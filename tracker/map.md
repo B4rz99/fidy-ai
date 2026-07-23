@@ -29,6 +29,8 @@ A **buildable MVP spec** for an agent-first personal-finance product for Colombi
 
 <!-- one line per closed ticket: gist + link -->
 
+- [Research: competitor & aggregator landscape in Colombia](tickets/001-research-competitors-and-aggregators.md) — no viable aggregator for MVP (Belvo exited Colombia; rivals are validation-only or enterprise-gated); every active Colombian PFM is manual-entry; notification parsing has working precedent (Bankity); open-finance data realistically ~H2 2027+.
+- [Research: WhatsApp Business API constraints (Kapso-first)](tickets/002-research-whatsapp-business-api.md) — Kapso fits (official Cloud API, TS SDK, voice transcription, ~$25/mo, low lock-in); replies in the 24h window are free, nudges need utility templates (~$0.0008/msg); never solicit card/account numbers in chat; quality-rating bans are the existential risk.
 - [Research: Colombian regulation for a PFM handling financial data](tickets/003-research-colombian-regulation.md) — read-only PFM needs no SFC license; Ley 1581 duties apply from day one (RNBD likely exempt); Decreto 0368/2026 makes open finance mandatory with real APIs ~2027–2028; scraping being regulated out — launch credential-free.
 - [Research: pricing models for agent-first consumer products](tickets/004-research-pricing-models.md) — three candidates, strongest: flat ~COP 19,900/mo agent tier (free = deterministic, paid = generative), with cheap-tier and credit-hybrid alternatives documented; decision deferred to the pricing ticket.
 - [Research: Colombian payment rails for recurring billing](tickets/005-research-payment-rails.md) — Wompi ranked first (only rail with recurring debits across cards + Nequi/Daviplata, variable-amount billing); Mercado Pago second (best managed subscriptions + only official TS SDK); PSE can't do recurring; Stripe unavailable in Colombia.
@@ -37,7 +39,6 @@ A **buildable MVP spec** for an agent-first personal-finance product for Colombi
 
 - Colombian category taxonomy in detail (seed categories, transfer/app-payment semantics).
 - Recurring-detection approach (rules vs model vs agent-judged).
-- Agent proactivity model — nudges, alerts, weekly summaries over WhatsApp; hangs on template-message rules from WhatsApp research.
 - Statement-parsing specifics per bank (formats, layouts, coverage order).
 - Web UI framework/rendering specifics beyond the dashboard-document model.
 - Product naming and working brand.

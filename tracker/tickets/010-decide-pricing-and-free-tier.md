@@ -3,7 +3,7 @@ id: 010
 title: "Decide: pricing model & free-tier boundary"
 label: wayfinder:grilling
 status: open
-assignee:
+assignee: obarboza
 blocked-by: [004]
 ---
 

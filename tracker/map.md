@@ -29,11 +29,12 @@ A **buildable MVP spec** for an agent-first personal-finance product for Colombi
 
 <!-- one line per closed ticket: gist + link -->
 
-*(none yet)*
+- [Research: Colombian regulation for a PFM handling financial data](tickets/003-research-colombian-regulation.md) — read-only PFM needs no SFC license; Ley 1581 duties apply from day one (RNBD likely exempt); Decreto 0368/2026 makes open finance mandatory with real APIs ~2027–2028; scraping being regulated out — launch credential-free.
+- [Research: pricing models for agent-first consumer products](tickets/004-research-pricing-models.md) — three candidates, strongest: flat ~COP 19,900/mo agent tier (free = deterministic, paid = generative), with cheap-tier and credit-hybrid alternatives documented; decision deferred to the pricing ticket.
+- [Research: Colombian payment rails for recurring billing](tickets/005-research-payment-rails.md) — Wompi ranked first (only rail with recurring debits across cards + Nequi/Daviplata, variable-amount billing); Mercado Pago second (best managed subscriptions + only official TS SDK); PSE can't do recurring; Stripe unavailable in Colombia.
 
 ## Not yet specified
 
-- Onboarding & KYC flow — depends on what regulation research surfaces.
 - Colombian category taxonomy in detail (seed categories, transfer/app-payment semantics).
 - Recurring-detection approach (rules vs model vs agent-judged).
 - Agent proactivity model — nudges, alerts, weekly summaries over WhatsApp; hangs on template-message rules from WhatsApp research.

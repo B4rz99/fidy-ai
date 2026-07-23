@@ -4,7 +4,7 @@ title: "Task: assemble the MVP spec"
 label: wayfinder:task
 status: open
 assignee:
-blocked-by: [006, 007, 008, 009, 010, 011]
+blocked-by: [006, 007, 008, 009, 010, 011, 013]
 ---
 
 ## Question

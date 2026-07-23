@@ -3,7 +3,7 @@ id: 002
 title: "Research: WhatsApp Business API constraints"
 label: wayfinder:research
 status: open
-assignee: research-subagent (fired at charting, 2026-07-22)
+assignee: research-subagent (re-fired 2026-07-22 with Kapso-first scope; original charting agent stopped before producing findings)
 blocked-by: []
 ---
 

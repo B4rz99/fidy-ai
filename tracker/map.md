@@ -9,6 +9,8 @@ created: 2026-07-22
 
 A **buildable MVP spec** for an agent-first personal-finance product for Colombia (Monarch-style, adapted to a pre-open-banking market): product scope, data-ingestion strategy, agent architecture, agent-facing surface, editable-dashboard model, pricing, compliance posture, and tech stack all decided — ready to hand to implementation sessions.
 
+**✅ Destination reached (2026-07-23): the spec is [`SPEC.md`](../SPEC.md).** The map is complete; implementation sessions start from the spec. Only [Task: Wompi merchant onboarding prerequisites](tickets/015-task-wompi-onboarding-prereqs.md) remains open — a launch-gate errand running in parallel, not a decision on the route.
+
 ## Notes
 
 - **Tracker**: local markdown. Tickets live in `tracker/tickets/NNN-slug.md`; a ticket's frontmatter `assignee` is the claim; `blocked-by` lists ticket ids. The frontier = open tickets with no open blockers and no assignee.
@@ -43,12 +45,11 @@ A **buildable MVP spec** for an agent-first personal-finance product for Colombi
 - [Decide: agent-legible response conventions for the canonical API](tickets/016-decide-agent-legible-api-conventions.md) — universal `{ data, next }` envelope via one Schema combinator (top-level `next` only); affordance names are canonical operation ids (identity binding, no rename); three-field affordances (`tool`, typed partial `args`, ≤140-char English `hint`), max 3 per response schema-enforced; handlers propose on state, a contract-derived checkpoint strikes anything the caller's scope/tier can't invoke (nothing in `next` ever fails); errors mirror the envelope with a closed code set, paywall errors point at new canonical op `getUpgradeUrl`.
 - [Decide: agent proactivity & notification design](tickets/014-decide-agent-proactivity.md) — four utility-template categories only (budget 80%/100% latches, new-recurring-charge daily digest with backfill suppression, weekly teaser summary Sun 6pm, manual-entry reminder on user-chosen cadence); every template self-contained-but-answerable, replies are ordinary agent turns; contextual per-category opt-in appending to the 013 consent ledger; 9am–7pm Bogota delivery window, ignore-backoff auto-pause, quality-rating kill switch; proactive events are canonical records — WhatsApp pushes, CLI/MCP pull, nothing else pushes at MVP.
 - [Prototype: dashboard-as-document DSL](tickets/009-prototype-dashboard-dsl.md) — dashboard is a recursive split tree (leaf widgets + weighted `row`/`column` splits; any region splits either axis, "halve a half"), size via integer weights (real resizing, no full/half), positions structural not geometric so the agent edits without collision math and every tree reflows to one deterministic mobile column; four widget types (discriminated union on `type`); adding = pick from a catalog + split a region (no empty canvas); one shared `DashboardEdit` vocabulary both editors emit, all-or-nothing at two decode gates (edit, then document); stored as a never-trusted-raw `jsonb` row, edited only through canonical ops gated by 008's `dashboard` scope. Prototype on branch `prototype/dashboard-dsl`.
+- [Task: assemble the MVP spec](tickets/012-assemble-mvp-spec.md) — **[`SPEC.md`](../SPEC.md)** assembled at the repo root from all closed decisions and research; remaining fog carried into its §13 "Open items for the build"; resolution closes the map.
 
 ## Not yet specified
 
-- Colombian category taxonomy in detail (seed categories, transfer/app-payment semantics).
-- Recurring-detection approach (rules vs model vs agent-judged).
-- Product naming and working brand — now also gates domain registration and DNS wiring (Resend MX, Railway custom domain, Kapso webhook URL).
+*Emptied on map completion (2026-07-23): the three remaining patches — Colombian category taxonomy in detail, recurring-detection approach, product naming/brand — were deferred by the resolving tickets as build-time work, and now live as [`SPEC.md` §13 "Open items for the build"](../SPEC.md).*
 
 ## Out of scope
 

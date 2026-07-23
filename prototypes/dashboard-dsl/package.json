@@ -1,0 +1,17 @@
+{
+  "name": "prototype-dashboard-dsl",
+  "private": true,
+  "type": "module",
+  "description": "THROWAWAY prototype (wayfinder ticket 009) — dashboard-as-document DSL",
+  "scripts": {
+    "demo": "bun run src/demo.ts",
+    "tui": "bun run src/tui.ts"
+  },
+  "dependencies": {
+    "effect": "^3.12.0"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.3.14",
+    "typescript": "^7.0.2"
+  }
+}

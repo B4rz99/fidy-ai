@@ -3,7 +3,7 @@ id: 007
 title: "Decide: hosted agent architecture"
 label: wayfinder:grilling
 status: open
-assignee:
+assignee: obarboza
 blocked-by: [002]
 ---
 

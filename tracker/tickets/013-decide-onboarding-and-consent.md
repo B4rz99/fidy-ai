@@ -3,7 +3,7 @@ id: 013
 title: "Decide: onboarding, consent & data-protection posture"
 label: wayfinder:grilling
 status: open
-assignee:
+assignee: obarboza
 blocked-by: []
 ---
 

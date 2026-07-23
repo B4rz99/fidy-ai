@@ -22,6 +22,7 @@ A **buildable MVP spec** for an agent-first personal-finance product for Colombi
   - **Freemium direction**; concrete pricing model undecided (leaning usage/agent-call based — needs research).
   - **Spanish-only, COP-only**, Colombian category taxonomy (domicilios, Nequi/Daviplata transfers, etc.).
   - **TypeScript + Effect-TS** is fixed; all other stack choices are open.
+  - **Kapso** is the intended platform for everything WhatsApp-related (added 2026-07-22, after charting).
   - User's global code principles apply: functional, atomic, type-strict, no silent fallbacks.
 
 ## Decisions so far

@@ -24,9 +24,10 @@ Prototyped and reacted to with obarboza over three HITL iterations; shape **lock
 
 **Asset**: throwaway prototype on branch **`prototype/dashboard-dsl`** (`prototypes/dashboard-dsl/`,
 final commit `3e82ce8`). Portable core `src/document.ts` (schema + recursive split tree
-+ edit DSL + pure reducer; zero I/O — lifts into the real codebase). `bunx tsc --noEmit`
-passes under `strict` + `exactOptionalPropertyTypes` + `noUncheckedIndexedAccess`.
-`bun run demo` walks every case; `bun run tui` drives it by hand.
+
+- edit DSL + pure reducer; zero I/O — lifts into the real codebase). `bunx tsc --noEmit`
+  passes under `strict` + `exactOptionalPropertyTypes` + `noUncheckedIndexedAccess`.
+  `bun run demo` walks every case; `bun run tui` drives it by hand.
 
 **HITL path**: v1 an ordered flat list (reorder + `full`/`half`) → rejected as not real
 customization; v2 (`a4713d7`) reworked to a recursive split tree; v3 (`3e82ce8`) added the
@@ -40,8 +41,8 @@ widget catalog after "how do I add stuff back?". v3 confirmed ("THIS IS IT").
    NOT a flat list, NOT pixel coordinates.
 2. **Size = a child's integer `weight`** within its split (`1:1` halves, `1:1:1` thirds,
    `3:1` = 75/25). Real resizing; no fixed `full`/`half`.
-3. **Positions are structural, never geometric** — an edit names a *region* (widget id) +
-   *axis/side*, never x/y/w/h. This is what frees the agent from collision math and removes
+3. **Positions are structural, never geometric** — an edit names a _region_ (widget id) +
+   _axis/side_, never x/y/w/h. This is what frees the agent from collision math and removes
    any need for per-breakpoint layouts.
 4. **Every tree reflows to one deterministic mobile column** via in-order leaf traversal
    (`flattenInOrder`) — order is unambiguous no matter how nested the 2D layout.
@@ -55,7 +56,7 @@ widget catalog after "how do I add stuff back?". v3 confirmed ("THIS IS IT").
 7. **One shared `DashboardEdit` vocabulary both editors emit**: `add-widget` (+`Placement`),
    `remove-widget`, `move-widget`, `resize-widget`, `update-widget`, `set-title`.
    `Placement = "top" | "bottom" | { besideWidget, axis, side }`. A UI split/drag/resize and
-   an agent tool call compile to the *same* op; the agent has no privileged path.
+   an agent tool call compile to the _same_ op; the agent has no privileged path.
 8. **All-or-nothing at two loud decode gates**: (1) the edit itself (agent boundary =
    untrusted LLM JSON); (2) the resulting document (unique ids, every split ≥2 children,
    positive weights, per-type config). Failure → `Left(EditError)`, document untouched — no
@@ -69,7 +70,7 @@ widget catalog after "how do I add stuff back?". v3 confirmed ("THIS IS IT").
 
 - **Compact agent-facing errors**: raw Effect `ParseError` dumps the whole edit union
   (unusable for an LLM/audit log). Build needs `ParseResult.ArrayFormatter` → `{ path,
-  message }` at the tool boundary.
+message }` at the tool boundary.
 - **Brand `CategoryId`/`WidgetId`** in production (prototype left them plain strings to keep
   the recursive schema readable). `CategoryId` binds to the Colombian taxonomy enum once
   that lands (map: "Colombian category taxonomy in detail").

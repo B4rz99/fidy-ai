@@ -11,7 +11,7 @@ All fees below are the publicly listed list-prices as of mid-2026; every provide
 ## 1. Stripe: not available to Colombian merchants
 
 - Stripe supports merchant accounts in 46 countries; **Colombia is not one of them** and Brazil is the only supported country in South America ([stripe.com/global](https://stripe.com/global)). Status unchanged into 2026.
-- Colombian *customers* can pay Stripe merchants; only local *merchant* accounts are unavailable.
+- Colombian _customers_ can pay Stripe merchants; only local _merchant_ accounts are unavailable.
 - Common workaround: incorporate a US LLC (e.g. via Stripe Atlas) and run Stripe from the US entity. That adds US tax/banking overhead and FX friction for a COP-denominated consumer product — viable only if a US entity is planned anyway.
 
 **Verdict: excluded as a domestic rail.** (Confirmed fact.)
@@ -68,21 +68,21 @@ All fees below are the publicly listed list-prices as of mid-2026; every provide
 
 ### dLocal / dLocal Go
 
-- dLocal proper is an **enterprise, sales-led cross-border processor** (negotiated pricing, typically quoted 3–5% by third parties; no public rate card) aimed mostly at foreign merchants selling *into* LatAm; KYB is a compliance-driven process aligned to SAGRILAFT/PTEE.
+- dLocal proper is an **enterprise, sales-led cross-border processor** (negotiated pricing, typically quoted 3–5% by third parties; no public rate card) aimed mostly at foreign merchants selling _into_ LatAm; KYB is a compliance-driven process aligned to SAGRILAFT/PTEE.
 - **dLocal Go** (self-serve SMB product) covers Colombian merchants: **1.99% + USD 0.20** per transaction (cards/cash/bank transfer, taxes excluded), no monthly fee; settlement 3 days (transfers/vouchers) or 7 days (cards); has a **subscription tool** (fixed plans, flexible amounts per client, API scheduling).
 - **Verdict**: cheapest headline rate, but a thinner product for a COP-native consumer SaaS: card-centric recurring, USD-denominated fee component, 7-day card settlement, and less depth on Nequi/Daviplata recurring. (Inference.)
 
 ## 4. Comparison snapshot
 
-| Provider | Card-on-file recurring | Variable amount | Nequi/Daviplata recurring | List fee (cards) | Payout | TS/Node SDK |
-|---|---|---|---|---|---|---|
-| **Wompi** | Yes (payment sources, 3DS + COF) | **Yes** (`recurrent:false` COF) | **Yes (both)** + Bancolombia button | 2.65% + $700 + IVA | Next business day (Bancolombia acct) | No official; REST + webhooks |
-| **Mercado Pago** | Yes (Preapproval, retries, card updater) | Weak (proration / payer-chosen) | No (wallet = MP account money) | 3.29% + $800 + IVA (immediate) | 0/7/14-day release + withdrawal | **Official TS SDK** |
-| **ePayco** | Yes (tokenization + recurrence engine) | Yes (token charges) | Partial (wallet enrollment) | 2.68–3.29% + $700–900 + IVA | Wallet + $6,500 withdrawal | Official JS SDK (no TS types) |
-| **dLocal Go** | Yes (subscriptions, cards) | Flexible amounts per client | No | 1.99% + USD 0.20 | 3–7 days | API; SMB-grade |
-| **PayU** | Tokenization only, sales-gated; recurring product discontinued | Yes (token charges) | No | 3.29% + $300 + IVA | ~3 days, 3 free/month | Java/PHP only |
-| **Bold** | **No recurring API yet** | n/a | No | 2.39–2.99% + $300 | 1 day / instant | REST, no recurring |
-| **Stripe** | n/a in Colombia | n/a | n/a | n/a | n/a | n/a |
+| Provider         | Card-on-file recurring                                         | Variable amount                 | Nequi/Daviplata recurring           | List fee (cards)               | Payout                               | TS/Node SDK                   |
+| ---------------- | -------------------------------------------------------------- | ------------------------------- | ----------------------------------- | ------------------------------ | ------------------------------------ | ----------------------------- |
+| **Wompi**        | Yes (payment sources, 3DS + COF)                               | **Yes** (`recurrent:false` COF) | **Yes (both)** + Bancolombia button | 2.65% + $700 + IVA             | Next business day (Bancolombia acct) | No official; REST + webhooks  |
+| **Mercado Pago** | Yes (Preapproval, retries, card updater)                       | Weak (proration / payer-chosen) | No (wallet = MP account money)      | 3.29% + $800 + IVA (immediate) | 0/7/14-day release + withdrawal      | **Official TS SDK**           |
+| **ePayco**       | Yes (tokenization + recurrence engine)                         | Yes (token charges)             | Partial (wallet enrollment)         | 2.68–3.29% + $700–900 + IVA    | Wallet + $6,500 withdrawal           | Official JS SDK (no TS types) |
+| **dLocal Go**    | Yes (subscriptions, cards)                                     | Flexible amounts per client     | No                                  | 1.99% + USD 0.20               | 3–7 days                             | API; SMB-grade                |
+| **PayU**         | Tokenization only, sales-gated; recurring product discontinued | Yes (token charges)             | No                                  | 3.29% + $300 + IVA             | ~3 days, 3 free/month                | Java/PHP only                 |
+| **Bold**         | **No recurring API yet**                                       | n/a                             | No                                  | 2.39–2.99% + $300              | 1 day / instant                      | REST, no recurring            |
+| **Stripe**       | n/a in Colombia                                                | n/a                             | n/a                                 | n/a                            | n/a                                  | n/a                           |
 
 ## 5. Ranked recommendation (freemium consumer SaaS, COP)
 

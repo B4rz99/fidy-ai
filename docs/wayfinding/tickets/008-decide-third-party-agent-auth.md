@@ -10,7 +10,7 @@ resolved: 2026-07-23
 
 ## Question
 
-How does a user's *own* agent (Claude Code, an MCP client, a script) get access to that user's data — and only theirs?
+How does a user's _own_ agent (Claude Code, an MCP client, a script) get access to that user's data — and only theirs?
 
 - Token issuance flow (OAuth device flow? CLI login? MCP auth spec as of 2026?).
 - Scope model: read vs write vs dashboard-edit; per-agent revocation.
@@ -24,7 +24,7 @@ Grilled with obarboza; six decisions locked.
 ### 1. Auth model: per-agent bearer tokens, no OAuth server at MVP
 
 - **PAT-style opaque bearer tokens, one per agent**, minted by the user. Stored **hashed** (never recoverable after the one-time reveal), identifiable `fin_` prefix plus a short token-id for naming in chat and support; `last_used_at` tracked per token.
-- **The MCP server ships as a *local stdio* server** reading the token from config — the MCP spec (2025-06-18 revision) only mandates OAuth 2.1 for *remote* HTTP servers, so this stays spec-clean.
+- **The MCP server ships as a _local stdio_ server** reading the token from config — the MCP spec (2025-06-18 revision) only mandates OAuth 2.1 for _remote_ HTTP servers, so this stays spec-clean.
 - **OAuth 2.1 authorization server is deferred** until a hosted/remote MCP server exists.
 
 ### 2. Issuance: in-chat only, with a WhatsApp-approved device flow for the CLI

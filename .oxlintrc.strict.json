@@ -1,0 +1,81 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["typescript", "unicorn", "oxc", "import", "promise"],
+  "ignorePatterns": ["**/node_modules/**", "**/dist/**", "**/build/**", "**/coverage/**"],
+  "rules": {
+    "array-callback-return": "error",
+    "curly": ["error", "multi-line"],
+    "default-case-last": "error",
+    "eqeqeq": ["error", "always", { "null": "ignore" }],
+    "import/first": "error",
+    "import/no-cycle": "error",
+    "no-console": "error",
+    "no-constant-binary-expression": "error",
+    "no-duplicate-imports": ["error", { "allowSeparateTypeImports": true }],
+    "no-else-return": "error",
+    "no-fallthrough": "error",
+    "no-implicit-coercion": "error",
+    "no-implied-eval": "error",
+    "no-lonely-if": "error",
+    "no-nested-ternary": "error",
+    "no-param-reassign": "error",
+    "no-self-compare": "error",
+    "no-unneeded-ternary": "error",
+    "no-useless-catch": "error",
+    "no-useless-return": "error",
+    "no-var": "error",
+    "object-shorthand": ["error", "always"],
+    "prefer-const": "error",
+    "prefer-object-has-own": "error",
+    "prefer-object-spread": "error",
+    "radix": "error",
+    "typescript/await-thenable": "error",
+    "typescript/consistent-type-imports": [
+      "error",
+      { "prefer": "type-imports", "fixStyle": "inline-type-imports" }
+    ],
+    "typescript/no-explicit-any": "error",
+    "typescript/no-floating-promises": "error",
+    "typescript/no-misused-promises": "error",
+    "typescript/no-non-null-assertion": "error",
+    "typescript/no-redundant-type-constituents": "error",
+    "typescript/no-require-imports": "error",
+    "typescript/no-unnecessary-condition": "error",
+    "typescript/no-unnecessary-type-assertion": "error",
+    "typescript/no-unsafe-argument": "error",
+    "typescript/no-unsafe-assignment": "error",
+    "typescript/no-unsafe-call": "error",
+    "typescript/no-unsafe-member-access": "error",
+    "typescript/no-unsafe-return": "error",
+    "typescript/only-throw-error": "error",
+    "typescript/prefer-nullish-coalescing": "error",
+    "typescript/prefer-optional-chain": "error",
+    "typescript/restrict-template-expressions": "error",
+    "typescript/switch-exhaustiveness-check": "error",
+    "yoda": "error"
+  },
+  "overrides": [
+    {
+      "files": ["**/__tests__/**/*.ts", "**/__tests__/**/*.tsx", "**/*.test.ts", "**/*.test.tsx"],
+      "rules": {
+        "typescript/no-explicit-any": "warn",
+        "typescript/no-non-null-assertion": "off",
+        "typescript/no-unsafe-argument": "off",
+        "typescript/no-unsafe-assignment": "off",
+        "typescript/no-unsafe-call": "off",
+        "typescript/no-unsafe-member-access": "off",
+        "typescript/no-unsafe-return": "off",
+        "typescript/restrict-template-expressions": "off"
+      }
+    },
+    {
+      "files": ["scripts/**/*.ts", "*.cjs", "*.js"],
+      "rules": {
+        "no-console": "off",
+        "no-var": "off",
+        "object-shorthand": "off",
+        "typescript/no-require-imports": "off"
+      }
+    }
+  ]
+}

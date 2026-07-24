@@ -8,7 +8,7 @@
 
 ## TL;DR
 
-Aggregator-backed bank sync is **not a viable MVP baseline for consumer PFM in Colombia today**. Belvo — historically the strongest Colombian retail-bank aggregator — no longer lists any Colombian products on its developer portal or status page (Brazil/Mexico only, as of July 2026). Prometeo's public Colombia coverage is account *validation* and B2B payments/treasury, not consumer transaction history. Finerio Connect and Syncfy claim Colombia coverage but publish no Colombian bank list, no self-serve pricing, and no public reliability data. Mandatory open finance (Decreto 0368 of April 2026) will not produce working, mandated data APIs before **H2 2027 at the earliest**. Meanwhile, every PFM app actually operating in Colombia ingests data manually (or via voice/AI entry), and the one notable automatic-ingestion player in history (Bankity, 2014) did it by reading **bank transaction alerts/notifications** — not credentials. Layered manual + notification + statement ingestion is the realistic baseline; design the data layer so an aggregator or the 2027+ open-finance rails can be slotted in later.
+Aggregator-backed bank sync is **not a viable MVP baseline for consumer PFM in Colombia today**. Belvo — historically the strongest Colombian retail-bank aggregator — no longer lists any Colombian products on its developer portal or status page (Brazil/Mexico only, as of July 2026). Prometeo's public Colombia coverage is account _validation_ and B2B payments/treasury, not consumer transaction history. Finerio Connect and Syncfy claim Colombia coverage but publish no Colombian bank list, no self-serve pricing, and no public reliability data. Mandatory open finance (Decreto 0368 of April 2026) will not produce working, mandated data APIs before **H2 2027 at the earliest**. Meanwhile, every PFM app actually operating in Colombia ingests data manually (or via voice/AI entry), and the one notable automatic-ingestion player in history (Bankity, 2014) did it by reading **bank transaction alerts/notifications** — not credentials. Layered manual + notification + statement ingestion is the realistic baseline; design the data layer so an aggregator or the 2027+ open-finance rails can be slotted in later.
 
 ---
 
@@ -16,7 +16,7 @@ Aggregator-backed bank sync is **not a viable MVP baseline for consumer PFM in C
 
 - **[Confirmed]** Colombia's open-finance framework evolved: Decreto 1297 de 2022 (voluntary scheme) → Ley 2294 de 2023 art. 89 (National Development Plan, mandate basis) → SFC Circular Externa 004 de 2024 (technical/security/API standards) → SFC Circular Externa 009 de 2025 (extended the standards-compliance deadline to 2026-02-08) → **Decreto 0368 del 7 de abril de 2026**, which replaces the voluntary scheme with a **mandatory** open-finance system (modifies Decreto 2555 de 2010). Sources: URF, Superintendencia Financiera, Holland & Knight.
 - **[Confirmed]** Decreto 0368's staggered timeline: SFC has until **October 2026** to publish the standards-issuance schedule, until **April 2027** to stand up the participant directory; entities then get **12 months (extendable +6)** to expose data once standards per data category are issued. Press and legal analyses conclude effective data-sharing will not occur before **H2 2027**, likely later for full coverage.
-- **[Confirmed]** **Bre-B**, Banco de la República's interoperable instant-payment system (keys/"llaves", DICE directory + MOL settlement), went to full-scale operation on **2025-10-06**; 64.4M operations in its first month, ~3.6M/day by December 2025. Bre-B is a *payments* rail, not a data-sharing rail — but it standardizes account addressing (keys) and is already reflected in aggregator products (e.g., Prometeo validates Bre-B keys).
+- **[Confirmed]** **Bre-B**, Banco de la República's interoperable instant-payment system (keys/"llaves", DICE directory + MOL settlement), went to full-scale operation on **2025-10-06**; 64.4M operations in its first month, ~3.6M/day by December 2025. Bre-B is a _payments_ rail, not a data-sharing rail — but it standardizes account addressing (keys) and is already reflected in aggregator products (e.g., Prometeo validates Bre-B keys).
 - **[Inference]** Pre-2027, third-party access to bank data rests on credential-based scraping under general data-protection/consent law (Ley 1581 de 2012 habeas data). It is not prohibited, but it is also not protected: banks may block scrapers with no recourse (see Fintonic vs. BancoEstado in Chile, a regional precedent).
 
 ---
@@ -25,15 +25,15 @@ Aggregator-backed bank sync is **not a viable MVP baseline for consumer PFM in C
 
 ### 2.1 Active local (Colombian) apps
 
-| App | What it offers | Ingestion | Pricing | Traction |
-|---|---|---|---|---|
-| **Bolsillos** (bolsillos.app) | Envelope budgeting ("bolsillos") for freelancers/variable income; goals, reports; local-only encrypted data (no cloud) | **Manual + voice** (Pro); explicitly *no bank sync* — "Open Finance está en el roadmap para 2027" | Free tier (2 accounts, 50 tx/mo); Pro COP 199,900/yr; lifetime "Fundador" COP 799,900 | iOS only, Android waitlist — early stage **[Confirmed from site]** |
-| **Gestiona Plus** (gestionaplus.com.co) | Budgets, debt payoff, savings; markets itself as "no exige claves bancarias" | **Manual** | 90 days free, then subscription | Unknown **[Confirmed features from site/blog]** |
-| **MisFinanzasApp** | Expense/income tracking with **voice + AI natural-language entry** ("gasté 50.000 en almuerzo"), alerts, goals, LatAm currencies incl. COP | **Manual/voice-AI** | Freemium (details not published) | Unknown |
-| **FinanzasFC / Finanfy** | Conventional expense trackers (categories, multiple accounts: cash/cards/banks/wallets) | **Manual** | Freemium | Unknown |
-| **Tributi budget planner** | Free web budget planner from the tax-filing startup Tributi | **Manual** | Free (lead-gen for tax filing) | Unknown |
+| App                                     | What it offers                                                                                                                             | Ingestion                                                                                         | Pricing                                                                               | Traction                                                           |
+| --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| **Bolsillos** (bolsillos.app)           | Envelope budgeting ("bolsillos") for freelancers/variable income; goals, reports; local-only encrypted data (no cloud)                     | **Manual + voice** (Pro); explicitly _no bank sync_ — "Open Finance está en el roadmap para 2027" | Free tier (2 accounts, 50 tx/mo); Pro COP 199,900/yr; lifetime "Fundador" COP 799,900 | iOS only, Android waitlist — early stage **[Confirmed from site]** |
+| **Gestiona Plus** (gestionaplus.com.co) | Budgets, debt payoff, savings; markets itself as "no exige claves bancarias"                                                               | **Manual**                                                                                        | 90 days free, then subscription                                                       | Unknown **[Confirmed features from site/blog]**                    |
+| **MisFinanzasApp**                      | Expense/income tracking with **voice + AI natural-language entry** ("gasté 50.000 en almuerzo"), alerts, goals, LatAm currencies incl. COP | **Manual/voice-AI**                                                                               | Freemium (details not published)                                                      | Unknown                                                            |
+| **FinanzasFC / Finanfy**                | Conventional expense trackers (categories, multiple accounts: cash/cards/banks/wallets)                                                    | **Manual**                                                                                        | Freemium                                                                              | Unknown                                                            |
+| **Tributi budget planner**              | Free web budget planner from the tax-filing startup Tributi                                                                                | **Manual**                                                                                        | Free (lead-gen for tax filing)                                                        | Unknown                                                            |
 
-**[Inference]** The striking pattern: *no active Colombian PFM app offers automatic bank sync*. The local innovation axis is friction reduction on manual entry (voice, AI parsing, local-first privacy), and at least one (Bolsillos) explicitly pins bank connectivity to the 2027 open-finance timeline.
+**[Inference]** The striking pattern: _no active Colombian PFM app offers automatic bank sync_. The local innovation axis is friction reduction on manual entry (voice, AI parsing, local-first privacy), and at least one (Bolsillos) explicitly pins bank connectivity to the 2027 open-finance timeline.
 
 ### 2.2 Regional/global apps used in Colombia
 
@@ -64,14 +64,14 @@ Aggregator-backed bank sync is **not a viable MVP baseline for consumer PFM in C
 
 - **[Confirmed]** B2B-focused fintech infrastructure: account validation, treasury/banking data, cross-border A2A payments; 1,500+ connections, 11 countries; Colombia clients include Rappi and Mesfix; historically connected Bancolombia, Banco de Bogotá, Davivienda for data.
 - **[Confirmed]** Its public docs' Colombia country page covers **Account Validation only**: validates local accounts (CC/NIT), **Nequi wallets**, and **Bre-B keys**, claiming "cobertura del 80% de las cuentas bancarias del país." Banking-data endpoints (accounts/movements/credit cards) exist in the API reference, but Colombia is not documented as a data-aggregation market. Free sandbox; quote-based pricing (no public rates); no first-party TypeScript SDK found in docs.
-- **[Confirmed]** 2025: announced a Prometeo–Fiskil alliance to sell **compliance-side** open-finance tooling to Colombian regulated entities (consent management, directory integration) — i.e., positioned for the *bank* side of Decreto 0368, not for consumer PFM data access today.
+- **[Confirmed]** 2025: announced a Prometeo–Fiskil alliance to sell **compliance-side** open-finance tooling to Colombian regulated entities (consent management, directory integration) — i.e., positioned for the _bank_ side of Decreto 0368, not for consumer PFM data access today.
 - **[Inference]** Prometeo could plausibly deliver consumer movements for 2–3 big Colombian banks under a commercial agreement, but the product is aimed at corporate treasury/validation; consumer-grade recurrent refresh for a PFM is not its published use case.
 
 ### 3.3 Finerio Connect (Mexico)
 
 - **[Confirmed]** "Full-stack" open-banking + PFM API: aggregation, categorization/enrichment, white-label PFM widgets, "Open Finance in a Box" (with Visa and Ozone API); 120+ clients in "México y LATAM"; claims a 98% connection success rate; claims a contract with a top Colombian bank (5M+ clients); raised US$6.5M citing LatAm expansion.
 - **[Confirmed]** Publishes **no Colombian bank coverage list, no pricing, no self-serve developer signup** — everything routes through a sales contact form.
-- **[Inference]** Their Colombian business is selling PFM/categorization *to banks*, not selling consumer aggregation to startups. A small MVP would face an enterprise sales cycle with unknown coverage and cost.
+- **[Inference]** Their Colombian business is selling PFM/categorization _to banks_, not selling consumer aggregation to startups. A small MVP would face an enterprise sales cycle with unknown coverage and cost.
 
 ### 3.4 Syncfy / Paybook (Mexico)
 
@@ -85,7 +85,7 @@ Aggregator-backed bank sync is **not a viable MVP baseline for consumer PFM in C
 
 ### 3.6 Minka (Bogotá)
 
-- **[Confirmed]** Payments *infrastructure*, not aggregation: built Transfiya with ACH Colombia (real-time transfers, ~80% of accounts reachable, 2M users by 2022; $24M from Tiger/Kaszek), and now supports ACH's transition to **Bre-B**.
+- **[Confirmed]** Payments _infrastructure_, not aggregation: built Transfiya with ACH Colombia (real-time transfers, ~80% of accounts reachable, 2M users by 2022; $24M from Tiger/Kaszek), and now supports ACH's transition to **Bre-B**.
 - **[Inference]** Not a data source for PFM. Relevant only if the product later initiates payments.
 
 ### 3.7 Not in Colombia
@@ -94,11 +94,11 @@ Aggregator-backed bank sync is **not a viable MVP baseline for consumer PFM in C
 
 ### 3.8 Cross-cutting assessment
 
-- **Connection method:** every Colombian bank connection that has ever existed commercially (Belvo, Prometeo data, Syncfy) is **credential-based scraping**; there are no bank-published data APIs for third parties yet (voluntary scheme saw near-zero adoption — that is *why* Decreto 0368 exists). **[Confirmed for Belvo's method; Inference for the rest]**
+- **Connection method:** every Colombian bank connection that has ever existed commercially (Belvo, Prometeo data, Syncfy) is **credential-based scraping**; there are no bank-published data APIs for third parties yet (voluntary scheme saw near-zero adoption — that is _why_ Decreto 0368 exists). **[Confirmed for Belvo's method; Inference for the rest]**
 - **Reliability reputation:** scraping in LatAm has a documented pattern of bank blocking (BancoEstado vs Fintonic/Chile), MFA breakage, and silent institution removals (Belvo's Colombian catalog disappearing). No aggregator publishes Colombia-specific uptime. **[Confirmed examples; Inference as pattern]**
 - **Pricing:** none of the four data aggregators publishes Colombian pricing; all are quote-based B2B sales. Belvo (the only one that ever had self-serve + published docs for CO) is gone. **[Confirmed]**
 - **Developer/TypeScript experience:** Belvo had the best DX (OpenAPI spec, widgets, SDKs) — now BR/MX only. Prometeo has decent docs + free sandbox but Python-first, no official TS SDK found. Finerio Connect and Syncfy have no self-serve path. **[Confirmed for docs existence; Inference on comparative quality]**
-- **Legal standing:** pre-Decreto-0368 scraping operates on user consent under habeas-data law; permitted but unprotected, and the mandatory system will define the *sanctioned* channel from ~2027. An MVP built on scraping would carry both technical and regulatory-transition risk. **[Inference]**
+- **Legal standing:** pre-Decreto-0368 scraping operates on user consent under habeas-data law; permitted but unprotected, and the mandatory system will define the _sanctioned_ channel from ~2027. An MVP built on scraping would carry both technical and regulatory-transition risk. **[Inference]**
 
 ---
 
@@ -119,6 +119,7 @@ Aggregator-backed bank sync is **not a viable MVP baseline for consumer PFM in C
 ## Sources
 
 ### Regulation
+
 - URF — "Colombia consolida el Sistema de Finanzas Abiertas obligatorio": https://www.urf.gov.co/w/colombia-consolida-el-sistema-de-finanzas-abiertas-obligatorio
 - Superintendencia Financiera — press release on mandatory open finance: https://www.superfinanciera.gov.co/publicaciones/10116081/finanzas-abiertas-obligatorias-impulsaran-el-desarrollo-del-sistema-y-la-inclusion-financiera-en-el-pais/
 - Holland & Knight — Decreto 0368 de 2026 analysis: https://www.hklaw.com/en/insights/publications/2026/04/nuevo-decreto-incorpora-el-sistema-de-finanzas-abiertas-en-colombia
@@ -130,6 +131,7 @@ Aggregator-backed bank sync is **not a viable MVP baseline for consumer PFM in C
 - Infobae — Bre-B launch delays: https://www.infobae.com/colombia/2025/08/27/banco-de-la-republica-aplazo-el-lanzamiento-del-sistema-de-pagos-inmediatos-bre-b-cual-es-la-nueva-fecha/
 
 ### Aggregators
+
 - Belvo developer portal (BR/MX only, checked 2026-07-22): https://developers.belvo.com/
 - Belvo institutions status page (no CO institutions, checked 2026-07-22): https://institutions.belvo.com
 - Belvo institutions API spec (integration types credentials/openfinance): https://developers.belvo.com/apis/belvoopenapispec/institutions
@@ -149,6 +151,7 @@ Aggregator-backed bank sync is **not a viable MVP baseline for consumer PFM in C
 - Minka / Transfiya / Bre-B transition: https://minka.io/ ; TechCrunch $24M round: https://techcrunch.com/2022/04/27/bogota-based-minka-lands-24m-from-tiger-kaszek-to-build-an-open-infrastructure-for-money
 
 ### PFM competitors
+
 - Bolsillos (features, pricing, 2027 open-finance roadmap): https://www.bolsillos.app/
 - Gestiona Plus blog — "mejor app de finanzas personales Colombia 2026": https://gestionaplus.com.co/blog/mejor-app-de-finanzas-personales-colombia-2026
 - MisFinanzasApp: https://www.misfinanzasapp.com/ ; FinanzasFC: https://finanzafc.com/ ; Tributi planner: https://www.tributi.com/finanzas-personales/planeador-de-presupuesto-y-finanzas-personales

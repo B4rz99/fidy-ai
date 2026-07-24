@@ -1,0 +1,25 @@
+{
+  "name": "fidy-ai",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "lint": "oxlint .",
+    "lint:strict": "oxlint --config .oxlintrc.strict.json .",
+    "lint:strict:type-aware": "oxlint --config .oxlintrc.strict.json --type-aware .",
+    "format": "oxfmt --write .",
+    "format:check": "oxfmt --check .",
+    "typecheck": "tsc --noEmit",
+    "verify": "bun run lint && bun run format:check && bun run typecheck",
+    "prepare": "lefthook install"
+  },
+  "devDependencies": {
+    "bun-types": "1.3.14",
+    "lefthook": "2.1.6",
+    "oxfmt": "0.56.0",
+    "oxlint": "1.71.0",
+    "oxlint-tsgolint": "0.23.0",
+    "typescript": "6.0.3"
+  },
+  "packageManager": "bun@1.3.14"
+}

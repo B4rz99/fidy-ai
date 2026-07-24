@@ -10,7 +10,7 @@
 1. The app is a **Responsable del Tratamiento** under **Ley 1581 de 2012** and owes the full habeas-data compliance stack (policy, privacy notice, prior express informed consent, security measures, SIC claim procedures) regardless of size. **RNBD registration** only kicks in above ~COP 5,237 million in total assets (100,000 UVT, 2026), so an MVP is likely exempt from registration but not from anything else.
 2. A **read-only PFM needs no SFC license**. The regulated line is crossed by: taking money from the public (captación masiva), lending as a supervised activity, payment initiation/processing, insurance, or securities-market advisory. Storing and displaying a user's own transaction data crosses none of these.
 3. **Screen scraping / storing bank credentials is legal today but is being regulated out**: SFC rules make APIs the only authorized data-exchange mechanism inside the open-finance scheme, with the transition window (extended twice) currently ending **7 August 2026**. Holding credentials concentrates security liability under Ley 1581 and probable contract/fraud-liability problems with banks.
-4. **Open finance became mandatory in April 2026** (Decreto 0368 de 2026, replacing the voluntary Decreto 1297 de 2022). Supervised entities must expose client data via standardized APIs on a phased schedule (~2027–2028 in practice). Non-supervised fintechs participate **voluntarily** as *terceros receptores de datos* (TRD), vetted by the data-providing banks (ISO 27001, PCI DSS, RNBD, double consent). An MVP built now should be architected to become a TRD.
+4. **Open finance became mandatory in April 2026** (Decreto 0368 de 2026, replacing the voluntary Decreto 1297 de 2022). Supervised entities must expose client data via standardized APIs on a phased schedule (~2027–2028 in practice). Non-supervised fintechs participate **voluntarily** as _terceros receptores de datos_ (TRD), vetted by the data-providing banks (ISO 27001, PCI DSS, RNBD, double consent). An MVP built now should be architected to become a TRD.
 
 ---
 
@@ -35,7 +35,7 @@
 ### Inference
 
 - An MVP-stage company will almost certainly be **below** the RNBD asset threshold, so the concrete launch checklist is: data-processing policy + privacy notice + consent capture with proof + security program + claims procedure. Budget for RNBD registration once assets pass 100,000 UVT.
-- **Ley 1266 de 2008** (habeas data financiero) governs credit-standing data circulated to third parties for risk assessment (credit bureaus and their sources/users). A PFM that shows users their *own* data and does not furnish it to lenders for credit decisions should fall under Ley 1581 only. If the product ever sells scores/insights to lenders, Ley 1266 duties (operador/fuente regime) would attach — different, heavier regime.
+- **Ley 1266 de 2008** (habeas data financiero) governs credit-standing data circulated to third parties for risk assessment (credit bureaus and their sources/users). A PFM that shows users their _own_ data and does not furnish it to lenders for credit decisions should fall under Ley 1581 only. If the product ever sells scores/insights to lenders, Ley 1266 duties (operador/fuente regime) would attach — different, heavier regime.
 
 ---
 
@@ -47,13 +47,13 @@
   - **Captación masiva y habitual** (Decreto 2920 de 1982 / Decreto 1981 de 1988): receiving money from **20+ persons or 50+ obligations** repayable without goods/services in return. Doing this without authorization is a crime (2–6 years' prison, art. 316 Código Penal). A PFM that holds no funds cannot trigger this.
   - Payment processing / e-money → SEDPE or payment-system regimes; deposit-taking → credit-institution license; insurance; securities intermediation and **investment advisory** (asesoría, Decreto 661 de 2018) → securities-market rules.
 - The SFC's own fintech guidance and legal analyses (LatamFintech/Pomelo, SFC publications) confirm the licensing question is driven by the business model; **pure data aggregation/read-only display is not a reserved activity** and involves no SFC license or registration.
-- **Sandbox (Decreto 1234 de 2020, SFC "laArenera", CE 006 de 2025)**: a *certificado de operación temporal* (max 2 years) exists for testing innovations that require performing **activities reserved to supervised entities** or a regulatory dispensation. It is not needed for non-reserved activities.
+- **Sandbox (Decreto 1234 de 2020, SFC "laArenera", CE 006 de 2025)**: a _certificado de operación temporal_ (max 2 years) exists for testing innovations that require performing **activities reserved to supervised entities** or a regulatory dispensation. It is not needed for non-reserved activities.
 - Under the open-finance framework (see §4), a non-supervised fintech consuming bank data acts as a **Tercero Receptor de Datos (TRD)** — this is **not an SFC license**; eligibility is verified by the data-providing supervised entities themselves against SFC-set requirements (ISO 27001 certification, PCI DSS, RNBD registration, risk policy, consent handling — per CE 004 de 2024 and SFC concept 2024108013-005).
 
 ### Inference — where exactly the line is
 
 - **Safe (no license)**: storing/categorizing/visualizing the user's own transactions, budgets, alerts, manual or file-based import, aggregated anonymous analytics.
-- **Gray (get advice before doing)**: personalized *investment* recommendations (may constitute regulated "asesoría" in the securities market); routing users to credit products for commission (marketing generally fine, but structure matters); charging to share user data with lenders (Ley 1266 territory).
+- **Gray (get advice before doing)**: personalized _investment_ recommendations (may constitute regulated "asesoría" in the securities market); routing users to credit products for commission (marketing generally fine, but structure matters); charging to share user data with lenders (Ley 1266 territory).
 - **Regulated (license or partner)**: initiating payments/transfers, holding balances or wallets, lending at scale with certain funding structures, FX.
 - Note: RNBD registration appears among TRD requirements even though small companies are otherwise exempt from RNBD; how banks apply this to sub-threshold fintechs is an open practical question (lawyer flag).
 
@@ -71,7 +71,7 @@
 
 - The realistic exposure stack for a scraping path is:
   1. **Contract**: bank terms of service universally prohibit credential sharing; banks can block aggregator IPs and users can lose fraud-protection coverage.
-  2. **Criminal-law shadow (Ley 1273 de 2009)**: automated access with the *user's* consent is generally argued to be authorized access, but the question of whether user consent defeats an "acceso abusivo a sistema informático" (art. 269A) claim by a bank has no clean Colombian precedent we could find — genuine lawyer question.
+  2. **Criminal-law shadow (Ley 1273 de 2009)**: automated access with the _user's_ consent is generally argued to be authorized access, but the question of whether user consent defeats an "acceso abusivo a sistema informático" (art. 269A) claim by a bank has no clean Colombian precedent we could find — genuine lawyer question.
   3. **Regulatory direction**: the API-only rule plus the mandatory open-finance decree mean scraping against supervised entities is a dead-end architecture on a ~1–2 year horizon.
 - **Recommendation**: do not store bank credentials first-party. Either (a) launch credential-free (manual/CSV/email-parse import), or (b) use a third-party aggregator that carries the credential risk contractually and is migrating to TRD/API access — and even then, review indemnities.
 
@@ -112,6 +112,7 @@
 ## Sources
 
 Primary / official:
+
 - Ley 1581 de 2012 (texto): https://www.funcionpublica.gov.co/eva/gestornormativo/norma.php?i=49981
 - SIC — RNBD page: https://www.sic.gov.co/registro-nacional-de-bases-de-datos
 - SIC — RNBD FAQ: https://sic.gov.co/preguntas-frecuentes-rnbd
@@ -130,6 +131,7 @@ Primary / official:
 - Decreto 1234 de 2020 (sandbox): https://www.funcionpublica.gov.co/eva/gestornormativo/norma.php?i=142005
 
 Legal/industry analyses (2024–2026):
+
 - Holland & Knight — RNBD obligations 2025: https://www.hklaw.com/en/insights/publications/2025/01/obligaciones-del-registro-nacional-de-bases-de-datos-personales
 - Deloitte — RNBD 2025: https://www2.deloitte.com/content/dam/Deloitte/co/Documents/legal/Registro-Nacional-de-Bases-de-Datos-2025.pdf
 - Dentons Cárdenas & Cárdenas — RNBD 2025: https://dentons.cardenas-cardenas.com/es/insights/articles/2025/february/6/obligations-regarding-the-national-database-registry-2025

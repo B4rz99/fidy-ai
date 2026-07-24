@@ -2,7 +2,7 @@
 
 - **Ticket:** tracker/tickets/004-research-pricing-models.md
 - **Date:** 2026-07-22
-- **Method:** Web search/fetch, preferring 2025–2026 sources. Facts and inference are separated; anything under an "Inference" heading or tagged *(inference)* is our reasoning, not a sourced fact.
+- **Method:** Web search/fetch, preferring 2025–2026 sources. Facts and inference are separated; anything under an "Inference" heading or tagged _(inference)_ is our reasoning, not a sourced fact.
 
 ---
 
@@ -10,13 +10,13 @@
 
 ### 1a. Flat subscription (PFM incumbents)
 
-| Product | Model | Price (2026) | Notes |
-|---|---|---|---|
-| Monarch Money | Flat subscription, no free tier (7-day trial) | Core $99.99/yr or $14.99/mo; Plus $199/yr | Two-tier split introduced 2026; Plus = "power user" planning |
-| Copilot Money | Flat subscription, no free tier | $95/yr or $13/mo | "AI categorization" bundled in single price; iOS/Mac only |
-| Origin | Flat subscription | $99/yr or $12.99/mo (heavy $1-first-year promo) | AI financial planning bundled; aggressive acquisition discounting |
-| Rocket Money | Freemium + pay-what-you-want premium | Free tier + Premium $7–$14/mo (user picks) | AI subscription detection free-ish; premium unlocks cancellation, smart savings |
-| Cleo (AI chat-first PFM) | Freemium + ladder of paid tiers | Plus $5.99/mo (or $44.99/yr); Pro $8.99/mo; Builder $14.99/mo | Chat assistant is the free hook; paid tiers monetize cash advances / credit building, NOT chat volume |
+| Product                  | Model                                         | Price (2026)                                                  | Notes                                                                                                 |
+| ------------------------ | --------------------------------------------- | ------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| Monarch Money            | Flat subscription, no free tier (7-day trial) | Core $99.99/yr or $14.99/mo; Plus $199/yr                     | Two-tier split introduced 2026; Plus = "power user" planning                                          |
+| Copilot Money            | Flat subscription, no free tier               | $95/yr or $13/mo                                              | "AI categorization" bundled in single price; iOS/Mac only                                             |
+| Origin                   | Flat subscription                             | $99/yr or $12.99/mo (heavy $1-first-year promo)               | AI financial planning bundled; aggressive acquisition discounting                                     |
+| Rocket Money             | Freemium + pay-what-you-want premium          | Free tier + Premium $7–$14/mo (user picks)                    | AI subscription detection free-ish; premium unlocks cancellation, smart savings                       |
+| Cleo (AI chat-first PFM) | Freemium + ladder of paid tiers               | Plus $5.99/mo (or $44.99/yr); Pro $8.99/mo; Builder $14.99/mo | Chat assistant is the free hook; paid tiers monetize cash advances / credit building, NOT chat volume |
 
 Key observation: Cleo — the closest existing analogue to an agent-first consumer PFM — gives the AI chat away and monetizes adjacent financial products (advances, credit builder, express-transfer fees). The US "premium tracker" cluster (Monarch/Copilot/Origin) has converged on **~$95–$100/yr ≈ $8–13/mo** with no free tier.
 
@@ -62,12 +62,12 @@ Key observation: Cleo — the closest existing analogue to an agent-first consum
 
 ### Subscription price anchors (COP, 2025–2026)
 
-| Reference | Price |
-|---|---|
-| Netflix Básico / Estándar / Premium | $18,900 / $29,900 / $44,900 per month (extra member $9,900) |
-| Spotify Premium Individual | $18,500/mo (Dúo $24,500; Familiar $30,500; Estudiantes $10,100) |
-| **ChatGPT Go (Colombia launch, Dec 2025)** | **$20,900/mo**, with Rappi free-month promos |
-| ChatGPT Plus | US$20/mo (≈ COP 78,000–80,000) — priced in dollars, not localized |
+| Reference                                  | Price                                                             |
+| ------------------------------------------ | ----------------------------------------------------------------- |
+| Netflix Básico / Estándar / Premium        | $18,900 / $29,900 / $44,900 per month (extra member $9,900)       |
+| Spotify Premium Individual                 | $18,500/mo (Dúo $24,500; Familiar $30,500; Estudiantes $10,100)   |
+| **ChatGPT Go (Colombia launch, Dec 2025)** | **$20,900/mo**, with Rappi free-month promos                      |
+| ChatGPT Plus                               | US$20/mo (≈ COP 78,000–80,000) — priced in dollars, not localized |
 
 ### Fee tolerance in mass-market fintech
 
@@ -117,6 +117,7 @@ Start with **Candidate A's simplicity at Candidate B's discipline**: one paid ti
 ## Sources
 
 ### AI/PFM product pricing
+
 - https://www.fincomparelab.com/guides/monarch-money-pricing/
 - https://getfinny.app/blog/monarch-money-pricing-2026
 - https://www.thepennyhoarder.com/budgeting/monarch-money-review/
@@ -132,6 +133,7 @@ Start with **Candidate A's simplicity at Candidate B's discipline**: one paid ti
 - https://thecollegeinvestor.com/32551/cleo-review/
 
 ### General AI assistant / agent pricing
+
 - https://aiviewer.ai/guides/ai-pricing-comparison-2026/
 - https://exploreaitogether.com/llm-usage-limits-comparison/
 - https://perspectiveai.xyz/ai-pricing-guide-2026-every-plan-compared/
@@ -145,6 +147,7 @@ Start with **Candidate A's simplicity at Candidate B's discipline**: one paid ti
 - https://aitoolgrade.com/blog/notion-ai-pricing-2026.html
 
 ### Unit economics
+
 - https://inworld.ai/blog/consumer-ai-cost-pricing
 - https://tianpan.co/blog/2026-04-17-pricing-ai-features-unit-economics
 - https://www.drivetrain.ai/post/unit-economics-of-ai-saas-companies-cfo-guide-for-managing-token-based-costs-and-margins
@@ -155,12 +158,14 @@ Start with **Candidate A's simplicity at Candidate B's discipline**: one paid ti
 - https://www.informationdifference.com/whos-paying-for-your-prompt/
 
 ### Freemium benchmarks
+
 - https://www.revenuecat.com/blog/growth/subscription-app-trends-benchmarks-2026/
 - https://userpilot.com/blog/freemium-to-premium/
 - https://www.gurustartups.com/reports/freemium-to-paid-conversion-rate-benchmarks
 - https://www.saastr.com/freemium-is-back-the-ai-edition-but-youll-still-probably-need-50-million-active-users-for-freemium-to-actually-work-as-a-business-model/
 
 ### Colombian context
+
 - https://selectra.com.co/streaming/netflix
 - https://newsroom.rcnradio.com/actualidad/cuales-son-los-nuevos-precios-de-netflix-en-2026-y-de-cuanto-es-el-incremento-en-colombia
 - https://www.noticiasrcn.com/tendencias/spotify-sube-de-precio-en-colombia-este-es-su-valor-923070

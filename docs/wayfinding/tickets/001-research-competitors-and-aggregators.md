@@ -23,7 +23,7 @@ Full findings: [research/001-competitors-and-aggregators.md](../../research/001-
 **Verdict: aggregator-backed sync is NOT viable for the MVP; layered manual/notification/statement ingestion is the realistic baseline.**
 
 - **Belvo exited Colombia** — as of July 2026 its portal lists only Brazil and Mexico (exit inferred from portal evidence; no public sunset announcement).
-- **Prometeo** offers only account *validation* + B2B payments in Colombia, not consumer transaction history. **Finerio Connect / Syncfy** claim Colombia but are enterprise-sales-to-banks, no public bank list or pricing. **Palenca** is payroll data; **Minka** is payment rails.
+- **Prometeo** offers only account _validation_ + B2B payments in Colombia, not consumer transaction history. **Finerio Connect / Syncfy** claim Colombia but are enterprise-sales-to-banks, no public bank list or pricing. **Palenca** is payroll data; **Minka** is payment rails.
 - **Regulated open-finance data lands ~H2 2027 at the earliest** (SFC standards due Oct 2026, participant directory Apr 2027, then 12–18-month bank windows).
 - **Every active PFM in Colombia is manual/voice-entry** (Bolsillos, Gestiona Plus, MisFinanzasApp…); Bolsillos explicitly waits for open finance. Historical precedent for automatic ingestion: **Bankity (2014) parsed bank alert notifications** — no credentials — across Bancolombia/Davivienda/BBVA. Regional scraping-PFM failures (Fintonic Chile) underline fragility.
 - Recommended architecture (inference): an ingestion-source abstraction so 2027+ open-finance APIs slot in beside notification/statement/manual sources. Bre-B (live Oct 2025) standardizes account keys — relevant to future payment features, not MVP ingestion.

@@ -29,7 +29,7 @@ Kapso fits this product. It is a developer-first layer over the **official Meta 
 - **[confirmed]** **Workflows**: graph of nodes (start, send-text/template/interactive, wait-for-response, set-variable, decide, function, **agent node**, handoff, webhook, emit-event, call-workflow) triggered by e.g. `inbound_message`. Buildable visually or **as code** via `@kapso/workflows` npm package + `@kapso/cli` (`kapso pull` / `kapso build` / `kapso push`).
 - **[confirmed]** **Serverless functions**: JavaScript on **Cloudflare Workers** (`handler(request, env)` contract), with `env.KV` (per-project KV store) and `env.DB` (Cloudflare D1 database), encrypted secrets, hosted invoke URLs. Used for webhook processing, workflow function/decide nodes, and **agent tools**. Deployed via dashboard/API (CLI does not manage functions yet).
 - **[confirmed]** **AI extras**: automatic transcription of inbound voice notes (`message.kapso.transcript`), WhatsApp Flows agent (generates Meta Flows JSON from natural language), MCP server for live WhatsApp ops, published agent skills (`gokapso/agent-skills` on GitHub).
-- **[inference]** For this product, the likely architecture is *not* Kapso's hosted agent nodes but Kapso as transport: inbound webhook → your own agent backend (own LLM calls, own ledger/DB) → outbound sends via SDK. Kapso explicitly supports this ("connect from your own app over APIs and webhooks"); its hosted workflow/agent layer is optional.
+- **[inference]** For this product, the likely architecture is _not_ Kapso's hosted agent nodes but Kapso as transport: inbound webhook → your own agent backend (own LLM calls, own ledger/DB) → outbound sends via SDK. Kapso explicitly supports this ("connect from your own app over APIs and webhooks"); its hosted workflow/agent layer is optional.
 
 ### Developer experience (API / webhooks / TypeScript)
 
@@ -111,6 +111,7 @@ Kapso fits this product. It is a developer-first layer over the **official Meta 
 ## Sources
 
 Kapso (primary):
+
 - https://kapso.com/ — product overview
 - https://kapso.com/pricing — plans
 - https://docs.kapso.ai/docs/introduction — docs index
@@ -128,10 +129,12 @@ Kapso (primary):
 - https://github.com/gokapso/agent-skills — agent skills
 
 Meta / WhatsApp (primary where reachable):
+
 - https://whatsappbusiness.com/policy/ — WhatsApp Business Messaging Policy (financial verticals, opt-in, escalation, enforcement)
 - https://developers.facebook.com/documentation/business-messaging/whatsapp/pricing — Meta pricing (NOT fetched: blocked by local network gateway; cited as the authority to verify against)
 
 Secondary (used where Meta pages were unreachable; treat numbers as approximate):
+
 - https://clevertap.com/blog/whatsapp-business-pricing-changes-in-july-2025/ — July 2025 per-message model
 - https://www.ycloud.com/blog/whatsapp-api-pricing-update — July 2025 changes, free utility in window
 - https://blueticks.co/blog/whatsapp-business-pricing-change-2026-per-message — model mechanics, volume tiers

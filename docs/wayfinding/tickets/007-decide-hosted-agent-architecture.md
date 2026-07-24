@@ -38,10 +38,10 @@ Grilled with obarboza; five decisions locked.
 
 ### 3. Tool set: strict parity rule, zero private tools
 
-- **Confirmed and hardened**: the hosted agent calls the canonical API *as the user* — user-scoped auth token, same authz path as any third-party agent. In-process transport is fine; the operation contracts are identical.
+- **Confirmed and hardened**: the hosted agent calls the canonical API _as the user_ — user-scoped auth token, same authz path as any third-party agent. In-process transport is fine; the operation contracts are identical.
 - **Tool definitions are derived, not hand-written**: each canonical API operation is defined once as an Effect Schema contract; the `@effect/ai` toolkit, HTTP surface, MCP server, and CLI all generate from that single source. Parity cannot drift.
 - **New capabilities enter the canonical API first** (dogfooding rule): chart/image rendering becomes a canonical "render widget/query as PNG" endpoint, not a private helper. Media ingestion (receipt photo, screenshot, PDF statement) is a canonical submit-for-extraction operation.
-  - *Amended 2026-07-23 by [Decide: tech stack beyond TypeScript + Effect-TS](011-decide-tech-stack.md): the render-as-PNG endpoint is out of MVP — no chart images to WhatsApp; the agent answers in text. The dogfooding rule itself stands.*
+  - _Amended 2026-07-23 by [Decide: tech stack beyond TypeScript + Effect-TS](011-decide-tech-stack.md): the render-as-PNG endpoint is out of MVP — no chart images to WhatsApp; the agent answers in text. The dogfooding rule itself stands._
 - Outside the API: only channel mechanics (session state, message send/receive, WhatsApp formatting) — adapter code, never LLM tools. Messaging/nudges are not tools (ticket 014's domain).
 
 ### 4. Memory: three layers + rolling summary live from day one
@@ -54,7 +54,7 @@ Grilled with obarboza; five decisions locked.
 
 ### 5. Channel adapters: channel-agnostic core, two thin adapters
 
-- **Core `AgentService`**: `handleTurn(userId, inboundMessage) → reply` — owns loop, context assembly, toolkit, summary maintenance. Speaks a *semantic* reply type (text + optional attachments + optional structured choices); knows nothing about WhatsApp or terminals.
+- **Core `AgentService`**: `handleTurn(userId, inboundMessage) → reply` — owns loop, context assembly, toolkit, summary maintenance. Speaks a _semantic_ reply type (text + optional attachments + optional structured choices); knows nothing about WhatsApp or terminals.
 - **Adapters normalize in, render out**: inbound events → canonical inbound message (text / Kapso-transcribed voice / image / document); semantic reply → channel rendering (WhatsApp: chunked text, images, buttons/lists; CLI: terminal text).
 - **WhatsApp adapter (Kapso)**: HMAC-verified webhooks, **idempotency on message id** (Kapso retries), **per-user serialized queue with ~2–3s debounce** (burst messages become one turn; never two concurrent turns per user), **window awareness as a capability**: exposes `windowOpenUntil` and refuses out-of-window free-form sends by construction — out-of-window policy (templates, nudges) is ticket 014's design space.
 - **CLI adapter**: a REPL over the same `AgentService` — the dev/test harness exercising the full agent loop with zero WhatsApp dependency. (Distinct from the user-facing CLI that wraps the canonical API — that standing decision is untouched.)

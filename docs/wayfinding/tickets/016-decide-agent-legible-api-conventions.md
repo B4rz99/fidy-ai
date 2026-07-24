@@ -47,13 +47,17 @@ Grilled with obarboza; six decisions locked. No conflicts with 007/008/010/011 �
 ### 3. Affordance shape: three fields, English, no `href`
 
 ```json
-{ "tool": "createBudget", "args": { "category": "domicilios" }, "hint": "40% of July spending has no budget assigned" }
+{
+  "tool": "createBudget",
+  "args": { "category": "domicilios" },
+  "hint": "40% of July spending has no budget assigned"
+}
 ```
 
-- **`tool`** — operation id. **`args`** — optional *typed partial* of the target operation's input
+- **`tool`** — operation id. **`args`** — optional _typed partial_ of the target operation's input
   schema (derived per-operation; invalid args fail server-side at construction and can't ship).
   Pre-filled args are the reasoning→reading conversion: the server already knows the ids/periods.
-  **`hint`** — one sentence, ≤140 chars (schema-enforced), stating *why* this is a good next step.
+  **`hint`** — one sentence, ≤140 chars (schema-enforced), stating _why_ this is a good next step.
 - **English throughout** — this is an agent-facing interface, not a human one (product Spanish-only
   notwithstanding).
 - No `href`/method (the tool name is the address in all three transports; HTTP agents resolve via the
@@ -64,11 +68,11 @@ Grilled with obarboza; six decisions locked. No conflicts with 007/008/010/011 �
 - **Layer 1 (state)**: each operation handler returns `data` + candidate affordances from domain
   logic (e.g. "12 transactions uncategorized → suggest `categorizeTransaction`"). Code, not config.
 - **Layer 2 (scope + tier)**: a single shared checkpoint before serialization strikes any candidate
-  the *calling token* couldn't successfully invoke — missing scope (read from 008's per-contract scope
+  the _calling token_ couldn't successfully invoke — missing scope (read from 008's per-contract scope
   declarations, the same field authz enforces) or 010's paywall rule for free-tier callers. Handlers
   never think about scopes/tiers; enforcement and advertising read the same metadata and cannot disagree.
 - **Invariant (absolute): `next` never advertises a call that would fail.** No paid-feature
-  advertising on free-tier success responses — the upsell channel is the paywall *error* (§5), which
+  advertising on free-tier success responses — the upsell channel is the paywall _error_ (§5), which
   fires exactly when intent exists. Rejected: `"requires": "pro"`-marked affordances (spends tokens on
   every free response, trains agents that affordances sometimes fail).
 
@@ -76,8 +80,11 @@ Grilled with obarboza; six decisions locked. No conflicts with 007/008/010/011 �
 
 ```json
 {
-  "error": { "code": "paywall_required", "message": "This query loads transaction history beyond the single captured record, which is a Pro feature. Ask the user if they want to upgrade, then call getUpgradeUrl." },
-  "next": [ { "tool": "getUpgradeUrl", "hint": "Returns a checkout URL to send to the user" } ]
+  "error": {
+    "code": "paywall_required",
+    "message": "This query loads transaction history beyond the single captured record, which is a Pro feature. Ask the user if they want to upgrade, then call getUpgradeUrl."
+  },
+  "next": [{ "tool": "getUpgradeUrl", "hint": "Returns a checkout URL to send to the user" }]
 }
 ```
 
@@ -102,8 +109,8 @@ Grilled with obarboza; six decisions locked. No conflicts with 007/008/010/011 �
   reviewed change; discipline can't erode handler-by-handler.
 - Bounded worst case: 3 × ~45 ≈ **~135 input tokens/response**; a 15-tool-call hosted-agent
   conversation carries ≤ ~2k affordance tokens ≈ US$0.0004 — three orders of magnitude under 007's
-  ceiling, against which each *used* affordance saves a reasoning detour on the expensive output side
+  ceiling, against which each _used_ affordance saves a reasoning detour on the expensive output side
   ($1.25/M out vs $0.20/M in).
 - **No runtime measurement machinery at MVP** (token-budget middleware, usage telemetry rejected).
-  If affordance *follow-through* is ever in doubt, 008's metadata audit log already answers "was the
+  If affordance _follow-through_ is ever in doubt, 008's metadata audit log already answers "was the
   suggested operation called next?" retroactively.

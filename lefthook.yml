@@ -1,0 +1,24 @@
+version: "2"
+
+pre-commit:
+  commands:
+    oxlint:
+      glob: "*.{js,jsx,ts,tsx}"
+      run: bunx oxlint --fix {staged_files}
+      skip_output: errors
+    format:
+      glob: "*.{js,jsx,ts,tsx,json}"
+      run: bunx oxfmt --write {staged_files}
+      skip_output: errors
+
+commit-msg:
+  commands:
+    commit-message-format:
+      run: bun scripts/check-commit-message.ts {1}
+
+pre-push:
+  commands:
+    pushed-commit-messages:
+      files: git ls-files
+      run: bun scripts/check-pushed-commit-messages.ts
+      skip_output: false

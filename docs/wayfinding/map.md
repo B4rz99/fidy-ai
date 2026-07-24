@@ -19,8 +19,8 @@ A **buildable MVP spec** for an agent-first personal-finance product for Colombi
   - Real **product from day one** — multi-user; regulation and WhatsApp-compliance questions are MVP-blocking, not deferrable.
   - **Layered ingestion baseline** (no open banking until ~2027): bank-notification parsing (SMS/email/push forwarded by user) + conversational entry via the agent (text, voice notes, receipt photos) + statement upload (PDF/CSV). Aggregator sync (Belvo et al.) is pending research, not assumed.
   - **MVP feature scope**: transactions, categorization, budgets, recurring/subscription detection. Nothing else.
-  - **Editable web UI = declarative dashboard document**: the dashboard is a blocks/widgets document (JSON/DSL). The user edits it through the UI; the user's agent edits the *same document* through tool calls. One source of truth.
-  - **One agent-facing surface, three transports**: a canonical authenticated API; a thin CLI and an MCP server wrap it; the hosted WhatsApp agent is just another client of the same API. Users' *own* agents are first-class consumers.
+  - **Editable web UI = declarative dashboard document**: the dashboard is a blocks/widgets document (JSON/DSL). The user edits it through the UI; the user's agent edits the _same document_ through tool calls. One source of truth.
+  - **One agent-facing surface, three transports**: a canonical authenticated API; a thin CLI and an MCP server wrap it; the hosted WhatsApp agent is just another client of the same API. Users' _own_ agents are first-class consumers.
   - **Freemium direction**; concrete pricing model undecided (leaning usage/agent-call based — needs research).
   - **Spanish-only, COP-only**, Colombian category taxonomy (domicilios, Nequi/Daviplata transfers, etc.).
   - **TypeScript + Effect-TS** is fixed; all other stack choices are open.
@@ -49,7 +49,7 @@ A **buildable MVP spec** for an agent-first personal-finance product for Colombi
 
 ## Not yet specified
 
-*Emptied on map completion (2026-07-23): the three remaining patches — Colombian category taxonomy in detail, recurring-detection approach, product naming/brand — were deferred by the resolving tickets as build-time work, and now live as [`SPEC.md` §13 "Open items for the build"](../SPEC.md).*
+_Emptied on map completion (2026-07-23): the three remaining patches — Colombian category taxonomy in detail, recurring-detection approach, product naming/brand — were deferred by the resolving tickets as build-time work, and now live as [`SPEC.md` §13 "Open items for the build"](../SPEC.md)._
 
 ## Out of scope
 
@@ -57,5 +57,5 @@ A **buildable MVP spec** for an agent-first personal-finance product for Colombi
 - Open-banking-native integration (Colombia ~2027) — the spec must not foreclose it, but integrating it is a future effort.
 - English localization.
 - Hosted/remote MCP server and the OAuth 2.1 authorization server it would require — deferred by [Decide: third-party agent auth & scoping](tickets/008-decide-third-party-agent-auth.md); the MVP ships a local stdio MCP server on bearer tokens.
-- Native mobile apps (WhatsApp *is* the mobile channel at MVP).
+- Native mobile apps (WhatsApp _is_ the mobile channel at MVP).
 - Chart images over WhatsApp and the canonical render-widget-as-PNG endpoint — amended out of ticket 007 by [Decide: tech stack beyond TypeScript + Effect-TS](tickets/011-decide-tech-stack.md); the agent answers in text at MVP, revivable as a new canonical endpoint later.

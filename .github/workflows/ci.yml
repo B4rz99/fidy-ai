@@ -70,7 +70,7 @@ jobs:
         with:
           extra_args: --only-verified
       - name: Fluid Attacks secret scan
-        run: docker run --rm -v "$PWD:/src" docker.io/fluidattacks/ss:latest ss scan --strict /src
+        run: docker run --rm --pull=always -v "$PWD:/src" docker.io/fluidattacks/ss:latest ss scan --strict /src
 
   security-sast:
     name: SAST
@@ -85,7 +85,7 @@ jobs:
             p/typescript
             p/secrets
       - name: Fluid Attacks SAST
-        run: docker run --rm -v "$PWD:/src" docker.io/fluidattacks/sast:latest sast --strict scan /src
+        run: docker run --rm --pull=always -v "$PWD:/src" docker.io/fluidattacks/sast:latest sast --strict scan /src
 
   security-sca:
     name: SCA
@@ -93,7 +93,7 @@ jobs:
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
       - name: Fluid Attacks SCA
-        run: docker run --rm -v "$PWD:/src" docker.io/fluidattacks/sca:latest sca --strict scan /src
+        run: docker run --rm --pull=always -v "$PWD:/src" docker.io/fluidattacks/sca:latest sca --strict scan /src
 
   required-checks:
     name: Required Checks

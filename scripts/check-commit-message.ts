@@ -1,23 +1,73 @@
 #!/usr/bin/env bun
 
+const TYPES: readonly string[] = ["feat", "fix", "refactor", "chore", "docs", "test", "perf", "ci"];
+
+const SCOPES: Record<string, string> = {
+  backend: "server, API implementation, business logic",
+  frontend: "web dashboard / UI",
+  ai: "hosted agent, prompts, LLM routing",
+  api: "agent-legible API surface & conventions",
+  whatsapp: "WhatsApp channel integration",
+  payments: "payment rails (Wompi / ePayco)",
+  auth: "onboarding, consent, login",
+  db: "schema / migrations",
+  repo: "repo-wide tooling, config, hooks, CI",
+  deps: "dependency bumps",
+  docs: "documentation",
+};
+
+const SCOPE_LINES = Object.entries(SCOPES)
+  .map(([scope, description]) => `  ${scope.padEnd(10)} ${description}`)
+  .join("\n");
+
 const COMMIT_MESSAGE_FORMAT = `Required commit message format:
 type(scope): message
 
 - concise body bullet
 - another body bullet
 
-Rules:
-- type: feat|fix|refactor|chore|docs|test|perf|ci
-- scope: required, lowercase letters/numbers/hyphens
-- body: required, bullet lines must start with "- "`;
+type: ${TYPES.join(" | ")}
+
+scope (pick the area the change touches):
+${SCOPE_LINES}
+
+body: required; every line must start with "- "`;
+
+export const validateCommitHeader = (header: string): string[] => {
+  const match = /^([a-z]+)\(([a-z0-9-]+)\): (.+)$/.exec(header);
+
+  if (!match) {
+    return ["Commit header must follow format: type(scope): message"];
+  }
+
+  const type = match[1];
+  const scope = match[2];
+  const summary = match[3];
+
+  if (type === undefined || scope === undefined || summary === undefined) {
+    return ["Commit header must follow format: type(scope): message"];
+  }
+
+  const errors: string[] = [];
+
+  if (!TYPES.includes(type)) {
+    errors.push(`Invalid type "${type}". Use one of: ${TYPES.join(", ")}`);
+  }
+
+  if (!Object.hasOwn(SCOPES, scope)) {
+    errors.push(`Invalid scope "${scope}". Use one of: ${Object.keys(SCOPES).join(", ")}`);
+  }
+
+  return errors;
+};
 
 export const validateCommitMessage = (message: string): string[] => {
   const lines = message.split(/\r?\n/);
   const header = lines[0] ?? "";
-  const headerPattern = /^(feat|fix|refactor|chore|docs|test|perf|ci)\([a-z0-9-]+\): .+$/;
+  const headerErrors = validateCommitHeader(header);
 
-  if (!headerPattern.test(header)) {
-    return ["Commit message must follow format: type(scope): message (scope is required)"];
+  if (headerErrors.length > 0) {
+    return headerErrors;
   }
 
   const bodyLines = lines

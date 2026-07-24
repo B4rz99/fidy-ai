@@ -11,7 +11,7 @@ All changes reach `trunk` through a squash-merged PR. Direct pushes to `trunk` a
 
 - Branch off `trunk`: `git checkout -b <type>/<short-name> trunk`.
 - Commit with the convention (enforced by the commit-msg hook): a `type(scope): summary` header, then `- ` bullet body lines only. Trailers (`Co-Authored-By`, etc.) are rejected.
-  - **type**: `feat | fix | refactor | chore | docs | test | perf | ci`
+  - **type**: `feat | fix | refactor | chore | docs | ci`
   - **scope** (allowlist — hook prints each with "when to use it" on failure):
 
     | scope | when to use |
@@ -24,9 +24,8 @@ All changes reach `trunk` through a squash-merged PR. Direct pushes to `trunk` a
     | `payments` | payment rails (Wompi / ePayco) |
     | `auth` | onboarding, consent, login |
     | `db` | schema / migrations |
-    | `repo` | repo-wide tooling, config, hooks, CI |
+    | `repo` | repo-wide tooling, config, hooks |
     | `deps` | dependency bumps |
-    | `docs` | documentation |
 
 ## 2. Create the PR
 

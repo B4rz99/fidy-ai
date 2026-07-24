@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 
-const TYPES: readonly string[] = ["feat", "fix", "refactor", "chore", "docs", "test", "perf", "ci"];
+const TYPES: readonly string[] = ["feat", "fix", "refactor", "chore", "docs", "ci"];
 
 const SCOPES: Record<string, string> = {
   backend: "server, API implementation, business logic",
@@ -11,9 +11,8 @@ const SCOPES: Record<string, string> = {
   payments: "payment rails (Wompi / ePayco)",
   auth: "onboarding, consent, login",
   db: "schema / migrations",
-  repo: "repo-wide tooling, config, hooks, CI",
+  repo: "repo-wide tooling, config, hooks",
   deps: "dependency bumps",
-  docs: "documentation",
 };
 
 const SCOPE_LINES = Object.entries(SCOPES)

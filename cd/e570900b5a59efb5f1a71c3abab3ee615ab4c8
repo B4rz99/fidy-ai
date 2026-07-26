@@ -1,0 +1,70 @@
+src/shell/transactions/fixtures.ts
+  s_9cd3c544771bfd::t_f4625af176fe98 1,3-4,14,24-27
+src/core/transactions/model.ts
+  s_9cd3c544771bfd::t_11abb64be380b9 26-28
+  s_9cd3c544771bfd::t_ae5809a9f19092 24-25,29-31,76,100-102,116-118
+  s_9cd3c544771bfd::t_24d2f7add6be61 1-2,19-23,32,71-72
+src/shell/transactions/repo.ts
+  s_9cd3c544771bfd::t_1aee42aa0b0577 16
+  s_9cd3c544771bfd::t_0d2fdea8d572c3 3,5-7,10-12,14-15,17,22-27,31,39-44,46-48,51-52,98,120
+  s_9cd3c544771bfd::t_e399c81c18961b 1,28-30,32-38
+src/core/transactions/model.test.ts
+  s_9cd3c544771bfd::t_2a767e7a5928c6 3,14,31,35-42,47-54
+  s_9cd3c544771bfd::t_4fca2973d4c55d 43,45
+  s_9cd3c544771bfd::t_4e1e09deccf623 44,46
+src/shell/db/migrations/0001-create-transactions.ts
+  s_9cd3c544771bfd::t_50917196cc57dd 4-27
+src/core/_shared/money.ts
+  s_9cd3c544771bfd::t_ae283e4693390f 272,279-284,292-302
+  s_9cd3c544771bfd::t_1352aff3890297 379-383,387-388,391
+  s_9cd3c544771bfd::t_7231da2ff09ab0 1,390
+  s_9cd3c544771bfd::t_eaa05470cd6e3e 255-257
+  s_9cd3c544771bfd::t_f77b45c1644146 4-159,163-178,197-201,359-360,362,366-369,373-376,386,389
+  s_9cd3c544771bfd::t_64fb8c39c2bf45 321,324-325,327-330,335,338-341
+  s_9cd3c544771bfd::t_487816d4d46c04 2-3,160-161,179,189-196,202-210,220-221,225,230-233,241-254,258-271,285-291,304-311,316-320,326,331-334,342-345,348-355,358,363-365,370-372,377-378,384-385,392-397
+  s_9cd3c544771bfd::t_6c89360b32cabf 162,180-188
+  s_9cd3c544771bfd::t_b5daef4f6648eb 211-219,222-224,226-229
+  s_9cd3c544771bfd::t_eaede9bbab6990 273-278
+  s_9cd3c544771bfd::t_50884fa94ac79b 234-240,312-315,322-323,336-337,346-347,356-357,361
+  s_9cd3c544771bfd::t_1f76d095008445 303
+src/shell/testing/isolation.test.ts
+  s_9cd3c544771bfd::t_71324e6ae20268 65
+src/shell/transactions/contract.ts
+  s_9cd3c544771bfd::t_9b9e83be072e4d 39-40
+src/shell/transactions/contract.test.ts
+  s_9cd3c544771bfd::t_b6983c84293b79 17-21,363-364
+  s_9cd3c544771bfd::t_bcef71552e6484 57-76
+  s_9cd3c544771bfd::t_f77b45c1644146 116-120,122-134,136-139
+  s_9cd3c544771bfd::t_a004f1f5fe907d 121,135,140-141
+  s_9cd3c544771bfd::t_3fd9678b4d1a84 47,83,101,109,169,179-187,200,214,223-224,237,242,295,302,309,312,324
+  s_9cd3c544771bfd::t_4f2ca72a27c92f 111
+ARCHITECTURE.md
+  s_9cd3c544771bfd::t_4280c0b1ce0c0e 62
+src/shell/transactions/handlers.test.ts
+  s_9cd3c544771bfd::t_85c73cf1aca61f 61
+  s_9cd3c544771bfd::t_fd045e7f4739e8 2-4,55,59-60,62,65-68,72-73
+src/core/_shared/money.test.ts
+  s_9cd3c544771bfd::t_cd48eaae3c6fd8 107-116,120,123-124,128
+  s_9cd3c544771bfd::t_f77b45c1644146 134
+  s_9cd3c544771bfd::t_d8cfcce30bdbad 80,83-85,92-93
+  s_9cd3c544771bfd::t_eed4691eb11c20 1-43,46-47,54-61,66-70,73-79,81-82,86-91,94-106,117-119,121-122,125-127,129-133,135-137
+  s_9cd3c544771bfd::t_71a9f1d0e0bf7d 44-45,48-53,71
+  s_9cd3c544771bfd::t_2eff48d50179c2 62-65
+  s_9cd3c544771bfd::t_c587de83cff58a 72
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "cde570900b5a59efb5f1a71c3abab3ee615ab4c8",
+  "prompts": {},
+  "sessions": {
+    "s_9cd3c544771bfd": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019f9fd3-bea7-7814-88d0-b4104b15b419",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

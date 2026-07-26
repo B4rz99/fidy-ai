@@ -1,0 +1,27 @@
+prototypes/germany-expansion-stress-test/logic.ts
+  s_9a670fe80e2bef::t_09b3a6c49c7df6 1-269
+package.json
+  s_9a670fe80e2bef::t_d9fe9ccd5310e4 14
+prototypes/germany-expansion-stress-test/README.md
+  s_9a670fe80e2bef::t_0892be13205a6f 1-123
+prototypes/germany-expansion-stress-test/tui.ts
+  s_9a670fe80e2bef::t_42d806a56a8d8d 1-44,51-137
+  s_9a670fe80e2bef::t_41475fa1448cae 45-50
+  s_9a670fe80e2bef::t_431980d9c039a0 138-142
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "6d2fae18ad5e855afcdf071ede2d09989801528d",
+  "prompts": {},
+  "sessions": {
+    "s_9a670fe80e2bef": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019f9f5f-79c5-79b7-8170-53434fa24a99",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

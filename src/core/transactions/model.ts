@@ -1,4 +1,5 @@
-import { Schema, SchemaTransformation, Struct } from "effect";
+import { BigDecimal, Schema, SchemaTransformation, Struct } from "effect";
+import { Money } from "~/core/_shared/money";
 
 /**
  * Names one Transaction. Assigned at insert and never sent by a caller, so a
@@ -15,23 +16,20 @@ export const TransactionId = Schema.String.check(Schema.isUUID()).pipe(
 );
 export type TransactionId = typeof TransactionId.Type;
 
-/**
- * Whole COP pesos — COP has no fractional unit in practice. Bounded to the
- * JSON-safe integer range so amounts roundtrip exactly as plain JSON numbers;
- * the database column is bigint with the same cap.
- */
-export const Amount = Schema.Int.check(
-  Schema.isGreaterThan(0),
-  Schema.isLessThanOrEqualTo(Number.MAX_SAFE_INTEGER)
-)
-  .annotate({
-    description:
-      "Whole Colombian pesos. COP has no fractional unit in daily use, so 25000 means " +
-      "$25.000 COP and never 250 pesos with 00 centavos. Always positive, whichever way the " +
-      "money went; `direction` is what carries that.",
-  })
-  .pipe(Schema.brand("Amount"));
-export type Amount = typeof Amount.Type;
+const zero = BigDecimal.make(0n, 0);
+
+// Money itself permits zero. A Transaction is specifically a movement, so the
+// owning model adds positivity while retaining Money's exact-decimal and
+// Currency rules. The nested path makes the correction actionable at the API
+// validation seam. `mapFields` drops struct checks, so the create input below
+// reapplies this one shared decision after deriving its fields.
+const positiveTransactionMoney = Schema.makeFilter<{
+  readonly money: { readonly amount: Readonly<BigDecimal.BigDecimal> };
+}>((transaction) =>
+  BigDecimal.Order(transaction.money.amount, zero) === 1
+    ? undefined
+    : { path: ["money", "amount"], issue: "Transaction Money must be greater than zero" }
+);
 
 /**
  * A closed pair rather than a sign on `Amount`, so "how much" and "which way"
@@ -70,14 +68,12 @@ const UtcTimestamp = Schema.String.annotate({ format: "date-time" }).pipe(
  *
  * `occurredAt` is when the money moved and `createdAt` is when fidy learned of
  * it. Both are ISO date-times, so their descriptions are the only thing telling
- * them apart — which is why `UtcTimestamp` carries none of its own. `id` and
- * `currency` are undescribed on purpose: a UUID named `id` and a single-member
- * enum spelled `COP` already say what they mean.
+ * them apart — which is why `UtcTimestamp` carries none of its own. `id` is
+ * undescribed on purpose: a UUID named `id` already says what it means.
  */
 export const Transaction = Schema.Struct({
   id: TransactionId,
-  amount: Amount,
-  currency: Schema.Literal("COP"),
+  money: Money,
   merchant: Schema.NonEmptyString.check(Schema.isTrimmed()).annotate({
     description:
       "Who the money went to, or came from when the direction is inflow, as the user names " +
@@ -101,7 +97,9 @@ export const Transaction = Schema.Struct({
         "`occurredAt`; read this only to tell how freshly the record was captured.",
     })
   ),
-}).annotate({ identifier: "Transaction" });
+})
+  .check(positiveTransactionMoney)
+  .annotate({ identifier: "Transaction" });
 export type Transaction = typeof Transaction.Type;
 
 /**
@@ -115,7 +113,7 @@ export type Transaction = typeof Transaction.Type;
  * two cannot drift (ARCHITECTURE.md §4). There is no owner to send either:
  * ownership is the context the call runs in, not a field (ARCHITECTURE.md §5).
  */
-export const CreateTransactionInput = Transaction.mapFields(
-  Struct.omit(["id", "createdAt"])
-).annotate({ identifier: "CreateTransactionInput" });
+export const CreateTransactionInput = Transaction.mapFields(Struct.omit(["id", "createdAt"]))
+  .check(positiveTransactionMoney)
+  .annotate({ identifier: "CreateTransactionInput" });
 export type CreateTransactionInput = typeof CreateTransactionInput.Type;

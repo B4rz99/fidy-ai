@@ -36,8 +36,8 @@ export const TransactionsGroup = HttpApiGroup.make("transactions").add(
     error: [Unauthenticated, NotFound],
   }).annotate(
     OpenApi.Description,
-    "Record one Transaction for the caller: a single movement of money, in whole COP pesos, " +
-      "with a direction and a merchant. Reach for this as soon as the user says money moved " +
+    "Record one Transaction for the caller: a single exact movement of Money with its Currency, " +
+      "direction, and merchant. Reach for this as soon as the user says money moved " +
       "and no record of it exists yet — money they spent, money that reached them, a receipt " +
       "they read out. The Transaction belongs to whoever the call is made as, so there is no " +
       "owner to name; the answer hands back the stored Transaction, id and all."

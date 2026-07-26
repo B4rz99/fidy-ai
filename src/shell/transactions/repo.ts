@@ -1,33 +1,55 @@
-import { Effect, Schema } from "effect";
+import { BigDecimal, DateTime, Effect, Schema, SchemaTransformation, Struct } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
+import { encodeMoneyAmount, Money } from "~/core/_shared/money";
 import { UserId } from "~/core/_shared/user";
-import {
-  Amount,
-  CreateTransactionInput,
-  Transaction,
-  TransactionId,
-} from "~/core/transactions/model";
+import { CreateTransactionInput, Transaction, TransactionId } from "~/core/transactions/model";
+
+const TransactionWithoutMoney = Transaction.mapFields(Struct.omit(["money"]));
 
 /**
- * The Transaction model, adjusted for how the driver materializes rows:
- * the bigint amount column arrives as a string (which Amount's JSON-safe
- * bound keeps exactly representable); timestamptz columns arrive as Date
- * objects, which decode into the model's DateTime.Utc.
+ * The canonical Transaction flattened only for a relational row. Numeric
+ * columns arrive as decimal strings and timestamptz columns as Date objects;
+ * decoding reconstructs nested Money before validating the domain model.
  */
-const TransactionFromRow = Schema.Struct({
-  ...Transaction.fields,
-  amount: Schema.FiniteFromString.pipe(Schema.decodeTo(Amount)),
+const TransactionFlatRow = Schema.Struct({
+  ...TransactionWithoutMoney.fields,
+  id: Schema.toEncoded(Transaction.fields.id),
+  ...Money.fields,
   occurredAt: Schema.DateTimeUtcFromDate,
   createdAt: Schema.DateTimeUtcFromDate,
 });
 
+const TransactionFromRow = TransactionFlatRow.pipe(
+  Schema.decodeTo(
+    Transaction,
+    SchemaTransformation.transform({
+      decode: ({ amount, currency, ...transaction }) => ({
+        ...transaction,
+        occurredAt: DateTime.formatIso(transaction.occurredAt),
+        createdAt: DateTime.formatIso(transaction.createdAt),
+        money: { amount: encodeMoneyAmount(amount), currency },
+      }),
+      encode: ({ money, ...transaction }) => ({
+        ...transaction,
+        occurredAt: DateTime.makeUnsafe(transaction.occurredAt),
+        createdAt: DateTime.makeUnsafe(transaction.createdAt),
+        amount: BigDecimal.fromStringUnsafe(money.amount),
+        currency: money.currency,
+      }),
+    })
+  )
+);
+
+const CreateTransactionWithoutMoney = CreateTransactionInput.mapFields(Struct.omit(["money"]));
+
 /**
- * The row an insert writes: the canonical create input, plus the owner the
- * caller was resolved to. Ownership joins the data here, at the storage edge,
- * and stops here — the projection below never reads it back out.
+ * The row an insert writes: the canonical create input flattened to adjacent
+ * Money columns, plus the owner resolved from operation context. Neither the
+ * flattening nor ownership leaks back into the Transaction returned to callers.
  */
 const TransactionToRow = Schema.Struct({
-  ...CreateTransactionInput.fields,
+  ...CreateTransactionWithoutMoney.fields,
+  ...Money.fields,
   userId: UserId,
 });
 
@@ -73,7 +95,7 @@ export const insertTransaction = ({
           VALUES (${row.userId}, ${row.amount}, ${row.currency}, ${row.merchant}, ${row.direction}, ${row.occurredAt})
           RETURNING ${sql.literal(transactionColumns)}
         `,
-    })({ ...input, userId })
+    })({ ...input, ...input.money, userId })
   ).pipe(Effect.orDie);
 
 // Absence is data, not a failure: the repo cannot know whether nothing found
@@ -95,6 +117,7 @@ export const findTransaction = (lookup: typeof TransactionLookup.Type) =>
     })(lookup)
   ).pipe(Effect.orDie);
 
+/** Lists one user's Transactions, newest occurrence and capture first. */
 export const listTransactions = (userId: UserId) =>
   Effect.flatMap(SqlClient.SqlClient, (sql) =>
     SqlSchema.findAll({

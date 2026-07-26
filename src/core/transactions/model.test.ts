@@ -1,11 +1,8 @@
 import { expect, it } from "@effect/vitest";
 import { Result, Schema } from "effect";
-import { Amount, CreateTransactionInput, Direction, Transaction } from "./model";
-
-const decodeAmount = Schema.decodeUnknownResult(Amount);
+import { CreateTransactionInput, Direction, Transaction } from "./model";
 
 const decodeDirection = Schema.decodeUnknownResult(Direction);
-
 const decodeTransaction = Schema.decodeUnknownResult(Transaction);
 
 /**
@@ -14,25 +11,12 @@ const decodeTransaction = Schema.decodeUnknownResult(Transaction);
  */
 const wireTransaction = (overrides: Readonly<Record<string, unknown>> = {}) => ({
   id: "f1d1a000-0000-4000-8000-0000000000aa",
-  amount: 25_000,
-  currency: "COP",
+  money: { amount: "25000", currency: "COP" },
   merchant: "El Corral",
   direction: "outflow",
   occurredAt: "2026-07-20T12:30:00Z",
   createdAt: "2026-07-21T08:00:00Z",
   ...overrides,
-});
-
-it("rejects an amount of zero, because a logged movement always moves money", () => {
-  expect(Result.isFailure(decodeAmount(0))).toBe(true);
-});
-
-it("rejects an amount beyond the JSON-safe integer range", () => {
-  expect(Result.isFailure(decodeAmount(Number.MAX_SAFE_INTEGER + 1))).toBe(true);
-});
-
-it("accepts the largest amount that survives the JSON-number roundtrip", () => {
-  expect(Result.isSuccess(decodeAmount(Number.MAX_SAFE_INTEGER))).toBe(true);
 });
 
 it("accepts both of the two ways money can move", () => {
@@ -44,12 +28,30 @@ it("rejects a third kind of movement, which is a domain decision and not a spell
   expect(Result.isFailure(decodeDirection("transfer"))).toBe(true);
 });
 
-it("accepts a whole movement, currency and both instants included", () => {
+it("accepts a positive Transaction with nested Money and both instants", () => {
   expect(Result.isSuccess(decodeTransaction(wireTransaction()))).toBe(true);
 });
 
-it("rejects a movement denominated in anything but the one currency fidy keeps", () => {
-  expect(Result.isFailure(decodeTransaction(wireTransaction({ currency: "USD" })))).toBe(true);
+it("accepts Transaction Money in a Currency independent of the Colombia ServiceMarket", () => {
+  expect(
+    Result.isSuccess(
+      decodeTransaction(wireTransaction({ money: { amount: "12.34", currency: "USD" } }))
+    )
+  ).toBe(true);
+});
+
+it("rejects zero Transaction Money at the nested amount field", () => {
+  const decoded = decodeTransaction(wireTransaction({ money: { amount: "0", currency: "COP" } }));
+
+  expect(Result.isFailure(decoded) ? String(decoded.failure) : "").toContain('["money"]["amount"]');
+});
+
+it("rejects the legacy top-level amount and currency shape", () => {
+  const { money: _, ...withoutMoney } = wireTransaction();
+
+  expect(
+    Result.isFailure(decodeTransaction({ ...withoutMoney, amount: 25_000, currency: "COP" }))
+  ).toBe(true);
 });
 
 it("carries no owner, so a client cannot name whose transaction it is creating", () => {

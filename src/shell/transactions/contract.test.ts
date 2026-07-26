@@ -14,7 +14,11 @@ import { truncateTransactions } from "./fixtures";
 
 const OpenApiComponents = Schema.Struct({
   components: Schema.Struct({
-    schemas: Schema.Record(Schema.String, Schema.Unknown),
+    schemas: Schema.Struct({
+      Currency: Schema.Struct({ description: Schema.NonEmptyString }),
+      Money: Schema.Struct({ description: Schema.NonEmptyString }),
+      Transaction: Schema.Unknown,
+    }),
   }),
 });
 
@@ -40,7 +44,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         // decode-gate check speaks raw HTTP at the same server.
         const response = yield* HttpClient.post("/transactions", {
           headers: headersFor(defaultCaller),
-          body: HttpBody.jsonUnsafe({ amount: -5, currency: "USD" }),
+          body: HttpBody.jsonUnsafe({ money: { amount: "-5", currency: "ZZZ" } }),
         });
 
         expect(response.status).toBe(400);
@@ -50,13 +54,33 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
       })
     );
 
+    it.effect("returns nested Money as normalized plain decimal text", () =>
+      Effect.gen(function* () {
+        yield* truncateTransactions;
+
+        const response = yield* HttpClient.post("/transactions", {
+          headers: headersFor(defaultCaller),
+          body: HttpBody.jsonUnsafe({
+            money: { amount: "25000.50", currency: "COP" },
+            merchant: "El Corral",
+            direction: "outflow",
+            occurredAt: "2026-07-20T12:30:00Z",
+          }),
+        });
+        const body = yield* response.json;
+
+        expect(response.status).toBe(201);
+        expect(body).toMatchObject({ data: { money: { amount: "25000.5", currency: "COP" } } });
+      })
+    );
+
     it.effect("a malformed payload answers with the error envelope, not a bare 400", () =>
       Effect.gen(function* () {
         yield* truncateTransactions;
 
         const response = yield* HttpClient.post("/transactions", {
           headers: headersFor(defaultCaller),
-          body: HttpBody.jsonUnsafe({ amount: -5, currency: "USD" }),
+          body: HttpBody.jsonUnsafe({ money: { amount: "-5", currency: "ZZZ" } }),
         });
         const body = yield* response.json;
 
@@ -74,8 +98,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         const response = yield* HttpClient.post("/transactions", {
           headers: headersFor(defaultCaller),
           body: HttpBody.jsonUnsafe({
-            amount: -5,
-            currency: "COP",
+            money: { amount: "-5", currency: "COP" },
             merchant: "El Corral",
             direction: "outflow",
             occurredAt: "2026-07-20T12:30:00Z",
@@ -83,11 +106,37 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         });
         const failure = yield* Schema.decodeUnknownEffect(ValidationFailed)(yield* response.json);
 
-        expect(failure.error.fields.map((field) => field.path)).toEqual(["amount"]);
+        expect(failure.error.fields.map((field) => field.path)).toEqual(["money.amount"]);
         expect(failure.error.fields.map((field) => field.message).join("\n")).toContain(
-          "greater than 0"
+          "non-negative plain decimal text"
         );
       })
+    );
+
+    it.effect(
+      "rejects zero, over-precision, exponent, and locale-formatted Transaction Money",
+      () =>
+        Effect.gen(function* () {
+          yield* truncateTransactions;
+
+          for (const amount of ["0", "1.001", "1e3", "1,000"]) {
+            const response = yield* HttpClient.post("/transactions", {
+              headers: headersFor(defaultCaller),
+              body: HttpBody.jsonUnsafe({
+                money: { amount, currency: "COP" },
+                merchant: "El Corral",
+                direction: "outflow",
+                occurredAt: "2026-07-20T12:30:00Z",
+              }),
+            });
+            const failure = yield* Schema.decodeUnknownEffect(ValidationFailed)(
+              yield* response.json
+            );
+
+            expect(response.status).toBe(400);
+            expect(failure.error.fields.map((field) => field.path)).toContain("money.amount");
+          }
+        })
     );
 
     it.effect("a body that is not an object at all carries no path, rather than a blank one", () =>
@@ -117,8 +166,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         yield* truncateTransactions;
 
         const validPayload = {
-          amount: 25000,
-          currency: "COP",
+          money: { amount: "25000", currency: "COP" },
           merchant: "El Corral",
           direction: "outflow",
           occurredAt: "2026-07-20T12:30:00Z",
@@ -127,10 +175,16 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           readonly payload: Record<string, unknown>;
           readonly correction: string;
         }> = [
-          { payload: { ...validPayload, currency: "USD" }, correction: "COP" },
-          { payload: { ...validPayload, currency: null }, correction: "COP" },
           {
-            payload: (({ currency: _, ...withoutCurrency }) => withoutCurrency)(validPayload),
+            payload: { ...validPayload, money: { amount: "25000", currency: "ZZZ" } },
+            correction: "Currency",
+          },
+          {
+            payload: { ...validPayload, money: { amount: "25000", currency: null } },
+            correction: "Currency",
+          },
+          {
+            payload: { ...validPayload, money: { amount: "25000" } },
             correction: "Missing key",
           },
         ];
@@ -143,7 +197,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           const failure = yield* Schema.decodeUnknownEffect(ValidationFailed)(yield* response.json);
           const messages = failure.error.fields.map((field) => field.message).join("\n");
 
-          expect(failure.error.fields.map((field) => field.path)).toEqual(["currency"]);
+          expect(failure.error.fields.map((field) => field.path)).toEqual(["money.currency"]);
           expect(messages).toContain(correction);
           expect(messages).not.toContain('"merchant":"El Corral"');
         }
@@ -157,8 +211,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         const response = yield* HttpClient.post("/transactions", {
           headers: headersFor(defaultCaller),
           body: HttpBody.jsonUnsafe({
-            amount: -5,
-            currency: "COP",
+            money: { amount: "-5", currency: "ZZZ" },
             merchant: "",
             direction: "sideways",
             occurredAt: "2026-07-20T12:30:00Z",
@@ -167,7 +220,8 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         const failure = yield* Schema.decodeUnknownEffect(ValidationFailed)(yield* response.json);
 
         expect(failure.error.fields.map((field) => field.path)).toEqual([
-          "amount",
+          "money.amount",
+          "money.currency",
           "merchant",
           "direction",
         ]);
@@ -180,12 +234,12 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
 
         const response = yield* HttpClient.post("/transactions", {
           headers: headersFor(defaultCaller),
-          body: HttpBody.jsonUnsafe({ currency: "COP" }),
+          body: HttpBody.jsonUnsafe({ money: { currency: "COP" } }),
         });
         const failure = yield* Schema.decodeUnknownEffect(ValidationFailed)(yield* response.json);
 
         expect(failure.error.fields.map((field) => field.path)).toEqual([
-          "amount",
+          "money.amount",
           "merchant",
           "direction",
           "occurredAt",
@@ -238,22 +292,24 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         })
     );
 
-    it.effect("the derived server rejects an amount beyond the JSON-safe integer range", () =>
+    it.effect("rejects the legacy top-level amount and currency shape", () =>
       Effect.gen(function* () {
         yield* truncateTransactions;
 
         const response = yield* HttpClient.post("/transactions", {
           headers: headersFor(defaultCaller),
           body: HttpBody.jsonUnsafe({
-            amount: 2 ** 53,
+            amount: 25000,
             currency: "COP",
             merchant: "Constructora Bolívar",
             direction: "outflow",
             occurredAt: "2026-07-22T15:00:00Z",
           }),
         });
+        const failure = yield* Schema.decodeUnknownEffect(ValidationFailed)(yield* response.json);
 
         expect(response.status).toBe(400);
+        expect(failure.error.fields.map((field) => field.path)).toContain("money");
       })
     );
 
@@ -265,8 +321,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         const response = yield* HttpClient.post("/transactions", {
           headers: headersFor(defaultCaller),
           body: HttpBody.jsonUnsafe({
-            amount: 25000,
-            currency: "COP",
+            money: { amount: "25000", currency: "COP" },
             merchant: "El Corral",
             direction: "outflow",
             occurredAt: "not-a-date",
@@ -305,7 +360,8 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         const body = yield* response.json;
         const spec = yield* Schema.decodeUnknownEffect(OpenApiComponents)(body);
 
-        expect(Object.keys(spec.components.schemas)).toContain("Transaction");
+        expect(spec.components.schemas.Currency.description).toContain("ISO 4217");
+        expect(spec.components.schemas.Money.description).toContain("exact decimal");
       })
     );
   }

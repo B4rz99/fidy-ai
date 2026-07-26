@@ -1,6 +1,7 @@
 import { expect, layer } from "@effect/vitest";
-import { DateTime, Effect, Schema } from "effect";
-import { Amount, TransactionId } from "~/core/transactions/model";
+import { BigDecimal, DateTime, Effect, Equal, Schema } from "effect";
+import { Currency, Money } from "~/core/_shared/money";
+import { TransactionId } from "~/core/transactions/model";
 import { type Affordance } from "~/shell/_shared/envelope";
 import { NotFound, ValidationFailed } from "~/shell/_shared/errors";
 import { ApiHarness, ApiHarnessClient } from "~/shell/testing/api-harness";
@@ -51,19 +52,25 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
       })
     );
 
-    it.effect("logs an amount beyond the 32-bit integer range and lists it back intact", () =>
+    it.effect("preserves exact fractional Money through create, get, and list", () =>
       Effect.gen(function* () {
         yield* truncateTransactions;
         const client = yield* ApiHarnessClient;
-
-        const created = yield* client.transactions.createTransaction({
-          payload: transactionPayload({ amount: Amount.make(450_000_000_000) }),
+        const exactMoney = Money.make({
+          amount: BigDecimal.fromStringUnsafe("450000000000.75"),
+          currency: Currency.make("USD"),
         });
 
-        expect(created.data.amount).toBe(Amount.make(450_000_000_000));
-
+        const created = yield* client.transactions.createTransaction({
+          payload: transactionPayload({ money: exactMoney }),
+        });
+        const read = yield* client.transactions.getTransaction({
+          params: { id: created.data.id },
+        });
         const listed = yield* client.transactions.listTransactions();
 
+        expect(Equal.equals(created.data.money.amount, exactMoney.amount)).toBe(true);
+        expect(read.data).toEqual(created.data);
         expect(listed.data).toEqual([created.data]);
       })
     );

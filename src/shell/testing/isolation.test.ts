@@ -62,8 +62,7 @@ const probes: Record<OperationId, IsolationProbe> = {
       const forged = yield* HttpClient.post("/transactions", {
         headers: headersFor(stranger),
         body: HttpBody.jsonUnsafe({
-          amount: 8000,
-          currency: "COP",
+          money: { amount: "8000", currency: "COP" },
           merchant: "Tostao",
           direction: "outflow",
           occurredAt: "2026-07-21T09:00:00Z",

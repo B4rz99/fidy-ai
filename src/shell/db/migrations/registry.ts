@@ -1,6 +1,4 @@
 import { createTransactions } from "./0001-create-transactions";
-import { amountBigint } from "./0002-amount-bigint";
-import { transactionOwner } from "./0003-transaction-owner";
 
 /**
  * The explicit index ARCHITECTURE.md §7 calls for: one ordered, append-only
@@ -12,6 +10,4 @@ import { transactionOwner } from "./0003-transaction-owner";
  */
 export const migrations = {
   "0001_create_transactions": createTransactions,
-  "0002_amount_bigint": amountBigint,
-  "0003_transaction_owner": transactionOwner,
 };

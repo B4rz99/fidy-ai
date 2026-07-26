@@ -59,6 +59,7 @@ subgraph src["src"]
     src_shell_transactions["transactions"]
   end
 end
+src_core_transactions-->src_core__shared
 src_main_ts-->src_shell_db
 src_main_ts-->src_shell_http_ts
 src_shell__shared-->src_core__shared

@@ -1,0 +1,23 @@
+AGENTS.md
+  s_249c866495009c::t_ef95d2ed78d694 9,11
+docs/agents/domain.md
+  s_249c866495009c::t_3df4335d075977 3,5,7-8,10-11
+.claude/skills
+  s_249c866495009c::t_197ebfed1fcd79 1
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "7452ca105f755d67dd84dc55f4fe128e3614df87",
+  "prompts": {},
+  "sessions": {
+    "s_249c866495009c": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019f9ec1-81c6-7205-97b4-49ede977e6ee",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

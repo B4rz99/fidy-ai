@@ -1,0 +1,27 @@
+src/shell/testing/isolation.test.ts
+  s_3fbf95521102ce::t_a4a83f065abbfc 8-9
+src/shell/testing/api-harness.ts
+  s_3fbf95521102ce::t_e1274036659918 2
+src/shell/transactions/handlers.test.ts
+  s_3fbf95521102ce::t_9c56d99c607dfe 6,8
+src/shell/transactions/fixtures.ts
+  s_3fbf95521102ce::t_de4f6089f405a7 1-29
+src/shell/transactions/contract.test.ts
+  s_3fbf95521102ce::t_a74cbd1bb40e6b 7,9,11,13
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "de694ec3207346e2497c508a33718486e9b5d8b2",
+  "prompts": {},
+  "sessions": {
+    "s_3fbf95521102ce": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019f9fbe-2e06-70a4-916b-02b14fa2812b",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

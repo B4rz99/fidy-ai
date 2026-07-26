@@ -5,15 +5,9 @@ import { UserId } from "~/core/_shared/user";
 import { type Transaction } from "~/core/transactions/model";
 import type { NotFound, Unauthenticated, ValidationFailed } from "~/shell/_shared/errors";
 import type { OperationId } from "~/shell/api";
+import { transactionPayload, truncateTransactions } from "~/shell/transactions/fixtures";
+import { ApiHarness, type ApiClient, clientFor, headersFor } from "./api-harness";
 import { publishedOperationIds } from "./openapi";
-import {
-  clientFor,
-  headersFor,
-  transactionPayload,
-  type ApiClient,
-  ApiHarness,
-  truncateTransactions,
-} from "./api-harness";
 
 const owner = UserId.make("f1d1a000-0000-4000-8000-0000000000a1");
 const stranger = UserId.make("f1d1a000-0000-4000-8000-0000000000b2");

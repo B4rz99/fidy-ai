@@ -3,13 +3,9 @@ import { DateTime, Effect, Schema } from "effect";
 import { Amount, TransactionId } from "~/core/transactions/model";
 import { type Affordance } from "~/shell/_shared/envelope";
 import { NotFound, ValidationFailed } from "~/shell/_shared/errors";
+import { ApiHarness, ApiHarnessClient } from "~/shell/testing/api-harness";
 import { publishedOperationIds } from "~/shell/testing/openapi";
-import {
-  transactionPayload,
-  ApiHarnessClient,
-  ApiHarness,
-  truncateTransactions,
-} from "~/shell/testing/api-harness";
+import { transactionPayload, truncateTransactions } from "./fixtures";
 
 const utcDateTime = (iso: string): DateTime.Utc => DateTime.makeUnsafe(iso);
 

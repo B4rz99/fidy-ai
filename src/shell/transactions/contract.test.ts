@@ -2,15 +2,15 @@ import { expect, layer } from "@effect/vitest";
 import { Effect, Schema } from "effect";
 import { HttpBody, HttpClient } from "effect/unstable/http";
 import { ValidationFailed } from "~/shell/_shared/errors";
-import { publishedOperationIds } from "~/shell/testing/openapi";
 import {
-  headersFor,
-  ApiHarnessClient,
   ApiHarness,
+  ApiHarnessClient,
   defaultCaller,
-  truncateTransactions,
+  headersFor,
 } from "~/shell/testing/api-harness";
+import { publishedOperationIds } from "~/shell/testing/openapi";
 import { TransactionsGroup } from "./contract";
+import { truncateTransactions } from "./fixtures";
 
 const OpenApiComponents = Schema.Struct({
   components: Schema.Struct({

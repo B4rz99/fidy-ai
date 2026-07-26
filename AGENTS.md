@@ -1,5 +1,7 @@
 # fidy-ai
 
+fidy-ai has not been released, it is in development phase. Any backward compatibility or anything similar to that is completely unnecessary.
+
 ## Agent skills
 
 ### Issue tracker

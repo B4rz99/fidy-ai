@@ -5,11 +5,24 @@ created: 2026-07-22
 
 # Map: Agent-first personal finance app for Colombia
 
+> [!IMPORTANT]
+> This directory is a historical wayfinding archive, not a source of current requirements. Its
+> decisions record what was believed during the original planning route and may be superseded.
+> Implementation starts from the amended
+> [MVP specification](https://github.com/B4rz99/fidy-ai/issues/1), informed by the later
+> [Global-ready foundations map](https://github.com/B4rz99/fidy-ai/issues/57), then follows
+> `CONTEXT.md`, `ARCHITECTURE.md`, and the active implementation ticket.
+
 ## Destination
 
 A **buildable MVP spec** for an agent-first personal-finance product for Colombia (Monarch-style, adapted to a pre-open-banking market): product scope, data-ingestion strategy, agent architecture, agent-facing surface, editable-dashboard model, pricing, compliance posture, and tech stack all decided — ready to hand to implementation sessions.
 
-**✅ Destination reached (2026-07-23): the spec is GitHub issue #1** — assembled here as a root `SPEC.md`, retired when the tracker moved to GitHub. The map is complete; implementation sessions start from the spec. Only [Task: Wompi merchant onboarding prerequisites](tickets/015-task-wompi-onboarding-prereqs.md) remains open — a launch-gate errand running in parallel, not a decision on the route.
+**✅ Destination reached (2026-07-23): the original spec became the
+[MVP specification](https://github.com/B4rz99/fidy-ai/issues/1)** — assembled here as a root
+`SPEC.md`, retired when the tracker moved to GitHub, and since amended in place. The map is
+complete; implementation sessions use the current linked specification, not the historical details
+below. Only [Task: Wompi merchant onboarding prerequisites](tickets/015-task-wompi-onboarding-prereqs.md)
+remains open — a launch-gate errand running in parallel, not a decision on the route.
 
 ## Notes
 

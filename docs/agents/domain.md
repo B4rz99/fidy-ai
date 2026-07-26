@@ -5,26 +5,31 @@ How the engineering skills should consume this repo's domain documentation when 
 ## Before exploring, read these
 
 - **`CONTEXT.md`** at the repo root — the ubiquitous language.
-- **`ARCHITECTURE.md`** at the repo root — this repo keeps its architectural decisions consolidated
-  here rather than in a `docs/adr/` directory. Its closing "Decisions and what they rule out" table
-  is the equivalent of the ADR record: it names each rejected alternative and why.
+- **`ARCHITECTURE.md`** at the repo root — the consolidated shape and its closing "Decisions and
+  what they rule out" table.
+- **`docs/adr/0001-colombia-first-global-ready-foundations.md`** — the accepted product-foundation
+  trade-off between stable persisted meaning and premature multi-market machinery.
 - **`CODING_STANDARDS.md`** at the repo root — how code is written inside that architecture.
 
-**Recording a new decision**: add it to the relevant section of `ARCHITECTURE.md` and, if it ruled
-something out, add a row to that closing table. Do not create `docs/adr/` — this repo deliberately
-consolidated it away.
+**Recording a new decision**: add the operational shape to the relevant section of
+`ARCHITECTURE.md` and, if it ruled something out, add a row to its closing table. The global-ready
+foundation has a separate ADR because its product-scope trade-off must remain independently
+legible. Do not create another ADR unless the work explicitly requires one; ordinary architecture
+still stays consolidated.
 
 If any of these files don't exist, **proceed silently**. Don't flag their absence; don't suggest creating them upfront. The `/domain-modeling` skill (reached via `/grill-with-docs` and `/improve-codebase-architecture`) creates them lazily when terms or decisions actually get resolved.
 
 ## File structure
 
-This repo is single-context, with decisions consolidated rather than kept as numbered ADR files:
+This repo is single-context, with architecture consolidated and one explicit product-foundation
+ADR:
 
 ```
 /
 ├── CONTEXT.md            the ubiquitous language
 ├── ARCHITECTURE.md       the shape, and a table of rejected alternatives
 ├── CODING_STANDARDS.md   how code is written inside that shape
+├── docs/adr/0001-…       the Colombia-first global-ready trade-off
 └── src/
     ├── core/             pure business rules
     └── shell/            everything that touches the world

@@ -45,9 +45,10 @@ cannot — units, ranges, invariants, lifecycle. **Implementation comments** liv
 never leak upward.
 
 **Don't repeat the code.** A comment at the same level of abstraction as the declaration is worse
-than none: it spends attention and returns nothing. The reference is `Amount`'s comment, which
-records that COP has no fractional unit and that the bound exists so values survive the JSON
-round-trip and match the `bigint` column — none of it recoverable from the code.
+than none: it spends attention and returns nothing. The reference is `Money`'s comment: it should
+explain that decimal text preserves exact monetary meaning across JSON, Currency controls allowed
+fractional precision, zero is valid until an owning operation requires movement, and arithmetic
+requires equal Currency. None of those obligations is recoverable from `{ amount, currency }`.
 
 ---
 
@@ -84,6 +85,11 @@ columns, so the row schema may be flatter, and the repo's decode is where the tw
 Any shape differing from the canonical one is **built from it** — `mapFields`, `Struct.omit`/`pick`,
 or spreading `.fields`. A type that never mentions the schema it derives from is the smell. See
 ARCHITECTURE.md §4.
+
+Preserve nested value boundaries in core and contracts. A relational row may flatten Money into
+adjacent exact amount and Currency columns, but its repo codec derives from the canonical Money
+schema and reconstructs the nested value on read. Do not leak storage flattening into canonical
+operations or define a parallel monetary DTO.
 
 ### Other defaults
 
@@ -162,8 +168,9 @@ Two rules nothing can check:
 
 Placement, tiers and responsibilities are in ARCHITECTURE.md §8. What review looks for:
 
-- **Descriptions are behaviour sentences**, not method names: _"rejects an amount beyond the
-  JSON-safe integer range"_, not _"createTransaction validation"_.
+- **Descriptions are behaviour sentences**, not method names: _"rejects exponent notation before
+  storing Money"_ or _"rejects more fractional digits than the Currency permits"_, not
+  _"Money validation"_.
 - **Exercise the public interface.** Never mock an internal collaborator.
 - **Core tests are not a loophole for testing the shell.** No mocked repos, no stubbed handlers.
   Wanting to test `handlers.ts` in isolation means a decision belongs in core.

@@ -2,7 +2,8 @@
 
 How fidy-ai is put together, and why. Companion documents: [`CONTEXT.md`](./CONTEXT.md) for the
 ubiquitous language, [`CODING_STANDARDS.md`](./CODING_STANDARDS.md) for how code is written inside
-this shape.
+this shape, and [Colombia-first global-ready foundations](./docs/adr/0001-colombia-first-global-ready-foundations.md)
+for the trade-off that keeps today's records stable without building a second ServiceMarket.
 
 Rejected alternatives are recorded in [Decisions and what they rule out](#decisions-and-what-they-rule-out)
 at the end. Read that before proposing a change — most obvious alternatives were considered and
@@ -123,17 +124,18 @@ commit scopes alongside the thirteen.
 
 ### Core slices do not import each other
 
-A core slice may import shared **value types** from `core/_shared` — `UserId`, `CategoryId`, date
-ranges. Where a decision needs data from two slices, the shell loads both and passes plain values
-in:
+A core slice may import shared **value types** from `core/_shared` — `UserId`, `CategoryId`,
+`Money`, date ranges. Where a decision needs data from two slices, the shell loads both and passes
+plain values in:
 
 ```
-decideAlerts({ budget, spentSoFar: Amount, alreadyFired, now })   // core/budgets never sees a Transaction
+decideAlerts({ budget, spentSoFar: Money, alreadyFired, now })   // core/budgets never sees a Transaction
 ```
 
-`Amount` is a value type of exactly that kind, and it still lives in `core/transactions/model.ts`
-rather than in `core/_shared`, because transactions is the only slice that has one. It moves the
-day a second slice needs it — the example above is what that day looks like.
+`Money` belongs in `core/_shared` from its first implementation because Transactions, Budgets,
+RecurringSeries, reports, and billing all need exactly the same monetary meaning. Owning slices
+add their contextual rules — for example, Money permits zero while a Transaction requires a
+positive amount — but they do not redefine the value.
 
 **Core decides; it does not gather.** A core slice importing another slice's entity is implicitly
 claiming it knows how to obtain it, which is shell's job. This also resolves the affordance
@@ -153,6 +155,18 @@ vocabulary (`Effect.gen`) on both sides of the boundary.
 
 Time and randomness are **parameters**. Core takes `now: DateTime.Utc` and generated ids as
 arguments; the shell supplies them.
+
+### Money is a shared exact value
+
+Money is the nested value `{ amount, currency }`. Its canonical wire amount is normalized,
+non-negative plain decimal text and its core representation is exact decimal — never a JavaScript
+floating-point number. Currency supplies the recognized denomination and its allowed fractional
+precision; it does not follow from ServiceMarket or locale. The shared core interface owns decode,
+encode, same-Currency arithmetic and comparison, and deterministic Currency ordering.
+
+Different Currencies fail with a typed `CurrencyMismatch`; there is no implicit conversion. Totals
+keep inflows and outflows separate, group by Currency in deterministic Currency order, and omit
+zero groups. Cross-Currency totals and nets are invalid until an explicit FX domain exists.
 
 `core/transactions/rules.ts` and `shell/transactions/handlers.ts` are the worked example: a
 decision that takes `now` as a value, and the handler that reads the clock and hands it in.
@@ -191,6 +205,17 @@ being a rule to remember: the canonical shape is by definition the one in `core/
 
 A type that never mentions the schema it derives from is the smell to catch in review.
 
+### Nested in the domain, flat at the relational seam
+
+Money stays nested in core models, canonical contracts, generated clients, OpenAPI, and agent
+surfaces. A Transaction says `money.amount` and `money.currency`; it never presents two unrelated
+fields whose relationship callers must remember.
+
+Relational storage has a different job. Repos flatten Money into adjacent exact `numeric` amount
+and text Currency columns, then reconstruct and decode the nested value on every read. The row
+schema is the derived storage projection, not a second domain model. Ordinary totals remain
+derived rather than persisted.
+
 ---
 
 ## 5. Ownership and isolation
@@ -201,8 +226,10 @@ There is no ambient `CurrentUser` service and no row-level security.
 **Where the caller is resolved.** Effect v4's HttpApi middleware can only reach a handler by
 `provides`-ing a service — which is exactly the ambient `CurrentUser` this section rejects. So the
 caller is resolved by a plain function of the request, called on the handler's first line, and the
-`UserId` travels onward as an explicit argument. Real bearer auth swaps that function's body
-without touching a repo or a handler.
+`UserId` travels onward as an explicit argument. At launch, one concrete resolver maps a verified
+WhatsAppIdentity to UserId and another maps an AgentToken to the same UserId. Provider message and
+contact identifiers are evidence at their adapter seam, never User identity. This is deliberately
+not a generic identity-provider or channel-identity framework.
 
 An explicit parameter can be present in the signature and absent from the SQL string, and types
 cannot catch that. The guard is a **contract-derived isolation test**: seed two users, enumerate
@@ -237,6 +264,58 @@ policy in every migration and the app running as a non-owner role (table owners 
 the API surface only; background jobs, the ingestion pipeline and the scheduler write without a
 request. Retrofitting is a migration across every table plus a role change — real work, but not a
 rewrite, because the `UserId` parameters are already threaded through.
+
+### User context is explicit; historical context stays captured
+
+A User has a stable UserId plus independent current ServiceMarket, locale, and validated IANA time
+zone. Creation supplies `CO`, `es-CO`, and `America/Bogota` explicitly. None is inferred from phone,
+Currency, channel, or another context field. Ownership still travels as the UserId parameter above;
+when an operation also depends on ServiceMarket, locale, or zone, the shell loads those values and
+passes them explicitly.
+
+Current User context may initialize new work, but it never reinterprets an existing artifact.
+Persist only what later interpretation needs:
+
+- ConsentRecords retain stable subject, ServiceMarket, disclosure locale, immutable disclosure
+  revision and hash, purposes, UTC time, channel, and provider-qualified message evidence.
+- SourceAttestations and NeedsReviewItems retain captured ServiceMarket, locale, IANA time zone,
+  source channel or provider, and parser or extractor revision; IngestSamples retain the relevant
+  ServiceMarket, source format or provider, parser revision, and anonymisation revision.
+- Schedules retain ServiceMarket and IANA time zone. Generated InsightEvents retain schedule
+  version, ServiceMarket, locale, zone, and scheduled UTC instant; delivery attempts add actual send
+  time, channel, provider, and provider message id.
+- Persisted reports retain their source period, ServiceMarket, locale, zone, and Currency groups. An
+  ephemeral query need not persist a snapshot, but a calendar query states the zone it applied.
+- Subscriptions and billing history retain activation ServiceMarket, billing period, Money,
+  immutable PriceRevision, tax treatment, renewal anchors, refunds, provider references, and UTC
+  times.
+
+Budget and report aggregation is Currency-scoped. A Budget is identified by User, Category, and
+Currency; only matching-Currency outflows contribute, and remaining or over-budget Money stays in
+that Currency. Reports return separate deterministic Currency groups rather than assuming COP or
+manufacturing a mixed-Currency total.
+
+### Billing completion is asynchronous
+
+Starting a BillingAttempt records its historical terms and returns its current
+`pending | succeeded | failed` state. `pending` is not settlement. Only a verified provider outcome
+advances the state, so delayed and retried Wompi callbacks cannot be represented as synchronous
+success. Wompi remains wired directly for Colombia; there is no runtime provider selector, fallback
+router, or provider registry.
+
+### Present seams, direct Colombia, deferred abstraction
+
+Build seams only where variation exists now: canonical operations, caller resolution, Ingestion
+sources, structured presentation results, controllable time, and narrow external-effect interfaces
+used by a production adapter and deterministic fake. Keep launch behaviour in its owning module:
+`CO` is the sole enabled ServiceMarket, `es-CO` and Spanish copy are the only launch presentation,
+`America/Bogota` is the default zone, WhatsApp through Kapso is the primary channel, Wompi handles
+billing, and Colombian compliance behaviour and Category data are direct.
+
+A second ServiceMarket must earn the abstraction it needs. Until then there is no generalized
+market/provider registry, country-settings bag, translation catalog, compliance-policy engine,
+generic identity framework, or ServiceMarket migration operation. The stable values and captured
+historical context above preserve meaning; they are not advance implementation of expansion.
 
 ---
 
@@ -382,26 +461,27 @@ That has happened: the guard is owed, and a third hand-written copy of the asser
 
 Most obvious alternatives here were considered and rejected. Read before reopening.
 
-| decision                                 | rejected alternative                        | why                                                                                                                                                                                                                                                                                                                      |
-| ---------------------------------------- | ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Layer-major (`core/`, `shell/`)          | Slice-major (`transactions/{core,repo}.ts`) | Boundary becomes a directory, not a filename; a file cannot be "neither"                                                                                                                                                                                                                                                 |
-| `Effect<A, E, never>` core               | Plain functions returning `Result<A, E>`    | Costs a second idiom and a lift at every call site; `R = never` plus four banned constructors is a comparable fence with one vocabulary                                                                                                                                                                                  |
-| Model in core, contract in shell         | Whole contract in core                      | Puts URL paths and status codes inside business rules                                                                                                                                                                                                                                                                    |
-| Model in core, contract in shell         | Separate domain model + wire DTO            | A mapping function per operation, and the thing OpenAPI/MCP derive from stops being the thing the domain uses                                                                                                                                                                                                            |
-| Slice = owns data                        | Slice = API group                           | API groups are presentation and regroupable at no cost; a wrong aggregate boundary means a partial write                                                                                                                                                                                                                 |
-| Core slices import only `_shared`        | Free cross-slice imports                    | Core would start gathering, which is shell's job                                                                                                                                                                                                                                                                         |
-| Ownership as context                     | `userId` on every model                     | Contracts derive from models, so the field reaches the input schema unless stripped every time                                                                                                                                                                                                                           |
-| Explicit `UserId` + derived test         | Ambient `CurrentUser` service               | Implicit, and unavailable to background jobs, which then pass the wrong user by hand                                                                                                                                                                                                                                     |
-| Explicit `UserId` + derived test         | Row-level security                          | Deferred, not rejected — see the tripwire above                                                                                                                                                                                                                                                                          |
-| One mapper per slice                     | `code` field on core errors                 | Wire vocabulary inside `core/`                                                                                                                                                                                                                                                                                           |
-| One mapper per slice                     | `catchTags` per handler                     | Repetitive, and a missed tag silently becomes a 500                                                                                                                                                                                                                                                                      |
-| Global migration log                     | Per-slice migrations                        | Ordering is global anyway; per-slice hides that                                                                                                                                                                                                                                                                          |
-| Global migration log                     | Timestamp prefixes                          | Overflows the `integer` migration id column                                                                                                                                                                                                                                                                              |
-| Mutation gate on `src/core` at 100       | Gating `src/core` and `src/shell` together  | Measured first (§8): four shell survivors are unkillable from any reachable seam — a response-encode branch, two documentation mutants, and migration bodies the migration log runs once per database. The choice was a sub-100 threshold or suppressions in source, and both make the number mean less than it says     |
-| Mutation gate on `src/core` at 100       | 90, matching the coverage gates             | A coverage percentage measures how much code a suite touched, where the last 10% is genuinely dear; a mutation score counts defects nothing noticed, and a standing allowance for those is a different thing to buy                                                                                                      |
-| Stryker's command runner                 | `@stryker-mutator/vitest-runner`            | The vitest runner drives vitest through its Node API, so every mutant would be judged on Node while the project ships on Bun. Per-test coverage analysis is the price, and at ~1s a core suite it buys nothing yet                                                                                                       |
-| `StringLiteral`/`ObjectLiteral` excluded | Mutating them and suppressing per site      | In a declarative tree they almost always land in `annotate({ description: … })`; killing them needs either exact prose pinned in a test or assertions against Effect's AST internals. One documented exclusion in the config beats eleven `Stryker disable` comments in a repo that bans suppression directives outright |
-| Core tests first-class                   | Core covered only through the API seam      | Core's branches are the model's schema checks — `Amount` alone rejects on three — and each boundary would need a full HTTP round-trip against a real database; `test:core` gates `src/core` at 90% lines with no database in the run, and CRAP ≤ 8 demands the coverage anyway, so this buys slower tests, not fewer     |
+| decision                                 | rejected alternative                                                       | why                                                                                                                                                                                                                                                                                                                               |
+| ---------------------------------------- | -------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Layer-major (`core/`, `shell/`)          | Slice-major (`transactions/{core,repo}.ts`)                                | Boundary becomes a directory, not a filename; a file cannot be "neither"                                                                                                                                                                                                                                                          |
+| `Effect<A, E, never>` core               | Plain functions returning `Result<A, E>`                                   | Costs a second idiom and a lift at every call site; `R = never` plus four banned constructors is a comparable fence with one vocabulary                                                                                                                                                                                           |
+| Model in core, contract in shell         | Whole contract in core                                                     | Puts URL paths and status codes inside business rules                                                                                                                                                                                                                                                                             |
+| Model in core, contract in shell         | Separate domain model + wire DTO                                           | A mapping function per operation, and the thing OpenAPI/MCP derive from stops being the thing the domain uses                                                                                                                                                                                                                     |
+| Colombia-first global-ready foundations  | COP/phone/implicit-context hard-coding; speculative multi-market machinery | Stable Money, User identity, explicit context and captured history preserve persisted meaning while Colombia stays direct; either alternative forces later reinterpretation or pays complexity before variation exists. See [ADR-0001](./docs/adr/0001-colombia-first-global-ready-foundations.md).                               |
+| Slice = owns data                        | Slice = API group                                                          | API groups are presentation and regroupable at no cost; a wrong aggregate boundary means a partial write                                                                                                                                                                                                                          |
+| Core slices import only `_shared`        | Free cross-slice imports                                                   | Core would start gathering, which is shell's job                                                                                                                                                                                                                                                                                  |
+| Ownership as context                     | `userId` on every model                                                    | Contracts derive from models, so the field reaches the input schema unless stripped every time                                                                                                                                                                                                                                    |
+| Explicit `UserId` + derived test         | Ambient `CurrentUser` service                                              | Implicit, and unavailable to background jobs, which then pass the wrong user by hand                                                                                                                                                                                                                                              |
+| Explicit `UserId` + derived test         | Row-level security                                                         | Deferred, not rejected — see the tripwire above                                                                                                                                                                                                                                                                                   |
+| One mapper per slice                     | `code` field on core errors                                                | Wire vocabulary inside `core/`                                                                                                                                                                                                                                                                                                    |
+| One mapper per slice                     | `catchTags` per handler                                                    | Repetitive, and a missed tag silently becomes a 500                                                                                                                                                                                                                                                                               |
+| Global migration log                     | Per-slice migrations                                                       | Ordering is global anyway; per-slice hides that                                                                                                                                                                                                                                                                                   |
+| Global migration log                     | Timestamp prefixes                                                         | Overflows the `integer` migration id column                                                                                                                                                                                                                                                                                       |
+| Mutation gate on `src/core` at 100       | Gating `src/core` and `src/shell` together                                 | Measured first (§8): four shell survivors are unkillable from any reachable seam — a response-encode branch, two documentation mutants, and migration bodies the migration log runs once per database. The choice was a sub-100 threshold or suppressions in source, and both make the number mean less than it says              |
+| Mutation gate on `src/core` at 100       | 90, matching the coverage gates                                            | A coverage percentage measures how much code a suite touched, where the last 10% is genuinely dear; a mutation score counts defects nothing noticed, and a standing allowance for those is a different thing to buy                                                                                                               |
+| Stryker's command runner                 | `@stryker-mutator/vitest-runner`                                           | The vitest runner drives vitest through its Node API, so every mutant would be judged on Node while the project ships on Bun. Per-test coverage analysis is the price, and at ~1s a core suite it buys nothing yet                                                                                                                |
+| `StringLiteral`/`ObjectLiteral` excluded | Mutating them and suppressing per site                                     | In a declarative tree they almost always land in `annotate({ description: … })`; killing them needs either exact prose pinned in a test or assertions against Effect's AST internals. One documented exclusion in the config beats eleven `Stryker disable` comments in a repo that bans suppression directives outright          |
+| Core tests first-class                   | Core covered only through the API seam                                     | Core's branches include exact Money decoding, Currency precision and same-Currency arithmetic, and each boundary would need a full HTTP round-trip against a real database; `test:core` gates `src/core` at 90% lines with no database in the run, and CRAP ≤ 8 demands the coverage anyway, so this buys slower tests, not fewer |
 
 **This last row amends the Testing Decisions section of the spec (GitHub issue #1)**, which reads
 "this is the exception, not a third seam". That was written before `core/` existed and now covers the

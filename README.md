@@ -193,7 +193,7 @@ change together:
 
 | scope          | when to use                                      |
 | -------------- | ------------------------------------------------ |
-| `identity`     | users, phone-number identity, sessions           |
+| `identity`     | users, channel identities, sessions              |
 | `consent`      | consent records and revocations (Ley 1581)       |
 | `transactions` | the ledger, source attestations, reconciliation  |
 | `categories`   | the spending taxonomy and its keyword rules      |

@@ -1,0 +1,7 @@
+[install]
+linker = "hoisted"
+# Supply-chain delay, matching the root bunfig. An isolated install is still an
+# install: without this, `bun install` here would take a release published
+# minutes ago, and the analyzer that grades the repo's tests would be the one
+# unvetted thing in CI.
+minimumReleaseAge = 604800

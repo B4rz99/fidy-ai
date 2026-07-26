@@ -1,0 +1,29 @@
+# Fluid Attacks SCA scanner configuration (passed to `sca scan` in CI).
+# .repos/ holds vendored reference checkouts (read-only source of truth for
+# agents); their lockfiles describe dependencies we never install or run.
+namespace: fidy-ai
+working_dir: /src
+language: EN
+sca:
+  include:
+    - glob(*)
+    - glob(**)
+  exclude:
+    - glob(.repos/**)
+    - glob(**/node_modules/**)
+  # Vulnerabilities this repo has decided to carry, by advisory and lockfile.
+  # An entry here is an accepted risk, not a fixed one: the scanner stops
+  # counting the finding, so the build goes green with the vulnerability still
+  # installed. It is the escape hatch of last resort, and the only one — the
+  # install delay in bunfig.toml is never punctured to reach a fix, because a
+  # release too young to have been looked at is the larger risk.
+  #
+  # The scanner has nowhere to record why an entry exists or when it should be
+  # gone, so every entry needs a matching `acceptedVulnerabilities` record in
+  # dependency-policy.json carrying the reason and the expiry. `bun run
+  # lint:dependencies` fails on any entry that has no record, whose record has
+  # expired, and on any record whose entry is gone.
+  exclusions:
+    - CVE: CVE-2026-14257
+      paths:
+        - tools/mutation/bun.lock

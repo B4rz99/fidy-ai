@@ -19,6 +19,29 @@ jobs:
           PR_TITLE: ${{ github.event.pull_request.title }}
         run: bun scripts/check-pr-title.ts
 
+  migration-ids:
+    name: Migration IDs
+    runs-on: ubuntu-latest
+    # No `bun install`: the check imports nothing outside Bun's own globals.
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      # The *tip* of the base branch, not the merge base. A branch cut before a
+      # higher migration id landed on trunk must still be measured against that
+      # id — the merge base predates it, so comparing there would wave through
+      # exactly the migration the migrator will silently skip. Depth 1 suffices:
+      # only the tip's copy of the registry is read.
+      - name: Fetch base branch tip
+        env:
+          BASE_BRANCH: ${{ github.event.pull_request.base.ref }}
+        run: git fetch --no-tags --depth=1 origin "+refs/heads/$BASE_BRANCH:refs/remotes/origin/$BASE_BRANCH"
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: "1.3.14"
+      - name: Validate migration ids
+        env:
+          BASE_REF: origin/${{ github.event.pull_request.base.ref }}
+        run: bun scripts/check-migration-ids.ts
+
   lint:
     name: Lint
     runs-on: ubuntu-latest
@@ -38,6 +61,67 @@ jobs:
         run: bun install --frozen-lockfile
       - name: oxlint
         run: bun run lint
+      - name: oxlint --type-aware
+        run: bun run lint:type-aware
+
+  lint-suppressions:
+    name: Lint Suppressions
+    runs-on: ubuntu-latest
+    # No `bun install`: the check reads the tree through git and Bun's own
+    # globals. It is its own job rather than a step of Lint because it decides
+    # whether that job's result means anything — a whole-file `oxlint-disable`
+    # turns off every rule in the file, including one written to catch it.
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: "1.3.14"
+      - name: Lint suppressions
+        run: bun run lint:suppressions
+
+  module-graph:
+    name: Module Graph
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: "1.3.14"
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+      # dependency-cruiser reads .ts sources and the tsconfig `paths` aliases
+      # through the classic TypeScript compiler API, which the repo's Effect
+      # tsgo `typescript` build does not expose, so the cruiser and a classic
+      # typescript live in an isolated install under tools/depcruise.
+      - name: Install dependency-cruiser
+        working-directory: tools/depcruise
+        run: bun install --frozen-lockfile
+      - name: Module-graph rules and generated graph
+        run: bun run lint:deps
+
+  dependencies:
+    name: Dependencies
+    runs-on: ubuntu-latest
+    # The one job that reaches the public internet on purpose: it asks the npm
+    # registry what has shipped since each pin was written. It grades the
+    # manifests as the pull request declares them, not the installed tree —
+    # `bun install` is here only because the check itself is an Effect program.
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: "1.3.14"
+      - name: Cache Bun install cache
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+      - name: Dependency policy
+        run: bun run lint:dependencies
 
   format:
     name: Format
@@ -64,6 +148,116 @@ jobs:
         run: bun install --frozen-lockfile
       - name: Typecheck
         run: bun run typecheck
+
+  test-core:
+    name: Core Tests
+    runs-on: ubuntu-latest
+    # Deliberately no postgres service and no DATABASE_URL: the core tier needs
+    # nothing (ARCHITECTURE.md §8). A core test that reaches for the world fails
+    # here rather than passing quietly inside the full run, where a database is
+    # always available.
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: "1.3.14"
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+      - name: Core tests
+        run: bun run test:core
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: fidy
+          POSTGRES_PASSWORD: fidy
+          POSTGRES_DB: fidy
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U fidy"
+          --health-interval 2s
+          --health-timeout 2s
+          --health-retries 15
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: "1.3.14"
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+      - name: Test
+        env:
+          DATABASE_URL: postgres://fidy:fidy@localhost:5432/fidy
+        run: bun run test
+
+  crap:
+    name: CRAP
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: fidy
+          POSTGRES_PASSWORD: fidy
+          POSTGRES_DB: fidy
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U fidy"
+          --health-interval 2s
+          --health-timeout 2s
+          --health-retries 15
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: "1.3.14"
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+      # crap4ts parses source with the classic TypeScript compiler API, which the
+      # repo's Effect tsgo `typescript` build does not expose, so the analyzer and
+      # a classic typescript live in an isolated install under tools/crap.
+      - name: Install CRAP analyzer
+        working-directory: tools/crap
+        run: bun install --frozen-lockfile
+      - name: CRAP threshold gate
+        env:
+          DATABASE_URL: postgres://fidy:fidy@localhost:5432/fidy
+        run: bun run test:crap
+
+  mutation:
+    name: Mutation
+    runs-on: ubuntu-latest
+    # No postgres service and no DATABASE_URL, for the same reason Core Tests
+    # has neither: the gate runs the core tier, which reaches for nothing.
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: "1.3.14"
+      # The one job that needs a Node runtime as well as Bun: Stryker's Babel
+      # instrumenter throws on Bun (tools/mutation/run.mjs). Bun still installs
+      # the dependencies and vitest still runs the tests — only the Stryker
+      # process itself is Node's.
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "22"
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+      # Stryker rewrites the sandbox tsconfig through the classic TypeScript
+      # compiler API, which the repo's Effect tsgo `typescript` build does not
+      # expose, so Stryker and a classic typescript live in an isolated install
+      # under tools/mutation.
+      - name: Install mutation runner
+        working-directory: tools/mutation
+        run: bun install --frozen-lockfile
+      - name: Mutation score gate
+        run: bun run test:mutation
 
   security-secrets:
     name: Secrets
@@ -98,7 +292,7 @@ jobs:
             p/typescript
             p/secrets
       - name: Fluid Attacks SAST
-        run: docker run --rm --pull=always -v "$PWD:/src" docker.io/fluidattacks/sast:latest sast --strict scan /src
+        run: docker run --rm --pull=always -v "$PWD:/src" docker.io/fluidattacks/sast:latest sast --strict scan /src/.fluidattacks/sast.yaml
 
   security-sca:
     name: SCA
@@ -106,16 +300,24 @@ jobs:
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
       - name: Fluid Attacks SCA
-        run: docker run --rm --pull=always -v "$PWD:/src" docker.io/fluidattacks/sca:latest sca --strict scan /src
+        run: docker run --rm --pull=always -v "$PWD:/src" docker.io/fluidattacks/sca:latest sca --strict scan /src/.fluidattacks/sca.yaml
 
   required-checks:
     name: Required Checks
     runs-on: ubuntu-latest
     needs:
       - pr-title
+      - migration-ids
       - lint
+      - lint-suppressions
+      - module-graph
+      - dependencies
       - format
       - typecheck
+      - test-core
+      - test
+      - crap
+      - mutation
       - security-secrets
       - security-sast
       - security-sca

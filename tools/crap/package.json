@@ -1,0 +1,10 @@
+{
+  "name": "fidy-ai-crap-tools",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Isolated classic-TypeScript install for crap4ts. crap4ts parses source through @typescript-eslint/typescript-estree, which needs the classic `typescript` compiler API; the root package pins the Effect tsgo `typescript` build, which does not expose it. Keeping crap4ts and a classic typescript here lets the analyzer run without disturbing the root toolchain. The pin tracks the classic 6.x line and stops there on purpose: typescript@7 ships no compiler API at all — its main entry resolves to a version stub — and typescript-estree's peer range ends below 6.1. Revisit when TypeScript 7.1 ships the replacement API and typescript-estree adopts it.",
+  "devDependencies": {
+    "crap4ts": "1.0.1",
+    "typescript": "6.0.3"
+  }
+}

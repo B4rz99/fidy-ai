@@ -4,39 +4,39 @@ How the engineering skills should consume this repo's domain documentation when 
 
 ## Before exploring, read these
 
-- **`CONTEXT.md`** at the repo root, or
-- **`CONTEXT-MAP.md`** at the repo root if it exists — it points at one `CONTEXT.md` per context. Read each one relevant to the topic.
-- **`docs/adr/`** — read ADRs that touch the area you're about to work in. In multi-context repos, also check `src/<context>/docs/adr/` for context-scoped decisions.
+- **`CONTEXT.md`** at the repo root — the ubiquitous language.
+- **`ARCHITECTURE.md`** at the repo root — this repo keeps its architectural decisions consolidated
+  here rather than in a `docs/adr/` directory. Its closing "Decisions and what they rule out" table
+  is the equivalent of the ADR record: it names each rejected alternative and why.
+- **`CODING_STANDARDS.md`** at the repo root — how code is written inside that architecture.
+
+**Recording a new decision**: add it to the relevant section of `ARCHITECTURE.md` and, if it ruled
+something out, add a row to that closing table. Do not create `docs/adr/` — this repo deliberately
+consolidated it away.
 
 If any of these files don't exist, **proceed silently**. Don't flag their absence; don't suggest creating them upfront. The `/domain-modeling` skill (reached via `/grill-with-docs` and `/improve-codebase-architecture`) creates them lazily when terms or decisions actually get resolved.
 
 ## File structure
 
-Single-context repo (most repos):
+This repo is single-context, with decisions consolidated rather than kept as numbered ADR files:
 
 ```
 /
-├── CONTEXT.md
-├── docs/adr/
-│   ├── 0001-event-sourced-orders.md
-│   └── 0002-postgres-for-write-model.md
+├── CONTEXT.md            the ubiquitous language
+├── ARCHITECTURE.md       the shape, and a table of rejected alternatives
+├── CODING_STANDARDS.md   how code is written inside that shape
 └── src/
+    ├── core/             pure business rules
+    └── shell/            everything that touches the world
 ```
 
-Multi-context repo (presence of `CONTEXT-MAP.md` at the root):
+The `/domain-modeling` skill's default is a `docs/adr/` directory of one file per decision. That was
+tried here and consolidated away: seven ADRs covering one coherent architecture read better as one
+document with a decisions table than as seven files a reader has to assemble. **Follow this layout,
+not the skill's default.**
 
-```
-/
-├── CONTEXT-MAP.md
-├── docs/adr/                          ← system-wide decisions
-└── src/
-    ├── ordering/
-    │   ├── CONTEXT.md
-    │   └── docs/adr/                  ← context-specific decisions
-    └── billing/
-        ├── CONTEXT.md
-        └── docs/adr/
-```
+There is no `CONTEXT-MAP.md` and there should not be — slices are aggregates inside a single bounded
+context, not separate contexts. See `ARCHITECTURE.md` §2.
 
 ## Use the glossary's vocabulary
 

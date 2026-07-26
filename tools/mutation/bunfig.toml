@@ -1,0 +1,10 @@
+[install]
+linker = "hoisted"
+# Supply-chain delay, matching the root bunfig — including its refusal to carry
+# an exclude list.
+minimumReleaseAge = 604800
+# No auto-installed peers. @stryker-mutator/vitest-runner peer-depends on
+# vitest, and a copy of vitest installed *here* would shadow the root's for
+# Node's upward resolution — the runner would then drive a second, unconfigured
+# vitest instead of the one vitest.core.config.ts belongs to.
+peer = false

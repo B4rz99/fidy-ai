@@ -11,21 +11,12 @@ All changes reach `trunk` through a squash-merged PR. Direct pushes to `trunk` a
 
 - Branch off `trunk`: `git checkout -b <type>/<short-name> trunk`.
 - Commit with the convention (enforced by the commit-msg hook): a `type(scope): summary` header, then `- ` bullet body lines only. Trailers (`Co-Authored-By`, etc.) are rejected.
-  - **type**: `feat | fix | refactor | chore | docs | ci`
-  - **scope** (allowlist — hook prints each with "when to use it" on failure):
-
-    | scope | when to use |
-    | --- | --- |
-    | `backend` | server, API implementation, business logic |
-    | `frontend` | web dashboard / UI |
-    | `ai` | hosted agent, prompts, LLM routing |
-    | `api` | agent-legible API surface & conventions |
-    | `whatsapp` | WhatsApp channel integration |
-    | `payments` | payment rails (Wompi / ePayco) |
-    | `auth` | onboarding, consent, login |
-    | `db` | schema / migrations |
-    | `repo` | repo-wide tooling, config, hooks |
-    | `deps` | dependency bumps |
+  - **type** and **scope** come from the allowlist published in README.md's "Commit convention"
+    section, which the hooks and the `PR Title` check parse directly. Read it there rather than
+    from a copy here — a copy is exactly what drifts. The scope is the slice the change lands in
+    (ARCHITECTURE.md §2); cross-cutting scopes are only for work that belongs to no slice.
+  - Print the current list without leaving the terminal:
+    `bun scripts/check-commit-message.ts /dev/null`
 
 ## 2. Create the PR
 

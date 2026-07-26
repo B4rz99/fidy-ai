@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 
-import { formatCommitMessageErrors, validateCommitMessage } from "./check-commit-message";
+import { loadCommitConvention } from "./check-commit-message";
 
 const ZERO_SHA = "0".repeat(40);
 
@@ -9,7 +9,7 @@ const text = (command: string[]): string => {
 
   if (result.exitCode !== 0) {
     const stderr = new TextDecoder().decode(result.stderr).trim();
-    throw new Error(`${command.join(" ")} failed${stderr ? `: ${stderr}` : ""}`);
+    throw new Error(`${command.join(" ")} failed${stderr.length > 0 ? `: ${stderr}` : ""}`);
   }
 
   return new TextDecoder().decode(result.stdout).trim();
@@ -23,10 +23,10 @@ const pushLines = (await Bun.stdin.text())
 const pushedCommits = pushLines.flatMap((line) => {
   const [, localSha, , remoteSha] = line.split(/\s+/);
 
-  if (!localSha || localSha === ZERO_SHA) return [];
+  if (localSha === undefined || localSha === ZERO_SHA) return [];
 
   const args =
-    remoteSha && remoteSha !== ZERO_SHA
+    remoteSha !== undefined && remoteSha !== ZERO_SHA
       ? ["rev-list", `${remoteSha}..${localSha}`]
       : ["rev-list", localSha, "--not", "--remotes"];
 
@@ -39,17 +39,21 @@ const commits = [
   ...new Set(pushLines.length > 0 ? pushedCommits : [text(["git", "rev-parse", "HEAD"])]),
 ];
 
+// The same allowlist the commit-msg hook enforces: README.md's commit
+// convention section.
+const convention = await loadCommitConvention();
+
 const failures = commits.flatMap((commit) => {
   const message = text(["git", "show", "-s", "--format=%B", commit]);
-  const errors = validateCommitMessage(message);
+  const errors = convention.validateMessage(message);
   const subject = text(["git", "show", "-s", "--format=%s", commit]);
 
   return errors.map(
-    (error) => `${commit.slice(0, 12)} ${subject}\n${formatCommitMessageErrors([error])}`
+    (error) => `${commit.slice(0, 12)} ${subject}\n${convention.formatErrors([error])}`
   );
 });
 
 if (failures.length > 0) {
-  console.error(failures.join("\n\n"));
+  process.stderr.write(`${failures.join("\n\n")}\n`);
   process.exit(1);
 }

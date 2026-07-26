@@ -1,0 +1,29 @@
+{
+  "$comment": [
+    "Updates this repo has decided not to take yet. Read by scripts/check-dependency-updates.ts,",
+    "which fails on any compatible update — patch, minor, or prerelease-to-stable — that a pin has",
+    "not taken. An entry here downgrades that failure to a warning until its date; it never hides it.",
+    "`until` is exclusive: a deferral dated 2026-09-01 stops applying on 2026-09-01. Give a reason a",
+    "reader in three months can act on — what breaks, and what has to happen first.",
+    "`manifest` scopes an entry to one manifest; omit it and the entry speaks for every pin of that",
+    "name, which is wrong whenever the same package is pinned twice for different reasons.",
+    "",
+    "`acceptedVulnerabilities` is the other half: a vulnerability this repo ships with, because the",
+    "install delay in bunfig.toml is never punctured — not even to reach a fix. A release published",
+    "days ago is how a compromised package arrives, so the delay outranks a known CVE, and when the",
+    "only fix is too young the vulnerability is carried instead. Each entry pairs one advisory with",
+    "one lockfile, matching an `sca.exclusions` entry in .fluidattacks/sca.yaml, which is where the",
+    "scanner is told to stop counting it. The reason and the expiry live here because that config",
+    "has nowhere to put them. An exclusion with no entry fails, an expired entry fails, and so does",
+    "an entry whose exclusion is gone."
+  ],
+  "deferredUpdates": [],
+  "acceptedVulnerabilities": [
+    {
+      "cve": "CVE-2026-14257",
+      "path": "tools/mutation/bun.lock",
+      "reason": "brace-expansion 5.0.7 reaches this install through @stryker-mutator/core's minimatch. Every release <= 5.0.7 is affected (High, denial of service via unbounded expansion) and the fix, 5.0.8, was published 2026-07-23 — inside the 7-day install delay, which holds. What runs here is a build-time mutation runner expanding this repo's own glob patterns, so nothing untrusted reaches the parser. 5.0.8 becomes installable on 2026-07-30: pin it via `overrides` then, and delete this entry together with the exclusion in .fluidattacks/sca.yaml.",
+      "until": "2026-08-03T00:00:00Z"
+    }
+  ]
+}

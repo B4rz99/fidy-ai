@@ -11,5 +11,5 @@
   "bracketSameLine": false,
   "bracketSpacing": true,
   "singleAttributePerLine": false,
-  "ignorePatterns": ["**/node_modules", "**/dist", "**/build", "**/coverage", ".claude"]
+  "ignorePatterns": ["**/node_modules", "**/dist", "**/build", "**/coverage", ".claude", ".repos"]
 }

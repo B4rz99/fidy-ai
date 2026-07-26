@@ -1,5 +1,11 @@
 [install]
 linker = "hoisted"
 # Supply-chain delay: refuse to install package versions younger than 7 days.
+# There is no exclude list here or in any tools/* bunfig, and that is the policy
+# rather than an omission: the delay is what stops a freshly published,
+# compromised release from reaching this machine, so nothing is let out of it —
+# not even a version that fixes a CVE. When the only fix is too young to
+# install, the vulnerability is carried instead, recorded in
+# .fluidattacks/sca.yaml with a reason and an expiry in dependency-policy.json.
+# `bun run lint:dependencies` fails on any `minimumReleaseAgeExcludes` entry.
 minimumReleaseAge = 604800
-minimumReleaseAgeExcludes = []

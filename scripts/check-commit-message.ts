@@ -1,42 +1,171 @@
 #!/usr/bin/env bun
 
-const TYPES: readonly string[] = ["feat", "fix", "refactor", "chore", "docs", "ci"];
+// The convention is not defined in this file. It is parsed out of README.md's
+// "Commit convention" section, which is therefore the allowlist itself rather
+// than a description of one. Three consumers read this module — the commit-msg
+// hook, the pre-push hook and the `PR Title` CI check — so a list kept here
+// would be a fourth copy of a list that has already drifted twice: the README
+// documented a `docs` scope and `test`/`perf` types that the hook rejected.
+//
+// Parsing is strict on purpose. A missing marker or an empty table throws
+// rather than falling back to "allow everything", because a silently permissive
+// hook is worse than a broken one.
 
-const SCOPES: Record<string, string> = {
-  backend: "server, API implementation, business logic",
-  frontend: "web dashboard / UI",
-  ai: "hosted agent, prompts, LLM routing",
-  api: "agent-legible API surface & conventions",
-  whatsapp: "WhatsApp channel integration",
-  payments: "payment rails (Wompi / ePayco)",
-  auth: "onboarding, consent, login",
-  db: "schema / migrations",
-  repo: "repo-wide tooling, config, hooks",
-  deps: "dependency bumps",
+const TYPES_MARKER = "<!-- commit-types -->";
+
+const HEADER_PATTERN = /^([a-z]+)\(([a-z0-9-]+)\): (.+)$/;
+
+// A data row of a scope table: the scope in a code span, then its "when to use"
+// cell. The header and separator rows carry no code span, so they never match.
+const SCOPE_ROW_PATTERN = /^\|\s*`([a-z0-9-]+)`\s*\|\s*(\S[^|]*?)\s*\|$/;
+
+const HEADER_SHAPE_ERROR = "Commit header must follow format: type(scope): message";
+
+const NAME_COLUMN = 14;
+
+type ScopeSection = {
+  /** The HTML comment in README.md the table follows. */
+  readonly marker: string;
+  /** Printed above the group in the failure message. */
+  readonly lead: string;
 };
 
-const SCOPE_LINES = Object.entries(SCOPES)
-  .map(([scope, description]) => `  ${scope.padEnd(10)} ${description}`)
-  .join("\n");
+type ScopeEntry = {
+  readonly name: string;
+  readonly when: string;
+};
 
-const COMMIT_MESSAGE_FORMAT = `Required commit message format:
+type ScopeGroup = {
+  readonly lead: string;
+  readonly scopes: readonly ScopeEntry[];
+};
+
+type Allowlist = {
+  readonly types: readonly string[];
+  readonly scopeGroups: readonly ScopeGroup[];
+};
+
+/**
+ * The published convention, ready to judge a header or a whole message. Every
+ * failure it reports is followed by the current list, so a rejected message can
+ * be fixed from the terminal.
+ */
+export type CommitConvention = {
+  readonly validateHeader: (header: string) => readonly string[];
+  readonly validateMessage: (message: string) => readonly string[];
+  readonly formatErrors: (errors: readonly string[]) => string;
+};
+
+const CONVENTION_SOURCE = new URL("../README.md", import.meta.url);
+
+// Order matters: it is the order scopes are printed in, slices first.
+const SCOPE_SECTIONS: readonly ScopeSection[] = [
+  {
+    marker: "<!-- commit-scopes:slices -->",
+    lead: "  the slice the change lands in — a commit almost always lands in exactly one:",
+  },
+  {
+    marker: "<!-- commit-scopes:cross-cutting -->",
+    lead: "  cross-cutting — only for work that belongs to no slice:",
+  },
+];
+
+const isBlank = (line: string): boolean => line.trim().length === 0;
+
+/** The first run of non-blank lines after a marker: the list or table it labels. */
+const blockAfter = (markdown: string, marker: string): readonly string[] => {
+  const marked = markdown.indexOf(marker);
+
+  if (marked === -1) {
+    throw new Error(
+      `README.md is missing the "${marker}" marker: the commit convention is unreadable`
+    );
+  }
+
+  const lines = markdown
+    .slice(marked + marker.length)
+    .split(/\r?\n/)
+    .slice(1);
+  const block = lines.slice(lines.findIndex((line) => !isBlank(line)));
+  const end = block.findIndex(isBlank);
+
+  return end === -1 ? block : block.slice(0, end);
+};
+
+const parseTypes = (markdown: string): readonly string[] => {
+  const spans = blockAfter(markdown, TYPES_MARKER)
+    .join(" ")
+    .match(/`[a-z]+`/g);
+
+  if (spans === null) {
+    throw new Error(`README.md lists no commit types under "${TYPES_MARKER}"`);
+  }
+
+  return spans.map((span) => span.slice(1, -1));
+};
+
+const parseScopeRow = (row: string): ScopeEntry | null => {
+  const match = SCOPE_ROW_PATTERN.exec(row.trim());
+
+  if (match === null) {
+    return null;
+  }
+
+  const name = match[1];
+  const when = match[2];
+
+  if (name === undefined || when === undefined) {
+    return null;
+  }
+
+  return { name, when };
+};
+
+const parseScopeGroup = (markdown: string, section: ScopeSection): ScopeGroup => {
+  const scopes = blockAfter(markdown, section.marker)
+    .map(parseScopeRow)
+    .filter((scope) => scope !== null);
+
+  if (scopes.length === 0) {
+    throw new Error(`README.md lists no scopes under "${section.marker}"`);
+  }
+
+  return { lead: section.lead, scopes };
+};
+
+const parseAllowlist = (markdown: string): Allowlist => ({
+  types: parseTypes(markdown),
+  scopeGroups: SCOPE_SECTIONS.map((section) => parseScopeGroup(markdown, section)),
+});
+
+const scopeNames = (allowlist: Allowlist): readonly string[] =>
+  allowlist.scopeGroups.flatMap((group) => group.scopes.map((scope) => scope.name));
+
+const formatScopeGroup = (group: ScopeGroup): string =>
+  [
+    group.lead,
+    ...group.scopes.map((scope) => `    ${scope.name.padEnd(NAME_COLUMN)}${scope.when}`),
+  ].join("\n");
+
+const formatAllowlist = (allowlist: Allowlist): string =>
+  `Required commit message format:
 type(scope): message
 
 - concise body bullet
 - another body bullet
 
-type: ${TYPES.join(" | ")}
+type: ${allowlist.types.join(" | ")}
 
-scope (pick the area the change touches):
-${SCOPE_LINES}
+scope:
+${allowlist.scopeGroups.map(formatScopeGroup).join("\n\n")}
 
 body: required; every line must start with "- "`;
 
-export const validateCommitHeader = (header: string): string[] => {
-  const match = /^([a-z]+)\(([a-z0-9-]+)\): (.+)$/.exec(header);
+const headerErrors = (header: string, allowlist: Allowlist): readonly string[] => {
+  const match = HEADER_PATTERN.exec(header);
 
-  if (!match) {
-    return ["Commit header must follow format: type(scope): message"];
+  if (match === null) {
+    return [HEADER_SHAPE_ERROR];
   }
 
   const type = match[1];
@@ -44,29 +173,29 @@ export const validateCommitHeader = (header: string): string[] => {
   const summary = match[3];
 
   if (type === undefined || scope === undefined || summary === undefined) {
-    return ["Commit header must follow format: type(scope): message"];
+    return [HEADER_SHAPE_ERROR];
   }
 
   const errors: string[] = [];
 
-  if (!TYPES.includes(type)) {
-    errors.push(`Invalid type "${type}". Use one of: ${TYPES.join(", ")}`);
+  if (!allowlist.types.includes(type)) {
+    errors.push(`Invalid type "${type}". Use one of: ${allowlist.types.join(", ")}`);
   }
 
-  if (!Object.hasOwn(SCOPES, scope)) {
-    errors.push(`Invalid scope "${scope}". Use one of: ${Object.keys(SCOPES).join(", ")}`);
+  if (!scopeNames(allowlist).includes(scope)) {
+    errors.push(`Invalid scope "${scope}". Use one of the scopes listed below`);
   }
 
   return errors;
 };
 
-export const validateCommitMessage = (message: string): string[] => {
+const messageErrors = (message: string, allowlist: Allowlist): readonly string[] => {
   const lines = message.split(/\r?\n/);
   const header = lines[0] ?? "";
-  const headerErrors = validateCommitHeader(header);
+  const errors = headerErrors(header, allowlist);
 
-  if (headerErrors.length > 0) {
-    return headerErrors;
+  if (errors.length > 0) {
+    return errors;
   }
 
   const bodyLines = lines
@@ -78,29 +207,48 @@ export const validateCommitMessage = (message: string): string[] => {
     return ["Commit body must contain at least one bullet point (- description)"];
   }
 
-  if (badBodyLine) {
+  if (badBodyLine !== undefined) {
     return ["Commit body must contain bullet points only (- description)"];
   }
 
   return [];
 };
 
-export const formatCommitMessageErrors = (errors: readonly string[]): string =>
-  `${errors.join("\n")}\n\n${COMMIT_MESSAGE_FORMAT}`;
+/**
+ * Parses the convention out of `markdown` — any document carrying the README's
+ * markers, not README.md alone. Throws when a marker is missing, or when the
+ * list or table under it holds no entries.
+ */
+export const parseCommitConvention = (markdown: string): CommitConvention => {
+  const allowlist = parseAllowlist(markdown);
+
+  return {
+    validateHeader: (header) => headerErrors(header, allowlist),
+    validateMessage: (message) => messageErrors(message, allowlist),
+    formatErrors: (errors) => `${errors.join("\n")}\n\n${formatAllowlist(allowlist)}`,
+  };
+};
+
+/**
+ * The convention as README.md publishes it, re-read on every call. Rejects when
+ * the file cannot be read or does not parse.
+ */
+export const loadCommitConvention = (): Promise<CommitConvention> =>
+  Bun.file(CONVENTION_SOURCE).text().then(parseCommitConvention);
 
 if (import.meta.main) {
   const messagePath = Bun.argv[2];
 
-  if (!messagePath) {
-    console.error("Usage: bun scripts/check-commit-message.ts <commit-msg-file>");
+  if (messagePath === undefined) {
+    process.stderr.write("Usage: bun scripts/check-commit-message.ts <commit-msg-file>\n");
     process.exit(1);
   }
 
-  const message = await Bun.file(messagePath).text();
-  const errors = validateCommitMessage(message);
+  const convention = await loadCommitConvention();
+  const errors = convention.validateMessage(await Bun.file(messagePath).text());
 
   if (errors.length > 0) {
-    console.error(formatCommitMessageErrors(errors));
+    process.stderr.write(`${convention.formatErrors(errors)}\n`);
     process.exit(1);
   }
 }

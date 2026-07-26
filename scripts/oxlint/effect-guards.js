@@ -1,0 +1,407 @@
+// Custom oxlint JS plugin: Effect/SQL semantic guards that oxlint's built-in
+// rules and @effect/language-service diagnostics do not already cover.
+//
+// Ported from the bespoke ESLint rules in
+// https://github.com/mikearnaldi/accountability/blob/main/eslint.config.mjs
+//
+// oxlint's JS-plugin API mirrors ESLint v9. Written in .js so tsgo (which only
+// typechecks *.ts) does not try to typecheck the untyped plugin API.
+
+/**
+ * Ban `sql<Type>`...`` — a type parameter on a sql tagged template provides no
+ * runtime validation. Use SqlSchema.findOne/findAll/single/void with a Schema
+ * so queries validate at runtime.
+ */
+const noSqlTypeParameter = {
+  meta: {
+    type: "problem",
+    docs: { description: "Disallow type parameters on sql tagged templates" },
+    messages: {
+      noSqlTypeParam:
+        "Do not use sql<Type>`...`. Type parameters provide no runtime validation. Use SqlSchema.findOne/findAll/single/void with a Schema for queries that validate at runtime.",
+    },
+    schema: [],
+  },
+  create(context) {
+    return {
+      TaggedTemplateExpression(node) {
+        // oxc exposes `typeArguments`; older ESTree used `typeParameters`.
+        if (!node.typeArguments && !node.typeParameters) return;
+        const tag = node.tag;
+        const isSql =
+          (tag.type === "Identifier" && tag.name === "sql") ||
+          (tag.type === "MemberExpression" &&
+            tag.property.type === "Identifier" &&
+            tag.property.name === "sql");
+        if (isSql) {
+          context.report({ node, messageId: "noSqlTypeParam" });
+        }
+      },
+    };
+  },
+};
+
+/**
+ * Ban `{ disableValidation: true }` — disabling Schema validation defeats the
+ * purpose of Schema and hides invalid data. Fix the data or the schema instead.
+ */
+const noDisableValidation = {
+  meta: {
+    type: "problem",
+    docs: { description: "Disallow disableValidation: true in Schema operations" },
+    messages: {
+      noDisableValidation:
+        "Do not use { disableValidation: true }. Schema validation should always be enabled. Fix the data or the schema instead of disabling validation.",
+    },
+    schema: [],
+  },
+  create(context) {
+    return {
+      Property(node) {
+        const key = node.key;
+        const isDisableValidationKey =
+          (key.type === "Identifier" && key.name === "disableValidation") ||
+          (key.type === "Literal" && key.value === "disableValidation");
+        if (isDisableValidationKey && node.value.type === "Literal" && node.value.value === true) {
+          context.report({ node, messageId: "noDisableValidation" });
+        }
+      },
+    };
+  },
+};
+
+// The Effect constructors that take an arbitrary thunk or promise and hand back
+// an Effect without putting anything in `R`. See ARCHITECTURE.md §3. `async` is
+// the v3 spelling of `callback`; both are listed so the fence survives either.
+const ESCAPE_HATCHES = new Set(["sync", "promise", "tryPromise", "async", "callback"]);
+
+/** The member name a `.prop` or `["prop"]` access reads, or undefined. */
+const staticMemberName = (node) => {
+  if (!node.computed && node.property.type === "Identifier") return node.property.name;
+  if (node.property.type === "Literal" && typeof node.property.value === "string") {
+    return node.property.value;
+  }
+  return undefined;
+};
+
+/**
+ * Ban the Effect escape hatches. `Effect.sync`, `Effect.promise`,
+ * `Effect.tryPromise` and `Effect.callback`/`async` accept an arbitrary thunk
+ * and produce an `Effect` with `R = never`, so a vendor SDK call reached
+ * through one of them never appears in the requirements channel. Scoped to
+ * `src/core/**` by the config: they are the last remaining way to do I/O in the
+ * functional core without the type noticing.
+ */
+const noEscapeHatch = {
+  meta: {
+    type: "problem",
+    docs: { description: "Disallow the Effect escape-hatch constructors" },
+    messages: {
+      noEscapeHatch:
+        "Do not use Effect.{{name}} here. It builds an Effect with R = never from an arbitrary thunk, so I/O reached through it never appears in the requirements channel. Take the value as a parameter and let the shell supply it, or move the operation to shell/.",
+    },
+    schema: [],
+  },
+  create(context) {
+    return {
+      // `Effect.sync(...)` — the repo idiom is `import { Effect } from "effect"`.
+      MemberExpression(node) {
+        if (node.object.type !== "Identifier" || node.object.name !== "Effect") return;
+        const name = staticMemberName(node);
+        if (name === undefined || !ESCAPE_HATCHES.has(name)) return;
+        context.report({ node, messageId: "noEscapeHatch", data: { name } });
+      },
+      // `import { sync } from "effect/Effect"` — the same hatch, unqualified.
+      ImportDeclaration(node) {
+        const source = node.source.value;
+        if (typeof source !== "string") return;
+        if (source !== "effect" && !source.startsWith("effect/")) return;
+        for (const specifier of node.specifiers) {
+          if (specifier.type !== "ImportSpecifier") continue;
+          const imported = specifier.imported;
+          if (imported.type !== "Identifier" || !ESCAPE_HATCHES.has(imported.name)) continue;
+          context.report({
+            node: specifier,
+            messageId: "noEscapeHatch",
+            data: { name: imported.name },
+          });
+        }
+      },
+    };
+  },
+};
+
+/**
+ * Arrow, `function` expression, `function` declaration — three spellings of one
+ * shape. The declaration form is included because `export default function` and
+ * `export function` parse to it, and `func-style` does not reach either.
+ */
+const isFunction = (node) =>
+  node?.type === "ArrowFunctionExpression" ||
+  node?.type === "FunctionExpression" ||
+  node?.type === "FunctionDeclaration";
+
+/**
+ * The function a function's body evaluates to, whether written as a concise
+ * expression or returned from a block. Length is checked before the element is
+ * read, so an empty body cannot depend on `||` short-circuiting to stay safe.
+ */
+const returnedFunction = (fn) => {
+  if (isFunction(fn.body)) return fn.body;
+  if (fn.body.type !== "BlockStatement" || fn.body.body.length !== 1) return undefined;
+  const [only] = fn.body.body;
+  if (only.type !== "ReturnStatement") return undefined;
+  return isFunction(only.argument) ? only.argument : undefined;
+};
+
+/** A function whose whole body is another function: the shape this rule bans. */
+const isCurried = (node) => isFunction(node) && returnedFunction(node) !== undefined;
+
+/**
+ * Whether an initializer puts a curried function within reach of a destructuring
+ * pattern — `[curried]`, `{ f: curried }`, or the degenerate `[f] = curried`.
+ * One level in, which is as far as a pattern on an export binds a name directly
+ * to a function.
+ */
+const yieldsCurried = (init) => {
+  if (init?.type === "ArrayExpression") return init.elements.some(isCurried);
+  if (init?.type === "ObjectExpression") {
+    return init.properties.some((property) => isCurried(property.value));
+  }
+  return isCurried(init);
+};
+
+/**
+ * The curried bindings a declaration makes, as `[name, node]` pairs. The name is
+ * undefined when the binding is a destructuring pattern: its names cannot be
+ * attributed to one initializer position, so the binding is reportable where it
+ * stands but unresolvable from a later `export { name }`.
+ */
+const curriedBindings = (declaration) => {
+  if (isCurried(declaration)) {
+    return declaration.id?.type === "Identifier" ? [[declaration.id.name, declaration]] : [];
+  }
+  if (declaration?.type !== "VariableDeclaration") return [];
+  return declaration.declarations.flatMap((declarator) => {
+    if (declarator.id.type !== "Identifier") {
+      return yieldsCurried(declarator.init) ? [[undefined, declarator]] : [];
+    }
+    return isCurried(declarator.init) ? [[declarator.id.name, declarator]] : [];
+  });
+};
+
+/** The curried bindings a top-level statement makes, seen through any `export` wrapper. */
+const curriedEntries = (statement) =>
+  curriedBindings(statement.type === "ExportNamedDeclaration" ? statement.declaration : statement);
+
+/**
+ * Index a module's top-level statements by the names they bind, as `bindingsOf`
+ * reports them. Nameless entries are dropped: nothing can refer to them by name.
+ */
+const indexByName = (program, bindingsOf) =>
+  new Map(program.body.flatMap(bindingsOf).filter(([name]) => name !== undefined));
+
+/**
+ * The `[specifier, local name]` pairs a bare `export { a, b as c }` carries.
+ * ESTree always supplies `specifiers` on that form, so it is read directly: a
+ * statement missing it is a shape that cannot occur, and it should fail here
+ * rather than quietly walk an empty list and report nothing.
+ */
+const exportedLocals = (statement) =>
+  statement.specifiers.flatMap((specifier) =>
+    specifier.type === "ExportSpecifier" && specifier.local.type === "Identifier"
+      ? [[specifier, specifier.local.name]]
+      : []
+  );
+
+/**
+ * Ban exported curried functions. `missingPipeableSignature` narrows every
+ * exported function to one argument or a curried form and treats the two as
+ * equally acceptable; they are not. Currying earns its place where partial
+ * application is genuinely used — where the first argument is bound once and
+ * the result carried around — and in an application nobody holds
+ * `insertTransaction(userId)` as a value.
+ *
+ * Internal functions are unaffected: a curried helper inside a module costs
+ * nobody a signature they have to guess at.
+ *
+ * Every spelling that hands a function to another module is checked here:
+ * `export const`, `export function`, a bare `export { name }`, and
+ * `export default` in each of its forms — arrow, `function` expression,
+ * `function` declaration, and an identifier bound above. The `function`
+ * declarations are not left to `func-style`, which does not apply to a
+ * default-exported declaration at all; two earlier versions read as complete
+ * while a spelling walked past, so each one is probed rather than assumed.
+ *
+ * A destructuring export — `export const [f] = [curried]` — binds names this
+ * rule cannot attribute to one initializer position, so it is reported whole,
+ * one level into the initializer.
+ */
+const noCurriedExport = {
+  meta: {
+    type: "problem",
+    docs: { description: "Disallow exported curried functions" },
+    messages: {
+      noCurriedExport:
+        "`{{name}}` is exported curried. The convention is an options object by default — the shape Effect's own SqlSchema.findOne({ Request, Result, execute }) takes — and currying only where partial application is actually used. A curried export nobody partially applies is two call syntaxes for one operation, costing signature help and readability and buying nothing. Internal functions are unaffected.",
+    },
+    schema: [],
+  },
+  create(context) {
+    const report = (node, name) =>
+      context.report({ node, messageId: "noCurriedExport", data: { name } });
+
+    const reportSpecifiers = (statement, curried) => {
+      for (const [specifier, name] of exportedLocals(statement)) {
+        if (curried.has(name)) report(specifier, name);
+      }
+    };
+
+    /** `export const f = …` / `export function f() {…}`, or a bare `export { f }`. */
+    const reportNamed = (statement, curried) => {
+      if (statement.declaration === null) return reportSpecifiers(statement, curried);
+      for (const [name, node] of curriedBindings(statement.declaration)) {
+        report(node, name === undefined ? "This export" : name);
+      }
+    };
+
+    /** `export default` — a function written inline, or an identifier bound above. */
+    const reportDefault = (statement, curried) => {
+      const exported = statement.declaration;
+      if (isCurried(exported)) {
+        const named = exported.id?.type === "Identifier";
+        report(statement, named ? exported.id.name : "The default export");
+        return;
+      }
+      if (exported.type === "Identifier" && curried.has(exported.name)) {
+        report(statement, exported.name);
+      }
+    };
+
+    // One pass over the module rather than a visitor per export form: a bare
+    // `export { name }` has to be resolved against a declaration that may sit
+    // anywhere above or below it, so the whole body has to be in hand either way.
+    return {
+      Program(program) {
+        const curried = indexByName(program, curriedEntries);
+        for (const statement of program.body) {
+          if (statement.type === "ExportNamedDeclaration") reportNamed(statement, curried);
+          if (statement.type === "ExportDefaultDeclaration") reportDefault(statement, curried);
+        }
+      },
+    };
+  },
+};
+
+/** The leftmost identifier of a `typeof X` / `typeof X.Y` query, or undefined. */
+const typeQueryRoot = (typeAnnotation) => {
+  if (typeAnnotation?.type !== "TSTypeQuery") return undefined;
+  let name = typeAnnotation.exprName;
+  while (name?.type === "TSQualifiedName") name = name.left;
+  return name?.type === "Identifier" ? name.name : undefined;
+};
+
+/**
+ * A `export type X = typeof X.Type` restating a schema declared just above it.
+ * The Effect idiom pairs every schema with its inferred type under one name;
+ * they are one interface, documented once on the schema. Demanding a second
+ * comment here would only produce the comment-shaped text that says nothing.
+ */
+const isSchemaTypeCompanion = (declaration) =>
+  declaration.type === "TSTypeAliasDeclaration" &&
+  declaration.id.type === "Identifier" &&
+  typeQueryRoot(declaration.typeAnnotation) === declaration.id.name;
+
+/** The names one top-level statement binds, each paired with the statement itself. */
+const declaredBindings = (statement) => {
+  if (statement.type === "VariableDeclaration") {
+    return statement.declarations.flatMap((declarator) =>
+      declarator.id.type === "Identifier" ? [[declarator.id.name, statement]] : []
+    );
+  }
+  return statement.id?.type === "Identifier" ? [[statement.id.name, statement]] : [];
+};
+
+/**
+ * Require a leading block comment on every exported declaration. Scoped to
+ * `src/core/**` by the config: core is what shell consumes, so its exports are
+ * the interfaces, and enforcing presence everywhere reliably produces
+ * comment-shaped text that satisfies a linter and says nothing.
+ *
+ * Presence only. Quality — whether a caller could use the thing having read the
+ * comment and the signature and never the body — stays a review matter
+ * (CODING_STANDARDS.md).
+ *
+ * A bare `export { name }` is judged on the comment above the declaration of
+ * `name`, not on the export line. The interface is documented where it is
+ * declared, and demanding a second comment above a list of names is how a rule
+ * about interfaces starts producing text about nothing.
+ */
+const requireInterfaceComment = {
+  meta: {
+    type: "problem",
+    docs: { description: "Require a leading block comment on exported declarations" },
+    messages: {
+      requireInterfaceComment:
+        "This export has no leading block comment. Core is what shell consumes, so its exports are the interfaces: say what the abstraction does, what the arguments mean beyond their types, what the caller must guarantee and what it may rely on afterwards. A caller should be able to use it correctly having read the comment and the signature and never the body.",
+    },
+    schema: [],
+  },
+  create(context) {
+    const lacksLeadingBlockComment = (node) => {
+      const comments = context.sourceCode.getCommentsBefore(node);
+      const nearest = comments.at(-1);
+      return nearest === undefined || nearest.type !== "Block" || nearest.value.trim() === "";
+    };
+    const report = (node) => context.report({ node, messageId: "requireInterfaceComment" });
+
+    const checkSpecifiers = (statement, sites) => {
+      for (const [specifier, name] of exportedLocals(statement)) {
+        const site = sites.get(name);
+        // A name this module does not declare arrived by import, documented
+        // wherever it came from.
+        if (site === undefined || isSchemaTypeCompanion(site)) continue;
+        if (lacksLeadingBlockComment(site)) report(specifier);
+      }
+    };
+
+    const checkNamed = (statement, sites) => {
+      // `export { x } from "./y"` re-exports something already documented
+      // where it is declared; the barrel-file rule in .dependency-cruiser.mjs
+      // is what keeps those from becoming a habit.
+      if (statement.source) return;
+      if (!statement.declaration) return checkSpecifiers(statement, sites);
+      if (isSchemaTypeCompanion(statement.declaration)) return;
+      if (lacksLeadingBlockComment(statement)) report(statement);
+    };
+
+    return {
+      Program(program) {
+        /** Where each name in the module is declared, for the `export { name }` case. */
+        const sites = indexByName(program, declaredBindings);
+        for (const statement of program.body) {
+          if (statement.type === "ExportNamedDeclaration") checkNamed(statement, sites);
+          if (
+            statement.type === "ExportDefaultDeclaration" &&
+            lacksLeadingBlockComment(statement)
+          ) {
+            report(statement);
+          }
+        }
+      },
+    };
+  },
+};
+
+const plugin = {
+  meta: { name: "effect-guards" },
+  rules: {
+    "no-sql-type-parameter": noSqlTypeParameter,
+    "no-disable-validation": noDisableValidation,
+    "no-escape-hatch": noEscapeHatch,
+    "no-curried-export": noCurriedExport,
+    "require-interface-comment": requireInterfaceComment,
+  },
+};
+
+export default plugin;

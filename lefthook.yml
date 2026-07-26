@@ -1,14 +1,20 @@
 version: "2"
 
+# Both pre-commit commands rewrite files, and git has already snapshotted the
+# index by the time they run — so without `stage_fixed` the fix lands in the
+# working tree while the commit keeps the content the hook was fixing, and the
+# repo is left dirty immediately after committing.
 pre-commit:
   commands:
     oxlint:
       glob: "*.{js,jsx,ts,tsx}"
       run: bunx oxlint --fix {staged_files}
+      stage_fixed: true
       skip_output: errors
     format:
       glob: "*.{js,jsx,ts,tsx,json}"
       run: bunx oxfmt --write {staged_files}
+      stage_fixed: true
       skip_output: errors
 
 commit-msg:

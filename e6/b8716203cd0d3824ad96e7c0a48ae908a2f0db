@@ -1,0 +1,21 @@
+prototypes/germany-expansion-stress-test/README.md
+  s_9a670fe80e2bef::t_22fe77da868854 63,73,75,77-81,83-87,89,91,102
+prototypes/germany-expansion-stress-test/logic.ts
+  s_9a670fe80e2bef::t_cb6d209dd63da0 13,78,80
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "e6b8716203cd0d3824ad96e7c0a48ae908a2f0db",
+  "prompts": {},
+  "sessions": {
+    "s_9a670fe80e2bef": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019f9f5f-79c5-79b7-8170-53434fa24a99",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

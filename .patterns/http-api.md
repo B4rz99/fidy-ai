@@ -52,6 +52,15 @@ Per-request flow is `handlerToHttpEffect` (`HttpApiBuilder.ts:751-819`):
    **no v3-style `HttpApiDecodeError` with an `issues` JSON body in v4**; field-level
    validation detail in responses must be built explicitly.
    The cause is still reported to logs (`HttpEffect.ts:45-47`).
+   Payload decoding has two extra traps. `buildPayloadDecoders` always constructs
+   `Schema.Union(schemas)`, even when there is exactly one payload schema, and invokes the decoder
+   without parse options (`HttpApiBuilder.ts:677`), so parsing uses `errors: "first"`, the default
+   (`SchemaAST.ts:470`). The union parser first narrows candidates by literal sentinels; when no
+   candidate matches, it raises `AnyOf(ast, input, [])` with no member issue
+   (`SchemaAST.ts:2671`). Formatting that empty `AnyOf` reports one root issue containing the whole
+   rejected value (`SchemaIssue.ts:1041-1048`), losing both the field path and the other offending
+   fields. To produce complete field-level payload failures in middleware, recover the `AnyOf`
+   input and decode it against the single unwrapped payload schema with `{ errors: "all" }`.
 2. **Unknown request content-type → 415** (`:702`).
 3. **Success responses are runtime-validated.** The handler's return value is encoded
    through the union of success schemas (`makeSuccessSchema`, `:1047-1093`); an encode

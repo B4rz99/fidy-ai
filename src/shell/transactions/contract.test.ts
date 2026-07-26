@@ -106,37 +106,90 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         // exactly one nameable field at fault and is answered the same way.
         expect(failure.error.fields.length).toBeGreaterThan(0);
         expect(failure.error.fields.every((field) => field.path === undefined)).toBe(true);
+        expect(failure.error.fields.map((field) => field.message).join("\n")).not.toContain(
+          "a transaction, honest"
+        );
       })
     );
 
-    it.effect("a body whose only fault is one field is still answered without naming it", () =>
+    it.effect("a wrong, null, or missing currency is attributed only to currency", () =>
+      Effect.gen(function* () {
+        yield* truncateTransactions;
+
+        const validPayload = {
+          amount: 25000,
+          currency: "COP",
+          merchant: "El Corral",
+          direction: "outflow",
+          occurredAt: "2026-07-20T12:30:00Z",
+        };
+        const rejectedPayloads: ReadonlyArray<{
+          readonly payload: Record<string, unknown>;
+          readonly correction: string;
+        }> = [
+          { payload: { ...validPayload, currency: "USD" }, correction: "COP" },
+          { payload: { ...validPayload, currency: null }, correction: "COP" },
+          {
+            payload: (({ currency: _, ...withoutCurrency }) => withoutCurrency)(validPayload),
+            correction: "Missing key",
+          },
+        ];
+
+        for (const { payload, correction } of rejectedPayloads) {
+          const response = yield* HttpClient.post("/transactions", {
+            headers: headersFor(defaultCaller),
+            body: HttpBody.jsonUnsafe(payload),
+          });
+          const failure = yield* Schema.decodeUnknownEffect(ValidationFailed)(yield* response.json);
+          const messages = failure.error.fields.map((field) => field.message).join("\n");
+
+          expect(failure.error.fields.map((field) => field.path)).toEqual(["currency"]);
+          expect(messages).toContain(correction);
+          expect(messages).not.toContain('"merchant":"El Corral"');
+        }
+      })
+    );
+
+    it.effect("a rejected payload reports every offending value in one response", () =>
       Effect.gen(function* () {
         yield* truncateTransactions;
 
         const response = yield* HttpClient.post("/transactions", {
           headers: headersFor(defaultCaller),
           body: HttpBody.jsonUnsafe({
-            amount: 25000,
-            currency: "USD",
-            merchant: "El Corral",
-            direction: "outflow",
+            amount: -5,
+            currency: "COP",
+            merchant: "",
+            direction: "sideways",
             occurredAt: "2026-07-20T12:30:00Z",
           }),
         });
         const failure = yield* Schema.decodeUnknownEffect(ValidationFailed)(yield* response.json);
 
-        // Pinned as it is, not endorsed. `currency` alone is wrong and there is
-        // a name for it, yet the answer names nothing and quotes the whole body
-        // back — the parser's own rendering, valid fields and all. The spec
-        // (GitHub issue #1) and ARCHITECTURE.md §6 both say a validation
-        // failure carries field-level `{ path, message }` and never a raw parse
-        // dump, so this is a gap with a ticket of its own; closing it turns
-        // these two expectations into `["currency"]` and a message about that
-        // one value.
-        expect(failure.error.fields.every((field) => field.path === undefined)).toBe(true);
-        expect(failure.error.fields.map((field) => field.message).join("\n")).toContain(
-          '"merchant":"El Corral"'
-        );
+        expect(failure.error.fields.map((field) => field.path)).toEqual([
+          "amount",
+          "merchant",
+          "direction",
+        ]);
+      })
+    );
+
+    it.effect("a rejected payload reports every missing required value in one response", () =>
+      Effect.gen(function* () {
+        yield* truncateTransactions;
+
+        const response = yield* HttpClient.post("/transactions", {
+          headers: headersFor(defaultCaller),
+          body: HttpBody.jsonUnsafe({ currency: "COP" }),
+        });
+        const failure = yield* Schema.decodeUnknownEffect(ValidationFailed)(yield* response.json);
+
+        expect(failure.error.fields.map((field) => field.path)).toEqual([
+          "amount",
+          "merchant",
+          "direction",
+          "occurredAt",
+        ]);
       })
     );
 

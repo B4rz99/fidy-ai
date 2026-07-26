@@ -1,5 +1,9 @@
-import { Effect, Option, Schema, SchemaIssue } from "effect";
-import { type HttpApiError, HttpApiMiddleware } from "effect/unstable/httpapi";
+import { Effect, Option, Result, Schema, SchemaIssue } from "effect";
+import {
+  type HttpApiEndpoint,
+  type HttpApiError,
+  HttpApiMiddleware,
+} from "effect/unstable/httpapi";
 import { NextAffordances } from "./envelope";
 
 /**
@@ -113,10 +117,8 @@ export class ValidationFailed extends Schema.ErrorClass<ValidationFailed>("Valid
       ...detail("validation_failed").fields,
       fields: Schema.Array(FieldIssue).annotate({
         description:
-          "What could be established about the failure, which may be less than everything " +
-          "wrong with the request: checking stops at the first value it rejects, so correcting " +
-          "these can surface another. Nothing was written, so send the whole request again " +
-          "rather than only the parts named here.",
+          "One entry per offending value. Nothing was written, so correct every one of them " +
+          "and send the whole request again rather than only the parts named here.",
       }),
     })
   ),
@@ -161,11 +163,9 @@ const segmentName = (segment: PropertyKey | { readonly key: PropertyKey }): stri
 
 /**
  * Which value an issue is about, as a dotted path. `None` when the formatter
- * gave nothing to name: a body rejected as a whole, and also — until the union
- * decoding behind the payload is addressed — a single wrong field that failed a
- * union candidate's discriminating literal, which reports one issue against the
- * whole payload. So `None` means the failure could not be pinned to a value,
- * not that no single value is at fault.
+ * gave nothing to name, such as a body rejected as a whole. Payload failures
+ * against a single schema are decoded without the framework's union wrapper
+ * before reaching here, so a discriminating literal still names its field.
  *
  * The filter is on the joined path, not the segment count: it is the string
  * that has to satisfy `FieldIssue.path`'s `NonEmptyString`, and a lone empty
@@ -183,10 +183,54 @@ const issuePath = (
 const fieldIssues = (cause: Schema.SchemaError): ReadonlyArray<typeof FieldIssue.Type> =>
   formatIssue(cause.issue).issues.map((issue) =>
     Option.match(issuePath(issue.path), {
-      onNone: () => ({ message: issue.message }),
+      onNone: () => ({ message: "Expected the whole value to match this operation's contract." }),
       onSome: (path) => ({ path, message: issue.message }),
     })
   );
+
+/**
+ * Narrows the service requirement erased by `HttpApiEndpoint.Top`. Canonical
+ * payload schemas come from core, whose compile-time fence requires `never`
+ * services (ARCHITECTURE.md §3); the runtime schema cannot expose that phantom
+ * type for a structural check.
+ */
+const isServiceFreePayloadSchema = (schema: Schema.Top): schema is Schema.Codec<unknown, unknown> =>
+  Reflect.has(schema, "ast");
+
+/**
+ * Re-checks a rejected JSON value against its one declared payload schema.
+ * HttpApiBuilder always wraps payload schemas in a union and decodes with the
+ * default first-error mode. The wrapper can discard the field issue when a
+ * literal candidate does not match; decoding the member directly with all
+ * errors preserves both field paths and the complete correction list.
+ *
+ * Multiple payload schemas represent content negotiation. Without the request
+ * content type at this middleware seam, choosing one would risk publishing
+ * issues from the wrong contract, so those retain the framework's original
+ * issue tree.
+ */
+const payloadFieldIssues = (
+  cause: Schema.SchemaError,
+  endpoint: HttpApiEndpoint.Top
+): ReadonlyArray<typeof FieldIssue.Type> => {
+  const schemas = Array.from(endpoint.payload.values()).flatMap(({ schemas }) => schemas);
+  const [schema, ...additionalSchemas] = schemas;
+  const actual = SchemaIssue.getActual(cause.issue);
+
+  if (
+    schema === undefined ||
+    additionalSchemas.length > 0 ||
+    Option.isNone(actual) ||
+    !isServiceFreePayloadSchema(schema)
+  ) {
+    return fieldIssues(cause);
+  }
+
+  return Result.match(Schema.decodeUnknownResult(schema, { errors: "all" })(actual.value), {
+    onFailure: fieldIssues,
+    onSuccess: () => fieldIssues(cause),
+  });
+};
 
 /**
  * Cross-cutting concern, so it rides on middleware: the contract gate rejects a
@@ -205,17 +249,23 @@ export class ContractGate extends HttpApiMiddleware.Service<ContractGate>()(
 
 export const ContractGateLive = HttpApiMiddleware.layerSchemaErrorTransform(
   ContractGate,
-  (schemaError) => {
+  (schemaError, { endpoint }) => {
     if (schemaError.kind === "Body") return Effect.fail(schemaError);
+
+    const kind = schemaError.kind;
+    const fields =
+      kind === "Payload"
+        ? payloadFieldIssues(schemaError.cause, endpoint)
+        : fieldIssues(schemaError.cause);
 
     return Effect.fail(
       ValidationFailed.make({
         error: {
           code: "validation_failed",
           message:
-            `The ${requestPart[schemaError.kind]} did not satisfy this operation's contract. ` +
+            `The ${requestPart[kind]} did not satisfy this operation's contract. ` +
             `Correct every value listed in error.fields and send the request again.`,
-          fields: fieldIssues(schemaError.cause),
+          fields,
         },
         next: [],
       })

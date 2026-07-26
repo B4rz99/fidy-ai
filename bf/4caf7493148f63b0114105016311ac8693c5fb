@@ -1,0 +1,40 @@
+ARCHITECTURE.md
+  s_598ba8a57acef9::t_e3344125f545b2 6
+  s_598ba8a57acef9::t_a479fe2a66f504 273-274,283,285-287,289-291
+  s_598ba8a57acef9::t_ef4b5152d729c6 464-484
+  s_598ba8a57acef9::t_db4b29ec37b33d 5,127-129,132,135-138,159-170,208-218,229-232,268-272,275-282,284,288,292-318
+  s_598ba8a57acef9::t_346d3b8601e015 319
+CODING_STANDARDS.md
+  s_598ba8a57acef9::t_09f78aa265f111 48-51,89-93,171-173
+README.md
+  s_598ba8a57acef9::t_084e21fa0f1470 196
+CONTEXT.md
+  s_598ba8a57acef9::t_4b90a59815e5db 46-47,87-88
+  s_598ba8a57acef9::t_d678de6caa820e 3-12,21-37,39-41,48,52-54,58-60,64-65,69-71,81-82,89,109-111,131-133,136-141,143-146,152,167-169,172-182
+  s_598ba8a57acef9::t_a7eb166beaf30e 183
+docs/agents/domain.md
+  s_598ba8a57acef9::t_bd3973ba76298b 8-11,14-18,24-25,32
+src/core/_shared/user.ts
+  s_598ba8a57acef9::t_b985e583b445c5 6-8
+docs/adr/0001-colombia-first-global-ready-foundations.md
+  s_598ba8a57acef9::t_c25a955a88d249 15,20-21,71-72
+  s_598ba8a57acef9::t_5b7ebd7a9dc3c0 1-14,16-19,22-70,73-74
+docs/wayfinding/map.md
+  s_598ba8a57acef9::t_488b2588729bae 8-15,20-25
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "bf4caf7493148f63b0114105016311ac8693c5fb",
+  "prompts": {},
+  "sessions": {
+    "s_598ba8a57acef9": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019f9fa5-1616-77ef-adb2-9ad157cada5a",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

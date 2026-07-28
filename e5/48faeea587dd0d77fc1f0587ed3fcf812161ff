@@ -1,0 +1,20 @@
+docs/research/icloud-mail-password-free-access.md
+  s_54193cee5baa90::t_1ada0b9ab16be2 78
+  s_54193cee5baa90::t_f9928fd255261b 1-77,79-145
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "e548faeea587dd0d77fc1f0587ed3fcf812161ff",
+  "prompts": {},
+  "sessions": {
+    "s_54193cee5baa90": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019fa61a-0ae7-719d-a708-3f8586c8c186",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

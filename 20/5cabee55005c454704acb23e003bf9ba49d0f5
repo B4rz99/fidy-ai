@@ -1,0 +1,19 @@
+research/075-icloud-password-free-mailbox.md
+  s_08794326392d87::t_63295b2b4ff709 1-110
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "205cabee55005c454704acb23e003bf9ba49d0f5",
+  "prompts": {},
+  "sessions": {
+    "s_08794326392d87": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019fa619-058c-743b-a208-cb13611faa10",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

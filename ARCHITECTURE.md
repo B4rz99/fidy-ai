@@ -410,13 +410,17 @@ public interface four layers down.
 The risk accepted: a well-tested core can still be integrated incorrectly and core tests would not notice.
 That is why every operation keeps its end-to-end coverage at the API seam.
 
-### The mutation gate
+### The mutation check
 
 Coverage says a line ran. **A mutation score says a test would have noticed had that line been
-wrong**, which is the claim this section makes about core and the only one worth gating on. Stryker
+wrong**, which is the claim this section makes about core and the only one worth enforcing. Stryker
 rewrites `src/core` a mutant at a time and reruns `test:core` against each; a single survivor fails
-`bun run test:mutation` and CI's Mutation job. The threshold is 100 — any number below it is a quota
-of unnoticed defects, and quotas fill.
+`bun run test:mutation`. The threshold is 100 — any number below it is a quota of unnoticed defects,
+and quotas fill.
+
+Mutation testing is shifted right rather than required on every pull request: a scheduled workflow
+checks `trunk` nightly and can also be dispatched manually. Its runtime therefore cannot delay or
+block pull-request feedback, while failures on the integrated code remain visible and actionable.
 
 It runs through `bun --bun vitest`, on Stryker's command runner rather than its vitest runner, so
 mutants are judged on the runtime that ships. Two mutators are excluded and one tier is out of
@@ -478,8 +482,8 @@ Most obvious alternatives here were considered and rejected. Read before reopeni
 | One mapper per slice                         | `catchTags` per handler                                                    | Repetitive, and a missed tag silently becomes a 500                                                                                                                                                                                                                                                                               |
 | Global migration log                         | Per-slice migrations                                                       | Ordering is global anyway; per-slice hides that                                                                                                                                                                                                                                                                                   |
 | Global migration log                         | Timestamp prefixes                                                         | Overflows the `integer` migration id column                                                                                                                                                                                                                                                                                       |
-| Mutation gate on `src/core` at 100           | Gating `src/core` and `src/shell` together                                 | Measured first (§8): four shell survivors are unkillable from any reachable seam — a response-encode branch, two documentation mutants, and migration bodies the migration log runs once per database. The choice was a sub-100 threshold or suppressions in source, and both make the number mean less than it says              |
-| Mutation gate on `src/core` at 100           | 90, matching the coverage gates                                            | A coverage percentage measures how much code a suite touched, where the last 10% is genuinely dear; a mutation score counts defects nothing noticed, and a standing allowance for those is a different thing to buy                                                                                                               |
+| Mutation check on `src/core` at 100          | Checking `src/core` and `src/shell` together                               | Measured first (§8): four shell survivors are unkillable from any reachable seam — a response-encode branch, two documentation mutants, and migration bodies the migration log runs once per database. The choice was a sub-100 threshold or suppressions in source, and both make the number mean less than it says              |
+| Mutation check on `src/core` at 100          | 90, matching the coverage gates                                            | A coverage percentage measures how much code a suite touched, where the last 10% is genuinely dear; a mutation score counts defects nothing noticed, and a standing allowance for those is a different thing to buy                                                                                                               |
 | Stryker's command runner                     | `@stryker-mutator/vitest-runner`                                           | The vitest runner drives vitest through its Node API, so every mutant would be judged on Node while the project ships on Bun. Per-test coverage analysis is the price, and at ~1s a core suite it buys nothing yet                                                                                                                |
 | `StringLiteral`/`ObjectLiteral` excluded     | Mutating them and suppressing per site                                     | In a declarative tree they almost always land in `annotate({ description: … })`; killing them needs either exact prose pinned in a test or assertions against Effect's AST internals. One documented exclusion in the config beats eleven `Stryker disable` comments in a repo that bans suppression directives outright          |
 | Core tests first-class                       | Core covered only through the API seam                                     | Core's branches include exact Money decoding, Currency precision and same-Currency arithmetic, and each boundary would need a full HTTP round-trip against a real database; `test:core` gates `src/core` at 90% lines with no database in the run, and CRAP ≤ 8 demands the coverage anyway, so this buys slower tests, not fewer |

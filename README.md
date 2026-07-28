@@ -114,9 +114,9 @@ judging a coverage number.
 
 ### Quality gates
 
-Four test-based gates run in CI (and locally), all over the behavioural source
-listed in `source-scope.mjs` (tests, the `src/shell/testing` harness, and
-`src/main.ts` are out of scope):
+Three test-based gates run on every pull request, with mutation testing shifted right to a nightly
+check on `trunk`. They cover the behavioural source listed in `source-scope.mjs` (tests, the
+`src/shell/testing` harness, and `src/main.ts` are out of scope):
 
 - **Total coverage** — `bun run test` fails if line coverage over `src/core` and
   `src/shell` drops below 90%.
@@ -124,15 +124,15 @@ listed in `source-scope.mjs` (tests, the `src/shell/testing` harness, and
   alone drops below 90%.
 - **CRAP score** — `bun run test:crap` fails if any function's [CRAP score](https://www.npmjs.com/package/crap4ts)
   exceeds 8 (high complexity + low coverage).
-- **Mutation score** — `bun run test:mutation` fails if a single mutant
-  [Stryker](https://stryker-mutator.io) plants in `src/core` survives the core
-  tests. The threshold is 100: coverage says a line ran, a mutation score says a
-  test would have noticed had that line been wrong.
+- **Mutation score** — the nightly and manually dispatchable Mutation workflow runs
+  `bun run test:mutation` against `trunk` and fails if a single mutant
+  [Stryker](https://stryker-mutator.io) plants in `src/core` survives the core tests. The threshold
+  remains 100, but its runtime no longer delays or blocks pull requests.
 
-`bun run verify` runs the first and the last, not the two in between, so a clean
-`verify` is still not a clean CI.
+`bun run verify` runs total coverage and mutation testing locally, not the core-coverage or CRAP
+commands, so a clean `verify` is still not a clean pull-request run.
 
-The mutation gate runs the tests the way everything else here does — through
+The mutation check runs the tests the way everything else here does — through
 `bun --bun vitest`, via Stryker's **command** runner rather than its vitest
 runner, so a mutant is judged on the runtime that would have shipped it. Only
 the Stryker process itself is Node's; its Babel instrumenter throws on Bun.

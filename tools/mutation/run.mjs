@@ -1,4 +1,4 @@
-// Runs the StrykerJS mutation gate against the core tree, configured by the
+// Runs the StrykerJS mutation check against the core tree, configured by the
 // repo-root stryker.config.mjs.
 //
 // Stryker is spawned from this directory's isolated node_modules so it resolves
@@ -23,7 +23,7 @@ import { dirname, resolve } from "node:path";
 
 if (process.versions.bun !== undefined) {
   console.error(
-    "The mutation gate runs on Node: Stryker's instrumenter does not work on Bun.\n" +
+    "The mutation check runs on Node: Stryker's instrumenter does not work on Bun.\n" +
       "Run `bun run test:mutation`, or `node tools/mutation/run.mjs` directly."
   );
   process.exit(1);

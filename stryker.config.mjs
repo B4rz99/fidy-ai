@@ -52,9 +52,9 @@ export default {
     // still gated here, so the tests that kill it cannot quietly disappear.
     excludedMutations: ["StringLiteral", "ObjectLiteral"],
   },
-  // The gate. `break: 100` fails the command — and CI's Mutation job — on a
+  // The threshold. `break: 100` fails the command — and the nightly Mutation workflow — on a
   // single surviving mutant; `high`/`low` only colour the report, and are
-  // pinned to the same number so the report never shows green below the gate.
+  // pinned to the same number so the report never shows green below the threshold.
   //
   // 100 is affordable because the scope is pure decisions with no I/O, and it
   // is the only threshold that does not decay: any number below 100 is a quota

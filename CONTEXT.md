@@ -1,4 +1,4 @@
-# fidy-ai
+# Fidy
 
 An agent-first personal finance product launching only in Colombia. `CO` is the sole enabled
 ServiceMarket, `es-CO` is the sole launch locale, `America/Bogota` is the default IANA time zone,
@@ -6,7 +6,7 @@ and Spanish is the product language. WhatsApp through Kapso is the primary chann
 billing provider; Colombian compliance behaviour and Category data remain direct launch choices.
 The user's own agents are first-class clients of the same API the hosted agent uses.
 
-**Launch enablement is not domain capability.** Enablement says where fidy operates and what it
+**Launch enablement is not domain capability.** Enablement says where Fidy operates and what it
 supports today. Capability says what the domain can represent without changing a record's meaning.
 Only Colombia is enabled, while a Transaction can retain Money in any recognized Currency. That
 does not promise a second ServiceMarket, foreign copy or providers, or FX conversion.
@@ -30,7 +30,7 @@ monetary meaning and is independent of ServiceMarket, locale, and presentation.
 _Avoid_: Country, market, locale, currency symbol.
 
 **ServiceMarket**:
-A jurisdiction where fidy's product, commercial terms, providers, and compliance behaviour are
+A jurisdiction where Fidy's product, commercial terms, providers, and compliance behaviour are
 enabled. Colombia (`CO`) is the only enabled ServiceMarket. It is independent of Currency, locale,
 time zone, channel, and identity.
 _Avoid_: Country (when product enablement is meant), region, country settings.
@@ -163,7 +163,7 @@ _Avoid_: Advice (unqualified), recommendation.
 ### Money in, money out
 
 **Subscription**:
-The User's paid access to fidy — weekly, monthly, or yearly Pro. Its activation ServiceMarket,
+The User's paid access to Fidy — weekly, monthly, or yearly Pro. Its activation ServiceMarket,
 billing periods, PriceRevisions, tax treatment, provider references, refunds, and UTC instants stay
 historically interpretable.
 _Avoid_: Membership, plan (alone), recurring charge (that is a RecurringSeries).

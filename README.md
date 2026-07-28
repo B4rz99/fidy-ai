@@ -24,6 +24,12 @@ docker compose up -d db     # local Postgres on :5433
 DATABASE_URL=postgres://fidy:fidy@localhost:5433/fidy bun src/main.ts
 ```
 
+Copy [`.env.example`](./.env.example) when a complete local environment is useful. Fidy's stable
+web, API, callback, and ingestion addresses come from the shared
+[`externalEndpoints`](./src/shell/_shared/external-endpoints.ts) configuration; production values
+and operational verification are documented in
+[`docs/operations/external-endpoints.md`](./docs/operations/external-endpoints.md).
+
 ### Testing
 
 Two tiers, and **the tier is decided by which tree the test is in**, not by a naming convention.

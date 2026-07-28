@@ -1,0 +1,21 @@
+research/076-delegated-mailbox-obligations.md
+  s_ca4b115bc08e86::t_56471b9de04cd6 5,11,98-104,138,143-144,184,202-206
+  s_ca4b115bc08e86::t_0e6e51ddbdae00 69-70,84
+  s_ca4b115bc08e86::t_c195f19d454d55 47,55-68
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "b8500811bda5ad8d94d6d2a1746aabe0d26cfe7e",
+  "prompts": {},
+  "sessions": {
+    "s_ca4b115bc08e86": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019fa61a-468e-7e45-8059-8facde59382e",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

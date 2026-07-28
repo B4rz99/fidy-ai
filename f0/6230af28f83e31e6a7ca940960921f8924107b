@@ -1,0 +1,19 @@
+research/073-gmail-delegated-mailbox.md
+  s_54193cee5baa90::t_277418725f6436 1-199
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "f06230af28f83e31e6a7ca940960921f8924107b",
+  "prompts": {},
+  "sessions": {
+    "s_54193cee5baa90": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019fa61a-0ae7-719d-a708-3f8586c8c186",
+        "model": "unknown"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

@@ -1,0 +1,35 @@
+src/shell/_shared/external-endpoints.ts
+  s_4512fc23e5afec::t_edf1b1564a08ca 1-18,21-22,26-36
+  s_4512fc23e5afec::t_96b5d2f6ab3c61 19-20,23-25
+docs/adr/0002-fidy-product-identity-and-public-namespace.md
+  s_4512fc23e5afec::t_8bebef5561a6ac 1-40
+README.md
+  s_4512fc23e5afec::t_efdd8afbc1f189 27-28,30-32
+  s_4512fc23e5afec::t_16ad73056d0e67 29
+CONTEXT.md
+  s_4512fc23e5afec::t_4b1bd5c4beac07 1,9,33,166
+.env.example
+  s_4512fc23e5afec::t_23a876af3f85f3 5-7
+  s_4512fc23e5afec::t_5394cb94237dfc 1-4
+docs/operations/external-endpoints.md
+  s_4512fc23e5afec::t_4ba784d5ccf9da 24-28
+  s_4512fc23e5afec::t_ee73fcc0523dd8 1-9,11,13-23,29,33-53,56-57
+  s_4512fc23e5afec::t_009b742fb0cf0d 30-32
+  s_4512fc23e5afec::t_8e378f785e00d0 10,12,54-55
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "d6f1182e82998f222310a325f89ed44c601cc954",
+  "prompts": {},
+  "sessions": {
+    "s_4512fc23e5afec": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019fa67c-1541-706d-9a19-04568200eaf8",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

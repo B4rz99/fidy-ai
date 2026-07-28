@@ -1,0 +1,53 @@
+src/shell/http.test.ts
+  s_40df4e12615b43::t_952439ba489b18 2,4-9,35
+  s_40df4e12615b43::t_94a37d0f1b3d8b 44-45,47-48
+  s_40df4e12615b43::t_e491dece86daf9 22-29,49-50
+  s_40df4e12615b43::t_92016451902da0 30-34,36-37,39-42,46
+  s_40df4e12615b43::t_6974ddfc0e1405 1,3,10-21,51-52
+  s_40df4e12615b43::t_a2ec13a8049150 38
+  s_40df4e12615b43::t_4ac7f881bafe65 43
+src/shell/testing/api-harness.ts
+  s_40df4e12615b43::t_d0db4bbc64fb17 2,35-50,56-58,60-63
+.dockerignore
+  s_40df4e12615b43::t_5c7bfcacbb82b1 1-17
+compose.yaml
+  s_40df4e12615b43::t_1eaeffaf426023 6
+  s_40df4e12615b43::t_84ff378d9d9190 2-5,7-15
+src/shell/http.ts
+  s_40df4e12615b43::t_794847ad3c2a8c 35
+  s_40df4e12615b43::t_8965bff1d2cb69 1,33,36-38
+  s_40df4e12615b43::t_389c97ac56bb6c 28-32,34
+  s_40df4e12615b43::t_2afdbea2633fac 2,39-40,47
+  s_40df4e12615b43::t_286ffec187d42c 42-45
+  s_40df4e12615b43::t_fb5ce66b65e07f 53-54
+src/shell/_shared/authz.ts
+  s_40df4e12615b43::t_7d83e5ac299a0a 1,16-17,31-41,47-51,58-59
+  s_40df4e12615b43::t_d6e566c428feca 18-19,57,60-67
+README.md
+  s_40df4e12615b43::t_feb4bcb8b0fea3 36-38,52-54
+  s_40df4e12615b43::t_ab0bc372ef45e4 22-23,31-33,39,41-51,55-59
+  s_40df4e12615b43::t_dd0749797b58e6 24-30
+  s_40df4e12615b43::t_ba4a6cfc9e8b95 40
+public/index.html
+  s_40df4e12615b43::t_8d5bbfd88ffd96 1-11
+railway.json
+  s_40df4e12615b43::t_929791d4f46f66 1-13
+Dockerfile
+  s_40df4e12615b43::t_60a3b8c92174d2 1-23
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "4b0f9d569cfa1bde5e1f54c2846b01f978446bc2",
+  "prompts": {},
+  "sessions": {
+    "s_40df4e12615b43": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019fa67b-edb8-72b2-a0fc-c766aef8f844",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": null
+    }
+  }
+}

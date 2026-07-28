@@ -36,7 +36,7 @@ Budget threshold alerts, new-recurring-charge detected, weekly summary, and **ma
 
 ### 3. Universal reply pattern; no nudge state machine
 
-Every template is **self-contained but answerable**: it delivers its full headline (no clickbait) and ends with a natural reply affordance. A reply reopens the free 24h window and the rich follow-up (breakdown, chart image, logging conversation) happens as ordinary conversation — this is where research 002's template-then-window re-engagement pattern applies, uniformly. Architecturally: **proactive sends append to the transcript** like any agent message; a reply is a normal `AgentService.handleTurn` turn (007). The outbound scheduler sits outside the agent loop (nudges are not agent tools, per 007) but writes into the same conversation history.
+Every template is **self-contained but answerable**: it delivers its full headline (no clickbait) and ends with a natural invitation to reply. A reply reopens the free 24h window and the rich follow-up (breakdown, chart image, logging conversation) happens as ordinary conversation — this is where research 002's template-then-window re-engagement pattern applies, uniformly. Architecturally: **proactive sends append to the transcript** like any agent message; a reply is a normal `AgentService.handleTurn` turn (007). The outbound scheduler sits outside the agent loop (nudges are not agent tools, per 007) but writes into the same conversation history.
 
 ### 4. Opt-in: contextual capture, per-category ledger records
 

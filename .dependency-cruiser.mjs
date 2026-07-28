@@ -53,23 +53,23 @@ export default {
     },
     {
       // Two things under src/ are in reach of the assembly, and nothing else
-      // is: a slice's contract.ts, which is what it composes, and
+      // is: a slice's operations.ts, which is what it composes, and
       // shell/_shared, which holds what the assembly is itself built from —
-      // the ContractGate it fixes across every group. Core is out with the
+      // the ValidationGate it fixes across every group. Core is out with the
       // rest, so an import of `src/core/**` from here trips this too.
-      name: "api-assembly-imports-beyond-contracts",
+      name: "api-assembly-imports-beyond-operations",
       severity: "error",
       comment:
-        "src/shell/api.ts imported something other than a slice's contract.ts or " +
-        "shell/_shared. The assembly composes contracts and nothing else. A slice's " +
+        "src/shell/api.ts imported something other than a slice's operations.ts or " +
+        "shell/_shared. The assembly composes operation definitions and nothing else. A slice's " +
         "handlers.ts *must* import api.ts, because HttpApiBuilder.group takes the assembled " +
         "HttpApi as its first argument, so the acyclic direction is the one this rule holds: " +
-        "api.ts imports contracts, implementations import api.ts, and the layer wiring that " +
+        "api.ts imports operation definitions, implementations import api.ts, and the layer assembly that " +
         "composes them lives in http.ts one file over (ARCHITECTURE.md §1).",
       from: { path: "^src/shell/api\\.ts$" },
       to: {
         path: "^src/",
-        pathNot: ["^src/shell/_shared/", "^src/shell/[^/]+/contract\\.ts$"],
+        pathNot: ["^src/shell/_shared/", "^src/shell/[^/]+/operations\\.ts$"],
       },
     },
     {

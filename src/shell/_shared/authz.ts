@@ -26,8 +26,8 @@ const unauthenticated = () =>
 
 /**
  * The one place a request becomes a user. Every handler starts here and passes
- * the result down explicitly; nothing else in the shell reads the caller off
- * the wire, and no repo or core function discovers it any other way.
+ * the result down explicitly; nothing else in the shell reads the caller from
+ * the request, and no repo or core function discovers it any other way.
  *
  * This stand-in believes whatever the header says, so it belongs to development
  * only. #3 replaces the body with a token lookup; what repos and handlers

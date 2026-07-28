@@ -31,7 +31,7 @@ export class TransactionNotYetOccurred extends Data.TaggedError("TransactionNotY
  * act on. Infrastructure that no caller can respond to — a dead connection, a
  * row the model rejects — is a defect and is absent from this union by design.
  *
- * Carries no status, no code, no message: how a failure reaches the wire is
+ * Carries no status, no code, no message: how a failure reaches the API response is
  * decided once per slice in `shell/transactions/errors.ts`, which switches over
  * this union exhaustively. Widening it without extending that switch fails the
  * build (ARCHITECTURE.md §6).

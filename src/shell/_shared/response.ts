@@ -1,14 +1,14 @@
 import { Schema } from "effect";
 
 /**
- * An affordance is a suggested next call: `tool` is a canonical operation id,
+ * A suggested operation is a suggested next call: `tool` is a canonical operation id,
  * `args` a partial of that operation's input, `hint` one English sentence.
  *
  * All three carry a description, because this schema is what an agent reads to
  * decide whether to follow a suggestion, and none of the three names says on
  * its own what belongs in it.
  */
-export const Affordance = Schema.Struct({
+export const SuggestedOperation = Schema.Struct({
   tool: Schema.NonEmptyString.check(Schema.isTrimmed()).annotate({
     description:
       "The canonical operation to call, spelled exactly as its `operationId` in this spec — " +
@@ -24,16 +24,16 @@ export const Affordance = Schema.Struct({
       "One sentence on why that call is worth making. Addressed to you, the calling agent, " +
       "and not to the user — act on it rather than reading it out.",
   }),
-}).annotate({ identifier: "Affordance" });
-export type Affordance = typeof Affordance.Type;
+}).annotate({ identifier: "SuggestedOperation" });
+export type SuggestedOperation = typeof SuggestedOperation.Type;
 
 /**
- * The `next` field, declared once. Both envelopes carry it on the same terms —
- * at most three affordances, possibly none — so a failure is as navigable as a
- * success; the error classes in `./errors` reuse this schema rather than
+ * The `next` field, declared once. Both success and error responses carry it on the same terms —
+ * at most three suggested operations, possibly none — so a failure is as navigable
+ * as a success; the error classes in `./errors` reuse this schema rather than
  * restating it.
  */
-export const NextAffordances = Schema.Array(Affordance)
+export const NextOperations = Schema.Array(SuggestedOperation)
   .check(Schema.isMaxLength(3))
   .annotate({
     description:
@@ -44,11 +44,11 @@ export const NextAffordances = Schema.Array(Affordance)
   });
 
 /**
- * The universal success envelope. Every canonical operation's success schema
+ * The universal success response. Every canonical operation's success schema
  * is built with this combinator — top-level only, no per-operation opt-out.
  */
-export const Envelope = <S extends Schema.Top>(data: S) =>
+export const OperationResponse = <S extends Schema.Top>(data: S) =>
   Schema.Struct({
     data,
-    next: NextAffordances,
+    next: NextOperations,
   });

@@ -324,6 +324,7 @@ export const addMoney = (operands: {
 }): Effect.Effect<Money, CurrencyMismatch> =>
   requireSameCurrency(operands.left, operands.right).pipe(
     Effect.as(
+      // as? is this casting types? why? i thought this was forbidden due to linter rules
       Money.make({
         amount: BigDecimal.sum(operands.left.amount, operands.right.amount),
         currency: operands.left.currency,

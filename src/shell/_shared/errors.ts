@@ -4,10 +4,10 @@ import {
   type HttpApiError,
   HttpApiMiddleware,
 } from "effect/unstable/httpapi";
-import { NextAffordances } from "./envelope";
+import { NextOperations } from "./response";
 
 /**
- * Every code an error envelope may carry, for every slice. Closed on purpose:
+ * Every code an error response may carry, for every slice. Closed on purpose:
  * a calling agent can branch on this set and know it has covered the space, and
  * a new slice reuses a code rather than inventing a synonym for it.
  *
@@ -41,7 +41,7 @@ export type ErrorCode = typeof ErrorCode.Type;
 const codeVocabulary = ErrorCode.literals.map((code) => `\`${code}\``).join(", ");
 
 /**
- * The body of an error envelope: the code, and a message addressed to the
+ * The body of an error response: the code, and a message addressed to the
  * calling agent — why it failed and what to do about it, in a sentence or two.
  * The code is pinned per error class so the derived spec advertises exactly
  * which one a given status carries.
@@ -87,32 +87,32 @@ const FieldIssue = Schema.Struct({
 }).annotate({ identifier: "FieldIssue" });
 
 /**
- * The `{ error, next }` pair every wire failure carries, declared once so the
+ * The `{ error, next }` pair every API failure carries, declared once so the
  * classes below differ only in the detail they hand it.
  *
  * Returns struct *fields*, not a schema, so the result cannot be piped or
  * annotated: its one use is the first argument to `Schema.ErrorClass`, which
- * takes fields or a struct and normalises either. `Envelope` on the success
+ * takes fields or a struct and normalises either. `OperationResponse` on the success
  * side has to return a schema because its results are piped through
  * `HttpApiSchema.status`; a failure takes its status from the annotation
  * argument of the same `ErrorClass` call instead, so it never needs to be one.
  */
-const errorEnvelope = <Detail extends Schema.Top>(error: Detail) => ({
+const errorResponse = <Detail extends Schema.Top>(error: Detail) => ({
   error,
-  next: NextAffordances,
+  next: NextOperations,
 });
 
 /**
- * Wire failures are `Schema.ErrorClass`, as `HttpApiError.ts` does for its own
+ * API failures are `Schema.ErrorClass`, as `HttpApiError.ts` does for its own
  * (ARCHITECTURE.md §6). Unlike those, these carry no `_tag`: `code` already
  * discriminates, from a set an agent can enumerate.
  *
- * The request did not satisfy the operation's contract. Carries whatever the
+ * The request did not satisfy the operation's input schema. Carries whatever the
  * gate could attribute to individual values rather than the parser's own
  * rendering of the failure.
  */
 export class ValidationFailed extends Schema.ErrorClass<ValidationFailed>("ValidationFailed")(
-  errorEnvelope(
+  errorResponse(
     Schema.Struct({
       ...detail("validation_failed").fields,
       fields: Schema.Array(FieldIssue).annotate({
@@ -127,10 +127,10 @@ export class ValidationFailed extends Schema.ErrorClass<ValidationFailed>("Valid
 
 /**
  * The request named no caller, or one that could not be resolved to a user.
- * Carries no affordance: nothing the API offers changes a credential.
+ * Carries no suggested operation: nothing the API offers changes a credential.
  */
 export class Unauthenticated extends Schema.ErrorClass<Unauthenticated>("Unauthenticated")(
-  errorEnvelope(detail("unauthenticated")),
+  errorResponse(detail("unauthenticated")),
   { httpApiStatus: 401 }
 ) {}
 
@@ -139,7 +139,7 @@ export class Unauthenticated extends Schema.ErrorClass<Unauthenticated>("Unauthe
  * through their own mapper, which supplies a message naming what was missing.
  */
 export class NotFound extends Schema.ErrorClass<NotFound>("NotFound")(
-  errorEnvelope(detail("not_found")),
+  errorResponse(detail("not_found")),
   { httpApiStatus: 404 }
 ) {}
 
@@ -183,7 +183,9 @@ const issuePath = (
 const fieldIssues = (cause: Schema.SchemaError): ReadonlyArray<typeof FieldIssue.Type> =>
   formatIssue(cause.issue).issues.map((issue) =>
     Option.match(issuePath(issue.path), {
-      onNone: () => ({ message: "Expected the whole value to match this operation's contract." }),
+      onNone: () => ({
+        message: "Expected the whole value to match this operation's input schema.",
+      }),
       onSome: (path) => ({ path, message: issue.message }),
     })
   );
@@ -206,7 +208,7 @@ const isServiceFreePayloadSchema = (schema: Schema.Top): schema is Schema.Codec<
  *
  * Multiple payload schemas represent content negotiation. Without the request
  * content type at this middleware seam, choosing one would risk publishing
- * issues from the wrong contract, so those retain the framework's original
+ * issues from the wrong operation schema, so those retain the framework's original
  * issue tree.
  */
 const payloadFieldIssues = (
@@ -233,22 +235,22 @@ const payloadFieldIssues = (
 };
 
 /**
- * Cross-cutting concern, so it rides on middleware: the contract gate rejects a
+ * Cross-cutting concern, so it rides on middleware: the validation gate rejects a
  * request before any handler runs, and v4 renders that as a bodyless 400 unless
  * something intercepts it. This is that something, attached once in `api.ts`,
- * which also puts `ValidationFailed` into every operation's derived contract.
+ * which also puts `ValidationFailed` into every operation's derived API definition.
  *
  * A `Body` failure is the server failing to encode its own answer — the
  * caller's request was fine and there is nothing for them to fix — so it is
  * passed back untouched rather than blamed on them.
  */
-export class ContractGate extends HttpApiMiddleware.Service<ContractGate>()(
-  "fidy-ai/shell/_shared/errors/ContractGate",
+export class ValidationGate extends HttpApiMiddleware.Service<ValidationGate>()(
+  "fidy-ai/shell/_shared/errors/ValidationGate",
   { error: ValidationFailed }
 ) {}
 
-export const ContractGateLive = HttpApiMiddleware.layerSchemaErrorTransform(
-  ContractGate,
+export const ValidationGateLive = HttpApiMiddleware.layerSchemaErrorTransform(
+  ValidationGate,
   (schemaError, { endpoint }) => {
     if (schemaError.kind === "Body") return Effect.fail(schemaError);
 
@@ -263,7 +265,7 @@ export const ContractGateLive = HttpApiMiddleware.layerSchemaErrorTransform(
         error: {
           code: "validation_failed",
           message:
-            `The ${requestPart[kind]} did not satisfy this operation's contract. ` +
+            `The ${requestPart[kind]} did not satisfy this operation's input schema. ` +
             `Correct every value listed in error.fields and send the request again.`,
           fields,
         },

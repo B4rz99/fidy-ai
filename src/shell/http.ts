@@ -1,15 +1,15 @@
 import { Layer } from "effect";
 import { HttpRouter } from "effect/unstable/http";
 import { HttpApiBuilder } from "effect/unstable/httpapi";
-import { ContractGateLive } from "~/shell/_shared/errors";
+import { ValidationGateLive } from "~/shell/_shared/errors";
 import { MigratorLive } from "~/shell/db/client";
 import { TransactionsLive } from "~/shell/transactions/handlers";
 import { FidyApi } from "./api";
 
 /**
  * The canonical API as live routes: every operation `FidyApi` declares, mounted
- * on the router in context with its slice's handlers and the contract gate's
- * implementation already wired in, alongside a `GET /openapi.json` serving the
+ * on the router in context with its slice's handlers and the validation gate's
+ * implementation already integrated, alongside a `GET /openapi.json` serving the
  * spec derived from that same declaration — the routes a caller can reach and
  * the document describing them come from one source and cannot drift.
  *
@@ -19,10 +19,10 @@ import { FidyApi } from "./api";
  * and the platform services the router is built on.
  */
 export const ApiLive = HttpApiBuilder.layer(FidyApi, { openapiPath: "/openapi.json" }).pipe(
-  // The contract gate is provided *to* the slice layers rather than beside
+  // The validation gate is provided *to* the slice layers rather than beside
   // them: a group captures its middleware from its own context when it builds
   // its routes, so a sibling layer would not be found.
-  Layer.provide(TransactionsLive.pipe(Layer.provide(ContractGateLive)))
+  Layer.provide(TransactionsLive.pipe(Layer.provide(ValidationGateLive)))
 );
 
 /**

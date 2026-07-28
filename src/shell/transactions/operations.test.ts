@@ -9,7 +9,7 @@ import {
   headersFor,
 } from "~/shell/testing/api-harness";
 import { publishedOperationIds } from "~/shell/testing/openapi";
-import { TransactionsGroup } from "./contract";
+import { TransactionsGroup } from "./operations";
 import { truncateTransactions } from "./fixtures";
 
 const OpenApiComponents = Schema.Struct({
@@ -24,7 +24,7 @@ const OpenApiComponents = Schema.Struct({
 
 /**
  * Every operation this slice declares, named as the generators name it. Read
- * off the group rather than listed here, so an operation added to the contract
+ * off the group rather than listed here, so an operation added to the operation definitions
  * is one the spec has to publish without anyone remembering to say so
  * (CODING_STANDARDS.md, tests).
  */
@@ -33,9 +33,9 @@ const declaredOperationIds = Object.keys(TransactionsGroup.endpoints).map(
 );
 
 layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
-  "transactions contract",
+  "transaction operations",
   (it) => {
-    it.effect("the derived server rejects a payload that violates the contract", () =>
+    it.effect("the derived server rejects a payload that violates the input schema", () =>
       Effect.gen(function* () {
         yield* truncateTransactions;
         const client = yield* ApiHarnessClient;
@@ -74,21 +74,23 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
       })
     );
 
-    it.effect("a malformed payload answers with the error envelope, not a bare 400", () =>
-      Effect.gen(function* () {
-        yield* truncateTransactions;
+    it.effect(
+      "a malformed payload answers with the structured error response, not a bare 400",
+      () =>
+        Effect.gen(function* () {
+          yield* truncateTransactions;
 
-        const response = yield* HttpClient.post("/transactions", {
-          headers: headersFor(defaultCaller),
-          body: HttpBody.jsonUnsafe({ money: { amount: "-5", currency: "ZZZ" } }),
-        });
-        const body = yield* response.json;
+          const response = yield* HttpClient.post("/transactions", {
+            headers: headersFor(defaultCaller),
+            body: HttpBody.jsonUnsafe({ money: { amount: "-5", currency: "ZZZ" } }),
+          });
+          const body = yield* response.json;
 
-        expect(body).toMatchObject({
-          error: { code: "validation_failed" },
-          next: [],
-        });
-      })
+          expect(body).toMatchObject({
+            error: { code: "validation_failed" },
+            next: [],
+          });
+        })
     );
 
     it.effect("a rejected payload names the field at fault, not the whole parse", () =>
@@ -335,23 +337,25 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
       })
     );
 
-    it.effect("the server publishes every operation this slice's contract declares", () =>
-      Effect.gen(function* () {
-        yield* truncateTransactions;
+    it.effect(
+      "the server publishes every operation this slice's operation definitions declare",
+      () =>
+        Effect.gen(function* () {
+          yield* truncateTransactions;
 
-        const operationIds = yield* publishedOperationIds;
+          const operationIds = yield* publishedOperationIds;
 
-        // Asserted before the filter below, which a contract declaring nothing
-        // would satisfy while the server published nothing either.
-        expect(declaredOperationIds.length).toBeGreaterThan(0);
+          // Asserted before the filter below, which an operation group declaring nothing
+          // would satisfy while the server published nothing either.
+          expect(declaredOperationIds.length).toBeGreaterThan(0);
 
-        const unpublished = declaredOperationIds.filter((id) => !operationIds.includes(id));
+          const unpublished = declaredOperationIds.filter((id) => !operationIds.includes(id));
 
-        expect(unpublished).toEqual([]);
-      })
+          expect(unpublished).toEqual([]);
+        })
     );
 
-    it.effect("the published OpenAPI spec names the shared contract schemas as components", () =>
+    it.effect("the published OpenAPI spec names the shared operation schemas as components", () =>
       Effect.gen(function* () {
         yield* truncateTransactions;
 

@@ -7,11 +7,11 @@
 core may never import shell. See **[`ARCHITECTURE.md`](./ARCHITECTURE.md)** for the shape and the
 reasoning, and **[`CODING_STANDARDS.md`](./CODING_STANDARDS.md)** for how code is written inside it.
 
-The canonical API follows a **contracts-once** rule: each operation's schemas are defined once in
-its slice's core model, its operation once in the slice's shell contract (Effect v4 HttpApi,
+The canonical API follows a **define operations once** rule: each operation's schemas are defined once in
+its slice's core model, its operation once in the slice's shell operation definition (Effect v4 HttpApi,
 `effect/unstable/httpapi`), and the HTTP server, the fully-typed client and the OpenAPI spec
 (served at `/openapi.json`) are all derived from that single definition. Every success response is
-wrapped in the universal `{ data, next }` envelope by one shared combinator.
+given the universal `{ data, next }` response shape by one shared combinator.
 
 Persistence is PostgreSQL only: pure-JS driver (`@effect/sql-pg`), Effect migrator over one
 globally-ordered log under `src/shell/db/migrations/`, hand-written SQL, and every row decoded
@@ -147,7 +147,7 @@ derived OpenAPI spec. That exclusion also hides two real mutants (the
 but not gated is in ARCHITECTURE.md §8.
 
 Coverage uses the **istanbul** provider, not v8: v8 reads coverage from Node's
-V8 inspector, which the Bun runtime does not wire up, so `bun --bun vitest
+V8 inspector, which the Bun runtime does not expose, so `bun --bun vitest
 --coverage` would report 0%. istanbul instruments the source directly.
 
 `crap4ts` parses with the classic TypeScript compiler API, which the repo's
@@ -211,16 +211,16 @@ Work that belongs to no slice takes a cross-cutting scope:
 
 <!-- commit-scopes:cross-cutting -->
 
-| scope      | when to use                                                    |
-| ---------- | -------------------------------------------------------------- |
-| `api`      | the API assembly, the envelope, shared wire and authz concerns |
-| `channels` | vendor adapters — WhatsApp, inbound email, payment callbacks   |
-| `agent`    | the hosted agent loop and its harness                          |
-| `frontend` | the web app                                                    |
-| `db`       | schema, migrations, the SQL client                             |
-| `repo`     | repo-wide tooling, config, hooks, CI                           |
-| `deps`     | dependency bumps                                               |
-| `docs`     | documentation                                                  |
+| scope      | when to use                                                             |
+| ---------- | ----------------------------------------------------------------------- |
+| `api`      | the API assembly, shared response schemas, transport and authz concerns |
+| `channels` | vendor adapters — WhatsApp, inbound email, payment callbacks            |
+| `agent`    | the hosted agent loop and its harness                                   |
+| `frontend` | the web app                                                             |
+| `db`       | schema, migrations, the SQL client                                      |
+| `repo`     | repo-wide tooling, config, hooks, CI                                    |
+| `deps`     | dependency bumps                                                        |
+| `docs`     | documentation                                                           |
 
 `api`, `channels` and `agent` are shell-only areas that own no aggregate, so they are not slices
 (`ARCHITECTURE.md` §2) — but code lands in them, so they need a scope.

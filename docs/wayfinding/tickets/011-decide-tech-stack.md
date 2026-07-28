@@ -24,8 +24,8 @@ Grilled with obarboza; eight decisions locked.
 
 ### 1. API framework: `@effect/platform` HttpApi
 
-- Canonical operations defined once as Effect Schema contracts; the HTTP server, fully-typed client (consumed by the CLI and the agent toolkit), and OpenAPI spec are all derived from them — ticket 007's parity rule enforced by construction.
-- tRPC rejected (own contract system, second-class Effect); hand-wired HTTP rejected (no derivation, parity drifts). Accepted cost: `@effect/platform` pre-1.0 API churn.
+- Canonical operations defined once as Effect Schema operation definitions; the HTTP server, fully-typed client (consumed by the CLI and the agent toolkit), and OpenAPI spec are all derived from them — ticket 007's parity rule enforced by construction.
+- tRPC rejected (own API definition system, second-class Effect); manually implemented HTTP rejected (no derivation, parity drifts). Accepted cost: `@effect/platform` pre-1.0 API churn.
 
 ### 2. Runtime: Bun
 
@@ -35,7 +35,7 @@ Grilled with obarboza; eight decisions locked.
 ### 3. Database: PostgreSQL only, via `@effect/sql-pg`
 
 - **One store, no Redis at MVP**: relational core (transactions, budgets, attestations); JSONB for dashboard documents and raw payloads (Schema-validated at the boundary); insert-only tables for the append-only ledgers (consent, audit, proactive events); Postgres-backed job queues (per-user serialization, ingest processing, corpus expiry).
-- **Access layer: `@effect/sql-pg` + Effect Schema row models + Effect Migrator.** Hand-written SQL with every row decoded through Schema — one schema language across API contracts, rows, and tool definitions. Drizzle rejected after weighing: its compile-time query checking duplicates what Schema decode gives at runtime, while its table defs are a second source of truth (the drift 007 exists to kill); Prisma rejected outright.
+- **Access layer: `@effect/sql-pg` + Effect Schema row models + Effect Migrator.** Hand-written SQL with every row decoded through Schema — one schema language across API operation schemas, rows, and tool definitions. Drizzle rejected after weighing: its compile-time query checking duplicates what Schema decode gives at runtime, while its table defs are a second source of truth (the drift 007 exists to kill); Prisma rejected outright.
 - Accepted costs: SQL typos surface at decode time (runtime, loudly), migrations are hand-written sequential files with no diff tooling.
 
 ### 4. Web app: Vite + React SPA
@@ -64,4 +64,4 @@ Grilled with obarboza; eight decisions locked.
 - **PDF statements → OpenAI natively** (Responses API PDF input; layout-aware, so bank tables survive — local text extraction rejected for flattening tables). **`mupdf` (WASM)** kept solely to decrypt password-protected statements in-memory per 006's used-once-never-stored rule.
 - **CSV/XLSX → deterministic rows** (Papa Parse / SheetJS); nano makes one column-mapping call per bank format, then rows flow mechanically. No LLM-per-row.
 - **Receipt photos/screenshots → nano vision** straight from Kapso media.
-- **Every path ends in structured outputs whose JSON Schema is generated (`JSONSchema.make`) from the same canonical Effect Schema transaction contract**, and responses are decoded back through it — a malformed extraction cannot enter the system; it fails decode into needs-review. No OCR stack, no table-extraction libraries.
+- **Every path ends in structured outputs whose JSON Schema is generated (`JSONSchema.make`) from the same canonical Effect Schema Transaction schema**, and responses are decoded back through it — a malformed extraction cannot enter the system; it fails decode into needs-review. No OCR stack, no table-extraction libraries.

@@ -92,17 +92,16 @@ _Avoid_: Corpus, training data, log.
 ### The agent surface
 
 **Canonical operation**:
-A capability defined once as a contract, from which the server, typed client, OpenAPI spec, MCP
-tools, and the hosted agent's toolkit are all derived. The hosted agent has no private tools.
+A capability declared once with its inputs, outputs, failures, and access requirements. The server,
+typed client, OpenAPI specification, MCP tools, and hosted agent toolkit are derived from that
+declaration. The hosted agent has no private tools.
 _Avoid_: Endpoint, route, API call, tool.
 
-**Affordance**:
-A suggested next canonical operation attached to a response — `{ tool, args?, hint }`. It is what
-makes a response navigable: an agent reads its next worthwhile call off the body rather than
-knowing the API in advance. Aimed at the invariant that one is never advertised when it would fail
-for the caller — nothing enforces that yet, so today an entry says a call is worth making, not that
-it will succeed, and the wire text agents read says exactly that.
-_Avoid_: Link, hint (alone), suggestion, next action.
+**SuggestedOperation**:
+A canonical operation attached to a response because it may be worthwhile for the calling agent to
+invoke next, together with any known inputs and a short reason. It makes the response navigable
+without requiring the agent to know the API in advance.
+_Avoid_: Affordance, link, hint (alone), suggestion, next action.
 
 **InsightEvent**:
 Something the product decided is worth telling the user, as a record with a lifecycle — pending,

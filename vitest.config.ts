@@ -28,7 +28,7 @@ export default defineConfig({
     coverage: {
       // istanbul (source-instrumented via Babel), not v8: the v8 provider reads
       // coverage from Node's V8 inspector (NODE_V8_COVERAGE), which the Bun
-      // runtime does not wire up, so `bun --bun vitest --coverage` reports 0%.
+      // runtime does not expose, so `bun --bun vitest --coverage` reports 0%.
       // istanbul instruments the source directly and is runtime-agnostic.
       provider: "istanbul",
       enabled: true,

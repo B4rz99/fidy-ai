@@ -2,7 +2,7 @@ import { Effect } from "effect";
 import { SqlClient } from "effect/unstable/sql";
 
 // This is the disposable walking-skeleton migration's final shape. Money stays
-// nested in the domain and contract but occupies adjacent exact numeric and
+// nested in the domain and canonical operation but occupies adjacent exact numeric and
 // Currency columns here; ownership exists only at this relational seam.
 export const createTransactions = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;

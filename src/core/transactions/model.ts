@@ -47,7 +47,7 @@ export const Direction = Schema.Literals(["inflow", "outflow"]).annotate({
 export type Direction = typeof Direction.Type;
 
 /**
- * DateTime.Utc in the domain; on the wire, a validated ISO date-time string
+ * DateTime.Utc in the domain; when encoded, a validated ISO date-time string
  * that the derived OpenAPI spec advertises as `format: date-time`.
  *
  * Describe fields of this type with `annotateEncoded`, never `annotate`. The
@@ -62,7 +62,7 @@ const UtcTimestamp = Schema.String.annotate({ format: "date-time" }).pipe(
 /**
  * One movement of money — how much, which way, who with, and when it happened
  * (CONTEXT.md). This is the canonical shape of the entity: the input schema,
- * the row schema and the wire schemas are all derived from it, so a field added
+ * the row schema and the transport schemas are all derived from it, so a field added
  * here reaches every one of them and a field added anywhere else is a parallel
  * definition (ARCHITECTURE.md §4).
  *

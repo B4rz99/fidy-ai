@@ -32,4 +32,4 @@ A full checkout of the [Effect](https://effect.website) source lives at `.repos/
 
 Distilled research on how Effect actually works, extracted from the `.repos/effect` source (citations are `path:line` into that checkout). Read the relevant file before working in its area; add a new file here when researching an Effect area not yet covered.
 
-- `.patterns/http-api.md` — `effect/unstable/httpapi`: contracts-once derivation (server / typed client / OpenAPI), request/response validation semantics, error modeling, schema patterns for contracts, testing seams, middleware.
+- `.patterns/http-api.md` — `effect/unstable/httpapi`: define-once operation derivation (server / typed client / OpenAPI), request/response validation semantics, error modeling, schema patterns for operation definitions, testing seams, middleware.

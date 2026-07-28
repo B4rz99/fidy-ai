@@ -4,16 +4,16 @@ How `effect/unstable/httpapi` (v4) actually works, read from the source. Citatio
 `<path>:<line>` relative to `packages/effect/`. The canonical walkthrough is
 `ai-docs/src/51_http-server/` (`10_basics.ts` + fixtures) — read it before adding endpoints.
 
-## The contracts-once trio
+## The define-once derivation trio
 
 One `HttpApi` definition derives three artifacts, all schema-enforced **at runtime**, not
 just at the type level:
 
-| Artifact | Derivation                                                                                                    | Where validation happens                                                                                                                                         |
-| -------- | ------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Server   | `HttpApiBuilder.layer(api)` + `HttpApiBuilder.group` handlers                                                 | request decoded through contract (400 on failure), handler return **encoded through the success schema** (`HttpApiBuilder.ts:758`, applied at `:809`)            |
-| Client   | `HttpApiClient.make(api)`                                                                                     | payload encoded through contract; response body run through `Schema.decodeEffect` against the success schema per status (`HttpApiClient.ts:362-379`, `:726-730`) |
-| OpenAPI  | `OpenApi.fromApi(api)` — served by `HttpApiBuilder.layer(api, { openapiPath })` (`HttpApiBuilder.ts:103-106`) | n/a (spec generation; cached per api instance in a `WeakMap`, `OpenApi.ts:213`)                                                                                  |
+| Artifact | Derivation                                                                                                    | Where validation happens                                                                                                                                                         |
+| -------- | ------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Server   | `HttpApiBuilder.layer(api)` + `HttpApiBuilder.group` handlers                                                 | request decoded through the operation definition (400 on failure), handler return **encoded through the success schema** (`HttpApiBuilder.ts:758`, applied at `:809`)            |
+| Client   | `HttpApiClient.make(api)`                                                                                     | payload encoded through the operation definition; response body run through `Schema.decodeEffect` against the success schema per status (`HttpApiClient.ts:362-379`, `:726-730`) |
+| OpenAPI  | `OpenApi.fromApi(api)` — served by `HttpApiBuilder.layer(api, { openapiPath })` (`HttpApiBuilder.ts:103-106`) | n/a (spec generation; cached per api instance in a `WeakMap`, `OpenApi.ts:213`)                                                                                                  |
 
 ## Defining endpoints
 
@@ -34,7 +34,7 @@ success defaults 200, error defaults **500** (`HttpApiSchema.ts:702-714`).
 
 JSON codecs are applied automatically: params/query/headers get `Schema.toCodecStringTree`,
 payload/success/error get `Schema.toCodecJson` (`HttpApiEndpoint.ts:1065-1076`). This is why
-`Schema.DateTimeUtc` in a contract "just works" as an ISO string on the wire.
+`Schema.DateTimeUtc` in an operation definition "just works" as an encoded ISO string.
 
 `HttpApiSchema` inventory: `Empty(code)`, `NoContent`(204), `Created`(201), `Accepted`(202),
 `asNoContent({decode})` (empty body ⇄ constructed value), `asJson/asText/asUint8Array/
@@ -91,7 +91,7 @@ endpoint turns the builder's return type into the string literal
 `HttpClient` service (`HttpApiClient.ts:476-494`) and returns `client[group][endpoint](req)`.
 
 - **Type safe AND runtime safe by default.** Payload/params/query/headers are encoded
-  through the contract; the response body is decoded through the success schema selected by
+  through the operation definition; the response body is decoded through the success schema selected by
   exact status (`HttpClientResponse.matchStatus`, `:330-334`) and content-type
   (`:754-766`). Opt out only via `responseMode: "response-only"`.
 - Request keys in v4 are **`params` and `query`** (not v3's `path`/`urlParams`);
@@ -125,7 +125,7 @@ endpoint turns the builder's return type into the string literal
   `HttpApi.AdditionalSchemas`.
 - **Schema `identifier` annotations drive `$ref`/`components.schemas`**
   (`internal/schema/representation.ts:62-73`). Without them, everything inlines and
-  `components.schemas` stays empty. Annotate shared contract schemas
+  `components.schemas` stays empty. Annotate shared operation schemas
   (`Schema.annotate({ identifier: "Transaction" })`) so agent/codegen consumers get named
   components.
 - Check → JSON Schema mapping: `isUUID` → `pattern` + `format: "uuid"`; `isInt` → `integer`;
@@ -136,17 +136,17 @@ endpoint turns the builder's return type into the string literal
   `.layerCdn`, and `HttpApiSwagger.layer` — all in core `effect/unstable/httpapi`, all embed
   the spec into the HTML; keep `openapiPath` for the raw JSON.
 
-## Dates in contracts — a trap
+## Dates in operation definitions — a trap
 
 `Schema.Date` accepts **invalid `Date` instances** (`Schema.ts:10449-10451`), and its JSON
 codec (`DateString`, `Schema.ts:10437`) decodes _any_ string — `"not-a-date"` decodes
-successfully to `Invalid Date`. In an HttpApi contract that means a garbage date passes the
+successfully to `Invalid Date`. In an HttpApi operation definition that means a garbage date passes the
 400 gate and detonates later (typically as a 500 deep in the handler). It also emits a bare
 `{ "type": "string" }` in OpenAPI.
 
 Use instead, in preference order:
 
-1. `Schema.DateTimeUtc` — validates `DateTime.Utc`, wire codec is a **validated** ISO string
+1. `Schema.DateTimeUtc` — validates `DateTime.Utc`, transport codec is a **validated** ISO string
    (`Schema.ts:12026`, `dateTimeUtcFromString` rejects garbage — `SchemaTransformation.ts:1811-1823`),
    handlers get immutable `DateTime.Utc` values that compose with `Clock`/`DateTime`. The
    `Date`-schema JSDoc itself points to `DateTimeUtcFromString` for date-time strings
@@ -155,7 +155,7 @@ Use instead, in preference order:
    but rejects `Invalid Date` at decode and adds `format: "date-time"` to the JSON schema
    (`representation.ts:711-712`).
 
-## Schema patterns for contracts
+## Schema patterns for operation definitions
 
 - **Derive, don't duplicate**: `Base.mapFields(Struct.omit(["id", "createdAt"]))` is the v4
   idiom (`Schema.ts:3395-3402`; repo tests use it verbatim). Caveat: struct-level
@@ -167,7 +167,7 @@ Use instead, in preference order:
 - Keep API definitions in their own module, importable by clients without pulling in server
   code (ai-docs `10_basics.ts:12-16`).
 
-## Layer wiring (canonical, ai-docs `10_basics.ts:23-63`)
+## Layer assembly (canonical, ai-docs `10_basics.ts:23-63`)
 
 ```ts
 const ApiRoutes = HttpApiBuilder.layer(Api, { openapiPath: "/openapi.json" }).pipe(
@@ -192,7 +192,7 @@ accepts `middleware:` (e.g. `HttpMiddleware.cors({...})`). Serverless:
   including middleware. Needs platform services (`FileSystem`, `Etag.Generator`,
   `HttpPlatform`, `Path`). This is what the effect repo's own HttpApiBuilder tests use.
 - **Real socket**: `NodeHttpServer.layerTest` (`platform-node/src/NodeHttpServer.ts:477-486`)
-  binds an ephemeral port and wires an `HttpClient` pointed at it. Same schema pipeline,
+  binds an ephemeral port and configures an `HttpClient` pointed at it. Same schema pipeline,
   plus real transport.
 
 ## Middleware
@@ -202,5 +202,5 @@ HttpApiSecurity.bearer }, error: Unauthorized, requiredForClient: true }) {}` �
 `.middleware(Tag)` at endpoint/group/api; implementation is a Layer providing a function
 (or a per-security-scheme record receiving the decoded credential) that typically
 `Effect.provideService`s e.g. `CurrentUser` downstream. Middleware error schemas merge into
-every covered endpoint's contract, and the derived client gains the matching requirement
+every covered endpoint's definition, and the derived client gains the matching requirement
 (`HttpApiMiddleware.layerClient` on the client side).

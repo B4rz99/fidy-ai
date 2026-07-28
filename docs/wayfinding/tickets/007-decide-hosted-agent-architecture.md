@@ -38,8 +38,8 @@ Grilled with obarboza; five decisions locked.
 
 ### 3. Tool set: strict parity rule, zero private tools
 
-- **Confirmed and hardened**: the hosted agent calls the canonical API _as the user_ — user-scoped auth token, same authz path as any third-party agent. In-process transport is fine; the operation contracts are identical.
-- **Tool definitions are derived, not hand-written**: each canonical API operation is defined once as an Effect Schema contract; the `@effect/ai` toolkit, HTTP surface, MCP server, and CLI all generate from that single source. Parity cannot drift.
+- **Confirmed and hardened**: the hosted agent calls the canonical API _as the user_ — user-scoped auth token, same authz path as any third-party agent. In-process transport is fine; the operation definitions are identical.
+- **Tool definitions are derived, not hand-written**: each canonical API operation is defined once as an Effect Schema operation definition; the `@effect/ai` toolkit, HTTP surface, MCP server, and CLI all generate from that single source. Parity cannot drift.
 - **New capabilities enter the canonical API first** (dogfooding rule): chart/image rendering becomes a canonical "render widget/query as PNG" endpoint, not a private helper. Media ingestion (receipt photo, screenshot, PDF statement) is a canonical submit-for-extraction operation.
   - _Amended 2026-07-23 by [Decide: tech stack beyond TypeScript + Effect-TS](011-decide-tech-stack.md): the render-as-PNG endpoint is out of MVP — no chart images to WhatsApp; the agent answers in text. The dogfooding rule itself stands._
 - Outside the API: only channel mechanics (session state, message send/receive, WhatsApp formatting) — adapter code, never LLM tools. Messaging/nudges are not tools (ticket 014's domain).

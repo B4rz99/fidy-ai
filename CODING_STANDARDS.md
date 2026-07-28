@@ -16,16 +16,16 @@ Bad names cause bugs. **A good name says what the entity is and what it is not.*
 - **If it is hard to name, the design is unclear.** Naming difficulty is a signal about the entity,
   not about vocabulary. Fix the boundary rather than reaching for a longer name.
 
-|                                        |                                                                                                                   |
-| -------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| files                                  | kebab-case — `needs-review.ts`                                                                                    |
-| schemas, types, classes                | PascalCase                                                                                                        |
-| functions, values                      | camelCase                                                                                                         |
-| core decisions                         | verb-first — `decideAlerts`, `matchTransaction`, `applyEdit`                                                      |
-| repo reads returning `Option`          | `find*` — `findBudget`                                                                                            |
-| repo reads where absence is impossible | `get*`                                                                                                            |
-| layers wiring the real thing           | `Live` suffix — `PgLive`, `ApiLive`                                                                               |
-| layers wiring a test stack             | named for what they are — `ApiHarness`. `Live` marks the production wiring, so it would read as the opposite here |
+|                                        |                                                                                                                     |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| files                                  | kebab-case — `needs-review.ts`                                                                                      |
+| schemas, types, classes                | PascalCase                                                                                                          |
+| functions, values                      | camelCase                                                                                                           |
+| core decisions                         | verb-first — `decideAlerts`, `matchTransaction`, `applyEdit`                                                        |
+| repo reads returning `Option`          | `find*` — `findBudget`                                                                                              |
+| repo reads where absence is impossible | `get*`                                                                                                              |
+| layers assembling the real thing       | `Live` suffix — `PgLive`, `ApiLive`                                                                                 |
+| layers assembling a test stack         | named for what they are — `ApiHarness`. `Live` marks the production assembly, so it would read as the opposite here |
 
 ---
 
@@ -86,7 +86,7 @@ Any shape differing from the canonical one is **built from it** — `mapFields`,
 or spreading `.fields`. A type that never mentions the schema it derives from is the smell. See
 ARCHITECTURE.md §4.
 
-Preserve nested value boundaries in core and contracts. A relational row may flatten Money into
+Preserve nested value boundaries in core and canonical operations. A relational row may flatten Money into
 adjacent exact amount and Currency columns, but its repo codec derives from the canonical Money
 schema and reconstructs the nested value on read. Do not leak storage flattening into canonical
 operations or define a parallel monetary DTO.
@@ -110,10 +110,10 @@ core/<slice>/     model.ts     the canonical schemas
                   rules.ts     pure decisions — omitted where there are none
                   errors.ts    the Data.TaggedError union
 
-shell/<slice>/    contract.ts  HttpApiGroup, paths, scopes, cost classes
+shell/<slice>/    operations.ts  canonical operation definitions — HttpApiGroup, paths, scopes, cost classes
                   repo.ts      SQL and row schemas
                   handlers.ts  load → decide → persist
-                  errors.ts    the exhaustive core→wire mapper
+                  errors.ts    the exhaustive core-to-API mapper
 ```
 
 Reserved for those roles in **every** slice. A slice may add whatever else it needs —
@@ -156,7 +156,7 @@ linter could draw, so it lives here.
 Two rules nothing can check:
 
 - **`orDie` is for defects only.** A dead connection, yes. "Budget not found", no — that is a typed
-  error that must reach the wire.
+  error that must reach the API response.
 - **Absence is an `Option`, and the handler decides what it means.** The repo cannot know whether a
   missing budget is a 404, an upsert, or simply an empty answer. Use `findOneOption` for
   `SELECT … WHERE`; `findOne` only where absence is genuinely impossible, such as
@@ -176,9 +176,9 @@ Placement, tiers and responsibilities are in ARCHITECTURE.md §8. What review lo
   Wanting to test `handlers.ts` in isolation means a decision belongs in core.
 - **Fixtures are builders with sensible defaults**, overridden per test with only the fields that
   matter, so a reader sees immediately what the test is about.
-- **Prefer a derived guard over a hand-kept list** wherever the contracts can supply the list. The
-  isolation and description tests both enumerate from the contract, so a new operation is covered
-  without anyone remembering. The affordance check does not yet — see ARCHITECTURE.md §8.
+- **Prefer a derived guard over a hand-kept list** wherever the operation definitions can supply the list. The
+  isolation and description tests both enumerate from the API definition, so a new operation is covered
+  without anyone remembering. The suggested operation check does not yet — see ARCHITECTURE.md §8.
 
 ---
 
@@ -189,7 +189,7 @@ Presence is enforced; **voice is not**, and voice is what makes it useful.
 `OpenApi.Description` flows into `/openapi.json`, which derives the MCP tool definitions and the
 agent toolkit — it is what a calling agent reads at runtime, so it is product surface rather than
 developer comfort. Write to an agent: what the operation does and when to reach for it, in English,
-not implementation detail. Follow the voice already set by affordance hints.
+not implementation detail. Follow the voice already set by suggested operation hints.
 
 ---
 

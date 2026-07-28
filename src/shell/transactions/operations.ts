@@ -1,7 +1,7 @@
 import { Schema } from "effect";
 import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/unstable/httpapi";
 import { CreateTransactionInput, Transaction, TransactionId } from "~/core/transactions/model";
-import { Envelope } from "~/shell/_shared/envelope";
+import { OperationResponse } from "~/shell/_shared/response";
 import { NotFound, Unauthenticated } from "~/shell/_shared/errors";
 
 /**
@@ -14,10 +14,10 @@ import { NotFound, Unauthenticated } from "~/shell/_shared/errors";
  * no input schema here mentions a user (ARCHITECTURE.md §5).
  *
  * The 400 is absent from every `error` list and present on every operation
- * anyway: it is declared by the contract-gate middleware in `api.ts`, whose
+ * anyway: it is declared by the validation-gate middleware in `api.ts`, whose
  * error schema merges into each operation the middleware covers.
  *
- * An operation that routes a domain failure declares the whole wire union its
+ * An operation that routes a domain failure declares the whole API failure union its
  * slice's mapper can return, because there is one mapper per slice and its
  * return type is that union (ARCHITECTURE.md §6). The alternative — a mapper
  * narrow enough per operation to keep each list minimal — is a mapper per
@@ -32,7 +32,7 @@ import { NotFound, Unauthenticated } from "~/shell/_shared/errors";
 export const TransactionsGroup = HttpApiGroup.make("transactions").add(
   HttpApiEndpoint.post("createTransaction", "/transactions", {
     payload: CreateTransactionInput,
-    success: Envelope(Transaction).pipe(HttpApiSchema.status(201)),
+    success: OperationResponse(Transaction).pipe(HttpApiSchema.status(201)),
     error: [Unauthenticated, NotFound],
   }).annotate(
     OpenApi.Description,
@@ -43,7 +43,7 @@ export const TransactionsGroup = HttpApiGroup.make("transactions").add(
       "owner to name; the answer hands back the stored Transaction, id and all."
   ),
   HttpApiEndpoint.get("listTransactions", "/transactions", {
-    success: Envelope(Schema.Array(Transaction)),
+    success: OperationResponse(Schema.Array(Transaction)),
     error: Unauthenticated,
   }).annotate(
     OpenApi.Description,
@@ -55,7 +55,7 @@ export const TransactionsGroup = HttpApiGroup.make("transactions").add(
   ),
   HttpApiEndpoint.get("getTransaction", "/transactions/:id", {
     params: Schema.Struct({ id: TransactionId }),
-    success: Envelope(Transaction),
+    success: OperationResponse(Transaction),
     error: [Unauthenticated, NotFound],
   }).annotate(
     OpenApi.Description,

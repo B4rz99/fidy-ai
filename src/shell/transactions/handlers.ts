@@ -5,7 +5,7 @@ import { type TransactionId } from "~/core/transactions/model";
 import { checkAlreadyOccurred } from "~/core/transactions/rules";
 import { resolveCaller } from "~/shell/_shared/authz";
 import { FidyApi, operationId } from "~/shell/api";
-import { toWireFailure } from "./errors";
+import { toApiFailure } from "./errors";
 import { findTransaction, insertTransaction, listTransactions } from "./repo";
 
 /**
@@ -33,11 +33,11 @@ export const TransactionsLive = HttpApiBuilder.group(FidyApi, "transactions", (h
 
         // The clock is read here and handed to core as a value, because core
         // reads no clock (ARCHITECTURE.md §3). The rule cannot live in the
-        // contract for the same reason: "not in the future" is not a property
+        // input schema for the same reason: "not in the future" is not a property
         // of the payload alone.
         const now = yield* DateTime.now;
         yield* checkAlreadyOccurred({ occurredAt: payload.occurredAt, now }).pipe(
-          Effect.mapError(toWireFailure)
+          Effect.mapError(toApiFailure)
         );
 
         const transaction = yield* insertTransaction({ userId, input: payload });
@@ -72,7 +72,7 @@ export const TransactionsLive = HttpApiBuilder.group(FidyApi, "transactions", (h
         // absence as an empty history and succeeds.
         const transaction = yield* found.pipe(
           Effect.fromOption(missingTransaction(params.id)),
-          Effect.mapError(toWireFailure)
+          Effect.mapError(toApiFailure)
         );
 
         return { data: transaction, next: [] };

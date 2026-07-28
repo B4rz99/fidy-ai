@@ -1,0 +1,147 @@
+src/shell/_shared/response.ts
+  s_40711ef2c091f6::t_08ee4070992158 31-33,36,47,50
+  s_40711ef2c091f6::t_acbca93745b9d8 4,11,27-28,53
+src/core/transactions/model.test.ts
+  s_80f94bbc6c4adb::t_dfd628176660d1 12,32,38,44,50
+  s_80f94bbc6c4adb::t_47b270c477dfdf 9
+ARCHITECTURE.md
+  s_40711ef2c091f6::t_853e591ff95a67 465-485
+  s_40711ef2c091f6::t_57c2d665ffe3c5 122,345,392,451
+  s_40711ef2c091f6::t_b857aae9259509 142,346,348,453,456
+  s_e14fbe353c3d41::t_7bf5e60a68f3e1 23,35,186,189,192,196,211,236,391,431,434,443
+  s_80f94bbc6c4adb::t_a4c7df08eb1155 162,304,326,332,334,410
+  s_80f94bbc6c4adb::t_6bd17ae2f8c023 24
+src/shell/_shared/errors.ts
+  s_40711ef2c091f6::t_853e591ff95a67 186-188
+  s_e14fbe353c3d41::t_d69e4e07e732f2 211
+  s_40711ef2c091f6::t_57c2d665ffe3c5 7,10,44,95,100,115,133,142
+  s_e14fbe353c3d41::t_7bf5e60a68f3e1 110,238,241,247-248,252-253,268
+  s_80f94bbc6c4adb::t_ec8cb1916a4e7b 90
+  s_40711ef2c091f6::t_b857aae9259509 102,130
+  s_80f94bbc6c4adb::t_6b693254fd1d41 106
+README.md
+  s_80f94bbc6c4adb::t_77f31f505bf4aa 150
+  s_e14fbe353c3d41::t_7bf5e60a68f3e1 10
+  s_40711ef2c091f6::t_afd2f480e13a19 214-215,217-223
+  s_40711ef2c091f6::t_57c2d665ffe3c5 14,216
+  s_e14fbe353c3d41::t_d69e4e07e732f2 11
+docs/wayfinding/tickets/016-decide-agent-legible-api-conventions.md
+  s_e14fbe353c3d41::t_7bf5e60a68f3e1 66
+  s_40711ef2c091f6::t_b857aae9259509 13,17,29,33,44,68,76-77,98,102,107,111-112,115
+  s_40711ef2c091f6::t_57c2d665ffe3c5 15,26,31,34,79
+  s_e14fbe353c3d41::t_d69e4e07e732f2 71
+  s_40711ef2c091f6::t_cd84e1dfb75448 16,38,47
+src/shell/transactions/handlers.ts
+  s_80f94bbc6c4adb::t_cef59cd36168fa 8,40,75
+  s_e14fbe353c3d41::t_d69e4e07e732f2 36
+docs/wayfinding/tickets/008-decide-third-party-agent-auth.md
+  s_e14fbe353c3d41::t_d69e4e07e732f2 37,40,52
+docs/wayfinding/map.md
+  s_e14fbe353c3d41::t_7bf5e60a68f3e1 57
+  s_40711ef2c091f6::t_57c2d665ffe3c5 58
+  s_e14fbe353c3d41::t_d69e4e07e732f2 55
+docs/wayfinding/tickets/011-decide-tech-stack.md
+  s_e14fbe353c3d41::t_d69e4e07e732f2 67
+  s_e14fbe353c3d41::t_7bf5e60a68f3e1 27-28,38
+src/shell/db/migrations/0001-create-transactions.ts
+  s_e14fbe353c3d41::t_d69e4e07e732f2 5
+vitest.config.ts
+  s_80f94bbc6c4adb::t_6d89bcce57ee3e 31
+src/shell/transactions/operations.test.ts
+  s_e14fbe353c3d41::t_d69e4e07e732f2 1-76,82,94-339,345,347,351,353,356-372
+  s_40711ef2c091f6::t_afd2f480e13a19 77-81,83-93,340-344,346,348-350,352,354-355
+CODING_STANDARDS.md
+  s_40711ef2c091f6::t_853e591ff95a67 19-27
+  s_40711ef2c091f6::t_b857aae9259509 181,192
+  s_80f94bbc6c4adb::t_294902d3b5a27e 116,159
+  s_e14fbe353c3d41::t_7bf5e60a68f3e1 89,113,179-180
+  s_80f94bbc6c4adb::t_b9337358b179ed 28
+src/shell/transactions/errors.ts
+  s_40711ef2c091f6::t_57c2d665ffe3c5 38
+  s_80f94bbc6c4adb::t_fa4d5fbe732cfe 10-11
+  s_80f94bbc6c4adb::t_41d02bd67777c8 7,19
+  s_e14fbe353c3d41::t_7bf5e60a68f3e1 37
+src/shell/http.ts
+  s_e14fbe353c3d41::t_7bf5e60a68f3e1 4,25
+  s_80f94bbc6c4adb::t_a18b7cf043edf3 12
+  s_e14fbe353c3d41::t_d69e4e07e732f2 11,22
+CONTEXT.md
+  s_e14fbe353c3d41::t_7bf5e60a68f3e1 95-97
+  s_40711ef2c091f6::t_b857aae9259509 100
+  s_40711ef2c091f6::t_64df11f6858eba 101-104
+src/shell/api.ts
+  s_e14fbe353c3d41::t_7bf5e60a68f3e1 2-3,16
+  s_40711ef2c091f6::t_4b370bf89369dd 32
+  s_e14fbe353c3d41::t_d69e4e07e732f2 7
+docs/wayfinding/tickets/007-decide-hosted-agent-architecture.md
+  s_e14fbe353c3d41::t_7bf5e60a68f3e1 41-42
+src/shell/_shared/authz.ts
+  s_80f94bbc6c4adb::t_ddab7e469153f2 29-30
+docs/wayfinding/tickets/014-decide-agent-proactivity.md
+  s_40711ef2c091f6::t_b857aae9259509 39
+.patterns/http-api.md
+  s_80f94bbc6c4adb::t_2f33bc728f0559 149,170,195
+  s_e14fbe353c3d41::t_7bf5e60a68f3e1 7,12-16,37,94,128,139,143,158,205
+src/shell/transactions/handlers.test.ts
+  s_e14fbe353c3d41::t_d69e4e07e732f2 13,111,113
+  s_40711ef2c091f6::t_8152da7320ead2 19-20,100-101
+  s_e14fbe353c3d41::t_7bf5e60a68f3e1 175
+  s_40711ef2c091f6::t_174ee649009cfa 5,78,112,174
+  s_40711ef2c091f6::t_b857aae9259509 89,164
+.dependency-cruiser.mjs
+  s_e14fbe353c3d41::t_7bf5e60a68f3e1 56,58,60,63-64,67
+  s_28e6c406c291b9::t_a8b5029e8d35bd 72
+src/core/transactions/model.ts
+  s_80f94bbc6c4adb::t_0a82b6ac9fa233 50,65
+src/shell/transactions/operations.ts
+  s_40711ef2c091f6::t_57c2d665ffe3c5 4,35,46,58
+  s_e14fbe353c3d41::t_7bf5e60a68f3e1 17,20
+AGENTS.md
+  s_e14fbe353c3d41::t_7bf5e60a68f3e1 35
+src/core/transactions/errors.ts
+  s_80f94bbc6c4adb::t_8979a46e94b77f 34
+bun.lock
+  s_28e6c406c291b9::t_dc85dc86954a68 13,67,69,71,73,75,77,79,81
+src/core/_shared/money.ts
+  s_28e6c406c291b9::t_f0f394ab805a47 327
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "f51113830857f6c8fe88b9343f0fa9c1a6f33dcc",
+  "prompts": {},
+  "sessions": {
+    "s_28e6c406c291b9": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019fa673-5938-7b8f-a45b-fae48ada0256",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_40711ef2c091f6": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019fa544-328d-7f0e-aa5e-9ac2851cbc30",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_80f94bbc6c4adb": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019fa1d7-3e71-72fe-8e01-0b9d893a104a",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_e14fbe353c3d41": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019fa1db-1cea-7388-aef4-4055a2e48228",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

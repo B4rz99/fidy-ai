@@ -19,10 +19,47 @@ through Effect Schema.
 
 ### Running
 
+The process reads deployment configuration from the environment:
+
+| Variable                | Requirement | Meaning                                              |
+| ----------------------- | ----------- | ---------------------------------------------------- |
+| `DATABASE_URL`          | required    | PostgreSQL URL; boot fails loudly when it is absent  |
+| `PORT`                  | optional    | HTTP port, defaulting to `3000`                      |
+| `FIDY_HTTP_HOST`        | optional    | Bind host, defaulting to `0.0.0.0`                   |
+| `APP_VERSION`           | optional    | Version returned by `GET /health`                    |
+| `RAILWAY_DEPLOYMENT_ID` | Railway     | Health version fallback when `APP_VERSION` is absent |
+
 ```sh
 docker compose up -d db     # local Postgres on :5433
 export DATABASE_URL=postgres://fidy:fidy@localhost:5433/fidy
 bun run dev                 # rotates a local-only fin_ bearer, prints it once, starts API
+```
+
+Build and run the monolith from its production Dockerfile:
+
+```sh
+docker compose up --build
+curl http://localhost:3000/health
+```
+
+The process applies pending migrations before binding the HTTP server. It serves the canonical API,
+`/openapi.json`, the public `/health` route, and the SPA shell from `public/` in one Effect runtime.
+Canonical operations remain protected by scoped `fin_` bearer authorization. `railway.json`
+configures Railway to build the Dockerfile and gate deployments on `/health`; the app receives
+`DATABASE_URL` as a Railway Postgres reference rather than committed credentials.
+
+The transient `health-cron` Railway service is built from `deploy/health-cron/`. Every five minutes
+it requests the public health endpoint from its environment-only `HEALTH_URL` and exits, making a
+failed scheduled check visible without adding application logic or another long-running process.
+
+GitHub Actions runs `Checks` for pull requests and again for the resulting `trunk` commit. Railway's
+GitHub deployment triggers watch only `trunk` and wait for that commit's checks to pass before
+building either service; pull-request runs never deploy.
+
+The hosting escape hatch is the same Dockerfile plus a standard PostgreSQL dump:
+
+```sh
+pg_dump "$DATABASE_URL" --format=custom --file=fidy.dump
 ```
 
 The development startup accepts only a local PostgreSQL URL, binds the API to loopback, applies

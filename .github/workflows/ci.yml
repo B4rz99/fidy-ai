@@ -4,10 +4,14 @@ on:
   pull_request:
     branches:
       - trunk
+  push:
+    branches:
+      - trunk
 
 jobs:
   pr-title:
     name: PR Title
+    if: ${{ github.event_name == 'pull_request' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -21,6 +25,7 @@ jobs:
 
   migration-ids:
     name: Migration IDs
+    if: ${{ github.event_name == 'pull_request' }}
     runs-on: ubuntu-latest
     # No `bun install`: the check imports nothing outside Bun's own globals.
     steps:
@@ -238,6 +243,7 @@ jobs:
         with:
           fetch-depth: 0
       - name: Fetch base ref
+        if: ${{ github.event_name == 'pull_request' }}
         run: git fetch origin ${{ github.event.pull_request.base.ref }}
       - name: Gitleaks — pattern-based secret scan
         uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7 # v2

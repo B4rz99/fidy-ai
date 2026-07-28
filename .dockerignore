@@ -1,0 +1,17 @@
+.git
+.github
+.env
+.env.*
+.repos
+node_modules
+coverage
+reports
+.stryker-tmp
+.claude
+.fluidattacks
+tools
+docs
+research
+scripts
+*.log
+.DS_Store

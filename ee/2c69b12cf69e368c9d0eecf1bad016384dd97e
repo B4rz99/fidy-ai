@@ -1,0 +1,83 @@
+src/shell/testing/identity-fixtures.ts
+  s_d7032a617100b3::t_1e4a02b5901b86 1-6
+ARCHITECTURE.md
+  s_d7032a617100b3::t_9c61465dde29f7 51,60,68,74,76,81-82,96
+src/shell/db/development-seed.test.ts
+  s_d7032a617100b3::t_4380d7ec746a2a 11-14,16-23
+  s_d7032a617100b3::t_607799bd982392 1-9,24-55,66-73
+  s_d7032a617100b3::t_8e4bd9f41a5c12 10
+  s_d7032a617100b3::t_29cdc067b09e73 15,56-65
+src/shell/testing/authorization.test.ts
+  s_d7032a617100b3::t_9354aac7d55d96 10-17,26-33,80-101,103,116,122,129-155
+  s_d7032a617100b3::t_c94abef4aaddf7 8-9,104,117,123-128
+src/core/tokens/model.ts
+  s_d7032a617100b3::t_028517aa0f4bd1 41,44-46,52-55,70
+  s_d7032a617100b3::t_4a4440b038ca1d 2
+src/shell/db/migrations/0002-create-identities-and-agent-tokens.ts
+  s_d7032a617100b3::t_7a27f98ea08479 40-44
+src/shell/identity/whatsapp-identity.test.ts
+  s_d7032a617100b3::t_7a412264ee76ea 11,22
+src/main.ts
+  s_d7032a617100b3::t_33cb358fc80bea 8-12,16
+README.md
+  s_d7032a617100b3::t_53b20ff624c800 25,28-31
+src/core/_shared/agent-token.ts
+  s_d7032a617100b3::t_697dc8b893a895 1-5
+src/shell/audit/repo.ts
+  s_d7032a617100b3::t_bc036a1aa38bb3 1-59
+src/shell/db/migrations/0003-create-audit-log.ts
+  s_d7032a617100b3::t_9d7b9998cf875b 1-27
+src/shell/db/migrations/registry.ts
+  s_d7032a617100b3::t_20a7efda49fc8f 3,16
+src/core/audit/model.test.ts
+  s_d7032a617100b3::t_00a313b0be4803 1-21
+src/shell/audit/audit-log.test.ts
+  s_d7032a617100b3::t_6f57562436f1ad 3-4,6,37-76
+  s_d7032a617100b3::t_559dcf8568cf23 28-36
+  s_d7032a617100b3::t_631a1555042bac 1-2,5,7-27,77-80
+src/shell/db/development-seed.ts
+  s_d7032a617100b3::t_514e69aebb5c3f 1,19,22-37,45-46,50,52,57,61,71,83-92,94-101,103-104,107-108
+  s_d7032a617100b3::t_f13f505bfc77fd 2,6
+  s_d7032a617100b3::t_eee02ca3a3051a 54-56,63-65,75-77
+src/shell/audit/fixtures.ts
+  s_d7032a617100b3::t_d409335af6cf3b 1-8
+src/shell/_shared/authz.ts
+  s_d7032a617100b3::t_10fe11a6014e7d 1,3,7,115,120-121,124-131,134,143-153
+  s_d7032a617100b3::t_70eef28907210a 8,85-86
+  s_d7032a617100b3::t_30cf2550cf7ba7 5
+scripts/seed-development.ts
+  s_d7032a617100b3::t_6d052cff41a9a5 2,12-16,20-22,24
+  s_d7032a617100b3::t_e74a9a926a5224 10-11,17-19,25-29,31-34,36-39,41-44
+  s_d7032a617100b3::t_cb96e29f0233f1 1,4-9,23
+  s_d7032a617100b3::t_8398920853cb41 3,30,35
+  s_d7032a617100b3::t_0a5cc194207ed2 40
+src/shell/testing/api-harness.ts
+  s_d7032a617100b3::t_5da46efd39e5ed 8,54
+  s_d7032a617100b3::t_f3b03d06115b85 9
+src/shell/identity/handlers.test.ts
+  s_d7032a617100b3::t_d563ceb645cea3 5
+src/shell/transactions/operations.test.ts
+  s_d7032a617100b3::t_f0a3ded64e3e2b 6
+src/core/audit/model.ts
+  s_d7032a617100b3::t_2f6265b15709a6 1-34
+src/shell/tokens/repo.ts
+  s_d7032a617100b3::t_ff633fe4253738 16-17,55-56,60,62,65,68-69,99-100
+package.json
+  s_d7032a617100b3::t_54ff3c8d58c684 13
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "ee2c69b12cf69e368c9d0eecf1bad016384dd97e",
+  "prompts": {},
+  "sessions": {
+    "s_d7032a617100b3": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019fa67a-c8d4-770b-90e2-024e6730e4e8",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

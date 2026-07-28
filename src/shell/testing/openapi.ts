@@ -1,10 +1,14 @@
 import { expect } from "@effect/vitest";
 import { Effect, Option, Schema } from "effect";
 import { HttpClient } from "effect/unstable/http";
+import { AgentScope } from "~/core/tokens/model";
+import { OperationCostClass } from "~/shell/_shared/operation-policy";
 
 const SpecOperation = Schema.Struct({
   operationId: Schema.String,
   description: Schema.optional(Schema.String),
+  "x-fidy-required-scope": Schema.optional(AgentScope),
+  "x-fidy-cost-class": Schema.optional(OperationCostClass),
 });
 
 const OpenApiPaths = Schema.Struct({
@@ -23,6 +27,10 @@ export interface PublishedOperation {
   readonly id: string;
   /** `None` when the spec carries no `description` at all for this operation. */
   readonly description: Option.Option<string>;
+  /** `None` when the spec omits the canonical operation's required-scope metadata. */
+  readonly requiredScope: Option.Option<AgentScope>;
+  /** `None` when the spec omits the canonical operation's cost-class metadata. */
+  readonly costClass: Option.Option<OperationCostClass>;
 }
 
 /**
@@ -34,17 +42,22 @@ export interface PublishedOperation {
 export const publishedOperations = Effect.gen(function* () {
   const spec = yield* Schema.decodeUnknownEffect(OpenApiPaths)(yield* publishedSpec);
 
-  return Object.values(spec.paths).flatMap((methods) =>
-    Object.values(methods).map(
-      (operation): PublishedOperation => ({
-        id: operation.operationId,
-        description: Option.fromUndefinedOr(operation.description),
-      })
-    )
+  const operations: ReadonlyArray<PublishedOperation> = Object.values(spec.paths).flatMap(
+    (methods) =>
+      Object.values(methods).map(
+        (operation): PublishedOperation => ({
+          id: operation.operationId,
+          description: Option.fromUndefinedOr(operation.description),
+          requiredScope: Option.fromUndefinedOr(operation["x-fidy-required-scope"]),
+          costClass: Option.fromUndefinedOr(operation["x-fidy-cost-class"]),
+        })
+      )
   );
+
+  return operations;
 });
 
 /** The same enumeration, for tests that only need to name the operations. */
 export const publishedOperationIds = publishedOperations.pipe(
-  Effect.map((operations) => operations.map((operation) => operation.id))
+  Effect.map((operations): ReadonlyArray<string> => operations.map((operation) => operation.id))
 );

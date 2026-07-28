@@ -4,8 +4,12 @@ import { PgLive } from "~/shell/db/client";
 import { AppLive } from "~/shell/http";
 
 const ServerLive = Layer.unwrap(
-  Effect.map(Config.int("PORT").pipe(Config.withDefault(3000)), (port) =>
-    BunHttpServer.layer({ port })
+  Effect.map(
+    Config.all({
+      port: Config.int("PORT").pipe(Config.withDefault(3000)),
+      hostname: Config.string("FIDY_HTTP_HOST").pipe(Config.withDefault("0.0.0.0")),
+    }),
+    BunHttpServer.layer
   )
 );
 

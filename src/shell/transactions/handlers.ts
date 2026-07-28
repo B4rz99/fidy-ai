@@ -29,7 +29,7 @@ export const TransactionsLive = HttpApiBuilder.group(FidyApi, "transactions", (h
   handlers
     .handle("createTransaction", ({ payload, request }) =>
       Effect.gen(function* () {
-        const userId = yield* resolveCaller(request);
+        const { subjectUserId: userId } = yield* resolveCaller(request);
 
         // The clock is read here and handed to core as a value, because core
         // reads no clock (ARCHITECTURE.md §3). The rule cannot live in the
@@ -55,7 +55,7 @@ export const TransactionsLive = HttpApiBuilder.group(FidyApi, "transactions", (h
     )
     .handle("listTransactions", ({ request }) =>
       Effect.gen(function* () {
-        const userId = yield* resolveCaller(request);
+        const { subjectUserId: userId } = yield* resolveCaller(request);
         const transactions = yield* listTransactions(userId);
 
         return { data: transactions, next: [] };
@@ -63,7 +63,7 @@ export const TransactionsLive = HttpApiBuilder.group(FidyApi, "transactions", (h
     )
     .handle("getTransaction", ({ params, request }) =>
       Effect.gen(function* () {
-        const userId = yield* resolveCaller(request);
+        const { subjectUserId: userId } = yield* resolveCaller(request);
         const found = yield* findTransaction({ userId, id: params.id });
 
         // Here is where absence stops being data and becomes a failure: this

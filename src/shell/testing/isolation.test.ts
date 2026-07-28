@@ -1,16 +1,41 @@
 import { expect, layer } from "@effect/vitest";
-import { Effect, type Schema } from "effect";
+import { Context, Effect, Layer, type Schema } from "effect";
 import { HttpBody, HttpClient, type HttpClientError } from "effect/unstable/http";
+import { IanaTimeZone } from "~/core/_shared/context";
 import { UserId } from "~/core/_shared/user";
 import { type Transaction } from "~/core/transactions/model";
-import type { NotFound, Unauthenticated, ValidationFailed } from "~/shell/_shared/errors";
+import { AgentBearerToken } from "~/core/tokens/model";
+import type {
+  NotFound,
+  ScopeMissing,
+  Unauthenticated,
+  ValidationFailed,
+} from "~/shell/_shared/errors";
 import type { OperationId } from "~/shell/api";
 import { transactionPayload, truncateTransactions } from "~/shell/transactions/fixtures";
-import { ApiHarness, type ApiClient, clientFor, headersFor } from "./api-harness";
+import { ApiHarness, type ApiClient, headersFor, makeApiClientLive } from "./api-harness";
+import { seedAgentIdentity } from "~/shell/db/development-seed";
 import { publishedOperationIds } from "./openapi";
 
 const owner = UserId.make("f1d1a000-0000-4000-8000-0000000000a1");
 const stranger = UserId.make("f1d1a000-0000-4000-8000-0000000000b2");
+const ownerBearer = AgentBearerToken.make("fin_owner001_0123456789abcdefghijklmnopqrstuvwxyzABCD");
+const strangerBearer = AgentBearerToken.make(
+  "fin_strange1_ABCDabcdefghijklmnopqrstuvwxyz0123456789"
+);
+
+class OwnerApiClient extends Context.Service<OwnerApiClient, ApiClient>()(
+  "fidy-ai/shell/testing/isolation.test/OwnerApiClient"
+) {}
+
+class StrangerApiClient extends Context.Service<StrangerApiClient, ApiClient>()(
+  "fidy-ai/shell/testing/isolation.test/StrangerApiClient"
+) {}
+
+const IsolationHarness = Layer.merge(
+  makeApiClientLive({ tag: OwnerApiClient, bearer: ownerBearer }),
+  makeApiClientLive({ tag: StrangerApiClient, bearer: strangerBearer })
+).pipe(Layer.provideMerge(ApiHarness));
 
 /**
  * What one operation, invoked by a stranger, is handed: a client for each user
@@ -27,6 +52,7 @@ type CallFailure =
   | Schema.SchemaError
   | HttpClientError.HttpClientError
   | NotFound
+  | ScopeMissing
   | Unauthenticated
   | ValidationFailed;
 
@@ -43,6 +69,29 @@ type IsolationProbe = (
  * catches the runtime case — a published operation this union never heard of.
  */
 const probes: Record<OperationId, IsolationProbe> = {
+  "identity.getCurrentUser": (attempt) =>
+    Effect.gen(function* () {
+      const current = yield* attempt.strangerClient.identity.getCurrentUser();
+
+      expect(current.data.id).toBe(stranger);
+      expect(current.data.id).not.toBe(owner);
+    }),
+
+  "identity.updateUserPreferences": (attempt) =>
+    Effect.gen(function* () {
+      const updated = yield* attempt.strangerClient.identity.updateUserPreferences({
+        payload: {
+          locale: "es-CO",
+          timeZone: IanaTimeZone.make("America/New_York"),
+        },
+      });
+      const ownersUser = yield* attempt.ownerClient.identity.getCurrentUser();
+
+      expect(updated.data.id).toBe(stranger);
+      expect(updated.data.timeZone).toBe("America/New_York");
+      expect(ownersUser.data.timeZone).toBe("America/Bogota");
+    }),
+
   "transactions.listTransactions": (attempt) =>
     Effect.gen(function* () {
       const listed = yield* attempt.strangerClient.transactions.listTransactions();
@@ -60,7 +109,7 @@ const probes: Record<OperationId, IsolationProbe> = {
       // the typed client to send. Naming one over raw HTTP is accepted — and
       // ignored: the row belongs to whoever called, not to whoever was named.
       const forged = yield* HttpClient.post("/transactions", {
-        headers: headersFor(stranger),
+        headers: headersFor(strangerBearer),
         body: HttpBody.jsonUnsafe({
           money: { amount: "8000", currency: "COP" },
           merchant: "Tostao",
@@ -103,8 +152,17 @@ const probes: Record<OperationId, IsolationProbe> = {
 };
 
 const seedAttempt = Effect.gen(function* () {
-  const ownerClient = yield* clientFor(owner);
-  const strangerClient = yield* clientFor(stranger);
+  yield* seedAgentIdentity({
+    userId: owner,
+    bearer: ownerBearer,
+  });
+  yield* seedAgentIdentity({
+    userId: stranger,
+    bearer: strangerBearer,
+  });
+
+  const ownerClient = yield* OwnerApiClient;
+  const strangerClient = yield* StrangerApiClient;
   const created = yield* ownerClient.transactions.createTransaction({
     payload: transactionPayload(),
   });
@@ -112,7 +170,7 @@ const seedAttempt = Effect.gen(function* () {
   return { ownerClient, strangerClient, ownedTransaction: created.data };
 });
 
-layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
+layer(IsolationHarness, { excludeTestServices: true, timeout: "30 seconds" })(
   "per-user isolation",
   (it) => {
     it.effect("every canonical operation the server publishes is probed here", () =>

@@ -48,27 +48,55 @@ flowchart LR
 subgraph src["src"]
   subgraph src_core["core"]
     src_core__shared["_shared"]
+    src_core_audit["audit"]
+    src_core_identity["identity"]
+    src_core_tokens["tokens"]
     src_core_transactions["transactions"]
   end
   src_main_ts["main.ts"]
   subgraph src_shell["shell"]
     src_shell__shared["_shared"]
     src_shell_api_ts["api.ts"]
+    src_shell_audit["audit"]
     src_shell_db["db"]
     src_shell_http_ts["http.ts"]
+    src_shell_identity["identity"]
+    src_shell_tokens["tokens"]
     src_shell_transactions["transactions"]
   end
 end
+src_core_audit-->src_core__shared
+src_core_identity-->src_core__shared
+src_core_tokens-->src_core__shared
 src_core_transactions-->src_core__shared
 src_main_ts-->src_shell_db
 src_main_ts-->src_shell_http_ts
-src_shell__shared-->src_core__shared
+src_shell__shared-->src_core_audit
+src_shell__shared-->src_core_tokens
+src_shell__shared-->src_shell_audit
+src_shell__shared-->src_shell_tokens
 src_shell_api_ts-->src_shell__shared
+src_shell_api_ts-->src_shell_identity
 src_shell_api_ts-->src_shell_transactions
+src_shell_audit-->src_core__shared
+src_shell_audit-->src_core_audit
+src_shell_db-->src_core__shared
+src_shell_db-->src_core_identity
+src_shell_db-->src_core_tokens
+src_shell_db-->src_shell__shared
+src_shell_db-->src_shell_identity
+src_shell_db-->src_shell_tokens
 src_shell_http_ts-->src_shell_api_ts
 src_shell_http_ts-->src_shell__shared
 src_shell_http_ts-->src_shell_db
+src_shell_http_ts-->src_shell_identity
 src_shell_http_ts-->src_shell_transactions
+src_shell_identity-->src_core_identity
+src_shell_identity-->src_shell__shared
+src_shell_identity-->src_core__shared
+src_shell_identity-->src_shell_api_ts
+src_shell_tokens-->src_core__shared
+src_shell_tokens-->src_core_tokens
 src_shell_transactions-->src_core_transactions
 src_shell_transactions-->src_shell__shared
 src_shell_transactions-->src_shell_api_ts
@@ -394,6 +422,14 @@ you always start from an empty database, where every migration runs):
 The **agent seam** arrives with the agent slice — `AgentService.handleTurn` through the CLI-REPL
 harness, with the model stubbed. It is a further seam, not a third tier: it will live under
 `shell/` like every other shell test, so the two-tier split still decides where it runs.
+
+**Caller resolution is an adapter boundary beside those seams.** WhatsApp evidence does not enter
+through HTTP, and AgentToken hashes and usage times must not be exposed by a canonical response.
+Tests may therefore call the exported concrete WhatsApp association/resolution boundary or
+AgentToken resolver against real Postgres. A command or API test may inspect a typed persistence observer only for a guarantee that
+must remain absent from the public response — bearer hashing or metadata-only AuditLogEntry
+contents, for example. These are not handler unit tests: no repo or resolver is mocked, and every
+canonical operation still keeps its API-seam coverage.
 
 A seam is where a test plugs in. An API-seam test traverses the decode gate, handlers, repo and
 Postgres to reach a decision; a core test starts at the decision. **Neither fakes anything** — a core

@@ -1,0 +1,95 @@
+src/core/tokens/rules.ts
+  s_d7032a617100b3::t_5f68ca1bd7aad9 2,12
+src/shell/identity/repo.ts
+  s_d7032a617100b3::t_19231ddd64d803 96-99,101,122-125,127
+  s_d7032a617100b3::t_98b84e0f5c773a 41,57
+  s_d7032a617100b3::t_c0e403590a7fd9 18-22
+src/core/tokens/model.test.ts
+  s_d7032a617100b3::t_37ca8257806cb4 76,78-81,83,85,90-92,94-95,98-101,111,113-116,120-123,133
+  s_d7032a617100b3::t_e611af821872d0 36
+  s_d7032a617100b3::t_dde807626143bf 77,86-89,96,117-119,124,129-132
+  s_d7032a617100b3::t_1c0dcb083ba3e3 82,84,93,112,125-127
+  s_d7032a617100b3::t_8d324430a5f2e5 3-4,6-9,12,62,64-75,97
+  s_d7032a617100b3::t_9c521f1f77dce7 128,134-136
+  s_d7032a617100b3::t_d2c56836bc51b3 2,5,10-11,32-35,37-42
+  s_d7032a617100b3::t_05fb2858a2ad87 63
+  s_d7032a617100b3::t_9185a4f7773346 102-110
+  s_d7032a617100b3::t_99e8236dc57bc5 43
+  s_d7032a617100b3::t_2958f7dc221fa5 137
+src/core/tokens/model.ts
+  s_d7032a617100b3::t_59334966d6ba25 63-65
+  s_d7032a617100b3::t_b77885720ef737 85,89,93,95
+  s_d7032a617100b3::t_5f3b96cc0fbdc4 67
+  s_d7032a617100b3::t_0b0b4c2c2ccd39 119
+  s_d7032a617100b3::t_8b3dd4bdf45990 58-59,70-72
+  s_d7032a617100b3::t_359fecfefb04da 21-22,75
+  s_d7032a617100b3::t_085e3b808fc9de 123
+  s_d7032a617100b3::t_50252a4e0fd9b8 57,60-61,66,90-91,96-97
+  s_d7032a617100b3::t_8d2d3991ee7d87 124-125,140-142
+  s_d7032a617100b3::t_9e3cc82f3cc0a9 20,23-27,33-35,38-43,51,53,62,68-69,73-74,76-77
+  s_d7032a617100b3::t_ee582362fa26a4 86-88,94
+  s_d7032a617100b3::t_6cba7d06065b5a 92,98,113-115,117-118,120-122,129-130
+  s_d7032a617100b3::t_26d7cdfa3cc1fe 52
+  s_d7032a617100b3::t_bd0f3308c5a832 100
+  s_d7032a617100b3::t_a89bf3d374a221 99,101-106,109,112,116
+  s_d7032a617100b3::t_2d0306758d82a8 1,47-48,81-84,107-108,110-111
+  s_d7032a617100b3::t_43b29f44e55abc 78
+src/shell/tokens/repo.ts
+  s_d7032a617100b3::t_9ad460e74ed484 113-114
+src/shell/db/development-seed.test.ts
+  s_d7032a617100b3::t_fe835a60a43452 3,8
+  s_d7032a617100b3::t_4ca3495652b86d 29-31
+  s_d7032a617100b3::t_7cee4ce4ac6dab 32-42,44-51,53-57,59-63,65-74,76-81,83-93
+  s_d7032a617100b3::t_1928d0b0a3c3ac 82
+src/shell/db/migrations/0002-create-identities-and-agent-tokens.ts
+  s_d7032a617100b3::t_13cf315e6b277f 44-46
+  s_d7032a617100b3::t_b647cccb63c099 43,47-48
+src/shell/identity/handlers.test.ts
+  s_d7032a617100b3::t_d92557e34c47d8 47,49-50,55,58,62,64-65,73,76
+src/core/identity/rules.test.ts
+  s_d7032a617100b3::t_3141ab40caafb6 2
+src/shell/identity/whatsapp-identity.test.ts
+  s_d7032a617100b3::t_1bcbcc5c10c389 32
+  s_d7032a617100b3::t_f2be1b3b603a76 13
+  s_d7032a617100b3::t_24eaffaa007544 3,29,34-39
+src/shell/_shared/operation-policy.ts
+  s_d7032a617100b3::t_4022fd09ce2c30 24-28
+ARCHITECTURE.md
+  s_d7032a617100b3::t_8c3949e143191e 428-429
+  s_d7032a617100b3::t_5afa923a5d69c3 426-427,430-433
+src/shell/db/development-seed.ts
+  s_d7032a617100b3::t_ac19b9a941542b 6-13,82
+  s_d7032a617100b3::t_484ce9682140eb 4,104-107
+  s_d7032a617100b3::t_6e58988f2c77d7 1,37-38,53-55
+  s_d7032a617100b3::t_3e9ea6150e2bce 16
+  s_d7032a617100b3::t_646495fe0e60a4 40-43
+src/shell/_shared/authz.ts
+  s_d7032a617100b3::t_9585b26cf689e2 6-10,116
+  s_d7032a617100b3::t_4f33a996aa23a3 57-59,84-88,102-105,122-129
+  s_d7032a617100b3::t_6a9e3a3f0539a1 1,42-43,51
+src/core/identity/model.test.ts
+  s_d7032a617100b3::t_90a82636d47cf9 1-34
+src/shell/testing/authorization.test.ts
+  s_d7032a617100b3::t_06b0b3a74d0e5f 199,206,233-236,239-246
+  s_d7032a617100b3::t_155d931952090e 30-32,37-39,162-163,167-168,173-174,177-186,200-205,209-211,218,237-238
+  s_d7032a617100b3::t_9dec66b8f8d952 159,161,187-189,191,193,195,197
+  s_d7032a617100b3::t_e5b7b1310bcf62 247-248
+scripts/seed-development.ts
+  s_d7032a617100b3::t_4c7f49e4df9be9 19-21,38
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "c99ffbd8473f199bd7eb36981da069b9333aa534",
+  "prompts": {},
+  "sessions": {
+    "s_d7032a617100b3": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019fa67a-c8d4-770b-90e2-024e6730e4e8",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

@@ -1,0 +1,28 @@
+tools/mutation/run.mjs
+  s_28e6c406c291b9::t_0fa6d8233e3085 1,26
+stryker.config.mjs
+  s_28e6c406c291b9::t_54a92324aa1e9d 55,57
+.github/workflows/mutation.yml
+  s_28e6c406c291b9::t_475dda5f6b0403 1-43
+ARCHITECTURE.md
+  s_28e6c406c291b9::t_7da99b94a75578 485
+  s_28e6c406c291b9::t_11468c5657c1aa 413,416,418-423,486
+README.md
+  s_28e6c406c291b9::t_fca2370ced7a3c 117-119,127-130,132-133,135
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "c28a2e24327d5b654a24dceeb77894e279bb5a74",
+  "prompts": {},
+  "sessions": {
+    "s_28e6c406c291b9": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019fa673-5938-7b8f-a45b-fae48ada0256",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

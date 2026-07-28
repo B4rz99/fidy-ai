@@ -1,0 +1,21 @@
+research/074-outlook-delegated-mailbox.md
+  s_08794326392d87::t_cd868b731d932f 127-266
+  s_08794326392d87::t_120b7b38d25e9e 124-126
+  s_08794326392d87::t_3b1ffbc665d46b 267-269
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "1c5711b5eec190f1e629ab5064194e77233c9e30",
+  "prompts": {},
+  "sessions": {
+    "s_08794326392d87": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019fa619-058c-743b-a208-cb13611faa10",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

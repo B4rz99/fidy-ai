@@ -1,0 +1,223 @@
+src/shell/_shared/suggested-operations.ts
+  s_16b169f29ae40e::t_b09699bc12524f 2-3,12-31,33-38,46-62,66-70,79-92,103,105-108,110-114
+  s_16b169f29ae40e::t_5c7986378e4215 65
+  s_b94ce0a75e952d::t_e1668726773cbc 7-11,99-100,104
+  s_b94ce0a75e952d::t_f75b74750d0ad6 1,6
+  s_b94ce0a75e952d::t_64a4e4f68f213d 101-102
+  s_16b169f29ae40e::t_6fefd43296795d 71-77,93-98,109
+  s_16b169f29ae40e::t_ab207a22120787 5,32
+  s_16b169f29ae40e::t_c2cfe6fbec5883 63-64,78
+  s_b94ce0a75e952d::t_dcdc9e7b632b40 39-45
+  s_16b169f29ae40e::t_0870b2b8fe1b74 4
+src/shell/transactions/errors.ts
+  s_16b169f29ae40e::t_8fb0fc4668d0a9 4-8
+  s_b94ce0a75e952d::t_daa773bf78e761 63-66
+  s_b94ce0a75e952d::t_addfb3952e962a 29-37,53,68-69
+  s_b94ce0a75e952d::t_023a829c64ce8a 1,13-19,61-62,67
+src/shell/identity/operations.ts
+  s_16b169f29ae40e::t_ab207a22120787 20-22,32-34
+src/shell/_shared/operation-policy.ts
+  s_16b169f29ae40e::t_7ff766fe2d0f8d 9-13,16,44,47,50
+src/shell/audit/repo.ts
+  s_16b169f29ae40e::t_837914fd7db590 21-22
+  s_16b169f29ae40e::t_7021c4fbe561d9 75-81
+  s_16b169f29ae40e::t_8460e42496384d 46-51,65-74,82
+src/shell/db/development-seed.ts
+  s_16b169f29ae40e::t_72853e27de15f5 27,102
+  s_b94ce0a75e952d::t_c438fcf6341f3b 28
+.env.example
+  s_16b169f29ae40e::t_b3aedb89a78bd7 4-6
+src/shell/_shared/operation-catalog.test.ts
+  s_b94ce0a75e952d::t_cb64cf50c71788 14-18
+  s_b94ce0a75e952d::t_d5b24f8b2e4e9e 2
+  s_b94ce0a75e952d::t_1252deccfacf88 1,3-13,19-24
+ARCHITECTURE.md
+  s_16b169f29ae40e::t_66a7a043016445 226-227,232
+  s_b94ce0a75e952d::t_914c9c3f892896 172-175,228-231,233,235,434-437
+  s_16b169f29ae40e::t_57f2c1f645b352 150-151,170-171,176,324-327
+  s_b94ce0a75e952d::t_b43fc64d6c4b0f 234
+  s_b94ce0a75e952d::t_512ea564c5db36 459
+src/shell/_shared/response.ts
+  s_b94ce0a75e952d::t_c438fcf6341f3b 59,63
+  s_b94ce0a75e952d::t_d539c5f9e9403e 24-27
+  s_b94ce0a75e952d::t_58a8e63316550c 5-6,10-16
+  s_b94ce0a75e952d::t_69d691f4e28004 2,44-55
+  s_16b169f29ae40e::t_c60354c58ce993 1,7-9,17-21,34-38,40-43,56-58,65-69
+  s_16b169f29ae40e::t_ab207a22120787 3
+  s_b94ce0a75e952d::t_efb08dee7f5666 29-33
+  s_b94ce0a75e952d::t_f1fb39cbc15fdb 60-62
+  s_b94ce0a75e952d::t_310e35b5b0b58d 87
+  s_b94ce0a75e952d::t_37687bb9ce3dd7 64,70-72
+  s_b94ce0a75e952d::t_902398d7a0858f 4
+src/shell/audit/retention.test.ts
+  s_16b169f29ae40e::t_58de055890c28b 25,30,42-43
+  s_16b169f29ae40e::t_91b1b2b97f97bd 1-23,44-53,55,59-70,72-76,78-82
+  s_b94ce0a75e952d::t_b09c84b09a9c30 24,26-29,32-41
+  s_b94ce0a75e952d::t_caa3399e89114b 31,54,56-58,71,77
+src/shell/_shared/suggested-operations.test.ts
+  s_b94ce0a75e952d::t_14e159ea1fa74b 29,31,45-46
+  s_16b169f29ae40e::t_ed8b23ba19d09c 3-4,15-28,32-44,47-50
+  s_b94ce0a75e952d::t_e10d7ce50d0a69 30
+  s_16b169f29ae40e::t_ab207a22120787 100-103,107-110
+  s_16b169f29ae40e::t_8cffd7b2eb7f08 1,5-14,51,54-57,70,97-99,104-106,111-128,143-198
+  s_b94ce0a75e952d::t_68d342cd1de13a 2,77-96
+  s_b94ce0a75e952d::t_ba459a69579a03 52-53,58-69,71-76
+  s_b94ce0a75e952d::t_672eeab44dd7c8 129-142
+src/shell/audit/audit-log.test.ts
+  s_16b169f29ae40e::t_16b604e5a5f854 37-40,195
+  s_16b169f29ae40e::t_20b6a5aa1143ab 71-74,77,88,113-117,119,215-218
+  s_16b169f29ae40e::t_ff8c6d4e74f4ee 136-137,141,228
+  s_16b169f29ae40e::t_90e14abc998953 2,4-5,7-9,14,16-22,24,28-36,41-51,142-152,154-194,196-205
+  s_b94ce0a75e952d::t_c438fcf6341f3b 226-227
+  s_16b169f29ae40e::t_99aaea10da0b6c 118
+  s_16b169f29ae40e::t_a15f6a6abd54af 10-13,15,59,61,67,75-76,78-79,96-101,104,108,153,206-214,219-225
+  s_16b169f29ae40e::t_95daedd984bae6 26,63,106,131
+src/shell/http.ts
+  s_16b169f29ae40e::t_6962f2f5e89a2e 6,57-61,63-65
+src/shell/transactions/operations.test.ts
+  s_16b169f29ae40e::t_9019a60c685db4 87,93
+  s_16b169f29ae40e::t_7ab84247486366 78,82-84
+src/shell/transactions/handlers.ts
+  s_16b169f29ae40e::t_491e090f2fa1ed 32
+  s_16b169f29ae40e::t_13eeb8464fdcdf 63-64,70-71
+  s_b94ce0a75e952d::t_e94a9a6a85df18 13,56,95
+  s_16b169f29ae40e::t_7b58c08528cd05 7-12,23-31,47-48,65-69,85-86
+src/shell/_shared/partial-input.ts
+  s_b94ce0a75e952d::t_29537b298619f6 317-318
+  s_b94ce0a75e952d::t_5481585f739ba4 164-165,177-182,184-187,189-196,212
+  s_b94ce0a75e952d::t_205be1afb261a2 23,27-42
+  s_b94ce0a75e952d::t_7b33c049d9a4e1 123-129,131,133,136-141,152
+  s_b94ce0a75e952d::t_72115cb72973b5 88-95,97,103-108,142-151,153-155,208,211
+  s_b94ce0a75e952d::t_33b5446af5eb68 1,11-12,14-22,24-26,47-51,62-79,96,98-102,109,156-157,205,210,213-225,228-233,235-236,238-239,243-247,249-250,252-253,255-286,288-289,291-316,319-321
+  s_b94ce0a75e952d::t_087fe3ab4e5db2 159
+  s_b94ce0a75e952d::t_026c5f162e7f94 166-174,176,183,188
+  s_b94ce0a75e952d::t_8ca7a265df9d91 43-46
+  s_b94ce0a75e952d::t_86e582e682bbc8 80-87,226-227,234,237,240-242,248,251,254,287,290
+  s_b94ce0a75e952d::t_eebedcc157766e 13,197-204,209
+  s_f43928b0bdeb8e::t_4f55a57e4155bd 175
+  s_b94ce0a75e952d::t_f09ee8f6bf8ca7 2-10,110-114,119-122,130,132,134-135
+  s_b94ce0a75e952d::t_1b2ea51a2a6795 115-118
+  s_b94ce0a75e952d::t_5dc23e1c12542a 53-61
+  s_b94ce0a75e952d::t_47f09b91635d40 158,160-163,206-207
+  s_b94ce0a75e952d::t_9ad2cfe8fc843f 52
+src/shell/audit/retention.ts
+  s_b94ce0a75e952d::t_e8cd8eaa3ef00d 4-12,14-15,20-21,24,33-35,42,48
+  s_16b169f29ae40e::t_f892d4fa5909b5 1,13,16-17,23,25-26
+  s_b94ce0a75e952d::t_5c535695e8f3cd 36-39
+  s_16b169f29ae40e::t_35e3b52bf03ae2 49,51-52
+  s_16b169f29ae40e::t_80d42323ecf4e0 2-3,18-19,22,27-32,40-41,43-47,50,53-68
+CODING_STANDARDS.md
+  s_16b169f29ae40e::t_88c280a40e5613 196
+  s_16b169f29ae40e::t_0813a47105a57f 113
+  s_b94ce0a75e952d::t_31f3c5ea74c387 174-175,180-181,194-195
+src/shell/_shared/operation-catalog.ts
+  s_b94ce0a75e952d::t_46ea77ce5da058 5,37
+  s_16b169f29ae40e::t_030eab51b8c197 1,4,6,10-12,15-22,24-27,29-35,39-43,46-52,56-61,71-90,92-98,100-101,103-105
+  s_b94ce0a75e952d::t_b2c15e21f6084f 2-3,62-70
+  s_b94ce0a75e952d::t_f6479c90864244 28
+  s_b94ce0a75e952d::t_46ec8de8b39166 9
+  s_b94ce0a75e952d::t_b66428856fc2f6 13-14,23,44-45,91,99,102,106-110
+  s_16b169f29ae40e::t_8d4f381e775f7a 7-8,36,38
+  s_16b169f29ae40e::t_ab207a22120787 53-55
+tools/depcruise/run.mjs
+  s_b94ce0a75e952d::t_e3f416e1dfe1b9 1,86,88
+src/shell/testing/authorization.test.ts
+  s_16b169f29ae40e::t_796a35209b9a50 4,27,56,120,135-142
+  s_16b169f29ae40e::t_1efe979325668b 10,128
+src/shell/testing/operation-policy.test.ts
+  s_16b169f29ae40e::t_0281974f19282f 30,37
+  s_16b169f29ae40e::t_3a62050fe20728 3,19-21
+  s_16b169f29ae40e::t_87a91ba1549749 4-5,12-18,22-29
+src/shell/transactions/operations.ts
+  s_16b169f29ae40e::t_aad6cf8f1ae889 47-49,61-63,76-78
+src/shell/testing/openapi.ts
+  s_16b169f29ae40e::t_67cf3eaa028600 5,11,33-34,55
+README.md
+  s_b94ce0a75e952d::t_1d2294b3254938 48-49
+  s_b94ce0a75e952d::t_50d2337860ff47 138
+  s_b94ce0a75e952d::t_d46869a9262b4c 150-164
+  s_16b169f29ae40e::t_4aed49cfcf3fb2 29,46-47
+src/shell/api.ts
+  s_16b169f29ae40e::t_ab207a22120787 4
+  s_16b169f29ae40e::t_c3288208749c14 26-28
+  s_b94ce0a75e952d::t_4f106ec24dc61b 29
+src/shell/_shared/errors.ts
+  s_b94ce0a75e952d::t_7a9ae7b8394e51 168-184,195
+  s_b94ce0a75e952d::t_9ebfce9bfa2856 185-194
+src/shell/transactions/handlers.test.ts
+  s_16b169f29ae40e::t_0e1e38b1ccc7fd 152,162
+  s_16b169f29ae40e::t_383231e4c920d5 96,99,109-113
+src/shell/testing/suggested-operations.test.ts
+  s_b94ce0a75e952d::t_e940f5696f2429 8,95-97,99,104-106,108,114-115,119,122-124,126-127,129-131,138-144,151-166,175-181,201
+  s_b94ce0a75e952d::t_c65ce70a1180ee 112
+  s_b94ce0a75e952d::t_f5e4bae78a2273 145-150
+  s_16b169f29ae40e::t_a68fee9ca216b6 9,11-13
+  s_b94ce0a75e952d::t_3904ac3e73e2d1 26
+  s_16b169f29ae40e::t_f200a2abc0465f 1,3,5,7,10,14-23,25,27-39,43-52,54-73,75,77-81,84,90-94,134-137,168-171,173-174,186-187,190-191,193-197,199-200,203-207,226-229
+  s_b94ce0a75e952d::t_d29a2d277637e5 40,53
+  s_b94ce0a75e952d::t_c028e0a26c57c1 82,85-88
+  s_16b169f29ae40e::t_679f21cedada53 89
+  s_b94ce0a75e952d::t_7206fb0f265426 2,4,6,24,109-111,113,120-121,125,132-133,209-211,213-225
+  s_b94ce0a75e952d::t_bd4199a4d11357 98,107
+  s_b94ce0a75e952d::t_c9a22a7a98d249 100-103,116-118,128,167,184
+  s_b94ce0a75e952d::t_34756413d94505 41-42,74,76,182-183,185
+  s_b94ce0a75e952d::t_f618672d8aef56 83,172,188-189,192,198,202,208,212
+src/shell/_shared/partial-input.test.ts
+  s_b94ce0a75e952d::t_098fe413dbf675 151-162,164-166,174-184,187-189
+  s_b94ce0a75e952d::t_1cfab3a8cf3d5d 78-79
+  s_b94ce0a75e952d::t_32a670f4ecf777 173
+  s_b94ce0a75e952d::t_be90d85f2eb552 55,63,65-68
+  s_b94ce0a75e952d::t_27ec1149d38b66 69-70,72-77,80-96
+  s_b94ce0a75e952d::t_70967a24c488c0 2,129-150,235-237
+  s_b94ce0a75e952d::t_8ca7a265df9d91 231
+  s_a73df753f2f34c::t_bb396cdd95a6c4 57-61
+  s_b94ce0a75e952d::t_26b00dd98c3b8a 71
+  s_b94ce0a75e952d::t_224119d595dcec 97-128
+  s_b94ce0a75e952d::t_2478ba0d5a0d13 56,64
+  s_b94ce0a75e952d::t_a8e3b121e88ef8 163,167-172,185-186
+  s_b94ce0a75e952d::t_20707166be79b6 62
+  s_b94ce0a75e952d::t_817e0aa25a93cc 1,3-54,222-226,228,232-233,238-239,241-249
+  s_b94ce0a75e952d::t_8cda09d70b5da5 227,229-230,234
+  s_b94ce0a75e952d::t_d21dd1bbc83b55 240
+  s_b94ce0a75e952d::t_1b5d4b370b2e73 190-221
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "1eaecfd1f62f3f47842c01fd5639fa320bb4117a",
+  "prompts": {},
+  "sessions": {
+    "s_16b169f29ae40e": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019fab79-cfb6-728c-9f42-2d2059cb70ec",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": null
+    },
+    "s_a73df753f2f34c": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019fac36-20bd-76d4-bf84-cd13f01c4143",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": null
+    },
+    "s_b94ce0a75e952d": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019fabc5-0a6b-743b-9260-4d7fd2a5be29",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_f43928b0bdeb8e": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019fac32-cd7c-7674-b51d-f370a18a1d33",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": null
+    }
+  }
+}

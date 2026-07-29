@@ -1,0 +1,55 @@
+deploy/health-cron/Dockerfile
+  s_40df4e12615b43::t_70ebfa896f6332 1-5
+src/shell/http.test.ts
+  s_40df4e12615b43::t_952439ba489b18 2
+  s_40df4e12615b43::t_6974ddfc0e1405 1,3,5-16
+  s_40df4e12615b43::t_92016451902da0 25-28
+  s_40df4e12615b43::t_e491dece86daf9 17-24
+src/shell/http.ts
+  s_40df4e12615b43::t_286ffec187d42c 48-51
+  s_40df4e12615b43::t_2afdbea2633fac 2,45-46,53
+  s_40df4e12615b43::t_389c97ac56bb6c 34-38,40
+  s_40df4e12615b43::t_794847ad3c2a8c 41
+  s_40df4e12615b43::t_8965bff1d2cb69 1,39,42-44
+  s_40df4e12615b43::t_fb5ce66b65e07f 59-60
+public/index.html
+  s_40df4e12615b43::t_8d5bbfd88ffd96 1-11
+deploy/health-cron/railway.json
+  s_40df4e12615b43::t_03a5e3de140b95 1-11
+README.md
+  s_40df4e12615b43::t_c1e3a7a4f7d43d 55-57
+  s_40df4e12615b43::t_ab0bc372ef45e4 23,31,36,39-46,50,59-62
+  s_40df4e12615b43::t_f38a6760a2ba4a 58
+  s_40df4e12615b43::t_e21485670b8393 51-54
+  s_40df4e12615b43::t_ba4a6cfc9e8b95 37
+compose.yaml
+  s_40df4e12615b43::t_84ff378d9d9190 2-5,6-13
+src/shell/_shared/authz.ts
+  s_40df4e12615b43::t_7d83e5ac299a0a 82
+  s_40df4e12615b43::t_d6e566c428feca 18,93,98-99
+  s_40df4e12615b43::t_51bb9e91ee707b 53-54,81
+.github/workflows/ci.yml
+  s_40df4e12615b43::t_bc338bcb6eb39a 7-9,14,28,246
+railway.json
+  s_40df4e12615b43::t_929791d4f46f66 1-13
+Dockerfile
+  s_40df4e12615b43::t_60a3b8c92174d2 1-19
+.dockerignore
+  s_40df4e12615b43::t_5c7bfcacbb82b1 1-17
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "a2bd9d6432330d97c8e5af189433198c76d07d97",
+  "prompts": {},
+  "sessions": {
+    "s_40df4e12615b43": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019fa67b-edb8-72b2-a0fc-c766aef8f844",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": null
+    }
+  }
+}

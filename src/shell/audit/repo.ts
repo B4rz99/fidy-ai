@@ -18,7 +18,8 @@ const AppendAuditLogEntryRow = Schema.Struct({
 
 /**
  * Appends metadata-only evidence for one User's canonical call. The database
- * assigns the evidence id; no update or delete operation exists at this seam.
+ * assigns the evidence id; no ordinary update/delete capability exists here,
+ * only the separate all-records-before-cutoff retention operation.
  */
 export const appendAuditLogEntry = Effect.fn("appendAuditLogEntry")(function* (
   subjectUserId: UserId,
@@ -42,8 +43,12 @@ export const appendAuditLogEntry = Effect.fn("appendAuditLogEntry")(function* (
   })({ subjectUserId, ...metadata }).pipe(Effect.orDie);
 });
 
-/** Lists one User's append-only canonical-call evidence in occurrence order. */
-export const listAuditLogEntries = (subjectUserId: UserId) =>
+/**
+ * Typed persistence observer for tests that must prove metadata remains absent
+ * from AuditLogEntry. It is not a canonical operation or an ordinary product
+ * read seam; production callers have no way to expose the retained evidence.
+ */
+export const observeAuditLogEntries = (subjectUserId: UserId) =>
   Effect.flatMap(SqlClient.SqlClient, (sql) =>
     SqlSchema.findAll({
       Request: UserId,
@@ -57,3 +62,21 @@ export const listAuditLogEntries = (subjectUserId: UserId) =>
       `,
     })(subjectUserId)
   ).pipe(Effect.orDie);
+
+/**
+ * Applies the append-only seam's sole deletion capability: retention may remove
+ * every AuditLogEntry strictly older than one UTC cutoff. Callers cannot select
+ * a User, token, operation, outcome, or individual evidence id for deletion.
+ */
+export const removeAuditLogEntriesBefore = Effect.fn("removeAuditLogEntriesBefore")(function* (
+  cutoff: typeof AuditLogEntry.fields.occurredAt.Type
+) {
+  const sql = yield* SqlClient.SqlClient;
+  const encodedCutoff = yield* Schema.encodeEffect(Schema.DateTimeUtcFromDate)(cutoff).pipe(
+    Effect.orDie
+  );
+  yield* sql`
+    DELETE FROM audit_log_entries
+    WHERE occurred_at < ${encodedCutoff}
+  `;
+});

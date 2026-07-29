@@ -44,7 +44,9 @@ export const TransactionsGroup = HttpApiGroup.make("transactions").add(
         "they read out. The Transaction belongs to whoever the call is made as, so there is no " +
         "owner to name; the answer hands back the stored Transaction, id and all."
     )
-    .annotateMerge(operationPolicy({ requiredScope: "write", costClass: "cheap" })),
+    .annotateMerge(
+      operationPolicy({ requiredScope: "write", requiredTier: "free", costClass: "cheap" })
+    ),
   HttpApiEndpoint.get("listTransactions", "/transactions", {
     success: OperationResponse(Schema.Array(Transaction)),
   })
@@ -56,7 +58,9 @@ export const TransactionsGroup = HttpApiGroup.make("transactions").add(
         "filters and returns the whole history, so narrow it yourself. Somebody who has " +
         "recorded nothing gets an empty list, not a failure."
     )
-    .annotateMerge(operationPolicy({ requiredScope: "read", costClass: "cheap" })),
+    .annotateMerge(
+      operationPolicy({ requiredScope: "read", requiredTier: "free", costClass: "cheap" })
+    ),
   HttpApiEndpoint.get("getTransaction", "/transactions/:id", {
     params: Schema.Struct({ id: TransactionId }),
     success: OperationResponse(Transaction),
@@ -69,5 +73,7 @@ export const TransactionsGroup = HttpApiGroup.make("transactions").add(
         "what you remember of it. An id that belongs to another user answers exactly as an id " +
         "that never existed, so `not_found` never tells you the record is real elsewhere."
     )
-    .annotateMerge(operationPolicy({ requiredScope: "read", costClass: "cheap" }))
+    .annotateMerge(
+      operationPolicy({ requiredScope: "read", requiredTier: "free", costClass: "cheap" })
+    )
 );

@@ -1,8 +1,4 @@
-// Runs the module-graph gate defined in `.dependency-cruiser.mjs`, and keeps
-// ARCHITECTURE.md's dependency graph generated from the same cruise.
-//
-//   bun tools/depcruise/run.mjs           validate the rules, check the graph
-//   bun tools/depcruise/run.mjs --write   regenerate the graph in place
+// Runs the module-graph gate defined in `.dependency-cruiser.mjs`.
 //
 // Not the `depcruise` binary, for two reasons. The cruiser reads .ts sources
 // and the tsconfig `paths` aliases through the classic TypeScript compiler API,
@@ -14,7 +10,6 @@
 // failure this repo already had once, so `assertCruisedSomething` below turns
 // it into an error.
 
-import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { cruise } from "dependency-cruiser";
@@ -22,7 +17,6 @@ import extractDepcruiseConfig from "dependency-cruiser/config-utl/extract-depcru
 import extractTSConfig from "dependency-cruiser/config-utl/extract-ts-config";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
-const architectureFile = resolve(repoRoot, "ARCHITECTURE.md");
 
 // The cruiser resolves every path against the cwd, and the reported module
 // names are what the rule patterns match, so both must be repo-root-relative.
@@ -89,63 +83,6 @@ const reportViolations = (report) => {
   );
 };
 
-/**
- * The diagram ARCHITECTURE.md publishes: one node per slice rather than per
- * file, which is the altitude that document argues at, and without the tests
- * or the API harness, which reach everywhere by design and would say
- * nothing about the shape.
- */
-const renderGraph = async () => {
-  const report = await cruiseSource({
-    outputType: "mermaid",
-    validate: false,
-    collapse: "^src/(core|shell)/[^/]+",
-    includeOnly: { path: "^src/" },
-    exclude: { path: ["\\.test\\.ts$", "^src/shell/testing/"] },
-    reporterOptions: { mermaid: { minify: false } },
-  });
-  return report.output.trim();
-};
-
-const GRAPH_START = "<!-- dependency-graph -->";
-const GRAPH_END = "<!-- /dependency-graph -->";
-
-const spliceGraph = (document, graph) => {
-  const start = document.indexOf(GRAPH_START);
-  const end = document.indexOf(GRAPH_END);
-  if (start < 0 || end < 0) {
-    console.error(`ARCHITECTURE.md is missing the ${GRAPH_START} / ${GRAPH_END} markers.`);
-    process.exit(1);
-  }
-  const block = `${GRAPH_START}\n\n\`\`\`mermaid\n${graph}\n\`\`\`\n\n`;
-  return document.slice(0, start) + block + document.slice(end);
-};
-
-const write = process.argv.includes("--write");
-
-// Rules before the diagram, and not the other way round: any change to the
-// graph makes the diagram stale, so checking that first would answer a genuine
-// architecture violation with "your picture is out of date".
-//
-// The tripwire runs on both paths, the rules only on the checking one. Skipping
-// the tripwire while writing is how a broken install would splice a diagram of
-// nothing into ARCHITECTURE.md and report success — the very failure this
-// file's header describes. Writing does not run the rules, so that regenerating
-// the picture is never blocked by a violation somewhere else in the graph.
-const report = await cruiseReport({ validate: !write });
+const report = await cruiseReport({ validate: true });
 assertCruisedSomething(report);
-if (!write) reportViolations(report);
-
-const document = readFileSync(architectureFile, "utf8");
-const regenerated = spliceGraph(document, await renderGraph());
-
-if (write) {
-  writeFileSync(architectureFile, regenerated);
-  console.log("ARCHITECTURE.md dependency graph regenerated.");
-} else if (regenerated !== document) {
-  console.error(
-    "ARCHITECTURE.md's dependency graph no longer matches the code. It is generated, not " +
-      "maintained: run `bun run graph` and commit the result."
-  );
-  process.exit(1);
-}
+reportViolations(report);

@@ -1,30 +1,75 @@
-import { Schema } from "effect";
+import * as Arr from "effect/Array";
+import { Option, Schema } from "effect";
+import { getBoundOperationCatalog, type CatalogOperation } from "./operation-catalog";
+
+const englishSentenceSegmenter = new Intl.Segmenter("en", { granularity: "sentence" });
+
+const SuggestedOperationHint = Schema.NonEmptyString.check(
+  Schema.isTrimmed(),
+  Schema.isMaxLength(140),
+  Schema.makeFilter((hint) =>
+    /[.!?]$/u.test(hint) &&
+    !/[\r\n]/u.test(hint) &&
+    Array.from(englishSentenceSegmenter.segment(hint)).length === 1
+      ? undefined
+      : { path: [], issue: "Expected one English sentence ending in punctuation" }
+  )
+).annotate({
+  description:
+    "One English sentence on why that call is worth making, no more than 140 characters. " +
+    "Addressed to you, the calling agent, and not to the user — act on it rather than reading it out.",
+});
 
 /**
- * A suggested operation is a suggested next call: `tool` is a canonical operation id,
- * `args` a partial of that operation's input, `hint` one English sentence.
- *
- * All three carry a description, because this schema is what an agent reads to
- * decide whether to follow a suggestion, and none of the three names says on
- * its own what belongs in it.
+ * The internal carrier for reflected schema members. Handler proposals never
+ * use this broad shape: `suggestOperation` binds each operation id to its input
+ * at compile time, and this reflected union strictly decodes the same pairing
+ * at the untyped response boundary without introducing an API assembly cycle.
  */
-export const SuggestedOperation = Schema.Struct({
-  tool: Schema.NonEmptyString.check(Schema.isTrimmed()).annotate({
+interface SuggestedOperationValue {
+  readonly tool: string;
+  readonly args?: unknown;
+  readonly hint: string;
+}
+
+const suggestedOperationMember = (
+  operation: CatalogOperation
+): Schema.Codec<SuggestedOperationValue, SuggestedOperationValue> => {
+  const tool = Schema.Literal(operation.id).annotate({
     description:
-      "The canonical operation to call, spelled exactly as its `operationId` in this spec — " +
-      "`transactions.listTransactions`, say. Look that id up here to see what it takes.",
-  }),
-  args: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)).annotate({
-    description:
-      "Arguments already worked out for that call, when there are any. Partial by design: " +
-      "merge them into the operation's own input rather than sending them as the whole of it.",
-  }),
-  hint: Schema.NonEmptyString.check(Schema.isTrimmed(), Schema.isMaxLength(140)).annotate({
-    description:
-      "One sentence on why that call is worth making. Addressed to you, the calling agent, " +
-      "and not to the user — act on it rather than reading it out.",
-  }),
-}).annotate({ identifier: "SuggestedOperation" });
+      "The canonical operation to call, spelled exactly as its `operationId` in this spec. " +
+      "Look that id up here to see the complete input and result.",
+  });
+
+  return Option.match(operation.partialInput, {
+    onNone: () => Schema.Struct({ tool, hint: SuggestedOperationHint }),
+    onSome: (partialInput) =>
+      Schema.Struct({
+        tool,
+        args: Schema.optionalKey(partialInput).annotate({
+          description:
+            "Arguments already worked out for that call. Partial by design: merge them into the " +
+            "operation's own input rather than sending them as the whole of it.",
+        }),
+        hint: SuggestedOperationHint,
+      }),
+  });
+};
+
+/**
+ * A suggested next canonical call. `tool` accepts exactly a published operation
+ * id; `args`, when present, is that target operation's schema-derived partial
+ * input.
+ */
+export const SuggestedOperation = Schema.suspend(() => {
+  const members = getBoundOperationCatalog().operations.map(suggestedOperationMember);
+  if (!Arr.isReadonlyArrayNonEmpty(members)) {
+    throw new Error("SuggestedOperation requires at least one canonical operation");
+  }
+  return Schema.Union(members);
+})
+  .pipe(Schema.brand("SuggestedOperation"))
+  .annotate({ identifier: "SuggestedOperation" });
 export type SuggestedOperation = typeof SuggestedOperation.Type;
 
 /**
@@ -39,8 +84,7 @@ export const NextOperations = Schema.Array(SuggestedOperation)
     description:
       "Where to go next: up to three canonical operations worth calling after this one, best " +
       "first. Empty when there is nothing worth suggesting, which is an answer rather than " +
-      "an omission. An entry says the call is worth making, not that it will succeed — read " +
-      "the failure you get back rather than treating a suggestion as clearance.",
+      "an omission. Each entry has passed the target-input and caller-authorization checkpoint.",
   });
 
 /**

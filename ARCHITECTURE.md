@@ -38,73 +38,6 @@ we want enforced, rather than an arbitrary technical one.
 A shell slice reaching into another slice's **core** is allowed and necessary — budgets are
 computed from spend.
 
-### The dependency graph
-
-<!-- dependency-graph -->
-
-```mermaid
-flowchart LR
-
-subgraph src["src"]
-  subgraph src_core["core"]
-    src_core__shared["_shared"]
-    src_core_audit["audit"]
-    src_core_identity["identity"]
-    src_core_tokens["tokens"]
-    src_core_transactions["transactions"]
-  end
-  src_main_ts["main.ts"]
-  subgraph src_shell["shell"]
-    src_shell__shared["_shared"]
-    src_shell_api_ts["api.ts"]
-    src_shell_audit["audit"]
-    src_shell_db["db"]
-    src_shell_http_ts["http.ts"]
-    src_shell_identity["identity"]
-    src_shell_tokens["tokens"]
-    src_shell_transactions["transactions"]
-  end
-end
-src_core_audit-->src_core__shared
-src_core_identity-->src_core__shared
-src_core_tokens-->src_core__shared
-src_core_transactions-->src_core__shared
-src_main_ts-->src_shell_db
-src_main_ts-->src_shell_http_ts
-src_shell__shared-->src_core_audit
-src_shell__shared-->src_core_tokens
-src_shell__shared-->src_shell_audit
-src_shell__shared-->src_shell_tokens
-src_shell_api_ts-->src_shell__shared
-src_shell_api_ts-->src_shell_identity
-src_shell_api_ts-->src_shell_transactions
-src_shell_audit-->src_core__shared
-src_shell_audit-->src_core_audit
-src_shell_db-->src_core__shared
-src_shell_db-->src_core_identity
-src_shell_db-->src_core_tokens
-src_shell_db-->src_shell__shared
-src_shell_db-->src_shell_identity
-src_shell_db-->src_shell_tokens
-src_shell_http_ts-->src_shell_api_ts
-src_shell_http_ts-->src_shell__shared
-src_shell_http_ts-->src_shell_db
-src_shell_http_ts-->src_shell_identity
-src_shell_http_ts-->src_shell_transactions
-src_shell_identity-->src_core_identity
-src_shell_identity-->src_shell__shared
-src_shell_identity-->src_core__shared
-src_shell_identity-->src_shell_api_ts
-src_shell_tokens-->src_core__shared
-src_shell_tokens-->src_core_tokens
-src_shell_transactions-->src_core_transactions
-src_shell_transactions-->src_shell__shared
-src_shell_transactions-->src_shell_api_ts
-src_shell_transactions-->src_core__shared
-```
-
-<!-- /dependency-graph -->
-
 ---
 
 ## 2. What a slice is
@@ -214,8 +147,8 @@ The question was never which type is pure, but which fence a compiler and a lint
 ## 4. Model in core, operation definition in shell
 
 The canonical schema for an entity lives in `core/<slice>/model.ts`. The `HttpApiGroup` that
-exposes it — paths, status codes, required scope, cost class — lives in `shell/<slice>/operations.ts`
-and references the core schemas.
+exposes it — paths, status codes, required scope, required Subscription tier, cost class — lives in
+`shell/<slice>/operations.ts` and references the core schemas.
 
 This does not weaken define-once derivation. The model is declared once, the operation is declared once, and
 the server, typed client, OpenAPI spec, MCP tool definitions and agent toolkit all still derive from
@@ -233,6 +166,13 @@ being a rule to remember: the canonical shape is by definition the one in `core/
 `core/transactions/model.ts`, not defined separately in `ingestion`.
 
 A type that never mentions the schema it derives from is the smell to catch in review.
+
+### Suggested operations are canonical and call-safe
+
+The assembled `FidyApi` is reflected once into the canonical operation ids, partial inputs, scopes,
+tiers, and cost classes used by `SuggestedOperation`; there is no parallel tool map. Every non-empty
+`next` is validated against its target, filtered by caller scope and tier, and only then limited to
+three operations.
 
 ### Nested in the domain, flat at the relational seam
 
@@ -282,6 +222,16 @@ worthless.
 Consequence accepted: `core/transactions/reconcile.ts` cannot verify two merge candidates belong to
 the same user; it trusts the shell to have loaded one user's rows. Adding the field would make that
 a runtime check, not a type error, and the isolation test covers the path that matters.
+
+### Attributable canonical calls
+
+`AgentAuthorization` is the auditing boundary for every reflected canonical operation. Attributable
+scope rejections, operation failures, and successes append one metadata-only AuditLogEntry; calls
+whose bearer cannot be resolved create no invented evidence. Successful state and evidence share a
+SQL transaction, while rejection and failure evidence survives the operation transaction.
+
+The audit repo exposes append, typed observation, and strictly-before-cutoff retention only.
+Production defaults to 365 days, cleans at launch and daily, and retains entries at the cutoff.
 
 ### Deferred: row-level security
 
@@ -371,9 +321,10 @@ the spec is told about failures that cannot happen. It is accepted for now becau
 unmapped error is worse than an over-declared one, but it is worth revisiting if the noise grows.
 
 Errors mirror the success response: correct status, a `code` from a closed set, a `message` written
-to an agent — reason plus what to do, one or two sentences — and the same suggested operation list. Validation
-failures carry field-level detail, never a raw parser dump. Paywall errors carry the upgrade
-suggested operation; `scope_missing` carries none, because token changes happen in chat.
+to an agent — reason plus what to do, one or two sentences — and the same checkpointed suggested
+operation list. Validation failures carry sanitized field paths plus what was expected, never a raw
+parser dump or the rejected body value. Paywall errors carry the upgrade suggested operation;
+`scope_missing` carries none, because token changes happen in chat.
 
 **`orDie` is for defects only.** A dead Postgres connection, yes. "Budget not found", no. This cannot
 be linted — the `redundantOrDie` diagnostic means something else — so it is a review rule.
@@ -480,21 +431,10 @@ The core gate is kept honest instead, and the shell keeps the coverage and CRAP 
 
 ### Derived guards
 
-Two tests enumerate from the operation definitions rather than a hand-kept list, so a new operation is covered
-without anyone remembering:
-
-1. **Isolation** — every canonical operation, called as another user, leaks nothing.
-2. **Descriptions** — every canonical operation carries a non-empty OpenAPI description.
-
-One more check — that a `next` entry only ever names an operation the generators actually expose —
-is **not** derived. Two tests in `shell/transactions/handlers.test.ts` make it: one over the
-success response `createTransaction` returns, one over the `not_found` failure `getTransaction`
-returns, whose `next` is built in `shell/transactions/errors.ts`. Each sweeps a single operation's
-suggested operations rather than all of them, so a new operation returning a bogus suggested operation would still
-pass.
-
-The condition for promoting this to a derived guard was a second operation proposing suggested operations.
-That has happened: the guard is owed, and a third hand-written copy of the assertion is not it.
+Isolation, descriptions, SuggestedOperations, and attributable-call auditing derive their
+operation set from the assembled API. Exhaustive typed probe records make a new operation require
+explicit behavior; the SuggestedOperation guard also inspects real responses so it can detect a
+handler that bypasses the checkpoint.
 
 ---
 
@@ -516,6 +456,7 @@ Most obvious alternatives here were considered and rejected. Read before reopeni
 | Explicit `UserId` + derived test             | Row-level security                                                         | Deferred, not rejected — see the tripwire above                                                                                                                                                                                                                                                                                   |
 | One mapper per slice                         | `code` field on core errors                                                | API vocabulary inside `core/`                                                                                                                                                                                                                                                                                                     |
 | One mapper per slice                         | `catchTags` per handler                                                    | Repetitive, and a missed tag silently becomes a 500                                                                                                                                                                                                                                                                               |
+| Auditing inside authorization middleware     | Per-handler AuditLogEntry writes                                           | One operation-derived boundary sees attribution, scope rejection, validation, declared failures, and success; handler-local calls could miss early failures and cannot universally bind successful state with evidence                                                                                                            |
 | Global migration log                         | Per-slice migrations                                                       | Ordering is global anyway; per-slice hides that                                                                                                                                                                                                                                                                                   |
 | Global migration log                         | Timestamp prefixes                                                         | Overflows the `integer` migration id column                                                                                                                                                                                                                                                                                       |
 | Mutation check on `src/core` at 100          | Checking `src/core` and `src/shell` together                               | Measured first (§8): four shell survivors are unkillable from any reachable seam — a response-encode branch, two documentation mutants, and migration bodies the migration log runs once per database. The choice was a sub-100 threshold or suppressions in source, and both make the number mean less than it says              |

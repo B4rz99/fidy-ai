@@ -1,12 +1,13 @@
 import { expect, layer } from "@effect/vitest";
 import { Context, DateTime, Effect, Layer, Option, Schema } from "effect";
 import { HttpBody, HttpClient } from "effect/unstable/http";
+import { AgentTokenId } from "~/core/_shared/agent-token";
 import { UserId } from "~/core/_shared/user";
 import { CreateTransactionInput } from "~/core/transactions/model";
 import { AgentBearerToken } from "~/core/tokens/model";
 import { authenticateAgentToken } from "~/shell/_shared/authz";
 import { truncateAuditLogEntries } from "~/shell/audit/fixtures";
-import { listAuditLogEntries } from "~/shell/audit/repo";
+import { observeAuditLogEntries } from "~/shell/audit/repo";
 import { transactionPayload, truncateTransactions } from "~/shell/transactions/fixtures";
 import {
   ApiHarness,
@@ -23,6 +24,7 @@ const readOnlyUser = UserId.make("f1d1a000-0000-4000-8000-0000000000c3");
 const readOnlyBearer = AgentBearerToken.make(
   "fin_readonly_abcdefghijklmnopqrstuvwxyz0123456789ABCD"
 );
+const readOnlyTokenId = AgentTokenId.make("f1d1a000-0000-4000-8000-0000000000c4");
 const expiredUser = UserId.make("f1d1a000-0000-4000-8000-0000000000e4");
 const expiredBearer = AgentBearerToken.make(
   "fin_expired1_abcdefghijklmnopqrstuvwxyz0123456789ABCD"
@@ -51,6 +53,7 @@ const AuthorizationHarness = makeApiClientLive({
 const seedReadOnlyIdentity = seedAgentIdentity({
   userId: readOnlyUser,
   bearer: readOnlyBearer,
+  tokenId: readOnlyTokenId,
   scopes: ["read"],
 });
 
@@ -114,6 +117,7 @@ layer(AuthorizationHarness, { excludeTestServices: true, timeout: "30 seconds" }
         const client = yield* ReadOnlyApiClient;
 
         const listed = yield* client.transactions.listTransactions();
+        yield* truncateAuditLogEntries;
         const denied = yield* HttpClient.post("/transactions", {
           headers: headersFor(readOnlyBearer),
           body: HttpBody.jsonUnsafe(
@@ -121,19 +125,21 @@ layer(AuthorizationHarness, { excludeTestServices: true, timeout: "30 seconds" }
           ),
         });
         const deniedBody = yield* denied.json;
+        const auditEntries = yield* observeAuditLogEntries(readOnlyUser);
         const afterDenial = yield* client.transactions.listTransactions();
-        const auditEntries = yield* listAuditLogEntries(readOnlyUser);
 
         expect(listed.data).toEqual([]);
         expect(denied.status).toBe(403);
         expect(deniedBody).toMatchObject({ error: { code: "scope_missing" } });
         expect(afterDenial.data).toEqual([]);
-        expect(auditEntries).toContainEqual(
-          expect.objectContaining({
-            operation: "transactions.createTransaction",
-            outcome: "rejected",
-          })
-        );
+        expect(auditEntries).toHaveLength(1);
+        expect(auditEntries[0]).toMatchObject({
+          subjectUserId: readOnlyUser,
+          tokenId: readOnlyTokenId,
+          operation: "transactions.createTransaction",
+          outcome: "rejected",
+        });
+        expect(DateTime.isUtc(auditEntries[0]?.occurredAt ?? DateTime.makeUnsafe(0))).toBe(true);
       })
     );
 

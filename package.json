@@ -9,7 +9,6 @@
     "lint:suppressions": "bun scripts/check-lint-suppressions.ts",
     "lint:deps": "bun tools/depcruise/run.mjs",
     "lint:dependencies": "bun scripts/check-dependency-updates.ts",
-    "graph": "bun tools/depcruise/run.mjs --write",
     "dev": "bun scripts/seed-development.ts && FIDY_HTTP_HOST=127.0.0.1 bun src/main.ts",
     "format": "oxfmt --write .",
     "format:check": "oxfmt --check .",

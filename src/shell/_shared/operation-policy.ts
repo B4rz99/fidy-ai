@@ -6,9 +6,14 @@ import { type AgentScope } from "~/core/tokens/model";
 export const OperationCostClass = Schema.Literals(["cheap", "expensive"]);
 export type OperationCostClass = typeof OperationCostClass.Type;
 
-/** Route-independent authorization and accounting policy carried by an operation. */
+/** The Subscription tier a caller currently has or an operation requires. */
+export const OperationTier = Schema.Literals(["free", "pro"]);
+export type OperationTier = typeof OperationTier.Type;
+
+/** Route-independent authorization, availability, and accounting policy carried by an operation. */
 export interface OperationPolicyValue {
   readonly requiredScope: AgentScope;
+  readonly requiredTier: OperationTier;
   readonly costClass: OperationCostClass;
 }
 
@@ -36,11 +41,13 @@ export const getOperationPolicy = (endpoint: PolicyAnnotatedOperation): Operatio
  */
 export const operationPolicy = ({
   requiredScope,
+  requiredTier,
   costClass,
 }: OperationPolicyValue): Context.Context<OperationPolicy | OpenApi.Override> =>
-  Context.make(OperationPolicy, { requiredScope, costClass }).pipe(
+  Context.make(OperationPolicy, { requiredScope, requiredTier, costClass }).pipe(
     Context.add(OpenApi.Override, {
       "x-fidy-required-scope": requiredScope,
+      "x-fidy-required-tier": requiredTier,
       "x-fidy-cost-class": costClass,
     })
   );

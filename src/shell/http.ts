@@ -1,5 +1,5 @@
-import { Layer } from "effect";
-import { HttpRouter } from "effect/unstable/http";
+import { Config, Effect, Layer } from "effect";
+import { HttpRouter, HttpServerResponse, HttpStaticServer } from "effect/unstable/http";
 import { HttpApiBuilder } from "effect/unstable/httpapi";
 import { AgentAuthorizationLive } from "~/shell/_shared/authz";
 import { ValidationGateLive } from "~/shell/_shared/errors";
@@ -31,17 +31,32 @@ export const ApiLive = HttpApiBuilder.layer(FidyApi, { openapiPath: "/openapi.js
   )
 );
 
+const appVersion = Config.string("APP_VERSION").pipe(
+  Config.orElse(() => Config.string("RAILWAY_DEPLOYMENT_ID")),
+  Config.withDefault("development")
+);
+
+const HealthLive = Layer.unwrap(
+  Effect.map(appVersion, (version) =>
+    HttpRouter.add("GET", "/health", HttpServerResponse.json({ status: "ok", version }))
+  )
+);
+
+const StaticLive = HttpStaticServer.layer({ root: "public", spa: true });
+
 /**
- * Those routes bound to a socket: launching this answers them for as long as
- * the layer is alive, and logs every request it answers. It picks neither the
- * port nor the platform — both arrive with the `HttpServer` given from outside.
+ * The public HTTP surface bound to a socket: the canonical API and OpenAPI
+ * document, unauthenticated health/version information, and the static SPA
+ * shell. Launching this answers for as long as the layer is alive and logs
+ * every request. The port and platform arrive from the outside.
  */
-export const HttpLive = HttpRouter.serve(ApiLive);
+export const HttpLive = HttpRouter.serve(Layer.mergeAll(ApiLive, HealthLive, StaticLive));
 
 /**
  * The whole service, and the layer to launch. The server does not bind until
  * every pending migration has run, so no handler can meet a schema older than
  * the code querying it. What is left to supply is the environment: Postgres,
- * and a platform's HTTP server.
+ * an HTTP server, and the platform file, path, and HTTP services used to serve
+ * the static shell.
  */
 export const AppLive = HttpLive.pipe(Layer.provide(MigratorLive));

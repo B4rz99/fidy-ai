@@ -1,0 +1,21 @@
+.claude/skills/opening-a-pr/SKILL.md
+  s_023f832fe51643::t_4b94d968254127 10-14,25,31,38
+.agents/skills
+  s_023f832fe51643::t_d56b2947f61e31 1
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "f4632d33c4792cb45f743b1da5a92e0a0e5e69d6",
+  "prompts": {},
+  "sessions": {
+    "s_023f832fe51643": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019fab69-b42f-7305-b73f-24251570ce83",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

@@ -1,8 +1,10 @@
 import { Layer } from "effect";
 import { HttpRouter } from "effect/unstable/http";
 import { HttpApiBuilder } from "effect/unstable/httpapi";
+import { AgentAuthorizationLive } from "~/shell/_shared/authz";
 import { ValidationGateLive } from "~/shell/_shared/errors";
 import { MigratorLive } from "~/shell/db/client";
+import { IdentityLive } from "~/shell/identity/handlers";
 import { TransactionsLive } from "~/shell/transactions/handlers";
 import { FidyApi } from "./api";
 
@@ -22,7 +24,11 @@ export const ApiLive = HttpApiBuilder.layer(FidyApi, { openapiPath: "/openapi.js
   // The validation gate is provided *to* the slice layers rather than beside
   // them: a group captures its middleware from its own context when it builds
   // its routes, so a sibling layer would not be found.
-  Layer.provide(TransactionsLive.pipe(Layer.provide(ValidationGateLive)))
+  Layer.provide(
+    Layer.mergeAll(IdentityLive, TransactionsLive).pipe(
+      Layer.provide([ValidationGateLive, AgentAuthorizationLive])
+    )
+  )
 );
 
 /**

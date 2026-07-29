@@ -127,11 +127,21 @@ export class ValidationFailed extends Schema.ErrorClass<ValidationFailed>("Valid
 
 /**
  * The request named no caller, or one that could not be resolved to a user.
- * Carries no suggested operation: nothing the API offers changes a credential.
+ * Carries no suggested operation: nothing the API offers changes an AgentToken.
  */
 export class Unauthenticated extends Schema.ErrorClass<Unauthenticated>("Unauthenticated")(
   errorResponse(detail("unauthenticated")),
   { httpApiStatus: 401 }
+) {}
+
+/**
+ * The bearer is a valid AgentToken but does not grant the scope declared by the
+ * attempted operation. Token changes happen in chat, outside this canonical API,
+ * so the failure carries no suggested operation.
+ */
+export class ScopeMissing extends Schema.ErrorClass<ScopeMissing>("ScopeMissing")(
+  errorResponse(detail("scope_missing")),
+  { httpApiStatus: 403 }
 ) {}
 
 /**

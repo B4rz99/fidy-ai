@@ -1,5 +1,7 @@
 import { HttpApi, type HttpApiGroup, OpenApi } from "effect/unstable/httpapi";
+import { AgentAuthorization } from "~/shell/_shared/authz";
 import { ValidationGate } from "~/shell/_shared/errors";
+import { IdentityGroup } from "~/shell/identity/operations";
 import { TransactionsGroup } from "~/shell/transactions/operations";
 
 /**
@@ -9,11 +11,15 @@ import { TransactionsGroup } from "~/shell/transactions/operations";
  * caller can reach is reachable from here.
  */
 export class FidyApi extends HttpApi.make("fidy")
+  .add(IdentityGroup)
   .add(TransactionsGroup)
   // `.middleware` after `.add`, and not the other way round: it attaches to
   // the operations already assembled, so a group added below this line would
   // silently skip the gate and answer a rejected request with a bodyless 400.
   .middleware(ValidationGate)
+  // Authorization is attached last so it wraps validation and rejects an
+  // unauthenticated request before decoding operation input.
+  .middleware(AgentAuthorization)
   .annotate(OpenApi.Title, "fidy-ai canonical API") {}
 
 type ApiGroups<Api> = Api extends HttpApi.HttpApi<infer _Identifier, infer Groups> ? Groups : never;

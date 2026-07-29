@@ -21,8 +21,14 @@ through Effect Schema.
 
 ```sh
 docker compose up -d db     # local Postgres on :5433
-DATABASE_URL=postgres://fidy:fidy@localhost:5433/fidy bun src/main.ts
+export DATABASE_URL=postgres://fidy:fidy@localhost:5433/fidy
+bun run dev                 # rotates a local-only fin_ bearer, prints it once, starts API
 ```
+
+The development startup accepts only a local PostgreSQL URL, binds the API to loopback, applies
+pending migrations, and upserts one stable User and WhatsAppIdentity. It rotates the hashed
+all-scopes AgentToken grant to a cryptographically random bearer disclosed once on stdout.
+`bun src/main.ts` starts without this seed path.
 
 Copy [`.env.example`](./.env.example) when a complete local environment is useful. Fidy's stable
 web, API, callback, and ingestion addresses come from the shared

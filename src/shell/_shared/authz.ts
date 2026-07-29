@@ -1,44 +1,180 @@
-import { Effect, Schema } from "effect";
-import { Headers, type HttpServerRequest } from "effect/unstable/http";
-import { UserId } from "~/core/_shared/user";
-import { Unauthenticated } from "./errors";
+import { Crypto, DateTime, Effect, Encoding, Exit, Layer, Option, Redacted, Schema } from "effect";
+import { HttpClientRequest, type HttpServerRequest } from "effect/unstable/http";
+import { SqlClient } from "effect/unstable/sql";
+import { HttpApiMiddleware, HttpApiSecurity, OpenApi } from "effect/unstable/httpapi";
+import { type AuditOutcome, CanonicalOperationId } from "~/core/audit/model";
+import {
+  AgentBearerToken,
+  AgentBearerTokenFormat,
+  type ResolvedAgentToken,
+} from "~/core/tokens/model";
+import { renewAgentTokenIdleExpiry } from "~/core/tokens/rules";
+import { appendAuditLogEntry } from "~/shell/audit/repo";
+import { AgentTokenHash, useAgentToken } from "~/shell/tokens/repo";
+import { ScopeMissing, Unauthenticated } from "./errors";
+import { getOperationPolicy } from "./operation-policy";
 
-/**
- * The header the stand-in reads the caller from. Deliberately not
- * `Authorization`: nothing here verifies anything, so it must not look like it
- * does, and a client written against it fails loudly the day real bearer auth
- * (#3) lands rather than being quietly trusted.
- */
-export const callerHeader = "x-fidy-caller";
-
-const decodeUserId = Schema.decodeUnknownEffect(UserId);
+const decodeAgentBearer = Schema.decodeUnknownEffect(AgentBearerToken);
 
 const unauthenticated = () =>
   Unauthenticated.make({
     error: {
       code: "unauthenticated",
       message:
-        `Every operation runs as a user and this request named none that resolves. ` +
-        `Send the caller's id in the ${callerHeader} header and retry.`,
+        "Every operation requires a known AgentToken. Send its opaque fin_ bearer in the " +
+        "Authorization header and retry.",
+    },
+    next: [],
+  });
+
+const scopeMissing = () =>
+  ScopeMissing.make({
+    error: {
+      code: "scope_missing",
+      message:
+        "This AgentToken does not grant the scope declared by the attempted operation. " +
+        "Ask the user in chat to mint or broaden a token before retrying.",
     },
     next: [],
   });
 
 /**
- * The one place a request becomes a user. Every handler starts here and passes
- * the result down explicitly; nothing else in the shell reads the caller from
- * the request, and no repo or core function discovers it any other way.
- *
- * This stand-in believes whatever the header says, so it belongs to development
- * only. #3 replaces the body with a token lookup; what repos and handlers
- * depend on is the returned `UserId`, and that does not change. An absent or
- * malformed credential is a 401 — never a fallback owner.
+ * SHA-256 hashes one opaque bearer with the platform Crypto service. Token
+ * lookup accepts this lowercase digest and never the full bearer or its secret.
+ */
+export const hashAgentBearer = (
+  bearer: AgentBearerToken
+): Effect.Effect<AgentTokenHash, never, Crypto.Crypto> =>
+  Effect.flatMap(Crypto.Crypto, (crypto) =>
+    crypto.digest("SHA-256", new TextEncoder().encode(bearer))
+  ).pipe(
+    Effect.map((digest) => AgentTokenHash.make(Encoding.encodeHex(digest))),
+    Effect.orDie
+  );
+
+/**
+ * Resolves a typed AgentToken bearer to its stable User and atomically records
+ * the supplied use time while renewing its 90-day idle deadline. The caller
+ * supplies one UTC instant for both writes. Unknown, revoked, and idle-expired
+ * grants remain `None`; database failures are defects.
+ */
+export const authenticateAgentToken = ({
+  bearer,
+  usedAt,
+}: {
+  readonly bearer: AgentBearerToken;
+  readonly usedAt: DateTime.Utc;
+}): Effect.Effect<Option.Option<ResolvedAgentToken>, never, Crypto.Crypto | SqlClient.SqlClient> =>
+  Effect.gen(function* () {
+    const tokenHash = yield* hashAgentBearer(bearer);
+    const renewedIdleExpiresAt = yield* renewAgentTokenIdleExpiry(usedAt);
+    return yield* useAgentToken({ tokenHash, usedAt, renewedIdleExpiresAt });
+  });
+
+const bearerFromRequest = (request: HttpServerRequest.HttpServerRequest) =>
+  Option.fromUndefinedOr(request.headers.authorization).pipe(
+    Option.flatMap((authorization) =>
+      Option.fromNullishOr(/^Bearer +(.+)$/i.exec(authorization)?.[1])
+    ),
+    Effect.fromOption(unauthenticated),
+    Effect.flatMap((bearer) => decodeAgentBearer(bearer).pipe(Effect.mapError(unauthenticated)))
+  );
+
+/**
+ * The handler-facing caller seam. It requires a well-formed Bearer header,
+ * resolves the AgentToken to its stable User and granted scopes, and records one
+ * use while renewing the idle deadline. Handlers pass the resulting UserId
+ * onward explicitly. Missing, malformed, unknown, revoked, and idle-expired
+ * bearers fail as `Unauthenticated`; database failures are defects.
  */
 export const resolveCaller = (
   request: HttpServerRequest.HttpServerRequest
-): Effect.Effect<UserId, Unauthenticated> =>
-  Headers.get(request.headers, callerHeader).pipe(
-    Effect.fromOption(unauthenticated),
-    Effect.flatMap(decodeUserId),
-    Effect.mapError(unauthenticated)
+): Effect.Effect<ResolvedAgentToken, Unauthenticated, Crypto.Crypto | SqlClient.SqlClient> =>
+  Effect.gen(function* () {
+    const bearer = yield* bearerFromRequest(request);
+    const usedAt = yield* DateTime.now;
+    return yield* authenticateAgentToken({ bearer, usedAt }).pipe(
+      Effect.flatMap(Effect.fromOption(unauthenticated))
+    );
+  });
+
+/**
+ * Security middleware attached once to the assembled API. It reads bearer
+ * scope and cost exclusively from active endpoint metadata, enforces the scope,
+ * and publishes the cost class for the consumption controls owned by issue #35;
+ * no route identifier or path participates in authorization.
+ */
+export class AgentAuthorization extends HttpApiMiddleware.Service<
+  AgentAuthorization,
+  {
+    requires: Crypto.Crypto | SqlClient.SqlClient;
+  }
+>()("fidy-ai/shell/_shared/authz/AgentAuthorization", {
+  requiredForClient: true,
+  security: {
+    agentBearer: HttpApiSecurity.bearer.pipe(
+      HttpApiSecurity.annotate(OpenApi.Format, AgentBearerTokenFormat)
+    ),
+  },
+  error: [Unauthenticated, ScopeMissing],
+}) {}
+
+/**
+ * Live operation-derived bearer authorization for the HTTP server. Each call
+ * authenticates and renews its AgentToken, rejects a missing declared scope,
+ * and appends metadata-only AuditLogEntry evidence. A successful operation and
+ * its evidence commit in one SQL transaction; rejected and failed attempts
+ * append their evidence separately. Authentication and scope failures remain
+ * typed HTTP failures, while persistence failures are defects.
+ */
+export const AgentAuthorizationLive = Layer.succeed(
+  AgentAuthorization,
+  AgentAuthorization.of({
+    agentBearer: Effect.fn(function* (httpEffect, { credential: redactedBearer, endpoint, group }) {
+      const policy = getOperationPolicy(endpoint);
+      const bearer = yield* decodeAgentBearer(Redacted.value(redactedBearer)).pipe(
+        Effect.mapError(unauthenticated)
+      );
+      const occurredAt = yield* DateTime.now;
+      const resolved = yield* authenticateAgentToken({ bearer, usedAt: occurredAt }).pipe(
+        Effect.flatMap(Effect.fromOption(unauthenticated))
+      );
+      const operation = CanonicalOperationId.make(`${group.identifier}.${endpoint.identifier}`);
+      const audit = (outcome: AuditOutcome) =>
+        appendAuditLogEntry(resolved.subjectUserId, {
+          tokenId: resolved.tokenId,
+          operation,
+          outcome,
+          occurredAt,
+        });
+
+      if (!resolved.scopes.includes(policy.requiredScope)) {
+        yield* audit("rejected");
+        return yield* scopeMissing();
+      }
+
+      yield* Effect.annotateCurrentSpan({
+        "fidy.operation.required_scope": policy.requiredScope,
+        "fidy.operation.cost_class": policy.costClass,
+      });
+
+      const sql = yield* SqlClient.SqlClient;
+      const audited = sql
+        .withTransaction(httpEffect.pipe(Effect.tap(() => audit("succeeded"))))
+        .pipe(Effect.catchTag("SqlError", (error) => Effect.die(error)));
+      const exit = yield* Effect.exit(audited);
+
+      if (Exit.isFailure(exit)) {
+        yield* audit("failed");
+      }
+
+      return yield* exit;
+    }),
+  })
+);
+
+/** Client-side bearer implementation derived from the same API middleware. */
+export const makeAgentAuthorizationClientLive = (bearer: AgentBearerToken) =>
+  HttpApiMiddleware.layerClient(AgentAuthorization, ({ next, request }) =>
+    next(HttpClientRequest.bearerToken(request, bearer))
   );

@@ -4,6 +4,6 @@ import { UserId } from "./user";
 
 const decodeUserId = Schema.decodeUnknownResult(UserId);
 
-it("rejects an owner id that is not a UUID, so a credential cannot name an arbitrary string", () => {
+it("rejects an owner id that is not a UUID", () => {
   expect(Result.isFailure(decodeUserId("el-corral"))).toBe(true);
 });

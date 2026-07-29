@@ -1,8 +1,9 @@
 import { Schema } from "effect";
 import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/unstable/httpapi";
 import { CreateTransactionInput, Transaction, TransactionId } from "~/core/transactions/model";
+import { NotFound } from "~/shell/_shared/errors";
+import { operationPolicy } from "~/shell/_shared/operation-policy";
 import { OperationResponse } from "~/shell/_shared/response";
-import { NotFound, Unauthenticated } from "~/shell/_shared/errors";
 
 /**
  * The slice's canonical operations, defined once, here: paths, methods and
@@ -33,35 +34,40 @@ export const TransactionsGroup = HttpApiGroup.make("transactions").add(
   HttpApiEndpoint.post("createTransaction", "/transactions", {
     payload: CreateTransactionInput,
     success: OperationResponse(Transaction).pipe(HttpApiSchema.status(201)),
-    error: [Unauthenticated, NotFound],
-  }).annotate(
-    OpenApi.Description,
-    "Record one Transaction for the caller: a single exact movement of Money with its Currency, " +
-      "direction, and merchant. Reach for this as soon as the user says money moved " +
-      "and no record of it exists yet — money they spent, money that reached them, a receipt " +
-      "they read out. The Transaction belongs to whoever the call is made as, so there is no " +
-      "owner to name; the answer hands back the stored Transaction, id and all."
-  ),
+    error: NotFound,
+  })
+    .annotate(
+      OpenApi.Description,
+      "Record one Transaction for the caller: a single exact movement of Money with its Currency, " +
+        "direction, and merchant. Reach for this as soon as the user says money moved " +
+        "and no record of it exists yet — money they spent, money that reached them, a receipt " +
+        "they read out. The Transaction belongs to whoever the call is made as, so there is no " +
+        "owner to name; the answer hands back the stored Transaction, id and all."
+    )
+    .annotateMerge(operationPolicy({ requiredScope: "write", costClass: "cheap" })),
   HttpApiEndpoint.get("listTransactions", "/transactions", {
     success: OperationResponse(Schema.Array(Transaction)),
-    error: Unauthenticated,
-  }).annotate(
-    OpenApi.Description,
-    "Read back every Transaction the caller has recorded, most recent occurrence first. " +
-      "Reach for this to answer anything about what the user spent or received — a total, a " +
-      "merchant they keep paying, whether something was captured already. It takes no " +
-      "filters and returns the whole history, so narrow it yourself. Somebody who has " +
-      "recorded nothing gets an empty list, not a failure."
-  ),
+  })
+    .annotate(
+      OpenApi.Description,
+      "Read back every Transaction the caller has recorded, most recent occurrence first. " +
+        "Reach for this to answer anything about what the user spent or received — a total, a " +
+        "merchant they keep paying, whether something was captured already. It takes no " +
+        "filters and returns the whole history, so narrow it yourself. Somebody who has " +
+        "recorded nothing gets an empty list, not a failure."
+    )
+    .annotateMerge(operationPolicy({ requiredScope: "read", costClass: "cheap" })),
   HttpApiEndpoint.get("getTransaction", "/transactions/:id", {
     params: Schema.Struct({ id: TransactionId }),
     success: OperationResponse(Transaction),
-    error: [Unauthenticated, NotFound],
-  }).annotate(
-    OpenApi.Description,
-    "Fetch one Transaction of the caller's by id. Reach for this when you already hold an id " +
-      "— from recording one, or from the history — and want the stored record rather than " +
-      "what you remember of it. An id that belongs to another user answers exactly as an id " +
-      "that never existed, so `not_found` never tells you the record is real elsewhere."
-  )
+    error: NotFound,
+  })
+    .annotate(
+      OpenApi.Description,
+      "Fetch one Transaction of the caller's by id. Reach for this when you already hold an id " +
+        "— from recording one, or from the history — and want the stored record rather than " +
+        "what you remember of it. An id that belongs to another user answers exactly as an id " +
+        "that never existed, so `not_found` never tells you the record is real elsewhere."
+    )
+    .annotateMerge(operationPolicy({ requiredScope: "read", costClass: "cheap" }))
 );

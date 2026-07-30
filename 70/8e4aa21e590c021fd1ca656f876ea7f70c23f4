@@ -1,0 +1,142 @@
+src/shell/db/migrations/0004-create-insights.ts
+  s_1b7f9d451a4df8::t_2e68d2005bbb23 1-36,48-51,57-64
+  s_1b7f9d451a4df8::t_6dafb56791a58c 37-47,52-56
+src/shell/insights/repo.ts
+  s_1b7f9d451a4df8::t_f42637ce31a21a 22-24,108,111-112,148
+  s_1b7f9d451a4df8::t_e211c58aed4bb5 52,172,174,177,180,196
+  s_1b7f9d451a4df8::t_8e70216e27c094 113-147
+  s_1b7f9d451a4df8::t_46d10eb94f3ece 7,10,12,51,53-81,165,178,181,183-184,190-195,197-200,202-203,206-207
+  s_1b7f9d451a4df8::t_6fe0bf60b8c1ff 3,15,21,46,83,86-102
+  s_1b7f9d451a4df8::t_904fbcff342eb0 1-2,4-6,8-9,11,13-14,16-20,25-45,47-50,82,84-85,103-107,109-110,149-164,171,173,175-176,179
+  s_1b7f9d451a4df8::t_cf54426d39f8a2 166-170,182,185-189,201
+  s_1b7f9d451a4df8::t_e5479766b2be82 205,217-220
+  s_1b7f9d451a4df8::t_8c8453dfc44911 204,208-216,221-225
+src/shell/_shared/suggested-operation.ts
+  s_1b7f9d451a4df8::t_e69ddc643731dc 1-33
+src/core/insights/model.ts
+  s_1b7f9d451a4df8::t_913fe2e3df29f6 16,53,55,79
+  s_1b7f9d451a4df8::t_bac54555221118 1,71-72,74
+  s_1b7f9d451a4df8::t_790024e2eb0a3d 124-126
+  s_1b7f9d451a4df8::t_06939c25e37b16 34-45,68-70
+  s_1b7f9d451a4df8::t_3ea3e7429e5162 4,30,32
+  s_1b7f9d451a4df8::t_8db8b5c7ff33a5 2-3,5-15,17-29,33,46-52,54,56-67,73,75-78,80-81,84-107,111-123,127-129,134
+  s_1b7f9d451a4df8::t_b2d5f0f7ddad3c 108-110,131-133
+  s_1b7f9d451a4df8::t_7133833e91e0b0 31,83
+  s_1b7f9d451a4df8::t_f34da5c2979f33 82,130
+src/core/insights/rules.ts
+  s_1b7f9d451a4df8::t_111047cb0ad2ad 1-2,4,8-13,19,28-29,35
+  s_1b7f9d451a4df8::t_b2ccc061c9008e 5-7
+  s_1b7f9d451a4df8::t_99077075e6e4c2 3,26
+  s_1b7f9d451a4df8::t_9884771e18258c 20-25,27,36
+  s_1b7f9d451a4df8::t_af0c4c24bc072c 30-32,34
+  s_1b7f9d451a4df8::t_f809134884f20a 14-18,33
+src/shell/db/migrations/registry.ts
+  s_1b7f9d451a4df8::t_26458b649ac496 4,18
+src/core/insights/errors.ts
+  s_1b7f9d451a4df8::t_6c24b3b4a96020 2,4-8,15,17
+  s_1b7f9d451a4df8::t_f024b0d71b02e1 16
+  s_1b7f9d451a4df8::t_6d040ba8c250d0 1,3,9-14
+src/shell/insights/handlers.ts
+  s_1b7f9d451a4df8::t_69e64d087e2270 41,52,57,82,89,100,105,119,138
+  s_1b7f9d451a4df8::t_c4165a0fb69336 31,40
+  s_1b7f9d451a4df8::t_06e4199628892b 92-94,111-113,130-132
+  s_1b7f9d451a4df8::t_499bcff1b3ec83 1,3,11-12,21,78,149
+  s_1b7f9d451a4df8::t_d1f049abaaa49e 2,4,10,14-20,30,32-39,76-77,79-81,83-88,90,95-99,107-109,114-118,126-128,133-137,145-148
+  s_1b7f9d451a4df8::t_bb9b6d7c15d163 13,91,110,129
+  s_1b7f9d451a4df8::t_709f52144a281e 5-9,47-51,53-56,58-63,71-75,101-104,106
+  s_1b7f9d451a4df8::t_0ba8919011be1b 22,27-29,42-46,120-125,139-144
+  s_1b7f9d451a4df8::t_5b869573ce73a7 23-26,64-70
+src/shell/api.ts
+  s_1b7f9d451a4df8::t_553c0eacdd8b7b 4
+  s_1b7f9d451a4df8::t_7a6690dce56930 47-53
+  s_1b7f9d451a4df8::t_32efc01cc1e4b9 6,18
+src/shell/testing/isolation.test.ts
+  s_1b7f9d451a4df8::t_1c8489988ce01b 2,6,16,237
+  s_1b7f9d451a4df8::t_0107afcc3d8dc8 17,51,113-169,239
+  s_1b7f9d451a4df8::t_7028961a97e560 106-112
+  s_1b7f9d451a4df8::t_02bf3b735e0852 256
+src/shell/transactions/handlers.ts
+  s_1b7f9d451a4df8::t_356bfb6ff55543 7
+  s_1b7f9d451a4df8::t_bf97b6dfa66af4 48,51
+src/shell/insights/errors.ts
+  s_1b7f9d451a4df8::t_7b458b91eee6be 1-2,4,7,9-19,21-23,25,27-29,31,33-35,37-48,63-71,80-86,92-93,95-98
+  s_1b7f9d451a4df8::t_3236d22e425ade 104-109
+  s_1b7f9d451a4df8::t_da400da49be06d 20,24,26,30,32,36
+  s_1b7f9d451a4df8::t_f7c4ac6f74a9c2 8,49-53,99-103
+  s_1b7f9d451a4df8::t_01bc7d6a1abaca 57,61,72-79
+  s_1b7f9d451a4df8::t_78fce0c07b2938 5-6
+  s_1b7f9d451a4df8::t_8d60869c323b1c 54-56,58-60,62,87,94
+  s_1b7f9d451a4df8::t_839da710b833ee 88-91
+  s_1b7f9d451a4df8::t_da7c0da7256ad2 3,110
+src/shell/transactions/handlers.test.ts
+  s_1b7f9d451a4df8::t_364f642314575b 156
+src/shell/insights/operations.ts
+  s_1b7f9d451a4df8::t_3c6b3a69697632 21-25
+  s_1b7f9d451a4df8::t_54ceea329d7de9 1-2,10-13
+  s_1b7f9d451a4df8::t_90831351e76458 3-9,14,16-20,26-43,45-57,59-71,73-80
+  s_1b7f9d451a4df8::t_b45820ccf3fbf9 15,44,58,72
+src/shell/testing/authorization.test.ts
+  s_1b7f9d451a4df8::t_2b1cfeff3a8c5c 5,29-30,32,52-54,56-59,66-70,123-138
+  s_1b7f9d451a4df8::t_ba7173d88330fa 11-12,87-122
+  s_1b7f9d451a4df8::t_a5854a9b7a98af 31
+  s_1b7f9d451a4df8::t_c9f7b34533c4fd 139
+src/shell/http.ts
+  s_1b7f9d451a4df8::t_a228fcfe6a166c 8,29
+src/core/insights/model.test.ts
+  s_1b7f9d451a4df8::t_67677b75be94f3 34-36
+  s_1b7f9d451a4df8::t_86ce58681fe4e4 2,42-58,82-85,87-90,112,116,118-121
+  s_1b7f9d451a4df8::t_5cbdee83cd3e12 1,4,30
+  s_1b7f9d451a4df8::t_09c8199a487440 59-73
+  s_1b7f9d451a4df8::t_e684adb74d2e9e 98-111,117,122
+  s_1b7f9d451a4df8::t_7133833e91e0b0 3,6-28,75-77,113-115
+  s_1b7f9d451a4df8::t_bb88c18ae82a69 5,29,31-33,37-41,74,78-81,86,91-97,123-141
+src/shell/insights/fixtures.ts
+  s_1b7f9d451a4df8::t_df956df72717f6 2,10-13,15
+  s_1b7f9d451a4df8::t_864918bdf8d93a 1,3-9,14,16-41
+.dependency-cruiser.mjs
+  s_1b7f9d451a4df8::t_af7d01be1f876b 76-87
+  s_1b7f9d451a4df8::t_cf9cf1ceb8b50c 75
+src/shell/_shared/response.ts
+  s_1b7f9d451a4df8::t_3a63513806e9a3 4
+  s_1b7f9d451a4df8::t_9c7e0f7b675acc 12
+  s_1b7f9d451a4df8::t_df9909fea64036 2
+ARCHITECTURE.md
+  s_1b7f9d451a4df8::t_b532f87b37244b 492-493
+  s_1b7f9d451a4df8::t_43939e3456b53a 497-501
+  s_1b7f9d451a4df8::t_92202ef3ecd215 53,65,72,83,97,103-106
+src/shell/insights/handlers.test.ts
+  s_1b7f9d451a4df8::t_abedc993f3c225 1,5-6,13-14,17,20-26,28-31,218,237-238
+  s_1b7f9d451a4df8::t_3a1769f151fcaf 19,27,102-130,136-137
+  s_1b7f9d451a4df8::t_a95a6aaf1775ca 12
+  s_1b7f9d451a4df8::t_4dce7e673bfd88 219-236
+  s_1b7f9d451a4df8::t_7133833e91e0b0 190-197,199-209,211-217
+  s_1b7f9d451a4df8::t_c8950e6335e820 3,9-10,138-157
+  s_1b7f9d451a4df8::t_99e82b8eb3df7a 7,16
+  s_1b7f9d451a4df8::t_c643104a2533c0 11,18,77-80,91-93
+  s_1b7f9d451a4df8::t_4ad7f259e755ce 4
+  s_1b7f9d451a4df8::t_af12df38be0b62 2,42-76,81-90,94-101
+  s_1b7f9d451a4df8::t_806643c583771b 8,15,32-41,131-135,158-189,198,210
+src/core/insights/rules.test.ts
+  s_1b7f9d451a4df8::t_f1afa60273e68b 1-4,8,10-11,37
+  s_1b7f9d451a4df8::t_0f6e6b8005838c 6
+  s_1b7f9d451a4df8::t_0b247699977af6 5,7,9,12-36
+src/shell/transactions/errors.ts
+  s_1b7f9d451a4df8::t_d74ffa6b30f865 4
+  s_1b7f9d451a4df8::t_a7b00053de8cb4 30,33
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "708e4aa21e590c021fd1ca656f876ea7f70c23f4",
+  "prompts": {},
+  "sessions": {
+    "s_1b7f9d451a4df8": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019fb090-4d30-7cec-9636-b0914c77fae1",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

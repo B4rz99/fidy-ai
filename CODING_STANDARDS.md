@@ -189,6 +189,20 @@ Placement, tiers and responsibilities are in ARCHITECTURE.md §8. What review lo
 
 ---
 
+## React
+
+React application code is event-driven and keeps only irreducible interaction state.
+
+- **`useEffect` is banned.** Derive presentation during render and perform commands in the event
+  handler that caused them. A state transition must never serve as an indirect command.
+- Server state belongs to TanStack Query, navigation state to TanStack Router, and external-store
+  subscriptions to `useSyncExternalStore`.
+- Do not store values that can be derived from props, query data, router state, or existing local
+  state. Reset interaction state through component identity and `key` where appropriate.
+- If a concrete imperative integration eventually requires React synchronization, isolate it behind
+  one narrow adapter and add an explicit file-scoped lint override. Do not add speculative
+  exceptions or expose the synchronization mechanism to application components.
+
 ## Agent-facing documentation
 
 Presence is enforced; **voice is not**, and voice is what makes it useful.

@@ -393,9 +393,57 @@ const requireInterfaceComment = {
   },
 };
 
+/**
+ * Ban direct use of React's useEffect. UI work is caused by an event, derived
+ * during render, or owned by a dedicated query/router/external-store API; a
+ * state transition must never be used as an indirect command. If a concrete
+ * imperative integration eventually requires synchronization, it belongs in
+ * one narrow adapter with an explicit file-scoped lint exception.
+ */
+const noReactUseEffect = {
+  meta: {
+    type: "problem",
+    docs: { description: "Disallow direct use of React useEffect" },
+    messages: {
+      noReactUseEffect:
+        "Do not use React useEffect. Derive presentation during render, perform commands in event handlers, and use the owning query, router, or external-store API for synchronization.",
+    },
+    schema: [],
+  },
+  create(context) {
+    const reactNamespaces = new Set();
+
+    return {
+      ImportDeclaration(node) {
+        if (node.source.value !== "react") return;
+        for (const specifier of node.specifiers) {
+          if (
+            specifier.type === "ImportSpecifier" &&
+            (specifier.imported.name === "useEffect" || specifier.imported.value === "useEffect")
+          ) {
+            context.report({ node: specifier, messageId: "noReactUseEffect" });
+          }
+          if (
+            specifier.type === "ImportDefaultSpecifier" ||
+            specifier.type === "ImportNamespaceSpecifier"
+          ) {
+            reactNamespaces.add(specifier.local.name);
+          }
+        }
+      },
+      MemberExpression(node) {
+        if (node.object.type !== "Identifier" || !reactNamespaces.has(node.object.name)) return;
+        if (staticMemberName(node) !== "useEffect") return;
+        context.report({ node, messageId: "noReactUseEffect" });
+      },
+    };
+  },
+};
+
 const plugin = {
   meta: { name: "effect-guards" },
   rules: {
+    "no-react-use-effect": noReactUseEffect,
     "no-sql-type-parameter": noSqlTypeParameter,
     "no-disable-validation": noDisableValidation,
     "no-escape-hatch": noEscapeHatch,

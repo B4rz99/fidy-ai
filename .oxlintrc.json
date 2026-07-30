@@ -18,6 +18,7 @@
     "effect-guards/no-sql-type-parameter": "error",
     "effect-guards/no-disable-validation": "error",
     "effect-guards/no-curried-export": "error",
+    "effect-guards/no-react-use-effect": "error",
     // `.mjs` is the exception: the vitest configs and the CRAP runner import
     // source-scope.mjs, where the extension is genuinely required to resolve.
     "import/extensions": ["error", "never", { "pattern": { "mjs": "always" } }],

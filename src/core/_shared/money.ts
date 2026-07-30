@@ -232,7 +232,13 @@ const plainDecimalPattern = /^(?:0|[1-9]\d*)(?:\.\d+)?$/;
 const zero = BigDecimal.make(0n, 0);
 
 type ReadonlyBigDecimal = Readonly<BigDecimal.BigDecimal>;
-type ReadonlyMoney = {
+
+/**
+ * Immutable view for decisions over an already-validated Money value. Callers guarantee a
+ * non-negative exact amount within the Currency's fractional precision; zero remains valid
+ * until an owning operation rejects it, and arithmetic requires equal Currency values.
+ */
+export type ReadonlyMoney = {
   readonly amount: ReadonlyBigDecimal;
   readonly currency: Currency;
 };

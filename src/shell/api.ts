@@ -3,6 +3,7 @@ import { AgentAuthorization } from "~/shell/_shared/authz";
 import { ValidationGate } from "~/shell/_shared/errors";
 import { bindOperationCatalog, makeOperationCatalog } from "~/shell/_shared/operation-catalog";
 import { IdentityGroup } from "~/shell/identity/operations";
+import { InsightsGroup } from "~/shell/insights/operations";
 import { TransactionsGroup } from "~/shell/transactions/operations";
 
 /**
@@ -14,6 +15,7 @@ import { TransactionsGroup } from "~/shell/transactions/operations";
 export class FidyApi extends HttpApi.make("fidy")
   .add(IdentityGroup)
   .add(TransactionsGroup)
+  .add(InsightsGroup)
   // `.middleware` after `.add`, and not the other way round: it attaches to
   // the operations already assembled, so a group added below this line would
   // silently skip the gate and answer a rejected request with a bodyless 400.

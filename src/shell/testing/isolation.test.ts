@@ -1,8 +1,9 @@
 import { expect, layer } from "@effect/vitest";
-import { Context, Effect, Layer, type Schema } from "effect";
+import { Context, DateTime, Effect, Layer, type Schema } from "effect";
 import { HttpBody, HttpClient, type HttpClientError } from "effect/unstable/http";
 import { IanaTimeZone } from "~/core/_shared/context";
 import { UserId } from "~/core/_shared/user";
+import { type InsightEvent } from "~/core/insights/model";
 import { type Transaction } from "~/core/transactions/model";
 import { AgentBearerToken } from "~/core/tokens/model";
 import type {
@@ -12,6 +13,8 @@ import type {
   ValidationFailed,
 } from "~/shell/_shared/errors";
 import type { OperationId } from "~/shell/api";
+import { truncateInsights, weeklySummaryInput } from "~/shell/insights/fixtures";
+import { generateInsightEvent } from "~/shell/insights/repo";
 import { transactionPayload, truncateTransactions } from "~/shell/transactions/fixtures";
 import { ApiHarness, type ApiClient, headersFor, makeApiClientLive } from "./api-harness";
 import { seedAgentIdentity } from "~/shell/db/development-seed";
@@ -45,6 +48,7 @@ type IsolationAttempt = {
   readonly ownerClient: ApiClient;
   readonly strangerClient: ApiClient;
   readonly ownedTransaction: Transaction;
+  readonly ownedInsight: InsightEvent;
 };
 
 /** Everything a call through the derived client, or a raw one, can fail with. */
@@ -97,6 +101,70 @@ const probes: Record<OperationId, IsolationProbe> = {
       const listed = yield* attempt.strangerClient.transactions.listTransactions();
 
       expect(listed.data).toEqual([]);
+    }),
+
+  "insights.listPendingInsights": (attempt) =>
+    Effect.gen(function* () {
+      const listed = yield* attempt.strangerClient.insights.listPendingInsights();
+
+      expect(listed.data).toEqual([]);
+    }),
+
+  "insights.markInsightDelivered": (attempt) =>
+    Effect.gen(function* () {
+      const denied = yield* Effect.result(
+        attempt.strangerClient.insights.markInsightDelivered({
+          params: { id: attempt.ownedInsight.id },
+          payload: {
+            sentAt: DateTime.makeUnsafe("2026-08-09T23:00:08Z"),
+            channel: "whatsapp",
+            provider: "kapso",
+            providerMessageId: "wamid.stranger-attempt",
+          },
+        })
+      );
+
+      expect(denied).toMatchObject({
+        _tag: "Failure",
+        failure: { error: { code: "not_found" } },
+      });
+      expect((yield* attempt.ownerClient.insights.listPendingInsights()).data).toEqual([
+        attempt.ownedInsight,
+      ]);
+    }),
+
+  "insights.markInsightRead": (attempt) =>
+    Effect.gen(function* () {
+      const denied = yield* Effect.result(
+        attempt.strangerClient.insights.markInsightRead({
+          params: { id: attempt.ownedInsight.id },
+        })
+      );
+
+      expect(denied).toMatchObject({
+        _tag: "Failure",
+        failure: { error: { code: "not_found" } },
+      });
+      expect((yield* attempt.ownerClient.insights.listPendingInsights()).data).toEqual([
+        attempt.ownedInsight,
+      ]);
+    }),
+
+  "insights.dismissInsight": (attempt) =>
+    Effect.gen(function* () {
+      const denied = yield* Effect.result(
+        attempt.strangerClient.insights.dismissInsight({
+          params: { id: attempt.ownedInsight.id },
+        })
+      );
+
+      expect(denied).toMatchObject({
+        _tag: "Failure",
+        failure: { error: { code: "not_found" } },
+      });
+      expect((yield* attempt.ownerClient.insights.listPendingInsights()).data).toEqual([
+        attempt.ownedInsight,
+      ]);
     }),
 
   "transactions.createTransaction": (attempt) =>
@@ -166,8 +234,9 @@ const seedAttempt = Effect.gen(function* () {
   const created = yield* ownerClient.transactions.createTransaction({
     payload: transactionPayload(),
   });
+  const ownedInsight = yield* generateInsightEvent(owner, weeklySummaryInput());
 
-  return { ownerClient, strangerClient, ownedTransaction: created.data };
+  return { ownerClient, strangerClient, ownedTransaction: created.data, ownedInsight };
 });
 
 layer(IsolationHarness, { excludeTestServices: true, timeout: "30 seconds" })(
@@ -184,6 +253,7 @@ layer(IsolationHarness, { excludeTestServices: true, timeout: "30 seconds" })(
     for (const [operation, probe] of Object.entries(probes)) {
       it.effect(`${operation} exposes nothing of another user's to its caller`, () =>
         Effect.gen(function* () {
+          yield* truncateInsights;
           yield* truncateTransactions;
           const attempt = yield* seedAttempt;
 

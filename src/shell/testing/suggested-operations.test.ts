@@ -1,6 +1,7 @@
 import { expect, layer } from "@effect/vitest";
-import { Context, Effect, Layer, Option, Result, Schema } from "effect";
+import { Context, DateTime, Effect, Layer, Option, Result, Schema } from "effect";
 import { type HttpClientError } from "effect/unstable/http";
+import { type SqlClient } from "effect/unstable/sql";
 import { AgentTokenId } from "~/core/_shared/agent-token";
 import { IanaTimeZone } from "~/core/_shared/context";
 import { UserId } from "~/core/_shared/user";
@@ -22,6 +23,8 @@ import {
 } from "~/shell/_shared/response";
 import { type OperationId, operationCatalog } from "~/shell/api";
 import { seedAgentIdentity } from "~/shell/db/development-seed";
+import { truncateInsights, weeklySummaryInput } from "~/shell/insights/fixtures";
+import { generateInsightEvent } from "~/shell/insights/repo";
 import { transactionPayload, truncateTransactions } from "~/shell/transactions/fixtures";
 import { ApiHarness, type ApiClient, makeApiClientLive } from "./api-harness";
 
@@ -40,7 +43,7 @@ type CallFailure =
 type SuggestedOperationProbe = (
   client: ApiClient,
   setupClient: ApiClient
-) => Effect.Effect<ReadonlyArray<NavigableResponse>, CallFailure>;
+) => Effect.Effect<ReadonlyArray<NavigableResponse>, CallFailure, SqlClient.SqlClient>;
 
 const absentId = TransactionId.make("f1d1a000-0000-4000-8000-00000000dead");
 
@@ -87,6 +90,40 @@ const probes: Record<OperationId, SuggestedOperationProbe> = {
       }
       const notFound = yield* Schema.decodeUnknownEffect(NotFound)(result.failure);
       return [succeeded, notFound];
+    }),
+
+  "insights.listPendingInsights": (client) =>
+    Effect.gen(function* () {
+      yield* generateInsightEvent(readOnlyUser, weeklySummaryInput());
+      return [yield* client.insights.listPendingInsights()];
+    }),
+
+  "insights.markInsightDelivered": (client) =>
+    Effect.gen(function* () {
+      const insight = yield* generateInsightEvent(writeOnlyUser, weeklySummaryInput());
+      return [
+        yield* client.insights.markInsightDelivered({
+          params: { id: insight.id },
+          payload: {
+            sentAt: DateTime.makeUnsafe("2026-08-09T23:00:08Z"),
+            channel: "whatsapp",
+            provider: "meta",
+            providerMessageId: "wamid.suggested-operations",
+          },
+        }),
+      ];
+    }),
+
+  "insights.markInsightRead": (client) =>
+    Effect.gen(function* () {
+      const insight = yield* generateInsightEvent(writeOnlyUser, weeklySummaryInput());
+      return [yield* client.insights.markInsightRead({ params: { id: insight.id } })];
+    }),
+
+  "insights.dismissInsight": (client) =>
+    Effect.gen(function* () {
+      const insight = yield* generateInsightEvent(writeOnlyUser, weeklySummaryInput());
+      return [yield* client.insights.dismissInsight({ params: { id: insight.id } })];
     }),
 };
 
@@ -172,6 +209,7 @@ layer(SuggestedOperationsHarness, { excludeTestServices: true, timeout: "30 seco
         let returnedSuggestedOperations = 0;
         for (const [sourceOperation, probe] of Object.entries(probes)) {
           yield* truncateTransactions;
+          yield* truncateInsights;
           const source = Option.getOrThrow(
             Option.fromUndefinedOr(operationCatalog.byId.get(sourceOperation))
           );

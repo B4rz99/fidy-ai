@@ -43,6 +43,7 @@ src/shell/insights/handlers.ts
   s_1b7f9d451a4df8::t_709f52144a281e 6-10,52-56,58-61,63-68,76-80,109-112,114
   s_1b7f9d451a4df8::t_0ba8919011be1b 33,47-51,130-133,135,151-154,156
   s_1b7f9d451a4df8::t_5b869573ce73a7 24-26,69-72,74-75
+  s_1b7f9d451a4df8::t_b0fe15ccf699cb 4,13,15,23,27-32,34,46,57,62,73,88,95,97,100,108,113,118,121,129,134,139,142,150,155
 src/shell/api.ts
   s_1b7f9d451a4df8::t_32efc01cc1e4b9 6,18
 src/shell/testing/isolation.test.ts
@@ -59,16 +60,19 @@ src/shell/insights/errors.ts
   s_1b7f9d451a4df8::t_8d60869c323b1c 63-65,67-69,71,97
   s_1b7f9d451a4df8::t_839da710b833ee 98-101
   s_1b7f9d451a4df8::t_da7c0da7256ad2 3
+  s_1b7f9d451a4df8::t_f8addadb72fb18 6-11,19,25-26,31-32,37-38,47-48,50-55,61,66,70,81-89,104,109-110,113,117,119
 src/shell/insights/operations.ts
   s_1b7f9d451a4df8::t_3c6b3a69697632 21-25
   s_1b7f9d451a4df8::t_54ceea329d7de9 1-2,10-13
   s_1b7f9d451a4df8::t_90831351e76458 3-9,14,16-20,26-36,40-45,47-53,57-61,63-69,73-77,79-84,88
   s_1b7f9d451a4df8::t_b45820ccf3fbf9 15,46,62,78
+  s_1b7f9d451a4df8::t_cfef4205debaec 37-39,54-56,70-72,85-87
 src/shell/testing/authorization.test.ts
   s_1b7f9d451a4df8::t_2b1cfeff3a8c5c 6,32,34,54-56,58-61,69-73,126-141
   s_1b7f9d451a4df8::t_ba7173d88330fa 12-13,90-125
   s_1b7f9d451a4df8::t_a5854a9b7a98af 33
   s_1b7f9d451a4df8::t_c9f7b34533c4fd 142
+  s_1b7f9d451a4df8::t_25205921207cf8 31
 src/shell/http.ts
   s_1b7f9d451a4df8::t_a228fcfe6a166c 9,30
 src/core/insights/model.test.ts
@@ -98,6 +102,9 @@ src/core/insights/rules.test.ts
   s_1b7f9d451a4df8::t_f1afa60273e68b 1-4,8,10-11,37
   s_1b7f9d451a4df8::t_0f6e6b8005838c 6
   s_1b7f9d451a4df8::t_0b247699977af6 5,7,9,12-36
+src/shell/testing/suggested-operations.test.ts
+  s_1b7f9d451a4df8::t_845c366063273b 4,46
+  s_1b7f9d451a4df8::t_8634863fe63672 2,26-27,94-127,212
 ---
 {
   "schema_version": "authorship/3.0.0",

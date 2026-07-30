@@ -56,8 +56,16 @@ _Avoid_: Deduplication, matching, merge (as a noun).
 
 **Category**:
 A user-facing classification for spending with an identity that survives label, seed-order, and
-taxonomy changes. Colombian labels and merchant knowledge are the only launch data. Assigned
-automatically at capture, correctable by user keyword rules.
+taxonomy changes. Assigned at capture from an explicit Category, a user keyword rule, or the
+categorization fallback; correctable by user keyword rules.
+
+The direct launch taxonomy is flat: Restaurantes, Domicilios, Mercado, Transporte, Vivienda,
+Servicios, Salud, Educación, Compras, Entretenimiento, Viajes, Impuestos, Transferencias, Retiros
+de efectivo, Ingresos, and Otros. These Spanish labels and their presentation order are attributes
+of stable opaque CategoryIds, never identity. A P2P or own-account movement is Transferencias; a
+purchase paid through Nequi, Daviplata, or another app uses the underlying merchant or purpose
+instead of the payment app. Keyword rules affect future capture only; changing existing history is
+an explicit Transaction correction.
 _Avoid_: Tag, label, bucket.
 
 **Budget**:

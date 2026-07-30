@@ -37,7 +37,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         });
         const retired = yield* resolveWhatsAppCaller(defaultWhatsAppPhone);
         const reassociated = yield* resolveWhatsAppCaller(replacementPhone);
-        const after = yield* client.transactions.listTransactions();
+        const after = yield* client.transactions.listTransactions({ query: {} });
 
         expect(Option.getOrThrow(before)).toBe(defaultUserId);
         expect(Option.getOrThrow(agentCaller)).toMatchObject({

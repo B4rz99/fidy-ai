@@ -188,7 +188,7 @@ const threeFractionCurrencies = new Set<(typeof currencyCodes)[number]>([
 ]);
 
 /**
- * A recognized monetary ISO 4217 denomination. This is the retained launch
+ * A recognized monetary ISO 4217 denomination. This is the retained
  * snapshot of active currencies with defined fractional precision: ISO fund,
  * metal, accounting, testing, and no-currency codes are deliberately absent.
  * Currency is independent of ServiceMarket; accepting USD does not enable a

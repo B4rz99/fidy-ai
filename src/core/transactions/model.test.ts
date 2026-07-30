@@ -1,9 +1,11 @@
 import { expect, it } from "@effect/vitest";
 import { Result, Schema } from "effect";
-import { CreateTransactionInput, Direction, Transaction } from "./model";
+import { CreateTransactionInput, Direction, Transaction, TransactionExtraction } from "./model";
 
 const decodeDirection = Schema.decodeUnknownResult(Direction);
 const decodeTransaction = Schema.decodeUnknownResult(Transaction);
+const decodeCreateInput = Schema.decodeUnknownResult(CreateTransactionInput);
+const decodeExtraction = Schema.decodeUnknownResult(TransactionExtraction);
 
 /**
  * A whole Transaction as it arrives in an API request, defaulted so a test spells out
@@ -14,6 +16,7 @@ const apiTransaction = (overrides: Readonly<Record<string, unknown>> = {}) => ({
   money: { amount: "25000", currency: "COP" },
   merchant: "El Corral",
   direction: "outflow",
+  categoryId: "10000000-0000-4000-8000-000000000001",
   occurredAt: "2026-07-20T12:30:00Z",
   createdAt: "2026-07-21T08:00:00Z",
   ...overrides,
@@ -51,6 +54,26 @@ it("rejects the legacy top-level amount and currency shape", () => {
 
   expect(
     Result.isFailure(decodeTransaction({ ...withoutMoney, amount: 25_000, currency: "COP" }))
+  ).toBe(true);
+});
+
+it("allows Category omission only on capture input", () => {
+  const { categoryId: _, createdAt: _createdAt, id: _id, ...capture } = apiTransaction();
+
+  expect(Result.isSuccess(decodeCreateInput(capture))).toBe(true);
+  expect(Result.isFailure(decodeTransaction(capture))).toBe(true);
+});
+
+it("derives extraction facts with nested exact Money", () => {
+  expect(
+    Result.isSuccess(
+      decodeExtraction({
+        money: { amount: "450000000000.75", currency: "USD" },
+        merchant: "Proveedor",
+        direction: "outflow",
+        occurredAt: "2026-07-20T12:30:00Z",
+      })
+    )
   ).toBe(true);
 });
 

@@ -26,6 +26,12 @@ export class TransactionNotYetOccurred extends Data.TaggedError("TransactionNotY
   readonly now: DateTime.Utc;
 }> {}
 
+/** A two-ended query period is empty or reversed; `from` must be strictly before `to`. */
+export class InvalidTransactionPeriod extends Data.TaggedError("InvalidTransactionPeriod")<{
+  readonly from: DateTime.Utc;
+  readonly to: DateTime.Utc;
+}> {}
+
 /**
  * Every way an operation on transactions can fail for a reason its caller could
  * act on. Infrastructure that no caller can respond to — a dead connection, a
@@ -36,4 +42,7 @@ export class TransactionNotYetOccurred extends Data.TaggedError("TransactionNotY
  * this union exhaustively. Widening it without extending that switch fails the
  * build (ARCHITECTURE.md §6).
  */
-export type TransactionFailure = TransactionNotFound | TransactionNotYetOccurred;
+export type TransactionFailure =
+  | InvalidTransactionPeriod
+  | TransactionNotFound
+  | TransactionNotYetOccurred;

@@ -1,7 +1,8 @@
 import { createTransactions } from "./0001-create-transactions";
 import { createIdentitiesAndAgentTokens } from "./0002-create-identities-and-agent-tokens";
 import { createAuditLog } from "./0003-create-audit-log";
-import { createInsights } from "./0004-create-insights";
+import { createCategorizedTransactions } from "./0004-categorized-transactions";
+import { createInsights } from "./0005-create-insights";
 
 /**
  * The explicit index ARCHITECTURE.md §7 calls for: one ordered, append-only
@@ -15,5 +16,6 @@ export const migrations = {
   "0001_create_transactions": createTransactions,
   "0002_create_identities_and_agent_tokens": createIdentitiesAndAgentTokens,
   "0003_create_audit_log": createAuditLog,
-  "0004_create_insights": createInsights,
+  "0004_categorized_transactions": createCategorizedTransactions,
+  "0005_create_insights": createInsights,
 };

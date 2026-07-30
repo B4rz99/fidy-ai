@@ -1,6 +1,7 @@
 import { expect, it } from "@effect/vitest";
 import { BigDecimal, DateTime, Result, Schema } from "effect";
 import { OpenApi } from "effect/unstable/httpapi";
+import { categoryIds } from "~/core/categories/taxonomy";
 import { FidyApi, operationCatalog } from "~/shell/api";
 import {
   canCallOperation,
@@ -88,6 +89,7 @@ it("rejects fully known arguments that violate a target object check", () => {
         merchant: "Rappi",
         direction: "outflow",
         occurredAt: DateTime.makeUnsafe("2026-07-20T12:30:00Z"),
+        categoryId: categoryIds.otros,
       },
     },
     hint: "Record the Transaction while all its details are known.",
@@ -116,9 +118,9 @@ it("rejects tools and arguments that do not belong to a canonical operation", ()
     SuggestedOperation,
     strictEncoding
   )({
-    tool: "transactions.listTransactions",
-    args: { query: { merchant: "Rappi" } },
-    hint: "List Transactions related to the current question.",
+    tool: "identity.getCurrentUser",
+    args: {},
+    hint: "Read the current User preferences.",
   });
 
   expect(Result.isFailure(unknownTool)).toBe(true);

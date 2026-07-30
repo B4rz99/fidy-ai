@@ -3,6 +3,8 @@ import { Context, DateTime, Effect, Layer, type Schema } from "effect";
 import { HttpBody, HttpClient, type HttpClientError } from "effect/unstable/http";
 import { IanaTimeZone } from "~/core/_shared/context";
 import { UserId } from "~/core/_shared/user";
+import { CategoryKeyword } from "~/core/categories/model";
+import { categoryIds } from "~/core/categories/taxonomy";
 import { type InsightEvent } from "~/core/insights/model";
 import { type Transaction } from "~/core/transactions/model";
 import { AgentBearerToken } from "~/core/tokens/model";
@@ -96,9 +98,71 @@ const probes: Record<OperationId, IsolationProbe> = {
       expect(ownersUser.data.timeZone).toBe("America/Bogota");
     }),
 
+  "categories.listCategories": (attempt) =>
+    Effect.gen(function* () {
+      const listed = yield* attempt.strangerClient.categories.listCategories({});
+      expect(listed.data).toHaveLength(16);
+    }),
+
+  "categories.listKeywordRules": (attempt) =>
+    Effect.gen(function* () {
+      const listed = yield* attempt.strangerClient.categories.listKeywordRules({});
+      expect(listed.data).toEqual([]);
+    }),
+
+  "categories.createKeywordRule": (attempt) =>
+    Effect.gen(function* () {
+      yield* attempt.strangerClient.categories.createKeywordRule({
+        payload: {
+          keyword: CategoryKeyword.make("privado"),
+          categoryId: categoryIds.otros,
+        },
+      });
+      const owners = yield* attempt.ownerClient.categories.listKeywordRules({});
+      expect(owners.data).toEqual([]);
+    }),
+
+  "categories.updateKeywordRule": (attempt) =>
+    Effect.gen(function* () {
+      const ownerRule = yield* attempt.ownerClient.categories.createKeywordRule({
+        payload: {
+          keyword: CategoryKeyword.make("dueño"),
+          categoryId: categoryIds.mercado,
+        },
+      });
+      const denied = yield* Effect.result(
+        attempt.strangerClient.categories.updateKeywordRule({
+          params: { id: ownerRule.data.id },
+          payload: {
+            keyword: CategoryKeyword.make("intruso"),
+            categoryId: categoryIds.otros,
+          },
+        })
+      );
+      const retained = yield* attempt.ownerClient.categories.listKeywordRules({});
+      expect(denied).toMatchObject({ _tag: "Failure", failure: { error: { code: "not_found" } } });
+      expect(retained.data).toEqual([ownerRule.data]);
+    }),
+
+  "categories.deleteKeywordRule": (attempt) =>
+    Effect.gen(function* () {
+      const ownerRule = yield* attempt.ownerClient.categories.createKeywordRule({
+        payload: {
+          keyword: CategoryKeyword.make("conservar"),
+          categoryId: categoryIds.mercado,
+        },
+      });
+      const denied = yield* Effect.result(
+        attempt.strangerClient.categories.deleteKeywordRule({ params: { id: ownerRule.data.id } })
+      );
+      const retained = yield* attempt.ownerClient.categories.listKeywordRules({});
+      expect(denied).toMatchObject({ _tag: "Failure", failure: { error: { code: "not_found" } } });
+      expect(retained.data).toEqual([ownerRule.data]);
+    }),
+
   "transactions.listTransactions": (attempt) =>
     Effect.gen(function* () {
-      const listed = yield* attempt.strangerClient.transactions.listTransactions();
+      const listed = yield* attempt.strangerClient.transactions.listTransactions({ query: {} });
 
       expect(listed.data).toEqual([]);
     }),
@@ -189,11 +253,53 @@ const probes: Record<OperationId, IsolationProbe> = {
 
       expect(forged.status).toBe(201);
 
-      const ownersHistory = yield* attempt.ownerClient.transactions.listTransactions();
-      const strangersHistory = yield* attempt.strangerClient.transactions.listTransactions();
+      const ownersHistory = yield* attempt.ownerClient.transactions.listTransactions({ query: {} });
+      const strangersHistory = yield* attempt.strangerClient.transactions.listTransactions({
+        query: {},
+      });
 
       expect(ownersHistory.data).toEqual([attempt.ownedTransaction]);
       expect(strangersHistory.data).toHaveLength(2);
+    }),
+
+  "transactions.updateTransaction": (attempt) =>
+    Effect.gen(function* () {
+      const { createdAt: _createdAt, id: _id, ...payload } = attempt.ownedTransaction;
+      const denied = yield* Effect.result(
+        attempt.strangerClient.transactions.updateTransaction({
+          params: { id: attempt.ownedTransaction.id },
+          payload,
+        })
+      );
+      const retained = yield* attempt.ownerClient.transactions.getTransaction({
+        params: { id: attempt.ownedTransaction.id },
+      });
+      expect(denied).toMatchObject({ _tag: "Failure", failure: { error: { code: "not_found" } } });
+      expect(retained.data).toEqual(attempt.ownedTransaction);
+    }),
+
+  "transactions.deleteTransaction": (attempt) =>
+    Effect.gen(function* () {
+      const denied = yield* Effect.result(
+        attempt.strangerClient.transactions.deleteTransaction({
+          params: { id: attempt.ownedTransaction.id },
+        })
+      );
+      const retained = yield* attempt.ownerClient.transactions.getTransaction({
+        params: { id: attempt.ownedTransaction.id },
+      });
+      expect(denied).toMatchObject({ _tag: "Failure", failure: { error: { code: "not_found" } } });
+      expect(retained.data).toEqual(attempt.ownedTransaction);
+    }),
+
+  "transactions.listSourceAttestations": (attempt) =>
+    Effect.gen(function* () {
+      const denied = yield* Effect.result(
+        attempt.strangerClient.transactions.listSourceAttestations({
+          params: { id: attempt.ownedTransaction.id },
+        })
+      );
+      expect(denied).toMatchObject({ _tag: "Failure", failure: { error: { code: "not_found" } } });
     }),
 
   "transactions.getTransaction": (attempt) =>

@@ -1,6 +1,6 @@
 import { expect, it } from "@effect/vitest";
-import { DateTime, Effect, Result } from "effect";
-import { checkAlreadyOccurred } from "./rules";
+import { DateTime, Effect, Option, Result } from "effect";
+import { checkAlreadyOccurred, checkTransactionPeriod } from "./rules";
 
 const at = (iso: string): DateTime.Utc => DateTime.makeUnsafe(iso);
 
@@ -29,3 +29,17 @@ it("names both instants, so a typo and a clock skew can be told apart", () => {
     now: at("2026-07-25T09:00:00Z"),
   });
 });
+
+it.effect("accepts open-ended periods and rejects a two-ended period without positive width", () =>
+  Effect.gen(function* () {
+    const july = at("2026-07-01T00:00:00Z");
+    const august = at("2026-08-01T00:00:00Z");
+
+    yield* checkTransactionPeriod({ from: Option.some(july), to: Option.none<DateTime.Utc>() });
+    const failure = yield* Effect.flip(
+      checkTransactionPeriod({ from: Option.some(august), to: Option.some(july) })
+    );
+
+    expect(failure._tag).toBe("InvalidTransactionPeriod");
+  })
+);

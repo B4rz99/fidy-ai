@@ -1,79 +1,104 @@
 import { Schema } from "effect";
 import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/unstable/httpapi";
-import { CreateTransactionInput, Transaction, TransactionId } from "~/core/transactions/model";
-import { NotFound } from "~/shell/_shared/errors";
+import {
+  CreateTransactionInput,
+  SourceAttestation,
+  Transaction,
+  TransactionId,
+  TransactionQueryValues,
+  UpdateTransactionInput,
+} from "~/core/transactions/model";
+import { NotFound, ValidationFailed } from "~/shell/_shared/errors";
 import { operationPolicy } from "~/shell/_shared/operation-policy";
 import { OperationResponse } from "~/shell/_shared/response";
 
+const read = operationPolicy({ requiredScope: "read", requiredTier: "free", costClass: "cheap" });
+const write = operationPolicy({ requiredScope: "write", requiredTier: "free", costClass: "cheap" });
+
+const TransactionQueryParameters = Schema.Struct({
+  from: Schema.optionalKey(TransactionQueryValues.fields.from),
+  to: Schema.optionalKey(TransactionQueryValues.fields.to),
+  categoryId: Schema.optionalKey(TransactionQueryValues.fields.categoryId),
+  merchant: Schema.optionalKey(TransactionQueryValues.fields.merchant),
+  direction: Schema.optionalKey(TransactionQueryValues.fields.direction),
+  currency: Schema.optionalKey(TransactionQueryValues.fields.currency),
+});
+
 /**
- * The slice's canonical operations, defined once, here: paths, methods and
- * status codes over the core schemas. The HTTP server, the typed client, and
- * the OpenAPI spec are all derived from this definition.
- *
- * Every operation runs as somebody, so every operation can answer 401 — the
- * caller is resolved from the request, never named in a payload, which is why
- * no input schema here mentions a user (ARCHITECTURE.md §5).
- *
- * The 400 is absent from every `error` list and present on every operation
- * anyway: it is declared by the validation-gate middleware in `api.ts`, whose
- * error schema merges into each operation the middleware covers.
- *
- * An operation that routes a domain failure declares the whole API failure union its
- * slice's mapper can return, because there is one mapper per slice and its
- * return type is that union (ARCHITECTURE.md §6). The alternative — a mapper
- * narrow enough per operation to keep each list minimal — is a mapper per
- * handler, which §6 rejects outright.
- *
- * Each operation carries an `OpenApi.Description`, and it is addressed to the
- * agent that will call it rather than to whoever maintains this file: the spec
- * these annotations land in derives the MCP tool definitions and the hosted
- * agent's toolkit, so this text is the manual a caller reads at runtime
- * (CODING_STANDARDS.md, agent-facing documentation).
+ * Caller-owned Transaction capture, history, correction, deletion, and retained provenance.
+ * Identity comes from authentication; unknown and foreign record ids are indistinguishable.
  */
-export const TransactionsGroup = HttpApiGroup.make("transactions").add(
-  HttpApiEndpoint.post("createTransaction", "/transactions", {
-    payload: CreateTransactionInput,
-    success: OperationResponse(Transaction).pipe(HttpApiSchema.status(201)),
-    error: NotFound,
-  })
-    .annotate(
-      OpenApi.Description,
-      "Record one Transaction for the caller: a single exact movement of Money with its Currency, " +
-        "direction, and merchant. Reach for this as soon as the user says money moved " +
-        "and no record of it exists yet — money they spent, money that reached them, a receipt " +
-        "they read out. The Transaction belongs to whoever the call is made as, so there is no " +
-        "owner to name; the answer hands back the stored Transaction, id and all."
-    )
-    .annotateMerge(
-      operationPolicy({ requiredScope: "write", requiredTier: "free", costClass: "cheap" })
-    ),
-  HttpApiEndpoint.get("listTransactions", "/transactions", {
-    success: OperationResponse(Schema.Array(Transaction)),
-  })
-    .annotate(
-      OpenApi.Description,
-      "Read back every Transaction the caller has recorded, most recent occurrence first. " +
-        "Reach for this to answer anything about what the user spent or received — a total, a " +
-        "merchant they keep paying, whether something was captured already. It takes no " +
-        "filters and returns the whole history, so narrow it yourself. Somebody who has " +
-        "recorded nothing gets an empty list, not a failure."
-    )
-    .annotateMerge(
-      operationPolicy({ requiredScope: "read", requiredTier: "free", costClass: "cheap" })
-    ),
-  HttpApiEndpoint.get("getTransaction", "/transactions/:id", {
-    params: Schema.Struct({ id: TransactionId }),
-    success: OperationResponse(Transaction),
-    error: NotFound,
-  })
-    .annotate(
-      OpenApi.Description,
-      "Fetch one Transaction of the caller's by id. Reach for this when you already hold an id " +
-        "— from recording one, or from the history — and want the stored record rather than " +
-        "what you remember of it. An id that belongs to another user answers exactly as an id " +
-        "that never existed, so `not_found` never tells you the record is real elsewhere."
-    )
-    .annotateMerge(
-      operationPolicy({ requiredScope: "read", requiredTier: "free", costClass: "cheap" })
-    )
-);
+export const TransactionsGroup = HttpApiGroup.make("transactions")
+  .add(
+    HttpApiEndpoint.post("createTransaction", "/transactions", {
+      payload: CreateTransactionInput,
+      success: OperationResponse(Transaction).pipe(HttpApiSchema.status(201)),
+      error: [NotFound, ValidationFailed],
+    })
+      .annotate(
+        OpenApi.Description,
+        "Record one exact movement of Money for the caller. Supply a stable Category id when known; omit it only at capture so a user keyword rule or the categorization fallback can assign it before storage. The result includes the stored Category."
+      )
+      .annotateMerge(write)
+  )
+  .add(
+    HttpApiEndpoint.get("listTransactions", "/transactions", {
+      query: TransactionQueryParameters,
+      success: OperationResponse(Schema.Array(Transaction)),
+      error: [NotFound, ValidationFailed],
+    })
+      .annotate(
+        OpenApi.Description,
+        "List the caller's visible Transactions, newest occurrence first. Any combination of from (inclusive), to (exclusive), Category id, merchant text, direction, and Currency narrows the history; omit every filter for all visible history."
+      )
+      .annotateMerge(read)
+  )
+  .add(
+    HttpApiEndpoint.get("getTransaction", "/transactions/:id", {
+      params: Schema.Struct({ id: TransactionId }),
+      success: OperationResponse(Transaction),
+      error: NotFound,
+    })
+      .annotate(
+        OpenApi.Description,
+        "Fetch one visible Transaction of the caller by id. Unknown, deleted, and another user's ids all answer not_found."
+      )
+      .annotateMerge(read)
+  )
+  .add(
+    HttpApiEndpoint.put("updateTransaction", "/transactions/:id", {
+      params: Schema.Struct({ id: TransactionId }),
+      payload: UpdateTransactionInput,
+      success: OperationResponse(Transaction),
+      error: [NotFound, ValidationFailed],
+    })
+      .annotate(
+        OpenApi.Description,
+        "Replace the editable facts of one visible Transaction, including Category and notes. Send the complete corrected movement; omitting notes clears them. Existing SourceAttestations remain unchanged."
+      )
+      .annotateMerge(write)
+  )
+  .add(
+    HttpApiEndpoint.delete("deleteTransaction", "/transactions/:id", {
+      params: Schema.Struct({ id: TransactionId }),
+      success: OperationResponse(TransactionId),
+      error: NotFound,
+    })
+      .annotate(
+        OpenApi.Description,
+        "Permanently remove one Transaction from the caller's visible product history. It cannot be restored; immutable SourceAttestations remain retained as provenance."
+      )
+      .annotateMerge(write)
+  )
+  .add(
+    HttpApiEndpoint.get("listSourceAttestations", "/transactions/:id/source-attestations", {
+      params: Schema.Struct({ id: TransactionId }),
+      success: OperationResponse(Schema.Array(SourceAttestation)),
+      error: NotFound,
+    })
+      .annotate(
+        OpenApi.Description,
+        "Explain which captured market, locale, IANA time zone, source details, and interpretation revision produced one owned Transaction, including after its user-facing deletion. SourceAttestations are immutable."
+      )
+      .annotateMerge(read)
+  );

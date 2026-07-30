@@ -5,12 +5,15 @@ import { AgentTokenId } from "~/core/_shared/agent-token";
 import { UserId } from "~/core/_shared/user";
 import { CategoryKeyword } from "~/core/categories/model";
 import { categoryIds } from "~/core/categories/taxonomy";
+import { InsightEventId } from "~/core/insights/model";
 import { CreateTransactionInput } from "~/core/transactions/model";
 import { AgentBearerToken } from "~/core/tokens/model";
 import { authenticateAgentToken } from "~/shell/_shared/authz";
 import { ScopeMissing } from "~/shell/_shared/errors";
 import { truncateAuditLogEntries } from "~/shell/audit/fixtures";
 import { observeAuditLogEntries } from "~/shell/audit/repo";
+import { truncateInsights, weeklySummaryInput } from "~/shell/insights/fixtures";
+import { generateInsightEvent } from "~/shell/insights/repo";
 import { transactionPayload, truncateTransactions } from "~/shell/transactions/fixtures";
 import {
   ApiHarness,
@@ -28,6 +31,10 @@ const readOnlyBearer = AgentBearerToken.make(
   "fin_readonly_abcdefghijklmnopqrstuvwxyz0123456789ABCD"
 );
 const readOnlyTokenId = AgentTokenId.make("f1d1a000-0000-4000-8000-0000000000c4");
+const writeOnlyUser = UserId.make("f1d1a000-0000-4000-8000-0000000000c5");
+const writeOnlyBearer = AgentBearerToken.make(
+  "fin_writonly_abcdefghijklmnopqrstuvwxyz0123456789ABCD"
+);
 const readOnlyWriterBearer = AgentBearerToken.make(
   "fin_authwrit_abcdefghijklmnopqrstuvwxyz0123456789ABCD"
 );
@@ -50,12 +57,16 @@ const idleBearer = AgentBearerToken.make("fin_idle090d_abcdefghijklmnopqrstuvwxy
 class ReadOnlyApiClient extends Context.Service<ReadOnlyApiClient, ApiClient>()(
   "fidy-ai/shell/testing/authorization.test/ReadOnlyApiClient"
 ) {}
+class WriteOnlyApiClient extends Context.Service<WriteOnlyApiClient, ApiClient>()(
+  "fidy-ai/shell/testing/authorization.test/WriteOnlyApiClient"
+) {}
 class ReadOnlyWriterClient extends Context.Service<ReadOnlyWriterClient, ApiClient>()(
   "fidy-ai/shell/testing/authorization.test/ReadOnlyWriterClient"
 ) {}
 
-const AuthorizationHarness = Layer.merge(
+const AuthorizationHarness = Layer.mergeAll(
   makeApiClientLive({ tag: ReadOnlyApiClient, bearer: readOnlyBearer }),
+  makeApiClientLive({ tag: WriteOnlyApiClient, bearer: writeOnlyBearer }),
   makeApiClientLive({ tag: ReadOnlyWriterClient, bearer: readOnlyWriterBearer })
 ).pipe(Layer.provideMerge(ApiHarness));
 
@@ -64,6 +75,11 @@ const seedReadOnlyIdentity = seedAgentIdentity({
   bearer: readOnlyBearer,
   tokenId: readOnlyTokenId,
   scopes: ["read"],
+});
+const seedWriteOnlyIdentity = seedAgentIdentity({
+  userId: writeOnlyUser,
+  bearer: writeOnlyBearer,
+  scopes: ["write"],
 });
 
 layer(AuthorizationHarness, { excludeTestServices: true, timeout: "30 seconds" })(
@@ -78,6 +94,59 @@ layer(AuthorizationHarness, { excludeTestServices: true, timeout: "30 seconds" }
         });
 
         expect(response.status).toBe(401);
+      })
+    );
+
+    it.effect("does not advertise or permit insight writes to a read-only caller", () =>
+      Effect.gen(function* () {
+        yield* truncateInsights;
+        yield* seedReadOnlyIdentity;
+        const client = yield* ReadOnlyApiClient;
+        const events = yield* Effect.all([
+          generateInsightEvent(readOnlyUser, weeklySummaryInput()),
+          generateInsightEvent(readOnlyUser, weeklySummaryInput()),
+          generateInsightEvent(readOnlyUser, weeklySummaryInput()),
+        ]);
+        const delivered = yield* Effect.result(
+          client.insights.markInsightDelivered({
+            params: { id: events[0].id },
+            payload: {
+              sentAt: DateTime.makeUnsafe("2026-08-09T23:00:08Z"),
+              channel: "whatsapp",
+              provider: "kapso",
+              providerMessageId: "wamid.under-scoped",
+            },
+          })
+        );
+        const read = yield* Effect.result(
+          client.insights.markInsightRead({ params: { id: events[1].id } })
+        );
+        const dismissed = yield* Effect.result(
+          client.insights.dismissInsight({ params: { id: events[2].id } })
+        );
+        const pending = yield* client.insights.listPendingInsights();
+
+        expect([delivered, read, dismissed].map(({ _tag }) => _tag)).toEqual([
+          "Failure",
+          "Failure",
+          "Failure",
+        ]);
+        expect(pending.data).toHaveLength(3);
+        expect(pending.next).toEqual([]);
+      })
+    );
+
+    it.effect("does not suggest a read operation to a write-only caller", () =>
+      Effect.gen(function* () {
+        yield* seedWriteOnlyIdentity;
+        const client = yield* WriteOnlyApiClient;
+        const result = yield* Effect.result(
+          client.insights.markInsightRead({
+            params: { id: InsightEventId.make("f1d1a000-0000-4000-8000-000000000299") },
+          })
+        );
+
+        expect(result).toMatchObject({ _tag: "Failure", failure: { next: [] } });
       })
     );
 

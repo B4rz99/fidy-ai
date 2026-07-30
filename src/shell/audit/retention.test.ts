@@ -1,47 +1,16 @@
 import { expect, layer } from "@effect/vitest";
-import { ConfigProvider, DateTime, Duration, Effect } from "effect";
+import { DateTime, Effect } from "effect";
 import { CanonicalOperationId } from "~/core/audit/model";
 import { defaultUserId } from "~/shell/db/development-seed";
 import { ApiHarness, ApiHarnessClient } from "~/shell/testing/api-harness";
 import { truncateAuditLogEntries } from "./fixtures";
 import { appendAuditLogEntry, observeAuditLogEntries } from "./repo";
-import { auditRetentionDuration, runConfiguredAuditRetention } from "./retention";
-
-const configuredFor = (value: string) =>
-  ConfigProvider.fromUnknown({ FIDY_AUDIT_RETENTION: value });
+import { runAuditRetention } from "./retention";
 
 layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
   "AuditLogEntry retention",
   (it) => {
-    it.effect("defaults the retention window to approximately twelve months", () =>
-      Effect.gen(function* () {
-        const retention = yield* auditRetentionDuration;
-
-        expect(Duration.toDays(retention)).toBe(365);
-      }).pipe(Effect.provideService(ConfigProvider.ConfigProvider, ConfigProvider.fromUnknown({})))
-    );
-
-    it.effect("rejects invalid retention without deleting evidence", () =>
-      Effect.gen(function* () {
-        yield* truncateAuditLogEntries;
-        const client = yield* ApiHarnessClient;
-        yield* client.identity.getCurrentUser();
-        const before = yield* observeAuditLogEntries(defaultUserId);
-
-        for (const value of ["299 days", "401 days", "not-a-duration"]) {
-          const result = yield* Effect.result(
-            runConfiguredAuditRetention(DateTime.makeUnsafe("2026-07-01T12:00:00Z")).pipe(
-              Effect.provideService(ConfigProvider.ConfigProvider, configuredFor(value))
-            )
-          );
-
-          expect(result._tag, value).toBe("Failure");
-          expect(yield* observeAuditLogEntries(defaultUserId), value).toEqual(before);
-        }
-      })
-    );
-
-    it.effect("removes only evidence older than the configured cutoff", () =>
+    it.effect("removes only evidence older than the 365-day cutoff", () =>
       Effect.gen(function* () {
         yield* truncateAuditLogEntries;
         const client = yield* ApiHarnessClient;
@@ -67,9 +36,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           })
         );
 
-        yield* runConfiguredAuditRetention(now).pipe(
-          Effect.provideService(ConfigProvider.ConfigProvider, configuredFor("365 days"))
-        );
+        yield* runAuditRetention(now);
 
         const retained = yield* observeAuditLogEntries(defaultUserId);
         expect(retained.map((entry) => entry.occurredAt)).toEqual([

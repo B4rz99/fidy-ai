@@ -231,7 +231,7 @@ whose bearer cannot be resolved create no invented evidence. Successful state an
 SQL transaction, while rejection and failure evidence survives the operation transaction.
 
 The audit repo exposes append, typed observation, and strictly-before-cutoff retention only.
-Production defaults to 365 days, cleans at launch and daily, and retains entries at the cutoff.
+Production retains 365 days, cleans at launch and daily, and retains entries at the cutoff.
 
 ### Deferred: row-level security
 

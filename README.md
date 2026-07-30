@@ -26,7 +26,6 @@ The process reads deployment configuration from the environment:
 | `DATABASE_URL`          | required    | PostgreSQL URL; boot fails loudly when it is absent  |
 | `PORT`                  | optional    | HTTP port, defaulting to `3000`                      |
 | `FIDY_HTTP_HOST`        | optional    | Bind host, defaulting to `0.0.0.0`                   |
-| `FIDY_AUDIT_RETENTION`  | optional    | AuditLogEntry retention, defaulting to `365 days`    |
 | `APP_VERSION`           | optional    | Version returned by `GET /health`                    |
 | `RAILWAY_DEPLOYMENT_ID` | Railway     | Health version fallback when `APP_VERSION` is absent |
 
@@ -45,8 +44,7 @@ curl http://localhost:3000/health
 
 The process applies pending migrations before binding the HTTP server or launching the daily
 AuditLogEntry retention worker. Retention runs at startup and removes only evidence strictly older
-than `FIDY_AUDIT_RETENTION`; the value uses Effect Duration syntax and must be between `300 days`
-and `400 days`. It serves the canonical API,
+than 365 days. It serves the canonical API,
 `/openapi.json`, the public `/health` route, and the SPA shell from `public/` in one Effect runtime.
 Canonical operations remain protected by scoped `fin_` bearer authorization. `railway.json`
 configures Railway to build the Dockerfile and gate deployments on `/health`; the app receives

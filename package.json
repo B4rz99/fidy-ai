@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "lint": "oxlint --deny-warnings --config .oxlintrc.json .",
-    "lint:type-aware": "oxlint --deny-warnings --config .oxlintrc.json --type-aware .",
+    "lint:type-aware": "oxlint --deny-warnings --config .oxlintrc.json --type-aware . && bun scripts/check-lint-guards.ts",
     "lint:suppressions": "bun scripts/check-lint-suppressions.ts",
     "lint:deps": "bun tools/depcruise/run.mjs",
     "lint:dependencies": "bun scripts/check-dependency-updates.ts",

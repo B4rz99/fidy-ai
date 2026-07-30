@@ -3,6 +3,7 @@ import { AgentAuthorization } from "~/shell/_shared/authz";
 import { ValidationGate } from "~/shell/_shared/errors";
 import { bindOperationCatalog, makeOperationCatalog } from "~/shell/_shared/operation-catalog";
 import { CategoriesGroup } from "~/shell/categories/operations";
+import { DashboardGroup } from "~/shell/dashboard/operations";
 import { IdentityGroup } from "~/shell/identity/operations";
 import { InsightsGroup } from "~/shell/insights/operations";
 import { TransactionsGroup } from "~/shell/transactions/operations";
@@ -16,6 +17,7 @@ import { TransactionsGroup } from "~/shell/transactions/operations";
 export class FidyApi extends HttpApi.make("fidy")
   .add(IdentityGroup)
   .add(CategoriesGroup)
+  .add(DashboardGroup)
   .add(TransactionsGroup)
   .add(InsightsGroup)
   // `.middleware` after `.add`, and not the other way round: it attaches to

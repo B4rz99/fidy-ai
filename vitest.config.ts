@@ -36,10 +36,13 @@ export default defineConfig({
       reporter: ["text"],
       include: SOURCE_SRC.map((sourceDir) => `${sourceDir}/**/*.ts`),
       exclude: [...SOURCE_EXCLUDE],
-      // Fail the suite (and CI's Test job) when total line coverage drops below
+      // Fail the suite (and CI's Test job) when any overall coverage metric drops below
       // 90% across the behavioural source in source-scope.mjs.
       thresholds: {
+        branches: 90,
+        functions: 90,
         lines: 90,
+        statements: 90,
       },
     },
   },

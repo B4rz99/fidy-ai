@@ -440,6 +440,141 @@ const noReactUseEffect = {
   },
 };
 
+/**
+ * DateTime.Utc exposes `partsUtc` only as Effect's mutable lazy cache. Core may
+ * carry Utc instants but must never couple domain logic to that internal field.
+ */
+const noDateTimeInternals = {
+  meta: {
+    type: "problem",
+    docs: { description: "Disallow access to Effect DateTime mutable internals" },
+    messages: {
+      noDateTimeInternals:
+        "Do not access DateTime.partsUtc. It is Effect's mutable internal cache, not domain state.",
+    },
+    schema: [],
+  },
+  create(context) {
+    return {
+      MemberExpression(node) {
+        if (staticMemberName(node) === "partsUtc") {
+          context.report({ node, messageId: "noDateTimeInternals" });
+        }
+      },
+    };
+  },
+};
+
+const SCALAR_SCHEMA_CONSTRUCTORS = new Set([
+  "BigInt",
+  "BigIntFromSelf",
+  "Boolean",
+  "Finite",
+  "Int",
+  "Literal",
+  "Literals",
+  "NonEmptyString",
+  "Number",
+  "String",
+  "Symbol",
+  "TemplateLiteral",
+]);
+
+/** The Schema constructor at the root of a fluent schema expression. */
+const schemaConstructorName = (expression, schemaNamespaces) => {
+  let current = expression;
+  while (current !== undefined) {
+    if (current.type === "ChainExpression") {
+      current = current.expression;
+      continue;
+    }
+    if (current.type === "CallExpression") {
+      current = current.callee;
+      continue;
+    }
+    if (current.type !== "MemberExpression") return undefined;
+    if (current.object.type === "Identifier" && schemaNamespaces.has(current.object.name)) {
+      return staticMemberName(current);
+    }
+    current = current.object;
+  }
+  return undefined;
+};
+
+/**
+ * Effect's Brand type is allowed through the deep-readonly rule because its
+ * phantom variance field is misclassified as mutable. Compensate by permitting
+ * Schema.brand only when the branded runtime value is a primitive scalar.
+ */
+const scalarBrandOnly = {
+  meta: {
+    type: "problem",
+    docs: { description: "Permit Effect Schema brands only on scalar schemas" },
+    messages: {
+      scalarBrandOnly:
+        "Schema.brand may only brand a scalar schema. Branded objects make the Brand readonly allowance hide mutable domain state.",
+    },
+    schema: [],
+  },
+  create(context) {
+    const schemaNamespaces = new Set(["Schema"]);
+    const directBrandBindings = new Set();
+
+    const isBrandCall = (node) => {
+      if (node.callee.type === "Identifier") return directBrandBindings.has(node.callee.name);
+      return (
+        node.callee.type === "MemberExpression" &&
+        node.callee.object.type === "Identifier" &&
+        schemaNamespaces.has(node.callee.object.name) &&
+        staticMemberName(node.callee) === "brand"
+      );
+    };
+
+    return {
+      ImportDeclaration(node) {
+        if (node.source.value === "effect") {
+          for (const specifier of node.specifiers) {
+            if (
+              specifier.type === "ImportSpecifier" &&
+              (specifier.imported.name === "Schema" || specifier.imported.value === "Schema")
+            ) {
+              schemaNamespaces.add(specifier.local.name);
+            }
+          }
+        }
+        if (node.source.value !== "effect/Schema") return;
+        for (const specifier of node.specifiers) {
+          if (specifier.type === "ImportNamespaceSpecifier") {
+            schemaNamespaces.add(specifier.local.name);
+          }
+          if (
+            specifier.type === "ImportSpecifier" &&
+            (specifier.imported.name === "brand" || specifier.imported.value === "brand")
+          ) {
+            directBrandBindings.add(specifier.local.name);
+          }
+        }
+      },
+      CallExpression(node) {
+        if (!isBrandCall(node)) return;
+        const pipeCall = node.parent;
+        if (
+          pipeCall?.type !== "CallExpression" ||
+          pipeCall.callee.type !== "MemberExpression" ||
+          staticMemberName(pipeCall.callee) !== "pipe"
+        ) {
+          context.report({ node, messageId: "scalarBrandOnly" });
+          return;
+        }
+        const constructor = schemaConstructorName(pipeCall.callee.object, schemaNamespaces);
+        if (constructor === undefined || !SCALAR_SCHEMA_CONSTRUCTORS.has(constructor)) {
+          context.report({ node, messageId: "scalarBrandOnly" });
+        }
+      },
+    };
+  },
+};
+
 const plugin = {
   meta: { name: "effect-guards" },
   rules: {
@@ -447,8 +582,10 @@ const plugin = {
     "no-sql-type-parameter": noSqlTypeParameter,
     "no-disable-validation": noDisableValidation,
     "no-escape-hatch": noEscapeHatch,
+    "no-datetime-internals": noDateTimeInternals,
     "no-curried-export": noCurriedExport,
     "require-interface-comment": requireInterfaceComment,
+    "scalar-brand-only": scalarBrandOnly,
   },
 };
 

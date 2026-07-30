@@ -45,7 +45,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
 
         expect(response.status).toBe(400);
 
-        const listed = yield* client.transactions.listTransactions();
+        const listed = yield* client.transactions.listTransactions({ query: {} });
         expect(listed.data).toEqual([]);
       })
     );
@@ -333,7 +333,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
 
         expect(response.status).toBe(400);
 
-        const listed = yield* client.transactions.listTransactions();
+        const listed = yield* client.transactions.listTransactions({ query: {} });
         expect(listed.data).toEqual([]);
       })
     );

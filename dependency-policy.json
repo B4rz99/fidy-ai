@@ -17,7 +17,14 @@
     "has nowhere to put them. An exclusion with no entry fails, an expired entry fails, and so does",
     "an entry whose exclusion is gone."
   ],
-  "deferredUpdates": [],
+  "deferredUpdates": [
+    {
+      "name": "@effect/tsgo",
+      "manifest": "package.json",
+      "reason": "The 0.24.3 package is old enough, but its required Linux binary was published on 2026-07-24 and Bun correctly refuses it until the same seven-day supply-chain delay expires. Upgrade once every platform package is installable.",
+      "until": "2026-08-01T00:00:00Z"
+    }
+  ],
   "acceptedVulnerabilities": [
     {
       "cve": "CVE-2026-14257",

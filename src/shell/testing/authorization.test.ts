@@ -3,9 +3,12 @@ import { Context, DateTime, Effect, Layer, Option, Schema } from "effect";
 import { HttpBody, HttpClient } from "effect/unstable/http";
 import { AgentTokenId } from "~/core/_shared/agent-token";
 import { UserId } from "~/core/_shared/user";
+import { CategoryKeyword } from "~/core/categories/model";
+import { categoryIds } from "~/core/categories/taxonomy";
 import { CreateTransactionInput } from "~/core/transactions/model";
 import { AgentBearerToken } from "~/core/tokens/model";
 import { authenticateAgentToken } from "~/shell/_shared/authz";
+import { ScopeMissing } from "~/shell/_shared/errors";
 import { truncateAuditLogEntries } from "~/shell/audit/fixtures";
 import { observeAuditLogEntries } from "~/shell/audit/repo";
 import { transactionPayload, truncateTransactions } from "~/shell/transactions/fixtures";
@@ -25,6 +28,9 @@ const readOnlyBearer = AgentBearerToken.make(
   "fin_readonly_abcdefghijklmnopqrstuvwxyz0123456789ABCD"
 );
 const readOnlyTokenId = AgentTokenId.make("f1d1a000-0000-4000-8000-0000000000c4");
+const readOnlyWriterBearer = AgentBearerToken.make(
+  "fin_authwrit_abcdefghijklmnopqrstuvwxyz0123456789ABCD"
+);
 const expiredUser = UserId.make("f1d1a000-0000-4000-8000-0000000000e4");
 const expiredBearer = AgentBearerToken.make(
   "fin_expired1_abcdefghijklmnopqrstuvwxyz0123456789ABCD"
@@ -44,11 +50,14 @@ const idleBearer = AgentBearerToken.make("fin_idle090d_abcdefghijklmnopqrstuvwxy
 class ReadOnlyApiClient extends Context.Service<ReadOnlyApiClient, ApiClient>()(
   "fidy-ai/shell/testing/authorization.test/ReadOnlyApiClient"
 ) {}
+class ReadOnlyWriterClient extends Context.Service<ReadOnlyWriterClient, ApiClient>()(
+  "fidy-ai/shell/testing/authorization.test/ReadOnlyWriterClient"
+) {}
 
-const AuthorizationHarness = makeApiClientLive({
-  tag: ReadOnlyApiClient,
-  bearer: readOnlyBearer,
-}).pipe(Layer.provideMerge(ApiHarness));
+const AuthorizationHarness = Layer.merge(
+  makeApiClientLive({ tag: ReadOnlyApiClient, bearer: readOnlyBearer }),
+  makeApiClientLive({ tag: ReadOnlyWriterClient, bearer: readOnlyWriterBearer })
+).pipe(Layer.provideMerge(ApiHarness));
 
 const seedReadOnlyIdentity = seedAgentIdentity({
   userId: readOnlyUser,
@@ -102,7 +111,7 @@ layer(AuthorizationHarness, { excludeTestServices: true, timeout: "30 seconds" }
           },
           body,
         });
-        const history = yield* client.transactions.listTransactions();
+        const history = yield* client.transactions.listTransactions({ query: {} });
 
         expect([missing.status, unknown.status]).toEqual([401, 401]);
         expect(history.data).toEqual([]);
@@ -116,7 +125,7 @@ layer(AuthorizationHarness, { excludeTestServices: true, timeout: "30 seconds" }
         yield* seedReadOnlyIdentity;
         const client = yield* ReadOnlyApiClient;
 
-        const listed = yield* client.transactions.listTransactions();
+        const listed = yield* client.transactions.listTransactions({ query: {} });
         yield* truncateAuditLogEntries;
         const denied = yield* HttpClient.post("/transactions", {
           headers: headersFor(readOnlyBearer),
@@ -126,7 +135,7 @@ layer(AuthorizationHarness, { excludeTestServices: true, timeout: "30 seconds" }
         });
         const deniedBody = yield* denied.json;
         const auditEntries = yield* observeAuditLogEntries(readOnlyUser);
-        const afterDenial = yield* client.transactions.listTransactions();
+        const afterDenial = yield* client.transactions.listTransactions({ query: {} });
 
         expect(listed.data).toEqual([]);
         expect(denied.status).toBe(403);
@@ -140,6 +149,98 @@ layer(AuthorizationHarness, { excludeTestServices: true, timeout: "30 seconds" }
           outcome: "rejected",
         });
         expect(DateTime.isUtc(auditEntries[0]?.occurredAt ?? DateTime.makeUnsafe(0))).toBe(true);
+      })
+    );
+
+    it.effect("rejects every new under-scoped mutation without changing owned records", () =>
+      Effect.gen(function* () {
+        yield* truncateTransactions;
+        yield* truncateAuditLogEntries;
+        yield* seedReadOnlyIdentity;
+        yield* seedAgentIdentity({
+          userId: readOnlyUser,
+          bearer: readOnlyWriterBearer,
+          scopes: ["read", "write"],
+        });
+        const reader = yield* ReadOnlyApiClient;
+        const writer = yield* ReadOnlyWriterClient;
+        const transaction = yield* writer.transactions.createTransaction({
+          payload: transactionPayload({ merchant: "Owned unchanged" }),
+        });
+        const rule = yield* writer.categories.createKeywordRule({
+          payload: {
+            keyword: CategoryKeyword.make("owned-rule"),
+            categoryId: categoryIds.otros,
+          },
+        });
+        yield* truncateAuditLogEntries;
+
+        const failures = yield* Effect.all([
+          Effect.flip(
+            reader.categories.createKeywordRule({
+              payload: {
+                keyword: CategoryKeyword.make("denied-rule"),
+                categoryId: categoryIds.otros,
+              },
+            })
+          ),
+          Effect.flip(
+            reader.categories.updateKeywordRule({
+              params: { id: rule.data.id },
+              payload: {
+                keyword: CategoryKeyword.make("denied-update"),
+                categoryId: categoryIds.otros,
+              },
+            })
+          ),
+          Effect.flip(reader.categories.deleteKeywordRule({ params: { id: rule.data.id } })),
+          Effect.flip(
+            reader.transactions.updateTransaction({
+              params: { id: transaction.data.id },
+              payload: {
+                money: transaction.data.money,
+                merchant: "Denied update",
+                direction: transaction.data.direction,
+                categoryId: transaction.data.categoryId,
+                notes: transaction.data.notes,
+                occurredAt: transaction.data.occurredAt,
+              },
+            })
+          ),
+          Effect.flip(
+            reader.transactions.deleteTransaction({ params: { id: transaction.data.id } })
+          ),
+        ]);
+        const rules = yield* writer.categories.listKeywordRules({});
+        const retained = yield* writer.transactions.getTransaction({
+          params: { id: transaction.data.id },
+        });
+        const auditEntries = yield* observeAuditLogEntries(readOnlyUser);
+
+        expect(
+          failures.map((failure) =>
+            Schema.is(ScopeMissing)(failure) ? failure.error.code : "unexpected"
+          )
+        ).toEqual([
+          "scope_missing",
+          "scope_missing",
+          "scope_missing",
+          "scope_missing",
+          "scope_missing",
+        ]);
+        expect(rules.data).toEqual([rule.data]);
+        expect(retained.data).toEqual(transaction.data);
+        expect(
+          auditEntries
+            .filter((entry) => entry.outcome === "rejected")
+            .map((entry) => [entry.operation, entry.outcome])
+        ).toEqual([
+          ["categories.createKeywordRule", "rejected"],
+          ["categories.updateKeywordRule", "rejected"],
+          ["categories.deleteKeywordRule", "rejected"],
+          ["transactions.updateTransaction", "rejected"],
+          ["transactions.deleteTransaction", "rejected"],
+        ]);
       })
     );
 

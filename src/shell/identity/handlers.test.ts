@@ -7,7 +7,7 @@ import { defaultAgentBearer } from "~/shell/testing/identity-fixtures";
 layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
   "User preferences",
   (it) => {
-    it.effect("returns independently persisted Colombian launch context", () =>
+    it.effect("returns independently persisted Colombian context", () =>
       Effect.gen(function* () {
         const client = yield* ApiHarnessClient;
 

@@ -1,0 +1,61 @@
+src/core/dashboard/rules.ts
+  s_bc26533c141395::t_8b2c2347b48a4e 1-438
+src/shell/dashboard/errors.ts
+  s_bc26533c141395::t_8b2c2347b48a4e 1-96
+.oxlintrc.json
+  s_bc26533c141395::t_8b2c2347b48a4e 144-147,150-155
+src/shell/db/migrations/0006-create-dashboards.ts
+  s_bc26533c141395::t_8b2c2347b48a4e 1-15
+src/shell/db/migrations/registry.ts
+  s_bc26533c141395::t_8b2c2347b48a4e 6,22
+src/core/dashboard/rules.test.ts
+  s_bc26533c141395::t_8b2c2347b48a4e 1-338
+src/shell/dashboard/handlers.ts
+  s_bc26533c141395::t_8b2c2347b48a4e 1-112
+docs/artifacts/issue-15-implementation-plan.html
+  s_bc26533c141395::t_8b2c2347b48a4e 1-1457
+src/shell/dashboard/fixtures.ts
+  s_bc26533c141395::t_8b2c2347b48a4e 1-8
+src/shell/testing/suggested-operations.test.ts
+  s_bc26533c141395::t_8b2c2347b48a4e 27,120-133,313
+src/shell/http.ts
+  s_bc26533c141395::t_8b2c2347b48a4e 8,32-38
+src/core/dashboard/model.test.ts
+  s_bc26533c141395::t_8b2c2347b48a4e 1-299
+src/core/dashboard/model.ts
+  s_bc26533c141395::t_8b2c2347b48a4e 1-588
+src/core/dashboard/errors.ts
+  s_bc26533c141395::t_8b2c2347b48a4e 1-48
+src/shell/testing/isolation.test.ts
+  s_bc26533c141395::t_8b2c2347b48a4e 22,148-175,373-375,396
+src/shell/api.ts
+  s_bc26533c141395::t_8b2c2347b48a4e 6,20
+src/core/dashboard/catalog.test.ts
+  s_bc26533c141395::t_8b2c2347b48a4e 1-41
+docs/artifacts/issue-15-proposed-types.ts
+  s_bc26533c141395::t_8b2c2347b48a4e 1-447
+src/shell/dashboard/operations.ts
+  s_bc26533c141395::t_8b2c2347b48a4e 1-54
+src/core/dashboard/catalog.ts
+  s_bc26533c141395::t_8b2c2347b48a4e 1-89
+src/shell/dashboard/repo.ts
+  s_bc26533c141395::t_8b2c2347b48a4e 1-90
+src/shell/dashboard/handlers.test.ts
+  s_bc26533c141395::t_8b2c2347b48a4e 1-215
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.18",
+  "base_commit_sha": "8f5890f95a109c401fe95367bd841b7270ab72fb",
+  "prompts": {},
+  "sessions": {
+    "s_bc26533c141395": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019fb441-7ac2-77f6-b7f7-7925f9bb241e",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

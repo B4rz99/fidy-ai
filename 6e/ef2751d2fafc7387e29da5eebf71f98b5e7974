@@ -1,0 +1,48 @@
+CODING_STANDARDS.md
+  s_b94ce0a75e952d::t_cda8d19fedf57a 74-79
+  s_b94ce0a75e952d::t_40bbc3a62a9e92 80
+src/shell/_shared/response.ts
+  s_b94ce0a75e952d::t_ad08d9b9126734 29,33
+src/shell/testing/isolation.test.ts
+  s_b94ce0a75e952d::t_4f73a156187ec4 44
+  s_b94ce0a75e952d::t_ad08d9b9126734 48
+src/shell/testing/suggested-operations.test.ts
+  s_b94ce0a75e952d::t_4f73a156187ec4 28
+  s_b94ce0a75e952d::t_ad08d9b9126734 30
+src/shell/_shared/partial-input.test.ts
+  s_b94ce0a75e952d::t_ad08d9b9126734 10,226
+  s_b94ce0a75e952d::t_4f73a156187ec4 7,223
+src/shell/_shared/external-endpoints.ts
+  s_b94ce0a75e952d::t_4f73a156187ec4 8
+  s_b94ce0a75e952d::t_ad08d9b9126734 16
+src/shell/testing/openapi.ts
+  s_b94ce0a75e952d::t_4f73a156187ec4 27
+  s_b94ce0a75e952d::t_ad08d9b9126734 37
+src/core/_shared/money.ts
+  s_b94ce0a75e952d::t_ad08d9b9126734 209,349
+  s_b94ce0a75e952d::t_4f73a156187ec4 205,345
+src/shell/_shared/suggested-operations.ts
+  s_b94ce0a75e952d::t_ad08d9b9126734 58
+  s_b94ce0a75e952d::t_62583dd621f2d4 61
+src/shell/_shared/operation-policy.ts
+  s_b94ce0a75e952d::t_4f73a156187ec4 14,25
+  s_b94ce0a75e952d::t_ad08d9b9126734 18,27
+src/shell/_shared/operation-catalog.ts
+  s_b94ce0a75e952d::t_62bc12f976cd04 10,15,18,21
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "6eef2751d2fafc7387e29da5eebf71f98b5e7974",
+  "prompts": {},
+  "sessions": {
+    "s_b94ce0a75e952d": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019fabc5-0a6b-743b-9260-4d7fd2a5be29",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

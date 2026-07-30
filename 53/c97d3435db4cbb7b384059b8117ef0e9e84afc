@@ -1,0 +1,27 @@
+src/core/categories/rules.ts
+  s_9ee0bb9f02704b::t_c7967e82c623d2 19,69,76
+  s_9ee0bb9f02704b::t_c0e34fb31f9ab9 13,59
+  s_9ee0bb9f02704b::t_6f9457018e039e 16-18,20,60-63,70
+  s_9ee0bb9f02704b::t_2796047aed7335 64
+src/core/transactions/rules.ts
+  s_9ee0bb9f02704b::t_fe5804f77a9fad 49
+  s_9ee0bb9f02704b::t_f21d91d077edf3 43-47
+src/shell/transactions/repo.ts
+  s_9ee0bb9f02704b::t_dc305fe3f04a54 240-242,248
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.18",
+  "base_commit_sha": "53c97d3435db4cbb7b384059b8117ef0e9e84afc",
+  "prompts": {},
+  "sessions": {
+    "s_9ee0bb9f02704b": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019fb08e-47c9-7ec6-9f8e-6f1f1210b9bd",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

@@ -1,0 +1,29 @@
+vitest.config.ts
+  s_bc26533c141395::t_d4b188714bb80a 39,42-43,45
+src/shell/dashboard/handlers.test.ts
+  s_bc26533c141395::t_03942d2226ff08 184-195
+  s_bc26533c141395::t_b03b2b9900d9ab 6,156
+  s_bc26533c141395::t_615c342c50ee48 7,124-155,157-183
+  s_bc26533c141395::t_4f936b44c63827 196-198
+  s_bc26533c141395::t_c6ca1d22e4f03a 199
+src/core/dashboard/rules.test.ts
+  s_bc26533c141395::t_f9aa1d8cdd4320 3,356-570
+  s_bc26533c141395::t_9adde01810492a 54-94
+  s_bc26533c141395::t_b0ba8b6a722f47 571
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.18",
+  "base_commit_sha": "aab4f9a9104e899f35cc790e9d2bf44e01cab23a",
+  "prompts": {},
+  "sessions": {
+    "s_bc26533c141395": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019fb441-7ac2-77f6-b7f7-7925f9bb241e",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

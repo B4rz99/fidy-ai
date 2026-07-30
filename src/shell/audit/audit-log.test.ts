@@ -190,7 +190,7 @@ layer(AuditHarness, { excludeTestServices: true, timeout: "30 seconds" })(
               encodeTransactionInput(transactionPayload({ merchant: "Atomic private body" }))
             ),
           });
-          const history = yield* observer.transactions.listTransactions();
+          const history = yield* observer.transactions.listTransactions({ query: {} });
           const entries = yield* observeAuditLogEntries(atomicUserId);
           const writeEvidence = evidenceForToken(entries, atomicWriteTokenId);
 

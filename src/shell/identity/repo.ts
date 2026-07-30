@@ -32,8 +32,8 @@ const userColumns = `id, service_market AS "serviceMarket", locale,
   time_zone AS "timeZone", created_at AS "createdAt"`;
 
 /**
- * Inserts or refreshes one development User with all three launch-context
- * columns supplied independently. Production creation can reuse the same row
+ * Inserts or refreshes one development User with all three context columns
+ * supplied independently. Production creation can reuse the same row
  * boundary without gaining implicit defaults from PostgreSQL.
  */
 export const upsertUser = Effect.fn("upsertUser")(function* (

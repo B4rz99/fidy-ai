@@ -4,6 +4,8 @@ import { type HttpClientError } from "effect/unstable/http";
 import { AgentTokenId } from "~/core/_shared/agent-token";
 import { IanaTimeZone } from "~/core/_shared/context";
 import { UserId } from "~/core/_shared/user";
+import { CategoryKeyword } from "~/core/categories/model";
+import { categoryIds } from "~/core/categories/taxonomy";
 import { TransactionId } from "~/core/transactions/model";
 import { AgentBearerToken, type AgentScope } from "~/core/tokens/model";
 import {
@@ -62,6 +64,55 @@ const probes: Record<OperationId, SuggestedOperationProbe> = {
       (response) => [response]
     ),
 
+  "categories.listCategories": (client) =>
+    Effect.map(client.categories.listCategories(), (response) => [response]),
+
+  "categories.listKeywordRules": (client) =>
+    Effect.map(client.categories.listKeywordRules(), (response) => [response]),
+
+  "categories.createKeywordRule": (client) =>
+    Effect.map(
+      client.categories.createKeywordRule({
+        payload: {
+          keyword: CategoryKeyword.make("probe-create"),
+          categoryId: categoryIds.otros,
+        },
+      }),
+      (response) => [response]
+    ),
+
+  "categories.updateKeywordRule": (client) =>
+    Effect.gen(function* () {
+      const created = yield* client.categories.createKeywordRule({
+        payload: {
+          keyword: CategoryKeyword.make("probe-update-before"),
+          categoryId: categoryIds.otros,
+        },
+      });
+      const updated = yield* client.categories.updateKeywordRule({
+        params: { id: created.data.id },
+        payload: {
+          keyword: CategoryKeyword.make("probe-update-after"),
+          categoryId: categoryIds.transporte,
+        },
+      });
+      return [updated];
+    }),
+
+  "categories.deleteKeywordRule": (client) =>
+    Effect.gen(function* () {
+      const created = yield* client.categories.createKeywordRule({
+        payload: {
+          keyword: CategoryKeyword.make("probe-delete"),
+          categoryId: categoryIds.otros,
+        },
+      });
+      const deleted = yield* client.categories.deleteKeywordRule({
+        params: { id: created.data.id },
+      });
+      return [deleted];
+    }),
+
   "transactions.createTransaction": (client) =>
     Effect.map(
       client.transactions.createTransaction({ payload: transactionPayload() }),
@@ -69,7 +120,7 @@ const probes: Record<OperationId, SuggestedOperationProbe> = {
     ),
 
   "transactions.listTransactions": (client) =>
-    Effect.map(client.transactions.listTransactions(), (response) => [response]),
+    Effect.map(client.transactions.listTransactions({ query: {} }), (response) => [response]),
 
   "transactions.getTransaction": (client, setupClient) =>
     Effect.gen(function* () {
@@ -87,6 +138,40 @@ const probes: Record<OperationId, SuggestedOperationProbe> = {
       }
       const notFound = yield* Schema.decodeUnknownEffect(NotFound)(result.failure);
       return [succeeded, notFound];
+    }),
+
+  "transactions.updateTransaction": (client) =>
+    Effect.gen(function* () {
+      const created = yield* client.transactions.createTransaction({
+        payload: transactionPayload(),
+      });
+      const updated = yield* client.transactions.updateTransaction({
+        params: { id: created.data.id },
+        payload: { ...transactionPayload(), categoryId: categoryIds.otros },
+      });
+      return [updated];
+    }),
+
+  "transactions.deleteTransaction": (client) =>
+    Effect.gen(function* () {
+      const created = yield* client.transactions.createTransaction({
+        payload: transactionPayload(),
+      });
+      const deleted = yield* client.transactions.deleteTransaction({
+        params: { id: created.data.id },
+      });
+      return [deleted];
+    }),
+
+  "transactions.listSourceAttestations": (client, setupClient) =>
+    Effect.gen(function* () {
+      const created = yield* setupClient.transactions.createTransaction({
+        payload: transactionPayload(),
+      });
+      const listed = yield* client.transactions.listSourceAttestations({
+        params: { id: created.data.id },
+      });
+      return [listed];
     }),
 };
 

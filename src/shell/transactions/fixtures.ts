@@ -1,12 +1,13 @@
-import { BigDecimal, DateTime, Effect } from "effect";
+import { BigDecimal, DateTime, Effect, Option } from "effect";
 import { SqlClient } from "effect/unstable/sql";
 import { Currency, Money } from "~/core/_shared/money";
+import { categoryIds } from "~/core/categories/taxonomy";
 import { type CreateTransactionInput } from "~/core/transactions/model";
 
 /** Resets the Transactions slice's harness state between tests. */
 export const truncateTransactions = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
-  yield* sql`TRUNCATE transactions`;
+  yield* sql`TRUNCATE source_attestations, transactions, keyword_rules`;
 });
 
 /**
@@ -27,6 +28,8 @@ export const transactionPayload = (
   }),
   merchant: "El Corral",
   direction: "outflow",
+  categoryId: Option.some(categoryIds.restaurantes),
+  notes: Option.none(),
   occurredAt: DateTime.makeUnsafe("2026-07-20T12:30:00Z"),
   ...overrides,
 });

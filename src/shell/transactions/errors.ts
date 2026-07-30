@@ -18,6 +18,21 @@ const toApiFailure = ({
   readonly caller: SuggestedOperationCaller;
 }): TransactionApiFailure => {
   switch (failure._tag) {
+    case "InvalidTransactionPeriod":
+      return ValidationFailed.make({
+        error: {
+          code: "validation_failed",
+          message: "A transaction period must start before it ends. Correct from or to and retry.",
+          fields: [
+            {
+              path: "from",
+              message: `Expected an instant before ${DateTime.formatIso(failure.to)}, got ${DateTime.formatIso(failure.from)}`,
+            },
+          ],
+        },
+        next: [],
+      });
+
     case "TransactionNotFound":
       return NotFound.make({
         error: {

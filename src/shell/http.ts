@@ -4,6 +4,7 @@ import { HttpApiBuilder } from "effect/unstable/httpapi";
 import { AgentAuthorizationLive } from "~/shell/_shared/authz";
 import { ValidationGateLive } from "~/shell/_shared/errors";
 import { AuditRetentionLive } from "~/shell/audit/retention";
+import { CategoriesLive } from "~/shell/categories/handlers";
 import { MigratorLive } from "~/shell/db/client";
 import { IdentityLive } from "~/shell/identity/handlers";
 import { TransactionsLive } from "~/shell/transactions/handlers";
@@ -26,7 +27,7 @@ export const ApiLive = HttpApiBuilder.layer(FidyApi, { openapiPath: "/openapi.js
   // them: a group captures its middleware from its own context when it builds
   // its routes, so a sibling layer would not be found.
   Layer.provide(
-    Layer.mergeAll(IdentityLive, TransactionsLive).pipe(
+    Layer.mergeAll(IdentityLive, CategoriesLive, TransactionsLive).pipe(
       Layer.provide([ValidationGateLive, AgentAuthorizationLive])
     )
   )

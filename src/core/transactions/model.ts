@@ -1,5 +1,7 @@
-import { BigDecimal, Schema, SchemaTransformation, Struct } from "effect";
-import { Money } from "~/core/_shared/money";
+import { BigDecimal, Function, Schema, SchemaTransformation, Struct } from "effect";
+import { CategoryId } from "~/core/_shared/category";
+import { IanaTimeZone, Locale, ServiceMarket } from "~/core/_shared/context";
+import { Currency, Money } from "~/core/_shared/money";
 
 /**
  * Names one Transaction. Assigned at insert and never sent by a caller, so a
@@ -46,16 +48,8 @@ export const Direction = Schema.Literals(["inflow", "outflow"]).annotate({
 });
 export type Direction = typeof Direction.Type;
 
-/**
- * DateTime.Utc in the domain; when encoded, a validated ISO date-time string
- * that the derived OpenAPI spec advertises as `format: date-time`.
- *
- * Describe fields of this type with `annotateEncoded`, never `annotate`. The
- * spec is generated from the encoded side, so an annotation on the decoded
- * `DateTime.Utc` reaches nothing and reports no error: the description is
- * dropped in silence and the field ships undocumented.
- */
-const UtcTimestamp = Schema.String.annotate({ format: "date-time" }).pipe(
+/** A UTC instant encoded as a validated ISO date-time string. */
+export const UtcTimestamp = Schema.String.annotate({ format: "date-time" }).pipe(
   Schema.decodeTo(Schema.DateTimeUtc, SchemaTransformation.dateTimeUtcFromString)
 );
 
@@ -81,6 +75,10 @@ export const Transaction = Schema.Struct({
       "normalised identifier, so one shop may be spelled several ways across a history.",
   }),
   direction: Direction,
+  categoryId: CategoryId,
+  notes: Schema.OptionFromOptionalKey(
+    Schema.NonEmptyString.check(Schema.isTrimmed()).check(Schema.isMaxLength(500))
+  ),
   occurredAt: UtcTimestamp.pipe(
     Schema.annotateEncoded({
       description:
@@ -113,7 +111,89 @@ export type Transaction = typeof Transaction.Type;
  * two cannot drift (ARCHITECTURE.md §4). There is no owner to send either:
  * ownership is the context the call runs in, not a field (ARCHITECTURE.md §5).
  */
-export const CreateTransactionInput = Transaction.mapFields(Struct.omit(["id", "createdAt"]))
+export const CreateTransactionInput = Transaction.mapFields(
+  Function.flow(
+    Struct.omit(["id", "createdAt"]),
+    Struct.evolve({ categoryId: () => Schema.OptionFromOptionalKey(CategoryId) })
+  )
+)
   .check(positiveTransactionMoney)
   .annotate({ identifier: "CreateTransactionInput" });
 export type CreateTransactionInput = typeof CreateTransactionInput.Type;
+
+/** A complete replacement of editable facts; omission of notes explicitly clears them. */
+export const UpdateTransactionInput = Transaction.mapFields(Struct.omit(["id", "createdAt"]))
+  .check(positiveTransactionMoney)
+  .annotate({ identifier: "UpdateTransactionInput" });
+export type UpdateTransactionInput = typeof UpdateTransactionInput.Type;
+
+/** Facts an extractor may propose, derived from the canonical model and nested Money. */
+export const TransactionExtraction = Transaction.mapFields(
+  Struct.pick(["money", "merchant", "direction", "occurredAt"])
+)
+  .check(positiveTransactionMoney)
+  .annotate({ identifier: "TransactionExtraction" });
+export type TransactionExtraction = typeof TransactionExtraction.Type;
+
+const MerchantFilter = Schema.NonEmptyString.check(Schema.isTrimmed()).check(
+  Schema.isMaxLength(120)
+);
+
+/** The constrained values from which every Transaction history filter is composed. */
+export const TransactionQueryValues = Schema.Struct({
+  from: UtcTimestamp,
+  to: UtcTimestamp,
+  categoryId: CategoryId,
+  merchant: MerchantFilter,
+  direction: Direction,
+  currency: Currency,
+});
+
+/**
+ * Canonical history filters. Every possible absence is explicit, periods are half-open, and every
+ * provided field combines with AND.
+ */
+export const TransactionQuery = Schema.Struct({
+  from: Schema.Option(TransactionQueryValues.fields.from),
+  to: Schema.Option(TransactionQueryValues.fields.to),
+  categoryId: Schema.Option(TransactionQueryValues.fields.categoryId),
+  merchant: Schema.Option(TransactionQueryValues.fields.merchant),
+  direction: Schema.Option(TransactionQueryValues.fields.direction),
+  currency: Schema.Option(TransactionQueryValues.fields.currency),
+}).annotate({ identifier: "TransactionQuery" });
+export type TransactionQuery = typeof TransactionQuery.Type;
+
+/** Stable identity of one immutable provenance statement attached to a Transaction. */
+export const SourceAttestationId = Schema.String.check(Schema.isUUID()).pipe(
+  Schema.brand("SourceAttestationId")
+);
+export type SourceAttestationId = typeof SourceAttestationId.Type;
+
+const SourceName = Schema.NonEmptyString.check(Schema.isTrimmed()).check(Schema.isMaxLength(80));
+
+/** Names the parser, extractor, or manual interpretation contract used at capture time. */
+export const InterpretationRevision = Schema.NonEmptyString.check(Schema.isTrimmed())
+  .check(Schema.isMaxLength(80))
+  .pipe(Schema.brand("InterpretationRevision"));
+export type InterpretationRevision = typeof InterpretationRevision.Type;
+
+/** Immutable evidence of the context that interpreted one manually captured Transaction. */
+export const SourceAttestation = Schema.Struct({
+  id: SourceAttestationId,
+  transactionId: TransactionId,
+  kind: Schema.Literal("manual"),
+  serviceMarket: ServiceMarket,
+  locale: Locale,
+  timeZone: IanaTimeZone,
+  sourceChannel: Schema.OptionFromOptionalKey(SourceName),
+  sourceProvider: Schema.OptionFromOptionalKey(SourceName),
+  interpretationRevision: InterpretationRevision,
+  createdAt: UtcTimestamp,
+}).annotate({ identifier: "SourceAttestation" });
+export type SourceAttestation = typeof SourceAttestation.Type;
+
+/** User interpretation context frozen into provenance when a Transaction is captured. */
+export const CapturedInterpretationContext = SourceAttestation.mapFields(
+  Struct.pick(["serviceMarket", "locale", "timeZone"])
+);
+export type CapturedInterpretationContext = typeof CapturedInterpretationContext.Type;

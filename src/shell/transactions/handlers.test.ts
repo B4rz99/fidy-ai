@@ -1,9 +1,13 @@
 import { expect, layer } from "@effect/vitest";
-import { BigDecimal, DateTime, Effect, Equal, Schema } from "effect";
+import { BigDecimal, DateTime, Effect, Equal, Option, Result, Schema } from "effect";
+import { SqlClient } from "effect/unstable/sql";
+import { IanaTimeZone } from "~/core/_shared/context";
 import { Currency, Money } from "~/core/_shared/money";
+import { categoryIds } from "~/core/categories/taxonomy";
 import { TransactionId } from "~/core/transactions/model";
 import { type SuggestedOperation } from "~/shell/_shared/response";
 import { NotFound, ValidationFailed } from "~/shell/_shared/errors";
+import { defaultUserId } from "~/shell/db/development-seed";
 import { ApiHarness, ApiHarnessClient } from "~/shell/testing/api-harness";
 import { transactionPayload, truncateTransactions } from "./fixtures";
 
@@ -30,11 +34,131 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
 
         const created = yield* client.transactions.createTransaction({ payload });
 
-        expect(created.data).toMatchObject(payload);
+        expect(created.data).toMatchObject({
+          ...payload,
+          categoryId: categoryIds.restaurantes,
+        });
 
-        const listed = yield* client.transactions.listTransactions();
+        const listed = yield* client.transactions.listTransactions({ query: {} });
 
         expect(listed.data).toEqual([created.data]);
+      })
+    );
+
+    it.effect("assigns the fallback before storing an immutable manual attestation", () =>
+      Effect.gen(function* () {
+        yield* truncateTransactions;
+        const client = yield* ApiHarnessClient;
+
+        const created = yield* client.transactions.createTransaction({
+          payload: transactionPayload({
+            merchant: "RÁPPI Turbo",
+            categoryId: Option.none(),
+          }),
+        });
+        const attestations = yield* client.transactions.listSourceAttestations({
+          params: { id: created.data.id },
+        });
+        const sql = yield* SqlClient.SqlClient;
+        const updateAttempt = yield* Effect.result(
+          sql`UPDATE source_attestations SET interpretation_revision = 'tampered' WHERE transaction_id = ${created.data.id}`
+        );
+        const deleteAttempt = yield* Effect.result(
+          sql`DELETE FROM source_attestations WHERE transaction_id = ${created.data.id}`
+        );
+        const retained = yield* client.transactions.listSourceAttestations({
+          params: { id: created.data.id },
+        });
+
+        expect(Result.isFailure(updateAttempt)).toBe(true);
+        expect(Result.isFailure(deleteAttempt)).toBe(true);
+        expect(retained.data).toEqual(attestations.data);
+        expect(created.data.categoryId).toBe(categoryIds.otros);
+        expect(attestations.data).toHaveLength(1);
+        expect(attestations.data[0]).toMatchObject({
+          transactionId: created.data.id,
+          kind: "manual",
+          serviceMarket: "CO",
+          locale: "es-CO",
+          timeZone: "America/Bogota",
+          interpretationRevision: "manual-v1",
+        });
+      })
+    );
+
+    it.effect("uses the explicit fallback without inferring a Category from merchant text", () =>
+      Effect.gen(function* () {
+        yield* truncateTransactions;
+        const client = yield* ApiHarnessClient;
+
+        const transfer = yield* client.transactions.createTransaction({
+          payload: transactionPayload({
+            merchant: "Transferencia a Juan",
+            categoryId: Option.none(),
+          }),
+        });
+        const walletPurchase = yield* client.transactions.createTransaction({
+          payload: transactionPayload({ merchant: "Nequi El Corral", categoryId: Option.none() }),
+        });
+
+        expect(transfer.data.categoryId).toBe(categoryIds.otros);
+        expect(walletPurchase.data.categoryId).toBe(categoryIds.otros);
+      })
+    );
+
+    it.effect("rolls capture back when its SourceAttestation cannot be inserted", () =>
+      Effect.gen(function* () {
+        yield* truncateTransactions;
+        const client = yield* ApiHarnessClient;
+        const sql = yield* SqlClient.SqlClient;
+        yield* sql`
+          CREATE OR REPLACE FUNCTION reject_manual_attestation() RETURNS trigger AS $$
+          BEGIN
+            RAISE EXCEPTION 'injected attestation failure';
+          END;
+          $$ LANGUAGE plpgsql
+        `;
+        yield* sql`DROP TRIGGER IF EXISTS reject_manual_attestation ON source_attestations`;
+        yield* sql`
+          CREATE TRIGGER reject_manual_attestation BEFORE INSERT ON source_attestations
+          FOR EACH ROW EXECUTE FUNCTION reject_manual_attestation()
+        `;
+        const removeFailure = sql`
+          DROP TRIGGER IF EXISTS reject_manual_attestation ON source_attestations
+        `.pipe(
+          Effect.andThen(sql`DROP FUNCTION IF EXISTS reject_manual_attestation()`),
+          Effect.orDie
+        );
+
+        yield* Effect.gen(function* () {
+          const failure = yield* Effect.flip(
+            client.transactions.createTransaction({ payload: transactionPayload() })
+          );
+          expect(failure).toBeDefined();
+          const history = yield* client.transactions.listTransactions({ query: {} });
+          expect(history.data).toEqual([]);
+        }).pipe(Effect.ensuring(removeFailure));
+      })
+    );
+
+    it.effect("continues capture beyond a large retained Transaction history", () =>
+      Effect.gen(function* () {
+        yield* truncateTransactions;
+        const client = yield* ApiHarnessClient;
+        const sql = yield* SqlClient.SqlClient;
+        yield* sql`
+          INSERT INTO transactions
+            (user_id, amount, currency, merchant, direction, category_id, occurred_at)
+          SELECT ${defaultUserId}, 1, 'COP', 'History seed', 'outflow',
+            ${categoryIds.otros}, '2026-01-01T00:00:00Z'
+          FROM generate_series(1, 100000)
+        `;
+
+        const created = yield* client.transactions.createTransaction({
+          payload: transactionPayload({ merchant: "After large history" }),
+        });
+
+        expect(created.data.merchant).toBe("After large history");
       })
     );
 
@@ -66,7 +190,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         const read = yield* client.transactions.getTransaction({
           params: { id: created.data.id },
         });
-        const listed = yield* client.transactions.listTransactions();
+        const listed = yield* client.transactions.listTransactions({ query: {} });
 
         expect(Equal.equals(created.data.money.amount, exactMoney.amount)).toBe(true);
         expect(read.data).toEqual(created.data);
@@ -79,7 +203,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         yield* truncateTransactions;
         const client = yield* ApiHarnessClient;
 
-        const listed = yield* client.transactions.listTransactions();
+        const listed = yield* client.transactions.listTransactions({ query: {} });
 
         expect(listed).toEqual({ data: [], next: [] });
       })
@@ -112,9 +236,172 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
             : ""
         ).not.toContain(DateTime.formatIso(rejectedOccurredAt));
 
-        const listed = yield* client.transactions.listTransactions();
+        const listed = yield* client.transactions.listTransactions({ query: {} });
 
         expect(listed.data).toEqual([]);
+      })
+    );
+
+    it.effect("rejects a period whose start is not before its end", () =>
+      Effect.gen(function* () {
+        yield* truncateTransactions;
+        const client = yield* ApiHarnessClient;
+        const failure = yield* Effect.flip(
+          client.transactions.listTransactions({
+            query: {
+              from: utcDateTime("2026-08-01T00:00:00Z"),
+              to: utcDateTime("2026-07-01T00:00:00Z"),
+            },
+          })
+        );
+
+        expect(isValidationFailed(failure)).toBe(true);
+        expect(isValidationFailed(failure) ? failure.error.fields[0]?.path : undefined).toBe(
+          "from"
+        );
+      })
+    );
+
+    it.effect("combines period, Category, merchant, direction, and Currency filters", () =>
+      Effect.gen(function* () {
+        yield* truncateTransactions;
+        const client = yield* ApiHarnessClient;
+
+        const wanted = yield* client.transactions.createTransaction({
+          payload: transactionPayload({
+            merchant: "RÁPPI Turbo",
+            categoryId: Option.some(categoryIds.domicilios),
+            occurredAt: utcDateTime("2026-07-20T12:30:00Z"),
+          }),
+        });
+        yield* client.transactions.createTransaction({
+          payload: transactionPayload({
+            merchant: "Nómina",
+            direction: "inflow",
+            categoryId: Option.some(categoryIds.ingresos),
+            occurredAt: utcDateTime("2026-07-10T12:30:00Z"),
+          }),
+        });
+        yield* client.transactions.createTransaction({
+          payload: transactionPayload({
+            merchant: "Rappi",
+            money: Money.make({ amount: BigDecimal.fromStringUnsafe("10"), currency: "USD" }),
+            categoryId: Option.some(categoryIds.domicilios),
+            occurredAt: utcDateTime("2026-07-21T12:30:00Z"),
+          }),
+        });
+
+        const listed = yield* client.transactions.listTransactions({
+          query: {
+            from: utcDateTime("2026-07-15T00:00:00Z"),
+            to: utcDateTime("2026-08-01T00:00:00Z"),
+            categoryId: categoryIds.domicilios,
+            merchant: "rappi",
+            direction: "outflow",
+            currency: "COP",
+          },
+        });
+
+        expect(listed.data).toEqual([wanted.data]);
+      })
+    );
+
+    it.effect("uses Transaction identity to stabilize newest-first ties", () =>
+      Effect.gen(function* () {
+        yield* truncateTransactions;
+        const client = yield* ApiHarnessClient;
+        const sql = yield* SqlClient.SqlClient;
+        const occurredAt = utcDateTime("2026-07-20T12:30:00Z");
+        const first = yield* client.transactions.createTransaction({
+          payload: transactionPayload({ merchant: "Primera", occurredAt }),
+        });
+        const second = yield* client.transactions.createTransaction({
+          payload: transactionPayload({ merchant: "Segunda", occurredAt }),
+        });
+        yield* sql`
+          UPDATE transactions SET created_at = '2026-07-21T00:00:00Z'
+          WHERE id IN (${first.data.id}, ${second.data.id})
+        `;
+
+        const listed = yield* client.transactions.listTransactions({ query: {} });
+        const expectedIds = [first.data.id, second.data.id].toSorted((left, right) =>
+          right.localeCompare(left)
+        );
+        expect(listed.data.map((transaction) => transaction.id)).toEqual(expectedIds);
+      })
+    );
+
+    it.effect("retains capture context after the User changes preferences", () =>
+      Effect.gen(function* () {
+        yield* truncateTransactions;
+        const client = yield* ApiHarnessClient;
+        const created = yield* client.transactions.createTransaction({
+          payload: transactionPayload(),
+        });
+        const restore = client.identity
+          .updateUserPreferences({
+            payload: { locale: "es-CO", timeZone: IanaTimeZone.make("America/Bogota") },
+          })
+          .pipe(Effect.orDie);
+
+        yield* Effect.gen(function* () {
+          yield* client.identity.updateUserPreferences({
+            payload: { locale: "es-CO", timeZone: IanaTimeZone.make("America/Lima") },
+          });
+          const attestations = yield* client.transactions.listSourceAttestations({
+            params: { id: created.data.id },
+          });
+          expect(attestations.data[0]?.timeZone).toBe("America/Bogota");
+        }).pipe(Effect.ensuring(restore));
+      })
+    );
+
+    it.effect("corrects a transaction, preserves provenance, and deletes it without restore", () =>
+      Effect.gen(function* () {
+        yield* truncateTransactions;
+        const client = yield* ApiHarnessClient;
+        const created = yield* client.transactions.createTransaction({
+          payload: transactionPayload(),
+        });
+        const before = yield* client.transactions.listSourceAttestations({
+          params: { id: created.data.id },
+        });
+
+        const updated = yield* client.transactions.updateTransaction({
+          params: { id: created.data.id },
+          payload: {
+            money: created.data.money,
+            merchant: "El Corral corregido",
+            direction: created.data.direction,
+            categoryId: categoryIds.otros,
+            notes: Option.some("Corrección del usuario"),
+            occurredAt: created.data.occurredAt,
+          },
+        });
+        const after = yield* client.transactions.listSourceAttestations({
+          params: { id: created.data.id },
+        });
+
+        expect(updated.data).toMatchObject({
+          id: created.data.id,
+          merchant: "El Corral corregido",
+          categoryId: categoryIds.otros,
+          notes: Option.some("Corrección del usuario"),
+        });
+        expect(after.data).toEqual(before.data);
+
+        expect(
+          (yield* client.transactions.deleteTransaction({ params: { id: created.data.id } })).data
+        ).toBe(created.data.id);
+        expect((yield* client.transactions.listTransactions({ query: {} })).data).toEqual([]);
+        const retained = yield* client.transactions.listSourceAttestations({
+          params: { id: created.data.id },
+        });
+        const deletedAgain = yield* Effect.flip(
+          client.transactions.deleteTransaction({ params: { id: created.data.id } })
+        );
+        expect(retained.data).toEqual(before.data);
+        expect(isNotFound(deletedAgain)).toBe(true);
       })
     );
 

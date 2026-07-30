@@ -2,7 +2,7 @@ import { DateTime, Option, Schema } from "effect";
 
 /**
  * A jurisdiction where fidy's product, providers, terms, and compliance
- * behavior are enabled. Colombia is the sole launch value; Currency, locale,
+ * behavior are enabled. Colombia is the sole supported value; Currency, locale,
  * time zone, and channel never determine it.
  */
 export const ServiceMarket = Schema.Literal("CO").annotate({
@@ -11,8 +11,8 @@ export const ServiceMarket = Schema.Literal("CO").annotate({
 export type ServiceMarket = typeof ServiceMarket.Type;
 
 /**
- * A supported presentation locale. Launch presentation is Spanish for
- * Colombia only, and this value never supplies monetary or market meaning.
+ * A supported presentation locale. Presentation is Spanish for Colombia only,
+ * and this value never supplies monetary or market meaning.
  */
 export const Locale = Schema.Literal("es-CO").annotate({ identifier: "Locale" });
 export type Locale = typeof Locale.Type;

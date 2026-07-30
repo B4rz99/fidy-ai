@@ -6,9 +6,9 @@ import { User } from "./model";
 type ColombianUserInput = Readonly<{ readonly createdAt: DateTime.Utc }>;
 
 /**
- * Creates the stable User record for a new Colombian launch user. The caller
- * supplies identity and time from the shell; this decision supplies each launch
- * context value explicitly and performs no inference between them.
+ * Creates the stable User record for a new Colombian User. The caller supplies
+ * identity and time from the shell; this decision supplies each context value
+ * explicitly and performs no inference between them.
  */
 export const makeColombianUser = Effect.fn("makeColombianUser")(function* (
   userId: UserId,

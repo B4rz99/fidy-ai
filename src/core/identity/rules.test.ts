@@ -6,7 +6,7 @@ import { makeColombianUser } from "./rules";
 const userId = UserId.make("f1d1a000-0000-4000-8000-000000000001");
 const createdAt = DateTime.makeUnsafe("2026-07-28T00:00:00Z");
 
-it.effect("creates a Colombian User with explicit independent launch context", () =>
+it.effect("creates a Colombian User with explicit independent context", () =>
   Effect.gen(function* () {
     const user = yield* makeColombianUser(userId, { createdAt });
 

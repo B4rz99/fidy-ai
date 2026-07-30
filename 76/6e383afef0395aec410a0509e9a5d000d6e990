@@ -1,0 +1,116 @@
+src/shell/db/migrations/registry.ts
+  s_5f6ec868ec1711::t_a6af7ef28169e4 5,19-20
+  s_5f6ec868ec1711::t_27eb0a28f2554b 4
+src/shell/testing/authorization.test.ts
+  s_5f6ec868ec1711::t_cc62744784240e 67,69
+  s_5f6ec868ec1711::t_68ba94393af96c 70
+  s_5f6ec868ec1711::t_cde8be9588db64 6-7,12,38-40,63-65,183,197,207,224-315
+src/shell/testing/suggested-operations.test.ts
+  s_5f6ec868ec1711::t_751f020d14d057 103,117,156,167,178-179
+  s_5f6ec868ec1711::t_ce142f9f7e63a5 100-102
+  s_5f6ec868ec1711::t_de68c2b28ef2ff 104-106,114-116
+  s_5f6ec868ec1711::t_ed54c289f4e19b 118
+  s_5f6ec868ec1711::t_e973f14f998bd6 153-155
+  s_5f6ec868ec1711::t_3e19e6df0edfb6 157-159,164-166
+  s_5f6ec868ec1711::t_3e77cd5eef456e 168-170,175-177
+  s_5f6ec868ec1711::t_051d452791755b 8-9,70-99,107-113,126,146-152,160-163,171-174
+src/shell/http.ts
+  s_5f6ec868ec1711::t_c7bb0180533b8b 31
+  s_5f6ec868ec1711::t_5014990ba1a37e 7
+CONTEXT.md
+  s_5f6ec868ec1711::t_ecf7e4d14d118e 59-68
+dependency-policy.json
+  s_5f6ec868ec1711::t_b55081756b26cf 20-27
+src/core/_shared/category.ts
+  s_5f6ec868ec1711::t_e90e23fe0fc852 1-8
+src/core/_shared/context.ts
+  s_5f6ec868ec1711::t_430a41a2363cab 5,14-15
+src/core/_shared/money.ts
+  s_5f6ec868ec1711::t_e80ffccd222f93 191
+src/core/_shared/option.ts
+  s_5f6ec868ec1711::t_5dda54649c478f 1-6
+src/core/categories/errors.ts
+  s_5f6ec868ec1711::t_ee16451633236a 1-30
+src/core/categories/model.ts
+  s_5f6ec868ec1711::t_3249e78b0fd3e7 1-63
+src/core/categories/rules.test.ts
+  s_5f6ec868ec1711::t_070326e99888bc 1-76
+src/core/categories/rules.ts
+  s_5f6ec868ec1711::t_4cb4b9aa96f457 1-73
+src/core/categories/taxonomy.ts
+  s_5f6ec868ec1711::t_da3ec60cacf304 1-58
+src/core/identity/rules.test.ts
+  s_5f6ec868ec1711::t_6e7bcd41c5dc1a 9
+src/core/identity/rules.ts
+  s_5f6ec868ec1711::t_ec5778f8c44a64 9-11
+src/core/transactions/errors.ts
+  s_5f6ec868ec1711::t_9d53300b2697c7 29-34,45-48
+src/core/transactions/model.test.ts
+  s_5f6ec868ec1711::t_1bc7bed32b28cd 3,7-8,19,60-79
+src/core/transactions/model.ts
+  s_5f6ec868ec1711::t_863a2cd647f86a 1-4,51-52,78-81,114-119,123-199
+src/core/transactions/rules.test.ts
+  s_5f6ec868ec1711::t_76bb9d03e2783b 2-3,32-45
+src/core/transactions/rules.ts
+  s_5f6ec868ec1711::t_613c298340a83c 2-3,18-23,27-39
+src/shell/_shared/suggested-operations.test.ts
+  s_5f6ec868ec1711::t_1b4425855c64f5 4,92,121-123
+src/shell/api.ts
+  s_5f6ec868ec1711::t_f22cd545310ac6 5,18
+src/shell/audit/audit-log.test.ts
+  s_5f6ec868ec1711::t_a90f4cb795a3f2 193
+src/shell/categories/categorizer.ts
+  s_5f6ec868ec1711::t_42a83a272363e8 1-33
+src/shell/categories/errors.ts
+  s_5f6ec868ec1711::t_4cacbda3171b22 1-48
+src/shell/categories/handlers.test.ts
+  s_5f6ec868ec1711::t_601496f7fe92b8 1-157
+src/shell/categories/handlers.ts
+  s_5f6ec868ec1711::t_45f0544a0dd0bb 1-165
+src/shell/categories/operations.ts
+  s_5f6ec868ec1711::t_909791f71389e0 1-75
+src/shell/categories/repo.ts
+  s_5f6ec868ec1711::t_38b3e7c1fc5d93 1-126
+src/shell/db/migrations/0002-create-identities-and-agent-tokens.ts
+  s_5f6ec868ec1711::t_da65870d75bf11 6
+src/shell/db/migrations/0004-categorized-transactions.ts
+  s_5f6ec868ec1711::t_4e6d95fe0745ce 1-88
+src/shell/identity/handlers.test.ts
+  s_5f6ec868ec1711::t_b08a81a0d061ae 10
+src/shell/identity/repo.ts
+  s_5f6ec868ec1711::t_2d1706ef175c21 35-36
+src/shell/identity/whatsapp-identity.test.ts
+  s_5f6ec868ec1711::t_8a5ad2e72f0002 40
+src/shell/transactions/errors.ts
+  s_5f6ec868ec1711::t_6e02d72bb552b4 21-35
+src/shell/transactions/fixtures.ts
+  s_5f6ec868ec1711::t_450df22e03de4b 1,4,10,31-32
+src/shell/transactions/handlers.test.ts
+  s_5f6ec868ec1711::t_2260d824ca680e 2-4,6,10,37-40,42,48-164,193,206,239,245-407
+src/shell/transactions/handlers.ts
+  s_5f6ec868ec1711::t_ac574bbe28d06a 1,3-6,8-15,23-26,28-36,40,44-76,78,90-97,113,115-128,135-155,161-184
+src/shell/transactions/operations.test.ts
+  s_5f6ec868ec1711::t_81627a3dff3bff 48,336
+src/shell/transactions/operations.ts
+  s_5f6ec868ec1711::t_7f28f296a4cdf7 3-11,15-26,28-29,31-104
+src/shell/transactions/repo.ts
+  s_5f6ec868ec1711::t_dd785e981da7b1 1,3,6-15,20-23,28-41,43-44,46-68,70-85,88-89,91-111,114-173,176-193,196-260,262-264,266-271,273-291
+src/shell/testing/isolation.test.ts
+  s_5f6ec868ec1711::t_8b7e2401ba41dd 6-7,101-162,165,256-259,265-304
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.18",
+  "base_commit_sha": "766e383afef0395aec410a0509e9a5d000d6e990",
+  "prompts": {},
+  "sessions": {
+    "s_5f6ec868ec1711": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019fb436-98d5-71cf-9ea7-058bc2bccfc2",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

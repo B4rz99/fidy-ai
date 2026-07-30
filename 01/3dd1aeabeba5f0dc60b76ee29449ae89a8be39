@@ -1,0 +1,26 @@
+README.md
+  s_b94ce0a75e952d::t_455a081ce1284d 47
+src/shell/audit/retention.ts
+  s_b94ce0a75e952d::t_5f66f7529c8111 1,4,7-8,10-11,13-17,24,28-29
+  s_b94ce0a75e952d::t_97b358228d9749 18-21
+ARCHITECTURE.md
+  s_b94ce0a75e952d::t_6103e818f4f959 234
+src/shell/audit/retention.test.ts
+  s_b94ce0a75e952d::t_7847841c28c9c9 2,8,13,39
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "013dd1aeabeba5f0dc60b76ee29449ae89a8be39",
+  "prompts": {},
+  "sessions": {
+    "s_b94ce0a75e952d": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019fabc5-0a6b-743b-9260-4d7fd2a5be29",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

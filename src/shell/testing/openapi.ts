@@ -2,12 +2,13 @@ import { expect } from "@effect/vitest";
 import { Effect, Option, Schema } from "effect";
 import { HttpClient } from "effect/unstable/http";
 import { AgentScope } from "~/core/tokens/model";
-import { OperationCostClass } from "~/shell/_shared/operation-policy";
+import { OperationCostClass, OperationTier } from "~/shell/_shared/operation-policy";
 
 const SpecOperation = Schema.Struct({
   operationId: Schema.String,
   description: Schema.optional(Schema.String),
   "x-fidy-required-scope": Schema.optional(AgentScope),
+  "x-fidy-required-tier": Schema.optional(OperationTier),
   "x-fidy-cost-class": Schema.optional(OperationCostClass),
 });
 
@@ -23,15 +24,17 @@ const publishedSpec = Effect.gen(function* () {
 });
 
 /** One canonical operation, as the spec presents it to a calling agent. */
-export interface PublishedOperation {
+export type PublishedOperation = {
   readonly id: string;
   /** `None` when the spec carries no `description` at all for this operation. */
   readonly description: Option.Option<string>;
   /** `None` when the spec omits the canonical operation's required-scope metadata. */
   readonly requiredScope: Option.Option<AgentScope>;
+  /** `None` when the spec omits the canonical operation's required-tier metadata. */
+  readonly requiredTier: Option.Option<OperationTier>;
   /** `None` when the spec omits the canonical operation's cost-class metadata. */
   readonly costClass: Option.Option<OperationCostClass>;
-}
+};
 
 /**
  * Every canonical operation the running server actually publishes, read back
@@ -49,6 +52,7 @@ export const publishedOperations = Effect.gen(function* () {
           id: operation.operationId,
           description: Option.fromUndefinedOr(operation.description),
           requiredScope: Option.fromUndefinedOr(operation["x-fidy-required-scope"]),
+          requiredTier: Option.fromUndefinedOr(operation["x-fidy-required-tier"]),
           costClass: Option.fromUndefinedOr(operation["x-fidy-cost-class"]),
         })
       )

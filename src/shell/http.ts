@@ -3,6 +3,7 @@ import { HttpRouter, HttpServerResponse, HttpStaticServer } from "effect/unstabl
 import { HttpApiBuilder } from "effect/unstable/httpapi";
 import { AgentAuthorizationLive } from "~/shell/_shared/authz";
 import { ValidationGateLive } from "~/shell/_shared/errors";
+import { AuditRetentionLive } from "~/shell/audit/retention";
 import { MigratorLive } from "~/shell/db/client";
 import { IdentityLive } from "~/shell/identity/handlers";
 import { TransactionsLive } from "~/shell/transactions/handlers";
@@ -53,10 +54,12 @@ const StaticLive = HttpStaticServer.layer({ root: "public", spa: true });
 export const HttpLive = HttpRouter.serve(Layer.mergeAll(ApiLive, HealthLive, StaticLive));
 
 /**
- * The whole service, and the layer to launch. The server does not bind until
- * every pending migration has run, so no handler can meet a schema older than
- * the code querying it. What is left to supply is the environment: Postgres,
- * an HTTP server, and the platform file, path, and HTTP services used to serve
- * the static shell.
+ * The whole service, and the layer to launch. The server and AuditLogEntry
+ * retention worker do not start until every pending migration has run, so
+ * neither can meet a schema older than the code querying it. What is left to
+ * supply is the environment: Postgres, an HTTP server, and the platform file,
+ * path, and HTTP services used to serve the static shell.
  */
-export const AppLive = HttpLive.pipe(Layer.provide(MigratorLive));
+export const AppLive = Layer.mergeAll(HttpLive, AuditRetentionLive).pipe(
+  Layer.provide(MigratorLive)
+);

@@ -75,17 +75,22 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
       () =>
         Effect.gen(function* () {
           yield* truncateTransactions;
+          const privateValue = "fin_private_+573001234567_provider-message-42";
 
           const response = yield* HttpClient.post("/transactions", {
             headers: headersFor(defaultAgentBearer),
-            body: HttpBody.jsonUnsafe({ money: { amount: "-5", currency: "ZZZ" } }),
+            body: HttpBody.jsonUnsafe({
+              money: { amount: privateValue, currency: "ZZZ" },
+            }),
           });
           const body = yield* response.json;
+          const encodedBody = yield* Schema.encodeUnknownEffect(Schema.UnknownFromJsonString)(body);
 
           expect(body).toMatchObject({
             error: { code: "validation_failed" },
             next: [],
           });
+          expect(encodedBody).not.toContain(privateValue);
         })
     );
 

@@ -4,8 +4,13 @@ import { TransactionNotFound } from "~/core/transactions/errors";
 import { type TransactionId } from "~/core/transactions/model";
 import { checkAlreadyOccurred } from "~/core/transactions/rules";
 import { resolveCaller } from "~/shell/_shared/authz";
-import { FidyApi, operationId } from "~/shell/api";
-import { toApiFailure } from "./errors";
+import {
+  checkpointSuggestedOperations,
+  type SuggestedOperationCaller,
+  suggestOperation,
+} from "~/shell/_shared/suggested-operations";
+import { FidyApi } from "~/shell/api";
+import { mapTransactionFailure } from "./errors";
 import { findTransaction, insertTransaction, listTransactions } from "./repo";
 
 /**
@@ -14,6 +19,16 @@ import { findTransaction, insertTransaction, listTransactions } from "./repo";
  */
 const missingTransaction = (transactionId: TransactionId) => () =>
   new TransactionNotFound({ transactionId });
+
+const suggestedOperationCaller = (
+  scopes: SuggestedOperationCaller["scopes"]
+): SuggestedOperationCaller => ({
+  scopes,
+  // Every User is free until the billing slice introduces Subscription state.
+  // Keeping the value explicit makes that future shell input visible rather
+  // than hiding it in the checkpoint or inferring it from another field.
+  tier: "free",
+});
 
 /**
  * Load, decide, persist — and, first, whose. Each handler resolves the request
@@ -29,7 +44,8 @@ export const TransactionsLive = HttpApiBuilder.group(FidyApi, "transactions", (h
   handlers
     .handle("createTransaction", ({ payload, request }) =>
       Effect.gen(function* () {
-        const { subjectUserId: userId } = yield* resolveCaller(request);
+        const { scopes, subjectUserId: userId } = yield* resolveCaller(request);
+        const caller = suggestedOperationCaller(scopes);
 
         // The clock is read here and handed to core as a value, because core
         // reads no clock (ARCHITECTURE.md §3). The rule cannot live in the
@@ -37,19 +53,22 @@ export const TransactionsLive = HttpApiBuilder.group(FidyApi, "transactions", (h
         // of the payload alone.
         const now = yield* DateTime.now;
         yield* checkAlreadyOccurred({ occurredAt: payload.occurredAt, now }).pipe(
-          Effect.mapError(toApiFailure)
+          mapTransactionFailure({ caller })
         );
 
         const transaction = yield* insertTransaction({ userId, input: payload });
 
         return {
           data: transaction,
-          next: [
-            {
-              tool: operationId("transactions.listTransactions"),
-              hint: "List transactions to see the new entry in the history.",
-            },
-          ],
+          next: checkpointSuggestedOperations({
+            candidates: [
+              suggestOperation({
+                tool: "transactions.listTransactions",
+                hint: "List transactions to see the new entry in the history.",
+              }),
+            ],
+            caller,
+          }),
         };
       })
     )
@@ -63,7 +82,8 @@ export const TransactionsLive = HttpApiBuilder.group(FidyApi, "transactions", (h
     )
     .handle("getTransaction", ({ params, request }) =>
       Effect.gen(function* () {
-        const { subjectUserId: userId } = yield* resolveCaller(request);
+        const { scopes, subjectUserId: userId } = yield* resolveCaller(request);
+        const caller = suggestedOperationCaller(scopes);
         const found = yield* findTransaction({ userId, id: params.id });
 
         // Here is where absence stops being data and becomes a failure: this
@@ -72,7 +92,7 @@ export const TransactionsLive = HttpApiBuilder.group(FidyApi, "transactions", (h
         // absence as an empty history and succeeds.
         const transaction = yield* found.pipe(
           Effect.fromOption(missingTransaction(params.id)),
-          Effect.mapError(toApiFailure)
+          mapTransactionFailure({ caller })
         );
 
         return { data: transaction, next: [] };

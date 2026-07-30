@@ -71,6 +71,13 @@ Unions are cheap to handle safely because a missing case is a build failure.
 **This binds the model, not the storage.** A discriminated union rarely maps cleanly onto relational
 columns, so the row schema may be flatter, and the repo's decode is where the two reconcile.
 
+### Type declarations
+
+Use `type` aliases for first-party object shapes. They are closed declarations and also compose with
+unions, tuples, mapped types, and conditional types. Use `interface` only when declaration merging
+or module augmentation is deliberately required; never leave a shape open for hypothetical future
+extension.
+
 ### Tuples
 
 - **Fixed arity — yes.** If there are exactly three of something, do not type it as an array of
@@ -110,7 +117,7 @@ core/<slice>/     model.ts     the canonical schemas
                   rules.ts     pure decisions — omitted where there are none
                   errors.ts    the Data.TaggedError union
 
-shell/<slice>/    operations.ts  canonical operation definitions — HttpApiGroup, paths, scopes, cost classes
+shell/<slice>/    operations.ts  canonical operation definitions — HttpApiGroup, paths, scopes, tiers, cost classes
                   repo.ts      SQL and row schemas
                   handlers.ts  load → decide → persist
                   errors.ts    the exhaustive core-to-API mapper
@@ -171,14 +178,14 @@ Placement, tiers and responsibilities are in ARCHITECTURE.md §8. What review lo
 - **Descriptions are behaviour sentences**, not method names: _"rejects exponent notation before
   storing Money"_ or _"rejects more fractional digits than the Currency permits"_, not
   _"Money validation"_.
-- **Exercise the public interface.** Never mock an internal collaborator.
+- **Exercise the public interface.** Never mock an internal collaborator. Pure exported policy
+  checkpoints may be tested directly, but their integration still needs API-seam coverage.
 - **Core tests are not a loophole for testing the shell.** No mocked repos, no stubbed handlers.
   Wanting to test `handlers.ts` in isolation means a decision belongs in core.
 - **Fixtures are builders with sensible defaults**, overridden per test with only the fields that
   matter, so a reader sees immediately what the test is about.
-- **Prefer a derived guard over a hand-kept list** wherever the operation definitions can supply the list. The
-  isolation and description tests both enumerate from the API definition, so a new operation is covered
-  without anyone remembering. The suggested operation check does not yet — see ARCHITECTURE.md §8.
+- **Prefer a derived guard over a hand-kept list** wherever the assembled API can supply the
+  operation set; use exhaustive typed probes when each operation needs explicit behavior.
 
 ---
 
@@ -190,6 +197,9 @@ Presence is enforced; **voice is not**, and voice is what makes it useful.
 agent toolkit — it is what a calling agent reads at runtime, so it is product surface rather than
 developer comfort. Write to an agent: what the operation does and when to reach for it, in English,
 not implementation detail. Follow the voice already set by suggested operation hints.
+
+Construct SuggestedOperations with `suggestOperation`; checkpoint every non-empty `next` by caller
+scope and tier. Hints are one English sentence of at most 140 characters.
 
 ---
 

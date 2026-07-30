@@ -165,7 +165,34 @@ const requestPart: Record<Exclude<HttpApiError.HttpApiSchemaError["kind"], "Body
   Payload: "request body",
 };
 
-const formatIssue = SchemaIssue.makeFormatterStandardSchemaV1();
+const formatIssue = SchemaIssue.makeFormatterStandardSchemaV1({
+  leafHook: (issue) => {
+    switch (issue._tag) {
+      case "MissingKey":
+        return "Missing key";
+      case "UnexpectedKey":
+        return "Unexpected key";
+      case "OneOf":
+        return "Expected exactly one schema member to match";
+      case "Forbidden":
+        return "Expected an operation allowed by this schema";
+      case "InvalidValue":
+        return "Expected a value accepted by this schema";
+      case "InvalidType":
+        return SchemaIssue.defaultLeafHook(issue).replace(/, got[\s\S]*$/u, "");
+    }
+  },
+  checkHook: (issue) => {
+    const annotated = SchemaIssue.defaultCheckHook(issue);
+    if (annotated !== undefined) return annotated;
+    if (issue.issue._tag !== "InvalidValue") return undefined;
+
+    const expected = issue.filter.annotations?.expected;
+    return typeof expected === "string"
+      ? `Expected ${expected}`
+      : "Expected a value satisfying this schema's constraints";
+  },
+});
 
 /** A `PropertyKey`, or the `{ key }` wrapper Standard Schema also permits. */
 const segmentName = (segment: PropertyKey | { readonly key: PropertyKey }): string =>

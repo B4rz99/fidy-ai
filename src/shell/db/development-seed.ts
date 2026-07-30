@@ -24,7 +24,8 @@ export const defaultUserId = UserId.make("f1d1a000-0000-4000-8000-000000000001")
 export const defaultWhatsAppPhone = E164PhoneNumber.make("+573001234567");
 
 const defaultCreatedAt = DateTime.makeUnsafe("2026-01-01T00:00:00Z");
-const developmentAgentTokenId = AgentTokenId.make("f1d1a000-0000-4000-8000-000000000002");
+/** Stable AgentToken id behind the local development and API-seam bearer. */
+export const defaultAgentTokenId = AgentTokenId.make("f1d1a000-0000-4000-8000-000000000002");
 const defaultAgentScopes = AgentTokenScopes.make(["read", "write", "dashboard"]);
 
 /**
@@ -98,7 +99,7 @@ export const seedDevelopmentIdentity = (bearer: AgentBearerToken) =>
   Effect.gen(function* () {
     const seeded = yield* seedAgentIdentity({
       bearer,
-      tokenId: developmentAgentTokenId,
+      tokenId: defaultAgentTokenId,
     });
 
     yield* associateWhatsAppIdentity(defaultUserId, {

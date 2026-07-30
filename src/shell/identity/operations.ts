@@ -17,7 +17,9 @@ export const IdentityGroup = HttpApiGroup.make("identity").add(
       "Get the stable User behind this AgentToken and the independently stored ServiceMarket, " +
         "locale, and IANA time zone. Use it before interpreting dates or presenting data to the User."
     )
-    .annotateMerge(operationPolicy({ requiredScope: "read", costClass: "cheap" })),
+    .annotateMerge(
+      operationPolicy({ requiredScope: "read", requiredTier: "free", costClass: "cheap" })
+    ),
   HttpApiEndpoint.patch("updateUserPreferences", "/user/preferences", {
     payload: UserPreferences,
     success: OperationResponse(User),
@@ -27,5 +29,7 @@ export const IdentityGroup = HttpApiGroup.make("identity").add(
       "Update the User's editable presentation locale and named IANA time zone. Use it when the " +
         "User asks to change either preference; ServiceMarket cannot be changed here."
     )
-    .annotateMerge(operationPolicy({ requiredScope: "write", costClass: "cheap" }))
+    .annotateMerge(
+      operationPolicy({ requiredScope: "write", requiredTier: "free", costClass: "cheap" })
+    )
 );

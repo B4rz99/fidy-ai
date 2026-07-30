@@ -1,6 +1,7 @@
 import { HttpApi, type HttpApiGroup, OpenApi } from "effect/unstable/httpapi";
 import { AgentAuthorization } from "~/shell/_shared/authz";
 import { ValidationGate } from "~/shell/_shared/errors";
+import { bindOperationCatalog, makeOperationCatalog } from "~/shell/_shared/operation-catalog";
 import { IdentityGroup } from "~/shell/identity/operations";
 import { TransactionsGroup } from "~/shell/transactions/operations";
 
@@ -22,6 +23,10 @@ export class FidyApi extends HttpApi.make("fidy")
   .middleware(AgentAuthorization)
   .annotate(OpenApi.Title, "fidy-ai canonical API") {}
 
+/** Canonical ids, partial inputs, and callability policy reflected from `FidyApi`. */
+export const operationCatalog = makeOperationCatalog(FidyApi);
+bindOperationCatalog(operationCatalog);
+
 type ApiGroups<Api> = Api extends HttpApi.HttpApi<infer _Identifier, infer Groups> ? Groups : never;
 
 type GroupOperationIds<Group> = Group extends HttpApiGroup.Constraint
@@ -39,5 +44,3 @@ type GroupOperationIds<Group> = Group extends HttpApiGroup.Constraint
  * may point at any operation the API publishes, not only its own slice's.
  */
 export type OperationId = GroupOperationIds<ApiGroups<typeof FidyApi>>;
-
-export const operationId = (id: OperationId): OperationId => id;

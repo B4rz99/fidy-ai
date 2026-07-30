@@ -5,7 +5,7 @@ import { Config } from "effect";
  * Origins may be overridden for previews or local development; route paths remain one
  * product-level contract so dependent adapters cannot drift onto parallel callback URLs.
  */
-export interface ExternalEndpoints {
+export type ExternalEndpoints = {
   readonly webOrigin: string;
   readonly apiOrigin: string;
   readonly policyUrl: string;
@@ -13,7 +13,7 @@ export interface ExternalEndpoints {
   readonly kapsoWebhookUrl: string;
   readonly wompiCallbackUrl: string;
   readonly ingestDomain: string;
-}
+};
 
 /**
  * Loads Fidy's public namespace from required process configuration. Missing or malformed

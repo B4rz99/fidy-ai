@@ -202,11 +202,11 @@ export const Currency = Schema.Literals(currencyCodes).annotate({
 export type Currency = typeof Currency.Type;
 
 /** The ISO facts retained for one Currency accepted by this build. */
-export interface CurrencyMetadata {
+export type CurrencyMetadata = {
   readonly alphabeticCode: Currency;
   /** Maximum decimal places ISO 4217 assigns to ordinary values in this Currency. */
   readonly fractionalDigits: 0 | 2 | 3 | 4;
-}
+};
 
 const fractionalDigits = (currency: Currency): CurrencyMetadata["fractionalDigits"] => {
   if (zeroFractionCurrencies.has(currency)) {
@@ -342,11 +342,11 @@ export const compareMoney = (operands: {
   );
 
 /** Separate exact inflow and outflow sums for one Currency. */
-export interface MoneyGroup {
+export type MoneyGroup = {
   readonly currency: Currency;
   readonly inflow: ReadonlyMoney;
   readonly outflow: ReadonlyMoney;
-}
+};
 
 /**
  * Groups Money by Currency in alphabetic order, keeping direction-separated

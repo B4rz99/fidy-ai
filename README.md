@@ -42,7 +42,9 @@ docker compose up --build
 curl http://localhost:3000/health
 ```
 
-The process applies pending migrations before binding the HTTP server. It serves the canonical API,
+The process applies pending migrations before binding the HTTP server or launching the daily
+AuditLogEntry retention worker. Retention runs at startup and removes only evidence strictly older
+than 365 days. It serves the canonical API,
 `/openapi.json`, the public `/health` route, and the SPA shell from `public/` in one Effect runtime.
 Canonical operations remain protected by scoped `fin_` bearer authorization. `railway.json`
 configures Railway to build the Dockerfile and gate deployments on `/health`; the app receives
@@ -131,8 +133,7 @@ judging a coverage number.
   `.dependency-cruiser.mjs`, run by `bun run lint:deps` in CI and in `bun run verify`. oxlint holds
   the per-file rules; the cruiser holds the ones about the graph, where the target has to be written
   in terms of the source — "a core slice may not import a _sibling_ core slice" is one relational
-  rule there and one override block per slice in oxlint. It also generates ARCHITECTURE.md's
-  dependency diagram, and the gate fails if that diagram has gone stale.
+  rule there and one override block per slice in oxlint.
 - **Formatter:** [oxfmt](https://oxc.rs) — configured in `.oxfmtrc.json`.
 - **Type checker:** TypeScript 7 native (`typescript@7`, `tsconfig.json`, strict), patched with
   the Effect language service via [`@effect/tsgo`](https://github.com/Effect-TS/tsgo): the
@@ -144,22 +145,21 @@ judging a coverage number.
 
 ### Common scripts
 
-| Command                     | What it does                                                      |
-| --------------------------- | ----------------------------------------------------------------- |
-| `bun run lint`              | oxlint                                                            |
-| `bun run lint:type-aware`   | oxlint with the type-aware rules                                  |
-| `bun run lint:suppressions` | reject lint-suppression comments in first-party source            |
-| `bun run lint:deps`         | module-graph rules + the generated graph                          |
-| `bun run lint:dependencies` | pins behind the registry, and the install delay                   |
-| `bun run graph`             | regenerate ARCHITECTURE.md's dependency diagram                   |
-| `bun run format`            | Format the repo with oxfmt                                        |
-| `bun run format:check`      | Verify formatting without writing                                 |
-| `bun run typecheck`         | `tsc --noEmit` (Effect-patched)                                   |
-| `bun run test`              | `bun --bun vitest run` (needs `DATABASE_URL`)                     |
-| `bun run test:core`         | the pure core tier — no Docker, no database                       |
-| `bun run test:crap`         | CRAP-score gate (needs `DATABASE_URL`)                            |
-| `bun run test:mutation`     | mutation-score gate over `src/core` (no database)                 |
-| `bun run verify`            | all rows above except `graph`, `format`, `test:core`, `test:crap` |
+| Command                     | What it does                                             |
+| --------------------------- | -------------------------------------------------------- |
+| `bun run lint`              | oxlint                                                   |
+| `bun run lint:type-aware`   | oxlint with the type-aware rules                         |
+| `bun run lint:suppressions` | reject lint-suppression comments in first-party source   |
+| `bun run lint:deps`         | module-graph rules                                       |
+| `bun run lint:dependencies` | pins behind the registry, and the install delay          |
+| `bun run format`            | Format the repo with oxfmt                               |
+| `bun run format:check`      | Verify formatting without writing                        |
+| `bun run typecheck`         | `tsc --noEmit` (Effect-patched)                          |
+| `bun run test`              | `bun --bun vitest run` (needs `DATABASE_URL`)            |
+| `bun run test:core`         | the pure core tier — no Docker, no database              |
+| `bun run test:crap`         | CRAP-score gate (needs `DATABASE_URL`)                   |
+| `bun run test:mutation`     | mutation-score gate over `src/core` (no database)        |
+| `bun run verify`            | all rows above except `format`, `test:core`, `test:crap` |
 
 ### Quality gates
 

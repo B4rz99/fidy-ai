@@ -4,10 +4,10 @@ import { HttpApi, HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable
 import { expectTypeOf } from "vitest";
 import { makePartialInputSchema, type PartialInput } from "./partial-input";
 
-interface CatalogTree {
+type CatalogTree = {
   readonly name: string;
   readonly children: ReadonlyArray<CatalogTree>;
-}
+};
 
 const CatalogTree: Schema.Codec<CatalogTree> = Schema.suspend(() =>
   Schema.Struct({
@@ -220,10 +220,10 @@ it("delays array and union checks while their selected nested input is incomplet
 });
 
 it("retains tuple arity and order while partialing nested tuple values", () => {
-  interface TupleObject {
+  type TupleObject = {
     readonly left: string;
     readonly right: string;
-  }
+  };
   type PartialTupleObject = { readonly left?: string; readonly right?: string };
   type InputTuple = readonly [TupleObject, number];
   type PartialTuple = readonly [PartialTupleObject, number];

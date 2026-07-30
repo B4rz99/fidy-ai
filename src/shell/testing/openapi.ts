@@ -24,7 +24,7 @@ const publishedSpec = Effect.gen(function* () {
 });
 
 /** One canonical operation, as the spec presents it to a calling agent. */
-export interface PublishedOperation {
+export type PublishedOperation = {
   readonly id: string;
   /** `None` when the spec carries no `description` at all for this operation. */
   readonly description: Option.Option<string>;
@@ -34,7 +34,7 @@ export interface PublishedOperation {
   readonly requiredTier: Option.Option<OperationTier>;
   /** `None` when the spec omits the canonical operation's cost-class metadata. */
   readonly costClass: Option.Option<OperationCostClass>;
-}
+};
 
 /**
  * Every canonical operation the running server actually publishes, read back

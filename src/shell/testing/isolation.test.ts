@@ -41,11 +41,11 @@ const IsolationHarness = Layer.merge(
  * What one operation, invoked by a stranger, is handed: a client for each user
  * and the transaction the owner already logged.
  */
-interface IsolationAttempt {
+type IsolationAttempt = {
   readonly ownerClient: ApiClient;
   readonly strangerClient: ApiClient;
   readonly ownedTransaction: Transaction;
-}
+};
 
 /** Everything a call through the derived client, or a raw one, can fail with. */
 type CallFailure =

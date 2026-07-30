@@ -71,6 +71,13 @@ Unions are cheap to handle safely because a missing case is a build failure.
 **This binds the model, not the storage.** A discriminated union rarely maps cleanly onto relational
 columns, so the row schema may be flatter, and the repo's decode is where the two reconcile.
 
+### Type declarations
+
+Use `type` aliases for first-party object shapes. They are closed declarations and also compose with
+unions, tuples, mapped types, and conditional types. Use `interface` only when declaration merging
+or module augmentation is deliberately required; never leave a shape open for hypothetical future
+extension.
+
 ### Tuples
 
 - **Fixed arity — yes.** If there are exactly three of something, do not type it as an array of

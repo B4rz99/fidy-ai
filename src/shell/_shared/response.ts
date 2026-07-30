@@ -26,11 +26,11 @@ const SuggestedOperationHint = Schema.NonEmptyString.check(
  * at compile time, and this reflected union strictly decodes the same pairing
  * at the untyped response boundary without introducing an API assembly cycle.
  */
-interface SuggestedOperationValue {
+type SuggestedOperationValue = {
   readonly tool: string;
   readonly args?: unknown;
   readonly hint: string;
-}
+};
 
 const suggestedOperationMember = (
   operation: CatalogOperation

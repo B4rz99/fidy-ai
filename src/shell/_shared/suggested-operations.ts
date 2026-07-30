@@ -55,10 +55,10 @@ export const suggestOperation = <Id extends OperationId>(
 ): SuggestedOperationCandidate<Id> => candidate;
 
 /** The explicit caller facts needed to decide whether a target is callable. */
-export interface SuggestedOperationCaller {
+export type SuggestedOperationCaller = {
   readonly scopes: ReadonlyArray<AgentScope>;
   readonly tier: OperationTier;
-}
+};
 
 const hasRequiredTier = (requiredTier: OperationTier, callerTier: OperationTier): boolean =>
   requiredTier === "free" || callerTier === "pro";

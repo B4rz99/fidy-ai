@@ -7,18 +7,18 @@ import { makePartialInputSchema } from "./partial-input";
 type OperationInputSchema = Schema.Codec<unknown, unknown>;
 
 /** One canonical operation as the response checkpoint needs to understand it. */
-export interface CatalogOperation {
+export type CatalogOperation = {
   readonly id: string;
   readonly policy: OperationPolicyValue;
   /** None when the generated client accepts no operation input. */
   readonly partialInput: Option.Option<OperationInputSchema>;
-}
+};
 
 /** The assembled canonical-operation facts derived from one HttpApi definition. */
-export interface OperationCatalog {
+export type OperationCatalog = {
   readonly operations: ReadonlyArray<CatalogOperation>;
   readonly byId: ReadonlyMap<string, CatalogOperation>;
-}
+};
 
 const requestInput = (endpoint: HttpApiEndpoint.Top): Option.Option<OperationInputSchema> => {
   const fields: Array<SchemaAST.PropertySignature> = [];

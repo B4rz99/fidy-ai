@@ -11,20 +11,20 @@ export const OperationTier = Schema.Literals(["free", "pro"]);
 export type OperationTier = typeof OperationTier.Type;
 
 /** Route-independent authorization, availability, and accounting policy carried by an operation. */
-export interface OperationPolicyValue {
+export type OperationPolicyValue = {
   readonly requiredScope: AgentScope;
   readonly requiredTier: OperationTier;
   readonly costClass: OperationCostClass;
-}
+};
 
 /** Annotation key read by shared authorization from the active endpoint. */
 export class OperationPolicy extends Context.Service<OperationPolicy, OperationPolicyValue>()(
   "fidy-ai/shell/_shared/operation-policy/OperationPolicy"
 ) {}
 
-interface PolicyAnnotatedOperation {
+type PolicyAnnotatedOperation = {
   readonly annotations: Context.Context<never>;
-}
+};
 
 /**
  * Reads the complete policy directly from one canonical operation definition.

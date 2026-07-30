@@ -25,9 +25,9 @@ import { seedAgentIdentity } from "~/shell/db/development-seed";
 import { transactionPayload, truncateTransactions } from "~/shell/transactions/fixtures";
 import { ApiHarness, type ApiClient, makeApiClientLive } from "./api-harness";
 
-interface NavigableResponse {
+type NavigableResponse = {
   readonly next: ReadonlyArray<SuggestedOperationValue>;
-}
+};
 
 type CallFailure =
   | Schema.SchemaError

@@ -1,0 +1,72 @@
+CONTEXT.md
+  s_d653f728f6d4b2::t_24b9fbb69e0873 103-105
+src/shell/agent/tool-confirmation.ts
+  s_d653f728f6d4b2::t_6298a233a6200c 130
+  s_d653f728f6d4b2::t_9cca8ed9ee70c9 2-3,5,11,17-20,22,27-30,32,34,57-61,65-80,82-83,85-95,97-117,120-124,127-129,131-133,135-136,138-139,146-147,149-150
+  s_d653f728f6d4b2::t_1fc919ed01d2f8 1,13,37-39,46-47,51,137,140-145
+  s_d653f728f6d4b2::t_cab4be2fb50e9d 15,31
+  s_d653f728f6d4b2::t_790c7710ff2327 125-126
+src/shell/categories/operations.ts
+  s_d653f728f6d4b2::t_a22ea31e12fbea 14-31,65,78,90
+src/shell/agent/agent-service.test.ts
+  s_d653f728f6d4b2::t_8719f99e7661bf 143,146,663,671-676,680-681
+  s_d653f728f6d4b2::t_984fa1a11591df 289-302,900,914-915,917-927
+  s_d653f728f6d4b2::t_37fc923e569103 686,707-710,713
+  s_d653f728f6d4b2::t_479152669b538c 1089-1091
+  s_d653f728f6d4b2::t_f127138a97f82d 179-208,1049-1088
+  s_d653f728f6d4b2::t_6298a233a6200c 682,930
+  s_d653f728f6d4b2::t_8b7384e243920e 928-929,931-932
+  s_d653f728f6d4b2::t_88f7f7d67ae459 1092-1133
+src/shell/_shared/operation-policy.ts
+  s_d653f728f6d4b2::t_6e36a92d16dedb 13-17,22,51,53-58,63
+ARCHITECTURE.md
+  s_d653f728f6d4b2::t_55da9a283e9c29 242-248,252-257
+  s_d653f728f6d4b2::t_fa5b78c1b8416a 249-251
+src/shell/insights/operations.ts
+  s_d653f728f6d4b2::t_265ead6a0e9755 38-43,60-65,81-86,101-106
+src/shell/identity/operations.ts
+  s_d653f728f6d4b2::t_4fc1fcf9aad46f 21-26,38-43
+src/shell/agent/model-boundary.ts
+  s_d653f728f6d4b2::t_b22accd53eb020 133-135
+  s_d653f728f6d4b2::t_ef3cdf935e0431 132,136-138
+src/shell/agent/openai.ts
+  s_d653f728f6d4b2::t_0dfcd280256320 5-11,20
+src/shell/agent/openai.test.ts
+  s_d653f728f6d4b2::t_f1ca9a5784c7bf 14,22-26
+  s_d653f728f6d4b2::t_341b8d57c157b3 4
+src/shell/_shared/operation-catalog.test.ts
+  s_d653f728f6d4b2::t_787e260e0fbfc0 11
+SECURITY_STANDARDS.md
+  s_d653f728f6d4b2::t_bd2bb72925b107 215-219,227-230
+src/shell/agent/agent-service.ts
+  s_d653f728f6d4b2::t_5faf673192d872 52,210,323-324,332-335
+  s_d653f728f6d4b2::t_6d81863277bb30 339
+src/shell/testing/operation-policy.test.ts
+  s_d653f728f6d4b2::t_7b99bbe9c8e301 5-6,45,47-65
+  s_d653f728f6d4b2::t_8ae2885aec4abb 31,40
+  s_d653f728f6d4b2::t_c28971b698d52c 44,46,66
+  s_d653f728f6d4b2::t_f68ca903936808 67-75
+  s_d653f728f6d4b2::t_a45c866003e5fa 76-77
+src/shell/testing/openapi.ts
+  s_d653f728f6d4b2::t_2a11fe72bc561a 5-9,17,42-43,64
+src/shell/transactions/operations.ts
+  s_d653f728f6d4b2::t_7e9a8d5982f633 15-32,58,95,107
+src/shell/_shared/suggested-operations.test.ts
+  s_d653f728f6d4b2::t_640aa528fdc938 196
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.19",
+  "base_commit_sha": "60ef874d0a2e5adf6922b8aa67e5e6d740c1ebe8",
+  "prompts": {},
+  "sessions": {
+    "s_d653f728f6d4b2": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019fb440-ecd8-75d4-869f-f38a24c3bf26",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": null
+    }
+  }
+}

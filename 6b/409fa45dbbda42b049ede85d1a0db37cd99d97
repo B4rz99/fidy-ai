@@ -1,0 +1,31 @@
+src/core/tokens/model.ts
+  s_d653f728f6d4b2::t_1305d79bfe28a6 147-154
+src/shell/dashboard/operations.ts
+  s_d18a4a88a83508::t_6f382e05dd942e 22-27,41-46,62-67
+src/shell/testing/operation-policy.test.ts
+  s_d18a4a88a83508::t_f059606901aadd 65-67
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.19",
+  "base_commit_sha": "6b409fa45dbbda42b049ede85d1a0db37cd99d97",
+  "prompts": {},
+  "sessions": {
+    "s_d18a4a88a83508": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019fb863-f83e-7289-8c4f-6c5badfb069b",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_d653f728f6d4b2": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019fb440-ecd8-75d4-869f-f38a24c3bf26",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": null
+    }
+  }
+}

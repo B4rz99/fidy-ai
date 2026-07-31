@@ -1,0 +1,83 @@
+src/shell/db/migrations/registry.ts
+  s_bc26533c141395::t_8b2c2347b48a4e 6,22
+src/shell/dashboard/fixtures.ts
+  s_bc26533c141395::t_8b2c2347b48a4e 1-8
+scripts/oxlint/effect-guards.js
+  s_bc26533c141395::t_22a14ae686103f 443-467,585
+  s_bc26533c141395::t_94f52fad56dc38 468-577,588
+src/core/dashboard/catalog.ts
+  s_bc26533c141395::t_8b2c2347b48a4e 1-89
+scripts/check-lint-guards.ts
+  s_bc26533c141395::t_9dc18de3731fcd 19-22,27,36,49
+  s_bc26533c141395::t_b6e6d107378761 5-13,15-17,24,26,29-35,37,42,44,48,50
+  s_bc26533c141395::t_2f5ff368136235 25
+  s_bc26533c141395::t_94251b24bb91bc 4,28,40
+  s_bc26533c141395::t_51f2ca29022581 14
+  s_bc26533c141395::t_69b5fd13790115 1-3,18,23,38-39,41,43,45-47
+src/core/dashboard/catalog.test.ts
+  s_bc26533c141395::t_8b2c2347b48a4e 1-41
+src/shell/api.ts
+  s_bc26533c141395::t_8b2c2347b48a4e 6,20
+src/core/dashboard/errors.ts
+  s_bc26533c141395::t_8b2c2347b48a4e 1-48
+.oxlintrc.json
+  s_bc26533c141395::t_fc1d36d019e5ff 145
+  s_bc26533c141395::t_1daec8240147a3 148-151
+  s_bc26533c141395::t_00783017471550 146
+  s_bc26533c141395::t_9ab683588ac15c 142
+  s_bc26533c141395::t_8b2c2347b48a4e 147,154-159
+src/core/dashboard/model.test.ts
+  s_bc26533c141395::t_8b2c2347b48a4e 1-299
+src/core/dashboard/rules.ts
+  s_bc26533c141395::t_8b2c2347b48a4e 1-438
+src/shell/dashboard/errors.ts
+  s_bc26533c141395::t_8b2c2347b48a4e 1-96
+package.json
+  s_bc26533c141395::t_3e008ae10e53ec 8
+src/core/dashboard/rules.test.ts
+  s_bc26533c141395::t_f9aa1d8cdd4320 3,356-570
+  s_bc26533c141395::t_b0ba8b6a722f47 571
+  s_bc26533c141395::t_8b2c2347b48a4e 1-2,4-53,95-355,572-595
+  s_bc26533c141395::t_9adde01810492a 54-94
+src/shell/dashboard/repo.ts
+  s_bc26533c141395::t_8b2c2347b48a4e 1-90
+vitest.config.ts
+  s_bc26533c141395::t_d4b188714bb80a 39,42-43,45
+src/shell/dashboard/handlers.test.ts
+  s_bc26533c141395::t_c6ca1d22e4f03a 199
+  s_bc26533c141395::t_b03b2b9900d9ab 6,156
+  s_bc26533c141395::t_615c342c50ee48 7,124-155,157-183
+  s_bc26533c141395::t_8b2c2347b48a4e 1-5,8-123,200-291
+  s_bc26533c141395::t_03942d2226ff08 184-195
+  s_bc26533c141395::t_4f936b44c63827 196-198
+src/shell/testing/isolation.test.ts
+  s_bc26533c141395::t_8b2c2347b48a4e 22,148-175,373-375,396
+src/shell/db/migrations/0006-create-dashboards.ts
+  s_bc26533c141395::t_8b2c2347b48a4e 1-15
+src/core/dashboard/model.ts
+  s_bc26533c141395::t_8b2c2347b48a4e 1-588
+src/shell/dashboard/operations.ts
+  s_bc26533c141395::t_8b2c2347b48a4e 1-54
+src/shell/testing/suggested-operations.test.ts
+  s_bc26533c141395::t_8b2c2347b48a4e 27,120-133,313
+src/shell/http.ts
+  s_bc26533c141395::t_8b2c2347b48a4e 8,32-38
+src/shell/dashboard/handlers.ts
+  s_bc26533c141395::t_8b2c2347b48a4e 1-112
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.18",
+  "base_commit_sha": "0a13f8f3ffa3acf3cb3e88c57ab94d0593add547",
+  "prompts": {},
+  "sessions": {
+    "s_bc26533c141395": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019fb441-7ac2-77f6-b7f7-7925f9bb241e",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": null
+    }
+  }
+}

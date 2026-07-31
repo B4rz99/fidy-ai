@@ -343,6 +343,8 @@ src/shell/tokens/repo.ts
   s_d653f728f6d4b2::t_af9a1326178165 154
 bun.lock
   s_d653f728f6d4b2::t_bc34eb334269db 8,62-63
+src/shell/db/migrations/registry.ts
+  s_d18a4a88a83508::t_54929e400b61b6 7-8,25-26
 ---
 {
   "schema_version": "authorship/3.0.0",
@@ -354,6 +356,14 @@ bun.lock
       "agent_id": {
         "tool": "pi",
         "id": "019fb684-73dd-720f-afbb-f2a218e8bb0c",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_d18a4a88a83508": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019fb863-f83e-7289-8c4f-6c5badfb069b",
         "model": "gpt-5.6-sol"
       },
       "human_author": "obarbozaa <obarbozaa@gmail.com>"

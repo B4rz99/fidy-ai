@@ -10,6 +10,7 @@
     "lint:deps": "bun tools/depcruise/run.mjs",
     "lint:dependencies": "bun scripts/check-dependency-updates.ts",
     "dev": "bun scripts/seed-development.ts && FIDY_HTTP_HOST=127.0.0.1 bun src/main.ts",
+    "agent:repl": "bun scripts/agent-repl.ts",
     "format": "oxfmt --write .",
     "format:check": "oxfmt --check .",
     "typecheck": "tsc --noEmit",
@@ -22,6 +23,7 @@
     "prepare": "lefthook install"
   },
   "dependencies": {
+    "@effect/ai-openai": "4.0.0-beta.98",
     "@effect/platform-bun": "4.0.0-beta.98",
     "@effect/sql-pg": "4.0.0-beta.98",
     "effect": "4.0.0-beta.98"

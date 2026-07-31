@@ -5,6 +5,7 @@
     "": {
       "name": "fidy-ai",
       "dependencies": {
+        "@effect/ai-openai": "4.0.0-beta.98",
         "@effect/platform-bun": "4.0.0-beta.98",
         "@effect/sql-pg": "4.0.0-beta.98",
         "effect": "4.0.0-beta.98",
@@ -57,6 +58,8 @@
     "@babel/types": ["@babel/types@7.29.7", "", { "dependencies": { "@babel/helper-string-parser": "^7.29.7", "@babel/helper-validator-identifier": "^7.29.7" } }, "sha512-4zBIxpPzowiZpusoFkyGVwakdRJUyuH5PxQ/PrqghfdFWWasvnCdPfQXHrenDai+gyLARulZjZowCOj6fjT4pA=="],
 
     "@bcoe/v8-coverage": ["@bcoe/v8-coverage@1.0.2", "", {}, "sha512-6zABk/ECA/QYSCQ1NGiVwwbQerUCZ+TQbp64Q3AgmfNvurHH0j8TtXa1qbShXA6qqkpAj4V5W8pP6mLe1mcMqA=="],
+
+    "@effect/ai-openai": ["@effect/ai-openai@4.0.0-beta.98", "", { "peerDependencies": { "effect": "^4.0.0-beta.98" } }, "sha512-ZkzkULfOwpe0367QMipBXnCTrWjonQP4MSdP8t3zvKLPWNQaNs8BNya7/wowZAlDo/eX9fRR5tjSZOGVnEKFrA=="],
 
     "@effect/platform-bun": ["@effect/platform-bun@4.0.0-beta.98", "", { "dependencies": { "@effect/platform-node-shared": "^4.0.0-beta.98" }, "peerDependencies": { "effect": "^4.0.0-beta.98" } }, "sha512-QorRKhvwHDPwvE8lH5lE0r0dI2z+zj12VUN4h7hfoIunKUiXSoSOMZqF3w13W30RpV6ivsvJywUycaa/18yMPA=="],
 

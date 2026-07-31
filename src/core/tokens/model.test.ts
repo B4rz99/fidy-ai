@@ -7,6 +7,7 @@ import {
   AgentToken,
   AgentTokenScopes,
   AgentTokenShortId,
+  HostedAgentScopes,
   getAgentTokenShortId,
   makeAgentBearerToken,
 } from "./model";
@@ -60,10 +61,73 @@ it("accepts exactly the non-empty unique AgentToken scope vocabulary", () => {
   expect(Result.isFailure(decodeScopes(["admin"]))).toBe(true);
 });
 
-it("rejects AgentToken timestamps outside lifecycle order", () => {
+it("requires every canonical scope for an internal HostedAgentToken", () => {
+  const decodeScopes = Schema.decodeUnknownResult(HostedAgentScopes);
+
+  expect(Result.isSuccess(decodeScopes(["read", "write", "dashboard"]))).toBe(true);
+  expect(Result.isSuccess(decodeScopes(["dashboard", "read", "write"]))).toBe(true);
+  expect(Result.isFailure(decodeScopes(["read", "write"]))).toBe(true);
+});
+
+it("rejects HostedAgentToken use and revocation outside its hard lifetime", () => {
+  const decodeToken = Schema.decodeUnknownResult(AgentToken);
+  const createdAt = DateTime.makeUnsafe("2026-07-28T12:34:56Z");
+  const expiresAt = DateTime.addDuration(createdAt, "15 minutes");
+  const usedAt = DateTime.addDuration(createdAt, "1 minute");
+  const validToken = {
+    _tag: "HostedAgentToken" as const,
+    id: AgentTokenId.make("f1d1a000-0000-4000-8000-000000000011"),
+    shortId: AgentTokenShortId.make("hosted01"),
+    scopes: HostedAgentScopes.make(["read", "write", "dashboard"]),
+    lastUsedAt: Option.some(usedAt),
+    expiresAt,
+    revokedAt: Option.some(usedAt),
+    createdAt,
+  };
+
+  const invalidExpiry = decodeToken({ ...validToken, expiresAt: createdAt });
+  const invalidEarlyUse = decodeToken({
+    ...validToken,
+    lastUsedAt: Option.some(DateTime.subtractDuration(createdAt, "1 millis")),
+    revokedAt: Option.none(),
+  });
+  const invalidLateUse = decodeToken({
+    ...validToken,
+    lastUsedAt: Option.some(expiresAt),
+    revokedAt: Option.none(),
+  });
+  const invalidRevocation = decodeToken({
+    ...validToken,
+    revokedAt: Option.some(createdAt),
+  });
+
+  expect(Result.isSuccess(decodeToken(validToken))).toBe(true);
+  expect(
+    Result.isSuccess(
+      decodeToken({ ...validToken, lastUsedAt: Option.none(), revokedAt: Option.none() })
+    )
+  ).toBe(true);
+  expect(Result.isFailure(invalidExpiry)).toBe(true);
+  expect(String(Option.getOrThrow(Result.getFailure(invalidExpiry)))).toContain('at ["expiresAt"]');
+  expect(Result.isFailure(invalidEarlyUse)).toBe(true);
+  expect(String(Option.getOrThrow(Result.getFailure(invalidEarlyUse)))).toContain(
+    'at ["lastUsedAt"]'
+  );
+  expect(Result.isFailure(invalidLateUse)).toBe(true);
+  expect(String(Option.getOrThrow(Result.getFailure(invalidLateUse)))).toContain(
+    'at ["lastUsedAt"]'
+  );
+  expect(Result.isFailure(invalidRevocation)).toBe(true);
+  expect(String(Option.getOrThrow(Result.getFailure(invalidRevocation)))).toContain(
+    'at ["revokedAt"]'
+  );
+});
+
+it("rejects UserAgentToken timestamps outside lifecycle order", () => {
   const decodeToken = Schema.decodeUnknownResult(AgentToken);
   const createdAt = DateTime.makeUnsafe("2026-07-28T12:34:56Z");
   const validToken = {
+    _tag: "UserAgentToken" as const,
     id: AgentTokenId.make("f1d1a000-0000-4000-8000-000000000010"),
     shortId: AgentTokenShortId.make("default1"),
     scopes: AgentTokenScopes.make(["read"]),

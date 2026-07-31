@@ -1,17 +1,23 @@
 import * as Arr from "effect/Array";
 import { Context, Option, Schema, SchemaAST } from "effect";
 import { HttpApi, type HttpApiEndpoint, type HttpApiGroup, OpenApi } from "effect/unstable/httpapi";
+import { CanonicalOperationId } from "~/core/_shared/canonical-operation";
 import { getOperationPolicy, type OperationPolicyValue } from "./operation-policy";
 import { makePartialInputSchema } from "./partial-input";
 
-type OperationInputSchema = Schema.Codec<unknown, unknown>;
+type OperationSchema = Schema.Codec<unknown, Schema.Json, never, never>;
+type PartialInputSchema = Schema.Codec<unknown, unknown>;
 
-/** One canonical operation as the response checkpoint needs to understand it. */
+/** One canonical operation projected for authorization, response checks, and hosted tooling. */
 export type CatalogOperation = {
-  readonly id: string;
+  readonly id: CanonicalOperationId;
+  readonly description: string;
+  readonly input: OperationSchema;
+  readonly success: OperationSchema;
+  readonly failure: OperationSchema;
   readonly policy: OperationPolicyValue;
   /** None when the generated client accepts no operation input. */
-  readonly partialInput: Option.Option<OperationInputSchema>;
+  readonly partialInput: Option.Option<PartialInputSchema>;
 };
 
 /** The assembled canonical-operation facts derived from one HttpApi definition. */
@@ -20,7 +26,32 @@ export type OperationCatalog = {
   readonly byId: ReadonlyMap<string, CatalogOperation>;
 };
 
-const requestInput = (endpoint: HttpApiEndpoint.Top): Option.Option<OperationInputSchema> => {
+const payloadSchemas = (endpoint: HttpApiEndpoint.Top): ReadonlyArray<Schema.Top> =>
+  Array.from(endpoint.payload.values()).flatMap(({ schemas }) => schemas);
+
+const unionSchema = (schemas: ReadonlyArray<Schema.Top>): Schema.Top => {
+  if (!Arr.isReadonlyArrayNonEmpty(schemas)) return Schema.Never;
+  return schemas.length === 1 ? schemas[0] : Schema.Union(schemas);
+};
+
+const asOperationSchema = (schema: Schema.Top): OperationSchema =>
+  Schema.make<OperationSchema>(Schema.toCodecJson(schema).ast);
+
+const canonicalInput = (endpoint: HttpApiEndpoint.Top): OperationSchema => {
+  const fields: Array<SchemaAST.PropertySignature> = [];
+  const add = (name: string, schema: Schema.Top | undefined) => {
+    if (schema !== undefined) fields.push(new SchemaAST.PropertySignature(name, schema.ast));
+  };
+  add("params", endpoint.params);
+  add("query", endpoint.query);
+  add("headers", endpoint.headers);
+  const payloads = payloadSchemas(endpoint);
+  if (Arr.isReadonlyArrayNonEmpty(payloads)) add("payload", unionSchema(payloads));
+  const schema = Schema.make<PartialInputSchema>(new SchemaAST.Objects(fields, []));
+  return asOperationSchema(schema);
+};
+
+const requestInput = (endpoint: HttpApiEndpoint.Top): Option.Option<PartialInputSchema> => {
   const fields: Array<SchemaAST.PropertySignature> = [];
   const add = (name: string, schema: Schema.Top | undefined) => {
     if (schema === undefined) return;
@@ -33,16 +64,14 @@ const requestInput = (endpoint: HttpApiEndpoint.Top): Option.Option<OperationInp
   add("query", endpoint.query);
   add("headers", endpoint.headers);
 
-  const payloads = Array.from(endpoint.payload.values()).flatMap(({ schemas }) =>
-    schemas.map(makePartialInputSchema)
-  );
+  const payloads = payloadSchemas(endpoint).map(makePartialInputSchema);
   if (Arr.isReadonlyArrayNonEmpty(payloads)) {
     add("payload", payloads.length === 1 ? payloads[0] : Schema.Union(payloads));
   }
 
   return fields.length === 0
     ? Option.none()
-    : Option.some(Schema.make<OperationInputSchema>(new SchemaAST.Objects(fields, [])));
+    : Option.some(Schema.make<PartialInputSchema>(new SchemaAST.Objects(fields, [])));
 };
 
 /**
@@ -60,10 +89,11 @@ export const makeOperationCatalog = <Id extends string, Groups extends HttpApiGr
     onGroup: () => {},
     onEndpoint: ({ endpoint, group }) => {
       const defaultId = `${group.identifier}.${endpoint.identifier}`;
-      const id = Context.getOrElse(endpoint.annotations, OpenApi.Identifier, () =>
+      const reflectedId = Context.getOrElse(endpoint.annotations, OpenApi.Identifier, () =>
         group.topLevel ? endpoint.identifier : defaultId
       );
-      if (id !== defaultId) {
+      const id = CanonicalOperationId.make(reflectedId);
+      if (reflectedId !== defaultId) {
         throw new Error(
           `Canonical operations must publish their group-qualified identifier: ${defaultId}`
         );
@@ -71,8 +101,16 @@ export const makeOperationCatalog = <Id extends string, Groups extends HttpApiGr
       if (byId.has(id)) {
         throw new Error(`Duplicate canonical operation id: ${id}`);
       }
+      const description = Context.getOption(endpoint.annotations, OpenApi.Description);
+      if (Option.isNone(description)) {
+        throw new Error(`Canonical operation is missing its agent description: ${id}`);
+      }
       const operation = {
         id,
+        description: description.value,
+        input: canonicalInput(endpoint),
+        success: asOperationSchema(unionSchema(Array.from(endpoint.success))),
+        failure: asOperationSchema(unionSchema(Array.from(endpoint.error))),
         policy: getOperationPolicy(endpoint),
         partialInput: requestInput(endpoint),
       };

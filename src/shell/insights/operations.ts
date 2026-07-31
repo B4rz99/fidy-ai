@@ -35,7 +35,12 @@ export const InsightsGroup = HttpApiGroup.make("insights")
           "yet consumed or dismissed. An empty stream is a successful answer."
       )
       .annotateMerge(
-        operationPolicy({ requiredScope: "read", requiredTier: "free", costClass: "cheap" })
+        operationPolicy({
+          requiredScope: "read",
+          requiredTier: "free",
+          costClass: "cheap",
+          agentConfirmation: "not-required",
+        })
       )
   )
   .add(
@@ -52,7 +57,12 @@ export const InsightsGroup = HttpApiGroup.make("insights")
           "instant, channel, provider, and message id. This operation sends nothing itself."
       )
       .annotateMerge(
-        operationPolicy({ requiredScope: "write", requiredTier: "free", costClass: "cheap" })
+        operationPolicy({
+          requiredScope: "write",
+          requiredTier: "free",
+          costClass: "cheap",
+          agentConfirmation: "required",
+        })
       )
   )
   .add(
@@ -68,7 +78,12 @@ export const InsightsGroup = HttpApiGroup.make("insights")
           "required when an agent pulled it directly."
       )
       .annotateMerge(
-        operationPolicy({ requiredScope: "write", requiredTier: "free", costClass: "cheap" })
+        operationPolicy({
+          requiredScope: "write",
+          requiredTier: "free",
+          costClass: "cheap",
+          agentConfirmation: "required",
+        })
       )
   )
   .add(
@@ -83,6 +98,11 @@ export const InsightsGroup = HttpApiGroup.make("insights")
           "occurrence should receive no further attention; dismissed events cannot move again."
       )
       .annotateMerge(
-        operationPolicy({ requiredScope: "write", requiredTier: "free", costClass: "cheap" })
+        operationPolicy({
+          requiredScope: "write",
+          requiredTier: "free",
+          costClass: "cheap",
+          agentConfirmation: "required",
+        })
       )
   );

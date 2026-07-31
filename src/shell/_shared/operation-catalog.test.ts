@@ -8,6 +8,7 @@ const policy = operationPolicy({
   requiredScope: "read",
   requiredTier: "free",
   costClass: "cheap",
+  agentConfirmation: "not-required",
 });
 
 it("rejects an OpenAPI operation id that is not the group-qualified identifier", () => {

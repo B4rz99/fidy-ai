@@ -19,7 +19,12 @@ export const DashboardGroup = HttpApiGroup.make("dashboard")
           "later call returns the same latest document."
       )
       .annotateMerge(
-        operationPolicy({ requiredScope: "read", requiredTier: "free", costClass: "cheap" })
+        operationPolicy({
+          requiredScope: "read",
+          requiredTier: "free",
+          costClass: "cheap",
+          agentConfirmation: "not-required",
+        })
       )
   )
   .add(
@@ -33,7 +38,12 @@ export const DashboardGroup = HttpApiGroup.make("dashboard")
           "dashboard.applyDashboardEdit with add-widget."
       )
       .annotateMerge(
-        operationPolicy({ requiredScope: "read", requiredTier: "free", costClass: "cheap" })
+        operationPolicy({
+          requiredScope: "read",
+          requiredTier: "free",
+          costClass: "cheap",
+          agentConfirmation: "not-required",
+        })
       )
   )
   .add(
@@ -49,6 +59,11 @@ export const DashboardGroup = HttpApiGroup.make("dashboard")
           "invalid resulting documents leave the stored dashboard unchanged."
       )
       .annotateMerge(
-        operationPolicy({ requiredScope: "dashboard", requiredTier: "free", costClass: "cheap" })
+        operationPolicy({
+          requiredScope: "dashboard",
+          requiredTier: "free",
+          costClass: "cheap",
+          agentConfirmation: "required",
+        })
       )
   );

@@ -15,8 +15,10 @@ turned down for reasons that are not visible in the code.
 
 `src/` splits into two trees, each sliced by capability: **`core/`** holds pure business rules
 typed `Effect<A, E, never>` and touches nothing outside itself; **`shell/`** holds every side
-effect in the system. `src/main.ts` is the only place the program runs. Read the tree itself for
-what is currently in it — `CODING_STANDARDS.md` gives the filename vocabulary a new slice follows.
+effect in the system. `src/main.ts` is the only production entry point. Dedicated scripts may run
+operator or test harnesses such as the agent REPL, but only by composing shell layers; they contain
+no domain behavior. Read the tree itself for what is currently in it — `CODING_STANDARDS.md` gives
+the filename vocabulary a new slice follows.
 
 **Why `http.ts` is separate from `api.ts`.** `HttpApiBuilder.group` takes the assembled `HttpApi` as
 its first argument, so a slice's `handlers.ts` _must_ import `api.ts`. That is fine and acyclic —
@@ -73,8 +75,12 @@ so there is a single `CONTEXT.md` and no context map. A slice is also not a use 
 
 `identity` · `consent` · `transactions` (incl. `SourceAttestation` and reconciliation) ·
 `categories` · `budgets` · `recurring` · `dashboard` · `insights` · `ingestion`
-(`NeedsReviewItem`, `IngestSample`) · `tokens` · `audit` · `memory` (transcript, rolling summary,
-`UserNote`) · `billing`.
+(`NeedsReviewItem`, `IngestSample`) · `tokens` · `audit` · `transcript` (exact Transcript,
+RollingSummary, `UserNote`) · `billing`.
+
+The slice name does not collapse those records into one source of truth: the Transcript says what
+happened, RollingSummary is bounded model context, and a UserNote exists only after an explicit
+request to remember it. Transcript content never silently changes User context or preferences.
 
 Slices are lopsided in both directions and that is fine. `categories` is nearly all core.
 **A slice with no real decisions gets no `rules.ts`** — an empty core file is ceremony.
@@ -233,6 +239,22 @@ SQL transaction, while rejection and failure evidence survives the operation tra
 The audit repo exposes append, typed observation, and strictly-before-cutoff retention only.
 Production retains 365 days, cleans at launch and daily, and retains entries at the cutoff.
 
+### Hosted confirmation follows canonical operation policy
+
+Every canonical operation declares whether a hosted agent requires exact User confirmation. The
+assembled `FidyApi` carries that declaration into the reflected operation catalog, OpenAPI, and the
+hosted toolkit; the agent keeps no parallel operation list and does not infer authority from exact
+phrases. Reads, additive writes, and reversible preference changes execute under the turn-scoped
+HostedAgentToken. Deletes, overwrites, irreversible lifecycle transitions, and assertions of
+external delivery require confirmation bound to the exact operation and canonical input. Policy
+presets remain local to each canonical operation module: matching risk values across domain slices
+do not imply that those policies must evolve together.
+
+A confirmation challenge includes a SHA-256 digest and is recoverable only from the newest eligible
+completed Transcript turn. Approval is single-use, and the model must reproduce the exact operation
+and input before canonical execution. Compact quick-log language remains model interpretation,
+verified through the `AgentService.handleTurn` seam rather than a second host-side language parser.
+
 ### Deferred: row-level security
 
 RLS would make a forgotten `WHERE` return nothing rather than leak. Deferred because it requires a
@@ -370,9 +392,11 @@ you always start from an empty database, where every migration runs):
 - **The API seam** proves the operation is integrated correctly: the operation schemas validate and reject, rows persist
   and come back intact, the response and its suggested operations, per-user isolation.
 
-The **agent seam** arrives with the agent slice — `AgentService.handleTurn` through the CLI-REPL
-harness, with the model stubbed. It is a further seam, not a third tier: it will live under
-`shell/` like every other shell test, so the two-tier split still decides where it runs.
+The **agent seam** is `AgentService.handleTurn` through the CLI-REPL harness, with the external
+LanguageModel and Terminal adapters substituted. It is a further seam, not a third tier: it lives
+under `shell/` like every other shell test, so the two-tier split still decides where it runs.
+Canonical handlers, authorization, repositories, PostgreSQL, and the generated HTTP client remain
+real at this seam.
 
 **Caller resolution is an adapter boundary beside those seams.** WhatsApp evidence does not enter
 through HTTP, and AgentToken hashes and usage times must not be exposed by a canonical response.
@@ -464,6 +488,7 @@ Most obvious alternatives here were considered and rejected. Read before reopeni
 | Stryker's command runner                     | `@stryker-mutator/vitest-runner`                                           | The vitest runner drives vitest through its Node API, so every mutant would be judged on Node while the project ships on Bun. Per-test coverage analysis is the price, and at ~1s a core suite it buys nothing yet                                                                                                                |
 | `StringLiteral`/`ObjectLiteral` excluded     | Mutating them and suppressing per site                                     | In a declarative tree they almost always land in `annotate({ description: … })`; killing them needs either exact prose pinned in a test or assertions against Effect's AST internals. One documented exclusion in the config beats eleven `Stryker disable` comments in a repo that bans suppression directives outright          |
 | Core tests first-class                       | Core covered only through the API seam                                     | Core's branches include exact Money decoding, Currency precision and same-Currency arithmetic, and each boundary would need a full HTTP round-trip against a real database; `test:core` gates `src/core` at 90% lines with no database in the run, and CRAP ≤ 8 demands the coverage anyway, so this buys slower tests, not fewer |
+| Protected PDFs unsupported                   | Requesting a PDF password in chat and decrypting in memory                 | A password is a transient Secret with no safe place in the text-only `AgentService` contract. Protected PDFs are rejected; passwords are neither persisted nor sent to the model.                                                                                                                                                 |
 
 **This last row amends the Testing Decisions section of the spec (GitHub issue #1)**, which reads
 "this is the exception, not a third seam". That was written before `core/` existed and now covers the

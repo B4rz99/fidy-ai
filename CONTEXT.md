@@ -100,9 +100,9 @@ _Avoid_: Corpus, training data, log.
 ### The agent surface
 
 **Canonical operation**:
-A capability declared once with its inputs, outputs, failures, and access requirements. The server,
-typed client, OpenAPI specification, MCP tools, and hosted agent toolkit are derived from that
-declaration. The hosted agent has no private tools.
+A capability declared once with its inputs, outputs, failures, access requirements, and hosted-agent
+confirmation policy. The server, typed client, OpenAPI specification, MCP tools, and hosted agent
+toolkit are derived from that declaration. The hosted agent has no private tools.
 _Avoid_: Endpoint, route, API call, tool.
 
 **SuggestedOperation**:
@@ -119,9 +119,19 @@ WhatsApp is one consumer; agents pull the same stream.
 _Avoid_: Notification, alert, push (those are delivery, not the record).
 
 **AgentToken**:
-A scoped bearer token a user mints in chat for one of their own agents. Scopes are `read`,
-`write`, `dashboard`.
-_Avoid_: API key, credential, PAT.
+A bearer grant for canonical operations with scopes `read`, `write`, and `dashboard`. A
+UserAgentToken is minted by a user for one of their own agents, may carry any non-empty scope
+subset, and has a renewable inactivity deadline. A HostedAgentToken is internal to one hosted turn,
+always carries every scope, has a short non-renewable hard expiry, and is revoked during normal
+turn cleanup. Raw bearers are disclosed only to their immediate caller and never persisted.
+_Avoid_: API key, credential, PAT, hosted grant.
+
+**Transcript**:
+The exact append-only record of accepted User text, visible assistant text, and canonical tool calls
+and outcomes. It is retained independently from the bounded recent complete turns sent to the
+model. A Transcript records what happened; it never silently becomes a preference, UserNote, or
+other User truth.
+_Avoid_: Memory, preference, context window, RollingSummary.
 
 **UserNote**:
 Free-text the user asked to be remembered, reachable by both the hosted agent and the user's own

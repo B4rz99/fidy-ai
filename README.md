@@ -54,6 +54,27 @@ The transient `health-cron` Railway service is built from `deploy/health-cron/`.
 it requests the public health endpoint from its environment-only `HEALTH_URL` and exits, making a
 failed scheduled check visible without adding application logic or another long-running process.
 
+#### Hosted agent CLI-REPL
+
+The REPL is a channel adapter over the same `AgentService.handleTurn` seam used by future hosted
+channels. It requires the canonical API to be running, PostgreSQL to be available, and an OpenAI API
+key; the production adapter always selects `gpt-5.4-nano` through Effect AI's OpenAI integration.
+The key is loaded as redacted configuration and is never a command argument.
+
+```sh
+bun run dev
+# In another terminal:
+export DATABASE_URL=postgres://fidy:fidy@localhost:5433/fidy
+export OPENAI_API_KEY='<set in your secret environment>'
+export FIDY_REPL_USER_ID=$(docker compose exec -T db psql -U fidy -d fidy -Atc \
+  'select id from users order by created_at limit 1')
+bun run agent:repl
+```
+
+`FIDY_API_BASE_URL` optionally changes the canonical server address and defaults to
+`http://127.0.0.1:3000`. The REPL creates a short-lived HostedAgentToken for each turn so every model
+tool traverses normal HTTP validation, authorization, and AuditLogEntry attribution.
+
 GitHub Actions runs `Checks` for pull requests and again for the resulting `trunk` commit. Railway's
 GitHub deployment triggers watch only `trunk` and wait for that commit's checks to pass before
 building either service; pull-request runs never deploy.
@@ -253,7 +274,7 @@ change together:
 | `ingestion`    | capture into transactions, review queue, samples |
 | `tokens`       | agent tokens and their scopes                    |
 | `audit`        | the metadata-only audit trail                    |
-| `memory`       | transcript, rolling summary, user notes          |
+| `transcript`   | transcript, rolling summary, user notes          |
 | `billing`      | subscriptions, the paywall, payment rails        |
 
 Work that belongs to no slice takes a cross-cutting scope:

@@ -1,4 +1,4 @@
-import { Duration, Effect, Schema, Struct } from "effect";
+import { Duration, Effect, Schema } from "effect";
 import { AgentTokenId } from "~/core/_shared/agent-token";
 import { UserId } from "~/core/_shared/user";
 
@@ -21,7 +21,6 @@ const agentBearerPrefix = "fin_";
 const agentTokenShortIdLength = 8;
 const agentTokenShortIdPattern = `[a-z0-9]{${agentTokenShortIdLength}}`;
 const agentBearerSecretPattern = "[A-Za-z0-9_-]{32,}";
-
 /** Human-readable notation for the one AgentToken bearer encoding. */
 export const AgentBearerTokenFormat = "fin_<short-id>_<secret>";
 
@@ -123,36 +122,91 @@ const validAgentTokenTimes = Schema.makeFilter<
   return undefined;
 });
 
-/**
- * One persisted AgentToken grant without its bearer secret. `idleExpiresAt`
- * advances on use and auto-revokes the grant after 90 idle days;
- * `revokedAt` disables it earlier. Creation, use, idle expiry, and revocation
- * remain in lifecycle order, and ownership remains operation context.
- */
-export const AgentToken = Schema.Struct({
+const AgentTokenFields = {
   id: AgentTokenId,
   shortId: AgentTokenShortId,
   scopes: AgentTokenScopes,
   lastUsedAt: Schema.Option(AgentTokenTime),
-  idleExpiresAt: AgentTokenTime,
   revokedAt: Schema.Option(AgentTokenTime),
   createdAt: AgentTokenTime,
+};
+
+/**
+ * A User-minted AgentToken grant. Its idle deadline advances on use and
+ * disables the grant after 90 inactive days; revocation can disable it sooner.
+ */
+export const UserAgentToken = Schema.TaggedStruct("UserAgentToken", {
+  ...AgentTokenFields,
+  idleExpiresAt: AgentTokenTime,
 })
   .check(validAgentTokenTimes)
-  .annotate({ identifier: "AgentToken" });
-export type AgentToken = typeof AgentToken.Type;
+  .annotate({ identifier: "UserAgentToken" });
+export type UserAgentToken = typeof UserAgentToken.Type;
 
-const AgentTokenAuthorizationFields = AgentToken.mapFields(Struct.pick(["id", "scopes"]));
+/** The fixed all-scope capability set carried only by a HostedAgentToken. */
+export const HostedAgentScopes = Schema.Union([
+  Schema.Tuple([Schema.Literal("read"), Schema.Literal("write"), Schema.Literal("dashboard")]),
+  Schema.Tuple([Schema.Literal("read"), Schema.Literal("dashboard"), Schema.Literal("write")]),
+  Schema.Tuple([Schema.Literal("write"), Schema.Literal("read"), Schema.Literal("dashboard")]),
+  Schema.Tuple([Schema.Literal("write"), Schema.Literal("dashboard"), Schema.Literal("read")]),
+  Schema.Tuple([Schema.Literal("dashboard"), Schema.Literal("read"), Schema.Literal("write")]),
+  Schema.Tuple([Schema.Literal("dashboard"), Schema.Literal("write"), Schema.Literal("read")]),
+]);
+export type HostedAgentScopes = typeof HostedAgentScopes.Type;
+
+const validHostedAgentTokenTimes = Schema.makeFilter<
+  Readonly<{
+    lastUsedAt: OptionalAgentTokenInstant;
+    expiresAt: AgentTokenInstant;
+    revokedAt: OptionalAgentTokenInstant;
+    createdAt: AgentTokenInstant;
+  }>
+>((token) => {
+  const createdAt = token.createdAt.epochMilliseconds;
+  const expiresAt = token.expiresAt.epochMilliseconds;
+  const lastUsedAt =
+    token.lastUsedAt._tag === "Some" ? token.lastUsedAt.value.epochMilliseconds : createdAt;
+  if (expiresAt <= createdAt) {
+    return { path: ["expiresAt"], issue: "HostedAgentToken expiry must follow creation" };
+  }
+  if (lastUsedAt < createdAt || lastUsedAt >= expiresAt) {
+    return { path: ["lastUsedAt"], issue: "HostedAgentToken use must be inside its hard lifetime" };
+  }
+  if (token.revokedAt._tag === "Some" && token.revokedAt.value.epochMilliseconds < lastUsedAt) {
+    return { path: ["revokedAt"], issue: "HostedAgentToken revocation cannot precede its use" };
+  }
+  return undefined;
+});
+
+/**
+ * An internal all-scope AgentToken created for one hosted turn. Its absolute
+ * expiry never renews, and the turn revokes it sooner during normal cleanup.
+ */
+export const HostedAgentToken = Schema.TaggedStruct("HostedAgentToken", {
+  ...AgentTokenFields,
+  scopes: HostedAgentScopes,
+  expiresAt: AgentTokenTime,
+})
+  .check(validHostedAgentTokenTimes)
+  .annotate({ identifier: "HostedAgentToken" });
+export type HostedAgentToken = typeof HostedAgentToken.Type;
+
+/** Every persisted bearer grant accepted by canonical AgentAuthorization. */
+export const AgentToken = Schema.Union([UserAgentToken, HostedAgentToken]).annotate({
+  identifier: "AgentToken",
+});
+export type AgentToken = typeof AgentToken.Type;
 
 /**
  * The authenticated AgentToken facts authorization needs after bearer lookup.
- * This projection carries the stable subject because resolving that association
- * is its purpose; it never leaves the process as a canonical response.
+ * This resolution adds the stable subject and renames the canonical token id to
+ * distinguish it from the User id; it never leaves the process as a response.
  */
 export const ResolvedAgentToken = Schema.Struct({
-  tokenId: AgentTokenAuthorizationFields.fields.id,
+  tokenId: AgentTokenFields.id,
   subjectUserId: UserId,
-  scopes: AgentTokenAuthorizationFields.fields.scopes,
+  scopes: AgentTokenFields.scopes,
+  // Bearer resolution has already recorded this use, so the timestamp is present.
   lastUsedAt: AgentTokenTime,
 });
 export type ResolvedAgentToken = typeof ResolvedAgentToken.Type;

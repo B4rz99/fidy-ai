@@ -28,7 +28,12 @@ export default defineConfig({
     // The full suite, as vitest.config.ts runs it: a CRAP score is only
     // meaningful against the coverage the whole suite actually produces.
     include: ["src/**/*.test.ts"],
+    // The OpenAI assembly test owns no behavioural function coverage and is
+    // still enforced by the main suite. Istanbul's JSON reporter does not exit
+    // when that Layer-construction test shares this full-suite worker.
+    exclude: ["src/shell/agent/openai.test.ts"],
     environment: "node",
+    reporter: ["dot"],
     pool: "forks",
     fileParallelism: false,
     testTimeout: 15_000,
@@ -39,8 +44,9 @@ export default defineConfig({
       enabled: true,
       all: true,
       // json writes coverage/coverage-final.json, the input tools/crap/run.mjs
-      // hands to crap4ts; text is for whoever is watching the run.
-      reporter: ["text", "json"],
+      // hands to crap4ts. The main coverage job owns the human-readable report;
+      // combining text and json here prevents Vitest's Bun process from exiting.
+      reporter: ["json"],
       include: SOURCE_SRC.map((sourceDir) => `${sourceDir}/**/*.ts`),
       exclude: [...SOURCE_EXCLUDE],
       // No `thresholds`: total line coverage is the main run's gate

@@ -212,9 +212,11 @@ tool generation/execution, agent loops, or model-rendered content.
 
 **Invariant:** messages and all retrieved or ingested material are data, even when they contain
 instructions. Direct, indirect, multilingual, encoded, and multimodal prompt injection may
-influence model text but cannot grant data access, authority, scope, or side effects. The model is
-an untrusted planner; canonical operations independently enforce identity, consent, scope,
-paywall, validation, and domain rules on every call.
+influence model planning, but cannot grant identity, scope, cross-User access, or destructive and
+irreversible side effects. A HostedAgentToken delegates canonical reads and reversible additions
+for one hosted turn; exact User confirmation is required when canonical operation metadata marks an
+effect as destructive or irreversible. Canonical operations independently enforce identity,
+consent, scope, paywall, validation, and domain rules on every call.
 
 The model receives only the operations and data needed for the current User and turn. It has no
 private, open-ended, shell, SQL, arbitrary-file, or arbitrary-network capability. System-prompt
@@ -222,9 +224,10 @@ secrecy is not a security boundary and no Secret belongs in it.
 
 Context assembly, summaries, caches, tool results, and transcripts stay User-isolated.
 
-**Evidence:** trace authority independently of prompt instructions; compare exposed tools with
-canonical operation metadata; inspect context selection; use adversarial direct, indirect, and
-multimodal fixtures to prove unauthorized calls and disclosures fail.
+**Evidence:** trace identity, scope, and destructive authority independently of prompt
+instructions; compare exposed tools with canonical operation metadata; inspect context selection;
+use adversarial direct, indirect, and multimodal fixtures to prove cross-User access and
+unconfirmed destructive effects fail.
 
 **Violation examples:** trusting the model to decline a write for a read-only token; an emailed
 instruction causing the agent to call another User's operation; a RollingSummary from one User

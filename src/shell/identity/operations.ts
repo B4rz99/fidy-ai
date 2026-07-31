@@ -18,7 +18,12 @@ export const IdentityGroup = HttpApiGroup.make("identity").add(
         "locale, and IANA time zone. Use it before interpreting dates or presenting data to the User."
     )
     .annotateMerge(
-      operationPolicy({ requiredScope: "read", requiredTier: "free", costClass: "cheap" })
+      operationPolicy({
+        requiredScope: "read",
+        requiredTier: "free",
+        costClass: "cheap",
+        agentConfirmation: "not-required",
+      })
     ),
   HttpApiEndpoint.patch("updateUserPreferences", "/user/preferences", {
     payload: UserPreferences,
@@ -30,6 +35,11 @@ export const IdentityGroup = HttpApiGroup.make("identity").add(
         "User asks to change either preference; ServiceMarket cannot be changed here."
     )
     .annotateMerge(
-      operationPolicy({ requiredScope: "write", requiredTier: "free", costClass: "cheap" })
+      operationPolicy({
+        requiredScope: "write",
+        requiredTier: "free",
+        costClass: "cheap",
+        agentConfirmation: "not-required",
+      })
     )
 );

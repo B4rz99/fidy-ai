@@ -1,0 +1,24 @@
+import { Effect } from "effect";
+import type { UserId } from "~/core/_shared/user";
+import type { TranscriptEntry, TranscriptTurnId } from "~/core/transcript/model";
+import {
+  appendTranscriptEntries as persistTranscriptEntries,
+  listRecentTranscriptEntries as loadRecentTranscriptEntries,
+  listTranscriptTurnEntries as loadTranscriptTurnEntries,
+} from "./repo";
+
+/** Appends exact Transcript evidence for one explicit User in supplied order. */
+export const appendTranscriptEntries = Effect.fn("appendTranscriptEntriesOperation")(
+  (userId: UserId, entries: ReadonlyArray<TranscriptEntry>) =>
+    persistTranscriptEntries(userId, entries)
+);
+
+/** Loads the newest completed Transcript turns for one explicit User. */
+export const listRecentTranscriptEntries = Effect.fn("listRecentTranscriptEntriesOperation")(
+  (userId: UserId, maxTurns: number) => loadRecentTranscriptEntries(userId, maxTurns)
+);
+
+/** Loads one explicit Transcript turn, including its in-progress entries. */
+export const listTranscriptTurnEntries = Effect.fn("listTranscriptTurnEntriesOperation")(
+  (userId: UserId, turnId: TranscriptTurnId) => loadTranscriptTurnEntries(userId, turnId)
+);

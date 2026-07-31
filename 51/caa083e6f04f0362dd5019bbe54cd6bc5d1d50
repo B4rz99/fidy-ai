@@ -1,0 +1,33 @@
+src/shell/agent/tool-confirmation.ts
+  s_d653f728f6d4b2::t_f4fc1f23eece7c 70
+  s_d653f728f6d4b2::t_5c7f077b591ccb 67-69,81,89-90
+  s_d653f728f6d4b2::t_de0d3c40cd948f 35-66,71-75,79-80
+  s_d653f728f6d4b2::t_5ac7137848bc6b 34
+  s_d653f728f6d4b2::t_481b9b4924113d 76-78
+src/core/transcript/rules.ts
+  s_d653f728f6d4b2::t_7dc61871a98f88 1,92-94,112-115,131,136-137,140,142,149,152-157,171-180,184-186,190-191,194-203,206-215
+  s_d653f728f6d4b2::t_1e14bdb32465e4 82-91,95-106,110-111,116-130
+  s_d653f728f6d4b2::t_5dbad1167e5458 158-170,187-189,192-193
+  s_d653f728f6d4b2::t_5ac7137848bc6b 107-109
+  s_d653f728f6d4b2::t_b52ab47286d7b1 216
+src/shell/agent/model-boundary.ts
+  s_d653f728f6d4b2::t_9dea4de3c21d69 140-187,192,194-196,198
+  s_d653f728f6d4b2::t_f0c6a7e5431fe0 188-191,193,199,203
+  s_d653f728f6d4b2::t_4f00a1b2c0fa59 197
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.19",
+  "base_commit_sha": "51caa083e6f04f0362dd5019bbe54cd6bc5d1d50",
+  "prompts": {},
+  "sessions": {
+    "s_d653f728f6d4b2": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019fb440-ecd8-75d4-869f-f38a24c3bf26",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

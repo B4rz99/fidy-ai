@@ -24,6 +24,7 @@ import {
   type SuggestedOperation as SuggestedOperationValue,
 } from "~/shell/_shared/response";
 import { type OperationId, operationCatalog } from "~/shell/api";
+import { truncateDashboards } from "~/shell/dashboard/fixtures";
 import { seedAgentIdentity } from "~/shell/db/development-seed";
 import { truncateInsights, weeklySummaryInput } from "~/shell/insights/fixtures";
 import { generateInsightEvent } from "~/shell/insights/repo";
@@ -115,6 +116,20 @@ const probes: Record<OperationId, SuggestedOperationProbe> = {
       });
       return [deleted];
     }),
+
+  "dashboard.getDashboard": (client) =>
+    Effect.map(client.dashboard.getDashboard(), (response) => [response]),
+
+  "dashboard.listDashboardCatalog": (client) =>
+    Effect.map(client.dashboard.listDashboardCatalog(), (response) => [response]),
+
+  "dashboard.applyDashboardEdit": (client) =>
+    Effect.map(
+      client.dashboard.applyDashboardEdit({
+        payload: { op: "set-title", title: "Panel de prueba" },
+      }),
+      (response) => [response]
+    ),
 
   "transactions.createTransaction": (client) =>
     Effect.map(
@@ -295,6 +310,7 @@ layer(SuggestedOperationsHarness, { excludeTestServices: true, timeout: "30 seco
         for (const [sourceOperation, probe] of Object.entries(probes)) {
           yield* truncateTransactions;
           yield* truncateInsights;
+          yield* truncateDashboards;
           const source = Option.getOrThrow(
             Option.fromUndefinedOr(operationCatalog.byId.get(sourceOperation))
           );

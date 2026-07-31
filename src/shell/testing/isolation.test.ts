@@ -19,6 +19,7 @@ import { truncateInsights, weeklySummaryInput } from "~/shell/insights/fixtures"
 import { generateInsightEvent } from "~/shell/insights/repo";
 import { transactionPayload, truncateTransactions } from "~/shell/transactions/fixtures";
 import { ApiHarness, type ApiClient, headersFor, makeApiClientLive } from "./api-harness";
+import { truncateDashboards } from "~/shell/dashboard/fixtures";
 import { seedAgentIdentity } from "~/shell/db/development-seed";
 import { publishedOperationIds } from "./openapi";
 
@@ -142,6 +143,34 @@ const probes: Record<OperationId, IsolationProbe> = {
       const retained = yield* attempt.ownerClient.categories.listKeywordRules({});
       expect(denied).toMatchObject({ _tag: "Failure", failure: { error: { code: "not_found" } } });
       expect(retained.data).toEqual([ownerRule.data]);
+    }),
+
+  "dashboard.getDashboard": (attempt) =>
+    Effect.gen(function* () {
+      const strangers = yield* attempt.strangerClient.dashboard.getDashboard();
+      const owners = yield* attempt.ownerClient.dashboard.getDashboard();
+
+      expect(strangers.data.title).toBe("Mi tablero");
+      expect(owners.data.title).toBe("Panel privado del dueño");
+    }),
+
+  "dashboard.listDashboardCatalog": (attempt) =>
+    Effect.gen(function* () {
+      const strangers = yield* attempt.strangerClient.dashboard.listDashboardCatalog();
+      const owners = yield* attempt.ownerClient.dashboard.listDashboardCatalog();
+
+      expect(strangers.data).toEqual(owners.data);
+      expect(strangers.data).toHaveLength(4);
+    }),
+
+  "dashboard.applyDashboardEdit": (attempt) =>
+    Effect.gen(function* () {
+      yield* attempt.strangerClient.dashboard.applyDashboardEdit({
+        payload: { op: "set-title", title: "Panel del extraño" },
+      });
+      const owners = yield* attempt.ownerClient.dashboard.getDashboard();
+
+      expect(owners.data.title).toBe("Panel privado del dueño");
     }),
 
   "categories.deleteKeywordRule": (attempt) =>
@@ -341,6 +370,9 @@ const seedAttempt = Effect.gen(function* () {
     payload: transactionPayload(),
   });
   const ownedInsight = yield* generateInsightEvent(owner, weeklySummaryInput());
+  yield* ownerClient.dashboard.applyDashboardEdit({
+    payload: { op: "set-title", title: "Panel privado del dueño" },
+  });
 
   return { ownerClient, strangerClient, ownedTransaction: created.data, ownedInsight };
 });
@@ -361,6 +393,7 @@ layer(IsolationHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         Effect.gen(function* () {
           yield* truncateInsights;
           yield* truncateTransactions;
+          yield* truncateDashboards;
           const attempt = yield* seedAttempt;
 
           yield* probe(attempt);

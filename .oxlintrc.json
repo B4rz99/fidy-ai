@@ -139,17 +139,24 @@
     {
       "files": ["src/core/**"],
       "rules": {
+        "effect-guards/no-datetime-internals": "error",
         "effect-guards/no-escape-hatch": "error",
         "effect-guards/require-interface-comment": "error",
-        // `DateTime.Utc` is the one allowance, and it is Effect's wart rather
-        // than ours: the interface carries a mutable `partsUtc` field, a lazily
-        // filled cache of the calendar parts, so the type is deeply mutable to
-        // this rule while the value it denotes — an instant — is not. Core
-        // takes `now` as a parameter everywhere (ARCHITECTURE.md §3), so
-        // without this the rule would be unsatisfiable here too.
+        "effect-guards/scalar-brand-only": "error",
+        "no-param-reassign": ["error", { "props": true }],
+        // `DateTime.Utc` carries a mutable lazy cache even though it denotes an
+        // immutable instant; property reassignment remains banned above. Effect's
+        // `Brand` adds phantom scalar identity, but its variance field trips this
+        // deep-readonly rule. scalar-brand-only compensates by rejecting brands on
+        // object schemas. Negative probes exercise both fences in lint:type-aware.
         "typescript/prefer-readonly-parameter-types": [
           "error",
-          { "allow": [{ "from": "package", "package": "effect", "name": "Utc" }] }
+          {
+            "allow": [
+              { "from": "package", "package": "effect", "name": "Utc" },
+              { "from": "package", "package": "effect", "name": "Brand" }
+            ]
+          }
         ],
         "no-restricted-imports": [
           "error",

@@ -31,6 +31,54 @@ type ConfirmationDecision =
       readonly failure: ConfirmationRequiredFailure;
     };
 
+type WindowCallEntry = Extract<TranscriptWindowEntry, { readonly _tag: "CanonicalToolCallEntry" }>;
+type WindowResultEntry = Extract<
+  TranscriptWindowEntry,
+  { readonly _tag: "CanonicalToolResultEntry" }
+>;
+
+const resultEntryAt = (
+  entries: ReadonlyArray<TranscriptWindowEntry>,
+  index: number
+): Option.Option<WindowResultEntry> =>
+  Option.fromUndefinedOr(entries[index]).pipe(
+    Option.filter((entry): entry is WindowResultEntry => entry._tag === "CanonicalToolResultEntry")
+  );
+
+const callEntryAt = (
+  entries: ReadonlyArray<TranscriptWindowEntry>,
+  index: number
+): Option.Option<WindowCallEntry> =>
+  Option.fromUndefinedOr(entries[index]).pipe(
+    Option.filter((entry): entry is WindowCallEntry => entry._tag === "CanonicalToolCallEntry")
+  );
+
+const confirmationFailure = (
+  result: WindowResultEntry,
+  challenge: string
+): Option.Option<ConfirmationRequiredFailure> =>
+  result.outcome._tag === "ToolInputRejected"
+    ? Option.some(result.outcome.failure).pipe(
+        Option.filter(Schema.is(ConfirmationRequiredFailure)),
+        Option.filter((failure) => failure.challenge === challenge)
+      )
+    : Option.none();
+
+const pendingApprovalAt = (
+  entries: ReadonlyArray<TranscriptWindowEntry>,
+  resultIndex: number,
+  challenge: string
+): Option.Option<PendingApproval> =>
+  Option.gen(function* () {
+    const result = yield* resultEntryAt(entries, resultIndex);
+    yield* confirmationFailure(result, challenge);
+    const call = yield* callEntryAt(entries, resultIndex - 1);
+    yield* Option.some(call).pipe(
+      Option.filter((candidate) => candidate.toolCallId === result.toolCallId)
+    );
+    return { operation: call.operation, input: call.input };
+  });
+
 const findPendingApproval = (
   entries: ReadonlyArray<TranscriptWindowEntry>
 ): Option.Option<PendingApproval> => {
@@ -38,18 +86,8 @@ const findPendingApproval = (
   if (assistant?._tag !== "AssistantTranscriptEntry") return Option.none();
 
   for (let index = entries.length - 1; index > 0; index -= 1) {
-    const result = entries[index];
-    const call = entries[index - 1];
-    if (
-      result?._tag === "CanonicalToolResultEntry" &&
-      result.outcome._tag === "ToolInputRejected" &&
-      Schema.is(ConfirmationRequiredFailure)(result.outcome.failure) &&
-      result.outcome.failure.challenge === assistant.text &&
-      call?._tag === "CanonicalToolCallEntry" &&
-      call.toolCallId === result.toolCallId
-    ) {
-      return Option.some({ operation: call.operation, input: call.input });
-    }
+    const pending = pendingApprovalAt(entries, index, assistant.text);
+    if (Option.isSome(pending)) return pending;
   }
   return Option.none();
 };

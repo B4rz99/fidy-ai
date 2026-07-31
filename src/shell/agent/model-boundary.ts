@@ -137,54 +137,67 @@ export const systemPrompt = ({
   `Cuando el Usuario responda con un comando CONFIRMAR emitido por el host, vuelve a proponer ` +
   `una sola vez exactamente la operación y los argumentos mostrados en el desafío.`;
 
+type TranscriptTextEntry = Extract<
+  TranscriptWindowEntry,
+  { readonly _tag: "UserTranscriptEntry" | "AssistantTranscriptEntry" }
+>;
+type TranscriptCallEntry = Extract<
+  TranscriptWindowEntry,
+  { readonly _tag: "CanonicalToolCallEntry" }
+>;
+type TranscriptResultEntry = Extract<
+  TranscriptWindowEntry,
+  { readonly _tag: "CanonicalToolResultEntry" }
+>;
+
+const transcriptTextMessage = (entry: TranscriptTextEntry): Prompt.MessageEncoded => ({
+  role: entry._tag === "UserTranscriptEntry" ? "user" : "assistant",
+  content: containsSensitiveChatValue(entry.text) ? credentialRejectedReply : entry.text,
+});
+
+const transcriptCallMessage = (entry: TranscriptCallEntry): Prompt.MessageEncoded => ({
+  role: "assistant",
+  content: [
+    {
+      type: "tool-call",
+      id: entry.toolCallId,
+      name: encodeOpenAiToolName(CanonicalOperationId.make(entry.operation)),
+      params: containsSensitiveJson(entry.input) ? sensitiveEntryRejected : entry.input,
+    },
+  ],
+});
+
+const transcriptResultMessage = (entry: TranscriptResultEntry): Prompt.MessageEncoded => {
+  const failed = entry.outcome._tag !== "Succeeded";
+  const canonicalResult =
+    entry.outcome._tag === "Succeeded" ? entry.outcome.output : entry.outcome.failure;
+  return {
+    role: "tool",
+    content: [
+      {
+        type: "tool-result",
+        id: entry.toolCallId,
+        name: encodeOpenAiToolName(CanonicalOperationId.make(entry.operation)),
+        result: containsSensitiveJson(canonicalResult) ? sensitiveEntryRejected : canonicalResult,
+        isFailure: failed,
+      },
+    ],
+  };
+};
+
+const transcriptMessage = (entry: TranscriptWindowEntry): Prompt.MessageEncoded => {
+  switch (entry._tag) {
+    case "UserTranscriptEntry":
+    case "AssistantTranscriptEntry":
+      return transcriptTextMessage(entry);
+    case "CanonicalToolCallEntry":
+      return transcriptCallMessage(entry);
+    case "CanonicalToolResultEntry":
+      return transcriptResultMessage(entry);
+  }
+};
+
 /** Converts a bounded Transcript window to provider messages while replacing sensitive values. */
 export const transcriptPrompt = (
   entries: ReadonlyArray<TranscriptWindowEntry>
-): ReadonlyArray<Prompt.MessageEncoded> => {
-  const messages: Array<Prompt.MessageEncoded> = [];
-  for (const entry of entries) {
-    switch (entry._tag) {
-      case "UserTranscriptEntry":
-      case "AssistantTranscriptEntry":
-        messages.push({
-          role: entry._tag === "UserTranscriptEntry" ? "user" : "assistant",
-          content: containsSensitiveChatValue(entry.text) ? credentialRejectedReply : entry.text,
-        });
-        break;
-      case "CanonicalToolCallEntry":
-        messages.push({
-          role: "assistant",
-          content: [
-            {
-              type: "tool-call",
-              id: entry.toolCallId,
-              name: encodeOpenAiToolName(CanonicalOperationId.make(entry.operation)),
-              params: containsSensitiveJson(entry.input) ? sensitiveEntryRejected : entry.input,
-            },
-          ],
-        });
-        break;
-      case "CanonicalToolResultEntry": {
-        const failed = entry.outcome._tag !== "Succeeded";
-        const canonicalResult =
-          entry.outcome._tag === "Succeeded" ? entry.outcome.output : entry.outcome.failure;
-        messages.push({
-          role: "tool",
-          content: [
-            {
-              type: "tool-result",
-              id: entry.toolCallId,
-              name: encodeOpenAiToolName(CanonicalOperationId.make(entry.operation)),
-              result: containsSensitiveJson(canonicalResult)
-                ? sensitiveEntryRejected
-                : canonicalResult,
-              isFailure: failed,
-            },
-          ],
-        });
-        break;
-      }
-    }
-  }
-  return messages;
-};
+): ReadonlyArray<Prompt.MessageEncoded> => entries.map(transcriptMessage);

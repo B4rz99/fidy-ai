@@ -1,4 +1,4 @@
-import { Effect, Schema, Struct } from "effect";
+import { Effect, Option, Schema, Struct } from "effect";
 import {
   AssistantTranscriptEntry,
   CanonicalToolCallEntry,
@@ -79,58 +79,140 @@ const groupTurns = (
   return turns;
 };
 
+type WindowUserEntry = Extract<WindowTextEntry, { readonly _tag: "UserTranscriptEntry" }>;
+type WindowCallEntryValue = Extract<
+  TranscriptWindowEntry,
+  { readonly _tag: "CanonicalToolCallEntry" }
+>;
+type WindowResultEntryValue = Extract<
+  TranscriptWindowEntry,
+  { readonly _tag: "CanonicalToolResultEntry" }
+>;
+
+const activeTurnUser = (
+  turn: ReadonlyArray<TranscriptWindowEntry>,
+  maxCharacters: TranscriptWindowCharacterLimit
+): Option.Option<WindowUserEntry> =>
+  Option.fromUndefinedOr(turn[0]).pipe(
+    Option.filter((entry): entry is WindowUserEntry => entry._tag === "UserTranscriptEntry"),
+    Option.filter((user) => entryCharacters(user) <= maxCharacters),
+    Option.filter(() => turn.at(-1)?._tag !== "AssistantTranscriptEntry")
+  );
+
+const matchingTrailingCall = (
+  previous: TranscriptWindowEntry | undefined,
+  result: WindowResultEntryValue
+): Option.Option<WindowCallEntryValue> =>
+  Option.fromUndefinedOr(previous).pipe(
+    Option.filter(
+      (entry): entry is WindowCallEntryValue => entry._tag === "CanonicalToolCallEntry"
+    ),
+    Option.filter((call) => call.toolCallId === result.toolCallId)
+  );
+
+const trailingTurnUnit = (
+  turn: ReadonlyArray<TranscriptWindowEntry>,
+  index: number
+): ReadonlyArray<TranscriptWindowEntry> =>
+  Option.fromUndefinedOr(turn[index]).pipe(
+    Option.match({
+      onNone: () => [],
+      onSome: (entry) =>
+        entry._tag === "CanonicalToolResultEntry"
+          ? matchingTrailingCall(turn[index - 1], entry).pipe(
+              Option.match({
+                onNone: () => [entry],
+                onSome: (call) => [call, entry],
+              })
+            )
+          : [entry],
+    })
+  );
+
 const boundedActiveTurn = (
   turn: ReadonlyArray<TranscriptWindowEntry>,
   maxCharacters: TranscriptWindowCharacterLimit
 ): ReadonlyArray<TranscriptWindowEntry> => {
-  const user = turn[0];
-  const last = turn.at(-1);
-  if (
-    user?._tag !== "UserTranscriptEntry" ||
-    last?._tag === "AssistantTranscriptEntry" ||
-    entryCharacters(user) > maxCharacters
-  ) {
-    return [];
-  }
+  const user = activeTurnUser(turn, maxCharacters);
+  if (Option.isNone(user)) return [];
 
   const suffix: Array<TranscriptWindowEntry> = [];
-  let characters = entryCharacters(user);
+  let characters = entryCharacters(user.value);
   for (let index = turn.length - 1; index > 0;) {
-    const entry = turn[index];
-    if (entry === undefined) break;
-    const previous = turn[index - 1];
-    const unit =
-      entry._tag === "CanonicalToolResultEntry" &&
-      previous?._tag === "CanonicalToolCallEntry" &&
-      previous.toolCallId === entry.toolCallId
-        ? [previous, entry]
-        : [entry];
+    const unit = trailingTurnUnit(turn, index);
     const unitCharacters = unit.reduce((total, member) => total + entryCharacters(member), 0);
     if (characters + unitCharacters > maxCharacters) break;
     suffix.unshift(...unit);
     characters += unitCharacters;
     index -= unit.length;
   }
-  return [user, ...suffix];
+  return [user.value, ...suffix];
+};
+
+type TurnSelection = Readonly<{
+  remaining: ReadonlyArray<ReadonlyArray<TranscriptWindowEntry>>;
+  selected: ReadonlyArray<ReadonlyArray<TranscriptWindowEntry>>;
+  characters: number;
+}>;
+
+const exceedsWindow = ({
+  selectedTurns,
+  characters,
+  turnCharacters,
+  maxTurns,
+  maxCharacters,
+}: Readonly<{
+  selectedTurns: number;
+  characters: number;
+  turnCharacters: number;
+  maxTurns: TranscriptWindowTurnLimit;
+  maxCharacters: TranscriptWindowCharacterLimit;
+}>): boolean => selectedTurns >= maxTurns || characters + turnCharacters > maxCharacters;
+
+const finishOverflow = (
+  selected: ReadonlyArray<ReadonlyArray<TranscriptWindowEntry>>,
+  turn: ReadonlyArray<TranscriptWindowEntry>,
+  maxCharacters: TranscriptWindowCharacterLimit
+): ReadonlyArray<TranscriptWindowEntry> =>
+  selected.length === 0 ? boundedActiveTurn(turn, maxCharacters) : selected.flat();
+
+const continueNewestTurns = (
+  state: TurnSelection,
+  maxTurns: TranscriptWindowTurnLimit,
+  maxCharacters: TranscriptWindowCharacterLimit
+): ReadonlyArray<TranscriptWindowEntry> => {
+  const turn = state.remaining[0];
+  if (turn === undefined) return state.selected.flat();
+  const turnCharacters = turn.reduce((total, entry) => total + entryCharacters(entry), 0);
+  return exceedsWindow({
+    selectedTurns: state.selected.length,
+    characters: state.characters,
+    turnCharacters,
+    maxTurns,
+    maxCharacters,
+  })
+    ? finishOverflow(state.selected, turn, maxCharacters)
+    : continueNewestTurns(
+        {
+          remaining: state.remaining.slice(1),
+          selected: [turn, ...state.selected],
+          characters: state.characters + turnCharacters,
+        },
+        maxTurns,
+        maxCharacters
+      );
 };
 
 const newestTurnsWithin = (
   turns: ReadonlyArray<ReadonlyArray<TranscriptWindowEntry>>,
   maxTurns: TranscriptWindowTurnLimit,
   maxCharacters: TranscriptWindowCharacterLimit
-): ReadonlyArray<TranscriptWindowEntry> => {
-  const selected: Array<ReadonlyArray<TranscriptWindowEntry>> = [];
-  let characters = 0;
-  for (const turn of turns.toReversed()) {
-    const turnCharacters = turn.reduce((total, entry) => total + entryCharacters(entry), 0);
-    if (selected.length >= maxTurns || characters + turnCharacters > maxCharacters) {
-      return selected.length === 0 ? boundedActiveTurn(turn, maxCharacters) : selected.flat();
-    }
-    selected.unshift(turn);
-    characters += turnCharacters;
-  }
-  return selected.flat();
-};
+): ReadonlyArray<TranscriptWindowEntry> =>
+  continueNewestTurns(
+    { remaining: turns.toReversed(), selected: [], characters: 0 },
+    maxTurns,
+    maxCharacters
+  );
 
 /**
  * Selects the newest contiguous Transcript turns that satisfy both bounds.

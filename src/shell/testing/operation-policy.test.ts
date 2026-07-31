@@ -62,6 +62,9 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           "insights.markInsightDelivered": "required",
           "insights.markInsightRead": "required",
           "insights.dismissInsight": "required",
+          "dashboard.getDashboard": "not-required",
+          "dashboard.listDashboardCatalog": "not-required",
+          "dashboard.applyDashboardEdit": "required",
         } satisfies Record<OperationId, AgentConfirmation>;
         const operations = yield* publishedOperations;
         const published: Array<readonly [string, AgentConfirmation | undefined]> = operations.map(

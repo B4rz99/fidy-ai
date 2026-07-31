@@ -143,16 +143,15 @@ export const UserAgentToken = Schema.TaggedStruct("UserAgentToken", {
   .annotate({ identifier: "UserAgentToken" });
 export type UserAgentToken = typeof UserAgentToken.Type;
 
-const containsEveryAgentScope = Schema.makeFilter<AgentTokenScopes>((scopes) =>
-  scopes.includes("read") && scopes.includes("write") && scopes.includes("dashboard")
-    ? undefined
-    : "A HostedAgentToken must grant every canonical AgentToken scope"
-);
-
 /** The fixed all-scope capability set carried only by a HostedAgentToken. */
-export const HostedAgentScopes = AgentTokenScopes.check(containsEveryAgentScope).pipe(
-  Schema.brand("HostedAgentScopes")
-);
+export const HostedAgentScopes = Schema.Union([
+  Schema.Tuple([Schema.Literal("read"), Schema.Literal("write"), Schema.Literal("dashboard")]),
+  Schema.Tuple([Schema.Literal("read"), Schema.Literal("dashboard"), Schema.Literal("write")]),
+  Schema.Tuple([Schema.Literal("write"), Schema.Literal("read"), Schema.Literal("dashboard")]),
+  Schema.Tuple([Schema.Literal("write"), Schema.Literal("dashboard"), Schema.Literal("read")]),
+  Schema.Tuple([Schema.Literal("dashboard"), Schema.Literal("read"), Schema.Literal("write")]),
+  Schema.Tuple([Schema.Literal("dashboard"), Schema.Literal("write"), Schema.Literal("read")]),
+]);
 export type HostedAgentScopes = typeof HostedAgentScopes.Type;
 
 const validHostedAgentTokenTimes = Schema.makeFilter<

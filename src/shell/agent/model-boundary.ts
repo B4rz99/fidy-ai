@@ -129,8 +129,13 @@ export const systemPrompt = ({
   `Las categorías canónicas disponibles son ${categoryRows
     .map(({ id, label }) => `${label}: ${id}`)
     .join(", ")}. ` +
-  `Para modificar datos o leer datos privados no expresamente pedidos, pide al Usuario responder ` +
-  `exactamente CONFIRMAR seguido del id canónico de la operación.`;
+  `Usa operaciones canónicas para consultar hechos financieros del Usuario; no los inventes. ` +
+  `Interpreta registros compactos de comercio e importe, incluidas las expresiones mil y k, ` +
+  `como egresos en la moneda contextual; preserva cualquier moneda ISO explícita, usa el ` +
+  `inicio del turno como ` +
+  `instante predeterminado y no inventes notas. ` +
+  `Cuando el Usuario responda con un comando CONFIRMAR emitido por el host, vuelve a proponer ` +
+  `una sola vez exactamente la operación y los argumentos mostrados en el desafío.`;
 
 /** Converts a bounded Transcript window to provider messages while replacing sensitive values. */
 export const transcriptPrompt = (

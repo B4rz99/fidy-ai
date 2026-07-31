@@ -49,14 +49,7 @@ import {
   systemPrompt,
   transcriptPrompt,
 } from "./model-boundary";
-import {
-  confirmationRequired,
-  directQuickLogOperation,
-  findPendingApproval,
-  matchesApprovedCall,
-  mayExecuteToolCall,
-  type PendingApproval,
-} from "./tool-authorization";
+import { makeTurnConfirmation } from "./tool-confirmation";
 import { findAgentOperationBinding, makeAgentToolkit } from "./toolkit";
 
 /** Resource and context bounds applied independently to every hosted turn. */
@@ -150,40 +143,6 @@ const appendAssistantTranscript = Effect.fn("AgentService.appendAssistantTranscr
     }),
   ]);
 });
-const ConfirmationDigest = Schema.String.check(Schema.isPattern(/^[0-9a-f]{64}$/)).pipe(
-  Schema.brand("ConfirmationDigest")
-);
-type ConfirmationDigest = typeof ConfirmationDigest.Type;
-const confirmationCommand = (
-  pending: Readonly<PendingApproval>,
-  digest: ConfirmationDigest
-): string => `CONFIRMAR ${pending.operation} ${digest}`;
-const confirmationChallenge = (
-  pending: Readonly<PendingApproval>,
-  digest: ConfirmationDigest,
-  serializedInput: string
-): string =>
-  `Esta operación requiere confirmación.\n` +
-  `Operación exacta: ${pending.operation}\n` +
-  `Argumentos exactos: ${serializedInput}\n` +
-  `Responde exactamente: ${confirmationCommand(pending, digest)}`;
-const approvalBinding = Effect.fn("AgentService.approvalBinding")(function* (
-  pending: Readonly<PendingApproval>
-) {
-  const crypto = yield* Crypto.Crypto;
-  const serializedInput = yield* Schema.encodeEffect(Schema.UnknownFromJsonString)(
-    pending.input
-  ).pipe(Effect.orDie);
-  const payload = new TextEncoder().encode(`${pending.operation}\n${serializedInput}`);
-  const bytes = yield* crypto.digest("SHA-256", payload).pipe(Effect.orDie);
-  return {
-    digest: ConfirmationDigest.make(
-      Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("")
-    ),
-    serializedInput,
-  };
-});
-
 const makeTextReply = (text: TranscriptText): AgentReply =>
   AgentReply.make({ text, attachments: Option.none(), choices: Option.none() });
 
@@ -248,20 +207,7 @@ const makeAgentService = Effect.gen(function* () {
       return makeTextReply(credentialRejectedReply);
     }
 
-    const priorTranscript = yield* listRecentTranscriptEntries(userId, 1);
-    let approvedCall = yield* findPendingApproval(priorTranscript).pipe(
-      Option.match({
-        onNone: () => Effect.succeed(Option.none()),
-        onSome: (pending) =>
-          approvalBinding(pending).pipe(
-            Effect.map(({ digest }) =>
-              message.text.trim() === confirmationCommand(pending, digest)
-                ? Option.some(pending)
-                : Option.none()
-            )
-          ),
-      })
-    );
+    const confirmation = yield* makeTurnConfirmation(userId, message);
     const turnId = yield* makeTurnId;
     const occurredAt = yield* DateTime.now;
     const userEntry = UserTranscriptEntry.make({
@@ -277,7 +223,6 @@ const makeAgentService = Effect.gen(function* () {
       Effect.gen(function* () {
         const toolkit = yield* makeAgentToolkit(hostedToken.bearer);
         let toolCalls = 0;
-        let quickLogAvailable = true;
         let includeMalformedOutputFeedback = false;
         for (let index = 1; index <= limits.maxIterations; index += 1) {
           const iteration = AgentIteration.make(index);
@@ -375,28 +320,8 @@ const makeAgentService = Effect.gen(function* () {
               ]);
               continue;
             }
-            const explicitlyApproved =
-              Option.isSome(approvedCall) &&
-              matchesApprovedCall({ pending: approvedCall.value, binding, input });
-            if (explicitlyApproved) approvedCall = Option.none();
-            const hostAuthorized = mayExecuteToolCall({
-              binding,
-              message,
-              iteration,
-              input,
-              quickLogAvailable,
-              occurredAt,
-            });
-            if (hostAuthorized && binding.operation === directQuickLogOperation) {
-              quickLogAvailable = false;
-            }
-
-            if (!explicitlyApproved && !hostAuthorized) {
-              const pending = { operation: binding.operation, input };
-              const approval = yield* approvalBinding(pending);
-              const challenge = TranscriptText.make(
-                confirmationChallenge(pending, approval.digest, approval.serializedInput)
-              );
+            const confirmationDecision = yield* confirmation.decide({ binding, input });
+            if (confirmationDecision._tag === "RequireConfirmation") {
               yield* appendTranscriptEntries(userId, [
                 CanonicalToolResultEntry.make({
                   id: yield* makeEntryId,
@@ -404,13 +329,14 @@ const makeAgentService = Effect.gen(function* () {
                   iteration,
                   toolCallId,
                   operation: binding.operation,
-                  outcome: { _tag: "ToolInputRejected", failure: confirmationRequired },
+                  outcome: {
+                    _tag: "ToolInputRejected",
+                    failure: confirmationDecision.failure,
+                  },
                   occurredAt: yield* DateTime.now,
                 }),
               ]);
-              pendingChallenge = Option.isNone(pendingChallenge)
-                ? Option.some(challenge)
-                : pendingChallenge;
+              pendingChallenge = Option.some(confirmationDecision.failure.challenge);
               continue;
             }
 

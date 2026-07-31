@@ -239,6 +239,22 @@ SQL transaction, while rejection and failure evidence survives the operation tra
 The audit repo exposes append, typed observation, and strictly-before-cutoff retention only.
 Production retains 365 days, cleans at launch and daily, and retains entries at the cutoff.
 
+### Hosted confirmation follows canonical operation policy
+
+Every canonical operation declares whether a hosted agent requires exact User confirmation. The
+assembled `FidyApi` carries that declaration into the reflected operation catalog, OpenAPI, and the
+hosted toolkit; the agent keeps no parallel operation list and does not infer authority from exact
+phrases. Reads, additive writes, and reversible preference changes execute under the turn-scoped
+HostedAgentToken. Deletes, overwrites, irreversible lifecycle transitions, and assertions of
+external delivery require confirmation bound to the exact operation and canonical input. Policy
+presets remain local to each canonical operation module: matching risk values across domain slices
+do not imply that those policies must evolve together.
+
+A confirmation challenge includes a SHA-256 digest and is recoverable only from the newest eligible
+completed Transcript turn. Approval is single-use, and the model must reproduce the exact operation
+and input before canonical execution. Compact quick-log language remains model interpretation,
+verified through the `AgentService.handleTurn` seam rather than a second host-side language parser.
+
 ### Deferred: row-level security
 
 RLS would make a forgotten `WHERE` return nothing rather than leak. Deferred because it requires a

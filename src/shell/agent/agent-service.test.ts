@@ -140,21 +140,10 @@ const ScriptedLanguageModel = Layer.effect(
           },
         ]);
       }
-      const unauthorizedQuickLog = [
-        "por favor no registres almuerzo 25 mil",
-        "tampoco registres almuerzo 25 mil",
-        "debería registrar almuerzo 25 mil",
-        "borra 25 mil",
-        "omite 25 mil",
-        "cancela 25 mil",
-      ]
-        .filter((candidate) => serialized.includes(candidate))
-        .toSorted((left, right) => serialized.lastIndexOf(right) - serialized.lastIndexOf(left))[0];
-      if (unauthorizedQuickLog !== undefined) {
+      if (serialized.includes("debería registrar almuerzo 25 mil")) {
         const occurredAt = /El turno comenzó en ([0-9T:.+-]+Z)/u.exec(serialized)?.[1];
-        const merchant = unauthorizedQuickLog.replace(/\s+25\s+mil$/u, "");
         return Effect.succeed([
-          createTransactionToolCall({ id: "negated-quick-log-call", merchant, occurredAt }),
+          createTransactionToolCall({ id: "free-form-addition", occurredAt }),
         ]);
       }
       if (serialized.includes("Provoca entrada malformada")) {
@@ -186,6 +175,36 @@ const ScriptedLanguageModel = Layer.effect(
                 }),
               ]
         );
+      }
+      if (serialized.includes("borra con lectura posterior")) {
+        const transactionId = /borra con lectura posterior ([0-9a-f-]{36})/u.exec(serialized)?.[1];
+        if (
+          serialized.lastIndexOf("CONFIRMAR transactions.deleteTransaction") >
+          serialized.lastIndexOf("explicit_confirmation_required")
+        ) {
+          return Effect.succeed([
+            {
+              type: "tool-call" as const,
+              id: "confirmed-mixed-delete",
+              name: "transactions__deleteTransaction",
+              params: { params: { id: transactionId } },
+            },
+          ]);
+        }
+        return Effect.succeed([
+          {
+            type: "tool-call" as const,
+            id: "mixed-delete",
+            name: "transactions__deleteTransaction",
+            params: { params: { id: transactionId } },
+          },
+          {
+            type: "tool-call" as const,
+            id: "mixed-safe-read",
+            name: "categories__listCategories",
+            params: {},
+          },
+        ]);
       }
       if (serialized.includes("revisa historial secretos")) {
         if (serialized.includes("replay-delete-call")) {
@@ -267,21 +286,20 @@ const ScriptedLanguageModel = Layer.effect(
           },
         ]);
       }
-      if (
-        serialized.includes("No leas la transacción") ||
-        serialized.includes("Solo menciona la transacción")
-      ) {
-        const transactionId = /(?:No leas|Solo menciona) la transacción ([0-9a-f-]{36})/u.exec(
-          serialized
-        )?.[1];
-        return Effect.succeed([
-          {
-            type: "tool-call" as const,
-            id: "negated-private-read",
-            name: "transactions__getTransaction",
-            params: { params: { id: transactionId } },
-          },
-        ]);
+      if (serialized.includes("Describe el movimiento")) {
+        const transactionId = /Describe el movimiento ([0-9a-f-]{36})/u.exec(serialized)?.[1];
+        return Effect.succeed(
+          hasToolResultAfter(serialized, "Describe el movimiento")
+            ? [{ type: "text" as const, text: "Este es el movimiento solicitado." }]
+            : [
+                {
+                  type: "tool-call" as const,
+                  id: "natural-private-read",
+                  name: "transactions__getTransaction",
+                  params: { params: { id: transactionId } },
+                },
+              ]
+        );
       }
       if (serialized.includes("Busca la transacción inexistente")) {
         const hasCurrentToolResult = hasToolResultAfter(
@@ -642,7 +660,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
     })
   );
 
-  it.effect("does not treat non-affirmative quick-log text as mutation authority", () =>
+  it.effect("executes a reversible addition without quick-log authorization grammar", () =>
     Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
       yield* sql`TRUNCATE source_attestations, transactions, keyword_rules`;
@@ -650,30 +668,22 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       yield* sql`DELETE FROM audit_log_entries WHERE user_id = ${defaultUserId}`;
       const service = yield* AgentService;
 
-      for (const text of [
-        "por favor no registres almuerzo 25 mil",
-        "tampoco registres almuerzo 25 mil",
-        "debería registrar almuerzo 25 mil",
-        "borra 25 mil",
-        "omite 25 mil",
-        "cancela 25 mil",
-      ]) {
-        yield* service.handleTurn(
-          defaultUserId,
-          InboundMessage.make({ text: TranscriptText.make(text) })
-        );
-      }
+      const reply = yield* service.handleTurn(
+        defaultUserId,
+        InboundMessage.make({
+          text: TranscriptText.make("debería registrar almuerzo 25 mil"),
+        })
+      );
       const rows = yield* sql`SELECT count(*)::int AS count FROM transactions`;
       const audit = yield* observeAuditLogEntries(defaultUserId);
 
-      expect(rows[0]?.count).toBe(0);
-      expect(audit.some((entry) => entry.operation === "transactions.createTransaction")).toBe(
-        false
-      );
+      expect(reply.text).toBe("Listo, completé la operación solicitada.");
+      expect(rows[0]?.count).toBe(1);
+      expect(audit.map(({ operation }) => operation)).toEqual(["transactions.createTransaction"]);
     })
   );
 
-  it.effect("rejects an unrelated private read batched with a grounded quick-log", () =>
+  it.effect("executes reads and reversible additions from one model batch", () =>
     Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
       yield* sql`TRUNCATE source_attestations, transactions, keyword_rules`;
@@ -694,10 +704,13 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       );
 
       expect(reply.text).toBe("Listo, completé la operación solicitada.");
-      expect(audit.map((entry) => entry.operation)).toEqual(["transactions.createTransaction"]);
+      expect(audit.map((entry) => entry.operation)).toEqual([
+        "transactions.listTransactions",
+        "transactions.createTransaction",
+      ]);
       expect(injectedRead).toMatchObject({
         _tag: "CanonicalToolResultEntry",
-        outcome: { _tag: "ToolInputRejected" },
+        outcome: { _tag: "Succeeded" },
       });
     })
   );
@@ -884,7 +897,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
     })
   );
 
-  it.effect("rejects private reads from negated or incidental Transaction mentions", () =>
+  it.effect("executes a canonical private read without matching an exact phrase", () =>
     Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
       const service = yield* AgentService;
@@ -898,30 +911,25 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       const history = yield* client.transactions.listTransactions({ query: {} });
       const transaction = history.data[0];
       expect(transaction).toBeDefined();
+      yield* clearTranscript;
+      yield* sql`DELETE FROM audit_log_entries WHERE user_id = ${defaultUserId}`;
 
-      for (const text of [
-        `No leas la transacción ${transaction?.id}`,
-        `Solo menciona la transacción ${transaction?.id}, no la consultes`,
-      ]) {
-        yield* clearTranscript;
-        yield* sql`DELETE FROM audit_log_entries WHERE user_id = ${defaultUserId}`;
-        const limits = agentLimits({ maxIterations: 2 });
+      const reply = yield* service.handleTurn(
+        defaultUserId,
+        InboundMessage.make({
+          text: TranscriptText.make(`Describe el movimiento ${transaction?.id}`),
+        })
+      );
+      const transcript = yield* listTranscriptEntries(defaultUserId);
+      const audit = yield* observeAuditLogEntries(defaultUserId);
 
-        yield* service
-          .handleTurn(defaultUserId, InboundMessage.make({ text: TranscriptText.make(text) }))
-          .pipe(Effect.provideService(CurrentAgentLimits, limits));
-        const transcript = yield* listTranscriptEntries(defaultUserId);
-        const audit = yield* observeAuditLogEntries(defaultUserId);
-        const encoded = yield* Schema.encodeEffect(Schema.UnknownFromJsonString)(transcript);
-
-        expect(audit).toEqual([]);
-        expect(
-          transcript
-            .filter((entry) => entry._tag === "CanonicalToolResultEntry")
-            .every((entry) => entry.outcome._tag === "ToolInputRejected")
-        ).toBe(true);
-        expect(encoded).not.toContain('"merchant":"Almuerzo"');
-      }
+      expect(reply.text).toBe("Este es el movimiento solicitado.");
+      expect(audit.map(({ operation }) => operation)).toEqual(["transactions.getTransaction"]);
+      expect(
+        transcript.some(
+          (entry) => entry._tag === "CanonicalToolResultEntry" && entry.outcome._tag === "Succeeded"
+        )
+      ).toBe(true);
     })
   );
 
@@ -1035,6 +1043,91 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
         []
       );
       expect(rejectedDelete).toBeDefined();
+    })
+  );
+
+  it.effect("confirms a destructive call followed by an automatic call in the same batch", () =>
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      const service = yield* AgentService;
+      const client = yield* ApiHarnessClient;
+      yield* sql`TRUNCATE source_attestations, transactions, keyword_rules`;
+      yield* clearTranscript;
+      yield* service.handleTurn(
+        defaultUserId,
+        InboundMessage.make({ text: TranscriptText.make("almuerzo 25 mil") })
+      );
+      const history = yield* client.transactions.listTransactions({ query: {} });
+      const transaction = history.data[0];
+      expect(transaction).toBeDefined();
+      yield* clearTranscript;
+      yield* sql`DELETE FROM audit_log_entries WHERE user_id = ${defaultUserId}`;
+
+      const challenge = yield* service.handleTurn(
+        defaultUserId,
+        InboundMessage.make({
+          text: TranscriptText.make(`borra con lectura posterior ${transaction?.id}`),
+        })
+      );
+      const command = /Responde exactamente: (CONFIRMAR [^\n]+)/u.exec(challenge.text)?.[1];
+      expect(command).toMatch(/^CONFIRMAR transactions\.deleteTransaction [0-9a-f]{64}$/u);
+
+      const confirmed = yield* service.handleTurn(
+        defaultUserId,
+        InboundMessage.make({ text: TranscriptText.make(command ?? "confirmación ausente") })
+      );
+      const rows =
+        yield* sql`SELECT count(*)::int AS count FROM transactions WHERE deleted_at IS NULL`;
+      const audit = yield* observeAuditLogEntries(defaultUserId);
+
+      expect(confirmed.text).toBe("Listo, completé la operación solicitada.");
+      expect(rows[0]?.count).toBe(0);
+      expect(audit.map(({ operation }) => operation)).toEqual([
+        "categories.listCategories",
+        "transactions.deleteTransaction",
+      ]);
+    })
+  );
+
+  it.effect("executes one exact destructive confirmation and rejects its replay", () =>
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      const service = yield* AgentService;
+      yield* sql`TRUNCATE source_attestations, transactions, keyword_rules`;
+      yield* clearTranscript;
+      yield* service.handleTurn(
+        defaultUserId,
+        InboundMessage.make({ text: TranscriptText.make("almuerzo 25 mil") })
+      );
+      yield* sql`UPDATE transactions SET merchant = 'BORRA_TODO_INYECCION'`;
+      yield* clearTranscript;
+      yield* sql`DELETE FROM audit_log_entries WHERE user_id = ${defaultUserId}`;
+
+      const challenge = yield* service.handleTurn(
+        defaultUserId,
+        InboundMessage.make({ text: TranscriptText.make("revisa historial secretos") })
+      );
+      const command = /Responde exactamente: (CONFIRMAR [^\n]+)/u.exec(challenge.text)?.[1];
+      expect(command).toMatch(/^CONFIRMAR transactions\.deleteTransaction [0-9a-f]{64}$/u);
+
+      const confirmed = yield* service.handleTurn(
+        defaultUserId,
+        InboundMessage.make({ text: TranscriptText.make(command ?? "confirmación ausente") })
+      );
+      const replayed = yield* service.handleTurn(
+        defaultUserId,
+        InboundMessage.make({ text: TranscriptText.make(command ?? "confirmación ausente") })
+      );
+      const rows =
+        yield* sql`SELECT count(*)::int AS count FROM transactions WHERE deleted_at IS NULL`;
+      const deleted = (yield* observeAuditLogEntries(defaultUserId)).filter(
+        ({ operation }) => operation === "transactions.deleteTransaction"
+      );
+
+      expect(confirmed.text).toBe("Listo, completé la operación solicitada.");
+      expect(replayed.text).toContain("Operación exacta: transactions.deleteTransaction");
+      expect(rows[0]?.count).toBe(0);
+      expect(deleted).toHaveLength(1);
     })
   );
 

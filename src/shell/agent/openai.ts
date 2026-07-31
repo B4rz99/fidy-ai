@@ -2,7 +2,13 @@ import { OpenAiClient, OpenAiLanguageModel } from "@effect/ai-openai";
 import { Config, Layer } from "effect";
 
 /** Direct launch model; model selection is not runtime-configurable. */
-export const HostedAgentModel = "gpt-5.4-nano";
+export const HostedAgentModel = "gpt-5.6-luna";
+
+/** Fixed generation controls for predictable low-latency hosted turns. */
+export const HostedAgentGenerationConfig = {
+  temperature: 0.7,
+  reasoning: { effort: "none" },
+} as const;
 
 const OpenAiClientLive = OpenAiClient.layerConfig({
   apiKey: Config.redacted("OPENAI_API_KEY"),
@@ -11,4 +17,5 @@ const OpenAiClientLive = OpenAiClient.layerConfig({
 /** Production Effect AI adapter backed by OpenAI's Responses API. */
 export const OpenAiLanguageModelLive = OpenAiLanguageModel.layer({
   model: HostedAgentModel,
+  config: HostedAgentGenerationConfig,
 }).pipe(Layer.provide(OpenAiClientLive));

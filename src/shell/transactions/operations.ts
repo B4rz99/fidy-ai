@@ -12,8 +12,24 @@ import { NotFound, ValidationFailed } from "~/shell/_shared/errors";
 import { operationPolicy } from "~/shell/_shared/operation-policy";
 import { OperationResponse } from "~/shell/_shared/response";
 
-const read = operationPolicy({ requiredScope: "read", requiredTier: "free", costClass: "cheap" });
-const write = operationPolicy({ requiredScope: "write", requiredTier: "free", costClass: "cheap" });
+const read = operationPolicy({
+  requiredScope: "read",
+  requiredTier: "free",
+  costClass: "cheap",
+  agentConfirmation: "not-required",
+});
+const additiveWrite = operationPolicy({
+  requiredScope: "write",
+  requiredTier: "free",
+  costClass: "cheap",
+  agentConfirmation: "not-required",
+});
+const destructiveWrite = operationPolicy({
+  requiredScope: "write",
+  requiredTier: "free",
+  costClass: "cheap",
+  agentConfirmation: "required",
+});
 
 const TransactionQueryParameters = Schema.Struct({
   from: Schema.optionalKey(TransactionQueryValues.fields.from),
@@ -39,7 +55,7 @@ export const TransactionsGroup = HttpApiGroup.make("transactions")
         OpenApi.Description,
         "Record one exact movement of Money for the caller. Supply a stable Category id when known; omit it only at capture so a user keyword rule or the categorization fallback can assign it before storage. The result includes the stored Category."
       )
-      .annotateMerge(write)
+      .annotateMerge(additiveWrite)
   )
   .add(
     HttpApiEndpoint.get("listTransactions", "/transactions", {
@@ -76,7 +92,7 @@ export const TransactionsGroup = HttpApiGroup.make("transactions")
         OpenApi.Description,
         "Replace the editable facts of one visible Transaction, including Category and notes. Send the complete corrected movement; omitting notes clears them. Existing SourceAttestations remain unchanged."
       )
-      .annotateMerge(write)
+      .annotateMerge(destructiveWrite)
   )
   .add(
     HttpApiEndpoint.delete("deleteTransaction", "/transactions/:id", {
@@ -88,7 +104,7 @@ export const TransactionsGroup = HttpApiGroup.make("transactions")
         OpenApi.Description,
         "Permanently remove one Transaction from the caller's visible product history. It cannot be restored; immutable SourceAttestations remain retained as provenance."
       )
-      .annotateMerge(write)
+      .annotateMerge(destructiveWrite)
   )
   .add(
     HttpApiEndpoint.get("listSourceAttestations", "/transactions/:id/source-attestations", {

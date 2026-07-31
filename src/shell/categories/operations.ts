@@ -11,8 +11,24 @@ import { NotFound, ValidationFailed } from "~/shell/_shared/errors";
 import { operationPolicy } from "~/shell/_shared/operation-policy";
 import { OperationResponse } from "~/shell/_shared/response";
 
-const read = operationPolicy({ requiredScope: "read", requiredTier: "free", costClass: "cheap" });
-const write = operationPolicy({ requiredScope: "write", requiredTier: "free", costClass: "cheap" });
+const read = operationPolicy({
+  requiredScope: "read",
+  requiredTier: "free",
+  costClass: "cheap",
+  agentConfirmation: "not-required",
+});
+const additiveWrite = operationPolicy({
+  requiredScope: "write",
+  requiredTier: "free",
+  costClass: "cheap",
+  agentConfirmation: "not-required",
+});
+const destructiveWrite = operationPolicy({
+  requiredScope: "write",
+  requiredTier: "free",
+  costClass: "cheap",
+  agentConfirmation: "required",
+});
 
 /** Public Category discovery and caller-owned keyword-rule management. */
 export const CategoriesGroup = HttpApiGroup.make("categories")
@@ -46,7 +62,7 @@ export const CategoriesGroup = HttpApiGroup.make("categories")
         OpenApi.Description,
         "Teach future capture that a merchant containing this case- and accent-insensitive keyword belongs to one stable Category. More specific longer matching keywords win."
       )
-      .annotateMerge(write)
+      .annotateMerge(additiveWrite)
   )
   .add(
     HttpApiEndpoint.put("updateKeywordRule", "/category-keyword-rules/:id", {
@@ -59,7 +75,7 @@ export const CategoriesGroup = HttpApiGroup.make("categories")
         OpenApi.Description,
         "Replace one of the caller's keyword instructions for future capture. Existing Transaction Categories remain unchanged."
       )
-      .annotateMerge(write)
+      .annotateMerge(destructiveWrite)
   )
   .add(
     HttpApiEndpoint.delete("deleteKeywordRule", "/category-keyword-rules/:id", {
@@ -71,5 +87,5 @@ export const CategoriesGroup = HttpApiGroup.make("categories")
         OpenApi.Description,
         "Stop applying one of the caller's keyword instructions to future capture. Existing Transactions remain unchanged."
       )
-      .annotateMerge(write)
+      .annotateMerge(destructiveWrite)
   );

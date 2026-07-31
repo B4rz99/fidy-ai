@@ -1,0 +1,150 @@
+import { Crypto, Effect, Option, Schema } from "effect";
+import type { UserId } from "~/core/_shared/user";
+import { TranscriptText } from "~/core/transcript/model";
+import type { TranscriptWindowEntry } from "~/core/transcript/rules";
+import { listRecentTranscriptEntries } from "~/shell/transcript/transcript-service";
+import type { AgentOperationBinding } from "./toolkit";
+
+const ConfirmationRequiredFailure = Schema.Struct({
+  code: Schema.Literal("explicit_confirmation_required"),
+  message: Schema.Literal(
+    "Use the exact host-rendered confirmation command, including its operation id and digest."
+  ),
+  challenge: TranscriptText,
+});
+type ConfirmationRequiredFailure = typeof ConfirmationRequiredFailure.Type;
+
+const ConfirmationDigest = Schema.String.check(Schema.isPattern(/^[0-9a-f]{64}$/)).pipe(
+  Schema.brand("ConfirmationDigest")
+);
+type ConfirmationDigest = typeof ConfirmationDigest.Type;
+
+type PendingApproval = Pick<
+  Extract<TranscriptWindowEntry, { readonly _tag: "CanonicalToolCallEntry" }>,
+  "operation" | "input"
+>;
+
+type ConfirmationDecision =
+  | { readonly _tag: "Execute" }
+  | {
+      readonly _tag: "RequireConfirmation";
+      readonly failure: ConfirmationRequiredFailure;
+    };
+
+const findPendingApproval = (
+  entries: ReadonlyArray<TranscriptWindowEntry>
+): Option.Option<PendingApproval> => {
+  const assistant = entries.at(-1);
+  if (assistant?._tag !== "AssistantTranscriptEntry") return Option.none();
+
+  for (let index = entries.length - 1; index > 0; index -= 1) {
+    const result = entries[index];
+    const call = entries[index - 1];
+    if (
+      result?._tag === "CanonicalToolResultEntry" &&
+      result.outcome._tag === "ToolInputRejected" &&
+      Schema.is(ConfirmationRequiredFailure)(result.outcome.failure) &&
+      result.outcome.failure.challenge === assistant.text &&
+      call?._tag === "CanonicalToolCallEntry" &&
+      call.toolCallId === result.toolCallId
+    ) {
+      return Option.some({ operation: call.operation, input: call.input });
+    }
+  }
+  return Option.none();
+};
+
+const matchesApprovedCall = (
+  pending: Readonly<PendingApproval>,
+  binding: Readonly<AgentOperationBinding>,
+  input: unknown
+): boolean =>
+  pending.operation === binding.operation &&
+  JSON.stringify(pending.input) === JSON.stringify(input);
+
+const confirmationCommand = (
+  pending: Readonly<PendingApproval>,
+  digest: ConfirmationDigest
+): string => `CONFIRMAR ${pending.operation} ${digest}`;
+
+const approvalBinding = Effect.fn("ToolConfirmation.approvalBinding")(function* (
+  pending: Readonly<PendingApproval>
+) {
+  const crypto = yield* Crypto.Crypto;
+  const serializedInput = yield* Schema.encodeEffect(Schema.UnknownFromJsonString)(
+    pending.input
+  ).pipe(Effect.orDie);
+  const payload = new TextEncoder().encode(`${pending.operation}\n${serializedInput}`);
+  const bytes = yield* crypto.digest("SHA-256", payload).pipe(Effect.orDie);
+  const digest = ConfirmationDigest.make(
+    Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("")
+  );
+  return { digest, serializedInput };
+});
+
+const confirmationChallenge = (
+  pending: Readonly<PendingApproval>,
+  digest: ConfirmationDigest,
+  serializedInput: string
+): TranscriptText =>
+  TranscriptText.make(
+    `Esta operación requiere confirmación.\n` +
+      `Operación exacta: ${pending.operation}\n` +
+      `Argumentos exactos: ${serializedInput}\n` +
+      `Responde exactamente: ${confirmationCommand(pending, digest)}`
+  );
+
+/**
+ * Recovers at most one exact approval for a hosted turn and hides confirmation
+ * digesting, replay prevention, and single-use consumption behind one decision.
+ */
+export const makeTurnConfirmation = Effect.fn("ToolConfirmation.makeTurn")(function* (
+  userId: UserId,
+  message: { readonly text: string }
+) {
+  const priorTranscript = yield* listRecentTranscriptEntries(userId, 1);
+  let approvedCall = yield* findPendingApproval(priorTranscript).pipe(
+    Option.match({
+      onNone: () => Effect.succeed(Option.none()),
+      onSome: (pending) =>
+        approvalBinding(pending).pipe(
+          Effect.map(({ digest }) =>
+            message.text.trim() === confirmationCommand(pending, digest)
+              ? Option.some(pending)
+              : Option.none()
+          )
+        ),
+    })
+  );
+
+  const decide = Effect.fn("ToolConfirmation.decide")(function* ({
+    binding,
+    input,
+  }: {
+    readonly binding: Readonly<AgentOperationBinding>;
+    readonly input: Schema.Json;
+  }): Effect.fn.Return<ConfirmationDecision, never, Crypto.Crypto> {
+    if (binding.policy.agentConfirmation === "not-required") {
+      return { _tag: "Execute" };
+    }
+    if (Option.isSome(approvedCall) && matchesApprovedCall(approvedCall.value, binding, input)) {
+      approvedCall = Option.none();
+      return { _tag: "Execute" };
+    }
+
+    const pending = { operation: binding.operation, input };
+    const { digest, serializedInput } = yield* approvalBinding(pending);
+    const challenge = confirmationChallenge(pending, digest, serializedInput);
+    return {
+      _tag: "RequireConfirmation",
+      failure: ConfirmationRequiredFailure.make({
+        code: "explicit_confirmation_required",
+        message:
+          "Use the exact host-rendered confirmation command, including its operation id and digest.",
+        challenge,
+      }),
+    };
+  });
+
+  return { decide } as const;
+});

@@ -2,7 +2,11 @@ import { expect } from "@effect/vitest";
 import { Effect, Option, Schema } from "effect";
 import { HttpClient } from "effect/unstable/http";
 import { AgentScope } from "~/core/tokens/model";
-import { OperationCostClass, OperationTier } from "~/shell/_shared/operation-policy";
+import {
+  AgentConfirmation,
+  OperationCostClass,
+  OperationTier,
+} from "~/shell/_shared/operation-policy";
 
 const SpecOperation = Schema.Struct({
   operationId: Schema.String,
@@ -10,6 +14,7 @@ const SpecOperation = Schema.Struct({
   "x-fidy-required-scope": Schema.optional(AgentScope),
   "x-fidy-required-tier": Schema.optional(OperationTier),
   "x-fidy-cost-class": Schema.optional(OperationCostClass),
+  "x-fidy-agent-confirmation": Schema.optional(AgentConfirmation),
 });
 
 const OpenApiPaths = Schema.Struct({
@@ -34,6 +39,8 @@ export type PublishedOperation = {
   readonly requiredTier: Option.Option<OperationTier>;
   /** `None` when the spec omits the canonical operation's cost-class metadata. */
   readonly costClass: Option.Option<OperationCostClass>;
+  /** `None` when the spec omits the hosted-agent confirmation metadata. */
+  readonly agentConfirmation: Option.Option<AgentConfirmation>;
 };
 
 /**
@@ -54,6 +61,7 @@ export const publishedOperations = Effect.gen(function* () {
           requiredScope: Option.fromUndefinedOr(operation["x-fidy-required-scope"]),
           requiredTier: Option.fromUndefinedOr(operation["x-fidy-required-tier"]),
           costClass: Option.fromUndefinedOr(operation["x-fidy-cost-class"]),
+          agentConfirmation: Option.fromUndefinedOr(operation["x-fidy-agent-confirmation"]),
         })
       )
   );

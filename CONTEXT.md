@@ -100,9 +100,9 @@ _Avoid_: Corpus, training data, log.
 ### The agent surface
 
 **Canonical operation**:
-A capability declared once with its inputs, outputs, failures, and access requirements. The server,
-typed client, OpenAPI specification, MCP tools, and hosted agent toolkit are derived from that
-declaration. The hosted agent has no private tools.
+A capability declared once with its inputs, outputs, failures, access requirements, and hosted-agent
+confirmation policy. The server, typed client, OpenAPI specification, MCP tools, and hosted agent
+toolkit are derived from that declaration. The hosted agent has no private tools.
 _Avoid_: Endpoint, route, API call, tool.
 
 **SuggestedOperation**:

@@ -1,7 +1,7 @@
 import { expect, it } from "@effect/vitest";
 import { ConfigProvider, Effect, Exit, Layer } from "effect";
 import { HttpClient } from "effect/unstable/http";
-import { OpenAiLanguageModelLive, HostedAgentModel } from "./openai";
+import { HostedAgentGenerationConfig, OpenAiLanguageModelLive, HostedAgentModel } from "./openai";
 
 const configLayer = (entries: ReadonlyArray<readonly [string, string]>) =>
   ConfigProvider.layer(ConfigProvider.fromUnknown(Object.fromEntries(entries)));
@@ -11,7 +11,7 @@ const NoNetworkHttpClient = Layer.succeed(
   HttpClient.make(() => Effect.die("Production OpenAI assembly must not make a request"))
 );
 
-it.effect("constructs the fixed gpt-5.4-nano model from a configured secret", () =>
+it.effect("constructs the fixed hosted model from a configured secret", () =>
   Effect.gen(function* () {
     const configured = OpenAiLanguageModelLive.pipe(
       Layer.provide(NoNetworkHttpClient),
@@ -19,7 +19,11 @@ it.effect("constructs the fixed gpt-5.4-nano model from a configured secret", ()
     );
 
     yield* Effect.scoped(Layer.build(configured));
-    expect(HostedAgentModel).toBe("gpt-5.4-nano");
+    expect(HostedAgentModel).toBe("gpt-5.6-luna");
+    expect(HostedAgentGenerationConfig).toEqual({
+      temperature: 0.7,
+      reasoning: { effort: "none" },
+    });
   })
 );
 

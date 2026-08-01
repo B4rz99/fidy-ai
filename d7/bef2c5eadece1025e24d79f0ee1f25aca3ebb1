@@ -1,0 +1,108 @@
+src/shell/transactions/fixtures.ts
+  s_03d4c2b517067a::t_06ef95b6fc857c 2,9
+src/shell/transactions/repo.ts
+  s_03d4c2b517067a::t_ab33d471446337 73-79,87-89,97-103,108-117,126-138,140-143,149-164,174-180,188-197,206-212,217-219,260-272,280-282,290-296,307-311
+  s_03d4c2b517067a::t_6bac5a41a8d5de 7
+src/shell/agent/agent-service.test.ts
+  s_03d4c2b517067a::t_c62e59ee2a5256 4,23,498,556,634,665,688,722,762,902,938,1002,1051,1094,1136,1176
+scripts/seed-development.ts
+  s_03d4c2b517067a::t_1eb20a706cd18b 3,42-46
+src/shell/audit/repo.ts
+  s_03d4c2b517067a::t_ab33d471446337 30-35,46-47,56-62,69-71
+  s_03d4c2b517067a::t_83de3f2ad7d95d 5,85
+src/shell/transcript/repo.ts
+  s_03d4c2b517067a::t_064efc921bf5ea 4
+  s_03d4c2b517067a::t_ab33d471446337 29-34,39-40,64-69,85-86,96-101,107-108,116-122,128-132
+docs/adr/0007-postgresql-row-level-user-isolation.md
+  s_03d4c2b517067a::t_ab33d471446337 49-54
+  s_03d4c2b517067a::t_aaa35a5d7107b6 1-48,55-106
+src/shell/db/user-transaction.ts
+  s_03d4c2b517067a::t_155511dacf34f6 1-12,14-15,38
+  s_03d4c2b517067a::t_ab33d471446337 34
+  s_03d4c2b517067a::t_8a85f55c12f341 13,16-33,35-37,39-40
+src/shell/db/migrations/0009-row-level-security.ts
+  s_03d4c2b517067a::t_e8fc07fe049d0c 155
+  s_03d4c2b517067a::t_ed6c5951e71210 1-154,156-247
+src/shell/http.ts
+  s_03d4c2b517067a::t_07f87fb7a5da6d 9,71
+compose.yaml
+  s_03d4c2b517067a::t_40a9bf52ce569d 6-9,25-26
+src/shell/db/migrations/registry.ts
+  s_03d4c2b517067a::t_067fe2f1e28635 9,28
+src/shell/dashboard/handlers.test.ts
+  s_03d4c2b517067a::t_2128ee9a767df5 4,280
+src/shell/insights/repo.ts
+  s_03d4c2b517067a::t_c33cd62b036104 4,108-110,139-141
+  s_03d4c2b517067a::t_ab33d471446337 111-114,124,126-129,137,146-152,158-160,167-173,179-181,192-198,204-206,220-225,236-237
+src/shell/audit/fixtures.ts
+  s_03d4c2b517067a::t_ad152144c578e1 2,6
+scripts/agent-repl.ts
+  s_03d4c2b517067a::t_33bb19520f3d14 8,25-27
+research/006-postgresql-row-level-security.md
+  s_03d4c2b517067a::t_b43ae28d6df4eb 1-51
+src/shell/dashboard/fixtures.ts
+  s_03d4c2b517067a::t_a4cb8b8bf26c44 2,6
+deploy/local-postgres-init.sql
+  s_03d4c2b517067a::t_3b51a28124de50 1-5
+src/shell/dashboard/repo.ts
+  s_03d4c2b517067a::t_3137c4e6778e67 5,20-26,30-44,64-77,87-101
+src/shell/_shared/authz.ts
+  s_03d4c2b517067a::t_ff3c11cbb69f87 13,162-165
+  s_03d4c2b517067a::t_153e97fc23631c 3
+src/shell/db/row-level-security.test.ts
+  s_03d4c2b517067a::t_0287ef15ce0b70 1,4-5,7-27,55-69,71-77,90-104,120-127,129-140,142-165,167-188,192-203
+  s_03d4c2b517067a::t_ab33d471446337 78-89,105-109,128
+  s_03d4c2b517067a::t_788a45cf7bd01a 110-113,115,117-119
+  s_03d4c2b517067a::t_3cf8c969b3b726 70,141,166
+  s_03d4c2b517067a::t_c9658825f6f955 2-3,6,28-54,114,116,189-191
+src/shell/identity/repo.ts
+  s_03d4c2b517067a::t_ee1ccdf363f47a 5
+  s_03d4c2b517067a::t_ab33d471446337 40-45,55-56,61-67,72-74,85-90,96-97,111-116,125-126
+  s_03d4c2b517067a::t_9b03055246cff4 141-143
+src/shell/testing/api-harness.ts
+  s_03d4c2b517067a::t_553a510d32f0a9 7,57
+README.md
+  s_03d4c2b517067a::t_376b79d554da1a 90
+  s_03d4c2b517067a::t_ba4568bd203504 35-36,53-55,71-72,117,121-122
+  s_03d4c2b517067a::t_ab33d471446337 24-31,185,187
+src/shell/audit/audit-log.test.ts
+  s_03d4c2b517067a::t_2128ee9a767df5 4,159
+src/shell/db/client.ts
+  s_03d4c2b517067a::t_ab33d471446337 76-78,81-83
+  s_03d4c2b517067a::t_2c55aef9d55e09 3,6,11-67,70-71,73
+  s_03d4c2b517067a::t_8dd2dc8222b920 2,72,74-75,79-80
+src/shell/tokens/repo.ts
+  s_03d4c2b517067a::t_5fbed03120e00c 4,184-187
+  s_03d4c2b517067a::t_ab33d471446337 72-77,100-101,117-122,133-134,147-152,161-162
+ARCHITECTURE.md
+  s_03d4c2b517067a::t_01678f3de537fe 87-90,97-99
+src/shell/db/development-seed.ts
+  s_03d4c2b517067a::t_af48cea9d3bb45 17,114-117
+src/shell/transactions/handlers.test.ts
+  s_03d4c2b517067a::t_2128ee9a767df5 3,62,113,148,313
+.github/workflows/ci.yml
+  s_03d4c2b517067a::t_d2a6bc5f671bee 198-204,207-208,241-247,250-251
+src/shell/categories/repo.ts
+  s_03d4c2b517067a::t_a09caf4fe96fa1 13,46-58,65-71
+  s_03d4c2b517067a::t_ab33d471446337 85-91,96-98,107-113,120-122,130-136,139-141
+src/shell/insights/fixtures.ts
+  s_03d4c2b517067a::t_8b54f1f9ec7108 2,9
+.env.example
+  s_03d4c2b517067a::t_3d9ee55cac6c5c 2-3
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.19",
+  "base_commit_sha": "d7bef2c5eadece1025e24d79f0ee1f25aca3ebb1",
+  "prompts": {},
+  "sessions": {
+    "s_03d4c2b517067a": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019fbeec-fd8a-79e0-9063-2732157ffc53",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

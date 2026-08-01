@@ -1,0 +1,32 @@
+CODING_STANDARDS.md
+  s_33f282c186ae9f::t_0c7376390db545 147,175
+  s_33f282c186ae9f::t_269a0c147ad429 89
+  s_33f282c186ae9f::t_0ea71d4e9e8835 176
+docs/adr/0004-canonical-operation-derivation.md
+  s_33f282c186ae9f::t_0570f6909b1e38 1-57
+ARCHITECTURE.md
+  s_33f282c186ae9f::t_de8434d6ca2442 7,9,11-15,17-19,22-24,28,32-35,37,39-41,43,46,48-51,55,57-59,61,63,65-67,72-75,77-79,85-87,89,92-94,96,100-103,105-108,112,114-116,123,125-127,129-131,133,135,139-143,145-148,150-152
+  s_33f282c186ae9f::t_f8ec3ad8f5f9eb 3,20,44,69-70,83,90,97-98,118-119,137
+docs/adr/0006-test-seams-and-core-mutation-gate.md
+  s_33f282c186ae9f::t_acf69b093e4b79 1-65
+docs/adr/0003-layer-major-core-shell-and-slice-ownership.md
+  s_33f282c186ae9f::t_bb5ed24c82d036 1-71
+docs/adr/0005-explicit-user-context-and-isolation.md
+  s_33f282c186ae9f::t_687db21c5a999a 1-63
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.19",
+  "base_commit_sha": "93e68b844d31fbeed9b57561eb151738d3d53847",
+  "prompts": {},
+  "sessions": {
+    "s_33f282c186ae9f": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019fbdd2-6da3-74e8-a213-ff42b71e5f5e",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

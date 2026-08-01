@@ -1,8 +1,5 @@
 # Coding standards
 
-How code is written inside the shape described in [`ARCHITECTURE.md`](./ARCHITECTURE.md). Domain
-vocabulary lives in [`CONTEXT.md`](./CONTEXT.md) — use those terms and avoid the synonyms they list.
-
 ---
 
 ## Naming
@@ -89,14 +86,7 @@ extension.
 
 ### Derived shapes
 
-Any shape differing from the canonical one is **built from it** — `mapFields`, `Struct.omit`/`pick`,
-or spreading `.fields`. A type that never mentions the schema it derives from is the smell. See
-ARCHITECTURE.md §4.
-
-Preserve nested value boundaries in core and canonical operations. A relational row may flatten Money into
-adjacent exact amount and Currency columns, but its repo codec derives from the canonical Money
-schema and reconstructs the nested value on read. Do not leak storage flattening into canonical
-operations or define a parallel monetary DTO.
+Build derived shapes from their canonical schemas rather than maintaining parallel definitions.
 
 ### Other defaults
 
@@ -107,31 +97,6 @@ operations or define a parallel monetary DTO.
   default; reaching for `Chunk` on a twenty-element list is cargo cult.
 - Local mutation is not banned — a small accumulator inside a pure function is sometimes clearer
   than a fold.
-
----
-
-## Layout and file vocabulary
-
-```
-core/<slice>/     reference.ts narrow stable ids/kinds published to genuine sibling consumers
-                  model.ts     the canonical schemas
-                  rules.ts     pure decisions — omitted where there are none
-                  errors.ts    the Data.TaggedError union
-
-shell/<slice>/    operations.ts  canonical operation definitions — HttpApiGroup, paths, scopes, tiers, cost classes
-                  repo.ts      SQL and row schemas
-                  handlers.ts  load → decide → persist
-                  errors.ts    the exhaustive core-to-API mapper
-```
-
-`model.ts`, `rules.ts`, and `errors.ts` are reserved for those roles in **every** slice. A slice may
-add `reference.ts` only when another core slice genuinely needs to name or persist one of its stable
-ids or kind codes. A reference exports only those values; sibling core code may import it directly,
-but may not import the sibling's model, rules, errors, repository, taxonomy, or other implementation.
-Ownerless values remain in `core/_shared`, and no empty reference file is created. A slice may add
-whatever else it needs — `core/transactions/reconcile.ts`, `core/ingestion/anonymise.ts` — but a repo
-may not live in a file called anything else. A session working on one issue should find things without
-exploring.
 
 ---
 
@@ -179,15 +144,13 @@ Two rules nothing can check:
 
 ## Tests
 
-Placement, tiers and responsibilities are in ARCHITECTURE.md §8. What review looks for:
+What review looks for:
 
 - **Descriptions are behaviour sentences**, not method names: _"rejects exponent notation before
   storing Money"_ or _"rejects more fractional digits than the Currency permits"_, not
   _"Money validation"_.
 - **Exercise the public interface.** Never mock an internal collaborator. Pure exported policy
   checkpoints may be tested directly, but their integration still needs API-seam coverage.
-- **Core tests are not a loophole for testing the shell.** No mocked repos, no stubbed handlers.
-  Wanting to test `handlers.ts` in isolation means a decision belongs in core.
 - **Fixtures are builders with sensible defaults**, overridden per test with only the fields that
   matter, so a reader sees immediately what the test is about.
 - **Prefer a derived guard over a hand-kept list** wherever the assembled API can supply the
@@ -208,6 +171,8 @@ React application code is event-driven and keeps only irreducible interaction st
 - If a concrete imperative integration eventually requires React synchronization, isolate it behind
   one narrow adapter and add an explicit file-scoped lint override. Do not add speculative
   exceptions or expose the synchronization mechanism to application components.
+
+---
 
 ## Agent-facing documentation
 

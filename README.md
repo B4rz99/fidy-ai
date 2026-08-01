@@ -214,8 +214,7 @@ in a tree that is mostly schema declaration they overwhelmingly rewrite
 `annotate({ description: … })` prose, which reaches a caller only through the
 derived OpenAPI spec. That exclusion also hides two real mutants (the
 `Direction` literals and the currency literal), which
-`src/core/transactions/model.test.ts` covers by hand. Why the shell is measured
-but not gated is in ARCHITECTURE.md §8.
+`src/core/transactions/model.test.ts` covers by hand.
 
 Coverage uses the **istanbul** provider, not v8: v8 reads coverage from Node's
 V8 inspector, which the Bun runtime does not expose, so `bun --bun vitest
@@ -257,8 +256,7 @@ of them move together — which is why the tables carry `<!-- commit-scopes:… 
 `feat` · `fix` · `refactor` · `chore` · `docs` · `test` · `ci`
 
 `scope` names the part of the domain that changed. A commit almost always lands in exactly one
-of the thirteen slices (`ARCHITECTURE.md` §2), because a slice's pure half and its impure half
-change together:
+slice, because a slice's pure half and its impure half change together:
 
 <!-- commit-scopes:slices -->
 
@@ -294,7 +292,7 @@ Work that belongs to no slice takes a cross-cutting scope:
 | `docs`     | documentation                                                           |
 
 `api`, `channels` and `agent` are shell-only areas that own no aggregate, so they are not slices
-(`ARCHITECTURE.md` §2) — but code lands in them, so they need a scope.
+— but code lands in them, so they need a scope.
 
 Body lines must be `-` bullets — non-bullet lines (including trailers) are rejected.
 

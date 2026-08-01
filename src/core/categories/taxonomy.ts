@@ -1,4 +1,4 @@
-import { CategoryId } from "~/core/_shared/category";
+import { CategoryId } from "./reference";
 import { CategoryLabel } from "./model";
 
 /** Stable identities for the Colombian Categories. */

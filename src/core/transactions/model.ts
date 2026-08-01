@@ -1,5 +1,5 @@
 import { BigDecimal, Function, Schema, SchemaTransformation, Struct } from "effect";
-import { CategoryId } from "~/core/_shared/category";
+import { CategoryId } from "~/core/categories/reference";
 import { IanaTimeZone, Locale, ServiceMarket } from "~/core/_shared/context";
 import { Currency, Money } from "~/core/_shared/money";
 

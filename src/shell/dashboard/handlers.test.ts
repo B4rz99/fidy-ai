@@ -2,7 +2,7 @@ import { expect, layer } from "@effect/vitest";
 import { Effect, Result, Schema } from "effect";
 import { HttpBody, HttpClient } from "effect/unstable/http";
 import { SqlClient } from "effect/unstable/sql";
-import { CategoryId } from "~/core/_shared/category";
+import { CategoryId } from "~/core/categories/reference";
 import { SplitWeight, TransactionListLimit, WidgetId } from "~/core/dashboard/model";
 import { NotFound, ValidationFailed } from "~/shell/_shared/errors";
 import { defaultAgentBearer } from "~/shell/testing/identity-fixtures";

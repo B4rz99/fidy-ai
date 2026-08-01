@@ -1,6 +1,6 @@
 import { type DateTime, Effect } from "effect";
 import { IanaTimeZone, Locale, ServiceMarket } from "~/core/_shared/context";
-import { type UserId } from "~/core/_shared/user";
+import { type UserId } from "./reference";
 import { User } from "./model";
 
 type ColombianUserInput = Readonly<{ readonly createdAt: DateTime.Utc }>;

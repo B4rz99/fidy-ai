@@ -1,7 +1,7 @@
 import { DateTime, Effect, Schema, SchemaTransformation, Struct } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import { encodeMoneyAmount } from "~/core/_shared/money";
-import { UserId } from "~/core/_shared/user";
+import { UserId } from "~/core/identity/reference";
 import {
   DeliveryEvidenceInput,
   InsightDeliveryAttempt,

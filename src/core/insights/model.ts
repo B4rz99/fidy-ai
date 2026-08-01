@@ -1,6 +1,7 @@
 import { Array as Arr, BigDecimal, Schema, SchemaTransformation, Struct } from "effect";
 import { IanaTimeZone, Locale, ServiceMarket } from "~/core/_shared/context";
 import { Currency, Money, type ReadonlyMoney } from "~/core/_shared/money";
+import { InsightKind } from "./reference";
 
 /** Stable identity of one generated occurrence. */
 export const InsightEventId = Schema.String.check(Schema.isUUID()).pipe(
@@ -17,15 +18,6 @@ export const ScheduleVersion = Schema.Finite.check(Schema.isInt(), Schema.isGrea
   Schema.brand("ScheduleVersion")
 );
 export type ScheduleVersion = typeof ScheduleVersion.Type;
-
-/** The four proactive decisions committed by the MVP specification. */
-export const InsightKind = Schema.Literals([
-  "budget-threshold",
-  "new-recurring-series",
-  "weekly-summary",
-  "manual-entry-reminder",
-]);
-export type InsightKind = typeof InsightKind.Type;
 
 /** The forward-only attention lifecycle shared by every InsightEvent consumer. */
 export const InsightLifecycleState = Schema.Literals(["pending", "delivered", "read", "dismissed"]);

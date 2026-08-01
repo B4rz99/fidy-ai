@@ -1,8 +1,8 @@
 import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
-import { CategoryId } from "~/core/_shared/category";
+import { CategoryId } from "~/core/categories/reference";
 import { encodeMoneyAmount, Money } from "~/core/_shared/money";
-import { UserId } from "~/core/_shared/user";
+import { UserId } from "~/core/identity/reference";
 import { normalizeCategoryKeyword } from "~/core/categories/rules";
 import {
   type CapturedInterpretationContext,

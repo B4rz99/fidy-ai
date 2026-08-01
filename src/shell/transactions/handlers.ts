@@ -1,8 +1,8 @@
 import { DateTime, Effect, Option } from "effect";
 import { HttpApiBuilder } from "effect/unstable/httpapi";
 import { SqlClient } from "effect/unstable/sql";
-import { type CategoryId } from "~/core/_shared/category";
-import { type UserId } from "~/core/_shared/user";
+import { type CategoryId } from "~/core/categories/reference";
+import { type UserId } from "~/core/identity/reference";
 import { CategoryNotFound } from "~/core/categories/errors";
 import { TransactionNotFound } from "~/core/transactions/errors";
 import {

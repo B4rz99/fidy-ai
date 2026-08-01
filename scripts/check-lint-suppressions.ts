@@ -68,10 +68,15 @@ const lintedFiles = (): readonly string[] => {
     throw new Error(`git ls-files failed: ${decode(listed.stderr).trim()}`);
   }
 
-  return decode(listed.stdout)
-    .split("\0")
-    .filter((path) => LINTED_EXTENSIONS.some((extension) => path.endsWith(extension)))
-    .filter((path) => !NOT_FIRST_PARTY.some((directory) => path.startsWith(directory)));
+  return (
+    decode(listed.stdout)
+      .split("\0")
+      .filter((path) => LINTED_EXTENSIONS.some((extension) => path.endsWith(extension)))
+      .filter((path) => !NOT_FIRST_PARTY.some((directory) => path.startsWith(directory)))
+      // `git ls-files --cached` retains a deleted path until the deletion is staged;
+      // do not try to read that stale index entry.
+      .filter((path) => Bun.file(`${repoRoot}${path}`).size > 0)
+  );
 };
 
 const suppressionsIn = (file: string, contents: string): readonly Suppression[] =>

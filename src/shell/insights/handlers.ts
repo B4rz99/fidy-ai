@@ -1,7 +1,7 @@
 import { Effect } from "effect";
 import { SqlClient } from "effect/unstable/sql";
 import { HttpApiBuilder } from "effect/unstable/httpapi";
-import { type UserId } from "~/core/_shared/user";
+import { type UserId } from "~/core/identity/reference";
 import { InsightNotFound } from "~/core/insights/errors";
 import {
   type DeliveryEvidenceInput,

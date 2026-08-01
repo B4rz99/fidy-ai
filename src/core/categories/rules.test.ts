@@ -1,6 +1,6 @@
 import { expect, it } from "@effect/vitest";
 import { Effect, Option } from "effect";
-import { CategoryId } from "~/core/_shared/category";
+import { CategoryId } from "./reference";
 import { CategoryKeyword, KeywordRuleId } from "./model";
 import { findKeywordCategory, findKnownCaptureCategory } from "./rules";
 

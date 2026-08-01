@@ -1,4 +1,4 @@
-import { type CategoryId } from "~/core/_shared/category";
+import { type CategoryId } from "~/core/categories/reference";
 import {
   DashboardCatalogEntry,
   DashboardPeriod,

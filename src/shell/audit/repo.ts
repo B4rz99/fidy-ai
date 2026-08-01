@@ -1,6 +1,6 @@
 import { Effect, Schema, Struct } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
-import { UserId } from "~/core/_shared/user";
+import { UserId } from "~/core/identity/reference";
 import { AuditLogEntry } from "~/core/audit/model";
 
 const AuditLogEntryWithoutOccurredAt = AuditLogEntry.mapFields(Struct.omit(["occurredAt"]));

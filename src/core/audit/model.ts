@@ -1,7 +1,7 @@
 import { Schema } from "effect";
-import { AgentTokenId } from "~/core/_shared/agent-token";
+import { AgentTokenId } from "~/core/tokens/reference";
 import { CanonicalOperationId } from "~/core/_shared/canonical-operation";
-import { UserId } from "~/core/_shared/user";
+import { UserId } from "~/core/identity/reference";
 
 export { CanonicalOperationId } from "~/core/_shared/canonical-operation";
 

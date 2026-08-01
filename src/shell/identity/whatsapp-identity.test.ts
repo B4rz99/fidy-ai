@@ -1,6 +1,6 @@
 import { expect, layer } from "@effect/vitest";
 import { DateTime, Effect, Option } from "effect";
-import { E164PhoneNumber } from "~/core/identity/model";
+import { E164PhoneNumber } from "~/core/identity/reference";
 import { authenticateAgentToken } from "~/shell/_shared/authz";
 import { ApiHarness, ApiHarnessClient } from "~/shell/testing/api-harness";
 import {

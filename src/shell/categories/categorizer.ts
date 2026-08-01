@@ -1,6 +1,6 @@
 import { Effect, Option } from "effect";
-import { type CategoryId } from "~/core/_shared/category";
-import { type UserId } from "~/core/_shared/user";
+import { type CategoryId } from "~/core/categories/reference";
+import { type UserId } from "~/core/identity/reference";
 import { findKnownCaptureCategory, findKeywordCategory } from "~/core/categories/rules";
 import { categoryIds } from "~/core/categories/taxonomy";
 import { listKeywordRules } from "./repo";

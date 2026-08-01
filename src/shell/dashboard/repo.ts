@@ -1,6 +1,6 @@
 import { Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
-import { UserId } from "~/core/_shared/user";
+import { UserId } from "~/core/identity/reference";
 import { DashboardDocument, WidgetId } from "~/core/dashboard/model";
 
 const PersistedDashboard = Schema.fromJsonString(DashboardDocument);

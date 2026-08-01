@@ -14,7 +14,7 @@ import {
 import { LanguageModel } from "effect/unstable/ai";
 import type { HttpClient } from "effect/unstable/http";
 import type { SqlClient } from "effect/unstable/sql";
-import type { UserId } from "~/core/_shared/user";
+import type { UserId } from "~/core/identity/reference";
 import {
   selectTranscriptWindow,
   TranscriptWindowCharacterLimit,

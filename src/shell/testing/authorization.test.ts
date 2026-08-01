@@ -1,8 +1,8 @@
 import { expect, layer } from "@effect/vitest";
 import { Context, DateTime, Effect, Layer, Option, Schema } from "effect";
 import { HttpBody, HttpClient } from "effect/unstable/http";
-import { AgentTokenId } from "~/core/_shared/agent-token";
-import { UserId } from "~/core/_shared/user";
+import { AgentTokenId } from "~/core/tokens/reference";
+import { UserId } from "~/core/identity/reference";
 import { CategoryKeyword } from "~/core/categories/model";
 import { categoryIds } from "~/core/categories/taxonomy";
 import { InsightEventId } from "~/core/insights/model";

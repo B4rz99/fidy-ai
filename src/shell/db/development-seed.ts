@@ -1,7 +1,6 @@
 import { Crypto, DateTime, Effect, Encoding, Layer, Option } from "effect";
-import { AgentTokenId } from "~/core/_shared/agent-token";
-import { UserId } from "~/core/_shared/user";
-import { E164PhoneNumber } from "~/core/identity/model";
+import { E164PhoneNumber, UserId } from "~/core/identity/reference";
+import { AgentTokenId } from "~/core/tokens/reference";
 import { makeColombianUser } from "~/core/identity/rules";
 import {
   AgentBearerSecret,

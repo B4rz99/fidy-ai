@@ -2,9 +2,9 @@ import { expect, layer } from "@effect/vitest";
 import { Context, DateTime, Effect, Layer, Schema } from "effect";
 import { HttpBody, HttpClient } from "effect/unstable/http";
 import { SqlClient } from "effect/unstable/sql";
-import { AgentTokenId } from "~/core/_shared/agent-token";
+import { AgentTokenId } from "~/core/tokens/reference";
 import { IanaTimeZone } from "~/core/_shared/context";
-import { UserId } from "~/core/_shared/user";
+import { UserId } from "~/core/identity/reference";
 import { CreateTransactionInput, TransactionId } from "~/core/transactions/model";
 import { AgentBearerToken } from "~/core/tokens/model";
 import {

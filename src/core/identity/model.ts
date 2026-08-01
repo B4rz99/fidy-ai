@@ -1,17 +1,6 @@
 import { Schema, Struct } from "effect";
 import { IanaTimeZone, Locale, ServiceMarket } from "~/core/_shared/context";
-import { UserId } from "~/core/_shared/user";
-
-/**
- * A WhatsApp phone number in canonical E.164 form: one leading `+`, a
- * non-zero country-code digit, and 8–15 digits total. Formatting characters
- * and locally scoped numbers are rejected so database uniqueness has one
- * spelling per number.
- */
-export const E164PhoneNumber = Schema.String.check(Schema.isPattern(/^\+[1-9][0-9]{7,14}$/)).pipe(
-  Schema.brand("E164PhoneNumber")
-);
-export type E164PhoneNumber = typeof E164PhoneNumber.Type;
+import { E164PhoneNumber, UserId } from "./reference";
 
 /**
  * The concrete verified association between a stable User and their current

@@ -1,7 +1,7 @@
 import { Effect, Option } from "effect";
 import { HttpApiBuilder } from "effect/unstable/httpapi";
 import { SqlClient } from "effect/unstable/sql";
-import { type UserId } from "~/core/_shared/user";
+import { type UserId } from "~/core/identity/reference";
 import {
   CategoryNotFound,
   KeywordRuleAlreadyExists,

@@ -4,8 +4,8 @@
 //
 // oxlint holds the per-file rules; the rules here are the ones that are about
 // the graph rather than about a file. The dividing line is whether the target
-// can be written in terms of the source: "a core slice may not import another
-// core slice" needs one relational rule with a back-reference, where oxlint's
+// can be written in terms of the source: "a core slice may import a sibling only
+// through reference.ts" needs one relational rule with a back-reference, where oxlint's
 // deny-pattern-only `no-restricted-imports` would need an override block per
 // slice enumerating every other slice, rotting on the next slice added.
 //
@@ -40,15 +40,15 @@ export default {
       name: "core-slice-reaches-sibling-slice",
       severity: "error",
       comment:
-        "A core slice imported another core slice. A core slice may import shared value " +
-        "types from core/_shared — UserId, a date range — and nothing else outside " +
-        "itself. Importing a sibling's entity is implicitly claiming to know how to obtain " +
-        "it, which is shell's job: core decides, it does not gather (ARCHITECTURE.md §2). " +
-        "Have the shell load both sides and pass plain values in.",
+        "A core slice imported a sibling's implementation instead of its published reference " +
+        "interface. A core slice may import ownerless shared values from core/_shared or a " +
+        "sibling's direct reference.ts, but sibling models, rules, errors, and other implementation " +
+        "details remain private. Core decides, it does not gather (ARCHITECTURE.md §2).",
+
       from: { path: "^src/core/([^/]+)/", pathNot: "^src/core/_shared/" },
       to: {
         path: "^src/core/[^/]+/",
-        pathNot: ["^src/core/_shared/", "^src/core/$1/"],
+        pathNot: ["^src/core/_shared/", "^src/core/$1/", "^src/core/[^/]+/reference\\.ts$"],
       },
     },
     {

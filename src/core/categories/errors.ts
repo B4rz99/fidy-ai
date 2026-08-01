@@ -1,5 +1,5 @@
 import { Data } from "effect";
-import { type CategoryId } from "~/core/_shared/category";
+import { type CategoryId } from "./reference";
 import { type CategoryKeyword, type KeywordRuleId } from "./model";
 
 /** The requested stable Category identity is not present in the configured taxonomy. */

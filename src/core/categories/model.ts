@@ -1,5 +1,5 @@
 import { Schema, Struct } from "effect";
-import { CategoryId } from "~/core/_shared/category";
+import { CategoryId } from "./reference";
 
 /** Stable identity of one user keyword rule; tie-breaking may rely on its lexical UUID order. */
 export const KeywordRuleId = Schema.String.check(Schema.isUUID()).pipe(

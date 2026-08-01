@@ -1,6 +1,6 @@
 import { Effect, type Option, Schema, Struct } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
-import { UserId } from "~/core/_shared/user";
+import { UserId } from "~/core/identity/reference";
 import { HostedAgentToken, ResolvedAgentToken, UserAgentToken } from "~/core/tokens/model";
 
 /** A lowercase SHA-256 digest used only at the AgentToken storage boundary. */

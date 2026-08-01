@@ -1,6 +1,6 @@
 import { Effect, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
-import { UserId } from "~/core/_shared/user";
+import { UserId } from "~/core/identity/reference";
 import { TranscriptEntry, TranscriptEntryId, TranscriptTurnId } from "~/core/transcript/model";
 
 const PersistedTranscriptEntry = Schema.fromJsonString(Schema.toCodecJson(TranscriptEntry));

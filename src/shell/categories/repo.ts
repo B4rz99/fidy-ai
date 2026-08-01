@@ -1,7 +1,7 @@
 import { Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
-import { CategoryId } from "~/core/_shared/category";
-import { UserId } from "~/core/_shared/user";
+import { CategoryId } from "~/core/categories/reference";
+import { UserId } from "~/core/identity/reference";
 import {
   Category,
   type CreateKeywordRuleInput,

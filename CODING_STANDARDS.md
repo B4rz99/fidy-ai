@@ -113,7 +113,8 @@ operations or define a parallel monetary DTO.
 ## Layout and file vocabulary
 
 ```
-core/<slice>/     model.ts     the canonical schemas
+core/<slice>/     reference.ts narrow stable ids/kinds published to genuine sibling consumers
+                  model.ts     the canonical schemas
                   rules.ts     pure decisions — omitted where there are none
                   errors.ts    the Data.TaggedError union
 
@@ -123,9 +124,14 @@ shell/<slice>/    operations.ts  canonical operation definitions — HttpApiGrou
                   errors.ts    the exhaustive core-to-API mapper
 ```
 
-Reserved for those roles in **every** slice. A slice may add whatever else it needs —
-`core/transactions/reconcile.ts`, `core/ingestion/anonymise.ts` — but a repo may not live in a file
-called anything else. A session working on one issue should find things without exploring.
+`model.ts`, `rules.ts`, and `errors.ts` are reserved for those roles in **every** slice. A slice may
+add `reference.ts` only when another core slice genuinely needs to name or persist one of its stable
+ids or kind codes. A reference exports only those values; sibling core code may import it directly,
+but may not import the sibling's model, rules, errors, repository, taxonomy, or other implementation.
+Ownerless values remain in `core/_shared`, and no empty reference file is created. A slice may add
+whatever else it needs — `core/transactions/reconcile.ts`, `core/ingestion/anonymise.ts` — but a repo
+may not live in a file called anything else. A session working on one issue should find things without
+exploring.
 
 ---
 

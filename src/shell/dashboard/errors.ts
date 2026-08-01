@@ -1,5 +1,5 @@
 import { Data } from "effect";
-import { type CategoryId } from "~/core/_shared/category";
+import { type CategoryId } from "~/core/categories/reference";
 import { type DashboardFailure } from "~/core/dashboard/errors";
 import { NotFound, ValidationFailed } from "~/shell/_shared/errors";
 

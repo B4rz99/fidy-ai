@@ -1,6 +1,6 @@
 import { Duration, Effect, Schema } from "effect";
-import { AgentTokenId } from "~/core/_shared/agent-token";
-import { UserId } from "~/core/_shared/user";
+import { AgentTokenId } from "./reference";
+import { UserId } from "~/core/identity/reference";
 
 /**
  * One access capability an AgentToken may grant. Scopes are independent: a

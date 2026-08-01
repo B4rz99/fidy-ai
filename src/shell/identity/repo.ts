@@ -1,12 +1,7 @@
 import { Effect, Option, Schema, Struct } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
-import { UserId } from "~/core/_shared/user";
-import {
-  type E164PhoneNumber,
-  User,
-  UserPreferences,
-  WhatsAppIdentity,
-} from "~/core/identity/model";
+import { type E164PhoneNumber, UserId } from "~/core/identity/reference";
+import { User, UserPreferences, WhatsAppIdentity } from "~/core/identity/model";
 
 const UserWithoutId = User.mapFields(Struct.omit(["id"]));
 const UserWithoutCreatedAt = User.mapFields(Struct.omit(["createdAt"]));

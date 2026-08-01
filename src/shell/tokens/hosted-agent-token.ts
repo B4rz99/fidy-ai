@@ -1,7 +1,7 @@
 import { Crypto, DateTime, Duration, Effect, Encoding } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
-import { AgentTokenId } from "~/core/_shared/agent-token";
-import type { UserId } from "~/core/_shared/user";
+import { AgentTokenId } from "~/core/tokens/reference";
+import type { UserId } from "~/core/identity/reference";
 import {
   AgentBearerSecret,
   type AgentBearerToken,

@@ -1,5 +1,5 @@
 import { Crypto, Effect, Option, Schema } from "effect";
-import type { UserId } from "~/core/_shared/user";
+import type { UserId } from "~/core/identity/reference";
 import { TranscriptText } from "~/core/transcript/model";
 import type { TranscriptWindowEntry } from "~/core/transcript/rules";
 import { listRecentTranscriptEntries } from "~/shell/transcript/transcript-service";

@@ -1,5 +1,5 @@
 import { Effect, Option, Schema, Terminal } from "effect";
-import type { UserId } from "~/core/_shared/user";
+import type { UserId } from "~/core/identity/reference";
 import { type AgentReply, AgentService, InboundMessage } from "./agent-service";
 
 const invalidMessage = "Escribe un mensaje de texto no vacío.\n";

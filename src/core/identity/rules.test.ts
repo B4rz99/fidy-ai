@@ -1,6 +1,6 @@
 import { expect, it } from "@effect/vitest";
 import { DateTime, Effect } from "effect";
-import { UserId } from "~/core/_shared/user";
+import { UserId } from "./reference";
 import { makeColombianUser } from "./rules";
 
 const userId = UserId.make("f1d1a000-0000-4000-8000-000000000001");

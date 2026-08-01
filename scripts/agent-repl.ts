@@ -1,6 +1,6 @@
 import { BunHttpClient, BunRuntime, BunServices } from "@effect/platform-bun";
 import { Config, Effect, Layer, Option, Schema } from "effect";
-import { UserId } from "~/core/_shared/user";
+import { UserId } from "~/core/identity/reference";
 import { AgentServiceLive } from "~/shell/agent/agent-service";
 import { OpenAiLanguageModelLive } from "~/shell/agent/openai";
 import { runAgentRepl } from "~/shell/agent/repl";

@@ -153,8 +153,8 @@ judging a coverage number.
 - **Module-graph linter:** [dependency-cruiser](https://github.com/sverweij/dependency-cruiser) —
   `.dependency-cruiser.mjs`, run by `bun run lint:deps` in CI and in `bun run verify`. oxlint holds
   the per-file rules; the cruiser holds the ones about the graph, where the target has to be written
-  in terms of the source — "a core slice may not import a _sibling_ core slice" is one relational
-  rule there and one override block per slice in oxlint.
+  in terms of the source — "a core slice may cross to a sibling only through `reference.ts`" is one
+  relational rule there. `bun run lint:deps` also runs positive and negative dependency probes.
 - **Formatter:** [oxfmt](https://oxc.rs) — configured in `.oxfmtrc.json`.
 - **Type checker:** TypeScript 7 native (`typescript@7`, `tsconfig.json`, strict), patched with
   the Effect language service via [`@effect/tsgo`](https://github.com/Effect-TS/tsgo): the
@@ -171,7 +171,8 @@ judging a coverage number.
 | `bun run lint`              | oxlint                                                   |
 | `bun run lint:type-aware`   | oxlint with the type-aware rules                         |
 | `bun run lint:suppressions` | reject lint-suppression comments in first-party source   |
-| `bun run lint:deps`         | module-graph rules                                       |
+| `bun run lint:deps`         | module-graph rules and positive/negative probes          |
+| `bun run lint:deps:probes`  | dependency import-boundary probes                        |
 | `bun run lint:dependencies` | pins behind the registry, and the install delay          |
 | `bun run format`            | Format the repo with oxfmt                               |
 | `bun run format:check`      | Verify formatting without writing                        |

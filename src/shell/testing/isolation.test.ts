@@ -2,7 +2,7 @@ import { expect, layer } from "@effect/vitest";
 import { Context, DateTime, Effect, Layer, type Schema } from "effect";
 import { HttpBody, HttpClient, type HttpClientError } from "effect/unstable/http";
 import { IanaTimeZone } from "~/core/_shared/context";
-import { UserId } from "~/core/_shared/user";
+import { UserId } from "~/core/identity/reference";
 import { CategoryKeyword } from "~/core/categories/model";
 import { categoryIds } from "~/core/categories/taxonomy";
 import { type InsightEvent } from "~/core/insights/model";

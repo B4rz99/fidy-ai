@@ -2,7 +2,7 @@ import { expect, layer } from "@effect/vitest";
 import { BigDecimal, Effect, Equal, Layer, Schema, Terminal } from "effect";
 import { LanguageModel } from "effect/unstable/ai";
 import { SqlClient } from "effect/unstable/sql";
-import { UserId } from "~/core/_shared/user";
+import { UserId } from "~/core/identity/reference";
 import { categoryIds } from "~/core/categories/taxonomy";
 import { TranscriptText } from "~/core/transcript/model";
 import { TranscriptWindowCharacterLimit, TranscriptWindowTurnLimit } from "~/core/transcript/rules";

@@ -1,6 +1,6 @@
 import { expect, it } from "@effect/vitest";
 import { DateTime, Effect, Option, Result, Schema } from "effect";
-import { AgentTokenId } from "~/core/_shared/agent-token";
+import { AgentTokenId } from "./reference";
 import {
   AgentBearerSecret,
   AgentBearerToken,

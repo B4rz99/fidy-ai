@@ -1,7 +1,7 @@
 import { Effect } from "effect";
 import { HttpServerRequest } from "effect/unstable/http";
 import { HttpApiBuilder } from "effect/unstable/httpapi";
-import type { UserId } from "~/core/_shared/user";
+import type { UserId } from "~/core/identity/reference";
 import { resolveCaller } from "~/shell/_shared/authz";
 import { FidyApi } from "~/shell/api";
 import { findUser, updateUserPreferences } from "./repo";

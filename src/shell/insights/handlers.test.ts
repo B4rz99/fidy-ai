@@ -1,7 +1,7 @@
 import { expect, layer } from "@effect/vitest";
 import { BigDecimal, Context, DateTime, Effect, Equal, Layer, Result, Schema } from "effect";
 import { HttpBody, HttpClient } from "effect/unstable/http";
-import { AgentTokenId } from "~/core/_shared/agent-token";
+import { AgentTokenId } from "~/core/tokens/reference";
 import { IanaTimeZone } from "~/core/_shared/context";
 import { Currency, Money } from "~/core/_shared/money";
 import { AgentBearerToken } from "~/core/tokens/model";

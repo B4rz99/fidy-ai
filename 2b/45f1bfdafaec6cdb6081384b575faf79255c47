@@ -1,0 +1,19 @@
+README.md
+  s_33f282c186ae9f::t_575ed86d741a90 217,259,295
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.19",
+  "base_commit_sha": "2b45f1bfdafaec6cdb6081384b575faf79255c47",
+  "prompts": {},
+  "sessions": {
+    "s_33f282c186ae9f": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019fbdd2-6da3-74e8-a213-ff42b71e5f5e",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

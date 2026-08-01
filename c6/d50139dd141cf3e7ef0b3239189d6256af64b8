@@ -1,0 +1,140 @@
+src/core/categories/reference.ts
+  s_aee6af8a5ba362::t_6710008b71e784 1-8
+src/shell/dashboard/handlers.ts
+  s_aee6af8a5ba362::t_2dd19e8d8766af 4
+src/core/audit/model.ts
+  s_aee6af8a5ba362::t_bab8d505a454a2 2,4
+src/core/identity/rules.ts
+  s_aee6af8a5ba362::t_58786b2e9cb2a1 3
+src/shell/transactions/handlers.ts
+  s_aee6af8a5ba362::t_eeb68a6b0aca5a 4-5
+src/core/insights/model.ts
+  s_aee6af8a5ba362::t_eb7fe53a53f76c 4
+ARCHITECTURE.md
+  s_aee6af8a5ba362::t_3d2ff3010e0517 93,95-107,114-116,119-123
+  s_aee6af8a5ba362::t_d38c0d26d14ec1 481-503
+src/core/transactions/model.ts
+  s_aee6af8a5ba362::t_07935cb6ad938d 2
+src/shell/agent/agent-service.test.ts
+  s_aee6af8a5ba362::t_ff78ade359bd36 5
+src/shell/testing/isolation.test.ts
+  s_aee6af8a5ba362::t_4a32c8fa8855bc 5
+package.json
+  s_aee6af8a5ba362::t_f5a31e26479634 10-11
+scripts/agent-repl.ts
+  s_aee6af8a5ba362::t_86021d17bb70a3 3
+src/core/tokens/model.ts
+  s_aee6af8a5ba362::t_0bc31af4673125 2-3
+src/core/categories/rules.test.ts
+  s_aee6af8a5ba362::t_eb2a08720fad6f 3
+src/shell/insights/repo.ts
+  s_aee6af8a5ba362::t_daceb08f967eb7 4
+src/shell/dashboard/handlers.test.ts
+  s_aee6af8a5ba362::t_20aef2f50ddc4b 5
+src/shell/identity/whatsapp-identity.test.ts
+  s_aee6af8a5ba362::t_5b9b0c5759c49f 3
+scripts/check-lint-suppressions.ts
+  s_aee6af8a5ba362::t_631e5188b8b09b 71-79
+src/core/dashboard/catalog.test.ts
+  s_aee6af8a5ba362::t_8d8306646318a8 3
+src/core/identity/model.ts
+  s_aee6af8a5ba362::t_deb135506f7b96 3
+src/shell/agent/tool-confirmation.ts
+  s_aee6af8a5ba362::t_dd5df70ea2c2bf 2
+src/core/insights/reference.ts
+  s_aee6af8a5ba362::t_ec20a4f284fb6e 1-10
+src/core/tokens/model.test.ts
+  s_aee6af8a5ba362::t_3e8c101c68ad11 3
+src/shell/transactions/repo.ts
+  s_aee6af8a5ba362::t_cbb3e659916d11 3,5
+src/core/identity/model.test.ts
+  s_aee6af8a5ba362::t_d7c9e6687c5e3f 3
+src/shell/dashboard/errors.ts
+  s_aee6af8a5ba362::t_3df02a4f790be9 2
+src/shell/insights/handlers.test.ts
+  s_aee6af8a5ba362::t_8936e8d0d32d7d 4
+src/shell/transcript/repo.ts
+  s_aee6af8a5ba362::t_962afa5f9b5cd8 3
+src/core/dashboard/catalog.ts
+  s_aee6af8a5ba362::t_b12e61642d6c61 1
+CODING_STANDARDS.md
+  s_aee6af8a5ba362::t_f65b2b5204413a 116-117,127-134
+src/shell/audit/repo.ts
+  s_aee6af8a5ba362::t_7a735e8344d9b9 3
+src/core/identity/reference.ts
+  s_aee6af8a5ba362::t_61d70e5072a2a4 1-26
+src/shell/testing/suggested-operations.test.ts
+  s_aee6af8a5ba362::t_44873f8e240a7d 5,7
+src/shell/dashboard/repo.ts
+  s_aee6af8a5ba362::t_ce832b6585a32d 3
+src/shell/identity/repo.ts
+  s_aee6af8a5ba362::t_5e35f1ef39f68e 3-4
+src/shell/identity/handlers.ts
+  s_aee6af8a5ba362::t_bb474382d2a94c 4
+src/core/identity/rules.test.ts
+  s_aee6af8a5ba362::t_da81dcff7628d8 3
+src/shell/agent/repl.ts
+  s_aee6af8a5ba362::t_5e8a26aa635f6e 2
+src/shell/insights/handlers.ts
+  s_aee6af8a5ba362::t_876758ae308ca7 4
+src/core/categories/taxonomy.ts
+  s_aee6af8a5ba362::t_38145a027aacc1 1
+src/shell/categories/handlers.ts
+  s_aee6af8a5ba362::t_8cbdf329f757fa 4
+src/shell/agent/agent-service.ts
+  s_aee6af8a5ba362::t_c177b689524fe6 17
+src/core/identity/reference.test.ts
+  s_aee6af8a5ba362::t_b374bf3f44d034 1-20
+src/shell/categories/repo.ts
+  s_aee6af8a5ba362::t_3665767d85682b 3-4
+src/shell/db/development-seed.ts
+  s_aee6af8a5ba362::t_7f46410c8a71bb 2
+  s_aee6af8a5ba362::t_96fe2bc43ea0cb 3
+README.md
+  s_aee6af8a5ba362::t_d38c0d26d14ec1 174
+  s_aee6af8a5ba362::t_a1416c6fed23ef 156-157,175
+src/shell/audit/audit-log.test.ts
+  s_aee6af8a5ba362::t_3613db384e1a10 5,7
+src/core/dashboard/model.ts
+  s_aee6af8a5ba362::t_7d33ea5b601a60 2
+src/core/categories/errors.ts
+  s_aee6af8a5ba362::t_de4166f5b0c065 2
+src/core/tokens/reference.ts
+  s_aee6af8a5ba362::t_337e90045f8270 1-5
+src/shell/tokens/repo.ts
+  s_aee6af8a5ba362::t_8f7bea095a357f 3
+src/shell/testing/authorization.test.ts
+  s_aee6af8a5ba362::t_d8d5181f6a660a 4-5
+src/shell/tokens/hosted-agent-token.ts
+  s_aee6af8a5ba362::t_4ef97e97ea7f9a 3-4
+scripts/check-dependency-guards.ts
+  s_aee6af8a5ba362::t_ec32f21ff35ebc 58-61
+  s_aee6af8a5ba362::t_2e61bf8f0e7081 1-57,62-63
+  s_aee6af8a5ba362::t_65e9ce88b873b1 64-66
+.dependency-cruiser.mjs
+  s_aee6af8a5ba362::t_ef118dc171cb1e 43-47
+  s_aee6af8a5ba362::t_a63327f2fadb2a 7-8
+  s_aee6af8a5ba362::t_65e9ce88b873b1 51
+src/core/categories/model.ts
+  s_aee6af8a5ba362::t_1870102af59967 2
+src/shell/categories/categorizer.ts
+  s_aee6af8a5ba362::t_df9c499b57975c 2-3
+src/shell/transcript/transcript-service.ts
+  s_aee6af8a5ba362::t_ac96ae84763c8a 2
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.19",
+  "base_commit_sha": "c6d50139dd141cf3e7ef0b3239189d6256af64b8",
+  "prompts": {},
+  "sessions": {
+    "s_aee6af8a5ba362": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019fbda8-2d1f-799b-830b-a84b9d254678",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

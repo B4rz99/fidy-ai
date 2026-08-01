@@ -1,6 +1,6 @@
 import { expect, layer } from "@effect/vitest";
 import { BigDecimal, DateTime, Effect, Equal, Option, Result, Schema } from "effect";
-import { SqlClient } from "effect/unstable/sql";
+import { MigrationSqlClient } from "~/shell/db/client";
 import { IanaTimeZone } from "~/core/_shared/context";
 import { Currency, Money } from "~/core/_shared/money";
 import { categoryIds } from "~/core/categories/taxonomy";
@@ -59,7 +59,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         const attestations = yield* client.transactions.listSourceAttestations({
           params: { id: created.data.id },
         });
-        const sql = yield* SqlClient.SqlClient;
+        const sql = yield* MigrationSqlClient;
         const updateAttempt = yield* Effect.result(
           sql`UPDATE source_attestations SET interpretation_revision = 'tampered' WHERE transaction_id = ${created.data.id}`
         );
@@ -110,7 +110,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
       Effect.gen(function* () {
         yield* truncateTransactions;
         const client = yield* ApiHarnessClient;
-        const sql = yield* SqlClient.SqlClient;
+        const sql = yield* MigrationSqlClient;
         yield* sql`
           CREATE OR REPLACE FUNCTION reject_manual_attestation() RETURNS trigger AS $$
           BEGIN
@@ -145,7 +145,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
       Effect.gen(function* () {
         yield* truncateTransactions;
         const client = yield* ApiHarnessClient;
-        const sql = yield* SqlClient.SqlClient;
+        const sql = yield* MigrationSqlClient;
         yield* sql`
           INSERT INTO transactions
             (user_id, amount, currency, merchant, direction, category_id, occurred_at)
@@ -310,7 +310,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
       Effect.gen(function* () {
         yield* truncateTransactions;
         const client = yield* ApiHarnessClient;
-        const sql = yield* SqlClient.SqlClient;
+        const sql = yield* MigrationSqlClient;
         const occurredAt = utcDateTime("2026-07-20T12:30:00Z");
         const first = yield* client.transactions.createTransaction({
           payload: transactionPayload({ merchant: "Primera", occurredAt }),

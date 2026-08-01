@@ -1,7 +1,7 @@
 import { expect, layer } from "@effect/vitest";
 import { Effect, Result, Schema } from "effect";
 import { HttpBody, HttpClient } from "effect/unstable/http";
-import { SqlClient } from "effect/unstable/sql";
+import { MigrationSqlClient } from "~/shell/db/client";
 import { CategoryId } from "~/core/categories/reference";
 import { SplitWeight, TransactionListLimit, WidgetId } from "~/core/dashboard/model";
 import { NotFound, ValidationFailed } from "~/shell/_shared/errors";
@@ -277,7 +277,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         yield* truncateDashboards;
         const client = yield* ApiHarnessClient;
         yield* client.dashboard.getDashboard();
-        const sql = yield* SqlClient.SqlClient;
+        const sql = yield* MigrationSqlClient;
         yield* sql`UPDATE dashboards SET document = '{"unexpected": true}'::jsonb`;
 
         const response = yield* HttpClient.get("/dashboard", {

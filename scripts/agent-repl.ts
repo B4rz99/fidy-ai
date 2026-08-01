@@ -5,7 +5,7 @@ import { AgentServiceLive } from "~/shell/agent/agent-service";
 import { OpenAiLanguageModelLive } from "~/shell/agent/openai";
 import { runAgentRepl } from "~/shell/agent/repl";
 import { CanonicalApiBaseUrl, CanonicalApiUrl } from "~/shell/agent/toolkit";
-import { MigratorLive, PgLive } from "~/shell/db/client";
+import { MigratorLive, PgLive, RuntimeAuthorityLive } from "~/shell/db/client";
 
 const program = Effect.gen(function* () {
   const userId = yield* Config.string("FIDY_REPL_USER_ID").pipe(
@@ -22,7 +22,9 @@ const program = Effect.gen(function* () {
 
 const AgentLive = AgentServiceLive.pipe(Layer.provide(OpenAiLanguageModelLive));
 const InfrastructureLive = Layer.mergeAll(PgLive, BunHttpClient.layer, BunServices.layer);
-const ReplLive = Layer.mergeAll(AgentLive, MigratorLive).pipe(
+const ReplLive = AgentLive.pipe(
+  Layer.provide(RuntimeAuthorityLive),
+  Layer.provide(MigratorLive),
   Layer.provideMerge(InfrastructureLive)
 );
 const MainLive = Layer.effectDiscard(program).pipe(Layer.provide(ReplLive));

@@ -1,7 +1,7 @@
 import { expect, layer } from "@effect/vitest";
 import { BigDecimal, Effect, Equal, Layer, Schema, Terminal } from "effect";
 import { LanguageModel } from "effect/unstable/ai";
-import { SqlClient } from "effect/unstable/sql";
+import { MigrationSqlClient } from "~/shell/db/client";
 import { UserId } from "~/core/identity/reference";
 import { categoryIds } from "~/core/categories/taxonomy";
 import { TranscriptText } from "~/core/transcript/model";
@@ -20,7 +20,7 @@ import {
 } from "./agent-service";
 
 const clearTranscript = Effect.flatMap(
-  SqlClient.SqlClient,
+  MigrationSqlClient,
   (sql) => sql`DELETE FROM transcript_entries WHERE user_id = ${defaultUserId}`
 );
 
@@ -495,7 +495,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
 
   it.effect("isolates Transcript, canonical execution, and audit attribution between Users", () =>
     Effect.gen(function* () {
-      const sql = yield* SqlClient.SqlClient;
+      const sql = yield* MigrationSqlClient;
       const service = yield* AgentService;
       const userA = UserId.make("f1d1a000-0000-4000-8000-0000000000a7");
       const userB = UserId.make("f1d1a000-0000-4000-8000-0000000000b7");
@@ -553,7 +553,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
     "rejects credentials and payment identifiers before persistence or model invocation",
     () =>
       Effect.gen(function* () {
-        const sql = yield* SqlClient.SqlClient;
+        const sql = yield* MigrationSqlClient;
         const service = yield* AgentService;
         yield* sql`DELETE FROM audit_log_entries WHERE user_id = ${defaultUserId}`;
         const sensitiveMessages = [
@@ -631,7 +631,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
 
   it.effect("removes bearers returned by canonical reads before model context or Transcript", () =>
     Effect.gen(function* () {
-      const sql = yield* SqlClient.SqlClient;
+      const sql = yield* MigrationSqlClient;
       yield* sql`TRUNCATE source_attestations, transactions, keyword_rules`;
       yield* clearTranscript;
       const service = yield* AgentService;
@@ -662,7 +662,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
 
   it.effect("executes a reversible addition without quick-log authorization grammar", () =>
     Effect.gen(function* () {
-      const sql = yield* SqlClient.SqlClient;
+      const sql = yield* MigrationSqlClient;
       yield* sql`TRUNCATE source_attestations, transactions, keyword_rules`;
       yield* clearTranscript;
       yield* sql`DELETE FROM audit_log_entries WHERE user_id = ${defaultUserId}`;
@@ -685,7 +685,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
 
   it.effect("executes reads and reversible additions from one model batch", () =>
     Effect.gen(function* () {
-      const sql = yield* SqlClient.SqlClient;
+      const sql = yield* MigrationSqlClient;
       yield* sql`TRUNCATE source_attestations, transactions, keyword_rules`;
       yield* clearTranscript;
       yield* sql`DELETE FROM audit_log_entries WHERE user_id = ${defaultUserId}`;
@@ -719,7 +719,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
     "quick-logs Colombian Money through the CLI and preserves explicit foreign Currency",
     () =>
       Effect.gen(function* () {
-        const sql = yield* SqlClient.SqlClient;
+        const sql = yield* MigrationSqlClient;
         yield* sql`TRUNCATE source_attestations, transactions, keyword_rules`;
         yield* clearTranscript;
         const service = yield* AgentService;
@@ -759,7 +759,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
 
   it.effect("bounds canonical history before exposing it to the model", () =>
     Effect.gen(function* () {
-      const sql = yield* SqlClient.SqlClient;
+      const sql = yield* MigrationSqlClient;
       const service = yield* AgentService;
       yield* sql`TRUNCATE source_attestations, transactions, keyword_rules`;
       yield* clearTranscript;
@@ -899,7 +899,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
 
   it.effect("executes a canonical private read without matching an exact phrase", () =>
     Effect.gen(function* () {
-      const sql = yield* SqlClient.SqlClient;
+      const sql = yield* MigrationSqlClient;
       const service = yield* AgentService;
       const client = yield* ApiHarnessClient;
       yield* sql`TRUNCATE source_attestations, transactions, keyword_rules`;
@@ -935,7 +935,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
 
   it.effect("rejects a model batch that exceeds the per-turn tool-call cap", () =>
     Effect.gen(function* () {
-      const sql = yield* SqlClient.SqlClient;
+      const sql = yield* MigrationSqlClient;
       yield* clearTranscript;
       yield* sql`DELETE FROM audit_log_entries WHERE user_id = ${defaultUserId}`;
       const service = yield* AgentService;
@@ -999,7 +999,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
 
   it.effect("blocks an injected persisted instruction from authorizing a mutation", () =>
     Effect.gen(function* () {
-      const sql = yield* SqlClient.SqlClient;
+      const sql = yield* MigrationSqlClient;
       const service = yield* AgentService;
       yield* sql`TRUNCATE source_attestations, transactions, keyword_rules`;
       yield* clearTranscript;
@@ -1048,7 +1048,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
 
   it.effect("confirms a destructive call followed by an automatic call in the same batch", () =>
     Effect.gen(function* () {
-      const sql = yield* SqlClient.SqlClient;
+      const sql = yield* MigrationSqlClient;
       const service = yield* AgentService;
       const client = yield* ApiHarnessClient;
       yield* sql`TRUNCATE source_attestations, transactions, keyword_rules`;
@@ -1091,7 +1091,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
 
   it.effect("executes one exact destructive confirmation and rejects its replay", () =>
     Effect.gen(function* () {
-      const sql = yield* SqlClient.SqlClient;
+      const sql = yield* MigrationSqlClient;
       const service = yield* AgentService;
       yield* sql`TRUNCATE source_attestations, transactions, keyword_rules`;
       yield* clearTranscript;
@@ -1133,7 +1133,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
 
   it.effect("does not accept approval from an interrupted confirmation turn", () =>
     Effect.gen(function* () {
-      const sql = yield* SqlClient.SqlClient;
+      const sql = yield* MigrationSqlClient;
       const service = yield* AgentService;
       yield* sql`TRUNCATE source_attestations, transactions, keyword_rules`;
       yield* clearTranscript;
@@ -1173,7 +1173,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
 
   it.effect("executes a derived canonical tool with attributable authorization", () =>
     Effect.gen(function* () {
-      const sql = yield* SqlClient.SqlClient;
+      const sql = yield* MigrationSqlClient;
       yield* clearTranscript;
       yield* sql`DELETE FROM audit_log_entries WHERE user_id = ${defaultUserId}`;
       const service = yield* AgentService;

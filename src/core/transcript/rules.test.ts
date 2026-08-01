@@ -1,5 +1,5 @@
 import { expect, it } from "@effect/vitest";
-import { DateTime, Effect } from "effect";
+import { DateTime, Effect, Result, Schema } from "effect";
 import { CanonicalOperationId } from "~/core/_shared/canonical-operation";
 import {
   AgentIteration,
@@ -7,11 +7,11 @@ import {
   CanonicalToolCallEntry,
   CanonicalToolResultEntry,
   ToolCallId,
+  TranscriptEntry,
   TranscriptEntryId,
   TranscriptText,
   TranscriptTurnId,
   UserTranscriptEntry,
-  type TranscriptEntry,
 } from "./model";
 import {
   selectTranscriptWindow,
@@ -21,6 +21,11 @@ import {
 } from "./rules";
 
 const occurredAt = DateTime.makeUnsafe("2026-07-20T12:00:00Z");
+
+it("rejects a value outside every TranscriptEntry variant", () => {
+  expect(Result.isFailure(Schema.decodeUnknownResult(TranscriptEntry)([]))).toBe(true);
+});
+
 const selectWindow = (
   entries: ReadonlyArray<TranscriptWindowEntry>,
   maxTurns: number,
@@ -51,6 +56,48 @@ const turn = (suffix: string, user: string, assistant: string): ReadonlyArray<Tr
     occurredAt,
   }),
 ];
+
+it("accepts every canonical TranscriptEntry variant", () => {
+  const id = turnId("0");
+  const operation = CanonicalOperationId.make("categories.listCategories");
+  const entries: ReadonlyArray<TranscriptEntry> = [
+    UserTranscriptEntry.make({
+      id: entryId("01"),
+      turnId: id,
+      text: TranscriptText.make("user"),
+      occurredAt,
+    }),
+    AssistantTranscriptEntry.make({
+      id: entryId("02"),
+      turnId: id,
+      iteration: AgentIteration.make(1),
+      text: TranscriptText.make("assistant"),
+      occurredAt,
+    }),
+    CanonicalToolCallEntry.make({
+      id: entryId("03"),
+      turnId: id,
+      iteration: AgentIteration.make(1),
+      toolCallId: ToolCallId.make("call"),
+      operation,
+      input: {},
+      occurredAt,
+    }),
+    CanonicalToolResultEntry.make({
+      id: entryId("04"),
+      turnId: id,
+      iteration: AgentIteration.make(1),
+      toolCallId: ToolCallId.make("call"),
+      operation,
+      outcome: { _tag: "Succeeded", output: {} },
+      occurredAt,
+    }),
+  ];
+
+  for (const entry of entries) {
+    expect(Result.isSuccess(Schema.decodeUnknownResult(TranscriptEntry)(entry))).toBe(true);
+  }
+});
 
 it.effect("keeps the newest complete Transcript turns within both context bounds", () =>
   Effect.gen(function* () {
@@ -143,6 +190,131 @@ it.effect(
         )
       ).toEqual([user, latestCall, latestResult]);
     })
+);
+
+it.effect("retains an active User request exactly at the character boundary", () =>
+  Effect.gen(function* () {
+    const user = UserTranscriptEntry.make({
+      id: entryId("91"),
+      turnId: turnId("9"),
+      text: TranscriptText.make("boundary"),
+      occurredAt,
+    });
+
+    expect(yield* selectWindow([user], 1, 8)).toEqual([user]);
+    expect(yield* selectWindow([user], 1, 7)).toEqual([]);
+  })
+);
+
+it.effect("retains an unmatched trailing result without its preceding call", () =>
+  Effect.gen(function* () {
+    const id = turnId("10");
+    const operation = CanonicalOperationId.make("categories.listCategories");
+    const user = UserTranscriptEntry.make({
+      id: entryId("101"),
+      turnId: id,
+      text: TranscriptText.make("u"),
+      occurredAt,
+    });
+    const call = CanonicalToolCallEntry.make({
+      id: entryId("102"),
+      turnId: id,
+      iteration: AgentIteration.make(1),
+      toolCallId: ToolCallId.make("different-call"),
+      operation,
+      input: { tooLarge: "x".repeat(20) },
+      occurredAt,
+    });
+    const result = CanonicalToolResultEntry.make({
+      id: entryId("103"),
+      turnId: id,
+      iteration: AgentIteration.make(1),
+      toolCallId: ToolCallId.make("result-call"),
+      operation,
+      outcome: { _tag: "Succeeded", output: {} },
+      occurredAt,
+    });
+
+    expect(yield* selectWindow([user, call, result], 1, 3)).toEqual([user, result]);
+  })
+);
+
+it.effect("does not treat a non-call entry as the call for a trailing result", () =>
+  Effect.gen(function* () {
+    const id = turnId("11");
+    const operation = CanonicalOperationId.make("categories.listCategories");
+    const user = UserTranscriptEntry.make({
+      id: entryId("111"),
+      turnId: id,
+      text: TranscriptText.make("u"),
+      occurredAt,
+    });
+    const assistant = AssistantTranscriptEntry.make({
+      id: entryId("112"),
+      turnId: id,
+      iteration: AgentIteration.make(1),
+      text: TranscriptText.make("too large"),
+      occurredAt,
+    });
+    const result = CanonicalToolResultEntry.make({
+      id: entryId("113"),
+      turnId: id,
+      iteration: AgentIteration.make(1),
+      toolCallId: ToolCallId.make("result-call"),
+      operation,
+      outcome: { _tag: "Succeeded", output: {} },
+      occurredAt,
+    });
+
+    expect(yield* selectWindow([user, assistant, result], 1, 3)).toEqual([user, result]);
+  })
+);
+
+it.effect("walks backward over each complete trailing call and result pair", () =>
+  Effect.gen(function* () {
+    const id = turnId("12");
+    const operation = CanonicalOperationId.make("categories.listCategories");
+    const user = UserTranscriptEntry.make({
+      id: entryId("121"),
+      turnId: id,
+      text: TranscriptText.make("u"),
+      occurredAt,
+    });
+    const oldCall = CanonicalToolCallEntry.make({
+      id: entryId("122"),
+      turnId: id,
+      iteration: AgentIteration.make(1),
+      toolCallId: ToolCallId.make("old-call"),
+      operation,
+      input: { tooLarge: "x".repeat(20) },
+      occurredAt,
+    });
+    const trailing = [1, 2].flatMap((iteration) => {
+      const toolCallId = ToolCallId.make(`call-${iteration}`);
+      return [
+        CanonicalToolCallEntry.make({
+          id: entryId(`12${iteration * 2 + 1}`),
+          turnId: id,
+          iteration: AgentIteration.make(iteration),
+          toolCallId,
+          operation,
+          input: {},
+          occurredAt,
+        }),
+        CanonicalToolResultEntry.make({
+          id: entryId(`12${iteration * 2 + 2}`),
+          turnId: id,
+          iteration: AgentIteration.make(iteration),
+          toolCallId,
+          operation,
+          outcome: { _tag: "Succeeded", output: {} },
+          occurredAt,
+        }),
+      ];
+    });
+
+    expect(yield* selectWindow([user, oldCall, ...trailing], 1, 9)).toEqual([user, ...trailing]);
+  })
 );
 
 it.effect("counts canonical call inputs and both result outcomes in the turn budget", () =>

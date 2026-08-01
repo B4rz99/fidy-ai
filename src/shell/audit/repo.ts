@@ -2,6 +2,7 @@ import { Effect, Schema, Struct } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import { UserId } from "~/core/identity/reference";
 import { AuditLogEntry } from "~/core/audit/model";
+import { withUserTransaction } from "~/shell/db/user-transaction";
 
 const AuditLogEntryWithoutOccurredAt = AuditLogEntry.mapFields(Struct.omit(["occurredAt"]));
 const AuditLogEntryRow = Schema.Struct({
@@ -26,10 +27,12 @@ export const appendAuditLogEntry = Effect.fn("appendAuditLogEntry")(function* (
   metadata: typeof AuditLogEntryMetadata.Type
 ) {
   const sql = yield* SqlClient.SqlClient;
-  return yield* SqlSchema.findOne({
-    Request: AppendAuditLogEntryRow,
-    Result: AuditLogEntryRow,
-    execute: (row) => sql`
+  return yield* withUserTransaction(
+    subjectUserId,
+    SqlSchema.findOne({
+      Request: AppendAuditLogEntryRow,
+      Result: AuditLogEntryRow,
+      execute: (row) => sql`
       INSERT INTO audit_log_entries (
         user_id, token_id, operation, outcome, occurred_at
       )
@@ -40,7 +43,8 @@ export const appendAuditLogEntry = Effect.fn("appendAuditLogEntry")(function* (
       RETURNING id, user_id AS "subjectUserId", token_id AS "tokenId",
         operation, outcome, occurred_at AS "occurredAt"
     `,
-  })({ subjectUserId, ...metadata }).pipe(Effect.orDie);
+    })({ subjectUserId, ...metadata }).pipe(Effect.orDie)
+  );
 });
 
 /**
@@ -49,19 +53,22 @@ export const appendAuditLogEntry = Effect.fn("appendAuditLogEntry")(function* (
  * read seam; production callers have no way to expose the retained evidence.
  */
 export const observeAuditLogEntries = (subjectUserId: UserId) =>
-  Effect.flatMap(SqlClient.SqlClient, (sql) =>
-    SqlSchema.findAll({
-      Request: UserId,
-      Result: AuditLogEntryRow,
-      execute: (userId) => sql`
+  withUserTransaction(
+    subjectUserId,
+    Effect.flatMap(SqlClient.SqlClient, (sql) =>
+      SqlSchema.findAll({
+        Request: UserId,
+        Result: AuditLogEntryRow,
+        execute: (userId) => sql`
         SELECT id, user_id AS "subjectUserId", token_id AS "tokenId",
           operation, outcome, occurred_at AS "occurredAt"
         FROM audit_log_entries
         WHERE user_id = ${userId}
         ORDER BY occurred_at, id
       `,
-    })(subjectUserId)
-  ).pipe(Effect.orDie);
+      })(subjectUserId)
+    ).pipe(Effect.orDie)
+  );
 
 /**
  * Applies the append-only seam's sole deletion capability: retention may remove
@@ -75,8 +82,5 @@ export const removeAuditLogEntriesBefore = Effect.fn("removeAuditLogEntriesBefor
   const encodedCutoff = yield* Schema.encodeEffect(Schema.DateTimeUtcFromDate)(cutoff).pipe(
     Effect.orDie
   );
-  yield* sql`
-    DELETE FROM audit_log_entries
-    WHERE occurred_at < ${encodedCutoff}
-  `;
+  yield* sql`SELECT fidy_delete_audit_log_entries_before(${encodedCutoff})`;
 });

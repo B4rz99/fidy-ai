@@ -1,6 +1,6 @@
 import { BunRuntime, BunServices } from "@effect/platform-bun";
 import { Config, Effect, Layer, Option } from "effect";
-import { MigratorLive, PgLive } from "~/shell/db/client";
+import { MigrationPgLive, MigratorLive } from "~/shell/db/client";
 import {
   generateDevelopmentAgentBearer,
   seedDevelopmentIdentity,
@@ -39,7 +39,11 @@ const SeedCommandLive = Layer.effectDiscard(
     // logging. No logger, error, or persisted record receives the raw bearer.
     yield* Effect.sync(() => process.stdout.write(`${bearer}\n`));
   })
-).pipe(Layer.provide(MigratorLive), Layer.provide(PgLive), Layer.provide(BunServices.layer));
+).pipe(
+  Layer.provide(MigratorLive),
+  Layer.provide(MigrationPgLive),
+  Layer.provide(BunServices.layer)
+);
 
 BunRuntime.runMain(
   requireLocalPostgres.pipe(Effect.andThen(Effect.scoped(Layer.build(SeedCommandLive))))

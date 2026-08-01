@@ -1,0 +1,622 @@
+import { expect, layer } from "@effect/vitest";
+import { Effect, Schema } from "effect";
+import { SqlClient, SqlSchema } from "effect/unstable/sql";
+import { UserId } from "~/core/identity/reference";
+import { TransactionId } from "~/core/transactions/model";
+import { ApiHarness } from "~/shell/testing/api-harness";
+import { assertRuntimeAuthority, MigrationSqlClient } from "./client";
+import { userTableNames } from "./user-tables";
+import { withUserTransaction } from "./user-transaction";
+
+const owner = UserId.make("f1d1a000-0000-4000-8000-0000000000c1");
+const stranger = UserId.make("f1d1a000-0000-4000-8000-0000000000d2");
+const ownerTransactionId = TransactionId.make("f1d1a000-0000-4000-8000-0000000000e3");
+
+const UserContextRow = Schema.Struct({ userId: UserId });
+
+type RlsPolicyCoverageRow = {
+  readonly tableName: string;
+  readonly rowSecurity: boolean;
+  readonly forceRowSecurity: boolean;
+  readonly policyCount: number;
+};
+
+type PublicTableRow = { readonly tableName: string };
+type UnexpectedInsertRow = { readonly tableName: string };
+
+const observeContext = Effect.fn("observeRlsContext")(function* (userId: UserId) {
+  const sql = yield* SqlClient.SqlClient;
+  return yield* withUserTransaction(
+    userId,
+    Effect.gen(function* () {
+      yield* sql`SELECT pg_sleep(0.02)`;
+      const setting = yield* SqlSchema.findOne({
+        Request: Schema.Void,
+        Result: UserContextRow,
+        execute: () => sql`
+          SELECT current_setting('fidy.user_id', true) AS "userId"
+        `,
+      })(undefined);
+      const rows = yield* SqlSchema.findAll({
+        Request: Schema.Void,
+        Result: UserContextRow,
+        execute: () => sql`
+          SELECT user_id AS "userId" FROM transactions ORDER BY user_id
+        `,
+      })(undefined);
+      return { setting: setting.userId, rows };
+    })
+  );
+});
+
+const seedRows = Effect.gen(function* () {
+  const admin = yield* MigrationSqlClient;
+  yield* admin`
+    INSERT INTO users (id, service_market, locale, time_zone, created_at)
+    VALUES
+      (${owner}, 'CO', 'es-CO', 'America/Bogota', '2026-01-01T00:00:00Z'),
+      (${stranger}, 'CO', 'es-CO', 'America/Bogota', '2026-01-01T00:00:00Z')
+    ON CONFLICT (id) DO NOTHING
+  `;
+  yield* admin`DELETE FROM transactions WHERE id = ${ownerTransactionId}`;
+  yield* admin`
+    INSERT INTO transactions (
+      id, user_id, amount, currency, merchant, direction, occurred_at, category_id
+    ) VALUES (
+      ${ownerTransactionId}, ${owner}, 25000, 'COP', 'Registro privado', 'outflow',
+      '2026-07-20T12:30:00Z', '10000000-0000-4000-8000-000000000016'
+    )
+  `;
+});
+
+const policyOwner = UserId.make("f1d1a000-0000-4000-8000-0000000001a1");
+const policyStranger = UserId.make("f1d1a000-0000-4000-8000-0000000001b2");
+const policyInsertVictim = UserId.make("f1d1a000-0000-4000-8000-0000000003a1");
+const policyForgedUser = UserId.make("f1d1a000-0000-4000-8000-0000000003b2");
+const policyTransactionId = TransactionId.make("f1d1a000-0000-4000-8000-0000000001c3");
+
+const seedEveryPolicyShape = Effect.gen(function* () {
+  const admin = yield* MigrationSqlClient;
+  yield* admin`
+    INSERT INTO users (id, service_market, locale, time_zone, created_at) VALUES
+      (${policyOwner}, 'CO', 'es-CO', 'America/Bogota', '2026-01-01T00:00:00Z'),
+      (${policyStranger}, 'CO', 'es-CO', 'America/Bogota', '2026-01-01T00:00:00Z'),
+      (${policyInsertVictim}, 'CO', 'es-CO', 'America/Bogota', '2026-01-01T00:00:00Z')
+  `;
+  yield* admin`
+    INSERT INTO whatsapp_identities (phone_number, user_id, verified_at)
+    VALUES ('+573001112233', ${policyOwner}, '2026-01-01T00:00:00Z')
+  `;
+  yield* admin`
+    INSERT INTO agent_tokens (
+      id, user_id, short_id, token_hash, scopes, idle_expires_at, created_at
+    ) VALUES (
+      'f1d1a000-0000-4000-8000-0000000001d4', ${policyOwner}, 'rlsprobe',
+      repeat('a', 64), ARRAY['read'], '2026-04-01T00:00:00Z', '2026-01-01T00:00:00Z'
+    )
+  `;
+  yield* admin`
+    INSERT INTO transactions (
+      id, user_id, amount, currency, merchant, direction, occurred_at, category_id
+    ) VALUES (
+      ${policyTransactionId}, ${policyOwner}, 1, 'COP', 'policy probe', 'outflow',
+      '2026-01-01T00:00:00Z', '10000000-0000-4000-8000-000000000016'
+    )
+  `;
+  yield* admin`
+    INSERT INTO audit_log_entries (id, user_id, token_id, operation, outcome, occurred_at)
+    VALUES (
+      'f1d1a000-0000-4000-8000-0000000001e5', ${policyOwner},
+      'f1d1a000-0000-4000-8000-0000000001d4', 'probe.read', 'succeeded',
+      '2026-01-01T00:00:00Z'
+    )
+  `;
+  yield* admin`
+    INSERT INTO keyword_rules (id, user_id, keyword, normalized_keyword, category_id)
+    VALUES (
+      'f1d1a000-0000-4000-8000-0000000001f6', ${policyOwner}, 'probe', 'probe',
+      '10000000-0000-4000-8000-000000000016'
+    )
+  `;
+  yield* admin`
+    INSERT INTO source_attestations (
+      id, transaction_id, kind, service_market, locale, time_zone, interpretation_revision
+    ) VALUES (
+      'f1d1a000-0000-4000-8000-0000000002a1', ${policyTransactionId}, 'manual',
+      'CO', 'es-CO', 'America/Bogota', 'policy-probe'
+    )
+  `;
+  yield* admin`
+    INSERT INTO insight_events (
+      id, user_id, kind, schedule_id, schedule_version, service_market, locale, time_zone,
+      scheduled_at
+    ) VALUES (
+      'f1d1a000-0000-4000-8000-0000000002b2', ${policyOwner}, 'weekly-summary',
+      'f1d1a000-0000-4000-8000-0000000002c3', 1, 'CO', 'es-CO', 'America/Bogota',
+      '2026-01-01T00:00:00Z'
+    )
+  `;
+  yield* admin`
+    INSERT INTO insight_money_groups (insight_event_id, currency, inflow_amount, outflow_amount)
+    VALUES ('f1d1a000-0000-4000-8000-0000000002b2', 'COP', 1, 0)
+  `;
+  yield* admin`
+    INSERT INTO insight_delivery_attempts (
+      id, insight_event_id, sent_at, channel, provider, provider_message_id
+    ) VALUES (
+      'f1d1a000-0000-4000-8000-0000000002d4',
+      'f1d1a000-0000-4000-8000-0000000002b2', '2026-01-01T00:00:00Z',
+      'whatsapp', 'probe', 'policy-probe'
+    )
+  `;
+  yield* admin`
+    INSERT INTO dashboards (user_id, document)
+    VALUES (${policyOwner}, '{"title":"policy probe"}'::jsonb)
+  `;
+  yield* admin`
+    INSERT INTO transcript_entries (user_id, entry_id, turn_id, entry)
+    VALUES (
+      ${policyOwner}, 'f1d1a000-0000-4000-8000-0000000002e5',
+      'f1d1a000-0000-4000-8000-0000000002f6',
+      '{"id":"f1d1a000-0000-4000-8000-0000000002e5","turnId":"f1d1a000-0000-4000-8000-0000000002f6"}'::jsonb
+    )
+  `;
+});
+
+type PolicyProbe = {
+  readonly tableName: (typeof userTableNames)[number];
+  readonly stableColumn: string;
+  readonly ownerPredicate: string;
+};
+
+const policyProbes: ReadonlyArray<PolicyProbe> = [
+  {
+    tableName: "agent_tokens",
+    stableColumn: "short_id",
+    ownerPredicate: "id = 'f1d1a000-0000-4000-8000-0000000001d4'",
+  },
+  {
+    tableName: "audit_log_entries",
+    stableColumn: "operation",
+    ownerPredicate: "id = 'f1d1a000-0000-4000-8000-0000000001e5'",
+  },
+  {
+    tableName: "dashboards",
+    stableColumn: "document",
+    ownerPredicate: `user_id = '${policyOwner}'`,
+  },
+  {
+    tableName: "insight_delivery_attempts",
+    stableColumn: "provider",
+    ownerPredicate: "id = 'f1d1a000-0000-4000-8000-0000000002d4'",
+  },
+  {
+    tableName: "insight_events",
+    stableColumn: "lifecycle_state",
+    ownerPredicate: "id = 'f1d1a000-0000-4000-8000-0000000002b2'",
+  },
+  {
+    tableName: "insight_money_groups",
+    stableColumn: "inflow_amount",
+    ownerPredicate: "insight_event_id = 'f1d1a000-0000-4000-8000-0000000002b2'",
+  },
+  {
+    tableName: "keyword_rules",
+    stableColumn: "keyword",
+    ownerPredicate: "id = 'f1d1a000-0000-4000-8000-0000000001f6'",
+  },
+  {
+    tableName: "source_attestations",
+    stableColumn: "time_zone",
+    ownerPredicate: "id = 'f1d1a000-0000-4000-8000-0000000002a1'",
+  },
+  {
+    tableName: "transactions",
+    stableColumn: "merchant",
+    ownerPredicate: `id = '${policyTransactionId}'`,
+  },
+  {
+    tableName: "transcript_entries",
+    stableColumn: "entry",
+    ownerPredicate: "entry_id = 'f1d1a000-0000-4000-8000-0000000002e5'",
+  },
+  { tableName: "users", stableColumn: "locale", ownerPredicate: `id = '${policyOwner}'` },
+  {
+    tableName: "whatsapp_identities",
+    stableColumn: "verified_at",
+    ownerPredicate: "phone_number = '+573001112233'",
+  },
+];
+
+const probeDeniedMutations = Effect.fn("probeDeniedRlsMutations")(function* () {
+  const sql = yield* SqlClient.SqlClient;
+  return yield* Effect.forEach(policyProbes, ({ tableName, stableColumn, ownerPredicate }) =>
+    Effect.gen(function* () {
+      const read = yield* sql.unsafe(
+        `SELECT 1 AS visible FROM ${tableName} WHERE ${ownerPredicate}`
+      );
+      const update = yield* sql.unsafe(
+        `UPDATE ${tableName} SET ${stableColumn} = ${stableColumn} WHERE ${ownerPredicate} RETURNING 1 AS touched`
+      );
+      const deleted = yield* sql.unsafe(
+        `DELETE FROM ${tableName} WHERE ${ownerPredicate} RETURNING 1 AS touched`
+      );
+      return { tableName, read, update, deleted };
+    })
+  );
+});
+
+const deniedInsertProbes = (sql: SqlClient.SqlClient) =>
+  [
+    {
+      tableName: "users",
+      insert: sql`
+      INSERT INTO users (id, service_market, locale, time_zone, created_at)
+      VALUES (${policyForgedUser}, 'CO', 'es-CO', 'America/Bogota', '2026-01-02T00:00:00Z')
+    `,
+    },
+    {
+      tableName: "whatsapp_identities",
+      insert: sql`
+      INSERT INTO whatsapp_identities (phone_number, user_id, verified_at)
+      VALUES ('+573009998877', ${policyOwner}, '2026-01-02T00:00:00Z')
+    `,
+    },
+    {
+      tableName: "agent_tokens",
+      insert: sql`
+      INSERT INTO agent_tokens (
+        id, user_id, short_id, token_hash, scopes, idle_expires_at, created_at
+      ) VALUES (
+        'f1d1a000-0000-4000-8000-0000000003c3', ${policyOwner}, 'insertprobe',
+        repeat('b', 64), ARRAY['read'], '2026-04-02T00:00:00Z', '2026-01-02T00:00:00Z'
+      )
+    `,
+    },
+    {
+      tableName: "transactions",
+      insert: sql`
+      INSERT INTO transactions (
+        id, user_id, amount, currency, merchant, direction, occurred_at, category_id
+      ) VALUES (
+        'f1d1a000-0000-4000-8000-0000000003d4', ${policyOwner}, 1, 'COP',
+        'denied insert', 'outflow', '2026-01-02T00:00:00Z',
+        '10000000-0000-4000-8000-000000000016'
+      )
+    `,
+    },
+    {
+      tableName: "audit_log_entries",
+      insert: sql`
+      INSERT INTO audit_log_entries (id, user_id, token_id, operation, outcome, occurred_at)
+      VALUES (
+        'f1d1a000-0000-4000-8000-0000000003e5', ${policyOwner},
+        'f1d1a000-0000-4000-8000-0000000001d4', 'probe.insert', 'succeeded',
+        '2026-01-02T00:00:00Z'
+      )
+    `,
+    },
+    {
+      tableName: "keyword_rules",
+      insert: sql`
+      INSERT INTO keyword_rules (id, user_id, keyword, normalized_keyword, category_id)
+      VALUES (
+        'f1d1a000-0000-4000-8000-0000000003f6', ${policyOwner}, 'insert', 'insert',
+        '10000000-0000-4000-8000-000000000016'
+      )
+    `,
+    },
+    {
+      tableName: "source_attestations",
+      insert: sql`
+      INSERT INTO source_attestations (
+        id, transaction_id, kind, service_market, locale, time_zone,
+        interpretation_revision
+      ) VALUES (
+        'f1d1a000-0000-4000-8000-0000000004a1', ${policyTransactionId}, 'manual',
+        'CO', 'es-CO', 'America/Bogota', 'denied-insert'
+      )
+    `,
+    },
+    {
+      tableName: "insight_events",
+      insert: sql`
+      INSERT INTO insight_events (
+        id, user_id, kind, schedule_id, schedule_version, service_market, locale, time_zone,
+        scheduled_at
+      ) VALUES (
+        'f1d1a000-0000-4000-8000-0000000004b2', ${policyOwner}, 'weekly-summary',
+        'f1d1a000-0000-4000-8000-0000000004c3', 1, 'CO', 'es-CO', 'America/Bogota',
+        '2026-01-02T00:00:00Z'
+      )
+    `,
+    },
+    {
+      tableName: "insight_money_groups",
+      insert: sql`
+      INSERT INTO insight_money_groups (
+        insight_event_id, currency, inflow_amount, outflow_amount
+      ) VALUES ('f1d1a000-0000-4000-8000-0000000002b2', 'USD', 1, 0)
+    `,
+    },
+    {
+      tableName: "insight_delivery_attempts",
+      insert: sql`
+      INSERT INTO insight_delivery_attempts (
+        id, insight_event_id, sent_at, channel, provider, provider_message_id
+      ) VALUES (
+        'f1d1a000-0000-4000-8000-0000000004d4',
+        'f1d1a000-0000-4000-8000-0000000002b2', '2026-01-02T00:00:00Z',
+        'whatsapp', 'denied', 'denied-insert'
+      )
+    `,
+    },
+    {
+      tableName: "dashboards",
+      insert: sql`
+      INSERT INTO dashboards (user_id, document)
+      VALUES (${policyInsertVictim}, '{"title":"denied insert"}'::jsonb)
+    `,
+    },
+    {
+      tableName: "transcript_entries",
+      insert: sql`
+      INSERT INTO transcript_entries (user_id, entry_id, turn_id, entry)
+      VALUES (
+        ${policyOwner}, 'f1d1a000-0000-4000-8000-0000000004e5',
+        'f1d1a000-0000-4000-8000-0000000004f6',
+        '{"id":"f1d1a000-0000-4000-8000-0000000004e5","turnId":"f1d1a000-0000-4000-8000-0000000004f6"}'::jsonb
+      )
+    `,
+    },
+  ] as const;
+
+const probeDeniedInserts = Effect.fn("probeDeniedRlsInserts")(function* (
+  userId: UserId | undefined
+) {
+  const sql = yield* SqlClient.SqlClient;
+  return yield* Effect.forEach(deniedInsertProbes(sql), ({ tableName, insert }) =>
+    Effect.gen(function* () {
+      const result = yield* Effect.exit(
+        userId === undefined ? insert : withUserTransaction(userId, insert)
+      );
+      return { tableName, result };
+    })
+  );
+});
+
+layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
+  "PostgreSQL User isolation",
+  (it) => {
+    it.effect(
+      "starts only with a restricted runtime role and complete forced policy coverage",
+      () =>
+        Effect.gen(function* () {
+          yield* assertRuntimeAuthority;
+          const admin = yield* MigrationSqlClient;
+          const covered = yield* admin<RlsPolicyCoverageRow>`
+          SELECT relation.relname AS "tableName",
+            relation.relrowsecurity AS "rowSecurity",
+            relation.relforcerowsecurity AS "forceRowSecurity",
+            count(policy.policyname)::integer AS "policyCount"
+          FROM pg_catalog.pg_class AS relation
+          INNER JOIN pg_catalog.pg_namespace AS namespace
+            ON namespace.oid = relation.relnamespace
+          LEFT JOIN pg_catalog.pg_policies AS policy
+            ON policy.schemaname = namespace.nspname AND policy.tablename = relation.relname
+          WHERE namespace.nspname = 'public'
+            AND relation.relname = ANY(${userTableNames})
+          GROUP BY relation.relname, relation.relrowsecurity, relation.relforcerowsecurity
+          ORDER BY relation.relname
+        `;
+
+          expect(covered.map((row) => row.tableName)).toEqual(userTableNames);
+          expect(
+            covered.every((row) => row.rowSecurity && row.forceRowSecurity && row.policyCount === 1)
+          ).toBe(true);
+
+          const publicTables = yield* admin<PublicTableRow>`
+            SELECT tablename AS "tableName"
+            FROM pg_catalog.pg_tables
+            WHERE schemaname = 'public'
+            ORDER BY tablename
+          `;
+          expect(publicTables.map((row) => row.tableName)).toEqual(
+            [...userTableNames, "categories", "effect_sql_migrations"].sort()
+          );
+        })
+    );
+
+    it.effect("fails closed when the runtime connection uses the migration authority", () =>
+      Effect.gen(function* () {
+        const admin = yield* MigrationSqlClient;
+        const result = yield* Effect.exit(
+          assertRuntimeAuthority.pipe(Effect.provideService(SqlClient.SqlClient, admin))
+        );
+
+        expect(result._tag).toBe("Failure");
+      })
+    );
+
+    it.effect("fails closed when the runtime role can assume the gateway authority", () =>
+      Effect.gen(function* () {
+        const admin = yield* MigrationSqlClient;
+        yield* Effect.gen(function* () {
+          yield* admin`GRANT fidy_gateway TO fidy_runtime`;
+          expect((yield* Effect.exit(assertRuntimeAuthority))._tag).toBe("Failure");
+        }).pipe(Effect.ensuring(admin`REVOKE fidy_gateway FROM fidy_runtime`.pipe(Effect.orDie)));
+      })
+    );
+
+    it.effect("fails closed when an owner authenticates and switches to the runtime role", () =>
+      Effect.gen(function* () {
+        const admin = yield* MigrationSqlClient;
+        const result = yield* admin.withTransaction(
+          Effect.gen(function* () {
+            yield* admin`SET LOCAL ROLE fidy_runtime`;
+            return yield* Effect.exit(
+              assertRuntimeAuthority.pipe(Effect.provideService(SqlClient.SqlClient, admin))
+            );
+          })
+        );
+        expect(result._tag).toBe("Failure");
+      })
+    );
+
+    it.effect("denies every CRUD shape without context and under another User context", () =>
+      Effect.gen(function* () {
+        yield* seedRows;
+        const sql = yield* SqlClient.SqlClient;
+
+        expect(yield* sql`SELECT id FROM transactions WHERE id = ${ownerTransactionId}`).toEqual(
+          []
+        );
+        expect(
+          yield* sql`UPDATE transactions SET merchant = 'sin contexto' WHERE id = ${ownerTransactionId}`
+        ).toEqual([]);
+        expect(yield* sql`DELETE FROM transactions WHERE id = ${ownerTransactionId}`).toEqual([]);
+
+        const missingInsert = yield* Effect.exit(sql`
+          INSERT INTO transactions (
+            user_id, amount, currency, merchant, direction, occurred_at, category_id
+          ) VALUES (
+            ${owner}, 1, 'COP', 'sin contexto', 'outflow', now(),
+            '10000000-0000-4000-8000-000000000016'
+          )
+        `);
+        expect(missingInsert._tag).toBe("Failure");
+
+        const wrongRead = yield* withUserTransaction(
+          stranger,
+          sql`SELECT id FROM transactions WHERE id = ${ownerTransactionId}`
+        );
+        const wrongUpdate = yield* withUserTransaction(
+          stranger,
+          sql`UPDATE transactions SET merchant = 'intruso' WHERE id = ${ownerTransactionId}`
+        );
+        const wrongDelete = yield* withUserTransaction(
+          stranger,
+          sql`DELETE FROM transactions WHERE id = ${ownerTransactionId}`
+        );
+        const wrongInsert = yield* Effect.exit(
+          withUserTransaction(
+            stranger,
+            sql`
+              INSERT INTO transactions (
+                user_id, amount, currency, merchant, direction, occurred_at, category_id
+              ) VALUES (
+                ${owner}, 1, 'COP', 'intruso', 'outflow', now(),
+                '10000000-0000-4000-8000-000000000016'
+              )
+            `
+          )
+        );
+
+        expect(wrongRead).toEqual([]);
+        expect(wrongUpdate).toEqual([]);
+        expect(wrongDelete).toEqual([]);
+        expect(wrongInsert._tag).toBe("Failure");
+        expect(
+          yield* withUserTransaction(
+            owner,
+            sql`SELECT merchant FROM transactions WHERE id = ${ownerTransactionId}`
+          )
+        ).toEqual([{ merchant: "Registro privado" }]);
+      })
+    );
+
+    it.effect("denies reads and mutations for every User-owned policy shape", () =>
+      Effect.gen(function* () {
+        yield* seedEveryPolicyShape;
+        const sql = yield* SqlClient.SqlClient;
+
+        const withoutContext = yield* probeDeniedMutations();
+        const underStranger = yield* withUserTransaction(policyStranger, probeDeniedMutations());
+        for (const result of [...withoutContext, ...underStranger]) {
+          expect(result.read, result.tableName).toEqual([]);
+          expect(result.update, result.tableName).toEqual([]);
+          expect(result.deleted, result.tableName).toEqual([]);
+        }
+
+        const missingContextInserts = yield* probeDeniedInserts(undefined);
+        const strangerInserts = yield* probeDeniedInserts(policyStranger);
+        for (const { tableName, result } of [...missingContextInserts, ...strangerInserts]) {
+          expect(result._tag, tableName).toBe("Failure");
+        }
+        expect(missingContextInserts.map(({ tableName }) => tableName).sort()).toEqual(
+          [...userTableNames].sort()
+        );
+
+        const admin = yield* MigrationSqlClient;
+        const unexpectedInserts = yield* admin<UnexpectedInsertRow>`
+          SELECT 'users' AS "tableName" WHERE EXISTS (
+            SELECT 1 FROM users WHERE id = ${policyForgedUser}
+          )
+          UNION ALL SELECT 'whatsapp_identities' WHERE EXISTS (
+            SELECT 1 FROM whatsapp_identities WHERE phone_number = '+573009998877'
+          )
+          UNION ALL SELECT 'agent_tokens' WHERE EXISTS (
+            SELECT 1 FROM agent_tokens WHERE id = 'f1d1a000-0000-4000-8000-0000000003c3'
+          )
+          UNION ALL SELECT 'transactions' WHERE EXISTS (
+            SELECT 1 FROM transactions WHERE id = 'f1d1a000-0000-4000-8000-0000000003d4'
+          )
+          UNION ALL SELECT 'audit_log_entries' WHERE EXISTS (
+            SELECT 1 FROM audit_log_entries WHERE id = 'f1d1a000-0000-4000-8000-0000000003e5'
+          )
+          UNION ALL SELECT 'keyword_rules' WHERE EXISTS (
+            SELECT 1 FROM keyword_rules WHERE id = 'f1d1a000-0000-4000-8000-0000000003f6'
+          )
+          UNION ALL SELECT 'source_attestations' WHERE EXISTS (
+            SELECT 1 FROM source_attestations WHERE id = 'f1d1a000-0000-4000-8000-0000000004a1'
+          )
+          UNION ALL SELECT 'insight_events' WHERE EXISTS (
+            SELECT 1 FROM insight_events WHERE id = 'f1d1a000-0000-4000-8000-0000000004b2'
+          )
+          UNION ALL SELECT 'insight_money_groups' WHERE EXISTS (
+            SELECT 1 FROM insight_money_groups
+            WHERE insight_event_id = 'f1d1a000-0000-4000-8000-0000000002b2'
+              AND currency = 'USD'
+          )
+          UNION ALL SELECT 'insight_delivery_attempts' WHERE EXISTS (
+            SELECT 1 FROM insight_delivery_attempts
+            WHERE id = 'f1d1a000-0000-4000-8000-0000000004d4'
+          )
+          UNION ALL SELECT 'dashboards' WHERE EXISTS (
+            SELECT 1 FROM dashboards WHERE user_id = ${policyInsertVictim}
+          )
+          UNION ALL SELECT 'transcript_entries' WHERE EXISTS (
+            SELECT 1 FROM transcript_entries
+            WHERE entry_id = 'f1d1a000-0000-4000-8000-0000000004e5'
+          )
+        `;
+        expect(unexpectedInserts).toEqual([]);
+
+        expect(
+          yield* withUserTransaction(
+            policyOwner,
+            sql`SELECT id FROM transactions WHERE id = ${policyTransactionId}`
+          )
+        ).toEqual([{ id: policyTransactionId }]);
+      })
+    );
+
+    it.effect("resets pooled context and keeps concurrently interleaved Users separate", () =>
+      Effect.gen(function* () {
+        yield* seedRows;
+        const sql = yield* SqlClient.SqlClient;
+        const observed = yield* Effect.all([observeContext(owner), observeContext(stranger)], {
+          concurrency: "unbounded",
+        });
+
+        expect(observed).toEqual([
+          { setting: owner, rows: [{ userId: owner }] },
+          { setting: stranger, rows: [] },
+        ]);
+        expect(
+          yield* sql`SELECT current_setting('fidy.user_id', true) AS "userId", id FROM transactions`
+        ).toEqual([]);
+      })
+    );
+  }
+);

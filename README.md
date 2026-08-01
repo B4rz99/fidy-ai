@@ -21,17 +21,19 @@ through Effect Schema.
 
 The process reads deployment configuration from the environment:
 
-| Variable                | Requirement | Meaning                                              |
-| ----------------------- | ----------- | ---------------------------------------------------- |
-| `DATABASE_URL`          | required    | PostgreSQL URL; boot fails loudly when it is absent  |
-| `PORT`                  | optional    | HTTP port, defaulting to `3000`                      |
-| `FIDY_HTTP_HOST`        | optional    | Bind host, defaulting to `0.0.0.0`                   |
-| `APP_VERSION`           | optional    | Version returned by `GET /health`                    |
-| `RAILWAY_DEPLOYMENT_ID` | Railway     | Health version fallback when `APP_VERSION` is absent |
+| Variable                 | Requirement | Meaning                                                    |
+| ------------------------ | ----------- | ---------------------------------------------------------- |
+| `DATABASE_URL`           | required    | Restricted `fidy_runtime` PostgreSQL URL                   |
+| `MIGRATION_DATABASE_URL` | required    | Separately privileged PostgreSQL URL used only during boot |
+| `PORT`                   | optional    | HTTP port, defaulting to `3000`                            |
+| `FIDY_HTTP_HOST`         | optional    | Bind host, defaulting to `0.0.0.0`                         |
+| `APP_VERSION`            | optional    | Version returned by `GET /health`                          |
+| `RAILWAY_DEPLOYMENT_ID`  | Railway     | Health version fallback when `APP_VERSION` is absent       |
 
 ```sh
 docker compose up -d db     # local Postgres on :5433
-export DATABASE_URL=postgres://fidy:fidy@localhost:5433/fidy
+export DATABASE_URL=postgres://fidy_runtime:fidy_runtime@localhost:5433/fidy
+export MIGRATION_DATABASE_URL=postgres://fidy:fidy@localhost:5433/fidy
 bun run dev                 # rotates a local-only fin_ bearer, prints it once, starts API
 ```
 
@@ -48,7 +50,9 @@ than 365 days. It serves the canonical API,
 `/openapi.json`, the public `/health` route, and the SPA shell from `public/` in one Effect runtime.
 Canonical operations remain protected by scoped `fin_` bearer authorization. `railway.json`
 configures Railway to build the Dockerfile and gate deployments on `/health`; the app receives
-`DATABASE_URL` as a Railway Postgres reference rather than committed credentials.
+the two database URLs as separate Railway secrets rather than committed credentials. The runtime
+login must be exactly `fidy_runtime`, while the migration login must be able to own tables and
+provision the fixed `fidy_runtime` and `fidy_gateway` roles.
 
 The transient `health-cron` Railway service is built from `deploy/health-cron/`. Every five minutes
 it requests the public health endpoint from its environment-only `HEALTH_URL` and exits, making a
@@ -64,7 +68,8 @@ The key is loaded as redacted configuration and is never a command argument.
 ```sh
 bun run dev
 # In another terminal:
-export DATABASE_URL=postgres://fidy:fidy@localhost:5433/fidy
+export DATABASE_URL=postgres://fidy_runtime:fidy_runtime@localhost:5433/fidy
+export MIGRATION_DATABASE_URL=postgres://fidy:fidy@localhost:5433/fidy
 export OPENAI_API_KEY='<set in your secret environment>'
 export FIDY_REPL_USER_ID=$(docker compose exec -T db psql -U fidy -d fidy -Atc \
   'select id from users order by created_at limit 1')
@@ -82,7 +87,7 @@ building either service; pull-request runs never deploy.
 The hosting escape hatch is the same Dockerfile plus a standard PostgreSQL dump:
 
 ```sh
-pg_dump "$DATABASE_URL" --format=custom --file=fidy.dump
+pg_dump "$MIGRATION_DATABASE_URL" --format=custom --file=fidy.dump
 ```
 
 The development startup accepts only a local PostgreSQL URL, binds the API to loopback, applies
@@ -109,12 +114,12 @@ bun run test:core
 Tests under `src/shell/` run at the **API seam**: canonical operations through the derived typed
 client against the real handler stack and a real Postgres (`src/shell/testing/api-harness.ts`). They
 run with [@effect/vitest](https://www.npmjs.com/package/@effect/vitest) under vitest on the Bun runtime
-(`bun --bun vitest`), matching production — the seam serves over a Bun HTTP server. They need
-`DATABASE_URL`:
+(`bun --bun vitest`), matching production — the seam serves over a Bun HTTP server. They need both database authorities:
 
 ```sh
 docker compose up -d db
-DATABASE_URL=postgres://fidy:fidy@localhost:5433/fidy bun run test
+DATABASE_URL=postgres://fidy_runtime:fidy_runtime@localhost:5433/fidy \
+MIGRATION_DATABASE_URL=postgres://fidy:fidy@localhost:5433/fidy bun run test
 ```
 
 Migration bodies only execute against a database that has not yet had them applied, so coverage
@@ -177,9 +182,9 @@ judging a coverage number.
 | `bun run format`            | Format the repo with oxfmt                               |
 | `bun run format:check`      | Verify formatting without writing                        |
 | `bun run typecheck`         | `tsc --noEmit` (Effect-patched)                          |
-| `bun run test`              | `bun --bun vitest run` (needs `DATABASE_URL`)            |
+| `bun run test`              | `bun --bun vitest run` (needs both database URLs)        |
 | `bun run test:core`         | the pure core tier — no Docker, no database              |
-| `bun run test:crap`         | CRAP-score gate (needs `DATABASE_URL`)                   |
+| `bun run test:crap`         | CRAP-score gate (needs both database URLs)               |
 | `bun run test:mutation`     | mutation-score gate over `src/core` (no database)        |
 | `bun run verify`            | all rows above except `format`, `test:core`, `test:crap` |
 

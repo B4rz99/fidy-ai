@@ -1,8 +1,8 @@
 import { Effect } from "effect";
-import { SqlClient } from "effect/unstable/sql";
+import { MigrationSqlClient } from "~/shell/db/client";
 
 /** Deletes every persisted dashboard so an API-seam attempt starts from first use. */
 export const truncateDashboards = Effect.flatMap(
-  SqlClient.SqlClient,
+  MigrationSqlClient,
   (sql) => sql`TRUNCATE TABLE dashboards`
 ).pipe(Effect.asVoid, Effect.orDie);

@@ -1,8 +1,8 @@
 import { Effect } from "effect";
-import { SqlClient } from "effect/unstable/sql";
+import { MigrationSqlClient } from "~/shell/db/client";
 
 /** Resets append-only AuditLogEntry state between API-seam tests. */
 export const truncateAuditLogEntries = Effect.gen(function* () {
-  const sql = yield* SqlClient.SqlClient;
+  const sql = yield* MigrationSqlClient;
   yield* sql`TRUNCATE audit_log_entries`;
 });

@@ -1,12 +1,12 @@
 import { BigDecimal, DateTime, Effect } from "effect";
-import { SqlClient } from "effect/unstable/sql";
+import { MigrationSqlClient } from "~/shell/db/client";
 import { IanaTimeZone } from "~/core/_shared/context";
 import { Currency, Money } from "~/core/_shared/money";
 import { type InsightGenerationInput, ScheduleId, ScheduleVersion } from "~/core/insights/model";
 
 /** Resets the Insights slice's harness state between tests. */
 export const truncateInsights = Effect.gen(function* () {
-  const sql = yield* SqlClient.SqlClient;
+  const sql = yield* MigrationSqlClient;
   yield* sql`TRUNCATE insight_delivery_attempts, insight_money_groups, insight_events`;
 });
 

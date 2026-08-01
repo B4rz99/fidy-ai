@@ -3,8 +3,10 @@ services:
     build: .
     environment:
       APP_VERSION: local-container
-      # NOFLUID Local-development database only; throwaway credential on this Compose network
-      DATABASE_URL: postgres://fidy:fidy@db:5432/fidy
+      # NOFLUID Local-development database only; restricted throwaway runtime credential
+      DATABASE_URL: postgres://fidy_runtime:fidy_runtime@db:5432/fidy
+      # NOFLUID Local-development database only; privileged throwaway migration credential
+      MIGRATION_DATABASE_URL: postgres://fidy:fidy@db:5432/fidy
     ports:
       - "3000:3000"
     depends_on:
@@ -20,6 +22,8 @@ services:
       POSTGRES_DB: fidy
     ports:
       - "5433:5432"
+    volumes:
+      - ./deploy/local-postgres-init.sql:/docker-entrypoint-initdb.d/010-runtime-role.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U fidy"]
       interval: 2s

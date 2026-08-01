@@ -1,6 +1,7 @@
 import { Effect, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import { UserId } from "~/core/identity/reference";
+import { withUserTransaction } from "~/shell/db/user-transaction";
 import { TranscriptEntry, TranscriptEntryId, TranscriptTurnId } from "~/core/transcript/model";
 
 const PersistedTranscriptEntry = Schema.fromJsonString(Schema.toCodecJson(TranscriptEntry));
@@ -25,15 +26,18 @@ const appendOne = Effect.fn("appendTranscriptEntry")(function* (
   entry: TranscriptEntry
 ) {
   const sql = yield* SqlClient.SqlClient;
-  yield* SqlSchema.findOne({
-    Request: OwnedTranscriptEntryRow,
-    Result: Schema.Struct({ entryId: TranscriptEntryId }),
-    execute: (row) => sql`
+  yield* withUserTransaction(
+    subjectUserId,
+    SqlSchema.findOne({
+      Request: OwnedTranscriptEntryRow,
+      Result: Schema.Struct({ entryId: TranscriptEntryId }),
+      execute: (row) => sql`
       INSERT INTO transcript_entries (user_id, entry_id, turn_id, entry)
       VALUES (${row.subjectUserId}, ${row.entryId}, ${row.turnId}, ${row.entry}::jsonb)
       RETURNING entry_id AS "entryId"
     `,
-  })({ subjectUserId, entryId: entry.id, turnId: entry.turnId, entry }).pipe(Effect.orDie);
+    })({ subjectUserId, entryId: entry.id, turnId: entry.turnId, entry }).pipe(Effect.orDie)
+  );
 });
 
 /**
@@ -57,10 +61,12 @@ export const listRecentTranscriptEntries = Effect.fn("listRecentTranscriptEntrie
   maxTurns: number
 ): Effect.fn.Return<ReadonlyArray<TranscriptEntry>, never, SqlClient.SqlClient> {
   const sql = yield* SqlClient.SqlClient;
-  const rows = yield* SqlSchema.findAll({
-    Request: RecentTranscriptRequest,
-    Result: TranscriptEntryRow,
-    execute: (request) => sql`
+  const rows = yield* withUserTransaction(
+    subjectUserId,
+    SqlSchema.findAll({
+      Request: RecentTranscriptRequest,
+      Result: TranscriptEntryRow,
+      execute: (request) => sql`
         WITH recent_turns AS (
           SELECT turn_id, max(sequence) AS newest_sequence
           FROM transcript_entries
@@ -76,7 +82,8 @@ export const listRecentTranscriptEntries = Effect.fn("listRecentTranscriptEntrie
         WHERE transcript.user_id = ${request.subjectUserId}
         ORDER BY transcript.sequence
       `,
-  })({ subjectUserId, maxTurns }).pipe(Effect.orDie);
+    })({ subjectUserId, maxTurns }).pipe(Effect.orDie)
+  );
   return rows.map(({ entry }) => entry);
 });
 
@@ -86,16 +93,19 @@ export const listTranscriptTurnEntries = Effect.fn("listTranscriptTurnEntries")(
   turnId: TranscriptTurnId
 ): Effect.fn.Return<ReadonlyArray<TranscriptEntry>, never, SqlClient.SqlClient> {
   const sql = yield* SqlClient.SqlClient;
-  const rows = yield* SqlSchema.findAll({
-    Request: TranscriptTurnRequest,
-    Result: TranscriptEntryRow,
-    execute: (request) => sql`
+  const rows = yield* withUserTransaction(
+    subjectUserId,
+    SqlSchema.findAll({
+      Request: TranscriptTurnRequest,
+      Result: TranscriptEntryRow,
+      execute: (request) => sql`
       SELECT entry::text AS entry
       FROM transcript_entries
       WHERE user_id = ${request.subjectUserId} AND turn_id = ${request.turnId}
       ORDER BY sequence
     `,
-  })({ subjectUserId, turnId }).pipe(Effect.orDie);
+    })({ subjectUserId, turnId }).pipe(Effect.orDie)
+  );
   return rows.map(({ entry }) => entry);
 });
 
@@ -103,18 +113,21 @@ export const listTranscriptTurnEntries = Effect.fn("listTranscriptTurnEntries")(
 export const listTranscriptEntries = (
   subjectUserId: UserId
 ): Effect.Effect<ReadonlyArray<TranscriptEntry>, never, SqlClient.SqlClient> =>
-  Effect.flatMap(SqlClient.SqlClient, (sql) =>
-    SqlSchema.findAll({
-      Request: UserId,
-      Result: TranscriptEntryRow,
-      execute: (userId) => sql`
+  withUserTransaction(
+    subjectUserId,
+    Effect.flatMap(SqlClient.SqlClient, (sql) =>
+      SqlSchema.findAll({
+        Request: UserId,
+        Result: TranscriptEntryRow,
+        execute: (userId) => sql`
         SELECT entry::text AS entry
         FROM transcript_entries
         WHERE user_id = ${userId}
         ORDER BY sequence
       `,
-    })(subjectUserId)
-  ).pipe(
-    Effect.map((rows) => rows.map(({ entry }) => entry)),
-    Effect.orDie
+      })(subjectUserId)
+    ).pipe(
+      Effect.map((rows) => rows.map(({ entry }) => entry)),
+      Effect.orDie
+    )
   );

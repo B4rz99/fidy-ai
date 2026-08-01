@@ -1,6 +1,7 @@
 import { Effect, type Option, Schema, Struct } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import { UserId } from "~/core/identity/reference";
+import { withUserTransaction } from "~/shell/db/user-transaction";
 import { HostedAgentToken, ResolvedAgentToken, UserAgentToken } from "~/core/tokens/model";
 
 /** A lowercase SHA-256 digest used only at the AgentToken storage boundary. */
@@ -68,10 +69,12 @@ export const upsertAgentToken = Effect.fn("upsertAgentToken")(function* (
   grant: typeof SeedAgentTokenGrant.Type
 ) {
   const sql = yield* SqlClient.SqlClient;
-  const row = yield* SqlSchema.findOne({
-    Request: SeedAgentTokenRow,
-    Result: Schema.Struct({ tokenHash: AgentTokenHash }),
-    execute: (row) => sql`
+  const row = yield* withUserTransaction(
+    subjectUserId,
+    SqlSchema.findOne({
+      Request: SeedAgentTokenRow,
+      Result: Schema.Struct({ tokenHash: AgentTokenHash }),
+      execute: (row) => sql`
       INSERT INTO agent_tokens (
         id, user_id, short_id, token_hash, scopes, last_used_at,
         idle_expires_at, revoked_at, created_at, kind, expires_at
@@ -94,7 +97,8 @@ export const upsertAgentToken = Effect.fn("upsertAgentToken")(function* (
         expires_at = NULL
       RETURNING token_hash AS "tokenHash"
     `,
-  })({ subjectUserId, ...grant }).pipe(Effect.orDie);
+    })({ subjectUserId, ...grant }).pipe(Effect.orDie)
+  );
 
   return row.tokenHash;
 });
@@ -110,10 +114,12 @@ export const insertHostedAgentToken = Effect.fn("insertHostedAgentToken")(functi
 ) {
   const input = StoreHostedAgentTokenRow.make({ subjectUserId, ...grant });
   const sql = yield* SqlClient.SqlClient;
-  yield* SqlSchema.findOne({
-    Request: StoreHostedAgentTokenRow,
-    Result: Schema.Struct({ id: HostedAgentToken.fields.id }),
-    execute: (row) => sql`
+  yield* withUserTransaction(
+    subjectUserId,
+    SqlSchema.findOne({
+      Request: StoreHostedAgentTokenRow,
+      Result: Schema.Struct({ id: HostedAgentToken.fields.id }),
+      execute: (row) => sql`
       INSERT INTO agent_tokens (
         id, user_id, short_id, token_hash, scopes, last_used_at,
         idle_expires_at, revoked_at, created_at, kind, expires_at
@@ -124,7 +130,8 @@ export const insertHostedAgentToken = Effect.fn("insertHostedAgentToken")(functi
       )
       RETURNING id
     `,
-  })(input).pipe(Effect.orDie);
+    })(input).pipe(Effect.orDie)
+  );
 });
 
 /**
@@ -137,10 +144,12 @@ export const revokeHostedAgentToken = Effect.fn("revokeHostedAgentToken")(functi
   revokedAt: typeof Schema.DateTimeUtc.Type
 ) {
   const sql = yield* SqlClient.SqlClient;
-  return yield* SqlSchema.findOneOption({
-    Request: RevokeHostedAgentTokenRow,
-    Result: Schema.Struct({ id: HostedAgentToken.fields.id }),
-    execute: (row) => sql`
+  return yield* withUserTransaction(
+    subjectUserId,
+    SqlSchema.findOneOption({
+      Request: RevokeHostedAgentTokenRow,
+      Result: Schema.Struct({ id: HostedAgentToken.fields.id }),
+      execute: (row) => sql`
       UPDATE agent_tokens
       SET revoked_at = ${row.revokedAt}
       WHERE id = ${row.tokenId}
@@ -149,7 +158,8 @@ export const revokeHostedAgentToken = Effect.fn("revokeHostedAgentToken")(functi
         AND revoked_at IS NULL
       RETURNING id
     `,
-  })({ subjectUserId, tokenId, revokedAt }).pipe(Effect.orDie);
+    })({ subjectUserId, tokenId, revokedAt }).pipe(Effect.orDie)
+  );
 });
 
 /**
@@ -171,38 +181,11 @@ export const useAgentToken = ({
       Request: UseAgentTokenRow,
       Result: ResolvedAgentTokenRow,
       execute: (row) => sql`
-        WITH candidate AS MATERIALIZED (
-          SELECT id
-          FROM agent_tokens
-          WHERE token_hash = ${row.tokenHash} AND revoked_at IS NULL
-          FOR UPDATE
-        ),
-        auto_revoked AS (
-          UPDATE agent_tokens AS token
-          SET revoked_at = ${row.usedAt}
-          FROM candidate
-          WHERE token.id = candidate.id
-            AND (
-              (token.kind = 'user' AND token.idle_expires_at <= ${row.usedAt})
-              OR
-              (token.kind = 'hosted' AND token.expires_at <= ${row.usedAt})
-            )
-        ),
-        active AS (
-          UPDATE agent_tokens AS token
-          SET last_used_at = GREATEST(token.last_used_at, ${row.usedAt}),
-            idle_expires_at = GREATEST(token.idle_expires_at, ${row.renewedIdleExpiresAt})
-          FROM candidate
-          WHERE token.id = candidate.id
-            AND (
-              (token.kind = 'user' AND token.idle_expires_at > ${row.usedAt})
-              OR
-              (token.kind = 'hosted' AND token.expires_at > ${row.usedAt})
-            )
-          RETURNING token.id AS "tokenId", token.user_id AS "subjectUserId",
-            token.scopes, token.last_used_at AS "lastUsedAt"
+        SELECT token_id AS "tokenId", subject_user_id AS "subjectUserId",
+          scopes, last_used_at AS "lastUsedAt"
+        FROM fidy_use_agent_token(
+          ${row.tokenHash}, ${row.usedAt}, ${row.renewedIdleExpiresAt}
         )
-        SELECT * FROM active
       `,
     })({ tokenHash, usedAt, renewedIdleExpiresAt })
   ).pipe(Effect.orDie);

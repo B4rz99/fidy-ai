@@ -1,0 +1,23 @@
+package.json
+  s_aee6af8a5ba362::t_2f4dc2e8436a2d 33
+dependency-policy.json
+  s_aee6af8a5ba362::t_8d71fb45b865ab 20
+bun.lock
+  s_aee6af8a5ba362::t_a7841281a5d651 14,70,72,74,76,78,80,82,84
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.19",
+  "base_commit_sha": "ac74dee9990421594c8d7219ff2dd175164ac66d",
+  "prompts": {},
+  "sessions": {
+    "s_aee6af8a5ba362": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019fbda8-2d1f-799b-830b-a84b9d254678",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

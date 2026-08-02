@@ -1,0 +1,201 @@
+src/core/dashboard/model.test.ts
+  s_4b1e40e0c9a7af::t_145ad201012938 9,493-517
+  s_4b1e40e0c9a7af::t_3b89ea12118d97 270-272,306-312,452-454
+  s_03d4c2b517067a::t_ec8dd9dbbe4011 629
+  s_4b1e40e0c9a7af::t_c595bb4dd1df81 4,7,11,13,250-269,273-305,313-320,340-451,455-492,518-577,598-601,607-608,617-619,628,633-634,659-660
+  s_4900b8ec538ff3::t_4ca8ae7e3a6f91 321-339
+  s_03d4c2b517067a::t_eb3ca8cd4924ae 578-597,602-606,609-616,620-627,630-632,635-651,653-657,711-715,717
+  s_03d4c2b517067a::t_450f0694fd8e61 652,658
+src/shell/dashboard/fixtures.ts
+  s_03d4c2b517067a::t_a4cb8b8bf26c44 2,6
+src/shell/_shared/authz.ts
+  s_03d4c2b517067a::t_153e97fc23631c 3
+  s_03d4c2b517067a::t_ff3c11cbb69f87 13,162-165
+scripts/seed-development.ts
+  s_03d4c2b517067a::t_1eb20a706cd18b 3,42-46
+src/shell/testing/api-harness.ts
+  s_03d4c2b517067a::t_553a510d32f0a9 7,57
+src/core/dashboard/rules.test.ts
+  s_4900b8ec538ff3::t_c3e5132f9a227c 257-321,323-332,462-480,483-491,714-738
+  s_4b1e40e0c9a7af::t_43257a47694d58 224-231,235-255,492-524,551,553-555,557-559,561-583,739
+  s_03d4c2b517067a::t_bbd985fd1be554 256
+  s_03d4c2b517067a::t_3399cf6995ebf2 481-482
+  s_4b1e40e0c9a7af::t_85f6e596057a54 552,556,560
+  s_4b1e40e0c9a7af::t_49fbd7b977c32e 740
+  s_03d4c2b517067a::t_f0c4ee6fd3f751 322
+  s_4b1e40e0c9a7af::t_466b347115d6f8 584
+src/core/transactions/rules.test.ts
+  s_03d4c2b517067a::t_78c0288092b61b 40
+  s_03d4c2b517067a::t_c1d565c5cd91ca 39
+src/shell/db/row-level-security.test.ts
+  s_03d4c2b517067a::t_39a5327dc207e7 2,453-460
+  s_03d4c2b517067a::t_3cf8c969b3b726 67,484,509
+  s_03d4c2b517067a::t_0287ef15ce0b70 1,4,6,9-12,14,52-66,388-390,398-407,409-412,438-439,466-470,472-483,485-508,510-526,604-607,611-622
+  s_03d4c2b517067a::t_1da3106a2ebddd 234,238,240,244,447
+  s_03d4c2b517067a::t_526572dd7047fd 25
+  s_03d4c2b517067a::t_788a45cf7bd01a 428-431,433,435
+  s_03d4c2b517067a::t_198bd9674c8399 5,8,13,17-24,26,397,408,413,417-426
+  s_03d4c2b517067a::t_c9658825f6f955 3,7,15,27-51,432,434,608-610
+  s_03d4c2b517067a::t_3585d7e20a2e1c 68-70,72-73,76-82,85-168,170-172,229-232
+  s_03d4c2b517067a::t_c39a05c9e1d22e 387
+  s_03d4c2b517067a::t_ab33d471446337 391-396,414-416,427,471
+  s_03d4c2b517067a::t_284ac77e8527b7 169,173-183,189-228,233,239,241-243
+  s_03d4c2b517067a::t_b37854d5b4aaf8 184-188,235-237
+  s_03d4c2b517067a::t_bdb2b073b9497f 437,441-446,448-452,461-465
+  s_03d4c2b517067a::t_3294e88d35a9ee 74-75,83-84,245-248,254-256,261-263,268-274,279-286,291-297,302-307,312-319,324-332,337-340,345-352,357-359,364-370,373-386
+  s_03d4c2b517067a::t_39dd3c3fbecf16 541-547,549-593
+  s_03d4c2b517067a::t_6c8b2565b7b368 16,71,436,440,527
+  s_03d4c2b517067a::t_11abcee0c39641 528-540,548,594-603
+  s_03d4c2b517067a::t_3e0ebee39c9939 249-253,257-260,264-267,275-278,287-290,298-301,308-311,320-323,333-336,341-344,353-356,360-363,371-372
+src/shell/categories/repo.ts
+  s_03d4c2b517067a::t_ab33d471446337 85-91,96-98,107-113,120-122,130-136,139-141
+  s_03d4c2b517067a::t_a09caf4fe96fa1 13,46-58,65-71
+src/core/transcript/rules.test.ts
+  s_03d4c2b517067a::t_8a02caf791cd9e 97-99
+  s_03d4c2b517067a::t_da78c4ccf8f143 10
+  s_5828173df02d55::t_ab378576ee8671 28,60-96,100-101,195-318
+  s_5828173df02d55::t_07b8f9a2666894 319
+  s_03d4c2b517067a::t_0da72052221cb5 2,24-27
+src/shell/insights/repo.ts
+  s_03d4c2b517067a::t_c33cd62b036104 4,108-110,139-141
+  s_03d4c2b517067a::t_ab33d471446337 111-114,124,126-129,137,146-152,158-160,167-173,179-181,192-198,204-206,220-225,236-237
+.env.example
+  s_03d4c2b517067a::t_3d9ee55cac6c5c 2-3
+src/shell/db/client.ts
+  s_03d4c2b517067a::t_8dd2dc8222b920 2,91,93-94,98-99
+  s_03d4c2b517067a::t_2e77c14ada56ee 18,22,35-36,43,45-64,72,75-76
+  s_03d4c2b517067a::t_2c55aef9d55e09 3,7,12-17,19-21,23-34,37-42,44,65-71,73-74,77-86,89-90,92
+  s_03d4c2b517067a::t_34fa381084b9a8 5
+  s_03d4c2b517067a::t_ab33d471446337 95-97,100-102
+src/shell/dashboard/handlers.test.ts
+  s_03d4c2b517067a::t_2128ee9a767df5 4,280
+src/core/transactions/model.test.ts
+  s_03d4c2b517067a::t_e2a875904370b8 3-10,91-93,95-107
+src/shell/tokens/repo.ts
+  s_03d4c2b517067a::t_5fbed03120e00c 4,184-187
+  s_03d4c2b517067a::t_ab33d471446337 72-77,100-101,117-122,133-134,147-152,161-162
+src/shell/transactions/handlers.test.ts
+  s_03d4c2b517067a::t_2128ee9a767df5 3,62,113,148,313
+src/shell/transactions/fixtures.ts
+  s_03d4c2b517067a::t_06ef95b6fc857c 2,9
+ARCHITECTURE.md
+  s_03d4c2b517067a::t_01678f3de537fe 87-90,97-99
+src/shell/identity/repo.ts
+  s_03d4c2b517067a::t_ee1ccdf363f47a 5
+  s_03d4c2b517067a::t_ab33d471446337 40-45,55-56,61-67,72-74,85-90,96-97,111-116,125-126
+  s_03d4c2b517067a::t_9b03055246cff4 141-143
+src/shell/agent/agent-service.test.ts
+  s_03d4c2b517067a::t_c62e59ee2a5256 4,23,498,556,634,665,688,722,762,902,938,1002,1051,1094,1136,1176
+src/shell/audit/repo.ts
+  s_03d4c2b517067a::t_83de3f2ad7d95d 5,85
+  s_03d4c2b517067a::t_ab33d471446337 30-35,46-47,56-62,69-71
+src/shell/db/user-tables.ts
+  s_03d4c2b517067a::t_d6e285e219939c 1-15
+src/core/tokens/model.test.ts
+  s_03d4c2b517067a::t_1a79eed32f772c 69
+src/shell/audit/fixtures.ts
+  s_03d4c2b517067a::t_ad152144c578e1 2,6
+compose.yaml
+  s_03d4c2b517067a::t_40a9bf52ce569d 6-9,25-26
+src/shell/http.ts
+  s_03d4c2b517067a::t_07f87fb7a5da6d 9,71
+src/shell/db/user-transaction.ts
+  s_03d4c2b517067a::t_155511dacf34f6 1-4,6-12,14-15,38
+  s_03d4c2b517067a::t_8a85f55c12f341 13,16-22,24-33,35-37,39-40
+  s_03d4c2b517067a::t_ab33d471446337 34
+  s_03d4c2b517067a::t_d042c85bf5dd6c 5,23
+src/shell/dashboard/repo.ts
+  s_03d4c2b517067a::t_3137c4e6778e67 5,20-26,30-44,64-77,87-101
+src/shell/db/development-seed.ts
+  s_03d4c2b517067a::t_af48cea9d3bb45 17,114-117
+research/006-postgresql-row-level-security.md
+  s_03d4c2b517067a::t_a688ea7140e65d 3
+  s_03d4c2b517067a::t_b43ae28d6df4eb 1-2,4-40,42-51
+  s_03d4c2b517067a::t_0d13097a5c602f 41
+src/shell/transcript/repo.ts
+  s_03d4c2b517067a::t_ab33d471446337 29-34,39-40,64-69,85-86,96-101,107-108,116-122,128-132
+  s_03d4c2b517067a::t_064efc921bf5ea 4
+src/core/categories/rules.test.ts
+  s_9435d45050ecb1::t_471240c99e49f5 138
+  s_9435d45050ecb1::t_da8f14edd9a9f7 23-27,84-92
+  s_03d4c2b517067a::t_af4abaf792926f 133-135
+  s_03d4c2b517067a::t_ea5ee30df6ebb9 2,4-9,30,42-46
+  s_9435d45050ecb1::t_31e806c3777c48 22
+  s_9435d45050ecb1::t_6651b0f6c1c48a 10-16,20-21,28-29,31-41,53-54,68-69,72-75,82-83,93-132,136-137
+scripts/agent-repl.ts
+  s_03d4c2b517067a::t_33bb19520f3d14 8,25-27
+src/shell/db/migrations/registry.ts
+  s_03d4c2b517067a::t_067fe2f1e28635 9,28
+docs/adr/0007-postgresql-row-level-user-isolation.md
+  s_03d4c2b517067a::t_13ce86743665b8 26,28
+  s_03d4c2b517067a::t_ab33d471446337 49-54
+  s_03d4c2b517067a::t_aaa35a5d7107b6 1-25,27,29-48,55-106
+src/shell/insights/fixtures.ts
+  s_03d4c2b517067a::t_8b54f1f9ec7108 2,9
+src/shell/transactions/repo.ts
+  s_03d4c2b517067a::t_ab33d471446337 73-79,87-89,97-103,108-117,126-138,140-143,149-164,174-180,188-197,206-212,217-219,260-272,280-282,290-296,307-311
+  s_03d4c2b517067a::t_6bac5a41a8d5de 7
+README.md
+  s_03d4c2b517067a::t_ba4568bd203504 35-36,53-55,71-72,117,121-122
+  s_03d4c2b517067a::t_376b79d554da1a 90
+  s_03d4c2b517067a::t_ab33d471446337 24-31,185,187
+.github/workflows/ci.yml
+  s_03d4c2b517067a::t_d2a6bc5f671bee 198-200,204-205,238-240,244-245
+  s_03d4c2b517067a::t_84707ba3e1b3cd 201,241
+src/shell/audit/audit-log.test.ts
+  s_03d4c2b517067a::t_2128ee9a767df5 4,159
+deploy/local-postgres-init.sql
+  s_03d4c2b517067a::t_3b51a28124de50 1-5
+src/shell/db/migrations/0009-row-level-security.ts
+  s_03d4c2b517067a::t_ed6c5951e71210 1-28,57-182,184-275
+  s_03d4c2b517067a::t_480d7e042849cd 29-56
+  s_03d4c2b517067a::t_e8fc07fe049d0c 183
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.20",
+  "base_commit_sha": "63d3aa8d53eaeb82f0ead4fc4f8c1a5239f140f6",
+  "prompts": {},
+  "sessions": {
+    "s_03d4c2b517067a": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019fbeec-fd8a-79e0-9063-2732157ffc53",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": null
+    },
+    "s_4900b8ec538ff3": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019fc3b0-b8ad-7257-bb5b-4f77d3ff71b9",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": null
+    },
+    "s_4b1e40e0c9a7af": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019fc380-51ba-7da1-b9ab-fe337c35fc6b",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": null
+    },
+    "s_5828173df02d55": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019fc380-51e1-7ed9-af5e-840f51cc1573",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": null
+    },
+    "s_9435d45050ecb1": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019fc380-5167-7358-b2d6-185f24bd13c0",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": null
+    }
+  }
+}

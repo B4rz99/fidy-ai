@@ -1,11 +1,16 @@
 import { expect, it } from "@effect/vitest";
 import { Result, Schema } from "effect";
 import {
+  AppliedDashboardPeriod,
   BudgetBarData,
   collectDashboardCategoryReferences,
+  collectLayoutWidgets,
   CustomMetricData,
+  DashboardCatalog,
   DashboardDocument,
+  DashboardMonetaryWidgetData,
   DashboardMoneyGroups,
+  findDashboardStructureIssue,
   SpendingChartData,
 } from "./model";
 
@@ -242,6 +247,417 @@ it("rejects invalid periods and every mixed-Currency Budget Money value", () => 
   ).toBe(true);
 });
 
+it("requires one to sixteen unique Category references", () => {
+  const makeDocument = (categories: ReadonlyArray<string>) => ({
+    title: "Resumen",
+    layout: {
+      kind: "leaf",
+      widget: {
+        id: "f1d1a000-0000-4000-8000-000000000320",
+        type: "transaction-list",
+        limit: 10,
+        categories,
+      },
+    },
+  });
+  const categories = Array.from(
+    { length: 16 },
+    (_, index) => `10000000-0000-4000-8000-${(index + 1).toString().padStart(12, "0")}`
+  );
+
+  expect(Schema.decodeUnknownSync(DashboardDocument)(makeDocument(categories))).toBeDefined();
+  for (const invalid of [[], [...categories, categoryId], [categoryId, categoryId]]) {
+    expect(
+      Result.isFailure(Schema.decodeUnknownResult(DashboardDocument)(makeDocument(invalid)))
+    ).toBe(true);
+  }
+});
+
+it("checks each Money-group branch and reports its exact Currency field", () => {
+  const group = {
+    currency: "COP",
+    inflow: { amount: "1", currency: "COP" },
+    outflow: { amount: "0", currency: "COP" },
+  };
+  const cases = [
+    [{ ...group, inflow: { amount: "1", currency: "USD" } }, '[0]["inflow"]["currency"]'],
+    [{ ...group, outflow: { amount: "0", currency: "USD" } }, '[0]["outflow"]["currency"]'],
+    [{ ...group, inflow: { amount: "0", currency: "COP" } }, "non-zero Money value"],
+  ] as const;
+
+  for (const [invalid, expectedIssue] of cases) {
+    const result = Schema.decodeUnknownResult(DashboardMoneyGroups)([invalid]);
+    expect(Result.isFailure(result)).toBe(true);
+    if (Result.isFailure(result)) {
+      expect(String(result.failure)).toContain(expectedIssue);
+    }
+  }
+});
+
+it("accepts empty and ordered Currency groups but rejects duplicate and descending neighbors", () => {
+  const group = (currency: "COP" | "EUR" | "USD") => ({
+    currency,
+    inflow: { amount: "1", currency },
+    outflow: { amount: "0", currency },
+  });
+
+  expect(Schema.decodeUnknownSync(DashboardMoneyGroups)([])).toEqual([]);
+  expect(Schema.decodeUnknownSync(DashboardMoneyGroups)([group("COP")])).toHaveLength(1);
+  expect(
+    Schema.decodeUnknownSync(DashboardMoneyGroups)([group("COP"), group("EUR"), group("USD")])
+  ).toHaveLength(3);
+  for (const groups of [
+    [group("COP"), group("COP")],
+    [group("USD"), group("COP")],
+  ]) {
+    const result = Schema.decodeUnknownResult(DashboardMoneyGroups)(groups);
+    expect(Result.isFailure(result)).toBe(true);
+    if (Result.isFailure(result)) {
+      expect(String(result.failure)).toContain('[1]["currency"]');
+    }
+  }
+});
+
+it("reports the first out-of-order Currency group after an ordered prefix", () => {
+  const group = (currency: "COP" | "EUR" | "USD") => ({
+    currency,
+    inflow: { amount: "1", currency },
+    outflow: { amount: "0", currency },
+  });
+
+  const result = Schema.decodeUnknownResult(DashboardMoneyGroups)([
+    group("COP"),
+    group("USD"),
+    group("EUR"),
+  ]);
+
+  expect(Result.isFailure(result)).toBe(true);
+  if (Result.isFailure(result)) {
+    expect(String(result.failure)).toContain('[2]["currency"]');
+  }
+});
+
+it("requires an applied period to end strictly after it starts", () => {
+  const from = "2026-07-01T05:00:00.000Z";
+
+  expect(
+    Schema.decodeUnknownSync(AppliedDashboardPeriod)({
+      from,
+      toExclusive: "2026-07-01T05:00:00.001Z",
+    })
+  ).toBeDefined();
+  for (const toExclusive of [from, "2026-07-01T04:59:59.999Z"]) {
+    const result = Schema.decodeUnknownResult(AppliedDashboardPeriod)({ from, toExclusive });
+    expect(Result.isFailure(result)).toBe(true);
+    if (Result.isFailure(result)) {
+      expect(String(result.failure)).toContain('["toExclusive"]');
+    }
+  }
+});
+
+it("accepts only exact local calendar day and month bucket keys", () => {
+  const shared = {
+    type: "spending-chart",
+    widgetId: "f1d1a000-0000-4000-8000-000000000319",
+    context: { serviceMarket: "CO", locale: "es-CO", timeZone: "America/Bogota" },
+    appliedPeriod: {
+      from: "2026-07-01T05:00:00.000Z",
+      toExclusive: "2026-08-01T05:00:00.000Z",
+    },
+  };
+  const decodeKey = (key: unknown) =>
+    Schema.decodeUnknownResult(SpendingChartData)({
+      ...shared,
+      buckets: [{ key, moneyGroups: [] }],
+    });
+
+  for (const key of [
+    { kind: "day", date: "2026-01-01" },
+    { kind: "day", date: "2026-12-31" },
+    { kind: "month", month: "2026-01" },
+    { kind: "month", month: "2026-12" },
+  ]) {
+    expect(Result.isSuccess(decodeKey(key))).toBe(true);
+  }
+  for (const date of [
+    "x2026-01-01",
+    "2026-01-01x",
+    "026-01-01",
+    "2x26-01-01",
+    "2026-00-01",
+    "2026-13-01",
+    "2026-x1-01",
+    "2026-01-00",
+    "2026-01-32",
+    "2026-01-x1",
+    "2026-01-1x",
+    "2026-01-3x",
+  ]) {
+    expect(Result.isFailure(decodeKey({ kind: "day", date }))).toBe(true);
+  }
+  for (const month of [
+    "x2026-01",
+    "2026-01x",
+    "026-01",
+    "2x26-01",
+    "2026-00",
+    "2026-13",
+    "2026-x1",
+    "2026-1x",
+  ]) {
+    expect(Result.isFailure(decodeKey({ kind: "month", month }))).toBe(true);
+  }
+});
+
+it("checks every Budget Money branch and preserves the failing field path", () => {
+  const valid = {
+    type: "budget-bar",
+    widgetId: "f1d1a000-0000-4000-8000-000000000318",
+    context: { serviceMarket: "CO", locale: "es-CO", timeZone: "America/Bogota" },
+    appliedPeriod: {
+      from: "2026-07-01T05:00:00.000Z",
+      toExclusive: "2026-08-01T05:00:00.000Z",
+    },
+    categoryId,
+    currency: "COP",
+    cap: { amount: "100", currency: "COP" },
+    spent: { amount: "25", currency: "COP" },
+    status: { state: "reached" },
+  } as const;
+  const cases = [
+    [{ ...valid, cap: { amount: "100", currency: "USD" } }, '["cap"]["currency"]'],
+    [{ ...valid, spent: { amount: "25", currency: "USD" } }, '["spent"]["currency"]'],
+    [
+      { ...valid, status: { state: "under", remaining: { amount: "75", currency: "USD" } } },
+      '["status"]["remaining"]["currency"]',
+    ],
+    [
+      { ...valid, status: { state: "over", overBy: { amount: "1", currency: "USD" } } },
+      '["status"]["overBy"]["currency"]',
+    ],
+  ] as const;
+
+  expect(Result.isSuccess(Schema.decodeUnknownResult(BudgetBarData)(valid))).toBe(true);
+  for (const [invalid, path] of cases) {
+    const result = Schema.decodeUnknownResult(BudgetBarData)(invalid);
+    expect(Result.isFailure(result)).toBe(true);
+    if (Result.isFailure(result)) {
+      expect(String(result.failure)).toContain(path);
+    }
+  }
+  for (const status of [
+    { state: "under", remaining: { amount: "75", currency: "COP" } },
+    { state: "over", overBy: { amount: "1", currency: "COP" } },
+  ]) {
+    expect(Result.isSuccess(Schema.decodeUnknownResult(BudgetBarData)({ ...valid, status }))).toBe(
+      true
+    );
+  }
+});
+
+it("decodes each monetary result through the shared closed result schema", () => {
+  const shared = {
+    widgetId: "f1d1a000-0000-4000-8000-000000000317",
+    context: { serviceMarket: "CO", locale: "es-CO", timeZone: "America/Bogota" },
+    appliedPeriod: {
+      from: "2026-07-01T05:00:00.000Z",
+      toExclusive: "2026-08-01T05:00:00.000Z",
+    },
+  };
+  const results = [
+    { type: "spending-chart", ...shared, buckets: [] },
+    {
+      type: "budget-bar",
+      ...shared,
+      categoryId,
+      currency: "COP",
+      cap: { amount: "100", currency: "COP" },
+      spent: { amount: "100", currency: "COP" },
+      status: { state: "reached" },
+    },
+    { type: "custom-metric", ...shared, aggregation: "average", moneyGroups: [] },
+  ];
+
+  for (const result of results) {
+    expect(Result.isSuccess(Schema.decodeUnknownResult(DashboardMonetaryWidgetData)(result))).toBe(
+      true
+    );
+  }
+  expect(
+    Result.isFailure(
+      Schema.decodeUnknownResult(DashboardMonetaryWidgetData)({ type: "transaction-list" })
+    )
+  ).toBe(true);
+});
+
+it("requires every split to contain at least two child regions", () => {
+  const oneChild = {
+    title: "Resumen",
+    layout: {
+      kind: "split",
+      axis: "row",
+      children: [
+        {
+          weight: 1,
+          node: {
+            kind: "leaf",
+            widget: transactionWidget("f1d1a000-0000-4000-8000-000000000327"),
+          },
+        },
+      ],
+    },
+  };
+
+  expect(Result.isFailure(Schema.decodeUnknownResult(DashboardDocument)(oneChild))).toBe(true);
+});
+
+it("requires exactly four catalog entries", () => {
+  expect(Result.isFailure(Schema.decodeUnknownResult(DashboardCatalog)([]))).toBe(true);
+});
+
+it("collects every leaf in recursive mobile order", () => {
+  const decoded = Schema.decodeUnknownSync(DashboardDocument)({
+    title: "Resumen",
+    layout: {
+      kind: "split",
+      axis: "row",
+      children: [
+        {
+          weight: 1,
+          node: {
+            kind: "leaf",
+            widget: {
+              id: "f1d1a000-0000-4000-8000-000000000324",
+              type: "transaction-list",
+              limit: 10,
+            },
+          },
+        },
+        {
+          weight: 1,
+          node: {
+            kind: "split",
+            axis: "column",
+            children: [
+              {
+                weight: 1,
+                node: {
+                  kind: "leaf",
+                  widget: {
+                    id: "f1d1a000-0000-4000-8000-000000000325",
+                    type: "custom-metric",
+                    label: "Uno",
+                    aggregation: "sum",
+                    period: "this-month",
+                  },
+                },
+              },
+              {
+                weight: 1,
+                node: {
+                  kind: "leaf",
+                  widget: {
+                    id: "f1d1a000-0000-4000-8000-000000000326",
+                    type: "transaction-list",
+                    limit: 10,
+                  },
+                },
+              },
+            ],
+          },
+        },
+      ],
+    },
+  });
+
+  expect(collectLayoutWidgets(decoded.layout).map(({ id }) => id)).toEqual([
+    "f1d1a000-0000-4000-8000-000000000324",
+    "f1d1a000-0000-4000-8000-000000000325",
+    "f1d1a000-0000-4000-8000-000000000326",
+  ]);
+});
+
+type RawTransactionWidget = Readonly<{
+  id: string;
+  type: "transaction-list";
+  limit: number;
+}>;
+type RawLayout =
+  | Readonly<{ kind: "leaf"; widget: RawTransactionWidget }>
+  | Readonly<{
+      kind: "split";
+      axis: "row" | "column";
+      children: readonly [RawChild, RawChild, ...ReadonlyArray<RawChild>];
+    }>;
+type RawChild = Readonly<{ weight: number; node: RawLayout }>;
+
+const transactionWidget = (id: string): RawTransactionWidget => ({
+  id,
+  type: "transaction-list",
+  limit: 10,
+});
+
+it("enforces the layout depth boundary and retains the first traversal issue", () => {
+  let nextId = 330;
+  const leaf = (id = nextId++): RawLayout => ({
+    kind: "leaf",
+    widget: transactionWidget(`f1d1a000-0000-4000-8000-${id.toString().padStart(12, "0")}`),
+  });
+  const nested = (splitCount: number): RawLayout => {
+    let node = leaf();
+    for (let depth = 0; depth < splitCount; depth += 1) {
+      node = {
+        kind: "split",
+        axis: depth % 2 === 0 ? "row" : "column",
+        children: [
+          { weight: 1, node: leaf() },
+          { weight: 1, node },
+        ],
+      };
+    }
+    return node;
+  };
+  const valid = Schema.decodeUnknownSync(DashboardDocument)({
+    title: "Resumen",
+    layout: nested(8),
+  });
+  const tooDeep = Schema.decodeUnknownResult(DashboardDocument)({
+    title: "Resumen",
+    layout: nested(9),
+  });
+
+  expect(findDashboardStructureIssue(valid)).toBeUndefined();
+  expect(Result.isFailure(tooDeep) ? String(tooDeep.failure) : "").toContain(
+    "DashboardDocument layout depth must not exceed 8"
+  );
+
+  const duplicate = leaf(399);
+  const firstIssue = Schema.decodeUnknownResult(DashboardDocument)({
+    title: "Resumen",
+    layout: {
+      kind: "split",
+      axis: "row",
+      children: [
+        { weight: 1, node: duplicate },
+        {
+          weight: 1,
+          node: {
+            kind: "split",
+            axis: "column",
+            children: [
+              { weight: 1, node: duplicate },
+              { weight: 1, node: nested(9) },
+            ],
+          },
+        },
+      ],
+    },
+  });
+  expect(Result.isFailure(firstIssue) ? String(firstIssue.failure) : "").toContain(
+    "Expected a unique WidgetId in DashboardDocument"
+  );
+});
+
 it("rejects duplicate widget identities and non-canonical same-axis nesting", () => {
   const widget = {
     id: "f1d1a000-0000-4000-8000-000000000321",
@@ -292,8 +708,12 @@ it("rejects duplicate widget identities and non-canonical same-axis nesting", ()
     },
   ];
 
-  for (const layout of invalidLayouts) {
+  const expectedIssues = [
+    "Expected a unique WidgetId in DashboardDocument",
+    "Expected canonical layout without nested splits on the same axis",
+  ];
+  for (const [index, layout] of invalidLayouts.entries()) {
     const result = Schema.decodeUnknownResult(DashboardDocument)({ title: "Resumen", layout });
-    expect(Result.isFailure(result)).toBe(true);
+    expect(Result.isFailure(result) ? String(result.failure) : "").toContain(expectedIssues[index]);
   }
 });

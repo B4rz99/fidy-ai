@@ -2,6 +2,7 @@ import { Effect, Option, Schema, Struct } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import { type E164PhoneNumber, UserId } from "~/core/identity/reference";
 import { User, UserPreferences, WhatsAppIdentity } from "~/core/identity/model";
+import { withUserTransaction } from "~/shell/db/user-transaction";
 
 const UserWithoutId = User.mapFields(Struct.omit(["id"]));
 const UserWithoutCreatedAt = User.mapFields(Struct.omit(["createdAt"]));
@@ -36,10 +37,12 @@ export const upsertUser = Effect.fn("upsertUser")(function* (
   attributes: typeof UserWithoutId.Type
 ) {
   const sql = yield* SqlClient.SqlClient;
-  return yield* SqlSchema.findOne({
-    Request: UserRow,
-    Result: UserRow,
-    execute: (row) => sql`
+  return yield* withUserTransaction(
+    userId,
+    SqlSchema.findOne({
+      Request: UserRow,
+      Result: UserRow,
+      execute: (row) => sql`
       INSERT INTO users (id, service_market, locale, time_zone, created_at)
       VALUES (${row.id}, ${row.serviceMarket}, ${row.locale}, ${row.timeZone}, ${row.createdAt})
       ON CONFLICT (id) DO UPDATE SET
@@ -49,22 +52,26 @@ export const upsertUser = Effect.fn("upsertUser")(function* (
         created_at = EXCLUDED.created_at
       RETURNING ${sql.literal(userColumns)}
     `,
-  })({ ...attributes, id: userId }).pipe(Effect.orDie);
+    })({ ...attributes, id: userId }).pipe(Effect.orDie)
+  );
 });
 
 /** Finds the stable User and all independently persisted interpretation context. */
 export const findUser = (userId: UserId) =>
-  Effect.flatMap(SqlClient.SqlClient, (sql) =>
-    SqlSchema.findOneOption({
-      Request: UserId,
-      Result: UserRow,
-      execute: (id) => sql`
+  withUserTransaction(
+    userId,
+    Effect.flatMap(SqlClient.SqlClient, (sql) =>
+      SqlSchema.findOneOption({
+        Request: UserId,
+        Result: UserRow,
+        execute: (id) => sql`
         SELECT ${sql.literal(userColumns)}
         FROM users
         WHERE id = ${id}
       `,
-    })(userId)
-  ).pipe(Effect.orDie);
+      })(userId)
+    ).pipe(Effect.orDie)
+  );
 
 /**
  * Updates only ordinary User presentation preferences. The request projection
@@ -75,16 +82,19 @@ export const updateUserPreferences = Effect.fn("updateUserPreferences")(function
   preferences: UserPreferences
 ) {
   const sql = yield* SqlClient.SqlClient;
-  return yield* SqlSchema.findOneOption({
-    Request: UserPreferencesRow,
-    Result: UserRow,
-    execute: (row) => sql`
+  return yield* withUserTransaction(
+    userId,
+    SqlSchema.findOneOption({
+      Request: UserPreferencesRow,
+      Result: UserRow,
+      execute: (row) => sql`
       UPDATE users
       SET locale = ${row.locale}, time_zone = ${row.timeZone}
       WHERE id = ${row.userId}
       RETURNING ${sql.literal(userColumns)}
     `,
-  })({ userId, ...preferences }).pipe(Effect.orDie);
+    })({ userId, ...preferences }).pipe(Effect.orDie)
+  );
 });
 
 /**
@@ -98,10 +108,12 @@ export const associateWhatsAppIdentity = Effect.fn("associateWhatsAppIdentity")(
   identity: typeof WhatsAppIdentityWithoutUserId.Type
 ) {
   const sql = yield* SqlClient.SqlClient;
-  return yield* SqlSchema.findOne({
-    Request: WhatsAppIdentityRow,
-    Result: WhatsAppIdentityRow,
-    execute: (row) => sql`
+  return yield* withUserTransaction(
+    userId,
+    SqlSchema.findOne({
+      Request: WhatsAppIdentityRow,
+      Result: WhatsAppIdentityRow,
+      execute: (row) => sql`
       INSERT INTO whatsapp_identities (user_id, phone_number, verified_at)
       VALUES (${row.userId}, ${row.phoneNumber}, ${row.verifiedAt})
       ON CONFLICT (user_id) DO UPDATE SET
@@ -110,7 +122,8 @@ export const associateWhatsAppIdentity = Effect.fn("associateWhatsAppIdentity")(
       RETURNING user_id AS "userId", phone_number AS "phoneNumber",
         verified_at AS "verifiedAt"
     `,
-  })({ ...identity, userId }).pipe(Effect.orDie);
+    })({ ...identity, userId }).pipe(Effect.orDie)
+  );
 });
 
 /**
@@ -125,9 +138,9 @@ export const resolveWhatsAppCaller = (phoneNumber: E164PhoneNumber) =>
       Request: WhatsAppLookup,
       Result: Schema.Struct({ userId: UserId }),
       execute: ({ phoneNumber }) => sql`
-        SELECT user_id AS "userId"
-        FROM whatsapp_identities
-        WHERE phone_number = ${phoneNumber}
+        SELECT resolved.user_id AS "userId"
+        FROM (SELECT fidy_resolve_whatsapp_user(${phoneNumber}) AS user_id) AS resolved
+        WHERE resolved.user_id IS NOT NULL
       `,
     })({ phoneNumber })
   ).pipe(Effect.map(Option.map(({ userId }) => userId)), Effect.orDie);

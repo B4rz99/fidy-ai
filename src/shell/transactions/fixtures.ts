@@ -1,12 +1,12 @@
 import { BigDecimal, DateTime, Effect, Option } from "effect";
-import { SqlClient } from "effect/unstable/sql";
+import { MigrationSqlClient } from "~/shell/db/client";
 import { Currency, Money } from "~/core/_shared/money";
 import { categoryIds } from "~/core/categories/taxonomy";
 import { type CreateTransactionInput } from "~/core/transactions/model";
 
 /** Resets the Transactions slice's harness state between tests. */
 export const truncateTransactions = Effect.gen(function* () {
-  const sql = yield* SqlClient.SqlClient;
+  const sql = yield* MigrationSqlClient;
   yield* sql`TRUNCATE source_attestations, transactions, keyword_rules`;
 });
 

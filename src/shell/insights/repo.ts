@@ -1,6 +1,7 @@
 import { DateTime, Effect, Schema, SchemaTransformation, Struct } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import { encodeMoneyAmount } from "~/core/_shared/money";
+import { withUserTransaction } from "~/shell/db/user-transaction";
 import { UserId } from "~/core/identity/reference";
 import {
   DeliveryEvidenceInput,
@@ -104,13 +105,13 @@ export const generateInsightEvent = Effect.fn("generateInsightEvent")(function* 
   input: InsightGenerationInput
 ) {
   const sql = yield* SqlClient.SqlClient;
-  return yield* sql
-    .withTransaction(
-      Effect.gen(function* () {
-        const event = yield* SqlSchema.findOne({
-          Request: EventInsertRow,
-          Result: InsightEventFromRow,
-          execute: (row) => sql`
+  return yield* withUserTransaction(
+    userId,
+    Effect.gen(function* () {
+      const event = yield* SqlSchema.findOne({
+        Request: EventInsertRow,
+        Result: InsightEventFromRow,
+        execute: (row) => sql`
             INSERT INTO insight_events (
               user_id, kind, schedule_id, schedule_version, service_market,
               locale, time_zone, scheduled_at
@@ -120,12 +121,12 @@ export const generateInsightEvent = Effect.fn("generateInsightEvent")(function* 
             )
             RETURNING ${sql.literal(insightScalarColumns)}, '[]'::jsonb AS "moneyGroups"
           `,
-        })({ ...input, userId });
+      })({ ...input, userId });
 
-        yield* Effect.forEach(
-          input.moneyGroups,
-          (group) =>
-            sql`
+      yield* Effect.forEach(
+        input.moneyGroups,
+        (group) =>
+          sql`
             INSERT INTO insight_money_groups (
               insight_event_id, currency, inflow_amount, outflow_amount
             ) VALUES (
@@ -133,46 +134,51 @@ export const generateInsightEvent = Effect.fn("generateInsightEvent")(function* 
               ${encodeMoneyAmount(group.outflow.amount)}
             )
           `
-        );
+      );
 
-        return { ...event, moneyGroups: input.moneyGroups };
-      })
-    )
-    .pipe(Effect.orDie);
+      return { ...event, moneyGroups: input.moneyGroups };
+    }).pipe(Effect.orDie)
+  );
 });
 
 /** Lists only pending occurrences owned by one User, oldest scheduled first. */
 export const listPendingInsights = (userId: UserId) =>
-  Effect.flatMap(SqlClient.SqlClient, (sql) =>
-    SqlSchema.findAll({
-      Request: UserId,
-      Result: InsightEventFromRow,
-      execute: (owner) => sql`
+  withUserTransaction(
+    userId,
+    Effect.flatMap(SqlClient.SqlClient, (sql) =>
+      SqlSchema.findAll({
+        Request: UserId,
+        Result: InsightEventFromRow,
+        execute: (owner) => sql`
         SELECT ${sql.literal(insightColumns)}
         FROM insight_events
         WHERE user_id = ${owner} AND lifecycle_state = 'pending'
         ORDER BY scheduled_at, id
       `,
-    })(userId)
-  ).pipe(Effect.orDie);
+      })(userId)
+    ).pipe(Effect.orDie)
+  );
 
 /** Locks one owned occurrence while a handler decides and persists its next state. */
 export const lockInsightEvent = Effect.fn("lockInsightEvent")(function* (
   userId: UserId,
   insightEventId: InsightEventId
 ) {
-  return yield* Effect.flatMap(SqlClient.SqlClient, (sql) =>
-    SqlSchema.findOneOption({
-      Request: InsightEventId,
-      Result: InsightEventFromRow,
-      execute: (id) => sql`
+  return yield* withUserTransaction(
+    userId,
+    Effect.flatMap(SqlClient.SqlClient, (sql) =>
+      SqlSchema.findOneOption({
+        Request: InsightEventId,
+        Result: InsightEventFromRow,
+        execute: (id) => sql`
         SELECT ${sql.literal(insightColumns)}
         FROM insight_events
         WHERE id = ${id} AND user_id = ${userId}
         FOR UPDATE
       `,
-    })(insightEventId)
-  ).pipe(Effect.orDie);
+      })(insightEventId)
+    ).pipe(Effect.orDie)
+  );
 });
 
 /**
@@ -183,18 +189,21 @@ export const updateInsightState = Effect.fn("updateInsightState")(function* (
   userId: UserId,
   transition: typeof InsightTransition.Type
 ) {
-  return yield* Effect.flatMap(SqlClient.SqlClient, (sql) =>
-    SqlSchema.findOne({
-      Request: InsightTransition,
-      Result: InsightEventFromRow,
-      execute: (request) => sql`
+  return yield* withUserTransaction(
+    userId,
+    Effect.flatMap(SqlClient.SqlClient, (sql) =>
+      SqlSchema.findOne({
+        Request: InsightTransition,
+        Result: InsightEventFromRow,
+        execute: (request) => sql`
         UPDATE insight_events
         SET lifecycle_state = ${request.lifecycleState}
         WHERE id = ${request.id} AND user_id = ${userId}
         RETURNING ${sql.literal(insightColumns)}
       `,
-    })(transition)
-  ).pipe(Effect.orDie);
+      })(transition)
+    ).pipe(Effect.orDie)
+  );
 });
 
 /**
@@ -208,10 +217,12 @@ export const appendDeliveryAttempt = Effect.fn("appendDeliveryAttempt")(function
   input: DeliveryEvidenceInput
 ) {
   const sql = yield* SqlClient.SqlClient;
-  return yield* SqlSchema.findOne({
-    Request: AppendDeliveryAttempt,
-    Result: DeliveryFromRow,
-    execute: (request) => sql`
+  return yield* withUserTransaction(
+    userId,
+    SqlSchema.findOne({
+      Request: AppendDeliveryAttempt,
+      Result: DeliveryFromRow,
+      execute: (request) => sql`
       INSERT INTO insight_delivery_attempts (
         insight_event_id, sent_at, channel, provider, provider_message_id
       )
@@ -222,5 +233,6 @@ export const appendDeliveryAttempt = Effect.fn("appendDeliveryAttempt")(function
       RETURNING id, insight_event_id AS "insightEventId", sent_at AS "sentAt",
         channel, provider, provider_message_id AS "providerMessageId"
     `,
-  })({ ...input, insightEventId }).pipe(Effect.orDie);
+    })({ ...input, insightEventId }).pipe(Effect.orDie)
+  );
 });

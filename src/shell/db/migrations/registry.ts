@@ -6,6 +6,7 @@ import { createInsights } from "./0005-create-insights";
 import { createDashboards } from "./0006-create-dashboards";
 import { createTranscripts } from "./0007-create-transcripts";
 import { hostedAgentTokens } from "./0008-hosted-agent-tokens";
+import { rowLevelSecurity } from "./0009-row-level-security";
 
 /**
  * The explicit index ARCHITECTURE.md §7 calls for: one ordered, append-only
@@ -24,4 +25,5 @@ export const migrations = {
   "0006_create_dashboards": createDashboards,
   "0007_create_transcripts": createTranscripts,
   "0008_hosted_agent_tokens": hostedAgentTokens,
+  "0009_row_level_security": rowLevelSecurity,
 };

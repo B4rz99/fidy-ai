@@ -1,0 +1,106 @@
+# PostgreSQL row-level User isolation
+
+- **Status:** Accepted
+- **Date:** 2026-08-01
+- **Amends:** [ADR-0005](./0005-explicit-user-context-and-isolation.md)
+
+## Context
+
+ADR-0005 deliberately launched with explicit `UserId` application isolation and recorded RLS as a future reinforcement when a non-request path began reading User data. The hosted agent now exists and the first background User-data path is next, so that revisit condition has been met.
+
+RLS remains defense in depth. It must catch an omitted or incorrect relational predicate without hiding the subject from TypeScript, widening pre-subject lookup, leaking context through a pooled connection, or holding a transaction across model/provider work.
+
+PostgreSQL table owners, superusers, and `BYPASSRLS` roles can bypass ordinary policies. AgentToken bearer and WhatsAppIdentity phone lookup must resolve a subject before a User-scoped transaction can exist. AuditLogEntry retention is deliberately global. These authorities need explicit treatment rather than exemptions hidden in repository SQL.
+
+The primary-source basis is recorded in [`research/006-postgresql-row-level-security.md`](../../research/006-postgresql-row-level-security.md).
+
+## Decision
+
+### Authorities and startup
+
+Use two independently configured PostgreSQL pools:
+
+- `MIGRATION_DATABASE_URL` authenticates the separately privileged boot migrator. It owns schema history and can provision the fixed roles.
+- `DATABASE_URL` authenticates exactly as `fidy_runtime`, a non-owner, non-superuser login without `BYPASSRLS`.
+
+Migrations finish before runtime authority validation and process startup. Startup fails closed unless both `session_user` and `current_user` are exactly `fidy_runtime`, or if that role has superuser, `BYPASSRLS`, ownership of a User table, or membership in any role with one of those authorities. This rejects owner sessions that begin with `SET ROLE` as well as directly unsafe runtime roles. There is no fallback from the migration URL to the runtime URL or vice versa.
+
+A fixed `fidy_gateway` role is `NOLOGIN`, non-superuser, and `BYPASSRLS`. The runtime role is not its member and cannot assume it through transitive membership. The gateway receives only the table privileges needed by the narrow functions it owns.
+
+### User context and repository interface
+
+`UserId` remains an explicit argument to every repository and core function that needs it. No ambient application `CurrentUser` service is introduced.
+
+The shell's `withUserTransaction(userId, effect)` module:
+
+1. reserves one connection with `SqlClient.withTransaction`;
+2. establishes `fidy.user_id` with transaction-local `set_config`;
+3. allows nested calls only when they repeat the same User; and
+4. commits or rolls back before the connection returns to the pool.
+
+Every User-owned repository operation enters that module. Canonical authorization also wraps the complete state mutation and successful AuditLogEntry in one such transaction. Rejected and failed audit evidence enters its own short User transaction.
+
+No language-model, HTTP, channel, or provider wait occurs in one of these transactions. Hosted-agent transcript and token operations each complete their short User transaction before model generation; canonical tools traverse the ordinary HTTP authorization path.
+
+### Policy coverage
+
+Every User-owned table enables and forces RLS with one explicit policy covering both `USING` and `WITH CHECK`:
+
+| ownership shape             | tables                                                                                                                                            |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| direct `user_id`            | `whatsapp_identities`, `agent_tokens`, `audit_log_entries`, `transactions`, `keyword_rules`, `insight_events`, `dashboards`, `transcript_entries` |
+| User identity is the row id | `users`                                                                                                                                           |
+| through Transaction         | `source_attestations`                                                                                                                             |
+| through InsightEvent        | `insight_money_groups`, `insight_delivery_attempts`                                                                                               |
+
+Absent context evaluates to no User and therefore exposes no row. A context for another User cannot read, insert, update, or delete the owner's rows.
+
+`categories` is deliberate global read-only taxonomy data. The Effect migration journal and PostgreSQL catalog/sequence objects are technical data available only to the authority that needs them; they are not accidental RLS exemptions.
+
+### Pre-subject and global gateways
+
+Use `SECURITY DEFINER` functions with a fixed trusted `search_path`, no `PUBLIC` execution, fixed typed inputs, and minimum output:
+
+- `fidy_use_agent_token` accepts a bearer digest and timestamps, atomically applies expiry/use, and returns only the resolved token id, UserId, scopes, and last-use time.
+- `fidy_resolve_whatsapp_user` accepts one normalized phone number and returns only its UserId when associated.
+- `fidy_delete_audit_log_entries_before` accepts one UTC cutoff and performs only the approved global retention deletion.
+
+The runtime role can execute these functions but cannot assume the gateway role or directly bypass policies. New gateways require a new security-boundary review and a negative test; generic privileged SQL is prohibited.
+
+### Future background queues
+
+A queue that must discover work before knowing a User may receive a narrow claim function that atomically returns only the work identity and stable UserId required to establish context. Claiming ends its transaction. Processing then enters a separate short `withUserTransaction` call and keeps `UserId` explicit through shell/core calls. Network work happens outside both transactions. A generic cross-User poll query is not permitted.
+
+## Consequences
+
+A missing or wrong User predicate is now blocked by PostgreSQL as well as the application. Transaction-local context cannot survive commit or rollback into a pooled caller. Runtime compromise still permits choosing another valid context through application code, so RLS does not replace authorization or explicit signatures.
+
+Boot now requires role provisioning and two credentials. Local Compose and CI create the restricted login before migrations. Production deployment must provision the same role contract; an owner credential cannot start the application.
+
+Repositories pay for short nested transactions when called inside an already-scoped canonical operation. Effect SQL implements those as savepoints on the reserved connection, preserving the outer canonical atomicity.
+
+## Rejected alternatives
+
+### Make the runtime role the table owner and rely on FORCE RLS
+
+Rejected because it leaves schema authority in the long-running process and makes one missed `FORCE` an isolation bypass.
+
+### Use one connection URL and `SET ROLE`
+
+Rejected because the authenticated session still begins with privileged authority, configuration is easy to omit, and migration/runtime separation would not fail closed.
+
+### Put User context in an application service
+
+Rejected for the reasons in ADR-0005: it hides the caller and creates a second subject-propagation path for background work. The PostgreSQL transaction setting is an implementation detail beneath the explicit interface, not application authority.
+
+### Use session-scoped `SET`
+
+Rejected because pooled connections can carry the prior User into unrelated work. Only transaction-local context is accepted.
+
+### Let pre-subject repositories bypass RLS directly
+
+Rejected because broad direct privilege makes every query in those modules a cross-User authority. Fixed-shape functions expose less interface and deny by default.
+
+### Hold one User transaction for an entire hosted turn
+
+Rejected because model and provider latency would pin a connection and transaction, expand lock lifetime, and make cleanup failure operationally dangerous.

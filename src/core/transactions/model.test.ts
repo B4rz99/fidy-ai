@@ -1,6 +1,13 @@
 import { expect, it } from "@effect/vitest";
 import { Result, Schema } from "effect";
-import { CreateTransactionInput, Direction, Transaction, TransactionExtraction } from "./model";
+import {
+  CapturedInterpretationContext,
+  CreateTransactionInput,
+  Direction,
+  Transaction,
+  TransactionExtraction,
+  UpdateTransactionInput,
+} from "./model";
 
 const decodeDirection = Schema.decodeUnknownResult(Direction);
 const decodeTransaction = Schema.decodeUnknownResult(Transaction);
@@ -81,8 +88,21 @@ it("carries no owner, so a client cannot name whose transaction it is creating",
   expect(Object.keys(CreateTransactionInput.fields)).not.toContain("userId");
 });
 
-it("derives the create input from the canonical transaction, minus the server-assigned fields", () => {
-  expect(Object.keys(CreateTransactionInput.fields)).toEqual(
-    Object.keys(Transaction.fields).filter((field) => field !== "id" && field !== "createdAt")
+it("derives input and evidence fields from their canonical models", () => {
+  const editableFields = Object.keys(Transaction.fields).filter(
+    (field) => field !== "id" && field !== "createdAt"
   );
+  expect(Object.keys(CreateTransactionInput.fields)).toEqual(editableFields);
+  expect(Object.keys(UpdateTransactionInput.fields)).toEqual(editableFields);
+  expect(Object.keys(TransactionExtraction.fields)).toEqual([
+    "money",
+    "merchant",
+    "direction",
+    "occurredAt",
+  ]);
+  expect(Object.keys(CapturedInterpretationContext.fields)).toEqual([
+    "serviceMarket",
+    "locale",
+    "timeZone",
+  ]);
 });

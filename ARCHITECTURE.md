@@ -84,14 +84,19 @@ a parallel tool map or a host-side parser.
 
 `UserId` is an explicit argument to every repository function and every core function that needs
 user context. The caller is resolved at the adapter boundary and passed inward. There is no ambient
-`CurrentUser` service and no row-level security at launch.
+`CurrentUser` service. PostgreSQL row-level security reinforces that explicit boundary: each short
+User-owned transaction establishes transaction-local context through the restricted runtime role.
+Migrations use a separate authority, and narrow deny-by-default gateways resolve pre-subject bearer
+or phone evidence without exposing general privileged SQL.
 
 Ordinary aggregates carry no owner field: the user is the context in which an operation runs.
 `ConsentRecord` and `AuditLogEntry` carry an explicit subject because they attest who acted.
 
 Isolation is guarded by a test derived from the assembled `HttpApi`: seed two users, enumerate
 every canonical operation, and assert that one user's data is neither visible nor mutable to the
-other. Background jobs and ingestion paths pass the user explicitly as well.
+other. Background jobs and ingestion paths pass the user explicitly as well. A future background queue
+claims only the work identity and stable User through a narrow gateway, then processes it in a
+separate User-scoped transaction; no database transaction spans model or provider network work.
 
 A User's current ServiceMarket, locale, and IANA time zone are explicit independent context. An
 existing record is not reinterpreted when current User preferences change; artifacts that need

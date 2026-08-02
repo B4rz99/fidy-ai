@@ -6,7 +6,7 @@ import { ValidationGateLive } from "~/shell/_shared/errors";
 import { AuditRetentionLive } from "~/shell/audit/retention";
 import { CategoriesLive } from "~/shell/categories/handlers";
 import { DashboardLive } from "~/shell/dashboard/handlers";
-import { MigratorLive } from "~/shell/db/client";
+import { MigratorLive, RuntimeAuthorityLive } from "~/shell/db/client";
 import { IdentityLive } from "~/shell/identity/handlers";
 import { InsightsLive } from "~/shell/insights/handlers";
 import { TransactionsLive } from "~/shell/transactions/handlers";
@@ -68,5 +68,6 @@ export const HttpLive = HttpRouter.serve(Layer.mergeAll(ApiLive, HealthLive, Sta
  * path, and HTTP services used to serve the static shell.
  */
 export const AppLive = Layer.mergeAll(HttpLive, AuditRetentionLive).pipe(
+  Layer.provide(RuntimeAuthorityLive),
   Layer.provide(MigratorLive)
 );

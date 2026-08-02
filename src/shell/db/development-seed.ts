@@ -14,7 +14,7 @@ import { renewAgentTokenIdleExpiry } from "~/core/tokens/rules";
 import { hashAgentBearer } from "~/shell/_shared/authz";
 import { associateWhatsAppIdentity, upsertUser } from "~/shell/identity/repo";
 import { type AgentTokenHash, upsertAgentToken } from "~/shell/tokens/repo";
-import { MigratorLive } from "./client";
+import { MigrationPgLive, MigratorLive } from "./client";
 
 /** The stable User used by the local development seed and API-seam tests. */
 export const defaultUserId = UserId.make("f1d1a000-0000-4000-8000-000000000001");
@@ -111,4 +111,7 @@ export const seedDevelopmentIdentity = (bearer: AgentBearerToken) =>
 
 /** Local development seeding ordered after the real migration log. */
 export const makeDevelopmentSeedLive = (bearer: AgentBearerToken) =>
-  Layer.effectDiscard(seedDevelopmentIdentity(bearer)).pipe(Layer.provide(MigratorLive));
+  Layer.effectDiscard(seedDevelopmentIdentity(bearer)).pipe(
+    Layer.provide(MigratorLive),
+    Layer.provide(MigrationPgLive)
+  );

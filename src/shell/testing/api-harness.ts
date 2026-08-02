@@ -4,7 +4,7 @@ import { HttpApiClient } from "effect/unstable/httpapi";
 import { type AgentBearerToken } from "~/core/tokens/model";
 import { makeAgentAuthorizationClientLive } from "~/shell/_shared/authz";
 import { FidyApi } from "~/shell/api";
-import { PgLive } from "~/shell/db/client";
+import { MigrationSqlClientLive, PgLive } from "~/shell/db/client";
 import { makeDevelopmentSeedLive } from "~/shell/db/development-seed";
 import { defaultAgentBearer } from "./identity-fixtures";
 import { AppLive } from "~/shell/http";
@@ -54,5 +54,6 @@ export const ApiHarness = makeApiClientLive({
   Layer.provideMerge(makeDevelopmentSeedLive(defaultAgentBearer)),
   Layer.provideMerge(BunHttpServer.layerTest),
   Layer.provideMerge(BunServices.layer),
+  Layer.provideMerge(MigrationSqlClientLive),
   Layer.provideMerge(PgLive)
 );

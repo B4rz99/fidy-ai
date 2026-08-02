@@ -221,7 +221,113 @@ it("returns a typed failure when exact normalized ratios exceed the weight bound
   expect(Result.isFailure(outcome)).toBe(true);
   if (Result.isFailure(outcome)) {
     expect(outcome.failure._tag).toBe("InvalidDashboardResult");
+    if (outcome.failure._tag === "InvalidDashboardResult") {
+      expect(outcome.failure.issues).toEqual([
+        {
+          path: "layout.children.0.node.axis",
+          message: "Expected canonical layout without nested splits on the same axis",
+        },
+      ]);
+    }
   }
+});
+
+it("accepts an exact normalized weight of 1000 at the upper boundary", () => {
+  const targetId = "f1d1a000-0000-4000-8000-000000000417";
+  const source = makeSplitDocument([
+    { weight: 1, widget: transactionListWidget(targetId) },
+    {
+      weight: 500,
+      widget: transactionListWidget("f1d1a000-0000-4000-8000-000000000418"),
+    },
+  ]);
+  const edit = Schema.decodeUnknownSync(DashboardEdit)({
+    op: "add-widget",
+    widget: transactionListWidget("f1d1a000-0000-4000-8000-000000000419"),
+    at: { besideWidget: targetId, axis: "row", side: "after" },
+  });
+
+  const updated = Effect.runSync(applyDashboardEdit({ document: source, edit }));
+
+  expect(
+    updated.layout.kind === "split" ? updated.layout.children.map(({ weight }) => weight) : []
+  ).toEqual([1, 1, 1000]);
+});
+
+it("reduces same-axis insertion weights to their smallest exact integer ratio", () => {
+  const targetId = "f1d1a000-0000-4000-8000-00000000041a";
+  const source = makeSplitDocument([
+    { weight: 2, widget: transactionListWidget(targetId) },
+    {
+      weight: 2,
+      widget: transactionListWidget("f1d1a000-0000-4000-8000-00000000041b"),
+    },
+  ]);
+  const edit = Schema.decodeUnknownSync(DashboardEdit)({
+    op: "add-widget",
+    widget: transactionListWidget("f1d1a000-0000-4000-8000-00000000041c"),
+    at: { besideWidget: targetId, axis: "row", side: "after" },
+  });
+
+  const updated = Effect.runSync(applyDashboardEdit({ document: source, edit }));
+
+  expect(
+    updated.layout.kind === "split" ? updated.layout.children.map(({ weight }) => weight) : []
+  ).toEqual([1, 1, 2]);
+});
+
+it("flattens only matching-axis regions and preserves a perpendicular sibling split", () => {
+  const targetId = "f1d1a000-0000-4000-8000-00000000041d";
+  const columnFirstId = "f1d1a000-0000-4000-8000-00000000041e";
+  const columnSecondId = "f1d1a000-0000-4000-8000-00000000041f";
+  const addedId = "f1d1a000-0000-4000-8000-000000000420";
+  const source = Schema.decodeUnknownSync(DashboardDocument)({
+    title: "Mi tablero",
+    layout: {
+      kind: "split",
+      axis: "row",
+      children: [
+        { weight: 3, node: { kind: "leaf", widget: transactionListWidget(targetId) } },
+        {
+          weight: 2,
+          node: {
+            kind: "split",
+            axis: "column",
+            children: [
+              {
+                weight: 1,
+                node: { kind: "leaf", widget: transactionListWidget(columnFirstId) },
+              },
+              {
+                weight: 1,
+                node: { kind: "leaf", widget: transactionListWidget(columnSecondId) },
+              },
+            ],
+          },
+        },
+      ],
+    },
+  });
+  const edit = Schema.decodeUnknownSync(DashboardEdit)({
+    op: "add-widget",
+    widget: transactionListWidget(addedId),
+    at: { besideWidget: targetId, axis: "row", side: "after" },
+  });
+
+  const updated = Effect.runSync(applyDashboardEdit({ document: source, edit }));
+
+  expect(updated.layout.kind).toBe("split");
+  if (updated.layout.kind === "split") {
+    expect(updated.layout.children.map(({ weight }) => weight)).toEqual([3, 3, 4]);
+    expect(updated.layout.children.map(({ node }) => node.kind)).toEqual(["leaf", "leaf", "split"]);
+    expect(updated.layout.children[2]?.node).toMatchObject({ kind: "split", axis: "column" });
+  }
+  expect(collectLayoutWidgets(updated.layout).map(({ id }) => id)).toEqual([
+    targetId,
+    addedId,
+    columnFirstId,
+    columnSecondId,
+  ]);
 });
 
 it("removes a widget and collapses the single-child split it leaves behind", () => {
@@ -353,6 +459,69 @@ it("rejects resizing the root widget because it has no sibling-relative weight",
   expect(Result.isFailure(outcome) ? outcome.failure._tag : undefined).toBe("RootWidgetResize");
 });
 
+it("wraps an existing row when adding a widget at the dashboard bottom", () => {
+  const firstId = "f1d1a000-0000-4000-8000-000000000464";
+  const secondId = "f1d1a000-0000-4000-8000-000000000465";
+  const addedId = "f1d1a000-0000-4000-8000-000000000466";
+  const source = makeSplitDocument([
+    { weight: 2, widget: transactionListWidget(firstId) },
+    { weight: 3, widget: customMetricWidget(secondId) },
+  ]);
+  const edit = Schema.decodeUnknownSync(DashboardEdit)({
+    op: "add-widget",
+    widget: transactionListWidget(addedId),
+    at: "bottom",
+  });
+
+  const updated = Effect.runSync(applyDashboardEdit({ document: source, edit }));
+
+  expect(updated.layout.kind).toBe("split");
+  if (updated.layout.kind === "split") {
+    expect(updated.layout.axis).toBe("column");
+    expect(updated.layout.children[0].node).toMatchObject({ kind: "split", axis: "row" });
+    expect(updated.layout.children[1].node).toMatchObject({
+      kind: "leaf",
+      widget: { id: addedId },
+    });
+  }
+  expect(collectLayoutWidgets(updated.layout).map(({ id }) => id)).toEqual([
+    firstId,
+    secondId,
+    addedId,
+  ]);
+});
+
+it("prepends a root widget to an existing column without introducing another split", () => {
+  const firstId = "f1d1a000-0000-4000-8000-000000000468";
+  const secondId = "f1d1a000-0000-4000-8000-000000000469";
+  const addedId = "f1d1a000-0000-4000-8000-000000000470";
+  const source = makeSplitDocument(
+    [
+      { weight: 2, widget: transactionListWidget(firstId) },
+      { weight: 3, widget: customMetricWidget(secondId) },
+    ],
+    "column"
+  );
+  const edit = Schema.decodeUnknownSync(DashboardEdit)({
+    op: "add-widget",
+    widget: transactionListWidget(addedId),
+    at: "top",
+  });
+
+  const updated = Effect.runSync(applyDashboardEdit({ document: source, edit }));
+
+  expect(updated.layout.kind).toBe("split");
+  if (updated.layout.kind === "split") {
+    expect(updated.layout.axis).toBe("column");
+    expect(updated.layout.children.map(({ weight }) => weight)).toEqual([1, 2, 3]);
+  }
+  expect(collectLayoutWidgets(updated.layout).map(({ id }) => id)).toEqual([
+    addedId,
+    firstId,
+    secondId,
+  ]);
+});
+
 it("appends a root widget to an existing column in mobile reading order", () => {
   const source = makeSplitDocument(
     [
@@ -377,6 +546,40 @@ it("appends a root widget to an existing column in mobile reading order", () => 
     "f1d1a000-0000-4000-8000-000000000472",
     "f1d1a000-0000-4000-8000-000000000473",
   ]);
+});
+
+it("finds a duplicate nested in only one branch before a root insertion", () => {
+  const duplicateId = "f1d1a000-0000-4000-8000-000000000463";
+  const source = makeNestedDocument();
+  const edit = Schema.decodeUnknownSync(DashboardEdit)({
+    op: "add-widget",
+    widget: transactionListWidget(duplicateId),
+    at: "bottom",
+  });
+
+  const outcome = Effect.runSync(Effect.result(applyDashboardEdit({ document: source, edit })));
+
+  expect(Result.isFailure(outcome) ? outcome.failure._tag : undefined).toBe("DuplicateWidgetId");
+});
+
+it("reports a missing beside target after searching every split branch", () => {
+  const source = makeNestedDocument();
+  const edit = Schema.decodeUnknownSync(DashboardEdit)({
+    op: "add-widget",
+    widget: transactionListWidget("f1d1a000-0000-4000-8000-00000000046b"),
+    at: {
+      besideWidget: "f1d1a000-0000-4000-8000-00000000046c",
+      axis: "row",
+      side: "after",
+    },
+  });
+
+  const outcome = Effect.runSync(Effect.result(applyDashboardEdit({ document: source, edit })));
+
+  expect(Result.isFailure(outcome) ? outcome.failure : undefined).toMatchObject({
+    _tag: "WidgetNotFound",
+    role: "placement-target",
+  });
 });
 
 it("inserts before a later sibling and still checks the complete document for duplicates", () => {
@@ -506,6 +709,33 @@ it("resizes a nested region and distinguishes missing nested and root targets", 
   expect(Result.isFailure(rootFailure) ? rootFailure.failure._tag : undefined).toBe(
     "WidgetNotFound"
   );
+});
+
+it("moves through the no-duplicate-check branch and flattens the destination row", () => {
+  const movingId = "f1d1a000-0000-4000-8000-000000000482";
+  const targetId = "f1d1a000-0000-4000-8000-000000000483";
+  const siblingId = "f1d1a000-0000-4000-8000-000000000484";
+  const source = makeSplitDocument([
+    { weight: 1, widget: transactionListWidget(movingId) },
+    { weight: 3, widget: customMetricWidget(targetId) },
+    { weight: 2, widget: transactionListWidget(siblingId) },
+  ]);
+  const edit = Schema.decodeUnknownSync(DashboardEdit)({
+    op: "move-widget",
+    widgetId: movingId,
+    at: { besideWidget: targetId, axis: "row", side: "before" },
+  });
+
+  const updated = Effect.runSync(applyDashboardEdit({ document: source, edit }));
+
+  expect(collectLayoutWidgets(updated.layout).map(({ id }) => id)).toEqual([
+    movingId,
+    targetId,
+    siblingId,
+  ]);
+  expect(
+    updated.layout.kind === "split" ? updated.layout.children.map(({ weight }) => weight) : []
+  ).toEqual([3, 3, 4]);
 });
 
 it("moves a later Widget in one traversal and reports both missing move targets", () => {

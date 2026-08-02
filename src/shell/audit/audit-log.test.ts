@@ -1,7 +1,7 @@
 import { expect, layer } from "@effect/vitest";
 import { Context, DateTime, Effect, Layer, Schema } from "effect";
 import { HttpBody, HttpClient } from "effect/unstable/http";
-import { SqlClient } from "effect/unstable/sql";
+import { MigrationSqlClient } from "~/shell/db/client";
 import { AgentTokenId } from "~/core/tokens/reference";
 import { IanaTimeZone } from "~/core/_shared/context";
 import { UserId } from "~/core/identity/reference";
@@ -156,7 +156,7 @@ layer(AuditHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           bearer: atomicObserverBearer,
           scopes: ["read"],
         });
-        const sql = yield* SqlClient.SqlClient;
+        const sql = yield* MigrationSqlClient;
         const observer = yield* AtomicObserverApiClient;
         yield* sql`
           CREATE OR REPLACE FUNCTION reject_atomic_success_audit()

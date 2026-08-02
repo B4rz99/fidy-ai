@@ -66,6 +66,7 @@ it("requires every canonical scope for an internal HostedAgentToken", () => {
 
   expect(Result.isSuccess(decodeScopes(["read", "write", "dashboard"]))).toBe(true);
   expect(Result.isSuccess(decodeScopes(["dashboard", "read", "write"]))).toBe(true);
+  expect(Result.isFailure(decodeScopes([]))).toBe(true);
   expect(Result.isFailure(decodeScopes(["read", "write"]))).toBe(true);
 });
 

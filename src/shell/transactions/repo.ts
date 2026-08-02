@@ -4,6 +4,7 @@ import { CategoryId } from "~/core/categories/reference";
 import { encodeMoneyAmount, Money } from "~/core/_shared/money";
 import { UserId } from "~/core/identity/reference";
 import { normalizeCategoryKeyword } from "~/core/categories/rules";
+import { withUserTransaction } from "~/shell/db/user-transaction";
 import {
   type CapturedInterpretationContext,
   InterpretationRevision,
@@ -69,11 +70,13 @@ export const insertTransaction = Effect.fn("insertTransaction")(function* (
   userId: UserId,
   input: UpdateTransactionInput
 ) {
-  return yield* Effect.flatMap(SqlClient.SqlClient, (sql) =>
-    SqlSchema.findOne({
-      Request: TransactionWriteRow,
-      Result: TransactionFlatRow,
-      execute: (row) => sql`
+  return yield* withUserTransaction(
+    userId,
+    Effect.flatMap(SqlClient.SqlClient, (sql) =>
+      SqlSchema.findOne({
+        Request: TransactionWriteRow,
+        Result: TransactionFlatRow,
+        execute: (row) => sql`
           INSERT INTO transactions
             (user_id, amount, currency, merchant, direction, category_id, notes, occurred_at)
           VALUES
@@ -81,8 +84,9 @@ export const insertTransaction = Effect.fn("insertTransaction")(function* (
              ${row.categoryId}, ${row.notes}, ${row.occurredAt})
           RETURNING ${sql.literal(transactionColumns)}
         `,
-    })(writeRow(userId, input))
-  ).pipe(Effect.flatMap(transactionFromRow), Effect.orDie);
+      })(writeRow(userId, input))
+    ).pipe(Effect.flatMap(transactionFromRow), Effect.orDie)
+  );
 });
 
 /** Loads one active User-owned Transaction; foreign, deleted, and absent identities return None. */
@@ -90,24 +94,27 @@ export const findTransaction = Effect.fn("findTransaction")(function* (
   userId: UserId,
   id: TransactionId
 ) {
-  return yield* Effect.flatMap(SqlClient.SqlClient, (sql) =>
-    SqlSchema.findOneOption({
-      Request: TransactionLookup,
-      Result: TransactionFlatRow,
-      execute: (request) => sql`
+  return yield* withUserTransaction(
+    userId,
+    Effect.flatMap(SqlClient.SqlClient, (sql) =>
+      SqlSchema.findOneOption({
+        Request: TransactionLookup,
+        Result: TransactionFlatRow,
+        execute: (request) => sql`
         SELECT ${sql.literal(transactionColumns)}
         FROM transactions
         WHERE id = ${request.id} AND user_id = ${request.userId} AND deleted_at IS NULL
       `,
-    })({ id, userId })
-  ).pipe(
-    Effect.flatMap(
-      Option.match({
-        onNone: () => Effect.succeed(Option.none()),
-        onSome: (row) => transactionFromRow(row).pipe(Effect.map(Option.some)),
-      })
-    ),
-    Effect.orDie
+      })({ id, userId })
+    ).pipe(
+      Effect.flatMap(
+        Option.match({
+          onNone: () => Effect.succeed(Option.none()),
+          onSome: (row) => transactionFromRow(row).pipe(Effect.map(Option.some)),
+        })
+      ),
+      Effect.orDie
+    )
   );
 });
 
@@ -116,42 +123,45 @@ export const listTransactions = Effect.fn("listTransactions")(function* (
   userId: UserId,
   query: TransactionQuery
 ) {
-  return yield* Effect.flatMap(SqlClient.SqlClient, (sql) => {
-    const conditions = [sql`user_id = ${userId}`, sql`deleted_at IS NULL`];
-    if (Option.isSome(query.from)) conditions.push(sql`occurred_at >= ${query.from.value}`);
-    if (Option.isSome(query.to)) conditions.push(sql`occurred_at < ${query.to.value}`);
-    if (Option.isSome(query.categoryId)) {
-      conditions.push(sql`category_id = ${query.categoryId.value}`);
-    }
-    if (Option.isSome(query.direction)) {
-      conditions.push(sql`direction = ${query.direction.value}`);
-    }
-    if (Option.isSome(query.currency)) conditions.push(sql`currency = ${query.currency.value}`);
+  return yield* withUserTransaction(
+    userId,
+    Effect.flatMap(SqlClient.SqlClient, (sql) => {
+      const conditions = [sql`user_id = ${userId}`, sql`deleted_at IS NULL`];
+      if (Option.isSome(query.from)) conditions.push(sql`occurred_at >= ${query.from.value}`);
+      if (Option.isSome(query.to)) conditions.push(sql`occurred_at < ${query.to.value}`);
+      if (Option.isSome(query.categoryId)) {
+        conditions.push(sql`category_id = ${query.categoryId.value}`);
+      }
+      if (Option.isSome(query.direction)) {
+        conditions.push(sql`direction = ${query.direction.value}`);
+      }
+      if (Option.isSome(query.currency)) conditions.push(sql`currency = ${query.currency.value}`);
 
-    return SqlSchema.findAll({
-      Request: Schema.Void,
-      Result: TransactionFlatRow,
-      execute: () => sql`
+      return SqlSchema.findAll({
+        Request: Schema.Void,
+        Result: TransactionFlatRow,
+        execute: () => sql`
         SELECT ${sql.literal(transactionColumns)}
         FROM transactions
         WHERE ${sql.and(conditions)}
         ORDER BY occurred_at DESC, created_at DESC, id DESC
       `,
-    })(undefined);
-  }).pipe(
-    Effect.flatMap((rows) => Effect.forEach(rows, transactionFromRow)),
-    Effect.map((transactions) =>
-      Option.match(query.merchant, {
-        onNone: () => transactions,
-        onSome: (merchant) => {
-          const normalized = normalizeCategoryKeyword(merchant);
-          return transactions.filter((transaction) =>
-            normalizeCategoryKeyword(transaction.merchant).includes(normalized)
-          );
-        },
-      })
-    ),
-    Effect.orDie
+      })(undefined);
+    }).pipe(
+      Effect.flatMap((rows) => Effect.forEach(rows, transactionFromRow)),
+      Effect.map((transactions) =>
+        Option.match(query.merchant, {
+          onNone: () => transactions,
+          onSome: (merchant) => {
+            const normalized = normalizeCategoryKeyword(merchant);
+            return transactions.filter((transaction) =>
+              normalizeCategoryKeyword(transaction.merchant).includes(normalized)
+            );
+          },
+        })
+      ),
+      Effect.orDie
+    )
   );
 });
 
@@ -161,11 +171,13 @@ export const updateTransaction = Effect.fn("updateTransaction")(function* (
   transactionId: TransactionId,
   input: UpdateTransactionInput
 ) {
-  return yield* Effect.flatMap(SqlClient.SqlClient, (sql) =>
-    SqlSchema.findOneOption({
-      Request: Schema.Struct({ ...TransactionWriteRow.fields, transactionId: TransactionId }),
-      Result: TransactionFlatRow,
-      execute: (row) => sql`
+  return yield* withUserTransaction(
+    userId,
+    Effect.flatMap(SqlClient.SqlClient, (sql) =>
+      SqlSchema.findOneOption({
+        Request: Schema.Struct({ ...TransactionWriteRow.fields, transactionId: TransactionId }),
+        Result: TransactionFlatRow,
+        execute: (row) => sql`
           UPDATE transactions SET
             amount = ${row.amount}, currency = ${row.currency}, merchant = ${row.merchant},
             direction = ${row.direction}, category_id = ${row.categoryId}, notes = ${row.notes},
@@ -173,15 +185,16 @@ export const updateTransaction = Effect.fn("updateTransaction")(function* (
           WHERE id = ${row.transactionId} AND user_id = ${row.userId} AND deleted_at IS NULL
           RETURNING ${sql.literal(transactionColumns)}
         `,
-    })({ ...writeRow(userId, input), transactionId })
-  ).pipe(
-    Effect.flatMap(
-      Option.match({
-        onNone: () => Effect.succeed(Option.none()),
-        onSome: (row) => transactionFromRow(row).pipe(Effect.map(Option.some)),
-      })
-    ),
-    Effect.orDie
+      })({ ...writeRow(userId, input), transactionId })
+    ).pipe(
+      Effect.flatMap(
+        Option.match({
+          onNone: () => Effect.succeed(Option.none()),
+          onSome: (row) => transactionFromRow(row).pipe(Effect.map(Option.some)),
+        })
+      ),
+      Effect.orDie
+    )
   );
 });
 
@@ -190,17 +203,20 @@ export const softDeleteTransaction = Effect.fn("softDeleteTransaction")(function
   userId: UserId,
   id: TransactionId
 ) {
-  return yield* Effect.flatMap(SqlClient.SqlClient, (sql) =>
-    SqlSchema.findOneOption({
-      Request: TransactionLookup,
-      Result: Schema.Struct({ id: TransactionId }),
-      execute: (request) => sql`
+  return yield* withUserTransaction(
+    userId,
+    Effect.flatMap(SqlClient.SqlClient, (sql) =>
+      SqlSchema.findOneOption({
+        Request: TransactionLookup,
+        Result: Schema.Struct({ id: TransactionId }),
+        execute: (request) => sql`
         UPDATE transactions SET deleted_at = now()
         WHERE id = ${request.id} AND user_id = ${request.userId} AND deleted_at IS NULL
         RETURNING id
       `,
-    })({ id, userId })
-  ).pipe(Effect.map(Option.map((row) => row.id)), Effect.orDie);
+      })({ id, userId })
+    ).pipe(Effect.map(Option.map((row) => row.id)), Effect.orDie)
+  );
 });
 
 const SourceAttestationRow = Schema.Struct({
@@ -241,17 +257,19 @@ export const insertManualSourceAttestation = Effect.fn("insertManualSourceAttest
   transactionId: TransactionId,
   context: CapturedInterpretationContext
 ) {
-  return yield* Effect.flatMap(SqlClient.SqlClient, (sql) =>
-    SqlSchema.findOne({
-      Request: Schema.Struct({
-        userId: UserId,
-        transactionId: TransactionId,
-        serviceMarket: SourceAttestation.fields.serviceMarket,
-        locale: SourceAttestation.fields.locale,
-        timeZone: SourceAttestation.fields.timeZone,
-      }),
-      Result: SourceAttestationRow,
-      execute: (row) => sql`
+  return yield* withUserTransaction(
+    userId,
+    Effect.flatMap(SqlClient.SqlClient, (sql) =>
+      SqlSchema.findOne({
+        Request: Schema.Struct({
+          userId: UserId,
+          transactionId: TransactionId,
+          serviceMarket: SourceAttestation.fields.serviceMarket,
+          locale: SourceAttestation.fields.locale,
+          timeZone: SourceAttestation.fields.timeZone,
+        }),
+        Result: SourceAttestationRow,
+        execute: (row) => sql`
           INSERT INTO source_attestations
             (transaction_id, kind, service_market, locale, time_zone, interpretation_revision)
           SELECT transaction.id, 'manual', ${row.serviceMarket}, ${row.locale}, ${row.timeZone}, 'manual-v1'
@@ -259,8 +277,9 @@ export const insertManualSourceAttestation = Effect.fn("insertManualSourceAttest
           WHERE transaction.id = ${row.transactionId} AND transaction.user_id = ${row.userId}
           RETURNING ${sql.literal(sourceAttestationColumns)}
         `,
-    })({ userId, transactionId, ...context })
-  ).pipe(Effect.flatMap(sourceAttestationFromRow), Effect.orDie);
+      })({ userId, transactionId, ...context })
+    ).pipe(Effect.flatMap(sourceAttestationFromRow), Effect.orDie)
+  );
 });
 
 /** Lists retained immutable provenance for one User-owned Transaction, including after deletion. */
@@ -268,11 +287,13 @@ export const listSourceAttestations = Effect.fn("listSourceAttestations")(functi
   userId: UserId,
   id: TransactionId
 ) {
-  return yield* Effect.flatMap(SqlClient.SqlClient, (sql) =>
-    SqlSchema.findAll({
-      Request: TransactionLookup,
-      Result: SourceAttestationRow,
-      execute: (request) => sql`
+  return yield* withUserTransaction(
+    userId,
+    Effect.flatMap(SqlClient.SqlClient, (sql) =>
+      SqlSchema.findAll({
+        Request: TransactionLookup,
+        Result: SourceAttestationRow,
+        execute: (request) => sql`
         SELECT ${sql.literal(sourceAttestationColumns)}
         FROM source_attestations source
         WHERE source.transaction_id = ${request.id}
@@ -283,9 +304,10 @@ export const listSourceAttestations = Effect.fn("listSourceAttestations")(functi
           )
         ORDER BY source.created_at, source.id
       `,
-    })({ id, userId })
-  ).pipe(
-    Effect.flatMap((rows) => Effect.forEach(rows, sourceAttestationFromRow)),
-    Effect.orDie
+      })({ id, userId })
+    ).pipe(
+      Effect.flatMap((rows) => Effect.forEach(rows, sourceAttestationFromRow)),
+      Effect.orDie
+    )
   );
 });

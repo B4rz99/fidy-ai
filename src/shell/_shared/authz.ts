@@ -1,6 +1,6 @@
 import { Crypto, DateTime, Effect, Encoding, Exit, Layer, Option, Redacted, Schema } from "effect";
 import { HttpClientRequest, type HttpServerRequest } from "effect/unstable/http";
-import { SqlClient } from "effect/unstable/sql";
+import type { SqlClient } from "effect/unstable/sql";
 import { HttpApiMiddleware, HttpApiSecurity, OpenApi } from "effect/unstable/httpapi";
 import { type AuditOutcome, CanonicalOperationId } from "~/core/audit/model";
 import {
@@ -10,6 +10,7 @@ import {
 } from "~/core/tokens/model";
 import { renewAgentTokenIdleExpiry } from "~/core/tokens/rules";
 import { appendAuditLogEntry } from "~/shell/audit/repo";
+import { withUserTransaction } from "~/shell/db/user-transaction";
 import { AgentTokenHash, useAgentToken } from "~/shell/tokens/repo";
 import { ScopeMissing, Unauthenticated } from "./errors";
 import { getOperationPolicy } from "./operation-policy";
@@ -158,10 +159,10 @@ export const AgentAuthorizationLive = Layer.succeed(
         "fidy.operation.cost_class": policy.costClass,
       });
 
-      const sql = yield* SqlClient.SqlClient;
-      const audited = sql
-        .withTransaction(httpEffect.pipe(Effect.tap(() => audit("succeeded"))))
-        .pipe(Effect.catchTag("SqlError", (error) => Effect.die(error)));
+      const audited = withUserTransaction(
+        resolved.subjectUserId,
+        httpEffect.pipe(Effect.tap(() => audit("succeeded")))
+      );
       const exit = yield* Effect.exit(audited);
 
       if (Exit.isFailure(exit)) {

@@ -1,0 +1,46 @@
+scripts/provision-runtime-role.ts
+  s_311738ae380d51::t_8077bc1f527fca 115-119
+  s_311738ae380d51::t_d3578b1e198ef1 1-3,5-6,8-12,15-68,101-103,111-114
+  s_311738ae380d51::t_bdcb655c6570ca 4
+  s_311738ae380d51::t_a8c2a43c1b611e 7,13-14,69-100,104-110
+Dockerfile
+  s_311738ae380d51::t_355446388d0e08 13
+railway.json
+  s_311738ae380d51::t_387cbe5c7599b9 8
+.dockerignore
+  s_311738ae380d51::t_7a863863803f68 15-16
+README.md
+  s_311738ae380d51::t_91bbfd17c0b26e 175-189,191
+  s_311738ae380d51::t_849e00276d6f6b 52-56,190
+docs/adr/0007-postgresql-row-level-user-isolation.md
+  s_311738ae380d51::t_e48a69a1b8b71f 26-28,80
+scripts/check-production-image.sh
+  s_311738ae380d51::t_d57a385f1a47a4 1-64
+.github/workflows/ci.yml
+  s_311738ae380d51::t_05c894ff96a241 248-260,320
+scripts/check-deployment-smoke.ts
+  s_311738ae380d51::t_2e68042666fd94 1-2,12-19,40-41,44,46
+  s_311738ae380d51::t_501f878dd90e54 3,5-9,20-24,26-38,42-43,45,47
+  s_311738ae380d51::t_0edcbbc830e806 4,10-11,25
+  s_311738ae380d51::t_8a86de5520265f 39
+package.json
+  s_311738ae380d51::t_9953da0f487af8 22
+.github/workflows/deployment-smoke.yml
+  s_311738ae380d51::t_91195992b1c5b5 1-54
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.20",
+  "base_commit_sha": "a5776a628f57d183d9d71351e25c17145fbe8508",
+  "prompts": {},
+  "sessions": {
+    "s_311738ae380d51": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019fc402-4e35-7ed2-89df-ddb96fcbc0e8",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

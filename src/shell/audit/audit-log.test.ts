@@ -11,7 +11,7 @@ import {
   defaultAgentTokenId,
   defaultUserId,
   defaultWhatsAppPhone,
-  seedAgentIdentity,
+  seedConsentedAgentIdentity,
 } from "~/shell/db/development-seed";
 import {
   ApiHarness,
@@ -145,13 +145,13 @@ layer(AuditHarness, { excludeTestServices: true, timeout: "30 seconds" })(
     it.effect("rolls back a state change when its successful evidence cannot commit", () =>
       Effect.gen(function* () {
         yield* truncateAuditLogEntries;
-        yield* seedAgentIdentity({
+        yield* seedConsentedAgentIdentity({
           userId: atomicUserId,
           tokenId: atomicWriteTokenId,
           bearer: atomicWriteBearer,
           scopes: ["write"],
         });
-        yield* seedAgentIdentity({
+        yield* seedConsentedAgentIdentity({
           userId: atomicUserId,
           bearer: atomicObserverBearer,
           scopes: ["read"],

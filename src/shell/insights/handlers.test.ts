@@ -5,7 +5,7 @@ import { AgentTokenId } from "~/core/tokens/reference";
 import { IanaTimeZone } from "~/core/_shared/context";
 import { Currency, Money } from "~/core/_shared/money";
 import { AgentBearerToken } from "~/core/tokens/model";
-import { defaultUserId, seedAgentIdentity } from "~/shell/db/development-seed";
+import { defaultUserId, seedConsentedAgentIdentity } from "~/shell/db/development-seed";
 import { ValidationFailed } from "~/shell/_shared/errors";
 import { type SuggestedOperation } from "~/shell/_shared/response";
 import {
@@ -160,7 +160,7 @@ layer(InsightsHarness, { excludeTestServices: true, timeout: "30 seconds" })(
     it.effect("serializes duplicate delivery and conflicting lifecycle calls", () =>
       Effect.gen(function* () {
         yield* truncateInsights;
-        yield* seedAgentIdentity({
+        yield* seedConsentedAgentIdentity({
           userId: defaultUserId,
           bearer: concurrentBearer,
           tokenId: concurrentTokenId,

@@ -7,12 +7,23 @@ import { PgLive } from "./client";
 
 const localDatabaseUrl = Config.string("DATABASE_URL");
 
+const testPublicNamespace = {
+  PUBLIC_WEB_ORIGIN: "https://fidyapp.com",
+  PUBLIC_API_ORIGIN: "https://api.fidyapp.com",
+  INGEST_EMAIL_DOMAIN: "ingest.fidyapp.com",
+} as const;
+
 const runSeedCommand = (databaseUrl: string, environment: Readonly<Record<string, string>> = {}) =>
   Effect.gen(function* () {
     const child = yield* Effect.sync(() =>
       Bun.spawn(["bun", "scripts/seed-development.ts"], {
         cwd: process.cwd(),
-        env: { ...process.env, ...environment, DATABASE_URL: databaseUrl },
+        env: {
+          ...process.env,
+          ...testPublicNamespace,
+          ...environment,
+          DATABASE_URL: databaseUrl,
+        },
         stdout: "pipe",
         stderr: "pipe",
       })

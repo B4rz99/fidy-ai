@@ -71,8 +71,8 @@ bun run dev
 export DATABASE_URL=postgres://fidy_runtime:fidy_runtime@localhost:5433/fidy
 export MIGRATION_DATABASE_URL=postgres://fidy:fidy@localhost:5433/fidy
 export OPENAI_API_KEY='<set in your secret environment>'
-export FIDY_REPL_USER_ID=$(docker compose exec -T db psql -U fidy -d fidy -Atc \
-  'select id from users order by created_at limit 1')
+export FIDY_REPL_PHONE_NUMBER=$(docker compose exec -T db psql -U fidy -d fidy -Atc \
+  'select phone_number from whatsapp_identities order by verified_at limit 1')
 bun run agent:repl
 ```
 

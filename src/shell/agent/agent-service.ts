@@ -13,7 +13,7 @@ import {
 } from "effect";
 import { LanguageModel } from "effect/unstable/ai";
 import type { HttpClient } from "effect/unstable/http";
-import type { SqlClient } from "effect/unstable/sql";
+import { SqlClient } from "effect/unstable/sql";
 import type { UserId } from "~/core/identity/reference";
 import {
   selectTranscriptWindow,
@@ -26,6 +26,7 @@ import {
   CanonicalToolCallEntry,
   CanonicalToolResultEntry,
   type CanonicalToolOutcome,
+  type TranscriptEntry,
   TranscriptEntryId,
   TranscriptText,
   TranscriptTurnId,
@@ -33,6 +34,7 @@ import {
   UserTranscriptEntry,
 } from "~/core/transcript/model";
 import { ValidationFailed } from "~/shell/_shared/errors";
+import { useCurrentConsent } from "~/shell/consent/repo";
 import { findUser } from "~/shell/identity/repo";
 import { issueHostedAgentToken, revokeHostedAgentToken } from "~/shell/tokens/hosted-agent-token";
 import {
@@ -63,6 +65,7 @@ export const AgentLimits = Schema.Struct({
   maxTranscriptCharacters: TranscriptWindowCharacterLimit.check(
     Schema.isGreaterThanOrEqualTo(1_000)
   ),
+  maxModelRoundMillis: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 120_000 })),
 });
 export type AgentLimits = typeof AgentLimits.Type;
 
@@ -77,6 +80,7 @@ export const CurrentAgentLimits = Context.Reference<AgentLimits>(
         maxToolResultCharacters: 32_000,
         maxTranscriptTurns: TranscriptWindowTurnLimit.make(12),
         maxTranscriptCharacters: TranscriptWindowCharacterLimit.make(32_000),
+        maxModelRoundMillis: 30_000,
       }),
   }
 );
@@ -108,11 +112,16 @@ export class UnknownUser extends Data.TaggedError("UnknownUser")<{
   readonly userId: UserId;
 }> {}
 
+/** Failure returned before any model or transcript work when onboarding consent is absent. */
+export class OnboardingConsentRequired extends Data.TaggedError("OnboardingConsentRequired")<{
+  readonly userId: UserId;
+}> {}
+
 /** Safe failure returned when the configured language model cannot complete a turn. */
 export class ModelUnavailable extends Data.TaggedError("ModelUnavailable")<{}> {}
 
 /** Closed failure vocabulary exposed by the channel-agnostic turn boundary. */
-export type AgentTurnError = UnknownUser | ModelUnavailable;
+export type AgentTurnError = UnknownUser | OnboardingConsentRequired | ModelUnavailable;
 
 const makeEntryId = Effect.flatMap(Crypto.Crypto, (crypto) => crypto.randomUUIDv7).pipe(
   Effect.map((id) => TranscriptEntryId.make(id)),
@@ -122,6 +131,27 @@ const makeTurnId = Effect.flatMap(Crypto.Crypto, (crypto) => crypto.randomUUIDv7
   Effect.map((id) => TranscriptTurnId.make(id)),
   Effect.orDie
 );
+const withCurrentConsent = <A, E, R>(
+  subjectUserId: UserId,
+  use: Effect.Effect<A, E, R>
+): Effect.Effect<A, E | OnboardingConsentRequired, R | SqlClient.SqlClient> =>
+  Effect.flatMap(SqlClient.SqlClient, (sql) =>
+    sql
+      .withTransaction(
+        useCurrentConsent(
+          subjectUserId,
+          () => Effect.fail(new OnboardingConsentRequired({ userId: subjectUserId })),
+          use
+        )
+      )
+      .pipe(Effect.catchTag("SqlError", Effect.die))
+  );
+
+const appendAuthorizedTranscript = (
+  subjectUserId: UserId,
+  entries: ReadonlyArray<TranscriptEntry>
+) => withCurrentConsent(subjectUserId, appendTranscriptEntries(subjectUserId, entries));
+
 const appendAssistantTranscript = Effect.fn("AgentService.appendAssistantTranscript")(function* ({
   userId,
   turnId,
@@ -133,15 +163,20 @@ const appendAssistantTranscript = Effect.fn("AgentService.appendAssistantTranscr
   readonly iteration: AgentIteration;
   readonly text: TranscriptText;
 }) {
-  yield* appendTranscriptEntries(userId, [
-    AssistantTranscriptEntry.make({
-      id: yield* makeEntryId,
-      turnId,
-      iteration,
-      text,
-      occurredAt: yield* DateTime.now,
-    }),
-  ]);
+  yield* withCurrentConsent(
+    userId,
+    Effect.gen(function* () {
+      yield* appendTranscriptEntries(userId, [
+        AssistantTranscriptEntry.make({
+          id: yield* makeEntryId,
+          turnId,
+          iteration,
+          text,
+          occurredAt: yield* DateTime.now,
+        }),
+      ]);
+    })
+  );
 });
 const makeTextReply = (text: TranscriptText): AgentReply =>
   AgentReply.make({ text, attachments: Option.none(), choices: Option.none() });
@@ -189,25 +224,89 @@ const makeToolOutcome = (isFailure: boolean, result: Schema.Json): CanonicalTool
 
 const makeAgentService = Effect.gen(function* () {
   const model = yield* LanguageModel.LanguageModel;
+  const generateCurrent = ({
+    includeMalformedOutputFeedback,
+    limits,
+    occurredAt,
+    toolkit,
+    turnId,
+    user,
+    userId,
+  }: Readonly<{
+    readonly includeMalformedOutputFeedback: boolean;
+    readonly limits: AgentLimits;
+    readonly occurredAt: DateTime.Utc;
+    readonly toolkit: Effect.Success<ReturnType<typeof makeAgentToolkit>>;
+    readonly turnId: TranscriptTurnId;
+    readonly user: Parameters<typeof systemPrompt>[0]["user"];
+    readonly userId: UserId;
+  }>) =>
+    Effect.gen(function* () {
+      const priorTurns =
+        limits.maxTranscriptTurns === 1
+          ? Effect.succeed([])
+          : listRecentTranscriptEntries(userId, limits.maxTranscriptTurns - 1);
+      const transcriptWindow = yield* withCurrentConsent(
+        userId,
+        Effect.all({
+          currentTranscript: listTranscriptTurnEntries(userId, turnId),
+          priorTurns,
+        }).pipe(
+          Effect.map(({ currentTranscript, priorTurns: prior }) =>
+            projectTranscriptForModel(
+              [...prior, ...currentTranscript],
+              limits.maxToolResultCharacters
+            )
+          ),
+          Effect.flatMap((transcript) =>
+            selectTranscriptWindow(
+              transcript,
+              limits.maxTranscriptTurns,
+              limits.maxTranscriptCharacters
+            )
+          )
+        )
+      );
+      return yield* Effect.result(
+        model
+          .generateText({
+            prompt: [
+              { role: "system", content: systemPrompt({ user, occurredAt }) },
+              ...(includeMalformedOutputFeedback
+                ? [{ role: "system" as const, content: malformedModelOutputFeedback }]
+                : []),
+              ...transcriptPrompt(transcriptWindow),
+            ],
+            toolkit,
+            disableToolCallResolution: true,
+          })
+          .pipe(Effect.timeout(`${limits.maxModelRoundMillis} millis`))
+      );
+    });
 
   const handleTurn = Effect.fn("AgentService.handleTurn")(function* (
     userId: UserId,
     message: InboundMessage
   ) {
     const limits = yield* CurrentAgentLimits;
-    const user = yield* findUser(userId).pipe(
-      Effect.flatMap(
-        Option.match({
-          onNone: () => Effect.fail(new UnknownUser({ userId })),
-          onSome: Effect.succeed,
-        })
-      )
+    const { user, confirmation } = yield* withCurrentConsent(
+      userId,
+      Effect.gen(function* () {
+        const user = yield* findUser(userId).pipe(
+          Effect.flatMap(
+            Option.match({
+              onNone: () => Effect.fail(new UnknownUser({ userId })),
+              onSome: Effect.succeed,
+            })
+          )
+        );
+        const confirmation = yield* makeTurnConfirmation(userId, message);
+        return { user, confirmation } as const;
+      })
     );
     if (containsSensitiveChatValue(message.text)) {
       return makeTextReply(credentialRejectedReply);
     }
-
-    const confirmation = yield* makeTurnConfirmation(userId, message);
     const turnId = yield* makeTurnId;
     const occurredAt = yield* DateTime.now;
     const userEntry = UserTranscriptEntry.make({
@@ -216,9 +315,11 @@ const makeAgentService = Effect.gen(function* () {
       text: message.text,
       occurredAt,
     });
-    yield* appendTranscriptEntries(userId, [userEntry]);
-
-    const hostedToken = yield* issueHostedAgentToken(userId, occurredAt);
+    yield* appendAuthorizedTranscript(userId, [userEntry]);
+    const hostedToken = yield* withCurrentConsent(
+      userId,
+      issueHostedAgentToken(userId, occurredAt)
+    );
     const runTurn = Effect.scoped(
       Effect.gen(function* () {
         const toolkit = yield* makeAgentToolkit(hostedToken.bearer);
@@ -226,35 +327,20 @@ const makeAgentService = Effect.gen(function* () {
         let includeMalformedOutputFeedback = false;
         for (let index = 1; index <= limits.maxIterations; index += 1) {
           const iteration = AgentIteration.make(index);
-          const currentTranscript = yield* listTranscriptTurnEntries(userId, turnId);
-          const priorTurns =
-            limits.maxTranscriptTurns === 1
-              ? []
-              : yield* listRecentTranscriptEntries(userId, limits.maxTranscriptTurns - 1);
-          const modelTranscript = projectTranscriptForModel(
-            [...priorTurns, ...currentTranscript],
-            limits.maxToolResultCharacters
-          );
-          const transcriptWindow = yield* selectTranscriptWindow(
-            modelTranscript,
-            limits.maxTranscriptTurns,
-            limits.maxTranscriptCharacters
-          );
-          const generatedResult = yield* Effect.result(
-            model.generateText({
-              prompt: [
-                { role: "system", content: systemPrompt({ user, occurredAt }) },
-                ...(includeMalformedOutputFeedback
-                  ? [{ role: "system" as const, content: malformedModelOutputFeedback }]
-                  : []),
-                ...transcriptPrompt(transcriptWindow),
-              ],
-              toolkit,
-              disableToolCallResolution: true,
-            })
-          );
+          const generatedResult = yield* generateCurrent({
+            includeMalformedOutputFeedback,
+            limits,
+            occurredAt,
+            toolkit,
+            turnId,
+            user,
+            userId,
+          });
           if (Result.isFailure(generatedResult)) {
-            if (generatedResult.failure.reason._tag !== "InvalidOutputError") {
+            if (
+              !("reason" in generatedResult.failure) ||
+              generatedResult.failure.reason._tag !== "InvalidOutputError"
+            ) {
               return yield* new ModelUnavailable();
             }
             if (containsSensitiveChatValue(generatedResult.failure.reason.description)) {
@@ -295,7 +381,7 @@ const makeAgentService = Effect.gen(function* () {
               onSuccess: Effect.succeed,
             });
             if (containsSensitiveJson(input)) return yield* new ModelUnavailable();
-            yield* appendTranscriptEntries(userId, [
+            yield* appendAuthorizedTranscript(userId, [
               CanonicalToolCallEntry.make({
                 id: yield* makeEntryId,
                 turnId,
@@ -307,7 +393,7 @@ const makeAgentService = Effect.gen(function* () {
               }),
             ]);
             if (Result.isFailure(encodedInput)) {
-              yield* appendTranscriptEntries(userId, [
+              yield* appendAuthorizedTranscript(userId, [
                 CanonicalToolResultEntry.make({
                   id: yield* makeEntryId,
                   turnId,
@@ -322,7 +408,7 @@ const makeAgentService = Effect.gen(function* () {
             }
             const confirmationDecision = yield* confirmation.decide({ binding, input });
             if (confirmationDecision._tag === "RequireConfirmation") {
-              yield* appendTranscriptEntries(userId, [
+              yield* appendAuthorizedTranscript(userId, [
                 CanonicalToolResultEntry.make({
                   id: yield* makeEntryId,
                   turnId,
@@ -353,7 +439,7 @@ const makeAgentService = Effect.gen(function* () {
             const outcome: CanonicalToolOutcome = containsSensitiveJson(result)
               ? { _tag: "ToolOutputRejected", failure: sensitiveEntryRejected }
               : makeToolOutcome(executed.isFailure, result);
-            yield* appendTranscriptEntries(userId, [
+            yield* appendAuthorizedTranscript(userId, [
               CanonicalToolResultEntry.make({
                 id: yield* makeEntryId,
                 turnId,
@@ -413,10 +499,11 @@ const makeAgentService = Effect.gen(function* () {
  * Runs one hosted turn for the stable User identified by `userId`. The service
  * appends the accepted message, model replies, and canonical call/results to the
  * User's Transcript; canonical writes can therefore commit before a later model
- * failure. It issues an all-scope HostedAgentToken only for the turn and always
- * attempts revocation on exit. Unknown Users and model failures are returned as
- * AgentTurnError values; persistence, HTTP, and crypto defects remain effects for
- * the assembled runtime rather than user-visible replies.
+ * failure. Current onboarding consent is required before Transcript, token, or
+ * model work. It issues an all-scope HostedAgentToken only for the turn and always
+ * attempts revocation on exit. Missing consent, unknown Users, and model failures
+ * are returned as AgentTurnError values; persistence, HTTP, and crypto defects
+ * remain effects for the assembled runtime rather than user-visible replies.
  */
 export class AgentService extends Context.Service<
   AgentService,

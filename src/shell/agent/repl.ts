@@ -1,6 +1,8 @@
-import { Effect, Option, Schema, Terminal } from "effect";
-import type { UserId } from "~/core/identity/reference";
-import { type AgentReply, AgentService, InboundMessage } from "./agent-service";
+import { Crypto, DateTime, Effect, Option, Schema, Terminal } from "effect";
+import type { E164PhoneNumber } from "~/core/identity/reference";
+import { recordConsentDisclosureDelivery } from "~/shell/consent/repo";
+import { type AgentConversationOutcome, handleAgentConversationTurn } from "./conversation";
+import { InboundMessage } from "./agent-service";
 
 const invalidMessage = "Escribe un mensaje de texto no vacío.\n";
 const unavailableMessage = "Fidy no está disponible en este momento. Intenta de nuevo.\n";
@@ -14,16 +16,41 @@ const renderTerminalText = (text: string): string =>
       : character;
   }).join("");
 
-/**
- * Runs repeated turns for the stable User identified by `userId` until Terminal
- * reports quit. Each valid line invokes AgentService; invalid lines and turn
- * failures are rendered without ending the loop, and reply control characters
- * are neutralized before display. Terminal read/display failures remain typed
- * effects for the caller to handle.
- */
-export const runAgentRepl = Effect.fn("runAgentRepl")(function* (userId: UserId) {
+const displayConversationOutcome = Effect.fn("displayConversationOutcome")(function* (
+  outcome: AgentConversationOutcome
+) {
   const terminal = yield* Terminal.Terminal;
-  const service = yield* AgentService;
+  if (outcome._tag === "AwaitingDisclosureDelivery") {
+    return yield* terminal.display(unavailableMessage);
+  }
+  if (outcome._tag === "AgentReplied") {
+    return yield* terminal.display(`${renderTerminalText(outcome.reply.text)}\n`);
+  }
+
+  yield* terminal.display(`${renderTerminalText(outcome.text)}\n`);
+  if (outcome._tag === "SendDisclosure") {
+    const crypto = yield* Crypto.Crypto;
+    const recorded = yield* recordConsentDisclosureDelivery({
+      exchangeId: outcome.exchangeId,
+      message: {
+        channel: "terminal",
+        provider: "local-repl",
+        providerMessageId: `repl:${yield* crypto.randomUUIDv4.pipe(Effect.orDie)}`,
+      },
+      deliveredAt: yield* DateTime.now,
+    });
+    if (Option.isNone(recorded)) return yield* terminal.display(unavailableMessage);
+  }
+});
+
+/**
+ * Runs channel-neutral gated turns for one normalized WhatsApp number until
+ * Terminal reports quit. Consent replies terminate their turns; only later
+ * authorized text reaches AgentService. Terminal failures remain typed.
+ */
+export const runAgentRepl = Effect.fn("runAgentRepl")(function* (phoneNumber: E164PhoneNumber) {
+  const terminal = yield* Terminal.Terminal;
+  const crypto = yield* Crypto.Crypto;
   const turn = Effect.gen(function* () {
     yield* terminal.display("Fidy> ");
     const text = yield* terminal.readLine;
@@ -35,17 +62,34 @@ export const runAgentRepl = Effect.fn("runAgentRepl")(function* (userId: UserId)
     );
     if (Option.isNone(message)) return;
 
-    const reply = yield* service.handleTurn(userId, message.value).pipe(
+    const outcome = yield* handleAgentConversationTurn({
+      phoneNumber,
+      content: { _tag: "Text", text: message.value.text },
+      message: {
+        channel: "terminal",
+        provider: "local-repl",
+        providerMessageId: `repl:${yield* crypto.randomUUIDv4.pipe(Effect.orDie)}`,
+      },
+      receivedAt: yield* DateTime.now,
+    }).pipe(
       Effect.map(Option.some),
       Effect.catchTags({
         ModelUnavailable: () =>
-          terminal.display(unavailableMessage).pipe(Effect.as(Option.none<AgentReply>())),
+          terminal
+            .display(unavailableMessage)
+            .pipe(Effect.as(Option.none<AgentConversationOutcome>())),
+        OnboardingConsentRequired: () =>
+          terminal
+            .display(unavailableMessage)
+            .pipe(Effect.as(Option.none<AgentConversationOutcome>())),
         UnknownUser: () =>
-          terminal.display(unavailableMessage).pipe(Effect.as(Option.none<AgentReply>())),
+          terminal
+            .display(unavailableMessage)
+            .pipe(Effect.as(Option.none<AgentConversationOutcome>())),
       })
     );
-    if (Option.isSome(reply)) {
-      yield* terminal.display(`${renderTerminalText(reply.value.text)}\n`);
+    if (Option.isSome(outcome)) {
+      yield* displayConversationOutcome(outcome.value);
     }
   });
 

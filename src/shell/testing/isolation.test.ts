@@ -1,6 +1,6 @@
 import { expect, layer } from "@effect/vitest";
-import { Context, DateTime, Effect, Layer, type Schema } from "effect";
-import { HttpBody, HttpClient, type HttpClientError } from "effect/unstable/http";
+import { Context, DateTime, Effect, Layer } from "effect";
+import { HttpBody, HttpClient } from "effect/unstable/http";
 import { IanaTimeZone } from "~/core/_shared/context";
 import { UserId } from "~/core/identity/reference";
 import { CategoryKeyword } from "~/core/categories/model";
@@ -8,19 +8,19 @@ import { categoryIds } from "~/core/categories/taxonomy";
 import { type InsightEvent } from "~/core/insights/model";
 import { type Transaction } from "~/core/transactions/model";
 import { AgentBearerToken } from "~/core/tokens/model";
-import type {
-  NotFound,
-  ScopeMissing,
-  Unauthenticated,
-  ValidationFailed,
-} from "~/shell/_shared/errors";
 import type { OperationId } from "~/shell/api";
 import { truncateInsights, weeklySummaryInput } from "~/shell/insights/fixtures";
 import { generateInsightEvent } from "~/shell/insights/repo";
 import { transactionPayload, truncateTransactions } from "~/shell/transactions/fixtures";
-import { ApiHarness, type ApiClient, headersFor, makeApiClientLive } from "./api-harness";
+import {
+  type ApiCallFailure,
+  ApiHarness,
+  type ApiClient,
+  headersFor,
+  makeApiClientLive,
+} from "./api-harness";
 import { truncateDashboards } from "~/shell/dashboard/fixtures";
-import { seedAgentIdentity } from "~/shell/db/development-seed";
+import { seedConsentedAgentIdentity } from "~/shell/db/development-seed";
 import { publishedOperationIds } from "./openapi";
 
 const owner = UserId.make("f1d1a000-0000-4000-8000-0000000000a1");
@@ -54,18 +54,9 @@ type IsolationAttempt = {
   readonly ownedInsight: InsightEvent;
 };
 
-/** Everything a call through the derived client, or a raw one, can fail with. */
-type CallFailure =
-  | Schema.SchemaError
-  | HttpClientError.HttpClientError
-  | NotFound
-  | ScopeMissing
-  | Unauthenticated
-  | ValidationFailed;
-
 type IsolationProbe = (
   attempt: IsolationAttempt
-) => Effect.Effect<void, CallFailure, HttpClient.HttpClient>;
+) => Effect.Effect<void, ApiCallFailure, HttpClient.HttpClient>;
 
 /**
  * One probe per canonical operation: invoke it as the stranger, then assert the
@@ -355,11 +346,11 @@ const probes: Record<OperationId, IsolationProbe> = {
 };
 
 const seedAttempt = Effect.gen(function* () {
-  yield* seedAgentIdentity({
+  yield* seedConsentedAgentIdentity({
     userId: owner,
     bearer: ownerBearer,
   });
-  yield* seedAgentIdentity({
+  yield* seedConsentedAgentIdentity({
     userId: stranger,
     bearer: strangerBearer,
   });

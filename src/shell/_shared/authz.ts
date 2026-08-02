@@ -1,6 +1,17 @@
-import { Crypto, DateTime, Effect, Encoding, Exit, Layer, Option, Redacted, Schema } from "effect";
+import {
+  Crypto,
+  Data,
+  DateTime,
+  Effect,
+  Encoding,
+  Exit,
+  Layer,
+  Option,
+  Redacted,
+  Schema,
+} from "effect";
 import { HttpClientRequest, type HttpServerRequest } from "effect/unstable/http";
-import type { SqlClient } from "effect/unstable/sql";
+import { SqlClient } from "effect/unstable/sql";
 import { HttpApiMiddleware, HttpApiSecurity, OpenApi } from "effect/unstable/httpapi";
 import { type AuditOutcome, CanonicalOperationId } from "~/core/audit/model";
 import {
@@ -10,9 +21,10 @@ import {
 } from "~/core/tokens/model";
 import { renewAgentTokenIdleExpiry } from "~/core/tokens/rules";
 import { appendAuditLogEntry } from "~/shell/audit/repo";
+import { useCurrentConsent } from "~/shell/consent/repo";
 import { withUserTransaction } from "~/shell/db/user-transaction";
 import { AgentTokenHash, useAgentToken } from "~/shell/tokens/repo";
-import { ScopeMissing, Unauthenticated } from "./errors";
+import { ConsentRequired, ScopeMissing, Unauthenticated } from "./errors";
 import { getOperationPolicy } from "./operation-policy";
 
 const decodeAgentBearer = Schema.decodeUnknownEffect(AgentBearerToken);
@@ -38,6 +50,25 @@ const scopeMissing = () =>
     },
     next: [],
   });
+
+const consentRequired = () =>
+  ConsentRequired.make({
+    error: {
+      code: "consent_required",
+      message:
+        "The User has no current onboarding consent. Return to the chat disclosure flow; " +
+        "do not retry or execute any canonical operation until explicit acceptance.",
+    },
+    next: [],
+  });
+
+class ConsentAuthenticationRejected extends Data.TaggedError("ConsentAuthenticationRejected")<{
+  readonly resolved: ResolvedAgentToken;
+}> {}
+
+class ScopeAuthenticationRejected extends Data.TaggedError("ScopeAuthenticationRejected")<{
+  readonly resolved: ResolvedAgentToken;
+}> {}
 
 /**
  * SHA-256 hashes one opaque bearer with the platform Crypto service. Token
@@ -117,59 +148,93 @@ export class AgentAuthorization extends HttpApiMiddleware.Service<
       HttpApiSecurity.annotate(OpenApi.Format, AgentBearerTokenFormat)
     ),
   },
-  error: [Unauthenticated, ScopeMissing],
+  error: [Unauthenticated, ConsentRequired, ScopeMissing],
 }) {}
 
 /**
  * Live operation-derived bearer authorization for the HTTP server. Each call
- * authenticates and renews its AgentToken, rejects a missing declared scope,
- * and appends metadata-only AuditLogEntry evidence. A successful operation and
- * its evidence commit in one SQL transaction; rejected and failed attempts
- * append their evidence separately. Authentication and scope failures remain
- * typed HTTP failures, while persistence failures are defects.
+ * authenticates its AgentToken, requires current onboarding consent, rejects a
+ * missing declared scope, and appends metadata-only AuditLogEntry evidence.
+ * Missing consent rolls back token renewal and returns `ConsentRequired` after
+ * recording rejection evidence. A successful operation and its evidence commit
+ * in one SQL transaction; rejected and failed attempts append their evidence
+ * separately. Authentication, consent, and scope failures remain typed HTTP
+ * failures, while persistence failures are defects.
  */
 export const AgentAuthorizationLive = Layer.succeed(
   AgentAuthorization,
   AgentAuthorization.of({
     agentBearer: Effect.fn(function* (httpEffect, { credential: redactedBearer, endpoint, group }) {
       const policy = getOperationPolicy(endpoint);
+      const operation = CanonicalOperationId.make(`${group.identifier}.${endpoint.identifier}`);
       const bearer = yield* decodeAgentBearer(Redacted.value(redactedBearer)).pipe(
         Effect.mapError(unauthenticated)
       );
       const occurredAt = yield* DateTime.now;
-      const resolved = yield* authenticateAgentToken({ bearer, usedAt: occurredAt }).pipe(
-        Effect.flatMap(Effect.fromOption(unauthenticated))
-      );
-      const operation = CanonicalOperationId.make(`${group.identifier}.${endpoint.identifier}`);
-      const audit = (outcome: AuditOutcome) =>
-        appendAuditLogEntry(resolved.subjectUserId, {
-          tokenId: resolved.tokenId,
-          operation,
-          outcome,
-          occurredAt,
-        });
+      const sql = yield* SqlClient.SqlClient;
+      const result = yield* sql
+        .withTransaction(
+          Effect.gen(function* () {
+            const resolved = yield* authenticateAgentToken({
+              bearer,
+              usedAt: occurredAt,
+            }).pipe(Effect.flatMap(Effect.fromOption(unauthenticated)));
+            return yield* withUserTransaction(
+              resolved.subjectUserId,
+              useCurrentConsent(
+                resolved.subjectUserId,
+                () => Effect.fail(new ConsentAuthenticationRejected({ resolved })),
+                Effect.gen(function* () {
+                  const audit = (outcome: AuditOutcome) =>
+                    appendAuditLogEntry(resolved.subjectUserId, {
+                      tokenId: resolved.tokenId,
+                      operation,
+                      outcome,
+                      occurredAt,
+                    });
 
-      if (!resolved.scopes.includes(policy.requiredScope)) {
-        yield* audit("rejected");
-        return yield* scopeMissing();
-      }
+                  if (!resolved.scopes.includes(policy.requiredScope)) {
+                    return yield* new ScopeAuthenticationRejected({ resolved });
+                  }
 
-      yield* Effect.annotateCurrentSpan({
-        "fidy.operation.required_scope": policy.requiredScope,
-        "fidy.operation.cost_class": policy.costClass,
-      });
+                  yield* Effect.annotateCurrentSpan({
+                    "fidy.operation.required_scope": policy.requiredScope,
+                    "fidy.operation.cost_class": policy.costClass,
+                  });
 
-      const audited = withUserTransaction(
-        resolved.subjectUserId,
-        httpEffect.pipe(Effect.tap(() => audit("succeeded")))
-      );
-      const exit = yield* Effect.exit(audited);
+                  const exit = yield* Effect.exit(
+                    sql.withTransaction(httpEffect.pipe(Effect.tap(audit.bind(null, "succeeded"))))
+                  );
+                  if (Exit.isFailure(exit)) {
+                    yield* audit("failed");
+                  }
+                  return { _tag: "OperationCompleted", exit } as const;
+                })
+              )
+            );
+          })
+        )
+        .pipe(
+          Effect.catchTags({
+            ConsentAuthenticationRejected: ({ resolved }) =>
+              appendAuditLogEntry(resolved.subjectUserId, {
+                tokenId: resolved.tokenId,
+                operation,
+                outcome: "rejected",
+                occurredAt,
+              }).pipe(Effect.andThen(consentRequired())),
+            ScopeAuthenticationRejected: ({ resolved }) =>
+              appendAuditLogEntry(resolved.subjectUserId, {
+                tokenId: resolved.tokenId,
+                operation,
+                outcome: "rejected",
+                occurredAt,
+              }).pipe(Effect.andThen(scopeMissing())),
+            SqlError: Effect.die,
+          })
+        );
 
-      if (Exit.isFailure(exit)) {
-        yield* audit("failed");
-      }
-
-      return yield* exit;
+      return yield* result.exit.pipe(Effect.catchTag("SqlError", Effect.die));
     }),
   })
 );

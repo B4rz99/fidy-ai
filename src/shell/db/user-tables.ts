@@ -2,6 +2,7 @@
 export const userTableNames = [
   "agent_tokens",
   "audit_log_entries",
+  "consent_records",
   "dashboards",
   "insight_delivery_attempts",
   "insight_events",

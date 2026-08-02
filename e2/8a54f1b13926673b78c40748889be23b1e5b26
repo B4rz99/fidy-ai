@@ -1,0 +1,100 @@
+docs/adr/0007-postgresql-row-level-user-isolation.md
+  s_ee0298190d75b7::t_6943b5873614cb 66
+  s_ee0298190d75b7::t_3352ba61e5942a 51-54,56
+  s_311738ae380d51::t_5e24412631ffcc 49-50
+src/shell/agent/repl.ts
+  s_ee0298190d75b7::t_dd196c5d757809 3
+src/shell/consent/agent-consent-gate.test.ts
+  s_ee0298190d75b7::t_690af744ef7632 83-86
+  s_ee0298190d75b7::t_1d1e4a1b3c2e99 5
+  s_ee0298190d75b7::t_650ee55e6afb69 35-54
+  s_ee0298190d75b7::t_0d924a32b7fce0 55,65,91
+ARCHITECTURE.md
+  s_ee0298190d75b7::t_f6886f48390fd1 40,113-114
+docs/adr/0003-layer-major-core-shell-and-slice-ownership.md
+  s_ee0298190d75b7::t_e07ae3ea976142 38
+src/shell/agent/agent-service.ts
+  s_ee0298190d75b7::t_7cba08018ab35d 249-266,269-282,318,321
+  s_ee0298190d75b7::t_a5db7968d22846 340-343
+  s_ee0298190d75b7::t_9964f151c56807 68,83,283
+  s_ee0298190d75b7::t_1737d4bbf16f0b 243-245,284-285
+  s_ee0298190d75b7::t_6a590f94fb6b9c 37,141-145
+  s_ee0298190d75b7::t_562f239745e8c5 246-248
+src/shell/db/row-level-security.test.ts
+  s_ee0298190d75b7::t_b39f363e7a1537 583-584,597-616,641
+  s_ee0298190d75b7::t_33108d179bc106 585-596
+  s_ee0298190d75b7::t_ab66ba40fb262c 2
+  s_ee0298190d75b7::t_53e08c26413c0a 293-309,639-640
+  s_ee0298190d75b7::t_95e2b6b6e0924f 99-114
+  s_ee0298190d75b7::t_aea17fdfe85774 98
+  s_ee0298190d75b7::t_dc38a52911ae28 310-312
+src/shell/consent/repo.ts
+  s_ee0298190d75b7::t_078d1419a712f7 114,125-126
+  s_ee0298190d75b7::t_442aa74e7eac3c 221-225,234,560-566,596,598
+  s_ee0298190d75b7::t_ae094e42fe1bc9 449-450,454-465,484-487,493-496
+  s_ee0298190d75b7::t_967d16e4c7464e 556-557,571,574-577,583-586
+  s_ee0298190d75b7::t_ec6b32336e9c53 18-26,49-52,115-124,129-131,133,135-137,146-149,155-158,164-167,172-175,407-409,411
+  s_ee0298190d75b7::t_6083ab3c60ace3 17
+  s_ee0298190d75b7::t_8789c5477c83a4 113,139
+  s_ee0298190d75b7::t_89d0ac4a41ff26 235-248
+  s_ee0298190d75b7::t_fc02949f23a12a 567-570
+  s_ee0298190d75b7::t_a4a1edb720ccf7 593-595
+  s_ee0298190d75b7::t_9098ce7be84cbf 591-592
+src/shell/agent/agent-service.test.ts
+  s_ee0298190d75b7::t_8b9b183f95b28a 31,746-747,762-788
+  s_ee0298190d75b7::t_fd3fc5f117d7d5 755-760
+  s_ee0298190d75b7::t_f803d22e59c24b 790-791,1253-1274
+  s_ee0298190d75b7::t_57b33be87d9dd7 2,13
+  s_ee0298190d75b7::t_bc6a19be8102ca 12,112
+  s_ee0298190d75b7::t_d27b30f3f209b7 38
+  s_ee0298190d75b7::t_f84a837f33159e 789
+  s_ee0298190d75b7::t_9b8c98a8946c32 748-754,761
+  s_ee0298190d75b7::t_2fac18406bb5f0 46
+  s_ee0298190d75b7::t_6bd5399a1fae62 792
+src/shell/http.ts
+  s_ee0298190d75b7::t_f0a18dc53261e6 7,55
+src/shell/_shared/authz.ts
+  s_ee0298190d75b7::t_5681b732aed679 24,184-188,198,210-212
+  s_ee0298190d75b7::t_44fa455949ed25 69-72,197,226-231
+  s_ee0298190d75b7::t_787fbfab9eb38c 189-196,199-202,205-209,213,232
+src/shell/consent/repo.test.ts
+  s_ee0298190d75b7::t_64d18aec124080 12,43,45,111,169-172
+  s_ee0298190d75b7::t_2d9efec7fe56c6 23,72,74-75
+  s_ee0298190d75b7::t_bbea999cd7ac1f 81-102
+src/shell/consent/consent-gate.test.ts
+  s_ee0298190d75b7::t_0208de707d73ea 56
+  s_ee0298190d75b7::t_0488ca7e18698a 15,18
+src/shell/db/development-seed.ts
+  s_ee0298190d75b7::t_34524e0c9dc9e9 72-81,83-107,109-118,120-121,128-132,134-137,139-140
+docs/adr/0008-serialize-consent-revocation-with-authorized-work.md
+  s_ee0298190d75b7::t_11451fb370bfae 5,9,13,15-17,21,25-27
+src/shell/db/migrations/0010-create-consent-ledger.ts
+  s_ee0298190d75b7::t_a0dd877aafbaf4 120
+  s_ee0298190d75b7::t_f8509e4c809da0 121,123
+src/core/consent/rules.ts
+  s_ee0298190d75b7::t_5233ad1943a7d5 67-70,72
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.20",
+  "base_commit_sha": "e28a54f1b13926673b78c40748889be23b1e5b26",
+  "prompts": {},
+  "sessions": {
+    "s_311738ae380d51": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019fc402-4e35-7ed2-89df-ddb96fcbc0e8",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_ee0298190d75b7": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019fbb73-5d87-7c1b-8aec-6f0bf4e44f78",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

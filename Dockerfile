@@ -10,6 +10,7 @@ RUN bun install --frozen-lockfile --production --ignore-scripts
 
 COPY --chown=bun:bun tsconfig.json ./
 COPY --chown=bun:bun src ./src
+COPY --chown=bun:bun scripts/provision-runtime-role.ts scripts/migrate.ts ./scripts/
 COPY --chown=bun:bun public ./public
 
 ENV NODE_ENV=production

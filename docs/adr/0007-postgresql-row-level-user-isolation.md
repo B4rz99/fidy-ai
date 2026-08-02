@@ -23,7 +23,11 @@ Use two independently configured PostgreSQL pools:
 - `MIGRATION_DATABASE_URL` authenticates the separately privileged boot migrator. It owns schema history and can provision the fixed roles.
 - `DATABASE_URL` authenticates exactly as `fidy_runtime`, a non-owner, non-superuser login without `BYPASSRLS`.
 
-Migrations finish before runtime authority validation and process startup. Startup fails closed unless both `session_user` and `current_user` are exactly `fidy_runtime`, or if that role has superuser, `BYPASSRLS`, ownership of a User table, or membership in any role with one of those authorities. This rejects owner sessions that begin with `SET ROLE` as well as directly unsafe runtime roles. There is no fallback from the migration URL to the runtime URL or vice versa.
+An idempotent pre-deploy command uses the migration authority to establish the `fidy_runtime` login from the separately configured runtime credential. Before constructing a database client, it requires query-free PostgreSQL URLs targeting the same database and refuses any runtime username except `fidy_runtime`; the credential is transaction-local during provisioning and is not written to migration history. This makes fresh environments self-provisioning without giving the running application schema authority.
+
+Provisioning removes PostgreSQL's default public schema-creation authority. It rejects `fidy_runtime` before rotating its password when the existing role is a superuser, can create roles or databases, can replicate, has `BYPASSRLS`, owns the database, public schema, or any public relation, can create in the database or public schema, or has any direct or transitive role membership. The complete check and password rotation share one transaction, so rejection leaves no partial authority or credential change.
+
+Migrations finish after provisioning and before runtime authority validation or process startup. Startup repeats the same authority check and also fails closed unless both `session_user` and `current_user` are exactly `fidy_runtime`. This rejects owner sessions that begin with `SET ROLE` as well as directly unsafe runtime roles. There is no fallback from the migration URL to the runtime URL or vice versa.
 
 A fixed `fidy_gateway` role is `NOLOGIN`, non-superuser, and `BYPASSRLS`. The runtime role is not its member and cannot assume it through transitive membership. The gateway receives only the table privileges needed by the narrow functions it owns.
 
@@ -76,7 +80,7 @@ A queue that must discover work before knowing a User may receive a narrow claim
 
 A missing or wrong User predicate is now blocked by PostgreSQL as well as the application. Transaction-local context cannot survive commit or rollback into a pooled caller. Runtime compromise still permits choosing another valid context through application code, so RLS does not replace authorization or explicit signatures.
 
-Boot now requires role provisioning and two credentials. Local Compose and CI create the restricted login before migrations. Production deployment must provision the same role contract; an owner credential cannot start the application.
+Boot now requires two credentials. Local Compose initializes the restricted login; production, CI image smoke tests, and ephemeral environments run the same checked-in pre-deploy provisioning command. An owner credential cannot start the application as its runtime authority.
 
 Repositories pay for short nested transactions when called inside an already-scoped canonical operation. Effect SQL implements those as savepoints on the reserved connection, preserving the outer canonical atomicity.
 

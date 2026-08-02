@@ -1,5 +1,5 @@
 import { expect, layer } from "@effect/vitest";
-import { Effect, Schema } from "effect";
+import { Effect, Exit, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import { UserId } from "~/core/identity/reference";
 import { TransactionId } from "~/core/transactions/model";
@@ -93,6 +93,23 @@ const seedEveryPolicyShape = Effect.gen(function* () {
     ) VALUES (
       'f1d1a000-0000-4000-8000-0000000001d4', ${policyOwner}, 'rlsprobe',
       repeat('a', 64), ARRAY['read'], '2026-04-01T00:00:00Z', '2026-01-01T00:00:00Z'
+    )
+  `;
+  yield* admin`
+    INSERT INTO consent_records (
+      id, subject_user_id, event_type, grant_type, service_market, locale,
+      disclosure_revision, disclosure_sha256, disclosure_text, policy_url,
+      policy_revision, policy_sha256, purposes, data_categories, duration,
+      revocation_method, disclosure_channel, disclosure_provider,
+      disclosure_provider_message_id, decision_channel, decision_provider,
+      decision_provider_message_id, occurred_at
+    ) VALUES (
+      'f1d1a000-0000-4000-8000-0000000001d5', ${policyOwner}, 'granted', 'onboarding',
+      'CO', 'es-CO', 'policy-probe', repeat('a', 64), 'policy probe',
+      'https://fidyapp.com/politica', 'policy-probe', repeat('b', 64),
+      ARRAY['service'], ARRAY['identity'], 'until revoked', 'chat',
+      'whatsapp', 'probe', 'policy-disclosure', 'whatsapp', 'probe',
+      'policy-decision', '2026-01-01T00:00:00Z'
     )
   `;
   yield* admin`
@@ -274,6 +291,26 @@ const deniedInsertProbes = (sql: SqlClient.SqlClient) =>
     `,
     },
     {
+      tableName: "consent_records",
+      insert: sql`
+      INSERT INTO consent_records (
+        id, subject_user_id, event_type, grant_type, service_market, locale,
+        disclosure_revision, disclosure_sha256, disclosure_text, policy_url,
+        policy_revision, policy_sha256, purposes, data_categories, duration,
+        revocation_method, disclosure_channel, disclosure_provider,
+        disclosure_provider_message_id, decision_channel, decision_provider,
+        decision_provider_message_id, occurred_at
+      ) VALUES (
+        'f1d1a000-0000-4000-8000-0000000003b2', ${policyOwner}, 'granted', 'onboarding',
+        'CO', 'es-CO', 'denied-insert', repeat('a', 64), 'denied insert',
+        'https://fidyapp.com/politica', 'denied-insert', repeat('b', 64),
+        ARRAY['service'], ARRAY['identity'], 'until revoked', 'chat',
+        'whatsapp', 'probe', 'denied-disclosure', 'whatsapp', 'probe',
+        'denied-decision', '2026-01-02T00:00:00Z'
+      )
+    `,
+    },
+    {
       tableName: "transactions",
       insert: sql`
       INSERT INTO transactions (
@@ -422,7 +459,12 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
             ORDER BY tablename
           `;
           expect(publicTables.map((row) => row.tableName)).toEqual(
-            [...userTableNames, "categories", "effect_sql_migrations"].sort()
+            [
+              ...userTableNames,
+              "categories",
+              "effect_sql_migrations",
+              "pending_consent_exchanges",
+            ].sort()
           );
         })
     );
@@ -538,13 +580,49 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           expect(result.deleted, result.tableName).toEqual([]);
         }
 
+        expect(yield* sql`SELECT id FROM consent_records`).toEqual([]);
+        expect(
+          yield* withUserTransaction(
+            policyOwner,
+            sql`SELECT id FROM consent_records WHERE subject_user_id = ${policyOwner}`
+          )
+        ).toHaveLength(1);
+        expect(
+          yield* withUserTransaction(
+            policyStranger,
+            sql`SELECT id FROM consent_records WHERE subject_user_id = ${policyOwner}`
+          )
+        ).toEqual([]);
+        expect(
+          Exit.isFailure(
+            yield* Effect.exit(
+              withUserTransaction(
+                policyOwner,
+                sql`UPDATE consent_records SET occurred_at = occurred_at WHERE subject_user_id = ${policyOwner}`
+              )
+            )
+          )
+        ).toBe(true);
+        expect(
+          Exit.isFailure(
+            yield* Effect.exit(
+              withUserTransaction(
+                policyOwner,
+                sql`DELETE FROM consent_records WHERE subject_user_id = ${policyOwner}`
+              )
+            )
+          )
+        ).toBe(true);
+
         const missingContextInserts = yield* probeDeniedInserts(undefined);
         const strangerInserts = yield* probeDeniedInserts(policyStranger);
         for (const { tableName, result } of [...missingContextInserts, ...strangerInserts]) {
           expect(result._tag, tableName).toBe("Failure");
         }
         expect(missingContextInserts.map(({ tableName }) => tableName).sort()).toEqual(
-          [...userTableNames].sort()
+          deniedInsertProbes(sql)
+            .map(({ tableName }) => tableName)
+            .sort()
         );
 
         const admin = yield* MigrationSqlClient;
@@ -557,6 +635,9 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           )
           UNION ALL SELECT 'agent_tokens' WHERE EXISTS (
             SELECT 1 FROM agent_tokens WHERE id = 'f1d1a000-0000-4000-8000-0000000003c3'
+          )
+          UNION ALL SELECT 'consent_records' WHERE EXISTS (
+            SELECT 1 FROM consent_records WHERE id = 'f1d1a000-0000-4000-8000-0000000003b2'
           )
           UNION ALL SELECT 'transactions' WHERE EXISTS (
             SELECT 1 FROM transactions WHERE id = 'f1d1a000-0000-4000-8000-0000000003d4'

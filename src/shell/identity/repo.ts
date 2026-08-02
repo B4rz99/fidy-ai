@@ -27,34 +27,47 @@ const WhatsAppLookup = WhatsAppIdentity.mapFields(Struct.pick(["phoneNumber"]));
 const userColumns = `id, service_market AS "serviceMarket", locale,
   time_zone AS "timeZone", created_at AS "createdAt"`;
 
-/**
- * Inserts or refreshes one development User with all three context columns
- * supplied independently. Production creation can reuse the same row
- * boundary without gaining implicit defaults from PostgreSQL.
- */
-export const upsertUser = Effect.fn("upsertUser")(function* (
+const writeUser = Effect.fn("Identity.writeUser")(function* (
+  mode: "insert" | "upsert",
   userId: UserId,
   attributes: typeof UserWithoutId.Type
 ) {
   const sql = yield* SqlClient.SqlClient;
+  const conflict =
+    mode === "upsert"
+      ? sql`ON CONFLICT (id) DO UPDATE SET
+          service_market = EXCLUDED.service_market,
+          locale = EXCLUDED.locale,
+          time_zone = EXCLUDED.time_zone,
+          created_at = EXCLUDED.created_at`
+      : sql``;
   return yield* withUserTransaction(
     userId,
     SqlSchema.findOne({
       Request: UserRow,
       Result: UserRow,
       execute: (row) => sql`
-      INSERT INTO users (id, service_market, locale, time_zone, created_at)
-      VALUES (${row.id}, ${row.serviceMarket}, ${row.locale}, ${row.timeZone}, ${row.createdAt})
-      ON CONFLICT (id) DO UPDATE SET
-        service_market = EXCLUDED.service_market,
-        locale = EXCLUDED.locale,
-        time_zone = EXCLUDED.time_zone,
-        created_at = EXCLUDED.created_at
-      RETURNING ${sql.literal(userColumns)}
-    `,
+        INSERT INTO users (id, service_market, locale, time_zone, created_at)
+        VALUES (${row.id}, ${row.serviceMarket}, ${row.locale}, ${row.timeZone}, ${row.createdAt})
+        ${conflict}
+        RETURNING ${sql.literal(userColumns)}
+      `,
     })({ ...attributes, id: userId }).pipe(Effect.orDie)
   );
 });
+
+/**
+ * Inserts or refreshes one development User with independently supplied
+ * context, returning the canonical persisted row; database failures are defects.
+ */
+export const upsertUser = Effect.fn("upsertUser")(
+  (userId: UserId, attributes: typeof UserWithoutId.Type) => writeUser("upsert", userId, attributes)
+);
+
+/** Inserts a production User exactly once; identity conflicts are defects. */
+export const insertUser = Effect.fn("insertUser")(
+  (userId: UserId, attributes: typeof UserWithoutId.Type) => writeUser("insert", userId, attributes)
+);
 
 /** Finds the stable User and all independently persisted interpretation context. */
 export const findUser = (userId: UserId) =>
@@ -97,34 +110,48 @@ export const updateUserPreferences = Effect.fn("updateUserPreferences")(function
   );
 });
 
-/**
- * Associates a channel-verified normalized WhatsApp number with the stable User
- * the adapter has already established. Reassociation replaces only channel
- * evidence; it never creates or changes User ownership. Database failures are
- * defects.
- */
-export const associateWhatsAppIdentity = Effect.fn("associateWhatsAppIdentity")(function* (
+const writeWhatsAppIdentity = Effect.fn("Identity.writeWhatsApp")(function* (
+  mode: "insert" | "associate",
   userId: UserId,
   identity: typeof WhatsAppIdentityWithoutUserId.Type
 ) {
   const sql = yield* SqlClient.SqlClient;
+  const conflict =
+    mode === "associate"
+      ? sql`ON CONFLICT (user_id) DO UPDATE SET
+          phone_number = EXCLUDED.phone_number,
+          verified_at = EXCLUDED.verified_at`
+      : sql``;
   return yield* withUserTransaction(
     userId,
     SqlSchema.findOne({
       Request: WhatsAppIdentityRow,
       Result: WhatsAppIdentityRow,
       execute: (row) => sql`
-      INSERT INTO whatsapp_identities (user_id, phone_number, verified_at)
-      VALUES (${row.userId}, ${row.phoneNumber}, ${row.verifiedAt})
-      ON CONFLICT (user_id) DO UPDATE SET
-        phone_number = EXCLUDED.phone_number,
-        verified_at = EXCLUDED.verified_at
-      RETURNING user_id AS "userId", phone_number AS "phoneNumber",
-        verified_at AS "verifiedAt"
-    `,
+        INSERT INTO whatsapp_identities (user_id, phone_number, verified_at)
+        VALUES (${row.userId}, ${row.phoneNumber}, ${row.verifiedAt})
+        ${conflict}
+        RETURNING user_id AS "userId", phone_number AS "phoneNumber",
+          verified_at AS "verifiedAt"
+      `,
     })({ ...identity, userId }).pipe(Effect.orDie)
   );
 });
+
+/**
+ * Associates verified WhatsApp evidence with a stable User. Reassociation
+ * replaces only channel evidence and persistence failures are defects.
+ */
+export const associateWhatsAppIdentity = Effect.fn("associateWhatsAppIdentity")(
+  (userId: UserId, identity: typeof WhatsAppIdentityWithoutUserId.Type) =>
+    writeWhatsAppIdentity("associate", userId, identity)
+);
+
+/** Inserts the first verified WhatsApp association; conflicts are defects. */
+export const insertWhatsAppIdentity = Effect.fn("insertWhatsAppIdentity")(
+  (userId: UserId, identity: typeof WhatsAppIdentityWithoutUserId.Type) =>
+    writeWhatsAppIdentity("insert", userId, identity)
+);
 
 /**
  * Resolves channel-verified WhatsApp evidence to its stable User. Only the

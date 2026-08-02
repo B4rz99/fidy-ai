@@ -22,7 +22,7 @@ import {
   headersFor,
   makeApiClientLive,
 } from "./api-harness";
-import { seedAgentIdentity } from "~/shell/db/development-seed";
+import { seedConsentedAgentIdentity } from "~/shell/db/development-seed";
 
 const encodeTransactionPayload = Schema.encodeSync(CreateTransactionInput);
 
@@ -70,13 +70,13 @@ const AuthorizationHarness = Layer.mergeAll(
   makeApiClientLive({ tag: ReadOnlyWriterClient, bearer: readOnlyWriterBearer })
 ).pipe(Layer.provideMerge(ApiHarness));
 
-const seedReadOnlyIdentity = seedAgentIdentity({
+const seedReadOnlyIdentity = seedConsentedAgentIdentity({
   userId: readOnlyUser,
   bearer: readOnlyBearer,
   tokenId: readOnlyTokenId,
   scopes: ["read"],
 });
-const seedWriteOnlyIdentity = seedAgentIdentity({
+const seedWriteOnlyIdentity = seedConsentedAgentIdentity({
   userId: writeOnlyUser,
   bearer: writeOnlyBearer,
   scopes: ["write"],
@@ -226,7 +226,7 @@ layer(AuthorizationHarness, { excludeTestServices: true, timeout: "30 seconds" }
         yield* truncateTransactions;
         yield* truncateAuditLogEntries;
         yield* seedReadOnlyIdentity;
-        yield* seedAgentIdentity({
+        yield* seedConsentedAgentIdentity({
           userId: readOnlyUser,
           bearer: readOnlyWriterBearer,
           scopes: ["read", "write"],
@@ -317,7 +317,7 @@ layer(AuthorizationHarness, { excludeTestServices: true, timeout: "30 seconds" }
       Effect.gen(function* () {
         const now = yield* DateTime.now;
         const tokenCreatedAt = DateTime.subtractDuration(now, "60 days");
-        yield* seedAgentIdentity({
+        yield* seedConsentedAgentIdentity({
           userId: idleUser,
           bearer: idleBearer,
           tokenCreatedAt,
@@ -337,25 +337,25 @@ layer(AuthorizationHarness, { excludeTestServices: true, timeout: "30 seconds" }
         yield* truncateTransactions;
         const expiredCreatedAt = DateTime.makeUnsafe("1999-01-01T00:00:00Z");
         const revokedCreatedAt = DateTime.makeUnsafe("2026-01-01T00:00:00Z");
-        yield* seedAgentIdentity({
+        yield* seedConsentedAgentIdentity({
           userId: expiredUser,
           bearer: expiredBearer,
           tokenCreatedAt: expiredCreatedAt,
           idleExpiresAt: DateTime.addDuration(expiredCreatedAt, "90 days"),
         });
-        yield* seedAgentIdentity({
+        yield* seedConsentedAgentIdentity({
           userId: revokedUser,
           bearer: revokedBearer,
           tokenCreatedAt: revokedCreatedAt,
           idleExpiresAt: DateTime.addDuration(revokedCreatedAt, "90 days"),
           revokedAt: Option.some(DateTime.makeUnsafe("2026-07-01T00:00:00Z")),
         });
-        yield* seedAgentIdentity({
+        yield* seedConsentedAgentIdentity({
           userId: expiredUser,
           bearer: expiredObserverBearer,
           scopes: ["read"],
         });
-        yield* seedAgentIdentity({
+        yield* seedConsentedAgentIdentity({
           userId: revokedUser,
           bearer: revokedObserverBearer,
           scopes: ["read"],

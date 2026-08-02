@@ -4,6 +4,8 @@ import { HttpApiBuilder } from "effect/unstable/httpapi";
 import { AgentAuthorizationLive } from "~/shell/_shared/authz";
 import { ValidationGateLive } from "~/shell/_shared/errors";
 import { AuditRetentionLive } from "~/shell/audit/retention";
+import { CURRENT_POLICY_PATH } from "~/shell/consent/current-disclosure";
+import { PendingConsentRetentionLive } from "~/shell/consent/retention";
 import { CategoriesLive } from "~/shell/categories/handlers";
 import { DashboardLive } from "~/shell/dashboard/handlers";
 import { MigratorLive, RuntimeAuthorityLive } from "~/shell/db/client";
@@ -50,6 +52,8 @@ const HealthLive = Layer.unwrap(
   )
 );
 
+const PolicyLive = HttpRouter.add("GET", "/politica", HttpServerResponse.file(CURRENT_POLICY_PATH));
+
 const StaticLive = HttpStaticServer.layer({ root: "public", spa: true });
 
 /**
@@ -58,16 +62,19 @@ const StaticLive = HttpStaticServer.layer({ root: "public", spa: true });
  * shell. Launching this answers for as long as the layer is alive and logs
  * every request. The port and platform arrive from the outside.
  */
-export const HttpLive = HttpRouter.serve(Layer.mergeAll(ApiLive, HealthLive, StaticLive));
+export const HttpLive = HttpRouter.serve(
+  Layer.mergeAll(ApiLive, HealthLive, PolicyLive, StaticLive)
+);
 
 /**
- * The whole service, and the layer to launch. The server and AuditLogEntry
- * retention worker do not start until every pending migration has run, so
- * neither can meet a schema older than the code querying it. What is left to
+ * The whole service, and the layer to launch. The server and retention workers
+ * do not start until every pending migration has run, so none can meet a schema
+ * older than the code querying it. What is left to
  * supply is the environment: Postgres, an HTTP server, and the platform file,
  * path, and HTTP services used to serve the static shell.
  */
-export const AppLive = Layer.mergeAll(HttpLive, AuditRetentionLive).pipe(
-  Layer.provide(RuntimeAuthorityLive),
-  Layer.provide(MigratorLive)
-);
+export const AppLive = Layer.mergeAll(
+  HttpLive,
+  AuditRetentionLive,
+  PendingConsentRetentionLive
+).pipe(Layer.provide(RuntimeAuthorityLive), Layer.provide(MigratorLive));

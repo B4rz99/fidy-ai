@@ -1,6 +1,6 @@
 import { BunHttpClient, BunRuntime, BunServices } from "@effect/platform-bun";
 import { Config, Effect, Layer, Option, Schema } from "effect";
-import { UserId } from "~/core/identity/reference";
+import { E164PhoneNumber } from "~/core/identity/reference";
 import { AgentServiceLive } from "~/shell/agent/agent-service";
 import { OpenAiLanguageModelLive } from "~/shell/agent/openai";
 import { runAgentRepl } from "~/shell/agent/repl";
@@ -8,14 +8,14 @@ import { CanonicalApiBaseUrl, CanonicalApiUrl } from "~/shell/agent/toolkit";
 import { MigratorLive, PgLive, RuntimeAuthorityLive } from "~/shell/db/client";
 
 const program = Effect.gen(function* () {
-  const userId = yield* Config.string("FIDY_REPL_USER_ID").pipe(
-    Effect.flatMap(Schema.decodeUnknownEffect(UserId))
+  const phoneNumber = yield* Config.string("FIDY_REPL_PHONE_NUMBER").pipe(
+    Effect.flatMap(Schema.decodeUnknownEffect(E164PhoneNumber))
   );
   const baseUrl = yield* Config.string("FIDY_API_BASE_URL").pipe(
     Config.withDefault("http://127.0.0.1:3000"),
     Effect.flatMap(Schema.decodeUnknownEffect(CanonicalApiUrl))
   );
-  yield* runAgentRepl(userId).pipe(
+  yield* runAgentRepl(phoneNumber).pipe(
     Effect.provideService(CanonicalApiBaseUrl, Option.some(baseUrl))
   );
 });

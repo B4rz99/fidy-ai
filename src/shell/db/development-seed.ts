@@ -1,4 +1,5 @@
 import { Crypto, DateTime, Effect, Encoding, Layer, Option } from "effect";
+import { ConsentRecord, ConsentRecordId } from "~/core/consent/model";
 import { E164PhoneNumber, UserId } from "~/core/identity/reference";
 import { AgentTokenId } from "~/core/tokens/reference";
 import { makeColombianUser } from "~/core/identity/rules";
@@ -12,6 +13,8 @@ import {
 } from "~/core/tokens/model";
 import { renewAgentTokenIdleExpiry } from "~/core/tokens/rules";
 import { hashAgentBearer } from "~/shell/_shared/authz";
+import { currentDisclosure } from "~/shell/consent/current-disclosure";
+import { appendConsentRecord, hasCurrentOnboardingConsent } from "~/shell/consent/repo";
 import { associateWhatsAppIdentity, upsertUser } from "~/shell/identity/repo";
 import { type AgentTokenHash, upsertAgentToken } from "~/shell/tokens/repo";
 import { MigrationPgLive, MigratorLive } from "./client";
@@ -49,12 +52,13 @@ const tokenIdFromHash = (tokenHash: AgentTokenHash) =>
   );
 
 /**
- * Seeds one stable User and one hashed AgentToken through slice-owned
- * persistence operations. The full bearer and secret never enter persistence;
- * only its digest and safe naming id cross that boundary. Tests override only
- * the grant facts they need.
+ * Seeds one stable User, current onboarding ConsentRecord, and hashed AgentToken
+ * through slice-owned persistence operations. When consent is absent, it adds
+ * synthesized disclosure and decision evidence suitable only for development
+ * and tests. The full bearer and secret never enter persistence; only its digest
+ * and safe naming id cross that boundary.
  */
-export const seedAgentIdentity = (
+export const seedConsentedAgentIdentity = (
   overrides: Readonly<{
     readonly bearer: AgentBearerToken;
     readonly userId?: UserId;
@@ -76,6 +80,32 @@ export const seedAgentIdentity = (
     const user = yield* makeColombianUser(userId, { createdAt: defaultCreatedAt });
     yield* upsertUser(userId, user);
 
+    if (!(yield* hasCurrentOnboardingConsent(userId))) {
+      const crypto = yield* Crypto.Crypto;
+      const disclosure = yield* currentDisclosure;
+      const recordId = ConsentRecordId.make(yield* crypto.randomUUIDv7.pipe(Effect.orDie));
+      const seedMessageId = `development-seed:${recordId}`;
+      yield* appendConsentRecord(
+        ConsentRecord.make({
+          id: recordId,
+          subjectUserId: userId,
+          event: { _tag: "Granted", grant: { _tag: "Onboarding" } },
+          disclosure,
+          occurredAt: defaultCreatedAt,
+          disclosureMessage: {
+            channel: "development",
+            provider: "development-seed",
+            providerMessageId: `${seedMessageId}:disclosure`,
+          },
+          decisionMessage: {
+            channel: "development",
+            provider: "development-seed",
+            providerMessageId: `${seedMessageId}:acceptance`,
+          },
+        })
+      );
+    }
+
     const tokenHash = yield* hashAgentBearer(bearer);
     yield* upsertAgentToken(userId, {
       id: overrides.tokenId ?? tokenIdFromHash(tokenHash),
@@ -96,7 +126,7 @@ export const seedAgentIdentity = (
  */
 export const seedDevelopmentIdentity = (bearer: AgentBearerToken) =>
   Effect.gen(function* () {
-    const seeded = yield* seedAgentIdentity({
+    const seeded = yield* seedConsentedAgentIdentity({
       bearer,
       tokenId: defaultAgentTokenId,
     });

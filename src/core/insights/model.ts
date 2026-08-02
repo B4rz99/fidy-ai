@@ -1,6 +1,7 @@
 import { Array as Arr, BigDecimal, Schema, SchemaTransformation, Struct } from "effect";
 import { IanaTimeZone, Locale, ServiceMarket } from "~/core/_shared/context";
 import { Currency, Money, type ReadonlyMoney } from "~/core/_shared/money";
+import { ProviderMessageEvidence } from "~/core/_shared/provider-message-evidence";
 import { InsightKind } from "./reference";
 
 /** Stable identity of one generated occurrence. */
@@ -108,9 +109,7 @@ export const InsightDeliveryAttempt = Schema.Struct({
   id: DeliveryAttemptId,
   insightEventId: InsightEventId,
   sentAt: UtcTimestamp,
-  channel: Schema.NonEmptyString.check(Schema.isTrimmed(), Schema.isMaxLength(32)),
-  provider: Schema.NonEmptyString.check(Schema.isTrimmed(), Schema.isMaxLength(64)),
-  providerMessageId: Schema.NonEmptyString.check(Schema.isTrimmed(), Schema.isMaxLength(256)),
+  ...ProviderMessageEvidence.fields,
 }).annotate({ identifier: "InsightDeliveryAttempt" });
 export type InsightDeliveryAttempt = typeof InsightDeliveryAttempt.Type;
 

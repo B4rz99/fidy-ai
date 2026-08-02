@@ -1,13 +1,21 @@
 import { expect, layer } from "@effect/vitest";
-import { BigDecimal, Effect, Equal, Layer, Schema, Terminal } from "effect";
+import { BigDecimal, Effect, Equal, Layer, Option, Schema, Terminal } from "effect";
 import { LanguageModel } from "effect/unstable/ai";
+import { SqlClient } from "effect/unstable/sql";
+import { E164PhoneNumber, UserId } from "~/core/identity/reference";
 import { MigrationSqlClient } from "~/shell/db/client";
-import { UserId } from "~/core/identity/reference";
 import { categoryIds } from "~/core/categories/taxonomy";
 import { TranscriptText } from "~/core/transcript/model";
+import { AgentBearerToken } from "~/core/tokens/model";
 import { TranscriptWindowCharacterLimit, TranscriptWindowTurnLimit } from "~/core/transcript/rules";
 import { observeAuditLogEntries } from "~/shell/audit/repo";
-import { defaultUserId } from "~/shell/db/development-seed";
+import { lockConsentSubject } from "~/shell/consent/repo";
+import { resolveWhatsAppCaller } from "~/shell/identity/repo";
+import {
+  defaultUserId,
+  defaultWhatsAppPhone,
+  seedConsentedAgentIdentity,
+} from "~/shell/db/development-seed";
 import { listRecentTranscriptEntries, listTranscriptEntries } from "~/shell/transcript/repo";
 import { ApiHarness, ApiHarnessClient } from "~/shell/testing/api-harness";
 import { runAgentRepl } from "./repl";
@@ -19,18 +27,15 @@ import {
   InboundMessage,
 } from "./agent-service";
 
+const declinedOnboardingPhone = E164PhoneNumber.make("+573009997332");
+const acceptedOnboardingPhone = E164PhoneNumber.make("+573009997333");
+
 const clearTranscript = Effect.flatMap(
   MigrationSqlClient,
   (sql) => sql`DELETE FROM transcript_entries WHERE user_id = ${defaultUserId}`
 );
 
-type AgentLimitOverrides = Partial<{
-  readonly maxIterations: number;
-  readonly maxToolCallsPerTurn: number;
-  readonly maxToolResultCharacters: number;
-  readonly maxTranscriptTurns: number;
-  readonly maxTranscriptCharacters: number;
-}>;
+type AgentLimitOverrides = Partial<typeof AgentLimits.Encoded>;
 const agentLimits = (overrides: AgentLimitOverrides = {}): AgentLimits => {
   const values = {
     maxIterations: 6,
@@ -38,6 +43,7 @@ const agentLimits = (overrides: AgentLimitOverrides = {}): AgentLimits => {
     maxToolResultCharacters: 32_000,
     maxTranscriptTurns: 12,
     maxTranscriptCharacters: 32_000,
+    maxModelRoundMillis: 30_000,
     ...overrides,
   };
   return AgentLimits.make({
@@ -103,6 +109,7 @@ const ScriptedLanguageModel = Layer.effect(
     generateText: ({ prompt }) => {
       const serialized = JSON.stringify(prompt.content);
       expect(serialized).not.toContain("fin_deadbeef_");
+      if (serialized.includes("MODELO_BLOQUEADO")) return Effect.never;
       if (serialized.includes("A_PRIVATE_TRANSCRIPT_MARKER")) {
         return Effect.succeed([{ type: "text" as const, text: "A_PRIVATE_ASSISTANT_MARKER" }]);
       }
@@ -503,16 +510,16 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       yield* sql`DELETE FROM transcript_entries WHERE user_id IN (${userA}, ${userB})`;
       yield* sql`DELETE FROM transactions WHERE user_id IN (${userA}, ${userB})`;
       yield* sql`DELETE FROM agent_tokens WHERE user_id IN (${userA}, ${userB})`;
-      yield* sql`
-        INSERT INTO users (id, service_market, locale, time_zone, created_at)
-        VALUES
-          (${userA}, 'CO', 'es-CO', 'America/Bogota', now()),
-          (${userB}, 'CO', 'es-CO', 'America/Bogota', now())
-        ON CONFLICT (id) DO UPDATE SET
-          service_market = EXCLUDED.service_market,
-          locale = EXCLUDED.locale,
-          time_zone = EXCLUDED.time_zone
-      `;
+      yield* seedConsentedAgentIdentity({
+        userId: userA,
+        bearer: AgentBearerToken.make("fin_agenta01_abcdefghijklmnopqrstuvwxyz0123456789ABCD"),
+        scopes: ["read"],
+      });
+      yield* seedConsentedAgentIdentity({
+        userId: userB,
+        bearer: AgentBearerToken.make("fin_agentb01_abcdefghijklmnopqrstuvwxyz0123456789ABCD"),
+        scopes: ["read"],
+      });
 
       yield* service.handleTurn(
         userA,
@@ -715,6 +722,74 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
     })
   );
 
+  it.effect("terminates a declined onboarding conversation without creating a User", () =>
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      yield* sql`DELETE FROM pending_consent_exchanges WHERE phone_number = ${declinedOnboardingPhone}`;
+      const displayed: Array<string> = [];
+      const terminal = scriptedTerminal(["hola", "No acepto"], (text) => displayed.push(text));
+
+      yield* runAgentRepl(declinedOnboardingPhone).pipe(
+        Effect.provideService(Terminal.Terminal, terminal)
+      );
+
+      expect(Option.isNone(yield* resolveWhatsAppCaller(declinedOnboardingPhone))).toBe(true);
+      expect(displayed.join("\n")).toContain("Antes de crear tu cuenta");
+      expect(displayed.join("\n")).toContain("No creé una cuenta");
+      const pending = yield* sql`
+        SELECT id FROM pending_consent_exchanges WHERE phone_number = ${declinedOnboardingPhone}
+      `;
+      expect(pending).toHaveLength(0);
+    })
+  );
+
+  it.effect("does not process a finance request during an accepted onboarding conversation", () =>
+    Effect.gen(function* () {
+      const sql = yield* MigrationSqlClient;
+      yield* sql`
+        DELETE FROM consent_records WHERE subject_user_id IN (
+          SELECT user_id FROM whatsapp_identities WHERE phone_number = ${acceptedOnboardingPhone}
+        )
+      `;
+      yield* sql`
+        WITH accepted_users AS MATERIALIZED (
+          SELECT user_id FROM whatsapp_identities WHERE phone_number = ${acceptedOnboardingPhone}
+        ), removed_identity AS (
+          DELETE FROM whatsapp_identities WHERE phone_number = ${acceptedOnboardingPhone}
+        )
+        DELETE FROM users WHERE id IN (SELECT user_id FROM accepted_users)
+      `;
+      const runtimeSql = yield* SqlClient.SqlClient;
+      yield* runtimeSql`DELETE FROM pending_consent_exchanges WHERE phone_number = ${acceptedOnboardingPhone}`;
+      const displayed: Array<string> = [];
+      const terminal = scriptedTerminal(["registra café 25 mil", "Acepto"], (text) =>
+        displayed.push(text)
+      );
+
+      yield* runAgentRepl(acceptedOnboardingPhone).pipe(
+        Effect.provideService(Terminal.Terminal, terminal)
+      );
+
+      const users = yield* sql`
+        SELECT u.id
+        FROM users u
+        JOIN whatsapp_identities wi ON wi.user_id = u.id
+        WHERE wi.phone_number = ${acceptedOnboardingPhone}
+      `;
+      const transactions = yield* sql`
+        SELECT t.id
+        FROM transactions t
+        JOIN whatsapp_identities wi ON wi.user_id = t.user_id
+        WHERE wi.phone_number = ${acceptedOnboardingPhone}
+      `;
+
+      expect(users).toHaveLength(1);
+      expect(transactions).toEqual([]);
+      expect(displayed.join("\n")).toContain("Antes de crear tu cuenta");
+      expect(displayed.join("\n")).toContain("Autorización registrada");
+    })
+  );
+
   it.effect(
     "quick-logs Colombian Money through the CLI and preserves explicit foreign Currency",
     () =>
@@ -727,7 +802,9 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
         const displayed: Array<string> = [];
         const terminal = scriptedTerminal(["almuerzo 25 mil"], (text) => displayed.push(text));
 
-        yield* runAgentRepl(defaultUserId).pipe(Effect.provideService(Terminal.Terminal, terminal));
+        yield* runAgentRepl(defaultWhatsAppPhone).pipe(
+          Effect.provideService(Terminal.Terminal, terminal)
+        );
         yield* service.handleTurn(
           defaultUserId,
           InboundMessage.make({ text: TranscriptText.make("almuerzo 25 usd") })
@@ -816,7 +893,9 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
         displayed.push(text)
       );
 
-      yield* runAgentRepl(defaultUserId).pipe(Effect.provideService(Terminal.Terminal, terminal));
+      yield* runAgentRepl(defaultWhatsAppPhone).pipe(
+        Effect.provideService(Terminal.Terminal, terminal)
+      );
 
       expect(displayed).toEqual(["Fidy> ", "�]52;c;contenido�visible\n", "Fidy> "]);
     })
@@ -1168,6 +1247,28 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       expect(audit.filter((entry) => entry.operation === "transactions.deleteTransaction")).toEqual(
         []
       );
+    })
+  );
+
+  it.effect("times out a stalled model round without retaining the Consent lock", () =>
+    Effect.gen(function* () {
+      yield* clearTranscript;
+      const service = yield* AgentService;
+      const failure = yield* service
+        .handleTurn(
+          defaultUserId,
+          InboundMessage.make({ text: TranscriptText.make("MODELO_BLOQUEADO") })
+        )
+        .pipe(
+          Effect.provideService(CurrentAgentLimits, agentLimits({ maxModelRoundMillis: 20 })),
+          Effect.flip
+        );
+
+      expect(failure._tag).toBe("ModelUnavailable");
+      const sql = yield* SqlClient.SqlClient;
+      yield* sql
+        .withTransaction(lockConsentSubject(defaultUserId))
+        .pipe(Effect.timeout("1 second"));
     })
   );
 

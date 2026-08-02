@@ -7,6 +7,8 @@ import { createDashboards } from "./0006-create-dashboards";
 import { createTranscripts } from "./0007-create-transcripts";
 import { hostedAgentTokens } from "./0008-hosted-agent-tokens";
 import { rowLevelSecurity } from "./0009-row-level-security";
+import { createConsentLedger } from "./0010-create-consent-ledger";
+import { bindPendingConsentInitiator } from "./0011-bind-pending-consent-initiator";
 
 /**
  * The explicit index ARCHITECTURE.md §7 calls for: one ordered, append-only
@@ -26,4 +28,6 @@ export const migrations = {
   "0007_create_transcripts": createTranscripts,
   "0008_hosted_agent_tokens": hostedAgentTokens,
   "0009_row_level_security": rowLevelSecurity,
+  "0010_create_consent_ledger": createConsentLedger,
+  "0011_bind_pending_consent_initiator": bindPendingConsentInitiator,
 };

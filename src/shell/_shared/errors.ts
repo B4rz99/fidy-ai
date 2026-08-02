@@ -20,14 +20,15 @@ import { NextOperations } from "./response";
  * `payment_required`, because it is the Paywall the caller has met (CONTEXT.md)
  * and the string is the contract.
  *
- * `unauthenticated` is the one this repo added rather than the spec: the spec's
- * list is open-ended and the caller has to be told when the request named
- * nobody.
+ * `unauthenticated` and `consent_required` are repository additions to the
+ * spec's open-ended list: callers must distinguish a request that names nobody
+ * from one whose User has not authorized processing.
  */
 export const ErrorCode = Schema.Literals([
   "validation_failed",
   "unauthenticated",
   "scope_missing",
+  "consent_required",
   "paywall_required",
   "rate_limited",
   "quota_exhausted",
@@ -141,6 +142,12 @@ export class Unauthenticated extends Schema.ErrorClass<Unauthenticated>("Unauthe
  */
 export class ScopeMissing extends Schema.ErrorClass<ScopeMissing>("ScopeMissing")(
   errorResponse(detail("scope_missing")),
+  { httpApiStatus: 403 }
+) {}
+
+/** The stable User has no current onboarding grant, so no canonical operation may run. */
+export class ConsentRequired extends Schema.ErrorClass<ConsentRequired>("ConsentRequired")(
+  errorResponse(detail("consent_required")),
   { httpApiStatus: 403 }
 ) {}
 

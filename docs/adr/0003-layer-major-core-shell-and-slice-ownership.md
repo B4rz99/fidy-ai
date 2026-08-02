@@ -33,7 +33,9 @@ the owning slice's operations.
 
 Slices are drawn using three checks:
 
-1. Data that must commit atomically belongs to one slice.
+1. Data that must commit atomically belongs to one slice unless an accepted coordination decision
+   explicitly composes owner operations: canonical state plus Audit evidence in ADR 0005, legal
+   bootstrap in ADR 0009, and consent-serialized authorized work in ADR 0008.
 2. Cross-slice references use stable ids, not embedded objects.
 3. An invariant that must hold immediately is enforceable inside one slice.
 

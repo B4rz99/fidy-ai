@@ -44,7 +44,7 @@ export const rowLevelSecurity = Effect.gen(function* () {
               WHERE namespace.nspname = 'public'
                 AND relation.relname = ANY(ARRAY[
                   'users', 'whatsapp_identities', 'agent_tokens', 'audit_log_entries',
-                  'transactions', 'keyword_rules', 'source_attestations', 'insight_events',
+                  'consent_records', 'transactions', 'keyword_rules', 'source_attestations', 'insight_events',
                   'insight_money_groups', 'insight_delivery_attempts', 'dashboards',
                   'transcript_entries'
                 ])

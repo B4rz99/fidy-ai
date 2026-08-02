@@ -46,14 +46,14 @@ No language-model, HTTP, channel, or provider wait occurs in one of these transa
 
 Every User-owned table enables and forces RLS with one explicit policy covering both `USING` and `WITH CHECK`:
 
-| ownership shape             | tables                                                                                                                                            |
-| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| direct `user_id`            | `whatsapp_identities`, `agent_tokens`, `audit_log_entries`, `transactions`, `keyword_rules`, `insight_events`, `dashboards`, `transcript_entries` |
-| User identity is the row id | `users`                                                                                                                                           |
-| through Transaction         | `source_attestations`                                                                                                                             |
-| through InsightEvent        | `insight_money_groups`, `insight_delivery_attempts`                                                                                               |
+| ownership shape             | tables                                                                                                                                                               |
+| --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| direct User reference       | `whatsapp_identities`, `agent_tokens`, `audit_log_entries`, `consent_records`, `transactions`, `keyword_rules`, `insight_events`, `dashboards`, `transcript_entries` |
+| User identity is the row id | `users`                                                                                                                                                              |
+| through Transaction         | `source_attestations`                                                                                                                                                |
+| through InsightEvent        | `insight_money_groups`, `insight_delivery_attempts`                                                                                                                  |
 
-Absent context evaluates to no User and therefore exposes no row. A context for another User cannot read, insert, update, or delete the owner's rows.
+Absent context evaluates to no User and therefore exposes no row. A context for another User cannot read, insert, update, or delete the owner's rows. `consent_records` additionally grants the runtime role only `SELECT` and `INSERT`; revocation and correction append evidence, while update and delete remain unavailable.
 
 `categories` is deliberate global read-only taxonomy data. The Effect migration journal and PostgreSQL catalog/sequence objects are technical data available only to the authority that needs them; they are not accidental RLS exemptions.
 
@@ -63,6 +63,7 @@ Use `SECURITY DEFINER` functions with a fixed trusted `search_path`, no `PUBLIC`
 
 - `fidy_use_agent_token` accepts a bearer digest and timestamps, atomically applies expiry/use, and returns only the resolved token id, UserId, scopes, and last-use time.
 - `fidy_resolve_whatsapp_user` accepts one normalized phone number and returns only its UserId when associated.
+- `fidy_resolve_consent_decision_subject` accepts one provider-qualified decision-message key and returns only the subject UserId already bound to that immutable ConsentRecord. Identity-replay tests prove the result cannot authorize another phone or User.
 - `fidy_delete_audit_log_entries_before` accepts one UTC cutoff and performs only the approved global retention deletion.
 
 The runtime role can execute these functions but cannot assume the gateway role or directly bypass policies. New gateways require a new security-boundary review and a negative test; generic privileged SQL is prohibited.

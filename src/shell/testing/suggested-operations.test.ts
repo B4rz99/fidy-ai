@@ -1,6 +1,5 @@
 import { expect, layer } from "@effect/vitest";
 import { Context, DateTime, Effect, Layer, Option, Result, Schema } from "effect";
-import { type HttpClientError } from "effect/unstable/http";
 import { type SqlClient } from "effect/unstable/sql";
 import { AgentTokenId } from "~/core/tokens/reference";
 import { IanaTimeZone } from "~/core/_shared/context";
@@ -9,12 +8,7 @@ import { CategoryKeyword } from "~/core/categories/model";
 import { categoryIds } from "~/core/categories/taxonomy";
 import { TransactionId } from "~/core/transactions/model";
 import { AgentBearerToken, type AgentScope } from "~/core/tokens/model";
-import {
-  NotFound,
-  type ScopeMissing,
-  type Unauthenticated,
-  type ValidationFailed,
-} from "~/shell/_shared/errors";
+import { NotFound } from "~/shell/_shared/errors";
 import {
   canCallOperation,
   type SuggestedOperationCaller,
@@ -25,28 +19,20 @@ import {
 } from "~/shell/_shared/response";
 import { type OperationId, operationCatalog } from "~/shell/api";
 import { truncateDashboards } from "~/shell/dashboard/fixtures";
-import { seedAgentIdentity } from "~/shell/db/development-seed";
+import { seedConsentedAgentIdentity } from "~/shell/db/development-seed";
 import { truncateInsights, weeklySummaryInput } from "~/shell/insights/fixtures";
 import { generateInsightEvent } from "~/shell/insights/repo";
 import { transactionPayload, truncateTransactions } from "~/shell/transactions/fixtures";
-import { ApiHarness, type ApiClient, makeApiClientLive } from "./api-harness";
+import { type ApiCallFailure, ApiHarness, type ApiClient, makeApiClientLive } from "./api-harness";
 
 type NavigableResponse = {
   readonly next: ReadonlyArray<SuggestedOperationValue>;
 };
 
-type CallFailure =
-  | Schema.SchemaError
-  | HttpClientError.HttpClientError
-  | NotFound
-  | ScopeMissing
-  | Unauthenticated
-  | ValidationFailed;
-
 type SuggestedOperationProbe = (
   client: ApiClient,
   setupClient: ApiClient
-) => Effect.Effect<ReadonlyArray<NavigableResponse>, CallFailure, SqlClient.SqlClient>;
+) => Effect.Effect<ReadonlyArray<NavigableResponse>, ApiCallFailure, SqlClient.SqlClient>;
 
 const absentId = TransactionId.make("f1d1a000-0000-4000-8000-00000000dead");
 
@@ -272,25 +258,25 @@ layer(SuggestedOperationsHarness, { excludeTestServices: true, timeout: "30 seco
   (it) => {
     it.effect("every returned SuggestedOperation names a callable canonical operation", () =>
       Effect.gen(function* () {
-        yield* seedAgentIdentity({
+        yield* seedConsentedAgentIdentity({
           userId: readOnlyUser,
           bearer: readOnlyBearer,
           tokenId: readOnlyTokenId,
           scopes: ["read"],
         });
-        yield* seedAgentIdentity({
+        yield* seedConsentedAgentIdentity({
           userId: readOnlyUser,
           bearer: readOwnerWriterBearer,
           tokenId: readOwnerWriterTokenId,
           scopes: ["write"],
         });
-        yield* seedAgentIdentity({
+        yield* seedConsentedAgentIdentity({
           userId: writeOnlyUser,
           bearer: writeOnlyBearer,
           tokenId: writeOnlyTokenId,
           scopes: ["write"],
         });
-        yield* seedAgentIdentity({
+        yield* seedConsentedAgentIdentity({
           userId: dashboardOnlyUser,
           bearer: dashboardOnlyBearer,
           tokenId: dashboardOnlyTokenId,
@@ -350,7 +336,7 @@ layer(SuggestedOperationsHarness, { excludeTestServices: true, timeout: "30 seco
 
     it.effect("filters SuggestedOperations unavailable to the resolved caller", () =>
       Effect.gen(function* () {
-        yield* seedAgentIdentity({
+        yield* seedConsentedAgentIdentity({
           userId: writeOnlyUser,
           bearer: writeOnlyBearer,
           tokenId: writeOnlyTokenId,

@@ -36,7 +36,10 @@ atomicity remain in one place.
 
 Use three checks when drawing a boundary:
 
-1. Data that must commit atomically belongs to one slice.
+1. Data that must commit atomically belongs to one slice unless an accepted coordination decision
+   says otherwise. ADR 0005 coordinates canonical state with Audit evidence, ADR 0009 coordinates
+   initial User bootstrap, and ADR 0008 serializes consent revocation with consent-dependent work.
+   These exceptions compose only owner-published operations and do not transfer data ownership.
 2. Cross-slice references use stable ids, not embedded objects.
 3. An invariant that must hold immediately is enforceable inside one slice.
 
@@ -105,7 +108,10 @@ later interpretation retain the relevant context at creation.
 Authorization is the auditing boundary for every reflected canonical operation. Resolved calls
 record metadata-only audit entries; unresolved bearers create no invented evidence. Successful
 state and success evidence share a database transaction, while rejection and failure evidence
-survives the operation transaction.
+survives the operation transaction. ADR 0008 additionally keeps the subject Consent lock across
+AgentToken renewal and canonical execution so revocation is linearizable with authorized work.
+Hosted-model context is loaded after the same serialized consent decision, but the provider call
+starts only after that short database transaction commits.
 
 Every canonical operation declares hosted-agent confirmation policy. A confirmation for a risky
 operation is bound to the exact operation and canonical input, is single-use, and is recoverable

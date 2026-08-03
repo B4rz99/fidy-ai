@@ -12,6 +12,8 @@ reports
 tools
 docs
 research
-scripts
+scripts/*
+!scripts/provision-runtime-role.ts
+!scripts/migrate.ts
 *.log
 .DS_Store

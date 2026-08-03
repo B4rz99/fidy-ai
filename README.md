@@ -49,10 +49,10 @@ AuditLogEntry retention worker. Retention runs at startup and removes only evide
 than 365 days. It serves the canonical API,
 `/openapi.json`, the public `/health` route, and the SPA shell from `public/` in one Effect runtime.
 Canonical operations remain protected by scoped `fin_` bearer authorization. `railway.json`
-configures Railway to build the Dockerfile and gate deployments on `/health`; the app receives
-the two database URLs as separate Railway secrets rather than committed credentials. The runtime
-login must be exactly `fidy_runtime`, while the migration login must be able to own tables and
-provision the fixed `fidy_runtime` and `fidy_gateway` roles.
+configures Railway to build the Dockerfile, provision the restricted runtime login and apply
+migrations before deploy, and gate deployments on `/health`. Both database URLs must resolve inside the production
+environment: the runtime login is exactly `fidy_runtime`, while the migration login can own tables
+and provision the fixed `fidy_runtime` and `fidy_gateway` roles.
 
 The transient `health-cron` Railway service is built from `deploy/health-cron/`. Every five minutes
 it requests the public health endpoint from its environment-only `HEALTH_URL` and exits, making a
@@ -80,9 +80,10 @@ bun run agent:repl
 `http://127.0.0.1:3000`. The REPL creates a short-lived HostedAgentToken for each turn so every model
 tool traverses normal HTTP validation, authorization, and AuditLogEntry attribution.
 
-GitHub Actions runs `Checks` for pull requests and again for the resulting `trunk` commit. Railway's
-GitHub deployment triggers watch only `trunk` and wait for that commit's checks to pass before
-building either service; pull-request runs never deploy.
+GitHub Actions runs `Checks` for pull requests and again for the resulting `trunk` commit;
+`Required Checks` protects `trunk`. Production authority provisioning and migrations run in
+Railway's pre-deploy phase, and `Production Deployment Smoke` checks the deployed Railway service's
+public health, OpenAPI, and SPA routes. Canonical-domain routing remains an independent DNS check.
 
 The hosting escape hatch is the same Dockerfile plus a standard PostgreSQL dump:
 
@@ -171,22 +172,23 @@ judging a coverage number.
 
 ### Common scripts
 
-| Command                     | What it does                                             |
-| --------------------------- | -------------------------------------------------------- |
-| `bun run lint`              | oxlint                                                   |
-| `bun run lint:type-aware`   | oxlint with the type-aware rules                         |
-| `bun run lint:suppressions` | reject lint-suppression comments in first-party source   |
-| `bun run lint:deps`         | module-graph rules and positive/negative probes          |
-| `bun run lint:deps:probes`  | dependency import-boundary probes                        |
-| `bun run lint:dependencies` | pins behind the registry, and the install delay          |
-| `bun run format`            | Format the repo with oxfmt                               |
-| `bun run format:check`      | Verify formatting without writing                        |
-| `bun run typecheck`         | `tsc --noEmit` (Effect-patched)                          |
-| `bun run test`              | `bun --bun vitest run` (needs both database URLs)        |
-| `bun run test:core`         | the pure core tier — no Docker, no database              |
-| `bun run test:crap`         | CRAP-score gate (needs both database URLs)               |
-| `bun run test:mutation`     | mutation-score gate over `src/core` (no database)        |
-| `bun run verify`            | all rows above except `format`, `test:core`, `test:crap` |
+| Command                          | What it does                                                                           |
+| -------------------------------- | -------------------------------------------------------------------------------------- |
+| `bun run lint`                   | oxlint                                                                                 |
+| `bun run lint:type-aware`        | oxlint with the type-aware rules                                                       |
+| `bun run lint:suppressions`      | reject lint-suppression comments in first-party source                                 |
+| `bun run lint:deps`              | module-graph rules and positive/negative probes                                        |
+| `bun run lint:deps:probes`       | dependency import-boundary probes                                                      |
+| `bun run lint:dependencies`      | pins behind the registry, and the install delay                                        |
+| `bun run format`                 | Format the repo with oxfmt                                                             |
+| `bun run format:check`           | Verify formatting without writing                                                      |
+| `bun run typecheck`              | `tsc --noEmit` (Effect-patched)                                                        |
+| `bun run test`                   | `bun --bun vitest run` (needs both database URLs)                                      |
+| `bun run test:core`              | the pure core tier — no Docker, no database                                            |
+| `bun run test:crap`              | CRAP-score gate (needs both database URLs)                                             |
+| `bun run test:mutation`          | mutation-score gate over `src/core` (no database)                                      |
+| `bun run check:production-image` | production image, migration, authority, and HTTP smoke check                           |
+| `bun run verify`                 | all rows above except `format`, `test:core`, `test:crap`, and `check:production-image` |
 
 ### Quality gates
 

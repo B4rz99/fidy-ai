@@ -19,6 +19,7 @@
     "test:core": "bun --bun vitest run --config vitest.core.config.ts",
     "test:crap": "bun --bun vitest run --config vitest.crap.config.ts --coverage && bun tools/crap/run.mjs",
     "test:mutation": "node tools/mutation/run.mjs",
+    "check:production-image": "bash scripts/check-production-image.sh",
     "verify": "bun run lint:suppressions && bun run lint && bun run lint:type-aware && bun run lint:deps && bun run lint:dependencies && bun run format:check && bun run typecheck && bun run test && bun run test:mutation",
     "postinstall": "effect-tsgo patch",
     "prepare": "lefthook install"

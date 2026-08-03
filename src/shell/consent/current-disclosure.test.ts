@@ -47,6 +47,6 @@ it.effect("uses the canonical stable policy URL and complete Colombia-first fact
     expect(disclosure.purposes.length).toBeGreaterThan(0);
     expect(disclosure.dataCategories.length).toBeGreaterThan(0);
     expect(disclosure.duration.length).toBeGreaterThan(0);
-    expect(disclosure.revocationMethod).toContain("privacidad@fidyapp.com");
+    expect(disclosure.revocationMethod).toContain("obarboza@fidyapp.com");
   })
 );

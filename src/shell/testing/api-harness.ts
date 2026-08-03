@@ -1,5 +1,5 @@
 import { BunHttpServer, BunServices } from "@effect/platform-bun";
-import { ConfigProvider, Context, type Effect, Layer, type Schema } from "effect";
+import { ConfigProvider, Context, DateTime, Effect, Layer, Ref, type Schema } from "effect";
 import { type HttpClientError } from "effect/unstable/http";
 import { HttpApiClient } from "effect/unstable/httpapi";
 import { type AgentBearerToken } from "~/core/tokens/model";
@@ -12,6 +12,12 @@ import type {
   ValidationFailed,
 } from "~/shell/_shared/errors";
 import { FidyApi } from "~/shell/api";
+import {
+  KapsoClient,
+  KapsoSendFailed,
+  type KapsoClientService,
+} from "~/shell/channels/whatsapp/kapso-client";
+import { WhatsAppProviderMessageId } from "~/shell/channels/whatsapp/model";
 import { MigrationSqlClientLive, MigratorLive, PgLive } from "~/shell/db/client";
 import { makeDevelopmentSeedLive } from "~/shell/db/development-seed";
 import { defaultAgentBearer } from "./identity-fixtures";
@@ -44,6 +50,7 @@ const TestPublicNamespace = ConfigProvider.layer(
         PUBLIC_WEB_ORIGIN: "https://fidyapp.com",
         PUBLIC_API_ORIGIN: "https://api.fidyapp.com",
         INGEST_EMAIL_DOMAIN: "ingest.fidyapp.com",
+        KAPSO_WEBHOOK_SECRET: "test-webhook-secret-32-characters",
       },
     }),
     ConfigProvider.fromEnv()
@@ -70,6 +77,51 @@ export class ApiHarnessClient extends Context.Service<ApiHarnessClient, ApiClien
   "fidy-ai/shell/testing/api-harness/ApiHarnessClient"
 ) {}
 
+/** Controls and observes the fake provider at the public HTTP test seam. */
+export class ApiHarnessKapsoControl extends Context.Service<
+  ApiHarnessKapsoControl,
+  {
+    readonly callCount: Effect.Effect<number>;
+    readonly failNextAfterAcceptance: Effect.Effect<void>;
+    readonly reset: Effect.Effect<void>;
+  }
+>()("fidy-ai/shell/testing/api-harness/ApiHarnessKapsoControl") {}
+
+const TestKapsoClient = Layer.effectContext(
+  Effect.gen(function* () {
+    const calls = yield* Ref.make(0);
+    const failNext = yield* Ref.make(false);
+    const client: KapsoClientService = {
+      sendText: () =>
+        Effect.gen(function* () {
+          yield* Ref.update(calls, (count) => count + 1);
+          if (yield* Ref.getAndSet(failNext, false)) {
+            return yield* new KapsoSendFailed({ safeReason: "unavailable" });
+          }
+          return {
+            messageEvidence: {
+              channel: "whatsapp",
+              provider: "kapso",
+              providerMessageId: WhatsAppProviderMessageId.make("wamid.test-outbound"),
+            },
+            sentAt: yield* DateTime.now,
+          };
+        }),
+    };
+    const control = ApiHarnessKapsoControl.of({
+      callCount: Ref.get(calls),
+      failNextAfterAcceptance: Ref.set(failNext, true),
+      reset: Effect.all([Ref.set(calls, 0), Ref.set(failNext, false)], {
+        discard: true,
+      }),
+    });
+    return Context.empty().pipe(
+      Context.add(KapsoClient, client),
+      Context.add(ApiHarnessKapsoControl, control)
+    );
+  })
+);
+
 /**
  * The API seam: the real handler stack served over a real socket against a
  * real Postgres (DATABASE_URL), exercised through the derived typed client.
@@ -83,6 +135,7 @@ export const ApiHarness = makeApiClientLive({
   bearer: defaultAgentBearer,
 }).pipe(
   Layer.provideMerge(HttpLive.pipe(Layer.provide(MigratorLive))),
+  Layer.provideMerge(TestKapsoClient),
   Layer.provideMerge(makeDevelopmentSeedLive(defaultAgentBearer)),
   Layer.provideMerge(BunHttpServer.layerTest),
   Layer.provideMerge(BunServices.layer),

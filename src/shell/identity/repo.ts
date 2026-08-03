@@ -23,6 +23,7 @@ const WhatsAppIdentityRow = Schema.Struct({
   verifiedAt: Schema.DateTimeUtcFromDate,
 });
 const WhatsAppLookup = WhatsAppIdentity.mapFields(Struct.pick(["phoneNumber"]));
+const WhatsAppIdentityByUser = WhatsAppIdentity.mapFields(Struct.pick(["userId"]));
 
 const userColumns = `id, service_market AS "serviceMarket", locale,
   time_zone AS "timeZone", created_at AS "createdAt"`;
@@ -152,6 +153,43 @@ export const insertWhatsAppIdentity = Effect.fn("insertWhatsAppIdentity")(
   (userId: UserId, identity: typeof WhatsAppIdentityWithoutUserId.Type) =>
     writeWhatsAppIdentity("insert", userId, identity)
 );
+
+const findAndLockWhatsAppIdentityInTransaction = (userId: UserId) =>
+  Effect.flatMap(SqlClient.SqlClient, (sql) =>
+    SqlSchema.findOneOption({
+      Request: WhatsAppIdentityByUser,
+      Result: WhatsAppIdentityRow,
+      execute: ({ userId }) => sql`
+        SELECT user_id AS "userId", phone_number AS "phoneNumber",
+          verified_at AS "verifiedAt"
+        FROM whatsapp_identities
+        WHERE user_id = ${userId}
+        FOR SHARE
+      `,
+    })({ userId })
+  ).pipe(Effect.orDie);
+
+/** Locks and reads the current association in a User-scoped transaction. */
+export const findAndLockWhatsAppIdentity = (userId: UserId) =>
+  withUserTransaction(userId, findAndLockWhatsAppIdentityInTransaction(userId));
+
+/** Reads the User's current verified WhatsApp association. */
+export const findWhatsAppIdentity = (userId: UserId) =>
+  withUserTransaction(
+    userId,
+    Effect.flatMap(SqlClient.SqlClient, (sql) =>
+      SqlSchema.findOneOption({
+        Request: WhatsAppIdentityByUser,
+        Result: WhatsAppIdentityRow,
+        execute: ({ userId }) => sql`
+          SELECT user_id AS "userId", phone_number AS "phoneNumber",
+            verified_at AS "verifiedAt"
+          FROM whatsapp_identities
+          WHERE user_id = ${userId}
+        `,
+      })({ userId })
+    ).pipe(Effect.orDie)
+  );
 
 /**
  * Resolves channel-verified WhatsApp evidence to its stable User. Only the

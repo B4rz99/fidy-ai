@@ -1,6 +1,10 @@
 import { Crypto, DateTime, Effect, Option, Schema, Terminal } from "effect";
 import type { E164PhoneNumber } from "~/core/identity/reference";
-import { recordConsentDisclosureDelivery } from "~/shell/consent/repo";
+import {
+  claimConsentDisclosureDelivery,
+  recordConsentDisclosureDelivery,
+  releaseConsentDisclosureDelivery,
+} from "~/shell/consent/repo";
 import { type AgentConversationOutcome, handleAgentConversationTurn } from "./conversation";
 import { InboundMessage } from "./agent-service";
 
@@ -27,11 +31,18 @@ const displayConversationOutcome = Effect.fn("displayConversationOutcome")(funct
     return yield* terminal.display(`${renderTerminalText(outcome.reply.text)}\n`);
   }
 
-  yield* terminal.display(`${renderTerminalText(outcome.text)}\n`);
-  if (outcome._tag === "SendDisclosure") {
+  if (outcome._tag !== "SendDisclosure") {
+    return yield* terminal.display(`${renderTerminalText(outcome.text)}\n`);
+  }
+  const claimedAt = yield* DateTime.now;
+  const claim = yield* claimConsentDisclosureDelivery(outcome.exchangeId, claimedAt);
+  if (Option.isNone(claim)) return yield* terminal.display(unavailableMessage);
+  yield* Effect.gen(function* () {
+    yield* terminal.display(`${renderTerminalText(outcome.text)}\n`);
     const crypto = yield* Crypto.Crypto;
     const recorded = yield* recordConsentDisclosureDelivery({
       exchangeId: outcome.exchangeId,
+      claimId: claim.value.claimId,
       message: {
         channel: "terminal",
         provider: "local-repl",
@@ -40,7 +51,14 @@ const displayConversationOutcome = Effect.fn("displayConversationOutcome")(funct
       deliveredAt: yield* DateTime.now,
     });
     if (Option.isNone(recorded)) return yield* terminal.display(unavailableMessage);
-  }
+  }).pipe(
+    Effect.onError(() =>
+      releaseConsentDisclosureDelivery({
+        exchangeId: outcome.exchangeId,
+        claimId: claim.value.claimId,
+      })
+    )
+  );
 });
 
 /**

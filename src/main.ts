@@ -1,4 +1,4 @@
-import { BunHttpServer, BunRuntime, BunServices } from "@effect/platform-bun";
+import { BunHttpClient, BunHttpServer, BunRuntime, BunServices } from "@effect/platform-bun";
 import { Config, Effect, Layer } from "effect";
 import { PgLive } from "~/shell/db/client";
 import { AppLive } from "~/shell/http";
@@ -16,6 +16,7 @@ const ServerLive = Layer.unwrap(
 const MainLive = AppLive.pipe(
   Layer.provide(ServerLive),
   Layer.provide(PgLive),
+  Layer.provide(BunHttpClient.layer),
   Layer.provide(BunServices.layer)
 );
 

@@ -15,7 +15,7 @@ one-shot migration paths not all reachable through a behavioural test.
 
 ## Decision
 
-Use two primary application seams and one further agent seam:
+Use two primary application seams and two focused asynchronous seams:
 
 - **Core seam:** call exported pure decisions directly, with no server or database.
 - **API seam:** traverse operation decoding, authorization, handlers, repositories, and real
@@ -23,6 +23,9 @@ Use two primary application seams and one further agent seam:
 - **Agent seam:** call `AgentService.handleTurn` through the CLI harness with external language
   model and terminal adapters substituted, while canonical handlers, authorization, repositories,
   PostgreSQL, and the generated client remain real.
+- **Channel-worker seam:** call one exported durable worker step with the external language model and
+  provider client substituted, while consent, `AgentService`, canonical handlers, repositories, and
+  PostgreSQL remain real. The production worker loop itself remains composition-only.
 
 Core tests do not mock shell collaborators or test shell orchestration in isolation. A policy with
 a stable pure interface may be tested directly, but its integration remains covered at the API
@@ -40,8 +43,9 @@ behaviour.
 ## Consequences
 
 Core feedback is fast and tests the decision independently of infrastructure. API tests are more
-expensive but prove that the operation is wired correctly, and the agent seam proves the hosted
-loop without replacing the product's canonical path.
+expensive but prove that the operation is wired correctly, the agent seam proves the hosted loop,
+and the channel-worker seam proves durable asynchronous dispatch without replacing either product's
+canonical path.
 
 The mutation gate is intentionally scoped to core and can run outside pull-request feedback. Shell
 mutation testing is not a 100% gate because some documentation, response-encoding, and one-shot

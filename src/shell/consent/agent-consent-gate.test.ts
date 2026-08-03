@@ -67,7 +67,7 @@ layer(AgentConsentHarness, { excludeTestServices: true, timeout: "30 seconds" })
 
         const service = yield* AgentService;
         const failure = yield* service
-          .handleTurn(
+          .handleSynchronousTurn(
             unconsentedUserId,
             InboundMessage.make({ text: TranscriptText.make("registra este dato privado") })
           )
@@ -116,7 +116,7 @@ layer(AgentConsentHarness, { excludeTestServices: true, timeout: "30 seconds" })
         yield* Deferred.await(lockHeld);
         const service = yield* AgentService;
         const turnFiber = yield* service
-          .handleTurn(
+          .handleSynchronousTurn(
             concurrentlyRevokedUserId,
             InboundMessage.make({ text: TranscriptText.make("registra dato concurrente") })
           )

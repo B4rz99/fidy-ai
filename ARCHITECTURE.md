@@ -32,7 +32,9 @@ protected by the dependency graph.
 A process touching one slice's data lives inside that slice. A process that owns data nobody else
 owns is a slice, including a pipeline. A process that owns no data is shell-only. A process never
 writes another slice's tables; it calls the owning slice's operations so that invariants and
-atomicity remain in one place.
+atomicity remain in one place. This rule applies to the nested WhatsApp operational slice: its
+durable delivery state is WhatsApp-owned even though the surrounding channel area is shell
+coordination.
 
 Use three checks when drawing a boundary:
 
@@ -97,9 +99,11 @@ Ordinary aggregates carry no owner field: the user is the context in which an op
 
 Isolation is guarded by a test derived from the assembled `HttpApi`: seed two users, enumerate
 every canonical operation, and assert that one user's data is neither visible nor mutable to the
-other. Background jobs and ingestion paths pass the user explicitly as well. A future background queue
+other. Background jobs and ingestion paths pass the user explicitly as well. The WhatsApp durable queue
 claims only the work identity and stable User through a narrow gateway, then processes it in a
 separate User-scoped transaction; no database transaction spans model or provider network work.
+A scheduled no-input gateway removes expired ingress budgets and free-form windows without exposing
+or accepting identifiers.
 
 A User's current ServiceMarket, locale, and IANA time zone are explicit independent context. An
 existing record is not reinterpreted when current User preferences change; artifacts that need
@@ -128,6 +132,9 @@ exhaustive core-to-API mapper in shell. Core never needs to know which transport
 
 External providers stay at shell edges behind narrow services. Launch-specific behavior remains
 in its owning module rather than being hidden behind speculative provider or market registries.
+The WhatsApp edge authenticates bounded exact webhook bytes before decoding and bounds Kapso
+response bytes before SDK decoding. Its worker appends a visible assistant Transcript entry only
+after provider delivery succeeds; failed or ambiguous sends do not claim that the User saw a reply.
 
 ---
 
@@ -152,6 +159,8 @@ Use these seams:
   It proves persistence, responses, suggested operations, and per-user isolation.
 - **Agent seam:** `AgentService.handleTurn` through the CLI harness, with external language-model
   and terminal adapters substituted while the canonical application path remains real.
+- **Channel-worker seam:** the exported durable worker step with real Consent, Identity, RLS
+  repositories, and AgentService; only language-model and provider clients are substituted.
 
 Core tests do not mock repositories or handlers. They prove decisions directly; the API seam proves
 load-decide-persist integration. A stable pure policy may be tested directly, but its integration

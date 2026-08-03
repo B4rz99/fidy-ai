@@ -6,7 +6,12 @@ import { ValidationGateLive } from "~/shell/_shared/errors";
 import { AuditRetentionLive } from "~/shell/audit/retention";
 import { CURRENT_POLICY_PATH } from "~/shell/consent/current-disclosure";
 import { PendingConsentRetentionLive } from "~/shell/consent/retention";
+import { AgentServiceLive } from "~/shell/agent/agent-service";
+import { OpenAiLanguageModelLive } from "~/shell/agent/openai";
 import { CategoriesLive } from "~/shell/categories/handlers";
+import { KapsoClientLive } from "~/shell/channels/whatsapp/kapso-client";
+import { KapsoWebhookLive } from "~/shell/channels/whatsapp/routes";
+import { WhatsAppWorkerLive } from "~/shell/channels/whatsapp/worker";
 import { DashboardLive } from "~/shell/dashboard/handlers";
 import { MigratorLive, RuntimeAuthorityLive } from "~/shell/db/client";
 import { IdentityLive } from "~/shell/identity/handlers";
@@ -63,7 +68,7 @@ const StaticLive = HttpStaticServer.layer({ root: "public", spa: true });
  * every request. The port and platform arrive from the outside.
  */
 export const HttpLive = HttpRouter.serve(
-  Layer.mergeAll(ApiLive, HealthLive, PolicyLive, StaticLive)
+  Layer.mergeAll(ApiLive, HealthLive, PolicyLive, StaticLive, KapsoWebhookLive)
 );
 
 /**
@@ -73,8 +78,14 @@ export const HttpLive = HttpRouter.serve(
  * supply is the environment: Postgres, an HTTP server, and the platform file,
  * path, and HTTP services used to serve the static shell.
  */
+const HostedWhatsAppWorkerLive = WhatsAppWorkerLive.pipe(
+  Layer.provide(AgentServiceLive.pipe(Layer.provide(OpenAiLanguageModelLive))),
+  Layer.provide(KapsoClientLive)
+);
+
 export const AppLive = Layer.mergeAll(
-  HttpLive,
+  HttpLive.pipe(Layer.provide(KapsoClientLive)),
+  HostedWhatsAppWorkerLive,
   AuditRetentionLive,
   PendingConsentRetentionLive
 ).pipe(Layer.provide(RuntimeAuthorityLive), Layer.provide(MigratorLive));

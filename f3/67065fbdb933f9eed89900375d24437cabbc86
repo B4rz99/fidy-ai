@@ -1,0 +1,25 @@
+.fluidattacks/sca.yaml
+  s_767b0265275e3d::t_cea1457d4340af 26
+tools/mutation/package.json
+  s_767b0265275e3d::t_ba853ac3e25253 12
+dependency-policy.json
+  s_767b0265275e3d::t_74beb7836fb44b 21
+tools/mutation/bun.lock
+  s_767b0265275e3d::t_df89bd6caed579 15,216
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.20",
+  "base_commit_sha": "f367065fbdb933f9eed89900375d24437cabbc86",
+  "prompts": {},
+  "sessions": {
+    "s_767b0265275e3d": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019fc583-7961-7d0c-afd4-a9d7ed541264",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

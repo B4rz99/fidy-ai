@@ -1,0 +1,79 @@
+.fluidattacks/sca.yaml
+  s_311738ae380d51::t_fe6b442e162cf4 26
+docs/adr/0007-postgresql-row-level-user-isolation.md
+  s_311738ae380d51::t_e48a69a1b8b71f 27,83
+  s_311738ae380d51::t_ad915eb57f77e3 26,28-30
+.github/workflows/ci.yml
+  s_311738ae380d51::t_05c894ff96a241 248-260,320
+railway.json
+  s_311738ae380d51::t_387cbe5c7599b9 8
+dependency-policy.json
+  s_311738ae380d51::t_006707feee41e3 21
+src/shell/db/client.ts
+  s_311738ae380d51::t_3a114275fdd82a 20-22
+  s_311738ae380d51::t_e115bcdaf8e0eb 2-3,5,18,25-28
+deploy/local-postgres-init.sql
+  s_311738ae380d51::t_f4bebb83112a2c 6-7
+scripts/check-production-image.sh
+  s_311738ae380d51::t_d57a385f1a47a4 1-8,10-14,16,55-73,102-125,178-179
+  s_311738ae380d51::t_c02db28a952df1 9,15,18-20,24-25,29,35,42
+  s_311738ae380d51::t_c96f1d39741979 133
+  s_311738ae380d51::t_0a27855d209d15 41,43-54,99-100,128,135-136
+  s_311738ae380d51::t_49cdffba969e48 17,21-23,26-28,30-34,36-40,75-77,79-81,83-85,87-89,101,153-154,158,160-161,163,166-167,177
+  s_311738ae380d51::t_4b5023478a828c 74,78,82,86,90-98,126-127,129-132,134,137-152,155-157,159,162,164-165,168-176
+src/shell/db/runtime-authority.ts
+  s_311738ae380d51::t_b82960b6a42b56 59-61
+  s_311738ae380d51::t_46cdc204d89bd1 5-6,29-30
+  s_311738ae380d51::t_ea09fc7b96c05a 1-4,7-8,12-15,18-28,33-48,50,52-58,62-87,89,93-96,99
+  s_311738ae380d51::t_8ffbda4f0d4625 9-11,31-32,90-92
+  s_311738ae380d51::t_ddd8b149503fa3 16-17,49,51,88,97-98
+Dockerfile
+  s_311738ae380d51::t_355446388d0e08 13
+package.json
+  s_311738ae380d51::t_9953da0f487af8 22
+.dockerignore
+  s_311738ae380d51::t_7a863863803f68 15-16
+.github/workflows/deployment-smoke.yml
+  s_311738ae380d51::t_eb6d24d24af4a0 14-15
+  s_311738ae380d51::t_38361d510c6732 1,28
+  s_311738ae380d51::t_91195992b1c5b5 2-13,16-27,29
+scripts/check-deployment-smoke.ts
+  s_311738ae380d51::t_0af5e21bd26ea4 20,31,34,37
+  s_311738ae380d51::t_501f878dd90e54 3,5-9,21-24,26-30,32-33,35-36,38,42-43
+  s_311738ae380d51::t_0edcbbc830e806 4,10-11,25
+  s_311738ae380d51::t_afa83de15d4391 45,47
+  s_311738ae380d51::t_8a86de5520265f 39
+  s_311738ae380d51::t_2e68042666fd94 1-2,12-19,40-41,44,46
+scripts/provision-runtime-role.ts
+  s_311738ae380d51::t_eae5caf76a3d9d 24-25,45,47-49,51-52,110,116-118
+  s_311738ae380d51::t_d3578b1e198ef1 1-3,6,8,17-19,46,50,60,65-66,70-81,84-85,88-91,119-120
+  s_311738ae380d51::t_3a114275fdd82a 40,121-123
+  s_311738ae380d51::t_8077bc1f527fca 124
+  s_311738ae380d51::t_f81de8266a44d4 9,14-16,26
+  s_311738ae380d51::t_807f12c0a724c7 4-5,7,10-13,20-23,27-39,41-44,53-59,61-64,67-69,82-83,86-87,92-109,111-115,125
+README.md
+  s_311738ae380d51::t_849e00276d6f6b 52
+  s_311738ae380d51::t_68c7fdaa73cc73 175-190
+  s_311738ae380d51::t_4725f847f203a4 53-55,83-86
+  s_311738ae380d51::t_567db4c92936de 191
+tools/mutation/package.json
+  s_311738ae380d51::t_1da19edb87349b 12
+tools/mutation/bun.lock
+  s_311738ae380d51::t_4abaa3e0fe9700 15,216
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.20",
+  "base_commit_sha": "1410be9f8e11889e114a920ad1ef989f3efa2308",
+  "prompts": {},
+  "sessions": {
+    "s_311738ae380d51": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019fc402-4e35-7ed2-89df-ddb96fcbc0e8",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": null
+    }
+  }
+}

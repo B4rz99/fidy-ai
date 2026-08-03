@@ -1,0 +1,28 @@
+public/politica.html
+  s_767b0265275e3d::t_a9565147161658 16-17,111,123
+  s_767b0265275e3d::t_334e03a3295587 86-88
+src/shell/consent/current-disclosure.test.ts
+  s_767b0265275e3d::t_fd431e98f93088 50
+src/shell/consent/current-disclosure.ts
+  s_767b0265275e3d::t_37f89de395ec5f 13,24,29,47
+  s_767b0265275e3d::t_334e03a3295587 30
+  s_767b0265275e3d::t_f214ad3c8ff414 25
+src/shell/consent/policy-route.test.ts
+  s_767b0265275e3d::t_3f29988c7d4f43 20-21
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.20",
+  "base_commit_sha": "39fbdca7655d809bf01aabe6c52097485a3126ab",
+  "prompts": {},
+  "sessions": {
+    "s_767b0265275e3d": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019fc583-7961-7d0c-afd4-a9d7ed541264",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

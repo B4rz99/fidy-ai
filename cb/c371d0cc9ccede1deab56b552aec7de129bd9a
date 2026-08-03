@@ -1,0 +1,63 @@
+.fluidattacks/sca.yaml
+  s_311738ae380d51::t_fe6b442e162cf4 26
+.github/workflows/deployment-smoke.yml
+  s_311738ae380d51::t_38361d510c6732 1,14,27
+  s_311738ae380d51::t_91195992b1c5b5 2-13,15-26,28
+scripts/check-production-image.sh
+  s_311738ae380d51::t_c96f1d39741979 121-123
+  s_311738ae380d51::t_d57a385f1a47a4 1-8,10-14,16,55-73,94-117,143-144
+  s_311738ae380d51::t_49cdffba969e48 9,15,17-40,74-89,93,126-142
+  s_311738ae380d51::t_0a27855d209d15 41-54,90-92,118-120,124-125
+scripts/provision-runtime-role.ts
+  s_311738ae380d51::t_eae5caf76a3d9d 24-26,28-29,31-33,35-36,75-78,109-120,122-124
+  s_311738ae380d51::t_d3578b1e198ef1 1-3,5-6,8-12,15-16,21-23,30,34,37-74,125-126
+  s_311738ae380d51::t_f81de8266a44d4 4,17-20,27
+  s_311738ae380d51::t_68c7fdaa73cc73 121
+  s_311738ae380d51::t_a8c2a43c1b611e 7,13-14,79-108
+  s_311738ae380d51::t_8077bc1f527fca 127-131
+package.json
+  s_311738ae380d51::t_9953da0f487af8 22
+.dockerignore
+  s_311738ae380d51::t_7a863863803f68 15-16
+tools/mutation/bun.lock
+  s_311738ae380d51::t_4abaa3e0fe9700 15,216
+docs/adr/0007-postgresql-row-level-user-isolation.md
+  s_311738ae380d51::t_e48a69a1b8b71f 26-28,81
+railway.json
+  s_311738ae380d51::t_387cbe5c7599b9 8
+README.md
+  s_311738ae380d51::t_4725f847f203a4 53-55,83-86
+  s_311738ae380d51::t_68c7fdaa73cc73 175-190
+  s_311738ae380d51::t_849e00276d6f6b 52
+  s_311738ae380d51::t_567db4c92936de 191
+.github/workflows/ci.yml
+  s_311738ae380d51::t_05c894ff96a241 248-260,320
+scripts/check-deployment-smoke.ts
+  s_311738ae380d51::t_0af5e21bd26ea4 20,31,34,37
+  s_311738ae380d51::t_501f878dd90e54 3,5-9,21-24,26-30,32-33,35-36,38,42-43,45,47
+  s_311738ae380d51::t_8a86de5520265f 39
+  s_311738ae380d51::t_0edcbbc830e806 4,10-11,25
+  s_311738ae380d51::t_2e68042666fd94 1-2,12-19,40-41,44,46
+tools/mutation/package.json
+  s_311738ae380d51::t_1da19edb87349b 12
+Dockerfile
+  s_311738ae380d51::t_355446388d0e08 13
+dependency-policy.json
+  s_311738ae380d51::t_006707feee41e3 21
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.20",
+  "base_commit_sha": "cbc371d0cc9ccede1deab56b552aec7de129bd9a",
+  "prompts": {},
+  "sessions": {
+    "s_311738ae380d51": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019fc402-4e35-7ed2-89df-ddb96fcbc0e8",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": null
+    }
+  }
+}

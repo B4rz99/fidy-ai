@@ -1,0 +1,48 @@
+docs/operations/external-endpoints.md
+  s_767b0265275e3d::t_a5eb3fc2ba9611 10-11
+.oxlintrc.json
+  s_767b0265275e3d::t_90c17d025cde44 100-105,107-116,119
+  s_767b0265275e3d::t_961a2d83b2c999 106
+landing/.gitignore
+  s_767b0265275e3d::t_eab6c71d39a353 1-2
+landing/api/waitlist.js
+  s_767b0265275e3d::t_95f2c897469cb8 1-103
+landing/en/index.html
+  s_767b0265275e3d::t_e9f4b1459cff82 1-121
+landing/en/privacy.html
+  s_767b0265275e3d::t_f65643a52c3f9b 1-255
+landing/en/terms.html
+  s_767b0265275e3d::t_cc2c6a7600aefb 1-245
+landing/es/index.html
+  s_767b0265275e3d::t_a9e77b00bda3a1 1-123
+landing/es/privacy.html
+  s_767b0265275e3d::t_8f2f547cec2216 1-270
+landing/es/terms.html
+  s_767b0265275e3d::t_b39f84e082fdca 1-258
+landing/styles.css
+  s_767b0265275e3d::t_c902b038b01e84 1-511
+landing/package.json
+  s_767b0265275e3d::t_6cc73c435d84de 1-10
+landing/tests/waitlist.test.js
+  s_767b0265275e3d::t_c5679c1bb88430 1-128
+landing/vercel.json
+  s_767b0265275e3d::t_1d1f939b687f40 1-12
+landing/waitlist.js
+  s_767b0265275e3d::t_3c6e436c7a5970 1-36
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.20",
+  "base_commit_sha": "b03b561551c6f627063f5f2ceb267d6e4b8cfc75",
+  "prompts": {},
+  "sessions": {
+    "s_767b0265275e3d": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019fc583-7961-7d0c-afd4-a9d7ed541264",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": null
+    }
+  }
+}

@@ -18,12 +18,5 @@
     "an entry whose exclusion is gone."
   ],
   "deferredUpdates": [],
-  "acceptedVulnerabilities": [
-    {
-      "cve": "CVE-2026-14257",
-      "path": "tools/mutation/bun.lock",
-      "reason": "brace-expansion 5.0.7 reaches this install through @stryker-mutator/core's minimatch. Every release <= 5.0.7 is affected (High, denial of service via unbounded expansion) and the fix, 5.0.8, was published 2026-07-23 — inside the 7-day install delay, which holds. What runs here is a build-time mutation runner expanding this repo's own glob patterns, so nothing untrusted reaches the parser. 5.0.8 becomes installable on 2026-07-30: pin it via `overrides` then, and delete this entry together with the exclusion in .fluidattacks/sca.yaml.",
-      "until": "2026-08-03T00:00:00Z"
-    }
-  ]
+  "acceptedVulnerabilities": []
 }

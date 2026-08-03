@@ -1,0 +1,20 @@
+scripts/check-dependency-guards.ts
+  s_f45efaa402581a::t_40b77186648d51 249
+  s_f45efaa402581a::t_0e8b72a1553b44 243-248,250-261,269
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.20",
+  "base_commit_sha": "5a12ea12a4a3c52360790a974bcd656119541bff",
+  "prompts": {},
+  "sessions": {
+    "s_f45efaa402581a": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019fc836-7925-74b9-a5cb-38252c6bd88a",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

@@ -1,0 +1,62 @@
+landing/styles.css
+  s_767b0265275e3d::t_98bb9ecb5e2e76 71-77,342-346,348-357
+  s_767b0265275e3d::t_c902b038b01e84 1-70,78-341,347,358-533
+landing/.gitignore
+  s_767b0265275e3d::t_eab6c71d39a353 1-2
+landing/en/index.html
+  s_767b0265275e3d::t_e9f4b1459cff82 1-121
+landing/package.json
+  s_767b0265275e3d::t_6cc73c435d84de 1-6,8-10
+  s_767b0265275e3d::t_d243db106a0554 7
+docs/operations/external-endpoints.md
+  s_767b0265275e3d::t_a5eb3fc2ba9611 10-11
+landing/es/terms.html
+  s_767b0265275e3d::t_b39f84e082fdca 1-52,54-232,234-250,252-258
+  s_767b0265275e3d::t_8d87014aba75b3 53,233,251
+landing/en/terms.html
+  s_767b0265275e3d::t_cc2c6a7600aefb 1-245
+landing/es/index.html
+  s_767b0265275e3d::t_a9e77b00bda3a1 1-114,116-123
+  s_767b0265275e3d::t_acd36656cdb9ef 115
+public/politica.html
+  s_767b0265275e3d::t_bc46eb599054d8 11-17,20-32,150-158
+  s_767b0265275e3d::t_6e72f66fe4ce17 34-40,42-61,63-78,80-87,89-99,101-109,111-126,128-142,144-149
+landing/api/waitlist.js
+  s_767b0265275e3d::t_95f2c897469cb8 1-103
+src/shell/consent/current-disclosure.ts
+  s_767b0265275e3d::t_cfad82b16c1b4b 29-30
+landing/vercel.json
+  s_767b0265275e3d::t_1d1f939b687f40 1,4-5,7
+  s_767b0265275e3d::t_4ed43b07571a92 2-3,6
+landing/en/privacy.html
+  s_767b0265275e3d::t_6e72f66fe4ce17 24,70-72,75-77
+  s_767b0265275e3d::t_f65643a52c3f9b 1-5,11-21,26-28,47,50,53-54,57-59,63,79,114,119,122-123,126-127,130,136,139,143,146,150-153,156-161
+  s_767b0265275e3d::t_7047702f41df9e 6-10,22-23,25,29-46,48-49,51-52,55-56,60-62,64-69,73-74,78,80-113,115-118,120-121,124-125,128-129,131-135,137-138,140-142,144-145,147-149,154-155
+landing/tests/waitlist.test.js
+  s_767b0265275e3d::t_c5679c1bb88430 1-128
+src/shell/consent/policy-route.test.ts
+  s_767b0265275e3d::t_ed27a907baa55a 20
+.oxlintrc.json
+  s_767b0265275e3d::t_961a2d83b2c999 106
+  s_767b0265275e3d::t_90c17d025cde44 100-105,107-116,119
+landing/bunfig.toml
+  s_767b0265275e3d::t_af3e60536c4017 1-2
+landing/waitlist.js
+  s_767b0265275e3d::t_3c6e436c7a5970 1-36
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.20",
+  "base_commit_sha": "f274dc0b3321f945bea3f9cc62b3079f6decf45f",
+  "prompts": {},
+  "sessions": {
+    "s_767b0265275e3d": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019fc583-7961-7d0c-afd4-a9d7ed541264",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": null
+    }
+  }
+}

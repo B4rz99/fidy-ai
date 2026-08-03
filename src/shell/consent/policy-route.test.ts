@@ -17,7 +17,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         expect(response.status).toBe(200);
         expect(response.headers["content-type"]).toContain("text/html");
         expect(body).toContain("Política de tratamiento de datos personales");
-        expect(body).toContain("policy-2026-08");
+        expect(body).toContain("policy-2026-08-03");
         expect(body).toContain("obarboza@fidyapp.com");
       })
     );

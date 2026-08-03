@@ -1,0 +1,10 @@
+{
+  "name": "@fidy/landing",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "bunx serve .",
+    "build": "rm -rf dist && mkdir dist && cp -R en es styles.css waitlist.js dist/ && cp ../public/politica.html dist/politica.html",
+    "test": "bun test tests"
+  }
+}

@@ -26,8 +26,8 @@ export const currentDisclosure = Config.map(externalEndpoints, ({ policyUrl }) =
     text: CURRENT_DISCLOSURE_TEXT,
     policy: {
       publicUrl: policyUrl,
-      revision: "policy-2026-08",
-      contentSha256: "455b8d2608bf2506cee806f2174de47985b4b95dd58bf8ba4f4cc3ea6539d44e",
+      revision: "policy-2026-08-03",
+      contentSha256: "3dc889976ce880aedcbe6189f06e0267fc297def08044f380d896496316c26c9",
     },
     purposes: [
       "Crear, autenticar, administrar y proteger la cuenta",

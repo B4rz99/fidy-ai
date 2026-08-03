@@ -97,12 +97,26 @@
         "no-console": "off"
       }
     },
-    // The two places the type-aware pass can see no types. dependency-cruiser
+    // The static landing app is plain JavaScript because Vercel loads its API
+    // handler directly and browsers load its form script without a build step.
+    // The regular lint pass still checks these files; type-aware safety rules
+    // cannot derive types for either runtime and would report every boundary as
+    // `any`.
+    {
+      "files": ["landing/**/*.js"],
+      "rules": {
+        "typescript/no-unsafe-argument": "off",
+        "typescript/no-unsafe-assignment": "off",
+        "typescript/no-unsafe-call": "off",
+        "typescript/no-unsafe-member-access": "off",
+        "typescript/no-unsafe-return": "off",
+        "typescript/prefer-nullish-coalescing": "off"
+      }
+    },
+    // The two tooling locations below also have no types. dependency-cruiser
     // lives in an isolated install under tools/depcruise (see its package.json)
     // that the root tsconfig does not see; the custom plugin is untyped .js
-    // written against oxlint's untyped JS plugin API. Either way every value in
-    // reach is `any`, and without this the type-aware run can never be a gate
-    // at all.
+    // written against oxlint's untyped JS plugin API.
     {
       "files": ["tools/depcruise/*.mjs", "scripts/oxlint/*.js"],
       "rules": {

@@ -7,7 +7,8 @@ operational state expected by dependent deployments.
 ## Ownership and routing
 
 - `fidyapp.com` is registered in the operator's Spaceship account.
-- Vercel hosts the public web origin and manages the authoritative DNS zone.
+- Vercel hosts the public web origin from `landing` in this repository and manages the authoritative
+  DNS zone.
 - Google Workspace handles mail for `@fidyapp.com`.
 - Resend is configured to send and receive for `ingest.fidyapp.com`; the domain uses the São Paulo
   sending region and enforced TLS.

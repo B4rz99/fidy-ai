@@ -1,0 +1,53 @@
+apps/landing/en/terms.html
+  s_767b0265275e3d::t_831a378cf3aa5e 1-245
+apps/landing/en/index.html
+  s_767b0265275e3d::t_831a378cf3aa5e 1-121
+docs/operations/external-endpoints.md
+  s_767b0265275e3d::t_ecfc83d7291898 10-11
+apps/landing/styles.css
+  s_767b0265275e3d::t_831a378cf3aa5e 1-511
+apps/landing/es/privacy.html
+  s_767b0265275e3d::t_831a378cf3aa5e 1-270
+apps/landing/es/index.html
+  s_767b0265275e3d::t_831a378cf3aa5e 1-123
+apps/landing/waitlist.js
+  s_767b0265275e3d::t_16a2d13c7f14a1 2-5,9-10,18,22
+  s_767b0265275e3d::t_831a378cf3aa5e 1,6-8,11-17,19-21,23-36
+apps/landing/api/waitlist.js
+  s_767b0265275e3d::t_831a378cf3aa5e 1-103
+apps/landing/.gitignore
+  s_767b0265275e3d::t_831a378cf3aa5e 1
+  s_767b0265275e3d::t_685510b6a3b814 2
+apps/landing/tests/waitlist.test.js
+  s_767b0265275e3d::t_41e3068961f3dd 3
+  s_767b0265275e3d::t_d914845b931165 1-2
+  s_767b0265275e3d::t_f68098ff5987c0 4-6
+  s_767b0265275e3d::t_a50083d1cb2674 7-128
+apps/landing/en/privacy.html
+  s_767b0265275e3d::t_831a378cf3aa5e 1-255
+apps/landing/package.json
+  s_767b0265275e3d::t_cd3e44d06db283 7-8
+  s_767b0265275e3d::t_831a378cf3aa5e 1-6,9-10
+apps/landing/es/terms.html
+  s_767b0265275e3d::t_831a378cf3aa5e 1-258
+.oxlintrc.json
+  s_767b0265275e3d::t_90c17d025cde44 100-116,119
+apps/landing/vercel.json
+  s_767b0265275e3d::t_831a378cf3aa5e 1-12
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.20",
+  "base_commit_sha": "0815ab35a4aa8f29f5f4f396dde49b153dd3c741",
+  "prompts": {},
+  "sessions": {
+    "s_767b0265275e3d": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019fc583-7961-7d0c-afd4-a9d7ed541264",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

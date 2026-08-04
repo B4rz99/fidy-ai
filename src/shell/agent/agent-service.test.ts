@@ -558,7 +558,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
         userBTranscript
       );
 
-      expect(reply.text).toBe("Listo, completé la operación solicitada.");
+      expect(reply.text).toContain("Gasto guardado");
       expect(userAAfter).toEqual(userABefore);
       expect(encodedBTranscript).not.toContain("A_PRIVATE_TRANSCRIPT_MARKER");
       expect(encodedBTranscript).not.toContain("A_PRIVATE_ASSISTANT_MARKER");
@@ -697,7 +697,9 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       const rows = yield* sql`SELECT count(*)::int AS count FROM transactions`;
       const audit = yield* observeAuditLogEntries(defaultUserId);
 
-      expect(reply.text).toBe("Listo, completé la operación solicitada.");
+      expect(reply.text).toBe(
+        "✅ **Gasto guardado**\n\n**Valor:** 25.000 COP\n**Comercio:** Almuerzo\n**Categoría:** Restaurantes\n**Fecha:** Hoy"
+      );
       expect(rows[0]?.count).toBe(1);
       expect(audit.map(({ operation }) => operation)).toEqual(["transactions.createTransaction"]);
     })
@@ -716,7 +718,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       );
       const rows = yield* sql`SELECT count(*)::int AS count FROM transactions`;
 
-      expect(reply.text).toBe("Listo, completé la operación solicitada.");
+      expect(reply.text).toContain("Gasto guardado");
       expect(rows[0]?.count).toBe(1);
     })
   );
@@ -741,7 +743,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
           entry.operation === "transactions.listTransactions"
       );
 
-      expect(reply.text).toBe("Listo, completé la operación solicitada.");
+      expect(reply.text).toContain("Gasto guardado");
       expect(audit.map((entry) => entry.operation)).toEqual([
         "transactions.listTransactions",
         "transactions.createTransaction",
@@ -854,7 +856,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
 
         expect(displayed).toEqual([
           "Fidy> ",
-          "Listo, completé la operación solicitada.\n",
+          "✅ **Gasto guardado**\n\n**Valor:** 25.000 COP\n**Comercio:** Almuerzo\n**Categoría:** Restaurantes\n**Fecha:** Hoy\n",
           "Fidy> ",
         ]);
         expect(cop?.categoryId).toBe(categoryIds.restaurantes);

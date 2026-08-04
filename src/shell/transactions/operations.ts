@@ -40,6 +40,9 @@ const TransactionQueryParameters = Schema.Struct({
   currency: Schema.optionalKey(TransactionQueryValues.fields.currency),
 });
 
+/** Successful create response shared by canonical consumers that present the stored Transaction. */
+export const CreateTransactionResponse = OperationResponse(Transaction);
+
 /**
  * Caller-owned Transaction capture, history, correction, deletion, and retained provenance.
  * Identity comes from authentication; unknown and foreign record ids are indistinguishable.
@@ -48,7 +51,7 @@ export const TransactionsGroup = HttpApiGroup.make("transactions")
   .add(
     HttpApiEndpoint.post("createTransaction", "/transactions", {
       payload: CreateTransactionInput,
-      success: OperationResponse(Transaction).pipe(HttpApiSchema.status(201)),
+      success: CreateTransactionResponse.pipe(HttpApiSchema.status(201)),
       error: [NotFound, ValidationFailed],
     })
       .annotate(

@@ -1,0 +1,43 @@
+src/shell/_shared/operation-catalog.ts
+  s_81885976fa7f4b::t_a0ffe9420db903 50,52,54
+  s_2096af1feee5ae::t_fa02edb0199554 51,53,55-56
+src/main.ts
+  s_81885976fa7f4b::t_114e110c6790a2 19-22
+  s_81885976fa7f4b::t_1751a56ba16106 2-3,17-18,23-24,27
+src/shell/agent/toolkit.test.ts
+  s_2096af1feee5ae::t_9bc8c6ae1c5713 25
+  s_81885976fa7f4b::t_3e332bd83de02d 3-4,26-31
+  s_df784fe67ec34e::t_66c555dd389593 32-33
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.20",
+  "base_commit_sha": "ce69dab31214342e30b9a08a130e0b9f46e422e5",
+  "prompts": {},
+  "sessions": {
+    "s_2096af1feee5ae": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019fca90-ce9e-7dab-9d9f-57075315f1a3",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_81885976fa7f4b": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019fbb76-d07b-71ba-a459-02b13f9a14d1",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_df784fe67ec34e": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019fc84f-f98e-7cad-a01a-a1a7785fadad",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

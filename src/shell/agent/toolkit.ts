@@ -5,6 +5,7 @@ import type { CanonicalOperationId } from "~/core/_shared/canonical-operation";
 import { type AgentBearerToken } from "~/core/tokens/model";
 import { makeAgentAuthorizationClientLive } from "~/shell/_shared/authz";
 import { type CatalogOperation } from "~/shell/_shared/operation-catalog";
+import { type AgentConfirmation } from "~/shell/_shared/operation-policy";
 import { FidyApi, operationCatalog } from "~/shell/api";
 
 const safeCanonicalApiUrl = Schema.makeFilter<URL>((url) => {
@@ -83,9 +84,14 @@ export const findAgentOperationBinding = (
     ? Option.fromNullishOr(bindingsByWireName.get(wireName))
     : Option.none();
 
+const confirmationGuidance = (agentConfirmation: AgentConfirmation): string =>
+  agentConfirmation === "not-required"
+    ? " This operation does not require User confirmation; call it directly without asking the User to confirm."
+    : " The host manages exact confirmation for this operation; call the tool rather than asking the User for informal confirmation.";
+
 const tools = agentOperationBindings.map((binding) =>
   Tool.dynamic(binding.wireName, {
-    description: binding.description,
+    description: binding.description + confirmationGuidance(binding.policy.agentConfirmation),
     parameters: binding.parameters,
     success: binding.success,
     failure: binding.failure,

@@ -1,6 +1,7 @@
 import { expect, layer } from "@effect/vitest";
 import {
   Array as EffectArray,
+  ConfigProvider,
   Context,
   DateTime,
   Deferred,
@@ -13,12 +14,14 @@ import {
   Stream,
 } from "effect";
 import { AiError, LanguageModel } from "effect/unstable/ai";
-import { HttpBody, HttpClient } from "effect/unstable/http";
+import { HttpBody, HttpClient, HttpClientResponse } from "effect/unstable/http";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import { ConsentRecord, ConsentRecordId } from "~/core/consent/model";
 import { E164PhoneNumber, UserId } from "~/core/identity/reference";
 import { AgentBearerToken } from "~/core/tokens/model";
 import { AgentReply, AgentService, AgentServiceLive } from "~/shell/agent/agent-service";
+import { makeOpenAiFunctionCallResponse } from "~/shell/agent/fixtures/openai";
+import { OpenAiLanguageModelLive } from "~/shell/agent/openai";
 import { admitAgentConversationTurn } from "~/shell/agent/conversation";
 import { MigrationSqlClient } from "~/shell/db/client";
 import {
@@ -177,6 +180,49 @@ const FailingWhatsAppModel = Layer.effect(
   })
 );
 const FailingAgentService = AgentServiceLive.pipe(Layer.provide(FailingWhatsAppModel));
+const OpenAiRequest = Schema.Struct({
+  tools: Schema.Array(Schema.Struct({ parameters: Schema.Unknown })),
+});
+const openAiToolResponse = makeOpenAiFunctionCallResponse({
+  name: "categories__listCategories",
+  argumentsJson: "{}",
+});
+const OpenAiHttpClient = Layer.succeed(
+  HttpClient.HttpClient,
+  HttpClient.make((request) =>
+    Effect.gen(function* () {
+      if (request.body._tag !== "Uint8Array") {
+        return yield* Effect.die("Expected an encoded OpenAI request body");
+      }
+      const json = yield* Schema.decodeUnknownEffect(Schema.UnknownFromJsonString)(
+        new TextDecoder().decode(request.body.body)
+      ).pipe(Effect.orDie);
+      const body = yield* Schema.decodeUnknownEffect(OpenAiRequest)(json).pipe(Effect.orDie);
+      if (
+        body.tools.some(
+          ({ parameters }) =>
+            typeof parameters === "object" && parameters !== null && "anyOf" in parameters
+        )
+      ) {
+        return yield* Effect.die("OpenAI rejected a union parameter schema");
+      }
+      return HttpClientResponse.fromWeb(
+        request,
+        new Response(openAiToolResponse, {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        })
+      );
+    })
+  )
+);
+const OpenAiWhatsAppModel = OpenAiLanguageModelLive.pipe(
+  Layer.provide(OpenAiHttpClient),
+  Layer.provide(
+    ConfigProvider.layer(ConfigProvider.fromUnknown({ OPENAI_API_KEY: "test-only-secret" }))
+  )
+);
+const OpenAiAgentService = AgentServiceLive.pipe(Layer.provide(OpenAiWhatsAppModel));
 const WhatsAppHarness = AgentServiceLive.pipe(
   Layer.provideMerge(ScriptedWhatsAppModel),
   Layer.provideMerge(ApiHarness)
@@ -725,6 +771,68 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
             })
           )
         ).toBe(false);
+      })
+    );
+
+    it.effect("processes an authorized turn through OpenAI with strict toolkit schemas", () =>
+      Effect.gen(function* () {
+        yield* seedDevelopmentIdentity(defaultAgentBearer);
+        yield* truncateWhatsAppChannel;
+        const eventTime = DateTime.makeUnsafe("2026-04-03T12:01:02.000Z");
+        const inbound = makeKapsoTextEvent("wamid.openai-toolkit", "mercado 20 mil", eventTime);
+        yield* enqueueWhatsAppTurn({
+          admission: authorizedTurn(inbound),
+          event: inbound,
+          deliveryKey,
+        });
+        const sql = yield* SqlClient.SqlClient;
+        yield* withUserTransaction(
+          defaultUserId,
+          sql`UPDATE whatsapp_conversation_windows
+              SET window_open_until = ${DateTime.add(yield* DateTime.now, { hours: 1 })}
+              WHERE user_id = ${defaultUserId}`
+        );
+        const sent = yield* Ref.make(0);
+        const agent = yield* Layer.build(Layer.fresh(OpenAiAgentService)).pipe(
+          Effect.map(Context.get(AgentService))
+        );
+
+        const processed = yield* processNextWhatsAppTurn(
+          DateTime.add(eventTime, { seconds: 3 })
+        ).pipe(
+          Effect.provideService(AgentService, agent),
+          Effect.provideService(
+            KapsoClient,
+            kapsoClientFixture(
+              "wamid.openai-toolkit-reply",
+              eventTime,
+              Ref.update(sent, (count) => count + 1)
+            )
+          )
+        );
+
+        expect(processed).toBe(true);
+        expect(yield* Ref.get(sent)).toBe(1);
+        const admin = yield* MigrationSqlClient;
+        const trace = yield* admin`
+          SELECT entry ->> '_tag' AS "tag", entry ->> 'operation' AS "operation"
+          FROM transcript_entries
+          WHERE user_id = ${defaultUserId}
+          ORDER BY sequence
+        `;
+        expect(trace).toContainEqual({
+          tag: "CanonicalToolCallEntry",
+          operation: "categories.listCategories",
+        });
+        const results = yield* admin`
+          SELECT entry ->> '_tag' AS "tag", entry ->> 'operation' AS "operation"
+          FROM transcript_entries
+          WHERE user_id = ${defaultUserId} AND entry ->> '_tag' = 'CanonicalToolResultEntry'
+        `;
+        expect(results).toContainEqual({
+          tag: "CanonicalToolResultEntry",
+          operation: "categories.listCategories",
+        });
       })
     );
 

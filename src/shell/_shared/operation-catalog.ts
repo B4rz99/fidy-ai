@@ -47,7 +47,12 @@ const canonicalInput = (endpoint: HttpApiEndpoint.Top): OperationSchema => {
   add("headers", endpoint.headers);
   const payloads = payloadSchemas(endpoint);
   if (Arr.isReadonlyArrayNonEmpty(payloads)) add("payload", unionSchema(payloads));
-  const schema = Schema.make<PartialInputSchema>(new SchemaAST.Objects(fields, []));
+  // A never-valued string record models an empty object while preserving a closed JSON shape for
+  // consumers that require strict object parameters.
+  const schema =
+    fields.length === 0
+      ? Schema.Record(Schema.String, Schema.Never)
+      : Schema.make<PartialInputSchema>(new SchemaAST.Objects(fields, []));
   return asOperationSchema(schema);
 };
 

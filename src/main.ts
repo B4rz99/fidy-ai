@@ -1,20 +1,26 @@
 import { BunHttpClient, BunHttpServer, BunRuntime, BunServices } from "@effect/platform-bun";
-import { Config, Effect, Layer } from "effect";
+import { Config, Effect, Layer, Option } from "effect";
+import { CanonicalApiBaseUrl, CanonicalApiUrl } from "~/shell/agent/toolkit";
 import { PgLive } from "~/shell/db/client";
 import { AppLive } from "~/shell/http";
 
-const ServerLive = Layer.unwrap(
-  Effect.map(
-    Config.all({
-      port: Config.int("PORT").pipe(Config.withDefault(3000)),
-      hostname: Config.string("FIDY_HTTP_HOST").pipe(Config.withDefault("0.0.0.0")),
-    }),
-    BunHttpServer.layer
+const serverConfig = Config.all({
+  port: Config.int("PORT").pipe(Config.withDefault(3000)),
+  hostname: Config.string("FIDY_HTTP_HOST").pipe(Config.withDefault("0.0.0.0")),
+});
+
+const ServerLive = Layer.unwrap(Effect.map(serverConfig, BunHttpServer.layer));
+
+const CanonicalApiUrlLive = Layer.effect(
+  CanonicalApiBaseUrl,
+  Effect.map(serverConfig, ({ port }) =>
+    Option.some(CanonicalApiUrl.make(new URL(`http://127.0.0.1:${port}/`)))
   )
 );
 
 const MainLive = AppLive.pipe(
   Layer.provide(ServerLive),
+  Layer.provide(CanonicalApiUrlLive),
   Layer.provide(PgLive),
   Layer.provide(BunHttpClient.layer),
   Layer.provide(BunServices.layer)

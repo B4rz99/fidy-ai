@@ -1,5 +1,7 @@
 import { expect, it } from "@effect/vitest";
 import { Effect, Schema } from "effect";
+import { Tool } from "effect/unstable/ai";
+import { toCodecOpenAI } from "effect/unstable/ai/OpenAiStructuredOutput";
 import { HttpApi } from "effect/unstable/httpapi";
 import { FidyApi } from "~/shell/api";
 import { AgentToolkit, CanonicalApiUrl, agentOperationBindings } from "./toolkit";
@@ -18,6 +20,15 @@ it("derives exactly one hosted tool for every FidyApi canonical operation", () =
     reflected.map((operation) => operation.replaceAll(".", "__"))
   );
   expect(agentOperationBindings.every(({ description }) => description.length > 0)).toBe(true);
+});
+
+it("encodes every hosted operation as an OpenAI closed object", () => {
+  for (const tool of Object.values(AgentToolkit.tools)) {
+    const parameters = Tool.getJsonSchema(tool, { transformer: toCodecOpenAI });
+    expect(parameters.type).toBe("object");
+    expect(parameters.anyOf).toBeUndefined();
+    expect(parameters.additionalProperties).toBe(false);
+  }
 });
 
 it.effect("rejects canonical API destinations that could leak a hosted bearer", () =>

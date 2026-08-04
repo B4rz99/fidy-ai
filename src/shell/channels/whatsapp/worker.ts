@@ -29,7 +29,13 @@ export const processNextWhatsAppTurn = Effect.fn("WhatsApp.processNextTurn")(fun
 
   const service = yield* AgentService;
   const prepared = yield* Effect.option(
-    service.handleTurn(claim.userId, started.value.inboundMessage)
+    service
+      .handleTurn(claim.userId, started.value.inboundMessage)
+      .pipe(
+        Effect.tapError((error) =>
+          Effect.logError("WhatsApp agent turn failed", { errorTag: error._tag })
+        )
+      )
   );
   if (Option.isNone(prepared)) {
     yield* failWhatsAppTurn(claim, claimTime, "agent_failed");

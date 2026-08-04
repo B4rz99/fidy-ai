@@ -1,0 +1,38 @@
+src/shell/agent/transaction-receipt.test.ts
+  s_2096af1feee5ae::t_dafdb7426adb8a 34,37,48
+  s_2096af1feee5ae::t_1f14e41dd6719c 1,3,5,25-27,29-33,35-36,38-47,49-54,56-62
+  s_2096af1feee5ae::t_5b3bd8a964632a 2,4,7-14,16-23,63-64
+  s_2096af1feee5ae::t_d7f6dc059030c4 6,15,24,28,55
+src/shell/transactions/operations.ts
+  s_2096af1feee5ae::t_e6c8523bd8d09c 43-45,54
+src/shell/agent/agent-service.test.ts
+  s_2096af1feee5ae::t_dc54bb4b6623f2 859
+  s_2096af1feee5ae::t_3aa2858d77b520 561,700-702,721,746
+src/shell/agent/agent-service.ts
+  s_2096af1feee5ae::t_e7ce13c37581f7 17,193-204,206-213,511,513-518
+  s_2096af1feee5ae::t_54fd989abfb47a 56,192,205,512
+src/shell/agent/transaction-receipt.ts
+  s_2096af1feee5ae::t_455147e1f16a8d 49-54
+  s_2096af1feee5ae::t_e9aa9a2658e67f 73
+  s_2096af1feee5ae::t_54fb51831270b7 87
+  s_2096af1feee5ae::t_6e65e57f08aa90 6
+  s_2096af1feee5ae::t_6c8ea97a7083ef 1-5,7-11,13-31,43-48,55-59,61-72,74-78,80-81,83,88-97
+  s_2096af1feee5ae::t_9c64307ea4c005 12,60,79
+  s_2096af1feee5ae::t_f37e9350427f91 32-42,82,84-86
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "b9c8af8ff7b01ac24068a48a3e2a835c91afbafc",
+  "prompts": {},
+  "sessions": {
+    "s_2096af1feee5ae": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019fca90-ce9e-7dab-9d9f-57075315f1a3",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": null
+    }
+  }
+}

@@ -1398,6 +1398,55 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
       })
     );
 
+    it.effect("renders standard Markdown bold for WhatsApp free-form replies", () =>
+      Effect.gen(function* () {
+        yield* seedDevelopmentIdentity(defaultAgentBearer);
+        yield* truncateWhatsAppChannel;
+        const eventTime = DateTime.makeUnsafe("2026-04-03T12:00:02.000Z");
+        const event = makeKapsoTextEvent("wamid.markdown-bold", "hola", eventTime);
+        const admission = yield* admitAgentConversationTurn({
+          phoneNumber: event.phoneNumber,
+          content: { _tag: "Text", text: event.content.text },
+          message: event.messageEvidence,
+          receivedAt: event.receivedAt,
+        });
+        if (admission._tag !== "AuthorizedTurn") {
+          return yield* Effect.die("expected authorized formatting fixture");
+        }
+        yield* enqueueWhatsAppTurn({ admission, event, deliveryKey });
+        const sql = yield* SqlClient.SqlClient;
+        yield* withUserTransaction(
+          defaultUserId,
+          sql`UPDATE whatsapp_conversation_windows
+              SET window_open_until = ${DateTime.add(eventTime, { hours: 1 })}
+              WHERE user_id = ${defaultUserId}`
+        );
+        const sentText = yield* Ref.make(Option.none<TranscriptText>());
+        yield* sendKapsoFreeForm(
+          defaultUserId,
+          agentReplyFixture("**Registré** el movimiento."),
+          DateTime.add(eventTime, { seconds: 1 })
+        ).pipe(
+          Effect.provideService(KapsoClient, {
+            sendText: (input) =>
+              Ref.set(sentText, Option.some(input.text)).pipe(
+                Effect.as({
+                  messageEvidence: {
+                    channel: "whatsapp" as const,
+                    provider: "kapso" as const,
+                    providerMessageId: WhatsAppProviderMessageId.make("wamid.markdown-bold-reply"),
+                  },
+                  sentAt: eventTime,
+                })
+              ),
+          })
+        );
+        expect(yield* Ref.get(sentText)).toEqual(
+          Option.some(TranscriptText.make("*Registré* el movimiento."))
+        );
+      })
+    );
+
     it.effect("refuses channel-unsupported semantic reply shapes before authorization", () =>
       Effect.gen(function* () {
         const unreachableKapso: KapsoClientService = {

@@ -26,6 +26,9 @@ export class ConsentDisclosureDeliveryUnavailable extends Data.TaggedError(
 /** The WhatsApp launch adapter cannot safely render reply attachments or choices. */
 export class AgentReplyNotRenderable extends Data.TaggedError("AgentReplyNotRenderable")<{}> {}
 
+const renderWhatsAppText = (text: TranscriptText): TranscriptText =>
+  TranscriptText.make(text.replace(/\*\*(\S(?:[\s\S]*?\S)?)\*\*/gu, "*$1*"));
+
 /**
  * Sends terminal consent communication immediately and never starts financial processing. Events
  * older than the provider's 24-hour window are acknowledged without a send. Disclosure outcomes
@@ -94,7 +97,7 @@ export const sendKapsoFreeForm = Effect.fn("WhatsApp.sendFreeForm")(function* (
   const sent = yield* client.sendText({
     businessPhoneNumberId: authorization.businessPhoneNumberId,
     to: authorization.phoneNumber,
-    text: reply.text,
+    text: renderWhatsAppText(reply.text),
   });
   yield* retainOutboundEvidence(userId, sent.messageEvidence, sent.sentAt);
   return sent;

@@ -130,6 +130,8 @@ export const systemPrompt = ({
     .map(({ id, label }) => `${label}: ${id}`)
     .join(", ")}. ` +
   `Usa operaciones canónicas para consultar hechos financieros del Usuario; no los inventes. ` +
+  `No pidas confirmación conversacional por tu cuenta: sigue la política indicada en cada ` +
+  `herramienta y deja que el host gestione las operaciones que requieren confirmación. ` +
   `Interpreta registros compactos de comercio e importe, incluidas las expresiones mil y k, ` +
   `como egresos en la moneda contextual; preserva cualquier moneda ISO explícita, usa el ` +
   `inicio del turno como ` +

@@ -6,6 +6,12 @@ import { HttpApi } from "effect/unstable/httpapi";
 import { FidyApi } from "~/shell/api";
 import { AgentToolkit, CanonicalApiUrl, agentOperationBindings } from "./toolkit";
 
+const hostedTool = (name: string) => {
+  const tool = Object.values(AgentToolkit.tools).find((candidate) => candidate.name === name);
+  if (tool === undefined) throw new Error(`Hosted tool is missing: ${name}`);
+  return tool;
+};
+
 it("derives exactly one hosted tool for every FidyApi canonical operation", () => {
   const reflected: Array<string> = [];
   HttpApi.reflect(FidyApi, {
@@ -29,6 +35,14 @@ it("encodes every hosted operation as an OpenAI closed object", () => {
     expect(parameters.anyOf).toBeUndefined();
     expect(parameters.additionalProperties).toBe(false);
   }
+});
+
+it("tells the hosted model which transaction operations need confirmation", () => {
+  const createDescription = Tool.getDescription(hostedTool("transactions__createTransaction"));
+  const deleteDescription = Tool.getDescription(hostedTool("transactions__deleteTransaction"));
+
+  expect(createDescription).toContain("does not require User confirmation");
+  expect(deleteDescription).toContain("host manages exact confirmation");
 });
 
 it.effect("rejects canonical API destinations that could leak a hosted bearer", () =>

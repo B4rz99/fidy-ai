@@ -1,6 +1,6 @@
 import { expect, layer } from "@effect/vitest";
 import { BigDecimal, Effect, Equal, Layer, Option, Schema, Terminal } from "effect";
-import { LanguageModel } from "effect/unstable/ai";
+import { LanguageModel, Tool } from "effect/unstable/ai";
 import { SqlClient } from "effect/unstable/sql";
 import { E164PhoneNumber, UserId } from "~/core/identity/reference";
 import { MigrationSqlClient } from "~/shell/db/client";
@@ -106,7 +106,7 @@ const createTransactionToolCall = ({
 const ScriptedLanguageModel = Layer.effect(
   LanguageModel.LanguageModel,
   LanguageModel.make({
-    generateText: ({ prompt }) => {
+    generateText: ({ prompt, tools }) => {
       const serialized = JSON.stringify(prompt.content);
       expect(serialized).not.toContain("fin_deadbeef_");
       if (serialized.includes("MODELO_BLOQUEADO")) return Effect.never;
@@ -152,6 +152,19 @@ const ScriptedLanguageModel = Layer.effect(
         return Effect.succeed([
           createTransactionToolCall({ id: "free-form-addition", occurredAt }),
         ]);
+      }
+      if (serialized.includes("captura sin confirmación")) {
+        const createTool = tools.find((tool) => tool.name === "transactions__createTransaction");
+        const createDescription =
+          createTool === undefined ? undefined : Tool.getDescription(createTool);
+        const occurredAt = /El turno comenzó en ([0-9T:.+-]+Z)/u.exec(serialized)?.[1];
+        const canCaptureWithoutConfirmation =
+          createDescription?.includes("does not require User confirmation") === true;
+        return Effect.succeed(
+          canCaptureWithoutConfirmation
+            ? [createTransactionToolCall({ id: "no-confirmation-capture", occurredAt })]
+            : [{ type: "text" as const, text: "¿Confirmas registrar este gasto?" }]
+        );
       }
       if (serialized.includes("Provoca entrada malformada")) {
         return Effect.succeed(
@@ -687,6 +700,24 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       expect(reply.text).toBe("Listo, completé la operación solicitada.");
       expect(rows[0]?.count).toBe(1);
       expect(audit.map(({ operation }) => operation)).toEqual(["transactions.createTransaction"]);
+    })
+  );
+
+  it.effect("executes a transaction capture without asking for confirmation", () =>
+    Effect.gen(function* () {
+      const sql = yield* MigrationSqlClient;
+      yield* sql`TRUNCATE source_attestations, transactions, keyword_rules`;
+      yield* clearTranscript;
+      const service = yield* AgentService;
+
+      const reply = yield* service.handleSynchronousTurn(
+        defaultUserId,
+        InboundMessage.make({ text: TranscriptText.make("captura sin confirmación 25 mil") })
+      );
+      const rows = yield* sql`SELECT count(*)::int AS count FROM transactions`;
+
+      expect(reply.text).toBe("Listo, completé la operación solicitada.");
+      expect(rows[0]?.count).toBe(1);
     })
   );
 

@@ -183,9 +183,22 @@ const FailingAgentService = AgentServiceLive.pipe(Layer.provide(FailingWhatsAppM
 const OpenAiRequest = Schema.Struct({
   tools: Schema.Array(Schema.Struct({ parameters: Schema.Unknown })),
 });
-const openAiToolResponse = makeOpenAiFunctionCallResponse({
+const openAiCategoryToolResponse = makeOpenAiFunctionCallResponse({
   name: "categories__listCategories",
   argumentsJson: "{}",
+});
+const openAiTransactionToolResponse = makeOpenAiFunctionCallResponse({
+  name: "transactions__createTransaction",
+  argumentsJson: JSON.stringify({
+    payload: {
+      money: { amount: "10000", currency: "COP" },
+      merchant: "OpenAiBreakfast",
+      direction: "outflow",
+      categoryId: categoryIds.restaurantes,
+      notes: null,
+      occurredAt: "2026-04-03T12:01:02.000Z",
+    },
+  }),
 });
 const OpenAiHttpClient = Layer.succeed(
   HttpClient.HttpClient,
@@ -194,8 +207,9 @@ const OpenAiHttpClient = Layer.succeed(
       if (request.body._tag !== "Uint8Array") {
         return yield* Effect.die("Expected an encoded OpenAI request body");
       }
+      const requestText = new TextDecoder().decode(request.body.body);
       const json = yield* Schema.decodeUnknownEffect(Schema.UnknownFromJsonString)(
-        new TextDecoder().decode(request.body.body)
+        requestText
       ).pipe(Effect.orDie);
       const body = yield* Schema.decodeUnknownEffect(OpenAiRequest)(json).pipe(Effect.orDie);
       if (
@@ -208,10 +222,15 @@ const OpenAiHttpClient = Layer.succeed(
       }
       return HttpClientResponse.fromWeb(
         request,
-        new Response(openAiToolResponse, {
-          status: 200,
-          headers: { "content-type": "application/json" },
-        })
+        new Response(
+          requestText.includes("10000 desayuno")
+            ? openAiTransactionToolResponse
+            : openAiCategoryToolResponse,
+          {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          }
+        )
       );
     })
   )
@@ -833,6 +852,66 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           tag: "CanonicalToolResultEntry",
           operation: "categories.listCategories",
         });
+      })
+    );
+
+    it.effect("accepts OpenAI's encoded money input through the canonical transaction seam", () =>
+      Effect.gen(function* () {
+        yield* seedDevelopmentIdentity(defaultAgentBearer);
+        yield* truncateWhatsAppChannel;
+        const eventTime = DateTime.makeUnsafe("2026-04-03T12:01:02.000Z");
+        const inbound = makeKapsoTextEvent("wamid.openai-transaction", "10000 desayuno", eventTime);
+        yield* enqueueWhatsAppTurn({
+          admission: authorizedTurn(inbound),
+          event: inbound,
+          deliveryKey,
+        });
+        const sql = yield* SqlClient.SqlClient;
+        yield* withUserTransaction(
+          defaultUserId,
+          sql`UPDATE whatsapp_conversation_windows
+              SET window_open_until = ${DateTime.add(yield* DateTime.now, { hours: 1 })}
+              WHERE user_id = ${defaultUserId}`
+        );
+        const sent = yield* Ref.make(0);
+        const agent = yield* Layer.build(Layer.fresh(OpenAiAgentService)).pipe(
+          Effect.map(Context.get(AgentService))
+        );
+
+        const processed = yield* processNextWhatsAppTurn(
+          DateTime.add(eventTime, { seconds: 3 })
+        ).pipe(
+          Effect.provideService(AgentService, agent),
+          Effect.provideService(
+            KapsoClient,
+            kapsoClientFixture(
+              "wamid.openai-transaction-reply",
+              eventTime,
+              Ref.update(sent, (count) => count + 1)
+            )
+          )
+        );
+
+        expect(processed).toBe(true);
+        expect(yield* Ref.get(sent)).toBe(1);
+        const admin = yield* MigrationSqlClient;
+        const trace = yield* admin`
+          SELECT entry ->> '_tag' AS "tag", entry ->> 'operation' AS "operation"
+          FROM transcript_entries
+          WHERE user_id = ${defaultUserId}
+          ORDER BY sequence
+        `;
+        expect(trace).toContainEqual({
+          tag: "CanonicalToolCallEntry",
+          operation: "transactions.createTransaction",
+        });
+        expect(
+          yield* admin`
+            SELECT merchant, amount::text AS amount
+            FROM transactions
+            WHERE user_id = ${defaultUserId} AND merchant = 'OpenAiBreakfast'
+          `
+        ).toEqual([{ merchant: "OpenAiBreakfast", amount: "10000" }]);
       })
     );
 

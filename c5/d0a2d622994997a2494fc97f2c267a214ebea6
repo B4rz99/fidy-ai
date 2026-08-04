@@ -1,0 +1,61 @@
+src/main.ts
+  s_2096af1feee5ae::t_818e71bf9056c8 7-14,16-17,23
+  s_81885976fa7f4b::t_1751a56ba16106 2-3,15
+src/shell/channels/whatsapp/whatsapp-channel.test.ts
+  s_2096af1feee5ae::t_f0831ba52ab110 196-197
+  s_2096af1feee5ae::t_b19bc37c1860bc 789
+  s_2096af1feee5ae::t_87ff5511478bd5 218-220,779
+  s_2096af1feee5ae::t_2b1dd4def53a17 4,17,23,182-195,198-217,221-222
+  s_2096af1feee5ae::t_675a2d01a00c6b 790
+  s_2096af1feee5ae::t_9ab1472fb2b125 774-778,780-784,792-815
+  s_2096af1feee5ae::t_7f961d15c64d8d 785-788,791
+src/shell/_shared/operation-catalog.ts
+  s_81885976fa7f4b::t_a0ffe9420db903 53
+  s_2096af1feee5ae::t_6b3087bd8db307 50-51
+  s_2096af1feee5ae::t_fa02edb0199554 52,54-55
+src/shell/channels/whatsapp/worker.ts
+  s_2096af1feee5ae::t_8b21fa35e17617 38
+  s_2096af1feee5ae::t_e597b51223e673 32-37
+src/shell/agent/toolkit.test.ts
+  s_df784fe67ec34e::t_66c555dd389593 32-33
+  s_2096af1feee5ae::t_9bc8c6ae1c5713 25
+  s_81885976fa7f4b::t_3e332bd83de02d 3-4,26-31
+src/shell/agent/openai.test.ts
+  s_2096af1feee5ae::t_70cb657bbbf452 114-116
+  s_2096af1feee5ae::t_13f6c9ceceedab 3,5,43,54-56,77-81,86-93,105-109,118-124
+  s_2096af1feee5ae::t_e332dabc1aa237 2,4,44-53,61-76,82-85,94-104,110-113,117
+  s_2096af1feee5ae::t_9e6f8cd741bd25 60
+  s_2096af1feee5ae::t_666577bf54d66d 57-59
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.20",
+  "base_commit_sha": "c5d0a2d622994997a2494fc97f2c267a214ebea6",
+  "prompts": {},
+  "sessions": {
+    "s_2096af1feee5ae": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019fca90-ce9e-7dab-9d9f-57075315f1a3",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": null
+    },
+    "s_81885976fa7f4b": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019fbb76-d07b-71ba-a459-02b13f9a14d1",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_df784fe67ec34e": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019fc84f-f98e-7cad-a01a-a1a7785fadad",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

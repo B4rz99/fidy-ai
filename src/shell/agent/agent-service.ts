@@ -52,7 +52,12 @@ import {
   transcriptPrompt,
 } from "./model-boundary";
 import { makeTurnConfirmation } from "./tool-confirmation";
-import { findAgentOperationBinding, makeAgentToolkit } from "./toolkit";
+import {
+  type AgentOperationBinding,
+  decodeAgentOperationInput,
+  findAgentOperationBinding,
+  makeAgentToolkit,
+} from "./toolkit";
 
 /** Resource and context bounds applied independently to every hosted turn. */
 export const AgentLimits = Schema.Struct({
@@ -204,6 +209,11 @@ const encodeTranscriptJson = (
 ) =>
   Schema.encodeUnknownEffect(schema)(value).pipe(
     Effect.flatMap(decodeTranscriptJson),
+    Effect.mapError(toModelUnavailable)
+  );
+const encodeAgentOperationInput = (binding: AgentOperationBinding, input: unknown) =>
+  decodeAgentOperationInput({ binding, input }).pipe(
+    Effect.flatMap((decoded) => encodeTranscriptJson(binding.parameters, decoded)),
     Effect.mapError(toModelUnavailable)
   );
 const requireToolResult = function <A>(result: Option.Option<A>) {
@@ -396,7 +406,7 @@ const makeAgentService = Effect.gen(function* () {
             );
             const toolCallId = ToolCallId.make(toolCall.id);
             const encodedInput = yield* Effect.result(
-              encodeTranscriptJson(binding.parameters, toolCall.params)
+              encodeAgentOperationInput(binding, toolCall.params)
             );
             const input = yield* Result.match(encodedInput, {
               onFailure: () => decodeTranscriptJson(toolCall.params),

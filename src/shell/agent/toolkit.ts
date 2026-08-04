@@ -89,10 +89,17 @@ const confirmationGuidance = (agentConfirmation: AgentConfirmation): string =>
     ? " This operation does not require User confirmation; call it directly without asking the User to confirm."
     : " The host manages exact confirmation for this operation; call the tool rather than asking the User for informal confirmation.";
 
+/** Decodes a provider-safe tool input into the canonical operation input type. */
+export const decodeAgentOperationInput = ({
+  binding,
+  input,
+}: Readonly<{ binding: AgentOperationBinding; input: unknown }>) =>
+  Schema.decodeUnknownEffect(binding.parameters)(input);
+
 const tools = agentOperationBindings.map((binding) =>
   Tool.dynamic(binding.wireName, {
     description: binding.description + confirmationGuidance(binding.policy.agentConfirmation),
-    parameters: binding.parameters,
+    parameters: Schema.toEncoded(binding.parameters),
     success: binding.success,
     failure: binding.failure,
     failureMode: "return",
@@ -151,7 +158,10 @@ export const makeAgentToolkit = (bearer: AgentBearerToken) =>
     const handlers = Object.fromEntries(
       agentOperationBindings.map((binding) => [
         binding.wireName,
-        (input: unknown) => callOperation(client, binding, input),
+        (input: unknown) =>
+          decodeAgentOperationInput({ binding, input }).pipe(
+            Effect.flatMap((decoded) => callOperation(client, binding, decoded))
+          ),
       ])
     );
     const handlerContext = yield* AgentToolkit.toHandlers(handlers);

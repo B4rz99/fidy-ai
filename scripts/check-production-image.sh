@@ -51,6 +51,7 @@ assertApplicationRejected() {
   docker rm --force "$rejectedApplication" >/dev/null 2>&1 || true
   docker run --detach --name "$rejectedApplication" --network "$network" \
     --env MIGRATION_DATABASE_URL --env DATABASE_URL \
+    --env KAPSO_API_KEY --env KAPSO_WEBHOOK_SECRET --env OPENAI_API_KEY \
     --env PORT=3000 --env APP_VERSION=production-smoke-rejected \
     "$image" >/dev/null
   for _ in {1..20}; do
@@ -109,6 +110,9 @@ docker exec "$database" pg_isready --username fidy --dbname fidy >/dev/null
 
 export MIGRATION_DATABASE_URL="postgresql://fidy:fidy@${database}:5432/fidy"
 export DATABASE_URL="postgresql://fidy_runtime:fidy_runtime@${database}:5432/fidy"
+export KAPSO_API_KEY="production-smoke-kapso-key"
+export KAPSO_WEBHOOK_SECRET="production-smoke-webhook-secret"
+export OPENAI_API_KEY="production-smoke-openai-key"
 
 assertProvisionRejected \
   "postgresql://fidy_runtime:runtime-sentinel@[bad/fidy" \
@@ -161,6 +165,7 @@ assertSqlResult "$expectedMigrationCount" \
 docker run --detach --name "$application" --network "$network" \
   --publish 127.0.0.1::3000 \
   --env MIGRATION_DATABASE_URL --env DATABASE_URL \
+  --env KAPSO_API_KEY --env KAPSO_WEBHOOK_SECRET --env OPENAI_API_KEY \
   --env PORT=3000 --env APP_VERSION=production-smoke \
   "$image" >/dev/null
 

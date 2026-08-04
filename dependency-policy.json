@@ -18,5 +18,24 @@
     "an entry whose exclusion is gone."
   ],
   "deferredUpdates": [],
-  "acceptedVulnerabilities": []
+  "acceptedVulnerabilities": [
+    {
+      "cve": "CVE-2026-69152",
+      "path": "tools/mutation/bun.lock",
+      "reason": "The only patched brace-expansion release remains inside the mandatory seven-day supply-chain observation window.",
+      "until": "2026-08-07T12:00:00Z"
+    },
+    {
+      "cve": "CVE-2026-69152",
+      "path": "tools/crap/bun.lock",
+      "reason": "The only patched brace-expansion release remains inside the mandatory seven-day supply-chain observation window.",
+      "until": "2026-08-07T12:00:00Z"
+    },
+    {
+      "cve": "CVE-2026-18446",
+      "path": "tools/mutation/bun.lock",
+      "reason": "The only patched fast-uri release remains inside the mandatory seven-day supply-chain observation window.",
+      "until": "2026-08-08T10:00:00Z"
+    }
+  ]
 }

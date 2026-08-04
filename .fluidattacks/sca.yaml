@@ -23,4 +23,11 @@ sca:
   # dependency-policy.json carrying the reason and the expiry. `bun run
   # lint:dependencies` fails on any entry that has no record, whose record has
   # expired, and on any record whose entry is gone.
-  exclusions: []
+  exclusions:
+    - CVE: CVE-2026-69152
+      paths:
+        - tools/mutation/bun.lock
+        - tools/crap/bun.lock
+    - CVE: CVE-2026-18446
+      paths:
+        - tools/mutation/bun.lock

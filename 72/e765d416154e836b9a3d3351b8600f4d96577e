@@ -1,0 +1,72 @@
+src/shell/agent/openai.test.ts
+  s_2096af1feee5ae::t_2d276281818827 5
+  s_2096af1feee5ae::t_e332dabc1aa237 2,4,45-54,67-70,79-89,95-98,102
+  s_2096af1feee5ae::t_666577bf54d66d 58-60
+  s_2096af1feee5ae::t_9dba184aeb4f00 61
+  s_2096af1feee5ae::t_13f6c9ceceedab 3,6,44,55-57,62-66,71-78,90-94,103-109
+  s_2096af1feee5ae::t_70cb657bbbf452 99-101
+src/shell/channels/whatsapp/whatsapp-channel.test.ts
+  s_2096af1feee5ae::t_1307dff2b4edcf 187-189
+  s_2096af1feee5ae::t_2b1dd4def53a17 4,17,24,183-185,190-198,201-210,212-220,224-225
+  s_2096af1feee5ae::t_1817dd01ad5f6b 23
+  s_2096af1feee5ae::t_5243cf7fcfc1c1 186,211
+  s_2096af1feee5ae::t_9ab1472fb2b125 777-781,783-787,795,797-815,836-838
+  s_2096af1feee5ae::t_7f961d15c64d8d 788-791,794
+  s_2096af1feee5ae::t_87ff5511478bd5 221-223,782
+  s_2096af1feee5ae::t_b19bc37c1860bc 792
+  s_2096af1feee5ae::t_675a2d01a00c6b 793
+  s_2096af1feee5ae::t_0f190873729cc8 796
+  s_2096af1feee5ae::t_f81f2b96607f61 817-824,826
+  s_2096af1feee5ae::t_f0831ba52ab110 199-200
+  s_2096af1feee5ae::t_05a93a18e01a2d 816
+  s_2096af1feee5ae::t_3f03d9ba12fd7a 825,827-835
+src/shell/agent/fixtures/openai.ts
+  s_2096af1feee5ae::t_4d1cbea397affd 1-34,39-48
+  s_2096af1feee5ae::t_b39e451df3d6ba 35-38
+src/shell/channels/whatsapp/worker.ts
+  s_2096af1feee5ae::t_8b21fa35e17617 38
+  s_2096af1feee5ae::t_e597b51223e673 32-37
+src/shell/_shared/operation-catalog.ts
+  s_2096af1feee5ae::t_fa02edb0199554 52,54-55
+  s_2096af1feee5ae::t_6b3087bd8db307 50-51
+  s_81885976fa7f4b::t_a0ffe9420db903 53
+src/main.ts
+  s_81885976fa7f4b::t_1751a56ba16106 2-3,15
+  s_2096af1feee5ae::t_818e71bf9056c8 7-14,16-17,23
+src/shell/agent/toolkit.test.ts
+  s_df784fe67ec34e::t_66c555dd389593 32-33
+  s_81885976fa7f4b::t_3e332bd83de02d 3-4,26-31
+  s_2096af1feee5ae::t_9bc8c6ae1c5713 25
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.20",
+  "base_commit_sha": "72e765d416154e836b9a3d3351b8600f4d96577e",
+  "prompts": {},
+  "sessions": {
+    "s_2096af1feee5ae": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019fca90-ce9e-7dab-9d9f-57075315f1a3",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": null
+    },
+    "s_81885976fa7f4b": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019fbb76-d07b-71ba-a459-02b13f9a14d1",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_df784fe67ec34e": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019fc84f-f98e-7cad-a01a-a1a7785fadad",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

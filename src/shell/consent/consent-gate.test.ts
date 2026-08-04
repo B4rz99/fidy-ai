@@ -1,7 +1,12 @@
 import { expect, layer } from "@effect/vitest";
 import { DateTime, Effect, Exit, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
-import { ConsentRecord, ConsentRecordId } from "~/core/consent/model";
+import type { ProviderMessageEvidence } from "~/core/_shared/provider-message-evidence";
+import {
+  ConsentRecord,
+  ConsentRecordId,
+  type PendingConsentExchangeId,
+} from "~/core/consent/model";
 import { E164PhoneNumber, UserId } from "~/core/identity/reference";
 import { makeColombianUser } from "~/core/identity/rules";
 import { MigrationSqlClient } from "~/shell/db/client";
@@ -15,6 +20,7 @@ import { ApiHarness } from "~/shell/testing/api-harness";
 import { evaluateConsentGate } from "./consent-gate";
 import {
   appendConsentRecord,
+  claimConsentDisclosureDelivery,
   recordConsentDisclosureDelivery,
   findPendingConsentExchange,
   hasCurrentOnboardingConsent,
@@ -32,6 +38,16 @@ const replayCollisionPhone = E164PhoneNumber.make("+573009990008");
 const initiatingReplayPhone = E164PhoneNumber.make("+573009990009");
 const returningUserId = UserId.make("f1d1a000-0000-4000-8000-0000000008c1");
 const receivedAt = DateTime.makeUnsafe("2026-08-01T12:00:00Z");
+
+const recordClaimedDisclosure = Effect.fn("test.recordClaimedDisclosure")(function* (input: {
+  readonly exchangeId: PendingConsentExchangeId;
+  readonly message: ProviderMessageEvidence;
+  readonly deliveredAt: DateTime.Utc;
+}) {
+  const claim = yield* claimConsentDisclosureDelivery(input.exchangeId, input.deliveredAt);
+  if (Option.isNone(claim)) return yield* Effect.die("missing disclosure claim");
+  return yield* recordConsentDisclosureDelivery({ ...input, claimId: claim.value.claimId });
+});
 
 const message = (providerMessageId: string) => ({
   channel: "whatsapp",
@@ -81,7 +97,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })("consent
         expect(disclosure.text).toContain("https://fidyapp.com/politica");
         expect(Option.isNone(yield* resolveWhatsAppCaller(acceptedPhone))).toBe(true);
 
-        yield* recordConsentDisclosureDelivery({
+        yield* recordClaimedDisclosure({
           exchangeId: disclosure.exchangeId,
           message: message("wamid.gate-disclosure"),
           deliveredAt: DateTime.makeUnsafe("2026-08-01T12:00:01Z"),
@@ -180,7 +196,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })("consent
           textTurn(rollbackPhone, "dato privado", "wamid.rollback-initial")
         );
         if (disclosure._tag !== "SendDisclosure") return yield* Effect.die("missing disclosure");
-        yield* recordConsentDisclosureDelivery({
+        yield* recordClaimedDisclosure({
           exchangeId: disclosure.exchangeId,
           message: message("wamid.rollback-disclosure"),
           deliveredAt: DateTime.makeUnsafe("2026-08-01T12:00:01Z"),
@@ -224,7 +240,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })("consent
         textTurn(returningPhone, "volver", "wamid.returning-initial")
       );
       if (disclosure._tag !== "SendDisclosure") return yield* Effect.die("missing disclosure");
-      yield* recordConsentDisclosureDelivery({
+      yield* recordClaimedDisclosure({
         exchangeId: disclosure.exchangeId,
         message: message("wamid.returning-disclosure"),
         deliveredAt: DateTime.makeUnsafe("2026-08-01T12:00:01Z"),
@@ -256,7 +272,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })("consent
       );
       expect(revokedReplay._tag).toBe("SendDisclosure");
       if (revokedReplay._tag !== "SendDisclosure") return;
-      yield* recordConsentDisclosureDelivery({
+      yield* recordClaimedDisclosure({
         exchangeId: revokedReplay.exchangeId,
         message: message("wamid.returning-current-disclosure"),
         deliveredAt: DateTime.makeUnsafe("2026-08-01T12:00:05Z"),
@@ -281,7 +297,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })("consent
         )
       );
       if (disclosure._tag !== "SendDisclosure") return yield* Effect.die("missing disclosure");
-      yield* recordConsentDisclosureDelivery({
+      yield* recordClaimedDisclosure({
         exchangeId: disclosure.exchangeId,
         message: message("wamid.out-of-order-disclosure"),
         deliveredAt: DateTime.makeUnsafe("2026-08-01T12:00:02Z"),
@@ -317,7 +333,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })("consent
         )
       );
       if (first._tag !== "SendDisclosure") return yield* Effect.die("missing disclosure");
-      yield* recordConsentDisclosureDelivery({
+      yield* recordClaimedDisclosure({
         exchangeId: first.exchangeId,
         message: message("wamid.initiating-disclosure"),
         deliveredAt: DateTime.makeUnsafe("2026-08-01T12:00:01Z"),
@@ -340,7 +356,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })("consent
       );
       expect(replacement._tag).toBe("SendDisclosure");
       if (replacement._tag !== "SendDisclosure") return;
-      yield* recordConsentDisclosureDelivery({
+      yield* recordClaimedDisclosure({
         exchangeId: replacement.exchangeId,
         message: message("wamid.replacement-disclosure"),
         deliveredAt: DateTime.makeUnsafe("2026-08-02T12:00:01Z"),
@@ -365,7 +381,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })("consent
         withReceivedAt(textTurn(declinedPhone, "hola", "wamid.decline-initial"), initiatedAt)
       );
       if (disclosure._tag !== "SendDisclosure") return yield* Effect.die("missing disclosure");
-      yield* recordConsentDisclosureDelivery({
+      yield* recordClaimedDisclosure({
         exchangeId: disclosure.exchangeId,
         message: message("wamid.decline-disclosure"),
         deliveredAt: DateTime.makeUnsafe("2026-08-01T12:34:55.789Z"),
@@ -436,7 +452,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })("consent
         textTurn(expiredPhone, "dato privado original", "wamid.expired-initial")
       );
       if (first._tag !== "SendDisclosure") return yield* Effect.die("missing disclosure");
-      yield* recordConsentDisclosureDelivery({
+      yield* recordClaimedDisclosure({
         exchangeId: first.exchangeId,
         message: message("wamid.expired-disclosure"),
         deliveredAt: DateTime.makeUnsafe("2026-08-01T12:00:01Z"),

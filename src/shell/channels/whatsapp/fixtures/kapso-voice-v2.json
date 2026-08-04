@@ -1,0 +1,13 @@
+{
+  "message": {
+    "id": "wamid.voice-001",
+    "timestamp": "1775217601",
+    "type": "audio",
+    "from": "573001234567",
+    "audio": { "id": "media-001" },
+    "kapso": { "direction": "inbound", "has_media": true, "transcript": { "text": "taxi 18 mil" } }
+  },
+  "conversation": { "phone_number": "573001234567" },
+  "is_new_conversation": false,
+  "phone_number_id": "123456789012345"
+}

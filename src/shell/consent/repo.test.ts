@@ -16,6 +16,7 @@ import { ApiHarness } from "~/shell/testing/api-harness";
 import { currentDisclosure } from "./current-disclosure";
 import {
   appendConsentRecord,
+  claimConsentDisclosureDelivery,
   findConsentRecordByDecisionMessage,
   findPendingConsentExchange,
   hasCurrentOnboardingConsent,
@@ -69,24 +70,27 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         yield* insertPendingConsentExchange(pending);
         expect(yield* findPendingConsentExchange(phoneNumber)).toEqual(Option.some(pending));
 
+        const deliveredAt = DateTime.makeUnsafe("2026-08-01T12:00:01Z");
+        const claim = yield* claimConsentDisclosureDelivery(pending.id, deliveredAt);
+        expect(Option.isSome(claim)).toBe(true);
+        if (Option.isNone(claim)) return yield* Effect.die("missing disclosure claim");
+        expect(Option.isNone(yield* claimConsentDisclosureDelivery(pending.id, deliveredAt))).toBe(
+          true
+        );
         const awaitingDecision = yield* recordConsentDisclosureDelivery({
           exchangeId: pending.id,
+          claimId: claim.value.claimId,
           message: disclosureMessage,
-          deliveredAt: DateTime.makeUnsafe("2026-08-01T12:00:01Z"),
+          deliveredAt,
         });
         expect(Option.isSome(awaitingDecision)).toBe(true);
         if (Option.isNone(awaitingDecision)) return yield* Effect.die("missing pending exchange");
         expect(awaitingDecision.value.disclosureMessage).toEqual(disclosureMessage);
 
-        const exactReplay = yield* recordConsentDisclosureDelivery({
-          exchangeId: pending.id,
-          message: disclosureMessage,
-          deliveredAt: DateTime.makeUnsafe("2026-08-01T12:00:01Z"),
-        });
-        expect(exactReplay).toEqual(awaitingDecision);
         expect(
           yield* recordConsentDisclosureDelivery({
             exchangeId: pending.id,
+            claimId: claim.value.claimId,
             message: { ...disclosureMessage, providerMessageId: "wamid.conflicting-delivery" },
             deliveredAt: DateTime.makeUnsafe("2026-08-01T12:00:02Z"),
           })
@@ -95,6 +99,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         expect(
           yield* recordConsentDisclosureDelivery({
             exchangeId: PendingConsentExchangeId.make("f1d1a000-0000-4000-8000-000000000822"),
+            claimId: claim.value.claimId,
             message: disclosureMessage,
             deliveredAt: DateTime.makeUnsafe("2026-08-01T12:00:01Z"),
           })

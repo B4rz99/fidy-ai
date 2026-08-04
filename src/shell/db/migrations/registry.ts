@@ -9,6 +9,8 @@ import { hostedAgentTokens } from "./0008-hosted-agent-tokens";
 import { rowLevelSecurity } from "./0009-row-level-security";
 import { createConsentLedger } from "./0010-create-consent-ledger";
 import { bindPendingConsentInitiator } from "./0011-bind-pending-consent-initiator";
+import { createWhatsAppChannel } from "./0012-create-whatsapp-channel";
+import { claimConsentDisclosureDelivery } from "./0013-claim-consent-disclosure-delivery";
 
 /**
  * The explicit index ARCHITECTURE.md §7 calls for: one ordered, append-only
@@ -30,4 +32,6 @@ export const migrations = {
   "0009_row_level_security": rowLevelSecurity,
   "0010_create_consent_ledger": createConsentLedger,
   "0011_bind_pending_consent_initiator": bindPendingConsentInitiator,
+  "0012_create_whatsapp_channel": createWhatsAppChannel,
+  "0013_claim_consent_disclosure_delivery": claimConsentDisclosureDelivery,
 };

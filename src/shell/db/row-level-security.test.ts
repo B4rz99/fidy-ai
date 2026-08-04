@@ -178,6 +178,30 @@ const seedEveryPolicyShape = Effect.gen(function* () {
       '{"id":"f1d1a000-0000-4000-8000-0000000002e5","turnId":"f1d1a000-0000-4000-8000-0000000002f6"}'::jsonb
     )
   `;
+  yield* admin`
+    INSERT INTO whatsapp_message_evidence(
+      provider_message_id, user_id, direction, delivery_key, occurred_at
+    ) VALUES ('policy-whatsapp-evidence', ${policyOwner}, 'inbound', 'policy-delivery', '2026-01-01T00:00:00Z')
+  `;
+  yield* admin`
+    INSERT INTO whatsapp_turn_claims(id, user_id, status, claim_expires_at)
+    VALUES ('f1d1a000-0000-4000-8000-0000000005a1', ${policyOwner}, 'claimed', '2026-01-01T00:01:00Z')
+  `;
+  yield* admin`
+    INSERT INTO whatsapp_inbound_jobs(
+      id, user_id, message_evidence_id, content, occurred_at, enqueued_at, debounce_until, claim_id
+    ) VALUES (
+      'f1d1a000-0000-4000-8000-0000000005b2', ${policyOwner},
+      (SELECT id FROM whatsapp_message_evidence WHERE provider_message_id = 'policy-whatsapp-evidence'),
+      'policy content', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z',
+      '2026-01-01T00:00:02Z', 'f1d1a000-0000-4000-8000-0000000005a1'
+    )
+  `;
+  yield* admin`
+    INSERT INTO whatsapp_conversation_windows(
+      user_id, identity_verified_at, business_phone_number_id, window_open_until
+    ) VALUES (${policyOwner}, '2026-01-01T00:00:00Z', 'policy-business', '2026-01-02T00:00:00Z')
+  `;
 });
 
 type PolicyProbe = {
@@ -243,6 +267,26 @@ const policyProbes: ReadonlyArray<PolicyProbe> = [
     stableColumn: "verified_at",
     ownerPredicate: "phone_number = '+573001112233'",
   },
+  {
+    tableName: "whatsapp_message_evidence",
+    stableColumn: "occurred_at",
+    ownerPredicate: "provider_message_id = 'policy-whatsapp-evidence'",
+  },
+  {
+    tableName: "whatsapp_turn_claims",
+    stableColumn: "claim_expires_at",
+    ownerPredicate: "id = 'f1d1a000-0000-4000-8000-0000000005a1'",
+  },
+  {
+    tableName: "whatsapp_inbound_jobs",
+    stableColumn: "debounce_until",
+    ownerPredicate: "id = 'f1d1a000-0000-4000-8000-0000000005b2'",
+  },
+  {
+    tableName: "whatsapp_conversation_windows",
+    stableColumn: "window_open_until",
+    ownerPredicate: `user_id = '${policyOwner}'`,
+  },
 ];
 
 const probeDeniedMutations = Effect.fn("probeDeniedRlsMutations")(function* () {
@@ -277,6 +321,40 @@ const deniedInsertProbes = (sql: SqlClient.SqlClient) =>
       insert: sql`
       INSERT INTO whatsapp_identities (phone_number, user_id, verified_at)
       VALUES ('+573009998877', ${policyOwner}, '2026-01-02T00:00:00Z')
+    `,
+    },
+    {
+      tableName: "whatsapp_message_evidence",
+      insert: sql`
+      INSERT INTO whatsapp_message_evidence(
+        provider_message_id, user_id, direction, delivery_key, occurred_at
+      ) VALUES ('denied-whatsapp-evidence', ${policyOwner}, 'inbound', 'denied-delivery', '2026-01-02T00:00:00Z')
+    `,
+    },
+    {
+      tableName: "whatsapp_turn_claims",
+      insert: sql`
+      INSERT INTO whatsapp_turn_claims(id, user_id, status, claim_expires_at)
+      VALUES ('f1d1a000-0000-4000-8000-0000000005c3', ${policyOwner}, 'claimed', '2026-01-02T00:01:00Z')
+    `,
+    },
+    {
+      tableName: "whatsapp_inbound_jobs",
+      insert: sql`
+      INSERT INTO whatsapp_inbound_jobs(
+        id, user_id, message_evidence_id, content, occurred_at, enqueued_at, debounce_until
+      ) VALUES (
+        'f1d1a000-0000-4000-8000-0000000005d4', ${policyOwner}, 1, 'denied content',
+        '2026-01-02T00:00:00Z', '2026-01-02T00:00:00Z', '2026-01-02T00:00:02Z'
+      )
+    `,
+    },
+    {
+      tableName: "whatsapp_conversation_windows",
+      insert: sql`
+      INSERT INTO whatsapp_conversation_windows(
+        user_id, identity_verified_at, business_phone_number_id, window_open_until
+      ) VALUES (${policyOwner}, '2026-01-01T00:00:00Z', 'denied-business', '2026-01-02T00:00:00Z')
     `,
     },
     {
@@ -464,9 +542,42 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
               "categories",
               "effect_sql_migrations",
               "pending_consent_exchanges",
+              "whatsapp_ingress_budget_receipts",
+              "whatsapp_ingress_budgets",
+              "whatsapp_inbound_receipts",
             ].sort()
           );
         })
+    );
+
+    it.effect("keeps pre-subject WhatsApp budget rows behind the narrow gateway", () =>
+      Effect.gen(function* () {
+        const sql = yield* SqlClient.SqlClient;
+        expect((yield* Effect.exit(sql`SELECT * FROM whatsapp_ingress_budgets`))._tag).toBe(
+          "Failure"
+        );
+        expect((yield* Effect.exit(sql`SELECT * FROM whatsapp_ingress_budget_receipts`))._tag).toBe(
+          "Failure"
+        );
+        expect((yield* Effect.exit(sql`SELECT * FROM whatsapp_inbound_receipts`))._tag).toBe(
+          "Failure"
+        );
+        expect(
+          (yield* Effect.exit(
+            sql`INSERT INTO whatsapp_ingress_budgets(budget_key, window_started_at, accepted_count)
+                  VALUES ('forged', now(), 1)`
+          ))._tag
+        ).toBe("Failure");
+        expect(
+          (yield* Effect.exit(
+            sql`INSERT INTO whatsapp_inbound_receipts(
+                    provider_message_id, delivery_key, status, claim_id,
+                    claim_expires_at, first_received_at
+                  ) VALUES ('forged', 'forged', 'processing',
+                    'f1d1a000-0000-4000-8000-000000000001', now(), now())`
+          ))._tag
+        ).toBe("Failure");
+      })
     );
 
     it.effect("fails closed when the runtime connection uses the migration authority", () =>

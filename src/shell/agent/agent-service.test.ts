@@ -484,13 +484,13 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
     Effect.gen(function* () {
       yield* clearTranscript;
       const firstService = yield* AgentService;
-      const firstReply = yield* firstService.handleTurn(
+      const firstReply = yield* firstService.handleSynchronousTurn(
         defaultUserId,
         InboundMessage.make({ text: TranscriptText.make("Primer mensaje") })
       );
 
       const secondService = yield* AgentService;
-      const secondReply = yield* secondService.handleTurn(
+      const secondReply = yield* secondService.handleSynchronousTurn(
         defaultUserId,
         InboundMessage.make({ text: TranscriptText.make("¿Qué dije antes?") })
       );
@@ -521,13 +521,13 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
         scopes: ["read"],
       });
 
-      yield* service.handleTurn(
+      yield* service.handleSynchronousTurn(
         userA,
         InboundMessage.make({ text: TranscriptText.make("A_PRIVATE_TRANSCRIPT_MARKER") })
       );
       const userABefore = yield* listTranscriptEntries(userA);
 
-      const reply = yield* service.handleTurn(
+      const reply = yield* service.handleSynchronousTurn(
         userB,
         InboundMessage.make({ text: TranscriptText.make("registra aislamientob 25 cop") })
       );
@@ -605,7 +605,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
 
         for (const text of sensitiveMessages) {
           yield* clearTranscript;
-          const reply = yield* service.handleTurn(
+          const reply = yield* service.handleSynchronousTurn(
             defaultUserId,
             InboundMessage.make({ text: TranscriptText.make(text) })
           );
@@ -624,7 +624,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       yield* clearTranscript;
       const service = yield* AgentService;
 
-      const reply = yield* service.handleTurn(
+      const reply = yield* service.handleSynchronousTurn(
         defaultUserId,
         InboundMessage.make({ text: TranscriptText.make("Expón token") })
       );
@@ -642,14 +642,14 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       yield* sql`TRUNCATE source_attestations, transactions, keyword_rules`;
       yield* clearTranscript;
       const service = yield* AgentService;
-      yield* service.handleTurn(
+      yield* service.handleSynchronousTurn(
         defaultUserId,
         InboundMessage.make({ text: TranscriptText.make("almuerzo 25 mil") })
       );
       yield* sql`UPDATE transactions SET notes = 'fin_deadbeef_abcdefghijklmnopqrstuvwxyzABCDEF'`;
       yield* clearTranscript;
 
-      const reply = yield* service.handleTurn(
+      const reply = yield* service.handleSynchronousTurn(
         defaultUserId,
         InboundMessage.make({ text: TranscriptText.make("Lista movimientos secretos") })
       );
@@ -675,7 +675,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       yield* sql`DELETE FROM audit_log_entries WHERE user_id = ${defaultUserId}`;
       const service = yield* AgentService;
 
-      const reply = yield* service.handleTurn(
+      const reply = yield* service.handleSynchronousTurn(
         defaultUserId,
         InboundMessage.make({
           text: TranscriptText.make("debería registrar almuerzo 25 mil"),
@@ -698,7 +698,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       yield* sql`DELETE FROM audit_log_entries WHERE user_id = ${defaultUserId}`;
       const service = yield* AgentService;
 
-      const reply = yield* service.handleTurn(
+      const reply = yield* service.handleSynchronousTurn(
         defaultUserId,
         InboundMessage.make({ text: TranscriptText.make("anota almuerzo 25 mil") })
       );
@@ -805,11 +805,11 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
         yield* runAgentRepl(defaultWhatsAppPhone).pipe(
           Effect.provideService(Terminal.Terminal, terminal)
         );
-        yield* service.handleTurn(
+        yield* service.handleSynchronousTurn(
           defaultUserId,
           InboundMessage.make({ text: TranscriptText.make("almuerzo 25 usd") })
         );
-        yield* service.handleTurn(
+        yield* service.handleSynchronousTurn(
           defaultUserId,
           InboundMessage.make({ text: TranscriptText.make("registra papelería 25 usd") })
         );
@@ -840,7 +840,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       const service = yield* AgentService;
       yield* sql`TRUNCATE source_attestations, transactions, keyword_rules`;
       yield* clearTranscript;
-      yield* service.handleTurn(
+      yield* service.handleSynchronousTurn(
         defaultUserId,
         InboundMessage.make({ text: TranscriptText.make("almuerzo 25 mil") })
       );
@@ -862,7 +862,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
         maxTranscriptCharacters: 200_000,
       });
       const reply = yield* service
-        .handleTurn(
+        .handleSynchronousTurn(
           defaultUserId,
           InboundMessage.make({ text: TranscriptText.make("Lista historial acotado") })
         )
@@ -907,7 +907,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       const service = yield* AgentService;
       const auditBefore = yield* observeAuditLogEntries(defaultUserId);
 
-      const reply = yield* service.handleTurn(
+      const reply = yield* service.handleSynchronousTurn(
         defaultUserId,
         InboundMessage.make({ text: TranscriptText.make("Provoca entrada malformada") })
       );
@@ -927,7 +927,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       yield* clearTranscript;
       const service = yield* AgentService;
 
-      const reply = yield* service.handleTurn(
+      const reply = yield* service.handleSynchronousTurn(
         defaultUserId,
         InboundMessage.make({
           text: TranscriptText.make("Almuerzo 25000 2099-07-20T17:30:00Z"),
@@ -957,7 +957,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       yield* clearTranscript;
       const service = yield* AgentService;
 
-      const reply = yield* service.handleTurn(
+      const reply = yield* service.handleSynchronousTurn(
         defaultUserId,
         InboundMessage.make({
           text: TranscriptText.make(
@@ -983,7 +983,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       const client = yield* ApiHarnessClient;
       yield* sql`TRUNCATE source_attestations, transactions, keyword_rules`;
       yield* clearTranscript;
-      yield* service.handleTurn(
+      yield* service.handleSynchronousTurn(
         defaultUserId,
         InboundMessage.make({ text: TranscriptText.make("almuerzo 25 mil") })
       );
@@ -993,7 +993,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       yield* clearTranscript;
       yield* sql`DELETE FROM audit_log_entries WHERE user_id = ${defaultUserId}`;
 
-      const reply = yield* service.handleTurn(
+      const reply = yield* service.handleSynchronousTurn(
         defaultUserId,
         InboundMessage.make({
           text: TranscriptText.make(`Describe el movimiento ${transaction?.id}`),
@@ -1019,7 +1019,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       yield* sql`DELETE FROM audit_log_entries WHERE user_id = ${defaultUserId}`;
       const service = yield* AgentService;
 
-      const reply = yield* service.handleTurn(
+      const reply = yield* service.handleSynchronousTurn(
         defaultUserId,
         InboundMessage.make({ text: TranscriptText.make("Desborda herramientas") })
       );
@@ -1037,7 +1037,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       const limits = agentLimits({ maxIterations: 2 });
 
       const reply = yield* service
-        .handleTurn(
+        .handleSynchronousTurn(
           defaultUserId,
           InboundMessage.make({ text: TranscriptText.make("Prueba el límite") })
         )
@@ -1053,7 +1053,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
     Effect.gen(function* () {
       yield* clearTranscript;
       const service = yield* AgentService;
-      yield* service.handleTurn(
+      yield* service.handleSynchronousTurn(
         defaultUserId,
         InboundMessage.make({ text: TranscriptText.make("MARCADOR_ANTIGUO") })
       );
@@ -1061,7 +1061,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       const limits = agentLimits({ maxTranscriptTurns: 1 });
 
       const reply = yield* service
-        .handleTurn(
+        .handleSynchronousTurn(
           defaultUserId,
           InboundMessage.make({ text: TranscriptText.make("MENSAJE_ACTUAL") })
         )
@@ -1082,7 +1082,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       const service = yield* AgentService;
       yield* sql`TRUNCATE source_attestations, transactions, keyword_rules`;
       yield* clearTranscript;
-      yield* service.handleTurn(
+      yield* service.handleSynchronousTurn(
         defaultUserId,
         InboundMessage.make({ text: TranscriptText.make("almuerzo 25 mil") })
       );
@@ -1090,14 +1090,14 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       yield* clearTranscript;
       yield* sql`DELETE FROM audit_log_entries WHERE user_id = ${defaultUserId}`;
 
-      const reply = yield* service.handleTurn(
+      const reply = yield* service.handleSynchronousTurn(
         defaultUserId,
         InboundMessage.make({ text: TranscriptText.make("revisa historial secretos") })
       );
       expect(reply.text).toContain("Operación exacta: transactions.deleteTransaction");
       expect(reply.text).toContain("Argumentos exactos:");
 
-      const bareConfirmationReply = yield* service.handleTurn(
+      const bareConfirmationReply = yield* service.handleSynchronousTurn(
         defaultUserId,
         InboundMessage.make({
           text: TranscriptText.make("CONFIRMAR transactions.deleteTransaction"),
@@ -1132,7 +1132,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       const client = yield* ApiHarnessClient;
       yield* sql`TRUNCATE source_attestations, transactions, keyword_rules`;
       yield* clearTranscript;
-      yield* service.handleTurn(
+      yield* service.handleSynchronousTurn(
         defaultUserId,
         InboundMessage.make({ text: TranscriptText.make("almuerzo 25 mil") })
       );
@@ -1142,7 +1142,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       yield* clearTranscript;
       yield* sql`DELETE FROM audit_log_entries WHERE user_id = ${defaultUserId}`;
 
-      const challenge = yield* service.handleTurn(
+      const challenge = yield* service.handleSynchronousTurn(
         defaultUserId,
         InboundMessage.make({
           text: TranscriptText.make(`borra con lectura posterior ${transaction?.id}`),
@@ -1151,7 +1151,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       const command = /Responde exactamente: (CONFIRMAR [^\n]+)/u.exec(challenge.text)?.[1];
       expect(command).toMatch(/^CONFIRMAR transactions\.deleteTransaction [0-9a-f]{64}$/u);
 
-      const confirmed = yield* service.handleTurn(
+      const confirmed = yield* service.handleSynchronousTurn(
         defaultUserId,
         InboundMessage.make({ text: TranscriptText.make(command ?? "confirmación ausente") })
       );
@@ -1174,7 +1174,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       const service = yield* AgentService;
       yield* sql`TRUNCATE source_attestations, transactions, keyword_rules`;
       yield* clearTranscript;
-      yield* service.handleTurn(
+      yield* service.handleSynchronousTurn(
         defaultUserId,
         InboundMessage.make({ text: TranscriptText.make("almuerzo 25 mil") })
       );
@@ -1182,18 +1182,18 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       yield* clearTranscript;
       yield* sql`DELETE FROM audit_log_entries WHERE user_id = ${defaultUserId}`;
 
-      const challenge = yield* service.handleTurn(
+      const challenge = yield* service.handleSynchronousTurn(
         defaultUserId,
         InboundMessage.make({ text: TranscriptText.make("revisa historial secretos") })
       );
       const command = /Responde exactamente: (CONFIRMAR [^\n]+)/u.exec(challenge.text)?.[1];
       expect(command).toMatch(/^CONFIRMAR transactions\.deleteTransaction [0-9a-f]{64}$/u);
 
-      const confirmed = yield* service.handleTurn(
+      const confirmed = yield* service.handleSynchronousTurn(
         defaultUserId,
         InboundMessage.make({ text: TranscriptText.make(command ?? "confirmación ausente") })
       );
-      const replayed = yield* service.handleTurn(
+      const replayed = yield* service.handleSynchronousTurn(
         defaultUserId,
         InboundMessage.make({ text: TranscriptText.make(command ?? "confirmación ausente") })
       );
@@ -1216,7 +1216,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       const service = yield* AgentService;
       yield* sql`TRUNCATE source_attestations, transactions, keyword_rules`;
       yield* clearTranscript;
-      yield* service.handleTurn(
+      yield* service.handleSynchronousTurn(
         defaultUserId,
         InboundMessage.make({ text: TranscriptText.make("almuerzo 25 mil") })
       );
@@ -1224,7 +1224,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       yield* clearTranscript;
       yield* sql`DELETE FROM audit_log_entries WHERE user_id = ${defaultUserId}`;
 
-      yield* service.handleTurn(
+      yield* service.handleSynchronousTurn(
         defaultUserId,
         InboundMessage.make({ text: TranscriptText.make("revisa historial secretos") })
       );
@@ -1233,7 +1233,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
         WHERE user_id = ${defaultUserId}
           AND entry->>'_tag' = 'AssistantTranscriptEntry'
       `;
-      yield* service.handleTurn(
+      yield* service.handleSynchronousTurn(
         defaultUserId,
         InboundMessage.make({
           text: TranscriptText.make("CONFIRMAR transactions.deleteTransaction"),
@@ -1255,7 +1255,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       yield* clearTranscript;
       const service = yield* AgentService;
       const failure = yield* service
-        .handleTurn(
+        .handleSynchronousTurn(
           defaultUserId,
           InboundMessage.make({ text: TranscriptText.make("MODELO_BLOQUEADO") })
         )
@@ -1279,7 +1279,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       yield* sql`DELETE FROM audit_log_entries WHERE user_id = ${defaultUserId}`;
       const service = yield* AgentService;
 
-      const reply = yield* service.handleTurn(
+      const reply = yield* service.handleSynchronousTurn(
         defaultUserId,
         InboundMessage.make({ text: TranscriptText.make("Lista las categorías") })
       );

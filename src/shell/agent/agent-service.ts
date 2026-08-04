@@ -222,8 +222,31 @@ const makeToolOutcome = (isFailure: boolean, result: Schema.Json): CanonicalTool
   return { _tag: "CanonicalOperationFailed", failure: result };
 };
 
+/**
+ * A reply prepared for asynchronous delivery plus the metadata needed to record that exact reply.
+ * The assistant text is deliberately derived from `reply` when delivery is recorded, so prepared
+ * state cannot represent a different sent and persisted message.
+ */
+export type PreparedAgentReply = Readonly<{
+  reply: AgentReply;
+  assistantEntry: Option.Option<
+    Readonly<{
+      userId: UserId;
+      turnId: TranscriptTurnId;
+      iteration: AgentIteration;
+    }>
+  >;
+}>;
+
+const preparedReply = (
+  reply: AgentReply,
+  assistantEntry: PreparedAgentReply["assistantEntry"]
+): PreparedAgentReply => ({ reply, assistantEntry });
+
 const makeAgentService = Effect.gen(function* () {
   const model = yield* LanguageModel.LanguageModel;
+  const crypto = yield* Crypto.Crypto;
+  const sqlClient = yield* SqlClient.SqlClient;
   const generateCurrent = ({
     includeMalformedOutputFeedback,
     limits,
@@ -284,7 +307,7 @@ const makeAgentService = Effect.gen(function* () {
       );
     });
 
-  const handleTurn = Effect.fn("AgentService.handleTurn")(function* (
+  const prepareTurn = Effect.fn("AgentService.prepareTurn")(function* (
     userId: UserId,
     message: InboundMessage
   ) {
@@ -305,7 +328,7 @@ const makeAgentService = Effect.gen(function* () {
       })
     );
     if (containsSensitiveChatValue(message.text)) {
-      return makeTextReply(credentialRejectedReply);
+      return preparedReply(makeTextReply(credentialRejectedReply), Option.none());
     }
     const turnId = yield* makeTurnId;
     const occurredAt = yield* DateTime.now;
@@ -360,8 +383,7 @@ const makeAgentService = Effect.gen(function* () {
             const text = containsSensitiveChatValue(decodedText)
               ? credentialRejectedReply
               : decodedText;
-            yield* appendAssistantTranscript({ userId, turnId, iteration, text });
-            return makeTextReply(text);
+            return preparedReply(makeTextReply(text), Option.some({ userId, turnId, iteration }));
           }
 
           let pendingChallenge = Option.none<TranscriptText>();
@@ -451,33 +473,28 @@ const makeAgentService = Effect.gen(function* () {
               }),
             ]);
             if (binding.policy.requiredScope === "write" && outcome._tag === "Succeeded") {
-              yield* appendAssistantTranscript({
-                userId,
-                turnId,
-                iteration,
-                text: operationCompletedReply,
-              });
-              return makeTextReply(operationCompletedReply);
+              return preparedReply(
+                makeTextReply(operationCompletedReply),
+                Option.some({ userId, turnId, iteration })
+              );
             }
           }
           if (Option.isSome(pendingChallenge)) {
-            yield* appendAssistantTranscript({
-              userId,
-              turnId,
-              iteration,
-              text: pendingChallenge.value,
-            });
-            return makeTextReply(pendingChallenge.value);
+            return preparedReply(
+              makeTextReply(pendingChallenge.value),
+              Option.some({ userId, turnId, iteration })
+            );
           }
         }
 
-        yield* appendAssistantTranscript({
-          userId,
-          turnId,
-          iteration: AgentIteration.make(limits.maxIterations),
-          text: exhaustedReply,
-        });
-        return makeTextReply(exhaustedReply);
+        return preparedReply(
+          makeTextReply(exhaustedReply),
+          Option.some({
+            userId,
+            turnId,
+            iteration: AgentIteration.make(limits.maxIterations),
+          })
+        );
       })
     );
 
@@ -492,17 +509,39 @@ const makeAgentService = Effect.gen(function* () {
     );
   });
 
-  return AgentService.of({ handleTurn });
+  const recordDeliveredReply = Effect.fn("AgentService.recordDeliveredReply")(
+    (prepared: PreparedAgentReply) =>
+      Option.match(prepared.assistantEntry, {
+        onNone: () => Effect.void,
+        onSome: (entry) => appendAssistantTranscript({ ...entry, text: prepared.reply.text }),
+      }).pipe(
+        Effect.provideService(Crypto.Crypto, crypto),
+        Effect.provideService(SqlClient.SqlClient, sqlClient)
+      )
+  );
+  const handleSynchronousTurn = Effect.fn("AgentService.handleSynchronousTurn")(function* (
+    userId: UserId,
+    message: InboundMessage
+  ) {
+    const prepared = yield* prepareTurn(userId, message);
+    yield* recordDeliveredReply(prepared);
+    return prepared.reply;
+  });
+
+  return AgentService.of({
+    handleTurn: prepareTurn,
+    handleSynchronousTurn,
+    recordDeliveredReply,
+  });
 });
 
 /**
- * Runs one hosted turn for the stable User identified by `userId`. The service
- * appends the accepted message, model replies, and canonical call/results to the
- * User's Transcript; canonical writes can therefore commit before a later model
- * failure. Current onboarding consent is required before Transcript, token, or
- * model work. It issues an all-scope HostedAgentToken only for the turn and always
- * attempts revocation on exit. Missing consent, unknown Users, and model failures
- * are returned as AgentTurnError values; persistence, HTTP, and crypto defects
+ * Runs one hosted turn for the stable User identified by `userId`. `handleTurn` prepares the reply
+ * for an asynchronous adapter; that adapter records it only after delivery. `handleSynchronousTurn`
+ * prepares and immediately records a locally delivered reply. Accepted User text and canonical
+ * calls/results may commit before delivery or a later model failure. Current onboarding consent is
+ * required before Transcript, authorization, or model work. Missing consent, unknown Users, and
+ * model failures are returned as AgentTurnError values; persistence, HTTP, and crypto defects
  * remain effects for the assembled runtime rather than user-visible replies.
  */
 export class AgentService extends Context.Service<
@@ -512,10 +551,21 @@ export class AgentService extends Context.Service<
       userId: UserId,
       message: InboundMessage
     ) => Effect.Effect<
+      PreparedAgentReply,
+      AgentTurnError,
+      Crypto.Crypto | HttpClient.HttpClient | SqlClient.SqlClient
+    >;
+    readonly handleSynchronousTurn: (
+      userId: UserId,
+      message: InboundMessage
+    ) => Effect.Effect<
       AgentReply,
       AgentTurnError,
       Crypto.Crypto | HttpClient.HttpClient | SqlClient.SqlClient
     >;
+    readonly recordDeliveredReply: (
+      prepared: PreparedAgentReply
+    ) => Effect.Effect<void, OnboardingConsentRequired>;
   }
 >()("fidy-ai/shell/agent/agent-service/AgentService") {}
 

@@ -6,7 +6,7 @@
 
 ## Context
 
-Current onboarding consent is an authorization precondition for reading a User's personal Transcript, sending that context to the hosted model, issuing a HostedAgentToken, and executing canonical operations. A check followed by a database effect in a separate transaction leaves a race in which revocation can commit between the check and that effect. Moving those operations into Consent would violate ownership. Holding a database transaction across a provider call would contradict the short RLS transaction model and allow provider latency to pin connections and delay revocation.
+Current onboarding consent is an authorization precondition for reading a User's personal Transcript, sending that context to the hosted model, issuing a HostedAgentToken, executing canonical operations, admitting a WhatsApp turn, and authorizing its exact free-form recipient/window projection. A check followed by a database effect in a separate transaction leaves a race in which revocation can commit between the check and that effect. Moving those operations into Consent would violate ownership. Holding a database transaction across a provider call would contradict the short RLS transaction model and allow provider latency to pin connections and delay revocation.
 
 ## Decision
 
@@ -14,7 +14,7 @@ Consent publishes a subject-scoped PostgreSQL advisory transaction lock. Each sh
 
 Hosted-model egress linearizes at the serialized consent check that loads its exact Transcript context. The database transaction commits before the provider call starts. Revocation after that point does not retroactively invalidate context whose egress was already authorized, but every later Transcript read or write, HostedAgentToken issue, and canonical operation must pass a new serialized check. Each provider round has a fixed timeout and cancellation boundary.
 
-This is a transaction-coordination exception to ADR 0003's single-slice atomicity check, alongside ADR 0005's canonical state-plus-Audit transaction and ADR 0009's bootstrap transaction. It does not transfer ownership or permit direct cross-slice table writes. Each participating slice remains the only implementation that writes its data. The exception is limited to one short consent-dependent database unit: one Transcript read or append, one HostedAgentToken issue, or one canonical authorization/execution/audit attempt including AgentToken renewal. Code must not infer unrelated cross-slice business invariants from the shared transaction.
+This is a transaction-coordination exception to ADR 0003's single-slice atomicity check, alongside ADR 0005's canonical state-plus-Audit transaction and ADR 0009's bootstrap transaction. It does not transfer ownership or permit direct cross-slice table writes. Each participating slice remains the only implementation that writes its data. The exception is limited to one short consent-dependent database unit: one Transcript read or append, one HostedAgentToken issue, one canonical authorization/execution/audit attempt including AgentToken renewal, one WhatsApp evidence/job/window admission, or one exact WhatsApp recipient/window authorization. Code must not infer unrelated cross-slice business invariants from the shared transaction.
 
 ## Consequences
 

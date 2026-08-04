@@ -12,5 +12,9 @@ export const userTableNames = [
   "transactions",
   "transcript_entries",
   "users",
+  "whatsapp_conversation_windows",
   "whatsapp_identities",
+  "whatsapp_inbound_jobs",
+  "whatsapp_message_evidence",
+  "whatsapp_turn_claims",
 ] as const;

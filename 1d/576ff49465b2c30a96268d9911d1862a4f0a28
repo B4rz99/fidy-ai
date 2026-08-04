@@ -1,0 +1,34 @@
+src/shell/agent/toolkit.test.ts
+  s_2096af1feee5ae::t_6a74ab6e15c32f 40,43,46-47
+  s_2096af1feee5ae::t_c4481e9cf2670c 9-14,41-42
+  s_2096af1feee5ae::t_6cca25e2d11a7f 44-45
+src/shell/agent/model-boundary.ts
+  s_2096af1feee5ae::t_9b96cf233c39ba 133-134
+src/shell/agent/agent-service.test.ts
+  s_2096af1feee5ae::t_93ff8598906f9f 156,160,163,165-168
+  s_2096af1feee5ae::t_7273cdfc8dabc3 161,164
+  s_2096af1feee5ae::t_32c8104b4337b9 706-723
+  s_2096af1feee5ae::t_78c9a40264f2dd 109
+  s_2096af1feee5ae::t_3cf9e68faddd01 162
+  s_2096af1feee5ae::t_a6a15241f8e804 3
+  s_2096af1feee5ae::t_5024d68452cc5f 157-159
+src/shell/agent/toolkit.ts
+  s_2096af1feee5ae::t_5d90ae138bd3cb 87-91,94
+  s_2096af1feee5ae::t_dc683aa8ccd14b 8
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "1d576ff49465b2c30a96268d9911d1862a4f0a28",
+  "prompts": {},
+  "sessions": {
+    "s_2096af1feee5ae": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019fca90-ce9e-7dab-9d9f-57075315f1a3",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

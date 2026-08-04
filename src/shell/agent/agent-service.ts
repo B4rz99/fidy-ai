@@ -14,6 +14,7 @@ import {
 import { LanguageModel } from "effect/unstable/ai";
 import type { HttpClient } from "effect/unstable/http";
 import { SqlClient } from "effect/unstable/sql";
+import type { User } from "~/core/identity/model";
 import type { UserId } from "~/core/identity/reference";
 import {
   selectTranscriptWindow,
@@ -52,6 +53,7 @@ import {
   transcriptPrompt,
 } from "./model-boundary";
 import { makeTurnConfirmation } from "./tool-confirmation";
+import { renderTransactionReceipt } from "./transaction-receipt";
 import {
   type AgentOperationBinding,
   decodeAgentOperationInput,
@@ -187,6 +189,28 @@ const makeTextReply = (text: TranscriptText): AgentReply =>
   AgentReply.make({ text, attachments: Option.none(), choices: Option.none() });
 
 const operationCompletedReply = TranscriptText.make("Listo, completé la operación solicitada.");
+const makeCompletedReply = ({
+  binding,
+  output,
+  turnStartedAt,
+  user,
+}: Readonly<{
+  binding: AgentOperationBinding;
+  output: Schema.Json;
+  turnStartedAt: DateTime.Utc;
+  user: User;
+}>): TranscriptText =>
+  binding.operation === "transactions.createTransaction"
+    ? Option.getOrElse(
+        renderTransactionReceipt({
+          locale: user.locale,
+          output,
+          timeZone: user.timeZone,
+          turnStartedAt,
+        }),
+        () => operationCompletedReply
+      )
+    : operationCompletedReply;
 const exhaustedReply = TranscriptText.make(
   "No pude completar la solicitud dentro del límite seguro de operaciones. Intenta de nuevo."
 );
@@ -484,7 +508,14 @@ const makeAgentService = Effect.gen(function* () {
             ]);
             if (binding.policy.requiredScope === "write" && outcome._tag === "Succeeded") {
               return preparedReply(
-                makeTextReply(operationCompletedReply),
+                makeTextReply(
+                  makeCompletedReply({
+                    binding,
+                    output: result,
+                    turnStartedAt: occurredAt,
+                    user,
+                  })
+                ),
                 Option.some({ userId, turnId, iteration })
               );
             }

@@ -1,6 +1,11 @@
-import { Crypto, DateTime, Effect, Encoding, Layer, Option } from "effect";
+import { Config, Crypto, DateTime, Effect, Encoding, Layer, Option } from "effect";
 import { ConsentRecord, ConsentRecordId } from "~/core/consent/model";
-import { E164PhoneNumber, UserId } from "~/core/identity/reference";
+import {
+  E164PhoneNumber,
+  UserId,
+  WhatsAppBusinessPortfolioId,
+  WhatsAppBusinessScopedUserId,
+} from "~/core/identity/reference";
 import { AgentTokenId } from "~/core/tokens/reference";
 import { makeColombianUser } from "~/core/identity/rules";
 import {
@@ -121,8 +126,9 @@ export const seedConsentedAgentIdentity = (
   });
 
 /**
- * Seeds the complete local development identity and rotates its single
- * all-scopes AgentToken to the supplied one-time bearer.
+ * Seeds the complete local development identity and rotates its single all-scopes AgentToken to
+ * the supplied one-time bearer. The WhatsApp association uses the required
+ * `WHATSAPP_BUSINESS_PORTFOLIO_ID`; missing or invalid configuration fails the seed.
  */
 export const seedDevelopmentIdentity = (bearer: AgentBearerToken) =>
   Effect.gen(function* () {
@@ -130,9 +136,17 @@ export const seedDevelopmentIdentity = (bearer: AgentBearerToken) =>
       bearer,
       tokenId: defaultAgentTokenId,
     });
+    const businessPortfolioId = yield* Config.schema(
+      WhatsAppBusinessPortfolioId,
+      "WHATSAPP_BUSINESS_PORTFOLIO_ID"
+    );
 
     yield* associateWhatsAppIdentity(defaultUserId, {
-      phoneNumber: defaultWhatsAppPhone,
+      businessPortfolioId,
+      businessScopedUserId: WhatsAppBusinessScopedUserId.make("CO.573001234567"),
+      parentBusinessScopedUserId: Option.none(),
+      username: Option.none(),
+      phoneNumber: Option.some(defaultWhatsAppPhone),
       verifiedAt: defaultCreatedAt,
     });
 

@@ -4,10 +4,14 @@
     "timestamp": "1775217600",
     "type": "text",
     "from": "573001234567",
+    "from_user_id": "CO.573001234567",
     "text": { "body": "almuerzo 25 mil" },
     "kapso": { "direction": "inbound", "has_media": false }
   },
-  "conversation": { "phone_number": "573001234567" },
+  "conversation": {
+    "phone_number": "573001234567",
+    "business_scoped_user_id": "CO.573001234567"
+  },
   "is_new_conversation": false,
   "phone_number_id": "123456789012345"
 }

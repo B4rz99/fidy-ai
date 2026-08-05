@@ -7,12 +7,13 @@ import {
   DisclosureSnapshot,
   PendingConsentExchangeId,
 } from "~/core/consent/model";
-import { E164PhoneNumber, UserId } from "~/core/identity/reference";
+import { E164PhoneNumber, UserId, whatsAppCallerReference } from "~/core/identity/reference";
 import { makeColombianUser } from "~/core/identity/rules";
 import { MigrationSqlClient } from "~/shell/db/client";
 import { defaultAgentTokenId, defaultUserId } from "~/shell/db/development-seed";
 import { insertUser } from "~/shell/identity/repo";
 import { ApiHarness } from "~/shell/testing/api-harness";
+import { testWhatsAppCaller } from "~/shell/testing/whatsapp-caller";
 import { currentDisclosure } from "./current-disclosure";
 import {
   appendConsentRecord,
@@ -42,7 +43,10 @@ const otherUserId = UserId.make("f1d1a000-0000-4000-8000-0000000008d1");
 
 const clearConsent = Effect.gen(function* () {
   const sql = yield* MigrationSqlClient;
-  yield* sql`DELETE FROM pending_consent_exchanges WHERE phone_number = ${phoneNumber}`;
+  const caller = testWhatsAppCaller(phoneNumber);
+  yield* sql`DELETE FROM pending_consent_exchanges
+    WHERE business_portfolio_id = ${caller.businessPortfolioId}
+      AND business_scoped_user_id = ${caller.businessScopedUserId}`;
   yield* sql`DELETE FROM consent_records WHERE subject_user_id = ${defaultUserId}`;
 });
 
@@ -56,7 +60,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         const pending = {
           _tag: "AwaitingDisclosureDelivery",
           id: PendingConsentExchangeId.make("f1d1a000-0000-4000-8000-000000000821"),
-          phoneNumber,
+          caller: whatsAppCallerReference(testWhatsAppCaller(phoneNumber)),
           disclosure,
           initiatingMessage: {
             channel: "whatsapp",
@@ -68,7 +72,9 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         } as const;
 
         yield* insertPendingConsentExchange(pending);
-        expect(yield* findPendingConsentExchange(phoneNumber)).toEqual(Option.some(pending));
+        expect(yield* findPendingConsentExchange(testWhatsAppCaller(phoneNumber))).toEqual(
+          Option.some(pending)
+        );
 
         const deliveredAt = DateTime.makeUnsafe("2026-08-01T12:00:01Z");
         const claim = yield* claimConsentDisclosureDelivery(pending.id, deliveredAt);
@@ -95,7 +101,9 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
             deliveredAt: DateTime.makeUnsafe("2026-08-01T12:00:02Z"),
           })
         ).toEqual(Option.none());
-        expect(yield* findPendingConsentExchange(phoneNumber)).toEqual(awaitingDecision);
+        expect(yield* findPendingConsentExchange(testWhatsAppCaller(phoneNumber))).toEqual(
+          awaitingDecision
+        );
         expect(
           yield* recordConsentDisclosureDelivery({
             exchangeId: PendingConsentExchangeId.make("f1d1a000-0000-4000-8000-000000000822"),
@@ -106,7 +114,9 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         ).toEqual(Option.none());
 
         yield* removePendingConsentExchange(pending.id);
-        expect(Option.isNone(yield* findPendingConsentExchange(phoneNumber))).toBe(true);
+        expect(
+          Option.isNone(yield* findPendingConsentExchange(testWhatsAppCaller(phoneNumber)))
+        ).toBe(true);
       })
     );
 

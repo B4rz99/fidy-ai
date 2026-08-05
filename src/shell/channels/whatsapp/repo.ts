@@ -1,6 +1,6 @@
 import { Array as EffectArray, Crypto, Data, DateTime, Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
-import { E164PhoneNumber, UserId } from "~/core/identity/reference";
+import { UserId } from "~/core/identity/reference";
 import { InboundMessage, OnboardingConsentRequired } from "~/shell/agent/agent-service";
 import type { AgentConversationAdmission } from "~/shell/agent/conversation";
 import { hasCurrentOnboardingConsentAt, useCurrentConsent } from "~/shell/consent/repo";
@@ -8,6 +8,7 @@ import { withUserTransaction } from "~/shell/db/user-transaction";
 import { findAndLockWhatsAppIdentity } from "~/shell/identity/repo";
 import {
   WhatsAppBusinessPhoneNumberId,
+  WhatsAppCaller,
   WhatsAppDeliveryKey,
   WhatsAppProviderMessageId,
   type WhatsAppInboundEvent,
@@ -64,15 +65,15 @@ export class WhatsAppReceiptInProgress extends Data.TaggedError("WhatsAppReceipt
 export class WhatsAppInboundCapacityExceeded extends Data.TaggedError(
   "WhatsAppInboundCapacityExceeded"
 )<{}> {}
-/** The durable hourly phone or User ingress budget is exhausted. */
+/** A durable hourly global, portfolio-scoped caller, or User ingress budget is exhausted. */
 export class WhatsAppRateLimitExceeded extends Data.TaggedError("WhatsAppRateLimitExceeded")<{}> {}
 
 const IngressBudgetScope = Schema.Union([
   Schema.TaggedStruct("Global", {}),
-  Schema.TaggedStruct("Phone", { phoneNumber: E164PhoneNumber }),
+  Schema.TaggedStruct("Caller", { caller: WhatsAppCaller }),
   Schema.TaggedStruct("User", { userId: UserId }),
 ]);
-/** Subject used to enforce either pre-association phone or stable-User ingress limits. */
+/** Subject used to enforce either pre-association portfolio-scoped caller or stable-User limits. */
 export type IngressBudgetScope = typeof IngressBudgetScope.Type;
 const BudgetRequest = Schema.Struct({
   budgetKey: Schema.NonEmptyString.check(Schema.isTrimmed(), Schema.isMaxLength(256)),
@@ -97,8 +98,9 @@ export const consumeWhatsAppIngressBudget = Effect.fn("WhatsApp.consumeIngressBu
   const sql = yield* SqlClient.SqlClient;
   let budgetKey: string;
   if (scope._tag === "Global") budgetKey = "global:authenticated";
-  else if (scope._tag === "Phone") budgetKey = `phone:${scope.phoneNumber}`;
-  else budgetKey = `user:${scope.userId}`;
+  else if (scope._tag === "Caller") {
+    budgetKey = `caller:${scope.caller.businessPortfolioId}:${scope.caller.businessScopedUserId}`;
+  } else budgetKey = `user:${scope.userId}`;
   const request: typeof BudgetRequest.Type = {
     budgetKey,
     providerMessageId,
@@ -238,6 +240,8 @@ const EnqueueRequest = Schema.Struct({
   debounceUntil: Schema.DateTimeUtcFromDate,
   identityVerifiedAt: Schema.DateTimeUtcFromDate,
   businessPhoneNumberId: WhatsAppBusinessPhoneNumberId,
+  businessPortfolioId: WhatsAppCaller.fields.businessPortfolioId,
+  businessScopedUserId: WhatsAppCaller.fields.businessScopedUserId,
   windowOpenUntil: Schema.DateTimeUtcFromDate,
 });
 const EnqueueResult = Schema.Struct({
@@ -272,7 +276,8 @@ export const enqueueWhatsAppTurn = Effect.fn("WhatsApp.enqueueTurn")(function* (
         );
         if (
           Option.isNone(identity) ||
-          identity.value.phoneNumber !== input.event.phoneNumber ||
+          identity.value.businessPortfolioId !== input.event.caller.businessPortfolioId ||
+          identity.value.businessScopedUserId !== input.event.caller.businessScopedUserId ||
           DateTime.Order(input.event.occurredAt, identity.value.verifiedAt) < 0 ||
           !consentExisted
         ) {
@@ -315,15 +320,21 @@ export const enqueueWhatsAppTurn = Effect.fn("WhatsApp.enqueueTurn")(function* (
             RETURNING id
           ), advanced_window AS (
             INSERT INTO whatsapp_conversation_windows(
-              user_id, identity_verified_at, business_phone_number_id, window_open_until
+              user_id, identity_verified_at, business_phone_number_id,
+              business_portfolio_id, business_scoped_user_id, window_open_until
             )
-            SELECT ${row.userId}, ${row.identityVerifiedAt}, ${row.businessPhoneNumberId}, ${row.windowOpenUntil}
+            SELECT ${row.userId}, ${row.identityVerifiedAt}, ${row.businessPhoneNumberId},
+              ${row.businessPortfolioId}, ${row.businessScopedUserId}, ${row.windowOpenUntil}
             FROM evidence
             ON CONFLICT (user_id) DO UPDATE SET
               identity_verified_at = EXCLUDED.identity_verified_at,
               business_phone_number_id = EXCLUDED.business_phone_number_id,
+              business_portfolio_id = EXCLUDED.business_portfolio_id,
+              business_scoped_user_id = EXCLUDED.business_scoped_user_id,
               window_open_until = CASE
                 WHEN whatsapp_conversation_windows.identity_verified_at = EXCLUDED.identity_verified_at
+                  AND whatsapp_conversation_windows.business_portfolio_id = EXCLUDED.business_portfolio_id
+                  AND whatsapp_conversation_windows.business_scoped_user_id = EXCLUDED.business_scoped_user_id
                 THEN GREATEST(whatsapp_conversation_windows.window_open_until, EXCLUDED.window_open_until)
                 ELSE EXCLUDED.window_open_until
               END
@@ -344,6 +355,8 @@ export const enqueueWhatsAppTurn = Effect.fn("WhatsApp.enqueueTurn")(function* (
           debounceUntil,
           identityVerifiedAt: identity.value.verifiedAt,
           businessPhoneNumberId: input.event.businessPhoneNumberId,
+          businessPortfolioId: input.event.caller.businessPortfolioId,
+          businessScopedUserId: input.event.caller.businessScopedUserId,
           windowOpenUntil,
         }).pipe(Effect.orDie);
       })
@@ -518,6 +531,8 @@ export const getWhatsAppWindowState = Effect.fn("WhatsApp.getWindowState")(funct
           FROM whatsapp_conversation_windows
           WHERE user_id = ${request.userId}
             AND identity_verified_at = ${request.identityVerifiedAt}
+            AND business_portfolio_id = ${identity.value.businessPortfolioId}
+            AND business_scoped_user_id = ${identity.value.businessScopedUserId}
         `,
       })({ userId, identityVerifiedAt: identity.value.verifiedAt }).pipe(Effect.orDie);
     })
@@ -596,6 +611,8 @@ export const authorizeWhatsAppFreeForm = Effect.fn("WhatsApp.authorizeFreeForm")
             FROM whatsapp_conversation_windows
             WHERE user_id = ${request.userId}
               AND identity_verified_at = ${request.identityVerifiedAt}
+              AND business_portfolio_id = ${identity.value.businessPortfolioId}
+              AND business_scoped_user_id = ${identity.value.businessScopedUserId}
           `,
         })({ userId, identityVerifiedAt: identity.value.verifiedAt }).pipe(Effect.orDie);
         if (Option.isNone(window)) {
@@ -611,7 +628,17 @@ export const authorizeWhatsAppFreeForm = Effect.fn("WhatsApp.authorizeFreeForm")
             lastWindowOpenUntil: Option.some(windowOpenUntil),
           });
         }
-        return { phoneNumber, businessPhoneNumberId, windowOpenUntil };
+        return {
+          caller: {
+            businessPortfolioId: identity.value.businessPortfolioId,
+            businessScopedUserId: identity.value.businessScopedUserId,
+            parentBusinessScopedUserId: identity.value.parentBusinessScopedUserId,
+            username: identity.value.username,
+            phoneNumber,
+          },
+          businessPhoneNumberId,
+          windowOpenUntil,
+        };
       })
     )
   );

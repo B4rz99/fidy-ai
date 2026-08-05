@@ -1,9 +1,13 @@
 import { expect, it } from "@effect/vitest";
-import { DateTime, Effect } from "effect";
-import { decodeKapsoWebhook } from "./kapso-webhook";
+import { DateTime, Effect, Option, Schema } from "effect";
+import { makeKapsoIdentityChangeBody } from "~/shell/testing/kapso-identity-change";
+import { decodeKapsoIdentityWebhook, decodeKapsoWebhook } from "./kapso-webhook";
 
-const fixtureBytes = (name: "kapso-text-v2.json" | "kapso-voice-v2.json") =>
-  Effect.promise(() => Bun.file(new URL(`./fixtures/${name}`, import.meta.url)).bytes());
+const fixtureBytes = (
+  name: "kapso-text-v2.json" | "kapso-voice-v2.json" | "kapso-bsuid-text-v2.json"
+) => Effect.promise(() => Bun.file(new URL(`./fixtures/${name}`, import.meta.url)).bytes());
+const encodeJsonBody = (value: unknown) =>
+  new TextEncoder().encode(Schema.encodeSync(Schema.UnknownFromJsonString)(value));
 const receivedAt = DateTime.makeUnsafe("2026-04-03T12:00:02.000Z");
 const secret = "test-webhook-secret-32-characters";
 const signedInput = (rawBody: Uint8Array, deliveryKey = "delivery-signed") => ({
@@ -11,8 +15,104 @@ const signedInput = (rawBody: Uint8Array, deliveryKey = "delivery-signed") => ({
   secret,
   signature: new Bun.CryptoHasher("sha256", secret).update(rawBody).digest("hex"),
   deliveryKey,
+  businessPortfolioId: "portfolio-test",
   receivedAt,
 });
+
+it.effect("projects a provider-authenticated BSUID identity change", () =>
+  Effect.gen(function* () {
+    const rawBody = makeKapsoIdentityChangeBody();
+
+    const changes = yield* decodeKapsoIdentityWebhook(signedInput(rawBody));
+
+    expect(changes).toHaveLength(1);
+    expect(changes[0]).toMatchObject({
+      previousCaller: {
+        businessPortfolioId: "portfolio-test",
+        businessScopedUserId: "CO.573001234567",
+      },
+      replacement: {
+        businessScopedUserId: "CO.573009876543",
+        phoneNumber: Option.some("+573009876543"),
+      },
+    });
+  })
+);
+
+it.effect("rejects forged or internally inconsistent identity changes", () =>
+  Effect.gen(function* () {
+    const rawBody = makeKapsoIdentityChangeBody();
+    const forged = yield* decodeKapsoIdentityWebhook({
+      ...signedInput(rawBody),
+      signature: "0".repeat(64),
+    }).pipe(Effect.flip);
+    expect(forged._tag).toBe("InvalidKapsoSignature");
+
+    const inconsistentBody = makeKapsoIdentityChangeBody({
+      systemUserId: "CO.different456",
+    });
+    const inconsistent = yield* decodeKapsoIdentityWebhook(signedInput(inconsistentBody)).pipe(
+      Effect.flip
+    );
+    expect(inconsistent._tag).toBe("InvalidKapsoPayload");
+  })
+);
+
+it.effect("bounds, filters, and validates authenticated identity envelopes", () =>
+  Effect.gen(function* () {
+    const oversized = new Uint8Array(1_048_577);
+    expect((yield* decodeKapsoIdentityWebhook(signedInput(oversized)).pipe(Effect.flip))._tag).toBe(
+      "KapsoPayloadTooLarge"
+    );
+
+    const validBody = makeKapsoIdentityChangeBody();
+    expect(
+      (yield* decodeKapsoIdentityWebhook({
+        ...signedInput(validBody),
+        secret: "too-short",
+      }).pipe(Effect.flip))._tag
+    ).toBe("InvalidKapsoSignature");
+
+    const malformedBody = makeKapsoIdentityChangeBody({ systemBody: "not a transition" });
+    expect(
+      (yield* decodeKapsoIdentityWebhook(signedInput(malformedBody)).pipe(Effect.flip))._tag
+    ).toBe("InvalidKapsoPayload");
+
+    const unrelatedBody = encodeJsonBody({
+      object: "whatsapp_business_account",
+      entry: [{ changes: [{ value: { messages: [{ type: "text" }] } }] }],
+    });
+    expect(yield* decodeKapsoIdentityWebhook(signedInput(unrelatedBody))).toEqual([]);
+
+    const noMessagesBody = encodeJsonBody({
+      object: "whatsapp_business_account",
+      entry: [{ changes: [{ value: {} }] }],
+    });
+    expect(yield* decodeKapsoIdentityWebhook(signedInput(noMessagesBody))).toEqual([]);
+
+    const message = {
+      id: "wamid.identity-change-batch",
+      timestamp: "1775217600",
+      type: "system",
+      system: {
+        body: "User Ada changed from CO.573001234567 to CO.573009876543",
+        user_id: "CO.573009876543",
+        type: "user_changed_user_id",
+      },
+    };
+    const oversizedBatch = encodeJsonBody({
+      object: "whatsapp_business_account",
+      entry: [
+        {
+          changes: [{ value: { messages: Array.from({ length: 101 }, () => message) } }],
+        },
+      ],
+    });
+    expect(
+      (yield* decodeKapsoIdentityWebhook(signedInput(oversizedBatch)).pipe(Effect.flip))._tag
+    ).toBe("KapsoBatchTooLarge");
+  })
+);
 
 it.effect("rejects an invalid Kapso signature before decoding provider content", () =>
   Effect.gen(function* () {
@@ -22,6 +122,7 @@ it.effect("rejects an invalid Kapso signature before decoding provider content",
       secret: "test-webhook-secret-32-characters",
       signature: "0".repeat(64),
       deliveryKey: "delivery-invalid",
+      businessPortfolioId: "portfolio-test",
       receivedAt,
     }).pipe(Effect.flip);
 
@@ -64,7 +165,7 @@ it.effect("normalizes prefixed senders and rejects unsafe projected event fields
     const fixture = new TextDecoder().decode(yield* fixtureBytes("kapso-text-v2.json"));
     const prefixed = new TextEncoder().encode(fixture.replace('"from": "573', '"from": "+573'));
     const decoded = yield* decodeKapsoWebhook(signedInput(prefixed));
-    expect(decoded.events[0].phoneNumber).toBe("+573001234567");
+    expect(Option.getOrThrow(decoded.events[0].caller.phoneNumber)).toBe("+573001234567");
 
     const unsafeTimestamp = new TextEncoder().encode(
       fixture.replace('"timestamp": "1775217600"', '"timestamp": "9999999999999999"')
@@ -91,20 +192,10 @@ it.effect("normalizes prefixed senders and rejects unsafe projected event fields
 
 it.effect("decodes recorded Kapso text and voice payloads into bounded WhatsApp evidence", () =>
   Effect.gen(function* () {
-    const text = yield* decodeKapsoWebhook({
-      rawBody: yield* fixtureBytes("kapso-text-v2.json"),
-      secret: "test-webhook-secret-32-characters",
-      signature: "2c9e6d0ce2b1d348e540f8e3ed623cd633aa39e09c2b96f1c782008186e0352f",
-      deliveryKey: "delivery-text",
-      receivedAt,
-    });
-    const voice = yield* decodeKapsoWebhook({
-      rawBody: yield* fixtureBytes("kapso-voice-v2.json"),
-      secret: "test-webhook-secret-32-characters",
-      signature: "181344306f695b38d012453d4a3d12cd97917c5aa3d5db1e598ad5cd2d7f77ad",
-      deliveryKey: "delivery-voice",
-      receivedAt,
-    });
+    const textBytes = yield* fixtureBytes("kapso-text-v2.json");
+    const voiceBytes = yield* fixtureBytes("kapso-voice-v2.json");
+    const text = yield* decodeKapsoWebhook(signedInput(textBytes, "delivery-text"));
+    const voice = yield* decodeKapsoWebhook(signedInput(voiceBytes, "delivery-voice"));
 
     expect(text.events).toMatchObject([
       {
@@ -113,7 +204,11 @@ it.effect("decodes recorded Kapso text and voice payloads into bounded WhatsApp 
           provider: "kapso",
           providerMessageId: "wamid.text-001",
         },
-        phoneNumber: "+573001234567",
+        caller: {
+          businessPortfolioId: "portfolio-test",
+          businessScopedUserId: "CO.573001234567",
+          phoneNumber: { _tag: "Some", value: "+573001234567" },
+        },
         businessPhoneNumberId: "123456789012345",
         content: { _tag: "Text", text: "almuerzo 25 mil" },
       },
@@ -128,5 +223,22 @@ it.effect("decodes recorded Kapso text and voice payloads into bounded WhatsApp 
         },
       },
     ]);
+  })
+);
+
+it.effect("accepts a BSUID-only sender without inventing a phone number", () =>
+  Effect.gen(function* () {
+    const rawBody = yield* fixtureBytes("kapso-bsuid-text-v2.json");
+    const decoded = yield* decodeKapsoWebhook(signedInput(rawBody, "delivery-bsuid"));
+
+    expect(decoded.events[0]).toMatchObject({
+      caller: {
+        businessPortfolioId: "portfolio-test",
+        businessScopedUserId: "CO.13491208655302741918",
+        phoneNumber: { _tag: "None" },
+        username: { _tag: "Some", value: "@sheena" },
+      },
+      content: { _tag: "Text", text: "mercado 40 mil" },
+    });
   })
 );

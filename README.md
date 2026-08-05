@@ -21,19 +21,21 @@ through Effect Schema.
 
 The process reads deployment configuration from the environment:
 
-| Variable                 | Requirement | Meaning                                                    |
-| ------------------------ | ----------- | ---------------------------------------------------------- |
-| `DATABASE_URL`           | required    | Restricted `fidy_runtime` PostgreSQL URL                   |
-| `MIGRATION_DATABASE_URL` | required    | Separately privileged PostgreSQL URL used only during boot |
-| `PORT`                   | optional    | HTTP port, defaulting to `3000`                            |
-| `FIDY_HTTP_HOST`         | optional    | Bind host, defaulting to `0.0.0.0`                         |
-| `APP_VERSION`            | optional    | Version returned by `GET /health`                          |
-| `RAILWAY_DEPLOYMENT_ID`  | Railway     | Health version fallback when `APP_VERSION` is absent       |
+| Variable                         | Requirement | Meaning                                                    |
+| -------------------------------- | ----------- | ---------------------------------------------------------- |
+| `DATABASE_URL`                   | required    | Restricted `fidy_runtime` PostgreSQL URL                   |
+| `MIGRATION_DATABASE_URL`         | required    | Separately privileged PostgreSQL URL used only during boot |
+| `WHATSAPP_BUSINESS_PORTFOLIO_ID` | required    | Trusted portfolio scope for WhatsApp BSUIDs                |
+| `PORT`                           | optional    | HTTP port, defaulting to `3000`                            |
+| `FIDY_HTTP_HOST`                 | optional    | Bind host, defaulting to `0.0.0.0`                         |
+| `APP_VERSION`                    | optional    | Version returned by `GET /health`                          |
+| `RAILWAY_DEPLOYMENT_ID`          | Railway     | Health version fallback when `APP_VERSION` is absent       |
 
 ```sh
 docker compose up -d db     # local Postgres on :5433
 export DATABASE_URL=postgres://fidy_runtime:fidy_runtime@localhost:5433/fidy
 export MIGRATION_DATABASE_URL=postgres://fidy:fidy@localhost:5433/fidy
+export WHATSAPP_BUSINESS_PORTFOLIO_ID=portfolio-local
 bun run dev                 # rotates a local-only fin_ bearer, prints it once, starts API
 ```
 
@@ -48,7 +50,11 @@ The process applies pending migrations before binding the HTTP server or launchi
 AuditLogEntry retention worker. Retention runs at startup and removes only evidence strictly older
 than 365 days. It serves the canonical API,
 `/openapi.json`, the public `/health` route, and the SPA shell from `public/` in one Effect runtime.
-Canonical operations remain protected by scoped `fin_` bearer authorization. `railway.json`
+Canonical operations remain protected by scoped `fin_` bearer authorization. Configure Kapso's
+buffered message-event webhook at `POST /webhooks/kapso` and its exact Meta forwarding webhook at
+`POST /webhooks/kapso/meta`; the latter handles authenticated `user_changed_user_id` events while
+acknowledging unrelated raw Meta events. Both use the configured Kapso webhook secret.
+`railway.json`
 configures Railway to build the Dockerfile, provision the restricted runtime login and apply
 migrations before deploy, and gate deployments on `/health`. Both database URLs must resolve inside the production
 environment: the runtime login is exactly `fidy_runtime`, while the migration login can own tables
@@ -70,13 +76,17 @@ bun run dev
 # In another terminal:
 export DATABASE_URL=postgres://fidy_runtime:fidy_runtime@localhost:5433/fidy
 export MIGRATION_DATABASE_URL=postgres://fidy:fidy@localhost:5433/fidy
+export WHATSAPP_BUSINESS_PORTFOLIO_ID=portfolio-local
 export OPENAI_API_KEY='<set in your secret environment>'
 export FIDY_REPL_PHONE_NUMBER=$(docker compose exec -T db psql -U fidy -d fidy -Atc \
   'select phone_number from whatsapp_identities order by verified_at limit 1')
+export FIDY_REPL_BSUID=$(docker compose exec -T db psql -U fidy -d fidy -Atc \
+  'select business_scoped_user_id from whatsapp_identities order by verified_at limit 1')
 bun run agent:repl
 ```
 
-`FIDY_API_BASE_URL` optionally changes the canonical server address and defaults to
+`FIDY_REPL_PHONE_NUMBER` and `FIDY_REPL_BSUID` must be evidence from the same seeded association;
+the REPL never derives one from the other. `FIDY_API_BASE_URL` optionally changes the canonical server address and defaults to
 `http://127.0.0.1:3000`. The REPL creates a short-lived HostedAgentToken for each turn so every model
 tool traverses normal HTTP validation, authorization, and AuditLogEntry attribution.
 
@@ -120,7 +130,8 @@ run with [@effect/vitest](https://www.npmjs.com/package/@effect/vitest) under vi
 ```sh
 docker compose up -d db
 DATABASE_URL=postgres://fidy_runtime:fidy_runtime@localhost:5433/fidy \
-MIGRATION_DATABASE_URL=postgres://fidy:fidy@localhost:5433/fidy bun run test
+MIGRATION_DATABASE_URL=postgres://fidy:fidy@localhost:5433/fidy \
+WHATSAPP_BUSINESS_PORTFOLIO_ID=portfolio-test bun run test
 ```
 
 Migration bodies only execute against a database that has not yet had them applied, so coverage

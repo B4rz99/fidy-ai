@@ -1,8 +1,7 @@
 import { describe, expect, it } from "@effect/vitest";
 import { DateTime, Effect, Schema } from "effect";
-import { E164PhoneNumber } from "~/core/identity/reference";
 import { DisclosureSnapshot, PendingConsentExchangeId } from "./model";
-import { decideConsentReply, hasPendingConsentExpired, makePendingConsentExchange } from "./rules";
+import { decideConsentReply, hasPendingConsentExpired, makePendingConsentDraft } from "./rules";
 
 const makeDisclosure = () =>
   Schema.decodeUnknownSync(DisclosureSnapshot)({
@@ -66,9 +65,8 @@ describe("consent reply decision", () => {
 it.effect("expires a pending disclosure exactly 24 hours after creation", () =>
   Effect.gen(function* () {
     const createdAt = DateTime.makeUnsafe("2026-08-01T12:00:00Z");
-    const pending = yield* makePendingConsentExchange({
+    const pending = yield* makePendingConsentDraft({
       id: PendingConsentExchangeId.make("f1d1a000-0000-4000-8000-000000000811"),
-      phoneNumber: E164PhoneNumber.make("+573001112233"),
       disclosure: makeDisclosure(),
       initiatingMessage: {
         channel: "whatsapp",

@@ -51,9 +51,10 @@ API groups are presentation choices.
 ### Core references
 
 A core slice may import ownerless values from `core/_shared` or a sibling's narrow `reference.ts`.
-A reference publishes only stable ids or kind codes that a genuine sibling needs to name or
-persist. Core may not import a sibling's model, rules, errors, taxonomy, repository, or other
-implementation. Shell loads data and passes plain values to core decisions.
+A reference publishes only stable ids, stable compound identifiers, or kind codes that a genuine
+sibling needs to name or persist. Mutable provider evidence is not a cross-slice reference. Core may
+not import a sibling's model, rules, errors, taxonomy, repository, or other implementation. Shell
+loads data and passes plain values to core decisions.
 
 ---
 
@@ -92,7 +93,9 @@ user context. The caller is resolved at the adapter boundary and passed inward. 
 `CurrentUser` service. PostgreSQL row-level security reinforces that explicit boundary: each short
 User-owned transaction establishes transaction-local context through the restricted runtime role.
 Migrations use a separate authority, and narrow deny-by-default gateways resolve pre-subject bearer
-or phone evidence without exposing general privileged SQL.
+or authenticated identity without exposing general privileged SQL. WhatsApp authorization resolves
+only the trusted Business Portfolio plus authenticated BSUID pair; phone, username, and parent BSUID
+remain mutable evidence and cannot resolve or reassociate a User.
 
 Ordinary aggregates carry no owner field: the user is the context in which an operation runs.
 `ConsentRecord` and `AuditLogEntry` carry an explicit subject because they attest who acted.

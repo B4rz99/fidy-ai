@@ -8,6 +8,7 @@ import {
   type PendingConsentExchangeId,
 } from "~/core/consent/model";
 import { E164PhoneNumber, UserId } from "~/core/identity/reference";
+import { WhatsAppCaller } from "~/shell/channels/whatsapp/model";
 import { makeColombianUser } from "~/core/identity/rules";
 import { MigrationSqlClient } from "~/shell/db/client";
 import {
@@ -17,6 +18,7 @@ import {
   resolveWhatsAppCaller,
 } from "~/shell/identity/repo";
 import { ApiHarness } from "~/shell/testing/api-harness";
+import { testWhatsAppCaller } from "~/shell/testing/whatsapp-caller";
 import { evaluateConsentGate } from "./consent-gate";
 import {
   appendConsentRecord,
@@ -56,7 +58,7 @@ const message = (providerMessageId: string) => ({
 });
 
 const textTurn = (phoneNumber: E164PhoneNumber, text: string, providerMessageId: string) => ({
-  phoneNumber,
+  caller: testWhatsAppCaller(phoneNumber),
   content: { _tag: "Text" as const, text },
   message: message(providerMessageId),
   receivedAt,
@@ -70,12 +72,15 @@ const withReceivedAt = (turn: ReturnType<typeof textTurn>, receivedAt: DateTime.
 const clearPhone = (phoneNumber: E164PhoneNumber) =>
   Effect.gen(function* () {
     const sql = yield* MigrationSqlClient;
+    const caller = testWhatsAppCaller(phoneNumber);
     yield* sql`
       DELETE FROM consent_records WHERE subject_user_id IN (
         SELECT user_id FROM whatsapp_identities WHERE phone_number = ${phoneNumber}
       )
     `;
-    yield* sql`DELETE FROM pending_consent_exchanges WHERE phone_number = ${phoneNumber}`;
+    yield* sql`DELETE FROM pending_consent_exchanges
+      WHERE business_portfolio_id = ${caller.businessPortfolioId}
+        AND business_scoped_user_id = ${caller.businessScopedUserId}`;
     yield* sql`DELETE FROM users WHERE id IN (
       SELECT user_id FROM whatsapp_identities WHERE phone_number = ${phoneNumber}
     )`;
@@ -95,7 +100,9 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })("consent
         expect(disclosure._tag).toBe("SendDisclosure");
         if (disclosure._tag !== "SendDisclosure") return;
         expect(disclosure.text).toContain("https://fidyapp.com/politica");
-        expect(Option.isNone(yield* resolveWhatsAppCaller(acceptedPhone))).toBe(true);
+        expect(Option.isNone(yield* resolveWhatsAppCaller(testWhatsAppCaller(acceptedPhone)))).toBe(
+          true
+        );
 
         yield* recordClaimedDisclosure({
           exchangeId: disclosure.exchangeId,
@@ -110,7 +117,9 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })("consent
           )
         );
         expect(ambiguous._tag).toBe("ClarifyDecision");
-        expect(Option.isSome(yield* findPendingConsentExchange(acceptedPhone))).toBe(true);
+        expect(
+          Option.isSome(yield* findPendingConsentExchange(testWhatsAppCaller(acceptedPhone)))
+        ).toBe(true);
 
         const accepted = yield* evaluateConsentGate(
           withReceivedAt(
@@ -120,7 +129,9 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })("consent
         );
         expect(accepted._tag).toBe("Accepted");
         if (accepted._tag !== "Accepted") return;
-        expect(Option.isNone(yield* findPendingConsentExchange(acceptedPhone))).toBe(true);
+        expect(
+          Option.isNone(yield* findPendingConsentExchange(testWhatsAppCaller(acceptedPhone)))
+        ).toBe(true);
         expect(yield* hasCurrentOnboardingConsent(accepted.userId)).toBe(true);
         expect(yield* observeConsentRecords(accepted.userId)).toHaveLength(1);
 
@@ -144,7 +155,9 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })("consent
           )
         );
         expect(crossIdentityReplay._tag).toBe("ClarifyDecision");
-        expect(Option.isNone(yield* resolveWhatsAppCaller(replayCollisionPhone))).toBe(true);
+        expect(
+          Option.isNone(yield* resolveWhatsAppCaller(testWhatsAppCaller(replayCollisionPhone)))
+        ).toBe(true);
 
         const nextTurn = yield* evaluateConsentGate(
           withReceivedAt(
@@ -156,11 +169,15 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })("consent
 
         const evidenceBeforeChange = yield* observeConsentRecords(accepted.userId);
         yield* associateWhatsAppIdentity(accepted.userId, {
-          phoneNumber: changedPhone,
+          ...testWhatsAppCaller(changedPhone),
           verifiedAt: DateTime.makeUnsafe("2026-08-01T12:00:06Z"),
         });
-        expect(Option.isNone(yield* resolveWhatsAppCaller(acceptedPhone))).toBe(true);
-        expect(yield* resolveWhatsAppCaller(changedPhone)).toEqual(Option.some(accepted.userId));
+        expect(Option.isNone(yield* resolveWhatsAppCaller(testWhatsAppCaller(acceptedPhone)))).toBe(
+          true
+        );
+        expect(yield* resolveWhatsAppCaller(testWhatsAppCaller(changedPhone))).toEqual(
+          Option.some(accepted.userId)
+        );
         expect(yield* observeConsentRecords(accepted.userId)).toEqual(evidenceBeforeChange);
         expect(evidenceBeforeChange[0]?.disclosureMessage).toEqual(
           message("wamid.gate-disclosure")
@@ -211,8 +228,12 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })("consent
           )
         );
         expect(Exit.isFailure(acceptance)).toBe(true);
-        expect(Option.isNone(yield* resolveWhatsAppCaller(rollbackPhone))).toBe(true);
-        expect(Option.isSome(yield* findPendingConsentExchange(rollbackPhone))).toBe(true);
+        expect(Option.isNone(yield* resolveWhatsAppCaller(testWhatsAppCaller(rollbackPhone)))).toBe(
+          true
+        );
+        expect(
+          Option.isSome(yield* findPendingConsentExchange(testWhatsAppCaller(rollbackPhone)))
+        ).toBe(true);
       });
 
       yield* exercise.pipe(
@@ -232,7 +253,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })("consent
       const user = yield* makeColombianUser(returningUserId, { createdAt: receivedAt });
       yield* insertUser(returningUserId, user);
       yield* insertWhatsAppIdentity(returningUserId, {
-        phoneNumber: returningPhone,
+        ...testWhatsAppCaller(returningPhone),
         verifiedAt: receivedAt,
       });
 
@@ -316,8 +337,12 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })("consent
       `;
 
       expect(result._tag).toBe("ClarifyDecision");
-      expect(Option.isNone(yield* resolveWhatsAppCaller(outOfOrderPhone))).toBe(true);
-      expect(Option.isSome(yield* findPendingConsentExchange(outOfOrderPhone))).toBe(true);
+      expect(Option.isNone(yield* resolveWhatsAppCaller(testWhatsAppCaller(outOfOrderPhone)))).toBe(
+        true
+      );
+      expect(
+        Option.isSome(yield* findPendingConsentExchange(testWhatsAppCaller(outOfOrderPhone)))
+      ).toBe(true);
       expect(rows).toHaveLength(0);
     })
   );
@@ -346,7 +371,9 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })("consent
         )
       );
       expect(replay._tag).toBe("ClarifyDecision");
-      expect(Option.isNone(yield* resolveWhatsAppCaller(initiatingReplayPhone))).toBe(true);
+      expect(
+        Option.isNone(yield* resolveWhatsAppCaller(testWhatsAppCaller(initiatingReplayPhone)))
+      ).toBe(true);
 
       const replacement = yield* evaluateConsentGate(
         withReceivedAt(
@@ -368,7 +395,9 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })("consent
         )
       );
       expect(delayedReplay._tag).toBe("ClarifyDecision");
-      expect(Option.isNone(yield* resolveWhatsAppCaller(initiatingReplayPhone))).toBe(true);
+      expect(
+        Option.isNone(yield* resolveWhatsAppCaller(testWhatsAppCaller(initiatingReplayPhone)))
+      ).toBe(true);
     })
   );
 
@@ -391,8 +420,12 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })("consent
         withReceivedAt(textTurn(declinedPhone, "No acepto", "wamid.decline-decision"), declinedAt)
       );
       expect(declined._tag).toBe("Declined");
-      expect(Option.isNone(yield* findPendingConsentExchange(declinedPhone))).toBe(true);
-      expect(Option.isNone(yield* resolveWhatsAppCaller(declinedPhone))).toBe(true);
+      expect(
+        Option.isNone(yield* findPendingConsentExchange(testWhatsAppCaller(declinedPhone)))
+      ).toBe(true);
+      expect(Option.isNone(yield* resolveWhatsAppCaller(testWhatsAppCaller(declinedPhone)))).toBe(
+        true
+      );
 
       const sql = yield* SqlClient.SqlClient;
       const ResidualRows = Schema.Struct({
@@ -470,13 +503,18 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })("consent
 
       const sql = yield* SqlClient.SqlClient;
       const rows = yield* SqlSchema.findAll({
-        Request: E164PhoneNumber,
+        Request: Schema.Struct({
+          businessPortfolioId: WhatsAppCaller.fields.businessPortfolioId,
+          businessScopedUserId: WhatsAppCaller.fields.businessScopedUserId,
+        }),
         Result: Schema.Struct({ serialized: Schema.String }),
-        execute: (phoneNumber) => sql`
+        execute: (caller) => sql`
           SELECT row_to_json(pending_consent_exchanges)::text AS serialized
-          FROM pending_consent_exchanges WHERE phone_number = ${phoneNumber}
+          FROM pending_consent_exchanges
+          WHERE business_portfolio_id = ${caller.businessPortfolioId}
+            AND business_scoped_user_id = ${caller.businessScopedUserId}
         `,
-      })(expiredPhone);
+      })(testWhatsAppCaller(expiredPhone));
       expect(rows).toHaveLength(1);
       expect(rows[0]?.serialized).not.toContain("dato privado original");
       expect(rows[0]?.serialized).not.toContain("wamid.expired-initial");

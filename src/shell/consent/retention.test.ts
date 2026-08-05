@@ -2,8 +2,9 @@ import { expect, layer } from "@effect/vitest";
 import { DateTime, Effect, Option } from "effect";
 import { SqlClient } from "effect/unstable/sql";
 import { PendingConsentExchangeId } from "~/core/consent/model";
-import { E164PhoneNumber } from "~/core/identity/reference";
+import { E164PhoneNumber, whatsAppCallerReference } from "~/core/identity/reference";
 import { ApiHarness } from "~/shell/testing/api-harness";
+import { testWhatsAppCaller } from "~/shell/testing/whatsapp-caller";
 import { currentDisclosure } from "./current-disclosure";
 import {
   findPendingConsentExchange,
@@ -21,9 +22,14 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
     it.effect("deletes exact-boundary expiry without deleting active exchanges", () =>
       Effect.gen(function* () {
         const sql = yield* SqlClient.SqlClient;
+        const expiredCaller = testWhatsAppCaller(expiredPhone);
+        const activeCaller = testWhatsAppCaller(activePhone);
         yield* sql`
           DELETE FROM pending_consent_exchanges
-          WHERE phone_number IN (${expiredPhone}, ${activePhone})
+          WHERE (business_portfolio_id, business_scoped_user_id) IN (
+            (${expiredCaller.businessPortfolioId}, ${expiredCaller.businessScopedUserId}),
+            (${activeCaller.businessPortfolioId}, ${activeCaller.businessScopedUserId})
+          )
         `;
         const disclosure = yield* currentDisclosure;
         const createdAt = DateTime.makeUnsafe("2026-08-01T12:00:00Z");
@@ -31,7 +37,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         yield* insertPendingConsentExchange({
           _tag: "AwaitingDisclosureDelivery",
           id: PendingConsentExchangeId.make("f1d1a000-0000-4000-8000-000000000861"),
-          phoneNumber: expiredPhone,
+          caller: whatsAppCallerReference(expiredCaller),
           disclosure,
           initiatingMessage: {
             channel: "whatsapp",
@@ -44,7 +50,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         yield* insertPendingConsentExchange({
           _tag: "AwaitingDisclosureDelivery",
           id: PendingConsentExchangeId.make("f1d1a000-0000-4000-8000-000000000862"),
-          phoneNumber: activePhone,
+          caller: whatsAppCallerReference(activeCaller),
           disclosure,
           initiatingMessage: {
             channel: "whatsapp",
@@ -57,8 +63,12 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
 
         yield* removeExpiredPendingConsentExchanges(now);
 
-        expect(Option.isNone(yield* findPendingConsentExchange(expiredPhone))).toBe(true);
-        expect(Option.isSome(yield* findPendingConsentExchange(activePhone))).toBe(true);
+        expect(
+          Option.isNone(yield* findPendingConsentExchange(testWhatsAppCaller(expiredPhone)))
+        ).toBe(true);
+        expect(
+          Option.isSome(yield* findPendingConsentExchange(testWhatsAppCaller(activePhone)))
+        ).toBe(true);
       })
     );
   }

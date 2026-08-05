@@ -2,7 +2,7 @@ import { expect, layer } from "@effect/vitest";
 import { BigDecimal, Effect, Equal, Layer, Option, Schema, Terminal } from "effect";
 import { LanguageModel, Tool } from "effect/unstable/ai";
 import { SqlClient } from "effect/unstable/sql";
-import { E164PhoneNumber, UserId } from "~/core/identity/reference";
+import { E164PhoneNumber, UserId, WhatsAppBusinessScopedUserId } from "~/core/identity/reference";
 import { MigrationSqlClient } from "~/shell/db/client";
 import { categoryIds } from "~/core/categories/taxonomy";
 import { TranscriptText } from "~/core/transcript/model";
@@ -18,6 +18,7 @@ import {
 } from "~/shell/db/development-seed";
 import { listRecentTranscriptEntries, listTranscriptEntries } from "~/shell/transcript/repo";
 import { ApiHarness, ApiHarnessClient } from "~/shell/testing/api-harness";
+import { testWhatsAppCaller } from "~/shell/testing/whatsapp-caller";
 import { runAgentRepl } from "./repl";
 import {
   AgentLimits,
@@ -29,6 +30,10 @@ import {
 
 const declinedOnboardingPhone = E164PhoneNumber.make("+573009997332");
 const acceptedOnboardingPhone = E164PhoneNumber.make("+573009997333");
+const replCaller = (phoneNumber: E164PhoneNumber) => ({
+  phoneNumber,
+  businessScopedUserId: WhatsAppBusinessScopedUserId.make(`CO.${phoneNumber.slice(1)}`),
+});
 
 const clearTranscript = Effect.flatMap(
   MigrationSqlClient,
@@ -791,19 +796,26 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
   it.effect("terminates a declined onboarding conversation without creating a User", () =>
     Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
-      yield* sql`DELETE FROM pending_consent_exchanges WHERE phone_number = ${declinedOnboardingPhone}`;
+      const caller = testWhatsAppCaller(declinedOnboardingPhone);
+      yield* sql`DELETE FROM pending_consent_exchanges
+        WHERE business_portfolio_id = ${caller.businessPortfolioId}
+          AND business_scoped_user_id = ${caller.businessScopedUserId}`;
       const displayed: Array<string> = [];
       const terminal = scriptedTerminal(["hola", "No acepto"], (text) => displayed.push(text));
 
-      yield* runAgentRepl(declinedOnboardingPhone).pipe(
+      yield* runAgentRepl(replCaller(declinedOnboardingPhone)).pipe(
         Effect.provideService(Terminal.Terminal, terminal)
       );
 
-      expect(Option.isNone(yield* resolveWhatsAppCaller(declinedOnboardingPhone))).toBe(true);
+      expect(
+        Option.isNone(yield* resolveWhatsAppCaller(testWhatsAppCaller(declinedOnboardingPhone)))
+      ).toBe(true);
       expect(displayed.join("\n")).toContain("Antes de crear tu cuenta");
       expect(displayed.join("\n")).toContain("No creé una cuenta");
       const pending = yield* sql`
-        SELECT id FROM pending_consent_exchanges WHERE phone_number = ${declinedOnboardingPhone}
+        SELECT id FROM pending_consent_exchanges
+        WHERE business_portfolio_id = ${caller.businessPortfolioId}
+          AND business_scoped_user_id = ${caller.businessScopedUserId}
       `;
       expect(pending).toHaveLength(0);
     })
@@ -826,13 +838,16 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
         DELETE FROM users WHERE id IN (SELECT user_id FROM accepted_users)
       `;
       const runtimeSql = yield* SqlClient.SqlClient;
-      yield* runtimeSql`DELETE FROM pending_consent_exchanges WHERE phone_number = ${acceptedOnboardingPhone}`;
+      const acceptedCaller = testWhatsAppCaller(acceptedOnboardingPhone);
+      yield* runtimeSql`DELETE FROM pending_consent_exchanges
+        WHERE business_portfolio_id = ${acceptedCaller.businessPortfolioId}
+          AND business_scoped_user_id = ${acceptedCaller.businessScopedUserId}`;
       const displayed: Array<string> = [];
       const terminal = scriptedTerminal(["registra café 25 mil", "Acepto"], (text) =>
         displayed.push(text)
       );
 
-      yield* runAgentRepl(acceptedOnboardingPhone).pipe(
+      yield* runAgentRepl(replCaller(acceptedOnboardingPhone)).pipe(
         Effect.provideService(Terminal.Terminal, terminal)
       );
 
@@ -868,7 +883,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
         const displayed: Array<string> = [];
         const terminal = scriptedTerminal(["almuerzo 25 mil"], (text) => displayed.push(text));
 
-        yield* runAgentRepl(defaultWhatsAppPhone).pipe(
+        yield* runAgentRepl(replCaller(defaultWhatsAppPhone)).pipe(
           Effect.provideService(Terminal.Terminal, terminal)
         );
         yield* service.handleSynchronousTurn(
@@ -962,7 +977,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
         displayed.push(text)
       );
 
-      yield* runAgentRepl(defaultWhatsAppPhone).pipe(
+      yield* runAgentRepl(replCaller(defaultWhatsAppPhone)).pipe(
         Effect.provideService(Terminal.Terminal, terminal)
       );
 

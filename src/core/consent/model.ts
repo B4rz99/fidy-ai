@@ -1,7 +1,7 @@
 import { Schema, SchemaTransformation } from "effect";
 import { Locale, ServiceMarket } from "~/core/_shared/context";
 import { ProviderMessageEvidence } from "~/core/_shared/provider-message-evidence";
-import { E164PhoneNumber, UserId } from "~/core/identity/reference";
+import { UserId, WhatsAppCallerReference } from "~/core/identity/reference";
 import { InsightKind } from "~/core/insights/reference";
 import { AgentTokenId } from "~/core/tokens/reference";
 
@@ -114,7 +114,7 @@ export type ConsentRecord = typeof ConsentRecord.Type;
 export const PendingConsentExchange = Schema.Union([
   Schema.TaggedStruct("AwaitingDisclosureDelivery", {
     id: PendingConsentExchangeId,
-    phoneNumber: E164PhoneNumber,
+    caller: WhatsAppCallerReference,
     disclosure: DisclosureSnapshot,
     initiatingMessage: ProviderMessageEvidence,
     createdAt: UtcTimestamp,
@@ -122,7 +122,7 @@ export const PendingConsentExchange = Schema.Union([
   }),
   Schema.TaggedStruct("AwaitingDecision", {
     id: PendingConsentExchangeId,
-    phoneNumber: E164PhoneNumber,
+    caller: WhatsAppCallerReference,
     disclosure: DisclosureSnapshot,
     initiatingMessage: ProviderMessageEvidence,
     disclosureMessage: ProviderMessageEvidence,

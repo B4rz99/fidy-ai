@@ -66,15 +66,17 @@ type ReadonlyDisclosureSnapshot = Omit<
 
 type PendingConsentInput = Omit<
   Readonly<AwaitingDisclosureDelivery>,
-  "_tag" | "disclosure" | "expiresAt"
+  "_tag" | "caller" | "disclosure" | "expiresAt"
 > & {
   readonly disclosure: ReadonlyDisclosureSnapshot;
 };
 
-/** Starts one minimal pending exchange with the fixed 24-hour legal lifetime. */
-export const makePendingConsentExchange = (
+type PendingConsentDraft = Omit<AwaitingDisclosureDelivery, "caller">;
+
+/** Starts one caller-independent pending draft with the fixed 24-hour legal lifetime. */
+export const makePendingConsentDraft = (
   input: PendingConsentInput
-): Effect.Effect<AwaitingDisclosureDelivery> =>
+): Effect.Effect<PendingConsentDraft> =>
   Effect.succeed({
     _tag: "AwaitingDisclosureDelivery",
     ...input,

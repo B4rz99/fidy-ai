@@ -84,8 +84,11 @@ const seedEveryPolicyShape = Effect.gen(function* () {
       (${policyInsertVictim}, 'CO', 'es-CO', 'America/Bogota', '2026-01-01T00:00:00Z')
   `;
   yield* admin`
-    INSERT INTO whatsapp_identities (phone_number, user_id, verified_at)
-    VALUES ('+573001112233', ${policyOwner}, '2026-01-01T00:00:00Z')
+    INSERT INTO whatsapp_identities (
+      business_portfolio_id, business_scoped_user_id, phone_number, user_id, verified_at
+    ) VALUES (
+      'portfolio-test', 'CO.573001112233', '+573001112233', ${policyOwner}, '2026-01-01T00:00:00Z'
+    )
   `;
   yield* admin`
     INSERT INTO agent_tokens (
@@ -179,6 +182,16 @@ const seedEveryPolicyShape = Effect.gen(function* () {
     )
   `;
   yield* admin`
+    INSERT INTO whatsapp_identity_change_evidence(
+      provider_message_id, user_id, business_portfolio_id,
+      previous_business_scoped_user_id, replacement_business_scoped_user_id,
+      occurred_at, applied
+    ) VALUES (
+      'policy-identity-change', ${policyOwner}, 'portfolio-test',
+      'CO.573001110000', 'CO.573001112233', '2026-01-01T00:00:00Z', true
+    )
+  `;
+  yield* admin`
     INSERT INTO whatsapp_message_evidence(
       provider_message_id, user_id, direction, delivery_key, occurred_at
     ) VALUES ('policy-whatsapp-evidence', ${policyOwner}, 'inbound', 'policy-delivery', '2026-01-01T00:00:00Z')
@@ -199,8 +212,12 @@ const seedEveryPolicyShape = Effect.gen(function* () {
   `;
   yield* admin`
     INSERT INTO whatsapp_conversation_windows(
-      user_id, identity_verified_at, business_phone_number_id, window_open_until
-    ) VALUES (${policyOwner}, '2026-01-01T00:00:00Z', 'policy-business', '2026-01-02T00:00:00Z')
+      user_id, identity_verified_at, business_phone_number_id,
+      business_portfolio_id, business_scoped_user_id, window_open_until
+    ) VALUES (
+      ${policyOwner}, '2026-01-01T00:00:00Z', 'policy-business',
+      'portfolio-test', 'CO.573001112233', '2026-01-02T00:00:00Z'
+    )
   `;
 });
 
@@ -267,6 +284,7 @@ const policyProbes: ReadonlyArray<PolicyProbe> = [
     stableColumn: "verified_at",
     ownerPredicate: "phone_number = '+573001112233'",
   },
+
   {
     tableName: "whatsapp_message_evidence",
     stableColumn: "occurred_at",
@@ -319,8 +337,11 @@ const deniedInsertProbes = (sql: SqlClient.SqlClient) =>
     {
       tableName: "whatsapp_identities",
       insert: sql`
-      INSERT INTO whatsapp_identities (phone_number, user_id, verified_at)
-      VALUES ('+573009998877', ${policyOwner}, '2026-01-02T00:00:00Z')
+      INSERT INTO whatsapp_identities (
+        business_portfolio_id, business_scoped_user_id, phone_number, user_id, verified_at
+      ) VALUES (
+        'portfolio-test', 'CO.573009998877', '+573009998877', ${policyOwner}, '2026-01-02T00:00:00Z'
+      )
     `,
     },
     {
@@ -353,8 +374,12 @@ const deniedInsertProbes = (sql: SqlClient.SqlClient) =>
       tableName: "whatsapp_conversation_windows",
       insert: sql`
       INSERT INTO whatsapp_conversation_windows(
-        user_id, identity_verified_at, business_phone_number_id, window_open_until
-      ) VALUES (${policyOwner}, '2026-01-01T00:00:00Z', 'denied-business', '2026-01-02T00:00:00Z')
+        user_id, identity_verified_at, business_phone_number_id,
+        business_portfolio_id, business_scoped_user_id, window_open_until
+      ) VALUES (
+        ${policyOwner}, '2026-01-01T00:00:00Z', 'denied-business',
+        'portfolio-test', 'CO.573001112233', '2026-01-02T00:00:00Z'
+      )
     `,
     },
     {
@@ -550,9 +575,12 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         })
     );
 
-    it.effect("keeps pre-subject WhatsApp budget rows behind the narrow gateway", () =>
+    it.effect("keeps WhatsApp gateway-owned rows inaccessible to ordinary runtime SQL", () =>
       Effect.gen(function* () {
         const sql = yield* SqlClient.SqlClient;
+        expect(
+          (yield* Effect.exit(sql`SELECT * FROM whatsapp_identity_change_evidence`))._tag
+        ).toBe("Failure");
         expect((yield* Effect.exit(sql`SELECT * FROM whatsapp_ingress_budgets`))._tag).toBe(
           "Failure"
         );

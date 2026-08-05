@@ -157,10 +157,12 @@ context. No KYC; optional recovery email.
 _Avoid_: Account, customer, client, titular (that word is reserved for its legal sense).
 
 **WhatsAppIdentity**:
-The concrete association between a User and one normalized, unique WhatsApp phone number in E.164.
-It is the launch channel identity, not the User itself; provider identifiers are delivery evidence,
-not identity.
-_Avoid_: User identity, root identity, generic channel identity, provider identity.
+The concrete association between a User and a WhatsApp Business Portfolio-scoped user ID (BSUID).
+Its identity key is Business Portfolio plus BSUID. A normalized E.164 phone number, parent BSUID,
+and username are optional mutable evidence on that association: none can resolve, authorize,
+reassociate, or address communication to a User. It is the launch channel identity, not the User
+itself; message, contact, and conversation identifiers are delivery evidence, not identity.
+_Avoid_: Phone identity, User identity, root identity, generic channel identity, provider identity.
 
 **ConsentRecord**:
 An append-only entry recording that a stable User agreed to a specific disclosure at a specific UTC

@@ -1,6 +1,13 @@
-import { Effect, Option, Schema, Struct } from "effect";
+import { DateTime, Effect, Option, Schema, Struct } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
-import { type E164PhoneNumber, UserId } from "~/core/identity/reference";
+import { ProviderMessageEvidence } from "~/core/_shared/provider-message-evidence";
+import {
+  E164PhoneNumber,
+  UserId,
+  WhatsAppCallerReference,
+  WhatsAppParentBusinessScopedUserId,
+  WhatsAppUsername,
+} from "~/core/identity/reference";
 import { User, UserPreferences, WhatsAppIdentity } from "~/core/identity/model";
 import { withUserTransaction } from "~/shell/db/user-transaction";
 
@@ -17,13 +24,29 @@ const UserPreferencesRow = Schema.Struct({
 });
 
 const WhatsAppIdentityWithoutUserId = WhatsAppIdentity.mapFields(Struct.omit(["userId"]));
-const WhatsAppIdentityWithoutVerifiedAt = WhatsAppIdentity.mapFields(Struct.omit(["verifiedAt"]));
-const WhatsAppIdentityRow = Schema.Struct({
-  ...WhatsAppIdentityWithoutVerifiedAt.fields,
-  verifiedAt: Schema.DateTimeUtcFromDate,
-});
-const WhatsAppLookup = WhatsAppIdentity.mapFields(Struct.pick(["phoneNumber"]));
+const WhatsAppReplacementEvidence = WhatsAppIdentityWithoutUserId.mapFields(
+  Struct.omit(["businessPortfolioId"])
+);
+const WhatsAppCallerObservation = WhatsAppIdentity.mapFields(Struct.omit(["userId", "verifiedAt"]));
+const WhatsAppIdentityRow = WhatsAppIdentity.mapFields(
+  Struct.evolve({
+    parentBusinessScopedUserId: () => Schema.OptionFromNullOr(WhatsAppParentBusinessScopedUserId),
+    username: () => Schema.OptionFromNullOr(WhatsAppUsername),
+    phoneNumber: () => Schema.OptionFromNullOr(E164PhoneNumber),
+    verifiedAt: () => Schema.DateTimeUtcFromDate,
+  })
+);
 const WhatsAppIdentityByUser = WhatsAppIdentity.mapFields(Struct.pick(["userId"]));
+const WhatsAppReassociationRequest = Schema.Struct({
+  providerMessageId: ProviderMessageEvidence.fields.providerMessageId,
+  previousBusinessPortfolioId: WhatsAppIdentity.fields.businessPortfolioId,
+  previousBusinessScopedUserId: WhatsAppIdentity.fields.businessScopedUserId,
+  replacementBusinessScopedUserId: WhatsAppIdentity.fields.businessScopedUserId,
+  parentBusinessScopedUserId: WhatsAppIdentityRow.fields.parentBusinessScopedUserId,
+  username: WhatsAppIdentityRow.fields.username,
+  phoneNumber: WhatsAppIdentityRow.fields.phoneNumber,
+  occurredAt: Schema.DateTimeUtcFromDate,
+});
 
 const userColumns = `id, service_market AS "serviceMarket", locale,
   time_zone AS "timeZone", created_at AS "createdAt"`;
@@ -112,36 +135,66 @@ export const updateUserPreferences = Effect.fn("updateUserPreferences")(function
 });
 
 const writeWhatsAppIdentity = Effect.fn("Identity.writeWhatsApp")(function* (
-  mode: "insert" | "associate",
+  mode: "insert" | "associate" | "observe",
   userId: UserId,
   identity: typeof WhatsAppIdentityWithoutUserId.Type
 ) {
   const sql = yield* SqlClient.SqlClient;
-  const conflict =
-    mode === "associate"
-      ? sql`ON CONFLICT (user_id) DO UPDATE SET
-          phone_number = EXCLUDED.phone_number,
-          verified_at = EXCLUDED.verified_at`
-      : sql``;
+  let conflict = sql``;
+  if (mode === "associate") {
+    conflict = sql`ON CONFLICT (user_id, business_portfolio_id) DO UPDATE SET
+      business_scoped_user_id = EXCLUDED.business_scoped_user_id,
+      parent_business_scoped_user_id = EXCLUDED.parent_business_scoped_user_id,
+      username = EXCLUDED.username,
+      phone_number = COALESCE(EXCLUDED.phone_number, whatsapp_identities.phone_number),
+      verified_at = EXCLUDED.verified_at`;
+  } else if (mode === "observe") {
+    conflict = sql`ON CONFLICT (business_portfolio_id, business_scoped_user_id) DO UPDATE SET
+      parent_business_scoped_user_id = CASE
+        WHEN EXCLUDED.verified_at >= whatsapp_identities.verified_at
+        THEN EXCLUDED.parent_business_scoped_user_id
+        ELSE whatsapp_identities.parent_business_scoped_user_id
+      END,
+      username = CASE
+        WHEN EXCLUDED.verified_at >= whatsapp_identities.verified_at
+        THEN EXCLUDED.username
+        ELSE whatsapp_identities.username
+      END,
+      phone_number = CASE
+        WHEN EXCLUDED.verified_at >= whatsapp_identities.verified_at
+        THEN COALESCE(EXCLUDED.phone_number, whatsapp_identities.phone_number)
+        ELSE whatsapp_identities.phone_number
+      END,
+      verified_at = whatsapp_identities.verified_at`;
+  }
   return yield* withUserTransaction(
     userId,
     SqlSchema.findOne({
       Request: WhatsAppIdentityRow,
       Result: WhatsAppIdentityRow,
       execute: (row) => sql`
-        INSERT INTO whatsapp_identities (user_id, phone_number, verified_at)
-        VALUES (${row.userId}, ${row.phoneNumber}, ${row.verifiedAt})
+        INSERT INTO whatsapp_identities (
+          user_id, business_portfolio_id, business_scoped_user_id,
+          parent_business_scoped_user_id, username, phone_number, verified_at
+        ) VALUES (
+          ${row.userId}, ${row.businessPortfolioId}, ${row.businessScopedUserId},
+          ${row.parentBusinessScopedUserId}, ${row.username}, ${row.phoneNumber}, ${row.verifiedAt}
+        )
         ${conflict}
-        RETURNING user_id AS "userId", phone_number AS "phoneNumber",
-          verified_at AS "verifiedAt"
+        RETURNING user_id AS "userId", business_portfolio_id AS "businessPortfolioId",
+          business_scoped_user_id AS "businessScopedUserId",
+          parent_business_scoped_user_id AS "parentBusinessScopedUserId", username,
+          phone_number AS "phoneNumber", verified_at AS "verifiedAt"
       `,
     })({ ...identity, userId }).pipe(Effect.orDie)
   );
 });
 
 /**
- * Associates verified WhatsApp evidence with a stable User. Reassociation
- * replaces only channel evidence and persistence failures are defects.
+ * Explicitly associates authenticated WhatsApp evidence with a stable User in one Business
+ * Portfolio. The association replaces that User's BSUID and mutable evidence for the portfolio;
+ * absent phone evidence preserves the previously observed phone. Other User data is unchanged,
+ * and persistence failures are defects.
  */
 export const associateWhatsAppIdentity = Effect.fn("associateWhatsAppIdentity")(
   (userId: UserId, identity: typeof WhatsAppIdentityWithoutUserId.Type) =>
@@ -160,20 +213,24 @@ const findAndLockWhatsAppIdentityInTransaction = (userId: UserId) =>
       Request: WhatsAppIdentityByUser,
       Result: WhatsAppIdentityRow,
       execute: ({ userId }) => sql`
-        SELECT user_id AS "userId", phone_number AS "phoneNumber",
-          verified_at AS "verifiedAt"
+        SELECT user_id AS "userId", business_portfolio_id AS "businessPortfolioId",
+          business_scoped_user_id AS "businessScopedUserId",
+          parent_business_scoped_user_id AS "parentBusinessScopedUserId", username,
+          phone_number AS "phoneNumber", verified_at AS "verifiedAt"
         FROM whatsapp_identities
         WHERE user_id = ${userId}
+        ORDER BY verified_at DESC
+        LIMIT 1
         FOR SHARE
       `,
     })({ userId })
   ).pipe(Effect.orDie);
 
-/** Locks and reads the current association in a User-scoped transaction. */
+/** Locks the User's most recently verified association across Business Portfolios. */
 export const findAndLockWhatsAppIdentity = (userId: UserId) =>
   withUserTransaction(userId, findAndLockWhatsAppIdentityInTransaction(userId));
 
-/** Reads the User's current verified WhatsApp association. */
+/** Reads the User's most recently verified association across Business Portfolios. */
 export const findWhatsAppIdentity = (userId: UserId) =>
   withUserTransaction(
     userId,
@@ -182,30 +239,94 @@ export const findWhatsAppIdentity = (userId: UserId) =>
         Request: WhatsAppIdentityByUser,
         Result: WhatsAppIdentityRow,
         execute: ({ userId }) => sql`
-          SELECT user_id AS "userId", phone_number AS "phoneNumber",
-            verified_at AS "verifiedAt"
+          SELECT user_id AS "userId", business_portfolio_id AS "businessPortfolioId",
+            business_scoped_user_id AS "businessScopedUserId",
+            parent_business_scoped_user_id AS "parentBusinessScopedUserId", username,
+            phone_number AS "phoneNumber", verified_at AS "verifiedAt"
           FROM whatsapp_identities
           WHERE user_id = ${userId}
+          ORDER BY verified_at DESC
+          LIMIT 1
         `,
       })({ userId })
     ).pipe(Effect.orDie)
   );
 
-/**
- * Resolves channel-verified WhatsApp evidence to its stable User. Only the
- * normalized phone association participates; provider contact and message ids
- * are deliberately absent. An unassociated number returns `None`, and database
- * failures are defects.
- */
-export const resolveWhatsAppCaller = (phoneNumber: E164PhoneNumber) =>
-  Effect.flatMap(SqlClient.SqlClient, (sql) =>
-    SqlSchema.findOneOption({
-      Request: WhatsAppLookup,
-      Result: Schema.Struct({ userId: UserId }),
-      execute: ({ phoneNumber }) => sql`
+/** Resolves only the authoritative Business Portfolio and BSUID pair without refreshing evidence. */
+export const findWhatsAppCaller = Effect.fn("findWhatsAppCaller")(function* (
+  caller: WhatsAppCallerReference
+) {
+  const sql = yield* SqlClient.SqlClient;
+  return yield* SqlSchema.findOneOption({
+    Request: WhatsAppCallerReference,
+    Result: Schema.Struct({ userId: UserId }),
+    execute: (input) => sql`
         SELECT resolved.user_id AS "userId"
-        FROM (SELECT fidy_resolve_whatsapp_user(${phoneNumber}) AS user_id) AS resolved
+        FROM (SELECT fidy_resolve_whatsapp_user(
+          ${input.businessPortfolioId}, ${input.businessScopedUserId}
+        ) AS user_id) AS resolved
         WHERE resolved.user_id IS NOT NULL
       `,
-    })({ phoneNumber })
-  ).pipe(Effect.map(Option.map(({ userId }) => userId)), Effect.orDie);
+  })(caller).pipe(Effect.map(Option.map((row) => row.userId)), Effect.orDie);
+});
+
+/**
+ * Atomically applies one authenticated provider identity change and retains its provider id as
+ * evidence. Exact replay and stale events are acknowledged without changing current authority;
+ * unknown transitions return None for provider retry. Missing replacement evidence clears stale
+ * observations, and phone evidence never authorizes the change.
+ */
+export const reassociateWhatsAppIdentity = Effect.fn("reassociateWhatsAppIdentity")(function* (
+  previousCaller: WhatsAppCallerReference,
+  replacement: typeof WhatsAppReplacementEvidence.Type,
+  providerMessageId: typeof ProviderMessageEvidence.fields.providerMessageId.Type
+) {
+  const sql = yield* SqlClient.SqlClient;
+  return yield* SqlSchema.findOneOption({
+    Request: WhatsAppReassociationRequest,
+    Result: Schema.Struct({ acknowledged: Schema.Boolean }),
+    execute: (request) => sql`
+      SELECT reassociated.acknowledged
+      FROM (SELECT fidy_reassociate_whatsapp_user(
+        ${request.previousBusinessPortfolioId},
+        ${request.previousBusinessScopedUserId},
+        ${request.replacementBusinessScopedUserId},
+        ${request.parentBusinessScopedUserId},
+        ${request.username},
+        ${request.phoneNumber},
+        ${request.occurredAt},
+        ${request.providerMessageId}
+      ) AS acknowledged) AS reassociated
+      WHERE reassociated.acknowledged IS NOT NULL
+    `,
+  })({
+    providerMessageId,
+    previousBusinessPortfolioId: previousCaller.businessPortfolioId,
+    previousBusinessScopedUserId: previousCaller.businessScopedUserId,
+    replacementBusinessScopedUserId: replacement.businessScopedUserId,
+    parentBusinessScopedUserId: replacement.parentBusinessScopedUserId,
+    username: replacement.username,
+    phoneNumber: replacement.phoneNumber,
+    occurredAt: replacement.verifiedAt,
+  }).pipe(Effect.orDie);
+});
+
+/**
+ * Resolves a caller only from its trusted Business Portfolio and authenticated BSUID. Phone,
+ * username, and parent-BSUID observations never participate in authorization. A successful match
+ * refreshes mutable evidence without changing the association; unknown callers return None and
+ * persistence failures are defects. `observedAt` defaults to the epoch for callers without a
+ * provider occurrence time, so it cannot supersede later evidence.
+ */
+export const resolveWhatsAppCaller = Effect.fn("resolveWhatsAppCaller")(function* (
+  caller: typeof WhatsAppCallerObservation.Type,
+  observedAt: typeof Schema.DateTimeUtc.Type = DateTime.makeUnsafe(0)
+) {
+  const resolved = yield* findWhatsAppCaller(caller);
+  if (Option.isNone(resolved)) return Option.none<UserId>();
+  yield* writeWhatsAppIdentity("observe", resolved.value, {
+    ...caller,
+    verifiedAt: observedAt,
+  });
+  return Option.some(resolved.value);
+});

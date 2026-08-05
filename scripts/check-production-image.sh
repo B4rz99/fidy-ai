@@ -51,7 +51,8 @@ assertApplicationRejected() {
   docker rm --force "$rejectedApplication" >/dev/null 2>&1 || true
   docker run --detach --name "$rejectedApplication" --network "$network" \
     --env MIGRATION_DATABASE_URL --env DATABASE_URL \
-    --env KAPSO_API_KEY --env KAPSO_WEBHOOK_SECRET --env OPENAI_API_KEY \
+    --env KAPSO_API_KEY --env KAPSO_WEBHOOK_SECRET --env WHATSAPP_BUSINESS_PORTFOLIO_ID \
+    --env OPENAI_API_KEY \
     --env PORT=3000 --env APP_VERSION=production-smoke-rejected \
     "$image" >/dev/null
   for _ in {1..20}; do
@@ -112,6 +113,7 @@ export MIGRATION_DATABASE_URL="postgresql://fidy:fidy@${database}:5432/fidy"
 export DATABASE_URL="postgresql://fidy_runtime:fidy_runtime@${database}:5432/fidy"
 export KAPSO_API_KEY="production-smoke-kapso-key"
 export KAPSO_WEBHOOK_SECRET="production-smoke-webhook-secret"
+export WHATSAPP_BUSINESS_PORTFOLIO_ID="portfolio-production-smoke"
 export OPENAI_API_KEY="production-smoke-openai-key"
 
 assertProvisionRejected \
@@ -154,7 +156,7 @@ docker run --rm --network "$network" \
   --env MIGRATION_DATABASE_URL --env DATABASE_URL \
   "$image" bun scripts/provision-runtime-role.ts
 docker run --rm --network "$network" \
-  --env MIGRATION_DATABASE_URL \
+  --env MIGRATION_DATABASE_URL --env WHATSAPP_BUSINESS_PORTFOLIO_ID \
   "$image" bun scripts/migrate.ts
 expectedMigrationCount=$(find src/shell/db/migrations -maxdepth 1 -type f \
   -name '[0-9][0-9][0-9][0-9]-*.ts' | wc -l | tr -d '[:space:]')
@@ -165,8 +167,8 @@ assertSqlResult "$expectedMigrationCount" \
 docker run --detach --name "$application" --network "$network" \
   --publish 127.0.0.1::3000 \
   --env MIGRATION_DATABASE_URL --env DATABASE_URL \
-  --env KAPSO_API_KEY --env KAPSO_WEBHOOK_SECRET --env OPENAI_API_KEY \
-  --env PORT=3000 --env APP_VERSION=production-smoke \
+  --env KAPSO_API_KEY --env KAPSO_WEBHOOK_SECRET --env WHATSAPP_BUSINESS_PORTFOLIO_ID \
+  --env OPENAI_API_KEY --env PORT=3000 --env APP_VERSION=production-smoke \
   "$image" >/dev/null
 
 port=$(docker inspect "$application" --format '{{(index (index .NetworkSettings.Ports "3000/tcp") 0).HostPort}}')

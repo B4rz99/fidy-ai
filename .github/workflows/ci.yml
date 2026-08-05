@@ -203,6 +203,7 @@ jobs:
         env:
           DATABASE_URL: postgres://fidy_runtime:fidy_runtime@localhost:5432/fidy
           MIGRATION_DATABASE_URL: postgres://fidy:fidy@localhost:5432/fidy
+          WHATSAPP_BUSINESS_PORTFOLIO_ID: portfolio-test
         run: bun run test
 
   crap:
@@ -243,6 +244,7 @@ jobs:
         env:
           DATABASE_URL: postgres://fidy_runtime:fidy_runtime@localhost:5432/fidy
           MIGRATION_DATABASE_URL: postgres://fidy:fidy@localhost:5432/fidy
+          WHATSAPP_BUSINESS_PORTFOLIO_ID: portfolio-test
         run: bun run test:crap
 
   production-image:

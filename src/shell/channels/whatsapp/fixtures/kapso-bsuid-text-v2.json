@@ -1,0 +1,20 @@
+{
+  "message": {
+    "id": "wamid.bsuid-text-001",
+    "timestamp": "1775217600",
+    "type": "text",
+    "from_user_id": "CO.13491208655302741918",
+    "username": "@sheena",
+    "text": { "body": "mercado 40 mil" },
+    "kapso": { "direction": "inbound", "has_media": false }
+  },
+  "conversation": {
+    "id": "conv_bsuid_001",
+    "phone_number": null,
+    "business_scoped_user_id": "CO.13491208655302741918",
+    "parent_business_scoped_user_id": null,
+    "username": "@sheena"
+  },
+  "is_new_conversation": false,
+  "phone_number_id": "123456789012345"
+}

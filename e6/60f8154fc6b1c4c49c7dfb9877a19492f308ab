@@ -1,0 +1,280 @@
+src/shell/channels/whatsapp/whatsapp-channel.test.ts
+  s_2096af1feee5ae::t_e5b032a6f12fb1 1502-1508,1510-1516,1525,1529-1536,1538-1551
+  s_2096af1feee5ae::t_63a10acef17ca2 1517-1524
+  s_2096af1feee5ae::t_5d1cd4e0b9080a 1555-1557
+  s_bd62cbb20ea6f0::t_d77472d59f445f 110,118,484,487-488,490,620-621,659,1125,1128
+  s_bd62cbb20ea6f0::t_9bec87ba6c80ae 1358
+  s_bd62cbb20ea6f0::t_ab96c9e73a55e6 1527
+  s_bd62cbb20ea6f0::t_3601cac539a16e 1342
+  s_bd62cbb20ea6f0::t_40f15f11939b92 708,993,1036,1441
+  s_bd62cbb20ea6f0::t_f950dbcde55c3b 262,466
+  s_bd62cbb20ea6f0::t_1d688c3e7e43d7 1161,1164,1235,1238,1594,1599
+  s_bd62cbb20ea6f0::t_941052c0f46332 1109-1111,1196-1198,1299-1301,1322-1324,1704-1706
+  s_bd62cbb20ea6f0::t_7ce02520d7aa47 1554
+  s_bd62cbb20ea6f0::t_a97e38e6bcf5d1 89,108,116
+  s_bd62cbb20ea6f0::t_3f23e054ee9395 72,310,316,394,460,1056,1357,1509,1682,1701
+  s_bd62cbb20ea6f0::t_8dfee76e307f92 20
+  s_bd62cbb20ea6f0::t_0820332b3ab5d9 1702
+  s_bd62cbb20ea6f0::t_4cedc158ffb0d3 1368-1372
+  s_bd62cbb20ea6f0::t_3265dfa21b45de 1526,1528,1537,1552-1553
+  s_bd62cbb20ea6f0::t_a7d37c9bf5a799 489,513-516
+src/shell/channels/whatsapp/outbound.ts
+  s_2096af1feee5ae::t_42f05f2103d1f1 29-31,104
+  s_bd62cbb20ea6f0::t_e02c5feb627dca 32-34
+  s_bd62cbb20ea6f0::t_b2b71e8719b855 35,58,73,103
+src/shell/channels/whatsapp/routes.ts
+  s_bd62cbb20ea6f0::t_941052c0f46332 170-173
+  s_bd62cbb20ea6f0::t_ceb077ea80706a 4,8,122-136,149
+  s_bd62cbb20ea6f0::t_48f7de9d073224 138-148
+  s_bd62cbb20ea6f0::t_15f66796891ef6 137,150-151
+  s_bd62cbb20ea6f0::t_1236fd1b4aecae 42,56,80,85,165
+  s_bd62cbb20ea6f0::t_3bcae8cb02dafc 24-26,208-209
+  s_bd62cbb20ea6f0::t_19d3f8276cf344 155-158
+  s_bd62cbb20ea6f0::t_8e35ee2dc7d1e6 167,194-207,210-215
+  s_bd62cbb20ea6f0::t_fecb47b8314c74 152-153
+src/shell/channels/whatsapp/fixtures/kapso-voice-v2.json
+  s_bd62cbb20ea6f0::t_bed732f4da32f0 11-12,14
+  s_bd62cbb20ea6f0::t_7ec9896823b7e9 7,13
+src/shell/channels/whatsapp/kapso-client.ts
+  s_bd62cbb20ea6f0::t_0245f29eea0c36 2,23,30,112
+  s_bd62cbb20ea6f0::t_bd7871d6bf8f55 24-25
+  s_bd62cbb20ea6f0::t_1d8f8623654ccf 118-125,127-130
+  s_bd62cbb20ea6f0::t_75d0b347e5e117 109-111,113-115,126
+  s_bd62cbb20ea6f0::t_c29792ed3ade51 81
+src/shell/channels/whatsapp/fixtures/kapso-text-v2.json
+  s_bd62cbb20ea6f0::t_3f3d5fef210feb 11-12,14
+  s_bd62cbb20ea6f0::t_7ec9896823b7e9 7,13
+src/shell/db/row-level-security.test.ts
+  s_bd62cbb20ea6f0::t_c8fdf932de6af8 287,581-583
+  s_bd62cbb20ea6f0::t_bf4c71536393a4 215-220,377-382
+  s_bd62cbb20ea6f0::t_9b3ab9ae524245 87-91,340-344
+  s_bd62cbb20ea6f0::t_99fb6b6bb8b950 185-193
+  s_bd62cbb20ea6f0::t_6d21816a0c73e7 578
+  s_bd62cbb20ea6f0::t_7adecf73f1e36f 184
+src/shell/channels/whatsapp/kapso-webhook.ts
+  s_bd62cbb20ea6f0::t_3a4a794362498d 290-295
+  s_bd62cbb20ea6f0::t_35f6dfbcd7a70a 258
+  s_bd62cbb20ea6f0::t_ae758b9a33538c 1,16,73-84,89-101,116-117,120,122-124,128-130,156
+  s_bd62cbb20ea6f0::t_b8e9a4cc8711b2 3-9,39-42,57,62,136,138-147,151-152,154-155,171-175,177,181-183,206,220-222,235
+  s_bd62cbb20ea6f0::t_c1bf8293c0d895 243,289,296-330,332-333,336-337
+  s_bd62cbb20ea6f0::t_b7d995bd88f678 134-135,244-251,255-257,260,262-263,265-272,278-288,331
+  s_bd62cbb20ea6f0::t_6a300205e52752 137,148-150,176,178-180,259,261,264
+  s_bd62cbb20ea6f0::t_f1104b21cfbacf 334-335
+  s_bd62cbb20ea6f0::t_dfdfb848e5319f 85-88,252-254
+  s_bd62cbb20ea6f0::t_51e0c62d474ed7 193-197
+  s_bd62cbb20ea6f0::t_9094d742aea689 273-277
+  s_bd62cbb20ea6f0::t_3e32072defa136 133,153
+  s_bd62cbb20ea6f0::t_5b7ad5b3ce26a4 2,58-61
+  s_bd62cbb20ea6f0::t_b1989cce810184 131-132
+.github/workflows/ci.yml
+  s_bd62cbb20ea6f0::t_dbafe56c2b0953 206,247
+src/shell/consent/consent-gate.test.ts
+  s_bd62cbb20ea6f0::t_067f38b760b2d3 11
+  s_bd62cbb20ea6f0::t_af8fd47dbab105 75,81-83,506-509,511,513-515,517
+  s_bd62cbb20ea6f0::t_3f23e054ee9395 61,172,256
+  s_bd62cbb20ea6f0::t_941052c0f46332 103-105,120-122,132-134,158-160,175-180,231-236,340-345,374-376,398-400,423-428
+  s_bd62cbb20ea6f0::t_f950dbcde55c3b 21
+src/shell/channels/whatsapp/kapso-client.test.ts
+  s_bd62cbb20ea6f0::t_0245da9d724a10 26
+  s_bd62cbb20ea6f0::t_b433e9b2bcd34b 3,12,20
+  s_bd62cbb20ea6f0::t_4b434e93727c64 5,8-10,14-15,38-44,66
+  s_bd62cbb20ea6f0::t_dfc52acd64f01f 2,21-25,27-37,45-48
+  s_bd62cbb20ea6f0::t_b7be32c738f5f4 49
+src/shell/channels/whatsapp/kapso-webhook.test.ts
+  s_bd62cbb20ea6f0::t_965a5a81115cdd 30,33
+  s_bd62cbb20ea6f0::t_86fd51aabf0865 40-41,43-48,55-58
+  s_bd62cbb20ea6f0::t_752578bbe8f93f 4,20-21,23-29,31-32,34-38
+  s_bd62cbb20ea6f0::t_44beb4cdf4a48e 67,137-140
+  s_bd62cbb20ea6f0::t_3375f6892b5cac 151
+  s_bd62cbb20ea6f0::t_b009aacd53a93a 6,16,149-150,152-153,170-184
+  s_bd62cbb20ea6f0::t_00916e27827ea2 185-186
+  s_bd62cbb20ea6f0::t_f6205cffadd9f6 39
+  s_bd62cbb20ea6f0::t_941052c0f46332 8
+  s_bd62cbb20ea6f0::t_e2d2727a11f2ce 2,110
+  s_bd62cbb20ea6f0::t_775b5180425064 52-54
+  s_bd62cbb20ea6f0::t_b7ac573ee18302 3,7,22,42,49-51
+src/shell/db/development-seed.ts
+  s_bd62cbb20ea6f0::t_924302e934072a 1,139-142,145
+  s_bd62cbb20ea6f0::t_8df47ab1761a6a 3-8,147-149
+  s_bd62cbb20ea6f0::t_84a7f732b3850c 129-131
+  s_bd62cbb20ea6f0::t_94edd15300d984 146
+scripts/agent-repl.ts
+  s_bd62cbb20ea6f0::t_00626905fe31b2 3,14-16,21
+src/shell/testing/api-harness.ts
+  s_bd62cbb20ea6f0::t_941052c0f46332 54
+src/shell/channels/whatsapp/repo.ts
+  s_bd62cbb20ea6f0::t_4de8dd449f22e6 73,76,102,243-244,279-280,323-324,326-327,332-333,336-337,358-359,614-615,631-641
+  s_bd62cbb20ea6f0::t_0e4cd326cc162b 101,103
+  s_bd62cbb20ea6f0::t_574ae24249fdb6 534-535
+  s_bd62cbb20ea6f0::t_ac8731a121bb66 68
+  s_bd62cbb20ea6f0::t_0e1083f15293c5 3,5
+src/core/identity/reference.ts
+  s_bd62cbb20ea6f0::t_ed5990bf01bf25 8
+  s_bd62cbb20ea6f0::t_17302ae01eea8b 28-31,38-41,47-51,57-60,67-68,71-73
+  s_bd62cbb20ea6f0::t_b9608d953a10ee 74
+  s_bd62cbb20ea6f0::t_a98fd7c9cfa6bf 78-80
+  s_bd62cbb20ea6f0::t_35a06e693430cf 75-77
+  s_bd62cbb20ea6f0::t_2e7dc50cdee370 27,32-37,42-46,52-56,61-66,69-70
+src/shell/channels/whatsapp/fixtures/kapso-meta-identity-change.json
+  s_bd62cbb20ea6f0::t_1661fc8273a408 1-28
+compose.yaml
+  s_bd62cbb20ea6f0::t_b0cffd49ba5de0 10
+src/shell/db/migrations/0015-whatsapp-bsuid-identity.ts
+  s_bd62cbb20ea6f0::t_33d98b97a86168 1,4-5,10,16-18,25,27,40-42,49,55-59,98,107-113
+  s_bd62cbb20ea6f0::t_301a1d2f41c678 26
+  s_bd62cbb20ea6f0::t_5b7d0193ae6751 2-3,11-12,19-24,28-39,43-48,50-54,60-71,94-97,99-106,236
+  s_bd62cbb20ea6f0::t_88910f35e3c1a9 6-9,14-15
+  s_bd62cbb20ea6f0::t_861bc2d3656fcd 72-93,114-125,127-136,142,150-190,192-199,209-217,219-235
+  s_bd62cbb20ea6f0::t_0ad508b2767aac 126,143,191,218
+  s_bd62cbb20ea6f0::t_41cc61fe36872f 137-141,144-149
+  s_bd62cbb20ea6f0::t_ac23b7a0974284 200-208
+  s_bd62cbb20ea6f0::t_989d10c8cbf8a1 13
+src/core/consent/rules.ts
+  s_bd62cbb20ea6f0::t_0f0fdc4ab98de7 77
+  s_bd62cbb20ea6f0::t_af2e5d73efeec5 69
+  s_bd62cbb20ea6f0::t_ec60567ab0c2d2 74-76,79
+src/shell/db/user-tables.ts
+  s_bd62cbb20ea6f0::t_de5d5f63b68bf8 17
+src/core/consent/rules.test.ts
+  s_bd62cbb20ea6f0::t_0846464bbfaa70 4,68
+src/shell/testing/whatsapp-caller.ts
+  s_bd62cbb20ea6f0::t_19b5f1cf394901 2,7
+  s_bd62cbb20ea6f0::t_67e28cc226036e 1,3-6,8,13-19
+  s_bd62cbb20ea6f0::t_bb0bd4e3cc421d 9-12
+src/shell/consent/repo.ts
+  s_bd62cbb20ea6f0::t_9047e8dbeade79 13-16,18,444,465-468,504-505,536,541-543,557-558,564-565,578,584,586-587,589-592
+  s_bd62cbb20ea6f0::t_99934c84056e3d 428-429
+  s_bd62cbb20ea6f0::t_a90c14d1725432 17,445,537,579,582
+src/shell/consent/consent-gate.ts
+  s_bd62cbb20ea6f0::t_b28de04fcbfeee 20-25,110,148,153,242-245
+  s_bd62cbb20ea6f0::t_4b78ab814bdbe9 17-18
+  s_bd62cbb20ea6f0::t_47eaa0edc008a4 15,79
+  s_bd62cbb20ea6f0::t_52a5f566e1c87c 78,80-84,86
+  s_bd62cbb20ea6f0::t_9d7fda7c05d97d 40,74,111-112,115,119,151,177
+  s_bd62cbb20ea6f0::t_5dfccb502b7c6a 140-142
+  s_bd62cbb20ea6f0::t_f20050f91cecb2 85
+scripts/check-production-image.sh
+  s_bd62cbb20ea6f0::t_e39ecc09b8cc03 54-55,116,170-171
+  s_bd62cbb20ea6f0::t_0fe0ec5734db27 159
+docs/adr/0011-bsuid-authority-for-whatsapp-identity.md
+  s_bd62cbb20ea6f0::t_2f3a2869c38004 22-23
+  s_bd62cbb20ea6f0::t_4204d39ed8f5fc 27-33
+  s_bd62cbb20ea6f0::t_e9a3cf584c6e1c 40-42
+  s_bd62cbb20ea6f0::t_379952baf08541 1-4,6-21,24-26,34-39,43-45,49-69
+  s_bd62cbb20ea6f0::t_ba3a2068659697 5,46-48
+CONTEXT.md
+  s_bd62cbb20ea6f0::t_aeecf32a3fc2cc 160-161,165
+  s_bd62cbb20ea6f0::t_5d42a35184a6fb 162-164
+src/shell/consent/repo.test.ts
+  s_bd62cbb20ea6f0::t_941052c0f46332 75-77,104-106,117-119
+  s_bd62cbb20ea6f0::t_f950dbcde55c3b 16
+  s_bd62cbb20ea6f0::t_0b8d49f65efacc 46-49
+  s_bd62cbb20ea6f0::t_8b47919e46db82 10,63
+src/shell/identity/repo.ts
+  s_bd62cbb20ea6f0::t_b4fb0285fee4a5 31-32,34-38
+  s_bd62cbb20ea6f0::t_689c8cda3f4cff 322
+  s_bd62cbb20ea6f0::t_b3ec73729759c6 176-182,184-187,216-219,222-223,242-245,248-249,326,332
+  s_bd62cbb20ea6f0::t_375091d6ee9388 27-29
+  s_bd62cbb20ea6f0::t_b327a4327e8e26 1
+  s_bd62cbb20ea6f0::t_349e1568b2c997 7,265-267,272-273,278,313-314,320
+  s_bd62cbb20ea6f0::t_5aab8f765ec261 194-197,229,233
+  s_bd62cbb20ea6f0::t_31e8433739d9ec 143-151,153-167,169
+  s_bd62cbb20ea6f0::t_abe71aba6e6b8d 255
+  s_bd62cbb20ea6f0::t_0c1f7c9f07ff94 287,289,299-300
+  s_bd62cbb20ea6f0::t_f947f8bf21c194 30
+  s_bd62cbb20ea6f0::t_187708bd2ad605 270
+  s_bd62cbb20ea6f0::t_24ff75f6090b6d 327,331
+  s_bd62cbb20ea6f0::t_d68d808b51a001 152,168,315-319,323,328-330
+  s_bd62cbb20ea6f0::t_6e01e92f86709e 256,325
+  s_bd62cbb20ea6f0::t_79bd65428326b1 138
+  s_bd62cbb20ea6f0::t_480aeec8319463 33,257-263,271,279-280,283,312,324
+  s_bd62cbb20ea6f0::t_3f26ec20e1cb9f 4-6,8-10
+  s_bd62cbb20ea6f0::t_c94bff348ab690 3,40-49,274-277,281-282,284-286,288,290-298,301-311
+  s_bd62cbb20ea6f0::t_3ea91f7f8d0102 321
+src/shell/testing/kapso-identity-change.ts
+  s_bd62cbb20ea6f0::t_06d50e6e422b46 1-6,9-21,23-42,44-57
+  s_bd62cbb20ea6f0::t_2f1dec6b7a8f80 7-8,22,43
+src/core/identity/model.ts
+  s_bd62cbb20ea6f0::t_62e603bc2830ac 3-10,21-25
+  s_bd62cbb20ea6f0::t_c0c414e6270387 13-17
+src/core/consent/model.ts
+  s_bd62cbb20ea6f0::t_102f57a55972ad 4,117,125
+src/shell/agent/agent-service.test.ts
+  s_bd62cbb20ea6f0::t_2f6bbb476ad17a 5
+  s_bd62cbb20ea6f0::t_941052c0f46332 810-812
+  s_bd62cbb20ea6f0::t_24f63b503dd41d 799-802,816-818,841-844
+  s_bd62cbb20ea6f0::t_ade30e4d4f5edc 21
+  s_bd62cbb20ea6f0::t_44ff368d31110a 33-36,806,850,886,980
+src/shell/agent/repl.ts
+  s_bd62cbb20ea6f0::t_cf7db4258353d3 3-4,6,98,101-102,104
+  s_bd62cbb20ea6f0::t_cbb7eb691a1d68 2
+  s_bd62cbb20ea6f0::t_913a36c4cde804 1,82-85,99
+  s_bd62cbb20ea6f0::t_ff4955df935c27 5,18-22,74-77,79,100,103
+README.md
+  s_bd62cbb20ea6f0::t_4391f0c44d0213 24-27
+  s_bd62cbb20ea6f0::t_92fd679ddb77ed 83-84,88-89
+  s_bd62cbb20ea6f0::t_1aeba9ddbad557 28-32,38,79,133-134
+  s_bd62cbb20ea6f0::t_a540d43281936b 53-57
+src/shell/identity/whatsapp-identity.test.ts
+  s_bd62cbb20ea6f0::t_3f23e054ee9395 21
+  s_bd62cbb20ea6f0::t_9d9e16c9e149f5 205
+  s_bd62cbb20ea6f0::t_0d7493846ed444 133
+  s_bd62cbb20ea6f0::t_ae9b77a149c8f8 17,23-31,67,88-91,140-141,169-173,175-178,180-181,203-204,207,213-216,218
+  s_bd62cbb20ea6f0::t_8169202a498e78 3
+  s_bd62cbb20ea6f0::t_02bf23326c2d79 120
+  s_bd62cbb20ea6f0::t_ebacc7d5ca006b 5-9,36,39-51
+  s_bd62cbb20ea6f0::t_b18dfa73b89794 4,56-57,71-78,116-118,128,130-131
+  s_bd62cbb20ea6f0::t_96a63881f7286c 19,134-139,142-152,154-161
+  s_bd62cbb20ea6f0::t_480aeec8319463 52-55,58-66,68-70,79-83,102-115,119,123-127,132
+  s_bd62cbb20ea6f0::t_323b1b7ac8a0a1 162,198-202,208-212,219-233
+  s_bd62cbb20ea6f0::t_6c7f8e33e85f82 84-87,92-101,121-122
+  s_bd62cbb20ea6f0::t_04749affd8c8b2 164-168,179,182-197
+  s_bd62cbb20ea6f0::t_c66bd4a64fd235 129
+src/core/consent/model.test.ts
+  s_bd62cbb20ea6f0::t_f908726a6fbf72 2-7,87-93
+ARCHITECTURE.md
+  s_bd62cbb20ea6f0::t_eb3fddbea39d0c 54-57,96-98
+src/shell/channels/whatsapp/fixtures/kapso-bsuid-text-v2.json
+  s_bd62cbb20ea6f0::t_6d0b1ce2f9ba06 1-20
+src/shell/channels/whatsapp/model.ts
+  s_bd62cbb20ea6f0::t_f947f8bf21c194 80
+  s_bd62cbb20ea6f0::t_5587a8540dd4cd 88-89
+  s_bd62cbb20ea6f0::t_14ae025002d551 1,81-82,86
+  s_bd62cbb20ea6f0::t_70c4cdc1cadf77 73
+  s_bd62cbb20ea6f0::t_b6c8165d743796 4-9,49-60,84
+  s_bd62cbb20ea6f0::t_0d97dbec3e9c9f 83,85,87
+.env.example
+  s_bd62cbb20ea6f0::t_7fa1ab4baf90e6 13
+  s_bd62cbb20ea6f0::t_a4efe49cca4bf1 18
+docs/adr/0007-postgresql-row-level-user-isolation.md
+  s_bd62cbb20ea6f0::t_35f6dfbcd7a70a 53-54,56-58
+  s_bd62cbb20ea6f0::t_1e2d7ed140d76f 55,69-70
+src/shell/consent/retention.test.ts
+  s_bd62cbb20ea6f0::t_f950dbcde55c3b 7
+  s_bd62cbb20ea6f0::t_941052c0f46332 66-71
+  s_bd62cbb20ea6f0::t_d656f05592af98 5,25-26,29-32,40,53
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "e660f8154fc6b1c4c49c7dfb9877a19492f308ab",
+  "prompts": {},
+  "sessions": {
+    "s_2096af1feee5ae": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019fca90-ce9e-7dab-9d9f-57075315f1a3",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_bd62cbb20ea6f0": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019fcec9-654f-738f-b644-1504a389768a",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

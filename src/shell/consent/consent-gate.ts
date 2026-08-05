@@ -12,11 +12,17 @@ import {
 import {
   decideConsentReply,
   hasPendingConsentExpired,
-  makePendingConsentExchange,
+  makePendingConsentDraft,
 } from "~/core/consent/rules";
-import { type E164PhoneNumber, UserId } from "~/core/identity/reference";
+import { UserId, whatsAppCallerReference } from "~/core/identity/reference";
+import type { WhatsAppCaller } from "~/shell/channels/whatsapp/model";
 import { makeColombianUser } from "~/core/identity/rules";
-import { insertUser, insertWhatsAppIdentity, resolveWhatsAppCaller } from "~/shell/identity/repo";
+import {
+  findWhatsAppCaller,
+  insertUser,
+  insertWhatsAppIdentity,
+  resolveWhatsAppCaller,
+} from "~/shell/identity/repo";
 import { currentDisclosure, CURRENT_DISCLOSURE_TEXT } from "./current-disclosure";
 import {
   appendConsentRecord,
@@ -31,7 +37,7 @@ import {
 
 /** One provider-authenticated inbound turn presented to the consent boundary. */
 export type ConsentGateInput = {
-  readonly phoneNumber: E164PhoneNumber;
+  readonly caller: WhatsAppCaller;
   readonly content: ConsentInboundContent;
   readonly message: ProviderMessageEvidence;
   readonly receivedAt: DateTime.Utc;
@@ -65,17 +71,19 @@ const sendDisclosure = (exchangeId: PendingConsentExchangeId): ConsentGateOutcom
 });
 
 const beginPendingExchange = Effect.fn("beginPendingConsentExchange")(function* (
-  input: Pick<ConsentGateInput, "phoneNumber" | "message" | "receivedAt">
+  input: Pick<ConsentGateInput, "caller" | "message" | "receivedAt">
 ) {
   const crypto = yield* Crypto.Crypto;
   const disclosure = yield* currentDisclosure;
-  const pending = yield* makePendingConsentExchange({
-    id: PendingConsentExchangeId.make(yield* crypto.randomUUIDv7.pipe(Effect.orDie)),
-    phoneNumber: input.phoneNumber,
-    disclosure,
-    initiatingMessage: input.message,
-    createdAt: input.receivedAt,
-  });
+  const pending = {
+    ...(yield* makePendingConsentDraft({
+      id: PendingConsentExchangeId.make(yield* crypto.randomUUIDv7.pipe(Effect.orDie)),
+      disclosure,
+      initiatingMessage: input.message,
+      createdAt: input.receivedAt,
+    })),
+    caller: whatsAppCallerReference(input.caller),
+  } satisfies Extract<PendingConsentExchange, { readonly _tag: "AwaitingDisclosureDelivery" }>;
   yield* insertPendingConsentExchange(pending);
   return sendDisclosure(pending.id);
 });
@@ -99,16 +107,16 @@ const acceptPending = Effect.fn("acceptPendingConsent")(function* (
   pending: Extract<PendingConsentExchange, { readonly _tag: "AwaitingDecision" }>
 ) {
   const crypto = yield* Crypto.Crypto;
-  const caller = yield* resolveWhatsAppCaller(input.phoneNumber);
-  const userId = Option.isSome(caller)
-    ? caller.value
+  const resolved = yield* findWhatsAppCaller(input.caller);
+  const userId = Option.isSome(resolved)
+    ? resolved.value
     : UserId.make(yield* crypto.randomUUIDv7.pipe(Effect.orDie));
 
-  if (Option.isNone(caller)) {
+  if (Option.isNone(resolved)) {
     const user = yield* makeColombianUser(userId, { createdAt: input.receivedAt });
     yield* insertUser(userId, user);
     yield* insertWhatsAppIdentity(userId, {
-      phoneNumber: input.phoneNumber,
+      ...input.caller,
       verifiedAt: input.receivedAt,
     });
   }
@@ -129,20 +137,20 @@ const acceptPending = Effect.fn("acceptPendingConsent")(function* (
 });
 
 /**
- * Evaluates one inbound turn under a phone-scoped transaction. The function
- * stores no initiating content, deletes temporary state on all terminal paths,
- * and never returns `Proceed` for the acceptance message itself.
+ * Evaluates one inbound turn serialized by its Business Portfolio and BSUID reference. The
+ * function stores no initiating content, deletes temporary state on all terminal paths, and never
+ * returns `Proceed` for the acceptance message itself.
  */
 export const evaluateConsentGate = Effect.fn("evaluateConsentGate")(function* (
   input: ConsentGateInput
 ) {
   const sql = yield* SqlClient.SqlClient;
-  return yield* sql
+  const outcome = yield* sql
     .withTransaction(
       Effect.gen(function* () {
-        yield* lockConsentGate(input.phoneNumber);
+        yield* lockConsentGate(input.caller);
 
-        const caller = yield* resolveWhatsAppCaller(input.phoneNumber);
+        const caller = yield* findWhatsAppCaller(input.caller);
         const disclosure = yield* currentDisclosure;
         const replay = yield* findConsentRecordByDecisionMessage(input.message);
         if (Option.isSome(replay)) {
@@ -166,7 +174,7 @@ export const evaluateConsentGate = Effect.fn("evaluateConsentGate")(function* (
           return { _tag: "Proceed", userId: caller.value } as const;
         }
 
-        const foundPending = yield* findPendingConsentExchange(input.phoneNumber);
+        const foundPending = yield* findPendingConsentExchange(input.caller);
         if (Option.isNone(foundPending)) {
           return yield* beginPendingExchange(input);
         }
@@ -231,4 +239,8 @@ export const evaluateConsentGate = Effect.fn("evaluateConsentGate")(function* (
       })
     )
     .pipe(Effect.catchTag("SqlError", Effect.die));
+
+  // Mutable provider evidence belongs to Identity and refreshes after Consent commits.
+  yield* resolveWhatsAppCaller(input.caller, input.receivedAt);
+  return outcome;
 });

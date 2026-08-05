@@ -1,7 +1,12 @@
-import { Schema } from "effect";
+import { Schema, Struct } from "effect";
 import type { Array as EffectArray, DateTime } from "effect";
 import { ProviderMessageEvidence } from "~/core/_shared/provider-message-evidence";
-import type { E164PhoneNumber } from "~/core/identity/reference";
+import {
+  E164PhoneNumber,
+  WhatsAppCallerReference,
+  WhatsAppParentBusinessScopedUserId,
+  WhatsAppUsername,
+} from "~/core/identity/reference";
 import type { TranscriptText } from "~/core/transcript/model";
 
 /** Immutable WhatsApp message identifier retained as evidence, never identity or authority. */
@@ -41,6 +46,18 @@ export const WhatsAppMediaId = Schema.NonEmptyString.check(
 ).pipe(Schema.brand("WhatsAppMediaId"));
 export type WhatsAppMediaId = typeof WhatsAppMediaId.Type;
 
+/**
+ * Provider-authenticated inbound caller evidence. Portfolio plus BSUID establish caller identity;
+ * optional mutable observations never independently resolve or authorize a User.
+ */
+export const WhatsAppCaller = Schema.Struct({
+  ...WhatsAppCallerReference.fields,
+  parentBusinessScopedUserId: Schema.Option(WhatsAppParentBusinessScopedUserId),
+  username: Schema.Option(WhatsAppUsername),
+  phoneNumber: Schema.Option(E164PhoneNumber),
+}).annotate({ identifier: "WhatsAppCaller" });
+export type WhatsAppCaller = typeof WhatsAppCaller.Type;
+
 /** Validated text accepted by the WhatsApp slice after provider authentication and projection. */
 export type WhatsAppInboundContent =
   | Readonly<{ readonly _tag: "Text"; readonly text: TranscriptText }>
@@ -53,11 +70,21 @@ export type WhatsAppInboundContent =
 /** Provider-independent input for one authenticated WhatsApp event. */
 export type WhatsAppInboundEvent = Readonly<{
   readonly messageEvidence: WhatsAppMessageEvidence;
-  readonly phoneNumber: E164PhoneNumber;
+  readonly caller: WhatsAppCaller;
   readonly businessPhoneNumberId: WhatsAppBusinessPhoneNumberId;
   readonly occurredAt: DateTime.Utc;
   readonly receivedAt: DateTime.Utc;
   readonly content: WhatsAppInboundContent;
+}>;
+
+const WhatsAppCallerReplacement = WhatsAppCaller.mapFields(Struct.omit(["businessPortfolioId"]));
+
+/** Provider-authenticated reassociation after Meta changes a WhatsAppIdentity BSUID. */
+export type WhatsAppIdentityChangeEvent = Readonly<{
+  readonly messageEvidence: WhatsAppMessageEvidence;
+  readonly previousCaller: WhatsAppCallerReference;
+  readonly replacement: typeof WhatsAppCallerReplacement.Type;
+  readonly occurredAt: DateTime.Utc;
 }>;
 
 /** One authenticated WhatsApp delivery normalized to a non-empty event collection. */

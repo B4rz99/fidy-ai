@@ -1,0 +1,28 @@
+{
+  "object": "whatsapp_business_account",
+  "entry": [
+    {
+      "changes": [
+        {
+          "value": {
+            "messaging_product": "whatsapp",
+            "messages": [
+              {
+                "id": "wamid.identity-change-001",
+                "timestamp": "1775217600",
+                "type": "system",
+                "system": {
+                  "body": "User Ada changed from CO.573001234567 to CO.573009876543",
+                  "wa_id": "573009876543",
+                  "user_id": "CO.573009876543",
+                  "type": "user_changed_user_id"
+                }
+              }
+            ]
+          },
+          "field": "messages"
+        }
+      ]
+    }
+  ]
+}

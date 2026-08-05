@@ -1,5 +1,9 @@
-import { Crypto, DateTime, Effect, Option, Schema, Terminal } from "effect";
-import type { E164PhoneNumber } from "~/core/identity/reference";
+import { Config, Crypto, DateTime, Effect, Option, Schema, Terminal } from "effect";
+import {
+  type E164PhoneNumber,
+  WhatsAppBusinessPortfolioId,
+  type WhatsAppBusinessScopedUserId,
+} from "~/core/identity/reference";
 import {
   claimConsentDisclosureDelivery,
   recordConsentDisclosureDelivery,
@@ -10,6 +14,11 @@ import { InboundMessage } from "./agent-service";
 
 const invalidMessage = "Escribe un mensaje de texto no vacío.\n";
 const unavailableMessage = "Fidy no está disponible en este momento. Intenta de nuevo.\n";
+
+type ReplCaller = Readonly<{
+  phoneNumber: E164PhoneNumber;
+  businessScopedUserId: WhatsAppBusinessScopedUserId;
+}>;
 
 const renderTerminalText = (text: string): string =>
   Array.from(text, (character) => {
@@ -62,13 +71,18 @@ const displayConversationOutcome = Effect.fn("displayConversationOutcome")(funct
 });
 
 /**
- * Runs channel-neutral gated turns for one normalized WhatsApp number until
- * Terminal reports quit. Consent replies terminate their turns; only later
- * authorized text reaches AgentService. Terminal failures remain typed.
+ * Runs channel-neutral gated turns for one explicitly configured development association until
+ * Terminal reports quit. The Business Portfolio and BSUID must match an existing seeded
+ * WhatsAppIdentity; the REPL never derives provider identity from phone evidence. Consent replies
+ * terminate their turns, and only later authorized text reaches AgentService.
  */
-export const runAgentRepl = Effect.fn("runAgentRepl")(function* (phoneNumber: E164PhoneNumber) {
+export const runAgentRepl = Effect.fn("runAgentRepl")(function* (caller: ReplCaller) {
   const terminal = yield* Terminal.Terminal;
   const crypto = yield* Crypto.Crypto;
+  const businessPortfolioId = yield* Config.schema(
+    WhatsAppBusinessPortfolioId,
+    "WHATSAPP_BUSINESS_PORTFOLIO_ID"
+  );
   const turn = Effect.gen(function* () {
     yield* terminal.display("Fidy> ");
     const text = yield* terminal.readLine;
@@ -81,7 +95,13 @@ export const runAgentRepl = Effect.fn("runAgentRepl")(function* (phoneNumber: E1
     if (Option.isNone(message)) return;
 
     const outcome = yield* handleAgentConversationTurn({
-      phoneNumber,
+      caller: {
+        businessPortfolioId,
+        businessScopedUserId: caller.businessScopedUserId,
+        parentBusinessScopedUserId: Option.none(),
+        username: Option.none(),
+        phoneNumber: Option.some(caller.phoneNumber),
+      },
       content: { _tag: "Text", text: message.value.text },
       message: {
         channel: "terminal",

@@ -17,7 +17,7 @@ import { AiError, LanguageModel } from "effect/unstable/ai";
 import { HttpBody, HttpClient, HttpClientResponse } from "effect/unstable/http";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import { ConsentRecord, ConsentRecordId } from "~/core/consent/model";
-import { E164PhoneNumber, UserId } from "~/core/identity/reference";
+import { E164PhoneNumber, UserId, WhatsAppBusinessScopedUserId } from "~/core/identity/reference";
 import { AgentBearerToken } from "~/core/tokens/model";
 import { AgentReply, AgentService, AgentServiceLive } from "~/shell/agent/agent-service";
 import { makeOpenAiFunctionCallResponse } from "~/shell/agent/fixtures/openai";
@@ -69,6 +69,7 @@ import {
 } from "./repo";
 import { processNextWhatsAppTurn } from "./worker";
 
+import { testWhatsAppCaller } from "~/shell/testing/whatsapp-caller";
 const deliveryKey = WhatsAppDeliveryKey.make("delivery-worker-fixture");
 const fixtureBytes = (name: "kapso-text-v2.json" | "kapso-voice-v2.json") =>
   Effect.promise(() => Bun.file(new URL(`./fixtures/${name}`, import.meta.url)).bytes());
@@ -85,7 +86,7 @@ const postSignedTextFixture = Effect.fn("WhatsApp.postSignedTextFixture")(functi
   const body = new TextEncoder().encode(
     template
       .replace("wamid.text-001", input.providerMessageId)
-      .replace("573001234567", phoneNumber.slice(1))
+      .replaceAll("573001234567", phoneNumber.slice(1))
       .replace("almuerzo 25 mil", text)
       .replace(
         '"timestamp": "1775217600"',
@@ -104,15 +105,17 @@ const recordedEvents = Effect.fn("WhatsApp.recordedEvents")(function* (receivedA
   const text = yield* decodeKapsoWebhook({
     rawBody: yield* fixtureBytes("kapso-text-v2.json"),
     secret: "test-webhook-secret-32-characters",
-    signature: "2c9e6d0ce2b1d348e540f8e3ed623cd633aa39e09c2b96f1c782008186e0352f",
+    signature: "6c2d8ade595be0115c9ba1286d8f015c380008cd250ed5bfffd676c4845d4571",
     deliveryKey,
+    businessPortfolioId: "portfolio-test",
     receivedAt,
   });
   const voice = yield* decodeKapsoWebhook({
     rawBody: yield* fixtureBytes("kapso-voice-v2.json"),
     secret: "test-webhook-secret-32-characters",
-    signature: "181344306f695b38d012453d4a3d12cd97917c5aa3d5db1e598ad5cd2d7f77ad",
+    signature: "c60d4e3e3daacd2911a21d7dbe4dfb488880893e5c8dbb12b8fe3479d17f8130",
     deliveryKey,
+    businessPortfolioId: "portfolio-test",
     receivedAt: DateTime.add(receivedAt, { milliseconds: 100 }),
   });
   return [text.events[0], voice.events[0]] as const;
@@ -256,7 +259,7 @@ const makeKapsoTextEvent = (
     provider: "kapso",
     providerMessageId: WhatsAppProviderMessageId.make(providerMessageId),
   },
-  phoneNumber: defaultWhatsAppPhone,
+  caller: testWhatsAppCaller(defaultWhatsAppPhone),
   businessPhoneNumberId,
   occurredAt: receivedAt,
   receivedAt,
@@ -304,13 +307,13 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           const [first, second] = yield* recordedEvents(eventTime);
 
           const firstAdmission = yield* admitAgentConversationTurn({
-            phoneNumber: first.phoneNumber,
+            caller: first.caller,
             content: { _tag: "Text", text: first.content.text },
             message: first.messageEvidence,
             receivedAt: first.receivedAt,
           });
           const secondAdmission = yield* admitAgentConversationTurn({
-            phoneNumber: second.phoneNumber,
+            caller: second.caller,
             content: { _tag: "Text", text: second.content.text },
             message: second.messageEvidence,
             receivedAt: second.receivedAt,
@@ -388,7 +391,7 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         const eventTime = DateTime.makeUnsafe("2026-04-03T12:01:02.000Z");
         const inbound = makeKapsoTextEvent("wamid.text-only", "almuerzo 25 mil", eventTime);
         const admission = yield* admitAgentConversationTurn({
-          phoneNumber: inbound.phoneNumber,
+          caller: inbound.caller,
           content: { _tag: "Text", text: inbound.content.text },
           message: inbound.messageEvidence,
           receivedAt: inbound.receivedAt,
@@ -454,13 +457,13 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         ]);
         const eventTime = yield* DateTime.now;
         yield* associateWhatsAppIdentity(secondUserId, {
-          phoneNumber: secondPhone,
+          ...testWhatsAppCaller(secondPhone),
           verifiedAt: eventTime,
         });
         const first = makeKapsoTextEvent("wamid.isolation-a", "almuerzo 25 mil", eventTime);
         const second = {
           ...makeKapsoTextEvent("wamid.isolation-b", "taxi 18 mil", eventTime),
-          phoneNumber: secondPhone,
+          caller: testWhatsAppCaller(secondPhone),
         };
         yield* Effect.all(
           [
@@ -478,10 +481,13 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           { concurrency: "unbounded" }
         );
 
-        const recipients = yield* Ref.make<ReadonlyArray<E164PhoneNumber>>([]);
+        const recipients = yield* Ref.make<ReadonlyArray<string>>([]);
         const kapsoService: KapsoClientService = {
           sendText: (input) =>
-            Ref.updateAndGet(recipients, (current) => [...current, input.to]).pipe(
+            Ref.updateAndGet(recipients, (current) => [
+              ...current,
+              input.destination.recipient,
+            ]).pipe(
               Effect.map((current) => ({
                 messageEvidence: {
                   channel: "whatsapp" as const,
@@ -504,7 +510,10 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         );
 
         expect((yield* Ref.get(recipients)).toSorted()).toEqual(
-          [defaultWhatsAppPhone, secondPhone].toSorted()
+          [
+            testWhatsAppCaller(defaultWhatsAppPhone).businessScopedUserId,
+            testWhatsAppCaller(secondPhone).businessScopedUserId,
+          ].toSorted()
         );
         const [firstCountAfter, secondCountAfter] = yield* Effect.all([
           countTransactions(defaultUserId, "WhatsAppAlmuerzo"),
@@ -608,8 +617,8 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         yield* truncateWhatsAppChannel;
         const receivedAt = yield* DateTime.now;
         const scope = {
-          _tag: "Phone" as const,
-          phoneNumber: E164PhoneNumber.make("+573001234567"),
+          _tag: "Caller" as const,
+          caller: testWhatsAppCaller(E164PhoneNumber.make("+573001234567")),
         };
         yield* Effect.forEach(
           EffectArray.range(1, 60),
@@ -647,7 +656,7 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           deliveryKey,
         });
         yield* consumeWhatsAppIngressBudget(
-          { _tag: "Phone", phoneNumber: inbound.phoneNumber },
+          { _tag: "Caller", caller: inbound.caller },
           inbound.messageEvidence.providerMessageId,
           eventTime
         );
@@ -696,7 +705,7 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         const response = yield* HttpClient.post("/webhooks/kapso", {
           headers: {
             "x-webhook-signature":
-              "2c9e6d0ce2b1d348e540f8e3ed623cd633aa39e09c2b96f1c782008186e0352f",
+              "6c2d8ade595be0115c9ba1286d8f015c380008cd250ed5bfffd676c4845d4571",
             "x-idempotency-key": "capacity-overflow-delivery",
           },
           body: HttpBody.uint8Array(overflowBody, "application/json"),
@@ -981,7 +990,7 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           HttpClient.post("/webhooks/kapso", {
             headers: {
               "x-webhook-signature":
-                "2c9e6d0ce2b1d348e540f8e3ed623cd633aa39e09c2b96f1c782008186e0352f",
+                "6c2d8ade595be0115c9ba1286d8f015c380008cd250ed5bfffd676c4845d4571",
               "x-idempotency-key": "recorded-route-delivery",
             },
             body: HttpBody.uint8Array(body, "application/json"),
@@ -1024,7 +1033,7 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           HttpClient.post("/webhooks/kapso", {
             headers: {
               "x-webhook-signature":
-                "2c9e6d0ce2b1d348e540f8e3ed623cd633aa39e09c2b96f1c782008186e0352f",
+                "6c2d8ade595be0115c9ba1286d8f015c380008cd250ed5bfffd676c4845d4571",
               "x-idempotency-key": "in-flight-redelivery",
             },
             body: HttpBody.uint8Array(body, "application/json"),
@@ -1044,7 +1053,7 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           EffectArray.range(1, 60),
           (index) =>
             consumeWhatsAppIngressBudget(
-              { _tag: "Phone", phoneNumber: exhaustedPhone },
+              { _tag: "Caller", caller: testWhatsAppCaller(exhaustedPhone) },
               WhatsAppProviderMessageId.make(`wamid.exhausted-phone-${index}`),
               now
             ),
@@ -1097,7 +1106,9 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           occurredAt: now,
         });
         expect(response.status).toBe(429);
-        expect(Option.isNone(yield* findPendingConsentExchange(phoneNumber))).toBe(true);
+        expect(
+          Option.isNone(yield* findPendingConsentExchange(testWhatsAppCaller(phoneNumber)))
+        ).toBe(true);
         yield* truncateWhatsAppChannel;
       })
     );
@@ -1111,10 +1122,10 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           const phoneNumber = E164PhoneNumber.make("+573007770097");
           const initialEvent = {
             ...makeKapsoTextEvent("wamid.public-disclosure-initial", "hola", now),
-            phoneNumber,
+            caller: testWhatsAppCaller(phoneNumber),
           };
           const admission = yield* admitAgentConversationTurn({
-            phoneNumber,
+            caller: initialEvent.caller,
             content: { _tag: "Text", text: initialEvent.content.text },
             message: initialEvent.messageEvidence,
             receivedAt: initialEvent.occurredAt,
@@ -1147,10 +1158,10 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         const phoneNumber = E164PhoneNumber.make("+573007770098");
         const event = {
           ...makeKapsoTextEvent("wamid.concurrent-disclosure", "hola", now),
-          phoneNumber,
+          caller: testWhatsAppCaller(phoneNumber),
         };
         const admission = yield* admitAgentConversationTurn({
-          phoneNumber,
+          caller: event.caller,
           content: { _tag: "Text", text: event.content.text },
           message: event.messageEvidence,
           receivedAt: event.occurredAt,
@@ -1182,7 +1193,9 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         expect(yield* Ref.get(sends)).toBe(1);
         yield* Deferred.succeed(allowSend, undefined);
         yield* Fiber.join(first);
-        expect((yield* findPendingConsentExchange(phoneNumber)).pipe(Option.isSome)).toBe(true);
+        expect(
+          (yield* findPendingConsentExchange(testWhatsAppCaller(phoneNumber))).pipe(Option.isSome)
+        ).toBe(true);
       })
     );
 
@@ -1219,10 +1232,10 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         const phoneNumber = E164PhoneNumber.make("+573007770094");
         const event = {
           ...makeKapsoTextEvent("wamid.ambiguous-disclosure", "hola", now),
-          phoneNumber,
+          caller: testWhatsAppCaller(phoneNumber),
         };
         const admission = yield* admitAgentConversationTurn({
-          phoneNumber,
+          caller: event.caller,
           content: { _tag: "Text", text: event.content.text },
           message: event.messageEvidence,
           receivedAt: event.occurredAt,
@@ -1283,7 +1296,9 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
             DateTime.subtract(receivedAt, { minutes: 1 })
           )).status
         ).toBe(200);
-        expect(yield* resolveWhatsAppCaller(phoneNumber)).toEqual(Option.none());
+        expect(yield* resolveWhatsAppCaller(testWhatsAppCaller(phoneNumber))).toEqual(
+          Option.none()
+        );
       })
     );
 
@@ -1304,7 +1319,9 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
             DateTime.add(receivedAt, { seconds: 1 })
           )).status
         ).toBe(200);
-        expect(Option.isSome(yield* resolveWhatsAppCaller(phoneNumber))).toBe(true);
+        expect(Option.isSome(yield* resolveWhatsAppCaller(testWhatsAppCaller(phoneNumber)))).toBe(
+          true
+        );
 
         const replay = yield* original();
         expect(replay.status).toBe(200);
@@ -1322,7 +1339,7 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
       })
     );
 
-    it.effect("rejects first-delivered messages predating consent or the current association", () =>
+    it.effect("does not authorize messages predating consent or the current association", () =>
       Effect.gen(function* () {
         yield* seedDevelopmentIdentity(defaultAgentBearer);
         yield* truncateWhatsAppChannel;
@@ -1337,7 +1354,8 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         expect(yield* preConsent.json).toMatchObject({ enqueued: 0, duplicates: 1 });
 
         yield* associateWhatsAppIdentity(defaultUserId, {
-          phoneNumber: defaultWhatsAppPhone,
+          ...testWhatsAppCaller(defaultWhatsAppPhone),
+          businessScopedUserId: WhatsAppBusinessScopedUserId.make("CO.new573001234567"),
           verifiedAt: now,
         });
         const preAssociation = yield* postSignedTextFixture({
@@ -1347,7 +1365,11 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           occurredAt: DateTime.subtract(now, { minutes: 1 }),
         });
         expect(preAssociation.status).toBe(200);
-        expect(yield* preAssociation.json).toMatchObject({ enqueued: 0, duplicates: 1 });
+        expect(yield* preAssociation.json).toMatchObject({
+          consentTurns: 1,
+          enqueued: 0,
+          duplicates: 0,
+        });
 
         const admin = yield* MigrationSqlClient;
         expect(
@@ -1416,7 +1438,7 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         const altered = yield* fixtureBytes("kapso-text-v2.json");
         altered[altered.length - 2] = altered[altered.length - 2] === 32 ? 33 : 32;
         expect(
-          (yield* post(altered, "2c9e6d0ce2b1d348e540f8e3ed623cd633aa39e09c2b96f1c782008186e0352f"))
+          (yield* post(altered, "6c2d8ade595be0115c9ba1286d8f015c380008cd250ed5bfffd676c4845d4571"))
             .status
         ).toBe(401);
 
@@ -1484,7 +1506,7 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         const eventTime = DateTime.makeUnsafe("2026-04-03T12:00:02.000Z");
         const event = makeKapsoTextEvent("wamid.markdown-bold", "hola", eventTime);
         const admission = yield* admitAgentConversationTurn({
-          phoneNumber: event.phoneNumber,
+          caller: event.caller,
           content: { _tag: "Text", text: event.content.text },
           message: event.messageEvidence,
           receivedAt: event.receivedAt,
@@ -1501,6 +1523,9 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
               WHERE user_id = ${defaultUserId}`
         );
         const sentText = yield* Ref.make(Option.none<TranscriptText>());
+        const destination = yield* Ref.make<
+          Option.Option<{ readonly recipient: WhatsAppBusinessScopedUserId }>
+        >(Option.none());
         yield* sendKapsoFreeForm(
           defaultUserId,
           agentReplyFixture("**Registré** el movimiento."),
@@ -1509,6 +1534,7 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           Effect.provideService(KapsoClient, {
             sendText: (input) =>
               Ref.set(sentText, Option.some(input.text)).pipe(
+                Effect.andThen(Ref.set(destination, Option.some(input.destination))),
                 Effect.as({
                   messageEvidence: {
                     channel: "whatsapp" as const,
@@ -1522,6 +1548,9 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         );
         expect(yield* Ref.get(sentText)).toEqual(
           Option.some(TranscriptText.make("*Registré* el movimiento."))
+        );
+        expect(yield* Ref.get(destination)).toEqual(
+          Option.some({ recipient: event.caller.businessScopedUserId })
         );
       })
     );
@@ -1562,12 +1591,12 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         const eventTime = DateTime.makeUnsafe("2026-04-03T12:00:02.000Z");
         yield* seedConsentedAgentIdentity({ userId, bearer, scopes: ["read", "write"] });
         yield* associateWhatsAppIdentity(userId, {
-          phoneNumber: E164PhoneNumber.make("+573008887766"),
+          ...testWhatsAppCaller(E164PhoneNumber.make("+573008887766")),
           verifiedAt: eventTime,
         });
         const event = {
           ...makeKapsoTextEvent("wamid.revoked-window", "pan 5 mil", eventTime),
-          phoneNumber: E164PhoneNumber.make("+573008887766"),
+          caller: testWhatsAppCaller(E164PhoneNumber.make("+573008887766")),
         };
         yield* enqueueWhatsAppTurn({
           admission: {
@@ -1650,7 +1679,7 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
 
         const [inbound] = yield* recordedEvents(eventTime);
         const admission = yield* admitAgentConversationTurn({
-          phoneNumber: inbound.phoneNumber,
+          caller: inbound.caller,
           content: { _tag: "Text", text: inbound.content.text },
           message: inbound.messageEvidence,
           receivedAt: inbound.receivedAt,
@@ -1669,10 +1698,12 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         });
         const reassociatedPhone = E164PhoneNumber.make("+573009999999");
         yield* associateWhatsAppIdentity(defaultUserId, {
-          phoneNumber: reassociatedPhone,
-          verifiedAt: eventTime,
+          ...testWhatsAppCaller(reassociatedPhone),
+          verifiedAt: DateTime.makeUnsafe("2026-01-01T00:00:00Z"),
         });
-        expect(yield* resolveWhatsAppCaller(reassociatedPhone)).toEqual(Option.some(defaultUserId));
+        expect(yield* resolveWhatsAppCaller(testWhatsAppCaller(reassociatedPhone))).toEqual(
+          Option.some(defaultUserId)
+        );
         expect(
           yield* withUserTransaction(
             defaultUserId,

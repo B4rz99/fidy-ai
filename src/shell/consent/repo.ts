@@ -10,7 +10,12 @@ import {
   PendingConsentExchangeId,
   PolicySnapshot,
 } from "~/core/consent/model";
-import { E164PhoneNumber, UserId } from "~/core/identity/reference";
+import {
+  UserId,
+  WhatsAppBusinessPortfolioId,
+  WhatsAppBusinessScopedUserId,
+  WhatsAppCallerReference,
+} from "~/core/identity/reference";
 import { InsightKind } from "~/core/insights/reference";
 import { AgentTokenId } from "~/core/tokens/reference";
 import { withUserTransaction } from "~/shell/db/user-transaction";
@@ -420,7 +425,8 @@ export const observeConsentRecords = (subjectUserId: UserId) =>
 
 const PendingRow = Schema.Struct({
   id: Schema.toEncoded(PendingConsentExchangeId),
-  phoneNumber: Schema.toEncoded(E164PhoneNumber),
+  businessPortfolioId: Schema.toEncoded(WhatsAppBusinessPortfolioId),
+  businessScopedUserId: Schema.toEncoded(WhatsAppBusinessScopedUserId),
   lifecycle: Schema.Literals(["awaiting-disclosure-delivery", "awaiting-decision"]),
   ...DisclosureRowFields,
   initiatingChannel: ProviderMessageEvidence.fields.channel,
@@ -435,7 +441,8 @@ const PendingRow = Schema.Struct({
 });
 type PendingRow = typeof PendingRow.Type;
 
-const pendingColumns = `id, phone_number AS "phoneNumber", lifecycle,
+const pendingColumns = `id, business_portfolio_id AS "businessPortfolioId",
+  business_scoped_user_id AS "businessScopedUserId", lifecycle,
   service_market AS "serviceMarket", locale, disclosure_revision AS "disclosureRevision",
   disclosure_sha256 AS "disclosureSha256", disclosure_text AS "disclosureText",
   policy_url AS "policyUrl", policy_revision AS "policyRevision",
@@ -455,7 +462,10 @@ const PendingFromRow = PendingRow.pipe(
       decode: (row) => {
         const common = {
           id: row.id,
-          phoneNumber: row.phoneNumber,
+          caller: {
+            businessPortfolioId: row.businessPortfolioId,
+            businessScopedUserId: row.businessScopedUserId,
+          },
           disclosure: disclosureFromRow(row),
           initiatingMessage: {
             channel: row.initiatingChannel,
@@ -491,7 +501,8 @@ const PendingFromRow = PendingRow.pipe(
         const pending = decodePendingExchange(input);
         const common = {
           id: pending.id,
-          phoneNumber: pending.phoneNumber,
+          businessPortfolioId: pending.caller.businessPortfolioId,
+          businessScopedUserId: pending.caller.businessScopedUserId,
           ...disclosureToRow(pending.disclosure),
           initiatingChannel: pending.initiatingMessage.channel,
           initiatingProvider: pending.initiatingMessage.provider,
@@ -522,12 +533,14 @@ const PendingFromRow = PendingRow.pipe(
   )
 );
 
-/** Serializes all gate decisions for one phone within the caller's transaction. */
-export const lockConsentGate = (phoneNumber: E164PhoneNumber) =>
+/** Serializes all gate decisions for one portfolio-scoped BSUID within the caller's transaction. */
+export const lockConsentGate = (caller: WhatsAppCallerReference) =>
   Effect.flatMap(
     SqlClient.SqlClient,
     (sql) => sql`
-      SELECT pg_advisory_xact_lock(hashtextextended(${`consent-gate:${phoneNumber}`}, 0))
+      SELECT pg_advisory_xact_lock(hashtextextended(
+        ${`consent-gate:${caller.businessPortfolioId}:${caller.businessScopedUserId}`}, 0
+      ))
     `
   ).pipe(Effect.asVoid, Effect.orDie);
 
@@ -541,13 +554,15 @@ export const insertPendingConsentExchange = Effect.fn("insertPendingConsentExcha
     Result: PendingFromRow,
     execute: (input) => sql`
       INSERT INTO pending_consent_exchanges (
-        id, phone_number, lifecycle, service_market, locale, disclosure_revision,
+        id, business_portfolio_id, business_scoped_user_id,
+        lifecycle, service_market, locale, disclosure_revision,
         disclosure_sha256, disclosure_text, policy_url, policy_revision, policy_sha256,
         purposes, data_categories, duration, revocation_method, initiating_channel,
         initiating_provider, initiating_provider_message_id, disclosure_channel,
         disclosure_provider, disclosure_provider_message_id, created_at, disclosed_at, expires_at
       ) VALUES (
-        ${input.id}, ${input.phoneNumber}, ${input.lifecycle}, ${input.serviceMarket},
+        ${input.id}, ${input.businessPortfolioId}, ${input.businessScopedUserId},
+        ${input.lifecycle}, ${input.serviceMarket},
         ${input.locale}, ${input.disclosureRevision}, ${input.disclosureSha256},
         ${input.disclosureText}, ${input.policyUrl}, ${input.policyRevision},
         ${input.policySha256}, ${input.purposes}, ${input.dataCategories}, ${input.duration},
@@ -560,17 +575,21 @@ export const insertPendingConsentExchange = Effect.fn("insertPendingConsentExcha
   })(pending).pipe(Effect.orDie);
 });
 
-/** Finds the sole minimal pending exchange for one normalized phone number. */
-export const findPendingConsentExchange = (phoneNumber: E164PhoneNumber) =>
+/** Finds the sole minimal pending exchange for one portfolio-scoped BSUID. */
+export const findPendingConsentExchange = (caller: WhatsAppCallerReference) =>
   Effect.flatMap(SqlClient.SqlClient, (sql) =>
     SqlSchema.findOneOption({
-      Request: E164PhoneNumber,
+      Request: WhatsAppCallerReference,
       Result: PendingFromRow,
-      execute: (phone) => sql`
+      execute: (key) => sql`
         SELECT ${sql.literal(pendingColumns)} FROM pending_consent_exchanges
-        WHERE phone_number = ${phone}
+        WHERE business_portfolio_id = ${key.businessPortfolioId}
+          AND business_scoped_user_id = ${key.businessScopedUserId}
       `,
-    })(phoneNumber)
+    })({
+      businessPortfolioId: caller.businessPortfolioId,
+      businessScopedUserId: caller.businessScopedUserId,
+    })
   ).pipe(Effect.orDie);
 
 const DisclosureDeliveryClaimId = Schema.String.check(Schema.isUUID()).pipe(

@@ -7,6 +7,7 @@ services:
       DATABASE_URL: postgres://fidy_runtime:fidy_runtime@db:5432/fidy
       # NOFLUID Local-development database only; privileged throwaway migration credential
       MIGRATION_DATABASE_URL: postgres://fidy:fidy@db:5432/fidy
+      WHATSAPP_BUSINESS_PORTFOLIO_ID: portfolio-local
     ports:
       - "3000:3000"
     depends_on:

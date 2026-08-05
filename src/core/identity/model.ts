@@ -1,15 +1,28 @@
 import { Schema, Struct } from "effect";
 import { IanaTimeZone, Locale, ServiceMarket } from "~/core/_shared/context";
-import { E164PhoneNumber, UserId } from "./reference";
+import {
+  E164PhoneNumber,
+  UserId,
+  WhatsAppBusinessPortfolioId,
+  WhatsAppBusinessScopedUserId,
+  WhatsAppParentBusinessScopedUserId,
+  WhatsAppUsername,
+} from "./reference";
 
 /**
- * The concrete verified association between a stable User and their current
- * WhatsApp phone number. Provider contact or message identifiers are absent
- * because they are delivery evidence, never identity.
+ * The concrete association between a stable User and one WhatsApp caller, keyed by Business
+ * Portfolio plus BSUID. Phone number, parent BSUID, and username are mutable evidence only.
+ * `verifiedAt` records when an explicit association was established; later observations may
+ * refresh evidence but cannot change that association. Kapso contact and message identifiers
+ * remain delivery evidence only.
  */
 export const WhatsAppIdentity = Schema.Struct({
   userId: UserId,
-  phoneNumber: E164PhoneNumber,
+  businessPortfolioId: WhatsAppBusinessPortfolioId,
+  businessScopedUserId: WhatsAppBusinessScopedUserId,
+  parentBusinessScopedUserId: Schema.Option(WhatsAppParentBusinessScopedUserId),
+  username: Schema.Option(WhatsAppUsername),
+  phoneNumber: Schema.Option(E164PhoneNumber),
   verifiedAt: Schema.DateTimeUtc,
 }).annotate({ identifier: "WhatsAppIdentity" });
 export type WhatsAppIdentity = typeof WhatsAppIdentity.Type;

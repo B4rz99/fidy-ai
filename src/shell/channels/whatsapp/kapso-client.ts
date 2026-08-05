@@ -1,6 +1,5 @@
-import { WhatsAppClient } from "@kapso/whatsapp-cloud-api";
 import { Config, Context, Data, DateTime, Effect, Layer, Redacted, Schema } from "effect";
-import type { E164PhoneNumber } from "~/core/identity/reference";
+import type { WhatsAppBusinessScopedUserId } from "~/core/identity/reference";
 import type { TranscriptText } from "~/core/transcript/model";
 import { makeBoundedBytes } from "./bounded-bytes";
 import {
@@ -21,14 +20,14 @@ export type KapsoSentMessage = Readonly<{
 }>;
 
 /**
- * Sends one validated TranscriptText to an E.164 recipient through a business phone number. The
- * implementation must bound the network wait and returns only decoded evidence; transport,
- * timeout, and invalid-response failures become KapsoSendFailed without remote details.
+ * Sends one validated TranscriptText to a BSUID recipient through a business phone. The caller
+ * must supply the authenticated portfolio-scoped recipient. The send has a bounded wait; transport,
+ * timeout, and invalid-response failures expose no remote or credential details.
  */
 export type KapsoClientService = {
   readonly sendText: (input: {
     readonly businessPhoneNumberId: WhatsAppBusinessPhoneNumberId;
-    readonly to: E164PhoneNumber;
+    readonly destination: { readonly recipient: WhatsAppBusinessScopedUserId };
     readonly text: TranscriptText;
   }) => Effect.Effect<KapsoSentMessage, KapsoSendFailed>;
 };
@@ -79,7 +78,7 @@ const boundKapsoResponse = (response: Response): Promise<Response> => {
 };
 
 const SendResponse = Schema.Struct({
-  messagingProduct: Schema.Literal("whatsapp"),
+  messaging_product: Schema.Literal("whatsapp"),
   messages: Schema.Tuple([Schema.Struct({ id: WhatsAppProviderMessageId })]),
 });
 
@@ -105,19 +104,30 @@ export const makeKapsoClientService = ({
     },
     { preconnect: nativeFetch.preconnect }
   );
-  const client = new WhatsAppClient({
-    baseUrl: "https://api.kapso.ai/meta/whatsapp",
-    kapsoApiKey: apiKey,
-    fetch: boundedFetch,
-  });
   return KapsoClient.of({
     sendText: Effect.fn("Kapso.sendText")(function* (input) {
+      const body = yield* Schema.encodeEffect(Schema.UnknownFromJsonString)({
+        messaging_product: "whatsapp",
+        recipient_type: "individual",
+        recipient: input.destination.recipient,
+        type: "text",
+        text: { body: input.text },
+      }).pipe(Effect.orDie);
       const response = yield* Effect.tryPromise({
         try: () =>
-          client.messages.sendText({
-            phoneNumberId: input.businessPhoneNumberId,
-            to: input.to.slice(1),
-            body: input.text,
+          boundedFetch(
+            `https://api.kapso.ai/meta/whatsapp/v24.0/${input.businessPhoneNumberId}/messages`,
+            {
+              method: "POST",
+              headers: {
+                "content-type": "application/json",
+                "x-api-key": apiKey,
+              },
+              body,
+            }
+          ).then((result) => {
+            if (!result.ok) throw new KapsoInvalidResponse();
+            return result.json();
           }),
         catch: (error) =>
           new KapsoSendFailed({

@@ -1,5 +1,10 @@
 import { expect, it } from "@effect/vitest";
-import { Result, Schema } from "effect";
+import { Option, Result, Schema } from "effect";
+import {
+  E164PhoneNumber,
+  WhatsAppBusinessPortfolioId,
+  WhatsAppBusinessScopedUserId,
+} from "~/core/identity/reference";
 import { ConsentRecord, DisclosureSnapshot, PendingConsentExchange } from "./model";
 
 const makeDisclosure = (overrides: Readonly<Record<string, unknown>> = {}) => ({
@@ -79,7 +84,13 @@ it("requires outbound evidence only after disclosure delivery", () => {
   const awaitingDelivery = {
     _tag: "AwaitingDisclosureDelivery",
     id: "f1d1a000-0000-4000-8000-000000000811",
-    phoneNumber: "+573001112233",
+    caller: {
+      businessPortfolioId: WhatsAppBusinessPortfolioId.make("portfolio-test"),
+      businessScopedUserId: WhatsAppBusinessScopedUserId.make("CO.573001112233"),
+      parentBusinessScopedUserId: Option.none(),
+      username: Option.none(),
+      phoneNumber: Option.some(E164PhoneNumber.make("+573001112233")),
+    },
     disclosure: makeDisclosure(),
     initiatingMessage: makeEvidence("wamid.initiating-811"),
     createdAt: "2026-08-01T12:00:00Z",

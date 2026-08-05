@@ -1,0 +1,98 @@
+src/shell/testing/whatsapp-caller.ts
+  s_bd62cbb20ea6f0::t_19b5f1cf394901 2,7
+README.md
+  s_bd62cbb20ea6f0::t_92fd679ddb77ed 83-84,88-89
+src/shell/consent/consent-gate.test.ts
+  s_bd62cbb20ea6f0::t_067f38b760b2d3 10-11
+src/core/identity/reference.ts
+  s_bd62cbb20ea6f0::t_b9608d953a10ee 74
+src/shell/agent/agent-service.test.ts
+  s_bd62cbb20ea6f0::t_44ff368d31110a 33-36,771,815,851,942
+  s_bd62cbb20ea6f0::t_2f6bbb476ad17a 5
+src/shell/db/row-level-security.test.ts
+  s_bd62cbb20ea6f0::t_99fb6b6bb8b950 185-193
+  s_bd62cbb20ea6f0::t_c8fdf932de6af8 287,581-583
+  s_bd62cbb20ea6f0::t_6d21816a0c73e7 578
+  s_bd62cbb20ea6f0::t_7adecf73f1e36f 184
+src/shell/testing/kapso-identity-change.ts
+  s_bd62cbb20ea6f0::t_06d50e6e422b46 1-6,9-21,23-42,44-57
+  s_bd62cbb20ea6f0::t_2f1dec6b7a8f80 7-8,22,43
+scripts/agent-repl.ts
+  s_bd62cbb20ea6f0::t_00626905fe31b2 3,14-16,21
+src/shell/channels/whatsapp/model.ts
+  s_bd62cbb20ea6f0::t_f947f8bf21c194 80
+  s_bd62cbb20ea6f0::t_14ae025002d551 1,81-82,86
+  s_bd62cbb20ea6f0::t_b6c8165d743796 4-9,49-60,84
+src/shell/consent/consent-gate.ts
+  s_bd62cbb20ea6f0::t_b28de04fcbfeee 20-25,110,148,153,242-245
+  s_bd62cbb20ea6f0::t_4b78ab814bdbe9 17-18
+src/shell/db/migrations/0014-whatsapp-bsuid-identity.ts
+  s_bd62cbb20ea6f0::t_41cc61fe36872f 137-141,144-149
+  s_bd62cbb20ea6f0::t_ac23b7a0974284 200-208
+  s_bd62cbb20ea6f0::t_861bc2d3656fcd 72-93,115-125,127-136,142,150-190,192-199,209-217,219-235
+  s_bd62cbb20ea6f0::t_0ad508b2767aac 126,143,191,218
+src/shell/identity/repo.ts
+  s_bd62cbb20ea6f0::t_187708bd2ad605 270
+  s_bd62cbb20ea6f0::t_689c8cda3f4cff 322
+  s_bd62cbb20ea6f0::t_abe71aba6e6b8d 255
+  s_bd62cbb20ea6f0::t_6e01e92f86709e 256,325
+  s_bd62cbb20ea6f0::t_0c1f7c9f07ff94 287,289,299-300
+  s_bd62cbb20ea6f0::t_f947f8bf21c194 30
+  s_bd62cbb20ea6f0::t_c94bff348ab690 3,40-49,274-277,281-282,284-286,288,290-298,301-311
+  s_bd62cbb20ea6f0::t_24ff75f6090b6d 327,331
+src/shell/identity/whatsapp-identity.test.ts
+  s_bd62cbb20ea6f0::t_02bf23326c2d79 120
+  s_bd62cbb20ea6f0::t_c66bd4a64fd235 129
+  s_bd62cbb20ea6f0::t_b18dfa73b89794 4,56-57,71-78,116-118,128,130-131
+  s_bd62cbb20ea6f0::t_ae9b77a149c8f8 17,23-31,67,88-91,140-141,169-178,180-181,203-204,206-207,213-218
+  s_bd62cbb20ea6f0::t_9d9e16c9e149f5 205
+  s_bd62cbb20ea6f0::t_323b1b7ac8a0a1 162-163,198-202,208-212,219-235
+  s_bd62cbb20ea6f0::t_04749affd8c8b2 164-168,179,182-197
+  s_bd62cbb20ea6f0::t_96a63881f7286c 2,19,134-139,142-161
+docs/adr/0011-bsuid-authority-for-whatsapp-identity.md
+  s_bd62cbb20ea6f0::t_ba3a2068659697 5,46-48
+  s_bd62cbb20ea6f0::t_4204d39ed8f5fc 27-33
+src/shell/db/user-tables.ts
+  s_bd62cbb20ea6f0::t_de5d5f63b68bf8 17
+src/shell/channels/whatsapp/routes.ts
+  s_bd62cbb20ea6f0::t_48f7de9d073224 138-148
+  s_bd62cbb20ea6f0::t_15f66796891ef6 137,150-151
+src/shell/channels/whatsapp/repo.ts
+  s_bd62cbb20ea6f0::t_0e1083f15293c5 3,5
+src/shell/channels/whatsapp/kapso-webhook.ts
+  s_bd62cbb20ea6f0::t_9094d742aea689 273-277
+  s_bd62cbb20ea6f0::t_5b7ad5b3ce26a4 2,58-61
+  s_bd62cbb20ea6f0::t_f1104b21cfbacf 334-335
+  s_bd62cbb20ea6f0::t_3a4a794362498d 290-295
+  s_bd62cbb20ea6f0::t_35f6dfbcd7a70a 258
+  s_bd62cbb20ea6f0::t_6a300205e52752 137,148-150,176,178-180,259,261,264
+src/shell/channels/whatsapp/kapso-webhook.test.ts
+  s_bd62cbb20ea6f0::t_b7ac573ee18302 3,7,22,42,49-51
+.env.example
+  s_bd62cbb20ea6f0::t_a4efe49cca4bf1 18
+docs/adr/0007-postgresql-row-level-user-isolation.md
+  s_bd62cbb20ea6f0::t_35f6dfbcd7a70a 53-54,56-58
+  s_bd62cbb20ea6f0::t_1e2d7ed140d76f 55,69-70
+src/core/identity/model.ts
+  s_bd62cbb20ea6f0::t_62e603bc2830ac 3-10,21-25
+src/shell/channels/whatsapp/kapso-client.ts
+  s_bd62cbb20ea6f0::t_bd7871d6bf8f55 24-25
+src/shell/agent/repl.ts
+  s_bd62cbb20ea6f0::t_ff4955df935c27 5,18-22,74-77,79,100,103
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "bcf4bdd60e710d0228602cf9498d9a67548d405f",
+  "prompts": {},
+  "sessions": {
+    "s_bd62cbb20ea6f0": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019fcec9-654f-738f-b644-1504a389768a",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

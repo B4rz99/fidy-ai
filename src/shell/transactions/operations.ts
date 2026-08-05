@@ -35,7 +35,7 @@ const TransactionQueryParameters = Schema.Struct({
   from: Schema.optionalKey(TransactionQueryValues.fields.from),
   to: Schema.optionalKey(TransactionQueryValues.fields.to),
   categoryId: Schema.optionalKey(TransactionQueryValues.fields.categoryId),
-  merchant: Schema.optionalKey(TransactionQueryValues.fields.merchant),
+  counterparty: Schema.optionalKey(TransactionQueryValues.fields.counterparty),
   direction: Schema.optionalKey(TransactionQueryValues.fields.direction),
   currency: Schema.optionalKey(TransactionQueryValues.fields.currency),
 });
@@ -56,7 +56,7 @@ export const TransactionsGroup = HttpApiGroup.make("transactions")
     })
       .annotate(
         OpenApi.Description,
-        "Record one exact movement of Money for the caller. Supply a stable Category id when known; omit it only at capture so a user keyword rule or the categorization fallback can assign it before storage. The result includes the stored Category."
+        "Record one exact movement of Money for the caller. Include a Counterparty only when the captured material explicitly identifies the person or organization; omit it rather than inferring one from an item, purpose, or context. Supply a stable Category id when known; omit it only at capture so a user keyword rule or the categorization fallback can assign it before storage. The result includes the stored Category."
       )
       .annotateMerge(additiveWrite)
   )
@@ -68,7 +68,7 @@ export const TransactionsGroup = HttpApiGroup.make("transactions")
     })
       .annotate(
         OpenApi.Description,
-        "List the caller's visible Transactions, newest occurrence first. Any combination of from (inclusive), to (exclusive), Category id, merchant text, direction, and Currency narrows the history; omit every filter for all visible history."
+        "List the caller's visible Transactions, newest occurrence first. Any combination of from (inclusive), to (exclusive), Category id, counterparty text, direction, and Currency narrows the history; omit every filter for all visible history."
       )
       .annotateMerge(read)
   )
@@ -93,7 +93,7 @@ export const TransactionsGroup = HttpApiGroup.make("transactions")
     })
       .annotate(
         OpenApi.Description,
-        "Replace the editable facts of one visible Transaction, including Category and notes. Send the complete corrected movement; omitting notes clears them. Existing SourceAttestations remain unchanged."
+        "Replace the editable facts of one visible Transaction, including Category, Counterparty, and notes. Send the complete corrected movement; omitting Counterparty or notes clears that fact. Existing SourceAttestations remain unchanged."
       )
       .annotateMerge(destructiveWrite)
   )

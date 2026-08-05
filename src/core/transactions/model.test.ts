@@ -21,7 +21,7 @@ const decodeExtraction = Schema.decodeUnknownResult(TransactionExtraction);
 const apiTransaction = (overrides: Readonly<Record<string, unknown>> = {}) => ({
   id: "f1d1a000-0000-4000-8000-0000000000aa",
   money: { amount: "25000", currency: "COP" },
-  merchant: "El Corral",
+  counterparty: "El Corral",
   direction: "outflow",
   categoryId: "10000000-0000-4000-8000-000000000001",
   occurredAt: "2026-07-20T12:30:00Z",
@@ -40,6 +40,12 @@ it("rejects a third kind of movement, which is a domain decision and not a spell
 
 it("accepts a positive Transaction with nested Money and both instants", () => {
   expect(Result.isSuccess(decodeTransaction(apiTransaction()))).toBe(true);
+});
+
+it("accepts a Transaction whose captured material identifies no Counterparty", () => {
+  const { counterparty: _, ...withoutCounterparty } = apiTransaction();
+
+  expect(Result.isSuccess(decodeTransaction(withoutCounterparty))).toBe(true);
 });
 
 it("accepts Transaction Money in a Currency independent of the Colombia ServiceMarket", () => {
@@ -76,7 +82,7 @@ it("derives extraction facts with nested exact Money", () => {
     Result.isSuccess(
       decodeExtraction({
         money: { amount: "450000000000.75", currency: "USD" },
-        merchant: "Proveedor",
+        counterparty: "Proveedor",
         direction: "outflow",
         occurredAt: "2026-07-20T12:30:00Z",
       })
@@ -96,7 +102,7 @@ it("derives input and evidence fields from their canonical models", () => {
   expect(Object.keys(UpdateTransactionInput.fields)).toEqual(editableFields);
   expect(Object.keys(TransactionExtraction.fields)).toEqual([
     "money",
-    "merchant",
+    "counterparty",
     "direction",
     "occurredAt",
   ]);

@@ -254,7 +254,7 @@ const probes: Record<OperationId, IsolationProbe> = {
   "transactions.createTransaction": (attempt) =>
     Effect.gen(function* () {
       yield* attempt.strangerClient.transactions.createTransaction({
-        payload: transactionPayload({ merchant: "Rappi" }),
+        payload: transactionPayload({ counterparty: "Rappi" }),
       });
 
       // The owner is context, not a field, so the payload has no `userId` for
@@ -264,7 +264,7 @@ const probes: Record<OperationId, IsolationProbe> = {
         headers: headersFor(strangerBearer),
         body: HttpBody.jsonUnsafe({
           money: { amount: "8000", currency: "COP" },
-          merchant: "Tostao",
+          counterparty: "Tostao",
           direction: "outflow",
           occurredAt: "2026-07-21T09:00:00Z",
           userId: owner,

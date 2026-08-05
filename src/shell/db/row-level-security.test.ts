@@ -61,7 +61,7 @@ const seedRows = Effect.gen(function* () {
   yield* admin`DELETE FROM transactions WHERE id = ${ownerTransactionId}`;
   yield* admin`
     INSERT INTO transactions (
-      id, user_id, amount, currency, merchant, direction, occurred_at, category_id
+      id, user_id, amount, currency, counterparty, direction, occurred_at, category_id
     ) VALUES (
       ${ownerTransactionId}, ${owner}, 25000, 'COP', 'Registro privado', 'outflow',
       '2026-07-20T12:30:00Z', '10000000-0000-4000-8000-000000000016'
@@ -114,7 +114,7 @@ const seedEveryPolicyShape = Effect.gen(function* () {
   `;
   yield* admin`
     INSERT INTO transactions (
-      id, user_id, amount, currency, merchant, direction, occurred_at, category_id
+      id, user_id, amount, currency, counterparty, direction, occurred_at, category_id
     ) VALUES (
       ${policyTransactionId}, ${policyOwner}, 1, 'COP', 'policy probe', 'outflow',
       '2026-01-01T00:00:00Z', '10000000-0000-4000-8000-000000000016'
@@ -253,7 +253,7 @@ const policyProbes: ReadonlyArray<PolicyProbe> = [
   },
   {
     tableName: "transactions",
-    stableColumn: "merchant",
+    stableColumn: "counterparty",
     ownerPredicate: `id = '${policyTransactionId}'`,
   },
   {
@@ -392,7 +392,7 @@ const deniedInsertProbes = (sql: SqlClient.SqlClient) =>
       tableName: "transactions",
       insert: sql`
       INSERT INTO transactions (
-        id, user_id, amount, currency, merchant, direction, occurred_at, category_id
+        id, user_id, amount, currency, counterparty, direction, occurred_at, category_id
       ) VALUES (
         'f1d1a000-0000-4000-8000-0000000003d4', ${policyOwner}, 1, 'COP',
         'denied insert', 'outflow', '2026-01-02T00:00:00Z',
@@ -625,13 +625,13 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           []
         );
         expect(
-          yield* sql`UPDATE transactions SET merchant = 'sin contexto' WHERE id = ${ownerTransactionId}`
+          yield* sql`UPDATE transactions SET counterparty = 'sin contexto' WHERE id = ${ownerTransactionId}`
         ).toEqual([]);
         expect(yield* sql`DELETE FROM transactions WHERE id = ${ownerTransactionId}`).toEqual([]);
 
         const missingInsert = yield* Effect.exit(sql`
           INSERT INTO transactions (
-            user_id, amount, currency, merchant, direction, occurred_at, category_id
+            user_id, amount, currency, counterparty, direction, occurred_at, category_id
           ) VALUES (
             ${owner}, 1, 'COP', 'sin contexto', 'outflow', now(),
             '10000000-0000-4000-8000-000000000016'
@@ -645,7 +645,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         );
         const wrongUpdate = yield* withUserTransaction(
           stranger,
-          sql`UPDATE transactions SET merchant = 'intruso' WHERE id = ${ownerTransactionId}`
+          sql`UPDATE transactions SET counterparty = 'intruso' WHERE id = ${ownerTransactionId}`
         );
         const wrongDelete = yield* withUserTransaction(
           stranger,
@@ -656,7 +656,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
             stranger,
             sql`
               INSERT INTO transactions (
-                user_id, amount, currency, merchant, direction, occurred_at, category_id
+                user_id, amount, currency, counterparty, direction, occurred_at, category_id
               ) VALUES (
                 ${owner}, 1, 'COP', 'intruso', 'outflow', now(),
                 '10000000-0000-4000-8000-000000000016'
@@ -672,9 +672,9 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         expect(
           yield* withUserTransaction(
             owner,
-            sql`SELECT merchant FROM transactions WHERE id = ${ownerTransactionId}`
+            sql`SELECT counterparty FROM transactions WHERE id = ${ownerTransactionId}`
           )
-        ).toEqual([{ merchant: "Registro privado" }]);
+        ).toEqual([{ counterparty: "Registro privado" }]);
       })
     );
 

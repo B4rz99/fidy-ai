@@ -78,7 +78,7 @@ const FieldIssue = Schema.Struct({
     Schema.NonEmptyString.annotate({
       description:
         "Dotted path to the value at fault inside what you sent — `amount`, or " +
-        "`items.0.merchant`. Present when the failure could be pinned to one value; absent " +
+        "`items.0.counterparty`. Present when the failure could be pinned to one value; absent " +
         "when it could not, and then `message` is about the request as a whole.",
     })
   ),

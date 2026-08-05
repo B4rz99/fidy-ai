@@ -9,7 +9,7 @@ import { Currency, Money } from "~/core/_shared/money";
  * existed at the moment it was handed out.
  *
  * A surrogate UUID rather than anything derived from the movement: two genuine
- * purchases can share merchant, amount and instant, and whether a second
+ * purchases can share Counterparty, amount and instant, and whether a second
  * capture of the same movement is a duplicate is reconciliation's decision to
  * make (CONTEXT.md) — not one an id can make by colliding.
  */
@@ -48,6 +48,10 @@ export const Direction = Schema.Literals(["inflow", "outflow"]).annotate({
 });
 export type Direction = typeof Direction.Type;
 
+/** A user-recognizable person or organization explicitly identified on the other side. */
+export const Counterparty = Schema.NonEmptyString.check(Schema.isTrimmed());
+export type Counterparty = typeof Counterparty.Type;
+
 /** A UTC instant encoded as a validated ISO date-time string. */
 export const UtcTimestamp = Schema.String.annotate({ format: "date-time" }).pipe(
   Schema.decodeTo(Schema.DateTimeUtc, SchemaTransformation.dateTimeUtcFromString)
@@ -68,12 +72,14 @@ export const UtcTimestamp = Schema.String.annotate({ format: "date-time" }).pipe
 export const Transaction = Schema.Struct({
   id: TransactionId,
   money: Money,
-  merchant: Schema.NonEmptyString.check(Schema.isTrimmed()).annotate({
-    description:
-      "Who the money went to, or came from when the direction is inflow, as the user names " +
-      'them — "El Corral", "Claro", "Nómina". Free text the user would recognise, not a ' +
-      "normalised identifier, so one shop may be spelled several ways across a history.",
-  }),
+  counterparty: Schema.OptionFromOptionalKey(
+    Counterparty.annotate({
+      description:
+        "The person or organization on the other side when the captured material explicitly " +
+        'identifies one — "El Corral", "Claro", "Acme S.A.". Omit this field rather than ' +
+        "inferring a business, using a purchased item or purpose, or sending a placeholder.",
+    })
+  ),
   direction: Direction,
   categoryId: CategoryId,
   notes: Schema.OptionFromOptionalKey(
@@ -121,7 +127,7 @@ export const CreateTransactionInput = Transaction.mapFields(
   .annotate({ identifier: "CreateTransactionInput" });
 export type CreateTransactionInput = typeof CreateTransactionInput.Type;
 
-/** A complete replacement of editable facts; omission of notes explicitly clears them. */
+/** A complete replacement of editable facts; omitting Counterparty or notes clears that fact. */
 export const UpdateTransactionInput = Transaction.mapFields(Struct.omit(["id", "createdAt"]))
   .check(positiveTransactionMoney)
   .annotate({ identifier: "UpdateTransactionInput" });
@@ -129,13 +135,13 @@ export type UpdateTransactionInput = typeof UpdateTransactionInput.Type;
 
 /** Facts an extractor may propose, derived from the canonical model and nested Money. */
 export const TransactionExtraction = Transaction.mapFields(
-  Struct.pick(["money", "merchant", "direction", "occurredAt"])
+  Struct.pick(["money", "counterparty", "direction", "occurredAt"])
 )
   .check(positiveTransactionMoney)
   .annotate({ identifier: "TransactionExtraction" });
 export type TransactionExtraction = typeof TransactionExtraction.Type;
 
-const MerchantFilter = Schema.NonEmptyString.check(Schema.isTrimmed()).check(
+const CounterpartyFilter = Schema.NonEmptyString.check(Schema.isTrimmed()).check(
   Schema.isMaxLength(120)
 );
 
@@ -144,7 +150,7 @@ export const TransactionQueryValues = Schema.Struct({
   from: UtcTimestamp,
   to: UtcTimestamp,
   categoryId: CategoryId,
-  merchant: MerchantFilter,
+  counterparty: CounterpartyFilter,
   direction: Direction,
   currency: Currency,
 });
@@ -157,7 +163,7 @@ export const TransactionQuery = Schema.Struct({
   from: Schema.Option(TransactionQueryValues.fields.from),
   to: Schema.Option(TransactionQueryValues.fields.to),
   categoryId: Schema.Option(TransactionQueryValues.fields.categoryId),
-  merchant: Schema.Option(TransactionQueryValues.fields.merchant),
+  counterparty: Schema.Option(TransactionQueryValues.fields.counterparty),
   direction: Schema.Option(TransactionQueryValues.fields.direction),
   currency: Schema.Option(TransactionQueryValues.fields.currency),
 }).annotate({ identifier: "TransactionQuery" });

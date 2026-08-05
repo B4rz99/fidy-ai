@@ -58,7 +58,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           headers: headersFor(defaultAgentBearer),
           body: HttpBody.jsonUnsafe({
             money: { amount: "25000.50", currency: "COP" },
-            merchant: "El Corral",
+            counterparty: "El Corral",
             direction: "outflow",
             occurredAt: "2026-07-20T12:30:00Z",
           }),
@@ -102,7 +102,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           headers: headersFor(defaultAgentBearer),
           body: HttpBody.jsonUnsafe({
             money: { amount: "-5", currency: "COP" },
-            merchant: "El Corral",
+            counterparty: "El Corral",
             direction: "outflow",
             occurredAt: "2026-07-20T12:30:00Z",
           }),
@@ -127,7 +127,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
               headers: headersFor(defaultAgentBearer),
               body: HttpBody.jsonUnsafe({
                 money: { amount, currency: "COP" },
-                merchant: "El Corral",
+                counterparty: "El Corral",
                 direction: "outflow",
                 occurredAt: "2026-07-20T12:30:00Z",
               }),
@@ -170,7 +170,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
 
         const validPayload = {
           money: { amount: "25000", currency: "COP" },
-          merchant: "El Corral",
+          counterparty: "El Corral",
           direction: "outflow",
           occurredAt: "2026-07-20T12:30:00Z",
         };
@@ -202,7 +202,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
 
           expect(failure.error.fields.map((field) => field.path)).toEqual(["money.currency"]);
           expect(messages).toContain(correction);
-          expect(messages).not.toContain('"merchant":"El Corral"');
+          expect(messages).not.toContain('"counterparty":"El Corral"');
         }
       })
     );
@@ -215,7 +215,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           headers: headersFor(defaultAgentBearer),
           body: HttpBody.jsonUnsafe({
             money: { amount: "-5", currency: "ZZZ" },
-            merchant: "",
+            counterparty: "",
             direction: "sideways",
             occurredAt: "2026-07-20T12:30:00Z",
           }),
@@ -225,7 +225,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         expect(failure.error.fields.map((field) => field.path)).toEqual([
           "money.amount",
           "money.currency",
-          "merchant",
+          "counterparty",
           "direction",
         ]);
       })
@@ -243,7 +243,6 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
 
         expect(failure.error.fields.map((field) => field.path)).toEqual([
           "money.amount",
-          "merchant",
           "direction",
           "occurredAt",
         ]);
@@ -304,7 +303,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           body: HttpBody.jsonUnsafe({
             amount: 25000,
             currency: "COP",
-            merchant: "Constructora Bolívar",
+            counterparty: "Constructora Bolívar",
             direction: "outflow",
             occurredAt: "2026-07-22T15:00:00Z",
           }),
@@ -325,7 +324,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           headers: headersFor(defaultAgentBearer),
           body: HttpBody.jsonUnsafe({
             money: { amount: "25000", currency: "COP" },
-            merchant: "El Corral",
+            counterparty: "El Corral",
             direction: "outflow",
             occurredAt: "not-a-date",
           }),

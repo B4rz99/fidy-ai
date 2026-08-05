@@ -7,6 +7,7 @@ import { normalizeCategoryKeyword } from "~/core/categories/rules";
 import { withUserTransaction } from "~/shell/db/user-transaction";
 import {
   type CapturedInterpretationContext,
+  Counterparty,
   InterpretationRevision,
   SourceAttestation,
   Transaction,
@@ -18,7 +19,7 @@ import {
 const TransactionFlatRow = Schema.Struct({
   id: Schema.toEncoded(Transaction.fields.id),
   ...Money.fields,
-  merchant: Transaction.fields.merchant,
+  counterparty: Schema.OptionFromNullOr(Counterparty),
   direction: Transaction.fields.direction,
   categoryId: Schema.toEncoded(CategoryId),
   notes: Schema.OptionFromNullOr(Schema.String),
@@ -27,15 +28,27 @@ const TransactionFlatRow = Schema.Struct({
 });
 
 const decodeTransaction = Schema.decodeUnknownEffect(Transaction);
+const counterpartyFact = (counterparty: Option.Option<Counterparty>) =>
+  Option.match(counterparty, {
+    onNone: () => ({}),
+    onSome: (value) => ({ counterparty: value }),
+  });
+const notesFact = (notes: Option.Option<string>) =>
+  Option.match(notes, {
+    onNone: () => ({}),
+    onSome: (value) => ({ notes: value }),
+  });
 const transactionFromRow = ({
   amount,
+  counterparty,
   currency,
   notes,
   ...transaction
 }: typeof TransactionFlatRow.Type) =>
   decodeTransaction({
     ...transaction,
-    ...(Option.isNone(notes) ? {} : { notes: notes.value }),
+    ...counterpartyFact(counterparty),
+    ...notesFact(notes),
     occurredAt: DateTime.formatIso(transaction.occurredAt),
     createdAt: DateTime.formatIso(transaction.createdAt),
     money: { amount: encodeMoneyAmount(amount), currency },
@@ -44,7 +57,7 @@ const transactionFromRow = ({
 const TransactionWriteRow = Schema.Struct({
   userId: UserId,
   ...Money.fields,
-  merchant: Transaction.fields.merchant,
+  counterparty: Schema.OptionFromNullOr(Counterparty),
   direction: Transaction.fields.direction,
   categoryId: CategoryId,
   notes: Schema.OptionFromNullOr(Schema.String),
@@ -52,13 +65,17 @@ const TransactionWriteRow = Schema.Struct({
 });
 
 const TransactionLookup = Schema.Struct({ id: TransactionId, userId: UserId });
-const transactionColumns = `id, amount, currency, merchant, direction,
+const containsCounterparty = (counterparty: Option.Option<string>, normalized: string): boolean =>
+  Option.exists(counterparty, (candidate) =>
+    normalizeCategoryKeyword(candidate).includes(normalized)
+  );
+const transactionColumns = `id, amount, currency, counterparty, direction,
   category_id AS "categoryId", notes, occurred_at AS "occurredAt", created_at AS "createdAt"`;
 
 const writeRow = (userId: UserId, input: UpdateTransactionInput) => ({
   userId,
   ...input.money,
-  merchant: input.merchant,
+  counterparty: input.counterparty,
   direction: input.direction,
   categoryId: input.categoryId,
   notes: input.notes,
@@ -78,9 +95,9 @@ export const insertTransaction = Effect.fn("insertTransaction")(function* (
         Result: TransactionFlatRow,
         execute: (row) => sql`
           INSERT INTO transactions
-            (user_id, amount, currency, merchant, direction, category_id, notes, occurred_at)
+            (user_id, amount, currency, counterparty, direction, category_id, notes, occurred_at)
           VALUES
-            (${row.userId}, ${row.amount}, ${row.currency}, ${row.merchant}, ${row.direction},
+            (${row.userId}, ${row.amount}, ${row.currency}, ${row.counterparty}, ${row.direction},
              ${row.categoryId}, ${row.notes}, ${row.occurredAt})
           RETURNING ${sql.literal(transactionColumns)}
         `,
@@ -150,12 +167,12 @@ export const listTransactions = Effect.fn("listTransactions")(function* (
     }).pipe(
       Effect.flatMap((rows) => Effect.forEach(rows, transactionFromRow)),
       Effect.map((transactions) =>
-        Option.match(query.merchant, {
+        Option.match(query.counterparty, {
           onNone: () => transactions,
-          onSome: (merchant) => {
-            const normalized = normalizeCategoryKeyword(merchant);
+          onSome: (counterparty) => {
+            const normalized = normalizeCategoryKeyword(counterparty);
             return transactions.filter((transaction) =>
-              normalizeCategoryKeyword(transaction.merchant).includes(normalized)
+              containsCounterparty(transaction.counterparty, normalized)
             );
           },
         })
@@ -179,7 +196,7 @@ export const updateTransaction = Effect.fn("updateTransaction")(function* (
         Result: TransactionFlatRow,
         execute: (row) => sql`
           UPDATE transactions SET
-            amount = ${row.amount}, currency = ${row.currency}, merchant = ${row.merchant},
+            amount = ${row.amount}, currency = ${row.currency}, counterparty = ${row.counterparty},
             direction = ${row.direction}, category_id = ${row.categoryId}, notes = ${row.notes},
             occurred_at = ${row.occurredAt}
           WHERE id = ${row.transactionId} AND user_id = ${row.userId} AND deleted_at IS NULL

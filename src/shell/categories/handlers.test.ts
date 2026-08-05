@@ -127,7 +127,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           },
         });
         const first = yield* client.transactions.createTransaction({
-          payload: transactionPayload({ merchant: "RÁPPI", categoryId: Option.none() }),
+          payload: transactionPayload({ counterparty: "RÁPPI", categoryId: Option.none() }),
         });
 
         expect(first.data.categoryId).toBe(categoryIds.mercado);
@@ -141,14 +141,14 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           },
         });
         const second = yield* client.transactions.createTransaction({
-          payload: transactionPayload({ merchant: "Rappi", categoryId: Option.none() }),
+          payload: transactionPayload({ counterparty: "Rappi", categoryId: Option.none() }),
         });
         expect(first.data.categoryId).toBe(categoryIds.mercado);
         expect(second.data.categoryId).toBe(categoryIds.transporte);
 
         yield* client.categories.deleteKeywordRule({ params: { id: createdRule.data.id } });
         const third = yield* client.transactions.createTransaction({
-          payload: transactionPayload({ merchant: "Rappi", categoryId: Option.none() }),
+          payload: transactionPayload({ counterparty: "Rappi", categoryId: Option.none() }),
         });
         expect(third.data.categoryId).toBe(categoryIds.otros);
       })

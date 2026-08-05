@@ -36,10 +36,16 @@ time zone, channel, and identity.
 _Avoid_: Country (when product enablement is meant), region, country settings.
 
 **Transaction**:
-One movement of Money, with a direction, merchant, and Category. It contains normalized financial
-facts; where those facts came from and the context used to interpret them belong to its
+One movement of Money, with a direction, optional Counterparty, and Category. It contains normalized
+financial facts; where those facts came from and the context used to interpret them belong to its
 SourceAttestations.
 _Avoid_: Expense, payment, purchase, movimiento.
+
+**Counterparty**:
+The person or organization on the other side of a Transaction, when the captured material identifies
+one. Its absence means the Counterparty was not known at capture; a purpose or purchased item is not
+a substitute.
+_Avoid_: Merchant, comercio, vendor, inferred business name, "Sin especificar".
 
 **SourceAttestation**:
 An immutable record of where a Transaction was learned from — a notification email, a statement
@@ -63,7 +69,7 @@ The direct launch taxonomy is flat: Restaurantes, Domicilios, Mercado, Transport
 Servicios, Salud, Educación, Compras, Entretenimiento, Viajes, Impuestos, Transferencias, Retiros
 de efectivo, Ingresos, and Otros. These Spanish labels and their presentation order are attributes
 of stable opaque CategoryIds, never identity. A P2P or own-account movement is Transferencias; a
-purchase paid through Nequi, Daviplata, or another app uses the underlying merchant or purpose
+purchase paid through Nequi, Daviplata, or another app uses the underlying Counterparty or purpose
 instead of the payment app. Keyword rules affect future capture only; changing existing history is
 an explicit Transaction correction.
 _Avoid_: Tag, label, bucket.

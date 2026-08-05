@@ -48,7 +48,7 @@ export const CategoriesGroup = HttpApiGroup.make("categories")
     })
       .annotate(
         OpenApi.Description,
-        "List the caller's merchant keyword instructions. These rules categorize future capture before the model fallback and never rewrite existing Transactions."
+        "List the caller's counterparty keyword instructions. These rules categorize future capture before the model fallback and never rewrite existing Transactions."
       )
       .annotateMerge(read)
   )
@@ -60,7 +60,7 @@ export const CategoriesGroup = HttpApiGroup.make("categories")
     })
       .annotate(
         OpenApi.Description,
-        "Teach future capture that a merchant containing this case- and accent-insensitive keyword belongs to one stable Category. More specific longer matching keywords win."
+        "Teach future capture that a counterparty containing this case- and accent-insensitive keyword belongs to one stable Category. More specific longer matching keywords win."
       )
       .annotateMerge(additiveWrite)
   )

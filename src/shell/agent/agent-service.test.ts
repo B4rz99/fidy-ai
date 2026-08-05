@@ -79,14 +79,14 @@ const createTransactionToolCall = ({
   occurredAt,
   amount = "25000",
   currency = "COP",
-  merchant = "Almuerzo",
+  counterparty = "Almuerzo",
   categoryId = categoryIds.restaurantes,
 }: {
   readonly id: string;
   readonly occurredAt: string | undefined;
   readonly amount?: string;
   readonly currency?: string;
-  readonly merchant?: string;
+  readonly counterparty?: string | null;
   readonly categoryId?: string;
 }) => ({
   type: "tool-call" as const,
@@ -95,7 +95,7 @@ const createTransactionToolCall = ({
   params: {
     payload: {
       money: { amount, currency },
-      merchant,
+      ...(counterparty === null ? {} : { counterparty }),
       direction: "outflow",
       categoryId,
       occurredAt,
@@ -121,7 +121,7 @@ const ScriptedLanguageModel = Layer.effect(
           createTransactionToolCall({
             id: "user-isolation-quick-log",
             amount: "25",
-            merchant: "AislamientoB",
+            counterparty: "AislamientoB",
             occurredAt,
           }),
         ]);
@@ -145,6 +145,17 @@ const ScriptedLanguageModel = Layer.effect(
             name: "categories__listCategories",
             params: {},
           },
+        ]);
+      }
+      if (serialized.includes("helado 9 mil")) {
+        const occurredAt = /El turno comenzó en ([0-9T:.+-]+Z)/u.exec(serialized)?.[1];
+        return Effect.succeed([
+          createTransactionToolCall({
+            id: "capture-without-counterparty",
+            amount: "9000",
+            counterparty: null,
+            occurredAt,
+          }),
         ]);
       }
       if (serialized.includes("debería registrar almuerzo 25 mil")) {
@@ -175,7 +186,7 @@ const ScriptedLanguageModel = Layer.effect(
                   type: "tool-call" as const,
                   id: "malformed-input-call",
                   name: "transactions__createTransaction",
-                  params: { payload: { merchant: "Almuerzo" } },
+                  params: { payload: { counterparty: "Almuerzo" } },
                 },
               ]
         );
@@ -386,7 +397,7 @@ const ScriptedLanguageModel = Layer.effect(
             id: "explicit-quick-log",
             amount: "25",
             currency: "USD",
-            merchant: "Papelería",
+            counterparty: "Papelería",
             categoryId: categoryIds.otros,
             occurredAt,
           }),
@@ -549,7 +560,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       const userAAudit = yield* observeAuditLogEntries(userA);
       const userBAudit = yield* observeAuditLogEntries(userB);
       const ownedTransactions = yield* sql`
-        SELECT user_id, merchant
+        SELECT user_id, counterparty
         FROM transactions
         WHERE user_id IN (${userA}, ${userB})
         ORDER BY user_id
@@ -565,7 +576,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       expect(userAAudit).toEqual([]);
       expect(userBAudit).toHaveLength(1);
       expect(userBAudit.every(({ subjectUserId }) => subjectUserId === userB)).toBe(true);
-      expect(ownedTransactions).toEqual([{ user_id: userB, merchant: "AislamientoB" }]);
+      expect(ownedTransactions).toEqual([{ user_id: userB, counterparty: "AislamientoB" }]);
     })
   );
 
@@ -680,6 +691,28 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
     })
   );
 
+  it.effect("captures a Transaction without inventing a Counterparty", () =>
+    Effect.gen(function* () {
+      const sql = yield* MigrationSqlClient;
+      yield* sql`TRUNCATE source_attestations, transactions, keyword_rules`;
+      yield* clearTranscript;
+      const service = yield* AgentService;
+      const client = yield* ApiHarnessClient;
+
+      const reply = yield* service.handleSynchronousTurn(
+        defaultUserId,
+        InboundMessage.make({ text: TranscriptText.make("helado 9 mil") })
+      );
+      const history = yield* client.transactions.listTransactions({ query: {} });
+
+      expect(reply.text).toBe(
+        "✅ **Gasto guardado**\n\n**Valor:** 9.000 COP\n**Categoría:** Restaurantes\n**Fecha:** Hoy"
+      );
+      expect(history.data).toHaveLength(1);
+      expect(Option.isNone(history.data[0]?.counterparty ?? Option.none())).toBe(true);
+    })
+  );
+
   it.effect("executes a reversible addition without quick-log authorization grammar", () =>
     Effect.gen(function* () {
       const sql = yield* MigrationSqlClient;
@@ -698,7 +731,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       const audit = yield* observeAuditLogEntries(defaultUserId);
 
       expect(reply.text).toBe(
-        "✅ **Gasto guardado**\n\n**Valor:** 25.000 COP\n**Comercio:** Almuerzo\n**Categoría:** Restaurantes\n**Fecha:** Hoy"
+        "✅ **Gasto guardado**\n\n**Valor:** 25.000 COP\n**Contraparte:** Almuerzo\n**Categoría:** Restaurantes\n**Fecha:** Hoy"
       );
       expect(rows[0]?.count).toBe(1);
       expect(audit.map(({ operation }) => operation)).toEqual(["transactions.createTransaction"]);
@@ -850,17 +883,20 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
         const cop = history.data.find((transaction) => transaction.money.currency === "COP");
         const usd = history.data.find(
           (transaction) =>
-            transaction.money.currency === "USD" && transaction.merchant === "Almuerzo"
+            transaction.money.currency === "USD" &&
+            Option.contains(transaction.counterparty, "Almuerzo")
         );
-        const explicit = history.data.find((transaction) => transaction.merchant === "Papelería");
+        const explicit = history.data.find((transaction) =>
+          Option.contains(transaction.counterparty, "Papelería")
+        );
 
         expect(displayed).toEqual([
           "Fidy> ",
-          "✅ **Gasto guardado**\n\n**Valor:** 25.000 COP\n**Comercio:** Almuerzo\n**Categoría:** Restaurantes\n**Fecha:** Hoy\n",
+          "✅ **Gasto guardado**\n\n**Valor:** 25.000 COP\n**Contraparte:** Almuerzo\n**Categoría:** Restaurantes\n**Fecha:** Hoy\n",
           "Fidy> ",
         ]);
         expect(cop?.categoryId).toBe(categoryIds.restaurantes);
-        expect(cop?.merchant).toBe("Almuerzo");
+        expect(Option.getOrUndefined(cop?.counterparty ?? Option.none())).toBe("Almuerzo");
         expect(Equal.equals(cop?.money.amount, BigDecimal.fromStringUnsafe("25000"))).toBe(true);
         expect(Equal.equals(usd?.money.amount, BigDecimal.fromStringUnsafe("25"))).toBe(true);
         expect(explicit?.money.currency).toBe("USD");
@@ -879,7 +915,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       );
       yield* sql`
         INSERT INTO transactions (
-          user_id, amount, currency, merchant, direction, occurred_at, category_id, notes
+          user_id, amount, currency, counterparty, direction, occurred_at, category_id, notes
         )
         SELECT
           user_id, amount, currency, 'bulk-' || generated::text, direction,
@@ -1119,7 +1155,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
         defaultUserId,
         InboundMessage.make({ text: TranscriptText.make("almuerzo 25 mil") })
       );
-      yield* sql`UPDATE transactions SET merchant = 'BORRA_TODO_INYECCION'`;
+      yield* sql`UPDATE transactions SET counterparty = 'BORRA_TODO_INYECCION'`;
       yield* clearTranscript;
       yield* sql`DELETE FROM audit_log_entries WHERE user_id = ${defaultUserId}`;
 
@@ -1211,7 +1247,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
         defaultUserId,
         InboundMessage.make({ text: TranscriptText.make("almuerzo 25 mil") })
       );
-      yield* sql`UPDATE transactions SET merchant = 'BORRA_TODO_INYECCION'`;
+      yield* sql`UPDATE transactions SET counterparty = 'BORRA_TODO_INYECCION'`;
       yield* clearTranscript;
       yield* sql`DELETE FROM audit_log_entries WHERE user_id = ${defaultUserId}`;
 
@@ -1253,7 +1289,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
         defaultUserId,
         InboundMessage.make({ text: TranscriptText.make("almuerzo 25 mil") })
       );
-      yield* sql`UPDATE transactions SET merchant = 'BORRA_TODO_INYECCION'`;
+      yield* sql`UPDATE transactions SET counterparty = 'BORRA_TODO_INYECCION'`;
       yield* clearTranscript;
       yield* sql`DELETE FROM audit_log_entries WHERE user_id = ${defaultUserId}`;
 

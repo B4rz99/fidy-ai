@@ -57,7 +57,7 @@ const captureCategory = (
           Effect.mapError(categoryToApiFailure)
         ),
     });
-    return yield* categorizeCapture({ userId, merchant: input.merchant, callerCategory });
+    return yield* categorizeCapture({ userId, counterparty: input.counterparty, callerCategory });
   });
 
 const persistManualCapture = (
@@ -118,7 +118,7 @@ export const TransactionsLive = HttpApiBuilder.group(FidyApi, "transactions", (h
           from: Option.fromUndefinedOr(parameters.from),
           to: Option.fromUndefinedOr(parameters.to),
           categoryId: Option.fromUndefinedOr(parameters.categoryId),
-          merchant: Option.fromUndefinedOr(parameters.merchant),
+          counterparty: Option.fromUndefinedOr(parameters.counterparty),
           direction: Option.fromUndefinedOr(parameters.direction),
           currency: Option.fromUndefinedOr(parameters.currency),
         });

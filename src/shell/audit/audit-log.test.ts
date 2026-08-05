@@ -187,7 +187,7 @@ layer(AuditHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           const response = yield* HttpClient.post("/transactions", {
             headers: headersFor(atomicWriteBearer),
             body: HttpBody.jsonUnsafe(
-              encodeTransactionInput(transactionPayload({ merchant: "Atomic private body" }))
+              encodeTransactionInput(transactionPayload({ counterparty: "Atomic private body" }))
             ),
           });
           const history = yield* observer.transactions.listTransactions({ query: {} });

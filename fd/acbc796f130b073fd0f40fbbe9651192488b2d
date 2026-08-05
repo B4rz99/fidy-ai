@@ -1,0 +1,124 @@
+src/shell/consent/repo.test.ts
+  s_bd62cbb20ea6f0::t_0b8d49f65efacc 46-49
+  s_bd62cbb20ea6f0::t_8b47919e46db82 10,63
+src/shell/channels/whatsapp/kapso-webhook.test.ts
+  s_bd62cbb20ea6f0::t_965a5a81115cdd 6-10,25,33,37
+  s_bd62cbb20ea6f0::t_86fd51aabf0865 44-57,61-64
+  s_bd62cbb20ea6f0::t_752578bbe8f93f 3,23-24,26-32,34-36,38-42
+  s_bd62cbb20ea6f0::t_775b5180425064 58-60
+  s_bd62cbb20ea6f0::t_f6205cffadd9f6 43
+src/shell/identity/whatsapp-identity.test.ts
+  s_bd62cbb20ea6f0::t_480aeec8319463 41-69,90-105,108-113
+  s_bd62cbb20ea6f0::t_45b8a5163d45a8 77-78
+  s_bd62cbb20ea6f0::t_6c7f8e33e85f82 70-76,79-89,106-107
+  s_bd62cbb20ea6f0::t_ebacc7d5ca006b 4-8,25,28-31,33-34,36-37,40
+  s_bd62cbb20ea6f0::t_8169202a498e78 2-3,17
+  s_bd62cbb20ea6f0::t_0d7493846ed444 114
+src/shell/agent/repl.ts
+  s_bd62cbb20ea6f0::t_b339736783a5ae 69-72
+src/core/consent/model.ts
+  s_bd62cbb20ea6f0::t_102f57a55972ad 4,117,125
+src/core/consent/rules.ts
+  s_bd62cbb20ea6f0::t_0f0fdc4ab98de7 77
+src/shell/consent/repo.ts
+  s_bd62cbb20ea6f0::t_a90c14d1725432 1,17,445,537,579,582
+src/shell/consent/retention.test.ts
+  s_bd62cbb20ea6f0::t_d656f05592af98 5,25-26,29-32,40,53
+src/shell/testing/whatsapp-caller.ts
+  s_bd62cbb20ea6f0::t_bb0bd4e3cc421d 8-11
+src/shell/consent/consent-gate.test.ts
+  s_bd62cbb20ea6f0::t_1c2becc34a93f6 10
+  s_bd62cbb20ea6f0::t_af8fd47dbab105 74,80-82,505-508,510,512-514,516
+src/shell/channels/whatsapp/outbound.ts
+  s_bd62cbb20ea6f0::t_e02c5feb627dca 32-34
+src/shell/channels/whatsapp/kapso-client.ts
+  s_bd62cbb20ea6f0::t_0245f29eea0c36 2,23-25,30,112
+src/shell/channels/whatsapp/repo.ts
+  s_bd62cbb20ea6f0::t_ac8731a121bb66 67
+  s_bd62cbb20ea6f0::t_574ae24249fdb6 533-534
+src/shell/identity/repo.ts
+  s_bd62cbb20ea6f0::t_d68d808b51a001 141,157,288-292,296,300-303
+  s_bd62cbb20ea6f0::t_480aeec8319463 32,244-251,258-259,267-268,270,278,285
+  s_bd62cbb20ea6f0::t_5aab8f765ec261 183-186,218,222
+  s_bd62cbb20ea6f0::t_349e1568b2c997 7,252-257,260-262,266,286,298
+  s_bd62cbb20ea6f0::t_375091d6ee9388 27-29,269,279-284
+  s_bd62cbb20ea6f0::t_b4fb0285fee4a5 30-31,33-37
+  s_bd62cbb20ea6f0::t_ac9beae4d5efca 263-265,271-277
+  s_bd62cbb20ea6f0::t_572d83f3af92c6 6
+src/shell/channels/whatsapp/routes.ts
+  s_bd62cbb20ea6f0::t_8e35ee2dc7d1e6 163,190-203,206-211
+  s_bd62cbb20ea6f0::t_3bcae8cb02dafc 24-26,146,204-205
+  s_bd62cbb20ea6f0::t_ceb077ea80706a 4,8,122-138,143-145,147
+  s_bd62cbb20ea6f0::t_19eb99256de145 139-142
+  s_bd62cbb20ea6f0::t_19d3f8276cf344 151-154
+  s_bd62cbb20ea6f0::t_fecb47b8314c74 148-149
+ARCHITECTURE.md
+  s_bd62cbb20ea6f0::t_eb3fddbea39d0c 54-57,96-98
+src/shell/db/migrations/0014-whatsapp-bsuid-identity.ts
+  s_bd62cbb20ea6f0::t_88910f35e3c1a9 6-9,14-15
+  s_bd62cbb20ea6f0::t_33d98b97a86168 1,4-5,10,16-18,25,27,40-42,49,55-59,76,85,89-91
+  s_bd62cbb20ea6f0::t_989d10c8cbf8a1 13
+src/shell/channels/whatsapp/whatsapp-channel.test.ts
+  s_bd62cbb20ea6f0::t_0820332b3ab5d9 1623
+  s_bd62cbb20ea6f0::t_3601cac539a16e 1263
+  s_bd62cbb20ea6f0::t_a7d37c9bf5a799 470,494-497
+  s_bd62cbb20ea6f0::t_4cedc158ffb0d3 1289-1293
+  s_bd62cbb20ea6f0::t_3265dfa21b45de 1447,1449,1458,1473-1474
+  s_bd62cbb20ea6f0::t_ab96c9e73a55e6 1448
+  s_bd62cbb20ea6f0::t_7ce02520d7aa47 1475
+src/core/identity/reference.ts
+  s_bd62cbb20ea6f0::t_a98fd7c9cfa6bf 86-87,91-93
+  s_bd62cbb20ea6f0::t_35a06e693430cf 88-90
+  s_bd62cbb20ea6f0::t_17302ae01eea8b 28-31,38-41,47-51,57-60,67-68,71-80
+src/shell/channels/whatsapp/model.ts
+  s_bd62cbb20ea6f0::t_0d97dbec3e9c9f 4,63-67
+  s_bd62cbb20ea6f0::t_5587a8540dd4cd 68-69
+src/core/identity/model.ts
+  s_bd62cbb20ea6f0::t_c0c414e6270387 6-10
+src/shell/db/development-seed.ts
+  s_bd62cbb20ea6f0::t_84a7f732b3850c 129-131
+src/shell/channels/whatsapp/kapso-client.test.ts
+  s_bd62cbb20ea6f0::t_b433e9b2bcd34b 3,12,20
+  s_bd62cbb20ea6f0::t_4b434e93727c64 5,8-10,14-15,38-44,66
+src/shell/agent/agent-service.test.ts
+  s_bd62cbb20ea6f0::t_24f63b503dd41d 760-763,777-779,802-805
+docs/adr/0011-bsuid-authority-for-whatsapp-identity.md
+  s_bd62cbb20ea6f0::t_e9a3cf584c6e1c 36-38
+  s_bd62cbb20ea6f0::t_0df0fe10981093 26-29
+  s_bd62cbb20ea6f0::t_2f3a2869c38004 21-22
+  s_bd62cbb20ea6f0::t_379952baf08541 1-20,23-25,30-35,39-63
+README.md
+  s_bd62cbb20ea6f0::t_a540d43281936b 53-57
+src/shell/channels/whatsapp/kapso-webhook.ts
+  s_bd62cbb20ea6f0::t_dfdfb848e5319f 86-89,256-258
+  s_bd62cbb20ea6f0::t_b7d995bd88f678 248-255,259-288,328
+  s_bd62cbb20ea6f0::t_51e0c62d474ed7 197-201
+  s_bd62cbb20ea6f0::t_c1bf8293c0d895 247,289-327,329-333
+  s_bd62cbb20ea6f0::t_ae758b9a33538c 1,15,74-85,90-102,117-131,158
+src/shell/consent/consent-gate.ts
+  s_bd62cbb20ea6f0::t_47eaa0edc008a4 15,73
+  s_bd62cbb20ea6f0::t_5dfccb502b7c6a 134-136
+  s_bd62cbb20ea6f0::t_f20050f91cecb2 17,79
+src/shell/channels/whatsapp/fixtures/kapso-meta-identity-change.json
+  s_bd62cbb20ea6f0::t_1661fc8273a408 1-28
+CONTEXT.md
+  s_bd62cbb20ea6f0::t_5d42a35184a6fb 156-158
+src/core/consent/rules.test.ts
+  s_bd62cbb20ea6f0::t_0846464bbfaa70 4,68
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "fdacbc796f130b073fd0f40fbbe9651192488b2d",
+  "prompts": {},
+  "sessions": {
+    "s_bd62cbb20ea6f0": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019fcec9-654f-738f-b644-1504a389768a",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

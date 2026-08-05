@@ -253,6 +253,8 @@ src/shell/consent/retention.test.ts
   s_bd62cbb20ea6f0::t_f950dbcde55c3b 7
   s_bd62cbb20ea6f0::t_941052c0f46332 66-71
   s_bd62cbb20ea6f0::t_d656f05592af98 5,25-26,29-32,40,53
+src/shell/db/migrations/registry.ts
+  s_bd62cbb20ea6f0::t_98334ff2cfbd2d 15,40
 ---
 {
   "schema_version": "authorship/3.0.0",

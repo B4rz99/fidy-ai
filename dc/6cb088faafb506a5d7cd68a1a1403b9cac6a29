@@ -1,0 +1,110 @@
+src/shell/transactions/repo.ts
+  s_2096af1feee5ae::t_8509cc53efb0d4 10,22,43,60
+  s_2096af1feee5ae::t_a2689039576848 31
+  s_2096af1feee5ae::t_f0cb92edd34bb9 32-40,50-51
+  s_2096af1feee5ae::t_f051f9e0310e19 68-72,78,98,100,170,172-173,175
+  s_bd62cbb20ea6f0::t_aa5b052b34d026 199
+src/shell/_shared/suggested-operations.test.ts
+  s_2096af1feee5ae::t_c01c9ffbc6331f 2,54,56-57,64
+  s_2096af1feee5ae::t_0436637067329b 74,77,89
+src/core/transactions/model.test.ts
+  s_2096af1feee5ae::t_1a06a8ba6833ed 45,47-50
+  s_2096af1feee5ae::t_5752727c949cfb 24,46,85,105
+src/shell/agent/model-boundary.ts
+  s_2096af1feee5ae::t_fcd621bf143fcb 135-139
+src/shell/transactions/handlers.test.ts
+  s_2096af1feee5ae::t_69b34ceded7abd 187,413
+  s_2096af1feee5ae::t_356f87add079a9 400
+  s_2096af1feee5ae::t_565bcf462f8ca4 48-60,63-65,113-114
+  s_2096af1feee5ae::t_50fa57c23e0884 419-421,423,428-431
+  s_2096af1feee5ae::t_3db8d960e0ed8a 422,424-427
+  s_2096af1feee5ae::t_213ba188cc41aa 61-62
+  s_2096af1feee5ae::t_4f777687c3476a 66-68
+  s_2096af1feee5ae::t_bd12ed4cf39bd6 110-112
+  s_2096af1feee5ae::t_ef381dc07e1777 115-117
+  s_2096af1feee5ae::t_2788640e589ca2 76,118-128,130-132,177,184,291,298,305,313,325,342,345
+src/core/transactions/model.ts
+  s_2096af1feee5ae::t_e8d667bc3054a1 130
+  s_2096af1feee5ae::t_73ea514527f9e7 51-54,76
+  s_2096af1feee5ae::t_2d3bdc70fa9433 12,75,77-82,138,144,153,166
+src/shell/db/migrations/registry.ts
+  s_2096af1feee5ae::t_4d248bff844718 14,38
+src/shell/testing/authorization.test.ts
+  s_2096af1feee5ae::t_df3209b2c4d100 271
+  s_2096af1feee5ae::t_8e6a7c5232bc8b 174,202,237,364
+src/shell/agent/transaction-receipt.ts
+  s_2096af1feee5ae::t_bc085784161af3 80-83
+SECURITY_STANDARDS.md
+  s_2096af1feee5ae::t_e62d88050ba434 182
+src/shell/db/migrations/0014-optional-transaction-counterparty.ts
+  s_2096af1feee5ae::t_beeee04db58baa 1-11
+src/shell/agent/agent-service.test.ts
+  s_2096af1feee5ae::t_19f24b24e8fd62 89,98,124,150-160,734
+  s_2096af1feee5ae::t_001280e879dd4c 694-715
+  s_2096af1feee5ae::t_4ee10e435d0b89 886-890,895,899
+  s_2096af1feee5ae::t_96c13717ca500a 82,189,400,563,579,918,1158,1250,1292
+src/shell/agent/transaction-receipt.test.ts
+  s_2096af1feee5ae::t_7b1402e4c8a58e 48-71
+  s_bd62cbb20ea6f0::t_2a1ff1d361e1d9 34,80
+src/shell/transactions/operations.ts
+  s_2096af1feee5ae::t_8ed1ab8355c905 96
+  s_2096af1feee5ae::t_699163fa8581fd 59
+  s_bd62cbb20ea6f0::t_70e82afbe1f285 38,71
+src/shell/transactions/fixtures.ts
+  s_2096af1feee5ae::t_7fd82592ce8ad7 22-25,27-42
+src/shell/categories/categorizer.ts
+  s_2096af1feee5ae::t_d57a19b2b27243 21,26-30
+  s_2096af1feee5ae::t_27fac859809e09 17
+CONTEXT.md
+  s_2096af1feee5ae::t_4d61f65bf8c06a 39-40,44-49,72
+src/core/categories/model.ts
+  s_2096af1feee5ae::t_2ff1aef6c90c32 16,23
+src/core/categories/rules.test.ts
+  s_2096af1feee5ae::t_e825fd792c0d3c 51,66,73
+src/core/categories/rules.ts
+  s_2096af1feee5ae::t_3c390fe1336f25 17,23-24,26
+src/shell/_shared/errors.ts
+  s_2096af1feee5ae::t_e1c220ae1b565e 81
+src/shell/audit/audit-log.test.ts
+  s_2096af1feee5ae::t_65dcd70a6a7f99 190
+src/shell/categories/handlers.test.ts
+  s_2096af1feee5ae::t_bc31c017de971c 130,144,151
+src/shell/categories/operations.ts
+  s_2096af1feee5ae::t_6f3effe54585a8 51,63
+src/shell/channels/whatsapp/whatsapp-channel.test.ts
+  s_2096af1feee5ae::t_72f04b9e7ddc0d 149,156,195,367,369-370,372,420-421,423,438,443,446-447,518,910,912,914,1668,1679-1680,1682
+src/shell/consent/consent-authorization.test.ts
+  s_2096af1feee5ae::t_d1bb5748597f95 60,141
+src/shell/db/row-level-security.test.ts
+  s_2096af1feee5ae::t_cdac3c36defc95 64,117,256,395,628,634,648,659,675,677
+src/shell/testing/isolation.test.ts
+  s_2096af1feee5ae::t_baf404662c743d 257,267
+src/shell/transactions/handlers.ts
+  s_2096af1feee5ae::t_a92524d08f89d2 60,121
+src/shell/transactions/operations.test.ts
+  s_2096af1feee5ae::t_461aeffaafd8e5 61,105,130,173,205,218,228,306,327
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "dc6cb088faafb506a5d7cd68a1a1403b9cac6a29",
+  "prompts": {},
+  "sessions": {
+    "s_2096af1feee5ae": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019fca90-ce9e-7dab-9d9f-57075315f1a3",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_bd62cbb20ea6f0": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019fcec9-654f-738f-b644-1504a389768a",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

@@ -13,14 +13,14 @@ export const CategoryLabel = Schema.NonEmptyString.check(Schema.isTrimmed())
   .pipe(Schema.brand("CategoryLabel"));
 export type CategoryLabel = typeof CategoryLabel.Type;
 
-/** Normalizes a merchant fragment for case- and diacritic-insensitive comparison. */
+/** Normalizes a counterparty fragment for case- and diacritic-insensitive comparison. */
 export const normalizeCategoryKeyword = (value: string): string =>
   value
     .normalize("NFD")
     .replaceAll(/[\u0300-\u036f]/g, "")
     .toLocaleLowerCase("es-CO");
 
-/** User-authored merchant fragment retained with its spelling but normalized only while matching. */
+/** User-authored counterparty fragment retained with its spelling but normalized only while matching. */
 export const CategoryKeyword = Schema.NonEmptyString.check(Schema.isTrimmed())
   .check(Schema.isMaxLength(80))
   .check(

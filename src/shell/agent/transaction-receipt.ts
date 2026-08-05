@@ -77,7 +77,10 @@ export const renderTransactionReceipt = ({
             `✅ **${heading} guardado**`,
             "",
             `**Valor:** ${formatMoneyEsCo(transaction.money)}`,
-            `**Comercio:** ${receiptValue(transaction.merchant)}`,
+            ...Option.match(transaction.counterparty, {
+              onNone: () => [],
+              onSome: (counterparty) => [`**Contraparte:** ${receiptValue(counterparty)}`],
+            }),
             `**Categoría:** ${label}`,
             `**Fecha:** ${formatReceiptDate({
               locale,

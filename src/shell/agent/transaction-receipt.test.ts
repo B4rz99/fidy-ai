@@ -31,7 +31,7 @@ describe("transaction receipt", () => {
         data: {
           id: "10000000-0000-4000-8000-000000000099",
           money: { amount: "1000.5", currency: "USD" },
-          merchant: "Nómina **mensual**",
+          counterparty: "Nómina **mensual**",
           direction: "inflow",
           categoryId: categoryIds.ingresos,
           notes: "Pago de _abril_",
@@ -45,7 +45,30 @@ describe("transaction receipt", () => {
     });
 
     expect(Option.getOrThrow(receipt)).toBe(
-      "✅ **Ingreso guardado**\n\n**Valor:** 1.000,50 USD\n**Comercio:** Nómina \\*\\*mensual\\*\\*\n**Categoría:** Ingresos\n**Fecha:** 2/04/2026\n**Nota:** Pago de \\_abril\\_"
+      "✅ **Ingreso guardado**\n\n**Valor:** 1.000,50 USD\n**Contraparte:** Nómina \\*\\*mensual\\*\\*\n**Categoría:** Ingresos\n**Fecha:** 2/04/2026\n**Nota:** Pago de \\_abril\\_"
+    );
+  });
+
+  it("omits the Counterparty line when capture identifies none", () => {
+    const receipt = renderTransactionReceipt({
+      locale: "es-CO",
+      output: {
+        data: {
+          id: "10000000-0000-4000-8000-000000000099",
+          money: { amount: "9000", currency: "COP" },
+          direction: "outflow",
+          categoryId: categoryIds.restaurantes,
+          occurredAt: "2026-04-03T12:00:00.000Z",
+          createdAt: "2026-04-03T12:00:00.000Z",
+        },
+        next: [],
+      },
+      timeZone: IanaTimeZone.make("America/Bogota"),
+      turnStartedAt: DateTime.makeUnsafe("2026-04-03T12:00:00.000Z"),
+    });
+
+    expect(Option.getOrThrow(receipt)).toBe(
+      "✅ **Gasto guardado**\n\n**Valor:** 9.000 COP\n**Categoría:** Restaurantes\n**Fecha:** Hoy"
     );
   });
 
@@ -54,7 +77,7 @@ describe("transaction receipt", () => {
       Option.isNone(
         renderTransactionReceipt({
           locale: "es-CO",
-          output: { data: { merchant: "Missing fields" }, next: [] },
+          output: { data: { counterparty: "Missing fields" }, next: [] },
           timeZone: IanaTimeZone.make("America/Bogota"),
           turnStartedAt: DateTime.makeUnsafe("2026-04-03T12:00:00.000Z"),
         })

@@ -11,6 +11,7 @@ import { createConsentLedger } from "./0010-create-consent-ledger";
 import { bindPendingConsentInitiator } from "./0011-bind-pending-consent-initiator";
 import { createWhatsAppChannel } from "./0012-create-whatsapp-channel";
 import { claimConsentDisclosureDelivery } from "./0013-claim-consent-disclosure-delivery";
+import { optionalTransactionCounterparty } from "./0014-optional-transaction-counterparty";
 
 /**
  * The explicit index ARCHITECTURE.md §7 calls for: one ordered, append-only
@@ -34,4 +35,5 @@ export const migrations = {
   "0011_bind_pending_consent_initiator": bindPendingConsentInitiator,
   "0012_create_whatsapp_channel": createWhatsAppChannel,
   "0013_claim_consent_disclosure_delivery": claimConsentDisclosureDelivery,
+  "0014_optional_transaction_counterparty": optionalTransactionCounterparty,
 };

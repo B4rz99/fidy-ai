@@ -146,14 +146,14 @@ const ScriptedWhatsAppModel = Layer.effect(
             payload: voice
               ? {
                   money: { amount: "18000", currency: "COP" },
-                  merchant: "WhatsAppTaxi",
+                  counterparty: "WhatsAppTaxi",
                   direction: "outflow",
                   categoryId: categoryIds.transporte,
                   occurredAt: occurredAt.value,
                 }
               : {
                   money: { amount: "25000", currency: "COP" },
-                  merchant: "WhatsAppAlmuerzo",
+                  counterparty: "WhatsAppAlmuerzo",
                   direction: "outflow",
                   categoryId: categoryIds.restaurantes,
                   occurredAt: occurredAt.value,
@@ -192,7 +192,7 @@ const openAiTransactionToolResponse = makeOpenAiFunctionCallResponse({
   argumentsJson: JSON.stringify({
     payload: {
       money: { amount: "10000", currency: "COP" },
-      merchant: "OpenAiBreakfast",
+      counterparty: "OpenAiBreakfast",
       direction: "outflow",
       categoryId: categoryIds.restaurantes,
       notes: null,
@@ -364,12 +364,12 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           expect(yield* Ref.get(sendCalls)).toBe(1);
           const transactions = yield* withUserTransaction(
             defaultUserId,
-            sql`SELECT merchant FROM transactions
+            sql`SELECT counterparty FROM transactions
                 WHERE user_id = ${defaultUserId}
-                  AND merchant IN ('WhatsAppAlmuerzo', 'WhatsAppTaxi')
-                ORDER BY merchant`
+                  AND counterparty IN ('WhatsAppAlmuerzo', 'WhatsAppTaxi')
+                ORDER BY counterparty`
           );
-          expect(transactions).toEqual([{ merchant: "WhatsAppTaxi" }]);
+          expect(transactions).toEqual([{ counterparty: "WhatsAppTaxi" }]);
 
           expect(
             (yield* enqueueWhatsAppTurn({
@@ -417,10 +417,10 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         expect(
           yield* withUserTransaction(
             defaultUserId,
-            sql`SELECT merchant FROM transactions
-                WHERE user_id = ${defaultUserId} AND merchant = 'WhatsAppAlmuerzo'`
+            sql`SELECT counterparty FROM transactions
+                WHERE user_id = ${defaultUserId} AND counterparty = 'WhatsAppAlmuerzo'`
           )
-        ).toEqual([{ merchant: "WhatsAppAlmuerzo" }]);
+        ).toEqual([{ counterparty: "WhatsAppAlmuerzo" }]);
       })
     );
 
@@ -435,16 +435,16 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           bearer: AgentBearerToken.make("fin_whatsiso_abcdefghijklmnopqrstuvwxyz0123456789ABCD"),
         });
         const sql = yield* SqlClient.SqlClient;
-        const countTransactions = (userId: UserId, merchant: string) =>
+        const countTransactions = (userId: UserId, counterparty: string) =>
           Effect.gen(function* () {
             const row = yield* withUserTransaction(
               userId,
               SqlSchema.findOne({
-                Request: Schema.Struct({ userId: UserId, merchant: Schema.String }),
+                Request: Schema.Struct({ userId: UserId, counterparty: Schema.String }),
                 Result: Schema.Struct({ count: Schema.Int }),
                 execute: (request) => sql`SELECT count(*)::int AS count FROM transactions
-                  WHERE user_id = ${request.userId} AND merchant = ${request.merchant}`,
-              })({ userId, merchant })
+                  WHERE user_id = ${request.userId} AND counterparty = ${request.counterparty}`,
+              })({ userId, counterparty })
             );
             return row.count;
           });
@@ -515,7 +515,7 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         expect(
           yield* withUserTransaction(
             defaultUserId,
-            sql`SELECT merchant FROM transactions WHERE user_id = ${secondUserId}`
+            sql`SELECT counterparty FROM transactions WHERE user_id = ${secondUserId}`
           )
         ).toEqual([]);
       })
@@ -907,11 +907,11 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         });
         expect(
           yield* admin`
-            SELECT merchant, amount::text AS amount
+            SELECT counterparty, amount::text AS amount
             FROM transactions
-            WHERE user_id = ${defaultUserId} AND merchant = 'OpenAiBreakfast'
+            WHERE user_id = ${defaultUserId} AND counterparty = 'OpenAiBreakfast'
           `
-        ).toEqual([{ merchant: "OpenAiBreakfast", amount: "10000" }]);
+        ).toEqual([{ counterparty: "OpenAiBreakfast", amount: "10000" }]);
       })
     );
 
@@ -1665,7 +1665,7 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         });
         const client = yield* ApiHarnessClient;
         yield* client.transactions.createTransaction({
-          payload: transactionPayload({ merchant: "ReassociationHistory" }),
+          payload: transactionPayload({ counterparty: "ReassociationHistory" }),
         });
         const reassociatedPhone = E164PhoneNumber.make("+573009999999");
         yield* associateWhatsAppIdentity(defaultUserId, {
@@ -1676,10 +1676,10 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         expect(
           yield* withUserTransaction(
             defaultUserId,
-            sql`SELECT merchant FROM transactions
-                WHERE user_id = ${defaultUserId} AND merchant = 'ReassociationHistory'`
+            sql`SELECT counterparty FROM transactions
+                WHERE user_id = ${defaultUserId} AND counterparty = 'ReassociationHistory'`
           )
-        ).toEqual([{ merchant: "ReassociationHistory" }]);
+        ).toEqual([{ counterparty: "ReassociationHistory" }]);
         const reassociated = yield* sendKapsoFreeForm(
           defaultUserId,
           agentReplyFixture("La ventana anterior no se transfiere."),

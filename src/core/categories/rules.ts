@@ -14,16 +14,16 @@ type CategoryRule<Category extends string> = Readonly<{
 }>;
 
 type KeywordCategoryInput<Category extends string> = Readonly<{
-  readonly merchant: string;
+  readonly counterparty: string;
   readonly rules: ReadonlyArray<CategoryRule<Category>>;
 }>;
 
 /** Selects the longest matching rule; lexical rule identity resolves equal-specificity ties. */
 export const findKeywordCategory = <C extends string>(input: KeywordCategoryInput<C>) => {
-  const { merchant, rules } = input;
-  const normalizedMerchant = normalizeCategoryKeyword(merchant);
+  const { counterparty, rules } = input;
+  const normalizedCounterparty = normalizeCategoryKeyword(counterparty);
   const matching = rules
-    .filter((rule) => normalizedMerchant.includes(normalizeCategoryKeyword(rule.keyword)))
+    .filter((rule) => normalizedCounterparty.includes(normalizeCategoryKeyword(rule.keyword)))
     .toSorted(
       (left, right) =>
         normalizeCategoryKeyword(right.keyword).length -

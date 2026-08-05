@@ -57,7 +57,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         );
 
         const payload = yield* Schema.encodeEffect(CreateTransactionInput)(
-          transactionPayload({ merchant: "Must never persist" })
+          transactionPayload({ counterparty: "Must never persist" })
         ).pipe(Effect.orDie);
         const response = yield* HttpClient.post("/transactions", {
           headers: headersFor(unconsentedBearer),
@@ -138,7 +138,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         yield* Deferred.await(lockAcquired);
 
         const payload = yield* Schema.encodeEffect(CreateTransactionInput)(
-          transactionPayload({ merchant: "Must lose revocation race" })
+          transactionPayload({ counterparty: "Must lose revocation race" })
         ).pipe(Effect.orDie);
         const requestFiber = yield* HttpClient.post("/transactions", {
           headers: headersFor(revokedBearer),

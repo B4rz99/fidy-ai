@@ -48,7 +48,7 @@ it("derives create-rule fields without persistence-assigned facts", () => {
 it.effect("uses the most specific matching user keyword without caring about case or accents", () =>
   Effect.gen(function* () {
     const category = yield* findKeywordCategory({
-      merchant: "RÁPPI Turbo Bogotá",
+      counterparty: "RÁPPI Turbo Bogotá",
       rules: [
         categoryRule(firstRuleId, CategoryKeyword.make("rappi")),
         categoryRule(secondRuleId, CategoryKeyword.make("Rappi Turbo"), mercado),
@@ -63,14 +63,14 @@ it.effect("uses lexical rule identity for equal-length ties and returns None wit
   Effect.gen(function* () {
     const earlier = CategoryId.make("33333333-3333-4333-8333-333333333333");
     const category = yield* findKeywordCategory({
-      merchant: "ab tienda cd",
+      counterparty: "ab tienda cd",
       rules: [
         categoryRule(secondRuleId, CategoryKeyword.make("cd"), mercado),
         categoryRule(firstRuleId, CategoryKeyword.make("ab"), earlier),
       ],
     });
     const absent = yield* findKeywordCategory({
-      merchant: "sin coincidencia",
+      counterparty: "sin coincidencia",
       rules: [categoryRule(firstRuleId, CategoryKeyword.make("rappi"))],
     });
 

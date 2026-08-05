@@ -19,17 +19,24 @@ export const truncateTransactions = Effect.gen(function* () {
  * turns on one of them should pass it as an override rather than read it off
  * the default.
  */
+type TransactionPayloadOverrides = Omit<Partial<CreateTransactionInput>, "counterparty"> & {
+  readonly counterparty?: string | CreateTransactionInput["counterparty"];
+};
+
 export const transactionPayload = (
-  overrides?: Partial<CreateTransactionInput>
-): CreateTransactionInput => ({
-  money: Money.make({
-    amount: BigDecimal.fromStringUnsafe("25000"),
-    currency: Currency.make("COP"),
-  }),
-  merchant: "El Corral",
-  direction: "outflow",
-  categoryId: Option.some(categoryIds.restaurantes),
-  notes: Option.none(),
-  occurredAt: DateTime.makeUnsafe("2026-07-20T12:30:00Z"),
-  ...overrides,
-});
+  overrides?: TransactionPayloadOverrides
+): CreateTransactionInput => {
+  const { counterparty = Option.some("El Corral"), ...rest } = overrides ?? {};
+  return {
+    money: Money.make({
+      amount: BigDecimal.fromStringUnsafe("25000"),
+      currency: Currency.make("COP"),
+    }),
+    counterparty: typeof counterparty === "string" ? Option.some(counterparty) : counterparty,
+    direction: "outflow",
+    categoryId: Option.some(categoryIds.restaurantes),
+    notes: Option.none(),
+    occurredAt: DateTime.makeUnsafe("2026-07-20T12:30:00Z"),
+    ...rest,
+  };
+};

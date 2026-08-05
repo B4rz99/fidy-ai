@@ -171,7 +171,7 @@ layer(AuthorizationHarness, { excludeTestServices: true, timeout: "30 seconds" }
         yield* truncateTransactions;
         const client = yield* ApiHarnessClient;
         const body = HttpBody.jsonUnsafe(
-          encodeTransactionPayload(transactionPayload({ merchant: "Tostao" }))
+          encodeTransactionPayload(transactionPayload({ counterparty: "Tostao" }))
         );
         const missing = yield* HttpClient.post("/transactions", { body });
         const unknown = yield* HttpClient.post("/transactions", {
@@ -199,7 +199,7 @@ layer(AuthorizationHarness, { excludeTestServices: true, timeout: "30 seconds" }
         const denied = yield* HttpClient.post("/transactions", {
           headers: headersFor(readOnlyBearer),
           body: HttpBody.jsonUnsafe(
-            encodeTransactionPayload(transactionPayload({ merchant: "Tostao" }))
+            encodeTransactionPayload(transactionPayload({ counterparty: "Tostao" }))
           ),
         });
         const deniedBody = yield* denied.json;
@@ -234,7 +234,7 @@ layer(AuthorizationHarness, { excludeTestServices: true, timeout: "30 seconds" }
         const reader = yield* ReadOnlyApiClient;
         const writer = yield* ReadOnlyWriterClient;
         const transaction = yield* writer.transactions.createTransaction({
-          payload: transactionPayload({ merchant: "Owned unchanged" }),
+          payload: transactionPayload({ counterparty: "Owned unchanged" }),
         });
         const rule = yield* writer.categories.createKeywordRule({
           payload: {
@@ -268,7 +268,7 @@ layer(AuthorizationHarness, { excludeTestServices: true, timeout: "30 seconds" }
               params: { id: transaction.data.id },
               payload: {
                 money: transaction.data.money,
-                merchant: "Denied update",
+                counterparty: Option.some("Denied update"),
                 direction: transaction.data.direction,
                 categoryId: transaction.data.categoryId,
                 notes: transaction.data.notes,
@@ -361,7 +361,7 @@ layer(AuthorizationHarness, { excludeTestServices: true, timeout: "30 seconds" }
           scopes: ["read"],
         });
         const body = HttpBody.jsonUnsafe(
-          encodeTransactionPayload(transactionPayload({ merchant: "Tostao" }))
+          encodeTransactionPayload(transactionPayload({ counterparty: "Tostao" }))
         );
 
         const expired = yield* HttpClient.post("/transactions", {

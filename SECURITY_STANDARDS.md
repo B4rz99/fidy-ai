@@ -179,7 +179,7 @@ to its output context; inspect redirects and caller-supplied destinations; test 
 the public boundary and assert no partial effect.
 
 **Violation examples:** trusting a typed provider SDK response without decoding it; interpolating a
-model-produced merchant into SQL; rendering model Markdown with active HTML; decoding a queue job
+model-produced Counterparty into SQL; rendering model Markdown with active HTML; decoding a queue job
 after it has selected another User's rows.
 
 ### 5. Provider authenticity, replay, and state transitions

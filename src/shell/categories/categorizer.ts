@@ -14,16 +14,20 @@ const modelFallback = (): Effect.Effect<CategoryId> => Effect.succeed(categoryId
  */
 export const categorizeCapture = ({
   userId,
-  merchant,
+  counterparty,
   callerCategory,
 }: {
   readonly userId: UserId;
-  readonly merchant: string;
+  readonly counterparty: Option.Option<string>;
   readonly callerCategory: Option.Option<CategoryId>;
 }) =>
   Effect.gen(function* () {
     const rules = yield* listKeywordRules(userId);
-    const keywordCategory = yield* findKeywordCategory({ merchant, rules });
+    const keywordCategory = yield* Option.match(counterparty, {
+      onNone: () => Effect.succeed(Option.none<CategoryId>()),
+      onSome: (knownCounterparty) =>
+        findKeywordCategory({ counterparty: knownCounterparty, rules }),
+    });
     const known = yield* findKnownCaptureCategory({
       caller: callerCategory,
       keywordRule: keywordCategory,

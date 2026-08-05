@@ -45,6 +45,27 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
       })
     );
 
+    it.effect("stores a Transaction when capture identifies no Counterparty", () =>
+      Effect.gen(function* () {
+        yield* truncateTransactions;
+        const client = yield* ApiHarnessClient;
+
+        const created = yield* client.transactions.createTransaction({
+          payload: transactionPayload({
+            counterparty: Option.none(),
+            categoryId: Option.none(),
+          }),
+        });
+        const read = yield* client.transactions.getTransaction({
+          params: { id: created.data.id },
+        });
+
+        expect(Option.isNone(created.data.counterparty)).toBe(true);
+        expect(Option.isNone(read.data.counterparty)).toBe(true);
+        expect(created.data.categoryId).toBe(categoryIds.otros);
+      })
+    );
+
     it.effect("assigns the fallback before storing an immutable manual attestation", () =>
       Effect.gen(function* () {
         yield* truncateTransactions;
@@ -52,7 +73,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
 
         const created = yield* client.transactions.createTransaction({
           payload: transactionPayload({
-            merchant: "RÁPPI Turbo",
+            counterparty: "RÁPPI Turbo",
             categoryId: Option.none(),
           }),
         });
@@ -86,24 +107,29 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
       })
     );
 
-    it.effect("uses the explicit fallback without inferring a Category from merchant text", () =>
-      Effect.gen(function* () {
-        yield* truncateTransactions;
-        const client = yield* ApiHarnessClient;
+    it.effect(
+      "uses the explicit fallback without inferring a Category from counterparty text",
+      () =>
+        Effect.gen(function* () {
+          yield* truncateTransactions;
+          const client = yield* ApiHarnessClient;
 
-        const transfer = yield* client.transactions.createTransaction({
-          payload: transactionPayload({
-            merchant: "Transferencia a Juan",
-            categoryId: Option.none(),
-          }),
-        });
-        const walletPurchase = yield* client.transactions.createTransaction({
-          payload: transactionPayload({ merchant: "Nequi El Corral", categoryId: Option.none() }),
-        });
+          const transfer = yield* client.transactions.createTransaction({
+            payload: transactionPayload({
+              counterparty: "Transferencia a Juan",
+              categoryId: Option.none(),
+            }),
+          });
+          const walletPurchase = yield* client.transactions.createTransaction({
+            payload: transactionPayload({
+              counterparty: "Nequi El Corral",
+              categoryId: Option.none(),
+            }),
+          });
 
-        expect(transfer.data.categoryId).toBe(categoryIds.otros);
-        expect(walletPurchase.data.categoryId).toBe(categoryIds.otros);
-      })
+          expect(transfer.data.categoryId).toBe(categoryIds.otros);
+          expect(walletPurchase.data.categoryId).toBe(categoryIds.otros);
+        })
     );
 
     it.effect("rolls capture back when its SourceAttestation cannot be inserted", () =>
@@ -148,17 +174,17 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         const sql = yield* MigrationSqlClient;
         yield* sql`
           INSERT INTO transactions
-            (user_id, amount, currency, merchant, direction, category_id, occurred_at)
+            (user_id, amount, currency, counterparty, direction, category_id, occurred_at)
           SELECT ${defaultUserId}, 1, 'COP', 'History seed', 'outflow',
             ${categoryIds.otros}, '2026-01-01T00:00:00Z'
           FROM generate_series(1, 100000)
         `;
 
         const created = yield* client.transactions.createTransaction({
-          payload: transactionPayload({ merchant: "After large history" }),
+          payload: transactionPayload({ counterparty: "After large history" }),
         });
 
-        expect(created.data.merchant).toBe("After large history");
+        expect(created.data.counterparty).toEqual(Option.some("After large history"));
       })
     );
 
@@ -262,21 +288,21 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
       })
     );
 
-    it.effect("combines period, Category, merchant, direction, and Currency filters", () =>
+    it.effect("combines period, Category, counterparty, direction, and Currency filters", () =>
       Effect.gen(function* () {
         yield* truncateTransactions;
         const client = yield* ApiHarnessClient;
 
         const wanted = yield* client.transactions.createTransaction({
           payload: transactionPayload({
-            merchant: "RÁPPI Turbo",
+            counterparty: "RÁPPI Turbo",
             categoryId: Option.some(categoryIds.domicilios),
             occurredAt: utcDateTime("2026-07-20T12:30:00Z"),
           }),
         });
         yield* client.transactions.createTransaction({
           payload: transactionPayload({
-            merchant: "Nómina",
+            counterparty: "Nómina",
             direction: "inflow",
             categoryId: Option.some(categoryIds.ingresos),
             occurredAt: utcDateTime("2026-07-10T12:30:00Z"),
@@ -284,7 +310,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         });
         yield* client.transactions.createTransaction({
           payload: transactionPayload({
-            merchant: "Rappi",
+            counterparty: "Rappi",
             money: Money.make({ amount: BigDecimal.fromStringUnsafe("10"), currency: "USD" }),
             categoryId: Option.some(categoryIds.domicilios),
             occurredAt: utcDateTime("2026-07-21T12:30:00Z"),
@@ -296,7 +322,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
             from: utcDateTime("2026-07-15T00:00:00Z"),
             to: utcDateTime("2026-08-01T00:00:00Z"),
             categoryId: categoryIds.domicilios,
-            merchant: "rappi",
+            counterparty: "rappi",
             direction: "outflow",
             currency: "COP",
           },
@@ -313,10 +339,10 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         const sql = yield* MigrationSqlClient;
         const occurredAt = utcDateTime("2026-07-20T12:30:00Z");
         const first = yield* client.transactions.createTransaction({
-          payload: transactionPayload({ merchant: "Primera", occurredAt }),
+          payload: transactionPayload({ counterparty: "Primera", occurredAt }),
         });
         const second = yield* client.transactions.createTransaction({
-          payload: transactionPayload({ merchant: "Segunda", occurredAt }),
+          payload: transactionPayload({ counterparty: "Segunda", occurredAt }),
         });
         yield* sql`
           UPDATE transactions SET created_at = '2026-07-21T00:00:00Z'
@@ -371,7 +397,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           params: { id: created.data.id },
           payload: {
             money: created.data.money,
-            merchant: "El Corral corregido",
+            counterparty: Option.some("El Corral corregido"),
             direction: created.data.direction,
             categoryId: categoryIds.otros,
             notes: Option.some("Corrección del usuario"),
@@ -384,11 +410,24 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
 
         expect(updated.data).toMatchObject({
           id: created.data.id,
-          merchant: "El Corral corregido",
+          counterparty: Option.some("El Corral corregido"),
           categoryId: categoryIds.otros,
           notes: Option.some("Corrección del usuario"),
         });
         expect(after.data).toEqual(before.data);
+
+        const cleared = yield* client.transactions.updateTransaction({
+          params: { id: created.data.id },
+          payload: {
+            money: updated.data.money,
+            counterparty: Option.none(),
+            direction: updated.data.direction,
+            categoryId: updated.data.categoryId,
+            notes: updated.data.notes,
+            occurredAt: updated.data.occurredAt,
+          },
+        });
+        expect(Option.isNone(cleared.data.counterparty)).toBe(true);
 
         expect(
           (yield* client.transactions.deleteTransaction({ params: { id: created.data.id } })).data

@@ -1,5 +1,5 @@
 import { expect, it } from "@effect/vitest";
-import { BigDecimal, DateTime, Result, Schema } from "effect";
+import { BigDecimal, DateTime, Option, Result, Schema } from "effect";
 import { OpenApi } from "effect/unstable/httpapi";
 import { categoryIds } from "~/core/categories/taxonomy";
 import { FidyApi, operationCatalog } from "~/shell/api";
@@ -51,17 +51,17 @@ it("publishes one partial-input OpenAPI member per canonical operation", () => {
 });
 
 it("accepts typed partials without running checks whose nested input is incomplete", () => {
-  const merchantOnly = suggestOperation({
+  const counterpartyOnly = suggestOperation({
     tool: "transactions.createTransaction",
-    args: { payload: { merchant: "Rappi" } },
-    hint: "Record the Transaction while its merchant is known.",
+    args: { payload: { counterparty: Option.some("Rappi") } },
+    hint: "Record the Transaction while its counterparty is known.",
   });
   const incompleteMoney = suggestOperation({
     tool: "transactions.createTransaction",
     args: {
       payload: {
         money: { currency: "COP" },
-        merchant: "Rappi",
+        counterparty: Option.some("Rappi"),
         direction: "outflow",
         occurredAt: DateTime.makeUnsafe("2026-07-20T12:30:00Z"),
       },
@@ -71,10 +71,10 @@ it("accepts typed partials without running checks whose nested input is incomple
 
   expect(
     checkpointSuggestedOperations({
-      candidates: [merchantOnly, incompleteMoney],
+      candidates: [counterpartyOnly, incompleteMoney],
       caller: freeCaller,
     })
-  ).toEqual([merchantOnly, incompleteMoney]);
+  ).toEqual([counterpartyOnly, incompleteMoney]);
 });
 
 it("rejects fully known arguments that violate a target object check", () => {
@@ -86,7 +86,7 @@ it("rejects fully known arguments that violate a target object check", () => {
     args: {
       payload: {
         money: { amount: BigDecimal.fromStringUnsafe("0"), currency: "COP" },
-        merchant: "Rappi",
+        counterparty: "Rappi",
         direction: "outflow",
         occurredAt: DateTime.makeUnsafe("2026-07-20T12:30:00Z"),
         categoryId: categoryIds.otros,

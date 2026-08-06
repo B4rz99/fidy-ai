@@ -1,0 +1,34 @@
+.env.example
+  s_bd62cbb20ea6f0::t_0ed4e5af23da1d 14
+src/shell/channels/whatsapp/kapso-client.ts
+  s_bd62cbb20ea6f0::t_15947f84818116 122
+  s_bd62cbb20ea6f0::t_8c9e86a40cb745 1-2,23-26,31-34,96,98-102,118-121,123-124,128,182-185,188
+  s_bd62cbb20ea6f0::t_9c719bf998f067 174-175
+src/shell/channels/whatsapp/whatsapp-channel.test.ts
+  s_bd62cbb20ea6f0::t_fc9207f47becf0 1553-1556
+docs/adr/0011-bsuid-authority-for-whatsapp-identity.md
+  s_bd62cbb20ea6f0::t_47a1a84735e42d 39-45,66-69
+src/shell/channels/whatsapp/outbound.ts
+  s_bd62cbb20ea6f0::t_b88b23e76d2f6e 34
+src/shell/channels/whatsapp/kapso-client.test.ts
+  s_bd62cbb20ea6f0::t_a410d79b9f6d4c 82-106
+  s_bd62cbb20ea6f0::t_9f5ac9ac838903 2-3,12-15,28,46,55-81,121
+README.md
+  s_bd62cbb20ea6f0::t_f2f76be1a9123b 29,40-41
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "907728a7e2517cd0c63937ccf1c48a9bef39587f",
+  "prompts": {},
+  "sessions": {
+    "s_bd62cbb20ea6f0": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019fcec9-654f-738f-b644-1504a389768a",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

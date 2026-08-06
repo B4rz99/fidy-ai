@@ -36,10 +36,10 @@ export class KapsoBatchTooLarge extends Data.TaggedError("KapsoBatchTooLarge")<{
 const rawMessageFields = {
   id: WhatsAppProviderMessageId,
   timestamp: Schema.String.check(Schema.isPattern(/^[0-9]{1,16}$/u)),
-  from: Schema.optional(Schema.String),
-  from_user_id: Schema.optional(WhatsAppBusinessScopedUserId),
-  from_parent_user_id: Schema.optional(WhatsAppParentBusinessScopedUserId),
-  username: Schema.optional(WhatsAppUsername),
+  from: Model.optionalOption(Schema.String),
+  from_user_id: Model.optionalOption(WhatsAppBusinessScopedUserId),
+  from_parent_user_id: Model.optionalOption(WhatsAppParentBusinessScopedUserId),
+  username: Model.optionalOption(WhatsAppUsername),
 };
 const RawTextMessage = Schema.Struct({
   ...rawMessageFields,
@@ -133,7 +133,7 @@ const projectEvent = Effect.fn("Kapso.projectWebhookEvent")(function* (
   businessPortfolioId: WhatsAppBusinessPortfolioId,
   receivedAt: DateTime.Utc
 ) {
-  const messageBsuid = Option.fromNullishOr(raw.message.from_user_id);
+  const messageBsuid = raw.message.from_user_id;
   const conversationBsuid = raw.conversation.business_scoped_user_id;
   if (
     Option.isSome(messageBsuid) &&
@@ -145,10 +145,7 @@ const projectEvent = Effect.fn("Kapso.projectWebhookEvent")(function* (
   const businessScopedUserId = Option.orElse(messageBsuid, () => conversationBsuid);
   if (Option.isNone(businessScopedUserId)) return yield* new InvalidKapsoPayload();
 
-  const rawPhone = Option.orElse(
-    Option.fromNullishOr(raw.message.from),
-    () => raw.conversation.phone_number
-  );
+  const rawPhone = Option.orElse(raw.message.from, () => raw.conversation.phone_number);
   const phoneNumber = yield* Option.match(rawPhone, {
     onNone: () => Effect.succeed(Option.none<E164PhoneNumber>()),
     onSome: (phone) => normalizePhoneNumber(phone).pipe(Effect.map(Option.some)),
@@ -172,13 +169,10 @@ const projectEvent = Effect.fn("Kapso.projectWebhookEvent")(function* (
       businessPortfolioId,
       businessScopedUserId: businessScopedUserId.value,
       parentBusinessScopedUserId: Option.orElse(
-        Option.fromNullishOr(raw.message.from_parent_user_id),
+        raw.message.from_parent_user_id,
         () => raw.conversation.parent_business_scoped_user_id
       ),
-      username: Option.orElse(
-        Option.fromNullishOr(raw.message.username),
-        () => raw.conversation.username
-      ),
+      username: Option.orElse(raw.message.username, () => raw.conversation.username),
       phoneNumber,
     },
     businessPhoneNumberId: raw.phone_number_id,

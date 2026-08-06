@@ -190,6 +190,22 @@ it.effect("normalizes prefixed senders and rejects unsafe projected event fields
   })
 );
 
+it.effect("accepts null for optional Kapso message identity evidence", () =>
+  Effect.gen(function* () {
+    const fixture = new TextDecoder().decode(yield* fixtureBytes("kapso-text-v2.json"));
+    const rawBody = new TextEncoder().encode(
+      fixture.replace(
+        '"from_user_id": "CO.573001234567",',
+        '"from_user_id": "CO.573001234567",\n    "from_parent_user_id": null,'
+      )
+    );
+
+    const decoded = yield* decodeKapsoWebhook(signedInput(rawBody, "delivery-null-parent"));
+
+    expect(decoded.events[0].caller.parentBusinessScopedUserId).toEqual(Option.none());
+  })
+);
+
 it.effect("decodes recorded Kapso text and voice payloads into bounded WhatsApp evidence", () =>
   Effect.gen(function* () {
     const textBytes = yield* fixtureBytes("kapso-text-v2.json");

@@ -1,0 +1,21 @@
+src/shell/channels/whatsapp/fixtures/kapso-text-v2.json
+  s_bd62cbb20ea6f0::t_1078d8120db2fc 8,14-15
+src/shell/channels/whatsapp/kapso-webhook.ts
+  s_bd62cbb20ea6f0::t_76ab010e9a7a7b 39-42,136,148,172,175
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "4267bd98fcc5365b894c65bef8658a1b52d895d3",
+  "prompts": {},
+  "sessions": {
+    "s_bd62cbb20ea6f0": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019fcec9-654f-738f-b644-1504a389768a",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

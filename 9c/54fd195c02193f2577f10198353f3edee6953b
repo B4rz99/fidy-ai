@@ -1,0 +1,63 @@
+vitest.crap.config.ts
+  s_bd62cbb20ea6f0::t_e670ab94896e5d 34
+src/shell/channels/whatsapp/whatsapp.acceptance.test.ts
+  s_bd62cbb20ea6f0::t_02c771462ef798 117-120
+  s_bd62cbb20ea6f0::t_bca3cbc2a84a10 64-81
+  s_bd62cbb20ea6f0::t_ecaed8e3c2095d 48,101,103,121-125,127-130,135,143-144,171-176
+  s_bd62cbb20ea6f0::t_242c14e513db40 1,5-6,8-10,15-22,37,49-63,83-100,102,104-116,181-182,235-236
+  s_bd62cbb20ea6f0::t_7c888bc4f9fbcb 183-200
+  s_bd62cbb20ea6f0::t_06ca23c242d26c 3-4,38,40-47,82
+  s_bd62cbb20ea6f0::t_75ffa7fd30c831 201-234
+  s_bd62cbb20ea6f0::t_0f35a6b90415b1 2,7,11-14,23-36,39,126,131-134,136-142,145-170,177-180
+.github/workflows/ci.yml
+  s_bd62cbb20ea6f0::t_489f280ae682c1 209-245,248,361
+  s_bd62cbb20ea6f0::t_8a0ad695a8744a 246-247
+README.md
+  s_bd62cbb20ea6f0::t_e1476de480515a 223-225
+  s_bd62cbb20ea6f0::t_95d98a925dba9d 201,210,220-222,231-232,245-250
+  s_bd62cbb20ea6f0::t_06ca23c242d26c 233-244
+ARCHITECTURE.md
+  s_bd62cbb20ea6f0::t_b7863e4efe5c34 167-170
+src/shell/testing/whatsapp-acceptance-scenarios.ts
+  s_bd62cbb20ea6f0::t_1bb66388ce82a0 1-24,29-31
+  s_bd62cbb20ea6f0::t_1301305f9ac41d 25-28
+package.json
+  s_bd62cbb20ea6f0::t_ae9becf60b6464 19
+src/shell/testing/whatsapp-acceptance-harness.ts
+  s_bd62cbb20ea6f0::t_77462baab00b23 2,22,157
+  s_bd62cbb20ea6f0::t_7bd489ef49ad21 1,3,5-19,21,23-31,37-41,43,51,53-57,70-77,85-91,99-139,141-147,152-156,158
+  s_bd62cbb20ea6f0::t_08d3c3d8d380b4 140
+  s_bd62cbb20ea6f0::t_06ca23c242d26c 42
+  s_bd62cbb20ea6f0::t_0ef02f5b5eed70 4,20,32-36,45-50,58-69,84,148-151
+  s_bd62cbb20ea6f0::t_6da02879626c00 44,52,92-94
+  s_bd62cbb20ea6f0::t_94dc9add4fb7ce 78-83,95-98
+vitest.config.ts
+  s_bd62cbb20ea6f0::t_aef7e64eaa1341 23
+vitest.acceptance.config.ts
+  s_bd62cbb20ea6f0::t_f6a38f95e1a28d 32,36
+  s_bd62cbb20ea6f0::t_788fcdd853be11 1-29,37-39
+  s_bd62cbb20ea6f0::t_c071592ff3d05a 34-35
+  s_bd62cbb20ea6f0::t_b94feca9e92d28 30-31,33
+docs/adr/0006-test-seams-and-core-mutation-gate.md
+  s_bd62cbb20ea6f0::t_e8b3347e7af5ac 18,29-33,53-54
+src/shell/testing/test-config.ts
+  s_bd62cbb20ea6f0::t_79a2cd9b517685 1-17
+src/shell/testing/api-harness.ts
+  s_bd62cbb20ea6f0::t_3c755d6c54420e 2,24
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "9c54fd195c02193f2577f10198353f3edee6953b",
+  "prompts": {},
+  "sessions": {
+    "s_bd62cbb20ea6f0": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019fcec9-654f-738f-b644-1504a389768a",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

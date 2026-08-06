@@ -1,0 +1,54 @@
+.env.example
+  s_bd62cbb20ea6f0::t_0ed4e5af23da1d 14
+src/shell/channels/whatsapp/kapso-client.ts
+  s_bd62cbb20ea6f0::t_8c9e86a40cb745 1-2,42-45,50-53,182,184-188,206-209,211-212,216,279-282,285
+  s_bd62cbb20ea6f0::t_9c719bf998f067 271-272
+  s_27da37b7974951::t_c1d83f93fc8174 113-119,157,252
+  s_27da37b7974951::t_94164d9dcaa452 11-21,24-25,28,67-70,72-82,92-96,132,135-156,158-163,170-174,197-199,210,232-243,246,250-251,253,255-256
+  s_27da37b7974951::t_16ffd429e5ca68 22-23,26-27,30-32,71
+  s_27da37b7974951::t_26e645696ca70a 164-169,248-249,254
+  s_27da37b7974951::t_7151d5a6df0dbc 133
+  s_27da37b7974951::t_2b8bc9fc12627b 134
+src/shell/channels/whatsapp/whatsapp-channel.test.ts
+  s_bd62cbb20ea6f0::t_fc9207f47becf0 1553-1556
+docs/adr/0011-bsuid-authority-for-whatsapp-identity.md
+  s_bd62cbb20ea6f0::t_47a1a84735e42d 39-45,66-69
+src/shell/channels/whatsapp/outbound.ts
+  s_bd62cbb20ea6f0::t_b88b23e76d2f6e 34
+src/shell/channels/whatsapp/kapso-client.test.ts
+  s_bd62cbb20ea6f0::t_a410d79b9f6d4c 261-279,285-287
+  s_bd62cbb20ea6f0::t_9f5ac9ac838903 2-3,12-15,28,46,55-81
+  s_27da37b7974951::t_4580c6bcc72f0e 82-147,152-190,192-219,221-250,252-260,280-284
+  s_27da37b7974951::t_d93a8313f44208 148-151
+  s_27da37b7974951::t_c1d83f93fc8174 191
+  s_27da37b7974951::t_50a1c4bb9771fc 220
+  s_27da37b7974951::t_b7791568174dc4 251
+README.md
+  s_bd62cbb20ea6f0::t_f2f76be1a9123b 29,40-41
+src/shell/testing/api-harness.ts
+  s_27da37b7974951::t_a907acde80633b 100-104
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "614cc1a90f4b26a1a7e073dd4f936abe3aa46dbd",
+  "prompts": {},
+  "sessions": {
+    "s_27da37b7974951": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019fd4e5-eef1-7654-8f58-fedb9930cd64",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_bd62cbb20ea6f0": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019fcec9-654f-738f-b644-1504a389768a",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

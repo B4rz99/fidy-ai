@@ -1,0 +1,27 @@
+research/007-kapso-meta-whatsapp-onboarding.md
+  s_bd62cbb20ea6f0::t_759748c0536d54 1-188
+research/007-sentry-free-plan-limits.md
+  s_bd62cbb20ea6f0::t_77d4d683d6a062 1-267
+research/008-sentry-ci-e2e-instrumentation-and-artifacts.md
+  s_bd62cbb20ea6f0::t_10d592281ba5d2 1-270
+research/008-sentry-redaction-controls.md
+  s_bd62cbb20ea6f0::t_ce8476e5680b62 1-363
+research/008-sentry-tracing.md
+  s_bd62cbb20ea6f0::t_e3d99b151e8df9 1-164
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "7a8d01eb844912e91e1e08a3e6149b240568d376",
+  "prompts": {},
+  "sessions": {
+    "s_bd62cbb20ea6f0": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019fcec9-654f-738f-b644-1504a389768a",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

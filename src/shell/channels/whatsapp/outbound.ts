@@ -31,6 +31,7 @@ const renderWhatsAppText = (text: TranscriptText): TranscriptText =>
 
 const destinationFor = (caller: WhatsAppInboundEvent["caller"]) => ({
   recipient: caller.businessScopedUserId,
+  sandboxPhone: caller.phoneNumber,
 });
 
 /**

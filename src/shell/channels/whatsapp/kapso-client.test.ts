@@ -1,6 +1,6 @@
 import { expect, it } from "@effect/vitest";
-import { Effect, Schema } from "effect";
-import { WhatsAppBusinessScopedUserId } from "~/core/identity/reference";
+import { Effect, Option, Schema } from "effect";
+import { E164PhoneNumber, WhatsAppBusinessScopedUserId } from "~/core/identity/reference";
 import { TranscriptText } from "~/core/transcript/model";
 import { type KapsoClientService, makeKapsoClientService } from "./kapso-client";
 import { WhatsAppBusinessPhoneNumberId } from "./model";
@@ -9,7 +9,10 @@ const sendInput = (
   overrides: Partial<Parameters<KapsoClientService["sendText"]>[0]> = {}
 ): Parameters<KapsoClientService["sendText"]>[0] => ({
   businessPhoneNumberId: WhatsAppBusinessPhoneNumberId.make("123456789"),
-  destination: { recipient: WhatsAppBusinessScopedUserId.make("CO.573001234567") },
+  destination: {
+    recipient: WhatsAppBusinessScopedUserId.make("CO.573001234567"),
+    sandboxPhone: Option.some(E164PhoneNumber.make("+573001234567")),
+  },
   text: TranscriptText.make("hola"),
   ...overrides,
 });
@@ -22,6 +25,7 @@ it.effect("uses recipient, never to, for a BSUID destination", () =>
     let requestBody: unknown;
     const service = makeKapsoClientService({
       apiKey: "test-api-key",
+      deliveryMode: "bsuid",
       nativeFetch: Object.assign(
         (_resource: Parameters<typeof globalThis.fetch>[0], init?: RequestInit) => {
           requestBody = Schema.decodeUnknownSync(Schema.UnknownFromJsonString)(init?.body);
@@ -39,11 +43,64 @@ it.effect("uses recipient, never to, for a BSUID destination", () =>
       sendInput({
         destination: {
           recipient: WhatsAppBusinessScopedUserId.make("CO.573001234567"),
+          sandboxPhone: Option.some(E164PhoneNumber.make("+573001234567")),
         },
       })
     );
     expect(requestBody).toMatchObject({ recipient: "CO.573001234567" });
     expect(requestBody).not.toHaveProperty("to");
+  })
+);
+
+it.effect("uses to only in explicit sandbox phone mode", () =>
+  Effect.gen(function* () {
+    let requestBody: unknown;
+    const service = makeKapsoClientService({
+      apiKey: "test-api-key",
+      deliveryMode: "sandbox-phone",
+      nativeFetch: Object.assign(
+        (_resource: Parameters<typeof globalThis.fetch>[0], init?: RequestInit) => {
+          requestBody = Schema.decodeUnknownSync(Schema.UnknownFromJsonString)(init?.body);
+          return Promise.resolve(
+            Response.json({
+              messaging_product: "whatsapp",
+              messages: [{ id: "wamid.sandbox-outbound" }],
+            })
+          );
+        },
+        { preconnect: () => undefined }
+      ),
+    });
+
+    yield* service.sendText(sendInput());
+
+    expect(requestBody).toMatchObject({ to: "573001234567" });
+    expect(requestBody).not.toHaveProperty("recipient");
+  })
+);
+
+it.effect("fails sandbox delivery when authenticated phone evidence is absent", () =>
+  Effect.gen(function* () {
+    const service = makeKapsoClientService({
+      apiKey: "test-api-key",
+      deliveryMode: "sandbox-phone",
+      nativeFetch: fakeFetch(() => Response.json({})),
+    });
+
+    const failure = yield* service
+      .sendText(
+        sendInput({
+          destination: {
+            recipient: WhatsAppBusinessScopedUserId.make("CO.573001234567"),
+            sandboxPhone: Option.none(),
+          },
+        })
+      )
+      .pipe(Effect.flip);
+
+    expect(failure).toEqual(
+      expect.objectContaining({ _tag: "KapsoSendFailed", safeReason: "invalid_response" })
+    );
   })
 );
 
@@ -61,6 +118,7 @@ it.effect("rejects malformed, incomplete, and oversized Kapso responses", () =>
     for (const response of responses) {
       const service = makeKapsoClientService({
         apiKey: "test-api-key",
+        deliveryMode: "bsuid",
         nativeFetch: fakeFetch(response),
       });
       const failure = yield* service.sendText(sendInput()).pipe(Effect.flip);

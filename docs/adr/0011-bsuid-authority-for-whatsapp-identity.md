@@ -36,10 +36,13 @@ A cross-slice WhatsApp caller reference contains only Business Portfolio and BSU
 evidence remains in Identity or the WhatsApp operational adapter and is not embedded in Consent.
 Pending consent and caller-scoped locks use only the stable reference.
 
-All outbound WhatsApp delivery uses the resolved BSUID as Kapso's `recipient`. Retained phone
-evidence is never a delivery destination. Pre-launch phone-keyed associations and work admitted
-through them have no authenticated BSUID and are deleted during migration rather than assigned
-fabricated provider identities.
+Outbound WhatsApp delivery uses the resolved BSUID as Kapso's `recipient` by default. An explicit
+`sandbox-phone` deployment mode may instead address Kapso's sandbox with `to`, because Kapso rejects
+BSUID recipients for sandbox numbers. That mode can use only phone evidence carried alongside the
+provider-authenticated BSUID caller; it never resolves, authorizes, reassociates, or admits work by
+phone, and it fails delivery when phone evidence is absent. It must not be enabled for a non-sandbox
+number. Pre-launch phone-keyed associations and work admitted through them have no authenticated
+BSUID and are deleted during migration rather than assigned fabricated provider identities.
 
 ## Consequences
 
@@ -60,8 +63,10 @@ User, and automatic persistence would turn one mistaken match into a durable tak
 
 ### Prefer phone for outbound delivery when retained
 
-Rejected because retained evidence may be stale and could disclose personal financial content to a
-new holder of the number.
+Rejected for normal delivery because retained evidence may be stale and could disclose personal
+financial content to a new holder of the number. The explicit sandbox-only mode is a constrained
+development exception for a provider environment that cannot address BSUID recipients; it is not an
+automatic fallback and does not weaken BSUID authorization.
 
 ### Fabricate BSUIDs for pre-launch rows
 

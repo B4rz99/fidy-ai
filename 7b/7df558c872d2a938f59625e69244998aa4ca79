@@ -1,0 +1,22 @@
+src/shell/channels/whatsapp/kapso-client.test.ts
+  s_27da37b7974951::t_0749bbc6f4ef2f 109-112,117-124,156-162,170-173
+src/shell/channels/whatsapp/kapso-client.ts
+  s_27da37b7974951::t_3e8802cdec7c33 195-197,200-201
+  s_27da37b7974951::t_ce848265671c28 198-199
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "7b7df558c872d2a938f59625e69244998aa4ca79",
+  "prompts": {},
+  "sessions": {
+    "s_27da37b7974951": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019fd4e5-eef1-7654-8f58-fedb9930cd64",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

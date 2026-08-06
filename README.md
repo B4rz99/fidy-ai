@@ -198,6 +198,7 @@ judging a coverage number.
 | `bun run format:check`           | Verify formatting without writing                                                      |
 | `bun run typecheck`              | `tsc --noEmit` (Effect-patched)                                                        |
 | `bun run test`                   | `bun --bun vitest run` (needs both database URLs)                                      |
+| `bun run test:acceptance`        | signed WhatsApp HTTP scenarios against a fresh PostgreSQL database                     |
 | `bun run test:core`              | the pure core tier — no Docker, no database                                            |
 | `bun run test:crap`              | CRAP-score gate (needs both database URLs)                                             |
 | `bun run test:mutation`          | mutation-score gate over `src/core` (no database)                                      |
@@ -206,7 +207,7 @@ judging a coverage number.
 
 ### Quality gates
 
-Three test-based gates run on every pull request, with mutation testing shifted right to a nightly
+Four test-based gates run on every pull request, with mutation testing shifted right to a nightly
 check on `trunk`. They cover the behavioural source listed in `source-scope.mjs` (tests, the
 `src/shell/testing` harness, and `src/main.ts` are out of scope):
 
@@ -216,13 +217,37 @@ check on `trunk`. They cover the behavioural source listed in `source-scope.mjs`
   alone drops below 90%.
 - **CRAP score** — `bun run test:crap` fails if any function's [CRAP score](https://www.npmjs.com/package/crap4ts)
   exceeds 8 (high complexity + low coverage).
+- **WhatsApp acceptance** — `bun run test:acceptance` enters through the public signed Kapso
+  webhook, uses real PostgreSQL and application coordination, and substitutes only Kapso transport
+  and language-model behavior. Scenario IDs are printed in the retained CI log. Acceptance-only
+  Istanbul coverage has initial ratchet floors of 41.5% lines and 15.77% branches. Vitest raises
+  the checked-in floors when coverage improves, and CI rejects an unrecorded increase or any later
+  decrease.
 - **Mutation score** — the nightly and manually dispatchable Mutation workflow runs
   `bun run test:mutation` against `trunk` and fails if a single mutant
   [Stryker](https://stryker-mutator.io) plants in `src/core` survives the core tests. The threshold
   remains 100, but its runtime no longer delays or blocks pull requests.
 
-`bun run verify` runs total coverage and mutation testing locally, not the core-coverage or CRAP
-commands, so a clean `verify` is still not a clean pull-request run.
+The WhatsApp acceptance inventory is independent from lower-seam test counts:
+
+| Scenario | Release behavior                                                    | Status          |
+| -------- | ------------------------------------------------------------------- | --------------- |
+| `WA-A01` | A new sandbox caller receives the disclosure                        | Executable      |
+| `WA-A02` | Portfolio + BSUID, never phone evidence, authorizes the caller      | Executable      |
+| `WA-A03` | Missing sandbox phone evidence fails closed without a provider call | Executable      |
+| `WA-A04` | Consent acceptance establishes the stable User                      | Planned in #121 |
+| `WA-A05` | A financial message creates one Transaction and visible reply       | Planned in #121 |
+| `WA-A06` | Duplicate webhooks do not duplicate effects                         | Planned in #121 |
+| `WA-A07` | Definitive provider rejection becomes safely retryable              | Planned in #122 |
+| `WA-A08` | Ambiguous delivery is not automatically resent                      | Planned in #122 |
+| `WA-A09` | An authenticated operator reconciles ambiguous delivery             | Planned in #122 |
+| `WA-A10` | Normal delivery uses only `recipient`; sandbox uses only `to`       | Executable      |
+
+The acceptance command requires `DATABASE_URL` and `MIGRATION_DATABASE_URL` for a fresh database
+whose restricted runtime role has been installed with `deploy/local-postgres-init.sql`.
+
+`bun run verify` runs total coverage and mutation testing locally, not the acceptance,
+core-coverage, or CRAP commands, so a clean `verify` is still not a clean pull-request run.
 
 The mutation check runs the tests the way everything else here does — through
 `bun --bun vitest`, via Stryker's **command** runner rather than its vitest

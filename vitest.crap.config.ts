@@ -31,7 +31,7 @@ export default defineConfig({
     // The OpenAI assembly test owns no behavioural function coverage and is
     // still enforced by the main suite. Istanbul's JSON reporter does not exit
     // when that Layer-construction test shares this full-suite worker.
-    exclude: ["src/shell/agent/openai.test.ts"],
+    exclude: ["src/shell/agent/openai.test.ts", "src/**/*.acceptance.test.ts"],
     environment: "node",
     reporter: ["dot"],
     pool: "forks",

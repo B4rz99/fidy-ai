@@ -169,9 +169,6 @@ const classifyHttpStatus = (status: number): Option.Option<KapsoSendFailed> => {
   return Option.none();
 };
 
-const isTimeoutFailure = (error: unknown): boolean =>
-  error instanceof DOMException && (error.name === "TimeoutError" || error.name === "AbortError");
-
 /**
  * Constructs the true-external sender around an explicit transport. Responses larger than 64 KiB
  * are rejected; transport, timeout, oversized, and malformed responses remain safe KapsoSendFailed
@@ -195,7 +192,13 @@ export const makeKapsoClientService = ({
           : timeout;
       return nativeFetch(resource, { ...init, signal })
         .catch((error: unknown) =>
-          Promise.reject(new KapsoTransportFailure({ timedOut: isTimeoutFailure(error) }))
+          Promise.reject(
+            new KapsoTransportFailure({
+              timedOut:
+                error instanceof DOMException &&
+                ["TimeoutError", "AbortError"].includes(error.name),
+            })
+          )
         )
         .then(boundKapsoResponse);
     },

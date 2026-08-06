@@ -107,8 +107,20 @@ it.effect("classifies every known rejection with safe retry semantics", () =>
         expected: ["rate_limited", true] as const,
       },
       {
+        response: () => Response.json({ error: { code: 4 } }, { status: 400 }),
+        expected: ["rate_limited", true] as const,
+      },
+      {
         response: () => Response.json({ error: "bad api key" }, { status: 401 }),
         expected: ["authentication_failed", false] as const,
+      },
+      {
+        response: () => Response.json({ error: { code: 190 } }, { status: 400 }),
+        expected: ["authentication_failed", false] as const,
+      },
+      {
+        response: () => Response.json({ error: { code: 131016 } }, { status: 400 }),
+        expected: ["provider_unavailable", true] as const,
       },
     ];
 
@@ -142,10 +154,21 @@ it.effect("classifies timeout and transport outcomes as ambiguous and not retrya
         safeReason: "timeout",
       },
       {
+        nativeFetch: Object.assign(
+          () => Promise.reject(new DOMException("request aborted", "AbortError")),
+          { preconnect: () => undefined }
+        ),
+        safeReason: "timeout",
+      },
+      {
         nativeFetch: Object.assign(() => Promise.reject(new Error("connection reset")), {
           preconnect: () => undefined,
         }),
         safeReason: "provider_unavailable",
+      },
+      {
+        nativeFetch: fakeFetch(() => new Response("request timeout", { status: 408 })),
+        safeReason: "timeout",
       },
       {
         nativeFetch: fakeFetch(() => new Response("malformed maintenance body", { status: 503 })),

@@ -1550,7 +1550,10 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           Option.some(TranscriptText.make("*Registré* el movimiento."))
         );
         expect(yield* Ref.get(destination)).toEqual(
-          Option.some({ recipient: event.caller.businessScopedUserId })
+          Option.some({
+            recipient: event.caller.businessScopedUserId,
+            sandboxPhone: event.caller.phoneNumber,
+          })
         );
       })
     );

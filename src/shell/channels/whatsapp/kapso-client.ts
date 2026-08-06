@@ -1,5 +1,5 @@
-import { Config, Context, Data, DateTime, Effect, Layer, Redacted, Schema } from "effect";
-import type { WhatsAppBusinessScopedUserId } from "~/core/identity/reference";
+import { Config, Context, Data, DateTime, Effect, Layer, Option, Redacted, Schema } from "effect";
+import type { E164PhoneNumber, WhatsAppBusinessScopedUserId } from "~/core/identity/reference";
 import type { TranscriptText } from "~/core/transcript/model";
 import { makeBoundedBytes } from "./bounded-bytes";
 import {
@@ -20,14 +20,18 @@ export type KapsoSentMessage = Readonly<{
 }>;
 
 /**
- * Sends one validated TranscriptText to a BSUID recipient through a business phone. The caller
- * must supply the authenticated portfolio-scoped recipient. The send has a bounded wait; transport,
- * timeout, and invalid-response failures expose no remote or credential details.
+ * Sends one validated TranscriptText to the configured Kapso destination. The caller must supply
+ * the authenticated portfolio-scoped BSUID and its optional provider-observed phone evidence.
+ * Normal delivery uses only the BSUID; explicit sandbox mode uses phone evidence because Kapso
+ * rejects BSUID recipients for sandbox numbers. Failures expose no remote or credential details.
  */
 export type KapsoClientService = {
   readonly sendText: (input: {
     readonly businessPhoneNumberId: WhatsAppBusinessPhoneNumberId;
-    readonly destination: { readonly recipient: WhatsAppBusinessScopedUserId };
+    readonly destination: {
+      readonly recipient: WhatsAppBusinessScopedUserId;
+      readonly sandboxPhone: Option.Option<E164PhoneNumber>;
+    };
     readonly text: TranscriptText;
   }) => Effect.Effect<KapsoSentMessage, KapsoSendFailed>;
 };
@@ -89,8 +93,13 @@ const SendResponse = Schema.Struct({
  */
 export const makeKapsoClientService = ({
   apiKey,
+  deliveryMode,
   nativeFetch,
-}: Readonly<{ apiKey: string; nativeFetch: KapsoFetch }>) => {
+}: Readonly<{
+  apiKey: string;
+  deliveryMode: "bsuid" | "sandbox-phone";
+  nativeFetch: KapsoFetch;
+}>) => {
   const boundedFetch = Object.assign(
     (resource: Parameters<KapsoFetch>[0], init?: Parameters<KapsoFetch>[1]) => {
       const timeout = AbortSignal.timeout(14_000);
@@ -106,10 +115,17 @@ export const makeKapsoClientService = ({
   );
   return KapsoClient.of({
     sendText: Effect.fn("Kapso.sendText")(function* (input) {
+      const address =
+        deliveryMode === "bsuid"
+          ? { recipient: input.destination.recipient }
+          : yield* Option.match(input.destination.sandboxPhone, {
+              onNone: () => Effect.fail(new KapsoSendFailed({ safeReason: "invalid_response" })),
+              onSome: (phoneNumber) => Effect.succeed({ to: phoneNumber.slice(1) }),
+            });
       const body = yield* Schema.encodeEffect(Schema.UnknownFromJsonString)({
         messaging_product: "whatsapp",
         recipient_type: "individual",
-        recipient: input.destination.recipient,
+        ...address,
         type: "text",
         text: { body: input.text },
       }).pipe(Effect.orDie);
@@ -155,15 +171,21 @@ export const makeKapsoClientService = ({
 };
 
 /**
- * Provides authenticated Kapso text delivery from KAPSO_API_KEY. Calls fail within 15 seconds,
+ * Provides authenticated Kapso text delivery from KAPSO_API_KEY. WHATSAPP_DELIVERY_MODE defaults
+ * to BSUID delivery and permits explicit sandbox phone routing. Calls fail within 15 seconds,
  * reject invalid provider responses, and never persist channel state.
  */
 export const KapsoClientLive = Layer.effect(
   KapsoClient,
   Effect.gen(function* () {
     const apiKey = yield* Config.redacted("KAPSO_API_KEY");
+    const deliveryMode = yield* Config.literals(
+      ["bsuid", "sandbox-phone"],
+      "WHATSAPP_DELIVERY_MODE"
+    ).pipe(Config.withDefault("bsuid"));
     return makeKapsoClientService({
       apiKey: Redacted.value(apiKey),
+      deliveryMode,
       nativeFetch: globalThis["fetch"],
     });
   })

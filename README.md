@@ -26,6 +26,7 @@ The process reads deployment configuration from the environment:
 | `DATABASE_URL`                   | required    | Restricted `fidy_runtime` PostgreSQL URL                   |
 | `MIGRATION_DATABASE_URL`         | required    | Separately privileged PostgreSQL URL used only during boot |
 | `WHATSAPP_BUSINESS_PORTFOLIO_ID` | required    | Trusted portfolio scope for WhatsApp BSUIDs                |
+| `WHATSAPP_DELIVERY_MODE`         | optional    | `bsuid` (default) or explicit `sandbox-phone` delivery     |
 | `PORT`                           | optional    | HTTP port, defaulting to `3000`                            |
 | `FIDY_HTTP_HOST`                 | optional    | Bind host, defaulting to `0.0.0.0`                         |
 | `APP_VERSION`                    | optional    | Version returned by `GET /health`                          |
@@ -36,6 +37,8 @@ docker compose up -d db     # local Postgres on :5433
 export DATABASE_URL=postgres://fidy_runtime:fidy_runtime@localhost:5433/fidy
 export MIGRATION_DATABASE_URL=postgres://fidy:fidy@localhost:5433/fidy
 export WHATSAPP_BUSINESS_PORTFOLIO_ID=portfolio-local
+# Use sandbox-phone only with a Kapso sandbox number; it cannot deliver to BSUID recipients.
+export WHATSAPP_DELIVERY_MODE=bsuid
 bun run dev                 # rotates a local-only fin_ bearer, prints it once, starts API
 ```
 

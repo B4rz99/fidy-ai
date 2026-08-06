@@ -97,7 +97,11 @@ const TestKapsoClient = Layer.effectContext(
         Effect.gen(function* () {
           yield* Ref.update(calls, (count) => count + 1);
           if (yield* Ref.getAndSet(failNext, false)) {
-            return yield* new KapsoSendFailed({ safeReason: "unavailable" });
+            return yield* new KapsoSendFailed({
+              safeReason: "provider_unavailable",
+              deliveryCertainty: "ambiguous",
+              automaticRetry: false,
+            });
           }
           return {
             messageEvidence: {

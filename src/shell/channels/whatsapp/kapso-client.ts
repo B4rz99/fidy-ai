@@ -8,9 +8,28 @@ import {
   type WhatsAppMessageEvidence,
 } from "./model";
 
-/** Safe provider-send failure that reveals no remote response or credential detail. */
+/** Closed operator-safe reason for a failed Kapso send. */
+export type KapsoFailureReason =
+  | "sandbox_bsuid_unsupported"
+  | "invalid_recipient"
+  | "conversation_window_closed"
+  | "rate_limited"
+  | "authentication_failed"
+  | "provider_unavailable"
+  | "timeout"
+  | "invalid_response";
+
+/** Whether a provider response proves rejection or acceptance may already have occurred. */
+export type KapsoDeliveryCertainty = "rejected" | "ambiguous";
+
+/**
+ * Safe provider-send failure. Automatic retry is permitted only when the provider definitively
+ * rejected a transient attempt; the value contains no request input, credential, or response body.
+ */
 export class KapsoSendFailed extends Data.TaggedError("KapsoSendFailed")<{
-  readonly safeReason: "unavailable" | "invalid_response";
+  readonly safeReason: KapsoFailureReason;
+  readonly deliveryCertainty: KapsoDeliveryCertainty;
+  readonly automaticRetry: boolean;
 }> {}
 
 /** Decoded provider evidence plus Fidy's local clock time after the response was validated. */
@@ -45,8 +64,22 @@ const maximumKapsoResponseBytes = 64 * 1_024;
 
 type KapsoFetch = typeof globalThis.fetch;
 
-class KapsoTransportFailure extends Data.TaggedError("KapsoTransportFailure")<{}> {}
-class KapsoInvalidResponse extends Data.TaggedError("KapsoInvalidResponse")<{}> {}
+class KapsoTransportFailure extends Data.TaggedError("KapsoTransportFailure")<{
+  readonly timedOut: boolean;
+}> {}
+class KapsoInvalidResponse extends Data.TaggedError("KapsoInvalidResponse")<{
+  readonly deliveryCertainty: KapsoDeliveryCertainty;
+}> {}
+
+const rejected = (safeReason: KapsoFailureReason, automaticRetry = false) =>
+  new KapsoSendFailed({ safeReason, deliveryCertainty: "rejected", automaticRetry });
+
+const ambiguous = (safeReason: KapsoFailureReason) =>
+  new KapsoSendFailed({
+    safeReason,
+    deliveryCertainty: "ambiguous",
+    automaticRetry: false,
+  });
 
 type ByteReadResult =
   | { readonly done: true; readonly value?: never }
@@ -56,7 +89,11 @@ const boundKapsoResponse = (response: Response): Promise<Response> => {
   const declaredLength = response.headers.get("content-length");
   if (declaredLength !== null && Number(declaredLength) > maximumKapsoResponseBytes) {
     return (response.body?.cancel() ?? Promise.resolve()).then(() =>
-      Promise.reject(new KapsoInvalidResponse())
+      Promise.reject(
+        new KapsoInvalidResponse({
+          deliveryCertainty: response.ok ? "ambiguous" : "rejected",
+        })
+      )
     );
   }
   if (response.body === null) return Promise.resolve(response);
@@ -73,7 +110,13 @@ const boundKapsoResponse = (response: Response): Promise<Response> => {
         });
       }
       if (!bytes.append(next.value)) {
-        return reader.cancel().then(() => Promise.reject(new KapsoInvalidResponse()));
+        return reader.cancel().then(() =>
+          Promise.reject(
+            new KapsoInvalidResponse({
+              deliveryCertainty: response.ok ? "ambiguous" : "rejected",
+            })
+          )
+        );
       }
       return readNext();
     });
@@ -85,6 +128,49 @@ const SendResponse = Schema.Struct({
   messaging_product: Schema.Literal("whatsapp"),
   messages: Schema.Tuple([Schema.Struct({ id: WhatsAppProviderMessageId })]),
 });
+
+const MetaFailureResponse = Schema.Struct({
+  error: Schema.Struct({ code: Schema.Finite }),
+});
+const KapsoFailureResponse = Schema.Struct({ error: Schema.String });
+
+const invalidRecipientCodes = new Set([130_403, 131_021, 131_026, 131_050]);
+const rateLimitedCodes = new Set([4, 17, 32, 80_007, 130_429, 131_056]);
+const authenticationCodes = new Set([10, 190, 200, 131_005]);
+const unavailableCodes = new Set([1, 2, 131_000, 131_016, 131_057, 133_004]);
+
+const classifyMetaCode = (code: number): KapsoSendFailed => {
+  if (invalidRecipientCodes.has(code)) return rejected("invalid_recipient");
+  if (code === 131_047) return rejected("conversation_window_closed");
+  if (rateLimitedCodes.has(code)) return rejected("rate_limited", true);
+  if (authenticationCodes.has(code)) return rejected("authentication_failed");
+  if (unavailableCodes.has(code)) return rejected("provider_unavailable", true);
+  return rejected("invalid_response");
+};
+
+const classifyFailureBody = (body: unknown): KapsoSendFailed => {
+  const metaFailure = Schema.decodeUnknownOption(MetaFailureResponse)(body);
+  if (Option.isSome(metaFailure)) return classifyMetaCode(metaFailure.value.error.code);
+  const kapsoFailure = Schema.decodeUnknownOption(KapsoFailureResponse)(body);
+  if (
+    Option.isSome(kapsoFailure) &&
+    kapsoFailure.value.error.toLowerCase() === "sandbox numbers do not support bsuid recipients"
+  ) {
+    return rejected("sandbox_bsuid_unsupported");
+  }
+  return rejected("invalid_response");
+};
+
+const classifyHttpStatus = (status: number): Option.Option<KapsoSendFailed> => {
+  if (status === 401 || status === 403) return Option.some(rejected("authentication_failed"));
+  if (status === 408) return Option.some(ambiguous("timeout"));
+  if (status === 429) return Option.some(rejected("rate_limited", true));
+  if (status >= 500 && status <= 599) return Option.some(ambiguous("provider_unavailable"));
+  return Option.none();
+};
+
+const isTimeoutFailure = (error: unknown): boolean =>
+  error instanceof DOMException && (error.name === "TimeoutError" || error.name === "AbortError");
 
 /**
  * Constructs the true-external sender around an explicit transport. Responses larger than 64 KiB
@@ -108,7 +194,9 @@ export const makeKapsoClientService = ({
           ? AbortSignal.any([init.signal, timeout])
           : timeout;
       return nativeFetch(resource, { ...init, signal })
-        .catch(() => Promise.reject(new KapsoTransportFailure()))
+        .catch((error: unknown) =>
+          Promise.reject(new KapsoTransportFailure({ timedOut: isTimeoutFailure(error) }))
+        )
         .then(boundKapsoResponse);
     },
     { preconnect: nativeFetch.preconnect }
@@ -119,7 +207,7 @@ export const makeKapsoClientService = ({
         deliveryMode === "bsuid"
           ? { recipient: input.destination.recipient }
           : yield* Option.match(input.destination.sandboxPhone, {
-              onNone: () => Effect.fail(new KapsoSendFailed({ safeReason: "invalid_response" })),
+              onNone: () => Effect.fail(rejected("invalid_recipient")),
               onSome: (phoneNumber) => Effect.succeed({ to: phoneNumber.slice(1) }),
             });
       const body = yield* Schema.encodeEffect(Schema.UnknownFromJsonString)({
@@ -141,22 +229,31 @@ export const makeKapsoClientService = ({
               },
               body,
             }
-          ).then((result) => {
-            if (!result.ok) throw new KapsoInvalidResponse();
-            return result.json();
-          }),
-        catch: (error) =>
-          new KapsoSendFailed({
-            safeReason: error instanceof KapsoTransportFailure ? "unavailable" : "invalid_response",
-          }),
+          ),
+        catch: (error) => {
+          if (error instanceof KapsoTransportFailure) {
+            return ambiguous(error.timedOut ? "timeout" : "provider_unavailable");
+          }
+          if (error instanceof KapsoInvalidResponse) {
+            return error.deliveryCertainty === "rejected"
+              ? rejected("invalid_response")
+              : ambiguous("invalid_response");
+          }
+          return ambiguous("invalid_response");
+        },
       }).pipe(
         Effect.timeout("15 seconds"),
-        Effect.catchTag("TimeoutError", () =>
-          Effect.fail(new KapsoSendFailed({ safeReason: "unavailable" }))
-        )
+        Effect.catchTag("TimeoutError", () => Effect.fail(ambiguous("timeout")))
       );
-      const decoded = yield* Schema.decodeUnknownEffect(SendResponse)(response).pipe(
-        Effect.mapError(() => new KapsoSendFailed({ safeReason: "invalid_response" }))
+      const statusFailure = classifyHttpStatus(response.status);
+      if (Option.isSome(statusFailure)) return yield* statusFailure.value;
+      const responseBody = yield* Effect.tryPromise({
+        try: () => response.json(),
+        catch: () => (response.ok ? ambiguous("invalid_response") : rejected("invalid_response")),
+      });
+      if (!response.ok) return yield* classifyFailureBody(responseBody);
+      const decoded = yield* Schema.decodeUnknownEffect(SendResponse)(responseBody).pipe(
+        Effect.mapError(() => ambiguous("invalid_response"))
       );
       return {
         messageEvidence: {

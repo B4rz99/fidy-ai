@@ -10,8 +10,12 @@ import {
   DashboardDocument,
   DashboardMonetaryWidgetData,
   DashboardMoneyGroups,
+  DashboardTitle,
   findDashboardStructureIssue,
   SpendingChartData,
+  SplitWeight,
+  TransactionListLimit,
+  WidgetId,
 } from "./model";
 
 const categoryId = "10000000-0000-4000-8000-000000000001";
@@ -337,6 +341,43 @@ it("reports the first out-of-order Currency group after an ordered prefix", () =
   }
 });
 
+it("checks every adjacent Currency boundary with strict order", () => {
+  type MoneyGroup = Readonly<{
+    readonly currency: "COP" | "EUR" | "USD";
+    readonly inflow: Readonly<{
+      readonly amount: string;
+      readonly currency: "COP" | "EUR" | "USD";
+    }>;
+    readonly outflow: Readonly<{
+      readonly amount: string;
+      readonly currency: "COP" | "EUR" | "USD";
+    }>;
+  }>;
+  const group = (currency: MoneyGroup["currency"]): MoneyGroup => ({
+    currency,
+    inflow: { amount: "1", currency },
+    outflow: { amount: "0", currency },
+  });
+  const decode = (groups: ReadonlyArray<MoneyGroup>) =>
+    Schema.decodeUnknownResult(DashboardMoneyGroups)(groups);
+
+  expect(Result.isSuccess(decode([]))).toBe(true);
+  expect(Result.isSuccess(decode([group("COP")]))).toBe(true);
+  expect(Result.isSuccess(decode([group("COP"), group("EUR")]))).toBe(true);
+
+  const duplicate = decode([group("COP"), group("COP")]);
+  expect(Result.isFailure(duplicate)).toBe(true);
+  if (Result.isFailure(duplicate)) {
+    expect(String(duplicate.failure)).toContain('[1]["currency"]');
+  }
+
+  const laterDisorder = decode([group("COP"), group("USD"), group("EUR")]);
+  expect(Result.isFailure(laterDisorder)).toBe(true);
+  if (Result.isFailure(laterDisorder)) {
+    expect(String(laterDisorder.failure)).toContain('[2]["currency"]');
+  }
+});
+
 it("requires an applied period to end strictly after it starts", () => {
   const from = "2026-07-01T05:00:00.000Z";
 
@@ -656,6 +697,38 @@ it("enforces the layout depth boundary and retains the first traversal issue", (
   expect(Result.isFailure(firstIssue) ? String(firstIssue.failure) : "").toContain(
     "Expected a unique WidgetId in DashboardDocument"
   );
+});
+
+it("reports the exact nested WidgetId path for a duplicate identity", () => {
+  const duplicateId = WidgetId.make("f1d1a000-0000-4000-8000-000000000398");
+  const widget = {
+    id: duplicateId,
+    type: "transaction-list" as const,
+    limit: TransactionListLimit.make(10),
+  };
+
+  const issue = findDashboardStructureIssue({
+    title: DashboardTitle.make("Resumen"),
+    layout: {
+      kind: "split",
+      axis: "row",
+      children: [
+        {
+          weight: SplitWeight.make(1),
+          node: { kind: "leaf", widget },
+        },
+        {
+          weight: SplitWeight.make(1),
+          node: { kind: "leaf", widget },
+        },
+      ],
+    },
+  });
+
+  expect(issue).toEqual({
+    path: ["layout", "children", 1, "node", "widget", "id"],
+    issue: "Expected a unique WidgetId in DashboardDocument",
+  });
 });
 
 it("rejects duplicate widget identities and non-canonical same-axis nesting", () => {

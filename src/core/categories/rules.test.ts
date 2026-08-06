@@ -59,6 +59,20 @@ it.effect("uses the most specific matching user keyword without caring about cas
   })
 );
 
+it.effect("does not let matching rule input order override keyword specificity", () =>
+  Effect.gen(function* () {
+    const category = yield* findKeywordCategory({
+      counterparty: "Mensajería Express",
+      rules: [
+        categoryRule(secondRuleId, CategoryKeyword.make("mensajería express"), mercado),
+        categoryRule(firstRuleId, CategoryKeyword.make("mensajería")),
+      ],
+    });
+
+    expect(Option.getOrUndefined(category)).toBe(mercado);
+  })
+);
+
 it.effect("uses lexical rule identity for equal-length ties and returns None without a match", () =>
   Effect.gen(function* () {
     const earlier = CategoryId.make("33333333-3333-4333-8333-333333333333");
@@ -90,6 +104,20 @@ it.effect("detects only a normalized duplicate when no rule is excluded", () =>
     expect(yield* hasKeywordRule({ keyword: "exito", rules: [], excluding: Option.none() })).toBe(
       false
     );
+  })
+);
+
+it.effect("treats a None exclusion as absent even when it carries an incidental value", () =>
+  Effect.gen(function* () {
+    const noneWithIncidentalValue = { _tag: "None" as const, value: firstRuleId };
+
+    expect(
+      yield* hasKeywordRule({
+        keyword: "exito",
+        rules: [categoryRule(firstRuleId, "Éxito")],
+        excluding: noneWithIncidentalValue,
+      })
+    ).toBe(true);
   })
 );
 

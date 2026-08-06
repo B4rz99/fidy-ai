@@ -36,6 +36,22 @@ describe("consent reply decision", () => {
     })
   );
 
+  it.effect("normalizes surrounding whitespace, repeated spaces, and trailing punctuation", () =>
+    Effect.gen(function* () {
+      expect(yield* decideConsentReply({ _tag: "Text", text: "  SÍ,   ACEPTO!!  " })).toEqual({
+        _tag: "Accepted",
+      });
+    })
+  );
+
+  it.effect("does not erase punctuation from inside a reply", () =>
+    Effect.gen(function* () {
+      expect(yield* decideConsentReply({ _tag: "Text", text: "A.cepto" })).toEqual({
+        _tag: "Clarify",
+      });
+    })
+  );
+
   it.effect("does not treat bare agreement or a finance request as legal acceptance", () =>
     Effect.gen(function* () {
       expect(yield* decideConsentReply({ _tag: "Text", text: "sí" })).toEqual({
@@ -76,6 +92,8 @@ it.effect("expires a pending disclosure exactly 24 hours after creation", () =>
       createdAt,
     });
 
+    expect(pending.disclosure.purposes).toEqual(["Registrar y organizar tus finanzas personales"]);
+    expect(pending.disclosure.dataCategories).toEqual(["Datos financieros"]);
     expect(DateTime.formatIso(pending.expiresAt)).toBe("2026-08-02T12:00:00.000Z");
     expect(
       yield* hasPendingConsentExpired({

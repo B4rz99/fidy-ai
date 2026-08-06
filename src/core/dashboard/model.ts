@@ -76,15 +76,15 @@ export type DashboardMoneyGroup = typeof DashboardMoneyGroup.Type;
 const deterministicDashboardCurrencyOrder = Schema.makeFilter<
   ReadonlyArray<Readonly<{ readonly currency: Currency }>>
 >((groups) => {
-  for (let index = 1; index < groups.length; index += 1) {
-    const previous = groups[index - 1];
-    const current = groups[index];
-    if (previous !== undefined && current !== undefined && previous.currency >= current.currency) {
+  let previous: Readonly<{ readonly currency: Currency }> | undefined;
+  for (const [index, current] of groups.entries()) {
+    if (previous !== undefined && previous.currency >= current.currency) {
       return {
         path: [index, "currency"],
         issue: "Expected unique Currency groups in alphabetic order",
       };
     }
+    previous = current;
   }
   return undefined;
 });
@@ -583,6 +583,6 @@ export const collectDashboardCategoryReferences = (
             field: `categories.${index}` satisfies `categories.${number}`,
           }));
       }
-      return [];
+      throw new Error("Unexpected Widget variant");
     }
   );

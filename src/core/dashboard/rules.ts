@@ -1,7 +1,8 @@
-import { Effect, Option, Schema } from "effect";
+import { BigInt as EffectBigInt, Effect, Option, Schema } from "effect";
 import {
   DuplicateWidgetId,
   InvalidDashboardResult,
+  type DashboardIssue,
   LastWidgetRemoval,
   RootWidgetResize,
   SelfPlacement,
@@ -20,6 +21,13 @@ import {
   type WidgetId,
 } from "./model";
 
+const makeInvalidDashboardResult = (): InvalidDashboardResult => {
+  const issues: [DashboardIssue] = [
+    { message: "The edit produced a document outside DashboardDocument invariants" },
+  ];
+  return new InvalidDashboardResult({ issues });
+};
+
 const revalidateDocument = (
   candidate: Readonly<DashboardDocument>
 ): Effect.Effect<DashboardDocument, InvalidDashboardResult> => {
@@ -33,14 +41,7 @@ const revalidateDocument = (
   }
   return Schema.encodeEffect(DashboardDocument)(candidate).pipe(
     Effect.flatMap(Schema.decodeEffect(DashboardDocument)),
-    Effect.mapError(
-      () =>
-        new InvalidDashboardResult({
-          issues: [
-            { message: "The edit produced a document outside DashboardDocument invariants" },
-          ],
-        })
-    )
+    Effect.mapError(makeInvalidDashboardResult)
   );
 };
 
@@ -65,49 +66,54 @@ const mapAtLeastTwo = <Input, Output>(
   ];
 };
 
-const greatestCommonDivisor = (left: bigint, right: bigint): bigint => {
-  let a = left;
-  let b = right;
-  while (b !== 0n) {
-    const remainder = a % b;
-    a = b;
-    b = remainder;
-  }
-  return a;
-};
-
-const leastCommonMultiple = (left: bigint, right: bigint): bigint =>
-  (left / greatestCommonDivisor(left, right)) * right;
-
 const normalizeSplit = (node: Readonly<SplitNode>): SplitNode => {
   const children = node.children;
   const denominators = children.map((child) =>
-    child.node.kind === "split" && child.node.axis === node.axis
-      ? child.node.children.reduce((sum, nested) => sum + BigInt(nested.weight), 0n)
-      : 1n
+    child.node.kind === "leaf"
+      ? 1n
+      : child.node.children.reduce((sum, nested) => sum + BigInt(nested.weight), 0n)
   );
-  const commonDenominator = denominators.reduce(leastCommonMultiple, 1n);
+  const commonDenominator = denominators.reduce(
+    (product, denominator) => product * denominator,
+    1n
+  );
   const expanded: ReadonlyArray<Readonly<{ node: LayoutNode; weight: bigint }>> = children.flatMap(
     (child, index) => {
       const denominator = denominators[index] ?? 1n;
-      if (child.node.kind === "split" && child.node.axis === node.axis) {
-        return child.node.children.map((nested) => ({
-          node: nested.node,
-          weight: BigInt(child.weight) * BigInt(nested.weight) * (commonDenominator / denominator),
-        }));
+      let expansion: ReadonlyArray<Readonly<{ node: LayoutNode; weight: bigint }>>;
+      switch (child.node.kind) {
+        case "leaf":
+          expansion = [{ node: child.node, weight: BigInt(child.weight) * commonDenominator }];
+          break;
+        case "split":
+          if (child.node.axis === node.axis) {
+            expansion = child.node.children.map((nested) => ({
+              node: nested.node,
+              weight:
+                BigInt(child.weight) * BigInt(nested.weight) * (commonDenominator / denominator),
+            }));
+          } else {
+            expansion = [
+              {
+                node: {
+                  ...child.node,
+                  children: mapAtLeastTwo(child.node.children, (current) => current),
+                },
+                weight: BigInt(child.weight) * commonDenominator,
+              },
+            ];
+          }
+          break;
       }
-      return [{ node: child.node, weight: BigInt(child.weight) * commonDenominator }];
+      return expansion;
     }
   );
-  const divisor = expanded.reduce(
-    (current, child) => greatestCommonDivisor(current, child.weight),
-    expanded[0]?.weight ?? 1n
-  );
-  const [first, second, ...remaining] = expanded;
-  if (first === undefined || second === undefined) {
-    return { ...node, children };
-  }
-  const expandedChildren: AtLeastTwo<(typeof expanded)[number]> = [first, second, ...remaining];
+  const divisor = expanded.reduce((current, child) => EffectBigInt.gcd(current, child.weight), 0n);
+  const expandedChildren: AtLeastTwo<(typeof expanded)[number]> = [
+    Option.getOrThrow(Option.fromUndefinedOr(expanded[0])),
+    Option.getOrThrow(Option.fromUndefinedOr(expanded[1])),
+    ...expanded.slice(2),
+  ];
   const weights = mapAtLeastTwo(expandedChildren, (child) => child.weight / divisor);
   if (weights.some((weight) => weight > 1000n)) {
     return { ...node, children };
@@ -130,10 +136,19 @@ const addAtRoot = (
     weight: SplitWeight.make(1),
     node: { kind: "leaf" as const, widget },
   };
-  if (layout.kind === "split" && layout.axis === "column") {
+  let existingColumn: Readonly<SplitNode> | undefined;
+  switch (layout.kind) {
+    case "leaf":
+      break;
+    case "split":
+      if (layout.axis !== "row") existingColumn = layout;
+      break;
+  }
+  if (existingColumn !== undefined) {
     return {
-      ...layout,
-      children: at === "top" ? [child, ...layout.children] : [...layout.children, child],
+      ...existingColumn,
+      children:
+        at === "top" ? [child, ...existingColumn.children] : [...existingColumn.children, child],
     };
   }
   const previous = { weight: SplitWeight.make(1), node: layout };
@@ -184,15 +199,17 @@ const addBesideWithoutDuplicateCheck = (
 ): BesideAddition => {
   for (const [index, child] of layout.children.entries()) {
     const addition = addBeside(child.node, input);
-    if (Option.isSome(addition.layout)) {
-      const addedLayout = addition.layout.value;
-      const children = mapAtLeastTwo(layout.children, (current, childIndex) =>
-        childIndex === index ? { ...current, node: addedLayout } : current
-      );
-      return { duplicate: false, layout: Option.some(normalizeSplit({ ...layout, children })) };
-    }
+    if (Option.isNone(addition.layout)) continue;
+    const addedLayout = addition.layout.value;
+    const children = mapAtLeastTwo(layout.children, (current, childIndex) =>
+      childIndex === index ? { ...current, node: addedLayout } : current
+    );
+    return {
+      duplicate: input.checkDuplicate,
+      layout: Option.some(normalizeSplit({ ...layout, children })),
+    };
   }
-  return { duplicate: false, layout: Option.none() };
+  return { duplicate: input.checkDuplicate, layout: Option.none() };
 };
 
 const addBesideWithDuplicateCheck = (
@@ -201,25 +218,21 @@ const addBesideWithDuplicateCheck = (
 ): BesideAddition => {
   const additions = mapAtLeastTwo(layout.children, (child) => addBeside(child.node, input));
   let duplicate = false;
-  let replacementIndex = -1;
-  for (const [index, addition] of additions.entries()) {
+  for (const addition of additions) {
     duplicate ||= addition.duplicate;
-    if (replacementIndex === -1 && Option.isSome(addition.layout)) {
-      replacementIndex = index;
-    }
   }
-  const replacement = additions[replacementIndex];
-  if (replacement === undefined || Option.isNone(replacement.layout)) {
-    return { duplicate, layout: Option.none() };
+  for (const [replacementIndex, replacement] of additions.entries()) {
+    if (Option.isNone(replacement.layout)) continue;
+    const replacementLayout = replacement.layout.value;
+    const children = mapAtLeastTwo(layout.children, (child, index) =>
+      index === replacementIndex ? { ...child, node: replacementLayout } : child
+    );
+    return {
+      duplicate,
+      layout: Option.some(normalizeSplit({ ...layout, children })),
+    };
   }
-  const replacementLayout = replacement.layout.value;
-  const children = mapAtLeastTwo(layout.children, (child, index) =>
-    index === replacementIndex ? { ...child, node: replacementLayout } : child
-  );
-  return {
-    duplicate,
-    layout: Option.some(normalizeSplit({ ...layout, children })),
-  };
+  return { duplicate, layout: Option.none() };
 };
 
 const addBeside = (layout: Readonly<LayoutNode>, input: BesideInput): BesideAddition => {
@@ -239,36 +252,34 @@ type WidgetRemoval = Readonly<{
 const collapseAfterChildRemoval = (
   node: Readonly<SplitNode>,
   children: ReadonlyArray<Readonly<SplitNode["children"][number]>>
-): LayoutNode =>
-  Option.fromUndefinedOr(children[1]).pipe(
-    Option.match({
-      onNone: () =>
-        Option.fromUndefinedOr(children[0]).pipe(
-          Option.map((child) => child.node),
-          Option.getOrElse(() => node)
-        ),
-      onSome: (second) =>
-        Option.fromUndefinedOr(children[0]).pipe(
-          Option.map((first) =>
-            normalizeSplit({ ...node, children: [first, second, ...children.slice(2)] })
-          ),
-          Option.getOrElse(() => node)
-        ),
-    })
-  );
+): LayoutNode => {
+  if (children.length === 1) {
+    return Option.getOrThrow(Option.fromUndefinedOr(children[0])).node;
+  }
+  const first = Option.getOrThrow(Option.fromUndefinedOr(children[0]));
+  const second = Option.getOrThrow(Option.fromUndefinedOr(children[1]));
+  return normalizeSplit({ ...node, children: [first, second, ...children.slice(2)] });
+};
 
 const removeWidget = (input: WidgetLookup): Option.Option<WidgetRemoval> => {
   const { node, widgetId } = input;
-  if (node.kind === "leaf") {
-    return node.widget.id === widgetId
-      ? Option.some({ widget: node.widget, layout: Option.none() })
-      : Option.none();
+  switch (node.kind) {
+    case "leaf":
+      return node.widget.id === widgetId
+        ? Option.some({ widget: node.widget, layout: Option.none() })
+        : Option.none();
+    case "split":
+      return removeSplitWidget(node, widgetId);
   }
+};
+
+const removeSplitWidget = (
+  node: Readonly<SplitNode>,
+  widgetId: WidgetId
+): Option.Option<WidgetRemoval> => {
   for (const [index, child] of node.children.entries()) {
     const removal = removeWidget({ node: child.node, widgetId });
-    if (Option.isNone(removal)) {
-      continue;
-    }
+    if (Option.isNone(removal)) continue;
     const children = [...node.children];
     if (Option.isSome(removal.value.layout)) {
       children[index] = { ...child, node: removal.value.layout.value };
@@ -300,13 +311,18 @@ const applyRemove = (
   });
 };
 
+type DuplicatePolicy = "reject" | "allow";
+
+const duplicatePolicies = new Set<DuplicatePolicy>(Array.of("reject"));
+
 const applyAdd = (
   document: Readonly<DashboardDocument>,
   edit: Readonly<Extract<DashboardEdit, { readonly op: "add-widget" }>>,
-  rejectDuplicate = true
+  duplicatePolicy: DuplicatePolicy = "reject"
 ): Effect.Effect<DashboardDocument, DashboardFailure> => {
+  const shouldRejectDuplicate = duplicatePolicies.has(duplicatePolicy);
   if (typeof edit.at === "string") {
-    if (rejectDuplicate && hasLayoutWidget(document.layout, edit.widget.id)) {
+    if (shouldRejectDuplicate && hasLayoutWidget(document.layout, edit.widget.id)) {
       return Effect.fail(new DuplicateWidgetId({ widgetId: edit.widget.id }));
     }
     return revalidateDocument({
@@ -318,9 +334,9 @@ const applyAdd = (
   const addition = addBeside(document.layout, {
     widget: edit.widget,
     placement,
-    checkDuplicate: rejectDuplicate,
+    checkDuplicate: shouldRejectDuplicate,
   });
-  if (rejectDuplicate && addition.duplicate) {
+  if (shouldRejectDuplicate && addition.duplicate) {
     return Effect.fail(new DuplicateWidgetId({ widgetId: edit.widget.id }));
   }
   return Option.match(addition.layout, {
@@ -423,16 +439,28 @@ const applyMove = (
   if (Option.isNone(removal)) {
     return Effect.fail(new WidgetNotFound({ widgetId: edit.widgetId, role: "edit-target" }));
   }
-  if (typeof edit.at !== "string" && edit.at.besideWidget === edit.widgetId) {
-    return Effect.fail(new SelfPlacement({ widgetId: edit.widgetId }));
+  let moveAt: typeof edit.at;
+  switch (edit.at) {
+    case "top":
+      moveAt = "top";
+      break;
+    case "bottom":
+      moveAt = "bottom";
+      break;
+    default:
+      if (edit.at.besideWidget === edit.widgetId) {
+        return Effect.fail(new SelfPlacement({ widgetId: edit.widgetId }));
+      }
+      moveAt = { ...edit.at };
+      break;
   }
   if (Option.isNone(removal.value.layout)) {
     return revalidateDocument(document);
   }
   return applyAdd(
     { ...document, layout: removal.value.layout.value },
-    { op: "add-widget", widget: removal.value.widget, at: edit.at },
-    false
+    { op: "add-widget", widget: removal.value.widget, at: moveAt },
+    "allow"
   );
 };
 

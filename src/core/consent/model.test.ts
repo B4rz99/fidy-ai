@@ -5,7 +5,16 @@ import {
   WhatsAppBusinessPortfolioId,
   WhatsAppBusinessScopedUserId,
 } from "~/core/identity/reference";
-import { ConsentRecord, DisclosureSnapshot, PendingConsentExchange } from "./model";
+import {
+  ConsentInboundContent,
+  ConsentRecord,
+  DisclosureRevision,
+  DisclosureSnapshot,
+  PendingConsentExchange,
+  PolicyRevision,
+  PolicyUrl,
+  Sha256Digest,
+} from "./model";
 
 const makeDisclosure = (overrides: Readonly<Record<string, unknown>> = {}) => ({
   serviceMarket: "CO",
@@ -29,6 +38,50 @@ const makeEvidence = (providerMessageId: string) => ({
   channel: "whatsapp",
   provider: "kapso",
   providerMessageId,
+});
+
+it("requires policy revisions to match their complete lexical grammar", () => {
+  for (const revision of ["@policy-2026-01", "policy-2026-01@"]) {
+    expect(Result.isFailure(Schema.decodeUnknownResult(PolicyRevision)(revision))).toBe(true);
+  }
+});
+
+it("requires disclosure revisions to match their complete lexical grammar", () => {
+  for (const revision of ["@onboarding-2026-01", "onboarding-2026-01@"]) {
+    expect(Result.isFailure(Schema.decodeUnknownResult(DisclosureRevision)(revision))).toBe(true);
+  }
+});
+
+it("requires a SHA-256 digest to occupy the complete input", () => {
+  const digest = "a".repeat(64);
+
+  expect(Result.isFailure(Schema.decodeUnknownResult(Sha256Digest)(`!${digest}`))).toBe(true);
+  expect(Result.isFailure(Schema.decodeUnknownResult(Sha256Digest)(`${digest}!`))).toBe(true);
+});
+
+it("requires a policy URL to be HTTPS without ignored prefixes or suffixes", () => {
+  expect(
+    Result.isFailure(Schema.decodeUnknownResult(PolicyUrl)("xhttps://fidyapp.com/politica"))
+  ).toBe(true);
+  expect(
+    Result.isFailure(Schema.decodeUnknownResult(PolicyUrl)("https://fidyapp.com/politica trailing"))
+  ).toBe(true);
+});
+
+it("decodes text and every supported explicit consent choice", () => {
+  for (const content of [
+    { _tag: "Text", text: "Acepto" },
+    { _tag: "Choice", choice: "accept" },
+    { _tag: "Choice", choice: "decline" },
+  ]) {
+    expect(Result.isSuccess(Schema.decodeUnknownResult(ConsentInboundContent)(content))).toBe(true);
+  }
+
+  expect(
+    Result.isFailure(
+      Schema.decodeUnknownResult(ConsentInboundContent)({ _tag: "Choice", choice: "maybe" })
+    )
+  ).toBe(true);
 });
 
 it("decodes complete immutable onboarding consent evidence", () => {

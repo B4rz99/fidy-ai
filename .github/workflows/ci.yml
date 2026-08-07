@@ -15,23 +15,12 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  pr-title:
-    name: PR Title
+  static:
+    name: Static Checks
     runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
-      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
-        with:
-          bun-version: "1.3.14"
-      - name: Validate PR title
-        env:
-          PR_TITLE: ${{ github.event.pull_request.title }}
-        run: bun scripts/check-pr-title.ts
-
-  migration-ids:
-    name: Migration IDs
-    runs-on: ubuntu-latest
-    # `bun install` is here only because the check itself is an Effect program.
+    # One job for every check that only reads the tree. Each pays no runner
+    # startup of its own, and none is on the critical path — the test jobs are
+    # slower than all of these put together.
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
       # The *tip* of the base branch, not the merge base. A branch cut before a
@@ -44,43 +33,6 @@ jobs:
           BASE_BRANCH: ${{ github.event.pull_request.base.ref }}
         run: git fetch --no-tags --depth=1 origin "+refs/heads/$BASE_BRANCH:refs/remotes/origin/$BASE_BRANCH"
       - uses: ./.github/actions/bun-install
-      - name: Validate migration ids
-        env:
-          BASE_REF: origin/${{ github.event.pull_request.base.ref }}
-        run: bun scripts/check-migration-ids.ts
-
-  lint:
-    name: Lint
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
-      - uses: ./.github/actions/bun-install
-      - name: oxlint
-        run: bun run lint
-      - name: oxlint --type-aware
-        run: bun run lint:type-aware
-
-  lint-suppressions:
-    name: Lint Suppressions
-    runs-on: ubuntu-latest
-    # No `bun install`: the check reads the tree through git and Bun's own
-    # globals. It is its own job rather than a step of Lint because it decides
-    # whether that job's result means anything — a whole-file `oxlint-disable`
-    # turns off every rule in the file, including one written to catch it.
-    steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
-      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
-        with:
-          bun-version: "1.3.14"
-      - name: Lint suppressions
-        run: bun run lint:suppressions
-
-  module-graph:
-    name: Module Graph
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
-      - uses: ./.github/actions/bun-install
       # dependency-cruiser reads .ts sources and the tsconfig `paths` aliases
       # through the classic TypeScript compiler API, which the repo's Effect
       # tsgo `typescript` build does not expose, so the cruiser and a classic
@@ -88,39 +40,47 @@ jobs:
       - name: Install dependency-cruiser
         working-directory: tools/depcruise
         run: bun install --frozen-lockfile
-      - name: Module-graph rules and generated graph
-        run: bun run lint:deps
+      # Every check runs even after one fails, so a single run reports every
+      # problem in the tree rather than only the first.
+      - name: Static checks
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          BASE_REF: origin/${{ github.event.pull_request.base.ref }}
+        run: |
+          failed=()
+          check() {
+            local label=$1
+            shift
+            echo "::group::$label"
+            if "$@"; then
+              echo "::endgroup::"
+            else
+              echo "::endgroup::"
+              echo "::error title=$label::$label failed"
+              failed+=("$label")
+            fi
+          }
 
-  dependencies:
-    name: Dependencies
-    runs-on: ubuntu-latest
-    # The one job that reaches the public internet on purpose: it asks the npm
-    # registry what has shipped since each pin was written. It grades the
-    # manifests as the pull request declares them, not the installed tree —
-    # `bun install` is here only because the check itself is an Effect program.
-    steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
-      - uses: ./.github/actions/bun-install
-      - name: Dependency policy
-        run: bun run lint:dependencies
+          # First, because it decides whether the lint verdict means anything: a
+          # whole-file `oxlint-disable` turns off every rule in the file,
+          # including one written to catch it.
+          check "Lint suppressions" bun run lint:suppressions
+          check "oxlint" bun run lint
+          check "oxlint --type-aware" bun run lint:type-aware
+          check "Format" bun run format:check
+          check "Typecheck" bun run typecheck
+          check "Module graph" bun run lint:deps
+          # The one check that reaches the public internet on purpose: it asks
+          # the npm registry what has shipped since each pin was written, and
+          # grades the manifests as the pull request declares them.
+          check "Dependency policy" bun run lint:dependencies
+          check "PR title" bun scripts/check-pr-title.ts
+          check "Migration ids" bun scripts/check-migration-ids.ts
 
-  format:
-    name: Format
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
-      - uses: ./.github/actions/bun-install
-      - name: oxfmt --check
-        run: bun run format:check
-
-  typecheck:
-    name: Type Check
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
-      - uses: ./.github/actions/bun-install
-      - name: Typecheck
-        run: bun run typecheck
+          if (( ${#failed[@]} > 0 )); then
+            printf 'Failed: %s\n' "${failed[@]}" >&2
+            exit 1
+          fi
 
   test-core:
     name: Core Tests
@@ -297,14 +257,7 @@ jobs:
     name: Required Checks
     runs-on: ubuntu-latest
     needs:
-      - pr-title
-      - migration-ids
-      - lint
-      - lint-suppressions
-      - module-graph
-      - dependencies
-      - format
-      - typecheck
+      - static
       - test-core
       - test
       - acceptance

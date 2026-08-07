@@ -5,10 +5,14 @@ on:
 
 permissions:
   contents: read
+  # The guard step below reads this workflow's own run history.
+  actions: read
 
-# Railway posts `success` on the same deployment more than once, and each repeat
-# smoke-tests a commit already smoke-tested. Keying the group on the sha collapses
-# the repeats to the last one, which is also the only one whose verdict is current.
+# Railway posts `success` on the same deployment more than once, so a single
+# commit arrives here several times. Two mechanisms cover the two shapes that
+# takes: this group cancels a repeat that overlaps a run still in flight, and the
+# guard step below drops a repeat that arrives after one already finished — 31
+# seconds apart, in the case that motivated it, which is far too late to cancel.
 concurrency:
   group: production-smoke-${{ github.event.deployment.sha }}
   cancel-in-progress: true
@@ -22,11 +26,31 @@ jobs:
       endsWith(github.event.deployment.environment, '/ production'))
     runs-on: ubuntu-latest
     steps:
+      # A run that was skipped by the job condition concludes `skipped`, not
+      # `success`, so it is not mistaken here for a smoke test that happened.
+      - name: Look for a smoke test already passed on this commit
+        id: prior
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.event.deployment.sha }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          passed=$(gh api \
+            "repos/$REPO/actions/workflows/deployment-smoke.yml/runs?head_sha=$SHA&status=success" \
+            --jq "[.workflow_runs[] | select(.id != $RUN_ID)] | length")
+          echo "found=$passed" >>"$GITHUB_OUTPUT"
+          if [[ "$passed" != "0" ]]; then
+            echo "Commit $SHA already passed its smoke test; nothing to re-verify." >&2
+          fi
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        if: ${{ steps.prior.outputs.found == '0' }}
         with:
           ref: ${{ github.event.deployment.sha }}
       - uses: ./.github/actions/bun-install
+        if: ${{ steps.prior.outputs.found == '0' }}
       - name: Check production deployment
+        if: ${{ steps.prior.outputs.found == '0' }}
         env:
           DEPLOYMENT_URL: https://fidy-ai-production.up.railway.app
         run: bun scripts/check-deployment-smoke.ts

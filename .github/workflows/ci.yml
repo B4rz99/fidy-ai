@@ -1,17 +1,22 @@
 name: Checks
 
+# Pull requests only. The `protect` ruleset requires the branch to be up to date
+# with trunk before merging, so a pull-request run already grades the head on top
+# of the current tip — a `push: trunk` trigger would re-grade an identical tree.
 on:
   pull_request:
     branches:
       - trunk
-  push:
-    branches:
-      - trunk
+
+# A new push to a pull request makes the run in flight worthless. Cancel it
+# rather than paying for a verdict on a superseded commit.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   pr-title:
     name: PR Title
-    if: ${{ github.event_name == 'pull_request' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -25,7 +30,6 @@ jobs:
 
   migration-ids:
     name: Migration IDs
-    if: ${{ github.event_name == 'pull_request' }}
     runs-on: ubuntu-latest
     # `bun install` is here only because the check itself is an Effect program.
     steps:
@@ -39,18 +43,7 @@ jobs:
         env:
           BASE_BRANCH: ${{ github.event.pull_request.base.ref }}
         run: git fetch --no-tags --depth=1 origin "+refs/heads/$BASE_BRANCH:refs/remotes/origin/$BASE_BRANCH"
-      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
-        with:
-          bun-version: "1.3.14"
-      - name: Cache Bun install cache
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
-        with:
-          path: ~/.bun/install/cache
-          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-bun-
-      - name: Install dependencies
-        run: bun install --frozen-lockfile
+      - uses: ./.github/actions/bun-install
       - name: Validate migration ids
         env:
           BASE_REF: origin/${{ github.event.pull_request.base.ref }}
@@ -61,18 +54,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
-      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
-        with:
-          bun-version: "1.3.14"
-      - name: Cache Bun install cache
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
-        with:
-          path: ~/.bun/install/cache
-          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-bun-
-      - name: Install dependencies
-        run: bun install --frozen-lockfile
+      - uses: ./.github/actions/bun-install
       - name: oxlint
         run: bun run lint
       - name: oxlint --type-aware
@@ -98,11 +80,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
-      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
-        with:
-          bun-version: "1.3.14"
-      - name: Install dependencies
-        run: bun install --frozen-lockfile
+      - uses: ./.github/actions/bun-install
       # dependency-cruiser reads .ts sources and the tsconfig `paths` aliases
       # through the classic TypeScript compiler API, which the repo's Effect
       # tsgo `typescript` build does not expose, so the cruiser and a classic
@@ -122,18 +100,7 @@ jobs:
     # `bun install` is here only because the check itself is an Effect program.
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
-      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
-        with:
-          bun-version: "1.3.14"
-      - name: Cache Bun install cache
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
-        with:
-          path: ~/.bun/install/cache
-          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-bun-
-      - name: Install dependencies
-        run: bun install --frozen-lockfile
+      - uses: ./.github/actions/bun-install
       - name: Dependency policy
         run: bun run lint:dependencies
 
@@ -142,11 +109,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
-      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
-        with:
-          bun-version: "1.3.14"
-      - name: Install dependencies
-        run: bun install --frozen-lockfile
+      - uses: ./.github/actions/bun-install
       - name: oxfmt --check
         run: bun run format:check
 
@@ -155,11 +118,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
-      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
-        with:
-          bun-version: "1.3.14"
-      - name: Install dependencies
-        run: bun install --frozen-lockfile
+      - uses: ./.github/actions/bun-install
       - name: Typecheck
         run: bun run typecheck
 
@@ -172,11 +131,7 @@ jobs:
     # always available.
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
-      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
-        with:
-          bun-version: "1.3.14"
-      - name: Install dependencies
-        run: bun install --frozen-lockfile
+      - uses: ./.github/actions/bun-install
       - name: Core tests
         run: bun run test:core
 
@@ -199,11 +154,7 @@ jobs:
           --health-retries 15
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
-      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
-        with:
-          bun-version: "1.3.14"
-      - name: Install dependencies
-        run: bun install --frozen-lockfile
+      - uses: ./.github/actions/bun-install
       - name: Create restricted runtime role
         env:
           PGPASSWORD: fidy
@@ -236,11 +187,7 @@ jobs:
           --health-retries 15
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
-      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
-        with:
-          bun-version: "1.3.14"
-      - name: Install dependencies
-        run: bun install --frozen-lockfile
+      - uses: ./.github/actions/bun-install
       - name: Create restricted runtime role
         env:
           PGPASSWORD: fidy
@@ -274,11 +221,7 @@ jobs:
           --health-retries 15
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
-      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
-        with:
-          bun-version: "1.3.14"
-      - name: Install dependencies
-        run: bun install --frozen-lockfile
+      - uses: ./.github/actions/bun-install
       # crap4ts parses source with the classic TypeScript compiler API, which the
       # repo's Effect tsgo `typescript` build does not expose, so the analyzer and
       # a classic typescript live in an isolated install under tools/crap.
@@ -301,11 +244,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
-      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
-        with:
-          bun-version: "1.3.14"
-      - name: Install dependencies
-        run: bun install --frozen-lockfile
+      - uses: ./.github/actions/bun-install
       - name: Boot production image against fresh PostgreSQL
         run: bun run check:production-image
 
@@ -317,8 +256,9 @@ jobs:
         with:
           fetch-depth: 0
       - name: Fetch base ref
-        if: ${{ github.event_name == 'pull_request' }}
-        run: git fetch origin ${{ github.event.pull_request.base.ref }}
+        env:
+          BASE_BRANCH: ${{ github.event.pull_request.base.ref }}
+        run: git fetch origin "$BASE_BRANCH"
       - name: Gitleaks — pattern-based secret scan
         uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7 # v2
         env:
@@ -375,14 +315,16 @@ jobs:
       - security-sca
     if: ${{ always() }}
     steps:
+      # Every needed job must report `success`. Enumerating the bad outcomes
+      # instead would let `skipped` through, and a gate turned off by a mistaken
+      # `if:` would then report green while grading nothing.
       - name: Verify required jobs
+        env:
+          RESULTS: ${{ toJSON(needs) }}
         run: |
-          if [[ "${{ contains(needs.*.result, 'failure') }}" == "true" ]]; then
-            echo "One or more required jobs failed." >&2
-            exit 1
-          fi
-
-          if [[ "${{ contains(needs.*.result, 'cancelled') }}" == "true" ]]; then
-            echo "One or more required jobs were cancelled." >&2
+          failed=$(jq -r 'to_entries | map(select(.value.result != "success") | "\(.key): \(.value.result)") | .[]' <<<"$RESULTS")
+          if [[ -n "$failed" ]]; then
+            echo "Required jobs did not succeed:" >&2
+            echo "$failed" >&2
             exit 1
           fi

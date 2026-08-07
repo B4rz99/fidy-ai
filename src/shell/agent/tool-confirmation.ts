@@ -5,6 +5,8 @@ import type { TranscriptWindowEntry } from "~/core/transcript/rules";
 import { listRecentTranscriptEntries } from "~/shell/transcript/transcript-service";
 import type { AgentOperationBinding } from "./toolkit";
 
+const hexadecimalRadix = 16;
+
 const ConfirmationRequiredFailure = Schema.Struct({
   code: Schema.Literal("explicit_confirmation_required"),
   message: Schema.Literal(
@@ -115,7 +117,7 @@ const approvalBinding = Effect.fn("ToolConfirmation.approvalBinding")(function* 
   const payload = new TextEncoder().encode(`${pending.operation}\n${serializedInput}`);
   const bytes = yield* crypto.digest("SHA-256", payload).pipe(Effect.orDie);
   const digest = ConfirmationDigest.make(
-    Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("")
+    Array.from(bytes, (byte) => byte.toString(hexadecimalRadix).padStart(2, "0")).join("")
   );
   return { digest, serializedInput };
 });

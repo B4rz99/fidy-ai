@@ -21,8 +21,12 @@ const agentBearerPrefix = "fin_";
 const agentTokenShortIdLength = 8;
 const agentTokenShortIdPattern = `[a-z0-9]{${agentTokenShortIdLength}}`;
 const agentBearerSecretPattern = "[A-Za-z0-9_-]{32,}";
+const agentTokenIdleDays = 90;
 /** Human-readable notation for the one AgentToken bearer encoding. */
 export const AgentBearerTokenFormat = "fin_<short-id>_<secret>";
+
+/** Random bytes a caller must draw for one AgentToken bearer secret before encoding it. */
+export const agentBearerSecretBytes = 32;
 
 /**
  * The eight-character identifier embedded after `fin_` and safe to use when a
@@ -78,7 +82,7 @@ export const getAgentTokenShortId = (
 const AgentTokenTime = Schema.DateTimeUtc;
 
 /** The rolling inactivity window after creation or the most recent use. */
-export const AgentTokenIdleDuration = Duration.days(90);
+export const AgentTokenIdleDuration = Duration.days(agentTokenIdleDays);
 const agentTokenIdleDurationMilliseconds = Duration.toMillis(AgentTokenIdleDuration);
 
 type AgentTokenInstant = Readonly<{ epochMilliseconds: number }>;

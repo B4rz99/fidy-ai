@@ -1,6 +1,8 @@
 import { Schema, Struct } from "effect";
 import { CategoryId } from "./reference";
 
+const maximumCategoryTextLength = 80;
+
 /** Stable identity of one user keyword rule; tie-breaking may rely on its lexical UUID order. */
 export const KeywordRuleId = Schema.String.check(Schema.isUUID()).pipe(
   Schema.brand("KeywordRuleId")
@@ -9,7 +11,7 @@ export type KeywordRuleId = typeof KeywordRuleId.Type;
 
 /** Spanish label shown for a Category; changing it never changes Category identity. */
 export const CategoryLabel = Schema.NonEmptyString.check(Schema.isTrimmed())
-  .check(Schema.isMaxLength(80))
+  .check(Schema.isMaxLength(maximumCategoryTextLength))
   .pipe(Schema.brand("CategoryLabel"));
 export type CategoryLabel = typeof CategoryLabel.Type;
 
@@ -22,7 +24,7 @@ export const normalizeCategoryKeyword = (value: string): string =>
 
 /** User-authored counterparty fragment retained with its spelling but normalized only while matching. */
 export const CategoryKeyword = Schema.NonEmptyString.check(Schema.isTrimmed())
-  .check(Schema.isMaxLength(80))
+  .check(Schema.isMaxLength(maximumCategoryTextLength))
   .check(
     Schema.makeFilter((keyword) =>
       normalizeCategoryKeyword(keyword).length > 0

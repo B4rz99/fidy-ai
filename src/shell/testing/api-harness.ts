@@ -1,6 +1,6 @@
 import { BunHttpServer, BunServices } from "@effect/platform-bun";
 import { Context, DateTime, Effect, Layer, Ref, type Schema } from "effect";
-import { type HttpClientError } from "effect/unstable/http";
+import { type HttpClient, type HttpClientError } from "effect/unstable/http";
 import { HttpApiClient } from "effect/unstable/httpapi";
 import { type AgentBearerToken } from "~/core/tokens/model";
 import { makeAgentAuthorizationClientLive } from "~/shell/_shared/authz";
@@ -14,8 +14,8 @@ import type {
 import { FidyApi } from "~/shell/api";
 import {
   KapsoClient,
-  KapsoSendFailed,
   type KapsoClientService,
+  KapsoSendFailed,
 } from "~/shell/channels/whatsapp/kapso-client";
 import { WhatsAppProviderMessageId } from "~/shell/channels/whatsapp/model";
 import { MigrationSqlClientLive, MigratorLive, PgLive } from "~/shell/db/client";
@@ -51,7 +51,7 @@ export const makeApiClientLive = <Id>({
 }: {
   readonly bearer: AgentBearerToken;
   readonly tag: Context.Key<Id, ApiClient>;
-}) =>
+}): Layer.Layer<Id, never, HttpClient.HttpClient> =>
   Layer.effect(tag, derivedApiClient).pipe(Layer.provide(makeAgentAuthorizationClientLive(bearer)));
 
 /** The same AgentToken bearer for tests that speak raw HTTP. */

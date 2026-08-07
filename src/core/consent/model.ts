@@ -8,7 +8,14 @@ import { AgentTokenId } from "~/core/tokens/reference";
 const UtcTimestamp = Schema.String.annotate({ format: "date-time" }).pipe(
   Schema.decodeTo(Schema.DateTimeUtc, SchemaTransformation.dateTimeUtcFromString)
 );
-const legalFact = Schema.NonEmptyString.check(Schema.isTrimmed(), Schema.isMaxLength(1_000));
+const maximumLegalFactLength = 1_000;
+const maximumPolicyUrlLength = 2_048;
+const maximumDisclosureTextLength = 8_000;
+
+const legalFact = Schema.NonEmptyString.check(
+  Schema.isTrimmed(),
+  Schema.isMaxLength(maximumLegalFactLength)
+);
 
 /** Stable identity of one append-only ConsentRecord. */
 export const ConsentRecordId = Schema.String.check(Schema.isUUID()).pipe(
@@ -45,7 +52,7 @@ export type Sha256Digest = typeof Sha256Digest.Type;
 /** Stable HTTPS location of a source-controlled policy revision. */
 export const PolicyUrl = Schema.String.check(
   Schema.isTrimmed(),
-  Schema.isMaxLength(2_048),
+  Schema.isMaxLength(maximumPolicyUrlLength),
   Schema.isPattern(/^https:\/\/[^\s]+$/u)
 ).pipe(Schema.brand("PolicyUrl"));
 export type PolicyUrl = typeof PolicyUrl.Type;
@@ -67,7 +74,10 @@ export const DisclosureSnapshot = Schema.Struct({
   locale: Locale,
   revision: DisclosureRevision,
   contentSha256: Sha256Digest,
-  text: Schema.NonEmptyString.check(Schema.isTrimmed(), Schema.isMaxLength(8_000)),
+  text: Schema.NonEmptyString.check(
+    Schema.isTrimmed(),
+    Schema.isMaxLength(maximumDisclosureTextLength)
+  ),
   policy: PolicySnapshot,
   purposes: Schema.UniqueArray(legalFact).check(Schema.isNonEmpty()),
   dataCategories: Schema.UniqueArray(legalFact).check(Schema.isNonEmpty()),

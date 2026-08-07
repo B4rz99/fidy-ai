@@ -14,10 +14,10 @@ import {
   UserTranscriptEntry,
 } from "./model";
 import {
-  selectTranscriptWindow,
   TranscriptWindowCharacterLimit,
-  TranscriptWindowTurnLimit,
   type TranscriptWindowEntry,
+  TranscriptWindowTurnLimit,
+  selectTranscriptWindow,
 } from "./rules";
 
 const occurredAt = DateTime.makeUnsafe("2026-07-20T12:00:00Z");
@@ -30,15 +30,15 @@ const selectWindow = (
   entries: ReadonlyArray<TranscriptWindowEntry>,
   maxTurns: number,
   maxCharacters: number
-) =>
+): Effect.Effect<ReadonlyArray<TranscriptWindowEntry>> =>
   selectTranscriptWindow(
     entries,
     TranscriptWindowTurnLimit.make(maxTurns),
     TranscriptWindowCharacterLimit.make(maxCharacters)
   );
-const entryId = (suffix: string) =>
+const entryId = (suffix: string): TranscriptEntryId =>
   TranscriptEntryId.make(`f1d1a000-0000-4000-8000-${suffix.padStart(12, "0")}`);
-const turnId = (suffix: string) =>
+const turnId = (suffix: string): TranscriptTurnId =>
   TranscriptTurnId.make(`f1d1a000-0000-4000-8001-${suffix.padStart(12, "0")}`);
 
 const turn = (suffix: string, user: string, assistant: string): ReadonlyArray<TranscriptEntry> => [
@@ -58,14 +58,18 @@ const turn = (suffix: string, user: string, assistant: string): ReadonlyArray<Tr
 ];
 
 const windowOperation = CanonicalOperationId.make("categories.listCategories");
-const windowUser = (suffix: string, id: TranscriptTurnId, text = "u") =>
+const windowUser = (suffix: string, id: TranscriptTurnId, text = "u"): UserTranscriptEntry =>
   UserTranscriptEntry.make({
     id: entryId(suffix),
     turnId: id,
     text: TranscriptText.make(text),
     occurredAt,
   });
-const windowAssistant = (suffix: string, id: TranscriptTurnId, text = "a") =>
+const windowAssistant = (
+  suffix: string,
+  id: TranscriptTurnId,
+  text = "a"
+): AssistantTranscriptEntry =>
   AssistantTranscriptEntry.make({
     id: entryId(suffix),
     turnId: id,
@@ -76,24 +80,31 @@ const windowAssistant = (suffix: string, id: TranscriptTurnId, text = "a") =>
 const windowCall = (
   suffix: string,
   id: TranscriptTurnId,
-  details: Readonly<{
-    readonly toolCallId: string;
-    readonly input?: unknown;
-  }>
-) => {
-  const toolCallId = details.toolCallId;
-  const input = Schema.decodeUnknownSync(Schema.Json)(details.input ?? {});
-  return CanonicalToolCallEntry.make({
+  toolCallId: string
+): CanonicalToolCallEntry =>
+  CanonicalToolCallEntry.make({
     id: entryId(suffix),
     turnId: id,
     iteration: AgentIteration.make(1),
     toolCallId: ToolCallId.make(toolCallId),
     operation: windowOperation,
-    input,
+    input: Schema.decodeUnknownSync(Schema.Json)({}),
     occurredAt,
   });
-};
-const windowResult = (suffix: string, id: TranscriptTurnId, toolCallId: string) =>
+/** A call whose serialized input alone overruns the character bounds under test. */
+const windowOversizedCall = (
+  suffix: string,
+  id: TranscriptTurnId,
+  toolCallId: string
+): CanonicalToolCallEntry => ({
+  ...windowCall(suffix, id, toolCallId),
+  input: Schema.decodeUnknownSync(Schema.Json)({ tooLarge: "x".repeat(20) }),
+});
+const windowResult = (
+  suffix: string,
+  id: TranscriptTurnId,
+  toolCallId: string
+): CanonicalToolResultEntry =>
   CanonicalToolResultEntry.make({
     id: entryId(suffix),
     turnId: id,
@@ -368,7 +379,7 @@ it.effect("retains a User request that exactly fills an oversized active turn", 
   Effect.gen(function* () {
     const id = turnId("13");
     const user = windowUser("131", id, "boundary");
-    const trailingCall = windowCall("132", id, { toolCallId: "boundary-call" });
+    const trailingCall = windowCall("132", id, "boundary-call");
 
     expect(yield* selectWindow([user, trailingCall], 1, 8)).toEqual([user]);
   })
@@ -388,7 +399,7 @@ it.effect("does not split a matching trailing call and result at the character b
   Effect.gen(function* () {
     const id = turnId("15");
     const user = windowUser("151", id);
-    const call = windowCall("152", id, { toolCallId: "boundary-pair" });
+    const call = windowCall("152", id, "boundary-pair");
     const result = windowResult("153", id, "boundary-pair");
 
     expect(yield* selectWindow([user, call, result], 1, 3)).toEqual([user]);
@@ -399,9 +410,9 @@ it.effect("charges every retained standalone suffix entry against the character 
   Effect.gen(function* () {
     const id = turnId("16");
     const user = windowUser("161", id);
-    const oldest = windowCall("162", id, { toolCallId: "oldest-call" });
-    const middle = windowCall("163", id, { toolCallId: "middle-call" });
-    const newest = windowCall("164", id, { toolCallId: "newest-call" });
+    const oldest = windowCall("162", id, "oldest-call");
+    const middle = windowCall("163", id, "middle-call");
+    const newest = windowCall("164", id, "newest-call");
 
     expect(yield* selectWindow([user, oldest, middle, newest], 1, 5)).toEqual([
       user,
@@ -433,8 +444,8 @@ it.effect(
     Effect.gen(function* () {
       const id = turnId("18");
       const user = windowUser("181", id);
-      const previousCall = windowCall("182", id, { toolCallId: "repeated-call" });
-      const trailingCall = windowCall("183", id, { toolCallId: "repeated-call" });
+      const previousCall = windowCall("182", id, "repeated-call");
+      const trailingCall = windowCall("183", id, "repeated-call");
 
       expect(yield* selectWindow([user, previousCall, trailingCall], 1, 4)).toEqual([
         user,
@@ -494,11 +505,8 @@ it.effect("keeps a fitting mismatched call before an unmatched trailing result",
   Effect.gen(function* () {
     const id = turnId("20");
     const user = windowUser("201", id);
-    const oversized = windowCall("202", id, {
-      toolCallId: "oversized",
-      input: { tooLarge: "x".repeat(20) },
-    });
-    const call = windowCall("203", id, { toolCallId: "call-a" });
+    const oversized = windowOversizedCall("202", id, "oversized");
+    const call = windowCall("203", id, "call-a");
     const result = windowResult("204", id, "call-b");
 
     expect(yield* selectWindow([user, oversized, call, result], 1, 5)).toEqual([
@@ -513,11 +521,8 @@ it.effect("stops the active suffix after its newest unit exceeds the character b
   Effect.gen(function* () {
     const id = turnId("21");
     const user = windowUser("211", id);
-    const olderCall = windowCall("212", id, { toolCallId: "older-call" });
-    const oversizedCall = windowCall("213", id, {
-      toolCallId: "newest-call",
-      input: { tooLarge: "x".repeat(20) },
-    });
+    const olderCall = windowCall("212", id, "older-call");
+    const oversizedCall = windowOversizedCall("213", id, "newest-call");
 
     expect(yield* selectWindow([user, olderCall, oversizedCall], 1, 3)).toEqual([user]);
   })
@@ -527,10 +532,7 @@ it.effect("retains repeated unmatched results when each one fits the active suff
   Effect.gen(function* () {
     const id = turnId("22");
     const user = windowUser("221", id);
-    const oversizedCall = windowCall("222", id, {
-      toolCallId: "oversized",
-      input: { tooLarge: "x".repeat(20) },
-    });
+    const oversizedCall = windowOversizedCall("222", id, "oversized");
     const previousResult = windowResult("223", id, "repeated-result");
     const trailingResult = windowResult("224", id, "repeated-result");
 

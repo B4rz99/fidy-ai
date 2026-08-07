@@ -1,21 +1,21 @@
 import { expect, it } from "@effect/vitest";
-import { Result, Schema } from "effect";
+import { Option, Result, Schema } from "effect";
 import {
   AppliedDashboardPeriod,
   BudgetBarData,
-  collectDashboardCategoryReferences,
-  collectLayoutWidgets,
   CustomMetricData,
   DashboardCatalog,
   DashboardDocument,
   DashboardMonetaryWidgetData,
   DashboardMoneyGroups,
   DashboardTitle,
-  findDashboardStructureIssue,
   SpendingChartData,
   SplitWeight,
   TransactionListLimit,
   WidgetId,
+  collectDashboardCategoryReferences,
+  collectLayoutWidgets,
+  findDashboardStructureIssue,
 } from "./model";
 
 const categoryId = "10000000-0000-4000-8000-000000000001";
@@ -252,7 +252,15 @@ it("rejects invalid periods and every mixed-Currency Budget Money value", () => 
 });
 
 it("requires one to sixteen unique Category references", () => {
-  const makeDocument = (categories: ReadonlyArray<string>) => ({
+  const makeDocument = (
+    categories: ReadonlyArray<string>
+  ): {
+    title: string;
+    layout: {
+      kind: string;
+      widget: { id: string; type: string; limit: number; categories: readonly string[] };
+    };
+  } => ({
     title: "Resumen",
     layout: {
       kind: "leaf",
@@ -299,7 +307,13 @@ it("checks each Money-group branch and reports its exact Currency field", () => 
 });
 
 it("accepts empty and ordered Currency groups but rejects duplicate and descending neighbors", () => {
-  const group = (currency: "COP" | "EUR" | "USD") => ({
+  const group = (
+    currency: "COP" | "EUR" | "USD"
+  ): {
+    currency: "COP" | "EUR" | "USD";
+    inflow: { amount: string; currency: "COP" | "EUR" | "USD" };
+    outflow: { amount: string; currency: "COP" | "EUR" | "USD" };
+  } => ({
     currency,
     inflow: { amount: "1", currency },
     outflow: { amount: "0", currency },
@@ -323,7 +337,13 @@ it("accepts empty and ordered Currency groups but rejects duplicate and descendi
 });
 
 it("reports the first out-of-order Currency group after an ordered prefix", () => {
-  const group = (currency: "COP" | "EUR" | "USD") => ({
+  const group = (
+    currency: "COP" | "EUR" | "USD"
+  ): {
+    currency: "COP" | "EUR" | "USD";
+    inflow: { amount: string; currency: "COP" | "EUR" | "USD" };
+    outflow: { amount: string; currency: "COP" | "EUR" | "USD" };
+  } => ({
     currency,
     inflow: { amount: "1", currency },
     outflow: { amount: "0", currency },
@@ -358,8 +378,7 @@ it("checks every adjacent Currency boundary with strict order", () => {
     inflow: { amount: "1", currency },
     outflow: { amount: "0", currency },
   });
-  const decode = (groups: ReadonlyArray<MoneyGroup>) =>
-    Schema.decodeUnknownResult(DashboardMoneyGroups)(groups);
+  const decode = Schema.decodeUnknownResult(DashboardMoneyGroups);
 
   expect(Result.isSuccess(decode([]))).toBe(true);
   expect(Result.isSuccess(decode([group("COP")]))).toBe(true);
@@ -406,7 +425,7 @@ it("accepts only exact local calendar day and month bucket keys", () => {
       toExclusive: "2026-08-01T05:00:00.000Z",
     },
   };
-  const decodeKey = (key: unknown) =>
+  const decodeKey = (key: unknown): Result.Result<SpendingChartData, Schema.SchemaError> =>
     Schema.decodeUnknownResult(SpendingChartData)({
       ...shared,
       buckets: [{ key, moneyGroups: [] }],
@@ -667,7 +686,7 @@ it("enforces the layout depth boundary and retains the first traversal issue", (
     layout: nested(9),
   });
 
-  expect(findDashboardStructureIssue(valid)).toBeUndefined();
+  expect(Option.isNone(findDashboardStructureIssue(valid))).toBe(true);
   expect(Result.isFailure(tooDeep) ? String(tooDeep.failure) : "").toContain(
     "DashboardDocument layout depth must not exceed 8"
   );
@@ -725,10 +744,12 @@ it("reports the exact nested WidgetId path for a duplicate identity", () => {
     },
   });
 
-  expect(issue).toEqual({
-    path: ["layout", "children", 1, "node", "widget", "id"],
-    issue: "Expected a unique WidgetId in DashboardDocument",
-  });
+  expect(issue).toEqual(
+    Option.some({
+      path: ["layout", "children", 1, "node", "widget", "id"],
+      issue: "Expected a unique WidgetId in DashboardDocument",
+    })
+  );
 });
 
 it("rejects duplicate widget identities and non-canonical same-axis nesting", () => {

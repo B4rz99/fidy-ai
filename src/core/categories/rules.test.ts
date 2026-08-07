@@ -20,7 +20,11 @@ const mercado = CategoryId.make("22222222-2222-4222-8222-222222222222");
 const firstRuleId = KeywordRuleId.make("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa");
 const secondRuleId = KeywordRuleId.make("bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb");
 
-const categoryRule = (id: KeywordRuleId, keyword: string, categoryId: CategoryId = domicilios) => ({
+const categoryRule = (
+  id: KeywordRuleId,
+  keyword: string,
+  categoryId: CategoryId = domicilios
+): { id: KeywordRuleId; keyword: string; categoryId: CategoryId } => ({
   id,
   keyword,
   categoryId,

@@ -30,6 +30,8 @@
 // check-commit-message.ts is strict: a parser that shrugs at a shape it does not
 // recognise reports "no migrations" and passes everything.
 
+import { Option } from "effect";
+
 /** Where ARCHITECTURE.md §7 fixes the loader's index. Repo-relative, so the same string addresses the working tree and a git ref. */
 const REGISTRY_PATH = "src/shell/db/migrations/registry.ts";
 
@@ -65,8 +67,8 @@ type Migration = {
 type RegistryComparison = {
   /** Source text of the branch's `registry.ts`. */
   readonly registry: string;
-  /** Source text of the base branch's `registry.ts`, or `null` when the base branch has no registry at all — a base with no migrations has a maximum id of zero, not a broken check. */
-  readonly baseRegistry: string | null;
+  /** `None` when the base branch has no registry at all — a base with no migrations has a maximum id of zero, not a broken check. */
+  readonly baseRegistry: Option.Option<string>;
   /** Named in failure messages so a reader knows what the ids were compared against. */
   readonly baseRef: string;
 };
@@ -141,19 +143,19 @@ const entryKey = (line: string): string => {
 const parseMigrationKeys = (source: string): readonly string[] =>
   literalBody(source).split(/\r?\n/).filter(isEntry).map(entryKey);
 
-const toMigration = (key: string): Migration | null => {
-  const id = KEY_PATTERN.exec(key)?.[1];
-
-  return id === undefined ? null : { key, id: Number(id) };
-};
+const toMigration = (key: string): Option.Option<Migration> =>
+  Option.map(Option.fromUndefinedOr(KEY_PATTERN.exec(key)?.[1]), (id) => ({
+    key,
+    id: Number(id),
+  }));
 
 /** The subset of keys the migrator will actually load — the rest it drops in silence. */
 const loadable = (keys: readonly string[]): readonly Migration[] =>
-  keys.map(toMigration).filter((migration) => migration !== null);
+  keys.flatMap((key) => Option.toArray(toMigration(key)));
 
 const malformedErrors = (keys: readonly string[]): readonly string[] =>
   keys
-    .filter((key) => toMigration(key) === null)
+    .filter((key) => Option.isNone(toMigration(key)))
     .map(
       (key) =>
         `Migration key "${key}" does not match <id>_<name> (for example "0004_add_budgets").\n` +
@@ -214,8 +216,10 @@ const skippedErrors = (
 const migrationIdErrors = (comparison: RegistryComparison): readonly string[] => {
   const keys = parseMigrationKeys(comparison.registry);
   const migrations = loadable(keys);
-  const base =
-    comparison.baseRegistry === null ? [] : loadable(parseMigrationKeys(comparison.baseRegistry));
+  const base = Option.match(comparison.baseRegistry, {
+    onNone: (): readonly Migration[] => [],
+    onSome: (registry) => loadable(parseMigrationKeys(registry)),
+  });
 
   return [
     ...malformedErrors(keys),
@@ -246,12 +250,12 @@ const git = (args: readonly string[]): GitResult => {
 };
 
 /**
- * The base branch's registry, or `null` when that branch has no registry —
- * which is a real state (a base that predates migrations) and means its highest
- * id is zero. A base ref that is not present locally is not that state: it is a
- * check that cannot do its job, and it fails loudly.
+ * The base branch's registry, `None` when that branch has no registry — which
+ * is a real state (a base that predates migrations) and means its highest id is
+ * zero. A base ref that is not present locally is not that state: it is a check
+ * that cannot do its job, and it fails loudly.
  */
-const baseRegistry = (baseRef: string): string | null => {
+const baseRegistry = (baseRef: string): Option.Option<string> => {
   if (!git(["rev-parse", "--verify", "--quiet", `${baseRef}^{commit}`]).ok) {
     throw new Error(
       `Base ref "${baseRef}" is not available locally, so migration ids cannot be compared against it.\n` +
@@ -260,7 +264,7 @@ const baseRegistry = (baseRef: string): string | null => {
   }
 
   if (!git(["cat-file", "-e", `${baseRef}:${REGISTRY_PATH}`]).ok) {
-    return null;
+    return Option.none();
   }
 
   const shown = git(["show", `${baseRef}:${REGISTRY_PATH}`]);
@@ -269,7 +273,7 @@ const baseRegistry = (baseRef: string): string | null => {
     throw new Error(`Could not read ${REGISTRY_PATH} from ${baseRef}: ${shown.stderr}`);
   }
 
-  return shown.stdout;
+  return Option.some(shown.stdout);
 };
 
 const report = (errors: readonly string[], baseRef: string): string =>
@@ -279,16 +283,16 @@ const report = (errors: readonly string[], baseRef: string): string =>
   `including ids that landed there after this branch was cut.\n`;
 
 /** Reads the base branch and judges the registry. Throws when the check itself cannot run. */
-const registryFailures = (source: string | null): readonly string[] => {
+const registryFailures = (source: Option.Option<string>): readonly string[] => {
   // No registry means no migration can be skipped, so there is nothing to
   // compare and no reason to need the base branch at all.
-  if (source === null) {
+  if (Option.isNone(source)) {
     return [];
   }
 
   const baseRef = Bun.env.BASE_REF ?? DEFAULT_BASE_REF;
   const errors = migrationIdErrors({
-    registry: source,
+    registry: source.value,
     baseRegistry: baseRegistry(baseRef),
     baseRef,
   });
@@ -301,7 +305,7 @@ const registryFailures = (source: string | null): readonly string[] => {
  * unreadable registry, an unreachable base branch — turned into failures of
  * their own, so CI reports the sentence rather than a Bun stack trace.
  */
-const allFailures = (source: string | null): readonly string[] => {
+const allFailures = (source: Option.Option<string>): readonly string[] => {
   try {
     return registryFailures(source);
   } catch (cause) {
@@ -311,7 +315,9 @@ const allFailures = (source: string | null): readonly string[] => {
 
 if (import.meta.main) {
   const registry = Bun.file(REGISTRY_SOURCE);
-  const failures = allFailures((await registry.exists()) ? await registry.text() : null);
+  const failures = allFailures(
+    (await registry.exists()) ? Option.some(await registry.text()) : Option.none()
+  );
 
   if (failures.length > 0) {
     process.stderr.write(failures.join("\n"));

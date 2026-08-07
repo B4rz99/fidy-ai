@@ -9,6 +9,7 @@ import {
   UpdateTransactionInput,
 } from "~/core/transactions/model";
 import { NotFound, ValidationFailed } from "~/shell/_shared/errors";
+import { createdStatus } from "~/shell/_shared/http-status";
 import { operationPolicy } from "~/shell/_shared/operation-policy";
 import { OperationResponse } from "~/shell/_shared/response";
 
@@ -51,7 +52,7 @@ export const TransactionsGroup = HttpApiGroup.make("transactions")
   .add(
     HttpApiEndpoint.post("createTransaction", "/transactions", {
       payload: CreateTransactionInput,
-      success: CreateTransactionResponse.pipe(HttpApiSchema.status(201)),
+      success: CreateTransactionResponse.pipe(HttpApiSchema.status(createdStatus)),
       error: [NotFound, ValidationFailed],
     })
       .annotate(

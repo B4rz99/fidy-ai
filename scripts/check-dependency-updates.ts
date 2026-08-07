@@ -48,7 +48,7 @@
 // vulnerability cannot outlive the vulnerability it was written for.
 
 import { BunRuntime } from "@effect/platform-bun";
-import { Console, Data, DateTime, Effect, Layer, Schema } from "effect";
+import { Array as Arr, Console, Data, DateTime, Effect, Layer, Option, Schema } from "effect";
 import { FetchHttpClient, HttpClient } from "effect/unstable/http";
 
 /**
@@ -139,41 +139,44 @@ type Finding = {
 // Judgement — pure, and the whole of the policy
 // ---------------------------------------------------------------------------
 
-const parsePin = (spec: string): Version | null => {
+const parsePin = (spec: string): Option.Option<Version> => {
   const match = EXACT_PIN.exec(spec);
 
   if (match?.[1] === undefined || match[2] === undefined || match[3] === undefined) {
-    return null;
+    return Option.none();
   }
 
-  return {
+  return Option.some({
     major: Number(match[1]),
     minor: Number(match[2]),
     patch: Number(match[3]),
     prerelease: match[4] !== undefined,
     raw: spec,
-  };
+  });
 };
 
 /**
- * The step from `current` to `latest`, or `null` when `latest` is not ahead —
+ * The step from `current` to `latest`, `None` when `latest` is not ahead —
  * which covers the ordinary case of an up-to-date pin, and the case of a pin
  * sitting on a prerelease of a major the registry has not shipped yet.
  */
-const step = (current: Version, latest: Version): Step | null => {
+const stepIfAhead = (kind: Step, current: number, latest: number): Option.Option<Step> =>
+  latest > current ? Option.some(kind) : Option.none();
+
+const step = (current: Version, latest: Version): Option.Option<Step> => {
   if (latest.major !== current.major) {
-    return latest.major > current.major ? "major" : null;
+    return stepIfAhead("major", current.major, latest.major);
   }
 
   if (latest.minor !== current.minor) {
-    return latest.minor > current.minor ? "minor" : null;
+    return stepIfAhead("minor", current.minor, latest.minor);
   }
 
   if (latest.patch !== current.patch) {
-    return latest.patch > current.patch ? "patch" : null;
+    return stepIfAhead("patch", current.patch, latest.patch);
   }
 
-  return current.prerelease && !latest.prerelease ? "stable" : null;
+  return current.prerelease && !latest.prerelease ? Option.some("stable") : Option.none();
 };
 
 /**
@@ -217,27 +220,31 @@ type Release = {
 const newestInstallable = (
   packument: typeof Packument.Type,
   startedAt: DateTime.Utc
-): Release | null => {
+): Option.Option<Release> => {
   const cutoff = DateTime.subtract(startedAt, { seconds: RELEASE_DELAY_SECONDS });
   const tagged = parsePin(packument["dist-tags"].latest);
 
   return Object.entries(packument.time)
     .flatMap(([raw, publishedAt]): ReadonlyArray<Release> => {
-      const version = STABLE_VERSION.test(raw) ? parsePin(raw) : null;
+      const version = STABLE_VERSION.test(raw) ? parsePin(raw) : Option.none<Version>();
 
-      if (version === null || !DateTime.isLessThanOrEqualTo(publishedAt, cutoff)) {
+      if (Option.isNone(version) || !DateTime.isLessThanOrEqualTo(publishedAt, cutoff)) {
         return [];
       }
 
       const published =
-        tagged === null || step(version, tagged) !== null || version.raw === tagged.raw;
+        Option.isNone(tagged) ||
+        Option.isSome(step(version.value, tagged.value)) ||
+        version.value.raw === tagged.value.raw;
 
-      return published ? [{ version, publishedAt }] : [];
+      return published ? [{ version: version.value, publishedAt }] : [];
     })
-    .reduce<Release | null>(
+    .reduce<Option.Option<Release>>(
       (newest, release) =>
-        newest === null || step(newest.version, release.version) !== null ? release : newest,
-      null
+        Option.isNone(newest) || Option.isSome(step(newest.value.version, release.version))
+          ? Option.some(release)
+          : newest,
+      Option.none()
     );
 };
 
@@ -421,11 +428,12 @@ const readYaml = <A>(
  * than a broken check: an install root with no delay is exactly the thing this
  * gate exists to report, so it comes back as a finding and the run continues.
  */
-const readBunfig = (directory: string): Effect.Effect<typeof Bunfig.Type | null> =>
+const readBunfig = (directory: string): Effect.Effect<Option.Option<typeof Bunfig.Type>> =>
   Effect.tryPromise(() => Bun.file(`${REPO_ROOT}${directory}bunfig.toml`).text()).pipe(
     Effect.map((text) => Bun.TOML.parse(text)),
     Effect.flatMap(Schema.decodeUnknownEffect(Bunfig)),
-    Effect.catchCause(() => Effect.succeed(null))
+    Effect.map(Option.some),
+    Effect.catchCause(() => Effect.succeed(Option.none<typeof Bunfig.Type>()))
   );
 
 /** Every manifest the repo owns, nearest first. `node_modules` is excluded by name and dotted directories by the scanner. */
@@ -452,11 +460,11 @@ const bunfigFindings = ({
   bunfig,
 }: {
   readonly directory: string;
-  readonly bunfig: typeof Bunfig.Type | null;
+  readonly bunfig: Option.Option<typeof Bunfig.Type>;
 }): ReadonlyArray<Finding> => {
   const path = `${directory}bunfig.toml`;
 
-  if (bunfig === null) {
+  if (Option.isNone(bunfig)) {
     return [
       {
         severity: "failure",
@@ -468,14 +476,15 @@ const bunfigFindings = ({
     ];
   }
 
+  const install = bunfig.value.install;
   const short =
-    bunfig.install.minimumReleaseAge < RELEASE_DELAY_SECONDS
+    install.minimumReleaseAge < RELEASE_DELAY_SECONDS
       ? [
           {
             severity: "failure" as const,
             subject: path,
             detail:
-              `install.minimumReleaseAge is ${bunfig.install.minimumReleaseAge}s, below the ${RELEASE_DELAY_SECONDS}s this repo requires.\n` +
+              `install.minimumReleaseAge is ${install.minimumReleaseAge}s, below the ${RELEASE_DELAY_SECONDS}s this repo requires.\n` +
               `  A release younger than the delay is a supply-chain landing window, and this gate ignores that window when it looks for updates.`,
           },
         ]
@@ -484,7 +493,7 @@ const bunfigFindings = ({
   // would: nothing is let out of the delay. That is bun's own reading of the
   // missing key rather than a default invented here to cover a gap — there is no
   // third state for this key to be in, and nothing downstream to mislead.
-  const holes = (bunfig.install.minimumReleaseAgeExcludes ?? []).map((excluded) => ({
+  const holes = (install.minimumReleaseAgeExcludes ?? []).map((excluded) => ({
     severity: "failure" as const,
     subject: path,
     detail:
@@ -577,13 +586,14 @@ const deferralFor = (
   deferrals: ReadonlyArray<Deferral>,
   pin: Pin,
   startedAt: DateTime.Utc
-): Deferral | null =>
-  deferrals.find(
+): Option.Option<Deferral> =>
+  Arr.findFirst(
+    deferrals,
     (deferral) =>
       deferral.name === pin.name &&
       (deferral.manifest === undefined || deferral.manifest === pin.manifest) &&
       DateTime.isLessThan(startedAt, deferral.until)
-  ) ?? null;
+  );
 
 const updateFinding = ({
   pin,
@@ -592,25 +602,26 @@ const updateFinding = ({
 }: {
   readonly pin: ExactPin;
   readonly release: Release;
-  readonly deferral: Deferral | null;
-}): Finding | null => {
+  readonly deferral: Option.Option<Deferral>;
+}): Option.Option<Finding> => {
   const kind = step(pin.current, release.version);
 
-  if (kind === null) {
-    return null;
+  if (Option.isNone(kind)) {
+    return Option.none();
   }
 
   const published = DateTime.formatIsoDate(release.publishedAt);
-  const deferred =
-    deferral === null
-      ? ""
-      : `\n  deferred until ${DateTime.formatIsoDate(deferral.until)}: ${deferral.reason}`;
+  const deferred = Option.match(deferral, {
+    onNone: () => "",
+    onSome: (active) =>
+      `\n  deferred until ${DateTime.formatIsoDate(active.until)}: ${active.reason}`,
+  });
 
-  return {
-    severity: deferral === null ? severityOf(kind) : "warning",
+  return Option.some({
+    severity: Option.isNone(deferral) ? severityOf(kind.value) : "warning",
     subject: `${pin.name} (${pin.manifest})`,
-    detail: `${kind} update available: ${pin.spec} → ${release.version.raw}, published ${published}${deferred}`,
-  };
+    detail: `${kind.value} update available: ${pin.spec} → ${release.version.raw}, published ${published}${deferred}`,
+  });
 };
 
 const pinFindings = ({
@@ -626,17 +637,17 @@ const pinFindings = ({
 }): ReadonlyArray<Finding> => {
   const release = newestInstallable(packument, startedAt);
 
-  if (release === null) {
+  if (Option.isNone(release)) {
     return [];
   }
 
-  const finding = updateFinding({
-    pin,
-    release,
-    deferral: deferralFor(deferrals, pin, startedAt),
-  });
-
-  return finding === null ? [] : [finding];
+  return Option.toArray(
+    updateFinding({
+      pin,
+      release: release.value,
+      deferral: deferralFor(deferrals, pin, startedAt),
+    })
+  );
 };
 
 // ---------------------------------------------------------------------------
@@ -672,18 +683,28 @@ const report = (checked: number, findings: ReadonlyArray<Finding>): string => {
 // Edge
 // ---------------------------------------------------------------------------
 
+const acceptedExclusions = (scanner: typeof ScaConfig.Type): ReadonlyArray<Exclusion> =>
+  scanner.sca.exclusions === undefined
+    ? []
+    : scanner.sca.exclusions.flatMap((exclusion) =>
+        exclusion.paths.map((path) => ({ cve: exclusion.CVE, path }))
+      );
+
+const rangedPinFindings = (ranged: ReadonlyArray<Pin>): ReadonlyArray<Finding> =>
+  ranged.map((pin) => ({
+    severity: "failure" as const,
+    subject: `${pin.name} (${pin.manifest})`,
+    detail:
+      `"${pin.spec}" is a range, not a pin. Which version is installed then lives in the lockfile, and this check would be grading a number nobody wrote down.\n` +
+      `  Pin the exact version the lockfile resolved.`,
+  }));
+
 const check = Effect.gen(function* () {
   const startedAt = yield* DateTime.now;
   const policy = yield* readJson(Policy, POLICY_PATH);
   const scanner = yield* readYaml(ScaConfig, SCA_CONFIG_PATH);
   const manifests = manifestPaths();
-
-  const exclusions =
-    scanner.sca.exclusions === undefined
-      ? []
-      : scanner.sca.exclusions.flatMap((exclusion) =>
-          exclusion.paths.map((path) => ({ cve: exclusion.CVE, path }))
-        );
+  const exclusions = acceptedExclusions(scanner);
 
   const pins = yield* Effect.forEach(manifests, (manifest) =>
     Effect.map(readJson(Manifest, manifest), (declared) => pinsOf(manifest, declared))
@@ -696,9 +717,10 @@ const check = Effect.gen(function* () {
   });
 
   const declared = pins.flat().map((pin) => ({ pin, current: parsePin(pin.spec) }));
-  const ranged = declared.flatMap(({ pin, current }) => (current === null ? [pin] : []));
+  const ranged = declared.flatMap(({ pin, current }) => (Option.isNone(current) ? [pin] : []));
   const exact = declared.flatMap(
-    ({ pin, current }): ReadonlyArray<ExactPin> => (current === null ? [] : [{ ...pin, current }])
+    ({ pin, current }): ReadonlyArray<ExactPin> =>
+      Option.isNone(current) ? [] : [{ ...pin, current: current.value }]
   );
 
   const updates = yield* Effect.forEach(
@@ -721,13 +743,7 @@ const check = Effect.gen(function* () {
       acceptances: policy.acceptedVulnerabilities,
       exclusions,
     }),
-    ...ranged.map((pin) => ({
-      severity: "failure" as const,
-      subject: `${pin.name} (${pin.manifest})`,
-      detail:
-        `"${pin.spec}" is a range, not a pin. Which version is installed then lives in the lockfile, and this check would be grading a number nobody wrote down.\n` +
-        `  Pin the exact version the lockfile resolved.`,
-    })),
+    ...rangedPinFindings(ranged),
     ...updates.flat(),
   ];
 

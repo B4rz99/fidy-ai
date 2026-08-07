@@ -13,7 +13,10 @@ const testPublicNamespace = {
   INGEST_EMAIL_DOMAIN: "ingest.fidyapp.com",
 } as const;
 
-const runSeedCommand = (databaseUrl: string, environment: Readonly<Record<string, string>> = {}) =>
+const runSeedCommand = (
+  databaseUrl: string,
+  environment: Readonly<Record<string, string>> = {}
+): Effect.Effect<{ exitCode: number; stdout: string; stderr: string }> =>
   Effect.gen(function* () {
     const child = yield* Effect.sync(() =>
       Bun.spawn(["bun", "scripts/seed-development.ts"], {

@@ -1,29 +1,33 @@
-import { BigInt as EffectBigInt, Effect, Option, Schema } from "effect";
+import { Effect, BigInt as EffectBigInt, Option, Schema } from "effect";
 import {
+  type DashboardFailure,
+  type DashboardIssue,
   DuplicateWidgetId,
   InvalidDashboardResult,
-  type DashboardIssue,
   LastWidgetRemoval,
   RootWidgetResize,
   SelfPlacement,
   WidgetNotFound,
-  type DashboardFailure,
 } from "./errors";
 import {
-  DashboardDocument,
-  findDashboardStructureIssue,
-  SplitWeight,
+  type Axis,
   type BesidePlacement,
+  DashboardDocument,
   type DashboardEdit,
   type LayoutNode,
   type SplitNode,
+  SplitWeight,
   type Widget,
   type WidgetId,
+  findDashboardStructureIssue,
 } from "./model";
 
 const makeInvalidDashboardResult = (): InvalidDashboardResult => {
   const issues: [DashboardIssue] = [
-    { message: "The edit produced a document outside DashboardDocument invariants" },
+    {
+      path: Option.none(),
+      message: "The edit produced a document outside DashboardDocument invariants",
+    },
   ];
   return new InvalidDashboardResult({ issues });
 };
@@ -32,10 +36,10 @@ const revalidateDocument = (
   candidate: Readonly<DashboardDocument>
 ): Effect.Effect<DashboardDocument, InvalidDashboardResult> => {
   const issue = findDashboardStructureIssue(candidate);
-  if (issue !== undefined) {
+  if (Option.isSome(issue)) {
     return Effect.fail(
       new InvalidDashboardResult({
-        issues: [{ path: issue.path.join("."), message: issue.issue }],
+        issues: [{ path: Option.some(issue.value.path.join(".")), message: issue.value.issue }],
       })
     );
   }
@@ -66,47 +70,42 @@ const mapAtLeastTwo = <Input, Output>(
   ];
 };
 
+type WeightedLayoutNode = Readonly<{ node: LayoutNode; weight: bigint }>;
+
+/** Restates one child against the parent's common denominator, flattening same-axis nesting. */
+const expandChild = (
+  child: Readonly<SplitNode["children"][number]>,
+  axis: Axis,
+  scale: Readonly<{ readonly keep: bigint; readonly flatten: bigint }>
+): ReadonlyArray<WeightedLayoutNode> => {
+  switch (child.node.kind) {
+    case "leaf":
+      return [{ node: child.node, weight: BigInt(child.weight) * scale.keep }];
+    case "split":
+      return child.node.axis === axis
+        ? child.node.children.map((nested) => ({
+            node: nested.node,
+            weight: BigInt(child.weight) * BigInt(nested.weight) * scale.flatten,
+          }))
+        : [{ node: child.node, weight: BigInt(child.weight) * scale.keep }];
+  }
+};
+
 const normalizeSplit = (node: Readonly<SplitNode>): SplitNode => {
   const children = node.children;
-  const denominators = children.map((child) =>
-    child.node.kind === "leaf"
-      ? 1n
-      : child.node.children.reduce((sum, nested) => sum + BigInt(nested.weight), 0n)
-  );
-  const commonDenominator = denominators.reduce(
-    (product, denominator) => product * denominator,
-    1n
-  );
-  const expanded: ReadonlyArray<Readonly<{ node: LayoutNode; weight: bigint }>> = children.flatMap(
-    (child, index) => {
-      const denominator = denominators[index] ?? 1n;
-      let expansion: ReadonlyArray<Readonly<{ node: LayoutNode; weight: bigint }>>;
-      switch (child.node.kind) {
-        case "leaf":
-          expansion = [{ node: child.node, weight: BigInt(child.weight) * commonDenominator }];
-          break;
-        case "split":
-          if (child.node.axis === node.axis) {
-            expansion = child.node.children.map((nested) => ({
-              node: nested.node,
-              weight:
-                BigInt(child.weight) * BigInt(nested.weight) * (commonDenominator / denominator),
-            }));
-          } else {
-            expansion = [
-              {
-                node: {
-                  ...child.node,
-                  children: mapAtLeastTwo(child.node.children, (current) => current),
-                },
-                weight: BigInt(child.weight) * commonDenominator,
-              },
-            ];
-          }
-          break;
-      }
-      return expansion;
-    }
+  const weighted = children.map((child) => ({
+    child,
+    denominator:
+      child.node.kind === "leaf"
+        ? 1n
+        : child.node.children.reduce((sum, nested) => sum + BigInt(nested.weight), 0n),
+  }));
+  const commonDenominator = weighted.reduce((product, entry) => product * entry.denominator, 1n);
+  const expanded: ReadonlyArray<WeightedLayoutNode> = weighted.flatMap(({ child, denominator }) =>
+    expandChild(child, node.axis, {
+      keep: commonDenominator,
+      flatten: commonDenominator / denominator,
+    })
   );
   const divisor = expanded.reduce((current, child) => EffectBigInt.gcd(current, child.weight), 0n);
   const expandedChildren: AtLeastTwo<(typeof expanded)[number]> = [
@@ -127,6 +126,15 @@ const normalizeSplit = (node: Readonly<SplitNode>): SplitNode => {
   };
 };
 
+const rootColumn = (layout: Readonly<LayoutNode>): Option.Option<Readonly<SplitNode>> => {
+  switch (layout.kind) {
+    case "leaf":
+      return Option.none();
+    case "split":
+      return layout.axis === "column" ? Option.some(layout) : Option.none();
+  }
+};
+
 const addAtRoot = (
   layout: Readonly<LayoutNode>,
   widget: Readonly<Widget>,
@@ -136,19 +144,12 @@ const addAtRoot = (
     weight: SplitWeight.make(1),
     node: { kind: "leaf" as const, widget },
   };
-  let existingColumn: Readonly<SplitNode> | undefined;
-  switch (layout.kind) {
-    case "leaf":
-      break;
-    case "split":
-      if (layout.axis !== "row") existingColumn = layout;
-      break;
-  }
-  if (existingColumn !== undefined) {
+  const column = rootColumn(layout);
+  if (Option.isSome(column)) {
     return {
-      ...existingColumn,
+      ...column.value,
       children:
-        at === "top" ? [child, ...existingColumn.children] : [...existingColumn.children, child],
+        at === "top" ? [child, ...column.value.children] : [...column.value.children, child],
     };
   }
   const previous = { weight: SplitWeight.make(1), node: layout };
@@ -439,27 +440,21 @@ const applyMove = (
   if (Option.isNone(removal)) {
     return Effect.fail(new WidgetNotFound({ widgetId: edit.widgetId, role: "edit-target" }));
   }
-  let moveAt: typeof edit.at;
   switch (edit.at) {
     case "top":
-      moveAt = "top";
-      break;
     case "bottom":
-      moveAt = "bottom";
       break;
     default:
       if (edit.at.besideWidget === edit.widgetId) {
         return Effect.fail(new SelfPlacement({ widgetId: edit.widgetId }));
       }
-      moveAt = { ...edit.at };
-      break;
   }
   if (Option.isNone(removal.value.layout)) {
     return revalidateDocument(document);
   }
   return applyAdd(
     { ...document, layout: removal.value.layout.value },
-    { op: "add-widget", widget: removal.value.widget, at: moveAt },
+    { op: "add-widget", widget: removal.value.widget, at: edit.at },
     "allow"
   );
 };

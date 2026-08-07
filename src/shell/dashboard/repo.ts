@@ -16,7 +16,7 @@ const DashboardWrite = Schema.Struct({
 });
 
 /** Serializes first-use initialization and edits even before a User has a row to lock. */
-export const lockDashboard = (userId: UserId) =>
+export const lockDashboard = (userId: UserId): Effect.Effect<void, never, SqlClient.SqlClient> =>
   withUserTransaction(
     userId,
     Effect.flatMap(
@@ -26,7 +26,9 @@ export const lockDashboard = (userId: UserId) =>
   );
 
 /** Reads and schema-decodes one User-owned JSONB document. */
-export const findDashboard = (userId: UserId) =>
+export const findDashboard = (
+  userId: UserId
+): Effect.Effect<Option.Option<DashboardDocument>, never, SqlClient.SqlClient> =>
   withUserTransaction(
     userId,
     Effect.flatMap(SqlClient.SqlClient, (sql) =>

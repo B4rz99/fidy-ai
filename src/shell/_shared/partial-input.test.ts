@@ -2,7 +2,7 @@ import { expect, it } from "@effect/vitest";
 import { type Option, Result, Schema } from "effect";
 import { HttpApi, HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi";
 import { expectTypeOf } from "vitest";
-import { makePartialInputSchema, type PartialInput } from "./partial-input";
+import { type PartialInput, makePartialInputSchema } from "./partial-input";
 
 type CatalogTree = {
   readonly name: string;
@@ -68,7 +68,7 @@ it("checks only record values whose keys match each index signature", () => {
 
 it("matches template, numeric, symbol, and union record keys before checking values", () => {
   const value = Schema.Struct({ left: Schema.String, right: Schema.String });
-  const checkedRecord = (key: Schema.Record.Key) =>
+  const checkedRecord = (key: Schema.Record.Key): Schema.Codec<unknown, unknown> =>
     makePartialInputSchema(
       Schema.StructWithRest(Schema.Struct({}), [Schema.Record(key, value)]).check(
         Schema.makeFilter(() => ({ path: [], issue: "Expected allowed" }))
@@ -224,7 +224,7 @@ it("retains tuple arity and order while partialing nested tuple values", () => {
     readonly left: string;
     readonly right: string;
   };
-  type PartialTupleObject = { readonly left?: string; readonly right?: string };
+  type PartialTupleObject = Partial<TupleObject>;
   type InputTuple = readonly [TupleObject, number];
   type PartialTuple = readonly [PartialTupleObject, number];
   type VariadicInputTuple = readonly [TupleObject, ...Array<TupleObject>, number];

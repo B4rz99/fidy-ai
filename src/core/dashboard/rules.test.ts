@@ -1,6 +1,6 @@
 import { expect, it } from "@effect/vitest";
-import { Effect, Result, Schema } from "effect";
-import { collectLayoutWidgets, DashboardDocument, DashboardEdit } from "./model";
+import { Effect, Option, Result, Schema } from "effect";
+import { DashboardDocument, DashboardEdit, collectLayoutWidgets } from "./model";
 import { applyDashboardEdit } from "./rules";
 
 const document = Schema.decodeUnknownSync(DashboardDocument)({
@@ -38,7 +38,7 @@ const customMetricWidget = (id: string): Readonly<Record<string, unknown>> => ({
 const makeSplitDocument = (
   children: ReadonlyArray<WeightedWidget>,
   axis: "row" | "column" = "row"
-) =>
+): DashboardDocument =>
   Schema.decodeUnknownSync(DashboardDocument)({
     title: "Mi tablero",
     layout: {
@@ -51,7 +51,7 @@ const makeSplitDocument = (
     },
   });
 
-const makeNestedDocument = () =>
+const makeNestedDocument = (): DashboardDocument =>
   Schema.decodeUnknownSync(DashboardDocument)({
     title: "Mi tablero",
     layout: {
@@ -254,7 +254,7 @@ it("returns a typed failure when exact normalized ratios exceed the weight bound
     if (outcome.failure._tag === "InvalidDashboardResult") {
       expect(outcome.failure.issues).toEqual([
         {
-          path: "layout.children.0.node.axis",
+          path: Option.some("layout.children.0.node.axis"),
           message: "Expected canonical layout without nested splits on the same axis",
         },
       ]);
@@ -466,7 +466,9 @@ it("returns an actionable path when an edit exceeds a complete-document limit", 
   if (Result.isFailure(outcome)) {
     expect(outcome.failure._tag).toBe("InvalidDashboardResult");
     if (outcome.failure._tag === "InvalidDashboardResult") {
-      expect(outcome.failure.issues[0].path).toContain("layout.children");
+      expect(Option.getOrElse(outcome.failure.issues[0].path, () => "")).toContain(
+        "layout.children"
+      );
     }
   }
 });

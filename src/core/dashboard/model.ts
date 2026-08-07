@@ -1,7 +1,13 @@
-import { BigDecimal, DateTime, Schema, Struct } from "effect";
+import { BigDecimal, DateTime, Option, Schema, Struct } from "effect";
 import { CategoryId } from "~/core/categories/reference";
 import { IanaTimeZone, Locale, ServiceMarket } from "~/core/_shared/context";
 import { Currency, Money, type ReadonlyMoney } from "~/core/_shared/money";
+
+const maximumDashboardLabelLength = 80;
+const maximumCatalogTextLength = 160;
+const maximumFilteredCategories = 16;
+const maximumWidgetsPerDashboard = 24;
+const maximumLayoutDepth = 8;
 
 /** Stable identity of one widget inside the User's DashboardDocument. */
 export const WidgetId = Schema.String.check(Schema.isUUID()).pipe(Schema.brand("WidgetId"));
@@ -9,13 +15,13 @@ export type WidgetId = typeof WidgetId.Type;
 
 /** User-visible heading for their one dashboard. */
 export const DashboardTitle = Schema.NonEmptyString.check(Schema.isTrimmed()).check(
-  Schema.isMaxLength(80)
+  Schema.isMaxLength(maximumDashboardLabelLength)
 );
 export type DashboardTitle = typeof DashboardTitle.Type;
 
 /** Optional user-visible heading for one widget. */
 export const WidgetTitle = Schema.NonEmptyString.check(Schema.isTrimmed()).check(
-  Schema.isMaxLength(80)
+  Schema.isMaxLength(maximumDashboardLabelLength)
 );
 export type WidgetTitle = typeof WidgetTitle.Type;
 
@@ -35,11 +41,13 @@ export const SpendingGroupBy = Schema.Literals(["category", "day", "month"]);
 export type SpendingGroupBy = typeof SpendingGroupBy.Type;
 
 const CategoryFilter = Schema.TupleWithRest(Schema.Tuple([CategoryId]), [CategoryId]).check(
-  Schema.isMaxLength(16),
+  Schema.isMaxLength(maximumFilteredCategories),
   Schema.isUnique()
 );
 
-const MetricLabel = Schema.NonEmptyString.check(Schema.isTrimmed()).check(Schema.isMaxLength(80));
+const MetricLabel = Schema.NonEmptyString.check(Schema.isTrimmed()).check(
+  Schema.isMaxLength(maximumDashboardLabelLength)
+);
 
 /** Currency-preserving monetary calculation supported by a custom metric. */
 export const MoneyAggregation = Schema.Literals(["sum", "average", "maximum"]);
@@ -76,15 +84,15 @@ export type DashboardMoneyGroup = typeof DashboardMoneyGroup.Type;
 const deterministicDashboardCurrencyOrder = Schema.makeFilter<
   ReadonlyArray<Readonly<{ readonly currency: Currency }>>
 >((groups) => {
-  let previous: Readonly<{ readonly currency: Currency }> | undefined;
+  let previous: Option.Option<Currency> = Option.none();
   for (const [index, current] of groups.entries()) {
-    if (previous !== undefined && previous.currency >= current.currency) {
+    if (Option.isSome(previous) && previous.value >= current.currency) {
       return {
         path: [index, "currency"],
         issue: "Expected unique Currency groups in alphabetic order",
       };
     }
-    previous = current;
+    previous = Option.some(current.currency);
   }
   return undefined;
 });
@@ -309,6 +317,11 @@ export const SplitWeight = Schema.Finite.check(
 ).pipe(Schema.brand("SplitWeight"));
 export type SplitWeight = typeof SplitWeight.Type;
 
+const LeafNode = Schema.Struct({
+  kind: Schema.Literal("leaf"),
+  widget: Widget,
+});
+
 /** Terminal layout region containing exactly one Widget. */
 export type LeafNode = Readonly<{
   readonly kind: "leaf";
@@ -320,6 +333,11 @@ type LeafNodeEncoded = {
   readonly widget: WidgetEncoded;
 };
 
+const SplitChild: Schema.Codec<SplitChild, SplitChildEncoded> = Schema.Struct({
+  weight: SplitWeight,
+  node: Schema.suspend((): Schema.Codec<LayoutNode, LayoutNodeEncoded> => LayoutNode),
+});
+
 /** One weighted child region whose share is relative only to its siblings. */
 export type SplitChild = Readonly<{
   readonly weight: SplitWeight;
@@ -330,6 +348,14 @@ type SplitChildEncoded = {
   readonly weight: number;
   readonly node: LayoutNodeEncoded;
 };
+
+const SplitNode = Schema.Struct({
+  kind: Schema.Literal("split"),
+  axis: Axis,
+  children: Schema.TupleWithRest(Schema.Tuple([SplitChild, SplitChild]), [SplitChild]).check(
+    Schema.isMaxLength(maximumWidgetsPerDashboard)
+  ),
+});
 
 /** Canonical row or column of at least two weighted child regions. */
 export type SplitNode = Readonly<{
@@ -347,24 +373,6 @@ type SplitNodeEncoded = {
 /** Recursive Dashboard layout whose in-order leaves define mobile order. */
 export type LayoutNode = LeafNode | SplitNode;
 type LayoutNodeEncoded = LeafNodeEncoded | SplitNodeEncoded;
-
-const LeafNode = Schema.Struct({
-  kind: Schema.Literal("leaf"),
-  widget: Widget,
-});
-
-const SplitChild: Schema.Codec<SplitChild, SplitChildEncoded> = Schema.Struct({
-  weight: SplitWeight,
-  node: Schema.suspend((): Schema.Codec<LayoutNode, LayoutNodeEncoded> => LayoutNode),
-});
-
-const SplitNode = Schema.Struct({
-  kind: Schema.Literal("split"),
-  axis: Axis,
-  children: Schema.TupleWithRest(Schema.Tuple([SplitChild, SplitChild]), [SplitChild]).check(
-    Schema.isMaxLength(24)
-  ),
-});
 
 /** Recursive structural layout; in-order leaves define mobile reading order. */
 export const LayoutNode: Schema.Codec<LayoutNode, LayoutNodeEncoded> = Schema.suspend(() =>
@@ -385,64 +393,70 @@ export type DashboardStructureIssue = Readonly<{
 
 type VisitContext = Readonly<{
   readonly depth: number;
-  readonly parentAxis: Axis | undefined;
+  readonly parentAxis: Option.Option<Axis>;
   readonly path: ReadonlyArray<string | number>;
 }>;
 
 /** Finds the first structural invariant violation with its document-relative path. */
 export const findDashboardStructureIssue = (
   document: Readonly<DashboardDocumentShape>
-): DashboardStructureIssue | undefined => {
+): Option.Option<DashboardStructureIssue> => {
   const widgetIds = new Set<WidgetId>();
   let widgetCount = 0;
-  let issue: DashboardStructureIssue | undefined;
+  let issue: Option.Option<DashboardStructureIssue> = Option.none();
 
   const visit = (node: Readonly<LayoutNode>, context: Readonly<VisitContext>): void => {
-    if (issue !== undefined) {
+    if (Option.isSome(issue)) {
       return;
     }
     if (node.kind === "leaf") {
       widgetCount += 1;
-      if (widgetCount > 24) {
-        issue = { path: context.path, issue: "DashboardDocument permits at most 24 widgets" };
+      if (widgetCount > maximumWidgetsPerDashboard) {
+        issue = Option.some({
+          path: context.path,
+          issue: "DashboardDocument permits at most 24 widgets",
+        });
         return;
       }
       if (widgetIds.has(node.widget.id)) {
-        issue = {
+        issue = Option.some({
           path: [...context.path, "widget", "id"],
           issue: "Expected a unique WidgetId in DashboardDocument",
-        };
+        });
         return;
       }
       widgetIds.add(node.widget.id);
       return;
     }
-    if (context.depth >= 8) {
-      issue = { path: context.path, issue: "DashboardDocument layout depth must not exceed 8" };
+    if (context.depth >= maximumLayoutDepth) {
+      issue = Option.some({
+        path: context.path,
+        issue: "DashboardDocument layout depth must not exceed 8",
+      });
       return;
     }
-    if (context.parentAxis === node.axis) {
-      issue = {
+    if (Option.contains(context.parentAxis, node.axis)) {
+      issue = Option.some({
         path: [...context.path, "axis"],
         issue: "Expected canonical layout without nested splits on the same axis",
-      };
+      });
       return;
     }
     for (const [index, child] of node.children.entries()) {
       visit(child.node, {
         depth: context.depth + 1,
-        parentAxis: node.axis,
+        parentAxis: Option.some(node.axis),
         path: [...context.path, "children", index, "node"],
       });
     }
   };
 
-  visit(document.layout, { depth: 0, parentAxis: undefined, path: ["layout"] });
+  visit(document.layout, { depth: 0, parentAxis: Option.none(), path: ["layout"] });
   return issue;
 };
 
-const validDocumentStructure = Schema.makeFilter<DashboardDocumentShape>(
-  findDashboardStructureIssue
+const validDocumentStructure = Schema.makeFilter<DashboardDocumentShape>((document) =>
+  Option.toArray(findDashboardStructureIssue(document))
 );
 
 /**
@@ -463,7 +477,9 @@ export const CatalogPresetId = Schema.Literals([
 ]);
 export type CatalogPresetId = typeof CatalogPresetId.Type;
 
-const CatalogText = Schema.NonEmptyString.check(Schema.isTrimmed()).check(Schema.isMaxLength(160));
+const CatalogText = Schema.NonEmptyString.check(Schema.isTrimmed()).check(
+  Schema.isMaxLength(maximumCatalogTextLength)
+);
 
 /** One named direct-launch preset carrying a complete Widget template. */
 export const DashboardCatalogEntry = Schema.Struct({

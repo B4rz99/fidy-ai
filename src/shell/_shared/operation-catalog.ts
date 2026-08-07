@@ -2,7 +2,7 @@ import * as Arr from "effect/Array";
 import { Context, Option, Schema, SchemaAST } from "effect";
 import { HttpApi, type HttpApiEndpoint, type HttpApiGroup, OpenApi } from "effect/unstable/httpapi";
 import { CanonicalOperationId } from "~/core/_shared/canonical-operation";
-import { getOperationPolicy, type OperationPolicyValue } from "./operation-policy";
+import { type OperationPolicyValue, getOperationPolicy } from "./operation-policy";
 import { makePartialInputSchema } from "./partial-input";
 
 type OperationSchema = Schema.Codec<unknown, Schema.Json, never, never>;
@@ -39,14 +39,16 @@ const asOperationSchema = (schema: Schema.Top): OperationSchema =>
 
 const canonicalInput = (endpoint: HttpApiEndpoint.Top): OperationSchema => {
   const fields: Array<SchemaAST.PropertySignature> = [];
-  const add = (name: string, schema: Schema.Top | undefined) => {
-    if (schema !== undefined) fields.push(new SchemaAST.PropertySignature(name, schema.ast));
+  const add = (name: string, schema: Option.Option<Schema.Top>): void => {
+    if (Option.isSome(schema)) {
+      fields.push(new SchemaAST.PropertySignature(name, schema.value.ast));
+    }
   };
-  add("params", endpoint.params);
-  add("query", endpoint.query);
-  add("headers", endpoint.headers);
+  add("params", Option.fromUndefinedOr(endpoint.params));
+  add("query", Option.fromUndefinedOr(endpoint.query));
+  add("headers", Option.fromUndefinedOr(endpoint.headers));
   const payloads = payloadSchemas(endpoint);
-  if (Arr.isReadonlyArrayNonEmpty(payloads)) add("payload", unionSchema(payloads));
+  if (Arr.isReadonlyArrayNonEmpty(payloads)) add("payload", Option.some(unionSchema(payloads)));
   // A never-valued string record models an empty object while preserving a closed JSON shape for
   // consumers that require strict object parameters.
   const schema =
@@ -58,20 +60,23 @@ const canonicalInput = (endpoint: HttpApiEndpoint.Top): OperationSchema => {
 
 const requestInput = (endpoint: HttpApiEndpoint.Top): Option.Option<PartialInputSchema> => {
   const fields: Array<SchemaAST.PropertySignature> = [];
-  const add = (name: string, schema: Schema.Top | undefined) => {
-    if (schema === undefined) return;
+  const add = (name: string, schema: Option.Option<Schema.Top>): void => {
+    if (Option.isNone(schema)) return;
     fields.push(
-      new SchemaAST.PropertySignature(name, Schema.optionalKey(makePartialInputSchema(schema)).ast)
+      new SchemaAST.PropertySignature(
+        name,
+        Schema.optionalKey(makePartialInputSchema(schema.value)).ast
+      )
     );
   };
 
-  add("params", endpoint.params);
-  add("query", endpoint.query);
-  add("headers", endpoint.headers);
+  add("params", Option.fromUndefinedOr(endpoint.params));
+  add("query", Option.fromUndefinedOr(endpoint.query));
+  add("headers", Option.fromUndefinedOr(endpoint.headers));
 
   const payloads = payloadSchemas(endpoint).map(makePartialInputSchema);
   if (Arr.isReadonlyArrayNonEmpty(payloads)) {
-    add("payload", payloads.length === 1 ? payloads[0] : Schema.Union(payloads));
+    add("payload", Option.some(payloads.length === 1 ? payloads[0] : Schema.Union(payloads)));
   }
 
   return fields.length === 0

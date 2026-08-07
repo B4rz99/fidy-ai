@@ -1,10 +1,11 @@
 import { expect, it } from "@effect/vitest";
 import { DateTime, Effect, Option, Result } from "effect";
+import type { TransactionNotYetOccurred } from "./errors";
 import { checkAlreadyOccurred, checkTransactionPeriod } from "./rules";
 
 const at = (iso: string): DateTime.Utc => DateTime.makeUnsafe(iso);
 
-const decide = (occurredAt: string, now: string) =>
+const decide = (occurredAt: string, now: string): Result.Result<void, TransactionNotYetOccurred> =>
   Effect.runSync(Effect.result(checkAlreadyOccurred({ occurredAt: at(occurredAt), now: at(now) })));
 
 it("accepts a movement that happened before it was recorded", () => {

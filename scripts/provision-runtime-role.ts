@@ -2,7 +2,7 @@
 
 import { BunRuntime } from "@effect/platform-bun";
 import { PgClient } from "@effect/sql-pg";
-import { Config, Data, Effect, Layer, Redacted } from "effect";
+import { type Cause, Config, Data, Effect, Layer, Redacted, type Schema } from "effect";
 import { SqlClient } from "effect/unstable/sql";
 import { hasUnsafeAuthority, readRuntimeAuthority } from "~/shell/db/runtime-authority";
 
@@ -44,7 +44,13 @@ const decodeCredential = (name: string, value: string): Effect.Effect<string, In
     catch: () => new InvalidDatabaseUrl({ message: `${name} contains invalid percent encoding.` }),
   });
 
-const provisionRuntimeRole = (runtimePassword: string) =>
+const provisionRuntimeRole = (
+  runtimePassword: string
+): Effect.Effect<
+  void,
+  Cause.NoSuchElementError | Schema.SchemaError | UnsafeRuntimeRole,
+  SqlClient.SqlClient
+> =>
   Effect.gen(function* () {
     const sql = yield* SqlClient.SqlClient;
 

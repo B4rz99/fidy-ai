@@ -43,7 +43,7 @@ export default defineConfig({
       provider: "istanbul",
       enabled: true,
       all: true,
-      // json writes coverage/coverage-final.json, the input tools/crap/run.mjs
+      // Json writes coverage/coverage-final.json, the input tools/crap/run.mjs
       // hands to crap4ts. The main coverage job owns the human-readable report;
       // combining text and json here prevents Vitest's Bun process from exiting.
       reporter: ["json"],

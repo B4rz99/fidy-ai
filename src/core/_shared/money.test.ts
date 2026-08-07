@@ -1,13 +1,13 @@
 import { expect, it } from "@effect/vitest";
 import { BigDecimal, Effect, Equal, Result, Schema } from "effect";
 import {
-  addMoney,
-  compareMoney,
   Currency,
   CurrencyMismatch,
+  Money,
+  addMoney,
+  compareMoney,
   currencyMetadata,
   groupMoney,
-  Money,
 } from "./money";
 
 const decodeCurrency = Schema.decodeUnknownResult(Currency);

@@ -1,9 +1,10 @@
-import { Data } from "effect";
+import { Data, type Option } from "effect";
 import type { WidgetId } from "./model";
 
 /** One actionable invariant violation found by the complete-document validation gate. */
 export type DashboardIssue = Readonly<{
-  readonly path?: string;
+  /** `None` when the violation is about the document as a whole. */
+  readonly path: Option.Option<string>;
   readonly message: string;
 }>;
 

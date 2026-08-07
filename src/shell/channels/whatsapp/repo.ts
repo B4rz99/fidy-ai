@@ -1,6 +1,21 @@
-import { Array as EffectArray, Crypto, Data, DateTime, Effect, Option, Schema } from "effect";
-import { SqlClient, SqlSchema } from "effect/unstable/sql";
-import { UserId } from "~/core/identity/reference";
+import {
+  type Cause,
+  Crypto,
+  Data,
+  DateTime,
+  Effect,
+  Array as EffectArray,
+  Option,
+  Schema,
+} from "effect";
+import {
+  SqlClient,
+  type SqlConnection,
+  type SqlError,
+  SqlSchema,
+  type Statement,
+} from "effect/unstable/sql";
+import { UserId, type WhatsAppCallerReference } from "~/core/identity/reference";
 import { InboundMessage, OnboardingConsentRequired } from "~/shell/agent/agent-service";
 import type { AgentConversationAdmission } from "~/shell/agent/conversation";
 import { hasCurrentOnboardingConsentAt, useCurrentConsent } from "~/shell/consent/repo";
@@ -10,10 +25,12 @@ import {
   WhatsAppBusinessPhoneNumberId,
   WhatsAppCaller,
   WhatsAppDeliveryKey,
-  WhatsAppProviderMessageId,
   type WhatsAppInboundEvent,
   type WhatsAppMessageEvidence,
+  WhatsAppProviderMessageId,
 } from "./model";
+
+const maximumBudgetKeyLength = 256;
 
 /** Opaque identity for one durable attempt to process a User's due burst. */
 export const WhatsAppClaimId = Schema.String.check(Schema.isUUID()).pipe(
@@ -76,7 +93,10 @@ const IngressBudgetScope = Schema.Union([
 /** Subject used to enforce either pre-association portfolio-scoped caller or stable-User limits. */
 export type IngressBudgetScope = typeof IngressBudgetScope.Type;
 const BudgetRequest = Schema.Struct({
-  budgetKey: Schema.NonEmptyString.check(Schema.isTrimmed(), Schema.isMaxLength(256)),
+  budgetKey: Schema.NonEmptyString.check(
+    Schema.isTrimmed(),
+    Schema.isMaxLength(maximumBudgetKeyLength)
+  ),
   providerMessageId: WhatsAppProviderMessageId,
   consumedAt: Schema.DateTimeUtcFromDate,
   maximumCount: Schema.Int.check(Schema.isGreaterThan(0)),
@@ -248,6 +268,108 @@ const EnqueueResult = Schema.Struct({
   status: Schema.Literals(["enqueued", "duplicate", "stale_authority", "capacity_exceeded"]),
 });
 
+type VerifiedWhatsAppIdentity = WhatsAppCallerReference &
+  Readonly<{ readonly verifiedAt: DateTime.Utc }>;
+
+const identifiesSameCaller = (
+  identity: WhatsAppCallerReference,
+  caller: WhatsAppCallerReference
+): boolean =>
+  identity.businessPortfolioId === caller.businessPortfolioId &&
+  identity.businessScopedUserId === caller.businessScopedUserId;
+
+const authorizesEvent = (
+  identity: VerifiedWhatsAppIdentity,
+  event: WhatsAppInboundEvent
+): boolean =>
+  identifiesSameCaller(identity, event.caller) &&
+  DateTime.Order(event.occurredAt, identity.verifiedAt) >= 0;
+
+const hasCurrentAuthority = (
+  identity: VerifiedWhatsAppIdentity,
+  event: WhatsAppInboundEvent,
+  consentExisted: boolean
+): boolean => consentExisted && authorizesEvent(identity, event);
+
+type EnqueueStatement = (
+  sql: SqlClient.SqlClient,
+  row: typeof EnqueueRequest.Encoded
+) => Statement.Statement<SqlConnection.Row>;
+
+const enqueueStatement: EnqueueStatement = (sql, row) => sql`
+  WITH admission_lock AS MATERIALIZED (
+    SELECT pg_advisory_xact_lock(hashtextextended(${row.userId}::text, 0))
+  ), existing AS (
+    SELECT 1 FROM whatsapp_message_evidence, admission_lock
+    WHERE provider_message_id = ${row.providerMessageId}
+  ), capacity AS (
+    SELECT
+      count(job.id) < 32
+      AND COALESCE(sum(char_length(job.content)), 0)
+        + char_length(${row.text}) + count(job.id) <= 16000
+      AS available
+    FROM admission_lock
+    LEFT JOIN whatsapp_inbound_jobs AS job
+      ON job.user_id = ${row.userId} AND job.completed_at IS NULL
+  ), evidence AS (
+    INSERT INTO whatsapp_message_evidence(
+      provider_message_id, user_id, direction, delivery_key, occurred_at
+    )
+    SELECT ${row.providerMessageId}, ${row.userId}, 'inbound', ${row.deliveryKey}, ${row.occurredAt}
+    WHERE NOT EXISTS (SELECT 1 FROM existing)
+      AND (SELECT available FROM capacity)
+    ON CONFLICT (provider_message_id) DO NOTHING
+    RETURNING id
+  ), inserted_job AS (
+    INSERT INTO whatsapp_inbound_jobs(
+      user_id, message_evidence_id, content, occurred_at, enqueued_at, debounce_until
+    )
+    SELECT ${row.userId}, id, ${row.text}, ${row.occurredAt},
+      ${row.enqueuedAt}, ${row.debounceUntil}
+    FROM evidence
+    RETURNING id
+  ), advanced_window AS (
+    INSERT INTO whatsapp_conversation_windows(
+      user_id, identity_verified_at, business_phone_number_id,
+      business_portfolio_id, business_scoped_user_id, window_open_until
+    )
+    SELECT ${row.userId}, ${row.identityVerifiedAt}, ${row.businessPhoneNumberId},
+      ${row.businessPortfolioId}, ${row.businessScopedUserId}, ${row.windowOpenUntil}
+    FROM evidence
+    ON CONFLICT (user_id) DO UPDATE SET
+      identity_verified_at = EXCLUDED.identity_verified_at,
+      business_phone_number_id = EXCLUDED.business_phone_number_id,
+      business_portfolio_id = EXCLUDED.business_portfolio_id,
+      business_scoped_user_id = EXCLUDED.business_scoped_user_id,
+      window_open_until = CASE
+        WHEN whatsapp_conversation_windows.identity_verified_at = EXCLUDED.identity_verified_at
+          AND whatsapp_conversation_windows.business_portfolio_id = EXCLUDED.business_portfolio_id
+          AND whatsapp_conversation_windows.business_scoped_user_id = EXCLUDED.business_scoped_user_id
+        THEN GREATEST(whatsapp_conversation_windows.window_open_until, EXCLUDED.window_open_until)
+        ELSE EXCLUDED.window_open_until
+      END
+  )
+  SELECT CASE
+    WHEN EXISTS(SELECT 1 FROM inserted_job) THEN 'enqueued'
+    WHEN EXISTS(SELECT 1 FROM existing) THEN 'duplicate'
+    ELSE 'capacity_exceeded'
+  END AS status
+`;
+
+const enqueueInboundJob = (
+  sql: SqlClient.SqlClient
+): ((
+  request: typeof EnqueueRequest.Type
+) => Effect.Effect<
+  typeof EnqueueResult.Type,
+  Cause.NoSuchElementError | Schema.SchemaError | SqlError.SqlError
+>) =>
+  SqlSchema.findOne({
+    Request: EnqueueRequest,
+    Result: EnqueueResult,
+    execute: (row) => enqueueStatement(sql, row),
+  });
+
 /**
  * Under current onboarding consent, atomically deduplicates by provider-message evidence, admits
  * at most 32 pending messages/16,000 characters, advances the quiet period and matching recipient
@@ -274,78 +396,11 @@ export const enqueueWhatsAppTurn = Effect.fn("WhatsApp.enqueueTurn")(function* (
           admission.userId,
           input.event.occurredAt
         );
-        if (
-          Option.isNone(identity) ||
-          identity.value.businessPortfolioId !== input.event.caller.businessPortfolioId ||
-          identity.value.businessScopedUserId !== input.event.caller.businessScopedUserId ||
-          DateTime.Order(input.event.occurredAt, identity.value.verifiedAt) < 0 ||
-          !consentExisted
-        ) {
+        if (Option.isNone(identity)) return { status: "stale_authority" as const };
+        if (!hasCurrentAuthority(identity.value, input.event, consentExisted)) {
           return { status: "stale_authority" as const };
         }
-        return yield* SqlSchema.findOne({
-          Request: EnqueueRequest,
-          Result: EnqueueResult,
-          execute: (row) => sql`
-          WITH admission_lock AS MATERIALIZED (
-            SELECT pg_advisory_xact_lock(hashtextextended(${row.userId}::text, 0))
-          ), existing AS (
-            SELECT 1 FROM whatsapp_message_evidence, admission_lock
-            WHERE provider_message_id = ${row.providerMessageId}
-          ), capacity AS (
-            SELECT
-              count(job.id) < 32
-              AND COALESCE(sum(char_length(job.content)), 0)
-                + char_length(${row.text}) + count(job.id) <= 16000
-              AS available
-            FROM admission_lock
-            LEFT JOIN whatsapp_inbound_jobs AS job
-              ON job.user_id = ${row.userId} AND job.completed_at IS NULL
-          ), evidence AS (
-            INSERT INTO whatsapp_message_evidence(
-              provider_message_id, user_id, direction, delivery_key, occurred_at
-            )
-            SELECT ${row.providerMessageId}, ${row.userId}, 'inbound', ${row.deliveryKey}, ${row.occurredAt}
-            WHERE NOT EXISTS (SELECT 1 FROM existing)
-              AND (SELECT available FROM capacity)
-            ON CONFLICT (provider_message_id) DO NOTHING
-            RETURNING id
-          ), inserted_job AS (
-            INSERT INTO whatsapp_inbound_jobs(
-              user_id, message_evidence_id, content, occurred_at, enqueued_at, debounce_until
-            )
-            SELECT ${row.userId}, id, ${row.text}, ${row.occurredAt},
-              ${row.enqueuedAt}, ${row.debounceUntil}
-            FROM evidence
-            RETURNING id
-          ), advanced_window AS (
-            INSERT INTO whatsapp_conversation_windows(
-              user_id, identity_verified_at, business_phone_number_id,
-              business_portfolio_id, business_scoped_user_id, window_open_until
-            )
-            SELECT ${row.userId}, ${row.identityVerifiedAt}, ${row.businessPhoneNumberId},
-              ${row.businessPortfolioId}, ${row.businessScopedUserId}, ${row.windowOpenUntil}
-            FROM evidence
-            ON CONFLICT (user_id) DO UPDATE SET
-              identity_verified_at = EXCLUDED.identity_verified_at,
-              business_phone_number_id = EXCLUDED.business_phone_number_id,
-              business_portfolio_id = EXCLUDED.business_portfolio_id,
-              business_scoped_user_id = EXCLUDED.business_scoped_user_id,
-              window_open_until = CASE
-                WHEN whatsapp_conversation_windows.identity_verified_at = EXCLUDED.identity_verified_at
-                  AND whatsapp_conversation_windows.business_portfolio_id = EXCLUDED.business_portfolio_id
-                  AND whatsapp_conversation_windows.business_scoped_user_id = EXCLUDED.business_scoped_user_id
-                THEN GREATEST(whatsapp_conversation_windows.window_open_until, EXCLUDED.window_open_until)
-                ELSE EXCLUDED.window_open_until
-              END
-          )
-          SELECT CASE
-            WHEN EXISTS(SELECT 1 FROM inserted_job) THEN 'enqueued'
-            WHEN EXISTS(SELECT 1 FROM existing) THEN 'duplicate'
-            ELSE 'capacity_exceeded'
-          END AS status
-        `,
-        })({
+        return yield* enqueueInboundJob(sql)({
           userId: admission.userId,
           providerMessageId: input.event.messageEvidence.providerMessageId,
           deliveryKey: input.deliveryKey,
@@ -380,7 +435,9 @@ const ClaimRow = Schema.Struct({
  * due; otherwise the action directs the caller either to process a new claim or retire an expired
  * started claim.
  */
-export const claimWhatsAppTurn = (now: DateTime.Utc) =>
+export const claimWhatsAppTurn = (
+  now: DateTime.Utc
+): Effect.Effect<Option.Option<typeof ClaimRow.Type>, never, SqlClient.SqlClient> =>
   Effect.flatMap(SqlClient.SqlClient, (sql) =>
     SqlSchema.findOneOption({
       Request: Schema.DateTimeUtcFromDate,
@@ -454,7 +511,7 @@ const retireClaimContent = (
   sql: SqlClient.SqlClient,
   claim: WhatsAppTurnClaim,
   completedAt: DateTime.Utc
-) => sql`
+): Statement.Statement<SqlConnection.Row> => sql`
   UPDATE whatsapp_inbound_jobs
   SET content = NULL, completed_at = ${completedAt}, claim_id = NULL
   WHERE user_id = ${claim.userId} AND claim_id = ${claim.claimId}

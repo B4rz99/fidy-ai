@@ -1,5 +1,7 @@
 #!/usr/bin/env bun
 
+import { Option } from "effect";
+
 const repoRoot = Bun.fileURLToPath(new URL("..", import.meta.url));
 const PROBE_PARENT = "src/core/audit";
 const PROBE_PREFIX = `__probe-${process.pid}-`;
@@ -22,14 +24,14 @@ type Probe = {
 
 const decode = (bytes: Uint8Array): string => new TextDecoder().decode(bytes);
 
-const runGraph = (): { readonly exitCode: number | null; readonly report: string } => {
+const runGraph = (): { readonly exitCode: Option.Option<number>; readonly report: string } => {
   const spawned = Bun.spawnSync(["bun", "tools/depcruise/run.mjs"], {
     cwd: repoRoot,
     stdout: "pipe",
     stderr: "pipe",
   });
   return {
-    exitCode: spawned.exitCode,
+    exitCode: Option.fromNullOr(spawned.exitCode),
     report: `${decode(spawned.stdout)}\n${decode(spawned.stderr)}`,
   };
 };
@@ -236,14 +238,14 @@ const assertProbe = (probe: Probe): void => {
   const { exitCode, report } = runGraph();
 
   if (probe.expect.kind === "allowed") {
-    if (exitCode !== 0) {
+    if (!Option.contains(exitCode, 0)) {
       throw new Error(`${probe.name}\nThe gate rejected something it must allow.\n${report}`);
     }
     return;
   }
 
   const missing = missingFrom(report, probe.expect.mustContain);
-  if (exitCode === 0) {
+  if (Option.contains(exitCode, 0)) {
     throw new Error(
       `${probe.name}\nThe gate PASSED on a graph that violates it — the rule did not fire, ` +
         `or the cruiser never resolved the probe's imports.\n${report}`

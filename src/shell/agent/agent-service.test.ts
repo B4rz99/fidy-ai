@@ -1,6 +1,6 @@
 import { expect, layer } from "@effect/vitest";
 import { BigDecimal, Effect, Equal, Layer, Option, Schema, Terminal } from "effect";
-import { LanguageModel, Tool } from "effect/unstable/ai";
+import { LanguageModel, type Response, Tool } from "effect/unstable/ai";
 import { SqlClient } from "effect/unstable/sql";
 import { E164PhoneNumber, UserId, WhatsAppBusinessScopedUserId } from "~/core/identity/reference";
 import { MigrationSqlClient } from "~/shell/db/client";
@@ -30,7 +30,9 @@ import {
 
 const declinedOnboardingPhone = E164PhoneNumber.make("+573009997332");
 const acceptedOnboardingPhone = E164PhoneNumber.make("+573009997333");
-const replCaller = (phoneNumber: E164PhoneNumber) => ({
+const replCaller = (
+  phoneNumber: E164PhoneNumber
+): { phoneNumber: E164PhoneNumber; businessScopedUserId: WhatsAppBusinessScopedUserId } => ({
   phoneNumber,
   businessScopedUserId: WhatsAppBusinessScopedUserId.make(`CO.${phoneNumber.slice(1)}`),
 });
@@ -79,34 +81,485 @@ const scriptedTerminal = (
 const hasToolResultAfter = (serialized: string, message: string): boolean =>
   serialized.lastIndexOf("tool-result") > serialized.lastIndexOf(message);
 
+type CreateTransactionToolCall = Readonly<{
+  id: string;
+  occurredAt: Option.Option<string>;
+}> &
+  Partial<
+    Readonly<{
+      amount: string;
+      currency: string;
+      counterparty: Option.Option<string>;
+      categoryId: string;
+    }>
+  >;
+
 const createTransactionToolCall = ({
   id,
   occurredAt,
   amount = "25000",
   currency = "COP",
-  counterparty = "Almuerzo",
+  counterparty = Option.some("Almuerzo"),
   categoryId = categoryIds.restaurantes,
-}: {
-  readonly id: string;
-  readonly occurredAt: string | undefined;
-  readonly amount?: string;
-  readonly currency?: string;
-  readonly counterparty?: string | null;
-  readonly categoryId?: string;
-}) => ({
+}: CreateTransactionToolCall): Response.ToolCallPartEncoded => ({
   type: "tool-call" as const,
   id,
   name: "transactions__createTransaction",
   params: {
     payload: {
       money: { amount, currency },
-      ...(counterparty === null ? {} : { counterparty }),
+      ...(Option.isNone(counterparty) ? {} : { counterparty: counterparty.value }),
       direction: "outflow",
       categoryId,
-      occurredAt,
+      occurredAt: Option.getOrUndefined(occurredAt),
     },
   },
 });
+
+type ModelReply = Array<Response.PartEncoded>;
+
+const turnStartedAt = (serialized: string): Option.Option<string> =>
+  Option.fromUndefinedOr(/El turno comenzó en ([0-9T:.+-]+Z)/u.exec(serialized)?.[1]);
+
+const previousDeleteTarget = (serialized: string): Option.Option<string> =>
+  Option.fromUndefinedOr(
+    /"params":\{"params":\{"id":"([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})"/u.exec(
+      serialized
+    )?.[1]
+  );
+
+const hasFreshConfirmation = (serialized: string): boolean =>
+  serialized.lastIndexOf("CONFIRMAR transactions.deleteTransaction") >
+  serialized.lastIndexOf("explicit_confirmation_required");
+
+const confirmationCount = (serialized: string): number =>
+  serialized.match(/CONFIRMAR transactions\.deleteTransaction/gu)?.length ?? 0;
+
+const injectedDeleteTarget = (serialized: string): Option.Option<string> =>
+  Option.fromUndefinedOr(
+    /"id":"([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})","money"/u.exec(
+      serialized
+    )?.[1]
+  );
+
+const currentQuickLogMessage = (
+  serialized: string
+): "almuerzo 25 USD" | "almuerzo 25 mil" | "almuerzo 25 usd" => {
+  const usdMessage =
+    serialized.lastIndexOf("almuerzo 25 USD") > serialized.lastIndexOf("almuerzo 25 usd")
+      ? "almuerzo 25 USD"
+      : "almuerzo 25 usd";
+  return serialized.lastIndexOf(usdMessage) > serialized.lastIndexOf("almuerzo 25 mil")
+    ? usdMessage
+    : "almuerzo 25 mil";
+};
+
+const isolationScript = (serialized: string): Option.Option<ModelReply> => {
+  if (serialized.includes("A_PRIVATE_TRANSCRIPT_MARKER")) {
+    return Option.some([{ type: "text" as const, text: "A_PRIVATE_ASSISTANT_MARKER" }]);
+  }
+  if (serialized.includes("registra aislamientob 25 cop")) {
+    expect(serialized).not.toContain("A_PRIVATE_TRANSCRIPT_MARKER");
+    expect(serialized).not.toContain("A_PRIVATE_ASSISTANT_MARKER");
+    return Option.some([
+      createTransactionToolCall({
+        id: "user-isolation-quick-log",
+        amount: "25",
+        counterparty: Option.some("AislamientoB"),
+        occurredAt: turnStartedAt(serialized),
+      }),
+    ]);
+  }
+  return Option.none();
+};
+
+const toolCapScript = (serialized: string): Option.Option<ModelReply> => {
+  if (serialized.includes("Desborda herramientas")) {
+    return Option.some(
+      Array.from({ length: 13 }, (_, index) => ({
+        type: "tool-call" as const,
+        id: `overflow-call-${index}`,
+        name: "categories__listCategories",
+        params: {},
+      }))
+    );
+  }
+  if (serialized.includes("Prueba el límite")) {
+    const calls = serialized.match(/limit-call-/g)?.length ?? 0;
+    return Option.some([
+      {
+        type: "tool-call" as const,
+        id: `limit-call-${calls + 1}`,
+        name: "categories__listCategories",
+        params: {},
+      },
+    ]);
+  }
+  return Option.none();
+};
+
+const captureScript = (
+  serialized: string,
+  tools: ReadonlyArray<Tool.Any>
+): Option.Option<ModelReply> => {
+  if (serialized.includes("helado 9 mil")) {
+    return Option.some([
+      createTransactionToolCall({
+        id: "capture-without-counterparty",
+        amount: "9000",
+        counterparty: Option.none(),
+        occurredAt: turnStartedAt(serialized),
+      }),
+    ]);
+  }
+  if (serialized.includes("debería registrar almuerzo 25 mil")) {
+    return Option.some([
+      createTransactionToolCall({
+        id: "free-form-addition",
+        occurredAt: turnStartedAt(serialized),
+      }),
+    ]);
+  }
+  if (serialized.includes("captura sin confirmación")) {
+    const createTool = tools.find((tool) => tool.name === "transactions__createTransaction");
+    const createDescription =
+      createTool === undefined ? undefined : Tool.getDescription(createTool);
+    const canCaptureWithoutConfirmation =
+      createDescription?.includes("does not require User confirmation") === true;
+    return Option.some(
+      canCaptureWithoutConfirmation
+        ? [
+            createTransactionToolCall({
+              id: "no-confirmation-capture",
+              occurredAt: turnStartedAt(serialized),
+            }),
+          ]
+        : [{ type: "text" as const, text: "¿Confirmas registrar este gasto?" }]
+    );
+  }
+  return Option.none();
+};
+
+const malformedCaptureScript = (serialized: string): Option.Option<ModelReply> => {
+  if (serialized.includes("Provoca entrada malformada")) {
+    return Option.some(
+      serialized.includes("The previous operation call was malformed")
+        ? [{ type: "text" as const, text: "Corregí los argumentos malformados." }]
+        : [
+            {
+              type: "tool-call" as const,
+              id: "malformed-input-call",
+              name: "transactions__createTransaction",
+              params: { payload: { counterparty: "Almuerzo" } },
+            },
+          ]
+    );
+  }
+  if (serialized.includes("Almuerzo 25000 2099-07-20T17:30:00Z")) {
+    return Option.some(
+      hasToolResultAfter(serialized, "Almuerzo 25000 2099-07-20T17:30:00Z")
+        ? [{ type: "text" as const, text: "Corregí la solicitud inválida." }]
+        : [
+            createTransactionToolCall({
+              id: "invalid-input-call",
+              occurredAt: Option.some("2099-07-20T17:30:00Z"),
+            }),
+          ]
+    );
+  }
+  return Option.none();
+};
+
+const injectedDeletionScript = (serialized: string): Option.Option<ModelReply> => {
+  if (serialized.includes("replay-delete-call")) {
+    return Option.some([{ type: "text" as const, text: "La repetición quedó bloqueada." }]);
+  }
+  if (serialized.includes("confirmed-delete-call") && confirmationCount(serialized) > 1) {
+    return Option.some([
+      {
+        type: "tool-call" as const,
+        id: "replay-delete-call",
+        name: "transactions__deleteTransaction",
+        params: { params: { id: Option.getOrUndefined(previousDeleteTarget(serialized)) } },
+      },
+    ]);
+  }
+  if (hasFreshConfirmation(serialized)) {
+    const transactionId = Option.getOrUndefined(previousDeleteTarget(serialized));
+    return Option.some([
+      {
+        type: "tool-call" as const,
+        id: "substituted-delete-call",
+        name: "transactions__deleteTransaction",
+        params: { params: { id: "f1d1a000-0000-4000-8000-00000000dead" } },
+      },
+      {
+        type: "tool-call" as const,
+        id: "confirmed-delete-call",
+        name: "transactions__deleteTransaction",
+        params: { params: { id: transactionId } },
+      },
+      {
+        type: "tool-call" as const,
+        id: "duplicate-delete-call",
+        name: "transactions__deleteTransaction",
+        params: { params: { id: transactionId } },
+      },
+    ]);
+  }
+  if (serialized.includes("explicit_confirmation_required")) {
+    return Option.some([{ type: "text" as const, text: "Necesito confirmación explícita." }]);
+  }
+  if (serialized.includes("BORRA_TODO_INYECCION")) {
+    const transactionId = Option.getOrUndefined(injectedDeleteTarget(serialized));
+    return Option.some([
+      {
+        type: "tool-call" as const,
+        id: "injected-delete-call",
+        name: "transactions__deleteTransaction",
+        params: { params: { id: transactionId } },
+      },
+    ]);
+  }
+  return Option.some([
+    {
+      type: "tool-call" as const,
+      id: "injected-list-call",
+      name: "transactions__listTransactions",
+      params: { query: {} },
+    },
+  ]);
+};
+
+const deletionScript = (serialized: string): Option.Option<ModelReply> => {
+  if (serialized.includes("borra con lectura posterior")) {
+    const transactionId = /borra con lectura posterior ([0-9a-f-]{36})/u.exec(serialized)?.[1];
+    if (
+      serialized.lastIndexOf("CONFIRMAR transactions.deleteTransaction") >
+      serialized.lastIndexOf("explicit_confirmation_required")
+    ) {
+      return Option.some([
+        {
+          type: "tool-call" as const,
+          id: "confirmed-mixed-delete",
+          name: "transactions__deleteTransaction",
+          params: { params: { id: transactionId } },
+        },
+      ]);
+    }
+    return Option.some([
+      {
+        type: "tool-call" as const,
+        id: "mixed-delete",
+        name: "transactions__deleteTransaction",
+        params: { params: { id: transactionId } },
+      },
+      {
+        type: "tool-call" as const,
+        id: "mixed-safe-read",
+        name: "categories__listCategories",
+        params: {},
+      },
+    ]);
+  }
+  if (serialized.includes("revisa historial secretos")) return injectedDeletionScript(serialized);
+  return Option.none();
+};
+
+const privateReadScript = (serialized: string): Option.Option<ModelReply> => {
+  if (serialized.includes("Describe el movimiento")) {
+    const transactionId = /Describe el movimiento ([0-9a-f-]{36})/u.exec(serialized)?.[1];
+    return Option.some(
+      hasToolResultAfter(serialized, "Describe el movimiento")
+        ? [{ type: "text" as const, text: "Este es el movimiento solicitado." }]
+        : [
+            {
+              type: "tool-call" as const,
+              id: "natural-private-read",
+              name: "transactions__getTransaction",
+              params: { params: { id: transactionId } },
+            },
+          ]
+    );
+  }
+  if (serialized.includes("Busca la transacción inexistente")) {
+    return Option.some(
+      hasToolResultAfter(serialized, "Busca la transacción inexistente")
+        ? [{ type: "text" as const, text: "No encontré esa transacción." }]
+        : [
+            {
+              type: "tool-call" as const,
+              id: "missing-transaction-call",
+              name: "transactions__getTransaction",
+              params: {
+                params: { id: "f1d1a000-0000-4000-8000-00000000dead" },
+              },
+            },
+          ]
+    );
+  }
+  return Option.none();
+};
+
+const plainTextScript = (serialized: string): Option.Option<ModelReply> => {
+  if (serialized.includes("Expón token")) {
+    return Option.some([
+      {
+        type: "text" as const,
+        text: "fin_deadbeef_abcdefghijklmnopqrstuvwxyzABCDEF",
+      },
+    ]);
+  }
+  if (serialized.includes("Muestra control terminal")) {
+    return Option.some([
+      {
+        type: "text" as const,
+        text: `${String.fromCodePoint(27)}]52;c;contenido${String.fromCodePoint(7)}visible`,
+      },
+    ]);
+  }
+  if (serialized.includes("MENSAJE_ACTUAL")) {
+    return Option.some([
+      {
+        type: "text" as const,
+        text: serialized.includes("MARCADOR_ANTIGUO") ? "contexto filtrado" : "contexto acotado",
+      },
+    ]);
+  }
+  return Option.none();
+};
+
+const quickLogScript = (serialized: string): Option.Option<ModelReply> => {
+  if (serialized.includes("anota almuerzo 25 mil")) {
+    return Option.some([
+      {
+        type: "tool-call" as const,
+        id: "injected-batch-read",
+        name: "transactions__listTransactions",
+        params: { query: {} },
+      },
+      createTransactionToolCall({
+        id: "batched-quick-log",
+        occurredAt: turnStartedAt(serialized),
+      }),
+    ]);
+  }
+  if (serialized.includes("registra papelería 25 usd")) {
+    return Option.some([
+      createTransactionToolCall({
+        id: "explicit-quick-log",
+        amount: "25",
+        currency: "USD",
+        counterparty: Option.some("Papelería"),
+        categoryId: categoryIds.otros,
+        occurredAt: turnStartedAt(serialized),
+      }),
+    ]);
+  }
+  return Option.none();
+};
+
+const almuerzoQuickLogScript = (serialized: string): Option.Option<ModelReply> => {
+  if (
+    serialized.includes("almuerzo 25 mil") ||
+    serialized.includes("almuerzo 25 USD") ||
+    serialized.includes("almuerzo 25 usd")
+  ) {
+    expect(serialized).toContain("ServiceMarket CO, locale es-CO");
+    expect(serialized).toContain("zona IANA America/Bogota");
+    expect(serialized).toMatch(/El turno comenzó en \d{4}-\d{2}-\d{2}T/);
+    const currentMessage = currentQuickLogMessage(serialized);
+    const currency = currentMessage.toUpperCase().endsWith("USD") ? "USD" : "COP";
+    return Option.some(
+      hasToolResultAfter(serialized, currentMessage)
+        ? [{ type: "text" as const, text: "Listo, registré el almuerzo." }]
+        : [
+            createTransactionToolCall({
+              id: `quick-log-${currency}`,
+              amount: currency === "COP" ? "25000" : "25",
+              currency,
+              occurredAt: turnStartedAt(serialized),
+            }),
+          ]
+    );
+  }
+  return Option.none();
+};
+
+const listingScript = (serialized: string): Option.Option<ModelReply> => {
+  if (serialized.includes("Lista historial acotado")) {
+    const hasCurrentToolResult = hasToolResultAfter(serialized, "Lista historial acotado");
+    if (hasCurrentToolResult) {
+      expect(serialized).toContain("tool_result_too_large");
+      expect(serialized).not.toContain("bulk-");
+    }
+    return Option.some(
+      hasCurrentToolResult
+        ? [{ type: "text" as const, text: "Historial acotado." }]
+        : [
+            {
+              type: "tool-call" as const,
+              id: "bounded-history-call",
+              name: "transactions__listTransactions",
+              params: { query: {} },
+            },
+          ]
+    );
+  }
+  if (serialized.includes("Lista movimientos secretos")) {
+    if (hasToolResultAfter(serialized, "Lista movimientos secretos")) {
+      expect(serialized).not.toContain("fin_deadbeef_");
+      return Option.some([{ type: "text" as const, text: "Resultado protegido." }]);
+    }
+    return Option.some([
+      {
+        type: "tool-call" as const,
+        id: "secret-list-call",
+        name: "transactions__listTransactions",
+        params: { query: {} },
+      },
+    ]);
+  }
+  if (serialized.includes("Lista las categorías")) {
+    return Option.some(
+      hasToolResultAfter(serialized, "Lista las categorías")
+        ? [{ type: "text" as const, text: "Estas son las categorías disponibles." }]
+        : [
+            {
+              type: "tool-call" as const,
+              id: "categories-call-1",
+              name: "categories__listCategories",
+              params: {},
+            },
+          ]
+    );
+  }
+  return Option.none();
+};
+
+const recallScript = (serialized: string): ModelReply => {
+  const priorTurnWasLoaded = serialized.includes("Primera respuesta");
+  return [
+    {
+      type: "text" as const,
+      text: priorTurnWasLoaded ? "Sí, recuerdo el turno anterior." : "Primera respuesta",
+    },
+  ];
+};
+
+const scriptedReply = (serialized: string, tools: ReadonlyArray<Tool.Any>): ModelReply =>
+  isolationScript(serialized).pipe(
+    Option.orElse(() => toolCapScript(serialized)),
+    Option.orElse(() => captureScript(serialized, tools)),
+    Option.orElse(() => malformedCaptureScript(serialized)),
+    Option.orElse(() => deletionScript(serialized)),
+    Option.orElse(() => privateReadScript(serialized)),
+    Option.orElse(() => plainTextScript(serialized)),
+    Option.orElse(() => quickLogScript(serialized)),
+    Option.orElse(() => almuerzoQuickLogScript(serialized)),
+    Option.orElse(() => listingScript(serialized)),
+    Option.getOrElse(() => recallScript(serialized))
+  );
 
 const ScriptedLanguageModel = Layer.effect(
   LanguageModel.LanguageModel,
@@ -115,387 +568,7 @@ const ScriptedLanguageModel = Layer.effect(
       const serialized = JSON.stringify(prompt.content);
       expect(serialized).not.toContain("fin_deadbeef_");
       if (serialized.includes("MODELO_BLOQUEADO")) return Effect.never;
-      if (serialized.includes("A_PRIVATE_TRANSCRIPT_MARKER")) {
-        return Effect.succeed([{ type: "text" as const, text: "A_PRIVATE_ASSISTANT_MARKER" }]);
-      }
-      if (serialized.includes("registra aislamientob 25 cop")) {
-        expect(serialized).not.toContain("A_PRIVATE_TRANSCRIPT_MARKER");
-        expect(serialized).not.toContain("A_PRIVATE_ASSISTANT_MARKER");
-        const occurredAt = /El turno comenzó en ([0-9T:.+-]+Z)/u.exec(serialized)?.[1];
-        return Effect.succeed([
-          createTransactionToolCall({
-            id: "user-isolation-quick-log",
-            amount: "25",
-            counterparty: "AislamientoB",
-            occurredAt,
-          }),
-        ]);
-      }
-      if (serialized.includes("Desborda herramientas")) {
-        return Effect.succeed(
-          Array.from({ length: 13 }, (_, index) => ({
-            type: "tool-call" as const,
-            id: `overflow-call-${index}`,
-            name: "categories__listCategories",
-            params: {},
-          }))
-        );
-      }
-      if (serialized.includes("Prueba el límite")) {
-        const calls = serialized.match(/limit-call-/g)?.length ?? 0;
-        return Effect.succeed([
-          {
-            type: "tool-call" as const,
-            id: `limit-call-${calls + 1}`,
-            name: "categories__listCategories",
-            params: {},
-          },
-        ]);
-      }
-      if (serialized.includes("helado 9 mil")) {
-        const occurredAt = /El turno comenzó en ([0-9T:.+-]+Z)/u.exec(serialized)?.[1];
-        return Effect.succeed([
-          createTransactionToolCall({
-            id: "capture-without-counterparty",
-            amount: "9000",
-            counterparty: null,
-            occurredAt,
-          }),
-        ]);
-      }
-      if (serialized.includes("debería registrar almuerzo 25 mil")) {
-        const occurredAt = /El turno comenzó en ([0-9T:.+-]+Z)/u.exec(serialized)?.[1];
-        return Effect.succeed([
-          createTransactionToolCall({ id: "free-form-addition", occurredAt }),
-        ]);
-      }
-      if (serialized.includes("captura sin confirmación")) {
-        const createTool = tools.find((tool) => tool.name === "transactions__createTransaction");
-        const createDescription =
-          createTool === undefined ? undefined : Tool.getDescription(createTool);
-        const occurredAt = /El turno comenzó en ([0-9T:.+-]+Z)/u.exec(serialized)?.[1];
-        const canCaptureWithoutConfirmation =
-          createDescription?.includes("does not require User confirmation") === true;
-        return Effect.succeed(
-          canCaptureWithoutConfirmation
-            ? [createTransactionToolCall({ id: "no-confirmation-capture", occurredAt })]
-            : [{ type: "text" as const, text: "¿Confirmas registrar este gasto?" }]
-        );
-      }
-      if (serialized.includes("Provoca entrada malformada")) {
-        return Effect.succeed(
-          serialized.includes("The previous operation call was malformed")
-            ? [{ type: "text" as const, text: "Corregí los argumentos malformados." }]
-            : [
-                {
-                  type: "tool-call" as const,
-                  id: "malformed-input-call",
-                  name: "transactions__createTransaction",
-                  params: { payload: { counterparty: "Almuerzo" } },
-                },
-              ]
-        );
-      }
-      if (serialized.includes("Almuerzo 25000 2099-07-20T17:30:00Z")) {
-        const hasCurrentToolResult = hasToolResultAfter(
-          serialized,
-          "Almuerzo 25000 2099-07-20T17:30:00Z"
-        );
-        return Effect.succeed(
-          hasCurrentToolResult
-            ? [{ type: "text" as const, text: "Corregí la solicitud inválida." }]
-            : [
-                createTransactionToolCall({
-                  id: "invalid-input-call",
-                  occurredAt: "2099-07-20T17:30:00Z",
-                }),
-              ]
-        );
-      }
-      if (serialized.includes("borra con lectura posterior")) {
-        const transactionId = /borra con lectura posterior ([0-9a-f-]{36})/u.exec(serialized)?.[1];
-        if (
-          serialized.lastIndexOf("CONFIRMAR transactions.deleteTransaction") >
-          serialized.lastIndexOf("explicit_confirmation_required")
-        ) {
-          return Effect.succeed([
-            {
-              type: "tool-call" as const,
-              id: "confirmed-mixed-delete",
-              name: "transactions__deleteTransaction",
-              params: { params: { id: transactionId } },
-            },
-          ]);
-        }
-        return Effect.succeed([
-          {
-            type: "tool-call" as const,
-            id: "mixed-delete",
-            name: "transactions__deleteTransaction",
-            params: { params: { id: transactionId } },
-          },
-          {
-            type: "tool-call" as const,
-            id: "mixed-safe-read",
-            name: "categories__listCategories",
-            params: {},
-          },
-        ]);
-      }
-      if (serialized.includes("revisa historial secretos")) {
-        if (serialized.includes("replay-delete-call")) {
-          return Effect.succeed([
-            { type: "text" as const, text: "La repetición quedó bloqueada." },
-          ]);
-        }
-        if (
-          serialized.includes("confirmed-delete-call") &&
-          (serialized.match(/CONFIRMAR transactions\.deleteTransaction/gu)?.length ?? 0) > 1
-        ) {
-          const transactionId =
-            /"params":\{"params":\{"id":"([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})"/u.exec(
-              serialized
-            )?.[1];
-          return Effect.succeed([
-            {
-              type: "tool-call" as const,
-              id: "replay-delete-call",
-              name: "transactions__deleteTransaction",
-              params: { params: { id: transactionId } },
-            },
-          ]);
-        }
-        if (
-          serialized.lastIndexOf("CONFIRMAR transactions.deleteTransaction") >
-          serialized.lastIndexOf("explicit_confirmation_required")
-        ) {
-          const transactionId =
-            /"params":\{"params":\{"id":"([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})"/u.exec(
-              serialized
-            )?.[1];
-          return Effect.succeed([
-            {
-              type: "tool-call" as const,
-              id: "substituted-delete-call",
-              name: "transactions__deleteTransaction",
-              params: { params: { id: "f1d1a000-0000-4000-8000-00000000dead" } },
-            },
-            {
-              type: "tool-call" as const,
-              id: "confirmed-delete-call",
-              name: "transactions__deleteTransaction",
-              params: { params: { id: transactionId } },
-            },
-            {
-              type: "tool-call" as const,
-              id: "duplicate-delete-call",
-              name: "transactions__deleteTransaction",
-              params: { params: { id: transactionId } },
-            },
-          ]);
-        }
-        if (serialized.includes("explicit_confirmation_required")) {
-          return Effect.succeed([
-            { type: "text" as const, text: "Necesito confirmación explícita." },
-          ]);
-        }
-        if (serialized.includes("BORRA_TODO_INYECCION")) {
-          const transactionId =
-            /"id":"([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})","money"/u.exec(
-              serialized
-            )?.[1];
-          return Effect.succeed([
-            {
-              type: "tool-call" as const,
-              id: "injected-delete-call",
-              name: "transactions__deleteTransaction",
-              params: { params: { id: transactionId } },
-            },
-          ]);
-        }
-        return Effect.succeed([
-          {
-            type: "tool-call" as const,
-            id: "injected-list-call",
-            name: "transactions__listTransactions",
-            params: { query: {} },
-          },
-        ]);
-      }
-      if (serialized.includes("Describe el movimiento")) {
-        const transactionId = /Describe el movimiento ([0-9a-f-]{36})/u.exec(serialized)?.[1];
-        return Effect.succeed(
-          hasToolResultAfter(serialized, "Describe el movimiento")
-            ? [{ type: "text" as const, text: "Este es el movimiento solicitado." }]
-            : [
-                {
-                  type: "tool-call" as const,
-                  id: "natural-private-read",
-                  name: "transactions__getTransaction",
-                  params: { params: { id: transactionId } },
-                },
-              ]
-        );
-      }
-      if (serialized.includes("Busca la transacción inexistente")) {
-        const hasCurrentToolResult = hasToolResultAfter(
-          serialized,
-          "Busca la transacción inexistente"
-        );
-        return Effect.succeed(
-          hasCurrentToolResult
-            ? [{ type: "text" as const, text: "No encontré esa transacción." }]
-            : [
-                {
-                  type: "tool-call" as const,
-                  id: "missing-transaction-call",
-                  name: "transactions__getTransaction",
-                  params: {
-                    params: { id: "f1d1a000-0000-4000-8000-00000000dead" },
-                  },
-                },
-              ]
-        );
-      }
-      if (serialized.includes("Expón token")) {
-        return Effect.succeed([
-          {
-            type: "text" as const,
-            text: "fin_deadbeef_abcdefghijklmnopqrstuvwxyzABCDEF",
-          },
-        ]);
-      }
-      if (serialized.includes("Muestra control terminal")) {
-        return Effect.succeed([
-          {
-            type: "text" as const,
-            text: `${String.fromCodePoint(27)}]52;c;contenido${String.fromCodePoint(7)}visible`,
-          },
-        ]);
-      }
-      if (serialized.includes("MENSAJE_ACTUAL")) {
-        return Effect.succeed([
-          {
-            type: "text" as const,
-            text: serialized.includes("MARCADOR_ANTIGUO")
-              ? "contexto filtrado"
-              : "contexto acotado",
-          },
-        ]);
-      }
-      if (serialized.includes("anota almuerzo 25 mil")) {
-        const occurredAt = /El turno comenzó en ([0-9T:.+-]+Z)/u.exec(serialized)?.[1];
-        return Effect.succeed([
-          {
-            type: "tool-call" as const,
-            id: "injected-batch-read",
-            name: "transactions__listTransactions",
-            params: { query: {} },
-          },
-          createTransactionToolCall({ id: "batched-quick-log", occurredAt }),
-        ]);
-      }
-      if (serialized.includes("registra papelería 25 usd")) {
-        const occurredAt = /El turno comenzó en ([0-9T:.+-]+Z)/u.exec(serialized)?.[1];
-        return Effect.succeed([
-          createTransactionToolCall({
-            id: "explicit-quick-log",
-            amount: "25",
-            currency: "USD",
-            counterparty: "Papelería",
-            categoryId: categoryIds.otros,
-            occurredAt,
-          }),
-        ]);
-      }
-      if (
-        serialized.includes("almuerzo 25 mil") ||
-        serialized.includes("almuerzo 25 USD") ||
-        serialized.includes("almuerzo 25 usd")
-      ) {
-        expect(serialized).toContain("ServiceMarket CO, locale es-CO");
-        expect(serialized).toContain("zona IANA America/Bogota");
-        expect(serialized).toMatch(/El turno comenzó en \d{4}-\d{2}-\d{2}T/);
-        const usdMessage =
-          serialized.lastIndexOf("almuerzo 25 USD") > serialized.lastIndexOf("almuerzo 25 usd")
-            ? "almuerzo 25 USD"
-            : "almuerzo 25 usd";
-        const currentMessage =
-          serialized.lastIndexOf(usdMessage) > serialized.lastIndexOf("almuerzo 25 mil")
-            ? usdMessage
-            : "almuerzo 25 mil";
-        const currency = currentMessage.toUpperCase().endsWith("USD") ? "USD" : "COP";
-        const occurredAt = /El turno comenzó en ([0-9T:.+-]+Z)/u.exec(serialized)?.[1];
-        const hasCurrentToolResult = hasToolResultAfter(serialized, currentMessage);
-        return Effect.succeed(
-          hasCurrentToolResult
-            ? [{ type: "text" as const, text: "Listo, registré el almuerzo." }]
-            : [
-                createTransactionToolCall({
-                  id: `quick-log-${currency}`,
-                  amount: currency === "COP" ? "25000" : "25",
-                  currency,
-                  occurredAt,
-                }),
-              ]
-        );
-      }
-      if (serialized.includes("Lista historial acotado")) {
-        const hasCurrentToolResult = hasToolResultAfter(serialized, "Lista historial acotado");
-        if (hasCurrentToolResult) {
-          expect(serialized).toContain("tool_result_too_large");
-          expect(serialized).not.toContain("bulk-");
-        }
-        return Effect.succeed(
-          hasCurrentToolResult
-            ? [{ type: "text" as const, text: "Historial acotado." }]
-            : [
-                {
-                  type: "tool-call" as const,
-                  id: "bounded-history-call",
-                  name: "transactions__listTransactions",
-                  params: { query: {} },
-                },
-              ]
-        );
-      }
-      if (serialized.includes("Lista movimientos secretos")) {
-        const hasCurrentToolResult = hasToolResultAfter(serialized, "Lista movimientos secretos");
-        if (hasCurrentToolResult) {
-          expect(serialized).not.toContain("fin_deadbeef_");
-          return Effect.succeed([{ type: "text" as const, text: "Resultado protegido." }]);
-        }
-        return Effect.succeed([
-          {
-            type: "tool-call" as const,
-            id: "secret-list-call",
-            name: "transactions__listTransactions",
-            params: { query: {} },
-          },
-        ]);
-      }
-      if (serialized.includes("Lista las categorías")) {
-        const hasCurrentToolResult = hasToolResultAfter(serialized, "Lista las categorías");
-        return Effect.succeed(
-          hasCurrentToolResult
-            ? [{ type: "text" as const, text: "Estas son las categorías disponibles." }]
-            : [
-                {
-                  type: "tool-call" as const,
-                  id: "categories-call-1",
-                  name: "categories__listCategories",
-                  params: {},
-                },
-              ]
-        );
-      }
-      const priorTurnWasLoaded = serialized.includes("Primera respuesta");
-      return Effect.succeed([
-        {
-          type: "text" as const,
-          text: priorTurnWasLoaded ? "Sí, recuerdo el turno anterior." : "Primera respuesta",
-        },
-      ]);
+      return Effect.succeed(scriptedReply(serialized, tools));
     },
     streamText: () => {
       throw new Error("The agent uses non-streaming generation");

@@ -53,19 +53,19 @@ it("publishes one partial-input OpenAPI member per canonical operation", () => {
 it("accepts typed partials without running checks whose nested input is incomplete", () => {
   const counterpartyOnly = suggestOperation({
     tool: "transactions.createTransaction",
-    args: { payload: { counterparty: Option.some("Rappi") } },
+    args: Option.some({ payload: { counterparty: Option.some("Rappi") } }),
     hint: "Record the Transaction while its counterparty is known.",
   });
   const incompleteMoney = suggestOperation({
     tool: "transactions.createTransaction",
-    args: {
+    args: Option.some({
       payload: {
         money: { currency: "COP" },
         counterparty: Option.some("Rappi"),
         direction: "outflow",
         occurredAt: DateTime.makeUnsafe("2026-07-20T12:30:00Z"),
       },
-    },
+    }),
     hint: "Record the Transaction after learning its amount.",
   });
 
@@ -83,7 +83,7 @@ it("rejects fully known arguments that violate a target object check", () => {
     strictEncoding
   )({
     tool: "transactions.createTransaction",
-    args: {
+    args: Option.some({
       payload: {
         money: { amount: BigDecimal.fromStringUnsafe("0"), currency: "COP" },
         counterparty: "Rappi",
@@ -91,7 +91,7 @@ it("rejects fully known arguments that violate a target object check", () => {
         occurredAt: DateTime.makeUnsafe("2026-07-20T12:30:00Z"),
         categoryId: categoryIds.otros,
       },
-    },
+    }),
     hint: "Record the Transaction while all its details are known.",
   });
 
@@ -111,7 +111,7 @@ it("rejects tools and arguments that do not belong to a canonical operation", ()
     strictEncoding
   )({
     tool: "transactions.getTransaction",
-    args: { params: { id: "not-a-transaction-id" } },
+    args: Option.some({ params: { id: "not-a-transaction-id" } }),
     hint: "Fetch the Transaction already under discussion.",
   });
   const inputForInputlessOperation = Schema.encodeUnknownResult(
@@ -131,10 +131,12 @@ it("rejects tools and arguments that do not belong to a canonical operation", ()
 it("accepts one sentence containing an abbreviation or version number", () => {
   const abbreviated = Schema.encodeUnknownResult(SuggestedOperation)({
     tool: "transactions.listTransactions",
+    args: Option.none(),
     hint: "List Transactions, e.g. the latest matching entries.",
   });
   const versioned = Schema.encodeUnknownResult(SuggestedOperation)({
     tool: "transactions.listTransactions",
+    args: Option.none(),
     hint: "Use v1.2 to list the matching Transactions.",
   });
 
@@ -145,10 +147,12 @@ it("accepts one sentence containing an abbreviation or version number", () => {
 it("rejects a multi-sentence or overlong hint", () => {
   const multiSentence = Schema.encodeUnknownResult(SuggestedOperation)({
     tool: "transactions.listTransactions",
+    args: Option.none(),
     hint: "List Transactions. Then inspect them.",
   });
   const overlong = Schema.encodeUnknownResult(SuggestedOperation)({
     tool: "transactions.listTransactions",
+    args: Option.none(),
     hint: `${"x".repeat(140)}.`,
   });
 
@@ -159,10 +163,12 @@ it("rejects a multi-sentence or overlong hint", () => {
 it("filters missing scopes before enforcing the three-item cap", () => {
   const write = suggestOperation({
     tool: "transactions.createTransaction",
+    args: Option.none(),
     hint: "Record the Transaction while its details are known.",
   });
   const read = suggestOperation({
     tool: "transactions.listTransactions",
+    args: Option.none(),
     hint: "List Transactions to answer the current question.",
   });
 
@@ -177,6 +183,7 @@ it("filters missing scopes before enforcing the three-item cap", () => {
 it("fails loudly when more than three callable operations remain", () => {
   const read = suggestOperation({
     tool: "transactions.listTransactions",
+    args: Option.none(),
     hint: "List Transactions to answer the current question.",
   });
 

@@ -2,6 +2,7 @@ import { expect } from "@effect/vitest";
 import { Effect, Option, Schema } from "effect";
 import { HttpClient } from "effect/unstable/http";
 import { AgentScope } from "~/core/tokens/model";
+import { okStatus } from "~/shell/_shared/http-status";
 import {
   AgentConfirmation,
   OperationCostClass,
@@ -23,7 +24,7 @@ const OpenApiPaths = Schema.Struct({
 
 const publishedSpec = Effect.gen(function* () {
   const response = yield* HttpClient.get("/openapi.json");
-  expect(response.status).toBe(200);
+  expect(response.status).toBe(okStatus);
 
   return yield* response.json;
 });

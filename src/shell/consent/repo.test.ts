@@ -22,8 +22,8 @@ import {
   findPendingConsentExchange,
   hasCurrentOnboardingConsent,
   insertPendingConsentExchange,
-  recordConsentDisclosureDelivery,
   observeConsentRecords,
+  recordConsentDisclosureDelivery,
   removePendingConsentExchange,
 } from "./repo";
 

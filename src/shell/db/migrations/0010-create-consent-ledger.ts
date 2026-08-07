@@ -1,15 +1,16 @@
 import { Effect } from "effect";
 import { SqlClient } from "effect/unstable/sql";
 
-/** Adds the append-only consent ledger and minimal 24-hour pre-User exchange state. */
-export const createConsentLedger = Effect.gen(function* () {
+const constrainAgentTokenSubject = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
-
   yield* sql`
     ALTER TABLE agent_tokens
       ADD CONSTRAINT agent_tokens_id_user_id_key UNIQUE (id, user_id)
   `;
+});
 
+const createConsentRecordsTable = Effect.gen(function* () {
+  const sql = yield* SqlClient.SqlClient;
   yield* sql`
     CREATE TABLE consent_records (
       id uuid PRIMARY KEY,
@@ -60,7 +61,10 @@ export const createConsentLedger = Effect.gen(function* () {
       UNIQUE (decision_channel, decision_provider, decision_provider_message_id)
     )
   `;
+});
 
+const indexConsentRecordLookups = Effect.gen(function* () {
+  const sql = yield* SqlClient.SqlClient;
   yield* sql`
     CREATE INDEX consent_records_current_grant_idx
     ON consent_records (subject_user_id, grant_type, occurred_at, id)
@@ -71,7 +75,10 @@ export const createConsentLedger = Effect.gen(function* () {
     ON consent_records (revoked_grant_id)
     WHERE event_type = 'revoked'
   `;
+});
 
+const createPendingConsentExchangeTable = Effect.gen(function* () {
+  const sql = yield* SqlClient.SqlClient;
   yield* sql`
     CREATE TABLE pending_consent_exchanges (
       id uuid PRIMARY KEY,
@@ -116,7 +123,10 @@ export const createConsentLedger = Effect.gen(function* () {
       )
     )
   `;
+});
 
+const restrictConsentLedgerToAppendOnly = Effect.gen(function* () {
+  const sql = yield* SqlClient.SqlClient;
   yield* sql`REVOKE UPDATE, DELETE ON consent_records FROM fidy_runtime`;
   yield* sql`GRANT SELECT, INSERT ON consent_records TO fidy_runtime`;
   yield* sql`
@@ -130,6 +140,10 @@ export const createConsentLedger = Effect.gen(function* () {
       USING (subject_user_id = NULLIF(current_setting('fidy.user_id', true), '')::uuid)
       WITH CHECK (subject_user_id = NULLIF(current_setting('fidy.user_id', true), '')::uuid)
   `;
+});
+
+const createConsentDecisionSubjectResolver = Effect.gen(function* () {
+  const sql = yield* SqlClient.SqlClient;
   yield* sql`
     CREATE FUNCTION fidy_resolve_consent_decision_subject(
       lookup_channel text,
@@ -158,4 +172,14 @@ export const createConsentLedger = Effect.gen(function* () {
     GRANT EXECUTE ON FUNCTION fidy_resolve_consent_decision_subject(text, text, text)
     TO fidy_runtime
   `;
+});
+
+/** Adds the append-only consent ledger and minimal 24-hour pre-User exchange state. */
+export const createConsentLedger = Effect.gen(function* () {
+  yield* constrainAgentTokenSubject;
+  yield* createConsentRecordsTable;
+  yield* indexConsentRecordLookups;
+  yield* createPendingConsentExchangeTable;
+  yield* restrictConsentLedgerToAppendOnly;
+  yield* createConsentDecisionSubjectResolver;
 }).pipe(Effect.asVoid);

@@ -1,10 +1,8 @@
 import { Effect } from "effect";
 import { SqlClient } from "effect/unstable/sql";
 
-/** Adds the durable WhatsApp queue, evidence, window state, and narrow claim gateway. */
-export const createWhatsAppChannel = Effect.gen(function* () {
+const createInboundQueueTables = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
-
   yield* sql`
     CREATE TABLE whatsapp_message_evidence (
       id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
@@ -48,6 +46,10 @@ export const createWhatsAppChannel = Effect.gen(function* () {
     ON whatsapp_inbound_jobs(user_id, debounce_until, occurred_at, message_evidence_id)
     WHERE completed_at IS NULL AND claim_id IS NULL
   `;
+});
+
+const createIngressBudgetTables = Effect.gen(function* () {
+  const sql = yield* SqlClient.SqlClient;
   yield* sql`
     CREATE TABLE whatsapp_ingress_budgets (
       budget_key text PRIMARY KEY,
@@ -67,6 +69,10 @@ export const createWhatsAppChannel = Effect.gen(function* () {
     CREATE INDEX whatsapp_ingress_budget_receipts_by_consumed_at
     ON whatsapp_ingress_budget_receipts(consumed_at)
   `;
+});
+
+const createReceiptAndWindowTables = Effect.gen(function* () {
+  const sql = yield* SqlClient.SqlClient;
   yield* sql`
     CREATE TABLE whatsapp_inbound_receipts (
       provider_message_id text PRIMARY KEY,
@@ -86,7 +92,10 @@ export const createWhatsAppChannel = Effect.gen(function* () {
       window_open_until timestamptz NOT NULL
     )
   `;
+});
 
+const restrictChannelTablesToOwner = Effect.gen(function* () {
+  const sql = yield* SqlClient.SqlClient;
   yield* sql`
     ALTER TABLE whatsapp_message_evidence ENABLE ROW LEVEL SECURITY;
     ALTER TABLE whatsapp_message_evidence FORCE ROW LEVEL SECURITY;
@@ -109,6 +118,10 @@ export const createWhatsAppChannel = Effect.gen(function* () {
       USING (user_id = NULLIF(current_setting('fidy.user_id', true), '')::uuid)
       WITH CHECK (user_id = NULLIF(current_setting('fidy.user_id', true), '')::uuid)
   `;
+});
+
+const grantChannelTableAuthority = Effect.gen(function* () {
+  const sql = yield* SqlClient.SqlClient;
   yield* sql`
     GRANT SELECT, INSERT, UPDATE, DELETE ON
       whatsapp_message_evidence, whatsapp_inbound_jobs, whatsapp_turn_claims,
@@ -124,6 +137,10 @@ export const createWhatsAppChannel = Effect.gen(function* () {
   yield* sql`GRANT SELECT, INSERT, DELETE ON whatsapp_ingress_budget_receipts TO fidy_gateway`;
   yield* sql`GRANT SELECT, INSERT, UPDATE, DELETE ON whatsapp_inbound_receipts TO fidy_gateway`;
   yield* sql`GRANT SELECT, DELETE ON whatsapp_conversation_windows TO fidy_gateway`;
+});
+
+const createIngressBudgetGateway = Effect.gen(function* () {
+  const sql = yield* SqlClient.SqlClient;
   yield* sql`
     CREATE FUNCTION fidy_consume_whatsapp_budget(
       requested_key text, consumed_at timestamptz, maximum_count integer
@@ -161,6 +178,10 @@ export const createWhatsAppChannel = Effect.gen(function* () {
   yield* sql`
     GRANT EXECUTE ON FUNCTION fidy_consume_whatsapp_budget(text, timestamptz, integer) TO fidy_runtime
   `;
+});
+
+const createSingleUseIngressBudgetGateway = Effect.gen(function* () {
+  const sql = yield* SqlClient.SqlClient;
   yield* sql`
     CREATE FUNCTION fidy_consume_whatsapp_budget_once(
       requested_key text,
@@ -205,6 +226,10 @@ export const createWhatsAppChannel = Effect.gen(function* () {
     GRANT EXECUTE ON FUNCTION
       fidy_consume_whatsapp_budget_once(text, text, timestamptz, integer) TO fidy_runtime
   `;
+});
+
+const createOperationalPruningGateway = Effect.gen(function* () {
+  const sql = yield* SqlClient.SqlClient;
   yield* sql`
     CREATE FUNCTION fidy_prune_whatsapp_operational_data() RETURNS void
     LANGUAGE sql
@@ -226,6 +251,10 @@ export const createWhatsAppChannel = Effect.gen(function* () {
     REVOKE ALL ON FUNCTION fidy_prune_whatsapp_operational_data() FROM PUBLIC;
     GRANT EXECUTE ON FUNCTION fidy_prune_whatsapp_operational_data() TO fidy_runtime
   `;
+});
+
+const createReceiptClaimGateway = Effect.gen(function* () {
+  const sql = yield* SqlClient.SqlClient;
   yield* sql`
     CREATE FUNCTION fidy_claim_whatsapp_receipt(
       requested_message_id text, requested_delivery_key text,
@@ -269,6 +298,10 @@ export const createWhatsAppChannel = Effect.gen(function* () {
     REVOKE ALL ON FUNCTION fidy_claim_whatsapp_receipt(text, text, uuid, timestamptz) FROM PUBLIC;
     GRANT EXECUTE ON FUNCTION fidy_claim_whatsapp_receipt(text, text, uuid, timestamptz) TO fidy_runtime
   `;
+});
+
+const createReceiptOutboundStartGateway = Effect.gen(function* () {
+  const sql = yield* SqlClient.SqlClient;
   yield* sql`
     CREATE FUNCTION fidy_mark_whatsapp_receipt_outbound_started(
       requested_message_id text, requested_claim_id uuid
@@ -293,6 +326,10 @@ export const createWhatsAppChannel = Effect.gen(function* () {
     GRANT EXECUTE ON FUNCTION fidy_mark_whatsapp_receipt_outbound_started(text, uuid)
       TO fidy_runtime
   `;
+});
+
+const createReceiptReleaseGateway = Effect.gen(function* () {
+  const sql = yield* SqlClient.SqlClient;
   yield* sql`
     CREATE FUNCTION fidy_release_whatsapp_receipt(
       requested_message_id text, requested_claim_id uuid
@@ -314,6 +351,10 @@ export const createWhatsAppChannel = Effect.gen(function* () {
     REVOKE ALL ON FUNCTION fidy_release_whatsapp_receipt(text, uuid) FROM PUBLIC;
     GRANT EXECUTE ON FUNCTION fidy_release_whatsapp_receipt(text, uuid) TO fidy_runtime
   `;
+});
+
+const createReceiptCompletionGateway = Effect.gen(function* () {
+  const sql = yield* SqlClient.SqlClient;
   yield* sql`
     CREATE FUNCTION fidy_complete_whatsapp_receipt(
       requested_message_id text, requested_claim_id uuid, completion_time timestamptz
@@ -337,6 +378,10 @@ export const createWhatsAppChannel = Effect.gen(function* () {
     REVOKE ALL ON FUNCTION fidy_complete_whatsapp_receipt(text, uuid, timestamptz) FROM PUBLIC;
     GRANT EXECUTE ON FUNCTION fidy_complete_whatsapp_receipt(text, uuid, timestamptz) TO fidy_runtime
   `;
+});
+
+const createTurnClaimGateway = Effect.gen(function* () {
+  const sql = yield* SqlClient.SqlClient;
   yield* sql`GRANT SELECT, UPDATE ON whatsapp_inbound_jobs TO fidy_gateway`;
   yield* sql`
     CREATE FUNCTION fidy_claim_whatsapp_turn(claim_time timestamptz)
@@ -426,4 +471,21 @@ export const createWhatsAppChannel = Effect.gen(function* () {
   yield* sql`
     GRANT EXECUTE ON FUNCTION fidy_claim_whatsapp_turn(timestamptz) TO fidy_runtime
   `;
+});
+
+/** Adds the durable WhatsApp queue, evidence, window state, and narrow claim gateway. */
+export const createWhatsAppChannel = Effect.gen(function* () {
+  yield* createInboundQueueTables;
+  yield* createIngressBudgetTables;
+  yield* createReceiptAndWindowTables;
+  yield* restrictChannelTablesToOwner;
+  yield* grantChannelTableAuthority;
+  yield* createIngressBudgetGateway;
+  yield* createSingleUseIngressBudgetGateway;
+  yield* createOperationalPruningGateway;
+  yield* createReceiptClaimGateway;
+  yield* createReceiptOutboundStartGateway;
+  yield* createReceiptReleaseGateway;
+  yield* createReceiptCompletionGateway;
+  yield* createTurnClaimGateway;
 }).pipe(Effect.asVoid);

@@ -4,8 +4,10 @@ import { CanonicalApiBaseUrl, CanonicalApiUrl } from "~/shell/agent/toolkit";
 import { PgLive } from "~/shell/db/client";
 import { AppLive } from "~/shell/http";
 
+const defaultHttpPort = 3000;
+
 const serverConfig = Config.all({
-  port: Config.int("PORT").pipe(Config.withDefault(3000)),
+  port: Config.int("PORT").pipe(Config.withDefault(defaultHttpPort)),
   hostname: Config.string("FIDY_HTTP_HOST").pipe(Config.withDefault("0.0.0.0")),
 });
 

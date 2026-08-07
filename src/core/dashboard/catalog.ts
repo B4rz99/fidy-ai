@@ -1,15 +1,17 @@
 import { type CategoryId } from "~/core/categories/reference";
 import {
+  type DashboardCatalog,
   DashboardCatalogEntry,
+  type DashboardDocument,
   DashboardPeriod,
   DashboardTitle,
   SpendingGroupBy,
   TransactionListLimit,
-  type DashboardCatalog,
-  type DashboardDocument,
   type Widget,
   type WidgetId,
 } from "./model";
+
+const recentTransactionsPresetLimit = 10;
 
 const monthlySpending = DashboardCatalogEntry.make({
   id: "monthly-spending",
@@ -43,7 +45,7 @@ const recentTransactions = DashboardCatalogEntry.make({
   widget: {
     type: "transaction-list",
     title: "Transacciones recientes",
-    limit: TransactionListLimit.make(10),
+    limit: TransactionListLimit.make(recentTransactionsPresetLimit),
   },
 });
 

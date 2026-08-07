@@ -14,8 +14,8 @@ import { generateInsightEvent } from "~/shell/insights/repo";
 import { transactionPayload, truncateTransactions } from "~/shell/transactions/fixtures";
 import {
   type ApiCallFailure,
-  ApiHarness,
   type ApiClient,
+  ApiHarness,
   headersFor,
   makeApiClientLive,
 } from "./api-harness";

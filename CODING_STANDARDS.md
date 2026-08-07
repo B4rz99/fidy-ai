@@ -131,14 +131,14 @@ linter could draw, so it lives here.
 
 ## Errors and absence
 
-Two rules nothing can check:
+Absence is an `Option` everywhere, and the linter enforces it. Two rules nothing can check:
 
 - **`orDie` is for defects only.** A dead connection, yes. "Budget not found", no — that is a typed
   error that must reach the API response.
-- **Absence is an `Option`, and the handler decides what it means.** The repo cannot know whether a
-  missing budget is a 404, an upsert, or simply an empty answer. Use `findOneOption` for
-  `SELECT … WHERE`; `findOne` only where absence is genuinely impossible, such as
-  `INSERT … RETURNING`, where it is a defect and dying is right.
+- **The handler decides what an absent row means.** The repo cannot know whether a missing budget is
+  a 404, an upsert, or simply an empty answer. Use `findOneOption` for `SELECT … WHERE`; `findOne`
+  only where absence is genuinely impossible, such as `INSERT … RETURNING`, where it is a defect and
+  dying is right.
 
 ---
 

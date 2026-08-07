@@ -2,17 +2,17 @@ import { Effect, Option, Schema } from "effect";
 import {
   type AssistantTranscriptEntry,
   type CanonicalToolCallEntry,
+  type CanonicalToolOutcome,
   type CanonicalToolResultEntry,
   type UserTranscriptEntry,
-  type CanonicalToolOutcome,
 } from "./model";
 
-type DeepReadonly<T> =
-  T extends ReadonlyArray<infer Value>
-    ? ReadonlyArray<DeepReadonly<Value>>
-    : T extends object
-      ? { readonly [Key in keyof T]: DeepReadonly<T[Key]> }
-      : T;
+type DeepReadonly<Value> =
+  Value extends ReadonlyArray<infer Element>
+    ? ReadonlyArray<DeepReadonly<Element>>
+    : Value extends object
+      ? { readonly [Key in keyof Value]: DeepReadonly<Value[Key]> }
+      : Value;
 type ReadonlyJson = DeepReadonly<Schema.Json>;
 
 type WindowTextEntry =
@@ -102,10 +102,10 @@ const activeTurnUser = (
 };
 
 const matchingTrailingCall = (
-  previous: TranscriptWindowEntry | undefined,
+  previous: Option.Option<TranscriptWindowEntry>,
   result: WindowResultEntryValue
 ): Option.Option<WindowCallEntryValue> =>
-  Option.fromUndefinedOr(previous).pipe(
+  previous.pipe(
     Option.filter(
       (entry): entry is WindowCallEntryValue => entry._tag === "CanonicalToolCallEntry"
     ),
@@ -118,7 +118,7 @@ const trailingTurnUnit = (
 ): ReadonlyArray<TranscriptWindowEntry> => {
   const entry = Option.getOrThrow(Option.fromUndefinedOr(turn[index]));
   return entry._tag === "CanonicalToolResultEntry"
-    ? matchingTrailingCall(turn[index - 1], entry).pipe(
+    ? matchingTrailingCall(Option.fromUndefinedOr(turn[index - 1]), entry).pipe(
         Option.match({
           onNone: () => [entry],
           onSome: (call) => [call, entry],
@@ -127,15 +127,18 @@ const trailingTurnUnit = (
     : [entry];
 };
 
-const isPairedTrailingCall = (
-  entry: TranscriptWindowEntry,
-  nextEntry: TranscriptWindowEntry | undefined
-): boolean => {
-  const callId = entry._tag === "CanonicalToolCallEntry" ? entry.toolCallId : undefined;
-  const resultId =
-    nextEntry?._tag === "CanonicalToolResultEntry" ? nextEntry.toolCallId : undefined;
-  return callId !== undefined && callId === resultId;
-};
+/** Whether the entry at the index is the call already carried by the result that follows it. */
+const pairedWithFollowingResult = (
+  turn: ReadonlyArray<TranscriptWindowEntry>,
+  index: number
+): boolean =>
+  Option.fromUndefinedOr(turn[index + 1]).pipe(
+    Option.filter(
+      (next): next is WindowResultEntryValue => next._tag === "CanonicalToolResultEntry"
+    ),
+    Option.flatMap((result) => matchingTrailingCall(Option.fromUndefinedOr(turn[index]), result)),
+    Option.isSome
+  );
 
 const boundedActiveTurn = (
   turn: ReadonlyArray<TranscriptWindowEntry>,
@@ -153,13 +156,10 @@ const boundedActiveTurn = (
     characters: entryCharacters(user.value),
     stopped: false,
   };
-  const [, ...trailingEntries] = turn;
-  const reversedEntries = trailingEntries.toReversed();
-  reversedEntries.forEach((entry, reverseIndex) => {
+  const newestFirstIndexes = Array.from(turn.keys()).slice(1).toReversed();
+  newestFirstIndexes.forEach((index) => {
     if (state.stopped) return;
-    const index = turn.length - 1 - reverseIndex;
-    const nextEntry = reversedEntries[reverseIndex - 1];
-    if (isPairedTrailingCall(entry, nextEntry)) return;
+    if (pairedWithFollowingResult(turn, index)) return;
     const unit = trailingTurnUnit(turn, index);
     const unitCharacters = unit.reduce((total, member) => total + entryCharacters(member), 0);
     if (state.characters + unitCharacters > maxCharacters) {

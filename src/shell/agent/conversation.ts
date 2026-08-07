@@ -4,7 +4,7 @@ import {
   type ConsentGateOutcome,
   evaluateConsentGate,
 } from "~/shell/consent/consent-gate";
-import { AgentService, InboundMessage, type AgentReply } from "./agent-service";
+import { type AgentReply, AgentService, InboundMessage } from "./agent-service";
 
 /**
  * Consent-terminal outcome or a validated text turn bound to the resolved stable User. Admission

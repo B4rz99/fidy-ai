@@ -2,9 +2,9 @@ import { Effect } from "effect";
 import type { UserId } from "~/core/identity/reference";
 import type { TranscriptEntry, TranscriptTurnId } from "~/core/transcript/model";
 import {
-  appendTranscriptEntries as persistTranscriptEntries,
   listRecentTranscriptEntries as loadRecentTranscriptEntries,
   listTranscriptTurnEntries as loadTranscriptTurnEntries,
+  appendTranscriptEntries as persistTranscriptEntries,
 } from "./repo";
 
 /** Appends exact Transcript evidence for one explicit User in supplied order. */

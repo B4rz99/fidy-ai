@@ -11,7 +11,7 @@ import { MigrationSqlClient } from "~/shell/db/client";
 import { seedConsentedAgentIdentity } from "~/shell/db/development-seed";
 import { withUserTransaction } from "~/shell/db/user-transaction";
 import { appendConsentRecord, lockConsentSubject, observeConsentRecords } from "./repo";
-import { headersFor, ApiHarness } from "~/shell/testing/api-harness";
+import { ApiHarness, headersFor } from "~/shell/testing/api-harness";
 import { transactionPayload, truncateTransactions } from "~/shell/transactions/fixtures";
 
 const unconsentedUserId = UserId.make("f1d1a000-0000-4000-8000-0000000008a1");

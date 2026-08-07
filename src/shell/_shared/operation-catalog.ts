@@ -74,10 +74,8 @@ const requestInput = (endpoint: HttpApiEndpoint.Top): Option.Option<PartialInput
   add("query", Option.fromUndefinedOr(endpoint.query));
   add("headers", Option.fromUndefinedOr(endpoint.headers));
 
-  const payloads = payloadSchemas(endpoint).map(makePartialInputSchema);
-  if (Arr.isReadonlyArrayNonEmpty(payloads)) {
-    add("payload", Option.some(payloads.length === 1 ? payloads[0] : Schema.Union(payloads)));
-  }
+  const payloads = payloadSchemas(endpoint);
+  if (Arr.isReadonlyArrayNonEmpty(payloads)) add("payload", Option.some(unionSchema(payloads)));
 
   return fields.length === 0
     ? Option.none()

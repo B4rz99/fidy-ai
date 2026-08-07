@@ -17,8 +17,8 @@ import { defaultAgentBearer } from "~/shell/testing/identity-fixtures";
 import { makeKapsoIdentityChangeBody } from "~/shell/testing/kapso-identity-change";
 import { transactionPayload, truncateTransactions } from "~/shell/transactions/fixtures";
 import { associateWhatsAppIdentity, findWhatsAppIdentity, resolveWhatsAppCaller } from "./repo";
-
 import { testWhatsAppCaller } from "~/shell/testing/whatsapp-caller";
+
 const replacementPhone = E164PhoneNumber.make("+573009876543");
 const postIdentityChange = (body: Uint8Array) =>
   HttpClient.post("/webhooks/kapso/meta", {

@@ -32,6 +32,7 @@ import {
   lockKeywordRules,
   updateKeywordRule,
 } from "./repo";
+
 const missingRule = (keywordRuleId: KeywordRuleId) => () =>
   new KeywordRuleNotFound({ keywordRuleId });
 

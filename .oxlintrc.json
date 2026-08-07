@@ -25,7 +25,7 @@
     "id-length": ["off", { "exceptions": ["_", "A", "E", "R"], "properties": "never" }],
     "import/exports-last": "off",
     "import/group-exports": "off",
-    "import/newline-after-import": "off",
+    "import/newline-after-import": "error",
     "max-lines-per-function": ["off", { "max": 60 }],
     "max-statements": ["off", { "max": 70 }],
     "no-magic-numbers": [

@@ -20,6 +20,7 @@ import { InsightKind } from "~/core/insights/reference";
 import { AgentTokenId } from "~/core/tokens/reference";
 import { withUserTransaction } from "~/shell/db/user-transaction";
 import { currentDisclosure } from "./current-disclosure";
+
 const OptionalAgentTokenId = Schema.OptionFromNullOr(Schema.toEncoded(AgentTokenId));
 const OptionalConsentRecordId = Schema.OptionFromNullOr(Schema.toEncoded(ConsentRecordId));
 const OptionalInsightKind = Schema.OptionFromNullOr(InsightKind);

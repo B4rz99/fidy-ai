@@ -68,8 +68,8 @@ import {
   startWhatsAppTurn,
 } from "./repo";
 import { processNextWhatsAppTurn } from "./worker";
-
 import { testWhatsAppCaller } from "~/shell/testing/whatsapp-caller";
+
 const deliveryKey = WhatsAppDeliveryKey.make("delivery-worker-fixture");
 const fixtureBytes = (name: "kapso-text-v2.json" | "kapso-voice-v2.json") =>
   Effect.promise(() => Bun.file(new URL(`./fixtures/${name}`, import.meta.url)).bytes());

@@ -48,6 +48,26 @@ const isSupportedEnvelope = (
   envelope: Parameters<ReturnType<typeof Sentry.createTransport>["send"]>[0]
 ): boolean => envelope[1].every(([header]) => isSupportedEnvelopeItemType(header.type));
 
+/**
+ * The trace coordinates an error event may carry. The SDK attaches these itself, and outside a Span
+ * it supplies a trace and span with no operation to name — so `op` is present only when one exists.
+ */
+const errorTraceContext = (
+  trace: NonNullable<Sentry.ErrorEvent["contexts"]>["trace"]
+): Readonly<Record<string, unknown>> =>
+  trace === undefined
+    ? {}
+    : {
+        contexts: {
+          trace: {
+            trace_id: trace.trace_id,
+            span_id: trace.span_id,
+            ...(trace.parent_span_id === undefined ? {} : { parent_span_id: trace.parent_span_id }),
+            ...(trace.op === undefined ? {} : { op: trace.op }),
+          },
+        },
+      };
+
 const safeErrorEvent = (event: Sentry.ErrorEvent): Option.Option<Sentry.ErrorEvent> => {
   const values = event.exception?.values;
   const selectedException =
@@ -67,7 +87,6 @@ const safeErrorEvent = (event: Sentry.ErrorEvent): Option.Option<Sentry.ErrorEve
             },
           })),
         };
-  const trace = event.contexts?.trace;
   const projected = Schema.decodeUnknownOption(
     ProjectedErrorEvent,
     strictDecoding
@@ -78,20 +97,7 @@ const safeErrorEvent = (event: Sentry.ErrorEvent): Option.Option<Sentry.ErrorEve
     fingerprint: event.fingerprint,
     tags: event.tags,
     breadcrumbs: event.breadcrumbs ?? [],
-    ...(trace === undefined
-      ? {}
-      : {
-          contexts: {
-            trace: {
-              trace_id: trace.trace_id,
-              span_id: trace.span_id,
-              ...(trace.parent_span_id === undefined
-                ? {}
-                : { parent_span_id: trace.parent_span_id }),
-              op: trace.op,
-            },
-          },
-        }),
+    ...errorTraceContext(event.contexts?.trace),
   });
   return Option.map(projected, (value) =>
     castSdkEvent<Sentry.ErrorEvent>({

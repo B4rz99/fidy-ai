@@ -210,3 +210,17 @@ _Avoid_: Charge (alone), synchronous payment, settlement promise.
 The boundary between free and Pro. The rule is mechanical: any agent turn that loads transaction
 history beyond the single record being captured is paid.
 _Avoid_: Gate, upsell, limit.
+
+### Observability
+
+**Work**:
+The application behaviour a Span observes, held as the Effect that performs it. Observing work never
+alters it: its success value, failure, and interruption reach the caller exactly as they would have
+had telemetry been absent.
+_Avoid_: Task, job, unit of work, operation (that is the code naming what the work does).
+
+**Projector**:
+A pure function that rebuilds an untrusted value into the exact shape allowed to leave the process.
+It constructs each field from a closed schema instead of removing fields from the original, so a
+field the schema does not declare cannot ride along.
+_Avoid_: Filter, sanitizer, scrubber, serializer.

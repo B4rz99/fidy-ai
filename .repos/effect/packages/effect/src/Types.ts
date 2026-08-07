@@ -421,6 +421,7 @@ export type MergeRight<Target, Source> = Simplify<
  *
  * - `number` — run at most N effects concurrently.
  * - `"unbounded"` — run all effects concurrently with no limit.
+ * - `"inherit"` — inherit the concurrency from the surrounding context.
  *
  * **Example** (Setting concurrency values)
  *
@@ -430,12 +431,13 @@ export type MergeRight<Target, Source> = Simplify<
  * const sequential: Types.Concurrency = 1
  * const limited: Types.Concurrency = 5
  * const unbounded: Types.Concurrency = "unbounded"
+ * const inherit: Types.Concurrency = "inherit"
  * ```
  *
  * @category models
  * @since 2.0.0
  */
-export type Concurrency = number | "unbounded"
+export type Concurrency = number | "unbounded" | "inherit"
 
 /**
  * Removes `readonly` from all properties of `T`. Supports arrays, tuples,

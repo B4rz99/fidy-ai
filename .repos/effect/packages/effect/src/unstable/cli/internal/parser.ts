@@ -391,18 +391,6 @@ const invalidNegatedFlagValue = (
     kind: "flag"
   })
 
-const missingFlagValue = (spec: FlagParam): CliError.InvalidValue => {
-  const choices = Primitive.getChoiceKeys(spec.primitiveType)
-  return new CliError.InvalidValue({
-    option: spec.name,
-    value: "",
-    expected: choices === undefined
-      ? spec.typeName ?? Primitive.getTypeName(spec.primitiveType)
-      : choices.join(" | "),
-    kind: "flag"
-  })
-}
-
 /**
  * Checks whether a token is a boolean literal value.
  * Recognizes: true/false, yes/no, on/off, 1/0
@@ -509,8 +497,8 @@ const consumeFlagValueWithTokens = (
   }
 
   return {
-    _tag: "Error",
-    error: missingFlagValue(spec),
+    _tag: "Value",
+    value: undefined,
     tokens: []
   }
 }

@@ -28,7 +28,6 @@ import * as SqlRunnerStorage from "effect/unstable/cluster/SqlRunnerStorage"
 import * as RpcSerialization from "effect/unstable/rpc/RpcSerialization"
 import type * as SocketServer from "effect/unstable/socket/SocketServer"
 import type { SqlClient } from "effect/unstable/sql/SqlClient"
-import * as NodeCrypto from "./NodeCrypto.ts"
 import * as NodeFileSystem from "./NodeFileSystem.ts"
 import * as NodeHttpClient from "./NodeHttpClient.ts"
 import * as Undici from "./Undici.ts"
@@ -114,7 +113,7 @@ export const layer = <
         ? MessageStorage.layerNoop
         : options?.storage === "byo"
         ? Layer.empty
-        : Layer.orDie(SqlMessageStorage.layer).pipe(Layer.provide(NodeCrypto.layer))
+        : Layer.orDie(SqlMessageStorage.layer)
     ),
     Layer.provide(
       options?.storage === "local"

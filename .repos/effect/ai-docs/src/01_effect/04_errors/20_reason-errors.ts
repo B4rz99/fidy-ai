@@ -9,11 +9,11 @@
 import { Effect, Schema } from "effect"
 
 export class RateLimitError extends Schema.TaggedErrorClass<RateLimitError>()("RateLimitError", {
-  retryAfter: Schema.Finite
+  retryAfter: Schema.Number
 }) {}
 
 export class QuotaExceededError extends Schema.TaggedErrorClass<QuotaExceededError>()("QuotaExceededError", {
-  limit: Schema.Int
+  limit: Schema.Number
 }) {}
 
 export class SafetyBlockedError extends Schema.TaggedErrorClass<SafetyBlockedError>()("SafetyBlockedError", {

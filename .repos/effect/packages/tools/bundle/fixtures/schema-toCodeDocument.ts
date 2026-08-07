@@ -7,4 +7,6 @@ const schema = Schema.Struct({
   c: Schema.Array(Schema.String)
 })
 
-SchemaRepresentation.toCodeDocument(SchemaRepresentation.toRepresentations([schema.ast]))
+const representation = Schema.toRepresentation(schema)
+
+SchemaRepresentation.toCodeDocument(SchemaRepresentation.toMultiDocument(representation))

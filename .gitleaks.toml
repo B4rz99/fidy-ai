@@ -1,2 +1,14 @@
 [extend]
 useDefault = true
+
+# Vendored upstream source is not this repo's secret surface. The Effect checkout under
+# .repos/ ships doc examples (`API_KEY: "sk-1234567890abcdef"`, a curl -H "X-API-Key: ..."
+# snippet) and identifiers that read as high-entropy keys, none of them a credential of
+# ours. Scoped to .repos/ alone, matching the exclusion oxlint and oxfmt already carry.
+# Singular [allowlist], not the [[allowlists]] array: gitleaks 8.24.3 — the version CI
+# pins — parses the array form without error and then ignores it, so it fails open.
+[allowlist]
+description = "Vendored third-party source under .repos/"
+# Unanchored on purpose: a git scan reports paths repo-relative (.repos/...) while a
+# filesystem scan reports them absolute (/src/.repos/...), and this must hold for both.
+paths = ['''(^|/)\.repos/''']

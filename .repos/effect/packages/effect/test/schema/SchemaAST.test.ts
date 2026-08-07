@@ -19,20 +19,8 @@ describe("SchemaAST", () => {
     strictEqual(SchemaAST.isJson(Symbol.for("symbol")), false)
     strictEqual(SchemaAST.isJson([]), true)
     strictEqual(SchemaAST.isJson([1]), true)
-    strictEqual(SchemaAST.isJson(new Array(1)), false)
     strictEqual(SchemaAST.isJson([1, undefined]), false)
     strictEqual(SchemaAST.isJson([1, 1n]), false)
-    let getterCalls = 0
-    const arrayWithGetter = [0]
-    Object.defineProperty(arrayWithGetter, "0", {
-      enumerable: true,
-      get() {
-        getterCalls++
-        return 1
-      }
-    })
-    strictEqual(SchemaAST.isJson(arrayWithGetter), true)
-    strictEqual(getterCalls, 1)
     strictEqual(SchemaAST.isJson({}), true)
     strictEqual(SchemaAST.isJson({ a: 1 }), true)
     strictEqual(SchemaAST.isJson({ a: undefined }), false)
@@ -70,17 +58,6 @@ describe("SchemaAST", () => {
     strictEqual(SchemaAST.isJson(deeper), true)
   })
 
-  it("isJson is stack safe", () => {
-    let valid: unknown = null
-    let invalid: unknown = undefined
-    for (let i = 0; i < 25_000; i++) {
-      valid = [valid]
-      invalid = [invalid]
-    }
-    strictEqual(SchemaAST.isJson(valid), true)
-    strictEqual(SchemaAST.isJson(invalid), false)
-  })
-
   it("Schema.toCodecJson rejects non-JSON objects", () => {
     const encode = Schema.encodeUnknownExit(Schema.toCodecJson(Schema.Unknown))
     strictEqual(encode(new Map([["a", 1]]))._tag, "Failure")
@@ -99,44 +76,18 @@ describe("SchemaAST", () => {
     strictEqual(SchemaAST.isStringTree(["a"]), true)
     strictEqual(SchemaAST.isStringTree(["a", undefined]), true)
     strictEqual(SchemaAST.isStringTree(["a", 1]), false)
-    strictEqual(SchemaAST.isStringTree(new Array(1)), true)
-    const sparseWithInheritedValue = new Array(1)
-    const arrayPrototype = Object.create(Array.prototype)
-    arrayPrototype[0] = 1
-    Object.setPrototypeOf(sparseWithInheritedValue, arrayPrototype)
-    strictEqual(SchemaAST.isStringTree(sparseWithInheritedValue), false)
     strictEqual(SchemaAST.isStringTree({}), true)
     strictEqual(SchemaAST.isStringTree({ a: "b" }), true)
     strictEqual(SchemaAST.isStringTree({ a: undefined }), true)
     strictEqual(SchemaAST.isStringTree({ a: "b", c: 1 }), false)
-    strictEqual(SchemaAST.isStringTree(new Map([["a", "b"]])), false)
-    strictEqual(SchemaAST.isStringTree(new Date(0)), false)
-    class A {
-      readonly a = "a"
-    }
-    strictEqual(SchemaAST.isStringTree(new A()), false)
     // nested
     strictEqual(SchemaAST.isStringTree({ a: { b: "c" } }), true)
     strictEqual(SchemaAST.isStringTree({ a: ["b", { c: "d" }] }), true)
     strictEqual(SchemaAST.isStringTree({ a: { b: 1 } }), false)
-    // DAG
-    const shared = { value: "a" }
-    strictEqual(SchemaAST.isStringTree({ left: shared, right: shared }), true)
     // circular reference
     const circular: Record<string, unknown> = {}
     circular.self = circular
     strictEqual(SchemaAST.isStringTree(circular), false)
-  })
-
-  it("isStringTree is stack safe", () => {
-    let valid: unknown = "value"
-    let invalid: unknown = 1
-    for (let i = 0; i < 25_000; i++) {
-      valid = { value: valid }
-      invalid = { value: invalid }
-    }
-    strictEqual(SchemaAST.isStringTree(valid), true)
-    strictEqual(SchemaAST.isStringTree(invalid), false)
   })
 
   describe("toType", () => {
@@ -166,48 +117,6 @@ describe("SchemaAST", () => {
       strictEqual(SchemaAST.isObjects(ast), true)
       strictEqual(ast.checks, undefined)
       strictEqual(ast.encodingChecks, undefined)
-    })
-
-    it("preserves structural checks when contained type shape changes", () => {
-      const check = Schema.isMinProperties(1)
-      const schema = Schema.Struct({ a: Schema.NumberFromString }).check(check)
-
-      const ast = SchemaAST.toEncoded(schema.ast)
-
-      strictEqual(SchemaAST.isObjects(ast), true)
-      strictEqual(ast.checks?.[0], check)
-    })
-
-    it("preserves structural checks when contained element shape changes", () => {
-      const check = Schema.isMinLength(1)
-      const schema = Schema.Array(Schema.NumberFromString).check(check)
-
-      const ast = SchemaAST.toEncoded(schema.ast)
-
-      strictEqual(SchemaAST.isArrays(ast), true)
-      strictEqual(ast.checks?.[0], check)
-    })
-
-    it("preserves structural checks when a declaration type parameter shape changes", () => {
-      const check = Schema.isMinSize(1)
-      const schema = Schema.ReadonlySet(Schema.NumberFromString).check(check)
-
-      const ast = SchemaAST.toEncoded(schema.ast)
-
-      strictEqual(SchemaAST.isDeclaration(ast), true)
-      strictEqual(ast.checks?.[0], check)
-    })
-
-    it("preserves only the structural members of a mixed filter group", () => {
-      const structural = Schema.isMinProperties(1)
-      const group = structural.and(Schema.makeFilter<object>(() => true))
-      const schema = Schema.Struct({ a: Schema.NumberFromString }).check(group)
-
-      const ast = SchemaAST.toEncoded(schema.ast)
-
-      strictEqual(SchemaAST.isObjects(ast), true)
-      strictEqual(ast.checks?.length, 1)
-      strictEqual(ast.checks?.[0], structural)
     })
   })
 
@@ -345,25 +254,6 @@ describe("SchemaAST", () => {
       deepStrictEqual(SchemaAST.getCandidates(undefined, ast.types), [])
     })
 
-    it("literal-only union with a unique symbol", () => {
-      const symbol = Symbol.for("a")
-      const schema = Schema.Union([Schema.UniqueSymbol(symbol), Schema.Literal("b")])
-      const ast = schema.ast
-      deepStrictEqual(SchemaAST.getCandidates(symbol, ast.types), [ast.types[0]])
-      deepStrictEqual(SchemaAST.getCandidates(Symbol("a"), ast.types), [])
-    })
-
-    it("should preserve duplicate literal candidates in member order", () => {
-      const schema = Schema.Union([
-        Schema.Literal("a").transform("first"),
-        Schema.Literal("a").transform("second"),
-        Schema.Never
-      ])
-      const ast = schema.ast
-      deepStrictEqual(SchemaAST.getCandidates("a", ast.types), [ast.types[0], ast.types[1]])
-      deepStrictEqual(SchemaAST.getCandidates("b", ast.types), [])
-    })
-
     it("String | Literals", () => {
       const schema = Schema.Union([Schema.String, Schema.Literals(["a", "b", "c"])])
       const ast = schema.ast
@@ -383,49 +273,6 @@ describe("SchemaAST", () => {
       deepStrictEqual(SchemaAST.getCandidates({ _tag: "c" }, ast.types), [])
       deepStrictEqual(SchemaAST.getCandidates("", ast.types), [ast.types[2]])
       deepStrictEqual(SchemaAST.getCandidates(1, ast.types), [])
-    })
-
-    it("should handle function-valued declarations with sentinels", () => {
-      const a = Schema.declare(
-        (input): input is () => void => typeof input === "function",
-        { "~sentinels": [{ key: "kind", literal: "a" }] }
-      )
-      const b = Schema.declare(
-        (input): input is () => void => typeof input === "function",
-        { "~sentinels": [{ key: "kind", literal: "b" }] }
-      )
-      const schema = Schema.Union([a, b])
-      const ast = schema.ast
-      const input = Object.assign(() => {}, { kind: "a" })
-      deepStrictEqual(SchemaAST.getCandidates(input, ast.types), [ast.types[0]])
-    })
-
-    it("should preserve duplicate candidates with a common discriminator", () => {
-      const member = Schema.Struct({ kind: Schema.Literal("a"), value: Schema.String })
-      const schema = Schema.Union([
-        member,
-        Schema.Struct({ kind: Schema.Literal("b"), value: Schema.Number }),
-        member,
-        Schema.Never
-      ])
-      const ast = schema.ast
-      deepStrictEqual(SchemaAST.getCandidates({ kind: "a" }, ast.types), [ast.types[0], ast.types[2]])
-      deepStrictEqual(SchemaAST.getCandidates({ kind: "b" }, ast.types), [ast.types[1]])
-      deepStrictEqual(SchemaAST.getCandidates({ kind: "c" }, ast.types), [])
-      deepStrictEqual(SchemaAST.getCandidates({}, ast.types), [])
-      deepStrictEqual(SchemaAST.getCandidates("a", ast.types), [])
-    })
-
-    it("should protect cached common sentinel candidates from external mutation", () => {
-      const schema = Schema.Union([
-        Schema.Struct({ kind: Schema.Literal("a") }),
-        Schema.Struct({ kind: Schema.Literal("b") })
-      ])
-      const ast = schema.ast
-      const input = { kind: "a" }
-      const candidates = SchemaAST.getCandidates(input, ast.types)
-      Reflect.set(candidates, candidates.length, ast.types[1])
-      deepStrictEqual(SchemaAST.getCandidates(input, ast.types), [ast.types[0]])
     })
 
     it("should collect matches from different sentinel keys without duplicates", () => {
@@ -457,34 +304,6 @@ describe("SchemaAST", () => {
       deepStrictEqual(SchemaAST.getCandidates(["c"], ast.types), [])
       deepStrictEqual(SchemaAST.getCandidates("", ast.types), [ast.types[2]])
       deepStrictEqual(SchemaAST.getCandidates(1, ast.types), [])
-    })
-
-    it("should handle tagged tuples with unique symbol sentinels", () => {
-      const a = Symbol.for("a")
-      const b = Symbol.for("b")
-      const schema = Schema.Union([
-        Schema.Tuple([Schema.UniqueSymbol(a), Schema.String]),
-        Schema.Tuple([Schema.UniqueSymbol(b), Schema.Number])
-      ])
-      const ast = schema.ast
-      deepStrictEqual(SchemaAST.getCandidates([a, "value"], ast.types), [ast.types[0]])
-      deepStrictEqual(SchemaAST.getCandidates([b, 1], ast.types), [ast.types[1]])
-      deepStrictEqual(SchemaAST.getCandidates([Symbol("a"), "value"], ast.types), [])
-    })
-
-    it(`should deduplicate repeated declaration sentinels in "oneOf" mode`, () => {
-      const member = Schema.declare(
-        (input): input is object => typeof input === "object" && input !== null,
-        {
-          "~sentinels": [
-            { key: "kind", literal: "a" },
-            { key: "kind", literal: "a" }
-          ]
-        }
-      )
-      const schema = Schema.Union([member], { mode: "oneOf" })
-      const input = { kind: "a" }
-      strictEqual(Schema.decodeUnknownSync(schema)(input), input)
     })
   })
 
@@ -541,7 +360,7 @@ describe("SchemaAST", () => {
     })
 
     it("Number", () => {
-      const input = { "1": 1, "1.5": 2, "-2": 3, a: 4, NaN: 5, x1: 6, "1x": 7 }
+      const input = { "1": 1, "1.5": 2, "-2": 3, a: 4, NaN: 5 }
       deepStrictEqual(SchemaAST.getIndexSignatureKeys(input, Schema.Number.ast, SchemaAST.defaultParseOptions), [
         "1",
         "1.5",
@@ -568,13 +387,13 @@ describe("SchemaAST", () => {
 
   describe("record", () => {
     it("treats Never parameters as no keys", () => {
-      const ast = SchemaAST.record(Schema.Never.ast, Schema.Number.ast)
+      const ast = SchemaAST.record(Schema.Never.ast, Schema.Number.ast, undefined)
       deepStrictEqual(ast.propertySignatures, [])
       deepStrictEqual(ast.indexSignatures, [])
     })
 
     it("ignores Never arms in union parameters", () => {
-      const ast = SchemaAST.record(Schema.Union([Schema.String, Schema.Never]).ast, Schema.Number.ast)
+      const ast = SchemaAST.record(Schema.Union([Schema.String, Schema.Never]).ast, Schema.Number.ast, undefined)
       const indexSignature = ast.indexSignatures[0]!
 
       deepStrictEqual(ast.propertySignatures, [])
@@ -586,19 +405,20 @@ describe("SchemaAST", () => {
 
   describe("IndexSignature", () => {
     it("accepts valid parameters on both type and encoded side", () => {
-      doesNotThrow(() => new SchemaAST.IndexSignature(Schema.String.ast, Schema.Number.ast))
-      doesNotThrow(() => new SchemaAST.IndexSignature(Schema.NumberFromString.ast, Schema.Number.ast))
+      doesNotThrow(() => new SchemaAST.IndexSignature(Schema.String.ast, Schema.Number.ast, undefined))
+      doesNotThrow(() => new SchemaAST.IndexSignature(Schema.NumberFromString.ast, Schema.Number.ast, undefined))
       doesNotThrow(() =>
         new SchemaAST.IndexSignature(
           Schema.Union([Schema.String, Schema.NumberFromString]).ast,
-          Schema.Number.ast
+          Schema.Number.ast,
+          undefined
         )
       )
     })
 
     it("rejects invalid type side parameters", () => {
       throws(
-        () => new SchemaAST.IndexSignature(Schema.Literal("a").ast, Schema.Number.ast),
+        () => new SchemaAST.IndexSignature(Schema.Literal("a").ast, Schema.Number.ast, undefined),
         new Error("Invalid index signature parameter Literal")
       )
     })
@@ -611,7 +431,7 @@ describe("SchemaAST", () => {
         })
       )
       throws(
-        () => new SchemaAST.IndexSignature(StringFromBoolean.ast, Schema.Number.ast),
+        () => new SchemaAST.IndexSignature(StringFromBoolean.ast, Schema.Number.ast, undefined),
         new Error("Invalid index signature parameter String")
       )
     })

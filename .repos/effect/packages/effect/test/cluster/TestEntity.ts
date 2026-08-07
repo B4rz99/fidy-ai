@@ -1,4 +1,4 @@
-import { type Cause, Context, Effect, Latch, Layer, MutableRef, Option, Queue, Schedule, Schema, Stream } from "effect"
+import { type Cause, Context, Effect, Layer, MutableRef, Option, Queue, Schedule, Schema, Stream } from "effect"
 import type { Envelope } from "effect/unstable/cluster"
 import { ClusterSchema, Entity } from "effect/unstable/cluster"
 import { MemoryTransaction } from "effect/unstable/cluster/MessageStorage"
@@ -58,7 +58,6 @@ export class TestEntityState extends Context.Service<TestEntityState>()("TestEnt
     >()
     const defectTrigger = MutableRef.make(false)
     const layerBuilds = MutableRef.make(0)
-    const buildLatch = Latch.makeUnsafe(true)
 
     return {
       messages,
@@ -66,8 +65,7 @@ export class TestEntityState extends Context.Service<TestEntityState>()("TestEnt
       envelopes,
       interrupts,
       defectTrigger,
-      layerBuilds,
-      buildLatch
+      layerBuilds
     } as const
   })
 }) {
@@ -79,7 +77,6 @@ export const TestEntityNoState = TestEntity.toLayer(
     const state = yield* TestEntityState
 
     MutableRef.update(state.layerBuilds, (count) => count + 1)
-    yield* state.buildLatch.await
 
     const never = (envelope: any) =>
       Effect.suspend(() => {

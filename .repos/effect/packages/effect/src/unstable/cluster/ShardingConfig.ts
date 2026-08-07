@@ -70,11 +70,7 @@ export class ShardingConfig extends Context.Service<ShardingConfig, {
    */
   readonly shardsPerGroup: number
   /**
-   * The maximum interval between shard lock refreshes.
-   *
-   * The runner may shorten this interval to one third of
-   * `shardLockExpiration` to preserve enough time to stop entities safely if
-   * lock storage becomes unavailable.
+   * Shard lock refresh interval.
    */
   readonly shardLockRefreshInterval: Duration.Input
   /**

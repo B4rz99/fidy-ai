@@ -89,7 +89,7 @@ export const testLayer = <E>(layer: Layer.Layer<KeyValueStore.KeyValueStore, E>)
 describe("KeyValueStore / layerMemory", () => testLayer(KeyValueStore.layerMemory))
 
 describe("KeyValueStore / prefix", () => {
-  it.effect("prefixes the keys", () =>
+  it("prefixes the keys", () =>
     Effect.gen(function*() {
       const store = yield* (KeyValueStore.KeyValueStore)
       const prefixed = KeyValueStore.prefix(store, "prefix/")
@@ -103,7 +103,8 @@ describe("KeyValueStore / prefix", () => {
       strictEqual(yield* (store.get("prefix/foo")), "barbar")
       assertTrue(yield* (store.has("prefix/foo")))
     }).pipe(
-      Effect.provide(KeyValueStore.layerMemory)
+      Effect.provide(KeyValueStore.layerMemory),
+      Effect.runPromise
     ))
 })
 
@@ -113,7 +114,7 @@ describe("toSchemaStore", () => {
     age: Schema.Number
   }) {}
 
-  it.effect("encodes & decodes", () =>
+  it("encodes & decodes", () =>
     Effect.gen(function*() {
       const store = yield* KeyValueStore.KeyValueStore
       const schemaStore = KeyValueStore.toSchemaStore(store, User)
@@ -125,10 +126,11 @@ describe("toSchemaStore", () => {
       strictEqual(value.value.name, "foo")
       strictEqual(value.value.age, 43)
     }).pipe(
-      Effect.provide(KeyValueStore.layerMemory)
+      Effect.provide(KeyValueStore.layerMemory),
+      Effect.runPromise
     ))
 
-  it.effect("prefix", () =>
+  it("prefix", () =>
     Effect.gen(function*() {
       const store = yield* KeyValueStore.KeyValueStore
       const schemaStore = KeyValueStore.toSchemaStore(store, User)
@@ -140,10 +142,11 @@ describe("toSchemaStore", () => {
         strictEqual(value.value.age, 42)
       }
     }).pipe(
-      Effect.provide(KeyValueStore.layerMemory)
+      Effect.provide(KeyValueStore.layerMemory),
+      Effect.runPromise
     ))
 
-  it.effect("json compliant", () =>
+  it("json compliant", () =>
     Effect.gen(function*() {
       const store = yield* KeyValueStore.KeyValueStore
       const schema = Schema.Struct({
@@ -155,6 +158,7 @@ describe("toSchemaStore", () => {
       assertTrue(Option.isSome(value))
       deepStrictEqual(value.value.a, new Date(0))
     }).pipe(
-      Effect.provide(KeyValueStore.layerMemory)
+      Effect.provide(KeyValueStore.layerMemory),
+      Effect.runPromise
     ))
 })

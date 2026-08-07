@@ -56,9 +56,7 @@ export interface EntityManager {
   }) => boolean
   readonly clearProcessed: () => void
 
-  readonly interruptShard: (shardId: ShardId, options?: {
-    readonly force?: boolean
-  }) => Effect.Effect<void>
+  readonly interruptShard: (shardId: ShardId) => Effect.Effect<void>
 
   readonly activeEntityCount: Effect.Effect<number>
 }
@@ -119,10 +117,7 @@ export const make = Effect.fnUntraced(function*<
   entityRpcs.set(KeepAliveRpc._tag, KeepAliveRpc as any)
 
   const activeServers = new Map<EntityId, EntityState>()
-  const serverCloseLatches = new Map<EntityAddress, {
-    readonly closed: Latch.Latch
-    readonly force: Latch.Latch
-  }>()
+  const serverCloseLatches = new Map<EntityAddress, Latch.Latch>()
   const processedRequestIds = new Set<Snowflake.Snowflake>()
 
   const entities: ResourceMap<
@@ -137,16 +132,12 @@ export const make = Effect.fnUntraced(function*<
     const scope = yield* Effect.scope
     const endLatch = Latch.makeUnsafe()
     const keepAliveLatch = Latch.makeUnsafe()
-    const closeLatches = {
-      closed: Latch.makeUnsafe(),
-      force: Latch.makeUnsafe()
-    }
 
     // on shutdown, reset the storage for the entity
     yield* Scope.addFinalizerExit(
       scope,
       () => {
-        serverCloseLatches.get(address)?.closed.openUnsafe()
+        serverCloseLatches.get(address)?.openUnsafe()
         serverCloseLatches.delete(address)
         return Effect.void
       }
@@ -382,19 +373,14 @@ export const make = Effect.fnUntraced(function*<
       scope,
       Effect.withFiber((fiber) => {
         activeServers.delete(address.entityId)
+        serverCloseLatches.set(address, Latch.makeUnsafe())
         internalInterruptors.add(fiber.id)
-        return Effect.raceFirst(
-          state.write(0, { _tag: "Eof" }).pipe(
-            Effect.andThen(endLatch.await),
-            Effect.timeoutOption(config.entityTerminationTimeout),
-            Effect.interruptible
-          ),
-          Effect.interruptible(closeLatches.force.await)
+        return state.write(0, { _tag: "Eof" }).pipe(
+          Effect.andThen(Effect.interruptible(endLatch.await)),
+          Effect.timeoutOption(config.entityTerminationTimeout)
         )
       })
     )
-    // Do not make shard interruption wait for an entity that is still building.
-    serverCloseLatches.set(address, closeLatches)
     activeServers.set(address.entityId, state)
 
     return state
@@ -551,24 +537,17 @@ export const make = Effect.fnUntraced(function*<
   const runFork = Effect.runForkWith(context)
 
   return identity<EntityManager>({
-    interruptShard: (shardId: ShardId, options) =>
+    interruptShard: (shardId: ShardId) =>
       Effect.suspend(function loop(): Effect.Effect<void> {
         const fibers = Arr.empty<Fiber.Fiber<void>>()
-        if (options?.force === true) {
-          serverCloseLatches.forEach((latches, address) => {
-            if (shardId[Equal.symbol](address.shardId)) {
-              latches.force.openUnsafe()
-            }
-          })
-        }
         activeServers.forEach((state) => {
           if (shardId[Equal.symbol](state.address.shardId)) {
             fibers.push(runFork(entities.removeIgnore(state.address)))
           }
         })
-        serverCloseLatches.forEach((latches, address) => {
+        serverCloseLatches.forEach((latch, address) => {
           if (shardId[Equal.symbol](address.shardId)) {
-            fibers.push(runFork(latches.closed.await))
+            fibers.push(runFork(latch.await))
           }
         })
         if (fibers.length === 0) return Effect.void

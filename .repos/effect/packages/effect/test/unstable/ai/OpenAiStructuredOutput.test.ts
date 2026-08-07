@@ -5,16 +5,7 @@ import { toCodecOpenAI } from "effect/unstable/ai/OpenAiStructuredOutput"
 import * as Tool from "effect/unstable/ai/Tool"
 
 function assertJsonSchema(schema: Schema.Constraint, expected: JsonSchema.JsonSchema) {
-  if (expected.type === "object" && expected.anyOf === undefined) {
-    assert.deepStrictEqual(toCodecOpenAI(schema).jsonSchema, expected)
-    return
-  }
-  assert.deepStrictEqual(toCodecOpenAI(Schema.Struct({ value: schema })).jsonSchema, {
-    type: "object",
-    properties: { value: expected },
-    required: ["value"],
-    additionalProperties: false
-  })
+  assert.deepStrictEqual(toCodecOpenAI(schema).jsonSchema, expected)
 }
 
 function assertError(schema: Schema.Constraint, message: string) {
@@ -22,61 +13,21 @@ function assertError(schema: Schema.Constraint, message: string) {
 }
 
 describe("toCodecOpenAI", () => {
-  describe("Canonical JSON and mechanical invariants", () => {
-    describe("Root", () => {
-      const message = `OpenAiStructuredOutput: Root JSON Schema must have type "object" and must not use "anyOf"`
-
-      it("rejects primitive roots", () => {
-        assertError(Schema.String, message)
-      })
-
-      it("rejects array roots", () => {
-        assertError(Schema.Array(Schema.String), message)
-      })
-
-      it("rejects anyOf roots", () => {
-        assertError(
-          Schema.Union([
-            Schema.Struct({ a: Schema.String }),
-            Schema.Struct({ b: Schema.String })
-          ]),
-          message
-        )
-      })
-
-      it("rejects unconstrained roots", () => {
-        assertError(Schema.Any, message)
-        assertError(Schema.Unknown, message)
-        assertError(Schema.Never, message)
-      })
+  describe("Unsupported", () => {
+    it("Undefined", () => {
+      assertError(Schema.Undefined, "Unsupported AST Undefined")
     })
 
-    it("encodes Undefined as null", () => {
-      assertJsonSchema(Schema.Undefined, { type: "null" })
-    })
-
-    it("encodes a bigint Literal as a string", () => {
-      assertJsonSchema(Schema.Literal(1n), { type: "string", enum: ["1"] })
+    it("Literal with unsupported type", () => {
+      assertError(Schema.Literal(1n), "Unsupported literal type bigint")
     })
 
     describe("Arrays", () => {
-      it("encodes post-rest elements as object properties", async () => {
-        const schema = Schema.TupleWithRest(Schema.Tuple([]), [Schema.String, Schema.String])
-        const result = toCodecOpenAI(schema)
-        assert.deepStrictEqual(result.jsonSchema, {
-          type: "object",
-          properties: {
-            __rest__: { type: "array", items: { type: "string" } },
-            __tail_0__: { type: "string" }
-          },
-          required: ["__rest__", "__tail_0__"],
-          additionalProperties: false,
-          description:
-            "Tuple encoded as an object with numeric string keys ('0', '1', ...). If present, '__rest__' contains remaining elements. Post-rest elements use '__tail_0__', '__tail_1__', and so on"
-        })
-        const asserts = new TestSchema.Asserts(result.codec)
-        await asserts.encoding().succeed(["a", "b"], { __rest__: ["a"], __tail_0__: "b" })
-        await asserts.decoding().succeed({ __rest__: ["a"], __tail_0__: "b" }, ["a", "b"])
+      it("post-rest elements", () => {
+        assertError(
+          Schema.TupleWithRest(Schema.Tuple([]), [Schema.String, Schema.String]),
+          "Post-rest elements are not supported for arrays"
+        )
       })
     })
 
@@ -84,7 +35,7 @@ describe("toCodecOpenAI", () => {
       it("non-string property signature name", () => {
         assertError(
           Schema.Struct({ [Symbol.for("effect/Schema/test/a")]: Schema.String }),
-          "Objects property names must be strings"
+          "Property names must be strings"
         )
       })
     })
@@ -273,7 +224,9 @@ describe("toCodecOpenAI", () => {
       assertJsonSchema(Schema.Number, {
         "anyOf": [
           { "type": "number" },
-          { "type": "string", "enum": ["Infinity", "-Infinity", "NaN"] }
+          { "type": "string", "enum": ["NaN"] },
+          { "type": "string", "enum": ["Infinity"] },
+          { "type": "string", "enum": ["-Infinity"] }
         ]
       })
     })
@@ -289,10 +242,10 @@ describe("toCodecOpenAI", () => {
         })
       })
 
-      it("Finite + string format", () => {
+      it("Finite + supported format", () => {
         assertJsonSchema(Schema.Finite.annotate({ format: "duration" }), {
           "type": "number",
-          "description": "a value with a format of duration"
+          "format": "duration"
         })
       })
 
@@ -373,10 +326,10 @@ describe("toCodecOpenAI", () => {
         })
       })
 
-      it("Int + string format", () => {
+      it("Int + supported format", () => {
         assertJsonSchema(Schema.Int.annotate({ format: "duration" }), {
           "type": "integer",
-          "description": "a value with a format of duration"
+          "format": "duration"
         })
       })
 
@@ -553,11 +506,9 @@ describe("toCodecOpenAI", () => {
 
       const encoding = asserts.encoding()
       await encoding.succeed(["a", 1], { "0": "a", "1": 1 })
-      await encoding.succeed(["a"], { "0": "a", "1": null })
 
       const decoding = asserts.decoding()
       await decoding.succeed({ "0": "a", "1": 1 }, ["a", 1])
-      await decoding.succeed({ "0": "a", "1": null }, ["a"])
     })
   })
 
@@ -654,7 +605,7 @@ describe("toCodecOpenAI", () => {
       "required": ["name"],
       "additionalProperties": false,
       "$defs": {
-        "PersonJsonEncoding": {
+        "Person": {
           "type": "object",
           "properties": {
             "name": { "type": "string" }
@@ -697,64 +648,14 @@ describe("toCodecOpenAI", () => {
           "additionalProperties": false
         }
       })
-      const codec = toCodecOpenAI(Schema.Struct({ value: schema })).codec
+      const codec = toCodecOpenAI(schema).codec
       const asserts = new TestSchema.Asserts(codec)
 
       const encoding = asserts.encoding()
-      await encoding.succeed(
-        { value: { "a": 1, "b": 2 } },
-        { value: [{ 0: "a", 1: 1 }, { 0: "b", 1: 2 }] }
-      )
+      await encoding.succeed({ "a": 1, "b": 2 }, [{ 0: "a", 1: 1 }, { 0: "b", 1: 2 }])
 
       const decoding = asserts.decoding()
-      await decoding.succeed(
-        { value: [{ 0: "a", 1: 1 }, { 0: "b", 1: 2 }] },
-        { value: { "a": 1, "b": 2 } }
-      )
-    })
-
-    it("Record with properties and an index signature", async () => {
-      const schema = Schema.Record(
-        Schema.Union([Schema.Literal("fixed"), Schema.String]),
-        Schema.String
-      )
-      const expected = {
-        type: "array",
-        description: "Object encoded as array of [key, value] pairs. Apply object constraints to the decoded object",
-        items: {
-          type: "object",
-          description:
-            "Tuple encoded as an object with numeric string keys ('0', '1', ...). If present, '__rest__' contains remaining elements",
-          properties: {
-            "0": {
-              anyOf: [
-                { type: "string", enum: ["fixed"] },
-                { type: "string" }
-              ]
-            },
-            "1": { type: "string" }
-          },
-          required: ["0", "1"],
-          additionalProperties: false
-        }
-      } as const
-      assertJsonSchema(schema, expected)
-
-      const result = toCodecOpenAI(Schema.Struct({ value: schema }))
-
-      const asserts = new TestSchema.Asserts(result.codec)
-      await asserts.encoding().succeed(
-        { value: { fixed: "required", dynamic: "value" } },
-        { value: [{ 0: "fixed", 1: "required" }, { 0: "dynamic", 1: "value" }] }
-      )
-      await asserts.decoding().succeed(
-        { value: [{ 0: "fixed", 1: "required" }, { 0: "dynamic", 1: "value" }] },
-        { value: { fixed: "required", dynamic: "value" } }
-      )
-      assert.strictEqual(
-        Schema.decodeUnknownExit(result.codec)({ value: [{ 0: "dynamic", 1: "value" }] })._tag,
-        "Failure"
-      )
+      await decoding.succeed([{ 0: "a", 1: 1 }, { 0: "b", 1: 2 }], { "a": 1, "b": 2 })
     })
 
     it("Record(String, Finite) + description", () => {
@@ -777,7 +678,7 @@ describe("toCodecOpenAI", () => {
       })
     })
 
-    it("Record(String, Finite) + isMinProperties", async () => {
+    it("Record(String, Finite) + isMinProperties", () => {
       const schema = Schema.Record(Schema.String, Schema.Finite).check(Schema.isMinProperties(2))
       assertJsonSchema(schema, {
         "type": "array",
@@ -793,15 +694,8 @@ describe("toCodecOpenAI", () => {
           },
           "required": ["0", "1"],
           "additionalProperties": false
-        },
-        "minItems": 2
+        }
       })
-      const result = toCodecOpenAI(Schema.Struct({ value: schema }))
-      await new TestSchema.Asserts(result.codec).decoding().fail(
-        { value: [{ 0: "a", 1: 1 }, { 0: "a", 1: 2 }] },
-        `Expected a value with at least 2 entries, got {"a":2}
-  at ["value"]`
-      )
     })
 
     it("Record(String, Finite) + isMinProperties + description", () => {
@@ -822,8 +716,7 @@ describe("toCodecOpenAI", () => {
           },
           "required": ["0", "1"],
           "additionalProperties": false
-        },
-        "minItems": 2
+        }
       })
     })
   })

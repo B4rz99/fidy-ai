@@ -1,6 +1,6 @@
 # `@effect/sql-mysql2`
 
-An Effect SQL implementation using the `mysql2` library.
+An `@effect/sql` implementation using the `mysql2` library.
 
 ## Documentation
 

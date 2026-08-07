@@ -31,7 +31,6 @@ import * as RpcSerialization from "effect/unstable/rpc/RpcSerialization"
 import type { SqlClient } from "effect/unstable/sql/SqlClient"
 import { createServer } from "node:http"
 import { layerK8sHttpClient } from "./NodeClusterSocket.ts"
-import * as NodeCrypto from "./NodeCrypto.ts"
 import * as NodeHttpClient from "./NodeHttpClient.ts"
 import * as NodeHttpServer from "./NodeHttpServer.ts"
 import type { NodeServices } from "./NodeServices.ts"
@@ -116,7 +115,7 @@ export const layer = <
         ? MessageStorage.layerNoop
         : options?.storage === "byo"
         ? Layer.empty
-        : Layer.orDie(SqlMessageStorage.layer).pipe(Layer.provide(NodeCrypto.layer))
+        : Layer.orDie(SqlMessageStorage.layer)
     ),
     Layer.provide(
       options?.storage === "local"

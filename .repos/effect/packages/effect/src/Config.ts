@@ -12,7 +12,6 @@ import * as ConfigProvider from "./ConfigProvider.ts"
 import * as Effect from "./Effect.ts"
 import * as Effectable from "./Effectable.ts"
 import { dual } from "./Function.ts"
-import * as InternalRecord from "./internal/record.ts"
 import * as LogLevel_ from "./LogLevel.ts"
 import * as Option from "./Option.ts"
 import * as Predicate from "./Predicate.ts"
@@ -509,7 +508,7 @@ const dump: (
       const out: Record<string, Schema.StringTree> = {}
       for (const key of stat.keys) {
         const child = yield* dump(provider, [...path, key])
-        if (child !== undefined) InternalRecord.assignProperty(out, key, child)
+        if (child !== undefined) out[key] = child
       }
       return out
     }
@@ -539,7 +538,7 @@ const recur: (
           const name = ps.name
           if (typeof name === "string") {
             const value = yield* recur(ps.type, provider, [...path, name])
-            if (value !== undefined) InternalRecord.assignProperty(out, name, value)
+            if (value !== undefined) out[name] = value
           }
         }
         if (ast.indexSignatures.length > 0) {
@@ -549,7 +548,7 @@ const recur: (
               for (const key of stat.keys) {
                 if (!Object.hasOwn(out, key) && matches(key)) {
                   const value = yield* recur(is.type, provider, [...path, key])
-                  if (value !== undefined) InternalRecord.assignProperty(out, key, value)
+                  if (value !== undefined) out[key] = value
                 }
               }
             }
@@ -1339,7 +1338,7 @@ export function url(name?: string) {
  *
  * **Details**
  *
- * Shortcut for `Config.schema(Schema.Date, name)`.
+ * Shortcut for `Config.schema(Schema.DateValid, name)`.
  *
  * **Gotchas**
  *
@@ -1361,7 +1360,7 @@ export function url(name?: string) {
  * @since 2.0.0
  */
 export function date(name?: string) {
-  return schema(Schema.Date, name)
+  return schema(Schema.DateValid, name)
 }
 
 /**

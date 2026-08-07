@@ -343,14 +343,14 @@ export const makeSingle = <const Kind extends ParamKind, A>(params: {
     params.kind === argumentKind
       ? parsePositional(params.name, params.primitiveType, args)
       : parseFlag(params.name, params.primitiveType, args)
-  return Object.setPrototypeOf({
+  return Object.assign(Object.create(Proto), {
     _tag: "Single",
     ...params,
     description: params.description ?? Option.none(),
     aliases: params.aliases ?? [],
     hidden: params.hidden ?? false,
     parse
-  }, Proto)
+  })
 }
 
 /**
@@ -865,7 +865,7 @@ export const keyValuePair = <Kind extends ParamKind>(
       }),
       { min: 1 }
     ),
-    (objects) => Object.fromEntries(objects.flatMap(Object.entries))
+    (objects) => Object.assign({}, ...objects)
   )
 
 /**
@@ -2101,19 +2101,9 @@ export const getUnderlyingSingleOrThrow = <Kind extends ParamKind, A>(
  */
 export const getParamMetadata = <Kind extends ParamKind, A>(
   param: Param<Kind, A>
-): {
-  readonly isOptional: boolean
-  readonly isVariadic: boolean
-  readonly variadicMin: Option.Option<number>
-  readonly variadicMax: Option.Option<number>
-} => {
+): { isOptional: boolean; isVariadic: boolean } => {
   return matchParam(param, {
-    Single: () => ({
-      isOptional: false,
-      isVariadic: false,
-      variadicMin: Option.none(),
-      variadicMax: Option.none()
-    }),
+    Single: () => ({ isOptional: false, isVariadic: false }),
     Map: (mapped) => getParamMetadata(mapped.param),
     Transform: (mapped) => getParamMetadata(mapped.param),
     Optional: (optional) => ({
@@ -2122,9 +2112,7 @@ export const getParamMetadata = <Kind extends ParamKind, A>(
     }),
     Variadic: (variadic) => ({
       ...getParamMetadata(variadic.param),
-      isVariadic: true,
-      variadicMin: variadic.min,
-      variadicMax: variadic.max
+      isVariadic: true
     })
   })
 }

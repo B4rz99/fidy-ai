@@ -1,6 +1,6 @@
 # `@effect/sql-pg`
 
-An Effect SQL implementation using the `pg` library.
+An `@effect/sql` implementation using the `pg` library.
 
 ## Documentation
 

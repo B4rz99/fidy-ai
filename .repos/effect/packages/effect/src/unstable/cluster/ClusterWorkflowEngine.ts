@@ -83,7 +83,7 @@ export const make = Effect.gen(function*() {
       | Rpc.Rpc<
         "activity",
         Schema.Struct<
-          { name: typeof Schema.String; attempt: typeof Schema.Int; withTransaction: typeof Schema.Boolean }
+          { name: typeof Schema.String; attempt: typeof Schema.Number; withTransaction: typeof Schema.Boolean }
         >,
         Schema.declare<Workflow.Result<any, any>>
       >
@@ -97,7 +97,7 @@ export const make = Effect.gen(function*() {
       | Rpc.Rpc<"deferred", Schema.Struct<{ name: typeof Schema.String; exit: typeof ExitUnknown }>, typeof ExitUnknown>
       | Rpc.Rpc<
         "activity",
-        Schema.Struct<{ name: typeof Schema.String; attempt: typeof Schema.Int }>,
+        Schema.Struct<{ name: typeof Schema.String; attempt: typeof Schema.Number }>,
         Schema.declare<Workflow.Result<any, any>>
       >
       | Rpc.Rpc<"resume">
@@ -644,7 +644,7 @@ const ExitUnknown = Schema.Exit(AnyOrVoid, AnyOrVoid, Schema.Any)
 const ActivityRpc = Rpc.make("activity", {
   payload: {
     name: Schema.String,
-    attempt: Schema.Int,
+    attempt: Schema.Number,
     withTransaction: Schema.Boolean.pipe(
       Schema.withDecodingDefault(Effect.succeed(false))
     )

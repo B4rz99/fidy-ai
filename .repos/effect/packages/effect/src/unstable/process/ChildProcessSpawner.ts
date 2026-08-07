@@ -200,7 +200,7 @@ const HandleProto = {
  * @since 4.0.0
  */
 export const makeHandle = (params: Omit<ChildProcessHandle, typeof HandleTypeId>): ChildProcessHandle =>
-  Object.setPrototypeOf({ ...params }, HandleProto)
+  Object.assign(Object.create(HandleProto), params)
 
 /**
  * Creates a `ChildProcessSpawner` service from a `spawn` function, deriving

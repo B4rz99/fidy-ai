@@ -429,6 +429,5 @@ export const primaryKeyByAddress = (options: {
   readonly tag: string
   readonly id: string
 }): string =>
-  // storage drivers with fixed-width key columns (e.g. SqlMessageStorage)
-  // hash this composed key at their own boundary
+  // hash the entity address to save space?
   `${options.address.entityType}/${options.address.entityId}/${options.tag}/${options.id}`

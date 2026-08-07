@@ -11,6 +11,7 @@ from `References` and related modules.
 
 | v3 FiberRef                         | v4 Reference                       |
 | ----------------------------------- | ---------------------------------- |
+| `FiberRef.currentConcurrency`       | `References.CurrentConcurrency`    |
 | `FiberRef.currentLogLevel`          | `References.CurrentLogLevel`       |
 | `FiberRef.currentMinimumLogLevel`   | `References.MinimumLogLevel`       |
 | `FiberRef.currentLogAnnotations`    | `References.CurrentLogAnnotations` |
@@ -87,8 +88,8 @@ set via `Effect.provideService`, which scopes the value to the provided effect.
 import { Effect, FiberRef } from "effect"
 
 const program = Effect.gen(function*() {
-  yield* FiberRef.set(FiberRef.currentMaxOpsBeforeYield, 500)
-  // subsequent code sees maxOpsBeforeYield = 500
+  yield* FiberRef.set(FiberRef.currentConcurrency, 10)
+  // subsequent code sees concurrency = 10
 })
 ```
 
@@ -99,10 +100,10 @@ import { Effect, References } from "effect"
 
 const program = Effect.provideService(
   Effect.gen(function*() {
-    const maxOps = yield* References.MaxOpsBeforeYield
-    console.log(maxOps) // 500
+    const concurrency = yield* References.CurrentConcurrency
+    console.log(concurrency) // 10
   }),
-  References.MaxOpsBeforeYield,
-  500
+  References.CurrentConcurrency,
+  10
 )
 ```

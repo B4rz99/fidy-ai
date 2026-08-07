@@ -1,14 +1,12 @@
 import { describe, test } from "@effect/vitest"
 import { deepStrictEqual, strictEqual } from "@effect/vitest/utils"
-import { Context, Effect, Stream } from "effect"
+import { Context, Effect, References, Stream } from "effect"
 import * as Layer from "effect/Layer"
 import { HttpEffect, HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
 import {
   appendPreResponseHandlerUnsafe,
   requestPreResponseHandlers
 } from "effect/unstable/http/internal/preResponseHandler"
-
-const TestValue = Context.Reference<number>("test/TestValue", { defaultValue: () => 0 })
 
 describe("HttpEffect", () => {
   describe("toWebHandler", () => {
@@ -86,9 +84,9 @@ describe("HttpEffect", () => {
 
     test("stream runtime", async () => {
       const handler = Effect.succeed(HttpServerResponse.stream(
-        Stream.fromEffect(TestValue).pipe(Stream.map(String), Stream.encodeText)
+        Stream.fromEffect(References.CurrentConcurrency).pipe(Stream.map(String), Stream.encodeText)
       )).pipe(
-        HttpEffect.toWebHandlerWith(TestValue.context(420))
+        HttpEffect.toWebHandlerWith(References.CurrentConcurrency.context(420))
       )
       const response = await handler(new Request("http://localhost:3000/"))
       strictEqual(await response.text(), "420")
@@ -97,13 +95,13 @@ describe("HttpEffect", () => {
     test("stream layer", async () => {
       const { handler } = HttpEffect.toWebHandlerLayer(
         Effect.succeed(HttpServerResponse.stream(
-          TestValue.pipe(
+          References.CurrentConcurrency.pipe(
             Stream.fromEffect,
             Stream.map(String),
             Stream.encodeText
           )
         )),
-        Layer.succeed(TestValue, 420)
+        Layer.succeed(References.CurrentConcurrency, 420)
       )
       const response = await handler(new Request("http://localhost:3000/"))
       strictEqual(await response.text(), "420")

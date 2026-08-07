@@ -58,9 +58,6 @@ export const red = `${ESC}31m`
 export const green = `${ESC}32m`
 
 /** @internal */
-export const magenta = `${ESC}35m`
-
-/** @internal */
 export const white = `${ESC}37m`
 
 /** @internal */

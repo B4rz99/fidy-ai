@@ -11,10 +11,8 @@
  */
 import * as Cache from "../../Cache.ts"
 import * as Context from "../../Context.ts"
-import * as Duration from "../../Duration.ts"
 import * as Effect from "../../Effect.ts"
 import * as Equal from "../../Equal.ts"
-import * as Exit from "../../Exit.ts"
 import { constant, identity } from "../../Function.ts"
 import * as Hash from "../../Hash.ts"
 import * as Schema from "../../Schema.ts"
@@ -52,13 +50,10 @@ export const make = Effect.fnUntraced(function*(
     readonly send: <A = unknown>(command: string, ...args: ReadonlyArray<string>) => Effect.Effect<A, RedisError>
   }
 ) {
-  const scriptCache = yield* Cache.makeWith(
-    (script: Script<any>) => options.send<string>("SCRIPT", "LOAD", script.lua),
-    {
-      capacity: Number.POSITIVE_INFINITY,
-      timeToLive: (exit) => Exit.isSuccess(exit) ? Duration.infinity : Duration.zero
-    }
-  )
+  const scriptCache = yield* Cache.make({
+    lookup: (script: Script<any>) => options.send<string>("SCRIPT", "LOAD", script.lua),
+    capacity: Number.POSITIVE_INFINITY
+  })
 
   const eval_ = <
     Config extends {
@@ -186,8 +181,8 @@ export const script = <Params extends ReadonlyArray<any>>(
   params: Params
   result: void
 }> =>
-  Object.setPrototypeOf({
+  Object.assign(Object.create(ScriptProto), {
     ...options,
     params: f,
     numberOfKeys: typeof options.numberOfKeys === "number" ? constant(options.numberOfKeys) : options.numberOfKeys
-  }, ScriptProto)
+  })

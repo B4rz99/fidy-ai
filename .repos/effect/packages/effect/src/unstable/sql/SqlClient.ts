@@ -62,7 +62,8 @@ export interface SqlClient extends Constructor {
   readonly transactionService: Context.Service<TransactionConnection, TransactionConnection.Service>
 
   /**
-   * Use the Reactivity service to create a reactive query.
+   * Use the Reactivity service from @effect/experimental to create a reactive
+   * query.
    */
   readonly reactive: <A, E, R>(
     keys: ReadonlyArray<unknown> | ReadonlyRecord<string, ReadonlyArray<unknown>>,

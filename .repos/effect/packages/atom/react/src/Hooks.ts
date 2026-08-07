@@ -293,14 +293,8 @@ export const useAtom = <R, W, const Mode extends "value" | "promise" | "promiseE
 }
 
 const atomPromiseMap = {
-  suspendOnWaiting: new WeakMap<
-    AtomRegistry.AtomRegistry,
-    WeakMap<Atom.Atom<any>, Promise<void>>
-  >(),
-  default: new WeakMap<
-    AtomRegistry.AtomRegistry,
-    WeakMap<Atom.Atom<any>, Promise<void>>
-  >()
+  suspendOnWaiting: new Map<Atom.Atom<any>, Promise<void>>(),
+  default: new Map<Atom.Atom<any>, Promise<void>>()
 }
 
 function atomToPromise<A, E>(
@@ -308,12 +302,7 @@ function atomToPromise<A, E>(
   atom: Atom.Atom<AsyncResult.AsyncResult<A, E>>,
   suspendOnWaiting: boolean
 ) {
-  const registries = suspendOnWaiting ? atomPromiseMap.suspendOnWaiting : atomPromiseMap.default
-  let map = registries.get(registry)
-  if (map === undefined) {
-    map = new WeakMap()
-    registries.set(registry, map)
-  }
+  const map = suspendOnWaiting ? atomPromiseMap.suspendOnWaiting : atomPromiseMap.default
   let promise = map.get(atom)
   if (promise !== undefined) {
     return promise

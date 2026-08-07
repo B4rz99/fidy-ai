@@ -16,7 +16,6 @@ import * as Context from "../../Context.ts"
 import * as Effect from "../../Effect.ts"
 import type * as FileSystem from "../../FileSystem.ts"
 import * as Inspectable from "../../Inspectable.ts"
-import * as InternalRecord from "../../internal/record.ts"
 import * as Option from "../../Option.ts"
 import type * as Path from "../../Path.ts"
 import type { ReadonlyRecord } from "../../Record.ts"
@@ -146,15 +145,15 @@ export class ParsedSearchParams extends Context.Service<
 export const searchParamsFromURL = (url: URL): ReadonlyRecord<string, string | Array<string>> => {
   const out: Record<string, string | Array<string>> = {}
   for (const [key, value] of url.searchParams.entries()) {
-    if (Object.hasOwn(out, key)) {
-      const entry = out[key]
+    const entry = out[key]
+    if (entry !== undefined) {
       if (Array.isArray(entry)) {
         entry.push(value)
       } else {
-        InternalRecord.assignProperty(out, key, [entry, value])
+        out[key] = [entry, value]
       }
     } else {
-      InternalRecord.assignProperty(out, key, value)
+      out[key] = value
     }
   }
   return out

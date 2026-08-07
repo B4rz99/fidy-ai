@@ -1064,12 +1064,11 @@ describe("OpenAiLanguageModel", () => {
         assert.deepStrictEqual(toolCall.params, expectedParams)
       }))
 
-    it.effect("continues after invalid JSON and schema-mismatched events", () =>
+    it.effect("streams known events and ignores unknown ones", () =>
       Effect.gen(function*() {
         let capturedRequest: HttpClientRequest.HttpClientRequest | undefined
 
         const events = [
-          "{invalid-json",
           {
             id: "chatcmpl_stream_1",
             object: "chat.completion.chunk",
@@ -1080,10 +1079,6 @@ describe("OpenAiLanguageModel", () => {
               delta: { content: "Hello" },
               finish_reason: null
             }]
-          },
-          {
-            type: "provider.chat.completion.delta",
-            provider_payload: { content: "provider-specific" }
           },
           {
             id: "chatcmpl_stream_1",

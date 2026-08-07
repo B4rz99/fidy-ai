@@ -173,15 +173,15 @@ const ComputerScreenshotContent = Schema.Struct({
 const FileCitationAnnotation = Schema.Struct({
   type: Schema.Literal("file_citation"),
   file_id: Schema.String,
-  index: Schema.Int,
+  index: Schema.Number,
   filename: Schema.String
 })
 
 const UrlCitationAnnotation = Schema.Struct({
   type: Schema.Literal("url_citation"),
   url: Schema.String,
-  start_index: Schema.Int,
-  end_index: Schema.Int,
+  start_index: Schema.Number,
+  end_index: Schema.Number,
   title: Schema.String
 })
 
@@ -189,15 +189,15 @@ const ContainerFileCitationAnnotation = Schema.Struct({
   type: Schema.Literal("container_file_citation"),
   container_id: Schema.String,
   file_id: Schema.String,
-  start_index: Schema.Int,
-  end_index: Schema.Int,
+  start_index: Schema.Number,
+  end_index: Schema.Number,
   filename: Schema.String
 })
 
 const FilePathAnnotation = Schema.Struct({
   type: Schema.Literal("file_path"),
   file_id: Schema.String,
-  index: Schema.Int
+  index: Schema.Number
 })
 
 /**
@@ -654,9 +654,9 @@ export type TextResponseFormatConfiguration = typeof TextResponseFormatConfigura
  */
 export const CreateResponse = Schema.Struct({
   metadata: Schema.optional(Schema.Record(Schema.String, Schema.String)),
-  top_logprobs: Schema.optional(Schema.Int),
-  temperature: Schema.optional(Schema.Finite),
-  top_p: Schema.optional(Schema.Finite),
+  top_logprobs: Schema.optional(Schema.Number),
+  temperature: Schema.optional(Schema.Number),
+  top_p: Schema.optional(Schema.Number),
   user: Schema.optional(Schema.String),
   service_tier: Schema.optional(Schema.String),
   previous_response_id: Schema.optional(Schema.String),
@@ -668,8 +668,8 @@ export const CreateResponse = Schema.Struct({
     generate_summary: Schema.optional(Schema.Literals(["auto", "concise", "detailed"]))
   })),
   background: Schema.optional(Schema.Boolean),
-  max_output_tokens: Schema.optional(Schema.Int),
-  max_tool_calls: Schema.optional(Schema.Int),
+  max_output_tokens: Schema.optional(Schema.Number),
+  max_tool_calls: Schema.optional(Schema.Number),
   text: Schema.optional(
     Schema.Struct({
       format: Schema.optional(TextResponseFormatConfiguration),
@@ -691,7 +691,7 @@ export const CreateResponse = Schema.Struct({
   stream: Schema.optional(Schema.Boolean),
   conversation: Schema.optional(Schema.String),
   modalities: Schema.optional(Schema.Array(Schema.Literals(["text", "audio"]))),
-  seed: Schema.optional(Schema.Int)
+  seed: Schema.optional(Schema.Number)
 })
 
 /**
@@ -716,9 +716,9 @@ export type CreateResponse = typeof CreateResponse.Type
  */
 export const ResponseUsage = Schema.StructWithRest(
   Schema.Struct({
-    input_tokens: Schema.Int,
-    output_tokens: Schema.Int,
-    total_tokens: Schema.Int,
+    input_tokens: Schema.Number,
+    output_tokens: Schema.Number,
+    total_tokens: Schema.Number,
     input_tokens_details: Schema.optionalKey(Schema.Unknown),
     output_tokens_details: Schema.optionalKey(Schema.Unknown)
   }),
@@ -778,8 +778,8 @@ const FileSearchCall = Schema.Struct({
 const ImageGenerationCall = Schema.Struct({
   id: Schema.String,
   type: Schema.Literal("image_generation_call"),
-  result: Schema.optionalKey(Schema.NullOr(Schema.String)),
-  status: Schema.optionalKey(Schema.Literals(["in_progress", "completed", "generating", "failed"]))
+  result: Schema.optionalKey(Schema.String),
+  status: Schema.optionalKey(MessageStatus)
 })
 
 const McpCall = Schema.Struct({
@@ -853,7 +853,7 @@ export const Response = Schema.Struct({
   id: Schema.String,
   object: Schema.optionalKey(Schema.Literal("response")),
   model: Schema.String,
-  created_at: Schema.Int,
+  created_at: Schema.Number,
   output: Schema.Array(OutputItem).pipe(
     Schema.withDecodingDefault(Effect.succeed([]))
   ),
@@ -888,141 +888,141 @@ export type Response = typeof Response.Type
 const ResponseCreatedEvent = Schema.Struct({
   type: Schema.Literal("response.created"),
   response: Response,
-  sequence_number: Schema.Int
+  sequence_number: Schema.Number
 })
 
 const ResponseCompletedEvent = Schema.Struct({
   type: Schema.Literal("response.completed"),
   response: Response,
-  sequence_number: Schema.Int
+  sequence_number: Schema.Number
 })
 
 const ResponseIncompleteEvent = Schema.Struct({
   type: Schema.Literal("response.incomplete"),
   response: Response,
-  sequence_number: Schema.Int
+  sequence_number: Schema.Number
 })
 
 const ResponseFailedEvent = Schema.Struct({
   type: Schema.Literal("response.failed"),
   response: Response,
-  sequence_number: Schema.Int
+  sequence_number: Schema.Number
 })
 
 const ResponseOutputItemAddedEvent = Schema.Struct({
   type: Schema.Literal("response.output_item.added"),
-  output_index: Schema.Int,
-  sequence_number: Schema.Int,
+  output_index: Schema.Number,
+  sequence_number: Schema.Number,
   item: OutputItem
 })
 
 const ResponseOutputItemDoneEvent = Schema.Struct({
   type: Schema.Literal("response.output_item.done"),
-  output_index: Schema.Int,
-  sequence_number: Schema.Int,
+  output_index: Schema.Number,
+  sequence_number: Schema.Number,
   item: OutputItem
 })
 
 const ResponseOutputTextDeltaEvent = Schema.Struct({
   type: Schema.Literal("response.output_text.delta"),
   item_id: Schema.String,
-  output_index: Schema.Int,
-  content_index: Schema.Int,
+  output_index: Schema.Number,
+  content_index: Schema.Number,
   delta: Schema.String,
-  sequence_number: Schema.Int,
+  sequence_number: Schema.Number,
   logprobs: Schema.optionalKey(Schema.Array(Schema.Unknown))
 })
 
 const ResponseOutputTextAnnotationAddedEvent = Schema.Struct({
   type: Schema.Literal("response.output_text.annotation.added"),
   item_id: Schema.String,
-  output_index: Schema.Int,
-  content_index: Schema.Int,
-  annotation_index: Schema.Int,
-  sequence_number: Schema.Int,
+  output_index: Schema.Number,
+  content_index: Schema.Number,
+  annotation_index: Schema.Number,
+  sequence_number: Schema.Number,
   annotation: Annotation
 })
 
 const ResponseReasoningSummaryPartAddedEvent = Schema.Struct({
   type: Schema.Literal("response.reasoning_summary_part.added"),
   item_id: Schema.String,
-  output_index: Schema.Int,
-  summary_index: Schema.Int,
-  sequence_number: Schema.Int,
+  output_index: Schema.Number,
+  summary_index: Schema.Number,
+  sequence_number: Schema.Number,
   part: SummaryTextContent
 })
 
 const ResponseReasoningSummaryPartDoneEvent = Schema.Struct({
   type: Schema.Literal("response.reasoning_summary_part.done"),
   item_id: Schema.String,
-  output_index: Schema.Int,
-  summary_index: Schema.Int,
-  sequence_number: Schema.Int,
+  output_index: Schema.Number,
+  summary_index: Schema.Number,
+  sequence_number: Schema.Number,
   part: SummaryTextContent
 })
 
 const ResponseReasoningSummaryTextDeltaEvent = Schema.Struct({
   type: Schema.Literal("response.reasoning_summary_text.delta"),
   item_id: Schema.String,
-  output_index: Schema.Int,
-  summary_index: Schema.Int,
+  output_index: Schema.Number,
+  summary_index: Schema.Number,
   delta: Schema.String,
-  sequence_number: Schema.Int
+  sequence_number: Schema.Number
 })
 
 const ResponseFunctionCallArgumentsDeltaEvent = Schema.Struct({
   type: Schema.Literal("response.function_call_arguments.delta"),
   item_id: Schema.String,
-  output_index: Schema.Int,
-  sequence_number: Schema.Int,
+  output_index: Schema.Number,
+  sequence_number: Schema.Number,
   delta: Schema.String
 })
 
 const ResponseFunctionCallArgumentsDoneEvent = Schema.Struct({
   type: Schema.Literal("response.function_call_arguments.done"),
   item_id: Schema.String,
-  output_index: Schema.Int,
-  sequence_number: Schema.Int,
+  output_index: Schema.Number,
+  sequence_number: Schema.Number,
   arguments: Schema.String
 })
 
 const ResponseCodeInterpreterCallCodeDeltaEvent = Schema.Struct({
   type: Schema.Literal("response.code_interpreter_call_code.delta"),
   item_id: Schema.String,
-  output_index: Schema.Int,
-  sequence_number: Schema.Int,
+  output_index: Schema.Number,
+  sequence_number: Schema.Number,
   delta: Schema.String
 })
 
 const ResponseCodeInterpreterCallCodeDoneEvent = Schema.Struct({
   type: Schema.Literal("response.code_interpreter_call_code.done"),
   item_id: Schema.String,
-  output_index: Schema.Int,
-  sequence_number: Schema.Int,
+  output_index: Schema.Number,
+  sequence_number: Schema.Number,
   code: Schema.String
 })
 
 const ResponseApplyPatchCallOperationDiffDeltaEvent = Schema.Struct({
   type: Schema.Literal("response.apply_patch_call_operation_diff.delta"),
   item_id: Schema.String,
-  output_index: Schema.Int,
-  sequence_number: Schema.Int,
+  output_index: Schema.Number,
+  sequence_number: Schema.Number,
   delta: Schema.String
 })
 
 const ResponseApplyPatchCallOperationDiffDoneEvent = Schema.Struct({
   type: Schema.Literal("response.apply_patch_call_operation_diff.done"),
   item_id: Schema.String,
-  output_index: Schema.Int,
-  sequence_number: Schema.Int,
+  output_index: Schema.Number,
+  sequence_number: Schema.Number,
   delta: Schema.optionalKey(Schema.String)
 })
 
 const ResponseImageGenerationCallPartialImageEvent = Schema.Struct({
   type: Schema.Literal("response.image_generation_call.partial_image"),
   item_id: Schema.String,
-  output_index: Schema.Int,
-  sequence_number: Schema.Int,
+  output_index: Schema.Number,
+  sequence_number: Schema.Number,
   partial_image_b64: Schema.String
 })
 
@@ -1031,8 +1031,8 @@ const ResponseErrorEvent = Schema.Struct({
   code: Schema.NullOr(Schema.String),
   message: Schema.String,
   param: Schema.NullOr(Schema.String),
-  sequence_number: Schema.Int,
-  status: Schema.optionalKey(Schema.Int)
+  sequence_number: Schema.Number,
+  status: Schema.optionalKey(Schema.Number)
 })
 
 const knownResponseStreamEventTypes = new Set([
@@ -1166,10 +1166,10 @@ export type ResponseStreamEvent = typeof ResponseStreamEvent.Type
  */
 export const Embedding = Schema.Struct({
   embedding: Schema.Union([
-    Schema.Array(Schema.Finite),
+    Schema.Array(Schema.Number),
     Schema.String
   ]),
-  index: Schema.Int,
+  index: Schema.Number,
   object: Schema.optionalKey(Schema.String)
 })
 
@@ -1213,12 +1213,12 @@ export const CreateEmbeddingRequest = Schema.Struct({
   input: Schema.Union([
     Schema.String,
     Schema.Array(Schema.String),
-    Schema.Array(Schema.Int),
-    Schema.Array(Schema.Array(Schema.Int))
+    Schema.Array(Schema.Number),
+    Schema.Array(Schema.Array(Schema.Number))
   ]),
   model: Schema.String,
   encoding_format: Schema.optionalKey(Schema.Literals(["float", "base64"])),
-  dimensions: Schema.optionalKey(Schema.Int),
+  dimensions: Schema.optionalKey(Schema.Number),
   user: Schema.optionalKey(Schema.String)
 })
 
@@ -1262,8 +1262,8 @@ export const CreateEmbeddingResponse = Schema.Struct({
   object: Schema.optionalKey(Schema.Literal("list")),
   usage: Schema.optionalKey(
     Schema.Struct({
-      prompt_tokens: Schema.Int,
-      total_tokens: Schema.Int
+      prompt_tokens: Schema.Number,
+      total_tokens: Schema.Number
     })
   )
 })

@@ -638,14 +638,14 @@ export const shutdown = <A>(self: TxPubSub<A>): Effect.Effect<void> =>
  * **Example** (Waiting for shutdown)
  *
  * ```ts
- * import { Effect, Fiber, TxPubSub } from "effect"
+ * import { Effect, TxPubSub } from "effect"
  *
  * const program = Effect.gen(function*() {
  *   const hub = yield* TxPubSub.unbounded<number>()
  *
  *   const fiber = yield* Effect.forkChild(TxPubSub.awaitShutdown(hub))
  *   yield* TxPubSub.shutdown(hub)
- *   yield* Fiber.await(fiber)
+ *   yield* fiber.await
  * })
  * ```
  *

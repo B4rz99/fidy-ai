@@ -12,7 +12,7 @@ class InvalidPayload extends Schema.TaggedErrorClass<InvalidPayload>()("InvalidP
 }) {}
 
 class UserLookupError extends Schema.TaggedErrorClass<UserLookupError>()("UserLookupError", {
-  userId: Schema.Int,
+  userId: Schema.Number,
   cause: Schema.Defect()
 }) {}
 

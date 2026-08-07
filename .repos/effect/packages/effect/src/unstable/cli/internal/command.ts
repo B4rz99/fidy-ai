@@ -125,7 +125,7 @@ export const makeCommand = <const Name extends string, Input, E, R, ContextInput
       : Effect.fail(new CliError.ShowHelp({ commandPath, errors: [] }))
 
   const parse = options.parse ?? makeParser(config) as any
-  const parseContext = options.parseContext ?? makeParser(contextConfig, { allowLeftovers: true }) as any
+  const parseContext = options.parseContext ?? makeParser(contextConfig) as any
 
   const buildHelpDoc = (commandPath: ReadonlyArray<string>): HelpDoc => {
     const args: Array<ArgDoc> = []
@@ -263,18 +263,10 @@ const appendChoiceKeys = (
  * and `parseContext`, and also by `withSharedFlags` to avoid constructing a
  * full throwaway command.
  */
-export const makeParser = (
-  cfg: ConfigInternal,
-  options?: {
-    readonly allowLeftovers?: boolean | undefined
-  } | undefined
-) =>
+export const makeParser = (cfg: ConfigInternal) =>
   Effect.fnUntraced(function*(input: ParsedTokens) {
     const parsedArgs: Param.ParsedArgs = { flags: input.flags, arguments: input.arguments }
-    const [remainingArguments, values] = yield* parseParams(parsedArgs, cfg.orderedParams)
-    if (options?.allowLeftovers !== true && remainingArguments.length > 0) {
-      return yield* new CliError.UnexpectedArgument({ arguments: remainingArguments })
-    }
+    const values = yield* parseParams(parsedArgs, cfg.orderedParams)
     return reconstructTree(cfg.tree, values)
   })
 
@@ -283,7 +275,7 @@ export const makeParser = (
  * representations.
  */
 const parseParams: (parsedArgs: Param.ParsedArgs, params: ReadonlyArray<Param.Any>) => Effect.Effect<
-  readonly [remainingArguments: ReadonlyArray<string>, values: ReadonlyArray<unknown>],
+  ReadonlyArray<unknown>,
   CliError.CliError,
   Environment
 > = Effect.fnUntraced(function*(parsedArgs, params) {
@@ -299,7 +291,7 @@ const parseParams: (parsedArgs: Param.ParsedArgs, params: ReadonlyArray<Param.An
     currentArguments = remainingArguments
   }
 
-  return [currentArguments, results] as const
+  return results
 })
 
 /**

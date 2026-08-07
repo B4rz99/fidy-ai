@@ -258,7 +258,7 @@ export class Chunk<R extends Rpc.Any> extends Data.TaggedClass("Chunk")<{
               _tag: Schema.Literal("Chunk"),
               requestId: SnowflakeFromBigInt,
               id: SnowflakeFromBigInt,
-              sequence: Schema.Int,
+              sequence: Schema.Number,
               values: Schema.NonEmptyArray(success)
             }),
             SchemaTransformation.transform({

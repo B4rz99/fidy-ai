@@ -33,10 +33,16 @@ export default defineConfig({
       // taken over. Vitest raises these values when coverage improves; CI then requires the updated
       // config to be committed, while any later decrease fails the threshold check — so a drop is
       // only ever recorded here deliberately, with the reason.
+      //
+      // Lowered in #133, the one deliberate drop so far: partializing payloads once deletes a
+      // ternary the WhatsApp path only ever took one side of, so that branch pair and its line
+      // leave both halves of the ratio. Statements (58.57) and functions (42.31) are unchanged
+      // either side of the fix, which is what says no scenario lost coverage — only arithmetic
+      // moved. Measured against a real PostgreSQL, not copied from a CI log.
       thresholds: {
         autoUpdate: true,
-        branches: 26.18,
-        lines: 60.31,
+        branches: 26.13,
+        lines: 60.3,
       },
     },
   },

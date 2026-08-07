@@ -816,7 +816,7 @@ const prepareMessages = Effect.fnUntraced(
         case "system": {
           messages.push({
             role: getSystemMessageMode(config.model as string),
-            content: [{ type: "input_text", text: message.content }]
+            content: message.content
           })
           break
         }
@@ -885,8 +885,7 @@ const prepareMessages = Effect.fnUntraced(
         }
 
         case "assistant": {
-          const reasoningMessages: Record<string, DeepMutable<typeof OpenAiSchema.ReasoningItem.Encoded>> = Object
-            .create(null)
+          const reasoningMessages: Record<string, DeepMutable<typeof OpenAiSchema.ReasoningItem.Encoded>> = {}
 
           for (const part of message.content) {
             switch (part.type) {
@@ -1683,7 +1682,7 @@ const makeStreamResponse = Effect.fnUntraced(
     }
 
     // Track active reasoning items with state machine for proper concluding logic
-    const activeReasoning: Record<string, ReasoningPart> = Object.create(null)
+    const activeReasoning: Record<string, ReasoningPart> = {}
 
     const getOrCreateReasoningPart = (
       itemId: string,
@@ -3054,16 +3053,15 @@ const getUsage = (usage: OpenAiSchema.ResponseUsage | null | undefined): Respons
 
   const inputTokens = usage.input_tokens
   const outputTokens = usage.output_tokens
-  const cachedTokens = getUsageTokenDetail(usage.input_tokens_details, "cached_tokens") ?? 0
-  const cacheWriteTokens = getUsageTokenDetail(usage.input_tokens_details, "cache_write_tokens")
-  const reasoningTokens = getUsageTokenDetail(usage.output_tokens_details, "reasoning_tokens") ?? 0
+  const cachedTokens = getUsageTokenDetail(usage.input_tokens_details, "cached_tokens")
+  const reasoningTokens = getUsageTokenDetail(usage.output_tokens_details, "reasoning_tokens")
 
   return {
     inputTokens: {
       uncached: inputTokens - cachedTokens,
       total: inputTokens,
       cacheRead: cachedTokens,
-      cacheWrite: cacheWriteTokens
+      cacheWrite: undefined
     },
     outputTokens: {
       total: outputTokens,
@@ -3094,8 +3092,8 @@ const toServiceTier = (value: string | undefined): {
   }
 }
 
-const getUsageTokenDetail = (details: unknown, key: string): number | undefined =>
-  Predicate.hasProperty(details, key) && typeof details[key] === "number" ? details[key] : undefined
+const getUsageTokenDetail = (details: unknown, key: string): number =>
+  Predicate.hasProperty(details, key) && typeof details[key] === "number" ? details[key] : 0
 
 const transformToolCallParams = Effect.fnUntraced(function*<Tools extends ReadonlyArray<Tool.Any>>(
   tools: Tools,

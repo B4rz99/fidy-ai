@@ -91,16 +91,6 @@ const setImmediate = "setImmediate" in globalThis
     return (): void => clearTimeout(timer)
   }
 
-const setMicrotask = (f: () => void) => {
-  let cancelled = false
-  queueMicrotask(() => {
-    if (!cancelled) f()
-  })
-  return (): void => {
-    cancelled = true
-  }
-}
-
 class PriorityBuckets {
   buckets: Array<[priority: number, tasks: Array<() => void>]> = []
 
@@ -154,10 +144,10 @@ export class MixedScheduler implements Scheduler {
 
   constructor(
     executionMode: "sync" | "async" = "async",
-    setImmediateFn?: (f: () => void) => () => void
+    setImmediateFn: (f: () => void) => () => void = setImmediate
   ) {
     this.executionMode = executionMode
-    this.setImmediate = setImmediateFn ?? (executionMode === "sync" ? setMicrotask : setImmediate)
+    this.setImmediate = setImmediateFn
   }
 
   /**

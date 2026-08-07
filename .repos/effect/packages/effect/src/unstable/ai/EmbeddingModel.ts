@@ -69,7 +69,7 @@ export class Dimensions extends Context.Service<Dimensions, number>()(
 export class EmbeddingUsage extends Schema.Class<EmbeddingUsage>(
   "effect/ai/EmbeddingModel/EmbeddingUsage"
 )({
-  inputTokens: Schema.optional(Schema.Finite)
+  inputTokens: Schema.UndefinedOr(Schema.Finite)
 }) {}
 
 /**

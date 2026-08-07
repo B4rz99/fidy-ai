@@ -26,7 +26,6 @@
     "./packages/tools/*/typetest/**/*.ts",
     "./packages/tools/*/benchmark/**/*.ts"
   ],
-  "exclude": ["node_modules", "./packages/platform-deno/**/*.ts"],
   "compilerOptions": {
     "rootDir": ".",
     "noEmit": true,
@@ -88,13 +87,9 @@
       "@effect/sql-sqlite-wasm/*": ["./packages/sql/sqlite-wasm/src/*.ts"],
       "@effect/ai-codegen": ["./packages/tools/ai-codegen/src/index.ts"],
       "@effect/ai-codegen/*": ["./packages/tools/ai-codegen/src/*.ts"],
-      "@effect/api-diff": ["./packages/tools/api-diff/src/Cli.ts"],
-      "@effect/api-diff/*": ["./packages/tools/api-diff/src/*.ts"],
       "@effect/ai-docgen": ["./packages/tools/ai-docgen/src/index.ts"],
       "@effect/ai-docgen/*": ["./packages/tools/ai-docgen/src/*.ts"],
       "@effect/bundle/*": ["./packages/tools/bundle/src/*.ts"],
-      "@effect/docgen": ["./packages/tools/docgen/src/index.ts"],
-      "@effect/docgen/*": ["./packages/tools/docgen/src/*.ts"],
       "@effect/openapi-generator": ["./packages/tools/openapi-generator/src/index.ts"],
       "@effect/openapi-generator/*": ["./packages/tools/openapi-generator/src/*.ts"],
       "@effect/oxc": ["./packages/tools/oxc/src/index.ts"],

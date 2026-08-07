@@ -19,7 +19,6 @@
     "scratchpad/",
     "packages/*/typetest/",
     "packages/*/typeperf/",
-    "packages/*/runtimeperf/",
     "packages/*/benchmark/",
     "packages/ai",
     "packages/atom",

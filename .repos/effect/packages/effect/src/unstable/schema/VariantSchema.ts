@@ -11,10 +11,10 @@
 import type { Brand } from "../../Brand.ts"
 import * as Effect from "../../Effect.ts"
 import { dual } from "../../Function.ts"
-import * as InternalRecord from "../../internal/record.ts"
 import { type Pipeable, pipeArguments } from "../../Pipeable.ts"
 import * as Predicate from "../../Predicate.ts"
 import * as Schema from "../../Schema.ts"
+import type * as SchemaAST from "../../SchemaAST.ts"
 import * as Struct_ from "../../Struct.ts"
 
 /**
@@ -214,9 +214,9 @@ const extract: {
       readonly isDefault?: boolean | undefined
     }
   ): Extract<V, A> => {
-    const cache = self[cacheSymbol] ?? (self[cacheSymbol] = Object.create(null))
+    const cache = self[cacheSymbol] ?? (self[cacheSymbol] = {})
     const cacheKey = options?.isDefault === true ? "__default" : variant
-    if (Object.hasOwn(cache, cacheKey)) {
+    if (cache[cacheKey] !== undefined) {
       return cache[cacheKey] as any
     }
     const fields: Record<string, any> = {}
@@ -224,21 +224,19 @@ const extract: {
       const value = self[TypeId][key]
       if (TypeId in value) {
         if (options?.isDefault === true && Schema.isSchema(value)) {
-          InternalRecord.assignProperty(fields, key, value)
+          fields[key] = value
         } else {
-          InternalRecord.assignProperty(fields, key, extract(value, variant))
+          fields[key] = extract(value, variant)
         }
       } else if (FieldTypeId in value) {
-        if (Object.hasOwn(value.schemas, variant)) {
-          InternalRecord.assignProperty(fields, key, value.schemas[variant])
+        if (variant in value.schemas) {
+          fields[key] = value.schemas[variant]
         }
       } else {
-        InternalRecord.assignProperty(fields, key, value)
+        fields[key] = value
       }
     }
-    const schema = Schema.Struct(fields)
-    cache[cacheKey] = schema
-    return schema as any
+    return cache[cacheKey] = Schema.Struct(fields) as any
   }
 )
 
@@ -263,7 +261,19 @@ export interface Class<
   S extends Schema.Top & {
     readonly fields: Schema.Struct.Fields
   }
-> extends Schema.Class<Self, S, {}>, Struct<Struct_.Simplify<Fields>> {
+> extends
+  Schema.BottomLazy<
+    SchemaAST.Declaration,
+    Schema.decodeTo<Schema.declareConstructor<Self, S["Encoded"], readonly [S], S["Iso"]>, S>,
+    readonly [S],
+    S["~type.mutability"],
+    S["~type.optionality"],
+    S["~type.constructor.default"],
+    S["~encoded.mutability"],
+    S["~encoded.optionality"]
+  >,
+  Struct<Struct_.Simplify<Fields>>
+{
   readonly "Type": Self
   readonly "Encoded": S["Encoded"]
   readonly "DecodingServices": S["DecodingServices"]
@@ -452,7 +462,7 @@ export const make = <
     return function<S extends Schema.Top>(schema: S) {
       const obj: Record<string, S> = {}
       for (const key of keys) {
-        InternalRecord.assignProperty(obj, key, schema)
+        obj[key] = schema
       }
       return Field(obj)
     }
@@ -462,7 +472,7 @@ export const make = <
       const obj: Record<string, S> = {}
       for (const variant of options.variants) {
         if (!keys.includes(variant)) {
-          InternalRecord.assignProperty(obj, variant, schema)
+          obj[variant] = schema
         }
       }
       return Field(obj)

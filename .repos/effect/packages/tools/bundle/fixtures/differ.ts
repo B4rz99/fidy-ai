@@ -1,9 +1,9 @@
 import * as Schema from "effect/Schema"
 
 const schema = Schema.Struct({
-  a: Schema.String,
-  b: Schema.optional(Schema.FiniteFromString),
-  c: Schema.Array(Schema.String)
+  id: Schema.Number,
+  name: Schema.String,
+  price: Schema.Number
 })
 
 Schema.toDifferJsonPatch(schema)

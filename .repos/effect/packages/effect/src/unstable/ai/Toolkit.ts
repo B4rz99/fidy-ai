@@ -15,7 +15,6 @@ import * as Effect from "../../Effect.ts"
 import * as Effectable from "../../Effectable.ts"
 import * as Fiber from "../../Fiber.ts"
 import { identity } from "../../Function.ts"
-import * as InternalRecord from "../../internal/record.ts"
 import * as Layer from "../../Layer.ts"
 import * as Predicate from "../../Predicate.ts"
 import * as Queue from "../../Queue.ts"
@@ -106,10 +105,6 @@ export interface Toolkit<in out Tools extends Record<string, Tool.Any>> extends
  * @since 4.0.0
  */
 export interface HandlerContext<Tool extends Tool.Any> {
-  /**
-   * The unique identifier of the tool call, when available.
-   */
-  readonly toolCallId?: string | undefined
   /**
    * Emit a preliminary result during long-running tool calls.
    *
@@ -204,11 +199,7 @@ export interface WithHandler<in out Tools extends Record<string, Tool.Any>> {
     /**
      * Parameters to pass to the tool handler.
      */
-    params: Tool.Parameters<Tools[Name]>,
-    /**
-     * The unique identifier of the tool call.
-     */
-    toolCallId?: string
+    params: Tool.Parameters<Tools[Name]>
   ) => Effect.Effect<
     Stream.Stream<
       Tool.HandlerResult<Tools[Name]>,
@@ -266,8 +257,8 @@ const Proto = {
         return schemas
       }
 
-      const handle = Effect.fnUntraced(function*(name: string, params: unknown, toolCallId?: string) {
-        const tool = Object.hasOwn(tools, name) ? tools[name] : undefined
+      const handle = Effect.fnUntraced(function*(name: string, params: unknown) {
+        const tool = tools[name]
 
         yield* Effect.annotateCurrentSpan({
           tool: name,
@@ -311,7 +302,6 @@ const Proto = {
           readonly preliminary: boolean
         }, Cause.Done>()
         const context: HandlerContext<any> = {
-          toolCallId,
           preliminary: (result) =>
             Effect.asVoid(Queue.offer(queue, {
               result,
@@ -400,10 +390,8 @@ const Proto = {
       const handlers = Effect.isEffect(build) ? yield* build : build
       const context = new Map<string, unknown>()
       for (const [name, handler] of Object.entries(handlers)) {
-        const tool = Object.hasOwn(this.tools, name) ? this.tools[name] : undefined
-        if (tool !== undefined) {
-          context.set(tool.id, { name, handler, context: services })
-        }
+        const tool = this.tools[name]!
+        context.set(tool.id, { name, handler, context: services })
       }
       return Context.makeUnsafe(context)
     })
@@ -430,7 +418,7 @@ const resolveInput = <Tools extends ReadonlyArray<Tool.Any>>(
 ): Record<string, Tools[number]> => {
   const output = {} as Record<string, Tools[number]>
   for (const tool of tools) {
-    InternalRecord.assignProperty(output, tool.name, tool)
+    output[tool.name] = tool
   }
   return output
 }
@@ -559,7 +547,7 @@ export const merge = <const Toolkits extends ReadonlyArray<Any>>(
   const tools = {} as Record<string, any>
   for (const toolkit of toolkits) {
     for (const [name, tool] of Object.entries(toolkit.tools)) {
-      InternalRecord.assignProperty(tools, name, tool)
+      tools[name] = tool
     }
   }
   return makeProto(tools) as any

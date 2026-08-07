@@ -16,7 +16,6 @@ import { dual } from "effect/Function"
 import * as Layer from "effect/Layer"
 import * as Option from "effect/Option"
 import * as Predicate from "effect/Predicate"
-import * as Rec from "effect/Record"
 import * as Redactable from "effect/Redactable"
 import type * as Schema from "effect/Schema"
 import * as AST from "effect/SchemaAST"
@@ -48,8 +47,7 @@ import {
   type ReasoningItem,
   type SummaryTextContent,
   type TextResponseFormatConfiguration,
-  type Tool as OpenAiClientTool,
-  type UnknownChatCompletionEvent
+  type Tool as OpenAiClientTool
 } from "./OpenAiClient.ts"
 import { addGenAIAnnotations } from "./OpenAiTelemetry.ts"
 
@@ -830,7 +828,7 @@ const prepareMessages = Effect.fnUntraced(
         }
 
         case "assistant": {
-          const reasoningMessages: Record<string, DeepMutable<ReasoningItem>> = Object.create(null)
+          const reasoningMessages: Record<string, DeepMutable<ReasoningItem>> = {}
 
           for (const part of message.content) {
             switch (part.type) {
@@ -1028,11 +1026,6 @@ const buildHttpResponseDetails = (
 
 type ResponseStreamEvent = CreateResponse200Sse
 
-const isUnknownChatCompletionEvent = (
-  event: ResponseStreamEvent
-): event is UnknownChatCompletionEvent =>
-  typeof event !== "string" && "_tag" in event && event._tag === "UnknownChatCompletionEvent"
-
 type ActiveToolCall = {
   readonly id: string
   name: string
@@ -1208,12 +1201,6 @@ const makeStreamResponse = Effect.fnUntraced(
               ? { metadata: { openai: { serviceTier: normalizedServiceTier } } }
               : undefined)
           })
-          return parts
-        }
-
-        // Keep unknown events available to direct client consumers; this layer
-        // cannot translate provider-specific data into portable stream parts.
-        if (isUnknownChatCompletionEvent(event)) {
           return parts
         }
 
@@ -1554,7 +1541,7 @@ const extractCustomRequestProperties = (payload: CreateResponse): Record<string,
   const customProperties: Record<string, unknown> = {}
   for (const [key, value] of Object.entries(payload)) {
     if (!createResponseKnownProperties.has(key)) {
-      Rec.assignProperty(customProperties, key, value)
+      customProperties[key] = value
     }
   }
   return customProperties

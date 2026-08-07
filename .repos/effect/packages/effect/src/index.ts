@@ -557,6 +557,11 @@ export * as SchemaRepresentation from "./SchemaRepresentation.ts"
 export * as SchemaTransformation from "./SchemaTransformation.ts"
 
 /**
+ * @since 4.0.0
+ */
+export * as SchemaUtils from "./SchemaUtils.ts"
+
+/**
  * @since 2.0.0
  */
 export * as Scope from "./Scope.ts"

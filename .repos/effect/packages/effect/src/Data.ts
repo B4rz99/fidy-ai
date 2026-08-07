@@ -10,7 +10,6 @@
  */
 import type * as Cause from "./Cause.ts"
 import * as core from "./internal/core.ts"
-import * as InternalRecord from "./internal/record.ts"
 import * as Pipeable from "./Pipeable.ts"
 import * as Predicate from "./Predicate.ts"
 import type * as Types from "./Types.ts"
@@ -52,10 +51,10 @@ import type { Unify } from "./Unify.ts"
 export const Class: new<A extends Record<string, any> = {}>(
   args: Types.VoidIfEmpty<{ readonly [P in keyof A]: A[P] }>
 ) => Readonly<A> & Pipeable.Pipeable = class extends Pipeable.Class {
-  constructor(props: object | undefined) {
+  constructor(props: any) {
     super()
     if (props) {
-      InternalRecord.assignProperties(this, props)
+      Object.assign(this, props)
     }
   }
 } as any

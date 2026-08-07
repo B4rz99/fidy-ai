@@ -319,7 +319,7 @@ const EntryRow = Schema.Struct({
   event: Schema.String,
   primary_key: Schema.String,
   payload: Schema.Uint8Array,
-  timestamp: Schema.Int
+  timestamp: Schema.Number
 })
 
 const EntryRowArray = Schema.Array(EntryRow)
@@ -345,7 +345,7 @@ const toEntryRow = (entry: EventJournal.Entry): EntryRow => ({
 const RemoteRow = Schema.Struct({
   remote_id: EventJournal.RemoteId,
   entry_id: EventJournal.EntryId,
-  sequence: Schema.Natural
+  sequence: Schema.Number
 })
 
 const RemoteRowArray = Schema.Array(RemoteRow)

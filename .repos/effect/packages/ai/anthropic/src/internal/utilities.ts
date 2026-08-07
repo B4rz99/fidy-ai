@@ -15,7 +15,7 @@ export const resolveFinishReason = (
   finishReason: string,
   isJsonResponse: boolean = false
 ): Response.FinishReason => {
-  const reason = Object.hasOwn(finishReasonMap, finishReason) ? finishReasonMap[finishReason] : undefined
+  const reason = finishReasonMap[finishReason]
   if (Predicate.isUndefined(reason)) {
     return "unknown"
   }

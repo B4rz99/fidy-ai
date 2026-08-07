@@ -74,11 +74,6 @@ const RedactedOpenAiHeaders = {
   OpenAiProject: "OpenAI-Project"
 }
 
-const withRedactedHeaders = Effect.updateService(
-  Headers.CurrentRedactedNames,
-  Array.appendAll(Object.values(RedactedOpenAiHeaders))
-)
-
 // =============================================================================
 // Constructor
 // =============================================================================
@@ -129,7 +124,10 @@ export const make = Effect.fnUntraced(
       })
     })
   },
-  withRedactedHeaders
+  Effect.updateService(
+    Headers.CurrentRedactedNames,
+    Array.appendAll(Object.values(RedactedOpenAiHeaders))
+  )
 )
 
 // =============================================================================

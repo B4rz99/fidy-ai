@@ -19,6 +19,7 @@ import * as BigDecimal_ from "./BigDecimal.ts"
 import type * as Brand from "./Brand.ts"
 import * as Cause_ from "./Cause.ts"
 import * as Chunk_ from "./Chunk.ts"
+import type * as Combiner from "./Combiner.ts"
 import * as Data from "./Data.ts"
 import * as DateTime from "./DateTime.ts"
 import type { Differ } from "./Differ.ts"
@@ -34,13 +35,11 @@ import { identity, memoize } from "./Function.ts"
 import * as HashMap_ from "./HashMap.ts"
 import * as HashSet_ from "./HashSet.ts"
 import * as core from "./internal/core.ts"
-import * as InternalRecord from "./internal/record.ts"
 import * as InternalAnnotations from "./internal/schema/annotations.ts"
+import * as InternalArbitrary from "./internal/schema/arbitrary.ts"
+import * as InternalEquivalence from "./internal/schema/equivalence.ts"
+import * as InternalStandard from "./internal/schema/representation.ts"
 import * as InternalSchema from "./internal/schema/schema.ts"
-import * as InternalArbitrary from "./internal/schema/toArbitrary.ts"
-import * as InternalEquivalence from "./internal/schema/toEquivalence.ts"
-import * as InternalToJsonSchemaDocument from "./internal/schema/toJsonSchemaDocument.ts"
-import * as InternalToRepresentation from "./internal/schema/toRepresentation.ts"
 import * as JsonPatch from "./JsonPatch.ts"
 import * as JsonSchema from "./JsonSchema.ts"
 import { remainder } from "./Number.ts"
@@ -51,7 +50,6 @@ import * as Pipeable from "./Pipeable.ts"
 import * as Predicate from "./Predicate.ts"
 import * as Record_ from "./Record.ts"
 import * as Redacted_ from "./Redacted.ts"
-import * as RegExp_ from "./RegExp.ts"
 import * as Result_ from "./Result.ts"
 import * as Scheduler from "./Scheduler.ts"
 import * as SchemaAST from "./SchemaAST.ts"
@@ -109,8 +107,8 @@ export type ConstructorDefault = "no-default" | "with-default"
  * Use when passing `disableChecks: true` to skip validation when you trust the data.
  * - Pass `parseOptions` to control error reporting behavior.
  *
- * @see {@link BottomWithoutNew.makeEffect}
- * @see {@link BottomWithoutNew.make}
+ * @see {@link Bottom.makeEffect}
+ * @see {@link Bottom.make}
  *
  * @category options
  * @since 3.13.4
@@ -133,19 +131,19 @@ export interface MakeOptions {
 }
 
 /**
- * The fully-parameterized schema interface without a construct signature.
- * Exposes all 14 type parameters controlling type inference, mutability,
- * optionality, services, and transformation behavior.
+ * The fully-parameterized base interface for all schemas. Exposes all 14 type
+ * parameters controlling type inference, mutability, optionality, services, and
+ * transformation behavior.
  *
  * **When to use**
  *
- * Use as the base for schema interfaces that provide a specialized construct
- * signature.
+ * Use when you are writing advanced generic schema utilities or performing
+ *   schema introspection.
  *
  * @category models
  * @since 4.0.0
  */
-export interface BottomWithoutNew<
+export interface Bottom<
   out T,
   out E,
   out RD,
@@ -207,8 +205,8 @@ export interface BottomWithoutNew<
    * Causes that contain defects, interruptions, or other non-schema reasons
    * throw with the underlying `Cause` attached instead.
    *
-   * @see {@link BottomWithoutNew.makeOption} — construct synchronously and discard validation details
-   * @see {@link BottomWithoutNew.makeEffect} — construct through `Effect` when validation failure should stay in the error channel
+   * @see {@link Bottom.makeOption} — construct synchronously and discard validation details
+   * @see {@link Bottom.makeEffect} — construct through `Effect` when validation failure should stay in the error channel
    */
   make(input: this["~type.make.in"], options?: MakeOptions): this["Type"]
   /**
@@ -231,8 +229,8 @@ export interface BottomWithoutNew<
    * that contain defects, interruptions, or other non-schema reasons throw
    * instead.
    *
-   * @see {@link BottomWithoutNew.make} — construct synchronously when validation failure should throw
-   * @see {@link BottomWithoutNew.makeEffect} — construct through `Effect` when validation details should stay in the error channel
+   * @see {@link Bottom.make} — construct synchronously when validation failure should throw
+   * @see {@link Bottom.makeEffect} — construct through `Effect` when validation details should stay in the error channel
    */
   makeOption(input: this["~type.make.in"], options?: MakeOptions): Option_.Option<this["Type"]>
   /**
@@ -244,95 +242,38 @@ export interface BottomWithoutNew<
    * Use when constructor input may fail validation and you want to
    * compose that failure with other `Effect` operations instead of throwing.
    *
-   * @see {@link BottomWithoutNew.make} — construct synchronously when validation failure should throw
-   * @see {@link BottomWithoutNew.makeOption} — construct synchronously and discard validation details
+   * @see {@link Bottom.make} — construct synchronously when validation failure should throw
+   * @see {@link Bottom.makeOption} — construct synchronously and discard validation details
    */
   makeEffect(input: this["~type.make.in"], options?: MakeOptions): Effect.Effect<this["Type"], SchemaError>
 }
 
 /**
- * Fully-parameterized base interface for schemas that can be extended directly
- * by TypeScript classes.
+ * Lazy `Bottom` variant for schema implementations that compute their public
+ * views on demand.
  *
  * **When to use**
  *
- * Use as the base for concrete schema interfaces whose runtime values support
- * `class ... extends schema`.
- *
- * **Details**
- *
- * Extends {@link BottomWithoutNew} with a construct signature that accepts `never`. The
- * signature enables class extension without making ordinary schemas directly
- * constructible.
- *
- * @see {@link BottomWithoutNew} for the schema protocol without a construct signature
- *
- * @category utility types
- * @since 4.0.0
- */
-export interface Bottom<
-  out T,
-  out E,
-  out RD,
-  out RE,
-  out Ast extends SchemaAST.AST,
-  out Rebuild extends Top,
-  out TypeMakeIn = T,
-  out Iso = T,
-  in out TypeParameters extends ReadonlyArray<Constraint> = readonly [],
-  out TypeMake = TypeMakeIn,
-  out TypeMutability extends Mutability = "readonly",
-  out TypeOptionality extends Optionality = "required",
-  out TypeConstructorDefault extends ConstructorDefault = "no-default",
-  out EncodedMutability extends Mutability = "readonly",
-  out EncodedOptionality extends Optionality = "required"
-> extends
-  BottomWithoutNew<
-    T,
-    E,
-    RD,
-    RE,
-    Ast,
-    Rebuild,
-    TypeMakeIn,
-    Iso,
-    TypeParameters,
-    TypeMake,
-    TypeMutability,
-    TypeOptionality,
-    TypeConstructorDefault,
-    EncodedMutability,
-    EncodedOptionality
-  >
-{
-  new(_: never): {}
-}
-
-/**
- * Lazy `BottomWithoutNew` variant for schema implementations that
- * compute their public views on demand.
- *
- * **When to use**
- *
- * Use as the base for lazy schema interfaces that provide a specialized
- * construct signature.
+ * Use as an implementation base for schema interfaces that must expose
+ * `Bottom` behavior without forcing TypeScript to eagerly evaluate expensive
+ * `Type`, `Encoded`, or service views.
  *
  * **Details**
  *
  * The laziness is purely type-level; runtime behavior is unchanged.
- * `BottomLazyWithoutNew` keeps the structural operations inherited from
- * `BottomWithoutNew`, but erases the expensive schema views to
- * `unknown`. Concrete schema interfaces can then redeclare the precise views
- * they expose. This keeps wide schemas such as `Struct` and `Union` cheaper when
- * generic code reads a single view, while preserving their exact public types.
+ * `BottomLazy` keeps the structural operations inherited from `Bottom`, but
+ * erases the expensive schema views to `unknown`. Concrete schema interfaces can
+ * then redeclare the precise views they expose. This keeps wide schemas such as
+ * `Struct` and `Union` cheaper when generic code reads a single view, while
+ * preserving their exact public types.
  *
- * @see {@link BottomWithoutNew} for the fully parameterized schema interface when every
+ * @see {@link Bottom} for the fully parameterized schema interface when every
  * view must be supplied directly.
  *
  * @category utility types
  * @since 4.0.0
  */
-export interface BottomLazyWithoutNew<
+export interface BottomLazy<
   out Ast extends SchemaAST.AST,
   out Rebuild extends Top,
   in out TypeParameters extends ReadonlyArray<Constraint> = readonly [],
@@ -342,7 +283,7 @@ export interface BottomLazyWithoutNew<
   out EncodedMutability extends Mutability = "readonly",
   out EncodedOptionality extends Optionality = "required"
 > extends
-  BottomWithoutNew<
+  Bottom<
     unknown,
     unknown,
     unknown,
@@ -360,50 +301,6 @@ export interface BottomLazyWithoutNew<
     EncodedOptionality
   >
 {}
-
-/**
- * Lazy `Bottom` variant for schemas that can be extended directly by TypeScript
- * classes.
- *
- * **When to use**
- *
- * Use as the base for concrete lazy schema interfaces whose runtime values
- * support `class ... extends schema`.
- *
- * **Details**
- *
- * Extends {@link BottomLazyWithoutNew} with a construct signature that accepts `never`.
- * The signature enables class extension without making ordinary schemas
- * directly constructible.
- *
- * @see {@link BottomLazyWithoutNew} for the lazy schema protocol without a construct signature
- *
- * @category utility types
- * @since 4.0.0
- */
-export interface BottomLazy<
-  out Ast extends SchemaAST.AST,
-  out Rebuild extends Top,
-  in out TypeParameters extends ReadonlyArray<Constraint> = readonly [],
-  out TypeMutability extends Mutability = "readonly",
-  out TypeOptionality extends Optionality = "required",
-  out TypeConstructorDefault extends ConstructorDefault = "no-default",
-  out EncodedMutability extends Mutability = "readonly",
-  out EncodedOptionality extends Optionality = "required"
-> extends
-  BottomLazyWithoutNew<
-    Ast,
-    Rebuild,
-    TypeParameters,
-    TypeMutability,
-    TypeOptionality,
-    TypeConstructorDefault,
-    EncodedMutability,
-    EncodedOptionality
-  >
-{
-  new(_: never): {}
-}
 
 /**
  * Type-level representation returned by {@link declareConstructor}.
@@ -624,7 +521,7 @@ export function revealBottom<S extends Top>(
  * ```ts
  * import { Schema } from "effect"
  *
- * const Age = Schema.Natural.pipe(
+ * const Age = Schema.Number.pipe(
  *   Schema.annotate({
  *     title: "Age",
  *     description: "A non-negative integer representing age in years"
@@ -1232,7 +1129,7 @@ function makeStandardResult<A>(exit: Exit_.Exit<StandardSchemaV1.Result<A>>): St
  * // Create a standard schema from a regular schema
  * const PersonSchema = Schema.Struct({
  *   name: Schema.NonEmptyString,
- *   age: Schema.Finite.check(Schema.isBetween({ minimum: 0, maximum: 150 }))
+ *   age: Schema.Number.check(Schema.isBetween({ minimum: 0, maximum: 150 }))
  * })
  *
  * const standardSchema = Schema.toStandardSchemaV1(PersonSchema, {
@@ -1271,7 +1168,7 @@ export function toStandardSchemaV1<S extends ConstraintDecoder<unknown>>(
   const parseOptions: SchemaAST.ParseOptions = { errors: "all", ...options?.parseOptions }
   const formatter = SchemaIssue.makeFormatterStandardSchemaV1(options)
   const validate: StandardSchemaV1<S["Encoded"], S["Type"]>["~standard"]["validate"] = (value: unknown) => {
-    const scheduler = new Scheduler.MixedScheduler("sync")
+    const scheduler = new Scheduler.MixedScheduler()
     const fiber = Effect.runFork(
       Effect.match(decodeUnknownEffect(value, parseOptions), {
         onFailure: formatter,
@@ -1584,7 +1481,7 @@ export function decodeUnknownExit<S extends ConstraintDecoder<unknown>>(schema: 
 
 function fromIssueExit<A>(exit: Exit_.Exit<A, SchemaIssue.Issue>): Exit_.Exit<A, SchemaError> {
   return Exit_.isSuccess(exit)
-    ? exit as unknown as Exit_.Exit<A, SchemaError>
+    ? Exit_.succeed(exit.value)
     : Exit_.failCause(Cause_.map(exit.cause, (issue) => new SchemaError(issue)))
 }
 
@@ -2326,6 +2223,33 @@ export const encodeSync: <S extends ConstraintEncoder<unknown>>(
  * @since 3.10.0
  */
 export const make: <S extends Constraint>(ast: S["ast"], options?: object) => S = InternalSchema.make
+
+/**
+ * Transforms a schema into a class that can be extended with `extends`. The
+ * resulting class inherits the full schema API (e.g. `annotate`) and can define
+ * static methods that reference `this`.
+ *
+ * **Example** (Wrapping a primitive schema)
+ *
+ * ```ts
+ * import { Schema } from "effect"
+ *
+ * class MyString extends Schema.asClass(Schema.String) {
+ *   static readonly decodeUnknownSync = Schema.decodeUnknownSync(this)
+ * }
+ *
+ * console.log(MyString.decodeUnknownSync("a"))
+ * // "a"
+ * ```
+ *
+ * @category constructors
+ * @since 4.0.0
+ */
+export function asClass<S extends Top>(schema: S): S & { new(_: never): {} } {
+  // oxlint-disable-next-line @typescript-eslint/no-extraneous-class
+  class Class {}
+  return Object.setPrototypeOf(Class, schema)
+}
 
 /**
  * Checks whether a value is a `Schema`.
@@ -3321,7 +3245,7 @@ export declare namespace Struct {
     S extends Side,
     O extends keyof F = SideOptionalKeys<F, S>,
     M extends keyof F = SideMutableKeys<F, S>
-  > = [O | M] extends [never] ? Simplify<ReadonlySide<F, S>>
+  > = [O | M] extends [never] ? ReadonlySide<F, S>
     : [M] extends [never] ? Simplify<SetOptional<ReadonlySide<F, S>, O>>
     : [O] extends [never] ? Simplify<SetMutable<ReadonlySide<F, S>, M>>
     : Simplify<
@@ -3628,8 +3552,8 @@ export function encodeKeys<
 >(mapping: M) {
   return function(self: S): encodeKeys<S, M> {
     const fields: any = {}
-    const appliedMapping: any = Object.create(null)
-    const reverseMapping: any = Object.create(null)
+    const appliedMapping: any = {}
+    const reverseMapping: any = {}
     const seenEncodedKeys = new Set<string | symbol>()
     for (const k of Reflect.ownKeys(self.fields)) {
       const encoded = toEncoded(self.fields[k])
@@ -3640,7 +3564,7 @@ export function encodeKeys<
         throw new globalThis.Error(`Duplicate encoded keys: ${formatPropertyKey(encodedKey)}`)
       }
       seenEncodedKeys.add(canonical)
-      InternalRecord.assignProperty(fields, encodedKey, encoded)
+      fields[encodedKey] = encoded
       if (hasMapping) {
         appliedMapping[k] = encodedKey
         reverseMapping[encodedKey] = k
@@ -3707,7 +3631,7 @@ export function extendTo<S extends Struct<Struct.Fields>, const Fields extends S
             const f = derive[k]
             const o = f(input)
             if (Option_.isSome(o)) {
-              InternalRecord.assignProperty(out, k, o.value)
+              out[k] = o.value
             }
           }
           return out
@@ -3884,13 +3808,6 @@ export interface $Record<Key extends Record.Key, Value extends Constraint> exten
  * For transformed key schemas, property selection is based on encoded property
  * names before the selected key is decoded.
  *
- * **Gotchas**
- *
- * When decoded or encoded key transformations produce the same property key,
- * sequential parsing applies selected own properties in selection order, so
- * the later selected property overwrites the earlier value. With concurrency
- * greater than `1`, completion order determines which value is retained.
- *
  * **Example** (Defining a string-keyed record of numbers)
  *
  * ```ts
@@ -3911,9 +3828,18 @@ export interface $Record<Key extends Record.Key, Value extends Constraint> exten
  */
 export function Record<Key extends Record.Key, Value extends Constraint>(
   key: Key,
-  value: Value
+  value: Value,
+  options?: {
+    readonly keyValueCombiner: {
+      readonly decode?: Combiner.Combiner<readonly [Key["Type"], Value["Type"]]> | undefined
+      readonly encode?: Combiner.Combiner<readonly [Key["Encoded"], Value["Encoded"]]> | undefined
+    }
+  }
 ): $Record<Key, Value> {
-  return make(SchemaAST.record(key.ast, value.ast), { key, value })
+  const keyValueCombiner = options?.keyValueCombiner?.decode || options?.keyValueCombiner?.encode
+    ? new SchemaAST.KeyValueCombiner(options.keyValueCombiner.decode, options.keyValueCombiner.encode)
+    : undefined
+  return make(SchemaAST.record(key.ast, value.ast, keyValueCombiner), { key, value })
 }
 
 /**
@@ -5076,7 +5002,7 @@ export function suspend<S extends Constraint>(f: () => S): suspend<S> {
  * ```ts
  * import { Schema } from "effect"
  *
- * const AgeSchema = Schema.Finite.pipe(
+ * const AgeSchema = Schema.Number.pipe(
  *   Schema.check(Schema.isGreaterThanOrEqualTo(0), Schema.isLessThanOrEqualTo(120))
  * )
  * ```
@@ -6163,10 +6089,6 @@ type TaggedUnionUtils<
     Members
   >
 > = {
-  /**
-   * Discriminant values in flattened member order.
-   */
-  readonly discriminants: { readonly [I in keyof Flattened]: Flattened[I]["Type"][Tag] }
   readonly cases: Simplify<{ [M in Flattened[number] as M["Type"][Tag]]: M }>
   readonly isAnyOf: <const Keys>(
     keys: ReadonlyArray<Keys>
@@ -6201,12 +6123,7 @@ export type toTaggedUnion<
 > = Union<Members> & TaggedUnionUtils<Tag, Members>
 
 /**
- * Augments an existing {@link Union} of tagged structs with utility methods and an ordered tuple of discriminant
- * values.
- *
- * **Gotchas**
- *
- * Throws if multiple members use the same discriminant property key.
+ * Augments an existing {@link Union} of tagged structs with utility methods keyed by the discriminant field.
  *
  * **Example** (Adding tagged-union utilities to an existing union)
  *
@@ -6234,14 +6151,12 @@ export function toTaggedUnion<const Tag extends PropertyKey>(tag: Tag) {
     self: Union<Members>
   ): toTaggedUnion<Tag, Members> => {
     const cases: Record<PropertyKey, unknown> = {}
-    const discriminants: Array<PropertyKey> = []
-    const discriminantKeys = new Set<string | symbol>()
     const guards: Record<PropertyKey, (u: unknown) => boolean> = {}
     const isAnyOf = (keys: ReadonlyArray<PropertyKey>) => (value: Members[number]["Type"]) => keys.includes(value[tag])
 
     walk(self)
 
-    return Object.assign(self, { cases, discriminants, isAnyOf, guards, match }) as any
+    return Object.assign(self, { cases, isAnyOf, guards, match }) as any
 
     function walk(schema: Constraint) {
       const ast = schema.ast
@@ -6257,14 +6172,8 @@ export function toTaggedUnion<const Tag extends PropertyKey>(tag: Tag) {
       if (sentinels.length > 0) {
         const literal = sentinels.find((s) => s.key === tag)?.literal
         if (Predicate.isPropertyKey(literal)) {
-          const key = typeof literal === "number" ? globalThis.String(literal) : literal
-          if (discriminantKeys.has(key)) {
-            throw new globalThis.Error(`Duplicate discriminant: ${globalThis.String(literal)}`)
-          }
-          discriminantKeys.add(key)
-          discriminants.push(literal)
-          InternalRecord.assignProperty(cases, literal, schema)
-          InternalRecord.assignProperty(guards, literal, is(toType(schema)))
+          cases[literal] = schema
+          guards[literal] = is(toType(schema))
           return
         }
       }
@@ -6276,16 +6185,12 @@ export function toTaggedUnion<const Tag extends PropertyKey>(tag: Tag) {
       if (arguments.length === 1) {
         const cases = arguments[0]
         return function(value: any) {
-          const key = value[tag]
-          const handler = Object.hasOwn(cases, key) ? cases[key] : undefined
-          return handler(value)
+          return cases[value[tag]](value)
         }
       }
       const value = arguments[0]
       const cases = arguments[1]
-      const key = value[tag]
-      const handler = Object.hasOwn(cases, key) ? cases[key] : undefined
-      return handler(value)
+      return cases[value[tag]](value)
     }
   }
 }
@@ -6357,9 +6262,7 @@ export function TaggedUnion<const CasesByTag extends Record<string, Struct.Field
   const cases: any = {}
   const members: any = []
   for (const key of Object.keys(casesByTag)) {
-    const member = TaggedStruct(key, casesByTag[key])
-    InternalRecord.assignProperty(cases, key, member)
-    members.push(member)
+    members.push(cases[key] = TaggedStruct(key, casesByTag[key]))
   }
   const union = Union(members)
   const { guards, isAnyOf, match } = toTaggedUnion("_tag")(union)
@@ -6373,7 +6276,7 @@ export function TaggedUnion<const CasesByTag extends Record<string, Struct.Field
  * @since 4.0.0
  */
 export interface Opaque<Self, S extends Top, Brand> extends
-  BottomLazyWithoutNew<
+  BottomLazy<
     S["ast"],
     S["Rebuild"],
     S["~type.parameters"],
@@ -6420,7 +6323,9 @@ export interface Opaque<Self, S extends Top, Brand> extends
  */
 export function Opaque<Self, Brand = {}>() {
   return <S extends Top>(schema: S): Opaque<Self, S, Brand> & Omit<S, keyof Top> => {
-    return schema as any
+    // oxlint-disable-next-line @typescript-eslint/no-extraneous-class
+    class Opaque {}
+    return Object.setPrototypeOf(Opaque, schema)
   }
 }
 
@@ -6612,17 +6517,6 @@ export function makeFilterGroup<T>(
   return new SchemaAST.FilterGroup(checks, annotations)
 }
 
-function makeFixedDeclarationReviver(
-  id: string,
-  schema: Top
-): SchemaRepresentation.DeclarationReviver<null> {
-  return InternalSchema.makeDeclarationReviver(
-    id,
-    Null,
-    ({ annotations }) => annotations === undefined ? schema : schema.annotate(annotations)
-  )
-}
-
 const TRIMMED_PATTERN = "^\\S[\\s\\S]*\\S$|^\\S$|^$"
 
 /**
@@ -6644,17 +6538,14 @@ const TRIMMED_PATTERN = "^\\S[\\s\\S]*\\S$|^\\S$|^$"
  * @since 4.0.0
  */
 export function isTrimmed(annotations?: Annotations.Filter) {
-  const regExp = new globalThis.RegExp(TRIMMED_PATTERN)
   return makeFilter(
     (s: string) => s.trim() === s,
     {
       expected: "a string with no leading or trailing whitespace",
-      representation: {
-        id: "effect/schema/isTrimmed",
-        payload: null
+      meta: {
+        _tag: "isTrimmed",
+        regExp: new globalThis.RegExp(TRIMMED_PATTERN)
       },
-      toJsonSchema: () => ({ pattern: regExp.source }),
-      toCode: () => ({ runtime: "Schema.isTrimmed()" }),
       arbitrary: {
         constraint: {
           patterns: [TRIMMED_PATTERN]
@@ -6664,24 +6555,6 @@ export function isTrimmed(annotations?: Annotations.Filter) {
     }
   )
 }
-
-/**
- * Reviver for persisted `isTrimmed` checks.
- *
- * **When to use**
- *
- * Use when reconstructing documents that may contain checks created by {@link isTrimmed}.
- *
- * @see {@link isTrimmed} for creating the corresponding check
- *
- * @category String checks
- * @since 4.0.0
- */
-export const isTrimmedReviver: SchemaRepresentation.FilterReviver<null> = InternalSchema.makeFilterReviver(
-  "effect/schema/isTrimmed",
-  Null,
-  ({ annotations }) => isTrimmed(annotations)
-)
 
 /**
  * Validates that a string matches the specified regular expression pattern.
@@ -6700,51 +6573,8 @@ export const isTrimmedReviver: SchemaRepresentation.FilterReviver<null> = Intern
  * @category String checks
  * @since 4.0.0
  */
-export function isPattern(
-  regExp: globalThis.RegExp,
-  annotations?: Annotations.Filter
-): SchemaAST.Filter<string> {
-  const source = regExp.source
-  const flags = regExp.flags
-  const runtimeRegExp = flags === ""
-    ? `new RegExp(${format(source)})`
-    : `new RegExp(${format(source)}, ${format(flags)})`
-  return SchemaAST.isPattern(regExp, {
-    toCode: () => ({ runtime: `Schema.isPattern(${runtimeRegExp})` }),
-    ...annotations
-  })
-}
-
-const IsPatternPayload = Struct({
-  source: String,
-  flags: String
-}).check(makeFilter((payload: { readonly source: string; readonly flags: string }) => {
-  const result = Result_.try(() => new globalThis.RegExp(payload.source, payload.flags))
-  return Result_.isSuccess(result) &&
-    result.success.source === payload.source &&
-    result.success.flags === payload.flags
-}))
-
-/**
- * Reviver for persisted `isPattern` checks.
- *
- * **When to use**
- *
- * Use when reconstructing documents that may contain checks created by {@link isPattern}.
- *
- * @see {@link isPattern} for creating the corresponding check
- *
- * @category String checks
- * @since 4.0.0
- */
-export const isPatternReviver: SchemaRepresentation.FilterReviver<{
-  readonly source: string
-  readonly flags: string
-}> = {
-  id: "effect/schema/isPattern",
-  payloadSchema: IsPatternPayload,
-  revive: ({ annotations, payload }) => isPattern(new globalThis.RegExp(payload.source, payload.flags), annotations)
-}
+export const isPattern: (regExp: globalThis.RegExp, annotations?: Annotations.Filter) => SchemaAST.Filter<string> =
+  SchemaAST.isPattern
 
 /**
  * Validates that a string represents a finite number.
@@ -6764,30 +6594,7 @@ export const isPatternReviver: SchemaRepresentation.FilterReviver<{
  * @category String checks
  * @since 4.0.0
  */
-export function isStringFinite(annotations?: Annotations.Filter): SchemaAST.Filter<string> {
-  return SchemaAST.isStringFinite({
-    toCode: () => ({ runtime: "Schema.isStringFinite()" }),
-    ...annotations
-  })
-}
-
-/**
- * Reviver for persisted `isStringFinite` checks.
- *
- * **When to use**
- *
- * Use when reconstructing documents that may contain checks created by {@link isStringFinite}.
- *
- * @see {@link isStringFinite} for creating the corresponding check
- *
- * @category String checks
- * @since 4.0.0
- */
-export const isStringFiniteReviver: SchemaRepresentation.FilterReviver<null> = InternalSchema.makeFilterReviver(
-  "effect/schema/isStringFinite",
-  Null,
-  ({ annotations }) => isStringFinite(annotations)
-)
+export const isStringFinite: (annotations?: Annotations.Filter) => SchemaAST.Filter<string> = SchemaAST.isStringFinite
 
 /**
  * Validates that a string is a signed base-10 integer literal for Effect's
@@ -6806,30 +6613,7 @@ export const isStringFiniteReviver: SchemaRepresentation.FilterReviver<null> = I
  * @category String checks
  * @since 4.0.0
  */
-export function isStringBigInt(annotations?: Annotations.Filter): SchemaAST.Filter<string> {
-  return SchemaAST.isStringBigInt({
-    toCode: () => ({ runtime: "Schema.isStringBigInt()" }),
-    ...annotations
-  })
-}
-
-/**
- * Reviver for persisted `isStringBigInt` checks.
- *
- * **When to use**
- *
- * Use when reconstructing documents that may contain checks created by {@link isStringBigInt}.
- *
- * @see {@link isStringBigInt} for creating the corresponding check
- *
- * @category String checks
- * @since 4.0.0
- */
-export const isStringBigIntReviver: SchemaRepresentation.FilterReviver<null> = InternalSchema.makeFilterReviver(
-  "effect/schema/isStringBigInt",
-  Null,
-  ({ annotations }) => isStringBigInt(annotations)
-)
+export const isStringBigInt: (annotations?: Annotations.Filter) => SchemaAST.Filter<string> = SchemaAST.isStringBigInt
 
 /**
  * Validates that a string has the `Symbol(description)` format used by Effect's
@@ -6843,30 +6627,7 @@ export const isStringBigIntReviver: SchemaRepresentation.FilterReviver<null> = I
  * @category String checks
  * @since 4.0.0
  */
-export function isStringSymbol(annotations?: Annotations.Filter): SchemaAST.Filter<string> {
-  return SchemaAST.isStringSymbol({
-    toCode: () => ({ runtime: "Schema.isStringSymbol()" }),
-    ...annotations
-  })
-}
-
-/**
- * Reviver for persisted `isStringSymbol` checks.
- *
- * **When to use**
- *
- * Use when reconstructing documents that may contain checks created by {@link isStringSymbol}.
- *
- * @see {@link isStringSymbol} for creating the corresponding check
- *
- * @category String checks
- * @since 4.0.0
- */
-export const isStringSymbolReviver: SchemaRepresentation.FilterReviver<null> = InternalSchema.makeFilterReviver(
-  "effect/schema/isStringSymbol",
-  Null,
-  ({ annotations }) => isStringSymbol(annotations)
-)
+export const isStringSymbol: (annotations?: Annotations.Filter) => SchemaAST.Filter<string> = SchemaAST.isStringSymbol
 
 /**
  * Returns a RegExp for validating an RFC 9562 / RFC 4122 UUID.
@@ -6918,36 +6679,15 @@ export function isUUID(version?: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8, annotations?: An
     regExp,
     {
       expected: version ? `a UUID v${version}` : "a UUID",
-      representation: {
-        id: "effect/schema/isUUID",
-        payload: { version: version ?? null }
+      meta: {
+        _tag: "isUUID",
+        regExp,
+        version
       },
-      toJsonSchema: () => ({ pattern: regExp.source, format: "uuid" }),
-      toCode: () => ({ runtime: version === undefined ? "Schema.isUUID()" : `Schema.isUUID(${version})` }),
       ...annotations
     }
   )
 }
-
-/**
- * Reviver for persisted `isUUID` checks.
- *
- * **When to use**
- *
- * Use when reconstructing documents that may contain checks created by {@link isUUID}.
- *
- * @see {@link isUUID} for creating the corresponding check
- *
- * @category String checks
- * @since 4.0.0
- */
-export const isUUIDReviver: SchemaRepresentation.FilterReviver<{
-  readonly version: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | null
-}> = InternalSchema.makeFilterReviver(
-  "effect/schema/isUUID",
-  Struct({ version: Union([Literals([1, 2, 3, 4, 5, 6, 7, 8]), Null]) }),
-  ({ annotations, payload }) => isUUID(payload.version ?? undefined, annotations)
-)
 
 const GUID_REGEXP = /^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})$/
 
@@ -6980,34 +6720,14 @@ export function isGUID(annotations?: Annotations.Filter) {
     GUID_REGEXP,
     {
       expected: "a GUID",
-      representation: {
-        id: "effect/schema/isGUID",
-        payload: null
+      meta: {
+        _tag: "isGUID",
+        regExp: GUID_REGEXP
       },
-      toJsonSchema: () => ({ pattern: GUID_REGEXP.source }),
-      toCode: () => ({ runtime: "Schema.isGUID()" }),
       ...annotations
     }
   )
 }
-
-/**
- * Reviver for persisted `isGUID` checks.
- *
- * **When to use**
- *
- * Use when reconstructing documents that may contain checks created by {@link isGUID}.
- *
- * @see {@link isGUID} for creating the corresponding check
- *
- * @category String checks
- * @since 4.0.0
- */
-export const isGUIDReviver: SchemaRepresentation.FilterReviver<null> = InternalSchema.makeFilterReviver(
-  "effect/schema/isGUID",
-  Null,
-  ({ annotations }) => isGUID(annotations)
-)
 
 /**
  * Validates that a string is a valid ULID (Universally Unique Lexicographically
@@ -7033,34 +6753,14 @@ export function isULID(annotations?: Annotations.Filter) {
   return isPattern(
     regExp,
     {
-      representation: {
-        id: "effect/schema/isULID",
-        payload: null
+      meta: {
+        _tag: "isULID",
+        regExp
       },
-      toJsonSchema: () => ({ pattern: regExp.source }),
-      toCode: () => ({ runtime: "Schema.isULID()" }),
       ...annotations
     }
   )
 }
-
-/**
- * Reviver for persisted `isULID` checks.
- *
- * **When to use**
- *
- * Use when reconstructing documents that may contain checks created by {@link isULID}.
- *
- * @see {@link isULID} for creating the corresponding check
- *
- * @category String checks
- * @since 4.0.0
- */
-export const isULIDReviver: SchemaRepresentation.FilterReviver<null> = InternalSchema.makeFilterReviver(
-  "effect/schema/isULID",
-  Null,
-  ({ annotations }) => isULID(annotations)
-)
 
 /**
  * Validates that a string is valid Base64 encoded data.
@@ -7086,34 +6786,14 @@ export function isBase64(annotations?: Annotations.Filter) {
     regExp,
     {
       expected: "a base64 encoded string",
-      representation: {
-        id: "effect/schema/isBase64",
-        payload: null
+      meta: {
+        _tag: "isBase64",
+        regExp
       },
-      toJsonSchema: () => ({ pattern: regExp.source }),
-      toCode: () => ({ runtime: "Schema.isBase64()" }),
       ...annotations
     }
   )
 }
-
-/**
- * Reviver for persisted `isBase64` checks.
- *
- * **When to use**
- *
- * Use when reconstructing documents that may contain checks created by {@link isBase64}.
- *
- * @see {@link isBase64} for creating the corresponding check
- *
- * @category String checks
- * @since 4.0.0
- */
-export const isBase64Reviver: SchemaRepresentation.FilterReviver<null> = InternalSchema.makeFilterReviver(
-  "effect/schema/isBase64",
-  Null,
-  ({ annotations }) => isBase64(annotations)
-)
 
 /**
  * Validates that a string is valid Base64URL encoded data (Base64 with URL-safe
@@ -7140,197 +6820,116 @@ export function isBase64Url(annotations?: Annotations.Filter) {
     regExp,
     {
       expected: "a base64url encoded string",
-      representation: {
-        id: "effect/schema/isBase64Url",
-        payload: null
+      meta: {
+        _tag: "isBase64Url",
+        regExp
       },
-      toJsonSchema: () => ({ pattern: regExp.source }),
-      toCode: () => ({ runtime: "Schema.isBase64Url()" }),
       ...annotations
     }
   )
 }
-
-/**
- * Reviver for persisted `isBase64Url` checks.
- *
- * **When to use**
- *
- * Use when reconstructing documents that may contain checks created by {@link isBase64Url}.
- *
- * @see {@link isBase64Url} for creating the corresponding check
- *
- * @category String checks
- * @since 4.0.0
- */
-export const isBase64UrlReviver: SchemaRepresentation.FilterReviver<null> = InternalSchema.makeFilterReviver(
-  "effect/schema/isBase64Url",
-  Null,
-  ({ annotations }) => isBase64Url(annotations)
-)
 
 /**
  * Validates at runtime that a string starts with the specified literal prefix.
  *
  * **Details**
  *
- * RegExp metacharacters in the prefix are escaped in JSON Schema and arbitrary
- * metadata so that the generated patterns retain literal `startsWith` semantics.
+ * Notes:
+ * The JSON Schema and arbitrary metadata are built from `^${startsWith}` without
+ * escaping regexp metacharacters. If the prefix contains regexp syntax, generated
+ * patterns may not be equivalent to the runtime `startsWith` check.
  *
  * @category String checks
  * @since 4.0.0
  */
 export function isStartsWith(startsWith: string, annotations?: Annotations.Filter) {
   const formatted = JSON.stringify(startsWith)
-  const regExp = new globalThis.RegExp(`^${RegExp_.escape(startsWith)}`)
   return makeFilter(
     (s: string) => s.startsWith(startsWith),
     {
       expected: `a string starting with ${formatted}`,
-      representation: {
-        id: "effect/schema/isStartsWith",
-        payload: { startsWith }
+      meta: {
+        _tag: "isStartsWith",
+        startsWith,
+        regExp: new globalThis.RegExp(`^${startsWith}`)
       },
-      toJsonSchema: () => ({ pattern: regExp.source }),
-      toCode: () => ({ runtime: `Schema.isStartsWith(${format(startsWith)})` }),
       arbitrary: {
         constraint: {
-          patterns: [regExp.source]
+          patterns: [`^${startsWith}`]
         }
       },
       ...annotations
     }
   )
 }
-
-/**
- * Reviver for persisted `isStartsWith` checks.
- *
- * **When to use**
- *
- * Use when reconstructing documents that may contain checks created by {@link isStartsWith}.
- *
- * @see {@link isStartsWith} for creating the corresponding check
- *
- * @category String checks
- * @since 4.0.0
- */
-export const isStartsWithReviver: SchemaRepresentation.FilterReviver<{
-  readonly startsWith: string
-}> = InternalSchema.makeFilterReviver(
-  "effect/schema/isStartsWith",
-  Struct({ startsWith: String }),
-  ({ annotations, payload }) => isStartsWith(payload.startsWith, annotations)
-)
 
 /**
  * Validates at runtime that a string ends with the specified literal suffix.
  *
  * **Details**
  *
- * RegExp metacharacters in the suffix are escaped in JSON Schema and arbitrary
- * metadata so that the generated patterns retain literal `endsWith` semantics.
+ * Notes:
+ * The JSON Schema and arbitrary metadata are built from `${endsWith}$` without
+ * escaping regexp metacharacters. If the suffix contains regexp syntax, generated
+ * patterns may not be equivalent to the runtime `endsWith` check.
  *
  * @category String checks
  * @since 4.0.0
  */
 export function isEndsWith(endsWith: string, annotations?: Annotations.Filter) {
   const formatted = JSON.stringify(endsWith)
-  const regExp = new globalThis.RegExp(`${RegExp_.escape(endsWith)}$`)
   return makeFilter(
     (s: string) => s.endsWith(endsWith),
     {
       expected: `a string ending with ${formatted}`,
-      representation: {
-        id: "effect/schema/isEndsWith",
-        payload: { endsWith }
+      meta: {
+        _tag: "isEndsWith",
+        endsWith,
+        regExp: new globalThis.RegExp(`${endsWith}$`)
       },
-      toJsonSchema: () => ({ pattern: regExp.source }),
-      toCode: () => ({ runtime: `Schema.isEndsWith(${format(endsWith)})` }),
       arbitrary: {
         constraint: {
-          patterns: [regExp.source]
+          patterns: [`${endsWith}$`]
         }
       },
       ...annotations
     }
   )
 }
-
-/**
- * Reviver for persisted `isEndsWith` checks.
- *
- * **When to use**
- *
- * Use when reconstructing documents that may contain checks created by {@link isEndsWith}.
- *
- * @see {@link isEndsWith} for creating the corresponding check
- *
- * @category String checks
- * @since 4.0.0
- */
-export const isEndsWithReviver: SchemaRepresentation.FilterReviver<{
-  readonly endsWith: string
-}> = InternalSchema.makeFilterReviver(
-  "effect/schema/isEndsWith",
-  Struct({ endsWith: String }),
-  ({ annotations, payload }) => isEndsWith(payload.endsWith, annotations)
-)
 
 /**
  * Validates at runtime that a string contains the specified literal substring.
  *
  * **Details**
  *
- * RegExp metacharacters in the substring are escaped in JSON Schema and
- * arbitrary metadata so that the generated patterns retain literal `includes`
- * semantics.
+ * Notes:
+ * The JSON Schema and arbitrary metadata use the substring as a raw regexp
+ * pattern. If the substring contains regexp syntax, generated patterns may not be
+ * equivalent to the runtime `includes` check.
  *
  * @category String checks
  * @since 4.0.0
  */
 export function isIncludes(includes: string, annotations?: Annotations.Filter) {
   const formatted = JSON.stringify(includes)
-  const regExp = new globalThis.RegExp(RegExp_.escape(includes))
   return makeFilter(
     (s: string) => s.includes(includes),
     {
       expected: `a string including ${formatted}`,
-      representation: {
-        id: "effect/schema/isIncludes",
-        payload: { includes }
+      meta: {
+        _tag: "isIncludes",
+        includes,
+        regExp: new globalThis.RegExp(includes)
       },
-      toJsonSchema: () => ({ pattern: regExp.source }),
-      toCode: () => ({ runtime: `Schema.isIncludes(${format(includes)})` }),
       arbitrary: {
         constraint: {
-          patterns: [regExp.source]
+          patterns: [includes]
         }
       },
       ...annotations
     }
   )
 }
-
-/**
- * Reviver for persisted `isIncludes` checks.
- *
- * **When to use**
- *
- * Use when reconstructing documents that may contain checks created by {@link isIncludes}.
- *
- * @see {@link isIncludes} for creating the corresponding check
- *
- * @category String checks
- * @since 4.0.0
- */
-export const isIncludesReviver: SchemaRepresentation.FilterReviver<{
-  readonly includes: string
-}> = InternalSchema.makeFilterReviver(
-  "effect/schema/isIncludes",
-  Struct({ includes: String }),
-  ({ annotations, payload }) => isIncludes(payload.includes, annotations)
-)
 
 const UPPERCASED_PATTERN = "^[^a-z]*$"
 
@@ -7347,17 +6946,14 @@ const UPPERCASED_PATTERN = "^[^a-z]*$"
  * @since 4.0.0
  */
 export function isUppercased(annotations?: Annotations.Filter) {
-  const regExp = new globalThis.RegExp(UPPERCASED_PATTERN)
   return makeFilter(
     (s: string) => s.toUpperCase() === s,
     {
       expected: "a string with all characters in uppercase",
-      representation: {
-        id: "effect/schema/isUppercased",
-        payload: null
+      meta: {
+        _tag: "isUppercased",
+        regExp: new globalThis.RegExp(UPPERCASED_PATTERN)
       },
-      toJsonSchema: () => ({ pattern: regExp.source }),
-      toCode: () => ({ runtime: "Schema.isUppercased()" }),
       arbitrary: {
         constraint: {
           patterns: [UPPERCASED_PATTERN]
@@ -7367,24 +6963,6 @@ export function isUppercased(annotations?: Annotations.Filter) {
     }
   )
 }
-
-/**
- * Reviver for persisted `isUppercased` checks.
- *
- * **When to use**
- *
- * Use when reconstructing documents that may contain checks created by {@link isUppercased}.
- *
- * @see {@link isUppercased} for creating the corresponding check
- *
- * @category String checks
- * @since 4.0.0
- */
-export const isUppercasedReviver: SchemaRepresentation.FilterReviver<null> = InternalSchema.makeFilterReviver(
-  "effect/schema/isUppercased",
-  Null,
-  ({ annotations }) => isUppercased(annotations)
-)
 
 const LOWERCASED_PATTERN = "^[^A-Z]*$"
 
@@ -7401,17 +6979,14 @@ const LOWERCASED_PATTERN = "^[^A-Z]*$"
  * @since 4.0.0
  */
 export function isLowercased(annotations?: Annotations.Filter) {
-  const regExp = new globalThis.RegExp(LOWERCASED_PATTERN)
   return makeFilter(
     (s: string) => s.toLowerCase() === s,
     {
       expected: "a string with all characters in lowercase",
-      representation: {
-        id: "effect/schema/isLowercased",
-        payload: null
+      meta: {
+        _tag: "isLowercased",
+        regExp: new globalThis.RegExp(LOWERCASED_PATTERN)
       },
-      toJsonSchema: () => ({ pattern: regExp.source }),
-      toCode: () => ({ runtime: "Schema.isLowercased()" }),
       arbitrary: {
         constraint: {
           patterns: [LOWERCASED_PATTERN]
@@ -7421,24 +6996,6 @@ export function isLowercased(annotations?: Annotations.Filter) {
     }
   )
 }
-
-/**
- * Reviver for persisted `isLowercased` checks.
- *
- * **When to use**
- *
- * Use when reconstructing documents that may contain checks created by {@link isLowercased}.
- *
- * @see {@link isLowercased} for creating the corresponding check
- *
- * @category String checks
- * @since 4.0.0
- */
-export const isLowercasedReviver: SchemaRepresentation.FilterReviver<null> = InternalSchema.makeFilterReviver(
-  "effect/schema/isLowercased",
-  Null,
-  ({ annotations }) => isLowercased(annotations)
-)
 
 const CAPITALIZED_PATTERN = "^[^a-z]?.*$"
 
@@ -7455,17 +7012,14 @@ const CAPITALIZED_PATTERN = "^[^a-z]?.*$"
  * @since 4.0.0
  */
 export function isCapitalized(annotations?: Annotations.Filter) {
-  const regExp = new globalThis.RegExp(CAPITALIZED_PATTERN)
   return makeFilter(
     (s: string) => s.charAt(0).toUpperCase() === s.charAt(0),
     {
       expected: "a string with the first character in uppercase",
-      representation: {
-        id: "effect/schema/isCapitalized",
-        payload: null
+      meta: {
+        _tag: "isCapitalized",
+        regExp: new globalThis.RegExp(CAPITALIZED_PATTERN)
       },
-      toJsonSchema: () => ({ pattern: regExp.source }),
-      toCode: () => ({ runtime: "Schema.isCapitalized()" }),
       arbitrary: {
         constraint: {
           patterns: [CAPITALIZED_PATTERN]
@@ -7475,24 +7029,6 @@ export function isCapitalized(annotations?: Annotations.Filter) {
     }
   )
 }
-
-/**
- * Reviver for persisted `isCapitalized` checks.
- *
- * **When to use**
- *
- * Use when reconstructing documents that may contain checks created by {@link isCapitalized}.
- *
- * @see {@link isCapitalized} for creating the corresponding check
- *
- * @category String checks
- * @since 4.0.0
- */
-export const isCapitalizedReviver: SchemaRepresentation.FilterReviver<null> = InternalSchema.makeFilterReviver(
-  "effect/schema/isCapitalized",
-  Null,
-  ({ annotations }) => isCapitalized(annotations)
-)
 
 const UNCAPITALIZED_PATTERN = "^[^A-Z]?.*$"
 
@@ -7509,17 +7045,14 @@ const UNCAPITALIZED_PATTERN = "^[^A-Z]?.*$"
  * @since 4.0.0
  */
 export function isUncapitalized(annotations?: Annotations.Filter) {
-  const regExp = new globalThis.RegExp(UNCAPITALIZED_PATTERN)
   return makeFilter(
     (s: string) => s.charAt(0).toLowerCase() === s.charAt(0),
     {
       expected: "a string with the first character in lowercase",
-      representation: {
-        id: "effect/schema/isUncapitalized",
-        payload: null
+      meta: {
+        _tag: "isUncapitalized",
+        regExp: new globalThis.RegExp(UNCAPITALIZED_PATTERN)
       },
-      toJsonSchema: () => ({ pattern: regExp.source }),
-      toCode: () => ({ runtime: "Schema.isUncapitalized()" }),
       arbitrary: {
         constraint: {
           patterns: [UNCAPITALIZED_PATTERN]
@@ -7529,42 +7062,6 @@ export function isUncapitalized(annotations?: Annotations.Filter) {
     }
   )
 }
-
-/**
- * Reviver for persisted `isUncapitalized` checks.
- *
- * **When to use**
- *
- * Use when reconstructing documents that may contain checks created by {@link isUncapitalized}.
- *
- * @see {@link isUncapitalized} for creating the corresponding check
- *
- * @category String checks
- * @since 4.0.0
- */
-export const isUncapitalizedReviver: SchemaRepresentation.FilterReviver<null> = InternalSchema.makeFilterReviver(
-  "effect/schema/isUncapitalized",
-  Null,
-  ({ annotations }) => isUncapitalized(annotations)
-)
-
-/**
- * Type-level representation of {@link Finite}.
- *
- * @category Number
- * @since 3.10.0
- */
-export interface Finite extends Number {
-  readonly "Rebuild": Finite
-}
-
-/**
- * Schema for finite numbers, rejecting `NaN`, `Infinity`, and `-Infinity`.
- *
- * @category Number
- * @since 3.10.0
- */
-export const Finite: Finite = make(SchemaAST.finite)
 
 /**
  * Validates that a number is finite (not `Infinity`, `-Infinity`, or `NaN`).
@@ -7584,25 +7081,24 @@ export const Finite: Finite = make(SchemaAST.finite)
  * @category Number checks
  * @since 4.0.0
  */
-export const isFinite: (annotations?: Annotations.Filter) => SchemaAST.Filter<number> = SchemaAST.isFinite
-
-/**
- * Reviver for persisted `isFinite` checks.
- *
- * **When to use**
- *
- * Use when reconstructing documents that may contain checks created by {@link isFinite}.
- *
- * @see {@link isFinite} for creating the corresponding check
- *
- * @category Number checks
- * @since 4.0.0
- */
-export const isFiniteReviver: SchemaRepresentation.FilterReviver<null> = InternalSchema.makeFilterReviver(
-  "effect/schema/isFinite",
-  Null,
-  ({ annotations }) => isFinite(annotations)
-)
+export function isFinite(annotations?: Annotations.Filter) {
+  return makeFilter(
+    (n: number) => globalThis.Number.isFinite(n),
+    {
+      expected: "a finite number",
+      meta: {
+        _tag: "isFinite"
+      },
+      arbitrary: {
+        constraint: {
+          noInfinity: true,
+          noNaN: true
+        }
+      },
+      ...annotations
+    }
+  )
+}
 
 /**
  * Creates a greater-than (`>`) check for any ordered type from an
@@ -7824,13 +7320,6 @@ export function makeIsMultipleOf<T>(options: {
   }
 }
 
-function encodeNumberPayload(number: number): number {
-  if (!globalThis.Number.isFinite(number)) {
-    throw new globalThis.RangeError(`Expected a finite number, got ${format(number)}`)
-  }
-  return number
-}
-
 /**
  * Validates that a number is greater than the specified value (exclusive).
  *
@@ -7852,34 +7341,12 @@ function encodeNumberPayload(number: number): number {
 export const isGreaterThan = makeIsGreaterThan({
   order: Order.Number,
   annotate: (exclusiveMinimum) => ({
-    representation: {
-      id: "effect/schema/isGreaterThan",
-      payload: { exclusiveMinimum: encodeNumberPayload(exclusiveMinimum) }
-    },
-    toJsonSchema: () => ({ exclusiveMinimum }),
-    toCode: () => ({ runtime: `Schema.isGreaterThan(${format(exclusiveMinimum)})` })
+    meta: {
+      _tag: "isGreaterThan",
+      exclusiveMinimum
+    }
   })
 })
-
-/**
- * Reviver for persisted `isGreaterThan` checks.
- *
- * **When to use**
- *
- * Use when reconstructing documents that may contain checks created by {@link isGreaterThan}.
- *
- * @see {@link isGreaterThan} for creating the corresponding check
- *
- * @category Number checks
- * @since 4.0.0
- */
-export const isGreaterThanReviver: SchemaRepresentation.FilterReviver<{
-  readonly exclusiveMinimum: number
-}> = InternalSchema.makeFilterReviver(
-  "effect/schema/isGreaterThan",
-  Struct({ exclusiveMinimum: Finite }),
-  ({ annotations, payload }) => isGreaterThan(payload.exclusiveMinimum, annotations)
-)
 
 /**
  * Validates that a number is greater than or equal to the specified value
@@ -7902,34 +7369,12 @@ export const isGreaterThanReviver: SchemaRepresentation.FilterReviver<{
 export const isGreaterThanOrEqualTo = makeIsGreaterThanOrEqualTo({
   order: Order.Number,
   annotate: (minimum) => ({
-    representation: {
-      id: "effect/schema/isGreaterThanOrEqualTo",
-      payload: { minimum: encodeNumberPayload(minimum) }
-    },
-    toJsonSchema: () => ({ minimum }),
-    toCode: () => ({ runtime: `Schema.isGreaterThanOrEqualTo(${format(minimum)})` })
+    meta: {
+      _tag: "isGreaterThanOrEqualTo",
+      minimum
+    }
   })
 })
-
-/**
- * Reviver for persisted `isGreaterThanOrEqualTo` checks.
- *
- * **When to use**
- *
- * Use when reconstructing documents that may contain checks created by {@link isGreaterThanOrEqualTo}.
- *
- * @see {@link isGreaterThanOrEqualTo} for creating the corresponding check
- *
- * @category Number checks
- * @since 4.0.0
- */
-export const isGreaterThanOrEqualToReviver: SchemaRepresentation.FilterReviver<{
-  readonly minimum: number
-}> = InternalSchema.makeFilterReviver(
-  "effect/schema/isGreaterThanOrEqualTo",
-  Struct({ minimum: Finite }),
-  ({ annotations, payload }) => isGreaterThanOrEqualTo(payload.minimum, annotations)
-)
 
 /**
  * Validates that a number is less than the specified value (exclusive).
@@ -7952,34 +7397,12 @@ export const isGreaterThanOrEqualToReviver: SchemaRepresentation.FilterReviver<{
 export const isLessThan = makeIsLessThan({
   order: Order.Number,
   annotate: (exclusiveMaximum) => ({
-    representation: {
-      id: "effect/schema/isLessThan",
-      payload: { exclusiveMaximum: encodeNumberPayload(exclusiveMaximum) }
-    },
-    toJsonSchema: () => ({ exclusiveMaximum }),
-    toCode: () => ({ runtime: `Schema.isLessThan(${format(exclusiveMaximum)})` })
+    meta: {
+      _tag: "isLessThan",
+      exclusiveMaximum
+    }
   })
 })
-
-/**
- * Reviver for persisted `isLessThan` checks.
- *
- * **When to use**
- *
- * Use when reconstructing documents that may contain checks created by {@link isLessThan}.
- *
- * @see {@link isLessThan} for creating the corresponding check
- *
- * @category Number checks
- * @since 4.0.0
- */
-export const isLessThanReviver: SchemaRepresentation.FilterReviver<{
-  readonly exclusiveMaximum: number
-}> = InternalSchema.makeFilterReviver(
-  "effect/schema/isLessThan",
-  Struct({ exclusiveMaximum: Finite }),
-  ({ annotations, payload }) => isLessThan(payload.exclusiveMaximum, annotations)
-)
 
 /**
  * Validates that a number is less than or equal to the specified value
@@ -8002,34 +7425,12 @@ export const isLessThanReviver: SchemaRepresentation.FilterReviver<{
 export const isLessThanOrEqualTo = makeIsLessThanOrEqualTo({
   order: Order.Number,
   annotate: (maximum) => ({
-    representation: {
-      id: "effect/schema/isLessThanOrEqualTo",
-      payload: { maximum: encodeNumberPayload(maximum) }
-    },
-    toJsonSchema: () => ({ maximum }),
-    toCode: () => ({ runtime: `Schema.isLessThanOrEqualTo(${format(maximum)})` })
+    meta: {
+      _tag: "isLessThanOrEqualTo",
+      maximum
+    }
   })
 })
-
-/**
- * Reviver for persisted `isLessThanOrEqualTo` checks.
- *
- * **When to use**
- *
- * Use when reconstructing documents that may contain checks created by {@link isLessThanOrEqualTo}.
- *
- * @see {@link isLessThanOrEqualTo} for creating the corresponding check
- *
- * @category Number checks
- * @since 4.0.0
- */
-export const isLessThanOrEqualToReviver: SchemaRepresentation.FilterReviver<{
-  readonly maximum: number
-}> = InternalSchema.makeFilterReviver(
-  "effect/schema/isLessThanOrEqualTo",
-  Struct({ maximum: Finite }),
-  ({ annotations, payload }) => isLessThanOrEqualTo(payload.maximum, annotations)
-)
 
 /**
  * Validates that a number is within a specified range. The range boundaries can
@@ -8055,59 +7456,14 @@ export const isLessThanOrEqualToReviver: SchemaRepresentation.FilterReviver<{
 export const isBetween = makeIsBetween({
   order: Order.Number,
   annotate: (options) => {
-    const exclusiveMinimum = options.exclusiveMinimum ? true : undefined
-    const exclusiveMaximum = options.exclusiveMaximum ? true : undefined
-    const payload = {
-      minimum: encodeNumberPayload(options.minimum),
-      maximum: encodeNumberPayload(options.maximum),
-      ...(exclusiveMinimum && { exclusiveMinimum }),
-      ...(exclusiveMaximum && { exclusiveMaximum })
-    }
     return {
-      representation: {
-        id: "effect/schema/isBetween",
-        payload
-      },
-      toJsonSchema: () => ({
-        [exclusiveMinimum ? "exclusiveMinimum" : "minimum"]: options.minimum,
-        [exclusiveMaximum ? "exclusiveMaximum" : "maximum"]: options.maximum
-      }),
-      toCode: () => ({
-        runtime: `Schema.isBetween({ minimum: ${format(options.minimum)}, maximum: ${
-          format(options.maximum)
-        }, exclusiveMinimum: ${format(exclusiveMinimum)}, exclusiveMaximum: ${format(exclusiveMaximum)} })`
-      })
+      meta: {
+        _tag: "isBetween",
+        ...options
+      }
     }
   }
 })
-
-/**
- * Reviver for persisted `isBetween` checks.
- *
- * **When to use**
- *
- * Use when reconstructing documents that may contain checks created by {@link isBetween}.
- *
- * @see {@link isBetween} for creating the corresponding check
- *
- * @category Number checks
- * @since 4.0.0
- */
-export const isBetweenReviver: SchemaRepresentation.FilterReviver<{
-  readonly minimum: number
-  readonly maximum: number
-  readonly exclusiveMinimum?: true | undefined
-  readonly exclusiveMaximum?: true | undefined
-}> = InternalSchema.makeFilterReviver(
-  "effect/schema/isBetween",
-  Struct({
-    minimum: Finite,
-    maximum: Finite,
-    exclusiveMinimum: optional(Literal(true)),
-    exclusiveMaximum: optional(Literal(true))
-  }),
-  ({ annotations, payload }) => isBetween(payload, annotations)
-)
 
 /**
  * Validates that a number is a multiple of the specified divisor.
@@ -8131,34 +7487,12 @@ export const isMultipleOf = makeIsMultipleOf({
   zero: 0,
   annotate: (divisor) => ({
     expected: `a value that is a multiple of ${divisor}`,
-    representation: {
-      id: "effect/schema/isMultipleOf",
-      payload: { divisor }
-    },
-    toJsonSchema: () => ({ multipleOf: divisor }),
-    toCode: () => ({ runtime: `Schema.isMultipleOf(${format(divisor)})` })
+    meta: {
+      _tag: "isMultipleOf",
+      divisor
+    }
   })
 })
-
-/**
- * Reviver for persisted `isMultipleOf` checks.
- *
- * **When to use**
- *
- * Use when reconstructing documents that may contain checks created by {@link isMultipleOf}.
- *
- * @see {@link isMultipleOf} for creating the corresponding check
- *
- * @category Number checks
- * @since 4.0.0
- */
-export const isMultipleOfReviver: SchemaRepresentation.FilterReviver<{
-  readonly divisor: number
-}> = InternalSchema.makeFilterReviver(
-  "effect/schema/isMultipleOf",
-  Struct({ divisor: Finite }),
-  ({ annotations, payload }) => isMultipleOf(payload.divisor, annotations)
-)
 
 /**
  * Validates that a number is a safe integer (within the safe integer range
@@ -8183,12 +7517,9 @@ export function isInt(annotations?: Annotations.Filter) {
     (n: number) => globalThis.Number.isSafeInteger(n),
     {
       expected: "an integer",
-      representation: {
-        id: "effect/schema/isInt",
-        payload: null
+      meta: {
+        _tag: "isInt"
       },
-      toJsonSchema: () => ({ type: "integer" }),
-      toCode: () => ({ runtime: "Schema.isInt()" }),
       arbitrary: {
         constraint: {
           integer: true
@@ -8198,66 +7529,6 @@ export function isInt(annotations?: Annotations.Filter) {
     }
   )
 }
-
-/**
- * Reviver for persisted `isInt` checks.
- *
- * **When to use**
- *
- * Use when reconstructing documents that may contain checks created by {@link isInt}.
- *
- * @see {@link isInt} for creating the corresponding check
- *
- * @category Integer checks
- * @since 4.0.0
- */
-export const isIntReviver: SchemaRepresentation.FilterReviver<null> = InternalSchema.makeFilterReviver(
-  "effect/schema/isInt",
-  Null,
-  ({ annotations }) => isInt(annotations)
-)
-
-/**
- * Type-level representation of {@link Int}.
- *
- * @category Number
- * @since 3.10.0
- */
-export interface Int extends Number {
-  readonly "Rebuild": Int
-}
-
-/**
- * Schema for integers, rejecting `NaN`, `Infinity`, and `-Infinity`.
- *
- * @category Number
- * @since 3.10.0
- */
-export const Int: Int = Number.check(isInt())
-
-/**
- * Type-level representation of {@link Natural}.
- *
- * @category Number
- * @since 4.0.0
- */
-export interface Natural extends Int {
-  readonly "Rebuild": Natural
-}
-
-/**
- * Schema for non-negative safe integers, including zero.
- *
- * **When to use**
- *
- * Use when you need a count, index, or size that cannot be negative.
- *
- * @see {@link Int} for safe integers that may be negative
- *
- * @category Number
- * @since 4.0.0
- */
-export const Natural: Natural = Int.check(isGreaterThanOrEqualTo(0))
 
 /**
  * Validates that a number is a 32-bit signed integer (range: -2,147,483,648 to
@@ -8281,7 +7552,7 @@ export const Natural: Natural = Int.check(isGreaterThanOrEqualTo(0))
 export function isInt32(annotations?: Annotations.Filter) {
   return new SchemaAST.FilterGroup(
     [
-      isInt(),
+      isInt(annotations),
       isBetween({ minimum: -2147483648, maximum: 2147483647 })
     ],
     {
@@ -8323,15 +7594,41 @@ export function isUint32(annotations?: Annotations.Filter) {
   )
 }
 
-function encodeDatePayload(date: globalThis.Date): string {
-  if (globalThis.Number.isNaN(date.getTime())) {
-    throw new globalThis.RangeError(`Expected a valid Date, got ${format(date)}`)
-  }
-  return date.toISOString()
-}
-
-function formatDateRuntime(date: globalThis.Date): string {
-  return `new Date(${format(date.getTime())})`
+/**
+ * Validates that a Date object represents a valid date (not an invalid date
+ * like `new Date("invalid")`).
+ *
+ * **Details**
+ *
+ * JSON Schema:
+ *
+ * This check does not have a direct JSON Schema equivalent, as JSON Schema
+ * validates date strings, not Date objects.
+ *
+ * Arbitrary:
+ *
+ * When generating test data with fast-check, this applies a `valid: true`
+ * constraint to ensure generated Date objects are valid.
+ *
+ * @category Date checks
+ * @since 4.0.0
+ */
+export function isDateValid(annotations?: Annotations.Filter) {
+  return makeFilter<globalThis.Date>(
+    (date) => !isNaN(date.getTime()),
+    {
+      expected: "a valid date",
+      meta: {
+        _tag: "isDateValid"
+      },
+      arbitrary: {
+        constraint: {
+          valid: true
+        }
+      },
+      ...annotations
+    }
+  )
 }
 
 /**
@@ -8350,17 +7647,12 @@ function formatDateRuntime(date: globalThis.Date): string {
  */
 export const isGreaterThanDate = makeIsGreaterThan({
   order: Order.Date,
-  annotate: (exclusiveMinimum) => {
-    const encoded = encodeDatePayload(exclusiveMinimum)
-    return {
-      representation: {
-        id: "effect/schema/isGreaterThanDate",
-        payload: { exclusiveMinimum: encoded }
-      },
-      toJsonSchema: () => ({}),
-      toCode: () => ({ runtime: `Schema.isGreaterThanDate(${formatDateRuntime(exclusiveMinimum)})` })
+  annotate: (exclusiveMinimum) => ({
+    meta: {
+      _tag: "isGreaterThanDate",
+      exclusiveMinimum
     }
-  }
+  })
 })
 
 /**
@@ -8385,17 +7677,12 @@ export const isGreaterThanDate = makeIsGreaterThan({
  */
 export const isGreaterThanOrEqualToDate = makeIsGreaterThanOrEqualTo({
   order: Order.Date,
-  annotate: (minimum) => {
-    const encoded = encodeDatePayload(minimum)
-    return {
-      representation: {
-        id: "effect/schema/isGreaterThanOrEqualToDate",
-        payload: { minimum: encoded }
-      },
-      toJsonSchema: () => ({}),
-      toCode: () => ({ runtime: `Schema.isGreaterThanOrEqualToDate(${formatDateRuntime(minimum)})` })
+  annotate: (minimum) => ({
+    meta: {
+      _tag: "isGreaterThanOrEqualToDate",
+      minimum
     }
-  }
+  })
 })
 
 /**
@@ -8414,17 +7701,12 @@ export const isGreaterThanOrEqualToDate = makeIsGreaterThanOrEqualTo({
  */
 export const isLessThanDate = makeIsLessThan({
   order: Order.Date,
-  annotate: (exclusiveMaximum) => {
-    const encoded = encodeDatePayload(exclusiveMaximum)
-    return {
-      representation: {
-        id: "effect/schema/isLessThanDate",
-        payload: { exclusiveMaximum: encoded }
-      },
-      toJsonSchema: () => ({}),
-      toCode: () => ({ runtime: `Schema.isLessThanDate(${formatDateRuntime(exclusiveMaximum)})` })
+  annotate: (exclusiveMaximum) => ({
+    meta: {
+      _tag: "isLessThanDate",
+      exclusiveMaximum
     }
-  }
+  })
 })
 
 /**
@@ -8449,17 +7731,12 @@ export const isLessThanDate = makeIsLessThan({
  */
 export const isLessThanOrEqualToDate = makeIsLessThanOrEqualTo({
   order: Order.Date,
-  annotate: (maximum) => {
-    const encoded = encodeDatePayload(maximum)
-    return {
-      representation: {
-        id: "effect/schema/isLessThanOrEqualToDate",
-        payload: { maximum: encoded }
-      },
-      toJsonSchema: () => ({}),
-      toCode: () => ({ runtime: `Schema.isLessThanOrEqualToDate(${formatDateRuntime(maximum)})` })
+  annotate: (maximum) => ({
+    meta: {
+      _tag: "isLessThanOrEqualToDate",
+      maximum
     }
-  }
+  })
 })
 
 /**
@@ -8484,28 +7761,12 @@ export const isLessThanOrEqualToDate = makeIsLessThanOrEqualTo({
  */
 export const isBetweenDate = makeIsBetween({
   order: Order.Date,
-  annotate: (options) => {
-    const exclusiveMinimum = options.exclusiveMinimum ? true : undefined
-    const exclusiveMaximum = options.exclusiveMaximum ? true : undefined
-    const payload = {
-      minimum: encodeDatePayload(options.minimum),
-      maximum: encodeDatePayload(options.maximum),
-      ...(exclusiveMinimum && { exclusiveMinimum }),
-      ...(exclusiveMaximum && { exclusiveMaximum })
+  annotate: (options) => ({
+    meta: {
+      _tag: "isBetweenDate",
+      ...options
     }
-    return {
-      representation: {
-        id: "effect/schema/isBetweenDate",
-        payload
-      },
-      toJsonSchema: () => ({}),
-      toCode: () => ({
-        runtime: `Schema.isBetweenDate({ minimum: ${formatDateRuntime(options.minimum)}, maximum: ${
-          formatDateRuntime(options.maximum)
-        }, exclusiveMinimum: ${format(exclusiveMinimum)}, exclusiveMaximum: ${format(exclusiveMaximum)} })`
-      })
-    }
-  }
+  })
 })
 
 /**
@@ -8524,17 +7785,12 @@ export const isBetweenDate = makeIsBetween({
  */
 export const isGreaterThanBigInt = makeIsGreaterThan({
   order: Order.BigInt,
-  annotate: (exclusiveMinimum) => {
-    const encoded = exclusiveMinimum.toString(10)
-    return {
-      representation: {
-        id: "effect/schema/isGreaterThanBigInt",
-        payload: { exclusiveMinimum: encoded }
-      },
-      toJsonSchema: () => ({}),
-      toCode: () => ({ runtime: `Schema.isGreaterThanBigInt(${format(exclusiveMinimum)})` })
+  annotate: (exclusiveMinimum) => ({
+    meta: {
+      _tag: "isGreaterThanBigInt",
+      exclusiveMinimum
     }
-  }
+  })
 })
 
 /**
@@ -8554,17 +7810,12 @@ export const isGreaterThanBigInt = makeIsGreaterThan({
  */
 export const isGreaterThanOrEqualToBigInt = makeIsGreaterThanOrEqualTo({
   order: Order.BigInt,
-  annotate: (minimum) => {
-    const encoded = minimum.toString(10)
-    return {
-      representation: {
-        id: "effect/schema/isGreaterThanOrEqualToBigInt",
-        payload: { minimum: encoded }
-      },
-      toJsonSchema: () => ({}),
-      toCode: () => ({ runtime: `Schema.isGreaterThanOrEqualToBigInt(${format(minimum)})` })
+  annotate: (minimum) => ({
+    meta: {
+      _tag: "isGreaterThanOrEqualToBigInt",
+      minimum
     }
-  }
+  })
 })
 
 /**
@@ -8583,17 +7834,12 @@ export const isGreaterThanOrEqualToBigInt = makeIsGreaterThanOrEqualTo({
  */
 export const isLessThanBigInt = makeIsLessThan({
   order: Order.BigInt,
-  annotate: (exclusiveMaximum) => {
-    const encoded = exclusiveMaximum.toString(10)
-    return {
-      representation: {
-        id: "effect/schema/isLessThanBigInt",
-        payload: { exclusiveMaximum: encoded }
-      },
-      toJsonSchema: () => ({}),
-      toCode: () => ({ runtime: `Schema.isLessThanBigInt(${format(exclusiveMaximum)})` })
+  annotate: (exclusiveMaximum) => ({
+    meta: {
+      _tag: "isLessThanBigInt",
+      exclusiveMaximum
     }
-  }
+  })
 })
 
 /**
@@ -8613,17 +7859,12 @@ export const isLessThanBigInt = makeIsLessThan({
  */
 export const isLessThanOrEqualToBigInt = makeIsLessThanOrEqualTo({
   order: Order.BigInt,
-  annotate: (maximum) => {
-    const encoded = maximum.toString(10)
-    return {
-      representation: {
-        id: "effect/schema/isLessThanOrEqualToBigInt",
-        payload: { maximum: encoded }
-      },
-      toJsonSchema: () => ({}),
-      toCode: () => ({ runtime: `Schema.isLessThanOrEqualToBigInt(${format(maximum)})` })
+  annotate: (maximum) => ({
+    meta: {
+      _tag: "isLessThanOrEqualToBigInt",
+      maximum
     }
-  }
+  })
 })
 
 /**
@@ -8643,28 +7884,12 @@ export const isLessThanOrEqualToBigInt = makeIsLessThanOrEqualTo({
  */
 export const isBetweenBigInt = makeIsBetween({
   order: Order.BigInt,
-  annotate: (options) => {
-    const exclusiveMinimum = options.exclusiveMinimum ? true : undefined
-    const exclusiveMaximum = options.exclusiveMaximum ? true : undefined
-    const payload = {
-      minimum: options.minimum.toString(10),
-      maximum: options.maximum.toString(10),
-      ...(exclusiveMinimum && { exclusiveMinimum }),
-      ...(exclusiveMaximum && { exclusiveMaximum })
+  annotate: (options) => ({
+    meta: {
+      _tag: "isBetweenBigInt",
+      ...options
     }
-    return {
-      representation: {
-        id: "effect/schema/isBetweenBigInt",
-        payload
-      },
-      toJsonSchema: () => ({}),
-      toCode: () => ({
-        runtime: `Schema.isBetweenBigInt({ minimum: ${format(options.minimum)}, maximum: ${
-          format(options.maximum)
-        }, exclusiveMinimum: ${format(exclusiveMinimum)}, exclusiveMaximum: ${format(exclusiveMaximum)} })`
-      })
-    }
-  }
+  })
 })
 
 /**
@@ -8764,13 +7989,11 @@ export function isMinLength(minLength: number, annotations?: Annotations.Filter)
     (input) => input.length >= minLength,
     {
       expected: `a value with a length of at least ${minLength}`,
-      representation: {
-        id: "effect/schema/isMinLength",
-        payload: { minLength }
+      meta: {
+        _tag: "isMinLength",
+        minLength
       },
-      toJsonSchema: ({ type }) => type === "array" ? { minItems: minLength } : { minLength },
-      toCode: () => ({ runtime: `Schema.isMinLength(${minLength})` }),
-      [InternalAnnotations.STRUCTURAL_ANNOTATION_KEY]: true,
+      [SchemaAST.STRUCTURAL_ANNOTATION_KEY]: true,
       arbitrary: {
         constraint: {
           minLength
@@ -8780,26 +8003,6 @@ export function isMinLength(minLength: number, annotations?: Annotations.Filter)
     }
   )
 }
-
-/**
- * Reviver for persisted `isMinLength` checks.
- *
- * **When to use**
- *
- * Use when reconstructing documents that may contain checks created by {@link isMinLength}.
- *
- * @see {@link isMinLength} for creating the corresponding check
- *
- * @category Length checks
- * @since 4.0.0
- */
-export const isMinLengthReviver: SchemaRepresentation.FilterReviver<{
-  readonly minLength: number
-}> = InternalSchema.makeFilterReviver(
-  "effect/schema/isMinLength",
-  Struct({ minLength: Natural }),
-  ({ annotations, payload }) => isMinLength(payload.minLength, annotations)
-)
 
 /**
  * Validates that a value has at least one element. Works with strings and arrays.
@@ -8850,13 +8053,11 @@ export function isMaxLength(maxLength: number, annotations?: Annotations.Filter)
     (input) => input.length <= maxLength,
     {
       expected: `a value with a length of at most ${maxLength}`,
-      representation: {
-        id: "effect/schema/isMaxLength",
-        payload: { maxLength }
+      meta: {
+        _tag: "isMaxLength",
+        maxLength
       },
-      toJsonSchema: ({ type }) => type === "array" ? { maxItems: maxLength } : { maxLength },
-      toCode: () => ({ runtime: `Schema.isMaxLength(${maxLength})` }),
-      [InternalAnnotations.STRUCTURAL_ANNOTATION_KEY]: true,
+      [SchemaAST.STRUCTURAL_ANNOTATION_KEY]: true,
       arbitrary: {
         constraint: {
           maxLength
@@ -8866,26 +8067,6 @@ export function isMaxLength(maxLength: number, annotations?: Annotations.Filter)
     }
   )
 }
-
-/**
- * Reviver for persisted `isMaxLength` checks.
- *
- * **When to use**
- *
- * Use when reconstructing documents that may contain checks created by {@link isMaxLength}.
- *
- * @see {@link isMaxLength} for creating the corresponding check
- *
- * @category Length checks
- * @since 4.0.0
- */
-export const isMaxLengthReviver: SchemaRepresentation.FilterReviver<{
-  readonly maxLength: number
-}> = InternalSchema.makeFilterReviver(
-  "effect/schema/isMaxLength",
-  Struct({ maxLength: Natural }),
-  ({ annotations, payload }) => isMaxLength(payload.maxLength, annotations)
-)
 
 /**
  * Validates that a value's length is within the specified range. Works with
@@ -8916,17 +8097,12 @@ export function isLengthBetween(minimum: number, maximum: number, annotations?: 
       expected: minimum === maximum
         ? `a value with a length of ${minimum}`
         : `a value with a length between ${minimum} and ${maximum}`,
-
-      representation: {
-        id: "effect/schema/isLengthBetween",
-        payload: { minimum, maximum }
+      meta: {
+        _tag: "isLengthBetween",
+        minimum,
+        maximum
       },
-      toJsonSchema: ({ type }) =>
-        type === "array"
-          ? { allOf: [{ minItems: minimum }, { maxItems: maximum }] }
-          : { allOf: [{ minLength: minimum }, { maxLength: maximum }] },
-      toCode: () => ({ runtime: `Schema.isLengthBetween(${minimum}, ${maximum})` }),
-      [InternalAnnotations.STRUCTURAL_ANNOTATION_KEY]: true,
+      [SchemaAST.STRUCTURAL_ANNOTATION_KEY]: true,
       arbitrary: {
         constraint: {
           minLength: minimum,
@@ -8937,27 +8113,6 @@ export function isLengthBetween(minimum: number, maximum: number, annotations?: 
     }
   )
 }
-
-/**
- * Reviver for persisted `isLengthBetween` checks.
- *
- * **When to use**
- *
- * Use when reconstructing documents that may contain checks created by {@link isLengthBetween}.
- *
- * @see {@link isLengthBetween} for creating the corresponding check
- *
- * @category Length checks
- * @since 4.0.0
- */
-export const isLengthBetweenReviver: SchemaRepresentation.FilterReviver<{
-  readonly minimum: number
-  readonly maximum: number
-}> = InternalSchema.makeFilterReviver(
-  "effect/schema/isLengthBetween",
-  Struct({ minimum: Natural, maximum: Natural }),
-  ({ annotations, payload }) => isLengthBetween(payload.minimum, payload.maximum, annotations)
-)
 
 /**
  * Validates that a value has at least the specified size. Works with values
@@ -8985,13 +8140,11 @@ export function isMinSize(minSize: number, annotations?: Annotations.Filter) {
     (input) => input.size >= minSize,
     {
       expected: `a value with a size of at least ${minSize}`,
-      representation: {
-        id: "effect/schema/isMinSize",
-        payload: { minSize }
+      meta: {
+        _tag: "isMinSize",
+        minSize
       },
-      toJsonSchema: () => ({}),
-      toCode: () => ({ runtime: `Schema.isMinSize(${minSize})` }),
-      [InternalAnnotations.STRUCTURAL_ANNOTATION_KEY]: true,
+      [SchemaAST.STRUCTURAL_ANNOTATION_KEY]: true,
       arbitrary: {
         constraint: {
           minLength: minSize
@@ -9001,26 +8154,6 @@ export function isMinSize(minSize: number, annotations?: Annotations.Filter) {
     }
   )
 }
-
-/**
- * Reviver for persisted `isMinSize` checks.
- *
- * **When to use**
- *
- * Use when reconstructing documents that may contain checks created by {@link isMinSize}.
- *
- * @see {@link isMinSize} for creating the corresponding check
- *
- * @category Size checks
- * @since 4.0.0
- */
-export const isMinSizeReviver: SchemaRepresentation.FilterReviver<{
-  readonly minSize: number
-}> = InternalSchema.makeFilterReviver(
-  "effect/schema/isMinSize",
-  Struct({ minSize: Natural }),
-  ({ annotations, payload }) => isMinSize(payload.minSize, annotations)
-)
 
 /**
  * Validates that a value has at most the specified size. Works with values
@@ -9048,13 +8181,11 @@ export function isMaxSize(maxSize: number, annotations?: Annotations.Filter) {
     (input) => input.size <= maxSize,
     {
       expected: `a value with a size of at most ${maxSize}`,
-      representation: {
-        id: "effect/schema/isMaxSize",
-        payload: { maxSize }
+      meta: {
+        _tag: "isMaxSize",
+        maxSize
       },
-      toJsonSchema: () => ({}),
-      toCode: () => ({ runtime: `Schema.isMaxSize(${maxSize})` }),
-      [InternalAnnotations.STRUCTURAL_ANNOTATION_KEY]: true,
+      [SchemaAST.STRUCTURAL_ANNOTATION_KEY]: true,
       arbitrary: {
         constraint: {
           maxLength: maxSize
@@ -9064,26 +8195,6 @@ export function isMaxSize(maxSize: number, annotations?: Annotations.Filter) {
     }
   )
 }
-
-/**
- * Reviver for persisted `isMaxSize` checks.
- *
- * **When to use**
- *
- * Use when reconstructing documents that may contain checks created by {@link isMaxSize}.
- *
- * @see {@link isMaxSize} for creating the corresponding check
- *
- * @category Size checks
- * @since 4.0.0
- */
-export const isMaxSizeReviver: SchemaRepresentation.FilterReviver<{
-  readonly maxSize: number
-}> = InternalSchema.makeFilterReviver(
-  "effect/schema/isMaxSize",
-  Struct({ maxSize: Natural }),
-  ({ annotations, payload }) => isMaxSize(payload.maxSize, annotations)
-)
 
 /**
  * Validates that a value's size is within the specified range. Works with
@@ -9114,14 +8225,12 @@ export function isSizeBetween(minimum: number, maximum: number, annotations?: An
       expected: minimum === maximum
         ? `a value with a size of ${minimum}`
         : `a value with a size between ${minimum} and ${maximum}`,
-
-      representation: {
-        id: "effect/schema/isSizeBetween",
-        payload: { minimum, maximum }
+      meta: {
+        _tag: "isSizeBetween",
+        minimum,
+        maximum
       },
-      toJsonSchema: () => ({}),
-      toCode: () => ({ runtime: `Schema.isSizeBetween(${minimum}, ${maximum})` }),
-      [InternalAnnotations.STRUCTURAL_ANNOTATION_KEY]: true,
+      [SchemaAST.STRUCTURAL_ANNOTATION_KEY]: true,
       arbitrary: {
         constraint: {
           minLength: minimum,
@@ -9132,27 +8241,6 @@ export function isSizeBetween(minimum: number, maximum: number, annotations?: An
     }
   )
 }
-
-/**
- * Reviver for persisted `isSizeBetween` checks.
- *
- * **When to use**
- *
- * Use when reconstructing documents that may contain checks created by {@link isSizeBetween}.
- *
- * @see {@link isSizeBetween} for creating the corresponding check
- *
- * @category Size checks
- * @since 4.0.0
- */
-export const isSizeBetweenReviver: SchemaRepresentation.FilterReviver<{
-  readonly minimum: number
-  readonly maximum: number
-}> = InternalSchema.makeFilterReviver(
-  "effect/schema/isSizeBetween",
-  Struct({ minimum: Natural, maximum: Natural }),
-  ({ annotations, payload }) => isSizeBetween(payload.minimum, payload.maximum, annotations)
-)
 
 /**
  * Validates that an object contains at least the specified number of
@@ -9180,13 +8268,11 @@ export function isMinProperties(minProperties: number, annotations?: Annotations
     (input) => Reflect.ownKeys(input).length >= minProperties,
     {
       expected: `a value with at least ${minProperties === 1 ? "1 entry" : `${minProperties} entries`}`,
-      representation: {
-        id: "effect/schema/isMinProperties",
-        payload: { minProperties }
+      meta: {
+        _tag: "isMinProperties",
+        minProperties
       },
-      toJsonSchema: () => ({ minProperties }),
-      toCode: () => ({ runtime: `Schema.isMinProperties(${minProperties})` }),
-      [InternalAnnotations.STRUCTURAL_ANNOTATION_KEY]: true,
+      [SchemaAST.STRUCTURAL_ANNOTATION_KEY]: true,
       arbitrary: {
         constraint: {
           minLength: minProperties
@@ -9196,26 +8282,6 @@ export function isMinProperties(minProperties: number, annotations?: Annotations
     }
   )
 }
-
-/**
- * Reviver for persisted `isMinProperties` checks.
- *
- * **When to use**
- *
- * Use when reconstructing documents that may contain checks created by {@link isMinProperties}.
- *
- * @see {@link isMinProperties} for creating the corresponding check
- *
- * @category Object checks
- * @since 4.0.0
- */
-export const isMinPropertiesReviver: SchemaRepresentation.FilterReviver<{
-  readonly minProperties: number
-}> = InternalSchema.makeFilterReviver(
-  "effect/schema/isMinProperties",
-  Struct({ minProperties: Natural }),
-  ({ annotations, payload }) => isMinProperties(payload.minProperties, annotations)
-)
 
 /**
  * Validates that an object contains at most the specified number of properties.
@@ -9242,13 +8308,11 @@ export function isMaxProperties(maxProperties: number, annotations?: Annotations
     (input) => Reflect.ownKeys(input).length <= maxProperties,
     {
       expected: `a value with at most ${maxProperties === 1 ? "1 entry" : `${maxProperties} entries`}`,
-      representation: {
-        id: "effect/schema/isMaxProperties",
-        payload: { maxProperties }
+      meta: {
+        _tag: "isMaxProperties",
+        maxProperties
       },
-      toJsonSchema: () => ({ maxProperties }),
-      toCode: () => ({ runtime: `Schema.isMaxProperties(${maxProperties})` }),
-      [InternalAnnotations.STRUCTURAL_ANNOTATION_KEY]: true,
+      [SchemaAST.STRUCTURAL_ANNOTATION_KEY]: true,
       arbitrary: {
         constraint: {
           maxLength: maxProperties
@@ -9258,26 +8322,6 @@ export function isMaxProperties(maxProperties: number, annotations?: Annotations
     }
   )
 }
-
-/**
- * Reviver for persisted `isMaxProperties` checks.
- *
- * **When to use**
- *
- * Use when reconstructing documents that may contain checks created by {@link isMaxProperties}.
- *
- * @see {@link isMaxProperties} for creating the corresponding check
- *
- * @category Object checks
- * @since 4.0.0
- */
-export const isMaxPropertiesReviver: SchemaRepresentation.FilterReviver<{
-  readonly maxProperties: number
-}> = InternalSchema.makeFilterReviver(
-  "effect/schema/isMaxProperties",
-  Struct({ maxProperties: Natural }),
-  ({ annotations, payload }) => isMaxProperties(payload.maxProperties, annotations)
-)
 
 /**
  * Validates that an object contains between `minimum` and `maximum` properties (inclusive).
@@ -9308,14 +8352,12 @@ export function isPropertiesLengthBetween(minimum: number, maximum: number, anno
       expected: minimum === maximum
         ? `a value with exactly ${minimum === 1 ? "1 entry" : `${minimum} entries`}`
         : `a value with between ${minimum} and ${maximum} entries`,
-
-      representation: {
-        id: "effect/schema/isPropertiesLengthBetween",
-        payload: { minimum, maximum }
+      meta: {
+        _tag: "isPropertiesLengthBetween",
+        minimum,
+        maximum
       },
-      toJsonSchema: () => ({ minProperties: minimum, maxProperties: maximum }),
-      toCode: () => ({ runtime: `Schema.isPropertiesLengthBetween(${minimum}, ${maximum})` }),
-      [InternalAnnotations.STRUCTURAL_ANNOTATION_KEY]: true,
+      [SchemaAST.STRUCTURAL_ANNOTATION_KEY]: true,
       arbitrary: {
         constraint: {
           minLength: minimum,
@@ -9326,27 +8368,6 @@ export function isPropertiesLengthBetween(minimum: number, maximum: number, anno
     }
   )
 }
-
-/**
- * Reviver for persisted `isPropertiesLengthBetween` checks.
- *
- * **When to use**
- *
- * Use when reconstructing documents that may contain checks created by {@link isPropertiesLengthBetween}.
- *
- * @see {@link isPropertiesLengthBetween} for creating the corresponding check
- *
- * @category Object checks
- * @since 4.0.0
- */
-export const isPropertiesLengthBetweenReviver: SchemaRepresentation.FilterReviver<{
-  readonly minimum: number
-  readonly maximum: number
-}> = InternalSchema.makeFilterReviver(
-  "effect/schema/isPropertiesLengthBetween",
-  Struct({ minimum: Natural, maximum: Natural }),
-  ({ annotations, payload }) => isPropertiesLengthBetween(payload.minimum, payload.maximum, annotations)
-)
 
 /**
  * Validates that every own property key of an object satisfies the encoded side
@@ -9385,36 +8406,15 @@ export function isPropertyNames(keySchema: Constraint, annotations?: Annotations
     },
     {
       expected: "an object with property names matching the schema",
-      representation: {
-        id: "effect/schema/isPropertyNames",
-        payload: null,
-        schemas: [propertyNames.ast]
+      meta: {
+        _tag: "isPropertyNames",
+        propertyNames: propertyNames.ast
       },
-      toJsonSchema: ({ schemas }) => ({ propertyNames: schemas[0] }),
-      toCode: ({ schemas }) => ({ runtime: `Schema.isPropertyNames(${schemas[0].runtime})` }),
-      [InternalAnnotations.STRUCTURAL_ANNOTATION_KEY]: true,
+      [SchemaAST.STRUCTURAL_ANNOTATION_KEY]: true,
       ...annotations
     }
   )
 }
-
-/**
- * Reviver for persisted `isPropertyNames` checks.
- *
- * **When to use**
- *
- * Use when reconstructing documents that may contain checks created by {@link isPropertyNames}.
- *
- * @see {@link isPropertyNames} for creating the corresponding check
- *
- * @category Object checks
- * @since 4.0.0
- */
-export const isPropertyNamesReviver: SchemaRepresentation.FilterReviver<null> = InternalSchema.makeFilterReviver(
-  "effect/schema/isPropertyNames",
-  Null,
-  ({ annotations, schemas }) => isPropertyNames(schemas[0], annotations)
-)
 
 /**
  * Validates that all items in an array are unique according to Effect equality.
@@ -9433,16 +8433,14 @@ export const isPropertyNamesReviver: SchemaRepresentation.FilterReviver<null> = 
  * @since 4.0.0
  */
 export function isUnique<T>(annotations?: Annotations.Filter) {
+  const equivalence = Equal.asEquivalence<T>()
   return makeFilter<ReadonlyArray<T>>(
-    (input) => Arr.dedupe(input).length === input.length,
+    (input) => Arr.dedupeWith(input, equivalence).length === input.length,
     {
       expected: "an array with unique items",
-      representation: {
-        id: "effect/schema/isUnique",
-        payload: null
+      meta: {
+        _tag: "isUnique"
       },
-      toJsonSchema: () => ({ uniqueItems: true }),
-      toCode: () => ({ runtime: "Schema.isUnique()" }),
       arbitrary: {
         constraint: {
           unique: true
@@ -9452,24 +8450,6 @@ export function isUnique<T>(annotations?: Annotations.Filter) {
     }
   )
 }
-
-/**
- * Reviver for persisted `isUnique` checks.
- *
- * **When to use**
- *
- * Use when reconstructing documents that may contain checks created by {@link isUnique}.
- *
- * @see {@link isUnique} for creating the corresponding check
- *
- * @category Array checks
- * @since 4.0.0
- */
-export const isUniqueReviver: SchemaRepresentation.FilterReviver<null> = InternalSchema.makeFilterReviver(
-  "effect/schema/isUnique",
-  Null,
-  ({ annotations }) => isUnique(annotations)
-)
 
 // -----------------------------------------------------------------------------
 // Built-in Schemas
@@ -9588,15 +8568,14 @@ export function Option<A extends Constraint>(value: A): Option<A> {
       return Effect.fail(new SchemaIssue.InvalidType(ast, Option_.some(input)))
     },
     {
-      representation: {
-        id: "effect/schema/Option",
-        payload: null
+      typeConstructor: {
+        _tag: "effect/Option"
       },
-      toCode: ({ typeParameters }) => ({
-        runtime: `Schema.Option(${typeParameters[0].runtime})`,
-        Type: `Option.Option<${typeParameters[0].Type}>`,
-        importDeclarations: [`import * as Option from "effect/Option"`]
-      }),
+      generation: {
+        runtime: `Schema.Option(?)`,
+        Type: `Option.Option<?>`,
+        importDeclaration: `import * as Option from "effect/Option"`
+      },
       expected: "Option",
       toCodec: ([value]) =>
         link<Option_.Option<A["Encoded"]>>()(
@@ -9627,27 +8606,6 @@ export function Option<A extends Constraint>(value: A): Option<A> {
   )
   return make(schema.ast, { value })
 }
-
-/**
- * Reviver for persisted `Option` declarations.
- *
- * **When to use**
- *
- * Use when reconstructing documents that may contain schemas created by {@link Option}.
- *
- * @see {@link Option} for creating the corresponding schema
- *
- * @category Option
- * @since 4.0.0
- */
-export const OptionReviver = InternalSchema.makeDeclarationReviver(
-  "effect/schema/Option",
-  Null,
-  ({ annotations, typeParameters }) => {
-    const schema = Option(typeParameters[0])
-    return annotations === undefined ? schema : schema.annotate(annotations)
-  }
-)
 
 /**
  * Type-level representation returned by {@link OptionFromNullOr}.
@@ -9916,15 +8874,14 @@ export function Result<A extends Constraint, E extends Constraint>(
       }
     },
     {
-      representation: {
-        id: "effect/schema/Result",
-        payload: null
+      typeConstructor: {
+        _tag: "effect/Result"
       },
-      toCode: ({ typeParameters }) => ({
-        runtime: `Schema.Result(${typeParameters[0].runtime}, ${typeParameters[1].runtime})`,
-        Type: `Result.Result<${typeParameters[0].Type}, ${typeParameters[1].Type}>`,
-        importDeclarations: [`import * as Result from "effect/Result"`]
-      }),
+      generation: {
+        runtime: `Schema.Result(?, ?)`,
+        Type: `Result.Result<?, ?>`,
+        importDeclaration: `import * as Result from "effect/Result"`
+      },
       expected: "Result",
       toCodec: ([success, failure]) =>
         link<Result_.Result<A["Encoded"], E["Encoded"]>>()(
@@ -9965,27 +8922,6 @@ export function Result<A extends Constraint, E extends Constraint>(
 }
 
 /**
- * Reviver for persisted {@link Result} declarations.
- *
- * **When to use**
- *
- * Use when reconstructing documents that may contain schemas created by {@link Result}.
- *
- * @see {@link Result} for creating the corresponding schema
- *
- * @category schemas
- * @since 4.0.0
- */
-export const ResultReviver = InternalSchema.makeDeclarationReviver(
-  "effect/schema/Result",
-  Null,
-  ({ annotations, typeParameters }) => {
-    const schema = Result(typeParameters[0], typeParameters[1])
-    return annotations === undefined ? schema : schema.annotate(annotations)
-  }
-)
-
-/**
  * Type-level representation returned by {@link Redacted}.
  *
  * @category Redacted
@@ -10001,37 +8937,6 @@ export interface Redacted<S extends Constraint> extends
   readonly "Rebuild": Redacted<S>
   readonly value: S
 }
-
-type RedactedRepresentationOptions = {
-  readonly label?: string | undefined
-  readonly disallowJsonEncode?: true | undefined
-}
-
-type NormalizedRedactedOptions =
-  | { readonly label: string }
-  | { readonly disallowJsonEncode: true }
-  | { readonly label: string; readonly disallowJsonEncode: true }
-
-type RedactedRepresentationPayload = RedactedRepresentationOptions | null
-
-const RedactedOptionsPayload = declare((input): input is RedactedRepresentationOptions => {
-  if (!Predicate.isObject(input)) {
-    return false
-  }
-  const keys = globalThis.Object.keys(input)
-  return keys.length > 0 && keys.every((key) => {
-    switch (key) {
-      case "label":
-        return typeof input[key] === "string"
-      case "disallowJsonEncode":
-        return input[key] === true
-      default:
-        return false
-    }
-  })
-})
-
-const RedactedRepresentationPayload: Decoder<RedactedRepresentationPayload> = Union([Null, RedactedOptionsPayload])
 
 /**
  * Schema for values that hide sensitive information from error output and
@@ -10061,15 +8966,8 @@ export function Redacted<S extends Constraint>(value: S, options?: {
   readonly label?: string | undefined
   readonly disallowJsonEncode?: boolean | undefined
 }): Redacted<S> {
-  const label = typeof options?.label === "string" ? options.label : undefined
-  const disallowJsonEncode = options?.disallowJsonEncode === true
-  const normalizedOptions: NormalizedRedactedOptions | undefined = label !== undefined
-    ? disallowJsonEncode ? { label, disallowJsonEncode: true } : { label }
-    : disallowJsonEncode
-    ? { disallowJsonEncode: true }
-    : undefined
-  const decodeLabel = label !== undefined
-    ? SchemaParser.decodeUnknownEffect(Literal(label))
+  const decodeLabel = typeof options?.label === "string"
+    ? SchemaParser.decodeUnknownEffect(Literal(options.label))
     : undefined
   const schema = declareConstructor<Redacted_.Redacted<S["Type"]>, Redacted_.Redacted<S["Encoded"]>>()(
     [value],
@@ -10101,24 +8999,22 @@ export function Redacted<S extends Constraint>(value: S, options?: {
       return Effect.fail(new SchemaIssue.InvalidType(ast, Option_.some(input)))
     },
     {
-      representation: {
-        id: "effect/schema/Redacted",
-        payload: normalizedOptions ?? null
+      typeConstructor: {
+        _tag: "effect/Redacted",
+        options
       },
-      toCode: ({ typeParameters }) => ({
-        runtime: normalizedOptions !== undefined
-          ? `Schema.Redacted(${typeParameters[0].runtime}, ${format(normalizedOptions)})`
-          : `Schema.Redacted(${typeParameters[0].runtime})`,
-        Type: `Redacted.Redacted<${typeParameters[0].Type}>`,
-        importDeclarations: [`import * as Redacted from "effect/Redacted"`]
-      }),
+      generation: {
+        runtime: options !== undefined ? `Schema.Redacted(?, ${format(options)})` : `Schema.Redacted(?)`,
+        Type: `Redacted.Redacted<?>`,
+        importDeclaration: `import * as Redacted from "effect/Redacted"`
+      },
       expected: "Redacted",
       toCodecJson: ([value]) =>
         link<Redacted_.Redacted<S["Encoded"]>>()(
           redact(value),
           {
-            decode: SchemaGetter.transform((e) => Redacted_.make(e, { label })),
-            encode: disallowJsonEncode ?
+            decode: SchemaGetter.transform((e) => Redacted_.make(e, { label: options?.label })),
+            encode: options?.disallowJsonEncode ?
               SchemaGetter.forbidden((oe) =>
                 "Cannot serialize Redacted" +
                 (Option_.isSome(oe) && typeof oe.value.label === "string" ? ` with label: "${oe.value.label}"` : "")
@@ -10127,8 +9023,8 @@ export function Redacted<S extends Constraint>(value: S, options?: {
           }
         ),
       toArbitrary: ([value]) => () => ({
-        arbitrary: value.arbitrary.map((a) => Redacted_.make(a, { label })),
-        terminal: value.terminal?.map((a) => Redacted_.make(a, { label }))
+        arbitrary: value.arbitrary.map((a) => Redacted_.make(a, { label: options?.label })),
+        terminal: value.terminal?.map((a) => Redacted_.make(a, { label: options?.label }))
       }),
       toFormatter: () => globalThis.String,
       toEquivalence: ([value]) => Redacted_.makeEquivalence(value)
@@ -10136,27 +9032,6 @@ export function Redacted<S extends Constraint>(value: S, options?: {
   )
   return make(schema.ast, { value })
 }
-
-/**
- * Reviver for persisted {@link Redacted} declarations.
- *
- * **When to use**
- *
- * Use when reconstructing documents that may contain schemas created by {@link Redacted}.
- *
- * @see {@link Redacted} for creating the corresponding schema
- *
- * @category Redacted
- * @since 4.0.0
- */
-export const RedactedReviver = InternalSchema.makeDeclarationReviver(
-  "effect/schema/Redacted",
-  RedactedRepresentationPayload,
-  ({ annotations, payload, typeParameters }) => {
-    const schema = Redacted(typeParameters[0], payload ?? undefined)
-    return annotations === undefined ? schema : schema.annotate(annotations)
-  }
-)
 
 /**
  * Type-level representation returned by {@link RedactedFromValue}.
@@ -10305,15 +9180,14 @@ export function CauseReason<E extends Constraint, D extends Constraint>(error: E
       }
     },
     {
-      representation: {
-        id: "effect/schema/CauseReason",
-        payload: null
+      typeConstructor: {
+        _tag: "effect/Cause/Failure"
       },
-      toCode: ({ typeParameters }) => ({
-        runtime: `Schema.CauseReason(${typeParameters[0].runtime}, ${typeParameters[1].runtime})`,
-        Type: `Cause.Failure<${typeParameters[0].Type}, ${typeParameters[1].Type}>`,
-        importDeclarations: [`import * as Cause from "effect/Cause"`]
-      }),
+      generation: {
+        runtime: `Schema.CauseReason(?, ?)`,
+        Type: `Cause.Failure<?, ?>`,
+        importDeclaration: `import * as Cause from "effect/Cause"`
+      },
       expected: "Cause.Failure",
       toCodec: ([error, defect]) =>
         link<Cause_.Reason<E["Encoded"]>>()(
@@ -10343,27 +9217,6 @@ export function CauseReason<E extends Constraint, D extends Constraint>(error: E
   )
   return make(schema.ast, { error, defect })
 }
-
-/**
- * Reviver for persisted `CauseReason` declarations.
- *
- * **When to use**
- *
- * Use when reconstructing documents that may contain schemas created by {@link CauseReason}.
- *
- * @see {@link CauseReason} for creating the corresponding schema
- *
- * @category CauseReason
- * @since 4.0.0
- */
-export const CauseReasonReviver = InternalSchema.makeDeclarationReviver(
-  "effect/schema/CauseReason",
-  Null,
-  ({ annotations, typeParameters }) => {
-    const schema = CauseReason(typeParameters[0], typeParameters[1])
-    return annotations === undefined ? schema : schema.annotate(annotations)
-  }
-)
 
 function causeReasonToArbitrary<E, D>(
   error: Annotations.ToArbitrary.TypeParameter<E>,
@@ -10482,15 +9335,14 @@ export function Cause<E extends Constraint, D extends Constraint>(error: E, defe
       }
     },
     {
-      representation: {
-        id: "effect/schema/Cause",
-        payload: null
+      typeConstructor: {
+        _tag: "effect/Cause"
       },
-      toCode: ({ typeParameters }) => ({
-        runtime: `Schema.Cause(${typeParameters[0].runtime}, ${typeParameters[1].runtime})`,
-        Type: `Cause.Cause<${typeParameters[0].Type}, ${typeParameters[1].Type}>`,
-        importDeclarations: [`import * as Cause from "effect/Cause"`]
-      }),
+      generation: {
+        runtime: `Schema.Cause(?, ?)`,
+        Type: `Cause.Cause<?, ?>`,
+        importDeclaration: `import * as Cause from "effect/Cause"`
+      },
       expected: "Cause",
       toCodec: ([error, defect]) =>
         link<Cause_.Cause<E["Encoded"]>>()(
@@ -10507,27 +9359,6 @@ export function Cause<E extends Constraint, D extends Constraint>(error: E, defe
   )
   return make(schema.ast, { error, defect })
 }
-
-/**
- * Reviver for persisted `Cause` declarations.
- *
- * **When to use**
- *
- * Use when reconstructing documents that may contain schemas created by {@link Cause}.
- *
- * @see {@link Cause} for creating the corresponding schema
- *
- * @category Cause
- * @since 4.0.0
- */
-export const CauseReviver = InternalSchema.makeDeclarationReviver(
-  "effect/schema/Cause",
-  Null,
-  ({ annotations, typeParameters }) => {
-    const schema = Cause(typeParameters[0], typeParameters[1])
-    return annotations === undefined ? schema : schema.annotate(annotations)
-  }
-)
 
 function causeToArbitrary<E, D>(
   error: Annotations.ToArbitrary.TypeParameter<E>,
@@ -10583,36 +9414,13 @@ export interface ErrorOptions {
   readonly excludeCause?: boolean | undefined
 }
 
-type ErrorRepresentationOptions = {
-  readonly includeStack?: true | undefined
-  readonly excludeCause?: true | undefined
-}
-
-type NormalizedErrorOptions =
-  | { readonly includeStack: true }
-  | { readonly excludeCause: true }
-  | { readonly includeStack: true; readonly excludeCause: true }
-
-type ErrorRepresentationPayload = ErrorRepresentationOptions | null
-
-const ErrorOptionsPayload = declare((input): input is ErrorRepresentationOptions => {
-  if (!Predicate.isObject(input)) {
-    return false
-  }
-  const keys = globalThis.Object.keys(input)
-  return keys.length > 0 &&
-    keys.every((key) => (key === "includeStack" || key === "excludeCause") && input[key] === true)
-})
-
-const ErrorRepresentationPayload: Decoder<ErrorRepresentationPayload> = Union([Null, ErrorOptionsPayload])
-
 type ErrorOptionsKey = 0 | 1 | 2 | 3
 
 const getErrorOptionsKey = (options?: ErrorOptions): ErrorOptionsKey =>
   ((options?.includeStack === true ? 1 : 0) |
     (options?.excludeCause === true ? 2 : 0)) as ErrorOptionsKey
 
-const getErrorOptions = (key: ErrorOptionsKey): NormalizedErrorOptions | undefined => {
+const getErrorOptions = (key: ErrorOptionsKey): ErrorOptions | undefined => {
   switch (key) {
     case 0:
       return undefined
@@ -10650,14 +9458,14 @@ export function Error(options?: ErrorOptions): Error {
   }
   const normalizedOptions = getErrorOptions(key)
   const schema = instanceOf(globalThis.Error, {
-    representation: {
-      id: "effect/schema/Error",
-      payload: normalizedOptions ?? null
+    typeConstructor: {
+      _tag: "Error",
+      ...(normalizedOptions === undefined ? {} : { options: normalizedOptions })
     },
-    toCode: () => ({
+    generation: {
       runtime: normalizedOptions !== undefined ? `Schema.Error(${format(normalizedOptions)})` : `Schema.Error()`,
       Type: `globalThis.Error`
-    }),
+    },
     expected: "Error",
     toCodecJson: () => link<globalThis.Error>()(JsonError, SchemaTransformation.errorFromJsonError(normalizedOptions)),
     toArbitrary: () => (fc) => fc.string().map((message) => new globalThis.Error(message))
@@ -10665,27 +9473,6 @@ export function Error(options?: ErrorOptions): Error {
   errorSchemaCache[key] = schema
   return schema
 }
-
-/**
- * Reviver for persisted {@link Error} declarations.
- *
- * **When to use**
- *
- * Use when reconstructing documents that may contain schemas created by {@link Error}.
- *
- * @see {@link Error} for creating the corresponding schema
- *
- * @category Error
- * @since 4.0.0
- */
-export const ErrorReviver = InternalSchema.makeDeclarationReviver(
-  "effect/schema/Error",
-  ErrorRepresentationPayload,
-  ({ annotations, payload }) => {
-    const schema = Error(payload ?? undefined)
-    return annotations === undefined ? schema : schema.annotate(annotations)
-  }
-)
 
 /**
  * Type-level representation of {@link Defect}.
@@ -10842,17 +9629,14 @@ export function Exit<A extends Constraint, E extends Constraint, D extends Const
       }
     },
     {
-      representation: {
-        id: "effect/schema/Exit",
-        payload: null
+      typeConstructor: {
+        _tag: "effect/Exit"
       },
-      toCode: ({ typeParameters }) => ({
-        runtime: `Schema.Exit(${typeParameters[0].runtime}, ${typeParameters[1].runtime}, ${
-          typeParameters[2].runtime
-        })`,
-        Type: `Exit.Exit<${typeParameters[0].Type}, ${typeParameters[1].Type}, ${typeParameters[2].Type}>`,
-        importDeclarations: [`import * as Exit from "effect/Exit"`]
-      }),
+      generation: {
+        runtime: `Schema.Exit(?, ?, ?)`,
+        Type: `Exit.Exit<?, ?, ?>`,
+        importDeclaration: `import * as Exit from "effect/Exit"`
+      },
       expected: "Exit",
       toCodec: ([value, error, defect]) =>
         link<Exit_.Exit<A["Encoded"], E["Encoded"]>>()(
@@ -10909,27 +9693,6 @@ export function Exit<A extends Constraint, E extends Constraint, D extends Const
   )
   return make(schema.ast, { value, error, defect })
 }
-
-/**
- * Reviver for persisted `Exit` declarations.
- *
- * **When to use**
- *
- * Use when reconstructing documents that may contain schemas created by {@link Exit}.
- *
- * @see {@link Exit} for creating the corresponding schema
- *
- * @category Exit
- * @since 4.0.0
- */
-export const ExitReviver = InternalSchema.makeDeclarationReviver(
-  "effect/schema/Exit",
-  Null,
-  ({ annotations, typeParameters }) => {
-    const schema = Exit(typeParameters[0], typeParameters[1], typeParameters[2])
-    return annotations === undefined ? schema : schema.annotate(annotations)
-  }
-)
 
 /**
  * Type-level representation returned by {@link ReadonlyMap}.
@@ -11085,14 +9848,13 @@ export function ReadonlyMap<Key extends Constraint, Value extends Constraint>(
       }
     },
     {
-      representation: {
-        id: "effect/schema/ReadonlyMap",
-        payload: null
+      typeConstructor: {
+        _tag: "ReadonlyMap"
       },
-      toCode: ({ typeParameters }) => ({
-        runtime: `Schema.ReadonlyMap(${typeParameters[0].runtime}, ${typeParameters[1].runtime})`,
-        Type: `globalThis.ReadonlyMap<${typeParameters[0].Type}, ${typeParameters[1].Type}>`
-      }),
+      generation: {
+        runtime: `Schema.ReadonlyMap(?, ?)`,
+        Type: `globalThis.ReadonlyMap<?, ?>`
+      },
       expected: "ReadonlyMap",
       toCodec: ([key, value]) =>
         link<globalThis.Map<Key["Encoded"], Value["Encoded"]>>()(
@@ -11116,27 +9878,6 @@ export function ReadonlyMap<Key extends Constraint, Value extends Constraint>(
   )
   return make(schema.ast, { key, value })
 }
-
-/**
- * Reviver for persisted {@link ReadonlyMap} declarations.
- *
- * **When to use**
- *
- * Use when reconstructing documents that may contain schemas created by {@link ReadonlyMap}.
- *
- * @see {@link ReadonlyMap} for creating the corresponding schema
- *
- * @category ReadonlyMap
- * @since 4.0.0
- */
-export const ReadonlyMapReviver = InternalSchema.makeDeclarationReviver(
-  "effect/schema/ReadonlyMap",
-  Null,
-  ({ annotations, typeParameters }) => {
-    const schema = ReadonlyMap(typeParameters[0], typeParameters[1])
-    return annotations === undefined ? schema : schema.annotate(annotations)
-  }
-)
 
 /**
  * Type-level representation returned by {@link HashMap}.
@@ -11198,15 +9939,14 @@ export function HashMap<Key extends Constraint, Value extends Constraint>(key: K
       }
     },
     {
-      representation: {
-        id: "effect/schema/HashMap",
-        payload: null
+      typeConstructor: {
+        _tag: "effect/HashMap"
       },
-      toCode: ({ typeParameters }) => ({
-        runtime: `Schema.HashMap(${typeParameters[0].runtime}, ${typeParameters[1].runtime})`,
-        Type: `HashMap.HashMap<${typeParameters[0].Type}, ${typeParameters[1].Type}>`,
-        importDeclarations: [`import * as HashMap from "effect/HashMap"`]
-      }),
+      generation: {
+        runtime: `Schema.HashMap(?, ?)`,
+        Type: `HashMap.HashMap<?, ?>`,
+        importDeclaration: `import * as HashMap from "effect/HashMap"`
+      },
       expected: "HashMap",
       toCodec: ([key, value]) =>
         link<HashMap_.HashMap<Key["Encoded"], Value["Encoded"]>>()(
@@ -11230,27 +9970,6 @@ export function HashMap<Key extends Constraint, Value extends Constraint>(key: K
   )
   return make(schema.ast, { key, value })
 }
-
-/**
- * Reviver for persisted `HashMap` declarations.
- *
- * **When to use**
- *
- * Use when reconstructing documents that may contain schemas created by {@link HashMap}.
- *
- * @see {@link HashMap} for creating the corresponding schema
- *
- * @category HashMap
- * @since 4.0.0
- */
-export const HashMapReviver = InternalSchema.makeDeclarationReviver(
-  "effect/schema/HashMap",
-  Null,
-  ({ annotations, typeParameters }) => {
-    const schema = HashMap(typeParameters[0], typeParameters[1])
-    return annotations === undefined ? schema : schema.annotate(annotations)
-  }
-)
 
 /**
  * Type-level representation returned by {@link ReadonlySet}.
@@ -11309,14 +10028,13 @@ export function ReadonlySet<Value extends Constraint>(value: Value): $ReadonlySe
       }
     },
     {
-      representation: {
-        id: "effect/schema/ReadonlySet",
-        payload: null
+      typeConstructor: {
+        _tag: "ReadonlySet"
       },
-      toCode: ({ typeParameters }) => ({
-        runtime: `Schema.ReadonlySet(${typeParameters[0].runtime})`,
-        Type: `globalThis.ReadonlySet<${typeParameters[0].Type}>`
-      }),
+      generation: {
+        runtime: `Schema.ReadonlySet(?)`,
+        Type: `globalThis.ReadonlySet<?>`
+      },
       expected: "ReadonlySet",
       toCodec: ([value]) =>
         link<globalThis.Set<Value["Encoded"]>>()(
@@ -11341,27 +10059,6 @@ export function ReadonlySet<Value extends Constraint>(value: Value): $ReadonlySe
   )
   return make(schema.ast, { value })
 }
-
-/**
- * Reviver for persisted {@link ReadonlySet} declarations.
- *
- * **When to use**
- *
- * Use when reconstructing documents that may contain schemas created by {@link ReadonlySet}.
- *
- * @see {@link ReadonlySet} for creating the corresponding schema
- *
- * @category ReadonlySet
- * @since 4.0.0
- */
-export const ReadonlySetReviver = InternalSchema.makeDeclarationReviver(
-  "effect/schema/ReadonlySet",
-  Null,
-  ({ annotations, typeParameters }) => {
-    const schema = ReadonlySet(typeParameters[0])
-    return annotations === undefined ? schema : schema.annotate(annotations)
-  }
-)
 
 /**
  * Type-level representation returned by {@link HashSet}.
@@ -11420,14 +10117,13 @@ export function HashSet<Value extends Constraint>(value: Value): HashSet<Value> 
       }
     },
     {
-      representation: {
-        id: "effect/schema/HashSet",
-        payload: null
+      typeConstructor: {
+        _tag: "effect/HashSet"
       },
-      toCode: ({ typeParameters }) => ({
-        runtime: `Schema.HashSet(${typeParameters[0].runtime})`,
-        Type: `HashSet.HashSet<${typeParameters[0].Type}>`
-      }),
+      generation: {
+        runtime: `Schema.HashSet(?)`,
+        Type: `HashSet.HashSet<?>`
+      },
       expected: "HashSet",
       toCodec: ([value]) =>
         link<HashSet_.HashSet<Value["Encoded"]>>()(
@@ -11452,27 +10148,6 @@ export function HashSet<Value extends Constraint>(value: Value): HashSet<Value> 
   )
   return make(schema.ast, { value })
 }
-
-/**
- * Reviver for persisted `HashSet` declarations.
- *
- * **When to use**
- *
- * Use when reconstructing documents that may contain schemas created by {@link HashSet}.
- *
- * @see {@link HashSet} for creating the corresponding schema
- *
- * @category HashSet
- * @since 4.0.0
- */
-export const HashSetReviver = InternalSchema.makeDeclarationReviver(
-  "effect/schema/HashSet",
-  Null,
-  ({ annotations, typeParameters }) => {
-    const schema = HashSet(typeParameters[0])
-    return annotations === undefined ? schema : schema.annotate(annotations)
-  }
-)
 
 /**
  * Type-level representation returned by {@link Chunk}.
@@ -11538,14 +10213,13 @@ export function Chunk<Value extends Constraint>(value: Value): Chunk<Value> {
       }
     },
     {
-      representation: {
-        id: "effect/schema/Chunk",
-        payload: null
+      typeConstructor: {
+        _tag: "effect/Chunk"
       },
-      toCode: ({ typeParameters }) => ({
-        runtime: `Schema.Chunk(${typeParameters[0].runtime})`,
-        Type: `Chunk.Chunk<${typeParameters[0].Type}>`
-      }),
+      generation: {
+        runtime: `Schema.Chunk(?)`,
+        Type: `Chunk.Chunk<?>`
+      },
       expected: "Chunk",
       toCodec: ([value]) =>
         link<Chunk_.Chunk<Value["Encoded"]>>()(
@@ -11572,27 +10246,6 @@ export function Chunk<Value extends Constraint>(value: Value): Chunk<Value> {
 }
 
 /**
- * Reviver for persisted {@link Chunk} declarations.
- *
- * **When to use**
- *
- * Use when reconstructing documents that may contain schemas created by {@link Chunk}.
- *
- * @see {@link Chunk} for creating the corresponding schema
- *
- * @category Chunk
- * @since 4.0.0
- */
-export const ChunkReviver = InternalSchema.makeDeclarationReviver(
-  "effect/schema/Chunk",
-  Null,
-  ({ annotations, typeParameters }) => {
-    const schema = Chunk(typeParameters[0])
-    return annotations === undefined ? schema : schema.annotate(annotations)
-  }
-)
-
-/**
  * Type-level representation of {@link RegExp}.
  *
  * @category RegExp
@@ -11615,14 +10268,13 @@ export interface RegExp extends instanceOf<globalThis.RegExp> {
 export const RegExp: RegExp = instanceOf(
   globalThis.RegExp,
   {
-    representation: {
-      id: "effect/schema/RegExp",
-      payload: null
+    typeConstructor: {
+      _tag: "RegExp"
     },
-    toCode: () => ({
+    generation: {
       runtime: `Schema.RegExp`,
       Type: `globalThis.RegExp`
-    }),
+    },
     expected: "RegExp",
     toCodecJson: () =>
       link<globalThis.RegExp>()(
@@ -11670,23 +10322,6 @@ export const RegExp: RegExp = instanceOf(
 )
 
 /**
- * Reviver for persisted `RegExp` declarations.
- *
- * **When to use**
- *
- * Use when reconstructing documents that may contain the {@link RegExp} schema.
- *
- * @see {@link RegExp} for the corresponding schema
- *
- * @category RegExp
- * @since 4.0.0
- */
-export const RegExpReviver = makeFixedDeclarationReviver(
-  "effect/schema/RegExp",
-  RegExp
-)
-
-/**
  * Type-level representation of {@link URL}.
  *
  * @category URL
@@ -11713,14 +10348,13 @@ const URLString = String.annotate({ expected: "a string that will be decoded as 
 export const URL: URL = instanceOf(
   globalThis.URL,
   {
-    representation: {
-      id: "effect/schema/URL",
-      payload: null
+    typeConstructor: {
+      _tag: "URL"
     },
-    toCode: () => ({
+    generation: {
       runtime: `Schema.URL`,
       Type: `globalThis.URL`
-    }),
+    },
     expected: "URL",
     toCodecJson: () =>
       link<globalThis.URL>()(
@@ -11730,23 +10364,6 @@ export const URL: URL = instanceOf(
     toArbitrary: () => (fc) => fc.webUrl().map((s) => new globalThis.URL(s)),
     toEquivalence: () => (a, b) => a.toString() === b.toString()
   }
-)
-
-/**
- * Reviver for persisted `URL` declarations.
- *
- * **When to use**
- *
- * Use when reconstructing documents that may contain the {@link URL} schema.
- *
- * @see {@link URL} for the corresponding schema
- *
- * @category URL
- * @since 4.0.0
- */
-export const URLReviver = makeFixedDeclarationReviver(
-  "effect/schema/URL",
-  URL
 )
 
 /**
@@ -11781,16 +10398,25 @@ export const URLFromString: URLFromString = URLString.pipe(decodeTo(URL, SchemaT
  * @category Date
  * @since 4.0.0
  */
-export interface Date extends declare<globalThis.Date> {
+export interface Date extends instanceOf<globalThis.Date> {
   readonly "Rebuild": Date
 }
 
+type DateArbitraryConstraints = FastCheck.DateConstraints & {
+  readonly valid?: boolean | undefined
+}
+
 function dateArbitraryConstraints<T = globalThis.Date>(
+  constraint: Annotations.ToArbitrary.GenerationConstraint | undefined,
   ordered: Annotations.ToArbitrary.OrderedConstraint<T> | undefined,
-  base?: FastCheck.DateConstraints | undefined,
+  base?: DateArbitraryConstraints | undefined,
   toDate?: (value: T) => globalThis.Date
 ): FastCheck.DateConstraints {
   const out: FastCheck.DateConstraints = { ...base }
+  delete (out as any).valid
+  if (base?.valid || constraint?.valid) {
+    out.noInvalidDate = true
+  }
   if (ordered?.minimum !== undefined) {
     const minimum = toDate === undefined ? ordered.minimum as globalThis.Date : toDate(ordered.minimum)
     const nextMin = ordered.exclusiveMinimum ? new globalThis.Date(minimum.getTime() + 1) : minimum
@@ -11808,20 +10434,21 @@ function dateArbitraryConstraints<T = globalThis.Date>(
   return out
 }
 
-const DateString = String.annotate({ expected: "a string that will be decoded as a Date" })
+const DateString = String.annotate({ expected: "a string in ISO 8601 format that will be decoded as a Date" })
 
 /**
- * Schema for valid JavaScript `Date` objects.
+ * Schema for JavaScript `Date` objects.
  *
  * **When to use**
  *
- * Use to validate in-memory values that must already be valid JavaScript date
+ * Use to validate in-memory values that must already be JavaScript date
  * objects.
  *
  * **Details**
  *
- * This schema accepts `Date` instances whose timestamp is not `NaN`. The
- * default JSON serializer encodes dates as ISO 8601 strings.
+ * This schema accepts any `Date` instance, including invalid dates. The default
+ * JSON serializer encodes valid dates as ISO 8601 strings; invalid dates encode
+ * as `"Invalid Date"`.
  *
  * **Example** (Defining a Date schema)
  *
@@ -11832,24 +10459,24 @@ const DateString = String.annotate({ expected: "a string that will be decoded as
  * // => Date { 2024-01-01T00:00:00.000Z }
  * ```
  *
+ * @see {@link DateValid} for accepting only valid Date instances
  * @see {@link DateFromString} for decoding strings into Date instances
  * @see {@link DateFromMillis} for decoding epoch milliseconds into Date instances
  *
  * @category Date
  * @since 4.0.0
  */
-export const Date: Date = declare(
-  (input): input is globalThis.Date => input instanceof globalThis.Date && !globalThis.Number.isNaN(input.getTime()),
+export const Date: Date = instanceOf(
+  globalThis.Date,
   {
-    representation: {
-      id: "effect/schema/Date",
-      payload: null
+    typeConstructor: {
+      _tag: "Date"
     },
-    toCode: () => ({
+    generation: {
       runtime: `Schema.Date`,
       Type: `globalThis.Date`
-    }),
-    expected: "a valid Date",
+    },
+    expected: "Date",
     toCodecJson: () =>
       link<globalThis.Date>()(
         DateString,
@@ -11857,27 +10484,10 @@ export const Date: Date = declare(
       ),
     toArbitrary: () => (fc, ctx) =>
       fc.date(dateArbitraryConstraints(
-        ctx?.constraint?.ordered?.order === Order.Date ? ctx.constraint.ordered : undefined,
-        { noInvalidDate: true }
+        ctx?.constraint,
+        ctx?.constraint?.ordered?.order === Order.Date ? ctx.constraint.ordered : undefined
       ))
   }
-)
-
-/**
- * Reviver for persisted `Date` declarations.
- *
- * **When to use**
- *
- * Use when reconstructing documents that may contain the {@link Date} schema.
- *
- * @see {@link Date} for the corresponding schema
- *
- * @category Date
- * @since 4.0.0
- */
-export const DateReviver = makeFixedDeclarationReviver(
-  "effect/schema/Date",
-  Date
 )
 
 /**
@@ -11904,13 +10514,17 @@ export interface DateFromString extends decodeTo<Date, String> {
  * The string is passed to JavaScript `Date` construction.
  *
  * Encoding:
- * A `Date` is encoded as an ISO string.
+ * A valid `Date` is encoded as an ISO string; an invalid `Date` is encoded as
+ * `"Invalid Date"`.
  *
- * Invalid date strings fail decoding.
+ * **Gotchas**
+ *
+ * Invalid date strings can decode to invalid `Date` instances.
  *
  * @see {@link DateFromMillis} for decoding epoch milliseconds into Date instances
  * @see {@link DateTimeUtcFromString} for decoding date-time strings into UTC values
  * @see {@link Date} for accepting Date instances directly
+ * @see {@link DateValid} for rejecting invalid Date instances
  *
  * @category Date
  * @since 3.10.0
@@ -11923,7 +10537,7 @@ export const DateFromString: DateFromString = DateString.pipe(decodeTo(Date, Sch
  * @category Date
  * @since 4.0.0
  */
-export interface DateFromMillis extends decodeTo<Date, Int> {
+export interface DateFromMillis extends decodeTo<Date, Number> {
   readonly "Rebuild": DateFromMillis
 }
 
@@ -11938,16 +10552,15 @@ export interface DateFromMillis extends decodeTo<Date, Int> {
  * **Details**
  *
  * Decoding:
- * A safe integer number of milliseconds since the Unix epoch is decoded as a
- * `Date`.
+ * A number of milliseconds since the Unix epoch is decoded as a `Date`.
  *
  * Encoding:
  * A `Date` is encoded as its millisecond timestamp.
  *
  * **Gotchas**
  *
- * JavaScript `Date` supports a narrower range than safe integers, so integers
- * outside the supported `Date` range fail decoding.
+ * This schema accepts any number, including `NaN`, `Infinity`, and `-Infinity`.
+ * Those values decode to invalid `Date` instances.
  *
  * @see {@link DateFromString} for decoding string-encoded dates
  * @see {@link DateTimeUtcFromMillis} for decoding epoch milliseconds into UTC values
@@ -11955,9 +10568,32 @@ export interface DateFromMillis extends decodeTo<Date, Int> {
  * @category Date
  * @since 4.0.0
  */
-export const DateFromMillis: DateFromMillis = Int.pipe(
+export const DateFromMillis: DateFromMillis = Number.pipe(
   decodeTo(Date, SchemaTransformation.dateFromMillis)
 )
+
+/**
+ * Type-level representation of {@link DateValid}.
+ *
+ * @category Date
+ * @since 4.0.0
+ */
+export interface DateValid extends Date {
+  readonly "Rebuild": DateValid
+}
+
+/**
+ * Schema for **valid** JavaScript `Date` objects.
+ *
+ * **Details**
+ *
+ * This schema accepts `Date` instances but rejects invalid dates (such as `new
+ * Date("invalid")`).
+ *
+ * @category Date
+ * @since 4.0.0
+ */
+export const DateValid: DateValid = Date.check(isDateValid())
 
 /**
  * Type-level representation of {@link Duration}.
@@ -11993,15 +10629,14 @@ export interface Duration extends declare<Duration_.Duration> {
 export const Duration: Duration = declare(
   Duration_.isDuration,
   {
-    representation: {
-      id: "effect/schema/Duration",
-      payload: null
+    typeConstructor: {
+      _tag: "effect/Duration"
     },
-    toCode: () => ({
+    generation: {
       runtime: `Schema.Duration`,
       Type: `Duration.Duration`,
-      importDeclarations: [`import * as Duration from "effect/Duration"`]
-    }),
+      importDeclaration: `import * as Duration from "effect/Duration"`
+    },
     expected: "Duration",
     toCodecJson: () =>
       link<Duration_.Duration>()(
@@ -12050,23 +10685,6 @@ export const Duration: Duration = declare(
   }
 )
 
-/**
- * Reviver for persisted {@link Duration} declarations.
- *
- * **When to use**
- *
- * Use when reconstructing documents that may contain the {@link Duration} schema.
- *
- * @see {@link Duration} for the corresponding schema
- *
- * @category Duration
- * @since 4.0.0
- */
-export const DurationReviver = makeFixedDeclarationReviver(
-  "effect/schema/Duration",
-  Duration
-)
-
 const DurationString = String.annotate({ expected: "a string that will be decoded as a Duration" })
 
 /**
@@ -12108,24 +10726,26 @@ export interface DurationFromNanos extends decodeTo<Duration, BigInt> {
   readonly "Rebuild": DurationFromNanos
 }
 
+const bigint0 = globalThis.BigInt(0)
+
 /**
- * Schema that decodes a `bigint` into a `Duration`, treating the bigint as
- * nanoseconds.
+ * Schema that decodes a non-negative `bigint` into a
+ * `Duration`, treating the bigint as nanoseconds.
  *
  * **Details**
  *
  * Decoding:
- * A `bigint` representing nanoseconds is decoded as a `Duration`.
+ * A non-negative `bigint` representing nanoseconds is decoded as a `Duration`.
  *
  * Encoding:
- * Finite durations are encoded as a `bigint` number of nanoseconds. Encoding
- * fails when the duration cannot be represented as nanoseconds, such as
- * `Duration.infinity` or `Duration.negativeInfinity`.
+ * Finite durations are encoded as a non-negative `bigint` number of nanoseconds.
+ * Encoding fails when the duration cannot be represented as nanoseconds, such as
+ * `Duration.infinity`.
  *
  * @category Duration
  * @since 3.10.0
  */
-export const DurationFromNanos: DurationFromNanos = BigInt.pipe(
+export const DurationFromNanos: DurationFromNanos = BigInt.check(isGreaterThanOrEqualToBigInt(bigint0)).pipe(
   decodeTo(Duration, SchemaTransformation.durationFromNanos)
 )
 
@@ -12140,25 +10760,24 @@ export interface DurationFromMillis extends decodeTo<Duration, Number> {
 }
 
 /**
- * Schema that decodes a number into a `Duration`, treating the number as
+ * Schema that decodes a non-negative (possibly infinite)
+ * integer into a `Duration`, treating the integer value as the duration in
  * milliseconds.
  *
  * **Details**
  *
  * Decoding:
- * - A finite or infinite number is decoded as a `Duration`
+ * - A non-negative (possibly infinite) integer representing milliseconds is
+ *   decoded as a `Duration`
  *
  * Encoding:
- * - A `Duration` is encoded to a finite or infinite number of milliseconds
- *
- * **Gotchas**
- *
- * `NaN` is decoded as `Duration.zero`, matching `Duration.millis`.
+ * - A `Duration` is encoded to a non-negative (possibly infinite) integer
+ *   representing milliseconds
  *
  * @category Duration
  * @since 3.10.0
  */
-export const DurationFromMillis: DurationFromMillis = Number.pipe(
+export const DurationFromMillis: DurationFromMillis = Number.check(isGreaterThanOrEqualTo(0)).pipe(
   decodeTo(Duration, SchemaTransformation.durationFromMillis)
 )
 
@@ -12271,15 +10890,14 @@ function bigDecimalScaleConstraints(
 export const BigDecimal: BigDecimal = declare(
   BigDecimal_.isBigDecimal,
   {
-    representation: {
-      id: "effect/schema/BigDecimal",
-      payload: null
+    typeConstructor: {
+      _tag: "effect/BigDecimal"
     },
-    toCode: () => ({
+    generation: {
       runtime: `Schema.BigDecimal`,
       Type: `BigDecimal.BigDecimal`,
-      importDeclarations: [`import * as BigDecimal from "effect/BigDecimal"`]
-    }),
+      importDeclaration: `import * as BigDecimal from "effect/BigDecimal"`
+    },
     expected: "BigDecimal",
     toCodecJson: () =>
       link<BigDecimal_.BigDecimal>()(
@@ -12306,23 +10924,6 @@ export const BigDecimal: BigDecimal = declare(
     toFormatter: () => (bd) => BigDecimal_.format(bd),
     toEquivalence: () => BigDecimal_.Equivalence
   }
-)
-
-/**
- * Reviver for persisted {@link BigDecimal} declarations.
- *
- * **When to use**
- *
- * Use when reconstructing documents that may contain the {@link BigDecimal} schema.
- *
- * @see {@link BigDecimal} for the corresponding schema
- *
- * @category BigDecimal
- * @since 4.0.0
- */
-export const BigDecimalReviver = makeFixedDeclarationReviver(
-  "effect/schema/BigDecimal",
-  BigDecimal
 )
 
 /**
@@ -12365,11 +10966,6 @@ export interface BigDecimalFromString extends decodeTo<BigDecimal, String> {
 export const BigDecimalFromString: BigDecimalFromString = BigDecimalString.pipe(
   decodeTo(BigDecimal, SchemaTransformation.bigDecimalFromString)
 )
-
-const JsonString = String.annotate({
-  expected: "a string that will be decoded as JSON",
-  contentMediaType: "application/json"
-})
 
 /**
  * Type-level representation of {@link UnknownFromJsonString}.
@@ -12430,6 +11026,12 @@ export interface fromJsonString<S extends Constraint> extends decodeTo<S, String
  * The resulting schema first parses the input string as JSON, and then runs the
  * provided schema on the parsed result.
  *
+ * JSON Schema generation:
+ *
+ * When using `fromJsonString` with `draft-2020-12` or `openApi3.1`, the
+ * resulting schema will be a JSON Schema with a `contentSchema` property that
+ * contains the JSON Schema for the given schema.
+ *
  * **Example** (Decoding JSON strings with a schema)
  *
  * ```ts
@@ -12442,11 +11044,51 @@ export interface fromJsonString<S extends Constraint> extends decodeTo<S, String
  * // => { a: 1 }
  * ```
  *
+ * **Example** (Emitting JSON Schema for a JSON string decoder)
+ *
+ * ```ts
+ * import { Schema } from "effect"
+ *
+ * const original = Schema.Struct({ a: Schema.String })
+ * const schema = Schema.fromJsonString(original)
+ *
+ * const document = Schema.toJsonSchemaDocument(schema)
+ *
+ * console.log(JSON.stringify(document, null, 2))
+ * // {
+ * //   "source": "draft-2020-12",
+ * //   "schema": {
+ * //     "type": "string",
+ * //     "contentMediaType": "application/json",
+ * //     "contentSchema": {
+ * //       "type": "object",
+ * //       "properties": {
+ * //         "a": {
+ * //           "type": "string"
+ * //         }
+ * //       },
+ * //       "required": [
+ * //         "a"
+ * //       ],
+ * //       "additionalProperties": false
+ * //     }
+ * //   },
+ * //   "definitions": {}
+ * // }
+ * ```
+ *
  * @category constructors
  * @since 4.0.0
  */
 export function fromJsonString<S extends Constraint>(schema: S): fromJsonString<S> {
-  return JsonString.pipe(decodeTo(schema, SchemaTransformation.fromJsonString))
+  const identifier = SchemaAST.resolveIdentifier(schema.ast)
+  return String.annotate({
+    // Give the transport wrapper its own name so the decoded payload keeps its identifier.
+    identifier: identifier === undefined ? undefined : `${identifier}JsonString`,
+    expected: "a string that will be decoded as JSON",
+    contentMediaType: "application/json",
+    contentSchema: SchemaAST.toEncoded(schema.ast)
+  }).pipe(decodeTo(schema, SchemaTransformation.fromJsonString))
 }
 
 /**
@@ -12471,14 +11113,13 @@ export interface File extends instanceOf<globalThis.File> {
  * @since 4.0.0
  */
 export const File: File = instanceOf(globalThis.File, {
-  representation: {
-    id: "effect/schema/File",
-    payload: null
+  typeConstructor: {
+    _tag: "File"
   },
-  toCode: () => ({
+  generation: {
     runtime: `Schema.File`,
     Type: `globalThis.File`
-  }),
+  },
   expected: "File",
   toCodecJson: () =>
     link<globalThis.File>()(
@@ -12486,7 +11127,7 @@ export const File: File = instanceOf(globalThis.File, {
         data: String.check(isBase64()),
         type: String,
         name: String,
-        lastModified: Int
+        lastModified: Number
       }),
       SchemaTransformation.transformOrFail({
         decode: (e) =>
@@ -12525,23 +11166,6 @@ export const File: File = instanceOf(globalThis.File, {
 })
 
 /**
- * Reviver for persisted `File` declarations.
- *
- * **When to use**
- *
- * Use when reconstructing documents that may contain the {@link File} schema.
- *
- * @see {@link File} for the corresponding schema
- *
- * @category file
- * @since 4.0.0
- */
-export const FileReviver = makeFixedDeclarationReviver(
-  "effect/schema/File",
-  File
-)
-
-/**
  * Type-level representation of {@link FormData}.
  *
  * @category FormData
@@ -12563,14 +11187,13 @@ export interface FormData extends instanceOf<globalThis.FormData> {
  * @since 4.0.0
  */
 export const FormData: FormData = instanceOf(globalThis.FormData, {
-  representation: {
-    id: "effect/schema/FormData",
-    payload: null
+  typeConstructor: {
+    _tag: "FormData"
   },
-  toCode: () => ({
+  generation: {
     runtime: `Schema.FormData`,
     Type: `globalThis.FormData`
-  }),
+  },
   expected: "FormData",
   toCodecJson: () =>
     link<globalThis.FormData>()(
@@ -12605,23 +11228,6 @@ export const FormData: FormData = instanceOf(globalThis.FormData, {
       })
     )
 })
-
-/**
- * Reviver for persisted `FormData` declarations.
- *
- * **When to use**
- *
- * Use when reconstructing documents that may contain the {@link FormData} schema.
- *
- * @see {@link FormData} for the corresponding schema
- *
- * @category FormData
- * @since 4.0.0
- */
-export const FormDataReviver = makeFixedDeclarationReviver(
-  "effect/schema/FormData",
-  FormData
-)
 
 /**
  * Type-level representation returned by {@link fromFormData}.
@@ -12743,14 +11349,13 @@ export interface URLSearchParams extends instanceOf<globalThis.URLSearchParams> 
  * @since 4.0.0
  */
 export const URLSearchParams: URLSearchParams = instanceOf(globalThis.URLSearchParams, {
-  representation: {
-    id: "effect/schema/URLSearchParams",
-    payload: null
+  typeConstructor: {
+    _tag: "URLSearchParams"
   },
-  toCode: () => ({
+  generation: {
     runtime: `Schema.URLSearchParams`,
     Type: `globalThis.URLSearchParams`
-  }),
+  },
   expected: "URLSearchParams",
   toCodecJson: () =>
     link<globalThis.URLSearchParams>()(
@@ -12761,23 +11366,6 @@ export const URLSearchParams: URLSearchParams = instanceOf(globalThis.URLSearchP
       })
     )
 })
-
-/**
- * Reviver for persisted `URLSearchParams` declarations.
- *
- * **When to use**
- *
- * Use when reconstructing documents that may contain the {@link URLSearchParams} schema.
- *
- * @see {@link URLSearchParams} for the corresponding schema
- *
- * @category search params
- * @since 4.0.0
- */
-export const URLSearchParamsReviver = makeFixedDeclarationReviver(
-  "effect/schema/URLSearchParams",
-  URLSearchParams
-)
 
 /**
  * Type-level representation returned by {@link fromURLSearchParams}.
@@ -12874,12 +11462,48 @@ export function fromURLSearchParams<S extends Constraint>(schema: S): fromURLSea
 }
 
 /**
+ * Type-level representation of {@link Finite}.
+ *
+ * @category Number
+ * @since 3.10.0
+ */
+export interface Finite extends Number {
+  readonly "Rebuild": Finite
+}
+
+/**
+ * Schema for finite numbers, rejecting `NaN`, `Infinity`, and `-Infinity`.
+ *
+ * @category Number
+ * @since 3.10.0
+ */
+export const Finite: Finite = Number.check(isFinite())
+
+/**
+ * Type-level representation of {@link Int}.
+ *
+ * @category Number
+ * @since 3.10.0
+ */
+export interface Int extends Number {
+  readonly "Rebuild": Int
+}
+
+/**
+ * Schema for integers, rejecting `NaN`, `Infinity`, and `-Infinity`.
+ *
+ * @category Number
+ * @since 3.10.0
+ */
+export const Int: Int = Number.check(isInt())
+
+/**
  * Type-level representation of {@link NumberFromString}.
  *
  * @category Number
  * @since 3.10.0
  */
-export interface NumberFromString extends decodeTo<Number, String> {
+export interface NumberFromString extends decodeTo<Finite, String> {
   readonly "Rebuild": NumberFromString
 }
 
@@ -13255,14 +11879,13 @@ const Base64String = String.annotate({
  * @since 4.0.0
  */
 export const Uint8Array: Uint8Array = instanceOf(globalThis.Uint8Array<ArrayBufferLike>, {
-  representation: {
-    id: "effect/schema/Uint8Array",
-    payload: null
+  typeConstructor: {
+    _tag: "Uint8Array"
   },
-  toCode: () => ({
+  generation: {
     runtime: `Schema.Uint8Array`,
     Type: `globalThis.Uint8Array`
-  }),
+  },
   expected: "Uint8Array",
   toCodecJson: () =>
     link<globalThis.Uint8Array<ArrayBufferLike>>()(
@@ -13271,23 +11894,6 @@ export const Uint8Array: Uint8Array = instanceOf(globalThis.Uint8Array<ArrayBuff
     ),
   toArbitrary: () => (fc) => fc.uint8Array()
 })
-
-/**
- * Reviver for persisted `Uint8Array` declarations.
- *
- * **When to use**
- *
- * Use when reconstructing documents that may contain the {@link Uint8Array} schema.
- *
- * @see {@link Uint8Array} for the corresponding schema
- *
- * @category Uint8Array
- * @since 4.0.0
- */
-export const Uint8ArrayReviver = makeFixedDeclarationReviver(
-  "effect/schema/Uint8Array",
-  Uint8Array
-)
 
 /**
  * Type-level representation of {@link Uint8ArrayFromBase64}.
@@ -13420,15 +12026,14 @@ export interface DateTimeUtc extends declare<DateTime.Utc> {
 export const DateTimeUtc: DateTimeUtc = declare(
   (u) => DateTime.isDateTime(u) && DateTime.isUtc(u),
   {
-    representation: {
-      id: "effect/schema/DateTimeUtc",
-      payload: null
+    typeConstructor: {
+      _tag: "effect/DateTime.Utc"
     },
-    toCode: () => ({
+    generation: {
       runtime: `Schema.DateTimeUtc`,
       Type: `DateTime.Utc`,
-      importDeclarations: [`import * as DateTime from "effect/DateTime"`]
-    }),
+      importDeclaration: `import * as DateTime from "effect/DateTime"`
+    },
     expected: "DateTime.Utc",
     toCodecJson: () =>
       link<DateTime.Utc>()(
@@ -13437,31 +12042,15 @@ export const DateTimeUtc: DateTimeUtc = declare(
       ),
     toArbitrary: () => (fc, ctx) =>
       fc.date(dateArbitraryConstraints(
+        ctx?.constraint,
         ctx?.constraint?.ordered?.order === DateTime.Order ? ctx.constraint.ordered : undefined,
-        { noInvalidDate: true },
+        { valid: true },
         DateTime.toDateUtc
       ))
         .map((date) => DateTime.fromDateUnsafe(date)),
     toFormatter: () => (utc) => utc.toString(),
     toEquivalence: () => DateTime.Equivalence
   }
-)
-
-/**
- * Reviver for persisted {@link DateTimeUtc} declarations.
- *
- * **When to use**
- *
- * Use when reconstructing documents that may contain the {@link DateTimeUtc} schema.
- *
- * @see {@link DateTimeUtc} for the corresponding schema
- *
- * @category DateTime
- * @since 4.0.0
- */
-export const DateTimeUtcReviver = makeFixedDeclarationReviver(
-  "effect/schema/DateTimeUtc",
-  DateTimeUtc
 )
 
 /**
@@ -13493,12 +12082,12 @@ export interface DateTimeUtcFromDate extends decodeTo<DateTimeUtc, Date> {
  * @see {@link DateTimeUtc} for validating values that are already `DateTime.Utc`
  * @see {@link DateTimeUtcFromString} for decoding date-time strings into UTC values
  * @see {@link DateTimeUtcFromMillis} for decoding epoch milliseconds into UTC values
- * @see {@link Date} for validating Date instances without converting them
+ * @see {@link DateValid} for validating Date instances without converting them
  *
  * @category DateTime
  * @since 3.12.0
  */
-export const DateTimeUtcFromDate: DateTimeUtcFromDate = Date.pipe(
+export const DateTimeUtcFromDate: DateTimeUtcFromDate = DateValid.pipe(
   decodeTo(DateTimeUtc, {
     decode: SchemaGetter.dateTimeUtcFromInput(),
     encode: SchemaGetter.transform(DateTime.toDateUtc)
@@ -13551,7 +12140,7 @@ export const DateTimeUtcFromString: DateTimeUtcFromString = String.annotate({
  * @category DateTime
  * @since 4.0.0
  */
-export interface DateTimeUtcFromMillis extends decodeTo<instanceOf<DateTime.Utc>, Int> {
+export interface DateTimeUtcFromMillis extends decodeTo<instanceOf<DateTime.Utc>, Number> {
   readonly "Rebuild": DateTimeUtcFromMillis
 }
 
@@ -13573,7 +12162,7 @@ export interface DateTimeUtcFromMillis extends decodeTo<instanceOf<DateTime.Utc>
  * @category DateTime
  * @since 4.0.0
  */
-export const DateTimeUtcFromMillis: DateTimeUtcFromMillis = Int.pipe(
+export const DateTimeUtcFromMillis: DateTimeUtcFromMillis = Number.pipe(
   decodeTo(DateTimeUtc, {
     decode: SchemaGetter.dateTimeUtcFromInput(),
     encode: SchemaGetter.transform(DateTime.toEpochMillis)
@@ -13605,19 +12194,18 @@ export interface TimeZoneOffset extends declare<DateTime.TimeZone.Offset> {
 export const TimeZoneOffset: TimeZoneOffset = declare(
   DateTime.isTimeZoneOffset,
   {
-    representation: {
-      id: "effect/schema/TimeZoneOffset",
-      payload: null
+    typeConstructor: {
+      _tag: "effect/DateTime.TimeZone.Offset"
     },
-    toCode: () => ({
+    generation: {
       runtime: `Schema.TimeZoneOffset`,
       Type: `DateTime.TimeZone.Offset`,
-      importDeclarations: [`import * as DateTime from "effect/DateTime"`]
-    }),
+      importDeclaration: `import * as DateTime from "effect/DateTime"`
+    },
     expected: "DateTime.TimeZone.Offset",
     toCodecJson: () =>
       link<DateTime.TimeZone.Offset>()(
-        Int,
+        Number,
         SchemaTransformation.timeZoneOffsetFromNumber
       ),
     toArbitrary: () => (fc) =>
@@ -13625,23 +12213,6 @@ export const TimeZoneOffset: TimeZoneOffset = declare(
     toFormatter: () => (tz) => DateTime.zoneToString(tz),
     toEquivalence: () => (a, b) => a.offset === b.offset
   }
-)
-
-/**
- * Reviver for persisted {@link TimeZoneOffset} declarations.
- *
- * **When to use**
- *
- * Use when reconstructing documents that may contain the {@link TimeZoneOffset} schema.
- *
- * @see {@link TimeZoneOffset} for the corresponding schema
- *
- * @category DateTime
- * @since 4.0.0
- */
-export const TimeZoneOffsetReviver = makeFixedDeclarationReviver(
-  "effect/schema/TimeZoneOffset",
-  TimeZoneOffset
 )
 
 /**
@@ -13671,15 +12242,14 @@ const TimeZoneNamedString = String.annotate({ expected: "an IANA time zone ident
 export const TimeZoneNamed: TimeZoneNamed = declare(
   DateTime.isTimeZoneNamed,
   {
-    representation: {
-      id: "effect/schema/TimeZoneNamed",
-      payload: null
+    typeConstructor: {
+      _tag: "effect/DateTime.TimeZone.Named"
     },
-    toCode: () => ({
+    generation: {
       runtime: `Schema.TimeZoneNamed`,
       Type: `DateTime.TimeZone.Named`,
-      importDeclarations: [`import * as DateTime from "effect/DateTime"`]
-    }),
+      importDeclaration: `import * as DateTime from "effect/DateTime"`
+    },
     expected: "DateTime.TimeZone.Named",
     toCodecJson: () =>
       link<DateTime.TimeZone.Named>()(
@@ -13695,23 +12265,6 @@ export const TimeZoneNamed: TimeZoneNamed = declare(
     toFormatter: () => (tz) => DateTime.zoneToString(tz),
     toEquivalence: () => (a, b) => a.id === b.id
   }
-)
-
-/**
- * Reviver for persisted {@link TimeZoneNamed} declarations.
- *
- * **When to use**
- *
- * Use when reconstructing documents that may contain the {@link TimeZoneNamed} schema.
- *
- * @see {@link TimeZoneNamed} for the corresponding schema
- *
- * @category DateTime
- * @since 4.0.0
- */
-export const TimeZoneNamedReviver = makeFixedDeclarationReviver(
-  "effect/schema/TimeZoneNamed",
-  TimeZoneNamed
 )
 
 /**
@@ -13772,15 +12325,14 @@ const TimeZoneString = String.annotate({
 export const TimeZone: TimeZone = declare(
   DateTime.isTimeZone,
   {
-    representation: {
-      id: "effect/schema/TimeZone",
-      payload: null
+    typeConstructor: {
+      _tag: "effect/DateTime.TimeZone"
     },
-    toCode: () => ({
+    generation: {
       runtime: `Schema.TimeZone`,
       Type: `DateTime.TimeZone`,
-      importDeclarations: [`import * as DateTime from "effect/DateTime"`]
-    }),
+      importDeclaration: `import * as DateTime from "effect/DateTime"`
+    },
     expected: "DateTime.TimeZone",
     toCodecJson: () =>
       link<DateTime.TimeZone>()(
@@ -13799,23 +12351,6 @@ export const TimeZone: TimeZone = declare(
     toFormatter: () => (tz) => DateTime.zoneToString(tz),
     toEquivalence: () => (a, b) => DateTime.zoneToString(a) === DateTime.zoneToString(b)
   }
-)
-
-/**
- * Reviver for persisted {@link TimeZone} declarations.
- *
- * **When to use**
- *
- * Use when reconstructing documents that may contain the {@link TimeZone} schema.
- *
- * @see {@link TimeZone} for the corresponding schema
- *
- * @category DateTime
- * @since 4.0.0
- */
-export const TimeZoneReviver = makeFixedDeclarationReviver(
-  "effect/schema/TimeZone",
-  TimeZone
 )
 
 /**
@@ -13878,15 +12413,14 @@ const DateTimeZonedString = String.annotate({
 export const DateTimeZoned: DateTimeZoned = declare(
   (u) => DateTime.isDateTime(u) && DateTime.isZoned(u),
   {
-    representation: {
-      id: "effect/schema/DateTimeZoned",
-      payload: null
+    typeConstructor: {
+      _tag: "effect/DateTime.Zoned"
     },
-    toCode: () => ({
+    generation: {
       runtime: `Schema.DateTimeZoned`,
       Type: `DateTime.Zoned`,
-      importDeclarations: [`import * as DateTime from "effect/DateTime"`]
-    }),
+      importDeclaration: `import * as DateTime from "effect/DateTime"`
+    },
     expected: "DateTime.Zoned",
     toCodecJson: () =>
       link<DateTime.Zoned>()(
@@ -13896,11 +12430,12 @@ export const DateTimeZoned: DateTimeZoned = declare(
     toArbitrary: () => (fc, ctx) =>
       fc.tuple(
         fc.date(dateArbitraryConstraints(
+          ctx?.constraint,
           ctx?.constraint?.ordered?.order === DateTime.Order ? ctx.constraint.ordered : undefined,
           {
             max: new globalThis.Date(8640000000000000 - 14 * 60 * 60 * 1000),
             min: new globalThis.Date(-8640000000000000 + 14 * 60 * 60 * 1000),
-            noInvalidDate: true
+            valid: true
           },
           DateTime.toDateUtc
         )),
@@ -13909,23 +12444,6 @@ export const DateTimeZoned: DateTimeZoned = declare(
     toFormatter: () => (zoned) => DateTime.formatIsoZoned(zoned),
     toEquivalence: () => DateTime.Equivalence
   }
-)
-
-/**
- * Reviver for persisted {@link DateTimeZoned} declarations.
- *
- * **When to use**
- *
- * Use when reconstructing documents that may contain the {@link DateTimeZoned} schema.
- *
- * @see {@link DateTimeZoned} for the corresponding schema
- *
- * @category DateTime
- * @since 4.0.0
- */
-export const DateTimeZonedReviver = makeFixedDeclarationReviver(
-  "effect/schema/DateTimeZoned",
-  DateTimeZoned
 )
 
 /**
@@ -13966,18 +12484,17 @@ export const DateTimeZonedFromString: DateTimeZonedFromString = DateTimeZonedStr
  * @category models
  * @since 3.10.0
  */
-export interface Class<Self, S extends Constraint & { readonly fields: Struct.Fields }, Inherited>
-  extends
-    BottomLazyWithoutNew<
-      SchemaAST.Declaration,
-      decodeTo<declareConstructor<Self, S["Encoded"], readonly [S], S["Iso"]>, S>,
-      readonly [S],
-      S["~type.mutability"],
-      S["~type.optionality"],
-      S["~type.constructor.default"],
-      S["~encoded.mutability"],
-      S["~encoded.optionality"]
-    >
+export interface Class<Self, S extends Constraint & { readonly fields: Struct.Fields }, Inherited> extends
+  BottomLazy<
+    SchemaAST.Declaration,
+    decodeTo<declareConstructor<Self, S["Encoded"], readonly [S], S["Iso"]>, S>,
+    readonly [S],
+    S["~type.mutability"],
+    S["~type.optionality"],
+    S["~type.constructor.default"],
+    S["~encoded.mutability"],
+    S["~encoded.optionality"]
+  >
 {
   readonly "Type": Self
   readonly "Encoded": S["Encoded"]
@@ -14210,7 +12727,7 @@ function getClassSchemaFactory<S extends Constraint>(
             terminal: from.terminal?.map((args: S["Type"]) => new self(args))
           }),
           toFormatter: ([from]: readonly [Formatter<S["Type"]>]) => (t: Self) => `${self.identifier}(${from(t)})`,
-          [InternalAnnotations.SENTINELS_ANNOTATION_KEY]: SchemaAST.collectSentinels(from.ast),
+          "~sentinels": SchemaAST.collectSentinels(from.ast),
           ...annotations
         }
       )
@@ -14729,17 +13246,14 @@ export function toFormatter<S extends Constraint>(schema: S, options?: {
         }
       }
       case "Union": {
-        const types = SchemaAST.toType(ast).types
-        const getCandidates = (t: any) => SchemaAST.getCandidates(t, types)
-        const compiled = new Map(
-          types.map((candidate, i) => [candidate, [SchemaParser._is(candidate), recur(ast.types[i])] as const] as const)
-        )
+        const getCandidates = (t: any) => SchemaAST.getCandidates(t, ast.types)
         return (t) => {
           const candidates = getCandidates(t)
+          const refinements = candidates.map(SchemaParser._is)
           for (let i = 0; i < candidates.length; i++) {
-            const [is, formatter] = compiled.get(candidates[i])!
+            const is = refinements[i]
             if (is(t)) {
-              return formatter(t)
+              return recur(candidates[i])(t)
             }
           }
           return format(t)
@@ -14801,18 +13315,15 @@ export function toEquivalence<T>(schema: Schema<T>): Equivalence.Equivalence<T> 
 // -----------------------------------------------------------------------------
 
 /**
- * Derives an intermediate `SchemaRepresentation.Document` from the encoded
- * side of a schema.
- *
- * **Details**
- *
- * Use {@link toType} before this function to represent the type side instead.
+ * Derives an intermediate `SchemaRepresentation.Document` from a schema. This
+ * document is used internally by {@link toJsonSchemaDocument} and related
+ * functions to produce JSON Schema output.
  *
  * @category Representation
  * @since 4.0.0
  */
 export function toRepresentation(schema: Constraint): SchemaRepresentation.Document {
-  return InternalToRepresentation.toRepresentation(schema.ast)
+  return InternalStandard.fromAST(schema.ast)
 }
 
 // -----------------------------------------------------------------------------
@@ -14900,16 +13411,14 @@ export interface ToJsonSchemaOptions {
  *
  * The `options` parameter controls generation details such as additional
  * properties and synthesized check descriptions; it does not change the draft
- * target. Declarations are lowered through their `toCodecJson` or `toCodec`
- * annotation when available before the representation document is compiled.
+ * target.
  *
  * **Gotchas**
  *
  * JSON Schema generation is best-effort. Some Effect schema semantics cannot
  * be represented exactly in JSON Schema, and importing an emitted JSON Schema
  * may produce an equivalent approximation rather than the original schema
- * shape. Opaque declarations without a structural codec are represented by an
- * unconstrained JSON Schema.
+ * shape.
  *
  * @category converting
  * @since 4.0.0
@@ -14918,8 +13427,13 @@ export function toJsonSchemaDocument(
   schema: Constraint,
   options?: ToJsonSchemaOptions
 ): JsonSchema.Document<"draft-2020-12"> {
-  const document = InternalToRepresentation.toRepresentation(toCodecJsonAST(schema.ast))
-  return InternalToJsonSchemaDocument.toJsonSchemaDocument(document, options)
+  const sd = toRepresentation(schema)
+  const jd = InternalStandard.toJsonSchemaDocument(sd, options)
+  return {
+    dialect: "draft-2020-12",
+    schema: jd.schema,
+    definitions: jd.definitions
+  }
 }
 
 // -----------------------------------------------------------------------------
@@ -14958,113 +13472,35 @@ export interface toCodecJson<S extends Constraint> extends
  * Derives a canonical JSON codec from a schema. The encoded form is `Json`, and
  * decoding produces the schema's `Type`.
  *
- * **Gotchas**
- *
- * Declarations without a `toCodecJson` or `toCodec` annotation use `Json` as
- * their encoded schema. This keeps codec construction total, but encoding or
- * decoding can still fail when declaration values are not JSON values. A
- * `toCodecJson` callback can return `undefined` when the declaration is already
- * in canonical JSON form.
- *
  * @category Canonical Codecs
  * @since 4.0.0
  */
 export function toCodecJson<S extends Constraint>(schema: S): toCodecJson<S> {
-  return make(toCodecJsonAST(schema.ast), { schema })
+  return make(toCodecJsonTop(schema.ast), { schema })
 }
 
-const toCodecJsonASTBase = SchemaAST.applyToSelfOrLastLinkEncoding((ast) => {
-  const out = toCodecJsonBase(ast, toCodecJsonAST)
-  const context = ast.context
-  if (out === ast || context === undefined) return out
-  return SchemaAST.replaceContextLastLink(out, withoutConstructorDefault(context))
-})
-
-/** @internal */
-export const toCodecJsonAST = memoize((ast: SchemaAST.AST): SchemaAST.AST => {
-  const identifier = InternalAnnotations.resolveIdentifier(ast)
-  const out = toCodecJsonASTBase(ast)
-  if (identifier === undefined || out.encoding === undefined) return out
-
-  const encoded = SchemaAST.getLastEncoding(out)
-  if (
-    InternalAnnotations.resolveIdentifier(encoded) !== undefined ||
-    InternalAnnotations.resolveIdentifierFallback(encoded) === identifier
-  ) {
-    return out
-  }
-
-  const annotated = SchemaAST.annotate(encoded, {
-    [InternalAnnotations.IDENTIFIER_FALLBACK_KEY]: identifier
-  })
-  return SchemaAST.applyToSelfOrLastLinkEncoding(() => annotated)(out)
-})
-
-function withoutConstructorDefault(context: SchemaAST.Context): SchemaAST.Context {
-  return context.defaultValue === undefined ?
-    context :
-    new SchemaAST.Context(context.isOptional, context.isMutable, undefined, context.annotations)
-}
-
-function validateCanonicalObjectPropertyNames(ast: SchemaAST.Objects): void {
-  if (ast.propertySignatures.some((ps) => typeof ps.name !== "string")) {
-    throw new globalThis.Error("Objects property names must be strings", { cause: ast })
-  }
-}
-
-function makeReorder(getPriority: (ast: SchemaAST.AST) => number) {
-  return (types: ReadonlyArray<SchemaAST.AST>): ReadonlyArray<SchemaAST.AST> => {
-    // Create a map of original indices for O(1) lookup
-    const indexMap = new Map<SchemaAST.AST, number>()
-    for (let i = 0; i < types.length; i++) {
-      indexMap.set(SchemaAST.toEncoded(types[i]), i)
-    }
-
-    // Create a sorted copy of the types array
-    const sortedTypes = [...types].sort((a, b) => {
-      a = SchemaAST.toEncoded(a)
-      b = SchemaAST.toEncoded(b)
-      const pa = getPriority(a)
-      const pb = getPriority(b)
-      if (pa !== pb) return pa - pb
-      // If priorities are equal, maintain original order (stable sort)
-      return indexMap.get(a)! - indexMap.get(b)!
-    })
-
-    // Check if order changed by comparing arrays
-    const orderChanged = sortedTypes.some((ast, index) => ast !== types[index])
-
-    if (!orderChanged) return types
-    return sortedTypes
-  }
-}
-
-const toCodecJsonReorder = makeReorder((ast: SchemaAST.AST) => {
-  switch (ast._tag) {
-    case "BigInt":
-    case "Symbol":
-    case "UniqueSymbol":
-      return 0
-    default:
-      return 1
-  }
+const toCodecJsonTop = SchemaAST.applyToSelfOrLastLinkEncoding((ast) => {
+  const out = toCodecJsonBase(ast, toCodecJsonTop)
+  return out !== ast && SchemaAST.isOptional(ast) ? SchemaAST.optionalKeyLastLink(out) : out
 })
 
 function toCodecJsonBase(ast: SchemaAST.AST, recur: (ast: SchemaAST.AST) => SchemaAST.AST): SchemaAST.AST {
   switch (ast._tag) {
     case "Declaration": {
       const getLink = ast.annotations?.toCodecJson ?? ast.annotations?.toCodec
-      if (!Predicate.isFunction(getLink)) {
-        return SchemaAST.replaceEncoding(ast, [SchemaAST.unknownToJson])
+      if (Predicate.isFunction(getLink)) {
+        const tps = SchemaAST.isDeclaration(ast)
+          ? ast.typeParameters.map((tp) => InternalSchema.make(SchemaAST.toEncoded(tp)))
+          : []
+        const link = getLink(tps)
+        const to = recur(link.to)
+        return SchemaAST.replaceEncoding(ast, to === link.to ? [link] : [new SchemaAST.Link(to, link.transformation)])
       }
-      const typeParameters = ast.typeParameters.map((tp) => InternalSchema.make(SchemaAST.toEncoded(tp)))
-      const link = getLink(typeParameters)
-      return link === undefined ? ast : SchemaAST.replaceEncoding(ast, [SchemaAST.mapLink(link, recur)])
+      return SchemaAST.replaceEncoding(ast, [SchemaAST.unknownToNull])
     }
     case "Unknown":
-      return SchemaAST.replaceEncoding(ast, [SchemaAST.unknownToJson])
     case "ObjectKeyword":
-      return SchemaAST.replaceEncoding(ast, [SchemaAST.objectKeywordToJson])
+      return SchemaAST.replaceEncoding(ast, [SchemaAST.unknownToJson])
     case "Undefined":
     case "Void":
     case "Literal":
@@ -15075,11 +13511,13 @@ function toCodecJsonBase(ast: SchemaAST.AST, recur: (ast: SchemaAST.AST) => Sche
     case "BigInt":
       return ast.toCodecStringTree()
     case "Objects": {
-      validateCanonicalObjectPropertyNames(ast)
+      if (ast.propertySignatures.some((ps) => typeof ps.name !== "string")) {
+        throw new globalThis.Error("Objects property names must be strings", { cause: ast })
+      }
       return ast.recur(recur, SchemaAST.parameterFromString)
     }
     case "Union": {
-      const sortedTypes = toCodecJsonReorder(ast.types)
+      const sortedTypes = InternalSchema.jsonReorder(ast.types)
       if (sortedTypes !== ast.types) {
         return new SchemaAST.Union(
           sortedTypes,
@@ -15114,9 +13552,7 @@ export function toCodecIso<S extends Constraint>(schema: S): Codec<S["Type"], S[
 
 const toCodecIsoTop = memoize((ast: SchemaAST.AST): SchemaAST.AST => {
   const out = toCodecIsoBase(ast, toCodecIsoTop)
-  return out !== ast && ast.context !== undefined ?
-    SchemaAST.replaceContextLastLink(out, withoutConstructorDefault(ast.context)) :
-    out
+  return out !== ast && SchemaAST.isOptional(ast) ? SchemaAST.optionalKeyLastLink(out) : out
 })
 
 function toCodecIsoBase(ast: SchemaAST.AST, recur: (ast: SchemaAST.AST) => SchemaAST.AST): SchemaAST.AST {
@@ -15125,7 +13561,8 @@ function toCodecIsoBase(ast: SchemaAST.AST, recur: (ast: SchemaAST.AST) => Schem
       const getLink = ast.annotations?.toCodecIso ?? ast.annotations?.toCodec
       if (Predicate.isFunction(getLink)) {
         const link = getLink(ast.typeParameters.map((tp) => InternalSchema.make(tp)))
-        return SchemaAST.replaceEncoding(ast, [SchemaAST.mapLink(link, recur)])
+        const to = recur(link.to)
+        return SchemaAST.replaceEncoding(ast, to === link.to ? [link] : [new SchemaAST.Link(to, link.transformation)])
       }
       return ast
     }
@@ -15179,11 +13616,10 @@ export interface toCodecStringTree<S extends Constraint> extends
  * Converts a schema to the StringTree canonical codec, where every leaf value
  * becomes a string while preserving the original structure.
  *
- * **Gotchas**
+ * **Details**
  *
- * Declarations must provide a structural `toCodecStringTree`, `toCodecJson`, or
- * `toCodec` encoding. A callback can return `undefined` when the declaration is
- * already in canonical StringTree form.
+ * Declarations are converted to `undefined` (unless they have a
+ * `toCodecJson` or `toCodec` annotation).
  *
  * @category Canonical Codecs
  * @since 4.0.0
@@ -15361,7 +13797,7 @@ const xml = {
   }
 }
 
-const toStringTreeReorder = makeReorder((ast: SchemaAST.AST) => {
+function getStringTreePriority(ast: SchemaAST.AST): number {
   switch (ast._tag) {
     case "Null":
     case "Boolean":
@@ -15373,7 +13809,9 @@ const toStringTreeReorder = makeReorder((ast: SchemaAST.AST) => {
     default:
       return 1
   }
-})
+}
+
+const treeReorder = InternalSchema.makeReorder(getStringTreePriority)
 
 function serializerTree(
   ast: SchemaAST.AST,
@@ -15382,20 +13820,16 @@ function serializerTree(
 ): SchemaAST.AST {
   switch (ast._tag) {
     case "Declaration": {
-      const typeParameters = ast.typeParameters.map((tp) => make(recur(SchemaAST.toEncoded(tp))))
-      const getStringTreeLink = ast.annotations?.toCodecStringTree
-      if (Predicate.isFunction(getStringTreeLink)) {
-        const link = getStringTreeLink(typeParameters)
-        if (link === undefined) return ast
-        return SchemaAST.replaceEncoding(ast, [SchemaAST.mapLink(link, recur)])
+      const getLink = ast.annotations?.toCodecJson ?? ast.annotations?.toCodec
+      if (Predicate.isFunction(getLink)) {
+        const tps = SchemaAST.isDeclaration(ast)
+          ? ast.typeParameters.map((tp) => make(recur(SchemaAST.toEncoded(tp))))
+          : []
+        const link = getLink(tps)
+        const to = recur(link.to)
+        return SchemaAST.replaceEncoding(ast, to === link.to ? [link] : [new SchemaAST.Link(to, link.transformation)])
       }
-      const getJsonLink = ast.annotations?.toCodecJson
-      const jsonLink = Predicate.isFunction(getJsonLink) ? getJsonLink(typeParameters) : undefined
-      const getLink = jsonLink === undefined ? ast.annotations?.toCodec : undefined
-      const link = jsonLink ?? (Predicate.isFunction(getLink) ? getLink(typeParameters) : undefined)
-      return link === undefined
-        ? onMissingAnnotation(ast)
-        : SchemaAST.replaceEncoding(ast, [SchemaAST.mapLink(link, recur)])
+      return onMissingAnnotation(ast)
     }
     case "Null":
       return SchemaAST.replaceEncoding(ast, [nullToString])
@@ -15412,11 +13846,13 @@ function serializerTree(
     case "BigInt":
       return ast.toCodecStringTree()
     case "Objects": {
-      validateCanonicalObjectPropertyNames(ast)
+      if (ast.propertySignatures.some((ps) => typeof ps.name !== "string")) {
+        throw new globalThis.Error("Objects property names must be strings", { cause: ast })
+      }
       return ast.recur(recur, SchemaAST.parameterFromString)
     }
     case "Union": {
-      const sortedTypes = toStringTreeReorder(ast.types)
+      const sortedTypes = treeReorder(ast.types)
       if (sortedTypes !== ast.types) {
         return new SchemaAST.Union(
           sortedTypes,
@@ -15463,14 +13899,20 @@ const serializerStringTree = SchemaAST.applyToSelfOrLastLinkEncoding((ast) => {
   if (isSerializerArrayFromSingle(ast)) {
     return ast
   }
-  const out = serializerTree(ast, serializerStringTree, (ast) => {
-    throw new globalThis.Error("Missing structural codec for StringTree", { cause: ast })
-  })
-  if (out !== ast && ast.context !== undefined) {
-    return SchemaAST.replaceContextLastLink(out, withoutConstructorDefault(ast.context))
+  const out = serializerTree(ast, serializerStringTree, (ast) => SchemaAST.replaceEncoding(ast, [unknownToUndefined]))
+  if (out !== ast && SchemaAST.isOptional(ast)) {
+    return SchemaAST.optionalKeyLastLink(out)
   }
   return out
 })
+
+const unknownToUndefined = new SchemaAST.Link(
+  SchemaAST.undefined,
+  new SchemaTransformation.Transformation(
+    SchemaGetter.passthrough(),
+    SchemaGetter.transform(() => undefined)
+  )
+)
 
 const toArrayFromSingleInputElement = (ast: SchemaAST.AST): SchemaAST.AST =>
   SchemaAST.isOptional(ast) ? SchemaAST.optionalKey(SchemaAST.unknown) : SchemaAST.unknown
@@ -15513,222 +13955,6 @@ function onSerializerArrayFromSingle(ast: SchemaAST.AST): SchemaAST.AST {
     ? ast.recur(toCodecArrayFromSingleTop)
     : ast
 }
-
-/**
- * Reviver for persisted `isGreaterThanDate` checks.
- *
- * **When to use**
- *
- * Use when reconstructing documents that may contain checks created by {@link isGreaterThanDate}.
- *
- * @see {@link isGreaterThanDate} for creating the corresponding check
- *
- * @category Date checks
- * @since 4.0.0
- */
-export const isGreaterThanDateReviver: SchemaRepresentation.FilterReviver<{
-  readonly exclusiveMinimum: globalThis.Date
-}> = InternalSchema.makeFilterReviver(
-  "effect/schema/isGreaterThanDate",
-  Struct({ exclusiveMinimum: Date }),
-  ({ annotations, payload }) => isGreaterThanDate(payload.exclusiveMinimum, annotations)
-)
-
-/**
- * Reviver for persisted `isGreaterThanOrEqualToDate` checks.
- *
- * **When to use**
- *
- * Use when reconstructing documents that may contain checks created by {@link isGreaterThanOrEqualToDate}.
- *
- * @see {@link isGreaterThanOrEqualToDate} for creating the corresponding check
- *
- * @category Date checks
- * @since 4.0.0
- */
-export const isGreaterThanOrEqualToDateReviver: SchemaRepresentation.FilterReviver<{
-  readonly minimum: globalThis.Date
-}> = InternalSchema.makeFilterReviver(
-  "effect/schema/isGreaterThanOrEqualToDate",
-  Struct({ minimum: Date }),
-  ({ annotations, payload }) => isGreaterThanOrEqualToDate(payload.minimum, annotations)
-)
-
-/**
- * Reviver for persisted `isLessThanDate` checks.
- *
- * **When to use**
- *
- * Use when reconstructing documents that may contain checks created by {@link isLessThanDate}.
- *
- * @see {@link isLessThanDate} for creating the corresponding check
- *
- * @category Date checks
- * @since 4.0.0
- */
-export const isLessThanDateReviver: SchemaRepresentation.FilterReviver<{
-  readonly exclusiveMaximum: globalThis.Date
-}> = InternalSchema.makeFilterReviver(
-  "effect/schema/isLessThanDate",
-  Struct({ exclusiveMaximum: Date }),
-  ({ annotations, payload }) => isLessThanDate(payload.exclusiveMaximum, annotations)
-)
-
-/**
- * Reviver for persisted `isLessThanOrEqualToDate` checks.
- *
- * **When to use**
- *
- * Use when reconstructing documents that may contain checks created by {@link isLessThanOrEqualToDate}.
- *
- * @see {@link isLessThanOrEqualToDate} for creating the corresponding check
- *
- * @category Date checks
- * @since 4.0.0
- */
-export const isLessThanOrEqualToDateReviver: SchemaRepresentation.FilterReviver<{
-  readonly maximum: globalThis.Date
-}> = InternalSchema.makeFilterReviver(
-  "effect/schema/isLessThanOrEqualToDate",
-  Struct({ maximum: Date }),
-  ({ annotations, payload }) => isLessThanOrEqualToDate(payload.maximum, annotations)
-)
-
-/**
- * Reviver for persisted `isBetweenDate` checks.
- *
- * **When to use**
- *
- * Use when reconstructing documents that may contain checks created by {@link isBetweenDate}.
- *
- * @see {@link isBetweenDate} for creating the corresponding check
- *
- * @category Date checks
- * @since 4.0.0
- */
-export const isBetweenDateReviver: SchemaRepresentation.FilterReviver<{
-  readonly minimum: globalThis.Date
-  readonly maximum: globalThis.Date
-  readonly exclusiveMinimum?: true | undefined
-  readonly exclusiveMaximum?: true | undefined
-}> = InternalSchema.makeFilterReviver(
-  "effect/schema/isBetweenDate",
-  Struct({
-    minimum: Date,
-    maximum: Date,
-    exclusiveMinimum: optional(Literal(true)),
-    exclusiveMaximum: optional(Literal(true))
-  }),
-  ({ annotations, payload }) => isBetweenDate(payload, annotations)
-)
-
-/**
- * Reviver for persisted `isGreaterThanBigInt` checks.
- *
- * **When to use**
- *
- * Use when reconstructing documents that may contain checks created by {@link isGreaterThanBigInt}.
- *
- * @see {@link isGreaterThanBigInt} for creating the corresponding check
- *
- * @category BigInt checks
- * @since 4.0.0
- */
-export const isGreaterThanBigIntReviver: SchemaRepresentation.FilterReviver<{
-  readonly exclusiveMinimum: bigint
-}> = InternalSchema.makeFilterReviver(
-  "effect/schema/isGreaterThanBigInt",
-  Struct({ exclusiveMinimum: BigInt }),
-  ({ annotations, payload }) => isGreaterThanBigInt(payload.exclusiveMinimum, annotations)
-)
-
-/**
- * Reviver for persisted `isGreaterThanOrEqualToBigInt` checks.
- *
- * **When to use**
- *
- * Use when reconstructing documents that may contain checks created by {@link isGreaterThanOrEqualToBigInt}.
- *
- * @see {@link isGreaterThanOrEqualToBigInt} for creating the corresponding check
- *
- * @category BigInt checks
- * @since 4.0.0
- */
-export const isGreaterThanOrEqualToBigIntReviver: SchemaRepresentation.FilterReviver<{
-  readonly minimum: bigint
-}> = InternalSchema.makeFilterReviver(
-  "effect/schema/isGreaterThanOrEqualToBigInt",
-  Struct({ minimum: BigInt }),
-  ({ annotations, payload }) => isGreaterThanOrEqualToBigInt(payload.minimum, annotations)
-)
-
-/**
- * Reviver for persisted `isLessThanBigInt` checks.
- *
- * **When to use**
- *
- * Use when reconstructing documents that may contain checks created by {@link isLessThanBigInt}.
- *
- * @see {@link isLessThanBigInt} for creating the corresponding check
- *
- * @category BigInt checks
- * @since 4.0.0
- */
-export const isLessThanBigIntReviver: SchemaRepresentation.FilterReviver<{
-  readonly exclusiveMaximum: bigint
-}> = InternalSchema.makeFilterReviver(
-  "effect/schema/isLessThanBigInt",
-  Struct({ exclusiveMaximum: BigInt }),
-  ({ annotations, payload }) => isLessThanBigInt(payload.exclusiveMaximum, annotations)
-)
-
-/**
- * Reviver for persisted `isLessThanOrEqualToBigInt` checks.
- *
- * **When to use**
- *
- * Use when reconstructing documents that may contain checks created by {@link isLessThanOrEqualToBigInt}.
- *
- * @see {@link isLessThanOrEqualToBigInt} for creating the corresponding check
- *
- * @category BigInt checks
- * @since 4.0.0
- */
-export const isLessThanOrEqualToBigIntReviver: SchemaRepresentation.FilterReviver<{
-  readonly maximum: bigint
-}> = InternalSchema.makeFilterReviver(
-  "effect/schema/isLessThanOrEqualToBigInt",
-  Struct({ maximum: BigInt }),
-  ({ annotations, payload }) => isLessThanOrEqualToBigInt(payload.maximum, annotations)
-)
-
-/**
- * Reviver for persisted `isBetweenBigInt` checks.
- *
- * **When to use**
- *
- * Use when reconstructing documents that may contain checks created by {@link isBetweenBigInt}.
- *
- * @see {@link isBetweenBigInt} for creating the corresponding check
- *
- * @category BigInt checks
- * @since 4.0.0
- */
-export const isBetweenBigIntReviver: SchemaRepresentation.FilterReviver<{
-  readonly minimum: bigint
-  readonly maximum: bigint
-  readonly exclusiveMinimum?: true | undefined
-  readonly exclusiveMaximum?: true | undefined
-}> = InternalSchema.makeFilterReviver(
-  "effect/schema/isBetweenBigInt",
-  Struct({
-    minimum: BigInt,
-    maximum: BigInt,
-    exclusiveMinimum: optional(Literal(true)),
-    exclusiveMaximum: optional(Literal(true))
-  }),
-  ({ annotations, payload }) => isBetweenBigInt(payload, annotations)
-)
 
 // -----------------------------------------------------------------------------
 // Optic APIs
@@ -15943,29 +14169,7 @@ export interface JsonObject {
  * @category schemas
  * @since 4.0.0
  */
-export const Json: Codec<Json> = make(SchemaAST.annotate(SchemaAST.Json, {
-  toCode: () => ({
-    runtime: "Schema.Json",
-    Type: "Schema.Json"
-  })
-}))
-
-/**
- * Reviver for persisted `Json` declarations.
- *
- * **When to use**
- *
- * Use when reconstructing documents that may contain the {@link Json} schema.
- *
- * @see {@link Json} for the corresponding immutable JSON schema
- *
- * @category schemas
- * @since 4.0.0
- */
-export const JsonReviver = makeFixedDeclarationReviver(
-  "effect/schema/Json",
-  Json
-)
+export const Json: Codec<Json> = make(SchemaAST.Json)
 
 const JsonError = Struct({
   message: String,
@@ -16008,29 +14212,7 @@ export interface MutableJsonObject {
  * @category schemas
  * @since 4.0.0
  */
-export const MutableJson: Codec<MutableJson> = make(SchemaAST.annotate(SchemaAST.MutableJson, {
-  toCode: () => ({
-    runtime: "Schema.MutableJson",
-    Type: "Schema.MutableJson"
-  })
-}))
-
-/**
- * Reviver for persisted `MutableJson` declarations.
- *
- * **When to use**
- *
- * Use when reconstructing documents that may contain the {@link MutableJson} schema.
- *
- * @see {@link MutableJson} for the corresponding mutable JSON schema
- *
- * @category schemas
- * @since 4.0.0
- */
-export const MutableJsonReviver = makeFixedDeclarationReviver(
-  "effect/schema/MutableJson",
-  MutableJson
-)
+export const MutableJson: Codec<MutableJson> = make(SchemaAST.MutableJson)
 
 // -----------------------------------------------------------------------------
 // Annotations
@@ -16151,7 +14333,6 @@ export declare namespace Annotations {
     readonly format?: string | undefined
     readonly contentEncoding?: string | undefined
     readonly contentMediaType?: string | undefined
-    readonly contentSchema?: Json | undefined
   }
 
   /**
@@ -16223,6 +14404,10 @@ export declare namespace Annotations {
     readonly identifier?: string | undefined
     readonly parseOptions?: SchemaAST.ParseOptions | undefined
     /**
+     * Optional metadata used to identify or extend the filter with custom data.
+     */
+    readonly meta?: Meta | undefined
+    /**
      * Accumulated brands when multiple brands are added with `Schema.brand`.
      */
     readonly brands?: ReadonlyArray<string> | undefined
@@ -16272,17 +14457,11 @@ export declare namespace Annotations {
   export interface Declaration<T, TypeParameters extends ReadonlyArray<Constraint> = readonly []>
     extends Bottom<T, TypeParameters>
   {
-    readonly representation?:
-      | SchemaRepresentation.RepresentationAnnotation
-      | undefined
     readonly toCodec?:
       | ((typeParameters: TypeParameters.Encoded<TypeParameters>) => SchemaAST.Link)
       | undefined
     readonly toCodecJson?:
-      | ((typeParameters: TypeParameters.Encoded<TypeParameters>) => SchemaAST.Link | undefined)
-      | undefined
-    readonly toCodecStringTree?:
-      | ((typeParameters: TypeParameters.Encoded<TypeParameters>) => SchemaAST.Link | undefined)
+      | ((typeParameters: TypeParameters.Encoded<TypeParameters>) => SchemaAST.Link)
       | undefined
     readonly toCodecIso?:
       | ((typeParameters: TypeParameters.Type<TypeParameters>) => SchemaAST.Link)
@@ -16290,13 +14469,20 @@ export declare namespace Annotations {
     readonly toArbitrary?: ToArbitrary.Declaration<T, TypeParameters> | undefined
     readonly toEquivalence?: ToEquivalence.Declaration<T, TypeParameters> | undefined
     readonly toFormatter?: ToFormatter.Declaration<T, TypeParameters> | undefined
-    readonly toCode?: SchemaRepresentation.Generation.Declaration | undefined
+    readonly typeConstructor?: {
+      readonly _tag: string
+      readonly [key: string]: unknown
+    } | undefined
+    readonly generation?: {
+      readonly runtime: string
+      readonly Type: string
+      readonly Encoded?: string | undefined
+      readonly importDeclaration?: string | undefined
+    } | undefined
     /**
      * Used to collect sentinels from a Declaration SchemaAST.
      *
-     * **Details**
-     *
-     * Reserved to internal use only.
+     * @internal
      */
     readonly "~sentinels"?: ReadonlyArray<SchemaAST.Sentinel> | undefined
   }
@@ -16310,11 +14496,6 @@ export declare namespace Annotations {
    * @since 4.0.0
    */
   export interface Filter extends Augment {
-    readonly representation?:
-      | SchemaRepresentation.CheckRepresentationAnnotation<SchemaAST.AST>
-      | undefined
-    readonly toJsonSchema?: SchemaRepresentation.ToJsonSchema.Check | undefined
-    readonly toCode?: SchemaRepresentation.Generation.Check | undefined
     /**
      * Complete message to use when this filter or refinement fails.
      *
@@ -16336,6 +14517,10 @@ export declare namespace Annotations {
      */
     readonly identifier?: string | undefined
     /**
+     * Optional metadata used to identify or extend the filter with custom data.
+     */
+    readonly meta?: Meta | undefined
+    /**
      * Optional hints used by arbitrary derivation for this filter.
      *
      * **Details**
@@ -16353,8 +14538,6 @@ export declare namespace Annotations {
      * the contents.
      *
      * **Details**
-     *
-     * Reserved to internal use only.
      *
      * Example: `minLength` on an array is a structural filter.
      */
@@ -16445,7 +14628,7 @@ export declare namespace Annotations {
      * length for strings, array length for arrays, final own-property count for
      * objects, and final size/cardinality for sets, maps, hash collections, and
      * chunks. `patterns` are concatenated and used by string generators.
-     * `integer`, `noNaN`, `noInfinity`, and `unique` are true when any
+     * `integer`, `noNaN`, `noInfinity`, `valid`, and `unique` are true when any
      * contributing filter sets them. Range bounds live in `ordered` so ordered
      * values can share the same representation.
      *
@@ -16459,6 +14642,7 @@ export declare namespace Annotations {
       readonly integer?: boolean | undefined
       readonly noInfinity?: boolean | undefined
       readonly noNaN?: boolean | undefined
+      readonly valid?: boolean | undefined
       readonly unique?: boolean | undefined
       readonly ordered?: OrderedConstraint<any> | undefined
     }
@@ -16683,4 +14867,254 @@ export declare namespace Annotations {
   export interface Issue extends Annotations {
     readonly message?: string | undefined
   }
+
+  /**
+   * Registry of metadata payloads emitted by built-in schema filters and checks.
+   *
+   * **Details**
+   *
+   * Do not augment this interface with custom metadata; extend `MetaDefinitions`
+   * instead.
+   *
+   * @category models
+   * @since 4.0.0
+   */
+  export interface BuiltInMetaDefinitions {
+    // String Meta
+    readonly isStringFinite: {
+      readonly _tag: "isStringFinite"
+      readonly regExp: globalThis.RegExp
+    }
+    readonly isStringBigInt: {
+      readonly _tag: "isStringBigInt"
+      readonly regExp: globalThis.RegExp
+    }
+    readonly isStringSymbol: {
+      readonly _tag: "isStringSymbol"
+      readonly regExp: globalThis.RegExp
+    }
+    readonly isMinLength: {
+      readonly _tag: "isMinLength"
+      readonly minLength: number
+    }
+    readonly isMaxLength: {
+      readonly _tag: "isMaxLength"
+      readonly maxLength: number
+    }
+    readonly isLengthBetween: {
+      readonly _tag: "isLengthBetween"
+      readonly minimum: number
+      readonly maximum: number
+    }
+    readonly isPattern: {
+      readonly _tag: "isPattern"
+      readonly regExp: globalThis.RegExp
+    }
+    readonly isTrimmed: {
+      readonly _tag: "isTrimmed"
+      readonly regExp: globalThis.RegExp
+    }
+    readonly isUUID: {
+      readonly _tag: "isUUID"
+      readonly regExp: globalThis.RegExp
+      readonly version: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | undefined
+    }
+    readonly isGUID: {
+      readonly _tag: "isGUID"
+      readonly regExp: globalThis.RegExp
+    }
+    readonly isULID: {
+      readonly _tag: "isULID"
+      readonly regExp: globalThis.RegExp
+    }
+    readonly isBase64: {
+      readonly _tag: "isBase64"
+      readonly regExp: globalThis.RegExp
+    }
+    readonly isBase64Url: {
+      readonly _tag: "isBase64Url"
+      readonly regExp: globalThis.RegExp
+    }
+    readonly isStartsWith: {
+      readonly _tag: "isStartsWith"
+      readonly startsWith: string
+      readonly regExp: globalThis.RegExp
+    }
+    readonly isEndsWith: {
+      readonly _tag: "isEndsWith"
+      readonly endsWith: string
+      readonly regExp: globalThis.RegExp
+    }
+    readonly isIncludes: {
+      readonly _tag: "isIncludes"
+      readonly includes: string
+      readonly regExp: globalThis.RegExp
+    }
+    readonly isUppercased: {
+      readonly _tag: "isUppercased"
+      readonly regExp: globalThis.RegExp
+    }
+    readonly isLowercased: {
+      readonly _tag: "isLowercased"
+      readonly regExp: globalThis.RegExp
+    }
+    readonly isCapitalized: {
+      readonly _tag: "isCapitalized"
+      readonly regExp: globalThis.RegExp
+    }
+    readonly isUncapitalized: {
+      readonly _tag: "isUncapitalized"
+      readonly regExp: globalThis.RegExp
+    }
+    // Number Meta
+    readonly isFinite: {
+      readonly _tag: "isFinite"
+    }
+    readonly isInt: {
+      readonly _tag: "isInt"
+    }
+    readonly isMultipleOf: {
+      readonly _tag: "isMultipleOf"
+      readonly divisor: number
+    }
+    readonly isGreaterThan: {
+      readonly _tag: "isGreaterThan"
+      readonly exclusiveMinimum: number
+    }
+    readonly isGreaterThanOrEqualTo: {
+      readonly _tag: "isGreaterThanOrEqualTo"
+      readonly minimum: number
+    }
+    readonly isLessThan: {
+      readonly _tag: "isLessThan"
+      readonly exclusiveMaximum: number
+    }
+    readonly isLessThanOrEqualTo: {
+      readonly _tag: "isLessThanOrEqualTo"
+      readonly maximum: number
+    }
+    readonly isBetween: {
+      readonly _tag: "isBetween"
+      readonly minimum: number
+      readonly maximum: number
+      readonly exclusiveMinimum?: boolean | undefined
+      readonly exclusiveMaximum?: boolean | undefined
+    }
+    // BigInt Meta
+    readonly isGreaterThanBigInt: {
+      readonly _tag: "isGreaterThanBigInt"
+      readonly exclusiveMinimum: bigint
+    }
+    readonly isGreaterThanOrEqualToBigInt: {
+      readonly _tag: "isGreaterThanOrEqualToBigInt"
+      readonly minimum: bigint
+    }
+    readonly isLessThanBigInt: {
+      readonly _tag: "isLessThanBigInt"
+      readonly exclusiveMaximum: bigint
+    }
+    readonly isLessThanOrEqualToBigInt: {
+      readonly _tag: "isLessThanOrEqualToBigInt"
+      readonly maximum: bigint
+    }
+    readonly isBetweenBigInt: {
+      readonly _tag: "isBetweenBigInt"
+      readonly minimum: bigint
+      readonly maximum: bigint
+      readonly exclusiveMinimum?: boolean | undefined
+      readonly exclusiveMaximum?: boolean | undefined
+    }
+    // Date Meta
+    readonly isDateValid: {
+      readonly _tag: "isDateValid"
+    }
+    readonly isGreaterThanDate: {
+      readonly _tag: "isGreaterThanDate"
+      readonly exclusiveMinimum: globalThis.Date
+    }
+    readonly isGreaterThanOrEqualToDate: {
+      readonly _tag: "isGreaterThanOrEqualToDate"
+      readonly minimum: globalThis.Date
+    }
+    readonly isLessThanDate: {
+      readonly _tag: "isLessThanDate"
+      readonly exclusiveMaximum: globalThis.Date
+    }
+    readonly isLessThanOrEqualToDate: {
+      readonly _tag: "isLessThanOrEqualToDate"
+      readonly maximum: globalThis.Date
+    }
+    readonly isBetweenDate: {
+      readonly _tag: "isBetweenDate"
+      readonly minimum: globalThis.Date
+      readonly maximum: globalThis.Date
+      readonly exclusiveMinimum?: boolean | undefined
+      readonly exclusiveMaximum?: boolean | undefined
+    }
+    // Objects Meta
+    readonly isMinProperties: {
+      readonly _tag: "isMinProperties"
+      readonly minProperties: number
+    }
+    readonly isMaxProperties: {
+      readonly _tag: "isMaxProperties"
+      readonly maxProperties: number
+    }
+    readonly isPropertiesLengthBetween: {
+      readonly _tag: "isPropertiesLengthBetween"
+      readonly minimum: number
+      readonly maximum: number
+    }
+    readonly isPropertyNames: {
+      readonly _tag: "isPropertyNames"
+      readonly propertyNames: SchemaAST.AST
+    }
+    // Arrays Meta
+    readonly isUnique: {
+      readonly _tag: "isUnique"
+    }
+    // Declaration Meta
+    readonly isMinSize: {
+      readonly _tag: "isMinSize"
+      readonly minSize: number
+    }
+    readonly isMaxSize: {
+      readonly _tag: "isMaxSize"
+      readonly maxSize: number
+    }
+    readonly isSizeBetween: {
+      readonly _tag: "isSizeBetween"
+      readonly minimum: number
+      readonly maximum: number
+    }
+  }
+
+  /**
+   * Union of all metadata payloads defined by `BuiltInMetaDefinitions`.
+   *
+   * @category utility types
+   * @since 4.0.0
+   */
+  export type BuiltInMeta = BuiltInMetaDefinitions[keyof BuiltInMetaDefinitions]
+
+  /**
+   * Augmentable registry of schema filter metadata payloads.
+   *
+   * **Details**
+   *
+   * Extend this interface to add custom values accepted by annotation `meta`
+   * fields.
+   *
+   * @category models
+   * @since 4.0.0
+   */
+  export interface MetaDefinitions extends BuiltInMetaDefinitions {}
+
+  /**
+   * Union of built-in and user-augmented schema filter metadata payloads.
+   *
+   * @category utility types
+   * @since 4.0.0
+   */
+  export type Meta = MetaDefinitions[keyof MetaDefinitions]
 }

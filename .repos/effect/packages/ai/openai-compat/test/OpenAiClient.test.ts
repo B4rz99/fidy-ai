@@ -1,42 +1,65 @@
-import { OpenAiClient } from "@effect/ai-openai-compat"
+import * as OpenAiClient from "@effect/ai-openai-compat/OpenAiClient"
 import { assert, describe, it } from "@effect/vitest"
-import { Context, Effect, Layer, Redacted, type Schema, Stream } from "effect"
-import {
-  Headers,
-  HttpClient,
-  type HttpClientError,
-  type HttpClientRequest,
-  HttpClientResponse
-} from "effect/unstable/http"
+import { Effect, Layer, Redacted, Stream } from "effect"
+import { HttpClient, type HttpClientError, type HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
 
 describe("OpenAiClient", () => {
   describe("request behavior", () => {
     it.effect("sets auth and OpenAI headers on /chat/completions requests", () =>
       Effect.gen(function*() {
-        const client = yield* OpenAiClient.OpenAiClient
+        let capturedRequest: HttpClientRequest.HttpClientRequest | undefined
+
+        const client = yield* OpenAiClient.make({
+          apiKey: Redacted.make("sk-test-key"),
+          apiUrl: "https://compat.example.test/v1",
+          organizationId: Redacted.make("org_123"),
+          projectId: Redacted.make("proj_456")
+        }).pipe(
+          Effect.provide(Layer.succeed(
+            HttpClient.HttpClient,
+            makeHttpClient((request) => {
+              capturedRequest = request
+              return Effect.succeed(jsonResponse(request, 200, makeChatCompletion()))
+            })
+          ))
+        )
 
         yield* client.createResponse({
           model: "gpt-4o-mini",
           messages: [{ role: "user", content: "hello" }]
         })
 
-        const requests = yield* MockHttpClient.requests
-        const request = requests[0]
-        const body = yield* getRequestBody(request)
+        assert.isDefined(capturedRequest)
+        if (capturedRequest === undefined) {
+          return
+        }
 
-        assert.isTrue(request.url.endsWith("/chat/completions"))
-        assert.isTrue(request.url.startsWith("https://compat.example.test/v1"))
-        assert.strictEqual(request.headers["authorization"], "Bearer sk-test-key")
-        assert.strictEqual(request.headers["openai-organization"], "org_123")
-        assert.strictEqual(request.headers["openai-project"], "proj_456")
+        assert.isTrue(capturedRequest.url.endsWith("/chat/completions"))
+        assert.isTrue(capturedRequest.url.startsWith("https://compat.example.test/v1"))
+        assert.strictEqual(capturedRequest.headers["authorization"], "Bearer sk-test-key")
+        assert.strictEqual(capturedRequest.headers["openai-organization"], "org_123")
+        assert.strictEqual(capturedRequest.headers["openai-project"], "proj_456")
 
+        const body = yield* getRequestBody(capturedRequest)
         assert.strictEqual(body.messages[0]?.role, "user")
         assert.strictEqual(body.messages[0]?.content, "hello")
-      }).pipe(Effect.provide(makeTestLayer())))
+      }))
 
     it.effect("passes custom chat-completions request properties through", () =>
       Effect.gen(function*() {
-        const client = yield* OpenAiClient.OpenAiClient
+        let capturedRequest: HttpClientRequest.HttpClientRequest | undefined
+
+        const client = yield* OpenAiClient.make({
+          apiKey: Redacted.make("sk-test-key")
+        }).pipe(
+          Effect.provide(Layer.succeed(
+            HttpClient.HttpClient,
+            makeHttpClient((request) => {
+              capturedRequest = request
+              return Effect.succeed(jsonResponse(request, 200, makeChatCompletion()))
+            })
+          ))
+        )
 
         yield* client.createResponse({
           model: "gpt-4o-mini",
@@ -46,187 +69,160 @@ describe("OpenAiClient", () => {
           }
         })
 
-        const requests = yield* MockHttpClient.requests
-        const request = requests[0]
-        const body = yield* getRequestBody(request)
+        assert.isDefined(capturedRequest)
+        if (capturedRequest === undefined) {
+          return
+        }
+
+        const body = yield* getRequestBody(capturedRequest)
         assert.deepStrictEqual(body.provider_feature, {
           enabled: true
         })
-      }).pipe(Effect.provide(makeTestLayer())))
+      }))
 
     it.effect("uses /embeddings path and decodes permissive embedding payloads", () =>
       Effect.gen(function*() {
-        const client = yield* OpenAiClient.OpenAiClient
+        let capturedRequest: HttpClientRequest.HttpClientRequest | undefined
+
+        const client = yield* OpenAiClient.make({
+          apiKey: Redacted.make("sk-test-key"),
+          apiUrl: "https://compat.example.test/v1"
+        }).pipe(
+          Effect.provide(Layer.succeed(
+            HttpClient.HttpClient,
+            makeHttpClient((request) => {
+              capturedRequest = request
+              return Effect.succeed(jsonResponse(request, 200, {
+                data: [{
+                  embedding: "YmFzZTY0LWRhdGE=",
+                  index: 0,
+                  object: "embedding",
+                  vendor_payload: { future_field: true }
+                }],
+                model: "my-custom-embedding-model",
+                object: "list",
+                usage: {
+                  prompt_tokens: 5,
+                  total_tokens: 5
+                },
+                unknown_top_level: true
+              }))
+            })
+          ))
+        )
 
         const embedding = yield* client.createEmbedding({
           model: "my-custom-embedding-model",
           input: "embed this"
         })
 
-        const requests = yield* MockHttpClient.requests
-        const request = requests[0]
+        assert.isDefined(capturedRequest)
+        if (capturedRequest === undefined) {
+          return
+        }
 
-        assert.isTrue(request.url.endsWith("/embeddings"))
+        assert.isTrue(capturedRequest.url.endsWith("/embeddings"))
         assert.strictEqual(embedding.model, "my-custom-embedding-model")
         assert.strictEqual(embedding.data[0]?.index, 0)
         assert.strictEqual(typeof embedding.data[0]?.embedding, "string")
-      }).pipe(Effect.provide(makeTestLayer({
-        _tag: "Json",
-        body: {
-          data: [{
-            embedding: "YmFzZTY0LWRhdGE=",
-            index: 0,
-            object: "embedding",
-            vendor_payload: { future_field: true }
-          }],
-          model: "my-custom-embedding-model",
-          object: "list",
-          usage: {
-            prompt_tokens: 5,
-            total_tokens: 5
-          },
-          unknown_top_level: true
-        }
-      }))))
+      }))
 
     it.effect("sets stream=true for createResponseStream and returns chat chunks", () =>
       Effect.gen(function*() {
-        const client = yield* OpenAiClient.OpenAiClient
+        let capturedRequest: HttpClientRequest.HttpClientRequest | undefined
 
-        const events = yield* client.createResponseStream({
+        const client = yield* OpenAiClient.make({
+          apiKey: Redacted.make("sk-test-key")
+        }).pipe(
+          Effect.provide(Layer.succeed(
+            HttpClient.HttpClient,
+            makeHttpClient((request) => {
+              capturedRequest = request
+              return Effect.succeed(sseResponse(request, [
+                {
+                  id: "chatcmpl_test_1",
+                  object: "chat.completion.chunk",
+                  model: "gpt-4o-mini",
+                  created: 1,
+                  future_provider_field: { accepted: true },
+                  choices: [{
+                    index: 0,
+                    delta: { content: "Hello" },
+                    finish_reason: null
+                  }]
+                },
+                {
+                  id: "chatcmpl_test_1",
+                  object: "chat.completion.chunk",
+                  model: "gpt-4o-mini",
+                  created: 1,
+                  usage: {
+                    prompt_tokens: 4,
+                    completion_tokens: 2,
+                    total_tokens: 6,
+                    prompt_tokens_details: { cached_tokens: 1 },
+                    completion_tokens_details: { reasoning_tokens: 1 }
+                  },
+                  choices: [{
+                    index: 0,
+                    delta: {},
+                    finish_reason: "stop"
+                  }]
+                },
+                "[DONE]"
+              ]))
+            })
+          ))
+        )
+
+        const eventsChunk = yield* client.createResponseStream({
           model: "gpt-4o-mini",
           messages: [{ role: "user", content: "hello" }]
         }).pipe(
           Effect.flatMap(([_, stream]) => Stream.runCollect(stream))
         )
 
-        const requests = yield* MockHttpClient.requests
-        const request = requests[0]
-        const body = yield* getRequestBody(request)
+        assert.isDefined(capturedRequest)
+        if (capturedRequest === undefined) {
+          return
+        }
+
+        const body = yield* getRequestBody(capturedRequest)
         assert.strictEqual(body.stream, true)
         assert.strictEqual(body.stream_options.include_usage, true)
-        assert.isTrue(request.url.endsWith("/chat/completions"))
+        assert.isTrue(capturedRequest.url.endsWith("/chat/completions"))
 
-        assert.propertyVal(events[0], "id", "chatcmpl_test_1")
-        assert.propertyVal(events[1], "id", "chatcmpl_test_1")
+        const events = globalThis.Array.from(eventsChunk)
+        const firstEvent = events[0]
+        const secondEvent = events[1]
+        assert.isTrue(typeof firstEvent === "object")
+        assert.isTrue(typeof secondEvent === "object")
+        if (
+          typeof firstEvent !== "object" || firstEvent === null || typeof secondEvent !== "object" ||
+          secondEvent === null
+        ) {
+          return
+        }
+        assert.strictEqual(firstEvent.id, "chatcmpl_test_1")
+        assert.strictEqual(secondEvent.id, "chatcmpl_test_1")
         assert.strictEqual(events[2], "[DONE]")
-      }).pipe(Effect.provide(makeTestLayer({
-        _tag: "Sse",
-        events: [
-          {
-            id: "chatcmpl_test_1",
-            object: "chat.completion.chunk",
-            model: "gpt-4o-mini",
-            created: 1,
-            future_provider_field: { accepted: true },
-            choices: [{
-              index: 0,
-              delta: { content: "Hello" },
-              finish_reason: null
-            }]
-          },
-          {
-            id: "chatcmpl_test_1",
-            object: "chat.completion.chunk",
-            model: "gpt-4o-mini",
-            created: 1,
-            usage: {
-              prompt_tokens: 4,
-              completion_tokens: 2,
-              total_tokens: 6,
-              prompt_tokens_details: { cached_tokens: 1 },
-              completion_tokens_details: { reasoning_tokens: 1 }
-            },
-            choices: [{
-              index: 0,
-              delta: {},
-              finish_reason: "stop"
-            }]
-          },
-          "[DONE]"
-        ]
-      }))))
-
-    it.effect("surfaces schema-mismatched chat chunks and continues streaming", () =>
-      Effect.gen(function*() {
-        const client = yield* OpenAiClient.OpenAiClient
-
-        const events = yield* client.createResponseStream({
-          model: "gpt-4o-mini",
-          messages: [{ role: "user", content: "hello" }]
-        }).pipe(
-          Effect.flatMap(([_, stream]) => Stream.runCollect(stream))
-        )
-
-        assert.deepStrictEqual(events[0], {
-          _tag: "UnknownChatCompletionEvent",
-          data: {
-            type: "provider.chat.completion.delta",
-            provider_payload: { content: "provider-specific" }
-          }
-        })
-        assert.propertyVal(events[1], "id", "chatcmpl_test_2")
-        assert.strictEqual(events[2], "[DONE]")
-      }).pipe(Effect.provide(makeTestLayer({
-        _tag: "Sse",
-        events: [
-          {
-            type: "provider.chat.completion.delta",
-            provider_payload: { content: "provider-specific" }
-          },
-          {
-            id: "chatcmpl_test_2",
-            object: "chat.completion.chunk",
-            model: "gpt-4o-mini",
-            created: 1,
-            choices: [{
-              index: 0,
-              delta: { content: "Hello" },
-              finish_reason: null
-            }]
-          },
-          "[DONE]"
-        ]
-      }))))
-
-    it.effect("drops invalid JSON and continues streaming", () =>
-      Effect.gen(function*() {
-        const client = yield* OpenAiClient.OpenAiClient
-
-        const events = yield* client.createResponseStream({
-          model: "gpt-4o-mini",
-          messages: [{ role: "user", content: "hello" }]
-        }).pipe(
-          Effect.flatMap(([_, stream]) => Stream.runCollect(stream))
-        )
-
-        assert.strictEqual(events.length, 2)
-        assert.propertyVal(events[0], "id", "chatcmpl_test_3")
-        assert.strictEqual(events[1], "[DONE]")
-      }).pipe(Effect.provide(makeTestLayer({
-        _tag: "RawSse",
-        body: [
-          "data: {invalid-json\n\n",
-          `data: ${
-            JSON.stringify({
-              id: "chatcmpl_test_3",
-              object: "chat.completion.chunk",
-              model: "gpt-4o-mini",
-              created: 1,
-              choices: [{
-                index: 0,
-                delta: { content: "Hello" },
-                finish_reason: null
-              }]
-            })
-          }\n\n`,
-          "data: [DONE]\n\n"
-        ].join("")
-      }))))
+      }))
 
     it.effect("passes chat-completions tool_choice payload through unchanged", () =>
       Effect.gen(function*() {
-        const client = yield* OpenAiClient.OpenAiClient
+        let capturedRequest: HttpClientRequest.HttpClientRequest | undefined
+
+        const client = yield* OpenAiClient.make({
+          apiKey: Redacted.make("sk-test-key")
+        }).pipe(
+          Effect.provide(Layer.succeed(
+            HttpClient.HttpClient,
+            makeHttpClient((request) => {
+              capturedRequest = request
+              return Effect.succeed(jsonResponse(request, 200, makeChatCompletion()))
+            })
+          ))
+        )
 
         yield* client.createResponse({
           model: "gpt-4o-mini",
@@ -253,19 +249,30 @@ describe("OpenAiClient", () => {
           }]
         })
 
-        const requests = yield* MockHttpClient.requests
-        const request = requests[0]
-        const body = yield* getRequestBody(request)
+        assert.isDefined(capturedRequest)
+        if (capturedRequest === undefined) {
+          return
+        }
 
-        assert.deepStrictEqual(body.tool_choice, {
-          type: "function",
-          function: { name: "TestTool" }
-        })
-      }).pipe(Effect.provide(makeTestLayer())))
+        const body = yield* getRequestBody(capturedRequest)
+        assert.deepStrictEqual(body.tool_choice, { type: "function", function: { name: "TestTool" } })
+      }))
 
     it.effect("accepts assistant tool-call and tool result chat history", () =>
       Effect.gen(function*() {
-        const client = yield* OpenAiClient.OpenAiClient
+        let capturedRequest: HttpClientRequest.HttpClientRequest | undefined
+
+        const client = yield* OpenAiClient.make({
+          apiKey: Redacted.make("sk-test-key")
+        }).pipe(
+          Effect.provide(Layer.succeed(
+            HttpClient.HttpClient,
+            makeHttpClient((request) => {
+              capturedRequest = request
+              return Effect.succeed(jsonResponse(request, 200, makeChatCompletion()))
+            })
+          ))
+        )
 
         yield* client.createResponse({
           model: "gpt-4o-mini",
@@ -296,10 +303,12 @@ describe("OpenAiClient", () => {
           ]
         })
 
-        const requests = yield* MockHttpClient.requests
-        const request = requests[0]
-        const body = yield* getRequestBody(request)
+        assert.isDefined(capturedRequest)
+        if (capturedRequest === undefined) {
+          return
+        }
 
+        const body = yield* getRequestBody(capturedRequest)
         const assistantMessages = body.messages.filter((message: any) => message.role === "assistant")
         const patchMessage = assistantMessages.find((message: any) =>
           message.tool_calls?.[0]?.function?.name === "apply_patch"
@@ -320,41 +329,28 @@ describe("OpenAiClient", () => {
         const patchOutput = toolMessages.find((message: any) => message.tool_call_id === "patch_call_1")
         assert.isDefined(patchOutput)
         assert.strictEqual(patchOutput.content, "deleted")
-      }).pipe(Effect.provide(makeTestLayer())))
-
-    it.effect("redacts OpenAI-specific headers in AI error context", () =>
-      Effect.gen(function*() {
-        const client = yield* OpenAiClient.OpenAiClient
-
-        const result = yield* client.createResponse({
-          model: "gpt-4o-mini",
-          messages: [{ role: "user", content: "hello" }]
-        }).pipe(Effect.flip)
-
-        const headers = result.reason._tag === "InvalidRequestError"
-          ? result.reason.http?.request.headers ?? Headers.empty
-          : Headers.empty
-
-        assert.strictEqual(String(headers["authorization"]), "<redacted>")
-        assert.strictEqual(String(headers["openai-organization"]), "<redacted>")
-        assert.strictEqual(String(headers["openai-project"]), "<redacted>")
-      }).pipe(Effect.provide(makeTestLayer({
-        _tag: "Json",
-        status: 400,
-        body: {
-          error: {
-            message: "Bad request",
-            type: "invalid_request_error",
-            code: null
-          }
-        }
-      }))))
+      }))
   })
 
   describe("error mapping", () => {
     it.effect("maps 400 responses to InvalidRequestError", () =>
       Effect.gen(function*() {
-        const client = yield* OpenAiClient.OpenAiClient
+        const client = yield* OpenAiClient.make({
+          apiKey: Redacted.make("sk-test-key")
+        }).pipe(
+          Effect.provide(Layer.succeed(
+            HttpClient.HttpClient,
+            makeHttpClient((request) =>
+              Effect.succeed(jsonResponse(request, 400, {
+                error: {
+                  message: "Bad request",
+                  type: "invalid_request_error",
+                  code: null
+                }
+              }))
+            )
+          ))
+        )
 
         const error = yield* client.createResponse({
           model: "gpt-4o-mini",
@@ -364,21 +360,26 @@ describe("OpenAiClient", () => {
         assert.strictEqual(error._tag, "AiError")
         assert.strictEqual(error.method, "createResponse")
         assert.strictEqual(error.reason._tag, "InvalidRequestError")
-      }).pipe(Effect.provide(makeTestLayer({
-        _tag: "Json",
-        status: 400,
-        body: {
-          error: {
-            message: "Bad request",
-            type: "invalid_request_error",
-            code: null
-          }
-        }
-      }))))
+      }))
 
     it.effect("maps insufficient quota errors to QuotaExhaustedError", () =>
       Effect.gen(function*() {
-        const client = yield* OpenAiClient.OpenAiClient
+        const client = yield* OpenAiClient.make({
+          apiKey: Redacted.make("sk-test-key")
+        }).pipe(
+          Effect.provide(Layer.succeed(
+            HttpClient.HttpClient,
+            makeHttpClient((request) =>
+              Effect.succeed(jsonResponse(request, 429, {
+                error: {
+                  message: "You exceeded your current quota",
+                  type: "insufficient_quota",
+                  code: "insufficient_quota"
+                }
+              }))
+            )
+          ))
+        )
 
         const error = yield* client.createResponse({
           model: "gpt-4o-mini",
@@ -388,93 +389,24 @@ describe("OpenAiClient", () => {
         assert.strictEqual(error._tag, "AiError")
         assert.strictEqual(error.method, "createResponse")
         assert.strictEqual(error.reason._tag, "QuotaExhaustedError")
-      }).pipe(Effect.provide(makeTestLayer({
-        _tag: "Json",
-        status: 429,
-        body: {
-          error: {
-            message: "You exceeded your current quota",
-            type: "insufficient_quota",
-            code: "insufficient_quota"
-          }
-        }
-      }))))
+      }))
   })
 })
 
-type MockResponse =
-  | {
-    readonly _tag: "Json"
-    readonly body: Schema.Json
-    readonly status?: number | undefined
-    readonly headers?: Record<string, string> | undefined
-  }
-  | {
-    readonly _tag: "Sse"
-    readonly events: ReadonlyArray<Schema.Json>
-    readonly status?: number | undefined
-    readonly headers?: Record<string, string> | undefined
-  }
-  | {
-    readonly _tag: "RawSse"
-    readonly body: string
-    readonly status?: number | undefined
-    readonly headers?: Record<string, string> | undefined
-  }
-
-class MockOpenAiResponse extends Context.Service<MockOpenAiResponse, {
-  readonly response: MockResponse
-}>()("MockOpenAiResponse") {}
-
-class MockHttpClient extends Context.Service<MockHttpClient, {
-  readonly requests: Effect.Effect<ReadonlyArray<HttpClientRequest.HttpClientRequest>>
-}>()("MockHttpClient") {
-  static requests = MockHttpClient.use((client) => client.requests)
-}
-
-const makeHttpClientContext = Effect.gen(function*() {
-  const capturedRequests: Array<HttpClientRequest.HttpClientRequest> = []
-  const mock = yield* MockOpenAiResponse
-
-  const httpClient = HttpClient.makeWith(
+const makeHttpClient = (
+  handler: (
+    request: HttpClientRequest.HttpClientRequest
+  ) => Effect.Effect<HttpClientResponse.HttpClientResponse, HttpClientError.HttpClientError>
+) =>
+  HttpClient.makeWith(
     Effect.fnUntraced(function*(requestEffect) {
       const request = yield* requestEffect
-      capturedRequests.push(request)
-      return makeResponse(request, mock.response)
+      return yield* handler(request)
     }),
     Effect.succeed as HttpClient.HttpClient.Preprocess<HttpClientError.HttpClientError, never>
   )
 
-  const mockHttpClient: MockHttpClient["Service"] = {
-    requests: Effect.sync(() => capturedRequests)
-  }
-
-  return Context.make(HttpClient.HttpClient, httpClient).pipe(
-    Context.add(MockHttpClient, mockHttpClient)
-  )
-})
-
-const HttpClientLayer = Layer.effectContext(makeHttpClientContext)
-
-const makeTestLayer = (response: MockResponse = {
-  _tag: "Json",
-  body: makeCreateResponse()
-}) =>
-  OpenAiClient.layer({
-    apiKey: Redacted.make("sk-test-key"),
-    apiUrl: "https://compat.example.test/v1",
-    organizationId: Redacted.make("org_123"),
-    projectId: Redacted.make("proj_456")
-  }).pipe(
-    Layer.provideMerge(HttpClientLayer),
-    Layer.provide(Layer.succeed(MockOpenAiResponse, {
-      response
-    }))
-  )
-
-const makeCreateResponse = (
-  overrides: Partial<OpenAiClient.CreateResponse200> = {}
-) => ({
+const makeChatCompletion = () => ({
   id: "chatcmpl_test_1",
   object: "chat.completion",
   model: "gpt-4o-mini",
@@ -491,34 +423,37 @@ const makeCreateResponse = (
     prompt_tokens: 1,
     completion_tokens: 1,
     total_tokens: 2
-  },
-  ...overrides
+  }
 })
 
-const makeResponse = (
+const jsonResponse = (
   request: HttpClientRequest.HttpClientRequest,
-  response: MockResponse
-): HttpClientResponse.HttpClientResponse => {
-  const contentType = response._tag === "Json"
-    ? "application/json"
-    : "text/event-stream"
-  const body = response._tag === "Json"
-    ? JSON.stringify(response.body)
-    : response._tag === "Sse"
-    ? toSseBody(response.events)
-    : response.body
-
-  return HttpClientResponse.fromWeb(
+  status: number,
+  body: unknown
+): HttpClientResponse.HttpClientResponse =>
+  HttpClientResponse.fromWeb(
     request,
-    new Response(body, {
-      status: response.status ?? 200,
+    new Response(JSON.stringify(body), {
+      status,
       headers: {
-        "content-type": contentType,
-        ...response.headers
+        "content-type": "application/json"
       }
     })
   )
-}
+
+const sseResponse = (
+  request: HttpClientRequest.HttpClientRequest,
+  events: ReadonlyArray<unknown>
+): HttpClientResponse.HttpClientResponse =>
+  HttpClientResponse.fromWeb(
+    request,
+    new Response(toSseBody(events), {
+      status: 200,
+      headers: {
+        "content-type": "text/event-stream"
+      }
+    })
+  )
 
 const getRequestBody = (request: HttpClientRequest.HttpClientRequest) =>
   Effect.gen(function*() {
@@ -530,8 +465,10 @@ const getRequestBody = (request: HttpClientRequest.HttpClientRequest) =>
     return yield* Effect.die(new Error("Expected Uint8Array body"))
   })
 
-const toSseBody = (events: ReadonlyArray<Schema.Json>): string =>
+const toSseBody = (events: ReadonlyArray<unknown>): string =>
   events.map((event) => {
-    const data = event === "[DONE]" ? event : JSON.stringify(event)
-    return `data: ${data}\n\n`
+    if (typeof event === "string") {
+      return `data: ${event}\n\n`
+    }
+    return `data: ${JSON.stringify(event)}\n\n`
   }).join("")

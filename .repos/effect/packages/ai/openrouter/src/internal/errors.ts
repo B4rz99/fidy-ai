@@ -23,7 +23,7 @@ export const OpenRouterErrorBody = Schema.Struct({
   error: Schema.Struct({
     message: Schema.String,
     type: Schema.optional(Schema.NullOr(Schema.String)),
-    code: Schema.optional(Schema.NullOr(Schema.Union([Schema.String, Schema.Finite])))
+    code: Schema.optional(Schema.NullOr(Schema.Union([Schema.String, Schema.Number.check(Schema.isFinite())])))
   })
 })
 

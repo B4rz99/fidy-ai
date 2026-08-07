@@ -150,8 +150,7 @@ export const toHttpEffect: Effect.Effect<
   const handlers = yield* Layer.build(RunnerServer.layerHandlers)
   return yield* RpcServer.toHttpEffect(Runners.Rpcs, {
     spanPrefix: "RunnerServer",
-    disableTracing: true,
-    disableFatalDefects: true
+    disableTracing: true
   }).pipe(Effect.provideContext(handlers))
 })
 
@@ -174,8 +173,7 @@ export const toHttpEffectWebsocket: Effect.Effect<
   const handlers = yield* Layer.build(RunnerServer.layerHandlers)
   return yield* RpcServer.toHttpEffectWebsocket(Runners.Rpcs, {
     spanPrefix: "RunnerServer",
-    disableTracing: true,
-    disableFatalDefects: true
+    disableTracing: true
   }).pipe(Effect.provideContext(handlers))
 })
 

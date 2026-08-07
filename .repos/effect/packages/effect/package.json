@@ -1,17 +1,17 @@
 {
   "name": "effect",
   "type": "module",
-  "version": "4.0.0-beta.102",
+  "version": "4.0.0-beta.98",
   "license": "MIT",
   "description": "The missing standard library for TypeScript, for writing production-grade software.",
   "homepage": "https://effect.website",
   "repository": {
     "type": "git",
-    "url": "https://github.com/Effect-TS/effect.git",
+    "url": "https://github.com/Effect-TS/effect-smol.git",
     "directory": "packages/effect"
   },
   "bugs": {
-    "url": "https://github.com/Effect-TS/effect/issues"
+    "url": "https://github.com/Effect-TS/effect-smol/issues"
   },
   "tags": [
     "typescript",
@@ -105,6 +105,7 @@
     "@types/ini": "^4.1.1",
     "@types/node": "^26.1.1",
     "ajv": "^8.20.0",
+    "arktype": "^2.2.3",
     "ast-types": "^0.14.2",
     "immer": "^11.1.11",
     "tinybench": "^6.0.2",

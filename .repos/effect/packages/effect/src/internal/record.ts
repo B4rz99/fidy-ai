@@ -1,5 +1,9 @@
+/**
+ * @since 4.0.0
+ */
+
 /** @internal */
-export function assignProperty(self: object, key: PropertyKey, value: unknown): void {
+export function set<K extends PropertyKey, A>(self: Record<K, A>, key: K, value: A): Record<K, A> {
   if (key === "__proto__") {
     Object.defineProperty(self, key, {
       value,
@@ -8,15 +12,7 @@ export function assignProperty(self: object, key: PropertyKey, value: unknown): 
       configurable: true
     })
   } else {
-    ;(self as any)[key] = value
+    self[key] = value
   }
-}
-
-/** @internal */
-export function assignProperties(self: object, source: object): void {
-  for (const key of Reflect.ownKeys(source)) {
-    if (Object.prototype.propertyIsEnumerable.call(source, key)) {
-      assignProperty(self, key, (source as any)[key])
-    }
-  }
+  return self
 }

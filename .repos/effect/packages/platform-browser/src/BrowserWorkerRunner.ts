@@ -81,7 +81,6 @@ export const make = (self: MessagePort | Window): WorkerRunner.WorkerRunnerPlatf
                 return Deferred.doneUnsafe(closeLatch, Exit.void)
               }
               ports.delete(portId)
-              Queue.offerUnsafe(disconnects, portId)
               Effect.runFork(Scope.close(port[1], Exit.void))
             }
           }
@@ -123,7 +122,7 @@ export const make = (self: MessagePort | Window): WorkerRunner.WorkerRunnerPlatf
             portScope,
             Effect.sync(() => {
               port.removeEventListener("message", onMsg)
-              port.removeEventListener("messageerror", onMessageError)
+              port.removeEventListener("messageerror", onError)
               port.close()
             })
           ))

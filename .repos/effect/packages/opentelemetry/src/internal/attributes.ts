@@ -1,6 +1,5 @@
 import type * as Otel from "@opentelemetry/api"
 import * as Inspectable from "effect/Inspectable"
-import * as Rec from "effect/Record"
 
 const bigint1e9 = BigInt(1_000_000_000)
 
@@ -13,7 +12,7 @@ export const nanosToHrTime = (timestamp: bigint): Otel.HrTime => {
 export const recordToAttributes = (record: Record<string, unknown>): Otel.Attributes => {
   const attributes: Otel.Attributes = {}
   for (const [key, value] of Object.entries(record)) {
-    Rec.assignProperty(attributes, key, unknownToAttributeValue(value))
+    attributes[key] = unknownToAttributeValue(value)
   }
   return attributes
 }

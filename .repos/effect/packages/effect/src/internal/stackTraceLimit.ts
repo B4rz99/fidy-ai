@@ -16,6 +16,10 @@
  */
 import type { ErrorWithStackTraceLimit } from "./tracer.ts"
 
+const ObjectGetOwnPropertyDescriptor = Object.getOwnPropertyDescriptor
+const ObjectPrototypeHasOwnProperty = Object.prototype.hasOwnProperty
+const ObjectIsExtensible = Object.isExtensible
+
 /**
  * Check if `Error.stackTraceLimit` is writable.
  * Returns `false` if the property is frozen, non-writable, or `Error` is non-extensible.
@@ -23,12 +27,12 @@ import type { ErrorWithStackTraceLimit } from "./tracer.ts"
  * @internal
  */
 export const isStackTraceLimitWritable = (): boolean => {
-  const desc = Object.getOwnPropertyDescriptor(Error, "stackTraceLimit")
+  const desc = ObjectGetOwnPropertyDescriptor(Error, "stackTraceLimit")
   if (desc === undefined) {
-    return Object.isExtensible(Error)
+    return ObjectIsExtensible(Error)
   }
 
-  return Object.hasOwn(desc, "writable")
+  return ObjectPrototypeHasOwnProperty.call(desc, "writable")
     ? desc.writable === true
     : desc.set !== undefined
 }

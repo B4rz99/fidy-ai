@@ -1290,8 +1290,7 @@ export const toWebHandler = <
     | Request<"Error", any>
     | Request<"GlobalError", any>,
   HE,
-  HR = Exclude<Request.Only<"Requires", R> | Request.Only<"GlobalRequires", R>, A>,
-  ReqR = Exclude<HR, A | Scope.Scope | HttpServerRequest.HttpServerRequest>
+  HR = Exclude<Request.Only<"Requires", R> | Request.Only<"GlobalRequires", R>, A>
 >(
   appLayer: Layer.Layer<A, E, R>,
   options?: {
@@ -1317,15 +1316,12 @@ export const toWebHandler = <
         | Request.Only<"Requires", R>
         | Request.Only<"GlobalRequires", R>
       >
-    ) => Effect.Effect<HttpServerResponse.HttpServerResponse, HE, HR | GlobalProvided>
+    ) => Effect.Effect<HttpServerResponse.HttpServerResponse, HE, HR>
   }
 ): {
-  readonly handler: [ReqR] extends [never]
+  readonly handler: [HR] extends [never]
     ? ((request: globalThis.Request, context?: Context.Context<never> | undefined) => Promise<Response>)
-    : ((
-      request: globalThis.Request,
-      context: Context.Context<ReqR>
-    ) => Promise<Response>)
+    : ((request: globalThis.Request, context: Context.Context<HR>) => Promise<Response>)
   readonly dispose: () => Promise<void>
 } => {
   let middleware: any = options?.middleware

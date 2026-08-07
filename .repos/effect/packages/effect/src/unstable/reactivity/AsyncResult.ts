@@ -17,7 +17,6 @@ import * as Exit from "../../Exit.ts"
 import type { LazyArg } from "../../Function.ts"
 import { constTrue, dual, identity } from "../../Function.ts"
 import * as Hash from "../../Hash.ts"
-import * as InternalRecord from "../../internal/record.ts"
 import * as Option from "../../Option.ts"
 import { type Pipeable, pipeArguments } from "../../Pipeable.ts"
 import type { Predicate, Refinement } from "../../Predicate.ts"
@@ -695,12 +694,12 @@ export const all = <const Arg extends Iterable<any> | Record<string, any>>(
   for (let i = 0; i < entries.length; i++) {
     const [key, result] = entries[i]
     if (!isAsyncResult(result)) {
-      InternalRecord.assignProperty(successes, key, result)
+      successes[key] = result
       continue
     } else if (!isSuccess(result)) {
       return result as any
     }
-    InternalRecord.assignProperty(successes, key, result.value)
+    successes[key] = result.value
     if (result.waiting) {
       waiting = true
     }
@@ -1010,7 +1009,7 @@ export const Schema = <
     {
       expected: "AsyncResult",
       toCodec([value, cause]) {
-        const Success = Schema_.TaggedStruct("Success", { value, waiting: Schema_.Boolean, timestamp: Schema_.Int })
+        const Success = Schema_.TaggedStruct("Success", { value, waiting: Schema_.Boolean, timestamp: Schema_.Number })
         return Schema_.link<AsyncResult<A["Encoded"], E["Encoded"]>>()(
           Schema_.Union([
             Schema_.TaggedStruct("Initial", { waiting: Schema_.Boolean }),

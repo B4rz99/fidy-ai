@@ -1,6 +1,6 @@
 # `@effect/sql-sqlite-do`
 
-An Effect SQL implementation for Cloudflare Durable Objects SQLite storage.
+An `@effect/sql` implementation for Cloudflare Durable Objects sqlite storage.
 
 ## Documentation
 

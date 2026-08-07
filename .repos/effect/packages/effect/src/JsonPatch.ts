@@ -8,7 +8,6 @@
  * @since 4.0.0
  */
 import { format } from "./Formatter.ts"
-import * as InternalRecord from "./internal/record.ts"
 import { escapeToken, unescapeToken } from "./JsonPointer.ts"
 import * as Predicate from "./Predicate.ts"
 import type * as Schema from "./Schema.ts"
@@ -359,7 +358,7 @@ function addAt(doc: Schema.Json, pointer: string, val: Schema.Json): Schema.Json
 
   if (isJsonObject(parent)) {
     const updated = { ...parent }
-    InternalRecord.assignProperty(updated, lastToken, val)
+    updated[lastToken] = val
     return rebuildFromStack(stack, updated)
   }
 
@@ -400,7 +399,7 @@ function setAt(
     }
     const updated = { ...parent }
     if (mode === "remove") delete updated[lastToken]
-    else InternalRecord.assignProperty(updated, lastToken, val!)
+    else updated[lastToken] = val!
     return rebuildFromStack(stack, updated)
   }
 
@@ -461,7 +460,7 @@ function rebuildFromStack(stack: ReadonlyArray<StackEntry>, newParent: Schema.Js
       acc = copy
     } else {
       const copy = { ...(container as Schema.JsonObject) }
-      InternalRecord.assignProperty(copy, token as string, acc)
+      copy[token as string] = acc
       acc = copy
     }
   }

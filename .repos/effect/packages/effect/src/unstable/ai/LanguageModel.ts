@@ -20,9 +20,9 @@ import type * as JsonSchema from "../../JsonSchema.ts"
 import * as Option from "../../Option.ts"
 import * as Predicate from "../../Predicate.ts"
 import * as Queue from "../../Queue.ts"
+import { CurrentConcurrency } from "../../References.ts"
 import * as Schema from "../../Schema.ts"
 import * as SchemaAST from "../../SchemaAST.ts"
-import * as Semaphore from "../../Semaphore.ts"
 import * as Sink from "../../Sink.ts"
 import * as Stream from "../../Stream.ts"
 import type { Span } from "../../Tracer.ts"
@@ -186,10 +186,7 @@ export interface Service {
  *
  * Different language model providers have varying constraints on the JSON
  * schemas they accept. A `CodecTransformer` rewrites a codec's encoded side to
- * satisfy those constraints while preserving the decoded type. A provider
- * schema may be less restrictive than the codec when the provider cannot
- * express every constraint; the returned codec remains authoritative for
- * validating model output.
+ * satisfy those constraints while preserving the decoded type.
  *
  * @category models
  * @since 4.0.0
@@ -1007,8 +1004,6 @@ export const make: (params: {
   ) {
     const tracker = Option.getOrUndefined(yield* Effect.serviceOption(ResponseIdTracker.ResponseIdTracker))
     const toolChoice = options.toolChoice ?? "auto"
-    const concurrency = options.concurrency ?? "unbounded"
-    providerOptions.span.attribute("concurrency", concurrency)
 
     const generateWithNonIncrementalFallback = () => {
       const requestOptions: ProviderOptions = {
@@ -1126,7 +1121,7 @@ export const make: (params: {
       const approvedResults = yield* executeApprovedToolCalls(
         approved,
         toolkit,
-        concurrency
+        options.concurrency
       )
       const deniedResults = createDenialResults(denied)
       const preResolvedResults = [...approvedResults, ...deniedResults]
@@ -1194,7 +1189,7 @@ export const make: (params: {
       rawContent,
       toolkit,
       providerOptions.prompt.content,
-      concurrency
+      options.concurrency
     ).pipe(
       Stream.filter(
         (result) =>
@@ -1244,8 +1239,6 @@ export const make: (params: {
   ) {
     const tracker = Option.getOrUndefined(yield* Effect.serviceOption(ResponseIdTracker.ResponseIdTracker))
     const toolChoice = options.toolChoice ?? "auto"
-    const concurrency = options.concurrency ?? "unbounded"
-    providerOptions.span.attribute("concurrency", concurrency)
 
     const streamWithNonIncrementalFallback = () => {
       const requestOptions: ProviderOptions = {
@@ -1386,7 +1379,7 @@ export const make: (params: {
       const approvedResults = yield* executeApprovedToolCalls(
         pendingApproved,
         toolkit,
-        concurrency
+        options.concurrency
       )
       const deniedResults = createDenialResults(pendingDenied)
       const preResolvedResults = [...approvedResults, ...deniedResults]
@@ -1493,9 +1486,6 @@ export const make: (params: {
 
     // FiberSet to track concurrent tool call handlers
     const toolCallFibers = yield* FiberSet.make<void, AiError.AiError>()
-    const toolCallSemaphore = concurrency === "unbounded"
-      ? undefined
-      : yield* Semaphore.make(concurrency)
 
     // Helper function to handle tool calls with approval logic
     const handleToolCall = Effect.fnUntraced(function*(part: Response.ToolCallPartEncoded) {
@@ -1519,7 +1509,7 @@ export const make: (params: {
         return
       }
 
-      yield* toolkit.handle(part.name, part.params as any, part.id).pipe(
+      yield* toolkit.handle(part.name, part.params as any).pipe(
         Stream.unwrap,
         Stream.runForEach((result) => {
           const toolResultPart = Response.makePart("tool-result", {
@@ -1560,11 +1550,7 @@ export const make: (params: {
           // Fork tool call handlers - use the raw chunk for encoded params
           for (const part of chunk) {
             if (part.type === "tool-call" && part.providerExecuted !== true) {
-              const effect = handleToolCall(part)
-              yield* FiberSet.run(
-                toolCallFibers,
-                toolCallSemaphore ? toolCallSemaphore.withPermit(effect) : effect
-              )
+              yield* FiberSet.run(toolCallFibers, handleToolCall(part))
             }
           }
         })
@@ -1968,7 +1954,7 @@ const isApprovalNeeded = Effect.fnUntraced(function*<T extends Tool.Any>(
 const executeApprovedToolCalls = <Tools extends Record<string, Tool.Any>>(
   approvals: ReadonlyArray<ApprovalResult>,
   toolkit: Toolkit.WithHandler<Tools>,
-  concurrency: Concurrency
+  concurrency: Concurrency | undefined
 ): Effect.Effect<
   Array<Prompt.ToolResultPart>,
   Tool.HandlerError<Tools[keyof Tools]> | AiError.AiError,
@@ -1996,8 +1982,7 @@ const executeApprovedToolCalls = <Tools extends Record<string, Tool.Any>>(
 
     const resultStream = yield* toolkit.handle(
       toolCall.name,
-      toolCall.params as any,
-      approval.toolCallId
+      toolCall.params as any
     )
 
     const terminalResult = yield* resultStream.pipe(
@@ -2019,8 +2004,14 @@ const executeApprovedToolCalls = <Tools extends Record<string, Tool.Any>>(
     })
   })
 
-  return Effect.forEach(approvals, executeTool, {
-    concurrency
+  return Effect.gen(function*() {
+    const resolveConcurrency = concurrency === "inherit"
+      ? yield* Effect.service(CurrentConcurrency)
+      : (concurrency ?? "unbounded")
+
+    return yield* Effect.forEach(approvals, executeTool, {
+      concurrency: resolveConcurrency
+    })
   })
 }
 
@@ -2059,7 +2050,7 @@ const resolveToolCalls = <Tools extends Record<string, Tool.Any>>(
   content: ReadonlyArray<Response.AllPartsEncoded>,
   toolkit: Toolkit.WithHandler<Tools>,
   messages: ReadonlyArray<Prompt.Message>,
-  concurrency: Concurrency
+  concurrency: Concurrency | undefined
 ): Stream.Stream<
   ToolResolutionResult<Tools>,
   Tool.HandlerError<Tools[keyof Tools]> | AiError.AiError,
@@ -2107,7 +2098,7 @@ const resolveToolCalls = <Tools extends Record<string, Tool.Any>>(
       }
 
       if (approvedToolCallIds.has(toolCall.id)) {
-        return toolkit.handle(toolCall.name, toolCall.params as any, toolCall.id).pipe(
+        return toolkit.handle(toolCall.name, toolCall.params as any).pipe(
           Stream.unwrap,
           Stream.map(
             (result) =>
@@ -2133,7 +2124,7 @@ const resolveToolCalls = <Tools extends Record<string, Tool.Any>>(
         )
       }
 
-      return toolkit.handle(toolCall.name, toolCall.params as any, toolCall.id).pipe(
+      return toolkit.handle(toolCall.name, toolCall.params as any).pipe(
         Stream.unwrap,
         Stream.map(
           (result) =>
@@ -2148,7 +2139,14 @@ const resolveToolCalls = <Tools extends Record<string, Tool.Any>>(
     }).pipe(Stream.unwrap)
   )
 
-  return Stream.mergeAll(streams, { concurrency })
+  const resolveConcurrency = concurrency === "inherit"
+    ? Effect.service(CurrentConcurrency)
+    : Effect.succeed(concurrency ?? "unbounded")
+
+  return resolveConcurrency.pipe(
+    Effect.map((concurrency) => Stream.mergeAll(streams, { concurrency })),
+    Stream.unwrap
+  )
 }
 
 // =============================================================================

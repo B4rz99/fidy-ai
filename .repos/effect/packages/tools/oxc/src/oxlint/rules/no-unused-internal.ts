@@ -286,33 +286,6 @@ function getExports(
   return fileInfos.get(fileName)?.internalExports.get(exportName) ?? []
 }
 
-function getReExportedInternals(
-  fileInfos: ReadonlyMap<string, FileInfo>,
-  fileInfo: FileInfo,
-  workspacePackages: ReadonlyMap<string, string>,
-  specifier: ts.ExportSpecifier
-): ReadonlyArray<InternalExport> {
-  const exportDeclaration = specifier.parent.parent
-  const importedName = (specifier.propertyName ?? specifier.name).text
-  if (
-    exportDeclaration.moduleSpecifier !== undefined &&
-    ts.isStringLiteral(exportDeclaration.moduleSpecifier)
-  ) {
-    const importedFile = resolveModule(
-      exportDeclaration.moduleSpecifier.text,
-      fileInfo.sourceFile.fileName,
-      workspacePackages
-    )
-    return getExports(fileInfos, importedFile, importedName)
-  }
-
-  const imported = fileInfo.imports.get(importedName)
-  return [
-    ...(fileInfo.internalExports.get(importedName) ?? []),
-    ...getExports(fileInfos, imported?.fileName, imported?.importedName ?? "")
-  ]
-}
-
 function markUsed(exports: ReadonlyArray<InternalExport>, node: ts.Node) {
   for (const internal of exports) {
     if (!isInside(node, internal.declaration)) {
@@ -375,17 +348,6 @@ function collectFileInfo(
       continue
     }
 
-    if (
-      !isInternalFile &&
-      ts.isExportDeclaration(statement) &&
-      !hasInternalApiJSDoc(statement) &&
-      statement.exportClause !== undefined &&
-      ts.isNamedExports(statement.exportClause)
-    ) {
-      fileInfo.publicDeclarations.push(statement)
-      continue
-    }
-
     if (!hasExportModifier(statement)) continue
 
     const names = getTopLevelDeclarationNameNodes(statement)
@@ -423,15 +385,9 @@ function markNamespaceReference(
   markUsed(getExports(fileInfos, importedFile, name.text), name)
 }
 
-function scanUsage(
-  fileInfos: ReadonlyMap<string, FileInfo>,
-  fileInfo: FileInfo,
-  workspacePackages: ReadonlyMap<string, string>
-) {
+function scanUsage(fileInfos: ReadonlyMap<string, FileInfo>, fileInfo: FileInfo) {
   const visit = (node: ts.Node) => {
-    if (ts.isExportSpecifier(node)) {
-      markUsed(getReExportedInternals(fileInfos, fileInfo, workspacePackages, node), node)
-    } else if (ts.isPropertyAccessExpression(node) && ts.isIdentifier(node.expression) && ts.isIdentifier(node.name)) {
+    if (ts.isPropertyAccessExpression(node) && ts.isIdentifier(node.expression) && ts.isIdentifier(node.name)) {
       markNamespaceReference(fileInfos, fileInfo, node.expression, node.name)
     } else if (ts.isQualifiedName(node) && ts.isIdentifier(node.left)) {
       markNamespaceReference(fileInfos, fileInfo, node.left, node.right)
@@ -573,8 +529,7 @@ function scanPublicSignature(
   fileInfos: ReadonlyMap<string, FileInfo>,
   fileInfo: FileInfo,
   diagnostics: Array<Diagnostic>,
-  node: ts.Node,
-  workspacePackages: ReadonlyMap<string, string>
+  node: ts.Node
 ) {
   if (ts.isFunctionDeclaration(node)) {
     scanFunctionLikeSignature(fileInfos, fileInfo, diagnostics, node)
@@ -607,21 +562,6 @@ function scanPublicSignature(
     for (const member of node.members) {
       scanClassMemberSignature(fileInfos, fileInfo, diagnostics, member)
     }
-  } else if (
-    ts.isExportDeclaration(node) &&
-    node.exportClause !== undefined &&
-    ts.isNamedExports(node.exportClause)
-  ) {
-    for (const specifier of node.exportClause.elements) {
-      for (const internal of getReExportedInternals(fileInfos, fileInfo, workspacePackages, specifier)) {
-        const name = specifier.propertyName ?? specifier.name
-        diagnostics.push({
-          fileName: fileInfo.fileName,
-          range: [name.getStart(), name.getEnd()],
-          message: `Do not re-export @internal export "${internal.name}" from a public module`
-        })
-      }
-    }
   }
 }
 
@@ -639,7 +579,7 @@ function analyze(cwd: string): Analysis {
   }
 
   for (const fileInfo of fileInfos.values()) {
-    scanUsage(fileInfos, fileInfo, workspacePackages)
+    scanUsage(fileInfos, fileInfo)
   }
 
   const diagnosticsByFile = new Map<string, Array<Diagnostic>>()
@@ -647,7 +587,7 @@ function analyze(cwd: string): Analysis {
   for (const fileInfo of fileInfos.values()) {
     const diagnostics: Array<Diagnostic> = []
     for (const declaration of fileInfo.publicDeclarations) {
-      scanPublicSignature(fileInfos, fileInfo, diagnostics, declaration, workspacePackages)
+      scanPublicSignature(fileInfos, fileInfo, diagnostics, declaration)
     }
     for (const diagnostic of diagnostics) {
       addFileDiagnostic(diagnosticsByFile, diagnostic)
@@ -679,7 +619,7 @@ const rule: CreateRule = {
   meta: {
     type: "problem",
     docs: {
-      description: "Disallow unused @internal exports, public re-exports, and references from public type signatures"
+      description: "Disallow unused @internal exports and references to @internal exports from public type signatures"
     }
   },
   create(context) {

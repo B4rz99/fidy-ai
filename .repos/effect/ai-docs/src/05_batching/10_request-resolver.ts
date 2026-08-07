@@ -6,13 +6,13 @@
 import { Context, Effect, Exit, Layer, Request, RequestResolver, Schema, Tracer } from "effect"
 
 export class User extends Schema.Class<User>("User")({
-  id: Schema.Int,
+  id: Schema.Number,
   name: Schema.String,
   email: Schema.String
 }) {}
 
 export class UserNotFound extends Schema.TaggedErrorClass<UserNotFound>()("UserNotFound", {
-  id: Schema.Int
+  id: Schema.Number
 }) {}
 
 export class Users extends Context.Service<Users, {

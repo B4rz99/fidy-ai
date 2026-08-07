@@ -67,25 +67,6 @@ export type ServeOptions<R extends string> =
   & { readonly routes?: Bun.Serve.Routes<WebSocketContext, R> }
 
 /**
- * WebSocket tuning options forwarded to `Bun.serve`'s `websocket` handler.
- *
- * **Details**
- *
- * The lifecycle handlers (`open`, `message`, `close`, ...) are managed by the
- * server and cannot be overridden; everything else — such as
- * `perMessageDeflate` compression, payload limits, and idle timeouts — passes
- * through, e.g.
- * `BunHttpServer.layer({ port: 3000, websocket: { perMessageDeflate: true } })`.
- *
- * @category options
- * @since 4.0.0
- */
-export type WebSocketOptions = Omit<
-  Bun.WebSocketHandler<WebSocketContext>,
-  "open" | "message" | "close" | "drain" | "ping" | "pong" | "data" | "binaryType"
->
-
-/**
  * Creates a scoped Bun `HttpServer` from `Bun.serve` options, stopping the server on scope finalization with optional graceful shutdown settings.
  *
  * @category constructors
@@ -96,7 +77,6 @@ export const make = Effect.fnUntraced(
     options: ServeOptions<R> & {
       readonly disablePreemptiveShutdown?: boolean | undefined
       readonly gracefulShutdownTimeout?: Duration.Input | undefined
-      readonly websocket?: WebSocketOptions | undefined
     }
   ) {
     const scope = yield* Effect.scope
@@ -110,7 +90,6 @@ export const make = Effect.fnUntraced(
       ...options as ServeOptions<R>,
       fetch: handlerStack[0],
       websocket: {
-        ...options.websocket,
         open(ws) {
           Deferred.doneUnsafe(ws.data.deferred, Exit.succeed(ws))
         },
@@ -254,7 +233,6 @@ export const layerServer: <R extends string>(
   options: ServeOptions<R> & {
     readonly disablePreemptiveShutdown?: boolean | undefined
     readonly gracefulShutdownTimeout?: Duration.Input | undefined
-    readonly websocket?: WebSocketOptions | undefined
   }
 ) => Layer.Layer<Server.HttpServer> = flow(make, Layer.effect(Server.HttpServer)) as any
 
@@ -284,7 +262,6 @@ export const layer = <R extends string>(
   options: ServeOptions<R> & {
     readonly disablePreemptiveShutdown?: boolean | undefined
     readonly gracefulShutdownTimeout?: Duration.Input | undefined
-    readonly websocket?: WebSocketOptions | undefined
   }
 ): Layer.Layer<
   | Server.HttpServer
@@ -319,7 +296,6 @@ export const layerConfig = <R extends string>(
     ServeOptions<R> & {
       readonly disablePreemptiveShutdown?: boolean | undefined
       readonly gracefulShutdownTimeout?: Duration.Input | undefined
-      readonly websocket?: WebSocketOptions | undefined
     }
   >
 ): Layer.Layer<

@@ -236,7 +236,7 @@ export const integer: Primitive<number> = makeSchemaPrimitive(
  */
 export const date: Primitive<Date> = makeSchemaPrimitive(
   "Date",
-  Schema.Date
+  Schema.DateValid
 )
 
 /**
@@ -304,7 +304,7 @@ export const choice = <A>(
     if (choiceMap.has(value)) {
       return Effect.succeed(choiceMap.get(value)!)
     }
-    return Effect.fail(validChoices)
+    return Effect.fail(`Expected ${validChoices}, got ${format(value)}`)
   })
   return Object.assign(primitive, { choiceKeys: choices.map(([key]) => key) })
 }

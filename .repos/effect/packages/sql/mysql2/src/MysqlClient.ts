@@ -196,12 +196,6 @@ export interface MysqlClientConfig {
 
   readonly poolConfig?: Mysql.PoolOptions | undefined
 
-  /**
-   * Use the text protocol instead of prepared statements, for proxies like
-   * Cloudflare Hyperdrive that do not support `COM_STMT_PREPARE`.
-   */
-  readonly disablePreparedStatements?: boolean | undefined
-
   readonly spanAttributes?: Record<string, unknown> | undefined
 
   readonly transformResultNames?: ((str: string) => string) | undefined
@@ -224,7 +218,6 @@ export const make = (
         options.transformResultNames
       ).array :
       undefined
-    const defaultMethod: "execute" | "query" = options.disablePreparedStatements === true ? "query" : "execute"
 
     class ConnectionImpl implements Connection {
       readonly conn: Mysql.PoolConnection | Mysql.Pool
@@ -236,7 +229,7 @@ export const make = (
         sql: string,
         values?: ReadonlyArray<any>,
         rowsAsArray = false,
-        method: "execute" | "query" = defaultMethod
+        method: "execute" | "query" = "execute"
       ) {
         return Effect.callback<unknown, SqlError>((resume) => {
           const operation = method === "query" ? "executeUnprepared" : "execute"
@@ -260,7 +253,7 @@ export const make = (
         sql: string,
         values?: ReadonlyArray<any>,
         rowsAsArray = false,
-        method: "execute" | "query" = defaultMethod
+        method: "execute" | "query" = "execute"
       ) {
         return this.runRaw(sql, values, rowsAsArray, method).pipe(
           Effect.map((results) => Array.isArray(results) ? results : [])
@@ -327,10 +320,10 @@ export const make = (
           : undefined,
         multipleStatements: true,
         supportBigNumbers: true,
-        connectionLimit: options.maxConnections ?? options.poolConfig?.connectionLimit,
+        connectionLimit: options.maxConnections,
         idleTimeout: options.connectionTTL
           ? Duration.toMillis(Duration.fromInputUnsafe(options.connectionTTL))
-          : options.poolConfig?.idleTimeout
+          : undefined
       } as Mysql.PoolOptions)
 
     yield* Effect.acquireRelease(

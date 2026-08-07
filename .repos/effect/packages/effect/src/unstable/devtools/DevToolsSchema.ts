@@ -311,7 +311,7 @@ export type Counter = Schema.Schema.Type<typeof Counter>
 export const Frequency = metric(
   "Frequency",
   Schema.Struct({
-    occurrences: Schema.ReadonlyMap(Schema.String, Schema.Natural)
+    occurrences: Schema.ReadonlyMap(Schema.String, Schema.Number)
   })
 )
 
@@ -370,8 +370,8 @@ export type Gauge = Schema.Schema.Type<typeof Gauge>
 export const Histogram = metric(
   "Histogram",
   Schema.Struct({
-    buckets: Schema.Array(Schema.Tuple([Schema.Number, Schema.Natural])),
-    count: Schema.Natural,
+    buckets: Schema.Array(Schema.Tuple([Schema.Number, Schema.Number])),
+    count: Schema.Number,
     min: Schema.Number,
     max: Schema.Number,
     sum: Schema.Number
@@ -405,13 +405,8 @@ export type Histogram = Schema.Schema.Type<typeof Histogram>
 export const Summary = metric(
   "Summary",
   Schema.Struct({
-    quantiles: Schema.Array(
-      Schema.Tuple([
-        Schema.Finite.check(Schema.isBetween({ minimum: 0, maximum: 1 })),
-        Schema.UndefinedOr(Schema.Number)
-      ])
-    ),
-    count: Schema.Natural,
+    quantiles: Schema.Array(Schema.Tuple([Schema.Number, Schema.UndefinedOr(Schema.Number)])),
+    count: Schema.Number,
     min: Schema.Number,
     max: Schema.Number,
     sum: Schema.Number

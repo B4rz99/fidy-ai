@@ -10,7 +10,6 @@
 import type * as Duration from "../../Duration.ts"
 import type * as Effect from "../../Effect.ts"
 import type * as Exit from "../../Exit.ts"
-import * as InternalRecord from "../../internal/record.ts"
 import * as PrimaryKey from "../../PrimaryKey.ts"
 import * as Request from "../../Request.ts"
 import * as Schema from "../../Schema.ts"
@@ -180,10 +179,10 @@ export const Class = <
     | ("requires" extends keyof Config ? Config["requires"] : never)
   > =>
 {
-  function Persistable(this: any, props: object | undefined) {
+  function Persistable(this: any, props: any) {
     this._tag = tag
     if (props) {
-      InternalRecord.assignProperties(this, props)
+      Object.assign(this, props)
     }
   }
   Persistable.prototype = {

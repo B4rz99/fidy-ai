@@ -1,4 +1,4 @@
-import { type Generated, OpenAiClient, OpenAiLanguageModel, OpenAiSchema, OpenAiTool } from "@effect/ai-openai"
+import { Generated, OpenAiClient, OpenAiLanguageModel, OpenAiTool } from "@effect/ai-openai"
 import { assert, describe, it } from "@effect/vitest"
 import { deepStrictEqual, strictEqual } from "@effect/vitest/utils"
 import { Array, Context, Effect, Layer, Redacted, Ref, Schema, Stream } from "effect"
@@ -46,10 +46,7 @@ describe("OpenAiLanguageModel", () => {
 
             const systemMessage = body.input.find((m: any) => m.role === "system")
             assert.isDefined(systemMessage)
-            deepStrictEqual(systemMessage.content, [{
-              type: "input_text",
-              text: "You are a helpful assistant"
-            }])
+            strictEqual(systemMessage.content, "You are a helpful assistant")
           }).pipe(Effect.provide(makeTestLayer())))
 
         it.effect("uses developer role for reasoning models", () =>
@@ -66,10 +63,7 @@ describe("OpenAiLanguageModel", () => {
 
             const devMessage = body.input.find((m: any) => m.role === "developer")
             assert.isDefined(devMessage)
-            deepStrictEqual(devMessage.content, [{
-              type: "input_text",
-              text: "You are a helpful assistant"
-            }])
+            strictEqual(devMessage.content, "You are a helpful assistant")
           }).pipe(Effect.provide(makeTestLayer({ body: { model: "o1" } }))))
 
         it.effect("uses developer role for gpt-5 models", () =>
@@ -805,22 +799,17 @@ describe("OpenAiLanguageModel", () => {
           assert.isDefined(finishPart)
           if (finishPart?.type === "finish") {
             deepStrictEqual(finishPart.usage.inputTokens, {
-              uncached: 7,
+              uncached: 10,
               total: 10,
-              cacheRead: 3,
-              cacheWrite: 4
+              cacheRead: 0,
+              cacheWrite: undefined
             })
             deepStrictEqual(finishPart.usage.outputTokens, { total: 20, text: 20, reasoning: 0 })
           }
         }).pipe(Effect.provide(makeTestLayer({
           body: {
             output: [makeTextOutput("Hello")],
-            usage: makeUsage({
-              input_tokens_details: {
-                cached_tokens: 3,
-                cache_write_tokens: 4
-              }
-            })
+            usage: makeUsage()
           }
         }))))
 
@@ -913,48 +902,6 @@ describe("OpenAiLanguageModel", () => {
   })
 
   describe("streamText", () => {
-    it.effect("extracts usage information", () =>
-      Effect.gen(function*() {
-        const streamEvents = [
-          {
-            type: "response.created",
-            sequence_number: 1,
-            response: makeDefaultResponse({ status: "in_progress" })
-          },
-          {
-            type: "response.completed",
-            sequence_number: 2,
-            response: makeDefaultResponse({
-              usage: makeUsage({
-                input_tokens_details: {
-                  cached_tokens: 3,
-                  cache_write_tokens: 4
-                }
-              })
-            })
-          }
-        ] as unknown as ReadonlyArray<typeof Generated.ResponseStreamEvent.Type>
-
-        const partsChunk = yield* LanguageModel.streamText({
-          prompt: "Hello"
-        }).pipe(
-          Stream.runCollect,
-          Effect.provide(OpenAiLanguageModel.model("gpt-4o-mini")),
-          Effect.provide(makeStreamTestLayer(streamEvents))
-        )
-
-        const finishPart = globalThis.Array.from(partsChunk).find((part) => part.type === "finish")
-        assert.isDefined(finishPart)
-        if (finishPart?.type === "finish") {
-          deepStrictEqual(finishPart.usage.inputTokens, {
-            uncached: 7,
-            total: 10,
-            cacheRead: 3,
-            cacheWrite: 4
-          })
-        }
-      }))
-
     it.effect("emits valid apply_patch tool params JSON for update_file diffs", () =>
       Effect.gen(function*() {
         const diff = "@@ -1 +1 @@\n-old\n+new\n"
@@ -1375,7 +1322,7 @@ class MockHttpClient extends Context.Service<MockHttpClient, {
   )
 }
 
-const encodeResponse = Schema.encodeUnknownEffect(OpenAiSchema.Response)
+const encodeResponse = Schema.encodeEffect(Generated.Response)
 
 const makeHttpClient = Effect.gen(function*() {
   const capturedRequests = yield* Ref.make<ReadonlyArray<HttpClientRequest.HttpClientRequest>>([])
@@ -1551,16 +1498,9 @@ const makeReasoningOutput = (
   ...overrides
 })
 
-type TestResponseUsage = Omit<Generated.ResponseUsage, "input_tokens_details"> & {
-  readonly input_tokens_details: {
-    readonly cached_tokens: number
-    readonly cache_write_tokens?: number
-  }
-}
-
 const makeUsage = (
-  overrides: Partial<TestResponseUsage> = {}
-): TestResponseUsage => ({
+  overrides: Partial<Generated.ResponseUsage> = {}
+): Generated.ResponseUsage => ({
   input_tokens: 10,
   output_tokens: 20,
   total_tokens: 30,

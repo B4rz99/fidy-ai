@@ -20,7 +20,6 @@ import type { TypeLambda } from "./HKT.ts"
 import type { Inspectable } from "./Inspectable.ts"
 import * as doNotation from "./internal/doNotation.ts"
 import * as option from "./internal/option.ts"
-import * as InternalRecord from "./internal/record.ts"
 import * as result from "./internal/result.ts"
 import type { Order } from "./Order.ts"
 import * as order from "./Order.ts"
@@ -1759,7 +1758,7 @@ export const all: <const I extends Iterable<Option<any>> | Record<string, Option
       if (isNone(o)) {
         return none()
       }
-      InternalRecord.assignProperty(out, key, o.value)
+      out[key] = o.value
     }
     return some(out)
   }

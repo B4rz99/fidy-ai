@@ -14,12 +14,10 @@ const finishReasonMap: Record<string, Response.FinishReason> = {
 /** @internal */
 export const resolveFinishReason = (
   finishReason: string | null | undefined
-): Response.FinishReason => {
-  if (Predicate.isNullish(finishReason)) {
-    return "other"
-  }
-  return Object.hasOwn(finishReasonMap, finishReason) ? finishReasonMap[finishReason] : "unknown"
-}
+): Response.FinishReason =>
+  Predicate.isNotNullish(finishReason)
+    ? finishReasonMap[finishReason]
+    : "other"
 
 /**
  * Tracks ReasoningDetailUnion entries and deduplicates them based

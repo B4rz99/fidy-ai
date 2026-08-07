@@ -31,6 +31,12 @@ const SchemaProto = {
   [TypeId]: {
     _A: (_: never) => _
   },
+  ...Effectable.Prototype<IndexedDbSchema<any, any, any>>({
+    label: "IndexedDbSchema",
+    evaluate() {
+      return this.getQueryBuilder
+    }
+  }),
   get getQueryBuilder() {
     const self = this as unknown as IndexedDbSchema<any, any, any>
     return IndexedDbDatabase.useSync(({ database, IDBKeyRange, reactivity }) =>
@@ -42,12 +48,6 @@ const SchemaProto = {
       })
     )
   },
-  ...Effectable.Prototype<IndexedDbSchema<any, any, any>>({
-    label: "IndexedDbSchema",
-    evaluate() {
-      return this.getQueryBuilder
-    }
-  }),
   add<Version extends IndexedDbVersion.AnyWithProps>(
     this: IndexedDbSchema<any, any, any>,
     version: Version,

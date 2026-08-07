@@ -1,6 +1,6 @@
 import { describe, it } from "@effect/vitest"
 import { assertDefined, assertTrue, deepStrictEqual, strictEqual } from "@effect/vitest/utils"
-import { Effect, Fiber, Latch, Option, Ref, Schema, Stream } from "effect"
+import { Effect, Latch, Option, Schema, Stream } from "effect"
 import { TestClock } from "effect/testing"
 import { AiError, LanguageModel, Prompt, Response, ResponseIdTracker, Tool, Toolkit } from "effect/unstable/ai"
 import * as TestUtils from "./utils.ts"
@@ -45,12 +45,11 @@ describe("LanguageModel", () => {
     usage: {
       inputTokens: { uncached: 5, total: 5, cacheRead: undefined, cacheWrite: undefined },
       outputTokens: { total: 5, text: undefined, reasoning: undefined }
-    },
-    response: undefined
+    }
   }
 
   describe("streamText", () => {
-    it.effect("should emit tool calls before executing tool handlers", () =>
+    it("should emit tool calls before executing tool handlers", () =>
       Effect.gen(function*() {
         const parts: Array<Response.StreamPart<Toolkit.Tools<typeof MyToolkit>>> = []
         const latch = yield* Latch.make()
@@ -60,7 +59,7 @@ describe("LanguageModel", () => {
         const toolParams = { testParam: "test-param" }
         const toolResult = { testSuccess: "test-success" }
 
-        const fiber = yield* LanguageModel.streamText({
+        yield* LanguageModel.streamText({
           prompt: [],
           toolkit: MyToolkit
         }).pipe(
@@ -107,21 +106,17 @@ describe("LanguageModel", () => {
 
         deepStrictEqual(parts, [toolCallPart])
 
-        // `TestClock.adjust` wakes the sleeping tool handler but returns before
-        // its result has propagated all the way downstream, so join the stream
-        // fiber to observe the completed sequence of parts.
         yield* TestClock.adjust("10 seconds")
-        yield* Fiber.join(fiber)
 
         deepStrictEqual(parts, [toolCallPart, toolResultPart])
       }))
 
-    it.effect("emits finish after resolved tool results", () =>
+    it("emits finish after resolved tool results", () =>
       Effect.gen(function*() {
         const parts: Array<Response.StreamPart<Toolkit.Tools<typeof MyToolkit>>> = []
         const latch = yield* Latch.make()
 
-        const fiber = yield* LanguageModel.streamText({
+        yield* LanguageModel.streamText({
           prompt: [],
           toolkit: MyToolkit
         }).pipe(
@@ -154,254 +149,16 @@ describe("LanguageModel", () => {
         strictEqual(parts.some((part) => part.type === "finish"), false)
 
         yield* TestClock.adjust("10 seconds")
-        yield* Fiber.join(fiber)
 
         strictEqual(parts.length, 3)
         strictEqual(parts[0]?.type, "tool-call")
         strictEqual(parts[1]?.type, "tool-result")
         strictEqual(parts[2]?.type, "finish")
       }))
-
-    it.effect("runs tool handlers sequentially with concurrency: 1", () =>
-      Effect.gen(function*() {
-        const active = yield* Ref.make(0)
-        const maxActive = yield* Ref.make(0)
-        const started = yield* Latch.make()
-        const release = yield* Latch.make()
-
-        const handlers = MyToolkit.toLayer({
-          MyTool: () =>
-            Effect.gen(function*() {
-              const current = yield* Ref.updateAndGet(active, (n) => n + 1)
-              yield* Ref.update(maxActive, (n) => Math.max(n, current))
-              yield* started.open
-              yield* release.await
-              return { testSuccess: "test-success" }
-            }).pipe(Effect.ensuring(Ref.update(active, (n) => n - 1)))
-        })
-
-        const fiber = yield* LanguageModel.streamText({
-          prompt: [],
-          toolkit: MyToolkit,
-          concurrency: 1
-        }).pipe(
-          Stream.runDrain,
-          TestUtils.withLanguageModel({
-            streamText: [
-              {
-                type: "tool-call",
-                id: "tool-1",
-                name: "MyTool",
-                params: { testParam: "test-1" }
-              },
-              {
-                type: "tool-call",
-                id: "tool-2",
-                name: "MyTool",
-                params: { testParam: "test-2" }
-              },
-              {
-                type: "tool-call",
-                id: "tool-3",
-                name: "MyTool",
-                params: { testParam: "test-3" }
-              }
-            ]
-          }),
-          Effect.provide(handlers),
-          Effect.forkScoped
-        )
-
-        yield* started.await
-        strictEqual(yield* Ref.get(active), 1)
-        strictEqual(yield* Ref.get(maxActive), 1)
-
-        yield* release.open
-        yield* Fiber.join(fiber)
-
-        strictEqual(yield* Ref.get(active), 0)
-        strictEqual(yield* Ref.get(maxActive), 1)
-      }))
-
-    it.effect("allows tool handler overlap up to a bounded concurrency", () =>
-      Effect.gen(function*() {
-        const active = yield* Ref.make(0)
-        const maxActive = yield* Ref.make(0)
-        const twoStarted = yield* Latch.make()
-        const release = yield* Latch.make()
-
-        const handlers = MyToolkit.toLayer({
-          MyTool: () =>
-            Effect.gen(function*() {
-              const current = yield* Ref.updateAndGet(active, (n) => n + 1)
-              yield* Ref.update(maxActive, (n) => Math.max(n, current))
-              if (current === 2) {
-                yield* twoStarted.open
-              }
-              yield* release.await
-              return { testSuccess: "test-success" }
-            }).pipe(Effect.ensuring(Ref.update(active, (n) => n - 1)))
-        })
-
-        const fiber = yield* LanguageModel.streamText({
-          prompt: [],
-          toolkit: MyToolkit,
-          concurrency: 2
-        }).pipe(
-          Stream.runDrain,
-          TestUtils.withLanguageModel({
-            streamText: [
-              {
-                type: "tool-call",
-                id: "tool-1",
-                name: "MyTool",
-                params: { testParam: "test-1" }
-              },
-              {
-                type: "tool-call",
-                id: "tool-2",
-                name: "MyTool",
-                params: { testParam: "test-2" }
-              },
-              {
-                type: "tool-call",
-                id: "tool-3",
-                name: "MyTool",
-                params: { testParam: "test-3" }
-              }
-            ]
-          }),
-          Effect.provide(handlers),
-          Effect.forkScoped
-        )
-
-        yield* twoStarted.await
-        strictEqual(yield* Ref.get(active), 2)
-        strictEqual(yield* Ref.get(maxActive), 2)
-
-        yield* release.open
-        yield* Fiber.join(fiber)
-
-        strictEqual(yield* Ref.get(active), 0)
-        strictEqual(yield* Ref.get(maxActive), 2)
-      }))
-
-    it.effect("provides tool call IDs to concurrent identical tool handlers", () =>
-      Effect.gen(function*() {
-        const toolCallIds = yield* Ref.make<Array<string>>([])
-        const twoStarted = yield* Latch.make()
-        const release = yield* Latch.make()
-
-        const handlers = MyToolkit.toLayer({
-          MyTool: (_, context) =>
-            Effect.gen(function*() {
-              const toolCallId = context.toolCallId
-              assertDefined(toolCallId)
-              const ids = yield* Ref.updateAndGet(toolCallIds, (ids) => [...ids, toolCallId])
-              if (ids.length === 2) {
-                yield* twoStarted.open
-              }
-              yield* release.await
-              return { testSuccess: "test-success" }
-            })
-        })
-
-        const fiber = yield* LanguageModel.streamText({
-          prompt: [],
-          toolkit: MyToolkit
-        }).pipe(
-          Stream.runDrain,
-          TestUtils.withLanguageModel({
-            streamText: [
-              {
-                type: "tool-call",
-                id: "tool-1",
-                name: "MyTool",
-                params: { testParam: "identical" }
-              },
-              {
-                type: "tool-call",
-                id: "tool-2",
-                name: "MyTool",
-                params: { testParam: "identical" }
-              }
-            ]
-          }),
-          Effect.provide(handlers),
-          Effect.forkScoped
-        )
-
-        yield* twoStarted.await
-        deepStrictEqual((yield* Ref.get(toolCallIds)).sort(), ["tool-1", "tool-2"])
-
-        yield* release.open
-        yield* Fiber.join(fiber)
-      }))
-
-    it.effect("bounds needsApproval evaluation with the tool handler concurrency", () =>
-      Effect.gen(function*() {
-        const active = yield* Ref.make(0)
-        const maxActive = yield* Ref.make(0)
-        const started = yield* Latch.make()
-        const release = yield* Latch.make()
-
-        const tool = Tool.make("ApprovalConcurrencyTool", {
-          parameters: Schema.Struct({ input: Schema.String }),
-          success: Schema.Struct({ output: Schema.String }),
-          needsApproval: () =>
-            Effect.gen(function*() {
-              const current = yield* Ref.updateAndGet(active, (n) => n + 1)
-              yield* Ref.update(maxActive, (n) => Math.max(n, current))
-              yield* started.open
-              yield* release.await
-              return false
-            }).pipe(Effect.ensuring(Ref.update(active, (n) => n - 1)))
-        })
-        const toolkit = Toolkit.make(tool)
-        const handlers = toolkit.toLayer({
-          ApprovalConcurrencyTool: () => Effect.succeed({ output: "done" })
-        })
-
-        const fiber = yield* LanguageModel.streamText({
-          prompt: [],
-          toolkit,
-          concurrency: 1
-        }).pipe(
-          Stream.runDrain,
-          TestUtils.withLanguageModel({
-            streamText: [
-              {
-                type: "tool-call",
-                id: "tool-1",
-                name: "ApprovalConcurrencyTool",
-                params: { input: "test-1" }
-              },
-              {
-                type: "tool-call",
-                id: "tool-2",
-                name: "ApprovalConcurrencyTool",
-                params: { input: "test-2" }
-              }
-            ]
-          }),
-          Effect.provide(handlers),
-          Effect.forkScoped
-        )
-
-        yield* started.await
-        strictEqual(yield* Ref.get(active), 1)
-        strictEqual(yield* Ref.get(maxActive), 1)
-
-        yield* release.open
-        yield* Fiber.join(fiber)
-
-        strictEqual(yield* Ref.get(active), 0)
-        strictEqual(yield* Ref.get(maxActive), 1)
-      }))
   })
 
   describe("generateObject", () => {
-    it.effect("includes full generated text in StructuredOutputError", () =>
+    it("includes full generated text in StructuredOutputError", () =>
       Effect.gen(function*() {
         const error = yield* LanguageModel.generateObject({
           prompt: [],
@@ -422,7 +179,7 @@ describe("LanguageModel", () => {
         }
       }))
 
-    it("resolves the canonical top-level $ref for class schemas in defaultCodecTransformer", () => {
+    it("resolves top-level $ref for class schemas in defaultCodecTransformer", () => {
       class Person extends Schema.Class<Person>("Person")({
         name: Schema.String
       }) {}
@@ -439,7 +196,7 @@ describe("LanguageModel", () => {
         required: ["name"],
         additionalProperties: false,
         $defs: {
-          "PersonJsonEncoding": {
+          Person: {
             type: "object",
             properties: {
               name: {
@@ -455,7 +212,7 @@ describe("LanguageModel", () => {
   })
 
   describe("provider options", () => {
-    it.effect("initialize incremental fields as undefined in generateText", () =>
+    it("initialize incremental fields as undefined in generateText", () =>
       Effect.gen(function*() {
         let capturedOptions: LanguageModel.ProviderOptions | undefined
 
@@ -475,7 +232,7 @@ describe("LanguageModel", () => {
         strictEqual(capturedOptions.incrementalPrompt, undefined)
       }))
 
-    it.effect("initialize incremental fields as undefined in generateObject", () =>
+    it("initialize incremental fields as undefined in generateObject", () =>
       Effect.gen(function*() {
         let capturedOptions: LanguageModel.ProviderOptions | undefined
 
@@ -502,7 +259,7 @@ describe("LanguageModel", () => {
         strictEqual(capturedOptions.incrementalPrompt, undefined)
       }))
 
-    it.effect("initialize incremental fields as undefined in streamText", () =>
+    it("initialize incremental fields as undefined in streamText", () =>
       Effect.gen(function*() {
         let capturedOptions: LanguageModel.ProviderOptions | undefined
 
@@ -523,7 +280,7 @@ describe("LanguageModel", () => {
         strictEqual(capturedOptions.incrementalPrompt, undefined)
       }))
 
-    it.effect("falls back to full prompt in generateText when incremental request fails", () =>
+    it("falls back to full prompt in generateText when incremental request fails", () =>
       Effect.gen(function*() {
         const fullPrompt = Prompt.make([
           Prompt.systemMessage({ content: "system" }),
@@ -580,7 +337,7 @@ describe("LanguageModel", () => {
         deepStrictEqual(calls[1]!.prompt, fullPrompt)
       }))
 
-    it.effect("falls back to full prompt in streamText when incremental request fails", () =>
+    it("falls back to full prompt in streamText when incremental request fails", () =>
       Effect.gen(function*() {
         const fullPrompt = Prompt.make([
           Prompt.systemMessage({ content: "system" }),
@@ -638,7 +395,7 @@ describe("LanguageModel", () => {
         deepStrictEqual(calls[1]!.prompt, fullPrompt)
       }))
 
-    it.effect("uses tracker prepareUnsafe and markParts in generateText without toolkit", () =>
+    it("uses tracker prepareUnsafe and markParts in generateText without toolkit", () =>
       Effect.gen(function*() {
         let capturedOptions: LanguageModel.ProviderOptions | undefined
         let preparedPrompt: LanguageModel.ProviderOptions["prompt"] | undefined
@@ -660,10 +417,7 @@ describe("LanguageModel", () => {
                 return Effect.succeed([
                   {
                     type: "response-metadata",
-                    id: "resp_next",
-                    modelId: undefined,
-                    timestamp: undefined,
-                    request: undefined
+                    id: "resp_next"
                   },
                   finishPart
                 ])
@@ -697,7 +451,7 @@ describe("LanguageModel", () => {
         strictEqual(markedResponseId, "resp_next")
       }))
 
-    it.effect("uses tracker prepareUnsafe and markParts in generateText with empty toolkit", () =>
+    it("uses tracker prepareUnsafe and markParts in generateText with empty toolkit", () =>
       Effect.gen(function*() {
         let capturedOptions: LanguageModel.ProviderOptions | undefined
         let prepareCalls = 0
@@ -715,10 +469,7 @@ describe("LanguageModel", () => {
                 return Effect.succeed([
                   {
                     type: "response-metadata",
-                    id: "resp_next",
-                    modelId: undefined,
-                    timestamp: undefined,
-                    request: undefined
+                    id: "resp_next"
                   },
                   finishPart
                 ])
@@ -747,7 +498,7 @@ describe("LanguageModel", () => {
         strictEqual(markCalls, 1)
       }))
 
-    it.effect("calls tracker.prepareUnsafe after stripping resolved approvals in toolkit flow", () =>
+    it("calls tracker.prepareUnsafe after stripping resolved approvals in toolkit flow", () =>
       Effect.gen(function*() {
         const toolCallId = "call-tracker"
         const approvalId = "approval-tracker"
@@ -798,10 +549,7 @@ describe("LanguageModel", () => {
                 Effect.succeed([
                   {
                     type: "response-metadata",
-                    id: "resp_next",
-                    modelId: undefined,
-                    timestamp: undefined,
-                    request: undefined
+                    id: "resp_next"
                   },
                   finishPart
                 ]),
@@ -834,7 +582,7 @@ describe("LanguageModel", () => {
         strictEqual(markedParts, preparedPrompt.content)
       }))
 
-    it.effect("uses tracker prepareUnsafe and markParts in streamText without toolkit", () =>
+    it("uses tracker prepareUnsafe and markParts in streamText without toolkit", () =>
       Effect.gen(function*() {
         let capturedOptions: LanguageModel.ProviderOptions | undefined
         let preparedPrompt: LanguageModel.ProviderOptions["prompt"] | undefined
@@ -858,10 +606,7 @@ describe("LanguageModel", () => {
                 return Stream.fromIterable([
                   {
                     type: "response-metadata",
-                    id: "resp_next",
-                    modelId: undefined,
-                    timestamp: undefined,
-                    request: undefined
+                    id: "resp_next"
                   },
                   finishPart
                 ])
@@ -894,7 +639,7 @@ describe("LanguageModel", () => {
         strictEqual(markedResponseId, "resp_next")
       }))
 
-    it.effect("uses tracker prepareUnsafe and markParts in streamText with empty toolkit", () =>
+    it("uses tracker prepareUnsafe and markParts in streamText with empty toolkit", () =>
       Effect.gen(function*() {
         let capturedOptions: LanguageModel.ProviderOptions | undefined
         let preparedPrompt: LanguageModel.ProviderOptions["prompt"] | undefined
@@ -919,10 +664,7 @@ describe("LanguageModel", () => {
                 return Stream.fromIterable([
                   {
                     type: "response-metadata",
-                    id: "resp_next",
-                    modelId: undefined,
-                    timestamp: undefined,
-                    request: undefined
+                    id: "resp_next"
                   },
                   finishPart
                 ])
@@ -955,7 +697,7 @@ describe("LanguageModel", () => {
         strictEqual(markedResponseId, "resp_next")
       }))
 
-    it.effect("calls tracker.prepareUnsafe after stripping resolved approvals in streamText toolkit flow", () =>
+    it("calls tracker.prepareUnsafe after stripping resolved approvals in streamText toolkit flow", () =>
       Effect.gen(function*() {
         const toolCallId = "call-tracker-stream"
         const approvalId = "approval-tracker-stream"
@@ -1008,10 +750,7 @@ describe("LanguageModel", () => {
                 Stream.fromIterable([
                   {
                     type: "response-metadata",
-                    id: "resp_next",
-                    modelId: undefined,
-                    timestamp: undefined,
-                    request: undefined
+                    id: "resp_next"
                   },
                   finishPart
                 ])
@@ -1043,7 +782,7 @@ describe("LanguageModel", () => {
         strictEqual(markedParts, preparedPrompt.content)
       }))
 
-    it.effect("uses tracker prepareUnsafe and markParts when disableToolCallResolution is true", () =>
+    it("uses tracker prepareUnsafe and markParts when disableToolCallResolution is true", () =>
       Effect.gen(function*() {
         const toolCallId = "call-tracker-stream-disable"
         const approvalId = "approval-tracker-stream-disable"
@@ -1104,10 +843,7 @@ describe("LanguageModel", () => {
                 return Stream.fromIterable([
                   {
                     type: "response-metadata",
-                    id: "resp_next",
-                    modelId: undefined,
-                    timestamp: undefined,
-                    request: undefined
+                    id: "resp_next"
                   },
                   finishPart
                 ])
@@ -1151,7 +887,7 @@ describe("LanguageModel", () => {
   })
 
   describe("tool approval", () => {
-    it.effect("emits tool-approval-request when tool has needsApproval: true", () =>
+    it("emits tool-approval-request when tool has needsApproval: true", () =>
       Effect.gen(function*() {
         const parts: Array<Response.StreamPart<Toolkit.Tools<typeof ApprovalToolkit>>> = []
 
@@ -1200,7 +936,7 @@ describe("LanguageModel", () => {
         }
       }))
 
-    it.effect("pre-resolves approved tool calls before calling LLM", () =>
+    it("pre-resolves approved tool calls before calling LLM", () =>
       Effect.gen(function*() {
         const toolCallId = "call-456"
         const approvalId = "approval-456"
@@ -1239,7 +975,14 @@ describe("LanguageModel", () => {
           TestUtils.withLanguageModel({
             streamText: (opts) => {
               capturedPrompt = opts.prompt
-              return [finishPart]
+              return [{
+                type: "finish",
+                reason: "stop",
+                usage: {
+                  inputTokens: { uncached: 5, total: 5, cacheRead: undefined, cacheWrite: undefined },
+                  outputTokens: { total: 5, text: undefined, reasoning: undefined }
+                }
+              }]
             }
           }),
           Effect.provide(ApprovalToolkitLayer)
@@ -1260,7 +1003,7 @@ describe("LanguageModel", () => {
         strictEqual(toolResults[0].isFailure, false)
       }))
 
-    it.effect("pre-resolves denied tool calls with execution-denied before calling LLM", () =>
+    it("pre-resolves denied tool calls with execution-denied before calling LLM", () =>
       Effect.gen(function*() {
         const toolCallId = "call-789"
         const approvalId = "approval-789"
@@ -1300,7 +1043,14 @@ describe("LanguageModel", () => {
           TestUtils.withLanguageModel({
             streamText: (opts) => {
               capturedPrompt = opts.prompt
-              return [finishPart]
+              return [{
+                type: "finish",
+                reason: "stop",
+                usage: {
+                  inputTokens: { uncached: 5, total: 5, cacheRead: undefined, cacheWrite: undefined },
+                  outputTokens: { total: 5, text: undefined, reasoning: undefined }
+                }
+              }]
             }
           }),
           Effect.provide(ApprovalToolkitLayer)
@@ -1323,7 +1073,7 @@ describe("LanguageModel", () => {
         strictEqual(toolResults[0].isFailure, true)
       }))
 
-    it.effect("strips approved approval artifacts from prompt sent to provider (streamText)", () =>
+    it("strips approved approval artifacts from prompt sent to provider (streamText)", () =>
       Effect.gen(function*() {
         const toolCallId = "call-strip"
         const approvalId = "approval-strip"
@@ -1362,7 +1112,14 @@ describe("LanguageModel", () => {
           TestUtils.withLanguageModel({
             streamText: (opts) => {
               capturedPrompt = opts.prompt
-              return [finishPart]
+              return [{
+                type: "finish",
+                reason: "stop",
+                usage: {
+                  inputTokens: { uncached: 5, total: 5, cacheRead: undefined, cacheWrite: undefined },
+                  outputTokens: { total: 5, text: undefined, reasoning: undefined }
+                }
+              }]
             }
           }),
           Effect.provide(ApprovalToolkitLayer)
@@ -1387,7 +1144,7 @@ describe("LanguageModel", () => {
         }
       }))
 
-    it.effect("strips denied approval artifacts from prompt sent to provider", () =>
+    it("strips denied approval artifacts from prompt sent to provider", () =>
       Effect.gen(function*() {
         const toolCallId = "call-strip-deny"
         const approvalId = "approval-strip-deny"
@@ -1427,7 +1184,14 @@ describe("LanguageModel", () => {
           TestUtils.withLanguageModel({
             streamText: (opts) => {
               capturedPrompt = opts.prompt
-              return [finishPart]
+              return [{
+                type: "finish",
+                reason: "stop",
+                usage: {
+                  inputTokens: { uncached: 5, total: 5, cacheRead: undefined, cacheWrite: undefined },
+                  outputTokens: { total: 5, text: undefined, reasoning: undefined }
+                }
+              }]
             }
           }),
           Effect.provide(ApprovalToolkitLayer)
@@ -1458,7 +1222,7 @@ describe("LanguageModel", () => {
         }
       }))
 
-    it.effect("strips only resolved approvals, preserves unrelated parts", () =>
+    it("strips only resolved approvals, preserves unrelated parts", () =>
       Effect.gen(function*() {
         const resolvedCallId = "call-resolved"
         const resolvedApprovalId = "approval-resolved"
@@ -1510,7 +1274,14 @@ describe("LanguageModel", () => {
           TestUtils.withLanguageModel({
             streamText: (opts) => {
               capturedPrompt = opts.prompt
-              return [finishPart]
+              return [{
+                type: "finish",
+                reason: "stop",
+                usage: {
+                  inputTokens: { uncached: 5, total: 5, cacheRead: undefined, cacheWrite: undefined },
+                  outputTokens: { total: 5, text: undefined, reasoning: undefined }
+                }
+              }]
             }
           }),
           Effect.provide(ApprovalToolkitLayer)
@@ -1536,7 +1307,7 @@ describe("LanguageModel", () => {
         }
       }))
 
-    it.effect("strips approval artifacts via generateText path", () =>
+    it("strips approval artifacts via generateText path", () =>
       Effect.gen(function*() {
         const toolCallId = "call-gen"
         const approvalId = "approval-gen"
@@ -1574,7 +1345,14 @@ describe("LanguageModel", () => {
           TestUtils.withLanguageModel({
             generateText: (opts) => {
               capturedPrompt = opts.prompt
-              return Effect.succeed([finishPart])
+              return Effect.succeed([{
+                type: "finish",
+                reason: "stop",
+                usage: {
+                  inputTokens: { uncached: 5, total: 5, cacheRead: undefined, cacheWrite: undefined },
+                  outputTokens: { total: 5, text: undefined, reasoning: undefined }
+                }
+              }])
             }
           }),
           Effect.provide(ApprovalToolkitLayer)
@@ -1594,7 +1372,7 @@ describe("LanguageModel", () => {
         }
       }))
 
-    it.effect("dynamic needsApproval returns true when condition met", () =>
+    it("dynamic needsApproval returns true when condition met", () =>
       Effect.gen(function*() {
         const parts: Array<Response.StreamPart<Toolkit.Tools<typeof ApprovalToolkit>>> = []
 
@@ -1630,7 +1408,7 @@ describe("LanguageModel", () => {
         }
       }))
 
-    it.effect("dynamic needsApproval returns false when condition not met", () =>
+    it("dynamic needsApproval returns false when condition not met", () =>
       Effect.gen(function*() {
         const parts: Array<Response.StreamPart<Toolkit.Tools<typeof ApprovalToolkit>>> = []
 
@@ -1666,14 +1444,14 @@ describe("LanguageModel", () => {
         }
       }))
 
-    it.effect("tool without needsApproval executes normally", () =>
+    it("tool without needsApproval executes normally", () =>
       Effect.gen(function*() {
         const parts: Array<Response.StreamPart<Toolkit.Tools<typeof MyToolkit>>> = []
 
         const toolCallId = "call-normal"
         const latch = yield* Latch.make()
 
-        const fiber = yield* LanguageModel.streamText({
+        yield* LanguageModel.streamText({
           prompt: [],
           toolkit: MyToolkit
         }).pipe(
@@ -1701,7 +1479,6 @@ describe("LanguageModel", () => {
 
         yield* latch.await
         yield* TestClock.adjust("10 seconds")
-        yield* Fiber.join(fiber)
 
         strictEqual(parts.length, 2)
         strictEqual(parts[0].type, "tool-call")
@@ -1711,7 +1488,7 @@ describe("LanguageModel", () => {
         }
       }))
 
-    it.effect("strips previous-round approval artifacts even when no new pending approvals (streamText)", () =>
+    it("strips previous-round approval artifacts even when no new pending approvals (streamText)", () =>
       Effect.gen(function*() {
         const toolCallId = "call-prev"
         const approvalId = "approval-prev"
@@ -1760,7 +1537,14 @@ describe("LanguageModel", () => {
           TestUtils.withLanguageModel({
             streamText: (opts) => {
               capturedPrompt = opts.prompt
-              return [finishPart]
+              return [{
+                type: "finish",
+                reason: "stop",
+                usage: {
+                  inputTokens: { uncached: 5, total: 5, cacheRead: undefined, cacheWrite: undefined },
+                  outputTokens: { total: 5, text: undefined, reasoning: undefined }
+                }
+              }]
             }
           }),
           Effect.provide(ApprovalToolkitLayer)
@@ -1792,7 +1576,7 @@ describe("LanguageModel", () => {
         }
       }))
 
-    it.effect("strips previous-round approval artifacts even when no new pending approvals (generateText)", () =>
+    it("strips previous-round approval artifacts even when no new pending approvals (generateText)", () =>
       Effect.gen(function*() {
         const toolCallId = "call-prev-gen"
         const approvalId = "approval-prev-gen"
@@ -1837,7 +1621,14 @@ describe("LanguageModel", () => {
           TestUtils.withLanguageModel({
             generateText: (opts) => {
               capturedPrompt = opts.prompt
-              return Effect.succeed([finishPart])
+              return Effect.succeed([{
+                type: "finish",
+                reason: "stop",
+                usage: {
+                  inputTokens: { uncached: 5, total: 5, cacheRead: undefined, cacheWrite: undefined },
+                  outputTokens: { total: 5, text: undefined, reasoning: undefined }
+                }
+              }])
             }
           }),
           Effect.provide(ApprovalToolkitLayer)
@@ -1856,7 +1647,7 @@ describe("LanguageModel", () => {
         }
       }))
 
-    it.effect("streamText emits pre-resolved tool results as stream parts", () =>
+    it("streamText emits pre-resolved tool results as stream parts", () =>
       Effect.gen(function*() {
         const toolCallId = "call-emit"
         const approvalId = "approval-emit"
@@ -1897,7 +1688,14 @@ describe("LanguageModel", () => {
             })
           ),
           TestUtils.withLanguageModel({
-            streamText: [finishPart]
+            streamText: [{
+              type: "finish",
+              reason: "stop",
+              usage: {
+                inputTokens: { uncached: 5, total: 5, cacheRead: undefined, cacheWrite: undefined },
+                outputTokens: { total: 5, text: undefined, reasoning: undefined }
+              }
+            }]
           }),
           Effect.provide(ApprovalToolkitLayer)
         )

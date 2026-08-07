@@ -193,6 +193,7 @@ export const makeUnsafe = <K = unknown>(options: {
       }
 
       const needed = permits - totalPermits
+      const taken = permits - needed
       if (totalPermits > 0) {
         totalPermits = 0
       }
@@ -227,7 +228,9 @@ export const makeUnsafe = <K = unknown>(options: {
       return Effect.sync(() => {
         cleanup()
         waitingPermits -= entry.permits
-        releaseUnsafe(permits - entry.permits)
+        if (taken > 0) {
+          releaseUnsafe(taken)
+        }
       })
     })
   }

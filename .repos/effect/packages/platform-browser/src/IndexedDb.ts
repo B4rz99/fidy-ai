@@ -40,7 +40,7 @@ export const IndexedDb: Context.Service<IndexedDb, IndexedDb> = Context.Service<
 const IDBFlatKey = Schema.Union([
   Schema.String,
   Schema.Number.check(Schema.makeFilter((input) => !Number.isNaN(input))),
-  Schema.Date,
+  Schema.DateValid,
   Schema.declare(
     (input): input is BufferSource =>
       input instanceof ArrayBuffer ||

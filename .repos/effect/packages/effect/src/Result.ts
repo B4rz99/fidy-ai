@@ -17,7 +17,6 @@ import type { TypeLambda } from "./HKT.ts"
 import type { Inspectable } from "./Inspectable.ts"
 import * as doNotation from "./internal/doNotation.ts"
 import * as option_ from "./internal/option.ts"
-import * as InternalRecord from "./internal/record.ts"
 import * as result from "./internal/result.ts"
 import type { Option } from "./Option.ts"
 import type { Pipeable } from "./Pipeable.ts"
@@ -820,7 +819,7 @@ export const mapError: {
 } = dual(
   2,
   <A, E, E2>(self: Result<A, E>, f: (err: E) => E2): Result<A, E2> =>
-    isFailure(self) ? fail(f(self.failure)) : self as unknown as Result<A, E2>
+    isFailure(self) ? fail(f(self.failure)) : succeed(self.success)
 )
 
 /**
@@ -863,7 +862,7 @@ export const map: {
 } = dual(
   2,
   <A, E, A2>(self: Result<A, E>, f: (ok: A) => A2): Result<A2, E> =>
-    isSuccess(self) ? succeed(f(self.success)) : self as unknown as Result<A2, E>
+    isSuccess(self) ? succeed(f(self.success)) : fail(self.failure)
 )
 
 /**
@@ -1482,7 +1481,7 @@ export const all: <const I extends Iterable<Result<any, any>> | Record<string, R
       if (isFailure(e)) {
         return e
       }
-      InternalRecord.assignProperty(out, key, e.success)
+      out[key] = e.success
     }
     return succeed(out)
   }

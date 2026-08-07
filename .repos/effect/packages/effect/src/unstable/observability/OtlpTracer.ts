@@ -59,7 +59,7 @@ export const make: (
 ) => Effect.Effect<
   Tracer.Tracer,
   never,
-  Exporter.Flusher | OtlpSerialization | HttpClient.HttpClient | Scope.Scope
+  OtlpSerialization | HttpClient.HttpClient | Scope.Scope
 > = Effect.fnUntraced(function*(options) {
   const otelResource = yield* OtlpResource.fromConfig(options.resource)
   const serialization = yield* OtlpSerialization
@@ -134,11 +134,7 @@ export const layer: (options: {
   readonly maxBatchSize?: number | undefined
   readonly context?: (<X>(primitive: Tracer.EffectPrimitive<X>, span: Tracer.AnySpan) => X) | undefined
   readonly shutdownTimeout?: Duration.Input | undefined
-}) => Layer.Layer<Exporter.Flusher, never, OtlpSerialization | HttpClient.HttpClient> = flow(
-  make,
-  Layer.effect(Tracer.Tracer),
-  Layer.provideMerge(Exporter.layerFlusher)
-)
+}) => Layer.Layer<never, never, OtlpSerialization | HttpClient.HttpClient> = flow(make, Layer.effect(Tracer.Tracer))
 
 /**
  * Creates an OTLP traces layer from OpenTelemetry configuration.
@@ -154,7 +150,7 @@ export const layerFromConfig = (options?: {
   } | undefined
   readonly headers?: Headers.Input | undefined
   readonly context?: (<X>(primitive: Tracer.EffectPrimitive<X>, span: Tracer.AnySpan) => X) | undefined
-}): Layer.Layer<Exporter.Flusher, never, HttpClient.HttpClient | OtlpSerialization> =>
+}): Layer.Layer<never, never, HttpClient.HttpClient | OtlpSerialization> =>
   Effect.gen(function*() {
     const { disabled, endpoint, exporters } = yield* Config.all({
       disabled: Config.boolean("OTEL_SDK_DISABLED").pipe(Config.withDefault(false)),
@@ -163,7 +159,7 @@ export const layerFromConfig = (options?: {
     })
 
     if (disabled || !endpoint || !exporters.includes("otlp")) {
-      return Exporter.layerFlusher
+      return Layer.empty
     }
 
     const { baseTimeout, tracesTimeout, exportTimeout, scheduleDelay, maxBatchSize } = yield* Config.all({

@@ -94,7 +94,9 @@ export const insertUser = Effect.fn("insertUser")(
 );
 
 /** Finds the stable User and all independently persisted interpretation context. */
-export const findUser = (userId: UserId) =>
+export const findUser = (
+  userId: UserId
+): Effect.Effect<Option.Option<typeof UserRow.Type>, never, SqlClient.SqlClient> =>
   withUserTransaction(
     userId,
     Effect.flatMap(SqlClient.SqlClient, (sql) =>
@@ -207,7 +209,9 @@ export const insertWhatsAppIdentity = Effect.fn("insertWhatsAppIdentity")(
     writeWhatsAppIdentity("insert", userId, identity)
 );
 
-const findAndLockWhatsAppIdentityInTransaction = (userId: UserId) =>
+const findAndLockWhatsAppIdentityInTransaction = (
+  userId: UserId
+): Effect.Effect<Option.Option<typeof WhatsAppIdentityRow.Type>, never, SqlClient.SqlClient> =>
   Effect.flatMap(SqlClient.SqlClient, (sql) =>
     SqlSchema.findOneOption({
       Request: WhatsAppIdentityByUser,
@@ -227,11 +231,15 @@ const findAndLockWhatsAppIdentityInTransaction = (userId: UserId) =>
   ).pipe(Effect.orDie);
 
 /** Locks the User's most recently verified association across Business Portfolios. */
-export const findAndLockWhatsAppIdentity = (userId: UserId) =>
+export const findAndLockWhatsAppIdentity = (
+  userId: UserId
+): Effect.Effect<Option.Option<typeof WhatsAppIdentityRow.Type>, never, SqlClient.SqlClient> =>
   withUserTransaction(userId, findAndLockWhatsAppIdentityInTransaction(userId));
 
 /** Reads the User's most recently verified association across Business Portfolios. */
-export const findWhatsAppIdentity = (userId: UserId) =>
+export const findWhatsAppIdentity = (
+  userId: UserId
+): Effect.Effect<Option.Option<typeof WhatsAppIdentityRow.Type>, never, SqlClient.SqlClient> =>
   withUserTransaction(
     userId,
     Effect.flatMap(SqlClient.SqlClient, (sql) =>

@@ -1,4 +1,5 @@
-import { Context, Effect, Layer, Option, Predicate, Schema } from "effect";
+import { Context, Effect, Layer, Option, Predicate, Schema, type Scope } from "effect";
+import type { HttpClient } from "effect/unstable/http";
 import { HttpApiClient } from "effect/unstable/httpapi";
 import { Tool, Toolkit } from "effect/unstable/ai";
 import type { CanonicalOperationId } from "~/core/_shared/canonical-operation";
@@ -8,19 +9,26 @@ import { type CatalogOperation } from "~/shell/_shared/operation-catalog";
 import { type AgentConfirmation } from "~/shell/_shared/operation-policy";
 import { FidyApi, operationCatalog } from "~/shell/api";
 
-const safeCanonicalApiUrl = Schema.makeFilter<URL>((url) => {
-  const loopback =
-    url.hostname === "127.0.0.1" || url.hostname === "localhost" || url.hostname === "[::1]";
-  return loopback &&
-    (url.protocol === "http:" || url.protocol === "https:") &&
-    url.username === "" &&
-    url.password === "" &&
-    url.pathname === "/" &&
-    url.search === "" &&
-    url.hash === ""
+const maximumOpenAiToolNameLength = 64;
+
+const loopbackHostnames = new Set(["127.0.0.1", "localhost", "[::1]"]);
+const httpProtocols = new Set(["http:", "https:"]);
+
+const isLoopbackOrigin = (url: URL): boolean =>
+  loopbackHostnames.has(url.hostname) && httpProtocols.has(url.protocol);
+
+const carriesNoCredentials = (url: URL): boolean => url.username === "" && url.password === "";
+
+const hasEmptyQueryAndFragment = (url: URL): boolean => url.search === "" && url.hash === "";
+
+const addressesOriginRoot = (url: URL): boolean =>
+  url.pathname === "/" && hasEmptyQueryAndFragment(url);
+
+const safeCanonicalApiUrl = Schema.makeFilter<URL>((url) =>
+  isLoopbackOrigin(url) && carriesNoCredentials(url) && addressesOriginRoot(url)
     ? undefined
-    : "Expected a loopback canonical API origin without credentials";
-});
+    : "Expected a loopback canonical API origin without credentials"
+);
 
 /** Runtime-validated origin used by standalone canonical API clients. */
 export const CanonicalApiUrl = Schema.URLFromString.check(safeCanonicalApiUrl);
@@ -38,7 +46,7 @@ export const CanonicalApiBaseUrl = Context.Reference<Option.Option<CanonicalApiU
 /** OpenAI-compatible alias mechanically derived from a canonical operation id. */
 export const OpenAiToolName = Schema.String.check(
   Schema.isPattern(/^[A-Za-z0-9_-]+$/),
-  Schema.isMaxLength(64)
+  Schema.isMaxLength(maximumOpenAiToolNameLength)
 ).pipe(Schema.brand("OpenAiToolName"));
 export type OpenAiToolName = typeof OpenAiToolName.Type;
 
@@ -93,7 +101,10 @@ const confirmationGuidance = (agentConfirmation: AgentConfirmation): string =>
 export const decodeAgentOperationInput = ({
   binding,
   input,
-}: Readonly<{ binding: AgentOperationBinding; input: unknown }>) =>
+}: Readonly<{
+  binding: AgentOperationBinding;
+  input: unknown;
+}>): Effect.Effect<unknown, Schema.SchemaError> =>
   Schema.decodeUnknownEffect(binding.parameters)(input);
 
 const tools = agentOperationBindings.map((binding) =>
@@ -146,7 +157,13 @@ const callOperation = (
  * Binds the derived toolkit to a turn-scoped AgentToken. Each handler restores
  * the canonical id and calls the generated HTTP client through AgentAuthorization.
  */
-export const makeAgentToolkit = (bearer: AgentBearerToken) =>
+export const makeAgentToolkit = (
+  bearer: AgentBearerToken
+): Effect.Effect<
+  Toolkit.WithHandler<typeof AgentToolkit.tools>,
+  never,
+  HttpClient.HttpClient | Scope.Scope
+> =>
   Effect.gen(function* () {
     const baseUrl = yield* CanonicalApiBaseUrl;
     const middlewareContext = yield* Layer.build(makeAgentAuthorizationClientLive(bearer));
@@ -158,7 +175,7 @@ export const makeAgentToolkit = (bearer: AgentBearerToken) =>
     const handlers = Object.fromEntries(
       agentOperationBindings.map((binding) => [
         binding.wireName,
-        (input: unknown) =>
+        (input: unknown): Effect.Effect<unknown, object | Schema.SchemaError> =>
           decodeAgentOperationInput({ binding, input }).pipe(
             Effect.flatMap((decoded) => callOperation(client, binding, decoded))
           ),

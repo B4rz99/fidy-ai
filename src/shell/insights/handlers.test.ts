@@ -1,5 +1,15 @@
 import { expect, layer } from "@effect/vitest";
-import { BigDecimal, Context, DateTime, Effect, Equal, Layer, Result, Schema } from "effect";
+import {
+  BigDecimal,
+  Context,
+  DateTime,
+  Effect,
+  Equal,
+  Layer,
+  Option,
+  Result,
+  Schema,
+} from "effect";
 import { HttpBody, HttpClient } from "effect/unstable/http";
 import { AgentTokenId } from "~/core/tokens/reference";
 import { IanaTimeZone } from "~/core/_shared/context";
@@ -9,9 +19,9 @@ import { defaultUserId, seedConsentedAgentIdentity } from "~/shell/db/developmen
 import { ValidationFailed } from "~/shell/_shared/errors";
 import { type SuggestedOperation } from "~/shell/_shared/response";
 import {
+  type ApiClient,
   ApiHarness,
   ApiHarnessClient,
-  type ApiClient,
   headersFor,
   makeApiClientLive,
 } from "~/shell/testing/api-harness";
@@ -20,7 +30,10 @@ import { truncateInsights, weeklySummaryInput } from "./fixtures";
 import { generateInsightEvent } from "./repo";
 
 const cop = Currency.make("COP");
-const toolNames = (next: ReadonlyArray<SuggestedOperation>) => next.map(({ tool }) => tool);
+const toolNames = (next: ReadonlyArray<SuggestedOperation>): ReadonlyArray<string> =>
+  next.map(({ tool }) => tool);
+const toolArgs = (next: ReadonlyArray<SuggestedOperation>): ReadonlyArray<Option.Option<unknown>> =>
+  next.map((suggestion) => ("args" in suggestion ? suggestion.args : Option.none()));
 const isValidationFailed = Schema.is(ValidationFailed);
 
 const generateWeeklySummary = generateInsightEvent(defaultUserId, weeklySummaryInput());
@@ -53,10 +66,10 @@ layer(InsightsHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           "insights.markInsightRead",
           "insights.dismissInsight",
         ]);
-        expect(listed.next.map(({ args }) => args)).toEqual([
-          { params: { id: generated.id } },
-          { params: { id: generated.id } },
-          { params: { id: generated.id } },
+        expect(toolArgs(listed.next)).toEqual([
+          Option.some({ params: { id: generated.id } }),
+          Option.some({ params: { id: generated.id } }),
+          Option.some({ params: { id: generated.id } }),
         ]);
       })
     );

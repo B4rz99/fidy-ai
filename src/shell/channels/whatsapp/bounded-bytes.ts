@@ -1,5 +1,7 @@
 /** Collects byte chunks up to a fixed total and materializes their exact concatenation. */
-export const makeBoundedBytes = (maximumBytes: number) => {
+export const makeBoundedBytes = (
+  maximumBytes: number
+): { append(chunk: Uint8Array): boolean; materialize(): Uint8Array } => {
   const chunks: Array<Uint8Array> = [];
   let size = 0;
 

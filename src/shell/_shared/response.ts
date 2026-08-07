@@ -1,12 +1,14 @@
 import * as Arr from "effect/Array";
 import { Option, Schema } from "effect";
-import { getBoundOperationCatalog, type CatalogOperation } from "./operation-catalog";
+import { type CatalogOperation, getBoundOperationCatalog } from "./operation-catalog";
 
 const englishSentenceSegmenter = new Intl.Segmenter("en", { granularity: "sentence" });
 
+const maximumSuggestedOperationHintLength = 140;
+
 const SuggestedOperationHint = Schema.NonEmptyString.check(
   Schema.isTrimmed(),
-  Schema.isMaxLength(140),
+  Schema.isMaxLength(maximumSuggestedOperationHintLength),
   Schema.makeFilter((hint) =>
     /[.!?]$/u.test(hint) &&
     !/[\r\n]/u.test(hint) &&
@@ -26,11 +28,9 @@ const SuggestedOperationHint = Schema.NonEmptyString.check(
  * at compile time, and this reflected union strictly decodes the same pairing
  * at the untyped response boundary without introducing an API assembly cycle.
  */
-type SuggestedOperationValue = {
-  readonly tool: string;
-  readonly args?: unknown;
-  readonly hint: string;
-};
+type SuggestedOperationValue =
+  | { readonly tool: string; readonly hint: string }
+  | { readonly tool: string; readonly args: Option.Option<unknown>; readonly hint: string };
 
 const suggestedOperationMember = (
   operation: CatalogOperation
@@ -46,11 +46,13 @@ const suggestedOperationMember = (
     onSome: (partialInput) =>
       Schema.Struct({
         tool,
-        args: Schema.optionalKey(partialInput).annotate({
-          description:
-            "Arguments already worked out for that call. Partial by design: merge them into the " +
-            "operation's own input rather than sending them as the whole of it.",
-        }),
+        args: Schema.OptionFromOptionalKey(
+          partialInput.annotate({
+            description:
+              "Arguments already worked out for that call. Partial by design: merge them into the " +
+              "operation's own input rather than sending them as the whole of it.",
+          })
+        ),
         hint: SuggestedOperationHint,
       }),
   });
@@ -91,7 +93,9 @@ export const NextOperations = Schema.Array(SuggestedOperation)
  * The universal success response. Every canonical operation's success schema
  * is built with this combinator — top-level only, no per-operation opt-out.
  */
-export const OperationResponse = <S extends Schema.Top>(data: S) =>
+export const OperationResponse = <Data extends Schema.Top>(
+  data: Data
+): Schema.Struct<{ readonly data: Data; readonly next: typeof NextOperations }> =>
   Schema.Struct({
     data,
     next: NextOperations,

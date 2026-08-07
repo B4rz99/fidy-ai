@@ -1,5 +1,8 @@
 import { Schema } from "effect";
 
+const maximumBusinessPortfolioIdLength = 128;
+const maximumWhatsAppUsernameLength = 256;
+
 /**
  * The identity every slice references when it needs to say whose data this is.
  *
@@ -31,7 +34,7 @@ export type E164PhoneNumber = typeof E164PhoneNumber.Type;
  */
 export const WhatsAppBusinessPortfolioId = Schema.NonEmptyString.check(
   Schema.isTrimmed(),
-  Schema.isMaxLength(128)
+  Schema.isMaxLength(maximumBusinessPortfolioIdLength)
 ).pipe(Schema.brand("WhatsAppBusinessPortfolioId"));
 export type WhatsAppBusinessPortfolioId = typeof WhatsAppBusinessPortfolioId.Type;
 
@@ -60,7 +63,7 @@ export type WhatsAppParentBusinessScopedUserId = typeof WhatsAppParentBusinessSc
  */
 export const WhatsAppUsername = Schema.NonEmptyString.check(
   Schema.isTrimmed(),
-  Schema.isMaxLength(256)
+  Schema.isMaxLength(maximumWhatsAppUsernameLength)
 ).pipe(Schema.brand("WhatsAppUsername"));
 export type WhatsAppUsername = typeof WhatsAppUsername.Type;
 

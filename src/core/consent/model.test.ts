@@ -7,7 +7,20 @@ import {
 } from "~/core/identity/reference";
 import { ConsentRecord, DisclosureSnapshot, PendingConsentExchange } from "./model";
 
-const makeDisclosure = (overrides: Readonly<Record<string, unknown>> = {}) => ({
+const makeDisclosure = (
+  overrides: Readonly<Record<string, unknown>> = {}
+): {
+  serviceMarket: string;
+  locale: string;
+  revision: string;
+  contentSha256: string;
+  text: string;
+  policy: { publicUrl: string; revision: string; contentSha256: string };
+  purposes: string[];
+  dataCategories: string[];
+  duration: string;
+  revocationMethod: string;
+} => ({
   serviceMarket: "CO",
   locale: "es-CO",
   revision: "onboarding-2026-01",
@@ -25,7 +38,9 @@ const makeDisclosure = (overrides: Readonly<Record<string, unknown>> = {}) => ({
   ...overrides,
 });
 
-const makeEvidence = (providerMessageId: string) => ({
+const makeEvidence = (
+  providerMessageId: string
+): { channel: string; provider: string; providerMessageId: string } => ({
   channel: "whatsapp",
   provider: "kapso",
   providerMessageId,

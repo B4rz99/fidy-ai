@@ -1,8 +1,13 @@
 import { expect, it } from "@effect/vitest";
 import { Effect, Result } from "effect";
+import type { InvalidInsightTransition } from "./errors";
+import type { InsightLifecycleState } from "./model";
 import { transitionInsight } from "./rules";
 
-const decide = (current: "pending" | "delivered" | "read" | "dismissed", target: typeof current) =>
+const decide = (
+  current: "pending" | "delivered" | "read" | "dismissed",
+  target: typeof current
+): Result.Result<InsightLifecycleState, InvalidInsightTransition> =>
   Effect.runSync(Effect.result(transitionInsight({ current, target })));
 
 it("moves a pending InsightEvent to delivered", () => {

@@ -4,17 +4,17 @@ import { HttpApiBuilder } from "effect/unstable/httpapi";
 import { type UserId } from "~/core/identity/reference";
 import { makeDashboardCatalog, makeDefaultDashboard } from "~/core/dashboard/catalog";
 import {
-  collectDashboardCategoryReferences,
   type DashboardCategoryReference,
   type DashboardDocument,
   type DashboardEdit,
+  collectDashboardCategoryReferences,
 } from "~/core/dashboard/model";
 import { applyDashboardEdit } from "~/core/dashboard/rules";
 import { resolveCaller } from "~/shell/_shared/authz";
 import { FidyApi } from "~/shell/api";
 import { categoryIds } from "~/core/categories/taxonomy";
 import { findCategory } from "~/shell/categories/repo";
-import { DashboardCategoryNotFound, toApiFailure } from "./errors";
+import { type DashboardApiFailure, DashboardCategoryNotFound, toApiFailure } from "./errors";
 import {
   findDashboard,
   generateDashboardWidgetId,
@@ -27,7 +27,9 @@ const dashboardCatalog = makeDashboardCatalog({
   restaurantCategoryId: categoryIds.restaurantes,
 });
 
-const loadOrCreateDashboard = (userId: UserId) =>
+const loadOrCreateDashboard = (
+  userId: UserId
+): Effect.Effect<DashboardDocument, never, SqlClient.SqlClient> =>
   Effect.gen(function* () {
     const found = yield* findDashboard(userId);
     if (Option.isSome(found)) {
@@ -52,7 +54,10 @@ const resolveCategoryReferencePath = (
     })
   );
 
-const validateCategoryReferences = (document: DashboardDocument, edit: Readonly<DashboardEdit>) =>
+const validateCategoryReferences = (
+  document: DashboardDocument,
+  edit: Readonly<DashboardEdit>
+): Effect.Effect<void, DashboardCategoryNotFound, SqlClient.SqlClient> =>
   Effect.forEach(
     collectDashboardCategoryReferences(document),
     (reference) =>
@@ -70,7 +75,9 @@ const validateCategoryReferences = (document: DashboardDocument, edit: Readonly<
     { discard: true }
   );
 
-const getDashboard = (userId: UserId) =>
+const getDashboard = (
+  userId: UserId
+): Effect.Effect<DashboardDocument, never, SqlClient.SqlClient> =>
   Effect.flatMap(SqlClient.SqlClient, (sql) =>
     sql.withTransaction(
       Effect.gen(function* () {
@@ -80,7 +87,10 @@ const getDashboard = (userId: UserId) =>
     )
   ).pipe(Effect.catchTag("SqlError", Effect.die));
 
-const applyEdit = (input: { readonly userId: UserId; readonly edit: DashboardEdit }) =>
+const applyEdit = (input: {
+  readonly userId: UserId;
+  readonly edit: DashboardEdit;
+}): Effect.Effect<DashboardDocument, DashboardApiFailure, SqlClient.SqlClient> =>
   Effect.flatMap(SqlClient.SqlClient, (sql) =>
     sql.withTransaction(
       Effect.gen(function* () {

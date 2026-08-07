@@ -1,22 +1,17 @@
 import { Effect } from "effect";
 import { SqlClient } from "effect/unstable/sql";
 
-/**
- * Replaces the unreleased phone-authority WhatsApp schema with portfolio-scoped BSUID authority.
- * Existing pre-launch associations, pending exchanges, windows, queued jobs, and turn claims are
- * deleted because they were admitted without an authenticated BSUID; User records and other
- * User-owned data remain intact. The migration also replaces the privileged resolver and dies on
- * schema, privilege, or persistence failures.
- */
-export const whatsappBsuidIdentity = Effect.gen(function* () {
+const discardPhoneAuthorityState = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
-
   yield* sql`DELETE FROM whatsapp_inbound_jobs`;
   yield* sql`DELETE FROM whatsapp_turn_claims`;
   yield* sql`DELETE FROM whatsapp_conversation_windows`;
   yield* sql`DELETE FROM pending_consent_exchanges`;
   yield* sql`DELETE FROM whatsapp_identities`;
+});
 
+const keyIdentitiesByBsuid = Effect.gen(function* () {
+  const sql = yield* SqlClient.SqlClient;
   yield* sql`
     ALTER TABLE whatsapp_identities
       ADD COLUMN business_portfolio_id text,
@@ -41,6 +36,10 @@ export const whatsappBsuidIdentity = Effect.gen(function* () {
       ALTER COLUMN business_portfolio_id SET NOT NULL,
       ALTER COLUMN business_scoped_user_id SET NOT NULL
   `;
+});
+
+const keyPendingExchangesByBsuid = Effect.gen(function* () {
+  const sql = yield* SqlClient.SqlClient;
   yield* sql`
     ALTER TABLE pending_consent_exchanges
       ADD COLUMN business_portfolio_id text,
@@ -57,7 +56,10 @@ export const whatsappBsuidIdentity = Effect.gen(function* () {
       ALTER COLUMN business_portfolio_id SET NOT NULL,
       ALTER COLUMN business_scoped_user_id SET NOT NULL
   `;
+});
 
+const keyConversationWindowsByBsuid = Effect.gen(function* () {
+  const sql = yield* SqlClient.SqlClient;
   yield* sql`
     ALTER TABLE whatsapp_conversation_windows
       ADD COLUMN business_portfolio_id text,
@@ -68,7 +70,10 @@ export const whatsappBsuidIdentity = Effect.gen(function* () {
       ALTER COLUMN business_portfolio_id SET NOT NULL,
       ALTER COLUMN business_scoped_user_id SET NOT NULL
   `;
+});
 
+const createIdentityChangeEvidence = Effect.gen(function* () {
+  const sql = yield* SqlClient.SqlClient;
   yield* sql`
     CREATE TABLE whatsapp_identity_change_evidence (
       provider_message_id text PRIMARY KEY,
@@ -90,7 +95,10 @@ export const whatsappBsuidIdentity = Effect.gen(function* () {
   `;
   yield* sql`GRANT SELECT, INSERT ON whatsapp_identity_change_evidence TO fidy_gateway`;
   yield* sql`GRANT UPDATE ON whatsapp_identities TO fidy_gateway`;
+});
 
+const replaceWhatsAppUserResolver = Effect.gen(function* () {
+  const sql = yield* SqlClient.SqlClient;
   yield* sql`DROP FUNCTION fidy_resolve_whatsapp_user(text)`;
   yield* sql`
     CREATE FUNCTION fidy_resolve_whatsapp_user(
@@ -112,7 +120,10 @@ export const whatsappBsuidIdentity = Effect.gen(function* () {
     REVOKE ALL ON FUNCTION fidy_resolve_whatsapp_user(text, text) FROM PUBLIC;
     GRANT EXECUTE ON FUNCTION fidy_resolve_whatsapp_user(text, text) TO fidy_runtime
   `;
+});
 
+const createIdentityReassociationGateway = Effect.gen(function* () {
+  const sql = yield* SqlClient.SqlClient;
   yield* sql`
     CREATE FUNCTION fidy_reassociate_whatsapp_user(
       requested_business_portfolio_id text,
@@ -233,4 +244,21 @@ export const whatsappBsuidIdentity = Effect.gen(function* () {
       text, text, text, text, text, text, timestamptz, text
     ) TO fidy_runtime
   `;
+});
+
+/**
+ * Replaces the unreleased phone-authority WhatsApp schema with portfolio-scoped BSUID authority.
+ * Existing pre-launch associations, pending exchanges, windows, queued jobs, and turn claims are
+ * deleted because they were admitted without an authenticated BSUID; User records and other
+ * User-owned data remain intact. The migration also replaces the privileged resolver and dies on
+ * schema, privilege, or persistence failures.
+ */
+export const whatsappBsuidIdentity = Effect.gen(function* () {
+  yield* discardPhoneAuthorityState;
+  yield* keyIdentitiesByBsuid;
+  yield* keyPendingExchangesByBsuid;
+  yield* keyConversationWindowsByBsuid;
+  yield* createIdentityChangeEvidence;
+  yield* replaceWhatsAppUserResolver;
+  yield* createIdentityReassociationGateway;
 }).pipe(Effect.asVoid);

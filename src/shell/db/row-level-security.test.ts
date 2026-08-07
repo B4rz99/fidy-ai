@@ -1,10 +1,10 @@
 import { expect, layer } from "@effect/vitest";
-import { Effect, Exit, Schema } from "effect";
+import { Effect, Exit, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import { UserId } from "~/core/identity/reference";
 import { TransactionId } from "~/core/transactions/model";
 import { ApiHarness } from "~/shell/testing/api-harness";
-import { assertRuntimeAuthority, MigrationSqlClient } from "./client";
+import { MigrationSqlClient, assertRuntimeAuthority } from "./client";
 import { userTableNames } from "./user-tables";
 import { withUserTransaction } from "./user-transaction";
 
@@ -512,13 +512,13 @@ const deniedInsertProbes = (sql: SqlClient.SqlClient) =>
   ] as const;
 
 const probeDeniedInserts = Effect.fn("probeDeniedRlsInserts")(function* (
-  userId: UserId | undefined
+  userId: Option.Option<UserId>
 ) {
   const sql = yield* SqlClient.SqlClient;
   return yield* Effect.forEach(deniedInsertProbes(sql), ({ tableName, insert }) =>
     Effect.gen(function* () {
       const result = yield* Effect.exit(
-        userId === undefined ? insert : withUserTransaction(userId, insert)
+        Option.isNone(userId) ? insert : withUserTransaction(userId.value, insert)
       );
       return { tableName, result };
     })
@@ -753,8 +753,8 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           )
         ).toBe(true);
 
-        const missingContextInserts = yield* probeDeniedInserts(undefined);
-        const strangerInserts = yield* probeDeniedInserts(policyStranger);
+        const missingContextInserts = yield* probeDeniedInserts(Option.none());
+        const strangerInserts = yield* probeDeniedInserts(Option.some(policyStranger));
         for (const { tableName, result } of [...missingContextInserts, ...strangerInserts]) {
           expect(result._tag, tableName).toBe("Failure");
         }

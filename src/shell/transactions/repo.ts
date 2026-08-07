@@ -1,7 +1,7 @@
 import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import { CategoryId } from "~/core/categories/reference";
-import { encodeMoneyAmount, Money } from "~/core/_shared/money";
+import { Money, encodeMoneyAmount } from "~/core/_shared/money";
 import { UserId } from "~/core/identity/reference";
 import { normalizeCategoryKeyword } from "~/core/categories/rules";
 import { withUserTransaction } from "~/shell/db/user-transaction";
@@ -28,12 +28,14 @@ const TransactionFlatRow = Schema.Struct({
 });
 
 const decodeTransaction = Schema.decodeUnknownEffect(Transaction);
-const counterpartyFact = (counterparty: Option.Option<Counterparty>) =>
+const counterpartyFact = (
+  counterparty: Option.Option<Counterparty>
+): {} | { counterparty: string } =>
   Option.match(counterparty, {
     onNone: () => ({}),
     onSome: (value) => ({ counterparty: value }),
   });
-const notesFact = (notes: Option.Option<string>) =>
+const notesFact = (notes: Option.Option<string>): {} | { notes: string } =>
   Option.match(notes, {
     onNone: () => ({}),
     onSome: (value) => ({ notes: value }),
@@ -44,7 +46,7 @@ const transactionFromRow = ({
   currency,
   notes,
   ...transaction
-}: typeof TransactionFlatRow.Type) =>
+}: typeof TransactionFlatRow.Type): Effect.Effect<Transaction, Schema.SchemaError> =>
   decodeTransaction({
     ...transaction,
     ...counterpartyFact(counterparty),
@@ -72,7 +74,10 @@ const containsCounterparty = (counterparty: Option.Option<string>, normalized: s
 const transactionColumns = `id, amount, currency, counterparty, direction,
   category_id AS "categoryId", notes, occurred_at AS "occurredAt", created_at AS "createdAt"`;
 
-const writeRow = (userId: UserId, input: UpdateTransactionInput) => ({
+const writeRow = (
+  userId: UserId,
+  input: UpdateTransactionInput
+): typeof TransactionWriteRow.Type => ({
   userId,
   ...input.money,
   counterparty: input.counterparty,
@@ -250,7 +255,9 @@ const SourceAttestationRow = Schema.Struct({
 });
 
 const decodeSourceAttestation = Schema.decodeUnknownEffect(SourceAttestation);
-const sourceAttestationFromRow = (source: typeof SourceAttestationRow.Type) => {
+const sourceAttestationFromRow = (
+  source: typeof SourceAttestationRow.Type
+): Effect.Effect<SourceAttestation, Schema.SchemaError> => {
   const { sourceChannel, sourceProvider, ...row } = source;
   return decodeSourceAttestation({
     ...row,

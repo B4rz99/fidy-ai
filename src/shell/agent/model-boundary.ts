@@ -8,6 +8,11 @@ import { TranscriptText } from "~/core/transcript/model";
 import type { TranscriptWindowEntry } from "~/core/transcript/rules";
 import { encodeOpenAiToolName } from "./toolkit";
 
+const minimumPaymentCardDigits = 13;
+const maximumPaymentCardDigits = 19;
+const largestSingleDigit = 9;
+const luhnChecksumModulus = 10;
+
 /** Stable channel-neutral response used when sensitive chat input is rejected. */
 export const credentialRejectedReply = TranscriptText.make(
   "No envíes credenciales ni tokens por chat. Este mensaje no fue guardado ni procesado."
@@ -87,16 +92,22 @@ const hasValidPaymentCardNumber = (text: string): boolean => {
   const candidates = text.replaceAll(identifierPattern, "").match(/(?:\d[\s./-]*){13,}/gu) ?? [];
   return candidates.some((candidate) => {
     const digits = candidate.replaceAll(/\D/gu, "");
-    if (digits.length < 13 || digits.length > 19 || /^(\d)\1+$/u.test(digits)) return false;
+    if (
+      digits.length < minimumPaymentCardDigits ||
+      digits.length > maximumPaymentCardDigits ||
+      /^(\d)\1+$/u.test(digits)
+    ) {
+      return false;
+    }
     let sum = 0;
     let doubleDigit = false;
     for (let index = digits.length - 1; index >= 0; index -= 1) {
       const digit = Number(digits[index]);
       const product = doubleDigit ? digit * 2 : digit;
-      sum += product > 9 ? product - 9 : product;
+      sum += product > largestSingleDigit ? product - largestSingleDigit : product;
       doubleDigit = !doubleDigit;
     }
-    return sum % 10 === 0;
+    return sum % luhnChecksumModulus === 0;
   });
 };
 
@@ -121,7 +132,7 @@ export const systemPrompt = ({
 }: {
   readonly user: Pick<User, "serviceMarket" | "locale" | "timeZone">;
   readonly occurredAt: DateTime.Utc;
-}) =>
+}): string =>
   `Eres Fidy, un asistente de finanzas personales. ` +
   `El contexto explícito del Usuario es ServiceMarket ${serviceMarket}, locale ${locale} ` +
   `y zona IANA ${timeZone}. El turno comenzó en ${DateTime.formatIso(occurredAt)}. ` +

@@ -1,10 +1,10 @@
-import { Crypto, DateTime, Effect, Option } from "effect";
+import { Crypto, DateTime, Effect, Option, Schema } from "effect";
 import { SqlClient } from "effect/unstable/sql";
-import type { ProviderMessageEvidence } from "~/core/_shared/provider-message-evidence";
+import { ProviderMessageEvidence } from "~/core/_shared/provider-message-evidence";
 import {
+  type ConsentInboundContent,
   ConsentRecord,
   ConsentRecordId,
-  type ConsentInboundContent,
   type DisclosureSnapshot,
   type PendingConsentExchange,
   PendingConsentExchangeId,
@@ -23,7 +23,7 @@ import {
   insertWhatsAppIdentity,
   resolveWhatsAppCaller,
 } from "~/shell/identity/repo";
-import { currentDisclosure, CURRENT_DISCLOSURE_TEXT } from "./current-disclosure";
+import { CURRENT_DISCLOSURE_TEXT, currentDisclosure } from "./current-disclosure";
 import {
   appendConsentRecord,
   findConsentRecordByDecisionMessage,
@@ -90,7 +90,7 @@ const beginPendingExchange = Effect.fn("beginPendingConsentExchange")(function* 
 
 const isOnboardingGrant = (record: ConsentRecord): boolean =>
   record.event._tag === "Granted" && record.event.grant._tag === "Onboarding";
-const isCurrentDisclosure = (candidate: DisclosureSnapshot, current: DisclosureSnapshot) =>
+const isCurrentDisclosure = (candidate: DisclosureSnapshot, current: DisclosureSnapshot): boolean =>
   candidate.revision === current.revision &&
   candidate.contentSha256 === current.contentSha256 &&
   candidate.policy.revision === current.policy.revision &&
@@ -101,6 +101,36 @@ const acceptedOutcome = (userId: UserId): ConsentGateOutcome => ({
   userId,
   text: "Autorización registrada. Tu cuenta está lista; envía de nuevo lo que quieras registrar.",
 });
+
+const decisionBelongsToAnotherIdentity: ConsentGateOutcome = {
+  _tag: "ClarifyDecision",
+  text: "Esa decisión ya fue registrada para otra identidad.",
+};
+
+const earlierDecisionNoLongerCurrent: ConsentGateOutcome = {
+  _tag: "ClarifyDecision",
+  text: "La autorización anterior ya no está vigente. Responde Acepto en un mensaje nuevo.",
+};
+
+const decisionRepeatsInitiatingMessage: ConsentGateOutcome = {
+  _tag: "ClarifyDecision",
+  text: "Para autorizar, envía una decisión nueva después de recibir la información.",
+};
+
+const decisionPrecedesDisclosure: ConsentGateOutcome = {
+  _tag: "ClarifyDecision",
+  text: "Para autorizar, responde después de recibir la información de tratamiento.",
+};
+
+const undecidedReply: ConsentGateOutcome = {
+  _tag: "ClarifyDecision",
+  text: "Para autorizar responde “Acepto”; para continuar sin crear cuenta responde “No acepto”.",
+};
+
+const declinedOutcome: ConsentGateOutcome = {
+  _tag: "Declined",
+  text: "Entendido. No creé una cuenta ni conservé tu información financiera.",
+};
 
 const acceptPending = Effect.fn("acceptPendingConsent")(function* (
   input: ConsentGateInput,
@@ -136,6 +166,78 @@ const acceptPending = Effect.fn("acceptPendingConsent")(function* (
   return acceptedOutcome(userId);
 });
 
+const settledReplayOutcome = Effect.fn("settledConsentReplayOutcome")(function* ({
+  caller,
+  replay,
+  disclosure,
+}: Readonly<{
+  caller: Option.Option<UserId>;
+  replay: ConsentRecord;
+  disclosure: DisclosureSnapshot;
+}>) {
+  const belongsToCaller = Option.isSome(caller) && caller.value === replay.subjectUserId;
+  if (!belongsToCaller || !isOnboardingGrant(replay)) {
+    return Option.some(decisionBelongsToAnotherIdentity);
+  }
+  if (!isCurrentDisclosure(replay.disclosure, disclosure)) return Option.none();
+  yield* lockConsentSubject(replay.subjectUserId);
+  if (yield* hasCurrentOnboardingConsent(replay.subjectUserId)) {
+    return Option.some(acceptedOutcome(replay.subjectUserId));
+  }
+  return Option.none();
+});
+
+const usablePendingExchange = Effect.fn("usablePendingConsentExchange")(function* ({
+  caller,
+  disclosure,
+  now,
+}: Readonly<{
+  caller: WhatsAppCaller;
+  disclosure: DisclosureSnapshot;
+  now: DateTime.Utc;
+}>) {
+  const found = yield* findPendingConsentExchange(caller);
+  if (Option.isNone(found)) return Option.none();
+
+  const pending = found.value;
+  if (!isCurrentDisclosure(pending.disclosure, disclosure)) {
+    yield* removePendingConsentExchange(pending.id);
+    return Option.none();
+  }
+  if (yield* hasPendingConsentExpired({ pending, now })) {
+    yield* removePendingConsentExchange(pending.id);
+    return Option.none();
+  }
+  return Option.some(pending);
+});
+
+const isSameProviderMessage = Schema.toEquivalence(ProviderMessageEvidence);
+
+const decideAwaitedConsent = Effect.fn("decideAwaitedConsent")(function* ({
+  input,
+  pending,
+  replay,
+}: Readonly<{
+  input: ConsentGateInput;
+  pending: Extract<PendingConsentExchange, { readonly _tag: "AwaitingDecision" }>;
+  replay: Option.Option<ConsentRecord>;
+}>) {
+  if (Option.isSome(replay)) return earlierDecisionNoLongerCurrent;
+  if (isSameProviderMessage(input.message, pending.initiatingMessage)) {
+    return decisionRepeatsInitiatingMessage;
+  }
+  if (DateTime.Order(input.receivedAt, pending.disclosedAt) < 0) return decisionPrecedesDisclosure;
+
+  const decision = yield* decideConsentReply(input.content);
+  if (decision._tag === "Clarify") return undecidedReply;
+  if (decision._tag === "Declined") {
+    yield* removePendingConsentExchange(pending.id);
+    return declinedOutcome;
+  }
+
+  return yield* acceptPending(input, pending);
+});
+
 /**
  * Evaluates one inbound turn serialized by its Business Portfolio and BSUID reference. The
  * function stores no initiating content, deletes temporary state on all terminal paths, and never
@@ -154,40 +256,22 @@ export const evaluateConsentGate = Effect.fn("evaluateConsentGate")(function* (
         const disclosure = yield* currentDisclosure;
         const replay = yield* findConsentRecordByDecisionMessage(input.message);
         if (Option.isSome(replay)) {
-          const belongsToCaller =
-            Option.isSome(caller) && caller.value === replay.value.subjectUserId;
-          if (!belongsToCaller || !isOnboardingGrant(replay.value)) {
-            return {
-              _tag: "ClarifyDecision",
-              text: "Esa decisión ya fue registrada para otra identidad.",
-            } as const;
-          }
-          if (isCurrentDisclosure(replay.value.disclosure, disclosure)) {
-            yield* lockConsentSubject(replay.value.subjectUserId);
-            if (yield* hasCurrentOnboardingConsent(replay.value.subjectUserId)) {
-              return acceptedOutcome(replay.value.subjectUserId);
-            }
-          }
+          const settled = yield* settledReplayOutcome({ caller, replay: replay.value, disclosure });
+          if (Option.isSome(settled)) return settled.value;
         }
 
         if (Option.isSome(caller) && (yield* hasCurrentOnboardingConsent(caller.value))) {
           return { _tag: "Proceed", userId: caller.value } as const;
         }
 
-        const foundPending = yield* findPendingConsentExchange(input.caller);
-        if (Option.isNone(foundPending)) {
-          return yield* beginPendingExchange(input);
-        }
+        const usable = yield* usablePendingExchange({
+          caller: input.caller,
+          disclosure,
+          now: input.receivedAt,
+        });
+        if (Option.isNone(usable)) return yield* beginPendingExchange(input);
 
-        const pending = foundPending.value;
-        if (!isCurrentDisclosure(pending.disclosure, disclosure)) {
-          yield* removePendingConsentExchange(pending.id);
-          return yield* beginPendingExchange(input);
-        }
-        if (yield* hasPendingConsentExpired({ pending, now: input.receivedAt })) {
-          yield* removePendingConsentExchange(pending.id);
-          return yield* beginPendingExchange(input);
-        }
+        const pending = usable.value;
         if (pending._tag === "AwaitingDisclosureDelivery") {
           return {
             _tag: "AwaitingDisclosureDelivery",
@@ -195,47 +279,7 @@ export const evaluateConsentGate = Effect.fn("evaluateConsentGate")(function* (
           } as const;
         }
 
-        if (Option.isSome(replay)) {
-          return {
-            _tag: "ClarifyDecision",
-            text: "La autorización anterior ya no está vigente. Responde Acepto en un mensaje nuevo.",
-          } as const;
-        }
-
-        if (
-          input.message.channel === pending.initiatingMessage.channel &&
-          input.message.provider === pending.initiatingMessage.provider &&
-          input.message.providerMessageId === pending.initiatingMessage.providerMessageId
-        ) {
-          return {
-            _tag: "ClarifyDecision",
-            text: "Para autorizar, envía una decisión nueva después de recibir la información.",
-          } as const;
-        }
-
-        if (DateTime.Order(input.receivedAt, pending.disclosedAt) < 0) {
-          return {
-            _tag: "ClarifyDecision",
-            text: "Para autorizar, responde después de recibir la información de tratamiento.",
-          } as const;
-        }
-
-        const decision = yield* decideConsentReply(input.content);
-        if (decision._tag === "Clarify") {
-          return {
-            _tag: "ClarifyDecision",
-            text: "Para autorizar responde “Acepto”; para continuar sin crear cuenta responde “No acepto”.",
-          } as const;
-        }
-        if (decision._tag === "Declined") {
-          yield* removePendingConsentExchange(pending.id);
-          return {
-            _tag: "Declined",
-            text: "Entendido. No creé una cuenta ni conservé tu información financiera.",
-          } as const;
-        }
-
-        return yield* acceptPending(input, pending);
+        return yield* decideAwaitedConsent({ input, pending, replay });
       })
     )
     .pipe(Effect.catchTag("SqlError", Effect.die));

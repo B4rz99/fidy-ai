@@ -14,8 +14,8 @@ import {
   seedConsentedAgentIdentity,
 } from "~/shell/db/development-seed";
 import {
-  ApiHarness,
   type ApiClient,
+  ApiHarness,
   ApiHarnessClient,
   headersFor,
   makeApiClientLive,

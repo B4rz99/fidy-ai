@@ -1,4 +1,5 @@
 import {
+  type Cause,
   Context,
   Crypto,
   Data,
@@ -11,27 +12,28 @@ import {
   Stream,
   Struct,
 } from "effect";
-import { LanguageModel } from "effect/unstable/ai";
+import { type AiError, LanguageModel, type Tool } from "effect/unstable/ai";
 import type { HttpClient } from "effect/unstable/http";
 import { SqlClient } from "effect/unstable/sql";
 import type { User } from "~/core/identity/model";
 import type { UserId } from "~/core/identity/reference";
 import {
-  selectTranscriptWindow,
   TranscriptWindowCharacterLimit,
+  type TranscriptWindowEntry,
   TranscriptWindowTurnLimit,
+  selectTranscriptWindow,
 } from "~/core/transcript/rules";
 import {
   AgentIteration,
   AssistantTranscriptEntry,
   CanonicalToolCallEntry,
-  CanonicalToolResultEntry,
   type CanonicalToolOutcome,
+  CanonicalToolResultEntry,
+  ToolCallId,
   type TranscriptEntry,
   TranscriptEntryId,
   TranscriptText,
   TranscriptTurnId,
-  ToolCallId,
   UserTranscriptEntry,
 } from "~/core/transcript/model";
 import { ValidationFailed } from "~/shell/_shared/errors";
@@ -61,6 +63,10 @@ import {
   makeAgentToolkit,
 } from "./toolkit";
 
+const minimumTranscriptWindowCharacters = 1_000;
+const defaultTranscriptWindowTurns = 12;
+const defaultTranscriptWindowCharacters = 32_000;
+
 /** Resource and context bounds applied independently to every hosted turn. */
 export const AgentLimits = Schema.Struct({
   maxIterations: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 32 })),
@@ -70,7 +76,7 @@ export const AgentLimits = Schema.Struct({
   ),
   maxTranscriptTurns: TranscriptWindowTurnLimit,
   maxTranscriptCharacters: TranscriptWindowCharacterLimit.check(
-    Schema.isGreaterThanOrEqualTo(1_000)
+    Schema.isGreaterThanOrEqualTo(minimumTranscriptWindowCharacters)
   ),
   maxModelRoundMillis: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 120_000 })),
 });
@@ -85,8 +91,10 @@ export const CurrentAgentLimits = Context.Reference<AgentLimits>(
         maxIterations: 6,
         maxToolCallsPerTurn: 12,
         maxToolResultCharacters: 32_000,
-        maxTranscriptTurns: TranscriptWindowTurnLimit.make(12),
-        maxTranscriptCharacters: TranscriptWindowCharacterLimit.make(32_000),
+        maxTranscriptTurns: TranscriptWindowTurnLimit.make(defaultTranscriptWindowTurns),
+        maxTranscriptCharacters: TranscriptWindowCharacterLimit.make(
+          defaultTranscriptWindowCharacters
+        ),
         maxModelRoundMillis: 30_000,
       }),
   }
@@ -157,7 +165,8 @@ const withCurrentConsent = <A, E, R>(
 const appendAuthorizedTranscript = (
   subjectUserId: UserId,
   entries: ReadonlyArray<TranscriptEntry>
-) => withCurrentConsent(subjectUserId, appendTranscriptEntries(subjectUserId, entries));
+): Effect.Effect<void, OnboardingConsentRequired, SqlClient.SqlClient> =>
+  withCurrentConsent(subjectUserId, appendTranscriptEntries(subjectUserId, entries));
 
 const appendAssistantTranscript = Effect.fn("AgentService.appendAssistantTranscript")(function* ({
   userId,
@@ -222,31 +231,36 @@ const malformedModelOutputFeedback =
   "The previous operation call was malformed and was not executed. Correct its arguments before retrying.";
 const CanonicalValidationFailure = ValidationFailed.mapFields(Struct.pick(["error"]));
 
-const toModelUnavailable = () => new ModelUnavailable();
-const decodeTranscriptText = (value: unknown) =>
+const toModelUnavailable = (): ModelUnavailable => new ModelUnavailable();
+const decodeTranscriptText = (value: unknown): Effect.Effect<TranscriptText, ModelUnavailable> =>
   Schema.decodeUnknownEffect(TranscriptText)(value).pipe(Effect.mapError(toModelUnavailable));
-const decodeTranscriptJson = (value: unknown) =>
+const decodeTranscriptJson = (value: unknown): Effect.Effect<Schema.Json, ModelUnavailable> =>
   Schema.decodeUnknownEffect(Schema.Json)(value).pipe(Effect.mapError(toModelUnavailable));
 const encodeTranscriptJson = (
   schema: Schema.Codec<unknown, Schema.Json, never, never>,
   value: unknown
-) =>
+): Effect.Effect<Schema.Json, ModelUnavailable> =>
   Schema.encodeUnknownEffect(schema)(value).pipe(
     Effect.flatMap(decodeTranscriptJson),
     Effect.mapError(toModelUnavailable)
   );
-const encodeAgentOperationInput = (binding: AgentOperationBinding, input: unknown) =>
+const encodeAgentOperationInput = (
+  binding: AgentOperationBinding,
+  input: unknown
+): Effect.Effect<Schema.Json, ModelUnavailable> =>
   decodeAgentOperationInput({ binding, input }).pipe(
     Effect.flatMap((decoded) => encodeTranscriptJson(binding.parameters, decoded)),
     Effect.mapError(toModelUnavailable)
   );
-const requireToolResult = function <A>(result: Option.Option<A>) {
+const requireToolResult = function <A>(
+  result: Option.Option<A>
+): Effect.Effect<never, ModelUnavailable> | Effect.Effect<A> {
   return Option.match(result, {
     onNone: () => Effect.fail(new ModelUnavailable()),
     onSome: (value) => Effect.succeed(value),
   });
 };
-const isTerminalToolResult = (result: { readonly preliminary: boolean }) =>
+const isTerminalToolResult = (result: { readonly preliminary: boolean }): boolean =>
   result.preliminary === false;
 const makeToolOutcome = (isFailure: boolean, result: Schema.Json): CanonicalToolOutcome => {
   if (!isFailure) return { _tag: "Succeeded", output: result };
@@ -277,90 +291,348 @@ const preparedReply = (
   assistantEntry: PreparedAgentReply["assistantEntry"]
 ): PreparedAgentReply => ({ reply, assistantEntry });
 
-const makeAgentService = Effect.gen(function* () {
-  const model = yield* LanguageModel.LanguageModel;
-  const crypto = yield* Crypto.Crypto;
-  const sqlClient = yield* SqlClient.SqlClient;
-  const generateCurrent = ({
-    includeMalformedOutputFeedback,
-    limits,
-    occurredAt,
-    toolkit,
-    turnId,
-    user,
+type AgentToolkitInstance = Effect.Success<ReturnType<typeof makeAgentToolkit>>;
+
+type AgentToolCall = Readonly<{
+  id: string;
+  name: Parameters<AgentToolkitInstance["handle"]>[0];
+  params: unknown;
+}>;
+
+type HostedTurn = Readonly<{
+  userId: UserId;
+  turnId: TranscriptTurnId;
+  user: User;
+  startedAt: DateTime.Utc;
+  limits: AgentLimits;
+  confirmation: Effect.Success<ReturnType<typeof makeTurnConfirmation>>;
+  toolkit: AgentToolkitInstance;
+}>;
+
+type RecordedCall = Readonly<{
+  binding: AgentOperationBinding;
+  iteration: AgentIteration;
+  toolCallId: ToolCallId;
+}>;
+
+type ToolCallOutcome =
+  | Readonly<{ _tag: "Recorded" }>
+  | Readonly<{ _tag: "ChallengeIssued"; challenge: TranscriptText }>
+  | Readonly<{ _tag: "TurnCompleted"; text: TranscriptText }>;
+
+type GenerationResponse =
+  | Readonly<{ _tag: "Completed"; text: TranscriptText }>
+  | Readonly<{ _tag: "Continued" }>;
+
+const recordedToolCall: ToolCallOutcome = { _tag: "Recorded" };
+const continuedGeneration: GenerationResponse = { _tag: "Continued" };
+
+const safeReplyText = (text: TranscriptText): TranscriptText =>
+  containsSensitiveChatValue(text) ? credentialRejectedReply : text;
+
+const toolCallOutcome = (
+  executed: Readonly<{ isFailure: boolean }>,
+  result: Schema.Json
+): CanonicalToolOutcome =>
+  containsSensitiveJson(result)
+    ? { _tag: "ToolOutputRejected", failure: sensitiveEntryRejected }
+    : makeToolOutcome(executed.isFailure, result);
+
+const completesTurn = (binding: AgentOperationBinding, outcome: CanonicalToolOutcome): boolean =>
+  binding.policy.requiredScope === "write" && outcome._tag === "Succeeded";
+
+const recordToolOutcome = Effect.fn("AgentService.recordToolOutcome")(function* (
+  turn: HostedTurn,
+  call: RecordedCall,
+  outcome: CanonicalToolOutcome
+) {
+  yield* appendAuthorizedTranscript(turn.userId, [
+    CanonicalToolResultEntry.make({
+      id: yield* makeEntryId,
+      turnId: turn.turnId,
+      iteration: call.iteration,
+      toolCallId: call.toolCallId,
+      operation: call.binding.operation,
+      outcome,
+      occurredAt: yield* DateTime.now,
+    }),
+  ]);
+});
+
+const recordToolCall = Effect.fn("AgentService.recordToolCall")(function* (
+  turn: HostedTurn,
+  call: RecordedCall,
+  input: Schema.Json
+) {
+  yield* appendAuthorizedTranscript(turn.userId, [
+    CanonicalToolCallEntry.make({
+      id: yield* makeEntryId,
+      turnId: turn.turnId,
+      iteration: call.iteration,
+      toolCallId: call.toolCallId,
+      operation: call.binding.operation,
+      input,
+      occurredAt: yield* DateTime.now,
+    }),
+  ]);
+});
+
+const runToolkitCall = (
+  turn: HostedTurn,
+  name: AgentToolCall["name"],
+  input: Schema.Json
+): Effect.Effect<
+  Tool.HandlerResult<AgentToolkitInstance["tools"][AgentToolCall["name"]]>,
+  ModelUnavailable
+> =>
+  turn.toolkit
+    .handle(name, input)
+    .pipe(
+      Stream.unwrap,
+      Stream.filter(isTerminalToolResult),
+      Stream.runLast,
+      Effect.flatMap(requireToolResult),
+      Effect.mapError(toModelUnavailable)
+    );
+
+const turnCompletedOutcome = (
+  turn: HostedTurn,
+  binding: AgentOperationBinding,
+  output: Schema.Json
+): ToolCallOutcome => ({
+  _tag: "TurnCompleted",
+  text: makeCompletedReply({ binding, output, turnStartedAt: turn.startedAt, user: turn.user }),
+});
+
+const executeAgentToolCall = Effect.fn("AgentService.executeToolCall")(function* (
+  turn: HostedTurn,
+  iteration: AgentIteration,
+  toolCall: AgentToolCall
+) {
+  const binding = yield* findAgentOperationBinding(toolCall.name).pipe(
+    Option.match({
+      onNone: () => Effect.fail(new ModelUnavailable()),
+      onSome: Effect.succeed,
+    })
+  );
+  const toolCallId = ToolCallId.make(toolCall.id);
+  const call: RecordedCall = { binding, iteration, toolCallId };
+  const encodedInput = yield* Effect.result(encodeAgentOperationInput(binding, toolCall.params));
+  const input = yield* Result.match(encodedInput, {
+    onFailure: () => decodeTranscriptJson(toolCall.params),
+    onSuccess: Effect.succeed,
+  });
+  if (containsSensitiveJson(input)) return yield* new ModelUnavailable();
+  yield* recordToolCall(turn, call, input);
+  if (Result.isFailure(encodedInput)) {
+    yield* recordToolOutcome(turn, call, {
+      _tag: "ToolInputRejected",
+      failure: malformedToolInput,
+    });
+    return recordedToolCall;
+  }
+
+  const confirmationDecision = yield* turn.confirmation.decide({ binding, input });
+  if (confirmationDecision._tag === "RequireConfirmation") {
+    yield* recordToolOutcome(turn, call, {
+      _tag: "ToolInputRejected",
+      failure: confirmationDecision.failure,
+    });
+    return { _tag: "ChallengeIssued", challenge: confirmationDecision.failure.challenge } as const;
+  }
+
+  const executed = yield* runToolkitCall(turn, toolCall.name, input);
+  const result = yield* decodeTranscriptJson(executed.encodedResult);
+  const outcome = toolCallOutcome(executed, result);
+  yield* recordToolOutcome(turn, call, outcome);
+  if (!completesTurn(binding, outcome)) return recordedToolCall;
+  return turnCompletedOutcome(turn, binding, result);
+});
+
+const respondToGeneration = Effect.fn("AgentService.respondToGeneration")(function* (
+  turn: HostedTurn,
+  iteration: AgentIteration,
+  generated: Readonly<{ text: unknown; toolCalls: ReadonlyArray<AgentToolCall> }>
+) {
+  if (generated.toolCalls.length === 0) {
+    const decodedText = yield* decodeTranscriptText(generated.text);
+    return { _tag: "Completed", text: safeReplyText(decodedText) } as const;
+  }
+
+  let pendingChallenge = Option.none<TranscriptText>();
+  for (const toolCall of generated.toolCalls) {
+    const outcome = yield* executeAgentToolCall(turn, iteration, toolCall);
+    if (outcome._tag === "TurnCompleted") return { _tag: "Completed", text: outcome.text } as const;
+    if (outcome._tag === "ChallengeIssued") pendingChallenge = Option.some(outcome.challenge);
+  }
+  return Option.match(pendingChallenge, {
+    onNone: (): GenerationResponse => continuedGeneration,
+    onSome: (challenge): GenerationResponse => ({ _tag: "Completed", text: challenge }),
+  });
+});
+
+const loadTranscriptWindow = (
+  userId: UserId,
+  turnId: TranscriptTurnId,
+  limits: AgentLimits
+): Effect.Effect<
+  ReadonlyArray<TranscriptWindowEntry>,
+  OnboardingConsentRequired,
+  SqlClient.SqlClient
+> =>
+  withCurrentConsent(
     userId,
-  }: Readonly<{
-    readonly includeMalformedOutputFeedback: boolean;
-    readonly limits: AgentLimits;
-    readonly occurredAt: DateTime.Utc;
-    readonly toolkit: Effect.Success<ReturnType<typeof makeAgentToolkit>>;
-    readonly turnId: TranscriptTurnId;
-    readonly user: Parameters<typeof systemPrompt>[0]["user"];
-    readonly userId: UserId;
-  }>) =>
-    Effect.gen(function* () {
-      const priorTurns =
+    Effect.all({
+      currentTranscript: listTranscriptTurnEntries(userId, turnId),
+      priorTurns:
         limits.maxTranscriptTurns === 1
           ? Effect.succeed([])
-          : listRecentTranscriptEntries(userId, limits.maxTranscriptTurns - 1);
-      const transcriptWindow = yield* withCurrentConsent(
-        userId,
-        Effect.all({
-          currentTranscript: listTranscriptTurnEntries(userId, turnId),
-          priorTurns,
-        }).pipe(
-          Effect.map(({ currentTranscript, priorTurns: prior }) =>
-            projectTranscriptForModel(
-              [...prior, ...currentTranscript],
-              limits.maxToolResultCharacters
-            )
-          ),
-          Effect.flatMap((transcript) =>
-            selectTranscriptWindow(
-              transcript,
-              limits.maxTranscriptTurns,
-              limits.maxTranscriptCharacters
-            )
-          )
+          : listRecentTranscriptEntries(userId, limits.maxTranscriptTurns - 1),
+    }).pipe(
+      Effect.map(({ currentTranscript, priorTurns }) =>
+        projectTranscriptForModel(
+          [...priorTurns, ...currentTranscript],
+          limits.maxToolResultCharacters
+        )
+      ),
+      Effect.flatMap((transcript) =>
+        selectTranscriptWindow(
+          transcript,
+          limits.maxTranscriptTurns,
+          limits.maxTranscriptCharacters
+        )
+      )
+    )
+  );
+
+const generateCurrentTurn = (
+  model: LanguageModel.Service,
+  turn: HostedTurn,
+  includeMalformedOutputFeedback: boolean
+): Effect.Effect<
+  Result.Result<
+    LanguageModel.GenerateTextResponse<AgentToolkitInstance["tools"]>,
+    AiError.AiError | Cause.TimeoutError
+  >,
+  OnboardingConsentRequired,
+  SqlClient.SqlClient
+> =>
+  Effect.gen(function* () {
+    const transcriptWindow = yield* loadTranscriptWindow(turn.userId, turn.turnId, turn.limits);
+    return yield* Effect.result(
+      model
+        .generateText({
+          prompt: [
+            {
+              role: "system",
+              content: systemPrompt({ user: turn.user, occurredAt: turn.startedAt }),
+            },
+            ...(includeMalformedOutputFeedback
+              ? [{ role: "system" as const, content: malformedModelOutputFeedback }]
+              : []),
+            ...transcriptPrompt(transcriptWindow),
+          ],
+          toolkit: turn.toolkit,
+          disableToolCallResolution: true,
+        })
+        .pipe(Effect.timeout(`${turn.limits.maxModelRoundMillis} millis`))
+    );
+  });
+
+const acceptModelRound = Effect.fn("AgentService.acceptModelRound")(function* (
+  round: Effect.Success<ReturnType<typeof generateCurrentTurn>>
+) {
+  if (Result.isSuccess(round)) return Option.some(round.success);
+  const { failure } = round;
+  if (!("reason" in failure) || failure.reason._tag !== "InvalidOutputError") {
+    return yield* new ModelUnavailable();
+  }
+  if (containsSensitiveChatValue(failure.reason.description)) {
+    return yield* new ModelUnavailable();
+  }
+  return Option.none();
+});
+
+const loadTurnContext = (
+  userId: UserId,
+  message: InboundMessage
+): Effect.Effect<
+  Readonly<{ user: User; confirmation: HostedTurn["confirmation"] }>,
+  OnboardingConsentRequired | UnknownUser,
+  Crypto.Crypto | SqlClient.SqlClient
+> =>
+  withCurrentConsent(
+    userId,
+    Effect.gen(function* () {
+      const user = yield* findUser(userId).pipe(
+        Effect.flatMap(
+          Option.match({
+            onNone: () => Effect.fail(new UnknownUser({ userId })),
+            onSome: Effect.succeed,
+          })
         )
       );
-      return yield* Effect.result(
-        model
-          .generateText({
-            prompt: [
-              { role: "system", content: systemPrompt({ user, occurredAt }) },
-              ...(includeMalformedOutputFeedback
-                ? [{ role: "system" as const, content: malformedModelOutputFeedback }]
-                : []),
-              ...transcriptPrompt(transcriptWindow),
-            ],
-            toolkit,
-            disableToolCallResolution: true,
-          })
-          .pipe(Effect.timeout(`${limits.maxModelRoundMillis} millis`))
-      );
-    });
+      const confirmation = yield* makeTurnConfirmation(userId, message);
+      return { user, confirmation } as const;
+    })
+  );
 
-  const prepareTurn = Effect.fn("AgentService.prepareTurn")(function* (
-    userId: UserId,
-    message: InboundMessage
-  ) {
+const iterationReply = (
+  turn: HostedTurn,
+  iteration: AgentIteration,
+  text: TranscriptText
+): PreparedAgentReply =>
+  preparedReply(
+    makeTextReply(text),
+    Option.some({ userId: turn.userId, turnId: turn.turnId, iteration })
+  );
+
+const runHostedTurn = (
+  model: LanguageModel.Service,
+  turn: HostedTurn
+): Effect.Effect<
+  PreparedAgentReply,
+  ModelUnavailable | OnboardingConsentRequired,
+  Crypto.Crypto | SqlClient.SqlClient
+> =>
+  Effect.gen(function* () {
+    let toolCalls = 0;
+    let includeMalformedOutputFeedback = false;
+    for (let index = 1; index <= turn.limits.maxIterations; index += 1) {
+      const iteration = AgentIteration.make(index);
+      const accepted = yield* acceptModelRound(
+        yield* generateCurrentTurn(model, turn, includeMalformedOutputFeedback)
+      );
+      if (Option.isNone(accepted)) {
+        includeMalformedOutputFeedback = true;
+        continue;
+      }
+      includeMalformedOutputFeedback = false;
+      const generated = accepted.value;
+
+      if (generated.toolCalls.length > turn.limits.maxToolCallsPerTurn - toolCalls) break;
+      toolCalls += generated.toolCalls.length;
+
+      const response = yield* respondToGeneration(turn, iteration, generated);
+      if (response._tag === "Completed") return iterationReply(turn, iteration, response.text);
+    }
+
+    return iterationReply(turn, AgentIteration.make(turn.limits.maxIterations), exhaustedReply);
+  });
+
+const makePrepareTurn = (
+  model: LanguageModel.Service
+): ((
+  userId: UserId,
+  message: InboundMessage
+) => Effect.Effect<
+  PreparedAgentReply,
+  AgentTurnError,
+  Crypto.Crypto | HttpClient.HttpClient | SqlClient.SqlClient
+>) =>
+  Effect.fn("AgentService.prepareTurn")(function* (userId: UserId, message: InboundMessage) {
     const limits = yield* CurrentAgentLimits;
-    const { user, confirmation } = yield* withCurrentConsent(
-      userId,
-      Effect.gen(function* () {
-        const user = yield* findUser(userId).pipe(
-          Effect.flatMap(
-            Option.match({
-              onNone: () => Effect.fail(new UnknownUser({ userId })),
-              onSome: Effect.succeed,
-            })
-          )
-        );
-        const confirmation = yield* makeTurnConfirmation(userId, message);
-        return { user, confirmation } as const;
-      })
-    );
+    const { user, confirmation } = yield* loadTurnContext(userId, message);
     if (containsSensitiveChatValue(message.text)) {
       return preparedReply(makeTextReply(credentialRejectedReply), Option.none());
     }
@@ -380,162 +652,15 @@ const makeAgentService = Effect.gen(function* () {
     const runTurn = Effect.scoped(
       Effect.gen(function* () {
         const toolkit = yield* makeAgentToolkit(hostedToken.bearer);
-        let toolCalls = 0;
-        let includeMalformedOutputFeedback = false;
-        for (let index = 1; index <= limits.maxIterations; index += 1) {
-          const iteration = AgentIteration.make(index);
-          const generatedResult = yield* generateCurrent({
-            includeMalformedOutputFeedback,
-            limits,
-            occurredAt,
-            toolkit,
-            turnId,
-            user,
-            userId,
-          });
-          if (Result.isFailure(generatedResult)) {
-            if (
-              !("reason" in generatedResult.failure) ||
-              generatedResult.failure.reason._tag !== "InvalidOutputError"
-            ) {
-              return yield* new ModelUnavailable();
-            }
-            if (containsSensitiveChatValue(generatedResult.failure.reason.description)) {
-              return yield* new ModelUnavailable();
-            }
-            includeMalformedOutputFeedback = true;
-            continue;
-          }
-          includeMalformedOutputFeedback = false;
-          const generated = generatedResult.success;
-
-          if (generated.toolCalls.length > limits.maxToolCallsPerTurn - toolCalls) break;
-          toolCalls += generated.toolCalls.length;
-
-          if (generated.toolCalls.length === 0) {
-            const decodedText = yield* decodeTranscriptText(generated.text);
-            const text = containsSensitiveChatValue(decodedText)
-              ? credentialRejectedReply
-              : decodedText;
-            return preparedReply(makeTextReply(text), Option.some({ userId, turnId, iteration }));
-          }
-
-          let pendingChallenge = Option.none<TranscriptText>();
-          for (const toolCall of generated.toolCalls) {
-            const binding = yield* findAgentOperationBinding(toolCall.name).pipe(
-              Option.match({
-                onNone: () => Effect.fail(new ModelUnavailable()),
-                onSome: Effect.succeed,
-              })
-            );
-            const toolCallId = ToolCallId.make(toolCall.id);
-            const encodedInput = yield* Effect.result(
-              encodeAgentOperationInput(binding, toolCall.params)
-            );
-            const input = yield* Result.match(encodedInput, {
-              onFailure: () => decodeTranscriptJson(toolCall.params),
-              onSuccess: Effect.succeed,
-            });
-            if (containsSensitiveJson(input)) return yield* new ModelUnavailable();
-            yield* appendAuthorizedTranscript(userId, [
-              CanonicalToolCallEntry.make({
-                id: yield* makeEntryId,
-                turnId,
-                iteration,
-                toolCallId,
-                operation: binding.operation,
-                input,
-                occurredAt: yield* DateTime.now,
-              }),
-            ]);
-            if (Result.isFailure(encodedInput)) {
-              yield* appendAuthorizedTranscript(userId, [
-                CanonicalToolResultEntry.make({
-                  id: yield* makeEntryId,
-                  turnId,
-                  iteration,
-                  toolCallId,
-                  operation: binding.operation,
-                  outcome: { _tag: "ToolInputRejected", failure: malformedToolInput },
-                  occurredAt: yield* DateTime.now,
-                }),
-              ]);
-              continue;
-            }
-            const confirmationDecision = yield* confirmation.decide({ binding, input });
-            if (confirmationDecision._tag === "RequireConfirmation") {
-              yield* appendAuthorizedTranscript(userId, [
-                CanonicalToolResultEntry.make({
-                  id: yield* makeEntryId,
-                  turnId,
-                  iteration,
-                  toolCallId,
-                  operation: binding.operation,
-                  outcome: {
-                    _tag: "ToolInputRejected",
-                    failure: confirmationDecision.failure,
-                  },
-                  occurredAt: yield* DateTime.now,
-                }),
-              ]);
-              pendingChallenge = Option.some(confirmationDecision.failure.challenge);
-              continue;
-            }
-
-            const executed = yield* toolkit
-              .handle(toolCall.name, input)
-              .pipe(
-                Stream.unwrap,
-                Stream.filter(isTerminalToolResult),
-                Stream.runLast,
-                Effect.flatMap(requireToolResult),
-                Effect.mapError(toModelUnavailable)
-              );
-            const result = yield* decodeTranscriptJson(executed.encodedResult);
-            const outcome: CanonicalToolOutcome = containsSensitiveJson(result)
-              ? { _tag: "ToolOutputRejected", failure: sensitiveEntryRejected }
-              : makeToolOutcome(executed.isFailure, result);
-            yield* appendAuthorizedTranscript(userId, [
-              CanonicalToolResultEntry.make({
-                id: yield* makeEntryId,
-                turnId,
-                iteration,
-                toolCallId,
-                operation: binding.operation,
-                outcome,
-                occurredAt: yield* DateTime.now,
-              }),
-            ]);
-            if (binding.policy.requiredScope === "write" && outcome._tag === "Succeeded") {
-              return preparedReply(
-                makeTextReply(
-                  makeCompletedReply({
-                    binding,
-                    output: result,
-                    turnStartedAt: occurredAt,
-                    user,
-                  })
-                ),
-                Option.some({ userId, turnId, iteration })
-              );
-            }
-          }
-          if (Option.isSome(pendingChallenge)) {
-            return preparedReply(
-              makeTextReply(pendingChallenge.value),
-              Option.some({ userId, turnId, iteration })
-            );
-          }
-        }
-
-        return preparedReply(
-          makeTextReply(exhaustedReply),
-          Option.some({
-            userId,
-            turnId,
-            iteration: AgentIteration.make(limits.maxIterations),
-          })
-        );
+        return yield* runHostedTurn(model, {
+          userId,
+          turnId,
+          user,
+          startedAt: occurredAt,
+          limits,
+          confirmation,
+          toolkit,
+        });
       })
     );
 
@@ -549,6 +674,13 @@ const makeAgentService = Effect.gen(function* () {
       )
     );
   });
+
+const makeAgentService = Effect.gen(function* () {
+  const model = yield* LanguageModel.LanguageModel;
+  const crypto = yield* Crypto.Crypto;
+  const sqlClient = yield* SqlClient.SqlClient;
+
+  const prepareTurn = makePrepareTurn(model);
 
   const recordDeliveredReply = Effect.fn("AgentService.recordDeliveredReply")(
     (prepared: PreparedAgentReply) =>

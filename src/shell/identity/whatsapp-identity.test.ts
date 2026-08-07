@@ -1,6 +1,11 @@
 import { expect, layer } from "@effect/vitest";
 import { DateTime, Effect, Option } from "effect";
-import { HttpBody, HttpClient } from "effect/unstable/http";
+import {
+  HttpBody,
+  HttpClient,
+  type HttpClientError,
+  type HttpClientResponse,
+} from "effect/unstable/http";
 import { MigrationSqlClient } from "~/shell/db/client";
 import {
   E164PhoneNumber,
@@ -17,10 +22,16 @@ import { defaultAgentBearer } from "~/shell/testing/identity-fixtures";
 import { makeKapsoIdentityChangeBody } from "~/shell/testing/kapso-identity-change";
 import { transactionPayload, truncateTransactions } from "~/shell/transactions/fixtures";
 import { associateWhatsAppIdentity, findWhatsAppIdentity, resolveWhatsAppCaller } from "./repo";
-
 import { testWhatsAppCaller } from "~/shell/testing/whatsapp-caller";
+
 const replacementPhone = E164PhoneNumber.make("+573009876543");
-const postIdentityChange = (body: Uint8Array) =>
+const postIdentityChange = (
+  body: Uint8Array
+): Effect.Effect<
+  HttpClientResponse.HttpClientResponse,
+  HttpClientError.HttpClientError,
+  HttpClient.HttpClient
+> =>
   HttpClient.post("/webhooks/kapso/meta", {
     headers: {
       "x-webhook-signature": new Bun.CryptoHasher("sha256", "test-webhook-secret-32-characters")
@@ -138,7 +149,11 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         yield* admin`DELETE FROM whatsapp_identity_change_evidence`;
         yield* seedDevelopmentIdentity(defaultAgentBearer);
         const body = makeKapsoIdentityChangeBody();
-        const post = () => postIdentityChange(body);
+        const post = (): Effect.Effect<
+          HttpClientResponse.HttpClientResponse,
+          HttpClientError.HttpClientError,
+          HttpClient.HttpClient
+        > => postIdentityChange(body);
 
         const concurrent = yield* Effect.all([post(), post()], { concurrency: "unbounded" });
         expect(concurrent.map((response) => response.status)).toEqual([200, 200]);

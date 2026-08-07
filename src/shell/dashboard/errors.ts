@@ -1,6 +1,6 @@
-import { Data } from "effect";
+import { Data, Option } from "effect";
 import { type CategoryId } from "~/core/categories/reference";
-import { type DashboardFailure } from "~/core/dashboard/errors";
+import { type DashboardFailure, type DashboardIssue } from "~/core/dashboard/errors";
 import { NotFound, ValidationFailed } from "~/shell/_shared/errors";
 
 /** A candidate dashboard references a Category unavailable to the authenticated User. */
@@ -92,6 +92,14 @@ const toNonInvalidApiFailure = (failure: NonInvalidDashboardFailure): DashboardA
   }
 };
 
+const toFieldIssue = (
+  issue: DashboardIssue
+): Readonly<{ message: string }> | Readonly<{ path: string; message: string }> =>
+  Option.match(issue.path, {
+    onNone: () => ({ message: issue.message }),
+    onSome: (path) => ({ path, message: issue.message }),
+  });
+
 /** Maps dashboard decisions to compact canonical failures without rejected document data. */
 export const toApiFailure = (
   failure: DashboardFailure | DashboardCategoryNotFound
@@ -102,7 +110,7 @@ export const toApiFailure = (
           code: "validation_failed",
           message:
             "The edit would produce an invalid DashboardDocument. Correct every reported field and resend the complete edit.",
-          fields: failure.issues,
+          fields: failure.issues.map(toFieldIssue),
         },
         next: [],
       })

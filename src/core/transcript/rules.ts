@@ -2,17 +2,17 @@ import { Effect, Option, Schema, Struct } from "effect";
 import {
   AssistantTranscriptEntry,
   CanonicalToolCallEntry,
+  type CanonicalToolOutcome,
   CanonicalToolResultEntry,
   UserTranscriptEntry,
-  type CanonicalToolOutcome,
 } from "./model";
 
-type DeepReadonly<T> =
-  T extends ReadonlyArray<infer Value>
-    ? ReadonlyArray<DeepReadonly<Value>>
-    : T extends object
-      ? { readonly [Key in keyof T]: DeepReadonly<T[Key]> }
-      : T;
+type DeepReadonly<Value> =
+  Value extends ReadonlyArray<infer Element>
+    ? ReadonlyArray<DeepReadonly<Element>>
+    : Value extends object
+      ? { readonly [Key in keyof Value]: DeepReadonly<Value[Key]> }
+      : Value;
 type ReadonlyJson = DeepReadonly<Schema.Json>;
 
 const WindowTextEntry = Schema.Union([
@@ -100,10 +100,10 @@ const activeTurnUser = (
   );
 
 const matchingTrailingCall = (
-  previous: TranscriptWindowEntry | undefined,
+  previous: Option.Option<TranscriptWindowEntry>,
   result: WindowResultEntryValue
 ): Option.Option<WindowCallEntryValue> =>
-  Option.fromUndefinedOr(previous).pipe(
+  previous.pipe(
     Option.filter(
       (entry): entry is WindowCallEntryValue => entry._tag === "CanonicalToolCallEntry"
     ),
@@ -119,7 +119,7 @@ const trailingTurnUnit = (
       onNone: () => [],
       onSome: (entry) =>
         entry._tag === "CanonicalToolResultEntry"
-          ? matchingTrailingCall(turn[index - 1], entry).pipe(
+          ? matchingTrailingCall(Option.fromUndefinedOr(turn[index - 1]), entry).pipe(
               Option.match({
                 onNone: () => [entry],
                 onSome: (call) => [call, entry],

@@ -2,7 +2,10 @@
 
 import { loadCommitConvention } from "./check-commit-message";
 
-const ZERO_SHA = "0".repeat(40);
+const gitObjectNameLength = 40;
+const abbreviatedCommitLength = 12;
+
+const ZERO_SHA = "0".repeat(gitObjectNameLength);
 
 const text = (command: string[]): string => {
   const result = Bun.spawnSync(command, { stderr: "pipe", stdout: "pipe" });
@@ -49,7 +52,8 @@ const failures = commits.flatMap((commit) => {
   const subject = text(["git", "show", "-s", "--format=%s", commit]);
 
   return errors.map(
-    (error) => `${commit.slice(0, 12)} ${subject}\n${convention.formatErrors([error])}`
+    (error) =>
+      `${commit.slice(0, abbreviatedCommitLength)} ${subject}\n${convention.formatErrors([error])}`
   );
 });
 

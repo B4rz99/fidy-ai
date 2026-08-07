@@ -1,4 +1,4 @@
-import { Schema } from "effect";
+import { type Option, Schema } from "effect";
 import { type HttpApiEndpoint } from "effect/unstable/httpapi";
 import { type AgentScope } from "~/core/tokens/model";
 import { type FidyApi, type OperationId, operationCatalog } from "~/shell/api";
@@ -32,8 +32,8 @@ type ClientInput<Endpoint extends HttpApiEndpoint.ConstraintRequest> = Exclude<
 type CanonicalInput<Id extends OperationId> = Omit<ClientInput<EndpointFor<Id>>, "responseMode">;
 
 type CandidateArgs<Id extends OperationId> = keyof CanonicalInput<Id> extends never
-  ? { readonly args?: never }
-  : { readonly args?: PartialInput<CanonicalInput<Id>> };
+  ? Record<never, never>
+  : { readonly args: Option.Option<PartialInput<CanonicalInput<Id>>> };
 
 /** A handler proposal whose target and known arguments are checked against `FidyApi`. */
 export type SuggestedOperationCandidate<Id extends OperationId = OperationId> =

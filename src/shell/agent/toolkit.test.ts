@@ -4,9 +4,25 @@ import { Tool } from "effect/unstable/ai";
 import { toCodecOpenAI } from "effect/unstable/ai/OpenAiStructuredOutput";
 import { HttpApi } from "effect/unstable/httpapi";
 import { FidyApi } from "~/shell/api";
-import { AgentToolkit, CanonicalApiUrl, agentOperationBindings } from "./toolkit";
+import {
+  AgentToolkit,
+  CanonicalApiUrl,
+  type OpenAiToolName,
+  agentOperationBindings,
+} from "./toolkit";
 
-const hostedTool = (name: string) => {
+const hostedTool = (
+  name: string
+): Tool.Dynamic<
+  OpenAiToolName,
+  {
+    readonly parameters: Schema.toEncoded<Schema.Codec<unknown, Schema.Json, never, never>>;
+    readonly success: Schema.Codec<unknown, Schema.Json, never, never>;
+    readonly failure: Schema.Codec<unknown, Schema.Json, never, never>;
+    readonly failureMode: "return";
+  },
+  never
+> => {
   const tool = Object.values(AgentToolkit.tools).find((candidate) => candidate.name === name);
   if (tool === undefined) throw new Error(`Hosted tool is missing: ${name}`);
   return tool;

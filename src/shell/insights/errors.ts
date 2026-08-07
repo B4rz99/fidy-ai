@@ -1,13 +1,14 @@
+import { Option } from "effect";
 import { type InsightFailure } from "~/core/insights/errors";
 import { type InsightEventId, type InsightLifecycleState } from "~/core/insights/model";
 import { allowedInsightTransitions } from "~/core/insights/rules";
 import { NotFound, ValidationFailed } from "~/shell/_shared/errors";
 import { type SuggestedOperation } from "~/shell/_shared/response";
 import {
-  checkpointSuggestedOperations,
-  suggestOperation,
   type SuggestedOperationCaller,
   type SuggestedOperationCandidate,
+  checkpointSuggestedOperations,
+  suggestOperation,
 } from "~/shell/_shared/suggested-operations";
 
 /** Public failures for an absent owned occurrence or an invalid lifecycle movement. */
@@ -16,29 +17,35 @@ export type InsightApiFailure = NotFound | ValidationFailed;
 const suggestionFor = (
   insightEventId: InsightEventId,
   target: InsightLifecycleState
-): SuggestedOperationCandidate | undefined => {
-  const args = { params: { id: insightEventId } };
+): Option.Option<SuggestedOperationCandidate> => {
+  const args = Option.some({ params: { id: insightEventId } });
   switch (target) {
     case "pending":
-      return undefined;
+      return Option.none();
     case "delivered":
-      return suggestOperation({
-        tool: "insights.markInsightDelivered",
-        args,
-        hint: "Record delivery only after an external provider accepts the send.",
-      });
+      return Option.some(
+        suggestOperation({
+          tool: "insights.markInsightDelivered",
+          args,
+          hint: "Record delivery only after an external provider accepts the send.",
+        })
+      );
     case "read":
-      return suggestOperation({
-        tool: "insights.markInsightRead",
-        args,
-        hint: "Mark this insight read after the user or their agent consumes it.",
-      });
+      return Option.some(
+        suggestOperation({
+          tool: "insights.markInsightRead",
+          args,
+          hint: "Mark this insight read after the user or their agent consumes it.",
+        })
+      );
     case "dismissed":
-      return suggestOperation({
-        tool: "insights.dismissInsight",
-        args,
-        hint: "Dismiss this insight when it should receive no further attention.",
-      });
+      return Option.some(
+        suggestOperation({
+          tool: "insights.dismissInsight",
+          args,
+          hint: "Dismiss this insight when it should receive no further attention.",
+        })
+      );
   }
 };
 
@@ -48,10 +55,9 @@ const lifecycleSuggestions = (
   caller: SuggestedOperationCaller
 ): ReadonlyArray<SuggestedOperation> =>
   checkpointSuggestedOperations({
-    candidates: allowedTargets.flatMap((target) => {
-      const suggestion = suggestionFor(insightEventId, target);
-      return suggestion === undefined ? [] : [suggestion];
-    }),
+    candidates: allowedTargets.flatMap((target) =>
+      Option.toArray(suggestionFor(insightEventId, target))
+    ),
     caller,
   });
 

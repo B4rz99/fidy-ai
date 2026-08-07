@@ -1,5 +1,5 @@
-import { DateTime, Effect } from "effect";
-import type { ReadonlyOption } from "~/core/_shared/option";
+import { DateTime, Effect, Option } from "effect";
+import { type ReadonlyOption, toOption } from "~/core/_shared/option";
 import { InvalidTransactionPeriod, TransactionNotYetOccurred } from "./errors";
 
 /**
@@ -30,10 +30,23 @@ type TransactionPeriod = Readonly<{
   readonly to: ReadonlyOption<DateTime.Utc>;
 }>;
 
+type PeriodBounds = Readonly<{
+  readonly from: DateTime.Utc;
+  readonly to: DateTime.Utc;
+}>;
+
+const checkPeriodWidth = (
+  bounds: PeriodBounds
+): Effect.Effect<void> | Effect.Effect<never, InvalidTransactionPeriod> =>
+  DateTime.isLessThan(bounds.from, bounds.to)
+    ? Effect.void
+    : Effect.fail(new InvalidTransactionPeriod(bounds));
+
 /** A two-ended period must have positive width; either end may be omitted. */
-export const checkTransactionPeriod = (period: TransactionPeriod) =>
-  period.from._tag === "Some" &&
-  period.to._tag === "Some" &&
-  !DateTime.isLessThan(period.from.value, period.to.value)
-    ? Effect.fail(new InvalidTransactionPeriod({ from: period.from.value, to: period.to.value }))
-    : Effect.void;
+export const checkTransactionPeriod = (
+  period: TransactionPeriod
+): Effect.Effect<void> | Effect.Effect<never, InvalidTransactionPeriod> =>
+  Option.match(Option.all({ from: toOption(period.from), to: toOption(period.to) }), {
+    onNone: () => Effect.void,
+    onSome: checkPeriodWidth,
+  });

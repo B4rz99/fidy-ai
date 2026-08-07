@@ -19,25 +19,25 @@
     "effect-guards/no-disable-validation": "error",
     "effect-guards/no-curried-export": "error",
     "effect-guards/no-react-use-effect": "error",
-    "capitalized-comments": ["off", "always", { "ignoreConsecutiveComments": true }],
-    "complexity": ["off", { "max": 8 }],
-    "effect-guards/no-nullable-type": "off",
-    "id-length": ["off", { "exceptions": ["_", "A", "E", "R"], "properties": "never" }],
+    "capitalized-comments": ["error", "always", { "ignoreConsecutiveComments": true }],
+    "complexity": ["error", { "max": 8 }],
+    "effect-guards/no-nullable-type": "error",
+    "id-length": ["error", { "exceptions": ["_", "A", "E", "R"], "properties": "never" }],
     "import/exports-last": "off",
     "import/group-exports": "off",
-    "import/newline-after-import": "off",
-    "max-lines-per-function": ["off", { "max": 60 }],
-    "max-statements": ["off", { "max": 70 }],
+    "import/newline-after-import": "error",
+    "max-lines-per-function": ["error", { "max": 60 }],
+    "max-statements": ["error", { "max": 70 }],
     "no-magic-numbers": [
-      "off",
+      "error",
       {
         "ignore": [-1, 0, 1, 2, 3, 4, 100],
         "ignoreArrayIndexes": true,
         "ignoreDefaultValues": true
       }
     ],
-    "sort-imports": ["off", { "ignoreDeclarationSort": true }],
-    "typescript/explicit-function-return-type": "off",
+    "sort-imports": ["error", { "ignoreDeclarationSort": true }],
+    "typescript/explicit-function-return-type": "error",
     // `.mjs` is the exception: the vitest configs and the CRAP runner import
     // source-scope.mjs, where the extension is genuinely required to resolve.
     "import/extensions": ["error", "never", { "pattern": { "mjs": "always" } }],
@@ -234,12 +234,16 @@
         // `Brand` adds phantom scalar identity, but its variance field trips this
         // deep-readonly rule. scalar-brand-only compensates by rejecting brands on
         // object schemas. Negative probes exercise both fences in lint:type-aware.
+        // `Option` trips it for the same reason as `Brand`: every member is
+        // readonly apart from the phantom `Unify` symbols, and no-nullable-type
+        // requires it wherever a core parameter may be absent.
         "typescript/prefer-readonly-parameter-types": [
           "error",
           {
             "allow": [
               { "from": "package", "package": "effect", "name": "Utc" },
-              { "from": "package", "package": "effect", "name": "Brand" }
+              { "from": "package", "package": "effect", "name": "Brand" },
+              { "from": "package", "package": "effect", "name": "Option" }
             ]
           }
         ],
@@ -273,11 +277,19 @@
     // The guard is meant to catch deep nesting, not to ban array callbacks in
     // tests, so tests get one level of their own.
     {
-      "files": ["**/*.test.ts"],
+      "files": ["**/*.test.ts", "**/*.test.js"],
       "rules": {
         "max-nested-callbacks": ["error", 4],
         "max-lines-per-function": "off",
         "no-magic-numbers": "off"
+      }
+    },
+    // A `CREATE FUNCTION` is one indivisible statement, so a gateway body longer
+    // than the limit cannot be split without routing DDL through `sql.unsafe`.
+    {
+      "files": ["src/shell/db/migrations/*.ts"],
+      "rules": {
+        "max-lines-per-function": "off"
       }
     },
     {

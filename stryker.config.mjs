@@ -60,7 +60,7 @@ export default {
   // is the only threshold that does not decay: any number below 100 is a quota
   // of unnoticed defects that fills up and then has to be argued down.
   thresholds: { high: 100, low: 100, break: 100 },
-  // clear-text for whoever is watching the run; html so a survivor can be read
+  // Clear-text for whoever is watching the run; html so a survivor can be read
   // in context instead of guessed at from a line number.
   reporters: ["clear-text", "html", "progress"],
   htmlReporter: { fileName: "reports/mutation/mutation.html" },

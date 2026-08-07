@@ -1,5 +1,5 @@
-import { Schema } from "effect";
-import { SqlSchema, type SqlClient } from "effect/unstable/sql";
+import { type Cause, type Effect, Schema } from "effect";
+import { type SqlClient, type SqlError, SqlSchema } from "effect/unstable/sql";
 
 const RuntimeAuthority = Schema.Struct({
   connectionRole: Schema.String,
@@ -21,7 +21,12 @@ const RuntimeAuthority = Schema.Struct({
 export type RuntimeAuthority = typeof RuntimeAuthority.Type;
 
 /** Reads every database authority forbidden to the fixed fidy_runtime role. */
-export const readRuntimeAuthority = (sql: SqlClient.SqlClient) =>
+export const readRuntimeAuthority = (
+  sql: SqlClient.SqlClient
+): Effect.Effect<
+  RuntimeAuthority,
+  Cause.NoSuchElementError | Schema.SchemaError | SqlError.SqlError
+> =>
   SqlSchema.findOne({
     Request: Schema.Void,
     Result: RuntimeAuthority,

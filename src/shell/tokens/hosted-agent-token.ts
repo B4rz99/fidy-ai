@@ -5,8 +5,9 @@ import type { UserId } from "~/core/identity/reference";
 import {
   AgentBearerSecret,
   type AgentBearerToken,
-  HostedAgentScopes,
   AgentTokenShortId,
+  HostedAgentScopes,
+  agentBearerSecretBytes,
   makeAgentBearerToken,
 } from "~/core/tokens/model";
 import { renewAgentTokenIdleExpiry } from "~/core/tokens/rules";
@@ -16,8 +17,10 @@ import {
   revokeHostedAgentToken as persistHostedAgentTokenRevocation,
 } from "./repo";
 
+const hostedAgentTokenLifetimeMinutes = 15;
+
 /** Absolute fallback lifetime if turn cleanup cannot revoke the internal bearer. */
-export const HostedAgentTokenLifetime = Duration.minutes(15);
+export const HostedAgentTokenLifetime = Duration.minutes(hostedAgentTokenLifetimeMinutes);
 
 type IssuedHostedAgentToken = {
   readonly tokenId: AgentTokenId;
@@ -38,7 +41,7 @@ export const issueHostedAgentToken = Effect.fn("issueHostedAgentToken")(function
     Encoding.encodeHex(yield* crypto.randomBytes(4).pipe(Effect.orDie))
   );
   const secret = AgentBearerSecret.make(
-    Encoding.encodeHex(yield* crypto.randomBytes(32).pipe(Effect.orDie))
+    Encoding.encodeHex(yield* crypto.randomBytes(agentBearerSecretBytes).pipe(Effect.orDie))
   );
   const bearer = yield* makeAgentBearerToken({ shortId, secret });
   const tokenHash = yield* hashAgentBearer(bearer);

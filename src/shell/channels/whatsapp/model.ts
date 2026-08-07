@@ -1,5 +1,5 @@
 import { Schema, Struct } from "effect";
-import type { Array as EffectArray, DateTime } from "effect";
+import type { DateTime, Array as EffectArray } from "effect";
 import { ProviderMessageEvidence } from "~/core/_shared/provider-message-evidence";
 import {
   E164PhoneNumber,
@@ -9,11 +9,13 @@ import {
 } from "~/core/identity/reference";
 import type { TranscriptText } from "~/core/transcript/model";
 
+const maximumProviderIdentifierLength = 256;
+
 /** Immutable WhatsApp message identifier retained as evidence, never identity or authority. */
 export const WhatsAppProviderMessageId = Schema.String.check(
   Schema.isTrimmed(),
   Schema.isMinLength(1),
-  Schema.isMaxLength(256)
+  Schema.isMaxLength(maximumProviderIdentifierLength)
 ).pipe(Schema.brand("WhatsAppProviderMessageId"));
 export type WhatsAppProviderMessageId = typeof WhatsAppProviderMessageId.Type;
 
@@ -21,7 +23,7 @@ export type WhatsAppProviderMessageId = typeof WhatsAppProviderMessageId.Type;
 export const WhatsAppDeliveryKey = Schema.String.check(
   Schema.isTrimmed(),
   Schema.isMinLength(1),
-  Schema.isMaxLength(256)
+  Schema.isMaxLength(maximumProviderIdentifierLength)
 ).pipe(Schema.brand("WhatsAppDeliveryKey"));
 export type WhatsAppDeliveryKey = typeof WhatsAppDeliveryKey.Type;
 
@@ -42,7 +44,7 @@ export type WhatsAppMessageEvidence = typeof WhatsAppMessageEvidence.Type;
 /** Audio-media identifier retained as WhatsApp provider evidence only. */
 export const WhatsAppMediaId = Schema.NonEmptyString.check(
   Schema.isTrimmed(),
-  Schema.isMaxLength(256)
+  Schema.isMaxLength(maximumProviderIdentifierLength)
 ).pipe(Schema.brand("WhatsAppMediaId"));
 export type WhatsAppMediaId = typeof WhatsAppMediaId.Type;
 

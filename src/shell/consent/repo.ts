@@ -20,6 +20,7 @@ import { InsightKind } from "~/core/insights/reference";
 import { AgentTokenId } from "~/core/tokens/reference";
 import { withUserTransaction } from "~/shell/db/user-transaction";
 import { currentDisclosure } from "./current-disclosure";
+
 const OptionalAgentTokenId = Schema.OptionFromNullOr(Schema.toEncoded(AgentTokenId));
 const OptionalConsentRecordId = Schema.OptionFromNullOr(Schema.toEncoded(ConsentRecordId));
 const OptionalInsightKind = Schema.OptionFromNullOr(InsightKind);
@@ -78,7 +79,7 @@ const consentColumns = `id, subject_user_id AS "subjectUserId", event_type AS "e
   decision_channel AS "decisionChannel", decision_provider AS "decisionProvider",
   decision_provider_message_id AS "decisionProviderMessageId", occurred_at AS "occurredAt"`;
 
-const disclosureFromRow = (row: DisclosureRow) => ({
+const disclosureFromRow = (row: DisclosureRow): typeof DisclosureSnapshot.Encoded => ({
   serviceMarket: row.serviceMarket,
   locale: row.locale,
   revision: row.disclosureRevision,
@@ -95,7 +96,7 @@ const disclosureFromRow = (row: DisclosureRow) => ({
   revocationMethod: row.revocationMethod,
 });
 
-const disclosureToRow = (disclosure: typeof DisclosureSnapshot.Encoded) => ({
+const disclosureToRow = (disclosure: typeof DisclosureSnapshot.Encoded): DisclosureRow => ({
   serviceMarket: disclosure.serviceMarket,
   locale: disclosure.locale,
   disclosureRevision: disclosure.revision,
@@ -129,7 +130,7 @@ const grantsFromRow: Record<StoredGrantType, (row: ConsentRecordRow) => unknown>
     }),
 };
 
-const eventFromRow = (row: ConsentRecordRow) => {
+const eventFromRow = (row: ConsentRecordRow): typeof ConsentEvent.Encoded => {
   if (row.eventType === "revoked") {
     const event = Option.match(row.revokedGrantId, {
       onNone: () => ({ _tag: "Revoked" }),
@@ -144,7 +145,12 @@ const eventFromRow = (row: ConsentRecordRow) => {
   return decodeConsentEvent({ _tag: "Granted", grant });
 };
 
-const eventToRow = (event: typeof ConsentEvent.Encoded) => {
+const eventToRow = (
+  event: typeof ConsentEvent.Encoded
+): Pick<
+  ConsentRecordRow,
+  "eventType" | "grantType" | "agentTokenId" | "insightKind" | "revokedGrantId"
+> => {
   if (event._tag === "Revoked") {
     return {
       eventType: "revoked" as const,
@@ -228,7 +234,9 @@ const ConsentRecordFromRow = ConsentRecordRow.pipe(
  * The caller must already be inside the transaction that defines the protected
  * unit; serialization lasts until that transaction completes.
  */
-export const lockConsentSubject = (subjectUserId: UserId) =>
+export const lockConsentSubject = (
+  subjectUserId: UserId
+): Effect.Effect<void, never, SqlClient.SqlClient> =>
   Effect.flatMap(
     SqlClient.SqlClient,
     (sql) => sql`
@@ -315,7 +323,9 @@ export const appendConsentRecord = Effect.fn("appendConsentRecord")(function* (
 const ResolvedConsentSubject = Schema.Struct({ subjectUserId: UserId });
 
 /** Finds the immutable decision already associated with one provider-qualified replay key. */
-export const findConsentRecordByDecisionMessage = (message: ProviderMessageEvidence) =>
+export const findConsentRecordByDecisionMessage = (
+  message: ProviderMessageEvidence
+): Effect.Effect<Option.Option<ConsentRecord>, never, SqlClient.SqlClient> =>
   Effect.gen(function* () {
     const sql = yield* SqlClient.SqlClient;
     const resolved = yield* SqlSchema.findOneOption({
@@ -397,14 +407,18 @@ export const hasCurrentOnboardingConsentAt = Effect.fn("Consent.hasCurrentOnboar
 );
 
 /** Reports whether an unrevoked onboarding grant matches the complete current consent basis. */
-export const hasCurrentOnboardingConsent = (subjectUserId: UserId) =>
+export const hasCurrentOnboardingConsent = (
+  subjectUserId: UserId
+): Effect.Effect<boolean, never, SqlClient.SqlClient> =>
   withUserTransaction(
     subjectUserId,
     queryCurrentOnboardingConsent(subjectUserId, Option.none()).pipe(Effect.orDie)
   );
 
 /** Test observer for the append-only ledger in deterministic occurrence order. */
-export const observeConsentRecords = (subjectUserId: UserId) =>
+export const observeConsentRecords = (
+  subjectUserId: UserId
+): Effect.Effect<ReadonlyArray<ConsentRecord>, never, SqlClient.SqlClient> =>
   withUserTransaction(
     subjectUserId,
     Effect.flatMap(SqlClient.SqlClient, (sql) =>
@@ -534,7 +548,9 @@ const PendingFromRow = PendingRow.pipe(
 );
 
 /** Serializes all gate decisions for one portfolio-scoped BSUID within the caller's transaction. */
-export const lockConsentGate = (caller: WhatsAppCallerReference) =>
+export const lockConsentGate = (
+  caller: WhatsAppCallerReference
+): Effect.Effect<void, never, SqlClient.SqlClient> =>
   Effect.flatMap(
     SqlClient.SqlClient,
     (sql) => sql`
@@ -576,7 +592,9 @@ export const insertPendingConsentExchange = Effect.fn("insertPendingConsentExcha
 });
 
 /** Finds the sole minimal pending exchange for one portfolio-scoped BSUID. */
-export const findPendingConsentExchange = (caller: WhatsAppCallerReference) =>
+export const findPendingConsentExchange = (
+  caller: WhatsAppCallerReference
+): Effect.Effect<Option.Option<PendingConsentExchange>, never, SqlClient.SqlClient> =>
   Effect.flatMap(SqlClient.SqlClient, (sql) =>
     SqlSchema.findOneOption({
       Request: WhatsAppCallerReference,
@@ -728,7 +746,9 @@ export const recordConsentDisclosureDelivery = Effect.fn("recordConsentDisclosur
 );
 
 /** Deletes temporary state after accept, decline, or observed expiry. */
-export const removePendingConsentExchange = (exchangeId: PendingConsentExchangeId) =>
+export const removePendingConsentExchange = (
+  exchangeId: PendingConsentExchangeId
+): Effect.Effect<void, never, SqlClient.SqlClient> =>
   Effect.flatMap(
     SqlClient.SqlClient,
     (sql) => sql`
@@ -737,7 +757,9 @@ export const removePendingConsentExchange = (exchangeId: PendingConsentExchangeI
   ).pipe(Effect.asVoid, Effect.orDie);
 
 /** Deletes abandoned pending exchanges whose 24-hour lifetime has ended. */
-export const removeExpiredPendingConsentExchanges = (now: DateTime.Utc) =>
+export const removeExpiredPendingConsentExchanges = (
+  now: DateTime.Utc
+): Effect.Effect<void, never, SqlClient.SqlClient> =>
   Effect.flatMap(
     SqlClient.SqlClient,
     (sql) => sql`

@@ -5,12 +5,23 @@ import { decodeKapsoIdentityWebhook, decodeKapsoWebhook } from "./kapso-webhook"
 
 const fixtureBytes = (
   name: "kapso-text-v2.json" | "kapso-voice-v2.json" | "kapso-bsuid-text-v2.json"
-) => Effect.promise(() => Bun.file(new URL(`./fixtures/${name}`, import.meta.url)).bytes());
-const encodeJsonBody = (value: unknown) =>
+): Effect.Effect<Uint8Array<ArrayBuffer>> =>
+  Effect.promise(() => Bun.file(new URL(`./fixtures/${name}`, import.meta.url)).bytes());
+const encodeJsonBody = (value: unknown): Uint8Array<ArrayBuffer> =>
   new TextEncoder().encode(Schema.encodeSync(Schema.UnknownFromJsonString)(value));
 const receivedAt = DateTime.makeUnsafe("2026-04-03T12:00:02.000Z");
 const secret = "test-webhook-secret-32-characters";
-const signedInput = (rawBody: Uint8Array, deliveryKey = "delivery-signed") => ({
+const signedInput = (
+  rawBody: Uint8Array,
+  deliveryKey = "delivery-signed"
+): {
+  rawBody: Uint8Array;
+  secret: string;
+  signature: string;
+  deliveryKey: string;
+  businessPortfolioId: string;
+  receivedAt: DateTime.Utc;
+} => ({
   rawBody,
   secret,
   signature: new Bun.CryptoHasher("sha256", secret).update(rawBody).digest("hex"),

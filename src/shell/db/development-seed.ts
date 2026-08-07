@@ -1,4 +1,16 @@
-import { Config, Crypto, DateTime, Effect, Encoding, Layer, Option } from "effect";
+import {
+  Config,
+  Crypto,
+  DateTime,
+  Effect,
+  Encoding,
+  type FileSystem,
+  Layer,
+  Option,
+  type Path,
+} from "effect";
+import type { ChildProcessSpawner } from "effect/unstable/process";
+import type { Migrator, SqlClient, SqlError } from "effect/unstable/sql";
 import { ConsentRecord, ConsentRecordId } from "~/core/consent/model";
 import {
   E164PhoneNumber,
@@ -7,12 +19,14 @@ import {
   WhatsAppBusinessScopedUserId,
 } from "~/core/identity/reference";
 import { AgentTokenId } from "~/core/tokens/reference";
+import type { User } from "~/core/identity/model";
 import { makeColombianUser } from "~/core/identity/rules";
 import {
   AgentBearerSecret,
   type AgentBearerToken,
   AgentTokenScopes,
   AgentTokenShortId,
+  agentBearerSecretBytes,
   getAgentTokenShortId,
   makeAgentBearerToken,
 } from "~/core/tokens/model";
@@ -43,7 +57,7 @@ const defaultAgentScopes = AgentTokenScopes.make(["read", "write", "dashboard"])
 export const generateDevelopmentAgentBearer = Effect.gen(function* () {
   const crypto = yield* Crypto.Crypto;
   const shortId = Encoding.encodeHex(yield* crypto.randomBytes(4));
-  const secret = Encoding.encodeHex(yield* crypto.randomBytes(32));
+  const secret = Encoding.encodeHex(yield* crypto.randomBytes(agentBearerSecretBytes));
 
   return yield* makeAgentBearerToken({
     shortId: AgentTokenShortId.make(shortId),
@@ -51,10 +65,59 @@ export const generateDevelopmentAgentBearer = Effect.gen(function* () {
   });
 });
 
-const tokenIdFromHash = (tokenHash: AgentTokenHash) =>
+const uuidTimeLowEnd = 8;
+const uuidTimeMidEnd = 12;
+const uuidTimeHighEnd = 16;
+const uuidClockSequenceEnd = 20;
+const uuidNodeEnd = 32;
+const uuidTimeHighStart = uuidTimeMidEnd + 1;
+const uuidClockSequenceStart = uuidTimeHighEnd + 1;
+
+const seedOnboardingConsent = (
+  userId: UserId
+): Effect.Effect<void, Config.ConfigError, Crypto.Crypto | SqlClient.SqlClient> =>
+  Effect.gen(function* () {
+    const crypto = yield* Crypto.Crypto;
+    const disclosure = yield* currentDisclosure;
+    const recordId = ConsentRecordId.make(yield* crypto.randomUUIDv7.pipe(Effect.orDie));
+    const seedMessageId = `development-seed:${recordId}`;
+    yield* appendConsentRecord(
+      ConsentRecord.make({
+        id: recordId,
+        subjectUserId: userId,
+        event: { _tag: "Granted", grant: { _tag: "Onboarding" } },
+        disclosure,
+        occurredAt: defaultCreatedAt,
+        disclosureMessage: {
+          channel: "development",
+          provider: "development-seed",
+          providerMessageId: `${seedMessageId}:disclosure`,
+        },
+        decisionMessage: {
+          channel: "development",
+          provider: "development-seed",
+          providerMessageId: `${seedMessageId}:acceptance`,
+        },
+      })
+    );
+  });
+
+const tokenIdFromHash = (tokenHash: AgentTokenHash): AgentTokenId =>
   AgentTokenId.make(
-    `${tokenHash.slice(0, 8)}-${tokenHash.slice(8, 12)}-4${tokenHash.slice(13, 16)}-8${tokenHash.slice(17, 20)}-${tokenHash.slice(20, 32)}`
+    `${tokenHash.slice(0, uuidTimeLowEnd)}-${tokenHash.slice(uuidTimeLowEnd, uuidTimeMidEnd)}-4${tokenHash.slice(uuidTimeHighStart, uuidTimeHighEnd)}-8${tokenHash.slice(uuidClockSequenceStart, uuidClockSequenceEnd)}-${tokenHash.slice(uuidClockSequenceEnd, uuidNodeEnd)}`
   );
+
+type SeededAgentIdentity = Readonly<{
+  userId: UserId;
+  tokenId: AgentTokenId;
+  scopes: AgentTokenScopes;
+  tokenCreatedAt: DateTime.Utc;
+  idleExpiresAt: DateTime.Utc;
+  revokedAt: Option.Option<DateTime.Utc>;
+}>;
+
+type SeededAgentIdentityOverrides = Readonly<{ bearer: AgentBearerToken }> &
+  Partial<SeededAgentIdentity>;
 
 /**
  * Seeds one stable User, current onboarding ConsentRecord, and hashed AgentToken
@@ -64,16 +127,12 @@ const tokenIdFromHash = (tokenHash: AgentTokenHash) =>
  * and safe naming id cross that boundary.
  */
 export const seedConsentedAgentIdentity = (
-  overrides: Readonly<{
-    readonly bearer: AgentBearerToken;
-    readonly userId?: UserId;
-    readonly tokenId?: AgentTokenId;
-    readonly scopes?: AgentTokenScopes;
-    readonly tokenCreatedAt?: DateTime.Utc;
-    readonly idleExpiresAt?: DateTime.Utc;
-    readonly revokedAt?: Option.Option<DateTime.Utc>;
-  }>
-) =>
+  overrides: SeededAgentIdentityOverrides
+): Effect.Effect<
+  { user: User; tokenHash: AgentTokenHash },
+  Config.ConfigError,
+  Crypto.Crypto | SqlClient.SqlClient
+> =>
   Effect.gen(function* () {
     const userId = overrides.userId ?? defaultUserId;
     const bearer = overrides.bearer;
@@ -86,29 +145,7 @@ export const seedConsentedAgentIdentity = (
     yield* upsertUser(userId, user);
 
     if (!(yield* hasCurrentOnboardingConsent(userId))) {
-      const crypto = yield* Crypto.Crypto;
-      const disclosure = yield* currentDisclosure;
-      const recordId = ConsentRecordId.make(yield* crypto.randomUUIDv7.pipe(Effect.orDie));
-      const seedMessageId = `development-seed:${recordId}`;
-      yield* appendConsentRecord(
-        ConsentRecord.make({
-          id: recordId,
-          subjectUserId: userId,
-          event: { _tag: "Granted", grant: { _tag: "Onboarding" } },
-          disclosure,
-          occurredAt: defaultCreatedAt,
-          disclosureMessage: {
-            channel: "development",
-            provider: "development-seed",
-            providerMessageId: `${seedMessageId}:disclosure`,
-          },
-          decisionMessage: {
-            channel: "development",
-            provider: "development-seed",
-            providerMessageId: `${seedMessageId}:acceptance`,
-          },
-        })
-      );
+      yield* seedOnboardingConsent(userId);
     }
 
     const tokenHash = yield* hashAgentBearer(bearer);
@@ -130,7 +167,13 @@ export const seedConsentedAgentIdentity = (
  * the supplied one-time bearer. The WhatsApp association uses the required
  * `WHATSAPP_BUSINESS_PORTFOLIO_ID`; missing or invalid configuration fails the seed.
  */
-export const seedDevelopmentIdentity = (bearer: AgentBearerToken) =>
+export const seedDevelopmentIdentity = (
+  bearer: AgentBearerToken
+): Effect.Effect<
+  { user: User; tokenHash: AgentTokenHash },
+  Config.ConfigError,
+  Crypto.Crypto | SqlClient.SqlClient
+> =>
   Effect.gen(function* () {
     const seeded = yield* seedConsentedAgentIdentity({
       bearer,
@@ -154,7 +197,13 @@ export const seedDevelopmentIdentity = (bearer: AgentBearerToken) =>
   });
 
 /** Local development seeding ordered after the real migration log. */
-export const makeDevelopmentSeedLive = (bearer: AgentBearerToken) =>
+export const makeDevelopmentSeedLive = (
+  bearer: AgentBearerToken
+): Layer.Layer<
+  never,
+  Config.ConfigError | Migrator.MigrationError | SqlError.SqlError,
+  ChildProcessSpawner.ChildProcessSpawner | Crypto.Crypto | FileSystem.FileSystem | Path.Path
+> =>
   Layer.effectDiscard(seedDevelopmentIdentity(bearer)).pipe(
     Layer.provide(MigratorLive),
     Layer.provide(MigrationPgLive)

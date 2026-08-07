@@ -83,7 +83,7 @@ it.effect("classifies every known rejection with safe retry semantics", () =>
   Effect.gen(function* () {
     const cases = [
       {
-        response: () =>
+        response: (): Response =>
           Response.json(
             { error: "Sandbox numbers do not support BSUID recipients" },
             { status: 400 }
@@ -91,15 +91,15 @@ it.effect("classifies every known rejection with safe retry semantics", () =>
         expected: ["sandbox_bsuid_unsupported", false] as const,
       },
       {
-        response: () => Response.json({ error: { code: 131026 } }, { status: 400 }),
+        response: (): Response => Response.json({ error: { code: 131026 } }, { status: 400 }),
         expected: ["invalid_recipient", false] as const,
       },
       {
-        response: () => Response.json({ error: { code: 131047 } }, { status: 400 }),
+        response: (): Response => Response.json({ error: { code: 131047 } }, { status: 400 }),
         expected: ["conversation_window_closed", false] as const,
       },
       {
-        response: () =>
+        response: (): Response =>
           Response.json(
             { error: "Rate limit exceeded", message: "Please try again later" },
             { status: 429 }
@@ -107,19 +107,19 @@ it.effect("classifies every known rejection with safe retry semantics", () =>
         expected: ["rate_limited", true] as const,
       },
       {
-        response: () => Response.json({ error: { code: 4 } }, { status: 400 }),
+        response: (): Response => Response.json({ error: { code: 4 } }, { status: 400 }),
         expected: ["rate_limited", true] as const,
       },
       {
-        response: () => Response.json({ error: "bad api key" }, { status: 401 }),
+        response: (): Response => Response.json({ error: "bad api key" }, { status: 401 }),
         expected: ["authentication_failed", false] as const,
       },
       {
-        response: () => Response.json({ error: { code: 190 } }, { status: 400 }),
+        response: (): Response => Response.json({ error: { code: 190 } }, { status: 400 }),
         expected: ["authentication_failed", false] as const,
       },
       {
-        response: () => Response.json({ error: { code: 131016 } }, { status: 400 }),
+        response: (): Response => Response.json({ error: { code: 131016 } }, { status: 400 }),
         expected: ["provider_unavailable", true] as const,
       },
     ];
@@ -198,12 +198,15 @@ it.effect("fails unknown, malformed, oversized, and incomplete responses closed"
   Effect.gen(function* () {
     const cases = [
       {
-        response: () => Response.json({ error: { code: 999_999 } }, { status: 418 }),
+        response: (): Response => Response.json({ error: { code: 999_999 } }, { status: 418 }),
         certainty: "rejected",
       },
-      { response: () => new Response("not-json", { status: 200 }), certainty: "ambiguous" },
       {
-        response: () =>
+        response: (): Response => new Response("not-json", { status: 200 }),
+        certainty: "ambiguous",
+      },
+      {
+        response: (): Response =>
           new Response("x", {
             status: 200,
             headers: { "content-length": String(64 * 1_024 + 1) },
@@ -211,7 +214,7 @@ it.effect("fails unknown, malformed, oversized, and incomplete responses closed"
         certainty: "ambiguous",
       },
       {
-        response: () => Response.json({ messaging_product: "whatsapp", messages: [] }),
+        response: (): Response => Response.json({ messaging_product: "whatsapp", messages: [] }),
         certainty: "ambiguous",
       },
     ];

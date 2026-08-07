@@ -31,8 +31,8 @@ export default defineConfig({
       // the updated config to be committed, while any later decrease fails the threshold check.
       thresholds: {
         autoUpdate: true,
-        branches: 28.08,
-        lines: 65.34,
+        branches: 28.4,
+        lines: 65.44,
       },
     },
   },

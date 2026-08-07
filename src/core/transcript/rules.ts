@@ -1,10 +1,10 @@
-import { Effect, Option, Schema, Struct } from "effect";
+import { Effect, Option, Schema } from "effect";
 import {
-  AssistantTranscriptEntry,
-  CanonicalToolCallEntry,
+  type AssistantTranscriptEntry,
+  type CanonicalToolCallEntry,
   type CanonicalToolOutcome,
-  CanonicalToolResultEntry,
-  UserTranscriptEntry,
+  type CanonicalToolResultEntry,
+  type UserTranscriptEntry,
 } from "./model";
 
 type DeepReadonly<Value> =
@@ -15,26 +15,24 @@ type DeepReadonly<Value> =
       : Value;
 type ReadonlyJson = DeepReadonly<Schema.Json>;
 
-const WindowTextEntry = Schema.Union([
-  UserTranscriptEntry.mapFields(Struct.pick(["_tag", "turnId", "text"])),
-  AssistantTranscriptEntry.mapFields(Struct.pick(["_tag", "turnId", "text"])),
-]);
-const WindowCallEntry = CanonicalToolCallEntry.mapFields(
-  Struct.pick(["_tag", "turnId", "toolCallId", "operation", "input"])
-);
-const WindowResultEntry = CanonicalToolResultEntry.mapFields(
-  Struct.pick(["_tag", "turnId", "toolCallId", "operation", "outcome"])
-);
+type WindowTextEntry =
+  | Pick<typeof UserTranscriptEntry.Encoded, "_tag" | "turnId" | "text">
+  | Pick<typeof AssistantTranscriptEntry.Encoded, "_tag" | "turnId" | "text">;
 type SucceededOutcome = Extract<CanonicalToolOutcome, { readonly _tag: "Succeeded" }>;
 type FailedOutcome = Exclude<CanonicalToolOutcome, SucceededOutcome>;
 type WindowOutcome =
   | { readonly _tag: SucceededOutcome["_tag"]; readonly output: ReadonlyJson }
   | { readonly _tag: FailedOutcome["_tag"]; readonly failure: ReadonlyJson };
-type WindowTextEntry = typeof WindowTextEntry.Encoded;
-type WindowCallEntry = Omit<typeof WindowCallEntry.Encoded, "input"> & {
+type WindowCallEntry = Pick<
+  typeof CanonicalToolCallEntry.Encoded,
+  "_tag" | "turnId" | "toolCallId" | "operation"
+> & {
   readonly input: ReadonlyJson;
 };
-type WindowResultEntry = Omit<typeof WindowResultEntry.Encoded, "outcome"> & {
+type WindowResultEntry = Pick<
+  typeof CanonicalToolResultEntry.Encoded,
+  "_tag" | "turnId" | "toolCallId" | "operation"
+> & {
   readonly outcome: WindowOutcome;
 };
 
@@ -67,13 +65,15 @@ const entryCharacters = (entry: TranscriptWindowEntry): number => {
   }
 };
 
+type NonEmptyTurn = [TranscriptWindowEntry, ...Array<TranscriptWindowEntry>];
+
 const groupTurns = (
   entries: ReadonlyArray<TranscriptWindowEntry>
 ): ReadonlyArray<ReadonlyArray<TranscriptWindowEntry>> => {
-  const turns: Array<Array<TranscriptWindowEntry>> = [];
+  const turns: Array<NonEmptyTurn> = [];
   for (const entry of entries) {
     const current = turns.at(-1);
-    if (current !== undefined && current[0]?.turnId === entry.turnId) current.push(entry);
+    if (current !== undefined && current[0].turnId === entry.turnId) current.push(entry);
     else turns.push([entry]);
   }
   return turns;
@@ -92,12 +92,14 @@ type WindowResultEntryValue = Extract<
 const activeTurnUser = (
   turn: ReadonlyArray<TranscriptWindowEntry>,
   maxCharacters: TranscriptWindowCharacterLimit
-): Option.Option<WindowUserEntry> =>
-  Option.fromUndefinedOr(turn[0]).pipe(
+): Option.Option<WindowUserEntry> => {
+  const lastEntry = Option.getOrThrow(Option.fromUndefinedOr(turn.at(-1)));
+  return Option.fromUndefinedOr(turn[0]).pipe(
     Option.filter((entry): entry is WindowUserEntry => entry._tag === "UserTranscriptEntry"),
     Option.filter((user) => entryCharacters(user) <= maxCharacters),
-    Option.filter(() => turn.at(-1)?._tag !== "AssistantTranscriptEntry")
+    Option.filter(() => lastEntry._tag !== "AssistantTranscriptEntry")
   );
+};
 
 const matchingTrailingCall = (
   previous: Option.Option<TranscriptWindowEntry>,
@@ -113,20 +115,25 @@ const matchingTrailingCall = (
 const trailingTurnUnit = (
   turn: ReadonlyArray<TranscriptWindowEntry>,
   index: number
-): ReadonlyArray<TranscriptWindowEntry> =>
-  Option.fromUndefinedOr(turn[index]).pipe(
-    Option.match({
-      onNone: () => [],
-      onSome: (entry) =>
-        entry._tag === "CanonicalToolResultEntry"
-          ? matchingTrailingCall(Option.fromUndefinedOr(turn[index - 1]), entry).pipe(
-              Option.match({
-                onNone: () => [entry],
-                onSome: (call) => [call, entry],
-              })
-            )
-          : [entry],
-    })
+): ReadonlyArray<TranscriptWindowEntry> => {
+  const entry = Option.getOrThrow(Option.fromUndefinedOr(turn[index]));
+  return entry._tag === "CanonicalToolResultEntry"
+    ? matchingTrailingCall(Option.fromUndefinedOr(turn[index - 1]), entry).pipe(
+        Option.match({
+          onNone: () => [entry],
+          onSome: (call) => [call, entry],
+        })
+      )
+    : [entry];
+};
+
+/** Whether the entry at the index is the call already carried by the result that follows it. */
+const pairedWithFollowingResult = (
+  turn: ReadonlyArray<TranscriptWindowEntry>,
+  index: number
+): boolean =>
+  Option.fromUndefinedOr(turn[index + 1]).pipe(
+    Option.exists(() => trailingTurnUnit(turn, index + 1).length > 1)
   );
 
 const boundedActiveTurn = (
@@ -136,17 +143,30 @@ const boundedActiveTurn = (
   const user = activeTurnUser(turn, maxCharacters);
   if (Option.isNone(user)) return [];
 
-  const suffix: Array<TranscriptWindowEntry> = [];
-  let characters = entryCharacters(user.value);
-  for (let index = turn.length - 1; index > 0;) {
+  const state: {
+    suffix: Array<TranscriptWindowEntry>;
+    characters: number;
+    stopped: boolean;
+  } = {
+    suffix: [],
+    characters: entryCharacters(user.value),
+    stopped: false,
+  };
+  const [, ...trailing] = turn;
+  const newestFirstIndexes = Array.from(trailing.keys(), (index) => turn.length - 1 - index);
+  newestFirstIndexes.forEach((index) => {
+    if (state.stopped) return;
+    if (pairedWithFollowingResult(turn, index)) return;
     const unit = trailingTurnUnit(turn, index);
     const unitCharacters = unit.reduce((total, member) => total + entryCharacters(member), 0);
-    if (characters + unitCharacters > maxCharacters) break;
-    suffix.unshift(...unit);
-    characters += unitCharacters;
-    index -= unit.length;
-  }
-  return [user.value, ...suffix];
+    if (state.characters + unitCharacters > maxCharacters) {
+      state.stopped = true;
+      return;
+    }
+    state.suffix.unshift(...unit);
+    state.characters += unitCharacters;
+  });
+  return [user.value, ...state.suffix];
 };
 
 type TurnSelection = Readonly<{

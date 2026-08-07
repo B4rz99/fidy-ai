@@ -84,15 +84,15 @@ export type DashboardMoneyGroup = typeof DashboardMoneyGroup.Type;
 const deterministicDashboardCurrencyOrder = Schema.makeFilter<
   ReadonlyArray<Readonly<{ readonly currency: Currency }>>
 >((groups) => {
-  for (let index = 1; index < groups.length; index += 1) {
-    const previous = groups[index - 1];
-    const current = groups[index];
-    if (previous !== undefined && current !== undefined && previous.currency >= current.currency) {
+  let previous: Option.Option<Currency> = Option.none();
+  for (const [index, current] of groups.entries()) {
+    if (Option.isSome(previous) && previous.value >= current.currency) {
       return {
         path: [index, "currency"],
         issue: "Expected unique Currency groups in alphabetic order",
       };
     }
+    previous = Option.some(current.currency);
   }
   return undefined;
 });
@@ -513,6 +513,9 @@ const BesidePlacement = Schema.Struct({
 }).annotate({ identifier: "BesidePlacement" });
 export type BesidePlacement = typeof BesidePlacement.Type;
 
+/** Whether a Placement names a sibling Widget rather than a document edge. */
+export const isBesidePlacement = Schema.is(BesidePlacement);
+
 /** Root or sibling-relative destination accepted by add and move edits. */
 export const Placement = Schema.Union([Schema.Literals(["top", "bottom"]), BesidePlacement]);
 export type Placement = typeof Placement.Type;
@@ -599,6 +602,6 @@ export const collectDashboardCategoryReferences = (
             field: `categories.${index}` satisfies `categories.${number}`,
           }));
       }
-      return [];
+      throw new Error("Unexpected Widget variant");
     }
   );

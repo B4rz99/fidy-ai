@@ -104,6 +104,36 @@ it("sets the dashboard's visible heading through the shared edit vocabulary", ()
   expect(updated.layout).toEqual(document.layout);
 });
 
+it("reports schema failures when an edit revalidates malformed document data", () => {
+  const malformedDocument = Schema.decodeUnknownSync(DashboardDocument)({
+    title: "Mi tablero",
+    layout: {
+      kind: "leaf",
+      widget: {
+        id: "f1d1a000-0000-4000-8000-000000000490",
+        type: "spending-chart",
+        groupBy: "category",
+        period: "this-month",
+      },
+    },
+  });
+  if (malformedDocument.layout.kind !== "leaf") throw new Error("Expected a leaf layout");
+  Object.assign(malformedDocument.layout.widget, { type: "not-a-dashboard-widget" });
+  const edit = Schema.decodeUnknownSync(DashboardEdit)({
+    op: "set-title",
+    title: "Flujo de caja",
+  });
+
+  const outcome = Effect.runSync(
+    Effect.result(applyDashboardEdit({ document: malformedDocument, edit }))
+  );
+
+  expect(Result.isFailure(outcome) ? outcome.failure : undefined).toMatchObject({
+    _tag: "InvalidDashboardResult",
+    issues: [{ message: "The edit produced a document outside DashboardDocument invariants" }],
+  });
+});
+
 it("adds a widget at the top of the whole dashboard in mobile reading order", () => {
   const edit = Schema.decodeUnknownSync(DashboardEdit)({
     op: "add-widget",
@@ -299,7 +329,7 @@ it("flattens only matching-axis regions and preserves a perpendicular sibling sp
                 node: { kind: "leaf", widget: transactionListWidget(columnFirstId) },
               },
               {
-                weight: 1,
+                weight: 2,
                 node: { kind: "leaf", widget: transactionListWidget(columnSecondId) },
               },
             ],
@@ -320,13 +350,78 @@ it("flattens only matching-axis regions and preserves a perpendicular sibling sp
   if (updated.layout.kind === "split") {
     expect(updated.layout.children.map(({ weight }) => weight)).toEqual([3, 3, 4]);
     expect(updated.layout.children.map(({ node }) => node.kind)).toEqual(["leaf", "leaf", "split"]);
-    expect(updated.layout.children[2]?.node).toMatchObject({ kind: "split", axis: "column" });
+    const perpendicular = updated.layout.children[2]?.node;
+    expect(perpendicular).toMatchObject({ kind: "split", axis: "column" });
+    if (perpendicular?.kind === "split") {
+      expect(perpendicular.children.map(({ weight }) => weight)).toEqual([1, 2]);
+    }
   }
   expect(collectLayoutWidgets(updated.layout).map(({ id }) => id)).toEqual([
     targetId,
     addedId,
     columnFirstId,
     columnSecondId,
+  ]);
+});
+
+it("keeps a perpendicular parent while placing beside a nested widget", () => {
+  const targetId = "f1d1a000-0000-4000-8000-000000000427";
+  const siblingId = "f1d1a000-0000-4000-8000-000000000428";
+  const outsideId = "f1d1a000-0000-4000-8000-000000000429";
+  const addedId = "f1d1a000-0000-4000-8000-00000000042a";
+  const source = Schema.decodeUnknownSync(DashboardDocument)({
+    title: "Mi tablero",
+    layout: {
+      kind: "split",
+      axis: "row",
+      children: [
+        {
+          weight: 3,
+          node: {
+            kind: "split",
+            axis: "column",
+            children: [
+              {
+                weight: 2,
+                node: { kind: "leaf", widget: transactionListWidget(targetId) },
+              },
+              {
+                weight: 1,
+                node: { kind: "leaf", widget: customMetricWidget(siblingId) },
+              },
+            ],
+          },
+        },
+        {
+          weight: 4,
+          node: { kind: "leaf", widget: transactionListWidget(outsideId) },
+        },
+      ],
+    },
+  });
+  const edit = Schema.decodeUnknownSync(DashboardEdit)({
+    op: "add-widget",
+    widget: transactionListWidget(addedId),
+    at: { besideWidget: targetId, axis: "row", side: "after" },
+  });
+
+  const updated = Effect.runSync(applyDashboardEdit({ document: source, edit }));
+
+  expect(updated.layout.kind).toBe("split");
+  if (updated.layout.kind === "split") {
+    expect(updated.layout.children.map(({ weight }) => weight)).toEqual([3, 4]);
+    const nested = updated.layout.children[0].node;
+    expect(nested).toMatchObject({ kind: "split", axis: "column" });
+    if (nested.kind === "split") {
+      expect(nested.children.map(({ weight }) => weight)).toEqual([2, 1]);
+      expect(nested.children[0].node).toMatchObject({ kind: "split", axis: "row" });
+    }
+  }
+  expect(collectLayoutWidgets(updated.layout).map(({ id }) => id)).toEqual([
+    targetId,
+    addedId,
+    siblingId,
+    outsideId,
   ]);
 });
 
@@ -425,6 +520,31 @@ it("rejects moving a widget beside itself without changing the input document", 
 
   expect(Result.isFailure(outcome) ? outcome.failure._tag : undefined).toBe("SelfPlacement");
   expect(document.layout.kind).toBe("leaf");
+});
+
+it("moves a widget to either root edge while preserving the requested order", () => {
+  const movingId = "f1d1a000-0000-4000-8000-000000000425";
+  const retainedId = "f1d1a000-0000-4000-8000-000000000426";
+  const source = makeSplitDocument([
+    { weight: 1, widget: transactionListWidget(movingId) },
+    { weight: 1, widget: customMetricWidget(retainedId) },
+  ]);
+  const topEdit = Schema.decodeUnknownSync(DashboardEdit)({
+    op: "move-widget",
+    widgetId: movingId,
+    at: "top",
+  });
+  const bottomEdit = Schema.decodeUnknownSync(DashboardEdit)({
+    op: "move-widget",
+    widgetId: movingId,
+    at: "bottom",
+  });
+
+  const top = Effect.runSync(applyDashboardEdit({ document: source, edit: topEdit }));
+  const bottom = Effect.runSync(applyDashboardEdit({ document: source, edit: bottomEdit }));
+
+  expect(collectLayoutWidgets(top.layout).map(({ id }) => id)).toEqual([movingId, retainedId]);
+  expect(collectLayoutWidgets(bottom.layout).map(({ id }) => id)).toEqual([retainedId, movingId]);
 });
 
 it("resizes the immediate region containing a widget", () => {
@@ -635,6 +755,71 @@ it("removes a later sibling without collapsing a split that still has two childr
   const updated = Effect.runSync(applyDashboardEdit({ document: source, edit }));
 
   expect(collectLayoutWidgets(updated.layout).map(({ id }) => id)).toEqual([firstId, lastId]);
+});
+
+it("preserves exact weighted shares when removal exposes a same-axis split", () => {
+  const removedId = "f1d1a000-0000-4000-8000-000000000485";
+  const firstId = "f1d1a000-0000-4000-8000-000000000486";
+  const secondId = "f1d1a000-0000-4000-8000-000000000487";
+  const lastId = "f1d1a000-0000-4000-8000-000000000488";
+  const source = Schema.decodeUnknownSync(DashboardDocument)({
+    title: "Mi tablero",
+    layout: {
+      kind: "split",
+      axis: "row",
+      children: [
+        {
+          weight: 6,
+          node: {
+            kind: "split",
+            axis: "column",
+            children: [
+              {
+                weight: 1,
+                node: { kind: "leaf", widget: transactionListWidget(removedId) },
+              },
+              {
+                weight: 1,
+                node: {
+                  kind: "split",
+                  axis: "row",
+                  children: [
+                    {
+                      weight: 2,
+                      node: { kind: "leaf", widget: transactionListWidget(firstId) },
+                    },
+                    {
+                      weight: 3,
+                      node: { kind: "leaf", widget: customMetricWidget(secondId) },
+                    },
+                  ],
+                },
+              },
+            ],
+          },
+        },
+        {
+          weight: 4,
+          node: { kind: "leaf", widget: transactionListWidget(lastId) },
+        },
+      ],
+    },
+  });
+  const edit = Schema.decodeUnknownSync(DashboardEdit)({
+    op: "remove-widget",
+    widgetId: removedId,
+  });
+
+  const updated = Effect.runSync(applyDashboardEdit({ document: source, edit }));
+
+  expect(collectLayoutWidgets(updated.layout).map(({ id }) => id)).toEqual([
+    firstId,
+    secondId,
+    lastId,
+  ]);
+  expect(
+    updated.layout.kind === "split" ? updated.layout.children.map(({ weight }) => weight) : []
+  ).toEqual([6, 9, 10]);
 });
 
 it("collapses a nested split while retaining its parent region", () => {

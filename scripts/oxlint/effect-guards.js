@@ -575,9 +575,116 @@ const scalarBrandOnly = {
   },
 };
 
+const ENTROPY_EXPORTS = new Set([
+  "generateKey",
+  "generateKeyPair",
+  "generateKeyPairSync",
+  "generateKeySync",
+  "generatePrime",
+  "generatePrimeSync",
+  "getRandomValues",
+  "randomBytes",
+  "randomFill",
+  "randomFillSync",
+  "randomInt",
+  "randomUUID",
+]);
+
+const CRYPTO_SOURCES = new Set(["crypto", "node:crypto"]);
+
+const bindsWholeModule = (specifier) =>
+  specifier.type === "ImportNamespaceSpecifier" || specifier.type === "ImportDefaultSpecifier";
+
+const cryptoModuleLocals = (statement) => {
+  if (statement.type !== "ImportDeclaration") return [];
+  const source = statement.source.value;
+  if (typeof source !== "string" || !CRYPTO_SOURCES.has(source)) return [];
+  return statement.specifiers.filter(bindsWholeModule).map((specifier) => specifier.local.name);
+};
+
+const cryptoBindings = (program) =>
+  new Set(["crypto", ...program.body.flatMap(cryptoModuleLocals)]);
+
+const isCryptoObject = (object, names) => {
+  if (object.type === "Identifier") return names.has(object.name);
+  return object.type === "MemberExpression" && staticMemberName(object) === "crypto";
+};
+
+const noAmbientNondeterminism = {
+  meta: {
+    type: "problem",
+    docs: { description: "Disallow ambient clock and entropy reads in core" },
+    messages: {
+      clock:
+        "core may not read the clock. `new Date()` with no arguments reads it as surely as Date.now() does, and types as a plain value so nothing else in the toolchain can see it. Take the timestamp as a parameter and let the shell call Clock. `new Date(value)` is fine — that parses what the caller gave you.",
+      random:
+        "core may not be random. `{{name}}` draws entropy, so the same inputs stop producing the same output. node:crypto is permitted in core for hashing only (`createHash`/`createHmac`, which are deterministic). Take the value as a parameter and let the shell generate it.",
+    },
+    schema: [],
+  },
+  create(context) {
+    const reportRandom = (node, name) =>
+      context.report({ node, messageId: "random", data: { name } });
+    const cryptoNames = new Set(["crypto"]);
+    return {
+      Program(program) {
+        for (const name of cryptoBindings(program)) cryptoNames.add(name);
+      },
+      NewExpression(node) {
+        if (node.callee.type !== "Identifier" || node.callee.name !== "Date") return;
+        if (node.arguments.length > 0) return;
+        context.report({ node, messageId: "clock" });
+      },
+      ImportDeclaration(node) {
+        const source = node.source.value;
+        if (typeof source !== "string" || !CRYPTO_SOURCES.has(source)) return;
+        for (const specifier of node.specifiers) {
+          if (specifier.type !== "ImportSpecifier") continue;
+          const imported = specifier.imported;
+          if (imported.type !== "Identifier" || !ENTROPY_EXPORTS.has(imported.name)) continue;
+          reportRandom(specifier, imported.name);
+        }
+      },
+      MemberExpression(node) {
+        const name = staticMemberName(node);
+        if (name === undefined || !ENTROPY_EXPORTS.has(name)) return;
+        if (!isCryptoObject(node.object, cryptoNames)) return;
+        reportRandom(node, name);
+      },
+    };
+  },
+};
+
+const noNullableType = {
+  meta: {
+    type: "problem",
+    docs: { description: "Disallow undefined/null in types; absence is Option" },
+    messages: {
+      keyword:
+        '`{{name}}` in a type makes absence a value every read has to be talked out of, and `?? fallback` the cheapest way to do it. Use `Option.Option<T>`: `Option.fromNullable`/`Option.fromUndefinedOr` where a builtin hands one back, `Schema.OptionFromNullOr` or `Schema.optionalWith(…, { as: "Option" })` in a schema — the wire keeps its `null`, only the decoded type changes. Effect\'s own lookups (`Array.get`, `Array.findFirst`, `Array.last`, `String.match`, `HashMap.get`) return Options and never produce this.',
+      optional:
+        "An optional property makes absence a missing key, which reads back as `T | undefined` — the same defect one spelling further out. Make it required and `Option.Option<T>`, so the empty case is handled at the read rather than defaulted at it.",
+    },
+    schema: [],
+  },
+  create(context) {
+    const keyword = (name) => (node) =>
+      context.report({ node, messageId: "keyword", data: { name } });
+    return {
+      TSUndefinedKeyword: keyword("undefined"),
+      TSNullKeyword: keyword("null"),
+      TSPropertySignature(node) {
+        if (node.optional === true) context.report({ node, messageId: "optional" });
+      },
+    };
+  },
+};
+
 const plugin = {
   meta: { name: "effect-guards" },
   rules: {
+    "no-ambient-nondeterminism": noAmbientNondeterminism,
+    "no-nullable-type": noNullableType,
     "no-react-use-effect": noReactUseEffect,
     "no-sql-type-parameter": noSqlTypeParameter,
     "no-disable-validation": noDisableValidation,

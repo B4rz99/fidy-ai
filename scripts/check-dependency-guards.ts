@@ -44,6 +44,7 @@ const TYPE_ONLY = dir("type-only");
 const CORE_TO_SHELL = dir("core-imports-shell");
 const CORE_TO_WORLD = dir("core-imports-the-world");
 const ENTRYPOINT = dir("entrypoint");
+const SENTRY_OUTSIDE_OBSERVABILITY = dir("sentry-outside-observability");
 const CYCLE = dir("cycle");
 const BARREL = dir("barrel");
 const ALIAS_SAME_DIRECTORY = dir("alias-same-directory");
@@ -155,6 +156,24 @@ const PROBES: readonly Probe[] = [
       },
     ],
     name: "entrypoint-is-imported rejects importing src/main.ts",
+  },
+  {
+    directory: SENTRY_OUTSIDE_OBSERVABILITY,
+    expect: {
+      kind: "rejected",
+      mustContain: [
+        `error sentry-imported-outside-observability: ${SENTRY_OUTSIDE_OBSERVABILITY}/probe.ts → node_modules/@sentry/bun/build/types/index.d.ts`,
+      ],
+    },
+    files: [
+      {
+        path: `${SENTRY_OUTSIDE_OBSERVABILITY}/probe.ts`,
+        source:
+          'import { captureEvent } from "@sentry/bun";\n\n' +
+          "export const sentryOutsideObservabilityProbe = captureEvent;\n",
+      },
+    ],
+    name: "sentry-imported-outside-observability rejects direct SDK access",
   },
   {
     directory: CYCLE,

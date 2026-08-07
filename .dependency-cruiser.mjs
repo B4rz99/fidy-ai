@@ -99,6 +99,16 @@ export default {
       to: { path: "^src/main\\.ts$" },
     },
     {
+      name: "sentry-imported-outside-observability",
+      severity: "error",
+      comment:
+        "A module outside src/shell/observability imported Sentry. Telemetry is one metadata-only " +
+        "shell seam: callers supply its closed protocol rather than gaining SDK event, context, " +
+        "breadcrumb, attachment, or request construction capability (issue #106).",
+      from: { path: "^src/", pathNot: "^src/shell/observability/" },
+      to: { path: "^node_modules/@sentry/", dependencyTypes: ["npm"] },
+    },
+    {
       name: "cycle",
       severity: "error",
       comment:

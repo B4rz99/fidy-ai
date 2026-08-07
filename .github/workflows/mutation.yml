@@ -16,12 +16,12 @@ jobs:
     # Mutation testing is deliberately shifted right: it protects trunk nightly
     # without extending or blocking pull-request feedback.
     steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       # Stryker's Babel instrumenter needs Node. Bun still installs dependencies
       # and runs Vitest; only the Stryker process itself runs on Node.
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
-          node-version: "22"
+          node-version: "24"
       - uses: ./.github/actions/bun-install
       # Stryker rewrites its sandbox tsconfig through the classic TypeScript
       # compiler API, isolated under tools/mutation from Effect tsgo.

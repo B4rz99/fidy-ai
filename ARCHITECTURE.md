@@ -164,6 +164,10 @@ Use these seams:
   and terminal adapters substituted while the canonical application path remains real.
 - **Channel-worker seam:** the exported durable worker step with real Consent, Identity, RLS
   repositories, and AgentService; only language-model and provider clients are substituted.
+- **Public-channel acceptance seam:** the signed provider webhook over a real socket, real PostgreSQL,
+  and the production Identity, Consent, queue, worker, AgentService, and canonical operation path;
+  only the provider transport and language-model behavior are substituted. This seam owns named
+  end-to-end channel scenarios and a separate source-coverage ratchet.
 
 Core tests do not mock repositories or handlers. They prove decisions directly; the API seam proves
 load-decide-persist integration. A stable pure policy may be tested directly, but its integration

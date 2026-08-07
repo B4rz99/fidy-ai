@@ -19,6 +19,25 @@
     "effect-guards/no-disable-validation": "error",
     "effect-guards/no-curried-export": "error",
     "effect-guards/no-react-use-effect": "error",
+    "capitalized-comments": ["off", "always", { "ignoreConsecutiveComments": true }],
+    "complexity": ["off", { "max": 8 }],
+    "effect-guards/no-nullable-type": "off",
+    "id-length": ["off", { "exceptions": ["_", "A", "E", "R"], "properties": "never" }],
+    "import/exports-last": "off",
+    "import/group-exports": "off",
+    "import/newline-after-import": "off",
+    "max-lines-per-function": ["off", { "max": 60 }],
+    "max-statements": ["off", { "max": 70 }],
+    "no-magic-numbers": [
+      "off",
+      {
+        "ignore": [-1, 0, 1, 2, 3, 4, 100],
+        "ignoreArrayIndexes": true,
+        "ignoreDefaultValues": true
+      }
+    ],
+    "sort-imports": ["off", { "ignoreDeclarationSort": true }],
+    "typescript/explicit-function-return-type": "off",
     // `.mjs` is the exception: the vitest configs and the CRAP runner import
     // source-scope.mjs, where the extension is genuinely required to resolve.
     "import/extensions": ["error", "never", { "pattern": { "mjs": "always" } }],
@@ -29,6 +48,8 @@
     "func-style": ["error", "expression"],
     "import/first": "error",
     "import/no-cycle": "error",
+    "import/no-default-export": "error",
+    "import/no-self-import": "error",
     "jsdoc/check-tag-names": "error",
     "jsdoc/empty-tags": "error",
     "jsdoc/require-param-description": "error",
@@ -37,6 +58,7 @@
     "max-depth": ["error", 3],
     "max-nested-callbacks": ["error", 3],
     "max-params": ["error", 3],
+    "no-await-in-loop": "error",
     "no-console": "error",
     "no-constant-binary-expression": "error",
     "no-duplicate-imports": ["error", { "allowSeparateTypeImports": true }],
@@ -44,8 +66,11 @@
     "no-fallthrough": "error",
     "no-implicit-coercion": "error",
     "no-implied-eval": "error",
+    "no-iterator": "error",
+    "no-labels": "error",
     "no-lonely-if": "error",
     "no-nested-ternary": "error",
+    "no-new": "error",
     "no-param-reassign": "error",
     "no-self-compare": "error",
     "no-unneeded-ternary": "error",
@@ -64,6 +89,7 @@
       { "ts-expect-error": true, "ts-ignore": true, "ts-nocheck": true }
     ],
     "typescript/consistent-type-assertions": ["error", { "assertionStyle": "never" }],
+    "typescript/consistent-type-definitions": ["error", "type"],
     "typescript/consistent-type-imports": [
       "error",
       { "prefer": "type-imports", "fixStyle": "inline-type-imports" }
@@ -82,7 +108,9 @@
     "typescript/no-unsafe-member-access": "error",
     "typescript/no-unsafe-return": "error",
     "typescript/only-throw-error": "error",
+    "typescript/parameter-properties": "error",
     "typescript/prefer-nullish-coalescing": "error",
+    "typescript/prefer-readonly": "error",
     "typescript/prefer-optional-chain": "error",
     "typescript/restrict-template-expressions": "error",
     "typescript/switch-exhaustiveness-check": "error",
@@ -94,6 +122,7 @@
     {
       "files": ["scripts/**/*.ts", "tools/**/*.mjs"],
       "rules": {
+        "no-await-in-loop": "off",
         "no-console": "off"
       }
     },
@@ -153,11 +182,53 @@
     {
       "files": ["src/core/**"],
       "rules": {
+        "effect-guards/no-ambient-nondeterminism": "error",
         "effect-guards/no-datetime-internals": "error",
         "effect-guards/no-escape-hatch": "error",
         "effect-guards/require-interface-comment": "error",
         "effect-guards/scalar-brand-only": "error",
         "no-param-reassign": ["error", { "props": true }],
+        "no-restricted-globals": [
+          "error",
+          {
+            "name": "process",
+            "message": "core may not read ambient process state. `argv`, `cwd`, `platform` and `env` are a shell concern, and `exit` in core would end the run from inside a pure function. Take the value as a parameter and let the shell read it."
+          },
+          {
+            "name": "queueMicrotask",
+            "message": "core may not schedule. Return a description of the work and let the shell run it."
+          }
+        ],
+        "no-restricted-properties": [
+          "error",
+          {
+            "object": "Date",
+            "property": "now",
+            "message": "core may not read the clock. Take the timestamp as a parameter and let the shell call Clock."
+          },
+          {
+            "object": "Math",
+            "property": "random",
+            "message": "core may not be random. Take the value as a parameter and let the shell generate it."
+          },
+          {
+            "object": "Clock",
+            "message": "core may not read the clock. Clock is an Effect default service: using it keeps the type `Effect<A, E, never>` while making the function depend on when it runs, so the requirements channel never reveals it."
+          },
+          {
+            "object": "Random",
+            "message": "core may not be random. Random is an Effect default service: using it keeps the type `Effect<A, E, never>` while making the function nondeterministic."
+          },
+          {
+            "object": "Console",
+            "message": "core may not log. Return what happened and let the shell decide whether to print it — Console is an Effect default service, so it does not appear in the requirements channel and nothing else will catch this."
+          },
+          {
+            "object": "performance",
+            "property": "now",
+            "message": "core may not read the clock. `performance.now()` is a clock like any other — a monotonic one — so a core function using it depends on when it runs."
+          }
+        ],
         // `DateTime.Utc` carries a mutable lazy cache even though it denotes an
         // immutable instant; property reassignment remains banned above. Effect's
         // `Brand` adds phantom scalar identity, but its variance field trips this
@@ -204,7 +275,23 @@
     {
       "files": ["**/*.test.ts"],
       "rules": {
-        "max-nested-callbacks": ["error", 4]
+        "max-nested-callbacks": ["error", 4],
+        "max-lines-per-function": "off",
+        "no-magic-numbers": "off"
+      }
+    },
+    {
+      "files": [
+        "vitest.config.ts",
+        "vitest.core.config.ts",
+        "vitest.crap.config.ts",
+        "vitest.acceptance.config.ts",
+        "stryker.config.mjs",
+        ".dependency-cruiser.mjs",
+        "scripts/oxlint/*.js"
+      ],
+      "rules": {
+        "import/no-default-export": "off"
       }
     }
   ]

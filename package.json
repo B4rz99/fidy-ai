@@ -16,6 +16,7 @@
     "format:check": "oxfmt --check .",
     "typecheck": "tsc --noEmit",
     "test": "bun --bun vitest run",
+    "test:acceptance": "bun --bun vitest run --config vitest.acceptance.config.ts",
     "test:core": "bun --bun vitest run --config vitest.core.config.ts",
     "test:crap": "bun --bun vitest run --config vitest.crap.config.ts --coverage && bun tools/crap/run.mjs",
     "test:mutation": "node tools/mutation/run.mjs",
@@ -39,7 +40,7 @@
     "lefthook": "2.1.10",
     "oxfmt": "0.61.0",
     "oxlint": "1.76.0",
-    "oxlint-tsgolint": "0.25.0",
+    "oxlint-tsgolint": "7.0.2001",
     "typescript": "7.0.2",
     "vitest": "4.1.10"
   },

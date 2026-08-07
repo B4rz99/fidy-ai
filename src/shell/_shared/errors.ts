@@ -47,7 +47,12 @@ const codeVocabulary = ErrorCode.literals.map((code) => `\`${code}\``).join(", "
  * The code is pinned per error class so the derived spec advertises exactly
  * which one a given status carries.
  */
-const detail = <Code extends ErrorCode>(code: Code) =>
+const detail = <Code extends ErrorCode>(
+  code: Code
+): Schema.Struct<{
+  readonly code: Schema.Literal<Code>;
+  readonly message: Schema.NonEmptyString;
+}> =>
   Schema.Struct({
     code: Schema.Literal(code).annotate({
       description:
@@ -98,7 +103,9 @@ const FieldIssue = Schema.Struct({
  * `HttpApiSchema.status`; a failure takes its status from the annotation
  * argument of the same `ErrorClass` call instead, so it never needs to be one.
  */
-const errorResponse = <Detail extends Schema.Top>(error: Detail) => ({
+const errorResponse = <Detail extends Schema.Top>(
+  error: Detail
+): { error: Detail; next: typeof NextOperations } => ({
   error,
   next: NextOperations,
 });
@@ -157,7 +164,9 @@ export class ConsentRequired extends Schema.ErrorClass<ConsentRequired>("Consent
  */
 export class NotFound extends Schema.ErrorClass<NotFound>("NotFound")(
   errorResponse(detail("not_found")),
-  { httpApiStatus: 404 }
+  {
+    httpApiStatus: 404,
+  }
 ) {}
 
 /**
@@ -217,16 +226,16 @@ const segmentName = (segment: PropertyKey | { readonly key: PropertyKey }): stri
  * failure.
  */
 const issuePath = (
-  segments: ReadonlyArray<PropertyKey | { readonly key: PropertyKey }> | undefined
+  segments: Option.Option<ReadonlyArray<PropertyKey | { readonly key: PropertyKey }>>
 ): Option.Option<string> =>
-  Option.fromUndefinedOr(segments).pipe(
+  segments.pipe(
     Option.map((present) => present.map(segmentName).join(".")),
     Option.filter((path) => path.length > 0)
   );
 
 const fieldIssues = (cause: Schema.SchemaError): ReadonlyArray<typeof FieldIssue.Type> =>
   formatIssue(cause.issue).issues.map((issue) =>
-    Option.match(issuePath(issue.path), {
+    Option.match(issuePath(Option.fromUndefinedOr(issue.path)), {
       onNone: () => ({
         message: "Expected the whole value to match this operation's input schema.",
       }),

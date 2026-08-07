@@ -10,8 +10,8 @@ import { TransactionId } from "~/core/transactions/model";
 import { AgentBearerToken, type AgentScope } from "~/core/tokens/model";
 import { NotFound } from "~/shell/_shared/errors";
 import {
-  canCallOperation,
   type SuggestedOperationCaller,
+  canCallOperation,
 } from "~/shell/_shared/suggested-operations";
 import {
   SuggestedOperation,
@@ -23,7 +23,7 @@ import { seedConsentedAgentIdentity } from "~/shell/db/development-seed";
 import { truncateInsights, weeklySummaryInput } from "~/shell/insights/fixtures";
 import { generateInsightEvent } from "~/shell/insights/repo";
 import { transactionPayload, truncateTransactions } from "~/shell/transactions/fixtures";
-import { type ApiCallFailure, ApiHarness, type ApiClient, makeApiClientLive } from "./api-harness";
+import { type ApiCallFailure, type ApiClient, ApiHarness, makeApiClientLive } from "./api-harness";
 
 type NavigableResponse = {
   readonly next: ReadonlyArray<SuggestedOperationValue>;

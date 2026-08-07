@@ -1,4 +1,4 @@
-import { type DateTime, Data } from "effect";
+import { Data, type DateTime } from "effect";
 import { type TransactionId } from "./model";
 
 /**
@@ -38,8 +38,8 @@ export class InvalidTransactionPeriod extends Data.TaggedError("InvalidTransacti
  * row the model rejects — is a defect and is absent from this union by design.
  *
  * Carries no status, no code, no message: how a failure reaches the API response is
- * decided once per slice in `shell/transactions/errors.ts`, which switches over
- * this union exhaustively. Widening it without extending that switch fails the
+ * decided once per slice in `shell/transactions/errors.ts`, which maps this
+ * union exhaustively. Widening it without extending that mapping fails the
  * build (ARCHITECTURE.md §6).
  */
 export type TransactionFailure =

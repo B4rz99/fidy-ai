@@ -1,6 +1,10 @@
 import { Data, DateTime, Effect, Option, Schema } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
-import type { UserId } from "~/core/identity/reference";
+import type {
+  E164PhoneNumber,
+  UserId,
+  WhatsAppBusinessScopedUserId,
+} from "~/core/identity/reference";
 import { TranscriptText } from "~/core/transcript/model";
 import type { AgentReply } from "~/shell/agent/agent-service";
 import type { AgentConversationAdmission } from "~/shell/agent/conversation";
@@ -13,9 +17,9 @@ import {
 import { KapsoClient } from "./kapso-client";
 import type { WhatsAppInboundEvent } from "./model";
 import {
+  type WhatsAppReceiptInvalid,
   authorizeWhatsAppFreeForm,
   retainOutboundEvidence,
-  type WhatsAppReceiptInvalid,
 } from "./repo";
 
 /** Another worker owns disclosure delivery or its evidence could not be recorded. */
@@ -29,9 +33,90 @@ export class AgentReplyNotRenderable extends Data.TaggedError("AgentReplyNotRend
 const renderWhatsAppText = (text: TranscriptText): TranscriptText =>
   TranscriptText.make(text.replace(/\*\*(\S(?:[\s\S]*?\S)?)\*\*/gu, "*$1*"));
 
-const destinationFor = (caller: WhatsAppInboundEvent["caller"]) => ({
+const destinationFor = (
+  caller: WhatsAppInboundEvent["caller"]
+): {
+  recipient: WhatsAppBusinessScopedUserId;
+  sandboxPhone: Option.Option<E164PhoneNumber>;
+} => ({
   recipient: caller.businessScopedUserId,
   sandboxPhone: caller.phoneNumber,
+});
+
+type DeliverableConsentOutcome = Exclude<
+  AgentConversationAdmission,
+  { readonly _tag: "AuthorizedTurn" }
+>;
+
+type DisclosureExchangeId = Extract<
+  DeliverableConsentOutcome,
+  { readonly _tag: "SendDisclosure" }
+>["exchangeId"];
+
+const isOutsideFreeFormWindow = (event: WhatsAppInboundEvent): boolean =>
+  DateTime.Order(event.occurredAt, DateTime.subtract(event.receivedAt, { hours: 24 })) < 0;
+
+const consentOutcomeText = (outcome: DeliverableConsentOutcome): string => {
+  switch (outcome._tag) {
+    case "AwaitingDisclosureDelivery":
+      return CURRENT_DISCLOSURE_TEXT;
+    case "SendDisclosure":
+    case "ClarifyDecision":
+    case "Declined":
+    case "Accepted":
+      return outcome.text;
+  }
+};
+
+const disclosureExchangeId = (
+  outcome: DeliverableConsentOutcome
+): Option.Option<DisclosureExchangeId> => {
+  switch (outcome._tag) {
+    case "SendDisclosure":
+    case "AwaitingDisclosureDelivery":
+      return Option.some(outcome.exchangeId);
+    case "ClarifyDecision":
+    case "Declined":
+    case "Accepted":
+      return Option.none();
+  }
+};
+
+const sendConsentText = Effect.fn("WhatsApp.sendConsentText")(function* (
+  request: Readonly<{ event: WhatsAppInboundEvent; text: TranscriptText }>
+) {
+  const client = yield* KapsoClient;
+  return yield* client.sendText({
+    businessPhoneNumberId: request.event.businessPhoneNumberId,
+    destination: destinationFor(request.event.caller),
+    text: request.text,
+  });
+});
+
+const deliverConsentDisclosure = Effect.fn("WhatsApp.deliverConsentDisclosure")(function* (
+  request: Readonly<{
+    event: WhatsAppInboundEvent;
+    exchangeId: DisclosureExchangeId;
+    text: TranscriptText;
+    beforeProviderCall: Effect.Effect<void, WhatsAppReceiptInvalid, SqlClient.SqlClient>;
+  }>
+) {
+  const claim = yield* claimConsentDisclosureDelivery(request.exchangeId, request.event.receivedAt);
+  if (Option.isNone(claim)) return yield* new ConsentDisclosureDeliveryUnavailable();
+  yield* request.beforeProviderCall;
+  const started = yield* markConsentDisclosureDeliveryStarted(
+    { exchangeId: request.exchangeId, claimId: claim.value.claimId },
+    request.event.receivedAt
+  );
+  if (!started) return yield* new ConsentDisclosureDeliveryUnavailable();
+  const sent = yield* sendConsentText({ event: request.event, text: request.text });
+  const recorded = yield* recordConsentDisclosureDelivery({
+    exchangeId: request.exchangeId,
+    claimId: claim.value.claimId,
+    message: sent.messageEvidence,
+    deliveredAt: sent.sentAt,
+  });
+  if (Option.isNone(recorded)) return yield* new ConsentDisclosureDeliveryUnavailable();
 });
 
 /**
@@ -42,45 +127,23 @@ const destinationFor = (caller: WhatsAppInboundEvent["caller"]) => ({
  */
 export const deliverWhatsAppConsentOutcome = Effect.fn("WhatsApp.deliverConsentOutcome")(function* (
   event: WhatsAppInboundEvent,
-  outcome: Exclude<AgentConversationAdmission, { readonly _tag: "AuthorizedTurn" }>,
+  outcome: DeliverableConsentOutcome,
   beforeProviderCall: Effect.Effect<void, WhatsAppReceiptInvalid, SqlClient.SqlClient> = Effect.void
 ) {
-  if (DateTime.Order(event.occurredAt, DateTime.subtract(event.receivedAt, { hours: 24 })) < 0) {
-    return;
-  }
-  const text = yield* Schema.decodeUnknownEffect(TranscriptText)(
-    outcome._tag === "AwaitingDisclosureDelivery" ? CURRENT_DISCLOSURE_TEXT : outcome.text
-  );
-  const client = yield* KapsoClient;
-  if (outcome._tag !== "SendDisclosure" && outcome._tag !== "AwaitingDisclosureDelivery") {
+  if (isOutsideFreeFormWindow(event)) return;
+  const text = yield* Schema.decodeUnknownEffect(TranscriptText)(consentOutcomeText(outcome));
+  const exchangeId = disclosureExchangeId(outcome);
+  if (Option.isNone(exchangeId)) {
     yield* beforeProviderCall;
-    yield* client.sendText({
-      businessPhoneNumberId: event.businessPhoneNumberId,
-      destination: destinationFor(event.caller),
-      text,
-    });
+    yield* sendConsentText({ event, text });
     return;
   }
-  const claim = yield* claimConsentDisclosureDelivery(outcome.exchangeId, event.receivedAt);
-  if (Option.isNone(claim)) return yield* new ConsentDisclosureDeliveryUnavailable();
-  yield* beforeProviderCall;
-  const started = yield* markConsentDisclosureDeliveryStarted(
-    { exchangeId: outcome.exchangeId, claimId: claim.value.claimId },
-    event.receivedAt
-  );
-  if (!started) return yield* new ConsentDisclosureDeliveryUnavailable();
-  const sent = yield* client.sendText({
-    businessPhoneNumberId: event.businessPhoneNumberId,
-    destination: destinationFor(event.caller),
+  yield* deliverConsentDisclosure({
+    event,
+    exchangeId: exchangeId.value,
     text,
+    beforeProviderCall,
   });
-  const recorded = yield* recordConsentDisclosureDelivery({
-    exchangeId: outcome.exchangeId,
-    claimId: claim.value.claimId,
-    message: sent.messageEvidence,
-    deliveredAt: sent.sentAt,
-  });
-  if (Option.isNone(recorded)) return yield* new ConsentDisclosureDeliveryUnavailable();
 });
 
 /**

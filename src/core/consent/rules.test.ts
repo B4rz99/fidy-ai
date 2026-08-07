@@ -3,7 +3,7 @@ import { DateTime, Effect, Schema } from "effect";
 import { DisclosureSnapshot, PendingConsentExchangeId } from "./model";
 import { decideConsentReply, hasPendingConsentExpired, makePendingConsentDraft } from "./rules";
 
-const makeDisclosure = () =>
+const makeDisclosure = (): DisclosureSnapshot =>
   Schema.decodeUnknownSync(DisclosureSnapshot)({
     serviceMarket: "CO",
     locale: "es-CO",

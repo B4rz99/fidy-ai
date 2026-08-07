@@ -2,10 +2,8 @@ import { Effect } from "effect";
 import { SqlClient } from "effect/unstable/sql";
 import { categoryIds, categoryRows } from "~/core/categories/taxonomy";
 
-/** Adds Categories, User rules, and immutable Transaction provenance. */
-export const createCategorizedTransactions = Effect.gen(function* () {
+const createCategoryTaxonomy = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
-
   yield* sql`
     CREATE TABLE categories (
       id uuid PRIMARY KEY,
@@ -20,7 +18,10 @@ export const createCategorizedTransactions = Effect.gen(function* () {
       VALUES (${category.id}, ${category.label}, ${category.displayOrder})
     `;
   }
+});
 
+const createKeywordRules = Effect.gen(function* () {
+  const sql = yield* SqlClient.SqlClient;
   yield* sql`
     CREATE TABLE keyword_rules (
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -36,7 +37,10 @@ export const createCategorizedTransactions = Effect.gen(function* () {
   yield* sql`
     CREATE INDEX keyword_rules_user_id_idx ON keyword_rules (user_id, created_at, id)
   `;
+});
 
+const categorizeExistingTransactions = Effect.gen(function* () {
+  const sql = yield* SqlClient.SqlClient;
   yield* sql`
     ALTER TABLE transactions
       ADD COLUMN category_id uuid REFERENCES categories(id) ON DELETE RESTRICT,
@@ -53,7 +57,10 @@ export const createCategorizedTransactions = Effect.gen(function* () {
       ON transactions (user_id, category_id, direction, currency, occurred_at DESC)
       WHERE deleted_at IS NULL
   `;
+});
 
+const createSourceAttestations = Effect.gen(function* () {
+  const sql = yield* SqlClient.SqlClient;
   yield* sql`
     CREATE TABLE source_attestations (
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -72,7 +79,10 @@ export const createCategorizedTransactions = Effect.gen(function* () {
     CREATE INDEX source_attestations_transaction_id_created_at_idx
       ON source_attestations (transaction_id, created_at, id)
   `;
+});
 
+const makeSourceAttestationsImmutable = Effect.gen(function* () {
+  const sql = yield* SqlClient.SqlClient;
   yield* sql`
     CREATE FUNCTION reject_source_attestation_mutation() RETURNS trigger AS $$
     BEGIN
@@ -85,4 +95,13 @@ export const createCategorizedTransactions = Effect.gen(function* () {
       BEFORE UPDATE OR DELETE ON source_attestations
       FOR EACH ROW EXECUTE FUNCTION reject_source_attestation_mutation()
   `;
+});
+
+/** Adds Categories, User rules, and immutable Transaction provenance. */
+export const createCategorizedTransactions = Effect.gen(function* () {
+  yield* createCategoryTaxonomy;
+  yield* createKeywordRules;
+  yield* categorizeExistingTransactions;
+  yield* createSourceAttestations;
+  yield* makeSourceAttestationsImmutable;
 }).pipe(Effect.asVoid);

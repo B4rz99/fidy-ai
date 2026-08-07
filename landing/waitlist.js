@@ -1,11 +1,12 @@
 (() => {
+  const okStatus = 200;
   const form = document.querySelector(".waitlist-form");
   const locale = form.getAttribute("data-locale");
   const msgSuccess = form.getAttribute("data-msg-success");
   const msgError = form.getAttribute("data-msg-error");
 
-  form.addEventListener("submit", (e) => {
-    e.preventDefault();
+  form.addEventListener("submit", (submitEvent) => {
+    submitEvent.preventDefault();
     const email = form.querySelector('input[type="email"]').value.trim();
     const btn = form.querySelector('button[type="submit"]');
     btn.disabled = true;
@@ -18,7 +19,7 @@
       body: JSON.stringify({ email, locale }),
     })
       .then((res) => {
-        if (res.status === 200) {
+        if (res.status === okStatus) {
           const success = document.createElement("p");
           success.className = "waitlist-success";
           success.textContent = msgSuccess;

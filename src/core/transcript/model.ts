@@ -1,6 +1,10 @@
 import { Schema } from "effect";
 import { CanonicalOperationId } from "~/core/_shared/canonical-operation";
 
+const maximumToolCallIdLength = 256;
+const maximumAgentIterationsPerTurn = 32;
+const maximumTranscriptTextLength = 16_000;
+
 /** Stable identity for one append-only Transcript entry. */
 export const TranscriptEntryId = Schema.String.check(Schema.isUUID()).pipe(
   Schema.brand("TranscriptEntryId")
@@ -14,22 +18,23 @@ export const TranscriptTurnId = Schema.String.check(Schema.isUUID()).pipe(
 export type TranscriptTurnId = typeof TranscriptTurnId.Type;
 
 /** Provider-issued identity linking one tool call to exactly one result. */
-export const ToolCallId = Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(256)).pipe(
-  Schema.brand("ToolCallId")
-);
+export const ToolCallId = Schema.String.check(
+  Schema.isMinLength(1),
+  Schema.isMaxLength(maximumToolCallIdLength)
+).pipe(Schema.brand("ToolCallId"));
 export type ToolCallId = typeof ToolCallId.Type;
 
 /** A one-based model round within a hosted-agent turn. */
 export const AgentIteration = Schema.Int.check(
   Schema.isGreaterThanOrEqualTo(1),
-  Schema.isLessThanOrEqualTo(32)
+  Schema.isLessThanOrEqualTo(maximumAgentIterationsPerTurn)
 ).pipe(Schema.brand("AgentIteration"));
 export type AgentIteration = typeof AgentIteration.Type;
 
 /** Exact user-visible text retained in a Transcript. */
 export const TranscriptText = Schema.String.check(
   Schema.isMinLength(1),
-  Schema.isMaxLength(16_000),
+  Schema.isMaxLength(maximumTranscriptTextLength),
   Schema.isPattern(/\S/u)
 ).pipe(Schema.brand("TranscriptText"));
 export type TranscriptText = typeof TranscriptText.Type;

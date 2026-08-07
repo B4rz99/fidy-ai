@@ -1,6 +1,6 @@
 import { expect, layer } from "@effect/vitest";
 import { DateTime, Effect, Exit, Option, Schema } from "effect";
-import { SqlClient, SqlSchema } from "effect/unstable/sql";
+import { SqlClient, type SqlError, SqlSchema } from "effect/unstable/sql";
 import type { ProviderMessageEvidence } from "~/core/_shared/provider-message-evidence";
 import {
   ConsentRecord,
@@ -23,10 +23,10 @@ import { evaluateConsentGate } from "./consent-gate";
 import {
   appendConsentRecord,
   claimConsentDisclosureDelivery,
-  recordConsentDisclosureDelivery,
   findPendingConsentExchange,
   hasCurrentOnboardingConsent,
   observeConsentRecords,
+  recordConsentDisclosureDelivery,
 } from "./repo";
 
 const acceptedPhone = E164PhoneNumber.make("+573009990001");
@@ -51,25 +51,41 @@ const recordClaimedDisclosure = Effect.fn("test.recordClaimedDisclosure")(functi
   return yield* recordConsentDisclosureDelivery({ ...input, claimId: claim.value.claimId });
 });
 
-const message = (providerMessageId: string) => ({
+const message = (
+  providerMessageId: string
+): { channel: string; provider: string; providerMessageId: string } => ({
   channel: "whatsapp",
   provider: "kapso",
   providerMessageId,
 });
 
-const textTurn = (phoneNumber: E164PhoneNumber, text: string, providerMessageId: string) => ({
+const textTurn = (
+  phoneNumber: E164PhoneNumber,
+  text: string,
+  providerMessageId: string
+): {
+  caller: WhatsAppCaller;
+  content: { _tag: "Text"; text: string };
+  message: { channel: string; provider: string; providerMessageId: string };
+  receivedAt: DateTime.Utc;
+} => ({
   caller: testWhatsAppCaller(phoneNumber),
   content: { _tag: "Text" as const, text },
   message: message(providerMessageId),
   receivedAt,
 });
 
-const withReceivedAt = (turn: ReturnType<typeof textTurn>, receivedAt: DateTime.Utc) => ({
+const withReceivedAt = (
+  turn: ReturnType<typeof textTurn>,
+  receivedAt: DateTime.Utc
+): ReturnType<typeof textTurn> => ({
   ...turn,
   receivedAt,
 });
 
-const clearPhone = (phoneNumber: E164PhoneNumber) =>
+const clearPhone = (
+  phoneNumber: E164PhoneNumber
+): Effect.Effect<void, SqlError.SqlError, MigrationSqlClient> =>
   Effect.gen(function* () {
     const sql = yield* MigrationSqlClient;
     const caller = testWhatsAppCaller(phoneNumber);

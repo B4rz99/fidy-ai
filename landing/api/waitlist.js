@@ -1,6 +1,15 @@
 const allowedLocales = new Set(["en", "es"]);
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+const minuteWindowKeyLength = 16;
+
+const okStatus = 200;
+const badRequestStatus = 400;
+const methodNotAllowedStatus = 405;
+const tooManyRequestsStatus = 429;
+const internalServerErrorStatus = 500;
+const badGatewayStatus = 502;
+
 const sendJson = (response, status, body) => {
   response.status(status).setHeader("Content-Type", "application/json");
   response.end(JSON.stringify(body));
@@ -41,7 +50,7 @@ const checkRateLimit = ({ supabaseUrl, supabaseServiceRoleKey }, ip) =>
     headers: authHeaders(supabaseServiceRoleKey),
     body: JSON.stringify({
       p_ip: ip,
-      p_window_key: new Date().toISOString().slice(0, 16),
+      p_window_key: new Date().toISOString().slice(0, minuteWindowKeyLength),
       p_max_count: 5,
     }),
   });
@@ -70,34 +79,34 @@ const readRateLimit = async (config, ip) => {
 
 module.exports = async function handler(request, response) {
   if (request.method !== "POST") {
-    return sendJson(response, 405, { error: "Method not allowed" });
+    return sendJson(response, methodNotAllowedStatus, { error: "Method not allowed" });
   }
 
   const config = readConfig();
   const body = parseBody(request);
 
   if (!config) {
-    return sendJson(response, 500, { error: "Waitlist is not configured" });
+    return sendJson(response, internalServerErrorStatus, { error: "Waitlist is not configured" });
   }
 
   if (!body) {
-    return sendJson(response, 400, { error: "Invalid email" });
+    return sendJson(response, badRequestStatus, { error: "Invalid email" });
   }
 
   const rateLimit = await readRateLimit(config, getClientIp(request));
 
   if (rateLimit === null) {
-    return sendJson(response, 502, { error: "Waitlist request failed" });
+    return sendJson(response, badGatewayStatus, { error: "Waitlist request failed" });
   }
   if (!rateLimit.allowed) {
-    return sendJson(response, 429, { error: "Too many requests" });
+    return sendJson(response, tooManyRequestsStatus, { error: "Too many requests" });
   }
 
   const supabaseResponse = await addWaitlistEmail(config, body);
 
   if (supabaseResponse.ok) {
-    return sendJson(response, 200, { ok: true });
+    return sendJson(response, okStatus, { ok: true });
   }
 
-  return sendJson(response, 502, { error: "Waitlist request failed" });
+  return sendJson(response, badGatewayStatus, { error: "Waitlist request failed" });
 };

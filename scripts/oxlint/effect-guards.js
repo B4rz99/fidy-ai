@@ -25,7 +25,7 @@ const noSqlTypeParameter = {
   create(context) {
     return {
       TaggedTemplateExpression(node) {
-        // oxc exposes `typeArguments`; older ESTree used `typeParameters`.
+        // Oxc exposes `typeArguments`; older ESTree used `typeParameters`.
         if (!node.typeArguments && !node.typeParameters) return;
         const tag = node.tag;
         const isSql =
@@ -501,6 +501,31 @@ const schemaConstructorName = (expression, schemaNamespaces) => {
   return undefined;
 };
 
+const importsName = (specifier, name) =>
+  specifier.type === "ImportSpecifier" &&
+  (specifier.imported.name === name || specifier.imported.value === name);
+
+const schemaNamespaceLocals = (node) => {
+  if (node.source.value === "effect") {
+    return node.specifiers
+      .filter((specifier) => importsName(specifier, "Schema"))
+      .map((specifier) => specifier.local.name);
+  }
+  if (node.source.value === "effect/Schema") {
+    return node.specifiers
+      .filter((specifier) => specifier.type === "ImportNamespaceSpecifier")
+      .map((specifier) => specifier.local.name);
+  }
+  return [];
+};
+
+const brandBindingLocals = (node) =>
+  node.source.value === "effect/Schema"
+    ? node.specifiers
+        .filter((specifier) => importsName(specifier, "brand"))
+        .map((specifier) => specifier.local.name)
+    : [];
+
 /**
  * Effect's Brand type is allowed through the deep-readonly rule because its
  * phantom variance field is misclassified as mutable. Compensate by permitting
@@ -532,28 +557,8 @@ const scalarBrandOnly = {
 
     return {
       ImportDeclaration(node) {
-        if (node.source.value === "effect") {
-          for (const specifier of node.specifiers) {
-            if (
-              specifier.type === "ImportSpecifier" &&
-              (specifier.imported.name === "Schema" || specifier.imported.value === "Schema")
-            ) {
-              schemaNamespaces.add(specifier.local.name);
-            }
-          }
-        }
-        if (node.source.value !== "effect/Schema") return;
-        for (const specifier of node.specifiers) {
-          if (specifier.type === "ImportNamespaceSpecifier") {
-            schemaNamespaces.add(specifier.local.name);
-          }
-          if (
-            specifier.type === "ImportSpecifier" &&
-            (specifier.imported.name === "brand" || specifier.imported.value === "brand")
-          ) {
-            directBrandBindings.add(specifier.local.name);
-          }
-        }
+        for (const local of schemaNamespaceLocals(node)) schemaNamespaces.add(local);
+        for (const local of brandBindingLocals(node)) directBrandBindings.add(local);
       },
       CallExpression(node) {
         if (!isBrandCall(node)) return;

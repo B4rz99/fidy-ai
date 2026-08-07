@@ -1,7 +1,8 @@
 import { Effect, Option } from "effect";
+import type { SqlClient } from "effect/unstable/sql";
 import { type CategoryId } from "~/core/categories/reference";
 import { type UserId } from "~/core/identity/reference";
-import { findKnownCaptureCategory, findKeywordCategory } from "~/core/categories/rules";
+import { findKeywordCategory, findKnownCaptureCategory } from "~/core/categories/rules";
 import { categoryIds } from "~/core/categories/taxonomy";
 import { listKeywordRules } from "./repo";
 
@@ -20,7 +21,7 @@ export const categorizeCapture = ({
   readonly userId: UserId;
   readonly counterparty: Option.Option<string>;
   readonly callerCategory: Option.Option<CategoryId>;
-}) =>
+}): Effect.Effect<CategoryId, never, SqlClient.SqlClient> =>
   Effect.gen(function* () {
     const rules = yield* listKeywordRules(userId);
     const keywordCategory = yield* Option.match(counterparty, {

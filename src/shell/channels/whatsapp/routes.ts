@@ -1,17 +1,49 @@
-import { Config, Data, DateTime, Effect, Layer, Option, Redacted, Semaphore, Stream } from "effect";
-import { HttpRouter, HttpServerResponse, type HttpServerRequest } from "effect/unstable/http";
+import {
+  Config,
+  type Crypto,
+  Data,
+  DateTime,
+  Effect,
+  Layer,
+  Option,
+  Redacted,
+  type Schema,
+  Semaphore,
+  Stream,
+} from "effect";
+import {
+  type HttpBody,
+  HttpRouter,
+  type HttpServerError,
+  type HttpServerRequest,
+  HttpServerResponse,
+} from "effect/unstable/http";
+import type { SqlClient } from "effect/unstable/sql";
+import type { OnboardingConsentRequired } from "~/shell/agent/agent-service";
 import { admitAgentConversationTurn } from "~/shell/agent/conversation";
+import type { AgentConversationAdmission } from "~/shell/agent/conversation";
 import { reassociateWhatsAppIdentity } from "~/shell/identity/repo";
 import { makeBoundedBytes } from "./bounded-bytes";
-import { deliverWhatsAppConsentOutcome } from "./outbound";
+import type { KapsoClient, KapsoSendFailed } from "./kapso-client";
+import type { WhatsAppDeliveryKey, WhatsAppInboundEvent } from "./model";
 import {
+  type ConsentDisclosureDeliveryUnavailable,
+  deliverWhatsAppConsentOutcome,
+} from "./outbound";
+import {
+  type InvalidKapsoPayload,
+  InvalidKapsoSignature,
+  type KapsoBatchTooLarge,
+  KapsoPayloadTooLarge,
   decodeKapsoIdentityWebhook,
   decodeKapsoWebhook,
-  InvalidKapsoSignature,
-  KapsoPayloadTooLarge,
   maxKapsoWebhookBytes,
 } from "./kapso-webhook";
 import {
+  type WhatsAppInboundCapacityExceeded,
+  type WhatsAppRateLimitExceeded,
+  type WhatsAppReceiptInProgress,
+  type WhatsAppReceiptInvalid,
   claimWhatsAppReceipt,
   completeWhatsAppReceipt,
   consumeWhatsAppIngressBudget,
@@ -20,12 +52,19 @@ import {
   releaseWhatsAppReceipt,
 } from "./repo";
 
+const concurrentWebhookBodyReads = 32;
+
 class KapsoBodyReadTimeout extends Data.TaggedError("KapsoBodyReadTimeout")<{}> {}
 class WhatsAppIdentityChangeDeferred extends Data.TaggedError(
   "WhatsAppIdentityChangeDeferred"
 )<{}> {}
 
-const readBoundedBody = (request: HttpServerRequest.HttpServerRequest) =>
+const readBoundedBody = (
+  request: HttpServerRequest.HttpServerRequest
+): Effect.Effect<
+  Uint8Array,
+  HttpServerError.HttpServerError | KapsoBodyReadTimeout | KapsoPayloadTooLarge
+> =>
   Effect.gen(function* () {
     const bytes = makeBoundedBytes(maxKapsoWebhookBytes);
     yield* Stream.runForEach(request.stream, (chunk) =>
@@ -39,7 +78,120 @@ const readBoundedBody = (request: HttpServerRequest.HttpServerRequest) =>
     })
   );
 
-const handleKapsoWebhook = (secret: string, businessPortfolioId: string) =>
+type ReceiptClaim = Parameters<typeof releaseWhatsAppReceipt>[0];
+type InboundEventOutcome = "enqueued" | "duplicate" | "consent-turn";
+
+const chargeIngressBudgets = (
+  event: WhatsAppInboundEvent
+): Effect.Effect<void, WhatsAppRateLimitExceeded, SqlClient.SqlClient> =>
+  Effect.gen(function* () {
+    yield* consumeWhatsAppIngressBudget(
+      { _tag: "Global" },
+      event.messageEvidence.providerMessageId,
+      event.receivedAt
+    );
+    yield* consumeWhatsAppIngressBudget(
+      { _tag: "Caller", caller: event.caller },
+      event.messageEvidence.providerMessageId,
+      event.receivedAt
+    );
+  });
+
+const enqueueAuthorizedTurn = (
+  event: WhatsAppInboundEvent,
+  deliveryKey: WhatsAppDeliveryKey,
+  admission: Extract<AgentConversationAdmission, { readonly _tag: "AuthorizedTurn" }>
+): Effect.Effect<
+  "duplicate" | "enqueued",
+  OnboardingConsentRequired | WhatsAppInboundCapacityExceeded | WhatsAppRateLimitExceeded,
+  SqlClient.SqlClient
+> =>
+  Effect.gen(function* () {
+    yield* consumeWhatsAppIngressBudget(
+      { _tag: "User", userId: admission.userId },
+      event.messageEvidence.providerMessageId,
+      event.receivedAt
+    );
+    const enqueueResult = yield* enqueueWhatsAppTurn({ admission, event, deliveryKey });
+    return enqueueResult.inserted ? ("enqueued" as const) : ("duplicate" as const);
+  });
+
+const deliverConsentTurn = (
+  event: WhatsAppInboundEvent,
+  admission: Exclude<AgentConversationAdmission, { readonly _tag: "AuthorizedTurn" }>,
+  claim: ReceiptClaim
+): Effect.Effect<
+  "consent-turn",
+  | ConsentDisclosureDeliveryUnavailable
+  | KapsoSendFailed
+  | Schema.SchemaError
+  | WhatsAppReceiptInvalid,
+  Crypto.Crypto | KapsoClient | SqlClient.SqlClient
+> =>
+  Effect.as(
+    deliverWhatsAppConsentOutcome(event, admission, markWhatsAppReceiptOutboundStarted(claim)),
+    "consent-turn" as const
+  );
+
+const admitInboundEvent = (
+  event: WhatsAppInboundEvent,
+  deliveryKey: WhatsAppDeliveryKey,
+  claim: ReceiptClaim
+): Effect.Effect<
+  InboundEventOutcome,
+  | Config.ConfigError
+  | ConsentDisclosureDeliveryUnavailable
+  | KapsoSendFailed
+  | OnboardingConsentRequired
+  | Schema.SchemaError
+  | WhatsAppInboundCapacityExceeded
+  | WhatsAppRateLimitExceeded
+  | WhatsAppReceiptInvalid,
+  Crypto.Crypto | KapsoClient | SqlClient.SqlClient
+> =>
+  Effect.gen(function* () {
+    yield* chargeIngressBudgets(event);
+    const admission = yield* admitAgentConversationTurn({
+      caller: event.caller,
+      content: { _tag: "Text", text: event.content.text },
+      message: event.messageEvidence,
+      receivedAt: event.occurredAt,
+    });
+    const outcome: InboundEventOutcome =
+      admission._tag === "AuthorizedTurn"
+        ? yield* enqueueAuthorizedTurn(event, deliveryKey, admission)
+        : yield* deliverConsentTurn(event, admission, claim);
+    yield* completeWhatsAppReceipt(claim, event.receivedAt);
+    return outcome;
+  }).pipe(Effect.onError(() => releaseWhatsAppReceipt(claim)));
+
+type KapsoMessageWebhookHandler = (
+  request: HttpServerRequest.HttpServerRequest
+) => Effect.Effect<
+  HttpServerResponse.HttpServerResponse,
+  | Config.ConfigError
+  | ConsentDisclosureDeliveryUnavailable
+  | HttpBody.HttpBodyError
+  | HttpServerError.HttpServerError
+  | InvalidKapsoPayload
+  | InvalidKapsoSignature
+  | KapsoBatchTooLarge
+  | KapsoBodyReadTimeout
+  | KapsoPayloadTooLarge
+  | KapsoSendFailed
+  | OnboardingConsentRequired
+  | Schema.SchemaError
+  | WhatsAppInboundCapacityExceeded
+  | WhatsAppRateLimitExceeded
+  | WhatsAppReceiptInProgress
+  | WhatsAppReceiptInvalid,
+  Crypto.Crypto | KapsoClient | SqlClient.SqlClient
+>;
+
+const handleKapsoWebhook = (
+  secret: string,
+  businessPortfolioId: string
+): KapsoMessageWebhookHandler =>
   Effect.fn("WhatsApp.handleKapsoWebhook")(function* (
     request: HttpServerRequest.HttpServerRequest
   ) {
@@ -70,46 +222,10 @@ const handleKapsoWebhook = (secret: string, businessPortfolioId: string) =>
         duplicates += 1;
         continue;
       }
-      yield* Effect.gen(function* () {
-        yield* consumeWhatsAppIngressBudget(
-          { _tag: "Global" },
-          event.messageEvidence.providerMessageId,
-          event.receivedAt
-        );
-        yield* consumeWhatsAppIngressBudget(
-          { _tag: "Caller", caller: event.caller },
-          event.messageEvidence.providerMessageId,
-          event.receivedAt
-        );
-        const admission = yield* admitAgentConversationTurn({
-          caller: event.caller,
-          content: { _tag: "Text", text: event.content.text },
-          message: event.messageEvidence,
-          receivedAt: event.occurredAt,
-        });
-        if (admission._tag === "AuthorizedTurn") {
-          yield* consumeWhatsAppIngressBudget(
-            { _tag: "User", userId: admission.userId },
-            event.messageEvidence.providerMessageId,
-            event.receivedAt
-          );
-          const enqueueResult = yield* enqueueWhatsAppTurn({
-            admission,
-            event,
-            deliveryKey: receipt.deliveryKey,
-          });
-          if (enqueueResult.inserted) enqueued += 1;
-          else duplicates += 1;
-        } else {
-          yield* deliverWhatsAppConsentOutcome(
-            event,
-            admission,
-            markWhatsAppReceiptOutboundStarted(claim.value)
-          );
-          consentTurns += 1;
-        }
-        yield* completeWhatsAppReceipt(claim.value, event.receivedAt);
-      }).pipe(Effect.onError(() => releaseWhatsAppReceipt(claim.value)));
+      const outcome = yield* admitInboundEvent(event, receipt.deliveryKey, claim.value);
+      if (outcome === "enqueued") enqueued += 1;
+      else if (outcome === "duplicate") duplicates += 1;
+      else consentTurns += 1;
     }
     return yield* HttpServerResponse.json({
       decoded: receipt.events.length,
@@ -119,7 +235,24 @@ const handleKapsoWebhook = (secret: string, businessPortfolioId: string) =>
     });
   });
 
-const handleKapsoIdentityWebhook = (secret: string, businessPortfolioId: string) =>
+const handleKapsoIdentityWebhook = (
+  secret: string,
+  businessPortfolioId: string
+): ((
+  request: HttpServerRequest.HttpServerRequest
+) => Effect.Effect<
+  HttpServerResponse.HttpServerResponse,
+  | HttpBody.HttpBodyError
+  | HttpServerError.HttpServerError
+  | InvalidKapsoPayload
+  | InvalidKapsoSignature
+  | KapsoBatchTooLarge
+  | KapsoBodyReadTimeout
+  | KapsoPayloadTooLarge
+  | Schema.SchemaError
+  | WhatsAppIdentityChangeDeferred,
+  SqlClient.SqlClient
+>) =>
   Effect.fn("WhatsApp.handleKapsoIdentityWebhook")(function* (
     request: HttpServerRequest.HttpServerRequest
   ) {
@@ -163,7 +296,7 @@ export const KapsoWebhookLive = Layer.unwrap(
   Effect.gen(function* () {
     const secret = yield* Config.redacted("KAPSO_WEBHOOK_SECRET");
     const businessPortfolioId = yield* Config.string("WHATSAPP_BUSINESS_PORTFOLIO_ID");
-    const bodyReaders = yield* Semaphore.make(32);
+    const bodyReaders = yield* Semaphore.make(concurrentWebhookBodyReads);
     const messageRoute = HttpRouter.add("POST", "/webhooks/kapso", (request) =>
       bodyReaders
         .withPermitsIfAvailable(1)(

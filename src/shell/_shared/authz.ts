@@ -13,7 +13,7 @@ import {
 import { HttpClientRequest, type HttpServerRequest } from "effect/unstable/http";
 import { SqlClient } from "effect/unstable/sql";
 import { HttpApiMiddleware, HttpApiSecurity, OpenApi } from "effect/unstable/httpapi";
-import { type AuditOutcome, CanonicalOperationId } from "~/core/audit/model";
+import { type AuditLogEntry, type AuditOutcome, CanonicalOperationId } from "~/core/audit/model";
 import {
   AgentBearerToken,
   AgentBearerTokenFormat,
@@ -29,7 +29,7 @@ import { getOperationPolicy } from "./operation-policy";
 
 const decodeAgentBearer = Schema.decodeUnknownEffect(AgentBearerToken);
 
-const unauthenticated = () =>
+const unauthenticated = (): Unauthenticated =>
   Unauthenticated.make({
     error: {
       code: "unauthenticated",
@@ -40,7 +40,7 @@ const unauthenticated = () =>
     next: [],
   });
 
-const scopeMissing = () =>
+const scopeMissing = (): ScopeMissing =>
   ScopeMissing.make({
     error: {
       code: "scope_missing",
@@ -51,7 +51,7 @@ const scopeMissing = () =>
     next: [],
   });
 
-const consentRequired = () =>
+const consentRequired = (): ConsentRequired =>
   ConsentRequired.make({
     error: {
       code: "consent_required",
@@ -103,7 +103,9 @@ export const authenticateAgentToken = ({
     return yield* useAgentToken({ tokenHash, usedAt, renewedIdleExpiresAt });
   });
 
-const bearerFromRequest = (request: HttpServerRequest.HttpServerRequest) =>
+const bearerFromRequest = (
+  request: HttpServerRequest.HttpServerRequest
+): Effect.Effect<AgentBearerToken, Unauthenticated> =>
   Option.fromUndefinedOr(request.headers.authorization).pipe(
     Option.flatMap((authorization) =>
       Option.fromNullishOr(/^Bearer +(.+)$/i.exec(authorization)?.[1])
@@ -151,6 +153,41 @@ export class AgentAuthorization extends HttpApiMiddleware.Service<
   error: [Unauthenticated, ConsentRequired, ScopeMissing],
 }) {}
 
+const recordAuthorizationOutcome = ({
+  resolved,
+  operation,
+  outcome,
+  occurredAt,
+}: Readonly<{
+  resolved: ResolvedAgentToken;
+  operation: CanonicalOperationId;
+  outcome: AuditOutcome;
+  occurredAt: DateTime.Utc;
+}>): Effect.Effect<AuditLogEntry, never, SqlClient.SqlClient> =>
+  appendAuditLogEntry(resolved.subjectUserId, {
+    tokenId: resolved.tokenId,
+    operation,
+    outcome,
+    occurredAt,
+  });
+
+const annotateOperationPolicy = (
+  policy: ReturnType<typeof getOperationPolicy>
+): Effect.Effect<void> =>
+  Effect.annotateCurrentSpan({
+    "fidy.operation.required_scope": policy.requiredScope,
+    "fidy.operation.cost_class": policy.costClass,
+  });
+
+const recordRejectedAttempt = (
+  attempt: Readonly<{
+    resolved: ResolvedAgentToken;
+    operation: CanonicalOperationId;
+    occurredAt: DateTime.Utc;
+  }>
+): Effect.Effect<AuditLogEntry, never, SqlClient.SqlClient> =>
+  recordAuthorizationOutcome({ ...attempt, outcome: "rejected" });
+
 /**
  * Live operation-derived bearer authorization for the HTTP server. Each call
  * authenticates its AgentToken, requires current onboarding consent, rejects a
@@ -185,22 +222,16 @@ export const AgentAuthorizationLive = Layer.succeed(
                 resolved.subjectUserId,
                 () => Effect.fail(new ConsentAuthenticationRejected({ resolved })),
                 Effect.gen(function* () {
-                  const audit = (outcome: AuditOutcome) =>
-                    appendAuditLogEntry(resolved.subjectUserId, {
-                      tokenId: resolved.tokenId,
-                      operation,
-                      outcome,
-                      occurredAt,
-                    });
+                  const audit = (
+                    outcome: AuditOutcome
+                  ): Effect.Effect<AuditLogEntry, never, SqlClient.SqlClient> =>
+                    recordAuthorizationOutcome({ resolved, operation, outcome, occurredAt });
 
                   if (!resolved.scopes.includes(policy.requiredScope)) {
                     return yield* new ScopeAuthenticationRejected({ resolved });
                   }
 
-                  yield* Effect.annotateCurrentSpan({
-                    "fidy.operation.required_scope": policy.requiredScope,
-                    "fidy.operation.cost_class": policy.costClass,
-                  });
+                  yield* annotateOperationPolicy(policy);
 
                   const exit = yield* Effect.exit(
                     sql.withTransaction(httpEffect.pipe(Effect.tap(audit.bind(null, "succeeded"))))
@@ -217,19 +248,13 @@ export const AgentAuthorizationLive = Layer.succeed(
         .pipe(
           Effect.catchTags({
             ConsentAuthenticationRejected: ({ resolved }) =>
-              appendAuditLogEntry(resolved.subjectUserId, {
-                tokenId: resolved.tokenId,
-                operation,
-                outcome: "rejected",
-                occurredAt,
-              }).pipe(Effect.andThen(consentRequired())),
+              recordRejectedAttempt({ resolved, operation, occurredAt }).pipe(
+                Effect.andThen(consentRequired())
+              ),
             ScopeAuthenticationRejected: ({ resolved }) =>
-              appendAuditLogEntry(resolved.subjectUserId, {
-                tokenId: resolved.tokenId,
-                operation,
-                outcome: "rejected",
-                occurredAt,
-              }).pipe(Effect.andThen(scopeMissing())),
+              recordRejectedAttempt({ resolved, operation, occurredAt }).pipe(
+                Effect.andThen(scopeMissing())
+              ),
             SqlError: Effect.die,
           })
         );
@@ -240,7 +265,9 @@ export const AgentAuthorizationLive = Layer.succeed(
 );
 
 /** Client-side bearer implementation derived from the same API middleware. */
-export const makeAgentAuthorizationClientLive = (bearer: AgentBearerToken) =>
+export const makeAgentAuthorizationClientLive = (
+  bearer: AgentBearerToken
+): Layer.Layer<HttpApiMiddleware.ForClient<AgentAuthorization>> =>
   HttpApiMiddleware.layerClient(AgentAuthorization, ({ next, request }) =>
     next(HttpClientRequest.bearerToken(request, bearer))
   );

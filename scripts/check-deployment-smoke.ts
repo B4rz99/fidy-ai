@@ -1,13 +1,21 @@
 #!/usr/bin/env bun
 
 import { BunRuntime } from "@effect/platform-bun";
-import { Data, Effect, Layer, Schema } from "effect";
-import { FetchHttpClient, HttpClient } from "effect/unstable/http";
+import { type Cause, Data, Effect, Layer, Schema } from "effect";
+import {
+  FetchHttpClient,
+  HttpClient,
+  type HttpClientError,
+  type HttpClientResponse,
+} from "effect/unstable/http";
 
 const Health = Schema.Struct({ status: Schema.Literal("ok"), version: Schema.String });
 const OpenApi = Schema.Struct({ openapi: Schema.String });
 
 class SmokeFailed extends Data.TaggedError("SmokeFailed")<{ readonly message: string }> {}
+
+const firstSuccessStatus = 200;
+const firstRedirectionStatus = 300;
 
 const rawOrigin = Bun.argv[2] ?? Bun.env.DEPLOYMENT_URL;
 
@@ -17,10 +25,16 @@ if (rawOrigin === undefined) {
 
 const origin = new URL(rawOrigin);
 
-const getDeploymentResponse = (path: string) =>
+const getDeploymentResponse = (
+  path: string
+): Effect.Effect<
+  HttpClientResponse.HttpClientResponse,
+  HttpClientError.HttpClientError | SmokeFailed | Cause.TimeoutError,
+  HttpClient.HttpClient
+> =>
   HttpClient.get(new URL(path, origin).toString()).pipe(
     Effect.flatMap((response) =>
-      response.status >= 200 && response.status < 300
+      response.status >= firstSuccessStatus && response.status < firstRedirectionStatus
         ? Effect.succeed(response)
         : Effect.fail(new SmokeFailed({ message: `${path} returned HTTP ${response.status}.` }))
     ),

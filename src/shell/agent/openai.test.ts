@@ -1,12 +1,12 @@
 import { expect, it } from "@effect/vitest";
 import { ConfigProvider, Context, Effect, Exit, Layer, Option, Ref, Schema } from "effect";
 import { LanguageModel } from "effect/unstable/ai";
-import { HttpClient, HttpClientResponse, type HttpClientRequest } from "effect/unstable/http";
+import { HttpClient, type HttpClientRequest, HttpClientResponse } from "effect/unstable/http";
 import { makeOpenAiTextResponse } from "~/shell/agent/fixtures/openai";
 import { AgentToolkit } from "./toolkit";
-import { HostedAgentGenerationConfig, OpenAiLanguageModelLive, HostedAgentModel } from "./openai";
+import { HostedAgentGenerationConfig, HostedAgentModel, OpenAiLanguageModelLive } from "./openai";
 
-const configLayer = (entries: ReadonlyArray<readonly [string, string]>) =>
+const configLayer = (entries: ReadonlyArray<readonly [string, string]>): Layer.Layer<never> =>
   ConfigProvider.layer(ConfigProvider.fromUnknown(Object.fromEntries(entries)));
 
 const NoNetworkHttpClient = Layer.succeed(

@@ -16,8 +16,8 @@ import { truncateInsights, weeklySummaryInput } from "~/shell/insights/fixtures"
 import { generateInsightEvent } from "~/shell/insights/repo";
 import { transactionPayload, truncateTransactions } from "~/shell/transactions/fixtures";
 import {
-  ApiHarness,
   type ApiClient,
+  ApiHarness,
   ApiHarnessClient,
   headersFor,
   makeApiClientLive,

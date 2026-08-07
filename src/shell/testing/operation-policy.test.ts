@@ -67,15 +67,21 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           "dashboard.applyDashboardEdit": "required",
         } satisfies Record<OperationId, AgentConfirmation>;
         const operations = yield* publishedOperations;
-        const published: Array<readonly [string, AgentConfirmation | undefined]> = operations.map(
-          ({ agentConfirmation, id }) => [id, Option.getOrUndefined(agentConfirmation)]
-        );
+        const published: Array<readonly [string, Option.Option<AgentConfirmation>]> =
+          operations.map(({ agentConfirmation, id }) => [id, agentConfirmation]);
         const byOperationId = (
           left: readonly [string, unknown],
           right: readonly [string, unknown]
         ): number => left[0].localeCompare(right[0]);
 
-        expect(published.sort(byOperationId)).toEqual(Object.entries(expected).sort(byOperationId));
+        expect(published.sort(byOperationId)).toEqual(
+          Object.entries(expected)
+            .map(([id, confirmation]): readonly [string, Option.Option<AgentConfirmation>] => [
+              id,
+              Option.some(confirmation),
+            ])
+            .sort(byOperationId)
+        );
       })
     );
   }

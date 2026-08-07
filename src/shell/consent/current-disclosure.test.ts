@@ -2,9 +2,9 @@ import { createHash } from "node:crypto";
 import { expect, it } from "@effect/vitest";
 import { ConfigProvider, Effect } from "effect";
 import {
-  currentDisclosure,
   CURRENT_DISCLOSURE_TEXT,
   CURRENT_POLICY_PATH,
+  currentDisclosure,
 } from "./current-disclosure";
 
 const sha256 = (content: string | Uint8Array): string =>

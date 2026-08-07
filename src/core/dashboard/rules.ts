@@ -1,33 +1,33 @@
 import { Effect, Option, Schema } from "effect";
 import {
+  type DashboardFailure,
   DuplicateWidgetId,
   InvalidDashboardResult,
   LastWidgetRemoval,
   RootWidgetResize,
   SelfPlacement,
   WidgetNotFound,
-  type DashboardFailure,
 } from "./errors";
 import {
-  DashboardDocument,
-  findDashboardStructureIssue,
-  SplitWeight,
   type BesidePlacement,
+  DashboardDocument,
   type DashboardEdit,
   type LayoutNode,
   type SplitNode,
+  SplitWeight,
   type Widget,
   type WidgetId,
+  findDashboardStructureIssue,
 } from "./model";
 
 const revalidateDocument = (
   candidate: Readonly<DashboardDocument>
 ): Effect.Effect<DashboardDocument, InvalidDashboardResult> => {
   const issue = findDashboardStructureIssue(candidate);
-  if (issue !== undefined) {
+  if (Option.isSome(issue)) {
     return Effect.fail(
       new InvalidDashboardResult({
-        issues: [{ path: issue.path.join("."), message: issue.issue }],
+        issues: [{ path: Option.some(issue.value.path.join(".")), message: issue.value.issue }],
       })
     );
   }
@@ -37,7 +37,10 @@ const revalidateDocument = (
       () =>
         new InvalidDashboardResult({
           issues: [
-            { message: "The edit produced a document outside DashboardDocument invariants" },
+            {
+              path: Option.none(),
+              message: "The edit produced a document outside DashboardDocument invariants",
+            },
           ],
         })
     )
@@ -66,14 +69,14 @@ const mapAtLeastTwo = <Input, Output>(
 };
 
 const greatestCommonDivisor = (left: bigint, right: bigint): bigint => {
-  let a = left;
-  let b = right;
-  while (b !== 0n) {
-    const remainder = a % b;
-    a = b;
-    b = remainder;
+  let dividend = left;
+  let divisor = right;
+  while (divisor !== 0n) {
+    const remainder = dividend % divisor;
+    dividend = divisor;
+    divisor = remainder;
   }
-  return a;
+  return dividend;
 };
 
 const leastCommonMultiple = (left: bigint, right: bigint): bigint =>

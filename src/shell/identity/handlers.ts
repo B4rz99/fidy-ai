@@ -6,7 +6,7 @@ import { resolveCaller } from "~/shell/_shared/authz";
 import { FidyApi } from "~/shell/api";
 import { findUser, updateUserPreferences } from "./repo";
 
-const authenticatedUserMissing = (userId: UserId) => () =>
+const authenticatedUserMissing = (userId: UserId) => (): Error =>
   new Error(`Authenticated User ${userId} is missing`);
 
 /** Stable-User handlers; bearer ownership remains context, never payload. */

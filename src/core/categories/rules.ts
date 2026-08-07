@@ -1,5 +1,5 @@
 import { Effect, Option } from "effect";
-import type { ReadonlyOption } from "~/core/_shared/option";
+import { type ReadonlyOption, toOption } from "~/core/_shared/option";
 import { type CategoryKeyword, type KeywordRuleId, normalizeCategoryKeyword } from "./model";
 
 export { normalizeCategoryKeyword } from "./model";
@@ -19,7 +19,9 @@ type KeywordCategoryInput<Category extends string> = Readonly<{
 }>;
 
 /** Selects the longest matching rule; lexical rule identity resolves equal-specificity ties. */
-export const findKeywordCategory = <C extends string>(input: KeywordCategoryInput<C>) => {
+export const findKeywordCategory = <Category extends string>(
+  input: KeywordCategoryInput<Category>
+): Effect.Effect<Option.Option<Category>> => {
   const { counterparty, rules } = input;
   const normalizedCounterparty = normalizeCategoryKeyword(counterparty);
   const matching = rules
@@ -65,9 +67,7 @@ type KnownCategories<Category extends string> = Readonly<{
 }>;
 
 /** Selects an explicit Category before a User rule; None leaves the model fallback available. */
-export const findKnownCaptureCategory = <C extends string>(choices: KnownCategories<C>) => {
-  const { caller, keywordRule } = choices;
-  if (caller._tag === "Some") return Effect.succeed(Option.some(caller.value));
-  if (keywordRule._tag === "Some") return Effect.succeed(Option.some(keywordRule.value));
-  return Effect.succeed(Option.none<C>());
-};
+export const findKnownCaptureCategory = <Category extends string>(
+  choices: KnownCategories<Category>
+): Effect.Effect<Option.Option<Category>> =>
+  Effect.succeed(Option.orElse(toOption(choices.caller), () => toOption(choices.keywordRule)));

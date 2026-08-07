@@ -22,7 +22,9 @@ export const listCategories = Effect.flatMap(SqlClient.SqlClient, (sql) =>
 ).pipe(Effect.orDie);
 
 /** Looks up public Category metadata by stable identity; absence remains explicit. */
-export const findCategory = (categoryId: CategoryId) =>
+export const findCategory = (
+  categoryId: CategoryId
+): Effect.Effect<Option.Option<Category>, never, SqlClient.SqlClient> =>
   Effect.flatMap(SqlClient.SqlClient, (sql) =>
     SqlSchema.findOneOption({
       Request: CategoryId,
@@ -42,7 +44,9 @@ const keywordRuleColumns = `id, keyword, category_id AS "categoryId",
   created_at AS "createdAt", updated_at AS "updatedAt"`;
 
 /** Loads only one User's keyword rules in stable creation order. Database failures are defects. */
-export const listKeywordRules = (userId: UserId) =>
+export const listKeywordRules = (
+  userId: UserId
+): Effect.Effect<Array<typeof KeywordRuleRow.Type>, never, SqlClient.SqlClient> =>
   withUserTransaction(
     userId,
     Effect.flatMap(SqlClient.SqlClient, (sql) =>
@@ -61,7 +65,7 @@ export const listKeywordRules = (userId: UserId) =>
  * Serializes rule decisions for one User inside the current operation transaction. Call before a
  * load-decide-write sequence so duplicate and capacity decisions remain true at insertion.
  */
-export const lockKeywordRules = (userId: UserId) =>
+export const lockKeywordRules = (userId: UserId): Effect.Effect<void, never, SqlClient.SqlClient> =>
   withUserTransaction(
     userId,
     Effect.flatMap(

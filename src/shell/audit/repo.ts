@@ -52,7 +52,9 @@ export const appendAuditLogEntry = Effect.fn("appendAuditLogEntry")(function* (
  * from AuditLogEntry. It is not a canonical operation or an ordinary product
  * read seam; production callers have no way to expose the retained evidence.
  */
-export const observeAuditLogEntries = (subjectUserId: UserId) =>
+export const observeAuditLogEntries = (
+  subjectUserId: UserId
+): Effect.Effect<Array<typeof AuditLogEntryRow.Type>, never, SqlClient.SqlClient> =>
   withUserTransaction(
     subjectUserId,
     Effect.flatMap(SqlClient.SqlClient, (sql) =>

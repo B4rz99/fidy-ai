@@ -19,6 +19,9 @@ export const TransactionId = Schema.String.check(Schema.isUUID()).pipe(
 export type TransactionId = typeof TransactionId.Type;
 
 const zero = BigDecimal.make(0n, 0);
+const maximumTransactionNotesLength = 500;
+const maximumCounterpartyFilterLength = 120;
+const maximumAttestationNameLength = 80;
 
 // Money itself permits zero. A Transaction is specifically a movement, so the
 // owning model adds positivity while retaining Money's exact-decimal and
@@ -83,7 +86,9 @@ export const Transaction = Schema.Struct({
   direction: Direction,
   categoryId: CategoryId,
   notes: Schema.OptionFromOptionalKey(
-    Schema.NonEmptyString.check(Schema.isTrimmed()).check(Schema.isMaxLength(500))
+    Schema.NonEmptyString.check(Schema.isTrimmed()).check(
+      Schema.isMaxLength(maximumTransactionNotesLength)
+    )
   ),
   occurredAt: UtcTimestamp.pipe(
     Schema.annotateEncoded({
@@ -142,7 +147,7 @@ export const TransactionExtraction = Transaction.mapFields(
 export type TransactionExtraction = typeof TransactionExtraction.Type;
 
 const CounterpartyFilter = Schema.NonEmptyString.check(Schema.isTrimmed()).check(
-  Schema.isMaxLength(120)
+  Schema.isMaxLength(maximumCounterpartyFilterLength)
 );
 
 /** The constrained values from which every Transaction history filter is composed. */
@@ -175,11 +180,13 @@ export const SourceAttestationId = Schema.String.check(Schema.isUUID()).pipe(
 );
 export type SourceAttestationId = typeof SourceAttestationId.Type;
 
-const SourceName = Schema.NonEmptyString.check(Schema.isTrimmed()).check(Schema.isMaxLength(80));
+const SourceName = Schema.NonEmptyString.check(Schema.isTrimmed()).check(
+  Schema.isMaxLength(maximumAttestationNameLength)
+);
 
 /** Names the parser, extractor, or manual interpretation contract used at capture time. */
 export const InterpretationRevision = Schema.NonEmptyString.check(Schema.isTrimmed())
-  .check(Schema.isMaxLength(80))
+  .check(Schema.isMaxLength(maximumAttestationNameLength))
   .pipe(Schema.brand("InterpretationRevision"));
 export type InterpretationRevision = typeof InterpretationRevision.Type;
 

@@ -1,4 +1,4 @@
-import { Array as EffectArray, Data, DateTime, Effect, Option, Schema } from "effect";
+import { Data, DateTime, Effect, Array as EffectArray, Option, Schema } from "effect";
 import { Model } from "effect/unstable/schema";
 import {
   E164PhoneNumber,
@@ -11,11 +11,11 @@ import { TranscriptText } from "~/core/transcript/model";
 import {
   WhatsAppBusinessPhoneNumberId,
   WhatsAppDeliveryKey,
-  WhatsAppMediaId,
-  WhatsAppProviderMessageId,
   type WhatsAppIdentityChangeEvent,
   type WhatsAppInboundContent,
   type WhatsAppInboundEvent,
+  WhatsAppMediaId,
+  WhatsAppProviderMessageId,
   type WhatsAppWebhookReceipt,
 } from "./model";
 
@@ -23,6 +23,10 @@ import {
 export const maxKapsoWebhookBytes = 1_048_576;
 /** Kapso's documented maximum number of events in one buffered delivery. */
 export const maxKapsoDeliveryEvents = 100;
+
+const hmacSha256HexLength = 64;
+const minimumWebhookSecretLength = 16;
+const millisecondsPerSecond = 1_000;
 
 /** Signature is absent, malformed, or does not authenticate the exact raw bytes. */
 export class InvalidKapsoSignature extends Data.TaggedError("InvalidKapsoSignature")<{}> {}
@@ -100,15 +104,17 @@ const RawIdentityChangeMessage = Schema.Struct({
 });
 
 const constantTimeEqual = (left: string, right: string): boolean => {
-  if (left.length !== 64 || right.length !== 64) return false;
+  if (left.length !== hmacSha256HexLength || right.length !== hmacSha256HexLength) return false;
   let difference = 0;
-  for (let index = 0; index < 64; index += 1) {
+  for (let index = 0; index < hmacSha256HexLength; index += 1) {
     difference |= left.charCodeAt(index) ^ right.charCodeAt(index);
   }
   return difference === 0;
 };
 
-const normalizePhoneNumber = (phoneNumber: string) =>
+const normalizePhoneNumber = (
+  phoneNumber: string
+): Effect.Effect<E164PhoneNumber, Schema.SchemaError> =>
   Schema.decodeUnknownEffect(E164PhoneNumber)(
     phoneNumber.startsWith("+") ? phoneNumber : `+${phoneNumber}`
   );
@@ -119,7 +125,7 @@ const parseOccurredAt = Effect.fn("Kapso.parseOccurredAt")(function* (
 ) {
   const seconds = Number(timestamp);
   if (!Number.isSafeInteger(seconds)) return yield* new InvalidKapsoPayload();
-  const parsed = DateTime.make(seconds * 1_000);
+  const parsed = DateTime.make(seconds * millisecondsPerSecond);
   if (Option.isNone(parsed)) return yield* new InvalidKapsoPayload();
   const occurredAt = DateTime.toUtc(parsed.value);
   if (DateTime.Order(occurredAt, DateTime.add(receivedAt, { minutes: 5 })) > 0) {
@@ -203,7 +209,9 @@ export const decodeKapsoWebhook = Effect.fn("Kapso.decodeWebhook")(function* (in
   if (input.rawBody.byteLength > maxKapsoWebhookBytes) {
     return yield* new KapsoPayloadTooLarge();
   }
-  if (input.secret.length < 16) return yield* new InvalidKapsoSignature();
+  if (input.secret.length < minimumWebhookSecretLength) {
+    return yield* new InvalidKapsoSignature();
+  }
   const expected = new Bun.CryptoHasher("sha256", input.secret).update(input.rawBody).digest("hex");
   if (!constantTimeEqual(expected, input.signature.toLowerCase())) {
     return yield* new InvalidKapsoSignature();
@@ -299,7 +307,9 @@ export const decodeKapsoIdentityWebhook = Effect.fn("Kapso.decodeIdentityWebhook
     if (input.rawBody.byteLength > maxKapsoWebhookBytes) {
       return yield* new KapsoPayloadTooLarge();
     }
-    if (input.secret.length < 16) return yield* new InvalidKapsoSignature();
+    if (input.secret.length < minimumWebhookSecretLength) {
+      return yield* new InvalidKapsoSignature();
+    }
     const expected = new Bun.CryptoHasher("sha256", input.secret)
       .update(input.rawBody)
       .digest("hex");

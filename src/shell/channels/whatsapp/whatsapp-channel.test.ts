@@ -1,11 +1,12 @@
 import { expect, layer } from "@effect/vitest";
 import {
-  Array as EffectArray,
+  type Cause,
   ConfigProvider,
   Context,
   DateTime,
   Deferred,
   Effect,
+  Array as EffectArray,
   Fiber,
   Layer,
   Option,
@@ -14,8 +15,13 @@ import {
   Stream,
 } from "effect";
 import { AiError, LanguageModel } from "effect/unstable/ai";
-import { HttpBody, HttpClient, HttpClientResponse } from "effect/unstable/http";
-import { SqlClient, SqlSchema } from "effect/unstable/sql";
+import {
+  HttpBody,
+  HttpClient,
+  type HttpClientError,
+  HttpClientResponse,
+} from "effect/unstable/http";
+import { SqlClient, type SqlConnection, SqlSchema, type Statement } from "effect/unstable/sql";
 import { ConsentRecord, ConsentRecordId } from "~/core/consent/model";
 import { E164PhoneNumber, UserId, WhatsAppBusinessScopedUserId } from "~/core/identity/reference";
 import { AgentBearerToken } from "~/core/tokens/model";
@@ -51,8 +57,8 @@ import { decodeKapsoWebhook } from "./kapso-webhook";
 import {
   WhatsAppBusinessPhoneNumberId,
   WhatsAppDeliveryKey,
-  WhatsAppProviderMessageId,
   type WhatsAppInboundEvent,
+  WhatsAppProviderMessageId,
 } from "./model";
 import { deliverWhatsAppConsentOutcome, sendKapsoFreeForm } from "./outbound";
 import { truncateWhatsAppChannel } from "./fixtures";
@@ -68,17 +74,17 @@ import {
   startWhatsAppTurn,
 } from "./repo";
 import { processNextWhatsAppTurn } from "./worker";
-
 import { testWhatsAppCaller } from "~/shell/testing/whatsapp-caller";
+
 const deliveryKey = WhatsAppDeliveryKey.make("delivery-worker-fixture");
-const fixtureBytes = (name: "kapso-text-v2.json" | "kapso-voice-v2.json") =>
+const fixtureBytes = (
+  name: "kapso-text-v2.json" | "kapso-voice-v2.json"
+): Effect.Effect<Uint8Array<ArrayBuffer>> =>
   Effect.promise(() => Bun.file(new URL(`./fixtures/${name}`, import.meta.url)).bytes());
-const postSignedTextFixture = Effect.fn("WhatsApp.postSignedTextFixture")(function* (input: {
-  readonly providerMessageId: string;
-  readonly phoneNumber?: E164PhoneNumber;
-  readonly text?: string;
-  readonly occurredAt?: DateTime.Utc;
-}) {
+const postSignedTextFixture = Effect.fn("WhatsApp.postSignedTextFixture")(function* (
+  input: Readonly<{ providerMessageId: string }> &
+    Partial<Readonly<{ phoneNumber: E164PhoneNumber; text: string; occurredAt: DateTime.Utc }>>
+) {
   const phoneNumber = input.phoneNumber ?? E164PhoneNumber.make("+573001234567");
   const text = input.text ?? "almuerzo 25 mil";
   const occurredAt = input.occurredAt ?? DateTime.makeUnsafe("2026-04-03T12:00:00.000Z");
@@ -126,7 +132,7 @@ const ScriptedWhatsAppModel = Layer.effect(
   LanguageModel.make({
     generateText: ({ prompt }) => {
       const serialized = Schema.encodeSync(Schema.UnknownFromJsonString)(prompt.content);
-      const completed = (callId: string) => {
+      const completed = (callId: string): boolean => {
         const callIndex = serialized.lastIndexOf(callId);
         return callIndex >= 0 && serialized.lastIndexOf("tool-result") > callIndex;
       };
@@ -265,12 +271,19 @@ const makeKapsoTextEvent = (
   receivedAt,
   content: { _tag: "Text", text: TranscriptText.make(text) },
 });
-const authorizedTurn = (event: WhatsAppInboundEvent, userId: UserId = defaultUserId) => ({
+const authorizedTurn = (
+  event: WhatsAppInboundEvent,
+  userId: UserId = defaultUserId
+): {
+  _tag: "AuthorizedTurn";
+  userId: UserId;
+  inboundMessage: { text: TranscriptText };
+} => ({
   _tag: "AuthorizedTurn" as const,
   userId,
   inboundMessage: { text: event.content.text },
 });
-const agentReplyFixture = (text: string, overrides: Partial<AgentReply> = {}) =>
+const agentReplyFixture = (text: string, overrides: Partial<AgentReply> = {}): AgentReply =>
   AgentReply.make({
     text: TranscriptText.make(text),
     attachments: Option.none(),
@@ -282,7 +295,14 @@ const kapsoClientFixture = (
   sentAt: DateTime.Utc,
   beforeSend: Effect.Effect<void> = Effect.void
 ): KapsoClientService => ({
-  sendText: () =>
+  sendText: (): Effect.Effect<{
+    messageEvidence: {
+      channel: "whatsapp";
+      provider: string;
+      providerMessageId: WhatsAppProviderMessageId;
+    };
+    sentAt: DateTime.Utc;
+  }> =>
     beforeSend.pipe(
       Effect.as({
         messageEvidence: {
@@ -438,7 +458,14 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           bearer: AgentBearerToken.make("fin_whatsiso_abcdefghijklmnopqrstuvwxyz0123456789ABCD"),
         });
         const sql = yield* SqlClient.SqlClient;
-        const countTransactions = (userId: UserId, counterparty: string) =>
+        const countTransactions = (
+          userId: UserId,
+          counterparty: string
+        ): Effect.Effect<
+          number,
+          Cause.NoSuchElementError | Schema.SchemaError,
+          SqlClient.SqlClient
+        > =>
           Effect.gen(function* () {
             const row = yield* withUserTransaction(
               userId,
@@ -986,7 +1013,11 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         yield* seedDevelopmentIdentity(defaultAgentBearer);
         yield* truncateWhatsAppChannel;
         const body = yield* fixtureBytes("kapso-text-v2.json");
-        const request = () =>
+        const request = (): Effect.Effect<
+          HttpClientResponse.HttpClientResponse,
+          HttpClientError.HttpClientError,
+          HttpClient.HttpClient
+        > =>
           HttpClient.post("/webhooks/kapso", {
             headers: {
               "x-webhook-signature":
@@ -1029,7 +1060,11 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         );
         if (Option.isNone(claim)) return yield* Effect.die("missing receipt claim");
         const body = yield* fixtureBytes("kapso-text-v2.json");
-        const request = () =>
+        const request = (): Effect.Effect<
+          HttpClientResponse.HttpClientResponse,
+          HttpClientError.HttpClientError,
+          HttpClient.HttpClient
+        > =>
           HttpClient.post("/webhooks/kapso", {
             headers: {
               "x-webhook-signature":
@@ -1059,7 +1094,11 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
             ),
           { concurrency: 16, discard: true }
         );
-        const request = () =>
+        const request = (): Effect.Effect<
+          HttpClientResponse.HttpClientResponse,
+          HttpClientError.HttpClientError,
+          HttpClient.HttpClient
+        > =>
           postSignedTextFixture({
             phoneNumber: exhaustedPhone,
             providerMessageId: "wamid.retried-after-phone-limit",
@@ -1136,7 +1175,11 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           const claim = yield* claimConsentDisclosureDelivery(admission.exchangeId, now);
           if (Option.isNone(claim)) return yield* Effect.die("missing disclosure delivery claim");
 
-          const request = () =>
+          const request = (): Effect.Effect<
+            HttpClientResponse.HttpClientResponse,
+            HttpClientError.HttpClientError,
+            HttpClient.HttpClient
+          > =>
             postSignedTextFixture({
               phoneNumber,
               providerMessageId: "wamid.public-disclosure-retry",
@@ -1285,8 +1328,15 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
     it.effect("uses provider occurrence time to reject a delayed pre-disclosure decision", () =>
       Effect.gen(function* () {
         const phoneNumber = E164PhoneNumber.make("+573007776655");
-        const postEvent = (providerMessageId: string, text: string, occurredAt: DateTime.Utc) =>
-          postSignedTextFixture({ phoneNumber, providerMessageId, text, occurredAt });
+        const postEvent = (
+          providerMessageId: string,
+          text: string,
+          occurredAt: DateTime.Utc
+        ): Effect.Effect<
+          HttpClientResponse.HttpClientResponse,
+          HttpClientError.HttpClientError,
+          HttpClient.HttpClient
+        > => postSignedTextFixture({ phoneNumber, providerMessageId, text, occurredAt });
         const receivedAt = yield* DateTime.now;
         expect((yield* postEvent("wamid.disclosure-trigger", "hola", receivedAt)).status).toBe(200);
         expect(
@@ -1306,11 +1356,21 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
       Effect.gen(function* () {
         yield* truncateWhatsAppChannel;
         const phoneNumber = E164PhoneNumber.make("+573006665544");
-        const postEvent = (providerMessageId: string, text: string, occurredAt: DateTime.Utc) =>
-          postSignedTextFixture({ phoneNumber, providerMessageId, text, occurredAt });
+        const postEvent = (
+          providerMessageId: string,
+          text: string,
+          occurredAt: DateTime.Utc
+        ): Effect.Effect<
+          HttpClientResponse.HttpClientResponse,
+          HttpClientError.HttpClientError,
+          HttpClient.HttpClient
+        > => postSignedTextFixture({ phoneNumber, providerMessageId, text, occurredAt });
         const receivedAt = yield* DateTime.now;
-        const original = () =>
-          postEvent("wamid.pre-consent-financial", "almuerzo 25 mil", receivedAt);
+        const original = (): Effect.Effect<
+          HttpClientResponse.HttpClientResponse,
+          HttpClientError.HttpClientError,
+          HttpClient.HttpClient
+        > => postEvent("wamid.pre-consent-financial", "almuerzo 25 mil", receivedAt);
         expect((yield* original()).status).toBe(200);
         // A minute, not a second: the fixture truncates the provider timestamp to whole seconds
         // while the harness stamps `disclosedAt` from the real clock, so any margin shorter than
@@ -1417,7 +1477,7 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
       Effect.gen(function* () {
         yield* truncateWhatsAppChannel;
         const admin = yield* MigrationSqlClient;
-        const observeEffects = () =>
+        const observeEffects = (): Statement.Statement<SqlConnection.Row> =>
           admin`SELECT
             (SELECT count(*)::int FROM users) AS users,
             (SELECT count(*)::int FROM pending_consent_exchanges) AS consent,
@@ -1428,7 +1488,14 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
             (SELECT count(*)::int FROM whatsapp_ingress_budgets) AS budgets,
             (SELECT count(*)::int FROM whatsapp_inbound_receipts) AS receipts`;
         const before = yield* observeEffects();
-        const post = (body: Uint8Array, signature: string) =>
+        const post = (
+          body: Uint8Array,
+          signature: string
+        ): Effect.Effect<
+          HttpClientResponse.HttpClientResponse,
+          HttpClientError.HttpClientError,
+          HttpClient.HttpClient
+        > =>
           HttpClient.post("/webhooks/kapso", {
             headers: {
               "x-webhook-signature": signature,

@@ -14,10 +14,10 @@ import {
   UserTranscriptEntry,
 } from "./model";
 import {
-  selectTranscriptWindow,
   TranscriptWindowCharacterLimit,
-  TranscriptWindowTurnLimit,
   type TranscriptWindowEntry,
+  TranscriptWindowTurnLimit,
+  selectTranscriptWindow,
 } from "./rules";
 
 const occurredAt = DateTime.makeUnsafe("2026-07-20T12:00:00Z");
@@ -30,15 +30,15 @@ const selectWindow = (
   entries: ReadonlyArray<TranscriptWindowEntry>,
   maxTurns: number,
   maxCharacters: number
-) =>
+): Effect.Effect<ReadonlyArray<TranscriptWindowEntry>> =>
   selectTranscriptWindow(
     entries,
     TranscriptWindowTurnLimit.make(maxTurns),
     TranscriptWindowCharacterLimit.make(maxCharacters)
   );
-const entryId = (suffix: string) =>
+const entryId = (suffix: string): TranscriptEntryId =>
   TranscriptEntryId.make(`f1d1a000-0000-4000-8000-${suffix.padStart(12, "0")}`);
-const turnId = (suffix: string) =>
+const turnId = (suffix: string): TranscriptTurnId =>
   TranscriptTurnId.make(`f1d1a000-0000-4000-8001-${suffix.padStart(12, "0")}`);
 
 const turn = (suffix: string, user: string, assistant: string): ReadonlyArray<TranscriptEntry> => [

@@ -1,10 +1,8 @@
 import { Effect } from "effect";
 import { SqlClient } from "effect/unstable/sql";
 
-/** Adds restricted runtime authority, transaction-scoped RLS, and narrow pre-subject gateways. */
-export const rowLevelSecurity = Effect.gen(function* () {
+const createRestrictedRoles = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
-
   yield* sql`
     DO $roles$
     BEGIN
@@ -57,7 +55,10 @@ export const rowLevelSecurity = Effect.gen(function* () {
     END
     $roles$
   `;
+});
 
+const grantRuntimeTableAuthority = Effect.gen(function* () {
+  const sql = yield* SqlClient.SqlClient;
   yield* sql`GRANT USAGE ON SCHEMA public TO fidy_runtime, fidy_gateway`;
   yield* sql`GRANT SELECT ON categories TO fidy_runtime`;
   yield* sql`
@@ -68,7 +69,10 @@ export const rowLevelSecurity = Effect.gen(function* () {
     TO fidy_runtime
   `;
   yield* sql`GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO fidy_runtime`;
+});
 
+const restrictIdentityTablesToOwner = Effect.gen(function* () {
+  const sql = yield* SqlClient.SqlClient;
   yield* sql`
     ALTER TABLE users ENABLE ROW LEVEL SECURITY;
     ALTER TABLE users FORCE ROW LEVEL SECURITY;
@@ -97,6 +101,10 @@ export const rowLevelSecurity = Effect.gen(function* () {
       USING (user_id = NULLIF(current_setting('fidy.user_id', true), '')::uuid)
       WITH CHECK (user_id = NULLIF(current_setting('fidy.user_id', true), '')::uuid)
   `;
+});
+
+const restrictTransactionTablesToOwner = Effect.gen(function* () {
+  const sql = yield* SqlClient.SqlClient;
   yield* sql`
     ALTER TABLE transactions ENABLE ROW LEVEL SECURITY;
     ALTER TABLE transactions FORCE ROW LEVEL SECURITY;
@@ -126,6 +134,10 @@ export const rowLevelSecurity = Effect.gen(function* () {
           AND transactions.user_id = NULLIF(current_setting('fidy.user_id', true), '')::uuid
       ))
   `;
+});
+
+const restrictInsightTablesToOwner = Effect.gen(function* () {
+  const sql = yield* SqlClient.SqlClient;
   yield* sql`
     ALTER TABLE insight_events ENABLE ROW LEVEL SECURITY;
     ALTER TABLE insight_events FORCE ROW LEVEL SECURITY;
@@ -163,6 +175,10 @@ export const rowLevelSecurity = Effect.gen(function* () {
           AND insight_events.user_id = NULLIF(current_setting('fidy.user_id', true), '')::uuid
       ))
   `;
+});
+
+const restrictDashboardAndTranscriptTablesToOwner = Effect.gen(function* () {
+  const sql = yield* SqlClient.SqlClient;
   yield* sql`
     ALTER TABLE dashboards ENABLE ROW LEVEL SECURITY;
     ALTER TABLE dashboards FORCE ROW LEVEL SECURITY;
@@ -177,11 +193,17 @@ export const rowLevelSecurity = Effect.gen(function* () {
       USING (user_id = NULLIF(current_setting('fidy.user_id', true), '')::uuid)
       WITH CHECK (user_id = NULLIF(current_setting('fidy.user_id', true), '')::uuid)
   `;
+});
 
+const grantGatewayReadAuthority = Effect.gen(function* () {
+  const sql = yield* SqlClient.SqlClient;
   yield* sql`GRANT SELECT ON whatsapp_identities TO fidy_gateway`;
   yield* sql`GRANT SELECT, UPDATE ON agent_tokens TO fidy_gateway`;
   yield* sql`GRANT SELECT, DELETE ON audit_log_entries TO fidy_gateway`;
+});
 
+const createWhatsAppUserResolver = Effect.gen(function* () {
+  const sql = yield* SqlClient.SqlClient;
   yield* sql`
     CREATE FUNCTION fidy_resolve_whatsapp_user(lookup_phone_number text)
     RETURNS uuid
@@ -194,6 +216,10 @@ export const rowLevelSecurity = Effect.gen(function* () {
       WHERE identity.phone_number = lookup_phone_number
     $function$
   `;
+});
+
+const createAgentTokenUseGateway = Effect.gen(function* () {
+  const sql = yield* SqlClient.SqlClient;
   yield* sql`
     CREATE FUNCTION fidy_use_agent_token(
       lookup_token_hash text,
@@ -240,6 +266,10 @@ export const rowLevelSecurity = Effect.gen(function* () {
       SELECT active.id, active.user_id, active.scopes, active.last_used_at FROM active
     $function$
   `;
+});
+
+const createAuditLogPruningGateway = Effect.gen(function* () {
+  const sql = yield* SqlClient.SqlClient;
   yield* sql`
     CREATE FUNCTION fidy_delete_audit_log_entries_before(cutoff timestamptz)
     RETURNS void
@@ -250,7 +280,10 @@ export const rowLevelSecurity = Effect.gen(function* () {
       DELETE FROM public.audit_log_entries WHERE occurred_at < cutoff
     $function$
   `;
+});
 
+const restrictGatewayFunctionsToRuntime = Effect.gen(function* () {
+  const sql = yield* SqlClient.SqlClient;
   yield* sql`ALTER FUNCTION fidy_resolve_whatsapp_user(text) OWNER TO fidy_gateway`;
   yield* sql`
     ALTER FUNCTION fidy_use_agent_token(text, timestamptz, timestamptz) OWNER TO fidy_gateway
@@ -272,4 +305,19 @@ export const rowLevelSecurity = Effect.gen(function* () {
   yield* sql`
     GRANT EXECUTE ON FUNCTION fidy_delete_audit_log_entries_before(timestamptz) TO fidy_runtime
   `;
+});
+
+/** Adds restricted runtime authority, transaction-scoped RLS, and narrow pre-subject gateways. */
+export const rowLevelSecurity = Effect.gen(function* () {
+  yield* createRestrictedRoles;
+  yield* grantRuntimeTableAuthority;
+  yield* restrictIdentityTablesToOwner;
+  yield* restrictTransactionTablesToOwner;
+  yield* restrictInsightTablesToOwner;
+  yield* restrictDashboardAndTranscriptTablesToOwner;
+  yield* grantGatewayReadAuthority;
+  yield* createWhatsAppUserResolver;
+  yield* createAgentTokenUseGateway;
+  yield* createAuditLogPruningGateway;
+  yield* restrictGatewayFunctionsToRuntime;
 }).pipe(Effect.asVoid);

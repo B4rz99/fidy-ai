@@ -21,6 +21,7 @@ import {
   maximumKeywordRulesPerUser,
 } from "~/core/categories/rules";
 import { resolveCaller } from "~/shell/_shared/authz";
+import type { NotFound, ValidationFailed } from "~/shell/_shared/errors";
 import { FidyApi } from "~/shell/api";
 import { toApiFailure } from "./errors";
 import {
@@ -32,7 +33,8 @@ import {
   lockKeywordRules,
   updateKeywordRule,
 } from "./repo";
-const missingRule = (keywordRuleId: KeywordRuleId) => () =>
+
+const missingRule = (keywordRuleId: KeywordRuleId) => (): KeywordRuleNotFound =>
   new KeywordRuleNotFound({ keywordRuleId });
 
 const validateKeywordRules = ({
@@ -45,7 +47,7 @@ const validateKeywordRules = ({
   readonly keyword: CategoryKeyword;
   readonly except: Option.Option<KeywordRuleId>;
   readonly enforceCapacity: boolean;
-}) =>
+}): Effect.Effect<void, KeywordRuleAlreadyExists | KeywordRuleLimitReached> =>
   Effect.gen(function* () {
     if (yield* hasKeywordRule({ keyword, rules, excluding: except })) {
       return yield* new KeywordRuleAlreadyExists({ keyword });
@@ -58,7 +60,10 @@ const validateKeywordRules = ({
 const createRule = ({
   userId,
   input,
-}: Readonly<{ userId: UserId; input: CreateKeywordRuleInput }>) =>
+}: Readonly<{
+  userId: UserId;
+  input: CreateKeywordRuleInput;
+}>): Effect.Effect<KeywordRule, NotFound | ValidationFailed, SqlClient.SqlClient> =>
   Effect.gen(function* () {
     yield* findCategory(input.categoryId).pipe(
       Effect.flatMap(
@@ -88,7 +93,11 @@ const updateRule = ({
   userId,
   id,
   input,
-}: Readonly<{ userId: UserId; id: KeywordRuleId; input: UpdateKeywordRuleInput }>) =>
+}: Readonly<{
+  userId: UserId;
+  id: KeywordRuleId;
+  input: UpdateKeywordRuleInput;
+}>): Effect.Effect<Option.Option<KeywordRule>, NotFound | ValidationFailed, SqlClient.SqlClient> =>
   Effect.gen(function* () {
     yield* findCategory(input.categoryId).pipe(
       Effect.flatMap(

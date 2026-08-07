@@ -11,6 +11,8 @@
 // rather than falling back to "allow everything", because a silently permissive
 // hook is worse than a broken one.
 
+import { Option } from "effect";
+
 const TYPES_MARKER = "<!-- commit-types -->";
 
 const HEADER_PATTERN = /^([a-z]+)\(([a-z0-9-]+)\): (.+)$/;
@@ -104,27 +106,27 @@ const parseTypes = (markdown: string): readonly string[] => {
   return spans.map((span) => span.slice(1, -1));
 };
 
-const parseScopeRow = (row: string): ScopeEntry | null => {
+const parseScopeRow = (row: string): Option.Option<ScopeEntry> => {
   const match = SCOPE_ROW_PATTERN.exec(row.trim());
 
   if (match === null) {
-    return null;
+    return Option.none();
   }
 
   const name = match[1];
   const when = match[2];
 
   if (name === undefined || when === undefined) {
-    return null;
+    return Option.none();
   }
 
-  return { name, when };
+  return Option.some({ name, when });
 };
 
 const parseScopeGroup = (markdown: string, section: ScopeSection): ScopeGroup => {
-  const scopes = blockAfter(markdown, section.marker)
-    .map(parseScopeRow)
-    .filter((scope) => scope !== null);
+  const scopes = blockAfter(markdown, section.marker).flatMap((row) =>
+    Option.toArray(parseScopeRow(row))
+  );
 
   if (scopes.length === 0) {
     throw new Error(`README.md lists no scopes under "${section.marker}"`);

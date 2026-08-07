@@ -19,9 +19,8 @@ export const truncateTransactions = Effect.gen(function* () {
  * turns on one of them should pass it as an override rather than read it off
  * the default.
  */
-type TransactionPayloadOverrides = Omit<Partial<CreateTransactionInput>, "counterparty"> & {
-  readonly counterparty?: string | CreateTransactionInput["counterparty"];
-};
+type TransactionPayloadOverrides = Omit<Partial<CreateTransactionInput>, "counterparty"> &
+  Partial<Readonly<{ counterparty: string | CreateTransactionInput["counterparty"] }>>;
 
 export const transactionPayload = (
   overrides?: TransactionPayloadOverrides

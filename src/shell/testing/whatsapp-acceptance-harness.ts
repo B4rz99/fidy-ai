@@ -5,8 +5,8 @@ import { categoryIds } from "~/core/categories/taxonomy";
 import { AgentServiceLive } from "~/shell/agent/agent-service";
 import {
   KapsoClient,
-  makeKapsoClientService,
   type KapsoClientService,
+  makeKapsoClientService,
 } from "~/shell/channels/whatsapp/kapso-client";
 import { WhatsAppWorkerLive } from "~/shell/channels/whatsapp/worker";
 import {

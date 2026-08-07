@@ -9,11 +9,27 @@ import { defaultAgentBearer } from "~/shell/testing/identity-fixtures";
 import { ApiHarness, ApiHarnessClient, headersFor } from "~/shell/testing/api-harness";
 import { truncateDashboards } from "./fixtures";
 
-const transactionList = (id: string) => ({
+const transactionList = (
+  id: string
+): { id: WidgetId; type: "transaction-list"; limit: TransactionListLimit } => ({
   id: WidgetId.make(id),
   type: "transaction-list" as const,
   limit: TransactionListLimit.make(10),
 });
+
+const expectNotFoundMessage = <A, E>(outcome: Result.Result<A, E>, expected: string): void => {
+  expect(Result.isFailure(outcome)).toBe(true);
+  if (!Result.isFailure(outcome)) return;
+  expect(Schema.is(NotFound)(outcome.failure)).toBe(true);
+  if (!Schema.is(NotFound)(outcome.failure)) return;
+  expect(outcome.failure.error.message).toContain(expected);
+};
+
+const expectValidationFieldPath = <A, E>(outcome: Result.Result<A, E>, expected: string): void => {
+  expect(Result.isFailure(outcome)).toBe(true);
+  if (!Result.isFailure(outcome) || !Schema.is(ValidationFailed)(outcome.failure)) return;
+  expect(outcome.failure.error.fields[0]?.path).toBe(expected);
+};
 
 layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
   "dashboard operations",
@@ -167,32 +183,11 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         );
         const after = yield* client.dashboard.getDashboard();
 
-        expect(Result.isFailure(missingEditTarget)).toBe(true);
-        if (Result.isFailure(missingEditTarget)) {
-          expect(Schema.is(NotFound)(missingEditTarget.failure)).toBe(true);
-          if (Schema.is(NotFound)(missingEditTarget.failure)) {
-            expect(missingEditTarget.failure.error.message).toContain("available to edit");
-          }
-        }
-        expect(Result.isFailure(missingPlacementTarget)).toBe(true);
-        if (Result.isFailure(missingPlacementTarget)) {
-          expect(Schema.is(NotFound)(missingPlacementTarget.failure)).toBe(true);
-          if (Schema.is(NotFound)(missingPlacementTarget.failure)) {
-            expect(missingPlacementTarget.failure.error.message).toContain("placement target");
-          }
-        }
-        expect(Result.isFailure(duplicate)).toBe(true);
-        if (Result.isFailure(duplicate) && Schema.is(ValidationFailed)(duplicate.failure)) {
-          expect(duplicate.failure.error.fields[0]?.path).toBe("widget.id");
-        }
-        expect(Result.isFailure(rootResize)).toBe(true);
-        if (Result.isFailure(rootResize) && Schema.is(ValidationFailed)(rootResize.failure)) {
-          expect(rootResize.failure.error.fields[0]?.path).toBe("weight");
-        }
-        expect(Result.isFailure(selfPlacement)).toBe(true);
-        if (Result.isFailure(selfPlacement) && Schema.is(ValidationFailed)(selfPlacement.failure)) {
-          expect(selfPlacement.failure.error.fields[0]?.path).toBe("at.besideWidget");
-        }
+        expectNotFoundMessage(missingEditTarget, "available to edit");
+        expectNotFoundMessage(missingPlacementTarget, "placement target");
+        expectValidationFieldPath(duplicate, "widget.id");
+        expectValidationFieldPath(rootResize, "weight");
+        expectValidationFieldPath(selfPlacement, "at.besideWidget");
         expect(after.data).toEqual(before.data);
       })
     );

@@ -12,6 +12,11 @@ import {
 import { type AgentConversationOutcome, handleAgentConversationTurn } from "./conversation";
 import { InboundMessage } from "./agent-service";
 
+const firstPrintableCodePoint = 32;
+const lineFeedCodePoint = 10;
+const deleteCodePoint = 127;
+const lastC1ControlCodePoint = 159;
+
 const invalidMessage = "Escribe un mensaje de texto no vacío.\n";
 const unavailableMessage = "Fidy no está disponible en este momento. Intenta de nuevo.\n";
 
@@ -24,7 +29,8 @@ const renderTerminalText = (text: string): string =>
   Array.from(text, (character) => {
     const codePoint = character.codePointAt(0);
     return codePoint !== undefined &&
-      ((codePoint < 32 && codePoint !== 10) || (codePoint >= 127 && codePoint <= 159))
+      ((codePoint < firstPrintableCodePoint && codePoint !== lineFeedCodePoint) ||
+        (codePoint >= deleteCodePoint && codePoint <= lastC1ControlCodePoint))
       ? "�"
       : character;
   }).join("");

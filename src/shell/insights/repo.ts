@@ -142,7 +142,9 @@ export const generateInsightEvent = Effect.fn("generateInsightEvent")(function* 
 });
 
 /** Lists only pending occurrences owned by one User, oldest scheduled first. */
-export const listPendingInsights = (userId: UserId) =>
+export const listPendingInsights = (
+  userId: UserId
+): Effect.Effect<Array<InsightEvent>, never, SqlClient.SqlClient> =>
   withUserTransaction(
     userId,
     Effect.flatMap(SqlClient.SqlClient, (sql) =>

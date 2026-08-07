@@ -48,16 +48,16 @@ type PartialArray<Value extends ReadonlyArray<unknown>> =
 type PartialInputSchema = Schema.Codec<unknown, unknown>;
 
 const partialAnnotations = (
-  annotations: Schema.Annotations.Annotations | undefined
-): Schema.Annotations.Annotations | undefined =>
-  Option.fromUndefinedOr(annotations).pipe(
+  annotations: Option.Option<Schema.Annotations.Annotations>
+): Option.Option<Schema.Annotations.Annotations> =>
+  annotations.pipe(
     Option.flatMap((present) =>
       Option.fromUndefinedOr(present.identifier).pipe(
         Option.filter(Predicate.isString),
         Option.map((identifier) => ({ ...present, identifier: `${identifier}Partial` }))
       )
     ),
-    Option.getOrElse(() => annotations)
+    Option.orElse(() => annotations)
   );
 
 const conditionalCheck = (
@@ -78,12 +78,10 @@ const conditionalCheck = (
 };
 
 const conditionalChecks = (
-  checks: SchemaAST.Checks | undefined,
+  checks: Option.Option<SchemaAST.Checks>,
   isComplete: (input: unknown) => boolean
-): SchemaAST.Checks | undefined =>
-  checks === undefined
-    ? undefined
-    : Arr.map(checks, (check) => conditionalCheck(check, isComplete));
+): Option.Option<SchemaAST.Checks> =>
+  Option.map(checks, (present) => Arr.map(present, (check) => conditionalCheck(check, isComplete)));
 
 const fixedElementsComplete = (
   elements: ReadonlyArray<SchemaAST.AST>,
@@ -212,104 +210,84 @@ const isCompleteInput = (ast: SchemaAST.AST, input: unknown): boolean => {
   return isCompleteAtomic(ast, input);
 };
 
+const partialArraysAst = (ast: SchemaAST.Arrays): SchemaAST.AST => {
+  const isComplete = (input: unknown): boolean => isCompleteArrayInput(ast, input);
+  return new SchemaAST.Arrays(
+    ast.isMutable,
+    ast.elements.map(partialInputAst),
+    ast.rest.map(partialInputAst),
+    Option.getOrUndefined(partialAnnotations(Option.fromUndefinedOr(ast.annotations))),
+    Option.getOrUndefined(conditionalChecks(Option.fromUndefinedOr(ast.checks), isComplete)),
+    ast.encoding,
+    ast.context,
+    Option.getOrUndefined(conditionalChecks(Option.fromUndefinedOr(ast.encodingChecks), isComplete))
+  );
+};
+
+const partialUnionAst = (ast: SchemaAST.Union): SchemaAST.AST => {
+  const isComplete = (input: unknown): boolean => isCompleteInput(ast, input);
+  return new SchemaAST.Union(
+    ast.types.map(partialInputAst),
+    ast.mode,
+    Option.getOrUndefined(partialAnnotations(Option.fromUndefinedOr(ast.annotations))),
+    Option.getOrUndefined(conditionalChecks(Option.fromUndefinedOr(ast.checks), isComplete)),
+    ast.encoding,
+    ast.context,
+    Option.getOrUndefined(conditionalChecks(Option.fromUndefinedOr(ast.encodingChecks), isComplete))
+  );
+};
+
+const partialSuspendAst = (ast: SchemaAST.Suspend): SchemaAST.AST =>
+  new SchemaAST.Suspend(
+    () => partialInputAst(ast.thunk()),
+    Option.getOrUndefined(partialAnnotations(Option.fromUndefinedOr(ast.annotations))),
+    undefined,
+    ast.encoding,
+    ast.context
+  );
+
+const partialObjectsAst = (ast: SchemaAST.Objects): SchemaAST.AST => {
+  const isComplete = (input: unknown): boolean => isCompleteInput(ast, input);
+  return new SchemaAST.Objects(
+    ast.propertySignatures.map(
+      (property) =>
+        new SchemaAST.PropertySignature(
+          property.name,
+          Schema.optionalKey(Schema.make(partialInputAst(property.type))).ast
+        )
+    ),
+    ast.indexSignatures.map(
+      (signature) =>
+        new SchemaAST.IndexSignature(
+          signature.parameter,
+          partialInputAst(signature.type),
+          signature.merge
+        )
+    ),
+    Option.getOrUndefined(partialAnnotations(Option.fromUndefinedOr(ast.annotations))),
+    Option.getOrUndefined(conditionalChecks(Option.fromUndefinedOr(ast.checks), isComplete)),
+    ast.encoding,
+    ast.context,
+    Option.getOrUndefined(conditionalChecks(Option.fromUndefinedOr(ast.encodingChecks), isComplete))
+  );
+};
+
+const rewrittenPartialAst = (ast: SchemaAST.AST): SchemaAST.AST => {
+  if (ast._tag === "Arrays") return partialArraysAst(ast);
+  if (ast._tag === "Union") return partialUnionAst(ast);
+  if (ast._tag === "Suspend") return partialSuspendAst(ast);
+  if (ast._tag === "Objects") return partialObjectsAst(ast);
+  return ast;
+};
+
 const partialAstCache = new WeakMap<SchemaAST.AST, SchemaAST.AST>();
 
 const partialInputAst = (ast: SchemaAST.AST): SchemaAST.AST => {
   const cached = partialAstCache.get(ast);
   if (cached !== undefined) return cached;
-  const remember = (partial: SchemaAST.AST): SchemaAST.AST => {
-    partialAstCache.set(ast, partial);
-    return partial;
-  };
-
-  switch (ast._tag) {
-    case "Arrays": {
-      const isComplete = (input: unknown): boolean => isCompleteArrayInput(ast, input);
-      return remember(
-        new SchemaAST.Arrays(
-          ast.isMutable,
-          ast.elements.map(partialInputAst),
-          ast.rest.map(partialInputAst),
-          partialAnnotations(ast.annotations),
-          conditionalChecks(ast.checks, isComplete),
-          ast.encoding,
-          ast.context,
-          conditionalChecks(ast.encodingChecks, isComplete)
-        )
-      );
-    }
-    case "Union": {
-      const isComplete = (input: unknown): boolean => isCompleteInput(ast, input);
-      return remember(
-        new SchemaAST.Union(
-          ast.types.map(partialInputAst),
-          ast.mode,
-          partialAnnotations(ast.annotations),
-          conditionalChecks(ast.checks, isComplete),
-          ast.encoding,
-          ast.context,
-          conditionalChecks(ast.encodingChecks, isComplete)
-        )
-      );
-    }
-    case "Suspend": {
-      const partial = new SchemaAST.Suspend(
-        () => partialInputAst(ast.thunk()),
-        partialAnnotations(ast.annotations),
-        undefined,
-        ast.encoding,
-        ast.context
-      );
-      partialAstCache.set(ast, partial);
-      return partial;
-    }
-    case "Objects": {
-      const isComplete = (input: unknown): boolean => isCompleteInput(ast, input);
-
-      return remember(
-        new SchemaAST.Objects(
-          ast.propertySignatures.map(
-            (property) =>
-              new SchemaAST.PropertySignature(
-                property.name,
-                Schema.optionalKey(Schema.make(partialInputAst(property.type))).ast
-              )
-          ),
-          ast.indexSignatures.map(
-            (signature) =>
-              new SchemaAST.IndexSignature(
-                signature.parameter,
-                partialInputAst(signature.type),
-                signature.merge
-              )
-          ),
-          partialAnnotations(ast.annotations),
-          conditionalChecks(ast.checks, isComplete),
-          ast.encoding,
-          ast.context,
-          conditionalChecks(ast.encodingChecks, isComplete)
-        )
-      );
-    }
-    case "Declaration":
-    case "Null":
-    case "Undefined":
-    case "Void":
-    case "Never":
-    case "Any":
-    case "Unknown":
-    case "ObjectKeyword":
-    case "Enum":
-    case "TemplateLiteral":
-    case "UniqueSymbol":
-    case "Literal":
-    case "String":
-    case "Number":
-    case "Boolean":
-    case "Symbol":
-    case "BigInt":
-      return remember(ast);
-  }
+  const partial = rewrittenPartialAst(ast);
+  partialAstCache.set(ast, partial);
+  return partial;
 };
 
 /**

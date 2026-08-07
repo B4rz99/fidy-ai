@@ -40,6 +40,7 @@ const SIBLING_REFERENCE = dir("sibling-reference");
 const SIBLING_IMPLEMENTATION = dir("sibling-implementation");
 const TYPE_ONLY = dir("type-only");
 const CORE_TO_SHELL = dir("core-imports-shell");
+const CORE_TO_WORLD = dir("core-imports-the-world");
 const ENTRYPOINT = dir("entrypoint");
 const CYCLE = dir("cycle");
 const BARREL = dir("barrel");
@@ -122,6 +123,22 @@ const PROBES: readonly Probe[] = [
       },
     ],
     name: "core-imports-shell rejects a core module reaching into shell",
+  },
+  {
+    directory: CORE_TO_WORLD,
+    expect: {
+      kind: "rejected",
+      mustContain: [`error core-imports-the-world: ${CORE_TO_WORLD}/probe.ts → fs`],
+    },
+    files: [
+      {
+        path: `${CORE_TO_WORLD}/probe.ts`,
+        source:
+          'import { readFileSync } from "node:fs";\n\n' +
+          "export const coreImportsTheWorldProbe = readFileSync;\n",
+      },
+    ],
+    name: "core-imports-the-world rejects a core module importing an I/O builtin",
   },
   {
     directory: ENTRYPOINT,

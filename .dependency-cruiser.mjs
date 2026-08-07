@@ -37,6 +37,22 @@ export default {
       to: { path: "^src/shell/" },
     },
     {
+      name: "core-imports-the-world",
+      severity: "error",
+      comment:
+        "A module under src/core imported the platform or an I/O builtin. This is the rule " +
+        'that actually holds "core is testable without a container": every path-scoped fence ' +
+        'would permit `import { FileSystem } from "@effect/platform"` inside a core module, ' +
+        "because the import never touches src/shell/ at all (ARCHITECTURE.md §3). Whatever the " +
+        "value is, take it as a parameter and let the shell read it.",
+      from: { path: "^src/core/" },
+      to: {
+        path:
+          "^node_modules/@effect/platform|" +
+          "^(fs|http|https|net|os|child_process|stream|dns|tls|timers|cluster|worker_threads)(/|$)",
+      },
+    },
+    {
       name: "core-slice-reaches-sibling-slice",
       severity: "error",
       comment:

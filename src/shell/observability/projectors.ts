@@ -63,6 +63,13 @@ const ProjectedTraceCoordinates = {
   op: TelemetryCodeSchema.spanOperation,
 } as const;
 
+// A failure can be captured with no Span in scope, and the SDK then supplies trace coordinates that
+// name no operation. Only the error shape may omit `op`: a transaction always originates in a Span.
+const ProjectedErrorTraceCoordinates = {
+  ...ProjectedTraceCoordinates,
+  op: Schema.optionalKey(TelemetryCodeSchema.spanOperation),
+} as const;
+
 const normalizeSourceFile = (value: string): Option.Option<string> => {
   if (/^[A-Za-z][A-Za-z0-9+.-]*:\/\//u.test(value)) return Option.none();
   const sourceMarker = value.lastIndexOf("/src/");
@@ -313,7 +320,9 @@ export const ProjectedErrorEvent = Schema.Struct({
     provider: Schema.optionalKey(TelemetryCodeSchema.provider),
   }),
   breadcrumbs: Schema.Array(ProjectedBreadcrumb),
-  contexts: Schema.optionalKey(Schema.Struct({ trace: Schema.Struct(ProjectedTraceCoordinates) })),
+  contexts: Schema.optionalKey(
+    Schema.Struct({ trace: Schema.Struct(ProjectedErrorTraceCoordinates) })
+  ),
 });
 export type ProjectedErrorEvent = typeof ProjectedErrorEvent.Type;
 

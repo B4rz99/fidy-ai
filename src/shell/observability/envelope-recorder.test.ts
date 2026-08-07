@@ -546,6 +546,43 @@ it.effect("attaches an exhausted operational failure to its provider and its act
   )
 );
 
+it.effect(
+  "reports a failure captured with no span in scope, under trace coordinates naming no op",
+  () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const services = yield* Layer.build(TelemetryEnvelopeRecording);
+        const telemetry = Context.get(services, Telemetry);
+        const recorder = Context.get(services, EnvelopeRecorder);
+        const failure: ClassifiedFailure = {
+          _tag: "Defect",
+          component: "agent",
+          operation: "agent.hostedTurn",
+          error: "unexpected_defect",
+          cause: new Error("unspanned-message-sentinel"),
+        };
+
+        yield* telemetry.captureFailure(failure);
+
+        const envelopes = yield* recorder.serializedEnvelopes;
+        const events = errorPayloads(envelopes);
+        expect(events).toHaveLength(1);
+        expect(transactionPayloads(envelopes)).toHaveLength(0);
+        expect(events[0]?.tags).toEqual({
+          component: "agent",
+          operation: "agent.hostedTurn",
+          error: "unexpected_defect",
+          retryable: "false",
+        });
+        expect(events[0]?.contexts?.trace.trace_id).toEqual(expect.any(String));
+        expect(events[0]?.contexts?.trace.span_id).toEqual(expect.any(String));
+        expect(events[0]?.contexts?.trace.op).toBeUndefined();
+        const serialized = new TextDecoder().decode(envelopes[0]);
+        expect(serialized).not.toContain("unspanned-message-sentinel");
+      })
+    )
+);
+
 it.effect("keeps only usable source coordinates and drops a cause carrying no stack", () =>
   Effect.scoped(
     Effect.gen(function* () {

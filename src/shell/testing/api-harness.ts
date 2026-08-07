@@ -1,5 +1,5 @@
 import { BunHttpServer, BunServices } from "@effect/platform-bun";
-import { ConfigProvider, Context, DateTime, Effect, Layer, Ref, type Schema } from "effect";
+import { Context, DateTime, Effect, Layer, Ref, type Schema } from "effect";
 import { type HttpClientError } from "effect/unstable/http";
 import { HttpApiClient } from "effect/unstable/httpapi";
 import { type AgentBearerToken } from "~/core/tokens/model";
@@ -21,6 +21,7 @@ import { WhatsAppProviderMessageId } from "~/shell/channels/whatsapp/model";
 import { MigrationSqlClientLive, MigratorLive, PgLive } from "~/shell/db/client";
 import { makeDevelopmentSeedLive } from "~/shell/db/development-seed";
 import { defaultAgentBearer } from "./identity-fixtures";
+import { TestPublicNamespace } from "./test-config";
 import { HttpLive } from "~/shell/http";
 
 /**
@@ -42,21 +43,6 @@ export type ApiCallFailure =
   | ScopeMissing
   | Unauthenticated
   | ValidationFailed;
-
-const TestPublicNamespace = ConfigProvider.layer(
-  ConfigProvider.orElse(
-    ConfigProvider.fromEnv({
-      env: {
-        PUBLIC_WEB_ORIGIN: "https://fidyapp.com",
-        PUBLIC_API_ORIGIN: "https://api.fidyapp.com",
-        INGEST_EMAIL_DOMAIN: "ingest.fidyapp.com",
-        KAPSO_WEBHOOK_SECRET: "test-webhook-secret-32-characters",
-        WHATSAPP_BUSINESS_PORTFOLIO_ID: "portfolio-test",
-      },
-    }),
-    ConfigProvider.fromEnv()
-  )
-);
 
 /** Builds a client service whose bearer is supplied through the declared middleware. */
 export const makeApiClientLive = <Id>({

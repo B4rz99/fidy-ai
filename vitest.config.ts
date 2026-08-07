@@ -20,6 +20,7 @@ export default defineConfig({
   },
   test: {
     include: ["src/**/*.test.ts"],
+    exclude: ["src/**/*.acceptance.test.ts"],
     environment: "node",
     pool: "forks",
     fileParallelism: false,

@@ -1312,11 +1312,14 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         const original = () =>
           postEvent("wamid.pre-consent-financial", "almuerzo 25 mil", receivedAt);
         expect((yield* original()).status).toBe(200);
+        // A minute, not a second: the fixture truncates the provider timestamp to whole seconds
+        // while the harness stamps `disclosedAt` from the real clock, so any margin shorter than
+        // the disclosure round trip lands the decision before it and only clarifies.
         expect(
           (yield* postEvent(
             "wamid.fresh-consent",
             "Acepto",
-            DateTime.add(receivedAt, { seconds: 1 })
+            DateTime.add(receivedAt, { minutes: 1 })
           )).status
         ).toBe(200);
         expect(Option.isSome(yield* resolveWhatsAppCaller(testWhatsAppCaller(phoneNumber)))).toBe(

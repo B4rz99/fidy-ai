@@ -513,6 +513,9 @@ const BesidePlacement = Schema.Struct({
 }).annotate({ identifier: "BesidePlacement" });
 export type BesidePlacement = typeof BesidePlacement.Type;
 
+/** Whether a Placement names a sibling Widget rather than a document edge. */
+export const isBesidePlacement = Schema.is(BesidePlacement);
+
 /** Root or sibling-relative destination accepted by add and move edits. */
 export const Placement = Schema.Union([Schema.Literals(["top", "bottom"]), BesidePlacement]);
 export type Placement = typeof Placement.Type;

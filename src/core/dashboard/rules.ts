@@ -15,11 +15,13 @@ import {
   DashboardDocument,
   type DashboardEdit,
   type LayoutNode,
+  type Placement,
   type SplitNode,
   SplitWeight,
   type Widget,
   type WidgetId,
   findDashboardStructureIssue,
+  isBesidePlacement,
 } from "./model";
 
 const makeInvalidDashboardResult = (): InvalidDashboardResult => {
@@ -70,17 +72,21 @@ const mapAtLeastTwo = <Input, Output>(
   ];
 };
 
+type SplitChild = Readonly<SplitNode["children"][number]>;
+
 type WeightedLayoutNode = Readonly<{ node: LayoutNode; weight: bigint }>;
 
+type Expansion = ReadonlyArray<WeightedLayoutNode>;
+
+/** A split child beside the denominator its own child weights are stated against. */
+type DenominatedChild = Readonly<{ child: SplitChild; denominator: bigint }>;
+
+/** The parent's common denominator, and the factor that lifts a nested split's own weights. */
+type ChildScale = Readonly<{ keep: bigint; flatten: bigint }>;
+
 /** Restates one child against the parent's common denominator, flattening same-axis nesting. */
-const expandChild = (
-  child: Readonly<SplitNode["children"][number]>,
-  axis: Axis,
-  scale: Readonly<{ readonly keep: bigint; readonly flatten: bigint }>
-): ReadonlyArray<WeightedLayoutNode> => {
+const expandChild = (child: SplitChild, axis: Axis, scale: ChildScale): Expansion => {
   switch (child.node.kind) {
-    case "leaf":
-      return [{ node: child.node, weight: BigInt(child.weight) * scale.keep }];
     case "split":
       return child.node.axis === axis
         ? child.node.children.map((nested) => ({
@@ -88,27 +94,26 @@ const expandChild = (
             weight: BigInt(child.weight) * BigInt(nested.weight) * scale.flatten,
           }))
         : [{ node: child.node, weight: BigInt(child.weight) * scale.keep }];
+    case "leaf":
+      return [{ node: child.node, weight: BigInt(child.weight) * scale.keep }];
   }
 };
 
 const normalizeSplit = (node: Readonly<SplitNode>): SplitNode => {
   const children = node.children;
-  const weighted = children.map((child) => ({
+  const weighted: ReadonlyArray<DenominatedChild> = children.map((child) => ({
     child,
     denominator:
       child.node.kind === "leaf"
         ? 1n
         : child.node.children.reduce((sum, nested) => sum + BigInt(nested.weight), 0n),
   }));
-  const commonDenominator = weighted.reduce((product, entry) => product * entry.denominator, 1n);
-  const expanded: ReadonlyArray<WeightedLayoutNode> = weighted.flatMap(({ child, denominator }) =>
-    expandChild(child, node.axis, {
-      keep: commonDenominator,
-      flatten: commonDenominator / denominator,
-    })
+  const common = weighted.reduce((product, entry) => product * entry.denominator, 1n);
+  const expanded = weighted.flatMap(({ child, denominator }) =>
+    expandChild(child, node.axis, { keep: common, flatten: common / denominator })
   );
   const divisor = expanded.reduce((current, child) => EffectBigInt.gcd(current, child.weight), 0n);
-  const expandedChildren: AtLeastTwo<(typeof expanded)[number]> = [
+  const expandedChildren: AtLeastTwo<WeightedLayoutNode> = [
     Option.getOrThrow(Option.fromUndefinedOr(expanded[0])),
     Option.getOrThrow(Option.fromUndefinedOr(expanded[1])),
     ...expanded.slice(2),
@@ -128,10 +133,10 @@ const normalizeSplit = (node: Readonly<SplitNode>): SplitNode => {
 
 const rootColumn = (layout: Readonly<LayoutNode>): Option.Option<Readonly<SplitNode>> => {
   switch (layout.kind) {
-    case "leaf":
-      return Option.none();
     case "split":
       return layout.axis === "column" ? Option.some(layout) : Option.none();
+    case "leaf":
+      return Option.none();
   }
 };
 
@@ -432,6 +437,12 @@ const applyResize = (
     : Effect.fail(new WidgetNotFound({ widgetId: edit.widgetId, role: "edit-target" }));
 };
 
+/** The sibling Widget a Placement names, when it names one rather than a document edge. */
+const besideWidgetId = (at: Readonly<Placement>): Option.Option<WidgetId> =>
+  Option.liftPredicate(at, isBesidePlacement).pipe(
+    Option.map((beside: Readonly<BesidePlacement>) => beside.besideWidget)
+  );
+
 const applyMove = (
   document: Readonly<DashboardDocument>,
   edit: Readonly<Extract<DashboardEdit, { readonly op: "move-widget" }>>
@@ -440,14 +451,8 @@ const applyMove = (
   if (Option.isNone(removal)) {
     return Effect.fail(new WidgetNotFound({ widgetId: edit.widgetId, role: "edit-target" }));
   }
-  switch (edit.at) {
-    case "top":
-    case "bottom":
-      break;
-    default:
-      if (edit.at.besideWidget === edit.widgetId) {
-        return Effect.fail(new SelfPlacement({ widgetId: edit.widgetId }));
-      }
+  if (Option.contains(besideWidgetId(edit.at), edit.widgetId)) {
+    return Effect.fail(new SelfPlacement({ widgetId: edit.widgetId }));
   }
   if (Option.isNone(removal.value.layout)) {
     return revalidateDocument(document);

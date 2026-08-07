@@ -133,11 +133,7 @@ const pairedWithFollowingResult = (
   index: number
 ): boolean =>
   Option.fromUndefinedOr(turn[index + 1]).pipe(
-    Option.filter(
-      (next): next is WindowResultEntryValue => next._tag === "CanonicalToolResultEntry"
-    ),
-    Option.flatMap((result) => matchingTrailingCall(Option.fromUndefinedOr(turn[index]), result)),
-    Option.isSome
+    Option.exists(() => trailingTurnUnit(turn, index + 1).length > 1)
   );
 
 const boundedActiveTurn = (
@@ -156,7 +152,8 @@ const boundedActiveTurn = (
     characters: entryCharacters(user.value),
     stopped: false,
   };
-  const newestFirstIndexes = Array.from(turn.keys()).slice(1).toReversed();
+  const [, ...trailing] = turn;
+  const newestFirstIndexes = Array.from(trailing.keys(), (index) => turn.length - 1 - index);
   newestFirstIndexes.forEach((index) => {
     if (state.stopped) return;
     if (pairedWithFollowingResult(turn, index)) return;

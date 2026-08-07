@@ -406,6 +406,24 @@ it.effect("does not split a matching trailing call and result at the character b
   })
 );
 
+it.effect("carries a paired call once while the budget still has room to repeat it", () =>
+  Effect.gen(function* () {
+    const id = turnId("23");
+    const user = windowUser("231", id);
+    const dropped = windowCall("232", id, "dropped-call");
+    const standalone = windowCall("233", id, "standalone-call");
+    const call = windowCall("234", id, "spare-pair");
+    const result = windowResult("235", id, "spare-pair");
+
+    expect(yield* selectWindow([user, dropped, standalone, call, result], 1, 7)).toEqual([
+      user,
+      standalone,
+      call,
+      result,
+    ]);
+  })
+);
+
 it.effect("charges every retained standalone suffix entry against the character budget", () =>
   Effect.gen(function* () {
     const id = turnId("16");

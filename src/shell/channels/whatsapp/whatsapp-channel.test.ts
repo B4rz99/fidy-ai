@@ -38,6 +38,7 @@ import {
   seedDevelopmentIdentity,
 } from "~/shell/db/development-seed";
 import { ApiHarness, ApiHarnessClient, ApiHarnessKapsoControl } from "~/shell/testing/api-harness";
+import { makeLanguageModelFinishPart } from "~/shell/testing/language-model-fixtures";
 import { withUserTransaction } from "~/shell/db/user-transaction";
 import {
   appendConsentRecord,
@@ -141,7 +142,10 @@ const ScriptedWhatsAppModel = Layer.effect(
         serialized.lastIndexOf("taxi 18 mil") > serialized.lastIndexOf("almuerzo 25 mil");
       const callId = voice ? "whatsapp-voice-quick-log" : "whatsapp-text-quick-log";
       if (completed(callId)) {
-        return Effect.succeed([{ type: "text" as const, text: "Registré el movimiento." }]);
+        return Effect.succeed([
+          { type: "text" as const, text: "Registré el movimiento." },
+          makeLanguageModelFinishPart("stop"),
+        ]);
       }
       const occurredAt = Option.fromNullishOr(
         /El turno comenzó en ([0-9T:.+-]+Z)/u.exec(serialized)
@@ -170,11 +174,11 @@ const ScriptedWhatsAppModel = Layer.effect(
                 },
           },
         },
+        makeLanguageModelFinishPart("tool-calls"),
       ]);
     },
-    streamText: () => {
-      throw new Error("The WhatsApp agent test uses non-streaming generation");
-    },
+    streamText: () =>
+      Stream.die(new Error("The WhatsApp agent test uses non-streaming generation")),
   })
 );
 const modelFailure = AiError.AiError.make({

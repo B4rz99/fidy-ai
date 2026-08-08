@@ -1,5 +1,5 @@
 import { expect, layer } from "@effect/vitest";
-import { DateTime, Deferred, Effect, Fiber, Layer } from "effect";
+import { DateTime, Deferred, Effect, Fiber, Layer, Stream } from "effect";
 import { LanguageModel } from "effect/unstable/ai";
 import { MigrationSqlClient } from "~/shell/db/client";
 import { ConsentRecord, ConsentRecordId } from "~/core/consent/model";
@@ -20,9 +20,7 @@ const MustNotRunModel = Layer.effect(
   LanguageModel.LanguageModel,
   LanguageModel.make({
     generateText: () => Effect.die("model must not run before consent"),
-    streamText: () => {
-      throw new Error("model must not run before consent");
-    },
+    streamText: () => Stream.die("model must not run before consent"),
   })
 );
 

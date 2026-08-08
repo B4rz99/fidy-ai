@@ -2,6 +2,7 @@ import { Context, Effect, Function, Layer, Option, Predicate, Schema, type Scope
 import type { HttpClient } from "effect/unstable/http";
 import { HttpApiClient } from "effect/unstable/httpapi";
 import { Tool, Toolkit } from "effect/unstable/ai";
+import { toCodecOpenAI } from "effect/unstable/ai/OpenAiStructuredOutput";
 import type { CanonicalOperationId } from "~/core/_shared/canonical-operation";
 import { type AgentBearerToken } from "~/core/tokens/model";
 import { makeAgentAuthorizationClientLive } from "~/shell/_shared/authz";
@@ -50,12 +51,19 @@ export const OpenAiToolName = Schema.String.check(
 ).pipe(Schema.brand("OpenAiToolName"));
 export type OpenAiToolName = typeof OpenAiToolName.Type;
 
-/** Facts connecting one provider-safe name back to its canonical declaration. */
+/**
+ * Connects one provider-safe tool to its canonical operation declaration. `canonicalParameters`
+ * governs API input, while `providerResponseParameters` accepts either strict OpenAI arguments or
+ * the canonical encoded form returned by Effect's provider adapter. `wireJsonSchema` is the exact
+ * strict schema published to OpenAI and must remain paired with that response codec.
+ */
 export type AgentOperationBinding = {
   readonly operation: CanonicalOperationId;
   readonly wireName: OpenAiToolName;
   readonly description: string;
-  readonly parameters: CatalogOperation["input"];
+  readonly canonicalParameters: CatalogOperation["input"];
+  readonly providerResponseParameters: Schema.Codec<unknown, unknown, never, never>;
+  readonly wireJsonSchema: ReturnType<typeof toCodecOpenAI>["jsonSchema"];
   readonly success: CatalogOperation["success"];
   readonly failure: CatalogOperation["failure"];
   readonly policy: CatalogOperation["policy"];
@@ -67,15 +75,25 @@ export const encodeOpenAiToolName = (operation: CanonicalOperationId): OpenAiToo
 
 /** Every hosted tool binding, derived from the assembled FidyApi catalog. */
 export const agentOperationBindings: ReadonlyArray<AgentOperationBinding> =
-  operationCatalog.operations.map((operation) => ({
-    operation: operation.id,
-    wireName: encodeOpenAiToolName(operation.id),
-    description: operation.description,
-    parameters: operation.input,
-    success: operation.success,
-    failure: operation.failure,
-    policy: operation.policy,
-  }));
+  operationCatalog.operations.map((operation) => {
+    const { codec: wireCodec, jsonSchema: wireJsonSchema } = toCodecOpenAI(operation.input);
+    const wireParameters: Schema.Codec<unknown, unknown, never, never> = Schema.make(wireCodec.ast);
+    const providerResponseParameters: Schema.Codec<unknown, unknown, never, never> = Schema.Union([
+      wireParameters,
+      operation.input,
+    ]);
+    return {
+      operation: operation.id,
+      wireName: encodeOpenAiToolName(operation.id),
+      description: operation.description,
+      canonicalParameters: operation.input,
+      providerResponseParameters,
+      wireJsonSchema,
+      success: operation.success,
+      failure: operation.failure,
+      policy: operation.policy,
+    };
+  });
 
 const bindingsByWireName = new Map(
   agentOperationBindings.map((binding) => [binding.wireName, binding] as const)
@@ -102,13 +120,13 @@ export const decodeAgentOperationInput: {
   (input: unknown): (self: AgentOperationBinding) => Effect.Effect<unknown, Schema.SchemaError>;
   (self: AgentOperationBinding, input: unknown): Effect.Effect<unknown, Schema.SchemaError>;
 } = Function.dual(2, (self: AgentOperationBinding, input: unknown) =>
-  Schema.decodeUnknownEffect(self.parameters)(input)
+  Schema.decodeUnknownEffect(self.providerResponseParameters)(input)
 );
 
 const tools = agentOperationBindings.map((binding) =>
   Tool.dynamic(binding.wireName, {
     description: binding.description + confirmationGuidance(binding.policy.agentConfirmation),
-    parameters: Schema.toEncoded(binding.parameters),
+    parameters: Schema.toEncoded(binding.canonicalParameters),
     success: binding.success,
     failure: binding.failure,
     failureMode: "return",
@@ -173,9 +191,10 @@ export const makeAgentToolkit = (
     const handlers = Object.fromEntries(
       agentOperationBindings.map((binding) => [
         binding.wireName,
-        (input: unknown): Effect.Effect<unknown, object | Schema.SchemaError> =>
-          decodeAgentOperationInput(binding, input).pipe(
-            Effect.flatMap((decoded) => callOperation(client, binding, decoded))
+        (input: unknown): Effect.Effect<unknown, object> =>
+          Schema.decodeUnknownEffect(binding.canonicalParameters)(input).pipe(
+            Effect.orDie,
+            Effect.flatMap((canonicalInput) => callOperation(client, binding, canonicalInput))
           ),
       ])
     );

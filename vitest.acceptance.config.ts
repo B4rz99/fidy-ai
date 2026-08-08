@@ -48,8 +48,8 @@ export default defineConfig({
       // shell branches outside the WhatsApp acceptance seam; focused API tests cover those paths.
       thresholds: {
         autoUpdate: true,
-        branches: 26.18,
-        lines: 60.41,
+        branches: 26.36,
+        lines: 60.46,
       },
     },
   },

@@ -8,6 +8,7 @@ export const HostedAgentModel = "gpt-5.6-luna";
 export const HostedAgentGenerationConfig = {
   temperature: 0.7,
   reasoning: { effort: "none" },
+  store: false,
 } as const;
 
 const OpenAiClientLive = OpenAiClient.layerConfig({

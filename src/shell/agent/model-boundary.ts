@@ -125,17 +125,15 @@ export const containsSensitiveChatValue = (text: string): boolean =>
 export const containsSensitiveJson = (value: Schema.Json): boolean =>
   Option.fromNullishOr(JSON.stringify(value)).pipe(Option.exists(containsSensitiveChatValue));
 
-/** Projects only explicit User context and current-turn time into the hosted model instructions. */
+/** Establishes the stable User locale and financial-assistant policy for hosted generation. */
 export const systemPrompt = ({
-  user: { serviceMarket, locale, timeZone },
-  occurredAt,
-}: {
-  readonly user: Pick<User, "serviceMarket" | "locale" | "timeZone">;
-  readonly occurredAt: DateTime.Utc;
-}): string =>
+  serviceMarket,
+  locale,
+  timeZone,
+}: Pick<User, "serviceMarket" | "locale" | "timeZone">): string =>
   `Eres Fidy, un asistente de finanzas personales. ` +
   `El contexto explícito del Usuario es ServiceMarket ${serviceMarket}, locale ${locale} ` +
-  `y zona IANA ${timeZone}. El turno comenzó en ${DateTime.formatIso(occurredAt)}. ` +
+  `y zona IANA ${timeZone}. ` +
   `No infieras ese contexto de teléfonos, monedas ni proveedores. ` +
   `Las categorías canónicas disponibles son ${categoryRows
     .map(({ id, label }) => `${label}: ${id}`)
@@ -150,6 +148,11 @@ export const systemPrompt = ({
   `una empresa a partir del artículo, propósito o contexto, y no inventes notas. ` +
   `Cuando el Usuario responda con un comando CONFIRMAR emitido por el host, vuelve a proponer ` +
   `una sola vez exactamente la operación y los argumentos mostrados en el desafío.`;
+
+/** Establishes the current turn instant used to resolve omitted Transaction times. */
+export const turnPrompt = (occurredAt: DateTime.Utc): string =>
+  `El turno comenzó en ${DateTime.formatIso(occurredAt)}. Usa este instante como valor ` +
+  `predeterminado cuando el Usuario no indique cuándo ocurrió una Transaction.`;
 
 type TranscriptTextEntry = Extract<
   TranscriptWindowEntry,

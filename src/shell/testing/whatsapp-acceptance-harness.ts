@@ -1,5 +1,5 @@
 import { BunHttpServer, BunServices } from "@effect/platform-bun";
-import { Context, Effect, Layer, MutableRef, Ref, Schema } from "effect";
+import { Context, Effect, Layer, MutableRef, Ref, Schema, Stream } from "effect";
 import { LanguageModel } from "effect/unstable/ai";
 import { categoryIds } from "~/core/categories/taxonomy";
 import { AgentService } from "~/shell/agent/agent-service";
@@ -14,6 +14,7 @@ import { makeDevelopmentSeedLive } from "~/shell/db/development-seed";
 import { HttpLive } from "~/shell/http";
 import { type ApiClient, makeApiClientLive } from "./api-harness";
 import { defaultAgentBearer } from "./identity-fixtures";
+import { makeLanguageModelFinishPart } from "./language-model-fixtures";
 import { TestPublicNamespace } from "./test-config";
 
 export type WhatsAppAcceptanceDeliveryMode = "bsuid" | "sandbox-phone";
@@ -63,10 +64,10 @@ const DeterministicLanguageModel = Layer.effect(
             },
           },
         },
+        makeLanguageModelFinishPart("tool-calls"),
       ]),
-    streamText: () => {
-      throw new Error("The WhatsApp acceptance model uses non-streaming generation");
-    },
+    streamText: () =>
+      Stream.die(new Error("The WhatsApp acceptance model uses non-streaming generation")),
   })
 );
 

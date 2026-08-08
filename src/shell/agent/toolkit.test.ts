@@ -3,26 +3,16 @@ import { Effect, Schema } from "effect";
 import { Tool } from "effect/unstable/ai";
 import { toCodecOpenAI } from "effect/unstable/ai/OpenAiStructuredOutput";
 import { HttpApi } from "effect/unstable/httpapi";
+import { categoryIds } from "~/core/categories/taxonomy";
 import { FidyApi } from "~/shell/api";
 import {
   AgentToolkit,
   CanonicalApiUrl,
-  type OpenAiToolName,
   agentOperationBindings,
+  decodeAgentOperationInput,
 } from "./toolkit";
 
-const hostedTool = (
-  name: string
-): Tool.Dynamic<
-  OpenAiToolName,
-  {
-    readonly parameters: Schema.toEncoded<Schema.Codec<unknown, Schema.Json, never, never>>;
-    readonly success: Schema.Codec<unknown, Schema.Json, never, never>;
-    readonly failure: Schema.Codec<unknown, Schema.Json, never, never>;
-    readonly failureMode: "return";
-  },
-  never
-> => {
+const hostedTool = (name: string): Tool.AnyDynamic => {
   const tool = Object.values(AgentToolkit.tools).find((candidate) => candidate.name === name);
   if (tool === undefined) throw new Error(`Hosted tool is missing: ${name}`);
   return tool;
@@ -44,14 +34,47 @@ it("derives exactly one hosted tool for every FidyApi canonical operation", () =
   expect(agentOperationBindings.every(({ description }) => description.length > 0)).toBe(true);
 });
 
-it("encodes every hosted operation as an OpenAI closed object", () => {
-  for (const tool of Object.values(AgentToolkit.tools)) {
-    const parameters = Tool.getJsonSchema(tool, { transformer: toCodecOpenAI });
+it("encodes every hosted operation with its derived OpenAI wire schema", () => {
+  for (const binding of agentOperationBindings) {
+    const parameters = Tool.getJsonSchema(hostedTool(binding.wireName), {
+      transformer: toCodecOpenAI,
+    });
+    expect(parameters).toEqual(binding.wireJsonSchema);
     expect(parameters.type).toBe("object");
     expect(parameters.anyOf).toBeUndefined();
     expect(parameters.additionalProperties).toBe(false);
   }
 });
+
+it.effect("decodes strict-mode nullable optional fields back to absent canonical input", () =>
+  Effect.gen(function* () {
+    const binding = agentOperationBindings.find(
+      ({ operation }) => operation === "transactions.createTransaction"
+    );
+    if (binding === undefined) return yield* Effect.die("Create Transaction binding is missing");
+
+    const decoded = yield* decodeAgentOperationInput(binding, {
+      payload: {
+        money: { amount: "9000", currency: "COP" },
+        counterparty: null,
+        direction: "outflow",
+        categoryId: categoryIds.restaurantes,
+        notes: null,
+        occurredAt: "2026-07-20T12:00:00Z",
+      },
+    });
+    const canonical = yield* Schema.encodeUnknownEffect(binding.canonicalParameters)(decoded);
+
+    expect(canonical).toEqual({
+      payload: {
+        money: { amount: "9000", currency: "COP" },
+        direction: "outflow",
+        categoryId: categoryIds.restaurantes,
+        occurredAt: "2026-07-20T12:00:00.000Z",
+      },
+    });
+  })
+);
 
 it("tells the hosted model which transaction operations need confirmation", () => {
   const createDescription = Tool.getDescription(hostedTool("transactions__createTransaction"));

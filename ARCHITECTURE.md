@@ -84,6 +84,13 @@ A non-empty `SuggestedOperation` is validated against its target operation and f
 scope and tier before it reaches a response. The operation checkpoint is the source of truth, not
 a parallel tool map or a host-side parser.
 
+OpenAI hosted-tool bindings derive one strict-mode wire codec from each canonical input schema.
+Tools expose the canonical schema's encoded side so the provider applies strict adaptation exactly
+once; returned arguments are normalized from either strict wire form or the provider's
+canonical-encoded form before canonical re-encoding. This returns OpenAI's required-nullable
+optional properties to canonical absence. A raw strict JSON Schema paired with an unadapted decoder
+is invalid: it can advertise `null` values that its own handler rejects.
+
 ---
 
 ## 5. User context and isolation

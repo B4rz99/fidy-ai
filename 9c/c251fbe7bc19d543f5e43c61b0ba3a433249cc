@@ -1,0 +1,19 @@
+src/shell/observability/sentry-adapter.ts
+  s_5436cdc90f83b3::t_2c5485cf279256 233-235
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "9cc251fbe7bc19d543f5e43c61b0ba3a433249cc",
+  "prompts": {},
+  "sessions": {
+    "s_5436cdc90f83b3": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019fe208-1697-7756-86f0-1f9f807abda1",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

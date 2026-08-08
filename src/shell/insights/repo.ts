@@ -1,4 +1,4 @@
-import { DateTime, Effect, Option, Schema, SchemaTransformation, Struct } from "effect";
+import { DateTime, Effect, Schema, SchemaTransformation, Struct } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import { MoneyGroups, encodeMoneyAmount } from "~/core/_shared/money";
 import { withUserTransaction } from "~/shell/db/user-transaction";
@@ -162,76 +162,61 @@ export const listPendingInsights = (
   );
 
 /**
- * Runs a lifecycle decision while holding one owned InsightEvent row lock. A missing or foreign
- * identity returns None without running the body; the lock cannot outlive its transaction.
+ * Finds and locks one owned InsightEvent inside the caller's active User-scoped transaction.
+ * Returns `None` when the identity is absent or foreign. The caller owns commit or rollback.
  */
-export const withInsightLock = Effect.fn("withInsightLock")(function* <A, E, R>(
+export const findInsightForUpdateInScope = Effect.fn("findInsightForUpdateInScope")(function* (
   userId: UserId,
-  insightEventId: InsightEventId,
-  body: (event: InsightEvent) => Effect.Effect<A, E, R>
+  insightEventId: InsightEventId
 ) {
-  return yield* withUserTransaction(
-    userId,
-    Effect.gen(function* () {
-      const sql = yield* SqlClient.SqlClient;
-      const found = yield* SqlSchema.findOneOption({
-        Request: InsightEventId,
-        Result: InsightEventFromRow,
-        execute: (id) => sql`
-          SELECT ${sql.literal(insightColumns)}
-          FROM insight_events
-          WHERE id = ${id} AND user_id = ${userId}
-          FOR UPDATE
-        `,
-      })(insightEventId).pipe(Effect.orDie);
-      if (Option.isNone(found)) return Option.none();
-      return Option.some(yield* body(found.value));
-    })
-  );
+  const sql = yield* SqlClient.SqlClient;
+  return yield* SqlSchema.findOneOption({
+    Request: InsightEventId,
+    Result: InsightEventFromRow,
+    execute: (id) => sql`
+      SELECT ${sql.literal(insightColumns)}
+      FROM insight_events
+      WHERE id = ${id} AND user_id = ${userId}
+      FOR UPDATE
+    `,
+  })(insightEventId).pipe(Effect.orDie);
 });
 
 /**
- * Requires the caller to hold this owned occurrence's row lock in the current transaction.
+ * Moves one locked, owned occurrence inside the caller's active User-scoped transaction.
  * InsightEvents have no delete path, so a missing update result is a persistence defect.
  */
-export const updateInsightState = Effect.fn("updateInsightState")(function* (
+export const updateInsightStateInScope = Effect.fn("updateInsightStateInScope")(function* (
   userId: UserId,
   transition: typeof InsightTransition.Type
 ) {
-  return yield* withUserTransaction(
-    userId,
-    Effect.flatMap(SqlClient.SqlClient, (sql) =>
-      SqlSchema.findOne({
-        Request: InsightTransition,
-        Result: InsightEventFromRow,
-        execute: (request) => sql`
-        UPDATE insight_events
-        SET lifecycle_state = ${request.lifecycleState}
-        WHERE id = ${request.id} AND user_id = ${userId}
-        RETURNING ${sql.literal(insightColumns)}
-      `,
-      })(transition)
-    ).pipe(Effect.orDie)
-  );
+  const sql = yield* SqlClient.SqlClient;
+  return yield* SqlSchema.findOne({
+    Request: InsightTransition,
+    Result: InsightEventFromRow,
+    execute: (request) => sql`
+      UPDATE insight_events
+      SET lifecycle_state = ${request.lifecycleState}
+      WHERE id = ${request.id} AND user_id = ${userId}
+      RETURNING ${sql.literal(insightColumns)}
+    `,
+  })(transition).pipe(Effect.orDie);
 });
 
 /**
- * Requires the caller to hold the owned occurrence's row lock and to have accepted its
- * pending-to-delivered movement in the current transaction. Those guarantees make ownership,
- * row presence, and the single-record constraint unconditional; violating them is a defect.
+ * Appends evidence for one locked, owned delivered occurrence inside the caller's active
+ * User-scoped transaction. Violating those caller guarantees is a persistence defect.
  */
-export const appendDeliveryAttempt = Effect.fn("appendDeliveryAttempt")(function* (
+export const appendDeliveryAttemptInScope = Effect.fn("appendDeliveryAttemptInScope")(function* (
   userId: UserId,
   insightEventId: InsightEventId,
   input: DeliveryEvidenceInput
 ) {
   const sql = yield* SqlClient.SqlClient;
-  return yield* withUserTransaction(
-    userId,
-    SqlSchema.findOne({
-      Request: AppendDeliveryAttempt,
-      Result: DeliveryFromRow,
-      execute: (request) => sql`
+  return yield* SqlSchema.findOne({
+    Request: AppendDeliveryAttempt,
+    Result: DeliveryFromRow,
+    execute: (request) => sql`
       INSERT INTO insight_delivery_attempts (
         insight_event_id, sent_at, channel, provider, provider_message_id
       )
@@ -242,6 +227,5 @@ export const appendDeliveryAttempt = Effect.fn("appendDeliveryAttempt")(function
       RETURNING id, insight_event_id AS "insightEventId", sent_at AS "sentAt",
         channel, provider, provider_message_id AS "providerMessageId"
     `,
-    })({ ...input, insightEventId }).pipe(Effect.orDie)
-  );
+  })({ ...input, insightEventId }).pipe(Effect.orDie);
 });

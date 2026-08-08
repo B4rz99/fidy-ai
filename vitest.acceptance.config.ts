@@ -51,8 +51,8 @@ export default defineConfig({
       // the WhatsApp release seam; focused Agent and observability tests cover those paths.
       thresholds: {
         autoUpdate: true,
-        branches: 28.04,
-        lines: 61.83,
+        branches: 28.09,
+        lines: 61.93,
       },
     },
   },

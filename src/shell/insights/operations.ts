@@ -13,7 +13,9 @@ import { OperationResponse } from "~/shell/_shared/response";
 /** Canonical operations over the caller's shared InsightEvent stream. */
 const InsightParams = Schema.Struct({ id: InsightEventId });
 const InsightOperationFailures = [NotFound, ValidationFailed] as const;
-const DeliveredInsight = Schema.Struct({
+
+/** Canonical result pairing one delivered InsightEvent with its immutable provider evidence. */
+export const DeliveredInsight = Schema.Struct({
   insight: InsightEvent,
   deliveryAttempt: InsightDeliveryAttempt,
 });

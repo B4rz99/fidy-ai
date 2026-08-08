@@ -89,6 +89,16 @@ extension.
 
 Build derived shapes from their canonical schemas rather than maintaining parallel definitions.
 
+### Record keyspaces
+
+Judge a `Record` by its actual keyspace and value contract.
+
+- A finite `Record<FailureTag, Status>` is an exhaustive table and strengthens the contract.
+- In production code, `Record<string, unknown>` is reserved for genuinely open property bags whose
+  keys and values Fidy does not know.
+- Do not return `Record<string, unknown>` for a value whose fields are already known. Use the
+  canonical schema-derived type or a named first-party shape.
+
 ### Other defaults
 
 - `Option` for absence. Never `null`. `undefined` only where an Effect API demands it.

@@ -52,9 +52,17 @@ const isSupportedEnvelope = (
  * The trace coordinates an error event may carry. The SDK attaches these itself, and outside a Span
  * it supplies a trace and span with no operation to name — so `op` is present only when one exists.
  */
+type ErrorTraceCoordinates = Pick<
+  NonNullable<NonNullable<Sentry.ErrorEvent["contexts"]>["trace"]>,
+  "trace_id" | "span_id" | "parent_span_id" | "op"
+>;
+type ErrorTraceContext = Partial<
+  Readonly<{ readonly contexts: Readonly<{ readonly trace: ErrorTraceCoordinates }> }>
+>;
+
 const errorTraceContext = (
   trace: NonNullable<Sentry.ErrorEvent["contexts"]>["trace"]
-): Readonly<Record<string, unknown>> =>
+): ErrorTraceContext =>
   trace === undefined
     ? {}
     : {

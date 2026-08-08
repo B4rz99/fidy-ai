@@ -1,0 +1,21 @@
+.pi/skills/update-effect/SKILL.md
+  s_023f832fe51643::t_4c4aabdcabefc2 1-17
+docs/research/mcp-apps-for-fidy.md
+  s_023f832fe51643::t_7a9208837c24d3 1-284
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "b671b181c8e9722ccd0cada5fa1464b3dc33e770",
+  "prompts": {},
+  "sessions": {
+    "s_023f832fe51643": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019fab69-b42f-7305-b73f-24251570ce83",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

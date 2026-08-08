@@ -1,0 +1,22 @@
+CODING_STANDARDS.md
+  s_449dd7f368ee06::t_6011bca22ac776 92-101
+src/shell/observability/sentry-adapter.ts
+  s_449dd7f368ee06::t_2ed7465ebd30b5 62,65
+  s_449dd7f368ee06::t_b90376e952d2ee 55-61
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "7196d31d53168f9179ab060aadf559524f318a59",
+  "prompts": {},
+  "sessions": {
+    "s_449dd7f368ee06": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019fe2e1-b4ce-7ca9-86d4-ce24adf398e6",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

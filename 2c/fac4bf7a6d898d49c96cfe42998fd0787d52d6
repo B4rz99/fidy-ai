@@ -1,0 +1,86 @@
+src/shell/testing/suggested-operations.test.ts
+  s_7df308969bbbec::t_2f29d8fb02c06d 21,121-134
+  s_7df308969bbbec::t_a3079ef872d56b 135-137
+  s_7df308969bbbec::t_553c79b29252ca 138
+src/shell/operations/handlers.test.ts
+  s_7df308969bbbec::t_5595ed4a712c50 5-8,19,59-121
+  s_7df308969bbbec::t_74ef9818dd4195 1-4,9,11-18,20-25,27-35,37-58,122-125
+  s_7df308969bbbec::t_ab266575e0da75 10,26,36
+src/shell/api.ts
+  s_7df308969bbbec::t_837c34ad0c2614 9,12-18,21-23,30
+  s_7df308969bbbec::t_5fdfb4fdee815f 19-20
+src/shell/operations/operations.ts
+  s_7df308969bbbec::t_b96f3280edb6b7 23,29-30
+  s_7df308969bbbec::t_a0aae8029003c9 11,152
+  s_7df308969bbbec::t_df22dcc6a15374 1,4-10,12-22,25-28,31-54,70-97,120-124,126,128-129,131-132,134,136-137,139-151,154-161
+  s_7df308969bbbec::t_a08d99da38ba27 62
+  s_7df308969bbbec::t_a4563769dbb02e 24,127,130,135,138
+  s_7df308969bbbec::t_34de5de8c8e463 63-66
+  s_7df308969bbbec::t_dc045acff06934 3
+  s_7df308969bbbec::t_3f9a1a600c63af 55-61,67-69,133
+  s_7df308969bbbec::t_c7a74cdeb933f5 2
+  s_7df308969bbbec::t_81a4f28dba6169 98-112,114,117-119,125
+  s_7df308969bbbec::t_518073191d66d5 113,115-116
+  s_7df308969bbbec::t_43e915ea82c6ea 153
+src/shell/_shared/errors.ts
+  s_7df308969bbbec::t_c7992f066b714d 71
+src/shell/testing/operation-policy.test.ts
+  s_7df308969bbbec::t_f535d0c5a8e6c2 98,142
+src/shell/testing/api-harness.ts
+  s_7df308969bbbec::t_98b20a9540e81b 15,46-47
+src/shell/_shared/authz.ts
+  s_7df308969bbbec::t_b24fb26816ca52 13,123-128,133-135,137-138,148,205,207,210-213
+  s_7df308969bbbec::t_a8033b63a3f7a4 129-132,136,208
+  s_7df308969bbbec::t_dd75c073614d40 209
+  s_7df308969bbbec::t_0de9912c661258 215-216,218-238,240-257,291-296
+  s_7df308969bbbec::t_dc045acff06934 239
+  s_7df308969bbbec::t_cdd9aef256ef03 214
+src/shell/_shared/suggested-operations.test.ts
+  s_7df308969bbbec::t_29a589b910891b 201
+src/shell/operations/handlers.ts
+  s_7df308969bbbec::t_5a780ff5c891a8 23-30
+  s_7df308969bbbec::t_3c61cc015af119 1
+  s_7df308969bbbec::t_b1f74a696c3919 2,5,11-12,15,31-45,47-51,60,68-70,85,93,100,148
+  s_7df308969bbbec::t_0945d5fa02c498 172
+  s_7df308969bbbec::t_8b5049632e5fd4 3,16,46,61-67
+  s_7df308969bbbec::t_947bb6d06e5671 4,97
+  s_7df308969bbbec::t_bb1030d5699c8d 21,150-154
+  s_7df308969bbbec::t_07ba5669935033 6-10,13-14,17-20,22,52-59,71-84,86-92,94-96,98-99,101-147,149,155-171
+src/shell/http.ts
+  s_7df308969bbbec::t_3b3ea6c8704c82 19,45-46
+src/shell/_shared/canonical-mutation-registry.ts
+  s_7df308969bbbec::t_0f152de717d109 1,3-16,22-25,31-35,42-46,53-188,207-222
+  s_7df308969bbbec::t_edb865c26dc9b1 50-52
+  s_7df308969bbbec::t_2aefe5f8b0f429 189-192,194-195,197-198,200-202,206
+  s_7df308969bbbec::t_5eb109ce703ff5 193,196,204-205
+  s_7df308969bbbec::t_bac1e4ed7bcc9d 199,203
+  s_7df308969bbbec::t_dc045acff06934 47-49
+  s_7df308969bbbec::t_9f7b10dafd7fab 36-41
+  s_7df308969bbbec::t_b96f3280edb6b7 17-21,26-30
+  s_7df308969bbbec::t_6fa96f502ec516 2
+src/shell/_shared/operation-policy.ts
+  s_7df308969bbbec::t_dc045acff06934 57
+  s_7df308969bbbec::t_9ba5cdb8dd83f3 24-25,54-56,58-59,62,76-84
+src/shell/testing/isolation.test.ts
+  s_7df308969bbbec::t_c0ae024f50ae0c 14,347-367
+  s_7df308969bbbec::t_2cc2f1e46b45ff 368
+src/shell/operations/operations.test.ts
+  s_7df308969bbbec::t_b96f3280edb6b7 68
+  s_7df308969bbbec::t_5d6bd3d0e7744e 1-67,69-72
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "2cfac4bf7a6d898d49c96cfe42998fd0787d52d6",
+  "prompts": {},
+  "sessions": {
+    "s_7df308969bbbec": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019fe301-d10e-7d6b-b4ac-b3fc08a7f863",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

@@ -12,6 +12,7 @@ import {
   Stream,
   Terminal,
 } from "effect";
+import { OpenAiLanguageModel } from "@effect/ai-openai";
 import { AiError, LanguageModel, type Response, Tool } from "effect/unstable/ai";
 import { SqlClient } from "effect/unstable/sql";
 import { E164PhoneNumber, UserId, WhatsAppBusinessScopedUserId } from "~/core/identity/reference";
@@ -147,6 +148,26 @@ class ModelPrompts extends Context.Service<ModelPrompts, Ref.Ref<ReadonlyArray<s
 const resetModelPrompts = Effect.flatMap(ModelPrompts, (prompts) => Ref.set(prompts, []));
 const readModelPrompts = Effect.flatMap(ModelPrompts, Ref.get);
 
+type ModelToolPolicy = Readonly<{
+  toolChoice: LanguageModel.ProviderOptions["toolChoice"];
+  maxToolCalls: Option.Option<number>;
+}>;
+
+class ModelToolPolicies extends Context.Service<
+  ModelToolPolicies,
+  Ref.Ref<ReadonlyArray<ModelToolPolicy>>
+>()("fidy-ai/shell/agent/agent-service.test/ModelToolPolicies") {
+  static readonly layer = Layer.effect(
+    ModelToolPolicies,
+    Ref.make<ReadonlyArray<ModelToolPolicy>>([])
+  );
+}
+
+const resetModelToolPolicies = Effect.flatMap(ModelToolPolicies, (policies) =>
+  Ref.set(policies, [])
+);
+const readModelToolPolicies = Effect.flatMap(ModelToolPolicies, Ref.get);
+
 const turnStartedAt = (serialized: string): Option.Option<string> =>
   Option.fromUndefinedOr(/El turno comenzó en ([0-9T:.+-]+Z)/u.exec(serialized)?.[1]);
 
@@ -198,6 +219,25 @@ const isolationScript = (serialized: string): Option.Option<ModelReply> => {
     ]);
   }
   return Option.none();
+};
+
+const toolBudgetScript = (
+  serialized: string,
+  toolChoice: LanguageModel.ProviderOptions["toolChoice"]
+): Option.Option<ModelReply> => {
+  if (!serialized.includes("Prueba el presupuesto")) return Option.none();
+  if (toolChoice === "none") {
+    return Option.some([{ type: "text" as const, text: "Presupuesto finalizado." }]);
+  }
+  const calls = serialized.match(/budget-call-/g)?.length ?? 0;
+  return Option.some([
+    {
+      type: "tool-call" as const,
+      id: `budget-call-${calls + 1}`,
+      name: "categories__listCategories",
+      params: {},
+    },
+  ]);
 };
 
 const toolCapScript = (serialized: string): Option.Option<ModelReply> => {
@@ -633,8 +673,13 @@ const recallScript = (serialized: string): ModelReply => {
   ];
 };
 
-const scriptedReply = (serialized: string, tools: ReadonlyArray<Tool.Any>): ModelReply =>
+const scriptedReply = (
+  serialized: string,
+  tools: ReadonlyArray<Tool.Any>,
+  toolChoice: LanguageModel.ProviderOptions["toolChoice"]
+): ModelReply =>
   isolationScript(serialized).pipe(
+    Option.orElse(() => toolBudgetScript(serialized, toolChoice)),
     Option.orElse(() => toolCapScript(serialized)),
     Option.orElse(() => captureScript(serialized, tools)),
     Option.orElse(() => invalidModelOutputScript(serialized)),
@@ -653,8 +698,9 @@ const ScriptedLanguageModel = Layer.effect(
   LanguageModel.LanguageModel,
   Effect.gen(function* () {
     const prompts = yield* ModelPrompts;
+    const toolPolicies = yield* ModelToolPolicies;
     return yield* LanguageModel.make({
-      generateText: ({ prompt, tools }) => {
+      generateText: ({ prompt, tools, toolChoice }) => {
         const serialized = JSON.stringify(prompt.content);
         expect(serialized).not.toContain("fin_deadbeef_");
         const generated = ((): Effect.Effect<ModelReply, AiError.AiError> => {
@@ -674,18 +720,29 @@ const ScriptedLanguageModel = Layer.effect(
               makeLanguageModelFinishPart("length"),
             ]);
           }
-          const reply = scriptedReply(serialized, tools);
+          const reply = scriptedReply(serialized, tools, toolChoice);
           const reason = reply.some((part) => part.type === "tool-call") ? "tool-calls" : "stop";
           return Effect.succeed([...reply, makeLanguageModelFinishPart(reason)]);
         })();
-        return Ref.update(prompts, (recorded) => [...recorded, serialized]).pipe(
-          Effect.andThen(generated)
-        );
+        return Effect.gen(function* () {
+          const openAiConfig = yield* Effect.serviceOption(OpenAiLanguageModel.Config);
+          yield* Ref.update(prompts, (recorded) => [...recorded, serialized]);
+          yield* Ref.update(toolPolicies, (recorded) => [
+            ...recorded,
+            {
+              toolChoice,
+              maxToolCalls: Option.flatMap(openAiConfig, (config) =>
+                Option.fromUndefinedOr(config.max_tool_calls)
+              ),
+            },
+          ]);
+          return yield* generated;
+        });
       },
       streamText: () => Stream.die(new Error("The agent uses non-streaming generation")),
     });
   })
-).pipe(Layer.provideMerge(ModelPrompts.layer));
+).pipe(Layer.provideMerge(ModelPrompts.layer), Layer.provideMerge(ModelToolPolicies.layer));
 
 const AgentHarness = AgentService.layer.pipe(
   Layer.provideMerge(ScriptedLanguageModel),
@@ -1370,6 +1427,36 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
         )
       ).toBe(true);
     })
+  );
+
+  it.effect(
+    "reduces the request cap after accepted calls and disables tools for finalization",
+    () =>
+      Effect.gen(function* () {
+        yield* clearTranscript;
+        yield* resetModelToolPolicies;
+        const service = yield* AgentService;
+        const limits = agentLimits({ maxIterations: 4, maxToolCallsPerTurn: 2 });
+
+        const reply = yield* service
+          .handleSynchronousTurn(
+            defaultUserId,
+            InboundMessage.make({ text: TranscriptText.make("Prueba el presupuesto") })
+          )
+          .pipe(Effect.provideService(CurrentAgentLimits, limits));
+        const policies = yield* readModelToolPolicies;
+        const transcript = yield* listTranscriptEntries(defaultUserId);
+
+        expect(reply.text).toBe("Presupuesto finalizado.");
+        expect(policies).toEqual([
+          { toolChoice: "auto", maxToolCalls: Option.some(2) },
+          { toolChoice: "auto", maxToolCalls: Option.some(1) },
+          { toolChoice: "none", maxToolCalls: Option.none() },
+        ]);
+        expect(transcript.filter((entry) => entry._tag === "CanonicalToolCallEntry")).toHaveLength(
+          2
+        );
+      })
   );
 
   it.effect("rejects a model batch that exceeds the per-turn tool-call cap", () =>

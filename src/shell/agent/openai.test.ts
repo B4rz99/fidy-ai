@@ -4,7 +4,13 @@ import { LanguageModel } from "effect/unstable/ai";
 import { HttpClient, type HttpClientRequest, HttpClientResponse } from "effect/unstable/http";
 import { makeOpenAiTextResponse } from "~/shell/agent/fixtures/openai";
 import { AgentToolkit } from "./toolkit";
-import { HostedAgentGenerationConfig, HostedAgentModel, OpenAiLanguageModelLive } from "./openai";
+import {
+  HostedAgentGenerationConfig,
+  HostedAgentModel,
+  HostedToolCallCap,
+  OpenAiLanguageModelLive,
+  withHostedToolCallCap,
+} from "./openai";
 
 const configLayer = (entries: ReadonlyArray<readonly [string, string]>): Layer.Layer<never> =>
   ConfigProvider.layer(ConfigProvider.fromUnknown(Object.fromEntries(entries)));
@@ -26,6 +32,7 @@ it.effect("constructs the fixed hosted model from a configured secret", () =>
     expect(HostedAgentGenerationConfig).toEqual({
       temperature: 0.7,
       reasoning: { effort: "none" },
+      parallel_tool_calls: false,
       store: false,
     });
   })
@@ -45,6 +52,9 @@ it.effect("fails closed when the OpenAI secret is absent", () =>
 
 const OpenAiRequest = Schema.Struct({
   store: Schema.Boolean,
+  max_tool_calls: Schema.optionalKey(Schema.Finite),
+  parallel_tool_calls: Schema.optionalKey(Schema.Boolean),
+  tool_choice: Schema.optionalKey(Schema.String),
   tools: Schema.optionalKey(
     Schema.Array(
       Schema.Struct({
@@ -55,7 +65,7 @@ const OpenAiRequest = Schema.Struct({
   ),
 });
 
-it.effect("sends the assembled toolkit's empty inputs as closed objects", () =>
+it.effect("sends the initial hosted tool cap with the assembled toolkit", () =>
   Effect.gen(function* () {
     const capturedRequest = yield* Ref.make<Option.Option<HttpClientRequest.HttpClientRequest>>(
       Option.none()
@@ -85,8 +95,12 @@ it.effect("sends the assembled toolkit's empty inputs as closed objects", () =>
         yield* LanguageModel.generateText({
           prompt: "Use the canonical toolkit.",
           toolkit: AgentToolkit,
+          toolChoice: "auto",
           disableToolCallResolution: true,
-        }).pipe(Effect.provideService(LanguageModel.LanguageModel, languageModel));
+        }).pipe(
+          withHostedToolCallCap(HostedToolCallCap.make(12)),
+          Effect.provideService(LanguageModel.LanguageModel, languageModel)
+        );
       })
     );
 
@@ -100,6 +114,9 @@ it.effect("sends the assembled toolkit's empty inputs as closed objects", () =>
     const body = yield* Schema.decodeUnknownEffect(OpenAiRequest)(rawBody);
     const categoriesTool = body.tools?.find(({ name }) => name === "categories__listCategories");
     expect(body.store).toBe(false);
+    expect(body.max_tool_calls).toBe(12);
+    expect(body.parallel_tool_calls).toBe(false);
+    expect(body.tool_choice).toBe("auto");
     expect(categoriesTool?.parameters).toEqual({
       type: "object",
       properties: {},

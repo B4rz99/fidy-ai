@@ -40,10 +40,13 @@ export default defineConfig({
       // Lowered again in #141 because the process-boot logging and listener configuration module is
       // deliberately outside the public-channel acceptance seam. Its dedicated tests cover the
       // environment choices and invalid-port failure; adding it only enlarges this denominator.
+      //
+      // Lowered in #140 because transaction-failure discrimination adds database-shell branches
+      // that the WhatsApp acceptance path does not reach; focused database tests cover both paths.
       thresholds: {
         autoUpdate: true,
-        branches: 26.29,
-        lines: 60.44,
+        branches: 26.18,
+        lines: 60.58,
       },
     },
   },

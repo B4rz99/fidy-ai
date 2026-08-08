@@ -9,7 +9,7 @@ import { TranscriptText } from "~/core/transcript/model";
 import { AgentBearerToken } from "~/core/tokens/model";
 import { TranscriptWindowCharacterLimit, TranscriptWindowTurnLimit } from "~/core/transcript/rules";
 import { observeAuditLogEntries } from "~/shell/audit/repo";
-import { lockConsentSubject } from "~/shell/consent/repo";
+import { withSubjectLock } from "~/shell/consent/repo";
 import { resolveWhatsAppCaller } from "~/shell/identity/repo";
 import {
   defaultUserId,
@@ -1449,10 +1449,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
         );
 
       expect(failure._tag).toBe("ModelUnavailable");
-      const sql = yield* SqlClient.SqlClient;
-      yield* sql
-        .withTransaction(lockConsentSubject(defaultUserId))
-        .pipe(Effect.timeout("1 second"));
+      yield* withSubjectLock(defaultUserId, Effect.void).pipe(Effect.timeout("1 second"));
     })
   );
 

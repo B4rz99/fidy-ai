@@ -10,7 +10,7 @@ import { observeAuditLogEntries } from "~/shell/audit/repo";
 import { MigrationSqlClient } from "~/shell/db/client";
 import { seedConsentedAgentIdentity } from "~/shell/db/development-seed";
 import { withUserTransaction } from "~/shell/db/user-transaction";
-import { appendConsentRecord, lockConsentSubject, observeConsentRecords } from "./repo";
+import { appendConsentRecord, observeConsentRecords, withSubjectLock } from "./repo";
 import { ApiHarness, headersFor } from "~/shell/testing/api-harness";
 import { transactionPayload, truncateTransactions } from "~/shell/transactions/fixtures";
 
@@ -125,16 +125,14 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
             providerMessageId: "wamid.concurrent-revocation",
           },
         });
-        const revocationFiber = yield* sql
-          .withTransaction(
-            Effect.gen(function* () {
-              yield* lockConsentSubject(revokedUserId);
-              yield* Deferred.succeed(lockAcquired, undefined);
-              yield* Deferred.await(commitRevocation);
-              yield* appendConsentRecord(revocation);
-            })
-          )
-          .pipe(Effect.forkChild);
+        const revocationFiber = yield* withSubjectLock(
+          revokedUserId,
+          Effect.gen(function* () {
+            yield* Deferred.succeed(lockAcquired, undefined);
+            yield* Deferred.await(commitRevocation);
+            yield* appendConsentRecord(revocation);
+          })
+        ).pipe(Effect.forkChild);
         yield* Deferred.await(lockAcquired);
 
         const payload = yield* Schema.encodeEffect(CreateTransactionInput)(

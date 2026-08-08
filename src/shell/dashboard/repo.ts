@@ -2,28 +2,28 @@ import { Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import { UserId } from "~/core/identity/reference";
 import { DashboardDocument, WidgetId } from "~/core/dashboard/model";
+import { advisoryLockKey, withUserLock } from "~/shell/db/advisory-lock";
 import { withUserTransaction } from "~/shell/db/user-transaction";
 
-const PersistedDashboard = Schema.fromJsonString(DashboardDocument);
-
 const DashboardRow = Schema.Struct({
-  document: PersistedDashboard,
+  document: DashboardDocument,
 });
 
 const DashboardWrite = Schema.Struct({
   userId: UserId,
-  document: PersistedDashboard,
+  document: DashboardDocument,
 });
 
-/** Serializes first-use initialization and edits even before a User has a row to lock. */
-export const lockDashboard = (userId: UserId): Effect.Effect<void, never, SqlClient.SqlClient> =>
-  withUserTransaction(
-    userId,
-    Effect.flatMap(
-      SqlClient.SqlClient,
-      (sql) => sql`SELECT pg_advisory_xact_lock(hashtextextended(${userId}, 15))`
-    ).pipe(Effect.asVoid, Effect.orDie)
-  );
+/**
+ * Runs one dashboard initialization or edit under its User-scoped lock. The lock covers the
+ * supplied body and cannot be acquired independently of its transaction.
+ */
+export const withDashboardLock = Effect.fn("withDashboardLock")(function* <A, E, R>(
+  userId: UserId,
+  body: Effect.Effect<A, E, R>
+) {
+  return yield* withUserLock(userId, advisoryLockKey.dashboard(userId), body);
+});
 
 /** Reads and schema-decodes one User-owned JSONB document. */
 export const findDashboard = (
@@ -36,10 +36,9 @@ export const findDashboard = (
         Request: UserId,
         Result: DashboardRow,
         execute: (owner) => sql`
-          SELECT document::text AS "document"
+          SELECT document
           FROM dashboards
           WHERE user_id = ${owner}
-          FOR UPDATE
         `,
       })(userId)
     ).pipe(Effect.map(Option.map((row) => row.document)), Effect.orDie)
@@ -71,7 +70,7 @@ export const insertDashboard = Effect.fn("insertDashboard")(function* (
       execute: (row) => sql`
         INSERT INTO dashboards (user_id, document)
         VALUES (${row.userId}, ${row.document}::jsonb)
-        RETURNING document::text AS "document"
+        RETURNING document
       `,
     })({ userId, document }).pipe(
       Effect.map((row) => row.document),
@@ -95,7 +94,7 @@ export const updateDashboard = Effect.fn("updateDashboard")(function* (
         UPDATE dashboards
         SET document = ${row.document}::jsonb, updated_at = now()
         WHERE user_id = ${row.userId}
-        RETURNING document::text AS "document"
+        RETURNING document
       `,
     })({ userId, document }).pipe(
       Effect.map((row) => row.document),

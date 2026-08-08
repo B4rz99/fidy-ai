@@ -475,7 +475,7 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
                 Result: Schema.Struct({ count: Schema.Int }),
                 execute: (request) => sql`SELECT count(*)::int AS count FROM transactions
                   WHERE user_id = ${request.userId} AND counterparty = ${request.counterparty}`,
-              })({ userId, counterparty })
+              })({ userId, counterparty }).pipe(Effect.orDie)
             );
             return row.count;
           });

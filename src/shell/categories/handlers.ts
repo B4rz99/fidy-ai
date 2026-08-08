@@ -1,6 +1,6 @@
 import { Effect, Option } from "effect";
 import { HttpApiBuilder } from "effect/unstable/httpapi";
-import { SqlClient } from "effect/unstable/sql";
+import type { SqlClient } from "effect/unstable/sql";
 import { type UserId } from "~/core/identity/reference";
 import {
   CategoryNotFound,
@@ -30,8 +30,8 @@ import {
   insertKeywordRule,
   listCategories,
   listKeywordRules,
-  lockKeywordRules,
   updateKeywordRule,
+  withKeywordLock,
 } from "./repo";
 
 const missingRule = (keywordRuleId: KeywordRuleId) => (): KeywordRuleNotFound =>
@@ -71,22 +71,19 @@ const createRule = ({
       ),
       Effect.mapError(toApiFailure)
     );
-    const sql = yield* SqlClient.SqlClient;
-    return yield* sql
-      .withTransaction(
-        Effect.gen(function* () {
-          yield* lockKeywordRules(userId);
-          const rules = yield* listKeywordRules(userId);
-          yield* validateKeywordRules({
-            rules,
-            keyword: input.keyword,
-            except: Option.none(),
-            enforceCapacity: true,
-          }).pipe(Effect.mapError(toApiFailure));
-          return yield* insertKeywordRule(userId, input);
-        })
-      )
-      .pipe(Effect.catchTag("SqlError", Effect.die));
+    return yield* withKeywordLock(
+      userId,
+      Effect.gen(function* () {
+        const rules = yield* listKeywordRules(userId);
+        yield* validateKeywordRules({
+          rules,
+          keyword: input.keyword,
+          except: Option.none(),
+          enforceCapacity: true,
+        }).pipe(Effect.mapError(toApiFailure));
+        return yield* insertKeywordRule(userId, input);
+      })
+    );
   });
 
 const updateRule = ({
@@ -105,22 +102,19 @@ const updateRule = ({
       ),
       Effect.mapError(toApiFailure)
     );
-    const sql = yield* SqlClient.SqlClient;
-    return yield* sql
-      .withTransaction(
-        Effect.gen(function* () {
-          yield* lockKeywordRules(userId);
-          const rules = yield* listKeywordRules(userId);
-          yield* validateKeywordRules({
-            rules,
-            keyword: input.keyword,
-            except: Option.some(id),
-            enforceCapacity: false,
-          }).pipe(Effect.mapError(toApiFailure));
-          return yield* updateKeywordRule(userId, id, input);
-        })
-      )
-      .pipe(Effect.catchTag("SqlError", Effect.die));
+    return yield* withKeywordLock(
+      userId,
+      Effect.gen(function* () {
+        const rules = yield* listKeywordRules(userId);
+        yield* validateKeywordRules({
+          rules,
+          keyword: input.keyword,
+          except: Option.some(id),
+          enforceCapacity: false,
+        }).pipe(Effect.mapError(toApiFailure));
+        return yield* updateKeywordRule(userId, id, input);
+      })
+    );
   });
 
 /** Provides public Categories and bounded, deterministic User keyword-rule management. */

@@ -21,8 +21,8 @@ import { type InsightApiFailure, nextLifecycleOperations, toApiFailure } from ".
 import {
   appendDeliveryAttempt,
   listPendingInsights,
-  lockInsightEvent,
   updateInsightState,
+  withInsightLock,
 } from "./repo";
 
 type InsightMovement = {
@@ -67,24 +67,17 @@ const moveInsight = ({
   target,
   caller,
 }: InsightMovement): Effect.Effect<InsightEvent, InsightApiFailure, SqlClient.SqlClient> =>
-  Effect.gen(function* () {
-    const found = yield* lockInsightEvent(userId, insightEventId);
-    const current = yield* found.pipe(
-      Effect.fromOption(() => new InsightNotFound({ insightEventId }))
-    );
-    const lifecycleState = yield* transitionInsight({
-      current: current.lifecycleState,
-      target,
-    });
-
-    return yield* updateInsightState(userId, { id: insightEventId, lifecycleState });
-  }).pipe(Effect.mapError((failure) => toApiFailure({ failure, insightEventId, caller })));
-
-const moveInsightAtomically = (
-  movement: InsightMovement
-): Effect.Effect<InsightEvent, InsightApiFailure, SqlClient.SqlClient> =>
-  Effect.flatMap(SqlClient.SqlClient, (sql) => sql.withTransaction(moveInsight(movement))).pipe(
-    Effect.catchTag("SqlError", Effect.die)
+  withInsightLock(userId, insightEventId, (current) =>
+    Effect.gen(function* () {
+      const lifecycleState = yield* transitionInsight({
+        current: current.lifecycleState,
+        target,
+      });
+      return yield* updateInsightState(userId, { id: insightEventId, lifecycleState });
+    })
+  ).pipe(
+    Effect.flatMap(Effect.fromOption(() => new InsightNotFound({ insightEventId }))),
+    Effect.mapError((failure) => toApiFailure({ failure, insightEventId, caller }))
   );
 
 const deliverInsight = ({
@@ -151,7 +144,7 @@ export const InsightsLive = HttpApiBuilder.group(FidyApi, "insights", (handlers)
     .handle("markInsightRead", ({ params, request }) =>
       Effect.gen(function* () {
         const { userId, caller } = yield* resolveInsightCaller(request);
-        const insight = yield* moveInsightAtomically({
+        const insight = yield* moveInsight({
           userId,
           insightEventId: params.id,
           target: "read",
@@ -164,7 +157,7 @@ export const InsightsLive = HttpApiBuilder.group(FidyApi, "insights", (handlers)
     .handle("dismissInsight", ({ params, request }) =>
       Effect.gen(function* () {
         const { userId, caller } = yield* resolveInsightCaller(request);
-        const insight = yield* moveInsightAtomically({
+        const insight = yield* moveInsight({
           userId,
           insightEventId: params.id,
           target: "dismissed",

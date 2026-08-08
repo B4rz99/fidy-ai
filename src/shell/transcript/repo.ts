@@ -4,7 +4,7 @@ import { UserId } from "~/core/identity/reference";
 import { withUserTransaction } from "~/shell/db/user-transaction";
 import { TranscriptEntry, TranscriptEntryId, TranscriptTurnId } from "~/core/transcript/model";
 
-const PersistedTranscriptEntry = Schema.fromJsonString(Schema.toCodecJson(TranscriptEntry));
+const PersistedTranscriptEntry = Schema.toCodecJson(TranscriptEntry);
 const TranscriptEntryRow = Schema.Struct({ entry: PersistedTranscriptEntry });
 const RecentTranscriptRequest = Schema.Struct({
   subjectUserId: UserId,
@@ -26,18 +26,15 @@ const appendOne = Effect.fn("appendTranscriptEntry")(function* (
   entry: TranscriptEntry
 ) {
   const sql = yield* SqlClient.SqlClient;
-  yield* withUserTransaction(
-    subjectUserId,
-    SqlSchema.findOne({
-      Request: OwnedTranscriptEntryRow,
-      Result: Schema.Struct({ entryId: TranscriptEntryId }),
-      execute: (row) => sql`
+  yield* SqlSchema.findOne({
+    Request: OwnedTranscriptEntryRow,
+    Result: Schema.Struct({ entryId: TranscriptEntryId }),
+    execute: (row) => sql`
       INSERT INTO transcript_entries (user_id, entry_id, turn_id, entry)
       VALUES (${row.subjectUserId}, ${row.entryId}, ${row.turnId}, ${row.entry}::jsonb)
       RETURNING entry_id AS "entryId"
     `,
-    })({ subjectUserId, entryId: entry.id, turnId: entry.turnId, entry }).pipe(Effect.orDie)
-  );
+  })({ subjectUserId, entryId: entry.id, turnId: entry.turnId, entry }).pipe(Effect.orDie);
 });
 
 /**
@@ -49,10 +46,13 @@ export const appendTranscriptEntries = Effect.fn("appendTranscriptEntries")(func
   subjectUserId: UserId,
   entries: ReadonlyArray<TranscriptEntry>
 ) {
-  yield* Effect.forEach(entries, (entry) => appendOne(subjectUserId, entry), {
-    concurrency: 1,
-    discard: true,
-  });
+  yield* withUserTransaction(
+    subjectUserId,
+    Effect.forEach(entries, (entry) => appendOne(subjectUserId, entry), {
+      concurrency: 1,
+      discard: true,
+    })
+  );
 });
 
 /** Reads only the newest bounded complete turns for model-context selection. */
@@ -76,7 +76,7 @@ export const listRecentTranscriptEntries = Effect.fn("listRecentTranscriptEntrie
           ORDER BY newest_sequence DESC
           LIMIT ${request.maxTurns}
         )
-        SELECT transcript.entry::text AS entry
+        SELECT transcript.entry
         FROM transcript_entries AS transcript
         INNER JOIN recent_turns USING (turn_id)
         WHERE transcript.user_id = ${request.subjectUserId}
@@ -99,7 +99,7 @@ export const listTranscriptTurnEntries = Effect.fn("listTranscriptTurnEntries")(
       Request: TranscriptTurnRequest,
       Result: TranscriptEntryRow,
       execute: (request) => sql`
-      SELECT entry::text AS entry
+      SELECT entry
       FROM transcript_entries
       WHERE user_id = ${request.subjectUserId} AND turn_id = ${request.turnId}
       ORDER BY sequence
@@ -120,7 +120,7 @@ export const listTranscriptEntries = (
         Request: UserId,
         Result: TranscriptEntryRow,
         execute: (userId) => sql`
-        SELECT entry::text AS entry
+        SELECT entry
         FROM transcript_entries
         WHERE user_id = ${userId}
         ORDER BY sequence

@@ -1,5 +1,4 @@
 import { Crypto, DateTime, Effect, Option, Schema } from "effect";
-import { SqlClient } from "effect/unstable/sql";
 import { ProviderMessageEvidence } from "~/core/_shared/provider-message-evidence";
 import {
   type ConsentInboundContent,
@@ -30,9 +29,9 @@ import {
   findPendingConsentExchange,
   hasCurrentOnboardingConsent,
   insertPendingConsentExchange,
-  lockConsentGate,
-  lockConsentSubject,
   removePendingConsentExchange,
+  withConsentLock,
+  withSubjectLock,
 } from "./repo";
 
 /** One provider-authenticated inbound turn presented to the consent boundary. */
@@ -180,11 +179,15 @@ const settledReplayOutcome = Effect.fn("settledConsentReplayOutcome")(function* 
     return Option.some(decisionBelongsToAnotherIdentity);
   }
   if (!isCurrentDisclosure(replay.disclosure, disclosure)) return Option.none();
-  yield* lockConsentSubject(replay.subjectUserId);
-  if (yield* hasCurrentOnboardingConsent(replay.subjectUserId)) {
-    return Option.some(acceptedOutcome(replay.subjectUserId));
-  }
-  return Option.none();
+  return yield* withSubjectLock(
+    replay.subjectUserId,
+    Effect.gen(function* () {
+      if (yield* hasCurrentOnboardingConsent(replay.subjectUserId)) {
+        return Option.some(acceptedOutcome(replay.subjectUserId));
+      }
+      return Option.none();
+    })
+  );
 });
 
 const usablePendingExchange = Effect.fn("usablePendingConsentExchange")(function* ({
@@ -246,43 +249,39 @@ const decideAwaitedConsent = Effect.fn("decideAwaitedConsent")(function* ({
 export const evaluateConsentGate = Effect.fn("evaluateConsentGate")(function* (
   input: ConsentGateInput
 ) {
-  const sql = yield* SqlClient.SqlClient;
-  const outcome = yield* sql
-    .withTransaction(
-      Effect.gen(function* () {
-        yield* lockConsentGate(input.caller);
+  const outcome = yield* withConsentLock(
+    input.caller,
+    Effect.gen(function* () {
+      const caller = yield* findWhatsAppCaller(input.caller);
+      const disclosure = yield* currentDisclosure;
+      const replay = yield* findConsentRecordByDecisionMessage(input.message);
+      if (Option.isSome(replay)) {
+        const settled = yield* settledReplayOutcome({ caller, replay: replay.value, disclosure });
+        if (Option.isSome(settled)) return settled.value;
+      }
 
-        const caller = yield* findWhatsAppCaller(input.caller);
-        const disclosure = yield* currentDisclosure;
-        const replay = yield* findConsentRecordByDecisionMessage(input.message);
-        if (Option.isSome(replay)) {
-          const settled = yield* settledReplayOutcome({ caller, replay: replay.value, disclosure });
-          if (Option.isSome(settled)) return settled.value;
-        }
+      if (Option.isSome(caller) && (yield* hasCurrentOnboardingConsent(caller.value))) {
+        return { _tag: "Proceed", userId: caller.value } as const;
+      }
 
-        if (Option.isSome(caller) && (yield* hasCurrentOnboardingConsent(caller.value))) {
-          return { _tag: "Proceed", userId: caller.value } as const;
-        }
+      const usable = yield* usablePendingExchange({
+        caller: input.caller,
+        disclosure,
+        now: input.receivedAt,
+      });
+      if (Option.isNone(usable)) return yield* beginPendingExchange(input);
 
-        const usable = yield* usablePendingExchange({
-          caller: input.caller,
-          disclosure,
-          now: input.receivedAt,
-        });
-        if (Option.isNone(usable)) return yield* beginPendingExchange(input);
+      const pending = usable.value;
+      if (pending._tag === "AwaitingDisclosureDelivery") {
+        return {
+          _tag: "AwaitingDisclosureDelivery",
+          exchangeId: pending.id,
+        } as const;
+      }
 
-        const pending = usable.value;
-        if (pending._tag === "AwaitingDisclosureDelivery") {
-          return {
-            _tag: "AwaitingDisclosureDelivery",
-            exchangeId: pending.id,
-          } as const;
-        }
-
-        return yield* decideAwaitedConsent({ input, pending, replay });
-      })
-    )
-    .pipe(Effect.catchTag("SqlError", Effect.die));
+      return yield* decideAwaitedConsent({ input, pending, replay });
+    })
+  ).pipe(Effect.catchTag("SqlError", Effect.die));
 
   // Mutable provider evidence belongs to Identity and refreshes after Consent commits.
   yield* resolveWhatsAppCaller(input.caller, input.receivedAt);

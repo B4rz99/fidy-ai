@@ -1,5 +1,5 @@
 import { Effect, Match, Option } from "effect";
-import { SqlClient } from "effect/unstable/sql";
+import type { SqlClient } from "effect/unstable/sql";
 import { HttpApiBuilder } from "effect/unstable/httpapi";
 import { type UserId } from "~/core/identity/reference";
 import { makeDashboardCatalog, makeDefaultDashboard } from "~/core/dashboard/catalog";
@@ -19,8 +19,8 @@ import {
   findDashboard,
   generateDashboardWidgetId,
   insertDashboard,
-  lockDashboard,
   updateDashboard,
+  withDashboardLock,
 } from "./repo";
 
 const dashboardCatalog = makeDashboardCatalog({
@@ -78,30 +78,21 @@ const validateCategoryReferences = (
 const getDashboard = (
   userId: UserId
 ): Effect.Effect<DashboardDocument, never, SqlClient.SqlClient> =>
-  Effect.flatMap(SqlClient.SqlClient, (sql) =>
-    sql.withTransaction(
-      Effect.gen(function* () {
-        yield* lockDashboard(userId);
-        return yield* loadOrCreateDashboard(userId);
-      })
-    )
-  ).pipe(Effect.catchTag("SqlError", Effect.die));
+  withDashboardLock(userId, loadOrCreateDashboard(userId));
 
 const applyEdit = (input: {
   readonly userId: UserId;
   readonly edit: DashboardEdit;
 }): Effect.Effect<DashboardDocument, DashboardApiFailure, SqlClient.SqlClient> =>
-  Effect.flatMap(SqlClient.SqlClient, (sql) =>
-    sql.withTransaction(
-      Effect.gen(function* () {
-        yield* lockDashboard(input.userId);
-        const current = yield* loadOrCreateDashboard(input.userId);
-        const candidate = yield* applyDashboardEdit({ document: current, edit: input.edit });
-        yield* validateCategoryReferences(candidate, input.edit);
-        return yield* updateDashboard(input.userId, candidate);
-      })
-    )
-  ).pipe(Effect.catchTag("SqlError", Effect.die), Effect.mapError(toApiFailure));
+  withDashboardLock(
+    input.userId,
+    Effect.gen(function* () {
+      const current = yield* loadOrCreateDashboard(input.userId);
+      const candidate = yield* applyDashboardEdit({ document: current, edit: input.edit });
+      yield* validateCategoryReferences(candidate, input.edit);
+      return yield* updateDashboard(input.userId, candidate);
+    })
+  ).pipe(Effect.mapError(toApiFailure));
 
 /** Resolves User ownership before every dashboard read or atomic edit. */
 export const DashboardLive = HttpApiBuilder.group(FidyApi, "dashboard", (handlers) =>

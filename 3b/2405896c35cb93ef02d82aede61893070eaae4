@@ -10,6 +10,7 @@ src/shell/agent/agent-service.ts
   s_5436cdc90f83b3::t_d4c35aa434c0fe 541-546,552,571,590,620-621,624-636
   s_5436cdc90f83b3::t_5a320faf9f843c 3,73-76,536-540,548-551,553-570,572-589
   s_5436cdc90f83b3::t_cc56938d7a244a 547
+  s_5436cdc90f83b3::t_aa663fcf9ad84e 622-623
 ---
 {
   "schema_version": "authorship/3.0.0",

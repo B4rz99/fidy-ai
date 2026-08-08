@@ -9,6 +9,7 @@ const policy = operationPolicy({
   requiredTier: "free",
   costClass: "cheap",
   agentConfirmation: "not-required",
+  kind: "query",
 });
 
 it("reads inherited descriptive metadata through reflected annotations", () => {
@@ -21,9 +22,10 @@ it("reads inherited descriptive metadata through reflected annotations", () => {
       .annotate(OpenApi.Description, "Inspect the available items before choosing one.")
   );
 
-  expect(makeOperationCatalog(api).operations[0]?.description).toBe(
-    "Inspect the available items before choosing one."
-  );
+  const reflected = makeOperationCatalog(api).operations[0];
+
+  expect(reflected?.description).toBe("Inspect the available items before choosing one.");
+  expect(reflected?.policy.kind).toBe("query");
 });
 
 it("rejects an OpenAPI operation id that is not the group-qualified identifier", () => {

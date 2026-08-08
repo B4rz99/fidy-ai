@@ -40,6 +40,7 @@ export const InsightsGroup = HttpApiGroup.make("insights")
           requiredTier: "free",
           costClass: "cheap",
           agentConfirmation: "not-required",
+          kind: "query",
         })
       )
   )
@@ -62,6 +63,7 @@ export const InsightsGroup = HttpApiGroup.make("insights")
           requiredTier: "free",
           costClass: "cheap",
           agentConfirmation: "required",
+          kind: "mutation",
         })
       )
   )
@@ -83,6 +85,7 @@ export const InsightsGroup = HttpApiGroup.make("insights")
           requiredTier: "free",
           costClass: "cheap",
           agentConfirmation: "required",
+          kind: "mutation",
         })
       )
   )
@@ -103,6 +106,7 @@ export const InsightsGroup = HttpApiGroup.make("insights")
           requiredTier: "free",
           costClass: "cheap",
           agentConfirmation: "required",
+          kind: "mutation",
         })
       )
   );

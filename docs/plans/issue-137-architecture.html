@@ -301,7 +301,7 @@
         <h1>Hosted agent continuity, atomic batches, bounded retries, and provider caps</h1>
         <p class="lead">
           A high-level view of A7, A9, A11, and A13: preserve model continuity only within a turn,
-          authorize and execute eligible operation batches atomically, retry one transient provider
+          authorize and execute canonical mutation batches atomically, retry one transient provider
           failure inside the existing round deadline, and project the remaining host tool budget
           into every OpenAI request.
         </p>
@@ -331,7 +331,7 @@
           </article>
           <article class="card">
             <span class="number">A9</span>
-            <h3>Atomic eligible batch</h3>
+            <h3>Atomic mutation batch</h3>
             <p>
               Preflight every call, request one exact batch confirmation, then let the canonical
               batch perform authoritative checks and execution in one PostgreSQL transaction.
@@ -375,7 +375,7 @@ flowchart LR
   U -->|CONFIRMAR LOTE digest| AS
   AS -->|confirmed exact batch| AB
   AB --> TX[withUserTransaction]
-  TX -->|authoritative checks + ordered execution| OI[Reusable operation implementations]
+  TX -->|authoritative checks + ordered execution| OI[Reusable canonical mutation implementations]
   TX -->|any child fails: roll back all| UX[Actionable User explanation]
   OI --> DB[(PostgreSQL)]
   OI --> J[(Durable job rows)]
@@ -392,8 +392,8 @@ flowchart LR
         </div>
         <div class="callout good">
           <strong>Source of truth:</strong> canonical operation definitions still derive schemas,
-          policy, authorization, clients, OpenAPI, and hosted tools. Atomic batching must derive its
-          eligible call union from that same catalog.
+          policy, authorization, clients, OpenAPI, and hosted tools. Atomic batching derives its
+          child-call union from canonical mutations in that same catalog.
         </div>
       </section>
 
@@ -425,7 +425,7 @@ sequenceDiagram
   Model-->>Agent: ordered text/tool parts + finish reason + usage
   Agent->>Agent: retain text/tool parts in transient continuation (A7)
   Agent->>Preflight: all generated calls
-  Preflight->>Preflight: decode + authorize + validate + check atomic eligibility
+  Preflight->>Preflight: decode + authorize + validate canonical mutations
   alt confirmation required
     Preflight-->>Agent: exact ordered batch challenge + digest
     Agent-->>User: one batch confirmation request
@@ -477,7 +477,7 @@ sequenceDiagram
       </section>
 
       <section id="a9">
-        <h2>A9 · one confirmation, one eligible atomic batch</h2>
+        <h2>A9 · one confirmation, one atomic mutation batch</h2>
         <table>
           <thead>
             <tr>
@@ -490,7 +490,7 @@ sequenceDiagram
             <tr>
               <td><strong>Initial preflight</strong></td>
               <td>
-                Every call decodes, is authorized, validates, and is atomic-batch eligible at
+                Every call is a canonical mutation and decodes, authorizes, and validates at
                 challenge time.
               </td>
               <td>Execute nothing; give an actionable explanation.</td>
@@ -506,8 +506,8 @@ sequenceDiagram
             <tr>
               <td><strong>Atomic execution</strong></td>
               <td>
-                Authoritative authorization, precondition, and domain checks run with all eligible
-                database effects and durable job inserts inside one PostgreSQL transaction.
+                Authoritative authorization, precondition, and domain checks run with all canonical
+                mutation effects and durable job inserts inside one PostgreSQL transaction.
               </td>
               <td>
                 Any child failure rolls back every child effect and becomes an actionable User
@@ -522,24 +522,24 @@ sequenceDiagram
           </tbody>
         </table>
         <div class="callout risk">
-          <strong>Eligibility limit:</strong> direct external side effects cannot be rolled back by
-          PostgreSQL. An operation must either be excluded or atomically persist a durable job for
-          post-commit work.
+          <strong>Mutation invariant:</strong> direct external side effects cannot be rolled back by
+          PostgreSQL. A canonical mutation that needs external work atomically persists durable
+          intent for post-commit execution; it cannot opt out through an eligibility flag.
         </div>
         <h3 style="margin-top: 20px">Required architecture changes</h3>
         <ul>
-          <li>Add atomic-batch eligibility to canonical operation policy.</li>
+          <li>Classify every canonical operation explicitly as a query or mutation.</li>
           <li>
             Publish <code>operations.executeAtomicBatch</code> normally on HTTP, OpenAPI, typed
             client, MCP, CLI, and the hosted-agent toolkit.
           </li>
           <li>
-            Derive a bounded tagged union of eligible ordinary operation inputs from the catalog;
-            excluding the batch operation from that child union makes recursion impossible by
-            schema.
+            Derive a bounded tagged union of every canonical mutation input from the catalog;
+            structurally excluding the batch operation from that child union makes recursion
+            impossible by schema.
           </li>
           <li>
-            Move eligible handler behavior behind reusable implementations that accept a
+            Put every canonical mutation behind a reusable implementation that accepts a
             transaction-scoped <code>SqlClient</code>.
           </li>
           <li>
@@ -552,7 +552,7 @@ sequenceDiagram
         </ul>
         <div class="callout good">
           <strong>Nothing hidden:</strong> the batch is a normal visible canonical operation. The
-          schema—not surface filtering—prevents nested batches and excludes ineligible operations.
+          schema—not surface filtering—prevents nested batches and excludes canonical queries.
         </div>
       </section>
 

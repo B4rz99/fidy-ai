@@ -111,6 +111,17 @@ confirmation policy. The server, typed client, OpenAPI specification, MCP tools,
 toolkit are derived from that declaration. The hosted agent has no private tools.
 _Avoid_: Endpoint, route, API call, tool.
 
+**Canonical query**:
+A canonical operation that observes domain state without requesting a domain transition or external
+effect. Audit, quota, and access-accounting writes do not change its classification.
+_Avoid_: Read operation, read-only endpoint.
+
+**Canonical mutation**:
+A canonical operation that requests a domain transition, records durable work, or causes an external
+effect. Every canonical mutation is transaction-composable and uses one reusable implementation for
+individual and atomic-batch execution.
+_Avoid_: Write operation, command, batch-eligible operation.
+
 **SuggestedOperation**:
 A canonical operation attached to a response because it may be worthwhile for the calling agent to
 invoke next, together with any known inputs and a short reason. It makes the response navigable

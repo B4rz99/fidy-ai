@@ -93,24 +93,27 @@ export const insertUser = Effect.fn("insertUser")(
   (userId: UserId, attributes: typeof UserWithoutId.Type) => writeUser("insert", userId, attributes)
 );
 
-/** Finds the stable User and all independently persisted interpretation context. */
-export const findUser = (
+/** Finds the stable User inside the caller's User-scoped transaction. */
+export const findUserInScope = (
   userId: UserId
 ): Effect.Effect<Option.Option<typeof UserRow.Type>, never, SqlClient.SqlClient> =>
-  withUserTransaction(
-    userId,
-    Effect.flatMap(SqlClient.SqlClient, (sql) =>
-      SqlSchema.findOneOption({
-        Request: UserId,
-        Result: UserRow,
-        execute: (id) => sql`
+  Effect.flatMap(SqlClient.SqlClient, (sql) =>
+    SqlSchema.findOneOption({
+      Request: UserId,
+      Result: UserRow,
+      execute: (id) => sql`
         SELECT ${sql.literal(userColumns)}
         FROM users
         WHERE id = ${id}
       `,
-      })(userId)
-    ).pipe(Effect.orDie)
-  );
+    })(userId)
+  ).pipe(Effect.orDie);
+
+/** Finds the stable User and all independently persisted interpretation context. */
+export const findUser = (
+  userId: UserId
+): Effect.Effect<Option.Option<typeof UserRow.Type>, never, SqlClient.SqlClient> =>
+  withUserTransaction(userId, findUserInScope(userId));
 
 /**
  * Updates only ordinary User presentation preferences. The request projection

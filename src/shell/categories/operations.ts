@@ -17,18 +17,21 @@ const read = operationPolicy({
   requiredTier: "free",
   costClass: "cheap",
   agentConfirmation: "not-required",
+  kind: "query",
 });
 const additiveWrite = operationPolicy({
   requiredScope: "write",
   requiredTier: "free",
   costClass: "cheap",
   agentConfirmation: "not-required",
+  kind: "mutation",
 });
 const destructiveWrite = operationPolicy({
   requiredScope: "write",
   requiredTier: "free",
   costClass: "cheap",
   agentConfirmation: "required",
+  kind: "mutation",
 });
 
 /** Public Category discovery and caller-owned keyword-rule management. */

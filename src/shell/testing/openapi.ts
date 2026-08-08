@@ -5,6 +5,7 @@ import { AgentScope } from "~/core/tokens/model";
 import { okStatus } from "~/shell/_shared/http-status";
 import {
   AgentConfirmation,
+  CanonicalOperationKind,
   OperationCostClass,
   OperationTier,
 } from "~/shell/_shared/operation-policy";
@@ -16,6 +17,7 @@ const SpecOperation = Schema.Struct({
   "x-fidy-required-tier": Schema.optional(OperationTier),
   "x-fidy-cost-class": Schema.optional(OperationCostClass),
   "x-fidy-agent-confirmation": Schema.optional(AgentConfirmation),
+  "x-fidy-operation-kind": Schema.optional(CanonicalOperationKind),
 });
 
 const OpenApiPaths = Schema.Struct({
@@ -42,6 +44,8 @@ export type PublishedOperation = {
   readonly costClass: Option.Option<OperationCostClass>;
   /** `None` when the spec omits the hosted-agent confirmation metadata. */
   readonly agentConfirmation: Option.Option<AgentConfirmation>;
+  /** `None` when the spec omits the canonical operation kind metadata. */
+  readonly kind: Option.Option<CanonicalOperationKind>;
 };
 
 /**
@@ -63,6 +67,7 @@ export const publishedOperations = Effect.gen(function* () {
           requiredTier: Option.fromUndefinedOr(operation["x-fidy-required-tier"]),
           costClass: Option.fromUndefinedOr(operation["x-fidy-cost-class"]),
           agentConfirmation: Option.fromUndefinedOr(operation["x-fidy-agent-confirmation"]),
+          kind: Option.fromUndefinedOr(operation["x-fidy-operation-kind"]),
         })
       )
   );

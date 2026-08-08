@@ -18,18 +18,21 @@ const read = operationPolicy({
   requiredTier: "free",
   costClass: "cheap",
   agentConfirmation: "not-required",
+  kind: "query",
 });
 const additiveWrite = operationPolicy({
   requiredScope: "write",
   requiredTier: "free",
   costClass: "cheap",
   agentConfirmation: "not-required",
+  kind: "mutation",
 });
 const destructiveWrite = operationPolicy({
   requiredScope: "write",
   requiredTier: "free",
   costClass: "cheap",
   agentConfirmation: "required",
+  kind: "mutation",
 });
 
 const TransactionQueryParameters = TransactionQueryValues.mapFields(Struct.map(Schema.optionalKey));

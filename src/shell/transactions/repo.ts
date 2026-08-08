@@ -87,28 +87,24 @@ const writeRow = (
   occurredAt: input.occurredAt,
 });
 
-/** Inserts one valid normalized Transaction for the explicit User. Database failures are defects. */
-export const insertTransaction = Effect.fn("insertTransaction")(function* (
+/** Inserts one valid normalized Transaction inside the caller's User-scoped transaction. */
+export const insertTransactionInScope = Effect.fn("insertTransactionInScope")(function* (
   userId: UserId,
   input: UpdateTransactionInput
 ) {
-  return yield* withUserTransaction(
-    userId,
-    Effect.flatMap(SqlClient.SqlClient, (sql) =>
-      SqlSchema.findOne({
-        Request: TransactionWriteRow,
-        Result: TransactionFlatRow,
-        execute: (row) => sql`
-          INSERT INTO transactions
-            (user_id, amount, currency, counterparty, direction, category_id, notes, occurred_at)
-          VALUES
-            (${row.userId}, ${row.amount}, ${row.currency}, ${row.counterparty}, ${row.direction},
-             ${row.categoryId}, ${row.notes}, ${row.occurredAt})
-          RETURNING ${sql.literal(transactionColumns)}
-        `,
-      })(writeRow(userId, input))
-    ).pipe(Effect.flatMap(transactionFromRow), Effect.orDie)
-  );
+  const sql = yield* SqlClient.SqlClient;
+  return yield* SqlSchema.findOne({
+    Request: TransactionWriteRow,
+    Result: TransactionFlatRow,
+    execute: (row) => sql`
+      INSERT INTO transactions
+        (user_id, amount, currency, counterparty, direction, category_id, notes, occurred_at)
+      VALUES
+        (${row.userId}, ${row.amount}, ${row.currency}, ${row.counterparty}, ${row.direction},
+         ${row.categoryId}, ${row.notes}, ${row.occurredAt})
+      RETURNING ${sql.literal(transactionColumns)}
+    `,
+  })(writeRow(userId, input)).pipe(Effect.flatMap(transactionFromRow), Effect.orDie);
 });
 
 /** Loads one active User-owned Transaction; foreign, deleted, and absent identities return None. */
@@ -187,58 +183,59 @@ export const listTransactions = Effect.fn("listTransactions")(function* (
   );
 });
 
-/** Replaces editable facts on one active User-owned Transaction; foreign or absent returns None. */
-export const updateTransaction = Effect.fn("updateTransaction")(function* (
+/**
+ * Replaces editable facts for one active Transaction owned by `userId` inside the caller's active
+ * User-scoped transaction. Returns `None` when `transactionId` is absent, foreign, or deleted. The
+ * caller establishes the matching User context and owns commit or rollback; database failures are
+ * defects.
+ */
+export const updateTransactionInScope = Effect.fn("updateTransactionInScope")(function* (
   userId: UserId,
   transactionId: TransactionId,
   input: UpdateTransactionInput
 ) {
-  return yield* withUserTransaction(
-    userId,
-    Effect.flatMap(SqlClient.SqlClient, (sql) =>
-      SqlSchema.findOneOption({
-        Request: Schema.Struct({ ...TransactionWriteRow.fields, transactionId: TransactionId }),
-        Result: TransactionFlatRow,
-        execute: (row) => sql`
-          UPDATE transactions SET
-            amount = ${row.amount}, currency = ${row.currency}, counterparty = ${row.counterparty},
-            direction = ${row.direction}, category_id = ${row.categoryId}, notes = ${row.notes},
-            occurred_at = ${row.occurredAt}
-          WHERE id = ${row.transactionId} AND user_id = ${row.userId} AND deleted_at IS NULL
-          RETURNING ${sql.literal(transactionColumns)}
-        `,
-      })({ ...writeRow(userId, input), transactionId })
-    ).pipe(
-      Effect.flatMap(
-        Option.match({
-          onNone: () => Effect.succeed(Option.none()),
-          onSome: (row) => transactionFromRow(row).pipe(Effect.map(Option.some)),
-        })
-      ),
-      Effect.orDie
-    )
+  const sql = yield* SqlClient.SqlClient;
+  return yield* SqlSchema.findOneOption({
+    Request: Schema.Struct({ ...TransactionWriteRow.fields, transactionId: TransactionId }),
+    Result: TransactionFlatRow,
+    execute: (row) => sql`
+      UPDATE transactions SET
+        amount = ${row.amount}, currency = ${row.currency}, counterparty = ${row.counterparty},
+        direction = ${row.direction}, category_id = ${row.categoryId}, notes = ${row.notes},
+        occurred_at = ${row.occurredAt}
+      WHERE id = ${row.transactionId} AND user_id = ${row.userId} AND deleted_at IS NULL
+      RETURNING ${sql.literal(transactionColumns)}
+    `,
+  })({ ...writeRow(userId, input), transactionId }).pipe(
+    Effect.flatMap(
+      Option.match({
+        onNone: () => Effect.succeed(Option.none()),
+        onSome: (row) => transactionFromRow(row).pipe(Effect.map(Option.some)),
+      })
+    ),
+    Effect.orDie
   );
 });
 
-/** Hides one active User-owned Transaction permanently while retaining its provenance evidence. */
-export const softDeleteTransaction = Effect.fn("softDeleteTransaction")(function* (
+/**
+ * Hides one active Transaction owned by `userId` inside the caller's active User-scoped
+ * transaction. Returns `None` when `id` is absent, foreign, or already deleted. The caller
+ * establishes the matching User context and owns commit or rollback; database failures are defects.
+ */
+export const softDeleteTransactionInScope = Effect.fn("softDeleteTransactionInScope")(function* (
   userId: UserId,
   id: TransactionId
 ) {
-  return yield* withUserTransaction(
-    userId,
-    Effect.flatMap(SqlClient.SqlClient, (sql) =>
-      SqlSchema.findOneOption({
-        Request: TransactionLookup,
-        Result: Schema.Struct({ id: TransactionId }),
-        execute: (request) => sql`
-        UPDATE transactions SET deleted_at = now()
-        WHERE id = ${request.id} AND user_id = ${request.userId} AND deleted_at IS NULL
-        RETURNING id
-      `,
-      })({ id, userId })
-    ).pipe(Effect.map(Option.map((row) => row.id)), Effect.orDie)
-  );
+  const sql = yield* SqlClient.SqlClient;
+  return yield* SqlSchema.findOneOption({
+    Request: TransactionLookup,
+    Result: Schema.Struct({ id: TransactionId }),
+    execute: (request) => sql`
+      UPDATE transactions SET deleted_at = now()
+      WHERE id = ${request.id} AND user_id = ${request.userId} AND deleted_at IS NULL
+      RETURNING id
+    `,
+  })({ id, userId }).pipe(Effect.map(Option.map((row) => row.id)), Effect.orDie);
 });
 
 const SourceAttestationRow = Schema.Struct({
@@ -273,36 +270,34 @@ const sourceAttestationColumns = `id, transaction_id AS "transactionId", kind,
   interpretation_revision AS "interpretationRevision", created_at AS "createdAt"`;
 
 /**
- * Appends immutable manual provenance only when the Transaction belongs to the explicit User.
- * Call in the same canonical-operation transaction as capture so both records commit together.
+ * Records immutable manual provenance for `transactionId`, which must belong to `userId`. The
+ * caller supplies the active User-scoped transaction; the attestation commits or rolls back with
+ * that transaction. A missing matching Transaction or a database failure is treated as a defect.
  */
-export const insertManualSourceAttestation = Effect.fn("insertManualSourceAttestation")(function* (
-  userId: UserId,
-  transactionId: TransactionId,
-  context: CapturedInterpretationContext
-) {
-  return yield* withUserTransaction(
-    userId,
-    Effect.flatMap(SqlClient.SqlClient, (sql) =>
-      SqlSchema.findOne({
-        Request: Schema.Struct({
-          userId: UserId,
-          transactionId: TransactionId,
-          serviceMarket: SourceAttestation.fields.serviceMarket,
-          locale: SourceAttestation.fields.locale,
-          timeZone: SourceAttestation.fields.timeZone,
-        }),
-        Result: SourceAttestationRow,
-        execute: (row) => sql`
-          INSERT INTO source_attestations
-            (transaction_id, kind, service_market, locale, time_zone, interpretation_revision)
-          SELECT transaction.id, 'manual', ${row.serviceMarket}, ${row.locale}, ${row.timeZone}, 'manual-v1'
-          FROM transactions transaction
-          WHERE transaction.id = ${row.transactionId} AND transaction.user_id = ${row.userId}
-          RETURNING ${sql.literal(sourceAttestationColumns)}
-        `,
-      })({ userId, transactionId, ...context })
-    ).pipe(Effect.flatMap(sourceAttestationFromRow), Effect.orDie)
+export const insertManualSourceAttestationInScope = Effect.fn(
+  "insertManualSourceAttestationInScope"
+)(function* (userId: UserId, transactionId: TransactionId, context: CapturedInterpretationContext) {
+  const sql = yield* SqlClient.SqlClient;
+  return yield* SqlSchema.findOne({
+    Request: Schema.Struct({
+      userId: UserId,
+      transactionId: TransactionId,
+      serviceMarket: SourceAttestation.fields.serviceMarket,
+      locale: SourceAttestation.fields.locale,
+      timeZone: SourceAttestation.fields.timeZone,
+    }),
+    Result: SourceAttestationRow,
+    execute: (row) => sql`
+      INSERT INTO source_attestations
+        (transaction_id, kind, service_market, locale, time_zone, interpretation_revision)
+      SELECT transaction.id, 'manual', ${row.serviceMarket}, ${row.locale}, ${row.timeZone}, 'manual-v1'
+      FROM transactions transaction
+      WHERE transaction.id = ${row.transactionId} AND transaction.user_id = ${row.userId}
+      RETURNING ${sql.literal(sourceAttestationColumns)}
+    `,
+  })({ userId, transactionId, ...context }).pipe(
+    Effect.flatMap(sourceAttestationFromRow),
+    Effect.orDie
   );
 });
 

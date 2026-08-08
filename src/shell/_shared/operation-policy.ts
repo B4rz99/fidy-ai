@@ -14,12 +14,17 @@ export type OperationTier = typeof OperationTier.Type;
 export const AgentConfirmation = Schema.Literals(["not-required", "required"]);
 export type AgentConfirmation = typeof AgentConfirmation.Type;
 
+/** Whether an operation observes domain state or requests a transition, durable work, or external effect. */
+export const CanonicalOperationKind = Schema.Literals(["query", "mutation"]);
+export type CanonicalOperationKind = typeof CanonicalOperationKind.Type;
+
 /** Route-independent authorization, availability, accounting, and agent policy carried by an operation. */
 export type OperationPolicyValue = {
   readonly requiredScope: AgentScope;
   readonly requiredTier: OperationTier;
   readonly costClass: OperationCostClass;
   readonly agentConfirmation: AgentConfirmation;
+  readonly kind: CanonicalOperationKind;
 };
 
 /** Annotation key read by shared authorization from the active endpoint. */
@@ -49,17 +54,20 @@ export const operationPolicy = ({
   requiredTier,
   costClass,
   agentConfirmation,
+  kind,
 }: OperationPolicyValue): Context.Context<OperationPolicy | OpenApi.Override> =>
   Context.make(OperationPolicy, {
     requiredScope,
     requiredTier,
     costClass,
     agentConfirmation,
+    kind,
   }).pipe(
     Context.add(OpenApi.Override, {
       "x-fidy-required-scope": requiredScope,
       "x-fidy-required-tier": requiredTier,
       "x-fidy-cost-class": costClass,
       "x-fidy-agent-confirmation": agentConfirmation,
+      "x-fidy-operation-kind": kind,
     })
   );

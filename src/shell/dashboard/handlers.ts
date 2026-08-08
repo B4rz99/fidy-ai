@@ -1,103 +1,24 @@
-import { Effect, Match, Option } from "effect";
+import { Effect } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
 import { HttpApiBuilder } from "effect/unstable/httpapi";
-import { type UserId } from "~/core/identity/reference";
-import { makeDashboardCatalog, makeDefaultDashboard } from "~/core/dashboard/catalog";
-import {
-  type DashboardCategoryReference,
-  type DashboardDocument,
-  type DashboardEdit,
-  collectDashboardCategoryReferences,
-} from "~/core/dashboard/model";
-import { applyDashboardEdit } from "~/core/dashboard/rules";
-import { ResolvedCaller } from "~/shell/_shared/authz";
-import {
-  type SuggestedOperationCaller,
-  makeFreeSuggestedOperationCaller,
-} from "~/shell/_shared/suggested-operations";
-import { FidyApi } from "~/shell/api";
 import { categoryIds } from "~/core/categories/taxonomy";
-import { findCategory } from "~/shell/categories/repo";
-import { type DashboardApiFailure, DashboardCategoryNotFound, toApiFailure } from "./errors";
-import {
-  findDashboard,
-  generateDashboardWidgetId,
-  insertDashboard,
-  updateDashboard,
-  withDashboardLock,
-} from "./repo";
+import { makeDashboardCatalog } from "~/core/dashboard/catalog";
+import { type DashboardDocument } from "~/core/dashboard/model";
+import { type UserId } from "~/core/identity/reference";
+import { ResolvedCaller } from "~/shell/_shared/authz";
+import { makeFreeSuggestedOperationCaller } from "~/shell/_shared/suggested-operations";
+import { FidyApi } from "~/shell/api";
+import { applyDashboardEdit, loadOrCreateDashboard } from "./mutations";
+import { withDashboardLock } from "./repo";
 
 const dashboardCatalog = makeDashboardCatalog({
   restaurantCategoryId: categoryIds.restaurantes,
 });
 
-const loadOrCreateDashboard = (
-  userId: UserId
-): Effect.Effect<DashboardDocument, never, SqlClient.SqlClient> =>
-  Effect.gen(function* () {
-    const found = yield* findDashboard(userId);
-    if (Option.isSome(found)) {
-      return found.value;
-    }
-    const widgetId = yield* generateDashboardWidgetId;
-    return yield* insertDashboard(userId, makeDefaultDashboard({ widgetId }));
-  });
-
-const resolveCategoryReferencePath = (
-  reference: Readonly<DashboardCategoryReference>,
-  edit: Readonly<DashboardEdit>
-): string =>
-  Match.value(edit).pipe(
-    Match.when({ op: "add-widget" }, ({ widget }) => Option.some(widget.id)),
-    Match.when({ op: "update-widget" }, ({ widget }) => Option.some(widget.id)),
-    Match.orElse(() => Option.none()),
-    Option.filter((widgetId) => widgetId === reference.widgetId),
-    Option.match({
-      onNone: () => `layout.${reference.widgetId}.${reference.field}`,
-      onSome: () => `widget.${reference.field}`,
-    })
-  );
-
-const validateCategoryReferences = (
-  document: DashboardDocument,
-  edit: Readonly<DashboardEdit>
-): Effect.Effect<void, DashboardCategoryNotFound, SqlClient.SqlClient> =>
-  Effect.forEach(
-    collectDashboardCategoryReferences(document),
-    (reference) =>
-      findCategory(reference.categoryId).pipe(
-        Effect.flatMap(
-          Effect.fromOption(
-            () =>
-              new DashboardCategoryNotFound({
-                categoryId: reference.categoryId,
-                path: resolveCategoryReferencePath(reference, edit),
-              })
-          )
-        )
-      ),
-    { discard: true }
-  );
-
 const getDashboard = (
   userId: UserId
 ): Effect.Effect<DashboardDocument, never, SqlClient.SqlClient> =>
   withDashboardLock(userId, loadOrCreateDashboard(userId));
-
-const applyEdit = (input: {
-  readonly userId: UserId;
-  readonly edit: DashboardEdit;
-  readonly caller: SuggestedOperationCaller;
-}): Effect.Effect<DashboardDocument, DashboardApiFailure, SqlClient.SqlClient> =>
-  withDashboardLock(
-    input.userId,
-    Effect.gen(function* () {
-      const current = yield* loadOrCreateDashboard(input.userId);
-      const candidate = yield* applyDashboardEdit({ document: current, edit: input.edit });
-      yield* validateCategoryReferences(candidate, input.edit);
-      return yield* updateDashboard(input.userId, candidate);
-    })
-  ).pipe(Effect.mapError((failure) => toApiFailure({ failure, caller: input.caller })));
 
 /** Resolves User ownership before every dashboard read or atomic edit. */
 export const DashboardLive = HttpApiBuilder.group(FidyApi, "dashboard", (handlers) =>
@@ -118,12 +39,11 @@ export const DashboardLive = HttpApiBuilder.group(FidyApi, "dashboard", (handler
     .handle("applyDashboardEdit", ({ payload: edit }) =>
       Effect.gen(function* () {
         const { scopes, subjectUserId: userId } = yield* ResolvedCaller;
-        const document = yield* applyEdit({
+        return yield* applyDashboardEdit({
           userId,
           edit,
           caller: makeFreeSuggestedOperationCaller(scopes),
         });
-        return { data: document, next: [] };
       })
     )
 );

@@ -1,8 +1,12 @@
 import { expect, layer } from "@effect/vitest";
-import { Effect } from "effect";
+import { Effect, Result } from "effect";
 import { HttpBody, HttpClient } from "effect/unstable/http";
+import { IanaTimeZone } from "~/core/_shared/context";
+import { defaultUserId } from "~/shell/db/development-seed";
+import { withUserTransaction } from "~/shell/db/user-transaction";
 import { ApiHarness, ApiHarnessClient, headersFor } from "~/shell/testing/api-harness";
 import { defaultAgentBearer } from "~/shell/testing/identity-fixtures";
+import { updateUserPreferences } from "./mutations";
 
 layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
   "User preferences",
@@ -41,6 +45,32 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
             timeZone: "America/New_York",
           },
         });
+      })
+    );
+
+    it.effect("rolls a preference update back with its caller-owned transaction", () =>
+      Effect.gen(function* () {
+        const client = yield* ApiHarnessClient;
+        const before = yield* client.identity.getCurrentUser();
+        const rollbackTimeZone =
+          before.data.timeZone === "America/Lima" ? "America/Bogota" : "America/Lima";
+
+        const rollback = yield* Effect.result(
+          withUserTransaction(
+            defaultUserId,
+            updateUserPreferences({
+              userId: defaultUserId,
+              payload: {
+                locale: "es-CO",
+                timeZone: IanaTimeZone.make(rollbackTimeZone),
+              },
+            }).pipe(Effect.andThen(Effect.fail("rollback requested")))
+          )
+        );
+        const after = yield* client.identity.getCurrentUser();
+
+        expect(rollback).toEqual(Result.fail("rollback requested"));
+        expect(after.data).toEqual(before.data);
       })
     );
 

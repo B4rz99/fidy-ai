@@ -116,27 +116,24 @@ export const findUser = (
   withUserTransaction(userId, findUserInScope(userId));
 
 /**
- * Updates only ordinary User presentation preferences. The request projection
- * has no ServiceMarket field and the statement never writes its column.
+ * Updates only ordinary User presentation preferences inside the caller-owned transaction. The
+ * request projection has no ServiceMarket field and the statement never writes its column.
  */
-export const updateUserPreferences = Effect.fn("updateUserPreferences")(function* (
+export const updateUserPreferencesInScope = Effect.fn("updateUserPreferencesInScope")(function* (
   userId: UserId,
   preferences: UserPreferences
 ) {
   const sql = yield* SqlClient.SqlClient;
-  return yield* withUserTransaction(
-    userId,
-    SqlSchema.findOneOption({
-      Request: UserPreferencesRow,
-      Result: UserRow,
-      execute: (row) => sql`
-      UPDATE users
-      SET locale = ${row.locale}, time_zone = ${row.timeZone}
-      WHERE id = ${row.userId}
-      RETURNING ${sql.literal(userColumns)}
-    `,
-    })({ userId, ...preferences }).pipe(Effect.orDie)
-  );
+  return yield* SqlSchema.findOneOption({
+    Request: UserPreferencesRow,
+    Result: UserRow,
+    execute: (row) => sql`
+        UPDATE users
+        SET locale = ${row.locale}, time_zone = ${row.timeZone}
+        WHERE id = ${row.userId}
+        RETURNING ${sql.literal(userColumns)}
+      `,
+  })({ userId, ...preferences }).pipe(Effect.orDie);
 });
 
 const writeWhatsAppIdentity = Effect.fn("Identity.writeWhatsApp")(function* (

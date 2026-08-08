@@ -11,13 +11,17 @@ import {
   Schema,
 } from "effect";
 import { HttpBody, HttpClient } from "effect/unstable/http";
+import { SqlSchema } from "effect/unstable/sql";
 import { AgentTokenId } from "~/core/tokens/reference";
 import { IanaTimeZone } from "~/core/_shared/context";
 import { Currency, Money } from "~/core/_shared/money";
 import { AgentBearerToken } from "~/core/tokens/model";
 import { defaultUserId, seedConsentedAgentIdentity } from "~/shell/db/development-seed";
+import { MigrationSqlClient } from "~/shell/db/client";
+import { withUserTransaction } from "~/shell/db/user-transaction";
 import { ValidationFailed } from "~/shell/_shared/errors";
 import { type SuggestedOperation } from "~/shell/_shared/response";
+import { makeFreeSuggestedOperationCaller } from "~/shell/_shared/suggested-operations";
 import {
   type ApiClient,
   ApiHarness,
@@ -27,6 +31,7 @@ import {
 } from "~/shell/testing/api-harness";
 import { defaultAgentBearer } from "~/shell/testing/identity-fixtures";
 import { truncateInsights, weeklySummaryInput } from "./fixtures";
+import { dismissInsight, markInsightDelivered, markInsightRead } from "./mutations";
 import { generateInsightEvent } from "./repo";
 
 const cop = Currency.make("COP");
@@ -240,6 +245,61 @@ layer(InsightsHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           client.insights.markInsightRead({ params: { id: conflictingEvent.id } })
         );
         expect(isValidationFailed(afterDismissal) ? afterDismissal.next : undefined).toEqual([]);
+      })
+    );
+
+    it.effect("rolls every Insight lifecycle mutation back with its caller-owned transaction", () =>
+      Effect.gen(function* () {
+        yield* truncateInsights;
+        const client = yield* ApiHarnessClient;
+        const caller = makeFreeSuggestedOperationCaller(["write"]);
+        const deliveredEvent = yield* generateWeeklySummary;
+        const readEvent = yield* generateWeeklySummary;
+        const dismissedEvent = yield* generateWeeklySummary;
+        const sentAt = DateTime.makeUnsafe("2026-08-09T23:00:08Z");
+
+        const rollback = yield* Effect.result(
+          withUserTransaction(
+            defaultUserId,
+            Effect.gen(function* () {
+              yield* markInsightDelivered({
+                userId: defaultUserId,
+                caller,
+                insightEventId: deliveredEvent.id,
+                payload: {
+                  sentAt,
+                  channel: "whatsapp",
+                  provider: "kapso",
+                  providerMessageId: "wamid.rollback-delivery",
+                },
+              });
+              yield* markInsightRead({
+                userId: defaultUserId,
+                caller,
+                insightEventId: readEvent.id,
+              });
+              yield* dismissInsight({
+                userId: defaultUserId,
+                caller,
+                insightEventId: dismissedEvent.id,
+              });
+              return yield* Effect.fail("rollback requested");
+            })
+          )
+        );
+        const pending = yield* client.insights.listPendingInsights();
+        const sql = yield* MigrationSqlClient;
+        const deliveryAttempts = yield* SqlSchema.findOne({
+          Request: Schema.Void,
+          Result: Schema.Struct({ count: Schema.Int }),
+          execute: () => sql`SELECT count(*)::int AS count FROM insight_delivery_attempts`,
+        })(undefined);
+
+        expect(rollback).toEqual(Result.fail("rollback requested"));
+        expect(pending.data.map(({ id }) => id).sort()).toEqual(
+          [deliveredEvent.id, readEvent.id, dismissedEvent.id].sort()
+        );
+        expect(deliveryAttempts.count).toBe(0);
       })
     );
 

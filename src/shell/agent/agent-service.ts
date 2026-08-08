@@ -740,7 +740,7 @@ export class AgentService extends Context.Service<
       prepared: PreparedAgentReply
     ) => Effect.Effect<void, OnboardingConsentRequired>;
   }
->()("fidy-ai/shell/agent/agent-service/AgentService") {}
-
-/** Constructs the hosted agent from the external model and persistent slice seams. */
-export const AgentServiceLive = Layer.effect(AgentService, makeAgentService);
+>()("fidy-ai/shell/agent/agent-service/AgentService") {
+  /** Constructs the hosted agent from the external model and persistent slice seams. */
+  static readonly layer = Layer.effect(this, makeAgentService);
+}

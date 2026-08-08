@@ -21,7 +21,8 @@ Bad names cause bugs. **A good name says what the entity is and what it is not.*
 | core decisions                         | verb-first — `decideAlerts`, `matchTransaction`, `applyEdit`                                                        |
 | repo reads returning `Option`          | `find*` — `findBudget`                                                                                              |
 | repo reads where absence is impossible | `get*`                                                                                                              |
-| layers assembling the real thing       | `Live` suffix — `PgLive`, `ApiLive`                                                                                 |
+| primary Layer on a `Context.Service`   | `static readonly layer` on the service class                                                                        |
+| classless production compositions      | `Live` suffix — `PgLive`, `ApiLive`                                                                                 |
 | layers assembling a test stack         | named for what they are — `ApiHarness`. `Live` marks the production assembly, so it would read as the opposite here |
 
 ---
@@ -113,6 +114,10 @@ Build derived shapes from their canonical schemas rather than maintaining parall
 
 Repos are not services because the main thing that buys is substitution, and we have decided not to
 substitute them. Thirteen unused substitution seams would sit there inviting someone to mock a repo.
+
+First-party `Context.Service` classes own their primary production Layer as `static readonly layer`,
+following the Effect v4 convention and keeping construction local to the service. `FooLive` remains
+for classless production compositions and configured aliases of third-party Layers.
 
 ### Classes only where an Effect API asks for one
 

@@ -7,7 +7,7 @@ import { ConsentRecord, ConsentRecordId } from "~/core/consent/model";
 import { UserId } from "~/core/identity/reference";
 import { TranscriptText } from "~/core/transcript/model";
 import { makeColombianUser } from "~/core/identity/rules";
-import { AgentService, AgentServiceLive, InboundMessage } from "~/shell/agent/agent-service";
+import { AgentService, InboundMessage } from "~/shell/agent/agent-service";
 import { upsertUser } from "~/shell/identity/repo";
 import { ApiHarness } from "~/shell/testing/api-harness";
 import { currentDisclosure } from "./current-disclosure";
@@ -27,7 +27,7 @@ const MustNotRunModel = Layer.effect(
   })
 );
 
-const AgentConsentHarness = AgentServiceLive.pipe(
+const AgentConsentHarness = AgentService.layer.pipe(
   Layer.provideMerge(MustNotRunModel),
   Layer.provideMerge(ApiHarness)
 );

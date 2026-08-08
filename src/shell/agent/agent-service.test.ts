@@ -20,13 +20,7 @@ import { listRecentTranscriptEntries, listTranscriptEntries } from "~/shell/tran
 import { ApiHarness, ApiHarnessClient } from "~/shell/testing/api-harness";
 import { testWhatsAppCaller } from "~/shell/testing/whatsapp-caller";
 import { runAgentRepl } from "./repl";
-import {
-  AgentLimits,
-  AgentService,
-  AgentServiceLive,
-  CurrentAgentLimits,
-  InboundMessage,
-} from "./agent-service";
+import { AgentLimits, AgentService, CurrentAgentLimits, InboundMessage } from "./agent-service";
 
 const declinedOnboardingPhone = E164PhoneNumber.make("+573009997332");
 const acceptedOnboardingPhone = E164PhoneNumber.make("+573009997333");
@@ -582,7 +576,7 @@ const ScriptedLanguageModel = Layer.effect(
   })
 ).pipe(Layer.provideMerge(ModelPrompts.layer));
 
-const AgentHarness = AgentServiceLive.pipe(
+const AgentHarness = AgentService.layer.pipe(
   Layer.provideMerge(ScriptedLanguageModel),
   Layer.provideMerge(ApiHarness)
 );

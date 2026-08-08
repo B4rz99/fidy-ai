@@ -26,7 +26,7 @@ import { SqlClient, type SqlConnection, SqlSchema, type Statement } from "effect
 import { ConsentRecord, ConsentRecordId } from "~/core/consent/model";
 import { E164PhoneNumber, UserId, WhatsAppBusinessScopedUserId } from "~/core/identity/reference";
 import { AgentBearerToken } from "~/core/tokens/model";
-import { AgentReply, AgentService, AgentServiceLive } from "~/shell/agent/agent-service";
+import { AgentReply, AgentService } from "~/shell/agent/agent-service";
 import { makeOpenAiFunctionCallResponse } from "~/shell/agent/fixtures/openai";
 import { OpenAiLanguageModelLive } from "~/shell/agent/openai";
 import { admitAgentConversationTurn } from "~/shell/agent/conversation";
@@ -189,7 +189,7 @@ const FailingWhatsAppModel = Layer.effect(
     streamText: () => Stream.fail(modelFailure),
   })
 );
-const FailingAgentService = AgentServiceLive.pipe(Layer.provide(FailingWhatsAppModel));
+const FailingAgentService = AgentService.layer.pipe(Layer.provide(FailingWhatsAppModel));
 const OpenAiRequest = Schema.Struct({
   tools: Schema.Array(Schema.Struct({ parameters: Schema.Unknown })),
 });
@@ -251,8 +251,8 @@ const OpenAiWhatsAppModel = OpenAiLanguageModelLive.pipe(
     ConfigProvider.layer(ConfigProvider.fromUnknown({ OPENAI_API_KEY: "test-only-secret" }))
   )
 );
-const OpenAiAgentService = AgentServiceLive.pipe(Layer.provide(OpenAiWhatsAppModel));
-const WhatsAppHarness = AgentServiceLive.pipe(
+const OpenAiAgentService = AgentService.layer.pipe(Layer.provide(OpenAiWhatsAppModel));
+const WhatsAppHarness = AgentService.layer.pipe(
   Layer.provideMerge(ScriptedWhatsAppModel),
   Layer.provideMerge(ApiHarness)
 );

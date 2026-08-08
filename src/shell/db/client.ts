@@ -46,9 +46,9 @@ export const MigrationPgLive = PgMigrationLive;
 /** Privileged SQL client exposed only to test cleanup and migration-aware setup helpers. */
 export class MigrationSqlClient extends Context.Service<MigrationSqlClient, SqlClient.SqlClient>()(
   "fidy-ai/shell/db/client/MigrationSqlClient"
-) {}
-
-/** Builds the isolated setup client without replacing the runtime SqlClient in context. */
-export const MigrationSqlClientLive = Layer.effect(MigrationSqlClient, SqlClient.SqlClient).pipe(
-  Layer.provide(PgMigrationLive)
-);
+) {
+  /** Builds the isolated setup client without replacing the runtime SqlClient in context. */
+  static readonly layer = Layer.effect(this, SqlClient.SqlClient).pipe(
+    Layer.provide(PgMigrationLive)
+  );
+}

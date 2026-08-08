@@ -63,11 +63,6 @@ export type KapsoClientService = {
   }) => Effect.Effect<KapsoSentMessage, KapsoSendFailed>;
 };
 
-/** True-external Kapso text sender used only after channel policy authorizes a recipient. */
-export class KapsoClient extends Context.Service<KapsoClient, KapsoClientService>()(
-  "fidy-ai/shell/channels/whatsapp/kapso-client/KapsoClient"
-) {}
-
 const bytesPerKibibyte = 1_024;
 const maximumKapsoResponseKibibytes = 64;
 const maximumKapsoResponseBytes = maximumKapsoResponseKibibytes * bytesPerKibibyte;
@@ -366,23 +361,28 @@ export const makeKapsoClientService = ({
   });
 };
 
-/**
- * Provides authenticated Kapso text delivery from KAPSO_API_KEY. WHATSAPP_DELIVERY_MODE defaults
- * to BSUID delivery and permits explicit sandbox phone routing. Calls fail within 15 seconds,
- * reject invalid provider responses, and never persist channel state.
- */
-export const KapsoClientLive = Layer.effect(
-  KapsoClient,
-  Effect.gen(function* () {
-    const apiKey = yield* Config.redacted("KAPSO_API_KEY");
-    const deliveryMode = yield* Config.literals(
-      ["bsuid", "sandbox-phone"],
-      "WHATSAPP_DELIVERY_MODE"
-    ).pipe(Config.withDefault("bsuid"));
-    return makeKapsoClientService({
-      apiKey: Redacted.value(apiKey),
-      deliveryMode,
-      nativeFetch: globalThis["fetch"],
-    });
-  })
-);
+/** True-external Kapso text sender used only after channel policy authorizes a recipient. */
+export class KapsoClient extends Context.Service<KapsoClient, KapsoClientService>()(
+  "fidy-ai/shell/channels/whatsapp/kapso-client/KapsoClient"
+) {
+  /**
+   * Provides authenticated Kapso text delivery from KAPSO_API_KEY. WHATSAPP_DELIVERY_MODE defaults
+   * to BSUID delivery and permits explicit sandbox phone routing. Calls fail within 15 seconds,
+   * reject invalid provider responses, and never persist channel state.
+   */
+  static readonly layer = Layer.effect(
+    this,
+    Effect.gen(function* () {
+      const apiKey = yield* Config.redacted("KAPSO_API_KEY");
+      const deliveryMode = yield* Config.literals(
+        ["bsuid", "sandbox-phone"],
+        "WHATSAPP_DELIVERY_MODE"
+      ).pipe(Config.withDefault("bsuid"));
+      return makeKapsoClientService({
+        apiKey: Redacted.value(apiKey),
+        deliveryMode,
+        nativeFetch: globalThis["fetch"],
+      });
+    })
+  );
+}

@@ -1,0 +1,47 @@
+src/shell/dashboard/mutations.ts
+  s_32451d6104f3cd::t_cae566c18bf3e6 5
+  s_32451d6104f3cd::t_fdb55451826dda 27-31
+  s_32451d6104f3cd::t_3a4529fe9871bf 7
+  s_32451d6104f3cd::t_97c2f33e953934 32
+  s_32451d6104f3cd::t_1c56169a2269c8 1-4,8-26,33-105
+  s_3b187d7074d186::t_4084630f4c35cd 6
+src/shell/db/advisory-lock.ts
+  s_32451d6104f3cd::t_6dc59ee3bb2f79 33-44,51
+src/shell/dashboard/repo.ts
+  s_32451d6104f3cd::t_60febc37faed85 5,33
+  s_32451d6104f3cd::t_95df906fbb4927 17-21,23-24,36-37,40-50,64-65,70-80,84-85,90-101
+  s_32451d6104f3cd::t_e99cbf7a54ce25 22
+src/shell/dashboard/handlers.ts
+  s_32451d6104f3cd::t_50933596c2c5f0 5-6
+  s_32451d6104f3cd::t_61181708100e98 4,9,42
+  s_32451d6104f3cd::t_4abbfbf03a8c7b 1,11-12
+src/shell/dashboard/handlers.test.ts
+  s_32451d6104f3cd::t_951ea6215ed839 94,108-110
+  s_32451d6104f3cd::t_149cd0b0b0aad3 119-121
+  s_32451d6104f3cd::t_3b27b65f1c1db4 8-10,14,91-93,95-106,116-117
+  s_32451d6104f3cd::t_12b3d86d982952 107,111-115,118
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "9e42f2234bcbed8f5ab5367cc38844ab9d43835b",
+  "prompts": {},
+  "sessions": {
+    "s_32451d6104f3cd": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019fe2dc-02fe-757e-b9f4-6430ecfcbdd3",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": null
+    },
+    "s_3b187d7074d186": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019fe2db-b4fe-7cbd-bf47-2478cf7c0415",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

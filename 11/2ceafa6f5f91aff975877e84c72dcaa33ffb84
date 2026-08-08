@@ -1,0 +1,19 @@
+src/shell/agent/agent-service.test.ts
+  s_5436cdc90f83b3::t_3ff0e42b9696ec 722,1861,1864
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "112ceafa6f5f91aff975877e84c72dcaa33ffb84",
+  "prompts": {},
+  "sessions": {
+    "s_5436cdc90f83b3": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019fe208-1697-7756-86f0-1f9f807abda1",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

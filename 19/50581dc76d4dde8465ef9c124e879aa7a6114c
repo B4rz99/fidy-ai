@@ -1,0 +1,37 @@
+src/shell/categories/handlers.test.ts
+  s_8ab607b93c7613::t_9ea8bc610d092c 5,49-63
+  s_6b95e207e358ce::t_5f565929bbf03e 64-66
+vitest.acceptance.config.ts
+  s_8ab607b93c7613::t_6a46b55ef97ef0 44-45
+dependency-policy.json
+  s_8ab607b93c7613::t_2dc5998e7ee90c 26,32
+  s_8ab607b93c7613::t_c20b8779699c50 21-25,27-31,33-34
+.fluidattacks/sca.yaml
+  s_8ab607b93c7613::t_33f14fe83312b5 26-30
+src/shell/consent/repo.ts
+  s_8ab607b93c7613::t_25bc5f2f10db70 127,129-131
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "1950581dc76d4dde8465ef9c124e879aa7a6114c",
+  "prompts": {},
+  "sessions": {
+    "s_6b95e207e358ce": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019fdfcd-ef62-7abd-83ac-18d0f8cd3319",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_8ab607b93c7613": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019fdfc9-d50f-78e3-b97b-46e1bffa9b89",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

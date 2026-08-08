@@ -28,7 +28,7 @@ export const IanaTimeZone = Schema.String.check(
     !timeZone.startsWith("-") &&
     Option.isSome(DateTime.zoneMakeNamed(timeZone))
       ? undefined
-      : { path: [], issue: "Expected a valid named IANA time zone" }
+      : "Expected a valid named IANA time zone"
   )
 )
   .pipe(Schema.brand("IanaTimeZone"))

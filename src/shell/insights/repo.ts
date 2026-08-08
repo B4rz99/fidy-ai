@@ -1,6 +1,6 @@
 import { DateTime, Effect, Schema, SchemaTransformation, Struct } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
-import { encodeMoneyAmount } from "~/core/_shared/money";
+import { MoneyGroups, encodeMoneyAmount } from "~/core/_shared/money";
 import { withUserTransaction } from "~/shell/db/user-transaction";
 import { UserId } from "~/core/identity/reference";
 import {
@@ -9,7 +9,6 @@ import {
   InsightEvent,
   InsightEventId,
   InsightGenerationInput,
-  InsightMoneyGroups,
 } from "~/core/insights/model";
 
 const EventRowFields = InsightEvent.mapFields(Struct.omit(["id", "scheduledAt", "moneyGroups"]));
@@ -21,7 +20,7 @@ const InsightEventRow = Schema.Struct({
   scheduleVersion: Schema.toEncoded(InsightEvent.fields.scheduleVersion),
   timeZone: Schema.toEncoded(InsightEvent.fields.timeZone),
   scheduledAt: Schema.DateTimeUtcFromDate,
-  moneyGroups: Schema.toEncoded(InsightMoneyGroups),
+  moneyGroups: Schema.toEncoded(MoneyGroups),
 });
 
 /** PostgreSQL dates and JSON Money text decoded back into the canonical model. */

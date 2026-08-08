@@ -79,7 +79,9 @@ export type WhatsAppInboundEvent = Readonly<{
   readonly content: WhatsAppInboundContent;
 }>;
 
-const WhatsAppCallerReplacement = WhatsAppCaller.mapFields(Struct.omit(["businessPortfolioId"]));
+const WhatsAppCallerReplacement = WhatsAppCaller.mapFields(
+  Struct.omit(["businessPortfolioId"])
+).annotate({ identifier: "WhatsAppCallerReplacement" });
 
 /** Provider-authenticated reassociation after Meta changes a WhatsAppIdentity BSUID. */
 export type WhatsAppIdentityChangeEvent = Readonly<{

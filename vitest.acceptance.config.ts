@@ -41,8 +41,8 @@ export default defineConfig({
       // moved. Measured against a real PostgreSQL, not copied from a CI log.
       thresholds: {
         autoUpdate: true,
-        branches: 26.13,
-        lines: 60.3,
+        branches: 26.34,
+        lines: 60.56,
       },
     },
   },

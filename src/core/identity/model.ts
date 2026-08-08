@@ -8,6 +8,7 @@ import {
   WhatsAppParentBusinessScopedUserId,
   WhatsAppUsername,
 } from "./reference";
+import { UtcTimestamp } from "~/core/_shared/time";
 
 /**
  * The concrete association between a stable User and one WhatsApp caller, keyed by Business
@@ -23,7 +24,7 @@ export const WhatsAppIdentity = Schema.Struct({
   parentBusinessScopedUserId: Schema.Option(WhatsAppParentBusinessScopedUserId),
   username: Schema.Option(WhatsAppUsername),
   phoneNumber: Schema.Option(E164PhoneNumber),
-  verifiedAt: Schema.DateTimeUtc,
+  verifiedAt: UtcTimestamp,
 }).annotate({ identifier: "WhatsAppIdentity" });
 export type WhatsAppIdentity = typeof WhatsAppIdentity.Type;
 
@@ -37,7 +38,7 @@ export const User = Schema.Struct({
   serviceMarket: ServiceMarket,
   locale: Locale,
   timeZone: IanaTimeZone,
-  createdAt: Schema.DateTimeUtc,
+  createdAt: UtcTimestamp,
 }).annotate({ identifier: "User" });
 export type User = typeof User.Type;
 

@@ -4,6 +4,7 @@ import {
   Currency,
   CurrencyMismatch,
   Money,
+  MoneyGroups,
   addMoney,
   compareMoney,
   currencyMetadata,
@@ -134,4 +135,75 @@ it("omits Currency groups whose inflow and outflow are both zero", () => {
   const groups = Effect.runSync(groupMoney({ inflows: [money("0")], outflows: [money("0")] }));
 
   expect(groups).toEqual([]);
+});
+
+type EncodedMoneyGroup = Readonly<{
+  currency: string;
+  inflow: Readonly<{ amount: string; currency: string }>;
+  outflow: Readonly<{ amount: string; currency: string }>;
+}>;
+
+const encodedGroup = (currency: string): EncodedMoneyGroup => ({
+  currency,
+  inflow: { amount: "1", currency },
+  outflow: { amount: "0", currency },
+});
+
+it("accepts only Currency-consistent, non-zero Money groups", () => {
+  const wire = [
+    {
+      currency: "COP",
+      inflow: { amount: "10", currency: "COP" },
+      outflow: { amount: "0", currency: "COP" },
+    },
+    {
+      currency: "USD",
+      inflow: { amount: "0", currency: "USD" },
+      outflow: { amount: "2.5", currency: "USD" },
+    },
+  ];
+
+  expect(Schema.encodeSync(MoneyGroups)(Schema.decodeUnknownSync(MoneyGroups)(wire))).toEqual(wire);
+
+  const group = encodedGroup("COP");
+  const cases = [
+    [{ ...group, inflow: { amount: "1", currency: "USD" } }, '[0]["inflow"]["currency"]'],
+    [{ ...group, outflow: { amount: "0", currency: "USD" } }, '[0]["outflow"]["currency"]'],
+    [{ ...group, inflow: { amount: "0", currency: "COP" } }, "non-zero Money value"],
+  ] as const;
+
+  for (const [invalid, expectedIssue] of cases) {
+    const result = Schema.decodeUnknownResult(MoneyGroups)([invalid]);
+
+    expect(Result.isFailure(result)).toBe(true);
+    expect(Result.isFailure(result) ? String(result.failure) : "").toContain(expectedIssue);
+  }
+});
+
+it("requires Money groups in strict ascending Currency order", () => {
+  const decode = Schema.decodeUnknownResult(MoneyGroups);
+
+  for (const groups of [
+    [],
+    [encodedGroup("COP")],
+    [encodedGroup("COP"), encodedGroup("EUR")],
+    [encodedGroup("COP"), encodedGroup("EUR"), encodedGroup("USD")],
+  ]) {
+    expect(Result.isSuccess(decode(groups))).toBe(true);
+  }
+
+  // The reported index is the later of the offending pair, so an ordered prefix
+  // does not shift the correction onto the wrong group.
+  const cases = [
+    [[encodedGroup("COP"), encodedGroup("COP")], '[1]["currency"]'],
+    [[encodedGroup("USD"), encodedGroup("COP")], '[1]["currency"]'],
+    [[encodedGroup("COP"), encodedGroup("USD"), encodedGroup("EUR")], '[2]["currency"]'],
+  ] as const;
+
+  for (const [groups, expectedPath] of cases) {
+    const result = decode(groups);
+
+    expect(Result.isFailure(result)).toBe(true);
+    expect(Result.isFailure(result) ? String(result.failure) : "").toContain(expectedPath);
+  }
 });

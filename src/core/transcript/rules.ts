@@ -42,13 +42,17 @@ export type TranscriptWindowEntry = WindowTextEntry | WindowCallEntry | WindowRe
 /** Positive whole-turn bound for model-context selection. */
 export const TranscriptWindowTurnLimit = Schema.Int.check(
   Schema.isBetween({ minimum: 1, maximum: 100 })
-).pipe(Schema.brand("TranscriptWindowTurnLimit"));
+)
+  .pipe(Schema.brand("TranscriptWindowTurnLimit"))
+  .annotate({ identifier: "TranscriptWindowTurnLimit" });
 export type TranscriptWindowTurnLimit = typeof TranscriptWindowTurnLimit.Type;
 
 /** Positive character bound for model-context selection. */
 export const TranscriptWindowCharacterLimit = Schema.Int.check(
   Schema.isBetween({ minimum: 1, maximum: 200_000 })
-).pipe(Schema.brand("TranscriptWindowCharacterLimit"));
+)
+  .pipe(Schema.brand("TranscriptWindowCharacterLimit"))
+  .annotate({ identifier: "TranscriptWindowCharacterLimit" });
 export type TranscriptWindowCharacterLimit = typeof TranscriptWindowCharacterLimit.Type;
 
 const entryCharacters = (entry: TranscriptWindowEntry): number => {

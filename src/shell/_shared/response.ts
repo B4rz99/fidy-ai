@@ -14,7 +14,7 @@ const SuggestedOperationHint = Schema.NonEmptyString.check(
     !/[\r\n]/u.test(hint) &&
     Array.from(englishSentenceSegmenter.segment(hint)).length === 1
       ? undefined
-      : { path: [], issue: "Expected one English sentence ending in punctuation" }
+      : "Expected one English sentence ending in punctuation"
   )
 ).annotate({
   description:

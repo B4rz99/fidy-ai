@@ -1,4 +1,12 @@
-import { BigDecimal, Data, Effect, Order, Schema, SchemaTransformation } from "effect";
+import {
+  BigDecimal,
+  Data,
+  Effect,
+  Order,
+  Schema,
+  SchemaGetter,
+  SchemaTransformation,
+} from "effect";
 
 const currencyCodes = [
   "AED",
@@ -268,9 +276,11 @@ const MoneyAmount = Schema.String.check(
 ).pipe(
   Schema.decodeTo(
     Schema.BigDecimal.check(Schema.isGreaterThanOrEqualToBigDecimal(zero)),
-    SchemaTransformation.transform({
-      decode: BigDecimal.fromStringUnsafe,
-      encode: formatPlainDecimal,
+    // Decoding reports unparsable text as an issue instead of throwing; encoding
+    // keeps the normalized plain-decimal spelling `BigDecimal.format` does not give.
+    SchemaTransformation.make({
+      decode: SchemaTransformation.bigDecimalFromString.decode,
+      encode: SchemaGetter.transform(formatPlainDecimal),
     })
   )
 );
@@ -346,12 +356,57 @@ export const compareMoney = (operands: {
     Effect.as(BigDecimal.Order(operands.left.amount, operands.right.amount))
   );
 
+const groupCurrenciesMatch = Schema.makeFilter<
+  Readonly<{ currency: Currency; inflow: ReadonlyMoney; outflow: ReadonlyMoney }>
+>((group) => {
+  if (group.inflow.currency !== group.currency) {
+    return { path: ["inflow", "currency"], issue: "Expected the group Currency" };
+  }
+  if (group.outflow.currency !== group.currency) {
+    return { path: ["outflow", "currency"], issue: "Expected the group Currency" };
+  }
+  return BigDecimal.isZero(group.inflow.amount) && BigDecimal.isZero(group.outflow.amount)
+    ? "Expected at least one non-zero Money value"
+    : undefined;
+});
+
 /** Separate exact inflow and outflow sums for one Currency. */
-export type MoneyGroup = {
+export const MoneyGroup = Schema.Struct({
+  currency: Currency,
+  inflow: Money,
+  outflow: Money,
+})
+  .check(groupCurrenciesMatch)
+  .annotate({ identifier: "MoneyGroup" });
+export type MoneyGroup = typeof MoneyGroup.Type;
+
+/** Immutable view for decisions over an already-validated MoneyGroup. */
+export type ReadonlyMoneyGroup = {
   readonly currency: Currency;
   readonly inflow: ReadonlyMoney;
   readonly outflow: ReadonlyMoney;
 };
+
+const deterministicCurrencyOrder = Schema.makeFilter<
+  ReadonlyArray<Readonly<{ currency: Currency }>>
+>((groups) => {
+  for (const [index, current] of groups.entries()) {
+    const previous = groups[index - 1];
+    if (previous !== undefined && previous.currency >= current.currency) {
+      return {
+        path: [index, "currency"],
+        issue: "Expected unique Currency groups in alphabetic order",
+      };
+    }
+  }
+  return undefined;
+});
+
+/** Currency groups in unique alphabetic order; empty means no Money was retained. */
+export const MoneyGroups = Schema.Array(MoneyGroup)
+  .check(deterministicCurrencyOrder)
+  .annotate({ identifier: "MoneyGroups" });
+export type MoneyGroups = typeof MoneyGroups.Type;
 
 /**
  * Groups Money by Currency in alphabetic order, keeping direction-separated
@@ -361,7 +416,7 @@ export type MoneyGroup = {
 export const groupMoney = (movements: {
   readonly inflows: ReadonlyArray<ReadonlyMoney>;
   readonly outflows: ReadonlyArray<ReadonlyMoney>;
-}): Effect.Effect<ReadonlyArray<MoneyGroup>> => {
+}): Effect.Effect<ReadonlyArray<ReadonlyMoneyGroup>> => {
   const groups = new Map<
     Currency,
     { readonly inflow: ReadonlyBigDecimal; readonly outflow: ReadonlyBigDecimal }

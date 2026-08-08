@@ -1,7 +1,8 @@
-import { BigDecimal, Function, Schema, SchemaTransformation, Struct } from "effect";
+import { BigDecimal, Function, Schema, Struct } from "effect";
 import { CategoryId } from "~/core/categories/reference";
 import { IanaTimeZone, Locale, ServiceMarket } from "~/core/_shared/context";
 import { Currency, Money } from "~/core/_shared/money";
+import { UtcTimestamp } from "~/core/_shared/time";
 
 /**
  * Names one Transaction. Assigned at insert and never sent by a caller, so a
@@ -13,14 +14,14 @@ import { Currency, Money } from "~/core/_shared/money";
  * capture of the same movement is a duplicate is reconciliation's decision to
  * make (CONTEXT.md) — not one an id can make by colliding.
  */
-export const TransactionId = Schema.String.check(Schema.isUUID()).pipe(
-  Schema.brand("TransactionId")
-);
+export const TransactionId = Schema.String.check(Schema.isUUID())
+  .pipe(Schema.brand("TransactionId"))
+  .annotate({ identifier: "TransactionId" });
 export type TransactionId = typeof TransactionId.Type;
 
 const zero = BigDecimal.make(0n, 0);
 const maximumTransactionNotesLength = 500;
-const maximumCounterpartyFilterLength = 120;
+const maximumCounterpartyLength = 120;
 const maximumAttestationNameLength = 80;
 
 // Money itself permits zero. A Transaction is specifically a movement, so the
@@ -52,12 +53,31 @@ export const Direction = Schema.Literals(["inflow", "outflow"]).annotate({
 export type Direction = typeof Direction.Type;
 
 /** A user-recognizable person or organization explicitly identified on the other side. */
-export const Counterparty = Schema.NonEmptyString.check(Schema.isTrimmed());
+export const Counterparty = Schema.NonEmptyString.check(
+  Schema.isTrimmed(),
+  Schema.isMaxLength(maximumCounterpartyLength)
+);
 export type Counterparty = typeof Counterparty.Type;
 
-/** A UTC instant encoded as a validated ISO date-time string. */
-export const UtcTimestamp = Schema.String.annotate({ format: "date-time" }).pipe(
-  Schema.decodeTo(Schema.DateTimeUtc, SchemaTransformation.dateTimeUtcFromString)
+/** Named so the derived documents carry one definition each rather than a copy per payload. */
+const OccurredAt = UtcTimestamp.pipe(
+  Schema.annotateEncoded({
+    identifier: "TransactionOccurredAt",
+    description:
+      "When the money actually moved. It must already have happened — a Transaction dated " +
+      "in the future is rejected — and the history is ordered by it, so send the instant " +
+      "the user is describing rather than the moment you are recording it.",
+  })
+);
+
+const CreatedAt = UtcTimestamp.pipe(
+  Schema.annotateEncoded({
+    identifier: "TransactionCreatedAt",
+    description:
+      "When fidy learned of it, which can be long after it occurred: a statement read in " +
+      "July carries movements from March. Reason about the user's spending from " +
+      "`occurredAt`; read this only to tell how freshly the record was captured.",
+  })
 );
 
 /**
@@ -90,22 +110,8 @@ export const Transaction = Schema.Struct({
       Schema.isMaxLength(maximumTransactionNotesLength)
     )
   ),
-  occurredAt: UtcTimestamp.pipe(
-    Schema.annotateEncoded({
-      description:
-        "When the money actually moved. It must already have happened — a Transaction dated " +
-        "in the future is rejected — and the history is ordered by it, so send the instant " +
-        "the user is describing rather than the moment you are recording it.",
-    })
-  ),
-  createdAt: UtcTimestamp.pipe(
-    Schema.annotateEncoded({
-      description:
-        "When fidy learned of it, which can be long after it occurred: a statement read in " +
-        "July carries movements from March. Reason about the user's spending from " +
-        "`occurredAt`; read this only to tell how freshly the record was captured.",
-    })
-  ),
+  occurredAt: OccurredAt,
+  createdAt: CreatedAt,
 })
   .check(positiveTransactionMoney)
   .annotate({ identifier: "Transaction" });
@@ -146,16 +152,12 @@ export const TransactionExtraction = Transaction.mapFields(
   .annotate({ identifier: "TransactionExtraction" });
 export type TransactionExtraction = typeof TransactionExtraction.Type;
 
-const CounterpartyFilter = Schema.NonEmptyString.check(Schema.isTrimmed()).check(
-  Schema.isMaxLength(maximumCounterpartyFilterLength)
-);
-
 /** The constrained values from which every Transaction history filter is composed. */
 export const TransactionQueryValues = Schema.Struct({
   from: UtcTimestamp,
   to: UtcTimestamp,
   categoryId: CategoryId,
-  counterparty: CounterpartyFilter,
+  counterparty: Counterparty,
   direction: Direction,
   currency: Currency,
 });
@@ -175,9 +177,9 @@ export const TransactionQuery = Schema.Struct({
 export type TransactionQuery = typeof TransactionQuery.Type;
 
 /** Stable identity of one immutable provenance statement attached to a Transaction. */
-export const SourceAttestationId = Schema.String.check(Schema.isUUID()).pipe(
-  Schema.brand("SourceAttestationId")
-);
+export const SourceAttestationId = Schema.String.check(Schema.isUUID())
+  .pipe(Schema.brand("SourceAttestationId"))
+  .annotate({ identifier: "SourceAttestationId" });
 export type SourceAttestationId = typeof SourceAttestationId.Type;
 
 const SourceName = Schema.NonEmptyString.check(Schema.isTrimmed()).check(
@@ -187,7 +189,8 @@ const SourceName = Schema.NonEmptyString.check(Schema.isTrimmed()).check(
 /** Names the parser, extractor, or manual interpretation contract used at capture time. */
 export const InterpretationRevision = Schema.NonEmptyString.check(Schema.isTrimmed())
   .check(Schema.isMaxLength(maximumAttestationNameLength))
-  .pipe(Schema.brand("InterpretationRevision"));
+  .pipe(Schema.brand("InterpretationRevision"))
+  .annotate({ identifier: "InterpretationRevision" });
 export type InterpretationRevision = typeof InterpretationRevision.Type;
 
 /** Immutable evidence of the context that interpreted one manually captured Transaction. */
@@ -208,5 +211,5 @@ export type SourceAttestation = typeof SourceAttestation.Type;
 /** User interpretation context frozen into provenance when a Transaction is captured. */
 export const CapturedInterpretationContext = SourceAttestation.mapFields(
   Struct.pick(["serviceMarket", "locale", "timeZone"])
-);
+).annotate({ identifier: "CapturedInterpretationContext" });
 export type CapturedInterpretationContext = typeof CapturedInterpretationContext.Type;

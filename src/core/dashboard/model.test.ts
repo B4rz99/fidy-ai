@@ -7,7 +7,6 @@ import {
   DashboardCatalog,
   DashboardDocument,
   DashboardMonetaryWidgetData,
-  DashboardMoneyGroups,
   DashboardTitle,
   SpendingChartData,
   SplitWeight,
@@ -103,67 +102,6 @@ it("decodes every closed widget variant without implicit monetary defaults", () 
       field: "categoryId",
     },
   ]);
-});
-
-it("accepts only deterministic, non-zero, Currency-consistent Money groups", () => {
-  const valid = Schema.decodeUnknownSync(DashboardMoneyGroups)([
-    {
-      currency: "COP",
-      inflow: { amount: "10", currency: "COP" },
-      outflow: { amount: "0", currency: "COP" },
-    },
-    {
-      currency: "USD",
-      inflow: { amount: "0", currency: "USD" },
-      outflow: { amount: "2.5", currency: "USD" },
-    },
-  ]);
-
-  expect(Schema.encodeSync(DashboardMoneyGroups)(valid)).toEqual([
-    {
-      currency: "COP",
-      inflow: { amount: "10", currency: "COP" },
-      outflow: { amount: "0", currency: "COP" },
-    },
-    {
-      currency: "USD",
-      inflow: { amount: "0", currency: "USD" },
-      outflow: { amount: "2.5", currency: "USD" },
-    },
-  ]);
-
-  const invalidGroups = [
-    [
-      {
-        currency: "COP",
-        inflow: { amount: "1", currency: "USD" },
-        outflow: { amount: "0", currency: "COP" },
-      },
-    ],
-    [
-      {
-        currency: "USD",
-        inflow: { amount: "1", currency: "USD" },
-        outflow: { amount: "0", currency: "USD" },
-      },
-      {
-        currency: "COP",
-        inflow: { amount: "1", currency: "COP" },
-        outflow: { amount: "0", currency: "COP" },
-      },
-    ],
-    [
-      {
-        currency: "COP",
-        inflow: { amount: "0", currency: "COP" },
-        outflow: { amount: "0", currency: "COP" },
-      },
-    ],
-  ];
-
-  for (const groups of invalidGroups) {
-    expect(Result.isFailure(Schema.decodeUnknownResult(DashboardMoneyGroups)(groups))).toBe(true);
-  }
 });
 
 it("decodes currency-safe ephemeral widget results without a mixed-Currency scalar", () => {
@@ -282,118 +220,6 @@ it("requires one to sixteen unique Category references", () => {
     expect(
       Result.isFailure(Schema.decodeUnknownResult(DashboardDocument)(makeDocument(invalid)))
     ).toBe(true);
-  }
-});
-
-it("checks each Money-group branch and reports its exact Currency field", () => {
-  const group = {
-    currency: "COP",
-    inflow: { amount: "1", currency: "COP" },
-    outflow: { amount: "0", currency: "COP" },
-  };
-  const cases = [
-    [{ ...group, inflow: { amount: "1", currency: "USD" } }, '[0]["inflow"]["currency"]'],
-    [{ ...group, outflow: { amount: "0", currency: "USD" } }, '[0]["outflow"]["currency"]'],
-    [{ ...group, inflow: { amount: "0", currency: "COP" } }, "non-zero Money value"],
-  ] as const;
-
-  for (const [invalid, expectedIssue] of cases) {
-    const result = Schema.decodeUnknownResult(DashboardMoneyGroups)([invalid]);
-    expect(Result.isFailure(result)).toBe(true);
-    if (Result.isFailure(result)) {
-      expect(String(result.failure)).toContain(expectedIssue);
-    }
-  }
-});
-
-it("accepts empty and ordered Currency groups but rejects duplicate and descending neighbors", () => {
-  const group = (
-    currency: "COP" | "EUR" | "USD"
-  ): {
-    currency: "COP" | "EUR" | "USD";
-    inflow: { amount: string; currency: "COP" | "EUR" | "USD" };
-    outflow: { amount: string; currency: "COP" | "EUR" | "USD" };
-  } => ({
-    currency,
-    inflow: { amount: "1", currency },
-    outflow: { amount: "0", currency },
-  });
-
-  expect(Schema.decodeUnknownSync(DashboardMoneyGroups)([])).toEqual([]);
-  expect(Schema.decodeUnknownSync(DashboardMoneyGroups)([group("COP")])).toHaveLength(1);
-  expect(
-    Schema.decodeUnknownSync(DashboardMoneyGroups)([group("COP"), group("EUR"), group("USD")])
-  ).toHaveLength(3);
-  for (const groups of [
-    [group("COP"), group("COP")],
-    [group("USD"), group("COP")],
-  ]) {
-    const result = Schema.decodeUnknownResult(DashboardMoneyGroups)(groups);
-    expect(Result.isFailure(result)).toBe(true);
-    if (Result.isFailure(result)) {
-      expect(String(result.failure)).toContain('[1]["currency"]');
-    }
-  }
-});
-
-it("reports the first out-of-order Currency group after an ordered prefix", () => {
-  const group = (
-    currency: "COP" | "EUR" | "USD"
-  ): {
-    currency: "COP" | "EUR" | "USD";
-    inflow: { amount: string; currency: "COP" | "EUR" | "USD" };
-    outflow: { amount: string; currency: "COP" | "EUR" | "USD" };
-  } => ({
-    currency,
-    inflow: { amount: "1", currency },
-    outflow: { amount: "0", currency },
-  });
-
-  const result = Schema.decodeUnknownResult(DashboardMoneyGroups)([
-    group("COP"),
-    group("USD"),
-    group("EUR"),
-  ]);
-
-  expect(Result.isFailure(result)).toBe(true);
-  if (Result.isFailure(result)) {
-    expect(String(result.failure)).toContain('[2]["currency"]');
-  }
-});
-
-it("checks every adjacent Currency boundary with strict order", () => {
-  type MoneyGroup = Readonly<{
-    readonly currency: "COP" | "EUR" | "USD";
-    readonly inflow: Readonly<{
-      readonly amount: string;
-      readonly currency: "COP" | "EUR" | "USD";
-    }>;
-    readonly outflow: Readonly<{
-      readonly amount: string;
-      readonly currency: "COP" | "EUR" | "USD";
-    }>;
-  }>;
-  const group = (currency: MoneyGroup["currency"]): MoneyGroup => ({
-    currency,
-    inflow: { amount: "1", currency },
-    outflow: { amount: "0", currency },
-  });
-  const decode = Schema.decodeUnknownResult(DashboardMoneyGroups);
-
-  expect(Result.isSuccess(decode([]))).toBe(true);
-  expect(Result.isSuccess(decode([group("COP")]))).toBe(true);
-  expect(Result.isSuccess(decode([group("COP"), group("EUR")]))).toBe(true);
-
-  const duplicate = decode([group("COP"), group("COP")]);
-  expect(Result.isFailure(duplicate)).toBe(true);
-  if (Result.isFailure(duplicate)) {
-    expect(String(duplicate.failure)).toContain('[1]["currency"]');
-  }
-
-  const laterDisorder = decode([group("COP"), group("USD"), group("EUR")]);
-  expect(Result.isFailure(laterDisorder)).toBe(true);
-  if (Result.isFailure(laterDisorder)) {
-    expect(String(laterDisorder.failure)).toContain('[2]["currency"]');
   }
 });
 

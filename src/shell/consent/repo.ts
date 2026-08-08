@@ -1,4 +1,12 @@
-import { Crypto, DateTime, Effect, Option, Schema, SchemaTransformation } from "effect";
+import {
+  Crypto,
+  DateTime,
+  Effect,
+  Option,
+  Schema,
+  type SchemaIssue,
+  SchemaTransformation,
+} from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import { ProviderMessageEvidence } from "~/core/_shared/provider-message-evidence";
 import {
@@ -111,9 +119,17 @@ const disclosureToRow = (disclosure: typeof DisclosureSnapshot.Encoded): Disclos
   revocationMethod: disclosure.revocationMethod,
 });
 
-const decodeConsentEvent = Schema.decodeUnknownSync(Schema.toEncoded(ConsentEvent));
-const decodeConsentRecord = Schema.decodeUnknownSync(Schema.toEncoded(ConsentRecord));
-const decodePendingExchange = Schema.decodeUnknownSync(Schema.toEncoded(PendingConsentExchange));
+const decodeConsentEvent = Schema.decodeUnknownEffect(Schema.toEncoded(ConsentEvent));
+const decodeConsentRecord = Schema.decodeUnknownEffect(Schema.toEncoded(ConsentRecord));
+const decodePendingExchange = Schema.decodeUnknownEffect(Schema.toEncoded(PendingConsentExchange));
+
+/** A row that does not reassemble into its model is a decode failure, not a defect. */
+const asIssue = function <A>(
+  decoded: Effect.Effect<A, Schema.SchemaError>
+): Effect.Effect<A, SchemaIssue.Issue> {
+  return Effect.mapError(decoded, (error) => error.issue);
+};
+
 const utcFromIso = (value: string): DateTime.Utc => DateTime.toUtc(DateTime.makeUnsafe(value));
 
 const grantsFromRow: Record<StoredGrantType, (row: ConsentRecordRow) => unknown> = {
@@ -130,7 +146,9 @@ const grantsFromRow: Record<StoredGrantType, (row: ConsentRecordRow) => unknown>
     }),
 };
 
-const eventFromRow = (row: ConsentRecordRow): typeof ConsentEvent.Encoded => {
+const eventFromRow = (
+  row: ConsentRecordRow
+): Effect.Effect<typeof ConsentEvent.Encoded, Schema.SchemaError> => {
   if (row.eventType === "revoked") {
     const event = Option.match(row.revokedGrantId, {
       onNone: () => ({ _tag: "Revoked" }),
@@ -190,41 +208,45 @@ const eventToRow = (
 const ConsentRecordFromRow = ConsentRecordRow.pipe(
   Schema.decodeTo(
     ConsentRecord,
-    SchemaTransformation.transform({
+    SchemaTransformation.transformOrFail({
       decode: (row) =>
-        decodeConsentRecord({
-          id: row.id,
-          subjectUserId: row.subjectUserId,
-          event: eventFromRow(row),
-          disclosure: disclosureFromRow(row),
-          disclosureMessage: {
-            channel: row.disclosureChannel,
-            provider: row.disclosureProvider,
-            providerMessageId: row.disclosureProviderMessageId,
-          },
-          decisionMessage: {
-            channel: row.decisionChannel,
-            provider: row.decisionProvider,
-            providerMessageId: row.decisionProviderMessageId,
-          },
-          occurredAt: DateTime.formatIso(row.occurredAt),
-        }),
-      encode: (input) => {
-        const record = decodeConsentRecord(input);
-        return {
-          id: record.id,
-          subjectUserId: record.subjectUserId,
-          ...eventToRow(record.event),
-          ...disclosureToRow(record.disclosure),
-          disclosureChannel: record.disclosureMessage.channel,
-          disclosureProvider: record.disclosureMessage.provider,
-          disclosureProviderMessageId: record.disclosureMessage.providerMessageId,
-          decisionChannel: record.decisionMessage.channel,
-          decisionProvider: record.decisionMessage.provider,
-          decisionProviderMessageId: record.decisionMessage.providerMessageId,
-          occurredAt: utcFromIso(record.occurredAt),
-        };
-      },
+        asIssue(
+          Effect.flatMap(eventFromRow(row), (event) =>
+            decodeConsentRecord({
+              id: row.id,
+              subjectUserId: row.subjectUserId,
+              event,
+              disclosure: disclosureFromRow(row),
+              disclosureMessage: {
+                channel: row.disclosureChannel,
+                provider: row.disclosureProvider,
+                providerMessageId: row.disclosureProviderMessageId,
+              },
+              decisionMessage: {
+                channel: row.decisionChannel,
+                provider: row.decisionProvider,
+                providerMessageId: row.decisionProviderMessageId,
+              },
+              occurredAt: DateTime.formatIso(row.occurredAt),
+            })
+          )
+        ),
+      encode: (input) =>
+        asIssue(
+          Effect.map(decodeConsentRecord(input), (record) => ({
+            id: record.id,
+            subjectUserId: record.subjectUserId,
+            ...eventToRow(record.event),
+            ...disclosureToRow(record.disclosure),
+            disclosureChannel: record.disclosureMessage.channel,
+            disclosureProvider: record.disclosureMessage.provider,
+            disclosureProviderMessageId: record.disclosureMessage.providerMessageId,
+            decisionChannel: record.decisionMessage.channel,
+            decisionProvider: record.decisionMessage.provider,
+            decisionProviderMessageId: record.decisionMessage.providerMessageId,
+            occurredAt: utcFromIso(record.occurredAt),
+          }))
+        ),
     })
   )
 );
@@ -472,7 +494,7 @@ const pendingColumns = `id, business_portfolio_id AS "businessPortfolioId",
 const PendingFromRow = PendingRow.pipe(
   Schema.decodeTo(
     PendingConsentExchange,
-    SchemaTransformation.transform({
+    SchemaTransformation.transformOrFail({
       decode: (row) => {
         const common = {
           id: row.id,
@@ -489,60 +511,64 @@ const PendingFromRow = PendingRow.pipe(
           createdAt: DateTime.formatIso(row.createdAt),
           expiresAt: DateTime.formatIso(row.expiresAt),
         };
-        return decodePendingExchange(
-          row.lifecycle === "awaiting-disclosure-delivery"
-            ? { _tag: "AwaitingDisclosureDelivery", ...common }
-            : Option.match(
-                Option.all({
-                  channel: row.disclosureChannel,
-                  provider: row.disclosureProvider,
-                  providerMessageId: row.disclosureProviderMessageId,
-                  disclosedAt: row.disclosedAt,
-                }),
-                {
-                  onNone: () => ({ _tag: "AwaitingDecision", ...common }),
-                  onSome: ({ disclosedAt, ...disclosureMessage }) => ({
-                    _tag: "AwaitingDecision",
-                    ...common,
-                    disclosureMessage,
-                    disclosedAt: DateTime.formatIso(disclosedAt),
+        return asIssue(
+          decodePendingExchange(
+            row.lifecycle === "awaiting-disclosure-delivery"
+              ? { _tag: "AwaitingDisclosureDelivery", ...common }
+              : Option.match(
+                  Option.all({
+                    channel: row.disclosureChannel,
+                    provider: row.disclosureProvider,
+                    providerMessageId: row.disclosureProviderMessageId,
+                    disclosedAt: row.disclosedAt,
                   }),
-                }
-              )
+                  {
+                    onNone: () => ({ _tag: "AwaitingDecision", ...common }),
+                    onSome: ({ disclosedAt, ...disclosureMessage }) => ({
+                      _tag: "AwaitingDecision",
+                      ...common,
+                      disclosureMessage,
+                      disclosedAt: DateTime.formatIso(disclosedAt),
+                    }),
+                  }
+                )
+          )
         );
       },
-      encode: (input) => {
-        const pending = decodePendingExchange(input);
-        const common = {
-          id: pending.id,
-          businessPortfolioId: pending.caller.businessPortfolioId,
-          businessScopedUserId: pending.caller.businessScopedUserId,
-          ...disclosureToRow(pending.disclosure),
-          initiatingChannel: pending.initiatingMessage.channel,
-          initiatingProvider: pending.initiatingMessage.provider,
-          initiatingProviderMessageId: pending.initiatingMessage.providerMessageId,
-          createdAt: utcFromIso(pending.createdAt),
-          expiresAt: utcFromIso(pending.expiresAt),
-        };
-        if (pending._tag === "AwaitingDisclosureDelivery") {
-          return {
-            ...common,
-            lifecycle: "awaiting-disclosure-delivery" as const,
-            disclosureChannel: Option.none(),
-            disclosureProvider: Option.none(),
-            disclosureProviderMessageId: Option.none(),
-            disclosedAt: Option.none(),
-          };
-        }
-        return {
-          ...common,
-          lifecycle: "awaiting-decision" as const,
-          disclosureChannel: Option.some(pending.disclosureMessage.channel),
-          disclosureProvider: Option.some(pending.disclosureMessage.provider),
-          disclosureProviderMessageId: Option.some(pending.disclosureMessage.providerMessageId),
-          disclosedAt: Option.some(utcFromIso(pending.disclosedAt)),
-        };
-      },
+      encode: (input) =>
+        asIssue(
+          Effect.map(decodePendingExchange(input), (pending) => {
+            const common = {
+              id: pending.id,
+              businessPortfolioId: pending.caller.businessPortfolioId,
+              businessScopedUserId: pending.caller.businessScopedUserId,
+              ...disclosureToRow(pending.disclosure),
+              initiatingChannel: pending.initiatingMessage.channel,
+              initiatingProvider: pending.initiatingMessage.provider,
+              initiatingProviderMessageId: pending.initiatingMessage.providerMessageId,
+              createdAt: utcFromIso(pending.createdAt),
+              expiresAt: utcFromIso(pending.expiresAt),
+            };
+            if (pending._tag === "AwaitingDisclosureDelivery") {
+              return {
+                ...common,
+                lifecycle: "awaiting-disclosure-delivery" as const,
+                disclosureChannel: Option.none(),
+                disclosureProvider: Option.none(),
+                disclosureProviderMessageId: Option.none(),
+                disclosedAt: Option.none(),
+              };
+            }
+            return {
+              ...common,
+              lifecycle: "awaiting-decision" as const,
+              disclosureChannel: Option.some(pending.disclosureMessage.channel),
+              disclosureProvider: Option.some(pending.disclosureMessage.provider),
+              disclosureProviderMessageId: Option.some(pending.disclosureMessage.providerMessageId),
+              disclosedAt: Option.some(utcFromIso(pending.disclosedAt)),
+            };
+          })
+        ),
     })
   )
 );
@@ -618,7 +644,9 @@ const DisclosureDeliveryClaimRequest = Schema.Struct({
   claimId: DisclosureDeliveryClaimId,
   claimedAt: Schema.DateTimeUtcFromDate,
 });
-const DisclosureDeliveryClaim = Schema.Struct({ claimId: DisclosureDeliveryClaimId });
+const DisclosureDeliveryClaim = Schema.Struct({
+  claimId: DisclosureDeliveryClaimId,
+});
 
 /**
  * Claims one disclosure send for 30 seconds. An active or already delivered exchange returns None.

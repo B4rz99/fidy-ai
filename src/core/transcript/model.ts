@@ -1,34 +1,39 @@
 import { Schema } from "effect";
 import { CanonicalOperationId } from "~/core/_shared/canonical-operation";
+import { UtcTimestamp } from "~/core/_shared/time";
 
 const maximumToolCallIdLength = 256;
 const maximumAgentIterationsPerTurn = 32;
 const maximumTranscriptTextLength = 16_000;
 
 /** Stable identity for one append-only Transcript entry. */
-export const TranscriptEntryId = Schema.String.check(Schema.isUUID()).pipe(
-  Schema.brand("TranscriptEntryId")
-);
+export const TranscriptEntryId = Schema.String.check(Schema.isUUID())
+  .pipe(Schema.brand("TranscriptEntryId"))
+  .annotate({ identifier: "TranscriptEntryId" });
 export type TranscriptEntryId = typeof TranscriptEntryId.Type;
 
 /** Stable identity joining every entry produced by one hosted-agent turn. */
-export const TranscriptTurnId = Schema.String.check(Schema.isUUID()).pipe(
-  Schema.brand("TranscriptTurnId")
-);
+export const TranscriptTurnId = Schema.String.check(Schema.isUUID())
+  .pipe(Schema.brand("TranscriptTurnId"))
+  .annotate({ identifier: "TranscriptTurnId" });
 export type TranscriptTurnId = typeof TranscriptTurnId.Type;
 
 /** Provider-issued identity linking one tool call to exactly one result. */
 export const ToolCallId = Schema.String.check(
   Schema.isMinLength(1),
   Schema.isMaxLength(maximumToolCallIdLength)
-).pipe(Schema.brand("ToolCallId"));
+)
+  .pipe(Schema.brand("ToolCallId"))
+  .annotate({ identifier: "ToolCallId" });
 export type ToolCallId = typeof ToolCallId.Type;
 
 /** A one-based model round within a hosted-agent turn. */
 export const AgentIteration = Schema.Int.check(
   Schema.isGreaterThanOrEqualTo(1),
   Schema.isLessThanOrEqualTo(maximumAgentIterationsPerTurn)
-).pipe(Schema.brand("AgentIteration"));
+)
+  .pipe(Schema.brand("AgentIteration"))
+  .annotate({ identifier: "AgentIteration" });
 export type AgentIteration = typeof AgentIteration.Type;
 
 /** Exact user-visible text retained in a Transcript. */
@@ -36,13 +41,15 @@ export const TranscriptText = Schema.String.check(
   Schema.isMinLength(1),
   Schema.isMaxLength(maximumTranscriptTextLength),
   Schema.isPattern(/\S/u)
-).pipe(Schema.brand("TranscriptText"));
+)
+  .pipe(Schema.brand("TranscriptText"))
+  .annotate({ identifier: "TranscriptText" });
 export type TranscriptText = typeof TranscriptText.Type;
 
 const TranscriptIdentity = {
   id: TranscriptEntryId,
   turnId: TranscriptTurnId,
-  occurredAt: Schema.DateTimeUtc,
+  occurredAt: UtcTimestamp,
 };
 
 /** Exact text accepted from the User for one turn. */

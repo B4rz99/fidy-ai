@@ -1,6 +1,7 @@
 import { Duration, Effect, Schema } from "effect";
 import { AgentTokenId } from "./reference";
 import { UserId } from "~/core/identity/reference";
+import { UtcTimestamp } from "~/core/_shared/time";
 
 /**
  * One access capability an AgentToken may grant. Scopes are independent: a
@@ -35,13 +36,17 @@ export const agentBearerSecretBytes = 32;
  */
 export const AgentTokenShortId = Schema.String.check(
   Schema.isPattern(new RegExp(`^${agentTokenShortIdPattern}$`))
-).pipe(Schema.brand("AgentTokenShortId"));
+)
+  .pipe(Schema.brand("AgentTokenShortId"))
+  .annotate({ identifier: "AgentTokenShortId" });
 export type AgentTokenShortId = typeof AgentTokenShortId.Type;
 
 /** URL-safe high-entropy secret segment used only to construct an opaque bearer. */
 export const AgentBearerSecret = Schema.String.check(
   Schema.isPattern(new RegExp(`^${agentBearerSecretPattern}$`))
-).pipe(Schema.brand("AgentBearerSecret"));
+)
+  .pipe(Schema.brand("AgentBearerSecret"))
+  .annotate({ identifier: "AgentBearerSecret" });
 export type AgentBearerSecret = typeof AgentBearerSecret.Type;
 
 /**
@@ -54,7 +59,9 @@ export const AgentBearerToken = Schema.String.check(
   Schema.isPattern(
     new RegExp(`^${agentBearerPrefix}${agentTokenShortIdPattern}_${agentBearerSecretPattern}$`)
   )
-).pipe(Schema.brand("AgentBearerToken"));
+)
+  .pipe(Schema.brand("AgentBearerToken"))
+  .annotate({ identifier: "AgentBearerToken" });
 export type AgentBearerToken = typeof AgentBearerToken.Type;
 
 type AgentBearerSegments = Readonly<{
@@ -78,8 +85,6 @@ export const getAgentTokenShortId = (
       bearer.slice(agentBearerPrefix.length, agentBearerPrefix.length + agentTokenShortIdLength)
     )
   );
-
-const AgentTokenTime = Schema.DateTimeUtc;
 
 /** The rolling inactivity window after creation or the most recent use. */
 export const AgentTokenIdleDuration = Duration.days(agentTokenIdleDays);
@@ -130,9 +135,9 @@ const AgentTokenFields = {
   id: AgentTokenId,
   shortId: AgentTokenShortId,
   scopes: AgentTokenScopes,
-  lastUsedAt: Schema.Option(AgentTokenTime),
-  revokedAt: Schema.Option(AgentTokenTime),
-  createdAt: AgentTokenTime,
+  lastUsedAt: Schema.Option(UtcTimestamp),
+  revokedAt: Schema.Option(UtcTimestamp),
+  createdAt: UtcTimestamp,
 };
 
 /**
@@ -141,21 +146,20 @@ const AgentTokenFields = {
  */
 export const UserAgentToken = Schema.TaggedStruct("UserAgentToken", {
   ...AgentTokenFields,
-  idleExpiresAt: AgentTokenTime,
+  idleExpiresAt: UtcTimestamp,
 })
   .check(validAgentTokenTimes)
   .annotate({ identifier: "UserAgentToken" });
 export type UserAgentToken = typeof UserAgentToken.Type;
 
-/** The fixed all-scope capability set carried only by a HostedAgentToken. */
-export const HostedAgentScopes = Schema.Union([
-  Schema.Tuple([Schema.Literal("read"), Schema.Literal("write"), Schema.Literal("dashboard")]),
-  Schema.Tuple([Schema.Literal("read"), Schema.Literal("dashboard"), Schema.Literal("write")]),
-  Schema.Tuple([Schema.Literal("write"), Schema.Literal("read"), Schema.Literal("dashboard")]),
-  Schema.Tuple([Schema.Literal("write"), Schema.Literal("dashboard"), Schema.Literal("read")]),
-  Schema.Tuple([Schema.Literal("dashboard"), Schema.Literal("read"), Schema.Literal("write")]),
-  Schema.Tuple([Schema.Literal("dashboard"), Schema.Literal("write"), Schema.Literal("read")]),
-]);
+/**
+ * The fixed all-scope capability set carried only by a HostedAgentToken: every
+ * AgentScope exactly once, in any order. Stated as uniqueness plus a count so a
+ * fourth scope needs no new permutation here.
+ */
+export const HostedAgentScopes = AgentTokenScopes.check(
+  Schema.isMinLength(AgentScope.members.length, { expected: "every AgentScope exactly once" })
+).annotate({ identifier: "HostedAgentScopes" });
 export type HostedAgentScopes = typeof HostedAgentScopes.Type;
 
 const validHostedAgentTokenTimes = Schema.makeFilter<
@@ -189,7 +193,7 @@ const validHostedAgentTokenTimes = Schema.makeFilter<
 export const HostedAgentToken = Schema.TaggedStruct("HostedAgentToken", {
   ...AgentTokenFields,
   scopes: HostedAgentScopes,
-  expiresAt: AgentTokenTime,
+  expiresAt: UtcTimestamp,
 })
   .check(validHostedAgentTokenTimes)
   .annotate({ identifier: "HostedAgentToken" });
@@ -211,6 +215,6 @@ export const ResolvedAgentToken = Schema.Struct({
   subjectUserId: UserId,
   scopes: AgentTokenFields.scopes,
   // Bearer resolution has already recorded this use, so the timestamp is present.
-  lastUsedAt: AgentTokenTime,
+  lastUsedAt: UtcTimestamp,
 });
 export type ResolvedAgentToken = typeof ResolvedAgentToken.Type;

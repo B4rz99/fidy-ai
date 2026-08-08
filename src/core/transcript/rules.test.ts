@@ -23,7 +23,9 @@ import {
 const occurredAt = DateTime.makeUnsafe("2026-07-20T12:00:00Z");
 
 it("rejects a value outside every TranscriptEntry variant", () => {
-  expect(Result.isFailure(Schema.decodeUnknownResult(TranscriptEntry)([]))).toBe(true);
+  expect(Result.isFailure(Schema.decodeUnknownResult(Schema.toType(TranscriptEntry))([]))).toBe(
+    true
+  );
 });
 
 const selectWindow = (
@@ -153,7 +155,13 @@ it("accepts every canonical TranscriptEntry variant", () => {
   ];
 
   for (const entry of entries) {
-    expect(Result.isSuccess(Schema.decodeUnknownResult(TranscriptEntry)(entry))).toBe(true);
+    expect(
+      Result.isSuccess(Schema.decodeUnknownResult(Schema.toType(TranscriptEntry))(entry))
+    ).toBe(true);
+
+    const encoded = Schema.encodeSync(TranscriptEntry)(entry);
+    expect(encoded.occurredAt).toBe("2026-07-20T12:00:00.000Z");
+    expect(Result.isSuccess(Schema.decodeUnknownResult(TranscriptEntry)(encoded))).toBe(true);
   }
 });
 

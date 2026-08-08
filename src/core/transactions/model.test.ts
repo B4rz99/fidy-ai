@@ -6,6 +6,7 @@ import {
   Direction,
   Transaction,
   TransactionExtraction,
+  TransactionQueryValues,
   UpdateTransactionInput,
 } from "./model";
 
@@ -56,6 +57,18 @@ it("accepts a Transaction whose captured material identifies no Counterparty", (
   const { counterparty: _, ...withoutCounterparty } = apiTransaction();
 
   expect(Result.isSuccess(decodeTransaction(withoutCounterparty))).toBe(true);
+});
+
+it("bounds a Counterparty to the same length wherever it is read", () => {
+  const longest = "a".repeat(120);
+  const filter = Schema.decodeUnknownResult(TransactionQueryValues.fields.counterparty);
+
+  expect(Result.isSuccess(decodeTransaction(apiTransaction({ counterparty: longest })))).toBe(true);
+  expect(Result.isFailure(decodeTransaction(apiTransaction({ counterparty: `${longest}a` })))).toBe(
+    true
+  );
+  expect(Result.isSuccess(filter(longest))).toBe(true);
+  expect(Result.isFailure(filter(`${longest}a`))).toBe(true);
 });
 
 it("accepts Transaction Money in a Currency independent of the Colombia ServiceMarket", () => {

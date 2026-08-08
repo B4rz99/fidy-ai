@@ -68,10 +68,18 @@ it("requires every canonical scope for an internal HostedAgentToken", () => {
   expect(Result.isSuccess(decodeScopes(["dashboard", "read", "write"]))).toBe(true);
   expect(Result.isFailure(decodeScopes([]))).toBe(true);
   expect(Result.isFailure(decodeScopes(["read", "write"]))).toBe(true);
+  expect(Result.isFailure(decodeScopes(["read", "write", "write"]))).toBe(true);
+  expect(Result.isFailure(decodeScopes(["read", "write", "admin"]))).toBe(true);
+});
+
+it("documents the hosted scope set as one array rather than a variant per ordering", () => {
+  const document = Schema.toJsonSchemaDocument(HostedAgentScopes);
+
+  expect(document.definitions.HostedAgentScopes).toMatchObject({ type: "array" });
 });
 
 it("rejects HostedAgentToken use and revocation outside its hard lifetime", () => {
-  const decodeToken = Schema.decodeUnknownResult(AgentToken);
+  const decodeToken = Schema.decodeUnknownResult(Schema.toType(AgentToken));
   const createdAt = DateTime.makeUnsafe("2026-07-28T12:34:56Z");
   const expiresAt = DateTime.addDuration(createdAt, "15 minutes");
   const usedAt = DateTime.addDuration(createdAt, "1 minute");
@@ -124,8 +132,25 @@ it("rejects HostedAgentToken use and revocation outside its hard lifetime", () =
   );
 });
 
+it("carries AgentToken instants over the wire as date-time strings", () => {
+  const createdAt = DateTime.makeUnsafe("2026-07-28T12:34:56Z");
+  const encoded = Schema.encodeSync(AgentToken)({
+    _tag: "UserAgentToken",
+    id: AgentTokenId.make("f1d1a000-0000-4000-8000-000000000010"),
+    shortId: AgentTokenShortId.make("default1"),
+    scopes: AgentTokenScopes.make(["read"]),
+    lastUsedAt: Option.none(),
+    idleExpiresAt: DateTime.addDuration(createdAt, "90 days"),
+    revokedAt: Option.none(),
+    createdAt,
+  });
+
+  expect(encoded.createdAt).toBe("2026-07-28T12:34:56.000Z");
+  expect(Result.isSuccess(Schema.decodeUnknownResult(AgentToken)(encoded))).toBe(true);
+});
+
 it("rejects UserAgentToken timestamps outside lifecycle order", () => {
-  const decodeToken = Schema.decodeUnknownResult(AgentToken);
+  const decodeToken = Schema.decodeUnknownResult(Schema.toType(AgentToken));
   const createdAt = DateTime.makeUnsafe("2026-07-28T12:34:56Z");
   const validToken = {
     _tag: "UserAgentToken" as const,

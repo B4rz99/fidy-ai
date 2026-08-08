@@ -1,4 +1,4 @@
-import { Effect, BigInt as EffectBigInt, Option, Schema } from "effect";
+import { Effect, BigInt as EffectBigInt, Option, Schema, SchemaIssue } from "effect";
 import {
   type DashboardFailure,
   type DashboardIssue,
@@ -20,36 +20,45 @@ import {
   SplitWeight,
   type Widget,
   type WidgetId,
-  findDashboardStructureIssue,
   isBesidePlacement,
 } from "./model";
 
-const makeInvalidDashboardResult = (): InvalidDashboardResult => {
-  const issues: [DashboardIssue] = [
-    {
-      path: Option.none(),
-      message: "The edit produced a document outside DashboardDocument invariants",
-    },
-  ];
-  return new InvalidDashboardResult({ issues });
+const formatIssues = SchemaIssue.makeFormatterStandardSchemaV1();
+
+type StandardIssue = ReturnType<typeof formatIssues>["issues"][number];
+
+const segmentKey = (segment: PropertyKey | Readonly<{ key: PropertyKey }>): PropertyKey =>
+  typeof segment === "object" ? segment.key : segment;
+
+/** An issue with no path names the document itself rather than one of its fields. */
+const toDashboardIssue = (issue: StandardIssue): DashboardIssue => ({
+  path:
+    issue.path === undefined || issue.path.length === 0
+      ? Option.none()
+      : Option.some(issue.path.map((segment) => String(segmentKey(segment))).join(".")),
+  message: issue.message,
+});
+
+// The formatter flattens a failure into its leaves, and a real failure always
+// has at least one; the head is spelled out only because the result type needs
+// a non-empty list. It reports the error itself rather than a fixed blurb.
+const toInvalidDashboardResult = (error: Schema.SchemaError): InvalidDashboardResult => {
+  const [first, ...rest] = formatIssues(error.issue).issues.map(toDashboardIssue);
+  return new InvalidDashboardResult({
+    issues:
+      first === undefined ? [{ path: Option.none(), message: error.message }] : [first, ...rest],
+  });
 };
 
+// Only Type-side checks need re-proving after an edit, so this decodes the Type
+// schema rather than round-tripping through the encoded form. `errors: "all"`
+// is what makes the API's "correct every reported field" instruction true.
 const revalidateDocument = (
   candidate: Readonly<DashboardDocument>
-): Effect.Effect<DashboardDocument, InvalidDashboardResult> => {
-  const issue = findDashboardStructureIssue(candidate);
-  if (Option.isSome(issue)) {
-    return Effect.fail(
-      new InvalidDashboardResult({
-        issues: [{ path: Option.some(issue.value.path.join(".")), message: issue.value.issue }],
-      })
-    );
-  }
-  return Schema.encodeEffect(DashboardDocument)(candidate).pipe(
-    Effect.flatMap(Schema.decodeEffect(DashboardDocument)),
-    Effect.mapError(makeInvalidDashboardResult)
+): Effect.Effect<DashboardDocument, InvalidDashboardResult> =>
+  Schema.decodeUnknownEffect(Schema.toType(DashboardDocument), { errors: "all" })(candidate).pipe(
+    Effect.mapError(toInvalidDashboardResult)
   );
-};
 
 type WidgetLookup = Readonly<{ readonly node: LayoutNode; readonly widgetId: WidgetId }>;
 

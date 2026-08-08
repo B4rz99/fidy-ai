@@ -1,7 +1,8 @@
-import { BigDecimal, DateTime, Option, Schema, Struct } from "effect";
+import { DateTime, Option, Schema, Struct } from "effect";
 import { CategoryId } from "~/core/categories/reference";
 import { IanaTimeZone, Locale, ServiceMarket } from "~/core/_shared/context";
-import { Currency, Money, type ReadonlyMoney } from "~/core/_shared/money";
+import { Currency, Money, MoneyGroups, type ReadonlyMoney } from "~/core/_shared/money";
+import { UtcTimestamp } from "~/core/_shared/time";
 
 const maximumDashboardLabelLength = 80;
 const maximumCatalogTextLength = 160;
@@ -10,7 +11,9 @@ const maximumWidgetsPerDashboard = 24;
 const maximumLayoutDepth = 8;
 
 /** Stable identity of one widget inside the User's DashboardDocument. */
-export const WidgetId = Schema.String.check(Schema.isUUID()).pipe(Schema.brand("WidgetId"));
+export const WidgetId = Schema.String.check(Schema.isUUID())
+  .pipe(Schema.brand("WidgetId"))
+  .annotate({ identifier: "WidgetId" });
 export type WidgetId = typeof WidgetId.Type;
 
 /** User-visible heading for their one dashboard. */
@@ -53,56 +56,6 @@ const MetricLabel = Schema.NonEmptyString.check(Schema.isTrimmed()).check(
 export const MoneyAggregation = Schema.Literals(["sum", "average", "maximum"]);
 export type MoneyAggregation = typeof MoneyAggregation.Type;
 
-const validDashboardMoneyGroup = Schema.makeFilter<
-  Readonly<{
-    readonly currency: Currency;
-    readonly inflow: ReadonlyMoney;
-    readonly outflow: ReadonlyMoney;
-  }>
->((group) => {
-  if (group.inflow.currency !== group.currency) {
-    return { path: ["inflow", "currency"], issue: "Expected the group's Currency" };
-  }
-  if (group.outflow.currency !== group.currency) {
-    return { path: ["outflow", "currency"], issue: "Expected the group's Currency" };
-  }
-  return BigDecimal.isZero(group.inflow.amount) && BigDecimal.isZero(group.outflow.amount)
-    ? "Expected at least one non-zero Money value"
-    : undefined;
-});
-
-/** Separate inflow and outflow Money retained for exactly one Currency. */
-export const DashboardMoneyGroup = Schema.Struct({
-  currency: Currency,
-  inflow: Money,
-  outflow: Money,
-})
-  .check(validDashboardMoneyGroup)
-  .annotate({ identifier: "DashboardMoneyGroup" });
-export type DashboardMoneyGroup = typeof DashboardMoneyGroup.Type;
-
-const deterministicDashboardCurrencyOrder = Schema.makeFilter<
-  ReadonlyArray<Readonly<{ readonly currency: Currency }>>
->((groups) => {
-  let previous: Option.Option<Currency> = Option.none();
-  for (const [index, current] of groups.entries()) {
-    if (Option.isSome(previous) && previous.value >= current.currency) {
-      return {
-        path: [index, "currency"],
-        issue: "Expected unique Currency groups in alphabetic order",
-      };
-    }
-    previous = Option.some(current.currency);
-  }
-  return undefined;
-});
-
-/** Currency-separated totals in unique deterministic alphabetic order. */
-export const DashboardMoneyGroups = Schema.Array(DashboardMoneyGroup).check(
-  deterministicDashboardCurrencyOrder
-);
-export type DashboardMoneyGroups = typeof DashboardMoneyGroups.Type;
-
 /** Presentation and jurisdiction applied when ephemeral widget data was calculated. */
 export const DashboardQueryContext = Schema.Struct({
   serviceMarket: ServiceMarket,
@@ -121,8 +74,8 @@ const validAppliedPeriod = Schema.makeFilter<
 
 /** Half-open UTC interval resolved from a relative period in the applied time zone. */
 export const AppliedDashboardPeriod = Schema.Struct({
-  from: Schema.DateTimeUtcFromString,
-  toExclusive: Schema.DateTimeUtcFromString,
+  from: UtcTimestamp,
+  toExclusive: UtcTimestamp,
 })
   .check(validAppliedPeriod)
   .annotate({ identifier: "AppliedDashboardPeriod" });
@@ -142,7 +95,7 @@ const SpendingBucketKey = Schema.Union([
 /** One chart bucket whose monetary values remain separated by Currency and direction. */
 export const SpendingChartBucket = Schema.Struct({
   key: SpendingBucketKey,
-  moneyGroups: DashboardMoneyGroups,
+  moneyGroups: MoneyGroups,
 }).annotate({ identifier: "SpendingChartBucket" });
 export type SpendingChartBucket = typeof SpendingChartBucket.Type;
 
@@ -211,7 +164,7 @@ export const CustomMetricData = Schema.Struct({
   context: DashboardQueryContext,
   appliedPeriod: AppliedDashboardPeriod,
   aggregation: MoneyAggregation,
-  moneyGroups: DashboardMoneyGroups,
+  moneyGroups: MoneyGroups,
 }).annotate({ identifier: "CustomMetricData" });
 export type CustomMetricData = typeof CustomMetricData.Type;
 
@@ -228,10 +181,9 @@ const TransactionSearch = Schema.NonEmptyString.check(Schema.isTrimmed()).check(
 );
 
 /** Maximum number of recent Transactions requested by one list widget. */
-export const TransactionListLimit = Schema.Finite.check(
-  Schema.isInt(),
-  Schema.isBetween({ minimum: 1, maximum: 50 })
-).pipe(Schema.brand("TransactionListLimit"));
+export const TransactionListLimit = Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 50 }))
+  .pipe(Schema.brand("TransactionListLimit"))
+  .annotate({ identifier: "TransactionListLimit" });
 export type TransactionListLimit = typeof TransactionListLimit.Type;
 
 const WidgetBase = {
@@ -242,7 +194,7 @@ const WidgetBase = {
 /** A time-bounded chart whose eventual Money output remains grouped by Currency. */
 export const SpendingChartWidget = Schema.Struct({
   ...WidgetBase,
-  type: Schema.Literal("spending-chart"),
+  type: Schema.tag("spending-chart"),
   groupBy: SpendingGroupBy,
   period: DashboardPeriod,
   categories: Schema.optionalKey(CategoryFilter),
@@ -252,7 +204,7 @@ export type SpendingChartWidget = typeof SpendingChartWidget.Type;
 /** A current monthly Budget selected by its Category and explicit Currency. */
 export const BudgetBarWidget = Schema.Struct({
   ...WidgetBase,
-  type: Schema.Literal("budget-bar"),
+  type: Schema.tag("budget-bar"),
   categoryId: CategoryId,
   currency: Currency,
 }).annotate({ identifier: "BudgetBarWidget" });
@@ -261,7 +213,7 @@ export type BudgetBarWidget = typeof BudgetBarWidget.Type;
 /** Raw recent Transactions; nested Money preserves each Transaction's Currency. */
 export const TransactionListWidget = Schema.Struct({
   ...WidgetBase,
-  type: Schema.Literal("transaction-list"),
+  type: Schema.tag("transaction-list"),
   limit: TransactionListLimit,
   categories: Schema.optionalKey(CategoryFilter),
   search: Schema.optionalKey(TransactionSearch),
@@ -271,7 +223,7 @@ export type TransactionListWidget = typeof TransactionListWidget.Type;
 /** A monetary aggregation whose eventual result is grouped by Currency. */
 export const CustomMetricWidget = Schema.Struct({
   ...WidgetBase,
-  type: Schema.Literal("custom-metric"),
+  type: Schema.tag("custom-metric"),
   label: MetricLabel,
   aggregation: MoneyAggregation,
   period: DashboardPeriod,
@@ -285,14 +237,25 @@ export const Widget = Schema.Union([
   BudgetBarWidget,
   TransactionListWidget,
   CustomMetricWidget,
-]).annotate({ identifier: "Widget" });
+])
+  .annotate({ identifier: "Widget" })
+  .pipe(Schema.toTaggedUnion("type"));
 export type Widget = typeof Widget.Type;
 type WidgetEncoded = typeof Widget.Encoded;
 
-const SpendingChartTemplate = SpendingChartWidget.mapFields(Struct.omit(["id"]));
-const BudgetBarTemplate = BudgetBarWidget.mapFields(Struct.omit(["id"]));
-const TransactionListTemplate = TransactionListWidget.mapFields(Struct.omit(["id"]));
-const CustomMetricTemplate = CustomMetricWidget.mapFields(Struct.omit(["id"]));
+// `mapFields` keeps no struct-level annotation, so each template renames itself.
+const SpendingChartTemplate = SpendingChartWidget.mapFields(Struct.omit(["id"])).annotate({
+  identifier: "SpendingChartTemplate",
+});
+const BudgetBarTemplate = BudgetBarWidget.mapFields(Struct.omit(["id"])).annotate({
+  identifier: "BudgetBarTemplate",
+});
+const TransactionListTemplate = TransactionListWidget.mapFields(Struct.omit(["id"])).annotate({
+  identifier: "TransactionListTemplate",
+});
+const CustomMetricTemplate = CustomMetricWidget.mapFields(Struct.omit(["id"])).annotate({
+  identifier: "CustomMetricTemplate",
+});
 
 /** Catalog-ready Widget config that receives identity only when it is added. */
 export const WidgetTemplate = Schema.Union([
@@ -300,21 +263,19 @@ export const WidgetTemplate = Schema.Union([
   BudgetBarTemplate,
   TransactionListTemplate,
   CustomMetricTemplate,
-]).annotate({ identifier: "WidgetTemplate" });
-type WithoutWidgetId<Value> = Value extends Widget ? Omit<Value, "id"> : never;
-
-/** Decoded catalog Widget configuration before a caller assigns identity. */
-export type WidgetTemplate = WithoutWidgetId<Widget>;
+])
+  .annotate({ identifier: "WidgetTemplate" })
+  .pipe(Schema.toTaggedUnion("type"));
+export type WidgetTemplate = typeof WidgetTemplate.Type;
 
 /** Orientation of a split: row is side-by-side and column is stacked. */
 export const Axis = Schema.Literals(["row", "column"]);
 export type Axis = typeof Axis.Type;
 
 /** Positive bounded integer interpreted only relative to sibling weights. */
-export const SplitWeight = Schema.Finite.check(
-  Schema.isInt(),
-  Schema.isBetween({ minimum: 1, maximum: 1000 })
-).pipe(Schema.brand("SplitWeight"));
+export const SplitWeight = Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 1000 }))
+  .pipe(Schema.brand("SplitWeight"))
+  .annotate({ identifier: "SplitWeight" });
 export type SplitWeight = typeof SplitWeight.Type;
 
 const LeafNode = Schema.Struct({
@@ -501,7 +462,7 @@ export type DashboardCatalog = typeof DashboardCatalog.Type;
 
 /** Edit replacing only the User-visible dashboard heading. */
 export const SetTitle = Schema.Struct({
-  op: Schema.Literal("set-title"),
+  op: Schema.tag("set-title"),
   title: DashboardTitle,
 }).annotate({ identifier: "SetTitle" });
 export type SetTitle = typeof SetTitle.Type;
@@ -522,7 +483,7 @@ export type Placement = typeof Placement.Type;
 
 /** Edit adding a fresh complete Widget at a structural destination. */
 export const AddWidget = Schema.Struct({
-  op: Schema.Literal("add-widget"),
+  op: Schema.tag("add-widget"),
   widget: Widget,
   at: Placement,
 }).annotate({ identifier: "AddWidget" });
@@ -530,14 +491,14 @@ export type AddWidget = typeof AddWidget.Type;
 
 /** Edit removing one Widget while retaining a non-empty canonical layout. */
 export const RemoveWidget = Schema.Struct({
-  op: Schema.Literal("remove-widget"),
+  op: Schema.tag("remove-widget"),
   widgetId: WidgetId,
 }).annotate({ identifier: "RemoveWidget" });
 export type RemoveWidget = typeof RemoveWidget.Type;
 
 /** Edit moving an existing Widget without changing its identity or configuration. */
 export const MoveWidget = Schema.Struct({
-  op: Schema.Literal("move-widget"),
+  op: Schema.tag("move-widget"),
   widgetId: WidgetId,
   at: Placement,
 }).annotate({ identifier: "MoveWidget" });
@@ -545,7 +506,7 @@ export type MoveWidget = typeof MoveWidget.Type;
 
 /** Edit changing the sibling-relative weight of a non-root Widget region. */
 export const ResizeWidget = Schema.Struct({
-  op: Schema.Literal("resize-widget"),
+  op: Schema.tag("resize-widget"),
   widgetId: WidgetId,
   weight: SplitWeight,
 }).annotate({ identifier: "ResizeWidget" });
@@ -553,7 +514,7 @@ export type ResizeWidget = typeof ResizeWidget.Type;
 
 /** Edit replacing a Widget's complete configuration at its existing region. */
 export const UpdateWidget = Schema.Struct({
-  op: Schema.Literal("update-widget"),
+  op: Schema.tag("update-widget"),
   widget: Widget,
 }).annotate({ identifier: "UpdateWidget" });
 export type UpdateWidget = typeof UpdateWidget.Type;
@@ -566,9 +527,9 @@ export const DashboardEdit = Schema.Union([
   MoveWidget,
   ResizeWidget,
   UpdateWidget,
-]).annotate({
-  identifier: "DashboardEdit",
-});
+])
+  .annotate({ identifier: "DashboardEdit" })
+  .pipe(Schema.toTaggedUnion("op"));
 export type DashboardEdit = typeof DashboardEdit.Type;
 
 /** Collects Widgets once in the in-order traversal that also defines mobile order. */
@@ -584,24 +545,31 @@ export type DashboardCategoryReference = Readonly<{
   readonly field: "categoryId" | `categories.${number}`;
 }>;
 
+/** The Widgets whose Category filter is optional; absence is not an empty filter. */
+type FilteredWidget = SpendingChartWidget | TransactionListWidget | CustomMetricWidget;
+
+const collectFilteredWidgetReferences = (
+  widget: Readonly<FilteredWidget>
+): ReadonlyArray<DashboardCategoryReference> =>
+  widget.categories === undefined
+    ? []
+    : widget.categories.map((categoryId, index) => ({
+        categoryId,
+        widgetId: widget.id,
+        field: `categories.${index}` satisfies `categories.${number}`,
+      }));
+
 /** Collects Category references without exposing recursive traversal to the shell. */
 export const collectDashboardCategoryReferences = (
   document: Readonly<DashboardDocument>
 ): ReadonlyArray<DashboardCategoryReference> =>
   collectLayoutWidgets(document.layout).flatMap(
-    (widget): ReadonlyArray<DashboardCategoryReference> => {
-      switch (widget.type) {
-        case "budget-bar":
-          return [{ categoryId: widget.categoryId, widgetId: widget.id, field: "categoryId" }];
-        case "spending-chart":
-        case "transaction-list":
-        case "custom-metric":
-          return (widget.categories ?? []).map((categoryId, index) => ({
-            categoryId,
-            widgetId: widget.id,
-            field: `categories.${index}` satisfies `categories.${number}`,
-          }));
-      }
-      throw new Error("Unexpected Widget variant");
-    }
+    Widget.match({
+      "budget-bar": (widget) => [
+        { categoryId: widget.categoryId, widgetId: widget.id, field: "categoryId" as const },
+      ],
+      "spending-chart": collectFilteredWidgetReferences,
+      "transaction-list": collectFilteredWidgetReferences,
+      "custom-metric": collectFilteredWidgetReferences,
+    })
   );

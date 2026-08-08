@@ -130,7 +130,7 @@ it("reports schema failures when an edit revalidates malformed document data", (
 
   expect(Result.isFailure(outcome) ? outcome.failure : undefined).toMatchObject({
     _tag: "InvalidDashboardResult",
-    issues: [{ message: "The edit produced a document outside DashboardDocument invariants" }],
+    issues: [{ path: Option.some("layout.widget") }],
   });
 });
 

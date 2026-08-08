@@ -1,10 +1,11 @@
-import { expect, it } from "@effect/vitest";
-import { BigDecimal, Effect, Equal, Result, Schema } from "effect";
+import { assert, expect, it } from "@effect/vitest";
+import { BigDecimal, Effect, Equal, Exit, Result, Schema } from "effect";
 import {
   Currency,
   CurrencyMismatch,
   Money,
   MoneyGroups,
+  type ReadonlyMoney,
   addMoney,
   compareMoney,
   currencyMetadata,
@@ -86,21 +87,32 @@ it("adds and compares Money with equal Currency exactly", () => {
   expect(Effect.runSync(compareMoney({ left: money("3"), right: money("2") }))).toBe(1);
 });
 
-it("fails same-Currency operations with typed CurrencyMismatch", () => {
+it("fails same-Currency operations with the exact CurrencyMismatch class", () => {
   const usd = money("1", Currency.make("USD"));
   const cop = money("1", Currency.make("COP"));
+  const expected = Exit.fail(new CurrencyMismatch({ left: "USD", right: "COP" }));
 
-  const addition = Effect.runSync(Effect.result(addMoney({ left: usd, right: cop })));
-  const comparison = Effect.runSync(Effect.result(compareMoney({ left: usd, right: cop })));
-
-  expect(Result.isFailure(addition) ? addition.failure : undefined).toBeInstanceOf(
-    CurrencyMismatch
+  assert.deepStrictEqual(
+    Effect.runSync(Effect.exit(addMoney({ left: usd, right: cop }))),
+    expected
   );
-  expect(Result.isFailure(comparison) ? comparison.failure : undefined).toMatchObject({
-    left: "USD",
-    right: "COP",
-  });
+  assert.deepStrictEqual(
+    Effect.runSync(Effect.exit(compareMoney({ left: usd, right: cop }))),
+    expected
+  );
 });
+
+it.effect.prop(
+  "round-trips every generated Money value without changing its exact meaning",
+  [Money],
+  ([generated]: readonly [ReadonlyMoney]) =>
+    Effect.gen(function* () {
+      const decoded = yield* Schema.decodeUnknownEffect(Money)(encodeMoney(generated));
+
+      expect(decoded.currency).toBe(generated.currency);
+      expect(Equal.equals(decoded.amount, generated.amount)).toBe(true);
+    })
+);
 
 it("groups inflows and outflows separately in deterministic Currency order", () => {
   const groups = Effect.runSync(

@@ -28,6 +28,7 @@ export default defineConfig({
     // The full suite, as vitest.config.ts runs it: a CRAP score is only
     // meaningful against the coverage the whole suite actually produces.
     include: ["src/**/*.test.ts"],
+    globalSetup: ["./tools/vitest-global-setup.ts"],
     // The OpenAI assembly test owns no behavioural function coverage and is
     // still enforced by the main suite. Istanbul's JSON reporter does not exit
     // when that Layer-construction test shares this full-suite worker.

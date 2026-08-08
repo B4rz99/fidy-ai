@@ -21,6 +21,7 @@ export default defineConfig({
   test: {
     include: ["src/**/*.test.ts"],
     exclude: ["src/**/*.acceptance.test.ts"],
+    globalSetup: ["./tools/vitest-global-setup.ts"],
     environment: "node",
     pool: "forks",
     fileParallelism: false,

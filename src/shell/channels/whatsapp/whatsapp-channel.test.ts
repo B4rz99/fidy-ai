@@ -11,6 +11,7 @@ import {
   Layer,
   Option,
   Ref,
+  Schedule,
   Schema,
   Stream,
 } from "effect";
@@ -1460,14 +1461,19 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
             }).pipe(Effect.forkScoped),
           { concurrency: "unbounded" }
         );
-        yield* Effect.sleep("500 millis");
         const refused = yield* HttpClient.post("/webhooks/kapso", {
           headers: {
             "x-webhook-signature": "0".repeat(64),
             "x-idempotency-key": "reader-overflow",
           },
           body: HttpBody.uint8Array(new Uint8Array([123]), "application/json"),
-        });
+        }).pipe(
+          Effect.filterOrFail(
+            (response) => response.status === 429,
+            () => "reader budget not exhausted"
+          ),
+          Effect.retry({ schedule: Schedule.spaced("100 millis"), times: 60 })
+        );
         expect(refused.status).toBe(429);
         yield* Fiber.interruptAll(readers);
       })

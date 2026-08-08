@@ -114,6 +114,10 @@ Build derived shapes from their canonical schemas rather than maintaining parall
 Repos are not services because the main thing that buys is substitution, and we have decided not to
 substitute them. Thirteen unused substitution seams would sit there inviting someone to mock a repo.
 
+Fidy deliberately keeps production Layer values as module-level `FooLive` exports rather than
+Effect v4's `static readonly layer` service convention. The explicit `Live` name distinguishes real
+assembly from test stacks and applies uniformly to class-based services and classless compositions.
+
 ### Classes only where an Effect API asks for one
 
 `Data.TaggedError`, `Schema.ErrorClass` and `Context.Service` are all class-based, so classes are

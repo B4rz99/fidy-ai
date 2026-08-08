@@ -1,0 +1,41 @@
+src/shell/_shared/suggested-operations.ts
+  s_6dff4f67fcd4d8::t_033d4af80afa88 1,76-83
+  s_6dff4f67fcd4d8::t_0ccfa89dc1c4b0 114
+src/shell/agent/agent-service.ts
+  s_6dff4f67fcd4d8::t_eb3c62372faf23 251
+src/shell/tokens/hosted-agent-token.test.ts
+  s_6dff4f67fcd4d8::t_d5b608f47b0fa4 17,33-36
+src/shell/db/development-seed.test.ts
+  s_6dff4f67fcd4d8::t_8336f3fff315da 55-56,85
+src/shell/_shared/suggested-operations.test.ts
+  s_6dff4f67fcd4d8::t_caa9e183f658f0 206
+  s_6dff4f67fcd4d8::t_047f46982e9e84 207
+src/shell/agent/toolkit.ts
+  s_6dff4f67fcd4d8::t_b22ae6ea5127c9 177
+  s_6dff4f67fcd4d8::t_c8839d16422063 1,101-106
+src/shell/testing/authorization.test.ts
+  s_6dff4f67fcd4d8::t_9386b5dcd9831e 442
+  s_6dff4f67fcd4d8::t_6f475e1cbc6908 463-464
+src/shell/testing/suggested-operations.test.ts
+  s_6dff4f67fcd4d8::t_a88f5c9fcd9e56 326
+src/shell/_shared/authz.ts
+  s_6dff4f67fcd4d8::t_f1dacbf83d12e1 9,95-99,101-103,105,107,110-111
+  s_6dff4f67fcd4d8::t_1c1a23073e34af 100,104
+  s_6dff4f67fcd4d8::t_f26a83cf204746 218-220
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "46249a66345c3b6c258d26a1fe3eccda14834b4d",
+  "prompts": {},
+  "sessions": {
+    "s_6dff4f67fcd4d8": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019fe18e-f5f0-76a5-ba04-651e88ce1b01",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": null
+    }
+  }
+}

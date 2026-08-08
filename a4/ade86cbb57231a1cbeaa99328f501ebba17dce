@@ -1,0 +1,28 @@
+src/shell/agent/agent-service.test.ts
+  s_5436cdc90f83b3::t_1594390612f49d 1793
+  s_5436cdc90f83b3::t_0a64b7804621ab 697-720,722-758,760-770,772-775
+  s_5436cdc90f83b3::t_a0707e78fd990f 1761-1777,1779-1782,1784-1787,1794-1864
+  s_5436cdc90f83b3::t_319aa72ed29a82 721
+  s_5436cdc90f83b3::t_32aa9f14ba9d2e 1783,1788-1792
+  s_5436cdc90f83b3::t_d3f8955a16dd03 1778
+src/shell/agent/agent-service.ts
+  s_5436cdc90f83b3::t_d4c35aa434c0fe 542-547,553,572,591
+  s_5436cdc90f83b3::t_5a320faf9f843c 3,74-77,537-541,549-552,554-571,573-590
+  s_5436cdc90f83b3::t_cc56938d7a244a 548
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "a4ade86cbb57231a1cbeaa99328f501ebba17dce",
+  "prompts": {},
+  "sessions": {
+    "s_5436cdc90f83b3": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019fe208-1697-7756-86f0-1f9f807abda1",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

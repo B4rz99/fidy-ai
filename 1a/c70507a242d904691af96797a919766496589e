@@ -1,0 +1,37 @@
+src/main.ts
+  s_5436cdc90f83b3::t_9c1de13f5869e1 6,23
+.env.example
+  s_5436cdc90f83b3::t_c861d1ddac7eda 16-20
+src/shell/agent/agent-service.test.ts
+  s_5436cdc90f83b3::t_0ab43edd062784 827
+  s_5436cdc90f83b3::t_fe715aaa6fe2c4 768-771
+  s_5436cdc90f83b3::t_0a190304c35664 778,785,788-792,795,800,805,810,817
+  s_5436cdc90f83b3::t_f1052418902a62 773-777,779-784,786-787,793-794,796-799,801-804,806-809,811-816
+src/shell/observability/sentry-live.ts
+  s_5436cdc90f83b3::t_b8aeba3427be81 1-2,4-11,13-28
+  s_5436cdc90f83b3::t_08ec8eca5ebd6e 3
+  s_5436cdc90f83b3::t_666b7f167b5b2e 12
+src/shell/observability/sentry-adapter.ts
+  s_5436cdc90f83b3::t_17620c07fd3b84 232-238,240-241,249-250,253,260,272-277
+  s_5436cdc90f83b3::t_e8a0a3d6d88bef 71-79,114-115,123-126,144-145
+  s_5436cdc90f83b3::t_4e5361dd154172 382,386,392-424,434
+  s_5436cdc90f83b3::t_08700b165f2a3e 166,279-280,307-308,329,339-340,367-368,385,387-391
+  s_5436cdc90f83b3::t_45f78bfd6e82df 278
+  s_5436cdc90f83b3::t_97d18f43323abf 383-384
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "1ac70507a242d904691af96797a919766496589e",
+  "prompts": {},
+  "sessions": {
+    "s_5436cdc90f83b3": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019fe208-1697-7756-86f0-1f9f807abda1",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

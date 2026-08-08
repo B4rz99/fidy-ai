@@ -49,8 +49,8 @@ export default defineConfig({
       // Raised in #151 because WhatsApp acceptance now exercises mixed assistant context replay.
       thresholds: {
         autoUpdate: true,
-        branches: 28.16,
-        lines: 60.96,
+        branches: 28.24,
+        lines: 61.01,
       },
     },
   },

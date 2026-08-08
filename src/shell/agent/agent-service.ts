@@ -56,6 +56,7 @@ import {
   transcriptPrompt,
   turnPrompt,
 } from "./model-boundary";
+import { HostedToolCallCap, withHostedToolCallCap } from "./openai";
 import { makeTurnConfirmation } from "./tool-confirmation";
 import { renderTransactionReceipt } from "./transaction-receipt";
 import {
@@ -534,10 +535,12 @@ const generateCurrentTurn = (
     turn,
     continuation,
     malformedOutputFeedback,
+    remainingToolCalls,
   }: Readonly<{
     turn: HostedTurn;
     continuation: TurnModelContinuation;
     malformedOutputFeedback: Option.Option<string>;
+    remainingToolCalls: number;
   }>
 ): Effect.Effect<
   Result.Result<
@@ -557,23 +560,27 @@ const generateCurrentTurn = (
               entry.turnId !== turn.turnId ||
               (entry._tag !== "CanonicalToolCallEntry" && entry._tag !== "CanonicalToolResultEntry")
           );
+    const generation = model.generateText({
+      prompt: [
+        { role: "system", content: systemPrompt(turn.user) },
+        ...transcriptPrompt(durableTranscript),
+        ...continuation,
+        { role: "system", content: turnPrompt(turn.startedAt) },
+        ...Option.match(malformedOutputFeedback, {
+          onNone: () => [],
+          onSome: (feedback) => [{ role: "system" as const, content: feedback }],
+        }),
+      ],
+      toolkit: turn.toolkit,
+      toolChoice: remainingToolCalls === 0 ? "none" : "auto",
+      disableToolCallResolution: true,
+    });
+    const boundedGeneration =
+      remainingToolCalls === 0
+        ? generation
+        : generation.pipe(withHostedToolCallCap(HostedToolCallCap.make(remainingToolCalls)));
     return yield* Effect.result(
-      model
-        .generateText({
-          prompt: [
-            { role: "system", content: systemPrompt(turn.user) },
-            ...transcriptPrompt(durableTranscript),
-            ...continuation,
-            { role: "system", content: turnPrompt(turn.startedAt) },
-            ...Option.match(malformedOutputFeedback, {
-              onNone: () => [],
-              onSome: (feedback) => [{ role: "system" as const, content: feedback }],
-            }),
-          ],
-          toolkit: turn.toolkit,
-          disableToolCallResolution: true,
-        })
-        .pipe(Effect.timeout(`${turn.limits.maxModelRoundMillis} millis`))
+      boundedGeneration.pipe(Effect.timeout(`${turn.limits.maxModelRoundMillis} millis`))
     );
   });
 
@@ -734,6 +741,7 @@ const runHostedTurn = (
           turn,
           continuation,
           malformedOutputFeedback: feedback,
+          remainingToolCalls: turn.limits.maxToolCallsPerTurn - toolCalls,
         })
       );
       if (roundDecision._tag === "Retry") {

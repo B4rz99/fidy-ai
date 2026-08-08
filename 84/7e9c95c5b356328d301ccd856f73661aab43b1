@@ -12,6 +12,7 @@ src/shell/categories/handlers.ts
   s_06825cdf95b6d4::t_2ec236d8ec5d7d 23,136,138,142,144,148,156,173
   s_06825cdf95b6d4::t_2b8e07d1afc57a 27
   s_06825cdf95b6d4::t_eefad9fe2ff506 44-48
+  s_06825cdf95b6d4::t_bda5cae99601d5 94,127
 src/shell/dashboard/errors.ts
   s_06825cdf95b6d4::t_63db9953063de0 67-84,143
   s_06825cdf95b6d4::t_dc316a0e5f41c0 146-148
@@ -82,6 +83,7 @@ src/shell/dashboard/handlers.ts
   s_06825cdf95b6d4::t_ce1897d05fa376 14-15,17,121-125
   s_06825cdf95b6d4::t_2b8e07d1afc57a 16
   s_06825cdf95b6d4::t_d9483bf2515d58 90,120
+  s_06825cdf95b6d4::t_cdcbc3411bab19 100
 ---
 {
   "schema_version": "authorship/3.0.0",

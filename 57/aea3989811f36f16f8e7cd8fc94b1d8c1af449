@@ -1,0 +1,21 @@
+src/shell/agent/agent-service.test.ts
+  s_87a2c022dbb65f::t_4a3f1976d8f76f 459-497,644,716-748
+src/shell/agent/agent-service.ts
+  s_87a2c022dbb65f::t_dcebbddfba6415 16,337,341-342,533-541,552-559,565-566,628,683-717,728,733-737,751-756
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "57aea3989811f36f16f8e7cd8fc94b1d8c1af449",
+  "prompts": {},
+  "sessions": {
+    "s_87a2c022dbb65f": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019fe1fb-4aa6-7a6e-9831-2bec41f7cb76",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

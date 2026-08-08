@@ -1,0 +1,21 @@
+src/shell/observability/telemetry.ts
+  s_5436cdc90f83b3::t_97fd2fc2cdfdcf 75-80,87
+src/shell/observability/sentry-adapter.ts
+  s_5436cdc90f83b3::t_e37c17f62c411b 22,412-413
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "5192d486566b835d8e5e8cb8697a33483e8a870a",
+  "prompts": {},
+  "sessions": {
+    "s_5436cdc90f83b3": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019fe208-1697-7756-86f0-1f9f807abda1",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

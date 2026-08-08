@@ -132,69 +132,6 @@ const noEscapeHatch = {
 };
 
 /**
- * Arrow, `function` expression, `function` declaration — three spellings of one
- * shape. The declaration form is included because `export default function` and
- * `export function` parse to it, and `func-style` does not reach either.
- */
-const isFunction = (node) =>
-  node?.type === "ArrowFunctionExpression" ||
-  node?.type === "FunctionExpression" ||
-  node?.type === "FunctionDeclaration";
-
-/**
- * The function a function's body evaluates to, whether written as a concise
- * expression or returned from a block. Length is checked before the element is
- * read, so an empty body cannot depend on `||` short-circuiting to stay safe.
- */
-const returnedFunction = (fn) => {
-  if (isFunction(fn.body)) return fn.body;
-  if (fn.body.type !== "BlockStatement" || fn.body.body.length !== 1) return undefined;
-  const [only] = fn.body.body;
-  if (only.type !== "ReturnStatement") return undefined;
-  return isFunction(only.argument) ? only.argument : undefined;
-};
-
-/** A function whose whole body is another function: the shape this rule bans. */
-const isCurried = (node) => isFunction(node) && returnedFunction(node) !== undefined;
-
-/**
- * Whether an initializer puts a curried function within reach of a destructuring
- * pattern — `[curried]`, `{ f: curried }`, or the degenerate `[f] = curried`.
- * One level in, which is as far as a pattern on an export binds a name directly
- * to a function.
- */
-const yieldsCurried = (init) => {
-  if (init?.type === "ArrayExpression") return init.elements.some(isCurried);
-  if (init?.type === "ObjectExpression") {
-    return init.properties.some((property) => isCurried(property.value));
-  }
-  return isCurried(init);
-};
-
-/**
- * The curried bindings a declaration makes, as `[name, node]` pairs. The name is
- * undefined when the binding is a destructuring pattern: its names cannot be
- * attributed to one initializer position, so the binding is reportable where it
- * stands but unresolvable from a later `export { name }`.
- */
-const curriedBindings = (declaration) => {
-  if (isCurried(declaration)) {
-    return declaration.id?.type === "Identifier" ? [[declaration.id.name, declaration]] : [];
-  }
-  if (declaration?.type !== "VariableDeclaration") return [];
-  return declaration.declarations.flatMap((declarator) => {
-    if (declarator.id.type !== "Identifier") {
-      return yieldsCurried(declarator.init) ? [[undefined, declarator]] : [];
-    }
-    return isCurried(declarator.init) ? [[declarator.id.name, declarator]] : [];
-  });
-};
-
-/** The curried bindings a top-level statement makes, seen through any `export` wrapper. */
-const curriedEntries = (statement) =>
-  curriedBindings(statement.type === "ExportNamedDeclaration" ? statement.declaration : statement);
-
-/**
  * Index a module's top-level statements by the names they bind, as `bindingsOf`
  * reports them. Nameless entries are dropped: nothing can refer to them by name.
  */
@@ -213,85 +150,6 @@ const exportedLocals = (statement) =>
       ? [[specifier, specifier.local.name]]
       : []
   );
-
-/**
- * Ban exported curried functions. `missingPipeableSignature` narrows every
- * exported function to one argument or a curried form and treats the two as
- * equally acceptable; they are not. Currying earns its place where partial
- * application is genuinely used — where the first argument is bound once and
- * the result carried around — and in an application nobody holds
- * `insertTransaction(userId)` as a value.
- *
- * Internal functions are unaffected: a curried helper inside a module costs
- * nobody a signature they have to guess at.
- *
- * Every spelling that hands a function to another module is checked here:
- * `export const`, `export function`, a bare `export { name }`, and
- * `export default` in each of its forms — arrow, `function` expression,
- * `function` declaration, and an identifier bound above. The `function`
- * declarations are not left to `func-style`, which does not apply to a
- * default-exported declaration at all; two earlier versions read as complete
- * while a spelling walked past, so each one is probed rather than assumed.
- *
- * A destructuring export — `export const [f] = [curried]` — binds names this
- * rule cannot attribute to one initializer position, so it is reported whole,
- * one level into the initializer.
- */
-const noCurriedExport = {
-  meta: {
-    type: "problem",
-    docs: { description: "Disallow exported curried functions" },
-    messages: {
-      noCurriedExport:
-        "`{{name}}` is exported curried. The convention is an options object by default — the shape Effect's own SqlSchema.findOne({ Request, Result, execute }) takes — and currying only where partial application is actually used. A curried export nobody partially applies is two call syntaxes for one operation, costing signature help and readability and buying nothing. Internal functions are unaffected.",
-    },
-    schema: [],
-  },
-  create(context) {
-    const report = (node, name) =>
-      context.report({ node, messageId: "noCurriedExport", data: { name } });
-
-    const reportSpecifiers = (statement, curried) => {
-      for (const [specifier, name] of exportedLocals(statement)) {
-        if (curried.has(name)) report(specifier, name);
-      }
-    };
-
-    /** `export const f = …` / `export function f() {…}`, or a bare `export { f }`. */
-    const reportNamed = (statement, curried) => {
-      if (statement.declaration === null) return reportSpecifiers(statement, curried);
-      for (const [name, node] of curriedBindings(statement.declaration)) {
-        report(node, name === undefined ? "This export" : name);
-      }
-    };
-
-    /** `export default` — a function written inline, or an identifier bound above. */
-    const reportDefault = (statement, curried) => {
-      const exported = statement.declaration;
-      if (isCurried(exported)) {
-        const named = exported.id?.type === "Identifier";
-        report(statement, named ? exported.id.name : "The default export");
-        return;
-      }
-      if (exported.type === "Identifier" && curried.has(exported.name)) {
-        report(statement, exported.name);
-      }
-    };
-
-    // One pass over the module rather than a visitor per export form: a bare
-    // `export { name }` has to be resolved against a declaration that may sit
-    // anywhere above or below it, so the whole body has to be in hand either way.
-    return {
-      Program(program) {
-        const curried = indexByName(program, curriedEntries);
-        for (const statement of program.body) {
-          if (statement.type === "ExportNamedDeclaration") reportNamed(statement, curried);
-          if (statement.type === "ExportDefaultDeclaration") reportDefault(statement, curried);
-        }
-      },
-    };
-  },
-};
 
 /** The leftmost identifier of a `typeof X` / `typeof X.Y` query, or undefined. */
 const typeQueryRoot = (typeAnnotation) => {
@@ -695,7 +553,6 @@ const plugin = {
     "no-disable-validation": noDisableValidation,
     "no-escape-hatch": noEscapeHatch,
     "no-datetime-internals": noDateTimeInternals,
-    "no-curried-export": noCurriedExport,
     "require-interface-comment": requireInterfaceComment,
     "scalar-brand-only": scalarBrandOnly,
   },

@@ -1,4 +1,4 @@
-import { type Option, Schema } from "effect";
+import { Function, type Option, Schema } from "effect";
 import { type HttpApiEndpoint } from "effect/unstable/httpapi";
 import { type AgentScope } from "~/core/tokens/model";
 import { type FidyApi, type OperationId, operationCatalog } from "~/shell/api";
@@ -73,14 +73,14 @@ const hasRequiredTier = (requiredTier: OperationTier, callerTier: OperationTier)
  * read. `free` operations are available to both tiers; Pro operations require a
  * Pro caller, and every operation still requires its declared AgentToken scope.
  */
-export const canCallOperation = ({
-  policy,
-  caller,
-}: {
-  readonly policy: OperationPolicyValue;
-  readonly caller: SuggestedOperationCaller;
-}): boolean =>
-  caller.scopes.includes(policy.requiredScope) && hasRequiredTier(policy.requiredTier, caller.tier);
+export const canCallOperation: {
+  (caller: SuggestedOperationCaller): (self: OperationPolicyValue) => boolean;
+  (self: OperationPolicyValue, caller: SuggestedOperationCaller): boolean;
+} = Function.dual(
+  2,
+  (self: OperationPolicyValue, caller: SuggestedOperationCaller): boolean =>
+    caller.scopes.includes(self.requiredScope) && hasRequiredTier(self.requiredTier, caller.tier)
+);
 
 const validationOptions = {
   errors: "all",
@@ -111,7 +111,7 @@ export const checkpointSuggestedOperations = ({
     if (target === undefined) {
       throw new Error(`Unknown canonical operation id: ${candidate.tool}`);
     }
-    return canCallOperation({ policy: target.policy, caller });
+    return canCallOperation(target.policy, caller);
   });
 
   Schema.encodeUnknownSync(NextOperations, validationOptions)(available);

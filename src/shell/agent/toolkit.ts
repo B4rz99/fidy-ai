@@ -1,4 +1,4 @@
-import { Context, Effect, Layer, Option, Predicate, Schema, type Scope } from "effect";
+import { Context, Effect, Function, Layer, Option, Predicate, Schema, type Scope } from "effect";
 import type { HttpClient } from "effect/unstable/http";
 import { HttpApiClient } from "effect/unstable/httpapi";
 import { Tool, Toolkit } from "effect/unstable/ai";
@@ -98,14 +98,12 @@ const confirmationGuidance = (agentConfirmation: AgentConfirmation): string =>
     : " The host manages exact confirmation for this operation; call the tool rather than asking the User for informal confirmation.";
 
 /** Decodes a provider-safe tool input into the canonical operation input type. */
-export const decodeAgentOperationInput = ({
-  binding,
-  input,
-}: Readonly<{
-  binding: AgentOperationBinding;
-  input: unknown;
-}>): Effect.Effect<unknown, Schema.SchemaError> =>
-  Schema.decodeUnknownEffect(binding.parameters)(input);
+export const decodeAgentOperationInput: {
+  (input: unknown): (self: AgentOperationBinding) => Effect.Effect<unknown, Schema.SchemaError>;
+  (self: AgentOperationBinding, input: unknown): Effect.Effect<unknown, Schema.SchemaError>;
+} = Function.dual(2, (self: AgentOperationBinding, input: unknown) =>
+  Schema.decodeUnknownEffect(self.parameters)(input)
+);
 
 const tools = agentOperationBindings.map((binding) =>
   Tool.dynamic(binding.wireName, {
@@ -176,7 +174,7 @@ export const makeAgentToolkit = (
       agentOperationBindings.map((binding) => [
         binding.wireName,
         (input: unknown): Effect.Effect<unknown, object | Schema.SchemaError> =>
-          decodeAgentOperationInput({ binding, input }).pipe(
+          decodeAgentOperationInput(binding, input).pipe(
             Effect.flatMap((decoded) => callOperation(client, binding, decoded))
           ),
       ])

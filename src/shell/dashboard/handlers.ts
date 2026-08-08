@@ -10,7 +10,11 @@ import {
   collectDashboardCategoryReferences,
 } from "~/core/dashboard/model";
 import { applyDashboardEdit } from "~/core/dashboard/rules";
-import { resolveCaller } from "~/shell/_shared/authz";
+import { ResolvedCaller } from "~/shell/_shared/authz";
+import {
+  type SuggestedOperationCaller,
+  makeFreeSuggestedOperationCaller,
+} from "~/shell/_shared/suggested-operations";
 import { FidyApi } from "~/shell/api";
 import { categoryIds } from "~/core/categories/taxonomy";
 import { findCategory } from "~/shell/categories/repo";
@@ -83,6 +87,7 @@ const getDashboard = (
 const applyEdit = (input: {
   readonly userId: UserId;
   readonly edit: DashboardEdit;
+  readonly caller: SuggestedOperationCaller;
 }): Effect.Effect<DashboardDocument, DashboardApiFailure, SqlClient.SqlClient> =>
   withDashboardLock(
     input.userId,
@@ -92,28 +97,32 @@ const applyEdit = (input: {
       yield* validateCategoryReferences(candidate, input.edit);
       return yield* updateDashboard(input.userId, candidate);
     })
-  ).pipe(Effect.mapError(toApiFailure));
+  ).pipe(Effect.mapError((failure) => toApiFailure({ failure, caller: input.caller })));
 
 /** Resolves User ownership before every dashboard read or atomic edit. */
 export const DashboardLive = HttpApiBuilder.group(FidyApi, "dashboard", (handlers) =>
   handlers
-    .handle("getDashboard", ({ request }) =>
+    .handle("getDashboard", () =>
       Effect.gen(function* () {
-        const { subjectUserId: userId } = yield* resolveCaller(request);
+        const { subjectUserId: userId } = yield* ResolvedCaller;
         const document = yield* getDashboard(userId);
         return { data: document, next: [] };
       })
     )
-    .handle("listDashboardCatalog", ({ request }) =>
+    .handle("listDashboardCatalog", () =>
       Effect.gen(function* () {
-        yield* resolveCaller(request);
+        yield* ResolvedCaller;
         return { data: dashboardCatalog, next: [] };
       })
     )
-    .handle("applyDashboardEdit", ({ payload: edit, request }) =>
+    .handle("applyDashboardEdit", ({ payload: edit }) =>
       Effect.gen(function* () {
-        const { subjectUserId: userId } = yield* resolveCaller(request);
-        const document = yield* applyEdit({ userId, edit });
+        const { scopes, subjectUserId: userId } = yield* ResolvedCaller;
+        const document = yield* applyEdit({
+          userId,
+          edit,
+          caller: makeFreeSuggestedOperationCaller(scopes),
+        });
         return { data: document, next: [] };
       })
     )

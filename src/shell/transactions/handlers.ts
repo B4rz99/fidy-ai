@@ -1,6 +1,5 @@
-import { type Crypto, DateTime, Effect, Option } from "effect";
+import { DateTime, Effect, Option } from "effect";
 import { HttpApiBuilder } from "effect/unstable/httpapi";
-import { type HttpServerRequest } from "effect/unstable/http";
 import { SqlClient } from "effect/unstable/sql";
 import { type Category } from "~/core/categories/model";
 import { type CategoryId } from "~/core/categories/reference";
@@ -18,12 +17,13 @@ import {
   UpdateTransactionInput,
 } from "~/core/transactions/model";
 import { checkAlreadyOccurred, checkTransactionPeriod } from "~/core/transactions/rules";
-import { resolveCaller } from "~/shell/_shared/authz";
-import type { NotFound, Unauthenticated, ValidationFailed } from "~/shell/_shared/errors";
+import { ResolvedCaller } from "~/shell/_shared/authz";
+import type { NotFound, ValidationFailed } from "~/shell/_shared/errors";
 import { type SuggestedOperation } from "~/shell/_shared/response";
 import {
   type SuggestedOperationCaller,
   checkpointSuggestedOperations,
+  makeFreeSuggestedOperationCaller,
   suggestOperation,
 } from "~/shell/_shared/suggested-operations";
 import { FidyApi } from "~/shell/api";
@@ -31,7 +31,11 @@ import { categorizeCapture } from "~/shell/categories/categorizer";
 import { toApiFailure as categoryToApiFailure } from "~/shell/categories/errors";
 import { findCategory } from "~/shell/categories/repo";
 import { findUser } from "~/shell/identity/repo";
-import { type TransactionApiFailure, mapTransactionFailure } from "./errors";
+import {
+  type TransactionApiFailure,
+  mapTransactionFailure,
+  mapTransactionValidationFailure,
+} from "./errors";
 import {
   findTransaction,
   insertManualSourceAttestation,
@@ -47,25 +51,19 @@ const missingTransaction = (transactionId: TransactionId) => (): TransactionNotF
 const missingCategory = (categoryId: CategoryId) => (): CategoryNotFound =>
   new CategoryNotFound({ categoryId });
 
-const suggestedOperationCaller = (
-  scopes: SuggestedOperationCaller["scopes"]
-): SuggestedOperationCaller => ({ scopes, tier: "free" });
-
-const resolveTransactionCaller = (
-  request: HttpServerRequest.HttpServerRequest
-): Effect.Effect<
+const resolveTransactionCaller: Effect.Effect<
   { userId: UserId; caller: SuggestedOperationCaller },
-  Unauthenticated,
-  Crypto.Crypto | SqlClient.SqlClient
-> =>
-  Effect.map(resolveCaller(request), ({ scopes, subjectUserId }) => ({
-    userId: subjectUserId,
-    caller: suggestedOperationCaller(scopes),
-  }));
+  never,
+  ResolvedCaller
+> = Effect.map(ResolvedCaller, ({ scopes, subjectUserId }) => ({
+  userId: subjectUserId,
+  caller: makeFreeSuggestedOperationCaller(scopes),
+}));
 
 const captureCategory = (
   userId: Parameters<typeof categorizeCapture>[0]["userId"],
-  input: CreateTransactionInput
+  input: CreateTransactionInput,
+  caller: SuggestedOperationCaller
 ): Effect.Effect<CategoryId, NotFound | ValidationFailed, SqlClient.SqlClient> =>
   Effect.gen(function* () {
     const callerCategory = yield* Option.match(input.categoryId, {
@@ -74,18 +72,19 @@ const captureCategory = (
         findCategory(categoryId).pipe(
           Effect.flatMap(Effect.fromOption(missingCategory(categoryId))),
           Effect.as(Option.some(categoryId)),
-          Effect.mapError(categoryToApiFailure)
+          Effect.mapError((failure) => categoryToApiFailure({ failure, caller }))
         ),
     });
     return yield* categorizeCapture({ userId, counterparty: input.counterparty, callerCategory });
   });
 
 const requireKnownCategory = (
-  categoryId: CategoryId
+  categoryId: CategoryId,
+  caller: SuggestedOperationCaller
 ): Effect.Effect<Category, NotFound | ValidationFailed, SqlClient.SqlClient> =>
   findCategory(categoryId).pipe(
     Effect.flatMap(Effect.fromOption(missingCategory(categoryId))),
-    Effect.mapError(categoryToApiFailure)
+    Effect.mapError((failure) => categoryToApiFailure({ failure, caller }))
   );
 
 const persistManualCapture = (
@@ -118,7 +117,7 @@ const captureTransaction = ({
       mapTransactionFailure({ caller })
     );
 
-    const categoryId = yield* captureCategory(userId, payload);
+    const categoryId = yield* captureCategory(userId, payload, caller);
     const input = UpdateTransactionInput.make({ ...payload, categoryId });
     const user = yield* findUser(userId).pipe(Effect.flatMap(Effect.fromOption), Effect.orDie);
     return yield* persistManualCapture(userId, input, {
@@ -162,11 +161,11 @@ const listUserTransactions = ({
   userId: UserId;
   filters: Partial<typeof TransactionQueryValues.Type>;
   caller: SuggestedOperationCaller;
-}>): Effect.Effect<ReadonlyArray<Transaction>, TransactionApiFailure, SqlClient.SqlClient> =>
+}>): Effect.Effect<ReadonlyArray<Transaction>, ValidationFailed, SqlClient.SqlClient> =>
   Effect.gen(function* () {
     const query = toTransactionQuery(filters);
     yield* checkTransactionPeriod({ from: query.from, to: query.to }).pipe(
-      mapTransactionFailure({ caller })
+      mapTransactionValidationFailure({ caller })
     );
     return yield* listTransactions(userId, query);
   });
@@ -187,7 +186,7 @@ const correctTransaction = ({
     yield* checkAlreadyOccurred({ occurredAt: payload.occurredAt, now }).pipe(
       mapTransactionFailure({ caller })
     );
-    yield* requireKnownCategory(payload.categoryId);
+    yield* requireKnownCategory(payload.categoryId, caller);
     return yield* updateTransaction(userId, transactionId, payload).pipe(
       Effect.flatMap(Effect.fromOption(missingTransaction(transactionId))),
       mapTransactionFailure({ caller })
@@ -216,23 +215,23 @@ const readSourceAttestations = ({
 /** Provides caller-owned Transaction capture, history, correction, deletion, and provenance. */
 export const TransactionsLive = HttpApiBuilder.group(FidyApi, "transactions", (handlers) =>
   handlers
-    .handle("createTransaction", ({ payload, request }) =>
+    .handle("createTransaction", ({ payload }) =>
       Effect.gen(function* () {
-        const { userId, caller } = yield* resolveTransactionCaller(request);
+        const { userId, caller } = yield* resolveTransactionCaller;
         const transaction = yield* captureTransaction({ userId, payload, caller });
         return { data: transaction, next: capturedTransactionOperations(caller) };
       })
     )
-    .handle("listTransactions", ({ query: filters, request }) =>
+    .handle("listTransactions", ({ query: filters }) =>
       Effect.gen(function* () {
-        const { userId, caller } = yield* resolveTransactionCaller(request);
+        const { userId, caller } = yield* resolveTransactionCaller;
         const transactions = yield* listUserTransactions({ userId, filters, caller });
         return { data: transactions, next: [] };
       })
     )
-    .handle("getTransaction", ({ params, request }) =>
+    .handle("getTransaction", ({ params }) =>
       Effect.gen(function* () {
-        const { userId, caller } = yield* resolveTransactionCaller(request);
+        const { userId, caller } = yield* resolveTransactionCaller;
         const transaction = yield* findTransaction(userId, params.id).pipe(
           Effect.flatMap(Effect.fromOption(missingTransaction(params.id))),
           mapTransactionFailure({ caller })
@@ -240,9 +239,9 @@ export const TransactionsLive = HttpApiBuilder.group(FidyApi, "transactions", (h
         return { data: transaction, next: [] };
       })
     )
-    .handle("updateTransaction", ({ params, payload, request }) =>
+    .handle("updateTransaction", ({ params, payload }) =>
       Effect.gen(function* () {
-        const { userId, caller } = yield* resolveTransactionCaller(request);
+        const { userId, caller } = yield* resolveTransactionCaller;
         const transaction = yield* correctTransaction({
           userId,
           transactionId: params.id,
@@ -252,9 +251,9 @@ export const TransactionsLive = HttpApiBuilder.group(FidyApi, "transactions", (h
         return { data: transaction, next: [] };
       })
     )
-    .handle("deleteTransaction", ({ params, request }) =>
+    .handle("deleteTransaction", ({ params }) =>
       Effect.gen(function* () {
-        const { userId, caller } = yield* resolveTransactionCaller(request);
+        const { userId, caller } = yield* resolveTransactionCaller;
         const id = yield* softDeleteTransaction(userId, params.id).pipe(
           Effect.flatMap(Effect.fromOption(missingTransaction(params.id))),
           mapTransactionFailure({ caller })
@@ -262,9 +261,9 @@ export const TransactionsLive = HttpApiBuilder.group(FidyApi, "transactions", (h
         return { data: id, next: [] };
       })
     )
-    .handle("listSourceAttestations", ({ params, request }) =>
+    .handle("listSourceAttestations", ({ params }) =>
       Effect.gen(function* () {
-        const { userId, caller } = yield* resolveTransactionCaller(request);
+        const { userId, caller } = yield* resolveTransactionCaller;
         const attestations = yield* readSourceAttestations({
           userId,
           transactionId: params.id,

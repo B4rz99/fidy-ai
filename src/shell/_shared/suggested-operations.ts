@@ -60,6 +60,11 @@ export type SuggestedOperationCaller = {
   readonly tier: OperationTier;
 };
 
+/** Converts the current free-tier authorization facts into suggestion checkpoint input. */
+export const makeFreeSuggestedOperationCaller = (
+  scopes: SuggestedOperationCaller["scopes"]
+): SuggestedOperationCaller => ({ scopes, tier: "free" });
+
 const hasRequiredTier = (requiredTier: OperationTier, callerTier: OperationTier): boolean =>
   requiredTier === "free" || callerTier === "pro";
 

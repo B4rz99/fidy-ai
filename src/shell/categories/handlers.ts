@@ -20,8 +20,12 @@ import {
   hasKeywordRule,
   maximumKeywordRulesPerUser,
 } from "~/core/categories/rules";
-import { resolveCaller } from "~/shell/_shared/authz";
+import { ResolvedCaller } from "~/shell/_shared/authz";
 import type { NotFound, ValidationFailed } from "~/shell/_shared/errors";
+import {
+  type SuggestedOperationCaller,
+  makeFreeSuggestedOperationCaller,
+} from "~/shell/_shared/suggested-operations";
 import { FidyApi } from "~/shell/api";
 import { toApiFailure } from "./errors";
 import {
@@ -36,6 +40,11 @@ import {
 
 const missingRule = (keywordRuleId: KeywordRuleId) => (): KeywordRuleNotFound =>
   new KeywordRuleNotFound({ keywordRuleId });
+
+const mapCategoryFailure =
+  (caller: SuggestedOperationCaller) =>
+  (failure: Parameters<typeof toApiFailure>[0]["failure"]): NotFound | ValidationFailed =>
+    toApiFailure({ failure, caller });
 
 const validateKeywordRules = ({
   rules,
@@ -60,16 +69,18 @@ const validateKeywordRules = ({
 const createRule = ({
   userId,
   input,
+  caller,
 }: Readonly<{
   userId: UserId;
   input: CreateKeywordRuleInput;
+  caller: SuggestedOperationCaller;
 }>): Effect.Effect<KeywordRule, NotFound | ValidationFailed, SqlClient.SqlClient> =>
   Effect.gen(function* () {
     yield* findCategory(input.categoryId).pipe(
       Effect.flatMap(
         Effect.fromOption(() => new CategoryNotFound({ categoryId: input.categoryId }))
       ),
-      Effect.mapError(toApiFailure)
+      Effect.mapError(mapCategoryFailure(caller))
     );
     return yield* withKeywordLock(
       userId,
@@ -80,7 +91,7 @@ const createRule = ({
           keyword: input.keyword,
           except: Option.none(),
           enforceCapacity: true,
-        }).pipe(Effect.mapError(toApiFailure));
+        }).pipe(Effect.mapError(mapCategoryFailure(caller)));
         return yield* insertKeywordRule(userId, input);
       })
     );
@@ -90,17 +101,19 @@ const updateRule = ({
   userId,
   id,
   input,
+  caller,
 }: Readonly<{
   userId: UserId;
   id: KeywordRuleId;
   input: UpdateKeywordRuleInput;
+  caller: SuggestedOperationCaller;
 }>): Effect.Effect<Option.Option<KeywordRule>, NotFound | ValidationFailed, SqlClient.SqlClient> =>
   Effect.gen(function* () {
     yield* findCategory(input.categoryId).pipe(
       Effect.flatMap(
         Effect.fromOption(() => new CategoryNotFound({ categoryId: input.categoryId }))
       ),
-      Effect.mapError(toApiFailure)
+      Effect.mapError(mapCategoryFailure(caller))
     );
     return yield* withKeywordLock(
       userId,
@@ -111,7 +124,7 @@ const updateRule = ({
           keyword: input.keyword,
           except: Option.some(id),
           enforceCapacity: false,
-        }).pipe(Effect.mapError(toApiFailure));
+        }).pipe(Effect.mapError(mapCategoryFailure(caller)));
         return yield* updateKeywordRule(userId, id, input);
       })
     );
@@ -120,47 +133,51 @@ const updateRule = ({
 /** Provides public Categories and bounded, deterministic User keyword-rule management. */
 export const CategoriesLive = HttpApiBuilder.group(FidyApi, "categories", (handlers) =>
   handlers
-    .handle("listCategories", ({ request }) =>
+    .handle("listCategories", () =>
       Effect.gen(function* () {
-        yield* resolveCaller(request);
+        yield* ResolvedCaller;
         return { data: yield* listCategories, next: [] };
       })
     )
-    .handle("listKeywordRules", ({ request }) =>
+    .handle("listKeywordRules", () =>
       Effect.gen(function* () {
-        const { subjectUserId } = yield* resolveCaller(request);
+        const { subjectUserId } = yield* ResolvedCaller;
         return { data: yield* listKeywordRules(subjectUserId), next: [] };
       })
     )
-    .handle("createKeywordRule", ({ payload, request }) =>
+    .handle("createKeywordRule", ({ payload }) =>
       Effect.gen(function* () {
-        const { subjectUserId } = yield* resolveCaller(request);
-        const rule = yield* createRule({ userId: subjectUserId, input: payload });
+        const { scopes, subjectUserId } = yield* ResolvedCaller;
+        const caller = makeFreeSuggestedOperationCaller(scopes);
+        const rule = yield* createRule({ userId: subjectUserId, input: payload, caller });
         return { data: rule, next: [] };
       })
     )
-    .handle("updateKeywordRule", ({ params, payload, request }) =>
+    .handle("updateKeywordRule", ({ params, payload }) =>
       Effect.gen(function* () {
-        const { subjectUserId } = yield* resolveCaller(request);
+        const { scopes, subjectUserId } = yield* ResolvedCaller;
+        const caller = makeFreeSuggestedOperationCaller(scopes);
         const found = yield* updateRule({
           userId: subjectUserId,
           id: params.id,
           input: payload,
+          caller,
         });
         const rule = yield* found.pipe(
           Effect.fromOption(missingRule(params.id)),
-          Effect.mapError(toApiFailure)
+          Effect.mapError(mapCategoryFailure(caller))
         );
         return { data: rule, next: [] };
       })
     )
-    .handle("deleteKeywordRule", ({ params, request }) =>
+    .handle("deleteKeywordRule", ({ params }) =>
       Effect.gen(function* () {
-        const { subjectUserId } = yield* resolveCaller(request);
+        const { scopes, subjectUserId } = yield* ResolvedCaller;
+        const caller = makeFreeSuggestedOperationCaller(scopes);
         const found = yield* deleteKeywordRule(subjectUserId, params.id);
         const id = yield* found.pipe(
           Effect.fromOption(missingRule(params.id)),
-          Effect.mapError(toApiFailure)
+          Effect.mapError(mapCategoryFailure(caller))
         );
         return { data: id, next: [] };
       })

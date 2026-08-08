@@ -89,6 +89,10 @@ export const NextOperations = Schema.Array(SuggestedOperation)
       "an omission. Each entry has passed the target-input and caller-authorization checkpoint.",
   });
 
+/** Supports the reflection guard that prevents endpoints from bypassing the universal envelope. */
+export const isOperationResponse = (schema: Schema.Top): boolean =>
+  Schema.resolveAnnotations(schema)?.operationResponse === true;
+
 /**
  * The universal success response. Every canonical operation's success schema
  * is built with this combinator — top-level only, no per-operation opt-out.
@@ -99,4 +103,4 @@ export const OperationResponse = <Data extends Schema.Top>(
   Schema.Struct({
     data,
     next: NextOperations,
-  });
+  }).annotate({ operationResponse: true });

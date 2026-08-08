@@ -70,19 +70,26 @@ const futureMovementRejected = (failure: TransactionNotYetOccurred): ValidationF
     next: [],
   });
 
-const toApiFailure = ({
+type TransactionValidationFailure = InvalidTransactionPeriod | TransactionNotYetOccurred;
+
+type FailureMappingInput<Failure extends TransactionFailure> = {
+  readonly failure: Failure;
+  readonly caller: SuggestedOperationCaller;
+};
+
+function toApiFailure(input: FailureMappingInput<TransactionValidationFailure>): ValidationFailed;
+function toApiFailure(input: FailureMappingInput<TransactionFailure>): TransactionApiFailure;
+function toApiFailure({
   failure,
   caller,
-}: {
-  readonly failure: TransactionFailure;
-  readonly caller: SuggestedOperationCaller;
-}): TransactionApiFailure =>
-  Match.typeTags<TransactionFailure, TransactionApiFailure>()({
+}: FailureMappingInput<TransactionFailure>): TransactionApiFailure {
+  return Match.typeTags<TransactionFailure, TransactionApiFailure>()({
     InvalidTransactionPeriod: reversedPeriodRejected,
     TransactionNotFound: (notFound) => unknownTransactionRejected(notFound, caller),
     // An API-shaped failure the input schema cannot express, because it depends on the clock.
     TransactionNotYetOccurred: futureMovementRejected,
   })(failure);
+}
 
 /**
  * Maps a declared Transaction failure to its stable caller-facing API error.
@@ -98,3 +105,16 @@ export const mapTransactionFailure = ({
   self: Effect.Effect<A, TransactionFailure, R>
 ) => Effect.Effect<A, TransactionApiFailure, R>) =>
   Effect.mapError((failure: TransactionFailure) => toApiFailure({ failure, caller }));
+
+/**
+ * Preserves a validation-only error channel for operations that cannot encounter
+ * missing Transactions, while delegating all translation to the exhaustive mapper.
+ */
+export const mapTransactionValidationFailure = ({
+  caller,
+}: {
+  readonly caller: SuggestedOperationCaller;
+}): (<A, R>(
+  self: Effect.Effect<A, TransactionValidationFailure, R>
+) => Effect.Effect<A, ValidationFailed, R>) =>
+  Effect.mapError((failure: TransactionValidationFailure) => toApiFailure({ failure, caller }));

@@ -58,7 +58,7 @@ export const TransactionsGroup = HttpApiGroup.make("transactions")
     HttpApiEndpoint.get("listTransactions", "/transactions", {
       query: TransactionQueryParameters,
       success: OperationResponse(Schema.Array(Transaction)),
-      error: [NotFound, ValidationFailed],
+      error: ValidationFailed,
     })
       .annotate(
         OpenApi.Description,

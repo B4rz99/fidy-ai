@@ -15,6 +15,16 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
       })
     );
 
+    it.effect("serves interactive canonical API documentation without caller credentials", () =>
+      Effect.gen(function* () {
+        const response = yield* HttpClient.get("/docs");
+
+        expect(response.status).toBe(200);
+        expect(response.headers["content-type"]).toBe("text/html");
+        expect(yield* response.text).toContain("fidy-ai canonical API");
+      })
+    );
+
     it.effect("serves the web shell without caller credentials", () =>
       Effect.gen(function* () {
         const response = yield* HttpClient.get("/");

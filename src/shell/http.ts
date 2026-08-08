@@ -1,6 +1,6 @@
 import { Config, Effect, Layer } from "effect";
 import { HttpRouter, HttpServerResponse, HttpStaticServer } from "effect/unstable/http";
-import { HttpApiBuilder } from "effect/unstable/httpapi";
+import { HttpApiBuilder, HttpApiScalar } from "effect/unstable/httpapi";
 import { AgentAuthorizationLive } from "~/shell/_shared/authz";
 import { ValidationGateLive } from "~/shell/_shared/errors";
 import { AuditRetentionLive } from "~/shell/audit/retention";
@@ -68,7 +68,14 @@ const StaticLive = HttpStaticServer.layer({ root: "public", spa: true });
  * every request. The port and platform arrive from the outside.
  */
 export const HttpLive = HttpRouter.serve(
-  Layer.mergeAll(ApiLive, HealthLive, PolicyLive, StaticLive, KapsoWebhookLive)
+  Layer.mergeAll(
+    ApiLive,
+    HttpApiScalar.layer(FidyApi, { path: "/docs" }),
+    HealthLive,
+    PolicyLive,
+    StaticLive,
+    KapsoWebhookLive
+  )
 );
 
 /**

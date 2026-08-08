@@ -2,6 +2,12 @@ import { Data, Option } from "effect";
 import { type CategoryId } from "~/core/categories/reference";
 import { type DashboardFailure, type DashboardIssue } from "~/core/dashboard/errors";
 import { NotFound, ValidationFailed } from "~/shell/_shared/errors";
+import type { SuggestedOperation } from "~/shell/_shared/response";
+import {
+  type SuggestedOperationCaller,
+  checkpointSuggestedOperations,
+  suggestOperation,
+} from "~/shell/_shared/suggested-operations";
 
 /** A candidate dashboard references a Category unavailable to the authenticated User. */
 export class DashboardCategoryNotFound extends Data.TaggedError("DashboardCategoryNotFound")<{
@@ -12,8 +18,31 @@ export class DashboardCategoryNotFound extends Data.TaggedError("DashboardCatego
 /** Declared canonical failures returned by dashboard operations. */
 export type DashboardApiFailure = NotFound | ValidationFailed;
 
+const dashboardRecovery = (caller: SuggestedOperationCaller): ReadonlyArray<SuggestedOperation> =>
+  checkpointSuggestedOperations({
+    candidates: [
+      suggestOperation({
+        tool: "dashboard.getDashboard",
+        hint: "Get the latest dashboard before choosing widget ids or applying another edit.",
+      }),
+    ],
+    caller,
+  });
+
+const categoryRecovery = (caller: SuggestedOperationCaller): ReadonlyArray<SuggestedOperation> =>
+  checkpointSuggestedOperations({
+    candidates: [
+      suggestOperation({
+        tool: "categories.listCategories",
+        hint: "List Categories to choose one available for dashboard widgets.",
+      }),
+    ],
+    caller,
+  });
+
 const widgetNotFoundFailure = (
-  failure: Readonly<Extract<DashboardFailure, { readonly _tag: "WidgetNotFound" }>>
+  failure: Readonly<Extract<DashboardFailure, { readonly _tag: "WidgetNotFound" }>>,
+  caller: SuggestedOperationCaller
 ): NotFound =>
   NotFound.make({
     error: {
@@ -23,7 +52,7 @@ const widgetNotFoundFailure = (
           ? `No widget ${failure.widgetId} is available as a placement target. Choose a WidgetId from the latest dashboard.`
           : `No widget ${failure.widgetId} is available to edit. Choose a WidgetId from the latest dashboard.`,
     },
-    next: [],
+    next: dashboardRecovery(caller),
   });
 
 type NonInvalidDashboardFailure = Exclude<
@@ -31,24 +60,33 @@ type NonInvalidDashboardFailure = Exclude<
   { readonly _tag: "InvalidDashboardResult" }
 >;
 
-const toNonInvalidApiFailure = (failure: NonInvalidDashboardFailure): DashboardApiFailure => {
+const categoryNotFoundFailure = (
+  failure: DashboardCategoryNotFound,
+  caller: SuggestedOperationCaller
+): ValidationFailed =>
+  ValidationFailed.make({
+    error: {
+      code: "validation_failed",
+      message: `Category ${failure.categoryId} is not available for dashboard widgets. Choose an available Category and resend the complete edit.`,
+      fields: [
+        {
+          path: failure.path,
+          message: "Expected a Category available to the authenticated User.",
+        },
+      ],
+    },
+    next: categoryRecovery(caller),
+  });
+
+const toNonInvalidApiFailure = (
+  failure: NonInvalidDashboardFailure,
+  caller: SuggestedOperationCaller
+): DashboardApiFailure => {
   switch (failure._tag) {
     case "WidgetNotFound":
-      return widgetNotFoundFailure(failure);
+      return widgetNotFoundFailure(failure, caller);
     case "DashboardCategoryNotFound":
-      return ValidationFailed.make({
-        error: {
-          code: "validation_failed",
-          message: `Category ${failure.categoryId} is not available for dashboard widgets. Choose an available Category and resend the complete edit.`,
-          fields: [
-            {
-              path: failure.path,
-              message: "Expected a Category available to the authenticated User.",
-            },
-          ],
-        },
-        next: [],
-      });
+      return categoryNotFoundFailure(failure, caller);
     case "DuplicateWidgetId":
       return ValidationFailed.make({
         error: {
@@ -56,7 +94,7 @@ const toNonInvalidApiFailure = (failure: NonInvalidDashboardFailure): DashboardA
           message: `WidgetId ${failure.widgetId} is already present in the dashboard. Generate a fresh WidgetId and resend the complete edit.`,
           fields: [{ path: "widget.id", message: "Expected a fresh WidgetId." }],
         },
-        next: [],
+        next: dashboardRecovery(caller),
       });
     case "LastWidgetRemoval":
       return ValidationFailed.make({
@@ -66,7 +104,7 @@ const toNonInvalidApiFailure = (failure: NonInvalidDashboardFailure): DashboardA
             "A dashboard must retain at least one widget. Add another widget before removing this one.",
           fields: [{ path: "widgetId", message: "Expected a removable non-final widget." }],
         },
-        next: [],
+        next: dashboardRecovery(caller),
       });
     case "RootWidgetResize":
       return ValidationFailed.make({
@@ -76,7 +114,7 @@ const toNonInvalidApiFailure = (failure: NonInvalidDashboardFailure): DashboardA
             "The root widget has no sibling-relative weight to resize. Add a sibling before resizing it.",
           fields: [{ path: "weight", message: "Expected a widget inside a split region." }],
         },
-        next: [],
+        next: dashboardRecovery(caller),
       });
     case "SelfPlacement":
       return ValidationFailed.make({
@@ -87,7 +125,7 @@ const toNonInvalidApiFailure = (failure: NonInvalidDashboardFailure): DashboardA
             { path: "at.besideWidget", message: "Expected a different WidgetId from widgetId." },
           ],
         },
-        next: [],
+        next: dashboardRecovery(caller),
       });
   }
 };
@@ -101,9 +139,13 @@ const toFieldIssue = (
   });
 
 /** Maps dashboard decisions to compact canonical failures without rejected document data. */
-export const toApiFailure = (
-  failure: DashboardFailure | DashboardCategoryNotFound
-): DashboardApiFailure =>
+export const toApiFailure = ({
+  failure,
+  caller,
+}: {
+  readonly failure: DashboardFailure | DashboardCategoryNotFound;
+  readonly caller: SuggestedOperationCaller;
+}): DashboardApiFailure =>
   failure._tag === "InvalidDashboardResult"
     ? ValidationFailed.make({
         error: {
@@ -112,6 +154,6 @@ export const toApiFailure = (
             "The edit would produce an invalid DashboardDocument. Correct every reported field and resend the complete edit.",
           fields: failure.issues.map(toFieldIssue),
         },
-        next: [],
+        next: dashboardRecovery(caller),
       })
-    : toNonInvalidApiFailure(failure);
+    : toNonInvalidApiFailure(failure, caller);

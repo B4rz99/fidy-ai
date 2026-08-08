@@ -12,6 +12,7 @@ import type {
   ValidationFailed,
 } from "~/shell/_shared/errors";
 import { FidyApi } from "~/shell/api";
+import type { AtomicBatchRejected } from "~/shell/operations/operations";
 import {
   KapsoClient,
   type KapsoClientService,
@@ -42,7 +43,8 @@ export type ApiCallFailure =
   | NotFound
   | ScopeMissing
   | Unauthenticated
-  | ValidationFailed;
+  | ValidationFailed
+  | AtomicBatchRejected;
 
 /** Builds a client service whose bearer is supplied through the declared middleware. */
 export const makeApiClientLive = <Id>({

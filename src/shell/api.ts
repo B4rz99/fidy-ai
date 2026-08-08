@@ -6,7 +6,20 @@ import { CategoriesGroup } from "~/shell/categories/operations";
 import { DashboardGroup } from "~/shell/dashboard/operations";
 import { IdentityGroup } from "~/shell/identity/operations";
 import { InsightsGroup } from "~/shell/insights/operations";
+import { makeOperationsGroup } from "~/shell/operations/operations";
 import { TransactionsGroup } from "~/shell/transactions/operations";
+
+const OrdinaryFidyApi = HttpApi.make("fidy")
+  .add(IdentityGroup)
+  .add(CategoriesGroup)
+  .add(DashboardGroup)
+  .add(TransactionsGroup)
+  .add(InsightsGroup);
+
+// The child union is reflected before the batch group exists, so queries and recursive batches are
+// absent by construction. The live dispatch layer checks registry completeness at startup.
+const ordinaryOperationCatalog = makeOperationCatalog(OrdinaryFidyApi);
+const OperationsGroup = makeOperationsGroup(ordinaryOperationCatalog);
 
 /**
  * The whole canonical API: every slice's operations under one definition, each
@@ -14,12 +27,7 @@ import { TransactionsGroup } from "~/shell/transactions/operations";
  * the typed client and the OpenAPI spec are all derived from, so anything a
  * caller can reach is reachable from here.
  */
-export class FidyApi extends HttpApi.make("fidy")
-  .add(IdentityGroup)
-  .add(CategoriesGroup)
-  .add(DashboardGroup)
-  .add(TransactionsGroup)
-  .add(InsightsGroup)
+export class FidyApi extends OrdinaryFidyApi.add(OperationsGroup)
   // `.middleware` after `.add`, and not the other way round: it attaches to
   // the operations already assembled, so a group added below this line would
   // silently skip the gate and answer a rejected request with a bodyless 400.

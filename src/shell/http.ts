@@ -16,6 +16,7 @@ import { DashboardLive } from "~/shell/dashboard/handlers";
 import { MigratorLive, RuntimeAuthorityLive } from "~/shell/db/client";
 import { IdentityLive } from "~/shell/identity/handlers";
 import { InsightsLive } from "~/shell/insights/handlers";
+import { OperationsLive } from "~/shell/operations/handlers";
 import { TransactionsLive } from "~/shell/transactions/handlers";
 import { FidyApi } from "./api";
 
@@ -41,7 +42,8 @@ export const ApiLive = HttpApiBuilder.layer(FidyApi, { openapiPath: "/openapi.js
       CategoriesLive,
       DashboardLive,
       TransactionsLive,
-      InsightsLive
+      InsightsLive,
+      OperationsLive
     ).pipe(Layer.provide([ValidationGateLive, AgentAuthorizationLive]))
   )
 );

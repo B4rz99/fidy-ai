@@ -1,7 +1,6 @@
 import { expect, layer } from "@effect/vitest";
 import { DateTime, Deferred, Effect, Fiber, Layer } from "effect";
 import { LanguageModel } from "effect/unstable/ai";
-import { SqlClient } from "effect/unstable/sql";
 import { MigrationSqlClient } from "~/shell/db/client";
 import { ConsentRecord, ConsentRecordId } from "~/core/consent/model";
 import { UserId } from "~/core/identity/reference";
@@ -11,7 +10,7 @@ import { AgentService, AgentServiceLive, InboundMessage } from "~/shell/agent/ag
 import { upsertUser } from "~/shell/identity/repo";
 import { ApiHarness } from "~/shell/testing/api-harness";
 import { currentDisclosure } from "./current-disclosure";
-import { appendConsentRecord, lockConsentSubject } from "./repo";
+import { appendConsentRecord, withSubjectLock } from "./repo";
 import { listTranscriptEntries } from "~/shell/transcript/repo";
 
 const unconsentedUserId = UserId.make("f1d1a000-0000-4000-8000-0000000008b1");
@@ -84,7 +83,6 @@ layer(AgentConsentHarness, { excludeTestServices: true, timeout: "30 seconds" })
         yield* admin`DELETE FROM consent_records WHERE subject_user_id = ${concurrentlyRevokedUserId}`;
         yield* admin`DELETE FROM transcript_entries WHERE user_id = ${concurrentlyRevokedUserId}`;
         yield* admin`DELETE FROM users WHERE id = ${concurrentlyRevokedUserId}`;
-        const sql = yield* SqlClient.SqlClient;
         const occurredAt = DateTime.makeUnsafe("2026-08-01T12:00:00Z");
         const user = yield* makeColombianUser(concurrentlyRevokedUserId, { createdAt: occurredAt });
         yield* upsertUser(concurrentlyRevokedUserId, user);
@@ -92,27 +90,25 @@ layer(AgentConsentHarness, { excludeTestServices: true, timeout: "30 seconds" })
         yield* appendConsentRecord(grant);
         const lockHeld = yield* Deferred.make<void>();
         const commitRevocation = yield* Deferred.make<void>();
-        const revocationFiber = yield* sql
-          .withTransaction(
-            Effect.gen(function* () {
-              yield* lockConsentSubject(concurrentlyRevokedUserId);
-              yield* appendConsentRecord(
-                ConsentRecord.make({
-                  ...grant,
-                  id: ConsentRecordId.make("f1d1a000-0000-4000-8000-0000000008b4"),
-                  event: { _tag: "Revoked", grantId: grant.id },
-                  decisionMessage: {
-                    ...grant.decisionMessage,
-                    providerMessageId: "wamid.concurrent-agent-revocation",
-                  },
-                  occurredAt: DateTime.makeUnsafe("2026-08-01T12:00:01Z"),
-                })
-              );
-              yield* Deferred.succeed(lockHeld, undefined);
-              yield* Deferred.await(commitRevocation);
-            })
-          )
-          .pipe(Effect.forkChild);
+        const revocationFiber = yield* withSubjectLock(
+          concurrentlyRevokedUserId,
+          Effect.gen(function* () {
+            yield* appendConsentRecord(
+              ConsentRecord.make({
+                ...grant,
+                id: ConsentRecordId.make("f1d1a000-0000-4000-8000-0000000008b4"),
+                event: { _tag: "Revoked", grantId: grant.id },
+                decisionMessage: {
+                  ...grant.decisionMessage,
+                  providerMessageId: "wamid.concurrent-agent-revocation",
+                },
+                occurredAt: DateTime.makeUnsafe("2026-08-01T12:00:01Z"),
+              })
+            );
+            yield* Deferred.succeed(lockHeld, undefined);
+            yield* Deferred.await(commitRevocation);
+          })
+        ).pipe(Effect.forkChild);
         yield* Deferred.await(lockHeld);
         const service = yield* AgentService;
         const turnFiber = yield* service

@@ -10,6 +10,7 @@ import {
   type UpdateKeywordRuleInput,
 } from "~/core/categories/model";
 import { normalizeCategoryKeyword } from "~/core/categories/rules";
+import { advisoryLockKey, withUserLock } from "~/shell/db/advisory-lock";
 import { withUserTransaction } from "~/shell/db/user-transaction";
 
 /** Loads Categories in presentation order. Database failures are defects. */
@@ -62,17 +63,15 @@ export const listKeywordRules = (
   );
 
 /**
- * Serializes rule decisions for one User inside the current operation transaction. Call before a
- * load-decide-write sequence so duplicate and capacity decisions remain true at insertion.
+ * Runs one keyword-rule decision under a User-scoped, slice-namespaced lock. The lock covers the
+ * supplied load-decide-write body and cannot be acquired independently of its transaction.
  */
-export const lockKeywordRules = (userId: UserId): Effect.Effect<void, never, SqlClient.SqlClient> =>
-  withUserTransaction(
-    userId,
-    Effect.flatMap(
-      SqlClient.SqlClient,
-      (sql) => sql`SELECT pg_advisory_xact_lock(hashtextextended(${userId}, 0))`
-    ).pipe(Effect.asVoid, Effect.orDie)
-  );
+export const withKeywordLock = Effect.fn("withKeywordLock")(function* <A, E, R>(
+  userId: UserId,
+  body: Effect.Effect<A, E, R>
+) {
+  return yield* withUserLock(userId, advisoryLockKey.keywordRules(userId), body);
+});
 
 const KeywordRuleWrite = Schema.Struct({
   userId: UserId,

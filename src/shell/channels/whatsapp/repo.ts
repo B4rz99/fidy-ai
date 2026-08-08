@@ -19,6 +19,7 @@ import { UserId, type WhatsAppCallerReference } from "~/core/identity/reference"
 import { InboundMessage, OnboardingConsentRequired } from "~/shell/agent/agent-service";
 import type { AgentConversationAdmission } from "~/shell/agent/conversation";
 import { hasCurrentOnboardingConsentAt, useCurrentConsent } from "~/shell/consent/repo";
+import { advisoryLockKey } from "~/shell/db/advisory-lock";
 import { withUserTransaction } from "~/shell/db/user-transaction";
 import { findAndLockWhatsAppIdentity } from "~/shell/identity/repo";
 import {
@@ -298,7 +299,7 @@ type EnqueueStatement = (
 
 const enqueueStatement: EnqueueStatement = (sql, row) => sql`
   WITH admission_lock AS MATERIALIZED (
-    SELECT pg_advisory_xact_lock(hashtextextended(${row.userId}::text, 0))
+    SELECT pg_advisory_xact_lock(hashtextextended(${advisoryLockKey.whatsAppAdmission(row.userId).value}, ${advisoryLockKey.whatsAppAdmission(row.userId).seed}))
   ), existing AS (
     SELECT 1 FROM whatsapp_message_evidence, admission_lock
     WHERE provider_message_id = ${row.providerMessageId}
@@ -466,25 +467,23 @@ export const startWhatsAppTurn = Effect.fn("WhatsApp.startTurn")(function* (
   const sql = yield* SqlClient.SqlClient;
   return yield* withUserTransaction(
     claim.userId,
-    sql
-      .withTransaction(
-        Effect.gen(function* () {
-          const started = yield* SqlSchema.findOneOption({
-            Request: LoadClaimRequest,
-            Result: Schema.Struct({ started: Schema.Boolean }),
-            execute: (row) => sql`
+    Effect.gen(function* () {
+      const started = yield* SqlSchema.findOneOption({
+        Request: LoadClaimRequest,
+        Result: Schema.Struct({ started: Schema.Boolean }),
+        execute: (row) => sql`
             UPDATE whatsapp_turn_claims
             SET status = 'started', started_at = now(),
               claim_expires_at = now() + interval '10 minutes'
             WHERE id = ${row.claimId} AND user_id = ${row.userId} AND status = 'claimed'
             RETURNING true AS started
           `,
-          })(claim);
-          if (Option.isNone(started)) return yield* new WhatsAppClaimInvalid();
-          const jobs = yield* SqlSchema.findAll({
-            Request: LoadClaimRequest,
-            Result: ClaimedJob,
-            execute: (row) => sql`
+      })(claim);
+      if (Option.isNone(started)) return yield* new WhatsAppClaimInvalid();
+      const jobs = yield* SqlSchema.findAll({
+        Request: LoadClaimRequest,
+        Result: ClaimedJob,
+        execute: (row) => sql`
             SELECT job.content AS text, evidence.provider_message_id AS "providerMessageId"
             FROM whatsapp_inbound_jobs AS job
             JOIN whatsapp_message_evidence AS evidence ON evidence.id = job.message_evidence_id
@@ -492,18 +491,16 @@ export const startWhatsAppTurn = Effect.fn("WhatsApp.startTurn")(function* (
               AND job.completed_at IS NULL AND job.content IS NOT NULL
             ORDER BY job.occurred_at, evidence.id
           `,
-          })(claim);
-          if (!EffectArray.isArrayNonEmpty(jobs)) {
-            return yield* Effect.die("started WhatsApp claim contained no jobs");
-          }
-          const joined = jobs.map(({ text }) => text).join("\n");
-          const inboundMessage = yield* Schema.decodeUnknownEffect(InboundMessage)({
-            text: joined,
-          });
-          return { claim, inboundMessage, messages: jobs } as const;
-        })
-      )
-      .pipe(Effect.catchTag("SqlError", Effect.die))
+      })(claim);
+      if (!EffectArray.isArrayNonEmpty(jobs)) {
+        return yield* Effect.die("started WhatsApp claim contained no jobs");
+      }
+      const joined = jobs.map(({ text }) => text).join("\n");
+      const inboundMessage = yield* Schema.decodeUnknownEffect(InboundMessage)({
+        text: joined,
+      });
+      return { claim, inboundMessage, messages: jobs } as const;
+    }).pipe(Effect.catchTag("SqlError", Effect.die))
   );
 });
 
@@ -525,17 +522,13 @@ export const completeWhatsAppTurn = Effect.fn("WhatsApp.completeTurn")(function*
   const sql = yield* SqlClient.SqlClient;
   yield* withUserTransaction(
     claim.userId,
-    sql
-      .withTransaction(
-        Effect.gen(function* () {
-          yield* retireClaimContent(sql, claim, completedAt);
-          yield* sql`
-          DELETE FROM whatsapp_turn_claims
-          WHERE user_id = ${claim.userId} AND id = ${claim.claimId}
-        `;
-        })
-      )
-      .pipe(Effect.catchTag("SqlError", Effect.die))
+    Effect.gen(function* () {
+      yield* retireClaimContent(sql, claim, completedAt);
+      yield* sql`
+        DELETE FROM whatsapp_turn_claims
+        WHERE user_id = ${claim.userId} AND id = ${claim.claimId}
+      `;
+    }).pipe(Effect.catchTag("SqlError", Effect.die))
   );
 });
 
@@ -548,18 +541,14 @@ export const failWhatsAppTurn = Effect.fn("WhatsApp.failTurn")(function* (
   const sql = yield* SqlClient.SqlClient;
   yield* withUserTransaction(
     claim.userId,
-    sql
-      .withTransaction(
-        Effect.gen(function* () {
-          yield* retireClaimContent(sql, claim, failedAt);
-          yield* sql`
-          UPDATE whatsapp_turn_claims
-          SET status = 'failed', failed_at = ${failedAt}, safe_reason = ${safeReason}
-          WHERE user_id = ${claim.userId} AND id = ${claim.claimId}
-        `;
-        })
-      )
-      .pipe(Effect.catchTag("SqlError", Effect.die))
+    Effect.gen(function* () {
+      yield* retireClaimContent(sql, claim, failedAt);
+      yield* sql`
+        UPDATE whatsapp_turn_claims
+        SET status = 'failed', failed_at = ${failedAt}, safe_reason = ${safeReason}
+        WHERE user_id = ${claim.userId} AND id = ${claim.claimId}
+      `;
+    }).pipe(Effect.catchTag("SqlError", Effect.die))
   );
 });
 

@@ -39,10 +39,14 @@ export default defineConfig({
       // leave both halves of the ratio. Statements (58.57) and functions (42.31) are unchanged
       // either side of the fix, which is what says no scenario lost coverage — only arithmetic
       // moved. Measured against a real PostgreSQL, not copied from a CI log.
+      //
+      // Lowered in #140 because preserving typed transaction-body failures adds SQL failure
+      // discrimination that the WhatsApp acceptance path never enters. All four scenarios still
+      // pass, while line coverage rises from 60.56 to 60.7; only the branch denominator changed.
       thresholds: {
         autoUpdate: true,
-        branches: 26.34,
-        lines: 60.56,
+        branches: 26.23,
+        lines: 60.7,
       },
     },
   },

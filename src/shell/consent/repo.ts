@@ -26,6 +26,7 @@ import {
 } from "~/core/identity/reference";
 import { InsightKind } from "~/core/insights/reference";
 import { AgentTokenId } from "~/core/tokens/reference";
+import { advisoryLockKey, withUserLock } from "~/shell/db/advisory-lock";
 import { withUserTransaction } from "~/shell/db/user-transaction";
 import { currentDisclosure } from "./current-disclosure";
 
@@ -252,33 +253,33 @@ const ConsentRecordFromRow = ConsentRecordRow.pipe(
 );
 
 /**
- * Serializes authorization and ledger changes for one stable Consent subject.
- * The caller must already be inside the transaction that defines the protected
- * unit; serialization lasts until that transaction completes.
+ * Runs one Consent-dependent unit under the stable subject's namespaced lock. The lock covers the
+ * supplied body and cannot be acquired independently of its User-scoped transaction.
  */
-export const lockConsentSubject = (
-  subjectUserId: UserId
-): Effect.Effect<void, never, SqlClient.SqlClient> =>
-  Effect.flatMap(
-    SqlClient.SqlClient,
-    (sql) => sql`
-      SELECT pg_advisory_xact_lock(hashtextextended(${`consent-subject:${subjectUserId}`}, 0))
-    `
-  ).pipe(Effect.asVoid, Effect.orDie);
+export const withSubjectLock = Effect.fn("withSubjectLock")(function* <A, E, R>(
+  subjectUserId: UserId,
+  body: Effect.Effect<A, E, R>
+) {
+  return yield* withUserLock(subjectUserId, advisoryLockKey.consentSubject(subjectUserId), body);
+});
 
 /**
  * Runs one consent-dependent unit after serializing it with revocation and
- * confirming an unrevoked onboarding grant. The caller must supply the
- * surrounding transaction; `onMissing` decides the boundary-specific failure.
+ * confirming an unrevoked onboarding grant. `onMissing` decides the boundary-specific failure;
+ * the supplied use runs in the same transaction that holds the subject lock.
  */
 export const useCurrentConsent = Effect.fn("useCurrentConsent")(function* <A, E, R, E2, R2>(
   subjectUserId: UserId,
   onMissing: () => Effect.Effect<never, E2, R2>,
   use: Effect.Effect<A, E, R>
 ) {
-  yield* lockConsentSubject(subjectUserId);
-  if (!(yield* hasCurrentOnboardingConsent(subjectUserId))) return yield* onMissing();
-  return yield* use;
+  return yield* withSubjectLock(
+    subjectUserId,
+    Effect.gen(function* () {
+      if (!(yield* hasCurrentOnboardingConsent(subjectUserId))) return yield* onMissing();
+      return yield* use;
+    })
+  );
 });
 
 /**
@@ -291,14 +292,12 @@ export const appendConsentRecord = Effect.fn("appendConsentRecord")(function* (
   record: ConsentRecord
 ) {
   const sql = yield* SqlClient.SqlClient;
-  return yield* withUserTransaction(
+  return yield* withSubjectLock(
     record.subjectUserId,
-    Effect.gen(function* () {
-      yield* lockConsentSubject(record.subjectUserId);
-      return yield* SqlSchema.findOne({
-        Request: ConsentRecordFromRow,
-        Result: ConsentRecordFromRow,
-        execute: (input) => sql`
+    SqlSchema.findOne({
+      Request: ConsentRecordFromRow,
+      Result: ConsentRecordFromRow,
+      execute: (input) => sql`
       INSERT INTO consent_records (
         id, subject_user_id, event_type, grant_type, agent_token_id, insight_kind,
         revoked_grant_id, service_market, locale, disclosure_revision,
@@ -337,8 +336,7 @@ export const appendConsentRecord = Effect.fn("appendConsentRecord")(function* (
       )
           RETURNING ${sql.literal(consentColumns)}
         `,
-      })(record).pipe(Effect.orDie);
-    })
+    })(record).pipe(Effect.orDie)
   );
 });
 
@@ -573,18 +571,25 @@ const PendingFromRow = PendingRow.pipe(
   )
 );
 
-/** Serializes all gate decisions for one portfolio-scoped BSUID within the caller's transaction. */
-export const lockConsentGate = (
-  caller: WhatsAppCallerReference
-): Effect.Effect<void, never, SqlClient.SqlClient> =>
-  Effect.flatMap(
-    SqlClient.SqlClient,
-    (sql) => sql`
-      SELECT pg_advisory_xact_lock(hashtextextended(
-        ${`consent-gate:${caller.businessPortfolioId}:${caller.businessScopedUserId}`}, 0
-      ))
-    `
-  ).pipe(Effect.asVoid, Effect.orDie);
+/**
+ * Runs one pre-subject Consent decision under its portfolio-scoped BSUID lock. The lock covers the
+ * supplied body and cannot be acquired independently of its transaction.
+ */
+export const withConsentLock = Effect.fn("withConsentLock")(function* <A, E, R>(
+  caller: WhatsAppCallerReference,
+  body: Effect.Effect<A, E, R>
+) {
+  const sql = yield* SqlClient.SqlClient;
+  return yield* sql.withTransaction(
+    Effect.gen(function* () {
+      const lockKey = advisoryLockKey.consentGate(caller);
+      yield* sql`
+        SELECT pg_advisory_xact_lock(hashtextextended(${lockKey.value}, ${lockKey.seed}))
+      `.pipe(Effect.orDie);
+      return yield* body;
+    })
+  );
+});
 
 /** Persists only the disclosure facts needed before a User exists. */
 export const insertPendingConsentExchange = Effect.fn("insertPendingConsentExchange")(function* (

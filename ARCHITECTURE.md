@@ -151,6 +151,20 @@ Relational rows are projections of core models, not parallel domain models. Repo
 nested Money only where storage and queries require it, then decode and reconstruct the canonical
 value on every read. Ordinary totals remain derived rather than persisted.
 
+PostgreSQL advisory-lock keys are namespaced by the owning slice and protected resource before
+hashing. The one deliberate shared key is the bare UserId used by WhatsApp enqueue admission and
+turn claim: those two steps coordinate the same per-User queue invariant. Lock APIs fuse lock
+acquisition with the protected body and transaction, so a transaction-scoped lock cannot silently
+be acquired and released before its work runs.
+
+Postgres returns `jsonb` as decoded JSON, so relational projections decode the bare column rather
+than casting it through text. Global query/result name transforms remain waived: adopting them
+would require a repository-wide alias audit, and recursive JSON transforms could alter domain
+keys; the current explicit aliases keep that boundary local. Insight Money groups use one bulk
+insert per event. LISTEN/NOTIFY remains deferred until the WhatsApp worker restructure tracked by
+#135; polling stays the correctness fallback, so changing wake-up transport independently would
+add a second scheduling mechanism without removing the first.
+
 ---
 
 ## 8. Testing seams

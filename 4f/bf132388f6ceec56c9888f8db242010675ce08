@@ -25,6 +25,7 @@ src/shell/agent/toolkit.ts
   s_02d819cb1bf1f3::t_f106f34a47da14 82,84
   s_02d819cb1bf1f3::t_bde5fc9165f82f 78,85-88,92-96
   s_02d819cb1bf1f3::t_24b49d2bf2facc 80
+  s_02d819cb1bf1f3::t_d27944bcc493b6 123
 src/shell/agent/model-boundary.ts
   s_02d819cb1bf1f3::t_de7a565081e8db 128,152
   s_02d819cb1bf1f3::t_c4f5a5b6a37ed7 130-133,136,153-155
@@ -36,6 +37,7 @@ src/shell/agent/toolkit.test.ts
   s_02d819cb1bf1f3::t_66b3012b65e4f4 37-42
   s_02d819cb1bf1f3::t_170117d650360d 12,49-55,64-65,67-71,73-77
   s_02d819cb1bf1f3::t_2d1cb7dc239583 78
+  s_02d819cb1bf1f3::t_c34ba2791f6603 56-63
 src/shell/agent/agent-service.test.ts
   s_02d819cb1bf1f3::t_8f723aa52d1179 105-107,109,113-114,130
   s_02d819cb1bf1f3::t_5820dc71a20989 1209-1210,1553-1554,1556-1573
@@ -52,6 +54,9 @@ src/shell/agent/agent-service.test.ts
   s_02d819cb1bf1f3::t_91ab674aa5da97 13
   s_02d819cb1bf1f3::t_8670e58160c8b3 1211
   s_02d819cb1bf1f3::t_cdb6211ee0a54c 1555
+  s_02d819cb1bf1f3::t_81ab4b9cca5a62 620-637,639-640
+  s_02d819cb1bf1f3::t_4c1dc50bec60ae 638
+  s_02d819cb1bf1f3::t_948380ca245909 4,10,619,642,645
 src/shell/agent/agent-service.ts
   s_02d819cb1bf1f3::t_277ccb59327f0b 331,591,668-669,671-672,676
   s_02d819cb1bf1f3::t_b1d31eb6cfc4b6 572,582,584,586,598
@@ -66,6 +71,7 @@ src/shell/agent/agent-service.ts
   s_02d819cb1bf1f3::t_ae22b9a42a5e5a 552
   s_02d819cb1bf1f3::t_ab3af85fb7d3ac 563
   s_02d819cb1bf1f3::t_ffd9afe129aaec 330
+  s_02d819cb1bf1f3::t_043bb2c3a991ce 581
 src/shell/agent/openai.ts
   s_02d819cb1bf1f3::t_9f81789fd27f1f 11
 src/shell/agent/model-boundary.test.ts

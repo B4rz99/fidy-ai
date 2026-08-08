@@ -2,19 +2,14 @@ import { BunHttpServer, BunServices } from "@effect/platform-bun";
 import { Context, Effect, Layer, MutableRef, Ref, Schema } from "effect";
 import { LanguageModel } from "effect/unstable/ai";
 import { categoryIds } from "~/core/categories/taxonomy";
-import { AgentServiceLive } from "~/shell/agent/agent-service";
+import { AgentService } from "~/shell/agent/agent-service";
 import {
   KapsoClient,
   type KapsoClientService,
   makeKapsoClientService,
 } from "~/shell/channels/whatsapp/kapso-client";
 import { WhatsAppWorkerLive } from "~/shell/channels/whatsapp/worker";
-import {
-  MigrationSqlClientLive,
-  MigratorLive,
-  PgLive,
-  RuntimeAuthorityLive,
-} from "~/shell/db/client";
+import { MigrationSqlClient, MigratorLive, PgLive, RuntimeAuthorityLive } from "~/shell/db/client";
 import { makeDevelopmentSeedLive } from "~/shell/db/development-seed";
 import { HttpLive } from "~/shell/http";
 import { type ApiClient, makeApiClientLive } from "./api-harness";
@@ -135,7 +130,7 @@ const AcceptanceKapsoTransport = Layer.effectContext(
 const AcceptanceApplication = Layer.mergeAll(
   HttpLive,
   WhatsAppWorkerLive.pipe(
-    Layer.provide(AgentServiceLive.pipe(Layer.provide(DeterministicLanguageModel)))
+    Layer.provide(AgentService.layer.pipe(Layer.provide(DeterministicLanguageModel)))
   )
 ).pipe(Layer.provide(RuntimeAuthorityLive), Layer.provide(MigratorLive));
 
@@ -152,7 +147,7 @@ export const WhatsAppAcceptanceHarness = AcceptanceApplication.pipe(
   Layer.provideMerge(makeDevelopmentSeedLive(defaultAgentBearer)),
   Layer.provideMerge(BunHttpServer.layerTest),
   Layer.provideMerge(BunServices.layer),
-  Layer.provideMerge(MigrationSqlClientLive),
+  Layer.provideMerge(MigrationSqlClient.layer),
   Layer.provideMerge(PgLive),
   Layer.provideMerge(TestPublicNamespace)
 );

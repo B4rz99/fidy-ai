@@ -18,7 +18,7 @@ import {
   KapsoSendFailed,
 } from "~/shell/channels/whatsapp/kapso-client";
 import { WhatsAppProviderMessageId } from "~/shell/channels/whatsapp/model";
-import { MigrationSqlClientLive, MigratorLive, PgLive } from "~/shell/db/client";
+import { MigrationSqlClient, MigratorLive, PgLive } from "~/shell/db/client";
 import { makeDevelopmentSeedLive } from "~/shell/db/development-seed";
 import { defaultAgentBearer } from "./identity-fixtures";
 import { TestPublicNamespace } from "./test-config";
@@ -130,7 +130,7 @@ export const ApiHarness = makeApiClientLive({
   Layer.provideMerge(makeDevelopmentSeedLive(defaultAgentBearer)),
   Layer.provideMerge(BunHttpServer.layerTest),
   Layer.provideMerge(BunServices.layer),
-  Layer.provideMerge(MigrationSqlClientLive),
+  Layer.provideMerge(MigrationSqlClient.layer),
   Layer.provideMerge(PgLive),
   Layer.provideMerge(TestPublicNamespace)
 );

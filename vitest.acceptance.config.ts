@@ -34,19 +34,16 @@ export default defineConfig({
       // config to be committed, while any later decrease fails the threshold check — so a drop is
       // only ever recorded here deliberately, with the reason.
       //
-      // Lowered in #133, the one deliberate drop so far: partializing payloads once deletes a
-      // ternary the WhatsApp path only ever took one side of, so that branch pair and its line
-      // leave both halves of the ratio. Statements (58.57) and functions (42.31) are unchanged
-      // either side of the fix, which is what says no scenario lost coverage — only arithmetic
-      // moved. Measured against a real PostgreSQL, not copied from a CI log.
+      // Lowered in #133: partializing payloads once deleted a ternary the WhatsApp path only ever
+      // took one side of, so that branch pair and its line left both halves of the ratio.
       //
-      // Lowered in #140 because preserving typed transaction-body failures adds SQL failure
-      // discrimination that the WhatsApp acceptance path never enters. All four scenarios still
-      // pass, while line coverage rises from 60.56 to 60.7; only the branch denominator changed.
+      // Lowered again in #141 because the process-boot logging and listener configuration module is
+      // deliberately outside the public-channel acceptance seam. Its dedicated tests cover the
+      // environment choices and invalid-port failure; adding it only enlarges this denominator.
       thresholds: {
         autoUpdate: true,
-        branches: 26.23,
-        lines: 60.7,
+        branches: 26.29,
+        lines: 60.44,
       },
     },
   },

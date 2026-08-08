@@ -1,0 +1,36 @@
+src/shell/agent/agent-service.test.ts
+  s_4ccf6106fc8ef1::t_065dc7fbce7b8f 15,151-159,164-170,225-227,676-680,701,703,723,727-740,745,1440
+  s_4ccf6106fc8ef1::t_f75286e33083d4 1461
+  s_4ccf6106fc8ef1::t_e4441ffcb4cdaa 224,228-242,682
+  s_4ccf6106fc8ef1::t_f45e9630553fbd 160-163,1432-1439,1441-1460
+src/shell/agent/openai.test.ts
+  s_4ccf6106fc8ef1::t_55cc15c196c1a3 68
+  s_4ccf6106fc8ef1::t_63a228e563ee54 10,101
+  s_4ccf6106fc8ef1::t_e95fb3838b80e8 7-9,11-13,57,98,100,102-103,117,119
+  s_4ccf6106fc8ef1::t_8c742968606869 35,56,118
+  s_4ccf6106fc8ef1::t_71eaa6fdc46249 55
+src/shell/agent/openai.ts
+  s_4ccf6106fc8ef1::t_8d0bdf1e13808e 2,15-19,24-25,27
+  s_4ccf6106fc8ef1::t_d86784d95219af 23,26,28-29
+  s_4ccf6106fc8ef1::t_6e59091d5eacd0 11
+  s_4ccf6106fc8ef1::t_f84f871420c706 20-22
+src/shell/agent/agent-service.ts
+  s_4ccf6106fc8ef1::t_036c34d7a4d563 59,581
+  s_4ccf6106fc8ef1::t_e6d2a887e12040 538,543,563-580,583,744
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "b129ad6296b89530b8d3f398923d304ea77494c7",
+  "prompts": {},
+  "sessions": {
+    "s_4ccf6106fc8ef1": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019fe237-a9b1-73e6-ac78-5c501d164772",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": null
+    }
+  }
+}

@@ -1,0 +1,91 @@
+src/shell/consent/repo.ts
+  s_c07979d4ee0e2f::t_4d1dda3e957127 256-257,260-262,264,268-269,277-282,297-300,339
+  s_c07979d4ee0e2f::t_0991f1ff85fe26 574-577,579-584,586,588-592
+  s_c07979d4ee0e2f::t_07fc9edd5aa4c5 29,259,276,295,578
+  s_c07979d4ee0e2f::t_aff83a19172a85 585,587
+  s_c07979d4ee0e2f::t_e1e1117a1102fc 263
+src/shell/channels/whatsapp/whatsapp-channel.test.ts
+  s_c07979d4ee0e2f::t_06dd682da131f6 477
+src/shell/channels/whatsapp/repo.ts
+  s_c07979d4ee0e2f::t_31ee213cb6c590 302
+  s_c07979d4ee0e2f::t_abc5fd6a275d03 22
+  s_c07979d4ee0e2f::t_0c5c0a9ee4faed 470-474,481-486,494-503,525-531,544-551
+src/shell/consent/agent-consent-gate.test.ts
+  s_c07979d4ee0e2f::t_e10f35d464c639 94-111
+  s_c07979d4ee0e2f::t_e1e1117a1102fc 13,93
+src/shell/db/advisory-lock.ts
+  s_c07979d4ee0e2f::t_a31a394efeeb57 3,5-29,31
+  s_c07979d4ee0e2f::t_65776c38a05211 1-2,32-49
+  s_c07979d4ee0e2f::t_8d46145762fc50 4
+  s_c07979d4ee0e2f::t_55f43dae5e14c3 30
+src/shell/transcript/repo.ts
+  s_c07979d4ee0e2f::t_d2c9be6dad2516 7,29-32,37,49-55,79,102,123
+src/shell/categories/repo.ts
+  s_c07979d4ee0e2f::t_701a9c4adaf15d 13,69,73
+  s_c07979d4ee0e2f::t_f3a443110e219b 66-67,70-72,74
+src/shell/insights/handlers.ts
+  s_c07979d4ee0e2f::t_756103086d5c27 71-80
+  s_c07979d4ee0e2f::t_e1e1117a1102fc 25,70,147,160
+ARCHITECTURE.md
+  s_c07979d4ee0e2f::t_1ee2fb19eda789 154-167
+src/shell/categories/handlers.ts
+  s_c07979d4ee0e2f::t_4638e4b7d6aba6 75-86,106-117
+  s_c07979d4ee0e2f::t_e1bd54a37e524e 3
+  s_c07979d4ee0e2f::t_e1e1117a1102fc 34,74,105
+src/shell/db/user-transaction.ts
+  s_c07979d4ee0e2f::t_6ade1eefc941a5 1,8-10,41,43,46,51
+  s_c07979d4ee0e2f::t_c909907618bdac 7,42,49
+  s_c07979d4ee0e2f::t_5cc2d4d5c51696 15-16
+  s_c07979d4ee0e2f::t_54678e054798e1 47-48,50
+src/shell/dashboard/handlers.ts
+  s_c07979d4ee0e2f::t_72ac569e6fa359 2
+  s_c07979d4ee0e2f::t_3059281269b5bd 88-95
+  s_c07979d4ee0e2f::t_e1e1117a1102fc 23,81,87
+src/shell/insights/repo.ts
+  s_c07979d4ee0e2f::t_75b1e0bf7349fa 1
+  s_c07979d4ee0e2f::t_0e566fc4a31913 125-137,164-167,170-171,175-177,181-189
+  s_c07979d4ee0e2f::t_b2c77724f0d50e 168
+src/shell/consent/consent-gate.ts
+  s_c07979d4ee0e2f::t_c435d57d285cd0 183-190
+  s_c07979d4ee0e2f::t_e1e1117a1102fc 33-34,182,252
+  s_c07979d4ee0e2f::t_e8a104c081eede 253-261,263-265,267-272,274-280,282-284
+src/shell/transcript/repo.test.ts
+  s_c07979d4ee0e2f::t_813d05da89f327 1-23,25-37
+  s_c07979d4ee0e2f::t_c402f370549f86 24
+src/shell/dashboard/repo.ts
+  s_c07979d4ee0e2f::t_046f3fb5568421 9,14,17-20,22-24,26,39,73,97
+  s_c07979d4ee0e2f::t_d9d7326cf5f23c 5,21,25
+src/shell/db/advisory-lock.test.ts
+  s_c07979d4ee0e2f::t_80799d13a65ff0 1-29,31-33,35-37
+  s_c07979d4ee0e2f::t_a01c10dbdc5ca8 30,34
+src/shell/db/user-transaction.test.ts
+  s_c07979d4ee0e2f::t_697533ad5a9347 16
+  s_c07979d4ee0e2f::t_edc6d0708e1e3e 2,17,33-36
+  s_c07979d4ee0e2f::t_c5ba196f66e8dc 4
+  s_c07979d4ee0e2f::t_6066447f7e97ab 23,27,37
+  s_c07979d4ee0e2f::t_c908ae8bfcf8c0 1,3,5-15,18-22,24-26,28-32,38-42
+src/shell/consent/consent-authorization.test.ts
+  s_c07979d4ee0e2f::t_e1e1117a1102fc 13,128
+  s_c07979d4ee0e2f::t_b32d276fdbea5a 129-135
+vitest.acceptance.config.ts
+  s_c07979d4ee0e2f::t_b81a19fedd06d9 42-45,48
+  s_c07979d4ee0e2f::t_d21ce82b871575 49
+src/shell/agent/agent-service.test.ts
+  s_c07979d4ee0e2f::t_e1e1117a1102fc 12,1425
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "0dcd95aa9d8989f235d908c3f72edffa2c86aa89",
+  "prompts": {},
+  "sessions": {
+    "s_c07979d4ee0e2f": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019fdfcd-576b-77f2-97c6-47282df3048e",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": null
+    }
+  }
+}

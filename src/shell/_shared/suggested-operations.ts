@@ -1,7 +1,7 @@
 import { Function, type Option, Schema } from "effect";
-import { type HttpApiEndpoint } from "effect/unstable/httpapi";
 import { type AgentScope } from "~/core/tokens/model";
-import { type FidyApi, type OperationId, operationCatalog } from "~/shell/api";
+import { type OperationId, operationCatalog } from "~/shell/api";
+import type { CanonicalInput } from "./canonical-input";
 import { type OperationPolicyValue, type OperationTier } from "./operation-policy";
 import { type PartialInput } from "./partial-input";
 import {
@@ -9,27 +9,6 @@ import {
   SuggestedOperation,
   type SuggestedOperation as SuggestedOperationValue,
 } from "./response";
-
-type EndpointFor<Id extends OperationId> = Id extends `${infer Group}.${infer Endpoint}`
-  ? Group extends keyof typeof FidyApi.groups
-    ? Endpoint extends keyof (typeof FidyApi.groups)[Group]["endpoints"]
-      ? (typeof FidyApi.groups)[Group]["endpoints"][Endpoint]
-      : never
-    : never
-  : never;
-
-type ClientInput<Endpoint extends HttpApiEndpoint.ConstraintRequest> = Exclude<
-  HttpApiEndpoint.ClientRequest<
-    Endpoint["~Params"],
-    Endpoint["~Query"],
-    Endpoint["~Payload"],
-    Endpoint["~Headers"],
-    "decoded-only"
-  >,
-  void
->;
-
-type CanonicalInput<Id extends OperationId> = Omit<ClientInput<EndpointFor<Id>>, "responseMode">;
 
 type CandidateArgs<Id extends OperationId> = keyof CanonicalInput<Id> extends never
   ? Record<never, never>

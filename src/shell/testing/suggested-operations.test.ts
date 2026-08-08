@@ -18,6 +18,7 @@ import {
   type SuggestedOperation as SuggestedOperationValue,
 } from "~/shell/_shared/response";
 import { type OperationId, operationCatalog } from "~/shell/api";
+import { AtomicBatchCallId } from "~/shell/operations/operations";
 import { truncateDashboards } from "~/shell/dashboard/fixtures";
 import { seedConsentedAgentIdentity } from "~/shell/db/development-seed";
 import { truncateInsights, weeklySummaryInput } from "~/shell/insights/fixtures";
@@ -113,6 +114,24 @@ const probes: Record<OperationId, SuggestedOperationProbe> = {
     Effect.map(
       client.dashboard.applyDashboardEdit({
         payload: { op: "set-title", title: "Panel de prueba" },
+      }),
+      (response) => [response]
+    ),
+
+  "operations.executeAtomicBatch": (client) =>
+    Effect.map(
+      client.operations.executeAtomicBatch({
+        payload: {
+          calls: [
+            {
+              callId: AtomicBatchCallId.make("f1d1a000-0000-4000-8000-00000000ba71"),
+              operation: "identity.updateUserPreferences",
+              input: {
+                payload: { locale: "es-CO", timeZone: IanaTimeZone.make("America/Bogota") },
+              },
+            },
+          ],
+        },
       }),
       (response) => [response]
     ),

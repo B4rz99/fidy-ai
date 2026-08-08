@@ -95,6 +95,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           "dashboard.getDashboard": "mutation",
           "dashboard.listDashboardCatalog": "query",
           "dashboard.applyDashboardEdit": "mutation",
+          "operations.executeAtomicBatch": "mutation",
         } satisfies Record<OperationId, CanonicalOperationKind>;
         const operations = yield* publishedOperations;
         const byOperationId = (
@@ -138,6 +139,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           "dashboard.getDashboard": "not-required",
           "dashboard.listDashboardCatalog": "not-required",
           "dashboard.applyDashboardEdit": "required",
+          "operations.executeAtomicBatch": "required",
         } satisfies Record<OperationId, AgentConfirmation>;
         const operations = yield* publishedOperations;
         const published: Array<readonly [string, Option.Option<AgentConfirmation>]> =

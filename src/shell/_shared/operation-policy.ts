@@ -21,6 +21,8 @@ export type CanonicalOperationKind = typeof CanonicalOperationKind.Type;
 /** Route-independent authorization, availability, accounting, and agent policy carried by an operation. */
 export type OperationPolicyValue = {
   readonly requiredScope: AgentScope;
+  /** Whether authorization checks this endpoint or each schema-derived child operation. */
+  readonly scopeEvaluation: "endpoint" | "children";
   readonly requiredTier: OperationTier;
   readonly costClass: OperationCostClass;
   readonly agentConfirmation: AgentConfirmation;
@@ -49,15 +51,15 @@ export const getOperationPolicy = (endpoint: PolicyAnnotatedOperation): Operatio
  * runtime policy and generated OpenAPI extensions are created together so they
  * cannot drift into separate route maps.
  */
-export const operationPolicy = ({
-  requiredScope,
-  requiredTier,
-  costClass,
-  agentConfirmation,
-  kind,
-}: OperationPolicyValue): Context.Context<OperationPolicy | OpenApi.Override> =>
+type OperationPolicyInput = Omit<OperationPolicyValue, "scopeEvaluation">;
+
+const makeOperationPolicy = (
+  { requiredScope, requiredTier, costClass, agentConfirmation, kind }: OperationPolicyInput,
+  scopeEvaluation: OperationPolicyValue["scopeEvaluation"]
+): Context.Context<OperationPolicy | OpenApi.Override> =>
   Context.make(OperationPolicy, {
     requiredScope,
+    scopeEvaluation,
     requiredTier,
     costClass,
     agentConfirmation,
@@ -71,3 +73,12 @@ export const operationPolicy = ({
       "x-fidy-operation-kind": kind,
     })
   );
+
+export const operationPolicy = (
+  policy: OperationPolicyInput
+): Context.Context<OperationPolicy | OpenApi.Override> => makeOperationPolicy(policy, "endpoint");
+
+/** Policy constructor reserved for operations whose children carry authoritative scopes. */
+export const childScopeOperationPolicy = (
+  policy: OperationPolicyInput
+): Context.Context<OperationPolicy | OpenApi.Override> => makeOperationPolicy(policy, "children");

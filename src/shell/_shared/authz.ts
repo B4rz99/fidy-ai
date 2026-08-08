@@ -10,6 +10,7 @@ import {
   Layer,
   type Option,
   Redacted,
+  Ref,
   Schema,
 } from "effect";
 import { HttpClientRequest } from "effect/unstable/http";
@@ -119,6 +120,27 @@ export class ResolvedCaller extends Context.Service<ResolvedCaller, ResolvedAgen
   "fidy-ai/shell/_shared/authz/ResolvedCaller"
 ) {}
 
+type ChildAuditEvidence = Readonly<{
+  operation: CanonicalOperationId;
+  outcome: AuditOutcome;
+  occurredAt: DateTime.Utc;
+}>;
+
+/**
+ * Collects metadata-only child outcomes for the current canonical operation. Authorization persists
+ * the evidence after the endpoint transaction completes; successful children are recorded as failed
+ * when a later child causes their shared transaction to roll back. Recording itself cannot fail.
+ */
+export type ChildOperationAuditService = Readonly<{
+  record: (evidence: ChildAuditEvidence) => Effect.Effect<void>;
+}>;
+
+/** Request-scoped access to child-operation audit collection. */
+export class ChildOperationAudit extends Context.Service<
+  ChildOperationAudit,
+  ChildOperationAuditService
+>()("fidy-ai/shell/_shared/authz/ChildOperationAudit") {}
+
 /**
  * Security middleware attached once to the assembled API. It reads bearer
  * scope and cost exclusively from active endpoint metadata, resolves and renews
@@ -128,7 +150,7 @@ export class ResolvedCaller extends Context.Service<ResolvedCaller, ResolvedAgen
 export class AgentAuthorization extends HttpApiMiddleware.Service<
   AgentAuthorization,
   {
-    provides: ResolvedCaller;
+    provides: ResolvedCaller | ChildOperationAudit;
     requires: Crypto.Crypto | SqlClient.SqlClient;
   }
 >()("fidy-ai/shell/_shared/authz/AgentAuthorization", {
@@ -185,11 +207,66 @@ const operationAudit =
   (outcome) =>
     recordAuthorizationOutcome({ ...attempt, outcome });
 
-const provideResolvedCaller = <A, E, R>(
+const provideRequestServices = <A, E, R>(
   effect: Effect.Effect<A, E, R>,
+  resolved: ResolvedAgentToken,
+  childOperationAudit: ChildOperationAuditService
+): Effect.Effect<A, E, Exclude<Exclude<R, ResolvedCaller>, ChildOperationAudit>> =>
+  effect.pipe(
+    Effect.provideService(ResolvedCaller, resolved),
+    Effect.provideService(ChildOperationAudit, childOperationAudit)
+  );
+
+const flushChildEvidence = Effect.fn("flushChildOperationAuditEvidence")(function* (
+  childEvidence: Ref.Ref<ReadonlyArray<ChildAuditEvidence>>,
   resolved: ResolvedAgentToken
-): Effect.Effect<A, E, Exclude<R, ResolvedCaller>> =>
-  Effect.provideService(effect, ResolvedCaller, resolved);
+) {
+  for (const evidence of yield* Ref.get(childEvidence)) {
+    yield* recordAuthorizationOutcome({ resolved, ...evidence });
+  }
+});
+
+type AuthorizedEndpointInput<A, E, R> = Readonly<{
+  httpEffect: Effect.Effect<A, E, R>;
+  resolved: ResolvedAgentToken;
+  policy: ReturnType<typeof getOperationPolicy>;
+  operation: CanonicalOperationId;
+  occurredAt: DateTime.Utc;
+}>;
+
+const executeAuthorizedEndpoint = Effect.fn("executeAuthorizedEndpoint")(function* <A, E, R>({
+  httpEffect,
+  occurredAt,
+  operation,
+  policy,
+  resolved,
+}: AuthorizedEndpointInput<A, E, R>) {
+  if (policy.scopeEvaluation !== "children" && !resolved.scopes.includes(policy.requiredScope)) {
+    return yield* new ScopeAuthenticationRejected({ resolved });
+  }
+
+  yield* annotateOperationPolicy(policy);
+  const sql = yield* SqlClient.SqlClient;
+  const audit = operationAudit({ resolved, operation, occurredAt });
+  const childEvidence = yield* Ref.make<ReadonlyArray<ChildAuditEvidence>>([]);
+  const childOperationAudit = ChildOperationAudit.of({
+    record: (evidence) => Ref.update(childEvidence, (entries) => [...entries, evidence]),
+  });
+  const authorizedEffect = provideRequestServices(httpEffect, resolved, childOperationAudit);
+  const exit = yield* Effect.exit(
+    sql.withTransaction(authorizedEffect.pipe(Effect.tap(audit.bind(null, "succeeded"))))
+  );
+  if (Exit.isFailure(exit)) {
+    yield* audit("failed");
+    yield* Ref.update(childEvidence, (entries) =>
+      entries.map((entry) =>
+        entry.outcome === "succeeded" ? { ...entry, outcome: "failed" as const } : entry
+      )
+    );
+  }
+  yield* flushChildEvidence(childEvidence, resolved);
+  return { _tag: "OperationCompleted", exit } as const;
+});
 
 /**
  * Live operation-derived bearer authorization for the HTTP server. Each call
@@ -223,25 +300,12 @@ export const AgentAuthorizationLive = Layer.succeed(
               useCurrentConsent(
                 resolved.subjectUserId,
                 () => Effect.fail(new ConsentAuthenticationRejected({ resolved })),
-                Effect.gen(function* () {
-                  const audit = operationAudit({ resolved, operation, occurredAt });
-
-                  if (!resolved.scopes.includes(policy.requiredScope)) {
-                    return yield* new ScopeAuthenticationRejected({ resolved });
-                  }
-
-                  yield* annotateOperationPolicy(policy);
-
-                  const authorizedEffect = provideResolvedCaller(httpEffect, resolved);
-                  const exit = yield* Effect.exit(
-                    sql.withTransaction(
-                      authorizedEffect.pipe(Effect.tap(audit.bind(null, "succeeded")))
-                    )
-                  );
-                  if (Exit.isFailure(exit)) {
-                    yield* audit("failed");
-                  }
-                  return { _tag: "OperationCompleted", exit } as const;
+                executeAuthorizedEndpoint({
+                  httpEffect,
+                  resolved,
+                  policy,
+                  operation,
+                  occurredAt,
                 })
               )
             );

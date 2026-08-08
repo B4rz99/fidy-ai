@@ -11,6 +11,7 @@ import { AgentBearerToken } from "~/core/tokens/model";
 import type { OperationId } from "~/shell/api";
 import { truncateInsights, weeklySummaryInput } from "~/shell/insights/fixtures";
 import { generateInsightEvent } from "~/shell/insights/repo";
+import { AtomicBatchCallId } from "~/shell/operations/operations";
 import { transactionPayload, truncateTransactions } from "~/shell/transactions/fixtures";
 import {
   type ApiCallFailure,
@@ -342,6 +343,28 @@ const probes: Record<OperationId, IsolationProbe> = {
       });
 
       expect(owners.data).toEqual(attempt.ownedTransaction);
+    }),
+
+  "operations.executeAtomicBatch": (attempt) =>
+    Effect.gen(function* () {
+      yield* attempt.strangerClient.operations.executeAtomicBatch({
+        payload: {
+          calls: [
+            {
+              callId: AtomicBatchCallId.make("f1d1a000-0000-4000-8000-0000000000b3"),
+              operation: "categories.createKeywordRule",
+              input: {
+                payload: {
+                  keyword: CategoryKeyword.make("solo extraño"),
+                  categoryId: categoryIds.otros,
+                },
+              },
+            },
+          ],
+        },
+      });
+      const owners = yield* attempt.ownerClient.categories.listKeywordRules({});
+      expect(owners.data).toEqual([]);
     }),
 };
 

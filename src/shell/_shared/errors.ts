@@ -68,7 +68,7 @@ const detail = <Code extends ErrorCode>(
     }),
   });
 
-const FieldIssue = Schema.Struct({
+export const FieldIssue = Schema.Struct({
   /**
    * `optionalKey` rather than `optional`: absence is the key not being there.
    * `optional` is `optionalKey(UndefinedOr(...))`, which publishes `null` in an

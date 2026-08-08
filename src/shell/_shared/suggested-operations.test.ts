@@ -198,6 +198,7 @@ it("fails loudly when more than three callable operations remain", () => {
 it("keeps Pro operations out of free responses", () => {
   const policy = {
     requiredScope: "read",
+    scopeEvaluation: "endpoint",
     requiredTier: "pro",
     costClass: "expensive",
     agentConfirmation: "not-required",

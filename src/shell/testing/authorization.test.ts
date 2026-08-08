@@ -16,6 +16,7 @@ import { truncateAuditLogEntries } from "~/shell/audit/fixtures";
 import { observeAuditLogEntries } from "~/shell/audit/repo";
 import { truncateInsights, weeklySummaryInput } from "~/shell/insights/fixtures";
 import { generateInsightEvent } from "~/shell/insights/repo";
+import { AtomicBatchCallId } from "~/shell/operations/operations";
 import { transactionPayload, truncateTransactions } from "~/shell/transactions/fixtures";
 import {
   type ApiClient,
@@ -311,6 +312,50 @@ layer(AuthorizationHarness, { excludeTestServices: true, timeout: "30 seconds" }
           ["transactions.updateTransaction", "rejected"],
           ["transactions.deleteTransaction", "rejected"],
         ]);
+      })
+    );
+
+    it.effect("rejects an under-scoped batch child without committing it", () =>
+      Effect.gen(function* () {
+        yield* truncateTransactions;
+        yield* truncateAuditLogEntries;
+        yield* seedReadOnlyIdentity;
+        const client = yield* ReadOnlyApiClient;
+
+        const failure = yield* Effect.flip(
+          client.operations.executeAtomicBatch({
+            payload: {
+              calls: [
+                {
+                  callId: AtomicBatchCallId.make("f1d1a000-0000-4000-8000-000000000501"),
+                  operation: "transactions.createTransaction",
+                  input: {
+                    payload: transactionPayload({ counterparty: "Denied batch mutation" }),
+                  },
+                },
+              ],
+            },
+          })
+        );
+        const transactions = yield* client.transactions.listTransactions({ query: {} });
+        const auditEntries = yield* observeAuditLogEntries(readOnlyUser);
+
+        expect(failure).toMatchObject({
+          error: {
+            code: "scope_missing",
+            failedCallIndex: 0,
+            operation: "transactions.createTransaction",
+          },
+        });
+        expect(transactions.data).toEqual([]);
+        expect(auditEntries).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({
+              operation: "transactions.createTransaction",
+              outcome: "rejected",
+            }),
+          ])
+        );
       })
     );
 

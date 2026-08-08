@@ -1,5 +1,5 @@
 import { expect, layer } from "@effect/vitest";
-import { BigDecimal, Effect, Equal, Layer, Option, Schema, Terminal } from "effect";
+import { BigDecimal, Context, Effect, Equal, Layer, Option, Ref, Schema, Terminal } from "effect";
 import { LanguageModel, type Response, Tool } from "effect/unstable/ai";
 import { SqlClient } from "effect/unstable/sql";
 import { E164PhoneNumber, UserId, WhatsAppBusinessScopedUserId } from "~/core/identity/reference";
@@ -118,6 +118,15 @@ const createTransactionToolCall = ({
 
 type ModelReply = Array<Response.PartEncoded>;
 
+class ModelPrompts extends Context.Service<ModelPrompts, Ref.Ref<ReadonlyArray<string>>>()(
+  "fidy-ai/shell/agent/agent-service.test/ModelPrompts"
+) {
+  static readonly layer = Layer.effect(ModelPrompts, Ref.make<ReadonlyArray<string>>([]));
+}
+
+const resetModelPrompts = Effect.flatMap(ModelPrompts, (prompts) => Ref.set(prompts, []));
+const readModelPrompts = Effect.flatMap(ModelPrompts, Ref.get);
+
 const turnStartedAt = (serialized: string): Option.Option<string> =>
   Option.fromUndefinedOr(/El turno comenzó en ([0-9T:.+-]+Z)/u.exec(serialized)?.[1]);
 
@@ -159,8 +168,6 @@ const isolationScript = (serialized: string): Option.Option<ModelReply> => {
     return Option.some([{ type: "text" as const, text: "A_PRIVATE_ASSISTANT_MARKER" }]);
   }
   if (serialized.includes("registra aislamientob 25 cop")) {
-    expect(serialized).not.toContain("A_PRIVATE_TRANSCRIPT_MARKER");
-    expect(serialized).not.toContain("A_PRIVATE_ASSISTANT_MARKER");
     return Option.some([
       createTransactionToolCall({
         id: "user-isolation-quick-log",
@@ -465,9 +472,6 @@ const almuerzoQuickLogScript = (serialized: string): Option.Option<ModelReply> =
     serialized.includes("almuerzo 25 USD") ||
     serialized.includes("almuerzo 25 usd")
   ) {
-    expect(serialized).toContain("ServiceMarket CO, locale es-CO");
-    expect(serialized).toContain("zona IANA America/Bogota");
-    expect(serialized).toMatch(/El turno comenzó en \d{4}-\d{2}-\d{2}T/);
     const currentMessage = currentQuickLogMessage(serialized);
     const currency = currentMessage.toUpperCase().endsWith("USD") ? "USD" : "COP";
     return Option.some(
@@ -489,10 +493,6 @@ const almuerzoQuickLogScript = (serialized: string): Option.Option<ModelReply> =
 const listingScript = (serialized: string): Option.Option<ModelReply> => {
   if (serialized.includes("Lista historial acotado")) {
     const hasCurrentToolResult = hasToolResultAfter(serialized, "Lista historial acotado");
-    if (hasCurrentToolResult) {
-      expect(serialized).toContain("tool_result_too_large");
-      expect(serialized).not.toContain("bulk-");
-    }
     return Option.some(
       hasCurrentToolResult
         ? [{ type: "text" as const, text: "Historial acotado." }]
@@ -508,7 +508,6 @@ const listingScript = (serialized: string): Option.Option<ModelReply> => {
   }
   if (serialized.includes("Lista movimientos secretos")) {
     if (hasToolResultAfter(serialized, "Lista movimientos secretos")) {
-      expect(serialized).not.toContain("fin_deadbeef_");
       return Option.some([{ type: "text" as const, text: "Resultado protegido." }]);
     }
     return Option.some([
@@ -563,18 +562,25 @@ const scriptedReply = (serialized: string, tools: ReadonlyArray<Tool.Any>): Mode
 
 const ScriptedLanguageModel = Layer.effect(
   LanguageModel.LanguageModel,
-  LanguageModel.make({
-    generateText: ({ prompt, tools }) => {
-      const serialized = JSON.stringify(prompt.content);
-      expect(serialized).not.toContain("fin_deadbeef_");
-      if (serialized.includes("MODELO_BLOQUEADO")) return Effect.never;
-      return Effect.succeed(scriptedReply(serialized, tools));
-    },
-    streamText: () => {
-      throw new Error("The agent uses non-streaming generation");
-    },
+  Effect.gen(function* () {
+    const prompts = yield* ModelPrompts;
+    return yield* LanguageModel.make({
+      generateText: ({ prompt, tools }) => {
+        const serialized = JSON.stringify(prompt.content);
+        return Ref.update(prompts, (recorded) => [...recorded, serialized]).pipe(
+          Effect.andThen(
+            serialized.includes("MODELO_BLOQUEADO")
+              ? Effect.never
+              : Effect.succeed(scriptedReply(serialized, tools))
+          )
+        );
+      },
+      streamText: () => {
+        throw new Error("The agent uses non-streaming generation");
+      },
+    });
   })
-);
+).pipe(Layer.provideMerge(ModelPrompts.layer));
 
 const AgentHarness = AgentServiceLive.pipe(
   Layer.provideMerge(ScriptedLanguageModel),
@@ -628,6 +634,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
         InboundMessage.make({ text: TranscriptText.make("A_PRIVATE_TRANSCRIPT_MARKER") })
       );
       const userABefore = yield* listTranscriptEntries(userA);
+      yield* resetModelPrompts;
 
       const reply = yield* service.handleSynchronousTurn(
         userB,
@@ -646,8 +653,14 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       const encodedBTranscript = yield* Schema.encodeEffect(Schema.UnknownFromJsonString)(
         userBTranscript
       );
+      const modelPrompts = yield* readModelPrompts;
 
       expect(reply.text).toContain("Gasto guardado");
+      expect(modelPrompts).not.toHaveLength(0);
+      for (const prompt of modelPrompts) {
+        expect(prompt).not.toContain("A_PRIVATE_TRANSCRIPT_MARKER");
+        expect(prompt).not.toContain("A_PRIVATE_ASSISTANT_MARKER");
+      }
       expect(userAAfter).toEqual(userABefore);
       expect(encodedBTranscript).not.toContain("A_PRIVATE_TRANSCRIPT_MARKER");
       expect(encodedBTranscript).not.toContain("A_PRIVATE_ASSISTANT_MARKER");
@@ -750,14 +763,18 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       );
       yield* sql`UPDATE transactions SET notes = 'fin_deadbeef_abcdefghijklmnopqrstuvwxyzABCDEF'`;
       yield* clearTranscript;
+      yield* resetModelPrompts;
 
       const reply = yield* service.handleSynchronousTurn(
         defaultUserId,
         InboundMessage.make({ text: TranscriptText.make("Lista movimientos secretos") })
       );
       const transcript = yield* listTranscriptEntries(defaultUserId);
+      const modelPrompts = yield* readModelPrompts;
 
       expect(reply.text).toBe("Resultado protegido.");
+      expect(modelPrompts).not.toHaveLength(0);
+      expect(modelPrompts.every((prompt) => !prompt.includes("fin_deadbeef_"))).toBe(true);
       expect(
         transcript.some(
           (entry) =>
@@ -951,6 +968,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
         const sql = yield* MigrationSqlClient;
         yield* sql`TRUNCATE source_attestations, transactions, keyword_rules`;
         yield* clearTranscript;
+        yield* resetModelPrompts;
         const service = yield* AgentService;
         const client = yield* ApiHarnessClient;
         const displayed: Array<string> = [];
@@ -977,7 +995,16 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
         const explicit = history.data.find((transaction) =>
           Option.contains(transaction.counterparty, "Papelería")
         );
+        const quickLogPrompts = (yield* readModelPrompts).filter((prompt) =>
+          /almuerzo 25 (?:mil|usd)/iu.test(prompt)
+        );
 
+        expect(quickLogPrompts).not.toHaveLength(0);
+        for (const prompt of quickLogPrompts) {
+          expect(prompt).toContain("ServiceMarket CO, locale es-CO");
+          expect(prompt).toContain("zona IANA America/Bogota");
+          expect(prompt).toMatch(/El turno comenzó en \d{4}-\d{2}-\d{2}T/u);
+        }
         expect(displayed).toEqual([
           "Fidy> ",
           "✅ **Gasto guardado**\n\n**Valor:** 25.000 COP\n**Contraparte:** Almuerzo\n**Categoría:** Restaurantes\n**Fecha:** Hoy\n",
@@ -1013,6 +1040,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
         LIMIT 110
       `;
       yield* clearTranscript;
+      yield* resetModelPrompts;
 
       const limits = agentLimits({
         maxToolResultCharacters: 1_000,
@@ -1028,7 +1056,12 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       const result = transcript.find((entry) => entry._tag === "CanonicalToolResultEntry");
       const BoundedHistory = Schema.Struct({ data: Schema.Array(Schema.Unknown) });
       const retained = yield* Schema.encodeEffect(Schema.UnknownFromJsonString)(transcript);
+      const boundedPrompt = (yield* readModelPrompts).find((prompt) =>
+        prompt.includes("tool_result_too_large")
+      );
 
+      expect(boundedPrompt).toBeDefined();
+      expect(boundedPrompt).not.toContain("bulk-");
       expect(reply.text).toBe("Historial acotado.");
       expect(retained).toContain("bulk-");
       expect(retained).not.toContain("tool_result_too_large");

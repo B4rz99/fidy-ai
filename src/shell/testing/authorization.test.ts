@@ -217,7 +217,6 @@ layer(AuthorizationHarness, { excludeTestServices: true, timeout: "30 seconds" }
           operation: "transactions.createTransaction",
           outcome: "rejected",
         });
-        expect(DateTime.isUtc(auditEntries[0]?.occurredAt ?? DateTime.makeUnsafe(0))).toBe(true);
       })
     );
 

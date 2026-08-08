@@ -155,6 +155,10 @@ What review looks for:
   matter, so a reader sees immediately what the test is about.
 - **Prefer a derived guard over a hand-kept list** wherever the assembled API can supply the
   operation set; use exhaustive typed probes when each operation needs explicit behavior.
+- **Vitest `expect` is the default for ordinary values.** Its Effect equality testers are a no-op in
+  the current beta, so use `Equal.equals` for `BigDecimal` and hashed collections. When a tagged
+  error class is part of the contract, compare the whole `Exit` with `assert.deepStrictEqual` so a
+  structurally identical instance of the wrong class cannot pass.
 
 ---
 

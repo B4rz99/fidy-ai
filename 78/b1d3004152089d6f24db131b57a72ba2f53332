@@ -1,0 +1,46 @@
+src/shell/agent/agent-service.test.ts
+  s_e02caf76ca4f6b::t_628f96c57580c8 23
+  s_e02caf76ca4f6b::t_237de5a86cf87f 579
+src/shell/consent/agent-consent-gate.test.ts
+  s_e02caf76ca4f6b::t_0b0f6bd07d9895 10,30
+tools/vitest-global-setup.ts
+  s_e02caf76ca4f6b::t_b4ee72914625a2 2,12
+src/shell/channels/whatsapp/whatsapp-channel.test.ts
+  s_e02caf76ca4f6b::t_6ba19a42dff0cd 29,192,254-255
+src/shell/db/client.ts
+  s_e02caf76ca4f6b::t_95a898c1ae3e73 49-54
+CODING_STANDARDS.md
+  s_e02caf76ca4f6b::t_31c7c97bed50c8 24-25,118-120
+src/shell/http.ts
+  s_e02caf76ca4f6b::t_23183d9aadb88c 9,12,82-83,87
+src/shell/channels/whatsapp/kapso-client.ts
+  s_e02caf76ca4f6b::t_a33a7e6259e09c 388
+  s_e02caf76ca4f6b::t_a91d7feeba6114 364-387
+src/shell/testing/api-harness.ts
+  s_e02caf76ca4f6b::t_902354504c69fe 21,133
+src/shell/testing/whatsapp-acceptance-harness.ts
+  s_e02caf76ca4f6b::t_628f96c57580c8 12
+  s_e02caf76ca4f6b::t_1876c1acc1170b 5,133,150
+src/shell/agent/agent-service.ts
+  s_e02caf76ca4f6b::t_72a07844fed3df 743-746
+vitest.acceptance.config.ts
+  s_e02caf76ca4f6b::t_d448a59abb60d8 37-42,45-46
+scripts/agent-repl.ts
+  s_e02caf76ca4f6b::t_f799dd614cea78 4,26
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "78b1d3004152089d6f24db131b57a72ba2f53332",
+  "prompts": {},
+  "sessions": {
+    "s_e02caf76ca4f6b": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019fdfcd-aa6d-74af-834d-27f132d01137",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": null
+    }
+  }
+}

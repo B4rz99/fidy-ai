@@ -46,10 +46,11 @@ export default defineConfig({
       //
       // Lowered in #149 because request-scoped caller resolution and API recovery metadata add
       // shell branches outside the WhatsApp acceptance seam; focused API tests cover those paths.
+      // Raised in #151 because WhatsApp acceptance now exercises mixed assistant context replay.
       thresholds: {
         autoUpdate: true,
-        branches: 26.36,
-        lines: 60.46,
+        branches: 28.16,
+        lines: 60.96,
       },
     },
   },

@@ -456,6 +456,45 @@ const privateReadScript = (serialized: string): Option.Option<ModelReply> => {
   return Option.none();
 };
 
+const turnContextScript = (serialized: string): Option.Option<ModelReply> => {
+  if (serialized.includes("CONTEXT_LATER_TURN")) {
+    return Option.some([
+      {
+        type: "text" as const,
+        text: serialized.includes("TRANSIENT_ASSISTANT_CONTEXT")
+          ? "El contexto transitorio se filtró."
+          : "El contexto transitorio terminó con el turno.",
+      },
+    ]);
+  }
+  if (!serialized.includes("CONTEXT_ACTIVE_TURN")) return Option.none();
+  if (hasToolResultAfter(serialized, "CONTEXT_ACTIVE_TURN")) {
+    const before = serialized.lastIndexOf("TRANSIENT_ASSISTANT_CONTEXT antes");
+    const toolCall = serialized.lastIndexOf('"type":"tool-call"');
+    const after = serialized.lastIndexOf("TRANSIENT_ASSISTANT_CONTEXT después");
+    const toolResult = serialized.lastIndexOf('"type":"tool-result"');
+    return Option.some([
+      {
+        type: "text" as const,
+        text:
+          before < toolCall && toolCall < after && after < toolResult
+            ? "El contexto activo conservó su orden."
+            : "El contexto activo perdió su orden.",
+      },
+    ]);
+  }
+  return Option.some([
+    { type: "text" as const, text: "TRANSIENT_ASSISTANT_CONTEXT antes" },
+    {
+      type: "tool-call" as const,
+      id: "active-turn-context-call",
+      name: "categories__listCategories",
+      params: {},
+    },
+    { type: "text" as const, text: "TRANSIENT_ASSISTANT_CONTEXT después" },
+  ]);
+};
+
 const plainTextScript = (serialized: string): Option.Option<ModelReply> => {
   if (serialized.includes("Expón token")) {
     return Option.some([
@@ -602,6 +641,7 @@ const scriptedReply = (serialized: string, tools: ReadonlyArray<Tool.Any>): Mode
     Option.orElse(() => malformedCaptureScript(serialized)),
     Option.orElse(() => deletionScript(serialized)),
     Option.orElse(() => privateReadScript(serialized)),
+    Option.orElse(() => turnContextScript(serialized)),
     Option.orElse(() => plainTextScript(serialized)),
     Option.orElse(() => quickLogScript(serialized)),
     Option.orElse(() => almuerzoQuickLogScript(serialized)),
@@ -671,6 +711,39 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       expect(firstReply.text).toBe("Primera respuesta");
       expect(secondReply.text).toBe("Sí, recuerdo el turno anterior.");
     })
+  );
+
+  it.effect(
+    "replays mixed assistant parts during the active turn without retaining their text later",
+    () =>
+      Effect.gen(function* () {
+        yield* clearTranscript;
+        yield* resetModelPrompts;
+        const service = yield* AgentService;
+
+        const activeReply = yield* service.handleSynchronousTurn(
+          defaultUserId,
+          InboundMessage.make({ text: TranscriptText.make("CONTEXT_ACTIVE_TURN") })
+        );
+        const activeTranscript = yield* listTranscriptEntries(defaultUserId);
+
+        yield* resetModelPrompts;
+        const laterReply = yield* service.handleSynchronousTurn(
+          defaultUserId,
+          InboundMessage.make({ text: TranscriptText.make("CONTEXT_LATER_TURN") })
+        );
+        const laterPrompts = yield* readModelPrompts;
+
+        expect(activeReply.text).toBe("El contexto activo conservó su orden.");
+        expect(
+          activeTranscript.filter((entry) => entry._tag === "AssistantTranscriptEntry")
+        ).toMatchObject([{ text: "El contexto activo conservó su orden." }]);
+        expect(laterReply.text).toBe("El contexto transitorio terminó con el turno.");
+        expect(laterPrompts).not.toHaveLength(0);
+        expect(
+          laterPrompts.every((prompt) => !prompt.includes("TRANSIENT_ASSISTANT_CONTEXT"))
+        ).toBe(true);
+      })
   );
 
   it.effect("isolates Transcript, canonical execution, and audit attribution between Users", () =>

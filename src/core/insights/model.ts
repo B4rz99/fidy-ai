@@ -1,78 +1,31 @@
-import { Array as Arr, BigDecimal, Schema, SchemaTransformation, Struct } from "effect";
+import { Schema, Struct } from "effect";
 import { IanaTimeZone, Locale, ServiceMarket } from "~/core/_shared/context";
-import { Currency, Money, type ReadonlyMoney } from "~/core/_shared/money";
+import { MoneyGroups } from "~/core/_shared/money";
 import { ProviderMessageEvidence } from "~/core/_shared/provider-message-evidence";
 import { InsightKind } from "./reference";
+import { UtcTimestamp } from "~/core/_shared/time";
 
 /** Stable identity of one generated occurrence. */
-export const InsightEventId = Schema.String.check(Schema.isUUID()).pipe(
-  Schema.brand("InsightEventId")
-);
+export const InsightEventId = Schema.String.check(Schema.isUUID())
+  .pipe(Schema.brand("InsightEventId"))
+  .annotate({ identifier: "InsightEventId" });
 export type InsightEventId = typeof InsightEventId.Type;
 
 /** Stable identity of the schedule whose revision generated an occurrence. */
-export const ScheduleId = Schema.String.check(Schema.isUUID()).pipe(Schema.brand("ScheduleId"));
+export const ScheduleId = Schema.String.check(Schema.isUUID())
+  .pipe(Schema.brand("ScheduleId"))
+  .annotate({ identifier: "ScheduleId" });
 export type ScheduleId = typeof ScheduleId.Type;
 
 /** Revisions start at one and increase whenever a Schedule's instructions change. */
-export const ScheduleVersion = Schema.Finite.check(Schema.isInt(), Schema.isGreaterThan(0)).pipe(
-  Schema.brand("ScheduleVersion")
-);
+export const ScheduleVersion = Schema.Int.check(Schema.isGreaterThan(0))
+  .pipe(Schema.brand("ScheduleVersion"))
+  .annotate({ identifier: "ScheduleVersion" });
 export type ScheduleVersion = typeof ScheduleVersion.Type;
 
 /** The forward-only attention lifecycle shared by every InsightEvent consumer. */
 export const InsightLifecycleState = Schema.Literals(["pending", "delivered", "read", "dismissed"]);
 export type InsightLifecycleState = typeof InsightLifecycleState.Type;
-
-const groupCurrenciesMatch = Schema.makeFilter<
-  Readonly<{
-    currency: Currency;
-    inflow: ReadonlyMoney;
-    outflow: ReadonlyMoney;
-  }>
->((group) => {
-  if (group.inflow.currency !== group.currency) {
-    return { path: ["inflow", "currency"], issue: "Expected the group Currency" };
-  }
-  if (group.outflow.currency !== group.currency) {
-    return { path: ["outflow", "currency"], issue: "Expected the group Currency" };
-  }
-  if (BigDecimal.isZero(group.inflow.amount) && BigDecimal.isZero(group.outflow.amount)) {
-    return "Expected at least one non-zero Money value";
-  }
-  return undefined;
-});
-
-/** Exact inflow and outflow Money retained separately for one Currency. */
-export const InsightMoneyGroup = Schema.Struct({
-  currency: Currency,
-  inflow: Money,
-  outflow: Money,
-})
-  .check(groupCurrenciesMatch)
-  .annotate({ identifier: "InsightMoneyGroup" });
-export type InsightMoneyGroup = typeof InsightMoneyGroup.Type;
-
-const deterministicCurrencyOrder = Schema.makeFilter<
-  ReadonlyArray<Readonly<{ currency: Currency }>>
->((groups) => {
-  for (const [index, [previous, current]] of Arr.zip(groups, groups.slice(1)).entries()) {
-    if (previous.currency >= current.currency) {
-      return {
-        path: [index + 1, "currency"],
-        issue: "Expected unique Currency groups in alphabetic order",
-      };
-    }
-  }
-  return undefined;
-});
-
-/** Currency groups in unique alphabetic order; an empty array means no Money was retained. */
-export const InsightMoneyGroups = Schema.Array(InsightMoneyGroup).check(deterministicCurrencyOrder);
-
-const UtcTimestamp = Schema.String.annotate({ format: "date-time" }).pipe(
-  Schema.decodeTo(Schema.DateTimeUtc, SchemaTransformation.dateTimeUtcFromString)
-);
 
 /**
  * One immutable generated occurrence plus its current lifecycle state. Context
@@ -87,7 +40,7 @@ export const InsightEvent = Schema.Struct({
   locale: Locale,
   timeZone: IanaTimeZone,
   scheduledAt: UtcTimestamp,
-  moneyGroups: InsightMoneyGroups,
+  moneyGroups: MoneyGroups,
   lifecycleState: InsightLifecycleState,
 }).annotate({ identifier: "InsightEvent" });
 export type InsightEvent = typeof InsightEvent.Type;
@@ -99,9 +52,9 @@ export const InsightGenerationInput = InsightEvent.mapFields(
 export type InsightGenerationInput = typeof InsightGenerationInput.Type;
 
 /** Stable identity of one append-only provider send record. */
-export const DeliveryAttemptId = Schema.String.check(Schema.isUUID()).pipe(
-  Schema.brand("DeliveryAttemptId")
-);
+export const DeliveryAttemptId = Schema.String.check(Schema.isUUID())
+  .pipe(Schema.brand("DeliveryAttemptId"))
+  .annotate({ identifier: "DeliveryAttemptId" });
 export type DeliveryAttemptId = typeof DeliveryAttemptId.Type;
 
 /** Evidence supplied after an external consumer actually attempted a send. */

@@ -14,7 +14,9 @@ const maximumWhatsAppUsernameLength = 256;
  * repo and core signatures and in storage — never as a field on an ordinary
  * entity's schema, where a client could name it.
  */
-export const UserId = Schema.String.check(Schema.isUUID()).pipe(Schema.brand("UserId"));
+export const UserId = Schema.String.check(Schema.isUUID())
+  .pipe(Schema.brand("UserId"))
+  .annotate({ identifier: "UserId" });
 export type UserId = typeof UserId.Type;
 
 /**
@@ -23,9 +25,9 @@ export type UserId = typeof UserId.Type;
  * and locally scoped numbers are rejected so database uniqueness has one
  * spelling per number.
  */
-export const E164PhoneNumber = Schema.String.check(Schema.isPattern(/^\+[1-9][0-9]{7,14}$/)).pipe(
-  Schema.brand("E164PhoneNumber")
-);
+export const E164PhoneNumber = Schema.String.check(Schema.isPattern(/^\+[1-9][0-9]{7,14}$/))
+  .pipe(Schema.brand("E164PhoneNumber"))
+  .annotate({ identifier: "E164PhoneNumber" });
 export type E164PhoneNumber = typeof E164PhoneNumber.Type;
 
 /**
@@ -35,7 +37,9 @@ export type E164PhoneNumber = typeof E164PhoneNumber.Type;
 export const WhatsAppBusinessPortfolioId = Schema.NonEmptyString.check(
   Schema.isTrimmed(),
   Schema.isMaxLength(maximumBusinessPortfolioIdLength)
-).pipe(Schema.brand("WhatsAppBusinessPortfolioId"));
+)
+  .pipe(Schema.brand("WhatsAppBusinessPortfolioId"))
+  .annotate({ identifier: "WhatsAppBusinessPortfolioId" });
 export type WhatsAppBusinessPortfolioId = typeof WhatsAppBusinessPortfolioId.Type;
 
 /**
@@ -44,7 +48,9 @@ export type WhatsAppBusinessPortfolioId = typeof WhatsAppBusinessPortfolioId.Typ
  */
 export const WhatsAppBusinessScopedUserId = Schema.String.check(
   Schema.isPattern(/^[A-Z]{2}\.[A-Za-z0-9]{1,128}$/iu)
-).pipe(Schema.brand("WhatsAppBusinessScopedUserId"));
+)
+  .pipe(Schema.brand("WhatsAppBusinessScopedUserId"))
+  .annotate({ identifier: "WhatsAppBusinessScopedUserId" });
 export type WhatsAppBusinessScopedUserId = typeof WhatsAppBusinessScopedUserId.Type;
 
 /**
@@ -54,7 +60,9 @@ export type WhatsAppBusinessScopedUserId = typeof WhatsAppBusinessScopedUserId.T
  */
 export const WhatsAppParentBusinessScopedUserId = Schema.String.check(
   Schema.isPattern(/^[A-Z]{2}\.ENT\.[A-Za-z0-9]{1,128}$/iu)
-).pipe(Schema.brand("WhatsAppParentBusinessScopedUserId"));
+)
+  .pipe(Schema.brand("WhatsAppParentBusinessScopedUserId"))
+  .annotate({ identifier: "WhatsAppParentBusinessScopedUserId" });
 export type WhatsAppParentBusinessScopedUserId = typeof WhatsAppParentBusinessScopedUserId.Type;
 
 /**
@@ -64,7 +72,9 @@ export type WhatsAppParentBusinessScopedUserId = typeof WhatsAppParentBusinessSc
 export const WhatsAppUsername = Schema.NonEmptyString.check(
   Schema.isTrimmed(),
   Schema.isMaxLength(maximumWhatsAppUsernameLength)
-).pipe(Schema.brand("WhatsAppUsername"));
+)
+  .pipe(Schema.brand("WhatsAppUsername"))
+  .annotate({ identifier: "WhatsAppUsername" });
 export type WhatsAppUsername = typeof WhatsAppUsername.Type;
 
 /** Stable cross-slice reference to one WhatsApp caller within a trusted Business Portfolio. */

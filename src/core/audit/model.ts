@@ -2,13 +2,14 @@ import { Schema } from "effect";
 import { AgentTokenId } from "~/core/tokens/reference";
 import { CanonicalOperationId } from "~/core/_shared/canonical-operation";
 import { UserId } from "~/core/identity/reference";
+import { UtcTimestamp } from "~/core/_shared/time";
 
 export { CanonicalOperationId } from "~/core/_shared/canonical-operation";
 
 /** A stable UUID naming one append-only AuditLogEntry. */
-export const AuditLogEntryId = Schema.String.check(Schema.isUUID()).pipe(
-  Schema.brand("AuditLogEntryId")
-);
+export const AuditLogEntryId = Schema.String.check(Schema.isUUID())
+  .pipe(Schema.brand("AuditLogEntryId"))
+  .annotate({ identifier: "AuditLogEntryId" });
 export type AuditLogEntryId = typeof AuditLogEntryId.Type;
 
 /** The recorded result of one attributable canonical call. */
@@ -26,6 +27,6 @@ export const AuditLogEntry = Schema.Struct({
   tokenId: AgentTokenId,
   operation: CanonicalOperationId,
   outcome: AuditOutcome,
-  occurredAt: Schema.DateTimeUtc,
+  occurredAt: UtcTimestamp,
 }).annotate({ identifier: "AuditLogEntry" });
 export type AuditLogEntry = typeof AuditLogEntry.Type;

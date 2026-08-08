@@ -1,18 +1,20 @@
 import { Schema, Struct } from "effect";
 import { CategoryId } from "./reference";
+import { UtcTimestamp } from "~/core/_shared/time";
 
 const maximumCategoryTextLength = 80;
 
 /** Stable identity of one user keyword rule; tie-breaking may rely on its lexical UUID order. */
-export const KeywordRuleId = Schema.String.check(Schema.isUUID()).pipe(
-  Schema.brand("KeywordRuleId")
-);
+export const KeywordRuleId = Schema.String.check(Schema.isUUID())
+  .pipe(Schema.brand("KeywordRuleId"))
+  .annotate({ identifier: "KeywordRuleId" });
 export type KeywordRuleId = typeof KeywordRuleId.Type;
 
 /** Spanish label shown for a Category; changing it never changes Category identity. */
 export const CategoryLabel = Schema.NonEmptyString.check(Schema.isTrimmed())
   .check(Schema.isMaxLength(maximumCategoryTextLength))
-  .pipe(Schema.brand("CategoryLabel"));
+  .pipe(Schema.brand("CategoryLabel"))
+  .annotate({ identifier: "CategoryLabel" });
 export type CategoryLabel = typeof CategoryLabel.Type;
 
 /** Normalizes a counterparty fragment for case- and diacritic-insensitive comparison. */
@@ -29,10 +31,11 @@ export const CategoryKeyword = Schema.NonEmptyString.check(Schema.isTrimmed())
     Schema.makeFilter((keyword) =>
       normalizeCategoryKeyword(keyword).length > 0
         ? undefined
-        : { path: [], issue: "Expected a keyword containing a letter or number" }
+        : "Expected a keyword containing a letter or number"
     )
   )
-  .pipe(Schema.brand("CategoryKeyword"));
+  .pipe(Schema.brand("CategoryKeyword"))
+  .annotate({ identifier: "CategoryKeyword" });
 export type CategoryKeyword = typeof CategoryKeyword.Type;
 
 /** Public Category metadata; identity remains stable when its Spanish label changes. */
@@ -47,8 +50,8 @@ export const KeywordRule = Schema.Struct({
   id: KeywordRuleId,
   keyword: CategoryKeyword,
   categoryId: CategoryId,
-  createdAt: Schema.DateTimeUtc,
-  updatedAt: Schema.DateTimeUtc,
+  createdAt: UtcTimestamp,
+  updatedAt: UtcTimestamp,
 }).annotate({ identifier: "KeywordRule" });
 export type KeywordRule = typeof KeywordRule.Type;
 

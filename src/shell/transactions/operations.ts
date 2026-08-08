@@ -1,4 +1,4 @@
-import { Schema } from "effect";
+import { Schema, Struct } from "effect";
 import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/unstable/httpapi";
 import {
   CreateTransactionInput,
@@ -32,14 +32,7 @@ const destructiveWrite = operationPolicy({
   agentConfirmation: "required",
 });
 
-const TransactionQueryParameters = Schema.Struct({
-  from: Schema.optionalKey(TransactionQueryValues.fields.from),
-  to: Schema.optionalKey(TransactionQueryValues.fields.to),
-  categoryId: Schema.optionalKey(TransactionQueryValues.fields.categoryId),
-  counterparty: Schema.optionalKey(TransactionQueryValues.fields.counterparty),
-  direction: Schema.optionalKey(TransactionQueryValues.fields.direction),
-  currency: Schema.optionalKey(TransactionQueryValues.fields.currency),
-});
+const TransactionQueryParameters = TransactionQueryValues.mapFields(Struct.map(Schema.optionalKey));
 
 /** Successful create response shared by canonical consumers that present the stored Transaction. */
 export const CreateTransactionResponse = OperationResponse(Transaction);

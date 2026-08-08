@@ -236,14 +236,17 @@
         // object schemas. Negative probes exercise both fences in lint:type-aware.
         // `Option` trips it for the same reason as `Brand`: every member is
         // readonly apart from the phantom `Unify` symbols, and no-nullable-type
-        // requires it wherever a core parameter may be absent.
+        // requires it wherever a core parameter may be absent. `SchemaError`
+        // holds a decode failure core reads to report which field to correct;
+        // its issue tree is mutable by declaration only.
         "typescript/prefer-readonly-parameter-types": [
           "error",
           {
             "allow": [
               { "from": "package", "package": "effect", "name": "Utc" },
               { "from": "package", "package": "effect", "name": "Brand" },
-              { "from": "package", "package": "effect", "name": "Option" }
+              { "from": "package", "package": "effect", "name": "Option" },
+              { "from": "package", "package": "effect", "name": "SchemaError" }
             ]
           }
         ],

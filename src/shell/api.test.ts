@@ -4,7 +4,7 @@ import { FidyApi } from "./api";
 
 const schemas = OpenApi.fromApi(FidyApi).components.schemas;
 
-it("names every branded identifier as its own component", () => {
+it("names the published branded identifiers as their own components", () => {
   for (const name of [
     "UserId",
     "CategoryId",

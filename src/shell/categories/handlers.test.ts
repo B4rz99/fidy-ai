@@ -2,6 +2,7 @@ import { expect, layer } from "@effect/vitest";
 import { Effect, Option, Result } from "effect";
 import { HttpBody, HttpClient } from "effect/unstable/http";
 import { CategoryKeyword } from "~/core/categories/model";
+import { CategoryId } from "~/core/categories/reference";
 import { categoryIds } from "~/core/categories/taxonomy";
 import { ApiHarness, ApiHarnessClient, headersFor } from "~/shell/testing/api-harness";
 import { defaultAgentBearer } from "~/shell/testing/identity-fixtures";
@@ -42,6 +43,24 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         expect(body).toMatchObject({
           error: { code: "validation_failed", fields: [{ path: "keyword" }] },
         });
+      })
+    );
+
+    it.effect("rejects a keyword rule for a Category outside the retained taxonomy", () =>
+      Effect.gen(function* () {
+        yield* truncateTransactions;
+        const client = yield* ApiHarnessClient;
+
+        const missing = yield* Effect.flip(
+          client.categories.createKeywordRule({
+            payload: {
+              keyword: CategoryKeyword.make("inexistente"),
+              categoryId: CategoryId.make("00000000-0000-4000-8000-000000000000"),
+            },
+          })
+        );
+
+        expect(missing).toMatchObject({ error: { code: "not_found" } });
       })
     );
 

@@ -124,9 +124,11 @@ const decodeConsentRecord = Schema.decodeUnknownEffect(Schema.toEncoded(ConsentR
 const decodePendingExchange = Schema.decodeUnknownEffect(Schema.toEncoded(PendingConsentExchange));
 
 /** A row that does not reassemble into its model is a decode failure, not a defect. */
-const asIssue = <A>(
+const asIssue = function <A>(
   decoded: Effect.Effect<A, Schema.SchemaError>
-): Effect.Effect<A, SchemaIssue.Issue> => Effect.mapError(decoded, (error) => error.issue);
+): Effect.Effect<A, SchemaIssue.Issue> {
+  return Effect.mapError(decoded, (error) => error.issue);
+};
 
 const utcFromIso = (value: string): DateTime.Utc => DateTime.toUtc(DateTime.makeUnsafe(value));
 

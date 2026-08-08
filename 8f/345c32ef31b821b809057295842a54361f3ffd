@@ -1,0 +1,25 @@
+docs/agents/domain.md
+  s_e534049018c7fe::t_83b73757e299c5 11
+  s_e534049018c7fe::t_7778fcf1dd9ef2 1-10,12-51
+docs/agents/issue-tracker.md
+  s_e534049018c7fe::t_9798437e02d1bd 1-37,39,41-45
+  s_e534049018c7fe::t_b38ac6416b78f2 38,40
+AGENTS.md
+  s_e534049018c7fe::t_19b64ec0472cf9 9,13
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "8f345c32ef31b821b809057295842a54361f3ffd",
+  "prompts": {},
+  "sessions": {
+    "s_e534049018c7fe": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019fe259-cbe0-7ad0-9708-1d36d158a141",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

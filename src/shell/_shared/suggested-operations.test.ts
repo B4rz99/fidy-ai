@@ -201,6 +201,7 @@ it("keeps Pro operations out of free responses", () => {
     requiredTier: "pro",
     costClass: "expensive",
     agentConfirmation: "not-required",
+    kind: "query",
   } as const;
 
   expect(canCallOperation(policy, freeCaller)).toBe(false);

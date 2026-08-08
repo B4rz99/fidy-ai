@@ -17,8 +17,9 @@ homes.
 
 Declare the canonical schema for a domain entity in `core/<slice>/model.ts`. Declare the
 canonical operation in `shell/<slice>/operations.ts`, where it contains its transport and access
-policy: path, status codes, required scope, Subscription tier, cost class, and hosted-agent
-confirmation policy.
+policy: path, status codes, required scope, Subscription tier, cost class, hosted-agent
+confirmation policy, and canonical query-or-mutation kind. ADR 0012 defines the mutation contract
+and its derived atomic-batch use.
 
 The operation references the core schema. The assembled `FidyApi` is the source for reflected
 operation ids, access metadata, suggested operations, OpenAPI, MCP definitions, and the hosted

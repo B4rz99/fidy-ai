@@ -9,7 +9,10 @@ import { type SuggestedOperation } from "~/shell/_shared/response";
 import { NotFound, ValidationFailed } from "~/shell/_shared/errors";
 import { defaultUserId } from "~/shell/db/development-seed";
 import { ApiHarness, ApiHarnessClient } from "~/shell/testing/api-harness";
+import { withUserTransaction } from "~/shell/db/user-transaction";
+import { makeFreeSuggestedOperationCaller } from "~/shell/_shared/suggested-operations";
 import { transactionPayload, truncateTransactions } from "./fixtures";
+import { correctTransaction, createTransaction, deleteTransaction } from "./mutations";
 
 const utcDateTime = (iso: string): DateTime.Utc => DateTime.makeUnsafe(iso);
 
@@ -379,6 +382,73 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           });
           expect(attestations.data[0]?.timeZone).toBe("America/Bogota");
         }).pipe(Effect.ensuring(restore));
+      })
+    );
+
+    it.effect("rolls Transaction creation back with its caller-owned transaction", () =>
+      Effect.gen(function* () {
+        yield* truncateTransactions;
+        const client = yield* ApiHarnessClient;
+        const caller = makeFreeSuggestedOperationCaller(["write"]);
+
+        const rollback = yield* Effect.result(
+          withUserTransaction(
+            defaultUserId,
+            createTransaction({
+              userId: defaultUserId,
+              caller,
+              payload: transactionPayload(),
+            }).pipe(Effect.andThen(Effect.fail("rollback requested")))
+          )
+        );
+        const retained = yield* client.transactions.listTransactions({ query: {} });
+
+        expect(rollback).toEqual(Result.fail("rollback requested"));
+        expect(retained.data).toEqual([]);
+      })
+    );
+
+    it.effect("rolls Transaction correction and deletion back together", () =>
+      Effect.gen(function* () {
+        yield* truncateTransactions;
+        const client = yield* ApiHarnessClient;
+        const caller = makeFreeSuggestedOperationCaller(["write"]);
+        const created = yield* client.transactions.createTransaction({
+          payload: transactionPayload(),
+        });
+
+        const rollback = yield* Effect.result(
+          withUserTransaction(
+            defaultUserId,
+            Effect.gen(function* () {
+              yield* correctTransaction({
+                userId: defaultUserId,
+                caller,
+                transactionId: created.data.id,
+                payload: {
+                  money: created.data.money,
+                  counterparty: Option.some("Corrección sin confirmar"),
+                  direction: created.data.direction,
+                  categoryId: created.data.categoryId,
+                  notes: created.data.notes,
+                  occurredAt: created.data.occurredAt,
+                },
+              });
+              yield* deleteTransaction({
+                userId: defaultUserId,
+                caller,
+                transactionId: created.data.id,
+              });
+              return yield* Effect.fail("rollback requested");
+            })
+          )
+        );
+        const retained = yield* client.transactions.getTransaction({
+          params: { id: created.data.id },
+        });
+
+        expect(rollback).toEqual(Result.fail("rollback requested"));
+        expect(retained.data).toEqual(created.data);
       })
     );
 

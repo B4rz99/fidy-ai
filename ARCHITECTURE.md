@@ -70,7 +70,27 @@ supplies them. Core decides; it does not gather data or perform I/O.
 
 The canonical schema for a domain entity lives in `core/<slice>/model.ts`. The canonical operation
 lives in `shell/<slice>/operations.ts`, where transport and access policy belong: paths, status
-codes, scopes, Subscription tier, cost class, and hosted-agent confirmation policy.
+codes, scopes, Subscription tier, cost class, hosted-agent confirmation policy, and whether the
+operation is a canonical query or canonical mutation.
+
+A canonical query observes domain state without requesting a domain transition or external effect;
+audit, quota, and access-accounting writes do not change that classification. A canonical mutation
+requests a domain transition, records durable work, or causes an external effect. As decided in ADR
+0012, every canonical mutation is transaction-composable by definition: its individual operation
+and an atomic batch call the same reusable implementation inside a caller-owned, User-scoped
+PostgreSQL transaction. The implementation does not open or commit an inner transaction. External
+work is inserted as a durable job in that transaction and performed after commit when rollback
+compatibility requires it.
+
+The atomic-batch child union derives from every reflected canonical mutation and its encoded input
+schema. There is no independent eligibility allowlist; the batch excludes itself structurally, and a
+new mutation cannot ship without its reusable transaction-aware implementation.
+
+ADR 0012 is adopted through an expand sequence. Operation kind records semantics immediately;
+Transaction creation, correction, and deletion establish the implementation tracer, and the
+remaining pre-existing mutations migrate in the follow-up slice issues linked from issue 137. The
+batch operation remains unpublished until that migration is complete. During expansion, `kind` is
+not an implementation-readiness flag.
 
 The operation references the core schema. All public API and agent surfaces derive from the
 canonical operation definition; parallel operation maps are not maintained.

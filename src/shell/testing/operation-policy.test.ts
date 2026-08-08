@@ -3,7 +3,10 @@ import { Effect, Option } from "effect";
 import { HttpApi } from "effect/unstable/httpapi";
 import { AgentAuthorization } from "~/shell/_shared/authz";
 import { ValidationGate } from "~/shell/_shared/errors";
-import { type AgentConfirmation } from "~/shell/_shared/operation-policy";
+import {
+  type AgentConfirmation,
+  type CanonicalOperationKind,
+} from "~/shell/_shared/operation-policy";
 import { isOperationResponse } from "~/shell/_shared/response";
 import { FidyApi, type OperationId } from "~/shell/api";
 import { ApiHarness } from "./api-harness";
@@ -64,7 +67,51 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           expect(Option.isSome(operation.requiredTier), operation.id).toBe(true);
           expect(Option.isSome(operation.costClass), operation.id).toBe(true);
           expect(Option.isSome(operation.agentConfirmation), operation.id).toBe(true);
+          expect(Option.isSome(operation.kind), operation.id).toBe(true);
         }
+      })
+    );
+
+    it.effect("classifies every canonical operation as a query or mutation", () =>
+      Effect.gen(function* () {
+        const expected = {
+          "identity.getCurrentUser": "query",
+          "identity.updateUserPreferences": "mutation",
+          "categories.listCategories": "query",
+          "categories.listKeywordRules": "query",
+          "categories.createKeywordRule": "mutation",
+          "categories.updateKeywordRule": "mutation",
+          "categories.deleteKeywordRule": "mutation",
+          "transactions.createTransaction": "mutation",
+          "transactions.listTransactions": "query",
+          "transactions.getTransaction": "query",
+          "transactions.updateTransaction": "mutation",
+          "transactions.deleteTransaction": "mutation",
+          "transactions.listSourceAttestations": "query",
+          "insights.listPendingInsights": "query",
+          "insights.markInsightDelivered": "mutation",
+          "insights.markInsightRead": "mutation",
+          "insights.dismissInsight": "mutation",
+          "dashboard.getDashboard": "mutation",
+          "dashboard.listDashboardCatalog": "query",
+          "dashboard.applyDashboardEdit": "mutation",
+        } satisfies Record<OperationId, CanonicalOperationKind>;
+        const operations = yield* publishedOperations;
+        const byOperationId = (
+          left: readonly [string, unknown],
+          right: readonly [string, unknown]
+        ): number => left[0].localeCompare(right[0]);
+        const published: Array<readonly [string, Option.Option<CanonicalOperationKind>]> =
+          operations.map(({ id, kind }) => [id, kind]);
+
+        expect(published.sort(byOperationId)).toEqual(
+          Object.entries(expected)
+            .map(([id, kind]): readonly [string, Option.Option<CanonicalOperationKind>] => [
+              id,
+              Option.some(kind),
+            ])
+            .sort(byOperationId)
+        );
       })
     );
 

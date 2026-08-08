@@ -44,23 +44,26 @@ const KeywordRuleRow = Schema.Struct({
 const keywordRuleColumns = `id, keyword, category_id AS "categoryId",
   created_at AS "createdAt", updated_at AS "updatedAt"`;
 
+/** Loads one User's keyword rules inside the caller's User-scoped transaction. */
+export const listKeywordRulesInScope = (
+  userId: UserId
+): Effect.Effect<ReadonlyArray<typeof KeywordRuleRow.Type>, never, SqlClient.SqlClient> =>
+  Effect.flatMap(SqlClient.SqlClient, (sql) =>
+    SqlSchema.findAll({
+      Request: UserId,
+      Result: KeywordRuleRow,
+      execute: (owner) => sql`
+        SELECT ${sql.literal(keywordRuleColumns)} FROM keyword_rules
+        WHERE user_id = ${owner} ORDER BY created_at, id
+      `,
+    })(userId)
+  ).pipe(Effect.orDie);
+
 /** Loads only one User's keyword rules in stable creation order. Database failures are defects. */
 export const listKeywordRules = (
   userId: UserId
-): Effect.Effect<Array<typeof KeywordRuleRow.Type>, never, SqlClient.SqlClient> =>
-  withUserTransaction(
-    userId,
-    Effect.flatMap(SqlClient.SqlClient, (sql) =>
-      SqlSchema.findAll({
-        Request: UserId,
-        Result: KeywordRuleRow,
-        execute: (owner) => sql`
-          SELECT ${sql.literal(keywordRuleColumns)} FROM keyword_rules
-          WHERE user_id = ${owner} ORDER BY created_at, id
-        `,
-      })(userId)
-    ).pipe(Effect.orDie)
-  );
+): Effect.Effect<ReadonlyArray<typeof KeywordRuleRow.Type>, never, SqlClient.SqlClient> =>
+  withUserTransaction(userId, listKeywordRulesInScope(userId));
 
 /**
  * Runs one keyword-rule decision under a User-scoped, slice-namespaced lock. The lock covers the

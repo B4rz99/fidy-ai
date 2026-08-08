@@ -24,6 +24,7 @@ export const DashboardGroup = HttpApiGroup.make("dashboard")
           requiredTier: "free",
           costClass: "cheap",
           agentConfirmation: "not-required",
+          kind: "mutation",
         })
       )
   )
@@ -43,6 +44,7 @@ export const DashboardGroup = HttpApiGroup.make("dashboard")
           requiredTier: "free",
           costClass: "cheap",
           agentConfirmation: "not-required",
+          kind: "query",
         })
       )
   )
@@ -64,6 +66,7 @@ export const DashboardGroup = HttpApiGroup.make("dashboard")
           requiredTier: "free",
           costClass: "cheap",
           agentConfirmation: "required",
+          kind: "mutation",
         })
       )
   );

@@ -64,12 +64,12 @@ export type BuildNextRoundPrompt = (input: {
 // A9 — preflighted confirmation and canonical atomic batches
 // -------------------------------------------------------------------------------------------------
 
-export type AtomicBatchPolicy = "eligible" | "ineligible";
+export type CanonicalOperationKind = "query" | "mutation";
 
-/** Proposed addition to canonical operation policy metadata. */
-export type AtomicOperationPolicy = OperationPolicyValue &
+/** Stable semantic classification carried by every canonical operation. */
+export type CanonicalOperationPolicy = OperationPolicyValue &
   Readonly<{
-    atomicBatch: AtomicBatchPolicy;
+    kind: CanonicalOperationKind;
   }>;
 
 /** Stable identity for one call inside a proposed batch. */
@@ -89,8 +89,8 @@ export type AtomicBatchCall<
 }>;
 
 /**
- * Non-empty, ordered, and bounded. Its catalog-derived call union includes only eligible ordinary
- * operations, so `operations.executeAtomicBatch` cannot contain itself.
+ * Non-empty, ordered, and bounded. Its catalog-derived call union includes every canonical mutation
+ * and structurally excludes `operations.executeAtomicBatch`, so a batch cannot contain itself.
  */
 export type AtomicBatchInput = Readonly<{
   calls: NonEmptyReadonlyArray<AtomicBatchCall>;
@@ -128,10 +128,10 @@ export type AtomicBatchRejected = Readonly<{
 }>;
 
 /**
- * Reusable implementation behind both an individual canonical operation and the atomic batch.
- * Supplying a transaction-scoped SqlClient makes every eligible implementation join one commit.
+ * Reusable implementation behind both an individual canonical mutation and the atomic batch.
+ * Supplying a transaction-scoped SqlClient makes every mutation join the caller's commit.
  */
-export type AtomicOperationImplementation<Input, Output, Failure, Requirements = never> = (
+export type CanonicalMutationImplementation<Input, Output, Failure, Requirements = never> = (
   input: Input
 ) => Effect.Effect<Output, Failure, Requirements | SqlClient.SqlClient>;
 

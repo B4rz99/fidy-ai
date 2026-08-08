@@ -23,6 +23,7 @@ export const IdentityGroup = HttpApiGroup.make("identity").add(
         requiredTier: "free",
         costClass: "cheap",
         agentConfirmation: "not-required",
+        kind: "query",
       })
     ),
   HttpApiEndpoint.patch("updateUserPreferences", "/user/preferences", {
@@ -40,6 +41,7 @@ export const IdentityGroup = HttpApiGroup.make("identity").add(
         requiredTier: "free",
         costClass: "cheap",
         agentConfirmation: "not-required",
+        kind: "mutation",
       })
     )
 );

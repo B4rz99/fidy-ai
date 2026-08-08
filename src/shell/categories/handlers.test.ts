@@ -4,7 +4,11 @@ import { HttpBody, HttpClient } from "effect/unstable/http";
 import { CategoryKeyword } from "~/core/categories/model";
 import { CategoryId } from "~/core/categories/reference";
 import { categoryIds } from "~/core/categories/taxonomy";
+import { makeFreeSuggestedOperationCaller } from "~/shell/_shared/suggested-operations";
+import { defaultUserId } from "~/shell/db/development-seed";
+import { withUserTransaction } from "~/shell/db/user-transaction";
 import { ApiHarness, ApiHarnessClient, headersFor } from "~/shell/testing/api-harness";
+import { createKeywordRule, deleteKeywordRule, updateKeywordRule } from "./mutations";
 import { defaultAgentBearer } from "~/shell/testing/identity-fixtures";
 import { transactionPayload, truncateTransactions } from "~/shell/transactions/fixtures";
 
@@ -131,6 +135,73 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         expect(raced.filter(Result.isFailure)).toHaveLength(1);
         expect(denied).toMatchObject({ error: { code: "validation_failed" } });
         expect(retained.data).toHaveLength(100);
+      })
+    );
+
+    it.effect("rolls keyword-rule creation back with its caller-owned transaction", () =>
+      Effect.gen(function* () {
+        yield* truncateTransactions;
+        const client = yield* ApiHarnessClient;
+        const caller = makeFreeSuggestedOperationCaller(["write"]);
+
+        const rollback = yield* Effect.result(
+          withUserTransaction(
+            defaultUserId,
+            createKeywordRule({
+              userId: defaultUserId,
+              caller,
+              payload: {
+                keyword: CategoryKeyword.make("Rappi"),
+                categoryId: categoryIds.domicilios,
+              },
+            }).pipe(Effect.andThen(Effect.fail("rollback requested")))
+          )
+        );
+        const retained = yield* client.categories.listKeywordRules({});
+
+        expect(rollback).toEqual(Result.fail("rollback requested"));
+        expect(retained.data).toEqual([]);
+      })
+    );
+
+    it.effect("rolls keyword-rule replacement and deletion back together", () =>
+      Effect.gen(function* () {
+        yield* truncateTransactions;
+        const client = yield* ApiHarnessClient;
+        const caller = makeFreeSuggestedOperationCaller(["write"]);
+        const created = yield* client.categories.createKeywordRule({
+          payload: {
+            keyword: CategoryKeyword.make("Rappi"),
+            categoryId: categoryIds.domicilios,
+          },
+        });
+
+        const rollback = yield* Effect.result(
+          withUserTransaction(
+            defaultUserId,
+            Effect.gen(function* () {
+              yield* updateKeywordRule({
+                userId: defaultUserId,
+                caller,
+                keywordRuleId: created.data.id,
+                payload: {
+                  keyword: CategoryKeyword.make("Rappi Turbo"),
+                  categoryId: categoryIds.mercado,
+                },
+              });
+              yield* deleteKeywordRule({
+                userId: defaultUserId,
+                caller,
+                keywordRuleId: created.data.id,
+              });
+              return yield* Effect.fail("rollback requested");
+            })
+          )
+        );
+        const retained = yield* client.categories.listKeywordRules({});
+
+        expect(rollback).toEqual(Result.fail("rollback requested"));
+        expect(retained.data).toEqual([created.data]);
       })
     );
 

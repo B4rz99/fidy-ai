@@ -1,4 +1,10 @@
-import { type CategoryFailure } from "~/core/categories/errors";
+import {
+  type CategoryFailure,
+  type CategoryNotFound,
+  type KeywordRuleAlreadyExists,
+  type KeywordRuleLimitReached,
+  type KeywordRuleNotFound,
+} from "~/core/categories/errors";
 import { NotFound, ValidationFailed } from "~/shell/_shared/errors";
 import type { SuggestedOperation } from "~/shell/_shared/response";
 import {
@@ -29,14 +35,25 @@ const keywordRuleRecovery = (caller: SuggestedOperationCaller): ReadonlyArray<Su
     caller,
   });
 
+type CategoryFailureInput<Failure extends CategoryFailure> = Readonly<{
+  failure: Failure;
+  caller: SuggestedOperationCaller;
+}>;
+
 /** Maps actionable Category failures to the complete canonical API failure vocabulary. */
-export const toApiFailure = ({
+export function toApiFailure(
+  input: CategoryFailureInput<CategoryNotFound | KeywordRuleNotFound>
+): NotFound;
+export function toApiFailure(
+  input: CategoryFailureInput<KeywordRuleAlreadyExists | KeywordRuleLimitReached>
+): ValidationFailed;
+export function toApiFailure(
+  input: CategoryFailureInput<CategoryFailure>
+): NotFound | ValidationFailed;
+export function toApiFailure({
   failure,
   caller,
-}: {
-  readonly failure: CategoryFailure;
-  readonly caller: SuggestedOperationCaller;
-}): NotFound | ValidationFailed => {
+}: CategoryFailureInput<CategoryFailure>): NotFound | ValidationFailed {
   switch (failure._tag) {
     case "CategoryNotFound":
       return NotFound.make({
@@ -79,4 +96,4 @@ export const toApiFailure = ({
         next: keywordRuleRecovery(caller),
       });
   }
-};
+}

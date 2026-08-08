@@ -1,6 +1,6 @@
 import { BunHttpServer, BunServices } from "@effect/platform-bun";
 import { Context, Effect, Layer, MutableRef, Ref, Schema, Stream } from "effect";
-import { LanguageModel } from "effect/unstable/ai";
+import { type Response as AiResponse, LanguageModel } from "effect/unstable/ai";
 import { categoryIds } from "~/core/categories/taxonomy";
 import { AgentService } from "~/shell/agent/agent-service";
 import {
@@ -45,11 +45,9 @@ export class WhatsAppAcceptanceApiClient extends Context.Service<
   ApiClient
 >()("fidy-ai/shell/testing/whatsapp-acceptance-harness/WhatsAppAcceptanceApiClient") {}
 
-const DeterministicLanguageModel = Layer.effect(
-  LanguageModel.LanguageModel,
-  LanguageModel.make({
-    generateText: () =>
-      Effect.succeed([
+const acceptanceModelReply = (serializedPrompt: string): Array<AiResponse.PartEncoded> =>
+  serializedPrompt.includes("ACCEPTANCE_TRANSIENT_CONTEXT")
+    ? [
         {
           type: "tool-call" as const,
           id: "acceptance-create-transaction",
@@ -65,7 +63,23 @@ const DeterministicLanguageModel = Layer.effect(
           },
         },
         makeLanguageModelFinishPart("tool-calls"),
-      ]),
+      ]
+    : [
+        { type: "text" as const, text: "ACCEPTANCE_TRANSIENT_CONTEXT before" },
+        {
+          type: "tool-call" as const,
+          id: "acceptance-list-categories",
+          name: "categories__listCategories",
+          params: {},
+        },
+        { type: "text" as const, text: "ACCEPTANCE_TRANSIENT_CONTEXT after" },
+        makeLanguageModelFinishPart("tool-calls"),
+      ];
+
+const DeterministicLanguageModel = Layer.effect(
+  LanguageModel.LanguageModel,
+  LanguageModel.make({
+    generateText: ({ prompt }) => Effect.succeed(acceptanceModelReply(JSON.stringify(prompt))),
     streamText: () =>
       Stream.die(new Error("The WhatsApp acceptance model uses non-streaming generation")),
   })

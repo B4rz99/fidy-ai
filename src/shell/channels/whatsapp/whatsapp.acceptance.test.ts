@@ -152,6 +152,7 @@ layer(WhatsAppAcceptanceHarness, { excludeTestServices: true, timeout: "30 secon
         );
         expect(authorizedSend).toMatchObject({ to: "573009876543" });
         expect(authorizedSend.text.body).toContain("Gasto guardado");
+        expect(authorizedSend.text.body).not.toContain("ACCEPTANCE_TRANSIENT_CONTEXT");
         const history = yield* api.transactions.listTransactions({ query: {} });
         expect(
           history.data.some(

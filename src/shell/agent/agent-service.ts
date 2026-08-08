@@ -13,7 +13,7 @@ import {
   Stream,
   Struct,
 } from "effect";
-import { type AiError, LanguageModel, type Response, type Tool } from "effect/unstable/ai";
+import { type AiError, LanguageModel, Prompt, type Response, type Tool } from "effect/unstable/ai";
 import type { HttpClient } from "effect/unstable/http";
 import { SqlClient } from "effect/unstable/sql";
 import type { User } from "~/core/identity/model";
@@ -334,8 +334,11 @@ type GenerationResponse =
 type AcceptedGeneration = Readonly<{
   text: unknown;
   toolCalls: ReadonlyArray<AgentToolCall>;
+  responseParts: ReadonlyArray<Response.AnyPart>;
   finishReason: Response.FinishReason;
 }>;
+
+type TurnModelContinuation = ReadonlyArray<Prompt.MessageEncoded>;
 
 type ModelRoundDecision = Readonly<
   { _tag: "Accepted"; generated: AcceptedGeneration } | { _tag: "Retry"; feedback: string }
@@ -527,8 +530,15 @@ const loadTranscriptWindow = (
 
 const generateCurrentTurn = (
   model: LanguageModel.Service,
-  turn: HostedTurn,
-  malformedOutputFeedback: Option.Option<string>
+  {
+    turn,
+    continuation,
+    malformedOutputFeedback,
+  }: Readonly<{
+    turn: HostedTurn;
+    continuation: TurnModelContinuation;
+    malformedOutputFeedback: Option.Option<string>;
+  }>
 ): Effect.Effect<
   Result.Result<
     LanguageModel.GenerateTextResponse<AgentToolkitInstance["tools"]>,
@@ -539,12 +549,21 @@ const generateCurrentTurn = (
 > =>
   Effect.gen(function* () {
     const transcriptWindow = yield* loadTranscriptWindow(turn.userId, turn.turnId, turn.limits);
+    const durableTranscript =
+      continuation.length === 0
+        ? transcriptWindow
+        : transcriptWindow.filter(
+            (entry) =>
+              entry.turnId !== turn.turnId ||
+              (entry._tag !== "CanonicalToolCallEntry" && entry._tag !== "CanonicalToolResultEntry")
+          );
     return yield* Effect.result(
       model
         .generateText({
           prompt: [
             { role: "system", content: systemPrompt(turn.user) },
-            ...transcriptPrompt(transcriptWindow),
+            ...transcriptPrompt(durableTranscript),
+            ...continuation,
             { role: "system", content: turnPrompt(turn.startedAt) },
             ...Option.match(malformedOutputFeedback, {
               onNone: () => [],
@@ -606,6 +625,7 @@ const acceptModelRound = Effect.fn("AgentService.acceptModelRound")(function* (
       generated: {
         text: round.success.text,
         toolCalls: yield* decodeModelToolCalls(round.success),
+        responseParts: round.success.content,
         finishReason: round.success.finishReason,
       },
     };
@@ -660,6 +680,41 @@ const iterationReply = (
     Option.some({ userId: turn.userId, turnId: turn.turnId, iteration })
   );
 
+const preserveModelContinuation = Effect.fn("AgentService.preserveModelContinuation")(function* ({
+  turn,
+  iteration,
+  generated,
+  continuation,
+}: Readonly<{
+  turn: HostedTurn;
+  iteration: AgentIteration;
+  generated: AcceptedGeneration;
+  continuation: TurnModelContinuation;
+}>) {
+  const callIds = new Set(generated.toolCalls.map(({ id }) => id));
+  const toolResults = yield* withCurrentConsent(
+    turn.userId,
+    listTranscriptTurnEntries(turn.userId, turn.turnId).pipe(
+      Effect.map((entries) =>
+        projectTranscriptForModel(
+          entries.filter(
+            (entry) =>
+              entry._tag === "CanonicalToolResultEntry" &&
+              entry.iteration === iteration &&
+              callIds.has(entry.toolCallId)
+          ),
+          turn.limits.maxToolResultCharacters
+        )
+      )
+    )
+  );
+  return [
+    ...continuation,
+    ...Prompt.fromResponseParts(generated.responseParts).content,
+    ...transcriptPrompt(toolResults),
+  ];
+});
+
 const runHostedTurn = (
   model: LanguageModel.Service,
   turn: HostedTurn
@@ -670,11 +725,16 @@ const runHostedTurn = (
 > =>
   Effect.gen(function* () {
     let toolCalls = 0;
+    let continuation: TurnModelContinuation = [];
     let feedback = Option.none<string>();
     for (let index = 1; index <= turn.limits.maxIterations; index += 1) {
       const iteration = AgentIteration.make(index);
       const roundDecision = yield* acceptModelRound(
-        yield* generateCurrentTurn(model, turn, feedback)
+        yield* generateCurrentTurn(model, {
+          turn,
+          continuation,
+          malformedOutputFeedback: feedback,
+        })
       );
       if (roundDecision._tag === "Retry") {
         feedback = Option.some(roundDecision.feedback);
@@ -688,6 +748,12 @@ const runHostedTurn = (
 
       const response = yield* respondToGeneration(turn, iteration, generated);
       if (response._tag === "Completed") return iterationReply(turn, iteration, response.text);
+      continuation = yield* preserveModelContinuation({
+        turn,
+        iteration,
+        generated,
+        continuation,
+      });
     }
 
     return iterationReply(turn, AgentIteration.make(turn.limits.maxIterations), exhaustedReply);

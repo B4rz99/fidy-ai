@@ -14,7 +14,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         const createdAt = DateTime.subtractDuration(usedAt, "16 minutes");
         const issued = yield* issueHostedAgentToken(defaultUserId, createdAt);
 
-        const resolved = yield* authenticateAgentToken({ bearer: issued.bearer, usedAt });
+        const resolved = yield* authenticateAgentToken(issued.bearer, usedAt);
 
         expect(Option.isNone(resolved)).toBe(true);
       })
@@ -30,10 +30,10 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           DateTime.addDuration(createdAt, "1 minute")
         );
 
-        const resolved = yield* authenticateAgentToken({
-          bearer: issued.bearer,
-          usedAt: DateTime.addDuration(createdAt, "2 minutes"),
-        });
+        const resolved = yield* authenticateAgentToken(
+          issued.bearer,
+          DateTime.addDuration(createdAt, "2 minutes")
+        );
 
         expect(Option.isNone(resolved)).toBe(true);
       })

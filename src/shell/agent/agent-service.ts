@@ -248,7 +248,7 @@ const encodeAgentOperationInput = (
   binding: AgentOperationBinding,
   input: unknown
 ): Effect.Effect<Schema.Json, ModelUnavailable> =>
-  decodeAgentOperationInput({ binding, input }).pipe(
+  decodeAgentOperationInput(binding, input).pipe(
     Effect.flatMap((decoded) => encodeTranscriptJson(binding.parameters, decoded)),
     Effect.mapError(toModelUnavailable)
   );

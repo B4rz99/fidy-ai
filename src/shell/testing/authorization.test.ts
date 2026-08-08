@@ -439,7 +439,7 @@ layer(AuthorizationHarness, { excludeTestServices: true, timeout: "30 seconds" }
       Effect.gen(function* () {
         const seeded = yield* seedReadOnlyIdentity;
         const usedAt = yield* DateTime.now;
-        const found = yield* authenticateAgentToken({ bearer: readOnlyBearer, usedAt });
+        const found = yield* authenticateAgentToken(usedAt)(readOnlyBearer);
         const resolved = Option.getOrThrow(found);
 
         expect(seeded.tokenHash).toBe(
@@ -460,11 +460,8 @@ layer(AuthorizationHarness, { excludeTestServices: true, timeout: "30 seconds" }
         const earlierUse = yield* DateTime.now;
         const laterUse = DateTime.addDuration(earlierUse, "1 day");
 
-        yield* authenticateAgentToken({ bearer: readOnlyBearer, usedAt: laterUse });
-        const staleResolution = yield* authenticateAgentToken({
-          bearer: readOnlyBearer,
-          usedAt: earlierUse,
-        });
+        yield* authenticateAgentToken(readOnlyBearer, laterUse);
+        const staleResolution = yield* authenticateAgentToken(readOnlyBearer, earlierUse);
 
         expect(Option.getOrThrow(staleResolution).lastUsedAt).toEqual(laterUse);
       })

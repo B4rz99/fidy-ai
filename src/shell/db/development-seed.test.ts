@@ -52,8 +52,8 @@ layer(Layer.merge(PgLive, BunServices.layer), {
       const firstBearer = AgentBearerToken.make(first.stdout.trim());
       const secondBearer = AgentBearerToken.make(second.stdout.trim());
       const usedAt = yield* DateTime.now;
-      const firstResolution = yield* authenticateAgentToken({ bearer: firstBearer, usedAt });
-      const secondResolution = yield* authenticateAgentToken({ bearer: secondBearer, usedAt });
+      const firstResolution = yield* authenticateAgentToken(firstBearer, usedAt);
+      const secondResolution = yield* authenticateAgentToken(secondBearer, usedAt);
 
       expect([first.exitCode, second.exitCode]).toEqual([0, 0]);
       expect(firstBearer).not.toBe(secondBearer);
@@ -82,10 +82,7 @@ layer(Layer.merge(PgLive, BunServices.layer), {
       const seeded = yield* runSeedCommand(databaseUrl);
       const bearer = AgentBearerToken.make(seeded.stdout.trim());
       const result = yield* runSeedCommand(`${databaseUrl}?host=127.0.0.1`);
-      const resolution = yield* authenticateAgentToken({
-        bearer,
-        usedAt: yield* DateTime.now,
-      });
+      const resolution = yield* authenticateAgentToken(bearer, yield* DateTime.now);
 
       expect(result.exitCode).not.toBe(0);
       expect(result.stdout).not.toContain("fin_");

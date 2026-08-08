@@ -203,6 +203,6 @@ it("keeps Pro operations out of free responses", () => {
     agentConfirmation: "not-required",
   } as const;
 
-  expect(canCallOperation({ policy, caller: freeCaller })).toBe(false);
-  expect(canCallOperation({ policy, caller: { scopes: ["read"], tier: "pro" } })).toBe(true);
+  expect(canCallOperation(policy, freeCaller)).toBe(false);
+  expect(canCallOperation({ scopes: ["read"], tier: "pro" })(policy)).toBe(true);
 });

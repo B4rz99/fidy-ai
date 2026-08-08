@@ -323,7 +323,7 @@ layer(SuggestedOperationsHarness, { excludeTestServices: true, timeout: "30 seco
                 Option.fromUndefinedOr(operationCatalog.byId.get(suggestedOperation.tool))
               );
               expect(
-                canCallOperation({ policy: target.policy, caller: sourceCaller }),
+                canCallOperation(target.policy, sourceCaller),
                 `${sourceOperation} advertised unavailable ${suggestedOperation.tool}`
               ).toBe(true);
             }

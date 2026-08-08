@@ -6,6 +6,7 @@ import {
   Effect,
   Encoding,
   Exit,
+  Function,
   Layer,
   type Option,
   Redacted,
@@ -91,18 +92,23 @@ export const hashAgentBearer = (
  * supplies one UTC instant for both writes. Unknown, revoked, and idle-expired
  * grants remain `None`; database failures are defects.
  */
-export const authenticateAgentToken = ({
-  bearer,
-  usedAt,
-}: {
-  readonly bearer: AgentBearerToken;
-  readonly usedAt: DateTime.Utc;
-}): Effect.Effect<Option.Option<ResolvedAgentToken>, never, Crypto.Crypto | SqlClient.SqlClient> =>
+export const authenticateAgentToken: {
+  (
+    usedAt: DateTime.Utc
+  ): (
+    self: AgentBearerToken
+  ) => Effect.Effect<Option.Option<ResolvedAgentToken>, never, Crypto.Crypto | SqlClient.SqlClient>;
+  (
+    self: AgentBearerToken,
+    usedAt: DateTime.Utc
+  ): Effect.Effect<Option.Option<ResolvedAgentToken>, never, Crypto.Crypto | SqlClient.SqlClient>;
+} = Function.dual(2, (self: AgentBearerToken, usedAt: DateTime.Utc) =>
   Effect.gen(function* () {
-    const tokenHash = yield* hashAgentBearer(bearer);
+    const tokenHash = yield* hashAgentBearer(self);
     const renewedIdleExpiresAt = yield* renewAgentTokenIdleExpiry(usedAt);
     return yield* useAgentToken({ tokenHash, usedAt, renewedIdleExpiresAt });
-  });
+  })
+);
 
 /**
  * The request-scoped result of bearer authorization. Handlers read it once and
@@ -209,10 +215,9 @@ export const AgentAuthorizationLive = Layer.succeed(
       const result = yield* sql
         .withTransaction(
           Effect.gen(function* () {
-            const resolved = yield* authenticateAgentToken({
-              bearer,
-              usedAt: occurredAt,
-            }).pipe(Effect.flatMap(Effect.fromOption(unauthenticated)));
+            const resolved = yield* authenticateAgentToken(bearer, occurredAt).pipe(
+              Effect.flatMap(Effect.fromOption(unauthenticated))
+            );
             return yield* withUserTransaction(
               resolved.subjectUserId,
               useCurrentConsent(

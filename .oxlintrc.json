@@ -17,7 +17,6 @@
     "array-callback-return": "error",
     "effect-guards/no-sql-type-parameter": "error",
     "effect-guards/no-disable-validation": "error",
-    "effect-guards/no-curried-export": "error",
     "effect-guards/no-react-use-effect": "error",
     "capitalized-comments": ["error", "always", { "ignoreConsecutiveComments": true }],
     "complexity": ["error", { "max": 8 }],

@@ -1,0 +1,32 @@
+src/shell/categories/repo.ts
+  s_3b187d7074d186::t_69ee8e69d8ba1f 13,69-70,72,76-81,91-92,96-106,110-111,116-128,132-133,137-144
+vitest.acceptance.config.ts
+  s_3b187d7074d186::t_83b1e6319be23c 55
+src/shell/categories/errors.ts
+  s_3b187d7074d186::t_8478e6c4e0587e 1-7,38-42,44-53,56,99
+src/shell/categories/handlers.ts
+  s_3b187d7074d186::t_50d1727e470637 1,4,6-7,27-31,37,39-41,48-52
+src/shell/categories/handlers.test.ts
+  s_3b187d7074d186::t_f83f9d3d6c70a8 207
+  s_3b187d7074d186::t_511c33ba8d87eb 7-9,11,141-206
+src/shell/categories/mutations.ts
+  s_3b187d7074d186::t_77f4b22c8e2c83 1-14,20-153,155-157
+  s_3b187d7074d186::t_a30a0f605aceae 15-19
+  s_3b187d7074d186::t_d4e3685a041439 154
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "b1c87365d4b816878bcdd05e69568bc1e96133bc",
+  "prompts": {},
+  "sessions": {
+    "s_3b187d7074d186": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019fe2db-b4fe-7cbd-bf47-2478cf7c0415",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": null
+    }
+  }
+}

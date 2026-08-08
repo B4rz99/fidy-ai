@@ -1,0 +1,35 @@
+src/shell/agent/agent-service.test.ts
+  s_4ccf6106fc8ef1::t_065dc7fbce7b8f 15,151-159,164-170,225-227,676-680,701,703,723,727-740,745,1440
+  s_4ccf6106fc8ef1::t_f45e9630553fbd 160-163,1432-1439,1441-1460
+  s_4ccf6106fc8ef1::t_e4441ffcb4cdaa 224,228-242,682
+  s_4ccf6106fc8ef1::t_f75286e33083d4 1461
+src/shell/agent/openai.ts
+  s_4ccf6106fc8ef1::t_d86784d95219af 19-23,25-26
+  s_4ccf6106fc8ef1::t_7bce00832bf6b9 24
+  s_4ccf6106fc8ef1::t_f84f871420c706 15-18
+  s_4ccf6106fc8ef1::t_953b6e19ebf6f9 2
+  s_4ccf6106fc8ef1::t_6e59091d5eacd0 11
+src/shell/agent/agent-service.ts
+  s_4ccf6106fc8ef1::t_e6d2a887e12040 59,538,543,563-581,583,744
+src/shell/agent/openai.test.ts
+  s_4ccf6106fc8ef1::t_e95fb3838b80e8 7-12,56,97,99-102,116,118
+  s_4ccf6106fc8ef1::t_71eaa6fdc46249 54
+  s_4ccf6106fc8ef1::t_8c742968606869 34,55,117
+  s_4ccf6106fc8ef1::t_55cc15c196c1a3 67
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "33ff2fca2e6e9ee045795dd6a0fcd5e4812dbcdd",
+  "prompts": {},
+  "sessions": {
+    "s_4ccf6106fc8ef1": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019fe237-a9b1-73e6-ac78-5c501d164772",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": null
+    }
+  }
+}

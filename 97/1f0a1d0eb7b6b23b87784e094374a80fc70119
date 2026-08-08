@@ -1,0 +1,101 @@
+src/shell/transactions/repo.ts
+  s_5307474280e6f9::t_d00811090a191f 273-275
+  s_5307474280e6f9::t_66c410098e7d94 186,191-192,197-216,220,224-225,229-238
+  s_5307474280e6f9::t_3fd6e0b1a34f70 187-190,221-223
+  s_5307474280e6f9::t_515231f7b92a8d 90-91,95-107,277-300
+src/shell/categories/categorizer.ts
+  s_5307474280e6f9::t_869939c7b3beff 7,26
+docs/adr/0004-canonical-operation-derivation.md
+  s_5307474280e6f9::t_3b03c348bad1e1 20-22
+docs/plans/issue-137-architecture.html
+  s_5307474280e6f9::t_36ac2d2869962d 304
+  s_5307474280e6f9::t_f963e844587ac0 334,378,395-396,428,480,493,509-510,525-527,531,537-539,542,555
+CONTEXT.md
+  s_5307474280e6f9::t_cc1ee954a429f8 114-124
+src/shell/transactions/mutations.ts
+  s_5307474280e6f9::t_6f8cb2140004c0 89,122,154
+  s_5307474280e6f9::t_3626aec10f5b28 15,128,160
+  s_5307474280e6f9::t_8e49205b855acc 3-7,12-14,16,24-25,27,34-42,44-48,83,116-117,123-127,129,131-150,155-159,161,163-174
+  s_5307474280e6f9::t_3627de3ecf69b0 9-10
+  s_5307474280e6f9::t_8ef737b2d7684b 79-80,84-88,118-121,151-153
+  s_5307474280e6f9::t_ce9fb3711d214b 1,17,94,130,162
+  s_5307474280e6f9::t_864892c44e54cb 8,11,18-23,26,28-33,50-78,81-82,90-93,95-115
+  s_5307474280e6f9::t_bcb4385b04017a 49
+  s_5307474280e6f9::t_a289fdbfd9b525 2,43
+src/shell/testing/operation-policy.test.ts
+  s_5307474280e6f9::t_a0ce9d7385bb4d 6-9,70,75,77-94,96-98
+  s_5307474280e6f9::t_0d75c2efa6275f 100-114
+  s_5307474280e6f9::t_6d44d37f6bb853 115-117
+  s_5307474280e6f9::t_ec712eb3cfe67b 76,99
+  s_5307474280e6f9::t_aa070cb0163a26 95
+src/shell/_shared/suggested-operations.test.ts
+  s_5307474280e6f9::t_21d5730fefdff2 204
+ARCHITECTURE.md
+  s_5307474280e6f9::t_4dca446aec1bb6 73-87
+  s_5307474280e6f9::t_2384d1f1143a35 89-93
+  s_5307474280e6f9::t_de67f30012dd5f 88
+src/shell/_shared/operation-catalog.test.ts
+  s_5307474280e6f9::t_25cff5057e8951 27
+  s_5307474280e6f9::t_a9de6f21904a97 25-26
+  s_5307474280e6f9::t_ffd3c2217c7468 12,28
+src/shell/identity/operations.ts
+  s_5307474280e6f9::t_d1eea53507f488 26,44
+src/shell/identity/repo.ts
+  s_5307474280e6f9::t_b900af202f6875 96-97,100-104,109-116
+src/shell/dashboard/operations.ts
+  s_5307474280e6f9::t_d895cce8e18224 27
+  s_5307474280e6f9::t_f76147def8f643 47,69
+docs/plans/issue-137-proposed-types.ts
+  s_5307474280e6f9::t_da24a1d4cfae24 67,69-70,72,92-93,131
+  s_5307474280e6f9::t_529ef87a3d2194 132,134
+src/shell/_shared/operation-policy.ts
+  s_5307474280e6f9::t_797b1f677520ff 20
+  s_5307474280e6f9::t_02d274b9241f32 18-19,27,57,64,71
+  s_5307474280e6f9::t_6462be7c112d7c 17
+src/shell/insights/operations.ts
+  s_5307474280e6f9::t_97583414e99d8c 43,66,88,109
+src/shell/transactions/handlers.ts
+  s_5307474280e6f9::t_4d69489373b11d 27,118,129-133
+  s_5307474280e6f9::t_35b1c3361a11ee 95
+  s_5307474280e6f9::t_e59790c60f3da2 3,26
+  s_5307474280e6f9::t_9c3dd99a8d1aff 1,13,15
+src/shell/transactions/handlers.test.ts
+  s_5307474280e6f9::t_ed6969179f2389 452-454
+  s_5307474280e6f9::t_ed77eebcd5f133 15
+  s_5307474280e6f9::t_862315916e34d5 388,397-422,446-448,451
+  s_5307474280e6f9::t_285c18642c166f 12-13,389-396,423-445,449
+  s_5307474280e6f9::t_af918d27bdf6d0 450
+src/shell/_shared/canonical-mutation.ts
+  s_5307474280e6f9::t_bdfcc65ca48760 2-4
+  s_5307474280e6f9::t_67d1478371b2cf 5-9
+  s_5307474280e6f9::t_b109509b20b8dc 10-11
+  s_5307474280e6f9::t_624d5672de4674 1
+src/shell/testing/openapi.ts
+  s_5307474280e6f9::t_9e9ae2d95a6cdb 8,20,47-48,70
+docs/adr/0012-canonical-mutations-are-transaction-composable.md
+  s_5307474280e6f9::t_df384e7b49d301 34-41
+  s_5307474280e6f9::t_deb1544284c1bf 1-33,42-47
+src/shell/transactions/operations.ts
+  s_5307474280e6f9::t_5a254e263b8612 21,28,35
+src/shell/categories/repo.ts
+  s_5307474280e6f9::t_bd03e262c36a85 47-49,51-61,66
+  s_5307474280e6f9::t_fb0db021aa8ce1 50,65
+src/shell/categories/operations.ts
+  s_5307474280e6f9::t_dd619ed5553e03 20,27,34
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "971f0a1d0eb7b6b23b87784e094374a80fc70119",
+  "prompts": {},
+  "sessions": {
+    "s_5307474280e6f9": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019fe238-6312-7fc9-ae51-cd7074797309",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": null
+    }
+  }
+}

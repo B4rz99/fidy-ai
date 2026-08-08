@@ -100,6 +100,9 @@ export const runAgentRepl = Effect.fn("runAgentRepl")(function* (caller: ReplCal
     );
     if (Option.isNone(message)) return;
 
+    const unavailableOutcome = terminal
+      .display(unavailableMessage)
+      .pipe(Effect.as(Option.none<AgentConversationOutcome>()));
     const outcome = yield* handleAgentConversationTurn({
       caller: {
         businessPortfolioId,
@@ -118,18 +121,10 @@ export const runAgentRepl = Effect.fn("runAgentRepl")(function* (caller: ReplCal
     }).pipe(
       Effect.map(Option.some),
       Effect.catchTags({
-        ModelUnavailable: () =>
-          terminal
-            .display(unavailableMessage)
-            .pipe(Effect.as(Option.none<AgentConversationOutcome>())),
-        OnboardingConsentRequired: () =>
-          terminal
-            .display(unavailableMessage)
-            .pipe(Effect.as(Option.none<AgentConversationOutcome>())),
-        UnknownUser: () =>
-          terminal
-            .display(unavailableMessage)
-            .pipe(Effect.as(Option.none<AgentConversationOutcome>())),
+        ModelUnavailable: () => unavailableOutcome,
+        ModelResponseRejected: () => unavailableOutcome,
+        OnboardingConsentRequired: () => unavailableOutcome,
+        UnknownUser: () => unavailableOutcome,
       })
     );
     if (Option.isSome(outcome)) {

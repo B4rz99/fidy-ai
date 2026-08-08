@@ -1,6 +1,18 @@
 import { expect, layer } from "@effect/vitest";
-import { BigDecimal, Context, Effect, Equal, Layer, Option, Ref, Schema, Terminal } from "effect";
-import { LanguageModel, type Response, Tool } from "effect/unstable/ai";
+import {
+  BigDecimal,
+  Context,
+  Duration,
+  Effect,
+  Equal,
+  Layer,
+  Option,
+  Ref,
+  Schema,
+  Stream,
+  Terminal,
+} from "effect";
+import { AiError, LanguageModel, type Response, Tool } from "effect/unstable/ai";
 import { SqlClient } from "effect/unstable/sql";
 import { E164PhoneNumber, UserId, WhatsAppBusinessScopedUserId } from "~/core/identity/reference";
 import { MigrationSqlClient } from "~/shell/db/client";
@@ -19,6 +31,7 @@ import {
 import { listRecentTranscriptEntries, listTranscriptEntries } from "~/shell/transcript/repo";
 import { ApiHarness, ApiHarnessClient } from "~/shell/testing/api-harness";
 import { testWhatsAppCaller } from "~/shell/testing/whatsapp-caller";
+import { makeLanguageModelFinishPart } from "~/shell/testing/language-model-fixtures";
 import { runAgentRepl } from "./repl";
 import { AgentLimits, AgentService, CurrentAgentLimits, InboundMessage } from "./agent-service";
 
@@ -85,8 +98,19 @@ type CreateTransactionToolCall = Readonly<{
       currency: string;
       counterparty: Option.Option<string>;
       categoryId: string;
+      nullableAbsentFields: boolean;
     }>
   >;
+
+const encodedCounterparty = (
+  counterparty: Option.Option<string>,
+  nullableAbsentFields: boolean
+): Readonly<Record<string, Schema.Json>> =>
+  Option.match(counterparty, {
+    onNone: (): Readonly<Record<string, Schema.Json>> =>
+      nullableAbsentFields ? { counterparty: null } : {},
+    onSome: (value): Readonly<Record<string, Schema.Json>> => ({ counterparty: value }),
+  });
 
 const createTransactionToolCall = ({
   id,
@@ -95,6 +119,7 @@ const createTransactionToolCall = ({
   currency = "COP",
   counterparty = Option.some("Almuerzo"),
   categoryId = categoryIds.restaurantes,
+  nullableAbsentFields = false,
 }: CreateTransactionToolCall): Response.ToolCallPartEncoded => ({
   type: "tool-call" as const,
   id,
@@ -102,7 +127,8 @@ const createTransactionToolCall = ({
   params: {
     payload: {
       money: { amount, currency },
-      ...(Option.isNone(counterparty) ? {} : { counterparty: counterparty.value }),
+      ...encodedCounterparty(counterparty, nullableAbsentFields),
+      ...(nullableAbsentFields ? { notes: null } : {}),
       direction: "outflow",
       categoryId,
       occurredAt: Option.getOrUndefined(occurredAt),
@@ -209,6 +235,7 @@ const captureScript = (
         id: "capture-without-counterparty",
         amount: "9000",
         counterparty: Option.none(),
+        nullableAbsentFields: false,
         occurredAt: turnStartedAt(serialized),
       }),
     ]);
@@ -241,10 +268,37 @@ const captureScript = (
   return Option.none();
 };
 
+const invalidModelOutputScript = (serialized: string): Option.Option<ModelReply> => {
+  if (serialized.includes("Provoca herramienta desconocida")) {
+    return Option.some(
+      serialized.includes("Validation reason:")
+        ? [{ type: "text" as const, text: "Corregí la herramienta desconocida." }]
+        : [
+            {
+              type: "tool-call" as const,
+              id: "unknown-tool-call",
+              name: "unknown__operation",
+              params: {},
+            },
+          ]
+    );
+  }
+  if (!serialized.includes("Provoca salida sensible")) return Option.none();
+  return Option.some([
+    {
+      type: "tool-call" as const,
+      id: "sensitive-invalid-output",
+      name: "fin_deadbeef_abcdefghijklmnopqrstuvwxyzABCDEF",
+      params: {},
+    },
+  ]);
+};
+
 const malformedCaptureScript = (serialized: string): Option.Option<ModelReply> => {
   if (serialized.includes("Provoca entrada malformada")) {
     return Option.some(
-      serialized.includes("The previous operation call was malformed")
+      serialized.includes("transactions__createTransaction") &&
+        serialized.includes("Validation reason:")
         ? [{ type: "text" as const, text: "Corregí los argumentos malformados." }]
         : [
             {
@@ -544,6 +598,7 @@ const scriptedReply = (serialized: string, tools: ReadonlyArray<Tool.Any>): Mode
   isolationScript(serialized).pipe(
     Option.orElse(() => toolCapScript(serialized)),
     Option.orElse(() => captureScript(serialized, tools)),
+    Option.orElse(() => invalidModelOutputScript(serialized)),
     Option.orElse(() => malformedCaptureScript(serialized)),
     Option.orElse(() => deletionScript(serialized)),
     Option.orElse(() => privateReadScript(serialized)),
@@ -561,17 +616,33 @@ const ScriptedLanguageModel = Layer.effect(
     return yield* LanguageModel.make({
       generateText: ({ prompt, tools }) => {
         const serialized = JSON.stringify(prompt.content);
+        expect(serialized).not.toContain("fin_deadbeef_");
+        const generated = ((): Effect.Effect<ModelReply, AiError.AiError> => {
+          if (serialized.includes("MODELO_BLOQUEADO")) return Effect.never;
+          if (serialized.includes("PROVEEDOR_LIMITADO")) {
+            return Effect.fail(
+              AiError.AiError.make({
+                module: "TestLanguageModel",
+                method: "generateText",
+                reason: AiError.RateLimitError.make({ retryAfter: Duration.seconds(1) }),
+              })
+            );
+          }
+          if (serialized.includes("RESPUESTA_TRUNCADA")) {
+            return Effect.succeed([
+              { type: "text" as const, text: "Fragmento incompleto" },
+              makeLanguageModelFinishPart("length"),
+            ]);
+          }
+          const reply = scriptedReply(serialized, tools);
+          const reason = reply.some((part) => part.type === "tool-call") ? "tool-calls" : "stop";
+          return Effect.succeed([...reply, makeLanguageModelFinishPart(reason)]);
+        })();
         return Ref.update(prompts, (recorded) => [...recorded, serialized]).pipe(
-          Effect.andThen(
-            serialized.includes("MODELO_BLOQUEADO")
-              ? Effect.never
-              : Effect.succeed(scriptedReply(serialized, tools))
-          )
+          Effect.andThen(generated)
         );
       },
-      streamText: () => {
-        throw new Error("The agent uses non-streaming generation");
-      },
+      streamText: () => Stream.die(new Error("The agent uses non-streaming generation")),
     });
   })
 ).pipe(Layer.provideMerge(ModelPrompts.layer));
@@ -1106,6 +1177,38 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
     })
   );
 
+  it.effect("retries invalid output even when no operation name can be detected", () =>
+    Effect.gen(function* () {
+      yield* clearTranscript;
+      const service = yield* AgentService;
+
+      const reply = yield* service.handleSynchronousTurn(
+        defaultUserId,
+        InboundMessage.make({ text: TranscriptText.make("Provoca herramienta desconocida") })
+      );
+
+      expect(reply.text).toBe("Corregí la herramienta desconocida.");
+    })
+  );
+
+  it.effect("fails closed when invalid model output contains sensitive text", () =>
+    Effect.gen(function* () {
+      yield* clearTranscript;
+      const service = yield* AgentService;
+
+      const failure = yield* service
+        .handleSynchronousTurn(
+          defaultUserId,
+          InboundMessage.make({ text: TranscriptText.make("Provoca salida sensible") })
+        )
+        .pipe(Effect.flip);
+      const transcript = yield* listTranscriptEntries(defaultUserId);
+
+      expect(failure._tag).toBe("ModelResponseRejected");
+      expect(transcript.map((entry) => entry._tag)).toEqual(["UserTranscriptEntry"]);
+    })
+  );
+
   it.effect("feeds rejected tool input back to the model for correction", () =>
     Effect.gen(function* () {
       yield* clearTranscript;
@@ -1431,6 +1534,40 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       expect(audit.filter((entry) => entry.operation === "transactions.deleteTransaction")).toEqual(
         []
       );
+    })
+  );
+
+  it.effect("rejects retryable provider failures with retry timing", () =>
+    Effect.gen(function* () {
+      yield* clearTranscript;
+      const service = yield* AgentService;
+
+      const failure = yield* service
+        .handleSynchronousTurn(
+          defaultUserId,
+          InboundMessage.make({ text: TranscriptText.make("PROVEEDOR_LIMITADO") })
+        )
+        .pipe(Effect.flip);
+
+      expect(failure._tag).toBe("ModelUnavailable");
+    })
+  );
+
+  it.effect("rejects truncated model text instead of delivering it as a complete reply", () =>
+    Effect.gen(function* () {
+      yield* clearTranscript;
+      const service = yield* AgentService;
+
+      const failure = yield* service
+        .handleSynchronousTurn(
+          defaultUserId,
+          InboundMessage.make({ text: TranscriptText.make("RESPUESTA_TRUNCADA") })
+        )
+        .pipe(Effect.flip);
+      const transcript = yield* listTranscriptEntries(defaultUserId);
+
+      expect(failure._tag).toBe("ModelResponseRejected");
+      expect(transcript.map((entry) => entry._tag)).toEqual(["UserTranscriptEntry"]);
     })
   );
 

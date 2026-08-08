@@ -26,6 +26,7 @@ it.effect("constructs the fixed hosted model from a configured secret", () =>
     expect(HostedAgentGenerationConfig).toEqual({
       temperature: 0.7,
       reasoning: { effort: "none" },
+      store: false,
     });
   })
 );
@@ -43,6 +44,7 @@ it.effect("fails closed when the OpenAI secret is absent", () =>
 );
 
 const OpenAiRequest = Schema.Struct({
+  store: Schema.Boolean,
   tools: Schema.optionalKey(
     Schema.Array(
       Schema.Struct({
@@ -92,14 +94,12 @@ it.effect("sends the assembled toolkit's empty inputs as closed objects", () =>
     if (request.body._tag !== "Uint8Array") {
       return yield* Effect.die("Expected an encoded OpenAI request body");
     }
-    const body = yield* Schema.decodeUnknownEffect(Schema.UnknownFromJsonString)(
+    const rawBody = yield* Schema.decodeUnknownEffect(Schema.UnknownFromJsonString)(
       new TextDecoder().decode(request.body.body)
     );
-    const categoriesTool = yield* Schema.decodeUnknownEffect(OpenAiRequest)(body).pipe(
-      Effect.map((decoded) =>
-        decoded.tools?.find(({ name }) => name === "categories__listCategories")
-      )
-    );
+    const body = yield* Schema.decodeUnknownEffect(OpenAiRequest)(rawBody);
+    const categoriesTool = body.tools?.find(({ name }) => name === "categories__listCategories");
+    expect(body.store).toBe(false);
     expect(categoriesTool?.parameters).toEqual({
       type: "object",
       properties: {},

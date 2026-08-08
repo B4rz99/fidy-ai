@@ -1,0 +1,692 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Issue #137 · Hosted agent follow-up architecture</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #07101d;
+        --panel: #0d1929;
+        --panel-2: #122238;
+        --line: #27415f;
+        --text: #edf5ff;
+        --muted: #a9bdd3;
+        --cyan: #63d9ff;
+        --green: #6ee7b7;
+        --amber: #ffd479;
+        --rose: #ff9eaa;
+        --violet: #c5a3ff;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html {
+        scroll-behavior: smooth;
+      }
+      body {
+        margin: 0;
+        background:
+          radial-gradient(circle at 85% -10%, #173b67 0, transparent 32rem),
+          radial-gradient(circle at -5% 42%, #10394a 0, transparent 28rem), var(--bg);
+        color: var(--text);
+        font:
+          15px/1.55 Inter,
+          ui-sans-serif,
+          system-ui,
+          -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          sans-serif;
+      }
+      main {
+        width: min(1220px, calc(100% - 30px));
+        margin: 0 auto;
+        padding: 34px 0 80px;
+      }
+      header,
+      section {
+        border: 1px solid var(--line);
+        background: linear-gradient(145deg, #0d1b2ddd, #091422ee);
+        box-shadow: 0 18px 55px #0005;
+      }
+      header {
+        padding: clamp(24px, 5vw, 44px);
+        border-radius: 24px;
+      }
+      section {
+        margin-top: 24px;
+        padding: clamp(20px, 4vw, 30px);
+        border-radius: 18px;
+      }
+      h1 {
+        margin: 8px 0 10px;
+        max-width: 940px;
+        font-size: clamp(34px, 6vw, 62px);
+        line-height: 1.02;
+        letter-spacing: -0.05em;
+      }
+      h2 {
+        margin: 0 0 18px;
+        font-size: 25px;
+        letter-spacing: -0.025em;
+      }
+      h3 {
+        margin: 0 0 8px;
+        font-size: 16px;
+      }
+      p {
+        margin: 0 0 12px;
+      }
+      a {
+        color: var(--cyan);
+      }
+      code {
+        padding: 2px 6px;
+        border-radius: 6px;
+        background: #06101d;
+        color: #c5f2ff;
+      }
+      ul,
+      ol {
+        margin: 8px 0 0;
+        padding-left: 21px;
+      }
+      li {
+        margin: 5px 0;
+        color: var(--muted);
+      }
+      .eyebrow {
+        color: var(--cyan);
+        text-transform: uppercase;
+        font-size: 12px;
+        font-weight: 850;
+        letter-spacing: 0.15em;
+      }
+      .lead {
+        max-width: 930px;
+        color: #c8d8e8;
+        font-size: 18px;
+      }
+      .badges {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 9px;
+        margin-top: 20px;
+      }
+      .badge {
+        padding: 7px 11px;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        color: var(--muted);
+        background: #071321aa;
+      }
+      .badge.agreed {
+        color: var(--green);
+        border-color: #32745e;
+      }
+      .badge.design {
+        color: var(--amber);
+        border-color: #755b2c;
+      }
+      .nav {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 22px;
+      }
+      .nav a {
+        padding: 7px 10px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        text-decoration: none;
+        background: #0a1727;
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(12, 1fr);
+        gap: 14px;
+      }
+      .card {
+        grid-column: span 3;
+        min-height: 158px;
+        padding: 17px;
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        background: var(--panel-2);
+      }
+      .card.wide {
+        grid-column: span 6;
+      }
+      .card p {
+        color: var(--muted);
+      }
+      .number {
+        display: inline-grid;
+        place-items: center;
+        min-width: 34px;
+        height: 27px;
+        margin-bottom: 10px;
+        padding: 0 8px;
+        border-radius: 8px;
+        color: var(--cyan);
+        background: #143452;
+        font-weight: 850;
+      }
+      .diagram {
+        overflow-x: auto;
+        padding: 15px;
+        border-radius: 12px;
+        background: #f3f8ff;
+      }
+      .mermaid {
+        min-width: 900px;
+      }
+      .callout {
+        margin-top: 14px;
+        padding: 14px 16px;
+        border-left: 4px solid var(--amber);
+        border-radius: 8px;
+        background: #251d0e;
+        color: #ffe8ba;
+      }
+      .callout.good {
+        border-color: var(--green);
+        background: #0d261f;
+        color: #c7f7e5;
+      }
+      .callout.risk {
+        border-color: var(--rose);
+        background: #29131a;
+        color: #ffd6dc;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+      th,
+      td {
+        padding: 12px 10px;
+        border-bottom: 1px solid var(--line);
+        text-align: left;
+        vertical-align: top;
+      }
+      th {
+        color: var(--cyan);
+        text-transform: uppercase;
+        font-size: 12px;
+        letter-spacing: 0.08em;
+      }
+      td {
+        color: var(--muted);
+      }
+      td strong {
+        color: var(--text);
+      }
+      .flow {
+        display: grid;
+        grid-template-columns: repeat(5, 1fr);
+        gap: 9px;
+        align-items: stretch;
+      }
+      .flow div {
+        position: relative;
+        padding: 13px;
+        border: 1px solid var(--line);
+        border-radius: 11px;
+        background: var(--panel-2);
+        color: var(--muted);
+      }
+      .flow strong {
+        display: block;
+        margin-bottom: 4px;
+        color: var(--text);
+      }
+      .flow div:not(:last-child)::after {
+        content: "→";
+        position: absolute;
+        right: -9px;
+        top: 42%;
+        z-index: 2;
+        color: var(--cyan);
+        font-weight: 900;
+      }
+      .file-link {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        margin-top: 10px;
+        padding: 10px 13px;
+        border: 1px solid #31708b;
+        border-radius: 9px;
+        background: #0b2637;
+        text-decoration: none;
+      }
+      .muted {
+        color: var(--muted);
+      }
+      footer {
+        padding: 28px 4px 0;
+        color: var(--muted);
+        text-align: center;
+      }
+      @media (max-width: 900px) {
+        .card,
+        .card.wide {
+          grid-column: span 6;
+        }
+        .flow {
+          grid-template-columns: 1fr;
+        }
+        .flow div:not(:last-child)::after {
+          content: "↓";
+          right: 50%;
+          top: auto;
+          bottom: -15px;
+        }
+      }
+      @media (max-width: 580px) {
+        .card,
+        .card.wide {
+          grid-column: span 12;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <div class="eyebrow">Issue #137 · agreed follow-up design</div>
+        <h1>Hosted agent continuity, atomic batches, bounded retries, and provider caps</h1>
+        <p class="lead">
+          A high-level view of A7, A9, A11, and A13: preserve model continuity only within a turn,
+          authorize and execute eligible operation batches atomically, retry one transient provider
+          failure inside the existing round deadline, and project the remaining host tool budget
+          into every OpenAI request.
+        </p>
+        <div class="badges">
+          <span class="badge agreed">A7 · agreed</span>
+          <span class="badge design">A9 · architecture change</span>
+          <span class="badge agreed">A11 · agreed</span>
+          <span class="badge agreed">A13 · agreed</span>
+        </div>
+        <nav class="nav">
+          <a href="#architecture">System</a><a href="#callstack">Callstack</a> <a href="#a7">A7</a
+          ><a href="#a9">A9</a><a href="#a11">A11</a> <a href="#a13">A13</a
+          ><a href="#types">Types</a>
+        </nav>
+      </header>
+
+      <section>
+        <h2>Decisions at a glance</h2>
+        <div class="grid">
+          <article class="card">
+            <span class="number">A7</span>
+            <h3>Transient continuation</h3>
+            <p>
+              Replay assistant text accompanying tool calls during the same turn. Do not persist it
+              as if it had been delivered to the User.
+            </p>
+          </article>
+          <article class="card">
+            <span class="number">A9</span>
+            <h3>Atomic eligible batch</h3>
+            <p>
+              Preflight every call, request one exact batch confirmation, then let the canonical
+              batch perform authoritative checks and execution in one PostgreSQL transaction.
+            </p>
+          </article>
+          <article class="card">
+            <span class="number">A11</span>
+            <h3>One bounded retry</h3>
+            <p>
+              At most two provider attempts share one 30-second model-round deadline. Retry only a
+              retryable <code>AiError</code>.
+            </p>
+          </article>
+          <article class="card">
+            <span class="number">A13</span>
+            <h3>Remaining tool budget</h3>
+            <p>
+              Send OpenAI the remaining turn budget as <code>max_tool_calls</code>. Disable tools
+              when the budget reaches zero.
+            </p>
+          </article>
+        </div>
+      </section>
+
+      <section id="architecture">
+        <h2>High-level system architecture</h2>
+        <div class="diagram">
+          <pre class="mermaid">
+flowchart LR
+  U[User via WhatsApp / REPL] --> AS[AgentService.handleTurn]
+  AS --> PC[Prompt composition]
+  PC -->|durable Transcript + transient continuation| RC[A11 model-round retry controller]
+  RC -->|max 2 attempts / shared 30s| LM[Effect LanguageModel]
+  LM -->|A13 max_tool_calls = remaining| OA[OpenAI Responses API]
+  OA -->|text + tool calls + finish + usage| AC[acceptModelRound]
+  AC --> A7[A7 transient model continuation]
+  AC --> PF[A9 whole-response preflight]
+  PF -->|no confirmation needed| AB[Canonical AtomicBatch operation]
+  PF -->|exact ordered batch| CH[Batch confirmation challenge]
+  CH --> T[(Append-only Transcript)]
+  U -->|CONFIRMAR LOTE digest| AS
+  AS -->|confirmed exact batch| AB
+  AB --> TX[withUserTransaction]
+  TX -->|authoritative checks + ordered execution| OI[Reusable operation implementations]
+  TX -->|any child fails: roll back all| UX[Actionable User explanation]
+  OI --> DB[(PostgreSQL)]
+  OI --> J[(Durable job rows)]
+  J --> W[Worker after commit]
+  W --> EXT[External provider]
+
+  classDef proposed fill:#e8ddff,stroke:#7656a8,color:#1b1230;
+  classDef durable fill:#dff7ea,stroke:#3b8260,color:#112c20;
+  classDef provider fill:#ffe8c7,stroke:#a56d20,color:#30200c;
+  class A7,PF,CH,AB,TX,OI proposed;
+  class T,DB,J durable;
+  class OA,EXT provider;
+          </pre>
+        </div>
+        <div class="callout good">
+          <strong>Source of truth:</strong> canonical operation definitions still derive schemas,
+          policy, authorization, clients, OpenAPI, and hosted tools. Atomic batching must derive its
+          eligible call union from that same catalog.
+        </div>
+      </section>
+
+      <section id="callstack">
+        <h2>Callstack graph · generation, confirmation, and atomic execution</h2>
+        <div class="diagram">
+          <pre class="mermaid">
+sequenceDiagram
+  autonumber
+  actor User
+  participant Agent as AgentService
+  participant Retry as ModelRoundRetry
+  participant Model as LanguageModel / OpenAI
+  participant Preflight as AtomicBatchPreflight
+  participant Confirm as BatchConfirmation
+  participant Batch as Canonical AtomicBatch
+  participant Tx as PostgreSQL transaction
+  participant Impl as Operation implementations
+  participant Jobs as Durable jobs
+
+  User->>Agent: inbound message
+  Agent->>Retry: generate round(deadline = started + 30s, remaining tools)
+  Retry->>Model: attempt 1 + max_tool_calls
+  alt retryable AiError and delay fits deadline
+    Model-->>Retry: AiError(isRetryable, retryAfter?)
+    Retry->>Retry: wait retryAfter or fallback delay
+    Retry->>Model: attempt 2 within same deadline
+  end
+  Model-->>Agent: ordered text/tool parts + finish reason + usage
+  Agent->>Agent: retain text/tool parts in transient continuation (A7)
+  Agent->>Preflight: all generated calls
+  Preflight->>Preflight: decode + authorize + validate + check atomic eligibility
+  alt confirmation required
+    Preflight-->>Agent: exact ordered batch challenge + digest
+    Agent-->>User: one batch confirmation request
+    User->>Agent: CONFIRMAR LOTE &lt;digest&gt;
+    Agent->>Confirm: consume single-use challenge
+    Confirm-->>Agent: exact confirmed batch
+  end
+  Agent->>Batch: execute(exact calls)
+  Batch->>Tx: begin
+  loop each call in order
+    Tx->>Impl: authoritative checks + execution with transaction-scoped SqlClient
+    Impl-->>Tx: typed result or canonical failure
+  end
+  opt operation schedules external work
+    Tx->>Jobs: insert durable job row
+  end
+  alt any child fails
+    Tx-->>Batch: roll back every child effect
+    Batch-->>Agent: actionable canonical batch failure
+    Agent-->>User: explain how to correct the request
+  else every child succeeds
+    Tx-->>Batch: commit all child effects
+    Batch-->>Agent: ordered results
+    Agent->>Retry: next model round with tool results + A7 continuation
+    Retry->>Model: tools enabled with new remaining budget, or disabled at zero
+    Model-->>Agent: final answer
+    Agent-->>User: semantic reply
+  end
+          </pre>
+        </div>
+      </section>
+
+      <section id="a7">
+        <h2>A7 · transient assistant text continuity</h2>
+        <div class="flow">
+          <div><strong>Provider response</strong>Ordered text and tool-call parts.</div>
+          <div><strong>Accept</strong>Validate finish reason and decode calls.</div>
+          <div>
+            <strong>Retain in memory</strong>Keep original assistant-part order for this turn.
+          </div>
+          <div><strong>Execute tools</strong>Append canonical tool calls/results durably.</div>
+          <div><strong>Next prompt</strong>Durable history plus transient continuation.</div>
+        </div>
+        <div class="callout">
+          <strong>Not persisted:</strong> accompanying text is not an
+          <code>AssistantTranscriptEntry</code> unless it was actually delivered to the User. It
+          disappears when the turn ends.
+        </div>
+      </section>
+
+      <section id="a9">
+        <h2>A9 · one confirmation, one eligible atomic batch</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Stage</th>
+              <th>Guarantee</th>
+              <th>Failure behavior</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>Initial preflight</strong></td>
+              <td>
+                Every call decodes, is authorized, validates, and is atomic-batch eligible at
+                challenge time.
+              </td>
+              <td>Execute nothing; give an actionable explanation.</td>
+            </tr>
+            <tr>
+              <td><strong>Confirmation</strong></td>
+              <td>
+                One digest binds the exact ordered calls and arguments; challenge is expiring and
+                single-use.
+              </td>
+              <td>Reject stale, altered, or replayed confirmation.</td>
+            </tr>
+            <tr>
+              <td><strong>Atomic execution</strong></td>
+              <td>
+                Authoritative authorization, precondition, and domain checks run with all eligible
+                database effects and durable job inserts inside one PostgreSQL transaction.
+              </td>
+              <td>
+                Any child failure rolls back every child effect and becomes an actionable User
+                explanation.
+              </td>
+            </tr>
+            <tr>
+              <td><strong>External work</strong></td>
+              <td>A committed durable job survives crashes and is retried by a worker.</td>
+              <td>The external action is not falsely described as transactionally reversible.</td>
+            </tr>
+          </tbody>
+        </table>
+        <div class="callout risk">
+          <strong>Eligibility limit:</strong> direct external side effects cannot be rolled back by
+          PostgreSQL. An operation must either be excluded or atomically persist a durable job for
+          post-commit work.
+        </div>
+        <h3 style="margin-top: 20px">Required architecture changes</h3>
+        <ul>
+          <li>Add atomic-batch eligibility to canonical operation policy.</li>
+          <li>
+            Publish <code>operations.executeAtomicBatch</code> normally on HTTP, OpenAPI, typed
+            client, MCP, CLI, and the hosted-agent toolkit.
+          </li>
+          <li>
+            Derive a bounded tagged union of eligible ordinary operation inputs from the catalog;
+            excluding the batch operation from that child union makes recursion impossible by
+            schema.
+          </li>
+          <li>
+            Move eligible handler behavior behind reusable implementations that accept a
+            transaction-scoped <code>SqlClient</code>.
+          </li>
+          <li>
+            Make individual operations and the batch operation call those same implementations.
+          </li>
+          <li>
+            Preserve per-child authorization, Subscription, quota, audit, validation, and typed
+            failure semantics.
+          </li>
+        </ul>
+        <div class="callout good">
+          <strong>Nothing hidden:</strong> the batch is a normal visible canonical operation. The
+          schema—not surface filtering—prevents nested batches and excludes ineligible operations.
+        </div>
+      </section>
+
+      <section id="a11">
+        <h2>A11 · retry inside one model-round deadline</h2>
+        <div class="grid">
+          <article class="card wide">
+            <h3>Policy</h3>
+            <ul>
+              <li>Two attempts maximum.</li>
+              <li>Retry only <code>AiError.isRetryable</code>.</li>
+              <li>Normalize optional <code>retryAfter</code> to Effect <code>Option</code>.</li>
+              <li>Use a small jittered fallback delay when absent.</li>
+              <li>Delay and both attempts share the same timeout.</li>
+            </ul>
+          </article>
+          <article class="card wide">
+            <h3>Default timing</h3>
+            <ul>
+              <li><code>maxModelRoundMillis = 30_000</code>.</li>
+              <li>The configured schema permits up to 120 seconds.</li>
+              <li>Provider retry does not consume an Agent iteration.</li>
+              <li>No retry starts when the delay plus minimum attempt window cannot fit.</li>
+              <li>An overall turn deadline remains separate follow-up policy.</li>
+            </ul>
+          </article>
+        </div>
+      </section>
+
+      <section id="a13">
+        <h2>A13 · translate a turn budget into request caps</h2>
+        <div class="diagram">
+          <pre class="mermaid">
+flowchart LR
+  B[Host maxToolCallsPerTurn = 12] --> R1[Round 1 remaining 12\nmax_tool_calls: 12]
+  R1 -->|accept 4 calls| R2[Round 2 remaining 8\nmax_tool_calls: 8]
+  R2 -->|accept 5 calls| R3[Round 3 remaining 3\nmax_tool_calls: 3]
+  R3 -->|accept 3 calls| F[Finalization round\ntool_choice: none]
+  F --> U[Final User reply]
+          </pre>
+        </div>
+        <div class="callout good">
+          <strong>Defense in depth:</strong> OpenAI receives the request cap, but the host still
+          validates the aggregate accepted-call count. User quota, fair-use, and monetary cost
+          controls remain separate modules owned by issues #30 and #35.
+        </div>
+      </section>
+
+      <section>
+        <h2>Invariant checklist</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Invariant</th>
+              <th>Owner</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>
+                Text accompanying tool calls is replayed during the turn but never mislabeled as
+                delivered Transcript text.
+              </td>
+              <td>A7 continuation</td>
+            </tr>
+            <tr>
+              <td>
+                No generated call executes before whole-response preflight and confirmation
+                settlement.
+              </td>
+              <td>A9 preflight</td>
+            </tr>
+            <tr>
+              <td>Confirmation binds exact ordered canonical operation ids and encoded inputs.</td>
+              <td>A9 confirmation</td>
+            </tr>
+            <tr>
+              <td>Eligible batch execution commits all database effects or none.</td>
+              <td>A9 atomic batch</td>
+            </tr>
+            <tr>
+              <td>Provider retries cannot extend a model round beyond its existing deadline.</td>
+              <td>A11 retry controller</td>
+            </tr>
+            <tr>
+              <td>Provider cap never exceeds the host's remaining tool budget.</td>
+              <td>A13 projection</td>
+            </tr>
+            <tr>
+              <td>
+                Host aggregate enforcement remains authoritative even when provider caps are sent.
+              </td>
+              <td>AgentService</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section id="types">
+        <h2>Proposed TypeScript interfaces</h2>
+        <p class="muted">
+          The companion file is a design artifact, not a second production model. Catalog-derived
+          schemas must replace its generic illustrative members during implementation.
+        </p>
+        <a class="file-link" href="./issue-137-proposed-types.ts"
+          >Open <code>docs/plans/issue-137-proposed-types.ts</code> →</a
+        >
+      </section>
+
+      <footer>Fidy · Issue #137 follow-up architecture · A7 / A9 / A11 / A13</footer>
+    </main>
+    <script type="module">
+      import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+      mermaid.initialize({
+        startOnLoad: true,
+        theme: "base",
+        securityLevel: "loose",
+        themeVariables: {
+          fontFamily: "Inter, ui-sans-serif, system-ui",
+          primaryColor: "#dff3ff",
+          primaryTextColor: "#102033",
+          primaryBorderColor: "#4f86ad",
+          lineColor: "#52708d",
+          secondaryColor: "#e8ddff",
+          tertiaryColor: "#e2f7ec",
+          actorBkg: "#dff3ff",
+          actorBorder: "#4f86ad",
+          actorTextColor: "#102033",
+          signalColor: "#38556f",
+          signalTextColor: "#102033",
+          noteBkgColor: "#fff1c9",
+          noteTextColor: "#30240f",
+        },
+      });
+    </script>
+  </body>
+</html>

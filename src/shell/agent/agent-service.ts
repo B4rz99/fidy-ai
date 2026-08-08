@@ -4,6 +4,7 @@ import {
   Crypto,
   Data,
   DateTime,
+  Duration,
   Effect,
   Layer,
   Option,
@@ -12,7 +13,7 @@ import {
   Stream,
   Struct,
 } from "effect";
-import { type AiError, LanguageModel, type Tool } from "effect/unstable/ai";
+import { type AiError, LanguageModel, type Response, type Tool } from "effect/unstable/ai";
 import type { HttpClient } from "effect/unstable/http";
 import { SqlClient } from "effect/unstable/sql";
 import type { User } from "~/core/identity/model";
@@ -53,11 +54,13 @@ import {
   sensitiveEntryRejected,
   systemPrompt,
   transcriptPrompt,
+  turnPrompt,
 } from "./model-boundary";
 import { makeTurnConfirmation } from "./tool-confirmation";
 import { renderTransactionReceipt } from "./transaction-receipt";
 import {
   type AgentOperationBinding,
+  agentOperationBindings,
   decodeAgentOperationInput,
   findAgentOperationBinding,
   makeAgentToolkit,
@@ -132,11 +135,18 @@ export class OnboardingConsentRequired extends Data.TaggedError("OnboardingConse
   readonly userId: UserId;
 }> {}
 
-/** Safe failure returned when the configured language model cannot complete a turn. */
+/** Safe failure returned when the configured language model or provider cannot serve a turn. */
 export class ModelUnavailable extends Data.TaggedError("ModelUnavailable")<{}> {}
 
+/** Safe failure returned when model output cannot be accepted or executed. */
+export class ModelResponseRejected extends Data.TaggedError("ModelResponseRejected")<{}> {}
+
 /** Closed failure vocabulary exposed by the channel-agnostic turn boundary. */
-export type AgentTurnError = UnknownUser | OnboardingConsentRequired | ModelUnavailable;
+export type AgentTurnError =
+  | UnknownUser
+  | OnboardingConsentRequired
+  | ModelUnavailable
+  | ModelResponseRejected;
 
 const makeEntryId = Effect.flatMap(Crypto.Crypto, (crypto) => crypto.randomUUIDv7).pipe(
   Effect.map((id) => TranscriptEntryId.make(id)),
@@ -227,36 +237,33 @@ const malformedToolInput: Schema.Json = {
   code: "tool_input_rejected",
   message: "The model supplied malformed operation input. Correct the fields before retrying.",
 };
-const malformedModelOutputFeedback =
-  "The previous operation call was malformed and was not executed. Correct its arguments before retrying.";
 const CanonicalValidationFailure = ValidationFailed.mapFields(Struct.pick(["error"]));
 
-const toModelUnavailable = (): ModelUnavailable => new ModelUnavailable();
-const decodeTranscriptText = (value: unknown): Effect.Effect<TranscriptText, ModelUnavailable> =>
-  Schema.decodeUnknownEffect(TranscriptText)(value).pipe(Effect.mapError(toModelUnavailable));
-const decodeTranscriptJson = (value: unknown): Effect.Effect<Schema.Json, ModelUnavailable> =>
-  Schema.decodeUnknownEffect(Schema.Json)(value).pipe(Effect.mapError(toModelUnavailable));
-const encodeTranscriptJson = (
-  schema: Schema.Codec<unknown, Schema.Json, never, never>,
+const toModelResponseRejected = (): ModelResponseRejected => new ModelResponseRejected();
+const decodeTranscriptText = (
   value: unknown
-): Effect.Effect<Schema.Json, ModelUnavailable> =>
+): Effect.Effect<TranscriptText, ModelResponseRejected> =>
+  Schema.decodeUnknownEffect(TranscriptText)(value).pipe(Effect.mapError(toModelResponseRejected));
+const decodeTranscriptJson = (value: unknown): Effect.Effect<Schema.Json, ModelResponseRejected> =>
+  Schema.decodeUnknownEffect(Schema.Json)(value).pipe(Effect.mapError(toModelResponseRejected));
+const encodeTranscriptJson = (
+  schema: Schema.Codec<unknown, unknown, never, never>,
+  value: unknown
+): Effect.Effect<Schema.Json, ModelResponseRejected> =>
   Schema.encodeUnknownEffect(schema)(value).pipe(
     Effect.flatMap(decodeTranscriptJson),
-    Effect.mapError(toModelUnavailable)
+    Effect.mapError(toModelResponseRejected)
   );
 const encodeAgentOperationInput = (
   binding: AgentOperationBinding,
   input: unknown
-): Effect.Effect<Schema.Json, ModelUnavailable> =>
-  decodeAgentOperationInput(binding, input).pipe(
-    Effect.flatMap((decoded) => encodeTranscriptJson(binding.parameters, decoded)),
-    Effect.mapError(toModelUnavailable)
-  );
+): Effect.Effect<Schema.Json, ModelResponseRejected> =>
+  encodeTranscriptJson(binding.canonicalParameters, input);
 const requireToolResult = function <A>(
   result: Option.Option<A>
-): Effect.Effect<never, ModelUnavailable> | Effect.Effect<A> {
+): Effect.Effect<never, ModelResponseRejected> | Effect.Effect<A> {
   return Option.match(result, {
-    onNone: () => Effect.fail(new ModelUnavailable()),
+    onNone: () => Effect.fail(new ModelResponseRejected()),
     onSome: (value) => Effect.succeed(value),
   });
 };
@@ -324,6 +331,16 @@ type GenerationResponse =
   | Readonly<{ _tag: "Completed"; text: TranscriptText }>
   | Readonly<{ _tag: "Continued" }>;
 
+type AcceptedGeneration = Readonly<{
+  text: unknown;
+  toolCalls: ReadonlyArray<AgentToolCall>;
+  finishReason: Response.FinishReason;
+}>;
+
+type ModelRoundDecision = Readonly<
+  { _tag: "Accepted"; generated: AcceptedGeneration } | { _tag: "Retry"; feedback: string }
+>;
+
 const recordedToolCall: ToolCallOutcome = { _tag: "Recorded" };
 const continuedGeneration: GenerationResponse = { _tag: "Continued" };
 
@@ -383,7 +400,7 @@ const runToolkitCall = (
   input: Schema.Json
 ): Effect.Effect<
   Tool.HandlerResult<AgentToolkitInstance["tools"][AgentToolCall["name"]]>,
-  ModelUnavailable
+  ModelResponseRejected
 > =>
   turn.toolkit
     .handle(name, input)
@@ -392,7 +409,7 @@ const runToolkitCall = (
       Stream.filter(isTerminalToolResult),
       Stream.runLast,
       Effect.flatMap(requireToolResult),
-      Effect.mapError(toModelUnavailable)
+      Effect.mapError(toModelResponseRejected)
     );
 
 const turnCompletedOutcome = (
@@ -411,7 +428,7 @@ const executeAgentToolCall = Effect.fn("AgentService.executeToolCall")(function*
 ) {
   const binding = yield* findAgentOperationBinding(toolCall.name).pipe(
     Option.match({
-      onNone: () => Effect.fail(new ModelUnavailable()),
+      onNone: () => Effect.fail(new ModelResponseRejected()),
       onSome: Effect.succeed,
     })
   );
@@ -422,7 +439,7 @@ const executeAgentToolCall = Effect.fn("AgentService.executeToolCall")(function*
     onFailure: () => decodeTranscriptJson(toolCall.params),
     onSuccess: Effect.succeed,
   });
-  if (containsSensitiveJson(input)) return yield* new ModelUnavailable();
+  if (containsSensitiveJson(input)) return yield* new ModelResponseRejected();
   yield* recordToolCall(turn, call, input);
   if (Result.isFailure(encodedInput)) {
     yield* recordToolOutcome(turn, call, {
@@ -452,8 +469,11 @@ const executeAgentToolCall = Effect.fn("AgentService.executeToolCall")(function*
 const respondToGeneration = Effect.fn("AgentService.respondToGeneration")(function* (
   turn: HostedTurn,
   iteration: AgentIteration,
-  generated: Readonly<{ text: unknown; toolCalls: ReadonlyArray<AgentToolCall> }>
+  generated: AcceptedGeneration
 ) {
+  if (generated.finishReason !== "stop" && generated.finishReason !== "tool-calls") {
+    return yield* new ModelResponseRejected();
+  }
   if (generated.toolCalls.length === 0) {
     const decodedText = yield* decodeTranscriptText(generated.text);
     return { _tag: "Completed", text: safeReplyText(decodedText) } as const;
@@ -508,7 +528,7 @@ const loadTranscriptWindow = (
 const generateCurrentTurn = (
   model: LanguageModel.Service,
   turn: HostedTurn,
-  includeMalformedOutputFeedback: boolean
+  malformedOutputFeedback: Option.Option<string>
 ): Effect.Effect<
   Result.Result<
     LanguageModel.GenerateTextResponse<AgentToolkitInstance["tools"]>,
@@ -523,14 +543,13 @@ const generateCurrentTurn = (
       model
         .generateText({
           prompt: [
-            {
-              role: "system",
-              content: systemPrompt({ user: turn.user, occurredAt: turn.startedAt }),
-            },
-            ...(includeMalformedOutputFeedback
-              ? [{ role: "system" as const, content: malformedModelOutputFeedback }]
-              : []),
+            { role: "system", content: systemPrompt(turn.user) },
             ...transcriptPrompt(transcriptWindow),
+            { role: "system", content: turnPrompt(turn.startedAt) },
+            ...Option.match(malformedOutputFeedback, {
+              onNone: () => [],
+              onSome: (feedback) => [{ role: "system" as const, content: feedback }],
+            }),
           ],
           toolkit: turn.toolkit,
           disableToolCallResolution: true,
@@ -539,18 +558,72 @@ const generateCurrentTurn = (
     );
   });
 
+const malformedOutputFeedback = (description: string): string => {
+  const binding = agentOperationBindings.find(({ wireName }) => description.includes(wireName));
+  const callName = binding?.wireName ?? "unknown_tool_call";
+  return (
+    `The previous operation call ${callName} was malformed and was not executed. ` +
+    `Correct its arguments before retrying. Validation reason: ${description}`
+  );
+};
+
+const annotateModelUsage = Effect.fn("AgentService.annotateModelUsage")(function* (
+  generated: LanguageModel.GenerateTextResponse<AgentToolkitInstance["tools"]>
+) {
+  yield* Effect.annotateCurrentSpan({
+    "agent.model.usage.input_tokens.cache_read": generated.usage.inputTokens.cacheRead ?? 0,
+    "agent.model.usage.input_tokens.total": generated.usage.inputTokens.total ?? 0,
+    "agent.model.usage.output_tokens.total": generated.usage.outputTokens.total ?? 0,
+  });
+});
+
+const decodeModelToolCalls = Effect.fn("AgentService.decodeModelToolCalls")(function* (
+  generated: LanguageModel.GenerateTextResponse<AgentToolkitInstance["tools"]>
+): Effect.fn.Return<ReadonlyArray<AgentToolCall>, ModelResponseRejected> {
+  const toolCalls: Array<AgentToolCall> = [];
+  for (const toolCall of generated.toolCalls) {
+    const binding = yield* findAgentOperationBinding(toolCall.name).pipe(
+      Option.match({
+        onNone: () => Effect.fail(new ModelResponseRejected()),
+        onSome: Effect.succeed,
+      })
+    );
+    const params = yield* decodeAgentOperationInput(binding, toolCall.params).pipe(
+      Effect.mapError(toModelResponseRejected)
+    );
+    toolCalls.push({ ...toolCall, params });
+  }
+  return toolCalls;
+});
+
 const acceptModelRound = Effect.fn("AgentService.acceptModelRound")(function* (
   round: Effect.Success<ReturnType<typeof generateCurrentTurn>>
-) {
-  if (Result.isSuccess(round)) return Option.some(round.success);
+): Effect.fn.Return<ModelRoundDecision, ModelUnavailable | ModelResponseRejected> {
+  if (Result.isSuccess(round)) {
+    yield* annotateModelUsage(round.success);
+    return {
+      _tag: "Accepted",
+      generated: {
+        text: round.success.text,
+        toolCalls: yield* decodeModelToolCalls(round.success),
+        finishReason: round.success.finishReason,
+      },
+    };
+  }
   const { failure } = round;
-  if (!("reason" in failure) || failure.reason._tag !== "InvalidOutputError") {
-    return yield* new ModelUnavailable();
-  }
+  if (!("reason" in failure)) return yield* new ModelUnavailable();
+  yield* Effect.annotateCurrentSpan({
+    "agent.model.failure.reason": failure.reason._tag,
+    "agent.model.failure.retryable": failure.isRetryable,
+    ...(failure.retryAfter === undefined
+      ? {}
+      : { "agent.model.failure.retry_after_millis": Duration.toMillis(failure.retryAfter) }),
+  });
+  if (failure.reason._tag !== "InvalidOutputError") return yield* new ModelUnavailable();
   if (containsSensitiveChatValue(failure.reason.description)) {
-    return yield* new ModelUnavailable();
+    return yield* new ModelResponseRejected();
   }
-  return Option.none();
+  return { _tag: "Retry", feedback: malformedOutputFeedback(failure.reason.description) };
 });
 
 const loadTurnContext = (
@@ -592,23 +665,23 @@ const runHostedTurn = (
   turn: HostedTurn
 ): Effect.Effect<
   PreparedAgentReply,
-  ModelUnavailable | OnboardingConsentRequired,
+  ModelUnavailable | ModelResponseRejected | OnboardingConsentRequired,
   Crypto.Crypto | SqlClient.SqlClient
 > =>
   Effect.gen(function* () {
     let toolCalls = 0;
-    let includeMalformedOutputFeedback = false;
+    let feedback = Option.none<string>();
     for (let index = 1; index <= turn.limits.maxIterations; index += 1) {
       const iteration = AgentIteration.make(index);
-      const accepted = yield* acceptModelRound(
-        yield* generateCurrentTurn(model, turn, includeMalformedOutputFeedback)
+      const roundDecision = yield* acceptModelRound(
+        yield* generateCurrentTurn(model, turn, feedback)
       );
-      if (Option.isNone(accepted)) {
-        includeMalformedOutputFeedback = true;
+      if (roundDecision._tag === "Retry") {
+        feedback = Option.some(roundDecision.feedback);
         continue;
       }
-      includeMalformedOutputFeedback = false;
-      const generated = accepted.value;
+      feedback = Option.none();
+      const { generated } = roundDecision;
 
       if (generated.toolCalls.length > turn.limits.maxToolCallsPerTurn - toolCalls) break;
       toolCalls += generated.toolCalls.length;

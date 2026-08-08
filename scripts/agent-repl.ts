@@ -1,7 +1,7 @@
 import { BunHttpClient, BunRuntime, BunServices } from "@effect/platform-bun";
 import { Config, Effect, Layer, Option, Schema } from "effect";
 import { E164PhoneNumber, WhatsAppBusinessScopedUserId } from "~/core/identity/reference";
-import { AgentServiceLive } from "~/shell/agent/agent-service";
+import { AgentService } from "~/shell/agent/agent-service";
 import { OpenAiLanguageModelLive } from "~/shell/agent/openai";
 import { runAgentRepl } from "~/shell/agent/repl";
 import { CanonicalApiBaseUrl, CanonicalApiUrl } from "~/shell/agent/toolkit";
@@ -23,7 +23,7 @@ const program = Effect.gen(function* () {
   );
 });
 
-const AgentLive = AgentServiceLive.pipe(Layer.provide(OpenAiLanguageModelLive));
+const AgentLive = AgentService.layer.pipe(Layer.provide(OpenAiLanguageModelLive));
 const InfrastructureLive = Layer.mergeAll(PgLive, BunHttpClient.layer, BunServices.layer);
 const ReplLive = AgentLive.pipe(
   Layer.provide(RuntimeAuthorityLive),

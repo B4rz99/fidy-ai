@@ -6,10 +6,10 @@ import { ValidationGateLive } from "~/shell/_shared/errors";
 import { AuditRetentionLive } from "~/shell/audit/retention";
 import { CURRENT_POLICY_PATH } from "~/shell/consent/current-disclosure";
 import { PendingConsentRetentionLive } from "~/shell/consent/retention";
-import { AgentServiceLive } from "~/shell/agent/agent-service";
+import { AgentService } from "~/shell/agent/agent-service";
 import { OpenAiLanguageModelLive } from "~/shell/agent/openai";
 import { CategoriesLive } from "~/shell/categories/handlers";
-import { KapsoClientLive } from "~/shell/channels/whatsapp/kapso-client";
+import { KapsoClient } from "~/shell/channels/whatsapp/kapso-client";
 import { KapsoWebhookLive } from "~/shell/channels/whatsapp/routes";
 import { WhatsAppWorkerLive } from "~/shell/channels/whatsapp/worker";
 import { DashboardLive } from "~/shell/dashboard/handlers";
@@ -79,12 +79,12 @@ export const HttpLive = HttpRouter.serve(
  * path, and HTTP services used to serve the static shell.
  */
 const HostedWhatsAppWorkerLive = WhatsAppWorkerLive.pipe(
-  Layer.provide(AgentServiceLive.pipe(Layer.provide(OpenAiLanguageModelLive))),
-  Layer.provide(KapsoClientLive)
+  Layer.provide(AgentService.layer.pipe(Layer.provide(OpenAiLanguageModelLive))),
+  Layer.provide(KapsoClient.layer)
 );
 
 export const AppLive = Layer.mergeAll(
-  HttpLive.pipe(Layer.provide(KapsoClientLive)),
+  HttpLive.pipe(Layer.provide(KapsoClient.layer)),
   HostedWhatsAppWorkerLive,
   AuditRetentionLive,
   PendingConsentRetentionLive

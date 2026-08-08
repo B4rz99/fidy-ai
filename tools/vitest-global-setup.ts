@@ -1,35 +1,17 @@
-import { Effect, Layer } from "effect";
-import { MigrationSqlClient, MigrationSqlClientLive, MigratorLive } from "../src/shell/db/client";
+import { Effect } from "effect";
+import { MigrationSqlClient, MigrationSqlClientLive } from "../src/shell/db/client";
 
 const resetPersistentDatabase = Effect.gen(function* () {
   const sql = yield* MigrationSqlClient;
 
-  // A killed consent-gate test can leave these behind and poison later runs.
-  yield* sql`DROP TRIGGER IF EXISTS reject_gate_test_consent ON consent_records`;
-  yield* sql`DROP FUNCTION IF EXISTS reject_gate_test_consent()`;
-
-  // Keep migration metadata and the migration-seeded category reference data.
-  yield* sql`
-    DO $$
-    DECLARE
-      application_tables text;
-    BEGIN
-      SELECT string_agg(format('%I.%I', schemaname, tablename), ', ')
-      INTO application_tables
-      FROM pg_tables
-      WHERE schemaname = 'public'
-        AND tablename NOT IN ('categories', 'effect_sql_migrations');
-
-      IF application_tables IS NOT NULL THEN
-        EXECUTE 'TRUNCATE TABLE ' || application_tables || ' RESTART IDENTITY CASCADE';
-      END IF;
-    END
-    $$
-  `;
+  // Recreate the test schema so the suite's instrumented Migrator runs every time. Besides
+  // clearing rows, CASCADE removes any trigger or function left behind by an interrupted test.
+  yield* sql`DROP SCHEMA public CASCADE`;
+  yield* sql`CREATE SCHEMA public AUTHORIZATION CURRENT_USER`;
+  yield* sql`REVOKE CREATE ON SCHEMA public FROM PUBLIC`;
 }).pipe(Effect.provide(MigrationSqlClientLive));
 
-/** Migrates, then resets the configured test database before Vitest loads any test files. */
+/** Resets the configured test database before Vitest loads any test files. */
 export const setup = async (): Promise<void> => {
-  await Effect.runPromise(Effect.scoped(Layer.build(MigratorLive)));
   await Effect.runPromise(resetPersistentDatabase);
 };

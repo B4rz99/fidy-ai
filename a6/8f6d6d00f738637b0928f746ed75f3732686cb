@@ -1,0 +1,102 @@
+src/shell/insights/handlers.ts
+  s_06825cdf95b6d4::t_b5fefe58ee86ae 1,14,36,38-41,43,120,122,132,134,145,147,158,160
+  s_06825cdf95b6d4::t_4353667ce2306d 16-17,19,42
+  s_06825cdf95b6d4::t_2b8e07d1afc57a 18
+src/shell/transactions/operations.ts
+  s_06825cdf95b6d4::t_e1cfb15f7aeeeb 61
+src/shell/categories/handlers.ts
+  s_06825cdf95b6d4::t_9d82e9a1879413 25-26,28
+  s_06825cdf95b6d4::t_340035a1d059bc 72,76,107,112,156,158,164,170,181
+  s_06825cdf95b6d4::t_a168bcfba1ef3d 83,96,119,132,174,186
+  s_06825cdf95b6d4::t_117a99ba66fb6a 157,165,182
+  s_06825cdf95b6d4::t_2ec236d8ec5d7d 23,142,144,148,150,154,162,179
+  s_06825cdf95b6d4::t_2b8e07d1afc57a 27
+  s_06825cdf95b6d4::t_eefad9fe2ff506 44-48
+src/shell/dashboard/errors.ts
+  s_06825cdf95b6d4::t_63db9953063de0 67-84,143
+  s_06825cdf95b6d4::t_dc316a0e5f41c0 146-148
+  s_06825cdf95b6d4::t_74148c7de14fb5 5,21-23,34-36
+  s_06825cdf95b6d4::t_679dd5ac17f999 6-10,24-33,37-42,44-45,87
+  s_06825cdf95b6d4::t_955eb4191e4f11 55,63-66,89,97,107,117,128,142,144-145,157,159
+src/shell/identity/handlers.ts
+  s_06825cdf95b6d4::t_bc40769fc0613e 4,16,27
+src/shell/_shared/authz.ts
+  s_06825cdf95b6d4::t_fcce3010bb0534 2
+  s_06825cdf95b6d4::t_92667efa5c0444 10,173-185
+  s_06825cdf95b6d4::t_efc94d35392365 14,108-110,112-114,118-120,125,230,232
+  s_06825cdf95b6d4::t_e19fce59c735c5 186-187,222,233-234
+src/shell/testing/authorization.test.ts
+  s_06825cdf95b6d4::t_25575ba61b50e1 330-332
+  s_06825cdf95b6d4::t_97dc409ab6d493 322-323
+  s_06825cdf95b6d4::t_b3a6d1b7da93d0 4,352-354,356,359
+  s_06825cdf95b6d4::t_8b87ef2005024f 324-326,341-346,355
+  s_06825cdf95b6d4::t_c151bee3269667 14,318-321,327-329,333-340,347-351,357-358,360
+  s_06825cdf95b6d4::t_558612559efc6b 361-363
+src/shell/categories/operations.ts
+  s_06825cdf95b6d4::t_6ce7a8bc960526 85
+src/shell/_shared/errors.test.ts
+  s_06825cdf95b6d4::t_f36201675a3154 4-13,15-26,35,40
+  s_06825cdf95b6d4::t_4e43ae4286fba2 1,14,31-32,34,36-39,41-48
+  s_06825cdf95b6d4::t_a78d8522661236 2-3,27-30,33
+  s_06825cdf95b6d4::t_9ec9e49b68df2a 49-50
+src/shell/_shared/suggested-operations.ts
+  s_06825cdf95b6d4::t_d0484cd1e18135 63-67
+src/shell/http.ts
+  s_06825cdf95b6d4::t_32cd092e4f7c24 3,71-78
+src/shell/transactions/handlers.ts
+  s_06825cdf95b6d4::t_c286997671d033 26,60
+  s_06825cdf95b6d4::t_2a288d2d887420 75,87
+  s_06825cdf95b6d4::t_f69969bde1ebf8 35-38,168
+  s_06825cdf95b6d4::t_916ff0850e2a95 65-66,82-83,120,189
+  s_06825cdf95b6d4::t_7223b87c3742a2 227
+  s_06825cdf95b6d4::t_144eabba430a09 164
+  s_06825cdf95b6d4::t_7ecfdebbe34fe4 1,20-21,54,56-59,61,218,220,225,232,234,242,244,254,256,264,266
+  s_06825cdf95b6d4::t_aade22a02bfb7b 34
+src/shell/http.test.ts
+  s_06825cdf95b6d4::t_de99f44f975c36 18-22,24-27
+  s_06825cdf95b6d4::t_8b87ef2005024f 23
+src/shell/testing/operation-policy.test.ts
+  s_06825cdf95b6d4::t_ca50ef16b4b917 5,15-20,24-25,27-28,33-45,47-54
+  s_06825cdf95b6d4::t_cd2a5c2306c7f8 7,46
+src/shell/_shared/operation-catalog.test.ts
+  s_06825cdf95b6d4::t_651e7295d74a69 14-28
+src/shell/_shared/operation-catalog.ts
+  s_06825cdf95b6d4::t_c379d61cdcc243 122-124
+  s_06825cdf95b6d4::t_b91946ad342c1f 98,100,112
+src/shell/categories/errors.ts
+  s_06825cdf95b6d4::t_20956743c50a48 4-8,13-22,26-30,33-35
+  s_06825cdf95b6d4::t_fa1f4032cc1bf9 37-39
+  s_06825cdf95b6d4::t_8c49b83e84fa74 3,10-12,23-25
+  s_06825cdf95b6d4::t_db202dbbb67d88 9,36,47,62,71,79
+src/shell/_shared/errors.ts
+  s_06825cdf95b6d4::t_7eaa3f2e6484b0 2,299,309-311
+src/shell/_shared/response.ts
+  s_06825cdf95b6d4::t_ee945a14ad78e6 92
+  s_06825cdf95b6d4::t_b9fd63fb4c1fb0 94,106
+  s_06825cdf95b6d4::t_f2219b6c4138be 93,95
+src/shell/transactions/errors.ts
+  s_06825cdf95b6d4::t_21fc1d4a810901 73-82,85-86,92,109-120
+  s_06825cdf95b6d4::t_54a9773bf51f81 108
+src/shell/dashboard/handlers.ts
+  s_06825cdf95b6d4::t_05a3ce91c418a8 13,117,119,124,126,130
+  s_06825cdf95b6d4::t_2a288d2d887420 111
+  s_06825cdf95b6d4::t_ce1897d05fa376 14-15,17,133-137
+  s_06825cdf95b6d4::t_2b8e07d1afc57a 16
+  s_06825cdf95b6d4::t_d9483bf2515d58 97,109-110,112,132
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "a68f6d6d00f738637b0928f746ed75f3732686cb",
+  "prompts": {},
+  "sessions": {
+    "s_06825cdf95b6d4": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019fdfcc-fc09-7f78-be4c-026aa8d37c95",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

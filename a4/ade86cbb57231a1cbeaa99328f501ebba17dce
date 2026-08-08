@@ -5,10 +5,12 @@ src/shell/agent/agent-service.test.ts
   s_5436cdc90f83b3::t_319aa72ed29a82 721
   s_5436cdc90f83b3::t_32aa9f14ba9d2e 1783,1788-1792
   s_5436cdc90f83b3::t_d3f8955a16dd03 1778
+  s_5436cdc90f83b3::t_513ed4a49fa9b3 759,771,787-790,800
 src/shell/agent/agent-service.ts
   s_5436cdc90f83b3::t_d4c35aa434c0fe 542-547,553,572,591
   s_5436cdc90f83b3::t_5a320faf9f843c 3,74-77,537-541,549-552,554-571,573-590
   s_5436cdc90f83b3::t_cc56938d7a244a 548
+  s_5436cdc90f83b3::t_67fc327ce4ba62 642
 ---
 {
   "schema_version": "authorship/3.0.0",

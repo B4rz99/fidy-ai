@@ -6,12 +6,11 @@ fidy-ai has not been released, it is in development phase. Any backward compatib
 
 ### Issue tracker
 
-Issues and PRDs live as **GitHub issues** in `B4rz99/fidy-ai`, managed via the `gh` CLI.
+Issues and PRDs live as **GitHub issues** in `B4rz99/fidy-ai`, managed via the `gh` CLI. See `docs/agents/issue-tracker.md`.
 
 ### Domain docs
 
-**Single-context**: one `CONTEXT.md` at the repo root, with architectural decisions consolidated
-into `ARCHITECTURE.md`.
+**Single-context**: one `CONTEXT.md` at the repo root, with ADRs in `docs/adr/`. See `docs/agents/domain.md`.
 
 ## Architecture and conventions
 

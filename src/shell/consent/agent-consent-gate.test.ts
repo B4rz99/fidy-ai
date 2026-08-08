@@ -8,6 +8,7 @@ import { TranscriptText } from "~/core/transcript/model";
 import { makeColombianUser } from "~/core/identity/rules";
 import { AgentService, InboundMessage } from "~/shell/agent/agent-service";
 import { upsertUser } from "~/shell/identity/repo";
+import { TelemetryDisabled } from "~/shell/observability/disabled";
 import { ApiHarness } from "~/shell/testing/api-harness";
 import { currentDisclosure } from "./current-disclosure";
 import { appendConsentRecord, withSubjectLock } from "./repo";
@@ -26,7 +27,8 @@ const MustNotRunModel = Layer.effect(
 
 const AgentConsentHarness = AgentService.layer.pipe(
   Layer.provideMerge(MustNotRunModel),
-  Layer.provideMerge(ApiHarness)
+  Layer.provideMerge(ApiHarness),
+  Layer.provide(TelemetryDisabled)
 );
 
 const makeOnboardingGrant = Effect.gen(function* () {

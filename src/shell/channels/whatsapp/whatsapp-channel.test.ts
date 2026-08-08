@@ -40,6 +40,7 @@ import {
 import { ApiHarness, ApiHarnessClient, ApiHarnessKapsoControl } from "~/shell/testing/api-harness";
 import { makeLanguageModelFinishPart } from "~/shell/testing/language-model-fixtures";
 import { withUserTransaction } from "~/shell/db/user-transaction";
+import { TelemetryDisabled } from "~/shell/observability/disabled";
 import {
   appendConsentRecord,
   claimConsentDisclosureDelivery,
@@ -193,7 +194,10 @@ const FailingWhatsAppModel = Layer.effect(
     streamText: () => Stream.fail(modelFailure),
   })
 );
-const FailingAgentService = AgentService.layer.pipe(Layer.provide(FailingWhatsAppModel));
+const FailingAgentService = AgentService.layer.pipe(
+  Layer.provide(FailingWhatsAppModel),
+  Layer.provide(TelemetryDisabled)
+);
 const OpenAiRequest = Schema.Struct({
   tools: Schema.Array(Schema.Struct({ parameters: Schema.Unknown })),
 });
@@ -255,10 +259,14 @@ const OpenAiWhatsAppModel = OpenAiLanguageModelLive.pipe(
     ConfigProvider.layer(ConfigProvider.fromUnknown({ OPENAI_API_KEY: "test-only-secret" }))
   )
 );
-const OpenAiAgentService = AgentService.layer.pipe(Layer.provide(OpenAiWhatsAppModel));
+const OpenAiAgentService = AgentService.layer.pipe(
+  Layer.provide(OpenAiWhatsAppModel),
+  Layer.provide(TelemetryDisabled)
+);
 const WhatsAppHarness = AgentService.layer.pipe(
   Layer.provideMerge(ScriptedWhatsAppModel),
-  Layer.provideMerge(ApiHarness)
+  Layer.provideMerge(ApiHarness),
+  Layer.provide(TelemetryDisabled)
 );
 const makeKapsoTextEvent = (
   providerMessageId: string,

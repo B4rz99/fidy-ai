@@ -3,7 +3,10 @@ import { Cause, Context, Effect, Exit, Layer, Option } from "effect";
 import { makeSpanDescriptor } from "~/shell/testing/telemetry-fixtures";
 import { TelemetryDisabled } from "./disabled";
 import { TelemetrySpanId, TelemetryTraceId } from "./protocol";
-import { Telemetry, type TelemetryAdapter, type TelemetrySpan, telemetryLayer } from "./telemetry";
+import { Telemetry, type TelemetryAdapter, type TelemetrySpan } from "./telemetry";
+
+const telemetryLayer = (adapter: TelemetryAdapter): Layer.Layer<Telemetry> =>
+  Telemetry.layer(Effect.succeed({ adapter, close: Effect.void }));
 
 const descriptor = makeSpanDescriptor();
 

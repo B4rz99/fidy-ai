@@ -1,4 +1,5 @@
 import {
+  Context,
   Crypto,
   Data,
   DateTime,
@@ -6,11 +7,11 @@ import {
   Encoding,
   Exit,
   Layer,
-  Option,
+  type Option,
   Redacted,
   Schema,
 } from "effect";
-import { HttpClientRequest, type HttpServerRequest } from "effect/unstable/http";
+import { HttpClientRequest } from "effect/unstable/http";
 import { SqlClient } from "effect/unstable/sql";
 import { HttpApiMiddleware, HttpApiSecurity, OpenApi } from "effect/unstable/httpapi";
 import { type AuditLogEntry, type AuditOutcome, CanonicalOperationId } from "~/core/audit/model";
@@ -103,44 +104,25 @@ export const authenticateAgentToken = ({
     return yield* useAgentToken({ tokenHash, usedAt, renewedIdleExpiresAt });
   });
 
-const bearerFromRequest = (
-  request: HttpServerRequest.HttpServerRequest
-): Effect.Effect<AgentBearerToken, Unauthenticated> =>
-  Option.fromUndefinedOr(request.headers.authorization).pipe(
-    Option.flatMap((authorization) =>
-      Option.fromNullishOr(/^Bearer +(.+)$/i.exec(authorization)?.[1])
-    ),
-    Effect.fromOption(unauthenticated),
-    Effect.flatMap((bearer) => decodeAgentBearer(bearer).pipe(Effect.mapError(unauthenticated)))
-  );
-
 /**
- * The handler-facing caller seam. It requires a well-formed Bearer header,
- * resolves the AgentToken to its stable User and granted scopes, and records one
- * use while renewing the idle deadline. Handlers pass the resulting UserId
- * onward explicitly. Missing, malformed, unknown, revoked, and idle-expired
- * bearers fail as `Unauthenticated`; database failures are defects.
+ * The request-scoped result of bearer authorization. Handlers read it once and
+ * continue passing its stable UserId explicitly; core and repositories never
+ * depend on request context.
  */
-export const resolveCaller = (
-  request: HttpServerRequest.HttpServerRequest
-): Effect.Effect<ResolvedAgentToken, Unauthenticated, Crypto.Crypto | SqlClient.SqlClient> =>
-  Effect.gen(function* () {
-    const bearer = yield* bearerFromRequest(request);
-    const usedAt = yield* DateTime.now;
-    return yield* authenticateAgentToken({ bearer, usedAt }).pipe(
-      Effect.flatMap(Effect.fromOption(unauthenticated))
-    );
-  });
+export class ResolvedCaller extends Context.Service<ResolvedCaller, ResolvedAgentToken>()(
+  "fidy-ai/shell/_shared/authz/ResolvedCaller"
+) {}
 
 /**
  * Security middleware attached once to the assembled API. It reads bearer
- * scope and cost exclusively from active endpoint metadata, enforces the scope,
- * and publishes the cost class for the consumption controls owned by issue #35;
- * no route identifier or path participates in authorization.
+ * scope and cost exclusively from active endpoint metadata, resolves and renews
+ * the AgentToken once, and provides that result only to the current request.
+ * No route identifier or path participates in authorization.
  */
 export class AgentAuthorization extends HttpApiMiddleware.Service<
   AgentAuthorization,
   {
+    provides: ResolvedCaller;
     requires: Crypto.Crypto | SqlClient.SqlClient;
   }
 >()("fidy-ai/shell/_shared/authz/AgentAuthorization", {
@@ -188,6 +170,21 @@ const recordRejectedAttempt = (
 ): Effect.Effect<AuditLogEntry, never, SqlClient.SqlClient> =>
   recordAuthorizationOutcome({ ...attempt, outcome: "rejected" });
 
+const operationAudit =
+  (attempt: {
+    readonly resolved: ResolvedAgentToken;
+    readonly operation: CanonicalOperationId;
+    readonly occurredAt: DateTime.Utc;
+  }): ((outcome: AuditOutcome) => Effect.Effect<AuditLogEntry, never, SqlClient.SqlClient>) =>
+  (outcome) =>
+    recordAuthorizationOutcome({ ...attempt, outcome });
+
+const provideResolvedCaller = <A, E, R>(
+  effect: Effect.Effect<A, E, R>,
+  resolved: ResolvedAgentToken
+): Effect.Effect<A, E, Exclude<R, ResolvedCaller>> =>
+  Effect.provideService(effect, ResolvedCaller, resolved);
+
 /**
  * Live operation-derived bearer authorization for the HTTP server. Each call
  * authenticates its AgentToken, requires current onboarding consent, rejects a
@@ -222,10 +219,7 @@ export const AgentAuthorizationLive = Layer.succeed(
                 resolved.subjectUserId,
                 () => Effect.fail(new ConsentAuthenticationRejected({ resolved })),
                 Effect.gen(function* () {
-                  const audit = (
-                    outcome: AuditOutcome
-                  ): Effect.Effect<AuditLogEntry, never, SqlClient.SqlClient> =>
-                    recordAuthorizationOutcome({ resolved, operation, outcome, occurredAt });
+                  const audit = operationAudit({ resolved, operation, occurredAt });
 
                   if (!resolved.scopes.includes(policy.requiredScope)) {
                     return yield* new ScopeAuthenticationRejected({ resolved });
@@ -233,8 +227,11 @@ export const AgentAuthorizationLive = Layer.succeed(
 
                   yield* annotateOperationPolicy(policy);
 
+                  const authorizedEffect = provideResolvedCaller(httpEffect, resolved);
                   const exit = yield* Effect.exit(
-                    sql.withTransaction(httpEffect.pipe(Effect.tap(audit.bind(null, "succeeded"))))
+                    sql.withTransaction(
+                      authorizedEffect.pipe(Effect.tap(audit.bind(null, "succeeded")))
+                    )
                   );
                   if (Exit.isFailure(exit)) {
                     yield* audit("failed");

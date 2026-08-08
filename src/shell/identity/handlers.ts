@@ -1,8 +1,7 @@
 import { Effect } from "effect";
-import { HttpServerRequest } from "effect/unstable/http";
 import { HttpApiBuilder } from "effect/unstable/httpapi";
 import type { UserId } from "~/core/identity/reference";
-import { resolveCaller } from "~/shell/_shared/authz";
+import { ResolvedCaller } from "~/shell/_shared/authz";
 import { FidyApi } from "~/shell/api";
 import { findUser, updateUserPreferences } from "./repo";
 
@@ -14,8 +13,7 @@ export const IdentityLive = HttpApiBuilder.group(FidyApi, "identity", (handlers)
   handlers
     .handle("getCurrentUser", () =>
       Effect.gen(function* () {
-        const request = yield* HttpServerRequest.HttpServerRequest;
-        const { subjectUserId: userId } = yield* resolveCaller(request);
+        const { subjectUserId: userId } = yield* ResolvedCaller;
         const user = yield* findUser(userId).pipe(
           Effect.flatMap(Effect.fromOption(authenticatedUserMissing(userId))),
           Effect.orDie
@@ -26,8 +24,7 @@ export const IdentityLive = HttpApiBuilder.group(FidyApi, "identity", (handlers)
     )
     .handle("updateUserPreferences", ({ payload }) =>
       Effect.gen(function* () {
-        const request = yield* HttpServerRequest.HttpServerRequest;
-        const { subjectUserId: userId } = yield* resolveCaller(request);
+        const { subjectUserId: userId } = yield* ResolvedCaller;
         const user = yield* updateUserPreferences(userId, payload).pipe(
           Effect.flatMap(Effect.fromOption(authenticatedUserMissing(userId))),
           Effect.orDie

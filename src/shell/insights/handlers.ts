@@ -1,6 +1,5 @@
-import { type Crypto, Effect } from "effect";
+import { Effect } from "effect";
 import { SqlClient } from "effect/unstable/sql";
-import { type HttpServerRequest } from "effect/unstable/http";
 import { HttpApiBuilder } from "effect/unstable/httpapi";
 import { type UserId } from "~/core/identity/reference";
 import { InsightNotFound } from "~/core/insights/errors";
@@ -12,10 +11,12 @@ import {
   type InsightLifecycleState,
 } from "~/core/insights/model";
 import { transitionInsight } from "~/core/insights/rules";
-import { resolveCaller } from "~/shell/_shared/authz";
-import { type Unauthenticated } from "~/shell/_shared/errors";
+import { ResolvedCaller } from "~/shell/_shared/authz";
 import { type SuggestedOperation } from "~/shell/_shared/response";
-import { type SuggestedOperationCaller } from "~/shell/_shared/suggested-operations";
+import {
+  type SuggestedOperationCaller,
+  makeFreeSuggestedOperationCaller,
+} from "~/shell/_shared/suggested-operations";
 import { FidyApi } from "~/shell/api";
 import { type InsightApiFailure, nextLifecycleOperations, toApiFailure } from "./errors";
 import {
@@ -32,21 +33,14 @@ type InsightMovement = {
   readonly caller: SuggestedOperationCaller;
 };
 
-const suggestedOperationCaller = (
-  scopes: SuggestedOperationCaller["scopes"]
-): SuggestedOperationCaller => ({ scopes, tier: "free" });
-
-const resolveInsightCaller = (
-  request: HttpServerRequest.HttpServerRequest
-): Effect.Effect<
+const resolveInsightCaller: Effect.Effect<
   { userId: UserId; caller: SuggestedOperationCaller },
-  Unauthenticated,
-  Crypto.Crypto | SqlClient.SqlClient
-> =>
-  Effect.map(resolveCaller(request), ({ scopes, subjectUserId }) => ({
-    userId: subjectUserId,
-    caller: suggestedOperationCaller(scopes),
-  }));
+  never,
+  ResolvedCaller
+> = Effect.map(ResolvedCaller, ({ scopes, subjectUserId }) => ({
+  userId: subjectUserId,
+  caller: makeFreeSuggestedOperationCaller(scopes),
+}));
 
 const insightLifecycleOperations = (
   insight: Readonly<{
@@ -116,9 +110,9 @@ const deliverInsight = ({
 /** Resolves ownership before every scoped query or lifecycle transition. */
 export const InsightsLive = HttpApiBuilder.group(FidyApi, "insights", (handlers) =>
   handlers
-    .handle("listPendingInsights", ({ request }) =>
+    .handle("listPendingInsights", () =>
       Effect.gen(function* () {
-        const { userId, caller } = yield* resolveInsightCaller(request);
+        const { userId, caller } = yield* resolveInsightCaller;
         const insights = yield* listPendingInsights(userId);
         const first = insights[0];
 
@@ -128,9 +122,9 @@ export const InsightsLive = HttpApiBuilder.group(FidyApi, "insights", (handlers)
         };
       })
     )
-    .handle("markInsightDelivered", ({ params, payload, request }) =>
+    .handle("markInsightDelivered", ({ params, payload }) =>
       Effect.gen(function* () {
-        const { userId, caller } = yield* resolveInsightCaller(request);
+        const { userId, caller } = yield* resolveInsightCaller;
         const result = yield* deliverInsight({
           userId,
           insightEventId: params.id,
@@ -141,9 +135,9 @@ export const InsightsLive = HttpApiBuilder.group(FidyApi, "insights", (handlers)
         return { data: result, next: insightLifecycleOperations(result.insight, caller) };
       })
     )
-    .handle("markInsightRead", ({ params, request }) =>
+    .handle("markInsightRead", ({ params }) =>
       Effect.gen(function* () {
-        const { userId, caller } = yield* resolveInsightCaller(request);
+        const { userId, caller } = yield* resolveInsightCaller;
         const insight = yield* moveInsight({
           userId,
           insightEventId: params.id,
@@ -154,9 +148,9 @@ export const InsightsLive = HttpApiBuilder.group(FidyApi, "insights", (handlers)
         return { data: insight, next: insightLifecycleOperations(insight, caller) };
       })
     )
-    .handle("dismissInsight", ({ params, request }) =>
+    .handle("dismissInsight", ({ params }) =>
       Effect.gen(function* () {
-        const { userId, caller } = yield* resolveInsightCaller(request);
+        const { userId, caller } = yield* resolveInsightCaller;
         const insight = yield* moveInsight({
           userId,
           insightEventId: params.id,

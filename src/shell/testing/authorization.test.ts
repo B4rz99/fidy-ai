@@ -1,6 +1,7 @@
 import { expect, layer } from "@effect/vitest";
 import { Context, DateTime, Effect, Layer, Option, Schema } from "effect";
 import { HttpBody, HttpClient } from "effect/unstable/http";
+import { SqlSchema } from "effect/unstable/sql";
 import { AgentTokenId } from "~/core/tokens/reference";
 import { UserId } from "~/core/identity/reference";
 import { CategoryKeyword } from "~/core/categories/model";
@@ -10,6 +11,7 @@ import { CreateTransactionInput } from "~/core/transactions/model";
 import { AgentBearerToken } from "~/core/tokens/model";
 import { authenticateAgentToken } from "~/shell/_shared/authz";
 import { ScopeMissing } from "~/shell/_shared/errors";
+import { MigrationSqlClient } from "~/shell/db/client";
 import { truncateAuditLogEntries } from "~/shell/audit/fixtures";
 import { observeAuditLogEntries } from "~/shell/audit/repo";
 import { truncateInsights, weeklySummaryInput } from "~/shell/insights/fixtures";
@@ -309,6 +311,52 @@ layer(AuthorizationHarness, { excludeTestServices: true, timeout: "30 seconds" }
           ["transactions.updateTransaction", "rejected"],
           ["transactions.deleteTransaction", "rejected"],
         ]);
+      })
+    );
+
+    it.effect("resolves and renews the AgentToken exactly once for one request", () =>
+      Effect.gen(function* () {
+        yield* seedReadOnlyIdentity;
+        const sql = yield* MigrationSqlClient;
+        yield* sql`DROP TRIGGER IF EXISTS count_authentication_use ON agent_tokens`;
+        yield* sql`DROP FUNCTION IF EXISTS count_authentication_use()`;
+        yield* sql`DROP TABLE IF EXISTS public.authentication_use_probe`;
+        yield* sql`CREATE TABLE public.authentication_use_probe (calls integer NOT NULL)`;
+        yield* sql`INSERT INTO public.authentication_use_probe (calls) VALUES (0)`;
+        yield* sql`
+          CREATE FUNCTION count_authentication_use() RETURNS trigger AS $$
+          BEGIN
+            IF NEW.id = ${sql.literal(`'${readOnlyTokenId}'::uuid`)} THEN
+              UPDATE public.authentication_use_probe SET calls = calls + 1;
+            END IF;
+            RETURN NEW;
+          END;
+          $$ LANGUAGE plpgsql SECURITY DEFINER
+        `;
+        yield* sql`
+          CREATE TRIGGER count_authentication_use AFTER UPDATE ON agent_tokens
+          FOR EACH ROW EXECUTE FUNCTION count_authentication_use()
+        `;
+        const removeProbe =
+          sql`DROP TRIGGER IF EXISTS count_authentication_use ON agent_tokens`.pipe(
+            Effect.andThen(sql`DROP FUNCTION IF EXISTS count_authentication_use()`),
+            Effect.andThen(sql`DROP TABLE IF EXISTS public.authentication_use_probe`),
+            Effect.orDie
+          );
+
+        yield* Effect.gen(function* () {
+          const response = yield* HttpClient.get("/transactions", {
+            headers: headersFor(readOnlyBearer),
+          });
+          const probe = yield* SqlSchema.findOne({
+            Request: Schema.Void,
+            Result: Schema.Struct({ calls: Schema.Int }),
+            execute: () => sql`SELECT calls FROM public.authentication_use_probe`,
+          })(undefined).pipe(Effect.orDie);
+
+          expect(response.status).toBe(200);
+          expect(probe.calls).toBe(1);
+        }).pipe(Effect.ensuring(removeProbe));
       })
     );
 

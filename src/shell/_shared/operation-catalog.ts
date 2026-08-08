@@ -95,9 +95,9 @@ export const makeOperationCatalog = <Id extends string, Groups extends HttpApiGr
 
   HttpApi.reflect(api, {
     onGroup: () => {},
-    onEndpoint: ({ endpoint, group }) => {
+    onEndpoint: ({ endpoint, group, mergedAnnotations }) => {
       const defaultId = `${group.identifier}.${endpoint.identifier}`;
-      const reflectedId = Context.getOrElse(endpoint.annotations, OpenApi.Identifier, () =>
+      const reflectedId = Context.getOrElse(mergedAnnotations, OpenApi.Identifier, () =>
         group.topLevel ? endpoint.identifier : defaultId
       );
       const id = CanonicalOperationId.make(reflectedId);
@@ -109,7 +109,7 @@ export const makeOperationCatalog = <Id extends string, Groups extends HttpApiGr
       if (byId.has(id)) {
         throw new Error(`Duplicate canonical operation id: ${id}`);
       }
-      const description = Context.getOption(endpoint.annotations, OpenApi.Description);
+      const description = Context.getOption(mergedAnnotations, OpenApi.Description);
       if (Option.isNone(description)) {
         throw new Error(`Canonical operation is missing its agent description: ${id}`);
       }
@@ -119,6 +119,9 @@ export const makeOperationCatalog = <Id extends string, Groups extends HttpApiGr
         input: canonicalInput(endpoint),
         success: asOperationSchema(unionSchema(Array.from(endpoint.success))),
         failure: asOperationSchema(unionSchema(Array.from(endpoint.error))),
+        // Access policy must be an explicit choice on each canonical operation;
+        // unlike descriptive OpenAPI metadata, group defaults could silently
+        // authorize a newly added operation with a policy nobody reviewed.
         policy: getOperationPolicy(endpoint),
         partialInput: requestInput(endpoint),
       };

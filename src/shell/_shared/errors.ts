@@ -1,4 +1,5 @@
 import { Effect, Option, Result, Schema, SchemaIssue } from "effect";
+import { HttpServerResponse } from "effect/unstable/http";
 import {
   type HttpApiEndpoint,
   type HttpApiError,
@@ -295,7 +296,7 @@ const payloadFieldIssues = (
  *
  * A `Body` failure is the server failing to encode its own answer — the
  * caller's request was fine and there is nothing for them to fix — so it is
- * passed back untouched rather than blamed on them.
+ * answered as an empty 500 rather than the framework's empty 400.
  */
 export class ValidationGate extends HttpApiMiddleware.Service<ValidationGate>()(
   "fidy-ai/shell/_shared/errors/ValidationGate",
@@ -305,7 +306,9 @@ export class ValidationGate extends HttpApiMiddleware.Service<ValidationGate>()(
 export const ValidationGateLive = HttpApiMiddleware.layerSchemaErrorTransform(
   ValidationGate,
   (schemaError, { endpoint }) => {
-    if (schemaError.kind === "Body") return Effect.fail(schemaError);
+    if (schemaError.kind === "Body") {
+      return Effect.succeed(HttpServerResponse.empty({ status: 500 }));
+    }
 
     const kind = schemaError.kind;
     const fields =

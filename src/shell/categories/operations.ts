@@ -82,7 +82,7 @@ export const CategoriesGroup = HttpApiGroup.make("categories")
     HttpApiEndpoint.delete("deleteKeywordRule", "/category-keyword-rules/:id", {
       params: Schema.Struct({ id: KeywordRuleId }),
       success: OperationResponse(KeywordRuleId),
-      error: [NotFound, ValidationFailed],
+      error: NotFound,
     })
       .annotate(
         OpenApi.Description,

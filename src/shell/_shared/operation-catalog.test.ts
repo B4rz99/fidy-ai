@@ -11,6 +11,21 @@ const policy = operationPolicy({
   agentConfirmation: "not-required",
 });
 
+it("reads inherited descriptive metadata through reflected annotations", () => {
+  const endpoint = HttpApiEndpoint.get("inspectItems", "/items", {
+    success: Schema.Void,
+  }).annotateMerge(policy);
+  const api = HttpApi.make("inherited-description-test").add(
+    HttpApiGroup.make("testing")
+      .add(endpoint)
+      .annotate(OpenApi.Description, "Inspect the available items before choosing one.")
+  );
+
+  expect(makeOperationCatalog(api).operations[0]?.description).toBe(
+    "Inspect the available items before choosing one."
+  );
+});
+
 it("rejects an OpenAPI operation id that is not the group-qualified identifier", () => {
   const endpoint = HttpApiEndpoint.get("inspectItems", "/items", {
     success: Schema.Void,

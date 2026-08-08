@@ -1,0 +1,19 @@
+vitest.acceptance.config.ts
+  s_06825cdf95b6d4::t_53507904a5defd 46-48,52
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "8d336761dc27d804edebfd634399192f85fd3827",
+  "prompts": {},
+  "sessions": {
+    "s_06825cdf95b6d4": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019fdfcc-fc09-7f78-be4c-026aa8d37c95",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

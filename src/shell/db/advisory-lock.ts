@@ -30,20 +30,23 @@ export const advisoryLockKey = {
   whatsAppAdmission: (userId: string): AdvisoryLockKey => ({ value: userId, seed: 0 }),
 } as const;
 
+/** Acquires one User-owned advisory lock inside the caller's active transaction. */
+export const withUserLockInScope = Effect.fn("withUserLockInScope")(function* <A, E, R>(
+  lockKey: AdvisoryLockKey,
+  body: Effect.Effect<A, E, R>
+) {
+  const sql = yield* SqlClient.SqlClient;
+  yield* sql`
+    SELECT pg_advisory_xact_lock(hashtextextended(${lockKey.value}, ${lockKey.seed}))
+  `.pipe(Effect.orDie);
+  return yield* body;
+});
+
 /** Runs a User-scoped body in the same transaction that owns the supplied advisory lock. */
 export const withUserLock = Effect.fn("withUserLock")(function* <A, E, R>(
   userId: UserId,
   lockKey: AdvisoryLockKey,
   body: Effect.Effect<A, E, R>
 ) {
-  return yield* withUserTransaction(
-    userId,
-    Effect.gen(function* () {
-      const sql = yield* SqlClient.SqlClient;
-      yield* sql`
-        SELECT pg_advisory_xact_lock(hashtextextended(${lockKey.value}, ${lockKey.seed}))
-      `.pipe(Effect.orDie);
-      return yield* body;
-    })
-  );
+  return yield* withUserTransaction(userId, withUserLockInScope(lockKey, body));
 });

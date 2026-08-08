@@ -19,7 +19,7 @@ import {
   TelemetrySpanId,
   TelemetryTraceId,
 } from "./protocol";
-import type { TelemetryAdapter, TelemetrySpan } from "./telemetry";
+import type { TelemetryAdapter, TelemetryResource, TelemetrySpan } from "./telemetry";
 
 const recordingDsn = "https://public@example.invalid/1";
 const recordingRelease = "fidy-ai@0.0.0-test";
@@ -68,7 +68,15 @@ const errorTraceContext = (
         },
       };
 
-const safeErrorEvent = (event: Sentry.ErrorEvent): Option.Option<Sentry.ErrorEvent> => {
+type SentryIdentity = Readonly<{
+  release: string;
+  environment: string;
+}>;
+
+const safeErrorEvent = (
+  event: Sentry.ErrorEvent,
+  identity: SentryIdentity
+): Option.Option<Sentry.ErrorEvent> => {
   const values = event.exception?.values;
   const selectedException =
     values === undefined
@@ -103,8 +111,8 @@ const safeErrorEvent = (event: Sentry.ErrorEvent): Option.Option<Sentry.ErrorEve
     castSdkEvent<Sentry.ErrorEvent>({
       event_id: event.event_id,
       platform: "javascript",
-      release: recordingRelease,
-      environment: recordingEnvironment,
+      release: identity.release,
+      environment: identity.environment,
       ...value,
     })
   );
@@ -112,7 +120,10 @@ const safeErrorEvent = (event: Sentry.ErrorEvent): Option.Option<Sentry.ErrorEve
 
 type TransactionEvent = Sentry.Event & Readonly<{ readonly type: "transaction" }>;
 
-const safeTransactionEvent = (event: TransactionEvent): Option.Option<TransactionEvent> => {
+const safeTransactionEvent = (
+  event: TransactionEvent,
+  identity: SentryIdentity
+): Option.Option<TransactionEvent> => {
   const projected = Schema.decodeUnknownOption(
     ProjectedTransaction,
     strictDecoding
@@ -130,8 +141,8 @@ const safeTransactionEvent = (event: TransactionEvent): Option.Option<Transactio
     castSdkEvent<TransactionEvent>({
       event_id: event.event_id,
       platform: "javascript",
-      release: recordingRelease,
-      environment: recordingEnvironment,
+      release: identity.release,
+      environment: identity.environment,
       spans: [],
       ...value,
     })
@@ -152,7 +163,7 @@ type ActiveState = {
 };
 
 /** The private client state every adapter method needs: where events go, and which spans are live. */
-type RecordingSink = Readonly<{
+type TelemetrySink = Readonly<{
   readonly scope: Sentry.Scope;
   readonly knownStates: WeakMap<object, ActiveState>;
 }>;
@@ -212,16 +223,19 @@ const makeRecordingTransport = (
   };
 };
 
-/**
- * Every SDK feature that could widen an event is switched off here rather than filtered later: no
- * integration, no default PII, no attached stack, no retained SDK breadcrumb, and no default
- * transport. The two send hooks are the last boundary — each rebuilds its event from approved
- * fields alone and drops it outright on a projector defect, so nothing the SDK added survives.
- */
-const makeRecordingSentryClient = (envelopes: Array<Uint8Array>): Sentry.BunClient => {
+type SentryTransport = NonNullable<ConstructorParameters<typeof Sentry.BunClient>[0]["transport"]>;
+
+const makeSentryClient = (
+  dsn: string,
+  identity: SentryIdentity,
+  transport: SentryTransport
+): Sentry.BunClient => {
+  // Disable every SDK feature that could widen an event rather than filtering later: integrations,
+  // default PII, attached stacks, retained SDK breadcrumbs, and the default transport. The send
+  // hooks rebuild events from approved fields and drop them on projector defects.
   const options: ConstructorParameters<typeof Sentry.BunClient>[0] = {
-    dsn: recordingDsn,
-    transport: (transportOptions) => makeRecordingTransport(envelopes, transportOptions),
+    dsn,
+    transport,
     stackParser: Sentry.defaultStackParser,
     integrations: [],
     sampleRate: 1,
@@ -229,18 +243,18 @@ const makeRecordingSentryClient = (envelopes: Array<Uint8Array>): Sentry.BunClie
     sendDefaultPii: false,
     attachStacktrace: false,
     maxBreadcrumbs: 0,
-    release: recordingRelease,
-    environment: recordingEnvironment,
+    release: identity.release,
+    environment: identity.environment,
     beforeSend: (event) => {
       try {
-        return Option.getOrNull(safeErrorEvent(event));
+        return Option.getOrNull(safeErrorEvent(event, identity));
       } catch {
         return null;
       }
     },
     beforeSendTransaction: (event) => {
       try {
-        return Option.getOrNull(safeTransactionEvent(event));
+        return Option.getOrNull(safeTransactionEvent(event, identity));
       } catch {
         return null;
       }
@@ -252,8 +266,15 @@ const makeRecordingSentryClient = (envelopes: Array<Uint8Array>): Sentry.BunClie
   return client;
 };
 
-const startRecordedSpan = (
-  sink: RecordingSink,
+const makeRecordingSentryClient = (envelopes: Array<Uint8Array>): Sentry.BunClient =>
+  makeSentryClient(
+    recordingDsn,
+    { release: recordingRelease, environment: recordingEnvironment },
+    (transportOptions) => makeRecordingTransport(envelopes, transportOptions)
+  );
+
+const startTelemetrySpan = (
+  sink: TelemetrySink,
   descriptor: SpanDescriptor,
   parent: Option.Option<DurableTraceContext>
 ): Effect.Effect<Option.Option<TelemetrySpan>> =>
@@ -280,8 +301,8 @@ const startRecordedSpan = (
     return Option.some({ traceId, spanId, sampled: true, state });
   });
 
-const finishRecordedSpan = (
-  sink: RecordingSink,
+const finishTelemetrySpan = (
+  sink: TelemetrySink,
   span: TelemetrySpan,
   exit: Exit.Exit<unknown, unknown>
 ): Effect.Effect<void> =>
@@ -302,7 +323,7 @@ const finishRecordedSpan = (
   });
 
 const recordSpanOutcome = (
-  sink: RecordingSink,
+  sink: TelemetrySink,
   span: TelemetrySpan,
   outcome: DeclaredOutcome
 ): Effect.Effect<void> =>
@@ -312,8 +333,8 @@ const recordSpanOutcome = (
     });
   });
 
-const captureRecordedFailure = (
-  sink: RecordingSink,
+const captureTelemetryFailure = (
+  sink: TelemetrySink,
   span: Option.Option<TelemetrySpan>,
   failure: ClassifiedFailure
 ): Effect.Effect<void> =>
@@ -340,8 +361,8 @@ const captureRecordedFailure = (
     if (Option.isSome(projected)) capture(sink.scope, projected.value);
   });
 
-const addRecordedBreadcrumb = (
-  sink: RecordingSink,
+const addTelemetryBreadcrumb = (
+  sink: TelemetrySink,
   span: TelemetrySpan,
   breadcrumb: TelemetryBreadcrumb
 ): Effect.Effect<void> =>
@@ -355,6 +376,48 @@ const addRecordedBreadcrumb = (
     });
   });
 
+const telemetryAdapter = (client: Sentry.BunClient): TelemetryAdapter => {
+  const scope = new Sentry.Scope();
+  scope.setClient(client);
+  const sink: TelemetrySink = { scope, knownStates: new WeakMap() };
+  return {
+    startSpan: (descriptor, parent) => startTelemetrySpan(sink, descriptor, parent),
+    finishSpan: (span, exit) => finishTelemetrySpan(sink, span, exit),
+    recordOutcome: (span, outcome) => recordSpanOutcome(sink, span, outcome),
+    captureFailure: (span, failure) => captureTelemetryFailure(sink, span, failure),
+    addBreadcrumb: (span, breadcrumb) => addTelemetryBreadcrumb(sink, span, breadcrumb),
+  };
+};
+
+const makeNetworkTransport: SentryTransport = (options) => {
+  const transport = Sentry.makeFetchTransport(options);
+  return {
+    send: (envelope) =>
+      isSupportedEnvelope(envelope)
+        ? transport.send(envelope)
+        : Promise.resolve({ statusCode: acceptedStatusCode }),
+    flush: (timeout) => transport.flush(timeout),
+  };
+};
+
+/** Deployment identity and secret destination required by the metadata-only Sentry client. */
+export type SentryTelemetryConfig = SentryIdentity &
+  Readonly<{
+    dsn: string;
+  }>;
+
+/** A configured Sentry adapter whose close effect drains accepted envelopes before shutdown. */
+export type SentryTelemetry = TelemetryResource;
+
+/** Constructs the production client with only the project's projected telemetry as egress. */
+export const makeSentryTelemetry = (config: SentryTelemetryConfig): SentryTelemetry => {
+  const client = makeSentryClient(config.dsn, config, makeNetworkTransport);
+  return {
+    adapter: telemetryAdapter(client),
+    close: Effect.asVoid(Effect.promise(() => client.close(clientDrainMilliseconds))),
+  };
+};
+
 /**
  * Constructs an isolated Sentry client whose only egress is exact serialized envelope bytes. No
  * default integration, request hook, global handler, automatic breadcrumb, or network transport runs.
@@ -362,19 +425,9 @@ const addRecordedBreadcrumb = (
 export const makeSentryRecordingClient = (): RecordingClient => {
   const envelopes: Array<Uint8Array> = [];
   const client = makeRecordingSentryClient(envelopes);
-  const scope = new Sentry.Scope();
-  scope.setClient(client);
-  const sink: RecordingSink = { scope, knownStates: new WeakMap() };
-  const adapter: TelemetryAdapter = {
-    startSpan: (descriptor, parent) => startRecordedSpan(sink, descriptor, parent),
-    finishSpan: (span, exit) => finishRecordedSpan(sink, span, exit),
-    recordOutcome: (span, outcome) => recordSpanOutcome(sink, span, outcome),
-    captureFailure: (span, failure) => captureRecordedFailure(sink, span, failure),
-    addBreadcrumb: (span, breadcrumb) => addRecordedBreadcrumb(sink, span, breadcrumb),
-  };
 
   return {
-    adapter,
+    adapter: telemetryAdapter(client),
     serializedEnvelopes: Effect.map(
       Effect.promise(() => client.flush(clientDrainMilliseconds)),
       () => envelopes.map((envelope) => envelope.slice())

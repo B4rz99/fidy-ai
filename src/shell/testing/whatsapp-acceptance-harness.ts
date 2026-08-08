@@ -12,6 +12,7 @@ import { WhatsAppWorkerLive } from "~/shell/channels/whatsapp/worker";
 import { MigrationSqlClient, MigratorLive, PgLive, RuntimeAuthorityLive } from "~/shell/db/client";
 import { makeDevelopmentSeedLive } from "~/shell/db/development-seed";
 import { HttpLive } from "~/shell/http";
+import { TelemetryDisabled } from "~/shell/observability/disabled";
 import { type ApiClient, makeApiClientLive } from "./api-harness";
 import { defaultAgentBearer } from "./identity-fixtures";
 import { makeLanguageModelFinishPart } from "./language-model-fixtures";
@@ -147,7 +148,11 @@ const AcceptanceApplication = Layer.mergeAll(
   WhatsAppWorkerLive.pipe(
     Layer.provide(AgentService.layer.pipe(Layer.provide(DeterministicLanguageModel)))
   )
-).pipe(Layer.provide(RuntimeAuthorityLive), Layer.provide(MigratorLive));
+).pipe(
+  Layer.provide(RuntimeAuthorityLive),
+  Layer.provide(MigratorLive),
+  Layer.provide(TelemetryDisabled)
+);
 
 /**
  * Full WhatsApp acceptance process over a real socket and real PostgreSQL. Only the external

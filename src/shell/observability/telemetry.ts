@@ -72,10 +72,27 @@ export type TelemetryService = {
   readonly captureDurableContext: Effect.Effect<Option.Option<DurableTraceContext>>;
 };
 
+/** A telemetry adapter together with the shutdown effect that drains its accepted work. */
+export type TelemetryResource = Readonly<{
+  adapter: TelemetryAdapter;
+  close: Effect.Effect<void>;
+}>;
+
 /** The shell-owned metadata-only observability seam. */
 export class Telemetry extends Context.Service<Telemetry, TelemetryService>()(
   "fidy-ai/shell/observability/telemetry"
-) {}
+) {
+  /** Builds the service from a scoped adapter resource and drains it when the layer shuts down. */
+  static readonly layer = <E, R>(
+    resource: Effect.Effect<TelemetryResource, E, R>
+  ): Layer.Layer<Telemetry, E, R> =>
+    Layer.effect(
+      Telemetry,
+      Effect.acquireRelease(resource, (telemetryResource) => telemetryResource.close).pipe(
+        Effect.map((telemetryResource) => makeTelemetryService(telemetryResource.adapter))
+      )
+    );
+}
 
 const CurrentTelemetrySpan = Context.Reference<Option.Option<TelemetrySpan>>(
   "fidy-ai/shell/observability/telemetry/CurrentTelemetrySpan",
@@ -209,7 +226,3 @@ export const makeTelemetryService = (adapter: TelemetryAdapter): TelemetryServic
       ),
     captureDurableContext: Effect.flatMap(CurrentTelemetrySpan, durableContextOf),
   });
-
-/** Provides a constructed adapter as the application's single Telemetry capability. */
-export const telemetryLayer = (adapter: TelemetryAdapter): Layer.Layer<Telemetry> =>
-  Layer.succeed(Telemetry, makeTelemetryService(adapter));

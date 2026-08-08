@@ -17,6 +17,7 @@ export const TelemetryWorkKindGroup = {
     "authorization",
     "repository_operation",
     "hosted_turn",
+    "model_round",
     "ci_scenario",
   ],
 } as const;

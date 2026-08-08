@@ -1,12 +1,15 @@
 import { expect, layer } from "@effect/vitest";
 import {
   BigDecimal,
+  Clock,
   Context,
   Duration,
   Effect,
   Equal,
+  Fiber,
   Layer,
   Option,
+  Random,
   Ref,
   Schema,
   Stream,
@@ -24,6 +27,10 @@ import { TranscriptWindowCharacterLimit, TranscriptWindowTurnLimit } from "~/cor
 import { observeAuditLogEntries } from "~/shell/audit/repo";
 import { withSubjectLock } from "~/shell/consent/repo";
 import { resolveWhatsAppCaller } from "~/shell/identity/repo";
+import {
+  EnvelopeRecorder,
+  TelemetryEnvelopeRecording,
+} from "~/shell/observability/envelope-recorder";
 import {
   defaultUserId,
   defaultWhatsAppPhone,
@@ -167,6 +174,62 @@ const resetModelToolPolicies = Effect.flatMap(ModelToolPolicies, (policies) =>
   Ref.set(policies, [])
 );
 const readModelToolPolicies = Effect.flatMap(ModelToolPolicies, Ref.get);
+const modelAttemptPrompts = (
+  marker: string
+): Effect.Effect<ReadonlyArray<string>, never, ModelPrompts> =>
+  readModelPrompts.pipe(
+    Effect.map((prompts) => prompts.filter((prompt) => prompt.includes(marker)))
+  );
+
+const modelAttemptCount = (marker: string): Effect.Effect<number, never, ModelPrompts> =>
+  modelAttemptPrompts(marker).pipe(Effect.map((prompts) => prompts.length));
+
+const awaitModelAttempts = (
+  marker: string,
+  count: number
+): Effect.Effect<ReadonlyArray<string>, never, ModelPrompts> =>
+  Effect.gen(function* () {
+    for (;;) {
+      const matching = yield* modelAttemptPrompts(marker);
+      if (matching.length >= count) return matching;
+      yield* Effect.sleep("1 millis");
+    }
+  });
+
+const makeManualClock = (): {
+  readonly clock: Clock.Clock;
+  readonly advance: (millis: number) => Effect.Effect<void>;
+} => {
+  let now = 0;
+  const sleepers = new Set<{ readonly deadline: number; readonly resume: () => void }>();
+  return {
+    clock: {
+      currentTimeMillisUnsafe: () => now,
+      currentTimeMillis: Effect.sync(() => now),
+      currentTimeNanosUnsafe: () => BigInt(now) * 1_000_000n,
+      currentTimeNanos: Effect.sync(() => BigInt(now) * 1_000_000n),
+      sleep: (duration) =>
+        Effect.callback<void>((resume) => {
+          const sleeper = {
+            deadline: now + Duration.toMillis(duration),
+            resume: (): void => resume(Effect.void),
+          };
+          sleepers.add(sleeper);
+          return Effect.sync(() => sleepers.delete(sleeper));
+        }),
+    },
+    advance: (millis) =>
+      Effect.sync(() => {
+        now += millis;
+        for (const sleeper of sleepers) {
+          if (sleeper.deadline <= now) {
+            sleepers.delete(sleeper);
+            sleeper.resume();
+          }
+        }
+      }),
+  };
+};
 
 const turnStartedAt = (serialized: string): Option.Option<string> =>
   Option.fromUndefinedOr(/El turno comenzó en ([0-9T:.+-]+Z)/u.exec(serialized)?.[1]);
@@ -694,6 +757,96 @@ const scriptedReply = (
     Option.getOrElse(() => recallScript(serialized))
   );
 
+const testModelFailure = (reason: AiError.AiErrorReason): Effect.Effect<never, AiError.AiError> =>
+  Effect.fail(
+    AiError.AiError.make({ module: "TestLanguageModel", method: "generateText", reason })
+  );
+
+const retryRateLimit = (retryAfter: Duration.Duration): Effect.Effect<never, AiError.AiError> =>
+  testModelFailure(AiError.RateLimitError.make({ retryAfter }));
+
+const retrySuccess = Effect.succeed<ModelReply>([
+  { type: "text", text: "Reintento completado." },
+  makeLanguageModelFinishPart("stop"),
+]);
+
+type RetryReply = Effect.Effect<ModelReply, AiError.AiError>;
+
+type RetryScenario = Readonly<{
+  marker: string;
+  initial: RetryReply;
+  subsequent: Option.Option<RetryReply>;
+}>;
+
+const retryScenarios: ReadonlyArray<RetryScenario> = [
+  {
+    marker: "PROVEEDOR_LIMITADO",
+    initial: retryRateLimit(Duration.millis(1)),
+    subsequent: Option.some(retryRateLimit(Duration.millis(1))),
+  },
+  {
+    marker: "RETRY_DEADLINE_EXHAUSTED",
+    initial: retryRateLimit(Duration.seconds(1)),
+    subsequent: Option.none(),
+  },
+  {
+    marker: "RETRY_NON_RETRYABLE",
+    initial: testModelFailure(AiError.QuotaExhaustedError.make()),
+    subsequent: Option.none(),
+  },
+  {
+    marker: "RETRY_SHARED_DEADLINE",
+    initial: retryRateLimit(Duration.millis(1)),
+    subsequent: Option.some(Effect.never),
+  },
+  {
+    marker: "RETRY_AFTER_SUCCESS",
+    initial: retryRateLimit(Duration.millis(1)),
+    subsequent: Option.some(retrySuccess),
+  },
+  {
+    marker: "RETRY_FALLBACK_SUCCESS",
+    initial: testModelFailure(AiError.InternalProviderError.make({ description: "transient" })),
+    subsequent: Option.some(retrySuccess),
+  },
+  {
+    marker: "RETRY_AFTER_FALLBACK_SUCCESS",
+    initial: retryRateLimit(Duration.minutes(10)),
+    subsequent: Option.some(retrySuccess),
+  },
+];
+
+const retryScenarioReply = (serialized: string, attempt: number): Option.Option<RetryReply> => {
+  const scenario = retryScenarios.find(({ marker }) => serialized.includes(marker));
+  if (scenario === undefined) return Option.none();
+  return attempt === 0 ? Option.some(scenario.initial) : scenario.subsequent;
+};
+
+const scriptedModelAttempt = ({
+  serialized,
+  tools,
+  toolChoice,
+  attempt,
+}: Readonly<{
+  serialized: string;
+  tools: ReadonlyArray<Tool.Any>;
+  toolChoice: LanguageModel.ToolChoice<string>;
+  attempt: number;
+}>): Effect.Effect<ModelReply, AiError.AiError> => {
+  if (serialized.includes("MODELO_BLOQUEADO")) return Effect.never;
+  const retryReply = retryScenarioReply(serialized, attempt);
+  if (Option.isSome(retryReply)) return retryReply.value;
+  if (serialized.includes("RESPUESTA_TRUNCADA")) {
+    return Effect.succeed([
+      { type: "text" as const, text: "Fragmento incompleto" },
+      makeLanguageModelFinishPart("length"),
+    ]);
+  }
+  const reply = scriptedReply(serialized, tools, toolChoice);
+  const reason = reply.some((part) => part.type === "tool-call") ? "tool-calls" : "stop";
+  return Effect.succeed([...reply, makeLanguageModelFinishPart(reason)]);
+};
+
 const ScriptedLanguageModel = Layer.effect(
   LanguageModel.LanguageModel,
   Effect.gen(function* () {
@@ -703,30 +856,12 @@ const ScriptedLanguageModel = Layer.effect(
       generateText: ({ prompt, tools, toolChoice }) => {
         const serialized = JSON.stringify(prompt.content);
         expect(serialized).not.toContain("fin_deadbeef_");
-        const generated = ((): Effect.Effect<ModelReply, AiError.AiError> => {
-          if (serialized.includes("MODELO_BLOQUEADO")) return Effect.never;
-          if (serialized.includes("PROVEEDOR_LIMITADO")) {
-            return Effect.fail(
-              AiError.AiError.make({
-                module: "TestLanguageModel",
-                method: "generateText",
-                reason: AiError.RateLimitError.make({ retryAfter: Duration.seconds(1) }),
-              })
-            );
-          }
-          if (serialized.includes("RESPUESTA_TRUNCADA")) {
-            return Effect.succeed([
-              { type: "text" as const, text: "Fragmento incompleto" },
-              makeLanguageModelFinishPart("length"),
-            ]);
-          }
-          const reply = scriptedReply(serialized, tools, toolChoice);
-          const reason = reply.some((part) => part.type === "tool-call") ? "tool-calls" : "stop";
-          return Effect.succeed([...reply, makeLanguageModelFinishPart(reason)]);
-        })();
         return Effect.gen(function* () {
           const openAiConfig = yield* Effect.serviceOption(OpenAiLanguageModel.Config);
-          yield* Ref.update(prompts, (recorded) => [...recorded, serialized]);
+          const attempt = yield* Ref.modify(prompts, (recorded) => [
+            recorded.filter((recordedPrompt) => recordedPrompt.includes(serialized)).length,
+            [...recorded, serialized],
+          ]);
           yield* Ref.update(toolPolicies, (recorded) => [
             ...recorded,
             {
@@ -736,7 +871,7 @@ const ScriptedLanguageModel = Layer.effect(
               ),
             },
           ]);
-          return yield* generated;
+          return yield* scriptedModelAttempt({ serialized, tools, toolChoice, attempt });
         });
       },
       streamText: () => Stream.die(new Error("The agent uses non-streaming generation")),
@@ -746,7 +881,8 @@ const ScriptedLanguageModel = Layer.effect(
 
 const AgentHarness = AgentService.layer.pipe(
   Layer.provideMerge(ScriptedLanguageModel),
-  Layer.provideMerge(ApiHarness)
+  Layer.provideMerge(ApiHarness),
+  Layer.provideMerge(TelemetryEnvelopeRecording)
 );
 
 layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hosted agent", (it) => {
@@ -1697,7 +1833,159 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
     })
   );
 
-  it.effect("rejects retryable provider failures with retry timing", () =>
+  it.effect("honors provider retry timing and succeeds within the same semantic iteration", () =>
+    Effect.gen(function* () {
+      yield* clearTranscript;
+      const service = yield* AgentService;
+
+      const reply = yield* service.handleSynchronousTurn(
+        defaultUserId,
+        InboundMessage.make({ text: TranscriptText.make("RETRY_AFTER_SUCCESS") })
+      );
+      const attempts = yield* modelAttemptPrompts("RETRY_AFTER_SUCCESS");
+      const transcript = yield* listTranscriptEntries(defaultUserId);
+
+      expect(reply.text).toBe("Reintento completado.");
+      expect(attempts).toHaveLength(2);
+      expect(transcript.find((entry) => entry._tag === "AssistantTranscriptEntry")).toMatchObject({
+        iteration: 1,
+      });
+    })
+  );
+
+  it.effect("uses seeded jitter and records safe model-round telemetry", () =>
+    Effect.gen(function* () {
+      yield* clearTranscript;
+      const service = yield* AgentService;
+      const manualClock = makeManualClock();
+      const recorder = yield* EnvelopeRecorder;
+      yield* recorder.clear;
+      const replyFiber = yield* service
+        .handleSynchronousTurn(
+          defaultUserId,
+          InboundMessage.make({ text: TranscriptText.make("RETRY_FALLBACK_SUCCESS") })
+        )
+        .pipe(
+          Effect.provideService(Clock.Clock, manualClock.clock),
+          Random.withSeed("model-retry"),
+          Effect.forkChild
+        );
+
+      yield* awaitModelAttempts("RETRY_FALLBACK_SUCCESS", 1);
+      yield* manualClock.advance(150);
+      expect(yield* modelAttemptCount("RETRY_FALLBACK_SUCCESS")).toBe(1);
+      yield* manualClock.advance(1);
+      const reply = yield* Fiber.join(replyFiber);
+      const serialized = (yield* recorder.serializedEnvelopes)
+        .map((bytes) => new TextDecoder().decode(bytes))
+        .join("\n");
+
+      expect(reply.text).toBe("Reintento completado.");
+      expect(yield* awaitModelAttempts("RETRY_FALLBACK_SUCCESS", 2)).toHaveLength(2);
+      expect(serialized).toContain('"transaction":"agent.modelRound"');
+      expect(serialized).toContain('"message":"retry_started"');
+      expect(serialized).toContain('"attempt":2');
+      expect(serialized).toContain('"duration_milliseconds":151');
+      expect(serialized).toContain('"message":"model_completed"');
+      expect(serialized).toContain('"outcome":"succeeded"');
+      expect(serialized).not.toContain("RETRY_FALLBACK_SUCCESS");
+      expect(serialized).not.toContain("Reintento completado.");
+    })
+  );
+
+  it.effect("falls back to seeded jitter when provider timing exceeds the deadline", () =>
+    Effect.gen(function* () {
+      yield* clearTranscript;
+      const service = yield* AgentService;
+      const manualClock = makeManualClock();
+      const replyFiber = yield* service
+        .handleSynchronousTurn(
+          defaultUserId,
+          InboundMessage.make({ text: TranscriptText.make("RETRY_AFTER_FALLBACK_SUCCESS") })
+        )
+        .pipe(
+          Effect.provideService(Clock.Clock, manualClock.clock),
+          Random.withSeed("model-retry"),
+          Effect.forkChild
+        );
+
+      yield* awaitModelAttempts("RETRY_AFTER_FALLBACK_SUCCESS", 1);
+      yield* manualClock.advance(150);
+      expect(yield* modelAttemptCount("RETRY_AFTER_FALLBACK_SUCCESS")).toBe(1);
+      yield* manualClock.advance(1);
+      const reply = yield* Fiber.join(replyFiber);
+
+      expect(reply.text).toBe("Reintento completado.");
+      expect(yield* awaitModelAttempts("RETRY_AFTER_FALLBACK_SUCCESS", 2)).toHaveLength(2);
+    })
+  );
+
+  it.effect("interrupts the second attempt at the original model-round deadline", () =>
+    Effect.gen(function* () {
+      yield* clearTranscript;
+      const service = yield* AgentService;
+      const manualClock = makeManualClock();
+      const replyFiber = yield* service
+        .handleSynchronousTurn(
+          defaultUserId,
+          InboundMessage.make({ text: TranscriptText.make("RETRY_SHARED_DEADLINE") })
+        )
+        .pipe(
+          Effect.provideService(CurrentAgentLimits, agentLimits({ maxModelRoundMillis: 300 })),
+          Effect.provideService(Clock.Clock, manualClock.clock),
+          Effect.forkChild
+        );
+
+      yield* awaitModelAttempts("RETRY_SHARED_DEADLINE", 1);
+      yield* manualClock.advance(1);
+      expect(yield* awaitModelAttempts("RETRY_SHARED_DEADLINE", 2)).toHaveLength(2);
+      yield* manualClock.advance(299);
+      const failure = yield* Fiber.join(replyFiber).pipe(Effect.flip);
+
+      expect(failure._tag).toBe("ModelUnavailable");
+    })
+  );
+
+  it.effect("fails non-retryable provider errors after one attempt", () =>
+    Effect.gen(function* () {
+      yield* clearTranscript;
+      const service = yield* AgentService;
+
+      const failure = yield* service
+        .handleSynchronousTurn(
+          defaultUserId,
+          InboundMessage.make({ text: TranscriptText.make("RETRY_NON_RETRYABLE") })
+        )
+        .pipe(Effect.flip);
+      const attempts = yield* modelAttemptPrompts("RETRY_NON_RETRYABLE");
+
+      expect(failure._tag).toBe("ModelUnavailable");
+      expect(attempts).toHaveLength(1);
+    })
+  );
+
+  it.effect("does not retry when fallback delay leaves no minimum attempt window", () =>
+    Effect.gen(function* () {
+      yield* clearTranscript;
+      const service = yield* AgentService;
+
+      const failure = yield* service
+        .handleSynchronousTurn(
+          defaultUserId,
+          InboundMessage.make({ text: TranscriptText.make("RETRY_DEADLINE_EXHAUSTED") })
+        )
+        .pipe(
+          Effect.provideService(CurrentAgentLimits, agentLimits({ maxModelRoundMillis: 100 })),
+          Effect.flip
+        );
+      const attempts = yield* modelAttemptPrompts("RETRY_DEADLINE_EXHAUSTED");
+
+      expect(failure._tag).toBe("ModelUnavailable");
+      expect(attempts).toHaveLength(1);
+    })
+  );
+
+  it.effect("rejects retryable provider failures after exhausting both attempts", () =>
     Effect.gen(function* () {
       yield* clearTranscript;
       const service = yield* AgentService;
@@ -1708,8 +1996,10 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
           InboundMessage.make({ text: TranscriptText.make("PROVEEDOR_LIMITADO") })
         )
         .pipe(Effect.flip);
+      const attempts = yield* modelAttemptPrompts("PROVEEDOR_LIMITADO");
 
       expect(failure._tag).toBe("ModelUnavailable");
+      expect(attempts).toHaveLength(2);
     })
   );
 

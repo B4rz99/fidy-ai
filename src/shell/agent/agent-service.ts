@@ -1,5 +1,6 @@
 import {
   type Cause,
+  Clock,
   Context,
   Crypto,
   Data,
@@ -8,6 +9,7 @@ import {
   Effect,
   Layer,
   Option,
+  Random,
   Result,
   Schema,
   Stream,
@@ -40,6 +42,14 @@ import {
 import { ValidationFailed } from "~/shell/_shared/errors";
 import { useCurrentConsent } from "~/shell/consent/repo";
 import { findUser } from "~/shell/identity/repo";
+import {
+  type DeclaredOutcome,
+  type SpanDescriptor,
+  TelemetryAttempt,
+  type TelemetryBreadcrumb,
+  TelemetryDuration,
+} from "~/shell/observability/protocol";
+import { Telemetry, type TelemetryService } from "~/shell/observability/telemetry";
 import { issueHostedAgentToken, revokeHostedAgentToken } from "~/shell/tokens/hosted-agent-token";
 import {
   appendTranscriptEntries,
@@ -70,6 +80,21 @@ import {
 const minimumTranscriptWindowCharacters = 1_000;
 const defaultTranscriptWindowTurns = 12;
 const defaultTranscriptWindowCharacters = 32_000;
+const attemptWindowMillis = 250;
+const modelRetryPolicy = {
+  maximumAttempts: 2,
+  minimumAttemptWindow: Duration.millis(attemptWindowMillis),
+  fallbackDelay: Duration.millis(100),
+  jitterWindow: Duration.millis(100),
+} as const;
+const modelRoundDescriptor: SpanDescriptor = {
+  component: "agent",
+  operation: "agent.modelRound",
+  trigger: "api",
+  spanOperation: "agent.model",
+  workKind: "model_round",
+  metadata: { _tag: "None" },
+};
 
 /** Resource and context bounds applied independently to every hosted turn. */
 export const AgentLimits = Schema.Struct({
@@ -529,6 +554,176 @@ const loadTranscriptWindow = (
     )
   );
 
+const fallbackRetryDelay = Random.nextIntBetween(
+  0,
+  Duration.toMillis(modelRetryPolicy.jitterWindow)
+).pipe(
+  Effect.map((jitterMillis) =>
+    Duration.millis(Duration.toMillis(modelRetryPolicy.fallbackDelay) + jitterMillis)
+  )
+);
+
+type ModelGeneration = LanguageModel.GenerateTextResponse<AgentToolkitInstance["tools"]>;
+
+const retryBreadcrumb = (nextAttempt: number, delayMillis: number): TelemetryBreadcrumb => ({
+  category: "agent",
+  action: "retry_started",
+  component: "agent",
+  outcome: Option.none(),
+  error: Option.none(),
+  attempt: Option.some(TelemetryAttempt.make(nextAttempt)),
+  durationMilliseconds: Option.some(TelemetryDuration.make(delayMillis)),
+});
+
+const recordModelCompletion = (
+  telemetry: TelemetryService,
+  attemptCount: number,
+  outcome: DeclaredOutcome
+): Effect.Effect<void> =>
+  Effect.all([
+    telemetry.addBreadcrumb({
+      category: "agent",
+      action: "model_completed",
+      component: "agent",
+      outcome: Option.some(outcome.outcome),
+      error: outcome.error,
+      attempt: Option.some(TelemetryAttempt.make(attemptCount)),
+      durationMilliseconds: Option.none(),
+    }),
+    telemetry.recordOutcome(outcome),
+  ]).pipe(Effect.asVoid);
+
+type ModelAttemptState = {
+  attemptCount: number;
+  retryDelayMillis: number;
+};
+
+const retryDelayFits = (delay: Duration.Duration, remainingMillis: number): boolean =>
+  Duration.toMillis(delay) + Duration.toMillis(modelRetryPolicy.minimumAttemptWindow) <=
+  remainingMillis;
+
+const selectRetryDelay = (
+  providerDelay: Option.Option<Duration.Duration>,
+  remainingMillis: number
+): Effect.Effect<Option.Option<Duration.Duration>> =>
+  Effect.gen(function* () {
+    if (Option.isSome(providerDelay) && retryDelayFits(providerDelay.value, remainingMillis)) {
+      return providerDelay;
+    }
+    const fallbackDelay = yield* fallbackRetryDelay;
+    return retryDelayFits(fallbackDelay, remainingMillis)
+      ? Option.some(fallbackDelay)
+      : Option.none();
+  });
+
+const executeModelAttempts = ({
+  attempt,
+  roundMillis,
+  telemetry,
+  state,
+}: Readonly<{
+  attempt: Effect.Effect<ModelGeneration, AiError.AiError>;
+  roundMillis: number;
+  telemetry: TelemetryService;
+  state: ModelAttemptState;
+}>): Effect.Effect<Result.Result<ModelGeneration, AiError.AiError>> =>
+  Effect.gen(function* () {
+    const startedAt = yield* Clock.currentTimeMillis;
+    const deadline = startedAt + roundMillis;
+    while (state.attemptCount < modelRetryPolicy.maximumAttempts) {
+      state.attemptCount += 1;
+      const attempted = yield* Effect.result(attempt);
+      if (Result.isSuccess(attempted)) return attempted;
+      if (
+        !attempted.failure.isRetryable ||
+        state.attemptCount === modelRetryPolicy.maximumAttempts
+      ) {
+        return attempted;
+      }
+
+      const now = yield* Clock.currentTimeMillis;
+      const retryDelay = yield* selectRetryDelay(
+        Option.fromNullishOr(attempted.failure.retryAfter),
+        deadline - now
+      );
+      if (Option.isNone(retryDelay)) return attempted;
+      const delayMillis = Duration.toMillis(retryDelay.value);
+      state.retryDelayMillis = delayMillis;
+      yield* telemetry.addBreadcrumb(retryBreadcrumb(state.attemptCount + 1, delayMillis));
+      yield* Effect.sleep(retryDelay.value);
+    }
+    return yield* Effect.die("The model attempt bound was bypassed");
+  });
+
+const finishModelTimeout = (
+  telemetry: TelemetryService,
+  state: ModelAttemptState,
+  failure: Cause.TimeoutError
+): Effect.Effect<Result.Result<ModelGeneration, Cause.TimeoutError>> =>
+  Effect.gen(function* () {
+    yield* recordModelCompletion(telemetry, state.attemptCount, {
+      outcome: "failed",
+      error: Option.some("live_deadline_exhausted"),
+      retryable: false,
+    });
+    yield* Effect.annotateCurrentSpan({
+      "agent.model.attempt_count": state.attemptCount,
+      "agent.model.retry_delay_millis": state.retryDelayMillis,
+      "agent.model.provider_outcome": "timed_out",
+    });
+    return Result.fail(failure);
+  });
+
+const finishProviderAttempts = (
+  telemetry: TelemetryService,
+  state: ModelAttemptState,
+  result: Result.Result<ModelGeneration, AiError.AiError>
+): Effect.Effect<Result.Result<ModelGeneration, AiError.AiError>> =>
+  Effect.gen(function* () {
+    const outcome: DeclaredOutcome = Result.isSuccess(result)
+      ? { outcome: "succeeded", error: Option.none(), retryable: false }
+      : {
+          outcome: "failed",
+          error: Option.some("model_unavailable"),
+          retryable: result.failure.isRetryable,
+        };
+    yield* recordModelCompletion(telemetry, state.attemptCount, outcome);
+    yield* Effect.annotateCurrentSpan({
+      "agent.model.attempt_count": state.attemptCount,
+      "agent.model.retry_delay_millis": state.retryDelayMillis,
+      "agent.model.provider_outcome": Result.isSuccess(result) ? "succeeded" : "failed",
+      ...(Result.isFailure(result)
+        ? { "agent.model.provider_failure_reason": result.failure.reason._tag }
+        : {}),
+    });
+    return result;
+  });
+
+const runModelAttempts = (
+  attempt: Effect.Effect<ModelGeneration, AiError.AiError>,
+  roundMillis: number
+): Effect.Effect<
+  Result.Result<ModelGeneration, AiError.AiError | Cause.TimeoutError>,
+  never,
+  Telemetry
+> =>
+  Effect.gen(function* () {
+    const telemetry = yield* Telemetry;
+    const state: ModelAttemptState = { attemptCount: 0, retryDelayMillis: 0 };
+    const work = Effect.gen(function* () {
+      const round = yield* Effect.result(
+        executeModelAttempts({ attempt, roundMillis, telemetry, state }).pipe(
+          Effect.timeout(`${roundMillis} millis`)
+        )
+      );
+      return yield* Result.match(round, {
+        onFailure: (failure) => finishModelTimeout(telemetry, state, failure),
+        onSuccess: (result) => finishProviderAttempts(telemetry, state, result),
+      });
+    });
+    return yield* telemetry.span(modelRoundDescriptor, work);
+  }).pipe(Effect.withSpan("AgentService.modelRound"));
+
 const generateCurrentTurn = (
   model: LanguageModel.Service,
   {
@@ -548,7 +743,7 @@ const generateCurrentTurn = (
     AiError.AiError | Cause.TimeoutError
   >,
   OnboardingConsentRequired,
-  SqlClient.SqlClient
+  SqlClient.SqlClient | Telemetry
 > =>
   Effect.gen(function* () {
     const transcriptWindow = yield* loadTranscriptWindow(turn.userId, turn.turnId, turn.limits);
@@ -579,9 +774,7 @@ const generateCurrentTurn = (
       remainingToolCalls === 0
         ? generation
         : generation.pipe(withHostedToolCallCap(HostedToolCallCap.make(remainingToolCalls)));
-    return yield* Effect.result(
-      boundedGeneration.pipe(Effect.timeout(`${turn.limits.maxModelRoundMillis} millis`))
-    );
+    return yield* runModelAttempts(boundedGeneration, turn.limits.maxModelRoundMillis);
   });
 
 const malformedOutputFeedback = (description: string): string => {
@@ -728,7 +921,7 @@ const runHostedTurn = (
 ): Effect.Effect<
   PreparedAgentReply,
   ModelUnavailable | ModelResponseRejected | OnboardingConsentRequired,
-  Crypto.Crypto | SqlClient.SqlClient
+  Crypto.Crypto | SqlClient.SqlClient | Telemetry
 > =>
   Effect.gen(function* () {
     let toolCalls = 0;
@@ -768,7 +961,8 @@ const runHostedTurn = (
   });
 
 const makePrepareTurn = (
-  model: LanguageModel.Service
+  model: LanguageModel.Service,
+  telemetry: TelemetryService
 ): ((
   userId: UserId,
   message: InboundMessage
@@ -818,7 +1012,8 @@ const makePrepareTurn = (
             revokeHostedAgentToken(userId, hostedToken.tokenId, revokedAt)
           )
         )
-      )
+      ),
+      Effect.provideService(Telemetry, telemetry)
     );
   });
 
@@ -826,8 +1021,9 @@ const makeAgentService = Effect.gen(function* () {
   const model = yield* LanguageModel.LanguageModel;
   const crypto = yield* Crypto.Crypto;
   const sqlClient = yield* SqlClient.SqlClient;
+  const telemetry = yield* Telemetry;
 
-  const prepareTurn = makePrepareTurn(model);
+  const prepareTurn = makePrepareTurn(model, telemetry);
 
   const recordDeliveredReply = Effect.fn("AgentService.recordDeliveredReply")(
     (prepared: PreparedAgentReply) =>

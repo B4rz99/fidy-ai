@@ -1,0 +1,19 @@
+tools/vitest-global-setup.ts
+  s_6b95e207e358ce::t_6a76bd9a773439 1-2,7-11,14
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "859697245733a7938ebdbe57af5510627bc7aca9",
+  "prompts": {},
+  "sessions": {
+    "s_6b95e207e358ce": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019fdfcd-ef62-7abd-83ac-18d0f8cd3319",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

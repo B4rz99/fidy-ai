@@ -1,0 +1,29 @@
+src/shell/channels/whatsapp/whatsapp.acceptance.test.ts
+  s_87a2c022dbb65f::t_534996d67e2417 155
+vitest.acceptance.config.ts
+  s_87a2c022dbb65f::t_209f3e4b9163c0 49,52-53
+src/shell/agent/agent-service.ts
+  s_87a2c022dbb65f::t_dcebbddfba6415 16,337,341-342,533-541,552-559,565-566,628,683-717,728,733-737,751-756
+src/shell/agent/agent-service.test.ts
+  s_87a2c022dbb65f::t_4a3f1976d8f76f 459-497,644,716-748
+src/shell/testing/whatsapp-acceptance-harness.ts
+  s_87a2c022dbb65f::t_eac3ec5bcdd1ab 48
+  s_87a2c022dbb65f::t_4296e9232ba044 3
+  s_87a2c022dbb65f::t_6d5b6e722adc3e 49-50,66-82
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "77bca844f9ba758155ecbc195efb7eae79f6073c",
+  "prompts": {},
+  "sessions": {
+    "s_87a2c022dbb65f": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019fe1fb-4aa6-7a6e-9831-2bec41f7cb76",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": null
+    }
+  }
+}

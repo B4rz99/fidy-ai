@@ -1,9 +1,18 @@
 import { expect, it } from "@effect/vitest";
-import { type Config, ConfigProvider, Effect, Exit, Function as Fn, Option } from "effect";
+import {
+  type Config,
+  ConfigProvider,
+  Effect,
+  Exit,
+  Function as Fn,
+  Option,
+  Redacted,
+} from "effect";
 import {
   type ApprovedSentryProjects,
   InvalidTelemetryConfig,
   type TelemetryConfig,
+  decodeSentryAccountSmokeConfig,
   telemetryConfigForProjects,
 } from "./telemetry-config";
 
@@ -298,6 +307,25 @@ const invalidCases = invalidCaseSources.map(({ reason, ...testCase }) => ({
   ...testCase,
   reason: Option.fromUndefinedOr(reason),
 }));
+
+it.effect("validates a full-capture non-production account smoke identity", () =>
+  Effect.gen(function* () {
+    const config = yield* decodeSentryAccountSmokeConfig({
+      dsn: Redacted.make(nonProductionDsn),
+      release,
+      environment: "ci",
+    });
+
+    expect(config).toMatchObject({
+      _tag: "NonProductionEnabled",
+      environment: "ci",
+      project: "non-production",
+      capture: { errors: true, traces: true },
+      errorSampleRate: 1,
+      rootTraceRate: 1,
+    });
+  })
+);
 
 it.effect.each(invalidCases)("rejects $name before initialization", ({ input, reason }) =>
   Effect.gen(function* () {

@@ -1,14 +1,16 @@
 import { expect, layer } from "@effect/vitest";
 import {
-  type Cause,
+  Cause,
   ConfigProvider,
   Context,
+  type Crypto,
   DateTime,
   Deferred,
   Effect,
   Array as EffectArray,
   Fiber,
   Layer,
+  Logger,
   Option,
   Ref,
   Schedule,
@@ -26,7 +28,7 @@ import { SqlClient, type SqlConnection, SqlSchema, type Statement } from "effect
 import { ConsentRecord, ConsentRecordId } from "~/core/consent/model";
 import { E164PhoneNumber, UserId, WhatsAppBusinessScopedUserId } from "~/core/identity/reference";
 import { AgentBearerToken } from "~/core/tokens/model";
-import { AgentReply, AgentService } from "~/shell/agent/agent-service";
+import { AgentReply, AgentService, OnboardingConsentRequired } from "~/shell/agent/agent-service";
 import { makeOpenAiFunctionCallResponse } from "~/shell/agent/fixtures/openai";
 import { OpenAiLanguageModelLive } from "~/shell/agent/openai";
 import { admitAgentConversationTurn } from "~/shell/agent/conversation";
@@ -41,6 +43,7 @@ import { ApiHarness, ApiHarnessClient, ApiHarnessKapsoControl } from "~/shell/te
 import { makeLanguageModelFinishPart } from "~/shell/testing/language-model-fixtures";
 import { withUserTransaction } from "~/shell/db/user-transaction";
 import { TelemetryDisabled } from "~/shell/observability/disabled";
+import { Telemetry } from "~/shell/observability/telemetry";
 import {
   appendConsentRecord,
   claimConsentDisclosureDelivery,
@@ -55,7 +58,7 @@ import { transactionPayload } from "~/shell/transactions/fixtures";
 import { listTranscriptEntries } from "~/shell/transcript/repo";
 import { TranscriptText } from "~/core/transcript/model";
 import { categoryIds } from "~/core/categories/taxonomy";
-import { KapsoClient, type KapsoClientService } from "./kapso-client";
+import { KapsoClient, type KapsoClientService, KapsoSendFailed } from "./kapso-client";
 import { decodeKapsoWebhook } from "./kapso-webhook";
 import {
   WhatsAppBusinessPhoneNumberId,
@@ -76,7 +79,7 @@ import {
   releaseWhatsAppReceipt,
   startWhatsAppTurn,
 } from "./repo";
-import { processNextWhatsAppTurn } from "./worker";
+import { processNextWhatsAppTurn, runSupervisedWhatsAppLoop } from "./worker";
 import { testWhatsAppCaller } from "~/shell/testing/whatsapp-caller";
 
 const deliveryKey = WhatsAppDeliveryKey.make("delivery-worker-fixture");
@@ -303,6 +306,18 @@ const agentReplyFixture = (text: string, overrides: Partial<AgentReply> = {}): A
     choices: Option.none(),
     ...overrides,
   });
+type AgentServiceFixture = Parameters<typeof AgentService.of>[0];
+const agentServiceFixture = (overrides: Partial<AgentServiceFixture> = {}): AgentServiceFixture =>
+  AgentService.of({
+    handleTurn: () =>
+      Effect.succeed({
+        reply: agentReplyFixture("Respuesta entregada."),
+        assistantEntry: Option.none(),
+      }),
+    handleSynchronousTurn: () => Effect.succeed(agentReplyFixture("Respuesta entregada.")),
+    recordDeliveredReply: () => Effect.void,
+    ...overrides,
+  });
 const kapsoClientFixture = (
   providerMessageId: string,
   sentAt: DateTime.Utc,
@@ -327,6 +342,15 @@ const kapsoClientFixture = (
       })
     ),
 });
+const processTurnWith = (
+  claimTime: DateTime.Utc,
+  agent: AgentServiceFixture,
+  kapso: KapsoClientService
+): Effect.Effect<boolean, never, Crypto.Crypto | HttpClient.HttpClient | SqlClient.SqlClient> =>
+  processNextWhatsAppTurn(claimTime).pipe(
+    Effect.provideService(AgentService, agent),
+    Effect.provideService(KapsoClient, kapso)
+  );
 layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
   "WhatsApp durable turn boundary",
   (it) => {
@@ -590,9 +614,11 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           ...claim.value,
           userId: UserId.make("f1d1a000-0000-4000-8000-000000000921"),
         };
-        expect((yield* startWhatsAppTurn(wrongUserClaim).pipe(Effect.flip))._tag).toBe(
-          "WhatsAppClaimInvalid"
-        );
+        expect(
+          (yield* startWhatsAppTurn(wrongUserClaim, DateTime.add(eventTime, { seconds: 3 })).pipe(
+            Effect.flip
+          ))._tag
+        ).toBe("WhatsAppClaimInvalid");
 
         const sql = yield* SqlClient.SqlClient;
         expect(yield* sql`SELECT content FROM whatsapp_inbound_jobs`).toEqual([]);
@@ -605,6 +631,19 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
                 WHERE claim.id = ${claim.value.claimId}`
           )
         ).toEqual([{ status: "claimed", content: "pan 5 mil" }]);
+
+        const claimTime = DateTime.add(eventTime, { seconds: 3 });
+        yield* startWhatsAppTurn(claim.value, claimTime);
+        expect(
+          yield* withUserTransaction(
+            defaultUserId,
+            sql`SELECT started_at = ${claimTime} AS "startedAtClaimTime",
+                       claim_expires_at = ${DateTime.add(claimTime, { minutes: 10 })}
+                         AS "expiresFromClaimTime"
+                FROM whatsapp_turn_claims
+                WHERE id = ${claim.value.claimId}`
+          )
+        ).toEqual([{ startedAtClaimTime: true, expiresFromClaimTime: true }]);
       })
     );
 
@@ -621,7 +660,7 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         });
         const claim = yield* claimWhatsAppTurn(DateTime.add(eventTime, { seconds: 3 }));
         if (Option.isNone(claim)) return yield* Effect.die("expected crash fixture claim");
-        yield* startWhatsAppTurn(claim.value);
+        yield* startWhatsAppTurn(claim.value, DateTime.add(eventTime, { seconds: 3 }));
         const sql = yield* SqlClient.SqlClient;
         yield* withUserTransaction(
           defaultUserId,
@@ -801,7 +840,10 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         if (Option.isNone(claim) || claim.value.action !== "process") {
           return yield* Effect.die("missing boundary claim");
         }
-        const started = yield* startWhatsAppTurn(claim.value);
+        const started = yield* startWhatsAppTurn(
+          claim.value,
+          DateTime.add(eventTime, { seconds: 3 })
+        );
         expect(started.inboundMessage.text).toBe(`${"a".repeat(8_000)}\n${"b".repeat(7_999)}`);
         expect(started.inboundMessage.text).toHaveLength(16_000);
       })
@@ -839,6 +881,181 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
             })
           )
         ).toBe(false);
+      })
+    );
+
+    it.effect("reports a worker defect and runs the next loop iteration", () =>
+      Effect.gen(function* () {
+        const attempts = yield* Ref.make(0);
+        const capturedLogs: Array<unknown> = [];
+        const logger = Logger.make((options) => capturedLogs.push(options.message));
+        const sentinel = "secret-webhook-body-sentinel";
+        const captures = yield* Ref.make(0);
+        const capturedCause = yield* Ref.make<Option.Option<unknown>>(Option.none());
+        const resumed = yield* Deferred.make<void>();
+        const telemetry = Telemetry.of({
+          span: (_descriptor, work) => work,
+          continueSpan: (_savedContext, _descriptor, work) => work,
+          recordOutcome: () => Effect.void,
+          captureFailure: (failure) =>
+            Ref.update(captures, (count) => count + 1).pipe(
+              Effect.andThen(
+                failure._tag === "Defect"
+                  ? Ref.set(capturedCause, Option.some(failure.cause))
+                  : Effect.void
+              )
+            ),
+          addBreadcrumb: () => Effect.void,
+          captureDurableContext: Effect.succeed(Option.none()),
+        });
+        const iteration = Ref.updateAndGet(attempts, (count) => count + 1).pipe(
+          Effect.flatMap((attempt) => {
+            if (attempt === 1) {
+              return Effect.fail({ _tag: "ScriptedWorkerFailure", body: sentinel });
+            }
+            if (attempt === 2) {
+              return Effect.die(Object.assign(new Error(sentinel), { body: sentinel }));
+            }
+            return Deferred.succeed(resumed, undefined).pipe(Effect.andThen(Effect.never));
+          })
+        );
+        const fiber = yield* runSupervisedWhatsAppLoop(iteration, "whatsapp.processTurn").pipe(
+          Effect.provideService(Telemetry, telemetry),
+          Effect.withLogger(logger),
+          Effect.forkScoped
+        );
+
+        yield* Deferred.await(resumed);
+        yield* Fiber.interrupt(fiber);
+        expect(yield* Ref.get(attempts)).toBe(3);
+        expect(yield* Ref.get(captures)).toBe(2);
+        const cause = yield* Ref.get(capturedCause);
+        expect(
+          Option.isSome(cause) && Cause.isCause(cause.value) && Cause.hasDies(cause.value)
+        ).toBe(true);
+        const encodedLogs = yield* Schema.encodeEffect(Schema.UnknownFromJsonString)(capturedLogs);
+        expect(encodedLogs).not.toContain(sentinel);
+        expect(encodedLogs).toContain("whatsapp-channel.test.ts");
+      })
+    );
+
+    it.effect(
+      "completes delivery when consent is revoked before recording and processes the next turn",
+      () =>
+        Effect.gen(function* () {
+          yield* seedDevelopmentIdentity(defaultAgentBearer);
+          yield* truncateWhatsAppChannel;
+          const eventTime = yield* DateTime.now;
+          const recordings = yield* Ref.make(0);
+          const agent = agentServiceFixture({
+            recordDeliveredReply: () =>
+              Ref.updateAndGet(recordings, (count) => count + 1).pipe(
+                Effect.flatMap((count) =>
+                  count === 1
+                    ? Effect.fail(new OnboardingConsentRequired({ userId: defaultUserId }))
+                    : Effect.void
+                )
+              ),
+          });
+          const sends = yield* Ref.make(0);
+          const kapsoService = kapsoClientFixture(
+            "wamid.consent-revoked-reply",
+            eventTime,
+            Ref.update(sends, (count) => count + 1)
+          );
+          const first = makeKapsoTextEvent("wamid.consent-revoked-first", "primero", eventTime);
+          yield* enqueueWhatsAppTurn({
+            admission: authorizedTurn(first),
+            event: first,
+            deliveryKey,
+          });
+          expect(
+            yield* processTurnWith(DateTime.add(eventTime, { seconds: 3 }), agent, kapsoService)
+          ).toBe(true);
+
+          const secondTime = DateTime.add(eventTime, { seconds: 4 });
+          const second = makeKapsoTextEvent("wamid.consent-revoked-second", "segundo", secondTime);
+          yield* enqueueWhatsAppTurn({
+            admission: authorizedTurn(second),
+            event: second,
+            deliveryKey,
+          });
+          expect(
+            yield* processTurnWith(DateTime.add(secondTime, { seconds: 3 }), agent, kapsoService)
+          ).toBe(true);
+          expect(yield* Ref.get(sends)).toBe(2);
+        })
+    );
+
+    it.effect("retries rejected transient sends but does not retry ambiguous sends", () =>
+      Effect.gen(function* () {
+        yield* seedDevelopmentIdentity(defaultAgentBearer);
+        yield* truncateWhatsAppChannel;
+        const eventTime = yield* DateTime.now;
+        const agent = agentServiceFixture();
+        const attempts = yield* Ref.make(0);
+        const transientKapso: KapsoClientService = {
+          sendText: () =>
+            Ref.updateAndGet(attempts, (count) => count + 1).pipe(
+              Effect.flatMap((attempt) =>
+                attempt === 1
+                  ? Effect.fail(
+                      new KapsoSendFailed({
+                        safeReason: "rate_limited",
+                        deliveryCertainty: "rejected",
+                        automaticRetry: true,
+                      })
+                    )
+                  : Effect.succeed({
+                      messageEvidence: {
+                        channel: "whatsapp",
+                        provider: "kapso",
+                        providerMessageId: WhatsAppProviderMessageId.make(
+                          "wamid.transient-retry-reply"
+                        ),
+                      },
+                      sentAt: eventTime,
+                    })
+              )
+            ),
+        };
+        const transient = makeKapsoTextEvent("wamid.transient-retry", "primero", eventTime);
+        yield* enqueueWhatsAppTurn({
+          admission: authorizedTurn(transient),
+          event: transient,
+          deliveryKey,
+        });
+        expect(
+          yield* processTurnWith(DateTime.add(eventTime, { seconds: 3 }), agent, transientKapso)
+        ).toBe(true);
+        expect(yield* Ref.get(attempts)).toBe(2);
+
+        const ambiguousTime = DateTime.add(eventTime, { seconds: 4 });
+        const ambiguous = makeKapsoTextEvent("wamid.ambiguous-no-retry", "segundo", ambiguousTime);
+        yield* enqueueWhatsAppTurn({
+          admission: authorizedTurn(ambiguous),
+          event: ambiguous,
+          deliveryKey,
+        });
+        const ambiguousAttempts = yield* Ref.make(0);
+        const ambiguousKapso: KapsoClientService = {
+          sendText: () =>
+            Ref.update(ambiguousAttempts, (count) => count + 1).pipe(
+              Effect.andThen(
+                Effect.fail(
+                  new KapsoSendFailed({
+                    safeReason: "timeout",
+                    deliveryCertainty: "ambiguous",
+                    automaticRetry: false,
+                  })
+                )
+              )
+            ),
+        };
+        expect(
+          yield* processTurnWith(DateTime.add(ambiguousTime, { seconds: 3 }), agent, ambiguousKapso)
+        ).toBe(true);
+        expect(yield* Ref.get(ambiguousAttempts)).toBe(1);
       })
     );
 
@@ -1458,6 +1675,16 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
 
     it.effect("bounds concurrent unauthenticated webhook body readers", () =>
       Effect.gen(function* () {
+        yield* truncateWhatsAppChannel;
+        const admin = yield* MigrationSqlClient;
+        const observeEffects = (): Statement.Statement<SqlConnection.Row> =>
+          admin`SELECT
+            (SELECT count(*)::int FROM whatsapp_message_evidence) AS evidence,
+            (SELECT count(*)::int FROM whatsapp_inbound_jobs) AS jobs,
+            (SELECT count(*)::int FROM whatsapp_conversation_windows) AS windows,
+            (SELECT count(*)::int FROM whatsapp_ingress_budgets) AS budgets,
+            (SELECT count(*)::int FROM whatsapp_inbound_receipts) AS receipts`;
+        const before = yield* observeEffects();
         const slowBody = HttpBody.stream(
           Stream.concat(Stream.make(new Uint8Array([123])), Stream.never)
         );
@@ -1487,6 +1714,7 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           Effect.retry({ schedule: Schedule.spaced("100 millis"), times: 60 })
         );
         expect(refused.status).toBe(429);
+        expect(yield* observeEffects()).toEqual(before);
         yield* Fiber.interruptAll(readers);
       })
     );

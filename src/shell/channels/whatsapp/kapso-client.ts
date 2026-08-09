@@ -330,13 +330,14 @@ export const makeKapsoClientService = ({
     body: string
   ): Effect.Effect<Response, KapsoSendFailed> =>
     Effect.tryPromise({
-      try: () =>
+      try: (signal) =>
         boundedFetch(
           `https://api.kapso.ai/meta/whatsapp/v24.0/${input.businessPhoneNumberId}/messages`,
           {
             method: "POST",
             headers: { "content-type": "application/json", "x-api-key": apiKey },
             body,
+            signal,
           }
         ),
       catch: classifyTransportError,

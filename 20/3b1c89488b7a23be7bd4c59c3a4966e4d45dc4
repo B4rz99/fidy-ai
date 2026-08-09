@@ -1,0 +1,50 @@
+railway.json
+  s_835a68f05b2a71::t_833cbc8d8d000f 8
+.dockerignore
+  s_835a68f05b2a71::t_efc2d00e0579ff 16
+scripts/check-production-image.sh
+  s_835a68f05b2a71::t_111cb41f0e5822 195,200,203
+  s_835a68f05b2a71::t_73a356869d915a 13-15,23,65-67,118-121,134,165-170,172-178,180-181,185-194,196-199,201-202,204-210,215,240-246,310-312,332
+  s_835a68f05b2a71::t_5dfbbd14b48add 171,179,182-184
+package.json
+  s_835a68f05b2a71::t_cab27e0ddde4cf 14
+Dockerfile
+  s_835a68f05b2a71::t_8353aea622bb6e 25,29
+  s_835a68f05b2a71::t_7321440624c12d 12
+  s_835a68f05b2a71::t_1eda0f9d0c7d77 13
+src/shell/observability/release-preparation.test.ts
+  s_835a68f05b2a71::t_81aee17fd75072 14,23,46,50
+  s_835a68f05b2a71::t_a199d3b99f0c8e 1-3,29
+  s_835a68f05b2a71::t_f8f0eb07619a7e 58
+  s_835a68f05b2a71::t_63a6c4a3a02a13 8,37-38,90-95,131,133,135,139,142-156
+  s_835a68f05b2a71::t_35cbe58f4737b5 17,20-22,24,44-45,47-49,51,117-120
+  s_835a68f05b2a71::t_c0314851cef90f 4-7,9-13,15-16,18-19,25-28,30-36,39-43,52-57,59-89,96-116,121-130,132,134,136-138,140-141,157-158
+README.md
+  s_835a68f05b2a71::t_1eae3e6f300147 70-76
+  s_835a68f05b2a71::t_b40cbecdfe5edd 34,65-69,77-83
+  s_835a68f05b2a71::t_5e8236f35e18f7 35-38
+scripts/check-deployment-smoke.ts
+  s_835a68f05b2a71::t_7723e9d0e0fc44 129-131
+src/shell/observability/release-preparation.ts
+  s_835a68f05b2a71::t_03cf4a3d9c98c5 93-113,140,142-143,145-149,151-152,154-158
+  s_835a68f05b2a71::t_fa1d4ae0792114 1-92,114-139,141,144,150,153,159-201
+scripts/prepare-sentry-release.ts
+  s_835a68f05b2a71::t_58f4f5fa72fedd 3,6-7
+  s_835a68f05b2a71::t_27f9932a29232d 1-2,4-5,8-12
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "203b1c89488b7a23be7bd4c59c3a4966e4d45dc4",
+  "prompts": {},
+  "sessions": {
+    "s_835a68f05b2a71": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019fe753-d804-72ba-b457-1ff30a9c7908",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": null
+    }
+  }
+}

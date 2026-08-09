@@ -1,5 +1,7 @@
 import { DateTime, Duration, Effect, Layer, Schedule } from "effect";
 import type { SqlClient, SqlError } from "effect/unstable/sql";
+import { runScheduledWork } from "~/shell/observability/scheduled-work";
+import type { Telemetry } from "~/shell/observability/telemetry";
 import { removeAuditLogEntriesBefore } from "./repo";
 
 const auditRetentionDays = 365;
@@ -14,21 +16,26 @@ export const runAuditRetention = (
 ): Effect.Effect<void, SqlError.SqlError, SqlClient.SqlClient> =>
   removeAuditLogEntriesBefore(DateTime.subtractDuration(now, auditRetentionDuration));
 
-const runScheduledAuditRetention = Effect.gen(function* () {
-  const now = yield* DateTime.now;
-  yield* runAuditRetention(now);
-  yield* Effect.logInfo("Applied AuditLogEntry retention");
-}).pipe(
-  Effect.catchCause((cause) =>
-    Effect.logError("AuditLogEntry retention failed; the next daily run will retry", cause)
-  )
+/** Runs one independently observed AuditLogEntry retention execution at the supplied UTC instant. */
+export const runScheduledAuditRetention = (
+  now: DateTime.Utc
+): Effect.Effect<void, SqlError.SqlError, SqlClient.SqlClient | Telemetry> =>
+  runScheduledWork({
+    component: "api",
+    schedule: "task.auditRetention",
+    operationalError: "database_unavailable",
+  })(
+    runAuditRetention(now).pipe(Effect.tap(() => Effect.logInfo("Applied AuditLogEntry retention")))
+  );
+
+const applyScheduledAuditRetention = Effect.flatMap(DateTime.now, runScheduledAuditRetention).pipe(
+  Effect.ignoreCause
 );
 
 /**
- * Production retention worker. Cleanup runs immediately and once per day.
- * Database failures are reported and retried on the next run rather than
- * terminating the long-lived worker.
+ * Production retention worker. Cleanup runs immediately and once per day. Database failures are
+ * captured at scheduled-work ownership and retried on the next run without stopping the worker.
  */
 export const AuditRetentionLive = Layer.effectDiscard(
-  runScheduledAuditRetention.pipe(Effect.repeat(Schedule.spaced("1 day")), Effect.forkScoped)
+  applyScheduledAuditRetention.pipe(Effect.repeat(Schedule.spaced("1 day")), Effect.forkScoped)
 );

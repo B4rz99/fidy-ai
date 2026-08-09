@@ -42,8 +42,8 @@ import {
 import { ApiHarness, ApiHarnessClient, ApiHarnessKapsoControl } from "~/shell/testing/api-harness";
 import { makeLanguageModelFinishPart } from "~/shell/testing/language-model-fixtures";
 import { withUserTransaction } from "~/shell/db/user-transaction";
-import { TelemetryDisabled } from "~/shell/observability/disabled";
-import { Telemetry } from "~/shell/observability/telemetry";
+import { DisabledTelemetryResource, TelemetryDisabled } from "~/shell/observability/disabled";
+import { Telemetry, makeTelemetryService } from "~/shell/observability/telemetry";
 import {
   appendConsentRecord,
   claimConsentDisclosureDelivery,
@@ -75,11 +75,10 @@ import {
   enqueueWhatsAppTurn,
   getWhatsAppWindowState,
   markWhatsAppReceiptOutboundStarted,
-  pruneWhatsAppOperationalData,
   releaseWhatsAppReceipt,
   startWhatsAppTurn,
 } from "./repo";
-import { processNextWhatsAppTurn, runSupervisedWhatsAppLoop } from "./worker";
+import { processNextWhatsAppTurn, runSupervisedWhatsAppLoop, runWhatsAppRetention } from "./worker";
 import { testWhatsAppCaller } from "~/shell/testing/whatsapp-caller";
 
 const deliveryKey = WhatsAppDeliveryKey.make("delivery-worker-fixture");
@@ -753,7 +752,9 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           (yield* SqlClient.SqlClient)`UPDATE whatsapp_conversation_windows
                                        SET window_open_until = now() - interval '1 second'`
         );
-        yield* pruneWhatsAppOperationalData();
+        yield* runWhatsAppRetention.pipe(
+          Effect.provideService(Telemetry, makeTelemetryService(DisabledTelemetryResource.adapter))
+        );
 
         expect(
           yield* admin`SELECT budget_key AS "budgetKey" FROM whatsapp_ingress_budgets`
@@ -895,6 +896,7 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         const resumed = yield* Deferred.make<void>();
         const telemetry = Telemetry.of({
           span: (_descriptor, work) => work,
+          rootSpan: (_descriptor, work) => work,
           continueSpan: (_savedContext, _descriptor, work) => work,
           recordOutcome: () => Effect.void,
           captureFailure: (failure) =>

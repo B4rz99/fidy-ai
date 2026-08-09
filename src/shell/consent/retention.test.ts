@@ -1,22 +1,22 @@
 import { expect, layer } from "@effect/vitest";
-import { DateTime, Effect, Option } from "effect";
+import { DateTime, Effect, Layer, Option } from "effect";
 import { SqlClient } from "effect/unstable/sql";
 import { PendingConsentExchangeId } from "~/core/consent/model";
 import { E164PhoneNumber, whatsAppCallerReference } from "~/core/identity/reference";
+import { TelemetryDisabled } from "~/shell/observability/disabled";
 import { ApiHarness } from "~/shell/testing/api-harness";
 import { testWhatsAppCaller } from "~/shell/testing/whatsapp-caller";
 import { currentDisclosure } from "./current-disclosure";
-import {
-  findPendingConsentExchange,
-  insertPendingConsentExchange,
-  removeExpiredPendingConsentExchanges,
-} from "./repo";
+import { findPendingConsentExchange, insertPendingConsentExchange } from "./repo";
+import { runPendingConsentRetention } from "./retention";
+
+const PendingRetentionHarness = Layer.merge(ApiHarness, TelemetryDisabled);
 
 const expiredPhone = E164PhoneNumber.make("+573009998861");
 const activePhone = E164PhoneNumber.make("+573009998862");
 const now = DateTime.makeUnsafe("2026-08-02T12:00:00Z");
 
-layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
+layer(PendingRetentionHarness, { excludeTestServices: true, timeout: "30 seconds" })(
   "pending Consent retention",
   (it) => {
     it.effect("deletes exact-boundary expiry without deleting active exchanges", () =>
@@ -61,7 +61,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           expiresAt: DateTime.addDuration(now, "1 millis"),
         });
 
-        yield* removeExpiredPendingConsentExchanges(now);
+        yield* runPendingConsentRetention(now);
 
         expect(
           Option.isNone(yield* findPendingConsentExchange(testWhatsAppCaller(expiredPhone)))

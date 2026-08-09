@@ -2,6 +2,7 @@ import { Cause, DateTime, Effect, Layer, Option, Schedule } from "effect";
 import { dual } from "effect/Function";
 import { AgentService } from "~/shell/agent/agent-service";
 import { projectStack } from "~/shell/observability/projectors";
+import { runScheduledWork } from "~/shell/observability/scheduled-work";
 import { Telemetry } from "~/shell/observability/telemetry";
 import { sendKapsoFreeForm } from "./outbound";
 import {
@@ -86,18 +87,18 @@ export const processNextWhatsAppTurn = Effect.fn("WhatsApp.processNextTurn")(fun
  * telemetry boundary, swallowed, and followed by a one-second delay before the next iteration.
  */
 export const runSupervisedWhatsAppLoop: {
-  <E, R>(
-    operation: "whatsapp.processTurn" | "task.retention"
-  ): (iteration: Effect.Effect<void, E, R>) => Effect.Effect<never, never, R | Telemetry>;
+  (
+    operation: "whatsapp.processTurn"
+  ): <E, R>(iteration: Effect.Effect<void, E, R>) => Effect.Effect<never, never, R | Telemetry>;
   <E, R>(
     iteration: Effect.Effect<void, E, R>,
-    operation: "whatsapp.processTurn" | "task.retention"
+    operation: "whatsapp.processTurn"
   ): Effect.Effect<never, never, R | Telemetry>;
 } = dual(
   2,
   <E, R>(
     iteration: Effect.Effect<void, E, R>,
-    operation: "whatsapp.processTurn" | "task.retention"
+    operation: "whatsapp.processTurn"
   ): Effect.Effect<never, never, R | Telemetry> =>
     Effect.forever(
       iteration.pipe(
@@ -131,10 +132,25 @@ const workerLoop = Effect.gen(function* () {
   const processed = yield* processNextWhatsAppTurn(yield* DateTime.now);
   if (!processed) yield* Effect.sleep("250 millis");
 }).pipe(runSupervisedWhatsAppLoop("whatsapp.processTurn"));
-const retentionLoop = Effect.gen(function* () {
-  yield* pruneWhatsAppOperationalData();
-  yield* Effect.sleep("1 hour");
-}).pipe(runSupervisedWhatsAppLoop("task.retention"));
+
+/** Removes expired WhatsApp operational data as one independently observed scheduled execution. */
+export const runWhatsAppRetention = runScheduledWork({
+  component: "whatsapp",
+  schedule: "task.whatsappRetention",
+  operationalError: "database_unavailable",
+})(pruneWhatsAppOperationalData());
+
+const retentionLoop = Effect.forever(
+  runWhatsAppRetention.pipe(
+    Effect.andThen(Effect.sleep("1 hour")),
+    Effect.catchCause((cause) => {
+      if (Cause.hasInterrupts(cause) && !Cause.hasDies(cause) && !Cause.hasFails(cause)) {
+        return Effect.interrupt;
+      }
+      return Effect.sleep("1 second");
+    })
+  )
+);
 
 /** Runs independently supervised durable turn and retention loops for the application scope. */
 export const WhatsAppWorkerLive = Layer.effectDiscard(

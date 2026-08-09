@@ -153,6 +153,25 @@ export const projectBreadcrumb = (input: {
     },
   }));
 
+const maximumTelemetryDurationMilliseconds = 86_400_000;
+const millisecondsPerSecond = 1_000;
+
+const scheduledDurationAttributes = (input: {
+  readonly workKind: SpanDescriptor["workKind"];
+  readonly startedAt: number;
+  readonly finishedAt: number;
+}): Readonly<Record<string, TelemetryDuration>> =>
+  input.workKind === "scheduled_execution"
+    ? {
+        "fidy.duration_milliseconds": TelemetryDuration.make(
+          Math.min(
+            maximumTelemetryDurationMilliseconds,
+            Math.max(0, Math.round((input.finishedAt - input.startedAt) * millisecondsPerSecond))
+          )
+        ),
+      }
+    : {};
+
 const spanAttributes = (
   metadata: SpanDescriptor["metadata"]
 ): Readonly<Record<string, string | number | boolean>> => {
@@ -210,6 +229,7 @@ export const ProjectedTraceData = Schema.Struct({
   "fidy.attempt": Schema.optionalKey(TelemetryAttempt),
   "fidy.input_count": Schema.optionalKey(TelemetryCount),
   "fidy.delay_milliseconds": Schema.optionalKey(TelemetryDuration),
+  "fidy.duration_milliseconds": Schema.optionalKey(TelemetryDuration),
   "gen_ai.request.model": Schema.optionalKey(TelemetryCodeSchema.model),
   "gen_ai.usage.input_tokens": Schema.optionalKey(TelemetryCount),
   "gen_ai.usage.output_tokens": Schema.optionalKey(TelemetryCount),
@@ -341,6 +361,11 @@ export const projectTransaction = (input: {
             "fidy.work_kind": descriptor.workKind,
             "fidy.outcome": outcome.outcome,
             "fidy.retryable": outcome.retryable,
+            ...scheduledDurationAttributes({
+              workKind: descriptor.workKind,
+              startedAt: input.startedAt,
+              finishedAt: input.finishedAt,
+            }),
             ...spanAttributes(descriptor.metadata),
           },
         },

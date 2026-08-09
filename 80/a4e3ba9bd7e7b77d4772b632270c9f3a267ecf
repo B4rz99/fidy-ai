@@ -1,0 +1,24 @@
+src/shell/observability/scheduled-work.test.ts
+  s_f0e1246b56ad60::t_7d6fc92f94b2d7 43-48
+vitest.acceptance.config.ts
+  s_f0e1246b56ad60::t_ab686dde1ad0ec 10
+  s_f0e1246b56ad60::t_310872740fa6eb 51
+src/shell/observability/projectors.ts
+  s_f0e1246b56ad60::t_7f88dc37c9a8ec 345-349,379
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "80a4e3ba9bd7e7b77d4772b632270c9f3a267ecf",
+  "prompts": {},
+  "sessions": {
+    "s_f0e1246b56ad60": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019fe6f3-6e3b-7944-9f4d-1ca2494a8ed6",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

@@ -134,6 +134,101 @@ it("reports schema failures when an edit revalidates malformed document data", (
   });
 });
 
+it("reports every malformed field when revalidating a moved root Widget", () => {
+  const malformedDocument = Schema.decodeUnknownSync(DashboardDocument)({
+    title: "Mi tablero",
+    layout: {
+      kind: "leaf",
+      widget: {
+        id: "f1d1a000-0000-4000-8000-000000000491",
+        type: "spending-chart",
+        groupBy: "category",
+        period: "this-month",
+      },
+    },
+  });
+  if (malformedDocument.layout.kind !== "leaf") throw new Error("Expected a leaf layout");
+  Object.assign(malformedDocument, { title: "" });
+  Object.assign(malformedDocument.layout.widget, { type: "not-a-dashboard-widget" });
+  const edit = Schema.decodeUnknownSync(DashboardEdit)({
+    op: "move-widget",
+    widgetId: "f1d1a000-0000-4000-8000-000000000491",
+    at: "bottom",
+  });
+
+  const outcome = Effect.runSync(
+    Effect.result(applyDashboardEdit({ document: malformedDocument, edit }))
+  );
+
+  expect(Result.isFailure(outcome)).toBe(true);
+  if (Result.isFailure(outcome)) {
+    expect(outcome.failure._tag).toBe("InvalidDashboardResult");
+    if (outcome.failure._tag === "InvalidDashboardResult") {
+      expect(outcome.failure.issues.map(({ path }) => path)).toEqual([
+        Option.some("title"),
+        Option.some("layout.widget"),
+      ]);
+    }
+  }
+});
+
+it("preserves string and numeric segments in a nested validation path", () => {
+  const malformedDocument = Schema.decodeUnknownSync(DashboardDocument)({
+    title: "Mi tablero",
+    layout: {
+      kind: "leaf",
+      widget: {
+        id: "f1d1a000-0000-4000-8000-000000000492",
+        type: "spending-chart",
+        groupBy: "category",
+        period: "this-month",
+      },
+    },
+  });
+  if (malformedDocument.layout.kind !== "leaf") throw new Error("Expected a leaf layout");
+  Object.assign(malformedDocument.layout.widget, { categories: ["not-a-category-id"] });
+  const edit = Schema.decodeUnknownSync(DashboardEdit)({
+    op: "set-title",
+    title: "Flujo de caja",
+  });
+
+  const outcome = Effect.runSync(
+    Effect.result(applyDashboardEdit({ document: malformedDocument, edit }))
+  );
+
+  expect(Result.isFailure(outcome)).toBe(true);
+  if (Result.isFailure(outcome)) {
+    expect(outcome.failure._tag).toBe("InvalidDashboardResult");
+    if (outcome.failure._tag === "InvalidDashboardResult") {
+      expect(outcome.failure.issues[0].path).toEqual(Option.some("layout.widget.categories.0"));
+    }
+  }
+});
+
+it("reports a root schema failure without inventing a field path", () => {
+  const malformedDocument: DashboardDocument = Object.assign(() => undefined, {
+    title: document.title,
+    layout: document.layout,
+  });
+  const edit = Schema.decodeUnknownSync(DashboardEdit)({
+    op: "move-widget",
+    widgetId: "f1d1a000-0000-4000-8000-000000000401",
+    at: "bottom",
+  });
+
+  const outcome = Effect.runSync(
+    Effect.result(applyDashboardEdit({ document: malformedDocument, edit }))
+  );
+
+  expect(Result.isFailure(outcome)).toBe(true);
+  if (Result.isFailure(outcome)) {
+    expect(outcome.failure._tag).toBe("InvalidDashboardResult");
+    if (outcome.failure._tag === "InvalidDashboardResult") {
+      expect(outcome.failure.issues[0].path).toEqual(Option.none());
+    }
+  }
+});
+
 it("adds a widget at the top of the whole dashboard in mobile reading order", () => {
   const edit = Schema.decodeUnknownSync(DashboardEdit)({
     op: "add-widget",

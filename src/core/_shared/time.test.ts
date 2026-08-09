@@ -20,6 +20,31 @@ it("rejects text that names no instant", () => {
   }
 });
 
+it("accepts the last valid day in months with 30 or 31 days", () => {
+  for (const text of ["2026-04-30T00:00:00Z", "2026-03-31T00:00:00Z"]) {
+    expect(Result.isSuccess(decode(text))).toBe(true);
+  }
+});
+
+it("accepts a positive timezone offset through +23:59", () => {
+  expect(Result.isSuccess(decode("2026-03-14T09:30:00+23:59"))).toBe(true);
+});
+
+it("rejects a positive timezone offset beyond +23:59", () => {
+  expect(Result.isFailure(decode("2026-03-14T09:30:00+24:00"))).toBe(true);
+});
+
+it("rejects junk before or after an otherwise valid instant spelling", () => {
+  for (const text of [
+    "prefix2026-03-14T09:30:00Z",
+    "2026-03-14T09:30:00Zsuffix",
+    "+002026-03-14T09:30:00Z",
+    "2026-03-14T09:30:00Z\u0000",
+  ]) {
+    expect(Result.isFailure(decode(text))).toBe(true);
+  }
+});
+
 it("rejects a spelling that leaves the instant to be guessed at", () => {
   for (const text of [
     "2026",

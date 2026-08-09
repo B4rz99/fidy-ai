@@ -27,6 +27,9 @@ export default {
   commandRunner: {
     command: "bun --bun vitest run --config vitest.core.config.ts --coverage.enabled=false",
   },
+  // A single runner avoids the resource contention that makes this full-suite
+  // command time out when Stryker fans it out across the machine.
+  concurrency: 1,
   // Only the behavioural core sources, matching source-scope.mjs so this gate
   // and the coverage gates measure the same files. Test files are mutated by
   // nobody: a mutant in a test is a broken test, not a surviving defect.

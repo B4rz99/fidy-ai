@@ -248,6 +248,38 @@ export const telemetryConfigForProjects = (
           })
   );
 
+/** Validates the explicit non-production identity used only by the bounded operator smoke command. */
+export const decodeSentryAccountSmokeConfig = (input: {
+  readonly dsn: Redacted.Redacted<string>;
+  readonly release: string;
+  readonly environment: "local" | "ci";
+}): Effect.Effect<NonProductionTelemetryConfig, InvalidTelemetryConfig> =>
+  Effect.gen(function* () {
+    const candidate = Schema.decodeUnknownOption(Schema.URLFromString)(Redacted.value(input.dsn));
+    if (Option.isNone(candidate) || !hasValidDsnShape(candidate.value)) {
+      return yield* new InvalidTelemetryConfig({ reason: "malformed_dsn" });
+    }
+    const projectId = candidate.value.pathname.slice(1);
+    const dsn = yield* decodeDsn(
+      input.dsn,
+      Option.some({
+        origin: Fn.cast<string, `https://${string}`>(candidate.value.origin),
+        projectId: Fn.cast<string, `${number}`>(projectId),
+      })
+    );
+    const release = yield* decodeRelease(Option.some(input.release));
+    return {
+      _tag: "NonProductionEnabled",
+      environment: input.environment,
+      project: "non-production",
+      capture: { errors: true, traces: true },
+      dsn,
+      release,
+      errorSampleRate: 1,
+      rootTraceRate: 1,
+    };
+  });
+
 /**
  * Reads raw Sentry variables once. Enabled capture remains fail-closed until provisioned project
  * coordinates replace this empty checked-in policy.

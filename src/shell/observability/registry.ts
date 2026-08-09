@@ -53,6 +53,7 @@ export const TelemetryRegistry = {
     "postgres.repositoryOperation",
     "task.retention",
     "provider.request",
+    "observability.accountSmoke",
   ],
   trigger: ["api", "kapso_webhook", "queue", "schedule", "cli", "ci"],
   outcome: ["succeeded", "rejected", "failed", "interrupted"],

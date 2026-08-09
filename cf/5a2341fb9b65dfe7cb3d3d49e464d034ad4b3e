@@ -1,0 +1,74 @@
+src/shell/channels/whatsapp/worker.ts
+  s_529bed04cbf248::t_881dfc92e02e51 5,137
+  s_529bed04cbf248::t_60864abcfc1234 90-92,95,101,135-136,138-149,151-153
+  s_529bed04cbf248::t_f7c0c251be5b59 150
+src/shell/observability/telemetry.test.ts
+  s_529bed04cbf248::t_01e8537e1bafba 88-89,91-119
+  s_529bed04cbf248::t_b63e0ea7ed1dda 90
+src/shell/consent/retention.ts
+  s_529bed04cbf248::t_881dfc92e02e51 3,11
+  s_529bed04cbf248::t_11234275f09424 2,7-10,12-21,25
+  s_529bed04cbf248::t_5db4f51e65b062 22
+  s_529bed04cbf248::t_bce90c454339a3 4
+src/shell/channels/whatsapp/whatsapp-channel.test.ts
+  s_529bed04cbf248::t_5dee83cf85aa2d 81
+  s_529bed04cbf248::t_f0d91ddd886a05 757
+  s_529bed04cbf248::t_e890d22926e72b 46,755
+  s_529bed04cbf248::t_a2f21e120c30a1 45,756
+  s_529bed04cbf248::t_07b3aca2db941d 899
+src/shell/observability/telemetry.ts
+  s_529bed04cbf248::t_e49a5730cd3432 208-212
+  s_529bed04cbf248::t_33474677140c98 59-63,207
+src/shell/observability/scheduled-work.ts
+  s_529bed04cbf248::t_881dfc92e02e51 1-100
+src/shell/observability/envelope-recorder.test.ts
+  s_529bed04cbf248::t_9a940edd99f1fa 458
+src/shell/observability/scheduled-work.test.ts
+  s_529bed04cbf248::t_881dfc92e02e51 1-2,4-5,7-140
+  s_529bed04cbf248::t_0ed21ccb7bf918 3,6
+src/shell/consent/retention.test.ts
+  s_529bed04cbf248::t_b2f09f5c55cfc1 6,10-11
+  s_cb8296d75c38f3::t_36137a7e18e7d0 12
+  s_529bed04cbf248::t_a349dfcb4e6837 2,13,19,64
+src/shell/observability/projectors.ts
+  s_529bed04cbf248::t_8118448fe27b55 232
+  s_529bed04cbf248::t_abafc4fbcfeb86 156-174,364-368
+src/shell/audit/retention.test.ts
+  s_529bed04cbf248::t_274149748291af 11,21-24
+  s_529bed04cbf248::t_0c736761508797 2,5-9,14,16-20,25-26,55-57,64-69
+src/shell/testing/telemetry-fixtures.ts
+  s_529bed04cbf248::t_90bde600cfc7a3 1,22-30
+  s_cb8296d75c38f3::t_ff2461a4f67f41 31
+src/shell/audit/retention.ts
+  s_529bed04cbf248::t_a0336f5de4281c 37
+  s_529bed04cbf248::t_2a842435464aa1 4
+  s_529bed04cbf248::t_881dfc92e02e51 3,23
+  s_529bed04cbf248::t_b438410cbeed51 19-22,24-30,36,40
+  s_529bed04cbf248::t_37617b23c497b0 31-32
+src/shell/observability/registry.ts
+  s_529bed04cbf248::t_54efb86acee098 55-57
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "cf5a2341fb9b65dfe7cb3d3d49e464d034ad4b3e",
+  "prompts": {},
+  "sessions": {
+    "s_529bed04cbf248": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019fe6f3-b235-7e11-bee7-459077f2a423",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": null
+    },
+    "s_cb8296d75c38f3": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019fe6bc-8875-79f6-aa77-3978d6d88ed8",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

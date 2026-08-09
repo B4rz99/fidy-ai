@@ -158,6 +158,8 @@ it.effect("bounds and validates authenticated webhook envelopes", () =>
     const malformed = new TextEncoder().encode("not json");
     const invalidJson = yield* decodeKapsoWebhook(signedInput(malformed)).pipe(Effect.flip);
     expect(invalidJson._tag).toBe("InvalidKapsoPayload");
+    expect(invalidJson.cause).toBeInstanceOf(Error);
+    expect(invalidJson.message.length).toBeGreaterThan(0);
 
     const invalidDelivery = yield* decodeKapsoWebhook(signedInput(fixture, "")).pipe(Effect.flip);
     expect(invalidDelivery._tag).toBe("InvalidKapsoPayload");

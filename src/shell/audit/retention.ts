@@ -19,8 +19,8 @@ const runScheduledAuditRetention = Effect.gen(function* () {
   yield* runAuditRetention(now);
   yield* Effect.logInfo("Applied AuditLogEntry retention");
 }).pipe(
-  Effect.catchCause(() =>
-    Effect.logError("AuditLogEntry retention failed; the next daily run will retry")
+  Effect.catchCause((cause) =>
+    Effect.logError("AuditLogEntry retention failed; the next daily run will retry", cause)
   )
 );
 

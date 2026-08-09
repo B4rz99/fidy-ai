@@ -1,11 +1,14 @@
+import assert from "node:assert/strict";
 import { expect, layer } from "@effect/vitest";
 import {
   BigDecimal,
+  Cause,
   Clock,
   Context,
   Duration,
   Effect,
   Equal,
+  Exit,
   Fiber,
   Layer,
   Option,
@@ -41,7 +44,14 @@ import { ApiHarness, ApiHarnessClient } from "~/shell/testing/api-harness";
 import { testWhatsAppCaller } from "~/shell/testing/whatsapp-caller";
 import { makeLanguageModelFinishPart } from "~/shell/testing/language-model-fixtures";
 import { runAgentRepl } from "./repl";
-import { AgentLimits, AgentService, CurrentAgentLimits, InboundMessage } from "./agent-service";
+import {
+  AgentLimits,
+  AgentService,
+  CurrentAgentLimits,
+  InboundMessage,
+  ModelResponseRejected,
+  ModelUnavailable,
+} from "./agent-service";
 
 const declinedOnboardingPhone = E164PhoneNumber.make("+573009997332");
 const acceptedOnboardingPhone = E164PhoneNumber.make("+573009997333");
@@ -1986,15 +1996,25 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       yield* clearTranscript;
       const service = yield* AgentService;
 
-      const failure = yield* service
+      const exit = yield* service
         .handleSynchronousTurn(
           defaultUserId,
           InboundMessage.make({ text: TranscriptText.make("Provoca salida sensible") })
         )
-        .pipe(Effect.flip);
+        .pipe(Effect.exit);
       const transcript = yield* listTranscriptEntries(defaultUserId);
 
-      expect(failure._tag).toBe("ModelResponseRejected");
+      assert.deepStrictEqual(
+        Exit.match(exit, {
+          onFailure: (cause) => Exit.fail(Cause.squash(cause)),
+          onSuccess: Exit.succeed,
+        }),
+        Exit.fail(
+          new ModelResponseRejected({
+            cause: new Error("Model output contained a sensitive chat value"),
+          })
+        )
+      );
       expect(transcript.map((entry) => entry._tag)).toEqual(["UserTranscriptEntry"]);
     })
   );
@@ -2472,15 +2492,29 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       yield* clearTranscript;
       const service = yield* AgentService;
 
-      const failure = yield* service
+      const exit = yield* service
         .handleSynchronousTurn(
           defaultUserId,
           InboundMessage.make({ text: TranscriptText.make("RETRY_NON_RETRYABLE") })
         )
-        .pipe(Effect.flip);
+        .pipe(Effect.exit);
       const attempts = yield* modelAttemptPrompts("RETRY_NON_RETRYABLE");
 
-      expect(failure._tag).toBe("ModelUnavailable");
+      assert.deepStrictEqual(
+        Exit.match(exit, {
+          onFailure: (cause) => Exit.fail(Cause.squash(cause)),
+          onSuccess: Exit.succeed,
+        }),
+        Exit.fail(
+          new ModelUnavailable({
+            cause: AiError.AiError.make({
+              module: "TestLanguageModel",
+              method: "generateText",
+              reason: AiError.QuotaExhaustedError.make(),
+            }),
+          })
+        )
+      );
       expect(attempts).toHaveLength(1);
     })
   );

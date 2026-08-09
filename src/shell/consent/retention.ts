@@ -6,8 +6,8 @@ const applyPendingRetention = Effect.gen(function* () {
   yield* removeExpiredPendingConsentExchanges(now);
   yield* Effect.logInfo("Applied pending Consent retention");
 }).pipe(
-  Effect.catchCause(() =>
-    Effect.logError("Pending Consent retention failed; the next hourly run will retry")
+  Effect.catchCause((cause) =>
+    Effect.logError("Pending Consent retention failed; the next hourly run will retry", cause)
   )
 );
 

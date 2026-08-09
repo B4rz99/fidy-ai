@@ -131,7 +131,9 @@ export const deliverWhatsAppConsentOutcome = Effect.fn("WhatsApp.deliverConsentO
   beforeProviderCall: Effect.Effect<void, WhatsAppReceiptInvalid, SqlClient.SqlClient> = Effect.void
 ) {
   if (isOutsideFreeFormWindow(event)) return;
-  const text = yield* Schema.decodeUnknownEffect(TranscriptText)(consentOutcomeText(outcome));
+  const text = yield* Schema.decodeUnknownEffect(TranscriptText)(consentOutcomeText(outcome)).pipe(
+    Effect.orDie
+  );
   const exchangeId = disclosureExchangeId(outcome);
   if (Option.isNone(exchangeId)) {
     yield* beforeProviderCall;

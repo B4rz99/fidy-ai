@@ -33,7 +33,18 @@ export class InvalidKapsoSignature extends Data.TaggedError("InvalidKapsoSignatu
 /** Raw webhook bytes exceed Fidy's fixed launch resource bound. */
 export class KapsoPayloadTooLarge extends Data.TaggedError("KapsoPayloadTooLarge")<{}> {}
 /** Authentic JSON does not match the supported Kapso v2 message projection. */
-export class InvalidKapsoPayload extends Data.TaggedError("InvalidKapsoPayload")<{}> {}
+export class InvalidKapsoPayload extends Data.TaggedError("InvalidKapsoPayload")<{
+  readonly cause: unknown;
+}> {
+  override get message(): string {
+    return "The authentic Kapso payload did not match the supported projection";
+  }
+}
+
+const invalidKapsoPayload = (cause: unknown): InvalidKapsoPayload =>
+  new InvalidKapsoPayload({ cause });
+const invalidKapsoInvariant = (reason: string): InvalidKapsoPayload =>
+  invalidKapsoPayload(new Error(reason));
 /** Authentic buffered delivery exceeds Kapso's documented event maximum. */
 export class KapsoBatchTooLarge extends Data.TaggedError("KapsoBatchTooLarge")<{}> {}
 
@@ -124,12 +135,16 @@ const parseOccurredAt = Effect.fn("Kapso.parseOccurredAt")(function* (
   receivedAt: DateTime.Utc
 ) {
   const seconds = Number(timestamp);
-  if (!Number.isSafeInteger(seconds)) return yield* new InvalidKapsoPayload();
+  if (!Number.isSafeInteger(seconds)) {
+    return yield* invalidKapsoInvariant("Kapso timestamp was not a safe integer");
+  }
   const parsed = DateTime.make(seconds * millisecondsPerSecond);
-  if (Option.isNone(parsed)) return yield* new InvalidKapsoPayload();
+  if (Option.isNone(parsed)) {
+    return yield* invalidKapsoInvariant("Kapso timestamp was outside the supported date range");
+  }
   const occurredAt = DateTime.toUtc(parsed.value);
   if (DateTime.Order(occurredAt, DateTime.add(receivedAt, { minutes: 5 })) > 0) {
-    return yield* new InvalidKapsoPayload();
+    return yield* invalidKapsoInvariant("Kapso timestamp exceeded the future-time tolerance");
   }
   return occurredAt;
 });
@@ -146,10 +161,12 @@ const projectEvent = Effect.fn("Kapso.projectWebhookEvent")(function* (
     Option.isSome(conversationBsuid) &&
     messageBsuid.value !== conversationBsuid.value
   ) {
-    return yield* new InvalidKapsoPayload();
+    return yield* invalidKapsoInvariant("Kapso message and conversation BSUIDs disagreed");
   }
   const businessScopedUserId = Option.orElse(messageBsuid, () => conversationBsuid);
-  if (Option.isNone(businessScopedUserId)) return yield* new InvalidKapsoPayload();
+  if (Option.isNone(businessScopedUserId)) {
+    return yield* invalidKapsoInvariant("Kapso event carried no portfolio-scoped BSUID");
+  }
 
   const rawPhone = Option.orElse(raw.message.from, () => raw.conversation.phone_number);
   const phoneNumber = yield* Option.match(rawPhone, {
@@ -218,15 +235,15 @@ export const decodeKapsoWebhook = Effect.fn("Kapso.decodeWebhook")(function* (in
   }
   const deliveryKey = yield* Schema.decodeUnknownEffect(WhatsAppDeliveryKey)(
     input.deliveryKey
-  ).pipe(Effect.mapError(() => new InvalidKapsoPayload()));
+  ).pipe(Effect.mapError(invalidKapsoPayload));
   const businessPortfolioId = yield* Schema.decodeUnknownEffect(WhatsAppBusinessPortfolioId)(
     input.businessPortfolioId
-  ).pipe(Effect.mapError(() => new InvalidKapsoPayload()));
+  ).pipe(Effect.mapError(invalidKapsoPayload));
   const unknown = yield* Schema.decodeUnknownEffect(Schema.UnknownFromJsonString)(
     new TextDecoder().decode(input.rawBody)
-  ).pipe(Effect.mapError(() => new InvalidKapsoPayload()));
+  ).pipe(Effect.mapError(invalidKapsoPayload));
   const envelope = yield* Schema.decodeUnknownEffect(RawKapsoEnvelope)(unknown).pipe(
-    Effect.mapError(() => new InvalidKapsoPayload())
+    Effect.mapError(invalidKapsoPayload)
   );
   const rawEvents = "data" in envelope ? envelope.data : [envelope];
   if (rawEvents.length > maxKapsoDeliveryEvents) {
@@ -238,7 +255,7 @@ export const decodeKapsoWebhook = Effect.fn("Kapso.decodeWebhook")(function* (in
     {
       concurrency: 1,
     }
-  ).pipe(Effect.mapError(() => new InvalidKapsoPayload()));
+  ).pipe(Effect.mapError(invalidKapsoPayload));
   const [first, ...rest] = events;
   return { deliveryKey, events: [first, ...rest] } satisfies WhatsAppWebhookReceipt;
 });
@@ -249,23 +266,27 @@ const projectIdentityChange = Effect.fn("Kapso.projectIdentityChange")(function*
   receivedAt: DateTime.Utc
 ) {
   const type = yield* Schema.decodeUnknownEffect(RawMetaMessageType)(message).pipe(
-    Effect.mapError(() => new InvalidKapsoPayload())
+    Effect.mapError(invalidKapsoPayload)
   );
   if (type.type !== "system" || type.system?.type !== "user_changed_user_id") {
     return Option.none<WhatsAppIdentityChangeEvent>();
   }
   const raw = yield* Schema.decodeUnknownEffect(RawIdentityChangeMessage)(message).pipe(
-    Effect.mapError(() => new InvalidKapsoPayload())
+    Effect.mapError(invalidKapsoPayload)
   );
   const changedIds = Option.fromNullishOr(/ changed from (\S+) to (\S+)$/u.exec(raw.system.body));
-  if (Option.isNone(changedIds)) return yield* new InvalidKapsoPayload();
+  if (Option.isNone(changedIds)) {
+    return yield* invalidKapsoInvariant("Kapso identity-change body named no BSUID transition");
+  }
   const previousBsuid = yield* Schema.decodeUnknownEffect(WhatsAppBusinessScopedUserId)(
     changedIds.value[1]
-  ).pipe(Effect.mapError(() => new InvalidKapsoPayload()));
+  ).pipe(Effect.mapError(invalidKapsoPayload));
   const replacementBsuid = yield* Schema.decodeUnknownEffect(WhatsAppBusinessScopedUserId)(
     changedIds.value[2]
-  ).pipe(Effect.mapError(() => new InvalidKapsoPayload()));
-  if (replacementBsuid !== raw.system.user_id) return yield* new InvalidKapsoPayload();
+  ).pipe(Effect.mapError(invalidKapsoPayload));
+  if (replacementBsuid !== raw.system.user_id) {
+    return yield* invalidKapsoInvariant("Kapso identity-change replacement BSUIDs disagreed");
+  }
   const phoneNumber = yield* Option.match(Option.fromNullishOr(raw.system.wa_id), {
     onNone: () => Effect.succeed(Option.none<E164PhoneNumber>()),
     onSome: (phone) => normalizePhoneNumber(phone).pipe(Effect.map(Option.some)),
@@ -318,12 +339,12 @@ export const decodeKapsoIdentityWebhook = Effect.fn("Kapso.decodeIdentityWebhook
     }
     const businessPortfolioId = yield* Schema.decodeUnknownEffect(WhatsAppBusinessPortfolioId)(
       input.businessPortfolioId
-    ).pipe(Effect.mapError(() => new InvalidKapsoPayload()));
+    ).pipe(Effect.mapError(invalidKapsoPayload));
     const unknown = yield* Schema.decodeUnknownEffect(Schema.UnknownFromJsonString)(
       new TextDecoder().decode(input.rawBody)
-    ).pipe(Effect.mapError(() => new InvalidKapsoPayload()));
+    ).pipe(Effect.mapError(invalidKapsoPayload));
     const envelope = yield* Schema.decodeUnknownEffect(RawMetaEnvelope)(unknown).pipe(
-      Effect.mapError(() => new InvalidKapsoPayload())
+      Effect.mapError(invalidKapsoPayload)
     );
     const messages = envelope.entry.flatMap((entry) =>
       entry.changes.flatMap((change) => change.value.messages ?? [])

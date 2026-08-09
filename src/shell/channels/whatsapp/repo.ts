@@ -70,7 +70,15 @@ export class WhatsAppIdentityMissing extends Data.TaggedError("WhatsAppIdentityM
 export class WhatsAppWindowClosed extends Data.TaggedError("WhatsAppWindowClosed")<{
   readonly userId: UserId;
   readonly lastWindowOpenUntil: Option.Option<DateTime.Utc>;
-}> {}
+}> {
+  override get message(): string {
+    return Option.match(this.lastWindowOpenUntil, {
+      onNone: () => "No free-form WhatsApp send window is available",
+      onSome: (closedAt) =>
+        `The free-form WhatsApp send window closed at ${DateTime.formatIso(closedAt)}`,
+    });
+  }
+}
 /** The claimed burst no longer exists in the expected claim lifecycle state. */
 export class WhatsAppClaimInvalid extends Data.TaggedError("WhatsAppClaimInvalid")<{}> {}
 /** Provider evidence collided with an already retained message identity. */
@@ -494,7 +502,7 @@ export const startWhatsAppTurn = Effect.fn("WhatsApp.startTurn")(function* (
           `,
       })(claim);
       if (!EffectArray.isArrayNonEmpty(jobs)) {
-        return yield* Effect.die("started WhatsApp claim contained no jobs");
+        return yield* Effect.die(new Error("Started WhatsApp claim contained no jobs"));
       }
       const joined = jobs.map(({ text }) => text).join("\n");
       const inboundMessage = yield* Schema.decodeUnknownEffect(InboundMessage)({

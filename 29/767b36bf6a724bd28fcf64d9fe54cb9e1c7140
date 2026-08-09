@@ -27,6 +27,8 @@ Dockerfile
   s_5b3fee1332add8::t_7cc37f974d2609 1,8,13-21
 bun.lock
   s_5b3fee1332add8::t_eac01a8247962f 18,274-291,376-377,432-433,438-439,524-525,578-581,618-619,634-639
+src/shell/channels/whatsapp/worker.ts
+  s_5b3fee1332add8::t_a220d475c69a57 140-145
 ---
 {
   "schema_version": "authorship/3.0.0",

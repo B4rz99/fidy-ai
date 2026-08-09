@@ -132,13 +132,17 @@ const workerLoop = Effect.gen(function* () {
   const processed = yield* processNextWhatsAppTurn(yield* DateTime.now);
   if (!processed) yield* Effect.sleep("250 millis");
 }).pipe(runSupervisedWhatsAppLoop("whatsapp.processTurn"));
-
 /** Removes expired WhatsApp operational data as one independently observed scheduled execution. */
 export const runWhatsAppRetention = runScheduledWork({
   component: "whatsapp",
   schedule: "task.whatsappRetention",
   operationalError: "database_unavailable",
-})(pruneWhatsAppOperationalData());
+})(
+  Effect.gen(function* () {
+    yield* pruneWhatsAppOperationalData();
+    yield* Effect.logInfo("Applied WhatsApp operational retention");
+  })
+);
 
 const retentionLoop = Effect.forever(
   runWhatsAppRetention.pipe(

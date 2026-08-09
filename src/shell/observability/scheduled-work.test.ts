@@ -80,6 +80,39 @@ it.effect("starts repeated and concurrent scheduled executions as isolated roots
   })
 );
 
+it.effect("classifies defects and mixed interruption failures without changing their exits", () =>
+  Effect.gen(function* () {
+    const services = yield* Layer.build(TelemetryEnvelopeRecording);
+    const recorder = Context.get(services, EnvelopeRecorder);
+    const observedRetention = <E>(work: Effect.Effect<void, E>): Effect.Effect<void, E> =>
+      Effect.provide(retentionWork(work), services);
+
+    const defect = yield* Effect.exit(
+      observedRetention(Effect.die(new Error("scheduled-defect-sentinel")))
+    );
+    const mixed = yield* Effect.exit(
+      observedRetention(
+        Effect.failCause(
+          Cause.combine(
+            Cause.fail(new RetentionFailure({ cause: new Error("mixed-failure-sentinel") })),
+            Cause.interrupt(1)
+          )
+        )
+      )
+    );
+
+    expect(Exit.isFailure(defect) && Cause.hasDies(defect.cause)).toBe(true);
+    expect(
+      Exit.isFailure(mixed) && Cause.hasFails(mixed.cause) && Cause.hasInterrupts(mixed.cause)
+    ).toBe(true);
+    const errors = payloadsOf(ProjectedErrorEvent, yield* recorder.serializedEnvelopes);
+    expect(errors.map(({ tags }) => tags.error)).toEqual([
+      "unexpected_defect",
+      "database_unavailable",
+    ]);
+  })
+);
+
 it.effect(
   "captures exhausted failures once but not declared outcomes or shutdown interruption",
   () =>

@@ -8,8 +8,9 @@
 // src/main.ts now falls outside by construction rather than by an exclusion:
 // it is neither tree, it is the runtime bootstrap.
 //
-// Excluded on purpose: test files, and the test-only API harness under
-// src/shell/testing.
+// Excluded on purpose: test files, the test-only API harness under src/shell/testing, and the
+// preload side-effect module. The preload is process wiring like src/main.ts; its decoded
+// configuration and single-assignment handoff remain measured through their behavioural modules.
 //
 // Plain .mjs (not .ts): tools/crap/run.mjs feeds these to crap4ts, which parses
 // through the classic TypeScript compiler API that this repo's Effect tsgo
@@ -23,4 +24,8 @@ export const SOURCE_SRC = [...CORE_SRC, ...SHELL_SRC];
 
 export const CORE_EXCLUDE = ["**/*.test.ts"];
 
-export const SOURCE_EXCLUDE = [...CORE_EXCLUDE, "src/shell/testing/**"];
+export const SOURCE_EXCLUDE = [
+  ...CORE_EXCLUDE,
+  "src/shell/testing/**",
+  "src/shell/observability/preload.ts",
+];

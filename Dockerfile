@@ -17,4 +17,4 @@ ENV NODE_ENV=production
 
 EXPOSE 3000
 
-CMD ["bun", "src/main.ts"]
+CMD ["bun", "--preload", "./src/shell/observability/preload.ts", "src/main.ts"]

@@ -11,8 +11,9 @@ How fidy-ai is put together, and why.
 - `core/` contains pure business decisions typed `Effect<A, E, never>` and touches no external
   service.
 - `shell/` contains repositories, handlers, API assembly, adapters, and every other side effect.
-- `src/main.ts` is the only production entrypoint. Scripts compose shell layers and contain no
-  domain decisions.
+- `src/main.ts` is the only production application entrypoint. Command-level preloads may initialize
+  process infrastructure before it, but cannot start application work. Scripts compose shell layers
+  and contain no domain decisions.
 
 The directory boundary is intentional. It is enforced by lint and dependency checks so a naming
 convention cannot be mistaken for a purity boundary. A feature may touch both trees; that cost is

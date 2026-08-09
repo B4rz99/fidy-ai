@@ -157,6 +157,14 @@ Absence is an `Option` everywhere, and the linter enforces it. Two rules nothing
 
 ---
 
+## Observability
+
+Every new or materially changed external workflow must decide whether its latency, failures, retries,
+or durable continuation need observing. If so, instrument its bounded Work at the shell orchestration
+boundary; otherwise state why not. Keep telemetry out of core and report each failure once.
+
+---
+
 ## Tests
 
 What review looks for:

@@ -53,7 +53,7 @@ assertApplicationRejected() {
     --env MIGRATION_DATABASE_URL --env DATABASE_URL \
     --env KAPSO_API_KEY --env KAPSO_WEBHOOK_SECRET --env WHATSAPP_BUSINESS_PORTFOLIO_ID \
     --env OPENAI_API_KEY \
-    --env SENTRY_DSN --env SENTRY_RELEASE --env SENTRY_ENVIRONMENT \
+    --env SENTRY_ENVIRONMENT --env SENTRY_CAPTURE_ERRORS --env SENTRY_CAPTURE_TRACES \
     --env PORT=3000 --env APP_VERSION=production-smoke-rejected \
     "$image" >/dev/null
   for _ in {1..20}; do
@@ -116,9 +116,9 @@ export KAPSO_API_KEY="production-smoke-kapso-key"
 export KAPSO_WEBHOOK_SECRET="production-smoke-webhook-secret"
 export WHATSAPP_BUSINESS_PORTFOLIO_ID="portfolio-production-smoke"
 export OPENAI_API_KEY="production-smoke-openai-key"
-export SENTRY_DSN="https://public@example.invalid/1"
-export SENTRY_RELEASE="fidy@production-smoke"
-export SENTRY_ENVIRONMENT="production-smoke"
+export SENTRY_ENVIRONMENT="production"
+export SENTRY_CAPTURE_ERRORS="false"
+export SENTRY_CAPTURE_TRACES="false"
 
 assertProvisionRejected \
   "postgresql://fidy_runtime:runtime-sentinel@[bad/fidy" \
@@ -173,7 +173,7 @@ docker run --detach --name "$application" --network "$network" \
   --env MIGRATION_DATABASE_URL --env DATABASE_URL \
   --env KAPSO_API_KEY --env KAPSO_WEBHOOK_SECRET --env WHATSAPP_BUSINESS_PORTFOLIO_ID \
   --env OPENAI_API_KEY \
-  --env SENTRY_DSN --env SENTRY_RELEASE --env SENTRY_ENVIRONMENT \
+  --env SENTRY_ENVIRONMENT --env SENTRY_CAPTURE_ERRORS --env SENTRY_CAPTURE_TRACES \
   --env PORT=3000 --env APP_VERSION=production-smoke \
   "$image" >/dev/null
 

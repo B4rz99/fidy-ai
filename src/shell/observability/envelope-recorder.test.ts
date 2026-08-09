@@ -6,7 +6,11 @@ import {
   makeSpanDescriptor,
   makeWorkSpanDescriptor,
 } from "~/shell/testing/telemetry-fixtures";
-import { EnvelopeRecorder, TelemetryEnvelopeRecording } from "./envelope-recorder";
+import {
+  EnvelopeRecorder,
+  TelemetryEnvelopeRecording,
+  telemetryEnvelopeRecording,
+} from "./envelope-recorder";
 import { ProjectedErrorEvent, ProjectedTransaction } from "./projectors";
 import {
   type ClassifiedFailure,
@@ -636,6 +640,116 @@ it.effect("carries every optional bounded field an approved breadcrumb declares"
       attempt: 3,
       duration_milliseconds: 1_250,
     });
+  })
+);
+
+it.effect("gates errors and traces independently", () =>
+  Effect.gen(function* () {
+    const errorOnly = yield* Layer.build(
+      telemetryEnvelopeRecording({ capture: { errors: true, traces: false } })
+    );
+    const errorTelemetry = Context.get(errorOnly, Telemetry);
+    yield* errorTelemetry.span(
+      descriptor,
+      errorTelemetry.captureFailure({
+        _tag: "Defect",
+        component: "agent",
+        operation: "agent.hostedTurn",
+        error: "unexpected_defect",
+        cause: new Error("error-only-sentinel"),
+      })
+    );
+    const errorOnlyEnvelopes = yield* Context.get(errorOnly, EnvelopeRecorder).serializedEnvelopes;
+
+    const traceOnly = yield* Layer.build(
+      telemetryEnvelopeRecording({ capture: { errors: false, traces: true } })
+    );
+    const traceTelemetry = Context.get(traceOnly, Telemetry);
+    yield* traceTelemetry.span(
+      descriptor,
+      traceTelemetry.captureFailure({
+        _tag: "Defect",
+        component: "agent",
+        operation: "agent.hostedTurn",
+        error: "unexpected_defect",
+        cause: new Error("trace-only-sentinel"),
+      })
+    );
+    const traceOnlyEnvelopes = yield* Context.get(traceOnly, EnvelopeRecorder).serializedEnvelopes;
+
+    expect(errorPayloads(errorOnlyEnvelopes)).toHaveLength(1);
+    expect(transactionPayloads(errorOnlyEnvelopes)).toHaveLength(0);
+    expect(errorPayloads(traceOnlyEnvelopes)).toHaveLength(0);
+    expect(transactionPayloads(traceOnlyEnvelopes)).toHaveLength(1);
+  })
+);
+
+it.effect.each(["rate-limited", "failed"] as const)(
+  "contains $ transport outcomes behind application work",
+  (transportOutcome) =>
+    Effect.gen(function* () {
+      const services = yield* Layer.build(telemetryEnvelopeRecording({ transportOutcome }));
+      const telemetry = Context.get(services, Telemetry);
+
+      const result = yield* telemetry.span(descriptor, Effect.succeed("application-result"));
+      yield* Context.get(services, EnvelopeRecorder).serializedEnvelopes;
+
+      expect(result).toBe("application-result");
+    })
+);
+
+it.effect("samples roots at the configured rate and keeps production errors at 100%", () =>
+  Effect.gen(function* () {
+    const services = yield* Layer.build(
+      telemetryEnvelopeRecording({
+        capture: { errors: true, traces: true },
+        rootTraceRate: 0.1,
+        randomUnitInterval: () => 0.1,
+      })
+    );
+    const telemetry = Context.get(services, Telemetry);
+    yield* telemetry.span(
+      descriptor,
+      telemetry.captureFailure({
+        _tag: "Defect",
+        component: "agent",
+        operation: "agent.hostedTurn",
+        error: "unexpected_defect",
+        cause: new Error("unsampled-root-error"),
+      })
+    );
+    const envelopes = yield* Context.get(services, EnvelopeRecorder).serializedEnvelopes;
+
+    expect(transactionPayloads(envelopes)).toHaveLength(0);
+    expect(errorPayloads(envelopes)).toHaveLength(1);
+  })
+);
+
+it.effect("inherits an unsampled durable parent without resampling", () =>
+  Effect.gen(function* () {
+    const services = yield* Layer.build(
+      telemetryEnvelopeRecording({
+        capture: { errors: true, traces: true },
+        rootTraceRate: 1,
+        randomUnitInterval: () => 0,
+      })
+    );
+    const telemetry = Context.get(services, Telemetry);
+    yield* telemetry.continueSpan(
+      {
+        version: 1,
+        traceId: "1".repeat(32),
+        parentSpanId: "2".repeat(16),
+        sampled: false,
+        capturedAtUnixMilliseconds: 0,
+      },
+      descriptor,
+      Effect.void
+    );
+
+    expect(
+      transactionPayloads(yield* Context.get(services, EnvelopeRecorder).serializedEnvelopes)
+    ).toHaveLength(0);
   })
 );
 

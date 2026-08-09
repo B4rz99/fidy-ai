@@ -53,6 +53,7 @@ src/shell/channels/whatsapp/routes.ts
   s_2a90926a68ba13::t_223c3ea2c4ca47 70-71,74-77,79-100,216-217,264-265
 vitest.acceptance.config.ts
   s_2a90926a68ba13::t_a320c93be0f41e 56-57,61
+  s_2a90926a68ba13::t_1fb0810eb35c63 60
 ---
 {
   "schema_version": "authorship/3.0.0",

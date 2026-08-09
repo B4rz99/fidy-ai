@@ -235,9 +235,9 @@ The WhatsApp acceptance inventory is independent from lower-seam test counts:
 | `WA-A01` | A new sandbox caller receives the disclosure                        | Executable      |
 | `WA-A02` | Portfolio + BSUID, never phone evidence, authorizes the caller      | Executable      |
 | `WA-A03` | Missing sandbox phone evidence fails closed without a provider call | Executable      |
-| `WA-A04` | Consent acceptance establishes the stable User                      | Planned in #121 |
-| `WA-A05` | A financial message creates one Transaction and visible reply       | Planned in #121 |
-| `WA-A06` | Duplicate webhooks do not duplicate effects                         | Planned in #121 |
+| `WA-A04` | Consent acceptance establishes the stable User                      | Executable      |
+| `WA-A05` | A financial message creates one Transaction and visible reply       | Executable      |
+| `WA-A06` | Duplicate webhooks do not duplicate effects                         | Executable      |
 | `WA-A07` | Definitive provider rejection becomes safely retryable              | Planned in #122 |
 | `WA-A08` | Ambiguous delivery is not automatically resent                      | Planned in #122 |
 | `WA-A09` | An authenticated operator reconciles ambiguous delivery             | Planned in #122 |

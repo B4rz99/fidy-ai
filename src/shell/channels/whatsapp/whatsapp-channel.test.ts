@@ -908,7 +908,9 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
               )
             ),
           addBreadcrumb: () => Effect.void,
+          recordModelUsage: () => Effect.void,
           captureDurableContext: Effect.succeed(Option.none()),
+          isActiveSpan: () => Effect.succeed(false),
         });
         const iteration = Ref.updateAndGet(attempts, (count) => count + 1).pipe(
           Effect.flatMap((attempt) => {

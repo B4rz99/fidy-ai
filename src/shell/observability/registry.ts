@@ -68,6 +68,8 @@ export const TelemetryRegistry = {
     "database_unavailable",
     "provider_unavailable",
     "model_unavailable",
+    "model_response_rejected",
+    "unknown_user",
     "live_deadline_exhausted",
     "invalid_runtime_response",
   ],

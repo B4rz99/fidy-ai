@@ -9,6 +9,7 @@ export const DisabledTelemetryResource: TelemetryResource = {
     recordOutcome: () => Effect.void,
     captureFailure: () => Effect.void,
     addBreadcrumb: () => Effect.void,
+    recordModelUsage: () => Effect.void,
   },
   close: Effect.void,
 };

@@ -1,8 +1,14 @@
 import { OpenAiClient, OpenAiLanguageModel } from "@effect/ai-openai";
 import { Config, type Effect, Layer, Schema } from "effect";
+import { TelemetryCodeSchema } from "~/shell/observability/registry";
 
 /** Direct launch model; model selection is not runtime-configurable. */
 export const HostedAgentModel = "gpt-5.6-luna";
+
+/** Derived telemetry identity for the direct launch model; provider response names are ignored. */
+export const hostedTelemetryModel = Schema.decodeUnknownSync(TelemetryCodeSchema.model)(
+  HostedAgentModel.replaceAll(/[.-]/gu, "_")
+);
 
 /** Fixed generation controls for predictable low-latency hosted turns. */
 export const HostedAgentGenerationConfig = {

@@ -6,6 +6,7 @@ import {
   DurableTraceContext,
   type SpanDescriptor,
   type TelemetryBreadcrumb,
+  type TelemetryModelUsage,
 } from "./protocol";
 
 /** Opaque adapter-owned state plus the only validated trace coordinates the service may read. */
@@ -44,6 +45,11 @@ export type TelemetryAdapter = {
     span: TelemetrySpan,
     breadcrumb: TelemetryBreadcrumb
   ) => Effect.Effect<void>;
+  /** Retains final bounded usage on an active approved model span. */
+  readonly recordModelUsage: (
+    span: TelemetrySpan,
+    usage: TelemetryModelUsage
+  ) => Effect.Effect<void>;
 };
 
 /**
@@ -73,8 +79,15 @@ export type TelemetryService = {
   readonly captureFailure: (failure: ClassifiedFailure) => Effect.Effect<void>;
   /** Adds an approved breadcrumb to the active span. Outside a span, no-op. */
   readonly addBreadcrumb: (breadcrumb: TelemetryBreadcrumb) => Effect.Effect<void>;
+  /** Records final bounded counters on the active approved model span. Outside a span, no-op. */
+  readonly recordModelUsage: (usage: TelemetryModelUsage) => Effect.Effect<void>;
   /** Returns only durable trace coordinates for the active span, or none outside a span. */
   readonly captureDurableContext: Effect.Effect<Option.Option<DurableTraceContext>>;
+  /** Proves that coordinates name a currently active in-process span with the expected operation. */
+  readonly isActiveSpan: (
+    context: DurableTraceContext,
+    operation: SpanDescriptor["operation"]
+  ) => Effect.Effect<boolean>;
 };
 
 /** A telemetry adapter together with the shutdown effect that drains its accepted work. */
@@ -130,16 +143,23 @@ const startSafely = (
     () => Effect.succeed(Option.none())
   );
 
+const activeSpanKey = (traceId: string, spanId: string): string => `${traceId}:${spanId}`;
+
 const observeWith = <A, E, R>(input: {
   readonly adapter: TelemetryAdapter;
+  readonly activeSpans: Map<string, SpanDescriptor["operation"]>;
   readonly parent: Option.Option<DurableTraceContext>;
   readonly descriptor: SpanDescriptor;
   readonly work: Effect.Effect<A, E, R>;
 }): Effect.Effect<A, E, R> =>
   Effect.flatMap(startSafely(input.adapter, input.descriptor, input.parent), (started) => {
     if (Option.isNone(started)) return input.work;
+    const key = activeSpanKey(started.value.traceId, started.value.spanId);
+    input.activeSpans.set(key, input.descriptor.operation);
     const observed = Effect.onExit(input.work, (exit) =>
-      ignoreTelemetryFailure(() => input.adapter.finishSpan(started.value, exit))
+      Effect.sync(() => input.activeSpans.delete(key)).pipe(
+        Effect.andThen(ignoreTelemetryFailure(() => input.adapter.finishSpan(started.value, exit)))
+      )
     );
     return Effect.provideService(observed, CurrentTelemetrySpan, started);
   });
@@ -173,6 +193,31 @@ const inProcessParent = (active: TelemetrySpan): DurableTraceContext =>
     capturedAtUnixMilliseconds: 0,
   });
 
+/** Encodes approved durable coordinates as one W3C trace parent for loopback propagation. */
+export const encodeTraceParent = (context: DurableTraceContext): string =>
+  `00-${context.traceId}-${context.parentSpanId}-${context.sampled ? "01" : "00"}`;
+
+/** Decodes only the strict W3C trace parent shape emitted by this service. */
+export const decodeTraceParent = ({
+  value,
+  receivedAtUnixMilliseconds,
+}: Readonly<{
+  value: Option.Option<string>;
+  receivedAtUnixMilliseconds: number;
+}>): Option.Option<DurableTraceContext> => {
+  const match = /^00-([0-9a-f]{32})-([0-9a-f]{16})-(00|01)$/u.exec(
+    Option.getOrElse(value, () => "")
+  );
+  if (match === null) return Option.none();
+  return Schema.decodeUnknownOption(DurableTraceContext)({
+    version: 1,
+    traceId: match[1],
+    parentSpanId: match[2],
+    sampled: match[3] === "01",
+    capturedAtUnixMilliseconds: receivedAtUnixMilliseconds,
+  });
+};
+
 const durableContextOf = (
   span: Option.Option<TelemetrySpan>
 ): Effect.Effect<Option.Option<DurableTraceContext>> =>
@@ -193,12 +238,14 @@ const durableContextOf = (
   });
 
 /** Constructs the public service around an adapter while containing every adapter defect. */
-export const makeTelemetryService = (adapter: TelemetryAdapter): TelemetryService =>
-  Telemetry.of({
+export const makeTelemetryService = (adapter: TelemetryAdapter): TelemetryService => {
+  const activeSpans = new Map<string, SpanDescriptor["operation"]>();
+  return Telemetry.of({
     span: (descriptor, work) =>
       Effect.flatMap(CurrentTelemetrySpan, (current) =>
         observeWith({
           adapter,
+          activeSpans,
           parent: Option.map(current, inProcessParent),
           descriptor,
           work,
@@ -206,14 +253,14 @@ export const makeTelemetryService = (adapter: TelemetryAdapter): TelemetryServic
       ),
     rootSpan: (descriptor, work) =>
       Effect.provideService(
-        observeWith({ adapter, parent: Option.none(), descriptor, work }),
+        observeWith({ adapter, activeSpans, parent: Option.none(), descriptor, work }),
         CurrentTelemetrySpan,
         Option.none()
       ),
     continueSpan: (savedContext, descriptor, work) =>
       Effect.flatMap(Clock.currentTimeMillis, (now) =>
         Effect.flatMap(decodeFreshContext(savedContext, now), (parent) =>
-          observeWith({ adapter, parent, descriptor, work })
+          observeWith({ adapter, activeSpans, parent, descriptor, work })
         )
       ),
     recordOutcome: (outcome) =>
@@ -235,5 +282,17 @@ export const makeTelemetryService = (adapter: TelemetryAdapter): TelemetryServic
             ignoreTelemetryFailure(() => adapter.addBreadcrumb(active, breadcrumb)),
         })
       ),
+    recordModelUsage: (usage) =>
+      Effect.flatMap(CurrentTelemetrySpan, (span) =>
+        Option.match(span, {
+          onNone: () => Effect.void,
+          onSome: (active) => ignoreTelemetryFailure(() => adapter.recordModelUsage(active, usage)),
+        })
+      ),
     captureDurableContext: Effect.flatMap(CurrentTelemetrySpan, durableContextOf),
+    isActiveSpan: (context, operation) =>
+      Effect.sync(
+        () => activeSpans.get(activeSpanKey(context.traceId, context.parentSpanId)) === operation
+      ),
   });
+};

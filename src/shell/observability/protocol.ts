@@ -1,9 +1,12 @@
 import { Schema } from "effect";
 import { TelemetryCodeSchema, TelemetryWorkKindGroup } from "./registry";
 
-/** An integer count from 0 through 1,000,000 whose meaning is named by its field. */
+/** Shared upper bound for every approved telemetry count. */
+export const maximumTelemetryCount = 1_000_000;
+
+/** An integer count from zero through the shared telemetry-count maximum. */
 export const TelemetryCount = Schema.Int.check(
-  Schema.isBetween({ minimum: 0, maximum: 1_000_000 })
+  Schema.isBetween({ minimum: 0, maximum: maximumTelemetryCount })
 ).pipe(Schema.brand("TelemetryCount"));
 export type TelemetryCount = typeof TelemetryCount.Type;
 
@@ -51,10 +54,15 @@ const ProviderSpanMetadata = Schema.TaggedStruct("Provider", {
 });
 const ModelSpanMetadata = Schema.TaggedStruct("Model", {
   model: TelemetryCodeSchema.model,
+});
+
+/** Completion-only counters attached to the active approved model span. */
+export const TelemetryModelUsage = Schema.Struct({
   attempt: TelemetryAttempt,
   inputTokens: TelemetryCount,
   outputTokens: TelemetryCount,
 });
+export type TelemetryModelUsage = typeof TelemetryModelUsage.Type;
 const ScheduleSpanMetadata = Schema.TaggedStruct("Schedule", {
   attempt: TelemetryAttempt,
 });

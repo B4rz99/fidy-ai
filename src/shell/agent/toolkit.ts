@@ -1,14 +1,15 @@
 import { Context, Effect, Function, Layer, Option, Predicate, Schema, type Scope } from "effect";
-import type { HttpClient } from "effect/unstable/http";
-import { HttpApiClient } from "effect/unstable/httpapi";
+import { HttpClient, HttpClientRequest } from "effect/unstable/http";
+import { HttpApiClient, HttpApiMiddleware } from "effect/unstable/httpapi";
 import { Tool, Toolkit } from "effect/unstable/ai";
 import { toCodecOpenAI } from "effect/unstable/ai/OpenAiStructuredOutput";
 import type { CanonicalOperationId } from "~/core/_shared/canonical-operation";
 import { type AgentBearerToken } from "~/core/tokens/model";
-import { makeAgentAuthorizationClientLive } from "~/shell/_shared/authz";
+import { AgentAuthorization } from "~/shell/_shared/authz";
 import { type CatalogOperation } from "~/shell/_shared/operation-catalog";
 import { type AgentConfirmation } from "~/shell/_shared/operation-policy";
 import { FidyApi, operationCatalog } from "~/shell/api";
+import { Telemetry, encodeTraceParent } from "~/shell/observability/telemetry";
 
 const maximumOpenAiToolNameLength = 64;
 
@@ -161,6 +162,7 @@ const callOperation = (
     return Effect.die(new Error("Derived canonical API client operation is not callable"));
   }
   return operation(input).pipe(
+    Effect.provideService(HttpClient.TracerPropagationEnabled, false),
     Effect.catch((error) =>
       Schema.is(binding.failure)(error)
         ? Effect.fail(error)
@@ -178,11 +180,28 @@ export const makeAgentToolkit = (
 ): Effect.Effect<
   Toolkit.WithHandler<typeof AgentToolkit.tools>,
   never,
-  HttpClient.HttpClient | Scope.Scope
+  HttpClient.HttpClient | Scope.Scope | Telemetry
 > =>
   Effect.gen(function* () {
     const baseUrl = yield* CanonicalApiBaseUrl;
-    const middlewareContext = yield* Layer.build(makeAgentAuthorizationClientLive(bearer));
+    const telemetry = yield* Telemetry;
+    const authorization = HttpApiMiddleware.layerClient(AgentAuthorization, ({ next, request }) =>
+      Effect.flatMap(telemetry.captureDurableContext, (context) => {
+        const authorized = HttpClientRequest.bearerToken(request, bearer);
+        return next(
+          Option.match(context, {
+            onNone: () => authorized,
+            onSome: (coordinates) =>
+              HttpClientRequest.setHeader(
+                authorized,
+                "traceparent",
+                encodeTraceParent(coordinates)
+              ),
+          })
+        );
+      })
+    );
+    const middlewareContext = yield* Layer.build(authorization);
     const derivedClient = Option.match(baseUrl, {
       onNone: () => HttpApiClient.make(FidyApi),
       onSome: (url) => HttpApiClient.make(FidyApi, { baseUrl: url.href }),

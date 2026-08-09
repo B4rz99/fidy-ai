@@ -396,14 +396,12 @@ const workAttributes = [
       metadata: {
         _tag: "Model",
         model: "gpt_5_6_luna",
-        attempt: TelemetryAttempt.make(1),
-        inputTokens: TelemetryCount.make(120),
-        outputTokens: TelemetryCount.make(45),
       },
     },
     attributes: {
       "gen_ai.request.model": "gpt_5_6_luna",
       "fidy.attempt": 1,
+      "fidy.duration_milliseconds": 0,
       "gen_ai.usage.input_tokens": 120,
       "gen_ai.usage.output_tokens": 45,
     },
@@ -427,7 +425,16 @@ it.effect("projects only the bounded attributes its own work kind admits", () =>
     const recorder = Context.get(services, EnvelopeRecorder);
 
     for (const { work } of workAttributes) {
-      yield* telemetry.span(makeWorkSpanDescriptor(work), Effect.void);
+      yield* telemetry.span(
+        makeWorkSpanDescriptor(work),
+        work.metadata._tag === "Model"
+          ? telemetry.recordModelUsage({
+              attempt: TelemetryAttempt.make(1),
+              inputTokens: TelemetryCount.make(120),
+              outputTokens: TelemetryCount.make(45),
+            })
+          : Effect.void
+      );
     }
 
     const transactions = transactionPayloads(yield* recorder.serializedEnvelopes);

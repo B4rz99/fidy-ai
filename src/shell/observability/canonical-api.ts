@@ -1,4 +1,5 @@
-import { Cause, Effect, Layer, Option, Schema } from "effect";
+import { Cause, Clock, Effect, Layer, Option, Schema } from "effect";
+import { HttpServerRequest } from "effect/unstable/http";
 import { CanonicalTelemetry } from "~/shell/_shared/canonical-telemetry";
 import { operationCatalog } from "~/shell/api";
 import {
@@ -8,7 +9,7 @@ import {
   type TelemetryHttpMethod as TelemetryHttpMethodType,
 } from "./protocol";
 import { type TelemetryCode, TelemetryCodeSchema } from "./registry";
-import { Telemetry, type TelemetryService } from "./telemetry";
+import { Telemetry, type TelemetryService, decodeTraceParent } from "./telemetry";
 
 const ExpectedFailure = Schema.Struct({
   error: Schema.Struct({ code: TelemetryCodeSchema.error }),
@@ -84,11 +85,29 @@ const makeCanonicalTelemetry = (
       const classified = Effect.tapError(httpEffect, recordExpectedOutcome(telemetry));
       const operation = telemetry.span(operationDescriptor(canonicalOperation), classified);
       const classifiedRoot = Effect.tapError(operation, recordExpectedOutcome(telemetry));
-      const capturedAtHttpOwner = Effect.tapCause(
-        classifiedRoot,
-        captureUnexpectedDefect(telemetry, canonicalOperation)
+      const descriptor = httpDescriptor({ method, route });
+      const request = yield* Effect.serviceOption(HttpServerRequest.HttpServerRequest);
+      const receivedAt = yield* Clock.currentTimeMillis;
+      const continued = Option.flatMap(request, ({ headers }) =>
+        decodeTraceParent({
+          value: Option.fromUndefinedOr(headers.traceparent),
+          receivedAtUnixMilliseconds: receivedAt,
+        })
       );
-      return yield* telemetry.span(httpDescriptor({ method, route }), capturedAtHttpOwner);
+      const hostedTurnContext = yield* Option.match(continued, {
+        onNone: () => Effect.succeed(Option.none()),
+        onSome: (context) =>
+          Effect.map(telemetry.isActiveSpan(context, "agent.hostedTurn"), (isActive) =>
+            isActive ? Option.some(context) : Option.none()
+          ),
+      });
+      const ownedWork = Option.isSome(hostedTurnContext)
+        ? classifiedRoot
+        : Effect.tapCause(classifiedRoot, captureUnexpectedDefect(telemetry, canonicalOperation));
+      return yield* Option.match(hostedTurnContext, {
+        onNone: () => telemetry.span(descriptor, ownedWork),
+        onSome: (context) => telemetry.continueSpan(context, descriptor, ownedWork),
+      });
     })
   );
 

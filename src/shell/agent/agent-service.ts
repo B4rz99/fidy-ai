@@ -155,18 +155,38 @@ export type AgentReply = typeof AgentReply.Type;
 /** Failure returned when no stable User and interpretation context exist. */
 export class UnknownUser extends Data.TaggedError("UnknownUser")<{
   readonly userId: UserId;
-}> {}
+}> {
+  override get message(): string {
+    return "No stable User and interpretation context exist for this turn";
+  }
+}
 
 /** Failure returned before any model or transcript work when onboarding consent is absent. */
 export class OnboardingConsentRequired extends Data.TaggedError("OnboardingConsentRequired")<{
   readonly userId: UserId;
-}> {}
+}> {
+  override get message(): string {
+    return "The User has no current onboarding consent";
+  }
+}
 
 /** Safe failure returned when the configured language model or provider cannot serve a turn. */
-export class ModelUnavailable extends Data.TaggedError("ModelUnavailable")<{}> {}
+export class ModelUnavailable extends Data.TaggedError("ModelUnavailable")<{
+  readonly cause: unknown;
+}> {
+  override get message(): string {
+    return "The configured language model or provider could not serve the turn";
+  }
+}
 
 /** Safe failure returned when model output cannot be accepted or executed. */
-export class ModelResponseRejected extends Data.TaggedError("ModelResponseRejected")<{}> {}
+export class ModelResponseRejected extends Data.TaggedError("ModelResponseRejected")<{
+  readonly cause: unknown;
+}> {
+  override get message(): string {
+    return "The model response could not be accepted or executed";
+  }
+}
 
 /** Closed failure vocabulary exposed by the channel-agnostic turn boundary. */
 export type AgentTurnError =
@@ -262,20 +282,21 @@ const exhaustedReply = TranscriptText.make(
 );
 const CanonicalValidationFailure = ValidationFailed.mapFields(Struct.pick(["error"]));
 
-const toModelResponseRejected = (): ModelResponseRejected => new ModelResponseRejected();
+const modelResponseRejected = (cause: unknown): ModelResponseRejected =>
+  new ModelResponseRejected({ cause });
 const decodeTranscriptText = (
   value: unknown
 ): Effect.Effect<TranscriptText, ModelResponseRejected> =>
-  Schema.decodeUnknownEffect(TranscriptText)(value).pipe(Effect.mapError(toModelResponseRejected));
+  Schema.decodeUnknownEffect(TranscriptText)(value).pipe(Effect.mapError(modelResponseRejected));
 const decodeTranscriptJson = (value: unknown): Effect.Effect<Schema.Json, ModelResponseRejected> =>
-  Schema.decodeUnknownEffect(Schema.Json)(value).pipe(Effect.mapError(toModelResponseRejected));
+  Schema.decodeUnknownEffect(Schema.Json)(value).pipe(Effect.mapError(modelResponseRejected));
 const encodeTranscriptJson = (
   schema: Schema.Codec<unknown, unknown, never, never>,
   value: unknown
 ): Effect.Effect<Schema.Json, ModelResponseRejected> =>
   Schema.encodeUnknownEffect(schema)(value).pipe(
     Effect.flatMap(decodeTranscriptJson),
-    Effect.mapError(toModelResponseRejected)
+    Effect.mapError(modelResponseRejected)
   );
 const encodeAgentOperationInput = (
   binding: AgentOperationBinding,
@@ -286,7 +307,7 @@ const requireToolResult = function <A>(
   result: Option.Option<A>
 ): Effect.Effect<never, ModelResponseRejected> | Effect.Effect<A> {
   return Option.match(result, {
-    onNone: () => Effect.fail(new ModelResponseRejected()),
+    onNone: () => Effect.fail(modelResponseRejected(new Error("Tool result was missing"))),
     onSome: (value) => Effect.succeed(value),
   });
 };
@@ -438,7 +459,7 @@ const runToolkitCall = (
       Stream.filter(isTerminalToolResult),
       Stream.runLast,
       Effect.flatMap(requireToolResult),
-      Effect.mapError(toModelResponseRejected)
+      Effect.mapError(modelResponseRejected)
     );
 
 const turnCompletedOutcome = (
@@ -485,7 +506,8 @@ const prepareAgentToolCall = Effect.fn("AgentService.prepareToolCall")(function*
 ) {
   const binding = yield* findAgentOperationBinding(toolCall.name).pipe(
     Option.match({
-      onNone: () => Effect.fail(new ModelResponseRejected()),
+      onNone: () =>
+        Effect.fail(modelResponseRejected(new Error("Model named an unknown operation"))),
       onSome: Effect.succeed,
     })
   );
@@ -494,7 +516,11 @@ const prepareAgentToolCall = Effect.fn("AgentService.prepareToolCall")(function*
     onFailure: () => decodeTranscriptJson(toolCall.params),
     onSuccess: Effect.succeed,
   });
-  if (containsSensitiveJson(input)) return yield* new ModelResponseRejected();
+  if (containsSensitiveJson(input)) {
+    return yield* modelResponseRejected(
+      new Error("Model operation input contained a sensitive value")
+    );
+  }
   const prepared = {
     toolCall,
     call: { binding, iteration, toolCallId: ToolCallId.make(toolCall.id) },
@@ -646,7 +672,9 @@ const respondToGeneration = Effect.fn("AgentService.respondToGeneration")(functi
   generated: AcceptedGeneration
 ) {
   if (generated.finishReason !== "stop" && generated.finishReason !== "tool-calls") {
-    return yield* new ModelResponseRejected();
+    return yield* modelResponseRejected(
+      new Error(`Model generation stopped with ${generated.finishReason}`)
+    );
   }
   if (generated.toolCalls.length === 0) {
     const decodedText = yield* decodeTranscriptText(generated.text);
@@ -944,12 +972,13 @@ const decodeModelToolCalls = Effect.fn("AgentService.decodeModelToolCalls")(func
   for (const toolCall of generated.toolCalls) {
     const binding = yield* findAgentOperationBinding(toolCall.name).pipe(
       Option.match({
-        onNone: () => Effect.fail(new ModelResponseRejected()),
+        onNone: () =>
+          Effect.fail(modelResponseRejected(new Error("Model named an unknown operation"))),
         onSome: Effect.succeed,
       })
     );
     const params = yield* decodeAgentOperationInput(binding, toolCall.params).pipe(
-      Effect.mapError(toModelResponseRejected)
+      Effect.mapError(modelResponseRejected)
     );
     toolCalls.push({ ...toolCall, params });
   }
@@ -972,7 +1001,7 @@ const acceptModelRound = Effect.fn("AgentService.acceptModelRound")(function* (
     };
   }
   const { failure } = round;
-  if (!("reason" in failure)) return yield* new ModelUnavailable();
+  if (!("reason" in failure)) return yield* new ModelUnavailable({ cause: failure });
   yield* Effect.annotateCurrentSpan({
     "agent.model.failure.reason": failure.reason._tag,
     "agent.model.failure.retryable": failure.isRetryable,
@@ -980,9 +1009,11 @@ const acceptModelRound = Effect.fn("AgentService.acceptModelRound")(function* (
       ? {}
       : { "agent.model.failure.retry_after_millis": Duration.toMillis(failure.retryAfter) }),
   });
-  if (failure.reason._tag !== "InvalidOutputError") return yield* new ModelUnavailable();
+  if (failure.reason._tag !== "InvalidOutputError") {
+    return yield* new ModelUnavailable({ cause: failure });
+  }
   if (containsSensitiveChatValue(failure.reason.description)) {
-    return yield* new ModelResponseRejected();
+    return yield* modelResponseRejected(new Error("Model output contained a sensitive chat value"));
   }
   return { _tag: "Retry", feedback: malformedOutputFeedback(failure.reason.description) };
 });

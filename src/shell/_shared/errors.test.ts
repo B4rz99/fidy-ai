@@ -1,4 +1,4 @@
-import { expect, layer } from "@effect/vitest";
+import { expect, it, layer } from "@effect/vitest";
 import { Effect, FileSystem, Layer, Path, Schema } from "effect";
 import { Etag, HttpPlatform } from "effect/unstable/http";
 import {
@@ -8,7 +8,7 @@ import {
   HttpApiGroup,
   HttpApiTest,
 } from "effect/unstable/httpapi";
-import { ValidationGate, ValidationGateLive } from "./errors";
+import { Unauthenticated, ValidationGate, ValidationGateLive } from "./errors";
 
 const CheckedSuccess = Schema.Struct({
   value: Schema.Finite.check(Schema.isGreaterThan(0)),
@@ -33,6 +33,25 @@ const HttpTestServices = Layer.mergeAll(Path.layer, Etag.layerWeak, HttpPlatform
 const EncodeFailureHarness = EncodeFailureLive.pipe(
   Layer.provideMerge(ValidationGateLive),
   Layer.provideMerge(HttpTestServices)
+);
+
+it.effect("keeps API failures taggable in-process without publishing the tag", () =>
+  Effect.gen(function* () {
+    const failure = Unauthenticated.make({
+      error: { code: "unauthenticated", message: "Supply a known AgentToken." },
+      next: [],
+    });
+    const recovered = yield* Effect.fail(failure).pipe(
+      Effect.catchTag("Unauthenticated", (caught) => Effect.succeed(caught.message))
+    );
+    const encoded = yield* Schema.encodeUnknownEffect(Unauthenticated)(failure);
+
+    expect(recovered).toBe("Supply a known AgentToken.");
+    expect(encoded).toEqual({
+      error: { code: "unauthenticated", message: "Supply a known AgentToken." },
+      next: [],
+    });
+  })
 );
 
 layer(EncodeFailureHarness)("validation gate", (it) => {

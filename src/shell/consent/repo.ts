@@ -772,7 +772,9 @@ export const recordConsentDisclosureDelivery = Effect.fn("recordConsentDisclosur
     })(input).pipe(Effect.orDie);
     if (Option.isNone(row)) return Option.none();
     if (row.value._tag === "AwaitingDisclosureDelivery") {
-      return yield* Effect.die("delivery update returned the previous lifecycle");
+      return yield* Effect.die(
+        new Error("Consent delivery update returned the previous lifecycle")
+      );
     }
     return Option.some(row.value);
   }

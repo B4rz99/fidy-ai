@@ -38,7 +38,11 @@ export class KapsoSendFailed extends Data.TaggedError("KapsoSendFailed")<{
   readonly safeReason: KapsoFailureReason;
   readonly deliveryCertainty: KapsoDeliveryCertainty;
   readonly automaticRetry: boolean;
-}> {}
+}> {
+  override get message(): string {
+    return `Kapso send failed: ${this.safeReason} (${this.deliveryCertainty})`;
+  }
+}
 
 /** Decoded provider evidence plus Fidy's local clock time after the response was validated. */
 export type KapsoSentMessage = Readonly<{

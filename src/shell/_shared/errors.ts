@@ -104,24 +104,37 @@ export const FieldIssue = Schema.Struct({
  * `HttpApiSchema.status`; a failure takes its status from the annotation
  * argument of the same `ErrorClass` call instead, so it never needs to be one.
  */
-const errorResponse = <Detail extends Schema.Top>(
+const errorResponse = <Tag extends string, Detail extends Schema.Top>(
+  tag: Tag,
   error: Detail
-): { error: Detail; next: typeof NextOperations } => ({
+): {
+  readonly _tag: ReturnType<typeof Schema.tagDefaultOmit<Tag>>;
+  readonly error: Detail;
+  readonly next: typeof NextOperations;
+} => ({
+  _tag: Schema.tagDefaultOmit(tag),
   error,
   next: NextOperations,
 });
 
+const validationFailedTag = "ValidationFailed";
+const unauthenticatedTag = "Unauthenticated";
+const scopeMissingTag = "ScopeMissing";
+const consentRequiredTag = "ConsentRequired";
+const notFoundTag = "NotFound";
+
 /**
- * API failures are `Schema.ErrorClass`, as `HttpApiError.ts` does for its own
- * (ARCHITECTURE.md §6). Unlike those, these carry no `_tag`: `code` already
- * discriminates, from a set an agent can enumerate.
+ * API failures are schema-backed tagged errors. Their `_tag` supports selective
+ * in-process handling but is omitted during encoding because `code` is the
+ * caller-facing discriminator an agent can enumerate (ARCHITECTURE.md §6).
  *
  * The request did not satisfy the operation's input schema. Carries whatever the
  * gate could attribute to individual values rather than the parser's own
  * rendering of the failure.
  */
-export class ValidationFailed extends Schema.ErrorClass<ValidationFailed>("ValidationFailed")(
+export class ValidationFailed extends Schema.ErrorClass<ValidationFailed>(validationFailedTag)(
   errorResponse(
+    validationFailedTag,
     Schema.Struct({
       ...detail("validation_failed").fields,
       fields: Schema.Array(FieldIssue).annotate({
@@ -138,8 +151,8 @@ export class ValidationFailed extends Schema.ErrorClass<ValidationFailed>("Valid
  * The request named no caller, or one that could not be resolved to a user.
  * Carries no suggested operation: nothing the API offers changes an AgentToken.
  */
-export class Unauthenticated extends Schema.ErrorClass<Unauthenticated>("Unauthenticated")(
-  errorResponse(detail("unauthenticated")),
+export class Unauthenticated extends Schema.ErrorClass<Unauthenticated>(unauthenticatedTag)(
+  errorResponse(unauthenticatedTag, detail("unauthenticated")),
   { httpApiStatus: 401 }
 ) {}
 
@@ -148,14 +161,14 @@ export class Unauthenticated extends Schema.ErrorClass<Unauthenticated>("Unauthe
  * attempted operation. Token changes happen in chat, outside this canonical API,
  * so the failure carries no suggested operation.
  */
-export class ScopeMissing extends Schema.ErrorClass<ScopeMissing>("ScopeMissing")(
-  errorResponse(detail("scope_missing")),
+export class ScopeMissing extends Schema.ErrorClass<ScopeMissing>(scopeMissingTag)(
+  errorResponse(scopeMissingTag, detail("scope_missing")),
   { httpApiStatus: 403 }
 ) {}
 
 /** The stable User has no current onboarding grant, so no canonical operation may run. */
-export class ConsentRequired extends Schema.ErrorClass<ConsentRequired>("ConsentRequired")(
-  errorResponse(detail("consent_required")),
+export class ConsentRequired extends Schema.ErrorClass<ConsentRequired>(consentRequiredTag)(
+  errorResponse(consentRequiredTag, detail("consent_required")),
   { httpApiStatus: 403 }
 ) {}
 
@@ -163,12 +176,30 @@ export class ConsentRequired extends Schema.ErrorClass<ConsentRequired>("Consent
  * The record the caller asked for is not theirs to see. Slices raise this
  * through their own mapper, which supplies a message naming what was missing.
  */
-export class NotFound extends Schema.ErrorClass<NotFound>("NotFound")(
-  errorResponse(detail("not_found")),
-  {
-    httpApiStatus: 404,
-  }
+export class NotFound extends Schema.ErrorClass<NotFound>(notFoundTag)(
+  errorResponse(notFoundTag, detail("not_found")),
+  { httpApiStatus: 404 }
 ) {}
+
+const forwardErrorMessage = (
+  ...prototypes: ReadonlyArray<{ readonly error: { readonly message: string } }>
+): void => {
+  for (const prototype of prototypes) {
+    Object.defineProperty(prototype, "message", {
+      get(this: { readonly error: { readonly message: string } }): string {
+        return this.error.message;
+      },
+    });
+  }
+};
+
+forwardErrorMessage(
+  ValidationFailed.prototype,
+  Unauthenticated.prototype,
+  ScopeMissing.prototype,
+  ConsentRequired.prototype,
+  NotFound.prototype
+);
 
 /**
  * How each rejected request component is named to the caller. A `Record` keyed

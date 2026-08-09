@@ -157,8 +157,10 @@ phrases outside that policy.
 ## 6. Errors and external effects
 
 Core failures are `Data.TaggedError` values and contain no HTTP vocabulary. API failures are
-`Schema.ErrorClass` values because they are encoded into response bodies. Each slice has one
-exhaustive core-to-API mapper in shell. Core never needs to know which transport exposes it.
+schema-backed tagged error classes because they are encoded into response bodies and must remain
+selectively catchable in-process. Their `_tag` is omitted on encoding: the closed `code` field is the
+wire discriminator. Each slice has one exhaustive core-to-API mapper in shell. Core never needs to
+know which transport exposes it.
 
 External providers stay at shell edges behind narrow services. Launch-specific behavior remains
 in its owning module rather than being hidden behind speculative provider or market registries.

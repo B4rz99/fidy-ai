@@ -21,7 +21,7 @@ import { SqlClient } from "effect/unstable/sql";
 import { E164PhoneNumber, UserId, WhatsAppBusinessScopedUserId } from "~/core/identity/reference";
 import { MigrationSqlClient } from "~/shell/db/client";
 import { categoryIds } from "~/core/categories/taxonomy";
-import { TranscriptText } from "~/core/transcript/model";
+import { type TranscriptEntry, TranscriptText } from "~/core/transcript/model";
 import { AgentBearerToken } from "~/core/tokens/model";
 import { TranscriptWindowCharacterLimit, TranscriptWindowTurnLimit } from "~/core/transcript/rules";
 import { observeAuditLogEntries } from "~/shell/audit/repo";
@@ -143,6 +143,90 @@ const createTransactionToolCall = ({
     },
   },
 });
+
+const atomicBatchToolCall = (
+  calls: ReadonlyArray<Schema.Json>,
+  id = "hosted-atomic-batch"
+): Response.ToolCallPartEncoded => ({
+  type: "tool-call",
+  id,
+  name: "operations__executeAtomicBatch",
+  params: { payload: { calls } },
+});
+
+type AtomicCreateBatchChild = Readonly<{
+  callId: string;
+  occurredAt: string;
+}> &
+  Partial<
+    Readonly<{
+      amount: string;
+      counterparty: string;
+      categoryId: string;
+    }>
+  >;
+
+const atomicCreateBatchChild = ({
+  callId,
+  occurredAt,
+  amount = "25000",
+  counterparty = "Compra lote",
+  categoryId = categoryIds.otros,
+}: AtomicCreateBatchChild): Schema.Json => ({
+  callId,
+  operation: "transactions.createTransaction",
+  input: {
+    payload: {
+      money: { amount, currency: "COP" },
+      counterparty,
+      direction: "outflow",
+      categoryId,
+      occurredAt,
+    },
+  },
+});
+
+const successfulAtomicBatchCalls: ReadonlyArray<Schema.Json> = [
+  atomicCreateBatchChild({
+    callId: "f1d1a000-0000-4000-8000-000000001591",
+    amount: "12000",
+    counterparty: "Café lote",
+    categoryId: categoryIds.restaurantes,
+    occurredAt: "2026-01-01T12:00:00Z",
+  }),
+  atomicCreateBatchChild({
+    callId: "f1d1a000-0000-4000-8000-000000001592",
+    amount: "8000",
+    counterparty: "Postre lote",
+    categoryId: categoryIds.restaurantes,
+    occurredAt: "2026-01-01T12:05:00Z",
+  }),
+];
+const successfulAtomicBatchCall = atomicBatchToolCall(
+  successfulAtomicBatchCalls,
+  "hosted-atomic-batch-success"
+);
+const reorderedAtomicBatchCall = atomicBatchToolCall(
+  successfulAtomicBatchCalls.toReversed(),
+  "hosted-atomic-batch-reordered"
+);
+
+const failingAtomicBatchCall = atomicBatchToolCall(
+  [
+    atomicCreateBatchChild({
+      callId: "f1d1a000-0000-4000-8000-000000001593",
+      amount: "5000",
+      counterparty: "Debe revertirse",
+      occurredAt: "2026-01-01T13:00:00Z",
+    }),
+    {
+      callId: "f1d1a000-0000-4000-8000-000000001594",
+      operation: "transactions.deleteTransaction",
+      input: { params: { id: "f1d1a000-0000-4000-8000-00000000dead" } },
+    },
+  ],
+  "hosted-atomic-batch-failure"
+);
 
 type ModelReply = Array<Response.PartEncoded>;
 
@@ -626,6 +710,136 @@ const plainTextScript = (serialized: string): Option.Option<ModelReply> => {
   return Option.none();
 };
 
+const batchConfirmationTurns = (serialized: string): number =>
+  serialized.match(/"type":"text","text":"CONFIRMAR LOTE/gu)?.length ?? 0;
+
+const batchConfirmationCommand = (text: string): string => {
+  const command = /Responde exactamente: (CONFIRMAR LOTE [0-9a-f]{64})/u.exec(text)?.[1];
+  if (command === undefined) throw new Error("Atomic batch confirmation command was absent");
+  return command;
+};
+
+const succeededAtomicBatchResult = (
+  entries: ReadonlyArray<TranscriptEntry>
+): Option.Option<TranscriptEntry> =>
+  Option.fromUndefinedOr(
+    entries.find(
+      (entry) =>
+        entry._tag === "CanonicalToolResultEntry" &&
+        entry.operation === "operations.executeAtomicBatch" &&
+        entry.outcome._tag === "Succeeded"
+    )
+  );
+
+const independentMutationTargets = (serialized: string): ReadonlyArray<string> =>
+  /LOTE_MUTACIONES_INDEPENDIENTES ([0-9a-f-]{36}) ([0-9a-f-]{36})/u.exec(serialized)?.slice(1) ??
+  [];
+
+const independentMutationCalls = (
+  serialized: string,
+  asBatch: boolean
+): ReadonlyArray<Response.ToolCallPartEncoded> => {
+  const targets = independentMutationTargets(serialized);
+  const calls = targets.map((id, index) => ({
+    type: "tool-call" as const,
+    id: `independent-delete-${index}`,
+    name: "transactions__deleteTransaction",
+    params: { params: { id } },
+  }));
+  if (!asBatch) return calls;
+  return [
+    {
+      type: "tool-call" as const,
+      id: "corrected-atomic-batch",
+      name: "operations__executeAtomicBatch",
+      params: {
+        payload: {
+          calls: targets.map((id, index) => ({
+            callId: `f1d1a000-0000-4000-8000-0000000016${index}0`,
+            operation: "transactions.deleteTransaction",
+            input: { params: { id } },
+          })),
+        },
+      },
+    },
+  ];
+};
+
+const malformedAtomicBatchReply = (serialized: string): ModelReply => {
+  if (
+    serialized.includes("preflight-malformed-delete") ||
+    serialized.includes("Validation reason:")
+  ) {
+    return [{ type: "text" as const, text: "Corregí la respuesta completa." }];
+  }
+  return [
+    createTransactionToolCall({
+      id: "preflight-valid-create",
+      occurredAt: Option.some("2026-01-01T14:00:00Z"),
+    }),
+    {
+      type: "tool-call",
+      id: "preflight-malformed-delete",
+      name: "transactions__deleteTransaction",
+      params: { params: {} },
+    },
+  ];
+};
+
+const failingAtomicBatchReply = (serialized: string): ModelReply => {
+  const confirmationTurns = batchConfirmationTurns(serialized);
+  if (serialized.includes('"failedCallIndex":1') && confirmationTurns < 2) {
+    return [
+      {
+        type: "text" as const,
+        text: "No apliqué el lote: la segunda operación no encontró la Transaction. Corrige ese identificador.",
+      },
+    ];
+  }
+  return [failingAtomicBatchCall];
+};
+
+const successfulAtomicBatchReply = (serialized: string): ModelReply => {
+  if (serialized.includes("LOTE_ATOMICO_ENTRADA_ALTERADA")) {
+    return batchConfirmationTurns(serialized) === 0
+      ? [successfulAtomicBatchCall]
+      : [reorderedAtomicBatchCall];
+  }
+  const succeeded =
+    serialized.lastIndexOf('"isFailure":false') >
+    Math.max(
+      serialized.lastIndexOf("LOTE_ATOMICO_EXITO"),
+      serialized.lastIndexOf("LOTE_ATOMICO_EXPIRA")
+    );
+  if (succeeded && batchConfirmationTurns(serialized) < 3) {
+    return [{ type: "text" as const, text: "El lote quedó aplicado por completo." }];
+  }
+  return [successfulAtomicBatchCall];
+};
+
+const atomicBatchScript = (serialized: string): Option.Option<ModelReply> => {
+  if (serialized.includes("LOTE_MUTACIONES_INDEPENDIENTES")) {
+    return Option.some([
+      ...independentMutationCalls(serialized, serialized.includes("atomic_batch_required")),
+    ]);
+  }
+  if (serialized.includes("LOTE_RESPUESTA_MALFORMADA")) {
+    return Option.some(malformedAtomicBatchReply(serialized));
+  }
+  if (serialized.includes("LOTE_ATOMICO_FALLA")) {
+    return Option.some(failingAtomicBatchReply(serialized));
+  }
+  if (
+    serialized.includes("LOTE_ATOMICO_EXITO") ||
+    serialized.includes("LOTE_ATOMICO_EXPIRA") ||
+    serialized.includes("LOTE_ATOMICO_CROSS_USER") ||
+    serialized.includes("LOTE_ATOMICO_ENTRADA_ALTERADA")
+  ) {
+    return Option.some(successfulAtomicBatchReply(serialized));
+  }
+  return Option.none();
+};
+
 const quickLogScript = (serialized: string): Option.Option<ModelReply> => {
   if (serialized.includes("anota almuerzo 25 mil")) {
     return Option.some([
@@ -751,6 +965,7 @@ const scriptedReply = (
     Option.orElse(() => privateReadScript(serialized)),
     Option.orElse(() => turnContextScript(serialized)),
     Option.orElse(() => plainTextScript(serialized)),
+    Option.orElse(() => atomicBatchScript(serialized)),
     Option.orElse(() => quickLogScript(serialized)),
     Option.orElse(() => almuerzoQuickLogScript(serialized)),
     Option.orElse(() => listingScript(serialized)),
@@ -886,6 +1101,315 @@ const AgentHarness = AgentService.layer.pipe(
 );
 
 layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hosted agent", (it) => {
+  it.effect("confirms one exact atomic batch and rejects altered or replayed confirmation", () =>
+    Effect.gen(function* () {
+      const sql = yield* MigrationSqlClient;
+      yield* sql`TRUNCATE source_attestations, transactions, keyword_rules`;
+      yield* clearTranscript;
+      const service = yield* AgentService;
+
+      const challenge = yield* service.handleSynchronousTurn(
+        defaultUserId,
+        InboundMessage.make({ text: TranscriptText.make("LOTE_ATOMICO_EXITO") })
+      );
+      expect(batchConfirmationCommand(challenge.text)).toMatch(/^CONFIRMAR LOTE/u);
+      const transactionCountAfterChallenge =
+        yield* sql`SELECT count(*)::int AS count FROM transactions WHERE deleted_at IS NULL`;
+
+      expect(challenge.text).toContain("1. transactions.createTransaction");
+      expect(challenge.text).toContain("2. transactions.createTransaction");
+      expect(transactionCountAfterChallenge[0]?.count).toBe(0);
+
+      const altered = yield* service.handleSynchronousTurn(
+        defaultUserId,
+        InboundMessage.make({ text: TranscriptText.make(`CONFIRMAR LOTE ${"0".repeat(64)}`) })
+      );
+      const transactionCountAfterAlteredConfirmation =
+        yield* sql`SELECT count(*)::int AS count FROM transactions WHERE deleted_at IS NULL`;
+      const correctedCommand = batchConfirmationCommand(altered.text);
+
+      expect(altered.text).toContain("Este lote atómico requiere una sola confirmación");
+      expect(transactionCountAfterAlteredConfirmation[0]?.count).toBe(0);
+
+      const completed = yield* service.handleSynchronousTurn(
+        defaultUserId,
+        InboundMessage.make({ text: TranscriptText.make(correctedCommand) })
+      );
+      const createdTransactions =
+        yield* sql`SELECT counterparty FROM transactions WHERE deleted_at IS NULL ORDER BY occurred_at`;
+      const transcript = yield* listTranscriptEntries(defaultUserId);
+      const batchResult = Option.getOrThrow(succeededAtomicBatchResult(transcript));
+
+      expect(completed.text).toBe("El lote quedó aplicado por completo.");
+      expect(createdTransactions.map(({ counterparty }) => counterparty)).toEqual([
+        "Café lote",
+        "Postre lote",
+      ]);
+      expect(batchResult).toMatchObject({
+        outcome: {
+          output: {
+            data: {
+              results: [
+                { operation: "transactions.createTransaction" },
+                { operation: "transactions.createTransaction" },
+              ],
+            },
+          },
+        },
+      });
+
+      const replayed = yield* service.handleSynchronousTurn(
+        defaultUserId,
+        InboundMessage.make({ text: TranscriptText.make(correctedCommand) })
+      );
+      const replayedAgain = yield* service.handleSynchronousTurn(
+        defaultUserId,
+        InboundMessage.make({ text: TranscriptText.make(correctedCommand) })
+      );
+      const afterReplay =
+        yield* sql`SELECT count(*)::int AS count FROM transactions WHERE deleted_at IS NULL`;
+      expect(replayed.text).toContain("Este lote atómico requiere una sola confirmación");
+      expect(replayedAgain.text).toContain("Este lote atómico requiere una sola confirmación");
+      expect(batchConfirmationCommand(replayed.text)).not.toBe(correctedCommand);
+      expect(batchConfirmationCommand(replayedAgain.text)).not.toBe(correctedCommand);
+      expect(afterReplay[0]?.count).toBe(2);
+    })
+  );
+
+  it.effect("rejects confirmation when the model reorders the proposed batch", () =>
+    Effect.gen(function* () {
+      const sql = yield* MigrationSqlClient;
+      yield* sql`TRUNCATE source_attestations, transactions, keyword_rules`;
+      yield* clearTranscript;
+      const service = yield* AgentService;
+
+      const challenge = yield* service.handleSynchronousTurn(
+        defaultUserId,
+        InboundMessage.make({ text: TranscriptText.make("LOTE_ATOMICO_ENTRADA_ALTERADA") })
+      );
+      const rejected = yield* service.handleSynchronousTurn(
+        defaultUserId,
+        InboundMessage.make({
+          text: TranscriptText.make(batchConfirmationCommand(challenge.text)),
+        })
+      );
+      const rows =
+        yield* sql`SELECT count(*)::int AS count FROM transactions WHERE deleted_at IS NULL`;
+
+      expect(rejected.text).toContain("1. transactions.createTransaction");
+      expect(batchConfirmationCommand(rejected.text)).not.toBe(
+        batchConfirmationCommand(challenge.text)
+      );
+      expect(rows[0]?.count).toBe(0);
+    })
+  );
+
+  it.effect("rejects another User's confirmation command for the same batch", () =>
+    Effect.gen(function* () {
+      const sql = yield* MigrationSqlClient;
+      const service = yield* AgentService;
+      const userB = UserId.make("f1d1a000-0000-4000-8000-0000000000b8");
+      yield* sql`DELETE FROM agent_confirmation_consumptions WHERE user_id = ${userB}`;
+      yield* sql`DELETE FROM transcript_entries WHERE user_id = ${userB}`;
+      yield* sql`DELETE FROM transactions WHERE user_id = ${userB}`;
+      yield* sql`DELETE FROM agent_tokens WHERE user_id = ${userB}`;
+      yield* sql`TRUNCATE source_attestations, transactions, keyword_rules`;
+      yield* clearTranscript;
+      yield* seedConsentedAgentIdentity({
+        userId: userB,
+        bearer: AgentBearerToken.make("fin_agentb02_abcdefghijklmnopqrstuvwxyz0123456789ABCD"),
+        scopes: ["read"],
+      });
+
+      const userAChallenge = yield* service.handleSynchronousTurn(
+        defaultUserId,
+        InboundMessage.make({ text: TranscriptText.make("LOTE_ATOMICO_CROSS_USER") })
+      );
+      const userBChallenge = yield* service.handleSynchronousTurn(
+        userB,
+        InboundMessage.make({ text: TranscriptText.make("LOTE_ATOMICO_CROSS_USER") })
+      );
+      const rejected = yield* service.handleSynchronousTurn(
+        userB,
+        InboundMessage.make({
+          text: TranscriptText.make(batchConfirmationCommand(userAChallenge.text)),
+        })
+      );
+      const rows = yield* sql`SELECT count(*)::int AS count FROM transactions`;
+      const consumptions = yield* sql`
+        SELECT count(*)::int AS count
+        FROM agent_confirmation_consumptions
+        WHERE user_id = ${userB}
+      `;
+
+      expect(batchConfirmationCommand(userAChallenge.text)).not.toBe(
+        batchConfirmationCommand(userBChallenge.text)
+      );
+      expect(rejected.text).toContain("Este lote atómico requiere una sola confirmación");
+      expect(rows[0]?.count).toBe(0);
+      expect(consumptions[0]?.count).toBe(0);
+    })
+  );
+
+  it.effect("atomically consumes concurrent confirmation submissions once", () =>
+    Effect.gen(function* () {
+      const sql = yield* MigrationSqlClient;
+      yield* sql`TRUNCATE source_attestations, transactions, keyword_rules`;
+      yield* clearTranscript;
+      const service = yield* AgentService;
+
+      const challenge = yield* service.handleSynchronousTurn(
+        defaultUserId,
+        InboundMessage.make({ text: TranscriptText.make("LOTE_ATOMICO_EXITO") })
+      );
+      const command = batchConfirmationCommand(challenge.text);
+      const replies = yield* Effect.all(
+        [
+          service.handleSynchronousTurn(
+            defaultUserId,
+            InboundMessage.make({ text: TranscriptText.make(command) })
+          ),
+          service.handleSynchronousTurn(
+            defaultUserId,
+            InboundMessage.make({ text: TranscriptText.make(command) })
+          ),
+        ],
+        { concurrency: "unbounded" }
+      );
+      const rows =
+        yield* sql`SELECT count(*)::int AS count FROM transactions WHERE deleted_at IS NULL`;
+
+      expect(rows[0]?.count).toBe(2);
+      expect(replies.some(({ text }) => text === "El lote quedó aplicado por completo.")).toBe(
+        true
+      );
+      expect(
+        replies.some(({ text }) =>
+          text.includes("Este lote atómico requiere una sola confirmación")
+        )
+      ).toBe(true);
+    })
+  );
+
+  it.effect("expires an unconsumed atomic batch confirmation", () =>
+    Effect.gen(function* () {
+      const sql = yield* MigrationSqlClient;
+      yield* sql`TRUNCATE source_attestations, transactions, keyword_rules`;
+      yield* clearTranscript;
+      const service = yield* AgentService;
+      const manualClock = makeManualClock();
+
+      const challenge = yield* service
+        .handleSynchronousTurn(
+          defaultUserId,
+          InboundMessage.make({ text: TranscriptText.make("LOTE_ATOMICO_EXPIRA") })
+        )
+        .pipe(Effect.provideService(Clock.Clock, manualClock.clock));
+      const command = batchConfirmationCommand(challenge.text);
+      yield* manualClock.advance(Duration.toMillis("11 minutes"));
+      const expired = yield* service
+        .handleSynchronousTurn(
+          defaultUserId,
+          InboundMessage.make({ text: TranscriptText.make(command) })
+        )
+        .pipe(Effect.provideService(Clock.Clock, manualClock.clock));
+      const rows =
+        yield* sql`SELECT count(*)::int AS count FROM transactions WHERE deleted_at IS NULL`;
+
+      expect(expired.text).toContain("Este lote atómico requiere una sola confirmación");
+      expect(rows[0]?.count).toBe(0);
+    })
+  );
+
+  it.effect("redirects independent confirmed mutations to the visible atomic batch", () =>
+    Effect.gen(function* () {
+      const sql = yield* MigrationSqlClient;
+      const service = yield* AgentService;
+      const client = yield* ApiHarnessClient;
+      yield* sql`TRUNCATE source_attestations, transactions, keyword_rules`;
+      yield* clearTranscript;
+      yield* service.handleSynchronousTurn(
+        defaultUserId,
+        InboundMessage.make({ text: TranscriptText.make("almuerzo 25 mil") })
+      );
+      yield* service.handleSynchronousTurn(
+        defaultUserId,
+        InboundMessage.make({ text: TranscriptText.make("registra papelería 25 usd") })
+      );
+      const seeded = yield* client.transactions.listTransactions({ query: {} });
+      const [first, second] = seeded.data;
+      if (first === undefined || second === undefined) return yield* Effect.die("missing fixtures");
+      yield* clearTranscript;
+      yield* resetModelPrompts;
+
+      const reply = yield* service.handleSynchronousTurn(
+        defaultUserId,
+        InboundMessage.make({
+          text: TranscriptText.make(`LOTE_MUTACIONES_INDEPENDIENTES ${first.id} ${second.id}`),
+        })
+      );
+      const remaining = yield* client.transactions.listTransactions({ query: {} });
+      const prompts = yield* readModelPrompts;
+
+      expect(reply.text).toContain("Este lote atómico requiere una sola confirmación");
+      expect(remaining.data).toHaveLength(2);
+      expect(prompts.at(-1)).toContain("atomic_batch_required");
+      expect(prompts.at(-1)).toContain("operations.executeAtomicBatch");
+    })
+  );
+
+  it.effect("executes nothing when a later generated call is malformed", () =>
+    Effect.gen(function* () {
+      const sql = yield* MigrationSqlClient;
+      yield* sql`TRUNCATE source_attestations, transactions, keyword_rules`;
+      yield* clearTranscript;
+      const service = yield* AgentService;
+
+      const reply = yield* service.handleSynchronousTurn(
+        defaultUserId,
+        InboundMessage.make({ text: TranscriptText.make("LOTE_RESPUESTA_MALFORMADA") })
+      );
+      const rows =
+        yield* sql`SELECT count(*)::int AS count FROM transactions WHERE deleted_at IS NULL`;
+
+      expect(reply.text).toBe("Corregí la respuesta completa.");
+      expect(rows[0]?.count).toBe(0);
+    })
+  );
+
+  it.effect("rolls back a confirmed batch and explains the failing child", () =>
+    Effect.gen(function* () {
+      const sql = yield* MigrationSqlClient;
+      yield* sql`TRUNCATE source_attestations, transactions, keyword_rules`;
+      yield* clearTranscript;
+      const service = yield* AgentService;
+
+      const challenge = yield* service.handleSynchronousTurn(
+        defaultUserId,
+        InboundMessage.make({ text: TranscriptText.make("LOTE_ATOMICO_FALLA") })
+      );
+      const command = batchConfirmationCommand(challenge.text);
+      const failed = yield* service.handleSynchronousTurn(
+        defaultUserId,
+        InboundMessage.make({ text: TranscriptText.make(command) })
+      );
+      const rows =
+        yield* sql`SELECT count(*)::int AS count FROM transactions WHERE deleted_at IS NULL`;
+
+      expect(failed.text).toContain("segunda operación no encontró la Transaction");
+      expect(rows[0]?.count).toBe(0);
+
+      const replayed = yield* service.handleSynchronousTurn(
+        defaultUserId,
+        InboundMessage.make({ text: TranscriptText.make(command) })
+      );
+      const afterReplay =
+        yield* sql`SELECT count(*)::int AS count FROM transactions WHERE deleted_at IS NULL`;
+      expect(replayed.text).toContain("Este lote atómico requiere una sola confirmación");
+      expect(afterReplay[0]?.count).toBe(0);
+    })
+  );
+
   it.effect("persists complete text turns for the next service instance", () =>
     Effect.gen(function* () {
       yield* clearTranscript;
@@ -1708,7 +2232,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
     })
   );
 
-  it.effect("confirms a destructive call followed by an automatic call in the same batch", () =>
+  it.effect("defers sibling calls until destructive confirmation is settled", () =>
     Effect.gen(function* () {
       const sql = yield* MigrationSqlClient;
       const service = yield* AgentService;
@@ -1744,10 +2268,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
 
       expect(confirmed.text).toBe("Listo, completé la operación solicitada.");
       expect(rows[0]?.count).toBe(0);
-      expect(audit.map(({ operation }) => operation)).toEqual([
-        "categories.listCategories",
-        "transactions.deleteTransaction",
-      ]);
+      expect(audit.map(({ operation }) => operation)).toEqual(["transactions.deleteTransaction"]);
     })
   );
 
@@ -1787,13 +2308,13 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       );
 
       expect(confirmed.text).toBe("Listo, completé la operación solicitada.");
-      expect(replayed.text).toContain("Operación exacta: transactions.deleteTransaction");
+      expect(replayed.text).toBe("La repetición quedó bloqueada.");
       expect(rows[0]?.count).toBe(0);
       expect(deleted).toHaveLength(1);
     })
   );
 
-  it.effect("does not accept approval from an interrupted confirmation turn", () =>
+  it.effect("does not accept confirmation from an interrupted confirmation turn", () =>
     Effect.gen(function* () {
       const sql = yield* MigrationSqlClient;
       const service = yield* AgentService;

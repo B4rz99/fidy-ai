@@ -84,6 +84,10 @@ const seedEveryPolicyShape = Effect.gen(function* () {
       (${policyInsertVictim}, 'CO', 'es-CO', 'America/Bogota', '2026-01-01T00:00:00Z')
   `;
   yield* admin`
+    INSERT INTO agent_confirmation_consumptions (user_id, digest, consumed_at)
+    VALUES (${policyOwner}, ${"a".repeat(64)}, '2026-01-01T00:00:00Z')
+  `;
+  yield* admin`
     INSERT INTO whatsapp_identities (
       business_portfolio_id, business_scoped_user_id, phone_number, user_id, verified_at
     ) VALUES (
@@ -229,6 +233,11 @@ type PolicyProbe = {
 
 const policyProbes: ReadonlyArray<PolicyProbe> = [
   {
+    tableName: "agent_confirmation_consumptions",
+    stableColumn: "consumed_at",
+    ownerPredicate: `user_id = '${policyOwner}' AND digest = '${"a".repeat(64)}'`,
+  },
+  {
     tableName: "agent_tokens",
     stableColumn: "short_id",
     ownerPredicate: "id = 'f1d1a000-0000-4000-8000-0000000001d4'",
@@ -327,6 +336,13 @@ const probeDeniedMutations = Effect.fn("probeDeniedRlsMutations")(function* () {
 
 const deniedInsertProbes = (sql: SqlClient.SqlClient) =>
   [
+    {
+      tableName: "agent_confirmation_consumptions",
+      insert: sql`
+        INSERT INTO agent_confirmation_consumptions (user_id, digest, consumed_at)
+        VALUES (${policyOwner}, ${"b".repeat(64)}, '2026-01-02T00:00:00Z')
+      `,
+    },
     {
       tableName: "users",
       insert: sql`

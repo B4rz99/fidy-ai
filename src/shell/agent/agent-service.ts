@@ -50,6 +50,7 @@ import {
   TelemetryDuration,
 } from "~/shell/observability/protocol";
 import { Telemetry, type TelemetryService } from "~/shell/observability/telemetry";
+import { atomicBatchOperation } from "~/shell/operations/operations";
 import { issueHostedAgentToken, revokeHostedAgentToken } from "~/shell/tokens/hosted-agent-token";
 import {
   appendTranscriptEntries,
@@ -259,10 +260,6 @@ const makeCompletedReply = ({
 const exhaustedReply = TranscriptText.make(
   "No pude completar la solicitud dentro del límite seguro de operaciones. Intenta de nuevo."
 );
-const malformedToolInput: Schema.Json = {
-  code: "tool_input_rejected",
-  message: "The model supplied malformed operation input. Correct the fields before retrying.",
-};
 const CanonicalValidationFailure = ValidationFailed.mapFields(Struct.pick(["error"]));
 
 const toModelResponseRejected = (): ModelResponseRejected => new ModelResponseRejected();
@@ -350,7 +347,6 @@ type RecordedCall = Readonly<{
 
 type ToolCallOutcome =
   | Readonly<{ _tag: "Recorded" }>
-  | Readonly<{ _tag: "ChallengeIssued"; challenge: TranscriptText }>
   | Readonly<{ _tag: "TurnCompleted"; text: TranscriptText }>;
 
 type GenerationResponse =
@@ -385,7 +381,9 @@ const toolCallOutcome = (
     : makeToolOutcome(executed.isFailure, result);
 
 const completesTurn = (binding: AgentOperationBinding, outcome: CanonicalToolOutcome): boolean =>
-  binding.policy.requiredScope === "write" && outcome._tag === "Succeeded";
+  binding.operation !== atomicBatchOperation &&
+  binding.policy.requiredScope === "write" &&
+  outcome._tag === "Succeeded";
 
 const recordToolOutcome = Effect.fn("AgentService.recordToolOutcome")(function* (
   turn: HostedTurn,
@@ -450,8 +448,36 @@ const turnCompletedOutcome = (
   text: makeCompletedReply({ binding, output, turnStartedAt: turn.startedAt, user: turn.user }),
 });
 
-const executeAgentToolCall = Effect.fn("AgentService.executeToolCall")(function* (
-  turn: HostedTurn,
+type PreparedToolCallBase = Readonly<{
+  toolCall: AgentToolCall;
+  call: RecordedCall;
+  input: Schema.Json;
+}>;
+
+type PreparedToolCall =
+  | (PreparedToolCallBase & Readonly<{ _tag: "Valid" }>)
+  | (PreparedToolCallBase & Readonly<{ _tag: "Invalid" }>);
+
+type ValidPreparedToolCall = Extract<PreparedToolCall, { readonly _tag: "Valid" }>;
+
+type ConfirmationSettledToolCall = ValidPreparedToolCall &
+  Readonly<{
+    confirmation: Effect.Success<ReturnType<HostedTurn["confirmation"]["decide"]>>;
+  }>;
+
+const preflightRejected: Schema.Json = {
+  code: "response_preflight_rejected",
+  message:
+    "Another operation in the same model response was malformed or requires confirmation. Correct the complete response before retrying.",
+};
+const atomicBatchRequired: Schema.Json = {
+  code: "atomic_batch_required",
+  message:
+    `Multiple confirmation-required mutations must be proposed as one ${atomicBatchOperation} call. ` +
+    "Put the exact ordered mutations in its calls payload and retry.",
+};
+
+const prepareAgentToolCall = Effect.fn("AgentService.prepareToolCall")(function* (
   iteration: AgentIteration,
   toolCall: AgentToolCall
 ) {
@@ -461,38 +487,151 @@ const executeAgentToolCall = Effect.fn("AgentService.executeToolCall")(function*
       onSome: Effect.succeed,
     })
   );
-  const toolCallId = ToolCallId.make(toolCall.id);
-  const call: RecordedCall = { binding, iteration, toolCallId };
   const encodedInput = yield* Effect.result(encodeAgentOperationInput(binding, toolCall.params));
   const input = yield* Result.match(encodedInput, {
     onFailure: () => decodeTranscriptJson(toolCall.params),
     onSuccess: Effect.succeed,
   });
   if (containsSensitiveJson(input)) return yield* new ModelResponseRejected();
-  yield* recordToolCall(turn, call, input);
-  if (Result.isFailure(encodedInput)) {
-    yield* recordToolOutcome(turn, call, {
-      _tag: "ToolInputRejected",
-      failure: malformedToolInput,
-    });
-    return recordedToolCall;
-  }
+  const prepared = {
+    toolCall,
+    call: { binding, iteration, toolCallId: ToolCallId.make(toolCall.id) },
+    input,
+  };
+  return Result.isSuccess(encodedInput)
+    ? ({ ...prepared, _tag: "Valid" } as const)
+    : ({ ...prepared, _tag: "Invalid" } as const);
+});
 
-  const confirmationDecision = yield* turn.confirmation.decide({ binding, input });
-  if (confirmationDecision._tag === "RequireConfirmation") {
-    yield* recordToolOutcome(turn, call, {
-      _tag: "ToolInputRejected",
-      failure: confirmationDecision.failure,
-    });
-    return { _tag: "ChallengeIssued", challenge: confirmationDecision.failure.challenge } as const;
-  }
+const recordRejectedPreflight = (
+  turn: HostedTurn,
+  calls: ReadonlyArray<PreparedToolCall>,
+  failure: Schema.Json
+): Effect.Effect<void, OnboardingConsentRequired, Crypto.Crypto | SqlClient.SqlClient> =>
+  Effect.forEach(
+    calls,
+    ({ call }) =>
+      recordToolOutcome(turn, call, {
+        _tag: "ToolInputRejected",
+        failure,
+      }),
+    { concurrency: 1, discard: true }
+  );
 
-  const executed = yield* runToolkitCall(turn, toolCall.name, input);
+const confirmationRequiredCount = (calls: ReadonlyArray<ValidPreparedToolCall>): number =>
+  calls.filter(
+    ({ call }) =>
+      call.binding.operation !== atomicBatchOperation &&
+      call.binding.policy.agentConfirmation === "required"
+  ).length;
+
+const requiresAtomicBatchCorrection = (calls: ReadonlyArray<ValidPreparedToolCall>): boolean =>
+  confirmationRequiredCount(calls) > 1 ||
+  (calls.length > 1 && calls.some(({ call }) => call.binding.operation === atomicBatchOperation));
+
+const settleConfirmations = (
+  turn: HostedTurn,
+  calls: ReadonlyArray<ValidPreparedToolCall>
+): Effect.Effect<
+  ReadonlyArray<ConfirmationSettledToolCall>,
+  never,
+  Crypto.Crypto | SqlClient.SqlClient
+> =>
+  Effect.forEach(
+    calls,
+    (prepared) =>
+      turn.confirmation
+        .decide({ binding: prepared.call.binding, input: prepared.input })
+        .pipe(Effect.map((confirmation) => ({ ...prepared, confirmation }))),
+    { concurrency: 1 }
+  );
+
+const executePreparedToolCall = Effect.fn("AgentService.executePreparedToolCall")(function* (
+  turn: HostedTurn,
+  prepared: ValidPreparedToolCall
+) {
+  const executed = yield* runToolkitCall(turn, prepared.toolCall.name, prepared.input);
   const result = yield* decodeTranscriptJson(executed.encodedResult);
   const outcome = toolCallOutcome(executed, result);
-  yield* recordToolOutcome(turn, call, outcome);
-  if (!completesTurn(binding, outcome)) return recordedToolCall;
-  return turnCompletedOutcome(turn, binding, result);
+  yield* recordToolOutcome(turn, prepared.call, outcome);
+  if (!completesTurn(prepared.call.binding, outcome)) return recordedToolCall;
+  return turnCompletedOutcome(turn, prepared.call.binding, result);
+});
+
+const prepareGeneratedCalls = Effect.fn("AgentService.prepareGeneratedCalls")(function* (
+  turn: HostedTurn,
+  iteration: AgentIteration,
+  generated: AcceptedGeneration
+) {
+  const prepared = yield* Effect.forEach(
+    generated.toolCalls,
+    (toolCall) => prepareAgentToolCall(iteration, toolCall),
+    { concurrency: 1 }
+  );
+  yield* Effect.forEach(prepared, ({ call, input }) => recordToolCall(turn, call, input), {
+    concurrency: 1,
+    discard: true,
+  });
+  return prepared;
+});
+
+const collectValidPreparedCalls = (
+  prepared: ReadonlyArray<PreparedToolCall>
+): Option.Option<ReadonlyArray<ValidPreparedToolCall>> => {
+  const valid = prepared.filter((call): call is ValidPreparedToolCall => call._tag === "Valid");
+  return valid.length === prepared.length ? Option.some(valid) : Option.none();
+};
+
+const acceptGeneratedCalls = Effect.fn("AgentService.acceptGeneratedCalls")(function* (
+  turn: HostedTurn,
+  prepared: ReadonlyArray<PreparedToolCall>
+) {
+  const valid = collectValidPreparedCalls(prepared);
+  if (Option.isNone(valid)) {
+    yield* recordRejectedPreflight(turn, prepared, preflightRejected);
+    return Option.none();
+  }
+  if (requiresAtomicBatchCorrection(valid.value)) {
+    yield* recordRejectedPreflight(turn, prepared, atomicBatchRequired);
+    return Option.none();
+  }
+  return valid;
+});
+
+const settleGeneratedConfirmation = Effect.fn("AgentService.settleGeneratedConfirmation")(
+  function* (turn: HostedTurn, prepared: ReadonlyArray<ValidPreparedToolCall>) {
+    const settledCalls = yield* settleConfirmations(turn, prepared);
+    const challenge = settledCalls.find(
+      ({ confirmation }) => confirmation._tag === "RequireConfirmation"
+    );
+    if (challenge?.confirmation._tag !== "RequireConfirmation") return Option.none();
+    yield* Effect.forEach(
+      settledCalls,
+      ({ call, confirmation }) =>
+        recordToolOutcome(turn, call, {
+          _tag: "ToolInputRejected",
+          failure:
+            confirmation._tag === "RequireConfirmation" ? confirmation.failure : preflightRejected,
+        }),
+      { concurrency: 1, discard: true }
+    );
+    return Option.some(challenge.confirmation.failure.challenge);
+  }
+);
+
+const executeGeneratedCalls = Effect.fn("AgentService.executeGeneratedCalls")(function* (
+  turn: HostedTurn,
+  prepared: ReadonlyArray<ValidPreparedToolCall>
+) {
+  let completed = Option.none<TranscriptText>();
+  for (const preparedCall of prepared) {
+    const outcome = yield* executePreparedToolCall(turn, preparedCall);
+    if (outcome._tag === "TurnCompleted") completed = Option.some(outcome.text);
+  }
+  return Option.match(completed, {
+    onNone: (): GenerationResponse => continuedGeneration,
+    onSome: (text): GenerationResponse => ({ _tag: "Completed", text }),
+  });
 });
 
 const respondToGeneration = Effect.fn("AgentService.respondToGeneration")(function* (
@@ -508,16 +647,12 @@ const respondToGeneration = Effect.fn("AgentService.respondToGeneration")(functi
     return { _tag: "Completed", text: safeReplyText(decodedText) } as const;
   }
 
-  let pendingChallenge = Option.none<TranscriptText>();
-  for (const toolCall of generated.toolCalls) {
-    const outcome = yield* executeAgentToolCall(turn, iteration, toolCall);
-    if (outcome._tag === "TurnCompleted") return { _tag: "Completed", text: outcome.text } as const;
-    if (outcome._tag === "ChallengeIssued") pendingChallenge = Option.some(outcome.challenge);
-  }
-  return Option.match(pendingChallenge, {
-    onNone: (): GenerationResponse => continuedGeneration,
-    onSome: (challenge): GenerationResponse => ({ _tag: "Completed", text: challenge }),
-  });
+  const prepared = yield* prepareGeneratedCalls(turn, iteration, generated);
+  const accepted = yield* acceptGeneratedCalls(turn, prepared);
+  if (Option.isNone(accepted)) return continuedGeneration;
+  const challenge = yield* settleGeneratedConfirmation(turn, accepted.value);
+  if (Option.isSome(challenge)) return { _tag: "Completed", text: challenge.value } as const;
+  return yield* executeGeneratedCalls(turn, accepted.value);
 });
 
 const loadTranscriptWindow = (

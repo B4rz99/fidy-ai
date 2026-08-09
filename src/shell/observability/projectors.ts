@@ -342,6 +342,11 @@ export const ProjectedTransaction = Schema.Struct({
 });
 export type ProjectedTransaction = typeof ProjectedTransaction.Type;
 
+const transactionName = (descriptor: SpanDescriptor): string =>
+  descriptor.metadata._tag === "Http"
+    ? `${descriptor.metadata.method} ${descriptor.metadata.route}`
+    : descriptor.operation;
+
 const outcomeStatus = (outcome: DeclaredOutcome["outcome"]): ProjectedTrace["status"] => {
   switch (outcome) {
     case "succeeded":
@@ -371,10 +376,7 @@ export const projectTransaction = (input: {
   Option.flatMap(decodeStrict(SpanDescriptor, input.descriptor), (descriptor) =>
     Option.map(decodeStrict(DeclaredOutcome, input.outcome), (outcome) => ({
       type: "transaction" as const,
-      transaction:
-        descriptor.metadata._tag === "Http"
-          ? `${descriptor.metadata.method} ${descriptor.metadata.route}`
-          : descriptor.operation,
+      transaction: transactionName(descriptor),
       transaction_info: { source: "custom" as const },
       start_timestamp: input.startedAt,
       timestamp: input.finishedAt,

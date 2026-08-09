@@ -1,5 +1,5 @@
 import {
-  type Cause,
+  Cause,
   Clock,
   Context,
   Crypto,
@@ -7,6 +7,7 @@ import {
   DateTime,
   Duration,
   Effect,
+  Exit,
   Layer,
   Option,
   Random,
@@ -47,7 +48,9 @@ import {
   type SpanDescriptor,
   TelemetryAttempt,
   type TelemetryBreadcrumb,
+  TelemetryCount,
   TelemetryDuration,
+  maximumTelemetryCount,
 } from "~/shell/observability/protocol";
 import { Telemetry, type TelemetryService } from "~/shell/observability/telemetry";
 import { atomicBatchOperation } from "~/shell/operations/operations";
@@ -67,7 +70,7 @@ import {
   transcriptPrompt,
   turnPrompt,
 } from "./model-boundary";
-import { HostedToolCallCap, withHostedToolCallCap } from "./openai";
+import { HostedToolCallCap, fidyAgentModelCode, withHostedToolCallCap } from "./openai";
 import { makeTurnConfirmation } from "./tool-confirmation";
 import { renderTransactionReceipt } from "./transaction-receipt";
 import {
@@ -88,13 +91,21 @@ const modelRetryPolicy = {
   fallbackDelay: Duration.millis(100),
   jitterWindow: Duration.millis(100),
 } as const;
+const turnDescriptor: SpanDescriptor = {
+  component: "agent",
+  operation: "agent.hostedTurn",
+  trigger: "api",
+  spanOperation: "agent.turn",
+  workKind: "hosted_turn",
+  metadata: { _tag: "None" },
+};
 const modelRoundDescriptor: SpanDescriptor = {
   component: "agent",
   operation: "agent.modelRound",
   trigger: "api",
   spanOperation: "agent.model",
-  workKind: "model_round",
-  metadata: { _tag: "None" },
+  workKind: "model_call",
+  metadata: { _tag: "Model", model: fidyAgentModelCode },
 };
 
 /** Resource and context bounds applied independently to every hosted turn. */
@@ -767,6 +778,26 @@ type ModelAttemptState = {
   retryDelayMillis: number;
 };
 
+const telemetryTokenCount = (value: Option.Option<number>): TelemetryCount =>
+  TelemetryCount.make(
+    Math.min(maximumTelemetryCount, Math.max(0, Math.trunc(Option.getOrElse(value, () => 0))))
+  );
+
+const recordModelUsage = (
+  telemetry: TelemetryService,
+  state: ModelAttemptState,
+  generation: Option.Option<ModelGeneration>
+): Effect.Effect<void> =>
+  telemetry.recordModelUsage({
+    attempt: TelemetryAttempt.make(Math.max(1, state.attemptCount)),
+    inputTokens: telemetryTokenCount(
+      Option.flatMap(generation, ({ usage }) => Option.fromUndefinedOr(usage.inputTokens.total))
+    ),
+    outputTokens: telemetryTokenCount(
+      Option.flatMap(generation, ({ usage }) => Option.fromUndefinedOr(usage.outputTokens.total))
+    ),
+  });
+
 const retryDelayFits = (delay: Duration.Duration, remainingMillis: number): boolean =>
   Duration.toMillis(delay) + Duration.toMillis(modelRetryPolicy.minimumAttemptWindow) <=
   remainingMillis;
@@ -835,6 +866,16 @@ const finishModelTimeout = (
       error: Option.some("live_deadline_exhausted"),
       retryable: false,
     });
+    yield* recordModelUsage(telemetry, state, Option.none());
+    yield* telemetry.captureFailure({
+      _tag: "ExhaustedOperationalFailure",
+      component: "agent",
+      operation: "agent.modelRound",
+      error: "live_deadline_exhausted",
+      provider: Option.some("openai"),
+      retryable: false,
+      cause: failure,
+    });
     yield* Effect.annotateCurrentSpan({
       "agent.model.attempt_count": state.attemptCount,
       "agent.model.retry_delay_millis": state.retryDelayMillis,
@@ -857,6 +898,22 @@ const finishProviderAttempts = (
           retryable: result.failure.isRetryable,
         };
     yield* recordModelCompletion(telemetry, state.attemptCount, outcome);
+    yield* recordModelUsage(
+      telemetry,
+      state,
+      Result.isSuccess(result) ? Option.some(result.success) : Option.none()
+    );
+    if (Result.isFailure(result) && result.failure.reason._tag !== "InvalidOutputError") {
+      yield* telemetry.captureFailure({
+        _tag: "ExhaustedOperationalFailure",
+        component: "agent",
+        operation: "agent.modelRound",
+        error: "model_unavailable",
+        provider: Option.some("openai"),
+        retryable: result.failure.isRetryable,
+        cause: result.failure,
+      });
+    }
     yield* Effect.annotateCurrentSpan({
       "agent.model.attempt_count": state.attemptCount,
       "agent.model.retry_delay_millis": state.retryDelayMillis,
@@ -1096,6 +1153,7 @@ const runHostedTurn = (
   Crypto.Crypto | SqlClient.SqlClient | Telemetry
 > =>
   Effect.gen(function* () {
+    const telemetry = yield* Telemetry;
     let toolCalls = 0;
     let continuation: TurnModelContinuation = [];
     let feedback = Option.none<string>();
@@ -1129,8 +1187,103 @@ const runHostedTurn = (
       });
     }
 
+    if (Option.isSome(feedback)) {
+      yield* telemetry.captureFailure({
+        _tag: "ExhaustedOperationalFailure",
+        component: "agent",
+        operation: "agent.modelRound",
+        error: "model_unavailable",
+        provider: Option.some("openai"),
+        retryable: false,
+        cause: new Error("Model output recovery exhausted"),
+      });
+    }
     return iterationReply(turn, AgentIteration.make(turn.limits.maxIterations), exhaustedReply);
   });
+
+const turnFailureOutcome = (failure: AgentTurnError): DeclaredOutcome => {
+  switch (failure._tag) {
+    case "UnknownUser":
+      return {
+        outcome: "rejected",
+        error: Option.some("unknown_user"),
+        retryable: false,
+      };
+    case "OnboardingConsentRequired":
+      return {
+        outcome: "rejected",
+        error: Option.some("consent_required"),
+        retryable: false,
+      };
+    case "ModelResponseRejected":
+      return {
+        outcome: "rejected",
+        error: Option.some("model_response_rejected"),
+        retryable: false,
+      };
+    case "ModelUnavailable":
+      return {
+        outcome: "failed",
+        error: Option.some("model_unavailable"),
+        retryable: false,
+      };
+  }
+};
+
+const recordTurnExit = (
+  telemetry: TelemetryService,
+  exit: Exit.Exit<unknown, AgentTurnError>
+): Effect.Effect<void> => {
+  if (Exit.isSuccess(exit)) return Effect.void;
+  const { cause } = exit;
+  if (Cause.hasInterrupts(cause) && !Cause.hasDies(cause) && !Cause.hasFails(cause)) {
+    return telemetry.recordOutcome({
+      outcome: "interrupted",
+      error: Option.none(),
+      retryable: false,
+    });
+  }
+  if (Cause.hasDies(cause)) {
+    return Effect.all(
+      [
+        telemetry.recordOutcome({
+          outcome: "failed",
+          error: Option.some("unexpected_defect"),
+          retryable: false,
+        }),
+        telemetry.captureFailure({
+          _tag: "Defect",
+          component: "agent",
+          operation: "agent.hostedTurn",
+          error: "unexpected_defect",
+          cause,
+        }),
+      ],
+      { discard: true }
+    );
+  }
+  return Option.match(Exit.findErrorOption(exit), {
+    onNone: () => Effect.void,
+    onSome: (failure) => telemetry.recordOutcome(turnFailureOutcome(failure)),
+  });
+};
+
+const beginHostedTurn = Effect.fn("AgentService.beginHostedTurn")(function* (
+  userId: UserId,
+  message: InboundMessage
+) {
+  const turnId = yield* makeTurnId;
+  const occurredAt = yield* DateTime.now;
+  yield* appendAuthorizedTranscript(userId, [
+    UserTranscriptEntry.make({
+      id: yield* makeEntryId,
+      turnId,
+      text: message.text,
+      occurredAt,
+    }),
+  ]);
+  return { turnId, occurredAt } as const;
+});
 
 const makePrepareTurn = (
   model: LanguageModel.Service,
@@ -1143,49 +1296,46 @@ const makePrepareTurn = (
   AgentTurnError,
   Crypto.Crypto | HttpClient.HttpClient | SqlClient.SqlClient
 >) =>
-  Effect.fn("AgentService.prepareTurn")(function* (userId: UserId, message: InboundMessage) {
-    const limits = yield* CurrentAgentLimits;
-    const { user, confirmation } = yield* loadTurnContext(userId, message);
-    if (containsSensitiveChatValue(message.text)) {
-      return preparedReply(makeTextReply(credentialRejectedReply), Option.none());
-    }
-    const turnId = yield* makeTurnId;
-    const occurredAt = yield* DateTime.now;
-    const userEntry = UserTranscriptEntry.make({
-      id: yield* makeEntryId,
-      turnId,
-      text: message.text,
-      occurredAt,
-    });
-    yield* appendAuthorizedTranscript(userId, [userEntry]);
-    const hostedToken = yield* withCurrentConsent(
-      userId,
-      issueHostedAgentToken(userId, occurredAt)
-    );
-    const runTurn = Effect.scoped(
-      Effect.gen(function* () {
-        const toolkit = yield* makeAgentToolkit(hostedToken.bearer);
-        return yield* runHostedTurn(model, {
-          userId,
-          turnId,
-          user,
-          startedAt: occurredAt,
-          limits,
-          confirmation,
-          toolkit,
-        });
-      })
-    );
+  Effect.fn("AgentService.prepareTurn")((userId: UserId, message: InboundMessage) => {
+    const work = Effect.gen(function* () {
+      const limits = yield* CurrentAgentLimits;
+      const { user, confirmation } = yield* loadTurnContext(userId, message);
+      if (containsSensitiveChatValue(message.text)) {
+        return preparedReply(makeTextReply(credentialRejectedReply), Option.none());
+      }
+      const { turnId, occurredAt } = yield* beginHostedTurn(userId, message);
+      const hostedToken = yield* withCurrentConsent(
+        userId,
+        issueHostedAgentToken(userId, occurredAt)
+      );
+      const runTurn = Effect.scoped(
+        Effect.gen(function* () {
+          const toolkit = yield* makeAgentToolkit(hostedToken.bearer);
+          return yield* runHostedTurn(model, {
+            userId,
+            turnId,
+            user,
+            startedAt: occurredAt,
+            limits,
+            confirmation,
+            toolkit,
+          });
+        })
+      );
 
-    return yield* runTurn.pipe(
-      Effect.ensuring(
-        DateTime.now.pipe(
-          Effect.flatMap((revokedAt) =>
-            revokeHostedAgentToken(userId, hostedToken.tokenId, revokedAt)
+      return yield* runTurn.pipe(
+        Effect.ensuring(
+          DateTime.now.pipe(
+            Effect.flatMap((revokedAt) =>
+              revokeHostedAgentToken(userId, hostedToken.tokenId, revokedAt)
+            )
           )
         )
-      ),
-      Effect.provideService(Telemetry, telemetry)
+      );
+    }).pipe(Effect.provideService(Telemetry, telemetry));
+    return telemetry.span(
+      turnDescriptor,
+      Effect.onExit(work, (exit) => recordTurnExit(telemetry, exit))
     );
   });
 

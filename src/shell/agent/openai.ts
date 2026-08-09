@@ -1,8 +1,14 @@
 import { OpenAiClient, OpenAiLanguageModel } from "@effect/ai-openai";
 import { Config, type Effect, Layer, Schema } from "effect";
+import { TelemetryCodeSchema } from "~/shell/observability/registry";
 
-/** Direct launch model; model selection is not runtime-configurable. */
-export const HostedAgentModel = "gpt-5.6-luna";
+/** Direct launch model for Fidy's agent; model selection is not runtime-configurable. */
+export const FidyAgentModel = "gpt-5.6-luna";
+
+/** Telemetry-safe model code for Fidy's agent; provider response names are ignored. */
+export const fidyAgentModelCode = Schema.decodeUnknownSync(TelemetryCodeSchema.model)(
+  FidyAgentModel.replaceAll(/[.-]/gu, "_")
+);
 
 /** Fixed generation controls for predictable low-latency hosted turns. */
 export const HostedAgentGenerationConfig = {
@@ -35,6 +41,6 @@ const OpenAiClientLive = OpenAiClient.layerConfig({
 
 /** Production Effect AI adapter backed by OpenAI's Responses API. */
 export const OpenAiLanguageModelLive = OpenAiLanguageModel.layer({
-  model: HostedAgentModel,
+  model: FidyAgentModel,
   config: HostedAgentGenerationConfig,
 }).pipe(Layer.provide(OpenAiClientLive));

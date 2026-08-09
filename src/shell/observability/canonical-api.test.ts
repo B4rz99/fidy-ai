@@ -105,7 +105,10 @@ layer(ApiTelemetryHarness, { excludeTestServices: true, timeout: "30 seconds" })
           const absentTraces = transactionPayloads(absentEnvelopes);
 
           yield* recorder.clear;
-          const unauthorized = yield* HttpClient.get("/transactions");
+          const forgedTraceId = "a".repeat(32);
+          const unauthorized = yield* HttpClient.get("/transactions", {
+            headers: { traceparent: `00-${forgedTraceId}-${"b".repeat(16)}-01` },
+          });
           const unauthorizedEnvelopes = yield* recorder.serializedEnvelopes;
           const unauthorizedTraces = transactionPayloads(unauthorizedEnvelopes);
 
@@ -117,6 +120,7 @@ layer(ApiTelemetryHarness, { excludeTestServices: true, timeout: "30 seconds" })
           expect(unauthorizedTraces).toHaveLength(2);
           for (const trace of unauthorizedTraces) {
             expect(trace.tags).toMatchObject({ outcome: "rejected", error: "unauthenticated" });
+            expect(trace.contexts.trace.trace_id).not.toBe(forgedTraceId);
           }
           expect(errorPayloads(absentEnvelopes)).toEqual([]);
           expect(errorPayloads(unauthorizedEnvelopes)).toEqual([]);

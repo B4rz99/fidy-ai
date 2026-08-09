@@ -18,6 +18,7 @@ import {
   type DurableTraceContext,
   SpanDescriptor,
   type TelemetryBreadcrumb,
+  type TelemetryModelUsage,
   TelemetrySpanId,
   TelemetryTraceId,
 } from "./protocol";
@@ -208,6 +209,7 @@ type ActiveState = {
   readonly sampled: boolean;
   readonly breadcrumbs: Array<ProjectedBreadcrumb>;
   outcome: Option.Option<unknown>;
+  modelUsage: Option.Option<unknown>;
 };
 
 /** The private client state every adapter method needs: where events go, and which spans are live. */
@@ -461,6 +463,7 @@ const startTelemetrySpan = (
           sampled,
           breadcrumbs: [],
           outcome: Option.none(),
+          modelUsage: Option.none(),
         };
         sink.knownStates.set(state, state);
         return Option.some({ traceId, spanId, sampled, state });
@@ -485,6 +488,7 @@ const finishTelemetrySpan = (
           startedAt: state.startedAt,
           finishedAt: now / millisecondsPerSecond,
           breadcrumbs: state.breadcrumbs,
+          modelUsage: state.modelUsage,
         });
         if (Option.isSome(projected)) capture(sink.scope, projected.value);
       }
@@ -499,6 +503,17 @@ const recordSpanOutcome = (
   Effect.sync(() => {
     Option.map(activeState(sink.knownStates, span), (state) => {
       state.outcome = Option.some(outcome);
+    });
+  });
+
+const recordModelUsage = (
+  sink: TelemetrySink,
+  span: TelemetrySpan,
+  usage: TelemetryModelUsage
+): Effect.Effect<void> =>
+  Effect.sync(() => {
+    Option.map(activeState(sink.knownStates, span), (state) => {
+      state.modelUsage = Option.some(usage);
     });
   });
 
@@ -568,6 +583,7 @@ const telemetryAdapter = (
     recordOutcome: (span, outcome) => recordSpanOutcome(sink, span, outcome),
     captureFailure: (span, failure) => captureTelemetryFailure(sink, span, failure),
     addBreadcrumb: (span, breadcrumb) => addTelemetryBreadcrumb(sink, span, breadcrumb),
+    recordModelUsage: (span, usage) => recordModelUsage(sink, span, usage),
   };
 };
 

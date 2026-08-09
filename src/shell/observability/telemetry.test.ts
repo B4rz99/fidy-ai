@@ -2,8 +2,20 @@ import { expect, it } from "@effect/vitest";
 import { Cause, Context, Effect, Exit, Layer, Option } from "effect";
 import { makeSpanDescriptor } from "~/shell/testing/telemetry-fixtures";
 import { TelemetryDisabled } from "./disabled";
-import { TelemetrySpanId, TelemetryTraceId } from "./protocol";
-import { Telemetry, type TelemetryAdapter, type TelemetrySpan } from "./telemetry";
+import {
+  DurableTraceContext,
+  TelemetryAttempt,
+  TelemetryCount,
+  TelemetrySpanId,
+  TelemetryTraceId,
+} from "./protocol";
+import {
+  Telemetry,
+  type TelemetryAdapter,
+  type TelemetrySpan,
+  decodeTraceParent,
+  encodeTraceParent,
+} from "./telemetry";
 
 const telemetryLayer = (adapter: TelemetryAdapter): Layer.Layer<Telemetry> =>
   Telemetry.layer(Effect.succeed({ adapter, close: Effect.void }));
@@ -16,11 +28,44 @@ const unobservedAdapter: TelemetryAdapter = {
   recordOutcome: () => Effect.void,
   captureFailure: () => Effect.void,
   addBreadcrumb: () => Effect.void,
+  recordModelUsage: () => Effect.void,
 };
 
 const makeTelemetryAdapter = (overrides: Partial<TelemetryAdapter> = {}): TelemetryAdapter => ({
   ...unobservedAdapter,
   ...overrides,
+});
+
+it("round-trips strict W3C loopback trace coordinates without baggage", () => {
+  const context = DurableTraceContext.make({
+    version: 1,
+    traceId: TelemetryTraceId.make("0123456789abcdef0123456789abcdef"),
+    parentSpanId: TelemetrySpanId.make("0123456789abcdef"),
+    sampled: false,
+    capturedAtUnixMilliseconds: 123,
+  });
+  const traceparent = encodeTraceParent(context);
+
+  expect(traceparent).toBe("00-0123456789abcdef0123456789abcdef-0123456789abcdef-00");
+  expect(
+    decodeTraceParent({
+      value: Option.some(traceparent),
+      receivedAtUnixMilliseconds: 456,
+    })
+  ).toEqual(
+    Option.some(
+      DurableTraceContext.make({
+        ...context,
+        capturedAtUnixMilliseconds: 456,
+      })
+    )
+  );
+  expect(
+    decodeTraceParent({
+      value: Option.some("00-0123456789abcdef0123456789abcdef-0123456789abcdef-02-extra"),
+      receivedAtUnixMilliseconds: 456,
+    })
+  ).toEqual(Option.none());
 });
 
 it.effect("disabled telemetry preserves every application outcome without observing work", () =>
@@ -49,6 +94,11 @@ it.effect("disabled telemetry preserves every application outcome without observ
       attempt: Option.none(),
       durationMilliseconds: Option.none(),
     });
+    yield* telemetry.recordModelUsage({
+      attempt: TelemetryAttempt.make(1),
+      inputTokens: TelemetryCount.make(10),
+      outputTokens: TelemetryCount.make(5),
+    });
     yield* telemetry.captureFailure({
       _tag: "Defect",
       component: "agent",
@@ -64,6 +114,36 @@ it.effect("disabled telemetry preserves every application outcome without observ
     ).toBe(true);
     expect(Exit.isFailure(defect) && Cause.hasDies(defect.cause)).toBe(true);
     expect(yield* telemetry.captureDurableContext).toEqual(Option.none());
+  })
+);
+
+it.effect("proves only currently active in-process span coordinates", () =>
+  Effect.gen(function* () {
+    const adapter = makeTelemetryAdapter({
+      startSpan: () =>
+        Effect.succeed(
+          Option.some({
+            traceId: TelemetryTraceId.make("1".repeat(32)),
+            spanId: TelemetrySpanId.make("2".repeat(16)),
+            sampled: true,
+            state: {},
+          })
+        ),
+    });
+    const services = yield* Layer.build(telemetryLayer(adapter));
+    const telemetry = Context.get(services, Telemetry);
+    const context = yield* telemetry.span(
+      descriptor,
+      Effect.gen(function* () {
+        const captured = yield* telemetry.captureDurableContext;
+        const active = Option.getOrThrow(captured);
+        expect(yield* telemetry.isActiveSpan(active, "agent.hostedTurn")).toBe(true);
+        expect(yield* telemetry.isActiveSpan(active, "agent.modelRound")).toBe(false);
+        return active;
+      })
+    );
+
+    expect(yield* telemetry.isActiveSpan(context, "agent.hostedTurn")).toBe(false);
   })
 );
 
@@ -168,6 +248,9 @@ it.effect("synchronous adapter defects never alter work or escape observation me
       addBreadcrumb: () => {
         throw new Error("breadcrumb-adapter-sentinel");
       },
+      recordModelUsage: () => {
+        throw new Error("model-usage-adapter-sentinel");
+      },
     });
     const services = yield* Layer.build(telemetryLayer(adapter));
     const telemetry = Context.get(services, Telemetry);
@@ -188,6 +271,11 @@ it.effect("synchronous adapter defects never alter work or escape observation me
             error: Option.none(),
             attempt: Option.none(),
             durationMilliseconds: Option.none(),
+          });
+          yield* telemetry.recordModelUsage({
+            attempt: TelemetryAttempt.make(1),
+            inputTokens: TelemetryCount.make(10),
+            outputTokens: TelemetryCount.make(5),
           });
           yield* telemetry.captureFailure({
             _tag: "Defect",

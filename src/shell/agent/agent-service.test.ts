@@ -34,13 +34,19 @@ import {
   EnvelopeRecorder,
   TelemetryEnvelopeRecording,
 } from "~/shell/observability/envelope-recorder";
+import type { SpanDescriptor } from "~/shell/observability/protocol";
+import { Telemetry } from "~/shell/observability/telemetry";
+import {
+  errorEnvelopePayloads,
+  transactionEnvelopePayloads,
+} from "~/shell/testing/telemetry-envelope-fixtures";
 import {
   defaultUserId,
   defaultWhatsAppPhone,
   seedConsentedAgentIdentity,
 } from "~/shell/db/development-seed";
 import { listRecentTranscriptEntries, listTranscriptEntries } from "~/shell/transcript/repo";
-import { ApiHarness, ApiHarnessClient } from "~/shell/testing/api-harness";
+import { ApiHarness, ApiHarnessClient, ApiTelemetryHarness } from "~/shell/testing/api-harness";
 import { testWhatsAppCaller } from "~/shell/testing/whatsapp-caller";
 import { makeLanguageModelFinishPart } from "~/shell/testing/language-model-fixtures";
 import { runAgentRepl } from "./repl";
@@ -1047,6 +1053,26 @@ const retryScenarioReply = (serialized: string, attempt: number): Option.Option<
   return attempt === 0 ? Option.some(scenario.initial) : scenario.subsequent;
 };
 
+const invalidOutputScenario = (
+  serialized: string
+): Option.Option<Effect.Effect<ModelReply, AiError.AiError>> => {
+  if (serialized.includes("SALIDA_INVALIDA_PERSISTENTE")) {
+    return Option.some(
+      testModelFailure(
+        AiError.InvalidOutputError.make({ description: "persistent_malformed_provider_payload" })
+      )
+    );
+  }
+  if (!serialized.includes("SALIDA_INVALIDA_RECUPERABLE")) return Option.none();
+  return Option.some(
+    serialized.includes("Validation reason:")
+      ? retrySuccess
+      : testModelFailure(
+          AiError.InvalidOutputError.make({ description: "malformed_provider_payload" })
+        )
+  );
+};
+
 const scriptedModelAttempt = ({
   serialized,
   tools,
@@ -1059,6 +1085,11 @@ const scriptedModelAttempt = ({
   attempt: number;
 }>): Effect.Effect<ModelReply, AiError.AiError> => {
   if (serialized.includes("MODELO_BLOQUEADO")) return Effect.never;
+  if (serialized.includes("MODELO_DEFECTUOSO")) {
+    return Effect.die(new Error("provider_response_id_defect_sentinel"));
+  }
+  const invalidOutput = invalidOutputScenario(serialized);
+  if (Option.isSome(invalidOutput)) return invalidOutput.value;
   const retryReply = retryScenarioReply(serialized, attempt);
   if (Option.isSome(retryReply)) return retryReply.value;
   if (serialized.includes("RESPUESTA_TRUNCADA")) {
@@ -1108,6 +1139,436 @@ const AgentHarness = AgentService.layer.pipe(
   Layer.provideMerge(ScriptedLanguageModel),
   Layer.provideMerge(ApiHarness),
   Layer.provideMerge(TelemetryEnvelopeRecording)
+);
+
+const AgentTelemetryHarness = AgentService.layer.pipe(
+  Layer.provideMerge(ScriptedLanguageModel),
+  Layer.provideMerge(ApiTelemetryHarness)
+);
+
+const prepareTelemetryTest = Effect.gen(function* () {
+  yield* clearTranscript;
+  const service = yield* AgentService;
+  const telemetry = yield* Telemetry;
+  const recorder = yield* EnvelopeRecorder;
+  yield* recorder.clear;
+  return { service, telemetry, recorder } as const;
+});
+
+const activeCallerDescriptor = {
+  component: "api",
+  operation: "http.canonicalRequest",
+  trigger: "api",
+  spanOperation: "http.server",
+  workKind: "http_request",
+  metadata: {
+    _tag: "Http",
+    method: "POST",
+    route: "/compatibility/:case",
+    status: Option.none(),
+  },
+} as const satisfies SpanDescriptor;
+
+layer(AgentTelemetryHarness, { excludeTestServices: true, timeout: "30 seconds" })(
+  "hosted agent telemetry",
+  (it) => {
+    it.effect("traces a complete turn, model work, and localhost canonical calls", () =>
+      Effect.gen(function* () {
+        const { service, telemetry, recorder } = yield* prepareTelemetryTest;
+
+        const reply = yield* telemetry.span(
+          activeCallerDescriptor,
+          service.handleSynchronousTurn(
+            defaultUserId,
+            InboundMessage.make({ text: TranscriptText.make("Lista las categorías") })
+          )
+        );
+        const transcript = yield* listTranscriptEntries(defaultUserId);
+        const envelopes = yield* recorder.serializedEnvelopes;
+        const transactions = transactionEnvelopePayloads(envelopes);
+        const caller = transactions
+          .filter(({ contexts }) => contexts.trace.op === "http.server")
+          .find(({ contexts }) => contexts.trace.data["http.route"] === "/compatibility/:case");
+        const turn = transactions.find(({ contexts }) => contexts.trace.op === "agent.turn");
+        assert(caller !== undefined);
+        assert(turn !== undefined);
+        const modelSpans = transactions.filter(
+          ({ contexts }) => contexts.trace.op === "agent.model"
+        );
+        const canonicalHttp = transactions
+          .filter(({ contexts }) => contexts.trace.op === "http.server")
+          .filter(({ contexts }) => contexts.trace.parent_span_id === turn.contexts.trace.span_id)
+          .find(({ tags }) => tags.operation === "http.canonicalRequest");
+        const canonical = transactions
+          .filter(({ contexts }) => contexts.trace.op === "fidy.operation")
+          .filter(
+            ({ contexts }) =>
+              contexts.trace.parent_span_id === canonicalHttp?.contexts.trace.span_id
+          )
+          .find(({ tags }) => tags.operation === "categories.listCategories");
+        const serialized = envelopes.map((bytes) => new TextDecoder().decode(bytes)).join("\n");
+
+        expect(reply.text).toBe("Estas son las categorías disponibles.");
+        expect(transcript.map((entry) => entry._tag)).toEqual([
+          "UserTranscriptEntry",
+          "CanonicalToolCallEntry",
+          "CanonicalToolResultEntry",
+          "AssistantTranscriptEntry",
+        ]);
+        assert(canonicalHttp !== undefined);
+        assert(canonical !== undefined);
+        const firstModelSpan = modelSpans[0];
+        assert(firstModelSpan !== undefined);
+        expect(turn.contexts.trace.parent_span_id).toBe(caller.contexts.trace.span_id);
+        expect(modelSpans).toHaveLength(2);
+        expect(
+          modelSpans.every(
+            (span) => span.contexts.trace.parent_span_id === turn.contexts.trace.span_id
+          )
+        ).toBe(true);
+        expect(firstModelSpan.contexts.trace.data).toMatchObject({
+          "gen_ai.request.model": "gpt_5_6_luna",
+          "fidy.attempt": 1,
+          "gen_ai.usage.input_tokens": 150,
+          "gen_ai.usage.output_tokens": 20,
+        });
+        expect(typeof firstModelSpan.contexts.trace.data["fidy.duration_milliseconds"]).toBe(
+          "number"
+        );
+        expect(canonicalHttp.contexts.trace.parent_span_id).toBe(turn.contexts.trace.span_id);
+        expect(canonical.contexts.trace.parent_span_id).toBe(canonicalHttp.contexts.trace.span_id);
+        expect(errorEnvelopePayloads(envelopes)).toEqual([]);
+        expect(serialized).not.toContain("Lista las categorías");
+        expect(serialized).not.toContain("Estas son las categorías disponibles.");
+        expect(serialized).not.toContain("categories__listCategories");
+        expect(serialized).not.toContain("fin_hosted_");
+      })
+    );
+
+    it.effect("captures only an exhausted provider failure and marks its spans failed", () =>
+      Effect.gen(function* () {
+        const { service, telemetry, recorder } = yield* prepareTelemetryTest;
+
+        const exit = yield* telemetry
+          .span(
+            activeCallerDescriptor,
+            service.handleSynchronousTurn(
+              defaultUserId,
+              InboundMessage.make({ text: TranscriptText.make("RETRY_NON_RETRYABLE") })
+            )
+          )
+          .pipe(Effect.exit);
+        const envelopes = yield* recorder.serializedEnvelopes;
+        const transactions = transactionEnvelopePayloads(envelopes);
+        const errors = errorEnvelopePayloads(envelopes);
+
+        expect(Exit.isFailure(exit)).toBe(true);
+        expect(
+          transactions.find(({ contexts }) => contexts.trace.op === "agent.model")?.tags
+        ).toMatchObject({ outcome: "failed", error: "model_unavailable" });
+        expect(
+          transactions.find(({ contexts }) => contexts.trace.op === "agent.turn")?.tags
+        ).toMatchObject({ outcome: "failed", error: "model_unavailable" });
+        expect(errors).toHaveLength(1);
+        expect(errors[0]?.tags).toMatchObject({
+          component: "agent",
+          operation: "agent.modelRound",
+          error: "model_unavailable",
+          provider: "openai",
+        });
+      })
+    );
+
+    it.effect("does not create an error issue when invalid provider output recovers", () =>
+      Effect.gen(function* () {
+        const { service, telemetry, recorder } = yield* prepareTelemetryTest;
+
+        const reply = yield* telemetry.span(
+          activeCallerDescriptor,
+          service.handleSynchronousTurn(
+            defaultUserId,
+            InboundMessage.make({ text: TranscriptText.make("SALIDA_INVALIDA_RECUPERABLE") })
+          )
+        );
+        const envelopes = yield* recorder.serializedEnvelopes;
+        const modelSpans = transactionEnvelopePayloads(envelopes).filter(
+          ({ contexts }) => contexts.trace.op === "agent.model"
+        );
+
+        expect(reply.text).toBe("Reintento completado.");
+        expect(modelSpans).toHaveLength(2);
+        expect(modelSpans.map(({ tags }) => tags.outcome)).toEqual(["failed", "succeeded"]);
+        expect(errorEnvelopePayloads(envelopes)).toEqual([]);
+      })
+    );
+
+    it.effect("creates one error issue when invalid-output recovery is exhausted", () =>
+      Effect.gen(function* () {
+        const { service, telemetry, recorder } = yield* prepareTelemetryTest;
+
+        const reply = yield* telemetry.span(
+          activeCallerDescriptor,
+          service.handleSynchronousTurn(
+            defaultUserId,
+            InboundMessage.make({ text: TranscriptText.make("SALIDA_INVALIDA_PERSISTENTE") })
+          )
+        );
+        const envelopes = yield* recorder.serializedEnvelopes;
+        const modelSpans = transactionEnvelopePayloads(envelopes).filter(
+          ({ contexts }) => contexts.trace.op === "agent.model"
+        );
+        const errors = errorEnvelopePayloads(envelopes);
+
+        expect(reply.text).toContain("límite seguro");
+        expect(modelSpans.length).toBeGreaterThan(1);
+        expect(modelSpans.every(({ tags }) => tags.outcome === "failed")).toBe(true);
+        expect(errors).toHaveLength(1);
+        expect(errors[0]?.tags).toMatchObject({
+          component: "agent",
+          operation: "agent.modelRound",
+          error: "model_unavailable",
+          provider: "openai",
+        });
+      })
+    );
+
+    it.effect("records typed rejection outcomes without creating error issues", () =>
+      Effect.gen(function* () {
+        const { service, telemetry, recorder } = yield* prepareTelemetryTest;
+
+        const exit = yield* telemetry
+          .span(
+            activeCallerDescriptor,
+            service.handleSynchronousTurn(
+              defaultUserId,
+              InboundMessage.make({ text: TranscriptText.make("RESPUESTA_TRUNCADA") })
+            )
+          )
+          .pipe(Effect.exit);
+        const envelopes = yield* recorder.serializedEnvelopes;
+        const turn = transactionEnvelopePayloads(envelopes).find(
+          ({ contexts }) => contexts.trace.op === "agent.turn"
+        );
+
+        expect(Exit.isFailure(exit)).toBe(true);
+        expect(turn?.tags).toMatchObject({
+          outcome: "rejected",
+          error: "model_response_rejected",
+        });
+        expect(errorEnvelopePayloads(envelopes)).toEqual([]);
+      })
+    );
+
+    it.effect("keeps declared canonical and identity rejections out of error issues", () =>
+      Effect.gen(function* () {
+        const { service, telemetry, recorder } = yield* prepareTelemetryTest;
+
+        const reply = yield* telemetry.span(
+          activeCallerDescriptor,
+          service.handleSynchronousTurn(
+            defaultUserId,
+            InboundMessage.make({ text: TranscriptText.make("Busca la transacción inexistente") })
+          )
+        );
+        const canonicalEnvelopes = yield* recorder.serializedEnvelopes;
+        const canonicalOutcomes = transactionEnvelopePayloads(canonicalEnvelopes).filter(
+          ({ tags }) => tags.error === "not_found"
+        );
+
+        yield* recorder.clear;
+        const unknownUser = UserId.make("f1d1a000-0000-4000-8000-00000000dead");
+        const identityExit = yield* telemetry
+          .span(
+            activeCallerDescriptor,
+            service.handleSynchronousTurn(
+              unknownUser,
+              InboundMessage.make({ text: TranscriptText.make("identidad ausente") })
+            )
+          )
+          .pipe(Effect.exit);
+        const identityEnvelopes = yield* recorder.serializedEnvelopes;
+        const identityTurn = transactionEnvelopePayloads(identityEnvelopes).find(
+          ({ contexts }) => contexts.trace.op === "agent.turn"
+        );
+
+        expect(reply.text).toBe("No encontré esa transacción.");
+        expect(canonicalOutcomes).not.toHaveLength(0);
+        expect(errorEnvelopePayloads(canonicalEnvelopes)).toEqual([]);
+        expect(Exit.isFailure(identityExit)).toBe(true);
+        expect(identityTurn?.tags).toMatchObject({
+          outcome: "rejected",
+          error: "consent_required",
+        });
+        expect(errorEnvelopePayloads(identityEnvelopes)).toEqual([]);
+      })
+    );
+
+    it.effect("captures an unexpected model defect exactly once at the turn owner", () =>
+      Effect.gen(function* () {
+        const { service, telemetry, recorder } = yield* prepareTelemetryTest;
+
+        const exit = yield* telemetry
+          .span(
+            activeCallerDescriptor,
+            service.handleSynchronousTurn(
+              defaultUserId,
+              InboundMessage.make({ text: TranscriptText.make("MODELO_DEFECTUOSO") })
+            )
+          )
+          .pipe(Effect.exit);
+        const envelopes = yield* recorder.serializedEnvelopes;
+        const errors = errorEnvelopePayloads(envelopes);
+        const serialized = envelopes.map((bytes) => new TextDecoder().decode(bytes)).join("\n");
+
+        expect(Exit.isFailure(exit)).toBe(true);
+        expect(errors).toHaveLength(1);
+        expect(errors[0]?.tags).toMatchObject({
+          component: "agent",
+          operation: "agent.hostedTurn",
+          error: "unexpected_defect",
+        });
+        expect(serialized).not.toContain("provider_response_id_defect_sentinel");
+      })
+    );
+
+    it.effect("captures a canonical tool defect exactly once at the hosted-turn owner", () =>
+      Effect.gen(function* () {
+        const { service, telemetry, recorder } = yield* prepareTelemetryTest;
+        const sql = yield* MigrationSqlClient;
+        yield* sql`
+          CREATE OR REPLACE FUNCTION reject_agent_capture() RETURNS trigger AS $$
+          BEGIN
+            RAISE EXCEPTION 'canonical_defect_payload_sentinel';
+          END;
+          $$ LANGUAGE plpgsql
+        `;
+        yield* sql`DROP TRIGGER IF EXISTS reject_agent_capture ON transactions`;
+        yield* sql`
+          CREATE TRIGGER reject_agent_capture BEFORE INSERT ON transactions
+          FOR EACH ROW EXECUTE FUNCTION reject_agent_capture()
+        `;
+        const removeFailure = sql`DROP TRIGGER IF EXISTS reject_agent_capture ON transactions`.pipe(
+          Effect.andThen(sql`DROP FUNCTION IF EXISTS reject_agent_capture()`),
+          Effect.orDie
+        );
+
+        const exit = yield* telemetry
+          .span(
+            activeCallerDescriptor,
+            service.handleSynchronousTurn(
+              defaultUserId,
+              InboundMessage.make({ text: TranscriptText.make("almuerzo 25 mil") })
+            )
+          )
+          .pipe(Effect.exit, Effect.ensuring(removeFailure));
+        const envelopes = yield* recorder.serializedEnvelopes;
+        const errors = errorEnvelopePayloads(envelopes);
+        const serialized = envelopes.map((bytes) => new TextDecoder().decode(bytes)).join("\n");
+
+        expect(Exit.isFailure(exit)).toBe(true);
+        expect(errors).toHaveLength(1);
+        expect(errors[0]?.tags).toMatchObject({
+          component: "agent",
+          operation: "agent.hostedTurn",
+          error: "unexpected_defect",
+        });
+        expect(serialized).not.toContain("canonical_defect_payload_sentinel");
+      })
+    );
+
+    it.effect("does not report normal turn interruption as a defect", () =>
+      Effect.gen(function* () {
+        const { service, telemetry, recorder } = yield* prepareTelemetryTest;
+
+        const fiber = yield* telemetry
+          .span(
+            activeCallerDescriptor,
+            service.handleSynchronousTurn(
+              defaultUserId,
+              InboundMessage.make({ text: TranscriptText.make("MODELO_BLOQUEADO") })
+            )
+          )
+          .pipe(
+            Effect.provideService(CurrentAgentLimits, agentLimits({ maxModelRoundMillis: 10_000 })),
+            Effect.forkChild
+          );
+        yield* awaitModelAttempts("MODELO_BLOQUEADO", 1);
+        yield* Fiber.interrupt(fiber);
+        const envelopes = yield* recorder.serializedEnvelopes;
+        const turn = transactionEnvelopePayloads(envelopes).find(
+          ({ contexts }) => contexts.trace.op === "agent.turn"
+        );
+
+        expect(turn?.tags).toMatchObject({ outcome: "interrupted" });
+        expect(errorEnvelopePayloads(envelopes)).toEqual([]);
+      })
+    );
+
+    it.effect("isolates model breadcrumbs and outcomes across concurrent turns", () =>
+      Effect.gen(function* () {
+        const sql = yield* MigrationSqlClient;
+        const userB = UserId.make("f1d1a000-0000-4000-8000-000000000113");
+        yield* clearTranscript;
+        yield* sql`DELETE FROM transcript_entries WHERE user_id = ${userB}`;
+        yield* sql`DELETE FROM agent_tokens WHERE user_id = ${userB}`;
+        yield* seedConsentedAgentIdentity({
+          userId: userB,
+          bearer: AgentBearerToken.make("fin_agent113_abcdefghijklmnopqrstuvwxyz0123456789ABCD"),
+          scopes: ["read"],
+        });
+        const service = yield* AgentService;
+        const telemetry = yield* Telemetry;
+        const recorder = yield* EnvelopeRecorder;
+        yield* recorder.clear;
+
+        yield* Effect.all(
+          [
+            telemetry
+              .span(
+                activeCallerDescriptor,
+                service.handleSynchronousTurn(
+                  defaultUserId,
+                  InboundMessage.make({ text: TranscriptText.make("RETRY_AFTER_SUCCESS") })
+                )
+              )
+              .pipe(Effect.exit),
+            telemetry
+              .span(
+                activeCallerDescriptor,
+                service.handleSynchronousTurn(
+                  userB,
+                  InboundMessage.make({ text: TranscriptText.make("RESPUESTA_TRUNCADA") })
+                )
+              )
+              .pipe(Effect.exit),
+          ],
+          { concurrency: "unbounded" }
+        );
+        const transactions = transactionEnvelopePayloads(yield* recorder.serializedEnvelopes);
+        const turns = transactions.filter(({ contexts }) => contexts.trace.op === "agent.turn");
+        const models = transactions.filter(({ contexts }) => contexts.trace.op === "agent.model");
+        const successfulTurn = turns.find(({ tags }) => tags.outcome === "succeeded");
+        const rejectedTurn = turns.find(({ tags }) => tags.outcome === "rejected");
+        const retriedModel = models.find(
+          ({ contexts }) => contexts.trace.data["fidy.attempt"] === 2
+        );
+        const singleAttemptModel = models.find(
+          ({ contexts }) => contexts.trace.data["fidy.attempt"] === 1
+        );
+
+        expect(turns).toHaveLength(2);
+        expect(models).toHaveLength(2);
+        expect(retriedModel?.contexts.trace.trace_id).toBe(successfulTurn?.contexts.trace.trace_id);
+        expect(singleAttemptModel?.contexts.trace.trace_id).toBe(
+          rejectedTurn?.contexts.trace.trace_id
+        );
+        expect(retriedModel?.breadcrumbs.map(({ message }) => message)).toContain("retry_started");
+        expect(singleAttemptModel?.breadcrumbs.map(({ message }) => message)).not.toContain(
+          "retry_started"
+        );
+      })
+    );
+  }
 );
 
 layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hosted agent", (it) => {

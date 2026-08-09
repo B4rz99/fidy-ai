@@ -15,6 +15,7 @@ import {
   TelemetryDuration,
   TelemetryHttpMethod,
   TelemetryHttpStatus,
+  TelemetryModelUsage,
   TelemetrySpanId,
   TelemetryTraceId,
 } from "./protocol";
@@ -174,13 +175,17 @@ export const projectBreadcrumb = (input: {
 
 const maximumTelemetryDurationMilliseconds = 86_400_000;
 const millisecondsPerSecond = 1_000;
+const durationWorkKinds = new Set<SpanDescriptor["workKind"]>([
+  "scheduled_execution",
+  "model_call",
+]);
 
-const scheduledDurationAttributes = (input: {
+const elapsedDurationAttributes = (input: {
   readonly workKind: SpanDescriptor["workKind"];
   readonly startedAt: number;
   readonly finishedAt: number;
 }): Readonly<Record<string, TelemetryDuration>> =>
-  input.workKind === "scheduled_execution"
+  durationWorkKinds.has(input.workKind)
     ? {
         "fidy.duration_milliseconds": TelemetryDuration.make(
           Math.min(
@@ -192,7 +197,8 @@ const scheduledDurationAttributes = (input: {
     : {};
 
 const spanAttributes = (
-  metadata: SpanDescriptor["metadata"]
+  metadata: SpanDescriptor["metadata"],
+  modelUsage: Option.Option<TelemetryModelUsage>
 ): Readonly<Record<string, string | number | boolean>> => {
   switch (metadata._tag) {
     case "None":
@@ -229,9 +235,14 @@ const spanAttributes = (
     case "Model":
       return {
         "gen_ai.request.model": metadata.model,
-        "fidy.attempt": metadata.attempt,
-        "gen_ai.usage.input_tokens": metadata.inputTokens,
-        "gen_ai.usage.output_tokens": metadata.outputTokens,
+        ...Option.match(modelUsage, {
+          onNone: () => ({}),
+          onSome: (usage) => ({
+            "fidy.attempt": usage.attempt,
+            "gen_ai.usage.input_tokens": usage.inputTokens,
+            "gen_ai.usage.output_tokens": usage.outputTokens,
+          }),
+        }),
       };
     case "Schedule":
       return { "fidy.attempt": metadata.attempt };
@@ -360,6 +371,29 @@ const outcomeStatus = (outcome: DeclaredOutcome["outcome"]): ProjectedTrace["sta
   }
 };
 
+const transactionData = ({
+  descriptor,
+  outcome,
+  modelUsage,
+  startedAt,
+  finishedAt,
+}: Readonly<{
+  descriptor: SpanDescriptor;
+  outcome: DeclaredOutcome;
+  modelUsage: Option.Option<TelemetryModelUsage>;
+  startedAt: number;
+  finishedAt: number;
+}>): ProjectedTrace["data"] => ({
+  "fidy.component": descriptor.component,
+  "fidy.operation": descriptor.operation,
+  "fidy.trigger": descriptor.trigger,
+  "fidy.work_kind": descriptor.workKind,
+  "fidy.outcome": outcome.outcome,
+  "fidy.retryable": outcome.retryable,
+  ...elapsedDurationAttributes({ workKind: descriptor.workKind, startedAt, finishedAt }),
+  ...spanAttributes(descriptor.metadata, modelUsage),
+});
+
 /** Strictly reconstructs the transaction event for one completed bounded span. */
 export const projectTransaction = (input: {
   readonly descriptor: unknown;
@@ -372,54 +406,53 @@ export const projectTransaction = (input: {
   /** Span completion as a Unix timestamp in seconds. */
   readonly finishedAt: number;
   readonly breadcrumbs: ReadonlyArray<ProjectedBreadcrumb>;
+  readonly modelUsage: Option.Option<unknown>;
 }): Option.Option<ProjectedTransaction> =>
   Option.flatMap(decodeStrict(SpanDescriptor, input.descriptor), (descriptor) =>
-    Option.map(decodeStrict(DeclaredOutcome, input.outcome), (outcome) => ({
-      type: "transaction" as const,
-      transaction: transactionName(descriptor),
-      transaction_info: { source: "custom" as const },
-      start_timestamp: input.startedAt,
-      timestamp: input.finishedAt,
-      contexts: {
-        trace: {
-          trace_id: input.traceId,
-          span_id: input.spanId,
-          ...Option.match(input.parentSpanId, {
-            onNone: () => ({}),
-            onSome: (parent_span_id) => ({ parent_span_id }),
-          }),
-          op: descriptor.spanOperation,
-          status: outcomeStatus(outcome.outcome),
-          data: {
-            "fidy.component": descriptor.component,
-            "fidy.operation": descriptor.operation,
-            "fidy.trigger": descriptor.trigger,
-            "fidy.work_kind": descriptor.workKind,
-            "fidy.outcome": outcome.outcome,
-            "fidy.retryable": outcome.retryable,
-            ...scheduledDurationAttributes({
-              workKind: descriptor.workKind,
+    Option.map(decodeStrict(DeclaredOutcome, input.outcome), (outcome) => {
+      const modelUsage = Option.flatMap(input.modelUsage, (usage) =>
+        decodeStrict(TelemetryModelUsage, usage)
+      );
+      return {
+        type: "transaction" as const,
+        transaction: transactionName(descriptor),
+        transaction_info: { source: "custom" as const },
+        start_timestamp: input.startedAt,
+        timestamp: input.finishedAt,
+        contexts: {
+          trace: {
+            trace_id: input.traceId,
+            span_id: input.spanId,
+            ...Option.match(input.parentSpanId, {
+              onNone: () => ({}),
+              onSome: (parent_span_id) => ({ parent_span_id }),
+            }),
+            op: descriptor.spanOperation,
+            status: outcomeStatus(outcome.outcome),
+            data: transactionData({
+              descriptor,
+              outcome,
+              modelUsage,
               startedAt: input.startedAt,
               finishedAt: input.finishedAt,
             }),
-            ...spanAttributes(descriptor.metadata),
           },
         },
-      },
-      tags: {
-        component: descriptor.component,
-        operation: descriptor.operation,
-        trigger: descriptor.trigger,
-        work_kind: descriptor.workKind,
-        outcome: outcome.outcome,
-        retryable: outcome.retryable ? "true" : "false",
-        ...Option.match(outcome.error, {
-          onNone: () => ({}),
-          onSome: (error) => ({ error }),
-        }),
-      },
-      breadcrumbs: input.breadcrumbs,
-    }))
+        tags: {
+          component: descriptor.component,
+          operation: descriptor.operation,
+          trigger: descriptor.trigger,
+          work_kind: descriptor.workKind,
+          outcome: outcome.outcome,
+          retryable: outcome.retryable ? "true" : "false",
+          ...Option.match(outcome.error, {
+            onNone: () => ({}),
+            onSome: (error) => ({ error }),
+          }),
+        },
+        breadcrumbs: input.breadcrumbs,
+      };
+    })
   );
 
 /** A classified error event containing only stable codes and sanitized stack coordinates. */

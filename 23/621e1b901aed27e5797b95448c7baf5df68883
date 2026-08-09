@@ -1,0 +1,32 @@
+src/core/dashboard/rules.ts
+  s_cb8296d75c38f3::t_a4b7f141dc4ea8 40-41,43-46
+  s_cb8296d75c38f3::t_cf154aeb293d05 33
+  s_cb8296d75c38f3::t_176864f3c247e4 35
+stryker.config.mjs
+  s_cb8296d75c38f3::t_34d0d5ab00bc74 30-32
+src/core/dashboard/rules.test.ts
+  s_cb8296d75c38f3::t_31ef2273fe4a6e 137-202,204-208,210-211,213-226,228-231
+  s_cb8296d75c38f3::t_d3e08553b26d2b 209,212
+  s_cb8296d75c38f3::t_84addf41f328f9 203,227
+src/core/_shared/time.test.ts
+  s_cb8296d75c38f3::t_b4e58ce2686a5e 41-42
+  s_cb8296d75c38f3::t_928e09f237cdca 23-40,43-47
+vitest.acceptance.config.ts
+  s_cb8296d75c38f3::t_05dd44df245f12 49-50
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "23621e1b901aed27e5797b95448c7baf5df68883",
+  "prompts": {},
+  "sessions": {
+    "s_cb8296d75c38f3": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019fe6bc-8875-79f6-aa77-3978d6d88ed8",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": null
+    }
+  }
+}

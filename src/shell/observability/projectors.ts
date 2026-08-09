@@ -2,7 +2,7 @@
  * Projectors rebuild an untrusted value into the exact shape allowed past the Sentry boundary,
  * constructing each field from a closed schema rather than removing fields from the original.
  */
-import { Option, Schema } from "effect";
+import { Cause, Option, Schema } from "effect";
 import { strictDecoding } from "./decoding";
 import {
   ClassifiedFailure,
@@ -98,8 +98,15 @@ const projectStackLine = (line: string): Option.Option<ProjectedStackFrame> => {
   );
 };
 
-/** Extracts only application source coordinates from a native Error stack. */
+const projectReasonStack = (reason: Cause.Reason<unknown>): ReadonlyArray<ProjectedStackFrame> => {
+  if (Cause.isFailReason(reason)) return projectStack(reason.error);
+  if (Cause.isDieReason(reason)) return projectStack(reason.defect);
+  return [];
+};
+
+/** Extracts only application source coordinates from an Error or every reason in an Effect Cause. */
 export const projectStack = (cause: unknown): ReadonlyArray<ProjectedStackFrame> => {
+  if (Cause.isCause(cause)) return cause.reasons.flatMap(projectReasonStack);
   if (!(cause instanceof Error) || typeof cause.stack !== "string") return [];
   return cause.stack.split("\n").flatMap((line) => Option.toArray(projectStackLine(line)));
 };

@@ -55,28 +55,50 @@ import {
 const concurrentWebhookBodyReads = 32;
 
 class KapsoBodyReadTimeout extends Data.TaggedError("KapsoBodyReadTimeout")<{}> {}
+class KapsoBodyReadCapacityExceeded extends Data.TaggedError("KapsoBodyReadCapacityExceeded")<{}> {}
 class WhatsAppIdentityChangeDeferred extends Data.TaggedError(
   "WhatsAppIdentityChangeDeferred"
 )<{}> {}
 
+const kapsoBodyReadErrorResponses = {
+  KapsoPayloadTooLarge: () => Effect.succeed(HttpServerResponse.empty({ status: 413 })),
+  KapsoBodyReadCapacityExceeded: () => Effect.succeed(HttpServerResponse.empty({ status: 429 })),
+  KapsoBodyReadTimeout: () => Effect.succeed(HttpServerResponse.empty({ status: 408 })),
+} as const;
+
 const readBoundedBody = (
-  request: HttpServerRequest.HttpServerRequest
+  request: HttpServerRequest.HttpServerRequest,
+  bodyReaders: Semaphore.Semaphore
 ): Effect.Effect<
   Uint8Array,
-  HttpServerError.HttpServerError | KapsoBodyReadTimeout | KapsoPayloadTooLarge
+  | HttpServerError.HttpServerError
+  | KapsoBodyReadCapacityExceeded
+  | KapsoBodyReadTimeout
+  | KapsoPayloadTooLarge
 > =>
-  Effect.gen(function* () {
-    const bytes = makeBoundedBytes(maxKapsoWebhookBytes);
-    yield* Stream.runForEach(request.stream, (chunk) =>
-      bytes.append(chunk) ? Effect.void : new KapsoPayloadTooLarge()
+  bodyReaders
+    .withPermitsIfAvailable(1)(
+      Effect.gen(function* () {
+        const bytes = makeBoundedBytes(maxKapsoWebhookBytes);
+        yield* Stream.runForEach(request.stream, (chunk) =>
+          bytes.append(chunk) ? Effect.void : new KapsoPayloadTooLarge()
+        );
+        return bytes.materialize();
+      }).pipe(
+        Effect.timeoutOrElse({
+          duration: "5 seconds",
+          orElse: () => Effect.fail(new KapsoBodyReadTimeout()),
+        })
+      )
+    )
+    .pipe(
+      Effect.flatMap(
+        Option.match({
+          onNone: () => Effect.fail(new KapsoBodyReadCapacityExceeded()),
+          onSome: Effect.succeed,
+        })
+      )
     );
-    return bytes.materialize();
-  }).pipe(
-    Effect.timeoutOrElse({
-      duration: "5 seconds",
-      orElse: () => Effect.fail(new KapsoBodyReadTimeout()),
-    })
-  );
 
 type ReceiptClaim = Parameters<typeof releaseWhatsAppReceipt>[0];
 type InboundEventOutcome = "enqueued" | "duplicate" | "consent-turn";
@@ -176,6 +198,7 @@ type KapsoMessageWebhookHandler = (
   | InvalidKapsoPayload
   | InvalidKapsoSignature
   | KapsoBatchTooLarge
+  | KapsoBodyReadCapacityExceeded
   | KapsoBodyReadTimeout
   | KapsoPayloadTooLarge
   | KapsoSendFailed
@@ -190,14 +213,15 @@ type KapsoMessageWebhookHandler = (
 
 const handleKapsoWebhook = (
   secret: string,
-  businessPortfolioId: string
+  businessPortfolioId: string,
+  bodyReaders: Semaphore.Semaphore
 ): KapsoMessageWebhookHandler =>
   Effect.fn("WhatsApp.handleKapsoWebhook")(function* (
     request: HttpServerRequest.HttpServerRequest
   ) {
     const signature = request.headers["x-webhook-signature"] ?? "";
     if (!/^[0-9a-f]{64}$/iu.test(signature)) return yield* new InvalidKapsoSignature();
-    const rawBody = yield* readBoundedBody(request);
+    const rawBody = yield* readBoundedBody(request, bodyReaders);
     const deliveryKey = request.headers["x-idempotency-key"] ?? "";
     const receivedAt = yield* DateTime.now;
     const receipt = yield* decodeKapsoWebhook({
@@ -237,7 +261,8 @@ const handleKapsoWebhook = (
 
 const handleKapsoIdentityWebhook = (
   secret: string,
-  businessPortfolioId: string
+  businessPortfolioId: string,
+  bodyReaders: Semaphore.Semaphore
 ): ((
   request: HttpServerRequest.HttpServerRequest
 ) => Effect.Effect<
@@ -247,6 +272,7 @@ const handleKapsoIdentityWebhook = (
   | InvalidKapsoPayload
   | InvalidKapsoSignature
   | KapsoBatchTooLarge
+  | KapsoBodyReadCapacityExceeded
   | KapsoBodyReadTimeout
   | KapsoPayloadTooLarge
   | Schema.SchemaError
@@ -258,7 +284,7 @@ const handleKapsoIdentityWebhook = (
   ) {
     const signature = request.headers["x-webhook-signature"] ?? "";
     if (!/^[0-9a-f]{64}$/iu.test(signature)) return yield* new InvalidKapsoSignature();
-    const rawBody = yield* readBoundedBody(request);
+    const rawBody = yield* readBoundedBody(request, bodyReaders);
     const receivedAt = yield* DateTime.now;
     const changes = yield* decodeKapsoIdentityWebhook({
       rawBody,
@@ -289,8 +315,8 @@ const handleKapsoIdentityWebhook = (
  * `/webhooks/kapso/meta` using KAPSO_WEBHOOK_SECRET and the trusted
  * WHATSAPP_BUSINESS_PORTFOLIO_ID. At most 32 bodies are read concurrently; exact bytes are bounded
  * and authenticated before decoding or writes. Successful durable admission returns a JSON summary;
- * authentication, malformed/batch, body-size/timeout, rate, and queue-capacity failures map to
- * 401, 400, 413/408, 429, and 503 respectively.
+ * authentication, malformed/batch, body-size/timeout, body-read/rate capacity, and queue-capacity
+ * failures map to 401, 400, 413/408, 429, and 503 respectively.
  */
 export const KapsoWebhookLive = Layer.unwrap(
   Effect.gen(function* () {
@@ -298,52 +324,42 @@ export const KapsoWebhookLive = Layer.unwrap(
     const businessPortfolioId = yield* Config.string("WHATSAPP_BUSINESS_PORTFOLIO_ID");
     const bodyReaders = yield* Semaphore.make(concurrentWebhookBodyReads);
     const messageRoute = HttpRouter.add("POST", "/webhooks/kapso", (request) =>
-      bodyReaders
-        .withPermitsIfAvailable(1)(
-          handleKapsoWebhook(
-            Redacted.value(secret),
-            businessPortfolioId
-          )(request).pipe(
-            Effect.catchTags({
-              InvalidKapsoSignature: () =>
-                Effect.succeed(HttpServerResponse.empty({ status: 401 })),
-              KapsoPayloadTooLarge: () => Effect.succeed(HttpServerResponse.empty({ status: 413 })),
-              KapsoBodyReadTimeout: () => Effect.succeed(HttpServerResponse.empty({ status: 408 })),
-              InvalidKapsoPayload: () => Effect.succeed(HttpServerResponse.empty({ status: 400 })),
-              KapsoBatchTooLarge: () => Effect.succeed(HttpServerResponse.empty({ status: 400 })),
-              WhatsAppInboundCapacityExceeded: () =>
-                Effect.succeed(HttpServerResponse.empty({ status: 503 })),
-              WhatsAppRateLimitExceeded: () =>
-                Effect.succeed(HttpServerResponse.empty({ status: 429 })),
-              WhatsAppReceiptInProgress: () =>
-                Effect.succeed(HttpServerResponse.empty({ status: 503 })),
-              ConsentDisclosureDeliveryUnavailable: () =>
-                Effect.succeed(HttpServerResponse.empty({ status: 503 })),
-            })
-          )
-        )
-        .pipe(Effect.map(Option.getOrElse(() => HttpServerResponse.empty({ status: 429 }))))
+      handleKapsoWebhook(
+        Redacted.value(secret),
+        businessPortfolioId,
+        bodyReaders
+      )(request).pipe(
+        Effect.catchTags({
+          ...kapsoBodyReadErrorResponses,
+          InvalidKapsoSignature: () => Effect.succeed(HttpServerResponse.empty({ status: 401 })),
+          InvalidKapsoPayload: () => Effect.succeed(HttpServerResponse.empty({ status: 400 })),
+          KapsoBatchTooLarge: () => Effect.succeed(HttpServerResponse.empty({ status: 400 })),
+          WhatsAppInboundCapacityExceeded: () =>
+            Effect.succeed(HttpServerResponse.empty({ status: 503 })),
+          WhatsAppRateLimitExceeded: () =>
+            Effect.succeed(HttpServerResponse.empty({ status: 429 })),
+          WhatsAppReceiptInProgress: () =>
+            Effect.succeed(HttpServerResponse.empty({ status: 503 })),
+          ConsentDisclosureDeliveryUnavailable: () =>
+            Effect.succeed(HttpServerResponse.empty({ status: 503 })),
+        })
+      )
     );
     const identityRoute = HttpRouter.add("POST", "/webhooks/kapso/meta", (request) =>
-      bodyReaders
-        .withPermitsIfAvailable(1)(
-          handleKapsoIdentityWebhook(
-            Redacted.value(secret),
-            businessPortfolioId
-          )(request).pipe(
-            Effect.catchTags({
-              InvalidKapsoSignature: () =>
-                Effect.succeed(HttpServerResponse.empty({ status: 401 })),
-              KapsoPayloadTooLarge: () => Effect.succeed(HttpServerResponse.empty({ status: 413 })),
-              KapsoBodyReadTimeout: () => Effect.succeed(HttpServerResponse.empty({ status: 408 })),
-              InvalidKapsoPayload: () => Effect.succeed(HttpServerResponse.empty({ status: 400 })),
-              KapsoBatchTooLarge: () => Effect.succeed(HttpServerResponse.empty({ status: 400 })),
-              WhatsAppIdentityChangeDeferred: () =>
-                Effect.succeed(HttpServerResponse.empty({ status: 503 })),
-            })
-          )
-        )
-        .pipe(Effect.map(Option.getOrElse(() => HttpServerResponse.empty({ status: 429 }))))
+      handleKapsoIdentityWebhook(
+        Redacted.value(secret),
+        businessPortfolioId,
+        bodyReaders
+      )(request).pipe(
+        Effect.catchTags({
+          ...kapsoBodyReadErrorResponses,
+          InvalidKapsoSignature: () => Effect.succeed(HttpServerResponse.empty({ status: 401 })),
+          InvalidKapsoPayload: () => Effect.succeed(HttpServerResponse.empty({ status: 400 })),
+          KapsoBatchTooLarge: () => Effect.succeed(HttpServerResponse.empty({ status: 400 })),
+          WhatsAppIdentityChangeDeferred: () =>
+            Effect.succeed(HttpServerResponse.empty({ status: 503 })),
+        })
+      )
     );
     return Layer.merge(messageRoute, identityRoute);
   })

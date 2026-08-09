@@ -457,12 +457,13 @@ const ClaimedJob = Schema.Struct({
 const LoadClaimRequest = Schema.Struct({ userId: UserId, claimId: WhatsAppClaimId });
 
 /**
- * Starts one claimed lease with a ten-minute ambiguous-crash deadline, loads its non-empty jobs
- * ordered by provider occurrence and internal evidence id, and collapses text with newlines into
- * one bounded InboundMessage. A missing or stale claim fails WhatsAppClaimInvalid.
+ * Starts one claimed lease at `claimTime` with a ten-minute ambiguous-crash deadline, loads its
+ * non-empty jobs ordered by provider occurrence and internal evidence id, and collapses text with
+ * newlines into one bounded InboundMessage. A missing or stale claim fails WhatsAppClaimInvalid.
  */
 export const startWhatsAppTurn = Effect.fn("WhatsApp.startTurn")(function* (
-  claim: WhatsAppTurnClaim
+  claim: WhatsAppTurnClaim,
+  claimTime: DateTime.Utc
 ) {
   const sql = yield* SqlClient.SqlClient;
   return yield* withUserTransaction(
@@ -473,8 +474,8 @@ export const startWhatsAppTurn = Effect.fn("WhatsApp.startTurn")(function* (
         Result: Schema.Struct({ started: Schema.Boolean }),
         execute: (row) => sql`
             UPDATE whatsapp_turn_claims
-            SET status = 'started', started_at = now(),
-              claim_expires_at = now() + interval '10 minutes'
+            SET status = 'started', started_at = ${claimTime},
+              claim_expires_at = ${claimTime}::timestamptz + interval '10 minutes'
             WHERE id = ${row.claimId} AND user_id = ${row.userId} AND status = 'claimed'
             RETURNING true AS started
           `,

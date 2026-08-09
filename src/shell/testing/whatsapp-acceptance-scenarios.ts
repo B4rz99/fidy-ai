@@ -14,11 +14,14 @@ export const whatsappAcceptanceScenarios = {
 
 export type WhatsAppAcceptanceScenarioId = keyof typeof whatsappAcceptanceScenarios;
 
-/** Scenarios executable by the issue #120 acceptance slice. */
+/** Scenarios executable by the WhatsApp acceptance release signal. */
 export const implementedWhatsAppAcceptanceScenarioIds = [
   "WA-A01",
   "WA-A02",
   "WA-A03",
+  "WA-A04",
+  "WA-A05",
+  "WA-A06",
   "WA-A10",
 ] as const satisfies ReadonlyArray<WhatsAppAcceptanceScenarioId>;
 

@@ -1,12 +1,22 @@
 import { expect, layer } from "@effect/vitest";
 import { Crypto, DateTime, Effect, Option, Schedule, Schema } from "effect";
 import { HttpBody, HttpClient, HttpClientResponse } from "effect/unstable/http";
-import { E164PhoneNumber, WhatsAppBusinessScopedUserId } from "~/core/identity/reference";
+import {
+  E164PhoneNumber,
+  WhatsAppBusinessPortfolioId,
+  WhatsAppBusinessScopedUserId,
+} from "~/core/identity/reference";
 import { TranscriptText } from "~/core/transcript/model";
+import { CURRENT_DISCLOSURE_TEXT } from "~/shell/consent/current-disclosure";
+import { WhatsAppProviderMessageId } from "./model";
 import {
   WhatsAppAcceptanceApiClient,
+  WhatsAppAcceptanceCallerControl,
+  type WhatsAppAcceptanceCallerProbe,
   WhatsAppAcceptanceHarness,
   WhatsAppAcceptanceKapsoControl,
+  WhatsAppAcceptanceModelControl,
+  type WhatsAppAcceptanceObserverId,
 } from "~/shell/testing/whatsapp-acceptance-harness";
 import {
   type ImplementedWhatsAppAcceptanceScenarioId,
@@ -41,18 +51,31 @@ const makeScenarioIdentity = Effect.fn("Acceptance.makeWhatsAppScenarioIdentity"
   const crypto = yield* Crypto.Crypto;
   const nonce = (yield* crypto.randomUUIDv7.pipe(Effect.orDie)).replaceAll("-", "");
   return {
-    providerMessageId: `wamid.acceptance-${scenarioId}-${nonce}`,
+    providerMessageId: WhatsAppProviderMessageId.make(`wamid.acceptance-${scenarioId}-${nonce}`),
     businessScopedUserId: WhatsAppBusinessScopedUserId.make(`CO.${nonce}`),
   };
 });
 
-const postSignedWebhook = Effect.fn("Acceptance.postSignedWhatsAppWebhook")(function* (input: {
-  readonly providerMessageId: string;
+type KapsoWebhookInput = Readonly<{
+  readonly providerMessageId: WhatsAppProviderMessageId;
   readonly businessScopedUserId: WhatsAppBusinessScopedUserId;
   readonly phoneNumber: Option.Option<E164PhoneNumber>;
   readonly text: TranscriptText;
-}) {
-  const occurredAt = yield* DateTime.now;
+}>;
+
+type SignedKapsoWebhook = Readonly<{
+  readonly providerMessageId: WhatsAppProviderMessageId;
+  readonly body: Uint8Array;
+  readonly headers: Readonly<{
+    readonly "x-webhook-signature": string;
+    readonly "x-idempotency-key": WhatsAppProviderMessageId;
+  }>;
+}>;
+
+const makeSignedWebhookAt = Effect.fn("Acceptance.makeSignedWhatsAppWebhookAt")(function* (
+  input: KapsoWebhookInput,
+  occurredAt: DateTime.Utc
+) {
   const phoneFields = Option.match(input.phoneNumber, {
     onNone: () => ({}),
     onSome: (phoneNumber) => ({ from: phoneNumber.slice(1) }),
@@ -80,13 +103,138 @@ const postSignedWebhook = Effect.fn("Acceptance.postSignedWhatsAppWebhook")(func
   });
   const body = new TextEncoder().encode(encodedBody);
   const signature = new Bun.CryptoHasher("sha256", webhookSecret).update(body).digest("hex");
-  return yield* HttpClient.post("/webhooks/kapso", {
+  return {
+    providerMessageId: input.providerMessageId,
+    body,
     headers: {
       "x-webhook-signature": signature,
       "x-idempotency-key": input.providerMessageId,
     },
-    body: HttpBody.uint8Array(body, "application/json"),
-  });
+  } satisfies SignedKapsoWebhook;
+});
+
+const makeSignedWebhook = Effect.fn("Acceptance.makeSignedWhatsAppWebhook")(function* (
+  input: KapsoWebhookInput
+) {
+  return yield* makeSignedWebhookAt(input, yield* DateTime.now);
+});
+
+const postSignedDelivery = Effect.fn("Acceptance.postSignedWhatsAppDelivery")(
+  (delivery: SignedKapsoWebhook) =>
+    HttpClient.post("/webhooks/kapso", {
+      headers: delivery.headers,
+      body: HttpBody.uint8Array(delivery.body, "application/json"),
+    })
+);
+
+const postSignedWebhook = Effect.fn("Acceptance.postSignedWhatsAppWebhook")(
+  (input: KapsoWebhookInput) => makeSignedWebhook(input).pipe(Effect.flatMap(postSignedDelivery))
+);
+
+const establishCaller = Effect.fn("Acceptance.establishWhatsAppCaller")(function* (input: {
+  readonly scenarioId: WhatsAppAcceptanceObserverId;
+  readonly phoneNumber: E164PhoneNumber;
+}) {
+  const identity = yield* makeScenarioIdentity(input.scenarioId);
+  const startedAt = yield* DateTime.now;
+  const disclosureDelivery = yield* makeSignedWebhookAt(
+    {
+      ...identity,
+      phoneNumber: Option.some(input.phoneNumber),
+      text: TranscriptText.make("Quiero empezar"),
+    },
+    startedAt
+  );
+  const disclosureResponse = yield* postSignedDelivery(disclosureDelivery);
+
+  const decisionIdentity = yield* makeScenarioIdentity(input.scenarioId);
+  const decisionDelivery = yield* makeSignedWebhookAt(
+    {
+      providerMessageId: decisionIdentity.providerMessageId,
+      businessScopedUserId: identity.businessScopedUserId,
+      phoneNumber: Option.some(input.phoneNumber),
+      text: TranscriptText.make("Acepto"),
+    },
+    DateTime.add(startedAt, { seconds: 2 })
+  );
+  const decisionResponse = yield* postSignedDelivery(decisionDelivery);
+  return {
+    identity,
+    startedAt,
+    disclosureDelivery,
+    disclosureResponse,
+    decisionDelivery,
+    decisionResponse,
+  };
+});
+
+const authorizeCallerProbe = Effect.fn("Acceptance.authorizeWhatsAppCallerProbe")(function* (
+  observerId: WhatsAppAcceptanceObserverId,
+  businessScopedUserId: WhatsAppBusinessScopedUserId
+) {
+  const callers = yield* WhatsAppAcceptanceCallerControl;
+  return yield* callers
+    .authorizeProbe(observerId, {
+      businessPortfolioId: WhatsAppBusinessPortfolioId.make("portfolio-test"),
+      businessScopedUserId,
+    })
+    .pipe(
+      Effect.flatMap(Effect.fromOption(() => new Error("accepted caller was not established"))),
+      Effect.orDie
+    );
+});
+
+const submitAcceptedFinancialTurn = Effect.fn("Acceptance.submitAcceptedFinancialTurn")(
+  function* (input: {
+    readonly scenarioId: WhatsAppAcceptanceObserverId;
+    readonly phoneNumber: E164PhoneNumber;
+  }) {
+    const onboarding = yield* establishCaller(input);
+    const probe = yield* authorizeCallerProbe(
+      input.scenarioId,
+      onboarding.identity.businessScopedUserId
+    );
+    const financialIdentity = yield* makeScenarioIdentity(input.scenarioId);
+    const financialDelivery = yield* makeSignedWebhookAt(
+      {
+        providerMessageId: financialIdentity.providerMessageId,
+        businessScopedUserId: onboarding.identity.businessScopedUserId,
+        phoneNumber: Option.some(input.phoneNumber),
+        text: TranscriptText.make("Registra una compra por 25000"),
+      },
+      DateTime.add(onboarding.startedAt, { seconds: 4 })
+    );
+    const financialResponse = yield* postSignedDelivery(financialDelivery);
+    return { onboarding, probe, financialDelivery, financialResponse };
+  }
+);
+
+const awaitKapsoRequests = Effect.fn("Acceptance.awaitWhatsAppKapsoRequests")(function* (
+  count: number
+) {
+  const kapso = yield* WhatsAppAcceptanceKapsoControl;
+  return yield* kapso.requests.pipe(
+    Effect.filterOrFail((requests) => requests.length === count),
+    Effect.retry({ schedule: Schedule.spaced("100 millis"), times: 60 }),
+    Effect.orDie
+  );
+});
+
+const awaitAcceptanceTransaction = Effect.fn("Acceptance.awaitWhatsAppTransaction")(function* (
+  probe: WhatsAppAcceptanceCallerProbe
+) {
+  return yield* probe.api.transactions.listTransactions({ query: {} }).pipe(
+    Effect.filterOrFail(
+      (response) =>
+        response.data.length === 1 &&
+        response.data.every(
+          (transaction) =>
+            Option.getOrUndefined(transaction.counterparty) === "Acceptance authority"
+        )
+    ),
+    Effect.retry({ schedule: Schedule.spaced("100 millis"), times: 60 }),
+    Effect.orDie
+  );
 });
 
 layer(WhatsAppAcceptanceHarness, { excludeTestServices: true, timeout: "30 seconds" })(
@@ -197,6 +345,143 @@ layer(WhatsAppAcceptanceHarness, { excludeTestServices: true, timeout: "30 secon
 
         expect(response.status).toBe(500);
         expect(yield* kapso.requests).toEqual([]);
+      })
+    );
+
+    it.effect(whatsappAcceptanceTestName("WA-A04"), () =>
+      Effect.gen(function* () {
+        const kapso = yield* WhatsAppAcceptanceKapsoControl;
+        yield* kapso.reset;
+        yield* kapso.setDeliveryMode("sandbox-phone");
+
+        const onboarding = yield* establishCaller({
+          scenarioId: "WA-A04",
+          phoneNumber: E164PhoneNumber.make("+573004040404"),
+        });
+        expect(onboarding.disclosureResponse.status).toBe(200);
+        expect(onboarding.decisionResponse.status).toBe(200);
+
+        const outbound = yield* kapso.requests;
+        expect(outbound).toHaveLength(2);
+        const disclosure = yield* Schema.decodeUnknownEffect(KapsoTextRequest)(outbound[0]?.body);
+        expect(disclosure).toEqual({
+          to: "573004040404",
+          type: "text",
+          text: { body: CURRENT_DISCLOSURE_TEXT },
+        });
+        const probe = yield* authorizeCallerProbe(
+          "WA-A04",
+          onboarding.identity.businessScopedUserId
+        );
+        const current = yield* probe.api.identity.getCurrentUser({});
+        expect(current.data.id).toBe(probe.userId);
+        const records = yield* probe.consentRecords;
+        expect(records).toHaveLength(1);
+        expect(records[0]).toMatchObject({
+          event: { _tag: "Granted", grant: { _tag: "Onboarding" } },
+          disclosureMessage: {
+            providerMessageId: outbound[0]?.outcome.providerMessageId,
+          },
+          decisionMessage: {
+            providerMessageId: onboarding.decisionDelivery.providerMessageId,
+          },
+        });
+      })
+    );
+
+    it.effect(whatsappAcceptanceTestName("WA-A05"), () =>
+      Effect.gen(function* () {
+        const kapso = yield* WhatsAppAcceptanceKapsoControl;
+        const model = yield* WhatsAppAcceptanceModelControl;
+        yield* kapso.reset;
+        yield* model.reset;
+        yield* kapso.setDeliveryMode("sandbox-phone");
+
+        const { onboarding, probe, financialResponse } = yield* submitAcceptedFinancialTurn({
+          scenarioId: "WA-A05",
+          phoneNumber: E164PhoneNumber.make("+573005050505"),
+        });
+        expect(onboarding.disclosureResponse.status).toBe(200);
+        expect(onboarding.decisionResponse.status).toBe(200);
+        expect(financialResponse.status).toBe(200);
+        expect(yield* HttpClientResponse.schemaBodyJson(WebhookSummary)(financialResponse)).toEqual(
+          {
+            decoded: 1,
+            consentTurns: 0,
+            enqueued: 1,
+            duplicates: 0,
+          }
+        );
+
+        const history = yield* awaitAcceptanceTransaction(probe);
+        expect(history.data).toHaveLength(1);
+
+        const outbound = yield* awaitKapsoRequests(3);
+        const reply = yield* Schema.decodeUnknownEffect(KapsoTextRequest)(outbound[2]?.body);
+        expect(reply).toHaveProperty("to", "573005050505");
+        expect(reply).not.toHaveProperty("recipient");
+        expect(reply.text.body).toContain("Gasto guardado");
+        expect(reply.text.body).not.toContain("ACCEPTANCE_TRANSIENT_CONTEXT");
+        expect((yield* model.calls).length).toBeGreaterThan(0);
+      })
+    );
+
+    it.effect(whatsappAcceptanceTestName("WA-A06"), () =>
+      Effect.gen(function* () {
+        const kapso = yield* WhatsAppAcceptanceKapsoControl;
+        const model = yield* WhatsAppAcceptanceModelControl;
+        yield* kapso.reset;
+        yield* model.reset;
+        yield* kapso.setDeliveryMode("sandbox-phone");
+
+        const { onboarding, probe, financialDelivery, financialResponse } =
+          yield* submitAcceptedFinancialTurn({
+            scenarioId: "WA-A06",
+            phoneNumber: E164PhoneNumber.make("+573006060606"),
+          });
+        expect(onboarding.disclosureResponse.status).toBe(200);
+        expect(onboarding.decisionResponse.status).toBe(200);
+        expect(financialResponse.status).toBe(200);
+        expect(yield* HttpClientResponse.schemaBodyJson(WebhookSummary)(financialResponse)).toEqual(
+          {
+            decoded: 1,
+            consentTurns: 0,
+            enqueued: 1,
+            duplicates: 0,
+          }
+        );
+
+        const outboundBeforeReplay = yield* awaitKapsoRequests(3);
+        const reply = yield* Schema.decodeUnknownEffect(KapsoTextRequest)(
+          outboundBeforeReplay[2]?.body
+        );
+        expect(reply.text.body).toContain("Gasto guardado");
+        const historyBeforeReplay = yield* awaitAcceptanceTransaction(probe);
+        const consentBeforeReplay = yield* probe.consentRecords;
+        const modelCallsBeforeReplay = yield* model.calls;
+        expect(consentBeforeReplay).toHaveLength(1);
+        expect(modelCallsBeforeReplay.length).toBeGreaterThan(0);
+
+        const decisionReplay = yield* postSignedDelivery(onboarding.decisionDelivery);
+        expect(yield* HttpClientResponse.schemaBodyJson(WebhookSummary)(decisionReplay)).toEqual({
+          decoded: 1,
+          consentTurns: 0,
+          enqueued: 0,
+          duplicates: 1,
+        });
+        const financialReplay = yield* postSignedDelivery(financialDelivery);
+        expect(yield* HttpClientResponse.schemaBodyJson(WebhookSummary)(financialReplay)).toEqual({
+          decoded: 1,
+          consentTurns: 0,
+          enqueued: 0,
+          duplicates: 1,
+        });
+
+        expect(yield* probe.consentRecords).toEqual(consentBeforeReplay);
+        expect(yield* kapso.requests).toEqual(outboundBeforeReplay);
+        expect(yield* model.calls).toEqual(modelCallsBeforeReplay);
+        const historyAfterReplay = yield* probe.api.transactions.listTransactions({ query: {} });
+        expect(historyAfterReplay.data).toEqual(historyBeforeReplay.data);
       })
     );
 

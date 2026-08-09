@@ -1,6 +1,25 @@
 import { BunHttpServer, BunServices } from "@effect/platform-bun";
-import { Context, Effect, Layer, MutableRef, Ref, Schema, Stream } from "effect";
+import {
+  Clock,
+  Context,
+  Crypto,
+  DateTime,
+  Effect,
+  Layer,
+  MutableRef,
+  Option,
+  Ref,
+  Schema,
+  Stream,
+} from "effect";
 import { type Response as AiResponse, LanguageModel } from "effect/unstable/ai";
+import { SqlClient } from "effect/unstable/sql";
+import type { ConsentRecord } from "~/core/consent/model";
+import type { UserId, WhatsAppCallerReference } from "~/core/identity/reference";
+import { AgentBearerToken, AgentTokenScopes, getAgentTokenShortId } from "~/core/tokens/model";
+import { AgentTokenId } from "~/core/tokens/reference";
+import { renewAgentTokenIdleExpiry } from "~/core/tokens/rules";
+import { hashAgentBearer } from "~/shell/_shared/authz";
 import { categoryIds } from "~/core/categories/taxonomy";
 import { AgentService } from "~/shell/agent/agent-service";
 import {
@@ -8,9 +27,13 @@ import {
   type KapsoClientService,
   makeKapsoClientService,
 } from "~/shell/channels/whatsapp/kapso-client";
+import { WhatsAppProviderMessageId } from "~/shell/channels/whatsapp/model";
 import { WhatsAppWorkerLive } from "~/shell/channels/whatsapp/worker";
+import { observeConsentRecords } from "~/shell/consent/repo";
 import { MigrationSqlClient, MigratorLive, PgLive, RuntimeAuthorityLive } from "~/shell/db/client";
 import { makeDevelopmentSeedLive } from "~/shell/db/development-seed";
+import { findWhatsAppCaller } from "~/shell/identity/repo";
+import { upsertAgentToken } from "~/shell/tokens/repo";
 import { HttpLive } from "~/shell/http";
 import { TelemetryDisabled } from "~/shell/observability/disabled";
 import { type ApiClient, makeApiClientLive } from "./api-harness";
@@ -24,11 +47,14 @@ export type WhatsAppAcceptanceDeliveryMode = "bsuid" | "sandbox-phone";
 export type WhatsAppAcceptanceKapsoRequest = Readonly<{
   readonly url: string;
   readonly body: Schema.Json;
+  readonly outcome: Readonly<{
+    readonly providerMessageId: WhatsAppProviderMessageId;
+  }>;
 }>;
 
 /**
  * Controls the recording Kapso transport below the production serializer. `requests` returns every
- * outbound JSON body since `reset`; reset also restarts synthetic provider-message numbering.
+ * outbound JSON body since `reset`; synthetic provider-message numbering remains process-unique.
  * `sandbox-phone` serializes a phone `to`, while `bsuid` serializes a BSUID `recipient`.
  */
 export class WhatsAppAcceptanceKapsoControl extends Context.Service<
@@ -45,6 +71,75 @@ export class WhatsAppAcceptanceApiClient extends Context.Service<
   WhatsAppAcceptanceApiClient,
   ApiClient
 >()("fidy-ai/shell/testing/whatsapp-acceptance-harness/WhatsAppAcceptanceApiClient") {}
+
+const acceptanceProbeCredentials = {
+  "WA-A04": {
+    bearer: AgentBearerToken.make("fin_obsa0401_0123456789abcdefghijklmnopqrstuvwxyzABCD"),
+    tokenId: AgentTokenId.make("f1d1a000-0000-4000-8000-000000001214"),
+    tag: Context.Service<ApiClient>(
+      "fidy-ai/shell/testing/whatsapp-acceptance-harness/WhatsAppAcceptanceA04ApiClient"
+    ),
+  },
+  "WA-A05": {
+    bearer: AgentBearerToken.make("fin_obsa0501_0123456789abcdefghijklmnopqrstuvwxyzABCD"),
+    tokenId: AgentTokenId.make("f1d1a000-0000-4000-8000-000000001215"),
+    tag: Context.Service<ApiClient>(
+      "fidy-ai/shell/testing/whatsapp-acceptance-harness/WhatsAppAcceptanceA05ApiClient"
+    ),
+  },
+  "WA-A06": {
+    bearer: AgentBearerToken.make("fin_obsa0601_0123456789abcdefghijklmnopqrstuvwxyzABCD"),
+    tokenId: AgentTokenId.make("f1d1a000-0000-4000-8000-000000001216"),
+    tag: Context.Service<ApiClient>(
+      "fidy-ai/shell/testing/whatsapp-acceptance-harness/WhatsAppAcceptanceA06ApiClient"
+    ),
+  },
+} as const;
+
+/** Scenarios whose established caller can be inspected through canonical read operations. */
+export type WhatsAppAcceptanceObserverId = keyof typeof acceptanceProbeCredentials;
+
+const AcceptanceProbeApiClients = Layer.mergeAll(
+  makeApiClientLive(acceptanceProbeCredentials["WA-A04"]),
+  makeApiClientLive(acceptanceProbeCredentials["WA-A05"]),
+  makeApiClientLive(acceptanceProbeCredentials["WA-A06"])
+);
+
+/** Read-only observations for one caller established through the public consent flow. */
+export type WhatsAppAcceptanceCallerProbe = Readonly<{
+  readonly userId: UserId;
+  readonly api: ApiClient;
+  readonly consentRecords: Effect.Effect<ReadonlyArray<ConsentRecord>>;
+}>;
+
+/**
+ * Authorizes canonical observations for an established caller by inserting a scenario-specific,
+ * read-only AgentToken. An unknown caller returns no probe; preparation cannot create or mutate
+ * User, identity, consent, or finance state.
+ */
+export class WhatsAppAcceptanceCallerControl extends Context.Service<
+  WhatsAppAcceptanceCallerControl,
+  {
+    readonly authorizeProbe: (
+      observerId: WhatsAppAcceptanceObserverId,
+      caller: WhatsAppCallerReference
+    ) => Effect.Effect<Option.Option<WhatsAppAcceptanceCallerProbe>>;
+  }
+>()("fidy-ai/shell/testing/whatsapp-acceptance-harness/WhatsAppAcceptanceCallerControl") {}
+
+/** One non-streaming language-model round retained for acceptance assertions. */
+export type WhatsAppAcceptanceModelCall = Readonly<{
+  readonly serializedPrompt: string;
+}>;
+
+/** Observes model rounds accumulated since the last reset; reset clears the call history. */
+export class WhatsAppAcceptanceModelControl extends Context.Service<
+  WhatsAppAcceptanceModelControl,
+  {
+    readonly calls: Effect.Effect<ReadonlyArray<WhatsAppAcceptanceModelCall>>;
+    readonly reset: Effect.Effect<void>;
+  }
+>()("fidy-ai/shell/testing/whatsapp-acceptance-harness/WhatsAppAcceptanceModelControl") {}
 
 const acceptanceModelReply = (serializedPrompt: string): Array<AiResponse.PartEncoded> =>
   serializedPrompt.includes("ACCEPTANCE_TRANSIENT_CONTEXT")
@@ -77,12 +172,33 @@ const acceptanceModelReply = (serializedPrompt: string): Array<AiResponse.PartEn
         makeLanguageModelFinishPart("tool-calls"),
       ];
 
-const DeterministicLanguageModel = Layer.effect(
-  LanguageModel.LanguageModel,
-  LanguageModel.make({
-    generateText: ({ prompt }) => Effect.succeed(acceptanceModelReply(JSON.stringify(prompt))),
-    streamText: () =>
-      Stream.die(new Error("The WhatsApp acceptance model uses non-streaming generation")),
+const recordModelCall = (
+  observedCalls: MutableRef.MutableRef<ReadonlyArray<WhatsAppAcceptanceModelCall>>,
+  serializedPrompt: string
+): Effect.Effect<void> =>
+  Effect.sync(() => MutableRef.update(observedCalls, (calls) => [...calls, { serializedPrompt }]));
+
+const DeterministicLanguageModel = Layer.effectContext(
+  Effect.gen(function* () {
+    const observedCalls = MutableRef.make<ReadonlyArray<WhatsAppAcceptanceModelCall>>([]);
+    const model = yield* LanguageModel.make({
+      generateText: ({ prompt }) =>
+        Schema.encodeEffect(Schema.UnknownFromJsonString)(prompt).pipe(
+          Effect.orDie,
+          Effect.tap((serializedPrompt) => recordModelCall(observedCalls, serializedPrompt)),
+          Effect.map(acceptanceModelReply)
+        ),
+      streamText: () =>
+        Stream.die(new Error("The WhatsApp acceptance model uses non-streaming generation")),
+    });
+    const control = WhatsAppAcceptanceModelControl.of({
+      calls: Effect.sync(() => MutableRef.get(observedCalls)),
+      reset: Effect.sync(() => MutableRef.set(observedCalls, [])),
+    });
+    return Context.empty().pipe(
+      Context.add(LanguageModel.LanguageModel, model),
+      Context.add(WhatsAppAcceptanceModelControl, control)
+    );
   })
 );
 
@@ -103,14 +219,21 @@ const AcceptanceKapsoTransport = Layer.effectContext(
         const body = Schema.decodeUnknownSync(Schema.Json)(
           Schema.decodeUnknownSync(Schema.UnknownFromJsonString)(init?.body)
         );
+        const providerMessageId = WhatsAppProviderMessageId.make(
+          `wamid.acceptance-outbound-${nextRequestNumber}`
+        );
         MutableRef.update(observedRequests, (requests) => [
           ...requests,
-          { url: kapsoResourceUrl(resource), body },
+          {
+            url: kapsoResourceUrl(resource),
+            body,
+            outcome: { providerMessageId },
+          },
         ]);
         return Promise.resolve(
           Response.json({
             messaging_product: "whatsapp",
-            messages: [{ id: `wamid.acceptance-outbound-${nextRequestNumber}` }],
+            messages: [{ id: providerMessageId }],
           })
         );
       },
@@ -130,10 +253,7 @@ const AcceptanceKapsoTransport = Layer.effectContext(
     };
     const control = WhatsAppAcceptanceKapsoControl.of({
       requests: Effect.sync(() => MutableRef.get(observedRequests)),
-      reset: Effect.sync(() => {
-        MutableRef.set(observedRequests, []);
-        MutableRef.set(requestNumber, 0);
-      }),
+      reset: Effect.sync(() => MutableRef.set(observedRequests, [])),
       setDeliveryMode: (mode) => Ref.set(deliveryMode, mode),
     });
     return Context.empty().pipe(
@@ -143,8 +263,51 @@ const AcceptanceKapsoTransport = Layer.effectContext(
   })
 );
 
+const AcceptanceCallerProbe = Layer.effect(
+  WhatsAppAcceptanceCallerControl,
+  Effect.gen(function* () {
+    const clock = yield* Clock.Clock;
+    const apiClients = yield* Effect.context<ApiClient>();
+    const crypto = yield* Crypto.Crypto;
+    const sqlClient = yield* SqlClient.SqlClient;
+
+    return WhatsAppAcceptanceCallerControl.of({
+      authorizeProbe: (observerId, caller) =>
+        Effect.gen(function* () {
+          const userId = yield* findWhatsAppCaller(caller);
+          if (Option.isNone(userId)) return Option.none<WhatsAppAcceptanceCallerProbe>();
+
+          const credentials = acceptanceProbeCredentials[observerId];
+          const createdAt = yield* DateTime.now;
+          const tokenHash = yield* hashAgentBearer(credentials.bearer);
+          yield* upsertAgentToken(userId.value, {
+            id: credentials.tokenId,
+            shortId: yield* getAgentTokenShortId(credentials.bearer),
+            tokenHash,
+            scopes: AgentTokenScopes.make(["read"]),
+            idleExpiresAt: yield* renewAgentTokenIdleExpiry(createdAt),
+            revokedAt: Option.none(),
+            createdAt,
+          });
+          return Option.some({
+            userId: userId.value,
+            api: Context.get(apiClients, credentials.tag),
+            consentRecords: observeConsentRecords(userId.value).pipe(
+              Effect.provideService(SqlClient.SqlClient, sqlClient)
+            ),
+          });
+        }).pipe(
+          Effect.provideService(Clock.Clock, clock),
+          Effect.provideService(Crypto.Crypto, crypto),
+          Effect.provideService(SqlClient.SqlClient, sqlClient)
+        ),
+    });
+  })
+);
+
 const AcceptanceApplication = Layer.mergeAll(
   HttpLive,
+  DeterministicLanguageModel,
   WhatsAppWorkerLive.pipe(
     Layer.provide(AgentService.layer.pipe(Layer.provide(DeterministicLanguageModel)))
   )
@@ -160,10 +323,12 @@ const AcceptanceApplication = Layer.mergeAll(
  * the same layers used by production.
  */
 export const WhatsAppAcceptanceHarness = AcceptanceApplication.pipe(
+  Layer.provideMerge(AcceptanceCallerProbe),
   Layer.provideMerge(AcceptanceKapsoTransport),
   Layer.provideMerge(
     makeApiClientLive({ tag: WhatsAppAcceptanceApiClient, bearer: defaultAgentBearer })
   ),
+  Layer.provideMerge(AcceptanceProbeApiClients),
   Layer.provideMerge(makeDevelopmentSeedLive(defaultAgentBearer)),
   Layer.provideMerge(BunHttpServer.layerTest),
   Layer.provideMerge(BunServices.layer),

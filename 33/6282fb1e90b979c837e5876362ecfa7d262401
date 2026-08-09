@@ -1,0 +1,67 @@
+README.md
+  s_68a6ccfed485dc::t_26258bd6d791e5 238-240
+src/shell/channels/whatsapp/whatsapp.acceptance.test.ts
+  s_68a6ccfed485dc::t_dc3e56d754c5a9 407-414,445-452
+  s_68a6ccfed485dc::t_eac3e3bf028ac3 442-443,454-456,458-460,465,480,483
+  s_68a6ccfed485dc::t_830ec03614a1d0 54
+  s_68a6ccfed485dc::t_f0578cb2de8a0b 10,366-371,422
+  s_68a6ccfed485dc::t_b3da7f4216fb92 18,389-399,403,415,418,420,425
+  s_68a6ccfed485dc::t_3e27b0edb5eccf 357-359,361-362,376-378,384-386
+  s_68a6ccfed485dc::t_3d441a5f64cc9c 417,484
+  s_68a6ccfed485dc::t_9fdd43a6b481cb 171,177,372-375
+  s_68a6ccfed485dc::t_89a7f116402a9d 426-427,429-436,453,457,461-464,466-479,481-482,485-487
+  s_68a6ccfed485dc::t_29b02241bdfc93 400,406,437-441,444
+  s_68a6ccfed485dc::t_0fdfc480a84fcd 187-211
+  s_68a6ccfed485dc::t_7962c48e7f48b0 4-8,14,351-356,360,363-365,379-383,387-388
+  s_68a6ccfed485dc::t_0bc0d49923211d 19,135,172
+  s_68a6ccfed485dc::t_2bc0c920efdc7a 421,423
+  s_68a6ccfed485dc::t_612f3416d869d9 11
+  s_68a6ccfed485dc::t_5e17611a310fd4 227-229,234
+  s_68a6ccfed485dc::t_d9505b8d7de027 401-402,404-405,416,419,424
+  s_68a6ccfed485dc::t_63871b2fe93658 230-233
+  s_68a6ccfed485dc::t_5556676cbc4192 75-77,114-119
+  s_68a6ccfed485dc::t_15c72c343faf29 140-147,151-159
+  s_68a6ccfed485dc::t_6524be53ac141d 59-60,64-74,78,106-108,113,121-132
+  s_68a6ccfed485dc::t_ac03cac4ef4163 15,120,133-134,136-139,148-150,160-170,173-176,178-186,212-226,235-237
+  s_68a6ccfed485dc::t_fb499dd1eebe96 428
+src/shell/testing/whatsapp-acceptance-harness.ts
+  s_68a6ccfed485dc::t_e36d81b39a3b97 16-18,20-22,30,32,35-36,50-52,101,108-115,119-122,125-128
+  s_68a6ccfed485dc::t_678ab4e4bb9708 222-224,227-231,236
+  s_68a6ccfed485dc::t_c47f38ce92a7b9 135
+  s_68a6ccfed485dc::t_024cd8235b9b22 2-14,266-269,271-274,276-279,281,283,286-293,295-304,326
+  s_68a6ccfed485dc::t_f5c5dcedf95e89 175-178,180,188
+  s_68a6ccfed485dc::t_1f55939da3850e 179
+  s_68a6ccfed485dc::t_3b767fe6bbf997 79,86,93,294
+  s_68a6ccfed485dc::t_9ae8c12d63038d 181-187,189,191-201,310
+  s_68a6ccfed485dc::t_48bcb860bad4f9 97-98
+  s_68a6ccfed485dc::t_96c3b9c690ba07 116-118,123,275
+  s_68a6ccfed485dc::t_29a1db24039ca8 103-105
+  s_68a6ccfed485dc::t_4baf3ce03044b1 130-134,136-143
+  s_68a6ccfed485dc::t_532ea2bd84f0c0 190
+  s_68a6ccfed485dc::t_830ec03614a1d0 19
+  s_68a6ccfed485dc::t_b35d537cd8fd13 57,256
+  s_68a6ccfed485dc::t_4a1f4f7fd65b76 75-78,80-85,87-92,94-96,99-100,102,106-107,124,270,280,282,284-285,306,331
+  s_68a6ccfed485dc::t_1fbf91f0ab1a9d 129,305,307
+vitest.acceptance.config.ts
+  s_68a6ccfed485dc::t_473039a2a762ac 32-33
+src/shell/testing/whatsapp-acceptance-scenarios.ts
+  s_68a6ccfed485dc::t_c995b3499c720b 23
+  s_68a6ccfed485dc::t_59d259eb6b112d 17,22
+  s_68a6ccfed485dc::t_9049e9fec9619f 24
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "336282fb1e90b979c837e5876362ecfa7d262401",
+  "prompts": {},
+  "sessions": {
+    "s_68a6ccfed485dc": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019fe64c-50b1-79b4-915c-2003d064aaa6",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

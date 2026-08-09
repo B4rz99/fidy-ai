@@ -130,6 +130,17 @@
                 "runEffectInsideEffect": "off"
               }
             }
+          },
+          {
+            "include": ["./src/shell/observability/release-preparation*.ts"],
+            "options": {
+              "diagnosticSeverity": {
+                "asyncFunction": "off",
+                "globalTimers": "off",
+                "nodeBuiltinImport": "off",
+                "processEnv": "off"
+              }
+            }
           }
         ]
       }

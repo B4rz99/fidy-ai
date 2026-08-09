@@ -6,6 +6,7 @@ network="fidy-production-smoke-${suffix}"
 database="fidy-production-smoke-db-${suffix}"
 application="fidy-production-smoke-app-${suffix}"
 artifactContainer="fidy-production-smoke-artifact-${suffix}"
+releaseContainer="fidy-production-smoke-release-${suffix}"
 telemetryProbe="fidy-production-smoke-telemetry-${suffix}"
 image="fidy-production-smoke:${suffix}"
 provisionLog=$(mktemp)
@@ -16,7 +17,7 @@ release="fidy@${releaseSha}"
 
 cleanup() {
   docker rm -f "$application" "${application}-rejected" "$artifactContainer" \
-    "$telemetryProbe" "$database" >/dev/null 2>&1 || true
+    "$releaseContainer" "$telemetryProbe" "$database" >/dev/null 2>&1 || true
   docker network rm "$network" >/dev/null 2>&1 || true
   docker image rm "$image" >/dev/null 2>&1 || true
   rm -f "$provisionLog"
@@ -164,20 +165,20 @@ assertTelemetryDisabled() {
 }
 
 assertReleasePreparation() {
-  chmod 777 "$releaseRoot"
   cat >"$releaseRoot/sentry-cli" <<'EOF'
 #!/bin/sh
 set -eu
-printf '%s\n' "$*" >> /release-smoke/calls
+printf '%s\n' "$*" >> /tmp/sentry-calls
 EOF
-  chmod +x "$releaseRoot/sentry-cli"
-  docker run --rm \
-    --volume "$releaseRoot:/release-smoke" \
+  chmod 755 "$releaseRoot/sentry-cli"
+  docker run --name "$releaseContainer" \
     --volume "$releaseRoot/sentry-cli:/app/dist/commands/sentry-cli:ro" \
     --env "RAILWAY_GIT_COMMIT_SHA=${releaseSha}" --env "SENTRY_RELEASE=${release}" \
     --env SENTRY_AUTH_TOKEN=upload-token-sentinel --env SENTRY_ORG=fidy-org \
     --env SENTRY_PROJECT=fidy-api \
     "$image" bun dist/commands/prepare-sentry-release.js
+  docker cp "${releaseContainer}:/tmp/sentry-calls" "$releaseRoot/calls"
+  docker rm "$releaseContainer" >/dev/null
   printf '%s\n' \
     "--url https://sentry.io/ releases new ${release}" \
     "--url https://sentry.io/ sourcemaps upload --release ${release} --validate --strict --wait --wait-for 8 dist" \

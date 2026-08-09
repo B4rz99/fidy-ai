@@ -48,12 +48,13 @@ it.effect("pins collection policy and fails malformed final hooks closed", () =>
       stackFrameVariables: false,
       frameContextLines: 0,
     });
-    expect(beforeSendSpan(Fn.cast<unknown, Parameters<typeof beforeSendSpan>[0]>({}))).toEqual({
-      data: {},
-      span_id: "",
-      start_timestamp: 0,
-      trace_id: "",
-    });
+    const emptySpan = { data: {}, span_id: "", start_timestamp: 0, trace_id: "" };
+    expect(beforeSendSpan(Fn.cast<unknown, Parameters<typeof beforeSendSpan>[0]>({}))).toEqual(
+      emptySpan
+    );
+    expect(beforeSendSpan(Fn.cast<unknown, Parameters<typeof beforeSendSpan>[0]>(null))).toEqual(
+      emptySpan
+    );
     expect(beforeBreadcrumb({})).toBeNull();
     expect(beforeSendLog(Fn.cast<unknown, Parameters<typeof beforeSendLog>[0]>({}))).toBeNull();
     expect(

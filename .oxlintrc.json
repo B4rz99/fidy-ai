@@ -300,6 +300,7 @@
         "vitest.core.config.ts",
         "vitest.crap.config.ts",
         "vitest.acceptance.config.ts",
+        "vitest.compatibility.config.ts",
         "stryker.config.mjs",
         ".dependency-cruiser.mjs",
         "scripts/oxlint/*.js"

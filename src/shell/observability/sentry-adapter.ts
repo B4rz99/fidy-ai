@@ -219,7 +219,10 @@ type TelemetrySink = Readonly<{
   readonly randomUnitInterval: () => number;
 }>;
 
-type RecordingClient = Readonly<{
+/** Isolated native client resource used by serialized-envelope and runtime compatibility gates. */
+export type RecordingClient = Readonly<{
+  readonly client: Sentry.BunClient;
+  readonly resource: TelemetryResource;
   readonly adapter: TelemetryAdapter;
   readonly serializedEnvelopes: Effect.Effect<ReadonlyArray<Uint8Array>>;
   readonly clear: Effect.Effect<void>;
@@ -372,6 +375,8 @@ const sentryClientOptions = (
   ...finalHooks(config),
 });
 
+let initializedSentryClientCount = 0;
+
 const makeSentryClient = (input: {
   readonly dsn: string;
   readonly config: SentryClientConfig;
@@ -383,8 +388,12 @@ const makeSentryClient = (input: {
   );
   if (input.bindCurrentClient) Sentry.setCurrentClient(client);
   client.init();
+  initializedSentryClientCount += 1;
   return client;
 };
+
+/** Reports how many native clients this adapter initialized in the current process. */
+export const sentryClientInitializationCount = (): number => initializedSentryClientCount;
 
 /** Transport outcomes available to deterministic no-network envelope tests. */
 export type RecordingTransportOutcome = "accepted" | "rate-limited" | "failed";
@@ -394,6 +403,7 @@ type RecordingSentryConfig = Readonly<{
   rootTraceRate: number;
   randomUnitInterval: () => number;
   transportOutcome: RecordingTransportOutcome;
+  bindCurrentClient: boolean;
 }>;
 
 const defaultRecordingConfig: RecordingSentryConfig = {
@@ -401,6 +411,7 @@ const defaultRecordingConfig: RecordingSentryConfig = {
   rootTraceRate: 1,
   randomUnitInterval: () => 0,
   transportOutcome: "accepted",
+  bindCurrentClient: false,
 };
 
 const makeRecordingSentryClient = (
@@ -418,7 +429,7 @@ const makeRecordingSentryClient = (
     },
     transport: (transportOptions) =>
       makeRecordingTransport(envelopes, transportOptions, config.transportOutcome),
-    bindCurrentClient: false,
+    bindCurrentClient: config.bindCurrentClient,
   });
 
 const startTelemetrySpan = (
@@ -575,6 +586,10 @@ const makeNetworkTransport: SentryTransport = (options) => {
   };
 };
 
+/** Reports whether runtime assembly still sees the exact client bound by early preload. */
+export const isCurrentSentryClient = (client: Sentry.BunClient): boolean =>
+  Sentry.getClient() === client;
+
 /** Validated enabled configuration accepted by the preload-owned Sentry client. */
 export type SentryTelemetryConfig = ProductionTelemetryConfig | NonProductionTelemetryConfig;
 
@@ -626,9 +641,13 @@ export const makeSentryRecordingClient = (
   const envelopes: Array<Uint8Array> = [];
   const config: RecordingSentryConfig = { ...defaultRecordingConfig, ...options };
   const client = makeRecordingSentryClient(envelopes, config);
+  const adapter = telemetryAdapter(client, config, config.randomUnitInterval);
+  const close = closeClient(client);
 
   return {
-    adapter: telemetryAdapter(client, config, config.randomUnitInterval),
+    client,
+    resource: { adapter, close },
+    adapter,
     serializedEnvelopes: Effect.map(
       Effect.promise(() => client.flush(clientDrainMilliseconds)),
       () => envelopes.map((envelope) => envelope.slice())
@@ -636,6 +655,6 @@ export const makeSentryRecordingClient = (
     clear: Effect.sync(() => {
       envelopes.length = 0;
     }),
-    close: closeClient(client),
+    close,
   };
 };

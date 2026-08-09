@@ -51,6 +51,7 @@ export const TelemetryRegistry = {
     "whatsapp.processTurn",
     "whatsapp.sendText",
     "postgres.repositoryOperation",
+    "postgres.compatibilityProbe",
     "task.retention",
     "provider.request",
     "observability.accountSmoke",

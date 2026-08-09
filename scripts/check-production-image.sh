@@ -5,14 +5,19 @@ suffix="${GITHUB_RUN_ID:-local}-$$"
 network="fidy-production-smoke-${suffix}"
 database="fidy-production-smoke-db-${suffix}"
 application="fidy-production-smoke-app-${suffix}"
+artifactContainer="fidy-production-smoke-artifact-${suffix}"
+telemetryProbe="fidy-production-smoke-telemetry-${suffix}"
 image="fidy-production-smoke:${suffix}"
 provisionLog=$(mktemp)
+artifactRoot=$(mktemp -d)
 
 cleanup() {
-  docker rm -f "$application" "${application}-rejected" "$database" >/dev/null 2>&1 || true
+  docker rm -f "$application" "${application}-rejected" "$artifactContainer" \
+    "$telemetryProbe" "$database" >/dev/null 2>&1 || true
   docker network rm "$network" >/dev/null 2>&1 || true
   docker image rm "$image" >/dev/null 2>&1 || true
   rm -f "$provisionLog"
+  rm -rf "$artifactRoot"
 }
 
 assertProvisionRejected() {
@@ -22,7 +27,7 @@ assertProvisionRejected() {
 
   if docker run --rm --network "$network" \
     --env "DATABASE_URL=${runtimeUrl}" --env "MIGRATION_DATABASE_URL=${migrationUrl}" \
-    "$image" bun scripts/provision-runtime-role.ts >"$provisionLog" 2>&1; then
+    "$image" bun dist/commands/provision-runtime-role.js >"$provisionLog" 2>&1; then
     echo "Runtime-role provisioning unexpectedly accepted an unsafe contract." >&2
     return 1
   fi
@@ -54,6 +59,7 @@ assertApplicationRejected() {
     --env KAPSO_API_KEY --env KAPSO_WEBHOOK_SECRET --env WHATSAPP_BUSINESS_PORTFOLIO_ID \
     --env OPENAI_API_KEY \
     --env SENTRY_ENVIRONMENT --env SENTRY_CAPTURE_ERRORS --env SENTRY_CAPTURE_TRACES \
+    --env SENTRY_PRODUCTION_DSN \
     --env PORT=3000 --env APP_VERSION=production-smoke-rejected \
     "$image" >/dev/null
   for _ in {1..20}; do
@@ -94,9 +100,88 @@ assertSqlResult() {
     return 1
   fi
 }
+
+assertArtifactPair() {
+  local javascript=$1
+  local sourceMap="${javascript}.map"
+  local javascriptDebugId
+  local sourceMapDebugId
+
+  if [[ ! -s "$javascript" || ! -s "$sourceMap" ]]; then
+    echo "Missing production JavaScript or external source map for ${javascript}." >&2
+    return 1
+  fi
+  javascriptDebugId=$(grep --only-matching --extended-regexp \
+    '//# debugId=[A-Fa-f0-9-]+' "$javascript" | tail -1 | cut -d= -f2)
+  sourceMapDebugId=$(grep --only-matching --extended-regexp \
+    '"debugId": "[A-Fa-f0-9-]+"' "$sourceMap" | tail -1 | cut -d'"' -f4)
+  if [[ -z "$javascriptDebugId" || "$javascriptDebugId" != "$sourceMapDebugId" ]]; then
+    echo "Production JavaScript and source map debug IDs do not match for ${javascript}." >&2
+    return 1
+  fi
+}
+
+inspectArtifacts() {
+  docker create --name "$artifactContainer" "$image" >/dev/null
+  docker cp "${artifactContainer}:/app/dist/." "$artifactRoot/"
+  docker rm "$artifactContainer" >/dev/null
+
+  if [[ $(find "$artifactRoot" -maxdepth 1 -type f -name '*.js' | wc -l | tr -d '[:space:]') != 2 ]]; then
+    echo "The production image must contain exactly the built preload and application entries." >&2
+    return 1
+  fi
+  assertArtifactPair "$artifactRoot/preload.js"
+  assertArtifactPair "$artifactRoot/main.js"
+  assertArtifactPair "$artifactRoot/commands/provision-runtime-role.js"
+  assertArtifactPair "$artifactRoot/commands/migrate.js"
+  if ! grep --fixed-strings --quiet 'src/shell/observability/preload.ts' "$artifactRoot/preload.js.map" || \
+    ! grep --fixed-strings --quiet 'src/main.ts' "$artifactRoot/main.js.map"; then
+    echo "The production source maps do not cover the preload and application entries." >&2
+    return 1
+  fi
+  if grep --recursive --quiet --binary-files=text --extended-regexp \
+    'production-smoke-(kapso-key|webhook-secret|openai-key)|error-message-sentinel|financial-sentinel|secret-webhook-body-sentinel|BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY' \
+    "$artifactRoot"; then
+    echo "Production JavaScript or source maps contain a secret or synthetic fixture." >&2
+    return 1
+  fi
+  if ! docker run --rm "$image" sh -c \
+    'test ! -e src/main.ts && test ! -e src/shell/observability/preload.ts && test ! -e scripts/migrate.ts'; then
+    echo "The runtime image retained direct TypeScript production entries." >&2
+    return 1
+  fi
+}
+
+assertRetentionStarted() {
+  local applicationLogs=""
+
+  for _ in {1..20}; do
+    applicationLogs=$(docker logs "$application" 2>&1)
+    if grep --fixed-strings --quiet 'Applied WhatsApp operational retention' <<<"$applicationLogs" && \
+      grep --fixed-strings --quiet 'Applied AuditLogEntry retention' <<<"$applicationLogs" && \
+      grep --fixed-strings --quiet 'Applied pending Consent retention' <<<"$applicationLogs"; then
+      return 0
+    fi
+    sleep 0.5
+  done
+
+  docker logs "$application" >&2
+  echo "The production retention workers did not report startup." >&2
+  return 1
+}
+
+assertTelemetryDisabled() {
+  sleep 1
+  if docker logs "$telemetryProbe" 2>&1 | grep --fixed-strings --quiet 'sentry-transport-opened'; then
+    echo "Disabled telemetry opened the Sentry transport." >&2
+    return 1
+  fi
+}
 trap cleanup EXIT
 
 docker build --tag "$image" .
+inspectArtifacts
+
 docker network create "$network" >/dev/null
 docker run --detach --name "$database" --network "$network" \
   --env POSTGRES_USER=fidy --env POSTGRES_PASSWORD=fidy --env POSTGRES_DB=fidy \
@@ -119,6 +204,7 @@ export OPENAI_API_KEY="production-smoke-openai-key"
 export SENTRY_ENVIRONMENT="production"
 export SENTRY_CAPTURE_ERRORS="false"
 export SENTRY_CAPTURE_TRACES="false"
+export SENTRY_PRODUCTION_DSN="http://${telemetryProbe}:8080/1"
 
 assertProvisionRejected \
   "postgresql://fidy_runtime:runtime-sentinel@[bad/fidy" \
@@ -158,15 +244,23 @@ assertSqlResult 0 \
 
 docker run --rm --network "$network" \
   --env MIGRATION_DATABASE_URL --env DATABASE_URL \
-  "$image" bun scripts/provision-runtime-role.ts
+  "$image" bun dist/commands/provision-runtime-role.js
 docker run --rm --network "$network" \
   --env MIGRATION_DATABASE_URL --env WHATSAPP_BUSINESS_PORTFOLIO_ID \
-  "$image" bun scripts/migrate.ts
+  "$image" bun dist/commands/migrate.js
 expectedMigrationCount=$(find src/shell/db/migrations -maxdepth 1 -type f \
   -name '[0-9][0-9][0-9][0-9]-*.ts' | wc -l | tr -d '[:space:]')
 assertSqlResult "$expectedMigrationCount" \
   "SELECT count(*) FROM effect_sql_migrations" \
   "Pre-deploy migration count"
+docker exec "$database" psql --username fidy --dbname fidy \
+  --command "INSERT INTO whatsapp_inbound_receipts (provider_message_id, delivery_key, status, claim_id, claim_expires_at, first_received_at, completed_at) VALUES ('wamid.text-001', 'production-smoke-delivery', 'completed', '00000000-0000-4000-8000-000000000112', now() + interval '1 minute', now(), now())" \
+  >/dev/null
+
+docker run --detach --name "$telemetryProbe" --network "$network" \
+  "$image" bun -e \
+  'Bun.serve({ port: 8080, fetch() { console.log("sentry-transport-opened"); return new Response(""); } });' \
+  >/dev/null
 
 docker run --detach --name "$application" --network "$network" \
   --publish 127.0.0.1::3000 \
@@ -174,6 +268,7 @@ docker run --detach --name "$application" --network "$network" \
   --env KAPSO_API_KEY --env KAPSO_WEBHOOK_SECRET --env WHATSAPP_BUSINESS_PORTFOLIO_ID \
   --env OPENAI_API_KEY \
   --env SENTRY_ENVIRONMENT --env SENTRY_CAPTURE_ERRORS --env SENTRY_CAPTURE_TRACES \
+  --env SENTRY_PRODUCTION_DSN \
   --env PORT=3000 --env APP_VERSION=production-smoke \
   "$image" >/dev/null
 
@@ -191,6 +286,8 @@ for _ in {1..30}; do
 done
 
 bun scripts/check-deployment-smoke.ts "$origin"
+assertRetentionStarted
+assertTelemetryDisabled
 assertSqlResult t \
   "SELECT rolcanlogin AND NOT rolsuper AND NOT rolcreatedb AND NOT rolcreaterole AND NOT rolreplication AND NOT rolbypassrls FROM pg_roles WHERE rolname = 'fidy_runtime'" \
   "Runtime authority"

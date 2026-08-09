@@ -1,0 +1,66 @@
+src/shell/observability/projectors.ts
+  s_529bed04cbf248::t_8118448fe27b55 232
+  s_529bed04cbf248::t_abafc4fbcfeb86 156-174,364-368
+src/shell/audit/retention.ts
+  s_529bed04cbf248::t_2a842435464aa1 4
+  s_529bed04cbf248::t_b438410cbeed51 3,19-33,38-39,42
+src/shell/channels/whatsapp/worker.ts
+  s_529bed04cbf248::t_60864abcfc1234 5,90-92,95,101,135-161
+src/shell/observability/scheduled-task.ts
+  s_529bed04cbf248::t_c16bd12279319a 2-3,68-70,81,86-100
+  s_529bed04cbf248::t_abf23d53f00b8f 1,4,6-13,67,71-80,82,84-85
+  s_529bed04cbf248::t_8516e7c6b9f070 5,14-66,83
+src/shell/consent/retention.ts
+  s_529bed04cbf248::t_11234275f09424 2-3,7-23,27
+  s_529bed04cbf248::t_bce90c454339a3 4
+src/shell/observability/scheduled-task.test.ts
+  s_529bed04cbf248::t_00cf433e84c97f 2-3,116-121,123
+  s_529bed04cbf248::t_1e8bc478f3b6c1 1,4-24,35-37,39-40,43-52,54-57,59-94,96-97,100,102-108,122,124-125,127-129,131-148
+  s_529bed04cbf248::t_592fe471eba1a0 25-28,110-115
+  s_529bed04cbf248::t_a433743a67db6b 29
+  s_529bed04cbf248::t_c0f7328c476906 30-34,42,53,58,99,101,109
+  s_529bed04cbf248::t_b6e553a9b13d81 38,95,126,130
+  s_529bed04cbf248::t_149af1e80e168b 41,98
+src/shell/consent/retention.test.ts
+  s_529bed04cbf248::t_a349dfcb4e6837 2,13,19,64
+  s_529bed04cbf248::t_b2f09f5c55cfc1 6,10-11
+  s_cb8296d75c38f3::t_36137a7e18e7d0 12
+src/shell/observability/registry.ts
+  s_529bed04cbf248::t_54efb86acee098 55-57
+src/shell/channels/whatsapp/whatsapp-channel.test.ts
+  s_529bed04cbf248::t_07b3aca2db941d 899
+  s_529bed04cbf248::t_e890d22926e72b 46,755
+  s_529bed04cbf248::t_5dee83cf85aa2d 81
+  s_529bed04cbf248::t_a2f21e120c30a1 45,756
+  s_529bed04cbf248::t_f0d91ddd886a05 757
+src/shell/observability/envelope-recorder.test.ts
+  s_529bed04cbf248::t_9a940edd99f1fa 458
+src/shell/audit/retention.test.ts
+  s_529bed04cbf248::t_0c736761508797 2,5-9,13,15-33,62-64,71-76
+src/shell/observability/telemetry.ts
+  s_529bed04cbf248::t_33474677140c98 59-63,207-208
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "3ce2ab6837aa5facf43a1b64a463e1db6c8df4fd",
+  "prompts": {},
+  "sessions": {
+    "s_529bed04cbf248": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019fe6f3-b235-7e11-bee7-459077f2a423",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_cb8296d75c38f3": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019fe6bc-8875-79f6-aa77-3978d6d88ed8",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

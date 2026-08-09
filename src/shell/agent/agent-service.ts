@@ -70,7 +70,7 @@ import {
   transcriptPrompt,
   turnPrompt,
 } from "./model-boundary";
-import { HostedToolCallCap, hostedTelemetryModel, withHostedToolCallCap } from "./openai";
+import { HostedToolCallCap, fidyAgentModelCode, withHostedToolCallCap } from "./openai";
 import { makeTurnConfirmation } from "./tool-confirmation";
 import { renderTransactionReceipt } from "./transaction-receipt";
 import {
@@ -105,7 +105,7 @@ const modelRoundDescriptor: SpanDescriptor = {
   trigger: "api",
   spanOperation: "agent.model",
   workKind: "model_call",
-  metadata: { _tag: "Model", model: hostedTelemetryModel },
+  metadata: { _tag: "Model", model: fidyAgentModelCode },
 };
 
 /** Resource and context bounds applied independently to every hosted turn. */

@@ -5,8 +5,8 @@ import { HttpClient, type HttpClientRequest, HttpClientResponse } from "effect/u
 import { makeOpenAiTextResponse } from "~/shell/agent/fixtures/openai";
 import { AgentToolkit } from "./toolkit";
 import {
+  FidyAgentModel,
   HostedAgentGenerationConfig,
-  HostedAgentModel,
   HostedToolCallCap,
   OpenAiLanguageModelLive,
   withHostedToolCallCap,
@@ -28,7 +28,7 @@ it.effect("constructs the fixed hosted model from a configured secret", () =>
     );
 
     yield* Effect.scoped(Layer.build(configured));
-    expect(HostedAgentModel).toBe("gpt-5.6-luna");
+    expect(FidyAgentModel).toBe("gpt-5.6-luna");
     expect(HostedAgentGenerationConfig).toEqual({
       temperature: 0.7,
       reasoning: { effort: "none" },

@@ -31,6 +31,11 @@ The process reads deployment configuration from the environment:
 | `FIDY_HTTP_HOST`                 | optional    | Bind host, defaulting to `0.0.0.0`                         |
 | `APP_VERSION`                    | optional    | Version returned by `GET /health`                          |
 | `RAILWAY_DEPLOYMENT_ID`          | Railway     | Health version fallback when `APP_VERSION` is absent       |
+| `RAILWAY_GIT_COMMIT_SHA`         | Railway     | Full GitHub-triggered SHA used for release validation      |
+| `SENTRY_RELEASE`                 | production  | Immutable `fidy@<full-sha>` runtime release                |
+| `SENTRY_AUTH_TOKEN`              | pre-deploy  | Upload-only token carrying only Sentry's `org:ci` scope    |
+| `SENTRY_ORG`                     | pre-deploy  | Sentry organization receiving the immutable release        |
+| `SENTRY_PROJECT`                 | pre-deploy  | Production server project receiving debug-ID artifacts     |
 
 ```sh
 docker compose up -d db     # local Postgres on :5433
@@ -57,11 +62,25 @@ Canonical operations remain protected by scoped `fin_` bearer authorization. Con
 buffered message-event webhook at `POST /webhooks/kapso` and its exact Meta forwarding webhook at
 `POST /webhooks/kapso/meta`; the latter handles authenticated `user_changed_user_id` events while
 acknowledging unrelated raw Meta events. Both use the configured Kapso webhook secret.
-`railway.json`
-configures Railway to build the Dockerfile, provision the restricted runtime login and apply
-migrations before deploy, and gate deployments on `/health`. Both database URLs must resolve inside the production
-environment: the runtime login is exactly `fidy_runtime`, while the migration login can own tables
-and provision the fixed `fidy_runtime` and `fidy_gateway` roles.
+`railway.json` configures Railway to build the Dockerfile, prepare the immutable Sentry release,
+provision the restricted runtime login, and apply migrations before deploy, then gate deployments
+on `/health`. Release preparation requires `SENTRY_RELEASE` to equal `fidy@` plus Railway's full
+Git commit SHA. It creates the release, uploads and validates the image's already-injected debug-ID
+artifacts with bounded retries, and finalizes it before database preparation. Repeating the same
+SHA is safe. The upload token must carry only Sentry's `org:ci` scope, and the uploader pins
+`https://sentry.io/` rather than accepting an environment-provided credential destination. The image
+removes the token, organization/project upload coordinates, and non-production DSN before the
+application starts. Railway's bounded pre-deploy command duration, fixed retry count, sanitized
+failure reason, and exit status are the observation boundary for this workflow; application
+telemetry is intentionally unavailable because the command prepares Sentry before activation. The
+running process retains the production DSN and code-validated environment, release, capture
+switches, and trace rate. Both database URLs must resolve inside the production environment: the
+runtime login is exactly `fidy_runtime`, while the migration login can own tables and provision the
+fixed `fidy_runtime` and `fidy_gateway` roles.
+
+A future browser build must use the same `fidy@<full-sha>` release, inject and upload its debug-ID
+maps before activation, and remove maps from public output. This deployment does not add a browser
+build or browser telemetry.
 
 The transient `health-cron` Railway service is built from `deploy/health-cron/`. Every five minutes
 it requests the public health endpoint from its environment-only `HEALTH_URL` and exits, making a

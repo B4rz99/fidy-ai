@@ -1,0 +1,69 @@
+package.json
+  s_0ead93ee88059c::t_5df7ebc49a90b7 21
+src/shell/observability/registry.ts
+  s_0ead93ee88059c::t_0830fb96acef38 54
+vitest.compatibility.config.ts
+  s_0ead93ee88059c::t_978215c12a5941 1-6,8-13
+  s_0ead93ee88059c::t_ada0f7446762ef 7
+tools/observability-compatibility/compatibility.test.ts
+  s_0ead93ee88059c::t_833cafbfe93b25 15
+  s_0ead93ee88059c::t_8149c8342d9ac8 1,27,41-46,80
+  s_0ead93ee88059c::t_9400b030b7b80e 14
+  s_0ead93ee88059c::t_403dd90f376a8c 51-62,77,86
+  s_0ead93ee88059c::t_f070a90a6e537c 28,67,79,87
+  s_97d597f62db5d6::t_7de120b3cb071b 2-13,16-26,29-40,47-50,63-66,68-76,78,81-85,88
+.github/workflows/ci.yml
+  s_0ead93ee88059c::t_434e9b0ccc61ad 128-131
+tools/observability-compatibility/handoff.ts
+  s_0ead93ee88059c::t_abe751724bb387 24
+  s_cb8296d75c38f3::t_bdafd7553a3dd6 1-23,25-27
+.oxlintrc.json
+  s_0ead93ee88059c::t_93528c7cce5591 303
+tools/observability-compatibility/fixture-process.test.ts
+  s_0ead93ee88059c::t_bedb489948dc8d 23-24,247,252-302
+  s_0ead93ee88059c::t_c451bede2bb080 125
+  s_0ead93ee88059c::t_caba84adb14a23 1,80-87,133,164,199-206
+  s_0ead93ee88059c::t_f87863d0fd5f89 191-194
+  s_0ead93ee88059c::t_aaf765862afe7a 134-136,212,219,223,226,229,244,249
+  s_0ead93ee88059c::t_c2ff41ca941d3b 90-100,128,243,245-246,248,310-311
+  s_0ead93ee88059c::t_95f8b35f09b0ca 2-22,25-79,88-89,101-124,126-127,129-132,137-163,165-190,195-198,207-211,213-218,220-222,224-225,227-228,230-242,250-251,303-309,312-313
+tsconfig.json
+  s_0ead93ee88059c::t_3955700d026c1d 118-134,138-143
+src/shell/observability/sentry-adapter.ts
+  s_0ead93ee88059c::t_6418bd61a637e0 583-586
+  s_0ead93ee88059c::t_2debf27aba7704 222-225,400,408,426,638-639,642-644,652
+tools/observability-compatibility/preload.ts
+  s_0ead93ee88059c::t_ee460d27ce0c65 1-36
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "8fe1c485b3b34931a1890beba8d069c157cd22c7",
+  "prompts": {},
+  "sessions": {
+    "s_0ead93ee88059c": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019fe6c0-5e25-7e82-8b28-42f201fab9bf",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_97d597f62db5d6": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019fe4c1-3e77-77b6-8c9e-5ed7f45acbc7",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_cb8296d75c38f3": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019fe6bc-8875-79f6-aa77-3978d6d88ed8",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

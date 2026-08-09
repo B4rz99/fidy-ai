@@ -60,14 +60,6 @@ const resultEntryAt = (
     )
   );
 
-const callEntryAt = (
-  entries: ReadonlyArray<TranscriptEntry>,
-  index: number
-): Option.Option<TranscriptCallEntry> =>
-  Option.fromUndefinedOr(entries[index]).pipe(
-    Option.filter((entry): entry is TranscriptCallEntry => entry._tag === "CanonicalToolCallEntry")
-  );
-
 const confirmationFailure = (
   result: TranscriptResultEntry,
   challenge: string
@@ -83,13 +75,13 @@ const matchingCallBefore = (
   entries: ReadonlyArray<TranscriptEntry>,
   resultIndex: number,
   result: TranscriptResultEntry
-): Option.Option<TranscriptCallEntry> => {
-  for (let index = resultIndex - 1; index >= 0; index -= 1) {
-    const call = callEntryAt(entries, index);
-    if (Option.isSome(call) && call.value.toolCallId === result.toolCallId) return call;
-  }
-  return Option.none();
-};
+): Option.Option<TranscriptCallEntry> =>
+  Option.fromUndefinedOr(
+    entries
+      .slice(0, resultIndex)
+      .filter((entry): entry is TranscriptCallEntry => entry._tag === "CanonicalToolCallEntry")
+      .findLast((call) => call.toolCallId === result.toolCallId)
+  );
 
 const pendingConfirmationAt = (
   entries: ReadonlyArray<TranscriptEntry>,

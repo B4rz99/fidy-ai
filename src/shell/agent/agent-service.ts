@@ -381,9 +381,11 @@ const toolCallOutcome = (
     : makeToolOutcome(executed.isFailure, result);
 
 const completesTurn = (binding: AgentOperationBinding, outcome: CanonicalToolOutcome): boolean =>
-  binding.operation !== atomicBatchOperation &&
-  binding.policy.requiredScope === "write" &&
-  outcome._tag === "Succeeded";
+  [
+    binding.operation !== atomicBatchOperation,
+    binding.policy.requiredScope === "write",
+    outcome._tag === "Succeeded",
+  ].every(Boolean);
 
 const recordToolOutcome = Effect.fn("AgentService.recordToolOutcome")(function* (
   turn: HostedTurn,
@@ -525,9 +527,13 @@ const confirmationRequiredCount = (calls: ReadonlyArray<ValidPreparedToolCall>):
       call.binding.policy.agentConfirmation === "required"
   ).length;
 
-const requiresAtomicBatchCorrection = (calls: ReadonlyArray<ValidPreparedToolCall>): boolean =>
-  confirmationRequiredCount(calls) > 1 ||
-  (calls.length > 1 && calls.some(({ call }) => call.binding.operation === atomicBatchOperation));
+const requiresAtomicBatchCorrection = (calls: ReadonlyArray<ValidPreparedToolCall>): boolean => {
+  const includesAtomicBatch = calls.some(
+    ({ call }) => call.binding.operation === atomicBatchOperation
+  );
+  const mixesAtomicBatchWithSiblingCalls = [calls.length > 1, includesAtomicBatch].every(Boolean);
+  return [confirmationRequiredCount(calls) > 1, mixesAtomicBatchWithSiblingCalls].some(Boolean);
+};
 
 const settleConfirmations = (
   turn: HostedTurn,

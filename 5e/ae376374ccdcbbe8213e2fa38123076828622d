@@ -1,0 +1,24 @@
+src/shell/observability/sentry-account-reader.ts
+  s_97d597f62db5d6::t_66f0840ec78d3f 110,114-115,135
+  s_97d597f62db5d6::t_39b4e0de10e9b5 100-102,106
+vitest.acceptance.config.ts
+  s_97d597f62db5d6::t_da9136c9487abf 8-12
+src/shell/observability/account-policy.ts
+  s_97d597f62db5d6::t_5ca92f0c859ce1 232-238,241-244
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "5eae376374ccdcbbe8213e2fa38123076828622d",
+  "prompts": {},
+  "sessions": {
+    "s_97d597f62db5d6": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019fe4c1-3e77-77b6-8c9e-5ed7f45acbc7",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

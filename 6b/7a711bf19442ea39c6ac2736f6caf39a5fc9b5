@@ -1,0 +1,115 @@
+src/shell/transactions/handlers.test.ts
+  s_f0e1246b56ad60::t_bfc5e7c3aa6859 2,11,18-19,31
+src/shell/transactions/mutations.ts
+  s_f0e1246b56ad60::t_6c494e6554ab03 27-28,93-104,110-111,117,125-128
+  s_f0e1246b56ad60::t_cd6c3219675770 105
+src/shell/observability/registry.test.ts
+  s_f0e1246b56ad60::t_22ba3a978f822e 2,4-5,15-31
+  s_f0e1246b56ad60::t_951c995f4f07b4 3
+  s_f0e1246b56ad60::t_6973031094e984 32
+src/shell/testing/telemetry-envelope-fixtures.ts
+  s_f0e1246b56ad60::t_1aa99c19836e77 24
+  s_f0e1246b56ad60::t_caedf46d2e4eeb 1-23,25-40
+src/shell/observability/canonical-api.ts
+  s_f0e1246b56ad60::t_c292b2ece1eafd 12-26,30-35,37-38,40,42-47,105
+  s_f0e1246b56ad60::t_a93e8fee4c24e3 69-71
+  s_f0e1246b56ad60::t_ce2176d2b4d1bb 2-3
+  s_f0e1246b56ad60::t_fbb19a32ca77ee 11,48-64,66-68,72-73,87-88,90,92-97,102-104
+  s_f0e1246b56ad60::t_08a09f8d9c8b20 98-101
+  s_f0e1246b56ad60::t_8241e6341311d6 65
+  s_f0e1246b56ad60::t_fe714e7e0558af 74-86
+  s_f0e1246b56ad60::t_aa8ff112376524 89,91
+  s_f0e1246b56ad60::t_a63cf5b7be6fcb 1,27,29,36,39,41
+  s_f0e1246b56ad60::t_2ee15412aeb28e 10
+  s_f0e1246b56ad60::t_1384a451ec6eb5 4-9,28
+src/shell/_shared/canonical-mutation-registry.ts
+  s_f0e1246b56ad60::t_fd2eb2e75063d4 12,29
+src/shell/api.ts
+  s_f0e1246b56ad60::t_bbf3e4304a8dce 3,26-28,31-32,34,36-37,58-59
+  s_f0e1246b56ad60::t_cdf2be5ba23085 40-43,53-55
+src/shell/observability/sentry-adapter.ts
+  s_f0e1246b56ad60::t_e6f4eed97fece2 113
+src/shell/observability/registry.ts
+  s_f0e1246b56ad60::t_e83de5583a47a9 2,22,63,79,90,137-140
+  s_f0e1246b56ad60::t_0488ce3c8fb981 8-13,23
+  s_f0e1246b56ad60::t_09edd04c309367 82-89
+src/shell/observability/canonical-api.test.ts
+  s_f0e1246b56ad60::t_d33187ca61645b 5,124-125,135-140,143-145,147-148,153,160
+  s_f0e1246b56ad60::t_6c5df76d3351cb 1,11,13-16,26,50,185-187
+  s_f0e1246b56ad60::t_3dcd615e420761 173-174
+  s_f0e1246b56ad60::t_db2732513673c7 2,7,10
+  s_f0e1246b56ad60::t_61d074148190b0 59-65,83
+  s_f0e1246b56ad60::t_51082d8328255f 175
+  s_f0e1246b56ad60::t_e64b1237f74390 176-179
+  s_f0e1246b56ad60::t_a088005d5bbede 180
+  s_f0e1246b56ad60::t_0488ce3c8fb981 6,17-25,27-31,33-49,51,56-58,67-69,82,84-90,93-100,102-104,107-109,112,121-123,126-134,141-142,146,149-152,154-157,159,161-172,181-184
+  s_f0e1246b56ad60::t_7ef92f2472e48f 3-4,91-92,101,106,111
+  s_f0e1246b56ad60::t_2e9916e95170ad 52-55,66,70-81
+  s_f0e1246b56ad60::t_dd7a48037627aa 12
+  s_f0e1246b56ad60::t_97c660c01cd344 105,110,113-120
+  s_f0e1246b56ad60::t_638a7a8aedf262 8-9,32,158
+src/shell/observability/envelope-recorder.test.ts
+  s_f0e1246b56ad60::t_331d8324a03758 80-82
+  s_f0e1246b56ad60::t_1af0f857eba748 618
+  s_f0e1246b56ad60::t_5354666398b659 5-8
+  s_f0e1246b56ad60::t_f4331c7f1598a2 327,331-335,340-345,347
+  s_f0e1246b56ad60::t_dc53494ccf9dd8 595,603-617,619,623-625
+  s_f0e1246b56ad60::t_ad3bbdd433f923 580
+  s_f0e1246b56ad60::t_38df9a7a5404e6 4
+src/shell/_shared/canonical-telemetry.ts
+  s_f0e1246b56ad60::t_818e23ab6c8b2f 4-6
+  s_f0e1246b56ad60::t_b1f894b21c3a0a 3
+  s_f0e1246b56ad60::t_30c722b823aa20 1-2
+src/shell/observability/protocol.ts
+  s_f0e1246b56ad60::t_6d3c5329ad2207 28
+  s_f0e1246b56ad60::t_a3267afc19f066 35,38-41,79-82
+  s_f0e1246b56ad60::t_efd20468298f6f 29-31,34
+  s_cb8296d75c38f3::t_da6fe629e95a44 83
+src/shell/http.ts
+  s_f0e1246b56ad60::t_12279e90be9c06 20
+  s_f0e1246b56ad60::t_0488ce3c8fb981 48
+src/shell/testing/api-harness.ts
+  s_f0e1246b56ad60::t_683afd70daf2b7 146-148
+  s_f0e1246b56ad60::t_b0d1b7c5d99124 27-28,128,141,144-145
+  s_f0e1246b56ad60::t_284bd9dda6e171 142-143
+  s_cb8296d75c38f3::t_7bbbe72e0703ab 149
+src/shell/observability/projectors.ts
+  s_f0e1246b56ad60::t_2f9ae3ffb09307 124
+  s_f0e1246b56ad60::t_676b5dacdaa9d7 133-136
+  s_f0e1246b56ad60::t_7a19f9daadd9da 184,190-194,232-234,254,261,307,354-357
+  s_f0e1246b56ad60::t_1a5a1b7c7fbf94 253,255-256
+  s_f0e1246b56ad60::t_6ba728e279fafb 16,230
+  s_f0e1246b56ad60::t_761f456afe9c4d 30,38,106
+  s_f0e1246b56ad60::t_e42ce157c4af20 121-123,125-131,137-140
+  s_f0e1246b56ad60::t_2ed38178100f1f 257
+tools/observability-compatibility/fixture-process.test.ts
+  s_f0e1246b56ad60::t_cafaab253d64be 19-21,138
+  s_f0e1246b56ad60::t_9d303470d662c8 60,71-75,341-345
+  s_f0e1246b56ad60::t_3b718a10d7c350 18
+src/shell/_shared/operation-catalog.ts
+  s_f0e1246b56ad60::t_b77eae6f206d19 15-17,122-123
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "6b7a711bf19442ea39c6ac2736f6caf39a5fc9b5",
+  "prompts": {},
+  "sessions": {
+    "s_cb8296d75c38f3": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019fe6bc-8875-79f6-aa77-3978d6d88ed8",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_f0e1246b56ad60": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019fe6f3-6e3b-7944-9f4d-1ca2494a8ed6",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

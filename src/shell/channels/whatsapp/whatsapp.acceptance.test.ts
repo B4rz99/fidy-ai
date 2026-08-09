@@ -422,6 +422,25 @@ layer(WhatsAppAcceptanceHarness, { excludeTestServices: true, timeout: "30 secon
         expect(reply).not.toHaveProperty("recipient");
         expect(reply.text.body).toContain("Gasto guardado");
         expect(reply.text.body).not.toContain("ACCEPTANCE_TRANSIENT_CONTEXT");
+
+        const plainIdentity = yield* makeScenarioIdentity("WA-A05");
+        const plainResponse = yield* postSignedDelivery(
+          yield* makeSignedWebhookAt(
+            {
+              providerMessageId: plainIdentity.providerMessageId,
+              businessScopedUserId: onboarding.identity.businessScopedUserId,
+              phoneNumber: Option.some(E164PhoneNumber.make("+573005050505")),
+              text: TranscriptText.make("Hola ACCEPTANCE_PLAIN_REPLY"),
+            },
+            DateTime.add(onboarding.startedAt, { seconds: 8 })
+          )
+        );
+        expect(plainResponse.status).toBe(200);
+        const plainOutbound = yield* awaitKapsoRequests(4);
+        const plainReply = yield* Schema.decodeUnknownEffect(KapsoTextRequest)(
+          plainOutbound[3]?.body
+        );
+        expect(plainReply.text.body).toBe("Todo listo.");
         expect((yield* model.calls).length).toBeGreaterThan(0);
       })
     );

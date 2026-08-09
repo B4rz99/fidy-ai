@@ -141,8 +141,11 @@ export class WhatsAppAcceptanceModelControl extends Context.Service<
   }
 >()("fidy-ai/shell/testing/whatsapp-acceptance-harness/WhatsAppAcceptanceModelControl") {}
 
-const acceptanceModelReply = (serializedPrompt: string): Array<AiResponse.PartEncoded> =>
-  serializedPrompt.includes("ACCEPTANCE_TRANSIENT_CONTEXT")
+const acceptanceModelReply = (serializedPrompt: string): Array<AiResponse.PartEncoded> => {
+  if (serializedPrompt.includes("ACCEPTANCE_PLAIN_REPLY")) {
+    return [{ type: "text" as const, text: "Todo listo." }, makeLanguageModelFinishPart("stop")];
+  }
+  return serializedPrompt.includes("ACCEPTANCE_TRANSIENT_CONTEXT")
     ? [
         {
           type: "tool-call" as const,
@@ -171,6 +174,7 @@ const acceptanceModelReply = (serializedPrompt: string): Array<AiResponse.PartEn
         { type: "text" as const, text: "ACCEPTANCE_TRANSIENT_CONTEXT after" },
         makeLanguageModelFinishPart("tool-calls"),
       ];
+};
 
 const recordModelCall = (
   observedCalls: MutableRef.MutableRef<ReadonlyArray<WhatsAppAcceptanceModelCall>>,

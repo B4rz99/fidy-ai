@@ -1,0 +1,19 @@
+src/shell/observability/projectors.ts
+  s_ee7bb67568bacb::t_de389bcbebfa97 178-181,188
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "668b8fcb0a3b3b071aae2b1660e5e548fe716aef",
+  "prompts": {},
+  "sessions": {
+    "s_ee7bb67568bacb": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019fe75a-8d68-73fe-a8b2-12052c4fb8b5",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

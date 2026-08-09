@@ -1,0 +1,126 @@
+src/shell/observability/registry.ts
+  s_ee7bb67568bacb::t_191d5a21ed09bd 71-72
+src/shell/observability/canonical-api.ts
+  s_ee7bb67568bacb::t_6b8512c5b8d593 92,94-95
+  s_ee7bb67568bacb::t_56742bc551f012 12,93
+  s_ee7bb67568bacb::t_cd1a10725b79d0 1,90-91
+  s_ee7bb67568bacb::t_5b79f796fd2e6b 105,108-109
+  s_ee7bb67568bacb::t_d1c682789313c1 97-102,104,107
+  s_ee7bb67568bacb::t_e1fe2c154fb5b9 106
+  s_ee7bb67568bacb::t_31a244ae54f53d 2,88-89,110
+  s_ee7bb67568bacb::t_e13a69a70e75a2 103
+src/shell/agent/openai.ts
+  s_ee7bb67568bacb::t_e3352114973e1e 12
+  s_ee7bb67568bacb::t_80ab6ef8181e4c 9
+  s_ee7bb67568bacb::t_00fe572ff0a5d3 3,8,10-11
+src/shell/agent/agent-service.ts
+  s_ee7bb67568bacb::t_3555f738981da1 1271-1287,1306
+  s_ee7bb67568bacb::t_6eb9da32634ed1 781-782,784-785
+  s_ee7bb67568bacb::t_c85086df8c0916 1336-1338
+  s_ee7bb67568bacb::t_7c8a00180d1e85 906
+  s_ee7bb67568bacb::t_78af5347c290ad 1204-1232,1267
+  s_ee7bb67568bacb::t_321757a1aa487f 2,10,51,94-101,107,786-793,795-796,798-800,869-878,901-905,907-916
+  s_ee7bb67568bacb::t_96a0ec6bb40523 794,797
+  s_ee7bb67568bacb::t_2367e29fd753fe 73,108
+  s_ee7bb67568bacb::t_abcfb853e88bbc 1190
+  s_ee7bb67568bacb::t_ef76859e05a73f 53,783
+  s_ee7bb67568bacb::t_da097cdf1bbc27 1233-1266,1268-1270,1299-1305,1307-1324,1326-1331,1334-1335
+  s_ee7bb67568bacb::t_52d63be3943120 1156,1191-1200
+src/shell/channels/whatsapp/whatsapp-channel.test.ts
+  s_ee7bb67568bacb::t_a3e5a7b2d9377f 911
+  s_ee7bb67568bacb::t_824b1e04bd346e 913
+src/shell/observability/sentry-adapter.ts
+  s_ee7bb67568bacb::t_7f0acc0f1f6682 21,212,466,491,509-519,586
+src/shell/observability/protocol.ts
+  s_ee7bb67568bacb::t_5aa1e1f3b41f00 6
+  s_ee7bb67568bacb::t_68404b345a21a5 57-60,65
+  s_ee7bb67568bacb::t_43a42055f05a5b 4-5,7,9
+src/shell/observability/canonical-api.test.ts
+  s_ee7bb67568bacb::t_3d70cc721e3a41 108-111,123
+src/shell/agent/toolkit.ts
+  s_ee7bb67568bacb::t_e81d60d8b86091 12
+  s_ee7bb67568bacb::t_ac08d02c23667d 196-198
+  s_ee7bb67568bacb::t_c85086df8c0916 188-195,199-202
+  s_ee7bb67568bacb::t_0ad684f9965bc5 2-3,8,165,183,187,203-204
+src/shell/observability/projectors.ts
+  s_ee7bb67568bacb::t_c2d2d79b427a5a 370-381,383-392,428-431
+  s_ee7bb67568bacb::t_c85086df8c0916 413-427,437-449
+  s_ee7bb67568bacb::t_2b13d3d0c6c785 382
+  s_ee7bb67568bacb::t_678f8823013676 18,179,184,196-197,234-241,405,408-412,450-451
+src/shell/observability/telemetry.ts
+  s_ee7bb67568bacb::t_24e12028799787 198,216
+  s_ee7bb67568bacb::t_4e4123096ed3e2 212-215,218,298
+  s_ee7bb67568bacb::t_c5d5569bf6ff72 205,208-210
+  s_835a68f05b2a71::t_aa7fa8e7a32066 290-291
+  s_ee7bb67568bacb::t_c85086df8c0916 289
+  s_ee7bb67568bacb::t_73e82979f19388 196-197,199-200,211,219-220
+  s_ee7bb67568bacb::t_b73deee5147df8 217
+  s_ee7bb67568bacb::t_127bed9ec49c54 9,48-52,82-83,285-288
+  s_ee7bb67568bacb::t_dc8da88ad52d16 201-204,206-207
+  s_ee7bb67568bacb::t_5c2c2c650d52c3 86-90,146-147,150,157-158,160-162,241-243,248,256,263,293-296
+src/shell/observability/envelope-recorder.test.ts
+  s_ee7bb67568bacb::t_cc31d2e6cfe6f3 431-435
+  s_ee7bb67568bacb::t_f8fff0d317eab3 404,428-430,436-437
+src/shell/observability/telemetry.test.ts
+  s_ee7bb67568bacb::t_95cf8411203ce3 5-15,18,39-49,56-64,68-70
+  s_ee7bb67568bacb::t_48778db6b93e0a 120-149
+  s_ee7bb67568bacb::t_0a17b0df161e2d 97-98,251-252,275
+  s_ee7bb67568bacb::t_9d4e2bebf8bc94 31,253
+  s_ee7bb67568bacb::t_a786f4ba5ae407 99-101,276-279
+  s_ee7bb67568bacb::t_6428e22407cba6 16-17,50-55,65-67
+src/shell/observability/disabled.ts
+  s_ee7bb67568bacb::t_9004990bbf87d9 12
+src/shell/agent/agent-service.test.ts
+  s_ee7bb67568bacb::t_47122c610e6532 37-42,49,1144-1148,1158-1176,1178-1188,1192,1197,1209-1217,1223,1230-1234,1240-1246,1571-1572
+  s_ee7bb67568bacb::t_6f342a44ccb445 1398-1401
+  s_ee7bb67568bacb::t_5de34990923f9f 1434,1471-1472
+  s_ee7bb67568bacb::t_2939b0e6dea63e 1468
+  s_ee7bb67568bacb::t_b02dcffe5be8d6 1362-1397,1402-1405
+  s_ee7bb67568bacb::t_10378c4731b52f 1189-1191,1198-1199,1201-1208
+  s_ee7bb67568bacb::t_cdc7cfc4c78fe0 1088-1089
+  s_ee7bb67568bacb::t_1267feb14206e3 1247-1249,1251-1280,1335-1336,1338-1361,1407,1410-1430,1476-1480,1482-1491,1493-1560,1562-1564,1566-1570
+  s_ee7bb67568bacb::t_3c4ad737c3f13a 1090
+  s_ee7bb67568bacb::t_fd5e248cda52b4 1193-1194,1200,1218-1222,1226,1229,1235,1238
+  s_ee7bb67568bacb::t_4a5613d0ae33ac 1149-1157
+  s_ee7bb67568bacb::t_2ddefa0d2092f1 1460
+  s_ee7bb67568bacb::t_a8c1a96d15256a 1056-1075,1091-1092
+  s_bc8bc5932da725::t_8d2d9ff77e2c88 1281,1406,1409
+  s_ee7bb67568bacb::t_782d631e3ba5c9 1302-1331
+  s_ee7bb67568bacb::t_c85086df8c0916 1195-1196,1224-1225,1227-1228,1236-1237,1492,1561,1565
+  s_ee7bb67568bacb::t_4b221e194a4e44 1177,1250,1337,1408,1481
+  s_ee7bb67568bacb::t_9a147674d0fc4e 1239
+  s_ee7bb67568bacb::t_d49464c8293c00 1573
+  s_ee7bb67568bacb::t_b5db8aedaf4162 1282-1301,1332-1334,1431-1433,1435-1459,1461-1467,1469-1470,1473-1475
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "c689fa6d650db43f62f887869eb9fa53444aee2c",
+  "prompts": {},
+  "sessions": {
+    "s_835a68f05b2a71": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019fe753-d804-72ba-b457-1ff30a9c7908",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_bc8bc5932da725": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019fe77c-fde7-79d0-841e-ad5ca2e02e79",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_ee7bb67568bacb": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019fe75a-8d68-73fe-a8b2-12052c4fb8b5",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": null
+    }
+  }
+}

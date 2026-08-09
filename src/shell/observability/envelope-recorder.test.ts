@@ -2,6 +2,11 @@ import { expect, it } from "@effect/vitest";
 import { Cause, Context, Effect, Exit, Function as Fn, Layer, Option, Ref, Schema } from "effect";
 import { TestClock } from "effect/testing";
 import {
+  decodeEnvelopeItems,
+  errorEnvelopePayloads as errorPayloads,
+  transactionEnvelopePayloads as transactionPayloads,
+} from "~/shell/testing/telemetry-envelope-fixtures";
+import {
   type SpanWork,
   makeSpanDescriptor,
   makeWorkSpanDescriptor,
@@ -11,7 +16,6 @@ import {
   TelemetryEnvelopeRecording,
   telemetryEnvelopeRecording,
 } from "./envelope-recorder";
-import { ProjectedErrorEvent, ProjectedTransaction } from "./projectors";
 import {
   type ClassifiedFailure,
   type DurableTraceContext,
@@ -26,34 +30,6 @@ import { isSupportedEnvelopeItemType } from "./sentry-adapter";
 import { Telemetry } from "./telemetry";
 
 const descriptor = makeSpanDescriptor();
-
-const decodeEnvelopeItems = (bytes: Uint8Array): ReadonlyArray<unknown> => {
-  const lines = new TextDecoder().decode(bytes).split("\n");
-  const items: Array<unknown> = [];
-  for (let index = 1; index + 1 < lines.length; index += 2) {
-    items.push({
-      header: Schema.decodeUnknownSync(Schema.UnknownFromJsonString)(lines[index] ?? "null"),
-      payload: Schema.decodeUnknownSync(Schema.UnknownFromJsonString)(lines[index + 1] ?? "null"),
-    });
-  }
-  return items;
-};
-
-const payloadsOf = <Decoded, Encoded>(
-  schema: Schema.Codec<Decoded, Encoded>,
-  envelopes: ReadonlyArray<Uint8Array>
-): ReadonlyArray<Decoded> =>
-  envelopes.flatMap(decodeEnvelopeItems).flatMap((item) => {
-    if (typeof item !== "object" || item === null || !("payload" in item)) return [];
-    return Option.toArray(Schema.decodeUnknownOption(schema)(item.payload));
-  });
-
-const transactionPayloads = (
-  envelopes: ReadonlyArray<Uint8Array>
-): ReadonlyArray<ProjectedTransaction> => payloadsOf(ProjectedTransaction, envelopes);
-
-const errorPayloads = (envelopes: ReadonlyArray<Uint8Array>): ReadonlyArray<ProjectedErrorEvent> =>
-  payloadsOf(ProjectedErrorEvent, envelopes);
 
 const untrustedInput = <A>(value: unknown): A => Fn.cast<unknown, A>(value);
 
@@ -101,11 +77,9 @@ it.effect("records only reconstructed metadata in complete serialized envelopes"
     const envelopes = yield* recorder.serializedEnvelopes;
     const serialized = envelopes.map((bytes) => new TextDecoder().decode(bytes)).join("\n");
     const items = envelopes.flatMap(decodeEnvelopeItems);
-    const itemTypes = items.flatMap((item) => {
-      if (typeof item !== "object" || item === null || !("header" in item)) return [];
-      const header = item.header;
-      return typeof header === "object" && header !== null && "type" in header ? [header.type] : [];
-    });
+    const itemTypes = items.flatMap(({ header }) =>
+      typeof header === "object" && header !== null && "type" in header ? [header.type] : []
+    );
 
     expect(itemTypes).toContain("event");
     expect(itemTypes).toContain("transaction");
@@ -350,17 +324,27 @@ const workAttributes = [
       metadata: {
         _tag: "Http",
         method: "POST",
+        route: "/transactions",
         status: Option.some(TelemetryHttpStatus.make(201)),
       },
     },
-    attributes: { "http.request.method": "POST", "http.response.status_code": 201 },
+    attributes: {
+      "http.request.method": "POST",
+      "http.route": "/transactions",
+      "http.response.status_code": 201,
+    },
   },
   {
     work: {
       workKind: "http_request",
-      metadata: { _tag: "Http", method: "GET", status: Option.none() },
+      metadata: {
+        _tag: "Http",
+        method: "GET",
+        route: "/transactions",
+        status: Option.none(),
+      },
     },
-    attributes: { "http.request.method": "GET" },
+    attributes: { "http.request.method": "GET", "http.route": "/transactions" },
   },
   {
     work: {
@@ -594,6 +578,7 @@ it.effect("keeps only usable source coordinates and drops a cause carrying no st
     const events = errorPayloads(yield* recorder.serializedEnvelopes);
     expect(events[0]?.exception.values[0].stacktrace.frames).toEqual([
       {
+        module: "src/shell/agent/agent-service",
         filename: "src/shell/agent/agent-service.ts",
         function: "anonymous",
         lineno: 12,
@@ -608,7 +593,7 @@ it.effect("keeps only usable source coordinates and drops a cause carrying no st
   })
 );
 
-it.effect("carries every optional bounded field an approved breadcrumb declares", () =>
+it.effect("carries approved breadcrumbs on transactions but never on error events", () =>
   Effect.gen(function* () {
     const services = yield* Layer.build(TelemetryEnvelopeRecording);
     const telemetry = Context.get(services, Telemetry);
@@ -616,18 +601,29 @@ it.effect("carries every optional bounded field an approved breadcrumb declares"
 
     yield* telemetry.span(
       descriptor,
-      telemetry.addBreadcrumb({
-        category: "provider",
-        action: "provider_completed",
-        component: "kapso",
-        outcome: Option.some("failed"),
-        error: Option.some("provider_unavailable"),
-        attempt: Option.some(TelemetryAttempt.make(3)),
-        durationMilliseconds: Option.some(TelemetryDuration.make(1_250)),
+      Effect.gen(function* () {
+        yield* telemetry.addBreadcrumb({
+          category: "provider",
+          action: "provider_completed",
+          component: "kapso",
+          outcome: Option.some("failed"),
+          error: Option.some("provider_unavailable"),
+          attempt: Option.some(TelemetryAttempt.make(3)),
+          durationMilliseconds: Option.some(TelemetryDuration.make(1_250)),
+        });
+        yield* telemetry.captureFailure({
+          _tag: "Defect",
+          component: "agent",
+          operation: "agent.hostedTurn",
+          error: "unexpected_defect",
+          cause: Option.none(),
+        });
       })
     );
 
-    const transactions = transactionPayloads(yield* recorder.serializedEnvelopes);
+    const envelopes = yield* recorder.serializedEnvelopes;
+    const transactions = transactionPayloads(envelopes);
+    expect(errorPayloads(envelopes)[0]).not.toHaveProperty("breadcrumbs");
     expect(transactions[0]?.breadcrumbs).toHaveLength(1);
     expect(transactions[0]?.breadcrumbs[0]).toMatchObject({
       category: "provider",

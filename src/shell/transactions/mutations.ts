@@ -24,6 +24,8 @@ import { categorizeCapture } from "~/shell/categories/categorizer";
 import { toApiFailure as categoryToApiFailure } from "~/shell/categories/errors";
 import { findCategory } from "~/shell/categories/repo";
 import { findUserInScope } from "~/shell/identity/repo";
+import type { SpanDescriptor } from "~/shell/observability/protocol";
+import { Telemetry } from "~/shell/observability/telemetry";
 import { type TransactionApiFailure, mapTransactionFailure } from "./errors";
 import {
   insertManualSourceAttestationInScope,
@@ -88,16 +90,31 @@ export type CreateTransactionMutationInput = TransactionMutationContext &
     payload: CreateTransactionInput;
   }>;
 
+const captureTransactionSpan = {
+  component: "postgres",
+  operation: "postgres.repositoryOperation",
+  trigger: "api",
+  spanOperation: "db",
+  workKind: "repository_operation",
+  metadata: {
+    _tag: "Database",
+    system: "postgresql",
+    repositoryOperation: "capture_transaction",
+  },
+} as const satisfies SpanDescriptor;
+
 /** Creates a normalized Transaction and provenance inside the caller-owned transaction. */
 export const createTransaction: CanonicalMutationImplementation<
   CreateTransactionMutationInput,
   MutationResponse<typeof Transaction>,
-  TransactionApiFailure
+  TransactionApiFailure,
+  Telemetry
 > = Effect.fn("createTransaction")(function* ({
   userId,
   caller,
   payload,
 }: CreateTransactionMutationInput) {
+  const telemetry = yield* Telemetry;
   const now = yield* DateTime.now;
   yield* checkAlreadyOccurred({ occurredAt: payload.occurredAt, now }).pipe(
     mapTransactionFailure({ caller })
@@ -105,7 +122,10 @@ export const createTransaction: CanonicalMutationImplementation<
   const categoryId = yield* captureCategory(userId, payload, caller);
   const input = UpdateTransactionInput.make({ ...payload, categoryId });
   const user = yield* findUserInScope(userId).pipe(Effect.flatMap(Effect.fromOption), Effect.orDie);
-  const transaction = yield* insertTransactionInScope(userId, input);
+  const transaction = yield* telemetry.span(
+    captureTransactionSpan,
+    insertTransactionInScope(userId, input)
+  );
   yield* insertManualSourceAttestationInScope(userId, transaction.id, {
     serviceMarket: user.serviceMarket,
     locale: user.locale,

@@ -12,6 +12,9 @@ type PartialInputSchema = Schema.Codec<unknown, unknown>;
 export type CatalogOperation = {
   readonly id: CanonicalOperationId;
   readonly description: string;
+  /** Fixed HTTP method and route template; request values never participate in this identity. */
+  readonly method: HttpApiEndpoint.Top["method"];
+  readonly route: string;
   readonly input: OperationSchema;
   readonly success: OperationSchema;
   readonly failure: OperationSchema;
@@ -116,6 +119,8 @@ export const makeOperationCatalog = <Id extends string, Groups extends HttpApiGr
       const operation = {
         id,
         description: description.value,
+        method: endpoint.method,
+        route: endpoint.path,
         input: canonicalInput(endpoint),
         success: asOperationSchema(unionSchema(Array.from(endpoint.success))),
         failure: asOperationSchema(unionSchema(Array.from(endpoint.error))),

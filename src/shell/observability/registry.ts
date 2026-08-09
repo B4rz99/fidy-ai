@@ -1,8 +1,15 @@
 import { Function as Fn, Schema } from "effect";
+import { ErrorCode } from "~/shell/_shared/errors";
 import { type OperationId, operationCatalog } from "~/shell/api";
 
 const canonicalOperationCodes = operationCatalog.operations.map(({ id }) =>
   Fn.cast<typeof id, OperationId>(id)
+);
+const canonicalHttpRoutes = Fn.cast<Array<string>, readonly [string, ...ReadonlyArray<string>]>(
+  Array.from(new Set(operationCatalog.operations.map(({ route }) => route)))
+);
+const canonicalHttpRequests = Fn.cast<Array<string>, readonly [string, ...ReadonlyArray<string>]>(
+  operationCatalog.operations.map(({ method, route }) => `${method} ${route}`)
 );
 
 /** Groups work kinds by the only metadata shape each kind may carry. */
@@ -12,14 +19,8 @@ export const TelemetryWorkKindGroup = {
   provider: ["provider_call"],
   model: ["model_call"],
   schedule: ["scheduled_execution"],
-  none: [
-    "canonical_operation",
-    "authorization",
-    "repository_operation",
-    "hosted_turn",
-    "model_round",
-    "ci_scenario",
-  ],
+  database: ["repository_operation"],
+  none: ["canonical_operation", "authorization", "hosted_turn", "model_round", "ci_scenario"],
 } as const;
 
 /**
@@ -61,6 +62,7 @@ export const TelemetryRegistry = {
   trigger: ["api", "kapso_webhook", "queue", "schedule", "cli", "ci"],
   outcome: ["succeeded", "rejected", "failed", "interrupted"],
   error: [
+    ...ErrorCode.literals,
     "unexpected_defect",
     "operational_failure",
     "database_unavailable",
@@ -76,8 +78,18 @@ export const TelemetryRegistry = {
     ...TelemetryWorkKindGroup.provider,
     ...TelemetryWorkKindGroup.model,
     ...TelemetryWorkKindGroup.schedule,
+    ...TelemetryWorkKindGroup.database,
     ...TelemetryWorkKindGroup.none,
   ],
+  httpRoute: [...canonicalHttpRoutes, "/compatibility/:case"],
+  httpRequest: [
+    ...canonicalHttpRequests,
+    "GET /compatibility/:case",
+    "POST /compatibility/:case",
+    "DELETE /compatibility/:case",
+  ],
+  repositoryOperation: ["capture_transaction", "compatibility_probe"],
+  databaseSystem: ["postgresql"],
   model: ["gpt_5_6_luna"],
   spanOperation: [
     "http.server",
@@ -124,6 +136,10 @@ export const TelemetryCodeSchema = {
   error: Schema.Literals(TelemetryRegistry.error),
   provider: Schema.Literals(TelemetryRegistry.provider),
   workKind: Schema.Literals(TelemetryRegistry.workKind),
+  httpRoute: Schema.Literals(TelemetryRegistry.httpRoute),
+  httpRequest: Schema.Literals(TelemetryRegistry.httpRequest),
+  repositoryOperation: Schema.Literals(TelemetryRegistry.repositoryOperation),
+  databaseSystem: Schema.Literals(TelemetryRegistry.databaseSystem),
   model: Schema.Literals(TelemetryRegistry.model),
   spanOperation: Schema.Literals(TelemetryRegistry.spanOperation),
   breadcrumbCategory: Schema.Literals(TelemetryRegistry.breadcrumbCategory),

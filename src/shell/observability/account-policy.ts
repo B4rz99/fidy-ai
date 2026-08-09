@@ -229,15 +229,19 @@ const quotaResponseActions: ReadonlyArray<SentryQuotaResponseAction> = [
   },
 ];
 
+const reportWithoutMismatch = (
+  findings: ReadonlyArray<SentryAccountFinding>
+): "verified" | "incomplete" =>
+  findings.some((item) => ["manual-check", "assumed"].includes(item.status))
+    ? "incomplete"
+    : "verified";
+
 const reportOverall = (
   findings: ReadonlyArray<SentryAccountFinding>
-): "verified" | "mismatch" | "incomplete" => {
-  if (findings.some((item) => item.status === "mismatch")) return "mismatch";
-  if (findings.some((item) => item.status === "manual-check" || item.status === "assumed")) {
-    return "incomplete";
-  }
-  return "verified";
-};
+): "verified" | "mismatch" | "incomplete" =>
+  findings.some((item) => item.status === "mismatch")
+    ? "mismatch"
+    : reportWithoutMismatch(findings);
 
 const reportFindingsMatch = (findings: ReadonlyArray<SentryAccountFinding>): boolean =>
   findings.length === SentryAccountCheck.literals.length &&

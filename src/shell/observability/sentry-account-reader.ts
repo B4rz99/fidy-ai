@@ -97,19 +97,22 @@ const reasonForStatus = (status: number): SentryAccountReadError["reason"] => {
   }
 };
 
+const isSuccessfulStatus = (status: number): boolean =>
+  status >= firstSuccessStatus && status < firstRedirectionStatus;
+
 const successfulResponse = (
   response: HttpClientResponse.HttpClientResponse
 ): Effect.Effect<HttpClientResponse.HttpClientResponse, SentryAccountReadError> =>
-  response.status >= firstSuccessStatus && response.status < firstRedirectionStatus
+  isSuccessfulStatus(response.status)
     ? Effect.succeed(response)
     : Effect.fail(SentryAccountReadError.make({ reason: reasonForStatus(response.status) }));
 
-const readJson = <A>(input: {
+const readJson = function <A>(input: {
   readonly url: string;
   readonly token: Redacted.Redacted;
   readonly schema: Schema.Codec<A, unknown>;
-}): Effect.Effect<A, SentryAccountReadError, HttpClient.HttpClient> =>
-  HttpClientRequest.get(input.url).pipe(
+}): Effect.Effect<A, SentryAccountReadError, HttpClient.HttpClient> {
+  return HttpClientRequest.get(input.url).pipe(
     HttpClientRequest.bearerToken(Redacted.value(input.token)),
     HttpClientRequest.acceptJson,
     HttpClient.execute,
@@ -129,6 +132,7 @@ const readJson = <A>(input: {
         : SentryAccountReadError.make({ reason: "unexpected-response" })
     )
   );
+};
 
 const normalizedRegion = (name: Option.Option<string>): Option.Option<SentryStorageRegion> =>
   Option.flatMap(name, (value) => {

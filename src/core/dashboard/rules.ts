@@ -27,27 +27,23 @@ const formatIssues = SchemaIssue.makeFormatterStandardSchemaV1();
 
 type StandardIssue = ReturnType<typeof formatIssues>["issues"][number];
 
-const segmentKey = (segment: PropertyKey | Readonly<{ key: PropertyKey }>): PropertyKey =>
-  typeof segment === "object" ? segment.key : segment;
-
 /** An issue with no path names the document itself rather than one of its fields. */
 const toDashboardIssue = (issue: StandardIssue): DashboardIssue => ({
   path:
-    issue.path === undefined || issue.path.length === 0
+    Option.getOrThrow(Option.fromNullishOr(issue.path)).length === 0
       ? Option.none()
-      : Option.some(issue.path.map((segment) => String(segmentKey(segment))).join(".")),
+      : Option.some(Option.getOrThrow(Option.fromNullishOr(issue.path)).map(String).join(".")),
   message: issue.message,
 });
 
 // The formatter flattens a failure into its leaves, and a real failure always
-// has at least one; the head is spelled out only because the result type needs
-// a non-empty list. It reports the error itself rather than a fixed blurb.
+// has at least one; the fallback still reports the error itself rather than a
+// fixed blurb if a formatter ever violates that invariant.
 const toInvalidDashboardResult = (error: Schema.SchemaError): InvalidDashboardResult => {
-  const [first, ...rest] = formatIssues(error.issue).issues.map(toDashboardIssue);
-  return new InvalidDashboardResult({
-    issues:
-      first === undefined ? [{ path: Option.none(), message: error.message }] : [first, ...rest],
-  });
+  const [issue = { path: Option.none(), message: error.message }, ...rest] = formatIssues(
+    error.issue
+  ).issues.map(toDashboardIssue);
+  return new InvalidDashboardResult({ issues: [issue, ...rest] });
 };
 
 // Only Type-side checks need re-proving after an edit, so this decodes the Type

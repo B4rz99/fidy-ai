@@ -1,0 +1,22 @@
+src/shell/testing/whatsapp-acceptance-harness.ts
+  s_ee7bb67568bacb::t_edad90bca0cbc8 144-145,147-148,177
+  s_ee7bb67568bacb::t_b64fec3b3600b2 146
+src/shell/channels/whatsapp/whatsapp.acceptance.test.ts
+  s_ee7bb67568bacb::t_d8dda9a438dbe7 425-443
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "41e86bbf941446f7c2debd333891a5c080dc29f5",
+  "prompts": {},
+  "sessions": {
+    "s_ee7bb67568bacb": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019fe75a-8d68-73fe-a8b2-12052c4fb8b5",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

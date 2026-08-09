@@ -13,6 +13,7 @@ import { createWhatsAppChannel } from "./0012-create-whatsapp-channel";
 import { claimConsentDisclosureDelivery } from "./0013-claim-consent-disclosure-delivery";
 import { optionalTransactionCounterparty } from "./0014-optional-transaction-counterparty";
 import { whatsappBsuidIdentity } from "./0015-whatsapp-bsuid-identity";
+import { agentConfirmationConsumptions } from "./0016-agent-confirmation-consumptions";
 
 /**
  * The explicit index ARCHITECTURE.md §7 calls for: one ordered, append-only
@@ -38,4 +39,5 @@ export const migrations = {
   "0013_claim_consent_disclosure_delivery": claimConsentDisclosureDelivery,
   "0014_optional_transaction_counterparty": optionalTransactionCounterparty,
   "0015_whatsapp_bsuid_identity": whatsappBsuidIdentity,
+  "0016_agent_confirmation_consumptions": agentConfirmationConsumptions,
 };

@@ -1,11 +1,23 @@
-import { Crypto, Effect, Option, Schema } from "effect";
+import { Crypto, DateTime, Effect, Option, Schema } from "effect";
+import type { SqlClient } from "effect/unstable/sql";
 import type { UserId } from "~/core/identity/reference";
-import { TranscriptText } from "~/core/transcript/model";
-import type { TranscriptWindowEntry } from "~/core/transcript/rules";
+import { type TranscriptEntry, TranscriptText } from "~/core/transcript/model";
+import {
+  type AtomicBatchInput,
+  atomicBatchOperation,
+  getAtomicBatchInputSchema,
+} from "~/shell/operations/operations";
 import { listRecentTranscriptEntries } from "~/shell/transcript/transcript-service";
+import {
+  ConfirmationDigest,
+  type ConfirmationDigest as ConfirmationDigestType,
+} from "./tool-confirmation-model";
+import { consumeConfirmation } from "./tool-confirmation-repo";
 import type { AgentOperationBinding } from "./toolkit";
 
 const hexadecimalRadix = 16;
+const confirmationNonceBytes = 32;
+const confirmationLifetimeMinutes = 10;
 
 const ConfirmationRequiredFailure = Schema.Struct({
   code: Schema.Literal("explicit_confirmation_required"),
@@ -16,15 +28,14 @@ const ConfirmationRequiredFailure = Schema.Struct({
 });
 type ConfirmationRequiredFailure = typeof ConfirmationRequiredFailure.Type;
 
-const ConfirmationDigest = Schema.String.check(Schema.isPattern(/^[0-9a-f]{64}$/)).pipe(
-  Schema.brand("ConfirmationDigest")
-);
-type ConfirmationDigest = typeof ConfirmationDigest.Type;
-
-type PendingApproval = Pick<
-  Extract<TranscriptWindowEntry, { readonly _tag: "CanonicalToolCallEntry" }>,
+type ConfirmationSubject = Pick<
+  Extract<TranscriptEntry, { readonly _tag: "CanonicalToolCallEntry" }>,
   "operation" | "input"
->;
+> &
+  Readonly<{ issuedAt: DateTime.Utc }>;
+
+type PendingConfirmation = ConfirmationSubject & Readonly<{ challenge: TranscriptText }>;
+type ConfirmationSubmission = PendingConfirmation & Readonly<{ digest: ConfirmationDigestType }>;
 
 type ConfirmationDecision =
   | { readonly _tag: "Execute" }
@@ -33,30 +44,24 @@ type ConfirmationDecision =
       readonly failure: ConfirmationRequiredFailure;
     };
 
-type WindowCallEntry = Extract<TranscriptWindowEntry, { readonly _tag: "CanonicalToolCallEntry" }>;
-type WindowResultEntry = Extract<
-  TranscriptWindowEntry,
+type TranscriptCallEntry = Extract<TranscriptEntry, { readonly _tag: "CanonicalToolCallEntry" }>;
+type TranscriptResultEntry = Extract<
+  TranscriptEntry,
   { readonly _tag: "CanonicalToolResultEntry" }
 >;
 
 const resultEntryAt = (
-  entries: ReadonlyArray<TranscriptWindowEntry>,
+  entries: ReadonlyArray<TranscriptEntry>,
   index: number
-): Option.Option<WindowResultEntry> =>
+): Option.Option<TranscriptResultEntry> =>
   Option.fromUndefinedOr(entries[index]).pipe(
-    Option.filter((entry): entry is WindowResultEntry => entry._tag === "CanonicalToolResultEntry")
-  );
-
-const callEntryAt = (
-  entries: ReadonlyArray<TranscriptWindowEntry>,
-  index: number
-): Option.Option<WindowCallEntry> =>
-  Option.fromUndefinedOr(entries[index]).pipe(
-    Option.filter((entry): entry is WindowCallEntry => entry._tag === "CanonicalToolCallEntry")
+    Option.filter(
+      (entry): entry is TranscriptResultEntry => entry._tag === "CanonicalToolResultEntry"
+    )
   );
 
 const confirmationFailure = (
-  result: WindowResultEntry,
+  result: TranscriptResultEntry,
   challenge: string
 ): Option.Option<ConfirmationRequiredFailure> =>
   result.outcome._tag === "ToolInputRejected"
@@ -66,55 +71,101 @@ const confirmationFailure = (
       )
     : Option.none();
 
-const pendingApprovalAt = (
-  entries: ReadonlyArray<TranscriptWindowEntry>,
+const matchingCallBefore = (
+  entries: ReadonlyArray<TranscriptEntry>,
+  resultIndex: number,
+  result: TranscriptResultEntry
+): Option.Option<TranscriptCallEntry> =>
+  Option.fromUndefinedOr(
+    entries
+      .slice(0, resultIndex)
+      .filter((entry): entry is TranscriptCallEntry => entry._tag === "CanonicalToolCallEntry")
+      .findLast((call) => call.toolCallId === result.toolCallId)
+  );
+
+const pendingConfirmationAt = (
+  entries: ReadonlyArray<TranscriptEntry>,
   resultIndex: number,
   challenge: string
-): Option.Option<PendingApproval> =>
+): Option.Option<PendingConfirmation> =>
   Option.gen(function* () {
     const result = yield* resultEntryAt(entries, resultIndex);
     yield* confirmationFailure(result, challenge);
-    const call = yield* callEntryAt(entries, resultIndex - 1);
-    yield* Option.some(call).pipe(
-      Option.filter((candidate) => candidate.toolCallId === result.toolCallId)
-    );
-    return { operation: call.operation, input: call.input };
+    const call = yield* matchingCallBefore(entries, resultIndex, result);
+    return {
+      operation: call.operation,
+      input: call.input,
+      challenge: TranscriptText.make(challenge),
+      issuedAt: result.occurredAt,
+    };
   });
 
-const findPendingApproval = (
-  entries: ReadonlyArray<TranscriptWindowEntry>
-): Option.Option<PendingApproval> => {
+const findPendingConfirmation = (
+  entries: ReadonlyArray<TranscriptEntry>
+): Option.Option<PendingConfirmation> => {
   const assistant = entries.at(-1);
   if (assistant?._tag !== "AssistantTranscriptEntry") return Option.none();
 
   for (let index = entries.length - 1; index > 0; index -= 1) {
-    const pending = pendingApprovalAt(entries, index, assistant.text);
+    const pending = pendingConfirmationAt(entries, index, assistant.text);
     if (Option.isSome(pending)) return pending;
   }
   return Option.none();
 };
 
-const matchesApprovedCall = (
-  pending: Readonly<PendingApproval>,
+const canonicalJsonString = (value: Schema.Json): string =>
+  Option.getOrThrow(
+    Option.fromNullishOr(
+      JSON.stringify(value, (_key, nested: unknown) =>
+        typeof nested === "object" && nested !== null && !Array.isArray(nested)
+          ? Object.fromEntries(
+              Object.entries(nested).toSorted(([left], [right]) => left.localeCompare(right))
+            )
+          : nested
+      )
+    )
+  );
+
+const matchesConfirmationSubject = (
+  pending: Readonly<PendingConfirmation>,
   binding: Readonly<AgentOperationBinding>,
-  input: unknown
+  input: Schema.Json
 ): boolean =>
   pending.operation === binding.operation &&
-  JSON.stringify(pending.input) === JSON.stringify(input);
+  canonicalJsonString(pending.input) === canonicalJsonString(input);
 
-const confirmationCommand = (
-  pending: Readonly<PendingApproval>,
-  digest: ConfirmationDigest
-): string => `CONFIRMAR ${pending.operation} ${digest}`;
+const atomicBatchInput = (
+  pending: Readonly<ConfirmationSubject>
+): Option.Option<AtomicBatchInput> => {
+  if (pending.operation !== atomicBatchOperation) return Option.none();
+  const agentInput = Schema.Struct({ payload: getAtomicBatchInputSchema() });
+  return Schema.decodeUnknownOption(agentInput)(pending.input).pipe(
+    Option.map(({ payload }) => payload)
+  );
+};
 
-const approvalBinding = Effect.fn("ToolConfirmation.approvalBinding")(function* (
-  pending: Readonly<PendingApproval>
+const renderAtomicBatch = (pending: Readonly<ConfirmationSubject>): Option.Option<string> =>
+  atomicBatchInput(pending).pipe(
+    Option.map(({ calls }) =>
+      calls
+        .map(
+          (call, index) =>
+            `${index + 1}. ${call.operation}\n   Argumentos exactos: ${JSON.stringify(call.input)}`
+        )
+        .join("\n")
+    )
+  );
+
+const confirmationBinding = Effect.fn("ToolConfirmation.confirmationBinding")(function* (
+  pending: Readonly<ConfirmationSubject>
 ) {
   const crypto = yield* Crypto.Crypto;
-  const serializedInput = yield* Schema.encodeEffect(Schema.UnknownFromJsonString)(
-    pending.input
-  ).pipe(Effect.orDie);
-  const payload = new TextEncoder().encode(`${pending.operation}\n${serializedInput}`);
+  const serializedInput = canonicalJsonString(pending.input);
+  const nonce = yield* crypto.randomBytes(confirmationNonceBytes).pipe(Effect.orDie);
+  const nonceHex = Array.from(nonce, (byte) =>
+    byte.toString(hexadecimalRadix).padStart(2, "0")
+  ).join("");
+  const payload = new TextEncoder().encode(`${pending.operation}\n${serializedInput}\n${nonceHex}`);
   const bytes = yield* crypto.digest("SHA-256", payload).pipe(Effect.orDie);
   const digest = ConfirmationDigest.make(
     Array.from(bytes, (byte) => byte.toString(hexadecimalRadix).padStart(2, "0")).join("")
@@ -122,20 +173,68 @@ const approvalBinding = Effect.fn("ToolConfirmation.approvalBinding")(function* 
   return { digest, serializedInput };
 });
 
-const confirmationChallenge = (
-  pending: Readonly<PendingApproval>,
-  digest: ConfirmationDigest,
+type ConfirmationFormat = Readonly<{
+  commandPrefix: string;
+  challengeBody: string;
+}>;
+
+const confirmationFormat = (
+  pending: Readonly<ConfirmationSubject>,
   serializedInput: string
-): TranscriptText =>
-  TranscriptText.make(
-    `Esta operación requiere confirmación.\n` +
-      `Operación exacta: ${pending.operation}\n` +
-      `Argumentos exactos: ${serializedInput}\n` +
-      `Responde exactamente: ${confirmationCommand(pending, digest)}`
+): ConfirmationFormat =>
+  renderAtomicBatch(pending).pipe(
+    Option.match({
+      onNone: () => ({
+        commandPrefix: `CONFIRMAR ${pending.operation} `,
+        challengeBody:
+          `Esta operación requiere confirmación.\n` +
+          `Operación exacta: ${pending.operation}\n` +
+          `Argumentos exactos: ${serializedInput}`,
+      }),
+      onSome: (calls) => ({
+        commandPrefix: "CONFIRMAR LOTE ",
+        challengeBody:
+          `Este lote atómico requiere una sola confirmación. Se ejecutará exactamente en este orden:\n` +
+          calls,
+      }),
+    })
+  );
+
+const confirmationChallenge = (
+  pending: Readonly<ConfirmationSubject>,
+  digest: ConfirmationDigestType,
+  serializedInput: string
+): TranscriptText => {
+  const format = confirmationFormat(pending, serializedInput);
+  return TranscriptText.make(
+    `${format.challengeBody}\nResponde exactamente: ${format.commandPrefix}${digest}`
+  );
+};
+
+const authorizationFromChallenge = (
+  pending: Readonly<PendingConfirmation>
+): Option.Option<Readonly<{ command: string; digest: ConfirmationDigestType }>> => {
+  const { commandPrefix } = confirmationFormat(pending, canonicalJsonString(pending.input));
+  return Option.fromUndefinedOr(pending.challenge.split("\n").at(-1)).pipe(
+    Option.filter((line) => line.startsWith("Responde exactamente: ")),
+    Option.map((line) => line.slice("Responde exactamente: ".length)),
+    Option.filter((command) => command.startsWith(commandPrefix)),
+    Option.flatMap((command) =>
+      Schema.decodeUnknownOption(ConfirmationDigest)(command.slice(commandPrefix.length)).pipe(
+        Option.map((digest) => ({ command, digest }))
+      )
+    )
+  );
+};
+
+const confirmationIsFresh = (pending: Readonly<PendingConfirmation>, now: DateTime.Utc): boolean =>
+  DateTime.isLessThanOrEqualTo(
+    now,
+    DateTime.add(pending.issuedAt, { minutes: confirmationLifetimeMinutes })
   );
 
 /**
- * Recovers at most one exact approval for a hosted turn and hides confirmation
+ * Recovers at most one exact confirmation for a hosted turn and hides confirmation
  * digesting, replay prevention, and single-use consumption behind one decision.
  */
 export const makeTurnConfirmation = Effect.fn("ToolConfirmation.makeTurn")(function* (
@@ -143,18 +242,15 @@ export const makeTurnConfirmation = Effect.fn("ToolConfirmation.makeTurn")(funct
   message: { readonly text: string }
 ) {
   const priorTranscript = yield* listRecentTranscriptEntries(userId, 1);
-  let approvedCall = yield* findPendingApproval(priorTranscript).pipe(
-    Option.match({
-      onNone: () => Effect.succeed(Option.none()),
-      onSome: (pending) =>
-        approvalBinding(pending).pipe(
-          Effect.map(({ digest }) =>
-            message.text.trim() === confirmationCommand(pending, digest)
-              ? Option.some(pending)
-              : Option.none()
-          )
-        ),
-    })
+  const now = yield* DateTime.now;
+  let submittedConfirmation = findPendingConfirmation(priorTranscript).pipe(
+    Option.filter((pending) => confirmationIsFresh(pending, now)),
+    Option.flatMap((pending) =>
+      authorizationFromChallenge(pending).pipe(
+        Option.filter(({ command }) => message.text.trim() === command),
+        Option.map(({ digest }) => ({ ...pending, digest }))
+      )
+    )
   );
 
   const decide = Effect.fn("ToolConfirmation.decide")(function* ({
@@ -163,17 +259,26 @@ export const makeTurnConfirmation = Effect.fn("ToolConfirmation.makeTurn")(funct
   }: {
     readonly binding: Readonly<AgentOperationBinding>;
     readonly input: Schema.Json;
-  }): Effect.fn.Return<ConfirmationDecision, never, Crypto.Crypto> {
+  }): Effect.fn.Return<ConfirmationDecision, never, Crypto.Crypto | SqlClient.SqlClient> {
     if (binding.policy.agentConfirmation === "not-required") {
       return { _tag: "Execute" };
     }
-    if (Option.isSome(approvedCall) && matchesApprovedCall(approvedCall.value, binding, input)) {
-      approvedCall = Option.none();
-      return { _tag: "Execute" };
+    if (
+      Option.isSome(submittedConfirmation) &&
+      matchesConfirmationSubject(submittedConfirmation.value, binding, input)
+    ) {
+      const submission: ConfirmationSubmission = submittedConfirmation.value;
+      submittedConfirmation = Option.none();
+      const consumed = yield* consumeConfirmation(userId, submission.digest, now);
+      if (consumed) return { _tag: "Execute" };
     }
 
-    const pending = { operation: binding.operation, input };
-    const { digest, serializedInput } = yield* approvalBinding(pending);
+    const pending: ConfirmationSubject = {
+      operation: binding.operation,
+      input,
+      issuedAt: yield* DateTime.now,
+    };
+    const { digest, serializedInput } = yield* confirmationBinding(pending);
     const challenge = confirmationChallenge(pending, digest, serializedInput);
     return {
       _tag: "RequireConfirmation",

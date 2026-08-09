@@ -1,5 +1,6 @@
 /** Public relations whose rows are owned by a User and therefore require forced RLS. */
 export const userTableNames = [
+  "agent_confirmation_consumptions",
   "agent_tokens",
   "audit_log_entries",
   "consent_records",

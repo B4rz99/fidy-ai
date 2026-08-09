@@ -7,6 +7,14 @@ import type { CatalogOperation, OperationCatalog } from "~/shell/_shared/operati
 import { childScopeOperationPolicy } from "~/shell/_shared/operation-policy";
 import { NextOperations, OperationResponse } from "~/shell/_shared/response";
 
+const operationsGroupName = "operations";
+const atomicBatchEndpointName = "executeAtomicBatch";
+
+/** Identity of the canonical mutation that executes one ordered atomic batch. */
+export const atomicBatchOperation = CanonicalOperationId.make(
+  `${operationsGroupName}.${atomicBatchEndpointName}`
+);
+
 /** Maximum child mutations accepted by one atomic batch request. */
 export const maximumAtomicBatchCalls = 12;
 
@@ -57,6 +65,7 @@ export class AtomicBatchRejected extends Schema.ErrorClass<AtomicBatchRejected>(
 ) {}
 
 let boundAtomicBatchCall = Option.none<Schema.Codec<AtomicBatchCall, Schema.Json>>();
+let boundAtomicBatchInput = Option.none<AtomicBatchInputSchema>();
 let boundAtomicBatchResult = Option.none<Schema.Codec<AtomicBatchResult, Schema.Json>>();
 
 /** The catalog-derived call schema used to recover exact registry correlation after HTTP decoding. */
@@ -64,6 +73,13 @@ export const getAtomicBatchCallSchema = (): Schema.Codec<AtomicBatchCall, Schema
   Option.getOrThrowWith(
     boundAtomicBatchCall,
     () => new Error("Atomic batch call schema has not been derived")
+  );
+
+/** The canonical operation input schema for one ordered atomic mutation batch. */
+export const getAtomicBatchInputSchema = (): AtomicBatchInputSchema =>
+  Option.getOrThrowWith(
+    boundAtomicBatchInput,
+    () => new Error("Atomic batch input schema has not been derived")
   );
 
 /** Revalidates the runtime registry output against the catalog-derived correlated result union. */
@@ -147,12 +163,13 @@ export const makeOperationsGroup = (ordinaryCatalog: OperationCatalog): Operatio
   const input = Schema.Struct({
     calls: Schema.NonEmptyArray(call).check(Schema.isMaxLength(maximumAtomicBatchCalls)),
   });
+  boundAtomicBatchInput = Option.some(input);
   const output = Schema.Struct({
     results: Schema.NonEmptyArray(result).check(Schema.isMaxLength(maximumAtomicBatchCalls)),
   });
 
-  return HttpApiGroup.make("operations").add(
-    HttpApiEndpoint.post("executeAtomicBatch", "/operations/atomic-batch", {
+  return HttpApiGroup.make(operationsGroupName).add(
+    HttpApiEndpoint.post(atomicBatchEndpointName, "/operations/atomic-batch", {
       payload: input,
       success: OperationResponse(output),
       error: AtomicBatchRejected,

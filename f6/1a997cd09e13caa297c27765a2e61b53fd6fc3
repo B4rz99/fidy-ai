@@ -1,0 +1,50 @@
+src/shell/channels/whatsapp/kapso-webhook.ts
+  s_73a326cde79ea5::t_2e08d122b9668e 278-280,287-289
+  s_73a326cde79ea5::t_8805dbfe16c4d1 238,241,244,246,258,269,275,283,286,342,345,347
+  s_73a326cde79ea5::t_a9730b652bd666 36-47,138-140,142-144,147,164,167-169
+src/shell/_shared/errors.ts
+  s_73a326cde79ea5::t_28fa8f0cb04238 115,121-123,131,142-146,153,155-159,167,169-173,177,179-183,190,194-198
+  s_73a326cde79ea5::t_9c6c0988ac1de1 107-108,110-114
+src/shell/agent/agent-service.test.ts
+  s_73a326cde79ea5::t_e975e6bfe2adae 1998-1999,2486-2487
+src/shell/channels/whatsapp/repo.ts
+  s_73a326cde79ea5::t_0399635535756f 77-78
+  s_73a326cde79ea5::t_f67b4c7b5f1988 73-76,79-81,505
+src/shell/consent/repo.ts
+  s_73a326cde79ea5::t_0399635535756f 775-777
+src/shell/channels/whatsapp/outbound.ts
+  s_73a326cde79ea5::t_721bd6d7afcfc7 134-136
+src/shell/channels/whatsapp/kapso-webhook.test.ts
+  s_73a326cde79ea5::t_89410f58be8143 161-162
+src/shell/audit/retention.ts
+  s_73a326cde79ea5::t_185ec784c2960e 22-23
+ARCHITECTURE.md
+  s_73a326cde79ea5::t_16b862dc931c9a 160-163
+src/shell/channels/whatsapp/kapso-client.ts
+  s_73a326cde79ea5::t_4e09853a64a7f9 41-45
+src/shell/consent/retention.ts
+  s_73a326cde79ea5::t_3ff586df570372 9-10
+src/shell/agent/agent-service.ts
+  s_73a326cde79ea5::t_93fb6b32f0c51a 158-162,167-171,174-180,183-189,285-286
+  s_73a326cde79ea5::t_cf5f9c8b235e92 310-311,510-513,522-526,678-680,978-981,1009,1017-1019,1021-1023
+src/shell/_shared/errors.test.ts
+  s_73a326cde79ea5::t_3103489408fe0a 47
+  s_73a326cde79ea5::t_51e648457beaa3 1,11,38-46,48-54
+  s_73a326cde79ea5::t_3e195943ae5851 55-56
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "f61a997cd09e13caa297c27765a2e61b53fd6fc3",
+  "prompts": {},
+  "sessions": {
+    "s_73a326cde79ea5": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019fe64a-8cf0-7be5-bc92-110c81ae54c8",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

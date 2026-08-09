@@ -1,0 +1,127 @@
+src/shell/observability/telemetry-config.test.ts
+  s_343bbdd414bff6::t_c6d4936207653a 116-118
+  s_343bbdd414bff6::t_5939ac5b78287a 304
+  s_343bbdd414bff6::t_c07101c7ebb0b2 1,9-13,18-20,25-38,46,53-110,132-145,147-149,151-154,156-159,161-173,202-296,302-303,305-306,308-309,311-313
+  s_343bbdd414bff6::t_b7a5642d677476 43-45,150,155,160
+  s_343bbdd414bff6::t_63ba86f598f548 2
+  s_343bbdd414bff6::t_4d05a56a536d9a 111-114,119-131
+  s_343bbdd414bff6::t_2e128097fab3ec 39-42,47-52
+  s_343bbdd414bff6::t_11f1dd91782989 146,297-301,307,310
+  s_343bbdd414bff6::t_b7bfb48b29d625 21-23
+  s_343bbdd414bff6::t_9729dac5ef1ef1 3-8,14,24,174-201
+  s_343bbdd414bff6::t_96cdb6f514a9f0 15-17,115
+src/shell/observability/preload.ts
+  s_343bbdd414bff6::t_5bd442d3faf026 3
+  s_343bbdd414bff6::t_ca21c1d0521cb1 12-22
+  s_343bbdd414bff6::t_2b6d8899494d67 1,8,11,23-29
+  s_343bbdd414bff6::t_baffb973df1911 2,4-7,9-10
+source-scope.mjs
+  s_343bbdd414bff6::t_db0a9f1cfd080b 12
+  s_343bbdd414bff6::t_55c220693350f3 11,13,27-31
+src/shell/observability/telemetry-config.ts
+  s_343bbdd414bff6::t_fa1e4b3622aaa0 1,3-7,12-15,140,149,159-161,170,172-173
+  s_343bbdd414bff6::t_56dd368f0a4d29 2,9,17,20-21,35-39,41-46,48-58,60-76,78-111,120,123-129,136,138-139,141-148,150-158,162-169,171,174-176,178-179,182-184,186-188,195-201,203-217,219-231
+  s_343bbdd414bff6::t_4e67cd4038b940 8,10-11,16,18-19,22,28,34,40,47,59,77,232-235
+  s_343bbdd414bff6::t_ed613e2d3ece40 177
+  s_343bbdd414bff6::t_64f60ea1032c26 23-27,29,32-33,121,131-132,137,180,185,189-190,202,218,236-254
+  s_343bbdd414bff6::t_bc80d072338342 30-31,122,133-135,181,255-258
+  s_343bbdd414bff6::t_54fbe97f47798e 112-119,130
+  s_343bbdd414bff6::t_2e128097fab3ec 191-194
+vitest.acceptance.config.ts
+  s_343bbdd414bff6::t_1159d0618c50d3 42-43
+  s_343bbdd414bff6::t_d172bf275c66fe 5-14,39
+src/shell/observability/projectors.ts
+  s_343bbdd414bff6::t_a86b5e30149b4f 263-265,271-272
+  s_343bbdd414bff6::t_b8a3b252055070 273
+  s_343bbdd414bff6::t_45378ac65358fe 259
+  s_343bbdd414bff6::t_a9cd49e865873e 242-244,251,270
+  s_343bbdd414bff6::t_ca3d5a1119f00c 5
+  s_343bbdd414bff6::t_4205dcd9a5ba3e 266-269
+  s_343bbdd414bff6::t_85d7fe785b8b22 245-250,252-254,257-258,260-261
+  s_343bbdd414bff6::t_973470ee175b24 59-68,227-240,256,262
+  s_343bbdd414bff6::t_5dc58e665ade47 197-218,223,241,255
+src/shell/observability/sentry-adapter.test.ts
+  s_343bbdd414bff6::t_0fa9ec798465e2 70,72,83
+  s_343bbdd414bff6::t_f76c3b54a593f4 7,64
+  s_343bbdd414bff6::t_5975013a047662 2,4-5,8-58,62-63
+  s_343bbdd414bff6::t_da601c342f17d0 3,67
+  s_343bbdd414bff6::t_4d112cfbf7fa8c 1,6,65-66,68-69,71,73-75,86
+  s_343bbdd414bff6::t_2e128097fab3ec 76-82,84-85
+  s_343bbdd414bff6::t_40622cfc67bfb3 59-61
+src/shell/observability/disabled.ts
+  s_343bbdd414bff6::t_b7da2f25727ecf 1-2,4-7,12-17
+  s_343bbdd414bff6::t_88d7dec15084fc 8
+src/shell/observability/telemetry-bootstrap.test.ts
+  s_343bbdd414bff6::t_ff1b7ed2852bf4 9-10,87-110
+  s_343bbdd414bff6::t_c203f192692649 25-38,43-44,62,114
+  s_343bbdd414bff6::t_f999eae889daa2 80-82
+  s_343bbdd414bff6::t_27f1da94999488 2,24
+  s_343bbdd414bff6::t_f916805cfb950f 4-8,13-19,66,70,75,141,149,156
+  s_343bbdd414bff6::t_829c577289c26b 1,3,67-69,71-74,76-77,139-140,142-148,150-152,154-155
+  s_343bbdd414bff6::t_564c12c57a7099 11-12,78-79,83-86,153
+  s_343bbdd414bff6::t_87de25e29e6a23 20-23,39-42,45-61,63-65,111-113,115-138
+CODING_STANDARDS.md
+  s_343bbdd414bff6::t_582ae83fa6ca6d 160-167
+src/shell/observability/sentry-adapter.ts
+  s_343bbdd414bff6::t_2e128097fab3ec 177,469-477,502-519
+  s_343bbdd414bff6::t_71ed37daa188a4 42-44,268-270
+  s_343bbdd414bff6::t_ba4cf46f4f5c5b 599
+  s_343bbdd414bff6::t_c0ad23f49dc8c9 389
+  s_343bbdd414bff6::t_1d2f5f1380e0dd 281-282,287,290,299,311-314,323,336
+  s_343bbdd414bff6::t_30e0060c7e8905 578-579,581-586,594-597,601-602,611-615,623-625,627-628,631
+  s_343bbdd414bff6::t_47ad321a3aff84 284-286,288-289,291-298,300-310,315-322,324-332,339-365,367,369-384,410-412,419,421-422,604-609
+  s_343bbdd414bff6::t_d87c77e0c051d9 283,405
+  s_343bbdd414bff6::t_898e9ed9622613 587-592
+  s_343bbdd414bff6::t_6a166b56d31593 11-12,24-28,32-33,89,92-94,97-98,208,217-219,334,337-338,392-395,397-402,404,406-409,413-418,429-457,465-468,478-480,499-501,520-522,539-548,551-557
+  s_343bbdd414bff6::t_688c66d67f54a4 593
+  s_343bbdd414bff6::t_3cc4f3e977a40f 150-156,158,160-176,178-195
+  s_343bbdd414bff6::t_e39b89c24ca3b5 262-263,267,390-391,396,403,420
+  s_343bbdd414bff6::t_52eb7d8b51a6b1 366,368
+  s_343bbdd414bff6::t_077fcbe83a1a95 600
+  s_343bbdd414bff6::t_4b288bf1bcb2da 639
+src/shell/observability/telemetry-bootstrap.ts
+  s_343bbdd414bff6::t_38203524b30d65 1,41-43,49
+  s_343bbdd414bff6::t_10f28a24b86186 17,31,34,38-39
+  s_343bbdd414bff6::t_2e128097fab3ec 32,53-60
+  s_343bbdd414bff6::t_be1d0035ebcb25 2-16,18-30,33,35-37,40,62-80,83-86
+  s_343bbdd414bff6::t_539e0ed3cfca02 44-48,50-52,61
+  s_343bbdd414bff6::t_1f1efd3ff36174 81-82
+package.json
+  s_343bbdd414bff6::t_a9ca4c754824ba 13
+src/shell/observability/envelope-recorder.test.ts
+  s_343bbdd414bff6::t_1f742b043bb86d 9-13,646-686,701-754
+  s_343bbdd414bff6::t_e60869f0f84a76 687-700
+  s_343bbdd414bff6::t_534904166111c0 755
+.env.example
+  s_343bbdd414bff6::t_868cbb1e47ecfa 16-22
+Dockerfile
+  s_343bbdd414bff6::t_3b5a912434ce2d 20
+ARCHITECTURE.md
+  s_343bbdd414bff6::t_27bb77115e29d5 14-16
+scripts/check-production-image.sh
+  s_343bbdd414bff6::t_48f61b9c7aa2f9 56
+  s_343bbdd414bff6::t_981946d522426b 119-121,176
+src/shell/observability/envelope-recorder.ts
+  s_343bbdd414bff6::t_b9d9282f669fcc 17,51
+  s_343bbdd414bff6::t_c6f5ca8d05052d 22
+  s_343bbdd414bff6::t_a704d69aad093e 2
+  s_343bbdd414bff6::t_9c520a09ea7053 3,18-21,23-24,29-46,48-50,52
+src/shell/observability/sentry-live.ts
+  s_343bbdd414bff6::t_17d09a53a2fdc9 1-2,6-7,10-12
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "a47cf3c962e668b9952a3ba61c4a5730bd7a9745",
+  "prompts": {},
+  "sessions": {
+    "s_343bbdd414bff6": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019fe4c1-a24b-75cd-9941-cd80ff054e05",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": null
+    }
+  }
+}

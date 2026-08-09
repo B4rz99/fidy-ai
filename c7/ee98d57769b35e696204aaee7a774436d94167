@@ -1,0 +1,19 @@
+src/shell/observability/canonical-api.ts
+  s_f0e1246b56ad60::t_bf2fb6648aef45 13-22
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "c7ee98d57769b35e696204aaee7a774436d94167",
+  "prompts": {},
+  "sessions": {
+    "s_f0e1246b56ad60": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019fe6f3-6e3b-7944-9f4d-1ca2494a8ed6",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

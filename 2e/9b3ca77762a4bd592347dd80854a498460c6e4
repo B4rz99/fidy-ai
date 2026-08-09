@@ -1,0 +1,57 @@
+src/shell/_shared/errors.test.ts
+  s_73a326cde79ea5::t_51e648457beaa3 1,11,38-46,48-54
+  s_73a326cde79ea5::t_3103489408fe0a 47
+  s_73a326cde79ea5::t_3e195943ae5851 55-56
+src/shell/agent/agent-service.ts
+  s_73a326cde79ea5::t_cf5f9c8b235e92 509,519,523,975,1004,1012-1014
+  s_73a326cde79ea5::t_b3b55ec29ef579 510,520-522,675-677,976,1016
+  s_73a326cde79ea5::t_5dd1ee38176ab8 285,290,292,299,462,981
+  s_73a326cde79ea5::t_93fb6b32f0c51a 158-162,167-171,174-180,183-189,286
+  s_73a326cde79ea5::t_695db6356ac2c4 310
+src/shell/audit/retention.ts
+  s_73a326cde79ea5::t_185ec784c2960e 22-23
+src/shell/channels/whatsapp/kapso-webhook.test.ts
+  s_73a326cde79ea5::t_89410f58be8143 161-162
+src/shell/agent/agent-service.test.ts
+  s_73a326cde79ea5::t_c0b0beb081d5c4 1,5,11,47-54,1999,2004,2007,2012-2017,2495,2500,2503,2508-2517
+  s_73a326cde79ea5::t_5731e5d60b43ae 2008-2011,2504-2507
+src/shell/_shared/errors.ts
+  s_73a326cde79ea5::t_4bb0d3909da5de 125
+  s_73a326cde79ea5::t_9c6c0988ac1de1 107-108,110-114
+  s_73a326cde79ea5::t_28fa8f0cb04238 115,127-129
+  s_73a326cde79ea5::t_0c167705dbf627 120-124,135,137,154-155,164-165,170-171,179-181,184-202
+  s_73a326cde79ea5::t_61e4fb664bcc5c 203
+src/shell/consent/retention.ts
+  s_73a326cde79ea5::t_3ff586df570372 9-10
+src/shell/channels/whatsapp/kapso-client.ts
+  s_73a326cde79ea5::t_4e09853a64a7f9 41-45
+src/shell/channels/whatsapp/repo.ts
+  s_73a326cde79ea5::t_0399635535756f 77-78
+  s_73a326cde79ea5::t_f67b4c7b5f1988 73-76,79-81,505
+src/shell/channels/whatsapp/kapso-webhook.ts
+  s_73a326cde79ea5::t_2e08d122b9668e 278-280,287-289
+  s_73a326cde79ea5::t_a9730b652bd666 36-47,138-140,142-144,147,164,167-169
+  s_73a326cde79ea5::t_8805dbfe16c4d1 238,241,244,246,258,269,275,283,286,342,345,347
+ARCHITECTURE.md
+  s_73a326cde79ea5::t_16b862dc931c9a 160-163
+src/shell/consent/repo.ts
+  s_73a326cde79ea5::t_0399635535756f 775-777
+src/shell/channels/whatsapp/outbound.ts
+  s_73a326cde79ea5::t_721bd6d7afcfc7 134-136
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "2e9b3ca77762a4bd592347dd80854a498460c6e4",
+  "prompts": {},
+  "sessions": {
+    "s_73a326cde79ea5": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019fe64a-8cf0-7be5-bc92-110c81ae54c8",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": null
+    }
+  }
+}

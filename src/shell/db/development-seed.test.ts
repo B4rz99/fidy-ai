@@ -11,6 +11,7 @@ const testPublicNamespace = {
   PUBLIC_WEB_ORIGIN: "https://fidyapp.com",
   PUBLIC_API_ORIGIN: "https://api.fidyapp.com",
   INGEST_EMAIL_DOMAIN: "ingest.fidyapp.com",
+  WHATSAPP_BUSINESS_PORTFOLIO_ID: "portfolio-test",
 } as const;
 
 const runSeedCommand = (

@@ -7,7 +7,7 @@ import {
   Layer,
   Option,
   Redacted,
-  type Schema,
+  Schema,
   Semaphore,
   Stream,
 } from "effect";
@@ -28,13 +28,16 @@ import type { KapsoClient, KapsoSendFailed } from "./kapso-client";
 import type { WhatsAppDeliveryKey, WhatsAppInboundEvent } from "./model";
 import {
   type ConsentDisclosureDeliveryUnavailable,
-  deliverWhatsAppConsentOutcome,
-} from "./outbound";
+  applyConsentDisclosureLifecycle,
+} from "./disclosure-delivery";
+import { deliverWhatsAppConsentOutcome } from "./outbound";
 import {
+  DisclosureLifecycleEventName,
   type InvalidKapsoPayload,
   InvalidKapsoSignature,
   type KapsoBatchTooLarge,
   KapsoPayloadTooLarge,
+  decodeKapsoDisclosureLifecycleWebhook,
   decodeKapsoIdentityWebhook,
   decodeKapsoWebhook,
   maxKapsoWebhookBytes,
@@ -211,6 +214,53 @@ type KapsoMessageWebhookHandler = (
   Crypto.Crypto | KapsoClient | SqlClient.SqlClient
 >;
 
+const isDisclosureLifecycleEvent = Schema.is(DisclosureLifecycleEventName);
+
+const handleKapsoDisclosureLifecycleWebhook = Effect.fn(
+  "WhatsApp.handleKapsoDisclosureLifecycleWebhook"
+)(function* (
+  request: HttpServerRequest.HttpServerRequest,
+  secret: string,
+  bodyReaders: Semaphore.Semaphore
+) {
+  const signature = request.headers["x-webhook-signature"] ?? "";
+  if (!/^[0-9a-f]{64}$/iu.test(signature)) return yield* new InvalidKapsoSignature();
+  const rawBody = yield* readBoundedBody(request, bodyReaders);
+  const evidence = yield* decodeKapsoDisclosureLifecycleWebhook({
+    rawBody,
+    secret,
+    signature,
+    eventName: request.headers["x-webhook-event"] ?? "",
+    receivedAt: yield* DateTime.now,
+  });
+  const resolution = yield* applyConsentDisclosureLifecycle(evidence);
+  return yield* HttpServerResponse.json({ resolution });
+});
+
+const processKapsoInboundReceipt = Effect.fn("WhatsApp.processKapsoInboundReceipt")(function* (
+  receipt: Effect.Success<ReturnType<typeof decodeKapsoWebhook>>
+) {
+  let consentTurns = 0;
+  let enqueued = 0;
+  let duplicates = 0;
+  for (const event of receipt.events) {
+    const claim = yield* claimWhatsAppReceipt(
+      event.messageEvidence.providerMessageId,
+      receipt.deliveryKey,
+      event.receivedAt
+    );
+    if (Option.isNone(claim)) {
+      duplicates += 1;
+      continue;
+    }
+    const outcome = yield* admitInboundEvent(event, receipt.deliveryKey, claim.value);
+    if (outcome === "enqueued") enqueued += 1;
+    else if (outcome === "duplicate") duplicates += 1;
+    else consentTurns += 1;
+  }
+  return { decoded: receipt.events.length, consentTurns, enqueued, duplicates };
+});
+
 const handleKapsoWebhook = (
   secret: string,
   businessPortfolioId: string,
@@ -219,11 +269,15 @@ const handleKapsoWebhook = (
   Effect.fn("WhatsApp.handleKapsoWebhook")(function* (
     request: HttpServerRequest.HttpServerRequest
   ) {
+    const eventName = request.headers["x-webhook-event"] ?? "";
+    if (isDisclosureLifecycleEvent(eventName)) {
+      return yield* handleKapsoDisclosureLifecycleWebhook(request, secret, bodyReaders);
+    }
     const signature = request.headers["x-webhook-signature"] ?? "";
     if (!/^[0-9a-f]{64}$/iu.test(signature)) return yield* new InvalidKapsoSignature();
     const rawBody = yield* readBoundedBody(request, bodyReaders);
-    const deliveryKey = request.headers["x-idempotency-key"] ?? "";
     const receivedAt = yield* DateTime.now;
+    const deliveryKey = request.headers["x-idempotency-key"] ?? "";
     const receipt = yield* decodeKapsoWebhook({
       rawBody,
       secret,
@@ -233,30 +287,7 @@ const handleKapsoWebhook = (
       receivedAt,
     });
 
-    let consentTurns = 0;
-    let enqueued = 0;
-    let duplicates = 0;
-    for (const event of receipt.events) {
-      const claim = yield* claimWhatsAppReceipt(
-        event.messageEvidence.providerMessageId,
-        receipt.deliveryKey,
-        event.receivedAt
-      );
-      if (Option.isNone(claim)) {
-        duplicates += 1;
-        continue;
-      }
-      const outcome = yield* admitInboundEvent(event, receipt.deliveryKey, claim.value);
-      if (outcome === "enqueued") enqueued += 1;
-      else if (outcome === "duplicate") duplicates += 1;
-      else consentTurns += 1;
-    }
-    return yield* HttpServerResponse.json({
-      decoded: receipt.events.length,
-      consentTurns,
-      enqueued,
-      duplicates,
-    });
+    return yield* HttpServerResponse.json(yield* processKapsoInboundReceipt(receipt));
   });
 
 const handleKapsoIdentityWebhook = (
@@ -311,12 +342,12 @@ const handleKapsoIdentityWebhook = (
   });
 
 /**
- * Adds buffered message POST `/webhooks/kapso` and exact Meta forwarding POST
+ * Adds authenticated Kapso message/lifecycle POST `/webhooks/kapso` and exact Meta forwarding POST
  * `/webhooks/kapso/meta` using KAPSO_WEBHOOK_SECRET and the trusted
  * WHATSAPP_BUSINESS_PORTFOLIO_ID. At most 32 bodies are read concurrently; exact bytes are bounded
- * and authenticated before decoding or writes. Successful durable admission returns a JSON summary;
- * authentication, malformed/batch, body-size/timeout, body-read/rate capacity, and queue-capacity
- * failures map to 401, 400, 413/408, 429, and 503 respectively.
+ * and authenticated before decoding or writes. Message admission and lifecycle reconciliation
+ * return JSON summaries; authentication, malformed/batch, body-size/timeout, body-read/rate
+ * capacity, and queue-capacity failures map to 401, 400, 413/408, 429, and 503 respectively.
  */
 export const KapsoWebhookLive = Layer.unwrap(
   Effect.gen(function* () {

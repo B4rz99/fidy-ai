@@ -1,6 +1,11 @@
 import { Config, Context, Data, DateTime, Effect, Layer, Option, Redacted, Schema } from "effect";
 import type { E164PhoneNumber, WhatsAppBusinessScopedUserId } from "~/core/identity/reference";
 import type { TranscriptText } from "~/core/transcript/model";
+import type {
+  DisclosureDeliveryCorrelationToken,
+  DisclosureDeliveryFailureReason,
+} from "./disclosure-model";
+import { classifyKapsoMetaFailureCode } from "./kapso-failure";
 import {
   firstServerErrorStatus,
   forbiddenStatus,
@@ -12,20 +17,10 @@ import {
 import { makeBoundedBytes } from "./bounded-bytes";
 import {
   type WhatsAppBusinessPhoneNumberId,
+  type WhatsAppInboundEvent,
   type WhatsAppMessageEvidence,
   WhatsAppProviderMessageId,
 } from "./model";
-
-/** Closed operator-safe reason for a failed Kapso send. */
-export type KapsoFailureReason =
-  | "sandbox_bsuid_unsupported"
-  | "invalid_recipient"
-  | "conversation_window_closed"
-  | "rate_limited"
-  | "authentication_failed"
-  | "provider_unavailable"
-  | "timeout"
-  | "invalid_response";
 
 /** Whether a provider response proves rejection or acceptance may already have occurred. */
 export type KapsoDeliveryCertainty = "rejected" | "ambiguous";
@@ -35,7 +30,7 @@ export type KapsoDeliveryCertainty = "rejected" | "ambiguous";
  * rejected a transient attempt; the value contains no request input, credential, or response body.
  */
 export class KapsoSendFailed extends Data.TaggedError("KapsoSendFailed")<{
-  readonly safeReason: KapsoFailureReason;
+  readonly safeReason: DisclosureDeliveryFailureReason;
   readonly deliveryCertainty: KapsoDeliveryCertainty;
   readonly automaticRetry: boolean;
 }> {
@@ -50,20 +45,30 @@ export type KapsoSentMessage = Readonly<{
   readonly sentAt: DateTime.Utc;
 }>;
 
+/** Provider-addressable destination derived only from authenticated WhatsApp caller evidence. */
+export type KapsoDestination = Readonly<{
+  readonly recipient: WhatsAppBusinessScopedUserId;
+  readonly sandboxPhone: Option.Option<E164PhoneNumber>;
+}>;
+
+/** Derives provider routing only from the authenticated inbound caller capability. */
+export const kapsoDestinationFor = (caller: WhatsAppInboundEvent["caller"]): KapsoDestination => ({
+  recipient: caller.businessScopedUserId,
+  sandboxPhone: caller.phoneNumber,
+});
+
 /**
- * Sends one validated TranscriptText to the configured Kapso destination. The caller must supply
- * the authenticated portfolio-scoped BSUID and its optional provider-observed phone evidence.
- * Normal delivery uses only the BSUID; explicit sandbox mode uses phone evidence because Kapso
- * rejects BSUID recipients for sandbox numbers. Failures expose no remote or credential details.
+ * Kapso seam for outbound WhatsApp text. Normal delivery uses the authenticated portfolio-scoped
+ * BSUID; explicit sandbox mode uses optional provider-observed phone evidence because Kapso rejects
+ * BSUID recipients for sandbox numbers. Failures expose no remote or credential details.
  */
 export type KapsoClientService = {
   readonly sendText: (input: {
     readonly businessPhoneNumberId: WhatsAppBusinessPhoneNumberId;
-    readonly destination: {
-      readonly recipient: WhatsAppBusinessScopedUserId;
-      readonly sandboxPhone: Option.Option<E164PhoneNumber>;
-    };
+    readonly destination: KapsoDestination;
     readonly text: TranscriptText;
+    /** Opaque disclosure-attempt correlation forwarded unchanged to lifecycle webhooks. */
+    readonly opaqueCallbackData: Option.Option<DisclosureDeliveryCorrelationToken>;
   }) => Effect.Effect<KapsoSentMessage, KapsoSendFailed>;
 };
 
@@ -81,10 +86,13 @@ class KapsoInvalidResponse extends Data.TaggedError("KapsoInvalidResponse")<{
   readonly deliveryCertainty: KapsoDeliveryCertainty;
 }> {}
 
-const rejected = (safeReason: KapsoFailureReason, automaticRetry = false): KapsoSendFailed =>
+const rejected = (
+  safeReason: DisclosureDeliveryFailureReason,
+  automaticRetry = false
+): KapsoSendFailed =>
   new KapsoSendFailed({ safeReason, deliveryCertainty: "rejected", automaticRetry });
 
-const ambiguous = (safeReason: KapsoFailureReason): KapsoSendFailed =>
+const ambiguous = (safeReason: DisclosureDeliveryFailureReason): KapsoSendFailed =>
   new KapsoSendFailed({
     safeReason,
     deliveryCertainty: "ambiguous",
@@ -144,73 +152,12 @@ const MetaFailureResponse = Schema.Struct({
 });
 const KapsoFailureResponse = Schema.Struct({ error: Schema.String });
 
-const metaBusinessBlockedRecipientCode = 130_403;
-const metaRecipientIsSenderCode = 131_021;
-const metaRecipientUndeliverableCode = 131_026;
-const metaRecipientStoppedMarketingCode = 131_050;
-
-const metaAppRateLimitCode = 4;
-const metaUserRateLimitCode = 17;
-const metaPageRateLimitCode = 32;
-const metaBusinessAccountRateLimitCode = 80_007;
-const metaMessageThroughputLimitCode = 130_429;
-const metaRecipientPairRateLimitCode = 131_056;
-
-const metaPermissionDeniedCode = 10;
-const metaExpiredAccessTokenCode = 190;
-const metaMissingPermissionCode = 200;
-const metaAccessDeniedCode = 131_005;
-
-const metaUnknownErrorCode = 1;
-const metaTemporaryServiceErrorCode = 2;
-const metaUnknownSendFailureCode = 131_000;
-const metaServiceUnavailableCode = 131_016;
-const metaMaintenanceModeCode = 131_057;
-const metaServerTemporarilyUnavailableCode = 133_004;
-
-const metaReengagementWindowCode = 131_047;
-
-const invalidRecipientCodes = new Set([
-  metaBusinessBlockedRecipientCode,
-  metaRecipientIsSenderCode,
-  metaRecipientUndeliverableCode,
-  metaRecipientStoppedMarketingCode,
-]);
-const rateLimitedCodes = new Set([
-  metaAppRateLimitCode,
-  metaUserRateLimitCode,
-  metaPageRateLimitCode,
-  metaBusinessAccountRateLimitCode,
-  metaMessageThroughputLimitCode,
-  metaRecipientPairRateLimitCode,
-]);
-const authenticationCodes = new Set([
-  metaPermissionDeniedCode,
-  metaExpiredAccessTokenCode,
-  metaMissingPermissionCode,
-  metaAccessDeniedCode,
-]);
-const unavailableCodes = new Set([
-  metaUnknownErrorCode,
-  metaTemporaryServiceErrorCode,
-  metaUnknownSendFailureCode,
-  metaServiceUnavailableCode,
-  metaMaintenanceModeCode,
-  metaServerTemporarilyUnavailableCode,
-]);
-
-const classifyMetaCode = (code: number): KapsoSendFailed => {
-  if (invalidRecipientCodes.has(code)) return rejected("invalid_recipient");
-  if (code === metaReengagementWindowCode) return rejected("conversation_window_closed");
-  if (rateLimitedCodes.has(code)) return rejected("rate_limited", true);
-  if (authenticationCodes.has(code)) return rejected("authentication_failed");
-  if (unavailableCodes.has(code)) return rejected("provider_unavailable", true);
-  return rejected("invalid_response");
-};
-
 const classifyFailureBody = (body: unknown): KapsoSendFailed => {
   const metaFailure = Schema.decodeUnknownOption(MetaFailureResponse)(body);
-  if (Option.isSome(metaFailure)) return classifyMetaCode(metaFailure.value.error.code);
+  if (Option.isSome(metaFailure)) {
+    const disposition = classifyKapsoMetaFailureCode(metaFailure.value.error.code);
+    return rejected(disposition.safeReason, disposition.automaticRetry);
+  }
   const kapsoFailure = Schema.decodeUnknownOption(KapsoFailureResponse)(body);
   if (
     Option.isSome(kapsoFailure) &&
@@ -275,7 +222,8 @@ const resolveRecipientAddress = (
 
 const encodeTextMessage = (
   address: KapsoRecipientAddress,
-  text: TranscriptText
+  text: TranscriptText,
+  opaqueCallbackData: Option.Option<DisclosureDeliveryCorrelationToken>
 ): Effect.Effect<string> =>
   Schema.encodeEffect(Schema.UnknownFromJsonString)({
     messaging_product: "whatsapp",
@@ -283,6 +231,10 @@ const encodeTextMessage = (
     ...address,
     type: "text",
     text: { body: text },
+    ...Option.match(opaqueCallbackData, {
+      onNone: () => ({}),
+      onSome: (value) => ({ biz_opaque_callback_data: value }),
+    }),
   }).pipe(Effect.orDie);
 
 const classifyTransportError = (error: unknown): KapsoSendFailed => {
@@ -314,11 +266,7 @@ const decodeSentMessage = (
     } satisfies KapsoSentMessage;
   });
 
-/**
- * Constructs the true-external sender around an explicit transport. Responses larger than 64 KiB
- * are rejected; transport, timeout, oversized, and malformed responses remain safe KapsoSendFailed
- * values.
- */
+/** Constructs the bounded, authenticated Kapso adapter for outbound WhatsApp delivery. */
 export const makeKapsoClientService = ({
   apiKey,
   deliveryMode,
@@ -352,7 +300,7 @@ export const makeKapsoClientService = ({
   return KapsoClient.of({
     sendText: Effect.fn("Kapso.sendText")(function* (input) {
       const address = yield* resolveRecipientAddress(deliveryMode, input.destination);
-      const body = yield* encodeTextMessage(address, input.text);
+      const body = yield* encodeTextMessage(address, input.text, input.opaqueCallbackData);
       const response = yield* postMessage(input, body);
       const statusFailure = classifyHttpStatus(response.status);
       if (Option.isSome(statusFailure)) return yield* statusFailure.value;
@@ -366,7 +314,7 @@ export const makeKapsoClientService = ({
   });
 };
 
-/** True-external Kapso text sender used only after channel policy authorizes a recipient. */
+/** True-external seam for authorized WhatsApp text delivery. */
 export class KapsoClient extends Context.Service<KapsoClient, KapsoClientService>()(
   "fidy-ai/shell/channels/whatsapp/kapso-client/KapsoClient"
 ) {

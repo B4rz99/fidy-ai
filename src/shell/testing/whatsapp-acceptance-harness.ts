@@ -13,8 +13,8 @@ import {
   Stream,
 } from "effect";
 import { type Response as AiResponse, LanguageModel } from "effect/unstable/ai";
-import { SqlClient } from "effect/unstable/sql";
-import type { ConsentRecord } from "~/core/consent/model";
+import { SqlClient, SqlSchema } from "effect/unstable/sql";
+import { type ConsentRecord, PendingConsentExchangeId } from "~/core/consent/model";
 import type { UserId, WhatsAppCallerReference } from "~/core/identity/reference";
 import { AgentBearerToken, AgentTokenScopes, getAgentTokenShortId } from "~/core/tokens/model";
 import { AgentTokenId } from "~/core/tokens/reference";
@@ -29,7 +29,13 @@ import {
 } from "~/shell/channels/whatsapp/kapso-client";
 import { WhatsAppProviderMessageId } from "~/shell/channels/whatsapp/model";
 import { WhatsAppWorkerLive } from "~/shell/channels/whatsapp/worker";
-import { observeConsentRecords } from "~/shell/consent/repo";
+import { processDueConsentDisclosureDelivery } from "~/shell/channels/whatsapp/disclosure-delivery";
+import {
+  DisclosureDeliveryAttemptId,
+  DisclosureDeliveryCorrelationToken,
+  DisclosureDeliveryFailureReason,
+} from "~/shell/channels/whatsapp/disclosure-model";
+import { findPendingConsentExchange, observeConsentRecords } from "~/shell/consent/repo";
 import { MigrationSqlClient, MigratorLive, PgLive, RuntimeAuthorityLive } from "~/shell/db/client";
 import { makeDevelopmentSeedLive } from "~/shell/db/development-seed";
 import { findWhatsAppCaller } from "~/shell/identity/repo";
@@ -42,6 +48,12 @@ import { makeLanguageModelFinishPart } from "./language-model-fixtures";
 import { TestPublicNamespace } from "./test-config";
 
 export type WhatsAppAcceptanceDeliveryMode = "bsuid" | "sandbox-phone";
+/** Deterministic fake-provider outcome consumed by acceptance sends in configured order. */
+export type WhatsAppAcceptanceKapsoOutcome =
+  | "accepted"
+  | "ambiguous"
+  | "non-retryable-rejection"
+  | "rejected";
 
 /** One synthetic Kapso HTTP request retained only in memory for acceptance assertions. */
 export type WhatsAppAcceptanceKapsoRequest = Readonly<{
@@ -63,8 +75,60 @@ export class WhatsAppAcceptanceKapsoControl extends Context.Service<
     readonly requests: Effect.Effect<ReadonlyArray<WhatsAppAcceptanceKapsoRequest>>;
     readonly reset: Effect.Effect<void>;
     readonly setDeliveryMode: (mode: WhatsAppAcceptanceDeliveryMode) => Effect.Effect<void>;
+    readonly setOutcomes: (
+      outcomes: ReadonlyArray<WhatsAppAcceptanceKapsoOutcome>
+    ) => Effect.Effect<void>;
   }
 >()("fidy-ai/shell/testing/whatsapp-acceptance-harness/WhatsAppAcceptanceKapsoControl") {}
+
+const AcceptanceDisclosureState = Schema.Struct({
+  attemptId: DisclosureDeliveryAttemptId,
+  state: Schema.Literals([
+    "claimed",
+    "started",
+    "reconciliation-required",
+    "retry-scheduled",
+    "delivered",
+    "definitively-failed",
+    "retry-exhausted",
+  ]),
+  reason: Schema.OptionFromNullOr(DisclosureDeliveryFailureReason),
+  attemptNumber: Schema.Int,
+});
+type AcceptanceDisclosureStateValue = typeof AcceptanceDisclosureState.Type & {
+  readonly correlationToken: DisclosureDeliveryCorrelationToken;
+};
+
+const AcceptanceDisclosureAttempt = Schema.Struct({
+  attemptId: DisclosureDeliveryAttemptId,
+  exchangeId: PendingConsentExchangeId,
+});
+const AcceptanceDisclosureFailureMetadata = Schema.Struct({
+  reason: DisclosureDeliveryFailureReason,
+  certainty: Schema.Literals(["rejected", "ambiguous"]),
+});
+
+/** Acceptance-only observation and public-module control for disclosure recovery. */
+export class WhatsAppAcceptanceDisclosureControl extends Context.Service<
+  WhatsAppAcceptanceDisclosureControl,
+  {
+    readonly find: (caller: WhatsAppCallerReference) => Effect.Effect<
+      Option.Option<{
+        readonly exchangeId: PendingConsentExchangeId;
+        readonly lifecycle: "AwaitingDecision" | "AwaitingDisclosureDelivery";
+        readonly state: Option.Option<AcceptanceDisclosureStateValue>;
+      }>
+    >;
+    readonly findAttemptByCorrelation: (
+      token: DisclosureDeliveryCorrelationToken
+    ) => Effect.Effect<Option.Option<typeof AcceptanceDisclosureAttempt.Type>>;
+    readonly failureMetadata: (
+      attemptId: DisclosureDeliveryAttemptId
+    ) => Effect.Effect<Option.Option<typeof AcceptanceDisclosureFailureMetadata.Type>>;
+    readonly runtimeHasDirectDeliveryUpdate: Effect.Effect<boolean>;
+    readonly processDue: (now: DateTime.Utc) => Effect.Effect<boolean>;
+  }
+>()("fidy-ai/shell/testing/whatsapp-acceptance-harness/WhatsAppAcceptanceDisclosureControl") {}
 
 /** Authenticated public canonical API client for the seeded acceptance User. */
 export class WhatsAppAcceptanceApiClient extends Context.Service<
@@ -212,36 +276,53 @@ const kapsoResourceUrl = (resource: Parameters<typeof globalThis.fetch>[0]): str
   return resource.url;
 };
 
+const makeAcceptanceKapsoFetch = (
+  observedRequests: MutableRef.MutableRef<ReadonlyArray<WhatsAppAcceptanceKapsoRequest>>,
+  configuredOutcomes: MutableRef.MutableRef<ReadonlyArray<WhatsAppAcceptanceKapsoOutcome>>,
+  requestNumber: MutableRef.MutableRef<number>
+): typeof globalThis.fetch =>
+  Object.assign(
+    (resource: Parameters<typeof globalThis.fetch>[0], init?: RequestInit) => {
+      const nextRequestNumber = MutableRef.updateAndGet(requestNumber, (value) => value + 1);
+      const body = Schema.decodeUnknownSync(Schema.Json)(
+        Schema.decodeUnknownSync(Schema.UnknownFromJsonString)(init?.body)
+      );
+      const providerMessageId = WhatsAppProviderMessageId.make(
+        `wamid.acceptance-outbound-${nextRequestNumber}`
+      );
+      MutableRef.update(observedRequests, (requests) => [
+        ...requests,
+        { url: kapsoResourceUrl(resource), body, outcome: { providerMessageId } },
+      ]);
+      const [outcome = "accepted", ...remainingOutcomes] = MutableRef.get(configuredOutcomes);
+      MutableRef.set(configuredOutcomes, remainingOutcomes);
+      if (outcome === "ambiguous") return Promise.reject(new Error("synthetic transport loss"));
+      if (outcome === "rejected") {
+        return Promise.resolve(Response.json({ error: { code: 130429 } }, { status: 429 }));
+      }
+      if (outcome === "non-retryable-rejection") {
+        return Promise.resolve(Response.json({ error: { code: 100 } }, { status: 400 }));
+      }
+      return Promise.resolve(
+        Response.json({
+          messaging_product: "whatsapp",
+          messages: [{ id: providerMessageId }],
+        })
+      );
+    },
+    { preconnect: () => undefined }
+  );
+
 const AcceptanceKapsoTransport = Layer.effectContext(
   Effect.gen(function* () {
     const deliveryMode = yield* Ref.make<WhatsAppAcceptanceDeliveryMode>("sandbox-phone");
     const observedRequests = MutableRef.make<ReadonlyArray<WhatsAppAcceptanceKapsoRequest>>([]);
+    const configuredOutcomes = MutableRef.make<ReadonlyArray<WhatsAppAcceptanceKapsoOutcome>>([]);
     const requestNumber = MutableRef.make(0);
-    const nativeFetch: typeof globalThis.fetch = Object.assign(
-      (resource: Parameters<typeof globalThis.fetch>[0], init?: RequestInit) => {
-        const nextRequestNumber = MutableRef.updateAndGet(requestNumber, (value) => value + 1);
-        const body = Schema.decodeUnknownSync(Schema.Json)(
-          Schema.decodeUnknownSync(Schema.UnknownFromJsonString)(init?.body)
-        );
-        const providerMessageId = WhatsAppProviderMessageId.make(
-          `wamid.acceptance-outbound-${nextRequestNumber}`
-        );
-        MutableRef.update(observedRequests, (requests) => [
-          ...requests,
-          {
-            url: kapsoResourceUrl(resource),
-            body,
-            outcome: { providerMessageId },
-          },
-        ]);
-        return Promise.resolve(
-          Response.json({
-            messaging_product: "whatsapp",
-            messages: [{ id: providerMessageId }],
-          })
-        );
-      },
-      { preconnect: () => undefined }
+    const nativeFetch = makeAcceptanceKapsoFetch(
+      observedRequests,
+      configuredOutcomes,
+      requestNumber
     );
     const client: KapsoClientService = {
       sendText: (input) =>
@@ -257,13 +338,119 @@ const AcceptanceKapsoTransport = Layer.effectContext(
     };
     const control = WhatsAppAcceptanceKapsoControl.of({
       requests: Effect.sync(() => MutableRef.get(observedRequests)),
-      reset: Effect.sync(() => MutableRef.set(observedRequests, [])),
+      reset: Effect.sync(() => {
+        MutableRef.set(observedRequests, []);
+        MutableRef.set(configuredOutcomes, []);
+      }),
       setDeliveryMode: (mode) => Ref.set(deliveryMode, mode),
+      setOutcomes: (outcomes) => Effect.sync(() => MutableRef.set(configuredOutcomes, outcomes)),
     });
     return Context.empty().pipe(
       Context.add(KapsoClient, client),
       Context.add(WhatsAppAcceptanceKapsoControl, control)
     );
+  })
+);
+
+const runtimeHasDirectDeliveryUpdate = (runtimeSql: SqlClient.SqlClient): Effect.Effect<boolean> =>
+  runtimeSql<{ readonly allowed: boolean }>`
+    SELECT has_table_privilege(
+      current_user, 'whatsapp_consent_disclosure_delivery_attempts', 'SELECT'
+    ) OR has_table_privilege(
+      current_user, 'whatsapp_consent_disclosure_delivery_attempts', 'INSERT'
+    ) OR has_table_privilege(
+      current_user, 'whatsapp_consent_disclosure_delivery_attempts', 'UPDATE'
+    ) OR has_table_privilege(
+      current_user, 'whatsapp_consent_disclosure_delivery_attempts', 'DELETE'
+    ) OR has_column_privilege(
+      current_user, 'pending_consent_exchanges', 'lifecycle', 'UPDATE'
+    ) OR has_column_privilege(
+      current_user, 'whatsapp_consent_disclosure_delivery_attempts', 'provider_message_id', 'UPDATE'
+    ) OR has_column_privilege(
+      current_user, 'whatsapp_consent_disclosure_delivery_attempts', 'status', 'UPDATE'
+    ) OR has_column_privilege(
+      current_user, 'whatsapp_consent_disclosure_delivery_attempts', 'safe_reason', 'UPDATE'
+    ) OR has_column_privilege(
+      current_user, 'whatsapp_consent_disclosure_delivery_attempts', 'correlation_hash', 'SELECT'
+    ) OR has_table_privilege(
+      current_user, 'whatsapp_consent_disclosure_delivery_attempts', 'DELETE'
+    ) AS allowed
+  `.pipe(
+    Effect.map((rows) => rows[0]?.allowed ?? true),
+    Effect.orDie
+  );
+
+const findAcceptanceDisclosure = Effect.fn("Acceptance.findDisclosure")(function* (
+  migrationSql: SqlClient.SqlClient,
+  runtimeSql: SqlClient.SqlClient,
+  caller: WhatsAppCallerReference
+) {
+  const exchange = yield* findPendingConsentExchange(caller).pipe(
+    Effect.provideService(SqlClient.SqlClient, runtimeSql)
+  );
+  if (Option.isNone(exchange)) return Option.none();
+  const state = yield* SqlSchema.findOneOption({
+    Request: PendingConsentExchangeId,
+    Result: AcceptanceDisclosureState,
+    execute: (exchangeId) => migrationSql`
+      SELECT id AS "attemptId", status AS state, safe_reason AS reason,
+        attempt_number AS "attemptNumber"
+      FROM whatsapp_consent_disclosure_delivery_attempts
+      WHERE exchange_id = ${exchangeId}
+      ORDER BY attempt_number DESC LIMIT 1
+    `,
+  })(exchange.value.id).pipe(Effect.orDie);
+  const acceptanceState = Option.map(state, (value) => ({
+    ...value,
+    correlationToken: DisclosureDeliveryCorrelationToken.make(value.attemptId),
+  }));
+  return Option.some({
+    exchangeId: exchange.value.id,
+    lifecycle: exchange.value._tag,
+    state: acceptanceState,
+  });
+});
+
+const AcceptanceDisclosureControl = Layer.effect(
+  WhatsAppAcceptanceDisclosureControl,
+  Effect.gen(function* () {
+    const migrationSql: SqlClient.SqlClient = yield* MigrationSqlClient;
+    const runtimeSql = yield* SqlClient.SqlClient;
+    const kapso = yield* KapsoClient;
+    const crypto = yield* Crypto.Crypto;
+    return WhatsAppAcceptanceDisclosureControl.of({
+      find: (caller) => findAcceptanceDisclosure(migrationSql, runtimeSql, caller),
+      findAttemptByCorrelation: (token) => {
+        const correlationHash = new Bun.CryptoHasher("sha256").update(token).digest("hex");
+        return SqlSchema.findOneOption({
+          Request: Schema.String,
+          Result: AcceptanceDisclosureAttempt,
+          execute: (hash) => migrationSql`
+            SELECT id AS "attemptId", exchange_id AS "exchangeId"
+            FROM whatsapp_consent_disclosure_delivery_attempts
+            WHERE correlation_hash = ${hash}
+          `,
+        })(correlationHash).pipe(Effect.orDie);
+      },
+      failureMetadata: (attemptId) =>
+        SqlSchema.findOneOption({
+          Request: DisclosureDeliveryAttemptId,
+          Result: AcceptanceDisclosureFailureMetadata,
+          execute: (id) => migrationSql`
+            SELECT safe_reason AS reason, failure_certainty AS certainty
+            FROM whatsapp_consent_disclosure_delivery_attempts
+            WHERE id = ${id} AND failure_certainty IS NOT NULL
+          `,
+        })(attemptId).pipe(Effect.orDie),
+      runtimeHasDirectDeliveryUpdate: runtimeHasDirectDeliveryUpdate(runtimeSql),
+      processDue: (now) =>
+        processDueConsentDisclosureDelivery(now).pipe(
+          Effect.provideService(SqlClient.SqlClient, runtimeSql),
+          Effect.provideService(KapsoClient, kapso),
+          Effect.provideService(Crypto.Crypto, crypto),
+          Effect.orDie
+        ),
+    });
   })
 );
 
@@ -328,6 +515,7 @@ const AcceptanceApplication = Layer.mergeAll(
  */
 export const WhatsAppAcceptanceHarness = AcceptanceApplication.pipe(
   Layer.provideMerge(AcceptanceCallerProbe),
+  Layer.provideMerge(AcceptanceDisclosureControl),
   Layer.provideMerge(AcceptanceKapsoTransport),
   Layer.provideMerge(
     makeApiClientLive({ tag: WhatsAppAcceptanceApiClient, bearer: defaultAgentBearer })

@@ -45,11 +45,20 @@ import { withUserTransaction } from "~/shell/db/user-transaction";
 import { DisabledTelemetryResource, TelemetryDisabled } from "~/shell/observability/disabled";
 import { Telemetry, makeTelemetryService } from "~/shell/observability/telemetry";
 import {
-  appendConsentRecord,
   claimConsentDisclosureDelivery,
+  claimNextConsentDisclosureRetry,
+  findConsentDisclosureDeliveryState,
+  releaseConsentDisclosureDelivery,
+} from "./disclosure-store";
+import {
+  DisclosureDeliveryCorrelationToken,
+  applyConsentDisclosureLifecycle,
+  processDueConsentDisclosureDelivery,
+} from "./disclosure-delivery";
+import {
+  appendConsentRecord,
   findPendingConsentExchange,
   observeConsentRecords,
-  releaseConsentDisclosureDelivery,
 } from "~/shell/consent/repo";
 import { associateWhatsAppIdentity, resolveWhatsAppCaller } from "~/shell/identity/repo";
 import { removeWhatsAppIdentityForTesting } from "~/shell/identity/testing";
@@ -341,6 +350,28 @@ const kapsoClientFixture = (
       })
     ),
 });
+const deliverLatestDisclosure = Effect.fn("Test.deliverLatestDisclosure")(function* (
+  phoneNumber: E164PhoneNumber,
+  occurredAt: DateTime.Utc
+) {
+  const exchange = yield* Effect.fromOption(
+    yield* findPendingConsentExchange(testWhatsAppCaller(phoneNumber))
+  ).pipe(Effect.orDie);
+  const attempt = yield* Effect.fromOption(
+    yield* findConsentDisclosureDeliveryState(exchange.id)
+  ).pipe(Effect.orDie);
+  return yield* applyConsentDisclosureLifecycle({
+    outcome: "accepted",
+    correlationToken: DisclosureDeliveryCorrelationToken.make(attempt.attemptId),
+    messageEvidence: {
+      channel: "whatsapp",
+      provider: "kapso",
+      providerMessageId: WhatsAppProviderMessageId.make("wamid.test-outbound"),
+    },
+    occurredAt,
+  });
+});
+
 const processTurnWith = (
   claimTime: DateTime.Utc,
   agent: AgentServiceFixture,
@@ -923,7 +954,7 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
             return Deferred.succeed(resumed, undefined).pipe(Effect.andThen(Effect.never));
           })
         );
-        const fiber = yield* runSupervisedWhatsAppLoop(iteration, "whatsapp.processTurn").pipe(
+        const fiber = yield* runSupervisedWhatsAppLoop(iteration, "whatsapp.processWork").pipe(
           Effect.provideService(Telemetry, telemetry),
           Effect.withLogger(logger),
           Effect.forkScoped
@@ -1423,7 +1454,7 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           expect((yield* request()).status).toBe(503);
           yield* releaseConsentDisclosureDelivery({
             exchangeId: admission.exchangeId,
-            claimId: claim.value.claimId,
+            attemptId: claim.value.attemptId,
           });
           expect((yield* request()).status).toBe(200);
         })
@@ -1556,6 +1587,367 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           )
         ).toBe(true);
         expect(yield* Ref.get(sends)).toBe(1);
+
+        const state = yield* findConsentDisclosureDeliveryState(admission.exchangeId);
+        const attempt = yield* Effect.fromOption(state).pipe(Effect.orDie);
+        const correlationToken = DisclosureDeliveryCorrelationToken.make(attempt.attemptId);
+        expect(
+          yield* applyConsentDisclosureLifecycle({
+            outcome: "sent",
+            correlationToken,
+            messageEvidence: {
+              channel: "whatsapp",
+              provider: "kapso",
+              providerMessageId: WhatsAppProviderMessageId.make("wamid.sent-only"),
+            },
+            occurredAt: now,
+          })
+        ).toBe("applied");
+        expect(
+          yield* applyConsentDisclosureLifecycle({
+            outcome: "failed",
+            correlationToken,
+            reason: "provider_unavailable",
+            automaticRetry: true,
+            messageEvidence: {
+              channel: "whatsapp",
+              provider: "kapso",
+              providerMessageId: WhatsAppProviderMessageId.make("wamid.sent-only"),
+            },
+            occurredAt: DateTime.subtract(now, { seconds: 1 }),
+          })
+        ).toBe("ignored");
+        expect(
+          yield* applyConsentDisclosureLifecycle({
+            outcome: "accepted",
+            correlationToken: DisclosureDeliveryCorrelationToken.make(
+              "11111111-1111-4111-8111-111111111111"
+            ),
+            messageEvidence: {
+              channel: "whatsapp",
+              provider: "kapso",
+              providerMessageId: WhatsAppProviderMessageId.make("wamid.uncorrelated"),
+            },
+            occurredAt: now,
+          })
+        ).toBe("ignored");
+
+        expect(
+          yield* applyConsentDisclosureLifecycle({
+            outcome: "sent",
+            correlationToken,
+            messageEvidence: {
+              channel: "whatsapp",
+              provider: "kapso",
+              providerMessageId: WhatsAppProviderMessageId.make("wamid.conflicting"),
+            },
+            occurredAt: DateTime.add(now, { seconds: 1 }),
+          })
+        ).toBe("ignored");
+        expect(
+          yield* applyConsentDisclosureLifecycle({
+            outcome: "accepted",
+            correlationToken,
+            messageEvidence: {
+              channel: "whatsapp",
+              provider: "kapso",
+              providerMessageId: WhatsAppProviderMessageId.make("wamid.conflicting"),
+            },
+            occurredAt: DateTime.add(now, { seconds: 1 }),
+          })
+        ).toBe("ignored");
+        expect(
+          yield* processDueConsentDisclosureDelivery(DateTime.add(now, { hours: 2 })).pipe(
+            Effect.provideService(KapsoClient, {
+              sendText: () => Effect.die("ambiguous disclosure was replayed"),
+            })
+          )
+        ).toBe(false);
+        expect(
+          yield* applyConsentDisclosureLifecycle({
+            outcome: "accepted",
+            correlationToken,
+            messageEvidence: {
+              channel: "whatsapp",
+              provider: "kapso",
+              providerMessageId: WhatsAppProviderMessageId.make("wamid.sent-only"),
+            },
+            occurredAt: DateTime.add(now, { hours: 2 }),
+          })
+        ).toBe("applied");
+      })
+    );
+
+    it.effect("retries only a definitively rejected disclosure attempt", () =>
+      Effect.gen(function* () {
+        yield* truncateWhatsAppChannel;
+        const now = yield* DateTime.now;
+        const phoneNumber = E164PhoneNumber.make(
+          `+57${String(DateTime.toEpochMillis(now)).slice(-10)}`
+        );
+        const event = {
+          ...makeKapsoTextEvent("wamid.rejected-disclosure", "hola", now),
+          caller: testWhatsAppCaller(phoneNumber),
+        };
+        const admission = yield* admitAgentConversationTurn({
+          caller: event.caller,
+          content: { _tag: "Text", text: event.content.text },
+          message: event.messageEvidence,
+          receivedAt: now,
+        });
+        if (admission._tag !== "SendDisclosure") {
+          return yield* Effect.die("missing rejected disclosure admission");
+        }
+        yield* Effect.exit(
+          deliverWhatsAppConsentOutcome(event, admission).pipe(
+            Effect.provideService(KapsoClient, {
+              sendText: () =>
+                Effect.fail(
+                  new KapsoSendFailed({
+                    safeReason: "timeout",
+                    deliveryCertainty: "ambiguous",
+                    automaticRetry: false,
+                  })
+                ),
+            })
+          )
+        );
+
+        const rejectedState = yield* findConsentDisclosureDeliveryState(admission.exchangeId);
+        const rejectedAttempt = yield* Effect.fromOption(rejectedState).pipe(Effect.orDie);
+        const rejectedCorrelation = DisclosureDeliveryCorrelationToken.make(
+          rejectedAttempt.attemptId
+        );
+        const lifecycleFailure = {
+          outcome: "failed" as const,
+          correlationToken: rejectedCorrelation,
+          reason: "provider_unavailable" as const,
+          automaticRetry: true,
+          messageEvidence: {
+            channel: "whatsapp" as const,
+            provider: "kapso",
+            providerMessageId: WhatsAppProviderMessageId.make("wamid.lifecycle-rejection"),
+          },
+          occurredAt: DateTime.add(now, { seconds: 1 }),
+        };
+        expect(
+          yield* applyConsentDisclosureLifecycle({
+            ...lifecycleFailure,
+            occurredAt: DateTime.subtract(now, { seconds: 1 }),
+          })
+        ).toBe("ignored");
+        expect(yield* applyConsentDisclosureLifecycle(lifecycleFailure)).toBe("applied");
+        expect(yield* applyConsentDisclosureLifecycle(lifecycleFailure)).toBe("ignored");
+
+        const retries = yield* Ref.make(0);
+        const retryingKapso: KapsoClientService = {
+          sendText: () =>
+            Ref.update(retries, (count) => count + 1).pipe(
+              Effect.andThen(
+                Effect.fail(
+                  new KapsoSendFailed({
+                    safeReason: "rate_limited",
+                    deliveryCertainty: "rejected",
+                    automaticRetry: true,
+                  })
+                )
+              )
+            ),
+        };
+        for (const dueAt of [5, 15, 30]) {
+          expect(
+            yield* processDueConsentDisclosureDelivery(DateTime.add(now, { seconds: dueAt })).pipe(
+              Effect.provideService(KapsoClient, retryingKapso)
+            )
+          ).toBe(true);
+        }
+        expect(yield* Ref.get(retries)).toBe(3);
+        expect(
+          yield* processDueConsentDisclosureDelivery(DateTime.add(now, { minutes: 1 })).pipe(
+            Effect.provideService(KapsoClient, kapsoClientFixture("wamid.never-used", now))
+          )
+        ).toBe(false);
+      })
+    );
+
+    it.effect("cancels a claimed retry when newer authenticated delivery arrives", () =>
+      Effect.gen(function* () {
+        yield* truncateWhatsAppChannel;
+        const now = yield* DateTime.now;
+        const phoneNumber = E164PhoneNumber.make(
+          `+57${String(DateTime.toEpochMillis(now) + 1).slice(-10)}`
+        );
+        const event = {
+          ...makeKapsoTextEvent("wamid.reordered-disclosure", "hola", now),
+          caller: testWhatsAppCaller(phoneNumber),
+        };
+        const admission = yield* admitAgentConversationTurn({
+          caller: event.caller,
+          content: { _tag: "Text", text: event.content.text },
+          message: event.messageEvidence,
+          receivedAt: now,
+        });
+        if (admission._tag !== "SendDisclosure") return yield* Effect.die("missing disclosure");
+        yield* Effect.exit(
+          deliverWhatsAppConsentOutcome(event, admission).pipe(
+            Effect.provideService(KapsoClient, {
+              sendText: () =>
+                Effect.fail(
+                  new KapsoSendFailed({
+                    safeReason: "timeout",
+                    deliveryCertainty: "ambiguous",
+                    automaticRetry: false,
+                  })
+                ),
+            })
+          )
+        );
+        const state = yield* findConsentDisclosureDeliveryState(admission.exchangeId);
+        const attempt = yield* Effect.fromOption(state).pipe(Effect.orDie);
+        const correlationToken = DisclosureDeliveryCorrelationToken.make(attempt.attemptId);
+        expect(
+          yield* applyConsentDisclosureLifecycle({
+            outcome: "failed",
+            correlationToken,
+            reason: "provider_unavailable",
+            automaticRetry: true,
+            messageEvidence: {
+              channel: "whatsapp",
+              provider: "kapso",
+              providerMessageId: WhatsAppProviderMessageId.make("wamid.reordered-failed"),
+            },
+            occurredAt: DateTime.add(now, { seconds: 1 }),
+          })
+        ).toBe("applied");
+        expect(
+          yield* applyConsentDisclosureLifecycle({
+            outcome: "accepted",
+            correlationToken,
+            messageEvidence: {
+              channel: "whatsapp",
+              provider: "kapso",
+              providerMessageId: WhatsAppProviderMessageId.make("wamid.stale-delivered"),
+            },
+            occurredAt: now,
+          })
+        ).toBe("ignored");
+        expect(
+          Option.isSome(yield* claimNextConsentDisclosureRetry(DateTime.add(now, { minutes: 1 })))
+        ).toBe(true);
+        expect(
+          yield* applyConsentDisclosureLifecycle({
+            outcome: "accepted",
+            correlationToken,
+            messageEvidence: {
+              channel: "whatsapp",
+              provider: "kapso",
+              providerMessageId: WhatsAppProviderMessageId.make("wamid.reordered-delivered"),
+            },
+            occurredAt: DateTime.add(now, { seconds: 2 }),
+          })
+        ).toBe("applied");
+        expect(
+          yield* processDueConsentDisclosureDelivery(DateTime.add(now, { minutes: 1 })).pipe(
+            Effect.provideService(KapsoClient, kapsoClientFixture("wamid.never-used", now))
+          )
+        ).toBe(false);
+        const delivered = yield* Effect.fromOption(
+          yield* findConsentDisclosureDeliveryState(admission.exchangeId)
+        ).pipe(Effect.orDie);
+        expect(delivered.state).toBe("delivered");
+      })
+    );
+
+    it.effect("rolls back delivered attempt evidence when Consent cannot advance", () =>
+      Effect.gen(function* () {
+        yield* truncateWhatsAppChannel;
+        const now = yield* DateTime.now;
+        const event = {
+          ...makeKapsoTextEvent("wamid.atomic-disclosure", "hola", now),
+          caller: testWhatsAppCaller(
+            E164PhoneNumber.make(`+57${String(DateTime.toEpochMillis(now) + 2).slice(-10)}`)
+          ),
+        };
+        const admission = yield* admitAgentConversationTurn({
+          caller: event.caller,
+          content: { _tag: "Text", text: event.content.text },
+          message: event.messageEvidence,
+          receivedAt: now,
+        });
+        if (admission._tag !== "SendDisclosure") return yield* Effect.die("missing disclosure");
+        yield* deliverWhatsAppConsentOutcome(event, admission).pipe(
+          Effect.provideService(KapsoClient, kapsoClientFixture("wamid.atomic-send", now))
+        );
+        const attempt = yield* Effect.fromOption(
+          yield* findConsentDisclosureDeliveryState(admission.exchangeId)
+        ).pipe(Effect.orDie);
+        const admin = yield* MigrationSqlClient;
+        yield* admin`
+          UPDATE pending_consent_exchanges
+          SET lifecycle = 'awaiting-decision', disclosure_channel = 'test',
+            disclosure_provider = 'test', disclosure_provider_message_id = 'test',
+            disclosed_at = ${now}
+          WHERE id = ${admission.exchangeId}
+        `;
+        const failure = yield* applyConsentDisclosureLifecycle({
+          outcome: "accepted",
+          correlationToken: DisclosureDeliveryCorrelationToken.make(attempt.attemptId),
+          messageEvidence: {
+            channel: "whatsapp",
+            provider: "kapso",
+            providerMessageId: WhatsAppProviderMessageId.make("wamid.atomic-send"),
+          },
+          occurredAt: DateTime.add(now, { seconds: 1 }),
+        }).pipe(Effect.flip);
+        expect(failure._tag).toBe("ConsentDisclosureDeliveryUnavailable");
+        const retained = yield* Effect.fromOption(
+          yield* findConsentDisclosureDeliveryState(admission.exchangeId)
+        ).pipe(Effect.orDie);
+        expect(retained.state).toBe("reconciliation-required");
+      })
+    );
+
+    it.effect("propagates a definitive terminal disclosure rejection without scheduling work", () =>
+      Effect.gen(function* () {
+        yield* truncateWhatsAppChannel;
+        const now = yield* DateTime.now;
+        const phoneNumber = E164PhoneNumber.make(
+          `+58${String(DateTime.toEpochMillis(now)).slice(-10)}`
+        );
+        const event = {
+          ...makeKapsoTextEvent("wamid.terminal-disclosure", "hola", now),
+          caller: testWhatsAppCaller(phoneNumber),
+        };
+        const admission = yield* admitAgentConversationTurn({
+          caller: event.caller,
+          content: { _tag: "Text", text: event.content.text },
+          message: event.messageEvidence,
+          receivedAt: now,
+        });
+        if (admission._tag !== "SendDisclosure") {
+          return yield* Effect.die("missing terminal disclosure admission");
+        }
+        const failure = yield* deliverWhatsAppConsentOutcome(event, admission).pipe(
+          Effect.provideService(KapsoClient, {
+            sendText: () =>
+              Effect.fail(
+                new KapsoSendFailed({
+                  safeReason: "invalid_recipient",
+                  deliveryCertainty: "rejected",
+                  automaticRetry: false,
+                })
+              ),
+          }),
+          Effect.flip
+        );
+        expect(failure._tag).toBe("KapsoSendFailed");
+        if (failure._tag !== "KapsoSendFailed") return yield* Effect.die("wrong failure");
+        expect(failure.safeReason).toBe("invalid_recipient");
+        expect(
+          yield* processDueConsentDisclosureDelivery(DateTime.add(now, { minutes: 1 })).pipe(
+            Effect.provideService(KapsoClient, kapsoClientFixture("wamid.never-used", now))
+          )
+        ).toBe(false);
       })
     );
 
@@ -1573,6 +1965,7 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         > => postSignedTextFixture({ phoneNumber, providerMessageId, text, occurredAt });
         const receivedAt = yield* DateTime.now;
         expect((yield* postEvent("wamid.disclosure-trigger", "hola", receivedAt)).status).toBe(200);
+        expect(yield* deliverLatestDisclosure(phoneNumber, receivedAt)).toBe("applied");
         expect(
           (yield* postEvent(
             "wamid.predates-disclosure",
@@ -1606,6 +1999,7 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           HttpClient.HttpClient
         > => postEvent("wamid.pre-consent-financial", "almuerzo 25 mil", receivedAt);
         expect((yield* original()).status).toBe(200);
+        expect(yield* deliverLatestDisclosure(phoneNumber, receivedAt)).toBe("applied");
         // A minute, not a second: the fixture truncates the provider timestamp to whole seconds
         // while the harness stamps `disclosedAt` from the real clock, so any margin shorter than
         // the disclosure round trip lands the decision before it and only clarifies.

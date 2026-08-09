@@ -3,6 +3,7 @@ import { Effect, Option, Schema } from "effect";
 import { E164PhoneNumber, WhatsAppBusinessScopedUserId } from "~/core/identity/reference";
 import { TranscriptText } from "~/core/transcript/model";
 import { type KapsoClientService, makeKapsoClientService } from "./kapso-client";
+import { DisclosureDeliveryCorrelationToken } from "./disclosure-model";
 import { WhatsAppBusinessPhoneNumberId } from "./model";
 
 const sendInput = (
@@ -14,11 +15,21 @@ const sendInput = (
     sandboxPhone: Option.some(E164PhoneNumber.make("+573001234567")),
   },
   text: TranscriptText.make("hola"),
+  opaqueCallbackData: Option.none(),
   ...overrides,
 });
 
 const fakeFetch = (response: () => Response): typeof globalThis.fetch =>
   Object.assign(() => Promise.resolve(response()), { preconnect: () => undefined });
+
+const responseWithStatusOutsideFetchRange = (): Response => {
+  const response = new Response(null, { status: 599 });
+  Object.defineProperties(response, {
+    ok: { value: false },
+    status: { value: 600 },
+  });
+  return response;
+};
 
 it.effect("uses recipient, never to, for a BSUID destination", () =>
   Effect.gen(function* () {
@@ -39,15 +50,22 @@ it.effect("uses recipient, never to, for a BSUID destination", () =>
         { preconnect: () => undefined }
       ),
     });
+    const correlationToken = DisclosureDeliveryCorrelationToken.make(
+      "11111111-1111-4111-8111-111111111111"
+    );
     yield* service.sendText(
       sendInput({
         destination: {
           recipient: WhatsAppBusinessScopedUserId.make("CO.573001234567"),
           sandboxPhone: Option.some(E164PhoneNumber.make("+573001234567")),
         },
+        opaqueCallbackData: Option.some(correlationToken),
       })
     );
-    expect(requestBody).toMatchObject({ recipient: "CO.573001234567" });
+    expect(requestBody).toMatchObject({
+      recipient: "CO.573001234567",
+      biz_opaque_callback_data: correlationToken,
+    });
     expect(requestBody).not.toHaveProperty("to");
   })
 );
@@ -115,12 +133,29 @@ it.effect("classifies every known rejection with safe retry semantics", () =>
         expected: ["authentication_failed", false] as const,
       },
       {
+        response: (): Response => Response.json({ error: "forbidden" }, { status: 403 }),
+        expected: ["authentication_failed", false] as const,
+      },
+      {
         response: (): Response => Response.json({ error: { code: 190 } }, { status: 400 }),
         expected: ["authentication_failed", false] as const,
       },
       {
         response: (): Response => Response.json({ error: { code: 131016 } }, { status: 400 }),
         expected: ["provider_unavailable", true] as const,
+      },
+      {
+        response: (): Response =>
+          Response.json({ error: "another provider rejection" }, { status: 400 }),
+        expected: ["invalid_response", false] as const,
+      },
+      {
+        response: (): Response => new Response("not-json", { status: 400 }),
+        expected: ["invalid_response", false] as const,
+      },
+      {
+        response: responseWithStatusOutsideFetchRange,
+        expected: ["invalid_response", false] as const,
       },
     ];
 
@@ -174,6 +209,10 @@ it.effect("classifies timeout and transport outcomes as ambiguous and not retrya
         nativeFetch: fakeFetch(() => new Response("malformed maintenance body", { status: 503 })),
         safeReason: "provider_unavailable",
       },
+      {
+        nativeFetch: fakeFetch(() => new Response("outside Fetch status range", { status: 600 })),
+        safeReason: "invalid_response",
+      },
     ];
 
     for (const testCase of cases) {
@@ -211,6 +250,34 @@ it.effect("fails unknown, malformed, oversized, and incomplete responses closed"
             status: 200,
             headers: { "content-length": String(64 * 1_024 + 1) },
           }),
+        certainty: "ambiguous",
+      },
+      {
+        response: (): Response =>
+          new Response("x", {
+            status: 400,
+            headers: { "content-length": String(64 * 1_024 + 1) },
+          }),
+        certainty: "rejected",
+      },
+      {
+        response: (): Response =>
+          new Response(null, {
+            status: 200,
+            headers: { "content-length": String(64 * 1_024 + 1) },
+          }),
+        certainty: "ambiguous",
+      },
+      {
+        response: (): Response => new Response(new Uint8Array(64 * 1_024 + 1), { status: 200 }),
+        certainty: "ambiguous",
+      },
+      {
+        response: (): Response => new Response(new Uint8Array(64 * 1_024 + 1), { status: 400 }),
+        certainty: "rejected",
+      },
+      {
+        response: (): Response => new Response(null, { status: 204 }),
         certainty: "ambiguous",
       },
       {

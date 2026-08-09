@@ -49,7 +49,7 @@ export const TelemetryRegistry = {
     "agent.hostedTurn",
     "agent.modelRound",
     "whatsapp.publishTurn",
-    "whatsapp.processTurn",
+    "whatsapp.processWork",
     "whatsapp.sendText",
     "postgres.repositoryOperation",
     "postgres.compatibilityProbe",

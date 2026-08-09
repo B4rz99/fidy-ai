@@ -251,18 +251,18 @@ check on `trunk`. They cover the behavioural source listed in `source-scope.mjs`
 
 The WhatsApp acceptance inventory is independent from lower-seam test counts:
 
-| Scenario | Release behavior                                                    | Status          |
-| -------- | ------------------------------------------------------------------- | --------------- |
-| `WA-A01` | A new sandbox caller receives the disclosure                        | Executable      |
-| `WA-A02` | Portfolio + BSUID, never phone evidence, authorizes the caller      | Executable      |
-| `WA-A03` | Missing sandbox phone evidence fails closed without a provider call | Executable      |
-| `WA-A04` | Consent acceptance establishes the stable User                      | Executable      |
-| `WA-A05` | A financial message creates one Transaction and visible reply       | Executable      |
-| `WA-A06` | Duplicate webhooks do not duplicate effects                         | Executable      |
-| `WA-A07` | Definitive provider rejection becomes safely retryable              | Planned in #122 |
-| `WA-A08` | Ambiguous delivery is not automatically resent                      | Planned in #122 |
-| `WA-A09` | An authenticated operator reconciles ambiguous delivery             | Planned in #122 |
-| `WA-A10` | Normal delivery uses only `recipient`; sandbox uses only `to`       | Executable      |
+| Scenario | Release behavior                                                    | Status     |
+| -------- | ------------------------------------------------------------------- | ---------- |
+| `WA-A01` | A new sandbox caller receives the disclosure                        | Executable |
+| `WA-A02` | Portfolio + BSUID, never phone evidence, authorizes the caller      | Executable |
+| `WA-A03` | Missing sandbox phone evidence fails closed without a provider call | Executable |
+| `WA-A04` | Consent acceptance establishes the stable User                      | Executable |
+| `WA-A05` | A financial message creates one Transaction and visible reply       | Executable |
+| `WA-A06` | Duplicate webhooks do not duplicate effects                         | Executable |
+| `WA-A07` | Definitive provider rejection becomes safely retryable              | Executable |
+| `WA-A08` | Ambiguous delivery is not automatically replayed                    | Executable |
+| `WA-A09` | Missing lifecycle webhook leaves delivery durably ambiguous         | Executable |
+| `WA-A10` | Normal delivery uses only `recipient`; sandbox uses only `to`       | Executable |
 
 The acceptance command requires `DATABASE_URL` and `MIGRATION_DATABASE_URL` for a fresh database
 whose restricted runtime role has been installed with `deploy/local-postgres-init.sql`.

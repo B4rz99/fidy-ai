@@ -4,6 +4,7 @@ import { AgentService } from "~/shell/agent/agent-service";
 import { projectStack } from "~/shell/observability/projectors";
 import { runScheduledWork } from "~/shell/observability/scheduled-work";
 import { Telemetry } from "~/shell/observability/telemetry";
+import { processDueConsentDisclosureDelivery } from "./disclosure-delivery";
 import { sendKapsoFreeForm } from "./outbound";
 import {
   claimWhatsAppTurn,
@@ -88,17 +89,17 @@ export const processNextWhatsAppTurn = Effect.fn("WhatsApp.processNextTurn")(fun
  */
 export const runSupervisedWhatsAppLoop: {
   (
-    operation: "whatsapp.processTurn"
+    operation: "whatsapp.processWork"
   ): <E, R>(iteration: Effect.Effect<void, E, R>) => Effect.Effect<never, never, R | Telemetry>;
   <E, R>(
     iteration: Effect.Effect<void, E, R>,
-    operation: "whatsapp.processTurn"
+    operation: "whatsapp.processWork"
   ): Effect.Effect<never, never, R | Telemetry>;
 } = dual(
   2,
   <E, R>(
     iteration: Effect.Effect<void, E, R>,
-    operation: "whatsapp.processTurn"
+    operation: "whatsapp.processWork"
   ): Effect.Effect<never, never, R | Telemetry> =>
     Effect.forever(
       iteration.pipe(
@@ -129,9 +130,11 @@ export const runSupervisedWhatsAppLoop: {
 );
 
 const workerLoop = Effect.gen(function* () {
-  const processed = yield* processNextWhatsAppTurn(yield* DateTime.now);
+  const now = yield* DateTime.now;
+  const retriedDisclosure = yield* processDueConsentDisclosureDelivery(now);
+  const processed = retriedDisclosure ? true : yield* processNextWhatsAppTurn(now);
   if (!processed) yield* Effect.sleep("250 millis");
-}).pipe(runSupervisedWhatsAppLoop("whatsapp.processTurn"));
+}).pipe(runSupervisedWhatsAppLoop("whatsapp.processWork"));
 /** Removes expired WhatsApp operational data as one independently observed scheduled execution. */
 export const runWhatsAppRetention = runScheduledWork({
   component: "whatsapp",
@@ -156,7 +159,7 @@ const retentionLoop = Effect.forever(
   )
 );
 
-/** Runs independently supervised durable turn and retention loops for the application scope. */
+/** Runs independently supervised disclosure-retry, durable-turn, and retention loops. */
 export const WhatsAppWorkerLive = Layer.effectDiscard(
   Effect.all(
     [...Array.from({ length: 8 }, () => workerLoop), retentionLoop].map((loop) =>

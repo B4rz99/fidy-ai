@@ -41,8 +41,10 @@ Use three checks when drawing a boundary:
 
 1. Data that must commit atomically belongs to one slice unless an accepted coordination decision
    says otherwise. ADR 0005 coordinates canonical state with Audit evidence, ADR 0009 coordinates
-   initial User bootstrap, and ADR 0008 serializes consent revocation with consent-dependent work.
-   These exceptions compose only owner-published operations and do not transfer data ownership.
+   initial User bootstrap, ADR 0008 serializes consent revocation with consent-dependent work, and
+   ADR 0013 lets the deep WhatsApp disclosure-delivery module atomically coordinate verified
+   attempt evidence with the Consent owner operation. These exceptions compose only owner-published
+   operations and do not transfer data ownership.
 2. Cross-slice references use stable ids, not embedded objects.
 3. An invariant that must hold immediately is enforceable inside one slice.
 

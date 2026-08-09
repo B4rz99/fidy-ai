@@ -8,7 +8,7 @@ export const whatsappAcceptanceScenarios = {
   "WA-A06": "Webhook replay does not duplicate effects",
   "WA-A07": "Definitive provider rejection is safely retryable",
   "WA-A08": "Ambiguous delivery is not automatically replayed",
-  "WA-A09": "An operator reconciles ambiguous delivery",
+  "WA-A09": "Missing lifecycle webhook leaves delivery durably ambiguous",
   "WA-A10": "BSUID and sandbox addressing remain mutually exclusive",
 } as const;
 
@@ -22,6 +22,9 @@ export const implementedWhatsAppAcceptanceScenarioIds = [
   "WA-A04",
   "WA-A05",
   "WA-A06",
+  "WA-A07",
+  "WA-A08",
+  "WA-A09",
   "WA-A10",
 ] as const satisfies ReadonlyArray<WhatsAppAcceptanceScenarioId>;
 

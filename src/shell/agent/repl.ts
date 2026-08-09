@@ -4,11 +4,7 @@ import {
   WhatsAppBusinessPortfolioId,
   type WhatsAppBusinessScopedUserId,
 } from "~/core/identity/reference";
-import {
-  claimConsentDisclosureDelivery,
-  recordConsentDisclosureDelivery,
-  releaseConsentDisclosureDelivery,
-} from "~/shell/consent/repo";
+import { recordLocalConsentDisclosureDelivery } from "~/shell/consent/repo";
 import { type AgentConversationOutcome, handleAgentConversationTurn } from "./conversation";
 import { InboundMessage } from "./agent-service";
 
@@ -49,31 +45,18 @@ const displayConversationOutcome = Effect.fn("displayConversationOutcome")(funct
   if (outcome._tag !== "SendDisclosure") {
     return yield* terminal.display(`${renderTerminalText(outcome.text)}\n`);
   }
-  const claimedAt = yield* DateTime.now;
-  const claim = yield* claimConsentDisclosureDelivery(outcome.exchangeId, claimedAt);
-  if (Option.isNone(claim)) return yield* terminal.display(unavailableMessage);
-  yield* Effect.gen(function* () {
-    yield* terminal.display(`${renderTerminalText(outcome.text)}\n`);
-    const crypto = yield* Crypto.Crypto;
-    const recorded = yield* recordConsentDisclosureDelivery({
-      exchangeId: outcome.exchangeId,
-      claimId: claim.value.claimId,
-      message: {
-        channel: "terminal",
-        provider: "local-repl",
-        providerMessageId: `repl:${yield* crypto.randomUUIDv4.pipe(Effect.orDie)}`,
-      },
-      deliveredAt: yield* DateTime.now,
-    });
-    if (Option.isNone(recorded)) return yield* terminal.display(unavailableMessage);
-  }).pipe(
-    Effect.onError(() =>
-      releaseConsentDisclosureDelivery({
-        exchangeId: outcome.exchangeId,
-        claimId: claim.value.claimId,
-      })
-    )
-  );
+  yield* terminal.display(`${renderTerminalText(outcome.text)}\n`);
+  const crypto = yield* Crypto.Crypto;
+  const recorded = yield* recordLocalConsentDisclosureDelivery({
+    exchangeId: outcome.exchangeId,
+    message: {
+      channel: "terminal",
+      provider: "local-repl",
+      providerMessageId: `repl:${yield* crypto.randomUUIDv4.pipe(Effect.orDie)}`,
+    },
+    deliveredAt: yield* DateTime.now,
+  });
+  if (Option.isNone(recorded)) return yield* terminal.display(unavailableMessage);
 });
 
 /**

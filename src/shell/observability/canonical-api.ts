@@ -10,19 +10,16 @@ import {
 import { type TelemetryCode, TelemetryCodeSchema } from "./registry";
 import { Telemetry, type TelemetryService } from "./telemetry";
 
-const expectedOutcome = (failure: unknown): Option.Option<DeclaredOutcome> => {
-  if (typeof failure !== "object" || failure === null || !("error" in failure)) {
-    return Option.none();
-  }
-  const detail = failure.error;
-  if (typeof detail !== "object" || detail === null || !("code" in detail)) {
-    return Option.none();
-  }
-  return Option.map(
-    Schema.decodeUnknownOption(TelemetryCodeSchema.error)(detail.code),
-    (error) => ({ outcome: "rejected", error: Option.some(error), retryable: false })
-  );
-};
+const ExpectedFailure = Schema.Struct({
+  error: Schema.Struct({ code: TelemetryCodeSchema.error }),
+});
+
+const expectedOutcome = (failure: unknown): Option.Option<DeclaredOutcome> =>
+  Option.map(Schema.decodeUnknownOption(ExpectedFailure)(failure), ({ error }) => ({
+    outcome: "rejected",
+    error: Option.some(error.code),
+    retryable: false,
+  }));
 
 const httpDescriptor = (input: {
   readonly method: TelemetryHttpMethodType;

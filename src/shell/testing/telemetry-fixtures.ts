@@ -1,3 +1,4 @@
+import { Schema } from "effect";
 import type { SpanDescriptor } from "~/shell/observability/protocol";
 
 const hostedTurnIdentity = {
@@ -17,6 +18,16 @@ type WorkOf<Descriptor> = Descriptor extends SpanDescriptor
 
 /** The varying half of a span descriptor: what kind of work it is, and that kind's own metadata. */
 export type SpanWork = WorkOf<SpanDescriptor>;
+
+/** Decodes the newline-framed item payloads from one serialized telemetry envelope. */
+export const decodeEnvelopeItems = (bytes: Uint8Array): ReadonlyArray<unknown> => {
+  const lines = new TextDecoder().decode(bytes).split("\n");
+  const items: Array<unknown> = [];
+  for (let index = 1; index + 1 < lines.length; index += 2) {
+    items.push(Schema.decodeUnknownSync(Schema.UnknownFromJsonString)(lines[index + 1] ?? "null"));
+  }
+  return items;
+};
 
 /** Builds the approved hosted-turn descriptor used by telemetry seam tests. */
 export const makeSpanDescriptor = (): SpanDescriptor => ({

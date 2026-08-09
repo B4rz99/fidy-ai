@@ -85,6 +85,38 @@ it.effect("a synchronous start defect runs application work unobserved", () =>
   })
 );
 
+it.effect("an unobserved root clears ambient context from its nested work", () =>
+  Effect.gen(function* () {
+    const parents: Array<Parameters<TelemetryAdapter["startSpan"]>[1]> = [];
+    const adapter = makeTelemetryAdapter({
+      startSpan: (_descriptor, parent) => {
+        parents.push(parent);
+        const index = parents.length;
+        return Effect.succeed(
+          index === 2
+            ? Option.none()
+            : Option.some({
+                traceId: TelemetryTraceId.make(String(index).repeat(32)),
+                spanId: TelemetrySpanId.make(String(index).repeat(16)),
+                sampled: true,
+                state: {},
+              })
+        );
+      },
+    });
+    const services = yield* Layer.build(telemetryLayer(adapter));
+    const telemetry = Context.get(services, Telemetry);
+
+    yield* telemetry.span(
+      descriptor,
+      telemetry.rootSpan(descriptor, telemetry.span(descriptor, Effect.void))
+    );
+
+    expect(parents).toHaveLength(3);
+    expect(parents.every(Option.isNone)).toBe(true);
+  })
+);
+
 it.effect("a malformed adapter span runs nested application work unobserved", () =>
   Effect.gen(function* () {
     const hostileSpan: TelemetrySpan = {

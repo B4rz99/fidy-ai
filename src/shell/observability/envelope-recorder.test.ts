@@ -455,6 +455,7 @@ it.effect("projects only the bounded attributes its own work kind admits", () =>
         "fidy.work_kind": work.workKind,
         "fidy.outcome": "succeeded",
         "fidy.retryable": false,
+        ...(work.workKind === "scheduled_execution" ? { "fidy.duration_milliseconds": 0 } : {}),
         ...attributes,
       }))
     );

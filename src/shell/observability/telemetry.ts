@@ -56,6 +56,11 @@ export type TelemetryService = {
     descriptor: SpanDescriptor,
     work: Effect.Effect<A, E, R>
   ) => Effect.Effect<A, E, R>;
+  /** Starts an isolated root even when the calling fiber is already inside unrelated observed work. */
+  readonly rootSpan: <A, E, R>(
+    descriptor: SpanDescriptor,
+    work: Effect.Effect<A, E, R>
+  ) => Effect.Effect<A, E, R>;
   /** Continues context no older than 24 hours; malformed, future, or stale input starts a safe root. */
   readonly continueSpan: <A, E, R>(
     savedContext: unknown,
@@ -198,6 +203,12 @@ export const makeTelemetryService = (adapter: TelemetryAdapter): TelemetryServic
           descriptor,
           work,
         })
+      ),
+    rootSpan: (descriptor, work) =>
+      Effect.provideService(
+        observeWith({ adapter, parent: Option.none(), descriptor, work }),
+        CurrentTelemetrySpan,
+        Option.none()
       ),
     continueSpan: (savedContext, descriptor, work) =>
       Effect.flatMap(Clock.currentTimeMillis, (now) =>

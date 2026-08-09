@@ -1,13 +1,29 @@
 import { expect, layer } from "@effect/vitest";
-import { DateTime, Effect } from "effect";
+import { DateTime, Effect, Layer, Option, Schema } from "effect";
 import { CanonicalOperationId } from "~/core/audit/model";
 import { defaultUserId } from "~/shell/db/development-seed";
+import {
+  EnvelopeRecorder,
+  TelemetryEnvelopeRecording,
+} from "~/shell/observability/envelope-recorder";
+import { ProjectedTransaction } from "~/shell/observability/projectors";
 import { ApiHarness, ApiHarnessClient } from "~/shell/testing/api-harness";
+import { decodeEnvelopeItems } from "~/shell/testing/telemetry-fixtures";
 import { truncateAuditLogEntries } from "./fixtures";
 import { appendAuditLogEntry, observeAuditLogEntries } from "./repo";
-import { runAuditRetention } from "./retention";
+import { runScheduledAuditRetention } from "./retention";
 
-layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
+const AuditRetentionHarness = Layer.merge(ApiHarness, TelemetryEnvelopeRecording);
+
+const scheduledTransactions = (
+  envelopes: ReadonlyArray<Uint8Array>
+): ReadonlyArray<ProjectedTransaction> =>
+  envelopes
+    .flatMap(decodeEnvelopeItems)
+    .flatMap((item) => Option.toArray(Schema.decodeUnknownOption(ProjectedTransaction)(item)))
+    .filter((transaction) => transaction.transaction === "task.auditRetention");
+
+layer(AuditRetentionHarness, { excludeTestServices: true, timeout: "30 seconds" })(
   "AuditLogEntry retention",
   (it) => {
     it.effect("removes only evidence older than the 365-day cutoff", () =>
@@ -36,13 +52,21 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           })
         );
 
-        yield* runAuditRetention(now);
+        const recorder = yield* EnvelopeRecorder;
+        yield* runScheduledAuditRetention(now);
+        yield* runScheduledAuditRetention(now);
 
         const retained = yield* observeAuditLogEntries(defaultUserId);
         expect(retained.map((entry) => entry.occurredAt)).toEqual([
           cutoff,
           DateTime.makeUnsafe("2025-07-01T12:00:01Z"),
         ]);
+        const executions = scheduledTransactions(yield* recorder.serializedEnvelopes);
+        expect(executions).toHaveLength(2);
+        expect(new Set(executions.map(({ contexts }) => contexts.trace.trace_id)).size).toBe(2);
+        expect(
+          executions.every(({ contexts }) => contexts.trace.parent_span_id === undefined)
+        ).toBe(true);
       })
     );
   }

@@ -11,6 +11,7 @@ const acceptanceExclude = [
   "src/shell/observability/sentry-account-reader.ts",
   "src/shell/observability/sentry-account-smoke.ts",
   "src/shell/observability/envelope-recorder.ts",
+  "src/shell/observability/scheduled-work.ts",
   "src/shell/observability/sentry-adapter.ts",
   "src/shell/observability/sentry-live.ts",
   "src/shell/observability/telemetry-bootstrap.ts",

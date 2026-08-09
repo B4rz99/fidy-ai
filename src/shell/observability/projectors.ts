@@ -175,13 +175,17 @@ export const projectBreadcrumb = (input: {
 
 const maximumTelemetryDurationMilliseconds = 86_400_000;
 const millisecondsPerSecond = 1_000;
+const durationWorkKinds = new Set<SpanDescriptor["workKind"]>([
+  "scheduled_execution",
+  "model_call",
+]);
 
 const elapsedDurationAttributes = (input: {
   readonly workKind: SpanDescriptor["workKind"];
   readonly startedAt: number;
   readonly finishedAt: number;
 }): Readonly<Record<string, TelemetryDuration>> =>
-  input.workKind === "scheduled_execution" || input.workKind === "model_call"
+  durationWorkKinds.has(input.workKind)
     ? {
         "fidy.duration_milliseconds": TelemetryDuration.make(
           Math.min(

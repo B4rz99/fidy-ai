@@ -1,0 +1,24 @@
+source-scope.mjs
+  s_835a68f05b2a71::t_29441f8d9ad15d 11-14,32
+tsconfig.json
+  s_835a68f05b2a71::t_ace2062625276e 133-143
+scripts/check-production-image.sh
+  s_835a68f05b2a71::t_fe01170d8c8740 173
+  s_835a68f05b2a71::t_12530212620f58 9,20,171,174,180-181
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "0e95a9926678712b088b906ed85714339d916c52",
+  "prompts": {},
+  "sessions": {
+    "s_835a68f05b2a71": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019fe753-d804-72ba-b457-1ff30a9c7908",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

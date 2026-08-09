@@ -115,10 +115,31 @@
           "unnecessaryTypeofType": "error",
           "unsafeEffectTypeAssertion": "error"
         },
-        "overrides": []
+        "overrides": [
+          {
+            "include": ["./tools/observability-compatibility/**/*.ts"],
+            "options": {
+              "diagnosticSeverity": {
+                "asyncFunction": "off",
+                "globalDate": "off",
+                "globalFetchInEffect": "off",
+                "globalTimers": "off",
+                "lazyPromiseInEffectSync": "off",
+                "preferSchemaOverJson": "off",
+                "processEnv": "off",
+                "runEffectInsideEffect": "off"
+              }
+            }
+          }
+        ]
       }
     ]
   },
-  "include": ["scripts/**/*.ts", "src/**/*.ts", "src/**/*.tsx"],
+  "include": [
+    "scripts/**/*.ts",
+    "src/**/*.ts",
+    "src/**/*.tsx",
+    "tools/observability-compatibility/**/*.ts"
+  ],
   "exclude": ["**/node_modules/**", "**/dist/**", "**/build/**"]
 }

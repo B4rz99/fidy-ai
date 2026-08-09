@@ -21,6 +21,7 @@
     "test": "bun --bun vitest run",
     "test:acceptance": "bun --bun vitest run --config vitest.acceptance.config.ts",
     "test:core": "bun --bun vitest run --config vitest.core.config.ts",
+    "test:observability-compatibility": "bun --bun vitest run --config vitest.compatibility.config.ts",
     "test:crap": "bun --bun vitest run --config vitest.crap.config.ts --coverage && bun tools/crap/run.mjs",
     "test:mutation": "node tools/mutation/run.mjs",
     "check:production-image": "bash scripts/check-production-image.sh",

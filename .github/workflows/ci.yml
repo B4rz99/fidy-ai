@@ -125,6 +125,10 @@ jobs:
           MIGRATION_DATABASE_URL: postgres://fidy:fidy@localhost:5432/fidy
           WHATSAPP_BUSINESS_PORTFOLIO_ID: portfolio-test
         run: bun run test
+      - name: Pinned observability compatibility gate
+        env:
+          DATABASE_URL: postgres://fidy_runtime:fidy_runtime@localhost:5432/fidy
+        run: bun run test:observability-compatibility
 
   acceptance:
     name: WhatsApp Acceptance

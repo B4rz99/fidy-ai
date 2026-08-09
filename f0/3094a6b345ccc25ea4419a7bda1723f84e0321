@@ -1,0 +1,31 @@
+src/core/dashboard/rules.ts
+  s_cb8296d75c38f3::t_4663598786352b 32-33
+  s_cb8296d75c38f3::t_6aa54380cfbb36 42-43,48
+  s_cb8296d75c38f3::t_a7c59f8a9f500c 34
+  s_cb8296d75c38f3::t_8c9b1a060ac995 45-47
+  s_cb8296d75c38f3::t_229aedca664d82 31,35-39
+src/core/dashboard/rules.test.ts
+  s_cb8296d75c38f3::t_d3e08553b26d2b 209,212
+  s_cb8296d75c38f3::t_31ef2273fe4a6e 137-208,210-211,213-231
+stryker.config.mjs
+  s_cb8296d75c38f3::t_34d0d5ab00bc74 30-32
+src/core/_shared/time.test.ts
+  s_cb8296d75c38f3::t_928e09f237cdca 23-40,43-47
+  s_cb8296d75c38f3::t_b4e58ce2686a5e 41-42
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "f03094a6b345ccc25ea4419a7bda1723f84e0321",
+  "prompts": {},
+  "sessions": {
+    "s_cb8296d75c38f3": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019fe6bc-8875-79f6-aa77-3978d6d88ed8",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": null
+    }
+  }
+}

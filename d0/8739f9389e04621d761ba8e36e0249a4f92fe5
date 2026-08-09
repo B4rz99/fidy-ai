@@ -1,0 +1,48 @@
+railway.json
+  s_5b3fee1332add8::t_922791c9dc6f16 8
+src/shell/channels/whatsapp/worker.ts
+  s_5b3fee1332add8::t_50ca94bbd4156a 136
+README.md
+  s_5b3fee1332add8::t_c1df6e09005fbb 189-196,198-208
+  s_5b3fee1332add8::t_c8e4f290f30e93 197
+package.json
+  s_5b3fee1332add8::t_79b821124d0e23 14-15
+  s_5b3fee1332add8::t_ce7753536b7e60 45
+scripts/check-deployment-smoke.ts
+  s_5b3fee1332add8::t_01f0ca5c5212a2 61
+  s_5b3fee1332add8::t_c588727d67632c 15,69,86,119
+  s_5b3fee1332add8::t_115da4a8b0cf76 7,16-20,96-104,117-118
+  s_5b3fee1332add8::t_1bb1369961653c 54-60,65-68,110-112,114-116,120-121,134-135
+  s_5b3fee1332add8::t_8ee08f7486443f 70-85,87-88
+  s_5b3fee1332add8::t_691888385cec9b 122-126,131-132
+  s_5b3fee1332add8::t_7f3c9839a523ed 26,113
+  s_5b3fee1332add8::t_ea732562a5ef34 127-130
+  s_5b3fee1332add8::t_ab20beffb8110b 27,53,62-64,133
+  s_5b3fee1332add8::t_7c9c7bc10ba28d 136
+scripts/check-production-image.sh
+  s_5b3fee1332add8::t_619f0054300f35 30
+  s_5b3fee1332add8::t_d908d07cac058c 123-179,183,289-290
+  s_5b3fee1332add8::t_0f2145fffcfffc 8-9,12,15-16,20,103-122,184,207,247,250,259-263
+  s_5b3fee1332add8::t_5e1e9085f0b408 62,256-258,271
+Dockerfile
+  s_5b3fee1332add8::t_2c115297a3d820 28
+  s_5b3fee1332add8::t_7cc37f974d2609 1,8,13-21
+bun.lock
+  s_5b3fee1332add8::t_eac01a8247962f 18,274-291,376-377,432-433,438-439,524-525,578-581,618-619,634-639
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "d08739f9389e04621d761ba8e36e0249a4f92fe5",
+  "prompts": {},
+  "sessions": {
+    "s_5b3fee1332add8": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019fe6f4-03cb-73f6-9a56-f42300652c3b",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

@@ -1,0 +1,19 @@
+src/shell/observability/scheduled-work.test.ts
+  s_529bed04cbf248::t_aa0c9c1c2d531c 83-115
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "c23a569e2fc05efeaa4263cf8067120bacff58a0",
+  "prompts": {},
+  "sessions": {
+    "s_529bed04cbf248": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019fe6f3-b235-7e11-bee7-459077f2a423",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

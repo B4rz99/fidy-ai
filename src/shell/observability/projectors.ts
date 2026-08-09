@@ -2,7 +2,7 @@
  * Projectors rebuild an untrusted value into the exact shape allowed past the Sentry boundary,
  * constructing each field from a closed schema rather than removing fields from the original.
  */
-import { Cause, Option, Schema } from "effect";
+import { Cause, Function as Fn, Option, Predicate, Schema } from "effect";
 import { strictDecoding } from "./decoding";
 import {
   ClassifiedFailure,
@@ -55,6 +55,16 @@ export const ProjectedBreadcrumb = Schema.Struct({
   }),
 });
 export type ProjectedBreadcrumb = typeof ProjectedBreadcrumb.Type;
+
+/** Reconstructs a final SDK breadcrumb exclusively from the already-approved breadcrumb schema. */
+export const projectFinalBreadcrumb = (value: unknown): Option.Option<ProjectedBreadcrumb> =>
+  Option.map(decodeStrict(ProjectedBreadcrumb, value), (breadcrumb) => ({
+    category: breadcrumb.category,
+    message: breadcrumb.message,
+    level: "info",
+    timestamp: breadcrumb.timestamp,
+    data: { ...breadcrumb.data },
+  }));
 
 const ProjectedTraceCoordinates = {
   trace_id: TelemetryTraceId,
@@ -184,31 +194,81 @@ const spanAttributes = (
   }
 };
 
+/** Exact allowlisted attributes permitted on a serialized transaction or final SDK span. */
+export const ProjectedTraceData = Schema.Struct({
+  "fidy.component": TelemetryCodeSchema.component,
+  "fidy.operation": TelemetryCodeSchema.operation,
+  "fidy.trigger": TelemetryCodeSchema.trigger,
+  "fidy.work_kind": TelemetryCodeSchema.workKind,
+  "fidy.outcome": TelemetryCodeSchema.outcome,
+  "fidy.retryable": Schema.Boolean,
+  "http.request.method": Schema.optionalKey(
+    Schema.Literals(["GET", "POST", "PUT", "PATCH", "DELETE"])
+  ),
+  "http.response.status_code": Schema.optionalKey(TelemetryHttpStatus),
+  "fidy.provider": Schema.optionalKey(TelemetryCodeSchema.provider),
+  "fidy.attempt": Schema.optionalKey(TelemetryAttempt),
+  "fidy.input_count": Schema.optionalKey(TelemetryCount),
+  "fidy.delay_milliseconds": Schema.optionalKey(TelemetryDuration),
+  "gen_ai.request.model": Schema.optionalKey(TelemetryCodeSchema.model),
+  "gen_ai.usage.input_tokens": Schema.optionalKey(TelemetryCount),
+  "gen_ai.usage.output_tokens": Schema.optionalKey(TelemetryCount),
+});
+export type ProjectedTraceData = typeof ProjectedTraceData.Type;
+
 /** Exact trace context and approved attributes permitted on a serialized transaction. */
 export const ProjectedTrace = Schema.Struct({
   ...ProjectedTraceCoordinates,
   status: Schema.Literals(["ok", "invalid_argument", "internal_error", "cancelled"]),
-  data: Schema.Struct({
-    "fidy.component": TelemetryCodeSchema.component,
-    "fidy.operation": TelemetryCodeSchema.operation,
-    "fidy.trigger": TelemetryCodeSchema.trigger,
-    "fidy.work_kind": TelemetryCodeSchema.workKind,
-    "fidy.outcome": TelemetryCodeSchema.outcome,
-    "fidy.retryable": Schema.Boolean,
-    "http.request.method": Schema.optionalKey(
-      Schema.Literals(["GET", "POST", "PUT", "PATCH", "DELETE"])
-    ),
-    "http.response.status_code": Schema.optionalKey(TelemetryHttpStatus),
-    "fidy.provider": Schema.optionalKey(TelemetryCodeSchema.provider),
-    "fidy.attempt": Schema.optionalKey(TelemetryAttempt),
-    "fidy.input_count": Schema.optionalKey(TelemetryCount),
-    "fidy.delay_milliseconds": Schema.optionalKey(TelemetryDuration),
-    "gen_ai.request.model": Schema.optionalKey(TelemetryCodeSchema.model),
-    "gen_ai.usage.input_tokens": Schema.optionalKey(TelemetryCount),
-    "gen_ai.usage.output_tokens": Schema.optionalKey(TelemetryCount),
-  }),
+  data: ProjectedTraceData,
 });
 export type ProjectedTrace = typeof ProjectedTrace.Type;
+
+/** The exact root/child span shape allowed through the pinned SDK's final span hook. */
+export const ProjectedFinalSpan = Schema.Struct({
+  data: ProjectedTrace.fields.data,
+  description: TelemetryCodeSchema.operation,
+  op: TelemetryCodeSchema.spanOperation,
+  parent_span_id: Schema.optionalKey(TelemetrySpanId),
+  span_id: TelemetrySpanId,
+  start_timestamp: Schema.Finite,
+  status: Schema.Literals(["ok", "invalid_argument", "internal_error", "cancelled"]),
+  timestamp: Schema.Finite,
+  trace_id: TelemetryTraceId,
+  is_segment: Schema.optionalKey(Schema.Boolean),
+});
+export type ProjectedFinalSpan = typeof ProjectedFinalSpan.Type;
+
+const getUnknownProperty = (value: object, key: string): unknown =>
+  Fn.cast<object, Readonly<Record<PropertyKey, unknown>>>(value)[key];
+
+const pickPresent = (
+  value: object,
+  keys: ReadonlyArray<string>
+): Readonly<Record<string, unknown>> =>
+  Object.fromEntries(
+    keys.flatMap<readonly [string, unknown]>((key) => {
+      const candidate = getUnknownProperty(value, key);
+      return candidate === undefined ? [] : [[key, candidate] as const];
+    })
+  );
+
+const projectFinalSpanData = (value: unknown): unknown =>
+  Predicate.isObject(value)
+    ? pickPresent(value, Object.keys(ProjectedTraceData.fields))
+    : undefined;
+
+/** Reconstructs a final SDK span and drops profile, measurement, link, origin, and widened data. */
+export const projectFinalSpan = (value: unknown): Option.Option<ProjectedFinalSpan> => {
+  if (typeof value !== "object" || value === null) return Option.none();
+  return decodeStrict(ProjectedFinalSpan, {
+    ...pickPresent(
+      value,
+      Object.keys(ProjectedFinalSpan.fields).filter((key) => key !== "data")
+    ),
+    data: projectFinalSpanData(getUnknownProperty(value, "data")),
+  });
+};
 
 /** A complete metadata-only transaction reconstructed before the Sentry SDK boundary. */
 export const ProjectedTransaction = Schema.Struct({

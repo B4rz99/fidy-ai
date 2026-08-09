@@ -10,7 +10,7 @@
     "lint:deps": "bun tools/depcruise/run.mjs && bun run lint:deps:probes",
     "lint:deps:probes": "bun scripts/check-dependency-guards.ts",
     "lint:dependencies": "bun scripts/check-dependency-updates.ts",
-    "dev": "bun scripts/seed-development.ts && FIDY_HTTP_HOST=127.0.0.1 bun src/main.ts",
+    "dev": "bun scripts/seed-development.ts && FIDY_HTTP_HOST=127.0.0.1 bun --preload ./src/shell/observability/preload.ts src/main.ts",
     "agent:repl": "bun scripts/agent-repl.ts",
     "format": "oxfmt --write .",
     "format:check": "oxfmt --check .",

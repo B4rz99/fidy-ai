@@ -1,5 +1,6 @@
 import { Context, Effect, Layer } from "effect";
-import { makeSentryRecordingClient } from "./sentry-adapter";
+import { type RecordingTransportOutcome, makeSentryRecordingClient } from "./sentry-adapter";
+import type { EnabledCapture } from "./telemetry-config";
 import { Telemetry, makeTelemetryService } from "./telemetry";
 
 /** Exact bytes passed to the isolated Sentry transport after SDK serialization. */
@@ -13,22 +14,39 @@ export class EnvelopeRecorder extends Context.Service<EnvelopeRecorder, Envelope
   "fidy-ai/shell/observability/envelope-recorder/EnvelopeRecorder"
 ) {}
 
+/** Deterministic capture, sampling, and transport controls for serialized-envelope tests. */
+export type TelemetryEnvelopeRecordingOptions = Readonly<{
+  capture: EnabledCapture;
+  rootTraceRate: number;
+  randomUnitInterval: () => number;
+  transportOutcome: RecordingTransportOutcome;
+}>;
+
 /**
  * Provides Telemetry with an isolated no-network Sentry client and exposes only its complete
  * serialized transport bytes. Layer scope closes and flushes the private client.
  */
-export const TelemetryEnvelopeRecording = Layer.effectContext(
-  Effect.map(
-    Effect.acquireRelease(Effect.sync(makeSentryRecordingClient), (recording) => recording.close),
-    (recording) =>
-      Context.make(Telemetry, makeTelemetryService(recording.adapter)).pipe(
-        Context.add(
-          EnvelopeRecorder,
-          EnvelopeRecorder.of({
-            serializedEnvelopes: recording.serializedEnvelopes,
-            clear: recording.clear,
-          })
+export const telemetryEnvelopeRecording = (
+  options: Partial<TelemetryEnvelopeRecordingOptions> = {}
+): Layer.Layer<Telemetry | EnvelopeRecorder> =>
+  Layer.effectContext(
+    Effect.map(
+      Effect.acquireRelease(
+        Effect.sync(() => makeSentryRecordingClient(options)),
+        (recording) => recording.close
+      ),
+      (recording) =>
+        Context.make(Telemetry, makeTelemetryService(recording.adapter)).pipe(
+          Context.add(
+            EnvelopeRecorder,
+            EnvelopeRecorder.of({
+              serializedEnvelopes: recording.serializedEnvelopes,
+              clear: recording.clear,
+            })
+          )
         )
-      )
-  )
-);
+    )
+  );
+
+/** Default complete-capture recording layer with a successful isolated transport. */
+export const TelemetryEnvelopeRecording = telemetryEnvelopeRecording();

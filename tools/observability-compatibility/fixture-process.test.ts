@@ -16,6 +16,10 @@ import {
 import { SentryLive } from "~/shell/observability/sentry-live";
 import { Telemetry, type TelemetryService } from "~/shell/observability/telemetry";
 import {
+  type DecodedEnvelopeItem,
+  decodeEnvelopeItems,
+} from "~/shell/testing/telemetry-envelope-fixtures";
+import {
   type TelemetryBootstrap,
   getTelemetryBootstrap,
 } from "~/shell/observability/telemetry-bootstrap";
@@ -53,6 +57,7 @@ const httpDescriptor = (method: HttpMethod) =>
     metadata: {
       _tag: "Http",
       method,
+      route: "/compatibility/:case",
       status: Option.some(TelemetryHttpStatus.make(200)),
     },
   }) as const;
@@ -63,7 +68,11 @@ const databaseDescriptor = {
   trigger: "api",
   spanOperation: "db",
   workKind: "repository_operation",
-  metadata: { _tag: "None" },
+  metadata: {
+    _tag: "Database",
+    system: "postgresql",
+    repositoryOperation: "compatibility_probe",
+  },
 } as const;
 
 const providerDescriptor = {
@@ -124,23 +133,9 @@ const trustedContext = (request: Request): Option.Option<DurableTraceContext> =>
   });
 };
 
-type EnvelopeItem = Readonly<{ header: unknown; payload: unknown }>;
-
-const decodeEnvelopeItems = (bytes: Uint8Array): ReadonlyArray<EnvelopeItem> => {
-  const lines = new TextDecoder().decode(bytes).split("\n");
-  const items: Array<EnvelopeItem> = [];
-  for (let index = 1; index + 1 < lines.length; index += 2) {
-    items.push({
-      header: Schema.decodeUnknownSync(Schema.UnknownFromJsonString)(lines[index] ?? "null"),
-      payload: Schema.decodeUnknownSync(Schema.UnknownFromJsonString)(lines[index + 1] ?? "null"),
-    });
-  }
-  return items;
-};
-
 const decodedPayloads = <Decoded, Encoded>(
   schema: Schema.Codec<Decoded, Encoded>,
-  items: ReadonlyArray<EnvelopeItem>
+  items: ReadonlyArray<DecodedEnvelopeItem>
 ): ReadonlyArray<Decoded> =>
   items.flatMap(({ payload }) => Option.toArray(Schema.decodeUnknownOption(schema)(payload)));
 
@@ -343,7 +338,11 @@ const fixture = Effect.scoped(
         sentryClientInitializationCount() === 1
       ),
       oneRootPerRequest: roots.length === requests.length,
-      boundedRootName: roots.every((root) => root.transaction === "http.canonicalRequest"),
+      boundedRootName: roots.every(
+        (root) =>
+          root.transaction ===
+          `${root.contexts.trace.data["http.request.method"]} /compatibility/:case`
+      ),
       trustedContextContinued: all(
         trustedRoot?.contexts.trace.parent_span_id === expectedParentSpanId,
         responseTraceIds[0] === expectedTraceId

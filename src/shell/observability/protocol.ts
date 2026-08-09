@@ -25,10 +25,19 @@ export const TelemetryHttpStatus = Schema.Int.check(
 ).pipe(Schema.brand("TelemetryHttpStatus"));
 export type TelemetryHttpStatus = typeof TelemetryHttpStatus.Type;
 
+/** HTTP methods admitted by the assembled canonical API. */
+export const TelemetryHttpMethod = Schema.Literals(["GET", "POST", "PUT", "PATCH", "DELETE"]);
+export type TelemetryHttpMethod = typeof TelemetryHttpMethod.Type;
+
 const NoSpanMetadata = Schema.TaggedStruct("None", {});
 const HttpSpanMetadata = Schema.TaggedStruct("Http", {
-  method: Schema.Literals(["GET", "POST", "PUT", "PATCH", "DELETE"]),
+  method: TelemetryHttpMethod,
+  route: TelemetryCodeSchema.httpRoute,
   status: Schema.Option(TelemetryHttpStatus),
+});
+const DatabaseSpanMetadata = Schema.TaggedStruct("Database", {
+  system: TelemetryCodeSchema.databaseSystem,
+  repositoryOperation: TelemetryCodeSchema.repositoryOperation,
 });
 const QueueSpanMetadata = Schema.TaggedStruct("Queue", {
   attempt: TelemetryAttempt,
@@ -66,6 +75,11 @@ export const SpanDescriptor = Schema.Union([
     ...SpanIdentity,
     workKind: Schema.Literals(TelemetryWorkKindGroup.http),
     metadata: HttpSpanMetadata,
+  }),
+  Schema.Struct({
+    ...SpanIdentity,
+    workKind: Schema.Literals(TelemetryWorkKindGroup.database),
+    metadata: DatabaseSpanMetadata,
   }),
   Schema.Struct({
     ...SpanIdentity,

@@ -24,6 +24,8 @@ import { makeDevelopmentSeedLive } from "~/shell/db/development-seed";
 import { defaultAgentBearer } from "./identity-fixtures";
 import { TestPublicNamespace } from "./test-config";
 import { HttpLive } from "~/shell/http";
+import { TelemetryDisabled } from "~/shell/observability/disabled";
+import { TelemetryEnvelopeRecording } from "~/shell/observability/envelope-recorder";
 
 /**
  * Derives the typed client from the ambient HttpClient, which the test server
@@ -123,7 +125,7 @@ const TestKapsoClient = Layer.effectContext(
  * test HttpClient, already pointed at the server, for raw HTTP checks. Runtime
  * retention workers are excluded; their deterministic seams have dedicated tests.
  */
-export const ApiHarness = makeApiClientLive({
+const ApiHarnessBase = makeApiClientLive({
   tag: ApiHarnessClient,
   bearer: defaultAgentBearer,
 }).pipe(
@@ -135,4 +137,13 @@ export const ApiHarness = makeApiClientLive({
   Layer.provideMerge(MigrationSqlClient.layer),
   Layer.provideMerge(PgLive),
   Layer.provideMerge(TestPublicNamespace)
+);
+
+/** The ordinary API test stack, with observability fully disabled and no SDK transport. */
+export const ApiHarness = ApiHarnessBase.pipe(Layer.provide(TelemetryDisabled));
+
+/** The API seam with exact serialized telemetry exposed for observability behavior tests. */
+export const ApiTelemetryHarness = Layer.merge(
+  ApiHarnessBase.pipe(Layer.provide(TelemetryEnvelopeRecording)),
+  TelemetryEnvelopeRecording
 );

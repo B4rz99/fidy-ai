@@ -13,6 +13,7 @@ import {
   TelemetryBreadcrumb,
   TelemetryCount,
   TelemetryDuration,
+  TelemetryHttpMethod,
   TelemetryHttpStatus,
   TelemetrySpanId,
   TelemetryTraceId,
@@ -26,6 +27,7 @@ const decodeStrict = <Decoded, Encoded>(
 
 const safeFunctionPattern = /^[A-Za-z_$][A-Za-z0-9_.$<>-]{0,119}$/u;
 const safeSourceFilePattern = /^src\/[A-Za-z0-9_./-]{1,220}\.(?:ts|tsx|js|mjs)$/u;
+const safeSourceModulePattern = /^src\/[A-Za-z0-9_./-]{1,220}$/u;
 const stackLinePattern = /^\s*at\s+(?:([^\s(]+)\s+\()?(.+):(\d+):(\d+)\)?\s*$/u;
 const PositiveStackCoordinate = Schema.Int.check(
   Schema.isBetween({ minimum: 1, maximum: Number.MAX_SAFE_INTEGER })
@@ -33,6 +35,7 @@ const PositiveStackCoordinate = Schema.Int.check(
 
 /** Closed stack coordinates that cannot carry exception messages, source context, URLs, or locals. */
 export const ProjectedStackFrame = Schema.Struct({
+  module: Schema.String.check(Schema.isPattern(safeSourceModulePattern)),
   filename: Schema.String.check(Schema.isPattern(safeSourceFilePattern)),
   function: Schema.String.check(Schema.isPattern(safeFunctionPattern)),
   lineno: PositiveStackCoordinate,
@@ -100,6 +103,7 @@ const projectStackLine = (line: string): Option.Option<ProjectedStackFrame> => {
   if (match === null) return Option.none();
   return Option.flatMap(normalizeSourceFile(match[2] ?? ""), (filename) =>
     decodeStrict(ProjectedStackFrame, {
+      module: filename.slice(0, filename.lastIndexOf(".")),
       filename,
       function: match[1] ?? "anonymous",
       lineno: Number(match[3]),
@@ -114,11 +118,26 @@ const projectReasonStack = (reason: Cause.Reason<unknown>): ReadonlyArray<Projec
   return [];
 };
 
-/** Extracts only application source coordinates from an Error or every reason in an Effect Cause. */
+const stackText = (cause: unknown): Option.Option<string> => {
+  if (!Predicate.isObject(cause)) return Option.none();
+  try {
+    const stack = Fn.cast<object, { readonly stack: unknown }>(cause).stack;
+    return Predicate.isString(stack) ? Option.some(stack) : Option.none();
+  } catch {
+    return Option.none();
+  }
+};
+
+/** Extracts only scrubbed application coordinates from a stack-bearing defect or Effect Cause. */
 export const projectStack = (cause: unknown): ReadonlyArray<ProjectedStackFrame> => {
-  if (Cause.isCause(cause)) return cause.reasons.flatMap(projectReasonStack);
-  if (!(cause instanceof Error) || typeof cause.stack !== "string") return [];
-  return cause.stack.split("\n").flatMap((line) => Option.toArray(projectStackLine(line)));
+  if (Cause.isCause(cause)) {
+    const direct = cause.reasons.flatMap(projectReasonStack);
+    return direct.length > 0 ? direct : Cause.prettyErrors(cause).flatMap(projectStack);
+  }
+  return Option.match(stackText(cause), {
+    onNone: () => [],
+    onSome: (stack) => stack.split("\n").flatMap((line) => Option.toArray(projectStackLine(line))),
+  });
 };
 
 /** Strictly reconstructs one approved breadcrumb; malformed or widened input returns none. */
@@ -181,10 +200,16 @@ const spanAttributes = (
     case "Http":
       return {
         "http.request.method": metadata.method,
+        "http.route": metadata.route,
         ...Option.match(metadata.status, {
           onNone: () => ({}),
           onSome: (value) => ({ "http.response.status_code": value }),
         }),
+      };
+    case "Database":
+      return {
+        "db.system.name": metadata.system,
+        "fidy.repository_operation": metadata.repositoryOperation,
       };
     case "Queue":
       return {
@@ -221,10 +246,11 @@ export const ProjectedTraceData = Schema.Struct({
   "fidy.work_kind": TelemetryCodeSchema.workKind,
   "fidy.outcome": TelemetryCodeSchema.outcome,
   "fidy.retryable": Schema.Boolean,
-  "http.request.method": Schema.optionalKey(
-    Schema.Literals(["GET", "POST", "PUT", "PATCH", "DELETE"])
-  ),
+  "http.request.method": Schema.optionalKey(TelemetryHttpMethod),
   "http.response.status_code": Schema.optionalKey(TelemetryHttpStatus),
+  "http.route": Schema.optionalKey(TelemetryCodeSchema.httpRoute),
+  "db.system.name": Schema.optionalKey(TelemetryCodeSchema.databaseSystem),
+  "fidy.repository_operation": Schema.optionalKey(TelemetryCodeSchema.repositoryOperation),
   "fidy.provider": Schema.optionalKey(TelemetryCodeSchema.provider),
   "fidy.attempt": Schema.optionalKey(TelemetryAttempt),
   "fidy.input_count": Schema.optionalKey(TelemetryCount),
@@ -244,10 +270,15 @@ export const ProjectedTrace = Schema.Struct({
 });
 export type ProjectedTrace = typeof ProjectedTrace.Type;
 
+const ProjectedSpanName = Schema.Union([
+  TelemetryCodeSchema.operation,
+  TelemetryCodeSchema.httpRequest,
+]);
+
 /** The exact root/child span shape allowed through the pinned SDK's final span hook. */
 export const ProjectedFinalSpan = Schema.Struct({
   data: ProjectedTrace.fields.data,
-  description: TelemetryCodeSchema.operation,
+  description: ProjectedSpanName,
   op: TelemetryCodeSchema.spanOperation,
   parent_span_id: Schema.optionalKey(TelemetrySpanId),
   span_id: TelemetrySpanId,
@@ -293,7 +324,7 @@ export const projectFinalSpan = (value: unknown): Option.Option<ProjectedFinalSp
 /** A complete metadata-only transaction reconstructed before the Sentry SDK boundary. */
 export const ProjectedTransaction = Schema.Struct({
   type: Schema.Literal("transaction"),
-  transaction: TelemetryCodeSchema.operation,
+  transaction: ProjectedSpanName,
   transaction_info: Schema.Struct({ source: Schema.Literal("custom") }),
   start_timestamp: Schema.Finite,
   timestamp: Schema.Finite,
@@ -310,6 +341,11 @@ export const ProjectedTransaction = Schema.Struct({
   breadcrumbs: Schema.Array(ProjectedBreadcrumb),
 });
 export type ProjectedTransaction = typeof ProjectedTransaction.Type;
+
+const transactionName = (descriptor: SpanDescriptor): string =>
+  descriptor.metadata._tag === "Http"
+    ? `${descriptor.metadata.method} ${descriptor.metadata.route}`
+    : descriptor.operation;
 
 const outcomeStatus = (outcome: DeclaredOutcome["outcome"]): ProjectedTrace["status"] => {
   switch (outcome) {
@@ -340,7 +376,7 @@ export const projectTransaction = (input: {
   Option.flatMap(decodeStrict(SpanDescriptor, input.descriptor), (descriptor) =>
     Option.map(decodeStrict(DeclaredOutcome, input.outcome), (outcome) => ({
       type: "transaction" as const,
-      transaction: descriptor.operation,
+      transaction: transactionName(descriptor),
       transaction_info: { source: "custom" as const },
       start_timestamp: input.startedAt,
       timestamp: input.finishedAt,
@@ -411,7 +447,6 @@ export const ProjectedErrorEvent = Schema.Struct({
     retryable: Schema.Literals(["true", "false"]),
     provider: Schema.optionalKey(TelemetryCodeSchema.provider),
   }),
-  breadcrumbs: Schema.Array(ProjectedBreadcrumb),
   contexts: Schema.optionalKey(
     Schema.Struct({ trace: Schema.Struct(ProjectedErrorTraceCoordinates) })
   ),
@@ -432,7 +467,6 @@ export const projectErrorEvent = (input: {
   /** Unix timestamp in seconds supplied by the adapter clock. */
   readonly timestamp: number;
   readonly activeTrace: Option.Option<ActiveTraceCoordinates>;
-  readonly breadcrumbs: ReadonlyArray<ProjectedBreadcrumb>;
 }): Option.Option<ProjectedErrorEvent> =>
   Option.map(decodeStrict(ClassifiedFailure, input.failure), (failure) => {
     const operational = failure._tag === "ExhaustedOperationalFailure";
@@ -463,7 +497,6 @@ export const projectErrorEvent = (input: {
           onSome: (provider) => ({ provider }),
         }),
       },
-      breadcrumbs: input.breadcrumbs,
       ...Option.match(input.activeTrace, {
         onNone: () => ({}),
         onSome: (trace) => ({

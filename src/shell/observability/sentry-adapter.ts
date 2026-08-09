@@ -110,6 +110,7 @@ const safeErrorEvent = (
             value: value.value,
             stacktrace: {
               frames: (value.stacktrace?.frames ?? []).map((frame) => ({
+                module: frame.module,
                 filename: frame.filename,
                 function: frame.function,
                 lineno: frame.lineno,
@@ -127,7 +128,6 @@ const safeErrorEvent = (
     exception: selectedException,
     fingerprint: event.fingerprint,
     tags: event.tags,
-    breadcrumbs: event.breadcrumbs ?? [],
     ...errorTraceContext(event.contexts?.trace),
   });
   return Option.map(projected, (value) =>
@@ -523,10 +523,6 @@ const captureTelemetryFailure = (
           failure,
           timestamp: now / millisecondsPerSecond,
           activeTrace,
-          breadcrumbs: Option.match(state, {
-            onNone: () => [],
-            onSome: (current) => current.breadcrumbs,
-          }),
         });
         if (Option.isSome(projected)) capture(sink.scope, projected.value);
       })

@@ -7,6 +7,7 @@ const acceptanceExclude = [
   // Acceptance runs with disabled telemetry; enabled SDK behavior has its own integration suite.
   // Operator-only account verification and smoke tooling is outside WhatsApp acceptance scope.
   "src/shell/observability/account-policy.ts",
+  "src/shell/observability/canonical-api.ts",
   "src/shell/observability/sentry-account-evidence.ts",
   "src/shell/observability/sentry-account-reader.ts",
   "src/shell/observability/sentry-account-smoke.ts",
@@ -47,7 +48,7 @@ export default defineConfig({
       thresholds: {
         autoUpdate: true,
         branches: 32.4,
-        lines: 67.04,
+        lines: 67.11,
       },
     },
   },

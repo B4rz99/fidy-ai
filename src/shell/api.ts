@@ -1,5 +1,6 @@
 import { HttpApi, type HttpApiGroup, OpenApi } from "effect/unstable/httpapi";
 import { AgentAuthorization } from "~/shell/_shared/authz";
+import { CanonicalTelemetry } from "~/shell/_shared/canonical-telemetry";
 import { ValidationGate } from "~/shell/_shared/errors";
 import { bindOperationCatalog, makeOperationCatalog } from "~/shell/_shared/operation-catalog";
 import { CategoriesGroup } from "~/shell/categories/operations";
@@ -22,24 +23,25 @@ const ordinaryOperationCatalog = makeOperationCatalog(OrdinaryFidyApi);
 const OperationsGroup = makeOperationsGroup(ordinaryOperationCatalog);
 
 /**
- * The whole canonical API: every slice's operations under one definition, each
- * of them behind the validation gate. This is the single declaration the server,
- * the typed client and the OpenAPI spec are all derived from, so anything a
- * caller can reach is reachable from here.
+ * The whole canonical API: every slice's operations under one definition, each of them behind the
+ * validation, authorization, and telemetry seams. This is the single declaration the server, typed
+ * client, and OpenAPI spec derive from, so a future operation cannot bypass those boundaries.
  */
 export class FidyApi extends OrdinaryFidyApi.add(OperationsGroup)
-  // `.middleware` after `.add`, and not the other way round: it attaches to
-  // the operations already assembled, so a group added below this line would
-  // silently skip the gate and answer a rejected request with a bodyless 400.
+  // `.middleware` after `.add`, and not the other way round: it attaches to the operations already
+  // assembled, so a group added below this line would silently skip every API-wide guard.
   .middleware(ValidationGate)
-  // Authorization is attached last so it wraps validation and rejects an
-  // unauthenticated request before decoding operation input.
+  // Authorization wraps validation and rejects an unauthenticated request before decoding input.
   .middleware(AgentAuthorization)
+  // Telemetry is outermost and observes both authorization failures and canonical execution.
+  .middleware(CanonicalTelemetry)
   .annotate(OpenApi.Title, "fidy-ai canonical API") {}
 
-/** Canonical ids, partial inputs, and callability policy reflected from `FidyApi`. */
+/**
+ * Canonical ids, routes, inputs, outputs, failures, and callability policy reflected from the
+ * assembled API. Adding or renaming an operation updates every catalog-derived guard and registry.
+ */
 export const operationCatalog = makeOperationCatalog(FidyApi);
-bindOperationCatalog(operationCatalog);
 
 type ApiGroups<Api> = Api extends HttpApi.HttpApi<infer _Identifier, infer Groups> ? Groups : never;
 
@@ -48,13 +50,10 @@ type GroupOperationIds<Group> = Group extends HttpApiGroup.Constraint
   : never;
 
 /**
- * Canonical operation ids, exactly as every generator exposes them
- * ("<group>.<operation>"). Derived from the assembled API rather than from a
- * list of groups, so both a new operation and a whole new slice widen this union
- * on their own — and a renamed operation is a compile error at every site that
- * names it. The identity binding, and what the derived guards enumerate.
- *
- * It lives beside the assembly rather than in a slice because a suggested operation
- * may point at any operation the API publishes, not only its own slice's.
+ * Every group-qualified canonical operation identifier derived from the assembled API. A new slice
+ * or operation widens the union, while a rename fails at every site that names the old identity.
+ * This cross-slice identity lives beside assembly because suggested operations may target any slice.
  */
 export type OperationId = GroupOperationIds<ApiGroups<typeof FidyApi>>;
+
+bindOperationCatalog(operationCatalog);

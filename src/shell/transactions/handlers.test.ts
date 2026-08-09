@@ -1,5 +1,5 @@
 import { expect, layer } from "@effect/vitest";
-import { BigDecimal, DateTime, Effect, Equal, Option, Result, Schema } from "effect";
+import { BigDecimal, DateTime, Effect, Equal, Layer, Option, Result, Schema } from "effect";
 import { MigrationSqlClient } from "~/shell/db/client";
 import { IanaTimeZone } from "~/core/_shared/context";
 import { Currency, Money } from "~/core/_shared/money";
@@ -8,11 +8,14 @@ import { TransactionId } from "~/core/transactions/model";
 import { type SuggestedOperation } from "~/shell/_shared/response";
 import { NotFound, ValidationFailed } from "~/shell/_shared/errors";
 import { defaultUserId } from "~/shell/db/development-seed";
+import { TelemetryDisabled } from "~/shell/observability/disabled";
 import { ApiHarness, ApiHarnessClient } from "~/shell/testing/api-harness";
 import { withUserTransaction } from "~/shell/db/user-transaction";
 import { makeFreeSuggestedOperationCaller } from "~/shell/_shared/suggested-operations";
 import { transactionPayload, truncateTransactions } from "./fixtures";
 import { correctTransaction, createTransaction, deleteTransaction } from "./mutations";
+
+const TransactionHarness = Layer.merge(ApiHarness, TelemetryDisabled);
 
 const utcDateTime = (iso: string): DateTime.Utc => DateTime.makeUnsafe(iso);
 
@@ -25,7 +28,7 @@ const isValidationFailed = Schema.is(ValidationFailed);
 const toolNames = (suggestedOperations: ReadonlyArray<SuggestedOperation>): ReadonlyArray<string> =>
   suggestedOperations.map((suggestedOperation) => suggestedOperation.tool);
 
-layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
+layer(TransactionHarness, { excludeTestServices: true, timeout: "30 seconds" })(
   "transactions operations",
   (it) => {
     it.effect("logs a transaction and lists it back through the derived client", () =>

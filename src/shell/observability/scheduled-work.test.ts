@@ -40,7 +40,12 @@ it.effect("starts repeated and concurrent scheduled executions as isolated roots
         trigger: "api",
         spanOperation: "http.server",
         workKind: "http_request",
-        metadata: { _tag: "Http", method: "GET", status: Option.none() },
+        metadata: {
+          _tag: "Http",
+          method: "GET",
+          route: "/v1/transactions",
+          status: Option.none(),
+        },
       },
       Effect.all([observedRetention(Effect.void), observedRetention(Effect.void)], {
         concurrency: "unbounded",

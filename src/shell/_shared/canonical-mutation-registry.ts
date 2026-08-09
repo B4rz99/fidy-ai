@@ -9,6 +9,7 @@ import {
 import { applyDashboardEdit, loadOrCreateDashboard } from "~/shell/dashboard/mutations";
 import { withDashboardLockInScope } from "~/shell/dashboard/repo";
 import { updateUserPreferences } from "~/shell/identity/mutations";
+import type { Telemetry } from "~/shell/observability/telemetry";
 import { dismissInsight, markInsightDelivered, markInsightRead } from "~/shell/insights/mutations";
 import {
   correctTransaction,
@@ -25,7 +26,7 @@ type MutationAdapter<Input, Output, Failure> = {
   execute(
     input: Input,
     caller: CanonicalMutationCaller
-  ): Effect.Effect<Output, Failure, SqlClient.SqlClient>;
+  ): Effect.Effect<Output, Failure, SqlClient.SqlClient | Telemetry>;
 }["execute"];
 
 const mutationAdapter = <Input, Output, Failure>(

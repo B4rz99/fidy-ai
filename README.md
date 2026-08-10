@@ -73,7 +73,19 @@ removes the token, organization/project upload coordinates, and non-production D
 application starts. Railway's bounded pre-deploy command duration, fixed retry count, sanitized
 failure reason, and exit status are the observation boundary for this workflow; application
 telemetry is intentionally unavailable because the command prepares Sentry before activation. The
-running process retains the production DSN and code-validated environment, release, capture
+post-deployment workflow validates and runs the private `smoke-sentry-deployment` artifact from the
+production image with a read-only Sentry token, private operator-evidence file, and independently
+configured `SENTRY_PRODUCTION_DSN_ORIGIN` / `SENTRY_PRODUCTION_DSN_PROJECT_ID` coordinates. It emits one fixed defect and one fully
+sampled synthetic asynchronous trace, reads both back through bounded APIs, and prints only its
+closed checks, release, stable trace ID, and an optional validated HTTPS operator URL. Passing the
+gate never changes runtime configuration. An operator may then enable production capture separately
+at 100% errors and 10% root traces, record the activation, and review accepted, filtered, discarded,
+and quota-consuming volume after 24 hours. The full privacy, compatibility, account, symbolication,
+causality, and production-image gates are required again for every Sentry SDK upgrade or diagnostic
+contract change. Runtime ingestion failures, 429 responses, exhausted quota, and flush timeouts
+remain non-fatal after activation.
+
+The running process retains the production DSN and code-validated environment, release, capture
 switches, and trace rate. Both database URLs must resolve inside the production environment: the
 runtime login is exactly `fidy_runtime`, while the migration login can own tables and provision the
 fixed `fidy_runtime` and `fidy_gateway` roles.
@@ -205,26 +217,27 @@ judging a coverage number.
 
 ### Common scripts
 
-| Command                          | What it does                                                                            |
-| -------------------------------- | --------------------------------------------------------------------------------------- |
-| `bun run lint`                   | oxlint                                                                                  |
-| `bun run lint:type-aware`        | oxlint with the type-aware rules                                                        |
-| `bun run lint:suppressions`      | reject lint-suppression comments in first-party source                                  |
-| `bun run lint:deps`              | module-graph rules and positive/negative probes                                         |
-| `bun run lint:deps:probes`       | dependency import-boundary probes                                                       |
-| `bun run lint:dependencies`      | pins behind the registry, and the install delay                                         |
-| `bun run build:production`       | build preload, application, and production commands with external source maps/debug IDs |
-| `bun run start:production`       | start the built preload and application entries                                         |
-| `bun run format`                 | Format the repo with oxfmt                                                              |
-| `bun run format:check`           | Verify formatting without writing                                                       |
-| `bun run typecheck`              | `tsc --noEmit` (Effect-patched)                                                         |
-| `bun run test`                   | `bun --bun vitest run` (needs both database URLs)                                       |
-| `bun run test:acceptance`        | signed WhatsApp HTTP scenarios against a fresh PostgreSQL database                      |
-| `bun run test:core`              | the pure core tier — no Docker, no database                                             |
-| `bun run test:crap`              | CRAP-score gate (needs both database URLs)                                              |
-| `bun run test:mutation`          | mutation-score gate over `src/core` (no database)                                       |
-| `bun run check:production-image` | built-artifact, source-map, migration, authority, telemetry-off, and HTTP smoke check   |
-| `bun run verify`                 | all rows above except `format`, `test:core`, `test:crap`, and `check:production-image`  |
+| Command                           | What it does                                                                            |
+| --------------------------------- | --------------------------------------------------------------------------------------- |
+| `bun run lint`                    | oxlint                                                                                  |
+| `bun run lint:type-aware`         | oxlint with the type-aware rules                                                        |
+| `bun run lint:suppressions`       | reject lint-suppression comments in first-party source                                  |
+| `bun run lint:deps`               | module-graph rules and positive/negative probes                                         |
+| `bun run lint:deps:probes`        | dependency import-boundary probes                                                       |
+| `bun run lint:dependencies`       | pins behind the registry, and the install delay                                         |
+| `bun run build:production`        | build preload, application, and production commands with external source maps/debug IDs |
+| `bun run start:production`        | start the built preload and application entries                                         |
+| `bun run sentry:smoke:deployment` | run the built private real-project rollout gate                                         |
+| `bun run format`                  | Format the repo with oxfmt                                                              |
+| `bun run format:check`            | Verify formatting without writing                                                       |
+| `bun run typecheck`               | `tsc --noEmit` (Effect-patched)                                                         |
+| `bun run test`                    | `bun --bun vitest run` (needs both database URLs)                                       |
+| `bun run test:acceptance`         | signed WhatsApp HTTP scenarios against a fresh PostgreSQL database                      |
+| `bun run test:core`               | the pure core tier — no Docker, no database                                             |
+| `bun run test:crap`               | CRAP-score gate (needs both database URLs)                                              |
+| `bun run test:mutation`           | mutation-score gate over `src/core` (no database)                                       |
+| `bun run check:production-image`  | built-artifact, source-map, migration, authority, telemetry-off, and HTTP smoke check   |
+| `bun run verify`                  | all rows above except `format`, `test:core`, `test:crap`, and `check:production-image`  |
 
 ### Quality gates
 

@@ -131,6 +131,8 @@ const smoke = Effect.gen(function* () {
       "/dist/commands/sentry-cli",
       "/dist/commands/provision-runtime-role.js",
       "/dist/commands/provision-runtime-role.js.map",
+      "/dist/commands/smoke-sentry-deployment.js",
+      "/dist/commands/smoke-sentry-deployment.js.map",
       "/.sentry/artifacts.json",
     ],
     assertArtifactUnavailable,

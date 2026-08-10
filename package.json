@@ -11,12 +11,13 @@
     "lint:deps:probes": "bun scripts/check-dependency-guards.ts",
     "lint:dependencies": "bun scripts/check-dependency-updates.ts",
     "dev": "bun scripts/seed-development.ts && FIDY_HTTP_HOST=127.0.0.1 bun --preload ./src/shell/observability/preload.ts src/main.ts",
-    "build:production": "rm -rf dist && bun build src/shell/observability/preload.ts src/main.ts --target=bun --outdir=dist --entry-naming='[name].js' --sourcemap=external && bun build scripts/prepare-sentry-release.ts scripts/provision-runtime-role.ts scripts/migrate.ts --target=bun --outdir=dist/commands --entry-naming='[name].js' --sourcemap=external && bunx --bun sentry-cli sourcemaps inject dist",
+    "build:production": "rm -rf dist && bun build src/shell/observability/preload.ts src/main.ts --target=bun --outdir=dist --entry-naming='[name].js' --sourcemap=external && bun build scripts/prepare-sentry-release.ts scripts/provision-runtime-role.ts scripts/migrate.ts scripts/smoke-sentry-deployment.ts --target=bun --outdir=dist/commands --entry-naming='[name].js' --sourcemap=external && bunx --bun sentry-cli sourcemaps inject dist",
     "start:production": "bun --preload ./dist/preload.js dist/main.js",
     "agent:repl": "bun scripts/agent-repl.ts",
     "sentry:verify": "bun scripts/verify-sentry-account.ts",
     "sentry:smoke:build": "bun build scripts/smoke-sentry-account.ts --target=bun --outdir=reports/sentry-smoke --entry-naming=smoke.js --sourcemap=external",
     "sentry:smoke": "bun reports/sentry-smoke/smoke.js",
+    "sentry:smoke:deployment": "bun dist/commands/smoke-sentry-deployment.js",
     "format": "oxfmt --write .",
     "format:check": "oxfmt --check .",
     "typecheck": "tsc --noEmit",
@@ -40,7 +41,7 @@
     "effect": "4.0.0-beta.98"
   },
   "devDependencies": {
-    "@effect/tsgo": "0.26.7",
+    "@effect/tsgo": "0.27.1",
     "@effect/vitest": "4.0.0-beta.98",
     "@sentry/cli": "3.6.2",
     "@vitest/coverage-istanbul": "4.1.10",

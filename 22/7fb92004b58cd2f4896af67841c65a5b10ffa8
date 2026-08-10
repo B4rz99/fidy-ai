@@ -51,12 +51,17 @@ src/shell/channels/whatsapp/routes.ts
   s_be04a7e549ad29::t_aa1f9c00f2b602 273-291,293-294
   s_be04a7e549ad29::t_3716498245780f 26,342-344
   s_be04a7e549ad29::t_2ab9fd03ca8749 150
+  s_be04a7e549ad29::t_3bd749e63449cd 28,346
+  s_be04a7e549ad29::t_c61704d834a766 322-324,335-340
+  s_be04a7e549ad29::t_5eecb31fc2b030 328
 src/shell/channels/whatsapp/kapso-client.ts
   s_1c39da18ea4763::t_e1d3749311e388 277,291
   s_be04a7e549ad29::t_839bee8e5e2a91 31-33
   s_be04a7e549ad29::t_5aae35f407bec7 17,39,50,95,97-103,105,107,109-110,115,173-177,188,190,193-194,196-198,200,202,278,334,338-341,343-344
   s_be04a7e549ad29::t_a3832b9f1d8480 282
   s_be04a7e549ad29::t_b65f28a703cbe7 104
+  s_be04a7e549ad29::t_81f870ff432a1b 92,129,152,270-271,331-333
+  s_be04a7e549ad29::t_c6b9f39c685bbc 108,181,199
 src/shell/db/migrations/0018-whatsapp-durable-propagation.ts
   s_1c39da18ea4763::t_64db2e4ee1311d 1-13,16-19,23-24,25-28
   s_be04a7e549ad29::t_09b760b5e01ca8 14-15
@@ -73,6 +78,7 @@ src/shell/channels/whatsapp/outbound.ts
   s_be04a7e549ad29::t_92ef039d86d5ba 119,133
   s_be04a7e549ad29::t_d00fe7ff517bdc 102,114
   s_be04a7e549ad29::t_e78c8901d1ea54 106-113,128-129
+  s_be04a7e549ad29::t_bf6ea75846b40f 9,11,86,130
 src/shell/channels/whatsapp/repo.ts
   s_1c39da18ea4763::t_7411ef176e77e3 281-285,345-346,443-447
   s_1c39da18ea4763::t_f0dc878bce5c1b 591-593
@@ -99,6 +105,7 @@ src/shell/channels/whatsapp/worker.ts
   s_be04a7e549ad29::t_a5f39f2260a773 7,15,29-31,54-58,60-61,63,65-79
   s_be04a7e549ad29::t_a7f88a8cb74fc6 90-92
   s_be04a7e549ad29::t_fa5a40d065b746 62
+  s_be04a7e549ad29::t_2fe11b8540c8e0 120-135
 src/shell/channels/whatsapp/whatsapp-channel.test.ts
   s_be04a7e549ad29::t_39d7212c3be74f 52,122-129,149-153
   s_be04a7e549ad29::t_c95badb71c1245 503,748,1210,2426
@@ -123,12 +130,19 @@ src/shell/channels/whatsapp/whatsapp-channel.test.ts
   s_be04a7e549ad29::t_17df8ae1b78d00 493,1198,1247
   s_be04a7e549ad29::t_14b41648edb644 2625-2665,2667-2682,2736-2753,2755-2799
   s_be04a7e549ad29::t_953add32c5115e 433,3020-3021
+  s_be04a7e549ad29::t_e0c6787b9e4c6c 51
+  s_be04a7e549ad29::t_09146f7a879922 42-47,432
+  s_be04a7e549ad29::t_3ccfd8e7acaf4d 183,191
+  s_be04a7e549ad29::t_0a958a27ee7be0 186,205,209-212
+  s_be04a7e549ad29::t_0080274464e6bd 208
+  s_be04a7e549ad29::t_052697eae02f33 1873,1916,1965,2104
 src/shell/channels/whatsapp/kapso-client.test.ts
   s_be04a7e549ad29::t_b71f46c95aca90 34,37,44,72-74
   s_be04a7e549ad29::t_12c832e096ac3c 352
 src/shell/observability/telemetry.test.ts
   s_be04a7e549ad29::t_84d990a8d0f634 30,247-249
   s_be04a7e549ad29::t_c6797642e15a44 271
+  s_be04a7e549ad29::t_067ccce66b5d3b 9
 src/shell/testing/api-harness.ts
   s_be04a7e549ad29::t_0cef4ebe8e474c 7,106
   s_be04a7e549ad29::t_50d978ad3c3cf8 2,24,96
@@ -139,6 +153,14 @@ src/shell/observability/telemetry.ts
   s_be04a7e549ad29::t_4f37990a80ce23 39-41,43,84,281-286
   s_be04a7e549ad29::t_24bd656ba1592b 9,42,85
   s_be04a7e549ad29::t_40075018f63ebc 287-288
+src/shell/channels/whatsapp/disclosure-delivery.ts
+  s_be04a7e549ad29::t_82b64563820281 274
+src/shell/observability/registry.ts
+  s_be04a7e549ad29::t_5aaca1255ad4d3 87,93
+  s_be04a7e549ad29::t_2b5ea16fe6f151 52
+src/shell/testing/consent-disclosure.ts
+  s_be04a7e549ad29::t_d47127851534c4 47-51
+  s_be04a7e549ad29::t_cc648573ddd673 11
 ---
 {
   "schema_version": "authorship/3.0.0",

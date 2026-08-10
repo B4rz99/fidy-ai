@@ -1,14 +1,9 @@
-import {
-  Crypto,
-  DateTime,
-  Effect,
-  Option,
-  Schema,
-  type SchemaIssue,
-  SchemaTransformation,
-} from "effect";
+import { DateTime, Effect, Option, Schema, type SchemaIssue, SchemaTransformation } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
-import { ProviderMessageEvidence } from "~/core/_shared/provider-message-evidence";
+import {
+  DisclosureDeliveryCorrelationToken,
+  ProviderMessageEvidence,
+} from "~/core/_shared/provider-message-evidence";
 import {
   ConsentEvent,
   ConsentRecord,
@@ -622,6 +617,65 @@ export const insertPendingConsentExchange = Effect.fn("insertPendingConsentExcha
   })(pending).pipe(Effect.orDie);
 });
 
+const LocalDeliveredRequest = Schema.Struct({
+  exchangeId: PendingConsentExchangeId,
+  message: ProviderMessageEvidence,
+  deliveredAt: Schema.DateTimeUtcFromDate,
+});
+const CorrelatedDeliveredRequest = LocalDeliveredRequest.pipe(
+  Schema.fieldsAssign({ correlationToken: DisclosureDeliveryCorrelationToken })
+);
+const AdvanceDeliveredRequest = LocalDeliveredRequest.pipe(
+  Schema.fieldsAssign({
+    correlationToken: Schema.OptionFromNullOr(DisclosureDeliveryCorrelationToken),
+  })
+);
+const AppliedDelivery = Schema.Struct({ applied: Schema.Boolean });
+
+const advancePendingConsentDisclosureDelivery = Effect.fn(
+  "Consent.advancePendingDisclosureDelivery"
+)(function* (input: typeof AdvanceDeliveredRequest.Type) {
+  const sql = yield* SqlClient.SqlClient;
+  return yield* sql
+    .withTransaction(
+      Effect.gen(function* () {
+        const result = yield* SqlSchema.findOne({
+          Request: AdvanceDeliveredRequest,
+          Result: AppliedDelivery,
+          execute: ({ deliveredAt, exchangeId, message }) => sql`
+          SELECT fidy_record_pending_consent_disclosure_delivery(
+            ${exchangeId}, ${Option.getOrNull(input.correlationToken)}, ${message.channel}, ${message.provider},
+            ${message.providerMessageId}, ${deliveredAt}
+          ) AS applied
+        `,
+        })(input);
+        if (!result.applied) return Option.none();
+        return yield* SqlSchema.findOneOption({
+          Request: PendingConsentExchangeId,
+          Result: PendingFromRow,
+          execute: (id) => sql`
+          SELECT ${sql.literal(pendingColumns)} FROM pending_consent_exchanges WHERE id = ${id}
+        `,
+        })(input.exchangeId);
+      }).pipe(Effect.orDie)
+    )
+    .pipe(Effect.orDie);
+});
+
+/**
+ * Records synchronous non-provider disclosure evidence without entering WhatsApp delivery state.
+ * Returns None when the exchange is absent, no longer awaits delivery, or conflicts with retained
+ * evidence; Some is the resulting awaiting-decision exchange.
+ */
+export const recordLocalConsentDisclosureDelivery = Effect.fn(
+  "Consent.recordLocalDisclosureDelivery"
+)(function* (input: typeof LocalDeliveredRequest.Type) {
+  return yield* advancePendingConsentDisclosureDelivery({
+    ...input,
+    correlationToken: Option.none(),
+  });
+});
+
 /** Finds the sole minimal pending exchange for one portfolio-scoped BSUID. */
 export const findPendingConsentExchange = (
   caller: WhatsAppCallerReference
@@ -641,142 +695,53 @@ export const findPendingConsentExchange = (
     })
   ).pipe(Effect.orDie);
 
-const DisclosureDeliveryClaimId = Schema.String.check(Schema.isUUID()).pipe(
-  Schema.brand("DisclosureDeliveryClaimId")
-);
-const DisclosureDeliveryClaimRequest = Schema.Struct({
-  exchangeId: PendingConsentExchangeId,
-  claimId: DisclosureDeliveryClaimId,
-  claimedAt: Schema.DateTimeUtcFromDate,
-});
-const DisclosureDeliveryClaim = Schema.Struct({
-  claimId: DisclosureDeliveryClaimId,
+const ConsentDisclosureRetry = Schema.Struct({
+  businessScopedUserId: WhatsAppBusinessScopedUserId,
+  disclosureText: DisclosureSnapshot.fields.text,
 });
 
-/**
- * Claims one disclosure send for 30 seconds. An active or already delivered exchange returns None.
- * An expired pre-provider claim may be reclaimed; a claim marked started remains unavailable for
- * reconciliation rather than risking an automatic duplicate send.
- */
-export const claimConsentDisclosureDelivery = Effect.fn("Consent.claimDisclosureDelivery")(
-  function* (exchangeId: PendingConsentExchangeId, claimedAt: DateTime.Utc) {
-    const crypto = yield* Crypto.Crypto;
-    const claimId = DisclosureDeliveryClaimId.make(yield* crypto.randomUUIDv4.pipe(Effect.orDie));
+/** Publishes the Consent-owned routing snapshot needed for one already-claimed retry. */
+export const findPendingConsentDisclosureRetry = Effect.fn("Consent.findPendingDisclosureRetry")(
+  function* (exchangeId: PendingConsentExchangeId) {
     const sql = yield* SqlClient.SqlClient;
     return yield* SqlSchema.findOneOption({
-      Request: DisclosureDeliveryClaimRequest,
-      Result: DisclosureDeliveryClaim,
-      execute: (request) => sql`
-        UPDATE pending_consent_exchanges
-        SET disclosure_delivery_claim_id = ${request.claimId},
-          disclosure_delivery_claim_expires_at = ${request.claimedAt}::timestamptz + interval '30 seconds'
-        WHERE id = ${request.exchangeId}
-          AND lifecycle = 'awaiting-disclosure-delivery'
-          AND (
-            disclosure_delivery_claim_id IS NULL
-            OR (
-              disclosure_delivery_started_at IS NULL
-              AND disclosure_delivery_claim_expires_at <= ${request.claimedAt}
-            )
-          )
-        RETURNING disclosure_delivery_claim_id AS "claimId"
+      Request: PendingConsentExchangeId,
+      Result: ConsentDisclosureRetry,
+      execute: (id) => sql`
+        SELECT business_scoped_user_id AS "businessScopedUserId",
+          disclosure_text AS "disclosureText"
+        FROM pending_consent_exchanges
+        WHERE id = ${id} AND lifecycle = 'awaiting-disclosure-delivery'
       `,
-    })({ exchangeId, claimId, claimedAt }).pipe(Effect.orDie);
+    })(exchangeId).pipe(Effect.orDie);
   }
 );
 
-const ReleaseDisclosureDeliveryClaimRequest = Schema.Struct({
-  exchangeId: PendingConsentExchangeId,
-  claimId: DisclosureDeliveryClaimId,
-});
-
 /**
- * Marks that the disclosure provider call may have begun. Such a claim is never automatically
- * reclaimed, because its delivery result is ambiguous until reconciled.
+ * Atomically advances Consent only after the correlated WhatsApp attempt retains exact delivered
+ * provider evidence. Returns None for an absent, stale, or conflicting exchange; Some is the
+ * resulting awaiting-decision exchange.
  */
-export const markConsentDisclosureDeliveryStarted = Effect.fn(
-  "Consent.markDisclosureDeliveryStarted"
-)(function* (input: typeof ReleaseDisclosureDeliveryClaimRequest.Type, startedAt: DateTime.Utc) {
-  const sql = yield* SqlClient.SqlClient;
-  return Option.isSome(
-    yield* SqlSchema.findOneOption({
-      Request: Schema.Struct({
-        ...ReleaseDisclosureDeliveryClaimRequest.fields,
-        startedAt: Schema.DateTimeUtcFromDate,
-      }),
-      Result: DisclosureDeliveryClaim,
-      execute: (request) => sql`
-        UPDATE pending_consent_exchanges
-        SET disclosure_delivery_started_at = ${request.startedAt}
-        WHERE id = ${request.exchangeId}
-          AND disclosure_delivery_claim_id = ${request.claimId}
-          AND lifecycle = 'awaiting-disclosure-delivery'
-          AND disclosure_delivery_started_at IS NULL
-        RETURNING disclosure_delivery_claim_id AS "claimId"
-      `,
-    })({ ...input, startedAt }).pipe(Effect.orDie)
-  );
-});
-
-/** Releases exactly the current pre-delivery claim so another delivery may retry. */
-export const releaseConsentDisclosureDelivery = Effect.fn("Consent.releaseDisclosureDelivery")(
-  function* (input: typeof ReleaseDisclosureDeliveryClaimRequest.Type) {
+export const recordConsentDisclosureDelivery = Effect.fn("Consent.recordDisclosureDelivery")(
+  function* (input: typeof CorrelatedDeliveredRequest.Type) {
     const sql = yield* SqlClient.SqlClient;
-    yield* SqlSchema.void({
-      Request: ReleaseDisclosureDeliveryClaimRequest,
-      execute: (request) => sql`
-        UPDATE pending_consent_exchanges
-        SET disclosure_delivery_claim_id = NULL,
-          disclosure_delivery_claim_expires_at = NULL
-        WHERE id = ${request.exchangeId}
-          AND disclosure_delivery_claim_id = ${request.claimId}
-          AND lifecycle = 'awaiting-disclosure-delivery'
-          AND disclosure_delivery_started_at IS NULL
-      `,
-    })(input).pipe(Effect.orDie);
-  }
-);
-
-const DeliveredRequest = Schema.Struct({
-  exchangeId: PendingConsentExchangeId,
-  claimId: DisclosureDeliveryClaimId,
-  message: ProviderMessageEvidence,
-  deliveredAt: Schema.DateTimeUtcFromDate,
-});
-
-/**
- * Records one authoritative delivery occurrence for the current claim. A stale claim, unknown
- * exchange, or conflicting evidence returns None without changing the pending exchange.
- */
-export const recordConsentDisclosureDelivery = Effect.fn("recordConsentDisclosureDelivery")(
-  function* (input: typeof DeliveredRequest.Type) {
-    const sql = yield* SqlClient.SqlClient;
-    const row = yield* SqlSchema.findOneOption({
-      Request: DeliveredRequest,
-      Result: PendingFromRow,
-      execute: ({ claimId, deliveredAt, exchangeId, message }) => sql`
-      UPDATE pending_consent_exchanges
-      SET lifecycle = 'awaiting-decision',
-        disclosure_channel = ${message.channel},
-        disclosure_provider = ${message.provider},
-        disclosure_provider_message_id = ${message.providerMessageId},
-        disclosed_at = ${deliveredAt},
-        disclosure_delivery_claim_id = NULL,
-        disclosure_delivery_claim_expires_at = NULL,
-        disclosure_delivery_started_at = NULL
-      WHERE id = ${exchangeId}
-        AND lifecycle = 'awaiting-disclosure-delivery'
-        AND disclosure_delivery_claim_id = ${claimId}
-      RETURNING ${sql.literal(pendingColumns)}
-    `,
-    })(input).pipe(Effect.orDie);
-    if (Option.isNone(row)) return Option.none();
-    if (row.value._tag === "AwaitingDisclosureDelivery") {
-      return yield* Effect.die(
-        new Error("Consent delivery update returned the previous lifecycle")
-      );
-    }
-    return Option.some(row.value);
+    return yield* sql
+      .withTransaction(
+        Effect.gen(function* () {
+          const changed = yield* advancePendingConsentDisclosureDelivery({
+            ...input,
+            correlationToken: Option.some(input.correlationToken),
+          });
+          if (Option.isNone(changed)) return Option.none();
+          if (changed.value._tag === "AwaitingDisclosureDelivery") {
+            return yield* Effect.die(
+              new Error("Consent delivery update returned the previous lifecycle")
+            );
+          }
+          return Option.some(changed.value);
+        }).pipe(Effect.orDie)
+      )
+      .pipe(Effect.orDie);
   }
 );
 

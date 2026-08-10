@@ -14,6 +14,7 @@ import { claimConsentDisclosureDelivery } from "./0013-claim-consent-disclosure-
 import { optionalTransactionCounterparty } from "./0014-optional-transaction-counterparty";
 import { whatsappBsuidIdentity } from "./0015-whatsapp-bsuid-identity";
 import { agentConfirmationConsumptions } from "./0016-agent-confirmation-consumptions";
+import { recoverConsentDisclosureDelivery } from "./0017-recover-consent-disclosure-delivery";
 
 /**
  * The explicit index ARCHITECTURE.md §7 calls for: one ordered, append-only
@@ -40,4 +41,5 @@ export const migrations = {
   "0014_optional_transaction_counterparty": optionalTransactionCounterparty,
   "0015_whatsapp_bsuid_identity": whatsappBsuidIdentity,
   "0016_agent_confirmation_consumptions": agentConfirmationConsumptions,
+  "0017_recover_consent_disclosure_delivery": recoverConsentDisclosureDelivery,
 };

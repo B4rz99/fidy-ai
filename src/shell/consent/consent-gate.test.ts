@@ -1,12 +1,7 @@
 import { expect, layer } from "@effect/vitest";
 import { DateTime, Effect, Exit, Option, Schema } from "effect";
 import { SqlClient, type SqlError, SqlSchema } from "effect/unstable/sql";
-import type { ProviderMessageEvidence } from "~/core/_shared/provider-message-evidence";
-import {
-  ConsentRecord,
-  ConsentRecordId,
-  type PendingConsentExchangeId,
-} from "~/core/consent/model";
+import { ConsentRecord, ConsentRecordId } from "~/core/consent/model";
 import { E164PhoneNumber, UserId } from "~/core/identity/reference";
 import { WhatsAppCaller } from "~/shell/channels/whatsapp/model";
 import { makeColombianUser } from "~/core/identity/rules";
@@ -18,15 +13,14 @@ import {
   resolveWhatsAppCaller,
 } from "~/shell/identity/repo";
 import { ApiHarness } from "~/shell/testing/api-harness";
+import { deliverConsentDisclosureForTesting } from "~/shell/testing/consent-disclosure";
 import { testWhatsAppCaller } from "~/shell/testing/whatsapp-caller";
 import { evaluateConsentGate } from "./consent-gate";
 import {
   appendConsentRecord,
-  claimConsentDisclosureDelivery,
   findPendingConsentExchange,
   hasCurrentOnboardingConsent,
   observeConsentRecords,
-  recordConsentDisclosureDelivery,
 } from "./repo";
 
 const acceptedPhone = E164PhoneNumber.make("+573009990001");
@@ -41,15 +35,7 @@ const initiatingReplayPhone = E164PhoneNumber.make("+573009990009");
 const returningUserId = UserId.make("f1d1a000-0000-4000-8000-0000000008c1");
 const receivedAt = DateTime.makeUnsafe("2026-08-01T12:00:00Z");
 
-const recordClaimedDisclosure = Effect.fn("test.recordClaimedDisclosure")(function* (input: {
-  readonly exchangeId: PendingConsentExchangeId;
-  readonly message: ProviderMessageEvidence;
-  readonly deliveredAt: DateTime.Utc;
-}) {
-  const claim = yield* claimConsentDisclosureDelivery(input.exchangeId, input.deliveredAt);
-  if (Option.isNone(claim)) return yield* Effect.die("missing disclosure claim");
-  return yield* recordConsentDisclosureDelivery({ ...input, claimId: claim.value.claimId });
-});
+const recordClaimedDisclosure = deliverConsentDisclosureForTesting;
 
 const message = (
   providerMessageId: string

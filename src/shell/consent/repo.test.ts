@@ -13,11 +13,11 @@ import { MigrationSqlClient } from "~/shell/db/client";
 import { defaultAgentTokenId, defaultUserId } from "~/shell/db/development-seed";
 import { insertUser } from "~/shell/identity/repo";
 import { ApiHarness } from "~/shell/testing/api-harness";
+import { deliverConsentDisclosureForTesting } from "~/shell/testing/consent-disclosure";
 import { testWhatsAppCaller } from "~/shell/testing/whatsapp-caller";
 import { currentDisclosure } from "./current-disclosure";
 import {
   appendConsentRecord,
-  claimConsentDisclosureDelivery,
   findConsentRecordByDecisionMessage,
   findPendingConsentExchange,
   hasCurrentOnboardingConsent,
@@ -77,26 +77,24 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         );
 
         const deliveredAt = DateTime.makeUnsafe("2026-08-01T12:00:01Z");
-        const claim = yield* claimConsentDisclosureDelivery(pending.id, deliveredAt);
-        expect(Option.isSome(claim)).toBe(true);
-        if (Option.isNone(claim)) return yield* Effect.die("missing disclosure claim");
-        expect(Option.isNone(yield* claimConsentDisclosureDelivery(pending.id, deliveredAt))).toBe(
-          true
-        );
-        const awaitingDecision = yield* recordConsentDisclosureDelivery({
+        const delivered = yield* deliverConsentDisclosureForTesting({
           exchangeId: pending.id,
-          claimId: claim.value.claimId,
           message: disclosureMessage,
           deliveredAt,
         });
+        expect(delivered.result).toBe("applied");
+        const awaitingDecision = yield* findPendingConsentExchange(testWhatsAppCaller(phoneNumber));
         expect(Option.isSome(awaitingDecision)).toBe(true);
         if (Option.isNone(awaitingDecision)) return yield* Effect.die("missing pending exchange");
+        if (awaitingDecision.value._tag !== "AwaitingDecision") {
+          return yield* Effect.die("delivery did not advance pending Consent");
+        }
         expect(awaitingDecision.value.disclosureMessage).toEqual(disclosureMessage);
 
         expect(
           yield* recordConsentDisclosureDelivery({
             exchangeId: pending.id,
-            claimId: claim.value.claimId,
+            correlationToken: delivered.correlationToken,
             message: { ...disclosureMessage, providerMessageId: "wamid.conflicting-delivery" },
             deliveredAt: DateTime.makeUnsafe("2026-08-01T12:00:02Z"),
           })
@@ -107,7 +105,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         expect(
           yield* recordConsentDisclosureDelivery({
             exchangeId: PendingConsentExchangeId.make("f1d1a000-0000-4000-8000-000000000822"),
-            claimId: claim.value.claimId,
+            correlationToken: delivered.correlationToken,
             message: disclosureMessage,
             deliveredAt: DateTime.makeUnsafe("2026-08-01T12:00:01Z"),
           })

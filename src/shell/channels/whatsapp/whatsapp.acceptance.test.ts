@@ -8,11 +8,13 @@ import {
 } from "~/core/identity/reference";
 import { TranscriptText } from "~/core/transcript/model";
 import { CURRENT_DISCLOSURE_TEXT } from "~/shell/consent/current-disclosure";
+import { DisclosureDeliveryCorrelationToken } from "./disclosure-model";
 import { WhatsAppProviderMessageId } from "./model";
 import {
   WhatsAppAcceptanceApiClient,
   WhatsAppAcceptanceCallerControl,
   type WhatsAppAcceptanceCallerProbe,
+  WhatsAppAcceptanceDisclosureControl,
   WhatsAppAcceptanceHarness,
   WhatsAppAcceptanceKapsoControl,
   WhatsAppAcceptanceModelControl,
@@ -29,6 +31,9 @@ const WebhookSummary = Schema.Struct({
   consentTurns: Schema.Int,
   enqueued: Schema.Int,
   duplicates: Schema.Int,
+});
+const DisclosureKapsoRequest = Schema.Struct({
+  biz_opaque_callback_data: Schema.String,
 });
 const KapsoTextRequest = Schema.Union([
   Schema.Struct({
@@ -131,6 +136,95 @@ const postSignedWebhook = Effect.fn("Acceptance.postSignedWhatsAppWebhook")(
   (input: KapsoWebhookInput) => makeSignedWebhook(input).pipe(Effect.flatMap(postSignedDelivery))
 );
 
+const acceptanceRetryableFailureCode = 131_016;
+const acceptanceTerminalFailureCode = 131_026;
+const postSignedLifecycleEvidence = Effect.fn("Acceptance.postSignedDisclosureLifecycleEvidence")(
+  function* (input: {
+    readonly eventName:
+      | "whatsapp.message.delivered"
+      | "whatsapp.message.failed"
+      | "whatsapp.message.sent";
+    readonly correlationToken: string;
+    readonly providerMessageId: WhatsAppProviderMessageId;
+    readonly failureDisposition: "retryable" | "terminal";
+    readonly previousStatus: Option.Option<"delivered" | "failed" | "sent">;
+    readonly additionalStatus: Option.Option<"delivered" | "failed" | "sent">;
+    readonly signature: Option.Option<string>;
+  }) {
+    const occurredAt = yield* DateTime.now;
+    const status = input.eventName.replace("whatsapp.message.", "");
+    const encoded = yield* Schema.encodeEffect(Schema.UnknownFromJsonString)({
+      message: {
+        id: input.providerMessageId,
+        kapso: {
+          statuses: [
+            ...Option.match(input.previousStatus, {
+              onNone: () => [],
+              onSome: (previousStatus) => [
+                {
+                  id: input.providerMessageId,
+                  status: previousStatus,
+                  timestamp: `${Math.floor(DateTime.toEpochMillis(occurredAt) / 1_000) - 1}`,
+                  biz_opaque_callback_data: input.correlationToken,
+                },
+              ],
+            }),
+            {
+              id: input.providerMessageId,
+              status,
+              timestamp: `${Math.floor(DateTime.toEpochMillis(occurredAt) / 1_000)}`,
+              biz_opaque_callback_data: input.correlationToken,
+              ...(status === "failed"
+                ? {
+                    errors: [
+                      {
+                        code:
+                          input.failureDisposition === "retryable"
+                            ? acceptanceRetryableFailureCode
+                            : acceptanceTerminalFailureCode,
+                      },
+                    ],
+                  }
+                : {}),
+            },
+            ...Option.match(input.additionalStatus, {
+              onNone: () => [],
+              onSome: (additionalStatus) => [
+                {
+                  id: input.providerMessageId,
+                  status: additionalStatus,
+                  timestamp: `${Math.floor(DateTime.toEpochMillis(occurredAt) / 1_000) + 1}`,
+                  biz_opaque_callback_data: input.correlationToken,
+                },
+              ],
+            }),
+          ],
+        },
+      },
+      phone_number_id: "123456789012345",
+    });
+    const body = new TextEncoder().encode(encoded);
+    const validSignature = new Bun.CryptoHasher("sha256", webhookSecret).update(body).digest("hex");
+    return yield* HttpClient.post("/webhooks/kapso", {
+      headers: {
+        "x-webhook-signature": Option.getOrElse(input.signature, () => validSignature),
+        "x-webhook-event": input.eventName,
+      },
+      body: HttpBody.uint8Array(body, "application/json"),
+    });
+  }
+);
+
+const acceptanceCaller = (
+  businessScopedUserId: WhatsAppBusinessScopedUserId
+): Readonly<{
+  businessPortfolioId: WhatsAppBusinessPortfolioId;
+  businessScopedUserId: WhatsAppBusinessScopedUserId;
+}> => ({
+  businessPortfolioId: WhatsAppBusinessPortfolioId.make("portfolio-test"),
+  businessScopedUserId,
+});
+
 const establishCaller = Effect.fn("Acceptance.establishWhatsAppCaller")(function* (input: {
   readonly scenarioId: WhatsAppAcceptanceObserverId;
   readonly phoneNumber: E164PhoneNumber;
@@ -146,6 +240,24 @@ const establishCaller = Effect.fn("Acceptance.establishWhatsAppCaller")(function
     startedAt
   );
   const disclosureResponse = yield* postSignedDelivery(disclosureDelivery);
+  const disclosures = yield* WhatsAppAcceptanceDisclosureControl;
+  const requests = yield* awaitKapsoRequests(1);
+  const request = yield* Effect.fromOption(Option.fromUndefinedOr(requests[0])).pipe(Effect.orDie);
+  const observed = yield* disclosures.find(acceptanceCaller(identity.businessScopedUserId));
+  const attempt = yield* Effect.fromOption(observed).pipe(
+    Effect.flatMap((value) => Effect.fromOption(value.state)),
+    Effect.orDie
+  );
+  const lifecycleResponse = yield* postSignedLifecycleEvidence({
+    eventName: "whatsapp.message.delivered",
+    correlationToken: attempt.correlationToken,
+    providerMessageId: request.outcome.providerMessageId,
+    failureDisposition: "terminal",
+    previousStatus: Option.some("sent"),
+    additionalStatus: Option.none(),
+    signature: Option.none(),
+  });
+  if (lifecycleResponse.status !== 200) return yield* Effect.die("delivery evidence was rejected");
 
   const decisionIdentity = yield* makeScenarioIdentity(input.scenarioId);
   const decisionDelivery = yield* makeSignedWebhookAt(
@@ -215,7 +327,7 @@ const awaitKapsoRequests = Effect.fn("Acceptance.awaitWhatsAppKapsoRequests")(fu
   const kapso = yield* WhatsAppAcceptanceKapsoControl;
   return yield* kapso.requests.pipe(
     Effect.filterOrFail((requests) => requests.length === count),
-    Effect.retry({ schedule: Schedule.spaced("100 millis"), times: 60 }),
+    Effect.retry({ schedule: Schedule.spaced("100 millis"), times: 150 }),
     Effect.orDie
   );
 });
@@ -501,6 +613,304 @@ layer(WhatsAppAcceptanceHarness, { excludeTestServices: true, timeout: "30 secon
         expect(yield* model.calls).toEqual(modelCallsBeforeReplay);
         const historyAfterReplay = yield* probe.api.transactions.listTransactions({ query: {} });
         expect(historyAfterReplay.data).toEqual(historyBeforeReplay.data);
+      })
+    );
+
+    it.effect(whatsappAcceptanceTestName("WA-A07"), () =>
+      Effect.gen(function* () {
+        const kapso = yield* WhatsAppAcceptanceKapsoControl;
+        const disclosures = yield* WhatsAppAcceptanceDisclosureControl;
+        yield* kapso.reset;
+        yield* kapso.setDeliveryMode("bsuid");
+        yield* kapso.setOutcomes(["rejected", "accepted"]);
+
+        const identity = yield* makeScenarioIdentity("WA-A07");
+        const delivery = yield* makeSignedWebhook({
+          ...identity,
+          phoneNumber: Option.none(),
+          text: TranscriptText.make("Quiero empezar"),
+        });
+        expect((yield* postSignedDelivery(delivery)).status).toBe(200);
+        const requests = yield* awaitKapsoRequests(2);
+        const first = yield* Schema.decodeUnknownEffect(DisclosureKapsoRequest)(requests[0]?.body);
+        const secondRequest = yield* Effect.fromOption(Option.fromUndefinedOr(requests[1])).pipe(
+          Effect.orDie
+        );
+        const second = yield* Schema.decodeUnknownEffect(DisclosureKapsoRequest)(
+          secondRequest.body
+        );
+        expect(first.biz_opaque_callback_data).not.toBe(second.biz_opaque_callback_data);
+        const rejectedAttempt = yield* disclosures.findAttemptByCorrelation(
+          DisclosureDeliveryCorrelationToken.make(first.biz_opaque_callback_data)
+        );
+        const rejectedAttemptValue = yield* Effect.fromOption(rejectedAttempt).pipe(Effect.orDie);
+        expect(yield* disclosures.failureMetadata(rejectedAttemptValue.attemptId)).toEqual(
+          Option.some({
+            reason: "rate_limited",
+            certainty: "rejected",
+          })
+        );
+
+        expect((yield* postSignedDelivery(delivery)).status).toBe(200);
+        yield* Effect.sleep("500 millis");
+        expect(yield* kapso.requests).toHaveLength(2);
+        const observed = yield* disclosures.find(acceptanceCaller(identity.businessScopedUserId));
+        const retryAttempt = yield* Effect.fromOption(observed).pipe(
+          Effect.flatMap((value) => Effect.fromOption(value.state)),
+          Effect.orDie
+        );
+        expect(retryAttempt.state).toBe("reconciliation-required");
+        const prematureDecision = yield* makeScenarioIdentity("WA-A07");
+        expect(
+          (yield* postSignedWebhook({
+            providerMessageId: prematureDecision.providerMessageId,
+            businessScopedUserId: identity.businessScopedUserId,
+            phoneNumber: Option.none(),
+            text: TranscriptText.make("Acepto"),
+          })).status
+        ).toBe(503);
+        expect(
+          (yield* disclosures.find(acceptanceCaller(identity.businessScopedUserId))).pipe(
+            Option.map((value) => value.lifecycle),
+            Option.getOrUndefined
+          )
+        ).toBe("AwaitingDisclosureDelivery");
+        expect(yield* kapso.requests).toHaveLength(2);
+        expect(
+          (yield* postSignedLifecycleEvidence({
+            eventName: "whatsapp.message.delivered",
+            correlationToken: retryAttempt.correlationToken,
+            providerMessageId: secondRequest.outcome.providerMessageId,
+            failureDisposition: "terminal",
+            previousStatus: Option.some("sent"),
+            additionalStatus: Option.none(),
+            signature: Option.none(),
+          })).status
+        ).toBe(200);
+        expect(
+          (yield* disclosures.find(acceptanceCaller(identity.businessScopedUserId))).pipe(
+            Option.flatMap((value) => value.state),
+            Option.map((state) => state.state),
+            Option.getOrUndefined
+          )
+        ).toBe("delivered");
+
+        yield* kapso.setOutcomes(["non-retryable-rejection"]);
+        const terminalIdentity = yield* makeScenarioIdentity("WA-A07");
+        const terminalDelivery = yield* makeSignedWebhook({
+          ...terminalIdentity,
+          phoneNumber: Option.none(),
+          text: TranscriptText.make("Inicio con rechazo terminal"),
+        });
+        expect((yield* postSignedDelivery(terminalDelivery)).status).toBe(500);
+        expect((yield* postSignedDelivery(terminalDelivery)).status).toBe(200);
+        yield* Effect.sleep("500 millis");
+        expect(yield* kapso.requests).toHaveLength(3);
+        const terminalObserved = yield* disclosures.find(
+          acceptanceCaller(terminalIdentity.businessScopedUserId)
+        );
+        expect(
+          Option.getOrUndefined(terminalObserved)?.state.pipe(Option.getOrUndefined)
+        ).toMatchObject({ state: "definitively-failed", reason: Option.some("invalid_response") });
+      })
+    );
+
+    it.effect(whatsappAcceptanceTestName("WA-A08"), () =>
+      Effect.gen(function* () {
+        const kapso = yield* WhatsAppAcceptanceKapsoControl;
+        const disclosures = yield* WhatsAppAcceptanceDisclosureControl;
+        yield* kapso.reset;
+        yield* kapso.setDeliveryMode("bsuid");
+        yield* kapso.setOutcomes(["ambiguous"]);
+
+        const identity = yield* makeScenarioIdentity("WA-A08");
+        const delivery = yield* makeSignedWebhook({
+          ...identity,
+          phoneNumber: Option.none(),
+          text: TranscriptText.make("Quiero empezar"),
+        });
+        expect((yield* postSignedDelivery(delivery)).status).toBe(500);
+        expect((yield* postSignedDelivery(delivery)).status).toBe(200);
+        yield* Effect.sleep("500 millis");
+        expect(yield* kapso.requests).toHaveLength(1);
+
+        const observed = yield* disclosures.find(acceptanceCaller(identity.businessScopedUserId));
+        const observedValue = yield* Effect.fromOption(observed).pipe(Effect.orDie);
+        const attempt = yield* Effect.fromOption(observedValue.state).pipe(Effect.orDie);
+        expect(attempt.state).toBe("reconciliation-required");
+        const invalidResponse = yield* postSignedLifecycleEvidence({
+          eventName: "whatsapp.message.delivered",
+          correlationToken: attempt.correlationToken,
+          providerMessageId: WhatsAppProviderMessageId.make("wamid.acceptance-forged-delivery-a08"),
+          failureDisposition: "terminal",
+          previousStatus: Option.none(),
+          additionalStatus: Option.none(),
+          signature: Option.some("0".repeat(64)),
+        });
+        expect(invalidResponse.status).toBe(401);
+        const mismatchedResponse = yield* postSignedLifecycleEvidence({
+          eventName: "whatsapp.message.delivered",
+          correlationToken: attempt.correlationToken,
+          providerMessageId: WhatsAppProviderMessageId.make("wamid.acceptance-mismatch-a08"),
+          failureDisposition: "terminal",
+          previousStatus: Option.none(),
+          additionalStatus: Option.some("failed"),
+          signature: Option.none(),
+        });
+        expect(mismatchedResponse.status).toBe(400);
+        expect(yield* kapso.requests).toHaveLength(1);
+        expect(
+          (yield* disclosures.find(acceptanceCaller(identity.businessScopedUserId))).pipe(
+            Option.flatMap((value) => value.state),
+            Option.map((state) => state.state),
+            Option.getOrUndefined
+          )
+        ).toBe("reconciliation-required");
+        const response = yield* postSignedLifecycleEvidence({
+          eventName: "whatsapp.message.delivered",
+          correlationToken: attempt.correlationToken,
+          providerMessageId: WhatsAppProviderMessageId.make("wamid.acceptance-reconciled-a08"),
+          failureDisposition: "terminal",
+          previousStatus: Option.some("sent"),
+          additionalStatus: Option.none(),
+          signature: Option.none(),
+        });
+        expect(response.status).toBe(200);
+        expect(yield* kapso.requests).toHaveLength(1);
+
+        yield* kapso.setOutcomes(["ambiguous"]);
+        const failedIdentity = yield* makeScenarioIdentity("WA-A08");
+        expect(
+          (yield* postSignedWebhook({
+            ...failedIdentity,
+            phoneNumber: Option.none(),
+            text: TranscriptText.make("Inicio con fallo confirmado"),
+          })).status
+        ).toBe(500);
+        const failedObserved = yield* disclosures.find(
+          acceptanceCaller(failedIdentity.businessScopedUserId)
+        );
+        const failedObservedValue = yield* Effect.fromOption(failedObserved).pipe(Effect.orDie);
+        const failedAttempt = yield* Effect.fromOption(failedObservedValue.state).pipe(
+          Effect.orDie
+        );
+        expect(
+          (yield* postSignedLifecycleEvidence({
+            eventName: "whatsapp.message.failed",
+            correlationToken: failedAttempt.correlationToken,
+            providerMessageId: WhatsAppProviderMessageId.make(
+              "wamid.acceptance-failed-evidence-a08"
+            ),
+            failureDisposition: "retryable",
+            previousStatus: Option.none(),
+            additionalStatus: Option.none(),
+            signature: Option.none(),
+          })).status
+        ).toBe(200);
+        expect(yield* awaitKapsoRequests(3)).toHaveLength(3);
+
+        yield* kapso.setOutcomes(["ambiguous"]);
+        const terminalIdentity = yield* makeScenarioIdentity("WA-A08");
+        expect(
+          (yield* postSignedWebhook({
+            ...terminalIdentity,
+            phoneNumber: Option.none(),
+            text: TranscriptText.make("Inicio con fallo permanente"),
+          })).status
+        ).toBe(500);
+        const terminalObserved = yield* disclosures.find(
+          acceptanceCaller(terminalIdentity.businessScopedUserId)
+        );
+        const terminalObservedValue = yield* Effect.fromOption(terminalObserved).pipe(Effect.orDie);
+        const terminalAttempt = yield* Effect.fromOption(terminalObservedValue.state).pipe(
+          Effect.orDie
+        );
+        expect(
+          (yield* postSignedLifecycleEvidence({
+            eventName: "whatsapp.message.sent",
+            correlationToken: terminalAttempt.correlationToken,
+            providerMessageId: WhatsAppProviderMessageId.make("wamid.acceptance-sent-evidence-a08"),
+            failureDisposition: "terminal",
+            previousStatus: Option.none(),
+            additionalStatus: Option.none(),
+            signature: Option.none(),
+          })).status
+        ).toBe(200);
+        const sentObserved = yield* disclosures.find(
+          acceptanceCaller(terminalIdentity.businessScopedUserId)
+        );
+        expect(
+          sentObserved.pipe(
+            Option.flatMap((value) => value.state),
+            Option.map((state) => state.state),
+            Option.getOrUndefined
+          )
+        ).toBe("reconciliation-required");
+        expect(
+          sentObserved.pipe(
+            Option.map((value) => value.lifecycle),
+            Option.getOrUndefined
+          )
+        ).toBe("AwaitingDisclosureDelivery");
+        expect(
+          (yield* postSignedLifecycleEvidence({
+            eventName: "whatsapp.message.failed",
+            correlationToken: terminalAttempt.correlationToken,
+            providerMessageId: WhatsAppProviderMessageId.make(
+              "wamid.acceptance-terminal-evidence-a08"
+            ),
+            failureDisposition: "terminal",
+            previousStatus: Option.none(),
+            additionalStatus: Option.none(),
+            signature: Option.none(),
+          })).status
+        ).toBe(200);
+        yield* Effect.sleep("500 millis");
+        expect(yield* kapso.requests).toHaveLength(4);
+        expect(
+          (yield* disclosures.find(acceptanceCaller(terminalIdentity.businessScopedUserId))).pipe(
+            Option.flatMap((value) => value.state),
+            Option.map((state) => state.state),
+            Option.getOrUndefined
+          )
+        ).toBe("definitively-failed");
+      })
+    );
+
+    it.effect(whatsappAcceptanceTestName("WA-A09"), () =>
+      Effect.gen(function* () {
+        const kapso = yield* WhatsAppAcceptanceKapsoControl;
+        const disclosures = yield* WhatsAppAcceptanceDisclosureControl;
+        yield* kapso.reset;
+        yield* kapso.setDeliveryMode("bsuid");
+        yield* kapso.setOutcomes(["ambiguous"]);
+
+        const identity = yield* makeScenarioIdentity("WA-A09");
+        expect(
+          (yield* postSignedWebhook({
+            ...identity,
+            phoneNumber: Option.none(),
+            text: TranscriptText.make("Quiero empezar"),
+          })).status
+        ).toBe(500);
+        const observed = yield* disclosures.find(acceptanceCaller(identity.businessScopedUserId));
+        const attempt = yield* Effect.fromOption(
+          Option.getOrUndefined(observed)?.state ?? Option.none()
+        ).pipe(Effect.orDie);
+
+        expect(yield* disclosures.processDue(DateTime.add(yield* DateTime.now, { days: 1 }))).toBe(
+          false
+        );
+        const unresolved = yield* disclosures.find(acceptanceCaller(identity.businessScopedUserId));
+        expect(
+          unresolved.pipe(
+            Option.flatMap((value) => value.state),
+            Option.map((state) => state.state),
+            Option.getOrUndefined
+          )
+        ).toBe("reconciliation-required");
+        expect(attempt.attemptNumber).toBe(1);
+        expect(yield* kapso.requests).toHaveLength(1);
       })
     );
 

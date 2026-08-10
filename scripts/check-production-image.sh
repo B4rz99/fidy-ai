@@ -122,18 +122,21 @@ inspectArtifacts() {
     return 1
   fi
   if ! grep --fixed-strings --quiet 'src/shell/observability/preload.ts' "$artifactRoot/preload.js.map" || \
-    ! grep --fixed-strings --quiet 'src/main.ts' "$artifactRoot/main.js.map"; then
-    echo "The production source maps do not cover the preload and application entries." >&2
+    ! grep --fixed-strings --quiet 'src/main.ts' "$artifactRoot/main.js.map" || \
+    ! grep --fixed-strings --quiet 'src/shell/observability/deployment-smoke.ts' \
+      "$artifactRoot/commands/smoke-sentry-deployment.js.map"; then
+    echo "The production source maps do not cover the preload, application, and rollout smoke entries." >&2
     return 1
   fi
   if grep --recursive --quiet --binary-files=text --extended-regexp \
+    --exclude='smoke-sentry-deployment.js' --exclude='smoke-sentry-deployment.js.map' \
     'production-smoke-(kapso-key|webhook-secret|openai-key)|error-message-sentinel|financial-sentinel|secret-webhook-body-sentinel|BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY' \
     "$artifactRoot"; then
     echo "Production JavaScript or source maps contain a secret or synthetic fixture." >&2
     return 1
   fi
   if ! docker run --rm "$image" sh -c \
-    'test ! -e src/main.ts && test ! -e src/shell/observability/preload.ts && test ! -e scripts/prepare-sentry-release.ts && test ! -e scripts/migrate.ts'; then
+    'test ! -e src/main.ts && test ! -e src/shell/observability/preload.ts && test ! -e scripts/prepare-sentry-release.ts && test ! -e scripts/migrate.ts && test ! -e scripts/smoke-sentry-deployment.ts'; then
     echo "The runtime image retained direct TypeScript production entries." >&2
     return 1
   fi

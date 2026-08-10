@@ -68,6 +68,18 @@ export type NonProductionTelemetryConfig = Readonly<{
   rootTraceRate: 1;
 }>;
 
+/** Fully sampled configuration owned only by the non-public production rollout command. */
+export type DeploymentSmokeTelemetryConfig = Readonly<{
+  _tag: "DeploymentSmoke";
+  environment: "production";
+  project: "production";
+  capture: Readonly<{ errors: true; traces: true }>;
+  dsn: SentryDsn;
+  release: TelemetryRelease;
+  errorSampleRate: 1;
+  rootTraceRate: 1;
+}>;
+
 /** The only decoded telemetry configuration consumed after process startup. */
 export type TelemetryConfig =
   | DisabledTelemetryConfig
@@ -103,6 +115,7 @@ const rawTelemetryConfig = Config.all({
 
 const fullShaReleasePattern = /^fidy@[0-9a-f]{40}$/u;
 const sentryProjectPathPattern = /^\/\d+$/u;
+const sentryProjectIdPattern = /^\d+$/u;
 
 const enabledCapture = (errors: boolean, traces: boolean): EnabledCapture => {
   if (errors) return traces ? { errors: true, traces: true } : { errors: true, traces: false };
@@ -272,6 +285,43 @@ export const decodeSentryAccountSmokeConfig = (input: {
       _tag: "NonProductionEnabled",
       environment: input.environment,
       project: "non-production",
+      capture: { errors: true, traces: true },
+      dsn,
+      release,
+      errorSampleRate: 1,
+      rootTraceRate: 1,
+    };
+  });
+
+/** Validates the explicit production-project identity used only by the rollout smoke command. */
+export const decodeSentryDeploymentSmokeConfig = (input: {
+  readonly dsn: Redacted.Redacted<string>;
+  readonly release: string;
+  readonly approvedOrigin: string;
+  readonly approvedProjectId: string;
+}): Effect.Effect<DeploymentSmokeTelemetryConfig, InvalidTelemetryConfig> =>
+  Effect.gen(function* () {
+    const approvedOrigin = Schema.decodeUnknownOption(Schema.URLFromString)(input.approvedOrigin);
+    if (
+      Option.isNone(approvedOrigin) ||
+      approvedOrigin.value.protocol !== "https:" ||
+      approvedOrigin.value.origin !== input.approvedOrigin ||
+      !sentryProjectIdPattern.test(input.approvedProjectId)
+    ) {
+      return yield* new InvalidTelemetryConfig({ reason: "crossed_project" });
+    }
+    const dsn = yield* decodeDsn(
+      input.dsn,
+      Option.some({
+        origin: Fn.cast<string, `https://${string}`>(approvedOrigin.value.origin),
+        projectId: Fn.cast<string, `${number}`>(input.approvedProjectId),
+      })
+    );
+    const release = yield* decodeRelease(Option.some(input.release));
+    return {
+      _tag: "DeploymentSmoke",
+      environment: "production",
+      project: "production",
       capture: { errors: true, traces: true },
       dsn,
       release,

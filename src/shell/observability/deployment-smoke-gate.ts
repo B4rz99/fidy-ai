@@ -129,13 +129,15 @@ const traceMatches = (
   actual: SentryDeploymentSmokeTraceNode,
   expected: SentryDeploymentSmokeTraceNode
 ): boolean =>
-  actual.name === expected.name &&
-  actual.op === expected.op &&
-  actual.children.length === expected.children.length &&
-  actual.children.every((child, index) => {
-    const expectedChild = expected.children[index];
-    return expectedChild !== undefined && traceMatches(child, expectedChild);
-  });
+  [
+    actual.name === expected.name,
+    actual.op === expected.op,
+    actual.children.length === expected.children.length,
+    actual.children.every((child, index) => {
+      const expectedChild = expected.children[index];
+      return expectedChild !== undefined && traceMatches(child, expectedChild);
+    }),
+  ].every(Boolean);
 
 const fail = (
   check: DeploymentSmokeCheck,

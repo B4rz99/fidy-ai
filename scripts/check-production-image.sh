@@ -182,7 +182,7 @@ EOF
   docker rm "$releaseContainer" >/dev/null
   printf '%s\n' \
     "--url https://sentry.io/ releases new ${release}" \
-    "--url https://sentry.io/ sourcemaps upload --release ${release} --validate --strict --wait-for 8 dist" \
+    "--url https://sentry.io/ sourcemaps upload --release ${release} --validate --strict --wait-for 300 dist" \
     "--url https://sentry.io/ releases finalize ${release}" >"$releaseRoot/expected"
   if ! diff --unified "$releaseRoot/expected" "$releaseRoot/calls"; then
     echo "Release preparation did not create, upload, and finalize the image artifact in order." >&2

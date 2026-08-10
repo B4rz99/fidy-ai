@@ -4,7 +4,10 @@ import { join } from "node:path";
 const artifactRoot = "dist";
 const sentryEndpoint = "https://sentry.io/";
 const commandTimeoutMilliseconds = 12_000;
-const uploadWaitSeconds = "8";
+const millisecondsPerSecond = 1_000;
+const uploadWaitSeconds = 300;
+const uploadCommandTimeoutMilliseconds =
+  uploadWaitSeconds * millisecondsPerSecond + commandTimeoutMilliseconds;
 const maximumAttempts = 3;
 const retryDelayMilliseconds = 250;
 const fullShaPattern = /^[0-9a-f]{40}$/u;
@@ -21,6 +24,7 @@ type SentryOperation = Readonly<{
   arguments: ReadonlyArray<string>;
   failureGuidance: string;
   label: string;
+  timeoutMilliseconds: number;
 }>;
 
 const requiredEnvironment = (name: string): string => {
@@ -116,7 +120,8 @@ const validateArtifacts = async (): Promise<void> => {
 
 const runCliAttempt = async (
   arguments_: ReadonlyArray<string>,
-  configuration: ReleaseConfiguration
+  configuration: ReleaseConfiguration,
+  timeoutMilliseconds: number
 ): Promise<boolean> => {
   const child = Bun.spawn(
     [join(import.meta.dir, "sentry-cli"), "--url", sentryEndpoint, ...arguments_],
@@ -134,7 +139,7 @@ const runCliAttempt = async (
   );
   const timeout = setTimeout(() => {
     child.kill();
-  }, commandTimeoutMilliseconds);
+  }, timeoutMilliseconds);
   const exitCode = await child.exited;
   clearTimeout(timeout);
   return exitCode === 0;
@@ -145,7 +150,9 @@ const runRequiredAttempt = async (
   configuration: ReleaseConfiguration,
   attempt: number
 ): Promise<void> => {
-  if (await runCliAttempt(operation.arguments, configuration)) return;
+  if (await runCliAttempt(operation.arguments, configuration, operation.timeoutMilliseconds)) {
+    return;
+  }
   if (attempt === maximumAttempts) {
     throw new Error(
       `Sentry ${operation.label} failed after ${maximumAttempts} attempts; ${operation.failureGuidance}.`
@@ -175,6 +182,7 @@ export const prepareSentryRelease = async (): Promise<string> => {
       arguments: ["releases", "new", configuration.release],
       failureGuidance: "verify the org:ci token and organization access",
       label: "release creation",
+      timeoutMilliseconds: commandTimeoutMilliseconds,
     },
     configuration
   );
@@ -188,12 +196,13 @@ export const prepareSentryRelease = async (): Promise<string> => {
         "--validate",
         "--strict",
         "--wait-for",
-        uploadWaitSeconds,
+        String(uploadWaitSeconds),
         artifactRoot,
       ],
       failureGuidance:
         "verify the org:ci token, project access, source-map upload entitlement, and Sentry availability",
       label: "source-map upload",
+      timeoutMilliseconds: uploadCommandTimeoutMilliseconds,
     },
     configuration
   );
@@ -202,6 +211,7 @@ export const prepareSentryRelease = async (): Promise<string> => {
       arguments: ["releases", "finalize", configuration.release],
       failureGuidance: "verify the org:ci token and release access",
       label: "release finalization",
+      timeoutMilliseconds: commandTimeoutMilliseconds,
     },
     configuration
   );

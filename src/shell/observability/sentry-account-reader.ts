@@ -12,6 +12,11 @@ const providerString = Schema.String.check(Schema.isMaxLength(maximumProviderStr
 const maximumProviderItems = Schema.isMaxLength(maximumProviderItemsPerPage);
 const OrganizationResponse = Schema.Struct({
   dataRegion: Schema.OptionFromOptionalKey(Schema.NullOr(Schema.Struct({ name: providerString }))),
+  links: Schema.OptionFromOptionalKey(
+    Schema.Struct({
+      regionUrl: Schema.String.check(Schema.isMaxLength(maximumProviderStringLength)),
+    })
+  ),
 });
 const ProjectsResponse = Schema.Array(Schema.Struct({ slug: providerString })).check(
   maximumProviderItems
@@ -154,6 +159,15 @@ const normalizedRegion = (name: Option.Option<string>): Option.Option<SentryStor
     }
   });
 
+const regionNameFromUrl = (value: string): Option.Option<string> => {
+  const url = Schema.decodeUnknownOption(Schema.URLFromString)(value);
+  return Option.flatMap(url, (candidate) =>
+    candidate.protocol === "https:"
+      ? Option.fromUndefinedOr(candidate.hostname.split(".")[0])
+      : Option.none()
+  );
+};
+
 const inspectProject = (input: {
   readonly baseUrl: string;
   readonly organization: string;
@@ -234,8 +248,14 @@ export const inspectSentryAccount = (
     return {
       _tag: "available" as const,
       storageRegion: normalizedRegion(
-        Option.flatMap(organizationResponse.dataRegion, (region) =>
-          region === null ? Option.none() : Option.some(region.name)
+        Option.orElse(
+          Option.flatMap(organizationResponse.dataRegion, (region) =>
+            region === null ? Option.none() : Option.some(region.name)
+          ),
+          () =>
+            Option.flatMap(organizationResponse.links, (links) =>
+              regionNameFromUrl(links.regionUrl)
+            )
         )
       ),
       projectsAreDistinct: production !== nonProduction,

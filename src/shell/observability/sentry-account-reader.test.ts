@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { expect, it } from "@effect/vitest";
-import { Effect, Exit, Redacted } from "effect";
+import { Effect, Exit, Option, Redacted } from "effect";
 import {
   HttpClient,
   type HttpClientError,
@@ -170,6 +170,47 @@ it.effect("accepts an organization response with no data region", () =>
     expect(observation._tag).toBe("available");
     if (observation._tag !== "available") throw new Error("expected available observation");
     expect(observation.storageRegion._tag).toBe("None");
+  })
+);
+
+it.effect("derives the organization region from the current region link", () =>
+  Effect.gen(function* () {
+    const organization = "private-organization";
+    const client = makeHttpClient((request) => {
+      const path = new URL(request.url).pathname;
+      if (path.endsWith(`/organizations/${organization}/`)) {
+        return Effect.succeed(
+          responseJson(request, { links: { regionUrl: "https://us.sentry.io" } })
+        );
+      }
+      if (path.endsWith(`/organizations/${organization}/projects/`)) {
+        return Effect.succeed(
+          responseJson(request, [
+            { slug: "private-production" },
+            { slug: "private-non-production" },
+          ])
+        );
+      }
+      if (path.endsWith("/keys/")) {
+        return Effect.succeed(responseJson(request, [{ isActive: true, rateLimit: null }]));
+      }
+      return Effect.succeed(responseJson(request, [{ name: "production" }]));
+    });
+
+    const observation = yield* inspectSentryAccount(
+      readerConfig({
+        organization,
+        production: "private-production",
+        nonProduction: "private-non-production",
+        token: "private-token",
+      })
+    ).pipe(Effect.provideService(HttpClient.HttpClient, client));
+
+    expect(observation._tag).toBe("available");
+    if (observation._tag !== "available") throw new Error("expected available observation");
+    expect(Option.isSome(observation.storageRegion)).toBe(true);
+    if (Option.isNone(observation.storageRegion)) throw new Error("expected a storage region");
+    expect(observation.storageRegion.value).toBe("us");
   })
 );
 

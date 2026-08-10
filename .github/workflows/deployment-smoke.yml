@@ -25,6 +25,7 @@ jobs:
       (github.event.deployment.environment == 'production' ||
       endsWith(github.event.deployment.environment, '/ production'))
     runs-on: ubuntu-latest
+    environment: Production
     steps:
       # A run that was skipped by the job condition concludes `skipped`, not
       # `success`, so it is not mistaken here for a smoke test that happened.

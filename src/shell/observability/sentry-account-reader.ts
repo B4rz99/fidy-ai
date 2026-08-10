@@ -11,7 +11,7 @@ const maximumProviderItemsPerPage = 100;
 const providerString = Schema.String.check(Schema.isMaxLength(maximumProviderStringLength));
 const maximumProviderItems = Schema.isMaxLength(maximumProviderItemsPerPage);
 const OrganizationResponse = Schema.Struct({
-  dataRegion: Schema.OptionFromOptionalKey(Schema.Struct({ name: providerString })),
+  dataRegion: Schema.OptionFromOptionalKey(Schema.NullOr(Schema.Struct({ name: providerString }))),
 });
 const ProjectsResponse = Schema.Array(Schema.Struct({ slug: providerString })).check(
   maximumProviderItems
@@ -100,6 +100,13 @@ const reasonForStatus = (status: number): SentryAccountReadError["reason"] => {
 const isSuccessfulStatus = (status: number): boolean =>
   status >= firstSuccessStatus && status < firstRedirectionStatus;
 
+const hasUnboundedNextPage = (link: string): boolean =>
+  link.split(",").some((entry) => {
+    const hasNextRelation = entry.includes('rel="next"') || entry.includes("rel=next");
+    const hasNoMoreResults = entry.includes('results="false"') || entry.includes("results=false");
+    return hasNextRelation && !hasNoMoreResults;
+  });
+
 const successfulResponse = (
   response: HttpClientResponse.HttpClientResponse
 ): Effect.Effect<HttpClientResponse.HttpClientResponse, SentryAccountReadError> =>
@@ -118,7 +125,7 @@ const readJson = function <A>(input: {
     HttpClient.execute,
     Effect.flatMap(successfulResponse),
     Effect.filterOrFail(
-      (response) => (response.headers["link"] ?? "").trim().length === 0,
+      (response) => !hasUnboundedNextPage(response.headers["link"] ?? ""),
       () => SentryAccountReadError.make({ reason: "unexpected-response" })
     ),
     Effect.flatMap((response) =>
@@ -227,7 +234,9 @@ export const inspectSentryAccount = (
     return {
       _tag: "available" as const,
       storageRegion: normalizedRegion(
-        Option.map(organizationResponse.dataRegion, (region) => region.name)
+        Option.flatMap(organizationResponse.dataRegion, (region) =>
+          region === null ? Option.none() : Option.some(region.name)
+        )
       ),
       projectsAreDistinct: production !== nonProduction,
       production: productionObservation,

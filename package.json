@@ -41,7 +41,7 @@
     "effect": "4.0.0-beta.98"
   },
   "devDependencies": {
-    "@effect/tsgo": "0.26.7",
+    "@effect/tsgo": "0.27.1",
     "@effect/vitest": "4.0.0-beta.98",
     "@sentry/cli": "3.6.2",
     "@vitest/coverage-istanbul": "4.1.10",

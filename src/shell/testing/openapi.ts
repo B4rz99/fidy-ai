@@ -59,17 +59,15 @@ export const publishedOperations = Effect.gen(function* () {
 
   const operations: ReadonlyArray<PublishedOperation> = Object.values(spec.paths).flatMap(
     (methods) =>
-      Object.values(methods).map(
-        (operation): PublishedOperation => ({
-          id: operation.operationId,
-          description: Option.fromUndefinedOr(operation.description),
-          requiredScope: Option.fromUndefinedOr(operation["x-fidy-required-scope"]),
-          requiredTier: Option.fromUndefinedOr(operation["x-fidy-required-tier"]),
-          costClass: Option.fromUndefinedOr(operation["x-fidy-cost-class"]),
-          agentConfirmation: Option.fromUndefinedOr(operation["x-fidy-agent-confirmation"]),
-          kind: Option.fromUndefinedOr(operation["x-fidy-operation-kind"]),
-        })
-      )
+      Object.values(methods).map((operation): PublishedOperation => ({
+        id: operation.operationId,
+        description: Option.fromUndefinedOr(operation.description),
+        requiredScope: Option.fromUndefinedOr(operation["x-fidy-required-scope"]),
+        requiredTier: Option.fromUndefinedOr(operation["x-fidy-required-tier"]),
+        costClass: Option.fromUndefinedOr(operation["x-fidy-cost-class"]),
+        agentConfirmation: Option.fromUndefinedOr(operation["x-fidy-agent-confirmation"]),
+        kind: Option.fromUndefinedOr(operation["x-fidy-operation-kind"]),
+      }))
   );
 
   return operations;

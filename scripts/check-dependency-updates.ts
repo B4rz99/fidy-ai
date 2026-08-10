@@ -718,9 +718,8 @@ const check = Effect.gen(function* () {
 
   const declared = pins.flat().map((pin) => ({ pin, current: parsePin(pin.spec) }));
   const ranged = declared.flatMap(({ pin, current }) => (Option.isNone(current) ? [pin] : []));
-  const exact = declared.flatMap(
-    ({ pin, current }): ReadonlyArray<ExactPin> =>
-      Option.isNone(current) ? [] : [{ ...pin, current: current.value }]
+  const exact = declared.flatMap(({ pin, current }): ReadonlyArray<ExactPin> =>
+    Option.isNone(current) ? [] : [{ ...pin, current: current.value }]
   );
 
   const updates = yield* Effect.forEach(

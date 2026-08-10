@@ -50,14 +50,11 @@ export const makeTelemetryBootstrap = (options: {
       resource: DisabledTelemetryResource,
     });
   }
-  return Effect.map(
-    options.makeEnabled(config),
-    (enabled): TelemetryBootstrap => ({
-      _tag: "Enabled",
-      config,
-      ...enabled,
-    })
-  );
+  return Effect.map(options.makeEnabled(config), (enabled): TelemetryBootstrap => ({
+    _tag: "Enabled",
+    config,
+    ...enabled,
+  }));
 };
 
 const bootstrapKey = Symbol.for("fidy-ai/shell/observability/telemetry-bootstrap");

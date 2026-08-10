@@ -18,18 +18,5 @@
     "an entry whose exclusion is gone."
   ],
   "deferredUpdates": [],
-  "acceptedVulnerabilities": [
-    {
-      "cve": "CVE-2026-67213",
-      "path": "bun.lock",
-      "reason": "The only patched nanoid release, 3.3.17, is younger than the mandatory seven-day supply-chain delay; retain 3.3.16 until the delay admits it.",
-      "until": "2026-08-10T10:39:23Z"
-    },
-    {
-      "cve": "CVE-2026-67213",
-      "path": "tools/mutation/bun.lock",
-      "reason": "The only patched nanoid release, 3.3.17, is younger than the mandatory seven-day supply-chain delay; retain 3.3.16 until the delay admits it.",
-      "until": "2026-08-10T10:39:23Z"
-    }
-  ]
+  "acceptedVulnerabilities": []
 }

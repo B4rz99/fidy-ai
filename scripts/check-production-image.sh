@@ -62,6 +62,7 @@ assertApplicationRejected() {
     --env MIGRATION_DATABASE_URL --env DATABASE_URL \
     --env KAPSO_API_KEY --env KAPSO_WEBHOOK_SECRET --env WHATSAPP_BUSINESS_PORTFOLIO_ID \
     --env OPENAI_API_KEY \
+    --env "RAILWAY_GIT_COMMIT_SHA=${releaseSha}" \
     --env SENTRY_ENVIRONMENT --env SENTRY_CAPTURE_ERRORS --env SENTRY_CAPTURE_TRACES \
     --env SENTRY_PRODUCTION_DSN --env SENTRY_NON_PRODUCTION_DSN \
     --env SENTRY_RELEASE --env SENTRY_AUTH_TOKEN --env SENTRY_FORCE_ENV_TOKEN \
@@ -181,7 +182,7 @@ EOF
   docker rm "$releaseContainer" >/dev/null
   printf '%s\n' \
     "--url https://sentry.io/ releases new ${release}" \
-    "--url https://sentry.io/ sourcemaps upload --release ${release} --validate --strict --wait --wait-for 8 dist" \
+    "--url https://sentry.io/ sourcemaps upload --release ${release} --validate --strict --wait-for 8 dist" \
     "--url https://sentry.io/ releases finalize ${release}" >"$releaseRoot/expected"
   if ! diff --unified "$releaseRoot/expected" "$releaseRoot/calls"; then
     echo "Release preparation did not create, upload, and finalize the image artifact in order." >&2
@@ -307,6 +308,7 @@ docker run --detach --name "$application" --network "$network" \
   --env MIGRATION_DATABASE_URL --env DATABASE_URL \
   --env KAPSO_API_KEY --env KAPSO_WEBHOOK_SECRET --env WHATSAPP_BUSINESS_PORTFOLIO_ID \
   --env OPENAI_API_KEY \
+  --env "RAILWAY_GIT_COMMIT_SHA=${releaseSha}" \
   --env SENTRY_ENVIRONMENT --env SENTRY_CAPTURE_ERRORS --env SENTRY_CAPTURE_TRACES \
   --env SENTRY_PRODUCTION_DSN --env SENTRY_NON_PRODUCTION_DSN \
   --env SENTRY_RELEASE --env SENTRY_AUTH_TOKEN --env SENTRY_FORCE_ENV_TOKEN \

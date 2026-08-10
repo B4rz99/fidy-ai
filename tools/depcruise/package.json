@@ -4,7 +4,7 @@
   "private": true,
   "description": "Isolated classic-TypeScript install for dependency-cruiser. dependency-cruiser reads .ts sources and the tsconfig `paths` aliases through the classic `typescript` compiler API; the root package pins the Effect tsgo `typescript` build, which does not expose it. With only that build present dependency-cruiser cruises zero modules and still exits 0 — a gate that enforces nothing, silently. Keeping the cruiser and a classic typescript here is what stops that. The pin tracks the classic 6.x line and stops there on purpose: typescript@7 ships no compiler API at all — its main entry resolves to a version stub — and dependency-cruiser's own engine range ends below 7, so it would decline the import before ever probing. Revisit when TypeScript ships the replacement API and the cruiser adopts it.",
   "devDependencies": {
-    "dependency-cruiser": "18.1.0",
+    "dependency-cruiser": "18.1.1",
     "typescript": "6.0.3"
   }
 }

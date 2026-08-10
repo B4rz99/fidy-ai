@@ -112,13 +112,24 @@ describe("Sentry release preparation", () => {
     expect(await Bun.file(harness.calls).text()).toBe(
       [
         `${sentryArgumentsPrefix} releases new ${release}|unset`,
-        `${sentryArgumentsPrefix} sourcemaps upload --release ${release} --validate --strict --wait --wait-for 8 dist|unset`,
+        `${sentryArgumentsPrefix} sourcemaps upload --release ${release} --validate --strict --wait-for 8 dist|unset`,
         `${sentryArgumentsPrefix} releases finalize ${release}|unset`,
         `${sentryArgumentsPrefix} releases new ${release}|unset`,
-        `${sentryArgumentsPrefix} sourcemaps upload --release ${release} --validate --strict --wait --wait-for 8 dist|unset`,
+        `${sentryArgumentsPrefix} sourcemaps upload --release ${release} --validate --strict --wait-for 8 dist|unset`,
         `${sentryArgumentsPrefix} releases finalize ${release}|unset`,
         "",
       ].join("\n")
+    );
+  });
+
+  it("derives the release from the Railway full commit SHA when no override is configured", async () => {
+    const harness = await makeHarness();
+
+    const result = runPreparation(harness, { SENTRY_RELEASE: "" });
+
+    expect(result.exitCode).toBe(0);
+    expect(await Bun.file(harness.calls).text()).toContain(
+      `${sentryArgumentsPrefix} releases new ${release}|unset`
     );
   });
 

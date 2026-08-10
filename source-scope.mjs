@@ -28,6 +28,7 @@ export const CORE_EXCLUDE = ["**/*.test.ts"];
 export const SOURCE_EXCLUDE = [
   ...CORE_EXCLUDE,
   "src/shell/testing/**",
+  "src/shell/observability/deployment-smoke-command.ts",
   "src/shell/observability/preload.ts",
   "src/shell/observability/release-preparation.ts",
 ];

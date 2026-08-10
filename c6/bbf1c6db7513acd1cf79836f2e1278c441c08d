@@ -1,0 +1,22 @@
+source-scope.mjs
+  s_2d213caa0f9fa7::t_6ff5e75765d709 31
+vitest.acceptance.config.ts
+  s_2d213caa0f9fa7::t_74604c3bff5638 11-13
+  s_2d213caa0f9fa7::t_d38018074b5423 22
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "c6bbf1c6db7513acd1cf79836f2e1278c441c08d",
+  "prompts": {},
+  "sessions": {
+    "s_2d213caa0f9fa7": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019fec85-2e87-7de5-958b-56d220909d66",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

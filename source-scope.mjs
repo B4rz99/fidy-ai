@@ -11,8 +11,8 @@
 // Excluded on purpose: test files, the test-only API harness under src/shell/testing, and command
 // process wiring. The preload is process wiring like src/main.ts; release preparation and the
 // deployment-smoke command/readback transport are exercised through dedicated tests and their
-// built-command and production-image seams. The reader's recursive codec is also outside crap4ts'
-// parser support. Their decoded configuration and artifacts remain measured by those checks.
+// built-command and production-image seams. Their decoded configuration and artifacts remain
+// measured by those checks.
 //
 // Plain .mjs (not .ts): tools/crap/run.mjs feeds these to crap4ts, which parses
 // through the classic TypeScript compiler API that this repo's Effect tsgo

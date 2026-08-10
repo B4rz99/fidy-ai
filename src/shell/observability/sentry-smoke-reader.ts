@@ -172,10 +172,10 @@ const readText = (
     )
   );
 
-const decode = <A>(
+const decode: <A>(
   schema: Schema.Codec<A, unknown>,
   text: string
-): Effect.Effect<A, SentrySmokeReadError> =>
+) => Effect.Effect<A, SentrySmokeReadError> = (schema, text) =>
   Schema.decodeUnknownEffect(Schema.fromJsonString(schema))(text).pipe(
     Effect.mapError(() => SentrySmokeReadError.make({ reason: "unexpected-response" }))
   );

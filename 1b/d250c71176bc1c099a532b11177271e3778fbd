@@ -1,0 +1,132 @@
+Dockerfile
+  s_2d213caa0f9fa7::t_c8d093176ebb25 12
+scripts/check-deployment-smoke.ts
+  s_2d213caa0f9fa7::t_3ab3e18b62b15a 134-135
+scripts/check-production-image.sh
+  s_2d213caa0f9fa7::t_411b47484427fe 132
+  s_2d213caa0f9fa7::t_da7a7f8259a45f 125-128,139
+README.md
+  s_2d213caa0f9fa7::t_924f503f2d7fb6 76-78
+  s_2d213caa0f9fa7::t_f804b015179fa9 220-240
+  s_2d213caa0f9fa7::t_be65081d8c61dd 79-88
+package.json
+  s_2d213caa0f9fa7::t_1aa0ebd0320a94 14,20
+.dockerignore
+  s_2d213caa0f9fa7::t_98a928c362a0eb 19
+src/shell/observability/telemetry-config.ts
+  s_2d213caa0f9fa7::t_bcaee9ebfff2a6 118,309
+  s_2d213caa0f9fa7::t_4aa95cf8fc35d2 300-301,304-308,310-319
+  s_2d213caa0f9fa7::t_4fcbc8f5a760b9 71-82,296-299,302-303,320-324
+  s_2d213caa0f9fa7::t_f585b8afb54fc1 325-332
+.github/workflows/deployment-smoke.yml
+  s_2d213caa0f9fa7::t_c5cf37bad56e1f 58,61-64,67-73,75,77
+  s_2d213caa0f9fa7::t_b8804529968df6 57,59-60,65-66,74,76,78-92
+src/shell/observability/deployment-smoke-command.ts
+  s_2d213caa0f9fa7::t_1563c3bba49f63 1-164
+scripts/smoke-sentry-deployment.ts
+  s_2d213caa0f9fa7::t_115951ba0bef35 11
+  s_2d213caa0f9fa7::t_700df6182fc298 1-3,10
+  s_2d213caa0f9fa7::t_e6954c1711ea50 4-9,12
+src/shell/observability/registry.ts
+  s_2d213caa0f9fa7::t_ddd1d26c03d34c 62-69,84-85,97-102,106
+src/shell/observability/deployment-smoke-gate.ts
+  s_2d213caa0f9fa7::t_34a3a236788725 1-2,4-29,42-44,46-69,78-149,151-153,160,173-182,186-202,210,228,232-235,237-238,240-256
+  s_2d213caa0f9fa7::t_f804b015179fa9 3,150,183-185
+  s_2d213caa0f9fa7::t_6b9abb77c43855 40
+  s_2d213caa0f9fa7::t_9225507938f880 70-77,162,229-231
+  s_2d213caa0f9fa7::t_67804716551630 154-159,161,163-172,239
+  s_2d213caa0f9fa7::t_528ca392f4b46b 211-215,217-227
+  s_2d213caa0f9fa7::t_6fb46f26750a95 30-39,41,45
+  s_2d213caa0f9fa7::t_c6c15ba031173e 203-209
+  s_2d213caa0f9fa7::t_0ca7d1baf84447 216
+  s_2d213caa0f9fa7::t_a0a19c1713d467 236
+src/shell/observability/sentry-smoke-reader.ts
+  s_2d213caa0f9fa7::t_be2695f0af2c95 189-203,206,209-213,215,219-220
+  s_2d213caa0f9fa7::t_a31d7c8804145a 286-291,293,295,297,359
+  s_2d213caa0f9fa7::t_eababbeaae0c55 5,16-32,58,64,81,84,112,114,116,118,121,137-138,148,245
+  s_2d213caa0f9fa7::t_f804b015179fa9 152-155,175-178,324-325,327-332,379-386,393-395,402-404,408-410
+  s_2d213caa0f9fa7::t_fa18d06c109f18 4,6-7
+  s_2d213caa0f9fa7::t_d3f63d9d829854 360
+  s_2d213caa0f9fa7::t_eb53bc60137dec 1-3,8-9,11,14-15,33-57,59-63,65-66,69,72-73,75,78,82-83,85-108,110-111,113,115,117,119-120,122-124,128-136,139-141,143-147,149-151,156-157,159-174,179-188,204-205,239-241,248-249,255-257,259-265,348,361,374-378,387-392,396-401,405-407,411-426
+  s_2d213caa0f9fa7::t_73e1bef6db69a6 258,266-267,333-340,342-347,349-356,362-373
+  s_2d213caa0f9fa7::t_ff24aacd817d6a 10,246-247
+  s_2d213caa0f9fa7::t_07f6adc161aa6e 268-285,292,294,296,298-316,320-323,326,357-358
+  s_2d213caa0f9fa7::t_2379a15361de88 317-319
+  s_2d213caa0f9fa7::t_1f67030d21b1ea 109,158
+  s_2d213caa0f9fa7::t_88de11f3b4f924 12-13,70-71,79-80,207-208,216-218,221-234,237-238,341
+  s_2d213caa0f9fa7::t_3a6d856e0f545b 235-236
+  s_2d213caa0f9fa7::t_c21bb9e272ffc2 244
+  s_2d213caa0f9fa7::t_b7cc57e2c9d4f4 125-127,142
+  s_2d213caa0f9fa7::t_12b3f5856ecceb 67-68,242-243
+  s_2d213caa0f9fa7::t_6b9abb77c43855 250-254
+  s_2d213caa0f9fa7::t_fee06d628b7fcf 74,76-77
+  s_2d213caa0f9fa7::t_77c5dcd64ef30d 214
+src/shell/observability/telemetry-config.test.ts
+  s_2d213caa0f9fa7::t_241071438380c0 43-44,57-68,70-82
+  s_2d213caa0f9fa7::t_10a1a655d92300 69
+  s_2d213caa0f9fa7::t_f9033ef42deb38 16,37-42,45-56,83-84
+src/shell/observability/deployment-smoke.test.ts
+  s_2d213caa0f9fa7::t_6048bf8c9d5a3e 89-103
+  s_2d213caa0f9fa7::t_f804b015179fa9 8,47
+  s_2d213caa0f9fa7::t_0d537e64774700 1-7,9-10,74-80,83-87,105
+  s_2d213caa0f9fa7::t_ffb14467bcdbe4 11-12,14,18-25,27-35,38-39,46,58-61,69,72-73,104
+  s_2d213caa0f9fa7::t_32b916db17c0a9 81-82
+  s_2d213caa0f9fa7::t_76597a7f5b7e34 13,15-17,26,36,40-45,51-57,62-66,88
+  s_2d213caa0f9fa7::t_a9678bfadb62ef 37,49,67-68,70-71
+  s_2d213caa0f9fa7::t_0c9f74d8ac05da 48,50
+src/shell/observability/sentry-adapter.ts
+  s_2d213caa0f9fa7::t_5f6be5e882bedb 631
+  s_2d213caa0f9fa7::t_5cad2ed01666a0 27,632-635
+src/shell/observability/sentry-smoke-reader.test.ts
+  s_2d213caa0f9fa7::t_3484c77569deeb 149
+  s_2d213caa0f9fa7::t_f804b015179fa9 4,13-14
+  s_2d213caa0f9fa7::t_ce20a935e3057b 2-3,6,8-10,29,107-111,116-126,128-133
+  s_2d213caa0f9fa7::t_14caaefe4251f9 112-115,127
+  s_2d213caa0f9fa7::t_eb7c41b649a5b0 5,16-17
+  s_2d213caa0f9fa7::t_af6a45fb1aa09c 24,27,30-36,78-82,88-93
+  s_2d213caa0f9fa7::t_a78216da16c22e 7
+  s_2d213caa0f9fa7::t_a9f3e8f065679d 25-26,28
+  s_2d213caa0f9fa7::t_45f192387fe78a 37-75,77,94-95,97-106,135,150-154,159-160
+  s_2d213caa0f9fa7::t_944770738bcefe 1,11-12,18-23,134,136,138-148,161-162
+  s_2d213caa0f9fa7::t_28e3540a2db822 96
+  s_2d213caa0f9fa7::t_a142765f40c783 15
+  s_2d213caa0f9fa7::t_7b8aaacbaeb541 76,83-87
+  s_2d213caa0f9fa7::t_b49e8dbd8c310a 137,155-158
+src/shell/observability/deployment-smoke.ts
+  s_2d213caa0f9fa7::t_fa4c3e1870e2f2 29
+  s_2d213caa0f9fa7::t_d29be947dcce27 121-131,133-139,174-183
+  s_2d213caa0f9fa7::t_f804b015179fa9 142,194,209
+  s_2d213caa0f9fa7::t_d3bf73e4d780f2 19
+  s_2d213caa0f9fa7::t_9bc1cff400de94 32,36
+  s_2d213caa0f9fa7::t_b112e0ae2a0874 1-2,4-18,20-23,33-35,37-120,157-173,184-185,195-204,206-208,210-240,242,244-256
+  s_2d213caa0f9fa7::t_9df7c715d7d0cd 3,147-156,241,243
+  s_2d213caa0f9fa7::t_b93c88194794f3 24-28,30-31
+  s_2d213caa0f9fa7::t_adf3e9a69921c8 132,140-141,143-146
+  s_2d213caa0f9fa7::t_e78169b4aabd29 186-193,205
+src/shell/observability/deployment-smoke-gate.test.ts
+  s_2d213caa0f9fa7::t_313a8edff7178a 2,116,119-123
+  s_2d213caa0f9fa7::t_14caaefe4251f9 82-85
+  s_2d213caa0f9fa7::t_326338a8fba9af 117-118
+  s_2d213caa0f9fa7::t_14c1e9cd9d9eb7 8,81
+  s_2d213caa0f9fa7::t_84ca671d03a164 1,3,5-6,9,11-12,15-19,21-24,26-33,35-63,75,98-113,126-127
+  s_2d213caa0f9fa7::t_aa7d2fc076c928 7,10,13-14,20,25
+  s_2d213caa0f9fa7::t_f804b015179fa9 4,64-74,76-80,86-97
+  s_2d213caa0f9fa7::t_8bdcbeee490cc0 34
+  s_2d213caa0f9fa7::t_1c568884683ede 114-115,124-125
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "1bd250c71176bc1c099a532b11177271e3778fbd",
+  "prompts": {},
+  "sessions": {
+    "s_2d213caa0f9fa7": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019fec85-2e87-7de5-958b-56d220909d66",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

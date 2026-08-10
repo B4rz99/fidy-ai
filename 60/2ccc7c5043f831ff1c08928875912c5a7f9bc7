@@ -1,0 +1,60 @@
+src/shell/db/migrations/0017-whatsapp-durable-propagation.ts
+  s_1c39da18ea4763::t_a8ebc096055d09 21
+  s_1c39da18ea4763::t_64db2e4ee1311d 1-20,22-25
+src/shell/channels/whatsapp/outbound.ts
+  s_1c39da18ea4763::t_65bad9e4ac6759 12,97-101,116-117
+  s_1c39da18ea4763::t_c82e01b181b3a3 91,127,195-196,206
+  s_1c39da18ea4763::t_393f5a9b2e86da 93-96,114
+  s_1c39da18ea4763::t_5495e830a51538 13
+  s_1c39da18ea4763::t_93c02264115135 87-88,90,92,118-119,123,202
+  s_1c39da18ea4763::t_8024485f164113 19,89
+  s_1c39da18ea4763::t_7f7459e94634af 102-113,115
+src/shell/db/migrations/registry.ts
+  s_1c39da18ea4763::t_a689a8d3b6a5ca 17,44
+src/shell/channels/whatsapp/worker.ts
+  s_1c39da18ea4763::t_3ee5636dda0ff6 1,56,58-66
+  s_1c39da18ea4763::t_e8e8c504c103f8 6
+  s_1c39da18ea4763::t_d5796cd377c687 44,91-93,97-112
+  s_1c39da18ea4763::t_7f7459e94634af 43,94-96,113-114
+  s_1c39da18ea4763::t_bb112eb545b588 45-54,57,67-80,82-86,88-90
+src/shell/channels/whatsapp/whatsapp-channel.test.ts
+  s_1c39da18ea4763::t_01be24c8fc3c33 1020
+  s_1c39da18ea4763::t_aeda0ad1b1ae77 1864
+  s_1c39da18ea4763::t_9c3e4cfa3881f0 342,565
+src/shell/channels/whatsapp/kapso-client.ts
+  s_1c39da18ea4763::t_e82d6bbeadb3c1 51
+  s_1c39da18ea4763::t_c88aeb9dbbd2f8 365-366
+src/shell/channels/whatsapp/repo.ts
+  s_1c39da18ea4763::t_4b6a758c4585da 553-559
+  s_1c39da18ea4763::t_7411ef176e77e3 24,278-282,342-343,346-347,444-448
+  s_1c39da18ea4763::t_d94c8d9fda3132 37,546,563
+  s_1c39da18ea4763::t_f1e21605c4aad9 403
+  s_1c39da18ea4763::t_192068efeb82b6 25,488,529,561-562,564-574
+  s_1c39da18ea4763::t_e5e51d1b5300df 406
+  s_1c39da18ea4763::t_c7f715a6517d03 407-412
+  s_1c39da18ea4763::t_f0dc878bce5c1b 395-397,500-502
+  s_1c39da18ea4763::t_4bf514e2ebdb90 489-493,528,530-531,547-552,560
+src/shell/channels/whatsapp/routes.ts
+  s_1c39da18ea4763::t_041a7335028479 153-170
+  s_1c39da18ea4763::t_7f7459e94634af 22,143-152,171-172,271,298-300,311
+  s_1c39da18ea4763::t_bb112eb545b588 23-27
+  s_1c39da18ea4763::t_fc9ec3c9fa4e00 272,296,301-310
+  s_1c39da18ea4763::t_c8351b14f5b730 273-284,286-289,291-295,297
+  s_1c39da18ea4763::t_76e5478adf4915 285
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "602ccc7c5043f831ff1c08928875912c5a7f9bc7",
+  "prompts": {},
+  "sessions": {
+    "s_1c39da18ea4763": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019febe2-1de7-70a3-b516-a2fbaa6d2e84",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": null
+    }
+  }
+}

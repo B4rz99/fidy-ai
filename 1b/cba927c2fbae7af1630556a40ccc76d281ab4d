@@ -1,0 +1,30 @@
+README.md
+  s_b1062aa8b42d6d::t_c9982509d2d653 34-35,67-70
+scripts/check-production-image.sh
+  s_b1062aa8b42d6d::t_fc6934addcf21b 185
+  s_b1062aa8b42d6d::t_47d219d9663085 65,311
+src/shell/observability/release-preparation.ts
+  s_b1062aa8b42d6d::t_db013abbf23a35 39-40
+  s_b1062aa8b42d6d::t_89a1cbdabaeb8e 41-46
+src/shell/observability/release-preparation.test.ts
+  s_b1062aa8b42d6d::t_f68c579074f496 115,118
+  s_b1062aa8b42d6d::t_49605762aa9245 125-135
+Dockerfile
+  s_b1062aa8b42d6d::t_794f7e495713bb 29
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "1bcba927c2fbae7af1630556a40ccc76d281ab4d",
+  "prompts": {},
+  "sessions": {
+    "s_b1062aa8b42d6d": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019fe798-3a46-756b-8fb0-ec75e3ef0e87",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

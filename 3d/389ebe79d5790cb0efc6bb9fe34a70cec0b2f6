@@ -1,0 +1,21 @@
+src/shell/observability/sentry-smoke-reader.ts
+  s_2d213caa0f9fa7::t_b37bdebfbe1086 175,178
+source-scope.mjs
+  s_2d213caa0f9fa7::t_1b5941f110cb9f 14-15
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "3d389ebe79d5790cb0efc6bb9fe34a70cec0b2f6",
+  "prompts": {},
+  "sessions": {
+    "s_2d213caa0f9fa7": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019fec85-2e87-7de5-958b-56d220909d66",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

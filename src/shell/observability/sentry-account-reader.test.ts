@@ -102,7 +102,11 @@ it.effect("reads only the account facts needed by policy and returns no account 
     };
     const client = makeHttpClient((request) => {
       requests.push(request);
-      return Effect.succeed(responseJson(request, bodyFor(new URL(request.url).pathname)));
+      return Effect.succeed(
+        responseJson(request, bodyFor(new URL(request.url).pathname), {
+          link: '<https://sentry.io/previous>; rel="previous"; results="false", <https://sentry.io/next>; rel="next"; results="false"',
+        })
+      );
     });
 
     const observation = yield* inspectSentryAccount(
@@ -129,6 +133,43 @@ it.effect("reads only the account facts needed by policy and returns no account 
     expect(observationValues).not.toContain(production);
     expect(observationValues).not.toContain(nonProduction);
     expect(observationValues).not.toContain(token);
+  })
+);
+
+it.effect("accepts an organization response with no data region", () =>
+  Effect.gen(function* () {
+    const organization = "private-organization";
+    const client = makeHttpClient((request) => {
+      const path = new URL(request.url).pathname;
+      if (path.endsWith(`/organizations/${organization}/`)) {
+        return Effect.succeed(responseJson(request, { dataRegion: null }));
+      }
+      if (path.endsWith(`/organizations/${organization}/projects/`)) {
+        return Effect.succeed(
+          responseJson(request, [
+            { slug: "private-production" },
+            { slug: "private-non-production" },
+          ])
+        );
+      }
+      if (path.endsWith("/keys/")) {
+        return Effect.succeed(responseJson(request, [{ isActive: true, rateLimit: null }]));
+      }
+      return Effect.succeed(responseJson(request, [{ name: "production" }]));
+    });
+
+    const observation = yield* inspectSentryAccount(
+      readerConfig({
+        organization,
+        production: "private-production",
+        nonProduction: "private-non-production",
+        token: "private-token",
+      })
+    ).pipe(Effect.provideService(HttpClient.HttpClient, client));
+
+    expect(observation._tag).toBe("available");
+    if (observation._tag !== "available") throw new Error("expected available observation");
+    expect(observation.storageRegion._tag).toBe("None");
   })
 );
 

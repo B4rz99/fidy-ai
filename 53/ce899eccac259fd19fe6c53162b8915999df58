@@ -75,6 +75,8 @@ src/shell/observability/sentry-adapter.ts
   s_be04a7e549ad29::t_b33938937eb138 510-511,513-515,517-519
 src/shell/channels/whatsapp/routes.ts
   s_be04a7e549ad29::t_aa1f9c00f2b602 242-260,262-263
+src/shell/db/migrations/registry.ts
+  s_be04a7e549ad29::t_8fc0d17565b69f 18,46
 ---
 {
   "schema_version": "authorship/3.0.0",

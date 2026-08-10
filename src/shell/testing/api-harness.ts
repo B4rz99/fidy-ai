@@ -1,9 +1,10 @@
 import { BunHttpServer, BunServices } from "@effect/platform-bun";
-import { Context, DateTime, Effect, Layer, Ref, type Schema } from "effect";
+import { Context, DateTime, Effect, Layer, Option, Ref, type Schema } from "effect";
 import { type HttpClient, type HttpClientError } from "effect/unstable/http";
 import { HttpApiClient } from "effect/unstable/httpapi";
 import { type AgentBearerToken } from "~/core/tokens/model";
 import { makeAgentAuthorizationClientLive } from "~/shell/_shared/authz";
+import { okStatus } from "~/shell/_shared/http-status";
 import type {
   ConsentRequired,
   NotFound,
@@ -20,6 +21,7 @@ import {
 } from "~/shell/channels/whatsapp/kapso-client";
 import { WhatsAppProviderMessageId } from "~/shell/channels/whatsapp/model";
 import { MigrationSqlClient, MigratorLive, PgLive } from "~/shell/db/client";
+import { TelemetryHttpStatus } from "~/shell/observability/protocol";
 import { makeDevelopmentSeedLive } from "~/shell/db/development-seed";
 import { defaultAgentBearer } from "./identity-fixtures";
 import { TestPublicNamespace } from "./test-config";
@@ -91,6 +93,7 @@ const TestKapsoClient = Layer.effectContext(
               safeReason: "provider_unavailable",
               deliveryCertainty: "ambiguous",
               automaticRetry: false,
+              responseStatus: Option.none(),
             });
           }
           return {
@@ -100,6 +103,7 @@ const TestKapsoClient = Layer.effectContext(
               providerMessageId: WhatsAppProviderMessageId.make("wamid.test-outbound"),
             },
             sentAt: yield* DateTime.now,
+            responseStatus: TelemetryHttpStatus.make(okStatus),
           };
         }),
     };

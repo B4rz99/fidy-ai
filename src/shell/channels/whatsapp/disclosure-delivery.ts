@@ -271,6 +271,7 @@ export const applyConsentDisclosureLifecycle = Effect.fn("WhatsApp.applyDisclosu
         deliveryCertainty: "rejected",
         safeReason: evidence.reason,
         automaticRetry: evidence.automaticRetry,
+        responseStatus: Option.none(),
       }),
       occurredAt: evidence.occurredAt,
       providerEvidence: true,

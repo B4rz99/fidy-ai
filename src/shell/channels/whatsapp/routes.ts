@@ -19,6 +19,13 @@ import {
   HttpServerResponse,
 } from "effect/unstable/http";
 import type { SqlClient } from "effect/unstable/sql";
+import {
+  TelemetryAttempt,
+  TelemetryCount,
+  TelemetryDuration,
+  TelemetryHttpStatus,
+} from "~/shell/observability/protocol";
+import { Telemetry } from "~/shell/observability/telemetry";
 import type { OnboardingConsentRequired } from "~/shell/agent/agent-service";
 import { admitAgentConversationTurn } from "~/shell/agent/conversation";
 import type { AgentConversationAdmission } from "~/shell/agent/conversation";
@@ -137,7 +144,31 @@ const enqueueAuthorizedTurn = (
       event.messageEvidence.providerMessageId,
       event.receivedAt
     );
-    const enqueueResult = yield* enqueueWhatsAppTurn({ admission, event, deliveryKey });
+    const telemetry = yield* Effect.serviceOption(Telemetry);
+    const enqueueResult = yield* Option.match(telemetry, {
+      onNone: () =>
+        enqueueWhatsAppTurn({ admission, event, deliveryKey, propagation: Option.none() }),
+      onSome: (service) =>
+        service.span(
+          {
+            component: "whatsapp",
+            operation: "whatsapp.publishTurn",
+            trigger: "kapso_webhook",
+            spanOperation: "queue.publish",
+            workKind: "queue_publication",
+            metadata: {
+              _tag: "Queue",
+              attempt: TelemetryAttempt.make(1),
+              inputCount: TelemetryCount.make(1),
+              delayMilliseconds: TelemetryDuration.make(0),
+            },
+          },
+          Effect.gen(function* () {
+            const propagation = yield* service.captureDurableContext;
+            return yield* enqueueWhatsAppTurn({ admission, event, deliveryKey, propagation });
+          })
+        ),
+    });
     return enqueueResult.inserted ? ("enqueued" as const) : ("duplicate" as const);
   });
 
@@ -287,7 +318,32 @@ const handleKapsoWebhook = (
       receivedAt,
     });
 
-    return yield* HttpServerResponse.json(yield* processKapsoInboundReceipt(receipt));
+    const telemetry = yield* Effect.serviceOption(Telemetry);
+    const work = processKapsoInboundReceipt(receipt).pipe(
+      Effect.flatMap((summary) => HttpServerResponse.json(summary))
+    );
+    return yield* Option.match(telemetry, {
+      onNone: () => work,
+      onSome: (service) =>
+        service.rootSpan(
+          {
+            component: "whatsapp",
+            operation: "http.kapsoWebhook",
+            trigger: "kapso_webhook",
+            spanOperation: "http.server",
+            workKind: "http_request",
+            metadata: {
+              _tag: "Http",
+              method: "POST",
+              route: "/webhooks/kapso",
+              status: Option.none(),
+            },
+          },
+          Effect.tap(work, (response) =>
+            service.recordResponseStatus(TelemetryHttpStatus.make(response.status))
+          )
+        ),
+    });
   });
 
 const handleKapsoIdentityWebhook = (

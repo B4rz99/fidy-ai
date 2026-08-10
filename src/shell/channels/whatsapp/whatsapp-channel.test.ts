@@ -39,10 +39,17 @@ import {
   seedConsentedAgentIdentity,
   seedDevelopmentIdentity,
 } from "~/shell/db/development-seed";
-import { ApiHarness, ApiHarnessClient, ApiHarnessKapsoControl } from "~/shell/testing/api-harness";
+import {
+  ApiHarness,
+  ApiHarnessClient,
+  ApiHarnessKapsoControl,
+  ApiTelemetryHarness,
+} from "~/shell/testing/api-harness";
 import { makeLanguageModelFinishPart } from "~/shell/testing/language-model-fixtures";
 import { withUserTransaction } from "~/shell/db/user-transaction";
 import { DisabledTelemetryResource, TelemetryDisabled } from "~/shell/observability/disabled";
+import { EnvelopeRecorder } from "~/shell/observability/envelope-recorder";
+import { ProjectedTransaction } from "~/shell/observability/projectors";
 import { Telemetry, makeTelemetryService } from "~/shell/observability/telemetry";
 import {
   claimConsentDisclosureDelivery,
@@ -55,6 +62,11 @@ import {
   applyConsentDisclosureLifecycle,
   processDueConsentDisclosureDelivery,
 } from "./disclosure-delivery";
+import {
+  DurableTraceContext,
+  TelemetryAttempt,
+  TelemetryHttpStatus,
+} from "~/shell/observability/protocol";
 import {
   appendConsentRecord,
   findPendingConsentExchange,
@@ -91,13 +103,30 @@ import { processNextWhatsAppTurn, runSupervisedWhatsAppLoop, runWhatsAppRetentio
 import { testWhatsAppCaller } from "~/shell/testing/whatsapp-caller";
 
 const deliveryKey = WhatsAppDeliveryKey.make("delivery-worker-fixture");
+const enqueueTurn = (
+  input: Omit<Parameters<typeof enqueueWhatsAppTurn>[0], "propagation">
+): ReturnType<typeof enqueueWhatsAppTurn> =>
+  enqueueWhatsAppTurn({ ...input, propagation: Option.none() });
+const sendFreeFormFixture = (
+  userId: UserId,
+  reply: AgentReply,
+  now: DateTime.Utc
+): ReturnType<typeof sendKapsoFreeForm> =>
+  sendKapsoFreeForm({ userId, reply, now, attempt: TelemetryAttempt.make(1) });
 const fixtureBytes = (
   name: "kapso-text-v2.json" | "kapso-voice-v2.json"
 ): Effect.Effect<Uint8Array<ArrayBuffer>> =>
   Effect.promise(() => Bun.file(new URL(`./fixtures/${name}`, import.meta.url)).bytes());
 const postSignedTextFixture = Effect.fn("WhatsApp.postSignedTextFixture")(function* (
   input: Readonly<{ providerMessageId: string }> &
-    Partial<Readonly<{ phoneNumber: E164PhoneNumber; text: string; occurredAt: DateTime.Utc }>>
+    Partial<
+      Readonly<{
+        phoneNumber: E164PhoneNumber;
+        text: string;
+        occurredAt: DateTime.Utc;
+        headers: Readonly<Record<string, string>>;
+      }>
+    >
 ) {
   const phoneNumber = input.phoneNumber ?? E164PhoneNumber.make("+573001234567");
   const text = input.text ?? "almuerzo 25 mil";
@@ -117,9 +146,128 @@ const postSignedTextFixture = Effect.fn("WhatsApp.postSignedTextFixture")(functi
     .update(body)
     .digest("hex");
   return yield* HttpClient.post("/webhooks/kapso", {
-    headers: { "x-webhook-signature": signature, "x-idempotency-key": input.providerMessageId },
+    headers: {
+      "x-webhook-signature": signature,
+      "x-idempotency-key": input.providerMessageId,
+      ...input.headers,
+    },
     body: HttpBody.uint8Array(body, "application/json"),
   });
+});
+const recordedTransactions = Effect.fn("WhatsApp.recordedTransactions")(function* () {
+  const recorder = yield* EnvelopeRecorder;
+  const envelopes = yield* recorder.serializedEnvelopes;
+  return envelopes.flatMap((bytes) => {
+    const lines = new TextDecoder().decode(bytes).split("\n");
+    const payloads: Array<ProjectedTransaction> = [];
+    for (let index = 2; index < lines.length; index += 2) {
+      const payload = Schema.decodeUnknownOption(ProjectedTransaction)(
+        Schema.decodeUnknownSync(Schema.UnknownFromJsonString)(lines[index] ?? "null")
+      );
+      if (Option.isSome(payload)) payloads.push(payload.value);
+    }
+    return payloads;
+  });
+});
+const requiredTransaction = (
+  transactions: ReadonlyArray<ProjectedTransaction>,
+  operation: ProjectedTransaction["transaction"]
+): ProjectedTransaction =>
+  Option.getOrThrow(
+    Option.fromNullishOr(transactions.find((transaction) => transaction.transaction === operation))
+  );
+const expectAuthenticatedTrace = (
+  transactions: ReadonlyArray<ProjectedTransaction>,
+  forgedTraceId: string
+): void => {
+  const ingress = requiredTransaction(transactions, "POST /webhooks/kapso");
+  const publication = requiredTransaction(transactions, "whatsapp.publishTurn");
+  const processing = requiredTransaction(transactions, "whatsapp.processTurn");
+  const hostedTurn = requiredTransaction(transactions, "agent.hostedTurn");
+  const modelRound = requiredTransaction(transactions, "agent.modelRound");
+  const provider = requiredTransaction(transactions, "whatsapp.sendText");
+  expect(ingress.contexts.trace.parent_span_id).toBeUndefined();
+  expect(ingress.contexts.trace.trace_id).not.toBe(forgedTraceId);
+  expect(ingress.contexts.trace.data["fidy.operation"]).toBe("http.kapsoWebhook");
+  expect(publication.contexts.trace).toMatchObject({
+    trace_id: ingress.contexts.trace.trace_id,
+    parent_span_id: ingress.contexts.trace.span_id,
+    op: "queue.publish",
+  });
+  expect(processing.contexts.trace).toMatchObject({
+    trace_id: ingress.contexts.trace.trace_id,
+    parent_span_id: publication.contexts.trace.span_id,
+    op: "queue.process",
+    data: { "fidy.attempt": 1, "fidy.input_count": 1 },
+  });
+  expect(processing.contexts.trace.data["fidy.delay_milliseconds"]).toBeGreaterThanOrEqual(2_500);
+  expect(processing.contexts.trace.data["fidy.delay_milliseconds"]).toBeLessThanOrEqual(3_000);
+  expect(hostedTurn.contexts.trace).toMatchObject({
+    trace_id: ingress.contexts.trace.trace_id,
+    parent_span_id: processing.contexts.trace.span_id,
+    op: "agent.turn",
+  });
+  expect(modelRound.contexts.trace).toMatchObject({
+    trace_id: ingress.contexts.trace.trace_id,
+    parent_span_id: hostedTurn.contexts.trace.span_id,
+    op: "agent.model",
+  });
+  expect(provider.contexts.trace).toMatchObject({
+    trace_id: ingress.contexts.trace.trace_id,
+    parent_span_id: processing.contexts.trace.span_id,
+    op: "http.client",
+    data: {
+      "fidy.provider": "kapso",
+      "fidy.attempt": 1,
+      "http.response.status_code": 200,
+    },
+  });
+};
+const durableContextFixture = (
+  traceId: string,
+  parentSpanId: string,
+  capturedAt: DateTime.Utc
+): Effect.Effect<DurableTraceContext, Schema.SchemaError> =>
+  Schema.decodeUnknownEffect(DurableTraceContext)({
+    version: 1,
+    traceId,
+    parentSpanId,
+    sampled: true,
+    capturedAtUnixMilliseconds: DateTime.toEpochMillis(capturedAt),
+  });
+
+const enqueueTraceFixture = Effect.fn("WhatsApp.enqueueTraceFixture")(function* (
+  index: number,
+  eventTime: DateTime.Utc
+) {
+  const suffix = String(index + 1);
+  const userId = UserId.make(`f1d1a000-0000-4000-8000-${String(index + 930).padStart(12, "0")}`);
+  yield* seedConsentedAgentIdentity({
+    userId,
+    bearer: AgentBearerToken.make(
+      `fin_trace${suffix.padStart(3, "0")}_abcdefghijklmnopqrstuvwxyz0123456789ABCD`
+    ),
+  });
+  const caller = testWhatsAppCaller(
+    E164PhoneNumber.make(`+5730012300${String(index).padStart(2, "0")}`)
+  );
+  yield* associateWhatsAppIdentity(userId, { ...caller, verifiedAt: eventTime });
+  const event = {
+    ...makeKapsoTextEvent(`wamid.concurrent-trace-${suffix}`, "taxi", eventTime),
+    caller,
+  };
+  const context = yield* durableContextFixture(suffix.repeat(32), suffix.repeat(16), eventTime);
+  yield* enqueueWhatsAppTurn({
+    admission: {
+      _tag: "AuthorizedTurn",
+      userId,
+      inboundMessage: { text: TranscriptText.make("taxi") },
+    },
+    event,
+    deliveryKey,
+    propagation: Option.some(context),
+  });
+  return { userId, context } as const;
 });
 const recordedEvents = Effect.fn("WhatsApp.recordedEvents")(function* (receivedAt: DateTime.Utc) {
   const text = yield* decodeKapsoWebhook({
@@ -279,6 +427,10 @@ const WhatsAppHarness = AgentService.layer.pipe(
   Layer.provideMerge(ApiHarness),
   Layer.provide(TelemetryDisabled)
 );
+const WhatsAppTraceHarness = AgentService.layer.pipe(
+  Layer.provideMerge(ScriptedWhatsAppModel),
+  Layer.provideMerge(ApiTelemetryHarness)
+);
 const makeKapsoTextEvent = (
   providerMessageId: string,
   text: string,
@@ -338,6 +490,7 @@ const kapsoClientFixture = (
       providerMessageId: WhatsAppProviderMessageId;
     };
     sentAt: DateTime.Utc;
+    responseStatus: TelemetryHttpStatus;
   }> =>
     beforeSend.pipe(
       Effect.as({
@@ -347,6 +500,7 @@ const kapsoClientFixture = (
           providerMessageId: WhatsAppProviderMessageId.make(providerMessageId),
         },
         sentAt,
+        responseStatus: TelemetryHttpStatus.make(200),
       })
     ),
 });
@@ -414,14 +568,14 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
             return yield* Effect.die("expected authorized fixture turns");
           }
           expect(
-            (yield* enqueueWhatsAppTurn({
+            (yield* enqueueTurn({
               admission: firstAdmission,
               event: first,
               deliveryKey,
             })).inserted
           ).toBe(true);
           expect(
-            (yield* enqueueWhatsAppTurn({
+            (yield* enqueueTurn({
               admission: secondAdmission,
               event: second,
               deliveryKey,
@@ -462,7 +616,7 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           expect(transactions).toEqual([{ counterparty: "WhatsAppTaxi" }]);
 
           expect(
-            (yield* enqueueWhatsAppTurn({
+            (yield* enqueueTurn({
               admission: firstAdmission,
               event: first,
               deliveryKey,
@@ -486,7 +640,7 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         if (admission._tag !== "AuthorizedTurn") {
           return yield* Effect.die("expected authorized text turn");
         }
-        yield* enqueueWhatsAppTurn({
+        yield* enqueueTurn({
           admission,
           event: inbound,
           deliveryKey,
@@ -561,12 +715,12 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         };
         yield* Effect.all(
           [
-            enqueueWhatsAppTurn({
+            enqueueTurn({
               admission: authorizedTurn(first),
               event: first,
               deliveryKey,
             }),
-            enqueueWhatsAppTurn({
+            enqueueTurn({
               admission: authorizedTurn(second, secondUserId),
               event: second,
               deliveryKey,
@@ -591,6 +745,7 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
                   ),
                 },
                 sentAt: eventTime,
+                responseStatus: TelemetryHttpStatus.make(200),
               }))
             ),
         };
@@ -630,7 +785,7 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         yield* truncateWhatsAppChannel;
         const eventTime = DateTime.makeUnsafe("2026-04-03T12:00:02.000Z");
         const inbound = makeKapsoTextEvent("wamid.gateway-boundary", "pan 5 mil", eventTime);
-        yield* enqueueWhatsAppTurn({
+        yield* enqueueTurn({
           admission: authorizedTurn(inbound),
           event: inbound,
           deliveryKey,
@@ -683,7 +838,7 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         yield* truncateWhatsAppChannel;
         const eventTime = yield* DateTime.now;
         const inbound = makeKapsoTextEvent("wamid.ambiguous-crash", "mercado 20 mil", eventTime);
-        yield* enqueueWhatsAppTurn({
+        yield* enqueueTurn({
           admission: authorizedTurn(inbound),
           event: inbound,
           deliveryKey,
@@ -759,7 +914,7 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         yield* truncateWhatsAppChannel;
         const eventTime = yield* DateTime.now;
         const inbound = makeKapsoTextEvent("wamid.retention", "x", eventTime);
-        yield* enqueueWhatsAppTurn({
+        yield* enqueueTurn({
           admission: authorizedTurn(inbound),
           event: inbound,
           deliveryKey,
@@ -803,7 +958,7 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           Array.from({ length: 32 }, (_, index) => index),
           (index) => {
             const inbound = makeKapsoTextEvent(`wamid.capacity-${index}`, "x", eventTime);
-            return enqueueWhatsAppTurn({
+            return enqueueTurn({
               admission: authorizedTurn(inbound),
               event: inbound,
               deliveryKey,
@@ -846,14 +1001,14 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         const first = makeKapsoTextEvent("wamid.boundary-first", "a".repeat(8_000), eventTime);
         const second = makeKapsoTextEvent("wamid.boundary-second", "b".repeat(7_999), eventTime);
         expect(
-          (yield* enqueueWhatsAppTurn({
+          (yield* enqueueTurn({
             admission: authorizedTurn(first),
             event: first,
             deliveryKey,
           })).inserted
         ).toBe(true);
         expect(
-          (yield* enqueueWhatsAppTurn({
+          (yield* enqueueTurn({
             admission: authorizedTurn(second),
             event: second,
             deliveryKey,
@@ -861,7 +1016,7 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         ).toBe(true);
 
         const overflow = makeKapsoTextEvent("wamid.boundary-overflow", "c", eventTime);
-        const failure = yield* enqueueWhatsAppTurn({
+        const failure = yield* enqueueTurn({
           admission: authorizedTurn(overflow),
           event: overflow,
           deliveryKey,
@@ -887,7 +1042,7 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         yield* truncateWhatsAppChannel;
         const eventTime = DateTime.makeUnsafe("2026-04-03T12:00:02.000Z");
         const inbound = makeKapsoTextEvent("wamid.agent-failure", "mercado 20 mil", eventTime);
-        yield* enqueueWhatsAppTurn({
+        yield* enqueueTurn({
           admission: authorizedTurn(inbound),
           event: inbound,
           deliveryKey,
@@ -930,6 +1085,7 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           rootSpan: (_descriptor, work) => work,
           continueSpan: (_savedContext, _descriptor, work) => work,
           recordOutcome: () => Effect.void,
+          recordResponseStatus: () => Effect.void,
           captureFailure: (failure) =>
             Ref.update(captures, (count) => count + 1).pipe(
               Effect.andThen(
@@ -999,7 +1155,7 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
             Ref.update(sends, (count) => count + 1)
           );
           const first = makeKapsoTextEvent("wamid.consent-revoked-first", "primero", eventTime);
-          yield* enqueueWhatsAppTurn({
+          yield* enqueueTurn({
             admission: authorizedTurn(first),
             event: first,
             deliveryKey,
@@ -1010,7 +1166,7 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
 
           const secondTime = DateTime.add(eventTime, { seconds: 4 });
           const second = makeKapsoTextEvent("wamid.consent-revoked-second", "segundo", secondTime);
-          yield* enqueueWhatsAppTurn({
+          yield* enqueueTurn({
             admission: authorizedTurn(second),
             event: second,
             deliveryKey,
@@ -1039,6 +1195,7 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
                         safeReason: "rate_limited",
                         deliveryCertainty: "rejected",
                         automaticRetry: true,
+                        responseStatus: Option.some(TelemetryHttpStatus.make(429)),
                       })
                     )
                   : Effect.succeed({
@@ -1050,12 +1207,13 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
                         ),
                       },
                       sentAt: eventTime,
+                      responseStatus: TelemetryHttpStatus.make(200),
                     })
               )
             ),
         };
         const transient = makeKapsoTextEvent("wamid.transient-retry", "primero", eventTime);
-        yield* enqueueWhatsAppTurn({
+        yield* enqueueTurn({
           admission: authorizedTurn(transient),
           event: transient,
           deliveryKey,
@@ -1063,11 +1221,15 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         expect(
           yield* processTurnWith(DateTime.add(eventTime, { seconds: 3 }), agent, transientKapso)
         ).toBe(true);
+        expect(yield* Ref.get(attempts)).toBe(1);
+        expect(
+          yield* processTurnWith(DateTime.add(eventTime, { seconds: 5 }), agent, transientKapso)
+        ).toBe(true);
         expect(yield* Ref.get(attempts)).toBe(2);
 
-        const ambiguousTime = DateTime.add(eventTime, { seconds: 4 });
+        const ambiguousTime = DateTime.add(eventTime, { seconds: 6 });
         const ambiguous = makeKapsoTextEvent("wamid.ambiguous-no-retry", "segundo", ambiguousTime);
-        yield* enqueueWhatsAppTurn({
+        yield* enqueueTurn({
           admission: authorizedTurn(ambiguous),
           event: ambiguous,
           deliveryKey,
@@ -1082,6 +1244,7 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
                     safeReason: "timeout",
                     deliveryCertainty: "ambiguous",
                     automaticRetry: false,
+                    responseStatus: Option.none(),
                   })
                 )
               )
@@ -1100,7 +1263,7 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         yield* truncateWhatsAppChannel;
         const eventTime = DateTime.makeUnsafe("2026-04-03T12:01:02.000Z");
         const inbound = makeKapsoTextEvent("wamid.openai-toolkit", "mercado 20 mil", eventTime);
-        yield* enqueueWhatsAppTurn({
+        yield* enqueueTurn({
           admission: authorizedTurn(inbound),
           event: inbound,
           deliveryKey,
@@ -1162,7 +1325,7 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         yield* truncateWhatsAppChannel;
         const eventTime = DateTime.makeUnsafe("2026-04-03T12:01:02.000Z");
         const inbound = makeKapsoTextEvent("wamid.openai-transaction", "10000 desayuno", eventTime);
-        yield* enqueueWhatsAppTurn({
+        yield* enqueueTurn({
           admission: authorizedTurn(inbound),
           event: inbound,
           deliveryKey,
@@ -1226,7 +1389,7 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           "almuerzo 25 mil",
           eventTime
         );
-        yield* enqueueWhatsAppTurn({
+        yield* enqueueTurn({
           admission: authorizedTurn(inbound),
           event: inbound,
           deliveryKey,
@@ -1707,6 +1870,7 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
                     safeReason: "timeout",
                     deliveryCertainty: "ambiguous",
                     automaticRetry: false,
+                    responseStatus: Option.none(),
                   })
                 ),
             })
@@ -1749,6 +1913,7 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
                     safeReason: "rate_limited",
                     deliveryCertainty: "rejected",
                     automaticRetry: true,
+                    responseStatus: Option.none(),
                   })
                 )
               )
@@ -1797,6 +1962,7 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
                     safeReason: "timeout",
                     deliveryCertainty: "ambiguous",
                     automaticRetry: false,
+                    responseStatus: Option.none(),
                   })
                 ),
             })
@@ -1935,6 +2101,7 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
                   safeReason: "invalid_recipient",
                   deliveryCertainty: "rejected",
                   automaticRetry: false,
+                  responseStatus: Option.none(),
                 })
               ),
           }),
@@ -2228,7 +2395,7 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         if (admission._tag !== "AuthorizedTurn") {
           return yield* Effect.die("expected authorized formatting fixture");
         }
-        yield* enqueueWhatsAppTurn({ admission, event, deliveryKey });
+        yield* enqueueTurn({ admission, event, deliveryKey });
         const sql = yield* SqlClient.SqlClient;
         yield* withUserTransaction(
           defaultUserId,
@@ -2240,7 +2407,7 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         const destination = yield* Ref.make<
           Option.Option<{ readonly recipient: WhatsAppBusinessScopedUserId }>
         >(Option.none());
-        yield* sendKapsoFreeForm(
+        yield* sendFreeFormFixture(
           defaultUserId,
           agentReplyFixture("**Registré** el movimiento."),
           DateTime.add(eventTime, { seconds: 1 })
@@ -2256,6 +2423,7 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
                     providerMessageId: WhatsAppProviderMessageId.make("wamid.markdown-bold-reply"),
                   },
                   sentAt: eventTime,
+                  responseStatus: TelemetryHttpStatus.make(200),
                 })
               ),
           })
@@ -2277,7 +2445,7 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         const unreachableKapso: KapsoClientService = {
           sendText: () => Effect.die("unsupported reply reached Kapso"),
         };
-        const attachmentFailure = yield* sendKapsoFreeForm(
+        const attachmentFailure = yield* sendFreeFormFixture(
           defaultUserId,
           agentReplyFixture("Adjunto", {
             attachments: Option.some([
@@ -2288,7 +2456,7 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         ).pipe(Effect.provideService(KapsoClient, unreachableKapso), Effect.flip);
         expect(attachmentFailure._tag).toBe("AgentReplyNotRenderable");
 
-        const choiceFailure = yield* sendKapsoFreeForm(
+        const choiceFailure = yield* sendFreeFormFixture(
           defaultUserId,
           agentReplyFixture("Elige", {
             choices: Option.some([{ label: "Sí", message: TranscriptText.make("Sí") }]),
@@ -2315,7 +2483,7 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           ...makeKapsoTextEvent("wamid.revoked-window", "pan 5 mil", eventTime),
           caller: testWhatsAppCaller(E164PhoneNumber.make("+573008887766")),
         };
-        yield* enqueueWhatsAppTurn({
+        yield* enqueueTurn({
           admission: {
             _tag: "AuthorizedTurn",
             userId,
@@ -2350,7 +2518,7 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           sendText: () =>
             Ref.update(sends, (count) => count + 1).pipe(Effect.andThen(Effect.die("called"))),
         };
-        const failure = yield* sendKapsoFreeForm(
+        const failure = yield* sendFreeFormFixture(
           userId,
           agentReplyFixture("No debe salir después de revocar."),
           DateTime.add(eventTime, { minutes: 2 })
@@ -2378,7 +2546,7 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           sendText: () =>
             Ref.update(sends, (count) => count + 1).pipe(Effect.andThen(Effect.die("called"))),
         };
-        const missingWindow = yield* sendKapsoFreeForm(
+        const missingWindow = yield* sendFreeFormFixture(
           defaultUserId,
           agentReplyFixture("Todavía no debe salir."),
           eventTime
@@ -2386,7 +2554,7 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         expect(missingWindow._tag).toBe("WhatsAppWindowClosed");
 
         yield* removeWhatsAppIdentityForTesting(defaultUserId);
-        const missingIdentity = yield* sendKapsoFreeForm(
+        const missingIdentity = yield* sendFreeFormFixture(
           defaultUserId,
           agentReplyFixture("No hay destinatario."),
           eventTime
@@ -2404,7 +2572,7 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         if (admission._tag !== "AuthorizedTurn") {
           return yield* Effect.die("expected authorized fixture turn");
         }
-        yield* enqueueWhatsAppTurn({
+        yield* enqueueTurn({
           admission,
           event: inbound,
           deliveryKey,
@@ -2428,7 +2596,7 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
                 WHERE user_id = ${defaultUserId} AND counterparty = 'ReassociationHistory'`
           )
         ).toEqual([{ counterparty: "ReassociationHistory" }]);
-        const reassociated = yield* sendKapsoFreeForm(
+        const reassociated = yield* sendFreeFormFixture(
           defaultUserId,
           agentReplyFixture("La ventana anterior no se transfiere."),
           eventTime
@@ -2439,13 +2607,414 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           lastWindowOpenUntil: Option.none(),
         });
 
-        const failure = yield* sendKapsoFreeForm(
+        const failure = yield* sendFreeFormFixture(
           defaultUserId,
           agentReplyFixture("No debe salir."),
           DateTime.add(eventTime, { hours: 25 })
         ).pipe(Effect.provideService(KapsoClient, kapsoNeverCalled), Effect.flip);
         expect(failure._tag).toBe("WhatsAppWindowClosed");
         expect(yield* Ref.get(sends)).toBe(0);
+      })
+    );
+  }
+);
+
+layer(WhatsAppTraceHarness, { excludeTestServices: true, timeout: "30 seconds" })(
+  "WhatsApp causal tracing",
+  (it) => {
+    it.effect("continues an authenticated webhook trace through durable delivery", () =>
+      Effect.gen(function* () {
+        yield* seedDevelopmentIdentity(defaultAgentBearer);
+        yield* truncateWhatsAppChannel;
+        const recorder = yield* EnvelopeRecorder;
+        yield* recorder.clear;
+        const receivedAt = yield* DateTime.now;
+        const forgedTraceId = "a".repeat(32);
+        const bodySentinel = "trace-private-message-sentinel";
+
+        const response = yield* postSignedTextFixture({
+          providerMessageId: "wamid.trace-causality",
+          text: bodySentinel,
+          occurredAt: receivedAt,
+          headers: {
+            "sentry-trace": `${forgedTraceId}-${"b".repeat(16)}-1`,
+            baggage: "private-baggage-sentinel",
+            traceparent: `00-${forgedTraceId}-${"c".repeat(16)}-01`,
+            b3: `${forgedTraceId}-${"d".repeat(16)}-1`,
+          },
+        });
+        expect(response.status).toBe(200);
+
+        const sql = yield* SqlClient.SqlClient;
+        const stored = yield* withUserTransaction(
+          defaultUserId,
+          sql`SELECT trace_version AS "traceVersion", trace_id AS "traceId",
+            parent_span_id AS "parentSpanId", trace_sampled AS "sampled",
+            trace_captured_at AS "capturedAt", processing_attempt AS "processingAttempt"
+          FROM whatsapp_inbound_jobs WHERE user_id = ${defaultUserId}`
+        );
+        expect(stored).toHaveLength(1);
+        expect(stored[0]).toMatchObject({ traceVersion: 1, sampled: true, processingAttempt: 0 });
+        expect(stored[0]?.traceId).not.toBe(forgedTraceId);
+        const serializedStored = yield* Schema.encodeEffect(Schema.UnknownFromJsonString)(stored);
+        expect(serializedStored).not.toContain(defaultUserId);
+        expect(serializedStored).not.toContain("wamid.trace-causality");
+        expect(serializedStored).not.toContain(bodySentinel);
+
+        expect(yield* processNextWhatsAppTurn(DateTime.add(receivedAt, { seconds: 3 }))).toBe(true);
+        const transactions = yield* recordedTransactions();
+        expectAuthenticatedTrace(transactions, forgedTraceId);
+        const serialized = yield* Schema.encodeEffect(Schema.UnknownFromJsonString)(transactions);
+        for (const sentinel of [
+          bodySentinel,
+          "private-baggage-sentinel",
+          defaultUserId,
+          defaultWhatsAppPhone,
+          "wamid.trace-causality",
+          "wamid.test-outbound",
+          "Respuesta entregada.",
+          "test-api-key",
+        ]) {
+          expect(serialized).not.toContain(sentinel);
+        }
+      })
+    );
+
+    it.effect("parents a debounced burst from only its newest durable context", () =>
+      Effect.gen(function* () {
+        yield* seedDevelopmentIdentity(defaultAgentBearer);
+        yield* truncateWhatsAppChannel;
+        const recorder = yield* EnvelopeRecorder;
+        yield* recorder.clear;
+        const firstAt = yield* DateTime.now;
+        const secondAt = DateTime.add(firstAt, { seconds: 1 });
+        const olderContext = yield* durableContextFixture("3".repeat(32), "4".repeat(16), firstAt);
+        const newestContext = yield* durableContextFixture("5".repeat(32), "6".repeat(16), firstAt);
+        const first = makeKapsoTextEvent("wamid.trace-burst-older", "almuerzo", firstAt);
+        const second = {
+          ...makeKapsoTextEvent(
+            "wamid.trace-burst-newest",
+            "taxi",
+            DateTime.subtract(firstAt, { seconds: 1 })
+          ),
+          receivedAt: secondAt,
+        };
+        yield* enqueueWhatsAppTurn({
+          admission: authorizedTurn(first),
+          event: first,
+          deliveryKey,
+          propagation: Option.some(olderContext),
+        });
+        yield* enqueueWhatsAppTurn({
+          admission: authorizedTurn(second),
+          event: second,
+          deliveryKey,
+          propagation: Option.some(newestContext),
+        });
+
+        expect(
+          yield* processNextWhatsAppTurn(DateTime.add(secondAt, { seconds: 3 })).pipe(
+            Effect.provideService(AgentService, agentServiceFixture()),
+            Effect.provideService(
+              KapsoClient,
+              kapsoClientFixture("wamid.trace-burst-reply", secondAt)
+            )
+          )
+        ).toBe(true);
+        const processing = (yield* recordedTransactions()).find(
+          (transaction) => transaction.transaction === "whatsapp.processTurn"
+        );
+        expect(processing?.contexts.trace).toMatchObject({
+          trace_id: newestContext.traceId,
+          parent_span_id: newestContext.parentSpanId,
+          data: { "fidy.input_count": 2 },
+        });
+        expect(processing?.contexts.trace.trace_id).not.toBe(olderContext.traceId);
+      })
+    );
+
+    it.effect(
+      "rejects widened storage and discards stale durable context without losing the turn",
+      () =>
+        Effect.gen(function* () {
+          yield* seedDevelopmentIdentity(defaultAgentBearer);
+          yield* truncateWhatsAppChannel;
+          const recorder = yield* EnvelopeRecorder;
+          yield* recorder.clear;
+          const eventTime = yield* DateTime.now;
+          const event = makeKapsoTextEvent("wamid.stale-propagation", "almuerzo 25 mil", eventTime);
+          const staleTraceId = "1".repeat(32);
+          const stalePropagation = yield* Schema.decodeUnknownEffect(DurableTraceContext)({
+            version: 1,
+            traceId: staleTraceId,
+            parentSpanId: "2".repeat(16),
+            sampled: true,
+            capturedAtUnixMilliseconds: 0,
+          });
+          yield* enqueueWhatsAppTurn({
+            admission: authorizedTurn(event),
+            event,
+            deliveryKey,
+            propagation: Option.some(stalePropagation),
+          });
+
+          const admin = yield* MigrationSqlClient;
+          const partial = yield* Effect.exit(
+            admin`UPDATE whatsapp_inbound_jobs SET parent_span_id = NULL
+            WHERE trace_id = ${staleTraceId}`
+          );
+          const oversized = yield* Effect.exit(
+            admin`UPDATE whatsapp_inbound_jobs SET trace_id = ${"f".repeat(2_048)}
+            WHERE trace_id = ${staleTraceId}`
+          );
+          expect(partial._tag).toBe("Failure");
+          expect(oversized._tag).toBe("Failure");
+
+          const secondUserId = UserId.make("f1d1a000-0000-4000-8000-000000000921");
+          yield* seedConsentedAgentIdentity({
+            userId: secondUserId,
+            bearer: AgentBearerToken.make("fin_traceiso_abcdefghijklmnopqrstuvwxyz0123456789ABCD"),
+          });
+          const sql = yield* SqlClient.SqlClient;
+          expect(
+            yield* withUserTransaction(
+              secondUserId,
+              sql`SELECT trace_id FROM whatsapp_inbound_jobs WHERE trace_id = ${staleTraceId}`
+            )
+          ).toEqual([]);
+
+          expect(
+            yield* processNextWhatsAppTurn(DateTime.add(eventTime, { seconds: 3 })).pipe(
+              Effect.provideService(
+                KapsoClient,
+                kapsoClientFixture("wamid.stale-propagation-reply", eventTime)
+              )
+            )
+          ).toBe(true);
+          const processing = (yield* recordedTransactions()).find(
+            (transaction) => transaction.transaction === "whatsapp.processTurn"
+          );
+          expect(processing?.contexts.trace.parent_span_id).toBeUndefined();
+          expect(processing?.contexts.trace.trace_id).not.toBe(staleTraceId);
+        })
+    );
+
+    it.effect("discards unsupported stored context without losing the turn", () =>
+      Effect.gen(function* () {
+        yield* seedDevelopmentIdentity(defaultAgentBearer);
+        yield* truncateWhatsAppChannel;
+        const recorder = yield* EnvelopeRecorder;
+        yield* recorder.clear;
+        const eventTime = yield* DateTime.now;
+        const traceId = "7".repeat(32);
+        const event = makeKapsoTextEvent("wamid.unsupported-propagation", "taxi", eventTime);
+        yield* enqueueWhatsAppTurn({
+          admission: authorizedTurn(event),
+          event,
+          deliveryKey,
+          propagation: Option.some(
+            yield* durableContextFixture(traceId, "8".repeat(16), eventTime)
+          ),
+        });
+        const admin = yield* MigrationSqlClient;
+        const processed = yield* Effect.acquireUseRelease(
+          admin`ALTER TABLE whatsapp_inbound_jobs
+            DROP CONSTRAINT whatsapp_inbound_jobs_trace_complete_or_absent`,
+          () =>
+            admin`UPDATE whatsapp_inbound_jobs SET trace_version = 2
+              WHERE trace_id = ${traceId}`.pipe(
+              Effect.andThen(
+                processNextWhatsAppTurn(DateTime.add(eventTime, { seconds: 3 })).pipe(
+                  Effect.provideService(
+                    KapsoClient,
+                    kapsoClientFixture("wamid.unsupported-propagation-reply", eventTime)
+                  )
+                )
+              )
+            ),
+          () =>
+            admin`UPDATE whatsapp_inbound_jobs
+              SET trace_version = NULL, trace_id = NULL, parent_span_id = NULL,
+                trace_sampled = NULL, trace_captured_at = NULL
+              WHERE trace_version <> 1`.pipe(
+              Effect.andThen(admin`ALTER TABLE whatsapp_inbound_jobs
+                ADD CONSTRAINT whatsapp_inbound_jobs_trace_complete_or_absent CHECK (
+                  (trace_version IS NULL AND trace_id IS NULL AND parent_span_id IS NULL
+                    AND trace_sampled IS NULL AND trace_captured_at IS NULL)
+                  OR
+                  (trace_version IS NOT NULL AND trace_id IS NOT NULL
+                    AND parent_span_id IS NOT NULL AND trace_sampled IS NOT NULL
+                    AND trace_captured_at IS NOT NULL AND trace_version = 1
+                    AND trace_id ~ '^[0-9a-f]{32}$'
+                    AND parent_span_id ~ '^[0-9a-f]{16}$'
+                    AND trace_captured_at >= 0
+                    AND trace_captured_at <= 8640000000000000)
+                )`),
+              Effect.orDie
+            )
+        );
+        expect(processed).toBe(true);
+        const processing = requiredTransaction(
+          yield* recordedTransactions(),
+          "whatsapp.processTurn"
+        );
+        expect(processing.contexts.trace.parent_span_id).toBeUndefined();
+        expect(processing.contexts.trace.trace_id).not.toBe(traceId);
+      })
+    );
+
+    it.effect("preserves context and bounded provider metadata across a retry", () =>
+      Effect.gen(function* () {
+        yield* seedDevelopmentIdentity(defaultAgentBearer);
+        yield* truncateWhatsAppChannel;
+        const recorder = yield* EnvelopeRecorder;
+        yield* recorder.clear;
+        const eventTime = yield* DateTime.now;
+        const context = yield* durableContextFixture("9".repeat(32), "a".repeat(16), eventTime);
+        const event = makeKapsoTextEvent("wamid.trace-retry", "mercado", eventTime);
+        yield* enqueueWhatsAppTurn({
+          admission: authorizedTurn(event),
+          event,
+          deliveryKey,
+          propagation: Option.some(context),
+        });
+        const attempts = yield* Ref.make(0);
+        const kapso: KapsoClientService = {
+          sendText: () =>
+            Ref.updateAndGet(attempts, (attempt) => attempt + 1).pipe(
+              Effect.flatMap((attempt) =>
+                attempt === 1
+                  ? Effect.fail(
+                      new KapsoSendFailed({
+                        safeReason: "rate_limited",
+                        deliveryCertainty: "rejected",
+                        automaticRetry: true,
+                        responseStatus: Option.some(TelemetryHttpStatus.make(429)),
+                      })
+                    )
+                  : Effect.succeed({
+                      messageEvidence: {
+                        channel: "whatsapp",
+                        provider: "kapso",
+                        providerMessageId:
+                          WhatsAppProviderMessageId.make("wamid.trace-retry-reply"),
+                      },
+                      sentAt: eventTime,
+                      responseStatus: TelemetryHttpStatus.make(200),
+                    })
+              )
+            ),
+        };
+        expect(
+          yield* processTurnWith(
+            DateTime.add(eventTime, { seconds: 3 }),
+            agentServiceFixture(),
+            kapso
+          )
+        ).toBe(true);
+        expect(
+          yield* processTurnWith(
+            DateTime.add(eventTime, { seconds: 5 }),
+            agentServiceFixture(),
+            kapso
+          )
+        ).toBe(true);
+        const transactions = yield* recordedTransactions();
+        const processingAttempts = transactions.filter(
+          (transaction) => transaction.transaction === "whatsapp.processTurn"
+        );
+        const providerAttempts = transactions.filter(
+          (transaction) => transaction.transaction === "whatsapp.sendText"
+        );
+        expect(processingAttempts).toHaveLength(2);
+        expect(providerAttempts).toHaveLength(2);
+        expect(processingAttempts.map((transaction) => transaction.contexts.trace.data)).toEqual([
+          expect.objectContaining({ "fidy.attempt": 1 }),
+          expect.objectContaining({ "fidy.attempt": 2 }),
+        ]);
+        expect(providerAttempts.map((transaction) => transaction.contexts.trace.data)).toEqual([
+          expect.objectContaining({ "fidy.attempt": 1, "http.response.status_code": 429 }),
+          expect.objectContaining({ "fidy.attempt": 2, "http.response.status_code": 200 }),
+        ]);
+        for (const [index, processing] of processingAttempts.entries()) {
+          expect(processing.contexts.trace).toMatchObject({
+            trace_id: context.traceId,
+            parent_span_id: context.parentSpanId,
+          });
+          expect(providerAttempts[index]?.contexts.trace).toMatchObject({
+            trace_id: context.traceId,
+            parent_span_id: processing.contexts.trace.span_id,
+          });
+        }
+        expect(processingAttempts[0]?.contexts.trace.span_id).not.toBe(
+          processingAttempts[1]?.contexts.trace.span_id
+        );
+      })
+    );
+
+    it.effect("isolates trace metadata across eight concurrent worker loops", () =>
+      Effect.gen(function* () {
+        yield* truncateWhatsAppChannel;
+        const recorder = yield* EnvelopeRecorder;
+        yield* recorder.clear;
+        const eventTime = yield* DateTime.now;
+        const fixtures = yield* Effect.forEach(
+          Array.from({ length: 8 }, (_, index) => index),
+          (index) => enqueueTraceFixture(index, eventTime)
+        );
+        const sends = yield* Ref.make(0);
+        const kapso: KapsoClientService = {
+          sendText: () =>
+            Ref.updateAndGet(sends, (count) => count + 1).pipe(
+              Effect.map((count) => ({
+                messageEvidence: {
+                  channel: "whatsapp" as const,
+                  provider: "kapso" as const,
+                  providerMessageId: WhatsAppProviderMessageId.make(
+                    `wamid.concurrent-trace-reply-${count}`
+                  ),
+                },
+                sentAt: eventTime,
+                responseStatus: TelemetryHttpStatus.make(200),
+              }))
+            ),
+        };
+        const workerLoop = Effect.gen(function* () {
+          let processed = 0;
+          while (
+            yield* processTurnWith(
+              DateTime.add(eventTime, { seconds: 3 }),
+              agentServiceFixture(),
+              kapso
+            )
+          ) {
+            processed += 1;
+          }
+          return processed;
+        });
+        const processedByLoop = yield* Effect.all(
+          fixtures.map(() => workerLoop),
+          {
+            concurrency: "unbounded",
+          }
+        );
+        expect(processedByLoop.reduce((total, count) => total + count, 0)).toBe(8);
+        const transactions = yield* recordedTransactions();
+        const processing = transactions.filter(
+          (transaction) => transaction.transaction === "whatsapp.processTurn"
+        );
+        expect(processing).toHaveLength(8);
+        expect(
+          new Set(processing.map((transaction) => transaction.contexts.trace.trace_id))
+        ).toEqual(new Set(fixtures.map(({ context }) => context.traceId)));
+        for (const transaction of processing) {
+          expect(transaction.contexts.trace.data).toMatchObject({
+            "fidy.attempt": 1,
+            "fidy.input_count": 1,
+          });
+        }
+        const serialized = yield* Schema.encodeEffect(Schema.UnknownFromJsonString)(transactions);
+        for (const { userId } of fixtures) expect(serialized).not.toContain(userId);
       })
     );
   }

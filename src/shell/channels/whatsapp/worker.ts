@@ -1,9 +1,10 @@
-import { Cause, DateTime, Effect, Layer, Option, Schedule } from "effect";
+import { Cause, DateTime, Effect, Layer, Option } from "effect";
 import { dual } from "effect/Function";
 import { AgentService } from "~/shell/agent/agent-service";
 import { projectStack } from "~/shell/observability/projectors";
 import { runScheduledWork } from "~/shell/observability/scheduled-work";
 import { Telemetry } from "~/shell/observability/telemetry";
+import { TelemetryCount } from "~/shell/observability/protocol";
 import { processDueConsentDisclosureDelivery } from "./disclosure-delivery";
 import { sendKapsoFreeForm } from "./outbound";
 import {
@@ -11,6 +12,7 @@ import {
   completeWhatsAppTurn,
   failWhatsAppTurn,
   pruneWhatsAppOperationalData,
+  retryWhatsAppTurn,
   startWhatsAppTurn,
 } from "./repo";
 
@@ -23,6 +25,98 @@ const projectCauseForLog = <E extends unknown>(
   stack: projectStack(cause),
 });
 
+type StartedTurn = Effect.Success<ReturnType<typeof startWhatsAppTurn>>;
+type DeliveryError = Effect.Error<ReturnType<typeof sendKapsoFreeForm>>;
+const maximumProcessingAttempts = 3;
+const rejectedRetryDelaySeconds = 1;
+const logDeliveryError = (error: DeliveryError): Effect.Effect<void> =>
+  error._tag === "KapsoSendFailed"
+    ? Effect.logError("WhatsApp Kapso send failed", {
+        safeReason: error.safeReason,
+        deliveryCertainty: error.deliveryCertainty,
+      })
+    : Effect.logError("WhatsApp delivery policy failed", { error: error._tag });
+
+const processStartedTurn = Effect.fn("WhatsApp.processStartedTurn")(function* (input: {
+  readonly started: StartedTurn;
+  readonly claimTime: DateTime.Utc;
+}) {
+  const { claim, inboundMessage } = input.started;
+  const service = yield* AgentService;
+  const prepared = yield* Effect.option(
+    service.handleTurn(claim.userId, inboundMessage).pipe(Effect.tapError(logAgentTurnError))
+  );
+  if (Option.isNone(prepared)) {
+    yield* failWhatsAppTurn(claim, input.claimTime, "agent_failed");
+    return true;
+  }
+
+  const delivery = yield* sendKapsoFreeForm({
+    userId: claim.userId,
+    reply: prepared.value.reply,
+    now: yield* DateTime.now,
+    attempt: input.started.processingAttempt,
+  }).pipe(
+    Effect.match({
+      onFailure: (error) => ({ _tag: "Failure" as const, error }),
+      onSuccess: () => ({ _tag: "Success" as const }),
+    })
+  );
+  if (delivery._tag === "Failure") {
+    yield* logDeliveryError(delivery.error);
+    if (
+      delivery.error._tag === "KapsoSendFailed" &&
+      delivery.error.automaticRetry &&
+      input.started.processingAttempt < maximumProcessingAttempts
+    ) {
+      yield* retryWhatsAppTurn(
+        claim,
+        input.claimTime,
+        DateTime.add(input.claimTime, { seconds: rejectedRetryDelaySeconds })
+      );
+    } else {
+      yield* failWhatsAppTurn(claim, input.claimTime, "send_failed");
+    }
+    return true;
+  }
+
+  yield* service
+    .recordDeliveredReply(prepared.value)
+    .pipe(Effect.catchTag("OnboardingConsentRequired", () => Effect.void));
+  yield* completeWhatsAppTurn(claim, input.claimTime);
+  return true;
+});
+
+const continueStartedTurn = (
+  started: StartedTurn,
+  claimTime: DateTime.Utc
+): Effect.Effect<boolean, never, Effect.Services<ReturnType<typeof processStartedTurn>>> =>
+  Effect.gen(function* () {
+    const work = processStartedTurn({ started, claimTime });
+    const telemetry = yield* Effect.serviceOption(Telemetry);
+    return yield* Option.match(telemetry, {
+      onNone: () => work,
+      onSome: (service) =>
+        service.continueSpan(
+          Option.getOrUndefined(started.propagation),
+          {
+            component: "whatsapp",
+            operation: "whatsapp.processTurn",
+            trigger: "queue",
+            spanOperation: "queue.process",
+            workKind: "queue_attempt",
+            metadata: {
+              _tag: "Queue",
+              attempt: started.processingAttempt,
+              inputCount: TelemetryCount.make(started.inputCount),
+              delayMilliseconds: started.queueDelayMilliseconds,
+            },
+          },
+          work
+        ),
+    });
+  });
+
 /** Processes one due User burst, returning false only when no work is due; failures become terminal evidence. */
 export const processNextWhatsAppTurn = Effect.fn("WhatsApp.processNextTurn")(function* (
   claimTime: DateTime.Utc
@@ -34,52 +128,12 @@ export const processNextWhatsAppTurn = Effect.fn("WhatsApp.processNextTurn")(fun
     yield* failWhatsAppTurn(claim, claimTime, "ambiguous_crash");
     return true;
   }
-
   const started = yield* Effect.option(startWhatsAppTurn(claim, claimTime));
   if (Option.isNone(started)) {
     yield* failWhatsAppTurn(claim, claimTime, "ambiguous_crash");
     return true;
   }
-
-  const service = yield* AgentService;
-  const prepared = yield* Effect.option(
-    service
-      .handleTurn(claim.userId, started.value.inboundMessage)
-      .pipe(Effect.tapError(logAgentTurnError))
-  );
-  if (Option.isNone(prepared)) {
-    yield* failWhatsAppTurn(claim, claimTime, "agent_failed");
-    return true;
-  }
-
-  const sent = yield* Effect.option(
-    sendKapsoFreeForm(claim.userId, prepared.value.reply, yield* DateTime.now).pipe(
-      Effect.retry({
-        while: (error) => error._tag === "KapsoSendFailed" && error.automaticRetry,
-        schedule: Schedule.jittered(
-          Schedule.exponential("1 second").pipe(Schedule.upTo({ times: 3 }))
-        ),
-      }),
-      Effect.tapError((error) =>
-        error._tag === "KapsoSendFailed"
-          ? Effect.logError("WhatsApp Kapso send failed", {
-              safeReason: error.safeReason,
-              deliveryCertainty: error.deliveryCertainty,
-            })
-          : Effect.logError("WhatsApp delivery policy failed", { error: error._tag })
-      )
-    )
-  );
-  if (Option.isNone(sent)) {
-    yield* failWhatsAppTurn(claim, claimTime, "send_failed");
-    return true;
-  }
-
-  yield* service
-    .recordDeliveredReply(prepared.value)
-    .pipe(Effect.catchTag("OnboardingConsentRequired", () => Effect.void));
-  yield* completeWhatsAppTurn(claim, claimTime);
-  return true;
+  return yield* continueStartedTurn(started.value, claimTime);
 });
 
 /**

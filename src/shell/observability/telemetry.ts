@@ -6,6 +6,7 @@ import {
   DurableTraceContext,
   type SpanDescriptor,
   type TelemetryBreadcrumb,
+  type TelemetryHttpStatus,
   type TelemetryModelUsage,
 } from "./protocol";
 
@@ -35,6 +36,11 @@ export type TelemetryAdapter = {
   ) => Effect.Effect<void>;
   /** Replaces the declared outcome retained by an active adapter span. */
   readonly recordOutcome: (span: TelemetrySpan, outcome: DeclaredOutcome) => Effect.Effect<void>;
+  /** Adds a validated HTTP response status to an active HTTP or provider span. */
+  readonly recordResponseStatus: (
+    span: TelemetrySpan,
+    status: TelemetryHttpStatus
+  ) => Effect.Effect<void>;
   /** Emits one already-classified failure, optionally attached to the supplied active span. */
   readonly captureFailure: (
     span: Option.Option<TelemetrySpan>,
@@ -75,6 +81,8 @@ export type TelemetryService = {
   ) => Effect.Effect<A, E, R>;
   /** Replaces the active span's declared outcome; the latest declaration wins. Outside a span, no-op. */
   readonly recordOutcome: (outcome: DeclaredOutcome) => Effect.Effect<void>;
+  /** Adds a bounded response status to the active HTTP or provider span. Outside a span, no-op. */
+  readonly recordResponseStatus: (status: TelemetryHttpStatus) => Effect.Effect<void>;
   /** Captures a classified failure, attaching active trace coordinates when a span exists. */
   readonly captureFailure: (failure: ClassifiedFailure) => Effect.Effect<void>;
   /** Adds an approved breadcrumb to the active span. Outside a span, no-op. */
@@ -237,6 +245,16 @@ const durableContextOf = (
       ),
   });
 
+const withActiveSpan = (
+  effect: (span: TelemetrySpan) => Effect.Effect<void>
+): Effect.Effect<void> =>
+  Effect.flatMap(CurrentTelemetrySpan, (span) =>
+    Option.match(span, {
+      onNone: () => Effect.void,
+      onSome: effect,
+    })
+  );
+
 /** Constructs the public service around an adapter while containing every adapter defect. */
 export const makeTelemetryService = (adapter: TelemetryAdapter): TelemetryService => {
   const activeSpans = new Map<string, SpanDescriptor["operation"]>();
@@ -264,30 +282,24 @@ export const makeTelemetryService = (adapter: TelemetryAdapter): TelemetryServic
         )
       ),
     recordOutcome: (outcome) =>
-      Effect.flatMap(CurrentTelemetrySpan, (span) =>
-        Option.match(span, {
-          onNone: () => Effect.void,
-          onSome: (active) => ignoreTelemetryFailure(() => adapter.recordOutcome(active, outcome)),
-        })
+      withActiveSpan((active) =>
+        ignoreTelemetryFailure(() => adapter.recordOutcome(active, outcome))
+      ),
+    recordResponseStatus: (status) =>
+      withActiveSpan((active) =>
+        ignoreTelemetryFailure(() => adapter.recordResponseStatus(active, status))
       ),
     captureFailure: (failure) =>
       Effect.flatMap(CurrentTelemetrySpan, (span) =>
         ignoreTelemetryFailure(() => adapter.captureFailure(span, failure))
       ),
     addBreadcrumb: (breadcrumb) =>
-      Effect.flatMap(CurrentTelemetrySpan, (span) =>
-        Option.match(span, {
-          onNone: () => Effect.void,
-          onSome: (active) =>
-            ignoreTelemetryFailure(() => adapter.addBreadcrumb(active, breadcrumb)),
-        })
+      withActiveSpan((active) =>
+        ignoreTelemetryFailure(() => adapter.addBreadcrumb(active, breadcrumb))
       ),
     recordModelUsage: (usage) =>
-      Effect.flatMap(CurrentTelemetrySpan, (span) =>
-        Option.match(span, {
-          onNone: () => Effect.void,
-          onSome: (active) => ignoreTelemetryFailure(() => adapter.recordModelUsage(active, usage)),
-        })
+      withActiveSpan((active) =>
+        ignoreTelemetryFailure(() => adapter.recordModelUsage(active, usage))
       ),
     captureDurableContext: Effect.flatMap(CurrentTelemetrySpan, durableContextOf),
     isActiveSpan: (context, operation) =>

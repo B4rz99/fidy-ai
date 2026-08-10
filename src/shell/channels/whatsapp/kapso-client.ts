@@ -14,6 +14,7 @@ import {
   tooManyRequestsStatus,
   unauthorizedStatus,
 } from "~/shell/_shared/http-status";
+import { TelemetryHttpStatus } from "~/shell/observability/protocol";
 import { makeBoundedBytes } from "./bounded-bytes";
 import {
   type WhatsAppBusinessPhoneNumberId,
@@ -27,12 +28,15 @@ export type KapsoDeliveryCertainty = "rejected" | "ambiguous";
 
 /**
  * Safe provider-send failure. Automatic retry is permitted only when the provider definitively
- * rejected a transient attempt; the value contains no request input, credential, or response body.
+ * rejected a transient attempt. responseStatus is present exactly when Kapso returned a validated
+ * bounded HTTP status, including malformed response bodies, and absent for transport or timeout
+ * failures. The value contains no request input, credential, or response body.
  */
 export class KapsoSendFailed extends Data.TaggedError("KapsoSendFailed")<{
   readonly safeReason: DisclosureDeliveryFailureReason;
   readonly deliveryCertainty: KapsoDeliveryCertainty;
   readonly automaticRetry: boolean;
+  readonly responseStatus: Option.Option<TelemetryHttpStatus>;
 }> {
   override get message(): string {
     return `Kapso send failed: ${this.safeReason} (${this.deliveryCertainty})`;
@@ -43,6 +47,7 @@ export class KapsoSendFailed extends Data.TaggedError("KapsoSendFailed")<{
 export type KapsoSentMessage = Readonly<{
   readonly messageEvidence: WhatsAppMessageEvidence;
   readonly sentAt: DateTime.Utc;
+  readonly responseStatus: TelemetryHttpStatus;
 }>;
 
 /** Provider-addressable destination derived only from authenticated WhatsApp caller evidence. */
@@ -84,19 +89,30 @@ class KapsoTransportFailure extends Data.TaggedError("KapsoTransportFailure")<{
 }> {}
 class KapsoInvalidResponse extends Data.TaggedError("KapsoInvalidResponse")<{
   readonly deliveryCertainty: KapsoDeliveryCertainty;
+  readonly responseStatus: Option.Option<TelemetryHttpStatus>;
 }> {}
 
 const rejected = (
   safeReason: DisclosureDeliveryFailureReason,
-  automaticRetry = false
+  automaticRetry = false,
+  responseStatus: Option.Option<TelemetryHttpStatus> = Option.none()
 ): KapsoSendFailed =>
-  new KapsoSendFailed({ safeReason, deliveryCertainty: "rejected", automaticRetry });
+  new KapsoSendFailed({
+    safeReason,
+    deliveryCertainty: "rejected",
+    automaticRetry,
+    responseStatus,
+  });
 
-const ambiguous = (safeReason: DisclosureDeliveryFailureReason): KapsoSendFailed =>
+const ambiguous = (
+  safeReason: DisclosureDeliveryFailureReason,
+  responseStatus: Option.Option<TelemetryHttpStatus> = Option.none()
+): KapsoSendFailed =>
   new KapsoSendFailed({
     safeReason,
     deliveryCertainty: "ambiguous",
     automaticRetry: false,
+    responseStatus,
   });
 
 type ByteReadResult =
@@ -110,6 +126,7 @@ const boundKapsoResponse = (response: Response): Promise<Response> => {
       Promise.reject(
         new KapsoInvalidResponse({
           deliveryCertainty: response.ok ? "ambiguous" : "rejected",
+          responseStatus: Schema.decodeUnknownOption(TelemetryHttpStatus)(response.status),
         })
       )
     );
@@ -132,6 +149,7 @@ const boundKapsoResponse = (response: Response): Promise<Response> => {
           Promise.reject(
             new KapsoInvalidResponse({
               deliveryCertainty: response.ok ? "ambiguous" : "rejected",
+              responseStatus: Schema.decodeUnknownOption(TelemetryHttpStatus)(response.status),
             })
           )
         );
@@ -152,30 +170,37 @@ const MetaFailureResponse = Schema.Struct({
 });
 const KapsoFailureResponse = Schema.Struct({ error: Schema.String });
 
-const classifyFailureBody = (body: unknown): KapsoSendFailed => {
+const classifyFailureBody = (
+  body: unknown,
+  responseStatus: TelemetryHttpStatus
+): KapsoSendFailed => {
+  const status = Option.some(responseStatus);
   const metaFailure = Schema.decodeUnknownOption(MetaFailureResponse)(body);
   if (Option.isSome(metaFailure)) {
     const disposition = classifyKapsoMetaFailureCode(metaFailure.value.error.code);
-    return rejected(disposition.safeReason, disposition.automaticRetry);
+    return rejected(disposition.safeReason, disposition.automaticRetry, status);
   }
   const kapsoFailure = Schema.decodeUnknownOption(KapsoFailureResponse)(body);
   if (
     Option.isSome(kapsoFailure) &&
     kapsoFailure.value.error.toLowerCase() === "sandbox numbers do not support bsuid recipients"
   ) {
-    return rejected("sandbox_bsuid_unsupported");
+    return rejected("sandbox_bsuid_unsupported", false, status);
   }
-  return rejected("invalid_response");
+  return rejected("invalid_response", false, status);
 };
 
-const classifyHttpStatus = (status: number): Option.Option<KapsoSendFailed> => {
+const classifyHttpStatus = (status: TelemetryHttpStatus): Option.Option<KapsoSendFailed> => {
+  const responseStatus = Option.some(status);
   if (status === unauthorizedStatus || status === forbiddenStatus) {
-    return Option.some(rejected("authentication_failed"));
+    return Option.some(rejected("authentication_failed", false, responseStatus));
   }
-  if (status === requestTimeoutStatus) return Option.some(ambiguous("timeout"));
-  if (status === tooManyRequestsStatus) return Option.some(rejected("rate_limited", true));
+  if (status === requestTimeoutStatus) return Option.some(ambiguous("timeout", responseStatus));
+  if (status === tooManyRequestsStatus) {
+    return Option.some(rejected("rate_limited", true, responseStatus));
+  }
   if (status >= firstServerErrorStatus && status <= lastServerErrorStatus) {
-    return Option.some(ambiguous("provider_unavailable"));
+    return Option.some(ambiguous("provider_unavailable", responseStatus));
   }
   return Option.none();
 };
@@ -243,18 +268,19 @@ const classifyTransportError = (error: unknown): KapsoSendFailed => {
   }
   if (error instanceof KapsoInvalidResponse) {
     return error.deliveryCertainty === "rejected"
-      ? rejected("invalid_response")
-      : ambiguous("invalid_response");
+      ? rejected("invalid_response", false, error.responseStatus)
+      : ambiguous("invalid_response", error.responseStatus);
   }
   return ambiguous("invalid_response");
 };
 
 const decodeSentMessage = (
-  responseBody: unknown
+  responseBody: unknown,
+  responseStatus: TelemetryHttpStatus
 ): Effect.Effect<KapsoSentMessage, KapsoSendFailed> =>
   Effect.gen(function* () {
     const decoded = yield* Schema.decodeUnknownEffect(SendResponse)(responseBody).pipe(
-      Effect.mapError(() => ambiguous("invalid_response"))
+      Effect.mapError(() => ambiguous("invalid_response", Option.some(responseStatus)))
     );
     return {
       messageEvidence: {
@@ -263,6 +289,7 @@ const decodeSentMessage = (
         providerMessageId: decoded.messages[0].id,
       },
       sentAt: yield* DateTime.now,
+      responseStatus,
     } satisfies KapsoSentMessage;
   });
 
@@ -302,14 +329,20 @@ export const makeKapsoClientService = ({
       const address = yield* resolveRecipientAddress(deliveryMode, input.destination);
       const body = yield* encodeTextMessage(address, input.text, input.opaqueCallbackData);
       const response = yield* postMessage(input, body);
-      const statusFailure = classifyHttpStatus(response.status);
+      const decodedStatus = Schema.decodeUnknownOption(TelemetryHttpStatus)(response.status);
+      if (Option.isNone(decodedStatus)) return yield* rejected("invalid_response");
+      const responseStatus = decodedStatus.value;
+      const statusFailure = classifyHttpStatus(responseStatus);
       if (Option.isSome(statusFailure)) return yield* statusFailure.value;
       const responseBody = yield* Effect.tryPromise({
         try: () => response.json(),
-        catch: () => (response.ok ? ambiguous("invalid_response") : rejected("invalid_response")),
+        catch: () =>
+          response.ok
+            ? ambiguous("invalid_response", Option.some(responseStatus))
+            : rejected("invalid_response", false, Option.some(responseStatus)),
       });
-      if (!response.ok) return yield* classifyFailureBody(responseBody);
-      return yield* decodeSentMessage(responseBody);
+      if (!response.ok) return yield* classifyFailureBody(responseBody, responseStatus);
+      return yield* decodeSentMessage(responseBody, responseStatus);
     }),
   });
 };

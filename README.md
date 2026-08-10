@@ -31,8 +31,8 @@ The process reads deployment configuration from the environment:
 | `FIDY_HTTP_HOST`                 | optional    | Bind host, defaulting to `0.0.0.0`                         |
 | `APP_VERSION`                    | optional    | Version returned by `GET /health`                          |
 | `RAILWAY_DEPLOYMENT_ID`          | Railway     | Health version fallback when `APP_VERSION` is absent       |
-| `RAILWAY_GIT_COMMIT_SHA`         | Railway     | Full GitHub-triggered SHA used for release validation      |
-| `SENTRY_RELEASE`                 | production  | Immutable `fidy@<full-sha>` runtime release                |
+| `RAILWAY_GIT_COMMIT_SHA`         | Railway     | Full GitHub-triggered SHA used to derive the release       |
+| `SENTRY_RELEASE`                 | optional    | Local/CI release override; production derives it from SHA  |
 | `SENTRY_AUTH_TOKEN`              | pre-deploy  | Upload-only token carrying only Sentry's `org:ci` scope    |
 | `SENTRY_ORG`                     | pre-deploy  | Sentry organization receiving the immutable release        |
 | `SENTRY_PROJECT`                 | pre-deploy  | Production server project receiving debug-ID artifacts     |
@@ -64,10 +64,10 @@ buffered message-event webhook at `POST /webhooks/kapso` and its exact Meta forw
 acknowledging unrelated raw Meta events. Both use the configured Kapso webhook secret.
 `railway.json` configures Railway to build the Dockerfile, prepare the immutable Sentry release,
 provision the restricted runtime login, and apply migrations before deploy, then gate deployments
-on `/health`. Release preparation requires `SENTRY_RELEASE` to equal `fidy@` plus Railway's full
-Git commit SHA. It creates the release, uploads and validates the image's already-injected debug-ID
-artifacts with bounded retries, and finalizes it before database preparation. Repeating the same
-SHA is safe. The upload token must carry only Sentry's `org:ci` scope, and the uploader pins
+on `/health`. Release preparation derives `fidy@` plus Railway's full Git commit SHA; an explicitly
+provided `SENTRY_RELEASE` must match that derived value. It creates the release, uploads and validates
+the image's already-injected debug-ID artifacts with bounded retries, and finalizes it before database
+preparation. Repeating the same SHA is safe. The upload token must carry only Sentry's `org:ci` scope, and the uploader pins
 `https://sentry.io/` rather than accepting an environment-provided credential destination. The image
 removes the token, organization/project upload coordinates, and non-production DSN before the
 application starts. Railway's bounded pre-deploy command duration, fixed retry count, sanitized

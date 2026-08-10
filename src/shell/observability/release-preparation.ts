@@ -36,9 +36,14 @@ const releaseConfiguration = (): ReleaseConfiguration => {
   if (!fullShaPattern.test(commitSha)) {
     throw new Error("RAILWAY_GIT_COMMIT_SHA must be a full lowercase Git commit SHA.");
   }
-  const release = requiredEnvironment("SENTRY_RELEASE");
-  if (release !== `fidy@${commitSha}`) {
-    throw new Error("SENTRY_RELEASE must equal fidy@ plus RAILWAY_GIT_COMMIT_SHA.");
+  const release = `fidy@${commitSha}`;
+  const configuredRelease = process.env.SENTRY_RELEASE?.trim();
+  if (
+    configuredRelease !== undefined &&
+    configuredRelease.length > 0 &&
+    configuredRelease !== release
+  ) {
+    throw new Error("SENTRY_RELEASE must equal fidy@ plus RAILWAY_GIT_COMMIT_SHA when provided.");
   }
   return {
     authToken: requiredEnvironment("SENTRY_AUTH_TOKEN"),
@@ -182,7 +187,6 @@ export const prepareSentryRelease = async (): Promise<string> => {
         configuration.release,
         "--validate",
         "--strict",
-        "--wait",
         "--wait-for",
         uploadWaitSeconds,
         artifactRoot,

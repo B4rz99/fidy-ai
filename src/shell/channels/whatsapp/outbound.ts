@@ -5,8 +5,10 @@ import { TranscriptText } from "~/core/transcript/model";
 import type { AgentReply } from "~/shell/agent/agent-service";
 import type { AgentConversationAdmission } from "~/shell/agent/conversation";
 import { CURRENT_DISCLOSURE_TEXT } from "~/shell/consent/current-disclosure";
+import type { TelemetryAttempt } from "~/shell/observability/protocol";
+import { Telemetry } from "~/shell/observability/telemetry";
 import { requestConsentDisclosureDelivery } from "./disclosure-delivery";
-import { KapsoClient, kapsoDestinationFor } from "./kapso-client";
+import { KapsoClient, type KapsoClientService, kapsoDestinationFor } from "./kapso-client";
 import type { WhatsAppInboundEvent } from "./model";
 import {
   type WhatsAppReceiptInvalid,
@@ -73,27 +75,73 @@ export const deliverWhatsAppConsentOutcome = Effect.fn("WhatsApp.deliverConsentO
   });
 });
 
+const sendKapsoText = Effect.fn("WhatsApp.sendText")(function* (request: {
+  readonly businessPhoneNumberId: WhatsAppInboundEvent["businessPhoneNumberId"];
+  readonly destination: Parameters<KapsoClientService["sendText"]>[0]["destination"];
+  readonly text: TranscriptText;
+  readonly attempt: TelemetryAttempt;
+}) {
+  const work = Effect.gen(function* () {
+    const client = yield* KapsoClient;
+    return yield* client.sendText({ ...request, opaqueCallbackData: Option.none() });
+  });
+  const telemetry = yield* Effect.serviceOption(Telemetry);
+  return yield* Option.match(telemetry, {
+    onNone: () => work,
+    onSome: (service) =>
+      service.span(
+        {
+          component: "kapso",
+          operation: "whatsapp.sendText",
+          trigger: "queue",
+          spanOperation: "http.client",
+          workKind: "provider_call",
+          metadata: {
+            _tag: "Provider",
+            provider: "kapso",
+            attempt: request.attempt,
+            status: Option.none(),
+          },
+        },
+        work.pipe(
+          Effect.tap((sent) => service.recordResponseStatus(sent.responseStatus)),
+          Effect.tapError((failure) =>
+            Option.match(failure.responseStatus, {
+              onNone: () => Effect.void,
+              onSome: service.recordResponseStatus,
+            })
+          )
+        )
+      ),
+  });
+});
+
+type KapsoFreeFormInput = Readonly<{
+  userId: UserId;
+  reply: AgentReply;
+  now: DateTime.Utc;
+  attempt: TelemetryAttempt;
+}>;
+
 /**
  * Rejects replies with attachments or choices, requires current onboarding consent, the User's
- * current WhatsAppIdentity, and its open free-form window, then sends through Kapso. A successful
- * decoded send retains metadata evidence. Typed renderability, Consent, identity, window, and
- * Kapso failures are preserved.
+ * current WhatsAppIdentity, and its open free-form window, then makes the supplied provider
+ * attempt through Kapso. A successful decoded send retains metadata evidence. Typed renderability,
+ * Consent, identity, window, Kapso, and evidence-persistence failures are preserved.
  */
 export const sendKapsoFreeForm = Effect.fn("WhatsApp.sendFreeForm")(function* (
-  userId: UserId,
-  reply: AgentReply,
-  now: DateTime.Utc
+  input: KapsoFreeFormInput
 ) {
+  const { userId, reply, now, attempt } = input;
   if (Option.isSome(reply.attachments) || Option.isSome(reply.choices)) {
     return yield* new AgentReplyNotRenderable();
   }
   const authorization = yield* authorizeWhatsAppFreeForm(userId, now);
-  const client = yield* KapsoClient;
-  const sent = yield* client.sendText({
+  const sent = yield* sendKapsoText({
     businessPhoneNumberId: authorization.businessPhoneNumberId,
     destination: kapsoDestinationFor(authorization.caller),
     text: renderWhatsAppText(reply.text),
-    opaqueCallbackData: Option.none(),
+    attempt,
   });
   yield* retainOutboundEvidence(userId, sent.messageEvidence, sent.sentAt);
   return sent;

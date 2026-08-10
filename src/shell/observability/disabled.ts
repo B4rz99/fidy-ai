@@ -7,6 +7,7 @@ export const DisabledTelemetryResource: TelemetryResource = {
     startSpan: () => Effect.succeed(Option.none()),
     finishSpan: () => Effect.void,
     recordOutcome: () => Effect.void,
+    recordResponseStatus: () => Effect.void,
     captureFailure: () => Effect.void,
     addBreadcrumb: () => Effect.void,
     recordModelUsage: () => Effect.void,

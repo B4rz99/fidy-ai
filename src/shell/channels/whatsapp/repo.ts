@@ -21,6 +21,11 @@ import type { AgentConversationAdmission } from "~/shell/agent/conversation";
 import { hasCurrentOnboardingConsentAt, useCurrentConsent } from "~/shell/consent/repo";
 import { advisoryLockKey } from "~/shell/db/advisory-lock";
 import { withUserTransaction } from "~/shell/db/user-transaction";
+import {
+  DurableTraceContext,
+  TelemetryAttempt,
+  TelemetryDuration,
+} from "~/shell/observability/protocol";
 import { findAndLockWhatsAppIdentity } from "~/shell/identity/repo";
 import {
   WhatsAppBusinessPhoneNumberId,
@@ -32,6 +37,7 @@ import {
 } from "./model";
 
 const maximumBudgetKeyLength = 256;
+const maximumQueueDelayMilliseconds = 86_400_000;
 
 /** Opaque identity for one durable attempt to process a User's due burst. */
 export const WhatsAppClaimId = Schema.String.check(Schema.isUUID()).pipe(
@@ -272,6 +278,11 @@ const EnqueueRequest = Schema.Struct({
   businessPortfolioId: WhatsAppCaller.fields.businessPortfolioId,
   businessScopedUserId: WhatsAppCaller.fields.businessScopedUserId,
   windowOpenUntil: Schema.DateTimeUtcFromDate,
+  traceVersion: Schema.OptionFromNullOr(Schema.Literal(1)),
+  traceId: Schema.OptionFromNullOr(DurableTraceContext.fields.traceId),
+  parentSpanId: Schema.OptionFromNullOr(DurableTraceContext.fields.parentSpanId),
+  traceSampled: Schema.OptionFromNullOr(Schema.Boolean),
+  traceCapturedAt: Schema.OptionFromNullOr(DurableTraceContext.fields.capturedAtUnixMilliseconds),
 });
 const EnqueueResult = Schema.Struct({
   status: Schema.Literals(["enqueued", "duplicate", "stale_authority", "capacity_exceeded"]),
@@ -331,10 +342,12 @@ const enqueueStatement: EnqueueStatement = (sql, row) => sql`
     RETURNING id
   ), inserted_job AS (
     INSERT INTO whatsapp_inbound_jobs(
-      user_id, message_evidence_id, content, occurred_at, enqueued_at, debounce_until
+      user_id, message_evidence_id, content, occurred_at, enqueued_at, debounce_until,
+      trace_version, trace_id, parent_span_id, trace_sampled, trace_captured_at
     )
-    SELECT ${row.userId}, id, ${row.text}, ${row.occurredAt},
-      ${row.enqueuedAt}, ${row.debounceUntil}
+    SELECT ${row.userId}, id, ${row.text}, ${row.occurredAt}, ${row.enqueuedAt},
+      ${row.debounceUntil}, ${row.traceVersion}, ${row.traceId}, ${row.parentSpanId},
+      ${row.traceSampled}, ${row.traceCapturedAt}
     FROM evidence
     RETURNING id
   ), advanced_window AS (
@@ -358,11 +371,9 @@ const enqueueStatement: EnqueueStatement = (sql, row) => sql`
         ELSE EXCLUDED.window_open_until
       END
   )
-  SELECT CASE
-    WHEN EXISTS(SELECT 1 FROM inserted_job) THEN 'enqueued'
+  SELECT CASE WHEN EXISTS(SELECT 1 FROM inserted_job) THEN 'enqueued'
     WHEN EXISTS(SELECT 1 FROM existing) THEN 'duplicate'
-    ELSE 'capacity_exceeded'
-  END AS status
+    ELSE 'capacity_exceeded' END AS status
 `;
 
 const enqueueInboundJob = (
@@ -379,18 +390,25 @@ const enqueueInboundJob = (
     execute: (row) => enqueueStatement(sql, row),
   });
 
+type EnqueueWhatsAppTurnInput = Readonly<{
+  admission: Extract<AgentConversationAdmission, { readonly _tag: "AuthorizedTurn" }>;
+  event: WhatsAppInboundEvent;
+  deliveryKey: WhatsAppDeliveryKey;
+  propagation: Option.Option<DurableTraceContext>;
+}>;
+
 /**
  * Under current onboarding consent, atomically deduplicates by provider-message evidence, admits
  * at most 32 pending messages/16,000 characters, advances the quiet period and matching recipient
- * window, and returns whether a job was inserted. Capacity refusal fails with
+ * window, and returns whether a job was inserted. Propagation must be complete validated context
+ * captured by the surrounding publication span or explicitly absent. Capacity refusal fails with
  * WhatsAppInboundCapacityExceeded so the provider may retry.
  */
-export const enqueueWhatsAppTurn = Effect.fn("WhatsApp.enqueueTurn")(function* (input: {
-  readonly admission: Extract<AgentConversationAdmission, { readonly _tag: "AuthorizedTurn" }>;
-  readonly event: WhatsAppInboundEvent;
-  readonly deliveryKey: WhatsAppDeliveryKey;
-}) {
+export const enqueueWhatsAppTurn = Effect.fn("WhatsApp.enqueueTurn")(function* (
+  input: EnqueueWhatsAppTurnInput
+) {
   const sql = yield* SqlClient.SqlClient;
+  const propagation = input.propagation;
   const { admission } = input;
   const debounceUntil = DateTime.add(input.event.receivedAt, { milliseconds: 2_500 });
   const windowOpenUntil = DateTime.add(input.event.occurredAt, { hours: 24 });
@@ -422,6 +440,11 @@ export const enqueueWhatsAppTurn = Effect.fn("WhatsApp.enqueueTurn")(function* (
           businessPortfolioId: input.event.caller.businessPortfolioId,
           businessScopedUserId: input.event.caller.businessScopedUserId,
           windowOpenUntil,
+          traceVersion: Option.map(propagation, (context) => context.version),
+          traceId: Option.map(propagation, (context) => context.traceId),
+          parentSpanId: Option.map(propagation, (context) => context.parentSpanId),
+          traceSampled: Option.map(propagation, (context) => context.sampled),
+          traceCapturedAt: Option.map(propagation, (context) => context.capturedAtUnixMilliseconds),
         }).pipe(Effect.orDie);
       })
     )
@@ -461,13 +484,113 @@ export const claimWhatsAppTurn = (
 const ClaimedJob = Schema.Struct({
   text: InboundMessage.fields.text,
   providerMessageId: WhatsAppProviderMessageId,
+  enqueuedAt: Schema.DateTimeUtcFromDate,
+  traceVersion: Schema.OptionFromNullOr(Schema.Unknown),
+  traceId: Schema.OptionFromNullOr(Schema.Unknown),
+  parentSpanId: Schema.OptionFromNullOr(Schema.Unknown),
+  traceSampled: Schema.OptionFromNullOr(Schema.Unknown),
+  traceCapturedAt: Schema.OptionFromNullOr(Schema.Unknown),
+  processingAttempt: TelemetryAttempt,
+});
+const StoredDurableTraceContext = Schema.Struct({
+  version: DurableTraceContext.fields.version,
+  traceId: DurableTraceContext.fields.traceId,
+  parentSpanId: DurableTraceContext.fields.parentSpanId,
+  sampled: DurableTraceContext.fields.sampled,
+  capturedAtUnixMilliseconds: Schema.FiniteFromString.pipe(
+    Schema.decodeTo(DurableTraceContext.fields.capturedAtUnixMilliseconds)
+  ),
 });
 const LoadClaimRequest = Schema.Struct({ userId: UserId, claimId: WhatsAppClaimId });
+type ClaimedJob = typeof ClaimedJob.Type;
+
+const markClaimStarted = Effect.fn("WhatsApp.markClaimStarted")(function* (
+  sql: SqlClient.SqlClient,
+  claim: WhatsAppTurnClaim,
+  claimTime: DateTime.Utc
+) {
+  const started = yield* SqlSchema.findOneOption({
+    Request: LoadClaimRequest,
+    Result: Schema.Struct({ started: Schema.Boolean }),
+    execute: (row) => sql`
+      UPDATE whatsapp_turn_claims
+      SET status = 'started', started_at = ${claimTime},
+        claim_expires_at = ${claimTime}::timestamptz + interval '10 minutes'
+      WHERE id = ${row.claimId} AND user_id = ${row.userId} AND status = 'claimed'
+      RETURNING true AS started
+    `,
+  })(claim);
+  if (Option.isNone(started)) return yield* new WhatsAppClaimInvalid();
+  yield* sql`
+    UPDATE whatsapp_inbound_jobs
+    SET processing_attempt = processing_attempt + 1
+    WHERE user_id = ${claim.userId} AND claim_id = ${claim.claimId}
+      AND completed_at IS NULL AND content IS NOT NULL
+  `;
+});
+
+const loadClaimedJobs = Effect.fn("WhatsApp.loadClaimedJobs")(function* (
+  sql: SqlClient.SqlClient,
+  claim: WhatsAppTurnClaim
+) {
+  return yield* SqlSchema.findAll({
+    Request: LoadClaimRequest,
+    Result: ClaimedJob,
+    execute: (row) => sql`
+      SELECT job.content AS text, evidence.provider_message_id AS "providerMessageId",
+        job.enqueued_at AS "enqueuedAt", job.trace_version AS "traceVersion", job.trace_id AS "traceId",
+        job.parent_span_id AS "parentSpanId", job.trace_sampled AS "traceSampled",
+        job.trace_captured_at AS "traceCapturedAt", job.processing_attempt AS "processingAttempt"
+      FROM whatsapp_inbound_jobs AS job
+      JOIN whatsapp_message_evidence AS evidence ON evidence.id = job.message_evidence_id
+      WHERE job.user_id = ${row.userId} AND job.claim_id = ${row.claimId}
+        AND job.completed_at IS NULL AND job.content IS NOT NULL
+      ORDER BY job.enqueued_at, evidence.id
+    `,
+  })(claim);
+});
+
+const durableContextFromJob = (job: ClaimedJob): Option.Option<DurableTraceContext> =>
+  Option.all({
+    version: job.traceVersion,
+    traceId: job.traceId,
+    parentSpanId: job.parentSpanId,
+    sampled: job.traceSampled,
+    capturedAtUnixMilliseconds: job.traceCapturedAt,
+  }).pipe(Option.flatMap(Schema.decodeUnknownOption(StoredDurableTraceContext)));
+
+const prepareStartedTurn = Effect.fn("WhatsApp.prepareStartedTurn")(function* (
+  claim: WhatsAppTurnClaim,
+  claimTime: DateTime.Utc,
+  jobs: EffectArray.NonEmptyReadonlyArray<ClaimedJob>
+) {
+  const inboundMessage = yield* Schema.decodeUnknownEffect(InboundMessage)({
+    text: jobs.map(({ text }) => text).join("\n"),
+  });
+  const newest = EffectArray.lastNonEmpty(jobs);
+  const queueDelayMilliseconds = TelemetryDuration.make(
+    Math.min(
+      maximumQueueDelayMilliseconds,
+      Math.max(0, DateTime.toEpochMillis(claimTime) - DateTime.toEpochMillis(newest.enqueuedAt))
+    )
+  );
+  return {
+    claim,
+    inboundMessage,
+    messages: jobs,
+    propagation: durableContextFromJob(newest),
+    inputCount: jobs.length,
+    processingAttempt: TelemetryAttempt.make(Math.max(...jobs.map((job) => job.processingAttempt))),
+    queueDelayMilliseconds,
+  } as const;
+});
 
 /**
  * Starts one claimed lease at `claimTime` with a ten-minute ambiguous-crash deadline, loads its
- * non-empty jobs ordered by provider occurrence and internal evidence id, and collapses text with
- * newlines into one bounded InboundMessage. A missing or stale claim fails WhatsAppClaimInvalid.
+ * non-empty jobs ordered by internal arrival and evidence id, and collapses text with
+ * newlines into one bounded InboundMessage. It selects only the newest job's bounded propagation
+ * context as the parent for this attempt; missing or invalid context becomes a new root.
+ * A missing or stale claim fails WhatsAppClaimInvalid.
  */
 export const startWhatsAppTurn = Effect.fn("WhatsApp.startTurn")(function* (
   claim: WhatsAppTurnClaim,
@@ -477,38 +600,12 @@ export const startWhatsAppTurn = Effect.fn("WhatsApp.startTurn")(function* (
   return yield* withUserTransaction(
     claim.userId,
     Effect.gen(function* () {
-      const started = yield* SqlSchema.findOneOption({
-        Request: LoadClaimRequest,
-        Result: Schema.Struct({ started: Schema.Boolean }),
-        execute: (row) => sql`
-            UPDATE whatsapp_turn_claims
-            SET status = 'started', started_at = ${claimTime},
-              claim_expires_at = ${claimTime}::timestamptz + interval '10 minutes'
-            WHERE id = ${row.claimId} AND user_id = ${row.userId} AND status = 'claimed'
-            RETURNING true AS started
-          `,
-      })(claim);
-      if (Option.isNone(started)) return yield* new WhatsAppClaimInvalid();
-      const jobs = yield* SqlSchema.findAll({
-        Request: LoadClaimRequest,
-        Result: ClaimedJob,
-        execute: (row) => sql`
-            SELECT job.content AS text, evidence.provider_message_id AS "providerMessageId"
-            FROM whatsapp_inbound_jobs AS job
-            JOIN whatsapp_message_evidence AS evidence ON evidence.id = job.message_evidence_id
-            WHERE job.user_id = ${row.userId} AND job.claim_id = ${row.claimId}
-              AND job.completed_at IS NULL AND job.content IS NOT NULL
-            ORDER BY job.occurred_at, evidence.id
-          `,
-      })(claim);
+      yield* markClaimStarted(sql, claim, claimTime);
+      const jobs = yield* loadClaimedJobs(sql, claim);
       if (!EffectArray.isArrayNonEmpty(jobs)) {
         return yield* Effect.die(new Error("Started WhatsApp claim contained no jobs"));
       }
-      const joined = jobs.map(({ text }) => text).join("\n");
-      const inboundMessage = yield* Schema.decodeUnknownEffect(InboundMessage)({
-        text: joined,
-      });
-      return { claim, inboundMessage, messages: jobs } as const;
+      return yield* prepareStartedTurn(claim, claimTime, jobs);
     }).pipe(Effect.catchTag("SqlError", Effect.die))
   );
 });
@@ -536,6 +633,35 @@ export const completeWhatsAppTurn = Effect.fn("WhatsApp.completeTurn")(function*
       yield* sql`
         DELETE FROM whatsapp_turn_claims
         WHERE user_id = ${claim.userId} AND id = ${claim.claimId}
+      `;
+    }).pipe(Effect.catchTag("SqlError", Effect.die))
+  );
+});
+
+/**
+ * Releases a definitively rejected processing attempt for a later sibling attempt. The original
+ * bounded publication context and transient content remain on the jobs; only the failed claim is
+ * retired and the jobs' next eligible time advances to retryAt.
+ */
+export const retryWhatsAppTurn = Effect.fn("WhatsApp.retryTurn")(function* (
+  claim: WhatsAppTurnClaim,
+  failedAt: DateTime.Utc,
+  retryAt: DateTime.Utc
+) {
+  const sql = yield* SqlClient.SqlClient;
+  yield* withUserTransaction(
+    claim.userId,
+    Effect.gen(function* () {
+      yield* sql`
+        UPDATE whatsapp_inbound_jobs
+        SET claim_id = NULL, debounce_until = ${retryAt}
+        WHERE user_id = ${claim.userId} AND claim_id = ${claim.claimId}
+          AND completed_at IS NULL AND content IS NOT NULL
+      `;
+      yield* sql`
+        UPDATE whatsapp_turn_claims
+        SET status = 'failed', failed_at = ${failedAt}, safe_reason = 'send_failed'
+        WHERE user_id = ${claim.userId} AND id = ${claim.claimId} AND status = 'started'
       `;
     }).pipe(Effect.catchTag("SqlError", Effect.die))
   );

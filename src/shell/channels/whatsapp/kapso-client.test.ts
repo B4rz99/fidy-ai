@@ -31,15 +31,17 @@ const responseWithStatusOutsideFetchRange = (): Response => {
   return response;
 };
 
-it.effect("uses recipient, never to, for a BSUID destination", () =>
+it.effect("uses recipient without forwarding trace propagation to Kapso", () =>
   Effect.gen(function* () {
     let requestBody: unknown;
+    let requestHeaders = new Headers();
     const service = makeKapsoClientService({
       apiKey: "test-api-key",
       deliveryMode: "bsuid",
       nativeFetch: Object.assign(
         (_resource: Parameters<typeof globalThis.fetch>[0], init?: RequestInit) => {
           requestBody = Schema.decodeUnknownSync(Schema.UnknownFromJsonString)(init?.body);
+          requestHeaders = new Headers(init?.headers);
           return Promise.resolve(
             Response.json({
               messaging_product: "whatsapp",
@@ -67,6 +69,9 @@ it.effect("uses recipient, never to, for a BSUID destination", () =>
       biz_opaque_callback_data: correlationToken,
     });
     expect(requestBody).not.toHaveProperty("to");
+    expect(Array.from(requestHeaders.keys())).not.toEqual(
+      expect.arrayContaining(["b3", "baggage", "sentry-trace", "traceparent", "tracestate"])
+    );
   })
 );
 
@@ -344,7 +349,7 @@ it.effect("keeps provider bodies and send inputs out of typed failures", () =>
     const ordinaryOutput = yield* Schema.encodeEffect(Schema.UnknownFromJsonString)(failure);
 
     expect(ordinaryOutput).toBe(
-      '{"safeReason":"invalid_response","deliveryCertainty":"rejected","automaticRetry":false,"_tag":"KapsoSendFailed"}'
+      '{"safeReason":"invalid_response","deliveryCertainty":"rejected","automaticRetry":false,"responseStatus":{"_id":"Option","_tag":"Some","value":400},"_tag":"KapsoSendFailed"}'
     );
     for (const secret of Object.values(sensitive)) expect(ordinaryOutput).not.toContain(secret);
   })

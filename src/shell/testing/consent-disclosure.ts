@@ -3,11 +3,13 @@ import type { ProviderMessageEvidence } from "~/core/_shared/provider-message-ev
 import type { PendingConsentExchangeId } from "~/core/consent/model";
 import { E164PhoneNumber } from "~/core/identity/reference";
 import { TranscriptText } from "~/core/transcript/model";
+import { okStatus } from "~/shell/_shared/http-status";
 import {
   applyConsentDisclosureLifecycle,
   requestConsentDisclosureDelivery,
 } from "~/shell/channels/whatsapp/disclosure-delivery";
 import { KapsoClient } from "~/shell/channels/whatsapp/kapso-client";
+import { TelemetryHttpStatus } from "~/shell/observability/protocol";
 import {
   WhatsAppBusinessPhoneNumberId,
   WhatsAppMessageEvidence,
@@ -43,7 +45,11 @@ export const deliverConsentDisclosureForTesting = Effect.fn("Test.deliverConsent
       Effect.provideService(KapsoClient, {
         sendText: (send) =>
           Ref.set(correlation, send.opaqueCallbackData).pipe(
-            Effect.as({ messageEvidence, sentAt: input.deliveredAt })
+            Effect.as({
+              messageEvidence,
+              sentAt: input.deliveredAt,
+              responseStatus: TelemetryHttpStatus.make(okStatus),
+            })
           ),
       })
     );

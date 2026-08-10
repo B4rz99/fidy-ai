@@ -453,6 +453,31 @@ it.effect("projects only the bounded attributes its own work kind admits", () =>
   })
 );
 
+it.effect("records a response status learned while provider work is active", () =>
+  Effect.gen(function* () {
+    const services = yield* Layer.build(TelemetryEnvelopeRecording);
+    const telemetry = Context.get(services, Telemetry);
+    const recorder = Context.get(services, EnvelopeRecorder);
+    const provider = makeWorkSpanDescriptor({
+      workKind: "provider_call",
+      metadata: {
+        _tag: "Provider",
+        provider: "kapso",
+        attempt: TelemetryAttempt.make(2),
+        status: Option.none(),
+      },
+    });
+
+    yield* telemetry.span(provider, telemetry.recordResponseStatus(TelemetryHttpStatus.make(202)));
+
+    const transactions = transactionPayloads(yield* recorder.serializedEnvelopes);
+    expect(transactions[0]?.contexts.trace.data).toMatchObject({
+      "fidy.attempt": 2,
+      "http.response.status_code": 202,
+    });
+  })
+);
+
 it.effect("reads a cancelled status from interruption and keeps a declared retryable failure", () =>
   Effect.gen(function* () {
     const services = yield* Layer.build(TelemetryEnvelopeRecording);

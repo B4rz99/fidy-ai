@@ -18,6 +18,7 @@ import {
   type DurableTraceContext,
   SpanDescriptor,
   type TelemetryBreadcrumb,
+  type TelemetryHttpStatus,
   type TelemetryModelUsage,
   TelemetrySpanId,
   TelemetryTraceId,
@@ -203,7 +204,7 @@ const randomHex = (bytes: number): string => {
 };
 
 type ActiveState = {
-  readonly descriptor: unknown;
+  descriptor: unknown;
   readonly trace: Omit<ActiveTraceCoordinates, "spanOperation">;
   readonly startedAt: number;
   readonly sampled: boolean;
@@ -517,6 +518,29 @@ const recordModelUsage = (
     });
   });
 
+const recordSpanResponseStatus = (
+  sink: TelemetrySink,
+  span: TelemetrySpan,
+  status: TelemetryHttpStatus
+): Effect.Effect<void> =>
+  Effect.sync(() => {
+    Option.map(activeState(sink.knownStates, span), (state) => {
+      const descriptor = Schema.decodeUnknownOption(
+        SpanDescriptor,
+        strictDecoding
+      )(state.descriptor);
+      if (
+        Option.isSome(descriptor) &&
+        (descriptor.value.metadata._tag === "Http" || descriptor.value.metadata._tag === "Provider")
+      ) {
+        state.descriptor = {
+          ...descriptor.value,
+          metadata: { ...descriptor.value.metadata, status: Option.some(status) },
+        };
+      }
+    });
+  });
+
 const captureTelemetryFailure = (
   sink: TelemetrySink,
   span: Option.Option<TelemetrySpan>,
@@ -581,6 +605,7 @@ const telemetryAdapter = (
     startSpan: (descriptor, parent) => startTelemetrySpan(sink, descriptor, parent),
     finishSpan: (span, exit) => finishTelemetrySpan(sink, span, exit),
     recordOutcome: (span, outcome) => recordSpanOutcome(sink, span, outcome),
+    recordResponseStatus: (span, status) => recordSpanResponseStatus(sink, span, status),
     captureFailure: (span, failure) => captureTelemetryFailure(sink, span, failure),
     addBreadcrumb: (span, breadcrumb) => addTelemetryBreadcrumb(sink, span, breadcrumb),
     recordModelUsage: (span, usage) => recordModelUsage(sink, span, usage),

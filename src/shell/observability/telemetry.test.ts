@@ -6,6 +6,7 @@ import {
   DurableTraceContext,
   TelemetryAttempt,
   TelemetryCount,
+  TelemetryHttpStatus,
   TelemetrySpanId,
   TelemetryTraceId,
 } from "./protocol";
@@ -26,6 +27,7 @@ const unobservedAdapter: TelemetryAdapter = {
   startSpan: () => Effect.succeed(Option.none()),
   finishSpan: () => Effect.void,
   recordOutcome: () => Effect.void,
+  recordResponseStatus: () => Effect.void,
   captureFailure: () => Effect.void,
   addBreadcrumb: () => Effect.void,
   recordModelUsage: () => Effect.void,
@@ -242,6 +244,9 @@ it.effect("synchronous adapter defects never alter work or escape observation me
       recordOutcome: () => {
         throw new Error("outcome-adapter-sentinel");
       },
+      recordResponseStatus: () => {
+        throw new Error("status-adapter-sentinel");
+      },
       captureFailure: () => {
         throw new Error("failure-adapter-sentinel");
       },
@@ -263,6 +268,7 @@ it.effect("synchronous adapter defects never alter work or escape observation me
             error: Option.none(),
             retryable: false,
           });
+          yield* telemetry.recordResponseStatus(TelemetryHttpStatus.make(200));
           yield* telemetry.addBreadcrumb({
             category: "agent",
             action: "model_started",

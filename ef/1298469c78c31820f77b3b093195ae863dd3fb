@@ -1,0 +1,24 @@
+Dockerfile
+  s_b1062aa8b42d6d::t_6762d6b4d18018 13
+package.json
+  s_b1062aa8b42d6d::t_6797e397a54783 43
+  s_b1062aa8b42d6d::t_7db79a454b9dd1 45
+bun.lock
+  s_b1062aa8b42d6d::t_e7ecfb7212a278 16,18,82,84,86,88,90,92,94,96,274,276,278,280,282,284,286,288,290,616-617
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "ef1298469c78c31820f77b3b093195ae863dd3fb",
+  "prompts": {},
+  "sessions": {
+    "s_b1062aa8b42d6d": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019fe798-3a46-756b-8fb0-ec75e3ef0e87",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

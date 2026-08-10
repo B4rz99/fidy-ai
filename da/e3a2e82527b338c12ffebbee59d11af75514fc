@@ -1,0 +1,23 @@
+src/shell/observability/sentry-account-reader.ts
+  s_2d213caa0f9fa7::t_9edfb345cc412f 15,19,162-170,251-258
+  s_2d213caa0f9fa7::t_71de2c1eac24c9 16-18
+src/shell/observability/sentry-account-reader.test.ts
+  s_2d213caa0f9fa7::t_501566f7cfd4c8 176-210,214-216
+  s_2d213caa0f9fa7::t_a8a5ce8365bf4d 3,211-213
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "dae3a2e82527b338c12ffebbee59d11af75514fc",
+  "prompts": {},
+  "sessions": {
+    "s_2d213caa0f9fa7": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019fec85-2e87-7de5-958b-56d220909d66",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

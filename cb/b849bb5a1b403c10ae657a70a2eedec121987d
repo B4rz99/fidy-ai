@@ -1,0 +1,37 @@
+package.json
+  s_b1062aa8b42d6d::t_61025d0ec6162c 49-50
+.fluidattacks/sca.yaml
+  s_b1062aa8b42d6d::t_c430e4493f070f 26
+src/shell/testing/openapi.ts
+  s_b1062aa8b42d6d::t_59e0305523bc6d 62-70
+src/shell/observability/telemetry-bootstrap.ts
+  s_b1062aa8b42d6d::t_59e0305523bc6d 53-57
+scripts/check-dependency-updates.ts
+  s_b1062aa8b42d6d::t_59e0305523bc6d 721-722
+tools/depcruise/package.json
+  s_b1062aa8b42d6d::t_08f82b184f07fb 7
+dependency-policy.json
+  s_b1062aa8b42d6d::t_714bb48b60c390 21
+tools/depcruise/bun.lock
+  s_b1062aa8b42d6d::t_3bb20df6a87b0c 8,14,34,36,101-106
+bun.lock
+  s_b1062aa8b42d6d::t_4bc07a70bc5374 22-23,152,154,156,158,160,162,164,166,168,170,172,174,176,178,180,182,184,186,188,202,204,206,208,210,212,214,216,218,220,222,224,226,228,230,232,234,236,238,522,534,536
+tools/mutation/bun.lock
+  s_b1062aa8b42d6d::t_ad20ea096fc2dc 377
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "cbb849bb5a1b403c10ae657a70a2eedec121987d",
+  "prompts": {},
+  "sessions": {
+    "s_b1062aa8b42d6d": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019fe798-3a46-756b-8fb0-ec75e3ef0e87",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

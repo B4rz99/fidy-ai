@@ -38,7 +38,7 @@ into reviewable invariants.
    links, device codes, recovery proofs, and protected-PDF passwords.
 2. **Personal and financial data** — identity and recovery details, Transactions and
    SourceAttestations, Budgets, Categories, DashboardDocuments, Subscriptions and BillingAttempts,
-   transcripts, RollingSummaries, UserNotes, NeedsReviewItems, and raw IngestSamples.
+   Transcripts, CompactedConversations, Memories, NeedsReviewItems, and raw IngestSamples.
 3. **Security evidence** — ConsentRecords, AuditLogEntries, token grants and revocations, provider
    message evidence, and immutable interpretation or policy revisions.
 4. **State integrity** — User ownership, token scope, consent state, financial records, billing
@@ -52,7 +52,7 @@ into reviewable invariants.
 - A User, or one of their agents, attempting to reach another User's data or operations.
 - A holder of a stolen, revoked, expired, replayed, or under-scoped bearer credential.
 - A sender forging or replaying Kapso, Resend, Wompi, or queued work.
-- Malicious instructions embedded in messages, emails, statements, images, receipts, UserNotes, or
+- Malicious instructions embedded in messages, emails, statements, images, receipts, Memories, or
   provider/model output.
 - Accidental disclosure through logs, errors, URLs, browser state, transcripts, caches, or outbound
   provider payloads.
@@ -71,12 +71,12 @@ Every crossing is untrusted regardless of its TypeScript type or vendor:
 
 ### Data handling classes
 
-| class                     | review invariant                                                                                                                                                                                                       |
-| ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Secret**                | Exists only for its required lifetime and purpose. It does not enter logs, errors, analytics, transcripts, LLM context, broad application objects, or recoverable storage unless recovery is the security requirement. |
-| **Personal or financial** | Access is bound to one explicit User and purpose. Persistence, model context, logs, and provider egress contain only what that purpose needs.                                                                          |
-| **Security metadata**     | Only the approved identity, token id, operation, outcome, timestamp, and provider evidence needed for accountability are recorded. Metadata must not become a disguised request body.                                  |
-| **Public**                | May be exposed intentionally, but still receives integrity, output-encoding, and cache review where it can influence trusted behaviour.                                                                                |
+| class                     | review invariant                                                                                                                                                                                                                                                         |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Secret**                | Once handled through an intended Secret boundary, exists only for its required lifetime and purpose. It does not enter logs, errors, analytics, transcripts, LLM context, broad application objects, or recoverable storage unless recovery is the security requirement. |
+| **Personal or financial** | Access is bound to one explicit User and purpose. Persistence, model context, logs, and provider egress contain only what that purpose needs.                                                                                                                            |
+| **Security metadata**     | Only the approved identity, token id, operation, outcome, timestamp, and provider evidence needed for accountability are recorded. Metadata must not become a disguised request body.                                                                                    |
+| **Public**                | May be exposed intentionally, but still receives integrity, output-encoding, and cache review where it can influence trusted behaviour.                                                                                                                                  |
 
 ---
 
@@ -151,8 +151,19 @@ consent, ingestion, billing, schedule, delivery, or persisted-report artifacts.
 
 Raw ingestion material has enforced bounded retention. Indefinite structural samples qualify only
 after anonymisation removes identifying and transaction-specific values. Protected-PDF passwords
-are transient Secrets. Fidy never solicits bank credentials or card/account numbers in chat, and
-accidentally supplied sensitive values must not spread into logs, prompts, or unrelated storage.
+are transient Secrets. Fidy never solicits bank credentials or card/account numbers in chat and
+warns Users not to submit them.
+
+Fidy does not classify or censor arbitrary free text by semantic content. Determining completely
+and soundly whether open-ended prose contains a credential, financial identifier, protected
+attribute, temporary detail, canonical-record fact, or other sensitive material is not an
+enforceable security control. User-submitted free text follows its explicit Transcript, Memory,
+Compaction, and hosted-model purposes and may therefore contain values the User should not have
+submitted. The
+hosted agent never solicits credentials, tokens, passwords, card numbers, account numbers, or
+unnecessary sensitive personal data and warns Users not to submit them. Typed Secrets crossing an
+intended credential boundary remain excluded from those purposes. Logs, telemetry, errors, and
+AuditLogEntries remain allowlisted and never record free-text bodies.
 
 **Evidence:** compare each collected or outbound field to its purpose; inspect pre-consent effects;
 trace retention and anonymisation states; verify deletion/expiry is executable and tested rather
@@ -222,7 +233,7 @@ The model receives only the operations and data needed for the current User and 
 private, open-ended, shell, SQL, arbitrary-file, or arbitrary-network capability. System-prompt
 secrecy is not a security boundary and no Secret belongs in it.
 
-Context assembly, summaries, caches, tool results, and transcripts stay User-isolated.
+Context assembly, CompactedConversations, caches, tool results, and Transcripts stay User-isolated.
 
 **Evidence:** trace identity, scope, and destructive authority independently of prompt
 instructions; compare exposed tools with canonical operation metadata; inspect context selection;
@@ -230,8 +241,8 @@ use adversarial direct, indirect, and multimodal fixtures to prove cross-User ac
 unconfirmed destructive effects fail.
 
 **Violation examples:** trusting the model to decline a write for a read-only token; an emailed
-instruction causing the agent to call another User's operation; a RollingSummary from one User
-entering another User's turn.
+instruction causing the agent to call another User's operation; a CompactedConversation from one
+User entering another User's turn.
 
 ### 7. Hostile ingestion material
 

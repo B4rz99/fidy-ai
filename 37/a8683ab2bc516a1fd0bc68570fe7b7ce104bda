@@ -1,0 +1,49 @@
+src/shell/observability/deployment-smoke-command.ts
+  s_82e796aedb1807::t_e65f515c7bfeb3 85,97
+src/shell/observability/account-policy.test.ts
+  s_82e796aedb1807::t_b5fce4018c8628 112
+  s_82e796aedb1807::t_dfb57f9bec66e2 55-56,58-63
+  s_82e796aedb1807::t_8e968e90f49052 86
+  s_82e796aedb1807::t_b77b69f72c81f2 4
+  s_82e796aedb1807::t_3a39b010c8e37c 36-37
+  s_82e796aedb1807::t_d922a5792e8e38 114,121,132-134
+.github/workflows/deployment-smoke.yml
+  s_82e796aedb1807::t_4ce410560799ca 26-27,73
+  s_82e796aedb1807::t_3419e05c92a5ec 59
+  s_82e796aedb1807::t_07cf526dd5c1df 23
+README.md
+  s_82e796aedb1807::t_c46b679d72d137 77-78
+scripts/verify-sentry-account.ts
+  s_82e796aedb1807::t_a978aecfec013a 15,23
+  s_82e796aedb1807::t_b508ef5f1d3cbb 4,29
+src/shell/observability/deployment-smoke-gate.test.ts
+  s_82e796aedb1807::t_6f32df970cc6e2 21
+vitest.acceptance.config.ts
+  s_82e796aedb1807::t_c939e1da857afa 8
+src/shell/observability/account-policy.ts
+  s_82e796aedb1807::t_c5eb1f1c776def 70
+  s_82e796aedb1807::t_4bec8246b0d561 37,50-51
+  s_82e796aedb1807::t_0b1ea3a608cba9 107,127
+  s_82e796aedb1807::t_c7ec3dbd090d65 126,258
+  s_82e796aedb1807::t_1740b573b20d5c 243-247,251,255
+  s_82e796aedb1807::t_f854e81767d6e2 106,172
+  s_82e796aedb1807::t_da79044e7d91f1 175-176
+  s_82e796aedb1807::t_8d791cfd5e344d 152
+  s_82e796aedb1807::t_f6eb2186ad1302 1,3
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "37a8683ab2bc516a1fd0bc68570fe7b7ce104bda",
+  "prompts": {},
+  "sessions": {
+    "s_82e796aedb1807": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019fedf4-d3cb-7fe4-848e-8f81a81c7736",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

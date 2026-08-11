@@ -16,6 +16,5 @@ scripts/*
 !scripts/prepare-sentry-release.ts
 !scripts/provision-runtime-role.ts
 !scripts/migrate.ts
-!scripts/smoke-sentry-deployment.ts
 *.log
 .DS_Store

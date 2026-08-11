@@ -5,12 +5,9 @@ import { SOURCE_EXCLUDE, SOURCE_SRC } from "./source-scope.mjs";
 const acceptanceExclude = [
   ...SOURCE_EXCLUDE,
   // Acceptance runs with disabled telemetry; enabled SDK behavior has its own integration suite.
-  // Sentry account verification and smoke tooling is outside WhatsApp acceptance scope.
+  // Sentry account verification is outside WhatsApp acceptance scope.
   "src/shell/observability/account-policy.ts",
   "src/shell/observability/canonical-api.ts",
-  "src/shell/observability/deployment-smoke-command.ts",
-  "src/shell/observability/deployment-smoke-gate.ts",
-  "src/shell/observability/deployment-smoke.ts",
   "src/shell/observability/sentry-account-reader.ts",
   "src/shell/observability/sentry-account-smoke.ts",
   "src/shell/observability/envelope-recorder.ts",
@@ -18,7 +15,6 @@ const acceptanceExclude = [
   "src/shell/observability/scheduled-work.ts",
   "src/shell/observability/sentry-adapter.ts",
   "src/shell/observability/sentry-live.ts",
-  "src/shell/observability/sentry-smoke-reader.ts",
   "src/shell/observability/telemetry-bootstrap.ts",
   "src/shell/observability/telemetry-config.ts",
 ];

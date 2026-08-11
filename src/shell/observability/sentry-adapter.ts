@@ -24,7 +24,6 @@ import {
   TelemetryTraceId,
 } from "./protocol";
 import type {
-  DeploymentSmokeTelemetryConfig,
   EnabledCapture,
   NonProductionTelemetryConfig,
   ProductionTelemetryConfig,
@@ -629,10 +628,7 @@ export const isCurrentSentryClient = (client: Sentry.BunClient): boolean =>
   Sentry.getClient() === client;
 
 /** Validated enabled configuration accepted by the Sentry telemetry adapter. */
-export type SentryTelemetryConfig =
-  | ProductionTelemetryConfig
-  | NonProductionTelemetryConfig
-  | DeploymentSmokeTelemetryConfig;
+export type SentryTelemetryConfig = ProductionTelemetryConfig | NonProductionTelemetryConfig;
 
 /** The one native client and resource installed by preload for runtime assembly. */
 export type SentryTelemetry = Readonly<{

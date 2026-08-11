@@ -13,7 +13,6 @@ import {
   InvalidTelemetryConfig,
   type TelemetryConfig,
   decodeSentryAccountSmokeConfig,
-  decodeSentryDeploymentSmokeConfig,
   telemetryConfigForProjects,
 } from "./telemetry-config";
 
@@ -34,54 +33,6 @@ const load = (
   telemetryConfigForProjects(approvedProjects).pipe(
     Effect.provideService(ConfigProvider.ConfigProvider, ConfigProvider.fromUnknown(input))
   );
-
-it.effect("decodes a fully sampled production identity only for the private rollout smoke", () =>
-  Effect.gen(function* () {
-    const config = yield* decodeSentryDeploymentSmokeConfig({
-      dsn: Redacted.make(productionDsn),
-      release,
-      approvedOrigin: "https://o1.ingest.sentry.io",
-      approvedProjectId: "100",
-    });
-
-    expect(config).toEqual({
-      _tag: "DeploymentSmoke",
-      environment: "production",
-      project: "production",
-      capture: { errors: true, traces: true },
-      dsn: productionDsn,
-      release,
-      errorSampleRate: 1,
-      rootTraceRate: 1,
-    });
-  })
-);
-
-it.effect.each([
-  {
-    name: "arbitrary host",
-    dsn: "https://public@attacker.invalid/100",
-  },
-  {
-    name: "crossed project",
-    dsn: nonProductionDsn,
-  },
-])("rejects a $name for the private rollout smoke", ({ dsn }) =>
-  Effect.gen(function* () {
-    const exit = yield* Effect.exit(
-      decodeSentryDeploymentSmokeConfig({
-        dsn: Redacted.make(dsn),
-        release,
-        approvedOrigin: "https://o1.ingest.sentry.io",
-        approvedProjectId: "100",
-      })
-    );
-
-    expect(Exit.findErrorOption(exit)).toEqual(
-      Option.some(new InvalidTelemetryConfig({ reason: "crossed_project" }))
-    );
-  })
-);
 
 const enabledInput = (input: Input): Input => ({
   SENTRY_CAPTURE_ERRORS: "true",

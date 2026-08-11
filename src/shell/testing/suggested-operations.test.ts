@@ -55,6 +55,9 @@ const probes: Record<OperationId, SuggestedOperationProbe> = {
       (response) => [response]
     ),
 
+  "subscription.getUpgradeUrl": (client) =>
+    Effect.map(client.subscription.getUpgradeUrl(), (response) => [response]),
+
   "categories.listCategories": (client) =>
     Effect.map(client.categories.listCategories(), (response) => [response]),
 

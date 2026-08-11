@@ -95,6 +95,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           "dashboard.getDashboard": "mutation",
           "dashboard.listDashboardCatalog": "query",
           "dashboard.applyDashboardEdit": "mutation",
+          "subscription.getUpgradeUrl": "query",
           "operations.executeAtomicBatch": "mutation",
         } satisfies Record<OperationId, CanonicalOperationKind>;
         const operations = yield* publishedOperations;
@@ -113,6 +114,21 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
             ])
             .sort(byOperationId)
         );
+      })
+    );
+
+    it.effect("keeps every currently assembled canonical operation Free", () =>
+      Effect.gen(function* () {
+        const operations = yield* publishedOperations;
+        const proOperations = operations
+          .filter((operation) => Option.getOrUndefined(operation.requiredTier) === "pro")
+          .map((operation) => operation.id);
+
+        expect(proOperations).toEqual([]);
+        expect(operations.map((operation) => operation.id)).toContain(
+          "transactions.listTransactions"
+        );
+        expect(operations.map((operation) => operation.id)).toContain("subscription.getUpgradeUrl");
       })
     );
 
@@ -139,6 +155,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           "dashboard.getDashboard": "not-required",
           "dashboard.listDashboardCatalog": "not-required",
           "dashboard.applyDashboardEdit": "required",
+          "subscription.getUpgradeUrl": "not-required",
           "operations.executeAtomicBatch": "required",
         } satisfies Record<OperationId, AgentConfirmation>;
         const operations = yield* publishedOperations;

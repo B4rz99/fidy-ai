@@ -124,7 +124,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         const sql = yield* MigrationSqlClient;
         yield* sql`DELETE FROM consent_records WHERE subject_user_id = ${otherUserId}`;
         yield* sql`DELETE FROM users WHERE id = ${otherUserId}`;
-        const otherUser = yield* makeColombianUser(otherUserId, { createdAt });
+        const otherUser = yield* makeColombianUser(otherUserId, { createdAt, paidTier: "free" });
         yield* insertUser(otherUserId, otherUser);
         const disclosure = yield* currentDisclosure;
 

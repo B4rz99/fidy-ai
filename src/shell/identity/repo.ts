@@ -12,10 +12,27 @@ import { User, UserPreferences, WhatsAppIdentity } from "~/core/identity/model";
 import { withUserTransaction } from "~/shell/db/user-transaction";
 
 const UserWithoutId = User.mapFields(Struct.omit(["id"]));
-const UserWithoutCreatedAt = User.mapFields(Struct.omit(["createdAt"]));
+const UserRowBase = User.mapFields(Struct.omit(["trialPeriod", "createdAt"]));
 const UserRow = Schema.Struct({
-  ...UserWithoutCreatedAt.fields,
+  ...UserRowBase.fields,
+  trialStartedAt: Schema.DateTimeUtcFromDate,
+  trialEndsAt: Schema.DateTimeUtcFromDate,
   createdAt: Schema.DateTimeUtcFromDate,
+});
+
+type UserRow = typeof UserRow.Type;
+
+const decodeUserRow = ({ trialEndsAt, trialStartedAt, ...row }: UserRow): User =>
+  User.make({
+    ...row,
+    trialPeriod: { startedAt: trialStartedAt, endsAt: trialEndsAt },
+  });
+
+const encodeUserRow = (userId: UserId, attributes: typeof UserWithoutId.Type): UserRow => ({
+  ...attributes,
+  id: userId,
+  trialStartedAt: attributes.trialPeriod.startedAt,
+  trialEndsAt: attributes.trialPeriod.endsAt,
 });
 
 const UserPreferencesRow = Schema.Struct({
@@ -49,7 +66,9 @@ const WhatsAppReassociationRequest = Schema.Struct({
 });
 
 const userColumns = `id, service_market AS "serviceMarket", locale,
-  time_zone AS "timeZone", created_at AS "createdAt"`;
+  time_zone AS "timeZone", paid_tier AS "paidTier",
+  trial_started_at AS "trialStartedAt", trial_ends_at AS "trialEndsAt",
+  created_at AS "createdAt"`;
 
 const writeUser = Effect.fn("Identity.writeUser")(function* (
   mode: "insert" | "upsert",
@@ -63,7 +82,7 @@ const writeUser = Effect.fn("Identity.writeUser")(function* (
           service_market = EXCLUDED.service_market,
           locale = EXCLUDED.locale,
           time_zone = EXCLUDED.time_zone,
-          created_at = EXCLUDED.created_at`
+          paid_tier = EXCLUDED.paid_tier`
       : sql``;
   return yield* withUserTransaction(
     userId,
@@ -71,12 +90,18 @@ const writeUser = Effect.fn("Identity.writeUser")(function* (
       Request: UserRow,
       Result: UserRow,
       execute: (row) => sql`
-        INSERT INTO users (id, service_market, locale, time_zone, created_at)
-        VALUES (${row.id}, ${row.serviceMarket}, ${row.locale}, ${row.timeZone}, ${row.createdAt})
+        INSERT INTO users (
+          id, service_market, locale, time_zone, paid_tier,
+          trial_started_at, trial_ends_at, created_at
+        )
+        VALUES (
+          ${row.id}, ${row.serviceMarket}, ${row.locale}, ${row.timeZone}, ${row.paidTier},
+          ${row.trialStartedAt}, ${row.trialEndsAt}, ${row.createdAt}
+        )
         ${conflict}
         RETURNING ${sql.literal(userColumns)}
       `,
-    })({ ...attributes, id: userId }).pipe(Effect.orDie)
+    })(encodeUserRow(userId, attributes)).pipe(Effect.map(decodeUserRow), Effect.orDie)
   );
 });
 
@@ -96,7 +121,7 @@ export const insertUser = Effect.fn("insertUser")(
 /** Finds the stable User inside the caller's User-scoped transaction. */
 export const findUserInScope = (
   userId: UserId
-): Effect.Effect<Option.Option<typeof UserRow.Type>, never, SqlClient.SqlClient> =>
+): Effect.Effect<Option.Option<User>, never, SqlClient.SqlClient> =>
   Effect.flatMap(SqlClient.SqlClient, (sql) =>
     SqlSchema.findOneOption({
       Request: UserId,
@@ -107,12 +132,12 @@ export const findUserInScope = (
         WHERE id = ${id}
       `,
     })(userId)
-  ).pipe(Effect.orDie);
+  ).pipe(Effect.map(Option.map(decodeUserRow)), Effect.orDie);
 
 /** Finds the stable User and all independently persisted interpretation context. */
 export const findUser = (
   userId: UserId
-): Effect.Effect<Option.Option<typeof UserRow.Type>, never, SqlClient.SqlClient> =>
+): Effect.Effect<Option.Option<User>, never, SqlClient.SqlClient> =>
   withUserTransaction(userId, findUserInScope(userId));
 
 /**
@@ -128,12 +153,12 @@ export const updateUserPreferencesInScope = Effect.fn("updateUserPreferencesInSc
     Request: UserPreferencesRow,
     Result: UserRow,
     execute: (row) => sql`
-        UPDATE users
-        SET locale = ${row.locale}, time_zone = ${row.timeZone}
-        WHERE id = ${row.userId}
-        RETURNING ${sql.literal(userColumns)}
-      `,
-  })({ userId, ...preferences }).pipe(Effect.orDie);
+      UPDATE users
+      SET locale = ${row.locale}, time_zone = ${row.timeZone}
+      WHERE id = ${row.userId}
+      RETURNING ${sql.literal(userColumns)}
+    `,
+  })({ userId, ...preferences }).pipe(Effect.map(Option.map(decodeUserRow)), Effect.orDie);
 });
 
 const writeWhatsAppIdentity = Effect.fn("Identity.writeWhatsApp")(function* (

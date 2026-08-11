@@ -8,6 +8,7 @@ import { makeColombianUser } from "~/core/identity/rules";
 import { MigrationSqlClient } from "~/shell/db/client";
 import {
   associateWhatsAppIdentity,
+  findUser,
   insertUser,
   insertWhatsAppIdentity,
   resolveWhatsAppCaller,
@@ -136,6 +137,11 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })("consent
         ).toBe(true);
         expect(yield* hasCurrentOnboardingConsent(accepted.userId)).toBe(true);
         expect(yield* observeConsentRecords(accepted.userId)).toHaveLength(1);
+        const acceptedUser = Option.getOrThrow(yield* findUser(accepted.userId));
+        expect(acceptedUser.trialPeriod).toEqual({
+          startedAt: DateTime.makeUnsafe("2026-08-01T12:00:03Z"),
+          endsAt: DateTime.makeUnsafe("2026-08-08T12:00:03Z"),
+        });
 
         // The acceptance turn is terminal at the gate and is never returned as Proceed.
         expect(accepted).not.toHaveProperty("inboundMessage");
@@ -181,6 +187,9 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })("consent
           Option.some(accepted.userId)
         );
         expect(yield* observeConsentRecords(accepted.userId)).toEqual(evidenceBeforeChange);
+        expect(Option.getOrThrow(yield* findUser(accepted.userId)).trialPeriod).toEqual(
+          acceptedUser.trialPeriod
+        );
         expect(evidenceBeforeChange[0]?.disclosureMessage).toEqual(
           message("wamid.gate-disclosure")
         );
@@ -252,7 +261,10 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })("consent
   it.effect("restores onboarding consent without replacing an existing User", () =>
     Effect.gen(function* () {
       yield* clearPhone(returningPhone);
-      const user = yield* makeColombianUser(returningUserId, { createdAt: receivedAt });
+      const user = yield* makeColombianUser(returningUserId, {
+        createdAt: receivedAt,
+        paidTier: "free",
+      });
       yield* insertUser(returningUserId, user);
       yield* insertWhatsAppIdentity(returningUserId, {
         ...testWhatsAppCaller(returningPhone),
@@ -276,6 +288,9 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })("consent
         )
       );
       expect(accepted).toMatchObject({ _tag: "Accepted", userId: returningUserId });
+      expect(Option.getOrThrow(yield* findUser(returningUserId)).trialPeriod).toEqual(
+        user.trialPeriod
+      );
       const [grant] = yield* observeConsentRecords(returningUserId);
       if (grant === undefined) return yield* Effect.die("missing consent grant");
       yield* appendConsentRecord(

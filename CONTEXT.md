@@ -199,6 +199,13 @@ _Avoid_: Advice (unqualified), recommendation.
 
 ### Money in, money out
 
+**TrialPeriod**:
+The immutable half-open UTC interval during which a newly consented User receives Pro access without
+a Subscription. It starts once, when onboarding consent creates the stable User, and ends exactly
+168 hours later. Returning identity resolution, consent restoration, and WhatsApp reassociation
+never replace or extend it.
+_Avoid_: Trial status, renewable trial, onboarding window.
+
 **Subscription**:
 The User's paid access to Fidy — weekly, monthly, or yearly Pro. Its activation ServiceMarket,
 billing periods, PriceRevisions, tax treatment, provider references, refunds, and UTC instants stay
@@ -218,9 +225,11 @@ outcome advances it to `succeeded` or `failed`.
 _Avoid_: Charge (alone), synchronous payment, settlement promise.
 
 **Paywall**:
-The boundary between free and Pro. The rule is mechanical: any agent turn that loads transaction
-history beyond the single record being captured is paid.
-_Avoid_: Gate, upsell, limit.
+The boundary between permanent Free access and genuine Pro-only capabilities. Transaction browsing
+and hosted analysis remain Free under their concrete monthly allowances; exhausting one of those
+allowances is `quota_exhausted`, never Paywall. TrialPeriod or an active Pro Subscription grants Pro
+access. Existing data remains available when either ends.
+_Avoid_: Gate, upsell, quota, limit.
 
 ### Observability
 

@@ -59,6 +59,7 @@ layer(AgentConsentHarness, { excludeTestServices: true, timeout: "30 seconds" })
       Effect.gen(function* () {
         const user = yield* makeColombianUser(unconsentedUserId, {
           createdAt: DateTime.makeUnsafe("2026-08-01T12:00:00Z"),
+          paidTier: "free",
         });
         yield* upsertUser(unconsentedUserId, user);
         const sql = yield* MigrationSqlClient;
@@ -84,7 +85,10 @@ layer(AgentConsentHarness, { excludeTestServices: true, timeout: "30 seconds" })
         yield* admin`DELETE FROM transcript_entries WHERE user_id = ${concurrentlyRevokedUserId}`;
         yield* admin`DELETE FROM users WHERE id = ${concurrentlyRevokedUserId}`;
         const occurredAt = DateTime.makeUnsafe("2026-08-01T12:00:00Z");
-        const user = yield* makeColombianUser(concurrentlyRevokedUserId, { createdAt: occurredAt });
+        const user = yield* makeColombianUser(concurrentlyRevokedUserId, {
+          createdAt: occurredAt,
+          paidTier: "free",
+        });
         yield* upsertUser(concurrentlyRevokedUserId, user);
         const grant = yield* makeOnboardingGrant;
         yield* appendConsentRecord(grant);

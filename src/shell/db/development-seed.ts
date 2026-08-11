@@ -141,7 +141,7 @@ export const seedConsentedAgentIdentity = (
     const idleExpiresAt =
       overrides.idleExpiresAt ?? (yield* renewAgentTokenIdleExpiry(tokenCreatedAt));
     const revokedAt = overrides.revokedAt ?? Option.none();
-    const user = yield* makeColombianUser(userId, { createdAt: defaultCreatedAt });
+    const user = yield* makeColombianUser(userId, { createdAt: defaultCreatedAt, paidTier: "pro" });
     yield* upsertUser(userId, user);
 
     if (!(yield* hasCurrentOnboardingConsent(userId))) {

@@ -16,6 +16,7 @@ import { whatsappBsuidIdentity } from "./0015-whatsapp-bsuid-identity";
 import { agentConfirmationConsumptions } from "./0016-agent-confirmation-consumptions";
 import { recoverConsentDisclosureDelivery } from "./0017-recover-consent-disclosure-delivery";
 import { whatsappDurablePropagation } from "./0018-whatsapp-durable-propagation";
+import { userAccess } from "./0019-user-access";
 
 /**
  * The explicit index ARCHITECTURE.md §7 calls for: one ordered, append-only
@@ -44,4 +45,5 @@ export const migrations = {
   "0016_agent_confirmation_consumptions": agentConfirmationConsumptions,
   "0017_recover_consent_disclosure_delivery": recoverConsentDisclosureDelivery,
   "0018_whatsapp_durable_propagation": whatsappDurablePropagation,
+  "0019_user_access": userAccess,
 };

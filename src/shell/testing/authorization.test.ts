@@ -100,6 +100,25 @@ layer(AuthorizationHarness, { excludeTestServices: true, timeout: "30 seconds" }
       })
     );
 
+    it.effect("rejects unauthorized Subscription upgrade destination reads", () =>
+      Effect.gen(function* () {
+        yield* truncateAuditLogEntries;
+        yield* seedWriteOnlyIdentity;
+
+        const missing = yield* HttpClient.get("/subscription/upgrade-url");
+        const underScoped = yield* HttpClient.get("/subscription/upgrade-url", {
+          headers: headersFor(writeOnlyBearer),
+        });
+        const auditEntries = yield* observeAuditLogEntries(writeOnlyUser);
+
+        expect([missing.status, underScoped.status]).toEqual([401, 403]);
+        expect(auditEntries.map((entry) => [entry.operation, entry.outcome])).toContainEqual([
+          "subscription.getUpgradeUrl",
+          "rejected",
+        ]);
+      })
+    );
+
     it.effect("does not advertise or permit insight writes to a read-only caller", () =>
       Effect.gen(function* () {
         yield* truncateInsights;

@@ -144,20 +144,48 @@ turn cleanup. Raw bearers are disclosed only to their immediate caller and never
 _Avoid_: API key, credential, PAT, hosted grant.
 
 **Transcript**:
-The exact append-only record of accepted User text, visible assistant text, and canonical tool calls
-and outcomes. It is retained independently from the bounded recent complete turns sent to the
-model. A Transcript records what happened; it never silently becomes a preference, UserNote, or
-other User truth.
-_Avoid_: Memory, preference, context window, RollingSummary.
+The exact append-only record of retained User text, visible assistant text, canonical tool calls and
+outcomes, and fixed metadata-only terminal Turn outcomes. Compaction physically removes the
+terminal-Turn prefix it successfully incorporates; a failed or stale Compaction removes nothing. A
+Transcript records what happened while retained; it never silently becomes a Memory or other User
+truth.
+_Avoid_: Memory, preference, context window, CompactedConversation.
 
-**UserNote**:
-Free-text the user asked to be remembered, reachable by both the hosted agent and the user's own
-agents through `remember` / `recall`.
-_Avoid_: Memory, fact, context.
+**Turn**:
+One admitted User request and its serialized hosted attempt. It is Pending after complete hosted
+preflight succeeds and the exact User entry is retained; it becomes Completed after a visible assistant reply
+is delivered, Failed after a handled model or delivery failure, or Interrupted when abandoned work
+is recovered. Completed, Failed, and Interrupted are terminal. A terminal Turn may participate in a
+contiguous Compaction prefix; a Failed or Interrupted Turn contributes its exact User entry and a
+fixed metadata-only terminal marker.
+_Avoid_: Message, model round, tool call, request.
 
-**RollingSummary**:
-The stored "story so far" that aged-out conversation messages are folded into.
-_Avoid_: History, context window, transcript (that is the full record).
+**Memory**:
+Formatting-normalized free text the User explicitly chose to retain for the durable-economic-context
+purpose, reachable by both the hosted agent and the User's own agents through `remember`, `recall`,
+`revise`, and `forget`. The server does not classify or censor arbitrary prose by semantic content;
+the hosted agent is instructed to use Memory only for its stated purpose and to warn the User not to
+submit sensitive values. Only current Memories are recalled; revision replaces stale text and
+forgetting removes it.
+_Avoid_: UserNote, fact, context, demographic profile.
+
+**Compaction**:
+The process that replaces any prior CompactedConversation and an exact contiguous terminal-Turn
+Transcript segment with one new bounded CompactedConversation, then physically removes the
+incorporated Transcript segment.
+_Avoid_: Summarization, Transcript rewrite, Memory creation.
+
+**CompactedConversation**:
+The stored lossy conversation continuity produced by Compaction. It becomes the only retained
+conversation continuity for incorporated Transcript entries; it is neither exact evidence nor a
+Memory or authoritative financial truth.
+_Avoid_: Summary, history, context window, Transcript.
+
+**WorkingContext**:
+The ordered, transient material assembled once for one hosted Turn from system policy, current
+Memories, any CompactedConversation, the exact uncompacted conversation, and the active request. It is never
+stored as another source of User truth.
+_Avoid_: Memory, Transcript, context window, prompt.
 
 ### Identity, consent, accountability
 

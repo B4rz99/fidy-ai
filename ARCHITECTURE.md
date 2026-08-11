@@ -114,6 +114,23 @@ canonical-encoded form before canonical re-encoding. This returns OpenAI's requi
 optional properties to canonical absence. A raw strict JSON Schema paired with an unadapted decoder
 is invalid: it can advertise `null` values that its own handler rejects.
 
+### Hosted-turn continuity
+
+Hosted turns coordinate three deep shell modules under [ADR 0014](docs/adr/0014-deep-hosted-turn-modules.md):
+
+- HostedInference alone converts, completely measures, and executes opaque provider requests.
+- WorkingContext alone constructs the trusted-policy-first semantic context order and projects
+  persisted prose as untrusted User material.
+- ConversationContinuity alone owns explicit Turn lifecycle, exact retained Transcript,
+  complete-prefix Compaction, optimistic replacement, and physical deletion.
+
+The legal sequence is continuity preparation and recovery, one WorkingContext construction, complete
+hosted preflight, stale-snapshot-checked Turn admission, prepared execution, delivery without replay,
+and explicit terminalization. Provider state, model or tokenizer identity, context capacity, prompt
+fragments, and constructible authorities do not cross these public boundaries. The executable
+contract and implementation-ticket ownership live in the
+[agent-continuity invariant matrix](docs/architecture/agent-continuity-invariant-matrix.md).
+
 ---
 
 ## 5. User context and isolation

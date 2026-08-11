@@ -8,6 +8,7 @@ import { DashboardGroup } from "~/shell/dashboard/operations";
 import { IdentityGroup } from "~/shell/identity/operations";
 import { InsightsGroup } from "~/shell/insights/operations";
 import { makeOperationsGroup } from "~/shell/operations/operations";
+import { SubscriptionGroup } from "~/shell/subscription/operations";
 import { TransactionsGroup } from "~/shell/transactions/operations";
 
 const OrdinaryFidyApi = HttpApi.make("fidy")
@@ -15,7 +16,8 @@ const OrdinaryFidyApi = HttpApi.make("fidy")
   .add(CategoriesGroup)
   .add(DashboardGroup)
   .add(TransactionsGroup)
-  .add(InsightsGroup);
+  .add(InsightsGroup)
+  .add(SubscriptionGroup);
 
 // The child union is reflected before the batch group exists, so queries and recursive batches are
 // absent by construction. The live dispatch layer checks registry completeness at startup.

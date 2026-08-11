@@ -1,6 +1,21 @@
 import { expect, it } from "@effect/vitest";
-import { Result, Schema } from "effect";
-import { UserPreferences } from "./model";
+import { DateTime, Result, Schema } from "effect";
+import { TrialPeriod, UserPreferences } from "./model";
+
+it("accepts only a TrialPeriod lasting exactly 168 hours", () => {
+  const startedAt = "2026-08-01T12:00:00Z";
+  const exact = Schema.decodeUnknownResult(TrialPeriod)({
+    startedAt,
+    endsAt: "2026-08-08T12:00:00Z",
+  });
+  const tooLong = Schema.decodeUnknownResult(TrialPeriod)({
+    startedAt,
+    endsAt: "2026-08-08T12:00:00.001Z",
+  });
+
+  expect(Result.getOrThrow(exact)).toMatchObject({ startedAt: DateTime.makeUnsafe(startedAt) });
+  expect(Result.isFailure(tooLong)).toBe(true);
+});
 
 it("derives editable User preferences as locale and time zone together", () => {
   const decoded = Schema.decodeUnknownResult(UserPreferences)({

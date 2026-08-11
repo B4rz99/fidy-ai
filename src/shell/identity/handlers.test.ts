@@ -1,5 +1,5 @@
 import { expect, layer } from "@effect/vitest";
-import { Effect, Result } from "effect";
+import { DateTime, Effect, Result } from "effect";
 import { HttpBody, HttpClient } from "effect/unstable/http";
 import { IanaTimeZone } from "~/core/_shared/context";
 import { defaultUserId } from "~/shell/db/development-seed";
@@ -21,6 +21,11 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           serviceMarket: "CO",
           locale: "es-CO",
           timeZone: "America/Bogota",
+          paidTier: "pro",
+          trialPeriod: {
+            startedAt: DateTime.makeUnsafe("2026-01-01T00:00:00Z"),
+            endsAt: DateTime.makeUnsafe("2026-01-08T00:00:00Z"),
+          },
         });
       })
     );

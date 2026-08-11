@@ -142,7 +142,10 @@ const acceptPending = Effect.fn("acceptPendingConsent")(function* (
     : UserId.make(yield* crypto.randomUUIDv7.pipe(Effect.orDie));
 
   if (Option.isNone(resolved)) {
-    const user = yield* makeColombianUser(userId, { createdAt: input.receivedAt });
+    const user = yield* makeColombianUser(userId, {
+      createdAt: input.receivedAt,
+      paidTier: "free",
+    });
     yield* insertUser(userId, user);
     yield* insertWhatsAppIdentity(userId, {
       ...input.caller,

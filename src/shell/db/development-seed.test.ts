@@ -3,7 +3,9 @@ import { expect, layer } from "@effect/vitest";
 import { Config, DateTime, Effect, Layer, Option } from "effect";
 import { AgentBearerToken } from "~/core/tokens/model";
 import { authenticateAgentToken } from "~/shell/_shared/authz";
+import { findUser } from "~/shell/identity/repo";
 import { PgLive } from "./client";
+import { defaultUserId } from "./development-seed";
 
 const localDatabaseUrl = Config.string("DATABASE_URL");
 
@@ -62,6 +64,7 @@ layer(Layer.merge(PgLive, BunServices.layer), {
       expect(second.stderr).not.toContain("fin_");
       expect(Option.isNone(firstResolution)).toBe(true);
       expect(Option.isSome(secondResolution)).toBe(true);
+      expect(Option.getOrThrow(yield* findUser(defaultUserId)).paidTier).toBe("pro");
     })
   );
 

@@ -9,6 +9,7 @@ export type ExternalEndpoints = {
   readonly webOrigin: string;
   readonly apiOrigin: string;
   readonly policyUrl: string;
+  readonly upgradeUrl: string;
   readonly magicLinkUrl: string;
   readonly kapsoWebhookUrl: string;
   readonly wompiCallbackUrl: string;
@@ -28,6 +29,7 @@ export const externalEndpoints: Config.Config<ExternalEndpoints> = Config.all({
     webOrigin: webOrigin.origin,
     apiOrigin: apiOrigin.origin,
     policyUrl: new URL("/politica", webOrigin).href,
+    upgradeUrl: new URL("/upgrade", webOrigin).href,
     magicLinkUrl: new URL("/auth/magic", webOrigin).href,
     kapsoWebhookUrl: new URL("/webhooks/kapso", apiOrigin).href,
     wompiCallbackUrl: new URL("/webhooks/wompi", apiOrigin).href,

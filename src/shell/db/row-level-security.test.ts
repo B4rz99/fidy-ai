@@ -52,10 +52,18 @@ const observeContext = Effect.fn("observeRlsContext")(function* (userId: UserId)
 const seedRows = Effect.gen(function* () {
   const admin = yield* MigrationSqlClient;
   yield* admin`
-    INSERT INTO users (id, service_market, locale, time_zone, created_at)
-    VALUES
-      (${owner}, 'CO', 'es-CO', 'America/Bogota', '2026-01-01T00:00:00Z'),
-      (${stranger}, 'CO', 'es-CO', 'America/Bogota', '2026-01-01T00:00:00Z')
+    INSERT INTO users (
+      id, service_market, locale, time_zone, paid_tier,
+      trial_started_at, trial_ends_at, created_at
+    ) VALUES
+      (
+        ${owner}, 'CO', 'es-CO', 'America/Bogota', 'free',
+        '2026-01-01T00:00:00Z', '2026-01-08T00:00:00Z', '2026-01-01T00:00:00Z'
+      ),
+      (
+        ${stranger}, 'CO', 'es-CO', 'America/Bogota', 'free',
+        '2026-01-01T00:00:00Z', '2026-01-08T00:00:00Z', '2026-01-01T00:00:00Z'
+      )
     ON CONFLICT (id) DO NOTHING
   `;
   yield* admin`DELETE FROM transactions WHERE id = ${ownerTransactionId}`;
@@ -78,10 +86,22 @@ const policyTransactionId = TransactionId.make("f1d1a000-0000-4000-8000-00000000
 const seedEveryPolicyShape = Effect.gen(function* () {
   const admin = yield* MigrationSqlClient;
   yield* admin`
-    INSERT INTO users (id, service_market, locale, time_zone, created_at) VALUES
-      (${policyOwner}, 'CO', 'es-CO', 'America/Bogota', '2026-01-01T00:00:00Z'),
-      (${policyStranger}, 'CO', 'es-CO', 'America/Bogota', '2026-01-01T00:00:00Z'),
-      (${policyInsertVictim}, 'CO', 'es-CO', 'America/Bogota', '2026-01-01T00:00:00Z')
+    INSERT INTO users (
+      id, service_market, locale, time_zone, paid_tier,
+      trial_started_at, trial_ends_at, created_at
+    ) VALUES
+      (
+        ${policyOwner}, 'CO', 'es-CO', 'America/Bogota', 'free',
+        '2026-01-01T00:00:00Z', '2026-01-08T00:00:00Z', '2026-01-01T00:00:00Z'
+      ),
+      (
+        ${policyStranger}, 'CO', 'es-CO', 'America/Bogota', 'free',
+        '2026-01-01T00:00:00Z', '2026-01-08T00:00:00Z', '2026-01-01T00:00:00Z'
+      ),
+      (
+        ${policyInsertVictim}, 'CO', 'es-CO', 'America/Bogota', 'free',
+        '2026-01-01T00:00:00Z', '2026-01-08T00:00:00Z', '2026-01-01T00:00:00Z'
+      )
   `;
   yield* admin`
     INSERT INTO agent_confirmation_consumptions (user_id, digest, consumed_at)
@@ -346,8 +366,13 @@ const deniedInsertProbes = (sql: SqlClient.SqlClient) =>
     {
       tableName: "users",
       insert: sql`
-      INSERT INTO users (id, service_market, locale, time_zone, created_at)
-      VALUES (${policyForgedUser}, 'CO', 'es-CO', 'America/Bogota', '2026-01-02T00:00:00Z')
+      INSERT INTO users (
+        id, service_market, locale, time_zone, paid_tier,
+        trial_started_at, trial_ends_at, created_at
+      ) VALUES (
+        ${policyForgedUser}, 'CO', 'es-CO', 'America/Bogota', 'free',
+        '2026-01-02T00:00:00Z', '2026-01-09T00:00:00Z', '2026-01-02T00:00:00Z'
+      )
     `,
     },
     {

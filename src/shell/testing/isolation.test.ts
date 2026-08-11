@@ -91,6 +91,12 @@ const probes: Record<OperationId, IsolationProbe> = {
       expect(ownersUser.data.timeZone).toBe("America/Bogota");
     }),
 
+  "subscription.getUpgradeUrl": (attempt) =>
+    Effect.gen(function* () {
+      const destination = yield* attempt.strangerClient.subscription.getUpgradeUrl();
+      expect(destination.data.url).toEqual(new URL("https://fidyapp.com/upgrade"));
+    }),
+
   "categories.listCategories": (attempt) =>
     Effect.gen(function* () {
       const listed = yield* attempt.strangerClient.categories.listCategories({});

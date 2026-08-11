@@ -1,0 +1,96 @@
+docs/adr/0014-deep-hosted-turn-modules.md
+  s_d9cea8ca8d71a3::t_32adad3adfe938 8,10-19,25-39,41-69,71,73,75,79,81,85-88,91-92
+  s_d9cea8ca8d71a3::t_a03c1f489a7c1f 40
+  s_bb6121f6d92ccd::t_73b4b491a67da6 1-7,9,22-24,70,72,74,76-78,80,82-84,89-90
+  s_d9cea8ca8d71a3::t_f0d9f1987e730d 20-21
+ARCHITECTURE.md
+  s_d9cea8ca8d71a3::t_320c039785e58a 117-133
+docs/architecture/agent-continuity-invariant-matrix.md
+  s_d9cea8ca8d71a3::t_fa92e13317fb2c 39,98
+  s_d9cea8ca8d71a3::t_dec8a1ec6e89bf 70-82,86-97
+  s_d9cea8ca8d71a3::t_57cf528dd06602 1-4,6-25,33-35,44-46,59-61,67-69,83-85,99-105
+  s_d9cea8ca8d71a3::t_e890c7c3f7d588 5,106
+  s_d9cea8ca8d71a3::t_37505baf3016b1 36-38,40-43
+  s_d9cea8ca8d71a3::t_0907761bf0cc1c 26-32,47-58,62-66
+CONTEXT.md
+  s_bb6121f6d92ccd::t_094ff49313c60e 152,172,177-178,182
+  s_d9cea8ca8d71a3::t_c9dd7e322ac9ad 155-156,185-186
+  s_bb6121f6d92ccd::t_4f484f4314b4e2 163,170,176,179-181
+  s_bb6121f6d92ccd::t_4fa635c22edbe7 147-151,154,157-162,173-175
+  s_bb6121f6d92ccd::t_a4ab4ee3aab574 184,187-188
+  s_bb6121f6d92ccd::t_15fab85403dad8 164-169
+  s_d9cea8ca8d71a3::t_9449ae6ea53529 153,171,183
+SECURITY_STANDARDS.md
+  s_bb6121f6d92ccd::t_5fd9ece918b80e 244-245
+  s_bb6121f6d92ccd::t_6637bd314c88d3 157-159,163-166
+  s_bb6121f6d92ccd::t_7efc99364458c1 41,55
+  s_bb6121f6d92ccd::t_ee1bb12a171916 76
+  s_bb6121f6d92ccd::t_d3ba984b2eda8e 154-156
+  s_d9cea8ca8d71a3::t_f8f51019e9616b 160-162
+  s_bb6121f6d92ccd::t_74723df2b0cb5a 236
+  s_bb6121f6d92ccd::t_4b9ea73f917ded 74-75,77-79
+src/shell/observability/registry.ts
+  s_40245b72d593db::t_fc2f439f1bd874 97
+src/shell/agent/toolkit.ts
+  s_40245b72d593db::t_fc2f439f1bd874 127-130,133
+scripts/check-dependency-guards.ts
+  s_40245b72d593db::t_fc2f439f1bd874 52-53,253-288
+src/shell/testing/whatsapp-acceptance-harness.ts
+  s_40245b72d593db::t_fc2f439f1bd874 25,500-503,508
+scripts/agent-repl.ts
+  s_40245b72d593db::t_fc2f439f1bd874 5,27
+src/shell/testing/hosted-inference-fixtures.ts
+  s_40245b72d593db::t_fc2f439f1bd874 1-113
+src/shell/agent/agent-service.ts
+  s_40245b72d593db::t_fc2f439f1bd874 19,73-82,117,400-401,404,755,802-803,830,834,842,847,889-890,897,905,912,928-929,932-933,940-950,952-957,959,961,963-964,969-970,972,976,982,987-988,993-1001,1004-1006,1014,1016-1024,1037,1040-1042,1047,1061,1077,1085-1091,1093,1136,1162,1166,1176-1177,1182,1185,1188-1192,1206-1207,1309,1334,1363,1368
+src/shell/consent/agent-consent-gate.test.ts
+  s_40245b72d593db::t_fc2f439f1bd874 13,29-30,32
+src/shell/agent/hosted-inference.ts
+  s_40245b72d593db::t_fc2f439f1bd874 1-376
+src/shell/agent/openai.ts
+  s_40245b72d593db::t_fc2f439f1bd874 1-24,29-32,42-43,47,54-459
+src/shell/channels/whatsapp/whatsapp-channel.test.ts
+  s_40245b72d593db::t_fc2f439f1bd874 33,42,357-359,361,388-396,428,438-440,442,447
+src/shell/agent/openai.test.ts
+  s_40245b72d593db::t_fc2f439f1bd874 4-14,18-19,21,26,28-38,40-114,118-120,129,131-158,160-175,177-181,183-200,202-206,208-213,217-236
+src/shell/http.ts
+  s_40245b72d593db::t_fc2f439f1bd874 10,94
+.dependency-cruiser.mjs
+  s_40245b72d593db::t_fc2f439f1bd874 102-116
+src/shell/agent/agent-service.test.ts
+  s_40245b72d593db::t_fc2f439f1bd874 51,1139-1142,1144,1150
+src/shell/agent/hosted-inference.test.ts
+  s_40245b72d593db::t_fc2f439f1bd874 1-199
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "b30ed57802e01e3d8f3a0b1822f9065c3389410d",
+  "prompts": {},
+  "sessions": {
+    "s_40245b72d593db": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019ff2ae-4eb5-7bf3-8480-83c1cd33373e",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_bb6121f6d92ccd": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019fed60-f908-77e9-a358-f89f7a49e8ff",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": null
+    },
+    "s_d9cea8ca8d71a3": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019ff2a3-3b9c-7dcf-8515-7a630d0e28a5",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

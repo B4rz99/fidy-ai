@@ -1,0 +1,49 @@
+src/shell/observability/registry.ts
+  s_40245b72d593db::t_fc2f439f1bd874 97
+src/shell/agent/toolkit.ts
+  s_40245b72d593db::t_fc2f439f1bd874 127-130,133
+scripts/check-dependency-guards.ts
+  s_40245b72d593db::t_fc2f439f1bd874 52-53,253-288
+src/shell/testing/whatsapp-acceptance-harness.ts
+  s_40245b72d593db::t_fc2f439f1bd874 25,500-503,508
+scripts/agent-repl.ts
+  s_40245b72d593db::t_fc2f439f1bd874 5,27
+src/shell/testing/hosted-inference-fixtures.ts
+  s_40245b72d593db::t_fc2f439f1bd874 1-113
+src/shell/agent/agent-service.ts
+  s_40245b72d593db::t_fc2f439f1bd874 19,73-82,117,400-401,404,755,802-803,830,834,842,847,889-890,897,905,912,928-929,932-933,940-950,952-957,959,961,963-964,969-970,972,976,982,987-988,993-1001,1004-1006,1014,1016-1024,1037,1040-1042,1047,1061,1077,1085-1091,1093,1136,1162,1166,1176-1177,1182,1185,1188-1192,1206-1207,1309,1334,1363,1368
+src/shell/consent/agent-consent-gate.test.ts
+  s_40245b72d593db::t_fc2f439f1bd874 13,29-30,32
+src/shell/agent/hosted-inference.ts
+  s_40245b72d593db::t_fc2f439f1bd874 1-376
+src/shell/agent/openai.ts
+  s_40245b72d593db::t_fc2f439f1bd874 1-24,29-32,42-43,47,54-459
+src/shell/channels/whatsapp/whatsapp-channel.test.ts
+  s_40245b72d593db::t_fc2f439f1bd874 33,42,357-359,361,388-396,428,438-440,442,447
+src/shell/agent/openai.test.ts
+  s_40245b72d593db::t_fc2f439f1bd874 4-14,18-19,21,26,28-38,40-114,118-120,129,131-158,160-175,177-181,183-200,202-206,208-213,217-236
+src/shell/http.ts
+  s_40245b72d593db::t_fc2f439f1bd874 10,94
+.dependency-cruiser.mjs
+  s_40245b72d593db::t_fc2f439f1bd874 102-116
+src/shell/agent/agent-service.test.ts
+  s_40245b72d593db::t_fc2f439f1bd874 51,1139-1142,1144,1150
+src/shell/agent/hosted-inference.test.ts
+  s_40245b72d593db::t_fc2f439f1bd874 1-199
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "8edf3ea479b9d9bfa14120d25ff17dd23fc51827",
+  "prompts": {},
+  "sessions": {
+    "s_40245b72d593db": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019ff2ae-4eb5-7bf3-8480-83c1cd33373e",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

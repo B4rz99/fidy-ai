@@ -1,0 +1,25 @@
+docs/research/open-source-deterministic-document-ingestion.md
+  s_64bc7903df8b4b::t_86885c0459a831 63-73,252-259
+  s_64bc7903df8b4b::t_b93b0928f6c16e 1-24,37-62,74-251,260-296
+  s_64bc7903df8b4b::t_a5208785900e0a 25-36
+docs/research/anydoc-for-fidy-ingestion.md
+  s_64bc7903df8b4b::t_9f9f78d9b2baff 49,142
+  s_64bc7903df8b4b::t_799ea43e1ad15a 83-89
+  s_64bc7903df8b4b::t_1c75a1211292de 1-48,50-82,90-141,143-144
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "16e98834f9b48facfdaec52af057fe2baef6ad4e",
+  "prompts": {},
+  "sessions": {
+    "s_64bc7903df8b4b": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019ff250-a8ee-7c08-a42f-ee163a7a99a9",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

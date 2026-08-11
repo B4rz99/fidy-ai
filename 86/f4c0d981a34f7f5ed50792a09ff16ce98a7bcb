@@ -1,0 +1,74 @@
+src/shell/http.ts
+  s_405115b40b60da::t_f6ae19793f9740 19,103
+src/shell/ingestion/source-format.ts
+  s_405115b40b60da::t_fadb3ce24b094c 1-8
+src/shell/ingestion/handlers.test.ts
+  s_405115b40b60da::t_a1f525b43ef4b2 3-5
+  s_405115b40b60da::t_73b78c774f9616 26
+  s_405115b40b60da::t_91d53947922e14 75-82,84-90
+  s_405115b40b60da::t_1197bf7d336ff8 2,13,17-25,41,47-52,57,59
+  s_405115b40b60da::t_bd55439012c28b 27-29,83
+  s_405115b40b60da::t_bd0738347f5416 14
+src/core/ingestion/model.ts
+  s_405115b40b60da::t_1ef215c5f95a90 1
+  s_405115b40b60da::t_03f658bdb77785 70-72
+  s_405115b40b60da::t_74c05e582583dc 58,62-69
+  s_405115b40b60da::t_96c842cb83dc02 201,216-238
+src/shell/ingestion/parser.test.ts
+  s_405115b40b60da::t_2a2c282b149b4f 93-95
+  s_405115b40b60da::t_775364189e526c 3,62-65,67-72,79,81,83-92
+  s_405115b40b60da::t_de5c739804daa4 7,66
+  s_405115b40b60da::t_b47dec77082fc6 2,73-78
+  s_405115b40b60da::t_a7d648f8fd6e91 6
+  s_405115b40b60da::t_80c6f3d0ed25a7 80
+  s_405115b40b60da::t_77dbcd862beb25 82
+src/shell/ingestion/worker.ts
+  s_405115b40b60da::t_b6240689cd1906 216-226
+  s_405115b40b60da::t_b56e91fe82fba9 31-32
+src/shell/ingestion/repo.ts
+  s_405115b40b60da::t_36ebe8819d3c43 382-388
+src/shell/transactions/repo.ts
+  s_405115b40b60da::t_e3231119d416d6 338-350
+src/shell/ingestion/parser.ts
+  s_405115b40b60da::t_0d8bfe907c5246 60-62,64-69,72
+  s_405115b40b60da::t_05c33271d53850 34,63
+  s_405115b40b60da::t_7cd1b480ad54ad 11,282
+src/shell/db/migrations/0020-statement-ingestion.ts
+  s_405115b40b60da::t_9e4c8903aa0dd1 155-160
+  s_405115b40b60da::t_be1a33da57e468 142
+  s_405115b40b60da::t_12fb6b029c589a 29,171
+src/shell/ingestion/column-mapper.ts
+  s_405115b40b60da::t_1ce31a564ba461 18
+  s_405115b40b60da::t_bd04bcefa88fcc 26-27,29-53
+src/shell/ingestion/mutations.ts
+  s_405115b40b60da::t_e7cf874a180597 180
+  s_405115b40b60da::t_cf8ed6c8910a64 174-179,181
+  s_405115b40b60da::t_54b942b0f5ccb8 25,110
+  s_405115b40b60da::t_901018c3def634 2-3,135-151,182
+src/core/ingestion/rules.test.ts
+  s_405115b40b60da::t_f5af3f8e4c14c2 61-62,273-276
+  s_405115b40b60da::t_6c09ae59b3c089 211
+  s_405115b40b60da::t_5c98c925b01a0e 271-272
+  s_405115b40b60da::t_961fd294a8af5e 233-259
+  s_405115b40b60da::t_6dd99cfe5f6213 2,33-60
+  s_405115b40b60da::t_0d69ac5ce8b28a 200-210,212-232,260-270
+src/shell/ingestion/worker.test.ts
+  s_405115b40b60da::t_6472018feda24e 2,126,143,146-159,164-167
+  s_405115b40b60da::t_b4bd42e7af191f 93,96-105
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "86f4c0d981a34f7f5ed50792a09ff16ce98a7bcb",
+  "prompts": {},
+  "sessions": {
+    "s_405115b40b60da": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019ff27a-029a-7cfe-b697-8a69c426b0a0",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": null
+    }
+  }
+}

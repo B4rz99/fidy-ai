@@ -1,0 +1,35 @@
+vitest.acceptance.config.ts
+  s_82e796aedb1807::t_b0959ca1e4ad9f 8
+README.md
+  s_82e796aedb1807::t_cfa1c8ba2f9ac6 216-235
+  s_82e796aedb1807::t_6b79d633c0f120 76-82,125-126
+src/shell/observability/registry.ts
+  s_82e796aedb1807::t_cfa1c8ba2f9ac6 87
+package.json
+  s_82e796aedb1807::t_5233dba0456a51 14
+src/shell/observability/sentry-adapter.ts
+  s_82e796aedb1807::t_ed10c7826f2ff5 631
+scripts/check-production-image.sh
+  s_82e796aedb1807::t_0e580db2c23d06 332
+  s_82e796aedb1807::t_253278f4563423 125-126,136
+source-scope.mjs
+  s_82e796aedb1807::t_a2a10b05c3933d 12-14
+Dockerfile
+  s_82e796aedb1807::t_3c1276f468ef75 12
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "e6dbff7f341dc8ba01fcb8ff29ae76615143cce9",
+  "prompts": {},
+  "sessions": {
+    "s_82e796aedb1807": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019fedf4-d3cb-7fe4-848e-8f81a81c7736",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

@@ -1,113 +1,15 @@
-import { DateTime, Option, Schema } from "effect";
+import { Option, Schema } from "effect";
 
-/** The bounded storage-region codes that may appear in secret-free evidence and reports. */
+/** The bounded storage-region codes returned by Sentry's read-only organization API. */
 export const SentryStorageRegion = Schema.Literals(["us", "eu"]);
 export type SentryStorageRegion = typeof SentryStorageRegion.Type;
 
-/** A sensitive event-data category that must be removed by each project's server scrubber. */
-export const SentryScrubField = Schema.Literals([
-  "request",
-  "user",
-  "breadcrumb",
-  "message",
-  "exception-value",
-  "span",
-  "geo",
-  "ai",
-  "database",
-  "arbitrary-context",
-]);
-export type SentryScrubField = typeof SentryScrubField.Type;
-
-const validDateTime = Schema.makeFilter((value: string) =>
-  Option.isSome(DateTime.make(value)) ? undefined : "Expected a valid calendar date or instant"
-);
-const IsoInstant = Schema.String.check(
-  Schema.isPattern(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$/u),
-  validDateTime
-);
-const IsoDate = Schema.String.check(Schema.isPattern(/^\d{4}-\d{2}-\d{2}$/u), validDateTime);
 const NonNegativeInt = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
-const developerRetentionDays = 30;
 const secondsPerDay = 86_400;
 const nonProductionDailyErrorCeiling = 100;
-const operationalFailureOccurrences = 5;
-const operationalFailureWindowMinutes = 10;
-const apiP95Seconds = 2;
-const latencyWindowMinutes = 15;
-const queueP95Milliseconds = 60_000;
 const firstQuotaAlertPercentage = 50;
 const secondQuotaAlertPercentage = 75;
 const thirdQuotaAlertPercentage = 90;
-const quotaUsagePercentages = [
-  firstQuotaAlertPercentage,
-  secondQuotaAlertPercentage,
-  thirdQuotaAlertPercentage,
-] as const;
-
-/** Operator-attested values copied from the live account UI after completing the runbook. */
-export const SentryOperatorEvidence = Schema.Struct({
-  version: Schema.Literal(1),
-  observedAt: IsoInstant,
-  account: Schema.Struct({
-    plan: Schema.String,
-    isTrial: Schema.Boolean,
-    isLegacy: Schema.Boolean,
-    errorQuota: NonNegativeInt,
-    spanQuota: NonNegativeInt,
-    quotaResetAt: IsoInstant,
-    retentionDays: NonNegativeInt,
-    maximumMembers: NonNegativeInt,
-    storageRegion: SentryStorageRegion,
-  }),
-  compliance: Schema.Struct({
-    processingTermsReviewed: Schema.Boolean,
-    processingTermsEffectiveDate: IsoDate,
-    subprocessorsReviewed: Schema.Boolean,
-    subprocessorListCheckedAt: IsoInstant,
-    regionOnlyProcessingClaimed: Schema.Boolean,
-  }),
-  configuration: Schema.Struct({
-    productionSpikeProtectionDisabled: Schema.Boolean,
-    productionHardQuotaDropsAccepted: Schema.Boolean,
-    productionScrubbedFields: Schema.UniqueArray(SentryScrubField),
-    nonProductionScrubbedFields: Schema.UniqueArray(SentryScrubField),
-    verifiedOperatorRecipientCount: Schema.Literal(1),
-    productionAlerts: Schema.Struct({
-      newRegressedDefectImmediate: Schema.Boolean,
-      operationalFailureErrorCode: Schema.Literal("operational_failure"),
-      operationalFailureOccurrences: NonNegativeInt,
-      operationalFailureWindowMinutes: NonNegativeInt,
-      apiSpanOperation: Schema.Literal("http.server"),
-      apiP95Seconds: NonNegativeInt,
-      apiP95WindowMinutes: NonNegativeInt,
-      queueDelayField: Schema.Literal("fidy.delay_milliseconds"),
-      queueP95Milliseconds: NonNegativeInt,
-      queueP95WindowMinutes: NonNegativeInt,
-      quotaUsagePercentages: Schema.UniqueArray(NonNegativeInt),
-      productionProjectOnly: Schema.Boolean,
-      productionEnvironmentOnly: Schema.Boolean,
-      verifiedOperatorRecipientOnly: Schema.Boolean,
-    }),
-    localAlertIsolationVerified: Schema.Boolean,
-    futureCiUsesNonProductionProject: Schema.Boolean,
-    futureCiFullCaptureVerified: Schema.Boolean,
-    futureCiAlertIsolationVerified: Schema.Boolean,
-  }),
-  smoke: Schema.Struct({
-    releaseCreated: Schema.Boolean,
-    sourceMapUploadedAndSymbolicated: Schema.Boolean,
-    quotaReportingVisible: Schema.Boolean,
-    alertDeliveredToVerifiedOperator: Schema.Boolean,
-    ingestion429Observed: Schema.Boolean,
-    generatedRegionEndpointAcceptedEvent: Schema.Boolean,
-  }),
-  runtime: Schema.Struct({
-    errorCaptureKillSwitchTested: Schema.Boolean,
-    tracingKillSwitchTested: Schema.Boolean,
-  }),
-});
-export type SentryOperatorEvidence = typeof SentryOperatorEvidence.Type;
 
 /** A client-key error ceiling returned by Sentry's read-only project API. */
 export type SentryClientKeyRateLimit = Readonly<{
@@ -132,56 +34,28 @@ export type SentryAccountObservation =
       nonProduction: Option.Option<SentryProjectObservation>;
     }>;
 
-/** The closed set of policy checks that a secret-free verification report may name. */
+/** The closed set of account checks that can be proved automatically. */
 export const SentryAccountCheck = Schema.Literals([
-  "developer-plan",
-  "live-quotas-and-reset",
-  "retention",
-  "one-user-constraint",
   "storage-region",
-  "processing-terms",
   "project-separation",
   "generated-client-keys",
   "explicit-environments",
-  "future-ci-policy",
   "non-production-error-ceiling",
   "production-key-unlimited",
-  "production-spike-protection-disabled",
-  "production-hard-quota-drops-accepted",
-  "server-side-scrubbing",
-  "operator-email",
-  "production-alerts",
-  "non-production-alert-isolation",
-  "release-creation",
-  "source-map-upload",
-  "quota-reporting",
-  "alert-delivery",
-  "ingestion-429",
-  "generated-region-endpoint",
   "management-api-availability",
-  "error-capture-kill-switch",
-  "tracing-kill-switch",
   "quota-response-actions",
 ]);
 export type SentryAccountCheck = typeof SentryAccountCheck.Type;
 
-/** The evidence state assigned to one account-policy check. */
-export const SentryFindingStatus = Schema.Literals([
-  "verified",
-  "assumed",
-  "mismatch",
-  "manual-check",
-]);
+/** The evidence state assigned to one automated account-policy check. */
+export const SentryFindingStatus = Schema.Literals(["verified", "mismatch"]);
 export type SentryFindingStatus = typeof SentryFindingStatus.Type;
 
 /** The bounded provenance categories allowed in a verification finding. */
 export const SentryFindingSource = Schema.Literals([
   "live-api",
-  "operator-evidence",
-  "public-documentation",
   "checked-in-policy",
   "unavailable",
-  "none",
 ]);
 export type SentryFindingSource = typeof SentryFindingSource.Type;
 
@@ -193,7 +67,7 @@ export const SentryAccountFinding = Schema.Struct({
 });
 export type SentryAccountFinding = typeof SentryAccountFinding.Type;
 
-/** One explicit operator action taken when shared account quota reaches a threshold. */
+/** One prescribed response when shared account quota reaches a threshold. */
 export const SentryQuotaResponseAction = Schema.Struct({
   quota: Schema.Literals(["spans", "errors"]),
   usagePercentage: NonNegativeInt,
@@ -229,19 +103,8 @@ const quotaResponseActions: ReadonlyArray<SentryQuotaResponseAction> = [
   },
 ];
 
-const reportWithoutMismatch = (
-  findings: ReadonlyArray<SentryAccountFinding>
-): "verified" | "incomplete" =>
-  findings.some((item) => ["manual-check", "assumed"].includes(item.status))
-    ? "incomplete"
-    : "verified";
-
-const reportOverall = (
-  findings: ReadonlyArray<SentryAccountFinding>
-): "verified" | "mismatch" | "incomplete" =>
-  findings.some((item) => item.status === "mismatch")
-    ? "mismatch"
-    : reportWithoutMismatch(findings);
+const reportOverall = (findings: ReadonlyArray<SentryAccountFinding>): "verified" | "mismatch" =>
+  findings.some((item) => item.status === "mismatch") ? "mismatch" : "verified";
 
 const reportFindingsMatch = (findings: ReadonlyArray<SentryAccountFinding>): boolean =>
   findings.length === SentryAccountCheck.literals.length &&
@@ -260,8 +123,8 @@ const reportActionsMatch = (actions: ReadonlyArray<SentryQuotaResponseAction>): 
   });
 
 const SentryVerificationReportShape = Schema.Struct({
-  policyRevision: Schema.Literal(1),
-  overall: Schema.Literals(["verified", "mismatch", "incomplete"]),
+  policyRevision: Schema.Literal(2),
+  overall: Schema.Literals(["verified", "mismatch"]),
   findings: Schema.Array(SentryAccountFinding),
   quotaResponseActions: Schema.Array(SentryQuotaResponseAction),
 });
@@ -284,48 +147,14 @@ const finding = (
   source: SentryFindingSource
 ): SentryAccountFinding => ({ check, status: matches ? "verified" : "mismatch", source });
 
-const manual = (check: SentryAccountCheck): SentryAccountFinding => ({
-  check,
-  status: "manual-check",
-  source: "none",
-});
-
 const unavailable = (check: SentryAccountCheck): SentryAccountFinding => ({
   check,
-  status: "manual-check",
+  status: "mismatch",
   source: "unavailable",
 });
 
 const hasEnvironment = (project: SentryProjectObservation, environment: string): boolean =>
   project.environments.includes(environment);
-
-const allScrubFields: ReadonlyArray<SentryScrubField> = SentryScrubField.literals;
-
-const assumed = (check: SentryAccountCheck): SentryAccountFinding => ({
-  check,
-  status: "assumed",
-  source: "public-documentation",
-});
-
-const operatorFinding = (
-  check: SentryAccountCheck,
-  evidence: Option.Option<SentryOperatorEvidence>,
-  matches: (value: SentryOperatorEvidence) => boolean
-): SentryAccountFinding =>
-  Option.match(evidence, {
-    onNone: () => manual(check),
-    onSome: (value) => finding(check, matches(value), "operator-evidence"),
-  });
-
-const assumedOperatorFinding = (
-  check: SentryAccountCheck,
-  evidence: Option.Option<SentryOperatorEvidence>,
-  matches: (value: SentryOperatorEvidence) => boolean
-): SentryAccountFinding =>
-  Option.match(evidence, {
-    onNone: () => assumed(check),
-    onSome: (value) => finding(check, matches(value), "operator-evidence"),
-  });
 
 const allActiveKeysMatch = (
   project: SentryProjectObservation,
@@ -334,62 +163,20 @@ const allActiveKeysMatch = (
   project.activeClientKeyRateLimits.length > 0 &&
   project.activeClientKeyRateLimits.every(predicate);
 
-const allScrubFieldsPresent = (fields: ReadonlyArray<SentryScrubField>): boolean =>
-  allScrubFields.every((field) => fields.includes(field));
-
-const productionAlertsMatch = (value: SentryOperatorEvidence): boolean => {
-  const alerts = value.configuration.productionAlerts;
-  return [
-    alerts.newRegressedDefectImmediate,
-    alerts.operationalFailureOccurrences === operationalFailureOccurrences,
-    alerts.operationalFailureWindowMinutes === operationalFailureWindowMinutes,
-    alerts.apiP95Seconds === apiP95Seconds,
-    alerts.apiP95WindowMinutes === latencyWindowMinutes,
-    alerts.queueP95Milliseconds === queueP95Milliseconds,
-    alerts.queueP95WindowMinutes === latencyWindowMinutes,
-    alerts.quotaUsagePercentages.length === quotaUsagePercentages.length,
-    quotaUsagePercentages.every((percentage) => alerts.quotaUsagePercentages.includes(percentage)),
-    alerts.productionProjectOnly,
-    alerts.productionEnvironmentOnly,
-    alerts.verifiedOperatorRecipientOnly,
-  ].every(Boolean);
-};
-
 const observedProject = (
   observation: SentryAccountObservation,
   project: "production" | "nonProduction"
 ): Option.Option<SentryProjectObservation> =>
   observation._tag === "available" ? observation[project] : Option.none();
 
-const storageRegionFinding = (
-  observation: SentryAccountObservation,
-  evidence: Option.Option<SentryOperatorEvidence>
-): SentryAccountFinding => {
+const storageRegionFinding = (observation: SentryAccountObservation): SentryAccountFinding => {
   if (observation._tag === "unavailable") return unavailable("storage-region");
   return Option.match(observation.storageRegion, {
-    onNone: () => manual("storage-region"),
-    onSome: (region) =>
-      finding(
-        "storage-region",
-        Option.match(evidence, {
-          onNone: () => true,
-          onSome: (value) => value.account.storageRegion === region,
-        }),
-        "live-api"
-      ),
+    onNone: () => unavailable("storage-region"),
+    onSome: () => finding("storage-region", true, "live-api"),
   });
 };
 
-type AccountEvidenceFindings = Readonly<
-  Record<
-    | "developer-plan"
-    | "live-quotas-and-reset"
-    | "retention"
-    | "one-user-constraint"
-    | "processing-terms",
-    SentryAccountFinding
-  >
->;
 type ApiObservationFindings = Readonly<
   Record<
     | "project-separation"
@@ -401,65 +188,6 @@ type ApiObservationFindings = Readonly<
     SentryAccountFinding
   >
 >;
-type ConfigurationEvidenceFindings = Readonly<
-  Record<
-    | "future-ci-policy"
-    | "production-spike-protection-disabled"
-    | "production-hard-quota-drops-accepted"
-    | "server-side-scrubbing"
-    | "operator-email"
-    | "production-alerts"
-    | "non-production-alert-isolation",
-    SentryAccountFinding
-  >
->;
-type SmokeAndRuntimeFindings = Readonly<
-  Record<
-    | "release-creation"
-    | "source-map-upload"
-    | "quota-reporting"
-    | "alert-delivery"
-    | "ingestion-429"
-    | "generated-region-endpoint"
-    | "error-capture-kill-switch"
-    | "tracing-kill-switch"
-    | "quota-response-actions",
-    SentryAccountFinding
-  >
->;
-
-const accountEvidenceFindings = (
-  evidence: Option.Option<SentryOperatorEvidence>
-): AccountEvidenceFindings => ({
-  "developer-plan": operatorFinding("developer-plan", evidence, (value) =>
-    [value.account.plan === "developer", !value.account.isTrial, !value.account.isLegacy].every(
-      Boolean
-    )
-  ),
-  "live-quotas-and-reset": operatorFinding(
-    "live-quotas-and-reset",
-    evidence,
-    (value) => value.account.errorQuota > 0 && value.account.spanQuota > 0
-  ),
-  retention: assumedOperatorFinding(
-    "retention",
-    evidence,
-    (value) => value.account.retentionDays === developerRetentionDays
-  ),
-  "one-user-constraint": assumedOperatorFinding(
-    "one-user-constraint",
-    evidence,
-    (value) => value.account.maximumMembers === 1
-  ),
-  "processing-terms": operatorFinding("processing-terms", evidence, (value) =>
-    [
-      value.compliance.processingTermsReviewed,
-      value.compliance.subprocessorsReviewed,
-      !value.compliance.regionOnlyProcessingClaimed,
-    ].every(Boolean)
-  ),
-});
-
 const apiObservationFindings = (observation: SentryAccountObservation): ApiObservationFindings => {
   if (observation._tag === "unavailable") {
     return {
@@ -512,101 +240,22 @@ const apiObservationFindings = (observation: SentryAccountObservation): ApiObser
   };
 };
 
-const configurationEvidenceFindings = (
-  evidence: Option.Option<SentryOperatorEvidence>
-): ConfigurationEvidenceFindings => ({
-  "future-ci-policy": operatorFinding("future-ci-policy", evidence, (value) =>
-    [
-      value.configuration.futureCiUsesNonProductionProject,
-      value.configuration.futureCiFullCaptureVerified,
-      value.configuration.futureCiAlertIsolationVerified,
-    ].every(Boolean)
-  ),
-  "production-spike-protection-disabled": operatorFinding(
-    "production-spike-protection-disabled",
-    evidence,
-    (value) => value.configuration.productionSpikeProtectionDisabled
-  ),
-  "production-hard-quota-drops-accepted": operatorFinding(
-    "production-hard-quota-drops-accepted",
-    evidence,
-    (value) => value.configuration.productionHardQuotaDropsAccepted
-  ),
-  "server-side-scrubbing": operatorFinding("server-side-scrubbing", evidence, (value) =>
-    [
-      allScrubFieldsPresent(value.configuration.productionScrubbedFields),
-      allScrubFieldsPresent(value.configuration.nonProductionScrubbedFields),
-    ].every(Boolean)
-  ),
-  "operator-email": operatorFinding("operator-email", evidence, (value) =>
-    Boolean(value.configuration.verifiedOperatorRecipientCount)
-  ),
-  "production-alerts": operatorFinding("production-alerts", evidence, productionAlertsMatch),
-  "non-production-alert-isolation": operatorFinding(
-    "non-production-alert-isolation",
-    evidence,
-    (value) => value.configuration.localAlertIsolationVerified
-  ),
-});
-
-const smokeAndRuntimeFindings = (
-  evidence: Option.Option<SentryOperatorEvidence>
-): SmokeAndRuntimeFindings => ({
-  "release-creation": operatorFinding("release-creation", evidence, (value) =>
-    Boolean(value.smoke.releaseCreated)
-  ),
-  "source-map-upload": operatorFinding(
-    "source-map-upload",
-    evidence,
-    (value) => value.smoke.sourceMapUploadedAndSymbolicated
-  ),
-  "quota-reporting": operatorFinding("quota-reporting", evidence, (value) =>
-    Boolean(value.smoke.quotaReportingVisible)
-  ),
-  "alert-delivery": operatorFinding(
-    "alert-delivery",
-    evidence,
-    (value) => value.smoke.alertDeliveredToVerifiedOperator
-  ),
-  "ingestion-429": operatorFinding("ingestion-429", evidence, (value) =>
-    Boolean(value.smoke.ingestion429Observed)
-  ),
-  "generated-region-endpoint": operatorFinding(
-    "generated-region-endpoint",
-    evidence,
-    (value) => value.smoke.generatedRegionEndpointAcceptedEvent
-  ),
-  "error-capture-kill-switch": operatorFinding(
-    "error-capture-kill-switch",
-    evidence,
-    (value) => value.runtime.errorCaptureKillSwitchTested
-  ),
-  "tracing-kill-switch": operatorFinding("tracing-kill-switch", evidence, (value) =>
-    Boolean(value.runtime.tracingKillSwitchTested)
-  ),
+const findingsByCheck = (
+  observation: SentryAccountObservation
+): Readonly<Record<SentryAccountCheck, SentryAccountFinding>> => ({
+  "storage-region": storageRegionFinding(observation),
+  ...apiObservationFindings(observation),
   "quota-response-actions": finding("quota-response-actions", true, "checked-in-policy"),
 });
 
-const findingsByCheck = (input: {
-  readonly observation: SentryAccountObservation;
-  readonly evidence: Option.Option<SentryOperatorEvidence>;
-}): Readonly<Record<SentryAccountCheck, SentryAccountFinding>> => ({
-  ...accountEvidenceFindings(input.evidence),
-  "storage-region": storageRegionFinding(input.observation, input.evidence),
-  ...apiObservationFindings(input.observation),
-  ...configurationEvidenceFindings(input.evidence),
-  ...smokeAndRuntimeFindings(input.evidence),
-});
-
-/** Compares sanitized API observations and optional live-account evidence with Fidy's policy. */
+/** Compares sanitized API observations with Fidy's automated Sentry policy. */
 export const verifySentryAccount = (input: {
   readonly observation: SentryAccountObservation;
-  readonly evidence: Option.Option<SentryOperatorEvidence>;
 }): SentryVerificationReport => {
-  const byCheck = findingsByCheck(input);
+  const byCheck = findingsByCheck(input.observation);
   const findings = SentryAccountCheck.literals.map((check) => byCheck[check]);
   return {
-    policyRevision: 1,
+    policyRevision: 2,
     overall: reportOverall(findings),
     findings,
     quotaResponseActions,

@@ -9,10 +9,9 @@
 // it is neither tree, it is the runtime bootstrap.
 //
 // Excluded on purpose: test files, the test-only API harness under src/shell/testing, and command
-// process wiring. The preload is process wiring like src/main.ts; release preparation and the
-// deployment-smoke command/readback transport are exercised through dedicated tests and their
-// built-command and production-image seams. Their decoded configuration and artifacts remain
-// measured by those checks.
+// process wiring. The preload is process wiring like src/main.ts; release preparation is exercised
+// through dedicated tests and its built-command and production-image seams. Its decoded
+// configuration and artifacts remain measured by those checks.
 //
 // Plain .mjs (not .ts): tools/crap/run.mjs feeds these to crap4ts, which parses
 // through the classic TypeScript compiler API that this repo's Effect tsgo
@@ -29,8 +28,6 @@ export const CORE_EXCLUDE = ["**/*.test.ts"];
 export const SOURCE_EXCLUDE = [
   ...CORE_EXCLUDE,
   "src/shell/testing/**",
-  "src/shell/observability/deployment-smoke-command.ts",
   "src/shell/observability/preload.ts",
   "src/shell/observability/release-preparation.ts",
-  "src/shell/observability/sentry-smoke-reader.ts",
 ];

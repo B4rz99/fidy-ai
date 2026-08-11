@@ -1,0 +1,104 @@
+src/shell/testing/operation-policy.test.ts
+  s_04081c1d35eae9::t_0455fcc7968c1d 120-130,132-134
+  s_04081c1d35eae9::t_d85d1192363174 158
+  s_04081c1d35eae9::t_f9b4183b80e957 131
+  s_04081c1d35eae9::t_ddb4349e876d50 98
+src/shell/testing/authorization.test.ts
+  s_04081c1d35eae9::t_32062f2fe439c2 103-114,119-121
+  s_04081c1d35eae9::t_354a76b4b4a0a4 115-118
+src/shell/identity/repo.test.ts
+  s_04081c1d35eae9::t_c9effbcb06c37d 1-41
+src/shell/consent/consent-gate.ts
+  s_04081c1d35eae9::t_f9b4183b80e957 145-148
+src/core/identity/model.ts
+  s_04081c1d35eae9::t_86b75704bcb361 25-28,36-37,42-44,46-48,77-78
+  s_04081c1d35eae9::t_3c49217780186b 29-32,38-41,45
+  s_04081c1d35eae9::t_4a8d45f8c62063 33-35
+  s_04081c1d35eae9::t_4cbc689d87f08a 13-18
+  s_04081c1d35eae9::t_cc449497d01787 19,22-23
+  s_04081c1d35eae9::t_f9b4183b80e957 24
+  s_04081c1d35eae9::t_272fe8f830eba5 20-21
+src/shell/subscription/handlers.ts
+  s_04081c1d35eae9::t_b94c04f4bf152b 11
+  s_04081c1d35eae9::t_05b6db30b7bb6c 1-6,8-10,12-18
+  s_04081c1d35eae9::t_2999a6bb67dc09 7
+src/shell/testing/isolation.test.ts
+  s_04081c1d35eae9::t_f082e001185d0d 94-99
+src/shell/consent/agent-consent-gate.test.ts
+  s_04081c1d35eae9::t_1892ba4906b214 62,88-91
+src/shell/testing/suggested-operations.test.ts
+  s_04081c1d35eae9::t_10159a760cb1c4 58-60
+src/shell/subscription/operations.ts
+  s_04081c1d35eae9::t_5e697f5851d933 6
+  s_04081c1d35eae9::t_27c2fb85a38beb 22
+  s_04081c1d35eae9::t_904a128c57c72a 1-5,7-21,23-25
+src/core/identity/rules.ts
+  s_04081c1d35eae9::t_37571e92a31994 11-12,24-28,33-38,40-46
+  s_04081c1d35eae9::t_13f5b564623a61 1,4,6-7,16,39
+  s_04081c1d35eae9::t_5c7ee3e8654b17 47-48
+src/shell/consent/consent-gate.test.ts
+  s_04081c1d35eae9::t_29923e6974c1a2 11,140-144,190-192,291-293
+  s_04081c1d35eae9::t_f9b4183b80e957 264-267
+src/shell/api.ts
+  s_04081c1d35eae9::t_66861142ad27d6 11
+  s_04081c1d35eae9::t_a3ba8ee54f3f1d 19-20
+src/shell/db/development-seed.ts
+  s_04081c1d35eae9::t_8935688bccdf1a 144
+src/shell/db/development-seed.test.ts
+  s_04081c1d35eae9::t_94ee660511fb6d 6,8,67
+src/shell/http.ts
+  s_04081c1d35eae9::t_b14868ea38ae47 48
+  s_04081c1d35eae9::t_45e1db03197575 21
+src/shell/_shared/external-endpoints.ts
+  s_04081c1d35eae9::t_ba01f67e13a5f7 12,32
+src/core/subscription/model.ts
+  s_04081c1d35eae9::t_d941f044443521 1-7
+src/shell/db/migrations/registry.ts
+  s_04081c1d35eae9::t_d0f1cc12f4ebc7 19,48
+CONTEXT.md
+  s_04081c1d35eae9::t_2f2f4a633165f6 202-208
+  s_04081c1d35eae9::t_5d84795e62bf2b 228-232
+src/shell/consent/repo.test.ts
+  s_04081c1d35eae9::t_55af3d5af67065 127
+src/shell/identity/repo.ts
+  s_04081c1d35eae9::t_99160a81556631 93-100,104
+  s_04081c1d35eae9::t_8774cf7f9c8f62 18-19,23-37,69-71
+  s_04081c1d35eae9::t_f97d0b90d6b62e 15,17
+  s_04081c1d35eae9::t_d3029a340f524b 85
+  s_04081c1d35eae9::t_ab84cbc24121e3 124,135,140,156-161
+src/core/identity/model.test.ts
+  s_04081c1d35eae9::t_ed2ef1c7134e62 2-5,7-8,10-12,14-15,17-18
+  s_04081c1d35eae9::t_9b75d5690ee256 6,9,13,16
+src/shell/subscription/handlers.test.ts
+  s_04081c1d35eae9::t_d89f729825e89a 1-19
+src/shell/db/row-level-security.test.ts
+  s_04081c1d35eae9::t_7ff0dd537cf107 55-66,89-104,369-375
+src/shell/identity/handlers.test.ts
+  s_04081c1d35eae9::t_220a1c3c9e2f52 26-27
+  s_04081c1d35eae9::t_9a05e68980c855 2
+  s_04081c1d35eae9::t_001826d0117803 24-25,28
+src/core/identity/rules.test.ts
+  s_04081c1d35eae9::t_bf795d34101300 17
+  s_04081c1d35eae9::t_c7effece9e9c24 5,33-35,37-54,56-59,66-70
+  s_04081c1d35eae9::t_2c0d1546ac28b5 3,9-13,36,55
+  s_04081c1d35eae9::t_48f4f84f8a8a23 24-28
+  s_04081c1d35eae9::t_686d51be4f2200 60-65
+src/shell/db/migrations/0019-user-access.ts
+  s_04081c1d35eae9::t_dd27a1498caa56 1-33
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "3e89fbecb28623298053be02ed1e2c1e1f4635d6",
+  "prompts": {},
+  "sessions": {
+    "s_04081c1d35eae9": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019ff110-e03e-7745-ac51-547864299113",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

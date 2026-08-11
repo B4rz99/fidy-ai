@@ -99,6 +99,21 @@ export default {
       to: { path: "^src/main\\.ts$" },
     },
     {
+      name: "hosted-inference-orchestration-imports-provider",
+      severity: "error",
+      comment:
+        "Hosted inference orchestration imported provider-specific code. agent-service.ts and " +
+        "hosted-inference.ts may use only the provider-neutral HostedInference authority; model, " +
+        "tokenizer, capacity, and wire-request knowledge belong in the adapter (ADR 0014).",
+      from: {
+        path: "^src/shell/agent/(agent-service\\.ts|hosted-inference\\.ts|__probe-.*hosted-(provider|model)/probe\\.ts)$",
+      },
+      to: {
+        path: "^(src/shell/agent/openai\\.ts|node_modules/@effect/ai-openai/|node_modules/effect/.*/unstable/ai/(index|LanguageModel|Tokenizer))",
+        dependencyTypesNot: ["type-only"],
+      },
+    },
+    {
       name: "sentry-imported-outside-observability",
       severity: "error",
       comment:

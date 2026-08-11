@@ -48,6 +48,7 @@ import {
 import { listRecentTranscriptEntries, listTranscriptEntries } from "~/shell/transcript/repo";
 import { ApiHarness, ApiHarnessClient, ApiTelemetryHarness } from "~/shell/testing/api-harness";
 import { testWhatsAppCaller } from "~/shell/testing/whatsapp-caller";
+import { HostedInferenceFromLanguageModel } from "~/shell/testing/hosted-inference-fixtures";
 import { makeLanguageModelFinishPart } from "~/shell/testing/language-model-fixtures";
 import { runAgentRepl } from "./repl";
 import {
@@ -1135,14 +1136,18 @@ const ScriptedLanguageModel = Layer.effect(
   })
 ).pipe(Layer.provideMerge(ModelPrompts.layer), Layer.provideMerge(ModelToolPolicies.layer));
 
+const ScriptedHostedInference = HostedInferenceFromLanguageModel.pipe(
+  Layer.provideMerge(ScriptedLanguageModel)
+);
+
 const AgentHarness = AgentService.layer.pipe(
-  Layer.provideMerge(ScriptedLanguageModel),
+  Layer.provideMerge(ScriptedHostedInference),
   Layer.provideMerge(ApiHarness),
   Layer.provideMerge(TelemetryEnvelopeRecording)
 );
 
 const AgentTelemetryHarness = AgentService.layer.pipe(
-  Layer.provideMerge(ScriptedLanguageModel),
+  Layer.provideMerge(ScriptedHostedInference),
   Layer.provideMerge(ApiTelemetryHarness)
 );
 

@@ -7,7 +7,7 @@ import { AuditRetentionLive } from "~/shell/audit/retention";
 import { CURRENT_POLICY_PATH } from "~/shell/consent/current-disclosure";
 import { PendingConsentRetentionLive } from "~/shell/consent/retention";
 import { AgentService } from "~/shell/agent/agent-service";
-import { OpenAiLanguageModelLive } from "~/shell/agent/openai";
+import { OpenAiHostedInferenceLive } from "~/shell/agent/openai";
 import { CategoriesLive } from "~/shell/categories/handlers";
 import { KapsoClient } from "~/shell/channels/whatsapp/kapso-client";
 import { KapsoWebhookLive } from "~/shell/channels/whatsapp/routes";
@@ -91,7 +91,7 @@ export const HttpLive = HttpRouter.serve(
  * path, and HTTP services used to serve the static shell.
  */
 const HostedWhatsAppWorkerLive = WhatsAppWorkerLive.pipe(
-  Layer.provide(AgentService.layer.pipe(Layer.provide(OpenAiLanguageModelLive))),
+  Layer.provide(AgentService.layer.pipe(Layer.provide(OpenAiHostedInferenceLive))),
   Layer.provide(KapsoClient.layer)
 );
 

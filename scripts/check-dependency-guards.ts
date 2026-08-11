@@ -49,6 +49,8 @@ const CYCLE = dir("cycle");
 const BARREL = dir("barrel");
 const ALIAS_SAME_DIRECTORY = dir("alias-same-directory");
 const RELATIVE_CROSS_DIRECTORY = dir("relative-cross-directory");
+const HOSTED_PROVIDER = `src/shell/agent/${PROBE_PREFIX}hosted-provider`;
+const HOSTED_MODEL = `src/shell/agent/${PROBE_PREFIX}hosted-model`;
 
 const PROBES: readonly Probe[] = [
   {
@@ -247,6 +249,42 @@ const PROBES: readonly Probe[] = [
       },
     ],
     name: "cross-directory-import-is-relative rejects `../` across directories",
+  },
+  {
+    directory: HOSTED_PROVIDER,
+    expect: {
+      kind: "rejected",
+      mustContain: [
+        `error hosted-inference-orchestration-imports-provider: ${HOSTED_PROVIDER}/probe.ts → src/shell/agent/openai.ts`,
+      ],
+    },
+    files: [
+      {
+        path: `${HOSTED_PROVIDER}/probe.ts`,
+        source:
+          'import { FidyAgentModel } from "../openai";\n\n' +
+          "export const hostedProviderProbe = FidyAgentModel;\n",
+      },
+    ],
+    name: "hosted inference orchestration rejects provider-specific imports",
+  },
+  {
+    directory: HOSTED_MODEL,
+    expect: {
+      kind: "rejected",
+      mustContain: [
+        `error hosted-inference-orchestration-imports-provider: ${HOSTED_MODEL}/probe.ts`,
+      ],
+    },
+    files: [
+      {
+        path: `${HOSTED_MODEL}/probe.ts`,
+        source:
+          'import { LanguageModel } from "effect/unstable/ai";\n\n' +
+          "export const hostedModelProbe = LanguageModel;\n",
+      },
+    ],
+    name: "hosted inference orchestration rejects generic model imports",
   },
 ];
 

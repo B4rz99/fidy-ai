@@ -74,8 +74,8 @@ application starts. Railway's bounded pre-deploy command duration, fixed retry c
 failure reason, and exit status are the observation boundary for this workflow; application
 telemetry is intentionally unavailable because the command prepares Sentry before activation. The
 post-deployment workflow validates and runs the private `smoke-sentry-deployment` artifact from the
-production image with a read-only Sentry token, private operator-evidence file, and independently
-configured `SENTRY_PRODUCTION_DSN_ORIGIN` / `SENTRY_PRODUCTION_DSN_PROJECT_ID` coordinates. It emits one fixed defect and one fully
+production image with a read-only Sentry token and independently configured
+`SENTRY_PRODUCTION_DSN_ORIGIN` / `SENTRY_PRODUCTION_DSN_PROJECT_ID` coordinates. It emits one fixed defect and one fully
 sampled synthetic asynchronous trace, reads both back through bounded APIs, and prints only its
 closed checks, release, stable trace ID, and an optional validated HTTPS operator URL. Passing the
 gate never changes runtime configuration. An operator may then enable production capture separately

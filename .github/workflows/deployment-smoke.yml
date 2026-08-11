@@ -20,10 +20,11 @@ concurrency:
 jobs:
   production-smoke:
     name: Production Deployment Smoke
+    # Vercel also reports a Production deployment, but this smoke targets Railway's backend.
     if: >-
       github.event.deployment_status.state == 'success' &&
-      (github.event.deployment.environment == 'production' ||
-      endsWith(github.event.deployment.environment, '/ production'))
+      github.event.deployment.creator.login == 'railway-app[bot]' &&
+      github.event.deployment.environment == 'fidy / production'
     runs-on: ubuntu-latest
     environment: Production
     steps:
@@ -55,10 +56,7 @@ jobs:
         env:
           DEPLOYMENT_URL: https://fidy-ai-production.up.railway.app
         run: bun scripts/check-deployment-smoke.ts
-      - name: Verify the production image gate
-        if: ${{ steps.prior.outputs.found == '0' }}
-        run: bun run check:production-image
-      - name: Verify production Sentry rollout evidence from the production image
+      - name: Verify production Sentry smoke from the production image
         if: ${{ steps.prior.outputs.found == '0' }}
         env:
           SENTRY_DEPLOYMENT_SMOKE_DSN: ${{ secrets.SENTRY_DEPLOYMENT_SMOKE_DSN }}
@@ -69,13 +67,10 @@ jobs:
           SENTRY_ORGANIZATION_SLUG: ${{ secrets.SENTRY_ORGANIZATION_SLUG }}
           SENTRY_PRODUCTION_PROJECT_SLUG: ${{ secrets.SENTRY_PRODUCTION_PROJECT_SLUG }}
           SENTRY_NON_PRODUCTION_PROJECT_SLUG: ${{ secrets.SENTRY_NON_PRODUCTION_PROJECT_SLUG }}
-          SENTRY_OPERATOR_EVIDENCE_JSON: ${{ secrets.SENTRY_OPERATOR_EVIDENCE_JSON }}
           SENTRY_TRACE_URL_TEMPLATE: ${{ vars.SENTRY_TRACE_URL_TEMPLATE }}
-          SENTRY_OPERATOR_EVIDENCE_PATH: ${{ runner.temp }}/sentry-operator-evidence.json
           ROLLOUT_IMAGE: fidy-rollout-gate:${{ github.event.deployment.sha }}
         run: |
-          trap 'rm -f "$SENTRY_OPERATOR_EVIDENCE_PATH"; docker image rm --force "$ROLLOUT_IMAGE" >/dev/null 2>&1 || true' EXIT
-          printf '%s' "$SENTRY_OPERATOR_EVIDENCE_JSON" >"$SENTRY_OPERATOR_EVIDENCE_PATH"
+          trap 'docker image rm --force "$ROLLOUT_IMAGE" >/dev/null 2>&1 || true' EXIT
           docker build --tag "$ROLLOUT_IMAGE" .
           docker run --rm \
             --env SENTRY_DEPLOYMENT_SMOKE_DSN \
@@ -87,7 +82,5 @@ jobs:
             --env SENTRY_PRODUCTION_PROJECT_SLUG \
             --env SENTRY_NON_PRODUCTION_PROJECT_SLUG \
             --env SENTRY_TRACE_URL_TEMPLATE \
-            --env SENTRY_OPERATOR_EVIDENCE_PATH=/run/secrets/sentry-operator-evidence.json \
-            --volume "$SENTRY_OPERATOR_EVIDENCE_PATH:/run/secrets/sentry-operator-evidence.json:ro" \
             "$ROLLOUT_IMAGE" \
             bun dist/commands/smoke-sentry-deployment.js

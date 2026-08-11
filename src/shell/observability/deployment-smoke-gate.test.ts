@@ -18,7 +18,7 @@ const emission: DeploymentSmokeEmission = {
   providerHeadersAreIsolated: true,
 };
 const verifiedAccount: SentryVerificationReport = {
-  policyRevision: 1,
+  policyRevision: 2,
   overall: "verified",
   findings: [],
   quotaResponseActions: [],

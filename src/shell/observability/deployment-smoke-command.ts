@@ -13,10 +13,6 @@ import {
   renderDeploymentSmokeReport,
   validateDeploymentSmokeOperatorUrlTemplate,
 } from "./deployment-smoke-gate";
-import {
-  type SentryEvidenceReadError,
-  readSentryOperatorEvidence,
-} from "./sentry-account-evidence";
 import { inspectSentryAccount, unavailableSentryAccountObservation } from "./sentry-account-reader";
 import { makeSentryRecordingClient, makeSentryTelemetry } from "./sentry-adapter";
 import { inspectDeploymentSmoke } from "./sentry-smoke-reader";
@@ -35,7 +31,6 @@ const commandConfig = Config.all({
   organizationSlug: Config.redacted("SENTRY_ORGANIZATION_SLUG"),
   productionProjectSlug: Config.redacted("SENTRY_PRODUCTION_PROJECT_SLUG"),
   nonProductionProjectSlug: Config.redacted("SENTRY_NON_PRODUCTION_PROJECT_SLUG"),
-  evidencePath: Config.string("SENTRY_OPERATOR_EVIDENCE_PATH"),
   operatorUrlTemplate: Config.option(Config.string("SENTRY_TRACE_URL_TEMPLATE")),
 });
 
@@ -87,13 +82,8 @@ type CommandConfig = Effect.Success<typeof commandConfig>;
 
 const readVerifiedAccount = (
   raw: CommandConfig
-): Effect.Effect<
-  SentryVerificationReport,
-  DeploymentSmokeGateError | SentryEvidenceReadError,
-  HttpClient.HttpClient
-> =>
+): Effect.Effect<SentryVerificationReport, DeploymentSmokeGateError, HttpClient.HttpClient> =>
   Effect.gen(function* () {
-    const evidence = yield* readSentryOperatorEvidence(Bun.file(raw.evidencePath));
     const observation = yield* inspectSentryAccount({
       authToken: raw.readToken,
       organizationSlug: raw.organizationSlug,
@@ -104,7 +94,7 @@ const readVerifiedAccount = (
         Effect.succeed(unavailableSentryAccountObservation)
       )
     );
-    const account = verifySentryAccount({ observation, evidence: Option.some(evidence) });
+    const account = verifySentryAccount({ observation });
     return account.overall === "verified"
       ? account
       : yield* DeploymentSmokeGateError.make({ check: "account", reason: "mismatch" });

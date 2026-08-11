@@ -1,0 +1,20 @@
+README.md
+  s_d4af7a96a83dcb::t_02900ac3344efe 1,3-4,6,8,10,13-16,20-21,23,26,29,32-33,36-37,39-41,43,45,47,53,72-73
+  s_d4af7a96a83dcb::t_36fc1deaede06c 57-71,77-86
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "582ef47a057d1540ee040fef1694449f32247c1c",
+  "prompts": {},
+  "sessions": {
+    "s_d4af7a96a83dcb": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019ff0fc-3085-7f3b-b542-0103ab4b1908",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

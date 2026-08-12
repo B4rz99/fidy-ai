@@ -60,7 +60,7 @@ it("projects safe and sensitive transcript prose with its original role", () => 
     {
       role: "assistant",
       content:
-        "No puedo procesar credenciales o secretos en el chat. Rota cualquier credencial compartida y vuelve a intentarlo sin incluirla.",
+        "No envíes credenciales ni tokens por chat. Este mensaje no fue guardado ni procesado.",
     },
   ]);
 });

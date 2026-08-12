@@ -297,7 +297,19 @@ layer(AuthorizationHarness, { excludeTestServices: true, timeout: "30 seconds" }
         });
         yield* truncateAuditLogEntries;
 
+        const memory = yield* writer.memory.remember({
+          payload: { text: MemoryText.make("owned-memory") },
+        });
+        yield* truncateAuditLogEntries;
+
         const failures = yield* Effect.all([
+          Effect.flip(
+            reader.memory.revise({
+              params: { id: memory.data.id },
+              payload: { text: MemoryText.make("denied-memory-revision") },
+            })
+          ),
+          Effect.flip(reader.memory.forget({ params: { id: memory.data.id } })),
           Effect.flip(
             reader.categories.createKeywordRule({
               payload: {
@@ -333,6 +345,7 @@ layer(AuthorizationHarness, { excludeTestServices: true, timeout: "30 seconds" }
             reader.transactions.deleteTransaction({ params: { id: transaction.data.id } })
           ),
         ]);
+        const memories = yield* writer.memory.recall();
         const rules = yield* writer.categories.listKeywordRules({});
         const retained = yield* writer.transactions.getTransaction({
           params: { id: transaction.data.id },
@@ -349,7 +362,10 @@ layer(AuthorizationHarness, { excludeTestServices: true, timeout: "30 seconds" }
           "scope_missing",
           "scope_missing",
           "scope_missing",
+          "scope_missing",
+          "scope_missing",
         ]);
+        expect(memories.data).toEqual([memory.data]);
         expect(rules.data).toEqual([rule.data]);
         expect(retained.data).toEqual(transaction.data);
         expect(
@@ -357,6 +373,8 @@ layer(AuthorizationHarness, { excludeTestServices: true, timeout: "30 seconds" }
             .filter((entry) => entry.outcome === "rejected")
             .map((entry) => [entry.operation, entry.outcome])
         ).toEqual([
+          ["memory.revise", "rejected"],
+          ["memory.forget", "rejected"],
           ["categories.createKeywordRule", "rejected"],
           ["categories.updateKeywordRule", "rejected"],
           ["categories.deleteKeywordRule", "rejected"],

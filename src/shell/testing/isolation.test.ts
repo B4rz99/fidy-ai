@@ -14,7 +14,7 @@ import type { OperationId } from "~/shell/api";
 import { truncateInsights, weeklySummaryInput } from "~/shell/insights/fixtures";
 import { truncateStatementIngestion } from "~/shell/ingestion/fixtures";
 import { generateInsightEvent } from "~/shell/insights/repo";
-import { MemoryText } from "~/core/memory/model";
+import { MemoryId, MemoryText } from "~/core/memory/model";
 import { truncateMemories } from "~/shell/memory/fixtures";
 import { AtomicBatchCallId } from "~/shell/operations/operations";
 import { transactionPayload, truncateTransactions } from "~/shell/transactions/fixtures";
@@ -36,6 +36,7 @@ const ownerBearer = AgentBearerToken.make("fin_owner001_0123456789abcdefghijklmn
 const strangerBearer = AgentBearerToken.make(
   "fin_strange1_ABCDabcdefghijklmnopqrstuvwxyz0123456789"
 );
+const absentMemoryId = MemoryId.make("f1d1a000-0000-4000-8000-00000000dead");
 
 class OwnerApiClient extends Context.Service<OwnerApiClient, ApiClient>()(
   "fidy-ai/shell/testing/isolation.test/OwnerApiClient"
@@ -111,6 +112,50 @@ const probes: Record<OperationId, IsolationProbe> = {
         payload: { text: MemoryText.make("solo extraño") },
       });
       expect((yield* attempt.ownerClient.memory.recall()).data).toEqual([]);
+    }),
+
+  "memory.revise": (attempt) =>
+    Effect.gen(function* () {
+      const owned = yield* attempt.ownerClient.memory.remember({
+        payload: { text: MemoryText.make("solo dueño") },
+      });
+      const denied = yield* Effect.result(
+        attempt.strangerClient.memory.revise({
+          params: { id: owned.data.id },
+          payload: { text: MemoryText.make("intruso") },
+        })
+      );
+      const absent = yield* Effect.result(
+        attempt.strangerClient.memory.revise({
+          params: { id: absentMemoryId },
+          payload: { text: MemoryText.make("intruso") },
+        })
+      );
+      expect(denied).toEqual(absent);
+      expect(denied).toMatchObject({
+        _tag: "Failure",
+        failure: { error: { code: "not_found" } },
+      });
+      expect((yield* attempt.ownerClient.memory.recall()).data).toEqual([owned.data]);
+    }),
+
+  "memory.forget": (attempt) =>
+    Effect.gen(function* () {
+      const owned = yield* attempt.ownerClient.memory.remember({
+        payload: { text: MemoryText.make("solo dueño") },
+      });
+      const denied = yield* Effect.result(
+        attempt.strangerClient.memory.forget({ params: { id: owned.data.id } })
+      );
+      const absent = yield* Effect.result(
+        attempt.strangerClient.memory.forget({ params: { id: absentMemoryId } })
+      );
+      expect(denied).toEqual(absent);
+      expect(denied).toMatchObject({
+        _tag: "Failure",
+        failure: { error: { code: "not_found" } },
+      });
+      expect((yield* attempt.ownerClient.memory.recall()).data).toEqual([owned.data]);
     }),
 
   "memory.recall": (attempt) =>

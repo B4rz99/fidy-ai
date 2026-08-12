@@ -43,11 +43,17 @@ export const Memory = Schema.Struct({
 }).annotate({ identifier: "Memory" });
 export type Memory = typeof Memory.Type;
 
+const MemoryTextPayload = Memory.mapFields(Struct.pick(["text"])).pipe(
+  Schema.fieldsAssign({ text: MemoryTextInput })
+);
+
 /** Prose the caller explicitly asks Fidy to retain as a durable Memory. */
-export const RememberInput = Memory.mapFields(Struct.pick(["text"]))
-  .pipe(Schema.fieldsAssign({ text: MemoryTextInput }))
-  .annotate({ identifier: "RememberInput" });
+export const RememberInput = MemoryTextPayload.annotate({ identifier: "RememberInput" });
 export type RememberInput = typeof RememberInput.Type;
+
+/** Formatting-normalized replacement prose for one current Memory. */
+export const ReviseInput = MemoryTextPayload.annotate({ identifier: "ReviseInput" });
+export type ReviseInput = typeof ReviseInput.Type;
 
 /** Every current Memory in stable ascending creation and identity order. */
 export const RecallOutput = Schema.Array(Memory).annotate({ identifier: "RecallOutput" });

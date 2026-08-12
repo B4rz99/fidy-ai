@@ -429,21 +429,62 @@ const toolCapScript = (serialized: string): Option.Option<ModelReply> => {
   return Option.none();
 };
 
-const memoryScript = (serialized: string): Option.Option<ModelReply> => {
-  if (!serialized.includes("Guarda una memoria sintética")) return Option.none();
-  return Option.some(
-    hasToolResultAfter(serialized, "Guarda una memoria sintética")
-      ? [{ type: "text" as const, text: "Guardé la memoria solicitada." }]
-      : [
-          {
-            type: "tool-call" as const,
-            id: "remember-content-agnostic",
-            name: "memory__remember",
-            params: { payload: { text: `clave sk-${"a".repeat(24)}` } },
-          },
-        ]
-  );
+const exactMemoryMutationScript = (serialized: string): Option.Option<ModelReply> => {
+  const reviseId = /Revisa memoria exacta ([0-9a-f-]{36})/u.exec(serialized)?.[1];
+  if (reviseId !== undefined) {
+    return Option.some(
+      serialized.lastIndexOf("tool-result") > serialized.lastIndexOf("CONFIRMAR memory.revise")
+        ? [{ type: "text" as const, text: "Revisé la memoria solicitada." }]
+        : [
+            {
+              type: "tool-call" as const,
+              id: "revise-memory-exact",
+              name: "memory__revise",
+              params: {
+                params: { id: reviseId },
+                payload: { text: "memoria revisada por confirmación" },
+              },
+            },
+          ]
+    );
+  }
+  const forgetId = /Olvida memoria exacta ([0-9a-f-]{36})/u.exec(serialized)?.[1];
+  if (forgetId !== undefined) {
+    return Option.some(
+      serialized.lastIndexOf("tool-result") > serialized.lastIndexOf("CONFIRMAR memory.forget")
+        ? [{ type: "text" as const, text: "Olvidé la memoria solicitada." }]
+        : [
+            {
+              type: "tool-call" as const,
+              id: "forget-memory-exact",
+              name: "memory__forget",
+              params: { params: { id: forgetId } },
+            },
+          ]
+    );
+  }
+  return Option.none();
 };
+
+const memoryScript = (serialized: string): Option.Option<ModelReply> =>
+  exactMemoryMutationScript(serialized).pipe(
+    Option.orElse(() =>
+      serialized.includes("Guarda una memoria sintética")
+        ? Option.some(
+            hasToolResultAfter(serialized, "Guarda una memoria sintética")
+              ? [{ type: "text" as const, text: "Guardé la memoria solicitada." }]
+              : [
+                  {
+                    type: "tool-call" as const,
+                    id: "remember-content-agnostic",
+                    name: "memory__remember",
+                    params: { payload: { text: `clave sk-${"a".repeat(24)}` } },
+                  },
+                ]
+          )
+        : Option.none()
+    )
+  );
 
 const captureScript = (
   serialized: string,
@@ -2213,6 +2254,88 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
 
       expect(reply.text).toBe("Guardé la memoria solicitada.");
       expect(rows).toEqual([{ text: `clave sk-${"a".repeat(24)}` }]);
+    })
+  );
+
+  it.effect("requires exact single-use confirmation for hosted Memory revision and deletion", () =>
+    Effect.gen(function* () {
+      const sql = yield* MigrationSqlClient;
+      const service = yield* AgentService;
+      const cases = [
+        {
+          operation: "memory.revise",
+          id: "f1d1a000-0000-4000-8000-00000000a201",
+          prompt: "Revisa memoria exacta",
+          before: "memoria anterior",
+          after: "memoria revisada por confirmación",
+        },
+        {
+          operation: "memory.forget",
+          id: "f1d1a000-0000-4000-8000-00000000a202",
+          prompt: "Olvida memoria exacta",
+          before: "memoria eliminable",
+          after: undefined,
+        },
+      ] as const;
+
+      for (const testCase of cases) {
+        yield* sql`TRUNCATE memories, memory_revisions`;
+        yield* sql`DELETE FROM agent_confirmation_consumptions WHERE user_id = ${defaultUserId}`;
+        yield* sql`DELETE FROM audit_log_entries WHERE user_id = ${defaultUserId}`;
+        yield* clearTranscript;
+        yield* sql`
+          INSERT INTO memories (user_id, id, text, created_at, updated_at)
+          VALUES (${defaultUserId}, ${testCase.id}, ${testCase.before}, now(), now())
+        `;
+
+        const challenge = yield* service.handleSynchronousTurn(
+          defaultUserId,
+          InboundMessage.make({
+            text: TranscriptText.make(`${testCase.prompt} ${testCase.id}`),
+          })
+        );
+        const command = /Responde exactamente: (CONFIRMAR [^\n]+)/u.exec(challenge.text)?.[1];
+        expect(command).toMatch(
+          new RegExp(`^CONFIRMAR ${testCase.operation.replace(".", "\\.")} [0-9a-f]{64}$`, "u")
+        );
+        expect(yield* sql`SELECT text FROM memories WHERE id = ${testCase.id}`).toEqual([
+          { text: testCase.before },
+        ]);
+
+        const altered = yield* service.handleSynchronousTurn(
+          defaultUserId,
+          InboundMessage.make({
+            text: TranscriptText.make(`${command ?? "confirmación ausente"}x`),
+          })
+        );
+        expect(altered.text).toContain(`Operación exacta: ${testCase.operation}`);
+        expect(yield* sql`SELECT text FROM memories WHERE id = ${testCase.id}`).toEqual([
+          { text: testCase.before },
+        ]);
+        const correctedCommand = /Responde exactamente: (CONFIRMAR [^\n]+)/u.exec(
+          altered.text
+        )?.[1];
+
+        yield* service.handleSynchronousTurn(
+          defaultUserId,
+          InboundMessage.make({
+            text: TranscriptText.make(correctedCommand ?? "confirmación ausente"),
+          })
+        );
+        yield* service.handleSynchronousTurn(
+          defaultUserId,
+          InboundMessage.make({
+            text: TranscriptText.make(correctedCommand ?? "confirmación ausente"),
+          })
+        );
+        const rows = yield* sql`SELECT text FROM memories WHERE id = ${testCase.id}`;
+        const audit = (yield* observeAuditLogEntries(defaultUserId)).filter(
+          ({ operation }) => operation === testCase.operation
+        );
+
+        expect(rows).toEqual(testCase.after === undefined ? [] : [{ text: testCase.after }]);
+        expect(audit).toHaveLength(1);
+      }
     })
   );
 

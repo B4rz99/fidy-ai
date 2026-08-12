@@ -536,7 +536,9 @@ const prepareAgentToolCall = Effect.fn("AgentService.prepareToolCall")(function*
     onFailure: () => decodeTranscriptJson(toolCall.params),
     onSuccess: Effect.succeed,
   });
-  if (binding.operation !== "memory.remember" && containsSensitiveJson(input)) {
+  const carriesMemoryProse =
+    binding.operation === "memory.remember" || binding.operation === "memory.revise";
+  if (!carriesMemoryProse && containsSensitiveJson(input)) {
     return yield* modelResponseRejected(
       new Error("Model operation input contained a sensitive value")
     );

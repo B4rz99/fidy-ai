@@ -4,7 +4,11 @@ import { DateTime, Effect, Exit, Ref } from "effect";
 import { Memory, MemoryId, MemoryText } from "~/core/memory/model";
 import { MemoryCapacityExceeded } from "~/core/memory/rules";
 import { HostedInference, type HostedInferenceService } from "~/shell/agent/hosted-inference";
-import { countAndAdmitMemory, projectMemoryAggregate } from "./memory-policy";
+import {
+  countAndAdmitMemory,
+  countAndAdmitMemoryRevision,
+  projectMemoryAggregate,
+} from "./memory-policy";
 
 const at = DateTime.makeUnsafe("2026-08-12T10:00:00Z");
 const memory = (id: string, text: string): Memory =>
@@ -54,6 +58,23 @@ it.effect("counts a same-instant candidate in the final recall identity order", 
     );
 
     expect(yield* Ref.get(counted)).toBe(projectMemoryAggregate([candidate, ...current]));
+  })
+);
+
+it.effect("counts revision against the replaced aggregate without duplicating identity", () =>
+  Effect.gen(function* () {
+    const counted = yield* Ref.make("");
+    const service = memoryInference((text) => Ref.set(counted, text).pipe(Effect.as(12)));
+    const first = memory("01912345-6789-7abc-8def-0123456789ab", "anterior");
+    const second = memory("01912345-6789-7abc-8def-0123456789ac", "segunda");
+    const replacement = memory("01912345-6789-7abc-8def-0123456789ab", "reemplazo");
+
+    expect(
+      yield* countAndAdmitMemoryRevision([first, second], replacement).pipe(
+        Effect.provideService(HostedInference, service)
+      )
+    ).toBe(replacement);
+    expect(yield* Ref.get(counted)).toBe(projectMemoryAggregate([replacement, second]));
   })
 );
 

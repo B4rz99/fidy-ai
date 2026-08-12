@@ -12,6 +12,7 @@ export const userTableNames = [
   "insight_money_groups",
   "keyword_rules",
   "memories",
+  "memory_revisions",
   "needs_review_items",
   "source_attestations",
   "statement_backfill_entitlements",

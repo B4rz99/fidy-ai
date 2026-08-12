@@ -1,5 +1,7 @@
+import { Schema } from "effect";
 import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/unstable/httpapi";
-import { Memory, RecallOutput, RememberInput } from "~/core/memory/model";
+import { Memory, MemoryId, RecallOutput, RememberInput, ReviseInput } from "~/core/memory/model";
+import { NotFound } from "~/shell/_shared/errors";
 import { createdStatus } from "~/shell/_shared/http-status";
 import { operationPolicy } from "~/shell/_shared/operation-policy";
 import { OperationResponse } from "~/shell/_shared/response";
@@ -11,6 +13,12 @@ const rememberPolicy = operationPolicy({
   agentConfirmation: "not-required",
   kind: "mutation",
 });
+const destructiveWritePolicy = operationPolicy({
+  requiredScope: "write",
+  requiredTier: "free",
+  agentConfirmation: "required",
+  kind: "mutation",
+});
 const recallPolicy = operationPolicy({
   requiredScope: "read",
   requiredTier: "free",
@@ -18,7 +26,7 @@ const recallPolicy = operationPolicy({
   kind: "query",
 });
 
-/** Explicit durable Memory creation and complete deterministic retrieval for the caller. */
+/** Canonical durable Memory lifecycle and deterministic retrieval for the caller. */
 export const MemoryGroup = HttpApiGroup.make("memory")
   .add(
     HttpApiEndpoint.post("remember", "/memories", {
@@ -31,6 +39,31 @@ export const MemoryGroup = HttpApiGroup.make("memory")
         "Retain formatting-normalized free text the User explicitly chose as durable economic context. Warn the User not to include credentials or unnecessary sensitive information; never solicit those values."
       )
       .annotateMerge(rememberPolicy)
+  )
+  .add(
+    HttpApiEndpoint.put("revise", "/memories/:id", {
+      params: Schema.Struct({ id: MemoryId }),
+      payload: ReviseInput,
+      success: OperationResponse(Memory),
+      error: [MemoryCapacityExceededApi, NotFound],
+    })
+      .annotate(
+        OpenApi.Description,
+        "Replace one current Memory's formatting-normalized prose in place. The id and creation order remain stable; the complete resulting aggregate must fit Memory capacity."
+      )
+      .annotateMerge(destructiveWritePolicy)
+  )
+  .add(
+    HttpApiEndpoint.delete("forget", "/memories/:id", {
+      params: Schema.Struct({ id: MemoryId }),
+      success: OperationResponse(MemoryId),
+      error: NotFound,
+    })
+      .annotate(
+        OpenApi.Description,
+        "Physically remove one current Memory belonging to the caller. This operation cannot reveal whether an identifier belongs to another User."
+      )
+      .annotateMerge(destructiveWritePolicy)
   )
   .add(
     HttpApiEndpoint.get("recall", "/memories", {

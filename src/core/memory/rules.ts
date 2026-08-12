@@ -11,6 +11,13 @@ export class MemoryCapacityExceeded extends Data.TaggedError("MemoryCapacityExce
   }
 }
 
+/** Content-free absence shared by missing and foreign Memory identifiers. */
+export class MemoryNotFound extends Data.TaggedError("MemoryNotFound")<{}> {
+  override get message(): string {
+    return "No current Memory belongs to the User";
+  }
+}
+
 /** Applies the server-owned aggregate capacity decision to an already-counted candidate. */
 export const admitMemory = (decision: {
   readonly candidate: Memory;

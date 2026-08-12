@@ -1,14 +1,18 @@
 import { expect, it } from "@effect/vitest";
-import { Effect, Option, Ref } from "effect";
+import { Deferred, Effect, Exit, Fiber, Option, Ref, Schema } from "effect";
 import type { Prompt } from "effect/unstable/ai";
 import {
   type HostedInferenceAdapter,
   HostedInferenceError,
+  type HostedStructuredAdapter,
+  HostedStructuredObjectName,
   type HostedTextContext,
   type HostedTextRequest,
   type HostedTextResult,
   HostedToolCallMaximum,
+  type PreparedHostedStructured,
   makeHostedInference,
+  makeHostedStructuredContext,
   makeHostedTextContext,
 } from "./hosted-inference";
 
@@ -19,10 +23,22 @@ type TestRequest = Readonly<{
 
 type TestContinuation = ReadonlyArray<Prompt.MessageEncoded>;
 
+const unavailableStructuredAdapter: HostedStructuredAdapter = {
+  prepare: () =>
+    Effect.fail(
+      new HostedInferenceError({
+        reason: { _tag: "ProviderUnavailable" },
+        retryable: false,
+        retryAfter: Option.none(),
+      })
+    ),
+};
+
 const makeTestInference = Effect.fn("Test.makeTestInference")(function* (capacity: number = 100) {
   const executions = yield* Ref.make<ReadonlyArray<TestRequest>>([]);
   const adapter: HostedInferenceAdapter<TestRequest, TestContinuation> = {
     countMemoryText: (text) => Effect.succeed(text.length),
+    structured: unavailableStructuredAdapter,
     prepare: ({ continuation, projection }) => {
       const messages = [
         ...projection.prefix,
@@ -58,8 +74,16 @@ const makeTestInference = Effect.fn("Test.makeTestInference")(function* (capacit
         }>)
       ),
   };
-  return { inference: makeHostedInference(adapter), executions } as const;
+  return {
+    inference: makeHostedInference(adapter),
+    inferenceAdapter: adapter,
+    executions,
+  } as const;
 });
+
+const ForgedPreparedStructured = Schema.declare(
+  (input): input is PreparedHostedStructured<unknown> => typeof input === "object" && input !== null
+);
 
 const context = (text: string): HostedTextContext =>
   makeHostedTextContext({
@@ -74,6 +98,175 @@ const request = (hostedContext: HostedTextContext): HostedTextRequest => ({
   toolChoice: "auto",
   maximumToolCalls: HostedToolCallMaximum.make(2),
 });
+
+it.effect(
+  "rejects wrong-kind, forged, cloned, foreign, discarded, and replayed structured authorities",
+  () =>
+    Effect.gen(function* () {
+      const executions = yield* Ref.make(0);
+      const structuredAdapter: HostedStructuredAdapter = {
+        prepare: ({ outputSchema }) =>
+          Effect.succeed({
+            execute: Ref.updateAndGet(executions, (count) => count + 1).pipe(
+              Effect.flatMap(() =>
+                Schema.decodeUnknownEffect(outputSchema)({ compactedConversation: "trusted" }).pipe(
+                  Effect.orDie
+                )
+              )
+            ),
+          }),
+      };
+      const first = yield* makeTestInference();
+      const second = yield* makeTestInference();
+      const firstInference = makeHostedInference({
+        ...first.inferenceAdapter,
+        structured: structuredAdapter,
+      });
+      const secondInference = makeHostedInference({
+        ...second.inferenceAdapter,
+        structured: structuredAdapter,
+      });
+      const outputSchema = Schema.Struct({ compactedConversation: Schema.String });
+      const prepared = yield* firstInference.prepareStructured({
+        context: makeHostedStructuredContext({
+          messages: [{ role: "user", content: "compact this" }],
+        }),
+        objectName: HostedStructuredObjectName.make("compacted_conversation"),
+        outputSchema,
+      });
+      expect(
+        Reflect.ownKeys(prepared).every(
+          (key) => Object.getOwnPropertyDescriptor(prepared, key)?.enumerable === false
+        )
+      ).toBe(true);
+
+      const discarded = yield* firstInference.prepareStructured({
+        context: makeHostedStructuredContext({
+          messages: [{ role: "user", content: "discard this" }],
+        }),
+        objectName: HostedStructuredObjectName.make("compacted_conversation"),
+        outputSchema,
+      });
+      yield* firstInference.discardStructured(discarded);
+      const text = yield* firstInference.prepareText(request(context("text")));
+      const crossKind = yield* Schema.decodeUnknownEffect(ForgedPreparedStructured)(text);
+      const forged = yield* Schema.decodeUnknownEffect(ForgedPreparedStructured)(Object.freeze({}));
+
+      const exits = yield* Effect.all(
+        [
+          firstInference.executeStructured(crossKind),
+          firstInference.executeStructured(structuredClone(prepared)),
+          firstInference.executeStructured(forged),
+          secondInference.executeStructured(prepared),
+          firstInference.executeStructured(discarded),
+        ].map(Effect.exit)
+      );
+      expect(exits.every(Exit.isFailure)).toBe(true);
+      expect(yield* Ref.get(executions)).toBe(0);
+
+      expect(yield* firstInference.executeStructured(prepared)).toEqual({
+        compactedConversation: "trusted",
+      });
+      expect(Exit.isFailure(yield* Effect.exit(firstInference.executeStructured(prepared)))).toBe(
+        true
+      );
+      expect(yield* Ref.get(executions)).toBe(1);
+    })
+);
+
+it.effect("returns transformed structured domain output without decoding it as wire data", () =>
+  Effect.gen(function* () {
+    const state = yield* makeTestInference();
+    const inference = makeHostedInference({
+      ...state.inferenceAdapter,
+      structured: {
+        prepare: ({ outputSchema }) =>
+          Effect.succeed({
+            execute: Schema.decodeUnknownEffect(outputSchema)({
+              generatedAt: "2026-08-12T00:00:00.000Z",
+            }).pipe(Effect.orDie),
+          }),
+      },
+    });
+    const prepared = yield* inference.prepareStructured({
+      context: makeHostedStructuredContext({ messages: [] }),
+      objectName: HostedStructuredObjectName.make("transformed_output"),
+      outputSchema: Schema.Struct({ generatedAt: Schema.DateFromString }),
+    });
+
+    const output = yield* inference.executeStructured(prepared);
+
+    expect(output.generatedAt.toISOString()).toBe("2026-08-12T00:00:00.000Z");
+  })
+);
+
+it.effect("rejects a structured authority while its execution is in progress", () =>
+  Effect.gen(function* () {
+    const started = yield* Deferred.make<void>();
+    const state = yield* makeTestInference();
+    const inference = makeHostedInference({
+      ...state.inferenceAdapter,
+      structured: {
+        prepare: () =>
+          Effect.succeed({
+            execute: Deferred.succeed(started, undefined).pipe(Effect.andThen(Effect.never)),
+          }),
+      },
+    });
+    const prepared = yield* inference.prepareStructured({
+      context: makeHostedStructuredContext({ messages: [] }),
+      objectName: HostedStructuredObjectName.make("in_progress"),
+      outputSchema: Schema.Struct({ value: Schema.String }),
+    });
+    const fiber = yield* inference
+      .executeStructured(prepared)
+      .pipe(Effect.forkChild({ startImmediately: true }));
+    yield* Deferred.await(started);
+
+    expect(Exit.isFailure(yield* Effect.exit(inference.executeStructured(prepared)))).toBe(true);
+    yield* Fiber.interrupt(fiber);
+    expect(Exit.isFailure(yield* Effect.exit(inference.executeStructured(prepared)))).toBe(true);
+  })
+);
+
+it.effect("preserves structured authority only after retryable provider failure", () =>
+  Effect.gen(function* () {
+    const attempts = yield* Ref.make(0);
+    const state = yield* makeTestInference();
+    const inference = makeHostedInference({
+      ...state.inferenceAdapter,
+      structured: {
+        prepare: ({ outputSchema }) =>
+          Effect.succeed({
+            execute: Ref.updateAndGet(attempts, (attempt) => attempt + 1).pipe(
+              Effect.flatMap((attempt) =>
+                attempt === 1
+                  ? Effect.fail(
+                      new HostedInferenceError({
+                        reason: { _tag: "ProviderUnavailable" },
+                        retryable: true,
+                        retryAfter: Option.none(),
+                      })
+                    )
+                  : Schema.decodeUnknownEffect(outputSchema)({ value: "retried" }).pipe(
+                      Effect.orDie
+                    )
+              )
+            ),
+          }),
+      },
+    });
+    const prepared = yield* inference.prepareStructured({
+      context: makeHostedStructuredContext({ messages: [] }),
+      objectName: HostedStructuredObjectName.make("retry_exact"),
+      outputSchema: Schema.Struct({ value: Schema.String }),
+    });
+
+    expect(Exit.isFailure(yield* Effect.exit(inference.executeStructured(prepared)))).toBe(true);
+    expect(yield* inference.executeStructured(prepared)).toEqual({ value: "retried" });
+    expect(Exit.isFailure(yield* Effect.exit(inference.executeStructured(prepared)))).toBe(true);
+  })
+);
 
 it.effect("executes only the exact complete request stored by preparation", () =>
   Effect.gen(function* () {

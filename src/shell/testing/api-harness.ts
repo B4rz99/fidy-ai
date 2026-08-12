@@ -140,6 +140,9 @@ const MemoryInferenceTest = Layer.succeed(
     validateText: () => Effect.die("Hosted text inference is outside the API harness"),
     executeText: () => Effect.die("Hosted text inference is outside the API harness"),
     discardText: () => Effect.die("Hosted text inference is outside the API harness"),
+    prepareStructured: () => Effect.die("Hosted structured inference is outside the API harness"),
+    executeStructured: () => Effect.die("Hosted structured inference is outside the API harness"),
+    discardStructured: () => Effect.die("Hosted structured inference is outside the API harness"),
   })
 );
 

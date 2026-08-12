@@ -3,7 +3,10 @@ import type { Duration } from "effect";
 import type { Prompt, Response } from "effect/unstable/ai";
 
 const hostedTextContextNominal = Symbol("HostedTextContext");
+const hostedStructuredContextNominal = Symbol("HostedStructuredContext");
 const preparedHostedTextNominal = Symbol("PreparedHostedText");
+const preparedHostedStructuredNominal = Symbol("PreparedHostedStructured");
+const preparedHostedStructuredSchema = Symbol("PreparedHostedStructuredSchema");
 const hostedTextContinuationNominal = Symbol("HostedTextContinuation");
 
 /** Opaque, single-claim semantic context that may be projected only by HostedInference. */
@@ -11,6 +14,15 @@ export type HostedTextContext = Readonly<{ [hostedTextContextNominal]: true }>;
 
 /** Opaque adapter-local authority for one exact prepared provider request. */
 export type PreparedHostedText = Readonly<{ [preparedHostedTextNominal]: true }>;
+
+/** Opaque, single-claim semantic context for one structured generation. */
+export type HostedStructuredContext = Readonly<{ [hostedStructuredContextNominal]: true }>;
+
+/** Opaque adapter-local authority bound to one schema-validated structured result. */
+export type PreparedHostedStructured<Output> = Readonly<{
+  [preparedHostedStructuredNominal]: true;
+  [preparedHostedStructuredSchema]: Schema.ConstraintDecoder<Output>;
+}>;
 
 /** Opaque adapter-local continuation returned by successful hosted text execution. */
 export type HostedTextContinuation = Readonly<{ [hostedTextContinuationNominal]: true }>;
@@ -22,7 +34,13 @@ export type HostedTextProjection = Readonly<{
   suffix: ReadonlyArray<Prompt.MessageEncoded>;
 }>;
 
+/** Semantic messages claimable once by HostedInference for structured generation. @internal */
+export type HostedStructuredProjection = Readonly<{
+  messages: ReadonlyArray<Prompt.MessageEncoded>;
+}>;
+
 const contextProjections = new WeakMap<object, HostedTextProjection>();
+const structuredContextProjections = new WeakMap<object, HostedStructuredProjection>();
 
 const freezeDeep: <A>(value: A) => A = (value) => {
   if (typeof value !== "object" || value === null || Object.isFrozen(value)) return value;
@@ -43,20 +61,63 @@ export const makeHostedTextContext = (projection: HostedTextProjection): HostedT
   return authority;
 };
 
+/**
+ * Isolates structured prompt messages behind a single-claim authority. The returned context exposes
+ * no message data and exactly one HostedInference service may claim its projection.
+ *
+ * @internal
+ */
+// Structured workflow integration belongs to #206; adapter behavior is covered at its stable seam.
+/* istanbul ignore next */
+export const makeHostedStructuredContext = (
+  projection: HostedStructuredProjection
+): HostedStructuredContext => {
+  const authority: HostedStructuredContext = Object.freeze({
+    [hostedStructuredContextNominal]: true,
+  });
+  structuredContextProjections.set(authority, freezeDeep(structuredClone(projection)));
+  return authority;
+};
+
+const maximumStructuredObjectNameLength = 64;
+
+/** Provider-compatible object name fixed during structured preparation. */
+export const HostedStructuredObjectName = Schema.String.check(
+  Schema.isMinLength(1),
+  Schema.isMaxLength(maximumStructuredObjectNameLength),
+  Schema.isPattern(/^[A-Za-z0-9_-]+$/)
+).pipe(Schema.brand("HostedStructuredObjectName"));
+export type HostedStructuredObjectName = typeof HostedStructuredObjectName.Type;
+
+/** Domain schema and semantic context for one strict structured generation. */
+export type HostedStructuredRequest<
+  Output,
+  Encoded extends Readonly<Record<string, unknown>>,
+> = Readonly<{
+  context: HostedStructuredContext;
+  objectName: HostedStructuredObjectName;
+  outputSchema: Schema.Codec<Output, Encoded, never, never>;
+}>;
+
 /** Allowlisted invalid-output descriptions safe for retry feedback and telemetry. */
 export type HostedInvalidOutputDescription =
   | "Semantic hosted text projection was invalid"
   | "Hosted provider response was invalid"
   | "Hosted tool arguments were invalid"
   | "Deterministic hosted output was invalid"
-  | "Deterministic model exceeded the hosted tool-call limit";
+  | "Deterministic model exceeded the hosted tool-call limit"
+  | "Hosted structured schema was invalid"
+  | "Hosted structured provider response was invalid"
+  | "Hosted structured output was malformed";
 
 /** Closed hosted inference failure vocabulary. */
 export type HostedInferenceFailureReason =
   | Readonly<{ _tag: "InvalidAuthority" }>
   | Readonly<{ _tag: "CapacityExceeded"; inputTokens: number }>
   | Readonly<{ _tag: "InvalidOutput"; description: HostedInvalidOutputDescription }>
-  | Readonly<{ _tag: "ProviderUnavailable" }>;
+  | Readonly<{ _tag: "ProviderUnavailable" }>
+  | Readonly<{ _tag: "StructuredOutputExceeded" }>
+  | Readonly<{ _tag: "StructuredOutputTimedOut" }>;
 
 const hostedInferenceErrorMessages: Readonly<Record<HostedInferenceFailureReason["_tag"], string>> =
   {
@@ -64,6 +125,8 @@ const hostedInferenceErrorMessages: Readonly<Record<HostedInferenceFailureReason
     CapacityExceeded: "The complete hosted request exceeds provider capacity",
     InvalidOutput: "The hosted provider returned invalid output",
     ProviderUnavailable: "The hosted provider is unavailable",
+    StructuredOutputExceeded: "The hosted structured response exceeded its bound",
+    StructuredOutputTimedOut: "The hosted structured request timed out",
   };
 
 /** Safe failure returned by preparation or execution without exposing provider request content. */
@@ -139,6 +202,23 @@ export type HostedInferenceAdapter<Request, Continuation> = Readonly<{
     Readonly<{ result: Omit<HostedTextResult, "continuation">; continuation: Continuation }>,
     HostedInferenceError
   >;
+  structured: HostedStructuredAdapter;
+}>;
+
+/** Adapter-private executable retaining one exact request and its matching output decoder. */
+export type PreparedStructuredExecution<Output> = Readonly<{
+  execute: Effect.Effect<Output, HostedInferenceError>;
+}>;
+
+/** Provider implementation of exact strict structured preparation. */
+export type HostedStructuredAdapter = Readonly<{
+  prepare: <Output, Encoded extends Readonly<Record<string, unknown>>>(
+    input: Readonly<{
+      projection: HostedStructuredProjection;
+      objectName: HostedStructuredObjectName;
+      outputSchema: Schema.Codec<Output, Encoded, never, never>;
+    }>
+  ) => Effect.Effect<PreparedStructuredExecution<Output>, HostedInferenceError>;
 }>;
 
 /** Provider-neutral authority interface shared by live turns and startup validation. */
@@ -157,6 +237,27 @@ export type HostedInferenceService = Readonly<{
   ) => Effect.Effect<HostedTextResult, HostedInferenceError>;
   /** Releases an unexecuted or terminally failed request and its claimed source continuation. */
   discardText: (prepared: PreparedHostedText) => Effect.Effect<void, HostedInferenceError>;
+  /**
+   * Claims semantic input once and stores one exact strict request with its matching decoder.
+   * Invalid or already-claimed context fails without producing an authority.
+   */
+  prepareStructured: <Output, Encoded extends Readonly<Record<string, unknown>>>(
+    request: HostedStructuredRequest<Output, Encoded>
+  ) => Effect.Effect<PreparedHostedStructured<Output>, HostedInferenceError>;
+  /**
+   * Executes once and returns validated domain output. Retryable provider failure preserves the
+   * authority; success, concurrent use, interruption, terminal failure, and invalid authority do not.
+   */
+  executeStructured: <Output>(
+    prepared: PreparedHostedStructured<Output>
+  ) => Effect.Effect<Output, HostedInferenceError>;
+  /**
+   * Releases an unexecuted authority. Foreign, discarded, executing, or already-consumed authority
+   * fails without affecting another request.
+   */
+  discardStructured: <Output>(
+    prepared: PreparedHostedStructured<Output>
+  ) => Effect.Effect<void, HostedInferenceError>;
 }>;
 
 type PreparedEntry<Request, Continuation> = {
@@ -355,6 +456,113 @@ const makeHostedInferenceRuntime = <Request, Continuation>(
   };
 };
 
+type HostedStructuredRuntime = Pick<
+  HostedInferenceService,
+  "prepareStructured" | "executeStructured" | "discardStructured"
+>;
+
+/* istanbul ignore next */
+const invalidStructuredOutput = (): HostedInferenceError =>
+  new HostedInferenceError({
+    reason: {
+      _tag: "InvalidOutput",
+      description: "Hosted structured output was malformed",
+    },
+    retryable: false,
+    retryAfter: Option.none(),
+  });
+
+/* istanbul ignore next */
+const isRetryableProviderFailure = (exit: Exit.Exit<unknown, HostedInferenceError>): boolean =>
+  Exit.isFailure(exit) &&
+  exit.cause.reasons.some(
+    (reason) =>
+      reason._tag === "Fail" &&
+      reason.error.reason._tag === "ProviderUnavailable" &&
+      reason.error.retryable
+  );
+
+type PreparedStructuredEntry = {
+  executing: boolean;
+  execute: Effect.Effect<unknown, HostedInferenceError>;
+};
+
+/* istanbul ignore next */
+const storeStructuredExecution = function <Output>(
+  prepared: WeakMap<object, PreparedStructuredEntry>,
+  execution: PreparedStructuredExecution<Output>,
+  outputSchema: Schema.Codec<Output, Readonly<Record<string, unknown>>, never, never>
+): PreparedHostedStructured<Output> {
+  const authority = {
+    [preparedHostedStructuredNominal]: true as const,
+    // This non-enumerable type witness is caller-owned domain schema, never provider state.
+    [preparedHostedStructuredSchema]: outputSchema,
+  };
+  Object.defineProperties(authority, {
+    [preparedHostedStructuredNominal]: { enumerable: false },
+    [preparedHostedStructuredSchema]: { enumerable: false },
+  });
+  Object.freeze(authority);
+  prepared.set(authority, {
+    executing: false,
+    execute: execution.execute.pipe(
+      Effect.flatMap(Schema.encodeUnknownEffect(outputSchema)),
+      Effect.mapError((error) =>
+        error instanceof HostedInferenceError ? error : invalidStructuredOutput()
+      )
+    ),
+  });
+  return authority;
+};
+
+/* istanbul ignore next */
+const makeHostedStructuredRuntime = (adapter: HostedStructuredAdapter): HostedStructuredRuntime => {
+  const prepared = new WeakMap<object, PreparedStructuredEntry>();
+  return {
+    prepareStructured: <Output, Encoded extends Readonly<Record<string, unknown>>>(
+      request: HostedStructuredRequest<Output, Encoded>
+    ) =>
+      Effect.suspend(() => {
+        const projection = structuredContextProjections.get(request.context);
+        if (projection === undefined) return Effect.fail(invalidAuthority());
+        structuredContextProjections.delete(request.context);
+        return adapter
+          .prepare({ ...request, projection })
+          .pipe(
+            Effect.map((execution) =>
+              storeStructuredExecution(prepared, execution, request.outputSchema)
+            )
+          );
+      }),
+    executeStructured: (authority) =>
+      Effect.suspend(() => {
+        const entry = prepared.get(authority);
+        if (entry === undefined || entry.executing) return Effect.fail(invalidAuthority());
+        entry.executing = true;
+        return entry.execute.pipe(
+          Effect.flatMap((output) =>
+            Schema.decodeUnknownEffect(authority[preparedHostedStructuredSchema])(output).pipe(
+              Effect.mapError(invalidStructuredOutput)
+            )
+          ),
+          Effect.onExit((exit) =>
+            Effect.sync(() => {
+              if (isRetryableProviderFailure(exit)) entry.executing = false;
+              else prepared.delete(authority);
+            })
+          )
+        );
+      }),
+    discardStructured: (authority) =>
+      Effect.suspend(() => {
+        const entry = prepared.get(authority);
+        if (entry === undefined || entry.executing) return Effect.fail(invalidAuthority());
+        prepared.delete(authority);
+        return Effect.void;
+      }),
+  };
+};
+
 /**
  * Gives one adapter exclusive, one-shot ownership of its prepared requests and continuations.
  * Authorities from another returned service are rejected.
@@ -363,6 +571,7 @@ export const makeHostedInference = <Request, Continuation>(
   adapter: HostedInferenceAdapter<Request, Continuation>
 ): HostedInferenceService => {
   const runtime = makeHostedInferenceRuntime(adapter);
+  const structuredRuntime = makeHostedStructuredRuntime(adapter.structured);
   return {
     countMemoryText: adapter.countMemoryText,
     prepareText: (request) =>
@@ -377,6 +586,7 @@ export const makeHostedInference = <Request, Continuation>(
     validateText: (request) => runtime.prepare(request, false).pipe(Effect.asVoid),
     executeText: (authority) => runtime.execute(authority),
     discardText: (authority) => runtime.discard(authority),
+    ...structuredRuntime,
   };
 };
 

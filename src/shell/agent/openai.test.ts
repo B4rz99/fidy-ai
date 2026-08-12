@@ -1,5 +1,17 @@
 import { expect, it } from "@effect/vitest";
-import { ConfigProvider, Context, Effect, Exit, Layer, Option, Ref, Schema } from "effect";
+import {
+  ConfigProvider,
+  Context,
+  Deferred,
+  Effect,
+  Exit,
+  Fiber,
+  Layer,
+  Option,
+  Ref,
+  Schema,
+} from "effect";
+import { TestClock } from "effect/testing";
 import { HttpClient, type HttpClientRequest, HttpClientResponse } from "effect/unstable/http";
 import {
   makeOpenAiFunctionCallResponse,
@@ -7,9 +19,12 @@ import {
 } from "~/shell/agent/fixtures/openai";
 import {
   HostedInference,
+  HostedStructuredObjectName,
+  type HostedStructuredRequest,
   type HostedTextContinuation,
   type HostedTextRequest,
   HostedToolCallMaximum,
+  makeHostedStructuredContext,
   makeHostedTextContext,
 } from "./hosted-inference";
 import {
@@ -17,6 +32,7 @@ import {
   HostedAgentGenerationConfig,
   OpenAiHostedInferenceLive,
   OpenAiHostedInferenceWithoutStartupValidation,
+  makeOpenAiHarness,
 } from "./openai";
 import { agentOperationBindings } from "./toolkit";
 
@@ -39,7 +55,8 @@ const requestBody = Effect.fn("Test.requestBody")(function* (
 
 const makeTransport = Effect.fn("Test.makeTransport")(function* (
   inputTokens: number,
-  responseBody: string = makeOpenAiTextResponse("ok")
+  responseBody: string = makeOpenAiTextResponse("ok"),
+  executionHeaders: Readonly<Record<string, string>> = {}
 ) {
   const requests = yield* Ref.make<ReadonlyArray<HttpClientRequest.HttpClientRequest>>([]);
   const client = HttpClient.make((request) =>
@@ -52,13 +69,37 @@ const makeTransport = Effect.fn("Test.makeTransport")(function* (
         request,
         new Response(body, {
           status: 200,
-          headers: { "content-type": "application/json" },
+          headers: {
+            "content-type": "application/json",
+            ...(request.url.includes("/responses/input_tokens") ? {} : executionHeaders),
+          },
         })
       );
     })
   );
   return { requests, layer: Layer.succeed(HttpClient.HttpClient, client) } as const;
 });
+
+const makeExecutionFailingTransport = (
+  status: number,
+  body: string
+): Layer.Layer<HttpClient.HttpClient> =>
+  Layer.succeed(
+    HttpClient.HttpClient,
+    HttpClient.make((request) =>
+      Effect.succeed(
+        HttpClientResponse.fromWeb(
+          request,
+          request.url.includes("/responses/input_tokens")
+            ? new Response('{"object":"response.input_tokens","input_tokens":100}', {
+                status: 200,
+                headers: { "content-type": "application/json" },
+              })
+            : new Response(body, { status })
+        )
+      )
+    )
+  );
 
 const makeFailingTransport = (status: number): Layer.Layer<HttpClient.HttpClient> =>
   Layer.succeed(
@@ -100,6 +141,22 @@ const textRequest = (): HostedTextRequest => ({
   continuation: Option.none(),
   toolChoice: "auto",
   maximumToolCalls: HostedToolCallMaximum.make(12),
+});
+
+const StructuredOutput = Schema.Struct({
+  compactedConversation: Schema.String,
+  optionalLabel: Schema.optionalKey(Schema.String),
+});
+
+const structuredRequest = (): HostedStructuredRequest<
+  typeof StructuredOutput.Type,
+  typeof StructuredOutput.Encoded
+> => ({
+  context: makeHostedStructuredContext({
+    messages: [{ role: "user" as const, content: "compact exact retained conversation" }],
+  }),
+  objectName: HostedStructuredObjectName.make("compacted_conversation"),
+  outputSchema: StructuredOutput,
 });
 
 const continuationRequest = (
@@ -200,6 +257,241 @@ it.effect("counts complete framing and executes the exact prepared request", () 
     const disabledCount = (yield* Ref.get(transport.requests))[2];
     if (disabledCount === undefined) return yield* Effect.die("missing disabled count request");
     expect((yield* requestBody(disabledCount)).tool_choice).toBe("none");
+  })
+);
+
+it.effect("measures and executes the exact strict structured schema, name, and framing", () =>
+  Effect.gen(function* () {
+    const outputJson = yield* Schema.encodeEffect(Schema.UnknownFromJsonString)({
+      compactedConversation: "trusted",
+      optionalLabel: null,
+    });
+    const transport = yield* makeTransport(100, makeOpenAiTextResponse(outputJson));
+    const inference = yield* buildInference(transport.layer);
+    const prepared = yield* inference.prepareStructured(structuredRequest());
+
+    expect(yield* inference.executeStructured(prepared)).toEqual({
+      compactedConversation: "trusted",
+    });
+    const [count, execute] = yield* Ref.get(transport.requests);
+    if (count === undefined || execute === undefined) return yield* Effect.die("missing requests");
+    const countJson = yield* requestBody(count);
+    const executeJson = yield* requestBody(execute);
+    expect(countJson.text).toEqual(executeJson.text);
+    expect(countJson.text).toMatchObject({
+      format: {
+        type: "json_schema",
+        name: "compacted_conversation",
+        strict: true,
+      },
+    });
+    expect(countJson.input).toEqual(executeJson.input);
+    expect(countJson.reasoning).toEqual(executeJson.reasoning);
+    expect(countJson.truncation).toEqual(executeJson.truncation);
+    expect(executeJson.tools).toEqual([]);
+    expect(executeJson.max_output_tokens).toBe(16_000);
+  })
+);
+
+it.effect("returns typed structured failures without retaining hostile model text", () =>
+  Effect.gen(function* () {
+    const canary = "HOSTILE_PRIVATE_MODEL_BODY";
+    const outputJson = yield* Schema.encodeEffect(Schema.UnknownFromJsonString)({
+      compactedConversation: canary,
+      optionalLabel: 42,
+    });
+    const transport = yield* makeTransport(100, makeOpenAiTextResponse(outputJson));
+    const inference = yield* buildInference(transport.layer);
+    const prepared = yield* inference.prepareStructured(structuredRequest());
+
+    const failure = yield* inference.executeStructured(prepared).pipe(Effect.flip);
+    expect(failure.reason).toEqual({
+      _tag: "InvalidOutput",
+      description: "Hosted structured output was malformed",
+    });
+    expect(String(failure)).not.toContain(canary);
+    expect(Exit.isFailure(yield* Effect.exit(inference.executeStructured(prepared)))).toBe(true);
+  })
+);
+
+it.effect("bounds structured provider responses before decoding", () =>
+  Effect.gen(function* () {
+    for (const transport of [
+      yield* makeTransport(100, "x".repeat(1_000_001)),
+      yield* makeTransport(100, "small", { "content-length": "1000001" }),
+    ]) {
+      const inference = yield* buildInference(transport.layer);
+      const prepared = yield* inference.prepareStructured(structuredRequest());
+
+      const failure = yield* inference.executeStructured(prepared).pipe(Effect.flip);
+      expect(failure.reason).toEqual({ _tag: "StructuredOutputExceeded" });
+    }
+  })
+);
+
+it.effect("rejects structured capacity overflow before execution", () =>
+  Effect.gen(function* () {
+    const transport = yield* makeTransport(1_034_001);
+    const inference = yield* buildInference(transport.layer);
+
+    const failure = yield* inference.prepareStructured(structuredRequest()).pipe(Effect.flip);
+
+    expect(failure.reason).toEqual({ _tag: "CapacityExceeded", inputTokens: 1_034_001 });
+    expect(yield* Ref.get(transport.requests)).toHaveLength(1);
+  })
+);
+
+it.effect("bounds structured token-count responses before execution", () =>
+  Effect.gen(function* () {
+    const requests = yield* Ref.make(0);
+    const client = HttpClient.make((request) =>
+      Ref.update(requests, (count) => count + 1).pipe(
+        Effect.as(
+          HttpClientResponse.fromWeb(
+            request,
+            new Response("small", {
+              status: 200,
+              headers: { "content-length": "1000001" },
+            })
+          )
+        )
+      )
+    );
+    const inference = yield* buildInference(Layer.succeed(HttpClient.HttpClient, client));
+
+    const failure = yield* inference.prepareStructured(structuredRequest()).pipe(Effect.flip);
+
+    expect(failure.reason).toEqual({ _tag: "StructuredOutputExceeded" });
+    expect(yield* Ref.get(requests)).toBe(1);
+  })
+);
+
+it.effect("times out structured token counting before execution", () =>
+  Effect.gen(function* () {
+    const countingStarted = yield* Deferred.make<void>();
+    const requests = yield* Ref.make(0);
+    const client = HttpClient.make(() =>
+      Ref.update(requests, (count) => count + 1).pipe(
+        Effect.andThen(Deferred.succeed(countingStarted, undefined)),
+        Effect.andThen(Effect.never)
+      )
+    );
+    const inference = yield* buildInference(
+      Layer.succeed(HttpClient.HttpClient, client),
+      makeOpenAiHarness("2 seconds")
+    );
+    const fiber = yield* Effect.exit(inference.prepareStructured(structuredRequest())).pipe(
+      Effect.forkChild({ startImmediately: true })
+    );
+    yield* Deferred.await(countingStarted);
+    yield* TestClock.adjust("3 seconds");
+
+    const exit = yield* Fiber.join(fiber);
+    expect(Exit.isFailure(exit)).toBe(true);
+    if (Exit.isFailure(exit)) {
+      expect(
+        exit.cause.reasons.some(
+          (reason) =>
+            reason._tag === "Fail" && reason.error.reason._tag === "StructuredOutputTimedOut"
+        )
+      ).toBe(true);
+    }
+    expect(yield* Ref.get(requests)).toBe(1);
+  })
+);
+
+it.effect("times out structured execution at the adapter-owned deadline", () =>
+  Effect.gen(function* () {
+    const executionStarted = yield* Deferred.make<void>();
+    const client = HttpClient.make((request) =>
+      request.url.includes("/responses/input_tokens")
+        ? Effect.succeed(
+            HttpClientResponse.fromWeb(
+              request,
+              new Response('{"object":"response.input_tokens","input_tokens":100}', {
+                status: 200,
+                headers: { "content-type": "application/json" },
+              })
+            )
+          )
+        : Deferred.succeed(executionStarted, undefined).pipe(Effect.andThen(Effect.never))
+    );
+    const inference = yield* buildInference(
+      Layer.succeed(HttpClient.HttpClient, client),
+      makeOpenAiHarness("2 seconds")
+    );
+    const prepared = yield* inference.prepareStructured(structuredRequest());
+    const fiber = yield* Effect.exit(inference.executeStructured(prepared)).pipe(
+      Effect.forkChild({ startImmediately: true })
+    );
+    yield* Deferred.await(executionStarted);
+    yield* TestClock.adjust("3 seconds");
+
+    const exit = yield* Fiber.join(fiber);
+    expect(Exit.isFailure(exit)).toBe(true);
+    if (Exit.isFailure(exit)) {
+      expect(
+        exit.cause.reasons.some(
+          (reason) =>
+            reason._tag === "Fail" && reason.error.reason._tag === "StructuredOutputTimedOut"
+        )
+      ).toBe(true);
+    }
+    expect(Exit.isFailure(yield* Effect.exit(inference.executeStructured(prepared)))).toBe(true);
+  })
+);
+
+it.effect("preserves an exact structured request only for retryable provider failure", () =>
+  Effect.gen(function* () {
+    const canary = "HOSTILE_PROVIDER_FAILURE_BODY";
+    const inference = yield* buildInference(makeExecutionFailingTransport(500, canary));
+    const prepared = yield* inference.prepareStructured(structuredRequest());
+
+    const first = yield* inference.executeStructured(prepared).pipe(Effect.flip);
+    const second = yield* inference.executeStructured(prepared).pipe(Effect.flip);
+    expect(first.reason._tag).toBe("ProviderUnavailable");
+    expect(first.retryable).toBe(true);
+    expect(second.reason._tag).toBe("ProviderUnavailable");
+    expect(String(first)).not.toContain(canary);
+  })
+);
+
+it.effect(
+  "consumes structured authority after malformed envelopes and terminal provider failure",
+  () =>
+    Effect.gen(function* () {
+      for (const transportLayer of [
+        (yield* makeTransport(100, "{}")).layer,
+        makeExecutionFailingTransport(400, "HOSTILE_TERMINAL_BODY"),
+      ]) {
+        const inference = yield* buildInference(transportLayer);
+        const prepared = yield* inference.prepareStructured(structuredRequest());
+        const failure = yield* inference.executeStructured(prepared).pipe(Effect.flip);
+        expect(["InvalidOutput", "ProviderUnavailable"]).toContain(failure.reason._tag);
+        expect(Exit.isFailure(yield* Effect.exit(inference.executeStructured(prepared)))).toBe(
+          true
+        );
+        expect(String(failure)).not.toContain("HOSTILE_TERMINAL_BODY");
+      }
+    })
+);
+
+it.effect("rejects unsupported structured schemas before provider I/O", () =>
+  Effect.gen(function* () {
+    const transport = yield* makeTransport(100);
+    const inference = yield* buildInference(transport.layer);
+    const failure = yield* inference
+      .prepareStructured({
+        ...structuredRequest(),
+        outputSchema: Schema.Struct({ unsupported: Schema.Unknown }),
+      })
+      .pipe(Effect.flip);
+
+    expect(failure.reason).toEqual({
+      _tag: "InvalidOutput",
+      description: "Hosted structured schema was invalid",
+    });
+    expect(yield* Ref.get(transport.requests)).toHaveLength(0);
   })
 );
 

@@ -20,6 +20,14 @@ src/shell/transcript/conversation-continuity.test.ts
         "model": "gpt-5.6-sol"
       },
       "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_df44ad36852a2f": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019ff797-32b9-7d91-8c99-1bfff5041e21",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
     }
   }
 }

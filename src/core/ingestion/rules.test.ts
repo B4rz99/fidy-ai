@@ -241,7 +241,7 @@ it.effect("covers opposite signed direction and absent mapped cells", () =>
     const signedMapping = StatementColumnMapping.make({
       dateColumn: 0,
       amountColumn: 1,
-      counterpartyColumn: Option.none(),
+      counterpartyColumn: Option.some(10),
       currencyColumn: Option.none(),
       currencyLiteral: Option.some(Currency.make("COP")),
       directionColumn: Option.none(),

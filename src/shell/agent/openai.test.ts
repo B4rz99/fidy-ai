@@ -33,8 +33,8 @@ import {
   HostedAgentGenerationConfig,
   OpenAiHostedInferenceLive,
   OpenAiHostedInferenceWithoutStartupValidation,
-  makeOpenAiHarness,
   OpenAiLanguageModelLive,
+  makeOpenAiHarness,
 } from "./openai";
 import { agentOperationBindings } from "./toolkit";
 

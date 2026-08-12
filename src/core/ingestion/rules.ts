@@ -11,7 +11,7 @@ import {
 
 type StatementDirection = "inflow" | "outflow";
 type ExtractionDecoder<Extraction> = (
-  candidate: unknown
+  candidate: Schema.Json
 ) => Effect.Effect<Extraction, Schema.SchemaError, never>;
 
 const oppositeDirection = (direction: StatementDirection): StatementDirection =>

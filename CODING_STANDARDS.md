@@ -94,13 +94,17 @@ Build derived shapes from their canonical schemas rather than maintaining parall
 Judge a `Record` by its actual keyspace and value contract.
 
 - A finite `Record<FailureTag, Status>` is an exhaustive table and strengthens the contract.
-- In production code, `Record<string, unknown>` is reserved for genuinely open property bags whose
-  keys and values Fidy does not know.
+- Core never uses an open dictionary whose direct value contract is `unknown`, `any`, `object`, or
+  `{}`. Its values are established domain contracts; test builders use named shapes and `Partial<T>`.
+- In shell production code, `Record<string, unknown>` is reserved for genuinely open property bags
+  whose keys and values Fidy does not know.
 - Do not return `Record<string, unknown>` for a value whose fields are already known. Use the
   canonical schema-derived type or a named first-party shape.
 
 ### Other defaults
 
+- Core functions do not accept explicit `unknown` parameters. Raw input is decoded at the shell
+  boundary; a genuine pure validation module is a narrow, explained config-level exception.
 - `Option` for absence. Never `null`. `undefined` only where an Effect API demands it.
 - `ReadonlyArray<T>` in **return** types. Parameters are enforced in core; returns are not.
 - `Data.struct` / `Data.tuple` for value objects needing structural equality.

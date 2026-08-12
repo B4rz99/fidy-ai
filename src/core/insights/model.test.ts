@@ -2,24 +2,10 @@ import { expect, it } from "@effect/vitest";
 import { BigDecimal, Equal, Result, Schema, SchemaIssue } from "effect";
 import { DeliveryEvidenceInput, InsightEvent, InsightGenerationInput } from "./model";
 
-const occurrence = (
-  overrides: Readonly<Record<string, unknown>> = {}
-): {
-  id: string;
-  kind: string;
-  scheduleId: string;
-  scheduleVersion: number;
-  serviceMarket: string;
-  locale: string;
-  timeZone: string;
-  scheduledAt: string;
-  moneyGroups: {
-    currency: string;
-    inflow: { amount: string; currency: string };
-    outflow: { amount: string; currency: string };
-  }[];
-  lifecycleState: string;
-} => ({
+type InsightOccurrenceInput = typeof InsightEvent.Encoded;
+type MoneyGroupInput = InsightOccurrenceInput["moneyGroups"][number];
+
+const occurrence = (overrides: Partial<InsightOccurrenceInput> = {}): InsightOccurrenceInput => ({
   id: "f1d1a000-0000-4000-8000-000000000101",
   kind: "weekly-summary",
   scheduleId: "f1d1a000-0000-4000-8000-000000000201",
@@ -107,7 +93,7 @@ it("rejects Currency groups that are duplicated or out of alphabetic order", () 
   ).toEqual(["moneyGroups", 1, "currency"]);
   expect(
     Result.isFailure(
-      Schema.decodeUnknownResult(InsightEvent)(occurrence({ moneyGroups: [groups[0], groups[0]] }))
+      Schema.decodeUnknownResult(InsightEvent)(occurrence({ moneyGroups: [...groups, ...groups] }))
     )
   ).toBe(true);
 });
@@ -124,7 +110,7 @@ it("rejects inflow or outflow Money whose Currency disagrees with its group", ()
       inflow: { amount: "1", currency: "COP" },
       outflow: { amount: "2", currency: "USD" },
     },
-  ];
+  ] satisfies ReadonlyArray<MoneyGroupInput>;
 
   for (const [index, mismatch] of mismatches.entries()) {
     const result = Schema.decodeUnknownResult(InsightEvent)(

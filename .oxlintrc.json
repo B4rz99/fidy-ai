@@ -144,15 +144,28 @@
     // The two tooling locations below also have no types. dependency-cruiser
     // lives in an isolated install under tools/depcruise (see its package.json)
     // that the root tsconfig does not see; the custom plugin is untyped .js
-    // written against oxlint's untyped JS plugin API.
+    // written against oxlint's untyped JS plugin API. Its local helper import
+    // carries the runtime extension Node ESM requires.
     {
       "files": ["tools/depcruise/*.mjs", "scripts/oxlint/*.js"],
       "rules": {
+        "import/extensions": ["error", "never", { "pattern": { "js": "always" } }],
         "typescript/no-unsafe-argument": "off",
         "typescript/no-unsafe-assignment": "off",
         "typescript/no-unsafe-call": "off",
         "typescript/no-unsafe-member-access": "off",
         "typescript/no-unsafe-return": "off"
+      }
+    },
+    // Resolving nested aliases and utility wrappers is one recursive syntax
+    // traversal. Splitting it to satisfy per-function shape limits would hide
+    // the resolution state rather than simplify the algorithm.
+    {
+      "files": ["scripts/oxlint/dictionary-types.js"],
+      "rules": {
+        "complexity": "off",
+        "max-depth": "off",
+        "max-params": "off"
       }
     },
     // Only the runner needs the `.mjs` exception turned back off. That
@@ -184,6 +197,8 @@
         "effect-guards/no-ambient-nondeterminism": "error",
         "effect-guards/no-datetime-internals": "error",
         "effect-guards/no-escape-hatch": "error",
+        "effect-guards/no-unknown-parameters": "error",
+        "effect-guards/no-unsafe-dictionary-type": "error",
         "effect-guards/require-interface-comment": "error",
         "effect-guards/scalar-brand-only": "error",
         "no-param-reassign": ["error", { "props": true }],
@@ -235,9 +250,11 @@
         // object schemas. Negative probes exercise both fences in lint:type-aware.
         // `Option` trips it for the same reason as `Brand`: every member is
         // readonly apart from the phantom `Unify` symbols, and no-nullable-type
-        // requires it wherever a core parameter may be absent. `SchemaError`
-        // holds a decode failure core reads to report which field to correct;
-        // its issue tree is mutable by declaration only.
+        // requires it wherever a core parameter may be absent. `Json` is a
+        // recursively readonly array/record union, but the rule loses that
+        // fact through the recursive alias. `SchemaError` holds a decode
+        // failure core reads to report which field to correct; its issue tree
+        // is mutable by declaration only.
         "typescript/prefer-readonly-parameter-types": [
           "error",
           {
@@ -245,6 +262,7 @@
               { "from": "package", "package": "effect", "name": "Utc" },
               { "from": "package", "package": "effect", "name": "Brand" },
               { "from": "package", "package": "effect", "name": "Option" },
+              { "from": "package", "package": "effect", "name": "Json" },
               { "from": "package", "package": "effect", "name": "SchemaError" }
             ]
           }

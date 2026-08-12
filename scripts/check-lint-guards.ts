@@ -25,6 +25,16 @@ const probes = [
     source: `import { randomUUID } from "node:crypto";\n\n/** Negative probe: a crypto entropy export must not reach core. */\nexport const makeId = (): string => randomUUID();\n`,
   },
   {
+    name: "unknown-parameter",
+    expectedRule: "effect-guards(no-unknown-parameters)",
+    source: `/** Negative probe: core inputs must carry an established contract. */\nexport const inspect = (value: unknown): boolean => value !== undefined;\n`,
+  },
+  {
+    name: "unsafe-dictionary",
+    expectedRule: "effect-guards(no-unsafe-dictionary-type)",
+    source: `/** Negative probe: aliases may not conceal an open unestablished value contract. */\ntype Properties = Readonly<Record<string, unknown>>;\n\nexport const properties = (): Properties => ({});\n`,
+  },
+  {
     name: "restricted-clock",
     expectedRule: "eslint(no-restricted-properties)",
     source: `/** Negative probe: core must not read the ambient clock. */\nexport const nowMillis = (): number => Date.now();\n`,

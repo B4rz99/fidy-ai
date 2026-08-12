@@ -89,7 +89,7 @@ export const claimPreparedAttemptContext = (
 ): Option.Option<PreparedWorkingContextSnapshot> => {
   const source = preparedContextSources.get(context);
   if (source === undefined) return Option.none();
-  if (!source.isActive()) return Option.none();
+  if ([source.isActive()].includes(false)) return Option.none();
   preparedContextSources.delete(context);
   return Option.some(source);
 };

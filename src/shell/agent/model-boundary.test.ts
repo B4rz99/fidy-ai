@@ -1,8 +1,13 @@
 import { expect, it } from "@effect/vitest";
 import { DateTime } from "effect";
 import { IanaTimeZone, Locale, ServiceMarket } from "~/core/_shared/context";
-import { TranscriptTurnId } from "~/core/transcript/model";
-import { projectTranscriptForModel, systemPrompt, turnPrompt } from "./model-boundary";
+import { TranscriptText, TranscriptTurnId } from "~/core/transcript/model";
+import {
+  projectTranscriptForModel,
+  systemPrompt,
+  transcriptPrompt,
+  turnPrompt,
+} from "./model-boundary";
 
 const userContext = {
   serviceMarket: ServiceMarket.make("CO"),
@@ -22,6 +27,25 @@ it("excludes lifecycle markers from the model projection", () => {
       1_000
     )
   ).toEqual([]);
+});
+
+it("projects safe and sensitive transcript prose with its original role", () => {
+  expect(
+    transcriptPrompt([
+      { _tag: "UserTranscriptEntry", text: TranscriptText.make("contenido seguro") },
+      {
+        _tag: "AssistantTranscriptEntry",
+        text: TranscriptText.make("contraseña: hunter2"),
+      },
+    ])
+  ).toEqual([
+    { role: "user", content: "contenido seguro" },
+    {
+      role: "assistant",
+      content:
+        "No puedo procesar credenciales o secretos en el chat. Rota cualquier credencial compartida y vuelve a intentarlo sin incluirla.",
+    },
+  ]);
 });
 
 it("warns against credentials and unnecessary sensitive information without soliciting them", () => {

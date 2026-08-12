@@ -7,6 +7,12 @@
 // oxlint's JS-plugin API mirrors ESLint v9. Written in .js so tsgo (which only
 // typechecks *.ts) does not try to typecheck the untyped plugin API.
 
+import {
+  classifyUnsafeDictionary,
+  classifyUnsafeDictionaryValue,
+  createTypeEnvironment,
+} from "./dictionary-types.js";
+
 /**
  * Ban `sql<Type>`...`` — a type parameter on a sql tagged template provides no
  * runtime validation. Use SqlSchema.findOne/findAll/single/void with a Schema
@@ -518,6 +524,126 @@ const noAmbientNondeterminism = {
   },
 };
 
+const parameterAnnotation = (parameter) => {
+  if (parameter.type === "TSParameterProperty") return parameterAnnotation(parameter.parameter);
+  if (parameter.type === "RestElement") {
+    return parameter.typeAnnotation ?? parameterAnnotation(parameter.argument);
+  }
+  if (parameter.type === "AssignmentPattern") {
+    return parameter.typeAnnotation ?? parameter.left.typeAnnotation;
+  }
+  return parameter.typeAnnotation;
+};
+
+/**
+ * Core accepts established contracts. Raw values must be decoded before they
+ * cross the core boundary unless a validation module is recorded as a narrow
+ * config-level exception.
+ */
+const noUnknownParameters = {
+  meta: {
+    type: "problem",
+    docs: { description: "Disallow explicitly unknown parameters in core" },
+    messages: {
+      unknownParameter:
+        "Core may not accept an `unknown` parameter. Decode raw input at its boundary or replace it with the narrowest honest input contract. A genuine core validation module must be recorded as a narrow override in .oxlintrc.json.",
+    },
+    schema: [],
+  },
+  create(context) {
+    const check = (node) => {
+      for (const parameter of node.params) {
+        const annotation = parameterAnnotation(parameter);
+        if (annotation?.typeAnnotation.type === "TSUnknownKeyword") {
+          context.report({ node: annotation.typeAnnotation, messageId: "unknownParameter" });
+        }
+      }
+    };
+    return {
+      ArrowFunctionExpression: check,
+      FunctionDeclaration: check,
+      FunctionExpression: check,
+      TSCallSignatureDeclaration: check,
+      TSConstructSignatureDeclaration: check,
+      TSConstructorType: check,
+      TSDeclareFunction: check,
+      TSEmptyBodyFunctionExpression: check,
+      TSFunctionType: check,
+      TSMethodSignature: check,
+    };
+  },
+};
+
+const isTypeNode = (node) => node.type.startsWith("TS") && node.type !== "TSTypeAnnotation";
+
+const hasUnsafeDictionaryAncestor = (node, environment) => {
+  let current = node.parent;
+  while (current !== null && current.type !== "Program") {
+    if (isTypeNode(current) && classifyUnsafeDictionary(current, environment) !== null) return true;
+    current = current.parent;
+  }
+  return false;
+};
+
+const isInsideTypeAlias = (node) => {
+  let current = node.parent;
+  while (current !== null && current.type !== "Program") {
+    if (current.type === "TSTypeAliasDeclaration") return true;
+    current = current.parent;
+  }
+  return false;
+};
+
+const isPlainAliasConsumer = (node, environment) =>
+  node.type === "TSTypeReference" &&
+  node.typeName.type === "Identifier" &&
+  (node.typeArguments?.params.length ?? 0) === 0 &&
+  environment.aliases.has(node.typeName.name) &&
+  !isInsideTypeAlias(node);
+
+/** Reject open object dictionaries whose values have no established contract. */
+const noUnsafeDictionaryType = {
+  meta: {
+    type: "problem",
+    docs: { description: "Disallow unsafe open dictionary value contracts in core" },
+    messages: {
+      unsafeDictionary:
+        "This core dictionary uses `{{value}}` as its direct value contract. Use a concrete owner/schema-derived value type; known fixture fields should use a named shape with Partial<T> overrides.",
+    },
+    schema: [],
+  },
+  create(context) {
+    let environment;
+    const reportType = (node) => {
+      if (environment === undefined || isPlainAliasConsumer(node, environment)) return;
+      if (hasUnsafeDictionaryAncestor(node, environment)) return;
+      const value = classifyUnsafeDictionary(node, environment);
+      if (value !== null) {
+        context.report({ node, messageId: "unsafeDictionary", data: { value } });
+      }
+    };
+    return {
+      Program(node) {
+        environment = createTypeEnvironment(node);
+      },
+      TSTypeReference: reportType,
+      TSTypeLiteral: reportType,
+      TSMappedType: reportType,
+      TSIndexSignature(node) {
+        if (environment === undefined || node.typeAnnotation === null) return;
+        if (node.parent.type === "TSTypeLiteral") return;
+        const value = classifyUnsafeDictionaryValue(
+          node.typeAnnotation.typeAnnotation,
+          environment
+        );
+        if (value !== null) {
+          context.report({ node, messageId: "unsafeDictionary", data: { value } });
+        }
+      },
+    };
+  },
+};
+
 const noNullableType = {
   meta: {
     type: "problem",
@@ -548,6 +674,8 @@ const plugin = {
   rules: {
     "no-ambient-nondeterminism": noAmbientNondeterminism,
     "no-nullable-type": noNullableType,
+    "no-unknown-parameters": noUnknownParameters,
+    "no-unsafe-dictionary-type": noUnsafeDictionaryType,
     "no-react-use-effect": noReactUseEffect,
     "no-sql-type-parameter": noSqlTypeParameter,
     "no-disable-validation": noDisableValidation,

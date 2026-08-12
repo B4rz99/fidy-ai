@@ -10,6 +10,8 @@ const maximumCanonicalToolEvidenceBytes = 1_000_000;
 const canonicalJsonStringIsValid = (value: string): boolean =>
   !value.includes("\u0000") && value.isWellFormed();
 
+const isJsonArray = (value: Schema.Json): value is Schema.JsonArray => Array.isArray(value);
+
 const isCanonicalJsonString = Schema.makeFilter<string>((value) =>
   canonicalJsonStringIsValid(value) ? undefined : "Expected well-formed Unicode without NUL"
 );
@@ -17,20 +19,21 @@ const isCanonicalUuid = Schema.makeFilter<string>((value) =>
   value === value.toLowerCase() ? undefined : "Expected canonical lowercase UUID spelling"
 );
 
-const canonicalJsonValueIsValid = (value: unknown): boolean => {
+const canonicalJsonValueIsValid = (value: Schema.Json): boolean => {
   if (typeof value === "string") return canonicalJsonStringIsValid(value);
   if (typeof value === "number") return !Object.is(value, -0);
-  if (Array.isArray(value)) return value.every(canonicalJsonValueIsValid);
+  if (isJsonArray(value)) return value.every(canonicalJsonValueIsValid);
   if (value !== null && typeof value === "object") {
-    return Object.entries(value).every(
-      ([key, member]: readonly [string, unknown]) =>
+    const object: Schema.JsonObject = value;
+    return Object.entries(object).every(
+      ([key, member]: readonly [string, Schema.Json]) =>
         canonicalJsonStringIsValid(key) && canonicalJsonValueIsValid(member)
     );
   }
   return true;
 };
 
-const canonicalToolEvidenceIsValid = Schema.makeFilter<Schema.Json>((value: unknown) => {
+const canonicalToolEvidenceIsValid = Schema.makeFilter<Schema.Json>((value) => {
   if (!canonicalJsonValueIsValid(value)) return "Expected losslessly persistable JSON";
   const encodedBytes = new TextEncoder().encode(JSON.stringify(value)).byteLength;
   return encodedBytes <= maximumCanonicalToolEvidenceBytes

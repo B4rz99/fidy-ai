@@ -1,6 +1,6 @@
 import { expect, it } from "@effect/vitest";
 import { Effect, Option, Result, Schema } from "effect";
-import { DashboardDocument, DashboardEdit, collectLayoutWidgets } from "./model";
+import { DashboardDocument, DashboardEdit, type Widget, collectLayoutWidgets } from "./model";
 import { applyDashboardEdit } from "./rules";
 
 const document = Schema.decodeUnknownSync(DashboardDocument)({
@@ -16,18 +16,19 @@ const document = Schema.decodeUnknownSync(DashboardDocument)({
   },
 });
 
+type WidgetInput = typeof Widget.Encoded;
 type WeightedWidget = Readonly<{
   readonly weight: number;
-  readonly widget: Readonly<Record<string, unknown>>;
+  readonly widget: WidgetInput;
 }>;
 
-const transactionListWidget = (id: string): Readonly<Record<string, unknown>> => ({
+const transactionListWidget = (id: string): WidgetInput => ({
   id,
   type: "transaction-list",
   limit: 10,
 });
 
-const customMetricWidget = (id: string): Readonly<Record<string, unknown>> => ({
+const customMetricWidget = (id: string): WidgetInput => ({
   id,
   type: "custom-metric",
   label: "Salidas",

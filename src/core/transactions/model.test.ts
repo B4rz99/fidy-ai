@@ -15,21 +15,13 @@ const decodeTransaction = Schema.decodeUnknownResult(Transaction);
 const decodeCreateInput = Schema.decodeUnknownResult(CreateTransactionInput);
 const decodeExtraction = Schema.decodeUnknownResult(TransactionExtraction);
 
+type TransactionInput = typeof Transaction.Encoded;
+
 /**
  * A whole Transaction as it arrives in an API request, defaulted so a test spells out
  * only the field it is about: an outflow of 25.000 COP to "El Corral".
  */
-const apiTransaction = (
-  overrides: Readonly<Record<string, unknown>> = {}
-): {
-  id: string;
-  money: { amount: string; currency: string };
-  counterparty: string;
-  direction: string;
-  categoryId: string;
-  occurredAt: string;
-  createdAt: string;
-} => ({
+const apiTransaction = (overrides: Partial<TransactionInput> = {}): TransactionInput => ({
   id: "f1d1a000-0000-4000-8000-0000000000aa",
   money: { amount: "25000", currency: "COP" },
   counterparty: "El Corral",

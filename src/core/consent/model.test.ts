@@ -16,20 +16,9 @@ import {
   Sha256Digest,
 } from "./model";
 
-const makeDisclosure = (
-  overrides: Readonly<Record<string, unknown>> = {}
-): {
-  serviceMarket: string;
-  locale: string;
-  revision: string;
-  contentSha256: string;
-  text: string;
-  policy: { publicUrl: string; revision: string; contentSha256: string };
-  purposes: string[];
-  dataCategories: string[];
-  duration: string;
-  revocationMethod: string;
-} => ({
+type DisclosureInput = typeof DisclosureSnapshot.Encoded;
+
+const makeDisclosure = (overrides: Partial<DisclosureInput> = {}): DisclosureInput => ({
   serviceMarket: "CO",
   locale: "es-CO",
   revision: "onboarding-2026-01",
@@ -188,11 +177,11 @@ it("requires outbound evidence only after disclosure delivery", () => {
 });
 
 it("rejects duplicate legal-purpose facts and malformed digests", () => {
-  const purposes = ["Registrar y organizar tus finanzas personales"];
+  const purpose = "Registrar y organizar tus finanzas personales";
   expect(
     Result.isFailure(
       Schema.decodeUnknownResult(DisclosureSnapshot)(
-        makeDisclosure({ purposes: [purposes[0], purposes[0]] })
+        makeDisclosure({ purposes: [purpose, purpose] })
       )
     )
   ).toBe(true);

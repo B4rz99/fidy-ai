@@ -8,6 +8,7 @@ import {
   DashboardDocument,
   DashboardMonetaryWidgetData,
   DashboardTitle,
+  type SpendingChartBucket,
   SpendingChartData,
   SplitWeight,
   TransactionListLimit,
@@ -251,7 +252,10 @@ it("accepts only exact local calendar day and month bucket keys", () => {
       toExclusive: "2026-08-01T05:00:00.000Z",
     },
   };
-  const decodeKey = (key: unknown): Result.Result<SpendingChartData, Schema.SchemaError> =>
+  type SpendingBucketKeyInput = (typeof SpendingChartBucket.Encoded)["key"];
+  const decodeKey = (
+    key: SpendingBucketKeyInput
+  ): Result.Result<SpendingChartData, Schema.SchemaError> =>
     Schema.decodeUnknownResult(SpendingChartData)({
       ...shared,
       buckets: [{ key, moneyGroups: [] }],
@@ -262,7 +266,7 @@ it("accepts only exact local calendar day and month bucket keys", () => {
     { kind: "day", date: "2026-12-31" },
     { kind: "month", month: "2026-01" },
     { kind: "month", month: "2026-12" },
-  ]) {
+  ] satisfies ReadonlyArray<SpendingBucketKeyInput>) {
     expect(Result.isSuccess(decodeKey(key))).toBe(true);
   }
   for (const date of [

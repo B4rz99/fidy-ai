@@ -238,6 +238,7 @@ package.json
   s_405115b40b60da::t_78e29e5f88658a 40-41
   s_405115b40b60da::t_de72bfa3ebd307 43
   s_405115b40b60da::t_0989fe547e3c19 38
+  s_db3be2a841d1f8::t_dfc1f4d0215ba0 42
 src/shell/ingestion/worker.test.ts
   s_405115b40b60da::t_05ef08ca0aca09 351-352
   s_405115b40b60da::t_5c93eb09f05c54 32,186,201-204,209-214,219
@@ -382,6 +383,8 @@ src/shell/testing/isolation.test.ts
   s_405115b40b60da::t_aef3468f1c465b 482-518
 src/shell/agent/openai.test.ts
   s_70138d5ac414c5::t_f96cf87edee3af 3,21,96-110
+src/shell/db/migrations/registry.ts
+  s_db3be2a841d1f8::t_e4293ecdf0ccac 22,54
 ---
 {
   "schema_version": "authorship/3.0.0",
@@ -409,6 +412,14 @@ src/shell/agent/openai.test.ts
       "agent_id": {
         "tool": "pi",
         "id": "019ff2c0-8997-7c1d-99e2-f694ca3ad355",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_db3be2a841d1f8": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019ff6e9-37d9-7db7-a6fc-341d2d07ea27",
         "model": "gpt-5.6-sol"
       },
       "human_author": "obarbozaa <obarbozaa@gmail.com>"

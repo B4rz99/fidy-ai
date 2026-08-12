@@ -30,7 +30,7 @@ import { E164PhoneNumber, UserId, WhatsAppBusinessScopedUserId } from "~/core/id
 import { AgentBearerToken } from "~/core/tokens/model";
 import { AgentReply, AgentService, OnboardingConsentRequired } from "~/shell/agent/agent-service";
 import { makeOpenAiFunctionCallResponse } from "~/shell/agent/fixtures/openai";
-import { OpenAiLanguageModelLive } from "~/shell/agent/openai";
+import { OpenAiHostedInferenceWithoutStartupValidation } from "~/shell/agent/openai";
 import { admitAgentConversationTurn } from "~/shell/agent/conversation";
 import { MigrationSqlClient } from "~/shell/db/client";
 import {
@@ -39,6 +39,7 @@ import {
   seedConsentedAgentIdentity,
   seedDevelopmentIdentity,
 } from "~/shell/db/development-seed";
+import { HostedInferenceFromLanguageModel } from "~/shell/testing/hosted-inference-fixtures";
 import {
   ApiHarness,
   ApiHarnessClient,
@@ -353,8 +354,11 @@ const FailingWhatsAppModel = Layer.effect(
     streamText: () => Stream.fail(modelFailure),
   })
 );
+const FailingWhatsAppInference = HostedInferenceFromLanguageModel.pipe(
+  Layer.provide(FailingWhatsAppModel)
+);
 const FailingAgentService = AgentService.layer.pipe(
-  Layer.provide(FailingWhatsAppModel),
+  Layer.provide(FailingWhatsAppInference),
   Layer.provide(TelemetryDisabled)
 );
 const OpenAiRequest = Schema.Struct({
@@ -381,6 +385,15 @@ const OpenAiHttpClient = Layer.succeed(
   HttpClient.HttpClient,
   HttpClient.make((request) =>
     Effect.gen(function* () {
+      if (request.url.includes("/responses/input_tokens")) {
+        return HttpClientResponse.fromWeb(
+          request,
+          new Response('{"object":"response.input_tokens","input_tokens":100}', {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          })
+        );
+      }
       if (request.body._tag !== "Uint8Array") {
         return yield* Effect.die("Expected an encoded OpenAI request body");
       }
@@ -412,7 +425,7 @@ const OpenAiHttpClient = Layer.succeed(
     })
   )
 );
-const OpenAiWhatsAppModel = OpenAiLanguageModelLive.pipe(
+const OpenAiWhatsAppModel = OpenAiHostedInferenceWithoutStartupValidation.pipe(
   Layer.provide(OpenAiHttpClient),
   Layer.provide(
     ConfigProvider.layer(ConfigProvider.fromUnknown({ OPENAI_API_KEY: "test-only-secret" }))
@@ -422,13 +435,16 @@ const OpenAiAgentService = AgentService.layer.pipe(
   Layer.provide(OpenAiWhatsAppModel),
   Layer.provide(TelemetryDisabled)
 );
+const ScriptedWhatsAppInference = HostedInferenceFromLanguageModel.pipe(
+  Layer.provideMerge(ScriptedWhatsAppModel)
+);
 const WhatsAppHarness = AgentService.layer.pipe(
-  Layer.provideMerge(ScriptedWhatsAppModel),
+  Layer.provideMerge(ScriptedWhatsAppInference),
   Layer.provideMerge(ApiHarness),
   Layer.provide(TelemetryDisabled)
 );
 const WhatsAppTraceHarness = AgentService.layer.pipe(
-  Layer.provideMerge(ScriptedWhatsAppModel),
+  Layer.provideMerge(ScriptedWhatsAppInference),
   Layer.provideMerge(ApiTelemetryHarness)
 );
 const makeKapsoTextEvent = (

@@ -94,7 +94,7 @@ export const TelemetryRegistry = {
   ],
   repositoryOperation: ["capture_transaction", "compatibility_probe"],
   databaseSystem: ["postgresql"],
-  model: ["gpt_5_6_luna"],
+  model: ["gpt_5_6_luna", "hosted_inference"],
   spanOperation: [
     "http.server",
     "http.client",

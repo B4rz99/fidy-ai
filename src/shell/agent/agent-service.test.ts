@@ -48,6 +48,8 @@ import {
 import { listRecentTranscriptEntries, listTranscriptEntries } from "~/shell/transcript/repo";
 import { ApiHarness, ApiHarnessClient, ApiTelemetryHarness } from "~/shell/testing/api-harness";
 import { testWhatsAppCaller } from "~/shell/testing/whatsapp-caller";
+import { HostedInferenceError } from "./hosted-inference";
+import { HostedInferenceFromLanguageModel } from "~/shell/testing/hosted-inference-fixtures";
 import { makeLanguageModelFinishPart } from "~/shell/testing/language-model-fixtures";
 import { runAgentRepl } from "./repl";
 import {
@@ -55,7 +57,6 @@ import {
   AgentService,
   CurrentAgentLimits,
   InboundMessage,
-  ModelResponseRejected,
   ModelUnavailable,
 } from "./agent-service";
 
@@ -500,8 +501,7 @@ const invalidModelOutputScript = (serialized: string): Option.Option<ModelReply>
 const malformedCaptureScript = (serialized: string): Option.Option<ModelReply> => {
   if (serialized.includes("Provoca entrada malformada")) {
     return Option.some(
-      serialized.includes("transactions__createTransaction") &&
-        serialized.includes("Validation reason:")
+      serialized.includes("Validation reason:")
         ? [{ type: "text" as const, text: "Corregí los argumentos malformados." }]
         : [
             {
@@ -1135,14 +1135,18 @@ const ScriptedLanguageModel = Layer.effect(
   })
 ).pipe(Layer.provideMerge(ModelPrompts.layer), Layer.provideMerge(ModelToolPolicies.layer));
 
+const ScriptedHostedInference = HostedInferenceFromLanguageModel.pipe(
+  Layer.provideMerge(ScriptedLanguageModel)
+);
+
 const AgentHarness = AgentService.layer.pipe(
-  Layer.provideMerge(ScriptedLanguageModel),
+  Layer.provideMerge(ScriptedHostedInference),
   Layer.provideMerge(ApiHarness),
   Layer.provideMerge(TelemetryEnvelopeRecording)
 );
 
 const AgentTelemetryHarness = AgentService.layer.pipe(
-  Layer.provideMerge(ScriptedLanguageModel),
+  Layer.provideMerge(ScriptedHostedInference),
   Layer.provideMerge(ApiTelemetryHarness)
 );
 
@@ -1227,7 +1231,7 @@ layer(AgentTelemetryHarness, { excludeTestServices: true, timeout: "30 seconds" 
           )
         ).toBe(true);
         expect(firstModelSpan.contexts.trace.data).toMatchObject({
-          "gen_ai.request.model": "gpt_5_6_luna",
+          "gen_ai.request.model": "hosted_inference",
           "fidy.attempt": 1,
           "gen_ai.usage.input_tokens": 150,
           "gen_ai.usage.output_tokens": 20,
@@ -2465,18 +2469,20 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
         .pipe(Effect.exit);
       const transcript = yield* listTranscriptEntries(defaultUserId);
 
-      assert.deepStrictEqual(
-        Exit.match(exit, {
-          onFailure: (cause) => Exit.fail(Cause.squash(cause)),
-          onSuccess: Exit.succeed,
-        }),
-        Exit.fail(
-          new ModelResponseRejected({
-            cause: new Error("Model output contained a sensitive chat value"),
-          })
-        )
+      expect(Exit.isSuccess(exit)).toBe(true);
+      if (Exit.isSuccess(exit)) {
+        expect(exit.value.text).toBe(
+          "No pude completar la solicitud dentro del límite seguro de operaciones. Intenta de nuevo."
+        );
+      }
+      expect(transcript.map((entry) => entry._tag)).toEqual([
+        "UserTranscriptEntry",
+        "AssistantTranscriptEntry",
+      ]);
+      const serializedTranscript = yield* Schema.encodeEffect(Schema.UnknownFromJsonString)(
+        transcript
       );
-      expect(transcript.map((entry) => entry._tag)).toEqual(["UserTranscriptEntry"]);
+      expect(serializedTranscript).not.toContain("fin_deadbeef_");
     })
   );
 
@@ -2968,10 +2974,10 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
         }),
         Exit.fail(
           new ModelUnavailable({
-            cause: AiError.AiError.make({
-              module: "TestLanguageModel",
-              method: "generateText",
-              reason: AiError.QuotaExhaustedError.make(),
+            cause: new HostedInferenceError({
+              reason: { _tag: "ProviderUnavailable" },
+              retryable: false,
+              retryAfter: Option.none(),
             }),
           })
         )

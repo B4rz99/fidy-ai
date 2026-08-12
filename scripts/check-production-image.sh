@@ -8,6 +8,7 @@ application="fidy-production-smoke-app-${suffix}"
 artifactContainer="fidy-production-smoke-artifact-${suffix}"
 releaseContainer="fidy-production-smoke-release-${suffix}"
 telemetryProbe="fidy-production-smoke-telemetry-${suffix}"
+openAiProbe="fidy-production-smoke-openai-${suffix}"
 image="fidy-production-smoke:${suffix}"
 provisionLog=$(mktemp)
 artifactRoot=$(mktemp -d)
@@ -17,7 +18,7 @@ release="fidy@${releaseSha}"
 
 cleanup() {
   docker rm -f "$application" "${application}-rejected" "$artifactContainer" \
-    "$releaseContainer" "$telemetryProbe" "$database" >/dev/null 2>&1 || true
+    "$releaseContainer" "$telemetryProbe" "$openAiProbe" "$database" >/dev/null 2>&1 || true
   docker network rm "$network" >/dev/null 2>&1 || true
   docker image rm "$image" >/dev/null 2>&1 || true
   rm -f "$provisionLog"
@@ -61,7 +62,7 @@ assertApplicationRejected() {
   docker run --detach --name "$rejectedApplication" --network "$network" \
     --env MIGRATION_DATABASE_URL --env DATABASE_URL \
     --env KAPSO_API_KEY --env KAPSO_WEBHOOK_SECRET --env WHATSAPP_BUSINESS_PORTFOLIO_ID \
-    --env OPENAI_API_KEY \
+    --env OPENAI_API_KEY --env OPENAI_API_URL \
     --env "RAILWAY_GIT_COMMIT_SHA=${releaseSha}" \
     --env SENTRY_ENVIRONMENT --env SENTRY_CAPTURE_ERRORS --env SENTRY_CAPTURE_TRACES \
     --env SENTRY_PRODUCTION_DSN --env SENTRY_NON_PRODUCTION_DSN \
@@ -235,6 +236,7 @@ export KAPSO_API_KEY="production-smoke-kapso-key"
 export KAPSO_WEBHOOK_SECRET="production-smoke-webhook-secret"
 export WHATSAPP_BUSINESS_PORTFOLIO_ID="portfolio-production-smoke"
 export OPENAI_API_KEY="production-smoke-openai-key"
+export OPENAI_API_URL="http://${openAiProbe}:8080/v1"
 export SENTRY_ENVIRONMENT="production"
 export SENTRY_CAPTURE_ERRORS="false"
 export SENTRY_CAPTURE_TRACES="false"
@@ -302,12 +304,16 @@ docker run --detach --name "$telemetryProbe" --network "$network" \
   "$image" bun -e \
   'Bun.serve({ port: 8080, fetch() { console.log("sentry-transport-opened"); return new Response(""); } });' \
   >/dev/null
+docker run --detach --name "$openAiProbe" --network "$network" \
+  "$image" bun -e \
+  'Bun.serve({ port: 8080, fetch(request) { const path = new URL(request.url).pathname; return path === "/v1/responses/input_tokens" ? Response.json({ object: "response.input_tokens", input_tokens: 100 }) : new Response("", { status: 404 }); } });' \
+  >/dev/null
 
 docker run --detach --name "$application" --network "$network" \
   --publish 127.0.0.1::3000 \
   --env MIGRATION_DATABASE_URL --env DATABASE_URL \
   --env KAPSO_API_KEY --env KAPSO_WEBHOOK_SECRET --env WHATSAPP_BUSINESS_PORTFOLIO_ID \
-  --env OPENAI_API_KEY \
+  --env OPENAI_API_KEY --env OPENAI_API_URL \
   --env "RAILWAY_GIT_COMMIT_SHA=${releaseSha}" \
   --env SENTRY_ENVIRONMENT --env SENTRY_CAPTURE_ERRORS --env SENTRY_CAPTURE_TRACES \
   --env SENTRY_PRODUCTION_DSN --env SENTRY_NON_PRODUCTION_DSN \

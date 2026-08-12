@@ -22,6 +22,7 @@ import { renewAgentTokenIdleExpiry } from "~/core/tokens/rules";
 import { hashAgentBearer } from "~/shell/_shared/authz";
 import { categoryIds } from "~/core/categories/taxonomy";
 import { AgentService } from "~/shell/agent/agent-service";
+import { HostedInferenceFromLanguageModel } from "./hosted-inference-fixtures";
 import {
   KapsoClient,
   type KapsoClientService,
@@ -496,11 +497,15 @@ const AcceptanceCallerProbe = Layer.effect(
   })
 );
 
+const DeterministicHostedInference = HostedInferenceFromLanguageModel.pipe(
+  Layer.provide(DeterministicLanguageModel)
+);
+
 const AcceptanceApplication = Layer.mergeAll(
   HttpLive,
   DeterministicLanguageModel,
   WhatsAppWorkerLive.pipe(
-    Layer.provide(AgentService.layer.pipe(Layer.provide(DeterministicLanguageModel)))
+    Layer.provide(AgentService.layer.pipe(Layer.provide(DeterministicHostedInference)))
   )
 ).pipe(
   Layer.provide(RuntimeAuthorityLive),

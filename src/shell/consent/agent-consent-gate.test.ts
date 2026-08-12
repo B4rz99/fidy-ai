@@ -10,6 +10,7 @@ import { AgentService, InboundMessage } from "~/shell/agent/agent-service";
 import { upsertUser } from "~/shell/identity/repo";
 import { TelemetryDisabled } from "~/shell/observability/disabled";
 import { ApiHarness } from "~/shell/testing/api-harness";
+import { HostedInferenceFromLanguageModel } from "~/shell/testing/hosted-inference-fixtures";
 import { currentDisclosure } from "./current-disclosure";
 import { appendConsentRecord, withSubjectLock } from "./repo";
 import { listTranscriptEntries } from "~/shell/transcript/repo";
@@ -25,8 +26,10 @@ const MustNotRunModel = Layer.effect(
   })
 );
 
+const MustNotRunInference = HostedInferenceFromLanguageModel.pipe(Layer.provide(MustNotRunModel));
+
 const AgentConsentHarness = AgentService.layer.pipe(
-  Layer.provideMerge(MustNotRunModel),
+  Layer.provideMerge(MustNotRunInference),
   Layer.provideMerge(ApiHarness),
   Layer.provide(TelemetryDisabled)
 );

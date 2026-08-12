@@ -17,6 +17,8 @@ const acceptanceExclude = [
   "src/shell/observability/sentry-live.ts",
   "src/shell/observability/telemetry-bootstrap.ts",
   "src/shell/observability/telemetry-config.ts",
+  // Acceptance substitutes provider transport; exact OpenAI behavior is covered by adapter tests.
+  "src/shell/agent/openai.ts",
 ];
 
 // The WhatsApp acceptance release signal: public signed HTTP, real PostgreSQL, and the production
@@ -46,8 +48,8 @@ export default defineConfig({
       exclude: acceptanceExclude,
       thresholds: {
         autoUpdate: true,
-        branches: 38.16,
-        lines: 70.02,
+        branches: 38.73,
+        lines: 70.07,
       },
     },
   },

@@ -124,9 +124,13 @@ export const decodeAgentOperationInput: {
   Schema.decodeUnknownEffect(self.providerResponseParameters)(input)
 );
 
+/** Returns the complete provider-facing description, including required confirmation behavior. */
+export const agentOperationToolDescription = (binding: AgentOperationBinding): string =>
+  binding.description + confirmationGuidance(binding.policy.agentConfirmation);
+
 const tools = agentOperationBindings.map((binding) =>
   Tool.dynamic(binding.wireName, {
-    description: binding.description + confirmationGuidance(binding.policy.agentConfirmation),
+    description: agentOperationToolDescription(binding),
     parameters: Schema.toEncoded(binding.canonicalParameters),
     success: binding.success,
     failure: binding.failure,

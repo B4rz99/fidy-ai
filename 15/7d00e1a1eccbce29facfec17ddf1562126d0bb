@@ -1,0 +1,21 @@
+vitest.acceptance.config.ts
+  s_40245b72d593db::t_7d8adb742fbfc3 51-52
+src/shell/agent/hosted-inference.ts
+  s_40245b72d593db::t_f6ee318b26ed72 27,230,233
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "157d00e1a1eccbce29facfec17ddf1562126d0bb",
+  "prompts": {},
+  "sessions": {
+    "s_40245b72d593db": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019ff2ae-4eb5-7bf3-8480-83c1cd33373e",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

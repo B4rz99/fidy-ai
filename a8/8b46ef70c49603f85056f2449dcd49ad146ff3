@@ -1,0 +1,20 @@
+src/shell/agent/model-boundary.test.ts
+  s_7c8816f7896502::t_15cc7661b256bc 5-11,24-25,44-53,55-56
+  s_7c8816f7896502::t_692cd209c9aedd 4
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "a88b46ef70c49603f85056f2449dcd49ad146ff3",
+  "prompts": {},
+  "sessions": {
+    "s_7c8816f7896502": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019ff79d-d891-780f-8edc-34a5fb0ac67a",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

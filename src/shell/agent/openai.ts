@@ -544,15 +544,15 @@ const makeStructuredCountedRequest = (
  * which to create a bounded envelope. The owning workflow records attempts, latency, failures, and
  * model usage once structured generation is integrated by #206.
  */
-const executeStructuredRequest = <Output>(
+const executeStructuredRequest = function <Output>(
   client: OpenAiClient.Service,
   prepared: Readonly<{
     request: OpenAiStructuredRequest;
     codec: Schema.ConstraintCodec<Output, unknown>;
     policy: StructuredExecutionPolicy;
   }>
-): Effect.Effect<Output, HostedInferenceError> =>
-  client.client
+): Effect.Effect<Output, HostedInferenceError> {
+  return client.client
     .execute(
       HttpClientRequest.post("/responses", {
         body: HttpBody.jsonUnsafe(prepared.request),
@@ -572,6 +572,7 @@ const executeStructuredRequest = <Output>(
       Effect.timeout(prepared.policy.timeout),
       Effect.catchTag("TimeoutError", () => Effect.fail(structuredOutputTimedOut()))
     );
+};
 
 const makeStructuredAdapter = (
   client: OpenAiClient.Service,

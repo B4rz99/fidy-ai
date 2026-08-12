@@ -307,9 +307,10 @@ const finishReason = (
   hasToolCalls: boolean
 ): HostedTextResult["finishReason"] => {
   if (hasToolCalls) return "tool-calls";
-  return Option.getOrElse(
-    Option.fromNullishOr(incompleteFinishReasons.get(response.incomplete_details?.reason)),
-    () => "stop"
+  return Option.fromNullishOr(response.incomplete_details).pipe(
+    Option.map((details) => details.reason),
+    Option.flatMap((reason) => Option.fromNullishOr(incompleteFinishReasons.get(reason))),
+    Option.getOrElse(() => "stop")
   );
 };
 

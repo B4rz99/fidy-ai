@@ -37,8 +37,10 @@
     "@effect/sql-pg": "4.0.0-beta.98",
     "@kapso/whatsapp-cloud-api": "0.3.0",
     "@sentry/bun": "10.69.0",
+    "csv-parse": "7.0.2",
     "effect": "4.0.0-beta.98",
-    "js-tiktoken": "1.0.21"
+    "js-tiktoken": "1.0.21",
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
   },
   "devDependencies": {
     "@effect/tsgo": "0.32.1",

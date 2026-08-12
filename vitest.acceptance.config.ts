@@ -25,6 +25,9 @@ const acceptanceExclude = [
   // suite; they are not part of the WhatsApp transport release signal.
   "src/core/memory/**",
   "src/shell/memory/**",
+  // Statement ingestion is not reachable from the WhatsApp channel acceptance surface.
+  "src/core/ingestion/**",
+  "src/shell/ingestion/**",
 ];
 
 // The WhatsApp acceptance release signal: public signed HTTP, real PostgreSQL, and the production

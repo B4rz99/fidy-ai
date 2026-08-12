@@ -2,10 +2,6 @@ import { Context, Option, Schema } from "effect";
 import { OpenApi } from "effect/unstable/httpapi";
 import { type AgentScope } from "~/core/tokens/model";
 
-/** Cost category declared by a canonical operation for later quota enforcement. */
-export const OperationCostClass = Schema.Literals(["cheap", "expensive"]);
-export type OperationCostClass = typeof OperationCostClass.Type;
-
 /** The Subscription tier a caller currently has or an operation requires. */
 export const OperationTier = Schema.Literals(["free", "pro"]);
 export type OperationTier = typeof OperationTier.Type;
@@ -24,7 +20,6 @@ export type OperationPolicyValue = {
   /** Whether authorization checks this endpoint or each schema-derived child operation. */
   readonly scopeEvaluation: "endpoint" | "children";
   readonly requiredTier: OperationTier;
-  readonly costClass: OperationCostClass;
   readonly agentConfirmation: AgentConfirmation;
   readonly kind: CanonicalOperationKind;
 };
@@ -54,21 +49,19 @@ export const getOperationPolicy = (endpoint: PolicyAnnotatedOperation): Operatio
 type OperationPolicyInput = Omit<OperationPolicyValue, "scopeEvaluation">;
 
 const makeOperationPolicy = (
-  { requiredScope, requiredTier, costClass, agentConfirmation, kind }: OperationPolicyInput,
+  { requiredScope, requiredTier, agentConfirmation, kind }: OperationPolicyInput,
   scopeEvaluation: OperationPolicyValue["scopeEvaluation"]
 ): Context.Context<OperationPolicy | OpenApi.Override> =>
   Context.make(OperationPolicy, {
     requiredScope,
     scopeEvaluation,
     requiredTier,
-    costClass,
     agentConfirmation,
     kind,
   }).pipe(
     Context.add(OpenApi.Override, {
       "x-fidy-required-scope": requiredScope,
       "x-fidy-required-tier": requiredTier,
-      "x-fidy-cost-class": costClass,
       "x-fidy-agent-confirmation": agentConfirmation,
       "x-fidy-operation-kind": kind,
     })

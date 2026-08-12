@@ -73,7 +73,7 @@ supplies them. Core decides; it does not gather data or perform I/O.
 
 The canonical schema for a domain entity lives in `core/<slice>/model.ts`. The canonical operation
 lives in `shell/<slice>/operations.ts`, where transport and access policy belong: paths, status
-codes, scopes, Subscription tier, cost class, hosted-agent confirmation policy, and whether the
+codes, scopes, Subscription tier, hosted-agent confirmation policy, and whether the
 operation is a canonical query or canonical mutation.
 
 A canonical query observes domain state without requesting a domain transition or external effect;

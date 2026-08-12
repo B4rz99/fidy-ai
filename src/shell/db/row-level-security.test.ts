@@ -153,6 +153,36 @@ const seedEveryPolicyShape = Effect.gen(function* () {
     )
   `;
   yield* admin`
+    INSERT INTO statement_submissions (
+      id, user_id, idempotency_key, content_hash, source_format, file_content, status,
+      service_market, locale, time_zone, parser_revision
+    ) VALUES (
+      'f1d1a000-0000-4000-8000-0000000006a1', ${policyOwner},
+      'f1d1a000-0000-4000-8000-0000000006a2', repeat('c', 64), 'csv', '\\x61',
+      'queued', 'CO', 'es-CO', 'America/Bogota', 'policy-probe'
+    )
+  `;
+  yield* admin`
+    INSERT INTO statement_backfill_entitlements (user_id) VALUES (${policyOwner})
+  `;
+  yield* admin`
+    INSERT INTO statement_format_profiles (
+      user_id, fingerprint, extractor_revision, mapping, created_at
+    ) VALUES (${policyOwner}, ${"d".repeat(64)}, 'policy-probe', '{}'::jsonb, '2026-01-01T00:00:00Z')
+  `;
+  yield* admin`
+    INSERT INTO needs_review_items (
+      id, user_id, submission_id, record_number, reason, service_market, locale, time_zone,
+      source_format, source_channel, parser_revision, extractor_revision, original_evidence, issues,
+      status
+    ) VALUES (
+      'f1d1a000-0000-4000-8000-0000000006a3', ${policyOwner},
+      'f1d1a000-0000-4000-8000-0000000006a1', 1, 'missing-amount', 'CO', 'es-CO',
+      'America/Bogota', 'csv', 'statement-upload', 'policy-probe', 'policy-probe',
+      '{}'::jsonb, '[]'::jsonb, 'pending'
+    )
+  `;
+  yield* admin`
     INSERT INTO audit_log_entries (id, user_id, token_id, operation, outcome, occurred_at)
     VALUES (
       'f1d1a000-0000-4000-8000-0000000001e5', ${policyOwner},
@@ -326,9 +356,29 @@ const policyProbes: ReadonlyArray<PolicyProbe> = [
     ownerPredicate: "id = 'f1d1a000-0000-4000-8000-0000000001f6'",
   },
   {
+    tableName: "needs_review_items",
+    stableColumn: "reason",
+    ownerPredicate: "id = 'f1d1a000-0000-4000-8000-0000000006a3'",
+  },
+  {
     tableName: "source_attestations",
     stableColumn: "time_zone",
     ownerPredicate: "id = 'f1d1a000-0000-4000-8000-0000000002a1'",
+  },
+  {
+    tableName: "statement_backfill_entitlements",
+    stableColumn: "consumed_at",
+    ownerPredicate: `user_id = '${policyOwner}'`,
+  },
+  {
+    tableName: "statement_format_profiles",
+    stableColumn: "extractor_revision",
+    ownerPredicate: `user_id = '${policyOwner}' AND fingerprint = '${"d".repeat(64)}'`,
+  },
+  {
+    tableName: "statement_submissions",
+    stableColumn: "content_hash",
+    ownerPredicate: "id = 'f1d1a000-0000-4000-8000-0000000006a1'",
   },
   {
     tableName: "transactions",

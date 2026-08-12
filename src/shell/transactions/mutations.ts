@@ -5,8 +5,10 @@ import { CategoryNotFound } from "~/core/categories/errors";
 import { type CategoryId } from "~/core/categories/reference";
 import { TransactionNotFound } from "~/core/transactions/errors";
 import {
+  type CapturedInterpretationContext,
   type CreateTransactionInput,
   type Transaction,
+  type TransactionExtraction,
   type TransactionId,
   UpdateTransactionInput,
 } from "~/core/transactions/model";
@@ -28,7 +30,9 @@ import type { SpanDescriptor } from "~/shell/observability/protocol";
 import { Telemetry } from "~/shell/observability/telemetry";
 import { type TransactionApiFailure, mapTransactionFailure } from "./errors";
 import {
+  type StatementLineAttestationInput,
   insertManualSourceAttestationInScope,
+  insertStatementLineSourceAttestationInScope,
   insertTransactionInScope,
   softDeleteTransactionInScope,
   updateTransactionInScope,
@@ -133,6 +137,52 @@ export const createTransaction: CanonicalMutationImplementation<
   });
   return { data: transaction, next: capturedTransactionOperations(caller) };
 });
+
+/** Accepted statement facts supplied by Ingestion inside its finalization transaction. */
+export type CaptureStatementTransactionInput = Readonly<{
+  userId: UserId;
+  extraction: TransactionExtraction;
+  context: CapturedInterpretationContext;
+  attestation: Omit<StatementLineAttestationInput, keyof CapturedInterpretationContext>;
+  caller: SuggestedOperationCaller;
+}>;
+
+/**
+ * Creates a categorized Transaction and immutable statement-line provenance without opening a
+ * transaction. Ingestion owns the matching User-scoped transaction and whole-file rollback.
+ */
+export const captureStatementTransactionInScope = Effect.fn("captureStatementTransactionInScope")(
+  function* ({
+    userId,
+    extraction,
+    context,
+    attestation,
+    caller,
+  }: CaptureStatementTransactionInput) {
+    const now = yield* DateTime.now;
+    yield* checkAlreadyOccurred({ occurredAt: extraction.occurredAt, now }).pipe(
+      mapTransactionFailure({ caller })
+    );
+    const categoryId = yield* categorizeCapture({
+      userId,
+      counterparty: extraction.counterparty,
+      callerCategory: Option.none(),
+    });
+    const transaction = yield* insertTransactionInScope(
+      userId,
+      UpdateTransactionInput.make({
+        ...extraction,
+        categoryId,
+        notes: Option.none(),
+      })
+    );
+    yield* insertStatementLineSourceAttestationInScope(userId, transaction.id, {
+      ...context,
+      ...attestation,
+    });
+    return transaction;
+  }
+);
 
 /** Facts supplied after canonical decoding and caller authorization for Transaction correction. */
 export type CorrectTransactionInput = TransactionMutationContext &

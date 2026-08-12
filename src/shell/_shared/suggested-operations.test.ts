@@ -200,7 +200,6 @@ it("keeps Pro operations out of free responses", () => {
     requiredScope: "read",
     scopeEvaluation: "endpoint",
     requiredTier: "pro",
-    costClass: "expensive",
     agentConfirmation: "not-required",
     kind: "query",
   } as const;

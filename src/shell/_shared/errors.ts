@@ -121,6 +121,7 @@ const validationFailedTag = "ValidationFailed";
 const unauthenticatedTag = "Unauthenticated";
 const scopeMissingTag = "ScopeMissing";
 const consentRequiredTag = "ConsentRequired";
+const paywallRequiredTag = "PaywallRequired";
 const notFoundTag = "NotFound";
 
 /**
@@ -172,6 +173,12 @@ export class ConsentRequired extends Schema.ErrorClass<ConsentRequired>(consentR
   { httpApiStatus: 403 }
 ) {}
 
+/** The User has exhausted Free access to a capability that remains available in Pro. */
+export class PaywallRequired extends Schema.ErrorClass<PaywallRequired>(paywallRequiredTag)(
+  errorResponse(paywallRequiredTag, detail("paywall_required")),
+  { httpApiStatus: 402 }
+) {}
+
 /**
  * The record the caller asked for is not theirs to see. Slices raise this
  * through their own mapper, which supplies a message naming what was missing.
@@ -198,6 +205,7 @@ forwardErrorMessage(
   Unauthenticated.prototype,
   ScopeMissing.prototype,
   ConsentRequired.prototype,
+  PaywallRequired.prototype,
   NotFound.prototype
 );
 

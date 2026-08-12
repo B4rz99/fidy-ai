@@ -65,7 +65,6 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         for (const operation of operations) {
           expect(Option.isSome(operation.requiredScope), operation.id).toBe(true);
           expect(Option.isSome(operation.requiredTier), operation.id).toBe(true);
-          expect(Option.isSome(operation.costClass), operation.id).toBe(true);
           expect(Option.isSome(operation.agentConfirmation), operation.id).toBe(true);
           expect(Option.isSome(operation.kind), operation.id).toBe(true);
         }
@@ -98,6 +97,10 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           "dashboard.listDashboardCatalog": "query",
           "dashboard.applyDashboardEdit": "mutation",
           "subscription.getUpgradeUrl": "query",
+          "ingestion.getStatementSubmission": "query",
+          "ingestion.listNeedsReviewItems": "query",
+          "ingestion.submitForExtraction": "mutation",
+          "ingestion.resolveNeedsReviewItem": "mutation",
           "operations.executeAtomicBatch": "mutation",
         } satisfies Record<OperationId, CanonicalOperationKind>;
         const operations = yield* publishedOperations;
@@ -160,6 +163,10 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           "dashboard.listDashboardCatalog": "not-required",
           "dashboard.applyDashboardEdit": "required",
           "subscription.getUpgradeUrl": "not-required",
+          "ingestion.getStatementSubmission": "not-required",
+          "ingestion.listNeedsReviewItems": "not-required",
+          "ingestion.submitForExtraction": "not-required",
+          "ingestion.resolveNeedsReviewItem": "required",
           "operations.executeAtomicBatch": "required",
         } satisfies Record<OperationId, AgentConfirmation>;
         const operations = yield* publishedOperations;

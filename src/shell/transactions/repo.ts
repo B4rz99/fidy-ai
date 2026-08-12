@@ -10,6 +10,8 @@ import {
   Counterparty,
   InterpretationRevision,
   SourceAttestation,
+  SourceAttestationCommon,
+  StatementLineSourceAttestation,
   Transaction,
   TransactionId,
   type TransactionQuery,
@@ -239,15 +241,22 @@ export const softDeleteTransactionInScope = Effect.fn("softDeleteTransactionInSc
 });
 
 const SourceAttestationRow = Schema.Struct({
-  id: Schema.toEncoded(SourceAttestation.fields.id),
+  id: Schema.toEncoded(SourceAttestationCommon.fields.id),
   transactionId: Schema.toEncoded(TransactionId),
-  kind: Schema.Literal("manual"),
-  serviceMarket: SourceAttestation.fields.serviceMarket,
-  locale: SourceAttestation.fields.locale,
-  timeZone: Schema.toEncoded(SourceAttestation.fields.timeZone),
+  kind: Schema.Literals(["manual", "statement-line"]),
+  serviceMarket: SourceAttestationCommon.fields.serviceMarket,
+  locale: SourceAttestationCommon.fields.locale,
+  timeZone: Schema.toEncoded(SourceAttestationCommon.fields.timeZone),
   sourceChannel: Schema.OptionFromNullOr(Schema.String),
   sourceProvider: Schema.OptionFromNullOr(Schema.String),
   interpretationRevision: Schema.toEncoded(InterpretationRevision),
+  statementSubmissionId: Schema.OptionFromNullOr(
+    StatementLineSourceAttestation.fields.statementSubmissionId
+  ),
+  statementRecordNumber: Schema.OptionFromNullOr(Schema.Int),
+  statementContentHash: Schema.OptionFromNullOr(Schema.String),
+  sourceFormat: Schema.OptionFromNullOr(StatementLineSourceAttestation.fields.sourceFormat),
+  extractorRevision: Schema.OptionFromNullOr(InterpretationRevision),
   createdAt: Schema.DateTimeUtcFromDate,
 });
 
@@ -255,11 +264,31 @@ const decodeSourceAttestation = Schema.decodeUnknownEffect(SourceAttestation);
 const sourceAttestationFromRow = (
   source: typeof SourceAttestationRow.Type
 ): Effect.Effect<SourceAttestation, Schema.SchemaError> => {
-  const { sourceChannel, sourceProvider, ...row } = source;
+  const {
+    sourceChannel,
+    sourceProvider,
+    statementSubmissionId,
+    statementRecordNumber,
+    statementContentHash,
+    sourceFormat,
+    extractorRevision,
+    ...row
+  } = source;
   return decodeSourceAttestation({
     ...row,
     ...(Option.isNone(sourceChannel) ? {} : { sourceChannel: sourceChannel.value }),
     ...(Option.isNone(sourceProvider) ? {} : { sourceProvider: sourceProvider.value }),
+    ...(Option.isNone(statementSubmissionId)
+      ? {}
+      : { statementSubmissionId: statementSubmissionId.value }),
+    ...(Option.isNone(statementRecordNumber)
+      ? {}
+      : { statementRecordNumber: statementRecordNumber.value }),
+    ...(Option.isNone(statementContentHash)
+      ? {}
+      : { statementContentHash: statementContentHash.value }),
+    ...(Option.isNone(sourceFormat) ? {} : { sourceFormat: sourceFormat.value }),
+    ...(Option.isNone(extractorRevision) ? {} : { extractorRevision: extractorRevision.value }),
     createdAt: DateTime.formatIso(row.createdAt),
   });
 };
@@ -267,7 +296,11 @@ const sourceAttestationFromRow = (
 const sourceAttestationColumns = `id, transaction_id AS "transactionId", kind,
   service_market AS "serviceMarket", locale, time_zone AS "timeZone",
   source_channel AS "sourceChannel", source_provider AS "sourceProvider",
-  interpretation_revision AS "interpretationRevision", created_at AS "createdAt"`;
+  interpretation_revision AS "interpretationRevision",
+  statement_submission_id AS "statementSubmissionId",
+  statement_record_number AS "statementRecordNumber",
+  statement_content_hash AS "statementContentHash", source_format AS "sourceFormat",
+  extractor_revision AS "extractorRevision", created_at AS "createdAt"`;
 
 /**
  * Records immutable manual provenance for `transactionId`, which must belong to `userId`. The
@@ -282,9 +315,9 @@ export const insertManualSourceAttestationInScope = Effect.fn(
     Request: Schema.Struct({
       userId: UserId,
       transactionId: TransactionId,
-      serviceMarket: SourceAttestation.fields.serviceMarket,
-      locale: SourceAttestation.fields.locale,
-      timeZone: SourceAttestation.fields.timeZone,
+      serviceMarket: SourceAttestationCommon.fields.serviceMarket,
+      locale: SourceAttestationCommon.fields.locale,
+      timeZone: SourceAttestationCommon.fields.timeZone,
     }),
     Result: SourceAttestationRow,
     execute: (row) => sql`
@@ -296,6 +329,61 @@ export const insertManualSourceAttestationInScope = Effect.fn(
       RETURNING ${sql.literal(sourceAttestationColumns)}
     `,
   })({ userId, transactionId, ...context }).pipe(
+    Effect.flatMap(sourceAttestationFromRow),
+    Effect.orDie
+  );
+});
+
+/** Facts retained for one accepted or later-resolved statement line. */
+export type StatementLineAttestationInput = Readonly<
+  Pick<
+    StatementLineSourceAttestation,
+    | "serviceMarket"
+    | "locale"
+    | "timeZone"
+    | "statementSubmissionId"
+    | "statementRecordNumber"
+    | "statementContentHash"
+    | "sourceFormat"
+    | "extractorRevision"
+  > & { readonly parserRevision: InterpretationRevision }
+>;
+
+/** Inserts immutable statement-line provenance in the caller-owned User transaction. */
+export const insertStatementLineSourceAttestationInScope = Effect.fn(
+  "insertStatementLineSourceAttestationInScope"
+)(function* (userId: UserId, transactionId: TransactionId, input: StatementLineAttestationInput) {
+  const sql = yield* SqlClient.SqlClient;
+  return yield* SqlSchema.findOne({
+    Request: Schema.Struct({
+      userId: UserId,
+      transactionId: TransactionId,
+      serviceMarket: StatementLineSourceAttestation.fields.serviceMarket,
+      locale: StatementLineSourceAttestation.fields.locale,
+      timeZone: StatementLineSourceAttestation.fields.timeZone,
+      statementSubmissionId: StatementLineSourceAttestation.fields.statementSubmissionId,
+      statementRecordNumber: Schema.Int.check(Schema.isGreaterThan(0)),
+      statementContentHash: Schema.NonEmptyString,
+      sourceFormat: StatementLineSourceAttestation.fields.sourceFormat,
+      parserRevision: InterpretationRevision,
+      extractorRevision: InterpretationRevision,
+    }),
+    Result: SourceAttestationRow,
+    execute: (row) => sql`
+      INSERT INTO source_attestations (
+        transaction_id, kind, service_market, locale, time_zone, source_channel,
+        interpretation_revision, statement_submission_id, statement_record_number,
+        statement_content_hash, source_format, extractor_revision
+      )
+      SELECT transaction.id, 'statement-line', ${row.serviceMarket}, ${row.locale},
+        ${row.timeZone}, 'statement-upload', ${row.parserRevision},
+        ${row.statementSubmissionId}, ${row.statementRecordNumber}, ${row.statementContentHash},
+        ${row.sourceFormat}, ${row.extractorRevision}
+      FROM transactions transaction
+      WHERE transaction.id = ${row.transactionId} AND transaction.user_id = ${row.userId}
+      RETURNING ${sql.literal(sourceAttestationColumns)}
+    `,
+  })({ userId, transactionId, ...input }).pipe(
     Effect.flatMap(sourceAttestationFromRow),
     Effect.orDie
   );

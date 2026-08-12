@@ -156,7 +156,6 @@ const executeChild = Effect.fn("executeAtomicBatchChild")(function* ({
         "fidy.batch.call_index": index,
         "fidy.operation.required_scope": catalogOperation.policy.requiredScope,
         "fidy.operation.required_tier": catalogOperation.policy.requiredTier,
-        "fidy.operation.cost_class": catalogOperation.policy.costClass,
         "fidy.operation.agent_confirmation": catalogOperation.policy.agentConfirmation,
       },
     })

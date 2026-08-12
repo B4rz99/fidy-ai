@@ -10,6 +10,10 @@ import { applyDashboardEdit, loadOrCreateDashboard } from "~/shell/dashboard/mut
 import { withDashboardLockInScope } from "~/shell/dashboard/repo";
 import { updateUserPreferences } from "~/shell/identity/mutations";
 import type { HostedInference } from "~/shell/agent/hosted-inference";
+import {
+  resolveNeedsReviewItemMutation,
+  submitForExtractionInScope,
+} from "~/shell/ingestion/mutations";
 import { rememberMemory } from "~/shell/memory/mutations";
 import type { Telemetry } from "~/shell/observability/telemetry";
 import { dismissInsight, markInsightDelivered, markInsightRead } from "~/shell/insights/mutations";
@@ -126,6 +130,23 @@ export const canonicalMutationImplementations = {
       userId: caller.resolved.subjectUserId,
       payload: input.payload,
     })
+  ),
+  "ingestion.submitForExtraction": mutationAdapter(
+    (input: CanonicalInput<"ingestion.submitForExtraction">, caller) =>
+      submitForExtractionInScope({
+        userId: caller.resolved.subjectUserId,
+        caller: suggestedCaller(caller),
+        payload: input.payload,
+      })
+  ),
+  "ingestion.resolveNeedsReviewItem": mutationAdapter(
+    (input: CanonicalInput<"ingestion.resolveNeedsReviewItem">, caller) =>
+      resolveNeedsReviewItemMutation({
+        userId: caller.resolved.subjectUserId,
+        caller: suggestedCaller(caller),
+        id: input.params.id,
+        extraction: input.payload.extraction,
+      })
   ),
   "insights.markInsightDelivered": mutationAdapter(
     (input: CanonicalInput<"insights.markInsightDelivered">, caller) =>

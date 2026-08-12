@@ -22,7 +22,6 @@ export const DashboardGroup = HttpApiGroup.make("dashboard")
         operationPolicy({
           requiredScope: "read",
           requiredTier: "free",
-          costClass: "cheap",
           agentConfirmation: "not-required",
           kind: "mutation",
         })
@@ -42,7 +41,6 @@ export const DashboardGroup = HttpApiGroup.make("dashboard")
         operationPolicy({
           requiredScope: "read",
           requiredTier: "free",
-          costClass: "cheap",
           agentConfirmation: "not-required",
           kind: "query",
         })
@@ -64,7 +62,6 @@ export const DashboardGroup = HttpApiGroup.make("dashboard")
         operationPolicy({
           requiredScope: "dashboard",
           requiredTier: "free",
-          costClass: "cheap",
           agentConfirmation: "required",
           kind: "mutation",
         })

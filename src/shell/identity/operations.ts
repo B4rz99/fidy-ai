@@ -21,7 +21,6 @@ export const IdentityGroup = HttpApiGroup.make("identity").add(
       operationPolicy({
         requiredScope: "read",
         requiredTier: "free",
-        costClass: "cheap",
         agentConfirmation: "not-required",
         kind: "query",
       })
@@ -39,7 +38,6 @@ export const IdentityGroup = HttpApiGroup.make("identity").add(
       operationPolicy({
         requiredScope: "write",
         requiredTier: "free",
-        costClass: "cheap",
         agentConfirmation: "not-required",
         kind: "mutation",
       })

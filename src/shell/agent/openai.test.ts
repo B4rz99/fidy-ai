@@ -12,6 +12,7 @@ import {
   Schema,
 } from "effect";
 import { TestClock } from "effect/testing";
+import { LanguageModel } from "effect/unstable/ai";
 import { HttpClient, type HttpClientRequest, HttpClientResponse } from "effect/unstable/http";
 import {
   makeOpenAiFunctionCallResponse,
@@ -33,6 +34,7 @@ import {
   OpenAiHostedInferenceLive,
   OpenAiHostedInferenceWithoutStartupValidation,
   makeOpenAiHarness,
+  OpenAiLanguageModelLive,
 } from "./openai";
 import { agentOperationBindings } from "./toolkit";
 
@@ -131,6 +133,21 @@ const buildInference = Effect.fn("Test.buildInference")(function* (
   );
   return Context.get(context, HostedInference);
 });
+
+it.effect("builds the structured-output LanguageModel adapter", () =>
+  Effect.gen(function* () {
+    const transport = yield* makeTransport(1);
+    const context = yield* Effect.scoped(
+      Layer.build(
+        OpenAiLanguageModelLive.pipe(
+          Layer.provide(transport.layer),
+          Layer.provide(configLayer([["OPENAI_API_KEY", "test-only-secret"]]))
+        )
+      )
+    );
+    expect(Context.get(context, LanguageModel.LanguageModel)).toBeDefined();
+  })
+);
 
 const textRequest = (): HostedTextRequest => ({
   context: makeHostedTextContext({

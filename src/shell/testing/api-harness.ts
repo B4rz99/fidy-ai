@@ -9,6 +9,7 @@ import { okStatus } from "~/shell/_shared/http-status";
 import type {
   ConsentRequired,
   NotFound,
+  PaywallRequired,
   ScopeMissing,
   Unauthenticated,
   ValidationFailed,
@@ -47,6 +48,7 @@ export type ApiCallFailure =
   | HttpClientError.HttpClientError
   | ConsentRequired
   | NotFound
+  | PaywallRequired
   | ScopeMissing
   | Unauthenticated
   | ValidationFailed

@@ -17,7 +17,6 @@ export const SubscriptionGroup = HttpApiGroup.make("subscription").add(
       operationPolicy({
         requiredScope: "read",
         requiredTier: "free",
-        costClass: "cheap",
         agentConfirmation: "not-required",
         kind: "query",
       })

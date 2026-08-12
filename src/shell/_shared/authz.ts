@@ -143,7 +143,7 @@ export class ChildOperationAudit extends Context.Service<
 
 /**
  * Security middleware attached once to the assembled API. It reads bearer
- * scope and cost exclusively from active endpoint metadata, resolves and renews
+ * scope exclusively from active endpoint metadata, resolves and renews
  * the AgentToken once, and provides that result only to the current request.
  * No route identifier or path participates in authorization.
  */
@@ -186,7 +186,6 @@ const annotateOperationPolicy = (
 ): Effect.Effect<void> =>
   Effect.annotateCurrentSpan({
     "fidy.operation.required_scope": policy.requiredScope,
-    "fidy.operation.cost_class": policy.costClass,
   });
 
 const recordRejectedAttempt = (

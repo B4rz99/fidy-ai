@@ -76,6 +76,12 @@ const OpenAiClientLive = OpenAiClient.layerConfig({
   apiUrl: Config.string("OPENAI_API_URL").pipe(Config.withDefault("https://api.openai.com/v1")),
 });
 
+/** Structured-output model used by bounded non-agent extraction adapters. */
+export const OpenAiLanguageModelLive = OpenAiLanguageModel.layer({
+  model: FidyAgentModel,
+  config: HostedAgentGenerationConfig,
+}).pipe(Layer.provide(OpenAiClientLive));
+
 type OpenAiTool = Readonly<{
   type: "function";
   name: string;

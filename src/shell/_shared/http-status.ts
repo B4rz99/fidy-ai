@@ -4,6 +4,9 @@ export const okStatus = 200;
 /** The response status a canonical operation declares when it creates a record. */
 export const createdStatus = 201;
 
+/** The response status for durable work accepted for asynchronous processing. */
+export const acceptedStatus = 202;
+
 /** The status a caller receives when it presented no usable credential. */
 export const unauthorizedStatus = 401;
 

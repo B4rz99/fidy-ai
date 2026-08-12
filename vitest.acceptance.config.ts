@@ -48,8 +48,8 @@ export default defineConfig({
       exclude: acceptanceExclude,
       thresholds: {
         autoUpdate: true,
-        branches: 38.64,
-        lines: 70.05,
+        branches: 38.73,
+        lines: 70.07,
       },
     },
   },

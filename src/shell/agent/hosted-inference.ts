@@ -24,7 +24,7 @@ export type HostedTextProjection = Readonly<{
 
 const contextProjections = new WeakMap<object, HostedTextProjection>();
 
-const freezeDeep = <A>(value: A): A => {
+const freezeDeep: <A>(value: A) => A = (value) => {
   if (typeof value !== "object" || value === null || Object.isFrozen(value)) return value;
   for (const child of Object.values(value)) freezeDeep(child);
   return Object.freeze(value);
@@ -227,10 +227,10 @@ const beginPreparation = <Request, Continuation>(
     });
   });
 
-const releaseFailedClaim = <Continuation>(
+const releaseFailedClaim: <Continuation>(
   exit: Exit.Exit<unknown, unknown>,
   claimed: ClaimedPreparation<Continuation>
-): Effect.Effect<void> =>
+) => Effect.Effect<void> = (exit, claimed) =>
   Exit.match(exit, {
     onFailure: () =>
       Option.match(claimed.continuationEntry, {

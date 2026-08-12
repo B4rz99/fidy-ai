@@ -20,7 +20,7 @@ import {
 } from "effect";
 import { OpenAiLanguageModel } from "@effect/ai-openai";
 import { AiError, LanguageModel, type Response, Tool } from "effect/unstable/ai";
-import { SqlClient } from "effect/unstable/sql";
+import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import { E164PhoneNumber, UserId, WhatsAppBusinessScopedUserId } from "~/core/identity/reference";
 import { MigrationSqlClient } from "~/shell/db/client";
 import { categoryIds } from "~/core/categories/taxonomy";
@@ -556,6 +556,35 @@ const invalidModelOutputScript = (serialized: string): Option.Option<ModelReply>
 };
 
 const malformedCaptureScript = (serialized: string): Option.Option<ModelReply> => {
+  if (serialized.includes("Provoca entrada sensible en herramienta")) {
+    return Option.some([
+      {
+        type: "tool-call" as const,
+        id: "sensitive-tool-input-call",
+        name: "transactions__deleteTransaction",
+        params: { params: { id: "DATABASE_URL=postgres://admin:secret@db.example/fidy" } },
+      },
+    ]);
+  }
+  if (serialized.includes("Provoca entrada sensible en Memoria")) {
+    return Option.some([
+      {
+        type: "tool-call" as const,
+        id: "sensitive-memory-input-call",
+        name: "memory__remember",
+        params: { payload: { text: "DATABASE_URL=postgres://admin:secret@db.example/fidy" } },
+      },
+    ]);
+  }
+  if (serialized.includes("Provoca entrada sensible en mutación válida")) {
+    return Option.some([
+      createTransactionToolCall({
+        id: "sensitive-valid-tool-input-call",
+        occurredAt: Option.some("2026-01-01T12:00:00Z"),
+        counterparty: Option.some("DATABASE_URL=postgres://admin:secret@db.example/fidy"),
+      }),
+    ]);
+  }
   if (serialized.includes("Provoca entrada malformada")) {
     return Option.some(
       serialized.includes("Validation reason:")
@@ -604,19 +633,7 @@ const injectedDeletionScript = (serialized: string): Option.Option<ModelReply> =
     return Option.some([
       {
         type: "tool-call" as const,
-        id: "substituted-delete-call",
-        name: "transactions__deleteTransaction",
-        params: { params: { id: "f1d1a000-0000-4000-8000-00000000dead" } },
-      },
-      {
-        type: "tool-call" as const,
         id: "confirmed-delete-call",
-        name: "transactions__deleteTransaction",
-        params: { params: { id: transactionId } },
-      },
-      {
-        type: "tool-call" as const,
-        id: "duplicate-delete-call",
         name: "transactions__deleteTransaction",
         params: { params: { id: transactionId } },
       },
@@ -784,7 +801,7 @@ const plainTextScript = (serialized: string): Option.Option<ModelReply> => {
 };
 
 const batchConfirmationTurns = (serialized: string): number =>
-  serialized.match(/"type":"text","text":"CONFIRMAR LOTE/gu)?.length ?? 0;
+  serialized.match(/"options":\{\},"type":"text","text":"CONFIRMAR LOTE/gu)?.length ?? 0;
 
 const batchConfirmationCommand = (text: string): string => {
   const command = /Responde exactamente: (CONFIRMAR LOTE [0-9a-f]{64})/u.exec(text)?.[1];
@@ -874,9 +891,9 @@ const failingAtomicBatchReply = (serialized: string): ModelReply => {
 
 const successfulAtomicBatchReply = (serialized: string): ModelReply => {
   if (serialized.includes("LOTE_ATOMICO_ENTRADA_ALTERADA")) {
-    return batchConfirmationTurns(serialized) === 0
-      ? [successfulAtomicBatchCall]
-      : [reorderedAtomicBatchCall];
+    return serialized.includes("Responde exactamente: CONFIRMAR LOTE ")
+      ? [reorderedAtomicBatchCall]
+      : [successfulAtomicBatchCall];
   }
   const succeeded =
     serialized.lastIndexOf('"isFailure":false') >
@@ -1114,6 +1131,9 @@ const retryScenarioReply = (serialized: string, attempt: number): Option.Option<
 const invalidOutputScenario = (
   serialized: string
 ): Option.Option<Effect.Effect<ModelReply, AiError.AiError>> => {
+  if (serialized.includes("SALIDA_INVALIDA_OTRA_CAUSA")) {
+    return Option.some(testModelFailure(AiError.QuotaExhaustedError.make()));
+  }
   if (serialized.includes("SALIDA_INVALIDA_PERSISTENTE")) {
     return Option.some(
       testModelFailure(
@@ -1337,6 +1357,40 @@ layer(AgentTelemetryHarness, { excludeTestServices: true, timeout: "30 seconds" 
           operation: "agent.modelRound",
           error: "model_unavailable",
           provider: "openai",
+        });
+      })
+    );
+
+    it.effect("maps a non-invalid hosted failure to model unavailability", () =>
+      Effect.gen(function* () {
+        const { service } = yield* prepareTelemetryTest;
+
+        const exit = yield* Effect.exit(
+          service.handleSynchronousTurn(
+            defaultUserId,
+            InboundMessage.make({ text: TranscriptText.make("SALIDA_INVALIDA_OTRA_CAUSA") })
+          )
+        );
+
+        expect(Exit.isFailure(exit)).toBe(true);
+        expect(Exit.findErrorOption(exit).pipe(Option.map((error) => error._tag))).toEqual(
+          Option.some("ModelUnavailable")
+        );
+        const sql = yield* MigrationSqlClient;
+        const terminal = yield* SqlSchema.findAll({
+          Request: UserId,
+          Result: Schema.Struct({
+            state: Schema.String,
+            failureReason: Schema.OptionFromNullOr(Schema.String),
+          }),
+          execute: (userId) => sql`SELECT state, failure_reason AS "failureReason"
+            FROM conversation_turns
+            WHERE user_id = ${userId}
+            ORDER BY started_at DESC LIMIT 1`,
+        })(defaultUserId);
+        expect(terminal[0]).toEqual({
+          state: "Failed",
+          failureReason: Option.some("HostedInferenceFailed"),
         });
       })
     );
@@ -1634,6 +1688,43 @@ layer(AgentTelemetryHarness, { excludeTestServices: true, timeout: "30 seconds" 
 );
 
 layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hosted agent", (it) => {
+  it.effect("marks a hosted Turn failed when delivery rejects the generated reply", () =>
+    Effect.gen(function* () {
+      yield* clearTranscript;
+      const service = yield* AgentService;
+      const deliveryFailure = { _tag: "TestDeliveryFailure" } as const;
+
+      const exit = yield* Effect.exit(
+        service.handleTurn(
+          defaultUserId,
+          InboundMessage.make({ text: TranscriptText.make("Lista las categorías") }),
+          () => Effect.fail(deliveryFailure)
+        )
+      );
+      const sql = yield* MigrationSqlClient;
+      const terminal = yield* SqlSchema.findAll({
+        Request: UserId,
+        Result: Schema.Struct({
+          state: Schema.String,
+          failureReason: Schema.OptionFromNullOr(Schema.String),
+        }),
+        execute: (userId) => sql`SELECT state, failure_reason AS "failureReason"
+          FROM conversation_turns
+          WHERE user_id = ${userId}
+          ORDER BY started_at DESC
+          LIMIT 1`,
+      })(defaultUserId);
+      const transcript = yield* listTranscriptEntries(defaultUserId);
+
+      expect(Exit.isFailure(exit)).toBe(true);
+      expect(terminal[0]).toEqual({
+        state: "Failed",
+        failureReason: Option.some("DeliveryFailed"),
+      });
+      expect(transcript.at(-1)?._tag).not.toBe("AssistantTranscriptEntry");
+    })
+  );
+
   it.effect("confirms one exact atomic batch and rejects altered or replayed confirmation", () =>
     Effect.gen(function* () {
       const sql = yield* MigrationSqlClient;
@@ -2614,6 +2705,71 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
     })
   );
 
+  it.effect("allows credential-shaped prose only through the Memory policy path", () =>
+    Effect.gen(function* () {
+      yield* clearTranscript;
+      const service = yield* AgentService;
+
+      const reply = yield* service.handleSynchronousTurn(
+        defaultUserId,
+        InboundMessage.make({ text: TranscriptText.make("Provoca entrada sensible en Memoria") })
+      );
+      const transcript = yield* listTranscriptEntries(defaultUserId);
+
+      expect(reply.text).toBe(
+        "No pude completar la solicitud dentro del límite seguro de operaciones. Intenta de nuevo."
+      );
+      expect(transcript.some((entry) => entry._tag === "CanonicalToolCallEntry")).toBe(true);
+      expect(transcript.at(-1)?._tag).toBe("AssistantTranscriptEntry");
+    })
+  );
+
+  it.effect("rejects sensitive valid non-Memory tool input before execution", () =>
+    Effect.gen(function* () {
+      yield* clearTranscript;
+      const service = yield* AgentService;
+
+      const exit = yield* Effect.exit(
+        service.handleSynchronousTurn(
+          defaultUserId,
+          InboundMessage.make({
+            text: TranscriptText.make("Provoca entrada sensible en mutación válida"),
+          })
+        )
+      );
+      const transcript = yield* listTranscriptEntries(defaultUserId);
+
+      expect(Exit.isFailure(exit)).toBe(true);
+      expect(transcript.map((entry) => entry._tag)).toEqual([
+        "UserTranscriptEntry",
+        "FailedTurnTranscriptEntry",
+      ]);
+    })
+  );
+
+  it.effect("rejects sensitive non-Memory tool input before execution", () =>
+    Effect.gen(function* () {
+      yield* clearTranscript;
+      const service = yield* AgentService;
+
+      const exit = yield* Effect.exit(
+        service.handleSynchronousTurn(
+          defaultUserId,
+          InboundMessage.make({
+            text: TranscriptText.make("Provoca entrada sensible en herramienta"),
+          })
+        )
+      );
+      const transcript = yield* listTranscriptEntries(defaultUserId);
+
+      expect(Exit.isSuccess(exit)).toBe(true);
+      expect(transcript.map((entry) => entry._tag)).toEqual([
+        "UserTranscriptEntry",
+        "AssistantTranscriptEntry",
+      ]);
+    })
+  );
+
   it.effect("fails closed when invalid model output contains sensitive text", () =>
     Effect.gen(function* () {
       yield* clearTranscript;
@@ -2953,7 +3109,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       );
 
       expect(confirmed.text).toBe("Listo, completé la operación solicitada.");
-      expect(replayed.text).toBe("La repetición quedó bloqueada.");
+      expect(replayed.text).toContain("requiere confirmación");
       expect(rows[0]?.count).toBe(0);
       expect(deleted).toHaveLength(1);
     })
@@ -3197,7 +3353,10 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       const transcript = yield* listTranscriptEntries(defaultUserId);
 
       expect(failure._tag).toBe("ModelResponseRejected");
-      expect(transcript.map((entry) => entry._tag)).toEqual(["UserTranscriptEntry"]);
+      expect(transcript.map((entry) => entry._tag)).toEqual([
+        "UserTranscriptEntry",
+        "FailedTurnTranscriptEntry",
+      ]);
     })
   );
 

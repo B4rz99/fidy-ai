@@ -1,6 +1,7 @@
 import { Context, Data, Effect, Exit, Option, Schema } from "effect";
 import type { Duration } from "effect";
 import type { Prompt, Response } from "effect/unstable/ai";
+import { type WorkingContext, claimWorkingContextProjection } from "./working-context";
 
 const hostedTextContextNominal = Symbol("HostedTextContext");
 const hostedStructuredContextNominal = Symbol("HostedStructuredContext");
@@ -152,11 +153,21 @@ export type HostedTextToolPolicy =
   | Readonly<{ toolChoice: "auto"; maximumToolCalls: HostedToolCallMaximum }>;
 
 /** One semantic hosted text request whose provider details remain adapter-owned. */
-export type HostedTextRequest = Readonly<{
-  context: HostedTextContext;
-  continuation: Option.Option<HostedTextContinuation>;
+export type InitialHostedTextRequest = Readonly<{
+  _tag: "Initial";
+  context: WorkingContext | HostedTextContext;
 }> &
   HostedTextToolPolicy;
+
+export type ContinuedHostedTextRequest = Readonly<{
+  _tag: "Continued";
+  context: HostedTextContext;
+  continuation: HostedTextContinuation;
+}> &
+  HostedTextToolPolicy;
+
+/** One initial WorkingContext request or one adapter-continuation request. */
+export type HostedTextRequest = InitialHostedTextRequest | ContinuedHostedTextRequest;
 
 /** Provider-neutral usage needed by bounded telemetry. */
 export type HostedTextUsage = Readonly<{
@@ -191,6 +202,7 @@ export type HostedInferenceAdapter<Request, Continuation> = Readonly<{
   countMemoryText: (text: string) => Effect.Effect<number>;
   prepare: (
     input: Readonly<{
+      basePrefix: ReadonlyArray<Prompt.MessageEncoded>;
       projection: HostedTextProjection;
       continuation: Option.Option<Continuation>;
     }> &
@@ -235,6 +247,14 @@ export type HostedInferenceService = Readonly<{
   executeText: (
     prepared: PreparedHostedText
   ) => Effect.Effect<HostedTextResult, HostedInferenceError>;
+  /**
+   * Converts an exact request rejected as invalid output into opaque continuation authority. The
+   * adapter retains the already-projected stable prefix; callers can add only bounded recovery
+   * framing through a normal continued request.
+   */
+  recoverText: (
+    prepared: PreparedHostedText
+  ) => Effect.Effect<HostedTextContinuation, HostedInferenceError>;
   /** Releases an unexecuted or terminally failed request and its claimed source continuation. */
   discardText: (prepared: PreparedHostedText) => Effect.Effect<void, HostedInferenceError>;
   /**
@@ -262,7 +282,9 @@ export type HostedInferenceService = Readonly<{
 
 type PreparedEntry<Request, Continuation> = {
   request: Request;
+  basePrefix: ReadonlyArray<Prompt.MessageEncoded>;
   executing: boolean;
+  recoverable: boolean;
   sourceContinuation: Option.Option<
     Readonly<{
       authority: HostedTextContinuation;
@@ -270,7 +292,11 @@ type PreparedEntry<Request, Continuation> = {
     }>
   >;
 };
-type ContinuationEntry<Continuation> = { continuation: Continuation; preparing: boolean };
+type ContinuationEntry<Continuation> = {
+  continuation: Option.Option<Continuation>;
+  basePrefix: ReadonlyArray<Prompt.MessageEncoded>;
+  preparing: boolean;
+};
 
 const invalidAuthority = (): HostedInferenceError =>
   new HostedInferenceError({
@@ -283,11 +309,13 @@ type Completion<Request, Continuation> = Readonly<{
   authority: PreparedHostedText;
   entry: PreparedEntry<Request, Continuation>;
   continuation: Continuation;
+  basePrefix: ReadonlyArray<Prompt.MessageEncoded>;
   result: Omit<HostedTextResult, "continuation">;
 }>;
 
 type ClaimedPreparation<Continuation> = Readonly<{
   projection: HostedTextProjection;
+  basePrefix: ReadonlyArray<Prompt.MessageEncoded>;
   continuation: Option.Option<Continuation>;
   continuationEntry: Option.Option<ContinuationEntry<Continuation>>;
 }>;
@@ -304,6 +332,9 @@ type HostedInferenceRuntime = Readonly<{
     executable: boolean
   ) => Effect.Effect<Option.Option<PreparedHostedText>, HostedInferenceError>;
   execute: (authority: PreparedHostedText) => Effect.Effect<HostedTextResult, HostedInferenceError>;
+  recover: (
+    authority: PreparedHostedText
+  ) => Effect.Effect<HostedTextContinuation, HostedInferenceError>;
   discard: (authority: PreparedHostedText) => Effect.Effect<void, HostedInferenceError>;
 }>;
 
@@ -312,22 +343,32 @@ const beginPreparation = <Request, Continuation>(
   request: HostedTextRequest
 ): Effect.Effect<ClaimedPreparation<Continuation>, HostedInferenceError> =>
   Effect.suspend(() => {
-    const projection = contextProjections.get(request.context);
-    if (projection === undefined) return Effect.fail(invalidAuthority());
-    contextProjections.delete(request.context);
-    if (Option.isNone(request.continuation)) {
+    if (request._tag === "Initial") {
+      const workingProjection = claimWorkingContextProjection(request.context);
+      const compatibilityProjection = contextProjections.get(request.context);
+      const projection = Option.match(workingProjection, {
+        onSome: ({ prefix }) => ({ prefix, continuationTail: [], suffix: [] }),
+        onNone: () => compatibilityProjection,
+      });
+      if (projection === undefined) return Effect.fail(invalidAuthority());
+      if (compatibilityProjection !== undefined) contextProjections.delete(request.context);
       return Effect.succeed({
         projection,
+        basePrefix: projection.prefix,
         continuation: Option.none(),
         continuationEntry: Option.none(),
       });
     }
-    const entry = state.continuations.get(request.continuation.value);
+    const projection = contextProjections.get(request.context);
+    if (projection === undefined) return Effect.fail(invalidAuthority());
+    contextProjections.delete(request.context);
+    const entry = state.continuations.get(request.continuation);
     if (entry === undefined || entry.preparing) return Effect.fail(invalidAuthority());
     entry.preparing = true;
     return Effect.succeed({
       projection,
-      continuation: Option.some(entry.continuation),
+      basePrefix: entry.basePrefix,
+      continuation: entry.continuation,
       continuationEntry: Option.some(entry),
     });
   });
@@ -360,7 +401,8 @@ const completeExecution = <Request, Continuation>(
     [hostedTextContinuationNominal]: true,
   });
   state.continuations.set(continuationAuthority, {
-    continuation: completion.continuation,
+    continuation: Option.some(completion.continuation),
+    basePrefix: completion.basePrefix,
     preparing: false,
   });
   return { ...completion.result, continuation: continuationAuthority };
@@ -374,7 +416,9 @@ const prepareRequest = <Request, Continuation>(
   Effect.gen(function* () {
     const claimed = yield* beginPreparation(state, request);
     const semanticInput = {
-      projection: claimed.projection,
+      basePrefix: claimed.basePrefix,
+      projection:
+        request._tag === "Initial" ? { ...claimed.projection, prefix: [] } : claimed.projection,
       continuation: claimed.continuation,
     };
     const prepared = yield* state.adapter
@@ -389,9 +433,7 @@ const prepareRequest = <Request, Continuation>(
       )
       .pipe(Effect.onExit((exit) => releaseFailedClaim(exit, claimed)));
     if (!executable) {
-      if (Option.isSome(request.continuation)) {
-        state.continuations.delete(request.continuation.value);
-      }
+      if (request._tag === "Continued") state.continuations.delete(request.continuation);
       return Option.none();
     }
     const authority: PreparedHostedText = Object.freeze({
@@ -399,11 +441,13 @@ const prepareRequest = <Request, Continuation>(
     });
     state.prepared.set(authority, {
       request: freezeDeep(prepared),
+      basePrefix: claimed.basePrefix,
       executing: false,
-      sourceContinuation: Option.all({
-        authority: request.continuation,
-        entry: claimed.continuationEntry,
-      }),
+      recoverable: false,
+      sourceContinuation:
+        request._tag === "Continued" && Option.isSome(claimed.continuationEntry)
+          ? Option.some({ authority: request.continuation, entry: claimed.continuationEntry.value })
+          : Option.none(),
     });
     return Option.some(authority);
   });
@@ -418,13 +462,48 @@ const executeRequest = <Request, Continuation>(
     entry.executing = true;
     return state.adapter.execute(entry.request).pipe(
       Effect.map(({ continuation, result }) =>
-        completeExecution(state, { authority, entry, continuation, result })
+        completeExecution(state, {
+          authority,
+          entry,
+          continuation,
+          basePrefix: entry.basePrefix,
+          result,
+        })
       ),
       Effect.onExit((exit) => {
-        if (Exit.isFailure(exit)) entry.executing = false;
+        if (Exit.isFailure(exit)) {
+          entry.executing = false;
+          entry.recoverable = exit.cause.reasons.some(
+            (reason) => reason._tag === "Fail" && reason.error.reason._tag === "InvalidOutput"
+          );
+        }
         return Effect.void;
       })
     );
+  });
+
+const recoverRequest = <Request, Continuation>(
+  state: HostedInferenceState<Request, Continuation>,
+  authority: PreparedHostedText
+): Effect.Effect<HostedTextContinuation, HostedInferenceError> =>
+  Effect.suspend(() => {
+    const entry = state.prepared.get(authority);
+    if (entry === undefined || entry.executing || !entry.recoverable) {
+      return Effect.fail(invalidAuthority());
+    }
+    state.prepared.delete(authority);
+    if (Option.isSome(entry.sourceContinuation)) {
+      state.continuations.delete(entry.sourceContinuation.value.authority);
+    }
+    const continuationAuthority: HostedTextContinuation = Object.freeze({
+      [hostedTextContinuationNominal]: true,
+    });
+    state.continuations.set(continuationAuthority, {
+      continuation: Option.none(),
+      basePrefix: entry.basePrefix,
+      preparing: false,
+    });
+    return Effect.succeed(continuationAuthority);
   });
 
 const discardRequest = <Request, Continuation>(
@@ -452,6 +531,7 @@ const makeHostedInferenceRuntime = <Request, Continuation>(
   return {
     prepare: (request, executable) => prepareRequest(state, request, executable),
     execute: (authority) => executeRequest(state, authority),
+    recover: (authority) => recoverRequest(state, authority),
     discard: (authority) => discardRequest(state, authority),
   };
 };
@@ -585,6 +665,7 @@ export const makeHostedInference = <Request, Continuation>(
       ),
     validateText: (request) => runtime.prepare(request, false).pipe(Effect.asVoid),
     executeText: (authority) => runtime.execute(authority),
+    recoverText: (authority) => runtime.recover(authority),
     discardText: (authority) => runtime.discard(authority),
     ...structuredRuntime,
   };

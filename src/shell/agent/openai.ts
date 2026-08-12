@@ -260,12 +260,13 @@ type ProjectedOpenAiInput = Readonly<{
 }>;
 
 const projectMessages = (
+  basePrefix: ReadonlyArray<Prompt.MessageEncoded>,
   projection: HostedTextProjection,
   continuation: Option.Option<OpenAiContinuation>
 ): Effect.Effect<ProjectedOpenAiInput, HostedInferenceError> =>
   Effect.try({
     try: () => {
-      const prefix = projection.prefix.flatMap(projectMessage);
+      const prefix = [...basePrefix, ...projection.prefix].flatMap(projectMessage);
       const prior = Option.getOrElse(continuation, () => []);
       const tail = projection.continuationTail.flatMap(projectMessage);
       return {
@@ -587,6 +588,7 @@ const makeStructuredAdapter = (
   prepare: (input) =>
     Effect.gen(function* () {
       const projected = yield* projectMessages(
+        [],
         { prefix: input.projection.messages, continuationTail: [], suffix: [] },
         Option.none()
       );
@@ -634,6 +636,7 @@ const makeOpenAiHostedInference = (
     prepare: (semanticInput) =>
       Effect.gen(function* () {
         const projected = yield* projectMessages(
+          semanticInput.basePrefix,
           semanticInput.projection,
           semanticInput.continuation
         );
@@ -689,8 +692,8 @@ const makeOpenAiLayer = (
       const inference = makeOpenAiHostedInference(client, structuredPolicy);
       if (validateStartup) {
         yield* inference.validateText({
+          _tag: "Initial",
           context: startupContext(),
-          continuation: Option.none(),
           toolChoice: "auto",
           maximumToolCalls: HostedToolCallMaximum.make(startupMaximumToolCalls),
         });

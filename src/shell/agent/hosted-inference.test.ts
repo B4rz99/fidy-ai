@@ -39,8 +39,9 @@ const makeTestInference = Effect.fn("Test.makeTestInference")(function* (capacit
   const adapter: HostedInferenceAdapter<TestRequest, TestContinuation> = {
     countMemoryText: (text) => Effect.succeed(text.length),
     structured: unavailableStructuredAdapter,
-    prepare: ({ continuation, projection }) => {
+    prepare: ({ basePrefix, continuation, projection }) => {
       const messages = [
+        ...basePrefix,
         ...projection.prefix,
         ...Option.getOrElse(continuation, () => []),
         ...projection.continuationTail,
@@ -84,6 +85,9 @@ const makeTestInference = Effect.fn("Test.makeTestInference")(function* (capacit
 const ForgedPreparedStructured = Schema.declare(
   (input): input is PreparedHostedStructured<unknown> => typeof input === "object" && input !== null
 );
+const ForgedHostedTextContext = Schema.declare(
+  (input): input is HostedTextContext => typeof input === "object" && input !== null
+);
 
 const context = (text: string): HostedTextContext =>
   makeHostedTextContext({
@@ -93,8 +97,8 @@ const context = (text: string): HostedTextContext =>
   });
 
 const request = (hostedContext: HostedTextContext): HostedTextRequest => ({
+  _tag: "Initial",
   context: hostedContext,
-  continuation: Option.none(),
   toolChoice: "auto",
   maximumToolCalls: HostedToolCallMaximum.make(2),
 });
@@ -311,6 +315,207 @@ it.effect("rejects forged, foreign, replayed, and second-projection authorities"
   })
 );
 
+it.effect("rejects a continued request with a forged semantic context", () =>
+  Effect.gen(function* () {
+    const { inference } = yield* makeTestInference();
+    const first = yield* inference.prepareText(request(context("first")));
+    const generated = yield* inference.executeText(first);
+    const forgedContext = yield* Schema.decodeUnknownEffect(ForgedHostedTextContext)({});
+
+    const exit = yield* Effect.exit(
+      inference.prepareText({
+        _tag: "Continued",
+        context: forgedContext,
+        continuation: generated.continuation,
+        toolChoice: "none",
+      })
+    );
+
+    expect(exit._tag).toBe("Failure");
+  })
+);
+
+it.effect("discards an unexecuted continued request and releases its continuation", () =>
+  Effect.gen(function* () {
+    const { inference } = yield* makeTestInference();
+    const first = yield* inference.prepareText(request(context("first")));
+    const generated = yield* inference.executeText(first);
+    const continued = yield* inference.prepareText({
+      _tag: "Continued",
+      context: context("continued"),
+      continuation: generated.continuation,
+      toolChoice: "none",
+    });
+
+    yield* inference.discardText(continued);
+
+    const replacement = yield* inference.prepareText({
+      _tag: "Continued",
+      context: context("replacement"),
+      continuation: generated.continuation,
+      toolChoice: "none",
+    });
+    expect(Exit.isSuccess(yield* Effect.exit(inference.executeText(replacement)))).toBe(true);
+  })
+);
+
+it.effect("validates a continued request without retaining its continuation", () =>
+  Effect.gen(function* () {
+    const { inference } = yield* makeTestInference();
+    const first = yield* inference.prepareText(request(context("first")));
+    const generated = yield* inference.executeText(first);
+
+    yield* inference.validateText({
+      _tag: "Continued",
+      context: context("validation"),
+      continuation: generated.continuation,
+      toolChoice: "none",
+    });
+
+    const replay = yield* Effect.exit(
+      inference.prepareText({
+        _tag: "Continued",
+        context: context("replay"),
+        continuation: generated.continuation,
+        toolChoice: "none",
+      })
+    );
+    expect(replay._tag).toBe("Failure");
+  })
+);
+
+it.effect("discards an unexecuted request and rejects later execution", () =>
+  Effect.gen(function* () {
+    const { executions, inference } = yield* makeTestInference();
+    const prepared = yield* inference.prepareText(request(context("discarded")));
+
+    yield* inference.discardText(prepared);
+    const execute = yield* Effect.exit(inference.executeText(prepared));
+    const discardAgain = yield* Effect.exit(inference.discardText(prepared));
+
+    expect(execute._tag).toBe("Failure");
+    expect(discardAgain._tag).toBe("Failure");
+    expect(yield* Ref.get(executions)).toEqual([]);
+  })
+);
+
+it.effect("releases a claimed continuation when continued preparation fails", () =>
+  Effect.gen(function* () {
+    const state = yield* makeTestInference();
+    const attempts = yield* Ref.make(0);
+    const failure = new HostedInferenceError({
+      reason: { _tag: "ProviderUnavailable" },
+      retryable: false,
+      retryAfter: Option.none(),
+    });
+    const inference = makeHostedInference({
+      ...state.inferenceAdapter,
+      prepare: (input) =>
+        Ref.updateAndGet(attempts, (count) => count + 1).pipe(
+          Effect.flatMap((attempt) =>
+            attempt === 2 ? Effect.fail(failure) : state.inferenceAdapter.prepare(input)
+          )
+        ),
+    });
+    const first = yield* inference.prepareText(request(context("first")));
+    const generated = yield* inference.executeText(first);
+    const continuedRequest: HostedTextRequest = {
+      _tag: "Continued",
+      context: context("failed continuation"),
+      continuation: generated.continuation,
+      toolChoice: "none",
+    };
+
+    expect(Exit.isFailure(yield* Effect.exit(inference.prepareText(continuedRequest)))).toBe(true);
+    expect(
+      Exit.isFailure(
+        yield* Effect.exit(
+          inference.prepareText({ ...continuedRequest, context: context("released continuation") })
+        )
+      )
+    ).toBe(false);
+  })
+);
+
+it.effect("rejects recovery after a successful execution", () =>
+  Effect.gen(function* () {
+    const { inference } = yield* makeTestInference();
+    const prepared = yield* inference.prepareText(request(context("successful")));
+
+    yield* inference.executeText(prepared);
+
+    expect(Exit.isFailure(yield* Effect.exit(inference.recoverText(prepared)))).toBe(true);
+  })
+);
+
+it.effect("recovers invalid output only through an opaque one-shot continuation", () =>
+  Effect.gen(function* () {
+    const state = yield* makeTestInference();
+    const invalid = new HostedInferenceError({
+      reason: { _tag: "InvalidOutput", description: "Hosted provider response was invalid" },
+      retryable: false,
+      retryAfter: Option.none(),
+    });
+    const inference = makeHostedInference({
+      ...state.inferenceAdapter,
+      execute: () => Effect.fail(invalid),
+    });
+    const prepared = yield* inference.prepareText(request(context("stable")));
+    yield* Effect.flip(inference.executeText(prepared));
+    const continuation = yield* inference.recoverText(prepared);
+    const replay = yield* Effect.exit(inference.recoverText(prepared));
+    const continued = yield* inference.prepareText({
+      _tag: "Continued",
+      context: context("feedback"),
+      continuation,
+      toolChoice: "none",
+    });
+
+    expect(replay._tag).toBe("Failure");
+    expect(Exit.isFailure(yield* Effect.exit(inference.executeText(continued)))).toBe(true);
+  })
+);
+
+it.effect("recovers invalid continued output and consumes its source continuation", () =>
+  Effect.gen(function* () {
+    const state = yield* makeTestInference();
+    const attempts = yield* Ref.make(0);
+    const invalid = new HostedInferenceError({
+      reason: { _tag: "InvalidOutput", description: "Hosted provider response was invalid" },
+      retryable: false,
+      retryAfter: Option.none(),
+    });
+    const inference = makeHostedInference({
+      ...state.inferenceAdapter,
+      execute: (prepared) =>
+        Ref.updateAndGet(attempts, (count) => count + 1).pipe(
+          Effect.flatMap((attempt) =>
+            attempt === 2 ? Effect.fail(invalid) : state.inferenceAdapter.execute(prepared)
+          )
+        ),
+    });
+    const first = yield* inference.prepareText(request(context("first")));
+    const generated = yield* inference.executeText(first);
+    const continued = yield* inference.prepareText({
+      _tag: "Continued",
+      context: context("continued"),
+      continuation: generated.continuation,
+      toolChoice: "none",
+    });
+    yield* Effect.flip(inference.executeText(continued));
+
+    const recovered = yield* inference.recoverText(continued);
+    const prepared = yield* inference.prepareText({
+      _tag: "Continued",
+      context: context("recovered"),
+      continuation: recovered,
+      toolChoice: "none",
+    });
+
+    expect(Exit.isSuccess(yield* Effect.exit(inference.executeText(prepared)))).toBe(true);
+  })
+);
+
 it.effect("continues only through an opaque one-shot adapter continuation", () =>
   Effect.gen(function* () {
     const { executions, inference } = yield* makeTestInference();
@@ -322,15 +527,17 @@ it.effect("continues only through an opaque one-shot adapter continuation", () =
     const forgedContinuation = structuredClone(generated.continuation);
     const forged = yield* Effect.exit(
       inference.prepareText({
+        _tag: "Continued",
         context: context("forged continuation"),
-        continuation: Option.some(forgedContinuation),
+        continuation: forgedContinuation,
         toolChoice: "none",
       })
     );
     const moved = yield* Effect.exit(
       inference.prepareText({
+        _tag: "Continued",
         context: context("foreign continuation"),
-        continuation: Option.some(foreignGenerated.continuation),
+        continuation: foreignGenerated.continuation,
         toolChoice: "none",
       })
     );
@@ -341,15 +548,17 @@ it.effect("continues only through an opaque one-shot adapter continuation", () =
     });
 
     const second = yield* inference.prepareText({
+      _tag: "Continued",
       context: continuedContext,
-      continuation: Option.some(generated.continuation),
+      continuation: generated.continuation,
       toolChoice: "none",
     });
     yield* inference.executeText(second);
     const replay = yield* Effect.exit(
       inference.prepareText({
+        _tag: "Continued",
         context: context("replay"),
-        continuation: Option.some(generated.continuation),
+        continuation: generated.continuation,
         toolChoice: "none",
       })
     );
@@ -358,6 +567,7 @@ it.effect("continues only through an opaque one-shot adapter continuation", () =
     expect(moved._tag).toBe("Failure");
     expect(replay._tag).toBe("Failure");
     expect((yield* Ref.get(executions))[1]?.messages).toEqual([
+      { role: "system", content: "first" },
       { role: "system", content: "stable prefix" },
       { role: "system", content: "first" },
       { role: "system", content: "turn framing" },

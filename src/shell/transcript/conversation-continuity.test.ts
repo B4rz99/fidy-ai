@@ -64,7 +64,7 @@ expectTypeOf<ActiveTurnRequest>().toEqualTypeOf<ExpectedActiveTurnRequest>();
 expectTypeOf<TurnContinuationContent>().toEqualTypeOf<ExpectedContinuationContent>();
 expectTypeOf<DeliveredAssistantContent>().toEqualTypeOf<ExpectedAssistantContent>();
 expectTypeOf<keyof SerializedAttempt>().toEqualTypeOf<"prepare">();
-expectTypeOf<keyof PreparedAttempt>().toEqualTypeOf<"context" | "view" | "begin">();
+expectTypeOf<keyof PreparedAttempt>().toEqualTypeOf<"context" | "begin">();
 expectTypeOf<keyof PendingTurn>().toEqualTypeOf<"append" | "complete" | "fail">();
 expectTypeOf<
   Effect.Error<ReturnType<PreparedAttempt["begin"]>>
@@ -236,7 +236,7 @@ const generatedMetadataProgram = Effect.gen(function* () {
   yield* continuity.withSerializedAttempt(defaultUserId, request, (attempt) =>
     attempt.prepare((prepared) =>
       Effect.gen(function* () {
-        expect(prepared.view).toEqual({ entries: [], turns: [] });
+        expect(yield* continuity.observe(defaultUserId)).toEqual({ entries: [], turns: [] });
         expect(Object.keys(prepared.context)).toEqual([]);
         const pending = yield* prepared.begin();
         const admitted = yield* continuity.observe(defaultUserId);
@@ -285,32 +285,63 @@ const stalePreparedProgram = Effect.gen(function* () {
   expect((yield* continuity.observe(defaultUserId)).entries).toEqual([]);
 });
 
+const staleMemoryPreparedProgram = Effect.gen(function* () {
+  const continuity = yield* ConversationContinuity;
+  const migrationSql = yield* MigrationSqlClient;
+  yield* resetDefaultContinuity;
+  yield* continuity.withSerializedAttempt(
+    defaultUserId,
+    activeRequest("stale memory request must stay absent"),
+    (attempt) =>
+      attempt.prepare((prepared) =>
+        Effect.gen(function* () {
+          yield* migrationSql`
+            INSERT INTO memory_revisions (user_id, revision)
+            VALUES (${defaultUserId}, 1)
+            ON CONFLICT (user_id) DO UPDATE
+            SET revision = memory_revisions.revision + 1
+          `;
+          const changed = yield* prepared.begin().pipe(Effect.flip);
+          assert.deepStrictEqual(changed, new ContinuityChanged());
+        })
+      )
+  );
+  expect((yield* continuity.observe(defaultUserId)).entries).toEqual([]);
+});
+
 const prepareAndInspectRecovery = (
   continuity: ConversationContinuityService,
   expectedCall: TurnContinuationContent
 ): Effect.Effect<void> =>
   continuity.withSerializedAttempt(defaultUserId, activeRequest("next request"), (attempt) =>
-    attempt.prepare((prepared) =>
-      Effect.sync(() => {
-        expect(prepared.view.turns[0]?._tag).toBe("Interrupted");
-        expect(prepared.view.entries.map(withoutMetadata)).toEqual([
-          { _tag: "UserTranscriptEntry", ...activeRequest("recover me") },
-          expectedCall,
-          { _tag: "InterruptedTurnTranscriptEntry" },
-        ]);
-      })
+    attempt.prepare(() =>
+      continuity.observe(defaultUserId).pipe(
+        Effect.tap((view) =>
+          Effect.sync(() => {
+            expect(view.turns[0]?._tag).toBe("Interrupted");
+            expect(view.entries.map(withoutMetadata)).toEqual([
+              { _tag: "UserTranscriptEntry", ...activeRequest("recover me") },
+              expectedCall,
+              { _tag: "InterruptedTurnTranscriptEntry" },
+            ]);
+          })
+        )
+      )
     )
   );
 
 const assertSingleInterruption = (continuity: ConversationContinuityService): Effect.Effect<void> =>
   continuity.withSerializedAttempt(defaultUserId, activeRequest("later request"), (attempt) =>
-    attempt.prepare((prepared) =>
-      Effect.sync(() => {
-        const interrupted = prepared.view.entries.filter(
-          (entry) => entry._tag === "InterruptedTurnTranscriptEntry"
-        );
-        expect(interrupted).toHaveLength(1);
-      })
+    attempt.prepare(() =>
+      continuity
+        .observe(defaultUserId)
+        .pipe(
+          Effect.map((view) =>
+            expect(
+              view.entries.filter((entry) => entry._tag === "InterruptedTurnTranscriptEntry")
+            ).toHaveLength(1)
+          )
+        )
     )
   );
 
@@ -362,20 +393,21 @@ const recoveryTimestampProgram = Effect.gen(function* () {
       AND entry->>'_tag' = 'CanonicalToolCallEntry'
   `;
 
-  const assertRecoveryTime = (prepared: PreparedAttempt): Effect.Effect<void> =>
-    Effect.sync(() => {
-      const interruption = Option.getOrThrow(
-        Arr.findFirst(
-          prepared.view.entries,
-          (entry) => entry._tag === "InterruptedTurnTranscriptEntry"
-        )
-      );
-      expect(interruption.occurredAt).toEqual(latestPersistedAt);
-      const interruptedTurn = Option.getOrThrow(
-        Arr.findFirst(prepared.view.turns, (turn) => turn._tag === "Interrupted")
-      );
-      expect(interruptedTurn.terminalAt).toEqual(latestPersistedAt);
-    });
+  const assertRecoveryTime = (): Effect.Effect<void> =>
+    continuity.observe(defaultUserId).pipe(
+      Effect.tap((view) =>
+        Effect.sync(() => {
+          const interruption = Option.getOrThrow(
+            Arr.findFirst(view.entries, (entry) => entry._tag === "InterruptedTurnTranscriptEntry")
+          );
+          expect(interruption.occurredAt).toEqual(latestPersistedAt);
+          const interruptedTurn = Option.getOrThrow(
+            Arr.findFirst(view.turns, (turn) => turn._tag === "Interrupted")
+          );
+          expect(interruptedTurn.terminalAt).toEqual(latestPersistedAt);
+        })
+      )
+    );
   yield* continuity.withSerializedAttempt(defaultUserId, activeRequest("next request"), (attempt) =>
     attempt.prepare(assertRecoveryTime)
   );
@@ -817,7 +849,7 @@ const completeIsolatedTurn = (
   continuity.withSerializedAttempt(isolatedUserId, activeRequest("second user"), (attempt) =>
     attempt.prepare((prepared) =>
       Effect.gen(function* () {
-        expect(prepared.view).toEqual({ entries: [], turns: [] });
+        expect(yield* continuity.observe(isolatedUserId)).toEqual({ entries: [], turns: [] });
         const pending = yield* prepared.begin();
         yield* pending.complete(assistantContent("second complete"));
       })
@@ -826,10 +858,10 @@ const completeIsolatedTurn = (
 
 const recoverFirstUser = (continuity: ConversationContinuityService): Effect.Effect<void> =>
   continuity.withSerializedAttempt(defaultUserId, activeRequest("recover first"), (attempt) =>
-    attempt.prepare((prepared) =>
-      Effect.sync(() => {
-        expect(prepared.view.turns[0]?._tag).toBe("Interrupted");
-      })
+    attempt.prepare(() =>
+      continuity
+        .observe(defaultUserId)
+        .pipe(Effect.map((view) => expect(view.turns[0]?._tag).toBe("Interrupted")))
     )
   );
 
@@ -869,10 +901,10 @@ const prepareWithRebuiltModule = Effect.gen(function* () {
   const rebuiltContext = yield* Layer.build(Layer.fresh(ConversationContinuity.layer));
   const rebuilt = Context.get(rebuiltContext, ConversationContinuity);
   yield* rebuilt.withSerializedAttempt(defaultUserId, activeRequest("rebuilt"), (attempt) =>
-    attempt.prepare((prepared) =>
-      Effect.sync(() => {
-        expect(prepared.view).toEqual({ entries: [], turns: [] });
-      })
+    attempt.prepare(() =>
+      rebuilt
+        .observe(defaultUserId)
+        .pipe(Effect.map((view) => expect(view).toEqual({ entries: [], turns: [] })))
     )
   );
 });
@@ -1157,6 +1189,10 @@ layer(ContinuityHarness, { excludeTestServices: true, timeout: "30 seconds" })(
     it.effect(
       "returns ContinuityChanged without appending a stale active request",
       () => stalePreparedProgram
+    );
+    it.effect(
+      "returns ContinuityChanged when Memory changes after preparation",
+      () => staleMemoryPreparedProgram
     );
     it.effect(
       "recovers an abandoned Pending Turn exactly once as Interrupted",

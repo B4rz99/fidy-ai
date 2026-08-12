@@ -28,7 +28,6 @@ const projectCauseForLog = <E extends unknown>(
 type StartedTurn = Effect.Success<ReturnType<typeof startWhatsAppTurn>>;
 type DeliveryError = Effect.Error<ReturnType<typeof sendKapsoFreeForm>>;
 const maximumProcessingAttempts = 3;
-const rejectedRetryDelaySeconds = 1;
 const logDeliveryError = (error: DeliveryError): Effect.Effect<void> =>
   error._tag === "KapsoSendFailed"
     ? Effect.logError("WhatsApp Kapso send failed", {
@@ -43,47 +42,53 @@ const processStartedTurn = Effect.fn("WhatsApp.processStartedTurn")(function* (i
 }) {
   const { claim, inboundMessage } = input.started;
   const service = yield* AgentService;
-  const prepared = yield* Effect.option(
-    service.handleTurn(claim.userId, inboundMessage).pipe(Effect.tapError(logAgentTurnError))
-  );
-  if (Option.isNone(prepared)) {
-    yield* failWhatsAppTurn(claim, input.claimTime, "agent_failed");
+  const handled = yield* service
+    .handleTurn(claim.userId, inboundMessage, (reply) =>
+      DateTime.now.pipe(
+        Effect.flatMap((now) =>
+          sendKapsoFreeForm({
+            userId: claim.userId,
+            reply,
+            now,
+            attempt: input.started.processingAttempt,
+          })
+        ),
+        Effect.asVoid
+      )
+    )
+    .pipe(
+      Effect.match({
+        onFailure: (error) => ({ _tag: "Failure" as const, error }),
+        onSuccess: () => ({ _tag: "Success" as const }),
+      })
+    );
+  if (handled._tag === "Success") {
+    yield* completeWhatsAppTurn(claim, input.claimTime);
     return true;
   }
-
-  const delivery = yield* sendKapsoFreeForm({
-    userId: claim.userId,
-    reply: prepared.value.reply,
-    now: yield* DateTime.now,
-    attempt: input.started.processingAttempt,
-  }).pipe(
-    Effect.match({
-      onFailure: (error) => ({ _tag: "Failure" as const, error }),
-      onSuccess: () => ({ _tag: "Success" as const }),
-    })
-  );
-  if (delivery._tag === "Failure") {
-    yield* logDeliveryError(delivery.error);
+  if (handled.error._tag === "KapsoSendFailed") {
+    yield* logDeliveryError(handled.error);
     if (
-      delivery.error._tag === "KapsoSendFailed" &&
-      delivery.error.automaticRetry &&
+      handled.error.deliveryCertainty === "rejected" &&
+      handled.error.automaticRetry &&
       input.started.processingAttempt < maximumProcessingAttempts
     ) {
       yield* retryWhatsAppTurn(
         claim,
         input.claimTime,
-        DateTime.add(input.claimTime, { seconds: rejectedRetryDelaySeconds })
+        DateTime.add(input.claimTime, { seconds: 1 })
       );
     } else {
       yield* failWhatsAppTurn(claim, input.claimTime, "send_failed");
     }
     return true;
   }
-
-  yield* service
-    .recordDeliveredReply(prepared.value)
-    .pipe(Effect.catchTag("OnboardingConsentRequired", () => Effect.void));
-  yield* completeWhatsAppTurn(claim, input.claimTime);
+  yield* logAgentTurnError(handled.error);
+  yield* failWhatsAppTurn(
+    claim,
+    input.claimTime,
+    handled.error._tag === "WhatsAppEvidenceConflict" ? "send_failed" : "agent_failed"
+  );
   return true;
 });
 

@@ -1,100 +1,184 @@
 import assert from "node:assert/strict";
 import { expect, layer } from "@effect/vitest";
-import { Cause, Context, DateTime, Effect, Exit, Layer, Schema } from "effect";
+import {
+  Array as Arr,
+  Cause,
+  Context,
+  Crypto,
+  DateTime,
+  Deferred,
+  Effect,
+  Exit,
+  Fiber,
+  Layer,
+  Option,
+  Ref,
+  Schema,
+} from "effect";
+import type { SqlError } from "effect/unstable/sql";
+import { expectTypeOf } from "vitest";
 import { CanonicalOperationId } from "~/core/_shared/canonical-operation";
 import { UserId } from "~/core/identity/reference";
 import {
   AgentIteration,
-  AssistantTranscriptEntry,
-  CanonicalToolCallEntry,
+  type AssistantTranscriptEntry,
+  type CanonicalToolEvidence,
   type CanonicalToolOutcome,
-  CanonicalToolResultEntry,
   ToolCallId,
   TranscriptContentEntry,
+  type TranscriptEntry,
   TranscriptEntryId,
   TranscriptText,
-  TranscriptTurnId,
   type TurnContinuationEntry,
   type TurnFailureReason,
-  UserTranscriptEntry,
+  type UserTranscriptEntry,
 } from "~/core/transcript/model";
 import { projectTranscriptForModel } from "~/shell/agent/model-boundary";
 import { MigrationSqlClient } from "~/shell/db/client";
 import { defaultUserId } from "~/shell/db/development-seed";
 import { ApiHarness } from "~/shell/testing/api-harness";
 import {
-  ContinuityAuthorityRejected,
+  type ActiveTurnRequest,
   ContinuityChanged,
+  type ContinuityView,
   ConversationContinuity,
-  InvalidTerminalTimestamp,
-  InvalidTranscriptEntry,
-  InvalidTurnFailureReason,
-  type PreparedContinuity,
-  TurnAlreadyTerminal,
-  TurnAuthorityRejected,
+  type ConversationContinuityService,
+  type DeliveredAssistantContent,
+  type PendingTurn,
+  type PreparedAttempt,
+  type SerializedAttempt,
+  type TurnContinuationContent,
 } from "./conversation-continuity";
 
-const ContinuityHarness = ConversationContinuity.layer.pipe(Layer.provideMerge(ApiHarness));
-const ForgedPreparedContinuity = Schema.declare(
-  (input): input is PreparedContinuity => typeof input === "object" && input !== null
+type ExpectedActiveTurnRequest = Pick<UserTranscriptEntry, "text">;
+type WithoutContinuityMetadata<Entry> = Entry extends unknown
+  ? Omit<Entry, "id" | "turnId" | "occurredAt">
+  : never;
+type ExpectedContinuationContent = WithoutContinuityMetadata<TurnContinuationEntry>;
+type ExpectedAssistantContent = Pick<AssistantTranscriptEntry, "iteration" | "text">;
+
+expectTypeOf<ActiveTurnRequest>().toEqualTypeOf<ExpectedActiveTurnRequest>();
+expectTypeOf<TurnContinuationContent>().toEqualTypeOf<ExpectedContinuationContent>();
+expectTypeOf<DeliveredAssistantContent>().toEqualTypeOf<ExpectedAssistantContent>();
+expectTypeOf<keyof SerializedAttempt>().toEqualTypeOf<"prepare">();
+expectTypeOf<keyof PreparedAttempt>().toEqualTypeOf<"context" | "view" | "begin">();
+expectTypeOf<keyof PendingTurn>().toEqualTypeOf<"append" | "complete" | "fail">();
+expectTypeOf<
+  Effect.Error<ReturnType<PreparedAttempt["begin"]>>
+>().toEqualTypeOf<ContinuityChanged>();
+expectTypeOf<Effect.Error<ReturnType<PendingTurn["append"]>>>().toEqualTypeOf<never>();
+expectTypeOf<Effect.Error<ReturnType<PendingTurn["complete"]>>>().toEqualTypeOf<never>();
+expectTypeOf<Effect.Error<ReturnType<PendingTurn["fail"]>>>().toEqualTypeOf<never>();
+
+type CryptoRaceGate = {
+  readonly entered: Deferred.Deferred<void>;
+  readonly release: Deferred.Deferred<void>;
+};
+
+class CryptoRaceControl extends Context.Service<
+  CryptoRaceControl,
+  { readonly arm: Effect.Effect<CryptoRaceGate> }
+>()("fidy-ai/shell/transcript/conversation-continuity.test/CryptoRaceControl") {}
+
+const ControlledCrypto = Layer.effectContext(
+  Effect.gen(function* () {
+    const crypto = yield* Crypto.Crypto;
+    const nextGate = yield* Ref.make(Option.none<CryptoRaceGate>());
+    const arm = Effect.gen(function* () {
+      const gate: CryptoRaceGate = {
+        entered: yield* Deferred.make<void>(),
+        release: yield* Deferred.make<void>(),
+      };
+      yield* Ref.set(nextGate, Option.some(gate));
+      return gate;
+    });
+    const controlled: Crypto.Crypto = {
+      ...crypto,
+      get randomUUIDv7() {
+        return Ref.getAndSet(nextGate, Option.none()).pipe(
+          Effect.flatMap(
+            Option.match({
+              onNone: () => crypto.randomUUIDv7,
+              onSome: (gate) =>
+                Deferred.succeed(gate.entered, undefined).pipe(
+                  Effect.andThen(Deferred.await(gate.release)),
+                  Effect.andThen(crypto.randomUUIDv7)
+                ),
+            })
+          )
+        );
+      },
+    };
+    return Context.empty().pipe(
+      Context.add(Crypto.Crypto, controlled),
+      Context.add(CryptoRaceControl, { arm })
+    );
+  })
 );
-const ForgedTurnContinuationEntry = Schema.declare(
-  (input): input is TurnContinuationEntry => typeof input === "object" && input !== null
+
+const ContinuityHarness = ConversationContinuity.layer.pipe(
+  Layer.provideMerge(ControlledCrypto),
+  Layer.provideMerge(ApiHarness)
 );
-const ForgedUserTranscriptEntry = Schema.declare(
-  (input): input is UserTranscriptEntry => typeof input === "object" && input !== null
+const ForgedActiveTurnRequest = Schema.declare(
+  (input): input is ActiveTurnRequest => typeof input === "object" && input !== null
 );
-const ForgedAssistantTranscriptEntry = Schema.declare(
-  (input): input is AssistantTranscriptEntry => typeof input === "object" && input !== null
+const ForgedContinuationContent = Schema.declare(
+  (input): input is TurnContinuationContent => typeof input === "object" && input !== null
+);
+const ForgedAssistantContent = Schema.declare(
+  (input): input is DeliveredAssistantContent => typeof input === "object" && input !== null
 );
 const ForgedTurnFailureReason = Schema.declare(
   (input): input is TurnFailureReason => typeof input === "string"
 );
 
-const makeUserEntry = (
-  overrides: Partial<Omit<UserTranscriptEntry, "_tag">> = {}
-): UserTranscriptEntry =>
-  UserTranscriptEntry.make({
-    id: TranscriptEntryId.make("f1d1a000-0000-4000-8000-000000000400"),
-    turnId: TranscriptTurnId.make("f1d1a000-0000-4000-8000-000000000401"),
-    text: TranscriptText.make("Necesito ayuda"),
-    occurredAt: DateTime.makeUnsafe("2026-08-11T12:00:00Z"),
-    ...overrides,
-  });
+const activeRequest = (text: string): ActiveTurnRequest => ({
+  text: TranscriptText.make(text),
+});
 
-const makeAssistantEntry = (
-  overrides: Partial<Omit<AssistantTranscriptEntry, "_tag">> = {}
-): AssistantTranscriptEntry =>
-  AssistantTranscriptEntry.make({
-    id: TranscriptEntryId.make("f1d1a000-0000-4000-8000-000000000403"),
-    turnId: TranscriptTurnId.make("f1d1a000-0000-4000-8000-000000000401"),
-    text: TranscriptText.make("Claro"),
-    iteration: AgentIteration.make(1),
-    occurredAt: DateTime.makeUnsafe("2026-08-11T12:00:01Z"),
-    ...overrides,
-  });
+const assistantContent = (text = "Claro", iteration = 1): DeliveredAssistantContent => ({
+  iteration: AgentIteration.make(iteration),
+  text: TranscriptText.make(text),
+});
 
-const assertFailure = (actual: Exit.Exit<unknown, unknown>, expected: unknown): void => {
-  const withoutRuntimeTrace = Exit.match(actual, {
-    onFailure: (cause) =>
-      Exit.failCause(
-        Cause.fromReasons(
-          cause.reasons.map((reason) => {
-            switch (reason._tag) {
-              case "Die":
-                return Cause.makeDieReason(reason.defect);
-              case "Fail":
-                return Cause.makeFailReason(reason.error);
-              case "Interrupt":
-                return Cause.makeInterruptReason(reason.fiberId);
-            }
-            throw new Error("Unexpected Cause reason.");
-          })
-        )
-      ),
-    onSuccess: Exit.succeed,
-  });
-  assert.deepStrictEqual(withoutRuntimeTrace, Exit.fail(expected));
+const operation = CanonicalOperationId.make("categories.listCategories");
+const toolCallContent = (
+  suffix = "default",
+  input: CanonicalToolEvidence = { query: "exact" },
+  iteration = 1
+): TurnContinuationContent => ({
+  _tag: "CanonicalToolCallEntry",
+  iteration: AgentIteration.make(iteration),
+  toolCallId: ToolCallId.make(`call-${suffix}`),
+  operation,
+  input,
+});
+const toolResultContent = (
+  outcome: CanonicalToolOutcome,
+  suffix = "default",
+  iteration = 1
+): TurnContinuationContent => ({
+  _tag: "CanonicalToolResultEntry",
+  iteration: AgentIteration.make(iteration),
+  toolCallId: ToolCallId.make(`call-${suffix}`),
+  operation,
+  outcome,
+});
+
+const withoutMetadata = (entry: TranscriptEntry): unknown => {
+  const { id: _id, turnId: _turnId, occurredAt: _occurredAt, ...content } = entry;
+  return content;
+};
+
+const assertDefect = (exit: Exit.Exit<unknown, unknown>): void => {
+  expect(Exit.isFailure(exit)).toBe(true);
+  if (Exit.isFailure(exit)) expect(Cause.hasDies(exit.cause)).toBe(true);
+};
+
+const assertContentFreeDefect = (exit: Exit.Exit<unknown, unknown>, secret: string): void => {
+  assertDefect(exit);
+  if (Exit.isFailure(exit)) expect(Cause.pretty(exit.cause)).not.toContain(secret);
 };
 
 const resetDefaultContinuity = Effect.gen(function* () {
@@ -119,598 +203,770 @@ const resetIsolatedUser = Effect.gen(function* () {
   `;
 });
 
+const assertGeneratedMetadata = (completed: ContinuityView): void => {
+  expect(completed.turns[0]?._tag).toBe("Completed");
+  const turn = Option.getOrThrow(Arr.head(completed.turns));
+  const ids = completed.entries.map((entry) => entry.id);
+  expect(new Set(ids).size).toBe(ids.length);
+  for (const entry of completed.entries) {
+    expect(Schema.is(TranscriptEntryId)(entry.id)).toBe(true);
+    expect(entry.turnId).toBe(turn.id);
+  }
+  const times = completed.entries.map((entry) => entry.occurredAt.epochMilliseconds);
+  expect(times).toEqual(times.toSorted((left, right) => left - right));
+  expect(turn.startedAt).toEqual(Option.getOrThrow(Arr.head(completed.entries)).occurredAt);
+  if (turn._tag === "Completed") {
+    expect(turn.terminalAt).toEqual(Option.getOrThrow(Arr.last(completed.entries)).occurredAt);
+  }
+};
+
+const generatedMetadataProgram = Effect.gen(function* () {
+  const continuity = yield* ConversationContinuity;
+  yield* resetDefaultContinuity;
+  const request = activeRequest("Necesito ayuda");
+  const call = toolCallContent("generated");
+  const result = toolResultContent(
+    { _tag: "Succeeded", output: { retained: ["sí", 1, true] } },
+    "generated"
+  );
+
+  yield* continuity.withSerializedAttempt(defaultUserId, request, (attempt) =>
+    attempt.prepare((prepared) =>
+      Effect.gen(function* () {
+        expect(prepared.view).toEqual({ entries: [], turns: [] });
+        expect(Object.keys(prepared.context)).toEqual([]);
+        const pending = yield* prepared.begin();
+        const admitted = yield* continuity.observe(defaultUserId);
+        expect(admitted.turns[0]?._tag).toBe("Pending");
+        expect(admitted.entries).toHaveLength(1);
+        expect(withoutMetadata(Option.getOrThrow(Arr.head(admitted.entries)))).toEqual({
+          _tag: "UserTranscriptEntry",
+          ...request,
+        });
+        yield* pending.append([call, result]);
+        yield* pending.complete(assistantContent());
+      })
+    )
+  );
+
+  const completed = yield* continuity.observe(defaultUserId);
+  expect(completed.entries.map(withoutMetadata)).toEqual([
+    { _tag: "UserTranscriptEntry", ...request },
+    call,
+    result,
+    { _tag: "AssistantTranscriptEntry", ...assistantContent() },
+  ]);
+  assertGeneratedMetadata(completed);
+});
+
+const completeWinningTurn = (
+  continuity: ConversationContinuityService
+): Effect.Effect<void, ContinuityChanged> =>
+  continuity.withSerializedAttempt(defaultUserId, activeRequest("winning request"), (attempt) =>
+    attempt.prepare((prepared) =>
+      Effect.gen(function* () {
+        const pending = yield* prepared.begin();
+        yield* pending.complete(assistantContent("winner"));
+      })
+    )
+  );
+
+const stalePreparedProgram = Effect.gen(function* () {
+  const continuity = yield* ConversationContinuity;
+  yield* resetDefaultContinuity;
+  yield* continuity.withSerializedAttempt(
+    defaultUserId,
+    activeRequest("stale request must stay absent"),
+    (attempt) =>
+      attempt.prepare((prepared) =>
+        Effect.gen(function* () {
+          yield* completeWinningTurn(continuity);
+          const changed = yield* prepared.begin().pipe(Effect.flip);
+          assert.deepStrictEqual(changed, new ContinuityChanged());
+        })
+      )
+  );
+  expect((yield* continuity.observe(defaultUserId)).entries.map(withoutMetadata)).toEqual([
+    { _tag: "UserTranscriptEntry", ...activeRequest("winning request") },
+    { _tag: "AssistantTranscriptEntry", ...assistantContent("winner") },
+  ]);
+});
+
+const prepareAndInspectRecovery = (
+  continuity: ConversationContinuityService,
+  expectedCall: TurnContinuationContent
+): Effect.Effect<void> =>
+  continuity.withSerializedAttempt(defaultUserId, activeRequest("next request"), (attempt) =>
+    attempt.prepare((prepared) =>
+      Effect.sync(() => {
+        expect(prepared.view.turns[0]?._tag).toBe("Interrupted");
+        expect(prepared.view.entries.map(withoutMetadata)).toEqual([
+          { _tag: "UserTranscriptEntry", ...activeRequest("recover me") },
+          expectedCall,
+          { _tag: "InterruptedTurnTranscriptEntry" },
+        ]);
+      })
+    )
+  );
+
+const assertSingleInterruption = (continuity: ConversationContinuityService): Effect.Effect<void> =>
+  continuity.withSerializedAttempt(defaultUserId, activeRequest("later request"), (attempt) =>
+    attempt.prepare((prepared) =>
+      Effect.sync(() => {
+        const interrupted = prepared.view.entries.filter(
+          (entry) => entry._tag === "InterruptedTurnTranscriptEntry"
+        );
+        expect(interrupted).toHaveLength(1);
+      })
+    )
+  );
+
+const recoveryProgram = Effect.gen(function* () {
+  const continuity = yield* ConversationContinuity;
+  yield* resetDefaultContinuity;
+  let escapedPending = Option.none<PendingTurn>();
+  const call = toolCallContent("recovery");
+  yield* continuity.withSerializedAttempt(defaultUserId, activeRequest("recover me"), (attempt) =>
+    attempt.prepare((prepared) =>
+      Effect.gen(function* () {
+        escapedPending = Option.some(yield* prepared.begin());
+        yield* Option.getOrThrow(escapedPending).append([call]);
+      })
+    )
+  );
+  expect((yield* continuity.observe(defaultUserId)).turns[0]?._tag).toBe("Pending");
+  yield* prepareAndInspectRecovery(continuity, call);
+  yield* assertSingleInterruption(continuity);
+  const pending = Option.getOrThrow(escapedPending);
+  assertDefect(yield* pending.append([toolCallContent("escaped")]).pipe(Effect.exit));
+});
+
+const recoveryTimestampProgram = Effect.gen(function* () {
+  const continuity = yield* ConversationContinuity;
+  const sql = yield* MigrationSqlClient;
+  yield* resetDefaultContinuity;
+  yield* continuity.withSerializedAttempt(
+    defaultUserId,
+    activeRequest("recover chronology"),
+    (attempt) =>
+      attempt.prepare((prepared) =>
+        Effect.gen(function* () {
+          const pending = yield* prepared.begin();
+          yield* pending.append([toolCallContent("future")]);
+        })
+      )
+  );
+
+  const latestPersistedAt = DateTime.makeUnsafe("2099-08-12T12:00:00.000Z");
+  yield* sql`
+    UPDATE transcript_entries
+    SET entry = jsonb_set(
+      entry,
+      '{occurredAt}',
+      to_jsonb(${DateTime.formatIso(latestPersistedAt)}::text)
+    )
+    WHERE user_id = ${defaultUserId}
+      AND entry->>'_tag' = 'CanonicalToolCallEntry'
+  `;
+
+  const assertRecoveryTime = (prepared: PreparedAttempt): Effect.Effect<void> =>
+    Effect.sync(() => {
+      const interruption = Option.getOrThrow(
+        Arr.findFirst(
+          prepared.view.entries,
+          (entry) => entry._tag === "InterruptedTurnTranscriptEntry"
+        )
+      );
+      expect(interruption.occurredAt).toEqual(latestPersistedAt);
+      const interruptedTurn = Option.getOrThrow(
+        Arr.findFirst(prepared.view.turns, (turn) => turn._tag === "Interrupted")
+      );
+      expect(interruptedTurn.terminalAt).toEqual(latestPersistedAt);
+    });
+  yield* continuity.withSerializedAttempt(defaultUserId, activeRequest("next request"), (attempt) =>
+    attempt.prepare(assertRecoveryTime)
+  );
+});
+
+const captureScopedCapabilities = (
+  continuity: ConversationContinuityService,
+  setAttempt: (attempt: SerializedAttempt) => void,
+  setPrepared: (attempt: PreparedAttempt) => void
+): Effect.Effect<void> =>
+  continuity.withSerializedAttempt(defaultUserId, activeRequest("scoped"), (attempt) => {
+    setAttempt(attempt);
+    return attempt.prepare((prepared) => {
+      setPrepared(prepared);
+      return Effect.void;
+    });
+  });
+
+const assertSupersededPreparation = (
+  continuity: ConversationContinuityService
+): Effect.Effect<void> =>
+  continuity.withSerializedAttempt(defaultUserId, activeRequest("superseded"), (attempt) =>
+    attempt.prepare((prepared) =>
+      Effect.gen(function* () {
+        yield* attempt.prepare(() => Effect.void);
+        assertDefect(yield* prepared.begin().pipe(Effect.exit));
+      })
+    )
+  );
+
+const terminalizeAndReuse = (
+  continuity: ConversationContinuityService
+): Effect.Effect<PendingTurn, ContinuityChanged> =>
+  continuity.withSerializedAttempt(defaultUserId, activeRequest("terminal"), (attempt) =>
+    attempt.prepare((prepared) =>
+      Effect.gen(function* () {
+        const pending = yield* prepared.begin();
+        yield* pending.complete(assistantContent("done"));
+        assertDefect(yield* pending.fail("DeliveryFailed").pipe(Effect.exit));
+        return pending;
+      })
+    )
+  );
+
+const capabilityDefectsProgram = Effect.gen(function* () {
+  const continuity = yield* ConversationContinuity;
+  yield* resetDefaultContinuity;
+  let escapedSerialized = Option.none<SerializedAttempt>();
+  let escapedPrepared = Option.none<PreparedAttempt>();
+  yield* captureScopedCapabilities(
+    continuity,
+    (attempt) => {
+      escapedSerialized = Option.some(attempt);
+    },
+    (prepared) => {
+      escapedPrepared = Option.some(prepared);
+    }
+  );
+  assertDefect(
+    yield* Option.getOrThrow(escapedSerialized)
+      .prepare(() => Effect.void)
+      .pipe(Effect.exit)
+  );
+  assertDefect(yield* Option.getOrThrow(escapedPrepared).begin().pipe(Effect.exit));
+  yield* assertSupersededPreparation(continuity);
+  const terminalPending = yield* terminalizeAndReuse(continuity);
+  assertDefect(yield* terminalPending.append([toolCallContent("after-scope")]).pipe(Effect.exit));
+  expect((yield* continuity.observe(defaultUserId)).entries).toHaveLength(2);
+});
+
+type PendingRaceOperation = "append" | "complete" | "fail";
+
+const pendingRaceOperation = (
+  pending: PendingTurn,
+  operation: PendingRaceOperation
+): Effect.Effect<void> => {
+  switch (operation) {
+    case "append":
+      return pending.append([toolCallContent("superseded-race")]);
+    case "complete":
+      return pending.complete(assistantContent("superseded-race"));
+    case "fail":
+      return pending.fail("DeliveryFailed");
+  }
+};
+
+const raceAdmission = (
+  race: CryptoRaceControl["Service"],
+  attempt: SerializedAttempt,
+  prepared: PreparedAttempt
+): Effect.Effect<void> =>
+  Effect.gen(function* () {
+    const gate = yield* race.arm;
+    const admission = yield* Effect.forkChild(prepared.begin());
+    yield* Deferred.await(gate.entered);
+    yield* attempt.prepare(() => Effect.void);
+    yield* Deferred.succeed(gate.release, undefined);
+    assertDefect(yield* Fiber.await(admission));
+  });
+
+const supersedeDuringBeginProgram = Effect.gen(function* () {
+  const continuity = yield* ConversationContinuity;
+  const race = yield* CryptoRaceControl;
+  yield* resetDefaultContinuity;
+  yield* continuity.withSerializedAttempt(defaultUserId, activeRequest("racing begin"), (attempt) =>
+    attempt.prepare((prepared) => raceAdmission(race, attempt, prepared))
+  );
+  expect(yield* continuity.observe(defaultUserId)).toEqual({ entries: [], turns: [] });
+});
+
+type PendingMutationRace = {
+  readonly continuity: ConversationContinuityService;
+  readonly race: CryptoRaceControl["Service"];
+  readonly attempt: SerializedAttempt;
+  readonly prepared: PreparedAttempt;
+  readonly operation: PendingRaceOperation;
+};
+
+const racePendingMutation = ({
+  continuity,
+  race,
+  attempt,
+  prepared,
+  operation,
+}: PendingMutationRace): Effect.Effect<void, ContinuityChanged> =>
+  Effect.gen(function* () {
+    const pending = yield* prepared.begin();
+    const admitted = yield* continuity.observe(defaultUserId);
+    const gate = yield* race.arm;
+    const mutation = yield* Effect.forkChild(pendingRaceOperation(pending, operation));
+    yield* Deferred.await(gate.entered);
+    yield* attempt.prepare(() => Effect.void);
+    yield* Deferred.succeed(gate.release, undefined);
+    assertDefect(yield* Fiber.await(mutation));
+    const after = yield* continuity.observe(defaultUserId);
+    expect(after.entries.map(withoutMetadata)).toEqual([
+      ...admitted.entries.map(withoutMetadata),
+      { _tag: "InterruptedTurnTranscriptEntry" },
+    ]);
+    expect(after.turns[0]?._tag).toBe("Interrupted");
+  });
+
+const supersedeDuringPendingMutationProgram = (
+  operation: PendingRaceOperation
+): Effect.Effect<
+  void,
+  ContinuityChanged | SqlError.SqlError,
+  ConversationContinuity | CryptoRaceControl | MigrationSqlClient
+> =>
+  Effect.gen(function* () {
+    const continuity = yield* ConversationContinuity;
+    const race = yield* CryptoRaceControl;
+    yield* resetDefaultContinuity;
+    yield* continuity.withSerializedAttempt(
+      defaultUserId,
+      activeRequest(`racing ${operation}`),
+      (attempt) =>
+        attempt.prepare((prepared) =>
+          racePendingMutation({ continuity, race, attempt, prepared, operation })
+        )
+    );
+  });
+
+const fixedFailureProgram = Effect.gen(function* () {
+  const continuity = yield* ConversationContinuity;
+  yield* resetDefaultContinuity;
+  yield* continuity.withSerializedAttempt(defaultUserId, activeRequest("fail safely"), (attempt) =>
+    attempt.prepare((prepared) =>
+      Effect.gen(function* () {
+        const pending = yield* prepared.begin();
+        yield* pending.fail("HostedInferenceTimedOut");
+      })
+    )
+  );
+  const failed = yield* continuity.observe(defaultUserId);
+  expect(failed.turns[0]).toMatchObject({
+    _tag: "Failed",
+    reason: "HostedInferenceTimedOut",
+  });
+  expect(failed.entries.map(withoutMetadata)).toEqual([
+    { _tag: "UserTranscriptEntry", ...activeRequest("fail safely") },
+    { _tag: "FailedTurnTranscriptEntry", reason: "HostedInferenceTimedOut" },
+  ]);
+  expect(projectTranscriptForModel(failed.entries, 1_000)).toEqual([failed.entries[0]]);
+});
+
+const outcomeRoundTripProgram = Effect.gen(function* () {
+  const continuity = yield* ConversationContinuity;
+  yield* resetDefaultContinuity;
+  const contents: Arr.NonEmptyReadonlyArray<TurnContinuationContent> = [
+    toolResultContent({ _tag: "Succeeded", output: { exact: "é" } }, "outcome-0", 1),
+    toolResultContent(
+      { _tag: "ToolInputRejected", failure: { code: "bad_input" } },
+      "outcome-1",
+      2
+    ),
+    toolResultContent(
+      { _tag: "ToolOutputRejected", failure: { code: "bad_output" } },
+      "outcome-2",
+      3
+    ),
+    toolResultContent(
+      { _tag: "CanonicalOperationFailed", failure: { code: "failed" } },
+      "outcome-3",
+      4
+    ),
+  ];
+  yield* continuity.withSerializedAttempt(defaultUserId, activeRequest("all outcomes"), (attempt) =>
+    attempt.prepare((prepared) =>
+      Effect.gen(function* () {
+        const pending = yield* prepared.begin();
+        yield* pending.append(contents);
+        yield* pending.complete(assistantContent("complete", 5));
+      })
+    )
+  );
+  const persisted = (yield* continuity.observe(defaultUserId)).entries.slice(1, -1);
+  expect(persisted.map(withoutMetadata)).toEqual(contents);
+});
+
+const maximumPayloadProgram = Effect.gen(function* () {
+  const continuity = yield* ConversationContinuity;
+  yield* resetDefaultContinuity;
+  const maximumText = "é".repeat(16_000);
+  const maximumEvidence = "é".repeat(499_999);
+  const call = toolCallContent("maximum-call", maximumEvidence);
+  const maximumOutcomes: ReadonlyArray<CanonicalToolOutcome> = [
+    { _tag: "Succeeded", output: maximumEvidence },
+    { _tag: "ToolInputRejected", failure: maximumEvidence },
+    { _tag: "ToolOutputRejected", failure: maximumEvidence },
+    { _tag: "CanonicalOperationFailed", failure: maximumEvidence },
+  ];
+  const contents: Arr.NonEmptyReadonlyArray<TurnContinuationContent> = [
+    call,
+    ...maximumOutcomes.map((outcome, index) =>
+      toolResultContent(outcome, `maximum-result-${index}`, index + 1)
+    ),
+  ];
+  yield* continuity.withSerializedAttempt(defaultUserId, activeRequest(maximumText), (attempt) =>
+    attempt.prepare((prepared) =>
+      Effect.gen(function* () {
+        const pending = yield* prepared.begin();
+        yield* pending.append(contents);
+        yield* pending.complete(assistantContent(maximumText, 5));
+      })
+    )
+  );
+  expect((yield* continuity.observe(defaultUserId)).entries.map(withoutMetadata)).toEqual([
+    { _tag: "UserTranscriptEntry", ...activeRequest(maximumText) },
+    ...contents,
+    { _tag: "AssistantTranscriptEntry", ...assistantContent(maximumText, 5) },
+  ]);
+});
+
+const generatedContentProgram = (
+  entry: TranscriptContentEntry
+): Effect.Effect<
+  void,
+  ContinuityChanged | SqlError.SqlError,
+  ConversationContinuity | MigrationSqlClient
+> =>
+  Effect.gen(function* () {
+    const continuity = yield* ConversationContinuity;
+    yield* resetDefaultContinuity;
+    const request =
+      entry._tag === "UserTranscriptEntry"
+        ? { text: entry.text }
+        : activeRequest("generated entry round-trip");
+    yield* continuity.withSerializedAttempt(defaultUserId, request, (attempt) =>
+      attempt.prepare((prepared) =>
+        Effect.gen(function* () {
+          const pending = yield* prepared.begin();
+          switch (entry._tag) {
+            case "UserTranscriptEntry":
+              break;
+            case "AssistantTranscriptEntry":
+              yield* pending.complete({ iteration: entry.iteration, text: entry.text });
+              break;
+            case "CanonicalToolCallEntry": {
+              const { id: _id, turnId: _turnId, occurredAt: _occurredAt, ...content } = entry;
+              yield* pending.append([content]);
+              break;
+            }
+            case "CanonicalToolResultEntry": {
+              const { id: _id, turnId: _turnId, occurredAt: _occurredAt, ...content } = entry;
+              yield* pending.append([content]);
+              break;
+            }
+          }
+        })
+      )
+    );
+    const observed = yield* continuity.observe(defaultUserId);
+    expect(withoutMetadata(Option.getOrThrow(Arr.last(observed.entries)))).toEqual(
+      withoutMetadata(entry)
+    );
+  });
+
+const malformedRequestProgram = Effect.gen(function* () {
+  const continuity = yield* ConversationContinuity;
+  yield* resetDefaultContinuity;
+  const secret = "request-secret\u0000";
+  const malformed = yield* Schema.decodeUnknownEffect(ForgedActiveTurnRequest)({ text: secret });
+  const rejected = yield* continuity
+    .withSerializedAttempt(defaultUserId, malformed, () => Effect.void)
+    .pipe(Effect.exit);
+  assertContentFreeDefect(rejected, secret);
+  expect(yield* continuity.observe(defaultUserId)).toEqual({ entries: [], turns: [] });
+});
+
+const malformedContinuationProgram = Effect.gen(function* () {
+  const continuity = yield* ConversationContinuity;
+  yield* resetDefaultContinuity;
+  const secret = "continuation-secret\u0000";
+  const malformed = yield* Schema.decodeUnknownEffect(ForgedContinuationContent)({
+    ...toolCallContent("malformed"),
+    input: { secret },
+  });
+  yield* continuity.withSerializedAttempt(
+    defaultUserId,
+    activeRequest("continue safely"),
+    (attempt) =>
+      attempt.prepare((prepared) =>
+        Effect.gen(function* () {
+          const pending = yield* prepared.begin();
+          const rejected = yield* pending.append([malformed]).pipe(Effect.exit);
+          assertContentFreeDefect(rejected, secret);
+          expect((yield* continuity.observe(defaultUserId)).entries).toHaveLength(1);
+          yield* pending.append([toolCallContent("corrected")]);
+          yield* pending.complete(assistantContent("corrected"));
+        })
+      )
+  );
+});
+
+const malformedAssistantProgram = Effect.gen(function* () {
+  const continuity = yield* ConversationContinuity;
+  yield* resetDefaultContinuity;
+  const secret = "assistant-secret\u0000";
+  const malformed = yield* Schema.decodeUnknownEffect(ForgedAssistantContent)({
+    ...assistantContent(),
+    text: secret,
+  });
+  yield* continuity.withSerializedAttempt(
+    defaultUserId,
+    activeRequest("complete safely"),
+    (attempt) =>
+      attempt.prepare((prepared) =>
+        Effect.gen(function* () {
+          const pending = yield* prepared.begin();
+          const rejected = yield* pending.complete(malformed).pipe(Effect.exit);
+          assertContentFreeDefect(rejected, secret);
+          expect((yield* continuity.observe(defaultUserId)).turns[0]?._tag).toBe("Pending");
+          yield* pending.complete(assistantContent("corrected"));
+        })
+      )
+  );
+  expect((yield* continuity.observe(defaultUserId)).turns[0]?._tag).toBe("Completed");
+});
+
+const malformedFailureProgram = Effect.gen(function* () {
+  const continuity = yield* ConversationContinuity;
+  yield* resetDefaultContinuity;
+  const secret = "failure-reason-secret";
+  const malformed = yield* Schema.decodeUnknownEffect(ForgedTurnFailureReason)(secret);
+  yield* continuity.withSerializedAttempt(defaultUserId, activeRequest("fail safely"), (attempt) =>
+    attempt.prepare((prepared) =>
+      Effect.gen(function* () {
+        const pending = yield* prepared.begin();
+        const rejected = yield* pending.fail(malformed).pipe(Effect.exit);
+        assertContentFreeDefect(rejected, secret);
+        expect((yield* continuity.observe(defaultUserId)).turns[0]?._tag).toBe("Pending");
+        yield* pending.fail("DeliveryFailed");
+      })
+    )
+  );
+  expect((yield* continuity.observe(defaultUserId)).turns[0]).toMatchObject({
+    _tag: "Failed",
+    reason: "DeliveryFailed",
+  });
+});
+
+const malformedPersistedEntryProgram = Effect.gen(function* () {
+  const continuity = yield* ConversationContinuity;
+  const sql = yield* MigrationSqlClient;
+  yield* resetDefaultContinuity;
+  yield* continuity.withSerializedAttempt(
+    defaultUserId,
+    activeRequest("persisted secret"),
+    (attempt) => attempt.prepare((prepared) => prepared.begin().pipe(Effect.asVoid))
+  );
+
+  const secret = "persisted-transcript-secret";
+  const malformedEntry = yield* Schema.encodeEffect(Schema.UnknownFromJsonString)({
+    _tag: "UserTranscriptEntry",
+    text: secret,
+  });
+  yield* sql`
+    UPDATE transcript_entries SET entry = ${malformedEntry}::jsonb
+    WHERE user_id = ${defaultUserId}
+  `;
+
+  const observed = yield* continuity.observe(defaultUserId).pipe(Effect.exit);
+  assertContentFreeDefect(observed, secret);
+
+  const prepared = yield* continuity
+    .withSerializedAttempt(defaultUserId, activeRequest("must roll back recovery"), (attempt) =>
+      attempt.prepare(() => Effect.void)
+    )
+    .pipe(Effect.exit);
+  assertContentFreeDefect(prepared, secret);
+
+  expect(
+    yield* sql`
+      SELECT state, terminal_at AS "terminalAt" FROM conversation_turns
+      WHERE user_id = ${defaultUserId}
+    `
+  ).toEqual([{ state: "Pending", terminalAt: null }]);
+  expect(
+    yield* sql`
+      SELECT count(*)::int AS count FROM transcript_entries
+      WHERE user_id = ${defaultUserId}
+    `
+  ).toEqual([{ count: 1 }]);
+});
+
+const beginPending = (
+  continuity: ConversationContinuityService,
+  userId: UserId,
+  request: ActiveTurnRequest
+): Effect.Effect<void, ContinuityChanged> =>
+  continuity.withSerializedAttempt(userId, request, (attempt) =>
+    attempt.prepare((prepared) => prepared.begin().pipe(Effect.asVoid))
+  );
+
+const completeIsolatedTurn = (
+  continuity: ConversationContinuityService
+): Effect.Effect<void, ContinuityChanged> =>
+  continuity.withSerializedAttempt(isolatedUserId, activeRequest("second user"), (attempt) =>
+    attempt.prepare((prepared) =>
+      Effect.gen(function* () {
+        expect(prepared.view).toEqual({ entries: [], turns: [] });
+        const pending = yield* prepared.begin();
+        yield* pending.complete(assistantContent("second complete"));
+      })
+    )
+  );
+
+const recoverFirstUser = (continuity: ConversationContinuityService): Effect.Effect<void> =>
+  continuity.withSerializedAttempt(defaultUserId, activeRequest("recover first"), (attempt) =>
+    attempt.prepare((prepared) =>
+      Effect.sync(() => {
+        expect(prepared.view.turns[0]?._tag).toBe("Interrupted");
+      })
+    )
+  );
+
+const userIsolationProgram = Effect.gen(function* () {
+  const continuity = yield* ConversationContinuity;
+  yield* resetDefaultContinuity;
+  yield* resetIsolatedUser;
+  yield* beginPending(continuity, defaultUserId, activeRequest("first user"));
+  yield* completeIsolatedTurn(continuity);
+  const secondBeforeRecovery = yield* continuity.observe(isolatedUserId);
+  yield* recoverFirstUser(continuity);
+  const first = yield* continuity.observe(defaultUserId);
+  const second = yield* continuity.observe(isolatedUserId);
+  expect(first.entries.map(withoutMetadata)).toEqual([
+    { _tag: "UserTranscriptEntry", ...activeRequest("first user") },
+    { _tag: "InterruptedTurnTranscriptEntry" },
+  ]);
+  expect(second).toEqual(secondBeforeRecovery);
+  expect(second.entries.map(withoutMetadata)).toEqual([
+    { _tag: "UserTranscriptEntry", ...activeRequest("second user") },
+    { _tag: "AssistantTranscriptEntry", ...assistantContent("second complete") },
+  ]);
+});
+
+const capturePrepared = (
+  continuity: ConversationContinuityService,
+  setPrepared: (prepared: PreparedAttempt) => void
+): Effect.Effect<void> =>
+  continuity.withSerializedAttempt(defaultUserId, activeRequest("original"), (attempt) =>
+    attempt.prepare((prepared) => {
+      setPrepared(prepared);
+      return Effect.void;
+    })
+  );
+
+const prepareWithRebuiltModule = Effect.gen(function* () {
+  const rebuiltContext = yield* Layer.build(Layer.fresh(ConversationContinuity.layer));
+  const rebuilt = Context.get(rebuiltContext, ConversationContinuity);
+  yield* rebuilt.withSerializedAttempt(defaultUserId, activeRequest("rebuilt"), (attempt) =>
+    attempt.prepare((prepared) =>
+      Effect.sync(() => {
+        expect(prepared.view).toEqual({ entries: [], turns: [] });
+      })
+    )
+  );
+});
+
+const moduleInstanceProgram = Effect.gen(function* () {
+  const continuity = yield* ConversationContinuity;
+  yield* resetDefaultContinuity;
+  let escaped = Option.none<PreparedAttempt>();
+  yield* capturePrepared(continuity, (prepared) => {
+    escaped = Option.some(prepared);
+  });
+  yield* Effect.scoped(prepareWithRebuiltModule);
+  assertDefect(yield* Option.getOrThrow(escaped).begin().pipe(Effect.exit));
+});
+
 layer(ContinuityHarness, { excludeTestServices: true, timeout: "30 seconds" })(
   "ConversationContinuity",
   (it) => {
-    it.effect("persists exact entries and an explicit Pending to Completed Turn", () =>
-      Effect.gen(function* () {
-        const continuity = yield* ConversationContinuity;
-        yield* resetDefaultContinuity;
-        const turnId = TranscriptTurnId.make("f1d1a000-0000-4000-8000-000000000401");
-        const startedAt = DateTime.makeUnsafe("2026-08-11T12:00:00Z");
-        const userEntry = makeUserEntry({
-          id: TranscriptEntryId.make("f1d1a000-0000-4000-8000-000000000402"),
-          turnId,
-          occurredAt: startedAt,
-        });
-        const assistantEntry = makeAssistantEntry({ turnId });
-
-        const prepared = yield* continuity.prepareForTurn(defaultUserId);
-        const handle = yield* continuity.beginTurn(defaultUserId, prepared, userEntry);
-        const pending = yield* continuity.observe(defaultUserId);
-        expect(pending.turns).toEqual([{ _tag: "Pending", id: turnId, startedAt }]);
-        expect(pending.entries).toEqual([userEntry]);
-
-        yield* continuity.completeTurn(defaultUserId, handle, {
-          entry: assistantEntry,
-          terminalAt: DateTime.makeUnsafe("2026-08-11T12:00:02Z"),
-        });
-        const completed = yield* continuity.observe(defaultUserId);
-        expect(completed.turns[0]).toMatchObject({ _tag: "Completed", id: turnId });
-        expect(completed.entries).toEqual([userEntry, assistantEntry]);
-      })
-    );
-
-    it.effect("rejects foreign, forged, and stale preparation without appending", () =>
-      Effect.gen(function* () {
-        const continuity = yield* ConversationContinuity;
-        yield* resetDefaultContinuity;
-        const startedAt = DateTime.makeUnsafe("2026-08-11T13:00:00Z");
-        const prepared = yield* continuity.prepareForTurn(defaultUserId);
-        const rebuiltContext = yield* Effect.scoped(
-          Layer.build(Layer.fresh(ConversationContinuity.layer))
-        );
-        const rebuilt = Context.get(rebuiltContext, ConversationContinuity);
-        const rebuiltSnapshotFailure = yield* rebuilt
-          .beginTurn(
-            defaultUserId,
-            prepared,
-            makeUserEntry({
-              id: TranscriptEntryId.make("f1d1a000-0000-4000-8000-000000000410"),
-              turnId: TranscriptTurnId.make("f1d1a000-0000-4000-8000-000000000409"),
-              text: TranscriptText.make("rebuilt"),
-              occurredAt: startedAt,
-            })
-          )
-          .pipe(Effect.exit);
-        assertFailure(
-          rebuiltSnapshotFailure,
-          new ContinuityAuthorityRejected({ reason: "Forged" })
-        );
-        const winningPrepared = yield* continuity.prepareForTurn(defaultUserId);
-        const winningEntry = makeUserEntry({
-          id: TranscriptEntryId.make("f1d1a000-0000-4000-8000-000000000412"),
-          turnId: TranscriptTurnId.make("f1d1a000-0000-4000-8000-000000000411"),
-          text: TranscriptText.make("winner"),
-          occurredAt: startedAt,
-        });
-        yield* continuity.beginTurn(defaultUserId, winningPrepared, winningEntry);
-        const preparationReuse = yield* continuity
-          .beginTurn(defaultUserId, winningPrepared, winningEntry)
-          .pipe(Effect.exit);
-        assertFailure(preparationReuse, new ContinuityAuthorityRejected({ reason: "Consumed" }));
-        const losingEntry = makeUserEntry({
-          id: TranscriptEntryId.make("f1d1a000-0000-4000-8000-000000000414"),
-          turnId: TranscriptTurnId.make("f1d1a000-0000-4000-8000-000000000413"),
-          text: TranscriptText.make("loser"),
-          occurredAt: startedAt,
-        });
-
-        const foreign = yield* continuity
-          .beginTurn(UserId.make("f1d1a000-0000-4000-8000-000000000499"), prepared, losingEntry)
-          .pipe(Effect.exit);
-        assertFailure(foreign, new ContinuityAuthorityRejected({ reason: "Foreign" }));
-        const forgedPrepared = yield* Schema.decodeUnknownEffect(ForgedPreparedContinuity)({
-          entries: [],
-          turns: [],
-        });
-        const forged = yield* continuity
-          .beginTurn(defaultUserId, forgedPrepared, losingEntry)
-          .pipe(Effect.exit);
-        assertFailure(forged, new ContinuityAuthorityRejected({ reason: "Forged" }));
-        const stale = yield* continuity
-          .beginTurn(defaultUserId, prepared, losingEntry)
-          .pipe(Effect.exit);
-        assertFailure(stale, new ContinuityChanged());
-        const reusedStale = yield* continuity
-          .beginTurn(defaultUserId, prepared, losingEntry)
-          .pipe(Effect.exit);
-        assertFailure(reusedStale, new ContinuityAuthorityRejected({ reason: "Consumed" }));
-
-        const observed = yield* continuity.observe(defaultUserId);
-        expect(observed.entries).toEqual([winningEntry]);
-      })
-    );
-
     it.effect(
-      "persists fixed failure evidence outside model input, validates time, and consumes handles",
-      () =>
-        Effect.gen(function* () {
-          const continuity = yield* ConversationContinuity;
-          yield* resetDefaultContinuity;
-          const turnId = TranscriptTurnId.make("f1d1a000-0000-4000-8000-000000000421");
-          const startedAt = DateTime.makeUnsafe("2026-08-11T14:00:00Z");
-          const userEntry = makeUserEntry({
-            id: TranscriptEntryId.make("f1d1a000-0000-4000-8000-000000000422"),
-            turnId,
-            text: TranscriptText.make("fail safely"),
-            occurredAt: startedAt,
-          });
-          const prepared = yield* continuity.prepareForTurn(defaultUserId);
-          const invalidUserEntry = yield* Schema.decodeUnknownEffect(ForgedUserTranscriptEntry)({
-            ...userEntry,
-            text: "invalid\u0000text",
-          });
-          const invalidUserFailure = yield* continuity
-            .beginTurn(defaultUserId, prepared, invalidUserEntry)
-            .pipe(Effect.exit);
-          assertFailure(invalidUserFailure, new InvalidTranscriptEntry());
-          const handle = yield* continuity.beginTurn(defaultUserId, prepared, userEntry);
-
-          const invalidTime = yield* continuity
-            .failTurn(defaultUserId, handle, {
-              reason: "HostedInferenceTimedOut",
-              terminalAt: DateTime.makeUnsafe("2026-08-11T13:59:59Z"),
-            })
-            .pipe(Effect.exit);
-          assertFailure(invalidTime, new InvalidTerminalTimestamp());
-
-          const invalidEvidence = yield* Schema.decodeUnknownEffect(ForgedTurnContinuationEntry)({
-            ...CanonicalToolCallEntry.make({
-              id: TranscriptEntryId.make("f1d1a000-0000-4000-8000-000000000423"),
-              turnId,
-              iteration: AgentIteration.make(1),
-              toolCallId: ToolCallId.make("invalid-evidence"),
-              operation: CanonicalOperationId.make("categories.listCategories"),
-              input: {},
-              occurredAt: startedAt,
-            }),
-            input: { invalid: "\u0000" },
-          });
-          const invalidEvidenceFailure = yield* continuity
-            .appendTurn(defaultUserId, handle, [invalidEvidence])
-            .pipe(Effect.exit);
-          assertFailure(invalidEvidenceFailure, new InvalidTranscriptEntry());
-
-          const validAssistant = makeAssistantEntry({
-            id: TranscriptEntryId.make("f1d1a000-0000-4000-8000-000000000424"),
-            turnId,
-            text: TranscriptText.make("not persisted"),
-            occurredAt: startedAt,
-          });
-          const invalidAssistant = yield* Schema.decodeUnknownEffect(
-            ForgedAssistantTranscriptEntry
-          )({ ...validAssistant, text: "invalid\u0000text" });
-          const invalidAssistantFailure = yield* continuity
-            .completeTurn(defaultUserId, handle, {
-              entry: invalidAssistant,
-              terminalAt: DateTime.makeUnsafe("2026-08-11T14:00:01Z"),
-            })
-            .pipe(Effect.exit);
-          assertFailure(invalidAssistantFailure, new InvalidTranscriptEntry());
-
-          const invalidTimestampFailure = yield* continuity
-            .completeTurn(defaultUserId, handle, {
-              entry: validAssistant,
-              terminalAt: DateTime.makeUnsafe("+010000-01-01T00:00:00Z"),
-            })
-            .pipe(Effect.exit);
-          assertFailure(invalidTimestampFailure, new InvalidTerminalTimestamp());
-          const invalidFailureTimestamp = yield* continuity
-            .failTurn(defaultUserId, handle, {
-              reason: "HostedInferenceFailed",
-              terminalAt: DateTime.makeUnsafe("+010000-01-01T00:00:00Z"),
-            })
-            .pipe(Effect.exit);
-          assertFailure(invalidFailureTimestamp, new InvalidTerminalTimestamp());
-          const invalidReason =
-            yield* Schema.decodeUnknownEffect(ForgedTurnFailureReason)("CallerProse");
-          const invalidReasonFailure = yield* continuity
-            .failTurn(defaultUserId, handle, {
-              reason: invalidReason,
-              terminalAt: DateTime.makeUnsafe("2026-08-11T14:00:01Z"),
-            })
-            .pipe(Effect.exit);
-          assertFailure(invalidReasonFailure, new InvalidTurnFailureReason());
-
-          const rebuiltContext = yield* Effect.scoped(
-            Layer.build(Layer.fresh(ConversationContinuity.layer))
-          );
-          const rebuilt = Context.get(rebuiltContext, ConversationContinuity);
-          const rebuiltHandleFailure = yield* rebuilt
-            .appendTurn(defaultUserId, handle, [])
-            .pipe(Effect.exit);
-          assertFailure(rebuiltHandleFailure, new TurnAuthorityRejected({ reason: "Forged" }));
-
-          yield* continuity.failTurn(defaultUserId, handle, {
-            reason: "HostedInferenceTimedOut",
-            terminalAt: DateTime.makeUnsafe("2026-08-11T14:00:01Z"),
-          });
-          const failed = yield* continuity.observe(defaultUserId);
-          expect(failed.turns[0]).toMatchObject({
-            _tag: "Failed",
-            id: turnId,
-            reason: "HostedInferenceTimedOut",
-          });
-          expect(failed.entries[0]).toEqual(userEntry);
-          expect(failed.entries[1]).toMatchObject({
-            _tag: "FailedTurnTranscriptEntry",
-            turnId,
-            reason: "HostedInferenceTimedOut",
-          });
-          expect(Object.keys(failed.entries[1] ?? {}).toSorted()).toEqual([
-            "_tag",
-            "id",
-            "occurredAt",
-            "reason",
-            "turnId",
-          ]);
-          expect(projectTranscriptForModel(failed.entries, 1_000)).toEqual([userEntry]);
-
-          const assistantEntry = makeAssistantEntry({
-            id: TranscriptEntryId.make("f1d1a000-0000-4000-8000-000000000423"),
-            turnId,
-            text: TranscriptText.make("too late"),
-            occurredAt: DateTime.makeUnsafe("2026-08-11T14:00:02Z"),
-          });
-          const reused = yield* continuity
-            .completeTurn(defaultUserId, handle, {
-              entry: assistantEntry,
-              terminalAt: DateTime.makeUnsafe("2026-08-11T14:00:03Z"),
-            })
-            .pipe(Effect.exit);
-          assertFailure(reused, new TurnAuthorityRejected({ reason: "Consumed" }));
-        })
+      "generates persistence metadata for a Pending to Completed Turn",
+      () => generatedMetadataProgram
     );
-
-    it.effect("rejects mismatched entries and permits completion after a corrected retry", () =>
-      Effect.gen(function* () {
-        const continuity = yield* ConversationContinuity;
-        yield* resetDefaultContinuity;
-        const turnId = TranscriptTurnId.make("f1d1a000-0000-4000-8000-000000000425");
-        const startedAt = DateTime.makeUnsafe("2026-08-11T14:30:00Z");
-        const prepared = yield* continuity.prepareForTurn(defaultUserId);
-        const handle = yield* continuity.beginTurn(
-          defaultUserId,
-          prepared,
-          makeUserEntry({
-            id: TranscriptEntryId.make("f1d1a000-0000-4000-8000-000000000426"),
-            turnId,
-            text: TranscriptText.make("correct me"),
-            occurredAt: startedAt,
-          })
-        );
-        const otherTurnId = TranscriptTurnId.make("f1d1a000-0000-4000-8000-000000000427");
-        const mismatchedCall = CanonicalToolCallEntry.make({
-          id: TranscriptEntryId.make("f1d1a000-0000-4000-8000-000000000428"),
-          turnId: otherTurnId,
-          iteration: AgentIteration.make(1),
-          toolCallId: ToolCallId.make("mismatched"),
-          operation: CanonicalOperationId.make("categories.listCategories"),
-          input: {},
-          occurredAt: startedAt,
-        });
-        const appendMismatch = yield* continuity
-          .appendTurn(defaultUserId, handle, [mismatchedCall])
-          .pipe(Effect.exit);
-        assertFailure(appendMismatch, new TurnAuthorityRejected({ reason: "EntryTurnMismatch" }));
-
-        const assistant = (entryTurnId: TranscriptTurnId): AssistantTranscriptEntry =>
-          makeAssistantEntry({
-            id: TranscriptEntryId.make("f1d1a000-0000-4000-8000-000000000429"),
-            turnId: entryTurnId,
-            text: TranscriptText.make("corrected"),
-            occurredAt: DateTime.makeUnsafe("2026-08-11T14:30:01Z"),
-          });
-        const completionMismatch = yield* continuity
-          .completeTurn(defaultUserId, handle, {
-            entry: assistant(otherTurnId),
-            terminalAt: DateTime.makeUnsafe("2026-08-11T14:30:02Z"),
-          })
-          .pipe(Effect.exit);
-        assertFailure(
-          completionMismatch,
-          new TurnAuthorityRejected({ reason: "EntryTurnMismatch" })
-        );
-        const invalidTime = yield* continuity
-          .completeTurn(defaultUserId, handle, {
-            entry: assistant(turnId),
-            terminalAt: DateTime.makeUnsafe("2026-08-11T14:29:59Z"),
-          })
-          .pipe(Effect.exit);
-        assertFailure(invalidTime, new InvalidTerminalTimestamp());
-
-        yield* continuity.completeTurn(defaultUserId, handle, {
-          entry: assistant(turnId),
-          terminalAt: DateTime.makeUnsafe("2026-08-11T14:30:02Z"),
-        });
-        const completed = yield* continuity.observe(defaultUserId);
-        expect(completed.turns[0]).toMatchObject({ _tag: "Completed" });
-        expect(completed.entries).toHaveLength(2);
-      })
+    it.effect(
+      "returns ContinuityChanged without appending a stale active request",
+      () => stalePreparedProgram
     );
-
-    it.effect("recovers an abandoned Pending Turn exactly once as Interrupted", () =>
-      Effect.gen(function* () {
-        const continuity = yield* ConversationContinuity;
-        yield* resetDefaultContinuity;
-        const turnId = TranscriptTurnId.make("f1d1a000-0000-4000-8000-000000000431");
-        const startedAt = DateTime.makeUnsafe("2026-08-11T15:00:00Z");
-        const userEntry = makeUserEntry({
-          id: TranscriptEntryId.make("f1d1a000-0000-4000-8000-000000000432"),
-          turnId,
-          text: TranscriptText.make("recover me"),
-          occurredAt: startedAt,
-        });
-        const prepared = yield* continuity.prepareForTurn(defaultUserId);
-        const handle = yield* continuity.beginTurn(defaultUserId, prepared, userEntry);
-        const operation = CanonicalOperationId.make("categories.listCategories");
-        const call = CanonicalToolCallEntry.make({
-          id: TranscriptEntryId.make("f1d1a000-0000-4000-8000-000000000433"),
-          turnId,
-          iteration: AgentIteration.make(1),
-          toolCallId: ToolCallId.make("recovery-call"),
-          operation,
-          input: { query: "exact" },
-          occurredAt: DateTime.makeUnsafe("2026-08-11T15:00:01Z"),
-        });
-        const result = CanonicalToolResultEntry.make({
-          id: TranscriptEntryId.make("f1d1a000-0000-4000-8000-000000000434"),
-          turnId,
-          iteration: AgentIteration.make(1),
-          toolCallId: ToolCallId.make("recovery-call"),
-          operation,
-          outcome: { _tag: "Succeeded", output: { retained: ["sí", 1, true] } },
-          occurredAt: DateTime.makeUnsafe("2026-08-11T15:00:02Z"),
-        });
-        yield* continuity.appendTurn(defaultUserId, handle, [call, result]);
-
-        const restartedContext = yield* Effect.scoped(
-          Layer.build(Layer.fresh(ConversationContinuity.layer))
-        );
-        const restarted = Context.get(restartedContext, ConversationContinuity);
-        const recovered = yield* restarted.prepareForTurn(defaultUserId);
-        expect(recovered.turns[0]).toMatchObject({ _tag: "Interrupted", id: turnId });
-        expect(recovered.entries.slice(0, 3)).toEqual([userEntry, call, result]);
-        expect(recovered.entries[3]).toMatchObject({
-          _tag: "InterruptedTurnTranscriptEntry",
-          turnId,
-        });
-        expect(Object.keys(recovered.entries[3] ?? {}).toSorted()).toEqual([
-          "_tag",
-          "id",
-          "occurredAt",
-          "turnId",
-        ]);
-
-        const recoveredAgain = yield* restarted.prepareForTurn(defaultUserId);
-        expect(recoveredAgain.entries).toEqual(recovered.entries);
-        const abandonedHandle = yield* continuity
-          .appendTurn(defaultUserId, handle, [])
-          .pipe(Effect.exit);
-        assertFailure(abandonedHandle, new TurnAlreadyTerminal());
-      })
+    it.effect(
+      "recovers an abandoned Pending Turn exactly once as Interrupted",
+      () => recoveryProgram
     );
-
-    it.effect("round-trips every canonical outcome variant exactly", () =>
-      Effect.gen(function* () {
-        const continuity = yield* ConversationContinuity;
-        yield* resetDefaultContinuity;
-        const turnId = TranscriptTurnId.make("f1d1a000-0000-4000-8000-000000000471");
-        const prepared = yield* continuity.prepareForTurn(defaultUserId);
-        const handle = yield* continuity.beginTurn(
-          defaultUserId,
-          prepared,
-          makeUserEntry({
-            id: TranscriptEntryId.make("f1d1a000-0000-4000-8000-000000000472"),
-            turnId,
-            text: TranscriptText.make("all outcomes"),
-            occurredAt: DateTime.makeUnsafe("2026-08-11T16:40:00Z"),
-          })
-        );
-        const outcomes: ReadonlyArray<CanonicalToolOutcome> = [
-          { _tag: "Succeeded", output: { exact: "é" } },
-          { _tag: "ToolInputRejected", failure: { code: "bad_input" } },
-          { _tag: "ToolOutputRejected", failure: { code: "bad_output" } },
-          { _tag: "CanonicalOperationFailed", failure: { code: "failed" } },
-        ];
-        const entries = outcomes.map((outcome, index) =>
-          CanonicalToolResultEntry.make({
-            id: TranscriptEntryId.make(
-              `f1d1a000-0000-4000-8000-${String(473 + index).padStart(12, "0")}`
-            ),
-            turnId,
-            iteration: AgentIteration.make(index + 1),
-            toolCallId: ToolCallId.make(`outcome-${index}`),
-            operation: CanonicalOperationId.make("categories.listCategories"),
-            outcome,
-            occurredAt: DateTime.makeUnsafe(`2026-08-11T16:40:0${index + 1}Z`),
-          })
-        );
-        yield* continuity.appendTurn(defaultUserId, handle, entries);
-
-        const observed = yield* continuity.observe(defaultUserId);
-        expect(observed.entries.slice(1)).toEqual(entries);
-      })
+    it.effect(
+      "recovers after clock rollback without preceding persisted Turn evidence",
+      () => recoveryTimestampProgram
     );
-
-    it.effect("round-trips maximum multibyte text and tool evidence exactly", () =>
-      Effect.gen(function* () {
-        const continuity = yield* ConversationContinuity;
-        yield* resetDefaultContinuity;
-        const turnId = TranscriptTurnId.make("f1d1a000-0000-4000-8000-000000000471");
-        const userEntry = makeUserEntry({
-          id: TranscriptEntryId.make("f1d1a000-0000-4000-8000-000000000472"),
-          turnId,
-          text: TranscriptText.make("é".repeat(16_000)),
-          occurredAt: DateTime.makeUnsafe("2026-08-11T16:45:00Z"),
-        });
-        const prepared = yield* continuity.prepareForTurn(defaultUserId);
-        const handle = yield* continuity.beginTurn(defaultUserId, prepared, userEntry);
-        const maximumEvidence = "é".repeat(499_999);
-        const operation = CanonicalOperationId.make("categories.listCategories");
-        const call = CanonicalToolCallEntry.make({
-          id: TranscriptEntryId.make("f1d1a000-0000-4000-8000-000000000473"),
-          turnId,
-          iteration: AgentIteration.make(1),
-          toolCallId: ToolCallId.make("maximum-evidence-call"),
-          operation,
-          input: maximumEvidence,
-          occurredAt: DateTime.makeUnsafe("2026-08-11T16:45:01Z"),
-        });
-        const maximumOutcomes: ReadonlyArray<CanonicalToolOutcome> = [
-          { _tag: "Succeeded", output: maximumEvidence },
-          { _tag: "ToolInputRejected", failure: maximumEvidence },
-          { _tag: "ToolOutputRejected", failure: maximumEvidence },
-          { _tag: "CanonicalOperationFailed", failure: maximumEvidence },
-        ];
-        const results = maximumOutcomes.map((outcome, index) =>
-          CanonicalToolResultEntry.make({
-            id: TranscriptEntryId.make(
-              `f1d1a000-0000-4000-8000-${String(474 + index).padStart(12, "0")}`
-            ),
-            turnId,
-            iteration: AgentIteration.make(index + 1),
-            toolCallId: ToolCallId.make(`maximum-evidence-result-${index}`),
-            operation,
-            outcome,
-            occurredAt: DateTime.makeUnsafe(`2026-08-11T16:45:0${index + 2}Z`),
-          })
-        );
-        yield* continuity.appendTurn(defaultUserId, handle, [call, ...results]);
-        const assistantEntry = makeAssistantEntry({
-          id: TranscriptEntryId.make("f1d1a000-0000-4000-8000-000000000478"),
-          turnId,
-          text: TranscriptText.make("é".repeat(16_000)),
-          iteration: AgentIteration.make(5),
-          occurredAt: DateTime.makeUnsafe("2026-08-11T16:45:06Z"),
-        });
-        yield* continuity.completeTurn(defaultUserId, handle, {
-          entry: assistantEntry,
-          terminalAt: DateTime.makeUnsafe("2026-08-11T16:45:07Z"),
-        });
-
-        expect((yield* continuity.observe(defaultUserId)).entries).toEqual([
-          userEntry,
-          call,
-          ...results,
-          assistantEntry,
-        ]);
-      })
+    it.effect(
+      "rejects escaped superseded and terminal capabilities as defects",
+      () => capabilityDefectsProgram
     );
-
+    it.effect(
+      "prevents a superseded attempt from admitting after asynchronous preparation",
+      () => supersedeDuringBeginProgram
+    );
+    for (const operation of ["append", "complete", "fail"] as const) {
+      it.effect(
+        `prevents a superseded attempt from committing ${operation} after asynchronous preparation`,
+        () => supersedeDuringPendingMutationProgram(operation)
+      );
+    }
+    it.effect("persists fixed failure evidence outside model input", () => fixedFailureProgram);
+    it.effect("round-trips every canonical outcome variant exactly", () => outcomeRoundTripProgram);
+    it.effect(
+      "round-trips maximum multibyte text and every maximum tool outcome exactly",
+      () => maximumPayloadProgram
+    );
     it.effect.prop(
-      "round-trips schema-generated caller-admitted entries through PostgreSQL exactly",
+      "round-trips schema-generated semantic content through PostgreSQL exactly",
       [TranscriptContentEntry],
-      ([entry]) =>
-        Effect.gen(function* () {
-          const continuity = yield* ConversationContinuity;
-          yield* resetDefaultContinuity;
-          const prepared = yield* continuity.prepareForTurn(defaultUserId);
-          const syntheticId = TranscriptEntryId.make(
-            entry.id === "f1d1a000-0000-4000-8000-0000000004a1"
-              ? "f1d1a000-0000-4000-8000-0000000004a2"
-              : "f1d1a000-0000-4000-8000-0000000004a1"
-          );
-          const userEntry =
-            entry._tag === "UserTranscriptEntry"
-              ? entry
-              : makeUserEntry({
-                  id: syntheticId,
-                  turnId: entry.turnId,
-                  text: TranscriptText.make("generated entry round-trip"),
-                  occurredAt: entry.occurredAt,
-                });
-          const handle = yield* continuity.beginTurn(defaultUserId, prepared, userEntry);
-
-          if (
-            entry._tag === "CanonicalToolCallEntry" ||
-            entry._tag === "CanonicalToolResultEntry"
-          ) {
-            yield* continuity.appendTurn(defaultUserId, handle, [entry]);
-          } else if (entry._tag === "AssistantTranscriptEntry") {
-            yield* continuity.completeTurn(defaultUserId, handle, {
-              entry,
-              terminalAt: entry.occurredAt,
-            });
-          }
-
-          const observed = yield* continuity.observe(defaultUserId);
-          expect(observed.entries.find((candidate) => candidate.id === entry.id)).toEqual(entry);
-        }),
+      ([entry]) => generatedContentProgram(entry),
       { timeout: 30_000, fastCheck: { numRuns: 40 } }
     );
-
-    it.effect("isolates preparation, recovery, observation, and terminal authority by User", () =>
-      Effect.gen(function* () {
-        const continuity = yield* ConversationContinuity;
-        yield* resetDefaultContinuity;
-        yield* resetIsolatedUser;
-        const firstTurnId = TranscriptTurnId.make("f1d1a000-0000-4000-8000-000000000441");
-        const firstEntry = makeUserEntry({
-          id: TranscriptEntryId.make("f1d1a000-0000-4000-8000-000000000442"),
-          turnId: firstTurnId,
-          text: TranscriptText.make("first user"),
-          occurredAt: DateTime.makeUnsafe("2026-08-11T16:00:00Z"),
-        });
-        const firstPrepared = yield* continuity.prepareForTurn(defaultUserId);
-        const foreignPreparation = yield* continuity
-          .beginTurn(isolatedUserId, firstPrepared, firstEntry)
-          .pipe(Effect.exit);
-        assertFailure(foreignPreparation, new ContinuityAuthorityRejected({ reason: "Foreign" }));
-        const firstHandle = yield* continuity.beginTurn(defaultUserId, firstPrepared, firstEntry);
-        const secondBefore = yield* continuity.prepareForTurn(isolatedUserId);
-        expect(secondBefore.entries).toEqual([]);
-        expect(secondBefore.turns).toEqual([]);
-        const foreignHandle = yield* continuity
-          .failTurn(isolatedUserId, firstHandle, {
-            reason: "DeliveryFailed",
-            terminalAt: DateTime.makeUnsafe("2026-08-11T16:00:01Z"),
-          })
-          .pipe(Effect.exit);
-        assertFailure(foreignHandle, new TurnAuthorityRejected({ reason: "Foreign" }));
-
-        const secondTurnId = TranscriptTurnId.make("f1d1a000-0000-4000-8000-000000000451");
-        const secondEntry = makeUserEntry({
-          id: TranscriptEntryId.make("f1d1a000-0000-4000-8000-000000000452"),
-          turnId: secondTurnId,
-          text: TranscriptText.make("second user"),
-          occurredAt: DateTime.makeUnsafe("2026-08-11T16:00:00Z"),
-        });
-        const secondHandle = yield* continuity.beginTurn(isolatedUserId, secondBefore, secondEntry);
-        const secondAssistant = makeAssistantEntry({
-          id: TranscriptEntryId.make("f1d1a000-0000-4000-8000-000000000453"),
-          turnId: secondTurnId,
-          text: TranscriptText.make("second complete"),
-          occurredAt: DateTime.makeUnsafe("2026-08-11T16:00:01Z"),
-        });
-        const recoveredFirst = yield* continuity.prepareForTurn(defaultUserId);
-        const recoveredHandle = yield* continuity
-          .failTurn(defaultUserId, firstHandle, {
-            reason: "DeliveryFailed",
-            terminalAt: DateTime.makeUnsafe("2026-08-11T16:00:02Z"),
-          })
-          .pipe(Effect.exit);
-        assertFailure(recoveredHandle, new TurnAuthorityRejected({ reason: "Consumed" }));
-        const pendingSecond = yield* continuity.observe(isolatedUserId);
-        expect(recoveredFirst.turns[0]).toMatchObject({ _tag: "Interrupted" });
-        expect(pendingSecond.turns).toEqual([
-          {
-            _tag: "Pending",
-            id: secondTurnId,
-            startedAt: DateTime.makeUnsafe("2026-08-11T16:00:00Z"),
-          },
-        ]);
-        expect(pendingSecond.entries).toEqual([secondEntry]);
-
-        yield* continuity.completeTurn(isolatedUserId, secondHandle, {
-          entry: secondAssistant,
-          terminalAt: DateTime.makeUnsafe("2026-08-11T16:00:02Z"),
-        });
-        const completedSecond = yield* continuity.observe(isolatedUserId);
-        expect(completedSecond.turns[0]).toMatchObject({ _tag: "Completed" });
-        expect(completedSecond.entries).toEqual([secondEntry, secondAssistant]);
-      })
+    it.effect(
+      "rejects malformed request content with a content-free defect",
+      () => malformedRequestProgram
+    );
+    it.effect(
+      "allows corrected continuation content after safe rejection",
+      () => malformedContinuationProgram
+    );
+    it.effect(
+      "allows corrected assistant content after safe rejection",
+      () => malformedAssistantProgram
+    );
+    it.effect(
+      "allows a corrected failure reason after safe rejection",
+      () => malformedFailureProgram
+    );
+    it.effect(
+      "hides malformed persisted content and rolls back failed recovery",
+      () => malformedPersistedEntryProgram
+    );
+    it.effect(
+      "isolates preparation recovery observation and terminalization by User",
+      () => userIsolationProgram
+    );
+    it.effect(
+      "keeps capabilities bound to their creating module instance",
+      () => moduleInstanceProgram
     );
   }
 );

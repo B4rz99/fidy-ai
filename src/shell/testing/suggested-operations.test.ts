@@ -3,6 +3,7 @@ import { Context, DateTime, Effect, Layer, Option, Result, Schema } from "effect
 import { type SqlClient } from "effect/unstable/sql";
 import { AgentTokenId } from "~/core/tokens/reference";
 import { IanaTimeZone } from "~/core/_shared/context";
+import { MemoryText } from "~/core/memory/model";
 import { UserId } from "~/core/identity/reference";
 import { CategoryKeyword } from "~/core/categories/model";
 import { categoryIds } from "~/core/categories/taxonomy";
@@ -57,6 +58,14 @@ const probes: Record<OperationId, SuggestedOperationProbe> = {
 
   "subscription.getUpgradeUrl": (client) =>
     Effect.map(client.subscription.getUpgradeUrl(), (response) => [response]),
+
+  "memory.remember": (client) =>
+    Effect.map(
+      client.memory.remember({ payload: { text: MemoryText.make("Contexto explícito") } }),
+      (response) => [response]
+    ),
+
+  "memory.recall": (client) => Effect.map(client.memory.recall(), (response) => [response]),
 
   "categories.listCategories": (client) =>
     Effect.map(client.categories.listCategories(), (response) => [response]),

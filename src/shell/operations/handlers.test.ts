@@ -3,10 +3,12 @@ import { Effect, Option } from "effect";
 import { HttpBody, HttpClient } from "effect/unstable/http";
 import { CategoryKeyword } from "~/core/categories/model";
 import { categoryIds } from "~/core/categories/taxonomy";
+import { MemoryText } from "~/core/memory/model";
 import { TransactionId } from "~/core/transactions/model";
 import { truncateAuditLogEntries } from "~/shell/audit/fixtures";
 import { observeAuditLogEntries } from "~/shell/audit/repo";
 import { defaultUserId } from "~/shell/db/development-seed";
+import { truncateMemories } from "~/shell/memory/fixtures";
 import { ApiHarness, ApiHarnessClient, headersFor } from "~/shell/testing/api-harness";
 import { defaultAgentBearer } from "~/shell/testing/identity-fixtures";
 import { AtomicBatchCallId, maximumAtomicBatchCalls } from "./operations";
@@ -58,6 +60,28 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         expect(rules.data).toHaveLength(1);
         expect(transactions.data).toHaveLength(1);
         expect(transactions.data[0]?.categoryId).toBe(categoryIds.domicilios);
+      })
+    );
+
+    it.effect("executes remember through the canonical mutation implementation", () =>
+      Effect.gen(function* () {
+        yield* truncateMemories;
+        const client = yield* ApiHarnessClient;
+        const batch = yield* client.operations.executeAtomicBatch({
+          payload: {
+            calls: [
+              {
+                callId: AtomicBatchCallId.make("f1d1a000-0000-4000-8000-000000000103"),
+                operation: "memory.remember",
+                input: { payload: { text: MemoryText.make("memoria atómica") } },
+              },
+            ],
+          },
+        });
+        const recalled = yield* client.memory.recall();
+
+        expect(batch.data.results).toMatchObject([{ operation: "memory.remember" }]);
+        expect(recalled.data.map(({ text }) => text)).toEqual(["memoria atómica"]);
       })
     );
 

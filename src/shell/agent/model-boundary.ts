@@ -146,6 +146,8 @@ export const systemPrompt = ({
     .map(({ id, label }) => `${label}: ${id}`)
     .join(", ")}. ` +
   `Usa operaciones canónicas para consultar hechos financieros del Usuario; no los inventes. ` +
+  `No solicites credenciales, tokens, contraseñas, números de tarjeta ni números de cuenta, y ` +
+  `advierte al Usuario que no envíe información sensible innecesaria. ` +
   `No pidas confirmación conversacional por tu cuenta: sigue la política indicada en cada ` +
   `herramienta y deja que el host gestione las operaciones que requieren confirmación. ` +
   `Interpreta registros compactos de importe, propósito o contraparte, incluidas las expresiones ` +

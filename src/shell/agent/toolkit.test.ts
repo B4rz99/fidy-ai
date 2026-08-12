@@ -1,6 +1,6 @@
 import { expect, it } from "@effect/vitest";
 import { Effect, Schema } from "effect";
-import { Tool } from "effect/unstable/ai";
+import { McpServer, Tool } from "effect/unstable/ai";
 import { toCodecOpenAI } from "effect/unstable/ai/OpenAiStructuredOutput";
 import { HttpApi } from "effect/unstable/httpapi";
 import { categoryIds } from "~/core/categories/taxonomy";
@@ -32,6 +32,13 @@ it("derives exactly one hosted tool for every FidyApi canonical operation", () =
     reflected.map((operation) => operation.replaceAll(".", "__"))
   );
   expect(agentOperationBindings.every(({ description }) => description.length > 0)).toBe(true);
+});
+
+it("makes canonical Memory tools available to hosted inference and MCP registration", () => {
+  expect(Object.keys(AgentToolkit.tools)).toEqual(
+    expect.arrayContaining(["memory__remember", "memory__recall"])
+  );
+  expect(() => McpServer.toolkit(AgentToolkit)).not.toThrow();
 });
 
 it("encodes every hosted operation with its derived OpenAI wire schema", () => {

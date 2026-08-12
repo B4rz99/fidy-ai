@@ -3,6 +3,7 @@ import { Context, DateTime, Effect, Layer, Option, Ref, type Schema } from "effe
 import { type HttpClient, type HttpClientError } from "effect/unstable/http";
 import { HttpApiClient } from "effect/unstable/httpapi";
 import { type AgentBearerToken } from "~/core/tokens/model";
+import { HostedInference } from "~/shell/agent/hosted-inference";
 import { makeAgentAuthorizationClientLive } from "~/shell/_shared/authz";
 import { okStatus } from "~/shell/_shared/http-status";
 import type {
@@ -13,6 +14,7 @@ import type {
   ValidationFailed,
 } from "~/shell/_shared/errors";
 import { FidyApi } from "~/shell/api";
+import type { MemoryCapacityExceededApi } from "~/shell/memory/errors";
 import type { AtomicBatchRejected } from "~/shell/operations/operations";
 import {
   KapsoClient,
@@ -48,6 +50,7 @@ export type ApiCallFailure =
   | ScopeMissing
   | Unauthenticated
   | ValidationFailed
+  | MemoryCapacityExceededApi
   | AtomicBatchRejected;
 
 /** Builds a client service whose bearer is supplied through the declared middleware. */
@@ -129,12 +132,24 @@ const TestKapsoClient = Layer.effectContext(
  * test HttpClient, already pointed at the server, for raw HTTP checks. Runtime
  * retention workers are excluded; their deterministic seams have dedicated tests.
  */
+const MemoryInferenceTest = Layer.succeed(
+  HostedInference,
+  HostedInference.of({
+    countMemoryText: (text) => Effect.succeed(new TextEncoder().encode(text).length),
+    prepareText: () => Effect.die("Hosted text inference is outside the API harness"),
+    validateText: () => Effect.die("Hosted text inference is outside the API harness"),
+    executeText: () => Effect.die("Hosted text inference is outside the API harness"),
+    discardText: () => Effect.die("Hosted text inference is outside the API harness"),
+  })
+);
+
 const ApiHarnessBase = makeApiClientLive({
   tag: ApiHarnessClient,
   bearer: defaultAgentBearer,
 }).pipe(
   Layer.provideMerge(HttpLive.pipe(Layer.provide(MigratorLive))),
   Layer.provideMerge(TestKapsoClient),
+  Layer.provideMerge(MemoryInferenceTest),
   Layer.provideMerge(makeDevelopmentSeedLive(defaultAgentBearer)),
   Layer.provideMerge(BunHttpServer.layerTest),
   Layer.provideMerge(BunServices.layer),

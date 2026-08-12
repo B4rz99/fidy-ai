@@ -16,11 +16,19 @@ import { DashboardLive } from "~/shell/dashboard/handlers";
 import { MigratorLive, RuntimeAuthorityLive } from "~/shell/db/client";
 import { IdentityLive } from "~/shell/identity/handlers";
 import { InsightsLive } from "~/shell/insights/handlers";
+import { MemoryLive } from "~/shell/memory/handlers";
 import { OperationsLive } from "~/shell/operations/handlers";
 import { CanonicalTelemetryLive } from "~/shell/observability/canonical-api";
 import { SubscriptionLive } from "~/shell/subscription/handlers";
 import { TransactionsLive } from "~/shell/transactions/handlers";
 import { FidyApi } from "./api";
+
+/** Prevents authenticated canonical responses from remaining in caller caches. */
+const CanonicalApiNoStoreLive = HttpRouter.middleware((httpEffect) =>
+  Effect.map(httpEffect, (response) =>
+    HttpServerResponse.setHeader(response, "cache-control", "no-store")
+  )
+).layer;
 
 /**
  * The canonical API as live routes: every operation `FidyApi` declares, mounted
@@ -35,6 +43,7 @@ import { FidyApi } from "./api";
  * and the platform services the router is built on.
  */
 export const ApiLive = HttpApiBuilder.layer(FidyApi, { openapiPath: "/openapi.json" }).pipe(
+  Layer.provide(CanonicalApiNoStoreLive),
   // The validation gate is provided *to* the slice layers rather than beside
   // them: a group captures its middleware from its own context when it builds
   // its routes, so a sibling layer would not be found.
@@ -45,6 +54,7 @@ export const ApiLive = HttpApiBuilder.layer(FidyApi, { openapiPath: "/openapi.js
       DashboardLive,
       TransactionsLive,
       InsightsLive,
+      MemoryLive,
       SubscriptionLive,
       OperationsLive
     ).pipe(Layer.provide([ValidationGateLive, AgentAuthorizationLive, CanonicalTelemetryLive]))
@@ -91,7 +101,7 @@ export const HttpLive = HttpRouter.serve(
  * path, and HTTP services used to serve the static shell.
  */
 const HostedWhatsAppWorkerLive = WhatsAppWorkerLive.pipe(
-  Layer.provide(AgentService.layer.pipe(Layer.provide(OpenAiHostedInferenceLive))),
+  Layer.provide(AgentService.layer),
   Layer.provide(KapsoClient.layer)
 );
 
@@ -100,4 +110,8 @@ export const AppLive = Layer.mergeAll(
   HostedWhatsAppWorkerLive,
   AuditRetentionLive,
   PendingConsentRetentionLive
-).pipe(Layer.provide(RuntimeAuthorityLive), Layer.provide(MigratorLive));
+).pipe(
+  Layer.provide(OpenAiHostedInferenceLive),
+  Layer.provide(RuntimeAuthorityLive),
+  Layer.provide(MigratorLive)
+);

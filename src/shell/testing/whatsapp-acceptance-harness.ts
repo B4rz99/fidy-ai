@@ -504,10 +504,9 @@ const DeterministicHostedInference = HostedInferenceFromLanguageModel.pipe(
 const AcceptanceApplication = Layer.mergeAll(
   HttpLive,
   DeterministicLanguageModel,
-  WhatsAppWorkerLive.pipe(
-    Layer.provide(AgentService.layer.pipe(Layer.provide(DeterministicHostedInference)))
-  )
+  WhatsAppWorkerLive.pipe(Layer.provide(AgentService.layer))
 ).pipe(
+  Layer.provide(DeterministicHostedInference),
   Layer.provide(RuntimeAuthorityLive),
   Layer.provide(MigratorLive),
   Layer.provide(TelemetryDisabled)

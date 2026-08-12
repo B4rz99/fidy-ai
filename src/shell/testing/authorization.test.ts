@@ -7,6 +7,7 @@ import { UserId } from "~/core/identity/reference";
 import { CategoryKeyword } from "~/core/categories/model";
 import { categoryIds } from "~/core/categories/taxonomy";
 import { InsightEventId } from "~/core/insights/model";
+import { MemoryText } from "~/core/memory/model";
 import { CreateTransactionInput } from "~/core/transactions/model";
 import { AgentBearerToken } from "~/core/tokens/model";
 import { authenticateAgentToken } from "~/shell/_shared/authz";
@@ -16,6 +17,7 @@ import { truncateAuditLogEntries } from "~/shell/audit/fixtures";
 import { observeAuditLogEntries } from "~/shell/audit/repo";
 import { truncateInsights, weeklySummaryInput } from "~/shell/insights/fixtures";
 import { generateInsightEvent } from "~/shell/insights/repo";
+import { truncateMemories } from "~/shell/memory/fixtures";
 import { AtomicBatchCallId } from "~/shell/operations/operations";
 import { transactionPayload, truncateTransactions } from "~/shell/transactions/fixtures";
 import {
@@ -116,6 +118,36 @@ layer(AuthorizationHarness, { excludeTestServices: true, timeout: "30 seconds" }
           "subscription.getUpgradeUrl",
           "rejected",
         ]);
+      })
+    );
+
+    it.effect("enforces independent read and write scopes for Memory", () =>
+      Effect.gen(function* () {
+        yield* truncateMemories;
+        yield* seedReadOnlyIdentity;
+        yield* seedWriteOnlyIdentity;
+        const reader = yield* ReadOnlyApiClient;
+        const writer = yield* WriteOnlyApiClient;
+
+        const deniedWrite = yield* Effect.result(
+          reader.memory.remember({ payload: { text: MemoryText.make("denied") } })
+        );
+        const remembered = yield* writer.memory.remember({
+          payload: { text: MemoryText.make("write-only memory") },
+        });
+        const deniedRead = yield* Effect.result(writer.memory.recall());
+        const recalled = yield* reader.memory.recall();
+
+        expect(deniedWrite).toMatchObject({
+          _tag: "Failure",
+          failure: { error: { code: "scope_missing" } },
+        });
+        expect(deniedRead).toMatchObject({
+          _tag: "Failure",
+          failure: { error: { code: "scope_missing" } },
+        });
+        expect(recalled.data).toEqual([]);
+        expect(remembered.data.text).toBe("write-only memory");
       })
     );
 

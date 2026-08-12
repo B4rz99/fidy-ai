@@ -203,6 +203,13 @@ const seedEveryPolicyShape = Effect.gen(function* () {
     VALUES (${policyOwner}, '{"title":"policy probe"}'::jsonb)
   `;
   yield* admin`
+    INSERT INTO memories (user_id, id, text, created_at, updated_at)
+    VALUES (
+      ${policyOwner}, 'f1d1a000-0000-4000-8000-0000000002a2', 'policy memory',
+      '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z'
+    )
+  `;
+  yield* admin`
     INSERT INTO conversation_continuity (user_id, revision)
     VALUES (${policyOwner}, 1), (${policyInsertVictim}, 0)
   `;
@@ -382,6 +389,16 @@ const probeDeniedMutations = Effect.fn("probeDeniedRlsMutations")(function* () {
 
 const deniedInsertProbes = (sql: SqlClient.SqlClient) =>
   [
+    {
+      tableName: "memories",
+      insert: sql`
+        INSERT INTO memories (id, user_id, text, created_at, updated_at)
+        VALUES (
+          'f1d1a000-0000-4000-8000-0000000002b3', ${policyOwner}, 'denied memory',
+          '2026-01-02T00:00:00Z', '2026-01-02T00:00:00Z'
+        )
+      `,
+    },
     {
       tableName: "agent_confirmation_consumptions",
       insert: sql`
@@ -804,6 +821,26 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           expect(result.deleted, result.tableName).toEqual([]);
         }
 
+        expect(
+          Exit.isFailure(
+            yield* Effect.exit(
+              withUserTransaction(
+                policyOwner,
+                sql`UPDATE memories SET text = text WHERE id = 'f1d1a000-0000-4000-8000-0000000002a2'`
+              )
+            )
+          )
+        ).toBe(true);
+        expect(
+          Exit.isFailure(
+            yield* Effect.exit(
+              withUserTransaction(
+                policyOwner,
+                sql`DELETE FROM memories WHERE id = 'f1d1a000-0000-4000-8000-0000000002a2'`
+              )
+            )
+          )
+        ).toBe(true);
         expect(yield* sql`SELECT id FROM consent_records`).toEqual([]);
         expect(
           yield* withUserTransaction(
@@ -851,7 +888,10 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
 
         const admin = yield* MigrationSqlClient;
         const unexpectedInserts = yield* admin<UnexpectedInsertRow>`
-          SELECT 'users' AS "tableName" WHERE EXISTS (
+          SELECT 'memories' AS "tableName" WHERE EXISTS (
+            SELECT 1 FROM memories WHERE id = 'f1d1a000-0000-4000-8000-0000000002b3'
+          )
+          UNION ALL SELECT 'users' WHERE EXISTS (
             SELECT 1 FROM users WHERE id = ${policyForgedUser}
           )
           UNION ALL SELECT 'whatsapp_identities' WHERE EXISTS (

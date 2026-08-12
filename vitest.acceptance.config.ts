@@ -21,6 +21,10 @@ const acceptanceExclude = [
   "src/shell/agent/openai.ts",
   // Transcript lifecycle persistence is covered against PostgreSQL at its public service seam.
   "src/shell/transcript/conversation-continuity.ts",
+  // Memory's canonical API and aggregate policy are covered by their real-PostgreSQL integration
+  // suite; they are not part of the WhatsApp transport release signal.
+  "src/core/memory/**",
+  "src/shell/memory/**",
 ];
 
 // The WhatsApp acceptance release signal: public signed HTTP, real PostgreSQL, and the production
@@ -50,8 +54,8 @@ export default defineConfig({
       exclude: acceptanceExclude,
       thresholds: {
         autoUpdate: true,
-        branches: 39.41,
-        lines: 70.36,
+        branches: 39.51,
+        lines: 70.39,
       },
     },
   },

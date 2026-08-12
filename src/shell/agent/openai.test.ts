@@ -142,6 +142,28 @@ it.effect("fails closed when the OpenAI secret is absent", () =>
   })
 );
 
+it.effect("counts Memory aggregates locally with o200k_base without provider requests", () =>
+  Effect.gen(function* () {
+    const transport = yield* makeTransport(100);
+    const inference = yield* buildInference(transport.layer);
+    const samples = [
+      ["a", 1],
+      ["hello world", 2],
+      ["Pago mensual de arriendo en Bogotá", 7],
+      ["Emoji 👩🏽‍💻, café, 漢字\r\nfin", 16],
+      [
+        '{"id":"01912345-6789-7abc-8def-0123456789ab","text":"Pago mensual de arriendo en Bogotá"}',
+        32,
+      ],
+    ] as const;
+
+    for (const [text, expected] of samples) {
+      expect(yield* inference.countMemoryText(text)).toBe(expected);
+    }
+    expect(yield* Ref.get(transport.requests)).toEqual([]);
+  })
+);
+
 it.effect("counts complete framing and executes the exact prepared request", () =>
   Effect.gen(function* () {
     const transport = yield* makeTransport(100);

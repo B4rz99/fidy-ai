@@ -7,6 +7,7 @@ import { CategoriesGroup } from "~/shell/categories/operations";
 import { DashboardGroup } from "~/shell/dashboard/operations";
 import { IdentityGroup } from "~/shell/identity/operations";
 import { InsightsGroup } from "~/shell/insights/operations";
+import { MemoryGroup } from "~/shell/memory/operations";
 import { makeOperationsGroup } from "~/shell/operations/operations";
 import { SubscriptionGroup } from "~/shell/subscription/operations";
 import { TransactionsGroup } from "~/shell/transactions/operations";
@@ -17,6 +18,7 @@ const OrdinaryFidyApi = HttpApi.make("fidy")
   .add(DashboardGroup)
   .add(TransactionsGroup)
   .add(InsightsGroup)
+  .add(MemoryGroup)
   .add(SubscriptionGroup);
 
 // The child union is reflected before the batch group exists, so queries and recursive batches are

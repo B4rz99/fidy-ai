@@ -1,4 +1,4 @@
-import { Effect } from "effect";
+import { type Crypto, Effect } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
 import type { ResolvedAgentToken } from "~/core/tokens/model";
 import {
@@ -9,6 +9,8 @@ import {
 import { applyDashboardEdit, loadOrCreateDashboard } from "~/shell/dashboard/mutations";
 import { withDashboardLockInScope } from "~/shell/dashboard/repo";
 import { updateUserPreferences } from "~/shell/identity/mutations";
+import type { HostedInference } from "~/shell/agent/hosted-inference";
+import { rememberMemory } from "~/shell/memory/mutations";
 import type { Telemetry } from "~/shell/observability/telemetry";
 import { dismissInsight, markInsightDelivered, markInsightRead } from "~/shell/insights/mutations";
 import {
@@ -26,7 +28,11 @@ type MutationAdapter<Input, Output, Failure> = {
   execute(
     input: Input,
     caller: CanonicalMutationCaller
-  ): Effect.Effect<Output, Failure, SqlClient.SqlClient | Telemetry>;
+  ): Effect.Effect<
+    Output,
+    Failure,
+    SqlClient.SqlClient | Telemetry | Crypto.Crypto | HostedInference
+  >;
 }["execute"];
 
 const mutationAdapter = <Input, Output, Failure>(
@@ -114,6 +120,12 @@ export const canonicalMutationImplementations = {
         caller: suggestedCaller(caller),
         transactionId: input.params.id,
       })
+  ),
+  "memory.remember": mutationAdapter((input: CanonicalInput<"memory.remember">, caller) =>
+    rememberMemory({
+      userId: caller.resolved.subjectUserId,
+      payload: input.payload,
+    })
   ),
   "insights.markInsightDelivered": mutationAdapter(
     (input: CanonicalInput<"insights.markInsightDelivered">, caller) =>

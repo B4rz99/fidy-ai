@@ -6,6 +6,8 @@ src/shell/agent/hosted-inference.ts
 src/shell/agent/openai.ts
   s_125eaf742e5b4b::t_987ed23981658d 554-555
   s_125eaf742e5b4b::t_fc08e47182cf30 547,575
+vitest.acceptance.config.ts
+  s_125eaf742e5b4b::t_43a5b35ff96bfb 58
 ---
 {
   "schema_version": "authorship/3.0.0",

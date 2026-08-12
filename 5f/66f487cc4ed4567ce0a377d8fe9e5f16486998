@@ -1,0 +1,70 @@
+scripts/oxlint/dictionary-types.js
+  s_df44ad36852a2f::t_c26583bbe7e248 51,72
+  s_df44ad36852a2f::t_827ff26daa0113 1-4
+  s_df44ad36852a2f::t_b1e73c8fc3d335 5-50,52-71,73-235
+src/core/insights/model.test.ts
+  s_df44ad36852a2f::t_c26583bbe7e248 8
+  s_df44ad36852a2f::t_c534c6f83fa5d4 5
+  s_df44ad36852a2f::t_61808af3c361df 96
+  s_df44ad36852a2f::t_7f04ccc81aa855 7
+  s_df44ad36852a2f::t_99c985477e5de4 6,113
+scripts/oxlint/effect-guards.js
+  s_df44ad36852a2f::t_b759096d87d0ff 527-529
+  s_df44ad36852a2f::t_9d79cace7c4e3f 645-649
+  s_df44ad36852a2f::t_cf0ed7cf255fa3 10-15,530-590,607-620,623-637,642-644,680-681
+  s_df44ad36852a2f::t_9bfd120f44f558 591-606,621-622
+  s_df44ad36852a2f::t_c26583bbe7e248 638-641
+.oxlintrc.json
+  s_df44ad36852a2f::t_27b639b345b86f 147-148,160-170
+  s_df44ad36852a2f::t_651b94b806198d 152,200-201
+  s_df44ad36852a2f::t_bd89cc65a4a03d 253-257,265
+src/core/dashboard/rules.test.ts
+  s_df44ad36852a2f::t_f532ebed959d77 3
+  s_df44ad36852a2f::t_6b35457e7b354b 19,22,25,31
+src/core/consent/model.test.ts
+  s_df44ad36852a2f::t_6acce1de88ff68 20-21
+  s_df44ad36852a2f::t_9f2247a134694a 19
+  s_df44ad36852a2f::t_ad0b24a230dec8 180,184
+src/core/ingestion/rules.ts
+  s_df44ad36852a2f::t_909366225eae90 14
+src/core/transactions/model.test.ts
+  s_df44ad36852a2f::t_fde3066aa7c510 18
+  s_df44ad36852a2f::t_b50f7e8c20ed8a 19,24
+docs/research/anti-slop-comparison.md
+  s_df44ad36852a2f::t_e244393825e729 38,40
+  s_df44ad36852a2f::t_c26583bbe7e248 29-37,39
+  s_df44ad36852a2f::t_4f3d411056a8f3 65,67
+  s_df44ad36852a2f::t_9e55e03215ed19 1-28,41-64,66,68
+  s_df44ad36852a2f::t_4db532b9162f6b 69
+CODING_STANDARDS.md
+  s_df44ad36852a2f::t_b46987b08de3cd 97-100,106-107
+scripts/check-lint-guards.ts
+  s_df44ad36852a2f::t_21ee828ff033b1 27-36
+src/core/transcript/model.ts
+  s_df44ad36852a2f::t_039941e3a10262 22,36
+  s_df44ad36852a2f::t_d1272acdc4b32c 29
+  s_df44ad36852a2f::t_b10c08614e6a71 28
+  s_df44ad36852a2f::t_3397e5c6ee5d43 13-14,25
+  s_df44ad36852a2f::t_40ab9a5b865ea6 27
+scripts/oxlint/anti-slop.LICENSE
+  s_df44ad36852a2f::t_3e350c0749c4c8 1-21
+src/core/dashboard/model.test.ts
+  s_df44ad36852a2f::t_58a423ec2e5561 11,255-258
+  s_df44ad36852a2f::t_765e71220debca 269
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "5f66f487cc4ed4567ce0a377d8fe9e5f16486998",
+  "prompts": {},
+  "sessions": {
+    "s_df44ad36852a2f": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019ff797-32b9-7d91-8c99-1bfff5041e21",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

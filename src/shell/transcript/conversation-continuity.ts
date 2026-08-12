@@ -27,6 +27,7 @@ import {
   TurnFailureReason,
   UserTranscriptEntry,
 } from "~/core/transcript/model";
+import { advisoryLockKey } from "~/shell/db/advisory-lock";
 import { withUserTransaction } from "~/shell/db/user-transaction";
 
 const preparedAttemptContextTypeId: unique symbol = Symbol.for(
@@ -105,9 +106,11 @@ export type SerializedAttempt = Readonly<{
 }>;
 
 /**
- * Observes durable continuity or runs a callback in one User-bound capability scope. Semantic
- * input is validated before use; capability misuse dies as a defect, and `ContinuityChanged` is
- * the sole continuity-specific recoverable failure exposed by a prepared attempt.
+ * Observes durable continuity or runs a callback serialized with every other callback for the same
+ * User across runtime instances. Waiting is interruptible, and no transaction spans the callback.
+ * Semantic input is validated before use; capability misuse dies as a defect, and
+ * `ContinuityChanged` is the sole continuity-specific recoverable failure exposed by a prepared
+ * attempt.
  */
 export type ConversationContinuityService = Readonly<{
   observe: (userId: UserId) => Effect.Effect<ContinuityView>;
@@ -877,6 +880,33 @@ type SerializedAttemptUse<A, E, R> = {
   readonly use: (attempt: SerializedAttempt) => Effect.Effect<A, E, R>;
 };
 
+const withHostedAttemptLock = <A, E, R>(
+  dependencies: Dependencies,
+  userId: UserId,
+  use: Effect.Effect<A, E, R>
+): Effect.Effect<A, E, R> =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const connection = yield* dependencies.sql.reserve.pipe(Effect.orDie);
+      const lockKey = advisoryLockKey.hostedAttempt(userId);
+      yield* Effect.addFinalizer(() =>
+        connection
+          .executeRaw("SELECT pg_advisory_unlock(hashtextextended($1, $2))", [
+            lockKey.value,
+            lockKey.seed,
+          ])
+          .pipe(Effect.orDie)
+      );
+      yield* connection
+        .executeRaw("SELECT pg_advisory_lock(hashtextextended($1, $2))", [
+          lockKey.value,
+          lockKey.seed,
+        ])
+        .pipe(Effect.orDie, Effect.interruptible);
+      return yield* use;
+    })
+  );
+
 const withSerializedAttemptOwned = <A, E, R>({
   dependencies,
   userId,
@@ -887,27 +917,31 @@ const withSerializedAttemptOwned = <A, E, R>({
     Effect.mapError(() => new InvalidSemanticTurnContent()),
     Effect.orDie,
     Effect.flatMap((request) =>
-      Effect.suspend(() => {
-        const attemptScope: CapabilityScope = {
-          active: true,
-          generation: 0,
-          mutationPermit: Semaphore.makeUnsafe(1),
-        };
-        const attempt = makeSerializedAttempt({
-          dependencies,
-          userId,
-          request,
-          attemptScope,
-        });
-        return use(attempt).pipe(
-          Effect.ensuring(
-            Effect.sync(() => {
-              attemptScope.active = false;
-              attemptScope.generation += 1;
-            })
-          )
-        );
-      })
+      withHostedAttemptLock(
+        dependencies,
+        userId,
+        Effect.suspend(() => {
+          const attemptScope: CapabilityScope = {
+            active: true,
+            generation: 0,
+            mutationPermit: Semaphore.makeUnsafe(1),
+          };
+          const attempt = makeSerializedAttempt({
+            dependencies,
+            userId,
+            request,
+            attemptScope,
+          });
+          return Effect.suspend(() => use(attempt)).pipe(
+            Effect.ensuring(
+              Effect.sync(() => {
+                attemptScope.active = false;
+                attemptScope.generation += 1;
+              })
+            )
+          );
+        })
+      )
     )
   );
 
@@ -940,12 +974,14 @@ const makeConversationContinuity = Effect.gen(function* () {
 /**
  * Owns exact Transcript admission, explicit Turn lifecycle, and abandoned-Pending recovery.
  *
- * `withSerializedAttempt` binds one User and active request to callback-scoped preparation and
- * Pending capabilities. Callers provide only semantic content; this module creates every persistence id and
- * nondecreasing lifecycle time. `prepare` recovers abandoned Pending work before exposing an exact
- * view, and `begin` admits the active User text only if that view is still current. Appends and
- * terminalization are atomic short User-scoped transactions. `ContinuityChanged` is the only typed
- * continuity failure; escaped or reused capabilities and impossible persistence states are defects.
+ * `withSerializedAttempt` waits interruptibly until no other runtime is executing an attempt for
+ * the same User, then exposes callback-scoped preparation and Pending capabilities. Serialization
+ * spans hosted inference and delivery without one transaction spanning the callback. Callers
+ * provide only semantic content; this module creates every persistence id and nondecreasing
+ * lifecycle time. `prepare` recovers abandoned Pending work before exposing an exact view, and
+ * `begin` admits the active User text only if that view is still current. `ContinuityChanged` is the
+ * only typed continuity failure; escaped or reused capabilities and impossible persistence states
+ * are defects.
  */
 export class ConversationContinuity extends Context.Service<
   ConversationContinuity,

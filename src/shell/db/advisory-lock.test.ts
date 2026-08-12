@@ -13,11 +13,19 @@ it("keeps unrelated slice locks distinct for the same User", () => {
   const keys = [
     advisoryLockKey.keywordRules(userId),
     advisoryLockKey.dashboard(userId),
+    advisoryLockKey.hostedAttempt(userId),
     advisoryLockKey.consentSubject(userId),
     advisoryLockKey.whatsAppAdmission(userId),
   ].map(({ value, seed }) => `${seed}:${value}`);
 
   expect(new Set(keys).size).toBe(keys.length);
+});
+
+it("namespaces hosted-attempt serialization by User", () => {
+  expect(advisoryLockKey.hostedAttempt(userId)).toEqual({
+    value: `hosted-attempt:${userId}`,
+    seed: 0,
+  });
 });
 
 it("shares the bare User key only between WhatsApp admission and database claims", () => {

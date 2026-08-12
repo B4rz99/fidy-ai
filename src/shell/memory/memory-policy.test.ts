@@ -19,6 +19,9 @@ const memoryInference = (
     validateText: () => Effect.die("unused"),
     executeText: () => Effect.die("unused"),
     discardText: () => Effect.die("unused"),
+    prepareStructured: () => Effect.die("unused"),
+    executeStructured: () => Effect.die("unused"),
+    discardStructured: () => Effect.die("unused"),
   });
 
 it.effect("counts the complete recall-ordered aggregate including the final candidate", () =>

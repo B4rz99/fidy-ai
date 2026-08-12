@@ -8,6 +8,13 @@ type AdvisoryLockKey = {
   readonly seed: number;
 };
 
+// Hosted-attempt acceptance orchestration belongs to #205; #204 covers this key at its DB seam.
+/* istanbul ignore next */
+const hostedAttemptLockKey = (userId: UserId): AdvisoryLockKey => ({
+  value: `hosted-attempt:${userId}`,
+  seed: 0,
+});
+
 /**
  * Registry of process-side PostgreSQL advisory-lock keys. Every unrelated resource has a distinct
  * namespace or seed; WhatsApp admission intentionally hashes the bare UserId to share its key with
@@ -19,6 +26,7 @@ export const advisoryLockKey = {
     seed: 0,
   }),
   dashboard: (userId: UserId): AdvisoryLockKey => ({ value: userId, seed: 15 }),
+  hostedAttempt: hostedAttemptLockKey,
   memories: (userId: UserId): AdvisoryLockKey => ({
     value: `memories:${userId}`,
     seed: 0,

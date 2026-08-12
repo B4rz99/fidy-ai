@@ -5,6 +5,7 @@ import {
   Cause,
   Context,
   Crypto,
+  Data,
   DateTime,
   Deferred,
   Effect,
@@ -13,6 +14,7 @@ import {
   Layer,
   Option,
   Ref,
+  Schedule,
   Schema,
 } from "effect";
 import type { SqlError } from "effect/unstable/sql";
@@ -34,7 +36,8 @@ import {
   type UserTranscriptEntry,
 } from "~/core/transcript/model";
 import { projectTranscriptForModel } from "~/shell/agent/model-boundary";
-import { MigrationSqlClient } from "~/shell/db/client";
+import { advisoryLockKey } from "~/shell/db/advisory-lock";
+import { MigrationSqlClient, PgLive } from "~/shell/db/client";
 import { defaultUserId } from "~/shell/db/development-seed";
 import { ApiHarness } from "~/shell/testing/api-harness";
 import {
@@ -259,20 +262,9 @@ const generatedMetadataProgram = Effect.gen(function* () {
   assertGeneratedMetadata(completed);
 });
 
-const completeWinningTurn = (
-  continuity: ConversationContinuityService
-): Effect.Effect<void, ContinuityChanged> =>
-  continuity.withSerializedAttempt(defaultUserId, activeRequest("winning request"), (attempt) =>
-    attempt.prepare((prepared) =>
-      Effect.gen(function* () {
-        const pending = yield* prepared.begin();
-        yield* pending.complete(assistantContent("winner"));
-      })
-    )
-  );
-
 const stalePreparedProgram = Effect.gen(function* () {
   const continuity = yield* ConversationContinuity;
+  const migrationSql = yield* MigrationSqlClient;
   yield* resetDefaultContinuity;
   yield* continuity.withSerializedAttempt(
     defaultUserId,
@@ -280,16 +272,17 @@ const stalePreparedProgram = Effect.gen(function* () {
     (attempt) =>
       attempt.prepare((prepared) =>
         Effect.gen(function* () {
-          yield* completeWinningTurn(continuity);
+          yield* migrationSql`
+            UPDATE conversation_continuity
+            SET revision = revision + 1
+            WHERE user_id = ${defaultUserId}
+          `;
           const changed = yield* prepared.begin().pipe(Effect.flip);
           assert.deepStrictEqual(changed, new ContinuityChanged());
         })
       )
   );
-  expect((yield* continuity.observe(defaultUserId)).entries.map(withoutMetadata)).toEqual([
-    { _tag: "UserTranscriptEntry", ...activeRequest("winning request") },
-    { _tag: "AssistantTranscriptEntry", ...assistantContent("winner") },
-  ]);
+  expect((yield* continuity.observe(defaultUserId)).entries).toEqual([]);
 });
 
 const prepareAndInspectRecovery = (
@@ -884,6 +877,265 @@ const prepareWithRebuiltModule = Effect.gen(function* () {
   );
 });
 
+const FreshConversationContinuityRuntime = ConversationContinuity.layer.pipe(
+  Layer.provide(Layer.fresh(PgLive))
+);
+
+const makeFreshContinuity = Layer.build(Layer.fresh(FreshConversationContinuityRuntime)).pipe(
+  Effect.map((services) => Context.get(services, ConversationContinuity))
+);
+
+const awaitHostedAttemptWaiter = (userId: UserId): Effect.Effect<void, never, MigrationSqlClient> =>
+  Effect.gen(function* () {
+    const migrationSql = yield* MigrationSqlClient;
+    const lockKey = advisoryLockKey.hostedAttempt(userId);
+    const waiters = yield* migrationSql<{ readonly present: number }>`
+      SELECT 1 AS present
+      FROM pg_locks
+      WHERE locktype = 'advisory'
+        AND NOT granted
+        AND objsubid = 1
+        AND classid = (
+          (hashtextextended(${lockKey.value}, ${lockKey.seed}) >> 32) & 4294967295
+        )::oid
+        AND objid = (
+          hashtextextended(${lockKey.value}, ${lockKey.seed}) & 4294967295
+        )::oid
+      LIMIT 1
+    `;
+    if (waiters.length === 0) {
+      return yield* Effect.fail(undefined);
+    }
+  }).pipe(Effect.retry({ schedule: Schedule.spaced("10 millis"), times: 100 }), Effect.orDie);
+
+type HeldAttempt = {
+  readonly continuity: ConversationContinuityService;
+  readonly userId: UserId;
+  readonly entered: Deferred.Deferred<void>;
+  readonly release: Deferred.Deferred<void>;
+};
+
+const holdSerializedAttempt = ({
+  continuity,
+  userId,
+  entered,
+  release,
+}: HeldAttempt): Effect.Effect<void> =>
+  continuity.withSerializedAttempt(userId, activeRequest("hosted work"), () =>
+    Deferred.succeed(entered, undefined).pipe(Effect.andThen(Deferred.await(release)))
+  );
+
+const sameUserSerializationProgram = Effect.scoped(
+  Effect.gen(function* () {
+    const firstContinuity = yield* makeFreshContinuity;
+    const secondContinuity = yield* makeFreshContinuity;
+    const firstEntered = yield* Deferred.make<void>();
+    const releaseFirst = yield* Deferred.make<void>();
+    const secondEntered = yield* Deferred.make<void>();
+    const releaseSecond = yield* Deferred.make<void>();
+
+    const first = yield* holdSerializedAttempt({
+      continuity: firstContinuity,
+      userId: defaultUserId,
+      entered: firstEntered,
+      release: releaseFirst,
+    }).pipe(Effect.forkChild);
+    yield* Deferred.await(firstEntered);
+    const second = yield* holdSerializedAttempt({
+      continuity: secondContinuity,
+      userId: defaultUserId,
+      entered: secondEntered,
+      release: releaseSecond,
+    }).pipe(Effect.forkChild);
+
+    yield* awaitHostedAttemptWaiter(defaultUserId);
+    expect(yield* Deferred.isDone(secondEntered)).toBe(false);
+    yield* Deferred.succeed(releaseFirst, undefined);
+    yield* Deferred.await(secondEntered);
+    yield* Deferred.succeed(releaseSecond, undefined);
+    yield* Fiber.join(first);
+    yield* Fiber.join(second);
+  })
+);
+
+const crossUserConcurrencyProgram = Effect.scoped(
+  Effect.gen(function* () {
+    const firstContinuity = yield* makeFreshContinuity;
+    const secondContinuity = yield* makeFreshContinuity;
+    const firstEntered = yield* Deferred.make<void>();
+    const secondEntered = yield* Deferred.make<void>();
+    const release = yield* Deferred.make<void>();
+
+    const first = yield* holdSerializedAttempt({
+      continuity: firstContinuity,
+      userId: defaultUserId,
+      entered: firstEntered,
+      release,
+    }).pipe(Effect.forkChild);
+    const second = yield* holdSerializedAttempt({
+      continuity: secondContinuity,
+      userId: isolatedUserId,
+      entered: secondEntered,
+      release,
+    }).pipe(Effect.forkChild);
+
+    yield* Deferred.await(firstEntered);
+    yield* Deferred.await(secondEntered);
+    yield* Deferred.succeed(release, undefined);
+    yield* Fiber.join(first);
+    yield* Fiber.join(second);
+  })
+);
+
+const noLongTransactionProgram = Effect.scoped(
+  Effect.gen(function* () {
+    const continuity = yield* makeFreshContinuity;
+    const migrationSql = yield* MigrationSqlClient;
+    const entered = yield* Deferred.make<void>();
+    const release = yield* Deferred.make<void>();
+    const holder = yield* holdSerializedAttempt({
+      continuity,
+      userId: defaultUserId,
+      entered,
+      release,
+    }).pipe(Effect.forkChild);
+    yield* Deferred.await(entered);
+
+    const lockKey = advisoryLockKey.hostedAttempt(defaultUserId);
+    const rows = yield* migrationSql<{
+      readonly state: string;
+      readonly hasNoTransaction: boolean;
+    }>`
+      SELECT
+        activity.state,
+        activity.xact_start IS NULL AS "hasNoTransaction"
+      FROM pg_locks AS lock
+      JOIN pg_stat_activity AS activity ON activity.pid = lock.pid
+      WHERE lock.locktype = 'advisory'
+        AND lock.granted
+        AND lock.objsubid = 1
+        AND lock.classid = (
+          (hashtextextended(${lockKey.value}, ${lockKey.seed}) >> 32) & 4294967295
+        )::oid
+        AND lock.objid = (
+          hashtextextended(${lockKey.value}, ${lockKey.seed}) & 4294967295
+        )::oid
+    `;
+    expect(rows).toEqual([{ state: "idle", hasNoTransaction: true }]);
+    yield* migrationSql`SELECT 1`;
+
+    yield* Deferred.succeed(release, undefined);
+    yield* Fiber.join(holder);
+  })
+);
+
+class ExpectedAttemptFailure extends Data.TaggedError("ExpectedAttemptFailure")<{}> {}
+
+const assertFreshAttemptCanEnter = Effect.fnUntraced(function* () {
+  const continuity = yield* makeFreshContinuity;
+  let entered = false;
+  yield* continuity.withSerializedAttempt(defaultUserId, activeRequest("next attempt"), () =>
+    Effect.sync(() => {
+      entered = true;
+    })
+  );
+  expect(entered).toBe(true);
+});
+
+const releaseMatrixProgram = Effect.scoped(
+  Effect.gen(function* () {
+    const success = yield* makeFreshContinuity;
+    yield* success.withSerializedAttempt(
+      defaultUserId,
+      activeRequest("success"),
+      () => Effect.void
+    );
+    yield* assertFreshAttemptCanEnter();
+
+    const typedFailure = yield* makeFreshContinuity;
+    const failed = yield* typedFailure
+      .withSerializedAttempt(defaultUserId, activeRequest("typed failure"), () =>
+        Effect.fail(new ExpectedAttemptFailure())
+      )
+      .pipe(Effect.exit);
+    expect(Exit.isFailure(failed)).toBe(true);
+    yield* assertFreshAttemptCanEnter();
+
+    const defective = yield* makeFreshContinuity;
+    assertDefect(
+      yield* defective
+        .withSerializedAttempt(defaultUserId, activeRequest("defect"), () =>
+          Effect.die("expected hosted-attempt defect")
+        )
+        .pipe(Effect.exit)
+    );
+    yield* assertFreshAttemptCanEnter();
+
+    const throwing = yield* makeFreshContinuity;
+    let escaped = Option.none<SerializedAttempt>();
+    assertDefect(
+      yield* throwing
+        .withSerializedAttempt(
+          defaultUserId,
+          activeRequest("synchronous defect"),
+          (attempt): Effect.Effect<never> => {
+            escaped = Option.some(attempt);
+            throw new Error("expected synchronous hosted-attempt defect");
+          }
+        )
+        .pipe(Effect.exit)
+    );
+    assertDefect(
+      yield* Option.getOrThrow(escaped)
+        .prepare(() => Effect.void)
+        .pipe(Effect.exit)
+    );
+    yield* assertFreshAttemptCanEnter();
+
+    const interrupted = yield* makeFreshContinuity;
+    const entered = yield* Deferred.make<void>();
+    const fiber = yield* interrupted
+      .withSerializedAttempt(defaultUserId, activeRequest("interrupted"), () =>
+        Deferred.succeed(entered, undefined).pipe(Effect.andThen(Effect.never))
+      )
+      .pipe(Effect.forkChild);
+    yield* Deferred.await(entered);
+    yield* Fiber.interrupt(fiber);
+    yield* assertFreshAttemptCanEnter();
+  })
+);
+
+const waitingCancellationProgram = Effect.scoped(
+  Effect.gen(function* () {
+    const holderContinuity = yield* makeFreshContinuity;
+    const waitingContinuity = yield* makeFreshContinuity;
+    const holderEntered = yield* Deferred.make<void>();
+    const releaseHolder = yield* Deferred.make<void>();
+    const waitingEntered = yield* Deferred.make<void>();
+
+    const holder = yield* holdSerializedAttempt({
+      continuity: holderContinuity,
+      userId: defaultUserId,
+      entered: holderEntered,
+      release: releaseHolder,
+    }).pipe(Effect.forkChild);
+    yield* Deferred.await(holderEntered);
+    const waiter = yield* waitingContinuity
+      .withSerializedAttempt(defaultUserId, activeRequest("cancelled waiter"), () =>
+        Deferred.succeed(waitingEntered, undefined)
+      )
+      .pipe(Effect.forkChild);
+    yield* awaitHostedAttemptWaiter(defaultUserId);
+    expect(yield* Deferred.isDone(waitingEntered)).toBe(false);
+
+    yield* Effect.all([Fiber.interrupt(waiter), Deferred.succeed(releaseHolder, undefined)], {
+      concurrency: "unbounded",
+    });
+    yield* Fiber.join(holder);
+    yield* assertFreshAttemptCanEnter();
+  })
+);
+
 const moduleInstanceProgram = Effect.gen(function* () {
   const continuity = yield* ConversationContinuity;
   yield* resetDefaultContinuity;
@@ -963,6 +1215,23 @@ layer(ContinuityHarness, { excludeTestServices: true, timeout: "30 seconds" })(
     it.effect(
       "isolates preparation recovery observation and terminalization by User",
       () => userIsolationProgram
+    );
+    it.effect(
+      "serializes the same User across fresh module instances",
+      () => sameUserSerializationProgram
+    );
+    it.effect(
+      "allows different Users to overlap across fresh module instances",
+      () => crossUserConcurrencyProgram
+    );
+    it.effect("holds the session lock without an open transaction", () => noLongTransactionProgram);
+    it.effect(
+      "releases serialization after success, typed failure, defect, and interruption",
+      () => releaseMatrixProgram
+    );
+    it.effect(
+      "cancels an advisory-lock wait without entering or poisoning the next attempt",
+      () => waitingCancellationProgram
     );
     it.effect(
       "keeps capabilities bound to their creating module instance",

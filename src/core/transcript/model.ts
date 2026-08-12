@@ -5,15 +5,47 @@ import { UtcTimestamp } from "~/core/_shared/time";
 const maximumToolCallIdLength = 256;
 const maximumAgentIterationsPerTurn = 32;
 const maximumTranscriptTextLength = 16_000;
+const maximumCanonicalToolEvidenceBytes = 1_000_000;
 
-/** Stable identity for one append-only Transcript entry. */
-export const TranscriptEntryId = Schema.String.check(Schema.isUUID())
+const canonicalJsonStringIsValid = (value: string): boolean =>
+  !value.includes("\u0000") && value.isWellFormed();
+
+const isCanonicalJsonString = Schema.makeFilter<string>((value) =>
+  canonicalJsonStringIsValid(value) ? undefined : "Expected well-formed Unicode without NUL"
+);
+const isCanonicalUuid = Schema.makeFilter<string>((value) =>
+  value === value.toLowerCase() ? undefined : "Expected canonical lowercase UUID spelling"
+);
+
+const canonicalJsonValueIsValid = (value: unknown): boolean => {
+  if (typeof value === "string") return canonicalJsonStringIsValid(value);
+  if (typeof value === "number") return !Object.is(value, -0);
+  if (Array.isArray(value)) return value.every(canonicalJsonValueIsValid);
+  if (value !== null && typeof value === "object") {
+    return Object.entries(value).every(
+      ([key, member]: readonly [string, unknown]) =>
+        canonicalJsonStringIsValid(key) && canonicalJsonValueIsValid(member)
+    );
+  }
+  return true;
+};
+
+const canonicalToolEvidenceIsValid = Schema.makeFilter<Schema.Json>((value: unknown) => {
+  if (!canonicalJsonValueIsValid(value)) return "Expected losslessly persistable JSON";
+  const encodedBytes = new TextEncoder().encode(JSON.stringify(value)).byteLength;
+  return encodedBytes <= maximumCanonicalToolEvidenceBytes
+    ? undefined
+    : `Expected at most ${maximumCanonicalToolEvidenceBytes} encoded UTF-8 bytes`;
+});
+
+/** Stable lowercase UUID identity for one append-only Transcript entry. */
+export const TranscriptEntryId = Schema.String.check(Schema.isUUID(), isCanonicalUuid)
   .pipe(Schema.brand("TranscriptEntryId"))
   .annotate({ identifier: "TranscriptEntryId" });
 export type TranscriptEntryId = typeof TranscriptEntryId.Type;
 
-/** Stable identity joining every entry produced by one hosted-agent turn. */
-export const TranscriptTurnId = Schema.String.check(Schema.isUUID())
+/** Stable lowercase UUID joining every entry produced by one hosted-agent turn. */
+export const TranscriptTurnId = Schema.String.check(Schema.isUUID(), isCanonicalUuid)
   .pipe(Schema.brand("TranscriptTurnId"))
   .annotate({ identifier: "TranscriptTurnId" });
 export type TranscriptTurnId = typeof TranscriptTurnId.Type;
@@ -21,7 +53,8 @@ export type TranscriptTurnId = typeof TranscriptTurnId.Type;
 /** Provider-issued identity linking one tool call to exactly one result. */
 export const ToolCallId = Schema.String.check(
   Schema.isMinLength(1),
-  Schema.isMaxLength(maximumToolCallIdLength)
+  Schema.isMaxLength(maximumToolCallIdLength),
+  isCanonicalJsonString
 )
   .pipe(Schema.brand("ToolCallId"))
   .annotate({ identifier: "ToolCallId" });
@@ -40,7 +73,8 @@ export type AgentIteration = typeof AgentIteration.Type;
 export const TranscriptText = Schema.String.check(
   Schema.isMinLength(1),
   Schema.isMaxLength(maximumTranscriptTextLength),
-  Schema.isPattern(/\S/u)
+  Schema.isPattern(/\S/u),
+  isCanonicalJsonString
 )
   .pipe(Schema.brand("TranscriptText"))
   .annotate({ identifier: "TranscriptText" });
@@ -67,22 +101,32 @@ export const AssistantTranscriptEntry = Schema.TaggedStruct("AssistantTranscript
 });
 export type AssistantTranscriptEntry = typeof AssistantTranscriptEntry.Type;
 
+/**
+ * Complete, losslessly persistable JSON evidence whose encoded form is at most
+ * 1,000,000 UTF-8 bytes. NUL, ill-formed Unicode, and negative zero are outside
+ * this canonical storage subset.
+ */
+export const CanonicalToolEvidence = Schema.Json.check(canonicalToolEvidenceIsValid).annotate({
+  identifier: "CanonicalToolEvidence",
+});
+export type CanonicalToolEvidence = typeof CanonicalToolEvidence.Type;
+
 /** Exact JSON arguments requested for one canonical operation. */
 export const CanonicalToolCallEntry = Schema.TaggedStruct("CanonicalToolCallEntry", {
   ...TranscriptIdentity,
   iteration: AgentIteration,
   toolCallId: ToolCallId,
   operation: CanonicalOperationId,
-  input: Schema.Json,
+  input: CanonicalToolEvidence,
 });
 export type CanonicalToolCallEntry = typeof CanonicalToolCallEntry.Type;
 
 /** The mutually exclusive results a canonical tool invocation may retain. */
 export const CanonicalToolOutcome = Schema.Union([
-  Schema.TaggedStruct("Succeeded", { output: Schema.Json }),
-  Schema.TaggedStruct("ToolInputRejected", { failure: Schema.Json }),
-  Schema.TaggedStruct("ToolOutputRejected", { failure: Schema.Json }),
-  Schema.TaggedStruct("CanonicalOperationFailed", { failure: Schema.Json }),
+  Schema.TaggedStruct("Succeeded", { output: CanonicalToolEvidence }),
+  Schema.TaggedStruct("ToolInputRejected", { failure: CanonicalToolEvidence }),
+  Schema.TaggedStruct("ToolOutputRejected", { failure: CanonicalToolEvidence }),
+  Schema.TaggedStruct("CanonicalOperationFailed", { failure: CanonicalToolEvidence }),
 ]);
 export type CanonicalToolOutcome = typeof CanonicalToolOutcome.Type;
 
@@ -96,11 +140,98 @@ export const CanonicalToolResultEntry = Schema.TaggedStruct("CanonicalToolResult
 });
 export type CanonicalToolResultEntry = typeof CanonicalToolResultEntry.Type;
 
+/** Allowlisted reason retained for a Failed Turn; arbitrary failure prose is forbidden. */
+export const TurnFailureReason = Schema.Literals([
+  "HostedInferenceFailed",
+  "HostedInferenceTimedOut",
+  "DeliveryFailed",
+]);
+export type TurnFailureReason = typeof TurnFailureReason.Type;
+
+/** Fixed metadata-only evidence that a Turn ended in a handled failure. */
+export const FailedTurnTranscriptEntry = Schema.TaggedStruct("FailedTurnTranscriptEntry", {
+  ...TranscriptIdentity,
+  reason: TurnFailureReason,
+});
+export type FailedTurnTranscriptEntry = typeof FailedTurnTranscriptEntry.Type;
+
+/** Fixed metadata-only evidence recovered after a process abandoned a Pending Turn. */
+export const InterruptedTurnTranscriptEntry = Schema.TaggedStruct(
+  "InterruptedTurnTranscriptEntry",
+  TranscriptIdentity
+);
+export type InterruptedTurnTranscriptEntry = typeof InterruptedTurnTranscriptEntry.Type;
+
+/** Continuation evidence admitted only through an active Turn handle. */
+export const TurnContinuationEntry = Schema.Union([
+  CanonicalToolCallEntry,
+  CanonicalToolResultEntry,
+]).annotate({ identifier: "TurnContinuationEntry" });
+export type TurnContinuationEntry = typeof TurnContinuationEntry.Type;
+
+/** Transcript evidence carrying User, Assistant, or canonical tool content; excludes lifecycle markers. */
+export const TranscriptContentEntry = Schema.Union([
+  UserTranscriptEntry,
+  AssistantTranscriptEntry,
+  CanonicalToolCallEntry,
+  CanonicalToolResultEntry,
+]).annotate({ identifier: "TranscriptContentEntry" });
+export type TranscriptContentEntry = typeof TranscriptContentEntry.Type;
+
 /** The complete provider-neutral record retained for exact conversation history. */
 export const TranscriptEntry = Schema.Union([
   UserTranscriptEntry,
   AssistantTranscriptEntry,
   CanonicalToolCallEntry,
   CanonicalToolResultEntry,
+  FailedTurnTranscriptEntry,
+  InterruptedTurnTranscriptEntry,
 ]).annotate({ identifier: "TranscriptEntry" });
 export type TranscriptEntry = typeof TranscriptEntry.Type;
+
+const terminalTimeIssue = (turn: {
+  readonly startedAt: UtcTimestamp;
+  readonly terminalAt: UtcTimestamp;
+}): Schema.FilterOutput =>
+  turn.terminalAt.epochMilliseconds >= turn.startedAt.epochMilliseconds
+    ? undefined
+    : { path: ["terminalAt"], issue: "Expected terminalAt not to precede startedAt" };
+
+const PendingConversationTurn = Schema.TaggedStruct("Pending", {
+  id: TranscriptTurnId,
+  startedAt: UtcTimestamp,
+});
+const CompletedConversationTurnBase = Schema.TaggedStruct("Completed", {
+  id: TranscriptTurnId,
+  startedAt: UtcTimestamp,
+  terminalAt: UtcTimestamp,
+});
+const CompletedConversationTurn = CompletedConversationTurnBase.check(
+  Schema.makeFilter<typeof CompletedConversationTurnBase.Type>(terminalTimeIssue)
+);
+const FailedConversationTurnBase = Schema.TaggedStruct("Failed", {
+  id: TranscriptTurnId,
+  startedAt: UtcTimestamp,
+  terminalAt: UtcTimestamp,
+  reason: TurnFailureReason,
+});
+const FailedConversationTurn = FailedConversationTurnBase.check(
+  Schema.makeFilter<typeof FailedConversationTurnBase.Type>(terminalTimeIssue)
+);
+const InterruptedConversationTurnBase = Schema.TaggedStruct("Interrupted", {
+  id: TranscriptTurnId,
+  startedAt: UtcTimestamp,
+  terminalAt: UtcTimestamp,
+});
+const InterruptedConversationTurn = InterruptedConversationTurnBase.check(
+  Schema.makeFilter<typeof InterruptedConversationTurnBase.Type>(terminalTimeIssue)
+);
+
+/** One explicit persisted Turn state; only Pending is non-terminal, and terminal time cannot precede start. */
+export const ConversationTurn = Schema.Union([
+  PendingConversationTurn,
+  CompletedConversationTurn,
+  FailedConversationTurn,
+  InterruptedConversationTurn,
+]).annotate({ identifier: "ConversationTurn" });
+export type ConversationTurn = typeof ConversationTurn.Type;

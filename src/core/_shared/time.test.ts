@@ -4,6 +4,7 @@ import { UtcTimestamp } from "./time";
 
 const decode = Schema.decodeUnknownResult(UtcTimestamp);
 const encode = Schema.encodeSync(UtcTimestamp);
+const validateType = Schema.decodeUnknownResult(Schema.toType(UtcTimestamp));
 
 it("reads an offset spelling and a UTC spelling as the same instant", () => {
   const withOffset = decode("2026-03-14T09:30:00-05:00");
@@ -14,9 +15,18 @@ it("reads an offset spelling and a UTC spelling as the same instant", () => {
   );
 });
 
-it("rejects text that names no instant", () => {
-  for (const text of ["", "yesterday", "2026-13-01T00:00:00Z"]) {
+it("rejects text that names no PostgreSQL instant", () => {
+  for (const text of ["", "yesterday", "0000-01-01T00:00:00Z", "2026-13-01T00:00:00Z"]) {
     expect(Result.isFailure(decode(text))).toBe(true);
+  }
+});
+
+it("rejects PostgreSQL-invalid in-memory instants at the domain boundary", () => {
+  for (const value of [
+    DateTime.makeUnsafe("0000-01-01T00:00:00Z"),
+    DateTime.makeUnsafe("+010000-01-01T00:00:00Z"),
+  ]) {
+    expect(Result.isFailure(validateType(value))).toBe(true);
   }
 });
 
@@ -26,8 +36,13 @@ it("accepts the last valid day in months with 30 or 31 days", () => {
   }
 });
 
-it("accepts a positive timezone offset through +23:59", () => {
-  expect(Result.isSuccess(decode("2026-03-14T09:30:00+23:59"))).toBe(true);
+it("accepts PostgreSQL timezone offsets through +15:59", () => {
+  expect(Result.isSuccess(decode("2026-03-14T09:30:00+15:59"))).toBe(true);
+});
+
+it("rejects timezone offsets outside PostgreSQL's displacement range", () => {
+  expect(Result.isFailure(decode("2026-03-14T09:30:00+16:00"))).toBe(true);
+  expect(Result.isFailure(decode("2026-03-14T09:30:00-16:00"))).toBe(true);
 });
 
 it("rejects a positive timezone offset beyond +23:59", () => {

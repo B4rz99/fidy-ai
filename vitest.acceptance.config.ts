@@ -19,6 +19,8 @@ const acceptanceExclude = [
   "src/shell/observability/telemetry-config.ts",
   // Acceptance substitutes provider transport; exact OpenAI behavior is covered by adapter tests.
   "src/shell/agent/openai.ts",
+  // Transcript lifecycle persistence is covered against PostgreSQL at its public service seam.
+  "src/shell/transcript/conversation-continuity.ts",
 ];
 
 // The WhatsApp acceptance release signal: public signed HTTP, real PostgreSQL, and the production
@@ -48,8 +50,8 @@ export default defineConfig({
       exclude: acceptanceExclude,
       thresholds: {
         autoUpdate: true,
-        branches: 38.73,
-        lines: 70.07,
+        branches: 39.41,
+        lines: 70.36,
       },
     },
   },

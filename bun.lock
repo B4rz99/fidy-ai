@@ -8,7 +8,7 @@
         "@effect/ai-openai": "4.0.0-beta.98",
         "@effect/platform-bun": "4.0.0-beta.98",
         "@effect/sql-pg": "4.0.0-beta.98",
-        "@kapso/whatsapp-cloud-api": "0.2.3",
+        "@kapso/whatsapp-cloud-api": "0.3.0",
         "@sentry/bun": "10.69.0",
         "effect": "4.0.0-beta.98",
       },
@@ -115,7 +115,7 @@
 
     "@jridgewell/trace-mapping": ["@jridgewell/trace-mapping@0.3.31", "", { "dependencies": { "@jridgewell/resolve-uri": "^3.1.0", "@jridgewell/sourcemap-codec": "^1.4.14" } }, "sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw=="],
 
-    "@kapso/whatsapp-cloud-api": ["@kapso/whatsapp-cloud-api@0.2.3", "", { "dependencies": { "zod": "^4.1.11" } }, "sha512-qYZbxBvX6kX7I7dI0PX1W6TWUYQkJKXnf7UqmeWlYALIgsiP5CvFvH45jsWrdjdUPwK1emsyIuHKReDBd7j/Sg=="],
+    "@kapso/whatsapp-cloud-api": ["@kapso/whatsapp-cloud-api@0.3.0", "", { "dependencies": { "zod": "^4.1.11" } }, "sha512-j4PBmpT+7tDpdmcBy7hRWkCfz2w7tvW5loGNgFBX4iCdVBKT2XNjfAUnjlx65tFToWV65AMPUTY5ztDKV31xhQ=="],
 
     "@msgpackr-extract/msgpackr-extract-darwin-arm64": ["@msgpackr-extract/msgpackr-extract-darwin-arm64@3.0.4", "", { "os": "darwin", "cpu": "arm64" }, "sha512-LCkGo6JDfaBhgST7UpPWgNgLINpcpabaHfyz5OBx75nUYxBsaEPxjnyNjWpeb/xBup/682QnBfRBy2/LvPutZQ=="],
 

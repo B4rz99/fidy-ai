@@ -1,6 +1,6 @@
 import { Effect } from "effect";
 import type { UserId } from "~/core/identity/reference";
-import type { TranscriptEntry, TranscriptTurnId } from "~/core/transcript/model";
+import type { TranscriptContentEntry, TranscriptTurnId } from "~/core/transcript/model";
 import {
   listRecentTranscriptEntries as loadRecentTranscriptEntries,
   listTranscriptTurnEntries as loadTranscriptTurnEntries,
@@ -9,7 +9,7 @@ import {
 
 /** Appends exact Transcript evidence for one explicit User in supplied order. */
 export const appendTranscriptEntries = Effect.fn("appendTranscriptEntriesOperation")(
-  (userId: UserId, entries: ReadonlyArray<TranscriptEntry>) =>
+  (userId: UserId, entries: ReadonlyArray<TranscriptContentEntry>) =>
     persistTranscriptEntries(userId, entries)
 );
 

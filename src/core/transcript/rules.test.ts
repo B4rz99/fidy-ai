@@ -6,6 +6,8 @@ import {
   AssistantTranscriptEntry,
   CanonicalToolCallEntry,
   CanonicalToolResultEntry,
+  FailedTurnTranscriptEntry,
+  InterruptedTurnTranscriptEntry,
   ToolCallId,
   TranscriptEntry,
   TranscriptEntryId,
@@ -43,7 +45,11 @@ const entryId = (suffix: string): TranscriptEntryId =>
 const turnId = (suffix: string): TranscriptTurnId =>
   TranscriptTurnId.make(`f1d1a000-0000-4000-8001-${suffix.padStart(12, "0")}`);
 
-const turn = (suffix: string, user: string, assistant: string): ReadonlyArray<TranscriptEntry> => [
+const turn = (
+  suffix: string,
+  user: string,
+  assistant: string
+): ReadonlyArray<TranscriptWindowEntry> => [
   UserTranscriptEntry.make({
     id: entryId(`${suffix}1`),
     turnId: turnId(suffix),
@@ -152,6 +158,17 @@ it("accepts every canonical TranscriptEntry variant", () => {
       outcome: { _tag: "Succeeded", output: {} },
       occurredAt,
     }),
+    FailedTurnTranscriptEntry.make({
+      id: entryId("05"),
+      turnId: id,
+      reason: "DeliveryFailed",
+      occurredAt,
+    }),
+    InterruptedTurnTranscriptEntry.make({
+      id: entryId("06"),
+      turnId: id,
+      occurredAt,
+    }),
   ];
 
   for (const entry of entries) {
@@ -164,6 +181,23 @@ it("accepts every canonical TranscriptEntry variant", () => {
     expect(Result.isSuccess(Schema.decodeUnknownResult(TranscriptEntry)(encoded))).toBe(true);
   }
 });
+
+it.effect("excludes lifecycle markers from model prompt windows", () =>
+  Effect.gen(function* () {
+    const complete = turn("0", "user", "assistant");
+    const selected = yield* selectTranscriptWindow(
+      [
+        ...complete,
+        { _tag: "FailedTurnTranscriptEntry" as const, turnId: turnId("0") },
+        { _tag: "InterruptedTurnTranscriptEntry" as const, turnId: turnId("0") },
+      ],
+      TranscriptWindowTurnLimit.make(2),
+      TranscriptWindowCharacterLimit.make(1_000)
+    );
+
+    expect(selected).toEqual(complete);
+  })
+);
 
 it.effect("keeps the newest complete Transcript turns within both context bounds", () =>
   Effect.gen(function* () {
@@ -493,7 +527,7 @@ it.effect("counts canonical call inputs and both result outcomes in the turn bud
   Effect.gen(function* () {
     const id = turnId("8");
     const operation = CanonicalOperationId.make("categories.listCategories");
-    const entries: ReadonlyArray<TranscriptEntry> = [
+    const entries: ReadonlyArray<TranscriptWindowEntry> = [
       CanonicalToolCallEntry.make({
         id: entryId("81"),
         turnId: id,

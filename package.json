@@ -35,7 +35,7 @@
     "@effect/ai-openai": "4.0.0-beta.98",
     "@effect/platform-bun": "4.0.0-beta.98",
     "@effect/sql-pg": "4.0.0-beta.98",
-    "@kapso/whatsapp-cloud-api": "0.2.3",
+    "@kapso/whatsapp-cloud-api": "0.3.0",
     "@sentry/bun": "10.69.0",
     "effect": "4.0.0-beta.98"
   },

@@ -4,6 +4,8 @@ import {
   type CanonicalToolCallEntry,
   type CanonicalToolOutcome,
   type CanonicalToolResultEntry,
+  type FailedTurnTranscriptEntry,
+  type InterruptedTurnTranscriptEntry,
   type UserTranscriptEntry,
 } from "./model";
 
@@ -38,6 +40,17 @@ type WindowResultEntry = Pick<
 
 /** Canonical Transcript fields considered for complete-turn model context selection. */
 export type TranscriptWindowEntry = WindowTextEntry | WindowCallEntry | WindowResultEntry;
+type LifecycleWindowEntry =
+  | Pick<typeof FailedTurnTranscriptEntry.Encoded, "_tag" | "turnId">
+  | Pick<typeof InterruptedTurnTranscriptEntry.Encoded, "_tag" | "turnId">;
+/** Any persisted entry accepted for model selection; lifecycle-only markers are removed. */
+export type TranscriptSelectionEntry = TranscriptWindowEntry | LifecycleWindowEntry;
+
+/** Narrows a persisted selection entry to content that is legal in a model prompt. */
+export const isTranscriptWindowEntry = (
+  entry: TranscriptSelectionEntry
+): entry is TranscriptWindowEntry =>
+  entry._tag !== "FailedTurnTranscriptEntry" && entry._tag !== "InterruptedTurnTranscriptEntry";
 
 /** Positive whole-turn bound for model-context selection. */
 export const TranscriptWindowTurnLimit = Schema.Int.check(
@@ -248,8 +261,15 @@ const newestTurnsWithin = (
  */
 export const selectTranscriptWindow = Effect.fn("selectTranscriptWindow")(
   (
-    entries: ReadonlyArray<TranscriptWindowEntry>,
+    entries: ReadonlyArray<TranscriptSelectionEntry>,
     maxTurns: TranscriptWindowTurnLimit,
     maxCharacters: TranscriptWindowCharacterLimit
-  ) => Effect.succeed(newestTurnsWithin(groupTurns(entries), maxTurns, maxCharacters))
+  ) =>
+    Effect.succeed(
+      newestTurnsWithin(
+        groupTurns(entries.filter(isTranscriptWindowEntry)),
+        maxTurns,
+        maxCharacters
+      )
+    )
 );

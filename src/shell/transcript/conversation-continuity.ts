@@ -1,4 +1,5 @@
 import {
+  Array as Arr,
   Context,
   Crypto,
   Data,
@@ -8,30 +9,53 @@ import {
   Option,
   Schema,
   SchemaTransformation,
+  Semaphore,
+  Struct,
 } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
-import { UtcTimestamp } from "~/core/_shared/time";
 import { UserId } from "~/core/identity/reference";
 import {
   AssistantTranscriptEntry,
+  CanonicalToolCallEntry,
+  CanonicalToolResultEntry,
   ConversationTurn,
   FailedTurnTranscriptEntry,
   InterruptedTurnTranscriptEntry,
   TranscriptEntry,
   TranscriptEntryId,
   TranscriptTurnId,
-  TurnContinuationEntry,
   TurnFailureReason,
   UserTranscriptEntry,
 } from "~/core/transcript/model";
 import { withUserTransaction } from "~/shell/db/user-transaction";
 
-const preparedContinuityTypeId: unique symbol = Symbol.for(
-  "fidy-ai/shell/conversation-continuity/PreparedContinuity"
+const preparedAttemptContextTypeId: unique symbol = Symbol.for(
+  "fidy-ai/shell/conversation-continuity/PreparedAttemptContext"
 );
-const turnHandleTypeId: unique symbol = Symbol.for(
-  "fidy-ai/shell/conversation-continuity/TurnHandle"
+
+const ActiveTurnRequestSchema = UserTranscriptEntry.mapFields(Struct.pick(["text"]));
+const CanonicalToolCallContent = CanonicalToolCallEntry.mapFields(
+  Struct.omit(["id", "turnId", "occurredAt"])
 );
+const CanonicalToolResultContent = CanonicalToolResultEntry.mapFields(
+  Struct.omit(["id", "turnId", "occurredAt"])
+);
+const TurnContinuationContentSchema = Schema.Union([
+  CanonicalToolCallContent,
+  CanonicalToolResultContent,
+]);
+const DeliveredAssistantContentSchema = AssistantTranscriptEntry.mapFields(
+  Struct.pick(["iteration", "text"])
+);
+
+/** The exact active request without caller-owned persistence identity or time. */
+export type ActiveTurnRequest = typeof ActiveTurnRequestSchema.Type;
+
+/** Canonical call or outcome content; persistence identity, Turn, and time are module-owned. */
+export type TurnContinuationContent = typeof TurnContinuationContentSchema.Type;
+
+/** Visible assistant content; persistence identity, Turn, and time are module-owned. */
+export type DeliveredAssistantContent = typeof DeliveredAssistantContentSchema.Type;
 
 /** Read-only continuity state in authoritative Transcript order. */
 export type ContinuityView = {
@@ -39,75 +63,92 @@ export type ContinuityView = {
   readonly turns: ReadonlyArray<ConversationTurn>;
 };
 
-/** Opaque, single-use authority to begin against one observed User revision. */
-export type PreparedContinuity = ContinuityView & {
-  readonly [preparedContinuityTypeId]: typeof preparedContinuityTypeId;
-};
+/**
+ * Attempt-scoped input for the WorkingContext owner. It binds one User, active request, durable
+ * revision, and ConversationContinuity scope without exposing those persistence facts.
+ */
+export type PreparedAttemptContext = Readonly<{
+  readonly [preparedAttemptContextTypeId]: typeof preparedAttemptContextTypeId;
+}>;
 
-/** Opaque authority to append and terminalize one Pending Turn. */
-export type TurnHandle = {
-  readonly [turnHandleTypeId]: typeof turnHandleTypeId;
-};
-
-/** The prepared revision no longer matches durable continuity; no User entry was admitted. */
+/** The prepared continuity changed before admission; no active User entry was appended. */
 export class ContinuityChanged extends Data.TaggedError("ContinuityChanged")<{}> {}
 
-/** Preparation authority was forged, belongs to another User, or was already consumed. */
-export class ContinuityAuthorityRejected extends Data.TaggedError("ContinuityAuthorityRejected")<{
-  readonly reason: "Consumed" | "Foreign" | "Forged";
-}> {}
+/**
+ * Operations for exactly one admitted Pending Turn. Inputs contain semantic content only. A method
+ * retained after terminalization, supersession, or callback closure dies as a programming defect.
+ */
+export type PendingTurn = Readonly<{
+  append: (entries: Arr.NonEmptyReadonlyArray<TurnContinuationContent>) => Effect.Effect<void>;
+  complete: (assistant: DeliveredAssistantContent) => Effect.Effect<void>;
+  fail: (reason: TurnFailureReason) => Effect.Effect<void>;
+}>;
 
-/** Turn authority was forged, foreign, consumed, or paired with another Turn's entry. */
-export class TurnAuthorityRejected extends Data.TaggedError("TurnAuthorityRejected")<{
-  readonly reason: "Consumed" | "EntryTurnMismatch" | "Foreign" | "Forged";
-}> {}
+/**
+ * One prepared attempt bound to its durable revision and callback scope. `begin` atomically admits
+ * the captured active request as a generated Pending Turn or reports `ContinuityChanged`.
+ */
+export type PreparedAttempt = Readonly<{
+  context: PreparedAttemptContext;
+  view: ContinuityView;
+  begin: () => Effect.Effect<PendingTurn, ContinuityChanged>;
+}>;
 
-/** An entry bypassed or failed its canonical Transcript schema, so nothing was persisted. */
-export class InvalidTranscriptEntry extends Data.TaggedError("InvalidTranscriptEntry")<{}> {}
+/**
+ * User-bound operations for one hosted attempt. A newer preparation supersedes every capability
+ * from the prior preparation.
+ */
+export type SerializedAttempt = Readonly<{
+  prepare: <A, E, R>(
+    use: (prepared: PreparedAttempt) => Effect.Effect<A, E, R>
+  ) => Effect.Effect<A, E, R>;
+}>;
 
-/** A terminal instant is not persistable or precedes the Turn's admitted User entry. */
-export class InvalidTerminalTimestamp extends Data.TaggedError("InvalidTerminalTimestamp")<{}> {}
-
-/** A failure reason is outside the fixed lifecycle allowlist, so nothing was persisted. */
-export class InvalidTurnFailureReason extends Data.TaggedError("InvalidTurnFailureReason")<{}> {}
-
-/** The durable Turn is no longer Pending, so the requested mutation had no effect. */
-export class TurnAlreadyTerminal extends Data.TaggedError("TurnAlreadyTerminal")<{}> {}
-
-/** Exact delivered assistant evidence and its non-earlier terminal instant for successful terminalization. */
-export type CompleteTurnRequest = {
-  readonly entry: AssistantTranscriptEntry;
-  readonly terminalAt: DateTime.Utc;
-};
-
-/** Allowlisted failure reason and its non-earlier terminal instant for failed terminalization. */
-export type FailTurnRequest = {
-  readonly reason: TurnFailureReason;
-  readonly terminalAt: DateTime.Utc;
-};
-
-type PreparedAuthority = {
-  readonly revision: bigint;
-  readonly userId: UserId;
-};
-
-type TurnAuthority = {
-  readonly startedAt: DateTime.Utc;
-  readonly turnId: TranscriptTurnId;
-  readonly userId: UserId;
-};
+/**
+ * Observes durable continuity or runs a callback in one User-bound capability scope. Semantic
+ * input is validated before use; capability misuse dies as a defect, and `ContinuityChanged` is
+ * the sole continuity-specific recoverable failure exposed by a prepared attempt.
+ */
+export type ConversationContinuityService = Readonly<{
+  observe: (userId: UserId) => Effect.Effect<ContinuityView>;
+  withSerializedAttempt: <A, E, R>(
+    userId: UserId,
+    request: ActiveTurnRequest,
+    use: (attempt: SerializedAttempt) => Effect.Effect<A, E, R>
+  ) => Effect.Effect<A, E, R>;
+}>;
 
 type CryptoService = Effect.Success<typeof Crypto.Crypto>;
 type Dependencies = {
-  readonly authorities: AuthorityRegistry;
   readonly crypto: CryptoService;
   readonly sql: SqlClient.SqlClient;
+};
+type PreparedPersistence = {
+  readonly revision: bigint;
+  readonly view: ContinuityView;
+};
+type CapabilityScope = {
+  active: boolean;
+  generation: number;
+  readonly mutationPermit: Semaphore.Semaphore;
+};
+type PendingScope = {
+  active: boolean;
+  lastOccurredAt: DateTime.Utc;
 };
 
 const RevisionRow = Schema.Struct({ revision: Schema.BigIntFromString });
 const PersistedTranscriptEntry = Schema.toCodecJson(TranscriptEntry);
 const TranscriptEntryRow = Schema.Struct({ entry: PersistedTranscriptEntry });
 const OptionalFailureReason = Schema.OptionFromNullOr(TurnFailureReason);
+class InvalidPersistedContinuity extends Data.TaggedError("InvalidPersistedContinuity")<{}> {}
+
+const persistenceOrDie = <A, E, R>(effect: Effect.Effect<A, E, R>): Effect.Effect<A, never, R> =>
+  effect.pipe(
+    Effect.mapError(() => new InvalidPersistedContinuity()),
+    Effect.orDie
+  );
+
 const StoredTurnRow = Schema.Struct({
   id: TranscriptTurnId,
   state: Schema.Literals(["Pending", "Completed", "Failed", "Interrupted"]),
@@ -156,119 +197,6 @@ const StoredTurnRow = Schema.Struct({
     })
   )
 );
-
-type PreparationRegistry = {
-  readonly preparedFor: (
-    userId: UserId,
-    prepared: PreparedContinuity
-  ) => Effect.Effect<PreparedAuthority, ContinuityAuthorityRejected>;
-  readonly registerPrepared: (
-    userId: UserId,
-    revision: bigint,
-    view: ContinuityView
-  ) => PreparedContinuity;
-  readonly consumePrepared: (prepared: PreparedContinuity) => void;
-};
-
-type TurnRegistry = {
-  readonly turnFor: (
-    userId: UserId,
-    handle: TurnHandle
-  ) => Effect.Effect<TurnAuthority, TurnAuthorityRejected>;
-  readonly registerTurn: (userId: UserId, entry: UserTranscriptEntry) => TurnHandle;
-  readonly consumeTurn: (handle: TurnHandle) => void;
-  readonly consumeTurnFor: (userId: UserId, turnId: TranscriptTurnId) => void;
-};
-
-type AuthorityRegistry = PreparationRegistry & TurnRegistry;
-
-type AuthorityRejectionReason = "Consumed" | "Foreign" | "Forged";
-type AuthorityStore<Authority, Rejection> = {
-  readonly find: (userId: UserId, key: object) => Effect.Effect<Authority, Rejection>;
-  readonly register: (key: object, authority: Authority) => void;
-  readonly consume: (key: object) => void;
-};
-
-const makeAuthorityStore = <Authority extends { readonly userId: UserId }, Rejection>(
-  reject: (reason: AuthorityRejectionReason) => Rejection
-): AuthorityStore<Authority, Rejection> => {
-  const authorities = new WeakMap<object, Authority>();
-  const consumed = new WeakSet<object>();
-  return {
-    find: (userId: UserId, key: object): Effect.Effect<Authority, Rejection> => {
-      if (consumed.has(key)) return Effect.fail(reject("Consumed"));
-      const authority = authorities.get(key);
-      if (authority === undefined) return Effect.fail(reject("Forged"));
-      return authority.userId === userId
-        ? Effect.succeed(authority)
-        : Effect.fail(reject("Foreign"));
-    },
-    register: (key: object, authority: Authority): void => {
-      authorities.set(key, authority);
-    },
-    consume: (key: object): void => {
-      consumed.add(key);
-    },
-  };
-};
-
-const makePreparationRegistry = (): PreparationRegistry => {
-  const store = makeAuthorityStore<PreparedAuthority, ContinuityAuthorityRejected>(
-    (reason) => new ContinuityAuthorityRejected({ reason })
-  );
-  return {
-    preparedFor: store.find,
-    registerPrepared: (userId, revision, view) => {
-      const prepared: PreparedContinuity = Object.freeze({
-        [preparedContinuityTypeId]: preparedContinuityTypeId,
-        entries: view.entries,
-        turns: view.turns,
-      });
-      store.register(prepared, { revision, userId });
-      return prepared;
-    },
-    consumePrepared: store.consume,
-  };
-};
-
-const makeTurnRegistry = (): TurnRegistry => {
-  const store = makeAuthorityStore<TurnAuthority, TurnAuthorityRejected>(
-    (reason) => new TurnAuthorityRejected({ reason })
-  );
-  const activeHandles = new Map<string, TurnHandle>();
-  const handleKeys = new WeakMap<TurnHandle, string>();
-  const authorityKey = (userId: UserId, turnId: TranscriptTurnId): string => `${userId}:${turnId}`;
-  const consumeTurn = (handle: TurnHandle): void => {
-    store.consume(handle);
-    const key = handleKeys.get(handle);
-    if (key !== undefined && activeHandles.get(key) === handle) activeHandles.delete(key);
-  };
-  return {
-    turnFor: store.find,
-    registerTurn: (userId, entry) => {
-      const handle: TurnHandle = Object.freeze({ [turnHandleTypeId]: turnHandleTypeId });
-      const key = authorityKey(userId, entry.turnId);
-      store.register(handle, {
-        userId,
-        turnId: entry.turnId,
-        startedAt: entry.occurredAt,
-      });
-      activeHandles.set(key, handle);
-      handleKeys.set(handle, key);
-      return handle;
-    },
-    consumeTurn,
-    consumeTurnFor: (userId, turnId) => {
-      const handle = activeHandles.get(authorityKey(userId, turnId));
-      if (handle !== undefined) consumeTurn(handle);
-    },
-  };
-};
-
-const makeAuthorityRegistry = (): AuthorityRegistry => ({
-  ...makePreparationRegistry(),
-  ...makeTurnRegistry(),
-});
 
 const inUserTransaction = <A, E>(
   sql: SqlClient.SqlClient,
@@ -389,44 +317,9 @@ const requirePending = Effect.fn("ConversationContinuity.requirePending")(functi
       FOR UPDATE
     `,
   })({ userId, turnId });
-  if (row.state !== "Pending") return yield* new TurnAlreadyTerminal();
-});
-
-const recoverPending = Effect.fn("ConversationContinuity.recoverPending")(function* (
-  dependencies: Dependencies,
-  userId: UserId
-) {
-  const { crypto, sql } = dependencies;
-  yield* ensureContinuity(sql, userId);
-  const pending = yield* SqlSchema.findAll({
-    Request: UserId,
-    Result: Schema.Struct({ id: TranscriptTurnId, startedAt: Schema.DateTimeUtcFromDate }),
-    execute: (ownedUserId) => sql`
-      SELECT id, started_at AS "startedAt" FROM conversation_turns
-      WHERE user_id = ${ownedUserId} AND state = 'Pending'
-      ORDER BY started_at, id FOR UPDATE
-    `,
-  })(userId);
-  for (const turn of pending) {
-    const now = yield* DateTime.now;
-    const terminalAt =
-      now.epochMilliseconds >= turn.startedAt.epochMilliseconds ? now : turn.startedAt;
-    yield* appendEntry(
-      sql,
-      userId,
-      InterruptedTurnTranscriptEntry.make({
-        id: TranscriptEntryId.make(yield* crypto.randomUUIDv7),
-        turnId: turn.id,
-        occurredAt: terminalAt,
-      })
-    );
-    yield* sql`
-      UPDATE conversation_turns SET state = 'Interrupted', terminal_at = ${terminalAt}
-      WHERE user_id = ${userId} AND id = ${turn.id} AND state = 'Pending'
-    `;
+  if (row.state !== "Pending") {
+    return yield* Effect.die(new Error("ConversationContinuity Turn is already terminal."));
   }
-  if (pending.length > 0) yield* incrementRevision(sql, userId);
-  return pending.map((turn) => turn.id);
 });
 
 const incrementRevision = Effect.fn("ConversationContinuity.incrementRevision")(function* (
@@ -439,285 +332,620 @@ const incrementRevision = Effect.fn("ConversationContinuity.incrementRevision")(
   `;
 });
 
+const makeEntryId = (crypto: CryptoService): Effect.Effect<TranscriptEntryId> =>
+  crypto.randomUUIDv7.pipe(
+    Effect.map((id) => TranscriptEntryId.make(id)),
+    Effect.orDie
+  );
+
+const makeTurnId = (crypto: CryptoService): Effect.Effect<TranscriptTurnId> =>
+  crypto.randomUUIDv7.pipe(
+    Effect.map((id) => TranscriptTurnId.make(id)),
+    Effect.orDie
+  );
+
+const recoverPending = Effect.fn("ConversationContinuity.recoverPending")(function* (
+  dependencies: Dependencies,
+  userId: UserId
+) {
+  const { crypto, sql } = dependencies;
+  yield* ensureContinuity(sql, userId);
+  const pending = yield* SqlSchema.findAll({
+    Request: UserId,
+    Result: Schema.Struct({
+      id: TranscriptTurnId,
+      startedAt: Schema.DateTimeUtcFromDate,
+      latestEntryAt: Schema.DateTimeUtcFromDate,
+    }),
+    execute: (ownedUserId) => sql`
+      SELECT turn.id, turn.started_at AS "startedAt",
+        max((entry.entry->>'occurredAt')::timestamptz) AS "latestEntryAt"
+      FROM conversation_turns AS turn
+      JOIN transcript_entries AS entry
+        ON entry.user_id = turn.user_id AND entry.turn_id = turn.id
+      WHERE turn.user_id = ${ownedUserId} AND turn.state = 'Pending'
+      GROUP BY turn.id, turn.started_at
+      ORDER BY turn.started_at, turn.id
+    `,
+  })(userId);
+  for (const turn of pending) {
+    const now = yield* DateTime.now;
+    const latestPersistedAt =
+      turn.latestEntryAt.epochMilliseconds >= turn.startedAt.epochMilliseconds
+        ? turn.latestEntryAt
+        : turn.startedAt;
+    const terminalAt =
+      now.epochMilliseconds >= latestPersistedAt.epochMilliseconds ? now : latestPersistedAt;
+    yield* appendEntry(
+      sql,
+      userId,
+      InterruptedTurnTranscriptEntry.make({
+        id: yield* makeEntryId(crypto),
+        turnId: turn.id,
+        occurredAt: terminalAt,
+      })
+    );
+    yield* sql`
+      UPDATE conversation_turns SET state = 'Interrupted', terminal_at = ${terminalAt}
+      WHERE user_id = ${userId} AND id = ${turn.id} AND state = 'Pending'
+    `;
+  }
+  if (pending.length > 0) yield* incrementRevision(sql, userId);
+});
+
 const observeOwned = Effect.fn("ConversationContinuity.observe")(function* (
   dependencies: Dependencies,
   userId: UserId
 ) {
-  const observed = yield* inUserTransaction(
+  return yield* inUserTransaction(
     dependencies.sql,
     userId,
     readContinuityView(dependencies.sql, userId)
-  );
-  return observed;
+  ).pipe(persistenceOrDie);
 });
 
-const prepareOwned = Effect.fn("ConversationContinuity.prepareForTurn")(function* (
+const preparePersisted = Effect.fn("ConversationContinuity.prepare")(function* (
   dependencies: Dependencies,
   userId: UserId
 ) {
-  const recovered = yield* inUserTransaction(
+  return yield* inUserTransaction(
     dependencies.sql,
     userId,
     Effect.gen(function* () {
-      const recoveredTurnIds = yield* recoverPending(dependencies, userId);
-      const observed = yield* observePersisted(dependencies.sql, userId);
-      return { observed, recoveredTurnIds };
+      yield* recoverPending(dependencies, userId);
+      return yield* observePersisted(dependencies.sql, userId);
     })
-  );
-  for (const turnId of recovered.recoveredTurnIds) {
-    dependencies.authorities.consumeTurnFor(userId, turnId);
-  }
-  return dependencies.authorities.registerPrepared(
-    userId,
-    recovered.observed.revision,
-    recovered.observed.view
-  );
+  ).pipe(persistenceOrDie);
 });
 
-type BeginTurnRequest = {
-  readonly entry: UserTranscriptEntry;
-  readonly prepared: PreparedContinuity;
+type BeginPersistence = {
+  readonly dependencies: Dependencies;
   readonly userId: UserId;
+  readonly revision: bigint;
+  readonly entry: UserTranscriptEntry;
 };
 
-const beginOwned = Effect.fn("ConversationContinuity.beginTurn")(function* (
-  dependencies: Dependencies,
-  request: BeginTurnRequest
-) {
-  const { authorities, sql } = dependencies;
-  const authority = yield* authorities.preparedFor(request.userId, request.prepared);
-  const entry = yield* Schema.decodeUnknownEffect(Schema.toType(UserTranscriptEntry))(
-    request.entry
-  ).pipe(Effect.mapError(() => new InvalidTranscriptEntry()));
-  yield* inUserTransaction(
-    sql,
-    request.userId,
+const beginPersisted = Effect.fn("ConversationContinuity.begin")(function* ({
+  dependencies,
+  userId,
+  revision,
+  entry,
+}: BeginPersistence) {
+  return yield* inUserTransaction(
+    dependencies.sql,
+    userId,
     Effect.gen(function* () {
-      yield* ensureContinuity(sql, request.userId);
-      if ((yield* readRevision(sql, request.userId, true)) !== authority.revision) {
-        authorities.consumePrepared(request.prepared);
+      yield* ensureContinuity(dependencies.sql, userId);
+      if ((yield* readRevision(dependencies.sql, userId, true)) !== revision) {
         return yield* new ContinuityChanged();
       }
-      yield* sql`
+      yield* dependencies.sql`
         INSERT INTO conversation_turns (user_id, id, state, started_at)
-        VALUES (${request.userId}, ${entry.turnId}, 'Pending', ${entry.occurredAt})
+        VALUES (${userId}, ${entry.turnId}, 'Pending', ${entry.occurredAt})
       `;
-      yield* appendEntry(sql, request.userId, entry);
-      yield* incrementRevision(sql, request.userId);
+      yield* appendEntry(dependencies.sql, userId, entry);
+      yield* incrementRevision(dependencies.sql, userId);
     })
-  );
-  authorities.consumePrepared(request.prepared);
-  return authorities.registerTurn(request.userId, entry);
-});
-
-type AppendTurnRequest = {
-  readonly entries: ReadonlyArray<TurnContinuationEntry>;
-  readonly handle: TurnHandle;
-  readonly userId: UserId;
-};
-
-const appendOwned = Effect.fn("ConversationContinuity.appendTurn")(function* (
-  dependencies: Dependencies,
-  request: AppendTurnRequest
-) {
-  const { authorities, sql } = dependencies;
-  const authority = yield* authorities.turnFor(request.userId, request.handle);
-  const entries = yield* Schema.decodeUnknownEffect(
-    Schema.Array(Schema.toType(TurnContinuationEntry))
-  )(request.entries).pipe(Effect.mapError(() => new InvalidTranscriptEntry()));
-  if (entries.some((entry) => entry.turnId !== authority.turnId)) {
-    return yield* new TurnAuthorityRejected({ reason: "EntryTurnMismatch" });
-  }
-  yield* inUserTransaction(
-    sql,
-    request.userId,
-    Effect.gen(function* () {
-      yield* requirePending(sql, request.userId, authority.turnId);
-      for (const entry of entries) yield* appendEntry(sql, request.userId, entry);
-      if (entries.length > 0) yield* incrementRevision(sql, request.userId);
-    })
+  ).pipe(
+    Effect.catch((error) =>
+      error instanceof ContinuityChanged
+        ? Effect.fail(error)
+        : Effect.die(new InvalidPersistedContinuity())
+    )
   );
 });
 
-type TerminalEntry =
-  | {
-      readonly _tag: "Completed";
-      readonly entry: AssistantTranscriptEntry;
-    }
-  | {
-      readonly _tag: "Failed";
-      readonly entry: FailedTurnTranscriptEntry;
-      readonly reason: TurnFailureReason;
-    };
-type TerminalEntryFactory = (
-  authority: TurnAuthority,
-  terminalAt: DateTime.Utc
-) => Effect.Effect<
-  TerminalEntry,
-  TurnAuthorityRejected | InvalidTranscriptEntry | InvalidTurnFailureReason
->;
-
-type TerminalizeOwnedRequest = {
-  readonly handle: TurnHandle;
-  readonly makeEntry: TerminalEntryFactory;
-  readonly terminalAt: DateTime.Utc;
+type AppendPersistence = {
+  readonly dependencies: Dependencies;
   readonly userId: UserId;
+  readonly turnId: TranscriptTurnId;
+  readonly entries: Arr.NonEmptyReadonlyArray<TranscriptEntry>;
 };
 
-const terminalizeOwned = Effect.fn("ConversationContinuity.terminalize")(function* (
-  dependencies: Dependencies,
-  request: TerminalizeOwnedRequest
-) {
-  const { authorities, sql } = dependencies;
-  const authority = yield* authorities.turnFor(request.userId, request.handle);
-  const terminalAt = yield* Schema.decodeUnknownEffect(Schema.toType(UtcTimestamp))(
-    request.terminalAt
-  ).pipe(Effect.mapError(() => new InvalidTerminalTimestamp()));
-  if (terminalAt.epochMilliseconds < authority.startedAt.epochMilliseconds) {
-    return yield* new InvalidTerminalTimestamp();
-  }
-  const terminal = yield* request.makeEntry(authority, terminalAt);
+const appendPersisted = Effect.fn("ConversationContinuity.append")(function* ({
+  dependencies,
+  userId,
+  turnId,
+  entries,
+}: AppendPersistence) {
   yield* inUserTransaction(
-    sql,
-    request.userId,
+    dependencies.sql,
+    userId,
     Effect.gen(function* () {
-      yield* requirePending(sql, request.userId, authority.turnId);
-      yield* appendEntry(sql, request.userId, terminal.entry);
-      yield* sql`
+      yield* requirePending(dependencies.sql, userId, turnId);
+      for (const entry of entries) yield* appendEntry(dependencies.sql, userId, entry);
+      yield* incrementRevision(dependencies.sql, userId);
+    })
+  ).pipe(persistenceOrDie);
+});
+
+type TerminalTurn =
+  | Readonly<{ _tag: "Completed"; entry: AssistantTranscriptEntry }>
+  | Readonly<{ _tag: "Failed"; entry: FailedTurnTranscriptEntry }>;
+
+type TerminalPersistence = {
+  readonly dependencies: Dependencies;
+  readonly userId: UserId;
+  readonly terminal: TerminalTurn;
+};
+
+const terminalizePersisted = Effect.fn("ConversationContinuity.terminalize")(function* ({
+  dependencies,
+  userId,
+  terminal,
+}: TerminalPersistence) {
+  const { occurredAt: terminalAt, turnId } = terminal.entry;
+  yield* inUserTransaction(
+    dependencies.sql,
+    userId,
+    Effect.gen(function* () {
+      yield* requirePending(dependencies.sql, userId, turnId);
+      yield* appendEntry(dependencies.sql, userId, terminal.entry);
+      yield* dependencies.sql`
         UPDATE conversation_turns
         SET state = ${terminal._tag}, terminal_at = ${terminalAt},
-          failure_reason = ${terminal._tag === "Failed" ? terminal.reason : null}
-        WHERE user_id = ${request.userId} AND id = ${authority.turnId} AND state = 'Pending'
+          failure_reason = ${terminal._tag === "Failed" ? terminal.entry.reason : null}
+        WHERE user_id = ${userId} AND id = ${turnId} AND state = 'Pending'
       `;
-      yield* incrementRevision(sql, request.userId);
+      yield* incrementRevision(dependencies.sql, userId);
+    })
+  ).pipe(persistenceOrDie);
+});
+
+const capabilityDefect = (message: string): Effect.Effect<never> =>
+  Effect.die(new Error(`ConversationContinuity capability ${message}.`));
+
+class InvalidSemanticTurnContent extends Data.TaggedError("InvalidSemanticTurnContent")<{}> {}
+
+const claimCapability = (
+  isActive: () => boolean,
+  consume: () => void,
+  message: string
+): Effect.Effect<void> =>
+  Effect.suspend(() => {
+    if (!isActive()) return capabilityDefect(message);
+    consume();
+    return Effect.void;
+  });
+
+const checkCapability = (isActive: () => boolean, message: string): Effect.Effect<void> =>
+  Effect.suspend(() => (isActive() ? Effect.void : capabilityDefect(message)));
+
+const nextTimestamp = (pending: PendingScope): Effect.Effect<DateTime.Utc> =>
+  DateTime.now.pipe(
+    Effect.map((now) => {
+      const occurredAt =
+        now.epochMilliseconds >= pending.lastOccurredAt.epochMilliseconds
+          ? now
+          : pending.lastOccurredAt;
+      pending.lastOccurredAt = occurredAt;
+      return occurredAt;
     })
   );
-  authorities.consumeTurn(request.handle);
-});
 
-type CompleteOwnedRequest = CompleteTurnRequest & {
-  readonly handle: TurnHandle;
-  readonly userId: UserId;
+type ContinuationEntryInput = {
+  readonly content: TurnContinuationContent;
+  readonly id: TranscriptEntryId;
+  readonly turnId: TranscriptTurnId;
+  readonly occurredAt: DateTime.Utc;
 };
 
-const completeOwned = Effect.fn("ConversationContinuity.completeTurn")(function* (
-  dependencies: Dependencies,
-  request: CompleteOwnedRequest
-) {
-  return yield* terminalizeOwned(dependencies, {
-    handle: request.handle,
-    makeEntry: (authority) =>
-      Schema.decodeUnknownEffect(Schema.toType(AssistantTranscriptEntry))(request.entry).pipe(
-        Effect.mapError(() => new InvalidTranscriptEntry()),
-        Effect.flatMap((entry) =>
-          entry.turnId === authority.turnId
-            ? Effect.succeed({ _tag: "Completed" as const, entry })
-            : Effect.fail(new TurnAuthorityRejected({ reason: "EntryTurnMismatch" }))
+const makeContinuationEntry = ({
+  content,
+  id,
+  turnId,
+  occurredAt,
+}: ContinuationEntryInput): TranscriptEntry =>
+  content._tag === "CanonicalToolCallEntry"
+    ? CanonicalToolCallEntry.make({ ...content, id, turnId, occurredAt })
+    : CanonicalToolResultEntry.make({ ...content, id, turnId, occurredAt });
+
+type PendingRuntime = {
+  readonly dependencies: Dependencies;
+  readonly userId: UserId;
+  readonly turnId: TranscriptTurnId;
+  readonly scope: PendingScope;
+  readonly operationPermit: Semaphore.Semaphore;
+  readonly mutationPermit: Semaphore.Semaphore;
+  readonly isAttemptActive: () => boolean;
+  readonly isActive: () => boolean;
+};
+
+const appendPending = (
+  runtime: PendingRuntime,
+  untrustedEntries: Arr.NonEmptyReadonlyArray<TurnContinuationContent>
+): Effect.Effect<void> =>
+  runtime.operationPermit.withPermits(1)(
+    Effect.gen(function* () {
+      yield* checkCapability(runtime.isActive, "was used outside its active Pending Turn");
+      const contents = yield* Schema.decodeUnknownEffect(
+        Schema.NonEmptyArray(TurnContinuationContentSchema)
+      )(untrustedEntries).pipe(
+        Effect.mapError(() => new InvalidSemanticTurnContent()),
+        Effect.orDie
+      );
+      const occurredAt = yield* nextTimestamp(runtime.scope);
+      const entries: Arr.NonEmptyArray<TranscriptEntry> = [
+        makeContinuationEntry({
+          content: contents[0],
+          id: yield* makeEntryId(runtime.dependencies.crypto),
+          turnId: runtime.turnId,
+          occurredAt,
+        }),
+      ];
+      for (const content of Arr.drop(contents, 1)) {
+        entries.push(
+          makeContinuationEntry({
+            content,
+            id: yield* makeEntryId(runtime.dependencies.crypto),
+            turnId: runtime.turnId,
+            occurredAt,
+          })
+        );
+      }
+      yield* runtime.mutationPermit.withPermits(1)(
+        checkCapability(runtime.isActive, "was superseded before its Pending Turn mutation").pipe(
+          Effect.andThen(appendPersisted({ ...runtime, entries }))
         )
-      ),
-    terminalAt: request.terminalAt,
-    userId: request.userId,
-  });
-});
+      );
+    })
+  );
 
-type FailOwnedRequest = FailTurnRequest & {
-  readonly handle: TurnHandle;
-  readonly userId: UserId;
-};
+const claimPendingTerminalization = (runtime: PendingRuntime): Effect.Effect<void> =>
+  claimCapability(
+    runtime.isActive,
+    () => {
+      runtime.scope.active = false;
+    },
+    "was reused after terminalization or scope closure"
+  );
 
-const failOwned = Effect.fn("ConversationContinuity.failTurn")(function* (
-  dependencies: Dependencies,
-  request: FailOwnedRequest
-) {
-  return yield* terminalizeOwned(dependencies, {
-    handle: request.handle,
-    makeEntry: (authority, terminalAt) =>
-      Schema.decodeUnknownEffect(TurnFailureReason)(request.reason).pipe(
-        Effect.mapError(() => new InvalidTurnFailureReason()),
-        Effect.flatMap((reason) =>
-          dependencies.crypto.randomUUIDv7.pipe(
-            Effect.orDie,
-            Effect.map((id) => ({
-              _tag: "Failed" as const,
-              entry: FailedTurnTranscriptEntry.make({
-                id: TranscriptEntryId.make(id),
-                turnId: authority.turnId,
-                reason,
-                occurredAt: terminalAt,
-              }),
-              reason,
-            }))
+const terminalizePending: <Content>(
+  runtime: PendingRuntime,
+  decodeContent: Effect.Effect<Content>,
+  makeTerminal: (content: Content, id: TranscriptEntryId, terminalAt: DateTime.Utc) => TerminalTurn
+) => Effect.Effect<void> = (runtime, decodeContent, makeTerminal) =>
+  runtime.operationPermit.withPermits(1)(
+    Effect.gen(function* () {
+      yield* checkCapability(runtime.isActive, "was reused after terminalization or scope closure");
+      const content = yield* decodeContent;
+      yield* claimPendingTerminalization(runtime);
+      const terminalAt = yield* nextTimestamp(runtime.scope);
+      const terminal = makeTerminal(
+        content,
+        yield* makeEntryId(runtime.dependencies.crypto),
+        terminalAt
+      );
+      yield* runtime.mutationPermit.withPermits(1)(
+        checkCapability(runtime.isAttemptActive, "was superseded before terminalization").pipe(
+          Effect.andThen(
+            terminalizePersisted({
+              dependencies: runtime.dependencies,
+              userId: runtime.userId,
+              terminal,
+            })
           )
         )
-      ),
-    terminalAt: request.terminalAt,
-    userId: request.userId,
+      );
+    })
+  );
+
+const completePending = (
+  runtime: PendingRuntime,
+  untrustedAssistant: DeliveredAssistantContent
+): Effect.Effect<void> =>
+  terminalizePending(
+    runtime,
+    Schema.decodeUnknownEffect(DeliveredAssistantContentSchema)(untrustedAssistant).pipe(
+      Effect.mapError(() => new InvalidSemanticTurnContent()),
+      Effect.orDie
+    ),
+    (assistant, id, terminalAt) => ({
+      _tag: "Completed",
+      entry: AssistantTranscriptEntry.make({
+        ...assistant,
+        id,
+        turnId: runtime.turnId,
+        occurredAt: terminalAt,
+      }),
+    })
+  );
+
+const failPending = (
+  runtime: PendingRuntime,
+  untrustedReason: TurnFailureReason
+): Effect.Effect<void> =>
+  terminalizePending(
+    runtime,
+    Schema.decodeUnknownEffect(TurnFailureReason)(untrustedReason).pipe(
+      Effect.mapError(() => new InvalidSemanticTurnContent()),
+      Effect.orDie
+    ),
+    (reason, id, terminalAt) => ({
+      _tag: "Failed",
+      entry: FailedTurnTranscriptEntry.make({
+        id,
+        turnId: runtime.turnId,
+        reason,
+        occurredAt: terminalAt,
+      }),
+    })
+  );
+
+type PendingTurnInput = {
+  readonly dependencies: Dependencies;
+  readonly userId: UserId;
+  readonly turnId: TranscriptTurnId;
+  readonly attemptScope: CapabilityScope;
+  readonly preparation: CapabilityScope;
+  readonly generation: number;
+  readonly startedAt: DateTime.Utc;
+};
+
+const makePendingTurn = (input: PendingTurnInput): PendingTurn => {
+  const scope: PendingScope = { active: true, lastOccurredAt: input.startedAt };
+  const isAttemptActive = (): boolean =>
+    input.attemptScope.active &&
+    input.preparation.active &&
+    input.attemptScope.generation === input.generation;
+  const runtime: PendingRuntime = {
+    dependencies: input.dependencies,
+    userId: input.userId,
+    turnId: input.turnId,
+    scope,
+    operationPermit: Semaphore.makeUnsafe(1),
+    mutationPermit: input.attemptScope.mutationPermit,
+    isAttemptActive,
+    isActive: () => isAttemptActive() && scope.active,
+  };
+  return Object.freeze({
+    append: (entries) => appendPending(runtime, entries),
+    complete: (assistant) => completePending(runtime, assistant),
+    fail: (reason) => failPending(runtime, reason),
   });
-});
+};
+
+type PreparedAttemptInput<A, E, R> = {
+  readonly dependencies: Dependencies;
+  readonly userId: UserId;
+  readonly request: ActiveTurnRequest;
+  readonly attemptScope: CapabilityScope;
+  readonly generation: number;
+  readonly persisted: PreparedPersistence;
+  readonly use: (prepared: PreparedAttempt) => Effect.Effect<A, E, R>;
+};
+
+type BeginPreparedAttempt = {
+  readonly input: Omit<PreparedAttemptInput<unknown, unknown, unknown>, "use">;
+  readonly preparation: CapabilityScope;
+  readonly isBeginActive: () => boolean;
+  readonly isAttemptActive: () => boolean;
+  readonly consumeBegin: () => void;
+};
+
+const beginPreparedAttempt = ({
+  input,
+  preparation,
+  isBeginActive,
+  isAttemptActive,
+  consumeBegin,
+}: BeginPreparedAttempt): Effect.Effect<PendingTurn, ContinuityChanged> =>
+  Effect.gen(function* () {
+    yield* claimCapability(
+      isBeginActive,
+      consumeBegin,
+      "was reused after begin, supersession, or scope closure"
+    );
+    const startedAt = yield* DateTime.now;
+    const turnId = yield* makeTurnId(input.dependencies.crypto);
+    const entry = UserTranscriptEntry.make({
+      ...input.request,
+      id: yield* makeEntryId(input.dependencies.crypto),
+      turnId,
+      occurredAt: startedAt,
+    });
+    yield* input.attemptScope.mutationPermit.withPermits(1)(
+      checkCapability(isAttemptActive, "was superseded before admission").pipe(
+        Effect.andThen(
+          beginPersisted({
+            dependencies: input.dependencies,
+            userId: input.userId,
+            revision: input.persisted.revision,
+            entry,
+          })
+        )
+      )
+    );
+    return makePendingTurn({ ...input, turnId, preparation, startedAt });
+  });
+
+const usePreparedAttempt = <A, E, R>(
+  input: PreparedAttemptInput<A, E, R>
+): Effect.Effect<A, E, R> =>
+  Effect.suspend(() => {
+    const { dependencies, userId, request, attemptScope, generation, persisted, use } = input;
+    const preparation: CapabilityScope = {
+      active: true,
+      generation,
+      mutationPermit: attemptScope.mutationPermit,
+    };
+    let beginAvailable = true;
+    const isAttemptActive = (): boolean =>
+      attemptScope.active && preparation.active && attemptScope.generation === generation;
+    const isBeginActive = (): boolean => isAttemptActive() && beginAvailable;
+    const context: PreparedAttemptContext = Object.freeze({
+      [preparedAttemptContextTypeId]: preparedAttemptContextTypeId,
+    });
+    const prepared: PreparedAttempt = Object.freeze({
+      context,
+      view: persisted.view,
+      begin: () =>
+        beginPreparedAttempt({
+          input: {
+            dependencies,
+            userId,
+            request,
+            attemptScope,
+            generation,
+            persisted,
+          },
+          preparation,
+          isBeginActive,
+          isAttemptActive,
+          consumeBegin: () => {
+            beginAvailable = false;
+          },
+        }),
+    });
+    return use(prepared).pipe(
+      Effect.ensuring(
+        Effect.sync(() => {
+          preparation.active = false;
+        })
+      )
+    );
+  });
+
+type SerializedAttemptInput = {
+  readonly dependencies: Dependencies;
+  readonly userId: UserId;
+  readonly request: ActiveTurnRequest;
+  readonly attemptScope: CapabilityScope;
+};
+
+const makeSerializedAttempt = ({
+  dependencies,
+  userId,
+  request,
+  attemptScope,
+}: SerializedAttemptInput): SerializedAttempt =>
+  Object.freeze({
+    prepare: <A, E, R>(
+      use: (prepared: PreparedAttempt) => Effect.Effect<A, E, R>
+    ): Effect.Effect<A, E, R> =>
+      Effect.gen(function* () {
+        const generation = yield* attemptScope.mutationPermit.withPermits(1)(
+          Effect.suspend(() => {
+            if (!attemptScope.active) {
+              return capabilityDefect("was used after its User scope closed");
+            }
+            attemptScope.generation += 1;
+            return Effect.succeed(attemptScope.generation);
+          })
+        );
+        const persisted = yield* preparePersisted(dependencies, userId);
+        yield* checkCapability(
+          () => attemptScope.active && attemptScope.generation === generation,
+          "was superseded during preparation"
+        );
+        return yield* usePreparedAttempt({
+          dependencies,
+          userId,
+          request,
+          attemptScope,
+          generation,
+          persisted,
+          use,
+        });
+      }),
+  });
+
+type SerializedAttemptUse<A, E, R> = {
+  readonly dependencies: Dependencies;
+  readonly userId: UserId;
+  readonly untrustedRequest: ActiveTurnRequest;
+  readonly use: (attempt: SerializedAttempt) => Effect.Effect<A, E, R>;
+};
+
+const withSerializedAttemptOwned = <A, E, R>({
+  dependencies,
+  userId,
+  untrustedRequest,
+  use,
+}: SerializedAttemptUse<A, E, R>): Effect.Effect<A, E, R> =>
+  Schema.decodeUnknownEffect(ActiveTurnRequestSchema)(untrustedRequest).pipe(
+    Effect.mapError(() => new InvalidSemanticTurnContent()),
+    Effect.orDie,
+    Effect.flatMap((request) =>
+      Effect.suspend(() => {
+        const attemptScope: CapabilityScope = {
+          active: true,
+          generation: 0,
+          mutationPermit: Semaphore.makeUnsafe(1),
+        };
+        const attempt = makeSerializedAttempt({
+          dependencies,
+          userId,
+          request,
+          attemptScope,
+        });
+        return use(attempt).pipe(
+          Effect.ensuring(
+            Effect.sync(() => {
+              attemptScope.active = false;
+              attemptScope.generation += 1;
+            })
+          )
+        );
+      })
+    )
+  );
 
 // Named Effect operations expose each bounded SQL workflow as a trace span. The owning hosted-Turn
 // orchestration reports failures once, so this persistence module deliberately does not log them.
 const makeConversationContinuity = Effect.gen(function* () {
   const dependencies: Dependencies = {
-    authorities: makeAuthorityRegistry(),
     crypto: yield* Crypto.Crypto,
     sql: yield* SqlClient.SqlClient,
   };
+  const observe = (userId: UserId): Effect.Effect<ContinuityView> =>
+    observeOwned(dependencies, userId);
+  const withSerializedAttempt: ConversationContinuityService["withSerializedAttempt"] = (
+    userId,
+    request,
+    use
+  ) =>
+    withSerializedAttemptOwned({
+      dependencies,
+      userId,
+      untrustedRequest: request,
+      use,
+    });
   return {
-    observe(userId: UserId): ReturnType<typeof observeOwned> {
-      return observeOwned(dependencies, userId);
-    },
-    prepareForTurn(userId: UserId): ReturnType<typeof prepareOwned> {
-      return prepareOwned(dependencies, userId);
-    },
-    beginTurn(
-      userId: UserId,
-      prepared: PreparedContinuity,
-      entry: UserTranscriptEntry
-    ): ReturnType<typeof beginOwned> {
-      return beginOwned(dependencies, { userId, prepared, entry });
-    },
-    appendTurn(
-      userId: UserId,
-      handle: TurnHandle,
-      entries: ReadonlyArray<TurnContinuationEntry>
-    ): ReturnType<typeof appendOwned> {
-      return appendOwned(dependencies, { userId, handle, entries });
-    },
-    completeTurn(
-      userId: UserId,
-      handle: TurnHandle,
-      request: CompleteTurnRequest
-    ): ReturnType<typeof completeOwned> {
-      return completeOwned(dependencies, { userId, handle, ...request });
-    },
-    failTurn(
-      userId: UserId,
-      handle: TurnHandle,
-      request: FailTurnRequest
-    ): ReturnType<typeof failOwned> {
-      return failOwned(dependencies, { userId, handle, ...request });
-    },
-  };
+    observe,
+    withSerializedAttempt,
+  } satisfies ConversationContinuityService;
 });
-
-type ConversationContinuityService = Effect.Success<typeof makeConversationContinuity>;
 
 /**
  * Owns exact Transcript admission, explicit Turn lifecycle, and abandoned-Pending recovery.
  *
- * Call `prepareForTurn` before building model context; it atomically marks any durable Pending Turn
- * Interrupted and returns a single-use, User-bound revision authority. Pass that authority and the
- * exact User entry to `beginTurn`, then use its User-bound Turn handle with `appendTurn` and exactly
- * one of `completeTurn` after successful visible delivery or `failTurn` otherwise. Appends and
- * terminalization persist their entries and lifecycle
- * changes atomically; `observe` is read-only. A successful terminal operation consumes its handle.
- *
- * Callers must serialize this sequence per User because a later preparation treats an earlier Pending
- * Turn as abandoned. Invalid, foreign, forged, stale, mismatched, consumed, and already-terminal
- * authority and noncanonical entries, terminal instants, or failure reasons are reported by the
- * exported typed errors; persistence failures are defects at this shell
- * boundary. This module deliberately does not log Transcript content or canonical tool evidence.
+ * `withSerializedAttempt` binds one User and active request to callback-scoped preparation and
+ * Pending capabilities. Callers provide only semantic content; this module creates every persistence id and
+ * nondecreasing lifecycle time. `prepare` recovers abandoned Pending work before exposing an exact
+ * view, and `begin` admits the active User text only if that view is still current. Appends and
+ * terminalization are atomic short User-scoped transactions. `ContinuityChanged` is the only typed
+ * continuity failure; escaped or reused capabilities and impossible persistence states are defects.
  */
 export class ConversationContinuity extends Context.Service<
   ConversationContinuity,

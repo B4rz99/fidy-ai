@@ -1,0 +1,14 @@
+src/shell/agent/model-boundary.test.ts
+  h_c6d49c804e0ad2 63
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "ab0ecd4c442b495baa2f12374ae4fd97ac0dd9ac",
+  "prompts": {},
+  "humans": {
+    "h_c6d49c804e0ad2": {
+      "author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

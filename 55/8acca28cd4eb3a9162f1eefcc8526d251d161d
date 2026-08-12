@@ -1,0 +1,23 @@
+src/core/_shared/time.test.ts
+  s_45ed2a881c4d49::t_6adf303b2465b9 92,94
+  s_45ed2a881c4d49::t_366e2459a02cd8 89-91,93,95
+src/core/_shared/time.ts
+  s_45ed2a881c4d49::t_25162a43e1a583 7
+  s_45ed2a881c4d49::t_60b50fb242e140 9
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "558acca28cd4eb3a9162f1eefcc8526d251d161d",
+  "prompts": {},
+  "sessions": {
+    "s_45ed2a881c4d49": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019ff6ff-c7be-757a-8acd-9e2f52c340f5",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": null
+    }
+  }
+}

@@ -1,0 +1,19 @@
+src/shell/db/advisory-lock.ts
+  s_07b7a7c32c4c52::t_66eef266396379 11-17,29
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "54ace58719268c53e406b7eaca1611a1f89290d9",
+  "prompts": {},
+  "sessions": {
+    "s_07b7a7c32c4c52": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019ff639-7d8f-7845-9b16-9f81dc2390d9",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": null
+    }
+  }
+}

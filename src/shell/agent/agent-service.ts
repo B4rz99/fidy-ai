@@ -776,7 +776,7 @@ const recordModelCompletion = (
       component: "agent",
       outcome: Option.some(outcome.outcome),
       error: outcome.error,
-      attempt: Option.some(TelemetryAttempt.make(attemptCount)),
+      attempt: Option.some(TelemetryAttempt.make(Math.max(1, attemptCount))),
       durationMilliseconds: Option.none(),
     }),
     telemetry.recordOutcome(outcome),

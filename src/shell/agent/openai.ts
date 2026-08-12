@@ -49,6 +49,7 @@ export const withHostedToolCallCap = (maximum: HostedToolCallMaximum): HostedToo
 
 const OpenAiClientLive = OpenAiClient.layerConfig({
   apiKey: Config.redacted("OPENAI_API_KEY"),
+  apiUrl: Config.string("OPENAI_API_URL").pipe(Config.withDefault("https://api.openai.com/v1")),
 });
 
 type OpenAiTool = Readonly<{
@@ -143,17 +144,8 @@ const projectAssistant = (message: Prompt.AssistantMessageEncoded): ReadonlyArra
     if (part.type === "text") {
       return [
         {
-          type: "message",
           role: "assistant",
-          status: "completed",
-          content: [
-            {
-              type: "output_text",
-              text: part.text,
-              annotations: [],
-              logprobs: [],
-            },
-          ],
+          content: [{ type: "input_text", text: part.text }],
         },
       ];
     }
@@ -305,14 +297,20 @@ const countInputTokens = (
       Effect.map(({ input_tokens }) => input_tokens)
     );
 
+const incompleteFinishReasons = new Map<unknown, HostedTextResult["finishReason"]>([
+  ["max_output_tokens", "length"],
+  ["content_filter", "error"],
+]);
+
 const finishReason = (
   response: OpenAiSchema.Response,
   hasToolCalls: boolean
 ): HostedTextResult["finishReason"] => {
   if (hasToolCalls) return "tool-calls";
-  if (response.incomplete_details?.reason === "max_output_tokens") return "length";
-  if (response.incomplete_details?.reason === "content_filter") return "error";
-  return "stop";
+  return Option.getOrElse(
+    Option.fromNullishOr(incompleteFinishReasons.get(response.incomplete_details?.reason)),
+    () => "stop"
+  );
 };
 
 const cachedInputTokens = (usage: OpenAiSchema.Response["usage"]): number => {

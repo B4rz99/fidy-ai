@@ -58,6 +58,14 @@ export type HostedInferenceFailureReason =
   | Readonly<{ _tag: "InvalidOutput"; description: HostedInvalidOutputDescription }>
   | Readonly<{ _tag: "ProviderUnavailable" }>;
 
+const hostedInferenceErrorMessages: Readonly<Record<HostedInferenceFailureReason["_tag"], string>> =
+  {
+    InvalidAuthority: "The hosted inference authority is invalid for this adapter",
+    CapacityExceeded: "The complete hosted request exceeds provider capacity",
+    InvalidOutput: "The hosted provider returned invalid output",
+    ProviderUnavailable: "The hosted provider is unavailable",
+  };
+
 /** Safe failure returned by preparation or execution without exposing provider request content. */
 export class HostedInferenceError extends Data.TaggedError("HostedInferenceError")<{
   readonly reason: HostedInferenceFailureReason;
@@ -65,16 +73,7 @@ export class HostedInferenceError extends Data.TaggedError("HostedInferenceError
   readonly retryAfter: Option.Option<Duration.Duration>;
 }> {
   override get message(): string {
-    switch (this.reason._tag) {
-      case "InvalidAuthority":
-        return "The hosted inference authority is invalid for this adapter";
-      case "CapacityExceeded":
-        return "The complete hosted request exceeds provider capacity";
-      case "InvalidOutput":
-        return "The hosted provider returned invalid output";
-      case "ProviderUnavailable":
-        return "The hosted provider is unavailable";
-    }
+    return hostedInferenceErrorMessages[this.reason._tag];
   }
 }
 
@@ -231,12 +230,18 @@ const beginPreparation = <Request, Continuation>(
 const releaseFailedClaim = <Continuation>(
   exit: Exit.Exit<unknown, unknown>,
   claimed: ClaimedPreparation<Continuation>
-): Effect.Effect<void> => {
-  if (Exit.isFailure(exit) && Option.isSome(claimed.continuationEntry)) {
-    claimed.continuationEntry.value.preparing = false;
-  }
-  return Effect.void;
-};
+): Effect.Effect<void> =>
+  Exit.match(exit, {
+    onFailure: () =>
+      Option.match(claimed.continuationEntry, {
+        onNone: () => Effect.void,
+        onSome: (entry) =>
+          Effect.sync(() => {
+            entry.preparing = false;
+          }),
+      }),
+    onSuccess: () => Effect.void,
+  });
 
 const completeExecution = <Request, Continuation>(
   state: HostedInferenceState<Request, Continuation>,

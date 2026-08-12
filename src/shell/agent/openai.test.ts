@@ -60,6 +60,22 @@ const makeTransport = Effect.fn("Test.makeTransport")(function* (
   return { requests, layer: Layer.succeed(HttpClient.HttpClient, client) } as const;
 });
 
+const makeFailingTransport = (status: number): Layer.Layer<HttpClient.HttpClient> =>
+  Layer.succeed(
+    HttpClient.HttpClient,
+    HttpClient.make((request) =>
+      Effect.succeed(HttpClientResponse.fromWeb(request, new Response("", { status })))
+    )
+  );
+
+const amendResponse = (body: string, patch: Readonly<Record<string, unknown>>): string => {
+  const decoded = Schema.decodeSync(Schema.UnknownFromJsonString)(body);
+  if (typeof decoded !== "object" || decoded === null || Array.isArray(decoded)) {
+    throw new Error("Expected an OpenAI response object");
+  }
+  return Schema.encodeSync(Schema.UnknownFromJsonString)({ ...decoded, ...patch });
+};
+
 const buildInference = Effect.fn("Test.buildInference")(function* (
   httpClient: Layer.Layer<HttpClient.HttpClient>,
   layer: typeof OpenAiHostedInferenceWithoutStartupValidation = OpenAiHostedInferenceWithoutStartupValidation
@@ -157,6 +173,11 @@ it.effect("counts complete framing and executes the exact prepared request", () 
     expect(tools.map(({ name }) => name).toSorted()).toEqual(
       agentOperationBindings.map(({ wireName }) => wireName).toSorted()
     );
+
+    yield* inference.prepareText({ ...textRequest(), toolChoice: "none" });
+    const disabledCount = (yield* Ref.get(transport.requests))[2];
+    if (disabledCount === undefined) return yield* Effect.die("missing disabled count request");
+    expect((yield* requestBody(disabledCount)).tool_choice).toBe("none");
   })
 );
 
@@ -212,6 +233,178 @@ it.effect("rejects malformed tool-call arguments", () =>
       _tag: "InvalidOutput",
       description: "Hosted tool arguments were invalid",
     });
+  })
+);
+
+it.effect("projects replayed Assistant text and tool outcomes as Responses input", () =>
+  Effect.gen(function* () {
+    const transport = yield* makeTransport(100);
+    const inference = yield* buildInference(transport.layer);
+    const request: HostedTextRequest = {
+      ...textRequest(),
+      context: makeHostedTextContext({
+        prefix: [
+          { role: "assistant", content: "prior answer" },
+          { role: "assistant", content: [{ type: "text", text: "another answer" }] },
+          {
+            role: "assistant",
+            content: [
+              {
+                type: "tool-call",
+                id: "prior_call",
+                name: agentOperationBindings[0]?.wireName ?? "identity__getCurrentUser",
+                params: {},
+              },
+            ],
+          },
+          {
+            role: "tool",
+            content: [
+              {
+                type: "tool-result",
+                id: "prior_call",
+                name: agentOperationBindings[0]?.wireName ?? "identity__getCurrentUser",
+                result: { status: "completed" },
+                isFailure: false,
+              },
+            ],
+          },
+        ],
+        continuationTail: [],
+        suffix: [{ role: "user", content: [{ type: "text", text: "continue" }] }],
+      }),
+    };
+
+    yield* inference.prepareText(request);
+    const [count] = yield* Ref.get(transport.requests);
+    if (count === undefined) return yield* Effect.die("missing count request");
+    const input = yield* Schema.encodeEffect(Schema.UnknownFromJsonString)(
+      (yield* requestBody(count)).input
+    );
+    expect(input).toContain('"role":"assistant"');
+    expect(input).toContain('"type":"input_text"');
+    expect(input).toContain('"type":"function_call"');
+    expect(input).toContain('"type":"function_call_output"');
+  })
+);
+
+it.effect("rejects unsupported semantic Prompt parts before counting", () =>
+  Effect.gen(function* () {
+    const unsupportedMessages = [
+      {
+        role: "user",
+        content: [{ type: "file", mediaType: "image/png", data: "aW1hZ2U=" }],
+      },
+      { role: "assistant", content: [{ type: "reasoning", text: "private reasoning" }] },
+      {
+        role: "tool",
+        content: [{ type: "tool-approval-response", approvalId: "approval", approved: false }],
+      },
+    ] as const;
+
+    for (const message of unsupportedMessages) {
+      const transport = yield* makeTransport(100);
+      const inference = yield* buildInference(transport.layer);
+      const failure = yield* inference
+        .prepareText({
+          ...textRequest(),
+          context: makeHostedTextContext({
+            prefix: [message],
+            continuationTail: [],
+            suffix: [],
+          }),
+        })
+        .pipe(Effect.flip);
+      expect(failure.reason).toEqual({
+        _tag: "InvalidOutput",
+        description: "Semantic hosted text projection was invalid",
+      });
+      expect(yield* Ref.get(transport.requests)).toHaveLength(0);
+    }
+  })
+);
+
+it.effect("maps OpenAI completion reasons and cached usage", () =>
+  Effect.gen(function* () {
+    const usage = {
+      input_tokens: 20,
+      input_tokens_details: { cached_tokens: 7 },
+      output_tokens: 3,
+      output_tokens_details: { reasoning_tokens: 0 },
+      total_tokens: 23,
+    };
+    const usageWithoutDetails = {
+      input_tokens: 20,
+      output_tokens: 3,
+      output_tokens_details: { reasoning_tokens: 0 },
+      total_tokens: 23,
+    };
+    const cases = [
+      {
+        status: "incomplete",
+        incompleteDetails: { reason: "max_output_tokens" },
+        expected: "length",
+        responseUsage: usage,
+      },
+      {
+        status: "incomplete",
+        incompleteDetails: { reason: "content_filter" },
+        expected: "error",
+        responseUsage: usage,
+      },
+      {
+        status: "completed",
+        incompleteDetails: null,
+        expected: "stop",
+        responseUsage: null,
+      },
+      {
+        status: "completed",
+        incompleteDetails: null,
+        expected: "stop",
+        responseUsage: usageWithoutDetails,
+      },
+    ] as const;
+
+    for (const { expected, incompleteDetails, responseUsage, status } of cases) {
+      const response = amendResponse(makeOpenAiTextResponse("partial"), {
+        status,
+        incomplete_details: incompleteDetails,
+        usage: responseUsage,
+      });
+      const transport = yield* makeTransport(100, response);
+      const inference = yield* buildInference(transport.layer);
+      const result = yield* inference
+        .prepareText(textRequest())
+        .pipe(Effect.flatMap(inference.executeText));
+      expect(result.finishReason).toBe(expected);
+      expect(result.usage).toEqual(
+        responseUsage === null
+          ? { inputTokens: 0, outputTokens: 0, cachedInputTokens: 0 }
+          : {
+              inputTokens: 20,
+              outputTokens: 3,
+              cachedInputTokens: "input_tokens_details" in responseUsage ? 7 : 0,
+            }
+      );
+    }
+  })
+);
+
+it.effect("classifies retryable and terminal OpenAI HTTP failures", () =>
+  Effect.gen(function* () {
+    for (const [status, retryable] of [
+      [408, true],
+      [409, true],
+      [429, true],
+      [500, true],
+      [400, false],
+    ] as const) {
+      const inference = yield* buildInference(makeFailingTransport(status));
+      const failure = yield* inference.prepareText(textRequest()).pipe(Effect.flip);
+      expect(failure.reason._tag).toBe("ProviderUnavailable");
+      expect(failure.retryable).toBe(retryable);
+    }
   })
 );
 

@@ -1,0 +1,23 @@
+vitest.acceptance.config.ts
+  s_7c8816f7896502::t_dccf8dcfbaa811 66-67
+src/shell/agent/model-boundary.test.ts
+  s_7c8816f7896502::t_d7d834d5bcd80f 5-10,32-35
+  s_7c8816f7896502::t_dd05ccc5fa7899 4,36-43
+  s_7c8816f7896502::t_34f6fd85d760e6 44-50
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "2c9b08b3eed26e85f0151247d668eab732dfd936",
+  "prompts": {},
+  "sessions": {
+    "s_7c8816f7896502": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019ff79d-d891-780f-8edc-34a5fb0ac67a",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

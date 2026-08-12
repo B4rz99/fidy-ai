@@ -1,0 +1,29 @@
+src/shell/ingestion/column-mapper.test.ts
+  s_405115b40b60da::t_cdebba9057503a 8,11-12,15-19
+package.json
+  s_405115b40b60da::t_4a7256e6ba44ea 45
+src/shell/ingestion/parser.test.ts
+  s_405115b40b60da::t_0665ae21a53ddc 45-61
+src/shell/ingestion/column-mapper.ts
+  s_405115b40b60da::t_751edf868a435a 1,10,22-25,31,33-34
+src/core/ingestion/model.ts
+  s_405115b40b60da::t_4ed958a158d7a8 301
+bun.lock
+  s_405115b40b60da::t_a4a09226e63bcc 18,84,86,88,90,92,94,96,98
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "9e0591b3bf95521c35fe4b70a8ceffad8cfc3252",
+  "prompts": {},
+  "sessions": {
+    "s_405115b40b60da": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019ff27a-029a-7cfe-b697-8a69c426b0a0",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

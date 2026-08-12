@@ -56,12 +56,17 @@ const activeRequestContext = (value: unknown): Prompt.UserMessageEncoded => ({
 
 type ProjectedTranscriptEntry = Parameters<typeof transcriptPrompt>[0][number];
 
+const isMatchingActiveRequest = (entry: ProjectedTranscriptEntry, activeRequest: string): boolean =>
+  entry._tag === "UserTranscriptEntry" && entry.text === activeRequest;
+
+const isConfirmationRequest = (entry: ProjectedTranscriptEntry): boolean =>
+  entry._tag === "UserTranscriptEntry" && entry.text.startsWith("CONFIRMAR ");
+
 const isSupersededActiveRequest = (
   entry: ProjectedTranscriptEntry,
   activeRequest: string
 ): boolean =>
-  entry._tag === "UserTranscriptEntry" &&
-  (entry.text === activeRequest || entry.text.startsWith("CONFIRMAR "));
+  [isMatchingActiveRequest(entry, activeRequest), isConfirmationRequest(entry)].includes(true);
 
 const isConsumedAtomicBatchEvidence = (entry: ProjectedTranscriptEntry): boolean =>
   (entry._tag === "CanonicalToolCallEntry" || entry._tag === "CanonicalToolResultEntry") &&

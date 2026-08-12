@@ -69,6 +69,8 @@ src/shell/memory/errors.ts
 src/core/memory/model.ts
   s_89de0047f66132::t_0cb75c69be4a52 46-49,51,54-56
   s_89de0047f66132::t_4fb96fbf3bad35 57
+src/shell/db/migrations/registry.ts
+  s_89de0047f66132::t_49e813fa3d621c 23,56
 ---
 {
   "schema_version": "authorship/3.0.0",

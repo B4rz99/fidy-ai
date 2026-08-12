@@ -1,0 +1,177 @@
+src/shell/testing/authorization.test.ts
+  s_b9630d1d396fed::t_b442aaa2b9fb98 10,20,124-140,149-150
+  s_b9630d1d396fed::t_47ca681b1e6409 141-148
+  s_b9630d1d396fed::t_63e297d09ba282 151-153
+vitest.acceptance.config.ts
+  s_b9630d1d396fed::t_0463dc925ce1de 24-27
+  s_b9630d1d396fed::t_875a3d175b9296 57-58
+bun.lock
+  s_b9630d1d396fed::t_6394b003dca0c8 14,17,83,85,87,89,91,93,95,97,383-384,447-448
+src/shell/memory/handlers.ts
+  s_b9630d1d396fed::t_afeae5107e552b 1-24
+src/shell/memory/memory-policy.ts
+  s_b9630d1d396fed::t_4836f4c04373f7 16-18
+  s_b9630d1d396fed::t_9e44860df1e5ad 3,21-22
+  s_b9630d1d396fed::t_34c474a901c5d5 14-15,19,28
+  s_b9630d1d396fed::t_92f1bc92398e24 7,11
+  s_b9630d1d396fed::t_c3fe3e52281398 1-2,6,10
+  s_b9630d1d396fed::t_9a43895ca24820 29
+  s_b9630d1d396fed::t_b444293985a62f 13,27
+  s_b9630d1d396fed::t_30c4b4bafd5579 9
+  s_b9630d1d396fed::t_1975b0455d9e42 4-5,8,12,20,23-26,30
+src/shell/db/row-level-security.test.ts
+  s_b9630d1d396fed::t_df8e6a2a3699c4 393-401
+  s_b9630d1d396fed::t_eec456531b7096 824-843
+  s_b9630d1d396fed::t_111ca0961fa86f 206-211
+  s_b9630d1d396fed::t_8cdf295e554528 392
+  s_b9630d1d396fed::t_3520a96586f370 891-894
+  s_125eaf742e5b4b::t_d566d2b13efd47 205
+src/shell/memory/handlers.test.ts
+  s_b9630d1d396fed::t_53f684c95ea9e6 34-36,38
+  s_b9630d1d396fed::t_1c765ad032b7df 5-7,77,91,103
+  s_b9630d1d396fed::t_90bea1a65aa208 100-102
+  s_b9630d1d396fed::t_147021c8aa7eb8 1-4,9,16-33,37,39-47,74-76,78-90,92-96,104-106
+  s_b9630d1d396fed::t_78c28a9478c59f 8,10-15,107-137
+  s_b9630d1d396fed::t_47ca681b1e6409 48-67,69-71,97-99
+  s_b9630d1d396fed::t_19d22cf40805dd 68,72-73
+src/core/memory/rules.ts
+  s_b9630d1d396fed::t_42b9da57cefe97 15-19,21
+  s_b9630d1d396fed::t_60141fcd523d3a 1-3,5-14,20
+  s_b9630d1d396fed::t_34e244c1a4c949 4
+src/core/memory/rules.test.ts
+  s_b9630d1d396fed::t_27663b1cc45893 25-27
+  s_b9630d1d396fed::t_d89f9269afbede 2-4,6-9,12-16,20-24,30-32
+  s_b9630d1d396fed::t_192d608def58c7 5
+  s_b9630d1d396fed::t_73aa2d376fac1b 10-11
+  s_b9630d1d396fed::t_84307e1174e78c 1,28-29
+  s_b9630d1d396fed::t_dfca36fab1fa6a 17-19
+src/shell/testing/api-harness.ts
+  s_b9630d1d396fed::t_ee8be9f1bb1600 17,53
+  s_b9630d1d396fed::t_2e042cd81d1c52 6,135-145,152
+src/shell/memory/errors.ts
+  s_b9630d1d396fed::t_eecdf6e61b465d 1,3-5,10-24,26-29,31-32
+  s_b9630d1d396fed::t_200f3e806188d0 6-7
+  s_b9630d1d396fed::t_05e1926d791b0e 2
+  s_b9630d1d396fed::t_47ca681b1e6409 8-9
+  s_b9630d1d396fed::t_58448c804512df 25
+  s_b9630d1d396fed::t_baf040b50af6d1 30
+src/shell/_shared/canonical-mutation-registry.ts
+  s_b9630d1d396fed::t_45acd376654575 1
+  s_b9630d1d396fed::t_666e6fe292b5ce 12-13,31-35
+  s_b9630d1d396fed::t_76a19d03791659 129
+  s_b9630d1d396fed::t_47ca681b1e6409 124-128
+src/shell/memory/memory-policy.test.ts
+  s_b9630d1d396fed::t_cb1999dc3014a4 6-9,16-26,30-32,48,62
+  s_b9630d1d396fed::t_04db3859c7ac23 10,37,50
+  s_b9630d1d396fed::t_eb5245713efeef 2,4,11-15,27-29,33-35,39-42,56-60,64-65,71
+  s_b9630d1d396fed::t_0b769f34d226f8 66-69
+  s_b9630d1d396fed::t_47ca681b1e6409 36,38
+  s_b9630d1d396fed::t_7b4ca95932b821 43-47,49,51-55
+  s_b9630d1d396fed::t_000b624577e1eb 72
+  s_b9630d1d396fed::t_256a731fdc277b 1,3,5,61,63,70
+src/shell/agent/openai.test.ts
+  s_b9630d1d396fed::t_4f981156726a26 152,156
+  s_b9630d1d396fed::t_d03fa311eeaafc 145-151,153-155,157-166
+src/shell/testing/isolation.test.ts
+  s_b9630d1d396fed::t_d46a781dce48e9 14
+  s_b9630d1d396fed::t_efea21e703c4e0 15,102-103,107-111,115-117,435
+  s_b9630d1d396fed::t_47ca681b1e6409 104-106,112-114
+src/shell/memory/mutations.ts
+  s_b9630d1d396fed::t_a426ea9ea86474 9,42
+  s_b9630d1d396fed::t_2cd79d7b9f52ab 1,3,28-37
+  s_b9630d1d396fed::t_e7d7d82d40af89 2,4-5,7-8,10-27,38-41,45-49
+  s_b9630d1d396fed::t_1fae1a6a97ede1 6
+  s_b9630d1d396fed::t_47ca681b1e6409 43-44
+src/shell/agent/model-boundary.ts
+  s_b9630d1d396fed::t_e13f537a38d62d 149-150
+src/shell/testing/suggested-operations.test.ts
+  s_b9630d1d396fed::t_70ad7adff38764 62,67-69
+  s_b9630d1d396fed::t_8b9a5ce4166e5d 6
+  s_b9630d1d396fed::t_47ca681b1e6409 63-66
+src/shell/agent/hosted-inference.test.ts
+  s_b9630d1d396fed::t_23776f4d2b0c45 25
+src/shell/testing/hosted-inference-fixtures.ts
+  s_b9630d1d396fed::t_f8d5acbc7e1152 109
+src/shell/agent/hosted-inference.ts
+  s_b9630d1d396fed::t_d3867bfd384ee1 127-128,146-147,367
+src/shell/agent/model-boundary.test.ts
+  s_b9630d1d396fed::t_47ca681b1e6409 30-32
+  s_b9630d1d396fed::t_4fcca258d9c589 27-29,33-35
+src/shell/db/advisory-lock.ts
+  s_b9630d1d396fed::t_c084219c38cb0d 22-25
+src/shell/operations/handlers.test.ts
+  s_b9630d1d396fed::t_b48955a3f5424b 6,11,66-84
+  s_b9630d1d396fed::t_2588904fafa3de 85-87
+src/core/memory/model.ts
+  s_b9630d1d396fed::t_ba66ab837d3bba 46
+  s_b9630d1d396fed::t_e02159fb6f7b3d 47-49
+  s_b9630d1d396fed::t_bd6aca8772b300 1-12,18-45,50-53
+  s_b9630d1d396fed::t_46d08b8b58236d 13-17
+src/core/memory/model.test.ts
+  s_b9630d1d396fed::t_3d58bdf1e0ce03 1-17
+src/shell/agent/toolkit.test.ts
+  s_b9630d1d396fed::t_0d9d2e1b8b76cf 42-43
+  s_b9630d1d396fed::t_23ecce246f34da 3,37-41
+src/shell/memory/fixtures.ts
+  s_b9630d1d396fed::t_c2d3f80ed3bb15 1-8
+src/shell/agent/agent-service.ts
+  s_b9630d1d396fed::t_1b4e0cc9a674de 539
+src/shell/api.ts
+  s_b9630d1d396fed::t_809ef0d511b74b 10,21
+src/shell/http.ts
+  s_b9630d1d396fed::t_a180f6364c7022 19,104,113-115
+  s_b9630d1d396fed::t_c16daef6888099 46
+  s_b9630d1d396fed::t_5431d6155b394d 26-32
+  s_125eaf742e5b4b::t_1480c075f19e33 57,116-117
+src/shell/memory/operations.ts
+  s_b9630d1d396fed::t_e2dc9cd2ce1263 1-46
+package.json
+  s_b9630d1d396fed::t_0bdedff7ed70c0 44
+  s_b9630d1d396fed::t_41a107bc2d93dc 40-41
+src/shell/db/migrations/0021-create-memories.ts
+  s_b9630d1d396fed::t_784a17ee1684cd 27
+  s_b9630d1d396fed::t_f4b374e001a751 1-26,28
+src/shell/testing/whatsapp-acceptance-harness.ts
+  s_b9630d1d396fed::t_d6fd41260619f9 507,509
+src/shell/testing/operation-policy.test.ts
+  s_b9630d1d396fed::t_082fc7d622a095 95-96,157-158
+src/shell/agent/openai.ts
+  s_b9630d1d396fed::t_1fb47349a3adc3 3-4,388-389,392
+src/shell/db/migrations/registry.ts
+  s_b9630d1d396fed::t_1174ac5c125c00 21,52
+src/shell/agent/agent-service.test.ts
+  s_b9630d1d396fed::t_78a920b8107f7f 2201
+  s_b9630d1d396fed::t_c3eda0563da47c 432-447,993,2212
+  s_b9630d1d396fed::t_4a48a2b7c9070d 2202-2211,2213-2218
+src/shell/memory/repo.ts
+  s_b9630d1d396fed::t_985dc9e45c4307 40-41
+  s_b9630d1d396fed::t_b90641a0387e8f 1,6,8,15
+  s_b9630d1d396fed::t_2b7b5fc0f5688c 2-3,5,7,9-14,16-39,42-60
+  s_b9630d1d396fed::t_5d4d9f1ed8b2ff 4
+src/shell/db/user-tables.ts
+  s_b9630d1d396fed::t_ca437dda2e807e 14
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "d0fcc648bb443d3b545b8adc9db33b9e1d65a3eb",
+  "prompts": {},
+  "sessions": {
+    "s_125eaf742e5b4b": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019ff67c-bd1f-770d-981d-8a6e44288fe8",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": null
+    },
+    "s_b9630d1d396fed": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019ff67c-f1a7-76f5-927d-d54b00e68b79",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": null
+    }
+  }
+}

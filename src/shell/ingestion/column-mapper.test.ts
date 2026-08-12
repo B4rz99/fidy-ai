@@ -5,33 +5,18 @@ import { it } from "@effect/vitest";
 import { StatementColumnMapper, statementMappingPrompt } from "./column-mapper";
 
 describe("statement mapping prompt", () => {
-  it("projects representative cells without sending source financial values", () => {
+  it("sends the bounded raw sample needed to understand an unknown format", () => {
     const prompt = statementMappingPrompt({
       sourceFormat: "csv",
-      headers: [
-        "Date - Jane Doe account 998877",
-        "Amount",
-        "Description",
-        "Direction",
-        "Currency",
-        "998877",
-      ],
-      sampleRows: [["2024-07-03", "12345.67", "Private hospital payment", "DEBIT", "COP", ""]],
+      headers: ["Date - Jane Doe account 998877", "Amount", "Description"],
+      sampleRows: [["2024-07-03", "12345.67", "Private hospital payment"]],
     });
 
-    expect(prompt).not.toContain("Jane Doe");
-    expect(prompt).not.toContain("998877");
-    expect(prompt).not.toContain("2024-07-03");
-    expect(prompt).not.toContain("12345.67");
-    expect(prompt).not.toContain("Private hospital payment");
-    expect(prompt).toContain('Header classes: ["date","amount"');
-    expect(prompt).toContain("<date:yyyy-mm-dd>");
-    expect(prompt).toContain("<number>");
-    expect(prompt).toContain("<text>");
-    expect(prompt).toContain("<direction:debit>");
-    expect(prompt).toContain("<currency:COP>");
-    expect(prompt).toContain("<column:5>");
-    expect(prompt).toContain("<blank>");
+    expect(prompt).toContain("Source format: csv");
+    expect(prompt).toContain('Headers: ["Date - Jane Doe account 998877","Amount","Description"]');
+    expect(prompt).toContain(
+      'Representative rows: [["2024-07-03","12345.67","Private hospital payment"]]'
+    );
   });
 
   it.effect("maps model failures to a safe adapter error", () => {

@@ -1,6 +1,5 @@
-import { Context, Data, Effect, Layer, Option, Schema } from "effect";
+import { Context, Data, Effect, Layer, Schema } from "effect";
 import { LanguageModel } from "effect/unstable/ai";
-import { Currency } from "~/core/_shared/money";
 import { StatementColumnMapping, type StatementMappingSample } from "~/core/ingestion/model";
 
 /** Safe failure returned when one bounded statement-mapping request cannot produce a mapping. */
@@ -8,7 +7,7 @@ export class StatementColumnMappingFailed extends Data.TaggedError("StatementCol
   readonly safeReason: "provider-unavailable" | "invalid-structured-output";
 }> {}
 
-/** Edge seam that maps one bounded, privacy-projected statement sample. */
+/** Edge seam that maps one bounded raw statement sample. */
 export type StatementColumnMapperService = Readonly<{
   mapColumns: (
     sample: StatementMappingSample
@@ -19,76 +18,20 @@ const jsonStringArray = Schema.encodeSync(Schema.fromJsonString(Schema.Array(Sch
 const jsonStringMatrix = Schema.encodeSync(
   Schema.fromJsonString(Schema.Array(Schema.Array(Schema.String)))
 );
-const directionMarkers = new Set(["credit", "cr", "debit", "dr", "in", "out"]);
-const semanticHeaderWords = new Set([
-  "amount",
-  "balance",
-  "counterparty",
-  "credit",
-  "currency",
-  "date",
-  "debit",
-  "description",
-  "details",
-  "direction",
-  "inflow",
-  "memo",
-  "merchant",
-  "outflow",
-  "payee",
-  "posted",
-  "transaction",
-  "type",
-  "value",
-  "beneficiario",
-  "comercio",
-  "concepto",
-  "credito",
-  "debito",
-  "descripcion",
-  "detalle",
-  "fecha",
-  "moneda",
-  "monto",
-  "saldo",
-  "tipo",
-  "valor",
-]);
-const isoDate = /^\d{4}-\d{2}-\d{2}$/u;
-const numericValue = /^[+-]?(?:\d{1,3}(?:[ ,.']\d{3})+|\d+)(?:[.,]\d+)?$/u;
 
-const projectHeader = (header: string, index: number): string => {
-  const words = header
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/gu, "")
-    .toLowerCase()
-    .match(/[a-z]+/gu);
-  const semanticWords = words?.filter((word) => semanticHeaderWords.has(word)) ?? [];
-  return semanticWords.length > 0 ? semanticWords.join(" ") : `<column:${index}>`;
-};
-
-const projectCell = (cell: string): string => {
-  const normalized = cell.trim();
-  if (normalized.length === 0) return "<blank>";
-  if (isoDate.test(normalized)) return "<date:yyyy-mm-dd>";
-  if (numericValue.test(normalized)) return "<number>";
-  const lower = normalized.toLowerCase();
-  if (directionMarkers.has(lower)) return `<direction:${lower}>`;
-  const upper = normalized.toUpperCase();
-  if (Option.isSome(Schema.decodeUnknownOption(Currency)(upper))) return `<currency:${upper}>`;
-  return "<text>";
-};
-
-/** Builds the model prompt from headers and non-sensitive cell classifications only. */
+/**
+ * Builds the one mapping prompt from raw headers and at most five raw rows. The complete statement
+ * is never sent to the model; deterministic code applies the returned mapping to every source row.
+ */
 export const statementMappingPrompt = (sample: StatementMappingSample): string =>
   [
     "Map this financial statement table to the supplied schema.",
     "Use zero-based column indexes for the parser-provided header row.",
     "Use a literal ISO Currency only when the table has no Currency column.",
-    "Representative cells are privacy-preserving classifications, never source values.",
+    "The headers and representative rows contain raw source values.",
     `Source format: ${sample.sourceFormat}`,
-    `Header classes: ${jsonStringArray(sample.headers.map(projectHeader))}`,
-    `Representative cell classes: ${jsonStringMatrix(sample.sampleRows.map((row) => row.map(projectCell)))}`,
+    `Headers: ${jsonStringArray(sample.headers)}`,
+    `Representative rows: ${jsonStringMatrix(sample.sampleRows)}`,
   ].join("\n");
 
 /** The single substitution seam around bank-format understanding. */

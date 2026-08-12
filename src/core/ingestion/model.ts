@@ -298,7 +298,7 @@ export type InterpretedStatementRow<Extraction> =
     }>
   | NeedsReviewStatementRow;
 
-/** The bounded table shape sent in one structured mapping request. */
+/** Raw headers and at most five raw rows sent once to map an unknown statement format. */
 export const StatementMappingSample = Schema.Struct({
   sourceFormat: StatementSourceFormat,
   headers: Schema.NonEmptyArray(Schema.String),

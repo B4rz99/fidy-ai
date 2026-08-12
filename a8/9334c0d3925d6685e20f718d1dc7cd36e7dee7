@@ -126,6 +126,10 @@ src/shell/agent/openai.ts
   s_125eaf742e5b4b::t_b86baef98889e6 705
   s_125eaf742e5b4b::t_51ac9bc8daf91e 549-553,558,566-568,572,610-616
   s_125eaf742e5b4b::t_e1f0f710ae62e2 107-109,111-131,330
+src/shell/testing/api-harness.ts
+  s_125eaf742e5b4b::t_9d63511bdfeced 143-145
+src/shell/memory/memory-policy.test.ts
+  s_125eaf742e5b4b::t_0271e55c11d936 22-24
 ---
 {
   "schema_version": "authorship/3.0.0",

@@ -23,6 +23,7 @@ const acceptanceExclude = [
   // suites; acceptance substitutes model behavior and validates the WhatsApp transport lifecycle.
   "src/shell/agent/agent-service.ts",
   "src/shell/agent/hosted-inference.ts",
+  "src/shell/agent/working-context.ts",
   // Transcript lifecycle persistence is covered against PostgreSQL at its public service seam.
   "src/shell/transcript/conversation-continuity.ts",
   // Memory's canonical API and aggregate policy are covered by their real-PostgreSQL integration

@@ -3,21 +3,10 @@ import { CategoryId } from "~/core/categories/reference";
 import { IanaTimeZone, Locale, ServiceMarket } from "~/core/_shared/context";
 import { Currency, Money } from "~/core/_shared/money";
 import { UtcTimestamp } from "~/core/_shared/time";
+import { StatementSourceFormat, StatementSubmissionId } from "~/core/ingestion/reference";
+import { TransactionId } from "./reference";
 
-/**
- * Names one Transaction. Assigned at insert and never sent by a caller, so a
- * value of this type always came back from fidy and always denotes a row that
- * existed at the moment it was handed out.
- *
- * A surrogate UUID rather than anything derived from the movement: two genuine
- * purchases can share Counterparty, amount and instant, and whether a second
- * capture of the same movement is a duplicate is reconciliation's decision to
- * make (CONTEXT.md) — not one an id can make by colliding.
- */
-export const TransactionId = Schema.String.check(Schema.isUUID())
-  .pipe(Schema.brand("TransactionId"))
-  .annotate({ identifier: "TransactionId" });
-export type TransactionId = typeof TransactionId.Type;
+export { TransactionId } from "./reference";
 
 const zero = BigDecimal.make(0n, 0);
 const maximumTransactionNotesLength = 500;
@@ -193,11 +182,10 @@ export const InterpretationRevision = Schema.NonEmptyString.check(Schema.isTrimm
   .annotate({ identifier: "InterpretationRevision" });
 export type InterpretationRevision = typeof InterpretationRevision.Type;
 
-/** Immutable evidence of the context that interpreted one manually captured Transaction. */
-export const SourceAttestation = Schema.Struct({
+/** Fields shared by every immutable provenance statement. */
+export const SourceAttestationCommon = Schema.Struct({
   id: SourceAttestationId,
   transactionId: TransactionId,
-  kind: Schema.Literal("manual"),
   serviceMarket: ServiceMarket,
   locale: Locale,
   timeZone: IanaTimeZone,
@@ -205,11 +193,34 @@ export const SourceAttestation = Schema.Struct({
   sourceProvider: Schema.OptionFromOptionalKey(SourceName),
   interpretationRevision: InterpretationRevision,
   createdAt: UtcTimestamp,
-}).annotate({ identifier: "SourceAttestation" });
+});
+
+const ManualSourceAttestation = Schema.Struct({
+  ...SourceAttestationCommon.fields,
+  kind: Schema.Literal("manual"),
+});
+
+/** Immutable provenance linking a captured Transaction to one parsed statement record. */
+export const StatementLineSourceAttestation = Schema.Struct({
+  ...SourceAttestationCommon.fields,
+  kind: Schema.Literal("statement-line"),
+  statementSubmissionId: StatementSubmissionId,
+  statementRecordNumber: Schema.Int.check(Schema.isGreaterThan(0)),
+  statementContentHash: Schema.NonEmptyString,
+  sourceFormat: StatementSourceFormat,
+  extractorRevision: InterpretationRevision,
+});
+export type StatementLineSourceAttestation = typeof StatementLineSourceAttestation.Type;
+
+/** Immutable evidence of the context and mechanism that interpreted one Transaction. */
+export const SourceAttestation = Schema.Union([
+  ManualSourceAttestation,
+  StatementLineSourceAttestation,
+]).annotate({ identifier: "SourceAttestation" });
 export type SourceAttestation = typeof SourceAttestation.Type;
 
 /** User interpretation context frozen into provenance when a Transaction is captured. */
-export const CapturedInterpretationContext = SourceAttestation.mapFields(
+export const CapturedInterpretationContext = SourceAttestationCommon.mapFields(
   Struct.pick(["serviceMarket", "locale", "timeZone"])
 ).annotate({ identifier: "CapturedInterpretationContext" });
 export type CapturedInterpretationContext = typeof CapturedInterpretationContext.Type;

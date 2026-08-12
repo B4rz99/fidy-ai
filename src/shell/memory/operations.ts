@@ -8,14 +8,12 @@ import { MemoryCapacityExceededApi } from "./errors";
 const rememberPolicy = operationPolicy({
   requiredScope: "write",
   requiredTier: "free",
-  costClass: "cheap",
   agentConfirmation: "not-required",
   kind: "mutation",
 });
 const recallPolicy = operationPolicy({
   requiredScope: "read",
   requiredTier: "free",
-  costClass: "cheap",
   agentConfirmation: "not-required",
   kind: "query",
 });

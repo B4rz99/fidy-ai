@@ -19,6 +19,7 @@ import { whatsappDurablePropagation } from "./0018-whatsapp-durable-propagation"
 import { userAccess } from "./0019-user-access";
 import { conversationContinuity } from "./0020-conversation-continuity";
 import { createMemories } from "./0021-create-memories";
+import { statementIngestion } from "./0022-statement-ingestion";
 
 /**
  * The explicit index ARCHITECTURE.md §7 calls for: one ordered, append-only
@@ -50,4 +51,5 @@ export const migrations = {
   "0019_user_access": userAccess,
   "0020_conversation_continuity": conversationContinuity,
   "0021_create_memories": createMemories,
+  "0022_statement_ingestion": statementIngestion,
 };

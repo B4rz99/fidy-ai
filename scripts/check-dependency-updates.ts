@@ -93,6 +93,9 @@ const REGISTRY_CONCURRENCY = 8;
 
 /** An exact pin, and nothing else: `1.2.3`, or `1.2.3-beta.4`. A leading `^`, `~`, `>=` or `*` fails to match, which is the point. */
 const EXACT_PIN = /^(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?$/;
+/** SheetJS CE publishes fixed-version tarballs after the stale npm release. */
+const EXACT_SHEETJS_CDN_PIN =
+  /^https:\/\/cdn\.sheetjs\.com\/xlsx-(\d+)\.(\d+)\.(\d+)\/xlsx-\1\.\2\.\3\.tgz$/;
 
 /** How the registry spells a released, non-prerelease version. */
 const STABLE_VERSION = /^\d+\.\d+\.\d+$/;
@@ -140,7 +143,7 @@ type Finding = {
 // ---------------------------------------------------------------------------
 
 const parsePin = (spec: string): Option.Option<Version> => {
-  const match = EXACT_PIN.exec(spec);
+  const match = EXACT_PIN.exec(spec) ?? EXACT_SHEETJS_CDN_PIN.exec(spec);
 
   if (match?.[1] === undefined || match[2] === undefined || match[3] === undefined) {
     return Option.none();

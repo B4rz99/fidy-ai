@@ -1,8 +1,10 @@
 import { expect, layer } from "@effect/vitest";
-import { Context, DateTime, Effect, Layer } from "effect";
+import { Context, DateTime, Effect, Layer, Option } from "effect";
 import { HttpBody, HttpClient } from "effect/unstable/http";
 import { IanaTimeZone } from "~/core/_shared/context";
 import { UserId } from "~/core/identity/reference";
+import { Base64FileContent, StatementIdempotencyKey } from "~/core/ingestion/model";
+import { NeedsReviewItemId, type StatementSubmissionId } from "~/core/ingestion/reference";
 import { CategoryKeyword } from "~/core/categories/model";
 import { categoryIds } from "~/core/categories/taxonomy";
 import { type InsightEvent } from "~/core/insights/model";
@@ -10,6 +12,7 @@ import { type Transaction } from "~/core/transactions/model";
 import { AgentBearerToken } from "~/core/tokens/model";
 import type { OperationId } from "~/shell/api";
 import { truncateInsights, weeklySummaryInput } from "~/shell/insights/fixtures";
+import { truncateStatementIngestion } from "~/shell/ingestion/fixtures";
 import { generateInsightEvent } from "~/shell/insights/repo";
 import { MemoryText } from "~/core/memory/model";
 import { truncateMemories } from "~/shell/memory/fixtures";
@@ -23,6 +26,7 @@ import {
   makeApiClientLive,
 } from "./api-harness";
 import { truncateDashboards } from "~/shell/dashboard/fixtures";
+import { MigrationSqlClient } from "~/shell/db/client";
 import { seedConsentedAgentIdentity } from "~/shell/db/development-seed";
 import { publishedOperationIds } from "./openapi";
 
@@ -55,6 +59,8 @@ type IsolationAttempt = {
   readonly strangerClient: ApiClient;
   readonly ownedTransaction: Transaction;
   readonly ownedInsight: InsightEvent;
+  readonly ownedStatementSubmissionId: StatementSubmissionId;
+  readonly ownedReviewItemId: NeedsReviewItemId;
 };
 
 type IsolationProbe = (
@@ -113,6 +119,68 @@ const probes: Record<OperationId, IsolationProbe> = {
         payload: { text: MemoryText.make("solo dueño") },
       });
       expect((yield* attempt.strangerClient.memory.recall()).data).toEqual([]);
+    }),
+
+  "ingestion.getStatementSubmission": (attempt) =>
+    Effect.gen(function* () {
+      const result = yield* Effect.result(
+        attempt.strangerClient.ingestion.getStatementSubmission({
+          params: { id: attempt.ownedStatementSubmissionId },
+        })
+      );
+      expect(result).toMatchObject({ _tag: "Failure", failure: { error: { code: "not_found" } } });
+      const retained = yield* attempt.ownerClient.ingestion.getStatementSubmission({
+        params: { id: attempt.ownedStatementSubmissionId },
+      });
+      expect(retained.data.id).toBe(attempt.ownedStatementSubmissionId);
+    }),
+
+  "ingestion.listNeedsReviewItems": (attempt) =>
+    Effect.gen(function* () {
+      const strangers = yield* attempt.strangerClient.ingestion.listNeedsReviewItems({
+        query: { offset: Option.none(), limit: Option.none() },
+      });
+      const owners = yield* attempt.ownerClient.ingestion.listNeedsReviewItems({
+        query: { offset: Option.none(), limit: Option.none() },
+      });
+      expect(strangers.data).toEqual([]);
+      expect(owners.data.map((item) => item.id)).toContain(attempt.ownedReviewItemId);
+    }),
+
+  "ingestion.submitForExtraction": (attempt) =>
+    Effect.asVoid(
+      attempt.strangerClient.ingestion.submitForExtraction({
+        payload: {
+          idempotencyKey: StatementIdempotencyKey.make("f1d1a000-0000-4000-8000-00000000a183"),
+          file: {
+            name: "statement.csv",
+            declaredMediaType: "text/csv",
+            contentBase64: Base64FileContent.make("RGF0ZSxBbW91bnQKMjAyNi0wMS0wMSwxLjAw"),
+          },
+        },
+      })
+    ),
+
+  "ingestion.resolveNeedsReviewItem": (attempt) =>
+    Effect.gen(function* () {
+      const result = yield* Effect.result(
+        attempt.strangerClient.ingestion.resolveNeedsReviewItem({
+          params: { id: attempt.ownedReviewItemId },
+          payload: {
+            extraction: {
+              money: attempt.ownedTransaction.money,
+              counterparty: attempt.ownedTransaction.counterparty,
+              direction: attempt.ownedTransaction.direction,
+              occurredAt: attempt.ownedTransaction.occurredAt,
+            },
+          },
+        })
+      );
+      expect(result).toMatchObject({ _tag: "Failure", failure: { error: { code: "not_found" } } });
+      const retained = yield* attempt.ownerClient.ingestion.listNeedsReviewItems({
+        query: { offset: Option.none(), limit: Option.none() },
+      });
+      expect(retained.data).toMatchObject([{ id: attempt.ownedReviewItemId, status: "pending" }]);
     }),
 
   "categories.listCategories": (attempt) =>
@@ -411,8 +479,43 @@ const seedAttempt = Effect.gen(function* () {
   yield* ownerClient.dashboard.applyDashboardEdit({
     payload: { op: "set-title", title: "Panel privado del dueño" },
   });
+  const ownedSubmission = yield* ownerClient.ingestion.submitForExtraction({
+    payload: {
+      idempotencyKey: StatementIdempotencyKey.make("f1d1a000-0000-4000-8000-00000000a181"),
+      file: {
+        name: "owner.csv",
+        declaredMediaType: "text/csv",
+        contentBase64: Base64FileContent.make("RGF0ZSxBbW91bnQKMjAyNi0wMS0wMSwxLjAw"),
+      },
+    },
+  });
+  const ownedReviewItemId = NeedsReviewItemId.make("f1d1a000-0000-4000-8000-00000000a182");
+  const sql = yield* MigrationSqlClient;
+  yield* sql`
+    INSERT INTO needs_review_items(
+      id, user_id, submission_id, record_number, reason, service_market, locale, time_zone,
+      source_format, source_channel, parser_revision, extractor_revision, original_evidence,
+      issues, status
+    ) VALUES (
+      ${ownedReviewItemId}, ${owner}, ${ownedSubmission.data.id}, 1, 'missing-required-fact',
+      'CO', 'es-CO', 'America/Bogota', 'csv', 'statement-upload', 'statement-parser-v1',
+      'statement-extractor-v1',
+      jsonb_build_object(
+        'sourceFormat', 'csv', 'recordNumber', 1, 'startLine', 2, 'endLine', 2,
+        'rawRecord', '2026-01-01,1.00', 'fields', jsonb_build_array('2026-01-01', '1.00')
+      ),
+      jsonb_build_array(), 'pending'
+    )
+  `;
 
-  return { ownerClient, strangerClient, ownedTransaction: created.data, ownedInsight };
+  return {
+    ownerClient,
+    strangerClient,
+    ownedTransaction: created.data,
+    ownedInsight,
+    ownedStatementSubmissionId: ownedSubmission.data.id,
+    ownedReviewItemId,
+  };
 });
 
 layer(IsolationHarness, { excludeTestServices: true, timeout: "30 seconds" })(
@@ -431,6 +534,7 @@ layer(IsolationHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         Effect.gen(function* () {
           yield* truncateInsights;
           yield* truncateTransactions;
+          yield* truncateStatementIngestion;
           yield* truncateDashboards;
           yield* truncateMemories;
           const attempt = yield* seedAttempt;

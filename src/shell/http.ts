@@ -7,7 +7,7 @@ import { AuditRetentionLive } from "~/shell/audit/retention";
 import { CURRENT_POLICY_PATH } from "~/shell/consent/current-disclosure";
 import { PendingConsentRetentionLive } from "~/shell/consent/retention";
 import { AgentService } from "~/shell/agent/agent-service";
-import { OpenAiHostedInferenceLive } from "~/shell/agent/openai";
+import { OpenAiHostedInferenceLive, OpenAiLanguageModelLive } from "~/shell/agent/openai";
 import { CategoriesLive } from "~/shell/categories/handlers";
 import { KapsoClient } from "~/shell/channels/whatsapp/kapso-client";
 import { KapsoWebhookLive } from "~/shell/channels/whatsapp/routes";
@@ -16,6 +16,9 @@ import { DashboardLive } from "~/shell/dashboard/handlers";
 import { MigratorLive, RuntimeAuthorityLive } from "~/shell/db/client";
 import { IdentityLive } from "~/shell/identity/handlers";
 import { InsightsLive } from "~/shell/insights/handlers";
+import { StatementColumnMapper } from "~/shell/ingestion/column-mapper";
+import { IngestionLive } from "~/shell/ingestion/handlers";
+import { StatementIngestionWorkerLive } from "~/shell/ingestion/worker";
 import { MemoryLive } from "~/shell/memory/handlers";
 import { OperationsLive } from "~/shell/operations/handlers";
 import { CanonicalTelemetryLive } from "~/shell/observability/canonical-api";
@@ -53,6 +56,7 @@ export const ApiLive = HttpApiBuilder.layer(FidyApi, { openapiPath: "/openapi.js
       CategoriesLive,
       DashboardLive,
       TransactionsLive,
+      IngestionLive,
       InsightsLive,
       MemoryLive,
       SubscriptionLive,
@@ -105,9 +109,14 @@ const HostedWhatsAppWorkerLive = WhatsAppWorkerLive.pipe(
   Layer.provide(KapsoClient.layer)
 );
 
+const HostedStatementIngestionWorkerLive = StatementIngestionWorkerLive.pipe(
+  Layer.provide(StatementColumnMapper.layer.pipe(Layer.provide(OpenAiLanguageModelLive)))
+);
+
 export const AppLive = Layer.mergeAll(
   HttpLive.pipe(Layer.provide(KapsoClient.layer)),
   HostedWhatsAppWorkerLive,
+  HostedStatementIngestionWorkerLive,
   AuditRetentionLive,
   PendingConsentRetentionLive
 ).pipe(

@@ -5,6 +5,8 @@ import { AgentTokenId } from "~/core/tokens/reference";
 import { IanaTimeZone } from "~/core/_shared/context";
 import { MemoryText } from "~/core/memory/model";
 import { UserId } from "~/core/identity/reference";
+import { Base64FileContent, StatementIdempotencyKey } from "~/core/ingestion/model";
+import { NeedsReviewItemId, StatementSubmissionId } from "~/core/ingestion/reference";
 import { CategoryKeyword } from "~/core/categories/model";
 import { categoryIds } from "~/core/categories/taxonomy";
 import { TransactionId } from "~/core/transactions/model";
@@ -23,6 +25,7 @@ import { AtomicBatchCallId } from "~/shell/operations/operations";
 import { truncateDashboards } from "~/shell/dashboard/fixtures";
 import { seedConsentedAgentIdentity } from "~/shell/db/development-seed";
 import { truncateInsights, weeklySummaryInput } from "~/shell/insights/fixtures";
+import { truncateStatementIngestion } from "~/shell/ingestion/fixtures";
 import { generateInsightEvent } from "~/shell/insights/repo";
 import { transactionPayload, truncateTransactions } from "~/shell/transactions/fixtures";
 import { type ApiCallFailure, type ApiClient, ApiHarness, makeApiClientLive } from "./api-harness";
@@ -66,6 +69,63 @@ const probes: Record<OperationId, SuggestedOperationProbe> = {
     ),
 
   "memory.recall": (client) => Effect.map(client.memory.recall(), (response) => [response]),
+
+  "ingestion.submitForExtraction": (client) =>
+    Effect.map(
+      client.ingestion.submitForExtraction({
+        payload: {
+          idempotencyKey: StatementIdempotencyKey.make("f1d1a000-0000-4000-8000-00000000dea2"),
+          file: {
+            name: "statement.csv",
+            declaredMediaType: "text/csv",
+            contentBase64: Base64FileContent.make("RGF0ZSxBbW91bnQKMjAyNi0wMS0wMSwxLjAw"),
+          },
+        },
+      }),
+      (response) => [response]
+    ),
+
+  "ingestion.getStatementSubmission": (client) =>
+    Effect.gen(function* () {
+      const result = yield* Effect.result(
+        client.ingestion.getStatementSubmission({
+          params: { id: StatementSubmissionId.make("f1d1a000-0000-4000-8000-00000000dea3") },
+        })
+      );
+      if (Result.isSuccess(result)) {
+        return yield* Effect.die("expected the absent StatementSubmission to fail");
+      }
+      return [yield* Schema.decodeUnknownEffect(NotFound)(result.failure)];
+    }),
+
+  "ingestion.listNeedsReviewItems": (client) =>
+    Effect.map(
+      client.ingestion.listNeedsReviewItems({
+        query: { offset: Option.none(), limit: Option.none() },
+      }),
+      (response) => [response]
+    ),
+
+  "ingestion.resolveNeedsReviewItem": (client) =>
+    Effect.gen(function* () {
+      const result = yield* Effect.result(
+        client.ingestion.resolveNeedsReviewItem({
+          params: { id: NeedsReviewItemId.make("f1d1a000-0000-4000-8000-00000000dea1") },
+          payload: {
+            extraction: {
+              money: transactionPayload().money,
+              counterparty: transactionPayload().counterparty,
+              direction: transactionPayload().direction,
+              occurredAt: transactionPayload().occurredAt,
+            },
+          },
+        })
+      );
+      if (Result.isSuccess(result)) {
+        return yield* Effect.die("expected the absent NeedsReviewItem to fail");
+      }
+      return [yield* Schema.decodeUnknownEffect(NotFound)(result.failure)];
+    }),
 
   "categories.listCategories": (client) =>
     Effect.map(client.categories.listCategories(), (response) => [response]),
@@ -326,6 +386,7 @@ layer(SuggestedOperationsHarness, { excludeTestServices: true, timeout: "30 seco
         let returnedSuggestedOperations = 0;
         for (const [sourceOperation, probe] of Object.entries(probes)) {
           yield* truncateTransactions;
+          yield* truncateStatementIngestion;
           yield* truncateInsights;
           yield* truncateDashboards;
           const source = Option.getOrThrow(

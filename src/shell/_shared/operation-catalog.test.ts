@@ -7,7 +7,6 @@ import { operationPolicy } from "./operation-policy";
 const policy = operationPolicy({
   requiredScope: "read",
   requiredTier: "free",
-  costClass: "cheap",
   agentConfirmation: "not-required",
   kind: "query",
 });

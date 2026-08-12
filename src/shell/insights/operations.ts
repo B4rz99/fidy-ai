@@ -40,7 +40,6 @@ export const InsightsGroup = HttpApiGroup.make("insights")
         operationPolicy({
           requiredScope: "read",
           requiredTier: "free",
-          costClass: "cheap",
           agentConfirmation: "not-required",
           kind: "query",
         })
@@ -63,7 +62,6 @@ export const InsightsGroup = HttpApiGroup.make("insights")
         operationPolicy({
           requiredScope: "write",
           requiredTier: "free",
-          costClass: "cheap",
           agentConfirmation: "required",
           kind: "mutation",
         })
@@ -85,7 +83,6 @@ export const InsightsGroup = HttpApiGroup.make("insights")
         operationPolicy({
           requiredScope: "write",
           requiredTier: "free",
-          costClass: "cheap",
           agentConfirmation: "required",
           kind: "mutation",
         })
@@ -106,7 +103,6 @@ export const InsightsGroup = HttpApiGroup.make("insights")
         operationPolicy({
           requiredScope: "write",
           requiredTier: "free",
-          costClass: "cheap",
           agentConfirmation: "required",
           kind: "mutation",
         })

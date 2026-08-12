@@ -1,0 +1,25 @@
+src/shell/db/advisory-lock.ts
+  s_07b7a7c32c4c52::t_bc080c227f4555 11-17,29
+src/shell/transcript/conversation-continuity.ts
+  s_07b7a7c32c4c52::t_beae06d059c9e6 30,109-113,883-909,920-944,977-984
+src/shell/db/advisory-lock.test.ts
+  s_07b7a7c32c4c52::t_21c8def817f987 16,24-30
+src/shell/transcript/conversation-continuity.test.ts
+  s_07b7a7c32c4c52::t_dd1c5f271a61b0 8,17,39-40,267,275-279,285,880-1138,1219-1235
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "f4bc82a334bb5ba123311ca16ba485378cdad09e",
+  "prompts": {},
+  "sessions": {
+    "s_07b7a7c32c4c52": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019ff639-7d8f-7845-9b16-9f81dc2390d9",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

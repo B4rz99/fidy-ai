@@ -37,10 +37,11 @@
     "@effect/sql-pg": "4.0.0-beta.98",
     "@kapso/whatsapp-cloud-api": "0.3.0",
     "@sentry/bun": "10.69.0",
-    "effect": "4.0.0-beta.98"
+    "effect": "4.0.0-beta.98",
+    "js-tiktoken": "1.0.21"
   },
   "devDependencies": {
-    "@effect/tsgo": "0.31.0",
+    "@effect/tsgo": "0.32.1",
     "@effect/vitest": "4.0.0-beta.98",
     "@sentry/cli": "3.6.2",
     "@vitest/coverage-istanbul": "4.1.10",

@@ -429,6 +429,22 @@ const toolCapScript = (serialized: string): Option.Option<ModelReply> => {
   return Option.none();
 };
 
+const memoryScript = (serialized: string): Option.Option<ModelReply> => {
+  if (!serialized.includes("Guarda una memoria sintética")) return Option.none();
+  return Option.some(
+    hasToolResultAfter(serialized, "Guarda una memoria sintética")
+      ? [{ type: "text" as const, text: "Guardé la memoria solicitada." }]
+      : [
+          {
+            type: "tool-call" as const,
+            id: "remember-content-agnostic",
+            name: "memory__remember",
+            params: { payload: { text: `clave sk-${"a".repeat(24)}` } },
+          },
+        ]
+  );
+};
+
 const captureScript = (
   serialized: string,
   tools: ReadonlyArray<Tool.Any>
@@ -974,6 +990,7 @@ const scriptedReply = (
   isolationScript(serialized).pipe(
     Option.orElse(() => toolBudgetScript(serialized, toolChoice)),
     Option.orElse(() => toolCapScript(serialized)),
+    Option.orElse(() => memoryScript(serialized)),
     Option.orElse(() => captureScript(serialized, tools)),
     Option.orElse(() => invalidModelOutputScript(serialized)),
     Option.orElse(() => malformedCaptureScript(serialized)),
@@ -2178,6 +2195,24 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
 
       expect(reply.text).toContain("Gasto guardado");
       expect(rows[0]?.count).toBe(1);
+    })
+  );
+
+  it.effect("remembers credential-shaped prose requested through the hosted agent", () =>
+    Effect.gen(function* () {
+      const sql = yield* MigrationSqlClient;
+      yield* sql`TRUNCATE memories`;
+      yield* clearTranscript;
+      const service = yield* AgentService;
+
+      const reply = yield* service.handleSynchronousTurn(
+        defaultUserId,
+        InboundMessage.make({ text: TranscriptText.make("Guarda una memoria sintética") })
+      );
+      const rows = yield* sql`SELECT text FROM memories WHERE user_id = ${defaultUserId}`;
+
+      expect(reply.text).toBe("Guardé la memoria solicitada.");
+      expect(rows).toEqual([{ text: `clave sk-${"a".repeat(24)}` }]);
     })
   );
 

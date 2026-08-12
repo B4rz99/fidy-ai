@@ -1,5 +1,7 @@
 import { OpenAiClient, OpenAiLanguageModel, OpenAiSchema } from "@effect/ai-openai";
 import * as Generated from "@effect/ai-openai/Generated";
+import { Tiktoken } from "js-tiktoken/lite";
+import o200kBase from "js-tiktoken/ranks/o200k_base";
 import { Config, type Duration, Effect, Layer, Option, Schema } from "effect";
 import type { ConfigError } from "effect/Config";
 import { type Prompt, Tool } from "effect/unstable/ai";
@@ -383,8 +385,11 @@ const executeRequest = (
       )
     );
 
+const memoryTokenizer = new Tiktoken(o200kBase);
+
 const makeOpenAiHostedInference = (client: OpenAiClient.Service): HostedInferenceService => {
   const adapter: HostedInferenceAdapter<PreparedOpenAiRequest, OpenAiContinuation> = {
+    countMemoryText: (text) => Effect.sync(() => memoryTokenizer.encode(text).length),
     prepare: (semanticInput) =>
       Effect.gen(function* () {
         const projected = yield* projectMessages(

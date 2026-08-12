@@ -24,6 +24,15 @@ it("excludes lifecycle markers from the model projection", () => {
   ).toEqual([]);
 });
 
+it("warns against credentials and unnecessary sensitive information without soliciting them", () => {
+  const prompt = systemPrompt(userContext);
+
+  expect(prompt).toContain(
+    "No solicites credenciales, tokens, contraseñas, números de tarjeta ni números de cuenta"
+  );
+  expect(prompt).toContain("advierte al Usuario que no envíe información sensible innecesaria");
+});
+
 it("keeps volatile turn instants out of the cacheable prompt head", () => {
   const firstTurn = DateTime.makeUnsafe("2026-07-20T12:00:00Z");
   const secondTurn = DateTime.makeUnsafe("2026-07-20T13:00:00Z");

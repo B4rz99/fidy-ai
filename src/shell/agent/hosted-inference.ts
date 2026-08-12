@@ -124,6 +124,8 @@ export type HostedTextResult = Readonly<{
  * unchanged. A successful execution returns the provider continuation represented by that request.
  */
 export type HostedInferenceAdapter<Request, Continuation> = Readonly<{
+  /** Counts one provider-compatible canonical plain-text aggregate without network I/O. */
+  countMemoryText: (text: string) => Effect.Effect<number>;
   prepare: (
     input: Readonly<{
       projection: HostedTextProjection;
@@ -141,6 +143,8 @@ export type HostedInferenceAdapter<Request, Continuation> = Readonly<{
 
 /** Provider-neutral authority interface shared by live turns and startup validation. */
 export type HostedInferenceService = Readonly<{
+  /** Counts Memory's canonical plain-text aggregate using provider-owned tokenization. */
+  countMemoryText: (text: string) => Effect.Effect<number>;
   /** Claims the semantic context and returns a one-shot authority for its exact complete request. */
   prepareText: (
     request: HostedTextRequest
@@ -360,6 +364,7 @@ export const makeHostedInference = <Request, Continuation>(
 ): HostedInferenceService => {
   const runtime = makeHostedInferenceRuntime(adapter);
   return {
+    countMemoryText: adapter.countMemoryText,
     prepareText: (request) =>
       runtime.prepare(request, true).pipe(
         Effect.flatMap(

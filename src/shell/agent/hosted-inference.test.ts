@@ -22,6 +22,7 @@ type TestContinuation = ReadonlyArray<Prompt.MessageEncoded>;
 const makeTestInference = Effect.fn("Test.makeTestInference")(function* (capacity: number = 100) {
   const executions = yield* Ref.make<ReadonlyArray<TestRequest>>([]);
   const adapter: HostedInferenceAdapter<TestRequest, TestContinuation> = {
+    countMemoryText: (text) => Effect.succeed(text.length),
     prepare: ({ continuation, projection }) => {
       const messages = [
         ...projection.prefix,

@@ -19,6 +19,10 @@ export const advisoryLockKey = {
     seed: 0,
   }),
   dashboard: (userId: UserId): AdvisoryLockKey => ({ value: userId, seed: 15 }),
+  memories: (userId: UserId): AdvisoryLockKey => ({
+    value: `memories:${userId}`,
+    seed: 0,
+  }),
   consentSubject: (userId: UserId): AdvisoryLockKey => ({
     value: `consent-subject:${userId}`,
     seed: 0,

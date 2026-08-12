@@ -11,6 +11,8 @@ import { AgentBearerToken } from "~/core/tokens/model";
 import type { OperationId } from "~/shell/api";
 import { truncateInsights, weeklySummaryInput } from "~/shell/insights/fixtures";
 import { generateInsightEvent } from "~/shell/insights/repo";
+import { MemoryText } from "~/core/memory/model";
+import { truncateMemories } from "~/shell/memory/fixtures";
 import { AtomicBatchCallId } from "~/shell/operations/operations";
 import { transactionPayload, truncateTransactions } from "~/shell/transactions/fixtures";
 import {
@@ -95,6 +97,22 @@ const probes: Record<OperationId, IsolationProbe> = {
     Effect.gen(function* () {
       const destination = yield* attempt.strangerClient.subscription.getUpgradeUrl();
       expect(destination.data.url).toEqual(new URL("https://fidyapp.com/upgrade"));
+    }),
+
+  "memory.remember": (attempt) =>
+    Effect.gen(function* () {
+      yield* attempt.strangerClient.memory.remember({
+        payload: { text: MemoryText.make("solo extraño") },
+      });
+      expect((yield* attempt.ownerClient.memory.recall()).data).toEqual([]);
+    }),
+
+  "memory.recall": (attempt) =>
+    Effect.gen(function* () {
+      yield* attempt.ownerClient.memory.remember({
+        payload: { text: MemoryText.make("solo dueño") },
+      });
+      expect((yield* attempt.strangerClient.memory.recall()).data).toEqual([]);
     }),
 
   "categories.listCategories": (attempt) =>
@@ -414,6 +432,7 @@ layer(IsolationHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           yield* truncateInsights;
           yield* truncateTransactions;
           yield* truncateDashboards;
+          yield* truncateMemories;
           const attempt = yield* seedAttempt;
 
           yield* probe(attempt);

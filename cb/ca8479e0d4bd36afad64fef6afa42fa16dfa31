@@ -1,0 +1,19 @@
+deploy/health-cron/Dockerfile
+  s_45ed2a881c4d49::t_3c76f93d8436f8 5
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "cbca8479e0d4bd36afad64fef6afa42fa16dfa31",
+  "prompts": {},
+  "sessions": {
+    "s_45ed2a881c4d49": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019ff6ff-c7be-757a-8acd-9e2f52c340f5",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

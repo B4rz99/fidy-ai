@@ -310,7 +310,7 @@ const finishReason = (
   return Option.fromNullishOr(response.incomplete_details).pipe(
     Option.map((details) => details.reason),
     Option.flatMap((reason) => Option.fromNullishOr(incompleteFinishReasons.get(reason))),
-    Option.getOrElse(() => "stop")
+    Option.getOrElse((): HostedTextResult["finishReason"] => "stop")
   );
 };
 

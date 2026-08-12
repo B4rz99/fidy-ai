@@ -4,8 +4,9 @@ import { DateTime, Schema, SchemaTransformation } from "effect";
 // also takes "2026" and "March 14, 2026 GMT", filling the absent date and time
 // in silently, and takes an offsetless spelling whose instant a reader can only
 // guess at.
+// Keep the generated JSON Schema in the provider-compatible regex subset: OpenAI rejects lookaround.
 const rfc3339 =
-  /^(?!0000)\d{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])T(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|[+-](?:0\d|1[0-5]):[0-5]\d)$/u;
+  /^(?:[0-9]{3}[1-9]|[0-9]{2}[1-9][0-9]|[0-9][1-9][0-9]{2}|[1-9][0-9]{3})-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12][0-9]|3[01])T(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9](?:\.[0-9]+)?(?:Z|[+-](?:0[0-9]|1[0-5]):[0-5][0-9])$/u;
 
 const canonicalUtcDateTime = Schema.DateTimeUtc.check(
   Schema.makeIsBetween({ order: DateTime.Order })({

@@ -86,3 +86,10 @@ it("documents itself to a calling agent as a date-time string", () => {
     format: "date-time",
   });
 });
+
+it("publishes date-time validation without regex lookaround", () => {
+  const document = Schema.toJsonSchemaDocument(UtcTimestamp);
+  const serialized = JSON.stringify(document);
+
+  expect(serialized).not.toMatch(/\(\?[=!<]/);
+});

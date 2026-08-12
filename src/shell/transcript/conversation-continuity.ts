@@ -86,13 +86,14 @@ const preparedContextSources = new WeakMap<object, PreparedWorkingContextSnapsho
 /** Claims one continuity-owned source without exposing it on PreparedAttempt.context. @internal */
 export const claimPreparedAttemptContext = (
   context: PreparedAttemptContext
-): Option.Option<PreparedWorkingContextSnapshot> => {
-  const source = preparedContextSources.get(context);
-  if (source === undefined) return Option.none();
-  if ([source.isActive()].includes(false)) return Option.none();
-  preparedContextSources.delete(context);
-  return Option.some(source);
-};
+): Option.Option<PreparedWorkingContextSnapshot> =>
+  Option.fromNullishOr(preparedContextSources.get(context)).pipe(
+    Option.filter((source) => source.isActive()),
+    Option.map((source) => {
+      preparedContextSources.delete(context);
+      return source;
+    })
+  );
 
 /** The prepared continuity changed before admission; no active User entry was appended. */
 export class ContinuityChanged extends Data.TaggedError("ContinuityChanged")<{}> {}

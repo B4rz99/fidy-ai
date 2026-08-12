@@ -1,0 +1,20 @@
+src/shell/transcript/conversation-continuity.ts
+  s_7c8816f7896502::t_ffa92485b0a436 89-90,92-95
+  s_7c8816f7896502::t_fb2c166ca827e1 91,96
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "29fd38ac1fd2ffeff6de636a206ca448040b50c9",
+  "prompts": {},
+  "sessions": {
+    "s_7c8816f7896502": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019ff79d-d891-780f-8edc-34a5fb0ac67a",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

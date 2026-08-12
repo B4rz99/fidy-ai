@@ -1,0 +1,19 @@
+scripts/oxlint/dictionary-types.js
+  s_df44ad36852a2f::t_313e9402ec8d0b 1-3
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "2d39a964e187ba08dbcfb6ccb9d5aef4348e3551",
+  "prompts": {},
+  "sessions": {
+    "s_df44ad36852a2f": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019ff797-32b9-7d91-8c99-1bfff5041e21",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

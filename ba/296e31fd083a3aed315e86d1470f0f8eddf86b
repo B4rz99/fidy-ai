@@ -1,0 +1,21 @@
+vitest.acceptance.config.ts
+  s_7c8816f7896502::t_5d0fa8ca5f0c72 66-67
+src/shell/transcript/conversation-continuity.ts
+  s_7c8816f7896502::t_a4259b01e58a6d 92
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "ba296e31fd083a3aed315e86d1470f0f8eddf86b",
+  "prompts": {},
+  "sessions": {
+    "s_7c8816f7896502": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019ff79d-d891-780f-8edc-34a5fb0ac67a",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

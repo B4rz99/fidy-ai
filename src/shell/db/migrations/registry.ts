@@ -17,6 +17,7 @@ import { agentConfirmationConsumptions } from "./0016-agent-confirmation-consump
 import { recoverConsentDisclosureDelivery } from "./0017-recover-consent-disclosure-delivery";
 import { whatsappDurablePropagation } from "./0018-whatsapp-durable-propagation";
 import { userAccess } from "./0019-user-access";
+import { conversationContinuity } from "./0020-conversation-continuity";
 
 /**
  * The explicit index ARCHITECTURE.md §7 calls for: one ordered, append-only
@@ -46,4 +47,5 @@ export const migrations = {
   "0017_recover_consent_disclosure_delivery": recoverConsentDisclosureDelivery,
   "0018_whatsapp_durable_propagation": whatsappDurablePropagation,
   "0019_user_access": userAccess,
+  "0020_conversation_continuity": conversationContinuity,
 };

@@ -4,6 +4,8 @@ export const userTableNames = [
   "agent_tokens",
   "audit_log_entries",
   "consent_records",
+  "conversation_continuity",
+  "conversation_turns",
   "dashboards",
   "insight_delivery_attempts",
   "insight_events",

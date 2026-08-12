@@ -80,6 +80,7 @@ const seedRows = Effect.gen(function* () {
 const policyOwner = UserId.make("f1d1a000-0000-4000-8000-0000000001a1");
 const policyStranger = UserId.make("f1d1a000-0000-4000-8000-0000000001b2");
 const policyInsertVictim = UserId.make("f1d1a000-0000-4000-8000-0000000003a1");
+const policyContinuityVictim = UserId.make("f1d1a000-0000-4000-8000-0000000003a2");
 const policyForgedUser = UserId.make("f1d1a000-0000-4000-8000-0000000003b2");
 const policyTransactionId = TransactionId.make("f1d1a000-0000-4000-8000-0000000001c3");
 
@@ -100,6 +101,10 @@ const seedEveryPolicyShape = Effect.gen(function* () {
       ),
       (
         ${policyInsertVictim}, 'CO', 'es-CO', 'America/Bogota', 'free',
+        '2026-01-01T00:00:00Z', '2026-01-08T00:00:00Z', '2026-01-01T00:00:00Z'
+      ),
+      (
+        ${policyContinuityVictim}, 'CO', 'es-CO', 'America/Bogota', 'free',
         '2026-01-01T00:00:00Z', '2026-01-08T00:00:00Z', '2026-01-01T00:00:00Z'
       )
   `;
@@ -198,6 +203,17 @@ const seedEveryPolicyShape = Effect.gen(function* () {
     VALUES (${policyOwner}, '{"title":"policy probe"}'::jsonb)
   `;
   yield* admin`
+    INSERT INTO conversation_continuity (user_id, revision)
+    VALUES (${policyOwner}, 1), (${policyInsertVictim}, 0)
+  `;
+  yield* admin`
+    INSERT INTO conversation_turns (user_id, id, state, started_at)
+    VALUES (
+      ${policyOwner}, 'f1d1a000-0000-4000-8000-0000000002f6',
+      'Pending', '2026-01-01T00:00:00Z'
+    )
+  `;
+  yield* admin`
     INSERT INTO transcript_entries (user_id, entry_id, turn_id, entry)
     VALUES (
       ${policyOwner}, 'f1d1a000-0000-4000-8000-0000000002e5',
@@ -271,6 +287,16 @@ const policyProbes: ReadonlyArray<PolicyProbe> = [
     tableName: "dashboards",
     stableColumn: "document",
     ownerPredicate: `user_id = '${policyOwner}'`,
+  },
+  {
+    tableName: "conversation_continuity",
+    stableColumn: "revision",
+    ownerPredicate: `user_id = '${policyOwner}'`,
+  },
+  {
+    tableName: "conversation_turns",
+    stableColumn: "state",
+    ownerPredicate: "id = 'f1d1a000-0000-4000-8000-0000000002f6'",
   },
   {
     tableName: "insight_delivery_attempts",
@@ -538,6 +564,23 @@ const deniedInsertProbes = (sql: SqlClient.SqlClient) =>
       INSERT INTO dashboards (user_id, document)
       VALUES (${policyInsertVictim}, '{"title":"denied insert"}'::jsonb)
     `,
+    },
+    {
+      tableName: "conversation_continuity",
+      insert: sql`
+        INSERT INTO conversation_continuity (user_id, revision)
+        VALUES (${policyContinuityVictim}, 0)
+      `,
+    },
+    {
+      tableName: "conversation_turns",
+      insert: sql`
+        INSERT INTO conversation_turns (user_id, id, state, started_at)
+        VALUES (
+          ${policyOwner}, 'f1d1a000-0000-4000-8000-0000000004f7',
+          'Pending', '2026-01-02T00:00:00Z'
+        )
+      `,
     },
     {
       tableName: "transcript_entries",
@@ -846,6 +889,13 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           )
           UNION ALL SELECT 'dashboards' WHERE EXISTS (
             SELECT 1 FROM dashboards WHERE user_id = ${policyInsertVictim}
+          )
+          UNION ALL SELECT 'conversation_continuity' WHERE EXISTS (
+            SELECT 1 FROM conversation_continuity WHERE user_id = ${policyContinuityVictim}
+          )
+          UNION ALL SELECT 'conversation_turns' WHERE EXISTS (
+            SELECT 1 FROM conversation_turns
+            WHERE id = 'f1d1a000-0000-4000-8000-0000000004f7'
           )
           UNION ALL SELECT 'transcript_entries' WHERE EXISTS (
             SELECT 1 FROM transcript_entries

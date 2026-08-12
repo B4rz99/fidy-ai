@@ -34,7 +34,7 @@ import {
   type CanonicalToolOutcome,
   CanonicalToolResultEntry,
   ToolCallId,
-  type TranscriptEntry,
+  type TranscriptContentEntry,
   TranscriptEntryId,
   TranscriptText,
   TranscriptTurnId,
@@ -241,7 +241,7 @@ const withCurrentConsent = <A, E, R>(
 
 const appendAuthorizedTranscript = (
   subjectUserId: UserId,
-  entries: ReadonlyArray<TranscriptEntry>
+  entries: ReadonlyArray<TranscriptContentEntry>
 ): Effect.Effect<void, OnboardingConsentRequired, SqlClient.SqlClient> =>
   withCurrentConsent(subjectUserId, appendTranscriptEntries(subjectUserId, entries));
 

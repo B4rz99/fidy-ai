@@ -2,9 +2,15 @@ import { Effect, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import { UserId } from "~/core/identity/reference";
 import { withUserTransaction } from "~/shell/db/user-transaction";
-import { TranscriptEntry, TranscriptEntryId, TranscriptTurnId } from "~/core/transcript/model";
+import {
+  TranscriptContentEntry,
+  TranscriptEntry,
+  TranscriptEntryId,
+  TranscriptTurnId,
+} from "~/core/transcript/model";
 
 const PersistedTranscriptEntry = Schema.toCodecJson(TranscriptEntry);
+const PersistedTranscriptContentEntry = Schema.toCodecJson(TranscriptContentEntry);
 const TranscriptEntryRow = Schema.Struct({ entry: PersistedTranscriptEntry });
 const RecentTranscriptRequest = Schema.Struct({
   subjectUserId: UserId,
@@ -18,12 +24,12 @@ const OwnedTranscriptEntryRow = Schema.Struct({
   subjectUserId: UserId,
   entryId: TranscriptEntryId,
   turnId: TranscriptTurnId,
-  entry: PersistedTranscriptEntry,
+  entry: PersistedTranscriptContentEntry,
 });
 
 const appendOne = Effect.fn("appendTranscriptEntry")(function* (
   subjectUserId: UserId,
-  entry: TranscriptEntry
+  entry: TranscriptContentEntry
 ) {
   const sql = yield* SqlClient.SqlClient;
   yield* SqlSchema.findOne({
@@ -44,7 +50,7 @@ const appendOne = Effect.fn("appendTranscriptEntry")(function* (
  */
 export const appendTranscriptEntries = Effect.fn("appendTranscriptEntries")(function* (
   subjectUserId: UserId,
-  entries: ReadonlyArray<TranscriptEntry>
+  entries: ReadonlyArray<TranscriptContentEntry>
 ) {
   yield* withUserTransaction(
     subjectUserId,

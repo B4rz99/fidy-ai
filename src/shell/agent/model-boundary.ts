@@ -5,7 +5,11 @@ import { categoryRows } from "~/core/categories/taxonomy";
 import type { User } from "~/core/identity/model";
 import { AgentBearerToken } from "~/core/tokens/model";
 import { TranscriptText } from "~/core/transcript/model";
-import type { TranscriptWindowEntry } from "~/core/transcript/rules";
+import {
+  type TranscriptSelectionEntry,
+  type TranscriptWindowEntry,
+  isTranscriptWindowEntry,
+} from "~/core/transcript/rules";
 import { encodeOpenAiToolName } from "./toolkit";
 
 const minimumPaymentCardDigits = 13;
@@ -29,29 +33,32 @@ const oversizedToolResult: Schema.Json = {
   message: "The canonical result exceeded the model-context safety limit.",
 };
 
-/** Replaces only oversized tool outcomes in model context, leaving retained Transcript entries unchanged. */
+/** Excludes lifecycle markers and replaces oversized tool outcomes without changing retained Transcript entries. */
 export const projectTranscriptForModel: {
   (
     maxToolResultCharacters: number
-  ): (entries: ReadonlyArray<TranscriptWindowEntry>) => ReadonlyArray<TranscriptWindowEntry>;
+  ): (entries: ReadonlyArray<TranscriptSelectionEntry>) => ReadonlyArray<TranscriptWindowEntry>;
   (
-    entries: ReadonlyArray<TranscriptWindowEntry>,
+    entries: ReadonlyArray<TranscriptSelectionEntry>,
     maxToolResultCharacters: number
   ): ReadonlyArray<TranscriptWindowEntry>;
 } = Function.dual(
   2,
-  (entries: ReadonlyArray<TranscriptWindowEntry>, maxToolResultCharacters: number) =>
-    entries.map((entry) => {
+  (entries: ReadonlyArray<TranscriptSelectionEntry>, maxToolResultCharacters: number) =>
+    entries.flatMap((entry): ReadonlyArray<TranscriptWindowEntry> => {
+      if (!isTranscriptWindowEntry(entry)) return [];
       if (
         entry._tag !== "CanonicalToolResultEntry" ||
         JSON.stringify(entry.outcome).length <= maxToolResultCharacters
       ) {
-        return entry;
+        return [entry];
       }
-      return {
-        ...entry,
-        outcome: { _tag: "ToolOutputRejected", failure: oversizedToolResult },
-      };
+      return [
+        {
+          ...entry,
+          outcome: { _tag: "ToolOutputRejected", failure: oversizedToolResult },
+        },
+      ];
     })
 );
 

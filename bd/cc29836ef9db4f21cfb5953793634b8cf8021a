@@ -1,0 +1,25 @@
+src/shell/agent/hosted-inference.ts
+  s_125eaf742e5b4b::t_bce20b2a7d307d 495
+  s_125eaf742e5b4b::t_19764eafd2896e 475
+  s_125eaf742e5b4b::t_e0c3c0a2911127 70-71,464,490,518
+  s_125eaf742e5b4b::t_9e50f65abe0655 491
+src/shell/agent/openai.ts
+  s_125eaf742e5b4b::t_987ed23981658d 554-555
+  s_125eaf742e5b4b::t_fc08e47182cf30 547,575
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "bdcc29836ef9db4f21cfb5953793634b8cf8021a",
+  "prompts": {},
+  "sessions": {
+    "s_125eaf742e5b4b": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019ff67c-bd1f-770d-981d-8a6e44288fe8",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": null
+    }
+  }
+}

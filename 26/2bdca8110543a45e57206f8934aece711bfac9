@@ -1,0 +1,21 @@
+src/shell/agent/openai.ts
+  s_405115b40b60da::t_2f326d6e372f3c 55-60
+src/shell/http.ts
+  s_405115b40b60da::t_9d0d5007fc456e 10
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "262bdca8110543a45e57206f8934aece711bfac9",
+  "prompts": {},
+  "sessions": {
+    "s_405115b40b60da": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019ff27a-029a-7cfe-b697-8a69c426b0a0",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

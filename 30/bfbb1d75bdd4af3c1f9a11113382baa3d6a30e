@@ -1,0 +1,55 @@
+.oxlintrc.json
+  s_df44ad36852a2f::t_5600448107e189 147-148,152,160-170,200-201,253-257,265
+CODING_STANDARDS.md
+  s_df44ad36852a2f::t_ecc1fe532f5f8d 97-100,106-107
+scripts/check-lint-guards.ts
+  s_df44ad36852a2f::t_f684bea2781a78 27-36
+src/core/consent/model.test.ts
+  s_df44ad36852a2f::t_87bfe586ea5dc9 19-21,180,184
+src/core/dashboard/model.test.ts
+  s_df44ad36852a2f::t_dcea77dbd7f88a 11,255-258,269
+src/core/dashboard/rules.test.ts
+  s_df44ad36852a2f::t_23f3581029df08 3,19,22,25,31
+src/core/ingestion/rules.ts
+  s_df44ad36852a2f::t_802932f9c2a7bf 14
+src/core/insights/model.test.ts
+  s_df44ad36852a2f::t_53b325c1440fcc 5-8,96,113
+src/core/transactions/model.test.ts
+  s_df44ad36852a2f::t_0d4956e5aaeaef 18-19,24
+src/core/transcript/model.ts
+  s_df44ad36852a2f::t_17e36382ace59f 13-14,22,25,27-29,36
+src/shell/transcript/conversation-continuity.test.ts
+  s_45ed2a881c4d49::t_d7f6ad1cbe7014 37,262-273,283,289-292
+src/shell/transcript/conversation-continuity.ts
+  s_45ed2a881c4d49::t_de24977c916b03 108-110,890-910,943-948
+scripts/oxlint/dictionary-types.js
+  s_df44ad36852a2f::t_f0d757e202cc33 1-234
+scripts/oxlint/effect-guards.js
+  s_df44ad36852a2f::t_69cd9921677c85 10-15,527-646,677-678
+vitest.acceptance.config.ts
+  s_df44ad36852a2f::t_cde6736e960842 61
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "30bfbb1d75bdd4af3c1f9a11113382baa3d6a30e",
+  "prompts": {},
+  "sessions": {
+    "s_45ed2a881c4d49": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019ff6ff-c7be-757a-8acd-9e2f52c340f5",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_df44ad36852a2f": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019ff797-32b9-7d91-8c99-1bfff5041e21",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

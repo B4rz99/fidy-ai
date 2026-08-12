@@ -20,6 +20,7 @@ import { userAccess } from "./0019-user-access";
 import { conversationContinuity } from "./0020-conversation-continuity";
 import { createMemories } from "./0021-create-memories";
 import { statementIngestion } from "./0022-statement-ingestion";
+import { memoryRevisions } from "./0023-memory-revisions";
 
 /**
  * The explicit index ARCHITECTURE.md §7 calls for: one ordered, append-only
@@ -52,4 +53,5 @@ export const migrations = {
   "0020_conversation_continuity": conversationContinuity,
   "0021_create_memories": createMemories,
   "0022_statement_ingestion": statementIngestion,
+  "0023_memory_revisions": memoryRevisions,
 };

@@ -68,6 +68,27 @@ const probes: Record<OperationId, SuggestedOperationProbe> = {
       (response) => [response]
     ),
 
+  "memory.revise": (client) =>
+    Effect.gen(function* () {
+      const created = yield* client.memory.remember({
+        payload: { text: MemoryText.make("Contexto antes") },
+      });
+      const revised = yield* client.memory.revise({
+        params: { id: created.data.id },
+        payload: { text: MemoryText.make("Contexto después") },
+      });
+      return [revised];
+    }),
+
+  "memory.forget": (client) =>
+    Effect.gen(function* () {
+      const created = yield* client.memory.remember({
+        payload: { text: MemoryText.make("Contexto eliminable") },
+      });
+      const forgotten = yield* client.memory.forget({ params: { id: created.data.id } });
+      return [forgotten];
+    }),
+
   "memory.recall": (client) => Effect.map(client.memory.recall(), (response) => [response]),
 
   "ingestion.submitForExtraction": (client) =>

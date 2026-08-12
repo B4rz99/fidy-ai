@@ -872,7 +872,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         }
 
         expect(
-          Exit.isFailure(
+          Exit.isSuccess(
             yield* Effect.exit(
               withUserTransaction(
                 policyOwner,
@@ -882,7 +882,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           )
         ).toBe(true);
         expect(
-          Exit.isFailure(
+          Exit.isSuccess(
             yield* Effect.exit(
               withUserTransaction(
                 policyOwner,

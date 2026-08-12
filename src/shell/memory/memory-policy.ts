@@ -18,13 +18,29 @@ const compareRecallOrder = (left: Memory, right: Memory): number => {
   return 0;
 };
 
-/** Counts the complete stable aggregate locally before applying Memory capacity policy. */
+const countAndAdmitFinalAggregate = Effect.fn("countAndAdmitFinalAggregate")(function* (
+  final: ReadonlyArray<Memory>,
+  candidate: Memory
+) {
+  const inference = yield* HostedInference;
+  const finalRecallOrder = [...final].sort(compareRecallOrder);
+  const tokens = yield* inference.countMemoryText(projectMemoryAggregate(finalRecallOrder));
+  return yield* admitMemory({ candidate, aggregateTokens: tokens });
+});
+
+/** Counts the complete stable aggregate locally before admitting one new Memory. */
 export const countAndAdmitMemory = Effect.fn("countAndAdmitMemory")(function* (
   current: ReadonlyArray<Memory>,
   candidate: Memory
 ) {
-  const inference = yield* HostedInference;
-  const finalRecallOrder = [...current, candidate].sort(compareRecallOrder);
-  const tokens = yield* inference.countMemoryText(projectMemoryAggregate(finalRecallOrder));
-  return yield* admitMemory({ candidate, aggregateTokens: tokens });
+  return yield* countAndAdmitFinalAggregate([...current, candidate], candidate);
+});
+
+/** Counts a complete aggregate with one current Memory replaced in place. */
+export const countAndAdmitMemoryRevision = Effect.fn("countAndAdmitMemoryRevision")(function* (
+  current: ReadonlyArray<Memory>,
+  candidate: Memory
+) {
+  const final = current.map((memory) => (memory.id === candidate.id ? candidate : memory));
+  return yield* countAndAdmitFinalAggregate(final, candidate);
 });

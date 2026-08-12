@@ -36,7 +36,12 @@ it("derives exactly one hosted tool for every FidyApi canonical operation", () =
 
 it("makes canonical Memory tools available to hosted inference and MCP registration", () => {
   expect(Object.keys(AgentToolkit.tools)).toEqual(
-    expect.arrayContaining(["memory__remember", "memory__recall"])
+    expect.arrayContaining([
+      "memory__remember",
+      "memory__revise",
+      "memory__forget",
+      "memory__recall",
+    ])
   );
   expect(() => McpServer.toolkit(AgentToolkit)).not.toThrow();
 });

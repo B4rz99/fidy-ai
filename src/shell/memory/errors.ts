@@ -1,8 +1,9 @@
 import { Schema } from "effect";
-import type { MemoryCapacityExceeded } from "~/core/memory/rules";
+import type { MemoryCapacityExceeded, MemoryNotFound } from "~/core/memory/rules";
+import { NotFound } from "~/shell/_shared/errors";
 import { NextOperations } from "~/shell/_shared/response";
 
-/** Declared content-free failure when a remember call would exceed aggregate Memory capacity. */
+/** Declared content-free failure when a Memory write would exceed aggregate capacity. */
 export class MemoryCapacityExceededApi extends Schema.ErrorClass<MemoryCapacityExceededApi>(
   "MemoryCapacityExceededApi"
 )(
@@ -21,12 +22,28 @@ export class MemoryCapacityExceededApi extends Schema.ErrorClass<MemoryCapacityE
   }
 }
 
-/** Maps the closed Memory policy failure without copying its candidate or aggregate. */
-export const mapMemoryFailure = (_failure: MemoryCapacityExceeded): MemoryCapacityExceededApi =>
-  MemoryCapacityExceededApi.make({
-    error: {
-      code: "quota_exhausted",
-      message: "Remembering this text would exceed the User's current Memory capacity.",
-    },
-    next: [],
-  });
+/** Maps the closed Memory failure set without copying prose or caller-controlled identity. */
+export function mapMemoryFailure(failure: MemoryCapacityExceeded): MemoryCapacityExceededApi;
+export function mapMemoryFailure(failure: MemoryNotFound): NotFound;
+export function mapMemoryFailure(
+  failure: MemoryCapacityExceeded | MemoryNotFound
+): MemoryCapacityExceededApi | NotFound {
+  switch (failure._tag) {
+    case "MemoryCapacityExceeded":
+      return MemoryCapacityExceededApi.make({
+        error: {
+          code: "quota_exhausted",
+          message: "Saving this text would exceed the User's current Memory capacity.",
+        },
+        next: [],
+      });
+    case "MemoryNotFound":
+      return NotFound.make({
+        error: {
+          code: "not_found",
+          message: "No current Memory with that identifier belongs to you.",
+        },
+        next: [],
+      });
+  }
+}

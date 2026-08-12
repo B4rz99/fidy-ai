@@ -14,7 +14,7 @@ import {
   resolveNeedsReviewItemMutation,
   submitForExtractionInScope,
 } from "~/shell/ingestion/mutations";
-import { rememberMemory } from "~/shell/memory/mutations";
+import { forgetMemory, rememberMemory, reviseMemory } from "~/shell/memory/mutations";
 import type { Telemetry } from "~/shell/observability/telemetry";
 import { dismissInsight, markInsightDelivered, markInsightRead } from "~/shell/insights/mutations";
 import {
@@ -129,6 +129,19 @@ export const canonicalMutationImplementations = {
     rememberMemory({
       userId: caller.resolved.subjectUserId,
       payload: input.payload,
+    })
+  ),
+  "memory.revise": mutationAdapter((input: CanonicalInput<"memory.revise">, caller) =>
+    reviseMemory({
+      userId: caller.resolved.subjectUserId,
+      memoryId: input.params.id,
+      payload: input.payload,
+    })
+  ),
+  "memory.forget": mutationAdapter((input: CanonicalInput<"memory.forget">, caller) =>
+    forgetMemory({
+      userId: caller.resolved.subjectUserId,
+      memoryId: input.params.id,
     })
   ),
   "ingestion.submitForExtraction": mutationAdapter(

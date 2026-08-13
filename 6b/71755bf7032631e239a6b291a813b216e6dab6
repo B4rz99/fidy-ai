@@ -1,0 +1,92 @@
+src/shell/agent/hosted-inference.ts
+  s_701ca85bdf20ae::t_66f0736cd66a35 450-458,563
+  s_701ca85bdf20ae::t_1ec209ad1126c0 30-46,48-55,511-512,516-520,522-526,529-533,535,537-548
+  s_701ca85bdf20ae::t_c9a4cdf84c9eac 27-29
+  s_701ca85bdf20ae::t_50dd52362ae0af 459-460
+  s_701ca85bdf20ae::t_8d8e62abc991ad 560-562
+  s_701ca85bdf20ae::t_5bb644a3dff6aa 1,4-6,15-17,19,23-26,57-59,61,64-85,166-167,199-201,237-240,256-259,263,267-268,270,272-278,281-285,288-312,314-321,323-330,333-357,359-369,371-373,375-382,384-388,390-400,402-408,411-422,424,426-442,444-447,462-463,465-470,472-484,486-487,491,496,550-559,572,575-577
+CODING_STANDARDS.md
+  s_701ca85bdf20ae::t_d07a67d3549a5b 57-60
+scripts/check-lint-guards.ts
+  s_701ca85bdf20ae::t_acdd8213b98bc7 6-15
+src/core/transcript/compacted-conversation.test.ts
+  s_701ca85bdf20ae::t_2eeda500390cec 1-40
+src/core/transcript/compacted-conversation.ts
+  s_701ca85bdf20ae::t_7010c0d7288ddf 1-12
+src/core/transcript/model.ts
+  s_701ca85bdf20ae::t_a05b5311afc64f 195-207
+src/shell/agent/agent-service.test.ts
+  s_6a2d6b818e8716::t_51f06c502accce 4,30-33,69-72,80-89,101,809-818,823,900,923,1209,1211-1219,1254-1265,1294-1351,2008-2010,2720,3053,3063-3066,3070
+src/shell/agent/agent-service.ts
+  s_701ca85bdf20ae::t_9b098b2b8ba748 24-28,62,70,75,178-184,207,766-770,881,897,904,949-950,952,1045-1051,1055-1058,1070,1078-1081,1193,1213,1241-1250,1255,1264-1265,1344-1346,1361-1364,1371,1418,1425-1426,1560-1598
+src/shell/agent/hosted-inference.test.ts
+  s_701ca85bdf20ae::t_97e819d50a3907 12,40-41,100,130,155-167,171-179,185,188,213,237,240,242,279-359,368,390-399,403-405,419-427,430,437,441-442,446,448-451,459,461,464,467,478-480,507-514,518,530-551,553,570-573,576,599-600,603,605-606,608,617,619-622,629-630,632,635
+src/shell/agent/model-boundary.ts
+  s_701ca85bdf20ae::t_5fa7cf822abf4e 7,184-188,219-246,263-284
+src/shell/agent/openai.test.ts
+  s_701ca85bdf20ae::t_7eb6a9bb15d0fa 12,18,173-194,225,236,280,314,320,333,431,447,457-458,476,478,509-515,534,550,708
+src/shell/agent/openai.ts
+  s_701ca85bdf20ae::t_fccf96abc397a3 18,636-649
+src/shell/agent/working-context.test.ts
+  s_701ca85bdf20ae::t_9d525d4103c02b 2,10,17-21
+src/shell/consent/repo.ts
+  s_701ca85bdf20ae::t_8540a8b3f7ff11 424-454
+src/shell/db/migrations/0024-compacted-conversations.ts
+  s_701ca85bdf20ae::t_36bfd6bb78e5c9 1-29
+src/shell/db/migrations/registry.ts
+  s_701ca85bdf20ae::t_60ed864b3d656b 24,58
+src/shell/db/row-level-security.test.ts
+  s_701ca85bdf20ae::t_3dab91879fdac6 290-293,337-341
+src/shell/db/user-tables.ts
+  s_701ca85bdf20ae::t_a86f78f9af010b 6
+src/shell/memory/memory-policy.test.ts
+  s_701ca85bdf20ae::t_e34c69611a605a 17,19-20
+src/shell/memory/memory-policy.ts
+  s_701ca85bdf20ae::t_a3706cae0bc1dd 27
+src/shell/observability/telemetry-config.ts
+  s_701ca85bdf20ae::t_9c624493b39f3d 20,136
+src/shell/testing/api-harness.ts
+  s_701ca85bdf20ae::t_c3670cbb657231 7,141-142,149-154,162
+src/shell/testing/hosted-inference-fixtures.ts
+  s_701ca85bdf20ae::t_f4b4dd343e4e1d 110-112
+src/shell/transcript/conversation-compaction-inference.ts
+  s_701ca85bdf20ae::t_97a501633664e3 1-29
+src/shell/transcript/conversation-continuity.ts
+  s_6a2d6b818e8716::t_834eb9a7af88d2 8-9,19-24,77,84,90-103,105,109-111,145-170,191-192,201-206,222-231,380-394,551-560,562,566-735,1102,1117,1121,1125-1130,1152-1155,1185,1280-1281
+vitest.config.ts
+  s_701ca85bdf20ae::t_ee79d7fa37c4fe 42,44-47
+src/shell/_shared/deep-freeze.ts
+  s_701ca85bdf20ae::t_63f1b407709cab 1-6
+src/shell/agent/model-boundary.test.ts
+  s_701ca85bdf20ae::t_2258b330a9b833 3,8-12,19,75-212
+src/shell/agent/working-context.ts
+  s_701ca85bdf20ae::t_2a78e50ff392cd 1,8-9,12,15,17-18,39-40,42,44-55,57-63,65,68,70-98,100-110,113-114,119-123,126-128,136,142-149
+src/shell/transcript/conversation-continuity.test.ts
+  s_701ca85bdf20ae::t_ea31819cbb23fb 20,23,40-41,46,51-52,87-99,145-248,1305-1667
+vitest.acceptance.config.ts
+  s_701ca85bdf20ae::t_744fdf8ee7173b 25-28,70-71
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "6b71755bf7032631e239a6b291a813b216e6dab6",
+  "prompts": {},
+  "sessions": {
+    "s_6a2d6b818e8716": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019ff8e5-b73d-7859-a142-a824b1e30955",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_701ca85bdf20ae": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019ff8e5-aba5-7326-9145-ff466989bc26",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

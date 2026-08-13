@@ -1,0 +1,29 @@
+.patterns/tanstack-query.md
+  s_b64f91679e9936::t_574ff4e7b12e11 1-59,63-135
+  s_b64f91679e9936::t_33480c41aa440f 60-62
+package.json
+  s_b64f91679e9936::t_8f2220aba2137c 40-41,45-46
+.patterns/tanstack-table.md
+  s_b64f91679e9936::t_b0708951eda66d 1-30,33-35,37-126
+  s_b64f91679e9936::t_417677a72eed08 31-32,36
+AGENTS.md
+  s_b64f91679e9936::t_5d1510e77e10bd 41-47
+bun.lock
+  s_b64f91679e9936::t_5ce19cd5a628cd 13-14,18-19,301-312,583-586,591-592,631-632
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "d71240c53c31bd397ba8d7d5a9561fa9c207a2a1",
+  "prompts": {},
+  "sessions": {
+    "s_b64f91679e9936": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019ff8f7-038c-7a06-829c-48a00985ac4a",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

@@ -38,3 +38,14 @@ Distilled research on how Effect actually works, extracted from the `.repos/effe
 - `.patterns/errors.md` — v4 typed error modeling: error classes (`Schema.TaggedErrorClass` vs `Data.TaggedError`), failures vs defects and the flat Cause model, catch/catchTag/catchReason semantics, `Result` at pure-core edges, the closed-error-set "reason pattern", schema-serializable errors for httpapi, Cause logging.
 - `.patterns/concurrency-time.md` — v4 fibers/Queue/Schedule/Cron/Clock/TestClock and `unstable/persistence` RateLimiter: fork lifetimes, queue termination semantics, the per-user serialized-turn + debounce pattern, cron time zones, zone-aware DateTime math.
 - `.patterns/testing.md` — `@effect/vitest` v4 + `effect/testing`: it.effect/it.live/it.layer semantics, TestClock/TestConsole defaults, layer memoization and teardown fine print, Schema-driven property tests, Exit/Equal assertion idioms, HttpClient stub pattern, testcontainers Postgres practice, Bun caveats.
+
+## React reference
+
+The exact React 19.2.8 source lives at `.repos/react`. Read `.patterns/react.md` before writing React code; use it to locate runtime behavior and tests, while treating the installed public API and official React documentation as the application-facing contract.
+
+## TanStack references
+
+Upstream Query and Table sources live at `.repos/query` and `.repos/table`. Read the matching source-cited note before working with either library:
+
+- `.patterns/tanstack-query.md` — cache keys, freshness, cancellation, mutations, invalidation, and tests.
+- `.patterns/tanstack-table.md` — the v9 adoption threshold, features, row models, rendering, controlled state, and tests.

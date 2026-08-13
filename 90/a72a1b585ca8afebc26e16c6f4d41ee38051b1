@@ -1,0 +1,54 @@
+.pi/skills/shadcn/rules/base-vs-radix.md
+  s_b64f91679e9936::t_235438e09e5b2f 1-306
+.pi/skills/shadcn/rules/icons.md
+  s_b64f91679e9936::t_235438e09e5b2f 1-101
+.pi/skills/shadcn/mcp.md
+  s_b64f91679e9936::t_235438e09e5b2f 1-105
+.pi/skills/shadcn/registry.md
+  s_b64f91679e9936::t_235438e09e5b2f 1-277
+.pi/skills/shadcn/SKILL.md
+  s_b64f91679e9936::t_235438e09e5b2f 1-277
+.pi/skills/shadcn/rules/forms.md
+  s_b64f91679e9936::t_235438e09e5b2f 1-192
+.pi/skills/shadcn/SOURCE.md
+  s_b64f91679e9936::t_3782abd54a9ee4 1-7
+.pi/skills/shadcn/evals/evals.json
+  s_b64f91679e9936::t_235438e09e5b2f 1-77
+.pi/skills/shadcn/rules/chat.md
+  s_b64f91679e9936::t_235438e09e5b2f 1-224
+.pi/skills/shadcn/agents/openai.yml
+  s_b64f91679e9936::t_235438e09e5b2f 1-5
+.pi/skills/shadcn/customization.md
+  s_b64f91679e9936::t_235438e09e5b2f 1-209
+.pi/skills/shadcn/rules/styling.md
+  s_b64f91679e9936::t_235438e09e5b2f 1-185
+.oxfmtrc.json
+  s_b64f91679e9936::t_ed8073937cb717 14-22
+.pi/skills/shadcn/rules/composition.md
+  s_b64f91679e9936::t_235438e09e5b2f 1-213
+docs/research/react-shadcn-agent-guidance.md
+  s_b64f91679e9936::t_a4dcdeeac0f5fc 12,58,60,62,64,96,98
+  s_b64f91679e9936::t_121f087579630a 52
+.pi/skills/shadcn/LICENSE.md
+  s_b64f91679e9936::t_1a7609c4d1d51e 1-21
+.pi/skills/shadcn/cli.md
+  s_b64f91679e9936::t_235438e09e5b2f 1-290
+skills-lock.json
+  s_b64f91679e9936::t_235438e09e5b2f 1-11
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "90a72a1b585ca8afebc26e16c6f4d41ee38051b1",
+  "prompts": {},
+  "sessions": {
+    "s_b64f91679e9936": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019ff8f7-038c-7a06-829c-48a00985ac4a",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

@@ -20,7 +20,8 @@ Workspace MX record with Resend's inbound record.
 
 The shared `externalEndpoints` configuration in
 [`src/shell/_shared/external-endpoints.ts`](../../src/shell/_shared/external-endpoints.ts) derives all
-stable paths from these variables:
+stable paths from these variables. Browser login uses `/auth/pair`; PAT management uses
+`/settings/pats`. The former `/auth/magic` entry is retired by ADR 0015:
 
 | Variable              | Production value          |
 | --------------------- | ------------------------- |
@@ -54,5 +55,6 @@ resend domains get <domain-id>
 
 The `ingest.fidyapp.com` Receiving record must report `verified` before ingestion starts. Its DKIM
 and SPF records must also report `verified` before a dependent ticket sends outbound mail. Provider
-webhook handlers and the policy and magic-link pages are delivered by their dependent tickets; this
-ticket reserves their DNS names and route contracts rather than implementing those capabilities.
+webhook handlers and the policy, browser-pairing, and recovery pages are delivered by their
+dependent tickets; this ticket reserves their DNS names and route contracts rather than implementing
+those capabilities.

@@ -3,6 +3,8 @@
 - **Status:** Accepted
 - **Date:** 2026-07-28
 - **Active specification:** [Product name, domain & external endpoints](https://github.com/B4rz99/fidy-ai/issues/9)
+- **Superseded in part by:** [ADR 0015](0015-browser-paired-web-authentication.md) replaces only the
+  magic-link entry
 
 ## Context
 
@@ -36,5 +38,6 @@ addresses.
 ## Consequences
 
 Dependent tickets consume the public namespace through the shared Effect configuration rather than
-restating URLs. The policy and magic-link routes belong to the web origin; provider callbacks
-belong to the API origin. A future host migration updates DNS, not the external contracts.
+restating URLs. The policy route belongs to the web origin; provider callbacks belong to the API
+origin. ADR 0015 replaces the former `/auth/magic` contract with the browser-pairing entry
+`/auth/pair`. A future host migration updates DNS, not the external contracts.

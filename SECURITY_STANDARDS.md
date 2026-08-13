@@ -34,14 +34,14 @@ into reviewable invariants.
 
 ### Protected assets
 
-1. **Secrets** — raw AgentTokens, provider credentials, signing secrets, magic and token-delivery
-   links, device codes, recovery proofs, and protected-PDF passwords.
+1. **Secrets** — raw PATs and HostedTurnTokens, provider credentials, signing secrets, private
+   device codes, recovery proofs and links, and protected-PDF passwords.
 2. **Personal and financial data** — identity and recovery details, Transactions and
    SourceAttestations, Budgets, Categories, DashboardDocuments, Subscriptions and BillingAttempts,
    Transcripts, CompactedConversations, Memories, NeedsReviewItems, and raw IngestSamples.
-3. **Security evidence** — ConsentRecords, AuditLogEntries, token grants and revocations, provider
-   message evidence, and immutable interpretation or policy revisions.
-4. **State integrity** — User ownership, token scope, consent state, financial records, billing
+3. **Security evidence** — ConsentRecords, AuditLogEntries, PAT grants and revocations,
+   origin-qualified decision evidence, and immutable interpretation or policy revisions.
+4. **State integrity** — User ownership, caller scope, consent state, financial records, billing
    state, InsightEvent lifecycle, and retention/anonymisation state.
 5. **Availability and spend** — request, parser, queue, model, messaging, and billing-provider
    capacity whose abuse can deny service or create unbounded cost.
@@ -62,9 +62,9 @@ into reviewable invariants.
 
 Every crossing is untrusted regardless of its TypeScript type or vendor:
 
-- public HTTP, the SPA, magic-link and device flows;
+- public HTTP, the SPA, browser-login pairing, and PATPairing flows;
 - Kapso, Resend, Wompi, OpenAI, and other outbound or callback seams;
-- AgentToken, hosted-agent, CLI, MCP, and typed-client calls;
+- PAT, HostedTurnToken, hosted-agent, CLI, MCP, and typed-client calls;
 - LLM prompts, tool requests, structured output, and generated presentation content;
 - emails, PDFs, CSV/XLSX files, images, voice transcripts, and screenshots;
 - PostgreSQL rows and JSONB, queue payloads, schedules, migrations, and environment configuration.
@@ -96,7 +96,8 @@ point that verifies its own proof. Phone numbers, provider ids, message ids, obj
 claims are evidence or input, never authority.
 
 Every access to User-owned data is constrained by that `UserId`; possession of an opaque UUID does
-not confer access. AgentToken scope is declared once on the canonical operation and governs HTTP
+not confer access. Each canonical operation declares one access requirement: a PAT scope for domain operations or an
+eligible caller class for account-security operations. It governs HTTP
 authorization, MCP/tool visibility, CLI availability, hosted-agent calls, and suggested operations.
 The hosted agent uses the same authorization path as the User's own agents.
 
@@ -114,8 +115,8 @@ over HTTP; an affordance advertises an operation the token cannot invoke.
 
 ### 2. Credential and recovery lifecycle
 
-**Applies when:** a diff handles AgentTokens, web sessions, magic or one-time links, CLI device
-flows, recovery, revocation, or WhatsAppIdentity changes.
+**Applies when:** a diff handles PATs, HostedTurnTokens, web sessions, browser-login pairing,
+PATPairing, recovery, revocation, or WhatsAppIdentity changes.
 
 **Invariant:** bearer material is unpredictable, narrowly purposed, bounded in usable lifetime,
 and disclosed only through its intended one-time channel. Verification does not require retaining
@@ -131,8 +132,9 @@ become a subject-enumeration oracle.
 rotation/revocation, and destruction; test reuse, expiry, revocation, wrong purpose, and wrong
 scope.
 
-**Violation examples:** a raw AgentToken is stored or pasted into chat; revocation affects HTTP but
-not MCP; a magic link remains reusable; changing a phone number creates a new owner for old data.
+**Violation examples:** a raw PAT is stored or pasted into chat; a private PATPairing device code
+crosses Kapso; revocation affects HTTP but not MCP; changing a phone number creates a new owner for
+old data.
 
 ### 3. Consent, privacy, retention, and egress
 
@@ -224,8 +226,8 @@ tool generation/execution, agent loops, or model-rendered content.
 **Invariant:** messages and all retrieved or ingested material are data, even when they contain
 instructions. Direct, indirect, multilingual, encoded, and multimodal prompt injection may
 influence model planning, but cannot grant identity, scope, cross-User access, or destructive and
-irreversible side effects. A HostedAgentToken delegates canonical reads and reversible additions
-for one hosted turn; exact User confirmation is required when canonical operation metadata marks an
+irreversible side effects. A HostedTurnToken delegates canonical reads and reversible additions
+for one hosted Turn; exact User confirmation is required when canonical operation metadata marks an
 effect as destructive or irreversible. Canonical operations independently enforce identity,
 consent, scope, paywall, validation, and domain rules on every call.
 
@@ -313,7 +315,7 @@ invalid.
 redirect targets and browser credential flow; inspect generated artifacts and publicly reachable
 routes.
 
-**Violation examples:** credentialed `Access-Control-Allow-Origin: *`; a magic-link token forwarded
+**Violation examples:** credentialed `Access-Control-Allow-Origin: *`; a recovery token forwarded
 through an open redirect; production source maps exposing embedded configuration; a missing signing
 secret silently disabling callback verification.
 

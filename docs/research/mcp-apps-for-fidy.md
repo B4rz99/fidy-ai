@@ -36,7 +36,7 @@ MCP Apps therefore standardizes an in-conversation UI resource and its host brid
 3. **Later workflow — NeedsReviewItem resolution:** a form can show unresolved statement rows and invoke the canonical resolution operation. This is a strong Apps use case, but it is a sensitive `write`/possibly `expensive` path and should follow [#18](https://github.com/B4rz99/fidy-ai/issues/18), scope enforcement, audit and quota work.
 4. **Later exploration — Transactions:** filter and inspect Transactions without repeated prompts. Keep Money grouped by Currency and never create a mixed-Currency total.
 
-Do **not** use an MCP App for token minting or consent. Fidy's in-chat disclosure, confirmation, ConsentRecord and one-time link in [#31](https://github.com/B4rz99/fidy-ai/issues/31) are the authoritative flow; putting an AgentToken in View HTML, tool results or model context would undo that design.
+Do **not** use an MCP App for PAT issuance or Consent. Fidy's authenticated-web disclosure, confirmation, ConsentRecord, one-time browser reveal, and direct PATPairing claim in [#31](https://github.com/B4rz99/fidy-ai/issues/31) are the authoritative flows; putting a PAT in View HTML, tool results, or model context would undo that design.
 
 ## 2. Compatibility, clients and negotiation
 
@@ -65,9 +65,9 @@ Fidy has an additional implementation gap: the source-of-truth Effect implementa
 
 The `2026-07-28` stdio transport still consists of a host-launched subprocess exchanging newline-delimited JSON-RPC over stdin/stdout; protocol version and capabilities travel in each message body, with no HTTP header layer. [Official stdio binding](https://github.com/modelcontextprotocol/modelcontextprotocol/blob/add218af97224816f23e7005864b39f94371a37b/docs/specification/2026-07-28/basic/transports/stdio.mdx#L7-L31) · [stdio request metadata](https://github.com/modelcontextprotocol/modelcontextprotocol/blob/add218af97224816f23e7005864b39f94371a37b/docs/specification/2026-07-28/basic/transports/stdio.mdx#L65-L72)
 
-The MCP authorization specification applies to HTTP transports and says stdio implementations should retrieve credentials from the environment rather than run that OAuth flow. This supports #33's local process reading the User's AgentToken from configuration; MCP Apps does not change it. [Official authorization scope](https://github.com/modelcontextprotocol/modelcontextprotocol/blob/add218af97224816f23e7005864b39f94371a37b/docs/specification/2026-07-28/basic/authorization/index.mdx#L10-L24) · [Fidy issue #33](https://github.com/B4rz99/fidy-ai/issues/33)
+The MCP authorization specification applies to HTTP transports and says stdio implementations should retrieve credentials from the environment rather than run that OAuth flow. This supports #33's local process reading the User's PAT from configuration; MCP Apps does not change it. [Official authorization scope](https://github.com/modelcontextprotocol/modelcontextprotocol/blob/add218af97224816f23e7005864b39f94371a37b/docs/specification/2026-07-28/basic/authorization/index.mdx#L10-L24) · [Fidy issue #33](https://github.com/B4rz99/fidy-ai/issues/33)
 
-The App's `postMessage` channel is a separate View-to-host transport. The View should ask the host to call a Fidy MCP tool; it should not open Fidy's config, receive the AgentToken, or call Fidy's HTTP API directly. The host then proxies the call over its existing stdio connection. [Official Apps communication and proxy model](https://github.com/modelcontextprotocol/ext-apps/blob/92f46a574568a3ddac7600343b7d3c4c4ed7b588/specification/2026-01-26/apps.mdx#L411-L508)
+The App's `postMessage` channel is a separate View-to-host transport. The View should ask the host to call a Fidy MCP tool; it should not open Fidy's config, receive the PAT, or call Fidy's HTTP API directly. The host then proxies the call over its existing stdio connection. [Official Apps communication and proxy model](https://github.com/modelcontextprotocol/ext-apps/blob/92f46a574568a3ddac7600343b7d3c4c4ed7b588/specification/2026-01-26/apps.mdx#L411-L508)
 
 ### Remote Streamable HTTP — later only
 
@@ -90,11 +90,11 @@ The July core requires cache hints on `tools/list` and `resources/read`. A `priv
 ### Recommendations for financial data
 
 - Bundle the View's HTML, JavaScript and CSS into the `ui://` resource. Request no browser permissions and no external network origins for the first Fidy App.
-- Keep the resource static and free of User data so it can be reviewed and safely cached. Send current data only in the canonical tool result; do not bake Transaction, Budget, User or AgentToken values into HTML.
+- Keep the resource static and free of User data so it can be reviewed and safely cached. Send current data only in the canonical tool result; do not bake Transaction, Budget, User or PAT values into HTML.
 - Mark scope-filtered `tools/list` results `cacheScope: "private"` and return them in deterministic order. A static identical UI resource may be `public`; any User-dependent resource must be `private`.
 - Put the canonical `{ data, next }` shape in MCP `structuredContent` and keep a concise, meaningful `content` fallback. Do not create a parallel “widget DTO”; any display projection must derive from the canonical schema.
 - Do not call `ui/update-model-context` with raw Transaction history. Send only the minimal User-selected summary needed for the conversation, and let the User's explicit action determine when that happens.
-- Re-authorize every View-initiated canonical call from the current AgentToken. `_meta.ui.visibility` may narrow exposure but never grant `read`, `write` or `dashboard`.
+- Re-authorize every View-initiated canonical call from the current PAT. `_meta.ui.visibility` may narrow exposure but never grant `read`, `write` or `dashboard`.
 - Prefer `visibility: ["model", "app"]` for Fidy domain capabilities. An app-only domain operation would violate the define-once/dogfooding rule. If a purely presentational helper is ever needed, it must not own business decisions or bypass canonical operations.
 - Persist DashboardDocument, NeedsReviewItem and other state on the server. The stable Apps specification explicitly leaves state persistence/restoration to future work, so iframe state cannot be authoritative. [Deferred Apps features](https://github.com/modelcontextprotocol/ext-apps/blob/92f46a574568a3ddac7600343b7d3c4c4ed7b588/specification/2026-01-26/apps.mdx#L1562-L1576)
 
@@ -154,12 +154,12 @@ All reviewed open issues carry `ready-for-agent` and have no comments. #46 is cl
 
 - [ ] Core MCP targets `2026-07-28`; an explicit tested host/version matrix records local-stdio and `io.modelcontextprotocol/ui` support. No untested “any client renders Apps” claim.
 - [ ] The transport dependency decision accounts for Effect's current `2025-06-18`-only adapter and proves `2026-07-28` wire compatibility without introducing parallel operation definitions.
-- [ ] `tools/list` is deterministic, `cacheScope: "private"`, and contains exactly the canonical operations allowed by the AgentToken's scopes; cache entries never cross authorization contexts.
+- [ ] `tools/list` is deterministic, `cacheScope: "private"`, and contains exactly the canonical operations allowed by the PAT's scopes; cache entries never cross authorization contexts.
 - [ ] Tool name, description, input schema, output schema, required scope, cost class and optional `_meta.ui.resourceUri` derive from the canonical operation declaration; adding an operation or App association requires no hand-written parallel tool definition.
 - [ ] Every tool returns meaningful `content`; canonical `{ data, next }` also arrives as schema-valid `structuredContent`, so a non-Apps client loses no capability.
 - [ ] On an Apps-capable host, one representative read-only operation renders its static `ui://` resource and can call another allowed canonical operation through the host.
 - [ ] A View-initiated call follows the same caller resolution, scope/tier checkpoint, quota, error mapping, SuggestedOperation filtering and AuditLogEntry path as a model-initiated call.
-- [ ] The AgentToken is available only to the local MCP process; it never appears in the View resource, tool result, model context, stdout diagnostics or browser storage.
+- [ ] The PAT is available only to the local MCP process; it never appears in the View resource, tool result, model context, stdout diagnostics or browser storage.
 - [ ] UI resource reads are separate from canonical operation quota; a View-initiated `tools/call` is metered exactly once.
 - [ ] Setup documentation names which tested hosts render Apps and explains that other clients receive the text/structured fallback.
 
@@ -181,11 +181,11 @@ Keep the end-to-end MCP assertion in #33 so #3 does not need an MCP test harness
 
 **Recommendation:** do not create an MCP/App-specific envelope, audit stream or `next` filter. Add only an integration criterion to #33 proving that model- and View-initiated MCP calls traverse #5/#48 exactly once. This is why both should precede #33.
 
-### #31 — AgentToken minting and revocation
+### #31 — PAT issuance and revocation
 
-**Verified:** #31 is open, blocked by #8, and requires disclosure, confirmation, a ConsentRecord, one-time delivery, revocation and AuditLogEntry-based activity answers; the token string must never enter the transcript. #8 is open and is itself blocked by #7. [Issue #31](https://github.com/B4rz99/fidy-ai/issues/31) · [issue #8](https://github.com/B4rz99/fidy-ai/issues/8) · [issue #7](https://github.com/B4rz99/fidy-ai/issues/7)
+**Decision update:** #31 uses fresh authenticated-web authorization, one-time manual reveal or direct PATPairing claim, atomic Consent evidence, revocation, and AuditLogEntry-based activity answers. WhatsApp carries no PAT, private device code, or bearer-equivalent link. The ticket is blocked by completed consent prerequisite #8 and browser-paired web login #13. [Issue #31](https://github.com/B4rz99/fidy-ai/issues/31) · [issue #13](https://github.com/B4rz99/fidy-ai/issues/13) · [ADR 0016](../adr/0016-web-authorized-pat-issuance.md)
 
-**Recommendation:** leave #31's acceptance criteria unchanged. Put the “token never enters View/resource/result/browser storage” criterion in #33, because that is the adapter that handles the token after issuance.
+**Decision update:** #31 owns web-authorized PAT issuance and direct PATPairing delivery. #33 separately proves that a configured PAT remains confined to the local MCP process and never enters a View, resource, result, model context, diagnostic stream, or browser storage.
 
 ### #35 — quotas and rate limiting
 
@@ -250,7 +250,7 @@ Keep the end-to-end MCP assertion in #33 so #3 does not need an MCP test harness
 | Does stable `ext-apps` work with TS SDK v2/`2026-07-28`? | Apps peers on SDK v1 while core SDK main is v2; the stable Apps negotiation text still shows `initialize`. [Apps package](https://github.com/modelcontextprotocol/ext-apps/blob/92f46a574568a3ddac7600343b7d3c4c4ed7b588/package.json#L78-L114) · [TS SDK](https://github.com/modelcontextprotocol/typescript-sdk/blob/cc4b41617ce3601b1290d67216ea0b194a3cd9ac/README.md#L4-L15) | Treat as a spike gate, not an assumption. Prefer an official v2-compatible release over a local fork.                                                  |
 | Which hosts support both local stdio and Apps at launch? | Extension support and transport support are distinct; the official Apps matrix is community-maintained. [Matrix](https://github.com/modelcontextprotocol/modelcontextprotocol/blob/add218af97224816f23e7005864b39f94371a37b/docs/extensions/client-matrix.mdx#L16-L46)                                                                                                            | Test exact host versions and document them. Keep fallback universally useful.                                                                          |
 | Can tool catalogs leak scopes through caching?           | `tools/list` may vary by authorization, and `public` caches may cross callers. [Tools](https://modelcontextprotocol.io/specification/2026-07-28/server/tools#capabilities) · [Caching](https://modelcontextprotocol.io/specification/2026-07-28/server/utilities/caching#security-considerations)                                                                                 | Deterministic order, `cacheScope: private`, authorization-context cache key, short documented TTL.                                                     |
-| Can the View bypass Fidy scopes?                         | Apps visibility controls model/app exposure, while server access control remains separately required. [Apps visibility](https://github.com/modelcontextprotocol/ext-apps/blob/92f46a574568a3ddac7600343b7d3c4c4ed7b588/specification/2026-01-26/apps.mdx#L395-L404)                                                                                                               | Intersect visibility with AgentToken scope on list and call; authorize again on every call.                                                            |
+| Can the View bypass Fidy scopes?                         | Apps visibility controls model/app exposure, while server access control remains separately required. [Apps visibility](https://github.com/modelcontextprotocol/ext-apps/blob/92f46a574568a3ddac7600343b7d3c4c4ed7b588/specification/2026-01-26/apps.mdx#L395-L404)                                                                                                               | Intersect visibility with PAT scope on list and call; authorize again on every call.                                                                   |
 | Can financial data enter model context unexpectedly?     | Tool results reach the View; `ui/update-model-context` is explicit and `structuredContent` is not automatically model context. [Data passing](https://github.com/modelcontextprotocol/ext-apps/blob/92f46a574568a3ddac7600343b7d3c4c4ed7b588/specification/2026-01-26/apps.mdx#L1391-L1490)                                                                                       | Never auto-forward raw history; send only a User-selected minimal summary.                                                                             |
 | Is iframe sandboxing sufficient?                         | The spec retains phishing/social-engineering and resource-consumption risks. [Security](https://github.com/modelcontextprotocol/ext-apps/blob/92f46a574568a3ddac7600343b7d3c4c4ed7b588/specification/2026-01-26/apps.mdx#L1680-L1763)                                                                                                                                             | Self-contained signed build, restrictive CSP, no permissions, dependency review, accessible Fidy branding, resource limits where host permits.         |
 | Where does UI state live?                                | Apps state persistence/restoration is deferred. [Deferred features](https://github.com/modelcontextprotocol/ext-apps/blob/92f46a574568a3ddac7600343b7d3c4c4ed7b588/specification/2026-01-26/apps.mdx#L1562-L1576)                                                                                                                                                                 | Canonical server state only; View state is ephemeral and reconstructible.                                                                              |
@@ -264,7 +264,7 @@ flowchart TD
   A[#3 scope/cost metadata] --> B[#5 errors + audit]
   B --> C[#48 caller-valid SuggestedOperations]
   D[#7 hosted agent] --> E[#8 consent]
-  E --> F[#31 AgentToken lifecycle]
+  E --> F[#31 PAT lifecycle]
   C --> G[SDK v2 + Apps host compatibility spike]
   F --> G
   G --> H[#33 base local MCP + optional Apps seam]

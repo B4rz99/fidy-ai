@@ -1,0 +1,50 @@
+ARCHITECTURE.md
+  s_f07a3eb2361d66::t_250a85250de079 46-48,77-80,110,137-150
+  s_f07a3eb2361d66::t_a772ef9aa307bc 184
+  s_f07a3eb2361d66::t_80cc3d608d95fc 151
+docs/adr/0016-web-authorized-pat-issuance.md
+  s_f07a3eb2361d66::t_48ee7eab139031 20,27
+  s_f07a3eb2361d66::t_6b2dd5370a1558 1-13,16-19,21,28-34
+  s_f07a3eb2361d66::t_b36369a35dc5eb 14-15
+  s_f07a3eb2361d66::t_7186de64d4fff9 22-26
+SECURITY_STANDARDS.md
+  s_f07a3eb2361d66::t_ebd0533053dd21 318
+  s_f07a3eb2361d66::t_287260eb549284 37,42-44,65,67,118-119,135,229-230
+  s_f07a3eb2361d66::t_525838a72f83dd 38,99-100,136-137
+docs/adr/0002-fidy-product-identity-and-public-namespace.md
+  s_f07a3eb2361d66::t_2f04ee4c01178e 6-7,41-43
+docs/operations/external-endpoints.md
+  s_f07a3eb2361d66::t_3ecfacd2ebdc7e 58-60
+  s_f07a3eb2361d66::t_ca4215b2e36926 23-24
+docs/adr/0015-browser-paired-web-authentication.md
+  s_f07a3eb2361d66::t_1e0c15d0ee30d2 12
+  s_f07a3eb2361d66::t_e3ced191c3bdf3 1-11,14-21
+  s_f07a3eb2361d66::t_8c9191c444c3fc 13
+docs/adr/0017-atomic-pat-consent-lifecycle.md
+  s_f07a3eb2361d66::t_44dcea8628d31c 1-21
+CONTEXT.md
+  s_f07a3eb2361d66::t_c2d8040301bbbd 138-140,143-154,224-226
+  s_f07a3eb2361d66::t_539aa349f60ef3 141-142
+  s_f07a3eb2361d66::t_7aa2ed5cd65b93 156-160
+  s_f07a3eb2361d66::t_d8bcb2767be15a 155
+docs/research/mcp-apps-for-fidy.md
+  s_f07a3eb2361d66::t_d316fd97c08037 188
+  s_f07a3eb2361d66::t_b184b939b8d81a 253
+  s_f07a3eb2361d66::t_47a920fc3d0bba 39,68,70,93,97,157,162,184,186,267
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "0a186684092c89a5d38cff14586f4caafcb7f953",
+  "prompts": {},
+  "sessions": {
+    "s_f07a3eb2361d66": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019ff8f5-c062-76da-884c-fdf6221df547",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

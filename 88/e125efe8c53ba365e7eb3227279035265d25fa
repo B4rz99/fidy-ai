@@ -1,0 +1,20 @@
+docs/research/react-shadcn-agent-guidance.md
+  s_b64f91679e9936::t_5dcecc639ef82b 62
+  s_b64f91679e9936::t_5d5017e28fb722 66-75
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "88e125efe8c53ba365e7eb3227279035265d25fa",
+  "prompts": {},
+  "sessions": {
+    "s_b64f91679e9936": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019ff8f7-038c-7a06-829c-48a00985ac4a",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

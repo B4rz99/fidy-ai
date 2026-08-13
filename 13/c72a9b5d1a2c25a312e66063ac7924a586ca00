@@ -1,0 +1,26 @@
+AGENTS.md
+  s_b64f91679e9936::t_64a0cdbf9124a5 42-45
+.patterns/react.md
+  s_b64f91679e9936::t_fb01df257286b9 1-94
+docs/research/react-shadcn-agent-guidance.md
+  s_b64f91679e9936::t_e06b24322ee19d 100-102
+  s_b64f91679e9936::t_ca30545668f254 16-20
+  s_b64f91679e9936::t_920efbde20c683 9-10,24-38
+  s_b64f91679e9936::t_22e1b9b2d261cf 1-8,11-15,21-23,39-99
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "13c72a9b5d1a2c25a312e66063ac7924a586ca00",
+  "prompts": {},
+  "sessions": {
+    "s_b64f91679e9936": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019ff8f7-038c-7a06-829c-48a00985ac4a",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

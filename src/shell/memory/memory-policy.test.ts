@@ -22,6 +22,7 @@ const memoryInference = (
     prepareText: () => Effect.die("unused"),
     validateText: () => Effect.die("unused"),
     executeText: () => Effect.die("unused"),
+    recoverText: () => Effect.die("unused"),
     discardText: () => Effect.die("unused"),
     prepareStructured: () => Effect.die("unused"),
     executeStructured: () => Effect.die("unused"),

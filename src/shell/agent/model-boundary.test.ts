@@ -1,14 +1,28 @@
 import { expect, it } from "@effect/vitest";
 import { DateTime } from "effect";
 import { IanaTimeZone, Locale, ServiceMarket } from "~/core/_shared/context";
-import { TranscriptTurnId } from "~/core/transcript/model";
-import { projectTranscriptForModel, systemPrompt, turnPrompt } from "./model-boundary";
+import {
+  AgentIteration,
+  AssistantTranscriptEntry,
+  TranscriptEntryId,
+  TranscriptText,
+  TranscriptTurnId,
+  UserTranscriptEntry,
+} from "~/core/transcript/model";
+import {
+  projectTranscriptForModel,
+  systemPrompt,
+  transcriptPrompt,
+  turnPrompt,
+} from "./model-boundary";
 
 const userContext = {
   serviceMarket: ServiceMarket.make("CO"),
   locale: Locale.make("es-CO"),
   timeZone: IanaTimeZone.make("America/Bogota"),
 };
+const occurredAt = DateTime.makeUnsafe("2026-07-20T12:00:00Z");
+const projectionTurnId = TranscriptTurnId.make("f1d1a000-0000-4000-8000-0000000004f2");
 
 it("excludes lifecycle markers from the model projection", () => {
   const turnId = TranscriptTurnId.make("f1d1a000-0000-4000-8000-0000000004f1");
@@ -22,6 +36,33 @@ it("excludes lifecycle markers from the model projection", () => {
       1_000
     )
   ).toEqual([]);
+});
+
+it("projects safe and sensitive transcript prose with its original role", () => {
+  expect(
+    transcriptPrompt([
+      UserTranscriptEntry.make({
+        id: TranscriptEntryId.make("f1d1a000-0000-4000-8000-0000000004f3"),
+        turnId: projectionTurnId,
+        text: TranscriptText.make("contenido seguro"),
+        occurredAt,
+      }),
+      AssistantTranscriptEntry.make({
+        id: TranscriptEntryId.make("f1d1a000-0000-4000-8000-0000000004f4"),
+        turnId: projectionTurnId,
+        iteration: AgentIteration.make(1),
+        text: TranscriptText.make("contraseña: hunter2"),
+        occurredAt,
+      }),
+    ])
+  ).toEqual([
+    { role: "user", content: "contenido seguro" },
+    {
+      role: "assistant",
+      content:
+        "No envíes credenciales ni tokens por chat. Este mensaje no fue guardado ni procesado.",
+    },
+  ]);
 });
 
 it("warns against credentials and unnecessary sensitive information without soliciting them", () => {

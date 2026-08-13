@@ -14,6 +14,8 @@ import {
 } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import { UserId } from "~/core/identity/reference";
+import { findUserInScope } from "~/shell/identity/repo";
+import { listMemoriesInScope } from "~/shell/memory/repo";
 import {
   AssistantTranscriptEntry,
   CanonicalToolCallEntry,
@@ -29,10 +31,6 @@ import {
 } from "~/core/transcript/model";
 import { advisoryLockKey } from "~/shell/db/advisory-lock";
 import { withUserTransaction } from "~/shell/db/user-transaction";
-
-const preparedAttemptContextTypeId: unique symbol = Symbol.for(
-  "fidy-ai/shell/conversation-continuity/PreparedAttemptContext"
-);
 
 const ActiveTurnRequestSchema = UserTranscriptEntry.mapFields(Struct.pick(["text"]));
 const CanonicalToolCallContent = CanonicalToolCallEntry.mapFields(
@@ -68,9 +66,34 @@ export type ContinuityView = {
  * Attempt-scoped input for the WorkingContext owner. It binds one User, active request, durable
  * revision, and ConversationContinuity scope without exposing those persistence facts.
  */
+const preparedAttemptContextTypeId: unique symbol = Symbol("PreparedAttemptContext");
 export type PreparedAttemptContext = Readonly<{
-  readonly [preparedAttemptContextTypeId]: typeof preparedAttemptContextTypeId;
+  readonly [preparedAttemptContextTypeId]: true;
 }>;
+
+/** WorkingContext input captured by one preparation generation. @internal */
+export type PreparedWorkingContextSnapshot = Readonly<{
+  user: Effect.Success<ReturnType<typeof findUserInScope>>;
+  memories: Effect.Success<ReturnType<typeof listMemoriesInScope>>;
+  transcript: ReadonlyArray<TranscriptEntry>;
+  request: ActiveTurnRequest;
+  startedAt: DateTime.Utc;
+  isActive: () => boolean;
+}>;
+
+const preparedContextSources = new WeakMap<object, PreparedWorkingContextSnapshot>();
+
+/** Claims one continuity-owned source without exposing it on PreparedAttempt.context. @internal */
+export const claimPreparedAttemptContext = (
+  context: PreparedAttemptContext
+): Option.Option<PreparedWorkingContextSnapshot> =>
+  Option.fromNullishOr(preparedContextSources.get(context)).pipe(
+    Option.filter((source) => source.isActive()),
+    Option.map((source) => {
+      preparedContextSources.delete(context);
+      return source;
+    })
+  );
 
 /** The prepared continuity changed before admission; no active User entry was appended. */
 export class ContinuityChanged extends Data.TaggedError("ContinuityChanged")<{}> {}
@@ -91,7 +114,6 @@ export type PendingTurn = Readonly<{
  */
 export type PreparedAttempt = Readonly<{
   context: PreparedAttemptContext;
-  view: ContinuityView;
   begin: () => Effect.Effect<PendingTurn, ContinuityChanged>;
 }>;
 
@@ -128,7 +150,11 @@ type Dependencies = {
 };
 type PreparedPersistence = {
   readonly revision: bigint;
+  readonly memoryRevision: bigint;
   readonly view: ContinuityView;
+  readonly user: Effect.Success<ReturnType<typeof findUserInScope>>;
+  readonly memories: Effect.Success<ReturnType<typeof listMemoriesInScope>>;
+  readonly startedAt: DateTime.Utc;
 };
 type CapabilityScope = {
   active: boolean;
@@ -141,6 +167,7 @@ type PendingScope = {
 };
 
 const RevisionRow = Schema.Struct({ revision: Schema.BigIntFromString });
+const MemoryRevisionRow = Schema.Struct({ revision: Schema.BigIntFromString });
 const PersistedTranscriptEntry = Schema.toCodecJson(TranscriptEntry);
 const TranscriptEntryRow = Schema.Struct({ entry: PersistedTranscriptEntry });
 const OptionalFailureReason = Schema.OptionFromNullOr(TurnFailureReason);
@@ -240,6 +267,23 @@ const readRevision = Effect.fn("ConversationContinuity.readRevision")(function* 
             FROM conversation_continuity
             WHERE user_id = ${ownedUserId}
           `,
+  })(userId);
+  return row.revision;
+});
+
+const readMemoryRevision = Effect.fn("ConversationContinuity.readMemoryRevision")(function* (
+  sql: SqlClient.SqlClient,
+  userId: UserId
+) {
+  const row = yield* SqlSchema.findOne({
+    Request: UserId,
+    Result: MemoryRevisionRow,
+    execute: (ownedUserId) => sql`
+      SELECT COALESCE(memory.revision, 0)::text AS revision
+      FROM users AS subject
+      LEFT JOIN memory_revisions AS memory ON memory.user_id = subject.id
+      WHERE subject.id = ${ownedUserId}
+    `,
   })(userId);
   return row.revision;
 });
@@ -416,7 +460,21 @@ const preparePersisted = Effect.fn("ConversationContinuity.prepare")(function* (
     userId,
     Effect.gen(function* () {
       yield* recoverPending(dependencies, userId);
-      return yield* observePersisted(dependencies.sql, userId);
+      const persisted = yield* observePersisted(dependencies.sql, userId);
+      const memoryRevision = yield* readMemoryRevision(dependencies.sql, userId);
+      const user = yield* findUserInScope(userId).pipe(
+        Effect.provideService(SqlClient.SqlClient, dependencies.sql)
+      );
+      const memories = yield* listMemoriesInScope(userId).pipe(
+        Effect.provideService(SqlClient.SqlClient, dependencies.sql)
+      );
+      return {
+        ...persisted,
+        memoryRevision,
+        user,
+        memories,
+        startedAt: yield* DateTime.now,
+      };
     })
   ).pipe(persistenceOrDie);
 });
@@ -425,6 +483,7 @@ type BeginPersistence = {
   readonly dependencies: Dependencies;
   readonly userId: UserId;
   readonly revision: bigint;
+  readonly memoryRevision: bigint;
   readonly entry: UserTranscriptEntry;
 };
 
@@ -432,6 +491,7 @@ const beginPersisted = Effect.fn("ConversationContinuity.begin")(function* ({
   dependencies,
   userId,
   revision,
+  memoryRevision,
   entry,
 }: BeginPersistence) {
   return yield* inUserTransaction(
@@ -439,7 +499,9 @@ const beginPersisted = Effect.fn("ConversationContinuity.begin")(function* ({
     userId,
     Effect.gen(function* () {
       yield* ensureContinuity(dependencies.sql, userId);
-      if ((yield* readRevision(dependencies.sql, userId, true)) !== revision) {
+      const continuityRevision = yield* readRevision(dependencies.sql, userId, true);
+      const currentMemoryRevision = yield* readMemoryRevision(dependencies.sql, userId);
+      if (continuityRevision !== revision || currentMemoryRevision !== memoryRevision) {
         return yield* new ContinuityChanged();
       }
       yield* dependencies.sql`
@@ -759,7 +821,7 @@ const beginPreparedAttempt = ({
       consumeBegin,
       "was reused after begin, supersession, or scope closure"
     );
-    const startedAt = yield* DateTime.now;
+    const startedAt = input.persisted.startedAt;
     const turnId = yield* makeTurnId(input.dependencies.crypto);
     const entry = UserTranscriptEntry.make({
       ...input.request,
@@ -774,6 +836,7 @@ const beginPreparedAttempt = ({
             dependencies: input.dependencies,
             userId: input.userId,
             revision: input.persisted.revision,
+            memoryRevision: input.persisted.memoryRevision,
             entry,
           })
         )
@@ -796,12 +859,21 @@ const usePreparedAttempt = <A, E, R>(
     const isAttemptActive = (): boolean =>
       attemptScope.active && preparation.active && attemptScope.generation === generation;
     const isBeginActive = (): boolean => isAttemptActive() && beginAvailable;
-    const context: PreparedAttemptContext = Object.freeze({
-      [preparedAttemptContextTypeId]: preparedAttemptContextTypeId,
+    const context: PreparedAttemptContext = {
+      [preparedAttemptContextTypeId]: true,
+    };
+    Object.defineProperty(context, preparedAttemptContextTypeId, { enumerable: false });
+    Object.freeze(context);
+    preparedContextSources.set(context, {
+      user: persisted.user,
+      memories: persisted.memories,
+      transcript: persisted.view.entries,
+      request,
+      startedAt: persisted.startedAt,
+      isActive: isAttemptActive,
     });
     const prepared: PreparedAttempt = Object.freeze({
       context,
-      view: persisted.view,
       begin: () =>
         beginPreparedAttempt({
           input: {

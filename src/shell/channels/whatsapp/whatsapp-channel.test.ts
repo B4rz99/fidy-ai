@@ -8,6 +8,7 @@ import {
   Deferred,
   Effect,
   Array as EffectArray,
+  Exit,
   Fiber,
   Layer,
   Logger,
@@ -28,7 +29,7 @@ import { SqlClient, type SqlConnection, SqlSchema, type Statement } from "effect
 import { ConsentRecord, ConsentRecordId } from "~/core/consent/model";
 import { E164PhoneNumber, UserId, WhatsAppBusinessScopedUserId } from "~/core/identity/reference";
 import { AgentBearerToken } from "~/core/tokens/model";
-import { AgentReply, AgentService, OnboardingConsentRequired } from "~/shell/agent/agent-service";
+import { AgentReply, AgentService } from "~/shell/agent/agent-service";
 import { makeOpenAiFunctionCallResponse } from "~/shell/agent/fixtures/openai";
 import { OpenAiHostedInferenceWithoutStartupValidation } from "~/shell/agent/openai";
 import { admitAgentConversationTurn } from "~/shell/agent/conversation";
@@ -215,7 +216,7 @@ const expectAuthenticatedTrace = (
   });
   expect(provider.contexts.trace).toMatchObject({
     trace_id: ingress.contexts.trace.trace_id,
-    parent_span_id: processing.contexts.trace.span_id,
+    parent_span_id: hostedTurn.contexts.trace.span_id,
     op: "http.client",
     data: {
       "fidy.provider": "kapso",
@@ -485,13 +486,11 @@ const agentReplyFixture = (text: string, overrides: Partial<AgentReply> = {}): A
 type AgentServiceFixture = Parameters<typeof AgentService.of>[0];
 const agentServiceFixture = (overrides: Partial<AgentServiceFixture> = {}): AgentServiceFixture =>
   AgentService.of({
-    handleTurn: () =>
-      Effect.succeed({
-        reply: agentReplyFixture("Respuesta entregada."),
-        assistantEntry: Option.none(),
-      }),
+    handleTurn: (_userId, _message, deliver) => {
+      const reply = agentReplyFixture("Respuesta entregada.");
+      return deliver(reply).pipe(Effect.as(reply));
+    },
     handleSynchronousTurn: () => Effect.succeed(agentReplyFixture("Respuesta entregada.")),
-    recordDeliveredReply: () => Effect.void,
     ...overrides,
   });
 const kapsoClientFixture = (
@@ -1052,6 +1051,32 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
       })
     );
 
+    it.effect("rejects non-text and invalid text after consent admission", () =>
+      Effect.gen(function* () {
+        yield* seedDevelopmentIdentity(defaultAgentBearer);
+        const receivedAt = DateTime.makeUnsafe("2026-04-03T12:00:02.000Z");
+        const event = makeKapsoTextEvent("wamid.invalid-agent-input", "valid", receivedAt);
+        const choice = yield* admitAgentConversationTurn({
+          caller: event.caller,
+          content: { _tag: "Choice", choice: "accept" },
+          message: event.messageEvidence,
+          receivedAt,
+        });
+        const empty = yield* admitAgentConversationTurn({
+          caller: event.caller,
+          content: { _tag: "Text", text: "" },
+          message: {
+            ...event.messageEvidence,
+            providerMessageId: WhatsAppProviderMessageId.make("wamid.empty-agent-input"),
+          },
+          receivedAt,
+        });
+
+        expect(choice._tag).toBe("ClarifyDecision");
+        expect(empty._tag).toBe("ClarifyDecision");
+      })
+    );
+
     it.effect("terminally fails a claimed burst when the agent cannot answer", () =>
       Effect.gen(function* () {
         yield* seedDevelopmentIdentity(defaultAgentBearer);
@@ -1084,6 +1109,102 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
             })
           )
         ).toBe(false);
+      })
+    );
+
+    it.effect("propagates pure interruption from the supervised worker loop", () =>
+      Effect.gen(function* () {
+        const telemetry = Telemetry.of({
+          span: (_descriptor, work) => work,
+          rootSpan: (_descriptor, work) => work,
+          continueSpan: (_savedContext, _descriptor, work) => work,
+          recordOutcome: () => Effect.void,
+          recordResponseStatus: () => Effect.void,
+          captureFailure: () => Effect.void,
+          addBreadcrumb: () => Effect.void,
+          recordModelUsage: () => Effect.void,
+          captureDurableContext: Effect.succeed(Option.none()),
+          isActiveSpan: () => Effect.succeed(false),
+        });
+
+        const exit = yield* runSupervisedWhatsAppLoop(
+          Effect.interrupt,
+          "whatsapp.processWork"
+        ).pipe(Effect.provideService(Telemetry, telemetry), Effect.exit);
+
+        expect(Exit.isFailure(exit) && Cause.hasInterrupts(exit.cause)).toBe(true);
+      })
+    );
+
+    it.effect("supervises a combined failure and interruption instead of propagating it", () =>
+      Effect.gen(function* () {
+        const captures = yield* Ref.make(0);
+        const resumed = yield* Deferred.make<void>();
+        const telemetry = Telemetry.of({
+          span: (_descriptor, work) => work,
+          rootSpan: (_descriptor, work) => work,
+          continueSpan: (_savedContext, _descriptor, work) => work,
+          recordOutcome: () => Effect.void,
+          recordResponseStatus: () => Effect.void,
+          captureFailure: () => Ref.update(captures, (count) => count + 1),
+          addBreadcrumb: () => Effect.void,
+          recordModelUsage: () => Effect.void,
+          captureDurableContext: Effect.succeed(Option.none()),
+          isActiveSpan: () => Effect.succeed(false),
+        });
+        const attempts = yield* Ref.make(0);
+        const iteration = Ref.updateAndGet(attempts, (count) => count + 1).pipe(
+          Effect.flatMap((attempt) =>
+            attempt === 1
+              ? Effect.all([Effect.fail("combined"), Effect.interrupt], {
+                  concurrency: "unbounded",
+                })
+              : Deferred.succeed(resumed, undefined).pipe(Effect.andThen(Effect.never))
+          )
+        );
+        const fiber = yield* runSupervisedWhatsAppLoop(iteration, "whatsapp.processWork").pipe(
+          Effect.provideService(Telemetry, telemetry),
+          Effect.forkScoped
+        );
+
+        yield* Deferred.await(resumed);
+        yield* Fiber.interrupt(fiber);
+        expect(yield* Ref.get(captures)).toBe(1);
+      })
+    );
+
+    it.effect("supervises an interrupted defect instead of propagating it", () =>
+      Effect.gen(function* () {
+        const captures = yield* Ref.make(0);
+        const resumed = yield* Deferred.make<void>();
+        const telemetry = Telemetry.of({
+          span: (_descriptor, work) => work,
+          rootSpan: (_descriptor, work) => work,
+          continueSpan: (_savedContext, _descriptor, work) => work,
+          recordOutcome: () => Effect.void,
+          recordResponseStatus: () => Effect.void,
+          captureFailure: () => Ref.update(captures, (count) => count + 1),
+          addBreadcrumb: () => Effect.void,
+          recordModelUsage: () => Effect.void,
+          captureDurableContext: Effect.succeed(Option.none()),
+          isActiveSpan: () => Effect.succeed(false),
+        });
+        const attempts = yield* Ref.make(0);
+        const iteration = Ref.updateAndGet(attempts, (count) => count + 1).pipe(
+          Effect.flatMap((attempt) =>
+            attempt === 1
+              ? Effect.all([Effect.die("combined"), Effect.interrupt], { concurrency: "unbounded" })
+              : Deferred.succeed(resumed, undefined).pipe(Effect.andThen(Effect.never))
+          )
+        );
+        const fiber = yield* runSupervisedWhatsAppLoop(iteration, "whatsapp.processWork").pipe(
+          Effect.provideService(Telemetry, telemetry),
+          Effect.forkScoped
+        );
+
+        yield* Deferred.await(resumed);
+        yield* Fiber.interrupt(fiber);
+        expect(yield* Ref.get(captures)).toBe(1);
       })
     );
 
@@ -1155,14 +1276,13 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           const eventTime = yield* DateTime.now;
           const recordings = yield* Ref.make(0);
           const agent = agentServiceFixture({
-            recordDeliveredReply: () =>
-              Ref.updateAndGet(recordings, (count) => count + 1).pipe(
-                Effect.flatMap((count) =>
-                  count === 1
-                    ? Effect.fail(new OnboardingConsentRequired({ userId: defaultUserId }))
-                    : Effect.void
-                )
-              ),
+            handleTurn: (_userId, _message, deliver) => {
+              const reply = agentReplyFixture("Respuesta entregada.");
+              return Ref.update(recordings, (count) => count + 1).pipe(
+                Effect.andThen(deliver(reply)),
+                Effect.as(reply)
+              );
+            },
           });
           const sends = yield* Ref.make(0);
           const kapsoService = kapsoClientFixture(
@@ -1243,7 +1363,40 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         ).toBe(true);
         expect(yield* Ref.get(attempts)).toBe(2);
 
-        const ambiguousTime = DateTime.add(eventTime, { seconds: 6 });
+        const exhaustedTime = DateTime.add(eventTime, { seconds: 6 });
+        const exhausted = makeKapsoTextEvent("wamid.exhausted-retry", "persistente", exhaustedTime);
+        yield* enqueueTurn({
+          admission: authorizedTurn(exhausted),
+          event: exhausted,
+          deliveryKey,
+        });
+        const exhaustedAttempts = yield* Ref.make(0);
+        const exhaustedKapso: KapsoClientService = {
+          sendText: () =>
+            Ref.update(exhaustedAttempts, (count) => count + 1).pipe(
+              Effect.andThen(
+                Effect.fail(
+                  new KapsoSendFailed({
+                    safeReason: "rate_limited",
+                    deliveryCertainty: "rejected",
+                    automaticRetry: true,
+                    responseStatus: Option.some(TelemetryHttpStatus.make(429)),
+                  })
+                )
+              )
+            ),
+        };
+        for (const seconds of [3, 5, 7]) {
+          expect(
+            yield* processTurnWith(DateTime.add(exhaustedTime, { seconds }), agent, exhaustedKapso)
+          ).toBe(true);
+        }
+        expect(yield* Ref.get(exhaustedAttempts)).toBe(3);
+        expect(
+          yield* processTurnWith(DateTime.add(exhaustedTime, { seconds: 9 }), agent, exhaustedKapso)
+        ).toBe(false);
+
+        const ambiguousTime = DateTime.add(exhaustedTime, { seconds: 10 });
         const ambiguous = makeKapsoTextEvent("wamid.ambiguous-no-retry", "segundo", ambiguousTime);
         yield* enqueueTurn({
           admission: authorizedTurn(ambiguous),
@@ -1436,7 +1589,7 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
                 FROM whatsapp_turn_claims AS claim
                 WHERE claim.user_id = ${defaultUserId}`
           )
-        ).toEqual([{ status: "failed", safeReason: "send_failed", content: null }]);
+        ).toEqual([{ status: "failed", safeReason: "agent_failed", content: null }]);
         expect(
           yield* withUserTransaction(
             defaultUserId,

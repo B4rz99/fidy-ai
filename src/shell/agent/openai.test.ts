@@ -1,16 +1,5 @@
 import { expect, it } from "@effect/vitest";
-import {
-  ConfigProvider,
-  Context,
-  Deferred,
-  Effect,
-  Exit,
-  Fiber,
-  Layer,
-  Option,
-  Ref,
-  Schema,
-} from "effect";
+import { ConfigProvider, Context, Deferred, Effect, Exit, Fiber, Layer, Ref, Schema } from "effect";
 import { TestClock } from "effect/testing";
 import { LanguageModel } from "effect/unstable/ai";
 import { HttpClient, type HttpClientRequest, HttpClientResponse } from "effect/unstable/http";
@@ -150,12 +139,12 @@ it.effect("builds the structured-output LanguageModel adapter", () =>
 );
 
 const textRequest = (): HostedTextRequest => ({
+  _tag: "Initial",
   context: makeHostedTextContext({
     prefix: [{ role: "system", content: "system framing" }],
     continuationTail: [],
     suffix: [{ role: "user", content: [{ type: "text", text: "hello" }] }],
   }),
-  continuation: Option.none(),
   toolChoice: "auto",
   maximumToolCalls: HostedToolCallMaximum.make(12),
 });
@@ -180,6 +169,7 @@ const continuationRequest = (
   continuation: HostedTextContinuation,
   callId: string
 ): HostedTextRequest => ({
+  _tag: "Continued",
   context: makeHostedTextContext({
     prefix: [{ role: "system", content: "system framing" }],
     continuationTail: [
@@ -198,7 +188,7 @@ const continuationRequest = (
     ],
     suffix: [{ role: "user", content: [{ type: "text", text: "continue" }] }],
   }),
-  continuation: Option.some(continuation),
+  continuation,
   toolChoice: "auto",
   maximumToolCalls: HostedToolCallMaximum.make(12),
 });
@@ -670,6 +660,10 @@ it.effect("maps OpenAI completion reasons and cached usage", () =>
       output_tokens_details: { reasoning_tokens: 0 },
       total_tokens: 23,
     };
+    const usageWithInvalidCachedTokens = {
+      ...usage,
+      input_tokens_details: { cached_tokens: "unknown" },
+    };
     const cases = [
       {
         status: "incomplete",
@@ -695,6 +689,12 @@ it.effect("maps OpenAI completion reasons and cached usage", () =>
         expected: "stop",
         responseUsage: usageWithoutDetails,
       },
+      {
+        status: "completed",
+        incompleteDetails: null,
+        expected: "stop",
+        responseUsage: usageWithInvalidCachedTokens,
+      },
     ] as const;
 
     for (const { expected, incompleteDetails, responseUsage, status } of cases) {
@@ -715,7 +715,11 @@ it.effect("maps OpenAI completion reasons and cached usage", () =>
           : {
               inputTokens: 20,
               outputTokens: 3,
-              cachedInputTokens: "input_tokens_details" in responseUsage ? 7 : 0,
+              cachedInputTokens:
+                "input_tokens_details" in responseUsage &&
+                typeof responseUsage.input_tokens_details.cached_tokens === "number"
+                  ? 7
+                  : 0,
             }
       );
     }

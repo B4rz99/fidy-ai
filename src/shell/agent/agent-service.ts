@@ -17,28 +17,16 @@ import {
   Struct,
 } from "effect";
 import type { Tool } from "effect/unstable/ai";
-import type { HttpClient } from "effect/unstable/http";
+import { HttpClient } from "effect/unstable/http";
 import { SqlClient } from "effect/unstable/sql";
 import type { User } from "~/core/identity/model";
 import type { UserId } from "~/core/identity/reference";
-import {
-  TranscriptWindowCharacterLimit,
-  type TranscriptWindowEntry,
-  TranscriptWindowTurnLimit,
-  selectTranscriptWindow,
-} from "~/core/transcript/rules";
+import { TranscriptWindowCharacterLimit, TranscriptWindowTurnLimit } from "~/core/transcript/rules";
 import {
   AgentIteration,
-  AssistantTranscriptEntry,
-  CanonicalToolCallEntry,
   type CanonicalToolOutcome,
-  CanonicalToolResultEntry,
   ToolCallId,
-  type TranscriptContentEntry,
-  TranscriptEntryId,
   TranscriptText,
-  TranscriptTurnId,
-  UserTranscriptEntry,
 } from "~/core/transcript/model";
 import { ValidationFailed } from "~/shell/_shared/errors";
 import { useCurrentConsent } from "~/shell/consent/repo";
@@ -56,23 +44,23 @@ import { Telemetry, type TelemetryService } from "~/shell/observability/telemetr
 import { atomicBatchOperation } from "~/shell/operations/operations";
 import { issueHostedAgentToken, revokeHostedAgentToken } from "~/shell/tokens/hosted-agent-token";
 import {
-  appendTranscriptEntries,
-  listRecentTranscriptEntries,
-  listTranscriptTurnEntries,
-} from "~/shell/transcript/transcript-service";
+  type ContinuityChanged,
+  ConversationContinuity,
+  type PendingTurn,
+  type PreparedAttempt,
+  type SerializedAttempt,
+  type TurnContinuationContent,
+} from "~/shell/transcript/conversation-continuity";
 import {
   containsSensitiveChatValue,
   containsSensitiveJson,
   credentialRejectedReply,
-  projectTranscriptForModel,
   sensitiveEntryRejected,
-  systemPrompt,
-  transcriptPrompt,
-  turnPrompt,
+  type transcriptPrompt,
 } from "./model-boundary";
 import {
   HostedInference,
-  type HostedInferenceError,
+  HostedInferenceError,
   type HostedInferenceService,
   type HostedTextContinuation,
   type HostedTextResult,
@@ -80,6 +68,7 @@ import {
   type PreparedHostedText,
   makeHostedTextContext,
 } from "./hosted-inference";
+import { type WorkingContext, makeWorkingContext } from "./working-context";
 import { makeTurnConfirmation } from "./tool-confirmation";
 import { renderTransactionReceipt } from "./transaction-receipt";
 import {
@@ -215,14 +204,6 @@ export type AgentTurnError =
   | ModelUnavailable
   | ModelResponseRejected;
 
-const makeEntryId = Effect.flatMap(Crypto.Crypto, (crypto) => crypto.randomUUIDv7).pipe(
-  Effect.map((id) => TranscriptEntryId.make(id)),
-  Effect.orDie
-);
-const makeTurnId = Effect.flatMap(Crypto.Crypto, (crypto) => crypto.randomUUIDv7).pipe(
-  Effect.map((id) => TranscriptTurnId.make(id)),
-  Effect.orDie
-);
 const withCurrentConsent = <A, E, R>(
   subjectUserId: UserId,
   use: Effect.Effect<A, E, R>
@@ -239,38 +220,6 @@ const withCurrentConsent = <A, E, R>(
       .pipe(Effect.catchTag("SqlError", Effect.die))
   );
 
-const appendAuthorizedTranscript = (
-  subjectUserId: UserId,
-  entries: ReadonlyArray<TranscriptContentEntry>
-): Effect.Effect<void, OnboardingConsentRequired, SqlClient.SqlClient> =>
-  withCurrentConsent(subjectUserId, appendTranscriptEntries(subjectUserId, entries));
-
-const appendAssistantTranscript = Effect.fn("AgentService.appendAssistantTranscript")(function* ({
-  userId,
-  turnId,
-  iteration,
-  text,
-}: {
-  readonly userId: UserId;
-  readonly turnId: TranscriptTurnId;
-  readonly iteration: AgentIteration;
-  readonly text: TranscriptText;
-}) {
-  yield* withCurrentConsent(
-    userId,
-    Effect.gen(function* () {
-      yield* appendTranscriptEntries(userId, [
-        AssistantTranscriptEntry.make({
-          id: yield* makeEntryId,
-          turnId,
-          iteration,
-          text,
-          occurredAt: yield* DateTime.now,
-        }),
-      ]);
-    })
-  );
-});
 const makeTextReply = (text: TranscriptText): AgentReply =>
   AgentReply.make({ text, attachments: Option.none(), choices: Option.none() });
 
@@ -346,15 +295,9 @@ const makeToolOutcome = (isFailure: boolean, result: Schema.Json): CanonicalTool
  * The assistant text is deliberately derived from `reply` when delivery is recorded, so prepared
  * state cannot represent a different sent and persisted message.
  */
-export type PreparedAgentReply = Readonly<{
+type PreparedAgentReply = Readonly<{
   reply: AgentReply;
-  assistantEntry: Option.Option<
-    Readonly<{
-      userId: UserId;
-      turnId: TranscriptTurnId;
-      iteration: AgentIteration;
-    }>
-  >;
+  assistantEntry: Option.Option<Readonly<{ iteration: AgentIteration }>>;
 }>;
 
 const preparedReply = (
@@ -372,12 +315,15 @@ type AgentToolCall = Readonly<{
 
 type HostedTurn = Readonly<{
   userId: UserId;
-  turnId: TranscriptTurnId;
   user: User;
   startedAt: DateTime.Utc;
   limits: AgentLimits;
   confirmation: Effect.Success<ReturnType<typeof makeTurnConfirmation>>;
   toolkit: AgentToolkitInstance;
+  context: WorkingContext;
+  pending: PendingTurn;
+  continuationEntries: Array<TurnContinuationContent>;
+  initialPrepared: PreparedHostedText;
 }>;
 
 type RecordedCall = Readonly<{
@@ -404,7 +350,12 @@ type AcceptedGeneration = Readonly<{
 type TurnModelContinuation = Option.Option<HostedTextContinuation>;
 
 type ModelRoundDecision = Readonly<
-  { _tag: "Accepted"; generated: AcceptedGeneration } | { _tag: "Retry"; feedback: string }
+  | { _tag: "Accepted"; generated: AcceptedGeneration }
+  | {
+      _tag: "Retry";
+      feedback: string;
+      continuation: Option.Option<HostedTextContinuation>;
+    }
 >;
 
 const recordedToolCall: ToolCallOutcome = { _tag: "Recorded" };
@@ -433,17 +384,15 @@ const recordToolOutcome = Effect.fn("AgentService.recordToolOutcome")(function* 
   call: RecordedCall,
   outcome: CanonicalToolOutcome
 ) {
-  yield* appendAuthorizedTranscript(turn.userId, [
-    CanonicalToolResultEntry.make({
-      id: yield* makeEntryId,
-      turnId: turn.turnId,
-      iteration: call.iteration,
-      toolCallId: call.toolCallId,
-      operation: call.binding.operation,
-      outcome,
-      occurredAt: yield* DateTime.now,
-    }),
-  ]);
+  const content: TurnContinuationContent = {
+    _tag: "CanonicalToolResultEntry",
+    iteration: call.iteration,
+    toolCallId: call.toolCallId,
+    operation: call.binding.operation,
+    outcome,
+  };
+  yield* turn.pending.append([content]);
+  turn.continuationEntries.push(content);
 });
 
 const recordToolCall = Effect.fn("AgentService.recordToolCall")(function* (
@@ -451,17 +400,15 @@ const recordToolCall = Effect.fn("AgentService.recordToolCall")(function* (
   call: RecordedCall,
   input: Schema.Json
 ) {
-  yield* appendAuthorizedTranscript(turn.userId, [
-    CanonicalToolCallEntry.make({
-      id: yield* makeEntryId,
-      turnId: turn.turnId,
-      iteration: call.iteration,
-      toolCallId: call.toolCallId,
-      operation: call.binding.operation,
-      input,
-      occurredAt: yield* DateTime.now,
-    }),
-  ]);
+  const content: TurnContinuationContent = {
+    _tag: "CanonicalToolCallEntry",
+    iteration: call.iteration,
+    toolCallId: call.toolCallId,
+    operation: call.binding.operation,
+    input,
+  };
+  yield* turn.pending.append([content]);
+  turn.continuationEntries.push(content);
 });
 
 const runToolkitCall = (
@@ -711,40 +658,6 @@ const respondToGeneration = Effect.fn("AgentService.respondToGeneration")(functi
   return yield* executeGeneratedCalls(turn, accepted.value);
 });
 
-const loadTranscriptWindow = (
-  userId: UserId,
-  turnId: TranscriptTurnId,
-  limits: AgentLimits
-): Effect.Effect<
-  ReadonlyArray<TranscriptWindowEntry>,
-  OnboardingConsentRequired,
-  SqlClient.SqlClient
-> =>
-  withCurrentConsent(
-    userId,
-    Effect.all({
-      currentTranscript: listTranscriptTurnEntries(userId, turnId),
-      priorTurns:
-        limits.maxTranscriptTurns === 1
-          ? Effect.succeed([])
-          : listRecentTranscriptEntries(userId, limits.maxTranscriptTurns - 1),
-    }).pipe(
-      Effect.map(({ currentTranscript, priorTurns }) =>
-        projectTranscriptForModel(
-          [...priorTurns, ...currentTranscript],
-          limits.maxToolResultCharacters
-        )
-      ),
-      Effect.flatMap((transcript) =>
-        selectTranscriptWindow(
-          transcript,
-          limits.maxTranscriptTurns,
-          limits.maxTranscriptCharacters
-        )
-      )
-    )
-  );
-
 const fallbackRetryDelay = Random.nextIntBetween(
   0,
   Duration.toMillis(modelRetryPolicy.jitterWindow)
@@ -755,6 +668,12 @@ const fallbackRetryDelay = Random.nextIntBetween(
 );
 
 type ModelGeneration = HostedTextResult;
+type RecoverableHostedOutput = Readonly<{
+  _tag: "RecoverableHostedOutput";
+  failure: HostedInferenceError;
+  continuation: HostedTextContinuation;
+}>;
+type ModelRoundFailure = HostedInferenceError | Cause.TimeoutError | RecoverableHostedOutput;
 
 const retryBreadcrumb = (nextAttempt: number, delayMillis: number): TelemetryBreadcrumb => ({
   category: "agent",
@@ -931,7 +850,7 @@ const runModelAttempts = (
   inference: HostedInferenceService,
   roundMillis: number
 ): Effect.Effect<
-  Result.Result<ModelGeneration, HostedInferenceError | Cause.TimeoutError>,
+  Result.Result<ModelGeneration, ModelRoundFailure>,
   HostedInferenceError,
   Telemetry
 > =>
@@ -958,11 +877,24 @@ const runModelAttempts = (
           state,
         }).pipe(Effect.timeout(`${roundMillis} millis`))
       );
-      const result = yield* Result.match(round, {
-        onFailure: (failure) => finishModelTimeout(telemetry, state, failure),
-        onSuccess: (attempts) => finishProviderAttempts(telemetry, state, attempts),
-      });
-      if (result._tag === "Failure") yield* inference.discardText(prepared);
+      const result: Result.Result<ModelGeneration, HostedInferenceError | Cause.TimeoutError> =
+        yield* Result.match(round, {
+          onFailure: (failure) => finishModelTimeout(telemetry, state, failure),
+          onSuccess: (attempts) => finishProviderAttempts(telemetry, state, attempts),
+        });
+      if (
+        Result.isFailure(result) &&
+        result.failure instanceof HostedInferenceError &&
+        result.failure.reason._tag === "InvalidOutput"
+      ) {
+        const continuation = yield* inference.recoverText(prepared);
+        return Result.fail<RecoverableHostedOutput>({
+          _tag: "RecoverableHostedOutput",
+          failure: result.failure,
+          continuation,
+        });
+      }
+      if (Result.isFailure(result)) yield* inference.discardText(prepared);
       return result;
     });
     return yield* telemetry.span(modelRoundDescriptor, work);
@@ -978,51 +910,48 @@ const generateCurrentTurn = (
     continuationTail,
     malformedOutputFeedback,
     remainingToolCalls,
+    preparedOverride,
   }: Readonly<{
     turn: HostedTurn;
     continuation: TurnModelContinuation;
     continuationTail: HostedContinuationTail;
     malformedOutputFeedback: Option.Option<string>;
     remainingToolCalls: number;
+    preparedOverride: Option.Option<PreparedHostedText>;
   }>
 ): Effect.Effect<
-  Result.Result<HostedTextResult, HostedInferenceError | Cause.TimeoutError>,
+  Result.Result<HostedTextResult, ModelRoundFailure>,
   OnboardingConsentRequired | HostedInferenceError,
   SqlClient.SqlClient | Telemetry
 > =>
   Effect.gen(function* () {
-    const transcriptWindow = yield* loadTranscriptWindow(turn.userId, turn.turnId, turn.limits);
-    const durableTranscript = Option.isNone(continuation)
-      ? transcriptWindow
-      : transcriptWindow.filter(
-          (entry) =>
-            entry.turnId !== turn.turnId ||
-            (entry._tag !== "CanonicalToolCallEntry" && entry._tag !== "CanonicalToolResultEntry")
-        );
-    const context = makeHostedTextContext({
-      prefix: [
-        { role: "system", content: systemPrompt(turn.user) },
-        ...transcriptPrompt(durableTranscript),
-      ],
-      continuationTail,
-      suffix: [
-        { role: "system", content: turnPrompt(turn.startedAt) },
-        ...Option.match(malformedOutputFeedback, {
-          onNone: () => [],
-          onSome: (feedback) => [{ role: "system" as const, content: feedback }],
-        }),
-      ],
-    });
-    const prepare = inference.prepareText(
-      remainingToolCalls === 0
-        ? { context, continuation, toolChoice: "none" }
-        : {
-            context,
-            continuation,
-            toolChoice: "auto",
-            maximumToolCalls: HostedToolCallMaximum.make(remainingToolCalls),
-          }
-    );
+    const prepare =
+      Option.isSome(preparedOverride) && Option.isNone(malformedOutputFeedback)
+        ? Effect.succeed(preparedOverride.value)
+        : Option.match(continuation, {
+            onNone: () => Effect.die("A continued round requires HostedInference continuation"),
+            onSome: (continued) => {
+              const context = makeHostedTextContext({
+                prefix: [],
+                continuationTail,
+                suffix: Option.match(malformedOutputFeedback, {
+                  onNone: () => [],
+                  onSome: (feedback) => [{ role: "system" as const, content: feedback }],
+                }),
+              });
+              return inference.prepareText(
+                remainingToolCalls === 0
+                  ? { _tag: "Continued", context, continuation: continued, toolChoice: "none" }
+                  : {
+                      _tag: "Continued",
+                      context,
+                      continuation: continued,
+                      toolChoice: "auto",
+                      maximumToolCalls: HostedToolCallMaximum.make(remainingToolCalls),
+                    }
+              );
+            },
+          });
     return yield* runModelAttempts(prepare, inference, turn.limits.maxModelRoundMillis);
   });
 
@@ -1065,41 +994,82 @@ const decodeModelToolCalls = Effect.fn("AgentService.decodeModelToolCalls")(func
   return toolCalls;
 });
 
-const acceptModelRound = Effect.fn("AgentService.acceptModelRound")(function* (
-  round: Effect.Success<ReturnType<typeof generateCurrentTurn>>
-): Effect.fn.Return<ModelRoundDecision, ModelUnavailable | ModelResponseRejected> {
-  if (Result.isSuccess(round)) {
-    yield* annotateModelUsage(round.success);
-    return {
-      _tag: "Accepted",
-      generated: {
-        text: round.success.text,
-        toolCalls: yield* decodeModelToolCalls(round.success),
-        finishReason: round.success.finishReason,
-        continuation: round.success.continuation,
-      },
-    };
+const malformedOutputRetry = (
+  description: string,
+  continuation: Option.Option<HostedTextContinuation>
+): Effect.Effect<ModelRoundDecision, ModelResponseRejected> =>
+  containsSensitiveChatValue(description)
+    ? Effect.fail(modelResponseRejected(new Error("Model output contained a sensitive chat value")))
+    : Effect.succeed({
+        _tag: "Retry",
+        feedback: malformedOutputFeedback(description),
+        continuation,
+      });
+
+const acceptGeneratedRound = Effect.fn("AgentService.acceptGeneratedRound")(function* (
+  generated: HostedTextResult
+): Effect.fn.Return<ModelRoundDecision, ModelResponseRejected> {
+  yield* annotateModelUsage(generated);
+  const decoded = yield* Effect.result(decodeModelToolCalls(generated));
+  if (Result.isFailure(decoded)) {
+    const description = String(decoded.failure.cause);
+    if (containsSensitiveChatValue(description)) return yield* decoded.failure;
+    return yield* malformedOutputRetry(description, Option.some(generated.continuation));
   }
-  const { failure } = round;
-  if (!("reason" in failure)) return yield* new ModelUnavailable({ cause: failure });
-  yield* Effect.annotateCurrentSpan({
-    "agent.model.failure.reason": failure.reason._tag,
-    "agent.model.failure.retryable": failure.retryable,
-    ...Option.match(failure.retryAfter, {
-      onNone: () => ({}),
-      onSome: (retryAfter) => ({
-        "agent.model.failure.retry_after_millis": Duration.toMillis(retryAfter),
-      }),
-    }),
-  });
-  if (failure.reason._tag !== "InvalidOutput") {
-    return yield* new ModelUnavailable({ cause: failure });
-  }
-  if (containsSensitiveChatValue(failure.reason.description)) {
-    return yield* modelResponseRejected(new Error("Model output contained a sensitive chat value"));
-  }
-  return { _tag: "Retry", feedback: malformedOutputFeedback(failure.reason.description) };
+  return {
+    _tag: "Accepted",
+    generated: {
+      text: generated.text,
+      toolCalls: decoded.success,
+      finishReason: generated.finishReason,
+      continuation: generated.continuation,
+    },
+  };
 });
+
+const acceptRecoverableHostedOutput = (
+  failure: RecoverableHostedOutput
+): Effect.Effect<ModelRoundDecision, ModelResponseRejected> =>
+  malformedOutputRetry(
+    failure.failure.reason._tag === "InvalidOutput"
+      ? failure.failure.reason.description
+      : "Hosted provider response was invalid",
+    Option.some(failure.continuation)
+  );
+
+const acceptHostedInferenceFailure = Effect.fn("AgentService.acceptHostedInferenceFailure")(
+  function* (
+    failure: HostedInferenceError
+  ): Effect.fn.Return<ModelRoundDecision, ModelUnavailable | ModelResponseRejected> {
+    yield* Effect.annotateCurrentSpan({
+      "agent.model.failure.reason": failure.reason._tag,
+      "agent.model.failure.retryable": failure.retryable,
+      ...Option.match(failure.retryAfter, {
+        onNone: () => ({}),
+        onSome: (retryAfter) => ({
+          "agent.model.failure.retry_after_millis": Duration.toMillis(retryAfter),
+        }),
+      }),
+    });
+    if (failure.reason._tag !== "InvalidOutput") {
+      return yield* new ModelUnavailable({ cause: failure });
+    }
+    return yield* malformedOutputRetry(failure.reason.description, Option.none());
+  }
+);
+
+const acceptModelRound = (
+  round: Effect.Success<ReturnType<typeof generateCurrentTurn>>
+): Effect.Effect<ModelRoundDecision, ModelUnavailable | ModelResponseRejected> => {
+  if (Result.isSuccess(round)) return acceptGeneratedRound(round.success);
+  if (round.failure instanceof HostedInferenceError) {
+    return acceptHostedInferenceFailure(round.failure);
+  }
+  if (round.failure._tag === "RecoverableHostedOutput") {
+    return acceptRecoverableHostedOutput(round.failure);
+  }
+  return Effect.fail(new ModelUnavailable({ cause: round.failure }));
+};
 
 const loadTurnContext = (
   userId: UserId,
@@ -1129,13 +1099,9 @@ const iterationReply = (
   turn: HostedTurn,
   iteration: AgentIteration,
   text: TranscriptText
-): PreparedAgentReply =>
-  preparedReply(
-    makeTextReply(text),
-    Option.some({ userId: turn.userId, turnId: turn.turnId, iteration })
-  );
+): PreparedAgentReply => preparedReply(makeTextReply(text), Option.some({ iteration }));
 
-const loadContinuationTail = Effect.fn("AgentService.loadContinuationTail")(function* ({
+const loadContinuationTail = ({
   turn,
   iteration,
   generated,
@@ -1143,26 +1109,63 @@ const loadContinuationTail = Effect.fn("AgentService.loadContinuationTail")(func
   turn: HostedTurn;
   iteration: AgentIteration;
   generated: AcceptedGeneration;
-}>) {
+}>): HostedContinuationTail => {
   const callIds = new Set(generated.toolCalls.map(({ id }) => id));
-  const toolResults = yield* withCurrentConsent(
-    turn.userId,
-    listTranscriptTurnEntries(turn.userId, turn.turnId).pipe(
-      Effect.map((entries) =>
-        projectTranscriptForModel(
-          entries.filter(
-            (entry) =>
-              entry._tag === "CanonicalToolResultEntry" &&
-              entry.iteration === iteration &&
-              callIds.has(entry.toolCallId)
-          ),
-          turn.limits.maxToolResultCharacters
-        )
-      )
-    )
-  );
-  return transcriptPrompt(toolResults);
-});
+  return turn.continuationEntries.flatMap((entry): HostedContinuationTail => {
+    if (
+      entry._tag !== "CanonicalToolResultEntry" ||
+      entry.iteration !== iteration ||
+      !callIds.has(entry.toolCallId)
+    ) {
+      return [];
+    }
+    const binding = agentOperationBindings.find(({ operation }) => operation === entry.operation);
+    if (binding === undefined) return [];
+    const failed = entry.outcome._tag !== "Succeeded";
+    const canonicalResult =
+      entry.outcome._tag === "Succeeded" ? entry.outcome.output : entry.outcome.failure;
+    const result =
+      JSON.stringify(canonicalResult).length <= turn.limits.maxToolResultCharacters
+        ? canonicalResult
+        : {
+            code: "tool_result_too_large",
+            message: "The canonical result exceeded the model-context safety limit.",
+          };
+    return [
+      {
+        role: "tool",
+        content: [
+          {
+            type: "tool-result",
+            id: entry.toolCallId,
+            name: binding.wireName,
+            result,
+            isFailure: failed,
+          },
+        ],
+      },
+    ];
+  });
+};
+
+const recordMalformedOutputExhaustion = (
+  feedback: Option.Option<string>
+): Effect.Effect<void, never, Telemetry> =>
+  Option.match(feedback, {
+    onNone: () => Effect.void,
+    onSome: () =>
+      Effect.flatMap(Telemetry, (telemetry) =>
+        telemetry.captureFailure({
+          _tag: "ExhaustedOperationalFailure",
+          component: "agent",
+          operation: "agent.modelRound",
+          error: "model_unavailable",
+          provider: Option.some("openai"),
+          retryable: false,
+          cause: new Error("Model output recovery exhausted"),
+        })
+      ),
+  });
 
 const runHostedTurn = (
   inference: HostedInferenceService,
@@ -1173,7 +1176,6 @@ const runHostedTurn = (
   Crypto.Crypto | SqlClient.SqlClient | Telemetry
 > =>
   Effect.gen(function* () {
-    const telemetry = yield* Telemetry;
     let toolCalls = 0;
     let continuation: TurnModelContinuation = Option.none();
     let continuationTail: HostedContinuationTail = [];
@@ -1187,6 +1189,7 @@ const runHostedTurn = (
           continuationTail,
           malformedOutputFeedback: feedback,
           remainingToolCalls: turn.limits.maxToolCallsPerTurn - toolCalls,
+          preparedOverride: index === 1 ? Option.some(turn.initialPrepared) : Option.none(),
         }).pipe(
           Effect.catchTag("HostedInferenceError", (failure) =>
             Effect.fail(new ModelUnavailable({ cause: failure }))
@@ -1195,6 +1198,10 @@ const runHostedTurn = (
       );
       if (roundDecision._tag === "Retry") {
         feedback = Option.some(roundDecision.feedback);
+        if (Option.isSome(roundDecision.continuation)) {
+          continuation = roundDecision.continuation;
+          continuationTail = [];
+        }
         continue;
       }
       feedback = Option.none();
@@ -1206,37 +1213,34 @@ const runHostedTurn = (
       const response = yield* respondToGeneration(turn, iteration, generated);
       if (response._tag === "Completed") return iterationReply(turn, iteration, response.text);
       continuation = Option.some(generated.continuation);
-      continuationTail = yield* loadContinuationTail({ turn, iteration, generated });
+      continuationTail = loadContinuationTail({ turn, iteration, generated });
     }
 
-    if (Option.isSome(feedback)) {
-      yield* telemetry.captureFailure({
-        _tag: "ExhaustedOperationalFailure",
-        component: "agent",
-        operation: "agent.modelRound",
-        error: "model_unavailable",
-        provider: Option.some("openai"),
-        retryable: false,
-        cause: new Error("Model output recovery exhausted"),
-      });
-    }
+    yield* recordMalformedOutputExhaustion(feedback);
     return iterationReply(turn, AgentIteration.make(turn.limits.maxIterations), exhaustedReply);
   });
 
-const turnFailureOutcome = (failure: AgentTurnError): DeclaredOutcome => {
+const turnFailureTag = (failure: unknown): Option.Option<AgentTurnError["_tag"]> => {
+  if (typeof failure !== "object" || failure === null || !("_tag" in failure)) {
+    return Option.none();
+  }
   switch (failure._tag) {
     case "UnknownUser":
-      return {
-        outcome: "rejected",
-        error: Option.some("unknown_user"),
-        retryable: false,
-      };
     case "OnboardingConsentRequired":
-      return {
-        outcome: "rejected",
-        error: Option.some("consent_required"),
-        retryable: false,
-      };
+    case "ModelUnavailable":
+    case "ModelResponseRejected":
+      return Option.some(failure._tag);
+    default:
+      return Option.none();
+  }
+};
+
+const turnFailureOutcomeFromTag = (tag: AgentTurnError["_tag"]): DeclaredOutcome => {
+  switch (tag) {
+    case "UnknownUser":
+      return { outcome: "rejected", error: Option.some("unknown_user"), retryable: false };
+    case "OnboardingConsentRequired":
+      return { outcome: "rejected", error: Option.some("consent_required"), retryable: false };
     case "ModelResponseRejected":
       return {
         outcome: "rejected",
@@ -1244,17 +1248,13 @@ const turnFailureOutcome = (failure: AgentTurnError): DeclaredOutcome => {
         retryable: false,
       };
     case "ModelUnavailable":
-      return {
-        outcome: "failed",
-        error: Option.some("model_unavailable"),
-        retryable: false,
-      };
+      return { outcome: "failed", error: Option.some("model_unavailable"), retryable: false };
   }
 };
 
 const recordTurnExit = (
   telemetry: TelemetryService,
-  exit: Exit.Exit<unknown, AgentTurnError>
+  exit: Exit.Exit<unknown, unknown>
 ): Effect.Effect<void> => {
   if (Exit.isSuccess(exit)) return Effect.void;
   const { cause } = exit;
@@ -1284,150 +1284,261 @@ const recordTurnExit = (
       { discard: true }
     );
   }
-  return Option.match(Exit.findErrorOption(exit), {
+  return Option.match(Exit.findErrorOption(exit).pipe(Option.flatMap(turnFailureTag)), {
     onNone: () => Effect.void,
-    onSome: (failure) => telemetry.recordOutcome(turnFailureOutcome(failure)),
+    onSome: (tag) => telemetry.recordOutcome(turnFailureOutcomeFromTag(tag)),
   });
 };
 
-const beginHostedTurn = Effect.fn("AgentService.beginHostedTurn")(function* (
-  userId: UserId,
-  message: InboundMessage
-) {
-  const turnId = yield* makeTurnId;
-  const occurredAt = yield* DateTime.now;
-  yield* appendAuthorizedTranscript(userId, [
-    UserTranscriptEntry.make({
-      id: yield* makeEntryId,
-      turnId,
-      text: message.text,
-      occurredAt,
-    }),
-  ]);
-  return { turnId, occurredAt } as const;
+const maximumContinuityPreparations = 3;
+
+type AgentServiceDependencies = Readonly<{
+  inference: HostedInferenceService;
+  continuity: ConversationContinuity["Service"];
+  telemetry: TelemetryService;
+  crypto: Crypto.Crypto;
+  httpClient: HttpClient.HttpClient;
+  sqlClient: SqlClient.SqlClient;
+}>;
+
+const prepareInitialRound = (
+  inference: HostedInferenceService,
+  context: WorkingContext,
+  maximumToolCalls: number
+): Effect.Effect<PreparedHostedText, HostedInferenceError> =>
+  inference.prepareText({
+    _tag: "Initial",
+    context,
+    toolChoice: "auto",
+    maximumToolCalls: HostedToolCallMaximum.make(maximumToolCalls),
+  });
+
+const beginPreparedTurn = Effect.fn("AgentService.beginPreparedTurn")(function* (
+  inference: HostedInferenceService,
+  prepared: PreparedAttempt,
+  firstRound: PreparedHostedText
+): Effect.fn.Return<PendingTurn, ContinuityChanged | ModelUnavailable> {
+  const admission = yield* Effect.result(prepared.begin());
+  if (Result.isSuccess(admission)) return admission.success;
+  yield* inference
+    .discardText(firstRound)
+    .pipe(
+      Effect.catchTag("HostedInferenceError", (cause) =>
+        Effect.fail(new ModelUnavailable({ cause }))
+      )
+    );
+  return yield* admission.failure;
 });
 
-const makePrepareTurn = (
-  inference: HostedInferenceService,
-  telemetry: TelemetryService
-): ((
-  userId: UserId,
-  message: InboundMessage
-) => Effect.Effect<
-  PreparedAgentReply,
-  AgentTurnError,
-  Crypto.Crypto | HttpClient.HttpClient | SqlClient.SqlClient
->) =>
-  Effect.fn("AgentService.prepareTurn")((userId: UserId, message: InboundMessage) => {
-    const work = Effect.gen(function* () {
-      const limits = yield* CurrentAgentLimits;
-      const { user, confirmation } = yield* loadTurnContext(userId, message);
-      if (containsSensitiveChatValue(message.text)) {
-        return preparedReply(makeTextReply(credentialRejectedReply), Option.none());
-      }
-      const { turnId, occurredAt } = yield* beginHostedTurn(userId, message);
-      const hostedToken = yield* withCurrentConsent(
+const generateHostedReply = Effect.fn("AgentService.generateHostedReply")(function* (input: {
+  dependencies: AgentServiceDependencies;
+  userId: UserId;
+  message: InboundMessage;
+  limits: AgentLimits;
+  context: WorkingContext;
+  pending: PendingTurn;
+  firstRound: PreparedHostedText;
+}) {
+  const { dependencies, userId, message, limits, context, pending, firstRound } = input;
+  const { user, confirmation } = yield* loadTurnContext(userId, message);
+  const startedAt = yield* DateTime.now;
+  const hostedToken = yield* withCurrentConsent(userId, issueHostedAgentToken(userId, startedAt));
+  return yield* Effect.scoped(
+    Effect.gen(function* () {
+      const toolkit = yield* makeAgentToolkit(hostedToken.bearer);
+      return yield* runHostedTurn(dependencies.inference, {
         userId,
-        issueHostedAgentToken(userId, occurredAt)
-      );
-      const runTurn = Effect.scoped(
-        Effect.gen(function* () {
-          const toolkit = yield* makeAgentToolkit(hostedToken.bearer);
-          return yield* runHostedTurn(inference, {
-            userId,
-            turnId,
-            user,
-            startedAt: occurredAt,
-            limits,
-            confirmation,
-            toolkit,
-          });
-        })
-      );
-
-      return yield* runTurn.pipe(
-        Effect.ensuring(
-          DateTime.now.pipe(
-            Effect.flatMap((revokedAt) =>
-              revokeHostedAgentToken(userId, hostedToken.tokenId, revokedAt)
-            )
-          )
+        user,
+        startedAt,
+        limits,
+        confirmation,
+        toolkit,
+        context,
+        pending,
+        continuationEntries: [],
+        initialPrepared: firstRound,
+      });
+    })
+  ).pipe(
+    Effect.ensuring(
+      DateTime.now.pipe(
+        Effect.flatMap((revokedAt) =>
+          revokeHostedAgentToken(userId, hostedToken.tokenId, revokedAt)
         )
-      );
-    }).pipe(Effect.provideService(Telemetry, telemetry));
-    return telemetry.span(
-      turnDescriptor,
-      Effect.onExit(work, (exit) => recordTurnExit(telemetry, exit))
-    );
+      )
+    )
+  );
+});
+
+const deliverAndComplete = Effect.fn("AgentService.deliverAndComplete")(function* <E, R>(input: {
+  pending: PendingTurn;
+  generated: PreparedAgentReply;
+  deliver: (reply: AgentReply) => Effect.Effect<void, E, R>;
+}) {
+  const { pending, generated, deliver } = input;
+  const delivered = yield* Effect.result(deliver(generated.reply));
+  if (Result.isFailure(delivered)) {
+    yield* pending.fail("DeliveryFailed");
+    return yield* Effect.fail(delivered.failure);
+  }
+  yield* Option.match(generated.assistantEntry, {
+    onNone: () => pending.fail("HostedInferenceFailed"),
+    onSome: ({ iteration }) => pending.complete({ iteration, text: generated.reply.text }),
   });
+  return generated.reply;
+});
+
+const runPreparedAttempt = Effect.fn("AgentService.runPreparedAttempt")(function* <E, R>(input: {
+  dependencies: AgentServiceDependencies;
+  userId: UserId;
+  message: InboundMessage;
+  prepared: PreparedAttempt;
+  deliver: (reply: AgentReply) => Effect.Effect<void, E, R>;
+}) {
+  const { dependencies, userId, message, prepared, deliver } = input;
+  const limits = yield* CurrentAgentLimits;
+  const context = yield* makeWorkingContext(prepared.context, limits).pipe(
+    Effect.mapError(() => new UnknownUser({ userId }))
+  );
+  const firstRound = yield* prepareInitialRound(
+    dependencies.inference,
+    context,
+    limits.maxToolCallsPerTurn
+  ).pipe(Effect.mapError((cause) => new ModelUnavailable({ cause })));
+  const pending = yield* beginPreparedTurn(dependencies.inference, prepared, firstRound);
+  const generation = yield* Effect.result(
+    generateHostedReply({
+      dependencies,
+      userId,
+      message,
+      limits,
+      context,
+      pending,
+      firstRound,
+    })
+  );
+  if (Result.isFailure(generation)) {
+    yield* pending.fail("HostedInferenceFailed");
+    return yield* generation.failure;
+  }
+  return yield* deliverAndComplete({ pending, generated: generation.success, deliver });
+});
+
+type SerializedTurnInput<E, R> = Readonly<{
+  dependencies: AgentServiceDependencies;
+  userId: UserId;
+  message: InboundMessage;
+  deliver: (reply: AgentReply) => Effect.Effect<void, E, R>;
+}>;
+
+const runBoundedPreparation = <E, R>(
+  input: SerializedTurnInput<E, R> &
+    Readonly<{ attempt: SerializedAttempt; preparationNumber: number }>
+): Effect.Effect<
+  AgentReply,
+  AgentTurnError | E,
+  R | Crypto.Crypto | HttpClient.HttpClient | SqlClient.SqlClient
+> => {
+  const { dependencies, attempt, userId, message, deliver, preparationNumber } = input;
+  return attempt
+    .prepare((prepared) =>
+      runPreparedAttempt({ dependencies, userId, message, prepared, deliver }).pipe(
+        Effect.provideService(Telemetry, dependencies.telemetry)
+      )
+    )
+    .pipe(
+      Effect.catchTag("ContinuityChanged", (changed) =>
+        preparationNumber < maximumContinuityPreparations
+          ? runBoundedPreparation({ ...input, preparationNumber: preparationNumber + 1 })
+          : Effect.fail(new ModelUnavailable({ cause: changed }))
+      )
+    );
+};
+
+const runSerializedTurn = <E, R>(
+  input: SerializedTurnInput<E, R>
+): Effect.Effect<
+  AgentReply,
+  AgentTurnError | E,
+  R | Crypto.Crypto | HttpClient.HttpClient | SqlClient.SqlClient
+> =>
+  input.dependencies.continuity.withSerializedAttempt(input.userId, input.message, (attempt) =>
+    runBoundedPreparation({ ...input, attempt, preparationNumber: 1 })
+  );
+
+const provideAgentDependencies = <A, E, R>(
+  dependencies: AgentServiceDependencies,
+  effect: Effect.Effect<A, E, R>
+): Effect.Effect<
+  A,
+  E,
+  Exclude<Exclude<Exclude<R, Crypto.Crypto>, HttpClient.HttpClient>, SqlClient.SqlClient>
+> =>
+  effect.pipe(
+    Effect.provideService(Crypto.Crypto, dependencies.crypto),
+    Effect.provideService(HttpClient.HttpClient, dependencies.httpClient),
+    Effect.provideService(SqlClient.SqlClient, dependencies.sqlClient)
+  );
+
+const makeHandleTurn =
+  (dependencies: AgentServiceDependencies) =>
+  <E, R>(
+    userId: UserId,
+    message: InboundMessage,
+    deliver: (reply: AgentReply) => Effect.Effect<void, E, R>
+  ): Effect.Effect<AgentReply, AgentTurnError | E, R> => {
+    if (containsSensitiveChatValue(message.text)) {
+      return Effect.succeed(makeTextReply(credentialRejectedReply));
+    }
+    const authorized = withCurrentConsent(userId, Effect.succeed(message));
+    const work = Effect.flatMap(authorized, (currentMessage) =>
+      runSerializedTurn({ dependencies, userId, message: currentMessage, deliver })
+    );
+    const traced = dependencies.telemetry.span(
+      turnDescriptor,
+      Effect.onExit(work.pipe(Effect.provideService(Telemetry, dependencies.telemetry)), (exit) =>
+        recordTurnExit(dependencies.telemetry, exit)
+      )
+    );
+    return provideAgentDependencies(dependencies, traced);
+  };
 
 const makeAgentService = Effect.gen(function* () {
-  const inference = yield* HostedInference;
-  const crypto = yield* Crypto.Crypto;
-  const sqlClient = yield* SqlClient.SqlClient;
-  const telemetry = yield* Telemetry;
-
-  const prepareTurn = makePrepareTurn(inference, telemetry);
-
-  const recordDeliveredReply = Effect.fn("AgentService.recordDeliveredReply")(
-    (prepared: PreparedAgentReply) =>
-      Option.match(prepared.assistantEntry, {
-        onNone: () => Effect.void,
-        onSome: (entry) => appendAssistantTranscript({ ...entry, text: prepared.reply.text }),
-      }).pipe(
-        Effect.provideService(Crypto.Crypto, crypto),
-        Effect.provideService(SqlClient.SqlClient, sqlClient)
-      )
-  );
-  const handleSynchronousTurn = Effect.fn("AgentService.handleSynchronousTurn")(function* (
-    userId: UserId,
-    message: InboundMessage
-  ) {
-    const prepared = yield* prepareTurn(userId, message);
-    yield* recordDeliveredReply(prepared);
-    return prepared.reply;
-  });
-
+  const dependencies: AgentServiceDependencies = {
+    inference: yield* HostedInference,
+    continuity: yield* ConversationContinuity,
+    telemetry: yield* Telemetry,
+    crypto: yield* Crypto.Crypto,
+    httpClient: yield* HttpClient.HttpClient,
+    sqlClient: yield* SqlClient.SqlClient,
+  };
+  const handleTurn = makeHandleTurn(dependencies);
   return AgentService.of({
-    handleTurn: prepareTurn,
-    handleSynchronousTurn,
-    recordDeliveredReply,
+    handleTurn,
+    handleSynchronousTurn: (userId, message) => handleTurn(userId, message, () => Effect.void),
   });
 });
 
 /**
- * Runs one hosted turn for the stable User identified by `userId`. `handleTurn` prepares the reply
- * for an asynchronous adapter; that adapter records it only after delivery. `handleSynchronousTurn`
- * prepares and immediately records a locally delivered reply. Accepted User text and canonical
- * calls/results may commit before delivery or a later model failure. Current onboarding consent is
- * required before Transcript, authorization, or model work. Missing consent, unknown Users, and
- * model failures are returned as AgentTurnError values; persistence, HTTP, and crypto defects
- * remain effects for the assembled runtime rather than user-visible replies.
+ * Runs one hosted Turn wholly inside a callback-scoped User serialization authority. Complete
+ * hosted preflight precedes admission; delivery and terminalization precede callback closure.
  */
 export class AgentService extends Context.Service<
   AgentService,
   {
-    readonly handleTurn: (
+    readonly handleTurn: <E, R>(
       userId: UserId,
-      message: InboundMessage
-    ) => Effect.Effect<
-      PreparedAgentReply,
-      AgentTurnError,
-      Crypto.Crypto | HttpClient.HttpClient | SqlClient.SqlClient
-    >;
+      message: InboundMessage,
+      deliver: (reply: AgentReply) => Effect.Effect<void, E, R>
+    ) => Effect.Effect<AgentReply, AgentTurnError | E, R>;
     readonly handleSynchronousTurn: (
       userId: UserId,
       message: InboundMessage
-    ) => Effect.Effect<
-      AgentReply,
-      AgentTurnError,
-      Crypto.Crypto | HttpClient.HttpClient | SqlClient.SqlClient
-    >;
-    readonly recordDeliveredReply: (
-      prepared: PreparedAgentReply
-    ) => Effect.Effect<void, OnboardingConsentRequired>;
+    ) => Effect.Effect<AgentReply, AgentTurnError>;
   }
 >()("fidy-ai/shell/agent/agent-service/AgentService") {
   /** Constructs the hosted agent from the external model and persistent slice seams. */
-  static readonly layer = Layer.effect(this, makeAgentService);
+  static readonly layer = Layer.effect(this, makeAgentService).pipe(
+    Layer.provide(ConversationContinuity.layer)
+  );
 }

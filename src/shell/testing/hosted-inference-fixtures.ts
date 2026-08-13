@@ -37,6 +37,7 @@ type DeterministicAdapter = HostedInferenceAdapter<DeterministicRequest, Determi
 
 const prepareDeterministic: DeterministicAdapter["prepare"] = (input) => {
   const prompt = [
+    ...input.basePrefix,
     ...input.projection.prefix,
     ...Option.getOrElse(input.continuation, () => []),
     ...input.projection.continuationTail,

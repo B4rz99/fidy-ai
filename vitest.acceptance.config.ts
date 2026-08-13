@@ -19,6 +19,12 @@ const acceptanceExclude = [
   "src/shell/observability/telemetry-config.ts",
   // Acceptance substitutes provider transport; exact OpenAI behavior is covered by adapter tests.
   "src/shell/agent/openai.ts",
+  // Hosted Turn orchestration is covered by its real-PostgreSQL integration suite; acceptance
+  // substitutes model behavior and validates the WhatsApp transport lifecycle.
+  "src/shell/agent/agent-service.ts",
+  // Dashboard reads are not reachable from the WhatsApp channel acceptance surface.
+  "src/core/dashboard/**",
+  "src/shell/dashboard/**",
   // Transcript lifecycle persistence is covered against PostgreSQL at its public service seam.
   "src/shell/transcript/conversation-continuity.ts",
   // Memory's canonical API and aggregate policy are covered by their real-PostgreSQL integration
@@ -57,8 +63,8 @@ export default defineConfig({
       exclude: acceptanceExclude,
       thresholds: {
         autoUpdate: true,
-        branches: 39.7,
-        lines: 70.5,
+        branches: 45.75,
+        lines: 73.65,
       },
     },
   },

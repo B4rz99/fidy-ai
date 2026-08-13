@@ -421,6 +421,37 @@ export const hasCurrentOnboardingConsentAt = Effect.fn("Consent.hasCurrentOnboar
     )
 );
 
+/** Returns the complete sorted identities of current onboarding grants for optimistic ABA checks. */
+export const currentOnboardingGrantIdsInScope = Effect.fn("Consent.currentOnboardingGrantIds")(
+  function* (subjectUserId: UserId) {
+    const sql = yield* SqlClient.SqlClient;
+    const disclosure = yield* currentDisclosure;
+    const rows = yield* SqlSchema.findAll({
+      Request: UserId,
+      Result: Schema.Struct({ id: ConsentRecordId }),
+      execute: (userId) => sql`
+        SELECT grant_record.id
+        FROM consent_records AS grant_record
+        WHERE grant_record.subject_user_id = ${userId}
+          AND grant_record.event_type = 'granted'
+          AND grant_record.grant_type = 'onboarding'
+          AND grant_record.disclosure_revision = ${disclosure.revision}
+          AND grant_record.disclosure_sha256 = ${disclosure.contentSha256}
+          AND grant_record.policy_revision = ${disclosure.policy.revision}
+          AND grant_record.policy_sha256 = ${disclosure.policy.contentSha256}
+          AND NOT EXISTS (
+            SELECT 1 FROM consent_records AS revocation
+            WHERE revocation.event_type = 'revoked'
+              AND revocation.subject_user_id = grant_record.subject_user_id
+              AND revocation.revoked_grant_id = grant_record.id
+          )
+        ORDER BY grant_record.id
+      `,
+    })(subjectUserId);
+    return rows.map(({ id }) => id);
+  }
+);
+
 /** Reports whether an unrevoked onboarding grant matches the complete current consent basis. */
 export const hasCurrentOnboardingConsent = (
   subjectUserId: UserId

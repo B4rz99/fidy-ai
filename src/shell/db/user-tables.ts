@@ -3,6 +3,7 @@ export const userTableNames = [
   "agent_confirmation_consumptions",
   "agent_tokens",
   "audit_log_entries",
+  "compacted_conversations",
   "consent_records",
   "conversation_continuity",
   "conversation_turns",

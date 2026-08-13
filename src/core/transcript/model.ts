@@ -192,6 +192,19 @@ export const TranscriptEntry = Schema.Union([
 ]).annotate({ identifier: "TranscriptEntry" });
 export type TranscriptEntry = typeof TranscriptEntry.Type;
 
+/** The User's sole lossy conversation-continuity replacement and its exact incorporated cursor. */
+export const CompactedConversation = Schema.Struct({
+  text: Schema.String.check(Schema.isMinLength(1)),
+  throughSequence: Schema.BigInt.check(
+    Schema.makeFilter((value) => value >= 0n || "Expected a non-negative cursor")
+  ),
+  revision: Schema.BigInt.check(
+    Schema.makeFilter((value) => value > 0n || "Expected a positive revision")
+  ),
+  updatedAt: Schema.DateTimeUtc,
+});
+export type CompactedConversation = typeof CompactedConversation.Type;
+
 const terminalTimeIssue = (turn: {
   readonly startedAt: UtcTimestamp;
   readonly terminalAt: UtcTimestamp;

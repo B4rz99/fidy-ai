@@ -107,7 +107,9 @@ export const HostedInferenceFromLanguageModel = Layer.effect(
   HostedInference,
   Effect.map(LanguageModel.LanguageModel, (model) =>
     makeHostedInference({
-      countMemoryText: (text) => Effect.succeed(new TextEncoder().encode(text).length),
+      countText: (text) => Effect.succeed(new TextEncoder().encode(text).length),
+      countTranscript: (entries) =>
+        Effect.succeed(new TextEncoder().encode(JSON.stringify(entries)).length),
       prepare: prepareDeterministic,
       execute: makeDeterministicExecute(model),
       structured: {

@@ -24,7 +24,7 @@ const countAndAdmitFinalAggregate = Effect.fn("countAndAdmitFinalAggregate")(fun
 ) {
   const inference = yield* HostedInference;
   const finalRecallOrder = [...final].sort(compareRecallOrder);
-  const tokens = yield* inference.countMemoryText(projectMemoryAggregate(finalRecallOrder));
+  const tokens = yield* inference.countText(projectMemoryAggregate(finalRecallOrder));
   return yield* admitMemory({ candidate, aggregateTokens: tokens });
 });
 

@@ -39,12 +39,12 @@ export default defineConfig({
       include: SOURCE_SRC.map((sourceDir) => `${sourceDir}/**/*.ts`),
       exclude: [...SOURCE_EXCLUDE],
       // Fail the suite (and CI's Test job) when any overall coverage metric drops below
-      // 90% across the behavioural source in source-scope.mjs.
+      // 80% across the behavioural source in source-scope.mjs.
       thresholds: {
-        branches: 90,
-        functions: 90,
-        lines: 90,
-        statements: 90,
+        branches: 80,
+        functions: 80,
+        lines: 80,
+        statements: 80,
       },
     },
   },

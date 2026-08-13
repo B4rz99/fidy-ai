@@ -9,11 +9,13 @@ import {
 } from "~/shell/agent/fixtures/openai";
 import {
   HostedInference,
+  type HostedInferenceError,
   HostedStructuredObjectName,
   type HostedStructuredRequest,
   type HostedTextContinuation,
   type HostedTextRequest,
   HostedToolCallMaximum,
+  type PreparedHostedText,
   makeHostedStructuredContext,
   makeHostedTextContext,
 } from "./hosted-inference";
@@ -168,30 +170,28 @@ const structuredRequest = (): HostedStructuredRequest<
 const continuationRequest = (
   continuation: HostedTextContinuation,
   callId: string
-): HostedTextRequest => ({
-  _tag: "Continued",
-  context: makeHostedTextContext({
-    prefix: [{ role: "system", content: "system framing" }],
-    continuationTail: [
-      {
-        role: "tool",
-        content: [
-          {
-            type: "tool-result",
-            id: callId,
-            name: agentOperationBindings[0]?.wireName ?? "get_transactions",
-            result: { status: "completed" },
-            isFailure: false,
-          },
-        ],
-      },
-    ],
-    suffix: [{ role: "user", content: [{ type: "text", text: "continue" }] }],
-  }),
-  continuation,
-  toolChoice: "auto",
-  maximumToolCalls: HostedToolCallMaximum.make(12),
-});
+): Effect.Effect<PreparedHostedText, HostedInferenceError> =>
+  continuation.prepare(
+    makeHostedTextContext({
+      prefix: [{ role: "system", content: "system framing" }],
+      continuationTail: [
+        {
+          role: "tool",
+          content: [
+            {
+              type: "tool-result",
+              id: callId,
+              name: agentOperationBindings[0]?.wireName ?? "get_transactions",
+              result: { status: "completed" },
+              isFailure: false,
+            },
+          ],
+        },
+      ],
+      suffix: [{ role: "user", content: [{ type: "text", text: "continue" }] }],
+    }),
+    { toolChoice: "auto", maximumToolCalls: HostedToolCallMaximum.make(12) }
+  );
 
 it.effect("fails closed when the OpenAI secret is absent", () =>
   Effect.gen(function* () {
@@ -222,7 +222,7 @@ it.effect("counts Memory aggregates locally with o200k_base without provider req
     ] as const;
 
     for (const [text, expected] of samples) {
-      expect(yield* inference.countMemoryText(text)).toBe(expected);
+      expect(yield* inference.countText(text)).toBe(expected);
     }
     expect(yield* Ref.get(transport.requests)).toEqual([]);
   })
@@ -233,7 +233,7 @@ it.effect("counts complete framing and executes the exact prepared request", () 
     const transport = yield* makeTransport(100);
     const inference = yield* buildInference(transport.layer);
     const prepared = yield* inference.prepareText(textRequest());
-    const result = yield* inference.executeText(prepared);
+    const result = yield* prepared.execute;
     expect(result.text).toBe("ok");
 
     const [count, execute] = yield* Ref.get(transport.requests);
@@ -277,7 +277,7 @@ it.effect("measures and executes the exact strict structured schema, name, and f
     const inference = yield* buildInference(transport.layer);
     const prepared = yield* inference.prepareStructured(structuredRequest());
 
-    expect(yield* inference.executeStructured(prepared)).toEqual({
+    expect(yield* prepared.execute).toEqual({
       compactedConversation: "trusted",
     });
     const [count, execute] = yield* Ref.get(transport.requests);
@@ -311,13 +311,13 @@ it.effect("returns typed structured failures without retaining hostile model tex
     const inference = yield* buildInference(transport.layer);
     const prepared = yield* inference.prepareStructured(structuredRequest());
 
-    const failure = yield* inference.executeStructured(prepared).pipe(Effect.flip);
+    const failure = yield* prepared.execute.pipe(Effect.flip);
     expect(failure.reason).toEqual({
       _tag: "InvalidOutput",
       description: "Hosted structured output was malformed",
     });
     expect(String(failure)).not.toContain(canary);
-    expect(Exit.isFailure(yield* Effect.exit(inference.executeStructured(prepared)))).toBe(true);
+    expect(Exit.isFailure(yield* Effect.exit(prepared.execute))).toBe(true);
   })
 );
 
@@ -330,7 +330,7 @@ it.effect("bounds structured provider responses before decoding", () =>
       const inference = yield* buildInference(transport.layer);
       const prepared = yield* inference.prepareStructured(structuredRequest());
 
-      const failure = yield* inference.executeStructured(prepared).pipe(Effect.flip);
+      const failure = yield* prepared.execute.pipe(Effect.flip);
       expect(failure.reason).toEqual({ _tag: "StructuredOutputExceeded" });
     }
   })
@@ -428,7 +428,7 @@ it.effect("times out structured execution at the adapter-owned deadline", () =>
       makeOpenAiHarness("2 seconds")
     );
     const prepared = yield* inference.prepareStructured(structuredRequest());
-    const fiber = yield* Effect.exit(inference.executeStructured(prepared)).pipe(
+    const fiber = yield* Effect.exit(prepared.execute).pipe(
       Effect.forkChild({ startImmediately: true })
     );
     yield* Deferred.await(executionStarted);
@@ -444,7 +444,7 @@ it.effect("times out structured execution at the adapter-owned deadline", () =>
         )
       ).toBe(true);
     }
-    expect(Exit.isFailure(yield* Effect.exit(inference.executeStructured(prepared)))).toBe(true);
+    expect(Exit.isFailure(yield* Effect.exit(prepared.execute))).toBe(true);
   })
 );
 
@@ -454,8 +454,8 @@ it.effect("preserves an exact structured request only for retryable provider fai
     const inference = yield* buildInference(makeExecutionFailingTransport(500, canary));
     const prepared = yield* inference.prepareStructured(structuredRequest());
 
-    const first = yield* inference.executeStructured(prepared).pipe(Effect.flip);
-    const second = yield* inference.executeStructured(prepared).pipe(Effect.flip);
+    const first = yield* prepared.execute.pipe(Effect.flip);
+    const second = yield* prepared.execute.pipe(Effect.flip);
     expect(first.reason._tag).toBe("ProviderUnavailable");
     expect(first.retryable).toBe(true);
     expect(second.reason._tag).toBe("ProviderUnavailable");
@@ -473,11 +473,9 @@ it.effect(
       ]) {
         const inference = yield* buildInference(transportLayer);
         const prepared = yield* inference.prepareStructured(structuredRequest());
-        const failure = yield* inference.executeStructured(prepared).pipe(Effect.flip);
+        const failure = yield* prepared.execute.pipe(Effect.flip);
         expect(["InvalidOutput", "ProviderUnavailable"]).toContain(failure.reason._tag);
-        expect(Exit.isFailure(yield* Effect.exit(inference.executeStructured(prepared)))).toBe(
-          true
-        );
+        expect(Exit.isFailure(yield* Effect.exit(prepared.execute))).toBe(true);
         expect(String(failure)).not.toContain("HOSTILE_TERMINAL_BODY");
       }
     })
@@ -508,13 +506,13 @@ it.effect("accumulates provider output and canonical outcomes across three round
     const inference = yield* buildInference(transport.layer);
     const first = yield* inference
       .prepareText(textRequest())
-      .pipe(Effect.flatMap(inference.executeText));
-    const second = yield* inference
-      .prepareText(continuationRequest(first.continuation, "call_first"))
-      .pipe(Effect.flatMap(inference.executeText));
-    yield* inference
-      .prepareText(continuationRequest(second.continuation, "call_second"))
-      .pipe(Effect.flatMap(inference.executeText));
+      .pipe(Effect.flatMap((prepared) => prepared.execute));
+    const second = yield* continuationRequest(first.continuation, "call_first").pipe(
+      Effect.flatMap((prepared) => prepared.execute)
+    );
+    yield* continuationRequest(second.continuation, "call_second").pipe(
+      Effect.flatMap((prepared) => prepared.execute)
+    );
 
     const requests = yield* Ref.get(transport.requests);
     const thirdCount = requests[4];
@@ -533,7 +531,7 @@ it.effect("rejects malformed provider responses", () =>
     const transport = yield* makeTransport(100, "{}");
     const inference = yield* buildInference(transport.layer);
     const prepared = yield* inference.prepareText(textRequest());
-    const failure = yield* inference.executeText(prepared).pipe(Effect.flip);
+    const failure = yield* prepared.execute.pipe(Effect.flip);
     expect(failure.reason).toEqual({
       _tag: "InvalidOutput",
       description: "Hosted provider response was invalid",
@@ -549,7 +547,7 @@ it.effect("rejects malformed tool-call arguments", () =>
     );
     const inference = yield* buildInference(transport.layer);
     const prepared = yield* inference.prepareText(textRequest());
-    const failure = yield* inference.executeText(prepared).pipe(Effect.flip);
+    const failure = yield* prepared.execute.pipe(Effect.flip);
     expect(failure.reason).toEqual({
       _tag: "InvalidOutput",
       description: "Hosted tool arguments were invalid",
@@ -707,7 +705,7 @@ it.effect("maps OpenAI completion reasons and cached usage", () =>
       const inference = yield* buildInference(transport.layer);
       const result = yield* inference
         .prepareText(textRequest())
-        .pipe(Effect.flatMap(inference.executeText));
+        .pipe(Effect.flatMap((prepared) => prepared.execute));
       expect(result.finishReason).toBe(expected);
       expect(result.usage).toEqual(
         responseUsage === null

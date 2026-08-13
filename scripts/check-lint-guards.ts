@@ -3,6 +3,16 @@
 const repoRoot = Bun.fileURLToPath(new URL("..", import.meta.url));
 const decode = (bytes: Uint8Array): string => new TextDecoder().decode(bytes);
 
+const productionSources = new Bun.Glob("src/**/*.ts");
+for await (const path of productionSources.scan({ cwd: repoRoot })) {
+  if (path.endsWith(".test.ts")) continue;
+  const source = await Bun.file(`${repoRoot}${path}`).text();
+  const handwrittenSymbol = /\bSymbol\s*\(/u.test(source) || /\bunique\s+symbol\b/u.test(source);
+  if (handwrittenSymbol) {
+    throw new Error(`${path}: handwritten Symbol(...) and unique symbol are prohibited`);
+  }
+}
+
 const probes = [
   {
     name: "object-brand",

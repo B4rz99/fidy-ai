@@ -4,7 +4,7 @@ import { CanonicalOperationId } from "~/core/_shared/canonical-operation";
 import { categoryRows } from "~/core/categories/taxonomy";
 import type { User } from "~/core/identity/model";
 import { AgentBearerToken } from "~/core/tokens/model";
-import { TranscriptText } from "~/core/transcript/model";
+import { type TranscriptEntry, TranscriptText } from "~/core/transcript/model";
 import {
   type TranscriptSelectionEntry,
   type TranscriptWindowEntry,
@@ -181,6 +181,11 @@ const transcriptTextMessage = (entry: TranscriptTextEntry): Prompt.MessageEncode
   content: containsSensitiveChatValue(entry.text) ? credentialRejectedReply : entry.text,
 });
 
+const exactTranscriptTextMessage = (entry: TranscriptTextEntry): Prompt.MessageEncoded => ({
+  role: entry._tag === "UserTranscriptEntry" ? "user" : "assistant",
+  content: entry.text,
+});
+
 const transcriptCallMessage = (entry: TranscriptCallEntry): Prompt.MessageEncoded => ({
   role: "assistant",
   content: [
@@ -211,6 +216,34 @@ const transcriptResultMessage = (entry: TranscriptResultEntry): Prompt.MessageEn
   };
 };
 
+const exactTranscriptCallMessage = (entry: TranscriptCallEntry): Prompt.MessageEncoded => ({
+  role: "assistant",
+  content: [
+    {
+      type: "tool-call",
+      id: entry.toolCallId,
+      name: encodeOpenAiToolName(CanonicalOperationId.make(entry.operation)),
+      params: entry.input,
+    },
+  ],
+});
+
+const exactTranscriptResultMessage = (entry: TranscriptResultEntry): Prompt.MessageEncoded => {
+  const failed = entry.outcome._tag !== "Succeeded";
+  return {
+    role: "tool",
+    content: [
+      {
+        type: "tool-result",
+        id: entry.toolCallId,
+        name: encodeOpenAiToolName(CanonicalOperationId.make(entry.operation)),
+        result: failed ? entry.outcome.failure : entry.outcome.output,
+        isFailure: failed,
+      },
+    ],
+  };
+};
+
 const transcriptMessage = (entry: TranscriptWindowEntry): Prompt.MessageEncoded => {
   switch (entry._tag) {
     case "UserTranscriptEntry":
@@ -227,3 +260,25 @@ const transcriptMessage = (entry: TranscriptWindowEntry): Prompt.MessageEncoded 
 export const transcriptPrompt = (
   entries: ReadonlyArray<TranscriptWindowEntry>
 ): ReadonlyArray<Prompt.MessageEncoded> => entries.map(transcriptMessage);
+
+/** Converts every exact Transcript entry, including fixed lifecycle markers, to provider input. */
+export const exactTranscriptPrompt = (
+  entries: ReadonlyArray<TranscriptEntry>
+): ReadonlyArray<Prompt.MessageEncoded> =>
+  entries.map((entry) => {
+    switch (entry._tag) {
+      case "UserTranscriptEntry":
+      case "AssistantTranscriptEntry":
+        return exactTranscriptTextMessage(entry);
+      case "CanonicalToolCallEntry":
+        return exactTranscriptCallMessage(entry);
+      case "CanonicalToolResultEntry":
+        return exactTranscriptResultMessage(entry);
+      case "FailedTurnTranscriptEntry":
+        return { role: "user", content: `[TURN_FAILED:${entry.reason}]` };
+      case "InterruptedTurnTranscriptEntry":
+        return { role: "user", content: "[TURN_INTERRUPTED]" };
+      default:
+        return entry satisfies never;
+    }
+  });

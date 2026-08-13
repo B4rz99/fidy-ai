@@ -4,6 +4,7 @@ import { type HttpClient, type HttpClientError } from "effect/unstable/http";
 import { HttpApiClient } from "effect/unstable/httpapi";
 import { type AgentBearerToken } from "~/core/tokens/model";
 import { HostedInference } from "~/shell/agent/hosted-inference";
+import { ConversationCompactionInference } from "~/shell/transcript/conversation-compaction-inference";
 import { makeAgentAuthorizationClientLive } from "~/shell/_shared/authz";
 import { okStatus } from "~/shell/_shared/http-status";
 import type {
@@ -137,17 +138,19 @@ const TestKapsoClient = Layer.effectContext(
 const MemoryInferenceTest = Layer.succeed(
   HostedInference,
   HostedInference.of({
-    countMemoryText: (text) => Effect.succeed(new TextEncoder().encode(text).length),
+    countText: (text) => Effect.succeed(new TextEncoder().encode(text).length),
+    countTranscript: (messages) => Effect.succeed(messages.length),
     prepareText: () => Effect.die("Hosted text inference is outside the API harness"),
     validateText: () => Effect.die("Hosted text inference is outside the API harness"),
-    executeText: () => Effect.die("Hosted text inference is outside the API harness"),
-    recoverText: () => Effect.die("Hosted text inference is outside the API harness"),
-    discardText: () => Effect.die("Hosted text inference is outside the API harness"),
     prepareStructured: () => Effect.die("Hosted structured inference is outside the API harness"),
-    executeStructured: () => Effect.die("Hosted structured inference is outside the API harness"),
-    discardStructured: () => Effect.die("Hosted structured inference is outside the API harness"),
   })
 );
+
+const BaselineCompactionInference = Layer.succeed(ConversationCompactionInference, {
+  countText: (text) => Effect.succeed(new TextEncoder().encode(text).length),
+  countTranscript: () => Effect.succeed(0),
+  generate: () => Effect.die("Compaction is below threshold in the API harness"),
+});
 
 const ApiHarnessBase = makeApiClientLive({
   tag: ApiHarnessClient,
@@ -156,6 +159,7 @@ const ApiHarnessBase = makeApiClientLive({
   Layer.provideMerge(HttpLive.pipe(Layer.provide(MigratorLive))),
   Layer.provideMerge(TestKapsoClient),
   Layer.provideMerge(MemoryInferenceTest),
+  Layer.provideMerge(BaselineCompactionInference),
   Layer.provideMerge(makeDevelopmentSeedLive(defaultAgentBearer)),
   Layer.provideMerge(BunHttpServer.layerTest),
   Layer.provideMerge(BunServices.layer),

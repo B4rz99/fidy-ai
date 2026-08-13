@@ -17,9 +17,10 @@ import {
   Schedule,
   Schema,
 } from "effect";
-import type { SqlError } from "effect/unstable/sql";
+import { SqlClient, type SqlError } from "effect/unstable/sql";
 import { expectTypeOf } from "vitest";
 import { CanonicalOperationId } from "~/core/_shared/canonical-operation";
+import { ConsentRecord, ConsentRecordId } from "~/core/consent/model";
 import { UserId } from "~/core/identity/reference";
 import {
   AgentIteration,
@@ -36,14 +37,19 @@ import {
   type UserTranscriptEntry,
 } from "~/core/transcript/model";
 import { projectTranscriptForModel } from "~/shell/agent/model-boundary";
+import { currentDisclosure } from "~/shell/consent/current-disclosure";
+import { appendConsentRecord } from "~/shell/consent/repo";
 import { advisoryLockKey } from "~/shell/db/advisory-lock";
 import { MigrationSqlClient, PgLive } from "~/shell/db/client";
 import { defaultUserId } from "~/shell/db/development-seed";
 import { ApiHarness } from "~/shell/testing/api-harness";
+import { ConversationCompactionInference } from "./conversation-compaction-inference";
 import {
   type ActiveTurnRequest,
   ContinuityChanged,
   type ContinuityView,
+  ConversationCompactionPolicy,
+  ConversationCompactionTokenCount,
   ConversationContinuity,
   type ConversationContinuityService,
   type DeliveredAssistantContent,
@@ -77,6 +83,19 @@ type CryptoRaceGate = {
   readonly entered: Deferred.Deferred<void>;
   readonly release: Deferred.Deferred<void>;
 };
+
+type CompactionGate = {
+  readonly entered: Deferred.Deferred<void>;
+  readonly release: Deferred.Deferred<void>;
+  readonly afterGeneration: Option.Option<Effect.Effect<void>>;
+};
+
+class CompactionRaceControl extends Context.Service<
+  CompactionRaceControl,
+  {
+    readonly arm: (afterGeneration?: Effect.Effect<void>) => Effect.Effect<CompactionGate>;
+  }
+>()("fidy-ai/shell/transcript/conversation-continuity.test/CompactionRaceControl") {}
 
 class CryptoRaceControl extends Context.Service<
   CryptoRaceControl,
@@ -122,6 +141,110 @@ const ControlledCrypto = Layer.effectContext(
 const ContinuityHarness = ConversationContinuity.layer.pipe(
   Layer.provideMerge(ControlledCrypto),
   Layer.provideMerge(ApiHarness)
+);
+
+const compactionLayer = (maximumTokens: number): typeof ContinuityHarness =>
+  ConversationContinuity.layer.pipe(
+    Layer.provide(
+      Layer.succeed(ConversationCompactionInference, {
+        countText: (text) => Effect.succeed(text.length),
+        countTranscript: (entries) => Effect.succeed(entries.length),
+        generate: () => Effect.succeed({ compactedConversation: "resumen fiel" }),
+      })
+    ),
+    Layer.provide(
+      Layer.succeed(ConversationCompactionPolicy, {
+        triggerTokens: ConversationCompactionTokenCount.make(3),
+        maximumTokens: ConversationCompactionTokenCount.make(maximumTokens),
+      })
+    ),
+    Layer.provideMerge(ControlledCrypto),
+    Layer.provideMerge(ApiHarness)
+  );
+
+const CompactionHarness = compactionLayer(100);
+const OversizedCompactionHarness = compactionLayer(1);
+
+const TokenScenarioCompactionHarness = ConversationContinuity.layer.pipe(
+  Layer.provide(
+    Layer.succeed(ConversationCompactionInference, {
+      countText: (text) => Effect.succeed(text.length),
+      countTranscript: (entries) =>
+        Effect.succeed(
+          entries.reduce((tokens, entry) => {
+            if (entry._tag !== "UserTranscriptEntry") return tokens;
+            if (entry.text.startsWith("large:")) return tokens + 2;
+            if (entry.text.startsWith("token:")) return tokens + 1;
+            return tokens;
+          }, 0)
+        ),
+      generate: (prior, entries) =>
+        Effect.succeed({
+          compactedConversation: `${Option.getOrElse(prior, () => "initial")}|${entries
+            .filter((entry): entry is UserTranscriptEntry => entry._tag === "UserTranscriptEntry")
+            .map(({ text }) => text)
+            .join(",")}`,
+        }),
+    })
+  ),
+  Layer.provide(
+    Layer.succeed(ConversationCompactionPolicy, {
+      triggerTokens: ConversationCompactionTokenCount.make(3),
+      maximumTokens: ConversationCompactionTokenCount.make(10_000),
+    })
+  ),
+  Layer.provideMerge(ControlledCrypto),
+  Layer.provideMerge(ApiHarness)
+);
+const ControlledCompactionInference = Layer.effectContext(
+  Effect.gen(function* () {
+    const nextGate = yield* Ref.make(Option.none<CompactionGate>());
+    const arm = (afterGeneration?: Effect.Effect<void>): Effect.Effect<CompactionGate> =>
+      Effect.gen(function* () {
+        const gate: CompactionGate = {
+          entered: yield* Deferred.make<void>(),
+          release: yield* Deferred.make<void>(),
+          afterGeneration: Option.fromNullishOr(afterGeneration),
+        };
+        yield* Ref.set(nextGate, Option.some(gate));
+        return gate;
+      });
+    return Context.empty().pipe(
+      Context.add(CompactionRaceControl, { arm }),
+      Context.add(ConversationCompactionInference, {
+        countText: (text: string): Effect.Effect<number> => Effect.succeed(text.length),
+        countTranscript: (entries: ReadonlyArray<TranscriptEntry>): Effect.Effect<number> =>
+          Effect.succeed(entries.length),
+        generate: () =>
+          Ref.get(nextGate).pipe(
+            Effect.flatMap(
+              Option.match({
+                onNone: () => Effect.succeed({ compactedConversation: "resumen fiel" }),
+                onSome: (gate) =>
+                  Deferred.succeed(gate.entered, undefined).pipe(
+                    Effect.andThen(Deferred.await(gate.release)),
+                    Effect.andThen(Option.getOrElse(gate.afterGeneration, () => Effect.void)),
+                    Effect.as({ compactedConversation: "resumen fiel" })
+                  ),
+              })
+            )
+          ),
+      })
+    );
+  })
+);
+
+const ConsentLockedCompactionHarness = ConversationContinuity.layer.pipe(
+  Layer.provideMerge(ControlledCompactionInference),
+  Layer.provide(
+    Layer.succeed(ConversationCompactionPolicy, {
+      triggerTokens: ConversationCompactionTokenCount.make(3),
+      maximumTokens: ConversationCompactionTokenCount.make(100),
+    })
+  ),
+  Layer.provideMerge(ControlledCrypto),
+  Layer.provideMerge(ApiHarness),
+  Layer.provideMerge(ControlledCompactionInference)
 );
 const ForgedActiveTurnRequest = Schema.declare(
   (input): input is ActiveTurnRequest => typeof input === "object" && input !== null
@@ -1178,6 +1301,369 @@ const moduleInstanceProgram = Effect.gen(function* () {
   yield* Effect.scoped(prepareWithRebuiltModule);
   assertDefect(yield* Option.getOrThrow(escaped).begin().pipe(Effect.exit));
 });
+
+const completeTestTurn = (
+  continuity: ConversationContinuityService,
+  text: string
+): Effect.Effect<void, ContinuityChanged> =>
+  continuity.withSerializedAttempt(defaultUserId, activeRequest(text), (attempt) =>
+    attempt.prepare((prepared) =>
+      Effect.gen(function* () {
+        const pending = yield* prepared.begin();
+        yield* pending.complete(assistantContent());
+      })
+    )
+  );
+
+layer(TokenScenarioCompactionHarness, { excludeTestServices: true, timeout: "30 seconds" })(
+  "ConversationContinuity token-only Compaction",
+  (it) => {
+    it.effect("does not trigger from many messages or retained bytes without enough tokens", () =>
+      Effect.gen(function* () {
+        const continuity = yield* ConversationContinuity;
+        const sql = yield* MigrationSqlClient;
+        yield* resetDefaultContinuity;
+        yield* sql`DELETE FROM compacted_conversations WHERE user_id = ${defaultUserId}`;
+        for (const index of Arr.range(1, 8)) {
+          yield* completeTestTurn(continuity, `small:${index}:${"x".repeat(2_000)}`);
+        }
+        expect(
+          yield* sql`SELECT text FROM compacted_conversations WHERE user_id = ${defaultUserId}`
+        ).toHaveLength(0);
+      })
+    );
+
+    it.effect("triggers from a few large-token turns independently of retained bytes", () =>
+      Effect.gen(function* () {
+        const continuity = yield* ConversationContinuity;
+        const sql = yield* MigrationSqlClient;
+        yield* resetDefaultContinuity;
+        yield* sql`DELETE FROM compacted_conversations WHERE user_id = ${defaultUserId}`;
+        yield* completeTestTurn(continuity, "large:a");
+        yield* completeTestTurn(continuity, "large:b");
+        yield* completeTestTurn(continuity, "probe");
+        expect(
+          yield* sql`SELECT text FROM compacted_conversations WHERE user_id = ${defaultUserId}`
+        ).toHaveLength(1);
+      })
+    );
+
+    it.effect("keeps the decision equal for equal tokens with different byte volume", () =>
+      Effect.gen(function* () {
+        const continuity = yield* ConversationContinuity;
+        const sql = yield* MigrationSqlClient;
+        yield* resetDefaultContinuity;
+        yield* sql`DELETE FROM compacted_conversations WHERE user_id = ${defaultUserId}`;
+        yield* completeTestTurn(continuity, "token:a");
+        yield* completeTestTurn(continuity, `token:${"界".repeat(2_000)}`);
+        expect(
+          yield* sql`SELECT text FROM compacted_conversations WHERE user_id = ${defaultUserId}`
+        ).toHaveLength(0);
+        yield* completeTestTurn(continuity, "token:c");
+        yield* completeTestTurn(continuity, "probe");
+        expect(
+          yield* sql`SELECT text FROM compacted_conversations WHERE user_id = ${defaultUserId}`
+        ).toHaveLength(1);
+      })
+    );
+
+    it.effect("feeds prior state and only post-cursor exact entries into a second compaction", () =>
+      Effect.gen(function* () {
+        const continuity = yield* ConversationContinuity;
+        const sql = yield* MigrationSqlClient;
+        yield* resetDefaultContinuity;
+        yield* sql`DELETE FROM compacted_conversations WHERE user_id = ${defaultUserId}`;
+        yield* completeTestTurn(continuity, "token:first");
+        yield* completeTestTurn(continuity, "token:second");
+        yield* completeTestTurn(continuity, "token:third");
+        yield* completeTestTurn(continuity, "token:fourth");
+        const first = yield* sql`
+          SELECT text FROM compacted_conversations WHERE user_id = ${defaultUserId}
+        `;
+        yield* completeTestTurn(continuity, "token:fifth");
+        yield* completeTestTurn(continuity, "token:sixth");
+        yield* completeTestTurn(continuity, "token:seventh");
+        yield* completeTestTurn(continuity, "probe");
+        const second = yield* sql`
+          SELECT text FROM compacted_conversations WHERE user_id = ${defaultUserId}
+        `;
+        const firstText = first[0]?.text;
+        expect(firstText).toContain("token:first");
+        expect(second[0]?.text).toBe(`${String(firstText)}|token:fourth,token:fifth,token:sixth`);
+      })
+    );
+  }
+);
+
+layer(OversizedCompactionHarness, { excludeTestServices: true, timeout: "30 seconds" })(
+  "ConversationContinuity bounded Compaction",
+  (it) => {
+    it.effect("keeps exact Transcript when generated replacement exceeds its token bound", () =>
+      Effect.gen(function* () {
+        const continuity = yield* ConversationContinuity;
+        const sql = yield* MigrationSqlClient;
+        yield* resetDefaultContinuity;
+        yield* sql`DELETE FROM compacted_conversations WHERE user_id = ${defaultUserId}`;
+        yield* completeTestTurn(continuity, "primero");
+        yield* completeTestTurn(continuity, "segundo");
+        yield* completeTestTurn(continuity, "tercero");
+        expect((yield* continuity.observe(defaultUserId)).entries).toHaveLength(6);
+        yield* sql`DELETE FROM transcript_entries WHERE user_id = ${defaultUserId}`;
+        yield* sql`DELETE FROM conversation_turns WHERE user_id = ${defaultUserId}`;
+        yield* completeTestTurn(continuity, "debajo del umbral");
+        yield* completeTestTurn(continuity, "todavía debajo");
+        expect((yield* continuity.observe(defaultUserId)).entries).toHaveLength(4);
+      })
+    );
+  }
+);
+
+layer(ConsentLockedCompactionHarness, { excludeTestServices: true, timeout: "30 seconds" })(
+  "ConversationContinuity consent-locked Compaction",
+  (it) => {
+    it.effect(
+      "leaves Consent unlocked while generation is blocked",
+      () =>
+        Effect.scoped(
+          Effect.gen(function* () {
+            const continuity = yield* ConversationContinuity;
+            const control = yield* CompactionRaceControl;
+            const sql = yield* MigrationSqlClient;
+            yield* resetDefaultContinuity;
+            yield* sql`DELETE FROM compacted_conversations WHERE user_id = ${defaultUserId}`;
+            yield* completeTestTurn(continuity, "primero");
+            yield* completeTestTurn(continuity, "segundo");
+            const gate = yield* control.arm();
+            const compacting = yield* completeTestTurn(continuity, "tercero").pipe(
+              Effect.forkChild
+            );
+            yield* Deferred.await(gate.entered);
+
+            const lockKey = advisoryLockKey.consentSubject(defaultUserId);
+            const consentMutationEntered = yield* Deferred.make<void>();
+            const consentMutation = yield* sql
+              .withTransaction(
+                Effect.gen(function* () {
+                  yield* sql`
+                    SELECT pg_advisory_xact_lock(hashtextextended(${lockKey.value}, ${lockKey.seed}))
+                  `;
+                  yield* Deferred.succeed(consentMutationEntered, undefined);
+                })
+              )
+              .pipe(Effect.forkChild);
+            yield* Deferred.await(consentMutationEntered);
+
+            yield* Deferred.succeed(gate.release, undefined);
+            yield* Fiber.join(compacting);
+            yield* Fiber.join(consentMutation);
+          })
+        ),
+      30_000
+    );
+
+    it.effect(
+      "deletes nothing across Consent revoke and re-grant ABA during generation",
+      () =>
+        Effect.scoped(
+          Effect.gen(function* () {
+            const continuity = yield* ConversationContinuity;
+            const control = yield* CompactionRaceControl;
+            const sql = yield* MigrationSqlClient;
+            yield* resetDefaultContinuity;
+            yield* sql`DELETE FROM compacted_conversations WHERE user_id = ${defaultUserId}`;
+            const disclosure = yield* currentDisclosure;
+            const grantId = ConsentRecordId.make("f1d1a000-0000-4000-8000-0000000004fb");
+            yield* appendConsentRecord(
+              ConsentRecord.make({
+                id: grantId,
+                subjectUserId: defaultUserId,
+                event: { _tag: "Granted", grant: { _tag: "Onboarding" } },
+                disclosure,
+                occurredAt: DateTime.makeUnsafe("2026-08-13T11:59:59Z"),
+                disclosureMessage: {
+                  channel: "test",
+                  provider: "test",
+                  providerMessageId: "compaction-aba-initial-disclosure",
+                },
+                decisionMessage: {
+                  channel: "test",
+                  provider: "test",
+                  providerMessageId: "compaction-aba-initial-decision",
+                },
+              })
+            );
+            yield* completeTestTurn(continuity, "primero");
+            yield* completeTestTurn(continuity, "segundo");
+            const before = yield* continuity.observe(defaultUserId);
+            const mutateConsent = Effect.gen(function* () {
+              yield* appendConsentRecord(
+                ConsentRecord.make({
+                  id: ConsentRecordId.make("f1d1a000-0000-4000-8000-0000000004fc"),
+                  subjectUserId: defaultUserId,
+                  event: { _tag: "Revoked", grantId },
+                  disclosure,
+                  occurredAt: DateTime.makeUnsafe("2026-08-13T12:00:00Z"),
+                  disclosureMessage: {
+                    channel: "test",
+                    provider: "test",
+                    providerMessageId: "compaction-aba-revoke-disclosure",
+                  },
+                  decisionMessage: {
+                    channel: "test",
+                    provider: "test",
+                    providerMessageId: "compaction-aba-revoke-decision",
+                  },
+                })
+              );
+              yield* appendConsentRecord(
+                ConsentRecord.make({
+                  id: ConsentRecordId.make("f1d1a000-0000-4000-8000-0000000004fd"),
+                  subjectUserId: defaultUserId,
+                  event: { _tag: "Granted", grant: { _tag: "Onboarding" } },
+                  disclosure,
+                  occurredAt: DateTime.makeUnsafe("2026-08-13T12:00:01Z"),
+                  disclosureMessage: {
+                    channel: "test",
+                    provider: "test",
+                    providerMessageId: "compaction-aba-grant-disclosure",
+                  },
+                  decisionMessage: {
+                    channel: "test",
+                    provider: "test",
+                    providerMessageId: "compaction-aba-grant-decision",
+                  },
+                })
+              );
+            }).pipe(Effect.provideService(SqlClient.SqlClient, sql));
+            const gate = yield* control.arm(mutateConsent);
+            const compacting = yield* completeTestTurn(continuity, "tercero").pipe(
+              Effect.forkChild
+            );
+            yield* Deferred.await(gate.entered);
+            yield* Deferred.succeed(gate.release, undefined);
+            yield* Fiber.join(compacting);
+
+            expect(
+              yield* sql`
+              SELECT text FROM compacted_conversations WHERE user_id = ${defaultUserId}
+            `
+            ).toHaveLength(0);
+            const observed = yield* continuity.observe(defaultUserId);
+            expect(observed.entries.slice(0, before.entries.length)).toEqual(before.entries);
+            expect(observed.entries).toHaveLength(before.entries.length + 2);
+          })
+        ),
+      30_000
+    );
+
+    it.effect(
+      "reloads exact continuity and deletes nothing when Memory changes after generation",
+      () =>
+        Effect.scoped(
+          Effect.gen(function* () {
+            const continuity = yield* ConversationContinuity;
+            const control = yield* CompactionRaceControl;
+            const sql = yield* MigrationSqlClient;
+            yield* resetDefaultContinuity;
+            yield* sql`DELETE FROM compacted_conversations WHERE user_id = ${defaultUserId}`;
+            yield* completeTestTurn(continuity, "primero");
+            yield* completeTestTurn(continuity, "segundo");
+            const before = yield* continuity.observe(defaultUserId);
+            const gate = yield* control.arm(
+              sql`
+                INSERT INTO memory_revisions (user_id, revision)
+                VALUES (${defaultUserId}, 1)
+                ON CONFLICT (user_id) DO UPDATE
+                SET revision = memory_revisions.revision + 1
+              `.pipe(Effect.orDie, Effect.asVoid)
+            );
+            const compacting = yield* completeTestTurn(continuity, "tercero").pipe(
+              Effect.forkChild
+            );
+            yield* Deferred.await(gate.entered);
+            yield* Deferred.succeed(gate.release, undefined);
+            yield* Fiber.join(compacting);
+
+            const observed = yield* continuity.observe(defaultUserId);
+            const compacted = yield* sql`
+              SELECT text FROM compacted_conversations WHERE user_id = ${defaultUserId}
+            `;
+            expect(compacted).toHaveLength(0);
+            expect(observed.entries.slice(0, before.entries.length)).toEqual(before.entries);
+            expect(observed.entries).toHaveLength(before.entries.length + 2);
+          })
+        ),
+      30_000
+    );
+  }
+);
+
+layer(CompactionHarness, { excludeTestServices: true, timeout: "30 seconds" })(
+  "ConversationContinuity Compaction",
+  (it) => {
+    it.effect("compacts complete turns at the token threshold and retains Turn metadata", () =>
+      Effect.gen(function* () {
+        const continuity = yield* ConversationContinuity;
+        const sql = yield* MigrationSqlClient;
+        yield* resetDefaultContinuity;
+        yield* sql`DELETE FROM compacted_conversations WHERE user_id = ${defaultUserId}`;
+        yield* completeTestTurn(continuity, "primero");
+        yield* completeTestTurn(continuity, "segundo");
+        yield* completeTestTurn(continuity, "tercero");
+
+        const observed = yield* continuity.observe(defaultUserId);
+        const [compacted] = yield* sql`
+          SELECT text FROM compacted_conversations WHERE user_id = ${defaultUserId}
+        `;
+        expect(compacted?.text).toBe("resumen fiel");
+        expect(observed.entries).toHaveLength(2);
+        expect(observed.turns).toHaveLength(3);
+      })
+    );
+
+    it.effect("rolls back replacement when persistence fails before exact-prefix deletion", () =>
+      Effect.gen(function* () {
+        const continuity = yield* ConversationContinuity;
+        const sql = yield* MigrationSqlClient;
+        yield* resetDefaultContinuity;
+        yield* sql`DELETE FROM compacted_conversations WHERE user_id = ${defaultUserId}`;
+        yield* completeTestTurn(continuity, "primero");
+        yield* completeTestTurn(continuity, "segundo");
+        const before = yield* continuity.observe(defaultUserId);
+        yield* sql`
+          CREATE OR REPLACE FUNCTION fail_test_compaction_write() RETURNS trigger AS $$
+          BEGIN
+            IF NEW.user_id = 'f1d1a000-0000-4000-8000-000000000001'::uuid THEN
+              RAISE EXCEPTION 'injected compaction persistence failure';
+            END IF;
+            RETURN NEW;
+          END;
+          $$ LANGUAGE plpgsql
+        `;
+        yield* sql`
+          CREATE TRIGGER fail_test_compaction_write
+          AFTER INSERT OR UPDATE ON compacted_conversations
+          FOR EACH ROW EXECUTE FUNCTION fail_test_compaction_write()
+        `;
+        yield* completeTestTurn(continuity, "tercero").pipe(
+          Effect.ensuring(
+            sql`DROP TRIGGER IF EXISTS fail_test_compaction_write ON compacted_conversations`.pipe(
+              Effect.andThen(sql`DROP FUNCTION IF EXISTS fail_test_compaction_write()`),
+              Effect.orDie
+            )
+          )
+        );
+
+        expect(
+          yield* sql`SELECT text FROM compacted_conversations WHERE user_id = ${defaultUserId}`
+        ).toHaveLength(0);
+        const after = yield* continuity.observe(defaultUserId);
+        expect(after.entries.slice(0, before.entries.length)).toEqual(before.entries);
+        expect(after.entries).toHaveLength(before.entries.length + 2);
+      })
+    );
+  }
+);
 
 layer(ContinuityHarness, { excludeTestServices: true, timeout: "30 seconds" })(
   "ConversationContinuity",

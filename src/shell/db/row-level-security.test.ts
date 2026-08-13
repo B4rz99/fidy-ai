@@ -288,6 +288,10 @@ const seedEveryPolicyShape = Effect.gen(function* () {
     )
   `;
   yield* admin`
+    INSERT INTO compacted_conversations(user_id, text, through_sequence, revision, updated_at)
+    VALUES (${policyOwner}, 'policy compacted conversation', 1, 1, '2026-01-01T00:00:00Z')
+  `;
+  yield* admin`
     INSERT INTO whatsapp_conversation_windows(
       user_id, identity_verified_at, business_phone_number_id,
       business_portfolio_id, business_scoped_user_id, window_open_until
@@ -327,6 +331,11 @@ const policyProbes: ReadonlyArray<PolicyProbe> = [
   },
   {
     tableName: "conversation_continuity",
+    stableColumn: "revision",
+    ownerPredicate: `user_id = '${policyOwner}'`,
+  },
+  {
+    tableName: "compacted_conversations",
     stableColumn: "revision",
     ownerPredicate: `user_id = '${policyOwner}'`,
   },

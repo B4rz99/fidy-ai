@@ -21,7 +21,11 @@ import { HttpClient } from "effect/unstable/http";
 import { SqlClient } from "effect/unstable/sql";
 import type { User } from "~/core/identity/model";
 import type { UserId } from "~/core/identity/reference";
-import { TranscriptWindowCharacterLimit, TranscriptWindowTurnLimit } from "~/core/transcript/rules";
+import { CompactedConversationOutput } from "~/core/transcript/compacted-conversation";
+import {
+  ConversationCompactionInference,
+  ConversationCompactionInferenceError,
+} from "~/shell/transcript/conversation-compaction-inference";
 import {
   AgentIteration,
   type CanonicalToolOutcome,
@@ -55,6 +59,7 @@ import {
   containsSensitiveChatValue,
   containsSensitiveJson,
   credentialRejectedReply,
+  exactTranscriptPrompt,
   sensitiveEntryRejected,
   type transcriptPrompt,
 } from "./model-boundary";
@@ -62,10 +67,12 @@ import {
   HostedInference,
   HostedInferenceError,
   type HostedInferenceService,
+  HostedStructuredObjectName,
   type HostedTextContinuation,
   type HostedTextResult,
   HostedToolCallMaximum,
   type PreparedHostedText,
+  makeHostedStructuredContext,
   makeHostedTextContext,
 } from "./hosted-inference";
 import { type WorkingContext, makeWorkingContext } from "./working-context";
@@ -79,9 +86,6 @@ import {
   makeAgentToolkit,
 } from "./toolkit";
 
-const minimumTranscriptWindowCharacters = 1_000;
-const defaultTranscriptWindowTurns = 12;
-const defaultTranscriptWindowCharacters = 32_000;
 const attemptWindowMillis = 250;
 const modelRetryPolicy = {
   maximumAttempts: 2,
@@ -113,10 +117,6 @@ export const AgentLimits = Schema.Struct({
   maxToolResultCharacters: Schema.Int.check(
     Schema.isBetween({ minimum: 1_000, maximum: 1_000_000 })
   ),
-  maxTranscriptTurns: TranscriptWindowTurnLimit,
-  maxTranscriptCharacters: TranscriptWindowCharacterLimit.check(
-    Schema.isGreaterThanOrEqualTo(minimumTranscriptWindowCharacters)
-  ),
   maxModelRoundMillis: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 120_000 })),
 });
 export type AgentLimits = typeof AgentLimits.Type;
@@ -130,10 +130,6 @@ export const CurrentAgentLimits = Context.Reference<AgentLimits>(
         maxIterations: 6,
         maxToolCallsPerTurn: 12,
         maxToolResultCharacters: 32_000,
-        maxTranscriptTurns: TranscriptWindowTurnLimit.make(defaultTranscriptWindowTurns),
-        maxTranscriptCharacters: TranscriptWindowCharacterLimit.make(
-          defaultTranscriptWindowCharacters
-        ),
         maxModelRoundMillis: 30_000,
       }),
   }
@@ -179,6 +175,13 @@ export class OnboardingConsentRequired extends Data.TaggedError("OnboardingConse
   }
 }
 
+/** Content-free failure when complete exact hosted context exceeds provider capacity. */
+export class HostedCapacityExceeded extends Data.TaggedError("HostedCapacityExceeded")<{}> {
+  override get message(): string {
+    return "The complete exact hosted context exceeds provider capacity";
+  }
+}
+
 /** Safe failure returned when the configured language model or provider cannot serve a turn. */
 export class ModelUnavailable extends Data.TaggedError("ModelUnavailable")<{
   readonly cause: unknown;
@@ -201,6 +204,7 @@ export class ModelResponseRejected extends Data.TaggedError("ModelResponseReject
 export type AgentTurnError =
   | UnknownUser
   | OnboardingConsentRequired
+  | HostedCapacityExceeded
   | ModelUnavailable
   | ModelResponseRejected;
 
@@ -320,7 +324,6 @@ type HostedTurn = Readonly<{
   limits: AgentLimits;
   confirmation: Effect.Success<ReturnType<typeof makeTurnConfirmation>>;
   toolkit: AgentToolkitInstance;
-  context: WorkingContext;
   pending: PendingTurn;
   continuationEntries: Array<TurnContinuationContent>;
   initialPrepared: PreparedHostedText;
@@ -760,7 +763,11 @@ const executeModelAttempts = ({
       state.attemptCount += 1;
       const attempted = yield* Effect.result(attempt);
       if (Result.isSuccess(attempted)) return attempted;
-      if (!attempted.failure.retryable || state.attemptCount === modelRetryPolicy.maximumAttempts) {
+      if (
+        attempted.failure.reason._tag !== "ProviderUnavailable" ||
+        !attempted.failure.retryable ||
+        state.attemptCount === modelRetryPolicy.maximumAttempts
+      ) {
         return attempted;
       }
 
@@ -871,7 +878,7 @@ const runModelAttempts = (
       const prepared = preparation.success;
       const round = yield* Effect.result(
         executeModelAttempts({
-          attempt: inference.executeText(prepared),
+          attempt: prepared.execute,
           roundMillis,
           telemetry,
           state,
@@ -887,14 +894,14 @@ const runModelAttempts = (
         result.failure instanceof HostedInferenceError &&
         result.failure.reason._tag === "InvalidOutput"
       ) {
-        const continuation = yield* inference.recoverText(prepared);
+        const continuation = yield* prepared.recover;
         return Result.fail<RecoverableHostedOutput>({
           _tag: "RecoverableHostedOutput",
           failure: result.failure,
           continuation,
         });
       }
-      if (Result.isFailure(result)) yield* inference.discardText(prepared);
+      if (Result.isFailure(result)) yield* prepared.discard.pipe(Effect.ignore);
       return result;
     });
     return yield* telemetry.span(modelRoundDescriptor, work);
@@ -939,13 +946,11 @@ const generateCurrentTurn = (
                   onSome: (feedback) => [{ role: "system" as const, content: feedback }],
                 }),
               });
-              return inference.prepareText(
+              return continued.prepare(
+                context,
                 remainingToolCalls === 0
-                  ? { _tag: "Continued", context, continuation: continued, toolChoice: "none" }
+                  ? { toolChoice: "none" }
                   : {
-                      _tag: "Continued",
-                      context,
-                      continuation: continued,
                       toolChoice: "auto",
                       maximumToolCalls: HostedToolCallMaximum.make(remainingToolCalls),
                     }
@@ -1037,10 +1042,20 @@ const acceptRecoverableHostedOutput = (
     Option.some(failure.continuation)
   );
 
+const mapHostedInferenceFailure = (
+  failure: HostedInferenceError
+): ModelUnavailable | HostedCapacityExceeded =>
+  failure.reason._tag === "CapacityExceeded"
+    ? new HostedCapacityExceeded()
+    : new ModelUnavailable({ cause: failure });
+
 const acceptHostedInferenceFailure = Effect.fn("AgentService.acceptHostedInferenceFailure")(
   function* (
     failure: HostedInferenceError
-  ): Effect.fn.Return<ModelRoundDecision, ModelUnavailable | ModelResponseRejected> {
+  ): Effect.fn.Return<
+    ModelRoundDecision,
+    HostedCapacityExceeded | ModelUnavailable | ModelResponseRejected
+  > {
     yield* Effect.annotateCurrentSpan({
       "agent.model.failure.reason": failure.reason._tag,
       "agent.model.failure.retryable": failure.retryable,
@@ -1052,24 +1067,41 @@ const acceptHostedInferenceFailure = Effect.fn("AgentService.acceptHostedInferen
       }),
     });
     if (failure.reason._tag !== "InvalidOutput") {
-      return yield* new ModelUnavailable({ cause: failure });
+      return yield* mapHostedInferenceFailure(failure);
     }
     return yield* malformedOutputRetry(failure.reason.description, Option.none());
   }
 );
 
+type ModelRound = Effect.Success<ReturnType<typeof generateCurrentTurn>>;
+
+const acceptNonHostedFailure = (
+  failure: Exclude<ModelRoundFailure, HostedInferenceError>
+): Effect.Effect<ModelRoundDecision, ModelUnavailable | ModelResponseRejected> =>
+  failure._tag === "RecoverableHostedOutput"
+    ? acceptRecoverableHostedOutput(failure)
+    : Effect.fail(new ModelUnavailable({ cause: failure }));
+
+const acceptModelRoundFailure = (
+  failure: ModelRoundFailure
+): Effect.Effect<
+  ModelRoundDecision,
+  HostedCapacityExceeded | ModelUnavailable | ModelResponseRejected
+> =>
+  failure instanceof HostedInferenceError
+    ? acceptHostedInferenceFailure(failure)
+    : acceptNonHostedFailure(failure);
+
 const acceptModelRound = (
-  round: Effect.Success<ReturnType<typeof generateCurrentTurn>>
-): Effect.Effect<ModelRoundDecision, ModelUnavailable | ModelResponseRejected> => {
-  if (Result.isSuccess(round)) return acceptGeneratedRound(round.success);
-  if (round.failure instanceof HostedInferenceError) {
-    return acceptHostedInferenceFailure(round.failure);
-  }
-  if (round.failure._tag === "RecoverableHostedOutput") {
-    return acceptRecoverableHostedOutput(round.failure);
-  }
-  return Effect.fail(new ModelUnavailable({ cause: round.failure }));
-};
+  round: ModelRound
+): Effect.Effect<
+  ModelRoundDecision,
+  HostedCapacityExceeded | ModelUnavailable | ModelResponseRejected
+> =>
+  Result.match(round, {
+    onFailure: acceptModelRoundFailure,
+    onSuccess: acceptGeneratedRound,
+  });
 
 const loadTurnContext = (
   userId: UserId,
@@ -1172,7 +1204,7 @@ const runHostedTurn = (
   turn: HostedTurn
 ): Effect.Effect<
   PreparedAgentReply,
-  ModelUnavailable | ModelResponseRejected | OnboardingConsentRequired,
+  HostedCapacityExceeded | ModelUnavailable | ModelResponseRejected | OnboardingConsentRequired,
   Crypto.Crypto | SqlClient.SqlClient | Telemetry
 > =>
   Effect.gen(function* () {
@@ -1192,7 +1224,7 @@ const runHostedTurn = (
           preparedOverride: index === 1 ? Option.some(turn.initialPrepared) : Option.none(),
         }).pipe(
           Effect.catchTag("HostedInferenceError", (failure) =>
-            Effect.fail(new ModelUnavailable({ cause: failure }))
+            Effect.fail(mapHostedInferenceFailure(failure))
           )
         )
       );
@@ -1220,19 +1252,21 @@ const runHostedTurn = (
     return iterationReply(turn, AgentIteration.make(turn.limits.maxIterations), exhaustedReply);
   });
 
+const decodeAgentTurnFailureTag = Schema.decodeUnknownOption(
+  Schema.Literals([
+    "UnknownUser",
+    "OnboardingConsentRequired",
+    "HostedCapacityExceeded",
+    "ModelUnavailable",
+    "ModelResponseRejected",
+  ])
+);
+
 const turnFailureTag = (failure: unknown): Option.Option<AgentTurnError["_tag"]> => {
   if (typeof failure !== "object" || failure === null || !("_tag" in failure)) {
     return Option.none();
   }
-  switch (failure._tag) {
-    case "UnknownUser":
-    case "OnboardingConsentRequired":
-    case "ModelUnavailable":
-    case "ModelResponseRejected":
-      return Option.some(failure._tag);
-    default:
-      return Option.none();
-  }
+  return decodeAgentTurnFailureTag(failure._tag);
 };
 
 const turnFailureOutcomeFromTag = (tag: AgentTurnError["_tag"]): DeclaredOutcome => {
@@ -1241,6 +1275,8 @@ const turnFailureOutcomeFromTag = (tag: AgentTurnError["_tag"]): DeclaredOutcome
       return { outcome: "rejected", error: Option.some("unknown_user"), retryable: false };
     case "OnboardingConsentRequired":
       return { outcome: "rejected", error: Option.some("consent_required"), retryable: false };
+    case "HostedCapacityExceeded":
+      return { outcome: "rejected", error: Option.some("model_unavailable"), retryable: false };
     case "ModelResponseRejected":
       return {
         outcome: "rejected",
@@ -1314,19 +1350,14 @@ const prepareInitialRound = (
   });
 
 const beginPreparedTurn = Effect.fn("AgentService.beginPreparedTurn")(function* (
-  inference: HostedInferenceService,
   prepared: PreparedAttempt,
   firstRound: PreparedHostedText
 ): Effect.fn.Return<PendingTurn, ContinuityChanged | ModelUnavailable> {
   const admission = yield* Effect.result(prepared.begin());
   if (Result.isSuccess(admission)) return admission.success;
-  yield* inference
-    .discardText(firstRound)
-    .pipe(
-      Effect.catchTag("HostedInferenceError", (cause) =>
-        Effect.fail(new ModelUnavailable({ cause }))
-      )
-    );
+  yield* firstRound.discard.pipe(
+    Effect.catchTag("HostedInferenceError", (cause) => Effect.fail(new ModelUnavailable({ cause })))
+  );
   return yield* admission.failure;
 });
 
@@ -1341,19 +1372,20 @@ const generateHostedReply = Effect.fn("AgentService.generateHostedReply")(functi
 }) {
   const { dependencies, userId, message, limits, context, pending, firstRound } = input;
   const { user, confirmation } = yield* loadTurnContext(userId, message);
-  const startedAt = yield* DateTime.now;
-  const hostedToken = yield* withCurrentConsent(userId, issueHostedAgentToken(userId, startedAt));
+  const hostedToken = yield* withCurrentConsent(
+    userId,
+    issueHostedAgentToken(userId, context.startedAt)
+  );
   return yield* Effect.scoped(
     Effect.gen(function* () {
       const toolkit = yield* makeAgentToolkit(hostedToken.bearer);
       return yield* runHostedTurn(dependencies.inference, {
         userId,
         user,
-        startedAt,
+        startedAt: context.startedAt,
         limits,
         confirmation,
         toolkit,
-        context,
         pending,
         continuationEntries: [],
         initialPrepared: firstRound,
@@ -1397,15 +1429,15 @@ const runPreparedAttempt = Effect.fn("AgentService.runPreparedAttempt")(function
 }) {
   const { dependencies, userId, message, prepared, deliver } = input;
   const limits = yield* CurrentAgentLimits;
-  const context = yield* makeWorkingContext(prepared.context, limits).pipe(
+  const context = yield* makeWorkingContext(prepared.context).pipe(
     Effect.mapError(() => new UnknownUser({ userId }))
   );
   const firstRound = yield* prepareInitialRound(
     dependencies.inference,
     context,
     limits.maxToolCallsPerTurn
-  ).pipe(Effect.mapError((cause) => new ModelUnavailable({ cause })));
-  const pending = yield* beginPreparedTurn(dependencies.inference, prepared, firstRound);
+  ).pipe(Effect.mapError(mapHostedInferenceFailure));
+  const pending = yield* beginPreparedTurn(prepared, firstRound);
   const generation = yield* Effect.result(
     generateHostedReply({
       dependencies,
@@ -1539,6 +1571,44 @@ export class AgentService extends Context.Service<
 >()("fidy-ai/shell/agent/agent-service/AgentService") {
   /** Constructs the hosted agent from the external model and persistent slice seams. */
   static readonly layer = Layer.effect(this, makeAgentService).pipe(
-    Layer.provide(ConversationContinuity.layer)
+    Layer.provide(
+      ConversationContinuity.layer.pipe(
+        Layer.provide(
+          ConversationCompactionInference.layer(
+            Effect.map(HostedInference, (inference) => ({
+              countText: inference.countText,
+              countTranscript: inference.countTranscript,
+              generate: (
+                prior,
+                entries
+              ): Effect.Effect<CompactedConversationOutput, ConversationCompactionInferenceError> =>
+                inference
+                  .prepareStructured({
+                    context: makeHostedStructuredContext({
+                      messages: [
+                        {
+                          role: "system",
+                          content:
+                            "Replace the prior compacted conversation and exact transcript with one faithful concise conversation record.",
+                        },
+                        ...Option.match(prior, {
+                          onNone: () => [],
+                          onSome: (text) => [{ role: "user" as const, content: text }],
+                        }),
+                        ...exactTranscriptPrompt(entries),
+                      ],
+                    }),
+                    objectName: HostedStructuredObjectName.make("compacted_conversation"),
+                    outputSchema: CompactedConversationOutput,
+                  })
+                  .pipe(
+                    Effect.flatMap((prepared) => prepared.execute),
+                    Effect.mapError((cause) => new ConversationCompactionInferenceError({ cause }))
+                  ),
+            }))
+          )
+        )
+      )
+    )
   );
 }

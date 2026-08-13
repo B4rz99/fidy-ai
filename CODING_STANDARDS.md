@@ -54,6 +54,10 @@ requires equal Currency. None of those obligations is recoverable from `{ amount
 
 ### Make illegal states unrepresentable
 
+First-party production source does not handwrite `Symbol(...)` or `unique symbol` nominal tokens.
+Use closure-backed behavior for one-shot capabilities and `Schema.brand(...)` for validated scalar
+domain identities. Language interop such as `Symbol.iterator` remains legitimate.
+
 Beyond branded ids and refined primitives, model **cardinality and structure**: `NonEmptyArray`
 where empty is illegal, `Tuple` where arity is fixed, `UniqueArray` where duplicates are, and
 discriminated unions instead of optional-field combinations.

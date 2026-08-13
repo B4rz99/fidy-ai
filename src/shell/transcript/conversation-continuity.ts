@@ -5,6 +5,8 @@ import {
   Data,
   DateTime,
   Effect,
+  Equal,
+  Function as Fn,
   Layer,
   Option,
   Schema,
@@ -14,6 +16,12 @@ import {
 } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import { UserId } from "~/core/identity/reference";
+import type { CompactedConversation } from "~/core/transcript/compacted-conversation";
+import { currentOnboardingGrantIdsInScope, withSubjectLock } from "~/shell/consent/repo";
+import {
+  ConversationCompactionInference,
+  type ConversationCompactionInferenceService,
+} from "./conversation-compaction-inference";
 import { findUserInScope } from "~/shell/identity/repo";
 import { listMemoriesInScope } from "~/shell/memory/repo";
 import {
@@ -66,34 +74,41 @@ export type ContinuityView = {
  * Attempt-scoped input for the WorkingContext owner. It binds one User, active request, durable
  * revision, and ConversationContinuity scope without exposing those persistence facts.
  */
-const preparedAttemptContextTypeId: unique symbol = Symbol("PreparedAttemptContext");
-export type PreparedAttemptContext = Readonly<{
-  readonly [preparedAttemptContextTypeId]: true;
-}>;
+export type PreparedAttemptContext = object;
 
 /** WorkingContext input captured by one preparation generation. @internal */
 export type PreparedWorkingContextSnapshot = Readonly<{
   user: Effect.Success<ReturnType<typeof findUserInScope>>;
   memories: Effect.Success<ReturnType<typeof listMemoriesInScope>>;
   transcript: ReadonlyArray<TranscriptEntry>;
+  compactedConversation: Option.Option<CompactedConversation>;
   request: ActiveTurnRequest;
   startedAt: DateTime.Utc;
   isActive: () => boolean;
 }>;
 
-const preparedContextSources = new WeakMap<object, PreparedWorkingContextSnapshot>();
+type PreparedAttemptContextAuthority = Readonly<{
+  claim: () => Option.Option<PreparedWorkingContextSnapshot>;
+}>;
 
-/** Claims one continuity-owned source without exposing it on PreparedAttempt.context. @internal */
+const preparedAttemptContextAuthorityPrototype: object = Object.freeze({});
+
+const preparedAttemptContextAuthority = (
+  claim: () => Option.Option<PreparedWorkingContextSnapshot>
+): PreparedAttemptContext => {
+  const authority = Fn.cast<object, PreparedAttemptContextAuthority>({});
+  Object.setPrototypeOf(authority, preparedAttemptContextAuthorityPrototype);
+  Object.defineProperty(authority, "claim", { enumerable: false, value: claim });
+  return Object.freeze(authority);
+};
+
+/** Consumes an authentic continuity-owned context once; structural lookalikes are rejected. @internal */
 export const claimPreparedAttemptContext = (
   context: PreparedAttemptContext
 ): Option.Option<PreparedWorkingContextSnapshot> =>
-  Option.fromNullishOr(preparedContextSources.get(context)).pipe(
-    Option.filter((source) => source.isActive()),
-    Option.map((source) => {
-      preparedContextSources.delete(context);
-      return source;
-    })
-  );
+  Object.getPrototypeOf(context) === preparedAttemptContextAuthorityPrototype
+    ? Fn.cast<PreparedAttemptContext, PreparedAttemptContextAuthority>(context).claim()
+    : Option.none();
 
 /** The prepared continuity changed before admission; no active User entry was appended. */
 export class ContinuityChanged extends Data.TaggedError("ContinuityChanged")<{}> {}
@@ -127,6 +142,32 @@ export type SerializedAttempt = Readonly<{
   ) => Effect.Effect<A, E, R>;
 }>;
 
+const defaultCompactionTriggerTokens = 100_000;
+const defaultCompactionMaximumTokens = 15_000;
+const compactionInferenceTimeout = "30 seconds";
+
+/** Provider-token trigger and bounded replacement output, both expressed as positive token counts. */
+export const ConversationCompactionTokenCount = Schema.Int.check(Schema.isGreaterThan(0)).pipe(
+  Schema.brand("ConversationCompactionTokenCount")
+);
+export type ConversationCompactionTokenCount = typeof ConversationCompactionTokenCount.Type;
+
+export type ConversationCompactionPolicy = Readonly<{
+  triggerTokens: ConversationCompactionTokenCount;
+  maximumTokens: ConversationCompactionTokenCount;
+}>;
+
+/** Provider-token trigger and replacement bound validated as positive whole counts. */
+export const ConversationCompactionPolicy = Context.Reference<ConversationCompactionPolicy>(
+  "fidy-ai/shell/transcript/conversation-continuity/ConversationCompactionPolicy",
+  {
+    defaultValue: () => ({
+      triggerTokens: ConversationCompactionTokenCount.make(defaultCompactionTriggerTokens),
+      maximumTokens: ConversationCompactionTokenCount.make(defaultCompactionMaximumTokens),
+    }),
+  }
+);
+
 /**
  * Observes durable continuity or runs a callback serialized with every other callback for the same
  * User across runtime instances. Waiting is interruptible, and no transaction spans the callback.
@@ -147,6 +188,8 @@ type CryptoService = Effect.Success<typeof Crypto.Crypto>;
 type Dependencies = {
   readonly crypto: CryptoService;
   readonly sql: SqlClient.SqlClient;
+  readonly inference: ConversationCompactionInferenceService;
+  readonly compactionPolicy: ConversationCompactionPolicy;
 };
 type PreparedPersistence = {
   readonly revision: bigint;
@@ -155,6 +198,12 @@ type PreparedPersistence = {
   readonly user: Effect.Success<ReturnType<typeof findUserInScope>>;
   readonly memories: Effect.Success<ReturnType<typeof listMemoriesInScope>>;
   readonly startedAt: DateTime.Utc;
+  readonly compactedConversation: Option.Option<CompactedConversation>;
+  readonly sequencedEntries: ReadonlyArray<{
+    sequence: bigint;
+    entry: TranscriptEntry;
+  }>;
+  readonly consentGrantIds: ReadonlyArray<string>;
 };
 type CapabilityScope = {
   active: boolean;
@@ -170,6 +219,16 @@ const RevisionRow = Schema.Struct({ revision: Schema.BigIntFromString });
 const MemoryRevisionRow = Schema.Struct({ revision: Schema.BigIntFromString });
 const PersistedTranscriptEntry = Schema.toCodecJson(TranscriptEntry);
 const TranscriptEntryRow = Schema.Struct({ entry: PersistedTranscriptEntry });
+const SequencedTranscriptEntryRow = Schema.Struct({
+  sequence: Schema.BigIntFromString,
+  entry: PersistedTranscriptEntry,
+});
+const CompactedConversationRow = Schema.Struct({
+  text: Schema.String,
+  throughSequence: Schema.BigIntFromString,
+  revision: Schema.BigIntFromString,
+  updatedAt: Schema.DateTimeUtcFromDate,
+});
 const OptionalFailureReason = Schema.OptionFromNullOr(TurnFailureReason);
 class InvalidPersistedContinuity extends Data.TaggedError("InvalidPersistedContinuity")<{}> {}
 
@@ -316,6 +375,21 @@ const readContinuityView = Effect.fn("ConversationContinuity.readView")(function
     entries: entryRows.map(({ entry }) => entry),
     turns: turnRows,
   };
+});
+
+const readCompactedConversation = Effect.fn("ConversationContinuity.readCompacted")(function* (
+  sql: SqlClient.SqlClient,
+  userId: UserId
+) {
+  return yield* SqlSchema.findOneOption({
+    Request: UserId,
+    Result: CompactedConversationRow,
+    execute: (ownedUserId) => sql`
+      SELECT text, through_sequence::text AS "throughSequence", revision::text AS revision,
+        updated_at AS "updatedAt"
+      FROM compacted_conversations WHERE user_id = ${ownedUserId}
+    `,
+  })(userId);
 });
 
 const observePersisted = Effect.fn("ConversationContinuity.observePersisted")(function* (
@@ -474,10 +548,190 @@ const preparePersisted = Effect.fn("ConversationContinuity.prepare")(function* (
         user,
         memories,
         startedAt: yield* DateTime.now,
+        compactedConversation: yield* readCompactedConversation(dependencies.sql, userId),
+        sequencedEntries: yield* SqlSchema.findAll({
+          Request: UserId,
+          Result: SequencedTranscriptEntryRow,
+          execute: (ownedUserId) => dependencies.sql`
+            SELECT sequence::text AS sequence, entry FROM transcript_entries
+            WHERE user_id = ${ownedUserId} ORDER BY sequence
+          `,
+        })(userId),
+        consentGrantIds: (yield* currentOnboardingGrantIdsInScope(userId)).map(String),
       };
-    })
+    }).pipe(Effect.provideService(SqlClient.SqlClient, dependencies.sql))
   ).pipe(persistenceOrDie);
 });
+
+type CompactionSelection = Readonly<{
+  entries: ReadonlyArray<{ sequence: bigint; entry: TranscriptEntry }>;
+  throughSequence: bigint;
+}>;
+
+const terminalCompactionPrefixes = (
+  persisted: PreparedPersistence
+): ReadonlyArray<ReadonlyArray<{ sequence: bigint; entry: TranscriptEntry }>> => {
+  const turnsById = new Map(persisted.view.turns.map((turn) => [String(turn.id), turn]));
+  const prefixes: Array<Array<{ sequence: bigint; entry: TranscriptEntry }>> = [];
+  const selected: Array<{ sequence: bigint; entry: TranscriptEntry }> = [];
+  let activeTurnId = Option.none<string>();
+  for (const sequenced of persisted.sequencedEntries) {
+    const turnId = String(sequenced.entry.turnId);
+    const turn = turnsById.get(turnId);
+    if (turn === undefined || turn._tag === "Pending") break;
+    if (Option.isSome(activeTurnId) && activeTurnId.value !== turnId) prefixes.push([...selected]);
+    selected.push(sequenced);
+    activeTurnId = Option.some(turnId);
+  }
+  if (selected.length > 0) prefixes.push([...selected]);
+  return prefixes;
+};
+
+// Selection keeps the Pending barrier, complete-Turn grouping, and threshold edge explicit.
+const selectCompactionPrefix = Effect.fn("ConversationContinuity.selectCompactionPrefix")(
+  function* (dependencies: Dependencies, persisted: PreparedPersistence) {
+    const terminalPrefixes = terminalCompactionPrefixes(persisted);
+    if (terminalPrefixes.length === 0) return Option.none<CompactionSelection>();
+    const completePrefix = Option.getOrThrow(Arr.last(terminalPrefixes));
+    const allTokens = yield* dependencies.inference.countTranscript(
+      completePrefix.map(({ entry }) => entry)
+    );
+    if (allTokens < dependencies.compactionPolicy.triggerTokens) {
+      return Option.none<CompactionSelection>();
+    }
+    let low = 0;
+    let high = terminalPrefixes.length - 1;
+    while (low < high) {
+      const middle = Math.floor((low + high) / 2);
+      const prefix = Option.getOrThrow(Arr.get(terminalPrefixes, middle));
+      const tokens = yield* dependencies.inference.countTranscript(
+        prefix.map(({ entry }) => entry)
+      );
+      if (tokens >= dependencies.compactionPolicy.triggerTokens) high = middle;
+      else low = middle + 1;
+    }
+    const thresholdPrefix = Option.getOrThrow(Arr.get(terminalPrefixes, low));
+    const terminal = Option.getOrThrow(Arr.last(thresholdPrefix));
+    return Option.some({ entries: thresholdPrefix, throughSequence: terminal.sequence });
+  }
+);
+
+const sameStrings = (left: ReadonlyArray<string>, right: ReadonlyArray<string>): boolean =>
+  left.length === right.length && left.every((value, index) => value === right[index]);
+
+type CompactionCommit = Readonly<{
+  dependencies: Dependencies;
+  userId: UserId;
+  persisted: PreparedPersistence;
+  selection: CompactionSelection;
+  text: string;
+}>;
+
+// One cohesive transaction keeps every optimistic comparison adjacent to replacement and deletion.
+const commitCompaction = Effect.fn("ConversationContinuity.commitCompaction")(function* ({
+  dependencies,
+  userId,
+  persisted,
+  selection,
+  text,
+}: CompactionCommit) {
+  return yield* withSubjectLock(
+    userId,
+    Effect.gen(function* () {
+      const revision = yield* readRevision(dependencies.sql, userId, true);
+      const memoryRevision = yield* readMemoryRevision(dependencies.sql, userId);
+      const grants = (yield* currentOnboardingGrantIdsInScope(userId)).map(String);
+      const prior = yield* readCompactedConversation(dependencies.sql, userId);
+      const currentRows = yield* SqlSchema.findAll({
+        Request: UserId,
+        Result: SequencedTranscriptEntryRow,
+        execute: (ownedUserId) => dependencies.sql`
+          SELECT sequence::text AS sequence, entry FROM transcript_entries
+          WHERE user_id = ${ownedUserId} AND sequence <= ${selection.throughSequence}
+          ORDER BY sequence`,
+      })(userId);
+      const samePrior = Option.match(persisted.compactedConversation, {
+        onNone: () => Option.isNone(prior),
+        onSome: (expected) => Option.isSome(prior) && Equal.equals(prior.value, expected),
+      });
+      const sameEntries =
+        currentRows.length === selection.entries.length &&
+        currentRows.every((row, index) => Equal.equals(row, selection.entries[index]));
+      if (
+        revision !== persisted.revision ||
+        memoryRevision !== persisted.memoryRevision ||
+        !sameStrings(grants, persisted.consentGrantIds) ||
+        !samePrior ||
+        !sameEntries
+      ) {
+        return false;
+      }
+      const now = yield* DateTime.now;
+      const nextRevision = Option.match(prior, {
+        onNone: () => 1n,
+        onSome: (value) => value.revision + 1n,
+      });
+      yield* dependencies.sql`
+          INSERT INTO compacted_conversations
+            (user_id, text, through_sequence, revision, updated_at)
+          VALUES (${userId}, ${text}, ${selection.throughSequence}, ${nextRevision}, ${now})
+          ON CONFLICT (user_id) DO UPDATE SET
+            text = EXCLUDED.text,
+            through_sequence = EXCLUDED.through_sequence,
+            revision = EXCLUDED.revision,
+            updated_at = EXCLUDED.updated_at
+        `;
+      yield* dependencies.sql`DELETE FROM transcript_entries
+        WHERE user_id = ${userId} AND sequence <= ${selection.throughSequence}`;
+      yield* incrementRevision(dependencies.sql, userId);
+      return true;
+    }).pipe(Effect.provideService(SqlClient.SqlClient, dependencies.sql))
+  ).pipe(Effect.provideService(SqlClient.SqlClient, dependencies.sql));
+});
+
+const compactIfNeeded = Effect.fn("ConversationContinuity.compactIfNeeded")(function* (
+  dependencies: Dependencies,
+  userId: UserId,
+  persisted: PreparedPersistence
+) {
+  const selection = yield* selectCompactionPrefix(dependencies, persisted);
+  if (Option.isNone(selection)) return false;
+  const generated = yield* dependencies.inference
+    .generate(
+      Option.map(persisted.compactedConversation, ({ text }) => text),
+      selection.value.entries.map(({ entry }) => entry)
+    )
+    .pipe(Effect.timeoutOption(compactionInferenceTimeout));
+  if (Option.isNone(generated)) return false;
+  const tokens = yield* dependencies.inference.countText(generated.value.compactedConversation);
+  if (tokens > dependencies.compactionPolicy.maximumTokens) return false;
+  return yield* commitCompaction({
+    dependencies,
+    userId,
+    persisted,
+    selection: selection.value,
+    text: generated.value.compactedConversation,
+  });
+});
+
+const recoverCompactionFailure = (): Effect.Effect<boolean> =>
+  Effect.logWarning("Conversation Compaction failed", { error: "compaction_failed" }).pipe(
+    Effect.as(false)
+  );
+
+const prepareWithCompaction = Effect.fn("ConversationContinuity.prepareWithCompaction")(function* (
+  dependencies: Dependencies,
+  userId: UserId
+) {
+  const persisted = yield* preparePersisted(dependencies, userId);
+  if (persisted.consentGrantIds.length === 0) return persisted;
+  yield* compactIfNeeded(dependencies, userId, persisted).pipe(
+    Effect.catchCause(recoverCompactionFailure)
+  );
+  return yield* preparePersisted(dependencies, userId);
+});
+
+const prepareCoherent = Effect.fn("ConversationContinuity.prepareCoherent")(prepareWithCompaction);
 
 type BeginPersistence = {
   readonly dependencies: Dependencies;
@@ -845,6 +1099,7 @@ const beginPreparedAttempt = ({
     return makePendingTurn({ ...input, turnId, preparation, startedAt });
   });
 
+// Construction stays cohesive so the source, liveness closure, and begin behavior share one scope.
 const usePreparedAttempt = <A, E, R>(
   input: PreparedAttemptInput<A, E, R>
 ): Effect.Effect<A, E, R> =>
@@ -859,18 +1114,20 @@ const usePreparedAttempt = <A, E, R>(
     const isAttemptActive = (): boolean =>
       attemptScope.active && preparation.active && attemptScope.generation === generation;
     const isBeginActive = (): boolean => isAttemptActive() && beginAvailable;
-    const context: PreparedAttemptContext = {
-      [preparedAttemptContextTypeId]: true,
-    };
-    Object.defineProperty(context, preparedAttemptContextTypeId, { enumerable: false });
-    Object.freeze(context);
-    preparedContextSources.set(context, {
+    const source: PreparedWorkingContextSnapshot = {
       user: persisted.user,
       memories: persisted.memories,
       transcript: persisted.view.entries,
+      compactedConversation: persisted.compactedConversation,
       request,
       startedAt: persisted.startedAt,
       isActive: isAttemptActive,
+    };
+    let contextAvailable = true;
+    const context = preparedAttemptContextAuthority(() => {
+      if (!contextAvailable || !source.isActive()) return Option.none();
+      contextAvailable = false;
+      return Option.some(source);
     });
     const prepared: PreparedAttempt = Object.freeze({
       context,
@@ -892,13 +1149,10 @@ const usePreparedAttempt = <A, E, R>(
           },
         }),
     });
-    return use(prepared).pipe(
-      Effect.ensuring(
-        Effect.sync(() => {
-          preparation.active = false;
-        })
-      )
-    );
+    const deactivate = (): void => {
+      preparation.active = false;
+    };
+    return use(prepared).pipe(Effect.ensuring(Effect.sync(deactivate)));
   });
 
 type SerializedAttemptInput = {
@@ -928,7 +1182,7 @@ const makeSerializedAttempt = ({
             return Effect.succeed(attemptScope.generation);
           })
         );
-        const persisted = yield* preparePersisted(dependencies, userId);
+        const persisted = yield* prepareCoherent(dependencies, userId);
         yield* checkCapability(
           () => attemptScope.active && attemptScope.generation === generation,
           "was superseded during preparation"
@@ -1023,6 +1277,8 @@ const makeConversationContinuity = Effect.gen(function* () {
   const dependencies: Dependencies = {
     crypto: yield* Crypto.Crypto,
     sql: yield* SqlClient.SqlClient,
+    inference: yield* ConversationCompactionInference,
+    compactionPolicy: yield* ConversationCompactionPolicy,
   };
   const observe = (userId: UserId): Effect.Effect<ContinuityView> =>
     observeOwned(dependencies, userId);

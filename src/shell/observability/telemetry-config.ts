@@ -17,7 +17,7 @@ export type ProductionTraceRate =
 export type TelemetryRelease = `fidy@${string}`;
 
 /** Validated DSN for the project selected by the deployment role. */
-export type SentryDsn = string & { readonly SentryDsn: unique symbol };
+export type SentryDsn = `https://${string}`;
 
 /** Public coordinates that distinguish an approved Sentry project without exposing its DSN. */
 export type SentryProjectIdentity = Readonly<{
@@ -133,11 +133,9 @@ const decodeDsn = (
   return Option.isSome(approvedProject) &&
     url.origin === approvedProject.value.origin &&
     url.pathname === `/${approvedProject.value.projectId}`
-    ? Effect.succeed(SentryDsn(value))
+    ? Effect.succeed(Fn.cast<string, SentryDsn>(value))
     : Effect.fail(new InvalidTelemetryConfig({ reason: "crossed_project" }));
 };
-
-const SentryDsn = (value: string): SentryDsn => Fn.cast<string, SentryDsn>(value);
 
 const decodeRelease = (
   candidate: Option.Option<string>

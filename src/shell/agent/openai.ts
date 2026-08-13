@@ -15,6 +15,7 @@ import o200kBase from "js-tiktoken/ranks/o200k_base";
 import type { ConfigError } from "effect/Config";
 import { type Prompt, Tool } from "effect/unstable/ai";
 import { toCodecOpenAI } from "effect/unstable/ai/OpenAiStructuredOutput";
+import { exactTranscriptPrompt } from "./model-boundary";
 import {
   HttpBody,
   type HttpClient,
@@ -632,7 +633,20 @@ const makeOpenAiHostedInference = (
   structuredPolicy: StructuredExecutionPolicy
 ): HostedInferenceService => {
   const adapter: HostedInferenceAdapter<PreparedOpenAiRequest, OpenAiContinuation> = {
-    countMemoryText: (text) => Effect.sync(() => memoryTokenizer.encode(text).length),
+    countText: (text) => Effect.sync(() => memoryTokenizer.encode(text).length),
+    countTranscript: (entries) =>
+      projectMessages(
+        [],
+        {
+          prefix: exactTranscriptPrompt(entries),
+          continuationTail: [],
+          suffix: [],
+        },
+        Option.none()
+      ).pipe(
+        Effect.flatMap(({ input }) => countInputTokens(client, makeCountedRequest(input, "none"))),
+        Effect.orDie
+      ),
     prepare: (semanticInput) =>
       Effect.gen(function* () {
         const projected = yield* projectMessages(

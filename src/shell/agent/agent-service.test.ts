@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { expect, layer } from "@effect/vitest";
 import {
+  Array as Arr,
   BigDecimal,
   Cause,
   Clock,
@@ -26,7 +27,10 @@ import { MigrationSqlClient } from "~/shell/db/client";
 import { categoryIds } from "~/core/categories/taxonomy";
 import { type TranscriptEntry, TranscriptText } from "~/core/transcript/model";
 import { AgentBearerToken } from "~/core/tokens/model";
-import { TranscriptWindowCharacterLimit, TranscriptWindowTurnLimit } from "~/core/transcript/rules";
+import {
+  ConversationCompactionPolicy,
+  ConversationCompactionTokenCount,
+} from "~/shell/transcript/conversation-continuity";
 import { observeAuditLogEntries } from "~/shell/audit/repo";
 import { withSubjectLock } from "~/shell/consent/repo";
 import { resolveWhatsAppCaller } from "~/shell/identity/repo";
@@ -62,6 +66,10 @@ import {
 
 const declinedOnboardingPhone = E164PhoneNumber.make("+573009997332");
 const acceptedOnboardingPhone = E164PhoneNumber.make("+573009997333");
+const compactionUserId = UserId.make("f1d1a000-0000-4000-8000-0000000004c0");
+const compactionBearer = AgentBearerToken.make(
+  "fin_compact1_abcdefghijklmnopqrstuvwxyz0123456789ABCD"
+);
 const replCaller = (
   phoneNumber: E164PhoneNumber
 ): { phoneNumber: E164PhoneNumber; businessScopedUserId: WhatsAppBusinessScopedUserId } => ({
@@ -69,9 +77,16 @@ const replCaller = (
   businessScopedUserId: WhatsAppBusinessScopedUserId.make(`CO.${phoneNumber.slice(1)}`),
 });
 
-const clearTranscript = Effect.flatMap(
-  MigrationSqlClient,
-  (sql) => sql`DELETE FROM transcript_entries WHERE user_id = ${defaultUserId}`
+const clearTranscript = Effect.flatMap(MigrationSqlClient, (sql) =>
+  Effect.all(
+    [
+      sql`DELETE FROM compacted_conversations WHERE user_id = ${defaultUserId}`,
+      sql`DELETE FROM transcript_entries WHERE user_id = ${defaultUserId}`,
+      sql`DELETE FROM conversation_turns WHERE user_id = ${defaultUserId}`,
+      sql`DELETE FROM conversation_continuity WHERE user_id = ${defaultUserId}`,
+    ],
+    { discard: true, concurrency: 1 }
+  )
 );
 
 type AgentLimitOverrides = Partial<typeof AgentLimits.Encoded>;
@@ -80,16 +95,10 @@ const agentLimits = (overrides: AgentLimitOverrides = {}): AgentLimits => {
     maxIterations: 6,
     maxToolCallsPerTurn: 12,
     maxToolResultCharacters: 32_000,
-    maxTranscriptTurns: 12,
-    maxTranscriptCharacters: 32_000,
     maxModelRoundMillis: 30_000,
     ...overrides,
   };
-  return AgentLimits.make({
-    ...values,
-    maxTranscriptTurns: TranscriptWindowTurnLimit.make(values.maxTranscriptTurns),
-    maxTranscriptCharacters: TranscriptWindowCharacterLimit.make(values.maxTranscriptCharacters),
-  });
+  return AgentLimits.make(values);
 };
 
 const scriptedTerminal = (
@@ -797,11 +806,21 @@ const plainTextScript = (serialized: string): Option.Option<ModelReply> => {
       },
     ]);
   }
+  if (serialized.includes("RECUERDA_COMPACTADO")) {
+    return Option.some([
+      {
+        type: "text" as const,
+        text: serialized.includes("MARCADOR_COMPACTADO")
+          ? "recordado desde conversación compactada"
+          : "marcador ausente",
+      },
+    ]);
+  }
   return Option.none();
 };
 
 const batchConfirmationTurns = (serialized: string): number =>
-  serialized.match(/"options":\{\},"type":"text","text":"CONFIRMAR LOTE/gu)?.length ?? 0;
+  serialized.split("[UNTRUSTED_TRANSCRIPT_USER]\\nCONFIRMAR LOTE").length - 1;
 
 const batchConfirmationCommand = (text: string): string => {
   const command = /Responde exactamente: (CONFIRMAR LOTE [0-9a-f]{64})/u.exec(text)?.[1];
@@ -878,7 +897,7 @@ const malformedAtomicBatchReply = (serialized: string): ModelReply => {
 
 const failingAtomicBatchReply = (serialized: string): ModelReply => {
   const confirmationTurns = batchConfirmationTurns(serialized);
-  if (serialized.includes('"failedCallIndex":1') && confirmationTurns < 2) {
+  if (serialized.includes('"failedCallIndex":1') && confirmationTurns < 1) {
     return [
       {
         type: "text" as const,
@@ -901,7 +920,7 @@ const successfulAtomicBatchReply = (serialized: string): ModelReply => {
       serialized.lastIndexOf("LOTE_ATOMICO_EXITO"),
       serialized.lastIndexOf("LOTE_ATOMICO_EXPIRA")
     );
-  if (succeeded && batchConfirmationTurns(serialized) < 3) {
+  if (succeeded && batchConfirmationTurns(serialized) < 2) {
     return [{ type: "text" as const, text: "El lote quedó aplicado por completo." }];
   }
   return [successfulAtomicBatchCall];
@@ -1187,8 +1206,17 @@ const ScriptedLanguageModel = Layer.effect(
     const prompts = yield* ModelPrompts;
     const toolPolicies = yield* ModelToolPolicies;
     return yield* LanguageModel.make({
-      generateText: ({ prompt, tools, toolChoice }) => {
+      generateText: ({ prompt, responseFormat, tools, toolChoice }) => {
         const serialized = JSON.stringify(prompt.content);
+        if (responseFormat.type === "json") {
+          const exactText = serialized.includes("MARCADOR_COMPACTADO")
+            ? "MARCADOR_COMPACTADO"
+            : "resumen fiel";
+          return Effect.succeed([
+            { type: "text" as const, text: JSON.stringify({ compactedConversation: exactText }) },
+            makeLanguageModelFinishPart("stop"),
+          ]);
+        }
         expect(serialized).not.toContain("fin_deadbeef_");
         return Effect.gen(function* () {
           const openAiConfig = yield* Effect.serviceOption(OpenAiLanguageModel.Config);
@@ -1223,6 +1251,18 @@ const AgentHarness = AgentService.layer.pipe(
   Layer.provideMerge(TelemetryEnvelopeRecording)
 );
 
+const CompactingAgentHarness = AgentService.layer.pipe(
+  Layer.provide(
+    Layer.succeed(ConversationCompactionPolicy, {
+      triggerTokens: ConversationCompactionTokenCount.make(1),
+      maximumTokens: ConversationCompactionTokenCount.make(100),
+    })
+  ),
+  Layer.provideMerge(ScriptedHostedInference),
+  Layer.provideMerge(ApiHarness),
+  Layer.provideMerge(TelemetryEnvelopeRecording)
+);
+
 const AgentTelemetryHarness = AgentService.layer.pipe(
   Layer.provideMerge(ScriptedHostedInference),
   Layer.provideMerge(ApiTelemetryHarness)
@@ -1250,6 +1290,64 @@ const activeCallerDescriptor = {
     status: Option.none(),
   },
 } as const satisfies SpanDescriptor;
+
+layer(CompactingAgentHarness, { excludeTestServices: true, timeout: "30 seconds" })(
+  "AgentService compacted continuity",
+  (it) => {
+    it.effect("answers from CompactedConversation after deleting exact source entries", () =>
+      Effect.gen(function* () {
+        const sql = yield* MigrationSqlClient;
+        const service = yield* AgentService;
+        const clearCompactionFixture = Effect.all(
+          [
+            sql`DELETE FROM agent_tokens WHERE user_id = ${compactionUserId}`,
+            sql`DELETE FROM consent_records WHERE subject_user_id = ${compactionUserId}`,
+            sql`DELETE FROM users WHERE id = ${compactionUserId}`,
+          ],
+          { discard: true, concurrency: 1 }
+        );
+        yield* clearCompactionFixture;
+        yield* seedConsentedAgentIdentity({
+          userId: compactionUserId,
+          bearer: compactionBearer,
+        });
+        yield* Effect.gen(function* () {
+          yield* service.handleSynchronousTurn(
+            compactionUserId,
+            InboundMessage.make({ text: TranscriptText.make("MARCADOR_COMPACTADO") })
+          );
+          yield* service.handleSynchronousTurn(
+            compactionUserId,
+            InboundMessage.make({ text: TranscriptText.make("ACTIVA_COMPACTACION") })
+          );
+          for (const index of Arr.range(1, 41)) {
+            yield* service.handleSynchronousTurn(
+              compactionUserId,
+              InboundMessage.make({ text: TranscriptText.make(`HISTORIAL_PROFUNDO_${index}`) })
+            );
+          }
+          const compacted = yield* sql`
+            SELECT text FROM compacted_conversations WHERE user_id = ${compactionUserId}
+          `;
+          const exactSource = yield* sql`
+            SELECT entry FROM transcript_entries
+            WHERE user_id = ${compactionUserId}
+              AND entry ->> 'text' = 'MARCADOR_COMPACTADO'
+          `;
+
+          const reply = yield* service.handleSynchronousTurn(
+            compactionUserId,
+            InboundMessage.make({ text: TranscriptText.make("RECUERDA_COMPACTADO") })
+          );
+
+          expect(compacted).toEqual([{ text: "MARCADOR_COMPACTADO" }]);
+          expect(exactSource).toHaveLength(0);
+          expect(reply.text).toBe("recordado desde conversación compactada");
+        }).pipe(Effect.ensuring(clearCompactionFixture.pipe(Effect.orDie)));
+      })
+    );
+  }
+);
 
 layer(AgentTelemetryHarness, { excludeTestServices: true, timeout: "30 seconds" })(
   "hosted agent telemetry",
@@ -1907,11 +2005,9 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       expect(replies.some(({ text }) => text === "El lote quedó aplicado por completo.")).toBe(
         true
       );
-      expect(
-        replies.some(({ text }) =>
-          text.includes("Este lote atómico requiere una sola confirmación")
-        )
-      ).toBe(true);
+      expect(replies.every(({ text }) => text === "El lote quedó aplicado por completo.")).toBe(
+        true
+      );
     })
   );
 
@@ -2621,10 +2717,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       yield* clearTranscript;
       yield* resetModelPrompts;
 
-      const limits = agentLimits({
-        maxToolResultCharacters: 1_000,
-        maxTranscriptCharacters: 200_000,
-      });
+      const limits = agentLimits({ maxToolResultCharacters: 1_000 });
       const reply = yield* service
         .handleSynchronousTurn(
           defaultUserId,
@@ -2957,7 +3050,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
     })
   );
 
-  it.effect("sends only bounded recent complete turns while retaining older entries", () =>
+  it.effect("sends all residual complete turns while retaining exact entries", () =>
     Effect.gen(function* () {
       yield* clearTranscript;
       const service = yield* AgentService;
@@ -2966,18 +3059,15 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
         InboundMessage.make({ text: TranscriptText.make("MARCADOR_ANTIGUO") })
       );
       const retainedBefore = yield* listTranscriptEntries(defaultUserId);
-      const limits = agentLimits({ maxTranscriptTurns: 1 });
 
-      const reply = yield* service
-        .handleSynchronousTurn(
-          defaultUserId,
-          InboundMessage.make({ text: TranscriptText.make("MENSAJE_ACTUAL") })
-        )
-        .pipe(Effect.provideService(CurrentAgentLimits, limits));
+      const reply = yield* service.handleSynchronousTurn(
+        defaultUserId,
+        InboundMessage.make({ text: TranscriptText.make("MENSAJE_ACTUAL") })
+      );
       const retainedAfter = yield* listTranscriptEntries(defaultUserId);
       const loadedWindow = yield* listRecentTranscriptEntries(defaultUserId, 1);
 
-      expect(reply.text).toBe("contexto acotado");
+      expect(reply.text).toBe("contexto filtrado");
       expect(retainedBefore).toHaveLength(2);
       expect(retainedAfter).toHaveLength(4);
       expect(loadedWindow).toHaveLength(2);

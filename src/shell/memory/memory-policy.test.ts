@@ -14,19 +14,13 @@ const at = DateTime.makeUnsafe("2026-08-12T10:00:00Z");
 const memory = (id: string, text: string): Memory =>
   Memory.make({ id: MemoryId.make(id), text: MemoryText.make(text), createdAt: at, updatedAt: at });
 
-const memoryInference = (
-  countMemoryText: HostedInferenceService["countMemoryText"]
-): HostedInferenceService =>
+const memoryInference = (countText: HostedInferenceService["countText"]): HostedInferenceService =>
   HostedInference.of({
-    countMemoryText,
+    countText,
+    countTranscript: (messages) => Effect.succeed(messages.length),
     prepareText: () => Effect.die("unused"),
     validateText: () => Effect.die("unused"),
-    executeText: () => Effect.die("unused"),
-    recoverText: () => Effect.die("unused"),
-    discardText: () => Effect.die("unused"),
     prepareStructured: () => Effect.die("unused"),
-    executeStructured: () => Effect.die("unused"),
-    discardStructured: () => Effect.die("unused"),
   });
 
 it.effect("counts the complete recall-ordered aggregate including the final candidate", () =>

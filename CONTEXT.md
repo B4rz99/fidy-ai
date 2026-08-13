@@ -135,13 +135,29 @@ locale, IANA time zone, scheduled UTC instant, and any Money groups needed to pr
 WhatsApp is one consumer; agents pull the same stream.
 _Avoid_: Notification, alert, push (those are delivery, not the record).
 
-**AgentToken**:
-A bearer grant for canonical operations with scopes `read`, `write`, and `dashboard`. A
-UserAgentToken is minted by a user for one of their own agents, may carry any non-empty scope
-subset, and has a renewable inactivity deadline. A HostedAgentToken is internal to one hosted turn,
-always carries every scope, has a short non-renewable hard expiry, and is revoked during normal
-turn cleanup. Raw bearers are disclosed only to their immediate caller and never persisted.
-_Avoid_: API key, credential, PAT, hosted grant.
+**PAT (Personal Access Token)**:
+A User-authorized bearer grant for one of their own agents to invoke canonical operations with a
+non-empty subset of `read`, `write`, and `dashboard`. It has no fixed lifetime, dies after 90 days
+without successful use, and its raw bearer is disclosed once to its immediate caller and never
+persisted.
+_Avoid_: AgentToken, UserAgentToken, API key, credential, personal agent token.
+
+**HostedTurnToken**:
+A short-lived internal all-scope bearer used for one hosted Turn and revoked during normal Turn
+cleanup. It is never a PAT and is never available to the User or their own agents.
+_Avoid_: HostedAgentToken, PAT, hosted grant.
+
+**PATPairing**:
+A short-lived bootstrap in which a User-owned client retains a private device code and presents a
+public user code for approval in the authenticated web app. Approval binds one exact recipient and
+scope set; only the initiating client can claim the PAT bearer, once.
+_Avoid_: Device login, magic-link delivery, WhatsApp approval, token exchange.
+
+**BrowserLoginPairing**:
+A short-lived web authentication bootstrap in which the browser retains a private verifier and the
+User approves only a public code through their WhatsAppIdentity. The public code cannot establish a
+session, and one approved pairing can bootstrap one stable-User web session.
+_Avoid_: Magic-link login, device login, WhatsApp login link.
 
 **Transcript**:
 The exact append-only record of retained User text, visible assistant text, canonical tool calls and
@@ -205,10 +221,9 @@ _Avoid_: Phone identity, User identity, root identity, generic channel identity,
 
 **ConsentRecord**:
 An append-only entry recording that a stable User agreed to a specific disclosure at a specific UTC
-instant — onboarding, a token grant, a proactivity opt-in, or a revocation. It retains the exact
-ServiceMarket, disclosure locale, immutable policy or disclosure revision and hash, purposes,
-channel, and provider-qualified message evidence needed to remain interpretable. Carries its
-subject, because a Ley 1581 artifact that cannot say who consented is not evidence.
+instant — onboarding, a PAT grant, a proactivity opt-in, or a revocation. It retains the exact
+historical disclosure context and origin-qualified decision evidence needed to remain interpretable
+and carries its subject, because a Ley 1581 artifact that cannot say who consented is not evidence.
 _Avoid_: Agreement, opt-in, permission.
 
 **AuditLogEntry**:

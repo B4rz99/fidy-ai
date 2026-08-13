@@ -43,8 +43,9 @@ Use three checks when drawing a boundary:
    says otherwise. ADR 0005 coordinates canonical state with Audit evidence, ADR 0009 coordinates
    initial User bootstrap, ADR 0008 serializes consent revocation with consent-dependent work, and
    ADR 0013 lets the deep WhatsApp disclosure-delivery module atomically coordinate verified
-   attempt evidence with the Consent owner operation. These exceptions compose only owner-published
-   operations and do not transfer data ownership.
+   attempt evidence with the Consent owner operation, and ADR 0017 coordinates PAT lifecycle with
+   its append-only Consent evidence. These exceptions compose only owner-published operations and
+   do not transfer data ownership.
 2. Cross-slice references use stable ids, not embedded objects.
 3. An invariant that must hold immediately is enforceable inside one slice.
 
@@ -73,8 +74,10 @@ supplies them. Core decides; it does not gather data or perform I/O.
 
 The canonical schema for a domain entity lives in `core/<slice>/model.ts`. The canonical operation
 lives in `shell/<slice>/operations.ts`, where transport and access policy belong: paths, status
-codes, scopes, Subscription tier, hosted-agent confirmation policy, and whether the
-operation is a canonical query or canonical mutation.
+codes, access requirement, Subscription tier, hosted-agent confirmation policy, and whether the
+operation is a canonical query or canonical mutation. The access requirement is an algebra:
+domain operations require one PAT scope, while account-security operations require a fresh web
+session or a web-or-hosted caller.
 
 A canonical query observes domain state without requesting a domain transition or external effect;
 audit, quota, and access-accounting writes do not change that classification. A canonical mutation
@@ -104,7 +107,7 @@ canonical operation shapes; repositories may flatten it into exact adjacent colu
 it on read. A type that never mentions the schema it derives from is a review smell.
 
 A non-empty `SuggestedOperation` is validated against its target operation and filtered by caller
-scope and tier before it reaches a response. The operation checkpoint is the source of truth, not
+access and tier before it reaches a response. The operation checkpoint is the source of truth, not
 a parallel tool map or a host-side parser.
 
 OpenAI hosted-tool bindings derive one strict-mode wire codec from each canonical input schema.
@@ -130,6 +133,21 @@ and explicit terminalization. Provider state, model or tokenizer identity, conte
 fragments, and constructible authorities do not cross these public boundaries. The executable
 contract and implementation-ticket ownership live in the
 [agent-continuity invariant matrix](docs/architecture/agent-continuity-invariant-matrix.md).
+
+### Browser authentication and PAT lifecycle
+
+ADR 0015 replaces WhatsApp-delivered web login links with browser-initiated pairing at
+`/auth/pair`. The browser retains the private verifier and WhatsApp sees only a public code that
+cannot establish a session. Pairing expires after ten minutes and succeeds once. Security-sensitive
+web actions require pairing completed within the preceding ten minutes; passkeys are deferred under
+the accepted MVP threat model.
+
+ADR 0016 makes `/settings/pats` the only PAT-issuance authority. Manual issuance reveals the raw PAT
+once to the first-party browser; PATPairing returns it once directly to the initiating client that
+retained the private device code. WhatsApp may list safe PAT metadata, answer bounded activity
+questions, and revoke PATs, but cannot issue or approve them and never transports a PAT, private
+proof, or bearer-equivalent link. ADR 0017 commits each PAT grant or revocation with its ConsentRecord
+through owner-published operations in one User-scoped transaction.
 
 ---
 
@@ -163,7 +181,7 @@ Authorization is the auditing boundary for every reflected canonical operation. 
 record metadata-only audit entries; unresolved bearers create no invented evidence. Successful
 state and success evidence share a database transaction, while rejection and failure evidence
 survives the operation transaction. ADR 0008 additionally keeps the subject Consent lock across
-AgentToken renewal and canonical execution so revocation is linearizable with authorized work.
+PAT or HostedTurnToken use renewal and canonical execution so revocation is linearizable with authorized work.
 Hosted-model context is loaded after the same serialized consent decision, but the provider call
 starts only after that short database transaction commits.
 

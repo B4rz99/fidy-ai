@@ -1,0 +1,157 @@
+src/shell/agent/hosted-inference.test.ts
+  s_701ca85bdf20ae::t_625c5ea701e675 321,325,546
+  s_701ca85bdf20ae::t_a0583c8b788d93 130
+  s_701ca85bdf20ae::t_f0652c8133a561 237,326-327,545
+  s_701ca85bdf20ae::t_c03debe408153e 40-41,171-177,188
+  s_701ca85bdf20ae::t_47de0cee214e82 155,178-179,185,213,240,242,279-281,290,341,361,369,377,385,411-413,440,464,466,483-485,494,517,524,526,534,543,575
+  s_701ca85bdf20ae::t_2248fb6bc8e20f 156
+  s_701ca85bdf20ae::t_1728282be8dfb5 157-167,312-320
+src/shell/agent/working-context.test.ts
+  s_701ca85bdf20ae::t_265d3dd213221c 21,29-30,35
+  s_701ca85bdf20ae::t_dd6c3475cb817b 11
+src/shell/testing/hosted-inference-fixtures.ts
+  s_701ca85bdf20ae::t_0b6818cfc473de 111-112
+  s_d94dbf1dba2b93::t_4258615be12987 110
+src/shell/db/user-tables.ts
+  s_701ca85bdf20ae::t_1e2d849bfd938b 6
+src/shell/agent/agent-service.ts
+  s_701ca85bdf20ae::t_155a39f2b278a6 63,65,76
+  s_701ca85bdf20ae::t_a8d23b6696801c 950-951,953
+  s_701ca85bdf20ae::t_ef9e513ddf74c7 1323,1329-1331
+  s_701ca85bdf20ae::t_bc059ca964af7e 71
+  s_701ca85bdf20ae::t_47de0cee214e82 882,898,905
+  s_701ca85bdf20ae::t_122ae8f5f6ce6e 27-29,1552-1554,1577-1578,1580
+  s_701ca85bdf20ae::t_4bdc3db096c0b0 1569-1571
+  s_701ca85bdf20ae::t_77bd72d39bfc48 1555,1579
+  s_701ca85bdf20ae::t_980f0fb9c606f7 25,1544-1551,1556-1568,1572-1576,1581-1585
+  s_701ca85bdf20ae::t_fad01821d24e3d 26
+src/shell/memory/memory-policy.test.ts
+  s_701ca85bdf20ae::t_c03debe408153e 17
+  s_701ca85bdf20ae::t_a40e7658b15cf8 20
+  s_701ca85bdf20ae::t_21221dcb11708b 19
+src/shell/agent/agent-service.test.ts
+  s_701ca85bdf20ae::t_1b6f0bba456c61 2960,2980
+src/shell/transcript/conversation-continuity.test.ts
+  s_701ca85bdf20ae::t_5026b5c4163be2 129
+  s_701ca85bdf20ae::t_5f25f941a2f9e1 1204,1251,1254
+  s_701ca85bdf20ae::t_6b933466695ce9 1227-1231
+  s_701ca85bdf20ae::t_2085d5fc0d565e 130-144,1213-1226,1232-1235
+  s_701ca85bdf20ae::t_8e6f34d855c38f 1238-1245,1249-1250,1255-1261
+  s_701ca85bdf20ae::t_c34307b6386916 43,48,128
+  s_701ca85bdf20ae::t_85a85ad9351d0a 1201-1203,1205-1212,1237,1246-1248,1252-1253
+  s_701ca85bdf20ae::t_229f524a756a9e 1236
+src/shell/db/migrations/registry.ts
+  s_701ca85bdf20ae::t_c5f6224942e25b 24,58
+src/shell/testing/api-harness.ts
+  s_701ca85bdf20ae::t_cba7a0668d24f9 7,149-154,162
+  s_701ca85bdf20ae::t_c03debe408153e 141-142
+src/shell/agent/openai.ts
+  s_701ca85bdf20ae::t_a84d0249c88d5e 18
+  s_701ca85bdf20ae::t_dd5e03e4ab77ab 638-639,645-649
+  s_701ca85bdf20ae::t_411b6761bf9536 637,640-644
+  s_d94dbf1dba2b93::t_a76e3a63fbd3e0 636
+src/shell/db/migrations/0024-compacted-conversations.ts
+  s_701ca85bdf20ae::t_e03dbe7dd994b9 1-29
+src/shell/agent/working-context.ts
+  s_701ca85bdf20ae::t_b7a3068b073590 112-113,130
+  s_701ca85bdf20ae::t_c03debe408153e 96-103
+  s_701ca85bdf20ae::t_5b130952d5d552 3-4,7-9,19-21,123,145,150-158
+  s_701ca85bdf20ae::t_88dfeae320c7f1 118-121
+  s_701ca85bdf20ae::t_44b668ff2b7c57 26-27,128-129
+CODING_STANDARDS.md
+  s_701ca85bdf20ae::t_9ace137ed7ec55 57-60
+src/shell/transcript/conversation-compaction-inference.ts
+  s_701ca85bdf20ae::t_802250b5c4f21a 20-22
+  s_701ca85bdf20ae::t_74469a29eb0dff 23
+  s_701ca85bdf20ae::t_bc4b3e7f8a09cb 2
+  s_701ca85bdf20ae::t_c50f46ab979ae4 1
+  s_701ca85bdf20ae::t_dce93e88de914a 3-5,10-16,18-19
+  s_701ca85bdf20ae::t_2bcfada3f66b5d 6-9,17
+src/shell/consent/repo.ts
+  s_701ca85bdf20ae::t_dbfe7f3d8a7c1f 424-454
+src/shell/agent/openai.test.ts
+  s_701ca85bdf20ae::t_50ccdbc67f5efd 509,512,515,708
+  s_701ca85bdf20ae::t_47de0cee214e82 236,280,314,320,333,431,447,457-458,476,534,550
+  s_701ca85bdf20ae::t_c03debe408153e 478
+  s_701ca85bdf20ae::t_b33a6d184e08ba 225
+src/shell/transcript/conversation-continuity.ts
+  s_701ca85bdf20ae::t_bed9769463b02f 538-540
+  s_701ca85bdf20ae::t_005270818da7c8 11
+  s_701ca85bdf20ae::t_68d68d4758885e 124-130,542,549-551,553,555-562,565,567-568
+  s_701ca85bdf20ae::t_10e534a7a37c89 1059-1060
+  s_701ca85bdf20ae::t_c03debe408153e 624
+  s_701ca85bdf20ae::t_696ffb8f729f4f 522,656
+  s_701ca85bdf20ae::t_4315e31dba14e7 554,572
+  s_701ca85bdf20ae::t_232f1911e09149 526-530,532,534-537,541,543-548,569,573-578,596-623,625-655,657-666,670-672,674-676,680-692,1151
+  s_701ca85bdf20ae::t_f5fc7726a95fc7 19
+  s_701ca85bdf20ae::t_2dff7b28cf8fae 20-21,86,161,182-191
+  s_701ca85bdf20ae::t_add6e440c68086 531,579-595,673,677-679
+  s_701ca85bdf20ae::t_c29976e86dad78 8,1085
+  s_701ca85bdf20ae::t_4e943e74d27aff 22-24,151,667-669,1246
+  s_701ca85bdf20ae::t_29c388d14b7999 564,566
+  s_701ca85bdf20ae::t_57c7ccd0238df7 78,1075,1083-1084,1089-1092
+  s_701ca85bdf20ae::t_ce3e5e53874cf2 552,563,570-571
+  s_701ca85bdf20ae::t_f57b300a588b91 533
+  s_701ca85bdf20ae::t_122c859dcfca1a 1086-1088,1094
+  s_701ca85bdf20ae::t_927f9e15be2897 340-354,511,1079
+  s_701ca85bdf20ae::t_f18010abda1048 152,162-166,512-520,1247
+src/shell/observability/telemetry-config.ts
+  s_701ca85bdf20ae::t_5babf2d8f4de13 20
+  s_701ca85bdf20ae::t_1d8d848c9f8438 136
+src/shell/agent/hosted-inference.ts
+  s_701ca85bdf20ae::t_f8a8585e90e720 4,196,235
+  s_701ca85bdf20ae::t_5b5974db01c087 1
+  s_701ca85bdf20ae::t_c03debe408153e 378,560-562,587-589
+  s_701ca85bdf20ae::t_db39ea6cbd71fc 579
+  s_701ca85bdf20ae::t_7dd733f961141a 358
+  s_701ca85bdf20ae::t_8a3cce0d7df280 316,381-383,392,430-432
+  s_701ca85bdf20ae::t_faad89ff66ac84 195,232-234,613
+  s_701ca85bdf20ae::t_6b2a82ef34c92e 5,315
+  s_701ca85bdf20ae::t_f073054d0328c1 380,578,580-584
+  s_701ca85bdf20ae::t_dc3ba4fd2a6ee9 194
+  s_701ca85bdf20ae::t_f29e3db2adec04 317-318
+  s_701ca85bdf20ae::t_e88c4aca6596c7 355-357
+  s_701ca85bdf20ae::t_1fa84bc3970a5d 359-361,375-377
+  s_701ca85bdf20ae::t_2304d631ca8e57 379
+  s_701ca85bdf20ae::t_5107e7e3f71376 559
+  s_701ca85bdf20ae::t_99abdbaa48eb8c 563
+  s_701ca85bdf20ae::t_3d5806b06257f6 575-577
+  s_701ca85bdf20ae::t_ab3d6b2db9405a 590-592
+  s_701ca85bdf20ae::t_41968a59c2a2fa 612
+  s_701ca85bdf20ae::t_f1a7b27fdf2b2e 14-18,24-27,35-41,44-48,51-73,326-327,332,362-374,490,529,534,549,552-557,566-570,572,574,593-600
+scripts/check-lint-guards.ts
+  s_701ca85bdf20ae::t_1fc42c72da9a40 6-15
+src/core/transcript/compacted-conversation.test.ts
+  s_701ca85bdf20ae::t_1b356d735cd351 1,3-13,15-38
+  s_701ca85bdf20ae::t_ddf54e3894b523 2,14
+src/core/transcript/compacted-conversation.ts
+  s_701ca85bdf20ae::t_ca7a371effaf40 9-14
+  s_701ca85bdf20ae::t_8095a605ce23c9 1
+  s_701ca85bdf20ae::t_a4c6b2422c7ad0 2-8,15-23
+src/shell/memory/memory-policy.ts
+  s_701ca85bdf20ae::t_5d3e34db61fd32 27
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "754f7f12240bcb94916ee31ca0329d69206e3ac4",
+  "prompts": {},
+  "sessions": {
+    "s_701ca85bdf20ae": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019ff8e5-aba5-7326-9145-ff466989bc26",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_d94dbf1dba2b93": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019ff925-d677-7aa3-af12-5c44ab46aa2e",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

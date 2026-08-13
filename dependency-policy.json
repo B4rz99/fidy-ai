@@ -17,6 +17,13 @@
     "has nowhere to put them. An exclusion with no entry fails, an expired entry fails, and so does",
     "an entry whose exclusion is gone."
   ],
-  "deferredUpdates": [],
+  "deferredUpdates": [
+    {
+      "name": "@effect/tsgo",
+      "manifest": "package.json",
+      "reason": "0.33.0 crashes Linux CI with a nil-pointer panic in prefer_typed_schema_decoder; defer until the verified fixed 0.35.0 release clears the seven-day install delay.",
+      "until": "2026-08-15T00:00:00Z"
+    }
+  ],
   "acceptedVulnerabilities": []
 }

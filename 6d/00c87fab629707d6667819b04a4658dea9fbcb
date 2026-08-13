@@ -1,0 +1,21 @@
+docs/research/wompi-launch-recurring-capability.md
+  s_f00df14a40a32a::t_d5251d83d9dde9 1-29,32-37,46-210,221-343
+  s_f00df14a40a32a::t_cdf599b7c22ab4 30-31,44
+  s_f00df14a40a32a::t_2250c367c84f7c 38-43,45,211-220
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "6d00c87fab629707d6667819b04a4658dea9fbcb",
+  "prompts": {},
+  "sessions": {
+    "s_f00df14a40a32a": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019ff925-7003-7e90-bd21-67b5313039c3",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

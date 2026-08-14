@@ -1,0 +1,49 @@
+src/shell/channels/whatsapp/worker.ts
+  s_6a2d6b818e8716::t_4d5fa3a79d1f06 60
+  s_6a2d6b818e8716::t_355632728b1915 9
+  s_6a2d6b818e8716::t_e5eeb98c65daa8 10,46
+.fluidattacks/sca.yaml
+  s_6a2d6b818e8716::t_c8e83899073b09 26-30
+vitest.acceptance.config.ts
+  s_6a2d6b818e8716::t_a8c652b333cba8 70-71
+src/shell/agent/agent-service.test.ts
+  s_6a2d6b818e8716::t_89075e144d0247 9,1827-1857
+  s_6a2d6b818e8716::t_9844c0f153b045 1858-1860
+dependency-policy.json
+  s_6a2d6b818e8716::t_f7e8207a6d38a6 28-41
+src/shell/channels/whatsapp/whatsapp-channel.test.ts
+  s_6a2d6b818e8716::t_eee1e82281dd65 105,546-550,559,727
+  s_6a2d6b818e8716::t_f9c7f2253d2f86 694-696,735-736,738,745
+  s_6a2d6b818e8716::t_b2726383e87dde 712-715,718-719,1388,1401,1438
+  s_6a2d6b818e8716::t_f1b6b45347464b 651,688-693,697-711,717,720-723,726,730-734,737,739-744,746-747
+  s_6a2d6b818e8716::t_53c7839f2e698a 655-664
+  s_6a2d6b818e8716::t_1d1f547f18bc51 716
+  s_6a2d6b818e8716::t_30ba8e7e864801 9,558,1387,1389-1397,1400,1402,1436-1437,1439-1441,1444,1469,1471,3168,3176,3185-3191,3193
+  s_6a2d6b818e8716::t_a3bfc113e991b5 1470
+  s_6a2d6b818e8716::t_5620801cdb66f4 1385,3116
+src/shell/channels/whatsapp/reply-delivery.test.ts
+  s_6a2d6b818e8716::t_771bfde15a8531 6,22,29,37,49
+  s_6a2d6b818e8716::t_ac209a36cb44fb 1-5,7-21,23-28,30-36,38-48,50-55
+src/shell/channels/whatsapp/reply-delivery.ts
+  s_6a2d6b818e8716::t_65795b93a49b1e 1-20,23-38,40-65,67-68,70-80,85-92
+  s_6a2d6b818e8716::t_66c50b2069e3fe 82-84
+  s_6a2d6b818e8716::t_6d5116c7e8664d 21-22,39,66,69,81
+src/shell/channels/whatsapp/whatsapp.acceptance.test.ts
+  s_6a2d6b818e8716::t_caf31c8744fc39 524,545-547,566,568
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "216d0bd31635bda129ee2f5e6ebf0d9f5cb1e7f4",
+  "prompts": {},
+  "sessions": {
+    "s_6a2d6b818e8716": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019ff8e5-b73d-7859-a142-a824b1e30955",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": null
+    }
+  }
+}

@@ -43,7 +43,3 @@ Distilled research on how Effect actually works, extracted from the `.repos/effe
 ## React reference
 
 The exact React 19.2.8 source lives at `.repos/react`. Read `.patterns/react.md` before writing React code; use it to locate runtime behavior and tests, while treating the installed public API and official React documentation as the application-facing contract.
-
-## TanStack Table reference
-
-Upstream Table source lives at `.repos/table`. Read `.patterns/tanstack-table.md` before using it; the note covers the v9 adoption threshold, features, row models, rendering, controlled state, and tests.

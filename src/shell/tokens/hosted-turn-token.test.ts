@@ -1,6 +1,6 @@
 import { expect, layer } from "@effect/vitest";
 import { DateTime, Effect, Option } from "effect";
-import { authenticateTokenBearer } from "~/shell/_shared/authz";
+import { authenticateTokenBearer } from "~/shell/_shared/authz-live";
 import { defaultUserId } from "~/shell/db/development-seed";
 import { ApiHarness } from "~/shell/testing/api-harness";
 import { issueHostedTurnToken, revokeHostedTurnToken } from "./hosted-turn-token";

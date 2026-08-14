@@ -19,7 +19,7 @@ import type { UserId, WhatsAppCallerReference } from "~/core/identity/reference"
 import { PatScopes, TokenBearer, getTokenShortId } from "~/core/tokens/model";
 import { PATId } from "~/core/tokens/reference";
 import { computePatIdleExpiry } from "~/core/tokens/rules";
-import { hashTokenBearer } from "~/shell/_shared/authz";
+import { hashTokenBearer } from "~/shell/_shared/authz-live";
 import { categoryIds } from "~/core/categories/taxonomy";
 import { AgentService } from "~/shell/agent/agent-service";
 import { HostedInferenceFromLanguageModel } from "./hosted-inference-fixtures";

@@ -8,7 +8,8 @@ import {
   HttpApiGroup,
   HttpApiTest,
 } from "effect/unstable/httpapi";
-import { Unauthenticated, ValidationGate, ValidationGateLive } from "./errors";
+import { Unauthenticated, ValidationGate } from "./errors";
+import { ValidationGateLive } from "./errors-live";
 
 const CheckedSuccess = Schema.Struct({
   value: Schema.Finite.check(Schema.isGreaterThan(0)),

@@ -1,8 +1,8 @@
 import { Config, Effect, Layer } from "effect";
 import { HttpRouter, HttpServerResponse, HttpStaticServer } from "effect/unstable/http";
 import { HttpApiBuilder, HttpApiScalar } from "effect/unstable/httpapi";
-import { TokenAuthorizationLive } from "~/shell/_shared/authz";
-import { ValidationGateLive } from "~/shell/_shared/errors";
+import { TokenAuthorizationLive } from "~/shell/_shared/authz-live";
+import { ValidationGateLive } from "~/shell/_shared/errors-live";
 import { AuditRetentionLive } from "~/shell/audit/retention";
 import { CURRENT_POLICY_PATH } from "~/shell/consent/current-disclosure";
 import { PendingConsentRetentionLive } from "~/shell/consent/retention";

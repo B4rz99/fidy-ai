@@ -89,6 +89,42 @@ export default {
       },
     },
     {
+      // The package-level facade is the only browser-facing source allowed to reach shell modules
+      // from outside the server tree. A future web package can depend on `src/client.ts`; it must
+      // not know whether the canonical declaration currently lives under shell/.
+      name: "browser-client-seam-bypass",
+      severity: "error",
+      comment:
+        "Code outside src/shell imported a server-internal shell module directly. The browser " +
+        "depends on the package-level client facade (`src/client.ts` / future `@fidy/server/client`), " +
+        "which preserves one canonical API without making shell paths public.",
+      from: {
+        path: "^src/",
+        pathNot: ["^src/shell/", "^src/main\\.ts$", "^src/client\\.ts$"],
+      },
+      to: { path: "^src/shell/" },
+    },
+    {
+      // Keep the facade narrow even while the dependency graph is being assembled: the transitive
+      // browser build performs the stronger allowlist check below, while this catches a direct
+      // accidental import before a build has to explain it.
+      name: "browser-client-facade-imports-server-code",
+      severity: "error",
+      comment:
+        "The browser client facade imported a shell implementation directly. It may expose only " +
+        "the assembled FidyApi, declaration-only client authorization, and derived input helpers; " +
+        "live middleware and server adapters stay behind the server assembly.",
+      from: { path: "^src/client\\.ts$" },
+      to: {
+        path: "^src/shell/",
+        pathNot: [
+          "^src/shell/api\\.ts$",
+          "^src/shell/_shared/authz\\.ts$",
+          "^src/shell/_shared/canonical-input\\.ts$",
+        ],
+      },
+    },
+    {
       name: "entrypoint-is-imported",
       severity: "error",
       comment:

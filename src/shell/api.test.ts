@@ -1,8 +1,13 @@
 import { expect, it } from "@effect/vitest";
 import { OpenApi } from "effect/unstable/httpapi";
+import { FidyApi as ClientFidyApi } from "~/client";
 import { FidyApi } from "./api";
 
 const schemas = OpenApi.fromApi(FidyApi).components.schemas;
+
+it("exposes the same assembled canonical API through the browser client facade", () => {
+  expect(ClientFidyApi).toBe(FidyApi);
+});
 
 it("names the published branded identifiers as their own components", () => {
   for (const name of [

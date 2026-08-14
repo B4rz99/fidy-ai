@@ -10,7 +10,7 @@ import { InsightEventId } from "~/core/insights/model";
 import { MemoryText } from "~/core/memory/model";
 import { CreateTransactionInput } from "~/core/transactions/model";
 import { TokenBearer } from "~/core/tokens/model";
-import { authenticateTokenBearer } from "~/shell/_shared/authz";
+import { authenticateTokenBearer } from "~/shell/_shared/authz-live";
 import { ScopeMissing } from "~/shell/_shared/errors";
 import { MigrationSqlClient } from "~/shell/db/client";
 import { truncateAuditLogEntries } from "~/shell/audit/fixtures";

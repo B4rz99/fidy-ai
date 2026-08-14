@@ -11,7 +11,7 @@ import {
   bearerSecretBytes,
   makeTokenBearer,
 } from "~/core/tokens/model";
-import { hashTokenBearer } from "~/shell/_shared/authz";
+import { hashTokenBearer } from "~/shell/_shared/authz-live";
 import {
   insertHostedTurnToken,
   revokeHostedTurnToken as persistHostedTurnTokenRevocation,

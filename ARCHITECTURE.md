@@ -101,6 +101,16 @@ not an implementation-readiness flag.
 The operation references the core schema. All public API and agent surfaces derive from the
 canonical operation definition; parallel operation maps are not maintained.
 
+The server-owned package has one browser-safe client facade at `src/client.ts`, which is the future
+`@fidy/server/client` export. It re-exports the assembled `FidyApi`, the client-side authorization
+layer factory required by the middleware declaration, and genuinely useful derived types such as
+`OperationId` and `CanonicalInput`. A web package derives its typed client directly from `FidyApi`
+with `AtomHttpApi.Service()("FidyClient", { api: FidyApi, httpClient: ... })`; the facade does not
+wrap transport or declare a second canonical surface. Its transitive browser build may reach core and
+declaration-only operation modules, but not live middleware, repositories, handlers, workers, adapters,
+observability implementations, database, filesystem, provider, or runtime modules. The browser build and module
+graph guards are executable checks for that boundary.
+
 Every shape that differs from a canonical shape is derived from it. This includes extraction
 schemas, response variants, and relational row projections. Money remains nested in domain and
 canonical operation shapes; repositories may flatten it into exact adjacent columns and reconstruct

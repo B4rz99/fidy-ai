@@ -2,7 +2,7 @@ import { BunServices } from "@effect/platform-bun";
 import { expect, layer } from "@effect/vitest";
 import { Config, DateTime, Effect, Layer, Option } from "effect";
 import { TokenBearer } from "~/core/tokens/model";
-import { authenticateTokenBearer } from "~/shell/_shared/authz";
+import { authenticateTokenBearer } from "~/shell/_shared/authz-live";
 import { findUser } from "~/shell/identity/repo";
 import { PgLive } from "./client";
 import { defaultUserId } from "./development-seed";

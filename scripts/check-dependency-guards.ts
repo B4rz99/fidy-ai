@@ -37,6 +37,7 @@ const runGraph = (): { readonly exitCode: Option.Option<number>; readonly report
 };
 
 const dir = (slug: string): string => `${PROBE_PARENT}/${PROBE_PREFIX}${slug}`;
+const sourceDir = (slug: string): string => `src/${PROBE_PREFIX}${slug}`;
 
 const SIBLING_REFERENCE = dir("sibling-reference");
 const SIBLING_IMPLEMENTATION = dir("sibling-implementation");
@@ -44,6 +45,8 @@ const TYPE_ONLY = dir("type-only");
 const CORE_TO_SHELL = dir("core-imports-shell");
 const CORE_TO_WORLD = dir("core-imports-the-world");
 const ENTRYPOINT = dir("entrypoint");
+const CLIENT_SEAM_ALLOWED = sourceDir("client-seam-allowed");
+const CLIENT_SEAM_BYPASS = sourceDir("client-seam-bypass");
 const SENTRY_OUTSIDE_OBSERVABILITY = dir("sentry-outside-observability");
 const CYCLE = dir("cycle");
 const BARREL = dir("barrel");
@@ -158,6 +161,34 @@ const PROBES: readonly Probe[] = [
       },
     ],
     name: "entrypoint-is-imported rejects importing src/main.ts",
+  },
+  {
+    directory: CLIENT_SEAM_ALLOWED,
+    expect: { kind: "allowed" },
+    files: [
+      {
+        path: `${CLIENT_SEAM_ALLOWED}/probe.ts`,
+        source: 'import { FidyApi } from "~/client";\n\nexport const clientSeamProbe = FidyApi;\n',
+      },
+    ],
+    name: "browser-facing code may import the package-level client facade",
+  },
+  {
+    directory: CLIENT_SEAM_BYPASS,
+    expect: {
+      kind: "rejected",
+      mustContain: [
+        `error browser-client-seam-bypass: ${CLIENT_SEAM_BYPASS}/probe.ts → src/shell/api.ts`,
+      ],
+    },
+    files: [
+      {
+        path: `${CLIENT_SEAM_BYPASS}/probe.ts`,
+        source:
+          'import { FidyApi } from "~/shell/api";\n\nexport const clientSeamBypassProbe = FidyApi;\n',
+      },
+    ],
+    name: "browser-facing code cannot bypass the package-level client facade",
   },
   {
     directory: SENTRY_OUTSIDE_OBSERVABILITY,
@@ -326,12 +357,18 @@ const remove = (path: string): void => {
 const stale = Array.from(
   new Bun.Glob("__probe-*").scanSync({ cwd: `${repoRoot}${PROBE_PARENT}`, onlyFiles: false })
 );
+const staleSource = Array.from(
+  new Bun.Glob("__probe-*").scanSync({ cwd: `${repoRoot}/src`, onlyFiles: false })
+);
 for (const entry of stale) {
   remove(`${repoRoot}${PROBE_PARENT}/${entry}`);
 }
-if (stale.length > 0) {
+for (const entry of staleSource) {
+  remove(`${repoRoot}/src/${entry}`);
+}
+if (stale.length > 0 || staleSource.length > 0) {
   process.stderr.write(
-    `swept ${stale.length} probe directory(ies) from an interrupted run: ${stale.join(", ")}\n`
+    `swept ${stale.length + staleSource.length} probe directory(ies) from an interrupted run\n`
   );
 }
 

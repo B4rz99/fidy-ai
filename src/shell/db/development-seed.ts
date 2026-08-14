@@ -31,7 +31,7 @@ import {
   makeTokenBearer,
 } from "~/core/tokens/model";
 import { computePatIdleExpiry } from "~/core/tokens/rules";
-import { hashTokenBearer } from "~/shell/_shared/authz";
+import { hashTokenBearer } from "~/shell/_shared/authz-live";
 import { currentDisclosure } from "~/shell/consent/current-disclosure";
 import { appendConsentRecord, hasCurrentOnboardingConsent } from "~/shell/consent/repo";
 import { associateWhatsAppIdentity, upsertUser } from "~/shell/identity/repo";

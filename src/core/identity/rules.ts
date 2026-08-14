@@ -1,10 +1,7 @@
-import { DateTime, Effect, Struct } from "effect";
+import { DateTime, Effect } from "effect";
 import { IanaTimeZone, Locale, ServiceMarket } from "~/core/_shared/context";
 import { type UserId } from "./reference";
 import { type EffectiveAccess, User } from "./model";
-
-const ColombianUserInput = User.mapFields(Struct.pick(["createdAt", "paidTier"]));
-const AccessDecisionInput = User.mapFields(Struct.pick(["paidTier", "trialPeriod"]));
 
 /**
  * Creates the stable User record for a new Colombian User. The caller supplies
@@ -13,7 +10,7 @@ const AccessDecisionInput = User.mapFields(Struct.pick(["paidTier", "trialPeriod
  */
 export const makeColombianUser = Effect.fn("makeColombianUser")(function* (
   userId: UserId,
-  input: typeof ColombianUserInput.Type
+  input: Pick<User, "createdAt" | "paidTier">
 ) {
   return yield* Effect.succeed(
     User.make({
@@ -36,7 +33,7 @@ export const makeColombianUser = Effect.fn("makeColombianUser")(function* (
  * half-open: its start is included and its end is Free unless paid tier is Pro.
  */
 export const decideEffectiveAccess = Effect.fn("decideEffectiveAccess")(function* (
-  access: typeof AccessDecisionInput.Type,
+  access: Pick<User, "paidTier" | "trialPeriod">,
   now: DateTime.Utc
 ) {
   const trialActive =

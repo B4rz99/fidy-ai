@@ -4,6 +4,7 @@ import {
   CapturedInterpretationContext,
   CreateTransactionInput,
   Direction,
+  SourceAttestation,
   Transaction,
   TransactionExtraction,
   TransactionQueryValues,
@@ -107,6 +108,34 @@ it("derives extraction facts with nested exact Money", () => {
 
 it("carries no owner, so a client cannot name whose transaction it is creating", () => {
   expect(Object.keys(CreateTransactionInput.fields)).not.toContain("userId");
+});
+
+it("accepts both manual and statement-line provenance variants", () => {
+  const common = {
+    id: "f1d1a000-0000-4000-8000-000000000101",
+    transactionId: "f1d1a000-0000-4000-8000-000000000102",
+    serviceMarket: "CO",
+    locale: "es-CO",
+    timeZone: "America/Bogota",
+    interpretationRevision: "manual-v1",
+    createdAt: "2026-07-21T08:00:00Z",
+  };
+  const decode = Schema.decodeUnknownResult(SourceAttestation);
+
+  expect(Result.isSuccess(decode({ ...common, kind: "manual" }))).toBe(true);
+  expect(
+    Result.isSuccess(
+      decode({
+        ...common,
+        kind: "statement-line",
+        statementSubmissionId: "f1d1a000-0000-4000-8000-000000000103",
+        statementRecordNumber: 7,
+        statementContentHash: "sha256:row",
+        sourceFormat: "csv",
+        extractorRevision: "extractor-v1",
+      })
+    )
+  ).toBe(true);
 });
 
 it("derives input and evidence fields from their canonical models", () => {

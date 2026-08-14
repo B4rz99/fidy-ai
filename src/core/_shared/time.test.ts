@@ -36,6 +36,13 @@ it("accepts the last valid day in months with 30 or 31 days", () => {
   }
 });
 
+it("accepts every four-digit year in PostgreSQL's supported range", () => {
+  for (const year of ["0001", "0009", "0010", "0099", "0100", "0999", "1000", "9999"]) {
+    expect(Result.isSuccess(decode(`${year}-01-01T00:00:00Z`))).toBe(true);
+  }
+  expect(Result.isFailure(decode("0000-01-01T00:00:00Z"))).toBe(true);
+});
+
 it("accepts PostgreSQL timezone offsets through +15:59", () => {
   expect(Result.isSuccess(decode("2026-03-14T09:30:00+15:59"))).toBe(true);
 });

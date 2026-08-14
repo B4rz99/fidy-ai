@@ -2,8 +2,12 @@
   "compilerOptions": {
     "strict": true,
     "moduleResolution": "bundler",
-    // Repository tooling has no private server-source alias. Server imports use
-    // the package-local alias declared in apps/server/tsconfig.json.
+    // Imports that leave a directory are aliased (`~/core/budgets/model`);
+    // imports within one stay relative. Both halves are enforced by
+    // `.dependency-cruiser.mjs`, which explains itself when either fires.
+    "paths": {
+      "~/*": ["./src/*"]
+    },
     "target": "ESNext",
     "module": "ESNext",
     "lib": ["ESNext"],
@@ -111,10 +115,42 @@
           "unnecessaryTypeofType": "error",
           "unsafeEffectTypeAssertion": "error"
         },
-        "overrides": []
+        "overrides": [
+          {
+            "include": ["./tools/observability-compatibility/**/*.ts"],
+            "options": {
+              "diagnosticSeverity": {
+                "asyncFunction": "off",
+                "globalDate": "off",
+                "globalFetchInEffect": "off",
+                "globalTimers": "off",
+                "lazyPromiseInEffectSync": "off",
+                "preferSchemaOverJson": "off",
+                "processEnv": "off",
+                "runEffectInsideEffect": "off"
+              }
+            }
+          },
+          {
+            "include": ["./src/shell/observability/release-preparation*.ts"],
+            "options": {
+              "diagnosticSeverity": {
+                "asyncFunction": "off",
+                "globalTimers": "off",
+                "nodeBuiltinImport": "off",
+                "processEnv": "off"
+              }
+            }
+          }
+        ]
       }
     ]
   },
-  "include": ["scripts/**/*.ts"],
+  "include": [
+    "scripts/**/*.ts",
+    "src/**/*.ts",
+    "src/**/*.tsx",
+    "tools/observability-compatibility/**/*.ts"
+  ],
   "exclude": ["**/node_modules/**", "**/dist/**", "**/build/**"]
 }

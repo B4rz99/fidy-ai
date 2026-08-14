@@ -755,8 +755,8 @@ const check = Effect.gen(function* () {
 });
 
 // `Layer.build` rather than `Effect.provide`: the repo composes with layers and
-// provides once, at the entry point (src/main.ts), and this is that point for
-// this program.
+// provides once, at this program's entry point, and this is that point for this
+// program.
 const main = Effect.scoped(
   Effect.flatMap(Layer.build(FetchHttpClient.layer), (services) =>
     Effect.provideContext(check, services)

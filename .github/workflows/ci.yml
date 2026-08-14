@@ -76,7 +76,7 @@ jobs:
           # grades the manifests as the pull request declares them.
           check "Dependency policy" bun run lint:dependencies
           check "PR title" bun scripts/check-pr-title.ts
-          check "Migration ids" bun scripts/check-migration-ids.ts
+          check "Migration ids" bun run check:migration-ids
 
           if (( ${#failed[@]} > 0 )); then
             printf 'Failed: %s\n' "${failed[@]}" >&2
@@ -165,7 +165,7 @@ jobs:
         # Verbose scenario IDs and the line/branch ratchet remain in the retained job log.
         run: bun run test:acceptance
       - name: Verify improved coverage was recorded
-        run: git diff --exit-code -- vitest.acceptance.config.ts
+        run: git diff --exit-code -- apps/server/vitest.acceptance.config.ts
 
   crap:
     name: CRAP

@@ -13,8 +13,5 @@ tools
 docs
 research
 scripts/*
-!scripts/prepare-sentry-release.ts
-!scripts/provision-runtime-role.ts
-!scripts/migrate.ts
 *.log
 .DS_Store

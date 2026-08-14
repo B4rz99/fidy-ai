@@ -95,7 +95,7 @@ const staticMemberName = (node) => {
  * `Effect.tryPromise` and `Effect.callback`/`async` accept an arbitrary thunk
  * and produce an `Effect` with `R = never`, so a vendor SDK call reached
  * through one of them never appears in the requirements channel. Scoped to
- * `src/core/**` by the config: they are the last remaining way to do I/O in the
+ * `apps/server/src/core/**` by the config: they are the last remaining way to do I/O in the
  * functional core without the type noticing.
  */
 const noEscapeHatch = {
@@ -188,7 +188,7 @@ const declaredBindings = (statement) => {
 
 /**
  * Require a leading block comment on every exported declaration. Scoped to
- * `src/core/**` by the config: core is what shell consumes, so its exports are
+ * `apps/server/src/core/**` by the config: core is what shell consumes, so its exports are
  * the interfaces, and enforcing presence everywhere reliably produces
  * comment-shaped text that satisfies a linter and says nothing.
  *

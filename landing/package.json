@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "bunx serve .",
-    "build": "rm -rf dist && mkdir dist && cp -R en es styles.css waitlist.js dist/ && cp ../public/politica.html dist/politica.html",
+    "build": "rm -rf dist && mkdir dist && cp -R en es styles.css waitlist.js dist/ && cp ../apps/server/public/politica.html dist/politica.html",
     "test": "bun test tests"
   }
 }

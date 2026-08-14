@@ -119,7 +119,7 @@
     // CI scripts and the tool runners report to a terminal; that is their whole
     // output channel.
     {
-      "files": ["scripts/**/*.ts", "tools/**/*.mjs"],
+      "files": ["scripts/**/*.ts", "apps/server/scripts/**/*.ts", "tools/**/*.mjs"],
       "rules": {
         "no-await-in-loop": "off",
         "no-console": "off"
@@ -192,7 +192,7 @@
     // here and nowhere else. It needs type information, so it fires on the
     // type-aware pass only.
     {
-      "files": ["src/core/**"],
+      "files": ["apps/server/src/core/**"],
       "rules": {
         "effect-guards/no-ambient-nondeterminism": "error",
         "effect-guards/no-datetime-internals": "error",
@@ -307,20 +307,20 @@
     // A `CREATE FUNCTION` is one indivisible statement, so a gateway body longer
     // than the limit cannot be split without routing DDL through `sql.unsafe`.
     {
-      "files": ["src/shell/db/migrations/*.ts"],
+      "files": ["apps/server/src/shell/db/migrations/*.ts"],
       "rules": {
         "max-lines-per-function": "off"
       }
     },
     {
       "files": [
-        "vitest.config.ts",
-        "vitest.core.config.ts",
-        "vitest.crap.config.ts",
-        "vitest.acceptance.config.ts",
-        "vitest.compatibility.config.ts",
-        "stryker.config.mjs",
-        ".dependency-cruiser.mjs",
+        "apps/server/vitest.config.ts",
+        "apps/server/vitest.core.config.ts",
+        "apps/server/vitest.crap.config.ts",
+        "apps/server/vitest.acceptance.config.ts",
+        "apps/server/vitest.compatibility.config.ts",
+        "apps/server/stryker.config.mjs",
+        "apps/server/.dependency-cruiser.mjs",
         "scripts/oxlint/*.js"
       ],
       "rules": {

@@ -1,0 +1,106 @@
+package.json
+  s_ee545d21162b70::t_45c670ff9c3853 35
+.github/workflows/preview.yml
+  s_ee545d21162b70::t_a1801c712d9a73 36,40,84,97
+  s_ee545d21162b70::t_4707e8b734354f 37-39,41-43,96,98-100
+  s_ee545d21162b70::t_54cfc23a33b80a 1-35,44-83,85-95,101-118
+apps/web/scripts/build-preview.ts
+  s_ee545d21162b70::t_d522d257f5ad45 14-15
+  s_ee545d21162b70::t_3a054e372cd5bb 1-2,7-12,20,22-27,36-40,42-45
+  s_ee545d21162b70::t_a3a79fb85eafba 13,16-17
+  s_ee545d21162b70::t_e31ead0dd91f83 3-6,28-35
+  s_ee545d21162b70::t_7cbde31f889522 18,21
+  s_ee545d21162b70::t_72472c8d559b2b 19
+  s_ee545d21162b70::t_3dbcd6ebe9297d 41
+apps/web/scripts/preview-workflow.test.ts
+  s_ee545d21162b70::t_c3d19de20bd52c 3
+  s_ee545d21162b70::t_b356e5bd2fc2a0 1-2,4-11,15-21,25-31,35-40
+  s_ee545d21162b70::t_9b1c3a9bbeb0b6 22-24
+  s_ee545d21162b70::t_d522d257f5ad45 12-14
+  s_ee545d21162b70::t_fdf074f9fe6047 32-34
+apps/web/scripts/build-preview.test.ts
+  s_ee545d21162b70::t_54eb6dab354edf 1,3-34
+  s_ee545d21162b70::t_0c0458475857d8 2
+apps/web/scripts/cloudflare-adapter.test.ts
+  s_ee545d21162b70::t_5cfa5659186b46 28
+  s_ee545d21162b70::t_003939a14080e0 3
+  s_ee545d21162b70::t_cdc95b2a16a5af 7
+  s_ee545d21162b70::t_12651532dcc21c 1-2,4-6,8-27,29-33
+.github/workflows/ci.yml
+  s_ee545d21162b70::t_d73ee240a19851 132-157
+apps/web/cloudflare/preview-policy/artifact.py
+  s_ee545d21162b70::t_c07d0ff0d20b88 42-149
+  s_ee545d21162b70::t_4d90acf2f8e923 39-41
+  s_ee545d21162b70::t_5d5501bd478ae9 150-152
+  s_ee545d21162b70::t_6cf0d655b84294 1-38,153-208
+.gitignore
+  s_ee545d21162b70::t_7ff13617f8957b 9-10
+  s_ee545d21162b70::t_90f5da877de413 8
+apps/web/vite.config.ts
+  s_ee545d21162b70::t_ba177913101661 6,8,14
+apps/web/package.json
+  s_ee545d21162b70::t_fe81123e850286 10,13
+apps/server/tools/contracts/check.ts
+  s_ee545d21162b70::t_c8b5ad220f0e61 5,11-12,66-70,120,186
+  s_ee545d21162b70::t_a8070ad84983c1 14
+apps/web/scripts/preview-artifact.ts
+  s_ee545d21162b70::t_2bbf8bdcbe4eb9 2,62
+  s_ee545d21162b70::t_8d7d57010a5527 1,3-21,38,44-45,53-54
+  s_ee545d21162b70::t_5a4bcd2dfa0654 46-52
+  s_ee545d21162b70::t_73e1476fa42f82 22,24,26,30-37,41-42
+  s_ee545d21162b70::t_d242422e2180c2 23,25,27-29,39-40,43,55-61
+apps/server/tools/contracts/generate.ts
+  s_ee545d21162b70::t_cbe48d23f71509 6,11
+scripts/verify.ts
+  s_ee545d21162b70::t_1824f51d3f50e7 57
+apps/web/cloudflare/preview-policy/request-test.py
+  s_ee545d21162b70::t_121bcdd7aaa8d6 6
+  s_ee545d21162b70::t_7a7773be59374c 3-5
+  s_ee545d21162b70::t_c629bc8f6437ac 7-9
+  s_ee545d21162b70::t_47db70d1b82646 1-2,10-85
+apps/server/package.json
+  s_ee545d21162b70::t_a57a19e109f508 23
+apps/web/cloudflare/wrangler.json
+  s_ee545d21162b70::t_2b64fbcc2bc41b 1-11
+docs/operations/pull-request-previews.md
+  s_ee545d21162b70::t_f5da5e13a6d038 25-32,56-63
+  s_ee545d21162b70::t_979b06008360d5 1-24,33-55,64-78
+apps/server/tools/contracts/compatibility.ts
+  s_ee545d21162b70::t_b5e57a154bda46 14,75,79-80,83
+  s_ee545d21162b70::t_d7aabbb1f7ea87 104
+  s_ee545d21162b70::t_703e75d7caba00 15-19,76-78,81-82,84-103
+apps/web/cloudflare/preview-policy/artifact-test.py
+  s_ee545d21162b70::t_3b6e26b00a9e30 10
+  s_ee545d21162b70::t_6cebd2fe945ce1 96-132
+  s_ee545d21162b70::t_131b4e2cca6559 7-9
+  s_ee545d21162b70::t_88def9154aec84 11-13,93-95
+  s_ee545d21162b70::t_2664db88a68ab5 133-135
+  s_ee545d21162b70::t_5ece1110d39c2b 1-6,14-92,136-163
+tsconfig.base.json
+  s_ee545d21162b70::t_7dabb948dbeb8b 130-132
+  s_ee545d21162b70::t_f82f54a3e24184 114-118,125-129
+apps/web/cloudflare/public/_headers
+  s_ee545d21162b70::t_ffb8128162b115 2
+  s_ee545d21162b70::t_8f6422c0edcc42 1,3-13
+apps/server/tools/contracts/digest-artifacts.ts
+  s_ee545d21162b70::t_a4fcd55b1e8501 3,10-14
+  s_ee545d21162b70::t_a0b78c9efc03bb 1-2,4-9,15-16
+apps/web/cloudflare/preview-policy/request.py
+  s_ee545d21162b70::t_d85a9b6a8cfe0d 1-86
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "56e71b80dd0a538ddf5c20c779150f170afdad6f",
+  "prompts": {},
+  "sessions": {
+    "s_ee545d21162b70": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0024d-b88e-744e-8f90-d5843eb34bbf",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": null
+    }
+  }
+}

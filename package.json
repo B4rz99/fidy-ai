@@ -32,6 +32,7 @@
     "contracts:check:compatibility": "bun run --cwd apps/server tools/contracts/check.ts",
     "test:contracts": "bun run --cwd apps/server test:contracts",
     "test": "bun run --cwd apps/server test && bun run --cwd apps/web test",
+    "test:preview-policy": "bun run --cwd apps/web test:preview-policy",
     "test:acceptance": "bun run --cwd apps/server test:acceptance",
     "test:core": "bun run --cwd apps/server test:core",
     "test:observability-compatibility": "bun run --cwd apps/server test:observability-compatibility",

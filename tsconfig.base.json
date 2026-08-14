@@ -111,10 +111,32 @@
         },
         "overrides": [
           {
-            "include": ["./apps/web/src/**/*.test.ts", "./apps/web/src/**/*.test.tsx"],
+            "include": ["./apps/web/cloudflare/preview-policy/**/*.ts"],
+            "options": {
+              "diagnosticSeverity": {
+                "asyncFunction": "off",
+                "missingPipeableSignature": "off",
+                "nodeBuiltinImport": "off"
+              }
+            }
+          },
+          {
+            "include": [
+              "./apps/web/src/**/*.test.ts",
+              "./apps/web/src/**/*.test.tsx",
+              "./apps/web/scripts/**/*.test.ts"
+            ],
             "options": {
               "diagnosticSeverity": {
                 "asyncFunction": "off"
+              }
+            }
+          },
+          {
+            "include": ["./apps/web/scripts/**/*.ts"],
+            "options": {
+              "diagnosticSeverity": {
+                "missingPipeableSignature": "off"
               }
             }
           },

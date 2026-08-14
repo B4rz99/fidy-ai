@@ -18,6 +18,7 @@
   },
   "references": [{ "path": "../server" }],
   "include": [
+    "cloudflare/**/*.ts",
     "scripts/**/*.ts",
     "server-client-boundary.ts",
     "src/**/*.ts",

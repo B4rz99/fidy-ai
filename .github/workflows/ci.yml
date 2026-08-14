@@ -129,3 +129,30 @@ jobs:
             echo "$failed" >&2
             exit 1
           fi
+
+  preview-artifact:
+    name: Preview Artifact
+    needs: required-checks
+    if: >-
+      ${{ needs.required-checks.result == 'success' &&
+          github.event.pull_request.head.repo.full_name == github.repository }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: ./.github/actions/bun-install
+      - name: Build credential-free static preview artifact
+        env:
+          PREVIEW_GIT_SHA: ${{ github.event.pull_request.head.sha }}
+        run: bun run --cwd apps/web build:preview
+      - name: Publish static artifact for trusted validation
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: fidy-web-preview-${{ github.event.pull_request.head.sha }}
+          path: apps/web/preview.tar
+          if-no-files-found: error
+          retention-days: 1

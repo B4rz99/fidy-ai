@@ -11,6 +11,12 @@ export type OperationPolicyManifest = {
   }>;
 };
 
+/** Generated contract pair that is compared and digested as one compatibility boundary. */
+export type ContractArtifacts = {
+  readonly openapi: JsonObject;
+  readonly operationPolicy: OperationPolicyManifest;
+};
+
 export type ContractFinding =
   | {
       readonly source: "openapi";
@@ -65,6 +71,36 @@ export const asJsonObject = (value: unknown, path = "$"): JsonObject => {
 
 /** Stable JSON is the wire format for artifacts, digests, findings, and exact acknowledgements. */
 export const canonicalJson = (value: unknown): string => JSON.stringify(asJsonValue(value));
+
+/** Returns the lowercase SHA-256 identity of a contract pair's canonical JSON. */
+export const contractDigest = (artifacts: ContractArtifacts): string =>
+  new Bun.CryptoHasher("sha256").update(canonicalJson(artifacts)).digest("hex");
+
+/** Allows field inspection without array semantics; JSON-safe leaf values remain unvalidated. */
+export const isUnknownRecord = (value: unknown): value is Readonly<Record<string, unknown>> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
+/** Parses generated OpenAPI and operation-policy values, rejecting malformed policy entries. */
+export const contractArtifactsFrom = (
+  openapi: unknown,
+  policy: unknown,
+  subject: string
+): ContractArtifacts => {
+  if (!isUnknownRecord(policy) || !Array.isArray(policy.operations)) {
+    throw new Error(`${subject} operation policy is not an operation-policy manifest`);
+  }
+  return {
+    openapi: asJsonObject(openapi, `${subject} OpenAPI contract`),
+    operationPolicy: {
+      operations: policy.operations.map((operation: unknown, index: number) => {
+        if (!isUnknownRecord(operation) || typeof operation.id !== "string") {
+          throw new Error(`${subject} operation policy.operations[${index}] is invalid`);
+        }
+        return { id: operation.id, policy: asJsonValue(operation.policy) };
+      }),
+    },
+  };
+};
 
 const normalizeOpenApiChange = (change: IOasdiffChange): ContractFinding => ({
   source: "openapi",

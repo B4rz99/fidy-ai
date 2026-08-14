@@ -3,21 +3,16 @@
 import { OpenApi } from "effect/unstable/httpapi";
 import { FidyApi, operationCatalog } from "~/shell/api";
 import {
-  type JsonObject,
+  type ContractArtifacts,
   type JsonValue,
   type OperationPolicyManifest,
   asJsonObject,
   asJsonValue,
-  canonicalJson,
+  contractDigest,
 } from "./compatibility";
 
 const serverRoot = Bun.fileURLToPath(new URL("../..", import.meta.url)).replace(/\/$/u, "");
 const defaultOutputDirectory = `${serverRoot}/contracts`;
-
-export type ContractArtifacts = {
-  readonly openapi: JsonObject;
-  readonly operationPolicy: OperationPolicyManifest;
-};
 
 export const makeContractArtifacts = (): ContractArtifacts => ({
   openapi: asJsonObject(OpenApi.fromApi(FidyApi)),
@@ -30,9 +25,6 @@ export const makeContractArtifacts = (): ContractArtifacts => ({
       .sort((left, right) => left.id.localeCompare(right.id)),
   },
 });
-
-export const contractDigest = (artifacts: ContractArtifacts): string =>
-  new Bun.CryptoHasher("sha256").update(canonicalJson(artifacts)).digest("hex");
 
 const artifactText = (value: JsonValue | OperationPolicyManifest): string =>
   `${JSON.stringify(asJsonValue(value), null, 2)}\n`;

@@ -2,16 +2,17 @@
 
 import {
   type ContractAcknowledgement,
+  type ContractArtifacts,
   type ContractFinding,
-  type OperationPolicyManifest,
   acknowledgementCovers,
   asJsonObject,
-  asJsonValue,
   canonicalJson,
   compareOperationPolicies,
+  contractArtifactsFrom,
+  contractDigest,
   findOpenApiBreakingChanges,
+  isUnknownRecord,
 } from "./compatibility";
-import { type ContractArtifacts, contractDigest } from "./generate";
 
 const serverRoot = Bun.fileURLToPath(new URL("../..", import.meta.url)).replace(/\/$/u, "");
 const workspaceRoot = Bun.fileURLToPath(new URL("../../../..", import.meta.url)).replace(
@@ -45,29 +46,7 @@ const readJson = async (path: string): Promise<unknown> => {
   }
 };
 
-const isUnknownRecord = (value: unknown): value is Readonly<Record<string, unknown>> =>
-  typeof value === "object" && value !== null && !Array.isArray(value);
-
 const isUnknownArray = (value: unknown): value is ReadonlyArray<unknown> => Array.isArray(value);
-
-const operationPolicyManifest = (value: unknown, subject: string): OperationPolicyManifest => {
-  if (!isUnknownRecord(value) || !isUnknownArray(value.operations)) {
-    throw new Error(`${subject} is not an operation-policy manifest`);
-  }
-  return {
-    operations: value.operations.map((operation, index) => {
-      if (!isUnknownRecord(operation) || typeof operation.id !== "string") {
-        throw new Error(`${subject}.operations[${index}] is invalid`);
-      }
-      return { id: operation.id, policy: asJsonValue(operation.policy) };
-    }),
-  };
-};
-
-const artifactsFrom = (openapi: unknown, policy: unknown, subject: string): ContractArtifacts => ({
-  openapi: asJsonObject(openapi, `${subject} OpenAPI contract`),
-  operationPolicy: operationPolicyManifest(policy, `${subject} operation policy`),
-});
 
 const committedBaseArtifacts = (baseRef: string): ContractArtifacts | undefined => {
   const paths = [
@@ -84,7 +63,11 @@ const committedBaseArtifacts = (baseRef: string): ContractArtifacts | undefined 
   if (openapi === undefined || policy === undefined) {
     throw new Error(`Base ${baseRef} contract lookup was incomplete`);
   }
-  return artifactsFrom(JSON.parse(openapi.stdout), JSON.parse(policy.stdout), `base ${baseRef}`);
+  return contractArtifactsFrom(
+    JSON.parse(openapi.stdout),
+    JSON.parse(policy.stdout),
+    `base ${baseRef}`
+  );
 };
 
 const bootstrapBaseArtifacts = async (baseRef: string): Promise<ContractArtifacts> => {
@@ -134,7 +117,7 @@ const bootstrapBaseArtifacts = async (baseRef: string): Promise<ContractArtifact
     if (generated.exitCode !== 0) {
       throw new Error(`Could not bootstrap ${baseRef} contracts:\n${generated.stderr}`);
     }
-    return artifactsFrom(
+    return contractArtifactsFrom(
       await readJson(`${outputDirectory}/openapi.json`),
       await readJson(`${outputDirectory}/operation-policy.json`),
       `bootstrapped base ${baseRef}`
@@ -200,7 +183,7 @@ const parseBaseRef = (): string => {
 
 const main = async (): Promise<void> => {
   const baseRef = parseBaseRef();
-  const candidate = artifactsFrom(
+  const candidate = contractArtifactsFrom(
     await readJson(`${contractsDirectory}/openapi.json`),
     await readJson(`${contractsDirectory}/operation-policy.json`),
     "candidate"

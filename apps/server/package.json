@@ -20,6 +20,7 @@
     "sentry:smoke": "bun reports/sentry-smoke/smoke.js",
     "typecheck": "tsc --noEmit",
     "contracts:generate": "bun tools/contracts/generate.ts",
+    "contracts:digest": "bun tools/contracts/digest-artifacts.ts contracts/openapi.json contracts/operation-policy.json",
     "contracts:check": "bun tools/contracts/generate.ts --check && bun tools/contracts/check.ts",
     "test:contracts": "bun --bun vitest run --config tools/contracts/vitest.config.ts",
     "test": "bun --bun vitest run --config vitest.config.ts",

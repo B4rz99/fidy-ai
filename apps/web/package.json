@@ -7,8 +7,10 @@
     "dev": "bun --bun vite",
     "shadcn": "shadcn",
     "build": "tsc --noEmit && bun --bun vite build",
+    "build:preview": "bun scripts/build-preview.ts",
     "typecheck": "tsc --noEmit",
     "test": "bun --bun vitest run",
+    "test:preview-policy": "bun --bun vitest run cloudflare/preview-policy",
     "check:bundle": "bun scripts/check-browser-bundle.ts",
     "check:policy": "bun scripts/check-policy-integrity.ts"
   },

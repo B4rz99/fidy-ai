@@ -54,6 +54,7 @@ const checks: Array<Check> = [
     env: coreEnvironment,
   },
   rootCheck("Web tests", ["bun", "run", "--cwd", "apps/web", "test"]),
+  rootCheck("Trusted preview artifact policy", ["bun", "run", "test:preview-policy"]),
   rootCheck("Contract checker tests", ["bun", "run", "test:contracts"]),
   rootCheck("Mutation tests", ["bun", "run", "test:mutation"]),
 ];

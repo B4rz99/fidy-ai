@@ -37,10 +37,16 @@ const moneyArbitrary = FastCheck.oneof(
     FastCheck.integer({ min: 0, max: 4 }),
     FastCheck.constant("UYW")
   )
-).map(([coefficient, scale, currency]): ReadonlyMoney => ({
-  amount: BigDecimal.make(coefficient, scale),
-  currency: Currency.make(currency),
-}));
+).map(
+  ([coefficient, scale, currency]: readonly [
+    bigint,
+    number,
+    "JPY" | "COP" | "KWD" | "UYW",
+  ]): ReadonlyMoney => ({
+    amount: BigDecimal.make(coefficient, scale),
+    currency: Currency.make(currency),
+  })
+);
 
 it("accepts zero Money because the owning operation decides whether zero is meaningful", () => {
   const decoded = decodeMoney({ amount: "0", currency: "COP" });

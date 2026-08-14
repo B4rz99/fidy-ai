@@ -6,14 +6,20 @@ How fidy-ai is put together, and why.
 
 ## 1. System shape
 
-`src/` is layer-major:
+The repository root is a private Bun workspace. It owns the single lockfile, CI, shared compiler
+policy, repository-wide quality policy, and stable orchestration commands. Root commands deliberately
+delegate application work to its owning workspace package: this gives contributors and automation one
+repository entrypoint while keeping runtime dependencies and behavior inside the application that
+owns them.
+
+`apps/server` is the `@fidy/server` application package. Its `src/` is layer-major:
 
 - `core/` contains pure business decisions typed `Effect<A, E, never>` and touches no external
   service.
 - `shell/` contains repositories, handlers, API assembly, adapters, and every other side effect.
-- `src/main.ts` is the only production application entrypoint. Command-level preloads may initialize
-  process infrastructure before it, but cannot start application work. Scripts compose shell layers
-  and contain no domain decisions.
+- `apps/server/src/main.ts` is the only production application entrypoint. Command-level preloads may
+  initialize process infrastructure before it, but cannot start application work. Scripts compose
+  shell layers and contain no domain decisions.
 
 The directory boundary is intentional. It is enforced by lint and dependency checks so a naming
 convention cannot be mistaken for a purity boundary. A feature may touch both trees; that cost is
@@ -23,6 +29,12 @@ sessions.
 The API assembly imports slice operation definitions. Handlers import the assembled API as required
 by the HTTP builder, and `http.ts` composes the handler layers. This direction is acyclic and is
 protected by the dependency graph.
+
+Server-specific build and deployment adapters live with `@fidy/server`. Its Dockerfile intentionally
+uses the repository root as build context so Bun can install the one workspace lockfile, while the
+runtime image receives only built server artifacts. Railway must use `/apps/server/railway.json` as
+its config-as-code path; that adapter selects `apps/server/Dockerfile` without changing the repository
+source root.
 
 ---
 
@@ -101,8 +113,8 @@ not an implementation-readiness flag.
 The operation references the core schema. All public API and agent surfaces derive from the
 canonical operation definition; parallel operation maps are not maintained.
 
-The server-owned package has one browser-safe client facade at `src/client.ts`, which is the future
-`@fidy/server/client` export. It re-exports the assembled `FidyApi`, the client-side authorization
+The server-owned package has one browser-safe `@fidy/server/client` export backed by
+`apps/server/src/client.ts`. It re-exports the assembled `FidyApi`, the client-side authorization
 layer factory required by the middleware declaration, and genuinely useful derived types such as
 `OperationId` and `CanonicalInput`. A web package derives its typed client directly from `FidyApi`
 with `AtomHttpApi.Service()("FidyClient", { api: FidyApi, httpClient: ... })`; the facade does not

@@ -8,7 +8,7 @@ COPY --chown=bun:bun package.json bun.lock bunfig.toml ./
 COPY --chown=bun:bun apps/server/package.json ./apps/server/package.json
 RUN bun install --frozen-lockfile --ignore-scripts
 
-COPY --chown=bun:bun tsconfig.json ./
+COPY --chown=bun:bun tsconfig.json tsconfig.base.json ./
 COPY --chown=bun:bun apps/server ./apps/server
 RUN bun run build:production && cp "$(bun --cwd apps/server -e 'console.log(require("@sentry/cli").SentryCli.getPath())')" apps/server/dist/commands/sentry-cli
 

@@ -217,7 +217,7 @@ EOF
 }
 trap cleanup EXIT
 
-docker build --tag "$image" "$workspaceRoot"
+docker build --file "$serverRoot/Dockerfile" --tag "$image" "$workspaceRoot"
 inspectArtifacts
 assertReleasePreparation
 

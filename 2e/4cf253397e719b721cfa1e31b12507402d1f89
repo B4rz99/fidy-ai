@@ -1,0 +1,34 @@
+src/shell/channels/whatsapp/whatsapp.acceptance.test.ts
+  s_6a2d6b818e8716::t_f447daea525d74 524,545-547,566,568
+vitest.acceptance.config.ts
+  s_6a2d6b818e8716::t_8e81430bad52d6 70-71
+src/shell/channels/whatsapp/reply-delivery.test.ts
+  s_6a2d6b818e8716::t_af77dd5cf34ace 1-55
+src/shell/channels/whatsapp/worker.ts
+  s_6a2d6b818e8716::t_1801e83f35d0f9 9-10,46,60
+src/shell/channels/whatsapp/whatsapp-channel.test.ts
+  s_6a2d6b818e8716::t_27024d195f796d 9,105,546-550,558-559,651,655-664,688-723,726-727,730-747,1385,1387-1397,1400-1402,1436-1441,1444,1469-1471,3116,3168,3176,3185-3191,3193
+src/shell/channels/whatsapp/reply-delivery.ts
+  s_6a2d6b818e8716::t_453627aad7d489 100-115
+  s_6a2d6b818e8716::t_9d89dceb21d3a5 40,44,47-53,61
+  s_6a2d6b818e8716::t_7a9ff19d0e9778 1-37,73-74,76-99
+  s_6a2d6b818e8716::t_6fcf75f6fe0af2 38-39,41-43,45-46,54-60,62-72,75
+src/shell/agent/agent-service.test.ts
+  s_6a2d6b818e8716::t_558f6fad15fa1a 9,1827-1860
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "2e4cf253397e719b721cfa1e31b12507402d1f89",
+  "prompts": {},
+  "sessions": {
+    "s_6a2d6b818e8716": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019ff8e5-b73d-7859-a142-a824b1e30955",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": null
+    }
+  }
+}

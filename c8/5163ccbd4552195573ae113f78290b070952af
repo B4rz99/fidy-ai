@@ -1,0 +1,789 @@
+apps/server/src/shell/testing/telemetry-fixtures.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-43
+tsconfig.json
+  s_cd09a9ddfcc3c6::t_bde65d2ffe1032 114
+  s_cd09a9ddfcc3c6::t_fdc30b1c881c35 5-6,118
+apps/server/scripts/verify-sentry-account.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-35
+apps/server/src/core/subscription/model.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-7
+apps/server/src/core/consent/model.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-157
+apps/server/src/shell/observability/decoding.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-3
+apps/server/tsconfig.json
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-156
+apps/server/src/core/audit/model.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-32
+apps/server/src/shell/observability/telemetry-config.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-288
+apps/server/src/shell/agent/transaction-receipt.test.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-87
+apps/server/src/shell/observability/canonical-api.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-121
+apps/server/src/shell/agent/fixtures/openai.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-48
+apps/server/src/shell/ingestion/mutations.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-230
+apps/server/src/shell/ingestion/handlers.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-85
+apps/server/src/shell/agent/hosted-inference.test.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-671
+apps/server/src/shell/channels/whatsapp/disclosure-store.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-360
+apps/server/src/shell/memory/handlers.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-40
+apps/server/src/shell/tokens/hosted-turn-token.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-69
+apps/server/src/shell/db/migrations/0018-whatsapp-durable-propagation.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-28
+apps/server/src/shell/subscription/handlers.test.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-19
+apps/server/public/index.html
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-11
+apps/server/src/core/categories/taxonomy.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-58
+apps/server/src/core/_shared/context.test.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-24
+apps/server/src/core/_shared/money.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-458
+apps/server/src/core/ingestion/rules.test.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-399
+apps/server/src/shell/channels/whatsapp/fixtures/kapso-bsuid-text-v2.json
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-20
+apps/server/src/shell/observability/account-policy.test.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-149
+apps/server/src/shell/_shared/canonical-mutation.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-11
+apps/server/src/shell/categories/handlers.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-55
+apps/server/src/shell/observability/account-policy.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-269
+apps/server/src/shell/observability/sentry-account-smoke.test.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-24
+apps/server/src/shell/db/migrations/0022-statement-ingestion.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-207
+apps/server/src/shell/insights/operations.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-110
+apps/server/src/main.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-27
+apps/server/source-scope.mjs
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-33
+apps/server/src/core/memory/rules.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-28
+apps/server/src/core/transcript/compacted-conversation.test.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-40
+apps/server/src/shell/agent/openai.test.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-762
+apps/server/src/shell/agent/working-context.test.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-38
+apps/server/src/shell/consent/repo.test.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-314
+apps/server/src/shell/db/migrations/0014-optional-transaction-counterparty.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-11
+apps/server/src/shell/_shared/http-status.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-26
+apps/server/src/shell/identity/testing.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-16
+apps/server/src/core/tokens/model.test.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-227
+apps/server/src/shell/consent/retention.test.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-75
+.oxlintrc.json
+  s_cd09a9ddfcc3c6::t_da9de6bc81d880 122,195,310,317-323
+apps/server/src/shell/testing/api-harness.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-75,77-86,88-178
+  s_cd09a9ddfcc3c6::t_825e586481f2ac 76,87
+apps/server/src/shell/categories/mutations.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-157
+apps/server/src/shell/dashboard/operations.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-69
+apps/server/src/shell/channels/whatsapp/kapso-webhook.test.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-172
+apps/server/src/shell/testing/suggested-operations.test.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-345,347-348,350-351,353-354,356-463
+  s_cd09a9ddfcc3c6::t_9a8596e76a2cff 346,349,352,355
+apps/server/src/shell/db/migrations/0021-create-memories.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-28
+apps/server/src/shell/db/user-transaction.test.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-54
+apps/server/src/shell/consent/policy-route.test.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-25
+apps/server/src/core/consent/rules.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-98
+apps/server/src/shell/memory/fixtures.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-44
+apps/server/src/shell/dashboard/fixtures.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-8
+apps/server/src/shell/identity/whatsapp-identity.test.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-252
+apps/server/src/shell/channels/whatsapp/reply-delivery.test.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-55
+apps/server/src/shell/categories/categorizer.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-38
+apps/server/src/core/ingestion/reference.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-17
+apps/server/src/shell/consent/repo.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-800
+apps/server/src/shell/_shared/partial-input.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-299
+tools/crap/run.mjs
+  s_cd09a9ddfcc3c6::t_2d12b6ebe67331 6-8,20,37
+  s_cd09a9ddfcc3c6::t_2ce72a4c5a367f 10,16
+apps/server/src/shell/audit/retention.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-41
+apps/server/src/shell/db/migrations/0015-whatsapp-bsuid-identity.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-264
+apps/server/src/shell/channels/whatsapp/repo.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-797
+apps/server/src/shell/memory/errors.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-49
+apps/server/src/shell/observability/preload.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-29
+apps/server/src/shell/ingestion/source-format.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-8
+apps/server/src/core/identity/rules.test.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-70
+apps/server/src/shell/transcript/repo.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-139
+apps/server/src/core/tokens/model.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-221
+apps/server/src/shell/identity/handlers.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-32
+apps/server/src/shell/insights/mutations.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-119
+apps/server/src/shell/observability/registry.test.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-37
+apps/server/src/shell/db/migrations/0012-create-whatsapp-channel.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-491
+apps/server/scripts/check-migration-ids.ts
+  s_cd09a9ddfcc3c6::t_763f499387ea20 35-37,41,99,107,271-273,277,280,287
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-34,38,40,42-98,100-106,108-266,274-276,278-279,281-286,288-333
+  s_cd09a9ddfcc3c6::t_3f8dbe6e8ed585 267-268
+  s_cd09a9ddfcc3c6::t_d852edcb11c551 269-270
+  s_cd09a9ddfcc3c6::t_6a67e980a90fe4 39
+apps/server/src/shell/observability/envelope-recorder.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-13,15-52
+  s_cd09a9ddfcc3c6::t_95c526778c8019 14
+apps/server/tools/observability-compatibility/fixture-process.test.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-100,102,106-227,231-232,244-345,348-405
+  s_cd09a9ddfcc3c6::t_7b8246e5c4debf 228,230
+  s_cd09a9ddfcc3c6::t_5d9cf7f30bf926 101,103-105,229,233-243,346-347
+apps/server/src/shell/db/user-transaction.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-52
+apps/server/src/core/_shared/canonical-operation.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-9
+apps/server/src/core/transactions/errors.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-48
+apps/server/src/shell/agent/model-boundary.test.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-233
+apps/server/src/shell/db/migrations/0010-create-consent-ledger.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-185
+apps/server/src/shell/transactions/errors.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-120
+apps/server/scripts/migrate.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-9
+apps/server/src/core/dashboard/rules.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-517
+apps/server/src/shell/memory/operations.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-77
+apps/server/scripts/smoke-sentry-account.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-20
+apps/server/src/shell/categories/handlers.test.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-247
+apps/server/src/core/tokens/rules.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-8
+apps/server/src/shell/consent/agent-consent-gate.test.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-136
+apps/server/src/shell/db/migrations/0001-create-transactions.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-27
+apps/server/src/shell/operations/operations.test.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-72
+apps/server/src/shell/transactions/repo.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-420
+apps/server/src/shell/agent/agent-service.ts
+  s_cd09a9ddfcc3c6::t_ed76366c7001f8 126,1569
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-125,127-1568,1570-1612
+apps/server/src/shell/testing/authorization.test.ts
+  s_cd09a9ddfcc3c6::t_041882fde45ca2 55,58,61
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-54,56-57,59-60,62-575
+apps/server/src/core/_shared/time.test.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-95
+apps/server/src/shell/audit/repo.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-88
+apps/server/src/shell/db/migrations/0006-create-dashboards.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-15
+apps/server/src/shell/identity/handlers.test.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-115
+apps/server/src/core/insights/reference.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-10
+apps/server/src/core/dashboard/errors.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-49
+apps/server/src/shell/identity/mutations.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-27
+apps/server/src/shell/observability/scheduled-work.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-100
+apps/server/scripts/agent-repl.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-37
+apps/server/src/core/identity/model.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-87
+apps/server/src/shell/insights/fixtures.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-41
+tools/mutation/run.mjs
+  s_cd09a9ddfcc3c6::t_64f1cb2a9ebc1e 2,8,12-13,27
+apps/server/src/shell/consent/retention.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-28
+apps/server/src/shell/observability/scheduled-work.test.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-178
+apps/server/src/shell/testing/whatsapp-acceptance-scenarios.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-37
+apps/server/src/core/transactions/rules.test.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-48
+apps/server/src/shell/_shared/operation-catalog.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-164
+apps/server/src/shell/agent/hosted-inference.ts
+  s_cd09a9ddfcc3c6::t_9e1fbd0a9d233e 581
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-580,582
+apps/server/src/shell/channels/whatsapp/reply-delivery.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-21,23-115
+  s_cd09a9ddfcc3c6::t_e9a35c70a54b0d 22
+apps/server/src/shell/testing/whatsapp-acceptance-harness.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-82,84-131,133-137,139-144,146-151,153-158,160-192,194-206,208-534
+  s_cd09a9ddfcc3c6::t_7c9e704e23afe2 83,132,138,145,152,159,193,207
+apps/server/src/shell/transcript/conversation-compaction-inference.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-23,27-31
+  s_cd09a9ddfcc3c6::t_5824c28f311fa9 24-26
+apps/server/src/core/categories/rules.test.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-190
+apps/server/src/core/_shared/context.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-36
+apps/server/src/core/categories/reference.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-10
+apps/server/src/shell/agent/openai.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-732
+apps/server/src/shell/consent/current-disclosure.test.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-52
+apps/server/scripts/check-dependency-guards.ts
+  s_cd09a9ddfcc3c6::t_1dee6d302d8113 5,29
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-4,6-27,30-357,359-360,362-363,365-366,368-377,379-381,383-387
+  s_cd09a9ddfcc3c6::t_c114acf3129833 28
+  s_cd09a9ddfcc3c6::t_661efa8b6c7ebc 358,361,364,367,378,382
+apps/server/src/shell/agent/tool-confirmation-repo.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-37
+apps/server/src/shell/db/development-seed.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-208
+apps/server/src/core/transcript/compacted-conversation.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-12
+apps/server/src/shell/testing/isolation.test.ts
+  s_cd09a9ddfcc3c6::t_4487632b8ca6c9 40,44
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-39,41-43,45-590
+apps/server/src/shell/ingestion/worker.test.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-83,85-463
+  s_cd09a9ddfcc3c6::t_be9bcca48b60de 84
+apps/server/src/shell/db/migrations/0004-categorized-transactions.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-107
+apps/server/src/shell/channels/whatsapp/kapso-failure.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-75
+apps/server/bunfig.toml
+  s_cd09a9ddfcc3c6::t_573c9ccd82bdb4 1-4
+apps/server/src/shell/db/migrations/0020-conversation-continuity.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-64
+apps/server/src/shell/identity/operations.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-45
+apps/server/src/core/ingestion/rules.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-314
+apps/server/src/shell/agent/working-context.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-150
+apps/server/src/core/audit/model.test.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-21
+apps/server/src/shell/db/migrations/0024-compacted-conversations.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-29
+apps/server/src/shell/ingestion/input.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-8
+apps/server/src/shell/db/row-level-security.test.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-1033
+apps/server/src/shell/http.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-126
+apps/server/src/shell/observability/projectors.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-550
+apps/server/src/shell/subscription/handlers.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-18
+apps/server/src/shell/testing/identity-fixtures.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-6
+apps/server/src/core/transactions/rules.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-52
+apps/server/src/core/transactions/reference.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-7
+apps/server/src/shell/channels/whatsapp/outbound.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-148
+apps/server/src/shell/testing/consent-disclosure.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-65
+apps/server/src/shell/db/migrations/0013-claim-consent-disclosure-delivery.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-20
+apps/server/src/shell/testing/operation-policy.test.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-195
+apps/server/src/shell/transactions/fixtures.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-41
+apps/server/vitest.compatibility.config.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-13
+apps/server/vitest.core.config.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-37
+apps/server/src/core/ingestion/model.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-309
+apps/server/public/politica.html
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-160
+apps/server/src/shell/_shared/partial-input.test.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-249
+apps/server/src/shell/observability/sentry-adapter.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-697
+apps/server/src/shell/runtime.test.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-71
+apps/server/src/core/_shared/time.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-32
+apps/server/src/core/identity/model.test.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-38
+apps/server/src/shell/_shared/external-endpoints.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-38
+apps/server/src/core/transcript/rules.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-275
+apps/server/src/shell/_shared/suggested-operations.test.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-209
+apps/server/src/shell/observability/sentry-account-reader.test.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-382
+apps/server/src/shell/transcript/repo.test.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-37
+apps/server/vitest.crap.config.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-55
+apps/server/src/shell/observability/telemetry-bootstrap.test.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-156
+apps/server/src/shell/agent/model-boundary.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-284
+apps/server/src/core/identity/reference.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-93
+apps/server/src/shell/_shared/authz.ts
+  s_cd09a9ddfcc3c6::t_34f2582bb22412 15,37,50
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-14,16-36,38-49,51-66
+apps/server/src/shell/_shared/errors-live.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-154
+apps/server/src/shell/dashboard/repo.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-103
+apps/server/src/core/_shared/option.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-12
+apps/server/src/shell/agent/toolkit.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-43,45-226
+  s_cd09a9ddfcc3c6::t_94c917902f5fc3 44
+apps/server/src/shell/operations/handlers.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-185
+apps/server/src/core/dashboard/model.test.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-643
+apps/server/src/core/memory/model.test.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-17
+apps/server/src/shell/_shared/errors.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-212,214-215
+  s_cd09a9ddfcc3c6::t_2bf95b2c34e427 213
+tools/depcruise/run.mjs
+  s_cd09a9ddfcc3c6::t_841b52fc54e392 1,18,21-22,24-25
+  s_cd09a9ddfcc3c6::t_5824c28f311fa9 63,68-71
+  s_cd09a9ddfcc3c6::t_9d09c239432c50 64,72
+  s_cd09a9ddfcc3c6::t_2977a70d6f4415 13
+apps/server/src/core/_shared/money.test.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-221
+apps/server/scripts/seed-development.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-47
+apps/server/src/shell/api.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-65
+apps/server/src/shell/channels/whatsapp/kapso-client.test.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-385
+apps/server/src/shell/db/migrations/0011-bind-pending-consent-initiator.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-22
+apps/server/src/shell/audit/retention.test.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-73
+apps/server/src/shell/identity/repo.test.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-41
+apps/server/src/shell/testing/telemetry-envelope-fixtures.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-40
+apps/server/src/shell/db/migrations/0023-memory-revisions.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-59
+apps/server/vitest.config.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-51
+apps/server/src/shell/insights/errors.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-125
+apps/server/src/shell/identity/repo.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-365
+apps/server/src/shell/db/migrations/0019-user-access.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-33
+apps/server/src/shell/memory/handlers.test.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-278
+apps/server/tools/observability-compatibility/preload.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-36
+apps/server/src/shell/db/user-tables.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-31
+apps/server/src/shell/ingestion/parser.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-379
+apps/server/src/core/memory/rules.test.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-32
+apps/server/src/shell/ingestion/parser.test.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-249
+apps/server/src/core/dashboard/catalog.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-91
+apps/server/src/shell/channels/whatsapp/fixtures/kapso-voice-v2.json
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-17
+apps/server/src/shell/consent/consent-gate.test.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-541
+apps/server/src/shell/observability/release-preparation.test.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-194
+apps/server/src/core/memory/model.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-59
+apps/server/src/shell/categories/errors.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-99
+apps/server/scripts/provision-runtime-role.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-138
+apps/server/src/shell/channels/whatsapp/fixtures.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-13
+apps/server/src/shell/observability/canonical-api.test.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-191
+apps/server/src/shell/_shared/operation-catalog.test.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-41
+apps/server/src/shell/db/migrations/0003-create-audit-log.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-27
+apps/server/src/shell/channels/whatsapp/fixtures/kapso-text-v2.json
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-17
+apps/server/src/core/transcript/rules.test.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-603
+apps/server/src/shell/tokens/repo.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-187
+scripts/check-dependency-updates.ts
+  s_cd09a9ddfcc3c6::t_f375bd30d5f5ba 758-759
+apps/server/src/core/transcript/model.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-253
+apps/server/src/shell/testing/descriptions.test.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-52
+apps/server/src/shell/insights/repo.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-231
+apps/server/src/shell/transactions/operations.test.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-372
+apps/server/src/shell/consent/current-disclosure.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-49
+apps/server/src/shell/audit/fixtures.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-8
+apps/server/src/types/xlsx-mjs.d.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-3
+apps/server/src/shell/transcript/conversation-continuity.ts
+  s_cd09a9ddfcc3c6::t_d33024542d05cf 162,1317
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-161,163-1316,1318-1319
+apps/server/src/shell/_shared/canonical-mutation-registry.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-246
+apps/server/src/shell/db/runtime-authority.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-84
+apps/server/src/shell/testing/test-config.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-17
+apps/server/src/shell/ingestion/handlers.test.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-20,22-137
+  s_cd09a9ddfcc3c6::t_69f299de0b22a2 21
+apps/server/src/shell/channels/whatsapp/model.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-98
+apps/server/src/shell/dashboard/errors.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-159
+apps/server/src/shell/dashboard/handlers.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-49
+apps/server/src/shell/observability/registry.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-151
+apps/server/src/shell/observability/sentry-account-smoke.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-40
+apps/server/src/shell/ingestion/fixtures.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-12
+apps/server/src/shell/agent/repl.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-122
+apps/server/src/shell/memory/mutations.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-124
+apps/server/src/shell/memory/memory-policy.test.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-91
+apps/server/src/core/identity/rules.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-48
+apps/server/src/shell/testing/openapi.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-74
+apps/server/src/shell/transcript/conversation-continuity.test.ts
+  s_cd09a9ddfcc3c6::t_0215569edbb6cc 98,103
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-97,99-102,104-1763
+apps/server/src/core/consent/rules.test.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-111
+apps/server/src/core/dashboard/rules.test.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-1108
+apps/server/src/core/transactions/model.test.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-129
+apps/server/scripts/prepare-sentry-release.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-13
+apps/server/src/shell/observability/release-preparation.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-219
+apps/server/src/shell/operations/handlers.test.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-197
+apps/server/src/shell/db/advisory-lock.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-64
+apps/server/src/shell/http.test.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-38
+apps/server/src/shell/db/migrations/0007-create-transcripts.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-25
+apps/server/src/shell/categories/operations.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-92
+apps/server/src/shell/channels/whatsapp/kapso-webhook.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-520
+apps/server/src/shell/agent/tool-confirmation.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-295
+apps/server/scripts/check-production-image.sh
+  s_cd09a9ddfcc3c6::t_314e9d8933e1ac 4-7,220,298,342
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-3,8-219,221-297,299-341,343-405
+apps/server/src/shell/insights/handlers.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-76
+apps/server/src/shell/observability/envelope-recorder.test.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-808
+Dockerfile
+  s_cd09a9ddfcc3c6::t_0c8728b272dc42 8,12,22
+  s_cd09a9ddfcc3c6::t_d75266d58dcfb7 13,21
+apps/server/src/shell/transactions/handlers.test.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-565
+apps/server/scripts/check-production-http.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-145
+apps/server/src/shell/dashboard/handlers.test.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-321
+apps/server/src/shell/_shared/canonical-telemetry.ts
+  s_cd09a9ddfcc3c6::t_ef0c62a7daac18 5
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-4,6
+apps/server/src/shell/agent/tool-confirmation-model.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-8
+apps/server/src/core/categories/model.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-68
+apps/server/src/shell/observability/telemetry.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-108,110-123,125-310
+  s_cd09a9ddfcc3c6::t_b31b404f6aa54a 109,124
+apps/server/src/shell/observability/telemetry-bootstrap.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-59,61-83
+  s_cd09a9ddfcc3c6::t_b9b9c5b7146c90 60
+apps/server/tools/observability-compatibility/handoff.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-6,8-72
+  s_cd09a9ddfcc3c6::t_eeb61dadf433f1 7
+apps/server/src/shell/channels/whatsapp/fixtures/kapso-meta-identity-change.json
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-28
+apps/server/src/shell/operations/operations.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-190
+apps/server/src/shell/db/migrations/0008-hosted-turn-tokens.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-29
+apps/server/src/shell/channels/whatsapp/disclosure-model.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-38
+apps/server/package.json
+  s_cd09a9ddfcc3c6::t_8e8a83d0f69229 32
+  s_cd09a9ddfcc3c6::t_545217de6d0111 1-31,33-55
+apps/server/src/core/tokens/reference.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-17
+apps/server/src/shell/transactions/mutations.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-244
+apps/server/src/shell/transcript/transcript-service.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-24
+apps/server/tools/observability-compatibility/compatibility.test.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-92
+apps/server/src/shell/db/migrations/0009-row-level-security.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-323
+apps/server/src/core/insights/errors.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-17
+apps/server/src/shell/_shared/canonical-input.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-27
+apps/server/src/shell/categories/repo.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-145
+apps/server/src/shell/_shared/response.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-106
+apps/server/src/shell/_shared/suggested-operations.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-98
+apps/server/src/shell/memory/repo.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-101
+apps/server/src/shell/observability/disabled.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-19
+apps/server/src/shell/observability/protocol.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-202
+landing/package.json
+  s_cd09a9ddfcc3c6::t_6162d123e47f64 7
+apps/server/src/shell/observability/sentry-account-reader.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-265
+apps/server/src/shell/observability/telemetry.test.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-303
+apps/server/src/shell/consent/consent-authorization.test.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-156
+.github/workflows/ci.yml
+  s_cd09a9ddfcc3c6::t_45fd0e88b97ea3 79,168
+apps/server/src/shell/runtime.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-33
+apps/server/src/shell/tokens/hosted-turn-token.test.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-42
+apps/server/src/shell/agent/transaction-receipt.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-100
+apps/server/scripts/check-browser-client.ts
+  s_cd09a9ddfcc3c6::t_e9d7d7e726c790 6
+  s_cd09a9ddfcc3c6::t_690c304a00f71d 52-54
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-2,9-50,57-81,83-127
+  s_cd09a9ddfcc3c6::t_33e0595dd32d64 7-8
+  s_cd09a9ddfcc3c6::t_6e43a77c7404ee 3,51,55,82
+  s_cd09a9ddfcc3c6::t_c69df66c1514d2 4-5
+  s_cd09a9ddfcc3c6::t_ea2bcd79976f1b 56
+apps/server/src/core/consent/model.test.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-195
+apps/server/src/core/transcript/model.test.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-66
+apps/server/src/shell/agent/conversation.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-61
+apps/server/src/shell/testing/kapso-identity-change.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-78
+apps/server/src/core/categories/rules.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-73
+apps/server/src/shell/dashboard/mutations.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-105
+apps/server/src/shell/memory/memory-policy.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-46
+apps/server/scripts/check-lint-guards.ts
+  s_cd09a9ddfcc3c6::t_dc5d1dff799e3b 4
+  s_cd09a9ddfcc3c6::t_1ce8934d7af3f3 3,8,10,79,81,92
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-2,5-7,9,11-65,69-78,80,82-91,93
+  s_cd09a9ddfcc3c6::t_5824c28f311fa9 66-68
+apps/server/src/shell/db/migrations/0017-recover-consent-disclosure-delivery.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-389
+apps/server/src/shell/testing/hosted-inference-fixtures.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-132
+apps/server/src/shell/ingestion/column-mapper.test.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-50
+apps/server/src/shell/ingestion/worker.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-286
+apps/server/src/core/dashboard/catalog.test.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-41
+apps/server/src/core/identity/reference.test.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-59
+apps/server/src/shell/channels/whatsapp/worker.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-206
+apps/server/.dependency-cruiser.mjs
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-50,52-147,149-159,161-221,223-239
+  s_cd09a9ddfcc3c6::t_730d9a89892846 51,148,160,222
+apps/server/src/core/dashboard/model.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-575
+apps/server/src/shell/consent/consent-gate.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-292
+apps/server/src/shell/_shared/errors.test.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-70
+apps/server/src/shell/api.test.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-32
+apps/server/src/shell/_shared/operation-policy.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-28,30-77
+  s_cd09a9ddfcc3c6::t_887772936b6f05 29
+apps/server/src/shell/db/migrations/0002-create-identities-and-tokens.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-57
+apps/server/src/shell/db/development-seed.test.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-108
+apps/server/src/core/transactions/model.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-226
+apps/server/src/shell/channels/whatsapp/disclosure-delivery.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-308
+apps/server/vitest.acceptance.config.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-75
+apps/server/src/shell/testing/whatsapp-caller.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-19
+apps/server/src/core/insights/rules.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-36
+apps/server/src/shell/db/migrations/0005-create-insights.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-59
+apps/server/src/core/tokens/rules.test.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-11
+apps/server/src/shell/channels/whatsapp/kapso-client.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-351,353-374
+  s_cd09a9ddfcc3c6::t_afe0fce9453915 352
+apps/server/src/core/insights/model.test.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-144
+apps/server/src/shell/channels/whatsapp/whatsapp-channel.test.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-3263
+apps/server/src/shell/testing/language-model-fixtures.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-14
+apps/server/src/shell/audit/audit-log.test.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-40,42-230
+  s_cd09a9ddfcc3c6::t_5e9515ee540b88 41
+apps/server/src/core/categories/errors.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-30
+apps/server/src/shell/observability/sentry-adapter.test.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-87
+apps/server/src/shell/channels/whatsapp/routes.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-453
+apps/server/src/shell/_shared/deep-freeze.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-6
+package.json
+  s_cd09a9ddfcc3c6::t_3129ddf997d1ec 5-7,46,49,54,60
+  s_cd09a9ddfcc3c6::t_d8602a941b2e56 13-14
+  s_cd09a9ddfcc3c6::t_e889e355b10b21 11,36
+  s_cd09a9ddfcc3c6::t_df1e9ecc8304f4 16-19,21-23,26-35
+apps/server/src/shell/db/migrations/registry.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-59
+apps/server/src/shell/agent/toolkit.test.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-111
+apps/server/src/shell/agent/agent-service.test.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-258,260-274,276-3534
+  s_cd09a9ddfcc3c6::t_727adba1632242 259,275
+apps/server/src/shell/ingestion/operations.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-89
+apps/server/src/shell/db/advisory-lock.test.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-45
+apps/server/src/shell/_shared/authz-live.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-283
+apps/server/src/shell/ingestion/repo.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-604
+apps/server/src/core/insights/rules.test.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-42
+scripts/oxlint/effect-guards.js
+  s_cd09a9ddfcc3c6::t_961b0cbe81c0e3 98,191
+apps/server/src/shell/insights/handlers.test.ts
+  s_cd09a9ddfcc3c6::t_99cefec0b2366c 48
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-47,49-401
+apps/server/src/shell/transactions/handlers.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-147
+apps/server/src/shell/subscription/operations.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-24
+apps/server/src/core/_shared/provider-message-evidence.test.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-21
+apps/server/src/shell/db/migrations/0016-agent-confirmation-consumptions.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-26
+apps/server/src/shell/channels/whatsapp/whatsapp.acceptance.test.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-966
+apps/server/src/shell/observability/telemetry-config.test.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-341
+apps/server/src/shell/transactions/operations.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-117
+apps/server/src/shell/ingestion/column-mapper.ts
+  s_cd09a9ddfcc3c6::t_a6db52b4a6a10b 41
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-40,42-64
+apps/server/src/shell/observability/sentry-live.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-13
+apps/server/src/core/_shared/provider-message-evidence.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-35
+apps/server/tools/vitest-global-setup.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-17
+apps/server/src/client.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-9
+apps/server/src/shell/db/client.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-47,49-54
+  s_cd09a9ddfcc3c6::t_bdfbd04cd04873 48
+apps/server/src/core/insights/model.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-73
+apps/server/src/shell/channels/whatsapp/bounded-bytes.ts
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-25
+apps/server/stryker.config.mjs
+  s_cd09a9ddfcc3c6::t_32cc086e919e8e 1-88
+bun.lock
+  s_cd09a9ddfcc3c6::t_1986d696512cbc 15,20,27-48,151-152,1087,1151-1152
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "c85163ccbd4552195573ae113f78290b070952af",
+  "prompts": {},
+  "sessions": {
+    "s_cd09a9ddfcc3c6": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a00074-a051-77e4-a783-683a3fdd4149",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

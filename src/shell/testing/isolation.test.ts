@@ -9,7 +9,7 @@ import { CategoryKeyword } from "~/core/categories/model";
 import { categoryIds } from "~/core/categories/taxonomy";
 import { type InsightEvent } from "~/core/insights/model";
 import { type Transaction } from "~/core/transactions/model";
-import { AgentBearerToken } from "~/core/tokens/model";
+import { TokenBearer } from "~/core/tokens/model";
 import type { OperationId } from "~/shell/api";
 import { truncateInsights, weeklySummaryInput } from "~/shell/insights/fixtures";
 import { truncateStatementIngestion } from "~/shell/ingestion/fixtures";
@@ -27,15 +27,13 @@ import {
 } from "./api-harness";
 import { truncateDashboards } from "~/shell/dashboard/fixtures";
 import { MigrationSqlClient } from "~/shell/db/client";
-import { seedConsentedAgentIdentity } from "~/shell/db/development-seed";
+import { seedConsentedPatIdentity } from "~/shell/db/development-seed";
 import { publishedOperationIds } from "./openapi";
 
 const owner = UserId.make("f1d1a000-0000-4000-8000-0000000000a1");
 const stranger = UserId.make("f1d1a000-0000-4000-8000-0000000000b2");
-const ownerBearer = AgentBearerToken.make("fin_owner001_0123456789abcdefghijklmnopqrstuvwxyzABCD");
-const strangerBearer = AgentBearerToken.make(
-  "fin_strange1_ABCDabcdefghijklmnopqrstuvwxyz0123456789"
-);
+const ownerBearer = TokenBearer.make("fin_owner001_0123456789abcdefghijklmnopqrstuvwxyzABCD");
+const strangerBearer = TokenBearer.make("fin_strange1_ABCDabcdefghijklmnopqrstuvwxyz0123456789");
 const absentMemoryId = MemoryId.make("f1d1a000-0000-4000-8000-00000000dead");
 
 class OwnerApiClient extends Context.Service<OwnerApiClient, ApiClient>()(
@@ -506,11 +504,11 @@ const probes: Record<OperationId, IsolationProbe> = {
 };
 
 const seedAttempt = Effect.gen(function* () {
-  yield* seedConsentedAgentIdentity({
+  yield* seedConsentedPatIdentity({
     userId: owner,
     bearer: ownerBearer,
   });
-  yield* seedConsentedAgentIdentity({
+  yield* seedConsentedPatIdentity({
     userId: stranger,
     bearer: strangerBearer,
   });

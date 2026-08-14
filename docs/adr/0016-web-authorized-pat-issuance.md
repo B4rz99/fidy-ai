@@ -9,7 +9,7 @@ A User needs to delegate canonical operations to an agent they control. Issuing 
 
 ## Decision
 
-The durable User-owned bearer is a **PAT (Personal Access Token)**; `AgentToken` and `UserAgentToken` are retired terms. The internal one-Turn bearer is a **HostedTurnToken** and is never a PAT.
+The durable User-owned bearer is a **PAT (Personal Access Token)**. The internal one-Turn bearer is a **HostedTurnToken** and is never a PAT.
 
 Only a freshly authenticated web session may authorize a PAT. The stable management entry is
 `https://fidyapp.com/settings/pats`. The web app supports two issuance paths behind one grant policy:

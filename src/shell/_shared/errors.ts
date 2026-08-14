@@ -150,7 +150,7 @@ export class ValidationFailed extends Schema.ErrorClass<ValidationFailed>(valida
 
 /**
  * The request named no caller, or one that could not be resolved to a user.
- * Carries no suggested operation: nothing the API offers changes an AgentToken.
+ * Carries no suggested operation: nothing the API offers changes a PAT.
  */
 export class Unauthenticated extends Schema.ErrorClass<Unauthenticated>(unauthenticatedTag)(
   errorResponse(unauthenticatedTag, detail("unauthenticated")),
@@ -158,9 +158,9 @@ export class Unauthenticated extends Schema.ErrorClass<Unauthenticated>(unauthen
 ) {}
 
 /**
- * The bearer is a valid AgentToken but does not grant the scope declared by the
- * attempted operation. Token changes happen in chat, outside this canonical API,
- * so the failure carries no suggested operation.
+ * The bearer is valid but does not grant the scope declared by the attempted operation. PAT
+ * changes happen at `/settings/pats`, outside this canonical API, so the failure carries no
+ * suggested operation.
  */
 export class ScopeMissing extends Schema.ErrorClass<ScopeMissing>(scopeMissingTag)(
   errorResponse(scopeMissingTag, detail("scope_missing")),

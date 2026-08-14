@@ -16,10 +16,10 @@ import { type Response as AiResponse, LanguageModel } from "effect/unstable/ai";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import { type ConsentRecord, PendingConsentExchangeId } from "~/core/consent/model";
 import type { UserId, WhatsAppCallerReference } from "~/core/identity/reference";
-import { AgentBearerToken, AgentTokenScopes, getAgentTokenShortId } from "~/core/tokens/model";
-import { AgentTokenId } from "~/core/tokens/reference";
-import { renewAgentTokenIdleExpiry } from "~/core/tokens/rules";
-import { hashAgentBearer } from "~/shell/_shared/authz";
+import { PatScopes, TokenBearer, getTokenShortId } from "~/core/tokens/model";
+import { PATId } from "~/core/tokens/reference";
+import { computePatIdleExpiry } from "~/core/tokens/rules";
+import { hashTokenBearer } from "~/shell/_shared/authz";
 import { categoryIds } from "~/core/categories/taxonomy";
 import { AgentService } from "~/shell/agent/agent-service";
 import { HostedInferenceFromLanguageModel } from "./hosted-inference-fixtures";
@@ -40,11 +40,11 @@ import { findPendingConsentExchange, observeConsentRecords } from "~/shell/conse
 import { MigrationSqlClient, MigratorLive, PgLive, RuntimeAuthorityLive } from "~/shell/db/client";
 import { makeDevelopmentSeedLive } from "~/shell/db/development-seed";
 import { findWhatsAppCaller } from "~/shell/identity/repo";
-import { upsertAgentToken } from "~/shell/tokens/repo";
+import { upsertPAT } from "~/shell/tokens/repo";
 import { HttpLive } from "~/shell/http";
 import { TelemetryDisabled } from "~/shell/observability/disabled";
 import { type ApiClient, makeApiClientLive } from "./api-harness";
-import { defaultAgentBearer } from "./identity-fixtures";
+import { defaultPatBearer } from "./identity-fixtures";
 import { makeLanguageModelFinishPart } from "./language-model-fixtures";
 import { TestPublicNamespace } from "./test-config";
 
@@ -139,22 +139,22 @@ export class WhatsAppAcceptanceApiClient extends Context.Service<
 
 const acceptanceProbeCredentials = {
   "WA-A04": {
-    bearer: AgentBearerToken.make("fin_obsa0401_0123456789abcdefghijklmnopqrstuvwxyzABCD"),
-    tokenId: AgentTokenId.make("f1d1a000-0000-4000-8000-000000001214"),
+    bearer: TokenBearer.make("fin_obsa0401_0123456789abcdefghijklmnopqrstuvwxyzABCD"),
+    tokenId: PATId.make("f1d1a000-0000-4000-8000-000000001214"),
     tag: Context.Service<ApiClient>(
       "fidy-ai/shell/testing/whatsapp-acceptance-harness/WhatsAppAcceptanceA04ApiClient"
     ),
   },
   "WA-A05": {
-    bearer: AgentBearerToken.make("fin_obsa0501_0123456789abcdefghijklmnopqrstuvwxyzABCD"),
-    tokenId: AgentTokenId.make("f1d1a000-0000-4000-8000-000000001215"),
+    bearer: TokenBearer.make("fin_obsa0501_0123456789abcdefghijklmnopqrstuvwxyzABCD"),
+    tokenId: PATId.make("f1d1a000-0000-4000-8000-000000001215"),
     tag: Context.Service<ApiClient>(
       "fidy-ai/shell/testing/whatsapp-acceptance-harness/WhatsAppAcceptanceA05ApiClient"
     ),
   },
   "WA-A06": {
-    bearer: AgentBearerToken.make("fin_obsa0601_0123456789abcdefghijklmnopqrstuvwxyzABCD"),
-    tokenId: AgentTokenId.make("f1d1a000-0000-4000-8000-000000001216"),
+    bearer: TokenBearer.make("fin_obsa0601_0123456789abcdefghijklmnopqrstuvwxyzABCD"),
+    tokenId: PATId.make("f1d1a000-0000-4000-8000-000000001216"),
     tag: Context.Service<ApiClient>(
       "fidy-ai/shell/testing/whatsapp-acceptance-harness/WhatsAppAcceptanceA06ApiClient"
     ),
@@ -179,7 +179,7 @@ export type WhatsAppAcceptanceCallerProbe = Readonly<{
 
 /**
  * Authorizes canonical observations for an established caller by inserting a scenario-specific,
- * read-only AgentToken. An unknown caller returns no probe; preparation cannot create or mutate
+ * read-only TokenBearer. An unknown caller returns no probe; preparation cannot create or mutate
  * User, identity, consent, or finance state.
  */
 export class WhatsAppAcceptanceCallerControl extends Context.Service<
@@ -471,13 +471,13 @@ const AcceptanceCallerProbe = Layer.effect(
 
           const credentials = acceptanceProbeCredentials[observerId];
           const createdAt = yield* DateTime.now;
-          const tokenHash = yield* hashAgentBearer(credentials.bearer);
-          yield* upsertAgentToken(userId.value, {
+          const tokenHash = yield* hashTokenBearer(credentials.bearer);
+          yield* upsertPAT(userId.value, {
             id: credentials.tokenId,
-            shortId: yield* getAgentTokenShortId(credentials.bearer),
+            shortId: yield* getTokenShortId(credentials.bearer),
             tokenHash,
-            scopes: AgentTokenScopes.make(["read"]),
-            idleExpiresAt: yield* renewAgentTokenIdleExpiry(createdAt),
+            scopes: PatScopes.make(["read"]),
+            idleExpiresAt: yield* computePatIdleExpiry(createdAt),
             revokedAt: Option.none(),
             createdAt,
           });
@@ -522,10 +522,10 @@ export const WhatsAppAcceptanceHarness = AcceptanceApplication.pipe(
   Layer.provideMerge(AcceptanceDisclosureControl),
   Layer.provideMerge(AcceptanceKapsoTransport),
   Layer.provideMerge(
-    makeApiClientLive({ tag: WhatsAppAcceptanceApiClient, bearer: defaultAgentBearer })
+    makeApiClientLive({ tag: WhatsAppAcceptanceApiClient, bearer: defaultPatBearer })
   ),
   Layer.provideMerge(AcceptanceProbeApiClients),
-  Layer.provideMerge(makeDevelopmentSeedLive(defaultAgentBearer)),
+  Layer.provideMerge(makeDevelopmentSeedLive(defaultPatBearer)),
   Layer.provideMerge(BunHttpServer.layerTest),
   Layer.provideMerge(BunServices.layer),
   Layer.provideMerge(MigrationSqlClient.layer),

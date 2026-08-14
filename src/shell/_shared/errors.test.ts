@@ -38,7 +38,7 @@ const EncodeFailureHarness = EncodeFailureLive.pipe(
 it.effect("keeps API failures taggable in-process without publishing the tag", () =>
   Effect.gen(function* () {
     const failure = Unauthenticated.make({
-      error: { code: "unauthenticated", message: "Supply a known AgentToken." },
+      error: { code: "unauthenticated", message: "Supply a known TokenBearer." },
       next: [],
     });
     const recovered = yield* Effect.fail(failure).pipe(
@@ -46,9 +46,9 @@ it.effect("keeps API failures taggable in-process without publishing the tag", (
     );
     const encoded = yield* Schema.encodeUnknownEffect(Unauthenticated)(failure);
 
-    expect(recovered).toBe("Supply a known AgentToken.");
+    expect(recovered).toBe("Supply a known TokenBearer.");
     expect(encoded).toEqual({
-      error: { code: "unauthenticated", message: "Supply a known AgentToken." },
+      error: { code: "unauthenticated", message: "Supply a known TokenBearer." },
       next: [],
     });
   })

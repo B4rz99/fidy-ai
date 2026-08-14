@@ -12,11 +12,11 @@ import {
 } from "effect";
 import { HttpBody, HttpClient } from "effect/unstable/http";
 import { SqlSchema } from "effect/unstable/sql";
-import { AgentTokenId } from "~/core/tokens/reference";
+import { PATId } from "~/core/tokens/reference";
 import { IanaTimeZone } from "~/core/_shared/context";
 import { Currency, Money } from "~/core/_shared/money";
-import { AgentBearerToken } from "~/core/tokens/model";
-import { defaultUserId, seedConsentedAgentIdentity } from "~/shell/db/development-seed";
+import { TokenBearer } from "~/core/tokens/model";
+import { defaultUserId, seedConsentedPatIdentity } from "~/shell/db/development-seed";
 import { MigrationSqlClient } from "~/shell/db/client";
 import { withUserTransaction } from "~/shell/db/user-transaction";
 import { ValidationFailed } from "~/shell/_shared/errors";
@@ -29,7 +29,7 @@ import {
   headersFor,
   makeApiClientLive,
 } from "~/shell/testing/api-harness";
-import { defaultAgentBearer } from "~/shell/testing/identity-fixtures";
+import { defaultPatBearer } from "~/shell/testing/identity-fixtures";
 import { truncateInsights, weeklySummaryInput } from "./fixtures";
 import { dismissInsight, markInsightDelivered, markInsightRead } from "./mutations";
 import { generateInsightEvent } from "./repo";
@@ -42,10 +42,8 @@ const toolArgs = (next: ReadonlyArray<SuggestedOperation>): ReadonlyArray<Option
 const isValidationFailed = Schema.is(ValidationFailed);
 
 const generateWeeklySummary = generateInsightEvent(defaultUserId, weeklySummaryInput());
-const concurrentTokenId = AgentTokenId.make("f1d1a000-0000-4000-8000-0000000000d2");
-const concurrentBearer = AgentBearerToken.make(
-  "fin_race0001_abcdefghijklmnopqrstuvwxyz0123456789ABCD"
-);
+const concurrentTokenId = PATId.make("f1d1a000-0000-4000-8000-0000000000d2");
+const concurrentBearer = TokenBearer.make("fin_race0001_abcdefghijklmnopqrstuvwxyz0123456789ABCD");
 class ConcurrentApiClient extends Context.Service<ConcurrentApiClient, ApiClient>()(
   "fidy-ai/shell/insights/handlers.test/ConcurrentApiClient"
 ) {}
@@ -178,7 +176,7 @@ layer(InsightsHarness, { excludeTestServices: true, timeout: "30 seconds" })(
     it.effect("serializes duplicate delivery and conflicting lifecycle calls", () =>
       Effect.gen(function* () {
         yield* truncateInsights;
-        yield* seedConsentedAgentIdentity({
+        yield* seedConsentedPatIdentity({
           userId: defaultUserId,
           bearer: concurrentBearer,
           tokenId: concurrentTokenId,
@@ -309,7 +307,7 @@ layer(InsightsHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         const client = yield* ApiHarnessClient;
         const generated = yield* generateWeeklySummary;
         const response = yield* HttpClient.post(`/insights/${generated.id}/delivered`, {
-          headers: headersFor(defaultAgentBearer),
+          headers: headersFor(defaultPatBearer),
           body: HttpBody.jsonUnsafe({
             sentAt: "2026-08-09T23:00:08Z",
             channel: "whatsapp",

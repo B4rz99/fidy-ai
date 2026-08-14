@@ -10,7 +10,7 @@ import { observeAuditLogEntries } from "~/shell/audit/repo";
 import { defaultUserId } from "~/shell/db/development-seed";
 import { truncateMemories } from "~/shell/memory/fixtures";
 import { ApiHarness, ApiHarnessClient, headersFor } from "~/shell/testing/api-harness";
-import { defaultAgentBearer } from "~/shell/testing/identity-fixtures";
+import { defaultPatBearer } from "~/shell/testing/identity-fixtures";
 import { AtomicBatchCallId, maximumAtomicBatchCalls } from "./operations";
 import { transactionPayload, truncateTransactions } from "~/shell/transactions/fixtures";
 
@@ -182,7 +182,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
 
         const responses = yield* Effect.forEach(payloads, (payload) =>
           HttpClient.post("/operations/atomic-batch", {
-            headers: headersFor(defaultAgentBearer),
+            headers: headersFor(defaultPatBearer),
             body: HttpBody.jsonUnsafe(payload),
           })
         );

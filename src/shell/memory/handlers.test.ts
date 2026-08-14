@@ -6,7 +6,7 @@ import { truncateAuditLogEntries } from "~/shell/audit/fixtures";
 import { observeAuditLogEntries } from "~/shell/audit/repo";
 import { defaultUserId } from "~/shell/db/development-seed";
 import { EnvelopeRecorder } from "~/shell/observability/envelope-recorder";
-import { defaultAgentBearer } from "~/shell/testing/identity-fixtures";
+import { defaultPatBearer } from "~/shell/testing/identity-fixtures";
 import {
   ApiHarness,
   ApiHarnessClient,
@@ -22,7 +22,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })("Memory 
     Effect.gen(function* () {
       yield* truncateMemories;
       const raw = yield* HttpClient.post("/memories", {
-        headers: headersFor(defaultAgentBearer),
+        headers: headersFor(defaultPatBearer),
         body: HttpBody.jsonUnsafe({ text: "  primera\r\nmemoria  " }),
       });
       expect(raw.status).toBe(201);
@@ -32,7 +32,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })("Memory 
       });
       const recalled = yield* client.memory.recall();
       const rawRecall = yield* HttpClient.get("/memories", {
-        headers: headersFor(defaultAgentBearer),
+        headers: headersFor(defaultPatBearer),
       });
 
       expect(rawRecall.headers["cache-control"]).toBe("no-store");
@@ -112,15 +112,15 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })("Memory 
       const malformedId = "not-a-memory-id";
 
       const malformedRevise = yield* HttpClient.put(`/memories/${malformedId}`, {
-        headers: headersFor(defaultAgentBearer),
+        headers: headersFor(defaultPatBearer),
         body: HttpBody.jsonUnsafe({ text: "texto nuevo" }),
       });
       const oversizedRevise = yield* HttpClient.put(`/memories/${target.data.id}`, {
-        headers: headersFor(defaultAgentBearer),
+        headers: headersFor(defaultPatBearer),
         body: HttpBody.jsonUnsafe({ text: "x".repeat(2_001) }),
       });
       const malformedForget = yield* HttpClient.del(`/memories/${malformedId}`, {
-        headers: headersFor(defaultAgentBearer),
+        headers: headersFor(defaultPatBearer),
       });
 
       expect(malformedRevise.status).toBe(400);
@@ -205,7 +205,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })("Memory 
       }
       const canary = `private-capacity-canary-${"y".repeat(1_976)}`;
       const response = yield* HttpClient.post("/memories", {
-        headers: headersFor(defaultAgentBearer),
+        headers: headersFor(defaultPatBearer),
         body: HttpBody.jsonUnsafe(encodeRemember({ text: MemoryText.make(canary) })),
       });
       const body = yield* response.text;
@@ -252,7 +252,7 @@ layer(ApiTelemetryHarness, { excludeTestServices: true, timeout: "30 seconds" })
         const callerControlledId = "f1d1a000-0000-4000-8000-00000000cafe";
         yield* Effect.result(
           HttpClient.put(`/memories/${callerControlledId}`, {
-            headers: headersFor(defaultAgentBearer),
+            headers: headersFor(defaultPatBearer),
             body: HttpBody.jsonUnsafe({ text: "rejected-revise-canary" }),
           })
         );

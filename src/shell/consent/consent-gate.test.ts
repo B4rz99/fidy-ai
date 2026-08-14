@@ -452,7 +452,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })("consent
         transactions: Schema.Int,
         transcripts: Schema.Int,
         audits: Schema.Int,
-        agentTokens: Schema.Int,
+        pats: Schema.Int,
       });
       const residual = yield* SqlSchema.findOne({
         Request: Schema.Struct({
@@ -479,8 +479,8 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })("consent
               WHERE user_id IN (SELECT id FROM declined_users)) AS transcripts,
             (SELECT count(*)::int FROM audit_log_entries
               WHERE user_id IN (SELECT id FROM declined_users)) AS audits,
-            (SELECT count(*)::int FROM agent_tokens
-              WHERE user_id IN (SELECT id FROM declined_users)) AS "agentTokens"
+            (SELECT count(*)::int FROM tokens
+              WHERE user_id IN (SELECT id FROM declined_users)) AS "pats"
         `,
       })({ declinedAt, initiatedAt, phoneNumber: declinedPhone });
       expect(residual).toEqual({
@@ -490,7 +490,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })("consent
         transactions: 0,
         transcripts: 0,
         audits: 0,
-        agentTokens: 0,
+        pats: 0,
       });
     })
   );

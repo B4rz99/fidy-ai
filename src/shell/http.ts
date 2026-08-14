@@ -1,7 +1,7 @@
 import { Config, Effect, Layer } from "effect";
 import { HttpRouter, HttpServerResponse, HttpStaticServer } from "effect/unstable/http";
 import { HttpApiBuilder, HttpApiScalar } from "effect/unstable/httpapi";
-import { AgentAuthorizationLive } from "~/shell/_shared/authz";
+import { TokenAuthorizationLive } from "~/shell/_shared/authz";
 import { ValidationGateLive } from "~/shell/_shared/errors";
 import { AuditRetentionLive } from "~/shell/audit/retention";
 import { CURRENT_POLICY_PATH } from "~/shell/consent/current-disclosure";
@@ -61,7 +61,7 @@ export const ApiLive = HttpApiBuilder.layer(FidyApi, { openapiPath: "/openapi.js
       MemoryLive,
       SubscriptionLive,
       OperationsLive
-    ).pipe(Layer.provide([ValidationGateLive, AgentAuthorizationLive, CanonicalTelemetryLive]))
+    ).pipe(Layer.provide([ValidationGateLive, TokenAuthorizationLive, CanonicalTelemetryLive]))
   )
 );
 

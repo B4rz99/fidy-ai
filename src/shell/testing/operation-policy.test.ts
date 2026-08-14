@@ -1,7 +1,7 @@
 import { expect, layer } from "@effect/vitest";
 import { Effect, Option } from "effect";
 import { HttpApi } from "effect/unstable/httpapi";
-import { AgentAuthorization } from "~/shell/_shared/authz";
+import { TokenAuthorization } from "~/shell/_shared/authz";
 import { ValidationGate } from "~/shell/_shared/errors";
 import {
   type AgentConfirmation,
@@ -27,7 +27,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           const middlewareKeys = Array.from(middleware, (candidate) => candidate.key);
           covered.push({
             id: `${group.identifier}.${endpoint.identifier}`,
-            authorization: middlewareKeys.includes(AgentAuthorization.key),
+            authorization: middlewareKeys.includes(TokenAuthorization.key),
             validation: middlewareKeys.includes(ValidationGate.key),
           });
         },

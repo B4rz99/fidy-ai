@@ -3,7 +3,7 @@ import { Locale, ServiceMarket } from "~/core/_shared/context";
 import { ProviderMessageEvidence } from "~/core/_shared/provider-message-evidence";
 import { UserId, WhatsAppCallerReference } from "~/core/identity/reference";
 import { InsightKind } from "~/core/insights/reference";
-import { AgentTokenId } from "~/core/tokens/reference";
+import { PATId } from "~/core/tokens/reference";
 import { UtcTimestamp } from "~/core/_shared/time";
 
 const maximumLegalFactLength = 1_000;
@@ -93,7 +93,7 @@ export type DisclosureSnapshot = typeof DisclosureSnapshot.Type;
 /** Capability authorized by one grant, using references owned by the named slice. */
 export const ConsentGrant = Schema.Union([
   Schema.TaggedStruct("Onboarding", {}),
-  Schema.TaggedStruct("AgentToken", { tokenId: AgentTokenId }),
+  Schema.TaggedStruct("PAT", { tokenId: PATId }),
   Schema.TaggedStruct("InsightDelivery", { insightKind: InsightKind }),
 ]);
 export type ConsentGrant = typeof ConsentGrant.Type;

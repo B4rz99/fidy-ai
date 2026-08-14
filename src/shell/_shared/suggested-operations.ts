@@ -1,5 +1,5 @@
 import { Function, type Option, Schema } from "effect";
-import { type AgentScope } from "~/core/tokens/model";
+import { type PatScope } from "~/core/tokens/model";
 import { type OperationId, operationCatalog } from "~/shell/api";
 import type { CanonicalInput } from "./canonical-input";
 import { type OperationPolicyValue, type OperationTier } from "./operation-policy";
@@ -35,7 +35,7 @@ export const suggestOperation = <Id extends OperationId>(
 
 /** The explicit caller facts needed to decide whether a target is callable. */
 export type SuggestedOperationCaller = {
-  readonly scopes: ReadonlyArray<AgentScope>;
+  readonly scopes: ReadonlyArray<PatScope>;
   readonly tier: OperationTier;
 };
 
@@ -50,7 +50,7 @@ const hasRequiredTier = (requiredTier: OperationTier, callerTier: OperationTier)
 /**
  * Decides callability from the same policy authorization and generated surfaces
  * read. `free` operations are available to both tiers; Pro operations require a
- * Pro caller, and every operation still requires its declared AgentToken scope.
+ * Pro caller, and every operation still requires its declared TokenBearer scope.
  */
 export const canCallOperation: {
   (caller: SuggestedOperationCaller): (self: OperationPolicyValue) => boolean;

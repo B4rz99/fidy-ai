@@ -1,10 +1,7 @@
 import { BunRuntime, BunServices } from "@effect/platform-bun";
 import { Config, Effect, Layer, Option } from "effect";
 import { MigrationPgLive, MigratorLive } from "~/shell/db/client";
-import {
-  generateDevelopmentAgentBearer,
-  seedDevelopmentIdentity,
-} from "~/shell/db/development-seed";
+import { generateDevelopmentPatBearer, seedDevelopmentIdentity } from "~/shell/db/development-seed";
 
 const localDatabaseHosts = new Set(["localhost", "127.0.0.1", "[::1]", "::1"]);
 
@@ -32,7 +29,7 @@ const requireLocalPostgres = Effect.gen(function* () {
 
 const SeedCommandLive = Layer.effectDiscard(
   Effect.gen(function* () {
-    const bearer = yield* generateDevelopmentAgentBearer;
+    const bearer = yield* generateDevelopmentPatBearer;
     yield* seedDevelopmentIdentity(bearer);
 
     // This is the command's one-time bearer-delivery channel, not application

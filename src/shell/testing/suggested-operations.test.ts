@@ -1,7 +1,7 @@
 import { expect, layer } from "@effect/vitest";
 import { Context, DateTime, Effect, Layer, Option, Result, Schema } from "effect";
 import { type SqlClient } from "effect/unstable/sql";
-import { AgentTokenId } from "~/core/tokens/reference";
+import { PATId } from "~/core/tokens/reference";
 import { IanaTimeZone } from "~/core/_shared/context";
 import { MemoryText } from "~/core/memory/model";
 import { UserId } from "~/core/identity/reference";
@@ -10,7 +10,7 @@ import { NeedsReviewItemId, StatementSubmissionId } from "~/core/ingestion/refer
 import { CategoryKeyword } from "~/core/categories/model";
 import { categoryIds } from "~/core/categories/taxonomy";
 import { TransactionId } from "~/core/transactions/model";
-import { AgentBearerToken, type AgentScope } from "~/core/tokens/model";
+import { type PatScope, TokenBearer } from "~/core/tokens/model";
 import { NotFound } from "~/shell/_shared/errors";
 import {
   type SuggestedOperationCaller,
@@ -23,7 +23,7 @@ import {
 import { type OperationId, operationCatalog } from "~/shell/api";
 import { AtomicBatchCallId } from "~/shell/operations/operations";
 import { truncateDashboards } from "~/shell/dashboard/fixtures";
-import { seedConsentedAgentIdentity } from "~/shell/db/development-seed";
+import { seedConsentedPatIdentity } from "~/shell/db/development-seed";
 import { truncateInsights, weeklySummaryInput } from "~/shell/insights/fixtures";
 import { truncateStatementIngestion } from "~/shell/ingestion/fixtures";
 import { generateInsightEvent } from "~/shell/insights/repo";
@@ -328,24 +328,20 @@ const probes: Record<OperationId, SuggestedOperationProbe> = {
 const strictEncoding = { errors: "all", onExcessProperty: "error" } as const;
 
 const readOnlyUser = UserId.make("f1d1a000-0000-4000-8000-0000000005b1");
-const readOnlyTokenId = AgentTokenId.make("f1d1a000-0000-4000-8000-0000000005b2");
-const readOnlyBearer = AgentBearerToken.make(
-  "fin_readgrd1_abcdefghijklmnopqrstuvwxyz0123456789ABCD"
-);
-const readOwnerWriterTokenId = AgentTokenId.make("f1d1a000-0000-4000-8000-0000000005b3");
-const readOwnerWriterBearer = AgentBearerToken.make(
+const readOnlyTokenId = PATId.make("f1d1a000-0000-4000-8000-0000000005b2");
+const readOnlyBearer = TokenBearer.make("fin_readgrd1_abcdefghijklmnopqrstuvwxyz0123456789ABCD");
+const readOwnerWriterTokenId = PATId.make("f1d1a000-0000-4000-8000-0000000005b3");
+const readOwnerWriterBearer = TokenBearer.make(
   "fin_readwrit_abcdefghijklmnopqrstuvwxyz0123456789ABCD"
 );
 const dashboardOnlyUser = UserId.make("f1d1a000-0000-4000-8000-0000000005c1");
-const dashboardOnlyTokenId = AgentTokenId.make("f1d1a000-0000-4000-8000-0000000005c2");
-const dashboardOnlyBearer = AgentBearerToken.make(
+const dashboardOnlyTokenId = PATId.make("f1d1a000-0000-4000-8000-0000000005c2");
+const dashboardOnlyBearer = TokenBearer.make(
   "fin_dashgrd1_abcdefghijklmnopqrstuvwxyz0123456789ABCD"
 );
 const writeOnlyUser = UserId.make("f1d1a000-0000-4000-8000-0000000005a1");
-const writeOnlyTokenId = AgentTokenId.make("f1d1a000-0000-4000-8000-0000000005a2");
-const writeOnlyBearer = AgentBearerToken.make(
-  "fin_write001_abcdefghijklmnopqrstuvwxyz0123456789ABCD"
-);
+const writeOnlyTokenId = PATId.make("f1d1a000-0000-4000-8000-0000000005a2");
+const writeOnlyBearer = TokenBearer.make("fin_write001_abcdefghijklmnopqrstuvwxyz0123456789ABCD");
 class ReadOnlyApiClient extends Context.Service<ReadOnlyApiClient, ApiClient>()(
   "fidy-ai/shell/testing/suggested-operations.test/ReadOnlyApiClient"
 ) {}
@@ -370,31 +366,31 @@ layer(SuggestedOperationsHarness, { excludeTestServices: true, timeout: "30 seco
   (it) => {
     it.effect("every returned SuggestedOperation names a callable canonical operation", () =>
       Effect.gen(function* () {
-        yield* seedConsentedAgentIdentity({
+        yield* seedConsentedPatIdentity({
           userId: readOnlyUser,
           bearer: readOnlyBearer,
           tokenId: readOnlyTokenId,
           scopes: ["read"],
         });
-        yield* seedConsentedAgentIdentity({
+        yield* seedConsentedPatIdentity({
           userId: readOnlyUser,
           bearer: readOwnerWriterBearer,
           tokenId: readOwnerWriterTokenId,
           scopes: ["write"],
         });
-        yield* seedConsentedAgentIdentity({
+        yield* seedConsentedPatIdentity({
           userId: writeOnlyUser,
           bearer: writeOnlyBearer,
           tokenId: writeOnlyTokenId,
           scopes: ["write"],
         });
-        yield* seedConsentedAgentIdentity({
+        yield* seedConsentedPatIdentity({
           userId: dashboardOnlyUser,
           bearer: dashboardOnlyBearer,
           tokenId: dashboardOnlyTokenId,
           scopes: ["dashboard"],
         });
-        const clientsByScope: Record<AgentScope, ApiClient> = {
+        const clientsByScope: Record<PatScope, ApiClient> = {
           read: yield* ReadOnlyApiClient,
           write: yield* WriteOnlyApiClient,
           dashboard: yield* DashboardOnlyApiClient,
@@ -449,7 +445,7 @@ layer(SuggestedOperationsHarness, { excludeTestServices: true, timeout: "30 seco
 
     it.effect("filters SuggestedOperations unavailable to the resolved caller", () =>
       Effect.gen(function* () {
-        yield* seedConsentedAgentIdentity({
+        yield* seedConsentedPatIdentity({
           userId: writeOnlyUser,
           bearer: writeOnlyBearer,
           tokenId: writeOnlyTokenId,

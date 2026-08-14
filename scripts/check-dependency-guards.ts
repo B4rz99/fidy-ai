@@ -61,8 +61,8 @@ const PROBES: readonly Probe[] = [
         path: `${SIBLING_REFERENCE}/probe.ts`,
         source:
           'import { UserId } from "~/core/identity/reference";\n' +
-          'import { AgentTokenId } from "~/core/tokens/reference";\n\n' +
-          "export const siblingReferenceProbe = [UserId, AgentTokenId];\n",
+          'import { TokenId } from "~/core/tokens/reference";\n\n' +
+          "export const siblingReferenceProbe = [UserId, TokenId];\n",
       },
     ],
     name: "a core slice may import a sibling's published reference.ts",

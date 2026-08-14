@@ -1,6 +1,6 @@
 import { Context, Option, Schema } from "effect";
 import { OpenApi } from "effect/unstable/httpapi";
-import { type AgentScope } from "~/core/tokens/model";
+import { type PatScope } from "~/core/tokens/model";
 
 /** The Subscription tier a caller currently has or an operation requires. */
 export const OperationTier = Schema.Literals(["free", "pro"]);
@@ -16,7 +16,7 @@ export type CanonicalOperationKind = typeof CanonicalOperationKind.Type;
 
 /** Route-independent authorization, availability, accounting, and agent policy carried by an operation. */
 export type OperationPolicyValue = {
-  readonly requiredScope: AgentScope;
+  readonly requiredScope: PatScope;
   /** Whether authorization checks this endpoint or each schema-derived child operation. */
   readonly scopeEvaluation: "endpoint" | "children";
   readonly requiredTier: OperationTier;

@@ -18,10 +18,10 @@ import {
   StatementIdempotencyKey,
   type SubmitForExtractionInput,
 } from "~/core/ingestion/model";
-import { AgentBearerToken } from "~/core/tokens/model";
-import { AgentTokenId } from "~/core/tokens/reference";
+import { TokenBearer } from "~/core/tokens/model";
+import { PATId } from "~/core/tokens/reference";
 import { MigrationSqlClient } from "~/shell/db/client";
-import { defaultUserId, seedConsentedAgentIdentity } from "~/shell/db/development-seed";
+import { defaultUserId, seedConsentedPatIdentity } from "~/shell/db/development-seed";
 import { withUserTransaction } from "~/shell/db/user-transaction";
 import {
   type ApiClient,
@@ -78,8 +78,8 @@ const ReviewWorkerHarness = Layer.merge(
   )
 );
 const otherUserId = UserId.make("f1d1a000-0000-4000-8000-00000000e001");
-const otherTokenId = AgentTokenId.make("f1d1a000-0000-4000-8000-00000000e002");
-const otherBearer = AgentBearerToken.make("fin_worker02_abcdefghijklmnopqrstuvwxyz0123456789ABCD");
+const otherTokenId = PATId.make("f1d1a000-0000-4000-8000-00000000e002");
+const otherBearer = TokenBearer.make("fin_worker02_abcdefghijklmnopqrstuvwxyz0123456789ABCD");
 class OtherApiClient extends Context.Service<OtherApiClient, ApiClient>()(
   "fidy-ai/shell/ingestion/worker.test/OtherApiClient"
 ) {}
@@ -246,7 +246,7 @@ layer(IsolationWorkerHarness, { excludeTestServices: true, timeout: "30 seconds"
     it.effect("keeps interleaved claimed outcomes attributed to their owning Users", () =>
       Effect.gen(function* () {
         yield* truncateStatementIngestion;
-        yield* seedConsentedAgentIdentity({
+        yield* seedConsentedPatIdentity({
           userId: otherUserId,
           bearer: otherBearer,
           tokenId: otherTokenId,

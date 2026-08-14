@@ -2,87 +2,83 @@ import { Effect, type Option, Schema, Struct } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import { UserId } from "~/core/identity/reference";
 import { withUserTransaction } from "~/shell/db/user-transaction";
-import { HostedAgentToken, ResolvedAgentToken, UserAgentToken } from "~/core/tokens/model";
+import { HostedTurnToken, PAT, ResolvedToken } from "~/core/tokens/model";
 
-/** A lowercase SHA-256 digest used only at the AgentToken storage boundary. */
-export const AgentTokenHash = Schema.String.check(Schema.isPattern(/^[0-9a-f]{64}$/)).pipe(
-  Schema.brand("AgentTokenHash")
+/** A lowercase SHA-256 digest used only at the token storage boundary. */
+export const TokenHash = Schema.String.check(Schema.isPattern(/^[0-9a-f]{64}$/)).pipe(
+  Schema.brand("TokenHash")
 );
-export type AgentTokenHash = typeof AgentTokenHash.Type;
+export type TokenHash = typeof TokenHash.Type;
 
-const AgentTokenGrant = UserAgentToken.mapFields(Struct.omit(["_tag", "lastUsedAt", "createdAt"]));
-const SeedAgentTokenGrant = Schema.Struct({
-  ...AgentTokenGrant.fields,
-  tokenHash: AgentTokenHash,
+const PATGrant = PAT.mapFields(Struct.omit(["_tag", "lastUsedAt", "createdAt"]));
+const SeedPATGrant = Schema.Struct({
+  ...PATGrant.fields,
+  tokenHash: TokenHash,
   idleExpiresAt: Schema.DateTimeUtcFromDate,
   revokedAt: Schema.OptionFromNullOr(Schema.DateTimeUtcFromDate),
   createdAt: Schema.DateTimeUtcFromDate,
 });
-const SeedAgentTokenRow = Schema.Struct({
+const SeedPATRow = Schema.Struct({
   subjectUserId: UserId,
-  ...SeedAgentTokenGrant.fields,
+  ...SeedPATGrant.fields,
 });
 
-const HostedAgentTokenGrant = HostedAgentToken.mapFields(
+const HostedTurnTokenGrant = HostedTurnToken.mapFields(
   Struct.omit(["_tag", "lastUsedAt", "revokedAt"])
 );
-const StoreHostedAgentTokenRow = Schema.Struct({
+const StoreHostedTurnTokenRow = Schema.Struct({
   subjectUserId: UserId,
-  tokenHash: AgentTokenHash,
+  tokenHash: TokenHash,
   storageIdleExpiresAt: Schema.DateTimeUtcFromDate,
-  ...HostedAgentTokenGrant.fields,
+  ...HostedTurnTokenGrant.fields,
   expiresAt: Schema.DateTimeUtcFromDate,
   createdAt: Schema.DateTimeUtcFromDate,
 });
-const StoreHostedAgentTokenGrant = StoreHostedAgentTokenRow.mapFields(
-  Struct.omit(["subjectUserId"])
-);
-const RevokeHostedAgentTokenRow = Schema.Struct({
+const StoreHostedTurnTokenGrant = StoreHostedTurnTokenRow.mapFields(Struct.omit(["subjectUserId"]));
+const RevokeHostedTurnTokenRow = Schema.Struct({
   subjectUserId: UserId,
-  tokenId: HostedAgentToken.fields.id,
+  tokenId: HostedTurnToken.fields.id,
   revokedAt: Schema.DateTimeUtcFromDate,
 });
 
-const AgentTokenLookup = Schema.Struct({ tokenHash: AgentTokenHash });
+const TokenLookup = Schema.Struct({ tokenHash: TokenHash });
 
-const UseAgentTokenRow = Schema.Struct({
-  ...AgentTokenLookup.fields,
+const UseTokenRow = Schema.Struct({
+  ...TokenLookup.fields,
   usedAt: Schema.DateTimeUtcFromDate,
   renewedIdleExpiresAt: Schema.DateTimeUtcFromDate,
 });
 
-const ResolvedAgentTokenWithoutLastUsedAt = ResolvedAgentToken.mapFields(
-  Struct.omit(["lastUsedAt"])
-);
-const ResolvedAgentTokenRow = Schema.Struct({
-  ...ResolvedAgentTokenWithoutLastUsedAt.fields,
+const ResolvedTokenWithoutLastUsedAt = ResolvedToken.mapFields(Struct.omit(["lastUsedAt"]));
+const ResolvedTokenRow = Schema.Struct({
+  ...ResolvedTokenWithoutLastUsedAt.fields,
   lastUsedAt: Schema.DateTimeUtcFromDate,
 });
 
 /**
- * Stores a development AgentToken grant by hash and resets its usage timestamp.
+ * Stores a development token grant by hash and resets its usage timestamp.
  * The opaque bearer is not accepted by this relational seam, making plaintext
  * persistence impossible through this operation.
  */
-export const upsertAgentToken = Effect.fn("upsertAgentToken")(function* (
+export const upsertPAT = Effect.fn("upsertPAT")(function* (
   subjectUserId: UserId,
-  grant: typeof SeedAgentTokenGrant.Type
+  grant: typeof SeedPATGrant.Type
 ) {
   const sql = yield* SqlClient.SqlClient;
   const row = yield* withUserTransaction(
     subjectUserId,
     SqlSchema.findOne({
-      Request: SeedAgentTokenRow,
-      Result: Schema.Struct({ tokenHash: AgentTokenHash }),
+      Request: SeedPATRow,
+      Result: Schema.Struct({ tokenHash: TokenHash }),
       execute: (row) => sql`
-      INSERT INTO agent_tokens (
+      INSERT INTO tokens (
         id, user_id, short_id, token_hash, scopes, last_used_at,
         idle_expires_at, revoked_at, created_at, kind, expires_at
       )
       VALUES (
         ${row.id}, ${row.subjectUserId}, ${row.shortId}, ${row.tokenHash},
         ${row.scopes}, NULL, ${row.idleExpiresAt}, ${row.revokedAt}, ${row.createdAt},
-        'user', NULL
+        'pat', NULL
       )
       ON CONFLICT (id) DO UPDATE SET
         user_id = EXCLUDED.user_id,
@@ -93,7 +89,7 @@ export const upsertAgentToken = Effect.fn("upsertAgentToken")(function* (
         idle_expires_at = EXCLUDED.idle_expires_at,
         revoked_at = EXCLUDED.revoked_at,
         created_at = EXCLUDED.created_at,
-        kind = 'user',
+        kind = 'pat',
         expires_at = NULL
       RETURNING token_hash AS "tokenHash"
     `,
@@ -104,29 +100,29 @@ export const upsertAgentToken = Effect.fn("upsertAgentToken")(function* (
 });
 
 /**
- * Stores one hard-expiring HostedAgentToken by digest. The storage-only idle
+ * Stores one hard-expiring HostedTurnToken by digest. The storage-only idle
  * deadline maintains the shared relational chronology but never authorizes or
  * extends this variant's absolute lifetime.
  */
-export const insertHostedAgentToken = Effect.fn("insertHostedAgentToken")(function* (
+export const insertHostedTurnToken = Effect.fn("insertHostedTurnToken")(function* (
   subjectUserId: UserId,
-  grant: typeof StoreHostedAgentTokenGrant.Type
+  grant: typeof StoreHostedTurnTokenGrant.Type
 ) {
-  const input = StoreHostedAgentTokenRow.make({ subjectUserId, ...grant });
+  const input = StoreHostedTurnTokenRow.make({ subjectUserId, ...grant });
   const sql = yield* SqlClient.SqlClient;
   yield* withUserTransaction(
     subjectUserId,
     SqlSchema.findOne({
-      Request: StoreHostedAgentTokenRow,
-      Result: Schema.Struct({ id: HostedAgentToken.fields.id }),
+      Request: StoreHostedTurnTokenRow,
+      Result: Schema.Struct({ id: HostedTurnToken.fields.id }),
       execute: (row) => sql`
-      INSERT INTO agent_tokens (
+      INSERT INTO tokens (
         id, user_id, short_id, token_hash, scopes, last_used_at,
         idle_expires_at, revoked_at, created_at, kind, expires_at
       )
       VALUES (
         ${row.id}, ${row.subjectUserId}, ${row.shortId}, ${row.tokenHash}, ${row.scopes},
-        NULL, ${row.storageIdleExpiresAt}, NULL, ${row.createdAt}, 'hosted', ${row.expiresAt}
+        NULL, ${row.storageIdleExpiresAt}, NULL, ${row.createdAt}, 'hosted-turn', ${row.expiresAt}
       )
       RETURNING id
     `,
@@ -135,26 +131,26 @@ export const insertHostedAgentToken = Effect.fn("insertHostedAgentToken")(functi
 });
 
 /**
- * Revokes one active User-owned HostedAgentToken. Returns None when ownership,
+ * Revokes one active HostedTurnToken owned by the subject User. Returns None when ownership,
  * token kind, or active state does not match; database failures are defects.
  */
-export const revokeHostedAgentToken = Effect.fn("revokeHostedAgentToken")(function* (
+export const revokeHostedTurnToken = Effect.fn("revokeHostedTurnToken")(function* (
   subjectUserId: UserId,
-  tokenId: typeof HostedAgentToken.fields.id.Type,
+  tokenId: typeof HostedTurnToken.fields.id.Type,
   revokedAt: typeof Schema.DateTimeUtc.Type
 ) {
   const sql = yield* SqlClient.SqlClient;
   return yield* withUserTransaction(
     subjectUserId,
     SqlSchema.findOneOption({
-      Request: RevokeHostedAgentTokenRow,
-      Result: Schema.Struct({ id: HostedAgentToken.fields.id }),
+      Request: RevokeHostedTurnTokenRow,
+      Result: Schema.Struct({ id: HostedTurnToken.fields.id }),
       execute: (row) => sql`
-      UPDATE agent_tokens
+      UPDATE tokens
       SET revoked_at = ${row.revokedAt}
       WHERE id = ${row.tokenId}
         AND user_id = ${row.subjectUserId}
-        AND kind = 'hosted'
+        AND kind = 'hosted-turn'
         AND revoked_at IS NULL
       RETURNING id
     `,
@@ -167,23 +163,23 @@ export const revokeHostedAgentToken = Effect.fn("revokeHostedAgentToken")(functi
  * valid token was used. Absence is authentication data, not a database error;
  * the shared authorization middleware decides that it means HTTP 401.
  */
-export const useAgentToken = ({
+export const useToken = ({
   tokenHash,
   usedAt,
   renewedIdleExpiresAt,
-}: typeof UseAgentTokenRow.Type): Effect.Effect<
-  Option.Option<ResolvedAgentToken>,
+}: typeof UseTokenRow.Type): Effect.Effect<
+  Option.Option<ResolvedToken>,
   never,
   SqlClient.SqlClient
 > =>
   Effect.flatMap(SqlClient.SqlClient, (sql) =>
     SqlSchema.findOneOption({
-      Request: UseAgentTokenRow,
-      Result: ResolvedAgentTokenRow,
+      Request: UseTokenRow,
+      Result: ResolvedTokenRow,
       execute: (row) => sql`
         SELECT token_id AS "tokenId", subject_user_id AS "subjectUserId",
           scopes, last_used_at AS "lastUsedAt"
-        FROM fidy_use_agent_token(
+        FROM fidy_use_token(
           ${row.tokenHash}, ${row.usedAt}, ${row.renewedIdleExpiresAt}
         )
       `,

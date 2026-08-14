@@ -140,12 +140,12 @@ A User-authorized bearer grant for one of their own agents to invoke canonical o
 non-empty subset of `read`, `write`, and `dashboard`. It has no fixed lifetime, dies after 90 days
 without successful use, and its raw bearer is disclosed once to its immediate caller and never
 persisted.
-_Avoid_: AgentToken, UserAgentToken, API key, credential, personal agent token.
+_Avoid_: API key, credential.
 
 **HostedTurnToken**:
 A short-lived internal all-scope bearer used for one hosted Turn and revoked during normal Turn
 cleanup. It is never a PAT and is never available to the User or their own agents.
-_Avoid_: HostedAgentToken, PAT, hosted grant.
+_Avoid_: PAT, hosted grant.
 
 **PATPairing**:
 A short-lived bootstrap in which a User-owned client retains a private device code and presents a

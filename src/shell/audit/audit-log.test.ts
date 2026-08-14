@@ -2,16 +2,16 @@ import { expect, layer } from "@effect/vitest";
 import { Context, DateTime, Effect, Layer, Schema } from "effect";
 import { HttpBody, HttpClient } from "effect/unstable/http";
 import { MigrationSqlClient } from "~/shell/db/client";
-import { AgentTokenId } from "~/core/tokens/reference";
+import { PATId, type TokenId } from "~/core/tokens/reference";
 import { IanaTimeZone } from "~/core/_shared/context";
 import { UserId } from "~/core/identity/reference";
 import { CreateTransactionInput, TransactionId } from "~/core/transactions/model";
-import { AgentBearerToken } from "~/core/tokens/model";
+import { TokenBearer } from "~/core/tokens/model";
 import {
-  defaultAgentTokenId,
+  defaultPATId,
   defaultUserId,
   defaultWhatsAppPhone,
-  seedConsentedAgentIdentity,
+  seedConsentedPatIdentity,
 } from "~/shell/db/development-seed";
 import {
   type ApiClient,
@@ -20,23 +20,21 @@ import {
   headersFor,
   makeApiClientLive,
 } from "~/shell/testing/api-harness";
-import { defaultAgentBearer } from "~/shell/testing/identity-fixtures";
+import { defaultPatBearer } from "~/shell/testing/identity-fixtures";
 import { transactionPayload } from "~/shell/transactions/fixtures";
 import { truncateAuditLogEntries } from "./fixtures";
 import { observeAuditLogEntries } from "./repo";
 
 const atomicUserId = UserId.make("f1d1a000-0000-4000-8000-0000000007a1");
-const atomicWriteTokenId = AgentTokenId.make("f1d1a000-0000-4000-8000-0000000007a2");
-const atomicWriteBearer = AgentBearerToken.make(
-  "fin_atomicw1_abcdefghijklmnopqrstuvwxyz0123456789ABCD"
-);
-const atomicObserverBearer = AgentBearerToken.make(
+const atomicWriteTokenId = PATId.make("f1d1a000-0000-4000-8000-0000000007a2");
+const atomicWriteBearer = TokenBearer.make("fin_atomicw1_abcdefghijklmnopqrstuvwxyz0123456789ABCD");
+const atomicObserverBearer = TokenBearer.make(
   "fin_atomicro_abcdefghijklmnopqrstuvwxyz0123456789ABCD"
 );
 const encodeTransactionInput = Schema.encodeSync(CreateTransactionInput);
-const evidenceForToken = <Entry extends { readonly tokenId: AgentTokenId }>(
+const evidenceForToken = <Entry extends { readonly tokenId: TokenId }>(
   entries: ReadonlyArray<Entry>,
-  tokenId: AgentTokenId
+  tokenId: TokenId
 ): ReadonlyArray<Entry> => entries.filter((entry) => entry.tokenId === tokenId);
 
 class AtomicObserverApiClient extends Context.Service<AtomicObserverApiClient, ApiClient>()(
@@ -64,7 +62,7 @@ layer(AuditHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         expect(entries).toHaveLength(1);
         expect(entries[0]).toMatchObject({
           subjectUserId: defaultUserId,
-          tokenId: defaultAgentTokenId,
+          tokenId: defaultPATId,
           operation: "identity.getCurrentUser",
           outcome: "succeeded",
         });
@@ -85,7 +83,7 @@ layer(AuditHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           "subjectUserId",
           "tokenId",
         ]);
-        expect(Object.values(entry)).not.toContain(defaultAgentBearer);
+        expect(Object.values(entry)).not.toContain(defaultPatBearer);
       })
     );
 
@@ -95,7 +93,7 @@ layer(AuditHarness, { excludeTestServices: true, timeout: "30 seconds" })(
 
         const response = yield* HttpClient.patch("/user/preferences", {
           headers: {
-            ...headersFor(defaultAgentBearer),
+            ...headersFor(defaultPatBearer),
             "x-kapso-contact-id": "provider-contact-private-42",
           },
           body: HttpBody.jsonUnsafe({
@@ -114,7 +112,7 @@ layer(AuditHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         expect(persistedValues).not.toContain(defaultWhatsAppPhone);
         expect(persistedValues).not.toContain("whatsapp");
         expect(persistedValues).not.toContain("provider-contact-private-42");
-        expect(persistedValues).not.toContain(defaultAgentBearer);
+        expect(persistedValues).not.toContain(defaultPatBearer);
         expect(persistedValues).not.toContain("es-CO");
         expect(persistedValues).not.toContain("America/New_York");
       })
@@ -125,7 +123,7 @@ layer(AuditHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         yield* truncateAuditLogEntries;
 
         const response = yield* HttpClient.patch("/user/preferences", {
-          headers: headersFor(defaultAgentBearer),
+          headers: headersFor(defaultPatBearer),
           body: HttpBody.jsonUnsafe({ locale: "es-CO", timeZone: "-05:00" }),
         });
         const entries = yield* observeAuditLogEntries(defaultUserId);
@@ -134,7 +132,7 @@ layer(AuditHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         expect(entries).toHaveLength(1);
         expect(entries[0]).toMatchObject({
           subjectUserId: defaultUserId,
-          tokenId: defaultAgentTokenId,
+          tokenId: defaultPATId,
           operation: "identity.updateUserPreferences",
           outcome: "failed",
         });
@@ -145,13 +143,13 @@ layer(AuditHarness, { excludeTestServices: true, timeout: "30 seconds" })(
     it.effect("rolls back a state change when its successful evidence cannot commit", () =>
       Effect.gen(function* () {
         yield* truncateAuditLogEntries;
-        yield* seedConsentedAgentIdentity({
+        yield* seedConsentedPatIdentity({
           userId: atomicUserId,
           tokenId: atomicWriteTokenId,
           bearer: atomicWriteBearer,
           scopes: ["write"],
         });
-        yield* seedConsentedAgentIdentity({
+        yield* seedConsentedPatIdentity({
           userId: atomicUserId,
           bearer: atomicObserverBearer,
           scopes: ["read"],
@@ -221,7 +219,7 @@ layer(AuditHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         expect(entries).toHaveLength(1);
         expect(entries[0]).toMatchObject({
           subjectUserId: defaultUserId,
-          tokenId: defaultAgentTokenId,
+          tokenId: defaultPATId,
           operation: "transactions.getTransaction",
           outcome: "failed",
         });

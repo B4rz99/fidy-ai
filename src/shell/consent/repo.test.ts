@@ -8,9 +8,11 @@ import {
   PendingConsentExchangeId,
 } from "~/core/consent/model";
 import { E164PhoneNumber, UserId, whatsAppCallerReference } from "~/core/identity/reference";
+import { PATId } from "~/core/tokens/reference";
 import { makeColombianUser } from "~/core/identity/rules";
 import { MigrationSqlClient } from "~/shell/db/client";
-import { defaultAgentTokenId, defaultUserId } from "~/shell/db/development-seed";
+import { issueHostedTurnToken } from "~/shell/tokens/hosted-turn-token";
+import { defaultPATId, defaultUserId } from "~/shell/db/development-seed";
 import { insertUser } from "~/shell/identity/repo";
 import { ApiHarness } from "~/shell/testing/api-harness";
 import { deliverConsentDisclosureForTesting } from "~/shell/testing/consent-disclosure";
@@ -165,15 +167,37 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           subjectUserId: otherUserId,
           event: {
             _tag: "Granted",
-            grant: { _tag: "AgentToken", tokenId: defaultAgentTokenId },
+            grant: { _tag: "PAT", tokenId: defaultPATId },
           },
           occurredAt: DateTime.makeUnsafe("2026-08-01T12:00:04Z"),
           decisionMessage: {
             ...decisionMessage,
-            providerMessageId: "wamid.repo-cross-user-agent-token",
+            providerMessageId: "wamid.repo-cross-user-pat",
           },
         });
         expect(Exit.isFailure(yield* Effect.exit(appendConsentRecord(crossUserTokenGrant)))).toBe(
+          true
+        );
+
+        const hostedToken = yield* issueHostedTurnToken(
+          defaultUserId,
+          DateTime.makeUnsafe("2026-08-01T12:00:04Z")
+        );
+        const hostedTokenPatGrant = ConsentRecord.make({
+          ...grant,
+          id: ConsentRecordId.make("f1d1a000-0000-4000-8000-000000000838"),
+          event: {
+            _tag: "Granted",
+            // Forge the external UUID as a PAT reference to exercise the persistence kind guard.
+            grant: { _tag: "PAT", tokenId: PATId.make(hostedToken.tokenId) },
+          },
+          occurredAt: DateTime.makeUnsafe("2026-08-01T12:00:05Z"),
+          decisionMessage: {
+            ...decisionMessage,
+            providerMessageId: "wamid.repo-hosted-token-pat",
+          },
+        });
+        expect(Exit.isFailure(yield* Effect.exit(appendConsentRecord(hostedTokenPatGrant)))).toBe(
           true
         );
       }).pipe(
@@ -247,20 +271,20 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         });
         yield* appendConsentRecord(revocation);
 
-        const agentTokenGrant = ConsentRecord.make({
+        const patGrant = ConsentRecord.make({
           ...grant,
           id: ConsentRecordId.make("f1d1a000-0000-4000-8000-000000000833"),
           event: {
             _tag: "Granted",
-            grant: { _tag: "AgentToken", tokenId: defaultAgentTokenId },
+            grant: { _tag: "PAT", tokenId: defaultPATId },
           },
           occurredAt: DateTime.makeUnsafe("2026-08-01T12:00:04Z"),
           decisionMessage: {
             ...decisionMessage,
-            providerMessageId: "wamid.repo-agent-token",
+            providerMessageId: "wamid.repo-pat",
           },
         });
-        yield* appendConsentRecord(agentTokenGrant);
+        yield* appendConsentRecord(patGrant);
 
         const insightDeliveryGrant = ConsentRecord.make({
           ...grant,
@@ -281,7 +305,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         expect(yield* observeConsentRecords(defaultUserId)).toEqual([
           grant,
           revocation,
-          agentTokenGrant,
+          patGrant,
           insightDeliveryGrant,
         ]);
       })

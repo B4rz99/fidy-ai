@@ -2,15 +2,15 @@ import { expect, layer } from "@effect/vitest";
 import { Context, DateTime, Effect, Layer, Option, Schema } from "effect";
 import { HttpBody, HttpClient } from "effect/unstable/http";
 import { SqlSchema } from "effect/unstable/sql";
-import { AgentTokenId } from "~/core/tokens/reference";
+import { PATId } from "~/core/tokens/reference";
 import { UserId } from "~/core/identity/reference";
 import { CategoryKeyword } from "~/core/categories/model";
 import { categoryIds } from "~/core/categories/taxonomy";
 import { InsightEventId } from "~/core/insights/model";
 import { MemoryText } from "~/core/memory/model";
 import { CreateTransactionInput } from "~/core/transactions/model";
-import { AgentBearerToken } from "~/core/tokens/model";
-import { authenticateAgentToken } from "~/shell/_shared/authz";
+import { TokenBearer } from "~/core/tokens/model";
+import { authenticateTokenBearer } from "~/shell/_shared/authz";
 import { ScopeMissing } from "~/shell/_shared/errors";
 import { MigrationSqlClient } from "~/shell/db/client";
 import { truncateAuditLogEntries } from "~/shell/audit/fixtures";
@@ -27,38 +27,30 @@ import {
   headersFor,
   makeApiClientLive,
 } from "./api-harness";
-import { seedConsentedAgentIdentity } from "~/shell/db/development-seed";
+import { seedConsentedPatIdentity } from "~/shell/db/development-seed";
 
 const encodeTransactionPayload = Schema.encodeSync(CreateTransactionInput);
 
 const readOnlyUser = UserId.make("f1d1a000-0000-4000-8000-0000000000c3");
-const readOnlyBearer = AgentBearerToken.make(
-  "fin_readonly_abcdefghijklmnopqrstuvwxyz0123456789ABCD"
-);
-const readOnlyTokenId = AgentTokenId.make("f1d1a000-0000-4000-8000-0000000000c4");
+const readOnlyBearer = TokenBearer.make("fin_readonly_abcdefghijklmnopqrstuvwxyz0123456789ABCD");
+const readOnlyTokenId = PATId.make("f1d1a000-0000-4000-8000-0000000000c4");
 const writeOnlyUser = UserId.make("f1d1a000-0000-4000-8000-0000000000c5");
-const writeOnlyBearer = AgentBearerToken.make(
-  "fin_writonly_abcdefghijklmnopqrstuvwxyz0123456789ABCD"
-);
-const readOnlyWriterBearer = AgentBearerToken.make(
+const writeOnlyBearer = TokenBearer.make("fin_writonly_abcdefghijklmnopqrstuvwxyz0123456789ABCD");
+const readOnlyWriterBearer = TokenBearer.make(
   "fin_authwrit_abcdefghijklmnopqrstuvwxyz0123456789ABCD"
 );
 const expiredUser = UserId.make("f1d1a000-0000-4000-8000-0000000000e4");
-const expiredBearer = AgentBearerToken.make(
-  "fin_expired1_abcdefghijklmnopqrstuvwxyz0123456789ABCD"
-);
-const expiredObserverBearer = AgentBearerToken.make(
+const expiredBearer = TokenBearer.make("fin_expired1_abcdefghijklmnopqrstuvwxyz0123456789ABCD");
+const expiredObserverBearer = TokenBearer.make(
   "fin_expread1_abcdefghijklmnopqrstuvwxyz0123456789ABCD"
 );
 const revokedUser = UserId.make("f1d1a000-0000-4000-8000-0000000000f5");
-const revokedBearer = AgentBearerToken.make(
-  "fin_revoked1_abcdefghijklmnopqrstuvwxyz0123456789ABCD"
-);
-const revokedObserverBearer = AgentBearerToken.make(
+const revokedBearer = TokenBearer.make("fin_revoked1_abcdefghijklmnopqrstuvwxyz0123456789ABCD");
+const revokedObserverBearer = TokenBearer.make(
   "fin_revread1_abcdefghijklmnopqrstuvwxyz0123456789ABCD"
 );
 const idleUser = UserId.make("f1d1a000-0000-4000-8000-0000000000d6");
-const idleBearer = AgentBearerToken.make("fin_idle090d_abcdefghijklmnopqrstuvwxyz0123456789ABCD");
+const idleBearer = TokenBearer.make("fin_idle090d_abcdefghijklmnopqrstuvwxyz0123456789ABCD");
 class ReadOnlyApiClient extends Context.Service<ReadOnlyApiClient, ApiClient>()(
   "fidy-ai/shell/testing/authorization.test/ReadOnlyApiClient"
 ) {}
@@ -75,20 +67,20 @@ const AuthorizationHarness = Layer.mergeAll(
   makeApiClientLive({ tag: ReadOnlyWriterClient, bearer: readOnlyWriterBearer })
 ).pipe(Layer.provideMerge(ApiHarness));
 
-const seedReadOnlyIdentity = seedConsentedAgentIdentity({
+const seedReadOnlyIdentity = seedConsentedPatIdentity({
   userId: readOnlyUser,
   bearer: readOnlyBearer,
   tokenId: readOnlyTokenId,
   scopes: ["read"],
 });
-const seedWriteOnlyIdentity = seedConsentedAgentIdentity({
+const seedWriteOnlyIdentity = seedConsentedPatIdentity({
   userId: writeOnlyUser,
   bearer: writeOnlyBearer,
   scopes: ["write"],
 });
 
 layer(AuthorizationHarness, { excludeTestServices: true, timeout: "30 seconds" })(
-  "AgentToken authorization",
+  "TokenBearer authorization",
   (it) => {
     it.effect("does not treat the retired caller header as User identity", () =>
       Effect.gen(function* () {
@@ -279,7 +271,7 @@ layer(AuthorizationHarness, { excludeTestServices: true, timeout: "30 seconds" }
         yield* truncateTransactions;
         yield* truncateAuditLogEntries;
         yield* seedReadOnlyIdentity;
-        yield* seedConsentedAgentIdentity({
+        yield* seedConsentedPatIdentity({
           userId: readOnlyUser,
           bearer: readOnlyWriterBearer,
           scopes: ["read", "write"],
@@ -428,11 +420,11 @@ layer(AuthorizationHarness, { excludeTestServices: true, timeout: "30 seconds" }
       })
     );
 
-    it.effect("resolves and renews the AgentToken exactly once for one request", () =>
+    it.effect("resolves and renews the TokenBearer exactly once for one request", () =>
       Effect.gen(function* () {
         yield* seedReadOnlyIdentity;
         const sql = yield* MigrationSqlClient;
-        yield* sql`DROP TRIGGER IF EXISTS count_authentication_use ON agent_tokens`;
+        yield* sql`DROP TRIGGER IF EXISTS count_authentication_use ON tokens`;
         yield* sql`DROP FUNCTION IF EXISTS count_authentication_use()`;
         yield* sql`DROP TABLE IF EXISTS public.authentication_use_probe`;
         yield* sql`CREATE TABLE public.authentication_use_probe (calls integer NOT NULL)`;
@@ -448,15 +440,14 @@ layer(AuthorizationHarness, { excludeTestServices: true, timeout: "30 seconds" }
           $$ LANGUAGE plpgsql SECURITY DEFINER
         `;
         yield* sql`
-          CREATE TRIGGER count_authentication_use AFTER UPDATE ON agent_tokens
+          CREATE TRIGGER count_authentication_use AFTER UPDATE ON tokens
           FOR EACH ROW EXECUTE FUNCTION count_authentication_use()
         `;
-        const removeProbe =
-          sql`DROP TRIGGER IF EXISTS count_authentication_use ON agent_tokens`.pipe(
-            Effect.andThen(sql`DROP FUNCTION IF EXISTS count_authentication_use()`),
-            Effect.andThen(sql`DROP TABLE IF EXISTS public.authentication_use_probe`),
-            Effect.orDie
-          );
+        const removeProbe = sql`DROP TRIGGER IF EXISTS count_authentication_use ON tokens`.pipe(
+          Effect.andThen(sql`DROP FUNCTION IF EXISTS count_authentication_use()`),
+          Effect.andThen(sql`DROP TABLE IF EXISTS public.authentication_use_probe`),
+          Effect.orDie
+        );
 
         yield* Effect.gen(function* () {
           const response = yield* HttpClient.get("/transactions", {
@@ -474,11 +465,11 @@ layer(AuthorizationHarness, { excludeTestServices: true, timeout: "30 seconds" }
       })
     );
 
-    it.effect("keeps an AgentToken active throughout its 90-day idle window", () =>
+    it.effect("keeps a PAT active throughout its 90-day idle window", () =>
       Effect.gen(function* () {
         const now = yield* DateTime.now;
         const tokenCreatedAt = DateTime.subtractDuration(now, "60 days");
-        yield* seedConsentedAgentIdentity({
+        yield* seedConsentedPatIdentity({
           userId: idleUser,
           bearer: idleBearer,
           tokenCreatedAt,
@@ -498,25 +489,25 @@ layer(AuthorizationHarness, { excludeTestServices: true, timeout: "30 seconds" }
         yield* truncateTransactions;
         const expiredCreatedAt = DateTime.makeUnsafe("1999-01-01T00:00:00Z");
         const revokedCreatedAt = DateTime.makeUnsafe("2026-01-01T00:00:00Z");
-        yield* seedConsentedAgentIdentity({
+        yield* seedConsentedPatIdentity({
           userId: expiredUser,
           bearer: expiredBearer,
           tokenCreatedAt: expiredCreatedAt,
           idleExpiresAt: DateTime.addDuration(expiredCreatedAt, "90 days"),
         });
-        yield* seedConsentedAgentIdentity({
+        yield* seedConsentedPatIdentity({
           userId: revokedUser,
           bearer: revokedBearer,
           tokenCreatedAt: revokedCreatedAt,
           idleExpiresAt: DateTime.addDuration(revokedCreatedAt, "90 days"),
           revokedAt: Option.some(DateTime.makeUnsafe("2026-07-01T00:00:00Z")),
         });
-        yield* seedConsentedAgentIdentity({
+        yield* seedConsentedPatIdentity({
           userId: expiredUser,
           bearer: expiredObserverBearer,
           scopes: ["read"],
         });
-        yield* seedConsentedAgentIdentity({
+        yield* seedConsentedPatIdentity({
           userId: revokedUser,
           bearer: revokedObserverBearer,
           scopes: ["read"],
@@ -553,7 +544,7 @@ layer(AuthorizationHarness, { excludeTestServices: true, timeout: "30 seconds" }
       Effect.gen(function* () {
         const seeded = yield* seedReadOnlyIdentity;
         const usedAt = yield* DateTime.now;
-        const found = yield* authenticateAgentToken(usedAt)(readOnlyBearer);
+        const found = yield* authenticateTokenBearer(usedAt)(readOnlyBearer);
         const resolved = Option.getOrThrow(found);
 
         expect(seeded.tokenHash).toBe(
@@ -568,14 +559,14 @@ layer(AuthorizationHarness, { excludeTestServices: true, timeout: "30 seconds" }
       })
     );
 
-    it.effect("does not regress usage when AgentToken resolutions complete out of order", () =>
+    it.effect("does not regress usage when TokenBearer resolutions complete out of order", () =>
       Effect.gen(function* () {
         yield* seedReadOnlyIdentity;
         const earlierUse = yield* DateTime.now;
         const laterUse = DateTime.addDuration(earlierUse, "1 day");
 
-        yield* authenticateAgentToken(readOnlyBearer, laterUse);
-        const staleResolution = yield* authenticateAgentToken(readOnlyBearer, earlierUse);
+        yield* authenticateTokenBearer(readOnlyBearer, laterUse);
+        const staleResolution = yield* authenticateTokenBearer(readOnlyBearer, earlierUse);
 
         expect(Option.getOrThrow(staleResolution).lastUsedAt).toEqual(laterUse);
       })

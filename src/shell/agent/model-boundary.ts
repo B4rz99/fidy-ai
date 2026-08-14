@@ -3,7 +3,7 @@ import type { Prompt } from "effect/unstable/ai";
 import { CanonicalOperationId } from "~/core/_shared/canonical-operation";
 import { categoryRows } from "~/core/categories/taxonomy";
 import type { User } from "~/core/identity/model";
-import { AgentBearerToken } from "~/core/tokens/model";
+import { TokenBearer } from "~/core/tokens/model";
 import { type TranscriptEntry, TranscriptText } from "~/core/transcript/model";
 import {
   type TranscriptSelectionEntry,
@@ -67,7 +67,7 @@ const bearerCharacter = /^[A-Za-z0-9_-]$/;
 const identifierPattern =
   /\b[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\b/giu;
 
-const containsAgentBearerToken = (text: string): boolean => {
+const containsTokenBearer = (text: string): boolean => {
   for (
     let start = text.indexOf(bearerStart);
     start >= 0;
@@ -75,7 +75,7 @@ const containsAgentBearerToken = (text: string): boolean => {
   ) {
     let end = start + bearerStart.length;
     while (end < text.length && bearerCharacter.test(text[end] ?? "")) end += 1;
-    if (Schema.is(AgentBearerToken)(text.slice(start, end))) return true;
+    if (Schema.is(TokenBearer)(text.slice(start, end))) return true;
   }
   return false;
 };
@@ -120,7 +120,7 @@ const hasValidPaymentCardNumber = (text: string): boolean => {
 
 /** Detects bearer, provider-secret, payment-card, and account-number material in chat text. */
 export const containsSensitiveChatValue = (text: string): boolean =>
-  containsAgentBearerToken(text) ||
+  containsTokenBearer(text) ||
   providerSecretPattern.test(text) ||
   credentialUriPattern.test(text) ||
   labelledCredentialPattern.test(text) ||

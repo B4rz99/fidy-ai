@@ -1,11 +1,11 @@
 import { Effect } from "effect";
 import { SqlClient } from "effect/unstable/sql";
 
-// Stable Users and their concrete WhatsApp and AgentToken associations arrive
+// Stable Users and their concrete WhatsApp associations and token grants arrive
 // together: neither a phone number nor a bearer hash is itself the User. The
 // market, locale, and time zone stay in separate columns so no one can be
 // reconstructed from another.
-export const createIdentitiesAndAgentTokens = Effect.gen(function* () {
+export const createIdentitiesAndTokens = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
 
   yield* sql`
@@ -27,7 +27,7 @@ export const createIdentitiesAndAgentTokens = Effect.gen(function* () {
   `;
 
   yield* sql`
-    CREATE TABLE agent_tokens (
+    CREATE TABLE tokens (
       id uuid PRIMARY KEY,
       user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       short_id text NOT NULL UNIQUE CHECK (short_id ~ '^[a-z0-9]{8}$'),

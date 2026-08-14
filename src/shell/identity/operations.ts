@@ -14,7 +14,7 @@ export const IdentityGroup = HttpApiGroup.make("identity").add(
   })
     .annotate(
       OpenApi.Description,
-      "Get the stable User behind this AgentToken and the independently stored ServiceMarket, " +
+      "Get the stable User behind the authenticated bearer and the independently stored ServiceMarket, " +
         "locale, and IANA time zone. Use it before interpreting dates or presenting data to the User."
     )
     .annotateMerge(

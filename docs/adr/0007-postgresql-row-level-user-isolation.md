@@ -10,7 +10,7 @@ ADR-0005 deliberately launched with explicit `UserId` application isolation and 
 
 RLS remains defense in depth. It must catch an omitted or incorrect relational predicate without hiding the subject from TypeScript, widening pre-subject lookup, leaking context through a pooled connection, or holding a transaction across model/provider work.
 
-PostgreSQL table owners, superusers, and `BYPASSRLS` roles can bypass ordinary policies. AgentToken bearer and WhatsAppIdentity phone lookup must resolve a subject before a User-scoped transaction can exist. AuditLogEntry retention is deliberately global. These authorities need explicit treatment rather than exemptions hidden in repository SQL.
+PostgreSQL table owners, superusers, and `BYPASSRLS` roles can bypass ordinary policies. PAT bearer and WhatsAppIdentity phone lookup must resolve a subject before a User-scoped transaction can exist. AuditLogEntry retention is deliberately global. These authorities need explicit treatment rather than exemptions hidden in repository SQL.
 
 The primary-source basis is recorded in [`research/006-postgresql-row-level-security.md`](../../research/006-postgresql-row-level-security.md).
 
@@ -50,12 +50,12 @@ No language-model, HTTP, channel, or provider wait occurs in one of these transa
 
 Every User-owned table enables and forces RLS with one explicit policy covering both `USING` and `WITH CHECK`:
 
-| ownership shape             | tables                                                                                                                                                                                                                                                                                                                   |
-| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| direct User reference       | `whatsapp_identities`, `agent_tokens`, `audit_log_entries`, `consent_records`, `transactions`, `keyword_rules`, `insight_events`, `dashboards`, `transcript_entries`, `whatsapp_message_evidence`, `whatsapp_identity_change_evidence`, `whatsapp_inbound_jobs`, `whatsapp_turn_claims`, `whatsapp_conversation_windows` |
-| User identity is the row id | `users`                                                                                                                                                                                                                                                                                                                  |
-| through Transaction         | `source_attestations`                                                                                                                                                                                                                                                                                                    |
-| through InsightEvent        | `insight_money_groups`, `insight_delivery_attempts`                                                                                                                                                                                                                                                                      |
+| ownership shape             | tables                                                                                                                                                                                                                                                                                                             |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| direct User reference       | `whatsapp_identities`, `tokens`, `audit_log_entries`, `consent_records`, `transactions`, `keyword_rules`, `insight_events`, `dashboards`, `transcript_entries`, `whatsapp_message_evidence`, `whatsapp_identity_change_evidence`, `whatsapp_inbound_jobs`, `whatsapp_turn_claims`, `whatsapp_conversation_windows` |
+| User identity is the row id | `users`                                                                                                                                                                                                                                                                                                            |
+| through Transaction         | `source_attestations`                                                                                                                                                                                                                                                                                              |
+| through InsightEvent        | `insight_money_groups`, `insight_delivery_attempts`                                                                                                                                                                                                                                                                |
 
 Absent context evaluates to no User and therefore exposes no row. A context for another User cannot read, insert, update, or delete the owner's rows. `consent_records` additionally grants the runtime role only `SELECT` and `INSERT`; revocation and correction append evidence, while update and delete remain unavailable.
 
@@ -65,7 +65,7 @@ Absent context evaluates to no User and therefore exposes no row. A context for 
 
 Use `SECURITY DEFINER` functions with a fixed trusted `search_path`, no `PUBLIC` execution, fixed typed inputs, and minimum output:
 
-- `fidy_use_agent_token` accepts a bearer digest and timestamps, atomically applies expiry/use, and returns only the resolved token id, UserId, scopes, and last-use time.
+- `fidy_use_token` accepts a bearer digest and timestamps, atomically applies expiry/use, and returns only the resolved token id, UserId, scopes, and last-use time.
 - As amended by ADR-0011, `fidy_resolve_whatsapp_user` accepts one Business Portfolio and BSUID pair and returns only its UserId when associated.
 - `fidy_reassociate_whatsapp_user` accepts one authenticated provider transition plus immutable provider-message evidence and returns only whether that transition was acknowledged.
 - `fidy_resolve_consent_decision_subject` accepts one provider-qualified decision-message key and returns only the subject UserId already bound to that immutable ConsentRecord. Identity-replay tests prove the result cannot authorize another phone or User.

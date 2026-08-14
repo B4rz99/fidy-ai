@@ -120,7 +120,7 @@ const seedEveryPolicyShape = Effect.gen(function* () {
     )
   `;
   yield* admin`
-    INSERT INTO agent_tokens (
+    INSERT INTO tokens (
       id, user_id, short_id, token_hash, scopes, idle_expires_at, created_at
     ) VALUES (
       'f1d1a000-0000-4000-8000-0000000001d4', ${policyOwner}, 'rlsprobe',
@@ -315,7 +315,7 @@ const policyProbes: ReadonlyArray<PolicyProbe> = [
     ownerPredicate: `user_id = '${policyOwner}' AND digest = '${"a".repeat(64)}'`,
   },
   {
-    tableName: "agent_tokens",
+    tableName: "tokens",
     stableColumn: "short_id",
     ownerPredicate: "id = 'f1d1a000-0000-4000-8000-0000000001d4'",
   },
@@ -526,9 +526,9 @@ const deniedInsertProbes = (sql: SqlClient.SqlClient) =>
     `,
     },
     {
-      tableName: "agent_tokens",
+      tableName: "tokens",
       insert: sql`
-      INSERT INTO agent_tokens (
+      INSERT INTO tokens (
         id, user_id, short_id, token_hash, scopes, idle_expires_at, created_at
       ) VALUES (
         'f1d1a000-0000-4000-8000-0000000003c3', ${policyOwner}, 'insertprobe',
@@ -956,8 +956,8 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           UNION ALL SELECT 'whatsapp_identities' WHERE EXISTS (
             SELECT 1 FROM whatsapp_identities WHERE phone_number = '+573009998877'
           )
-          UNION ALL SELECT 'agent_tokens' WHERE EXISTS (
-            SELECT 1 FROM agent_tokens WHERE id = 'f1d1a000-0000-4000-8000-0000000003c3'
+          UNION ALL SELECT 'tokens' WHERE EXISTS (
+            SELECT 1 FROM tokens WHERE id = 'f1d1a000-0000-4000-8000-0000000003c3'
           )
           UNION ALL SELECT 'consent_records' WHERE EXISTS (
             SELECT 1 FROM consent_records WHERE id = 'f1d1a000-0000-4000-8000-0000000003b2'

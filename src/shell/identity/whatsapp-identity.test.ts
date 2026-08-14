@@ -18,7 +18,7 @@ import {
   defaultWhatsAppPhone,
   seedDevelopmentIdentity,
 } from "~/shell/db/development-seed";
-import { defaultAgentBearer } from "~/shell/testing/identity-fixtures";
+import { defaultPatBearer } from "~/shell/testing/identity-fixtures";
 import { makeKapsoIdentityChangeBody } from "~/shell/testing/kapso-identity-change";
 import { transactionPayload, truncateTransactions } from "~/shell/transactions/fixtures";
 import { associateWhatsAppIdentity, findWhatsAppIdentity, resolveWhatsAppCaller } from "./repo";
@@ -46,7 +46,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
   (it) => {
     it.effect("does not resolve a different BSUID from matching phone evidence", () =>
       Effect.gen(function* () {
-        yield* seedDevelopmentIdentity(defaultAgentBearer);
+        yield* seedDevelopmentIdentity(defaultPatBearer);
         const impersonatingCaller = {
           ...testWhatsAppCaller(defaultWhatsAppPhone),
           businessScopedUserId: WhatsAppBusinessScopedUserId.make("CO.differentcaller"),
@@ -66,7 +66,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         Effect.gen(function* () {
           const admin = yield* MigrationSqlClient;
           yield* admin`DELETE FROM whatsapp_identity_change_evidence`;
-          yield* seedDevelopmentIdentity(defaultAgentBearer);
+          yield* seedDevelopmentIdentity(defaultPatBearer);
           yield* truncateTransactions;
           const client = yield* ApiHarnessClient;
           const created = yield* client.transactions.createTransaction({
@@ -147,7 +147,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
       Effect.gen(function* () {
         const admin = yield* MigrationSqlClient;
         yield* admin`DELETE FROM whatsapp_identity_change_evidence`;
-        yield* seedDevelopmentIdentity(defaultAgentBearer);
+        yield* seedDevelopmentIdentity(defaultPatBearer);
         const body = makeKapsoIdentityChangeBody();
         const post = (): Effect.Effect<
           HttpClientResponse.HttpClientResponse,
@@ -180,7 +180,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
       Effect.gen(function* () {
         const admin = yield* MigrationSqlClient;
         yield* admin`DELETE FROM whatsapp_identity_change_evidence`;
-        yield* seedDevelopmentIdentity(defaultAgentBearer);
+        yield* seedDevelopmentIdentity(defaultPatBearer);
         const reverse = makeKapsoIdentityChangeBody({
           providerMessageId: "wamid.identity-change-reverse",
           previousBsuid: "CO.573009876543",
@@ -214,7 +214,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
       Effect.gen(function* () {
         const admin = yield* MigrationSqlClient;
         yield* admin`DELETE FROM whatsapp_identity_change_evidence`;
-        yield* seedDevelopmentIdentity(defaultAgentBearer);
+        yield* seedDevelopmentIdentity(defaultPatBearer);
         const phoneLessBody = makeKapsoIdentityChangeBody({
           providerMessageId: "wamid.identity-change-phoneless",
           includePhoneNumber: false,
@@ -224,7 +224,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         expect(Option.isNone(phoneLessIdentity.phoneNumber)).toBe(true);
 
         yield* admin`DELETE FROM whatsapp_identity_change_evidence`;
-        yield* seedDevelopmentIdentity(defaultAgentBearer);
+        yield* seedDevelopmentIdentity(defaultPatBearer);
         const staleBody = makeKapsoIdentityChangeBody({
           providerMessageId: "wamid.identity-change-stale",
           timestamp: "1",

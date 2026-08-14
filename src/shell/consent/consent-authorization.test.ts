@@ -5,30 +5,26 @@ import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import { ConsentRecord, ConsentRecordId } from "~/core/consent/model";
 import { UserId } from "~/core/identity/reference";
 import { CreateTransactionInput } from "~/core/transactions/model";
-import { AgentBearerToken } from "~/core/tokens/model";
+import { TokenBearer } from "~/core/tokens/model";
 import { observeAuditLogEntries } from "~/shell/audit/repo";
 import { MigrationSqlClient } from "~/shell/db/client";
-import { seedConsentedAgentIdentity } from "~/shell/db/development-seed";
+import { seedConsentedPatIdentity } from "~/shell/db/development-seed";
 import { withUserTransaction } from "~/shell/db/user-transaction";
 import { appendConsentRecord, observeConsentRecords, withSubjectLock } from "./repo";
 import { ApiHarness, headersFor } from "~/shell/testing/api-harness";
 import { transactionPayload, truncateTransactions } from "~/shell/transactions/fixtures";
 
 const unconsentedUserId = UserId.make("f1d1a000-0000-4000-8000-0000000008a1");
-const unconsentedBearer = AgentBearerToken.make(
-  "fin_noconsnt_abcdefghijklmnopqrstuvwxyz0123456789ABCD"
-);
+const unconsentedBearer = TokenBearer.make("fin_noconsnt_abcdefghijklmnopqrstuvwxyz0123456789ABCD");
 const revokedUserId = UserId.make("f1d1a000-0000-4000-8000-0000000008a2");
-const revokedBearer = AgentBearerToken.make(
-  "fin_revokrac_abcdefghijklmnopqrstuvwxyz0123456789ABCD"
-);
+const revokedBearer = TokenBearer.make("fin_revokrac_abcdefghijklmnopqrstuvwxyz0123456789ABCD");
 
 layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
   "canonical consent enforcement",
   (it) => {
     it.effect("rejects before canonical financial execution and audit", () =>
       Effect.gen(function* () {
-        yield* seedConsentedAgentIdentity({
+        yield* seedConsentedPatIdentity({
           userId: unconsentedUserId,
           bearer: unconsentedBearer,
           scopes: ["write"],
@@ -48,7 +44,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           Result: TokenUseState,
           execute: (userId) => sql`
             SELECT last_used_at AS "lastUsedAt", idle_expires_at AS "idleExpiresAt"
-            FROM agent_tokens WHERE user_id = ${userId}
+            FROM tokens WHERE user_id = ${userId}
           `,
         });
         const tokenUseBefore = yield* withUserTransaction(
@@ -102,9 +98,9 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         yield* admin`DELETE FROM transactions WHERE user_id = ${revokedUserId}`;
         yield* admin`DELETE FROM audit_log_entries WHERE user_id = ${revokedUserId}`;
         yield* admin`DELETE FROM consent_records WHERE subject_user_id = ${revokedUserId}`;
-        yield* admin`DELETE FROM agent_tokens WHERE user_id = ${revokedUserId}`;
+        yield* admin`DELETE FROM tokens WHERE user_id = ${revokedUserId}`;
         yield* admin`DELETE FROM users WHERE id = ${revokedUserId}`;
-        yield* seedConsentedAgentIdentity({
+        yield* seedConsentedPatIdentity({
           userId: revokedUserId,
           bearer: revokedBearer,
           scopes: ["write"],

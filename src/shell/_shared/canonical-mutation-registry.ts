@@ -1,6 +1,6 @@
 import { type Crypto, Effect } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
-import type { ResolvedAgentToken } from "~/core/tokens/model";
+import type { ResolvedToken } from "~/core/tokens/model";
 import {
   createKeywordRule,
   deleteKeywordRule,
@@ -26,7 +26,7 @@ import type { CanonicalInput } from "./canonical-input";
 import type { OperationCatalog } from "./operation-catalog";
 
 /** Caller facts supplied to every registered canonical mutation adapter. */
-export type CanonicalMutationCaller = Readonly<{ resolved: ResolvedAgentToken }>;
+export type CanonicalMutationCaller = Readonly<{ resolved: ResolvedToken }>;
 
 type MutationAdapter<Input, Output, Failure> = {
   execute(
@@ -45,7 +45,7 @@ const mutationAdapter = <Input, Output, Failure>(
 
 const suggestedCaller = ({
   resolved,
-}: CanonicalMutationCaller): Readonly<{ scopes: ResolvedAgentToken["scopes"]; tier: "free" }> => ({
+}: CanonicalMutationCaller): Readonly<{ scopes: ResolvedToken["scopes"]; tier: "free" }> => ({
   scopes: resolved.scopes,
   tier: "free" as const,
 });

@@ -65,7 +65,7 @@ Slice scopes:
 | `dashboard`    | dashboard read model                  |
 | `insights`     | insight events                        |
 | `ingestion`    | capture and review                    |
-| `tokens`       | agent tokens and scopes               |
+| `tokens`       | PATs and scopes                       |
 | `audit`        | the audit trail                       |
 | `transcript`   | transcript and user notes             |
 | `billing`      | subscriptions and payments            |

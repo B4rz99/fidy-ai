@@ -4,8 +4,8 @@ import { HttpApiClient, HttpApiMiddleware } from "effect/unstable/httpapi";
 import { Tool, Toolkit } from "effect/unstable/ai";
 import { toCodecOpenAI } from "effect/unstable/ai/OpenAiStructuredOutput";
 import type { CanonicalOperationId } from "~/core/_shared/canonical-operation";
-import { type AgentBearerToken } from "~/core/tokens/model";
-import { AgentAuthorization } from "~/shell/_shared/authz";
+import { type TokenBearer } from "~/core/tokens/model";
+import { TokenAuthorization } from "~/shell/_shared/authz";
 import { type CatalogOperation } from "~/shell/_shared/operation-catalog";
 import { type AgentConfirmation } from "~/shell/_shared/operation-policy";
 import { FidyApi, operationCatalog } from "~/shell/api";
@@ -176,11 +176,11 @@ const callOperation = (
 };
 
 /**
- * Binds the derived toolkit to a turn-scoped AgentToken. Each handler restores
- * the canonical id and calls the generated HTTP client through AgentAuthorization.
+ * Binds the derived toolkit to a turn-scoped TokenBearer. Each handler restores
+ * the canonical id and calls the generated HTTP client through TokenAuthorization.
  */
 export const makeAgentToolkit = (
-  bearer: AgentBearerToken
+  bearer: TokenBearer
 ): Effect.Effect<
   Toolkit.WithHandler<typeof AgentToolkit.tools>,
   never,
@@ -189,7 +189,7 @@ export const makeAgentToolkit = (
   Effect.gen(function* () {
     const baseUrl = yield* CanonicalApiBaseUrl;
     const telemetry = yield* Telemetry;
-    const authorization = HttpApiMiddleware.layerClient(AgentAuthorization, ({ next, request }) =>
+    const authorization = HttpApiMiddleware.layerClient(TokenAuthorization, ({ next, request }) =>
       Effect.flatMap(telemetry.captureDurableContext, (context) => {
         const authorized = HttpClientRequest.bearerToken(request, bearer);
         return next(

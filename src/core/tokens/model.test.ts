@@ -1,20 +1,20 @@
 import { expect, it } from "@effect/vitest";
 import { DateTime, Effect, Option, Result, Schema } from "effect";
-import { AgentTokenId } from "./reference";
+import { HostedTurnTokenId, PATId } from "./reference";
 import {
-  AgentBearerSecret,
-  AgentBearerToken,
-  AgentToken,
-  AgentTokenScopes,
-  AgentTokenShortId,
-  HostedAgentScopes,
-  getAgentTokenShortId,
-  makeAgentBearerToken,
+  HostedTurnScopes,
+  PatScopes,
+  TokenBearer,
+  TokenGrant,
+  TokenSecret,
+  TokenShortId,
+  getTokenShortId,
+  makeTokenBearer,
 } from "./model";
 
-const decodeBearer = Schema.decodeUnknownResult(AgentBearerToken);
+const decodeBearer = Schema.decodeUnknownResult(TokenBearer);
 
-it("accepts only opaque AgentToken bearers with the fin_ prefix and short token id", () => {
+it("accepts only opaque TokenBearer bearers with the fin_ prefix and short token id", () => {
   expect(
     Result.isSuccess(decodeBearer("fin_default1_0123456789abcdefghijklmnopqrstuvwxyzABCD"))
   ).toBe(true);
@@ -30,20 +30,20 @@ it("accepts only opaque AgentToken bearers with the fin_ prefix and short token 
   ).toBe(true);
 });
 
-it.effect("builds and reads the AgentToken bearer through one encoding contract", () =>
+it.effect("builds and reads the TokenBearer bearer through one encoding contract", () =>
   Effect.gen(function* () {
-    const shortId = AgentTokenShortId.make("default1");
-    const secret = AgentBearerSecret.make("0123456789abcdefghijklmnopqrstuvwxyzABCD");
-    const bearer = yield* makeAgentBearerToken({ shortId, secret });
-    const extracted = yield* getAgentTokenShortId(bearer);
+    const shortId = TokenShortId.make("default1");
+    const secret = TokenSecret.make("0123456789abcdefghijklmnopqrstuvwxyzABCD");
+    const bearer = yield* makeTokenBearer({ shortId, secret });
+    const extracted = yield* getTokenShortId(bearer);
 
     expect(bearer).toBe("fin_default1_0123456789abcdefghijklmnopqrstuvwxyzABCD");
     expect(extracted).toBe(shortId);
   })
 );
 
-it("accepts exactly eight lowercase alphanumeric characters as the AgentToken short id", () => {
-  const decodeShortId = Schema.decodeUnknownResult(AgentTokenShortId);
+it("accepts exactly eight lowercase alphanumeric characters as the TokenBearer short id", () => {
+  const decodeShortId = Schema.decodeUnknownResult(TokenShortId);
 
   expect(Result.isSuccess(decodeShortId("default1"))).toBe(true);
   expect(Result.isFailure(decodeShortId("xdefault1"))).toBe(true);
@@ -52,8 +52,8 @@ it("accepts exactly eight lowercase alphanumeric characters as the AgentToken sh
   expect(Result.isFailure(decodeShortId("d"))).toBe(true);
 });
 
-it("accepts exactly the non-empty unique AgentToken scope vocabulary", () => {
-  const decodeScopes = Schema.decodeUnknownResult(AgentTokenScopes);
+it("accepts exactly the non-empty unique TokenBearer scope vocabulary", () => {
+  const decodeScopes = Schema.decodeUnknownResult(PatScopes);
 
   expect(Result.isSuccess(decodeScopes(["read", "write", "dashboard"]))).toBe(true);
   expect(Result.isFailure(decodeScopes([]))).toBe(true);
@@ -61,8 +61,8 @@ it("accepts exactly the non-empty unique AgentToken scope vocabulary", () => {
   expect(Result.isFailure(decodeScopes(["admin"]))).toBe(true);
 });
 
-it("requires every canonical scope for an internal HostedAgentToken", () => {
-  const decodeScopes = Schema.decodeUnknownResult(HostedAgentScopes);
+it("requires every canonical scope for an internal HostedTurnToken", () => {
+  const decodeScopes = Schema.decodeUnknownResult(HostedTurnScopes);
 
   expect(Result.isSuccess(decodeScopes(["read", "write", "dashboard"]))).toBe(true);
   expect(Result.isSuccess(decodeScopes(["dashboard", "read", "write"]))).toBe(true);
@@ -73,21 +73,21 @@ it("requires every canonical scope for an internal HostedAgentToken", () => {
 });
 
 it("documents the hosted scope set as one array rather than a variant per ordering", () => {
-  const document = Schema.toJsonSchemaDocument(HostedAgentScopes);
+  const document = Schema.toJsonSchemaDocument(HostedTurnScopes);
 
-  expect(document.definitions.HostedAgentScopes).toMatchObject({ type: "array" });
+  expect(document.definitions.HostedTurnScopes).toMatchObject({ type: "array" });
 });
 
-it("rejects HostedAgentToken use and revocation outside its hard lifetime", () => {
-  const decodeToken = Schema.decodeUnknownResult(Schema.toType(AgentToken));
+it("rejects HostedTurnToken use and revocation outside its hard lifetime", () => {
+  const decodeToken = Schema.decodeUnknownResult(Schema.toType(TokenGrant));
   const createdAt = DateTime.makeUnsafe("2026-07-28T12:34:56Z");
   const expiresAt = DateTime.addDuration(createdAt, "15 minutes");
   const usedAt = DateTime.addDuration(createdAt, "1 minute");
   const validToken = {
-    _tag: "HostedAgentToken" as const,
-    id: AgentTokenId.make("f1d1a000-0000-4000-8000-000000000011"),
-    shortId: AgentTokenShortId.make("hosted01"),
-    scopes: HostedAgentScopes.make(["read", "write", "dashboard"]),
+    _tag: "HostedTurnToken" as const,
+    id: HostedTurnTokenId.make("f1d1a000-0000-4000-8000-000000000011"),
+    shortId: TokenShortId.make("hosted01"),
+    scopes: HostedTurnScopes.make(["read", "write", "dashboard"]),
     lastUsedAt: Option.some(usedAt),
     expiresAt,
     revokedAt: Option.some(usedAt),
@@ -132,13 +132,13 @@ it("rejects HostedAgentToken use and revocation outside its hard lifetime", () =
   );
 });
 
-it("carries AgentToken instants over the wire as date-time strings", () => {
+it("carries bearer grant instants over the wire as date-time strings", () => {
   const createdAt = DateTime.makeUnsafe("2026-07-28T12:34:56Z");
-  const encoded = Schema.encodeSync(AgentToken)({
-    _tag: "UserAgentToken",
-    id: AgentTokenId.make("f1d1a000-0000-4000-8000-000000000010"),
-    shortId: AgentTokenShortId.make("default1"),
-    scopes: AgentTokenScopes.make(["read"]),
+  const encoded = Schema.encodeSync(TokenGrant)({
+    _tag: "PAT",
+    id: PATId.make("f1d1a000-0000-4000-8000-000000000010"),
+    shortId: TokenShortId.make("default1"),
+    scopes: PatScopes.make(["read"]),
     lastUsedAt: Option.none(),
     idleExpiresAt: DateTime.addDuration(createdAt, "90 days"),
     revokedAt: Option.none(),
@@ -146,17 +146,17 @@ it("carries AgentToken instants over the wire as date-time strings", () => {
   });
 
   expect(encoded.createdAt).toBe("2026-07-28T12:34:56.000Z");
-  expect(Result.isSuccess(Schema.decodeUnknownResult(AgentToken)(encoded))).toBe(true);
+  expect(Result.isSuccess(Schema.decodeUnknownResult(TokenGrant)(encoded))).toBe(true);
 });
 
-it("rejects UserAgentToken timestamps outside lifecycle order", () => {
-  const decodeToken = Schema.decodeUnknownResult(Schema.toType(AgentToken));
+it("rejects PAT timestamps outside lifecycle order", () => {
+  const decodeToken = Schema.decodeUnknownResult(Schema.toType(TokenGrant));
   const createdAt = DateTime.makeUnsafe("2026-07-28T12:34:56Z");
   const validToken = {
-    _tag: "UserAgentToken" as const,
-    id: AgentTokenId.make("f1d1a000-0000-4000-8000-000000000010"),
-    shortId: AgentTokenShortId.make("default1"),
-    scopes: AgentTokenScopes.make(["read"]),
+    _tag: "PAT" as const,
+    id: PATId.make("f1d1a000-0000-4000-8000-000000000010"),
+    shortId: TokenShortId.make("default1"),
+    scopes: PatScopes.make(["read"]),
     lastUsedAt: Option.none(),
     idleExpiresAt: DateTime.addDuration(createdAt, "90 days"),
     revokedAt: Option.none(),

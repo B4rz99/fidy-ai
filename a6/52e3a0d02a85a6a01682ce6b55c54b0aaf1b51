@@ -1,0 +1,79 @@
+.github/workflows/preview.yml
+  s_ee545d21162b70::t_54cfc23a33b80a 1-122
+apps/web/package.json
+  s_ee545d21162b70::t_6d764b88872e9d 10
+  s_ee545d21162b70::t_b2c7ef97c22568 13
+apps/web/scripts/preview-workflow.test.ts
+  s_ee545d21162b70::t_b356e5bd2fc2a0 1-2,4-11,15-21,24-32,36-41
+  s_ee545d21162b70::t_896d75c804e919 22-23
+  s_ee545d21162b70::t_fdf074f9fe6047 33-35
+  s_ee545d21162b70::t_c3d19de20bd52c 3
+  s_ee545d21162b70::t_d522d257f5ad45 12-14
+apps/web/cloudflare/wrangler.json
+  s_ee545d21162b70::t_2b64fbcc2bc41b 1-11
+tsconfig.base.json
+  s_ee545d21162b70::t_f82f54a3e24184 114-118,125-129
+  s_ee545d21162b70::t_7dabb948dbeb8b 130-132
+package.json
+  s_ee545d21162b70::t_45c670ff9c3853 35
+apps/server/tools/contracts/check.ts
+  s_ee545d21162b70::t_c8b5ad220f0e61 5,11-12,68-72,122,188
+.github/workflows/ci.yml
+  s_ee545d21162b70::t_d73ee240a19851 132-157
+apps/server/tools/contracts/digest-artifacts.ts
+  s_ee545d21162b70::t_a4fcd55b1e8501 3,10-14
+  s_ee545d21162b70::t_a0b78c9efc03bb 1-2,4-9,15-16
+apps/web/scripts/preview-artifact.ts
+  s_ee545d21162b70::t_5a4bcd2dfa0654 18-32
+  s_ee545d21162b70::t_2bbf8bdcbe4eb9 1-17,33
+apps/web/cloudflare/validate_preview_artifact.py
+  s_ee545d21162b70::t_c5a08af99f67c7 1-204
+apps/web/vite.config.ts
+  s_ee545d21162b70::t_ba177913101661 6,8,14
+apps/server/tools/contracts/generate.ts
+  s_ee545d21162b70::t_cbe48d23f71509 6,11
+apps/web/cloudflare/validate_preview_artifact_test.py
+  s_ee545d21162b70::t_0ef0cb75e839ae 66-72,74-77,79-81,102-116
+  s_ee545d21162b70::t_7ca7ff9d448213 1-65,73,78,82-101,117-147
+apps/web/scripts/cloudflare-adapter.test.ts
+  s_ee545d21162b70::t_12651532dcc21c 1-2,4-6,8-32
+  s_ee545d21162b70::t_003939a14080e0 3
+  s_ee545d21162b70::t_cdc95b2a16a5af 7
+apps/web/cloudflare/public/_headers
+  s_ee545d21162b70::t_8f6422c0edcc42 1-13
+.gitignore
+  s_ee545d21162b70::t_90f5da877de413 8
+  s_ee545d21162b70::t_7ff13617f8957b 9-10
+scripts/build-web-preview.ts
+  s_ee545d21162b70::t_b4678ae815858e 3-4
+  s_ee545d21162b70::t_6951e07e21ca12 5-7
+  s_ee545d21162b70::t_edcc3d99b45818 1-2
+  s_ee545d21162b70::t_e1237900f0427c 8-10
+  s_ee545d21162b70::t_63f0a3633ff730 11-39
+apps/web/scripts/build-preview.test.ts
+  s_ee545d21162b70::t_0c0458475857d8 2
+  s_ee545d21162b70::t_54eb6dab354edf 1,3-34
+docs/operations/pull-request-previews.md
+  s_ee545d21162b70::t_979b06008360d5 1-65
+scripts/verify.ts
+  s_ee545d21162b70::t_1824f51d3f50e7 57
+apps/server/tools/contracts/compatibility.ts
+  s_ee545d21162b70::t_703e75d7caba00 14-18,74-99
+  s_ee545d21162b70::t_d7aabbb1f7ea87 100
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "a652e3a0d02a85a6a01682ce6b55c54b0aaf1b51",
+  "prompts": {},
+  "sessions": {
+    "s_ee545d21162b70": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0024d-b88e-744e-8f90-d5843eb34bbf",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

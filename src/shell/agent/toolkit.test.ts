@@ -96,7 +96,7 @@ it("tells the hosted model which transaction operations need confirmation", () =
   expect(deleteDescription).toContain("host manages exact confirmation");
 });
 
-it.effect("rejects canonical API destinations that could leak a hosted bearer", () =>
+it.effect("rejects canonical API destinations that could leak a HostedTurnToken", () =>
   Effect.gen(function* () {
     const decode = Schema.decodeUnknownEffect(CanonicalApiUrl);
     yield* Effect.flip(decode("http://attacker.example"));

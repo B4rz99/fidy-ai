@@ -46,7 +46,7 @@ import {
 } from "~/shell/observability/protocol";
 import { Telemetry, type TelemetryService } from "~/shell/observability/telemetry";
 import { atomicBatchOperation } from "~/shell/operations/operations";
-import { issueHostedAgentToken, revokeHostedAgentToken } from "~/shell/tokens/hosted-agent-token";
+import { issueHostedTurnToken, revokeHostedTurnToken } from "~/shell/tokens/hosted-turn-token";
 import {
   type ContinuityChanged,
   ConversationContinuity,
@@ -1374,7 +1374,7 @@ const generateHostedReply = Effect.fn("AgentService.generateHostedReply")(functi
   const { user, confirmation } = yield* loadTurnContext(userId, message);
   const hostedToken = yield* withCurrentConsent(
     userId,
-    issueHostedAgentToken(userId, context.startedAt)
+    issueHostedTurnToken(userId, context.startedAt)
   );
   return yield* Effect.scoped(
     Effect.gen(function* () {
@@ -1394,9 +1394,7 @@ const generateHostedReply = Effect.fn("AgentService.generateHostedReply")(functi
   ).pipe(
     Effect.ensuring(
       DateTime.now.pipe(
-        Effect.flatMap((revokedAt) =>
-          revokeHostedAgentToken(userId, hostedToken.tokenId, revokedAt)
-        )
+        Effect.flatMap((revokedAt) => revokeHostedTurnToken(userId, hostedToken.tokenId, revokedAt))
       )
     )
   );

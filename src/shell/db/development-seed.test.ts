@@ -1,8 +1,8 @@
 import { BunServices } from "@effect/platform-bun";
 import { expect, layer } from "@effect/vitest";
 import { Config, DateTime, Effect, Layer, Option } from "effect";
-import { AgentBearerToken } from "~/core/tokens/model";
-import { authenticateAgentToken } from "~/shell/_shared/authz";
+import { TokenBearer } from "~/core/tokens/model";
+import { authenticateTokenBearer } from "~/shell/_shared/authz";
 import { findUser } from "~/shell/identity/repo";
 import { PgLive } from "./client";
 import { defaultUserId } from "./development-seed";
@@ -52,11 +52,11 @@ layer(Layer.merge(PgLive, BunServices.layer), {
       const databaseUrl = yield* localDatabaseUrl;
       const first = yield* runSeedCommand(databaseUrl);
       const second = yield* runSeedCommand(databaseUrl);
-      const firstBearer = AgentBearerToken.make(first.stdout.trim());
-      const secondBearer = AgentBearerToken.make(second.stdout.trim());
+      const firstBearer = TokenBearer.make(first.stdout.trim());
+      const secondBearer = TokenBearer.make(second.stdout.trim());
       const usedAt = yield* DateTime.now;
-      const firstResolution = yield* authenticateAgentToken(firstBearer, usedAt);
-      const secondResolution = yield* authenticateAgentToken(secondBearer, usedAt);
+      const firstResolution = yield* authenticateTokenBearer(firstBearer, usedAt);
+      const secondResolution = yield* authenticateTokenBearer(secondBearer, usedAt);
 
       expect([first.exitCode, second.exitCode]).toEqual([0, 0]);
       expect(firstBearer).not.toBe(secondBearer);
@@ -84,9 +84,9 @@ layer(Layer.merge(PgLive, BunServices.layer), {
     Effect.gen(function* () {
       const databaseUrl = yield* localDatabaseUrl;
       const seeded = yield* runSeedCommand(databaseUrl);
-      const bearer = AgentBearerToken.make(seeded.stdout.trim());
+      const bearer = TokenBearer.make(seeded.stdout.trim());
       const result = yield* runSeedCommand(`${databaseUrl}?host=127.0.0.1`);
-      const resolution = yield* authenticateAgentToken(bearer, yield* DateTime.now);
+      const resolution = yield* authenticateTokenBearer(bearer, yield* DateTime.now);
 
       expect(result.exitCode).not.toBe(0);
       expect(result.stdout).not.toContain("fin_");

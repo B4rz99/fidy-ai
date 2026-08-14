@@ -28,7 +28,7 @@ import {
 import { SqlClient, type SqlConnection, SqlSchema, type Statement } from "effect/unstable/sql";
 import { ConsentRecord, ConsentRecordId } from "~/core/consent/model";
 import { E164PhoneNumber, UserId, WhatsAppBusinessScopedUserId } from "~/core/identity/reference";
-import { AgentBearerToken } from "~/core/tokens/model";
+import { TokenBearer } from "~/core/tokens/model";
 import { AgentReply, AgentService } from "~/shell/agent/agent-service";
 import { makeOpenAiFunctionCallResponse } from "~/shell/agent/fixtures/openai";
 import { OpenAiHostedInferenceWithoutStartupValidation } from "~/shell/agent/openai";
@@ -37,7 +37,7 @@ import { MigrationSqlClient } from "~/shell/db/client";
 import {
   defaultUserId,
   defaultWhatsAppPhone,
-  seedConsentedAgentIdentity,
+  seedConsentedPatIdentity,
   seedDevelopmentIdentity,
 } from "~/shell/db/development-seed";
 import { HostedInferenceFromLanguageModel } from "~/shell/testing/hosted-inference-fixtures";
@@ -76,7 +76,7 @@ import {
 } from "~/shell/consent/repo";
 import { associateWhatsAppIdentity, resolveWhatsAppCaller } from "~/shell/identity/repo";
 import { removeWhatsAppIdentityForTesting } from "~/shell/identity/testing";
-import { defaultAgentBearer } from "~/shell/testing/identity-fixtures";
+import { defaultPatBearer } from "~/shell/testing/identity-fixtures";
 import { transactionPayload } from "~/shell/transactions/fixtures";
 import { listTranscriptEntries } from "~/shell/transcript/repo";
 import { TranscriptText } from "~/core/transcript/model";
@@ -244,9 +244,9 @@ const enqueueTraceFixture = Effect.fn("WhatsApp.enqueueTraceFixture")(function* 
 ) {
   const suffix = String(index + 1);
   const userId = UserId.make(`f1d1a000-0000-4000-8000-${String(index + 930).padStart(12, "0")}`);
-  yield* seedConsentedAgentIdentity({
+  yield* seedConsentedPatIdentity({
     userId,
-    bearer: AgentBearerToken.make(
+    bearer: TokenBearer.make(
       `fin_trace${suffix.padStart(3, "0")}_abcdefghijklmnopqrstuvwxyz0123456789ABCD`
     ),
   });
@@ -557,7 +557,7 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
       "resolves identity, deduplicates redelivery, and collapses a text/voice burst once",
       () =>
         Effect.gen(function* () {
-          yield* seedDevelopmentIdentity(defaultAgentBearer);
+          yield* seedDevelopmentIdentity(defaultPatBearer);
           yield* truncateWhatsAppChannel;
           const eventTime = DateTime.makeUnsafe("2026-04-03T12:00:02.000Z");
           const [first, second] = yield* recordedEvents(eventTime);
@@ -642,7 +642,7 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
 
     it.effect("quick-logs a text-only turn through the real AgentService", () =>
       Effect.gen(function* () {
-        yield* seedDevelopmentIdentity(defaultAgentBearer);
+        yield* seedDevelopmentIdentity(defaultPatBearer);
         yield* truncateWhatsAppChannel;
         const eventTime = DateTime.makeUnsafe("2026-04-03T12:01:02.000Z");
         const inbound = makeKapsoTextEvent("wamid.text-only", "almuerzo 25 mil", eventTime);
@@ -685,13 +685,13 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
 
     it.effect("keeps concurrent background turns bound to their originating Users", () =>
       Effect.gen(function* () {
-        yield* seedDevelopmentIdentity(defaultAgentBearer);
+        yield* seedDevelopmentIdentity(defaultPatBearer);
         yield* truncateWhatsAppChannel;
         const secondUserId = UserId.make("f1d1a000-0000-4000-8000-000000000920");
         const secondPhone = E164PhoneNumber.make("+573008889920");
-        yield* seedConsentedAgentIdentity({
+        yield* seedConsentedPatIdentity({
           userId: secondUserId,
-          bearer: AgentBearerToken.make("fin_whatsiso_abcdefghijklmnopqrstuvwxyz0123456789ABCD"),
+          bearer: TokenBearer.make("fin_whatsiso_abcdefghijklmnopqrstuvwxyz0123456789ABCD"),
         });
         const sql = yield* SqlClient.SqlClient;
         const countTransactions = (
@@ -796,7 +796,7 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
 
     it.effect("keeps claimed content behind User RLS and exposes only pre-subject identity", () =>
       Effect.gen(function* () {
-        yield* seedDevelopmentIdentity(defaultAgentBearer);
+        yield* seedDevelopmentIdentity(defaultPatBearer);
         yield* truncateWhatsAppChannel;
         const eventTime = DateTime.makeUnsafe("2026-04-03T12:00:02.000Z");
         const inbound = makeKapsoTextEvent("wamid.gateway-boundary", "pan 5 mil", eventTime);
@@ -849,7 +849,7 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
 
     it.effect("terminally retires stale started work without replaying its content", () =>
       Effect.gen(function* () {
-        yield* seedDevelopmentIdentity(defaultAgentBearer);
+        yield* seedDevelopmentIdentity(defaultPatBearer);
         yield* truncateWhatsAppChannel;
         const eventTime = yield* DateTime.now;
         const inbound = makeKapsoTextEvent("wamid.ambiguous-crash", "mercado 20 mil", eventTime);
@@ -925,7 +925,7 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
 
     it.effect("prunes expired operational identifiers without later inbound traffic", () =>
       Effect.gen(function* () {
-        yield* seedDevelopmentIdentity(defaultAgentBearer);
+        yield* seedDevelopmentIdentity(defaultPatBearer);
         yield* truncateWhatsAppChannel;
         const eventTime = yield* DateTime.now;
         const inbound = makeKapsoTextEvent("wamid.retention", "x", eventTime);
@@ -966,7 +966,7 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
 
     it.effect("refuses bounded-capacity overflow without consuming provider evidence", () =>
       Effect.gen(function* () {
-        yield* seedDevelopmentIdentity(defaultAgentBearer);
+        yield* seedDevelopmentIdentity(defaultPatBearer);
         yield* truncateWhatsAppChannel;
         const eventTime = yield* DateTime.now;
         const concurrentAdmissions = yield* Effect.forEach(
@@ -1010,7 +1010,7 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
 
     it.effect("counts newline separators inside the 16,000-character burst limit", () =>
       Effect.gen(function* () {
-        yield* seedDevelopmentIdentity(defaultAgentBearer);
+        yield* seedDevelopmentIdentity(defaultPatBearer);
         yield* truncateWhatsAppChannel;
         const eventTime = yield* DateTime.now;
         const first = makeKapsoTextEvent("wamid.boundary-first", "a".repeat(8_000), eventTime);
@@ -1053,7 +1053,7 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
 
     it.effect("rejects non-text and invalid text after consent admission", () =>
       Effect.gen(function* () {
-        yield* seedDevelopmentIdentity(defaultAgentBearer);
+        yield* seedDevelopmentIdentity(defaultPatBearer);
         const receivedAt = DateTime.makeUnsafe("2026-04-03T12:00:02.000Z");
         const event = makeKapsoTextEvent("wamid.invalid-agent-input", "valid", receivedAt);
         const choice = yield* admitAgentConversationTurn({
@@ -1079,7 +1079,7 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
 
     it.effect("terminally fails a claimed burst when the agent cannot answer", () =>
       Effect.gen(function* () {
-        yield* seedDevelopmentIdentity(defaultAgentBearer);
+        yield* seedDevelopmentIdentity(defaultPatBearer);
         yield* truncateWhatsAppChannel;
         const eventTime = DateTime.makeUnsafe("2026-04-03T12:00:02.000Z");
         const inbound = makeKapsoTextEvent("wamid.agent-failure", "mercado 20 mil", eventTime);
@@ -1271,7 +1271,7 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
       "completes delivery when consent is revoked before recording and processes the next turn",
       () =>
         Effect.gen(function* () {
-          yield* seedDevelopmentIdentity(defaultAgentBearer);
+          yield* seedDevelopmentIdentity(defaultPatBearer);
           yield* truncateWhatsAppChannel;
           const eventTime = yield* DateTime.now;
           const recordings = yield* Ref.make(0);
@@ -1316,7 +1316,7 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
 
     it.effect("retries rejected transient sends but does not retry ambiguous sends", () =>
       Effect.gen(function* () {
-        yield* seedDevelopmentIdentity(defaultAgentBearer);
+        yield* seedDevelopmentIdentity(defaultPatBearer);
         yield* truncateWhatsAppChannel;
         const eventTime = yield* DateTime.now;
         const agent = agentServiceFixture();
@@ -1428,7 +1428,7 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
 
     it.effect("processes an authorized turn through OpenAI with strict toolkit schemas", () =>
       Effect.gen(function* () {
-        yield* seedDevelopmentIdentity(defaultAgentBearer);
+        yield* seedDevelopmentIdentity(defaultPatBearer);
         yield* truncateWhatsAppChannel;
         const eventTime = DateTime.makeUnsafe("2026-04-03T12:01:02.000Z");
         const inbound = makeKapsoTextEvent("wamid.openai-toolkit", "mercado 20 mil", eventTime);
@@ -1490,7 +1490,7 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
 
     it.effect("accepts OpenAI's encoded money input through the canonical transaction seam", () =>
       Effect.gen(function* () {
-        yield* seedDevelopmentIdentity(defaultAgentBearer);
+        yield* seedDevelopmentIdentity(defaultPatBearer);
         yield* truncateWhatsAppChannel;
         const eventTime = DateTime.makeUnsafe("2026-04-03T12:01:02.000Z");
         const inbound = makeKapsoTextEvent("wamid.openai-transaction", "10000 desayuno", eventTime);
@@ -1550,7 +1550,7 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
 
     it.effect("fails a sent turn terminally when Kapso reuses existing evidence identity", () =>
       Effect.gen(function* () {
-        yield* seedDevelopmentIdentity(defaultAgentBearer);
+        yield* seedDevelopmentIdentity(defaultPatBearer);
         yield* truncateWhatsAppChannel;
         const eventTime = DateTime.makeUnsafe("2026-04-03T12:02:02.000Z");
         const inbound = makeKapsoTextEvent(
@@ -1607,7 +1607,7 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
 
     it.effect("authenticates and durably deduplicates the public webhook route", () =>
       Effect.gen(function* () {
-        yield* seedDevelopmentIdentity(defaultAgentBearer);
+        yield* seedDevelopmentIdentity(defaultPatBearer);
         yield* truncateWhatsAppChannel;
         const body = yield* fixtureBytes("kapso-text-v2.json");
         const request = (): Effect.Effect<
@@ -1646,7 +1646,7 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
 
     it.effect("keeps an in-flight receipt retryable until its owner releases the claim", () =>
       Effect.gen(function* () {
-        yield* seedDevelopmentIdentity(defaultAgentBearer);
+        yield* seedDevelopmentIdentity(defaultPatBearer);
         yield* truncateWhatsAppChannel;
         const now = yield* DateTime.now;
         const event = (yield* recordedEvents(now))[0];
@@ -2368,7 +2368,7 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
 
     it.effect("does not authorize messages predating consent or the current association", () =>
       Effect.gen(function* () {
-        yield* seedDevelopmentIdentity(defaultAgentBearer);
+        yield* seedDevelopmentIdentity(defaultPatBearer);
         yield* truncateWhatsAppChannel;
         const now = yield* DateTime.now;
         const preConsent = yield* postSignedTextFixture({
@@ -2551,7 +2551,7 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
 
     it.effect("renders standard Markdown bold for WhatsApp free-form replies", () =>
       Effect.gen(function* () {
-        yield* seedDevelopmentIdentity(defaultAgentBearer);
+        yield* seedDevelopmentIdentity(defaultPatBearer);
         yield* truncateWhatsAppChannel;
         const eventTime = DateTime.makeUnsafe("2026-04-03T12:00:02.000Z");
         const event = makeKapsoTextEvent("wamid.markdown-bold", "hola", eventTime);
@@ -2639,11 +2639,9 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
     it.effect("refuses free-form send after onboarding consent is revoked", () =>
       Effect.gen(function* () {
         const userId = UserId.make("f1d1a000-0000-4000-8000-000000000910");
-        const bearer = AgentBearerToken.make(
-          "fin_whatsrvk_abcdefghijklmnopqrstuvwxyz0123456789ABCD"
-        );
+        const bearer = TokenBearer.make("fin_whatsrvk_abcdefghijklmnopqrstuvwxyz0123456789ABCD");
         const eventTime = DateTime.makeUnsafe("2026-04-03T12:00:02.000Z");
-        yield* seedConsentedAgentIdentity({ userId, bearer, scopes: ["read", "write"] });
+        yield* seedConsentedPatIdentity({ userId, bearer, scopes: ["read", "write"] });
         yield* associateWhatsAppIdentity(userId, {
           ...testWhatsAppCaller(E164PhoneNumber.make("+573008887766")),
           verifiedAt: eventTime,
@@ -2706,7 +2704,7 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
 
     it.effect("refuses an out-of-window free-form send before calling Kapso", () =>
       Effect.gen(function* () {
-        yield* seedDevelopmentIdentity(defaultAgentBearer);
+        yield* seedDevelopmentIdentity(defaultPatBearer);
         yield* truncateWhatsAppChannel;
         const eventTime = DateTime.makeUnsafe("2026-04-03T12:00:02.000Z");
         const sql = yield* SqlClient.SqlClient;
@@ -2729,7 +2727,7 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           eventTime
         ).pipe(Effect.provideService(KapsoClient, kapsoNeverCalled), Effect.flip);
         expect(missingIdentity._tag).toBe("WhatsAppIdentityMissing");
-        yield* seedDevelopmentIdentity(defaultAgentBearer);
+        yield* seedDevelopmentIdentity(defaultPatBearer);
 
         const [inbound] = yield* recordedEvents(eventTime);
         const admission = yield* admitAgentConversationTurn({
@@ -2793,7 +2791,7 @@ layer(WhatsAppTraceHarness, { excludeTestServices: true, timeout: "30 seconds" }
   (it) => {
     it.effect("continues an authenticated webhook trace through durable delivery", () =>
       Effect.gen(function* () {
-        yield* seedDevelopmentIdentity(defaultAgentBearer);
+        yield* seedDevelopmentIdentity(defaultPatBearer);
         yield* truncateWhatsAppChannel;
         const recorder = yield* EnvelopeRecorder;
         yield* recorder.clear;
@@ -2851,7 +2849,7 @@ layer(WhatsAppTraceHarness, { excludeTestServices: true, timeout: "30 seconds" }
 
     it.effect("parents a debounced burst from only its newest durable context", () =>
       Effect.gen(function* () {
-        yield* seedDevelopmentIdentity(defaultAgentBearer);
+        yield* seedDevelopmentIdentity(defaultPatBearer);
         yield* truncateWhatsAppChannel;
         const recorder = yield* EnvelopeRecorder;
         yield* recorder.clear;
@@ -2906,7 +2904,7 @@ layer(WhatsAppTraceHarness, { excludeTestServices: true, timeout: "30 seconds" }
       "rejects widened storage and discards stale durable context without losing the turn",
       () =>
         Effect.gen(function* () {
-          yield* seedDevelopmentIdentity(defaultAgentBearer);
+          yield* seedDevelopmentIdentity(defaultPatBearer);
           yield* truncateWhatsAppChannel;
           const recorder = yield* EnvelopeRecorder;
           yield* recorder.clear;
@@ -2940,9 +2938,9 @@ layer(WhatsAppTraceHarness, { excludeTestServices: true, timeout: "30 seconds" }
           expect(oversized._tag).toBe("Failure");
 
           const secondUserId = UserId.make("f1d1a000-0000-4000-8000-000000000921");
-          yield* seedConsentedAgentIdentity({
+          yield* seedConsentedPatIdentity({
             userId: secondUserId,
-            bearer: AgentBearerToken.make("fin_traceiso_abcdefghijklmnopqrstuvwxyz0123456789ABCD"),
+            bearer: TokenBearer.make("fin_traceiso_abcdefghijklmnopqrstuvwxyz0123456789ABCD"),
           });
           const sql = yield* SqlClient.SqlClient;
           expect(
@@ -2970,7 +2968,7 @@ layer(WhatsAppTraceHarness, { excludeTestServices: true, timeout: "30 seconds" }
 
     it.effect("discards unsupported stored context without losing the turn", () =>
       Effect.gen(function* () {
-        yield* seedDevelopmentIdentity(defaultAgentBearer);
+        yield* seedDevelopmentIdentity(defaultPatBearer);
         yield* truncateWhatsAppChannel;
         const recorder = yield* EnvelopeRecorder;
         yield* recorder.clear;
@@ -3034,7 +3032,7 @@ layer(WhatsAppTraceHarness, { excludeTestServices: true, timeout: "30 seconds" }
 
     it.effect("preserves context and bounded provider metadata across a retry", () =>
       Effect.gen(function* () {
-        yield* seedDevelopmentIdentity(defaultAgentBearer);
+        yield* seedDevelopmentIdentity(defaultPatBearer);
         yield* truncateWhatsAppChannel;
         const recorder = yield* EnvelopeRecorder;
         yield* recorder.clear;

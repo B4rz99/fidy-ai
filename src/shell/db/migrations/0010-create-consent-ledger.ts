@@ -1,11 +1,11 @@
 import { Effect } from "effect";
 import { SqlClient } from "effect/unstable/sql";
 
-const constrainAgentTokenSubject = Effect.gen(function* () {
+const constrainTokenBearerSubject = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
   yield* sql`
-    ALTER TABLE agent_tokens
-      ADD CONSTRAINT agent_tokens_id_user_id_key UNIQUE (id, user_id)
+    ALTER TABLE tokens
+      ADD CONSTRAINT tokens_id_user_id_key UNIQUE (id, user_id)
   `;
 });
 
@@ -16,8 +16,8 @@ const createConsentRecordsTable = Effect.gen(function* () {
       id uuid PRIMARY KEY,
       subject_user_id uuid NOT NULL REFERENCES users(id),
       event_type text NOT NULL CHECK (event_type IN ('granted', 'revoked')),
-      grant_type text CHECK (grant_type IN ('onboarding', 'agent-token', 'insight-delivery')),
-      agent_token_id uuid,
+      grant_type text CHECK (grant_type IN ('onboarding', 'pat', 'insight-delivery')),
+      pat_id uuid,
       insight_kind text,
       revoked_grant_id uuid,
       service_market text NOT NULL,
@@ -42,22 +42,22 @@ const createConsentRecordsTable = Effect.gen(function* () {
       CHECK (
         (event_type = 'granted' AND grant_type IS NOT NULL AND revoked_grant_id IS NULL)
         OR
-        (event_type = 'revoked' AND grant_type IS NULL AND agent_token_id IS NULL
+        (event_type = 'revoked' AND grant_type IS NULL AND pat_id IS NULL
           AND insight_kind IS NULL AND revoked_grant_id IS NOT NULL)
       ),
       CHECK (
-        (grant_type = 'onboarding' AND agent_token_id IS NULL AND insight_kind IS NULL)
+        (grant_type = 'onboarding' AND pat_id IS NULL AND insight_kind IS NULL)
         OR
-        (grant_type = 'agent-token' AND agent_token_id IS NOT NULL AND insight_kind IS NULL)
+        (grant_type = 'pat' AND pat_id IS NOT NULL AND insight_kind IS NULL)
         OR
-        (grant_type = 'insight-delivery' AND agent_token_id IS NULL AND insight_kind IS NOT NULL)
+        (grant_type = 'insight-delivery' AND pat_id IS NULL AND insight_kind IS NOT NULL)
         OR grant_type IS NULL
       ),
       UNIQUE (id, subject_user_id),
       FOREIGN KEY (revoked_grant_id, subject_user_id)
         REFERENCES consent_records(id, subject_user_id),
-      FOREIGN KEY (agent_token_id, subject_user_id)
-        REFERENCES agent_tokens(id, user_id),
+      FOREIGN KEY (pat_id, subject_user_id)
+        REFERENCES tokens(id, user_id),
       UNIQUE (decision_channel, decision_provider, decision_provider_message_id)
     )
   `;
@@ -176,7 +176,7 @@ const createConsentDecisionSubjectResolver = Effect.gen(function* () {
 
 /** Adds the append-only consent ledger and minimal 24-hour pre-User exchange state. */
 export const createConsentLedger = Effect.gen(function* () {
-  yield* constrainAgentTokenSubject;
+  yield* constrainTokenBearerSubject;
   yield* createConsentRecordsTable;
   yield* indexConsentRecordLookups;
   yield* createPendingConsentExchangeTable;

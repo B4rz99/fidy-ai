@@ -30,7 +30,7 @@ Choose stable persisted meaning while keeping Colombia implementation direct.
 - Money is exact, Currency-aware, and independent of ServiceMarket. Aggregation and comparison are
   Currency-scoped; fidy performs no FX conversion or cross-Currency netting.
 - UserId is stable across channel and credential changes. Launch authentication uses concrete
-  WhatsAppIdentity and AgentToken resolvers that reach the same User; no generic identity framework
+  WhatsAppIdentity and PAT resolvers that reach the same User; no generic identity framework
   is introduced.
 - A User's current ServiceMarket, locale, and IANA time zone are explicit and independent. Existing
   legal, financial, ingestion, delivery, billing, and persisted-report artifacts retain only the

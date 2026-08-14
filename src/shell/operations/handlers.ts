@@ -1,7 +1,7 @@
 import { DateTime, Effect, Schema } from "effect";
 import { HttpApiBuilder } from "effect/unstable/httpapi";
 import { CanonicalOperationId } from "~/core/_shared/canonical-operation";
-import type { ResolvedAgentToken } from "~/core/tokens/model";
+import type { ResolvedToken } from "~/core/tokens/model";
 import {
   ChildOperationAudit,
   type ChildOperationAuditService,
@@ -96,7 +96,7 @@ const rejectChild = (
 type ExecuteChild = Readonly<{
   call: AtomicBatchInput["calls"][number];
   index: number;
-  resolved: ResolvedAgentToken;
+  resolved: ResolvedToken;
   childAudit: ChildOperationAuditService;
 }>;
 
@@ -131,7 +131,7 @@ const executeChild = Effect.fn("executeAtomicBatchChild")(function* ({
       operation: call.operation,
       code: "scope_missing",
       message:
-        "This AgentToken does not grant the scope declared by this child mutation. Broaden the token before retrying the whole batch.",
+        "This PAT does not grant the scope declared by this child mutation. Broaden the token before retrying the whole batch.",
     });
   }
   if (catalogOperation.policy.requiredTier !== "free") {

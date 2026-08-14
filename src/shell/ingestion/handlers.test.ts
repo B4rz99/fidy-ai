@@ -1,8 +1,8 @@
 import { expect, layer } from "@effect/vitest";
 import { Context, Effect, Encoding, Layer, Result, Schema } from "effect";
 import { UserId } from "~/core/identity/reference";
-import { AgentBearerToken } from "~/core/tokens/model";
-import { AgentTokenId } from "~/core/tokens/reference";
+import { TokenBearer } from "~/core/tokens/model";
+import { PATId } from "~/core/tokens/reference";
 import {
   Base64FileContent,
   StatementIdempotencyKey,
@@ -10,13 +10,13 @@ import {
 } from "~/core/ingestion/model";
 import { PaywallRequired, ValidationFailed } from "~/shell/_shared/errors";
 import { MigrationSqlClient } from "~/shell/db/client";
-import { seedConsentedAgentIdentity } from "~/shell/db/development-seed";
+import { seedConsentedPatIdentity } from "~/shell/db/development-seed";
 import { type ApiClient, ApiHarness, makeApiClientLive } from "~/shell/testing/api-harness";
 import { truncateStatementIngestion } from "./fixtures";
 
 const freeUserId = UserId.make("f1d1a000-0000-4000-8000-00000000c181");
-const freeTokenId = AgentTokenId.make("f1d1a000-0000-4000-8000-00000000c182");
-const freeBearer = AgentBearerToken.make("fin_ingest01_abcdefghijklmnopqrstuvwxyz0123456789ABCD");
+const freeTokenId = PATId.make("f1d1a000-0000-4000-8000-00000000c182");
+const freeBearer = TokenBearer.make("fin_ingest01_abcdefghijklmnopqrstuvwxyz0123456789ABCD");
 class FreeApiClient extends Context.Service<FreeApiClient, ApiClient>()(
   "fidy-ai/shell/ingestion/handlers.test/FreeApiClient"
 ) {}
@@ -44,7 +44,7 @@ layer(IngestionHarness, { excludeTestServices: true, timeout: "30 seconds" })(
     it.effect("bounds outstanding files per stable User", () =>
       Effect.gen(function* () {
         yield* truncateStatementIngestion;
-        yield* seedConsentedAgentIdentity({
+        yield* seedConsentedPatIdentity({
           userId: freeUserId,
           bearer: freeBearer,
           tokenId: freeTokenId,
@@ -76,7 +76,7 @@ layer(IngestionHarness, { excludeTestServices: true, timeout: "30 seconds" })(
     it.effect("queues idempotently and consumes the lifetime Free grant only once", () =>
       Effect.gen(function* () {
         yield* truncateStatementIngestion;
-        yield* seedConsentedAgentIdentity({
+        yield* seedConsentedPatIdentity({
           userId: freeUserId,
           bearer: freeBearer,
           tokenId: freeTokenId,

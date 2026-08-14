@@ -2,10 +2,10 @@ import { BunHttpServer, BunServices } from "@effect/platform-bun";
 import { Context, DateTime, Effect, Layer, Option, Ref, type Schema } from "effect";
 import { type HttpClient, type HttpClientError } from "effect/unstable/http";
 import { HttpApiClient } from "effect/unstable/httpapi";
-import { type AgentBearerToken } from "~/core/tokens/model";
+import { type TokenBearer } from "~/core/tokens/model";
 import { HostedInference } from "~/shell/agent/hosted-inference";
 import { ConversationCompactionInference } from "~/shell/transcript/conversation-compaction-inference";
-import { makeAgentAuthorizationClientLive } from "~/shell/_shared/authz";
+import { makeTokenAuthorizationClientLive } from "~/shell/_shared/authz";
 import { okStatus } from "~/shell/_shared/http-status";
 import type {
   ConsentRequired,
@@ -27,7 +27,7 @@ import { WhatsAppProviderMessageId } from "~/shell/channels/whatsapp/model";
 import { MigrationSqlClient, MigratorLive, PgLive } from "~/shell/db/client";
 import { TelemetryHttpStatus } from "~/shell/observability/protocol";
 import { makeDevelopmentSeedLive } from "~/shell/db/development-seed";
-import { defaultAgentBearer } from "./identity-fixtures";
+import { defaultPatBearer } from "./identity-fixtures";
 import { TestPublicNamespace } from "./test-config";
 import { HttpLive } from "~/shell/http";
 import { TelemetryDisabled } from "~/shell/observability/disabled";
@@ -36,7 +36,7 @@ import { TelemetryEnvelopeRecording } from "~/shell/observability/envelope-recor
 /**
  * Derives the typed client from the ambient HttpClient, which the test server
  * layer points at whatever port the harness bound. Every request presents one
- * opaque AgentToken bearer; no client API accepts a UserId as authentication.
+ * opaque TokenBearer bearer; no client API accepts a UserId as authentication.
  */
 const derivedApiClient = HttpApiClient.make(FidyApi);
 
@@ -61,13 +61,13 @@ export const makeApiClientLive = <Id>({
   bearer,
   tag,
 }: {
-  readonly bearer: AgentBearerToken;
+  readonly bearer: TokenBearer;
   readonly tag: Context.Key<Id, ApiClient>;
 }): Layer.Layer<Id, never, HttpClient.HttpClient> =>
-  Layer.effect(tag, derivedApiClient).pipe(Layer.provide(makeAgentAuthorizationClientLive(bearer)));
+  Layer.effect(tag, derivedApiClient).pipe(Layer.provide(makeTokenAuthorizationClientLive(bearer)));
 
-/** The same AgentToken bearer for tests that speak raw HTTP. */
-export const headersFor = (bearer: AgentBearerToken): Record<string, string> => ({
+/** The same TokenBearer bearer for tests that speak raw HTTP. */
+export const headersFor = (bearer: TokenBearer): Record<string, string> => ({
   authorization: `Bearer ${bearer}`,
 });
 
@@ -154,13 +154,13 @@ const BaselineCompactionInference = Layer.succeed(ConversationCompactionInferenc
 
 const ApiHarnessBase = makeApiClientLive({
   tag: ApiHarnessClient,
-  bearer: defaultAgentBearer,
+  bearer: defaultPatBearer,
 }).pipe(
   Layer.provideMerge(HttpLive.pipe(Layer.provide(MigratorLive))),
   Layer.provideMerge(TestKapsoClient),
   Layer.provideMerge(MemoryInferenceTest),
   Layer.provideMerge(BaselineCompactionInference),
-  Layer.provideMerge(makeDevelopmentSeedLive(defaultAgentBearer)),
+  Layer.provideMerge(makeDevelopmentSeedLive(defaultPatBearer)),
   Layer.provideMerge(BunHttpServer.layerTest),
   Layer.provideMerge(BunServices.layer),
   Layer.provideMerge(MigrationSqlClient.layer),

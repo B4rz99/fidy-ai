@@ -17,28 +17,24 @@ import { HttpClientRequest } from "effect/unstable/http";
 import { SqlClient } from "effect/unstable/sql";
 import { HttpApiMiddleware, HttpApiSecurity, OpenApi } from "effect/unstable/httpapi";
 import { type AuditLogEntry, type AuditOutcome, CanonicalOperationId } from "~/core/audit/model";
-import {
-  AgentBearerToken,
-  AgentBearerTokenFormat,
-  type ResolvedAgentToken,
-} from "~/core/tokens/model";
-import { renewAgentTokenIdleExpiry } from "~/core/tokens/rules";
+import { type ResolvedToken, TokenBearer, TokenBearerFormat } from "~/core/tokens/model";
+import { computePatIdleExpiry } from "~/core/tokens/rules";
 import { appendAuditLogEntry } from "~/shell/audit/repo";
 import { useCurrentConsent } from "~/shell/consent/repo";
 import { withUserTransaction } from "~/shell/db/user-transaction";
-import { AgentTokenHash, useAgentToken } from "~/shell/tokens/repo";
+import { TokenHash, useToken } from "~/shell/tokens/repo";
 import { ConsentRequired, ScopeMissing, Unauthenticated } from "./errors";
 import { getOperationPolicy } from "./operation-policy";
 
-const decodeAgentBearer = Schema.decodeUnknownEffect(AgentBearerToken);
+const decodeBearer = Schema.decodeUnknownEffect(TokenBearer);
 
 const unauthenticated = (): Unauthenticated =>
   Unauthenticated.make({
     error: {
       code: "unauthenticated",
       message:
-        "Every operation requires a known AgentToken. Send its opaque fin_ bearer in the " +
-        "Authorization header and retry.",
+        "Every operation requires a known PAT or internal HostedTurnToken. Send its opaque fin_ " +
+        "bearer in the Authorization header and retry.",
     },
     next: [],
   });
@@ -48,8 +44,8 @@ const scopeMissing = (): ScopeMissing =>
     error: {
       code: "scope_missing",
       message:
-        "This AgentToken does not grant the scope declared by the attempted operation. " +
-        "Ask the user in chat to mint or broaden a token before retrying.",
+        "This bearer does not grant the scope declared by the attempted operation. " +
+        "Ask the User to mint or broaden a PAT in /settings/pats before retrying.",
     },
     next: [],
   });
@@ -66,48 +62,48 @@ const consentRequired = (): ConsentRequired =>
   });
 
 class ConsentAuthenticationRejected extends Data.TaggedError("ConsentAuthenticationRejected")<{
-  readonly resolved: ResolvedAgentToken;
+  readonly resolved: ResolvedToken;
 }> {}
 
 class ScopeAuthenticationRejected extends Data.TaggedError("ScopeAuthenticationRejected")<{
-  readonly resolved: ResolvedAgentToken;
+  readonly resolved: ResolvedToken;
 }> {}
 
 /**
  * SHA-256 hashes one opaque bearer with the platform Crypto service. Token
  * lookup accepts this lowercase digest and never the full bearer or its secret.
  */
-export const hashAgentBearer = (
-  bearer: AgentBearerToken
-): Effect.Effect<AgentTokenHash, never, Crypto.Crypto> =>
+export const hashTokenBearer = (
+  bearer: TokenBearer
+): Effect.Effect<TokenHash, never, Crypto.Crypto> =>
   Effect.flatMap(Crypto.Crypto, (crypto) =>
     crypto.digest("SHA-256", new TextEncoder().encode(bearer))
   ).pipe(
-    Effect.map((digest) => AgentTokenHash.make(Encoding.encodeHex(digest))),
+    Effect.map((digest) => TokenHash.make(Encoding.encodeHex(digest))),
     Effect.orDie
   );
 
 /**
- * Resolves a typed AgentToken bearer to its stable User and atomically records
+ * Resolves a typed TokenBearer bearer to its stable User and atomically records
  * the supplied use time while renewing its 90-day idle deadline. The caller
  * supplies one UTC instant for both writes. Unknown, revoked, and idle-expired
  * grants remain `None`; database failures are defects.
  */
-export const authenticateAgentToken: {
+export const authenticateTokenBearer: {
   (
     usedAt: DateTime.Utc
   ): (
-    self: AgentBearerToken
-  ) => Effect.Effect<Option.Option<ResolvedAgentToken>, never, Crypto.Crypto | SqlClient.SqlClient>;
+    self: TokenBearer
+  ) => Effect.Effect<Option.Option<ResolvedToken>, never, Crypto.Crypto | SqlClient.SqlClient>;
   (
-    self: AgentBearerToken,
+    self: TokenBearer,
     usedAt: DateTime.Utc
-  ): Effect.Effect<Option.Option<ResolvedAgentToken>, never, Crypto.Crypto | SqlClient.SqlClient>;
-} = Function.dual(2, (self: AgentBearerToken, usedAt: DateTime.Utc) =>
+  ): Effect.Effect<Option.Option<ResolvedToken>, never, Crypto.Crypto | SqlClient.SqlClient>;
+} = Function.dual(2, (self: TokenBearer, usedAt: DateTime.Utc) =>
   Effect.gen(function* () {
-    const tokenHash = yield* hashAgentBearer(self);
-    const renewedIdleExpiresAt = yield* renewAgentTokenIdleExpiry(usedAt);
-    return yield* useAgentToken({ tokenHash, usedAt, renewedIdleExpiresAt });
+    const tokenHash = yield* hashTokenBearer(self);
+    const renewedIdleExpiresAt = yield* computePatIdleExpiry(usedAt);
+    return yield* useToken({ tokenHash, usedAt, renewedIdleExpiresAt });
   })
 );
 
@@ -116,7 +112,7 @@ export const authenticateAgentToken: {
  * continue passing its stable UserId explicitly; core and repositories never
  * depend on request context.
  */
-export class ResolvedCaller extends Context.Service<ResolvedCaller, ResolvedAgentToken>()(
+export class ResolvedCaller extends Context.Service<ResolvedCaller, ResolvedToken>()(
   "fidy-ai/shell/_shared/authz/ResolvedCaller"
 ) {}
 
@@ -144,20 +140,20 @@ export class ChildOperationAudit extends Context.Service<
 /**
  * Security middleware attached once to the assembled API. It reads bearer
  * scope exclusively from active endpoint metadata, resolves and renews
- * the AgentToken once, and provides that result only to the current request.
+ * the TokenBearer once, and provides that result only to the current request.
  * No route identifier or path participates in authorization.
  */
-export class AgentAuthorization extends HttpApiMiddleware.Service<
-  AgentAuthorization,
+export class TokenAuthorization extends HttpApiMiddleware.Service<
+  TokenAuthorization,
   {
     provides: ResolvedCaller | ChildOperationAudit;
     requires: Crypto.Crypto | SqlClient.SqlClient;
   }
->()("fidy-ai/shell/_shared/authz/AgentAuthorization", {
+>()("fidy-ai/shell/_shared/authz/TokenAuthorization", {
   requiredForClient: true,
   security: {
     agentBearer: HttpApiSecurity.bearer.pipe(
-      HttpApiSecurity.annotate(OpenApi.Format, AgentBearerTokenFormat)
+      HttpApiSecurity.annotate(OpenApi.Format, TokenBearerFormat)
     ),
   },
   error: [Unauthenticated, ConsentRequired, ScopeMissing],
@@ -169,7 +165,7 @@ const recordAuthorizationOutcome = ({
   outcome,
   occurredAt,
 }: Readonly<{
-  resolved: ResolvedAgentToken;
+  resolved: ResolvedToken;
   operation: CanonicalOperationId;
   outcome: AuditOutcome;
   occurredAt: DateTime.Utc;
@@ -190,7 +186,7 @@ const annotateOperationPolicy = (
 
 const recordRejectedAttempt = (
   attempt: Readonly<{
-    resolved: ResolvedAgentToken;
+    resolved: ResolvedToken;
     operation: CanonicalOperationId;
     occurredAt: DateTime.Utc;
   }>
@@ -199,7 +195,7 @@ const recordRejectedAttempt = (
 
 const operationAudit =
   (attempt: {
-    readonly resolved: ResolvedAgentToken;
+    readonly resolved: ResolvedToken;
     readonly operation: CanonicalOperationId;
     readonly occurredAt: DateTime.Utc;
   }): ((outcome: AuditOutcome) => Effect.Effect<AuditLogEntry, never, SqlClient.SqlClient>) =>
@@ -208,7 +204,7 @@ const operationAudit =
 
 const provideRequestServices = <A, E, R>(
   effect: Effect.Effect<A, E, R>,
-  resolved: ResolvedAgentToken,
+  resolved: ResolvedToken,
   childOperationAudit: ChildOperationAuditService
 ): Effect.Effect<A, E, Exclude<Exclude<R, ResolvedCaller>, ChildOperationAudit>> =>
   effect.pipe(
@@ -218,7 +214,7 @@ const provideRequestServices = <A, E, R>(
 
 const flushChildEvidence = Effect.fn("flushChildOperationAuditEvidence")(function* (
   childEvidence: Ref.Ref<ReadonlyArray<ChildAuditEvidence>>,
-  resolved: ResolvedAgentToken
+  resolved: ResolvedToken
 ) {
   for (const evidence of yield* Ref.get(childEvidence)) {
     yield* recordAuthorizationOutcome({ resolved, ...evidence });
@@ -227,7 +223,7 @@ const flushChildEvidence = Effect.fn("flushChildOperationAuditEvidence")(functio
 
 type AuthorizedEndpointInput<A, E, R> = Readonly<{
   httpEffect: Effect.Effect<A, E, R>;
-  resolved: ResolvedAgentToken;
+  resolved: ResolvedToken;
   policy: ReturnType<typeof getOperationPolicy>;
   operation: CanonicalOperationId;
   occurredAt: DateTime.Utc;
@@ -269,7 +265,7 @@ const executeAuthorizedEndpoint = Effect.fn("executeAuthorizedEndpoint")(functio
 
 /**
  * Live operation-derived bearer authorization for the HTTP server. Each call
- * authenticates its AgentToken, requires current onboarding consent, rejects a
+ * authenticates its bearer, requires current onboarding consent, rejects a
  * missing declared scope, and appends metadata-only AuditLogEntry evidence.
  * Missing consent rolls back token renewal and returns `ConsentRequired` after
  * recording rejection evidence. A successful operation and its evidence commit
@@ -277,13 +273,13 @@ const executeAuthorizedEndpoint = Effect.fn("executeAuthorizedEndpoint")(functio
  * separately. Authentication, consent, and scope failures remain typed HTTP
  * failures, while persistence failures are defects.
  */
-export const AgentAuthorizationLive = Layer.succeed(
-  AgentAuthorization,
-  AgentAuthorization.of({
+export const TokenAuthorizationLive = Layer.succeed(
+  TokenAuthorization,
+  TokenAuthorization.of({
     agentBearer: Effect.fn(function* (httpEffect, { credential: redactedBearer, endpoint, group }) {
       const policy = getOperationPolicy(endpoint);
       const operation = CanonicalOperationId.make(`${group.identifier}.${endpoint.identifier}`);
-      const bearer = yield* decodeAgentBearer(Redacted.value(redactedBearer)).pipe(
+      const bearer = yield* decodeBearer(Redacted.value(redactedBearer)).pipe(
         Effect.mapError(unauthenticated)
       );
       const occurredAt = yield* DateTime.now;
@@ -291,7 +287,7 @@ export const AgentAuthorizationLive = Layer.succeed(
       const result = yield* sql
         .withTransaction(
           Effect.gen(function* () {
-            const resolved = yield* authenticateAgentToken(bearer, occurredAt).pipe(
+            const resolved = yield* authenticateTokenBearer(bearer, occurredAt).pipe(
               Effect.flatMap(Effect.fromOption(unauthenticated))
             );
             return yield* withUserTransaction(
@@ -330,9 +326,9 @@ export const AgentAuthorizationLive = Layer.succeed(
 );
 
 /** Client-side bearer implementation derived from the same API middleware. */
-export const makeAgentAuthorizationClientLive = (
-  bearer: AgentBearerToken
-): Layer.Layer<HttpApiMiddleware.ForClient<AgentAuthorization>> =>
-  HttpApiMiddleware.layerClient(AgentAuthorization, ({ next, request }) =>
+export const makeTokenAuthorizationClientLive = (
+  bearer: TokenBearer
+): Layer.Layer<HttpApiMiddleware.ForClient<TokenAuthorization>> =>
+  HttpApiMiddleware.layerClient(TokenAuthorization, ({ next, request }) =>
     next(HttpClientRequest.bearerToken(request, bearer))
   );

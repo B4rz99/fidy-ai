@@ -3,7 +3,7 @@ import { Effect, Schema } from "effect";
 import { HttpBody, HttpClient } from "effect/unstable/http";
 import { ValidationFailed } from "~/shell/_shared/errors";
 import { ApiHarness, ApiHarnessClient, headersFor } from "~/shell/testing/api-harness";
-import { defaultAgentBearer } from "~/shell/testing/identity-fixtures";
+import { defaultPatBearer } from "~/shell/testing/identity-fixtures";
 import { publishedOperationIds } from "~/shell/testing/openapi";
 import { TransactionsGroup } from "./operations";
 import { truncateTransactions } from "./fixtures";
@@ -39,7 +39,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         // The typed client cannot represent an invalid payload, so this
         // decode-gate check speaks raw HTTP at the same server.
         const response = yield* HttpClient.post("/transactions", {
-          headers: headersFor(defaultAgentBearer),
+          headers: headersFor(defaultPatBearer),
           body: HttpBody.jsonUnsafe({ money: { amount: "-5", currency: "ZZZ" } }),
         });
 
@@ -55,7 +55,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         yield* truncateTransactions;
 
         const response = yield* HttpClient.post("/transactions", {
-          headers: headersFor(defaultAgentBearer),
+          headers: headersFor(defaultPatBearer),
           body: HttpBody.jsonUnsafe({
             money: { amount: "25000.50", currency: "COP" },
             counterparty: "El Corral",
@@ -78,7 +78,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           const privateValue = "fin_private_+573001234567_provider-message-42";
 
           const response = yield* HttpClient.post("/transactions", {
-            headers: headersFor(defaultAgentBearer),
+            headers: headersFor(defaultPatBearer),
             body: HttpBody.jsonUnsafe({
               money: { amount: privateValue, currency: "ZZZ" },
             }),
@@ -99,7 +99,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         yield* truncateTransactions;
 
         const response = yield* HttpClient.post("/transactions", {
-          headers: headersFor(defaultAgentBearer),
+          headers: headersFor(defaultPatBearer),
           body: HttpBody.jsonUnsafe({
             money: { amount: "-5", currency: "COP" },
             counterparty: "El Corral",
@@ -124,7 +124,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
 
           for (const amount of ["0", "1.001", "1e3", "1,000"]) {
             const response = yield* HttpClient.post("/transactions", {
-              headers: headersFor(defaultAgentBearer),
+              headers: headersFor(defaultPatBearer),
               body: HttpBody.jsonUnsafe({
                 money: { amount, currency: "COP" },
                 counterparty: "El Corral",
@@ -147,7 +147,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         yield* truncateTransactions;
 
         const response = yield* HttpClient.post("/transactions", {
-          headers: headersFor(defaultAgentBearer),
+          headers: headersFor(defaultPatBearer),
           body: HttpBody.jsonUnsafe("a transaction, honest"),
         });
         const failure = yield* Schema.decodeUnknownEffect(ValidationFailed)(yield* response.json);
@@ -194,7 +194,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
 
         for (const { payload, correction } of rejectedPayloads) {
           const response = yield* HttpClient.post("/transactions", {
-            headers: headersFor(defaultAgentBearer),
+            headers: headersFor(defaultPatBearer),
             body: HttpBody.jsonUnsafe(payload),
           });
           const failure = yield* Schema.decodeUnknownEffect(ValidationFailed)(yield* response.json);
@@ -212,7 +212,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         yield* truncateTransactions;
 
         const response = yield* HttpClient.post("/transactions", {
-          headers: headersFor(defaultAgentBearer),
+          headers: headersFor(defaultPatBearer),
           body: HttpBody.jsonUnsafe({
             money: { amount: "-5", currency: "ZZZ" },
             counterparty: "",
@@ -236,7 +236,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         yield* truncateTransactions;
 
         const response = yield* HttpClient.post("/transactions", {
-          headers: headersFor(defaultAgentBearer),
+          headers: headersFor(defaultPatBearer),
           body: HttpBody.jsonUnsafe({ money: { currency: "COP" } }),
         });
         const failure = yield* Schema.decodeUnknownEffect(ValidationFailed)(yield* response.json);
@@ -256,7 +256,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           yield* truncateTransactions;
 
           const response = yield* HttpClient.get("/transactions/not-a-uuid", {
-            headers: headersFor(defaultAgentBearer),
+            headers: headersFor(defaultPatBearer),
           });
           const failure = yield* Schema.decodeUnknownEffect(ValidationFailed)(yield* response.json);
 
@@ -285,7 +285,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           const response = yield* HttpClient.get("/transactions");
           const body = yield* response.json;
 
-          // No SuggestedOperation: nothing this API publishes changes an AgentToken
+          // No SuggestedOperation: nothing this API publishes changes a token grant
           // (ARCHITECTURE.md §6), so `next` stays empty rather than guessing.
           expect(body).toMatchObject({
             error: { code: "unauthenticated" },
@@ -299,7 +299,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         yield* truncateTransactions;
 
         const response = yield* HttpClient.post("/transactions", {
-          headers: headersFor(defaultAgentBearer),
+          headers: headersFor(defaultPatBearer),
           body: HttpBody.jsonUnsafe({
             amount: 25000,
             currency: "COP",
@@ -321,7 +321,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         const client = yield* ApiHarnessClient;
 
         const response = yield* HttpClient.post("/transactions", {
-          headers: headersFor(defaultAgentBearer),
+          headers: headersFor(defaultPatBearer),
           body: HttpBody.jsonUnsafe({
             money: { amount: "25000", currency: "COP" },
             counterparty: "El Corral",

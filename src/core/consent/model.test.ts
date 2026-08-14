@@ -116,7 +116,7 @@ it("supports the explicitly reusable grant and revocation shapes", () => {
     {
       _tag: "Granted",
       grant: {
-        _tag: "AgentToken",
+        _tag: "PAT",
         tokenId: "f1d1a000-0000-4000-8000-000000000803",
       },
     },

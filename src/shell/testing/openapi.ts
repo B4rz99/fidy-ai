@@ -1,7 +1,7 @@
 import { expect } from "@effect/vitest";
 import { Effect, Option, Schema } from "effect";
 import { HttpClient } from "effect/unstable/http";
-import { AgentScope } from "~/core/tokens/model";
+import { PatScope } from "~/core/tokens/model";
 import { okStatus } from "~/shell/_shared/http-status";
 import {
   AgentConfirmation,
@@ -12,7 +12,7 @@ import {
 const SpecOperation = Schema.Struct({
   operationId: Schema.String,
   description: Schema.optional(Schema.String),
-  "x-fidy-required-scope": Schema.optional(AgentScope),
+  "x-fidy-required-scope": Schema.optional(PatScope),
   "x-fidy-required-tier": Schema.optional(OperationTier),
   "x-fidy-agent-confirmation": Schema.optional(AgentConfirmation),
   "x-fidy-operation-kind": Schema.optional(CanonicalOperationKind),
@@ -35,7 +35,7 @@ export type PublishedOperation = {
   /** `None` when the spec carries no `description` at all for this operation. */
   readonly description: Option.Option<string>;
   /** `None` when the spec omits the canonical operation's required-scope metadata. */
-  readonly requiredScope: Option.Option<AgentScope>;
+  readonly requiredScope: Option.Option<PatScope>;
   /** `None` when the spec omits the canonical operation's required-tier metadata. */
   readonly requiredTier: Option.Option<OperationTier>;
   /** `None` when the spec omits the hosted-agent confirmation metadata. */

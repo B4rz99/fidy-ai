@@ -20,19 +20,19 @@ import {
   WhatsAppCallerReference,
 } from "~/core/identity/reference";
 import { InsightKind } from "~/core/insights/reference";
-import { AgentTokenId } from "~/core/tokens/reference";
+import { PATId } from "~/core/tokens/reference";
 import { advisoryLockKey, withUserLock } from "~/shell/db/advisory-lock";
 import { withUserTransaction } from "~/shell/db/user-transaction";
 import { currentDisclosure } from "./current-disclosure";
 
-const OptionalAgentTokenId = Schema.OptionFromNullOr(Schema.toEncoded(AgentTokenId));
+const OptionalPATId = Schema.OptionFromNullOr(Schema.toEncoded(PATId));
 const OptionalConsentRecordId = Schema.OptionFromNullOr(Schema.toEncoded(ConsentRecordId));
 const OptionalInsightKind = Schema.OptionFromNullOr(InsightKind);
 const OptionalMessageChannel = Schema.OptionFromNullOr(ProviderMessageEvidence.fields.channel);
 const OptionalMessageProvider = Schema.OptionFromNullOr(ProviderMessageEvidence.fields.provider);
 const OptionalMessageId = Schema.OptionFromNullOr(ProviderMessageEvidence.fields.providerMessageId);
 const OptionalUtcDate = Schema.OptionFromNullOr(Schema.DateTimeUtcFromDate);
-const StoredGrantType = Schema.Literals(["onboarding", "agent-token", "insight-delivery"]);
+const StoredGrantType = Schema.Literals(["onboarding", "pat", "insight-delivery"]);
 type StoredGrantType = typeof StoredGrantType.Type;
 
 const DisclosureRowFields = {
@@ -57,7 +57,7 @@ const ConsentRecordRow = Schema.Struct({
   subjectUserId: Schema.toEncoded(UserId),
   eventType: Schema.Literals(["granted", "revoked"]),
   grantType: Schema.OptionFromNullOr(StoredGrantType),
-  agentTokenId: OptionalAgentTokenId,
+  patId: OptionalPATId,
   insightKind: OptionalInsightKind,
   revokedGrantId: OptionalConsentRecordId,
   ...DisclosureRowFields,
@@ -72,7 +72,7 @@ const ConsentRecordRow = Schema.Struct({
 type ConsentRecordRow = typeof ConsentRecordRow.Type;
 
 const consentColumns = `id, subject_user_id AS "subjectUserId", event_type AS "eventType",
-  grant_type AS "grantType", agent_token_id AS "agentTokenId", insight_kind AS "insightKind",
+  grant_type AS "grantType", pat_id AS "patId", insight_kind AS "insightKind",
   revoked_grant_id AS "revokedGrantId", service_market AS "serviceMarket", locale,
   disclosure_revision AS "disclosureRevision", disclosure_sha256 AS "disclosureSha256",
   disclosure_text AS "disclosureText", policy_url AS "policyUrl",
@@ -130,10 +130,10 @@ const utcFromIso = (value: string): DateTime.Utc => DateTime.toUtc(DateTime.make
 
 const grantsFromRow: Record<StoredGrantType, (row: ConsentRecordRow) => unknown> = {
   onboarding: () => ({ _tag: "Onboarding" }),
-  "agent-token": (row) =>
-    Option.match(row.agentTokenId, {
-      onNone: () => ({ _tag: "AgentToken" }),
-      onSome: (tokenId) => ({ _tag: "AgentToken", tokenId }),
+  pat: (row) =>
+    Option.match(row.patId, {
+      onNone: () => ({ _tag: "PAT" }),
+      onSome: (tokenId) => ({ _tag: "PAT", tokenId }),
     }),
   "insight-delivery": (row) =>
     Option.match(row.insightKind, {
@@ -163,13 +163,13 @@ const eventToRow = (
   event: typeof ConsentEvent.Encoded
 ): Pick<
   ConsentRecordRow,
-  "eventType" | "grantType" | "agentTokenId" | "insightKind" | "revokedGrantId"
+  "eventType" | "grantType" | "patId" | "insightKind" | "revokedGrantId"
 > => {
   if (event._tag === "Revoked") {
     return {
       eventType: "revoked" as const,
       grantType: Option.none(),
-      agentTokenId: Option.none(),
+      patId: Option.none(),
       insightKind: Option.none(),
       revokedGrantId: Option.some(event.grantId),
     };
@@ -178,16 +178,16 @@ const eventToRow = (
     return {
       eventType: "granted" as const,
       grantType: Option.some("onboarding" as const),
-      agentTokenId: Option.none(),
+      patId: Option.none(),
       insightKind: Option.none(),
       revokedGrantId: Option.none(),
     };
   }
-  if (event.grant._tag === "AgentToken") {
+  if (event.grant._tag === "PAT") {
     return {
       eventType: "granted" as const,
-      grantType: Option.some("agent-token" as const),
-      agentTokenId: Option.some(event.grant.tokenId),
+      grantType: Option.some("pat" as const),
+      patId: Option.some(event.grant.tokenId),
       insightKind: Option.none(),
       revokedGrantId: Option.none(),
     };
@@ -195,7 +195,7 @@ const eventToRow = (
   return {
     eventType: "granted" as const,
     grantType: Option.some("insight-delivery" as const),
-    agentTokenId: Option.none(),
+    patId: Option.none(),
     insightKind: Option.some(event.grant.insightKind),
     revokedGrantId: Option.none(),
   };
@@ -280,7 +280,7 @@ export const useCurrentConsent = Effect.fn("useCurrentConsent")(function* <A, E,
 /**
  * Appends one immutable grant or revocation after serializing changes for its
  * subject. A revocation must reference that subject's existing grant, and an
- * AgentToken grant must reference that subject's existing token. Violating
+ * token grant must reference that subject's existing token. Violating
  * either ownership prerequisite or any persistence invariant is a defect.
  */
 export const appendConsentRecord = Effect.fn("appendConsentRecord")(function* (
@@ -294,7 +294,7 @@ export const appendConsentRecord = Effect.fn("appendConsentRecord")(function* (
       Result: ConsentRecordFromRow,
       execute: (input) => sql`
       INSERT INTO consent_records (
-        id, subject_user_id, event_type, grant_type, agent_token_id, insight_kind,
+        id, subject_user_id, event_type, grant_type, pat_id, insight_kind,
         revoked_grant_id, service_market, locale, disclosure_revision,
         disclosure_sha256, disclosure_text, policy_url, policy_revision, policy_sha256,
         purposes, data_categories, duration, revocation_method, disclosure_channel,
@@ -302,7 +302,7 @@ export const appendConsentRecord = Effect.fn("appendConsentRecord")(function* (
         decision_provider, decision_provider_message_id, occurred_at
       ) SELECT
         ${input.id}, ${input.subjectUserId}, ${input.eventType}, ${input.grantType},
-        ${input.agentTokenId}, ${input.insightKind}, ${input.revokedGrantId},
+        ${input.patId}, ${input.insightKind}, ${input.revokedGrantId},
         ${input.serviceMarket}, ${input.locale}, ${input.disclosureRevision},
         ${input.disclosureSha256}, ${input.disclosureText}, ${input.policyUrl},
         ${input.policyRevision}, ${input.policySha256}, ${input.purposes},
@@ -321,11 +321,12 @@ export const appendConsentRecord = Effect.fn("appendConsentRecord")(function* (
       ) OR (
         ${input.eventType} = 'granted'
         AND (
-          ${input.grantType} <> 'agent-token'
+          ${input.grantType} <> 'pat'
           OR EXISTS (
-            SELECT 1 FROM agent_tokens AS granted_token
-            WHERE granted_token.id = ${input.agentTokenId}
+            SELECT 1 FROM tokens AS granted_token
+            WHERE granted_token.id = ${input.patId}
               AND granted_token.user_id = ${input.subjectUserId}
+              AND granted_token.kind = 'pat'
           )
         )
       )

@@ -8,7 +8,7 @@ import { NotFound, ValidationFailed } from "~/shell/_shared/errors";
 import { makeFreeSuggestedOperationCaller } from "~/shell/_shared/suggested-operations";
 import { defaultUserId } from "~/shell/db/development-seed";
 import { withUserTransaction } from "~/shell/db/user-transaction";
-import { defaultAgentBearer } from "~/shell/testing/identity-fixtures";
+import { defaultPatBearer } from "~/shell/testing/identity-fixtures";
 import { ApiHarness, ApiHarnessClient, headersFor } from "~/shell/testing/api-harness";
 import { truncateDashboards } from "./fixtures";
 import { applyDashboardEdit } from "./mutations";
@@ -126,7 +126,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         const before = yield* client.dashboard.getDashboard();
 
         const response = yield* HttpClient.post("/dashboard/edits", {
-          headers: headersFor(defaultAgentBearer),
+          headers: headersFor(defaultPatBearer),
           body: HttpBody.jsonUnsafe({ op: "set-title", title: "" }),
         });
         const failure = yield* Schema.decodeUnknownEffect(ValidationFailed)(yield* response.json);
@@ -311,7 +311,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         yield* sql`UPDATE dashboards SET document = '{"unexpected": true}'::jsonb`;
 
         const response = yield* HttpClient.get("/dashboard", {
-          headers: headersFor(defaultAgentBearer),
+          headers: headersFor(defaultPatBearer),
         });
 
         expect(response.status).toBe(500);

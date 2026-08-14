@@ -5,7 +5,7 @@ import { IanaTimeZone } from "~/core/_shared/context";
 import { defaultUserId } from "~/shell/db/development-seed";
 import { withUserTransaction } from "~/shell/db/user-transaction";
 import { ApiHarness, ApiHarnessClient, headersFor } from "~/shell/testing/api-harness";
-import { defaultAgentBearer } from "~/shell/testing/identity-fixtures";
+import { defaultPatBearer } from "~/shell/testing/identity-fixtures";
 import { updateUserPreferences } from "./mutations";
 
 layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
@@ -33,7 +33,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
     it.effect("updates locale and named time zone but never ServiceMarket", () =>
       Effect.gen(function* () {
         const response = yield* HttpClient.patch("/user/preferences", {
-          headers: headersFor(defaultAgentBearer),
+          headers: headersFor(defaultPatBearer),
           body: HttpBody.jsonUnsafe({
             locale: "es-CO",
             timeZone: "America/New_York",
@@ -84,7 +84,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         const client = yield* ApiHarnessClient;
         const before = yield* client.identity.getCurrentUser();
         const response = yield* HttpClient.patch("/user/preferences", {
-          headers: headersFor(defaultAgentBearer),
+          headers: headersFor(defaultPatBearer),
           body: HttpBody.jsonUnsafe({ locale: "es-CO", timeZone: "-05:00" }),
         });
         const after = yield* client.identity.getCurrentUser();
@@ -99,7 +99,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         const client = yield* ApiHarnessClient;
         const before = yield* client.identity.getCurrentUser();
         const response = yield* HttpClient.patch("/user/preferences", {
-          headers: headersFor(defaultAgentBearer),
+          headers: headersFor(defaultPatBearer),
           body: HttpBody.jsonUnsafe({
             locale: "en-US",
             timeZone: "America/Bogota",

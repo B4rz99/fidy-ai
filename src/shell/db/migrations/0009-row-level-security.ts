@@ -41,7 +41,7 @@ const createRestrictedRoles = Effect.gen(function* () {
                 ON namespace.oid = relation.relnamespace
               WHERE namespace.nspname = 'public'
                 AND relation.relname = ANY(ARRAY[
-                  'users', 'whatsapp_identities', 'agent_tokens', 'audit_log_entries',
+                  'users', 'whatsapp_identities', 'tokens', 'audit_log_entries',
                   'consent_records', 'transactions', 'keyword_rules', 'source_attestations', 'insight_events',
                   'insight_money_groups', 'insight_delivery_attempts', 'dashboards',
                   'transcript_entries'
@@ -63,7 +63,7 @@ const grantRuntimeTableAuthority = Effect.gen(function* () {
   yield* sql`GRANT SELECT ON categories TO fidy_runtime`;
   yield* sql`
     GRANT SELECT, INSERT, UPDATE, DELETE ON
-      users, whatsapp_identities, agent_tokens, audit_log_entries,
+      users, whatsapp_identities, tokens, audit_log_entries,
       transactions, keyword_rules, source_attestations, insight_events,
       insight_money_groups, insight_delivery_attempts, dashboards, transcript_entries
     TO fidy_runtime
@@ -88,9 +88,9 @@ const restrictIdentityTablesToOwner = Effect.gen(function* () {
       WITH CHECK (user_id = NULLIF(current_setting('fidy.user_id', true), '')::uuid)
   `;
   yield* sql`
-    ALTER TABLE agent_tokens ENABLE ROW LEVEL SECURITY;
-    ALTER TABLE agent_tokens FORCE ROW LEVEL SECURITY;
-    CREATE POLICY agent_tokens_by_user ON agent_tokens
+    ALTER TABLE tokens ENABLE ROW LEVEL SECURITY;
+    ALTER TABLE tokens FORCE ROW LEVEL SECURITY;
+    CREATE POLICY tokens_by_user ON tokens
       USING (user_id = NULLIF(current_setting('fidy.user_id', true), '')::uuid)
       WITH CHECK (user_id = NULLIF(current_setting('fidy.user_id', true), '')::uuid)
   `;
@@ -198,7 +198,7 @@ const restrictDashboardAndTranscriptTablesToOwner = Effect.gen(function* () {
 const grantGatewayReadAuthority = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
   yield* sql`GRANT SELECT ON whatsapp_identities TO fidy_gateway`;
-  yield* sql`GRANT SELECT, UPDATE ON agent_tokens TO fidy_gateway`;
+  yield* sql`GRANT SELECT, UPDATE ON tokens TO fidy_gateway`;
   yield* sql`GRANT SELECT, DELETE ON audit_log_entries TO fidy_gateway`;
 });
 
@@ -218,10 +218,10 @@ const createWhatsAppUserResolver = Effect.gen(function* () {
   `;
 });
 
-const createAgentTokenUseGateway = Effect.gen(function* () {
+const createTokenBearerUseGateway = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
   yield* sql`
-    CREATE FUNCTION fidy_use_agent_token(
+    CREATE FUNCTION fidy_use_token(
       lookup_token_hash text,
       use_time timestamptz,
       renewed_idle_expiry timestamptz
@@ -237,29 +237,29 @@ const createAgentTokenUseGateway = Effect.gen(function* () {
     AS $function$
       WITH candidate AS MATERIALIZED (
         SELECT id
-        FROM public.agent_tokens
+        FROM public.tokens
         WHERE token_hash = lookup_token_hash AND revoked_at IS NULL
         FOR UPDATE
       ),
       auto_revoked AS (
-        UPDATE public.agent_tokens AS token
+        UPDATE public.tokens AS token
         SET revoked_at = use_time
         FROM candidate
         WHERE token.id = candidate.id
           AND (
-            (token.kind = 'user' AND token.idle_expires_at <= use_time)
-            OR (token.kind = 'hosted' AND token.expires_at <= use_time)
+            (token.kind = 'pat' AND token.idle_expires_at <= use_time)
+            OR (token.kind = 'hosted-turn' AND token.expires_at <= use_time)
           )
       ),
       active AS (
-        UPDATE public.agent_tokens AS token
+        UPDATE public.tokens AS token
         SET last_used_at = GREATEST(token.last_used_at, use_time),
           idle_expires_at = GREATEST(token.idle_expires_at, renewed_idle_expiry)
         FROM candidate
         WHERE token.id = candidate.id
           AND (
-            (token.kind = 'user' AND token.idle_expires_at > use_time)
-            OR (token.kind = 'hosted' AND token.expires_at > use_time)
+            (token.kind = 'pat' AND token.idle_expires_at > use_time)
+            OR (token.kind = 'hosted-turn' AND token.expires_at > use_time)
           )
         RETURNING token.id, token.user_id, token.scopes, token.last_used_at
       )
@@ -286,21 +286,21 @@ const restrictGatewayFunctionsToRuntime = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
   yield* sql`ALTER FUNCTION fidy_resolve_whatsapp_user(text) OWNER TO fidy_gateway`;
   yield* sql`
-    ALTER FUNCTION fidy_use_agent_token(text, timestamptz, timestamptz) OWNER TO fidy_gateway
+    ALTER FUNCTION fidy_use_token(text, timestamptz, timestamptz) OWNER TO fidy_gateway
   `;
   yield* sql`
     ALTER FUNCTION fidy_delete_audit_log_entries_before(timestamptz) OWNER TO fidy_gateway
   `;
   yield* sql`REVOKE ALL ON FUNCTION fidy_resolve_whatsapp_user(text) FROM PUBLIC`;
   yield* sql`
-    REVOKE ALL ON FUNCTION fidy_use_agent_token(text, timestamptz, timestamptz) FROM PUBLIC
+    REVOKE ALL ON FUNCTION fidy_use_token(text, timestamptz, timestamptz) FROM PUBLIC
   `;
   yield* sql`
     REVOKE ALL ON FUNCTION fidy_delete_audit_log_entries_before(timestamptz) FROM PUBLIC
   `;
   yield* sql`GRANT EXECUTE ON FUNCTION fidy_resolve_whatsapp_user(text) TO fidy_runtime`;
   yield* sql`
-    GRANT EXECUTE ON FUNCTION fidy_use_agent_token(text, timestamptz, timestamptz) TO fidy_runtime
+    GRANT EXECUTE ON FUNCTION fidy_use_token(text, timestamptz, timestamptz) TO fidy_runtime
   `;
   yield* sql`
     GRANT EXECUTE ON FUNCTION fidy_delete_audit_log_entries_before(timestamptz) TO fidy_runtime
@@ -317,7 +317,7 @@ export const rowLevelSecurity = Effect.gen(function* () {
   yield* restrictDashboardAndTranscriptTablesToOwner;
   yield* grantGatewayReadAuthority;
   yield* createWhatsAppUserResolver;
-  yield* createAgentTokenUseGateway;
+  yield* createTokenBearerUseGateway;
   yield* createAuditLogPruningGateway;
   yield* restrictGatewayFunctionsToRuntime;
 }).pipe(Effect.asVoid);

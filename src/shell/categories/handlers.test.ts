@@ -9,7 +9,7 @@ import { defaultUserId } from "~/shell/db/development-seed";
 import { withUserTransaction } from "~/shell/db/user-transaction";
 import { ApiHarness, ApiHarnessClient, headersFor } from "~/shell/testing/api-harness";
 import { createKeywordRule, deleteKeywordRule, updateKeywordRule } from "./mutations";
-import { defaultAgentBearer } from "~/shell/testing/identity-fixtures";
+import { defaultPatBearer } from "~/shell/testing/identity-fixtures";
 import { transactionPayload, truncateTransactions } from "~/shell/transactions/fixtures";
 
 layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
@@ -35,7 +35,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
       Effect.gen(function* () {
         yield* truncateTransactions;
         const response = yield* HttpClient.post("/category-keyword-rules", {
-          headers: headersFor(defaultAgentBearer),
+          headers: headersFor(defaultPatBearer),
           body: HttpBody.jsonUnsafe({
             keyword: "\u0301",
             categoryId: categoryIds.mercado,

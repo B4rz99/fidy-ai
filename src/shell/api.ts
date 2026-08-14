@@ -1,5 +1,5 @@
 import { HttpApi, type HttpApiGroup, OpenApi } from "effect/unstable/httpapi";
-import { AgentAuthorization } from "~/shell/_shared/authz";
+import { TokenAuthorization } from "~/shell/_shared/authz";
 import { CanonicalTelemetry } from "~/shell/_shared/canonical-telemetry";
 import { ValidationGate } from "~/shell/_shared/errors";
 import { bindOperationCatalog, makeOperationCatalog } from "~/shell/_shared/operation-catalog";
@@ -38,7 +38,7 @@ export class FidyApi extends OrdinaryFidyApi.add(OperationsGroup)
   // assembled, so a group added below this line would silently skip every API-wide guard.
   .middleware(ValidationGate)
   // Authorization wraps validation and rejects an unauthenticated request before decoding input.
-  .middleware(AgentAuthorization)
+  .middleware(TokenAuthorization)
   // Telemetry is outermost and observes both authorization failures and canonical execution.
   .middleware(CanonicalTelemetry)
   .annotate(OpenApi.Title, "fidy-ai canonical API") {}

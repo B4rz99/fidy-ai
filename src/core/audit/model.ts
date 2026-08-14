@@ -1,5 +1,5 @@
 import { Schema } from "effect";
-import { AgentTokenId } from "~/core/tokens/reference";
+import { TokenId } from "~/core/tokens/reference";
 import { CanonicalOperationId } from "~/core/_shared/canonical-operation";
 import { UserId } from "~/core/identity/reference";
 import { UtcTimestamp } from "~/core/_shared/time";
@@ -18,13 +18,13 @@ export type AuditOutcome = typeof AuditOutcome.Type;
 
 /**
  * Metadata-only evidence for one canonical call. It identifies the stable User,
- * AgentToken grant, operation, outcome, and UTC occurrence without retaining a
+ * token grant, operation, outcome, and UTC occurrence without retaining a
  * request, response, bearer, or financial value.
  */
 export const AuditLogEntry = Schema.Struct({
   id: AuditLogEntryId,
   subjectUserId: UserId,
-  tokenId: AgentTokenId,
+  tokenId: TokenId,
   operation: CanonicalOperationId,
   outcome: AuditOutcome,
   occurredAt: UtcTimestamp,

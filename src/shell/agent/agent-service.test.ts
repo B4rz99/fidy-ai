@@ -26,7 +26,7 @@ import { E164PhoneNumber, UserId, WhatsAppBusinessScopedUserId } from "~/core/id
 import { MigrationSqlClient } from "~/shell/db/client";
 import { categoryIds } from "~/core/categories/taxonomy";
 import { type TranscriptEntry, TranscriptText } from "~/core/transcript/model";
-import { AgentBearerToken } from "~/core/tokens/model";
+import { TokenBearer } from "~/core/tokens/model";
 import {
   ConversationCompactionPolicy,
   ConversationCompactionTokenCount,
@@ -47,7 +47,7 @@ import {
 import {
   defaultUserId,
   defaultWhatsAppPhone,
-  seedConsentedAgentIdentity,
+  seedConsentedPatIdentity,
 } from "~/shell/db/development-seed";
 import { listRecentTranscriptEntries, listTranscriptEntries } from "~/shell/transcript/repo";
 import { ApiHarness, ApiHarnessClient, ApiTelemetryHarness } from "~/shell/testing/api-harness";
@@ -67,9 +67,7 @@ import {
 const declinedOnboardingPhone = E164PhoneNumber.make("+573009997332");
 const acceptedOnboardingPhone = E164PhoneNumber.make("+573009997333");
 const compactionUserId = UserId.make("f1d1a000-0000-4000-8000-0000000004c0");
-const compactionBearer = AgentBearerToken.make(
-  "fin_compact1_abcdefghijklmnopqrstuvwxyz0123456789ABCD"
-);
+const compactionBearer = TokenBearer.make("fin_compact1_abcdefghijklmnopqrstuvwxyz0123456789ABCD");
 const replCaller = (
   phoneNumber: E164PhoneNumber
 ): { phoneNumber: E164PhoneNumber; businessScopedUserId: WhatsAppBusinessScopedUserId } => ({
@@ -1300,14 +1298,14 @@ layer(CompactingAgentHarness, { excludeTestServices: true, timeout: "30 seconds"
         const service = yield* AgentService;
         const clearCompactionFixture = Effect.all(
           [
-            sql`DELETE FROM agent_tokens WHERE user_id = ${compactionUserId}`,
+            sql`DELETE FROM tokens WHERE user_id = ${compactionUserId}`,
             sql`DELETE FROM consent_records WHERE subject_user_id = ${compactionUserId}`,
             sql`DELETE FROM users WHERE id = ${compactionUserId}`,
           ],
           { discard: true, concurrency: 1 }
         );
         yield* clearCompactionFixture;
-        yield* seedConsentedAgentIdentity({
+        yield* seedConsentedPatIdentity({
           userId: compactionUserId,
           bearer: compactionBearer,
         });
@@ -1724,10 +1722,10 @@ layer(AgentTelemetryHarness, { excludeTestServices: true, timeout: "30 seconds" 
         const userB = UserId.make("f1d1a000-0000-4000-8000-000000000113");
         yield* clearTranscript;
         yield* sql`DELETE FROM transcript_entries WHERE user_id = ${userB}`;
-        yield* sql`DELETE FROM agent_tokens WHERE user_id = ${userB}`;
-        yield* seedConsentedAgentIdentity({
+        yield* sql`DELETE FROM tokens WHERE user_id = ${userB}`;
+        yield* seedConsentedPatIdentity({
           userId: userB,
-          bearer: AgentBearerToken.make("fin_agent113_abcdefghijklmnopqrstuvwxyz0123456789ABCD"),
+          bearer: TokenBearer.make("fin_agent113_abcdefghijklmnopqrstuvwxyz0123456789ABCD"),
           scopes: ["read"],
         });
         const service = yield* AgentService;
@@ -1934,12 +1932,12 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       yield* sql`DELETE FROM agent_confirmation_consumptions WHERE user_id = ${userB}`;
       yield* sql`DELETE FROM transcript_entries WHERE user_id = ${userB}`;
       yield* sql`DELETE FROM transactions WHERE user_id = ${userB}`;
-      yield* sql`DELETE FROM agent_tokens WHERE user_id = ${userB}`;
+      yield* sql`DELETE FROM tokens WHERE user_id = ${userB}`;
       yield* sql`TRUNCATE source_attestations, transactions, keyword_rules`;
       yield* clearTranscript;
-      yield* seedConsentedAgentIdentity({
+      yield* seedConsentedPatIdentity({
         userId: userB,
-        bearer: AgentBearerToken.make("fin_agentb02_abcdefghijklmnopqrstuvwxyz0123456789ABCD"),
+        bearer: TokenBearer.make("fin_agentb02_abcdefghijklmnopqrstuvwxyz0123456789ABCD"),
         scopes: ["read"],
       });
 
@@ -2192,15 +2190,15 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       yield* sql`DELETE FROM audit_log_entries WHERE user_id IN (${userA}, ${userB})`;
       yield* sql`DELETE FROM transcript_entries WHERE user_id IN (${userA}, ${userB})`;
       yield* sql`DELETE FROM transactions WHERE user_id IN (${userA}, ${userB})`;
-      yield* sql`DELETE FROM agent_tokens WHERE user_id IN (${userA}, ${userB})`;
-      yield* seedConsentedAgentIdentity({
+      yield* sql`DELETE FROM tokens WHERE user_id IN (${userA}, ${userB})`;
+      yield* seedConsentedPatIdentity({
         userId: userA,
-        bearer: AgentBearerToken.make("fin_agenta01_abcdefghijklmnopqrstuvwxyz0123456789ABCD"),
+        bearer: TokenBearer.make("fin_agenta01_abcdefghijklmnopqrstuvwxyz0123456789ABCD"),
         scopes: ["read"],
       });
-      yield* seedConsentedAgentIdentity({
+      yield* seedConsentedPatIdentity({
         userId: userB,
-        bearer: AgentBearerToken.make("fin_agentb01_abcdefghijklmnopqrstuvwxyz0123456789ABCD"),
+        bearer: TokenBearer.make("fin_agentb01_abcdefghijklmnopqrstuvwxyz0123456789ABCD"),
         scopes: ["read"],
       });
 

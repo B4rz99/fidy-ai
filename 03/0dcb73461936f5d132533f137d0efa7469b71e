@@ -1,0 +1,46 @@
+docs/research/effect-atom-spa-assessment.md
+  s_b64f91679e9936::t_88bac6ea18a306 3,5,7,9,11,13,15,17,19,21,23,25,27,29,31,33,35,37,39,41,43,45-52,54,56,58,60,62
+  s_b64f91679e9936::t_065576d0305176 1-2,4,6,8,10,12,14,16,18,20,22,24,26,28,30,32,34,36,38,40,42,44,53,55,57,59,61
+bun.lock
+  s_6a2d6b818e8716::t_04ddb8238a180d 9,20,113-114
+CODING_STANDARDS.md
+  s_b64f91679e9936::t_2f8e75c5761b25 202-204
+package.json
+  s_b64f91679e9936::t_2c88f2b62cad79 37,48
+.fluidattacks/sca.yaml
+  s_b64f91679e9936::t_6f7ead7c0b1096 26-30
+docs/research/react-shadcn-agent-guidance.md
+  s_b64f91679e9936::t_7cbfad7909eafe 84
+dependency-policy.json
+  s_b64f91679e9936::t_94ca451aca9429 28-41
+.patterns/effect-atom.md
+  s_b64f91679e9936::t_bb175a87597655 1-53
+.patterns/tanstack-table.md
+  s_b64f91679e9936::t_d66c8cbced86d8 37,84,89,95
+AGENTS.md
+  s_b64f91679e9936::t_279c74e4677bcb 41,47,49
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "030dcb73461936f5d132533f137d0efa7469b71e",
+  "prompts": {},
+  "sessions": {
+    "s_6a2d6b818e8716": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019ff8e5-b73d-7859-a142-a824b1e30955",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": null
+    },
+    "s_b64f91679e9936": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019ff8f7-038c-7a06-829c-48a00985ac4a",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": null
+    }
+  }
+}

@@ -521,6 +521,7 @@ layer(WhatsAppAcceptanceHarness, { excludeTestServices: true, timeout: "30 secon
         yield* kapso.reset;
         yield* model.reset;
         yield* kapso.setDeliveryMode("sandbox-phone");
+        yield* kapso.setOutcomes(["accepted", "accepted", "rejected", "accepted"]);
 
         const { onboarding, probe, financialResponse } = yield* submitAcceptedFinancialTurn({
           scenarioId: "WA-A05",
@@ -541,8 +542,9 @@ layer(WhatsAppAcceptanceHarness, { excludeTestServices: true, timeout: "30 secon
         const history = yield* awaitAcceptanceTransaction(probe);
         expect(history.data).toHaveLength(1);
 
-        const outbound = yield* awaitKapsoRequests(3);
-        const reply = yield* Schema.decodeUnknownEffect(KapsoTextRequest)(outbound[2]?.body);
+        const outbound = yield* awaitKapsoRequests(4);
+        expect(outbound[3]?.body).toEqual(outbound[2]?.body);
+        const reply = yield* Schema.decodeUnknownEffect(KapsoTextRequest)(outbound[3]?.body);
         expect(reply).toHaveProperty("to", "573005050505");
         expect(reply).not.toHaveProperty("recipient");
         expect(reply.text.body).toContain("Gasto guardado");
@@ -561,9 +563,9 @@ layer(WhatsAppAcceptanceHarness, { excludeTestServices: true, timeout: "30 secon
           )
         );
         expect(plainResponse.status).toBe(200);
-        const plainOutbound = yield* awaitKapsoRequests(4);
+        const plainOutbound = yield* awaitKapsoRequests(5);
         const plainReply = yield* Schema.decodeUnknownEffect(KapsoTextRequest)(
-          plainOutbound[3]?.body
+          plainOutbound[4]?.body
         );
         expect(plainReply.text.body).toBe("Todo listo.");
         expect((yield* model.calls).length).toBeGreaterThan(0);

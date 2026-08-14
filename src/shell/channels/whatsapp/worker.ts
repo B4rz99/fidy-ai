@@ -6,13 +6,13 @@ import { runScheduledWork } from "~/shell/observability/scheduled-work";
 import { Telemetry } from "~/shell/observability/telemetry";
 import { TelemetryCount } from "~/shell/observability/protocol";
 import { processDueConsentDisclosureDelivery } from "./disclosure-delivery";
-import { sendKapsoFreeForm } from "./outbound";
+import type { sendKapsoFreeForm } from "./outbound";
+import { deliverPreparedReply } from "./reply-delivery";
 import {
   claimWhatsAppTurn,
   completeWhatsAppTurn,
   failWhatsAppTurn,
   pruneWhatsAppOperationalData,
-  retryWhatsAppTurn,
   startWhatsAppTurn,
 } from "./repo";
 
@@ -27,7 +27,6 @@ const projectCauseForLog = <E extends unknown>(
 
 type StartedTurn = Effect.Success<ReturnType<typeof startWhatsAppTurn>>;
 type DeliveryError = Effect.Error<ReturnType<typeof sendKapsoFreeForm>>;
-const maximumProcessingAttempts = 3;
 const logDeliveryError = (error: DeliveryError): Effect.Effect<void> =>
   error._tag === "KapsoSendFailed"
     ? Effect.logError("WhatsApp Kapso send failed", {
@@ -44,17 +43,7 @@ const processStartedTurn = Effect.fn("WhatsApp.processStartedTurn")(function* (i
   const service = yield* AgentService;
   const handled = yield* service
     .handleTurn(claim.userId, inboundMessage, (reply) =>
-      DateTime.now.pipe(
-        Effect.flatMap((now) =>
-          sendKapsoFreeForm({
-            userId: claim.userId,
-            reply,
-            now,
-            attempt: input.started.processingAttempt,
-          })
-        ),
-        Effect.asVoid
-      )
+      deliverPreparedReply({ userId: claim.userId, reply }).pipe(Effect.asVoid)
     )
     .pipe(
       Effect.match({
@@ -68,19 +57,7 @@ const processStartedTurn = Effect.fn("WhatsApp.processStartedTurn")(function* (i
   }
   if (handled.error._tag === "KapsoSendFailed") {
     yield* logDeliveryError(handled.error);
-    if (
-      handled.error.deliveryCertainty === "rejected" &&
-      handled.error.automaticRetry &&
-      input.started.processingAttempt < maximumProcessingAttempts
-    ) {
-      yield* retryWhatsAppTurn(
-        claim,
-        input.claimTime,
-        DateTime.add(input.claimTime, { seconds: 1 })
-      );
-    } else {
-      yield* failWhatsAppTurn(claim, input.claimTime, "send_failed");
-    }
+    yield* failWhatsAppTurn(claim, input.claimTime, "send_failed");
     return true;
   }
   yield* logAgentTurnError(handled.error);

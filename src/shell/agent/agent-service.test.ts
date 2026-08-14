@@ -6,6 +6,7 @@ import {
   Cause,
   Clock,
   Context,
+  Deferred,
   Duration,
   Effect,
   Equal,
@@ -1818,6 +1819,40 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
         failureReason: Option.some("DeliveryFailed"),
       });
       expect(transcript.at(-1)?._tag).not.toBe("AssistantTranscriptEntry");
+    })
+  );
+
+  it.effect("leaves interrupted delivery Pending for the next serialized preparation", () =>
+    Effect.gen(function* () {
+      yield* clearTranscript;
+      const service = yield* AgentService;
+      const deliveryStarted = yield* Deferred.make<void>();
+      const interrupted = yield* service
+        .handleTurn(
+          defaultUserId,
+          InboundMessage.make({ text: TranscriptText.make("Lista las categorías") }),
+          () => Deferred.succeed(deliveryStarted, undefined).pipe(Effect.andThen(Effect.never))
+        )
+        .pipe(Effect.forkChild);
+
+      yield* Deferred.await(deliveryStarted);
+      yield* Fiber.interrupt(interrupted);
+      const sql = yield* MigrationSqlClient;
+      const pending = yield* sql`SELECT state FROM conversation_turns
+        WHERE user_id = ${defaultUserId}
+        ORDER BY started_at DESC
+        LIMIT 1`;
+      expect(pending).toEqual([{ state: "Pending" }]);
+
+      yield* service.handleTurn(
+        defaultUserId,
+        InboundMessage.make({ text: TranscriptText.make("Lista las categorías de nuevo") }),
+        () => Effect.void
+      );
+      const recovered = yield* sql`SELECT state FROM conversation_turns
+        WHERE user_id = ${defaultUserId}
+        ORDER BY started_at`;
+      expect(recovered).toEqual([{ state: "Interrupted" }, { state: "Completed" }]);
     })
   );
 

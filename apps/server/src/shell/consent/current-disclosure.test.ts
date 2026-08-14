@@ -1,11 +1,7 @@
 import { createHash } from "node:crypto";
 import { expect, it } from "@effect/vitest";
 import { ConfigProvider, Effect } from "effect";
-import {
-  CURRENT_DISCLOSURE_TEXT,
-  CURRENT_POLICY_PATH,
-  currentDisclosure,
-} from "./current-disclosure";
+import { CURRENT_DISCLOSURE_TEXT, currentDisclosure } from "./current-disclosure";
 
 const sha256 = (content: string | Uint8Array): string =>
   createHash("sha256").update(content).digest("hex");
@@ -22,18 +18,12 @@ const loadCurrentDisclosure = currentDisclosure.pipe(
   Effect.provideService(ConfigProvider.ConfigProvider, TestPublicNamespace)
 );
 
-it.effect("pins the exact chat disclosure and source-controlled policy bytes", () =>
+it.effect("pins the exact chat disclosure and web-owned policy metadata", () =>
   Effect.gen(function* () {
     const disclosure = yield* loadCurrentDisclosure;
-    const policyBuffer = yield* Effect.promise(() => Bun.file(CURRENT_POLICY_PATH).arrayBuffer());
-    const policyBytes = new Uint8Array(policyBuffer);
-    const policyText = new TextDecoder().decode(policyBytes);
 
     expect(sha256(CURRENT_DISCLOSURE_TEXT)).toBe(disclosure.contentSha256);
-    expect(sha256(policyBytes)).toBe(disclosure.policy.contentSha256);
-    expect(policyText).toContain("OpenAI");
-    expect(policyText).toMatch(/Estados\s+Unidos/u);
-    expect(policyText).not.toMatch(/cuentas|saldos/iu);
+    expect(disclosure.policy.contentSha256).toMatch(/^[a-f0-9]{64}$/u);
   })
 );
 

@@ -271,6 +271,9 @@ const fetchPackument = (
 // ---------------------------------------------------------------------------
 
 const Manifest = Schema.Struct({
+  name: Schema.String,
+  version: Schema.String,
+  private: Schema.Boolean,
   dependencies: Schema.optionalKey(Schema.Record(Schema.String, Schema.String)),
   devDependencies: Schema.optionalKey(Schema.Record(Schema.String, Schema.String)),
 });
@@ -453,6 +456,23 @@ const pinsOf = (manifest: string, declared: typeof Manifest.Type): ReadonlyArray
     ...Object.entries(declared.dependencies ?? {}),
     ...Object.entries(declared.devDependencies ?? {}),
   ].map(([name, spec]) => ({ name, manifest, spec }));
+
+const externalPinsOf = (
+  manifests: ReadonlyArray<Readonly<{ declared: typeof Manifest.Type; manifest: string }>>
+): ReadonlyArray<Pin> => {
+  const workspaceVersions = new Map(
+    manifests
+      .filter(({ declared }) => declared.private)
+      .map(({ declared }) => [declared.name, declared.version] as const)
+  );
+  return manifests
+    .flatMap(({ declared, manifest }) => pinsOf(manifest, declared))
+    .filter(
+      ({ name, spec }) =>
+        workspaceVersions.get(name) === undefined ||
+        spec !== `workspace:${workspaceVersions.get(name)}`
+    );
+};
 
 // ---------------------------------------------------------------------------
 // Findings
@@ -709,9 +729,10 @@ const check = Effect.gen(function* () {
   const manifests = manifestPaths();
   const exclusions = acceptedExclusions(scanner);
 
-  const pins = yield* Effect.forEach(manifests, (manifest) =>
-    Effect.map(readJson(Manifest, manifest), (declared) => pinsOf(manifest, declared))
+  const decodedManifests = yield* Effect.forEach(manifests, (manifest) =>
+    Effect.map(readJson(Manifest, manifest), (declared) => ({ declared, manifest }))
   );
+  const externalPins = externalPinsOf(decodedManifests);
 
   const installSettings = yield* Effect.forEach(manifests, (manifest) => {
     const directory = manifest.slice(0, manifest.length - "package.json".length);
@@ -719,7 +740,7 @@ const check = Effect.gen(function* () {
     return Effect.map(readBunfig(directory), (bunfig) => bunfigFindings({ directory, bunfig }));
   });
 
-  const declared = pins.flat().map((pin) => ({ pin, current: parsePin(pin.spec) }));
+  const declared = externalPins.map((pin) => ({ pin, current: parsePin(pin.spec) }));
   const ranged = declared.flatMap(({ pin, current }) => (Option.isNone(current) ? [pin] : []));
   const exact = declared.flatMap(({ pin, current }): ReadonlyArray<ExactPin> =>
     Option.isNone(current) ? [] : [{ ...pin, current: current.value }]

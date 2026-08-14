@@ -6,6 +6,7 @@ USER bun
 
 COPY --chown=bun:bun package.json bun.lock bunfig.toml ./
 COPY --chown=bun:bun apps/server/package.json ./apps/server/package.json
+COPY --chown=bun:bun apps/web/package.json ./apps/web/package.json
 RUN bun install --frozen-lockfile --ignore-scripts
 
 COPY --chown=bun:bun tsconfig.json tsconfig.base.json ./
@@ -19,7 +20,6 @@ RUN chown bun:bun /app
 USER bun
 
 COPY --from=builder --chown=bun:bun /app/apps/server/dist ./dist
-COPY --from=builder --chown=bun:bun /app/apps/server/public ./public
 
 ENV NODE_ENV=production
 ENV PATH="/app/dist/commands:${PATH}"

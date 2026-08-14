@@ -71,6 +71,8 @@ jobs:
           check "Typecheck" bun run typecheck
           check "Module graph" bun run lint:deps
           check "Browser client graph" bun run check:browser-client
+          check "Policy integrity" bun run check:policy
+          check "Portable web build" bun run build
           # The one check that reaches the public internet on purpose: it asks
           # the npm registry what has shipped since each pin was written, and
           # grades the manifests as the pull request declares them.

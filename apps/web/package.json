@@ -1,0 +1,45 @@
+{
+  "name": "@fidy/web",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "bun --bun vite",
+    "shadcn": "shadcn",
+    "build": "tsc --noEmit && bun --bun vite build",
+    "typecheck": "tsc --noEmit",
+    "test": "bun --bun vitest run",
+    "check:bundle": "bun scripts/check-browser-bundle.ts",
+    "check:policy": "bun scripts/check-policy-integrity.ts"
+  },
+  "dependencies": {
+    "@base-ui/react": "1.7.0",
+    "@effect/atom-react": "4.0.0-beta.98",
+    "@fidy/server": "workspace:0.0.0",
+    "@fontsource-variable/geist": "5.3.0",
+    "@tanstack/react-router": "1.170.23",
+    "class-variance-authority": "0.7.1",
+    "clsx": "2.1.1",
+    "effect": "4.0.0-beta.98",
+    "lucide-react": "1.30.0",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "scheduler": "0.27.0",
+    "tailwind-merge": "3.6.0",
+    "tw-animate-css": "1.4.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "4.3.3",
+    "@testing-library/jest-dom": "7.0.0",
+    "@testing-library/react": "16.3.2",
+    "@types/react": "19.2.18",
+    "@types/react-dom": "19.2.4",
+    "@vitejs/plugin-react": "6.0.5",
+    "jsdom": "30.0.1",
+    "shadcn": "4.16.2",
+    "tailwindcss": "4.3.3",
+    "typescript": "7.0.2",
+    "vite": "8.2.1",
+    "vitest": "4.1.10"
+  }
+}

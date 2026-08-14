@@ -12,14 +12,21 @@ delegate application work to its owning workspace package: this gives contributo
 repository entrypoint while keeping runtime dependencies and behavior inside the application that
 owns them.
 
+The workspace contains exactly two application packages: `@fidy/server` and `@fidy/web`.
 `apps/server` is the `@fidy/server` application package. Its `src/` is layer-major:
 
 - `core/` contains pure business decisions typed `Effect<A, E, never>` and touches no external
   service.
 - `shell/` contains repositories, handlers, API assembly, adapters, and every other side effect.
-- `apps/server/src/main.ts` is the only production application entrypoint. Command-level preloads may
+- `apps/server/src/main.ts` is the only server production entrypoint. Command-level preloads may
   initialize process infrastructure before it, but cannot start application work. Scripts compose
   shell layers and contain no domain decisions.
+
+`apps/web` is the `@fidy/web` React/Vite application package and produces a portable static artifact.
+It owns browser routing, providers, styles, and public policy copy. Its only server import is the
+browser-safe `@fidy/server/client` declaration seam; Effect Atom derives browser transport from that
+canonical API without importing server implementations. The API process never serves web routes or
+static assets.
 
 The directory boundary is intentional. It is enforced by lint and dependency checks so a naming
 convention cannot be mistaken for a purity boundary. A feature may touch both trees; that cost is

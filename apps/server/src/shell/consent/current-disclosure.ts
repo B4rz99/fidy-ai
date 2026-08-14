@@ -2,9 +2,6 @@ import { Config, Schema } from "effect";
 import { DisclosureSnapshot } from "~/core/consent/model";
 import { externalEndpoints } from "~/shell/_shared/external-endpoints";
 
-/** Source-controlled file served at the canonical public policy URL. */
-export const CURRENT_POLICY_PATH = "public/politica.html";
-
 /** Exact aviso de privacidad sent before Fidy creates a User. */
 export const CURRENT_DISCLOSURE_TEXT = `Soy Fidy. Antes de crear tu cuenta necesito tu autorización previa, expresa e informada para tratar tus datos personales.
 
@@ -27,7 +24,7 @@ export const currentDisclosure = Config.map(externalEndpoints, ({ policyUrl }) =
     policy: {
       publicUrl: policyUrl,
       revision: "policy-2026-08-03",
-      contentSha256: "3dc889976ce880aedcbe6189f06e0267fc297def08044f380d896496316c26c9",
+      contentSha256: "4a1be9d2eaf9917e5f84dcaad53be4ad4f8f61b0f59253c212f322c161434d27",
     },
     purposes: [
       "Crear, autenticar, administrar y proteger la cuenta",

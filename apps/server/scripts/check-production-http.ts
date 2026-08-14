@@ -102,10 +102,8 @@ const smoke = Effect.gen(function* () {
     });
   }
 
-  const html = yield* (yield* getDeploymentResponse("/")).text;
-  if (!html.includes('<html lang="es-CO">') || !html.includes('<div id="root"></div>')) {
-    return yield* new SmokeFailed({ message: "/ did not return the es-CO SPA shell." });
-  }
+  yield* assertArtifactUnavailable("/");
+  yield* assertArtifactUnavailable("/politica");
 
   const webhookResponse = yield* HttpClient.post(
     new URL("/webhooks/kapso", origin).toString()

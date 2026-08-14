@@ -1,10 +1,11 @@
 import { Config, Effect, Layer } from "effect";
-import { HttpRouter, HttpServerResponse, HttpStaticServer } from "effect/unstable/http";
+import { HttpRouter, HttpServerResponse } from "effect/unstable/http";
 import { HttpApiBuilder, HttpApiScalar } from "effect/unstable/httpapi";
 import { TokenAuthorizationLive } from "~/shell/_shared/authz-live";
+import { makeExactOriginCors } from "~/shell/_shared/exact-origin-cors";
 import { ValidationGateLive } from "~/shell/_shared/errors-live";
+import { externalEndpoints } from "~/shell/_shared/external-endpoints";
 import { AuditRetentionLive } from "~/shell/audit/retention";
-import { CURRENT_POLICY_PATH } from "~/shell/consent/current-disclosure";
 import { PendingConsentRetentionLive } from "~/shell/consent/retention";
 import { AgentService } from "~/shell/agent/agent-service";
 import { OpenAiHostedInferenceLive, OpenAiLanguageModelLive } from "~/shell/agent/openai";
@@ -24,7 +25,7 @@ import { OperationsLive } from "~/shell/operations/handlers";
 import { CanonicalTelemetryLive } from "~/shell/observability/canonical-api";
 import { SubscriptionLive } from "~/shell/subscription/handlers";
 import { TransactionsLive } from "~/shell/transactions/handlers";
-import { FidyApi } from "./api";
+import { FidyApi, operationCatalog } from "./api";
 
 /** Prevents authenticated canonical responses from remaining in caller caches. */
 const CanonicalApiNoStoreLive = HttpRouter.middleware((httpEffect) =>
@@ -76,24 +77,39 @@ const HealthLive = Layer.unwrap(
   )
 );
 
-const PolicyLive = HttpRouter.add("GET", "/politica", HttpServerResponse.file(CURRENT_POLICY_PATH));
+const canonicalCorsMethods = Array.from(
+  new Set(operationCatalog.operations.map(({ method }) => method))
+).sort();
 
-const StaticLive = HttpStaticServer.layer({ root: "public", spa: true });
+/**
+ * Registers the global exact-origin boundary after parsing the required public
+ * namespace. Missing or malformed origin configuration fails Layer startup,
+ * before the router can serve any canonical or callback behavior.
+ */
+export const ExactOriginCorsLive = Layer.unwrap(
+  Effect.map(externalEndpoints, ({ webOrigin }) =>
+    HttpRouter.middleware(
+      makeExactOriginCors({ allowedOrigin: webOrigin, methods: canonicalCorsMethods }),
+      {
+        global: true,
+      }
+    )
+  )
+);
 
 /**
  * The public HTTP surface bound to a socket: the canonical API and OpenAPI
- * document, unauthenticated health/version information, and the static SPA
- * shell. Launching this answers for as long as the layer is alive and logs
- * every request. The port and platform arrive from the outside.
+ * document, unauthenticated health/version information, provider callbacks,
+ * and an exact-origin browser boundary. Web routes and static assets belong to
+ * the separate web application. The port and platform arrive from the outside.
  */
 export const HttpLive = HttpRouter.serve(
   Layer.mergeAll(
     ApiLive,
     HttpApiScalar.layer(FidyApi, { path: "/docs" }),
     HealthLive,
-    PolicyLive,
-    StaticLive,
-    KapsoWebhookLive
+    KapsoWebhookLive,
+    ExactOriginCorsLive
   )
 );
 
@@ -101,8 +117,8 @@ export const HttpLive = HttpRouter.serve(
  * The whole service, and the layer to launch. The server and retention workers
  * do not start until every pending migration has run, so none can meet a schema
  * older than the code querying it. What is left to
- * supply is the environment: Postgres, an HTTP server, and the platform file,
- * path, and HTTP services used to serve the static shell.
+ * supply is the environment: Postgres, an HTTP server, and the platform services
+ * used by the canonical API and provider callbacks.
  */
 const HostedWhatsAppWorkerLive = WhatsAppWorkerLive.pipe(
   Layer.provide(AgentService.layer),

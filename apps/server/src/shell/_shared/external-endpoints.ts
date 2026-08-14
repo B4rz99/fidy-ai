@@ -1,4 +1,5 @@
-import { Config } from "effect";
+import { Config, Schema } from "effect";
+import { isHttpOrigin } from "~/http-origin";
 
 /**
  * Stable public addresses shared by the web, channel, ingestion, and billing adapters.
@@ -16,13 +17,21 @@ export type ExternalEndpoints = {
   readonly ingestDomain: string;
 };
 
+const HttpOrigin = Schema.URL.check(
+  Schema.makeFilter((url) =>
+    isHttpOrigin(url)
+      ? undefined
+      : "Expected an HTTP origin without credentials, path, query, or fragment"
+  )
+);
+
 /**
  * Loads Fidy's public namespace from required process configuration. Missing or malformed
  * values fail before a dependent adapter can advertise an unusable external address.
  */
 export const externalEndpoints: Config.Config<ExternalEndpoints> = Config.all({
-  webOrigin: Config.url("PUBLIC_WEB_ORIGIN"),
-  apiOrigin: Config.url("PUBLIC_API_ORIGIN"),
+  webOrigin: Config.schema(HttpOrigin, "PUBLIC_WEB_ORIGIN"),
+  apiOrigin: Config.schema(HttpOrigin, "PUBLIC_API_ORIGIN"),
   ingestDomain: Config.nonEmptyString("INGEST_EMAIL_DOMAIN"),
 }).pipe(
   Config.map(({ apiOrigin, ingestDomain, webOrigin }) => ({

@@ -125,20 +125,35 @@
         "no-console": "off"
       }
     },
-    // The static landing app is plain JavaScript because Vercel loads its API
-    // handler directly and browsers load its form script without a build step.
-    // The regular lint pass still checks these files; type-aware safety rules
-    // cannot derive types for either runtime and would report every boundary as
-    // `any`.
+    // Vite's source and configuration contracts require extension-bearing asset imports and
+    // default-exported configuration objects. TanStack Router requires interface declaration
+    // merging for its registered router type.
     {
-      "files": ["landing/**/*.js"],
+      "files": ["apps/web/**/*.{ts,tsx}"],
       "rules": {
-        "typescript/no-unsafe-argument": "off",
-        "typescript/no-unsafe-assignment": "off",
-        "typescript/no-unsafe-call": "off",
-        "typescript/no-unsafe-member-access": "off",
-        "typescript/no-unsafe-return": "off",
-        "typescript/prefer-nullish-coalescing": "off"
+        "import/extensions": "off"
+      }
+    },
+    {
+      "files": ["apps/web/{vite,vitest}.config.ts"],
+      "rules": {
+        "import/no-default-export": "off"
+      }
+    },
+    {
+      "files": ["apps/web/src/router.tsx"],
+      "rules": {
+        "typescript/consistent-type-definitions": "off"
+      }
+    },
+    // The staged generic needs its concrete canonical API to preserve each operation in the
+    // resulting Atom client. Oxc cannot type the workspace source export and marks that one
+    // assignment as `error`; tsc and both browser module-graph checks grade the boundary.
+    {
+      "files": ["apps/web/src/api-client.ts"],
+      "rules": {
+        "typescript/explicit-function-return-type": "off",
+        "typescript/no-unsafe-assignment": "off"
       }
     },
     // The two tooling locations below also have no types. dependency-cruiser

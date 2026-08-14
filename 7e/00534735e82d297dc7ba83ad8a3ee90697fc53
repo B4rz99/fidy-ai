@@ -1,0 +1,217 @@
+src/shell/ingestion/worker.test.ts
+  s_19c30bce03c4e4::t_e38371f7b98fba 22,81
+  s_19c30bce03c4e4::t_218c151ed864e9 21,82
+src/shell/_shared/authz.ts
+  s_19c30bce03c4e4::t_2832c8f10c2027 21,105
+  s_19c30bce03c4e4::t_0f339ee227d586 268
+  s_19c30bce03c4e4::t_14ef12a298103c 20,25,29,65,69,76-78,82,87,92,96-97,99,101-102,104,106,115,143,146-147,152,156,168,189,198,207,217,226,276-278,290,329-332
+  s_19c30bce03c4e4::t_218c151ed864e9 282
+  s_19c30bce03c4e4::t_c75f3706e0be21 36-37,47
+src/shell/testing/whatsapp-acceptance-harness.ts
+  s_19c30bce03c4e4::t_2832c8f10c2027 21,480
+  s_19c30bce03c4e4::t_14ef12a298103c 19-20,22,142-143,149-150,156-157,182,474
+  s_19c30bce03c4e4::t_e38371f7b98fba 477,479
+  s_19c30bce03c4e4::t_218c151ed864e9 43,475
+src/core/tokens/model.test.ts
+  s_19c30bce03c4e4::t_e38371f7b98fba 6,11,35,38,46,56,64-65,76,78,81,87,89-90,138,140-141,152,156,158-159
+  s_19c30bce03c4e4::t_14ef12a298103c 3,5,7-9,12,15,17,33,36-37,45,55,82,88,137,139,149,153,157
+  s_19c30bce03c4e4::t_ce1102eb559700 135
+  s_19c30bce03c4e4::t_257c8aab3bfd36 10
+src/core/tokens/rules.test.ts
+  s_19c30bce03c4e4::t_2832c8f10c2027 3,7
+  s_19c30bce03c4e4::t_e38371f7b98fba 5
+src/core/tokens/rules.ts
+  s_19c30bce03c4e4::t_fb146a58bcd349 5-7,9
+  s_19c30bce03c4e4::t_e38371f7b98fba 2,12
+src/shell/_shared/suggested-operations.ts
+  s_19c30bce03c4e4::t_e38371f7b98fba 2,38,53
+src/shell/testing/isolation.test.ts
+  s_19c30bce03c4e4::t_0f339ee227d586 36
+  s_19c30bce03c4e4::t_218c151ed864e9 12,35
+src/shell/testing/operation-policy.test.ts
+  s_19c30bce03c4e4::t_e38371f7b98fba 4,30
+src/shell/channels/whatsapp/whatsapp-channel.test.ts
+  s_19c30bce03c4e4::t_0f339ee227d586 2642
+  s_19c30bce03c4e4::t_218c151ed864e9 31,249,694,2943
+README.md
+  s_19c30bce03c4e4::t_0f339ee227d586 68
+src/shell/db/migrations/0003-create-audit-log.ts
+  s_19c30bce03c4e4::t_e38371f7b98fba 5,14
+src/shell/consent/consent-gate.test.ts
+  s_19c30bce03c4e4::t_e38371f7b98fba 455,482-483,493
+src/shell/ingestion/handlers.test.ts
+  s_19c30bce03c4e4::t_e38371f7b98fba 5,18
+  s_19c30bce03c4e4::t_218c151ed864e9 4,19
+src/shell/_shared/errors.test.ts
+  s_19c30bce03c4e4::t_e38371f7b98fba 41,49,51
+src/shell/consent/repo.ts
+  s_19c30bce03c4e4::t_218c151ed864e9 75,297
+  s_19c30bce03c4e4::t_0f339ee227d586 133
+  s_19c30bce03c4e4::t_e38371f7b98fba 23,28,35,60,134,166,172,181,189-190,198,283,305,324,326-327
+  s_19c30bce03c4e4::t_aa8478bebe59fb 135-136,186
+CONTEXT.md
+  s_19c30bce03c4e4::t_0f339ee227d586 143,148
+docs/adr/0001-colombia-first-global-ready-foundations.md
+  s_19c30bce03c4e4::t_0f339ee227d586 33
+src/shell/consent/consent-authorization.test.ts
+  s_19c30bce03c4e4::t_e38371f7b98fba 47,101
+  s_19c30bce03c4e4::t_218c151ed864e9 8
+  s_19c30bce03c4e4::t_0f339ee227d586 18,20
+src/shell/identity/operations.ts
+  s_19c30bce03c4e4::t_0f339ee227d586 17
+scripts/check-dependency-guards.ts
+  s_19c30bce03c4e4::t_e38371f7b98fba 64-65
+src/shell/agent/agent-service.ts
+  s_19c30bce03c4e4::t_e38371f7b98fba 1377
+  s_19c30bce03c4e4::t_0f339ee227d586 1397
+  s_19c30bce03c4e4::t_b0778c0fc41da6 49
+src/shell/testing/api-harness.ts
+  s_19c30bce03c4e4::t_e38371f7b98fba 8,39
+  s_19c30bce03c4e4::t_0f339ee227d586 67
+  s_19c30bce03c4e4::t_218c151ed864e9 5,64
+  s_19c30bce03c4e4::t_40701f85fe0ca3 69-70
+src/shell/db/migrations/0009-row-level-security.ts
+  s_19c30bce03c4e4::t_e38371f7b98fba 44,66,91-93,201,221,224,240,245,250-251,255,261-262,289,296,303,320
+src/shell/db/migrations/0010-create-consent-ledger.ts
+  s_19c30bce03c4e4::t_218c151ed864e9 20,45,49,51,53,59
+  s_19c30bce03c4e4::t_e38371f7b98fba 4,7-8,19,60,179
+src/shell/tokens/hosted-turn-token.ts
+  s_19c30bce03c4e4::t_e38371f7b98fba 6,16-17,25,34,37,40,48,51,56,65,67
+  s_19c30bce03c4e4::t_14ef12a298103c 3,7-8,11,14,20,23,26-27,31,39,43,46-47,66
+  s_19c30bce03c4e4::t_9a6e1e507c98a7 64
+  s_19c30bce03c4e4::t_218c151ed864e9 10,44
+  s_19c30bce03c4e4::t_2832c8f10c2027 13,49
+  s_19c30bce03c4e4::t_c00981743b16a0 9
+src/shell/agent/agent-service.test.ts
+  s_19c30bce03c4e4::t_0f339ee227d586 70
+  s_19c30bce03c4e4::t_e38371f7b98fba 1301,1725,1935,2193
+  s_19c30bce03c4e4::t_218c151ed864e9 29,1728,1940,2196,2201
+src/shell/db/development-seed.test.ts
+  s_19c30bce03c4e4::t_e38371f7b98fba 5,58-59,89
+  s_19c30bce03c4e4::t_218c151ed864e9 4,55-56,87
+src/shell/_shared/operation-policy.ts
+  s_19c30bce03c4e4::t_e38371f7b98fba 3,19
+src/core/tokens/reference.ts
+  s_19c30bce03c4e4::t_e38371f7b98fba 3-7
+docs/adr/0007-postgresql-row-level-user-isolation.md
+  s_19c30bce03c4e4::t_0f339ee227d586 13,53-54,56-58
+  s_19c30bce03c4e4::t_e38371f7b98fba 55,68
+src/shell/operations/handlers.ts
+  s_19c30bce03c4e4::t_0f339ee227d586 134
+  s_19c30bce03c4e4::t_bc08274dfab0af 4,99
+src/shell/_shared/errors.ts
+  s_19c30bce03c4e4::t_0f339ee227d586 153,161
+src/shell/testing/authorization.test.ts
+  s_19c30bce03c4e4::t_e38371f7b98fba 5,13,36,83,423,427,443,446-449
+  s_19c30bce03c4e4::t_218c151ed864e9 12,39,44,49,53
+  s_19c30bce03c4e4::t_0f339ee227d586 35,38,43,48
+  s_19c30bce03c4e4::t_99106e03b67897 450
+  s_19c30bce03c4e4::t_0feb8258f5c769 468,547,562,568-569
+src/shell/db/row-level-security.test.ts
+  s_19c30bce03c4e4::t_e38371f7b98fba 123,318,529,531,959-960
+src/shell/testing/identity-fixtures.ts
+  s_19c30bce03c4e4::t_218c151ed864e9 1,4
+src/core/tokens/model.ts
+  s_19c30bce03c4e4::t_0f339ee227d586 59,80
+  s_19c30bce03c4e4::t_7e685f51435f5e 188
+  s_19c30bce03c4e4::t_ed26fb0598e777 45
+  s_19c30bce03c4e4::t_127571f57f418c 128-129
+  s_19c30bce03c4e4::t_e05957ed2d0aeb 142
+  s_19c30bce03c4e4::t_218c151ed864e9 21,24,30,46
+  s_19c30bce03c4e4::t_b82347d6b3d624 7,15,29,34,106,113,121,138,184,203
+  s_19c30bce03c4e4::t_f03301d00183f8 27
+  s_19c30bce03c4e4::t_688d89bf7e8a02 26
+  s_19c30bce03c4e4::t_71c525fb6dcd06 2,48-50,61-63,71,74-75,78,87-88,90,94-97,161-164,196-198,200,207-208,210,214
+  s_19c30bce03c4e4::t_cc62ff977b4244 58
+  s_19c30bce03c4e4::t_a855af7a51e0d6 65
+  s_19c30bce03c4e4::t_deaf8fcf849c17 67
+  s_19c30bce03c4e4::t_e38371f7b98fba 11-12,18-19,22-23,25,37-38,40-42,66,84-85,92,110,130-131,141,145-147,150-151,154-157,159,172,175,178,187,189,192-194
+src/shell/tokens/repo.ts
+  s_19c30bce03c4e4::t_0f339ee227d586 37
+  s_19c30bce03c4e4::t_218c151ed864e9 63
+  s_19c30bce03c4e4::t_c20cbf83c586b0 81,92,125
+  s_19c30bce03c4e4::t_14ef12a298103c 5,7-9,11,16,31,44,46-47,52-54,59,72,74,119,149,153,166,170-171,177-178,182
+  s_19c30bce03c4e4::t_e38371f7b98fba 13-15,21,23,26,29,33,38,40,65,71,103,107,109,111,116-117,134,137,139,146-147
+src/shell/consent/repo.test.ts
+  s_19c30bce03c4e4::t_e38371f7b98fba 173,250,260,263,284
+  s_19c30bce03c4e4::t_218c151ed864e9 13
+  s_19c30bce03c4e4::t_d51bca177be1a8 168,255
+src/shell/_shared/canonical-mutation-registry.ts
+  s_19c30bce03c4e4::t_e38371f7b98fba 3,29,48
+src/shell/db/migrations/registry.ts
+  s_19c30bce03c4e4::t_9e6126933330ee 8,42
+  s_19c30bce03c4e4::t_2832c8f10c2027 2,36
+src/shell/agent/model-boundary.ts
+  s_19c30bce03c4e4::t_218c151ed864e9 6,70,78,123
+src/shell/db/migrations/0002-create-identities-and-tokens.ts
+  s_19c30bce03c4e4::t_2832c8f10c2027 4,8
+  s_19c30bce03c4e4::t_f2e4f90b97a22e 30
+src/shell/http.ts
+  s_19c30bce03c4e4::t_e38371f7b98fba 4,64
+src/core/consent/model.ts
+  s_19c30bce03c4e4::t_e38371f7b98fba 6
+  s_19c30bce03c4e4::t_0cb5f484743340 96
+src/shell/api.ts
+  s_19c30bce03c4e4::t_e38371f7b98fba 2,41
+docs/adr/0008-serialize-consent-revocation-with-authorized-work.md
+  s_19c30bce03c4e4::t_e38371f7b98fba 9,15
+  s_19c30bce03c4e4::t_0f339ee227d586 17,21
+src/shell/testing/suggested-operations.test.ts
+  s_19c30bce03c4e4::t_e38371f7b98fba 393
+  s_19c30bce03c4e4::t_14ef12a298103c 4,13,331-334,338-339,343-344
+src/shell/db/user-tables.ts
+  s_19c30bce03c4e4::t_e38371f7b98fba 4
+src/shell/db/migrations/0008-hosted-turn-tokens.ts
+  s_19c30bce03c4e4::t_fdf3eba60b7e36 4,10-11,14,16,18-19,25,27
+  s_19c30bce03c4e4::t_e38371f7b98fba 9,13,26
+  s_19c30bce03c4e4::t_218c151ed864e9 5
+src/core/consent/model.test.ts
+  s_19c30bce03c4e4::t_8c85aee1b06f32 119
+src/core/audit/model.ts
+  s_19c30bce03c4e4::t_e38371f7b98fba 2,21,27
+src/shell/audit/audit-log.test.ts
+  s_19c30bce03c4e4::t_e38371f7b98fba 5,29,35,37
+  s_19c30bce03c4e4::t_0f339ee227d586 30
+  s_19c30bce03c4e4::t_218c151ed864e9 9,11,31,65,135,222
+docs/adr/0016-web-authorized-pat-issuance.md
+  s_19c30bce03c4e4::t_0f339ee227d586 12
+src/shell/insights/handlers.test.ts
+  s_19c30bce03c4e4::t_e38371f7b98fba 15,45
+  s_19c30bce03c4e4::t_0f339ee227d586 46
+  s_19c30bce03c4e4::t_218c151ed864e9 18
+src/shell/tokens/hosted-turn-token.test.ts
+  s_19c30bce03c4e4::t_a21c489369fdc0 11,23
+  s_19c30bce03c4e4::t_e38371f7b98fba 3,9,15,17,26-27,33
+  s_19c30bce03c4e4::t_b0778c0fc41da6 6
+src/shell/testing/openapi.ts
+  s_19c30bce03c4e4::t_e38371f7b98fba 4,15,38
+src/shell/db/development-seed.ts
+  s_19c30bce03c4e4::t_14ef12a298103c 21,26-27,31,34,38,48-49,62,64,105-106,112,119,123,132,151,166,171,173,201
+  s_19c30bce03c4e4::t_e38371f7b98fba 25,30,50,63,113,139,154
+  s_19c30bce03c4e4::t_218c151ed864e9 29,60,152,180
+  s_19c30bce03c4e4::t_2832c8f10c2027 33,142
+  s_19c30bce03c4e4::t_1a0c661b60205d 28
+src/shell/agent/toolkit.test.ts
+  s_19c30bce03c4e4::t_e27cf4826247fc 99
+src/shell/agent/toolkit.ts
+  s_19c30bce03c4e4::t_e38371f7b98fba 8,179-180,192
+  s_19c30bce03c4e4::t_218c151ed864e9 7,183
+src/shell/transactions/operations.test.ts
+  s_19c30bce03c4e4::t_e38371f7b98fba 288
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "7e00534735e82d297dc7ba83ad8a3ee90697fc53",
+  "prompts": {},
+  "sessions": {
+    "s_19c30bce03c4e4": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019ffd77-f07e-71ee-a5e8-baf1c00ca9e3",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": null
+    }
+  }
+}

@@ -1,13 +1,22 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
+    "composite": true,
+    "declaration": true,
+    "emitDeclarationOnly": true,
+    "noEmit": false,
+    "outDir": "../../.tsbuild/web",
+    "tsBuildInfoFile": "../../.tsbuild/web.tsbuildinfo",
     "lib": ["ESNext", "DOM", "DOM.Iterable"],
     "types": ["bun-types", "vite/client"],
     "jsx": "react-jsx",
+    "allowImportingTsExtensions": true,
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "@fidy/server/client": ["../server/src/client.ts"]
     }
   },
+  "references": [{ "path": "../server" }],
   "include": [
     "scripts/**/*.ts",
     "server-client-boundary.ts",

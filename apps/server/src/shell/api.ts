@@ -51,6 +51,9 @@ export const operationCatalog = makeOperationCatalog(FidyApi);
 
 type ApiGroups<Api> = Api extends HttpApi.HttpApi<infer _Identifier, infer Groups> ? Groups : never;
 
+/** Public type projection used by browser adapters without re-declaring operation groups. */
+export type FidyApiGroups = ApiGroups<typeof FidyApi>;
+
 type GroupOperationIds<Group> = Group extends HttpApiGroup.Constraint
   ? `${HttpApiGroup.Identifier<Group>}.${HttpApiGroup.Endpoints<Group>["identifier"]}`
   : never;

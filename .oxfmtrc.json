@@ -16,6 +16,7 @@
     "**/dist",
     "**/build",
     "**/coverage",
+    "apps/server/contracts",
     ".claude",
     ".repos",
     ".pi/skills/shadcn"

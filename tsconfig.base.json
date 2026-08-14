@@ -111,6 +111,23 @@
         },
         "overrides": [
           {
+            "include": ["./apps/web/src/**/*.test.ts", "./apps/web/src/**/*.test.tsx"],
+            "options": {
+              "diagnosticSeverity": {
+                "asyncFunction": "off"
+              }
+            }
+          },
+          {
+            "include": ["./apps/server/tools/contracts/**/*.ts"],
+            "options": {
+              "diagnosticSeverity": {
+                "asyncFunction": "off",
+                "missingPipeableSignature": "off"
+              }
+            }
+          },
+          {
             "include": ["./apps/server/tools/observability-compatibility/**/*.ts"],
             "options": {
               "diagnosticSeverity": {

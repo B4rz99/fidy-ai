@@ -11,7 +11,7 @@ const webSourceRoot = Bun.fileURLToPath(new URL("./src/", import.meta.url));
 export const serverClientBoundary = (): Plugin => ({
   name: "server-client-boundary",
   enforce: "pre",
-  async resolveId(source, importer) {
+  resolveId(source, importer) {
     if (!source.startsWith("~/")) return null;
     if (importer === undefined || importer.startsWith(webSourceRoot)) {
       throw new Error(`Web modules cannot import server-private path ${source}`);

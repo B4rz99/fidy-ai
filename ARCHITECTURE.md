@@ -130,6 +130,15 @@ declaration-only operation modules, but not live middleware, repositories, handl
 observability implementations, database, filesystem, provider, or runtime modules. The browser build and module
 graph guards are executable checks for that boundary.
 
+The root TypeScript project-reference build expresses the server-before-web declaration dependency.
+Server-owned OpenAPI and complete reflected operation-policy artifacts live under
+`apps/server/contracts/`; they are deterministic review evidence, never another declaration. The
+mandatory root gate checks freshness and compares them with the pull-request base, failing structural
+or policy breaks unless an acknowledgement is bound to the exact base digest, candidate digest,
+finding set, and coordinated rollout issue. See
+[Contract compatibility](docs/contract-compatibility.md) for the artifact lifecycle and the
+one-time base bootstrap used by the architecture PR that introduces them.
+
 Every shape that differs from a canonical shape is derived from it. This includes extraction
 schemas, response variants, and relational row projections. Money remains nested in domain and
 canonical operation shapes; repositories may flatten it into exact adjacent columns and reconstruct

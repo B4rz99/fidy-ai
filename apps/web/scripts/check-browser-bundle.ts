@@ -70,18 +70,18 @@ try {
 
   const sourceFiles = Array.from(new Bun.Glob("src/**/*.{ts,tsx}").scanSync({ cwd: webRoot }));
   const sources = await Promise.all(
-    sourceFiles.map(async (sourceFile) => ({
-      sourceFile,
-      source: await Bun.file(`${webRoot}/${sourceFile}`).text(),
-    }))
+    sourceFiles.map((sourceFile) =>
+      Bun.file(`${webRoot}/${sourceFile}`)
+        .text()
+        .then((source) => ({ sourceFile, source }))
+    )
   );
   const serverSourceRoot = `${workspaceRoot}/apps/server/src/`;
   const forbiddenServerImport = sources
     .flatMap(({ source, sourceFile }) =>
-      Array.from(source.matchAll(/(?:from\s+|import\s*\()\s*["']([^"']+)["']/gu)).map((match) => ({
-        importPath: match[1],
-        sourceFile,
-      }))
+      Array.from(source.matchAll(/(?:from\s+|import\s*\()\s*["']([^"']+)["']/gu)).flatMap(
+        (match) => (match[1] === undefined ? [] : [{ importPath: match[1], sourceFile }])
+      )
     )
     .find(({ importPath, sourceFile }) => {
       if (importPath.startsWith("@fidy/server")) return importPath !== "@fidy/server/client";

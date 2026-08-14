@@ -7,7 +7,7 @@ export {
   makeTokenAuthorizationClientLive,
   TokenAuthorizationClientAnonymousLive,
 } from "~/shell/_shared/authz";
-export { FidyApi, type OperationId } from "~/shell/api";
+export { FidyApi, type FidyApiGroups, type OperationId } from "~/shell/api";
 export { isHttpOrigin } from "./http-origin";
 export { TokenBearer, TokenBearerFormat } from "~/core/tokens/model";
 export type { CanonicalInput } from "~/shell/_shared/canonical-input";

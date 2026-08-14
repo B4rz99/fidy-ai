@@ -1,0 +1,304 @@
+{
+  "operations": [
+    {
+      "id": "categories.createKeywordRule",
+      "policy": {
+        "agentConfirmation": "not-required",
+        "kind": "mutation",
+        "requiredScope": "write",
+        "requiredTier": "free",
+        "scopeEvaluation": "endpoint"
+      }
+    },
+    {
+      "id": "categories.deleteKeywordRule",
+      "policy": {
+        "agentConfirmation": "required",
+        "kind": "mutation",
+        "requiredScope": "write",
+        "requiredTier": "free",
+        "scopeEvaluation": "endpoint"
+      }
+    },
+    {
+      "id": "categories.listCategories",
+      "policy": {
+        "agentConfirmation": "not-required",
+        "kind": "query",
+        "requiredScope": "read",
+        "requiredTier": "free",
+        "scopeEvaluation": "endpoint"
+      }
+    },
+    {
+      "id": "categories.listKeywordRules",
+      "policy": {
+        "agentConfirmation": "not-required",
+        "kind": "query",
+        "requiredScope": "read",
+        "requiredTier": "free",
+        "scopeEvaluation": "endpoint"
+      }
+    },
+    {
+      "id": "categories.updateKeywordRule",
+      "policy": {
+        "agentConfirmation": "required",
+        "kind": "mutation",
+        "requiredScope": "write",
+        "requiredTier": "free",
+        "scopeEvaluation": "endpoint"
+      }
+    },
+    {
+      "id": "dashboard.applyDashboardEdit",
+      "policy": {
+        "agentConfirmation": "required",
+        "kind": "mutation",
+        "requiredScope": "dashboard",
+        "requiredTier": "free",
+        "scopeEvaluation": "endpoint"
+      }
+    },
+    {
+      "id": "dashboard.getDashboard",
+      "policy": {
+        "agentConfirmation": "not-required",
+        "kind": "mutation",
+        "requiredScope": "read",
+        "requiredTier": "free",
+        "scopeEvaluation": "endpoint"
+      }
+    },
+    {
+      "id": "dashboard.listDashboardCatalog",
+      "policy": {
+        "agentConfirmation": "not-required",
+        "kind": "query",
+        "requiredScope": "read",
+        "requiredTier": "free",
+        "scopeEvaluation": "endpoint"
+      }
+    },
+    {
+      "id": "identity.getCurrentUser",
+      "policy": {
+        "agentConfirmation": "not-required",
+        "kind": "query",
+        "requiredScope": "read",
+        "requiredTier": "free",
+        "scopeEvaluation": "endpoint"
+      }
+    },
+    {
+      "id": "identity.updateUserPreferences",
+      "policy": {
+        "agentConfirmation": "not-required",
+        "kind": "mutation",
+        "requiredScope": "write",
+        "requiredTier": "free",
+        "scopeEvaluation": "endpoint"
+      }
+    },
+    {
+      "id": "ingestion.getStatementSubmission",
+      "policy": {
+        "agentConfirmation": "not-required",
+        "kind": "query",
+        "requiredScope": "read",
+        "requiredTier": "free",
+        "scopeEvaluation": "endpoint"
+      }
+    },
+    {
+      "id": "ingestion.listNeedsReviewItems",
+      "policy": {
+        "agentConfirmation": "not-required",
+        "kind": "query",
+        "requiredScope": "read",
+        "requiredTier": "free",
+        "scopeEvaluation": "endpoint"
+      }
+    },
+    {
+      "id": "ingestion.resolveNeedsReviewItem",
+      "policy": {
+        "agentConfirmation": "required",
+        "kind": "mutation",
+        "requiredScope": "write",
+        "requiredTier": "free",
+        "scopeEvaluation": "endpoint"
+      }
+    },
+    {
+      "id": "ingestion.submitForExtraction",
+      "policy": {
+        "agentConfirmation": "not-required",
+        "kind": "mutation",
+        "requiredScope": "write",
+        "requiredTier": "free",
+        "scopeEvaluation": "endpoint"
+      }
+    },
+    {
+      "id": "insights.dismissInsight",
+      "policy": {
+        "agentConfirmation": "required",
+        "kind": "mutation",
+        "requiredScope": "write",
+        "requiredTier": "free",
+        "scopeEvaluation": "endpoint"
+      }
+    },
+    {
+      "id": "insights.listPendingInsights",
+      "policy": {
+        "agentConfirmation": "not-required",
+        "kind": "query",
+        "requiredScope": "read",
+        "requiredTier": "free",
+        "scopeEvaluation": "endpoint"
+      }
+    },
+    {
+      "id": "insights.markInsightDelivered",
+      "policy": {
+        "agentConfirmation": "required",
+        "kind": "mutation",
+        "requiredScope": "write",
+        "requiredTier": "free",
+        "scopeEvaluation": "endpoint"
+      }
+    },
+    {
+      "id": "insights.markInsightRead",
+      "policy": {
+        "agentConfirmation": "required",
+        "kind": "mutation",
+        "requiredScope": "write",
+        "requiredTier": "free",
+        "scopeEvaluation": "endpoint"
+      }
+    },
+    {
+      "id": "memory.forget",
+      "policy": {
+        "agentConfirmation": "required",
+        "kind": "mutation",
+        "requiredScope": "write",
+        "requiredTier": "free",
+        "scopeEvaluation": "endpoint"
+      }
+    },
+    {
+      "id": "memory.recall",
+      "policy": {
+        "agentConfirmation": "not-required",
+        "kind": "query",
+        "requiredScope": "read",
+        "requiredTier": "free",
+        "scopeEvaluation": "endpoint"
+      }
+    },
+    {
+      "id": "memory.remember",
+      "policy": {
+        "agentConfirmation": "not-required",
+        "kind": "mutation",
+        "requiredScope": "write",
+        "requiredTier": "free",
+        "scopeEvaluation": "endpoint"
+      }
+    },
+    {
+      "id": "memory.revise",
+      "policy": {
+        "agentConfirmation": "required",
+        "kind": "mutation",
+        "requiredScope": "write",
+        "requiredTier": "free",
+        "scopeEvaluation": "endpoint"
+      }
+    },
+    {
+      "id": "operations.executeAtomicBatch",
+      "policy": {
+        "agentConfirmation": "required",
+        "kind": "mutation",
+        "requiredScope": "write",
+        "requiredTier": "free",
+        "scopeEvaluation": "children"
+      }
+    },
+    {
+      "id": "subscription.getUpgradeUrl",
+      "policy": {
+        "agentConfirmation": "not-required",
+        "kind": "query",
+        "requiredScope": "read",
+        "requiredTier": "free",
+        "scopeEvaluation": "endpoint"
+      }
+    },
+    {
+      "id": "transactions.createTransaction",
+      "policy": {
+        "agentConfirmation": "not-required",
+        "kind": "mutation",
+        "requiredScope": "write",
+        "requiredTier": "free",
+        "scopeEvaluation": "endpoint"
+      }
+    },
+    {
+      "id": "transactions.deleteTransaction",
+      "policy": {
+        "agentConfirmation": "required",
+        "kind": "mutation",
+        "requiredScope": "write",
+        "requiredTier": "free",
+        "scopeEvaluation": "endpoint"
+      }
+    },
+    {
+      "id": "transactions.getTransaction",
+      "policy": {
+        "agentConfirmation": "not-required",
+        "kind": "query",
+        "requiredScope": "read",
+        "requiredTier": "free",
+        "scopeEvaluation": "endpoint"
+      }
+    },
+    {
+      "id": "transactions.listSourceAttestations",
+      "policy": {
+        "agentConfirmation": "not-required",
+        "kind": "query",
+        "requiredScope": "read",
+        "requiredTier": "free",
+        "scopeEvaluation": "endpoint"
+      }
+    },
+    {
+      "id": "transactions.listTransactions",
+      "policy": {
+        "agentConfirmation": "not-required",
+        "kind": "query",
+        "requiredScope": "read",
+        "requiredTier": "free",
+        "scopeEvaluation": "endpoint"
+      }
+    },
+    {
+      "id": "transactions.updateTransaction",
+      "policy": {
+        "agentConfirmation": "required",
+        "kind": "mutation",
+        "requiredScope": "write",
+        "requiredTier": "free",
+        "scopeEvaluation": "endpoint"
+      }
+    }
+  ]
+}

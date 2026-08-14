@@ -289,7 +289,8 @@ export type LeafNode = Readonly<{
   readonly widget: Widget;
 }>;
 
-type LeafNodeEncoded = {
+/** Input accepted by the LayoutNode decoder; its Widget fields are not validated until decoding. */
+export type LeafNodeEncoded = {
   readonly kind: "leaf";
   readonly widget: WidgetEncoded;
 };
@@ -305,7 +306,8 @@ export type SplitChild = Readonly<{
   readonly node: LayoutNode;
 }>;
 
-type SplitChildEncoded = {
+/** LayoutNode decoder input; callers must not treat its numeric weight as already validated. */
+export type SplitChildEncoded = {
   readonly weight: number;
   readonly node: LayoutNodeEncoded;
 };
@@ -325,7 +327,8 @@ export type SplitNode = Readonly<{
   readonly children: readonly [SplitChild, SplitChild, ...Array<SplitChild>];
 }>;
 
-type SplitNodeEncoded = {
+/** LayoutNode decoder input; depth and maximum-widget constraints are enforced only on decode. */
+export type SplitNodeEncoded = {
   readonly kind: "split";
   readonly axis: Axis;
   readonly children: readonly [SplitChildEncoded, SplitChildEncoded, ...Array<SplitChildEncoded>];
@@ -333,7 +336,8 @@ type SplitNodeEncoded = {
 
 /** Recursive Dashboard layout whose in-order leaves define mobile order. */
 export type LayoutNode = LeafNode | SplitNode;
-type LayoutNodeEncoded = LeafNodeEncoded | SplitNodeEncoded;
+/** Unvalidated JSON-side input and output of the recursive LayoutNode codec. */
+export type LayoutNodeEncoded = LeafNodeEncoded | SplitNodeEncoded;
 
 /** Recursive structural layout; in-order leaves define mobile reading order. */
 export const LayoutNode: Schema.Codec<LayoutNode, LayoutNodeEncoded> = Schema.suspend(() =>

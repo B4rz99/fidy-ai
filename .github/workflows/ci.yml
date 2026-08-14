@@ -16,11 +16,24 @@ concurrency:
 
 jobs:
   static:
-    name: Static Checks
+    name: Workspace Gate
     runs-on: ubuntu-latest
-    # One job for every check that only reads the tree. Each pays no runner
-    # startup of its own, and none is on the critical path — the test jobs are
-    # slower than all of these put together.
+    # This is the mandatory repository-owned verdict. Provider-hosted security
+    # scans remain required sibling jobs below because they are not local tools.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: fidy
+          POSTGRES_PASSWORD: fidy
+          POSTGRES_DB: fidy
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U fidy"
+          --health-interval 2s
+          --health-timeout 2s
+          --health-retries 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       # The *tip* of the base branch, not the merge base. A branch cut before a
@@ -33,187 +46,18 @@ jobs:
           BASE_BRANCH: ${{ github.event.pull_request.base.ref }}
         run: git fetch --no-tags --depth=1 origin "+refs/heads/$BASE_BRANCH:refs/remotes/origin/$BASE_BRANCH"
       - uses: ./.github/actions/bun-install
-      # dependency-cruiser reads .ts sources and the tsconfig `paths` aliases
-      # through the classic TypeScript compiler API, which the repo's Effect
-      # tsgo `typescript` build does not expose, so the cruiser and a classic
-      # typescript live in an isolated install under tools/depcruise.
-      - name: Install dependency-cruiser
-        working-directory: tools/depcruise
-        run: bun install --frozen-lockfile
-      # Every check runs even after one fails, so a single run reports every
-      # problem in the tree rather than only the first.
-      - name: Static checks
+      - name: Create restricted runtime role
+        env:
+          PGPASSWORD: fidy
+        run: psql -h localhost -U fidy -d fidy -v ON_ERROR_STOP=1 -f deploy/local-postgres-init.sql
+      - name: Complete repository-owned validation
         env:
           PR_TITLE: ${{ github.event.pull_request.title }}
           BASE_REF: origin/${{ github.event.pull_request.base.ref }}
-        run: |
-          failed=()
-          check() {
-            local label=$1
-            shift
-            echo "::group::$label"
-            if "$@"; then
-              echo "::endgroup::"
-            else
-              echo "::endgroup::"
-              echo "::error title=$label::$label failed"
-              failed+=("$label")
-            fi
-          }
-
-          # First, because it decides whether the lint verdict means anything: a
-          # whole-file `oxlint-disable` turns off every rule in the file,
-          # including one written to catch it.
-          check "Lint suppressions" bun run lint:suppressions
-          check "oxlint" bun run lint
-          check "oxlint --type-aware" bun run lint:type-aware
-          check "Format" bun run format:check
-          check "Typecheck" bun run typecheck
-          check "Module graph" bun run lint:deps
-          check "Browser client graph" bun run check:browser-client
-          check "Policy integrity" bun run check:policy
-          check "Portable web build" bun run build
-          # The one check that reaches the public internet on purpose: it asks
-          # the npm registry what has shipped since each pin was written, and
-          # grades the manifests as the pull request declares them.
-          check "Dependency policy" bun run lint:dependencies
-          check "PR title" bun scripts/check-pr-title.ts
-          check "Migration ids" bun run check:migration-ids
-
-          if (( ${#failed[@]} > 0 )); then
-            printf 'Failed: %s\n' "${failed[@]}" >&2
-            exit 1
-          fi
-
-  test-core:
-    name: Core Tests
-    runs-on: ubuntu-latest
-    # Deliberately no postgres service and no DATABASE_URL: the core tier needs
-    # nothing (ARCHITECTURE.md §8). A core test that reaches for the world fails
-    # here rather than passing quietly inside the full run, where a database is
-    # always available.
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-      - uses: ./.github/actions/bun-install
-      - name: Core tests
-        run: bun run test:core
-
-  test:
-    name: Test
-    runs-on: ubuntu-latest
-    services:
-      postgres:
-        image: postgres:16-alpine
-        env:
-          POSTGRES_USER: fidy
-          POSTGRES_PASSWORD: fidy
-          POSTGRES_DB: fidy
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U fidy"
-          --health-interval 2s
-          --health-timeout 2s
-          --health-retries 15
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-      - uses: ./.github/actions/bun-install
-      - name: Create restricted runtime role
-        env:
-          PGPASSWORD: fidy
-        run: psql -h localhost -U fidy -d fidy -v ON_ERROR_STOP=1 -f deploy/local-postgres-init.sql
-      - name: Test
-        env:
           DATABASE_URL: postgres://fidy_runtime:fidy_runtime@localhost:5432/fidy
           MIGRATION_DATABASE_URL: postgres://fidy:fidy@localhost:5432/fidy
           WHATSAPP_BUSINESS_PORTFOLIO_ID: portfolio-test
-        run: bun run test
-      - name: Pinned observability compatibility gate
-        env:
-          DATABASE_URL: postgres://fidy_runtime:fidy_runtime@localhost:5432/fidy
-        run: bun run test:observability-compatibility
-
-  acceptance:
-    name: WhatsApp Acceptance
-    runs-on: ubuntu-latest
-    # A separate service container gives the public-seam release signal a fresh database without
-    # sharing state or coverage output with unit and lower-seam integration tests.
-    services:
-      postgres:
-        image: postgres:16-alpine
-        env:
-          POSTGRES_USER: fidy
-          POSTGRES_PASSWORD: fidy
-          POSTGRES_DB: fidy
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U fidy"
-          --health-interval 2s
-          --health-timeout 2s
-          --health-retries 15
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-      - uses: ./.github/actions/bun-install
-      - name: Create restricted runtime role
-        env:
-          PGPASSWORD: fidy
-        run: psql -h localhost -U fidy -d fidy -v ON_ERROR_STOP=1 -f deploy/local-postgres-init.sql
-      - name: WhatsApp acceptance scenarios and coverage
-        env:
-          DATABASE_URL: postgres://fidy_runtime:fidy_runtime@localhost:5432/fidy
-          MIGRATION_DATABASE_URL: postgres://fidy:fidy@localhost:5432/fidy
-          WHATSAPP_BUSINESS_PORTFOLIO_ID: portfolio-test
-        # Verbose scenario IDs and the line/branch ratchet remain in the retained job log.
-        run: bun run test:acceptance
-      - name: Verify improved coverage was recorded
-        run: git diff --exit-code -- apps/server/vitest.acceptance.config.ts
-
-  crap:
-    name: CRAP
-    runs-on: ubuntu-latest
-    services:
-      postgres:
-        image: postgres:16-alpine
-        env:
-          POSTGRES_USER: fidy
-          POSTGRES_PASSWORD: fidy
-          POSTGRES_DB: fidy
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U fidy"
-          --health-interval 2s
-          --health-timeout 2s
-          --health-retries 15
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-      - uses: ./.github/actions/bun-install
-      # crap4ts parses source with the classic TypeScript compiler API, which the
-      # repo's Effect tsgo `typescript` build does not expose, so the analyzer and
-      # a classic typescript live in an isolated install under tools/crap.
-      - name: Install CRAP analyzer
-        working-directory: tools/crap
-        run: bun install --frozen-lockfile
-      - name: Create restricted runtime role
-        env:
-          PGPASSWORD: fidy
-        run: psql -h localhost -U fidy -d fidy -v ON_ERROR_STOP=1 -f deploy/local-postgres-init.sql
-      - name: CRAP threshold gate
-        env:
-          DATABASE_URL: postgres://fidy_runtime:fidy_runtime@localhost:5432/fidy
-          MIGRATION_DATABASE_URL: postgres://fidy:fidy@localhost:5432/fidy
-          WHATSAPP_BUSINESS_PORTFOLIO_ID: portfolio-test
-        run: bun run test:crap
-
-  production-image:
-    name: Production Image
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-      - uses: ./.github/actions/bun-install
-      - name: Boot production image against fresh PostgreSQL
-        run: bun run check:production-image
+        run: bun run verify
 
   security-secrets:
     name: Secrets
@@ -267,11 +111,6 @@ jobs:
     runs-on: ubuntu-latest
     needs:
       - static
-      - test-core
-      - test
-      - acceptance
-      - crap
-      - production-image
       - security-secrets
       - security-sast
       - security-sca

@@ -125,6 +125,22 @@
         "no-console": "off"
       }
     },
+    // Contract tooling reflects raw OpenAPI JSON, whose data model necessarily includes null,
+    // and coordinates a bounded set of parsing and edge steps. Keeping that wire shape literal
+    // is safer than wrapping every JSON leaf in Option; the complexity is isolated from runtime.
+    {
+      "files": ["apps/server/tools/contracts/**/*.ts"],
+      "rules": {
+        "complexity": "off",
+        "effect-guards/no-nullable-type": "off"
+      }
+    },
+    {
+      "files": ["apps/server/tools/contracts/vitest.config.ts"],
+      "rules": {
+        "import/no-default-export": "off"
+      }
+    },
     // Vite's source and configuration contracts require extension-bearing asset imports and
     // default-exported configuration objects. TanStack Router requires interface declaration
     // merging for its registered router type.

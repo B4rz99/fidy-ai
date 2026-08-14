@@ -8,6 +8,7 @@ out/
 
 # TypeScript
 *.tsbuildinfo
+.tsbuild/
 
 # Environment variables
 .env

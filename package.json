@@ -34,17 +34,18 @@
   },
   "dependencies": {
     "@effect/ai-openai": "4.0.0-beta.98",
+    "@effect/atom-react": "4.0.0-beta.98",
     "@effect/platform-bun": "4.0.0-beta.98",
     "@effect/sql-pg": "4.0.0-beta.98",
     "@kapso/whatsapp-cloud-api": "0.3.0",
     "@sentry/bun": "10.69.0",
-    "@tanstack/react-query": "5.101.4",
     "@tanstack/react-table": "9.0.0",
     "csv-parse": "7.0.2",
     "effect": "4.0.0-beta.98",
     "js-tiktoken": "1.0.21",
     "react": "19.2.8",
     "react-dom": "19.2.8",
+    "scheduler": "0.27.0",
     "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
   },
   "devDependencies": {

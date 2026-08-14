@@ -34,10 +34,7 @@ corresponding definition types. At runtime the helper only constructs column-def
 Keep feature and column definitions static unless they genuinely depend on render state. Keep
 `data` referentially stable: the core row model memo depends directly on `table.options.data`
 (`packages/table-core/src/core/row-models/createCoreRowModel.ts:19-35`). When data may be absent,
-reuse a stable empty-array fallback instead of allocating one during every render. The upstream
-Query integration follows this pattern
-(`examples/react/with-tanstack-query/src/main.tsx:27-29`,
-`examples/react/with-tanstack-query/src/main.tsx:148-155`).
+reuse a stable empty-array fallback instead of allocating one during every render.
 
 Create the instance with `useTable({ features, columns, data }, selector?)`. It constructs the
 underlying table once, updates options during later renders, and shallow-subscribes React to the
@@ -84,21 +81,18 @@ shows these pairs (`examples/react/basic-external-state/src/main.tsx:67-105`). D
 callback without feeding the resulting value back, and do not mirror internal state merely to
 observe it; select it from `table.state` instead.
 
-## Server-side behavior with Query
+## Server-side behavior
 
 When a server owns sorting, filtering, or pagination:
 
 1. Own that state outside Table.
-2. Include every state coordinate in the Query key.
+2. Include every state coordinate in the request identity.
 3. Fetch already processed rows from the request boundary.
 4. Pass the rows and available count metadata to Table.
 5. Enable the corresponding manual mode.
 6. Omit the client row-model factory for that operation.
 
-The upstream Query example includes pagination, sorting, and filtering in the key, preserves data
-while coordinates change, supplies stable row IDs, controls table state, and enables all three
-manual modes (`examples/react/with-tanstack-query/src/main.tsx:127-170`). The option contracts
-confirm that manual modes expect already processed rows
+The option contracts confirm that manual modes expect already processed rows
 (`packages/table-core/src/features/column-filtering/columnFilteringFeature.types.ts:258-268`,
 `packages/table-core/src/features/row-sorting/rowSortingFeature.types.ts:241-257`,
 `packages/table-core/src/features/row-pagination/rowPaginationFeature.types.ts:18-34`). Do not run

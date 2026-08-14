@@ -50,6 +50,22 @@ it.effect("ends trial-derived Pro access at the exclusive TrialPeriod end", () =
   })
 );
 
+it.effect("includes the TrialPeriod start but not the instant before it", () =>
+  Effect.gen(function* () {
+    const trialPeriod = makeTrialPeriod();
+
+    expect(
+      yield* decideEffectiveAccess({ paidTier: "free", trialPeriod }, trialPeriod.startedAt)
+    ).toBe("pro");
+    expect(
+      yield* decideEffectiveAccess(
+        { paidTier: "free", trialPeriod },
+        DateTime.makeUnsafe("2026-08-01T11:59:59.999Z")
+      )
+    ).toBe("free");
+  })
+);
+
 it.effect("keeps paid Pro access after the TrialPeriod ends", () =>
   Effect.gen(function* () {
     const trialPeriod = makeTrialPeriod();

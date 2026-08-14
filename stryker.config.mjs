@@ -25,10 +25,12 @@ export default {
   // and be recorded as killed — a kill nothing actually noticed.
   testRunner: "command",
   commandRunner: {
-    command: "bun --bun vitest run --config vitest.core.config.ts --coverage.enabled=false",
+    command:
+      "bun --bun vitest run --config vitest.core.config.ts --coverage.enabled=false --maxWorkers=2",
   },
-  // A single runner avoids the resource contention that makes this full-suite
-  // command time out when Stryker fans it out across the machine.
+  // A single runner avoids Stryker fan-out, while the command caps Vitest at two
+  // workers so repeated mutant runs cannot accumulate enough Bun worker churn to
+  // cause spurious timeouts during the full core campaign.
   concurrency: 1,
   // Only the behavioural core sources, matching source-scope.mjs so this gate
   // and the coverage gates measure the same files. Test files are mutated by

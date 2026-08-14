@@ -1,5 +1,5 @@
 import { expect, it } from "@effect/vitest";
-import { BigDecimal, DateTime, Effect, Option, Schema } from "effect";
+import { BigDecimal, DateTime, Effect, Option, Result, Schema } from "effect";
 import { Currency, Money, type ReadonlyMoney } from "~/core/_shared/money";
 import {
   type InterpretedStatementRow,
@@ -97,6 +97,33 @@ it("rejects contradictory mapping strategies", () => {
       inflowMarkers: ["CREDIT"],
     })
   ).toBe(false);
+  expect(
+    Schema.is(StatementColumnMapping)({
+      ...base,
+      currencyColumn: Option.none(),
+      currencyLiteral: Option.some(Currency.make("COP")),
+      outflowMarkers: ["DEBIT"],
+    })
+  ).toBe(false);
+
+  const decodeMapping = Schema.decodeUnknownResult(Schema.toType(StatementColumnMapping));
+  const invalidCurrency = decodeMapping({
+    ...base,
+    currencyColumn: Option.none(),
+    currencyLiteral: Option.none(),
+  });
+  expect(Result.isFailure(invalidCurrency) ? String(invalidCurrency.failure) : "").toContain(
+    "currencyColumn"
+  );
+  const invalidDirection = decodeMapping({
+    ...base,
+    currencyColumn: Option.none(),
+    currencyLiteral: Option.some(Currency.make("COP")),
+    outflowMarkers: ["DEBIT"],
+  });
+  expect(Result.isFailure(invalidDirection) ? String(invalidDirection.failure) : "").toContain(
+    "directionColumn"
+  );
 });
 
 it.effect("accounts for every row through the canonical Transaction and Money gate", () =>
@@ -160,6 +187,7 @@ it.effect("accounts for every row through the canonical Transaction and Money ga
     expect(interpreted.outcomes[2]).toMatchObject({
       outcome: "needs-review",
       reason: "missing-required-fact",
+      issues: [{ path: "", message: "The row is missing a valid date." }],
     });
   })
 );
@@ -210,7 +238,7 @@ it.effect(
         counterpartyColumn: Option.some(3),
         currencyColumn: Option.some(2),
         directionColumn: Option.some(4),
-        inflowMarkers: ["credit"],
+        inflowMarkers: ["credit", "cash in", "ß"],
         outflowMarkers: ["debit"],
         dateFormat: "yyyy-MM-dd",
       });
@@ -219,7 +247,8 @@ it.effect(
           csvRow(1, ["2026-02-05", "25", "COP", "", " CREDIT "]),
           csvRow(2, ["2026-02-05", "25", "COP", "Shop", "unknown"]),
           csvRow(3, ["2026-02-05", "25", "INVALID", "Shop", "DEBIT"]),
-          csvRow(4, ["2026-02-05", "25", "COP", "Shop", "DEBIT"]),
+          csvRow(4, ["2026-02-05", "25", "COP", " Shop ", "DEBIT"]),
+          csvRow(5, ["2026-02-05", "25", "COP", "", "ss"]),
         ],
         mapping: markerMapping,
         timeZone: "America/Bogota",
@@ -232,8 +261,140 @@ it.effect(
           outcome: "accepted",
           extraction: { direction: "outflow", counterparty: Option.some("Shop") },
         },
+        { outcome: "accepted", extraction: { direction: "inflow" } },
       ]);
     })
+);
+
+it.effect("distinguishes whitespace and anchored parsing from malformed values", () =>
+  Effect.gen(function* () {
+    const mapping = StatementColumnMapping.make({
+      dateColumn: 0,
+      amountColumn: 1,
+      counterpartyColumn: Option.none(),
+      currencyColumn: Option.some(2),
+      currencyLiteral: Option.none(),
+      directionColumn: Option.none(),
+      inflowMarkers: [],
+      outflowMarkers: [],
+      positiveDirection: "inflow",
+      dateFormat: "MM/dd/yyyy",
+      decimalSeparator: ".",
+      groupingSeparator: Option.none(),
+    });
+    const interpreted = yield* interpretCanonicalRows({
+      rows: [
+        csvRow(1, [" 02/09/2026 ", " 2.50 ", " COP "]),
+        csvRow(2, ["02/09/2026 trailing", "1", "COP"]),
+        csvRow(3, ["prefix 02/09/2026", "1", "COP"]),
+        csvRow(4, ["02/09/2026", "1,2", "COP"]),
+        csvRow(5, ["02/09/2026", "1-2", "COP"]),
+      ],
+      mapping,
+      timeZone: "America/Bogota",
+    });
+
+    expect(interpreted.outcomes).toMatchObject([
+      { outcome: "accepted", extraction: { money: { currency: "COP" } } },
+      { outcome: "needs-review", reason: "missing-required-fact" },
+      { outcome: "needs-review", reason: "missing-required-fact" },
+      { outcome: "needs-review", reason: "missing-required-fact" },
+      { outcome: "needs-review", reason: "missing-required-fact" },
+    ]);
+    const accepted = interpreted.outcomes[0];
+    if (accepted?.outcome === "accepted") {
+      expect(accepted.extraction.occurredAt).toEqual(
+        DateTime.toUtc(
+          DateTime.makeZonedUnsafe("2026-02-09", {
+            timeZone: "America/Bogota",
+            adjustForTimeZone: true,
+          })
+        )
+      );
+    }
+  })
+);
+
+it.effect("rejects a local calendar date skipped by its time zone", () =>
+  Effect.gen(function* () {
+    const mapping = StatementColumnMapping.make({
+      dateColumn: 0,
+      amountColumn: 1,
+      counterpartyColumn: Option.none(),
+      currencyColumn: Option.none(),
+      currencyLiteral: Option.some(Currency.make("COP")),
+      directionColumn: Option.none(),
+      inflowMarkers: [],
+      outflowMarkers: [],
+      positiveDirection: "inflow",
+      dateFormat: "yyyy-MM-dd",
+      decimalSeparator: ".",
+      groupingSeparator: Option.none(),
+    });
+    const interpreted = yield* interpretCanonicalRows({
+      rows: [csvRow(1, ["2011-12-30", "1"])],
+      mapping,
+      timeZone: "Pacific/Apia",
+    });
+
+    expect(interpreted.outcomes).toMatchObject([
+      { outcome: "needs-review", reason: "missing-required-fact" },
+    ]);
+  })
+);
+
+it.effect("inspects mapped currency cells before decoding", () =>
+  Effect.gen(function* () {
+    const mapping = StatementColumnMapping.make({
+      dateColumn: 0,
+      amountColumn: 1,
+      counterpartyColumn: Option.none(),
+      currencyColumn: Option.some(2),
+      currencyLiteral: Option.none(),
+      directionColumn: Option.none(),
+      inflowMarkers: [],
+      outflowMarkers: [],
+      positiveDirection: "inflow",
+      dateFormat: "yyyy-MM-dd",
+      decimalSeparator: ".",
+      groupingSeparator: Option.none(),
+    });
+    const interpreted = yield* interpretCanonicalRows({
+      rows: [
+        {
+          recordNumber: 1,
+          fields: ["2020-02-05", "25000", "COP"],
+          evidence: {
+            sourceFormat: "xlsx",
+            sheetName: "Statement",
+            sheetIndex: 0,
+            rowNumber: 2,
+            hidden: false,
+            cells: [
+              xlsxCell("A2", "2020-02-05", Option.none()),
+              xlsxCell("B2", "25000", Option.none()),
+              { ...xlsxCell("C2", "COP", Option.none()), cellType: "boolean" },
+            ],
+          },
+        },
+      ],
+      mapping,
+      timeZone: "America/Bogota",
+    });
+
+    expect(interpreted.outcomes).toMatchObject([
+      {
+        outcome: "needs-review",
+        reason: "malformed-source-row",
+        issues: [
+          {
+            path: "",
+            message: "A mapped Money cell is a formula, boolean, or spreadsheet error.",
+          },
+        ],
+      },
+    ]);
+  })
 );
 
 it.effect("covers opposite signed direction and absent mapped cells", () =>

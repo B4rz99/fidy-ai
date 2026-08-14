@@ -2,7 +2,12 @@ import assert from "node:assert/strict";
 import { describe, expect, it } from "@effect/vitest";
 import { DateTime, Effect, Exit } from "effect";
 import { Memory, MemoryId, MemoryText } from "./model";
-import { MemoryCapacityExceeded, admitMemory, maximumAggregateMemoryTokens } from "./rules";
+import {
+  MemoryCapacityExceeded,
+  MemoryNotFound,
+  admitMemory,
+  maximumAggregateMemoryTokens,
+} from "./rules";
 
 const candidate = Memory.make({
   id: MemoryId.make("01912345-6789-7abc-8def-0123456789ab"),
@@ -12,6 +17,13 @@ const candidate = Memory.make({
 });
 
 describe("Memory capacity", () => {
+  it("exposes stable, content-free failure messages", () => {
+    expect(new MemoryCapacityExceeded().message).toBe(
+      "The User's current Memories have reached their aggregate token capacity"
+    );
+    expect(new MemoryNotFound().message).toBe("No current Memory belongs to the User");
+  });
+
   it.effect("admits an aggregate at the token cap", () =>
     Effect.gen(function* () {
       expect(yield* admitMemory({ candidate, aggregateTokens: maximumAggregateMemoryTokens })).toBe(

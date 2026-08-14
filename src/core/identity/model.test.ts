@@ -1,6 +1,6 @@
 import { expect, it } from "@effect/vitest";
 import { DateTime, Result, Schema } from "effect";
-import { TrialPeriod, UserPreferences } from "./model";
+import { EffectiveAccess, PaidTier, TrialPeriod, UserPreferences } from "./model";
 
 it("accepts only a TrialPeriod lasting exactly 168 hours", () => {
   const startedAt = "2026-08-01T12:00:00Z";
@@ -15,6 +15,15 @@ it("accepts only a TrialPeriod lasting exactly 168 hours", () => {
 
   expect(Result.getOrThrow(exact)).toMatchObject({ startedAt: DateTime.makeUnsafe(startedAt) });
   expect(Result.isFailure(tooLong)).toBe(true);
+  expect(Result.isFailure(tooLong) ? String(tooLong.failure) : "").toContain("endsAt");
+});
+
+it("keeps PaidTier and EffectiveAccess closed to unknown values", () => {
+  for (const schema of [PaidTier, EffectiveAccess]) {
+    expect(Result.isSuccess(Schema.decodeUnknownResult(schema)("free"))).toBe(true);
+    expect(Result.isSuccess(Schema.decodeUnknownResult(schema)("pro"))).toBe(true);
+    expect(Result.isFailure(Schema.decodeUnknownResult(schema)("trial"))).toBe(true);
+  }
 });
 
 it("derives editable User preferences as locale and time zone together", () => {

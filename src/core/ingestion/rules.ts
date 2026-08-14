@@ -47,10 +47,10 @@ type NormalizeAmount = (source: string, mapping: StatementColumnMapping) => Opti
 
 const normalizedAmount: NormalizeAmount = (source, mapping) => {
   let value = source.trim();
-  if (value.length === 0) return Option.none();
-  if (Option.isSome(mapping.groupingSeparator)) {
-    value = value.replaceAll(mapping.groupingSeparator.value, "");
-  }
+  value = Option.match(mapping.groupingSeparator, {
+    onNone: () => value,
+    onSome: (separator) => value.replaceAll(separator, ""),
+  });
   if (mapping.decimalSeparator === ",") value = value.replace(",", ".");
   value = value.replace(/^[-+]/u, "");
   return /^(?:0|[1-9]\d*)(?:\.\d+)?$/u.test(value) ? Option.some(value) : Option.none();
@@ -88,7 +88,9 @@ const parsedDate: ParseDate = (value, format, timeZone) => {
   const date = DateTime.makeZoned(parts, { timeZone, adjustForTimeZone: true });
   if (Option.isNone(date)) return Option.none();
   const actual = DateTime.toParts(date.value);
-  return actual.year === parts.year && actual.month === parts.month && actual.day === parts.day
+  const expectedDateKey = [parts.year, parts.month, parts.day].join("-");
+  const actualDateKey = [actual.year, actual.month, actual.day].join("-");
+  return actualDateKey === expectedDateKey
     ? Option.some(DateTime.toUtc(date.value))
     : Option.none();
 };
@@ -217,8 +219,7 @@ const decodeKnownMoney = Effect.fn("decodeKnownStatementMoney")(function* (
   row: ParsedStatementRow,
   mapping: StatementColumnMapping
 ) {
-  const moneyIndexes = [mapping.amountColumn];
-  if (Option.isSome(mapping.currencyColumn)) moneyIndexes.push(mapping.currencyColumn.value);
+  const moneyIndexes = [mapping.amountColumn, ...Option.toArray(mapping.currencyColumn)];
   if (unsafeXlsxCells(row, moneyIndexes)) {
     return review(row, {
       reason: "malformed-source-row",
@@ -251,10 +252,7 @@ const interpretRow: InterpretRow = (row, mapping, context) =>
     if ("outcome" in known) return known;
     if ("outcome" in known.money) return known.money;
 
-    const remainingIndexes = [mapping.dateColumn];
-    if (Option.isSome(mapping.directionColumn)) {
-      remainingIndexes.push(mapping.directionColumn.value);
-    }
+    const remainingIndexes = [mapping.dateColumn, ...Option.toArray(mapping.directionColumn)];
     if (unsafeXlsxCells(row, remainingIndexes)) {
       return review(row, {
         reason: "malformed-source-row",
@@ -297,18 +295,15 @@ export const interpretStatementRows = Effect.fn("interpretStatementRows")(functi
   const outcomes = yield* Effect.forEach(input.rows, (row: Readonly<ParsedStatementRow>) =>
     interpretRow(row, input.mapping, { timeZone: input.timeZone, decodeCandidate })
   );
-  let acceptedRows = 0;
-  for (const outcome of outcomes) {
-    if (outcome.outcome === "accepted") acceptedRows += 1;
-  }
-  const needsReviewRows = outcomes.length - acceptedRows;
+  const counts: Record<InterpretedStatementRow<Extraction>["outcome"], number> = {
+    accepted: 0,
+    "needs-review": 0,
+  };
+  for (const outcome of outcomes) counts[outcome.outcome] += 1;
   const accounting: StatementAccounting = {
     inputRows: input.rows.length,
-    acceptedRows,
-    needsReviewRows,
+    acceptedRows: counts.accepted,
+    needsReviewRows: counts["needs-review"],
   };
-  if (accounting.inputRows !== accounting.acceptedRows + accounting.needsReviewRows) {
-    return yield* Effect.die("Statement row accounting invariant failed");
-  }
   return { outcomes, accounting };
 });

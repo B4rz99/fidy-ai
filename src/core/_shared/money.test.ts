@@ -1,5 +1,6 @@
 import { assert, expect, it } from "@effect/vitest";
 import { BigDecimal, Effect, Equal, Exit, Result, Schema } from "effect";
+import * as FastCheck from "effect/testing/FastCheck";
 import {
   Currency,
   CurrencyMismatch,
@@ -18,6 +19,28 @@ const encodeMoney = Schema.encodeSync(Money);
 
 const money = (amount: string, currency: Currency = Currency.make("COP")): Money =>
   Money.make({ amount: BigDecimal.fromStringUnsafe(amount), currency });
+
+const moneyArbitrary = FastCheck.oneof(
+  FastCheck.tuple(FastCheck.bigInt({ min: 0n }), FastCheck.constant(0), FastCheck.constant("JPY")),
+  FastCheck.tuple(
+    FastCheck.bigInt({ min: 0n }),
+    FastCheck.integer({ min: 0, max: 2 }),
+    FastCheck.constant("COP")
+  ),
+  FastCheck.tuple(
+    FastCheck.bigInt({ min: 0n }),
+    FastCheck.integer({ min: 0, max: 3 }),
+    FastCheck.constant("KWD")
+  ),
+  FastCheck.tuple(
+    FastCheck.bigInt({ min: 0n }),
+    FastCheck.integer({ min: 0, max: 4 }),
+    FastCheck.constant("UYW")
+  )
+).map(([coefficient, scale, currency]): ReadonlyMoney => ({
+  amount: BigDecimal.make(coefficient, scale),
+  currency: Currency.make(currency),
+}));
 
 it("accepts zero Money because the owning operation decides whether zero is meaningful", () => {
   const decoded = decodeMoney({ amount: "0", currency: "COP" });
@@ -104,7 +127,7 @@ it("fails same-Currency operations with the exact CurrencyMismatch class", () =>
 
 it.effect.prop(
   "round-trips every generated Money value without changing its exact meaning",
-  [Money],
+  [moneyArbitrary],
   ([generated]: readonly [ReadonlyMoney]) =>
     Effect.gen(function* () {
       const decoded = yield* Schema.decodeUnknownEffect(Money)(encodeMoney(generated));

@@ -1,9 +1,10 @@
 import { expect, it } from "@effect/vitest";
 import { DateTime, Effect, Option, Result, Schema } from "effect";
-import { HostedTurnTokenId, PATId } from "./reference";
+import { HostedTurnTokenId, PATId, TokenId } from "./reference";
 import {
   HostedTurnScopes,
   PatScopes,
+  ResolvedToken,
   TokenBearer,
   TokenGrant,
   TokenSecret,
@@ -41,6 +42,22 @@ it.effect("builds and reads the TokenBearer bearer through one encoding contract
     expect(extracted).toBe(shortId);
   })
 );
+
+it("accepts both token id variants in resolved authorization facts", () => {
+  const id = "f1d1a000-0000-4000-8000-000000000012";
+
+  expect(Result.isSuccess(Schema.decodeUnknownResult(TokenId)(id))).toBe(true);
+  expect(
+    Result.isSuccess(
+      Schema.decodeUnknownResult(ResolvedToken)({
+        tokenId: id,
+        subjectUserId: "f1d1a000-0000-4000-8000-000000000013",
+        scopes: ["read"],
+        lastUsedAt: "2026-07-28T12:34:56Z",
+      })
+    )
+  ).toBe(true);
+});
 
 it("accepts exactly eight lowercase alphanumeric characters as the TokenBearer short id", () => {
   const decodeShortId = Schema.decodeUnknownResult(TokenShortId);

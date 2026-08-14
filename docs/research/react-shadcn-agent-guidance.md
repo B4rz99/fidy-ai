@@ -17,7 +17,7 @@ The right authority differs by library:
 | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------ |
 | React public API and application practices | Installed package/types → official `react.dev` API and Learn pages → exact-tag source and tests for runtime behavior                             |
 | shadcn                                     | Project-owned generated component source → `components.json` → pinned CLI `info`/`docs`/`view`/`--diff` output → selected primitive's types/docs |
-| TanStack/Effect                            | Existing exact or near-exact checked-out source and source-cited `.patterns/` notes                                                              |
+| Effect                                     | Existing exact checked-out source and source-cited `.patterns/` notes                                                                            |
 
 This is not a universal claim that source is always best. Source is best for precise behavior and testing seams. Public docs are often better for application-level React guidance, and project-local generated code plus the CLI is better for shadcn because shadcn is a code-distribution system rather than a traditional runtime component package.
 
@@ -103,6 +103,6 @@ Do not install it for this React 19.2.8 SPA. The skill's quality does not make i
 
 ## Minimal agent setup
 
-Keep the exact React, Effect, and TanStack source subtrees with concise source-cited notes. Keep the official shadcn skill, but add no shadcn subtree and no separate shadcn pattern note. Do not install either Vercel React skill.
+Keep the exact React and Effect source subtrees with concise source-cited notes. Keep the official shadcn skill, but add no shadcn subtree and no separate shadcn pattern note. Do not install either Vercel React skill.
 
 When UI implementation begins, initialize `components.json` after choosing the primitive base, preset, icon library, and Tailwind setup. Thereafter the skill, CLI, generated component source, and current call sites provide the shadcn guidance and review workflow.

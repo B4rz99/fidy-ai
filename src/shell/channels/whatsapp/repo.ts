@@ -638,35 +638,6 @@ export const completeWhatsAppTurn = Effect.fn("WhatsApp.completeTurn")(function*
   );
 });
 
-/**
- * Releases a definitively rejected processing attempt for a later sibling attempt. The original
- * bounded publication context and transient content remain on the jobs; only the failed claim is
- * retired and the jobs' next eligible time advances to retryAt.
- */
-export const retryWhatsAppTurn = Effect.fn("WhatsApp.retryTurn")(function* (
-  claim: WhatsAppTurnClaim,
-  failedAt: DateTime.Utc,
-  retryAt: DateTime.Utc
-) {
-  const sql = yield* SqlClient.SqlClient;
-  yield* withUserTransaction(
-    claim.userId,
-    Effect.gen(function* () {
-      yield* sql`
-        UPDATE whatsapp_inbound_jobs
-        SET claim_id = NULL, debounce_until = ${retryAt}
-        WHERE user_id = ${claim.userId} AND claim_id = ${claim.claimId}
-          AND completed_at IS NULL AND content IS NOT NULL
-      `;
-      yield* sql`
-        UPDATE whatsapp_turn_claims
-        SET status = 'failed', failed_at = ${failedAt}, safe_reason = 'send_failed'
-        WHERE user_id = ${claim.userId} AND id = ${claim.claimId} AND status = 'started'
-      `;
-    }).pipe(Effect.catchTag("SqlError", Effect.die))
-  );
-});
-
 /** Converts terminal processing failure to metadata-only evidence without replay. */
 export const failWhatsAppTurn = Effect.fn("WhatsApp.failTurn")(function* (
   claim: WhatsAppTurnClaim,

@@ -81,7 +81,7 @@ The skill identifies itself as a React **and Next.js performance optimization** 
 
 Its headline rules mix generic JavaScript, React, Next.js, server/RSC, and Vercel ecosystem choices. It calls `next/dynamic` the correct heavy-component solution and prescribes SWR for client request deduplication. [Rule index](https://github.com/vercel-labs/agent-skills/blob/main/skills/react-best-practices/SKILL.md#L42-L99) · [`next/dynamic` rule](https://github.com/vercel-labs/agent-skills/blob/main/skills/react-best-practices/rules/bundle-dynamic-imports.md#L8-L35) · [SWR rule](https://github.com/vercel-labs/agent-skills/blob/main/skills/react-best-practices/rules/client-swr-dedup.md#L8-L56)
 
-Those prescriptions do not fit a Vite SPA already standardized on TanStack Query. Several rules also introduce optional libraries or assert universal performance priorities without measurements from this application.
+Those prescriptions do not fit a Vite SPA already standardized on Effect Atom. Several rules also introduce optional libraries or assert universal performance priorities without measurements from this application.
 
 ### Conclusion
 

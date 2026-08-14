@@ -25,5 +25,18 @@
       "until": "2026-08-15T00:00:00Z"
     }
   ],
-  "acceptedVulnerabilities": []
+  "acceptedVulnerabilities": [
+    {
+      "cve": "CVE-2026-67213",
+      "path": "bun.lock",
+      "reason": "The nanoid 3.3.18 transitive fix remains blocked by the seven-day minimum release age until 2026-08-14T16:41:05.696Z; retain 3.3.17 only until the fix becomes policy-eligible.",
+      "until": "2026-08-15T00:00:00Z"
+    },
+    {
+      "cve": "CVE-2026-67213",
+      "path": "tools/mutation/bun.lock",
+      "reason": "The nanoid 3.3.18 transitive fix remains blocked by the seven-day minimum release age until 2026-08-14T16:41:05.696Z; retain 3.3.17 only until the fix becomes policy-eligible.",
+      "until": "2026-08-15T00:00:00Z"
+    }
+  ]
 }

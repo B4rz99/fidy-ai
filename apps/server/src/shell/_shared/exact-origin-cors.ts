@@ -1,9 +1,25 @@
 import { Effect, Option } from "effect";
 import { HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
 
-const forbidden = HttpServerResponse.empty({ status: 403 });
+const forbidden = HttpServerResponse.empty({
+  status: 403,
+  headers: {
+    "cache-control": "no-store",
+    vary: "Origin",
+  },
+});
 const allowedRequestHeaders = ["authorization", "content-type"] as const;
 const allowedRequestHeaderSet = new Set<string>(allowedRequestHeaders);
+
+const mergeVary = (current: Option.Option<string>, required: ReadonlyArray<string>): string => {
+  const fields = [...Option.getOrElse(current, () => "").split(","), ...required]
+    .map((field) => field.trim())
+    .filter((field) => field.length > 0);
+  if (fields.includes("*")) return "*";
+  return Array.from(new Map(fields.map((field) => [field.toLowerCase(), field])).values()).join(
+    ", "
+  );
+};
 
 const requestedHeadersAreAllowed = (header: Option.Option<string>): boolean => {
   if (Option.isNone(header) || header.value.trim().length === 0) return true;
@@ -20,7 +36,7 @@ const acceptedResponse = (
   HttpServerResponse.setHeaders(response, {
     "access-control-allow-origin": origin,
     "access-control-allow-credentials": "true",
-    vary: "Origin",
+    vary: mergeVary(Option.fromUndefinedOr(response.headers.vary), ["Origin"]),
   });
 
 const acceptedPreflight = (

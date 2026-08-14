@@ -1,0 +1,76 @@
+src/core/memory/model.test.ts
+  s_90f74066c681a2::t_f03c4009280a85 3,13-24
+  s_90f74066c681a2::t_3f8cc6e113be51 25
+src/core/memory/model.ts
+  s_90f74066c681a2::t_dacee5cf94d5dd 1,46
+src/core/memory/rules.test.ts
+  s_90f74066c681a2::t_34d862911705a4 5-10,20-26
+src/core/identity/rules.test.ts
+  s_90f74066c681a2::t_55a51b4f3fd912 53-57,59-68
+  s_90f74066c681a2::t_a9d8832289d029 58
+src/core/identity/model.test.ts
+  s_90f74066c681a2::t_5f54dd4c1886dd 3,19-26
+  s_90f74066c681a2::t_eec827c0d325e4 18
+src/core/_shared/time.test.ts
+  s_90f74066c681a2::t_553bb3728f520b 39-45
+src/core/transcript/model.ts
+  s_90f74066c681a2::t_1d35faf9660918 23-27
+src/core/transactions/model.test.ts
+  s_90f74066c681a2::t_251a19fe99cacc 7,113-138
+  s_90f74066c681a2::t_e76ac477905987 139-140
+src/core/tokens/model.test.ts
+  s_90f74066c681a2::t_1c2473b7f2492a 3,7,46-60
+  s_90f74066c681a2::t_b35c02d432a4f9 61
+src/core/ingestion/model.test.ts
+  s_90f74066c681a2::t_a9d8832289d029 34,160,183-185,222-224
+  s_90f74066c681a2::t_f185b3b33e689d 174-182
+  s_90f74066c681a2::t_4bdd090510c8f8 84-92,162-170,225-233
+  s_90f74066c681a2::t_8254979d6b4412 5,17
+  s_90f74066c681a2::t_be4a49aabfa0c6 1-4,6-16,18-33,35-83,93-159,161,171-173,186-221,234-259
+src/core/ingestion/rules.ts
+  s_90f74066c681a2::t_33696892e74cd3 222,255
+  s_90f74066c681a2::t_0115ef6997d0ff 50-53,91-93,298-302,305-306
+src/core/identity/rules.ts
+  s_90f74066c681a2::t_1c157b51433e89 1,13,36
+src/core/transcript/model.test.ts
+  s_90f74066c681a2::t_4e0ecc78de4547 69
+  s_90f74066c681a2::t_e2a1eadba8632d 2,120-123
+  s_90f74066c681a2::t_17542759123e6a 5-6,16,34-40,57-68,70-74,81-97
+  s_90f74066c681a2::t_d3f5cd0adc9e33 3,10
+  s_90f74066c681a2::t_03e9f202b97936 75-80
+  s_90f74066c681a2::t_ad6c1fd47d4a2f 110-118
+  s_90f74066c681a2::t_3f562f51950696 15
+  s_90f74066c681a2::t_8682886341ff75 98
+src/core/ingestion/rules.test.ts
+  s_90f74066c681a2::t_08dce5b36d30ba 2
+  s_90f74066c681a2::t_b42716adb425e8 305
+  s_90f74066c681a2::t_5b15f71f91d7ab 108-126
+  s_90f74066c681a2::t_46598940556b8c 318-345,398
+  s_90f74066c681a2::t_cb5bb115a7a9f1 241,251,264
+  s_90f74066c681a2::t_48370e49d70f56 190,250,269-304,306-317,346-397
+  s_90f74066c681a2::t_a464821ba4bb6d 100-107
+  s_90f74066c681a2::t_2ee6893ad2f3a0 399
+vitest.config.ts
+  s_90f74066c681a2::t_8c70708811c185 42,44-47
+src/core/_shared/money.test.ts
+  s_90f74066c681a2::t_0312ad60722225 3,23-44,130
+stryker.config.mjs
+  s_90f74066c681a2::t_4e6bcb0451afbe 28,32-33
+  s_90f74066c681a2::t_e18a020c9e05f3 29,31
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "a917c6b7194fa261e2013449a45615c035fd4a51",
+  "prompts": {},
+  "sessions": {
+    "s_90f74066c681a2": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019ffd7c-b94a-7309-ba12-af1f79dbc7cf",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

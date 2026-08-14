@@ -1,0 +1,174 @@
+apps/server/scripts/check-browser-client.ts
+  s_3a64e5f344d590::t_c8099ddecb5afb 18
+bun.lock
+  s_3a64e5f344d590::t_524a79ffe9f528 42-47,49-75,81-82,89-92,143-144,151-168,201-202,205-216,427-441,443,445,447-471,475-476,533-534,559-561,566,581-582,611-612,617-618,633-634,643-646,653-654,659-660,673-674,679-680,697-698,701-702,801-802,817-818,847-848,859-860,869-870,879-880,949-953,963-964,985-986,1049-1050,1107-1108,1119-1120,1135-1136,1139-1140,1145-1146,1163-1164,1173-1176,1225-1226,1229-1230,1235-1238,1251-1254,1261-1264,1271-1272,1277,1299,1303-1310,1323-1326,1337,1341-1342,1349-1350,1353-1361,1363,1365-1366,1369,1379-1380,1387-1388,1405-1410,1431-1451
+apps/web/vitest.config.ts
+  s_3a64e5f344d590::t_46edaf21be1c78 6
+  s_3a64e5f344d590::t_0c202c509fdccc 1-2,4-5,7-8,10-16
+  s_3a64e5f344d590::t_1a922c8615759e 3
+  s_3a64e5f344d590::t_ccf98a32cfc8dd 9
+apps/web/scripts/check-policy-integrity.ts
+  s_3a64e5f344d590::t_711b448fad00f3 1-24
+apps/server/src/http-origin.ts
+  s_3a64e5f344d590::t_581b2b7420f4ae 1-12
+apps/web/.gitignore
+  s_3a64e5f344d590::t_20bce8b75a8da6 1-24
+apps/web/package.json
+  s_3a64e5f344d590::t_11a7d5bdb3397f 8
+  s_3a64e5f344d590::t_ded843bb1d18af 16,19,21-22,24,28-29
+  s_3a64e5f344d590::t_5e073fa776f2bd 18
+  s_3a64e5f344d590::t_cb3f4480336ca7 14-15
+  s_3a64e5f344d590::t_d99d2e8ed05119 27
+  s_3a64e5f344d590::t_cbeaa952963c83 39
+  s_3a64e5f344d590::t_c297a8ee3b336f 2-3,10,17,23,25-26,32,34-38,40-43
+  s_3a64e5f344d590::t_7d7f1a45714ba1 12-13
+  s_3a64e5f344d590::t_4ea0ed69e2db3a 33
+  s_3a64e5f344d590::t_2338d12803b2cf 7,9,11
+  s_3a64e5f344d590::t_655454dcf40155 5
+  s_3a64e5f344d590::t_67db209b23f7f1 20
+  s_3a64e5f344d590::t_f65b098e32855f 30-31
+apps/web/src/router.tsx
+  s_3a64e5f344d590::t_759a186e4e75c0 2,14,33,44,54
+  s_3a64e5f344d590::t_baec792c24d21f 7-9
+  s_3a64e5f344d590::t_e5bd3f051501d5 11,65-70
+  s_3a64e5f344d590::t_ceee8352f8c316 1,79,82-87
+  s_3a64e5f344d590::t_d8d32c9e1084f4 3-6,10,12-13,15-32,34-43,45-53,55-64,71-78,80-81,88-93
+scripts/check-dependency-updates.ts
+  s_3a64e5f344d590::t_c9faf80a55053e 460-476,735
+  s_3a64e5f344d590::t_62c863231eb66b 274-276,732-733,743
+apps/server/Dockerfile
+  s_3a64e5f344d590::t_dd49474601cc2e 9
+apps/web/src/testing/setup.ts
+  s_3a64e5f344d590::t_309c338815ce98 1
+apps/server/src/shell/http.ts
+  s_3a64e5f344d590::t_3c7697a24c9de2 91-96
+  s_3a64e5f344d590::t_5db3f1a465a9f4 2,5,7,28,80-82,90,97-98,102-104,111-112,120-121
+  s_3a64e5f344d590::t_cdd029777cf7c2 84-89
+apps/web/.oxlintrc.json
+  s_3a64e5f344d590::t_3b890f82da1003 1-8
+apps/server/scripts/check-production-http.ts
+  s_3a64e5f344d590::t_ec1aca6c19214e 105-106
+apps/server/src/shell/_shared/exact-origin-cors.ts
+  s_3a64e5f344d590::t_c172dffad301b6 3-7,11-13,16-23,26-31,33-37,41-48,52,78-91
+  s_3a64e5f344d590::t_59380e4d545f94 2,55-62
+  s_3a64e5f344d590::t_759edaca652d31 1,8-10,49-51
+  s_3a64e5f344d590::t_af2221db516f30 63-70
+  s_3a64e5f344d590::t_38eb41456944fc 71-77
+apps/web/src/policy/policy.html
+  s_3a64e5f344d590::t_e9532cfdd3fda2 58-113
+  s_3a64e5f344d590::t_19530bba4dd87a 1-57
+apps/server/src/shell/consent/current-disclosure.test.ts
+  s_3a64e5f344d590::t_ee4d0027c4d986 4,21,26
+.env.example
+  s_3a64e5f344d590::t_5f70391271a9f8 8
+package.json
+  s_3a64e5f344d590::t_ad8a0e689dab71 16-19,23,29-30,37-38,41
+apps/server/src/shell/http.test.ts
+  s_3a64e5f344d590::t_06474e7db4c416 1-2,5-22,26-31
+  s_3a64e5f344d590::t_a30905959e1318 3,23-25
+  s_3a64e5f344d590::t_4834a94c166525 57-58,60-130,134-149
+  s_3a64e5f344d590::t_3d92b1f1431349 131-133
+  s_3a64e5f344d590::t_452032ef94f3d1 55
+apps/server/src/shell/_shared/external-endpoints.ts
+  s_3a64e5f344d590::t_cc82d3c4548be2 2,22
+  s_3a64e5f344d590::t_21526ca945b1aa 1,20-21,23-27,33-34
+apps/web/src/api-client.ts
+  s_3a64e5f344d590::t_d9a55832aad42b 18-19,24,26
+  s_3a64e5f344d590::t_9b2e8dfa87c281 12-17,25
+  s_3a64e5f344d590::t_2fc59815383971 1-11,20-23
+apps/web/src/api-origin.ts
+  s_3a64e5f344d590::t_03ee13798f37ab 1,3,5-9
+  s_3a64e5f344d590::t_f7747ab7e66ef6 10-11
+  s_3a64e5f344d590::t_5bfcae3ba34ba4 2,4,12-24
+apps/web/tsconfig.json
+  s_3a64e5f344d590::t_5e0d58553aebfb 3
+  s_3a64e5f344d590::t_1b40d29035d6d2 2
+apps/web/src/main.tsx
+  s_3a64e5f344d590::t_d0f094f7526ee9 1-2,4-5,8-15,18-25
+  s_3a64e5f344d590::t_3d1a31ca575a09 3,17
+  s_3a64e5f344d590::t_c2012135b8caeb 6-7,16
+apps/server/src/client.ts
+  s_3a64e5f344d590::t_41d6c7e6205c64 11
+  s_3a64e5f344d590::t_0e1c29a5062a22 6-9
+apps/web/server-client-boundary.ts
+  s_3a64e5f344d590::t_63a6a456c1e23e 3-4
+  s_3a64e5f344d590::t_3fa6532cf16b74 1-2,5-22
+apps/web/src/index.css
+  s_3a64e5f344d590::t_7a1e2a168a1ec3 123-124,127-129,132-155
+  s_3a64e5f344d590::t_94bca04b5efbf4 1
+  s_3a64e5f344d590::t_d99d2e8ed05119 2-122,125-126,130-131,156
+.oxlintrc.json
+  s_3a64e5f344d590::t_8703988b014c6d 152-154
+  s_3a64e5f344d590::t_557d0a96cc4a39 128-130,132,134-148
+  s_3a64e5f344d590::t_a189cf59dfe73b 149-151,155-156
+apps/web/scripts/check-browser-bundle.ts
+  s_3a64e5f344d590::t_f111ece2be7315 78,81-83,85-93,96
+  s_3a64e5f344d590::t_bc72029c0e5ac7 1-16,26-37,51-56,60-62,64-70,98-105
+  s_3a64e5f344d590::t_fab87ba5b10c9d 106
+  s_3a64e5f344d590::t_b46ec5afdf5f8a 17-25,41,57-59,72-77,79-80,84,94-95,97
+  s_3a64e5f344d590::t_6fc2cf8a729d1a 63,71
+  s_3a64e5f344d590::t_346b0d6bc9db62 38-40,42-50
+apps/server/src/shell/_shared/authz.ts
+  s_3a64e5f344d590::t_f6bff21b0be97a 60-64
+apps/web/src/lib/utils.ts
+  s_3a64e5f344d590::t_4e453307899731 2-3,5
+  s_3a64e5f344d590::t_fb6dfcad5df4db 4
+  s_3a64e5f344d590::t_732f0173b62fce 1
+apps/server/scripts/check-production-image.sh
+  s_3a64e5f344d590::t_5fca3d78428b16 70,245-247,325
+.github/workflows/ci.yml
+  s_3a64e5f344d590::t_76f7d17fcbddcd 74-75
+apps/server/src/shell/consent/current-disclosure.ts
+  s_3a64e5f344d590::t_b93b086edd3dfc 27
+ARCHITECTURE.md
+  s_3a64e5f344d590::t_7b623d62dc4340 30
+  s_3a64e5f344d590::t_e5057341fcb06f 15,21,25-29
+apps/web/vite.config.ts
+  s_3a64e5f344d590::t_56d830fd9df386 1-3,8-9,11-13
+  s_3a64e5f344d590::t_4f07cb34d9c00e 7
+  s_3a64e5f344d590::t_1a7859033d6a3f 4
+  s_3a64e5f344d590::t_ce5e41bd127e4c 10
+  s_3a64e5f344d590::t_323e74e851846c 5-6
+docs/operations/external-endpoints.md
+  s_3a64e5f344d590::t_12a3a8edc485dd 10-11,22-23,30,33
+apps/web/components.json
+  s_3a64e5f344d590::t_d99d2e8ed05119 1-25
+apps/web/src/application.test.tsx
+  s_3a64e5f344d590::t_b555a362f5b127 2
+  s_3a64e5f344d590::t_9a0d5977f2f2b1 1,4-5,7-10,13-39,43-51
+  s_3a64e5f344d590::t_b4f410d19e00f0 6,11
+  s_3a64e5f344d590::t_f2464a25f5cbcc 3,12
+  s_3a64e5f344d590::t_27033f73e481e4 40-42
+apps/web/src/api-origin.test.ts
+  s_3a64e5f344d590::t_889a0510a00fd9 1-22
+apps/web/tsconfig.app.json
+  s_3a64e5f344d590::t_01ed20b97a1df6 13
+  s_3a64e5f344d590::t_ebe221d679a772 2-4,7-9
+  s_3a64e5f344d590::t_5412cc20d41e39 6
+  s_3a64e5f344d590::t_684470ddac0101 10
+  s_3a64e5f344d590::t_ab090a8a832d43 1
+  s_3a64e5f344d590::t_c7a284bde3e24c 5,11-12,14-18
+  s_3a64e5f344d590::t_74db6263a23306 19
+apps/web/index.html
+  s_3a64e5f344d590::t_ca12fc5379d0b8 2,6
+  s_3a64e5f344d590::t_ca68ef165957b4 11
+apps/server/src/shell/_shared/external-endpoints.test.ts
+  s_3a64e5f344d590::t_7b9614debb2126 16-17,34,48
+  s_3a64e5f344d590::t_44278856b6c7f6 1-3,5-15,18-21,23-33,35-43,45-47,49-50
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "d215c395e0a3cbd82cedb200a8872d76af5ce69d",
+  "prompts": {},
+  "sessions": {
+    "s_3a64e5f344d590": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a00190-8e3f-7530-8846-d964612bea5e",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": null
+    }
+  }
+}

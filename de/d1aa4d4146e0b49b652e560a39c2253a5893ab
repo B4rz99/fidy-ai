@@ -1,0 +1,78 @@
+scripts/check-browser-client.ts
+  s_4e6212edd8a339::t_6f688e4334e01a 85-86
+  s_4e6212edd8a339::t_6056ef21877cb7 3,44-47,50-71,73,87,91,115,117
+  s_4e6212edd8a339::t_6648be85351403 1-2,4-6,10-13,15-21,28,30-43,48-49,72,74-84,88-90,96,100,102,105-114,116,118
+  s_4e6212edd8a339::t_c6088ae383f085 7-9,22-27,92-95,101,103-104
+  s_4e6212edd8a339::t_109eff2f85827d 14
+  s_4e6212edd8a339::t_7094659b0add51 29
+  s_4e6212edd8a339::t_137d4bd1ddefd4 97-99
+src/shell/db/development-seed.ts
+  s_4e6212edd8a339::t_406a91cf360d0f 34
+scripts/check-dependency-guards.ts
+  s_4e6212edd8a339::t_75c275191a99d2 360-362,366-369,371
+  s_4e6212edd8a339::t_137d4bd1ddefd4 187-188
+  s_4e6212edd8a339::t_373203f655b930 165-186,189-192
+  s_4e6212edd8a339::t_6908691f9af337 40,48-49
+src/shell/db/development-seed.test.ts
+  s_4e6212edd8a339::t_67c19348de7f7f 5
+src/shell/_shared/errors-live.ts
+  s_4e6212edd8a339::t_2bdb9a94530fb3 8
+  s_4e6212edd8a339::t_c152f33ad845d4 125-126
+  s_4e6212edd8a339::t_137d4bd1ddefd4 122
+  s_4e6212edd8a339::t_384f33481bc33d 1-7,9-121,123-124,127-154
+src/shell/tokens/hosted-turn-token.test.ts
+  s_4e6212edd8a339::t_d20224549fc641 3
+src/shell/api.test.ts
+  s_4e6212edd8a339::t_8a5067ef7e4cb4 3,8-10
+  s_4e6212edd8a339::t_23f6529ca0da6d 11
+ARCHITECTURE.md
+  s_4e6212edd8a339::t_1abf6b4878be50 108-109
+  s_4e6212edd8a339::t_97b216c94f1ac9 110-111
+  s_4e6212edd8a339::t_d8b451b8792f0d 104-107,112-113
+.dependency-cruiser.mjs
+  s_4e6212edd8a339::t_bc604f8864a906 91-126
+src/shell/_shared/authz-live.ts
+  s_4e6212edd8a339::t_591891d75449bb 1-25,27-283
+  s_4e6212edd8a339::t_a2ddd6ea89aea9 26
+src/shell/_shared/errors.test.ts
+  s_4e6212edd8a339::t_f53ec651d537b7 11-12
+src/client.ts
+  s_4e6212edd8a339::t_3dcaf403984909 1-7,9
+  s_4e6212edd8a339::t_d429db20da3daa 8
+src/shell/tokens/hosted-turn-token.ts
+  s_4e6212edd8a339::t_70a607571ea0df 14
+src/shell/http.ts
+  s_4e6212edd8a339::t_3a662a4ee2a2d5 4-5
+src/shell/_shared/authz.ts
+  s_4e6212edd8a339::t_764980a845bf94 1,6
+  s_4e6212edd8a339::t_d588ffc66c5c01 25-27,33,40-42
+  s_4e6212edd8a339::t_f9e31b708e01d8 5
+  s_4e6212edd8a339::t_e6b5a22ada089b 3,60
+src/shell/testing/whatsapp-acceptance-harness.ts
+  s_4e6212edd8a339::t_3b735213fb8c64 22
+.github/workflows/ci.yml
+  s_4e6212edd8a339::t_4a5e7c1b80c332 73
+package.json
+  s_4e6212edd8a339::t_5b3cc9facdb057 31-32
+src/shell/testing/authorization.test.ts
+  s_4e6212edd8a339::t_a5e1f901340fa2 13
+src/shell/_shared/errors.ts
+  s_4e6212edd8a339::t_4d6a58b741c111 1-2
+  s_4e6212edd8a339::t_de0a908c73ff50 208-210
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "ded1aa4d4146e0b49b652e560a39c2253a5893ab",
+  "prompts": {},
+  "sessions": {
+    "s_4e6212edd8a339": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019ffe47-461a-7a81-aafb-a4add92e8dbe",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

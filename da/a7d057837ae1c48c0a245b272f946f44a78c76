@@ -1,0 +1,24 @@
+apps/server/src/shell/_shared/exact-origin-cors.ts
+  s_a2d9eff2180721::t_82225f8d3b5ccf 14-15,39
+  s_a2d9eff2180721::t_850f272fc33908 4-10,16-22
+  s_a2d9eff2180721::t_ef1c79243f5997 23
+apps/server/src/shell/_shared/exact-origin-cors.test.ts
+  s_a2d9eff2180721::t_ad2c8b8f113de6 1-13,15-55
+  s_a2d9eff2180721::t_d93bccab1be23f 14
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "daa7d057837ae1c48c0a245b272f946f44a78c76",
+  "prompts": {},
+  "sessions": {
+    "s_a2d9eff2180721": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019ffd84-2ac8-787e-ab7a-e21ea5906d9e",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

@@ -1,0 +1,43 @@
+tsconfig.json
+  s_a2d9eff2180721::t_58e0a3ba939244 2-4
+tsconfig.base.json
+  s_a2d9eff2180721::t_3c41312d5b7fc6 142
+  s_a2d9eff2180721::t_0a90d2478bbd34 1-113,115-128,130-141,143
+  s_a2d9eff2180721::t_f5becaf753afd7 114,129
+apps/server/scripts/check-production-image.sh
+  s_a2d9eff2180721::t_2c9365506b4b8f 220
+apps/server/tsconfig.json
+  s_a2d9eff2180721::t_b3771985269d3e 2,9
+apps/server/railway.json
+  s_a2d9eff2180721::t_680b92c9fd4133 1-4,6-14
+  s_a2d9eff2180721::t_b735f566907641 5
+ARCHITECTURE.md
+  s_a2d9eff2180721::t_42e9b6420b41b7 9-15,20-22,33-38,116-117
+apps/server/Dockerfile
+  s_a2d9eff2180721::t_70b6214c0b3b7e 11
+  s_a2d9eff2180721::t_680b92c9fd4133 1-10,12-29
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "47811aec83120566f4b62b974690889f5cb22014",
+  "prompts": {},
+  "sessions": {
+    "s_a2d9eff2180721": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019ffd84-2ac8-787e-ab7a-e21ea5906d9e",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_cd09a9ddfcc3c6": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a00074-a051-77e4-a783-683a3fdd4149",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

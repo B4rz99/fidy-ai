@@ -1,0 +1,26 @@
+apps/server/src/shell/transcript/conversation-continuity.test.ts
+  s_92d92e5c9f1bac::t_586fad38160ec3 1536,1550,1564
+  s_92d92e5c9f1bac::t_59b51638c3b9b4 93,262
+  s_92d92e5c9f1bac::t_3106cda62550dc 1597-1598
+  s_92d92e5c9f1bac::t_379fe42669f399 281,286-291
+  s_92d92e5c9f1bac::t_b7510f4221c787 1387-1422,1594-1596
+  s_92d92e5c9f1bac::t_8f85bb8a8bf7ca 110,199-200
+  s_92d92e5c9f1bac::t_7c1bc337039599 282-285,1537-1549,1551-1563
+  s_92d92e5c9f1bac::t_dc7ed91db02ba5 92,261
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "4be677d9bdbd77943498cde2fe4fbb03b2d10188",
+  "prompts": {},
+  "sessions": {
+    "s_92d92e5c9f1bac": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0072d-128d-7357-ac3e-a90b0101424c",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

@@ -1,0 +1,21 @@
+docs/operations/production-releases.md
+  s_a2d9eff2180721::t_2eecf066268226 24,34-37,58-61
+.github/workflows/production.yml
+  s_a2d9eff2180721::t_32d43cefb56484 84-97
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "88a23c712eea933f07f170fca0537d69dded7800",
+  "prompts": {},
+  "sessions": {
+    "s_a2d9eff2180721": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019ffd84-2ac8-787e-ab7a-e21ea5906d9e",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

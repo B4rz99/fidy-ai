@@ -1,0 +1,21 @@
+CODING_STANDARDS.md
+  s_4b6175149ec839::t_6580a9f0e956cd 108-109
+  s_4b6175149ec839::t_afa5298fa2d50d 110-118
+  s_4b6175149ec839::t_79b6c289e3668d 119
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "3e990003d11a0d5fb161fde818ddefc322fac54f",
+  "prompts": {},
+  "sessions": {
+    "s_4b6175149ec839": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a002ce-bfbe-7782-9d15-13a68f1f76ee",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": null
+    }
+  }
+}

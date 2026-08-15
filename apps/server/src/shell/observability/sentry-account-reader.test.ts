@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { expect, it } from "@effect/vitest";
-import { Effect, Exit, Option, Redacted } from "effect";
+import { ConfigProvider, Effect, Exit, Option, Redacted } from "effect";
 import {
   HttpClient,
   type HttpClientError,
@@ -11,6 +11,7 @@ import {
   SentryAccountReadError,
   type SentryAccountReaderConfig,
   inspectSentryAccount,
+  sentryAccountConfig,
 } from "./sentry-account-reader";
 
 const responseJson = (
@@ -74,6 +75,26 @@ const readerConfig = (
   productionProjectSlug: Redacted.make(input.production),
   nonProductionProjectSlug: Redacted.make(input.nonProduction),
 });
+
+it.effect("loads all operator Sentry account credentials as redacted values", () =>
+  Effect.gen(function* () {
+    const config = yield* sentryAccountConfig;
+    expect(Redacted.value(config.authToken)).toBe("account-token");
+    expect(Redacted.value(config.organizationSlug)).toBe("account-organization");
+    expect(Redacted.value(config.productionProjectSlug)).toBe("account-production");
+    expect(Redacted.value(config.nonProductionProjectSlug)).toBe("account-non-production");
+  }).pipe(
+    Effect.provideService(
+      ConfigProvider.ConfigProvider,
+      ConfigProvider.fromUnknown({
+        SENTRY_AUTH_TOKEN: "account-token",
+        SENTRY_ORGANIZATION_SLUG: "account-organization",
+        SENTRY_PRODUCTION_PROJECT_SLUG: "account-production",
+        SENTRY_NON_PRODUCTION_PROJECT_SLUG: "account-non-production",
+      })
+    )
+  )
+);
 
 it.effect("reads only the account facts needed by policy and returns no account locators", () =>
   Effect.gen(function* () {

@@ -53,7 +53,7 @@ import {
 import { listRecentTranscriptEntries, listTranscriptEntries } from "~/shell/transcript/repo";
 import { ApiHarness, ApiHarnessClient, ApiTelemetryHarness } from "~/shell/testing/api-harness";
 import { testWhatsAppCaller } from "~/shell/testing/whatsapp-caller";
-import { HostedInferenceError } from "./hosted-inference";
+import { HostedInference, HostedInferenceError } from "./hosted-inference";
 import { HostedInferenceFromLanguageModel } from "~/shell/testing/hosted-inference-fixtures";
 import { makeLanguageModelFinishPart } from "~/shell/testing/language-model-fixtures";
 import { runAgentRepl } from "./repl";
@@ -61,6 +61,7 @@ import {
   AgentLimits,
   AgentService,
   CurrentAgentLimits,
+  HostedCapacityExceeded,
   InboundMessage,
   ModelUnavailable,
 } from "./agent-service";
@@ -1250,6 +1251,29 @@ const AgentHarness = AgentService.layer.pipe(
   Layer.provideMerge(TelemetryEnvelopeRecording)
 );
 
+const CapacityFailingHostedInference = Layer.effect(
+  HostedInference,
+  Effect.map(HostedInference, (inference) =>
+    HostedInference.of({
+      ...inference,
+      prepareText: () =>
+        Effect.fail(
+          new HostedInferenceError({
+            reason: { _tag: "CapacityExceeded", inputTokens: 1_034_001 },
+            retryable: false,
+            retryAfter: Option.none(),
+          })
+        ),
+    })
+  )
+).pipe(Layer.provide(ScriptedHostedInference));
+
+const CapacityFailingAgentHarness = AgentService.layer.pipe(
+  Layer.provideMerge(CapacityFailingHostedInference),
+  Layer.provideMerge(ApiHarness),
+  Layer.provideMerge(TelemetryEnvelopeRecording)
+);
+
 const CompactingAgentHarness = AgentService.layer.pipe(
   Layer.provide(
     Layer.succeed(ConversationCompactionPolicy, {
@@ -1422,6 +1446,89 @@ layer(AgentTelemetryHarness, { excludeTestServices: true, timeout: "30 seconds" 
         expect(serialized).not.toContain("categories__listCategories");
         expect(serialized).not.toContain("fin_hosted_");
       })
+    );
+
+    it.effect(
+      "keeps hosted outcome telemetry metadata-only across success, failure, and timeout",
+      () =>
+        Effect.gen(function* () {
+          const { service, telemetry, recorder } = yield* prepareTelemetryTest;
+          const promptCanaries = [
+            "PR02_PROVIDER_BODY_CANARY",
+            "PR02_PROMPT_CANARY",
+            "PR02_TRANSCRIPT_CANARY",
+            "PR02_SECRET_CANARY",
+            "/pr02-stack-path-canary/provider.ts",
+          ].join(" ");
+          const forbiddenCanaries = [
+            "Lista las categorías",
+            "Estas son las categorías disponibles.",
+            ...promptCanaries.split(" "),
+            "provider_response_id_defect_sentinel",
+          ];
+          const scenarios = [
+            {
+              text: `Lista las categorías ${promptCanaries}`,
+              outcome: "succeeded" as const,
+              errorCount: 0,
+              timeout: false,
+            },
+            {
+              text: `MODELO_DEFECTUOSO ${promptCanaries}`,
+              outcome: "failed" as const,
+              errorCount: 1,
+              timeout: false,
+            },
+            {
+              text: `MODELO_BLOQUEADO ${promptCanaries}`,
+              outcome: "failed" as const,
+              errorCount: 1,
+              timeout: true,
+            },
+          ] as const;
+
+          for (const scenario of scenarios) {
+            yield* clearTranscript;
+            yield* resetModelPrompts;
+            yield* recorder.clear;
+            const turn = telemetry.span(
+              activeCallerDescriptor,
+              service.handleSynchronousTurn(
+                defaultUserId,
+                InboundMessage.make({ text: TranscriptText.make(scenario.text) })
+              )
+            );
+            const exit = yield* Effect.exit(
+              scenario.timeout === true
+                ? turn.pipe(
+                    Effect.provideService(
+                      CurrentAgentLimits,
+                      agentLimits({ maxModelRoundMillis: 20 })
+                    )
+                  )
+                : turn
+            );
+            const envelopes = yield* recorder.serializedEnvelopes;
+            const transactions = transactionEnvelopePayloads(envelopes);
+            const turnEnvelope = transactions.find(
+              ({ contexts }) => contexts.trace.op === "agent.turn"
+            );
+            const serialized = envelopes.map((bytes) => new TextDecoder().decode(bytes)).join("\n");
+
+            assert(turnEnvelope !== undefined);
+            expect(turnEnvelope.tags.outcome).toBe(scenario.outcome);
+            expect(errorEnvelopePayloads(envelopes)).toHaveLength(scenario.errorCount);
+            for (const canary of forbiddenCanaries) {
+              expect(serialized).not.toContain(canary);
+            }
+            if (scenario.outcome === "succeeded") {
+              expect(Exit.isSuccess(exit)).toBe(true);
+            } else {
+              expect(Exit.isFailure(exit)).toBe(true);
+            }
+          }
+          yield* resetModelPrompts;
+        })
     );
 
     it.effect("captures only an exhausted provider failure and marks its spans failed", () =>
@@ -1784,6 +1891,29 @@ layer(AgentTelemetryHarness, { excludeTestServices: true, timeout: "30 seconds" 
   }
 );
 
+layer(CapacityFailingAgentHarness, { excludeTestServices: true, timeout: "30 seconds" })(
+  "hosted agent capacity",
+  (it) => {
+    it.effect(
+      "does not append the active User entry when complete hosted preparation exceeds capacity",
+      () =>
+        Effect.gen(function* () {
+          yield* clearTranscript;
+          const service = yield* AgentService;
+          const failure = yield* service
+            .handleSynchronousTurn(
+              defaultUserId,
+              InboundMessage.make({ text: TranscriptText.make("solicitud demasiado grande") })
+            )
+            .pipe(Effect.flip);
+
+          expect(failure).toBeInstanceOf(HostedCapacityExceeded);
+          expect(yield* listTranscriptEntries(defaultUserId)).toEqual([]);
+        })
+    );
+  }
+);
+
 layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hosted agent", (it) => {
   it.effect("marks a hosted Turn failed when delivery rejects the generated reply", () =>
     Effect.gen(function* () {
@@ -1818,7 +1948,9 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
         state: "Failed",
         failureReason: Option.some("DeliveryFailed"),
       });
-      expect(transcript.at(-1)?._tag).not.toBe("AssistantTranscriptEntry");
+      expect(transcript.at(-1)?._tag).toBe("FailedTurnTranscriptEntry");
+      expect(transcript.at(-1)).not.toHaveProperty("text");
+      expect(transcript.at(-1)).not.toHaveProperty("providerMessageId");
     })
   );
 
@@ -3420,6 +3552,12 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
         )
       );
       expect(attempts).toHaveLength(1);
+      const terminal = (yield* listTranscriptEntries(defaultUserId)).at(-1);
+      expect(terminal).toMatchObject({
+        _tag: "FailedTurnTranscriptEntry",
+        reason: "HostedInferenceFailed",
+      });
+      expect(terminal).not.toHaveProperty("text");
     })
   );
 
@@ -3498,6 +3636,12 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
         );
 
       expect(failure._tag).toBe("ModelUnavailable");
+      const terminal = (yield* listTranscriptEntries(defaultUserId)).at(-1);
+      expect(terminal).toMatchObject({
+        _tag: "FailedTurnTranscriptEntry",
+        reason: "HostedInferenceTimedOut",
+      });
+      expect(terminal).not.toHaveProperty("text");
       yield* withSubjectLock(defaultUserId, Effect.void).pipe(Effect.timeout("1 second"));
     })
   );

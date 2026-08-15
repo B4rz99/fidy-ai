@@ -72,8 +72,6 @@ import {
   type HostedTextResult,
   HostedToolCallMaximum,
   type PreparedHostedText,
-  makeHostedStructuredContext,
-  makeHostedTextContext,
 } from "./hosted-inference";
 import { type WorkingContext, makeWorkingContext } from "./working-context";
 import { makeTurnConfirmation } from "./tool-confirmation";
@@ -938,14 +936,15 @@ const generateCurrentTurn = (
         : Option.match(continuation, {
             onNone: () => Effect.die("A continued round requires HostedInference continuation"),
             onSome: (continued) => {
-              const context = makeHostedTextContext({
+              const context = {
                 prefix: [],
                 continuationTail,
                 suffix: Option.match(malformedOutputFeedback, {
                   onNone: () => [],
                   onSome: (feedback) => [{ role: "system" as const, content: feedback }],
                 }),
-              });
+                activeRequest: { _tag: "Absent" as const },
+              };
               return continued.prepare(
                 context,
                 remainingToolCalls === 0
@@ -1042,10 +1041,15 @@ const acceptRecoverableHostedOutput = (
     Option.some(failure.continuation)
   );
 
+const capacityFailureReasons = new Set<HostedInferenceError["reason"]["_tag"]>([
+  "CapacityExceeded",
+  "ActiveRequestCapacityExceeded",
+]);
+
 const mapHostedInferenceFailure = (
   failure: HostedInferenceError
 ): ModelUnavailable | HostedCapacityExceeded =>
-  failure.reason._tag === "CapacityExceeded"
+  capacityFailureReasons.has(failure.reason._tag)
     ? new HostedCapacityExceeded()
     : new ModelUnavailable({ cause: failure });
 
@@ -1081,6 +1085,14 @@ const acceptNonHostedFailure = (
   failure._tag === "RecoverableHostedOutput"
     ? acceptRecoverableHostedOutput(failure)
     : Effect.fail(new ModelUnavailable({ cause: failure }));
+
+const isTimedOutModelUnavailable = (failure: unknown): boolean =>
+  failure instanceof ModelUnavailable && Cause.isTimeoutError(failure.cause);
+
+const terminalTurnFailureReason = (
+  failure: unknown
+): "HostedInferenceFailed" | "HostedInferenceTimedOut" =>
+  isTimedOutModelUnavailable(failure) ? "HostedInferenceTimedOut" : "HostedInferenceFailed";
 
 const acceptModelRoundFailure = (
   failure: ModelRoundFailure
@@ -1343,7 +1355,6 @@ const prepareInitialRound = (
   maximumToolCalls: number
 ): Effect.Effect<PreparedHostedText, HostedInferenceError> =>
   inference.prepareText({
-    _tag: "Initial",
     context,
     toolChoice: "auto",
     maximumToolCalls: HostedToolCallMaximum.make(maximumToolCalls),
@@ -1448,7 +1459,7 @@ const runPreparedAttempt = Effect.fn("AgentService.runPreparedAttempt")(function
     })
   );
   if (Result.isFailure(generation)) {
-    yield* pending.fail("HostedInferenceFailed");
+    yield* pending.fail(terminalTurnFailureReason(generation.failure));
     return yield* generation.failure;
   }
   return yield* deliverAndComplete({ pending, generated: generation.success, deliver });
@@ -1582,7 +1593,7 @@ export class AgentService extends Context.Service<
               ): Effect.Effect<CompactedConversationOutput, ConversationCompactionInferenceError> =>
                 inference
                   .prepareStructured({
-                    context: makeHostedStructuredContext({
+                    context: {
                       messages: [
                         {
                           role: "system",
@@ -1595,7 +1606,7 @@ export class AgentService extends Context.Service<
                         }),
                         ...exactTranscriptPrompt(entries),
                       ],
-                    }),
+                    },
                     objectName: HostedStructuredObjectName.make("compacted_conversation"),
                     outputSchema: CompactedConversationOutput,
                   })

@@ -1,4 +1,4 @@
-import { Effect, Option, Redacted, Schema, Stream } from "effect";
+import { Config, Effect, Option, Redacted, Schema, Stream } from "effect";
 import { HttpClient, HttpClientRequest, type HttpClientResponse } from "effect/unstable/http";
 import type {
   SentryAccountObservation,
@@ -57,6 +57,14 @@ export type SentryAccountReaderConfig = Readonly<{
   productionProjectSlug: Redacted.Redacted;
   nonProductionProjectSlug: Redacted.Redacted;
 }>;
+
+/** Redacted credentials consumed by the operator-only Sentry account verification command. */
+export const sentryAccountConfig = Config.all({
+  authToken: Config.redacted("SENTRY_AUTH_TOKEN"),
+  organizationSlug: Config.redacted("SENTRY_ORGANIZATION_SLUG"),
+  productionProjectSlug: Config.redacted("SENTRY_PRODUCTION_PROJECT_SLUG"),
+  nonProductionProjectSlug: Config.redacted("SENTRY_NON_PRODUCTION_PROJECT_SLUG"),
+});
 
 const unauthorizedStatus = 401;
 const forbiddenStatus = 403;

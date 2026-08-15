@@ -9,15 +9,15 @@ import {
 } from "~/shell/agent/fixtures/openai";
 import {
   HostedInference,
-  type HostedInferenceError,
+  HostedInferenceError,
+  type HostedStructuredContext,
   HostedStructuredObjectName,
   type HostedStructuredRequest,
+  type HostedTextContext,
   type HostedTextContinuation,
   type HostedTextRequest,
   HostedToolCallMaximum,
   type PreparedHostedText,
-  makeHostedStructuredContext,
-  makeHostedTextContext,
 } from "./hosted-inference";
 import {
   FidyAgentModel,
@@ -26,6 +26,7 @@ import {
   OpenAiHostedInferenceWithoutStartupValidation,
   OpenAiLanguageModelLive,
   makeOpenAiHarness,
+  openAiHostedInferenceBudgetVariation,
 } from "./openai";
 import { agentOperationBindings } from "./toolkit";
 
@@ -33,6 +34,10 @@ const configLayer = (entries: ReadonlyArray<readonly [string, string]>): Layer.L
   ConfigProvider.layer(ConfigProvider.fromUnknown(Object.fromEntries(entries)));
 
 const JsonRecord = Schema.Record(Schema.String, Schema.Unknown);
+
+const testTextContext = (context: HostedTextContext): HostedTextContext => context;
+const testStructuredContext = (context: HostedStructuredContext): HostedStructuredContext =>
+  context;
 
 const requestBody = Effect.fn("Test.requestBody")(function* (
   request: HttpClientRequest.HttpClientRequest
@@ -141,11 +146,11 @@ it.effect("builds the structured-output LanguageModel adapter", () =>
 );
 
 const textRequest = (): HostedTextRequest => ({
-  _tag: "Initial",
-  context: makeHostedTextContext({
+  context: testTextContext({
     prefix: [{ role: "system", content: "system framing" }],
     continuationTail: [],
     suffix: [{ role: "user", content: [{ type: "text", text: "hello" }] }],
+    activeRequest: { _tag: "Absent" },
   }),
   toolChoice: "auto",
   maximumToolCalls: HostedToolCallMaximum.make(12),
@@ -160,7 +165,7 @@ const structuredRequest = (): HostedStructuredRequest<
   typeof StructuredOutput.Type,
   typeof StructuredOutput.Encoded
 > => ({
-  context: makeHostedStructuredContext({
+  context: testStructuredContext({
     messages: [{ role: "user" as const, content: "compact exact retained conversation" }],
   }),
   objectName: HostedStructuredObjectName.make("compacted_conversation"),
@@ -172,7 +177,7 @@ const continuationRequest = (
   callId: string
 ): Effect.Effect<PreparedHostedText, HostedInferenceError> =>
   continuation.prepare(
-    makeHostedTextContext({
+    testTextContext({
       prefix: [{ role: "system", content: "system framing" }],
       continuationTail: [
         {
@@ -189,6 +194,7 @@ const continuationRequest = (
         },
       ],
       suffix: [{ role: "user", content: [{ type: "text", text: "continue" }] }],
+      activeRequest: { _tag: "Absent" },
     }),
     { toolChoice: "auto", maximumToolCalls: HostedToolCallMaximum.make(12) }
   );
@@ -242,7 +248,13 @@ it.effect("counts complete framing and executes the exact prepared request", () 
     expect(execute.url).toContain("/responses");
     const countJson = yield* requestBody(count);
     const executeJson = yield* requestBody(execute);
+    const encodedCount = yield* Schema.encodeEffect(Schema.UnknownFromJsonString)(countJson);
+    const encodedExecution = yield* Schema.encodeEffect(Schema.UnknownFromJsonString)(executeJson);
 
+    expect(count.headers.authorization).toBe("Bearer test-only-secret");
+    expect(execute.headers.authorization).toBe("Bearer test-only-secret");
+    expect(encodedCount).not.toContain("test-only-secret");
+    expect(encodedExecution).not.toContain("test-only-secret");
     expect(executeJson.model).toBe(FidyAgentModel);
     expect(executeJson.max_output_tokens).toBe(16_000);
     expect(executeJson.max_tool_calls).toBe(12);
@@ -561,7 +573,7 @@ it.effect("projects replayed Assistant text and tool outcomes as Responses input
     const inference = yield* buildInference(transport.layer);
     const request: HostedTextRequest = {
       ...textRequest(),
-      context: makeHostedTextContext({
+      context: testTextContext({
         prefix: [
           { role: "assistant", content: "prior answer" },
           { role: "assistant", content: [{ type: "text", text: "another answer" }] },
@@ -591,6 +603,7 @@ it.effect("projects replayed Assistant text and tool outcomes as Responses input
         ],
         continuationTail: [],
         suffix: [{ role: "user", content: [{ type: "text", text: "continue" }] }],
+        activeRequest: { _tag: "Absent" },
       }),
     };
 
@@ -627,10 +640,11 @@ it.effect("rejects unsupported semantic Prompt parts before counting", () =>
       const failure = yield* inference
         .prepareText({
           ...textRequest(),
-          context: makeHostedTextContext({
+          context: testTextContext({
             prefix: [message],
             continuationTail: [],
             suffix: [],
+            activeRequest: { _tag: "Absent" },
           }),
         })
         .pipe(Effect.flip);
@@ -751,12 +765,127 @@ it.effect("rejects complete-capacity overflow before execution", () =>
   })
 );
 
-it.effect("runs non-executable startup validation through the same preparer", () =>
+it.effect(
+  "refuses an active request above its independent token capacity before provider I/O",
+  () =>
+    Effect.gen(function* () {
+      const transport = yield* makeTransport(100);
+      const inference = yield* buildInference(transport.layer);
+      const oversized = "👩🏽‍💻 ".repeat(3_000);
+
+      const failure = yield* inference
+        .prepareText({
+          ...textRequest(),
+          context: testTextContext({
+            prefix: [{ role: "user", content: oversized }],
+            continuationTail: [],
+            suffix: [],
+            activeRequest: {
+              _tag: "Present",
+              text: oversized,
+            },
+          }),
+        })
+        .pipe(Effect.flip);
+
+      expect(failure.reason).toEqual({
+        _tag: "ActiveRequestCapacityExceeded",
+        inputTokens: 21_001,
+        maximumTokens: 16_000,
+      });
+      expect(yield* Ref.get(transport.requests)).toEqual([]);
+    })
+);
+
+it.effect("refuses startup when the maximum continuity request exceeds model capacity", () =>
+  Effect.gen(function* () {
+    const transport = yield* makeTransport(1_034_001);
+
+    const failure = yield* buildInference(transport.layer, OpenAiHostedInferenceLive).pipe(
+      Effect.flip
+    );
+
+    if (!(failure instanceof HostedInferenceError)) {
+      return yield* Effect.die("expected hosted startup capacity failure");
+    }
+    expect(failure.reason).toEqual({ _tag: "CapacityExceeded", inputTokens: 1_034_001 });
+    expect(yield* Ref.get(transport.requests)).toHaveLength(1);
+  })
+);
+
+it.effect("varies each continuity budget without changing the other four semantic sections", () =>
+  Effect.gen(function* () {
+    const defaults = {
+      memory: 15_000,
+      compactedConversation: 15_000,
+      exactTranscript: 100_000,
+      activeRequest: 16_000,
+      outputReserve: 16_000,
+    } as const;
+    const sectionMarkers = [
+      ["memory", "MEMORY"],
+      ["compactedConversation", "COMPACTED_CONVERSATION"],
+      ["exactTranscript", "EXACT_TRANSCRIPT"],
+      ["activeRequest", "ACTIVE_REQUEST"],
+    ] as const;
+    const budgets = [
+      "memory",
+      "compactedConversation",
+      "exactTranscript",
+      "activeRequest",
+      "outputReserve",
+    ] as const;
+
+    for (const varied of budgets) {
+      const transport = yield* makeTransport(1_034_001);
+      const startup = yield* buildInference(
+        transport.layer,
+        openAiHostedInferenceBudgetVariation(varied)
+      ).pipe(Effect.exit);
+      expect(Exit.isSuccess(startup)).toBe(varied === "outputReserve");
+      const request = (yield* Ref.get(transport.requests))[0];
+      if (request === undefined) return yield* Effect.die("missing varied startup request");
+      const body = yield* requestBody(request);
+      const serialized = yield* Schema.encodeEffect(Schema.UnknownFromJsonString)(body.input);
+
+      for (const [budget, marker] of sectionMarkers) {
+        const expected = defaults[budget] - (varied === budget ? 1 : 0);
+        expect(serialized).toContain(`[STARTUP_MAXIMUM_${marker}:${expected}_TOKENS]`);
+        expect(serialized).toContain(
+          `[UNTRUSTED_${marker === "EXACT_TRANSCRIPT" ? "TRANSCRIPT_USER" : marker}]`
+        );
+      }
+      expect(body.tools).toHaveLength(agentOperationBindings.length);
+    }
+  })
+);
+
+it.effect("frames every independent continuity maximum in startup's complete request", () =>
   Effect.gen(function* () {
     const transport = yield* makeTransport(100);
     yield* buildInference(transport.layer, OpenAiHostedInferenceLive);
     const requests = yield* Ref.get(transport.requests);
     expect(requests).toHaveLength(1);
-    expect(requests[0]?.url).toContain("/responses/input_tokens");
+    const startup = requests[0];
+    if (startup === undefined) return yield* Effect.die("missing startup request");
+    expect(startup.url).toContain("/responses/input_tokens");
+
+    const counted = yield* requestBody(startup);
+    const serializedInput = yield* Schema.encodeEffect(Schema.UnknownFromJsonString)(counted.input);
+    expect(serializedInput).toContain("Eres Fidy, un asistente de finanzas personales.");
+    expect(serializedInput).toContain("El turno comenzó en 2000-01-01T00:00:00.000Z");
+    expect(serializedInput).toContain("[UNTRUSTED_MEMORY]\\n[STARTUP_MAXIMUM_MEMORY:15000_TOKENS]");
+    expect(serializedInput).toContain(
+      "[UNTRUSTED_COMPACTED_CONVERSATION]\\n" +
+        "[STARTUP_MAXIMUM_COMPACTED_CONVERSATION:15000_TOKENS]"
+    );
+    expect(serializedInput).toContain(
+      "[UNTRUSTED_TRANSCRIPT_USER]\\n[STARTUP_MAXIMUM_EXACT_TRANSCRIPT:100000_TOKENS]"
+    );
+    expect(serializedInput).toContain(
+      "[UNTRUSTED_ACTIVE_REQUEST]\\n[STARTUP_MAXIMUM_ACTIVE_REQUEST:16000_TOKENS]"
+    );
+    expect(counted.max_output_tokens).toBeUndefined();
+    expect(counted.tools).toHaveLength(agentOperationBindings.length);
   })
 );

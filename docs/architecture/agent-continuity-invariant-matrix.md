@@ -16,8 +16,16 @@ bun run lint
 bun run lint:type-aware
 bun run lint:deps
 bun run typecheck
+bun run check:continuity-invariants
 bun run test
 ```
+
+`check:continuity-invariants` fails unless every accepted row maps exactly once to concrete,
+non-skipped executable test declarations; one row may cite several declarations when its assertion
+spans accepted seams. It also inventories every production `Config.redacted` credential and requires
+focused evidence for each adapter path, so adding an invariant row or credential cannot silently
+bypass the release gate. The tests themselves remain in their ordinary unit, integration, and
+acceptance suites; the check proves completeness without creating a second execution path.
 
 Real-Postgres rows run through the existing API, agent, or repository integration harness. Hosted-provider rows use the production `HostedInference` interface with a deterministic adapter; they do not mock internal collaborators.
 

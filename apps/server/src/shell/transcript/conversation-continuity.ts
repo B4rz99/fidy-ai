@@ -115,9 +115,26 @@ export type SerializedAttempt = Readonly<{
   ) => Effect.Effect<A, E, R>;
 }>;
 
-const defaultCompactionTriggerTokens = 100_000;
-const defaultCompactionMaximumTokens = 15_000;
+/** Production exact-Transcript token threshold that requests Compaction. */
+export const defaultCompactionTriggerTokens = 100_000;
+/** Production maximum for one generated CompactedConversation replacement. */
+export const defaultCompactionMaximumTokens = 15_000;
 const compactionInferenceTimeout = "30 seconds";
+
+/** Internal commit tags used only by the deterministic concurrency probe. */
+type CompactionCommitTag = "Committed" | "Stale";
+
+/** Test-only metadata hook; production uses its no-op default.
+ * @internal
+ */
+const noCompactionCommitObservation = (_tag: CompactionCommitTag): Effect.Effect<void> =>
+  Effect.void;
+
+export const CompactionCommitObserver = Context.Reference<
+  (tag: CompactionCommitTag) => Effect.Effect<void>
+>("@fidy/server/shell/transcript/conversation-continuity/CompactionCommitObserver", {
+  defaultValue: (): typeof noCompactionCommitObservation => noCompactionCommitObservation,
+});
 
 /** Provider-token trigger and bounded replacement output, both expressed as positive token counts. */
 export const ConversationCompactionTokenCount = Schema.Int.check(Schema.isGreaterThan(0)).pipe(
@@ -163,6 +180,7 @@ type Dependencies = {
   readonly sql: SqlClient.SqlClient;
   readonly inference: ConversationCompactionInferenceService;
   readonly compactionPolicy: ConversationCompactionPolicy;
+  readonly observeCompactionCommit: (tag: CompactionCommitTag) => Effect.Effect<void>;
 };
 type PreparedPersistence = {
   readonly revision: bigint;
@@ -600,51 +618,48 @@ type CompactionCommit = Readonly<{
   text: string;
 }>;
 
+type CompactionCommitResult = Readonly<{ _tag: "Committed" }> | Readonly<{ _tag: "Stale" }>;
+
 // One cohesive transaction keeps every optimistic comparison adjacent to replacement and deletion.
-const commitCompaction = Effect.fn("ConversationContinuity.commitCompaction")(function* ({
-  dependencies,
-  userId,
-  persisted,
-  selection,
-  text,
-}: CompactionCommit) {
-  return yield* withSubjectLock(
-    userId,
-    Effect.gen(function* () {
-      const revision = yield* readRevision(dependencies.sql, userId, true);
-      const memoryRevision = yield* readMemoryRevision(dependencies.sql, userId);
-      const grants = (yield* currentOnboardingGrantIdsInScope(userId)).map(String);
-      const prior = yield* readCompactedConversation(dependencies.sql, userId);
-      const currentRows = yield* SqlSchema.findAll({
-        Request: UserId,
-        Result: SequencedTranscriptEntryRow,
-        execute: (ownedUserId) => dependencies.sql`
+const commitCompactionTransaction = Effect.fn("ConversationContinuity.commitCompactionTransaction")(
+  function* ({ dependencies, userId, persisted, selection, text }: CompactionCommit) {
+    return yield* withSubjectLock(
+      userId,
+      Effect.gen(function* () {
+        const revision = yield* readRevision(dependencies.sql, userId, true);
+        const memoryRevision = yield* readMemoryRevision(dependencies.sql, userId);
+        const grants = (yield* currentOnboardingGrantIdsInScope(userId)).map(String);
+        const prior = yield* readCompactedConversation(dependencies.sql, userId);
+        const currentRows = yield* SqlSchema.findAll({
+          Request: UserId,
+          Result: SequencedTranscriptEntryRow,
+          execute: (ownedUserId) => dependencies.sql`
           SELECT sequence::text AS sequence, entry FROM transcript_entries
           WHERE user_id = ${ownedUserId} AND sequence <= ${selection.throughSequence}
           ORDER BY sequence`,
-      })(userId);
-      const samePrior = Option.match(persisted.compactedConversation, {
-        onNone: () => Option.isNone(prior),
-        onSome: (expected) => Option.isSome(prior) && Equal.equals(prior.value, expected),
-      });
-      const sameEntries =
-        currentRows.length === selection.entries.length &&
-        currentRows.every((row, index) => Equal.equals(row, selection.entries[index]));
-      if (
-        revision !== persisted.revision ||
-        memoryRevision !== persisted.memoryRevision ||
-        !sameStrings(grants, persisted.consentGrantIds) ||
-        !samePrior ||
-        !sameEntries
-      ) {
-        return false;
-      }
-      const now = yield* DateTime.now;
-      const nextRevision = Option.match(prior, {
-        onNone: () => 1n,
-        onSome: (value) => value.revision + 1n,
-      });
-      yield* dependencies.sql`
+        })(userId);
+        const samePrior = Option.match(persisted.compactedConversation, {
+          onNone: () => Option.isNone(prior),
+          onSome: (expected) => Option.isSome(prior) && Equal.equals(prior.value, expected),
+        });
+        const sameEntries =
+          currentRows.length === selection.entries.length &&
+          currentRows.every((row, index) => Equal.equals(row, selection.entries[index]));
+        if (
+          revision !== persisted.revision ||
+          memoryRevision !== persisted.memoryRevision ||
+          !sameStrings(grants, persisted.consentGrantIds) ||
+          !samePrior ||
+          !sameEntries
+        ) {
+          return { _tag: "Stale" } as const satisfies CompactionCommitResult;
+        }
+        const now = yield* DateTime.now;
+        const nextRevision = Option.match(prior, {
+          onNone: () => 1n,
+          onSome: (value) => value.revision + 1n,
+        });
+        yield* dependencies.sql`
           INSERT INTO compacted_conversations
             (user_id, text, through_sequence, revision, updated_at)
           VALUES (${userId}, ${text}, ${selection.throughSequence}, ${nextRevision}, ${now})
@@ -654,12 +669,21 @@ const commitCompaction = Effect.fn("ConversationContinuity.commitCompaction")(fu
             revision = EXCLUDED.revision,
             updated_at = EXCLUDED.updated_at
         `;
-      yield* dependencies.sql`DELETE FROM transcript_entries
+        yield* dependencies.sql`DELETE FROM transcript_entries
         WHERE user_id = ${userId} AND sequence <= ${selection.throughSequence}`;
-      yield* incrementRevision(dependencies.sql, userId);
-      return true;
-    }).pipe(Effect.provideService(SqlClient.SqlClient, dependencies.sql))
-  ).pipe(Effect.provideService(SqlClient.SqlClient, dependencies.sql));
+        yield* incrementRevision(dependencies.sql, userId);
+        return { _tag: "Committed" } as const satisfies CompactionCommitResult;
+      }).pipe(Effect.provideService(SqlClient.SqlClient, dependencies.sql))
+    ).pipe(Effect.provideService(SqlClient.SqlClient, dependencies.sql));
+  }
+);
+
+const commitCompaction = Effect.fn("ConversationContinuity.commitCompaction")(function* (
+  input: CompactionCommit
+) {
+  const result = yield* commitCompactionTransaction(input);
+  yield* input.dependencies.observeCompactionCommit(result._tag);
+  return result;
 });
 
 const compactIfNeeded = Effect.fn("ConversationContinuity.compactIfNeeded")(function* (
@@ -1246,6 +1270,7 @@ const makeConversationContinuity = Effect.gen(function* () {
     sql: yield* SqlClient.SqlClient,
     inference: yield* ConversationCompactionInference,
     compactionPolicy: yield* ConversationCompactionPolicy,
+    observeCompactionCommit: yield* CompactionCommitObserver,
   };
   const observe = (userId: UserId): Effect.Effect<ContinuityView> =>
     observeOwned(dependencies, userId);

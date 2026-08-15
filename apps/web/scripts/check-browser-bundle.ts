@@ -1,5 +1,7 @@
 #!/usr/bin/env bun
 
+import { decodeBuildMetafile } from "./build-metafile";
+
 const webRoot = Bun.fileURLToPath(new URL("..", import.meta.url)).replace(/\/$/u, "");
 const workspaceRoot = Bun.fileURLToPath(new URL("../../../", import.meta.url)).replace(/\/$/u, "");
 const outdir = `/tmp/fidy-web-bundle-${process.pid}`;
@@ -13,15 +15,6 @@ const forbiddenDependencies = [
   "/node_modules/pg/",
   "/node_modules/postgres/",
 ] as const;
-
-type Metafile = Readonly<{ inputs: Readonly<Record<string, unknown>> }>;
-
-const isMetafile = (value: unknown): value is Metafile =>
-  typeof value === "object" &&
-  value !== null &&
-  "inputs" in value &&
-  typeof value.inputs === "object" &&
-  value.inputs !== null;
 
 const removeOutput = (): void => {
   Bun.spawnSync(["rm", "-rf", outdir]);
@@ -53,14 +46,8 @@ try {
     throw new Error(result.logs.map((log) => JSON.stringify(log)).join("\n"));
   }
 
-  const rawMetafile: unknown = result.metafile;
-  const parsedMetafile: unknown =
-    typeof rawMetafile === "string" ? JSON.parse(rawMetafile) : rawMetafile;
-  if (!isMetafile(parsedMetafile)) {
-    throw new Error("Browser build did not return a module graph");
-  }
-
-  const inputs = Object.keys(parsedMetafile.inputs).map((path) => path.replaceAll("\\", "/"));
+  const metafile = decodeBuildMetafile(result.metafile);
+  const inputs = Object.keys(metafile.inputs).map((path) => path.replaceAll("\\", "/"));
   const forbidden = inputs.filter((input) =>
     forbiddenDependencies.some((dependency) => input.includes(dependency))
   );

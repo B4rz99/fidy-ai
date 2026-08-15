@@ -1,5 +1,5 @@
 import { expect, it } from "@effect/vitest";
-import { Cause, Context, Effect, Exit, Function as Fn, Layer, Option, Ref, Schema } from "effect";
+import { Cause, Context, Effect, Exit, Layer, Option, Ref, Schema } from "effect";
 import { TestClock } from "effect/testing";
 import {
   decodeEnvelopeItems,
@@ -11,17 +11,18 @@ import {
   makeSpanDescriptor,
   makeWorkSpanDescriptor,
 } from "~/shell/testing/telemetry-fixtures";
+import { strictDecoding } from "./decoding";
 import {
   EnvelopeRecorder,
   TelemetryEnvelopeRecording,
   telemetryEnvelopeRecording,
 } from "./envelope-recorder";
 import {
-  type ClassifiedFailure,
+  ClassifiedFailure,
   type DurableTraceContext,
-  type SpanDescriptor,
+  SpanDescriptor,
   TelemetryAttempt,
-  type TelemetryBreadcrumb,
+  TelemetryBreadcrumb,
   TelemetryCount,
   TelemetryDuration,
   TelemetryHttpStatus,
@@ -30,8 +31,6 @@ import { isSupportedEnvelopeItemType } from "./sentry-adapter";
 import { Telemetry } from "./telemetry";
 
 const descriptor = makeSpanDescriptor();
-
-const untrustedInput = <A>(value: unknown): A => Fn.cast<unknown, A>(value);
 
 it.effect("records only reconstructed metadata in complete serialized envelopes", () =>
   Effect.gen(function* () {
@@ -127,17 +126,23 @@ it.effect("drops every forbidden sentinel and malformed telemetry channel", () =
     yield* telemetry.span(
       descriptor,
       Effect.gen(function* () {
-        const malformedBreadcrumb = untrustedInput<TelemetryBreadcrumb>({
-          category: "agent",
-          action: "model_started",
-          component: "agent",
-          outcome: Option.none(),
-          error: Option.none(),
-          attempt: Option.none(),
-          durationMilliseconds: Option.none(),
-          data: "breadcrumb-sentinel",
-        });
-        yield* telemetry.addBreadcrumb(malformedBreadcrumb);
+        expect(
+          Option.isNone(
+            Schema.decodeUnknownOption(
+              TelemetryBreadcrumb,
+              strictDecoding
+            )({
+              category: "agent",
+              action: "model_started",
+              component: "agent",
+              outcome: Option.none(),
+              error: Option.none(),
+              attempt: Option.none(),
+              durationMilliseconds: Option.none(),
+              data: "breadcrumb-sentinel",
+            })
+          )
+        ).toBe(true);
         yield* telemetry.captureFailure({
           _tag: "Defect",
           component: "agent",
@@ -147,20 +152,31 @@ it.effect("drops every forbidden sentinel and malformed telemetry channel", () =
         });
       })
     );
-    const malformedSpan = untrustedInput<SpanDescriptor>({
-      ...descriptor,
-      request: "span-request-sentinel",
-    });
-    yield* telemetry.span(malformedSpan, Effect.void);
-    yield* telemetry.captureFailure(
-      untrustedInput<ClassifiedFailure>({
-        _tag: "Defect",
-        component: "agent",
-        operation: "agent.hostedTurn",
-        error: "unknown-error-sentinel",
-        cause: hostileCause,
-      })
-    );
+    expect(
+      Option.isNone(
+        Schema.decodeUnknownOption(
+          SpanDescriptor,
+          strictDecoding
+        )({
+          ...descriptor,
+          request: "span-request-sentinel",
+        })
+      )
+    ).toBe(true);
+    expect(
+      Option.isNone(
+        Schema.decodeUnknownOption(
+          ClassifiedFailure,
+          strictDecoding
+        )({
+          _tag: "Defect",
+          component: "agent",
+          operation: "agent.hostedTurn",
+          error: "unknown-error-sentinel",
+          cause: hostileCause,
+        })
+      )
+    ).toBe(true);
 
     const envelopes = yield* recorder.serializedEnvelopes;
     const serialized = envelopes.map((bytes) => new TextDecoder().decode(bytes)).join("\n");
@@ -606,6 +622,7 @@ it.effect("keeps only usable source coordinates and drops a cause carrying no st
 
     yield* telemetry.span(descriptor, telemetry.captureFailure(defect(hostileError)));
     yield* telemetry.span(descriptor, telemetry.captureFailure(defect("plain-cause-sentinel")));
+    yield* telemetry.span(descriptor, telemetry.captureFailure(defect({ stack: 7 })));
 
     const events = errorPayloads(yield* recorder.serializedEnvelopes);
     expect(events[0]?.exception.values[0].stacktrace.frames).toEqual([
@@ -618,6 +635,7 @@ it.effect("keeps only usable source coordinates and drops a cause carrying no st
       },
     ]);
     expect(events[1]?.exception.values[0].stacktrace.frames).toEqual([]);
+    expect(events[2]?.exception.values[0].stacktrace.frames).toEqual([]);
     const serialized = yield* Schema.encodeEffect(Schema.UnknownFromJsonString)(events);
     expect(serialized).not.toContain("extensionSentinel");
     expect(serialized).not.toContain("columnSentinel");

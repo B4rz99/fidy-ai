@@ -189,7 +189,7 @@ Hosted turns coordinate three deep shell modules under [ADR 0014](docs/adr/0014-
 The legal sequence is continuity preparation and recovery, one WorkingContext construction, complete
 hosted preflight, stale-snapshot-checked Turn admission, prepared execution, delivery without replay,
 and explicit terminalization. Provider state, model or tokenizer identity, context capacity, prompt
-fragments, and constructible authorities do not cross these public boundaries. The executable
+fragments, and constructible executable authorities do not cross these public boundaries. The executable
 contract and implementation-ticket ownership live in the
 [agent-continuity invariant matrix](docs/architecture/agent-continuity-invariant-matrix.md).
 

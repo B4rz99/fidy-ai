@@ -2,7 +2,9 @@
 
 import { lstat, mkdir, mkdtemp, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { basename, dirname, extname, join } from "node:path";
-import { isRecord, requireArgument } from "./shared";
+import { Option, Predicate, Schema } from "effect";
+import { ReleaseMetadata } from "../../scripts/release-metadata";
+import { requireArgument } from "./shared";
 
 const KIBIBYTE = 1024;
 const MEBIBYTE = KIBIBYTE * KIBIBYTE;
@@ -190,21 +192,35 @@ const allowedPath = (path: string): boolean => {
   );
 };
 
+const SourceMap = Schema.Union([
+  Schema.Struct({
+    version: Schema.Literal(3),
+    sources: Schema.Array(Schema.Unknown),
+    mappings: Schema.String,
+  }),
+  Schema.Struct({
+    version: Schema.Literal(3),
+    sections: Schema.Array(Schema.Unknown),
+  }),
+]);
+
 const validateMetadata = (
   contents: Uint8Array,
   request: Pick<PreviewArtifactRequest, "expectedSha" | "expectedDigest">
 ): void => {
-  let metadata: unknown;
+  let parsed: unknown;
   try {
-    metadata = JSON.parse(decoder.decode(contents));
+    parsed = JSON.parse(decoder.decode(contents));
   } catch {
     throw new Error("preview metadata is not valid JSON");
   }
-  if (!isRecord(metadata)) {
+  let metadata: ReleaseMetadata;
+  try {
+    metadata = Schema.decodeUnknownSync(ReleaseMetadata, { onExcessProperty: "error" })(parsed);
+  } catch {
     throw new Error("preview metadata does not match the expected head SHA and digest");
   }
   if (
-    Object.keys(metadata).length !== 2 ||
     metadata.gitRevision !== request.expectedSha ||
     metadata.contractDigest !== request.expectedDigest
   ) {
@@ -226,17 +242,10 @@ const validatedPath = (entry: TarEntry, files: ReadonlyMap<string, Uint8Array>):
   return path;
 };
 
-const looksLikeSourceMap = (contents: Uint8Array): boolean => {
-  let value: unknown;
-  try {
-    value = JSON.parse(decoder.decode(contents));
-  } catch {
-    return false;
-  }
-  if (!isRecord(value) || value.version !== 3) return false;
-  const flatSourceMap = Array.isArray(value.sources) && typeof value.mappings === "string";
-  return flatSourceMap || Array.isArray(value.sections);
-};
+const looksLikeSourceMap = (contents: Uint8Array): boolean =>
+  Option.isSome(
+    Schema.decodeUnknownOption(Schema.fromJsonString(SourceMap))(decoder.decode(contents))
+  );
 
 const validateContents = (path: string, contents: Uint8Array): void => {
   if (FORBIDDEN_CONTENT_STRINGS.some((marker) => includesAsciiIgnoringCase(contents, marker))) {
@@ -344,7 +353,9 @@ const readValidatedFiles = async (
 type ErrorWithCode = Error & { readonly code: string };
 
 const hasErrorCode = (error: unknown): error is ErrorWithCode =>
-  error instanceof Error && "code" in error && typeof error.code === "string";
+  Predicate.isError(error) &&
+  Predicate.hasProperty(error, "code") &&
+  Predicate.isString(error.code);
 
 const pathExists = async (path: string): Promise<boolean> => {
   try {

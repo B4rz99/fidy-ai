@@ -1,15 +1,15 @@
 import { it } from "@effect/vitest";
-import { Effect, Exit, Function as Fn, Layer, Option, Random, Result } from "effect";
+import { Effect, Layer, Option, Random, Result } from "effect";
 import { describe, expect, vi } from "vitest";
 import {
   getTelemetryBootstrap,
   installTelemetryBootstrap,
   makeTelemetryBootstrap,
 } from "./telemetry-bootstrap";
+import { makeSpanDescriptor } from "~/shell/testing/telemetry-fixtures";
 import type { TelemetryConfig } from "./telemetry-config";
 import { DisabledTelemetryResource } from "./disabled";
 import { SentryLive } from "./sentry-live";
-import type { TelemetrySpan } from "./telemetry";
 
 const disabledConfig = {
   _tag: "Disabled",
@@ -76,21 +76,16 @@ describe("telemetry preload handoff", () => {
       expect(bootstrap._tag).toBe("Disabled");
       expect(makeEnabled).not.toHaveBeenCalled();
       const adapter = bootstrap.resource.adapter;
-      const span = Fn.cast<unknown, TelemetrySpan>({});
-      expect(
-        Option.isNone(yield* adapter.startSpan(Fn.cast<unknown, never>({}), Option.none()))
-      ).toBe(true);
-      yield* adapter.finishSpan(span, Exit.succeed(undefined));
-      yield* adapter.recordOutcome(span, Fn.cast<unknown, never>({}));
-      yield* adapter.captureFailure(Option.none(), Fn.cast<unknown, never>({}));
-      yield* adapter.addBreadcrumb(span, Fn.cast<unknown, never>({}));
+      expect(Option.isNone(yield* adapter.startSpan(makeSpanDescriptor(), Option.none()))).toBe(
+        true
+      );
     })
   );
 
   it.effect("creates and exposes exactly one enabled client", () =>
     Effect.gen(function* () {
       const client = {};
-      const config = Fn.cast<unknown, TelemetryConfig>({
+      const config = {
         _tag: "NonProductionEnabled",
         environment: "local",
         project: "non-production",
@@ -99,7 +94,7 @@ describe("telemetry preload handoff", () => {
         release: "fidy@0123456789abcdef0123456789abcdef01234567",
         errorSampleRate: 1,
         rootTraceRate: 1,
-      });
+      } satisfies TelemetryConfig;
       const makeEnabled = vi.fn(() =>
         Effect.succeed({ client, resource: DisabledTelemetryResource })
       );
@@ -136,6 +131,60 @@ describe("telemetry preload handoff", () => {
 
       expect(result.exitCode).not.toBe(0);
       expect(result.stdout).not.toContain("application-imported");
+    })
+  );
+
+  it.effect("shares the preload handoff across separately bundled entries", () =>
+    Effect.gen(function* () {
+      const fixtureRoot = `${process.cwd()}/.tmp/fidy-telemetry-bundle-${yield* Random.nextInt}`;
+      const preloadEntry = `${fixtureRoot}/preload.ts`;
+      const applicationEntry = `${fixtureRoot}/application.ts`;
+      const bootstrapModule = `${process.cwd()}/src/shell/observability/telemetry-bootstrap.ts`;
+      const disabledModule = `${process.cwd()}/src/shell/observability/disabled.ts`;
+      yield* Effect.promise(() =>
+        Promise.all([
+          Bun.write(
+            preloadEntry,
+            `import { Result } from "effect";
+import { DisabledTelemetryResource } from "${disabledModule}";
+import { installTelemetryBootstrap } from "${bootstrapModule}";
+if (Result.isFailure(installTelemetryBootstrap({ _tag: "Disabled", config: { _tag: "Disabled", environment: "local", capture: { errors: false, traces: false } }, resource: DisabledTelemetryResource }))) throw new Error("installation failed");`
+          ),
+          Bun.write(
+            applicationEntry,
+            `import { Result } from "effect";
+import { getTelemetryBootstrap } from "${bootstrapModule}";
+if (Result.isFailure(getTelemetryBootstrap())) throw new Error("preload handoff missing");
+console.log("handoff-visible");`
+          ),
+        ])
+      );
+      const build = (entrypoint: string, naming: string): Effect.Effect<Bun.BuildOutput> =>
+        Effect.promise(() =>
+          Bun.build({ entrypoints: [entrypoint], outdir: fixtureRoot, naming, target: "bun" })
+        );
+      yield* build(preloadEntry, "preload.js");
+      yield* build(applicationEntry, "application.js");
+      const child = yield* Effect.sync(() =>
+        Bun.spawn(
+          ["bun", "--preload", `${fixtureRoot}/preload.js`, `${fixtureRoot}/application.js`],
+          {
+            stdout: "pipe",
+            stderr: "pipe",
+          }
+        )
+      );
+      const [exitCode, stdout, stderr] = yield* Effect.all([
+        Effect.promise(() => child.exited),
+        Effect.promise(() => new Response(child.stdout).text()),
+        Effect.promise(() => new Response(child.stderr).text()),
+      ]);
+      const cleanup = yield* Effect.sync(() => Bun.spawn(["rm", "-rf", fixtureRoot]));
+      yield* Effect.promise(() => cleanup.exited);
+
+      expect(stderr).toBe("");
+      expect(exitCode).toBe(0);
+      expect(stdout).toContain("handoff-visible");
     })
   );
 

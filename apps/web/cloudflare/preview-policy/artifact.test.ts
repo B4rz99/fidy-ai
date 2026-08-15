@@ -237,6 +237,14 @@ describe("preview artifact policy", () => {
     );
   });
 
+  it("rejects malformed metadata", async () => {
+    const entries = validEntries().map((entry) =>
+      entry.path === "preview-metadata.json" ? regular(entry.path, "[]") : entry
+    );
+
+    await expectRejectedWithoutOutput(entries, "metadata does not match");
+  });
+
   it("rejects metadata for a different revision", async () => {
     const changedMetadata = bytes(JSON.stringify({ contractDigest, gitRevision: "c".repeat(40) }));
     const entries = validEntries().map((entry) =>

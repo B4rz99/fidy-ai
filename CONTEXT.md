@@ -198,9 +198,9 @@ Memory or authoritative financial truth.
 _Avoid_: Summary, history, context window, Transcript.
 
 **WorkingContext**:
-The ordered, transient material assembled once for one hosted Turn from system policy, current
-Memories, any CompactedConversation, the exact uncompacted conversation, and the active request. It is never
-stored as another source of User truth.
+The ordered, transient material assembled for one hosted Turn from system policy, current Memories,
+any CompactedConversation, the exact uncompacted conversation, and the active request, then reused
+across its hosted rounds. It is never stored as another source of User truth.
 _Avoid_: Memory, Transcript, context window, prompt.
 
 ### Identity, consent, accountability

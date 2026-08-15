@@ -1,4 +1,4 @@
-import { Data, Effect, Function as Fn, Result } from "effect";
+import { Context, Data, Effect, Option, Result } from "effect";
 import { DisabledTelemetryResource } from "./disabled";
 import type {
   NonProductionTelemetryConfig,
@@ -58,6 +58,10 @@ export const makeTelemetryBootstrap = (options: {
 };
 
 const bootstrapKey = Symbol.for("@fidy/server/shell/observability/telemetry-bootstrap");
+class TelemetryBootstrapContext extends Context.Service<
+  TelemetryBootstrapContext,
+  TelemetryBootstrap
+>()("@fidy/server/shell/observability/telemetry-bootstrap/TelemetryBootstrapContext") {}
 
 /** Installs the preload-owned client/resource exactly once for runtime assembly. */
 export const installTelemetryBootstrap = (
@@ -66,18 +70,22 @@ export const installTelemetryBootstrap = (
   if (Reflect.has(globalThis, bootstrapKey)) {
     return Result.fail(new TelemetryAlreadyInitialized());
   }
-  Reflect.set(globalThis, bootstrapKey, bootstrap);
+  Reflect.set(globalThis, bootstrapKey, Context.make(TelemetryBootstrapContext, bootstrap));
   return Result.succeed(undefined);
+};
+
+const decodeInstalledBootstrap = (
+  installed: unknown
+): Result.Result<TelemetryBootstrap, TelemetryPreloadMissing> => {
+  if (!Context.isContext(installed)) return Result.fail(new TelemetryPreloadMissing());
+  return Option.match(Context.getOption(installed, TelemetryBootstrapContext), {
+    onNone: () => Result.fail(new TelemetryPreloadMissing()),
+    onSome: Result.succeed,
+  });
 };
 
 /** Reads the preload handoff without ever falling back to late SDK initialization. */
 export const getTelemetryBootstrap = (): Result.Result<
   TelemetryBootstrap,
   TelemetryPreloadMissing
-> => {
-  const globals = Fn.cast<unknown, Readonly<Record<PropertyKey, unknown>>>(globalThis);
-  const value = globals[bootstrapKey];
-  return value === undefined
-    ? Result.fail(new TelemetryPreloadMissing())
-    : Result.succeed(Fn.cast<unknown, TelemetryBootstrap>(value));
-};
+> => decodeInstalledBootstrap(Reflect.get(globalThis, bootstrapKey));

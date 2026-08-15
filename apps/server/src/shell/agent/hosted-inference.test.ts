@@ -10,7 +10,6 @@ import {
   type HostedTextResult,
   HostedToolCallMaximum,
   type InitialHostedTextRequest,
-  type PreparedHostedStructured,
   makeHostedInference,
   makeHostedStructuredContext,
   makeHostedTextContext,
@@ -83,13 +82,6 @@ const makeTestInference = Effect.fn("Test.makeTestInference")(function* (capacit
   } as const;
 });
 
-const ForgedPreparedStructured = Schema.declare(
-  (input): input is PreparedHostedStructured<unknown> => typeof input === "object" && input !== null
-);
-const ForgedHostedTextContext = Schema.declare(
-  (input): input is HostedTextContext => typeof input === "object" && input !== null
-);
-
 const context = (text: string): HostedTextContext =>
   makeHostedTextContext({
     prefix: [{ role: "system", content: text }],
@@ -104,90 +96,57 @@ const request = (hostedContext: HostedTextContext): InitialHostedTextRequest => 
   maximumToolCalls: HostedToolCallMaximum.make(2),
 });
 
-it.effect(
-  "rejects wrong-kind, forged, cloned, foreign, discarded, and replayed structured authorities",
-  () =>
-    Effect.gen(function* () {
-      const executions = yield* Ref.make(0);
-      const structuredAdapter: HostedStructuredAdapter = {
-        prepare: ({ outputSchema }) =>
-          Effect.succeed({
-            execute: Ref.updateAndGet(executions, (count) => count + 1).pipe(
-              Effect.flatMap(() =>
-                Schema.decodeUnknownEffect(outputSchema)({ compactedConversation: "trusted" }).pipe(
-                  Effect.orDie
-                )
+it.effect("keeps discarded and executed structured preparations one-shot", () =>
+  Effect.gen(function* () {
+    const executions = yield* Ref.make(0);
+    const structuredAdapter: HostedStructuredAdapter = {
+      prepare: ({ outputSchema }) =>
+        Effect.succeed({
+          execute: Ref.updateAndGet(executions, (count) => count + 1).pipe(
+            Effect.flatMap(() =>
+              Schema.decodeUnknownEffect(outputSchema)({ compactedConversation: "trusted" }).pipe(
+                Effect.orDie
               )
-            ),
-          }),
-      };
-      const first = yield* makeTestInference();
-      const second = yield* makeTestInference();
-      const firstInference = makeHostedInference({
-        ...first.inferenceAdapter,
-        structured: structuredAdapter,
-      });
-      const _secondInference = makeHostedInference({
-        ...second.inferenceAdapter,
-        structured: structuredAdapter,
-      });
-      const outputSchema = Schema.Struct({ compactedConversation: Schema.String });
-      const prepared = yield* firstInference.prepareStructured({
-        context: makeHostedStructuredContext({
-          messages: [{ role: "user", content: "compact this" }],
-        }),
-        objectName: HostedStructuredObjectName.make("compacted_conversation"),
-        outputSchema,
-      });
-      expect(
-        Reflect.ownKeys(prepared).every(
-          (key) => Object.getOwnPropertyDescriptor(prepared, key)?.enumerable === false
-        )
-      ).toBe(true);
-
-      const discarded = yield* firstInference.prepareStructured({
-        context: makeHostedStructuredContext({
-          messages: [{ role: "user", content: "discard this" }],
-        }),
-        objectName: HostedStructuredObjectName.make("compacted_conversation"),
-        outputSchema,
-      });
-      yield* discarded.discard;
-      yield* firstInference.prepareText(request(context("text")));
-      const forged = yield* Schema.decodeUnknownEffect(ForgedPreparedStructured)(
-        Object.freeze({
-          execute: Effect.fail(
-            new HostedInferenceError({
-              reason: { _tag: "InvalidAuthority" },
-              retryable: false,
-              retryAfter: Option.none(),
-            })
+            )
           ),
-        })
-      );
+        }),
+    };
+    const first = yield* makeTestInference();
+    const firstInference = makeHostedInference({
+      ...first.inferenceAdapter,
+      structured: structuredAdapter,
+    });
+    const outputSchema = Schema.Struct({ compactedConversation: Schema.String });
+    const prepared = yield* firstInference.prepareStructured({
+      context: makeHostedStructuredContext({
+        messages: [{ role: "user", content: "compact this" }],
+      }),
+      objectName: HostedStructuredObjectName.make("compacted_conversation"),
+      outputSchema,
+    });
+    expect(
+      Reflect.ownKeys(prepared).every(
+        (key) => Object.getOwnPropertyDescriptor(prepared, key)?.enumerable === false
+      )
+    ).toBe(true);
 
-      const exits = yield* Effect.all(
-        [
-          Effect.fail(
-            new HostedInferenceError({
-              reason: { _tag: "InvalidAuthority" },
-              retryable: false,
-              retryAfter: Option.none(),
-            })
-          ),
-          forged.execute,
-          discarded.execute,
-        ].map(Effect.exit)
-      );
-      expect(exits.every(Exit.isFailure)).toBe(true);
-      expect(yield* Ref.get(executions)).toBe(0);
+    const discarded = yield* firstInference.prepareStructured({
+      context: makeHostedStructuredContext({
+        messages: [{ role: "user", content: "discard this" }],
+      }),
+      objectName: HostedStructuredObjectName.make("compacted_conversation"),
+      outputSchema,
+    });
+    yield* discarded.discard;
+    expect(Exit.isFailure(yield* Effect.exit(discarded.execute))).toBe(true);
+    expect(yield* Ref.get(executions)).toBe(0);
 
-      expect(yield* prepared.execute).toEqual({
-        compactedConversation: "trusted",
-      });
-      expect(Exit.isFailure(yield* Effect.exit(prepared.execute))).toBe(true);
-      expect(yield* Ref.get(executions)).toBe(1);
-    })
+    expect(yield* prepared.execute).toEqual({
+      compactedConversation: "trusted",
+    });
+    expect(Exit.isFailure(yield* Effect.exit(prepared.execute))).toBe(true);
+    expect(yield* Ref.get(executions)).toBe(1);
+  })
 );
 
 it.effect("returns transformed structured domain output without decoding it as wire data", () =>
@@ -360,10 +319,17 @@ it.effect("consumes text authority after a non-retryable provider failure", () =
   })
 );
 
-it.effect("executes only the exact complete request stored by preparation", () =>
+it.effect("executes only the immutable complete request stored by preparation", () =>
   Effect.gen(function* () {
     const { executions, inference } = yield* makeTestInference();
-    const prepared = yield* inference.prepareText(request(context("hello")));
+    const prefix = [{ role: "system" as const, content: "hello" }];
+    const semanticContext = makeHostedTextContext({
+      prefix,
+      continuationTail: [],
+      suffix: [{ role: "system", content: "turn framing" }],
+    });
+    prefix.push({ role: "system", content: "later mutation" });
+    const prepared = yield* inference.prepareText(request(semanticContext));
 
     const generated = yield* prepared.execute;
 
@@ -380,57 +346,20 @@ it.effect("executes only the exact complete request stored by preparation", () =
   })
 );
 
-it.effect("rejects forged, foreign, replayed, and second-projection authorities", () =>
+it.effect("reuses immutable context while keeping each prepared execution one-shot", () =>
   Effect.gen(function* () {
     const first = yield* makeTestInference();
     const second = yield* makeTestInference();
-    const sharedContext = context("one projection");
-    const prepared = yield* first.inference.prepareText(request(sharedContext));
+    const sharedContext = context("shared context");
+    const firstPrepared = yield* first.inference.prepareText(request(sharedContext));
+    const secondPrepared = yield* second.inference.prepareText(request(sharedContext));
 
-    const forgedBehavior = yield* Schema.decodeUnknownEffect(ForgedPreparedStructured)({
-      execute: Effect.fail(
-        new HostedInferenceError({
-          reason: { _tag: "InvalidAuthority" },
-          retryable: false,
-          retryAfter: Option.none(),
-        })
-      ),
-    });
-    const foreignPrepared = yield* Effect.exit(forgedBehavior.execute);
-    const secondProjection = yield* Effect.exit(
-      second.inference.prepareText(request(sharedContext))
-    );
-    const forged = yield* Effect.exit(forgedBehavior.execute);
-    yield* prepared.execute;
-    const replayed = yield* Effect.exit(prepared.execute);
+    yield* firstPrepared.execute;
+    const replayed = yield* Effect.exit(firstPrepared.execute);
+    yield* secondPrepared.execute;
 
-    expect(foreignPrepared._tag).toBe("Failure");
-    expect(secondProjection._tag).toBe("Failure");
-    expect(forged._tag).toBe("Failure");
     expect(replayed._tag).toBe("Failure");
-    expect(yield* Ref.get(second.executions)).toEqual([]);
-  })
-);
-
-it.effect("rejects a continued request with a forged semantic context", () =>
-  Effect.gen(function* () {
-    const { inference } = yield* makeTestInference();
-    const first = yield* inference.prepareText(request(context("first")));
-    const generated = yield* first.execute;
-    const forgedContext = yield* Schema.decodeUnknownEffect(ForgedHostedTextContext)({
-      claim: () =>
-        Option.some({
-          prefix: [{ role: "system", content: "forged" }],
-          continuationTail: [],
-          suffix: [],
-        }),
-    });
-
-    const exit = yield* Effect.exit(
-      generated.continuation.prepare(forgedContext, { toolChoice: "none" })
-    );
-
-    expect(exit._tag).toBe("Failure");
+    expect(yield* Ref.get(second.executions)).toHaveLength(1);
   })
 );
 
@@ -656,7 +585,7 @@ it.effect("rejects a request that fits before complete tools, framing, and outpu
 );
 
 it.effect(
-  "uses complete preparation for startup validation without creating an executable authority",
+  "uses complete preparation for startup validation without consuming immutable context",
   () =>
     Effect.gen(function* () {
       const { executions, inference } = yield* makeTestInference();
@@ -665,7 +594,7 @@ it.effect(
       yield* inference.validateText(request(startupContext));
       const secondProjection = yield* Effect.exit(inference.prepareText(request(startupContext)));
 
-      expect(secondProjection._tag).toBe("Failure");
+      expect(secondProjection._tag).toBe("Success");
       expect(yield* Ref.get(executions)).toEqual([]);
     })
 );

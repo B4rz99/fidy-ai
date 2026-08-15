@@ -1,10 +1,10 @@
-import { Function as Fn, Result, Schema } from "effect";
+import { Option, Result, Schema } from "effect";
 import type {
   RecordingClient,
   RecordingTransportOutcome,
 } from "~/shell/observability/sentry-adapter";
 
-const compatibilityKey = Symbol.for("@fidy/server/testing/observability-compatibility");
+let compatibilityRecorder = Option.none<RecordingClient>();
 
 export const compatibilityConditionNames = [
   "runtimePinned",
@@ -50,17 +50,13 @@ export type CompatibilityTransportOutcome = RecordingTransportOutcome;
 
 /** Installs the fixture recorder once so the preloaded client is the client exercised by the body. */
 export const installCompatibilityRecorder = (recorder: RecordingClient): void => {
-  if (Reflect.has(globalThis, compatibilityKey)) throw new Error("compatibility recorder replaced");
-  Reflect.set(globalThis, compatibilityKey, recorder);
+  if (Option.isSome(compatibilityRecorder)) throw new Error("compatibility recorder replaced");
+  compatibilityRecorder = Option.some(recorder);
 };
 
 /** Reads the recorder created before the compatibility fixture body was imported. */
-export const getCompatibilityRecorder = (): RecordingClient => {
-  const globals = Fn.cast<unknown, Readonly<Record<PropertyKey, unknown>>>(globalThis);
-  const recorder = globals[compatibilityKey];
-  if (recorder === undefined) throw new Error("compatibility preload missing");
-  return Fn.cast<unknown, RecordingClient>(recorder);
-};
+export const getCompatibilityRecorder = (): RecordingClient =>
+  Option.getOrThrowWith(compatibilityRecorder, () => new Error("compatibility preload missing"));
 
 /** Converts a Result into a preload failure without introducing a fallback initialization path. */
 export const requireInstalled = <A, E>(result: Result.Result<A, E>): A =>

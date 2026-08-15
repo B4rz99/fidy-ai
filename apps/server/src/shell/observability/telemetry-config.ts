@@ -1,4 +1,4 @@
-import { Config, Data, Effect, Function as Fn, Option, Redacted, Schema } from "effect";
+import { Config, Data, Effect, Option, Redacted, Schema } from "effect";
 
 const productionTraceRateTenPercent = 0.1;
 const productionTraceRateFivePercent = 0.05;
@@ -13,17 +13,24 @@ export type ProductionTraceRate =
   | typeof productionTraceRateTenPercent
   | typeof productionTraceRateFivePercent
   | typeof productionTraceRateOnePercent;
+const fullShaReleasePattern = /^fidy@[0-9a-f]{40}$/u;
+
 /** Immutable Fidy release identifier validated as a full lowercase Git SHA. */
-export type TelemetryRelease = `fidy@${string}`;
+export const TelemetryRelease = Schema.TemplateLiteral(["fidy@", Schema.String]).check(
+  Schema.isPattern(fullShaReleasePattern)
+);
+export type TelemetryRelease = typeof TelemetryRelease.Type;
 
 /** Validated DSN for the project selected by the deployment role. */
-export type SentryDsn = `https://${string}`;
+export const SentryDsn = Schema.TemplateLiteral(["https://", Schema.String]);
+export type SentryDsn = typeof SentryDsn.Type;
 
 /** Public coordinates that distinguish an approved Sentry project without exposing its DSN. */
-export type SentryProjectIdentity = Readonly<{
-  origin: `https://${string}`;
-  projectId: `${number}`;
-}>;
+export const SentryProjectIdentity = Schema.Struct({
+  origin: SentryDsn,
+  projectId: Schema.TemplateLiteral([Schema.Finite]),
+});
+export type SentryProjectIdentity = typeof SentryProjectIdentity.Type;
 
 /** Code-owned production and non-production project policy; absent identities reject enablement. */
 export type ApprovedSentryProjects = Readonly<{
@@ -101,7 +108,6 @@ const rawTelemetryConfig = Config.all({
   traceSampleRate: Config.option(Config.finite("SENTRY_TRACE_SAMPLE_RATE")),
 });
 
-const fullShaReleasePattern = /^fidy@[0-9a-f]{40}$/u;
 const sentryProjectPathPattern = /^\/\d+$/u;
 
 const enabledCapture = (errors: boolean, traces: boolean): EnabledCapture => {
@@ -130,11 +136,16 @@ const decodeDsn = (
   if (!hasValidDsnShape(url)) {
     return Effect.fail(new InvalidTelemetryConfig({ reason: "malformed_dsn" }));
   }
-  return Option.isSome(approvedProject) &&
-    url.origin === approvedProject.value.origin &&
-    url.pathname === `/${approvedProject.value.projectId}`
-    ? Effect.succeed(Fn.cast<string, SentryDsn>(value))
-    : Effect.fail(new InvalidTelemetryConfig({ reason: "crossed_project" }));
+  if (
+    Option.isNone(approvedProject) ||
+    url.origin !== approvedProject.value.origin ||
+    url.pathname !== `/${approvedProject.value.projectId}`
+  ) {
+    return Effect.fail(new InvalidTelemetryConfig({ reason: "crossed_project" }));
+  }
+  return Schema.decodeUnknownEffect(SentryDsn)(value).pipe(
+    Effect.mapError(() => new InvalidTelemetryConfig({ reason: "malformed_dsn" }))
+  );
 };
 
 const decodeRelease = (
@@ -143,9 +154,9 @@ const decodeRelease = (
   Option.match(candidate, {
     onNone: () => Effect.fail(new InvalidTelemetryConfig({ reason: "missing_release" })),
     onSome: (value) =>
-      fullShaReleasePattern.test(value)
-        ? Effect.succeed(Fn.cast<string, TelemetryRelease>(value))
-        : Effect.fail(new InvalidTelemetryConfig({ reason: "malformed_release" })),
+      Schema.decodeUnknownEffect(TelemetryRelease)(value).pipe(
+        Effect.mapError(() => new InvalidTelemetryConfig({ reason: "malformed_release" }))
+      ),
   });
 
 const productionTraceRate = (
@@ -257,14 +268,14 @@ export const decodeSentryAccountSmokeConfig = (input: {
     if (Option.isNone(candidate) || !hasValidDsnShape(candidate.value)) {
       return yield* new InvalidTelemetryConfig({ reason: "malformed_dsn" });
     }
-    const projectId = candidate.value.pathname.slice(1);
-    const dsn = yield* decodeDsn(
-      input.dsn,
-      Option.some({
-        origin: Fn.cast<string, `https://${string}`>(candidate.value.origin),
-        projectId: Fn.cast<string, `${number}`>(projectId),
-      })
-    );
+    const identity = Schema.decodeUnknownOption(SentryProjectIdentity)({
+      origin: candidate.value.origin,
+      projectId: candidate.value.pathname.slice(1),
+    });
+    if (Option.isNone(identity)) {
+      return yield* new InvalidTelemetryConfig({ reason: "malformed_dsn" });
+    }
+    const dsn = yield* decodeDsn(input.dsn, identity);
     const release = yield* decodeRelease(Option.some(input.release));
     return {
       _tag: "NonProductionEnabled",

@@ -2,7 +2,7 @@
  * Projectors rebuild an untrusted value into the exact shape allowed past the Sentry boundary,
  * constructing each field from a closed schema rather than removing fields from the original.
  */
-import { Cause, Function as Fn, Option, Predicate, Schema } from "effect";
+import { Cause, Option, Predicate, Schema } from "effect";
 import { strictDecoding } from "./decoding";
 import {
   ClassifiedFailure,
@@ -102,14 +102,16 @@ const normalizeSourceFile = (value: string): Option.Option<string> => {
 const projectStackLine = (line: string): Option.Option<ProjectedStackFrame> => {
   const match = stackLinePattern.exec(line);
   if (match === null) return Option.none();
-  return Option.flatMap(normalizeSourceFile(match[2] ?? ""), (filename) =>
-    decodeStrict(ProjectedStackFrame, {
-      module: filename.slice(0, filename.lastIndexOf(".")),
-      filename,
-      function: match[1] ?? "anonymous",
-      lineno: Number(match[3]),
-      colno: Number(match[4]),
-    })
+  return Option.flatMap(Option.fromUndefinedOr(match[2]), (sourceFile) =>
+    Option.flatMap(normalizeSourceFile(sourceFile), (filename) =>
+      decodeStrict(ProjectedStackFrame, {
+        module: filename.slice(0, filename.lastIndexOf(".")),
+        filename,
+        function: match[1] ?? "anonymous",
+        lineno: Number(match[3]),
+        colno: Number(match[4]),
+      })
+    )
   );
 };
 
@@ -122,8 +124,8 @@ const projectReasonStack = (reason: Cause.Reason<unknown>): ReadonlyArray<Projec
 const stackText = (cause: unknown): Option.Option<string> => {
   if (!Predicate.isObject(cause)) return Option.none();
   try {
-    const stack = Fn.cast<object, { readonly stack: unknown }>(cause).stack;
-    return Predicate.isString(stack) ? Option.some(stack) : Option.none();
+    if (!Predicate.hasProperty(cause, "stack")) return Option.none();
+    return Predicate.isString(cause.stack) ? Option.some(cause.stack) : Option.none();
   } catch {
     return Option.none();
   }
@@ -302,7 +304,7 @@ export const ProjectedFinalSpan = Schema.Struct({
 export type ProjectedFinalSpan = typeof ProjectedFinalSpan.Type;
 
 const getUnknownProperty = (value: object, key: string): unknown =>
-  Fn.cast<object, Readonly<Record<PropertyKey, unknown>>>(value)[key];
+  Predicate.hasProperty(value, key) ? value[key] : undefined;
 
 const pickPresent = (
   value: object,
@@ -322,7 +324,7 @@ const projectFinalSpanData = (value: unknown): unknown =>
 
 /** Reconstructs a final SDK span and drops profile, measurement, link, origin, and widened data. */
 export const projectFinalSpan = (value: unknown): Option.Option<ProjectedFinalSpan> => {
-  if (typeof value !== "object" || value === null) return Option.none();
+  if (!Predicate.isObject(value)) return Option.none();
   return decodeStrict(ProjectedFinalSpan, {
     ...pickPresent(
       value,

@@ -1,42 +1,68 @@
 #!/usr/bin/env bun
 
-import { type UnknownRecord, requireArgument, requireRecord } from "./shared";
+import { Schema } from "effect";
+import { requireArgument } from "./shared";
 
 type PreviewRequest = {
   readonly number: number;
   readonly headSha: string;
 };
 
-const successfulRun = (event: unknown): UnknownRecord => {
-  const run = requireRecord(
-    requireRecord(event, "workflow-run event").workflow_run,
-    "workflow run"
-  );
+const WorkflowRunEvent = Schema.Struct({
+  workflow_run: Schema.Struct({
+    conclusion: Schema.String,
+    event: Schema.String,
+    head_repository: Schema.Struct({ full_name: Schema.String }),
+    head_sha: Schema.String,
+    pull_requests: Schema.Array(Schema.Struct({ number: Schema.Finite })),
+  }),
+});
+type WorkflowRunEventValue = typeof WorkflowRunEvent.Type;
+type WorkflowRun = WorkflowRunEventValue["workflow_run"];
+
+const PullRequest = Schema.Struct({
+  number: Schema.Finite,
+  state: Schema.String,
+  head: Schema.Struct({
+    sha: Schema.String,
+    repo: Schema.Struct({ full_name: Schema.String }),
+  }),
+});
+
+const decodeWorkflowRun = (event: unknown): WorkflowRun => {
+  try {
+    return Schema.decodeUnknownSync(WorkflowRunEvent)(event).workflow_run;
+  } catch {
+    throw new Error("workflow-run event is malformed");
+  }
+};
+
+const successfulRun = (event: unknown): WorkflowRun => {
+  const run = decodeWorkflowRun(event);
   if (run.conclusion !== "success" || run.event !== "pull_request") {
     throw new Error("trigger must be a successful pull-request workflow");
   }
   return run;
 };
 
-const sameRepositoryHead = (run: UnknownRecord, repository: string): string => {
-  const runRepository = requireRecord(run.head_repository, "workflow head repository");
-  if (runRepository.full_name !== repository) {
+const sameRepositoryHead = (run: WorkflowRun, repository: string): string => {
+  if (run.head_repository.full_name !== repository) {
     throw new Error("workflow head must belong to the same repository");
   }
   const headSha = run.head_sha;
-  if (typeof headSha !== "string" || !/^[0-9a-f]{40}$/u.test(headSha)) {
+  if (!/^[0-9a-f]{40}$/u.test(headSha)) {
     throw new Error("workflow head SHA is invalid");
   }
   return headSha;
 };
 
-const associatedPullRequest = (run: UnknownRecord): number => {
+const associatedPullRequest = (run: WorkflowRun): number => {
   const associated = run.pull_requests;
-  if (!Array.isArray(associated) || associated.length !== 1) {
+  if (associated.length !== 1) {
     throw new Error("workflow must have exactly one associated pull request");
   }
-  const number = requireRecord(associated[0], "associated pull request").number;
-  if (typeof number !== "number" || !Number.isInteger(number) || number <= 0) {
+  const number = associated[0]?.number;
+  if (number === undefined || !Number.isInteger(number) || number <= 0) {
     throw new Error("associated pull request number is invalid");
   }
   return number;
@@ -64,14 +90,18 @@ export const validatePreviewRequest = (
   repository: string
 ): PreviewRequest => {
   const expected = previewRequestFromEvent(event, repository);
-  const pullRequestRecord = requireRecord(pullRequest, "pull request");
+  let pullRequestRecord: typeof PullRequest.Type;
+  try {
+    pullRequestRecord = Schema.decodeUnknownSync(PullRequest)(pullRequest);
+  } catch {
+    throw new Error("pull request is malformed");
+  }
   if (pullRequestRecord.number !== expected.number) {
     throw new Error("pull request is not associated with the workflow run");
   }
   if (pullRequestRecord.state !== "open") throw new Error("pull request is not open");
-  const head = requireRecord(pullRequestRecord.head, "pull request head");
-  const headRepository = requireRecord(head.repo, "pull request head repository");
-  if (headRepository.full_name !== repository) {
+  const head = pullRequestRecord.head;
+  if (head.repo.full_name !== repository) {
     throw new Error("pull request head must belong to the same repository");
   }
   if (head.sha !== expected.headSha) {

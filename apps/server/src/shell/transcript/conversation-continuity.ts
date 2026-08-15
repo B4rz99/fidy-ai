@@ -6,7 +6,6 @@ import {
   DateTime,
   Effect,
   Equal,
-  Function as Fn,
   Layer,
   Option,
   Schema,
@@ -70,12 +69,6 @@ export type ContinuityView = {
   readonly turns: ReadonlyArray<ConversationTurn>;
 };
 
-/**
- * Attempt-scoped input for the WorkingContext owner. It binds one User, active request, durable
- * revision, and ConversationContinuity scope without exposing those persistence facts.
- */
-export type PreparedAttemptContext = object;
-
 /** WorkingContext input captured by one preparation generation. @internal */
 export type PreparedWorkingContextSnapshot = Readonly<{
   user: Effect.Success<ReturnType<typeof findUserInScope>>;
@@ -87,28 +80,8 @@ export type PreparedWorkingContextSnapshot = Readonly<{
   isActive: () => boolean;
 }>;
 
-type PreparedAttemptContextAuthority = Readonly<{
-  claim: () => Option.Option<PreparedWorkingContextSnapshot>;
-}>;
-
-const preparedAttemptContextAuthorityPrototype: object = Object.freeze({});
-
-const preparedAttemptContextAuthority = (
-  claim: () => Option.Option<PreparedWorkingContextSnapshot>
-): PreparedAttemptContext => {
-  const authority = Fn.cast<object, PreparedAttemptContextAuthority>({});
-  Object.setPrototypeOf(authority, preparedAttemptContextAuthorityPrototype);
-  Object.defineProperty(authority, "claim", { enumerable: false, value: claim });
-  return Object.freeze(authority);
-};
-
-/** Consumes an authentic continuity-owned context once; structural lookalikes are rejected. @internal */
-export const claimPreparedAttemptContext = (
-  context: PreparedAttemptContext
-): Option.Option<PreparedWorkingContextSnapshot> =>
-  Object.getPrototypeOf(context) === preparedAttemptContextAuthorityPrototype
-    ? Fn.cast<PreparedAttemptContext, PreparedAttemptContextAuthority>(context).claim()
-    : Option.none();
+/** Immutable attempt-scoped input for WorkingContext while this preparation remains active. */
+export type PreparedAttemptContext = PreparedWorkingContextSnapshot;
 
 /** The prepared continuity changed before admission; no active User entry was appended. */
 export class ContinuityChanged extends Data.TaggedError("ContinuityChanged")<{}> {}
@@ -1123,14 +1096,8 @@ const usePreparedAttempt = <A, E, R>(
       startedAt: persisted.startedAt,
       isActive: isAttemptActive,
     };
-    let contextAvailable = true;
-    const context = preparedAttemptContextAuthority(() => {
-      if (!contextAvailable || !source.isActive()) return Option.none();
-      contextAvailable = false;
-      return Option.some(source);
-    });
     const prepared: PreparedAttempt = Object.freeze({
-      context,
+      context: Object.freeze(source),
       begin: () =>
         beginPreparedAttempt({
           input: {

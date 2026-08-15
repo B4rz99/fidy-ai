@@ -119,6 +119,11 @@ Judge a `Record` by its actual keyspace and value contract.
 
 ### Other defaults
 
+- Type-only casts are prohibited. Preserve assignability through the module interface or validate
+  unknown values at runtime; never use `Function.cast`, `as Type`, angle-bracket assertions, or
+  custom guards that claim more than they check. Const assertions remain valid literal inference.
+- Use `WeakMap` only when private data must be associated with an object by identity and must not
+  extend that object's lifetime.
 - Core functions do not accept explicit `unknown` parameters. Raw input is decoded at the shell
   boundary; a genuine pure validation module is a narrow, explained config-level exception.
 - `Option` for absence. Never `null`. `undefined` only where an Effect API demands it.

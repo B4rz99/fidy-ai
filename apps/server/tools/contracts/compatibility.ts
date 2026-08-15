@@ -1,15 +1,20 @@
 import { type IOasdiffChange, runOasdiffBreakingFromSpecs } from "@oasdiff-js/oasdiff-js";
+import { Predicate, Schema } from "effect";
 
-export type JsonValue = null | boolean | number | string | JsonArray | JsonObject;
+const JsonObject = Schema.Record(Schema.String, Schema.Json);
+export type JsonValue = Schema.Json;
 export type JsonArray = ReadonlyArray<JsonValue>;
-export type JsonObject = Readonly<{ [key: string]: JsonValue }>;
+export type JsonObject = typeof JsonObject.Type;
 
-export type OperationPolicyManifest = {
-  readonly operations: ReadonlyArray<{
-    readonly id: string;
-    readonly policy: JsonValue;
-  }>;
-};
+const OperationPolicyManifest = Schema.Struct({
+  operations: Schema.Array(
+    Schema.Struct({
+      id: Schema.String,
+      policy: Schema.Json,
+    })
+  ),
+});
+export type OperationPolicyManifest = typeof OperationPolicyManifest.Type;
 
 /** Generated contract pair that is compared and digested as one compatibility boundary. */
 export type ContractArtifacts = {
@@ -17,56 +22,57 @@ export type ContractArtifacts = {
   readonly operationPolicy: OperationPolicyManifest;
 };
 
-export type ContractFinding =
-  | {
-      readonly source: "openapi";
-      readonly rule: string;
-      readonly location: JsonObject;
-      readonly detail: string;
-    }
-  | {
-      readonly source: "operation-policy";
-      readonly rule: string;
-      readonly operationId: string;
-      readonly detail: string;
-    };
+const ContractFinding = Schema.Union([
+  Schema.Struct({
+    source: Schema.Literal("openapi"),
+    rule: Schema.String,
+    location: JsonObject,
+    detail: Schema.String,
+  }),
+  Schema.Struct({
+    source: Schema.Literal("operation-policy"),
+    rule: Schema.String,
+    operationId: Schema.String,
+    detail: Schema.String,
+  }),
+]);
+export type ContractFinding = typeof ContractFinding.Type;
 
-export type ContractAcknowledgement = {
-  readonly baseDigest: string;
-  readonly candidateDigest: string;
-  readonly findings: ReadonlyArray<ContractFinding>;
-  readonly rolloutIssue: string;
+const ContractAcknowledgement = Schema.Struct({
+  baseDigest: Schema.String,
+  candidateDigest: Schema.String,
+  findings: Schema.Array(ContractFinding),
+  rolloutIssue: Schema.String,
+});
+export type ContractAcknowledgement = typeof ContractAcknowledgement.Type;
+
+const sortJson = (value: JsonValue): JsonValue => {
+  if (Array.isArray(value)) return value.map(sortJson);
+  if (Predicate.isObject(value)) {
+    const object: JsonObject = Schema.decodeUnknownSync(JsonObject)(value);
+    return Object.fromEntries(
+      Object.entries(object)
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([key, entry]) => [key, sortJson(entry)])
+    );
+  }
+  return value;
 };
 
 export const asJsonValue = (value: unknown, path = "$"): JsonValue => {
-  if (
-    value === null ||
-    typeof value === "boolean" ||
-    typeof value === "string" ||
-    (typeof value === "number" && Number.isFinite(value))
-  ) {
-    return value;
+  try {
+    return sortJson(Schema.decodeUnknownSync(Schema.Json)(value));
+  } catch {
+    throw new Error(`Contract value at ${path} is not valid JSON`);
   }
-  if (Array.isArray(value)) {
-    return value.map((entry, index) => asJsonValue(entry, `${path}[${index}]`));
-  }
-  if (typeof value === "object") {
-    return Object.fromEntries(
-      Object.entries(value)
-        .sort(([left], [right]) => left.localeCompare(right))
-        .map(([key, entry]) => [key, asJsonValue(entry, `${path}.${key}`)])
-    );
-  }
-  throw new Error(`Contract value at ${path} has unsupported type ${typeof value}`);
 };
 
-const isJsonObject = (value: JsonValue): value is JsonObject =>
-  typeof value === "object" && value !== null && !Array.isArray(value);
-
 export const asJsonObject = (value: unknown, path = "$"): JsonObject => {
-  const json = asJsonValue(value, path);
-  if (!isJsonObject(json)) throw new Error(`Contract value at ${path} is not a JSON object`);
-  return json;
+  try {
+    return Schema.decodeUnknownSync(JsonObject)(value);
+  } catch {
+    throw new Error(`Contract value at ${path} is not a JSON object`);
+  }
 };
 
 /** Stable JSON is the wire format for artifacts, digests, findings, and exact acknowledgements. */
@@ -76,30 +82,31 @@ export const canonicalJson = (value: unknown): string => JSON.stringify(asJsonVa
 export const contractDigest = (artifacts: ContractArtifacts): string =>
   new Bun.CryptoHasher("sha256").update(canonicalJson(artifacts)).digest("hex");
 
-/** Allows field inspection without array semantics; JSON-safe leaf values remain unvalidated. */
-export const isUnknownRecord = (value: unknown): value is Readonly<Record<string, unknown>> =>
-  typeof value === "object" && value !== null && !Array.isArray(value);
-
 /** Parses generated OpenAPI and operation-policy values, rejecting malformed policy entries. */
 export const contractArtifactsFrom = (
   openapi: unknown,
   policy: unknown,
   subject: string
 ): ContractArtifacts => {
-  if (!isUnknownRecord(policy) || !Array.isArray(policy.operations)) {
+  let operationPolicy: OperationPolicyManifest;
+  try {
+    operationPolicy = Schema.decodeUnknownSync(OperationPolicyManifest)(policy);
+  } catch {
     throw new Error(`${subject} operation policy is not an operation-policy manifest`);
   }
   return {
     openapi: asJsonObject(openapi, `${subject} OpenAPI contract`),
-    operationPolicy: {
-      operations: policy.operations.map((operation: unknown, index: number) => {
-        if (!isUnknownRecord(operation) || typeof operation.id !== "string") {
-          throw new Error(`${subject} operation policy.operations[${index}] is invalid`);
-        }
-        return { id: operation.id, policy: asJsonValue(operation.policy) };
-      }),
-    },
+    operationPolicy,
   };
+};
+
+/** Decodes one exact compatibility acknowledgement before it can authorize contract findings. */
+export const contractAcknowledgementFrom = (value: unknown): ContractAcknowledgement => {
+  try {
+    return Schema.decodeUnknownSync(ContractAcknowledgement)(value);
+  } catch {
+    throw new Error("Contract value is not a valid exact-finding acknowledgement");
+  }
 };
 
 const normalizeOpenApiChange = (change: IOasdiffChange): ContractFinding => ({

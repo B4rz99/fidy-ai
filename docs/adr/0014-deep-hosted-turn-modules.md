@@ -24,7 +24,7 @@ The research sketches under `reports/issue-11/` are decision inputs, not accepte
 Use three deep modules behind small interfaces:
 
 - **HostedInference** owns provider conversion, compatible token counting, verified context capacity, request preparation, and execution. It converts a semantic hosted request into an opaque, adapter-local `PreparedHostedRequest`, measures its complete provider-facing messages, canonical tools or strict structured-output format, framing, and output reserve, and executes only that exact prepared representation. Startup validation and live calls use the same preparation implementation. Production OpenAI and deterministic test adapters implement this external seam.
-- **WorkingContext** owns the sole construction and projection of one Turn's semantic context. Its only legal order is `[system and per-turn policy | all active Memories | CompactedConversation, if any | exact uncompacted Transcript | active request]`. It supplies trusted policy itself and projects persisted or generated prose as untrusted User context. One WorkingContext is reused across every hosted round in the Turn.
+- **WorkingContext** owns the sole construction and projection of one Turn's semantic context. Its only legal order is `[system and per-turn policy | all active Memories | CompactedConversation, if any | exact uncompacted Transcript | active request]`. It supplies trusted policy itself and projects persisted or generated prose as untrusted User context. One immutable WorkingContext may be reused across every hosted round in the Turn.
 - **ConversationContinuity** owns explicit Turn lifecycle, exact Transcript persistence, abandoned-Pending recovery, retention, complete-prefix Compaction, optimistic commit, and physical deletion. PostgreSQL remains concrete behind this module; callers do not coordinate rows, cursors, revisions, or deletion.
 
 The boundaries own their policies completely:
@@ -42,16 +42,16 @@ This section is the accepted public-type proposal; no type sketch under `reports
 - raw provider messages, continuation state, response-format framing, tokenizer identities, or model identities;
 - caller-supplied context capacity, aggregate budget arithmetic, Compaction thresholds, or output-capacity decisions;
 - caller-assembled system policy, per-turn policy, prompt arrays, or fragments that can be appended or reordered after WorkingContext construction;
-- constructible prepared requests, WorkingContexts, continuity snapshots, Turn handles, or cross-User persistence authorities.
+- constructible prepared requests, Turn handles, or cross-User persistence authorities.
 
-Server-owned policy values remain independently named even when launch values coincide. Opaque authorities are bound to the adapter, User, revision, or Turn that created them and are rejected when foreign, stale, already consumed, or forged.
+Server-owned policy values remain independently named even when launch values coincide. Prepared requests and mutation authorities are bound to the adapter, User, revision, or Turn that created them and are rejected when stale or already consumed. Prepared continuity context and WorkingContext are immutable data: their owning modules construct them, trusted shell callers may reuse them while their attempt is active, and runtime capability registries do not authenticate them.
 
 ### Legal hosted-Turn sequence
 
-1. ConversationContinuity acquires the per-User session-scoped serialization authority, recovers abandoned Pending work as Interrupted, optionally attempts safe Compaction, and returns one opaque revision-bound continuity snapshot.
-2. WorkingContext constructs one opaque context from its trusted policy, all current Memories, the snapshot's optional CompactedConversation and exact Transcript, and the in-memory active request.
+1. ConversationContinuity acquires the per-User session-scoped serialization authority, recovers abandoned Pending work as Interrupted, optionally attempts safe Compaction, and returns one immutable revision-bound continuity context.
+2. WorkingContext constructs immutable semantic context from its trusted policy, all current Memories, the prepared context's optional CompactedConversation and exact Transcript, and the in-memory active request.
 3. HostedInference prepares and measures the complete provider-facing request, canonical tools, framing, and output reserve.
-4. Only after preflight succeeds, `beginTurn` compares the continuity and Memory revisions and persists the active User entry as a Pending Turn. If either changed, it appends nothing, destroys the prepared authorities, and restarts at step 1. Retries are bounded to three before failing closed.
+4. Only after preflight succeeds, `beginTurn` compares the continuity and Memory revisions and persists the active User entry as a Pending Turn. If either changed, it appends nothing, discards the prepared execution, and restarts at step 1. Retries are bounded to three before failing closed.
 5. HostedInference executes only the prepared request. Later model rounds reuse the same WorkingContext; canonical calls and complete bounded outcomes extend only the prepared Turn continuation owned by HostedInference.
 6. Delivery retries reuse the exact prepared reply and never rerun inference or canonical mutations.
 7. Visible delivery records Completed. A handled model or exhausted delivery failure records Failed with a fixed metadata-only reason. Cancellation or process abandonment is recovered as Interrupted by the next preparation. The serialization authority is then released.
@@ -76,14 +76,14 @@ AuditLogEntries, terminal markers, logs, telemetry, and errors contain allowlist
 
 ## Consequences
 
-An unmeasured hosted request, invalid WorkingContext order, caller-selected capacity, and indefinitely blocking abandoned Turn are no longer caller-constructable states. Provider conversion, capacity arithmetic, lifecycle recovery, retention, and Compaction become local to their owners. `AgentService` becomes a coordinator over the three boundaries, and tests use the same interfaces as production callers.
+An unmeasured hosted request, caller-selected capacity, and indefinitely blocking abandoned Turn are no longer caller-constructable states. WorkingContext keeps semantic ordering local to its constructor without turning immutable data into a runtime capability. Provider conversion, capacity arithmetic, lifecycle recovery, retention, and Compaction remain local to their owners. `AgentService` is a coordinator over the three boundaries, and tests use the same interfaces as production callers.
 
 A continuity snapshot can become stale between preflight and `beginTurn`; this is an explicit retry result rather than a partial admission. Failed and Interrupted User text can eventually become lossy CompactedConversation and be physically deleted under the same disclosed retention semantics as completed conversation.
 
 ## Rejected alternatives
 
 - Keep token counting separate from provider request construction: rejected because measured and executed representations can drift.
-- Enforce prompt order with array-position tests alone: rejected because the interface still permits invalid construction.
+- Let orchestration assemble prompt order: rejected because order would drift across callers instead of remaining local to WorkingContext construction.
 - Expose capacity or context budgets as caller-adjustable configuration: rejected because callers could authorize requests the provider boundary cannot safely execute.
 - Carry raw provider continuation through AgentService: rejected because provider state could be inspected, forged, or paired with a different prepared context.
 - Infer Turn completion from the last Transcript entry: rejected because model, delivery, and process failures have no safe terminal representation.

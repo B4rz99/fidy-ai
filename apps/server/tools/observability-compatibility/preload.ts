@@ -1,4 +1,3 @@
-import { Function as Fn } from "effect";
 import { makeSentryRecordingClient } from "~/shell/observability/sentry-adapter";
 import { installTelemetryBootstrap } from "~/shell/observability/telemetry-bootstrap";
 import type { NonProductionTelemetryConfig } from "~/shell/observability/telemetry-config";
@@ -18,7 +17,7 @@ const config: NonProductionTelemetryConfig = {
   environment: "ci",
   project: "non-production",
   capture: { errors: true, traces: true },
-  dsn: Fn.cast<string, NonProductionTelemetryConfig["dsn"]>("https://public@example.invalid/1"),
+  dsn: "https://public@example.invalid/1",
   release: "fidy@0000000000000000000000000000000000000000",
   errorSampleRate: 1,
   rootTraceRate: 1,

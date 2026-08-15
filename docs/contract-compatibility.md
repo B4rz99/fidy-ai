@@ -53,10 +53,10 @@ project-reference build, generated-contract checks, dependency and architecture 
 production builds, browser bundle checks, tests, mutation/quality gates, and the production-image
 check when Docker is available. Database-backed server, observability, acceptance, and CRAP tests
 join the same command when both `DATABASE_URL` and `MIGRATION_DATABASE_URL` are provided. CI provides
-those values. Pull-request CI invokes the same command with a `--group` selector so independent
-checks run in parallel; the ungrouped command remains the complete local verdict. Provider-hosted
-secret, SAST, and SCA scanners remain required sibling jobs because a local command cannot
-orchestrate them meaningfully.
+those values. Pull-request CI invokes selected groups in parallel; mutation testing is intentionally
+excluded from the pull-request gate and runs in its separate nightly workflow. The ungrouped command
+remains the complete local verdict. Provider-hosted secret, SAST, and SCA scanners remain required
+sibling jobs because a local command cannot orchestrate them meaningfully.
 
 The project-reference build proves that the web compiles against the same-revision browser-safe
 server declaration graph. OpenAPI comparison proves selected wire-shape compatibility. Neither can

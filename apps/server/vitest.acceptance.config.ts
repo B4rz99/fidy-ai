@@ -38,6 +38,9 @@ const acceptanceExclude = [
   // Statement ingestion is not reachable from the WhatsApp channel acceptance surface.
   "src/core/ingestion/**",
   "src/shell/ingestion/**",
+  // Exact-origin CORS belongs to the browser/API boundary and has focused HTTP-edge tests; the
+  // WhatsApp webhook acceptance surface sends no browser Origin and does not own that policy.
+  "src/shell/_shared/exact-origin-cors.ts",
 ];
 
 // The WhatsApp acceptance release signal: public signed HTTP, real PostgreSQL, and the production
@@ -67,8 +70,8 @@ export default defineConfig({
       exclude: acceptanceExclude,
       thresholds: {
         autoUpdate: true,
-        branches: 43.41,
-        lines: 73.5,
+        branches: 43.45,
+        lines: 73.54,
       },
     },
   },

@@ -30,10 +30,9 @@ All changes reach `trunk` through a squash-merged PR. Direct pushes to `trunk` a
 
 ## 4. Conditions to merge
 
-- All required checks pass. The `Required Checks` job demands `success` from the workspace gate and
-  each provider-hosted security job. The workspace gate runs the mandatory root repository verdict,
-  including static checks, project-reference and production builds, contract compatibility, tests,
-  quality gates, and the production-image check. Read its log for the complete failure list.
+- All required checks pass. The fail-closed `Required Checks` job aggregates the parallel static,
+  build, unit, integration, acceptance, quality, production-image, and provider-hosted security jobs;
+  every dependency must report `success`. Read the failing sibling job for its focused verdict.
 - **0 approvals required** — solo self-merge is allowed.
 - **Squash only**: `gh pr merge <n> --squash --delete-branch`. Merge commits and rebase are disabled.
 - Resulting `trunk` commit reads `type(scope): summary (#N)`.

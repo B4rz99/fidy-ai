@@ -10,7 +10,11 @@ import {
   type HttpClientResponse,
 } from "effect/unstable/http";
 
-const Health = Schema.Struct({ status: Schema.Literal("ok"), version: Schema.String });
+const Health = Schema.Struct({
+  status: Schema.Literal("ok"),
+  gitRevision: Schema.String,
+  contractDigest: Schema.String,
+});
 const OpenApi = Schema.Struct({ openapi: Schema.String });
 const DuplicateWebhookResponse = Schema.Struct({
   decoded: Schema.Literal(1),
@@ -88,7 +92,13 @@ const checkWebhookDuplicate = Effect.gen(function* () {
 
 const smoke = Effect.gen(function* () {
   const healthResponse = yield* getDeploymentResponse("/health");
-  yield* Schema.decodeUnknownEffect(Health)(yield* healthResponse.json);
+  const health = yield* Schema.decodeUnknownEffect(Health)(yield* healthResponse.json);
+  if (
+    health.gitRevision !== Bun.env.EXPECTED_GIT_REVISION ||
+    health.contractDigest !== Bun.env.EXPECTED_CONTRACT_DIGEST
+  ) {
+    return yield* new SmokeFailed({ message: "The health release identity does not match." });
+  }
 
   const openApiResponse = yield* getDeploymentResponse("/openapi.json");
   yield* Schema.decodeUnknownEffect(OpenApi)(yield* openApiResponse.json);

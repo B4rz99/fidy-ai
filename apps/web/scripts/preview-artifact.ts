@@ -1,53 +1,19 @@
-import { Schema } from "effect";
-
-/** Exact lowercase Git commit identity embedded in a preview artifact. */
-export const PreviewGitRevision = Schema.String.check(Schema.isPattern(/^[0-9a-f]{40}$/u))
-  .pipe(Schema.brand("PreviewGitRevision"))
-  .annotate({ identifier: "PreviewGitRevision" });
-export type PreviewGitRevision = typeof PreviewGitRevision.Type;
-
-/** Exact lowercase canonical-contract digest embedded in a preview artifact. */
-export const PreviewContractDigest = Schema.String.check(Schema.isPattern(/^[0-9a-f]{64}$/u))
-  .pipe(Schema.brand("PreviewContractDigest"))
-  .annotate({ identifier: "PreviewContractDigest" });
-export type PreviewContractDigest = typeof PreviewContractDigest.Type;
+import { type ReleaseMetadata, releaseMetadata } from "./release-metadata";
 
 /** Review identity that binds a static artifact to one commit and server contract. */
-export const PreviewMetadata = Schema.Struct({
-  contractDigest: PreviewContractDigest,
-  gitRevision: PreviewGitRevision,
-}).annotate({ identifier: "PreviewMetadata" });
-export type PreviewMetadata = typeof PreviewMetadata.Type;
+export type PreviewMetadata = ReleaseMetadata;
 
-const decodeIdentity = <Identity>(
-  decode: (candidate: unknown) => Identity,
-  candidate: string,
-  failureMessage: string
-): Identity => {
+/** Returns exact preview identity with preview-specific diagnostic failures. */
+export const previewMetadata = (gitRevision: string, contractDigest: string): PreviewMetadata => {
   try {
-    return decode(candidate);
-  } catch {
-    throw new Error(failureMessage);
+    return releaseMetadata(gitRevision, contractDigest);
+  } catch (error) {
+    if (error instanceof Error && error.message.startsWith("Git revision")) {
+      throw new Error("Preview Git revision must be 40 lowercase hexadecimal characters");
+    }
+    throw new Error("Preview contract digest must be 64 lowercase hexadecimal characters");
   }
 };
-
-/**
- * Returns exact preview identity or throws when either lowercase hexadecimal value has the wrong
- * length.
- */
-export const previewMetadata = (gitRevision: string, contractDigest: string): PreviewMetadata =>
-  Schema.decodeUnknownSync(PreviewMetadata)({
-    contractDigest: decodeIdentity(
-      Schema.decodeUnknownSync(PreviewContractDigest),
-      contractDigest,
-      "Preview contract digest must be 64 lowercase hexadecimal characters"
-    ),
-    gitRevision: decodeIdentity(
-      Schema.decodeUnknownSync(PreviewGitRevision),
-      gitRevision,
-      "Preview Git revision must be 40 lowercase hexadecimal characters"
-    ),
-  });
 
 /**
  * Reads and packages every regular file below a static output directory; rejects an empty tree and

@@ -12,7 +12,7 @@
   },
   "scripts": {
     "dev": "bun scripts/seed-development.ts && FIDY_HTTP_HOST=127.0.0.1 bun --preload ./src/shell/observability/preload.ts src/main.ts",
-    "build:production": "rm -rf dist && bun build src/shell/observability/preload.ts src/main.ts --target=bun --outdir=dist --entry-naming='[name].js' --sourcemap=external && bun build scripts/prepare-sentry-release.ts scripts/provision-runtime-role.ts scripts/migrate.ts --target=bun --outdir=dist/commands --entry-naming='[name].js' --sourcemap=external && bunx --bun sentry-cli sourcemaps inject dist",
+    "build:production": "rm -rf dist && CONTRACT_DIGEST=$(bun run --silent contracts:digest) && [[ \"$CONTRACT_DIGEST\" =~ ^[0-9a-f]{64}$ ]] && bun build src/shell/observability/preload.ts src/main.ts --target=bun --outdir=dist --entry-naming='[name].js' --sourcemap=external --define \"FIDY_CONTRACT_DIGEST=\\\"$CONTRACT_DIGEST\\\"\" && bun build scripts/prepare-sentry-release.ts scripts/provision-runtime-role.ts scripts/migrate.ts --target=bun --outdir=dist/commands --entry-naming='[name].js' --sourcemap=external && bunx --bun sentry-cli sourcemaps inject dist",
     "start:production": "bun --preload ./dist/preload.js dist/main.js",
     "agent:repl": "bun scripts/agent-repl.ts",
     "sentry:verify": "bun scripts/verify-sentry-account.ts",

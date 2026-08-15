@@ -33,12 +33,14 @@ for (const [description, webOrigin] of [
 layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
   "public service routes",
   (it) => {
-    it.effect("reports health and the running version without caller credentials", () =>
+    it.effect("reports the running release identity without caller credentials", () =>
       Effect.gen(function* () {
         const response = yield* HttpClient.get("/health");
 
         expect(response.status).toBe(200);
-        expect(yield* response.text).toBe('{"status":"ok","version":"development"}');
+        expect(yield* response.text).toBe(
+          '{"status":"ok","gitRevision":"development","contractDigest":"development"}'
+        );
       })
     );
 

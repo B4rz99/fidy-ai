@@ -111,7 +111,11 @@
         },
         "overrides": [
           {
-            "include": ["./apps/web/cloudflare/preview-policy/**/*.ts"],
+            "include": [
+              "./apps/web/cloudflare/preview-policy/**/*.ts",
+              "./apps/web/cloudflare/production-policy/**/*.ts",
+              "./scripts/production/**/*.ts"
+            ],
             "options": {
               "diagnosticSeverity": {
                 "asyncFunction": "off",
@@ -128,7 +132,8 @@
             ],
             "options": {
               "diagnosticSeverity": {
-                "asyncFunction": "off"
+                "asyncFunction": "off",
+                "nodeBuiltinImport": "off"
               }
             }
           },

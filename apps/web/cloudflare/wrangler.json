@@ -3,6 +3,7 @@
   "compatibility_date": "2026-08-14",
   "workers_dev": true,
   "preview_urls": true,
+  "routes": [{ "pattern": "fidyapp.com", "custom_domain": true }],
   "assets": {
     "directory": "../dist",
     "html_handling": "none",

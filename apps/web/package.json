@@ -8,6 +8,7 @@
     "shadcn": "shadcn",
     "build": "tsc --noEmit && bun --bun vite build",
     "build:preview": "bun scripts/build-preview.ts",
+    "build:production": "bun scripts/build-production.ts",
     "typecheck": "tsc --noEmit",
     "test": "bun --bun vitest run",
     "test:preview-policy": "bun --bun vitest run cloudflare/preview-policy",

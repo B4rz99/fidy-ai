@@ -61,3 +61,10 @@ server declaration graph. OpenAPI comparison proves selected wire-shape compatib
 detect a type-compatible semantic change—for example, returning a different meaning in the same
 string field. Existing API-seam tests remain authoritative for request encoding, routing,
 authorization, real handlers, PostgreSQL persistence, response encoding, and client decoding.
+
+Production deploys the server before the web. A contract change therefore uses three separate trunk
+releases: **add** a temporarily backward-compatible server shape, **use** it from the web after that
+server is healthy, then **remove** the old shape only after the new web is active. Do not combine add
+and remove in one release or treat the shared digest as a substitute for rollout compatibility. See
+[ADR 0018](adr/0018-independent-production-deployments.md) and the
+[Production runbook](operations/production-releases.md).

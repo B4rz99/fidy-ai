@@ -18,6 +18,7 @@ provisionLog=$(mktemp)
 artifactRoot=$(mktemp -d)
 releaseRoot=$(mktemp -d)
 releaseSha="0123456789abcdef0123456789abcdef01234567"
+contractDigest=$(bun run --cwd "$serverRoot" --silent contracts:digest)
 release="fidy@${releaseSha}"
 
 cleanup() {
@@ -27,6 +28,15 @@ cleanup() {
   docker image rm "$image" >/dev/null 2>&1 || true
   rm -f "$provisionLog"
   rm -rf "$artifactRoot" "$releaseRoot"
+}
+
+assertReleaseRevisionRejected() {
+  local revision=$1
+
+  if docker run --rm --env "RAILWAY_GIT_COMMIT_SHA=${revision}" "$image" >/dev/null 2>&1; then
+    echo "Production startup unexpectedly accepted an invalid Git revision." >&2
+    return 1
+  fi
 }
 
 assertProvisionRejected() {
@@ -220,6 +230,9 @@ trap cleanup EXIT
 
 docker build --file "$serverRoot/Dockerfile" --tag "$image" "$workspaceRoot"
 inspectArtifacts
+assertReleaseRevisionRejected ""
+assertReleaseRevisionRejected "development"
+assertReleaseRevisionRejected "0123456789ABCDEF0123456789ABCDEF01234567"
 assertReleasePreparation
 
 docker network create "$network" >/dev/null
@@ -344,7 +357,8 @@ for _ in {1..30}; do
   sleep 1
 done
 
-bun "$scriptRoot/check-production-http.ts" "$origin"
+EXPECTED_GIT_REVISION="$releaseSha" EXPECTED_CONTRACT_DIGEST="$contractDigest" \
+  bun "$scriptRoot/check-production-http.ts" "$origin"
 assertRetentionStarted
 assertTelemetryDisabled
 assertCredentialsRemoved

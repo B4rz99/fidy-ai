@@ -33,6 +33,7 @@
     "test:contracts": "bun run --cwd apps/server test:contracts",
     "test": "bun run --cwd apps/server test && bun run --cwd apps/web test",
     "test:preview-policy": "bun run --cwd apps/web test:preview-policy",
+    "test:production-adapters": "bun --bun vitest run scripts/production/*.test.ts --environment node",
     "test:acceptance": "bun run --cwd apps/server test:acceptance",
     "test:core": "bun run --cwd apps/server test:core",
     "test:observability-compatibility": "bun run --cwd apps/server test:observability-compatibility",

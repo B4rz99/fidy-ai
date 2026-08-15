@@ -1,4 +1,4 @@
-import { Config, Effect, Layer } from "effect";
+import { Config, Effect, Layer, Schema } from "effect";
 import { HttpRouter, HttpServerResponse } from "effect/unstable/http";
 import { HttpApiBuilder, HttpApiScalar } from "effect/unstable/httpapi";
 import { TokenAuthorizationLive } from "~/shell/_shared/authz-live";
@@ -66,14 +66,26 @@ export const ApiLive = HttpApiBuilder.layer(FidyApi, { openapiPath: "/openapi.js
   )
 );
 
-const appVersion = Config.string("APP_VERSION").pipe(
-  Config.orElse(() => Config.string("RAILWAY_DEPLOYMENT_ID")),
-  Config.withDefault("development")
-);
+declare const FIDY_CONTRACT_DIGEST: string;
+
+const ProductionGitRevision = Schema.String.check(Schema.isPattern(/^[0-9a-f]{40}$/u));
+const gitRevision = Effect.gen(function* () {
+  const environment = yield* Config.string("NODE_ENV").pipe(Config.withDefault("development"));
+  if (environment === "production") {
+    return yield* Config.schema(ProductionGitRevision, "RAILWAY_GIT_COMMIT_SHA");
+  }
+  return yield* Config.string("RAILWAY_GIT_COMMIT_SHA").pipe(Config.withDefault("development"));
+});
+const contractDigest =
+  typeof FIDY_CONTRACT_DIGEST === "undefined" ? "development" : FIDY_CONTRACT_DIGEST;
 
 const HealthLive = Layer.unwrap(
-  Effect.map(appVersion, (version) =>
-    HttpRouter.add("GET", "/health", HttpServerResponse.json({ status: "ok", version }))
+  Effect.map(gitRevision, (revision) =>
+    HttpRouter.add(
+      "GET",
+      "/health",
+      HttpServerResponse.json({ status: "ok", gitRevision: revision, contractDigest })
+    )
   )
 );
 

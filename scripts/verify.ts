@@ -19,6 +19,9 @@ const rootCheck = (label: string, command: ReadonlyArray<string>): Check => ({
 const coreEnvironment = { ...Bun.env };
 delete coreEnvironment.DATABASE_URL;
 delete coreEnvironment.MIGRATION_DATABASE_URL;
+const gitRevision = new TextDecoder()
+  .decode(Bun.spawnSync(["git", "rev-parse", "HEAD"], { cwd: workspaceRoot }).stdout)
+  .trim();
 
 const checks: Array<Check> = [
   {
@@ -46,6 +49,10 @@ const checks: Array<Check> = [
   rootCheck("Dependency policy", ["bun", "run", "lint:dependencies"]),
   rootCheck("Migration ids", ["bun", "run", "check:migration-ids"]),
   rootCheck("Server production build", ["bun", "run", "build:production"]),
+  {
+    ...rootCheck("Production web build", ["bun", "run", "--cwd", "apps/web", "build:production"]),
+    env: { ...Bun.env, RELEASE_GIT_SHA: gitRevision },
+  },
   rootCheck("Portable web build", ["bun", "run", "build"]),
   // Preserve the core tier's proof that decisions need no database, even when the complete CI gate
   // has PostgreSQL configured for higher-seam tests.
@@ -55,6 +62,7 @@ const checks: Array<Check> = [
   },
   rootCheck("Web tests", ["bun", "run", "--cwd", "apps/web", "test"]),
   rootCheck("Trusted preview artifact policy", ["bun", "run", "test:preview-policy"]),
+  rootCheck("Production deployment adapters", ["bun", "run", "test:production-adapters"]),
   rootCheck("Contract checker tests", ["bun", "run", "test:contracts"]),
   rootCheck("Mutation tests", ["bun", "run", "test:mutation"]),
 ];

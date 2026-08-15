@@ -43,6 +43,27 @@ runtime image receives only built server artifacts. Railway must use `/apps/serv
 its config-as-code path; that adapter selects `apps/server/Dockerfile` without changing the repository
 source root.
 
+### Production topology
+
+[ADR 0018](docs/adr/0018-independent-production-deployments.md) makes the application boundary a
+runtime boundary. Railway builds and runs only the server image at `api.fidyapp.com`; Cloudflare
+serves only the validated static web output at `fidyapp.com`. Cloudflare has no Worker entrypoint and
+the API has no static-file route. The browser CSP permits connections only to the stable API origin.
+
+GitHub Actions is the sole release coordinator. A trunk release selects one immutable source commit,
+deploys it through Railway's connected-repository API, and verifies that public health reports its
+full Git revision and canonical contract digest. Only then does it build an identically marked web
+artifact, upload one immutable Cloudflare version, recheck trunk head, and promote that exact version.
+The contract digest is derived from the checked-in server-owned canonical artifacts; the web still
+consumes only `@fidy/server/client` rather than owning a copied contract.
+
+Releases are serialized without cancelling an active deployment. A server failure stops before web
+work. A web failure or superseded release leaves the prior Cloudflare version active; the newly
+successful server remains temporarily compatible under the documented add/use/remove rollout. No
+cross-provider rollback transaction exists. Provider source-triggered deployments are disabled, and
+[the Production runbook](docs/operations/production-releases.md) owns configuration, diagnostics, and
+recovery.
+
 ---
 
 ## 2. Slices and ownership

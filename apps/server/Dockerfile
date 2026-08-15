@@ -26,4 +26,4 @@ ENV PATH="/app/dist/commands:${PATH}"
 
 EXPOSE 3000
 
-CMD ["sh", "-c", ": \"${RAILWAY_GIT_COMMIT_SHA:?RAILWAY_GIT_COMMIT_SHA is required}\"; export SENTRY_RELEASE=\"fidy@${RAILWAY_GIT_COMMIT_SHA}\"; unset SENTRY_AUTH_TOKEN SENTRY_FORCE_ENV_TOKEN SENTRY_ORG SENTRY_PROJECT SENTRY_URL SENTRY_NON_PRODUCTION_DSN; exec bun --preload ./dist/preload.js dist/main.js"]
+CMD ["sh", "-c", ": \"${RAILWAY_GIT_COMMIT_SHA:?RAILWAY_GIT_COMMIT_SHA is required}\"; printf '%s' \"${RAILWAY_GIT_COMMIT_SHA}\" | grep -Eq '^[0-9a-f]{40}$' || { echo 'RAILWAY_GIT_COMMIT_SHA must be a full lowercase Git SHA.' >&2; exit 1; }; export SENTRY_RELEASE=\"fidy@${RAILWAY_GIT_COMMIT_SHA}\"; unset SENTRY_AUTH_TOKEN SENTRY_FORCE_ENV_TOKEN SENTRY_ORG SENTRY_PROJECT SENTRY_URL SENTRY_NON_PRODUCTION_DSN; exec bun --preload ./dist/preload.js dist/main.js"]

@@ -16,10 +16,23 @@ describe("Cloudflare static hosting adapter", () => {
       name: "fidy-web",
       preview_urls: true,
       workers_dev: true,
+      routes: [{ pattern: "fidyapp.com", custom_domain: true }],
     });
   });
 
-  it("denies network access and applies preview security and cache policy", async () => {
+  it("allows only the production API and applies production security and cache policy", async () => {
+    const headers = await Bun.file(`${cloudflareRoot}/production/_headers`).text();
+
+    expect(headers).toContain("connect-src https://api.fidyapp.com");
+    expect(headers).not.toContain("connect-src 'none'");
+    expect(headers).toContain("frame-ancestors 'none'");
+    expect(headers).toContain("worker-src 'none'");
+    expect(headers).not.toContain("X-Robots-Tag: noindex");
+    expect(headers).toContain("Cache-Control: no-cache");
+    expect(headers).toContain("Cache-Control: public, max-age=31536000, immutable");
+  });
+
+  it("denies network access and applies separate preview security and cache policy", async () => {
     const headers = await Bun.file(`${cloudflareRoot}/public/_headers`).text();
 
     expect(headers).toContain("connect-src 'none'");

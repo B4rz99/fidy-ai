@@ -1,0 +1,33 @@
+scripts/production/cloudflare-dns.test.ts
+  s_a2d9eff2180721::t_25145b6ebae95c 1-34,40-41,43-52,57-59,64-67,72-95,104-125
+  s_a2d9eff2180721::t_cd5c01d4a6517a 35-39,42,53-56,60-63,68-71,96-103
+  s_a2d9eff2180721::t_db3dd05aaa7b00 126-132
+scripts/production/railway-release.test.ts
+  s_a2d9eff2180721::t_067e4c72057551 10-11,53-60,66-70,72,74-78,80-83,97-99,105-109,121-125,134-139,141,143-146,151-161,166-170
+  s_a2d9eff2180721::t_528e3b785412b4 12-13
+.github/workflows/production.yml
+  s_a2d9eff2180721::t_169cc7d66eccea 57-66
+scripts/production/cloudflare-dns.ts
+  s_a2d9eff2180721::t_1e09aa4cdb68b7 1-48,50-99,101-109,111-113,115-121,123-171,179-184,191-212
+  s_a2d9eff2180721::t_f9858f2f21eaef 49,100,110,114,122,172-178,185-190
+scripts/production/railway-release.ts
+  s_a2d9eff2180721::t_b7fb9d3ca1fe5e 8,20-24,50-57,89,153,155-156,158,161,166,168,170-194,276
+docs/operations/production-releases.md
+  s_a2d9eff2180721::t_c432c9e615cf65 19-23,26-31,46-49,52,54,56-57
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "1d9057855b30b4ec29b2818cd56a4c31c914e2a3",
+  "prompts": {},
+  "sessions": {
+    "s_a2d9eff2180721": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019ffd84-2ac8-787e-ab7a-e21ea5906d9e",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

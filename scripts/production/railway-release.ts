@@ -5,7 +5,7 @@ import { Option, Result, Schema } from "effect";
 
 const railwayGraphqlUrl = "https://backboard.railway.app/graphql/v2";
 const deploymentCheckLimit = 120;
-const healthCheckLimit = 30;
+const healthCheckLimit = 150;
 const deploymentPollInterval = 5_000;
 const healthPollInterval = 2_000;
 const GitRevision = Schema.String.check(Schema.isPattern(/^[0-9a-f]{40}$/u));
@@ -16,6 +16,11 @@ const GraphqlFailure = Schema.Struct({
 });
 const TriggerResponse = Schema.Struct({
   data: Schema.Struct({ environmentTriggersDeploy: Schema.Literal(true) }),
+});
+const AutoDeployResponse = Schema.Struct({
+  data: Schema.Struct({
+    serviceInstanceAutoDeployUpdate: Schema.Struct({ enabled: Schema.Boolean }),
+  }),
 });
 const LatestDeployment = Schema.Struct({
   id: Schema.String,
@@ -41,6 +46,14 @@ const triggerMutation = `mutation environmentTriggersDeploy($projectId: String!,
     serviceId: $serviceId
     environmentId: $environmentId
   })
+}`;
+const autoDeployMutation = `mutation serviceInstanceAutoDeployUpdate($projectId: String!, $serviceId: String!, $environmentId: String!, $enabled: Boolean!) {
+  serviceInstanceAutoDeployUpdate(input: {
+    projectId: $projectId
+    serviceId: $serviceId
+    environmentId: $environmentId
+    enabled: $enabled
+  }) { enabled }
 }`;
 const latestDeploymentQuery = `query latestDeployment($serviceId: String!, $environmentId: String!) {
   serviceInstance(serviceId: $serviceId, environmentId: $environmentId) {
@@ -73,7 +86,7 @@ type GraphqlRequest<Value> = {
   readonly request: HttpRequest;
   readonly token: string;
   readonly query: string;
-  readonly variables: Readonly<Record<string, string>>;
+  readonly variables: Readonly<Record<string, string | boolean>>;
   readonly decode: (value: unknown) => Value;
 };
 
@@ -137,21 +150,48 @@ const latestDeployment = async (
   return result.data.serviceInstance.latestDeployment;
 };
 
-const triggerDeployment = async (
+const setAutoDeploy = async (
   input: RailwayReleaseRequest,
-  dependencies: RailwayReleaseDependencies
+  dependencies: RailwayReleaseDependencies,
+  enabled: boolean
 ): Promise<void> => {
-  await graphql({
+  const result = await graphql({
     request: dependencies.request,
     token: input.apiToken,
-    query: triggerMutation,
+    query: autoDeployMutation,
     variables: {
       projectId: input.projectId,
       serviceId: input.serviceId,
       environmentId: input.environmentId,
+      enabled,
     },
-    decode: Schema.decodeUnknownSync(TriggerResponse),
+    decode: Schema.decodeUnknownSync(AutoDeployResponse),
   });
+  if (result.data.serviceInstanceAutoDeployUpdate.enabled !== enabled) {
+    throw new Error("Railway returned a different automatic deployment state");
+  }
+};
+
+const triggerDeployment = async (
+  input: RailwayReleaseRequest,
+  dependencies: RailwayReleaseDependencies
+): Promise<void> => {
+  await setAutoDeploy(input, dependencies, true);
+  try {
+    await graphql({
+      request: dependencies.request,
+      token: input.apiToken,
+      query: triggerMutation,
+      variables: {
+        projectId: input.projectId,
+        serviceId: input.serviceId,
+        environmentId: input.environmentId,
+      },
+      decode: Schema.decodeUnknownSync(TriggerResponse),
+    });
+  } finally {
+    await setAutoDeploy(input, dependencies, false);
+  }
 };
 
 const awaitDeployment = async (
@@ -233,6 +273,7 @@ export const deployRailwayRelease = async (
     throw new Error("Railway release configuration is incomplete");
   }
 
+  await setAutoDeploy(input, dependencies, false);
   const previousDeployment = await latestDeployment(input, dependencies);
   await triggerDeployment(input, dependencies);
   const deploymentId = await awaitDeployment(

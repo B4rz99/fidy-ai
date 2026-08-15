@@ -53,3 +53,41 @@ it.effect("preserves existing response variation for an accepted Origin", () =>
     expect(response.headers["access-control-allow-origin"]).toBe("https://fidyapp.com");
   })
 );
+
+it.effect("accepts a preflight for an allowed method and header set", () =>
+  Effect.gen(function* () {
+    const response = yield* applyCors(
+      new Request("https://api.fidyapp.com/user", {
+        method: "OPTIONS",
+        headers: {
+          origin: "https://fidyapp.com",
+          "access-control-request-method": "POST",
+          "access-control-request-headers": "Authorization, Content-Type",
+        },
+      }),
+      Effect.succeed(HttpServerResponse.empty({ status: 500 }))
+    );
+
+    expect(response.status).toBe(204);
+    expect(response.headers["access-control-allow-methods"]).toBe("GET, POST");
+    expect(response.headers["access-control-allow-headers"]).toBe("authorization, content-type");
+  })
+);
+
+it.effect("rejects a preflight that requests an unsupported header", () =>
+  Effect.gen(function* () {
+    const response = yield* applyCors(
+      new Request("https://api.fidyapp.com/user", {
+        method: "OPTIONS",
+        headers: {
+          origin: "https://fidyapp.com",
+          "access-control-request-method": "POST",
+          "access-control-request-headers": "x-forwarded-for",
+        },
+      }),
+      Effect.succeed(HttpServerResponse.empty({ status: 500 }))
+    );
+
+    expect(response.status).toBe(403);
+  })
+);

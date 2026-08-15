@@ -1,0 +1,23 @@
+dependency-policy.json
+  s_a2d9eff2180721::t_8b5210854150c2 20-27
+package.json
+  s_a2d9eff2180721::t_b51ff7fb49c195 53
+bun.lock
+  s_a2d9eff2180721::t_36c25e603834ca 9,184,186,188,190,192,194,196,198
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "7a3ebd9c83a551877aa7661e193bebf2b0a4380c",
+  "prompts": {},
+  "sessions": {
+    "s_a2d9eff2180721": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019ffd84-2ac8-787e-ab7a-e21ea5906d9e",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

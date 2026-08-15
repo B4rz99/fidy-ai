@@ -1,0 +1,53 @@
+apps/web/cloudflare/preview-policy/request.test.ts
+  s_2df9c58e401882::t_ed247a079fa7a5 49-55
+apps/web/scripts/build-metafile.ts
+  s_2df9c58e401882::t_a56fb884ddce3c 1-18
+apps/server/scripts/check-browser-client.ts
+  s_2df9c58e401882::t_f8bb4127799ded 3-4,85-86
+apps/web/cloudflare/preview-policy/request.ts
+  s_2df9c58e401882::t_0c629e52daee01 3-4,11-16,18-19,22-23,25-41,48-49,59,61,64-65,93-98,103-104
+  s_2df9c58e401882::t_3f9b4bda716b23 17,24
+  s_2df9c58e401882::t_65a61a65790cef 20-21
+apps/server/scripts/build-metafile.ts
+  s_2df9c58e401882::t_143af943842914 1-18
+apps/web/scripts/check-browser-bundle.ts
+  s_2df9c58e401882::t_db89c59e70a916 3-4,49-50
+apps/web/scripts/build-metafile.test.ts
+  s_2df9c58e401882::t_970d80ada76ce2 1-14
+apps/server/tools/contracts/check.ts
+  s_2df9c58e401882::t_5d74215384649c 9,129-131
+apps/server/src/shell/agent/toolkit.ts
+  s_2df9c58e401882::t_dab0176fcb8390 158,162,165
+apps/web/cloudflare/preview-policy/artifact.test.ts
+  s_2df9c58e401882::t_fd710a0b7e913e 240-247
+apps/server/tools/contracts/compatibility.test.ts
+  s_2df9c58e401882::t_fbcd3b7b21a8c7 7-8,90-109
+  s_2df9c58e401882::t_f3527a5cc9556e 110
+apps/web/cloudflare/preview-policy/artifact.ts
+  s_2df9c58e401882::t_2b7a687817d6be 360-362
+  s_2df9c58e401882::t_087bda107edea3 5-6,194-210,221,249-252
+  s_2df9c58e401882::t_ef8de3a2fe44f0 215,217,223-224
+  s_2df9c58e401882::t_f745d6d1eee3b8 222
+apps/server/tools/contracts/compatibility.ts
+  s_2df9c58e401882::t_28944b4d096905 52,54,56
+  s_2df9c58e401882::t_0536c7b124795d 5
+  s_2df9c58e401882::t_8258c09e508b88 25-39,41-47,49-51,59,62-68,71-75,91-94,99,103-110
+  s_2df9c58e401882::t_770b6ccab6b9a7 2,4,7,9-17
+  s_2df9c58e401882::t_46b3f084b218ac 111
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "77d1548dfc375ac6e6c415759acc5dfddb8f0776",
+  "prompts": {},
+  "sessions": {
+    "s_2df9c58e401882": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a005d6-bf4c-772b-953f-d26851c60523",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

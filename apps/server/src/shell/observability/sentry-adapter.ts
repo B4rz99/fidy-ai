@@ -1,5 +1,5 @@
 import * as Sentry from "@sentry/bun";
-import { Cause, Clock, Effect, Exit, Function as Fn, Option, Predicate, Schema } from "effect";
+import { Cause, Clock, Effect, Exit, Option, Predicate, Schema } from "effect";
 import { strictDecoding } from "./decoding";
 import {
   type ActiveTraceCoordinates,
@@ -45,9 +45,6 @@ const uint32BitWidth = 32;
 const randomUint32Range = 2 ** uint32BitWidth;
 const rateLimitedStatusCode = 429;
 
-const castSdkEvent = <SdkEvent extends Sentry.Event>(value: unknown): SdkEvent =>
-  Fn.cast<unknown, SdkEvent>(value);
-
 const copyBytes = (body: string | Uint8Array): Uint8Array =>
   typeof body === "string" ? new TextEncoder().encode(body) : body.slice();
 
@@ -71,6 +68,28 @@ type ErrorTraceCoordinates = Pick<
 type ErrorTraceContext = Partial<
   Readonly<{ readonly contexts: Readonly<{ readonly trace: ErrorTraceCoordinates }> }>
 >;
+
+type SdkIdentityFields = Pick<Sentry.Event, "event_id" | "platform" | "release" | "environment">;
+
+const toSdkErrorEvent = (
+  event: ProjectedErrorEvent,
+  identity: Partial<SdkIdentityFields> = {}
+): Sentry.ErrorEvent => ({
+  ...identity,
+  type: undefined,
+  timestamp: event.timestamp,
+  level: event.level,
+  exception: {
+    values: event.exception.values.map((exception) => ({
+      type: exception.type,
+      value: exception.value,
+      stacktrace: { frames: exception.stacktrace.frames.map((frame) => ({ ...frame })) },
+    })),
+  },
+  fingerprint: [...event.fingerprint],
+  tags: { ...event.tags },
+  ...(event.contexts === undefined ? {} : { contexts: { trace: { ...event.contexts.trace } } }),
+});
 
 const errorTraceContext = (
   trace: NonNullable<Sentry.ErrorEvent["contexts"]>["trace"]
@@ -133,17 +152,40 @@ const safeErrorEvent = (
     ...errorTraceContext(event.contexts?.trace),
   });
   return Option.map(projected, (value) =>
-    castSdkEvent<Sentry.ErrorEvent>({
+    toSdkErrorEvent(value, {
       event_id: event.event_id,
       platform: "javascript",
       release: identity.release,
       environment: identity.environment,
-      ...value,
     })
   );
 };
 
 type TransactionEvent = Sentry.Event & Readonly<{ readonly type: "transaction" }>;
+
+const toSdkTransactionEvent = (
+  event: ProjectedTransaction,
+  identity: Partial<SdkIdentityFields> = {}
+): TransactionEvent => ({
+  ...identity,
+  type: "transaction",
+  transaction: event.transaction,
+  transaction_info: { ...event.transaction_info },
+  start_timestamp: event.start_timestamp,
+  timestamp: event.timestamp,
+  contexts: {
+    trace: {
+      ...event.contexts.trace,
+      data: { ...event.contexts.trace.data },
+    },
+  },
+  tags: { ...event.tags },
+  breadcrumbs: event.breadcrumbs.map((breadcrumb) => ({
+    ...breadcrumb,
+    data: { ...breadcrumb.data },
+  })),
+  spans: [],
+});
 
 const safeTransactionEvent = (
   event: TransactionEvent,
@@ -186,13 +228,11 @@ const safeTransactionEvent = (
       breadcrumbs: event.breadcrumbs ?? [],
     });
     return Option.map(projected, (value) =>
-      castSdkEvent<TransactionEvent>({
+      toSdkTransactionEvent(value, {
         event_id: event.event_id,
         platform: "javascript",
         release: identity.release,
         environment: identity.environment,
-        spans: [],
-        ...value,
       })
     );
   });
@@ -259,7 +299,11 @@ const activeState = (
   );
 
 const capture = (scope: Sentry.Scope, event: ProjectedErrorEvent | ProjectedTransaction): void => {
-  scope.captureEvent(Fn.cast<ProjectedErrorEvent | ProjectedTransaction, Sentry.Event>(event));
+  if (Schema.is(ProjectedTransaction)(event)) {
+    scope.captureEvent(toSdkTransactionEvent(event));
+  } else if (Schema.is(ProjectedErrorEvent)(event)) {
+    scope.captureEvent(toSdkErrorEvent(event));
+  }
 };
 
 /** Appends the exact serialized bytes of every supported envelope and sends nothing anywhere. */
@@ -287,6 +331,22 @@ const makeRecordingTransport = (
 type BunClientOptions = ConstructorParameters<typeof Sentry.BunClient>[0];
 type SentryTransport = NonNullable<BunClientOptions["transport"]>;
 
+/** Projects an SDK span candidate through the fail-closed metadata allowlist. */
+export const projectSdkSpan = (
+  value: unknown
+): ReturnType<NonNullable<BunClientOptions["beforeSendSpan"]>> => {
+  try {
+    return Option.getOrElse(projectFinalSpan(value), () => ({
+      data: {},
+      span_id: "",
+      start_timestamp: 0,
+      trace_id: "",
+    }));
+  } catch {
+    return { data: {}, span_id: "", start_timestamp: 0, trace_id: "" };
+  }
+};
+
 const finalHooks = (
   config: SentryClientConfig
 ): Pick<
@@ -302,18 +362,7 @@ const finalHooks = (
       return null;
     }
   },
-  beforeSendSpan: (span): ReturnType<NonNullable<BunClientOptions["beforeSendSpan"]>> => {
-    try {
-      return Option.getOrElse(projectFinalSpan(span), () => ({
-        data: {},
-        span_id: "",
-        start_timestamp: 0,
-        trace_id: "",
-      }));
-    } catch {
-      return { data: {}, span_id: "", start_timestamp: 0, trace_id: "" };
-    }
-  },
+  beforeSendSpan: projectSdkSpan,
   beforeSendTransaction: (
     event,
     hint

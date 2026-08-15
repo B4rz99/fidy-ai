@@ -1,12 +1,12 @@
 import { expect, it } from "@effect/vitest";
-import { Data, Effect, Exit, Fiber, Function as Fn, Option } from "effect";
+import { Data, Effect, Exit, Fiber, Option } from "effect";
 import { TestClock } from "effect/testing";
-import { closeTelemetryClient, makeSentryTelemetry } from "./sentry-adapter";
+import { closeTelemetryClient, makeSentryTelemetry, projectSdkSpan } from "./sentry-adapter";
 import type { NonProductionTelemetryConfig } from "./telemetry-config";
 
 class TestTransportFailure extends Data.TaggedError("TestTransportFailure") {}
 
-const enabledConfig = Fn.cast<unknown, NonProductionTelemetryConfig>({
+const enabledConfig = {
   _tag: "NonProductionEnabled",
   environment: "local",
   project: "non-production",
@@ -15,7 +15,7 @@ const enabledConfig = Fn.cast<unknown, NonProductionTelemetryConfig>({
   release: "fidy@0123456789abcdef0123456789abcdef01234567",
   errorSampleRate: 1,
   rootTraceRate: 1,
-});
+} satisfies NonProductionTelemetryConfig;
 
 it.effect("pins collection policy and fails malformed final hooks closed", () =>
   Effect.gen(function* () {
@@ -49,17 +49,12 @@ it.effect("pins collection policy and fails malformed final hooks closed", () =>
       frameContextLines: 0,
     });
     const emptySpan = { data: {}, span_id: "", start_timestamp: 0, trace_id: "" };
-    expect(beforeSendSpan(Fn.cast<unknown, Parameters<typeof beforeSendSpan>[0]>({}))).toEqual(
-      emptySpan
-    );
-    expect(beforeSendSpan(Fn.cast<unknown, Parameters<typeof beforeSendSpan>[0]>(null))).toEqual(
-      emptySpan
-    );
+    expect(projectSdkSpan({})).toEqual(emptySpan);
+    expect(projectSdkSpan(null)).toEqual(emptySpan);
     expect(beforeBreadcrumb({})).toBeNull();
-    expect(beforeSendLog(Fn.cast<unknown, Parameters<typeof beforeSendLog>[0]>({}))).toBeNull();
-    expect(
-      beforeSendMetric(Fn.cast<unknown, Parameters<typeof beforeSendMetric>[0]>({}))
-    ).toBeNull();
+    expect(beforeSendLog({ level: "info", message: "sentinel" })).toBeNull();
+    expect(beforeSendMetric({ name: "sentinel", value: 1, type: "counter" })).toBeNull();
+    expect(beforeSendSpan(emptySpan)).toEqual(emptySpan);
   })
 );
 

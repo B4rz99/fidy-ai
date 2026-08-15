@@ -16,6 +16,11 @@ for await (const path of productionSources.scan({ cwd: serverRoot })) {
 
 const probes = [
   {
+    name: "type-cast",
+    expectedRule: "effect-guards(no-type-cast)",
+    source: `import { Function } from "effect";\n\n/** Negative probe: type-only casts must never suppress an assignability error. */\nexport const invalidCast = (value: unknown): string => Function.cast<unknown, string>(value);\n`,
+  },
+  {
     name: "object-brand",
     expectedRule: "effect-guards(scalar-brand-only)",
     source: `import { Schema } from "effect";\n\n/** Negative probe: object schemas must never receive Effect brands. */\nexport const InvalidObjectBrand = Schema.Struct({ value: Schema.String }).pipe(\n  Schema.brand("InvalidObjectBrand")\n);\n`,

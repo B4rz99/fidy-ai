@@ -1,5 +1,7 @@
 #!/usr/bin/env bun
 
+import { decodeBuildMetafile } from "./build-metafile";
+
 const serverRoot = Bun.fileURLToPath(new URL("..", import.meta.url))
   .replaceAll("\\", "/")
   .replace(/\/$/u, "");
@@ -43,10 +45,6 @@ const forbiddenDependency = [
   /^(?:node:)?(?:child_process|cluster|dns|fs|http|https|net|os|stream|tls|worker_threads)(?:\/|$)/u,
 ] as const;
 
-type Metafile = {
-  readonly inputs: Readonly<Record<string, unknown>>;
-};
-
 const repositoryPath = (path: string): string => {
   const normalized = path.replaceAll("\\", "/");
   const absolute = Bun.fileURLToPath(new URL(normalized, `file://${serverRoot}/`)).replaceAll(
@@ -56,13 +54,6 @@ const repositoryPath = (path: string): string => {
   const root = absolute.startsWith(`${serverRoot}/`) ? serverRoot : workspaceRoot;
   return absolute.startsWith(`${root}/`) ? absolute.slice(root.length + 1) : normalized;
 };
-
-const isMetafile = (value: unknown): value is Metafile =>
-  typeof value === "object" &&
-  value !== null &&
-  "inputs" in value &&
-  typeof value.inputs === "object" &&
-  value.inputs !== null;
 
 const outdir = `/tmp/fidy-browser-client-${process.pid}`;
 const removeOutput = (): void => {
@@ -91,14 +82,8 @@ try {
     throw new Error(`Browser client build failed.\n${logs}`);
   }
 
-  const rawMetafile: unknown = result.metafile;
-  const parsedMetafile: unknown =
-    typeof rawMetafile === "string" ? JSON.parse(rawMetafile) : rawMetafile;
-  if (!isMetafile(parsedMetafile)) {
-    throw new Error("Browser client build did not return a metafile");
-  }
-
-  const inputs = Object.keys(parsedMetafile.inputs).map(repositoryPath);
+  const metafile = decodeBuildMetafile(result.metafile);
+  const inputs = Object.keys(metafile.inputs).map(repositoryPath);
   const unexpectedInput = inputs.filter(
     (input) =>
       !safeSource.some((pattern) => pattern.test(input)) &&

@@ -1,13 +1,5 @@
 import { expect, it } from "@effect/vitest";
-import {
-  type Config,
-  ConfigProvider,
-  Effect,
-  Exit,
-  Function as Fn,
-  Option,
-  Redacted,
-} from "effect";
+import { type Config, ConfigProvider, Effect, Exit, Option, Redacted, Schema } from "effect";
 import {
   type ApprovedSentryProjects,
   InvalidTelemetryConfig,
@@ -156,17 +148,14 @@ const invalidCaseSources = [
   {
     name: "unsupported environment",
     input: { SENTRY_ENVIRONMENT: "development" },
-    reason: undefined,
   },
   {
     name: "malformed error switch",
     input: { SENTRY_CAPTURE_ERRORS: "sometimes" },
-    reason: undefined,
   },
   {
     name: "malformed trace switch",
     input: { SENTRY_CAPTURE_TRACES: "sometimes" },
-    reason: undefined,
   },
   {
     name: "production with only the crossed non-production DSN",
@@ -329,7 +318,10 @@ it.effect("validates a full-capture non-production account smoke identity", () =
 
 it.effect.each(invalidCases)("rejects $name before initialization", ({ input, reason }) =>
   Effect.gen(function* () {
-    const exit = yield* Effect.exit(load(Fn.cast<typeof input, Input>(input)));
+    const decodedInput = yield* Schema.decodeUnknownEffect(
+      Schema.Record(Schema.String, Schema.String)
+    )(input).pipe(Effect.orDie);
+    const exit = yield* Effect.exit(load(decodedInput));
 
     expect(Exit.isFailure(exit)).toBe(true);
     if (Option.isSome(reason) && Exit.isFailure(exit)) {

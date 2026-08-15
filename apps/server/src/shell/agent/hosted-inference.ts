@@ -1,9 +1,9 @@
-import { Context, Data, Effect, Exit, Function as Fn, Option, Schema } from "effect";
+import { Context, Data, Effect, Exit, Option, Schema } from "effect";
 import type { Duration } from "effect";
 import type { Prompt, Response } from "effect/unstable/ai";
 import type { TranscriptEntry } from "~/core/transcript/model";
 import { freezeDeep } from "~/shell/_shared/deep-freeze";
-import { type WorkingContext, claimWorkingContext } from "./working-context";
+import { type WorkingContext } from "./working-context";
 
 /** Semantic prompt sections around provider-owned continuation items. @internal */
 export type HostedTextProjection = Readonly<{
@@ -12,52 +12,22 @@ export type HostedTextProjection = Readonly<{
   suffix: ReadonlyArray<Prompt.MessageEncoded>;
 }>;
 
-/** Opaque semantic text context accepted only by HostedInference. */
-export type HostedTextContext = object;
+/** Immutable semantic text context accepted by HostedInference. */
+export type HostedTextContext = HostedTextProjection;
 
-/** Semantic messages claimable once by HostedInference for structured generation. @internal */
-type HostedStructuredProjection = Readonly<{
+/** Immutable semantic messages for one structured generation. */
+export type HostedStructuredContext = Readonly<{
   messages: ReadonlyArray<Prompt.MessageEncoded>;
 }>;
 
-/** Opaque semantic context for one structured generation. */
-export type HostedStructuredContext = object;
-
-type HostedContextAuthority<A> = Readonly<{ claim: () => Option.Option<A> }>;
-
-const hostedContextAuthorityPrototype: object = Object.freeze({});
-
-const hostedContextAuthority = <A extends unknown>(projection: A): object => {
-  let available = true;
-  const isolated = freezeDeep(structuredClone(projection));
-  const authority = Fn.cast<object, HostedContextAuthority<A>>({});
-  Object.setPrototypeOf(authority, hostedContextAuthorityPrototype);
-  Object.defineProperty(authority, "claim", {
-    enumerable: false,
-    value: (): Option.Option<A> => {
-      if (!available) return Option.none();
-      available = false;
-      return Option.some(isolated);
-    },
-  });
-  return Object.freeze(authority);
-};
-
-const claimHostedContext = <A extends unknown>(context: unknown): Option.Option<A> =>
-  typeof context === "object" &&
-  context !== null &&
-  Object.getPrototypeOf(context) === hostedContextAuthorityPrototype
-    ? Fn.cast<unknown, HostedContextAuthority<A>>(context).claim()
-    : Option.none();
-
-/** Isolates semantic prompt sections behind one closure-backed claim. @internal */
+/** Isolates immutable semantic prompt sections from later caller mutation. @internal */
 export const makeHostedTextContext = (projection: HostedTextProjection): HostedTextContext =>
-  hostedContextAuthority(projection);
+  freezeDeep(structuredClone(projection));
 
-/** Isolates structured semantic messages behind one closure-backed claim. @internal */
+/** Isolates immutable structured messages from later caller mutation. @internal */
 export const makeHostedStructuredContext = (
-  projection: HostedStructuredProjection
-): HostedStructuredContext => hostedContextAuthority(projection);
+  context: HostedStructuredContext
+): HostedStructuredContext => freezeDeep(structuredClone(context));
 
 /** One-shot prepared hosted text request. */
 export type PreparedHostedText = Readonly<{
@@ -221,29 +191,26 @@ export type PreparedStructuredExecution<Output> = Readonly<{
 export type HostedStructuredAdapter = Readonly<{
   prepare: <Output, Encoded extends Readonly<Record<string, unknown>>>(
     input: Readonly<{
-      projection: HostedStructuredProjection;
+      projection: HostedStructuredContext;
       objectName: HostedStructuredObjectName;
       outputSchema: Schema.Codec<Output, Encoded, never, never>;
     }>
   ) => Effect.Effect<PreparedStructuredExecution<Output>, HostedInferenceError>;
 }>;
 
-/** Provider-neutral authority interface shared by live turns and startup validation. */
+/** Provider-neutral hosted inference interface shared by live turns and startup validation. */
 export type HostedInferenceService = Readonly<{
   /** Counts one canonical plain-text aggregate using provider-owned tokenization. */
   countText: (text: string) => Effect.Effect<number>;
   /** Counts exact semantic Transcript messages using provider-owned tokenization and framing. */
   countTranscript: (entries: ReadonlyArray<TranscriptEntry>) => Effect.Effect<number>;
-  /** Claims the semantic context and returns a one-shot authority for its exact complete request. */
+  /** Prepares immutable semantic context as a one-shot exact complete request. */
   prepareText: (
     request: HostedTextRequest
   ) => Effect.Effect<PreparedHostedText, HostedInferenceError>;
-  /** Claims, prepares, and capacity-checks a request without creating executable authority. */
+  /** Prepares and capacity-checks immutable context without creating executable work. */
   validateText: (request: HostedTextRequest) => Effect.Effect<void, HostedInferenceError>;
-  /**
-   * Claims semantic input once and stores one exact strict request with its matching decoder.
-   * Invalid or already-claimed context fails without producing an authority.
-   */
+  /** Stores one exact strict request with its matching decoder as one-shot executable work. */
   prepareStructured: <Output, Encoded extends Readonly<Record<string, unknown>>>(
     request: HostedStructuredRequest<Output, Encoded>
   ) => Effect.Effect<PreparedHostedStructured<Output>, HostedInferenceError>;
@@ -368,7 +335,7 @@ const makePreparedText = <Request, Continuation>(
     consumeSource();
     return Effect.void;
   });
-  const behavior = Fn.cast<object, PreparedHostedText>({});
+  const behavior = { execute, recover, discard } satisfies PreparedHostedText;
   Object.defineProperties(behavior, {
     execute: { enumerable: false, value: execute },
     recover: { enumerable: false, value: recover },
@@ -384,13 +351,11 @@ const prepareContinuation = <Request, Continuation>(
 ): Effect.Effect<PreparedHostedText, HostedInferenceError> =>
   Effect.suspend(() => {
     if (state.lifecycle !== "ready") return Effect.fail(invalidAuthority());
-    const projection = claimHostedContext<HostedTextProjection>(next.context);
-    if (Option.isNone(projection)) return Effect.fail(invalidAuthority());
     state.lifecycle = "preparing";
     return runtime
       .prepareExact({
         basePrefix: state.basePrefix,
-        projection: projection.value,
+        projection: next.context,
         continuation: state.continuation,
         policy: next.policy,
         source: Option.some(state),
@@ -419,39 +384,23 @@ const makeContinuation = <Request, Continuation>(
   });
 };
 
-type ClaimedInitial = Readonly<{
+type InitialContext = Readonly<{
   projection: HostedTextProjection;
   policy: HostedTextToolPolicy;
 }>;
-const claimWorkingProjection = (
-  context: WorkingContext | HostedTextContext
-): Option.Option<HostedTextProjection> =>
-  "startedAt" in context ? claimWorkingContext(context) : Option.none();
 
-const claimInitialProjection = (
-  context: WorkingContext | HostedTextContext
-): Option.Option<HostedTextProjection> =>
-  Object.getPrototypeOf(context) === hostedContextAuthorityPrototype
-    ? claimHostedContext(context)
-    : claimWorkingProjection(context);
-
-const claimInitial = (
-  request: InitialHostedTextRequest
-): Effect.Effect<ClaimedInitial, HostedInferenceError> =>
-  Effect.suspend(() => {
-    const projection = claimInitialProjection(request.context);
-    return Option.isNone(projection)
-      ? Effect.fail(invalidAuthority())
-      : Effect.succeed({ projection: projection.value, policy: toolPolicy(request) });
-  });
+const initialContext = (request: InitialHostedTextRequest): InitialContext => ({
+  projection: request.context,
+  policy: toolPolicy(request),
+});
 
 const initialPreparation: <Continuation>(
-  claimed: ClaimedInitial
-) => ExactPreparation<Continuation> = (claimed) => ({
-  basePrefix: claimed.projection.prefix,
-  projection: { ...claimed.projection, prefix: [] },
+  context: InitialContext
+) => ExactPreparation<Continuation> = (context) => ({
+  basePrefix: context.projection.prefix,
+  projection: { ...context.projection, prefix: [] },
   continuation: Option.none(),
-  policy: claimed.policy,
+  policy: context.policy,
   source: Option.none(),
 });
 
@@ -470,16 +419,11 @@ const makeTextRuntime = <Request, Continuation>(
   const prepareInitial = (
     request: InitialHostedTextRequest
   ): Effect.Effect<PreparedHostedText, HostedInferenceError> =>
-    claimInitial(request).pipe(
-      Effect.flatMap((claimed) => runtime.prepareExact(initialPreparation(claimed)))
-    );
+    runtime.prepareExact(initialPreparation(initialContext(request)));
   const validateInitial = (
     request: InitialHostedTextRequest
   ): Effect.Effect<void, HostedInferenceError> =>
-    claimInitial(request).pipe(
-      Effect.flatMap((claimed) => prepareAdapterRequest(adapter, initialPreparation(claimed))),
-      Effect.asVoid
-    );
+    prepareAdapterRequest(adapter, initialPreparation(initialContext(request))).pipe(Effect.asVoid);
   return {
     prepareText: prepareInitial,
     validateText: validateInitial,
@@ -536,7 +480,7 @@ const makeStructuredBehavior = <Output extends unknown>(
     state = "consumed";
     return Effect.void;
   });
-  const behavior = Fn.cast<object, PreparedHostedStructured<Output>>({});
+  const behavior = { execute, discard } satisfies PreparedHostedStructured<Output>;
   Object.defineProperties(behavior, {
     execute: { enumerable: false, value: execute },
     discard: { enumerable: false, value: discard },
@@ -550,19 +494,12 @@ const makeHostedStructuredRuntime = (
   prepareStructured: <Output, Encoded extends Readonly<Record<string, unknown>>>(
     request: HostedStructuredRequest<Output, Encoded>
   ) =>
-    Effect.suspend(() => {
-      const projection = claimHostedContext<HostedStructuredProjection>(request.context);
-      if (Option.isNone(projection)) return Effect.fail(invalidAuthority());
-      return adapter
-        .prepare({ ...request, projection: projection.value })
-        .pipe(Effect.map((execution) => makeStructuredBehavior(execution, request.outputSchema)));
-    }),
+    adapter
+      .prepare({ ...request, projection: request.context })
+      .pipe(Effect.map((execution) => makeStructuredBehavior(execution, request.outputSchema))),
 });
 
-/**
- * Gives one adapter exclusive, one-shot ownership of its prepared requests and continuations.
- * Authorities from another returned service are rejected.
- */
+/** Gives one adapter one-shot ownership of its prepared requests and continuations. */
 export const makeHostedInference = <Request, Continuation>(
   adapter: HostedInferenceAdapter<Request, Continuation>
 ): HostedInferenceService => {

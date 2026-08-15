@@ -1,22 +1,22 @@
-import { Data, Effect, Function as Fn, Option } from "effect";
+import { Data, Effect, Option } from "effect";
 import type { Prompt } from "effect/unstable/ai";
 import {
   type PreparedAttemptContext,
   type PreparedWorkingContextSnapshot,
-  claimPreparedAttemptContext,
 } from "~/shell/transcript/conversation-continuity";
 import { freezeDeep } from "~/shell/_shared/deep-freeze";
 import { exactTranscriptPrompt, systemPrompt, turnPrompt } from "./model-boundary";
 
-/** Opaque immutable semantic snapshot reused by every hosted round of one admitted Turn. */
-export type WorkingContext = Readonly<{ startedAt: PreparedWorkingContextSnapshot["startedAt"] }>;
-
-/** Fixed, provider-neutral projection claimable once by one HostedInference adapter. @internal */
-type WorkingContextProjection = Readonly<{
+/** Fixed, provider-neutral semantic projection owned and ordered by WorkingContext. @internal */
+export type WorkingContextProjection = Readonly<{
   prefix: ReadonlyArray<Prompt.MessageEncoded>;
   continuationTail: ReadonlyArray<Prompt.MessageEncoded>;
   suffix: ReadonlyArray<Prompt.MessageEncoded>;
 }>;
+
+/** Immutable semantic context reused by every hosted round of one admitted Turn. */
+export type WorkingContext = WorkingContextProjection &
+  Readonly<{ startedAt: PreparedWorkingContextSnapshot["startedAt"] }>;
 
 /** Content-free construction failure. */
 export class WorkingContextUnavailable extends Data.TaggedError("WorkingContextUnavailable")<{
@@ -35,32 +35,6 @@ const activeRequestContext = (value: unknown): Prompt.UserMessageEncoded => ({
   role: "user",
   content: untrustedText("active_request", value),
 });
-
-type WorkingContextAuthority = WorkingContext &
-  Readonly<{ claim: () => Option.Option<WorkingContextProjection> }>;
-
-const workingContextAuthorityPrototype: object = Object.freeze({});
-
-const workingContextAuthority = (
-  startedAt: PreparedWorkingContextSnapshot["startedAt"],
-  claim: () => Option.Option<WorkingContextProjection>
-): WorkingContext => {
-  const authority = Fn.cast<object, WorkingContextAuthority>({});
-  Object.setPrototypeOf(authority, workingContextAuthorityPrototype);
-  Object.defineProperties(authority, {
-    startedAt: { enumerable: true, value: startedAt },
-    claim: { enumerable: false, value: claim },
-  });
-  return Object.freeze(authority);
-};
-
-/** Consumes an authentic WorkingContext once; structural lookalikes are rejected. @internal */
-export const claimWorkingContext = (
-  context: WorkingContext
-): Option.Option<WorkingContextProjection> =>
-  Object.getPrototypeOf(context) === workingContextAuthorityPrototype
-    ? Fn.cast<WorkingContext, WorkingContextAuthority>(context).claim()
-    : Option.none();
 
 const maximumToolResultCharacters = 32_000;
 
@@ -129,22 +103,15 @@ const projectSnapshot = ({
   });
 
 /**
- * The sole WorkingContext constructor. It consumes exactly one PreparedAttempt.context and stores
- * no reconstructible User, request, revision, scope, or prose on the returned authority.
+ * The sole WorkingContext constructor. It projects an active prepared snapshot into immutable,
+ * provider-neutral semantic context without retaining persistence state.
  */
 export const makeWorkingContext = Effect.fn("WorkingContext.make")(function* (
   context: PreparedAttemptContext
 ) {
-  const source = claimPreparedAttemptContext(context);
-  if (Option.isNone(source)) {
+  if (!context.isActive()) {
     return yield* new WorkingContextUnavailable({ reason: "InvalidAuthority" });
   }
-  const projection = yield* projectSnapshot(source.value);
-  const isolated = freezeDeep(structuredClone(projection));
-  let available = true;
-  return workingContextAuthority(source.value.startedAt, () => {
-    if (!available) return Option.none();
-    available = false;
-    return Option.some(isolated);
-  });
+  const projection = freezeDeep(structuredClone(yield* projectSnapshot(context)));
+  return Object.freeze({ ...projection, startedAt: context.startedAt });
 });

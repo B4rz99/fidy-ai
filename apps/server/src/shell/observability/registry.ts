@@ -1,14 +1,24 @@
-import { Function as Fn, Schema } from "effect";
+import * as Arr from "effect/Array";
+import { Option, Schema } from "effect";
 import { ErrorCode } from "~/shell/_shared/errors";
-import { type OperationId, operationCatalog } from "~/shell/api";
+import { operationCatalog } from "~/shell/api";
 
-const canonicalOperationCodes = operationCatalog.operations.map(({ id }) =>
-  Fn.cast<typeof id, OperationId>(id)
-);
-const canonicalHttpRoutes = Fn.cast<Array<string>, readonly [string, ...ReadonlyArray<string>]>(
+type RequireNonEmpty = <Value>(
+  values: ReadonlyArray<Value>
+) => readonly [Value, ...ReadonlyArray<Value>];
+
+const requireNonEmpty: RequireNonEmpty = function (values) {
+  return Option.getOrThrowWith(
+    Option.liftPredicate(values, Arr.isReadonlyArrayNonEmpty),
+    () => new Error("Telemetry registry derivation requires canonical operations")
+  );
+};
+
+const canonicalOperationCodes = operationCatalog.operations.map(({ id }) => id);
+const canonicalHttpRoutes = requireNonEmpty(
   Array.from(new Set(operationCatalog.operations.map(({ route }) => route)))
 );
-const canonicalHttpRequests = Fn.cast<Array<string>, readonly [string, ...ReadonlyArray<string>]>(
+const canonicalHttpRequests = requireNonEmpty(
   operationCatalog.operations.map(({ method, route }) => `${method} ${route}`)
 );
 

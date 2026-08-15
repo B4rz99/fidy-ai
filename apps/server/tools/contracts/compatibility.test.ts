@@ -4,6 +4,8 @@ import {
   type OperationPolicyManifest,
   acknowledgementCovers,
   compareOperationPolicies,
+  contractAcknowledgementFrom,
+  contractArtifactsFrom,
   findOpenApiBreakingChanges,
 } from "./compatibility";
 
@@ -83,6 +85,27 @@ it.each([
   expect(findings.length).toBeGreaterThan(0);
   expect(findings.every((finding) => finding.source === "openapi")).toBe(true);
   expect(findings.every((finding) => finding.rule.length > 0)).toBe(true);
+});
+
+it("rejects malformed generated contract artifacts at the contract boundary", () => {
+  expect(() =>
+    contractArtifactsFrom(
+      { openapi: "3.1.0" },
+      { operations: [{ id: 42, policy: {} }] },
+      "candidate"
+    )
+  ).toThrow("operation policy");
+});
+
+it("rejects malformed compatibility acknowledgements at the acknowledgement boundary", () => {
+  expect(() =>
+    contractAcknowledgementFrom({
+      baseDigest: "base",
+      candidateDigest: "candidate",
+      findings: [{ source: "openapi", rule: "removed", detail: "removed", location: [] }],
+      rolloutIssue: "https://github.com/B4rz99/fidy-ai/issues/269",
+    })
+  ).toThrow("exact-finding acknowledgement");
 });
 
 it("compares the complete reflected policy value without a field allowlist", () => {

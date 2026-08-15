@@ -46,6 +46,13 @@ describe("preview request policy", () => {
     });
   });
 
+  it("rejects malformed workflow and pull-request documents", () => {
+    expect(() => previewRequestFromEvent({ workflow_run: [] }, repository)).toThrow("malformed");
+    expect(() => validatePreviewRequest(workflowEvent(), { head: [] }, repository)).toThrow(
+      "malformed"
+    );
+  });
+
   it("rejects a non-pull-request or unsuccessful trigger", () => {
     for (const [field, value] of [
       ["event", "push"],

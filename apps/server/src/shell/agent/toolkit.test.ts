@@ -1,5 +1,5 @@
 import { expect, it } from "@effect/vitest";
-import { Effect, Schema } from "effect";
+import { Effect, Option, Schema } from "effect";
 import { McpServer, Tool } from "effect/unstable/ai";
 import { toCodecOpenAI } from "effect/unstable/ai/OpenAiStructuredOutput";
 import { HttpApi } from "effect/unstable/httpapi";
@@ -10,6 +10,7 @@ import {
   CanonicalApiUrl,
   agentOperationBindings,
   decodeAgentOperationInput,
+  findAgentOperationBinding,
 } from "./toolkit";
 
 const hostedTool = (name: string): Tool.AnyDynamic => {
@@ -32,6 +33,10 @@ it("derives exactly one hosted tool for every FidyApi canonical operation", () =
     reflected.map((operation) => operation.replaceAll(".", "__"))
   );
   expect(agentOperationBindings.every(({ description }) => description.length > 0)).toBe(true);
+});
+
+it("rejects names outside the provider-safe operation vocabulary", () => {
+  expect(Option.isNone(findAgentOperationBinding("not a provider tool"))).toBe(true);
 });
 
 it("makes canonical Memory tools available to hosted inference and MCP registration", () => {

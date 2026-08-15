@@ -360,7 +360,6 @@ const generatedMetadataProgram = Effect.gen(function* () {
     attempt.prepare((prepared) =>
       Effect.gen(function* () {
         expect(yield* continuity.observe(defaultUserId)).toEqual({ entries: [], turns: [] });
-        expect(Object.keys(prepared.context)).toEqual([]);
         const pending = yield* prepared.begin();
         const admitted = yield* continuity.observe(defaultUserId);
         expect(admitted.turns[0]?._tag).toBe("Pending");

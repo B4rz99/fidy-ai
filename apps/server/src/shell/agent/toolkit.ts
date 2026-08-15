@@ -1,4 +1,4 @@
-import { Context, Effect, Function, Layer, Option, Predicate, Schema, type Scope } from "effect";
+import { Context, Effect, Function, Layer, Option, Schema, type Scope } from "effect";
 import { HttpClient, HttpClientRequest } from "effect/unstable/http";
 import { HttpApiClient, HttpApiMiddleware } from "effect/unstable/httpapi";
 import { Tool, Toolkit } from "effect/unstable/ai";
@@ -8,7 +8,7 @@ import { type TokenBearer } from "~/core/tokens/model";
 import { TokenAuthorization } from "~/shell/_shared/authz";
 import { type CatalogOperation } from "~/shell/_shared/operation-catalog";
 import { type AgentConfirmation } from "~/shell/_shared/operation-policy";
-import { FidyApi, operationCatalog } from "~/shell/api";
+import { FidyApi, type FidyApiGroups, type OperationId, operationCatalog } from "~/shell/api";
 import { Telemetry, encodeTraceParent } from "~/shell/observability/telemetry";
 
 const maximumOpenAiToolNameLength = 64;
@@ -16,18 +16,19 @@ const maximumOpenAiToolNameLength = 64;
 const loopbackHostnames = new Set(["127.0.0.1", "localhost", "[::1]"]);
 const httpProtocols = new Set(["http:", "https:"]);
 
-const isLoopbackOrigin = (url: URL): boolean =>
-  loopbackHostnames.has(url.hostname) && httpProtocols.has(url.protocol);
-
-const carriesNoCredentials = (url: URL): boolean => url.username === "" && url.password === "";
-
-const hasEmptyQueryAndFragment = (url: URL): boolean => url.search === "" && url.hash === "";
-
-const addressesOriginRoot = (url: URL): boolean =>
-  url.pathname === "/" && hasEmptyQueryAndFragment(url);
+const isSafeCanonicalApiUrl = (url: URL): boolean =>
+  [
+    loopbackHostnames.has(url.hostname),
+    httpProtocols.has(url.protocol),
+    url.username === "",
+    url.password === "",
+    url.pathname === "/",
+    url.search === "",
+    url.hash === "",
+  ].every(Boolean);
 
 const safeCanonicalApiUrl = Schema.makeFilter<URL>((url) =>
-  isLoopbackOrigin(url) && carriesNoCredentials(url) && addressesOriginRoot(url)
+  isSafeCanonicalApiUrl(url)
     ? undefined
     : "Expected a loopback canonical API origin without credentials"
 );
@@ -141,39 +142,204 @@ const tools = agentOperationBindings.map((binding) =>
 /** Toolkit definition containing exactly the operations reflected from FidyApi. */
 export const AgentToolkit = Toolkit.make(...tools);
 
-type DynamicOperation = (input: unknown) => Effect.Effect<unknown, object, never>;
+type ClientOperation = (input: unknown) => Effect.Effect<unknown, object>;
 
-const isDynamicOperation = (value: unknown): value is DynamicOperation =>
-  typeof value === "function";
-
-const callOperation = (
-  client: object,
+const bindClientOperation = <Input, Success, Failure extends object>(
   binding: AgentOperationBinding,
-  input: unknown
-): Effect.Effect<unknown, object> => {
-  const separator = binding.operation.indexOf(".");
-  const groupName = binding.operation.slice(0, separator);
-  const operationName = binding.operation.slice(separator + 1);
-  if (!Predicate.hasProperty(client, groupName)) {
-    return Effect.die(new Error("Derived canonical API client group is missing"));
-  }
-  const group = client[groupName];
-  if (typeof group !== "object" || group === null || !Predicate.hasProperty(group, operationName)) {
-    return Effect.die(new Error("Derived canonical API client operation is missing"));
-  }
-  const operation = group[operationName];
-  if (!isDynamicOperation(operation)) {
-    return Effect.die(new Error("Derived canonical API client operation is not callable"));
-  }
-  return operation(input).pipe(
-    Effect.provideService(HttpClient.TracerPropagationEnabled, false),
-    Effect.catch((error) =>
-      Schema.is(binding.failure)(error)
-        ? Effect.fail(error)
-        : Effect.die(new Error("Canonical API client returned an undeclared failure"))
-    )
+  operation: (input: Input) => Effect.Effect<Success, Failure, never>
+): ClientOperation => {
+  const parameters = Schema.make<Schema.Codec<Input, unknown, never, never>>(
+    binding.canonicalParameters.ast
   );
+  return (input) =>
+    Schema.decodeUnknownEffect(parameters)(input).pipe(
+      Effect.orDie,
+      Effect.flatMap(operation),
+      Effect.provideService(HttpClient.TracerPropagationEnabled, false),
+      Effect.catch((error) =>
+        Schema.is(binding.failure)(error)
+          ? Effect.fail(error)
+          : Effect.die(new Error("Canonical API client returned an undeclared failure"))
+      )
+    );
 };
+
+const requireBinding = (operation: OperationId): AgentOperationBinding => {
+  const catalogOperation = Option.getOrThrowWith(
+    Option.fromNullishOr(operationCatalog.byId.get(operation)),
+    () => new Error(`Agent operation binding is missing: ${operation}`)
+  );
+  const binding = agentOperationBindings.find(
+    (candidate) => candidate.operation === catalogOperation.id
+  );
+  if (binding === undefined) throw new Error(`Agent operation binding is missing: ${operation}`);
+  return binding;
+};
+
+type FidyClient = HttpApiClient.Client<FidyApiGroups>;
+type BindClientOperation = <Input, Success, Failure extends object>(
+  operation: OperationId,
+  invoke: (input: Input) => Effect.Effect<Success, Failure, never>
+) => ClientOperation;
+type GroupClientOperations<Group extends string> = Record<
+  Extract<OperationId, `${Group}.${string}`>,
+  ClientOperation
+>;
+
+const identityClientOperations = (
+  client: FidyClient,
+  bind: BindClientOperation
+): GroupClientOperations<"identity"> => ({
+  "identity.getCurrentUser": bind("identity.getCurrentUser", client.identity.getCurrentUser),
+  "identity.updateUserPreferences": bind(
+    "identity.updateUserPreferences",
+    client.identity.updateUserPreferences
+  ),
+});
+
+const categoryClientOperations = (
+  client: FidyClient,
+  bind: BindClientOperation
+): GroupClientOperations<"categories"> => ({
+  "categories.listCategories": bind("categories.listCategories", client.categories.listCategories),
+  "categories.listKeywordRules": bind(
+    "categories.listKeywordRules",
+    client.categories.listKeywordRules
+  ),
+  "categories.createKeywordRule": bind(
+    "categories.createKeywordRule",
+    client.categories.createKeywordRule
+  ),
+  "categories.updateKeywordRule": bind(
+    "categories.updateKeywordRule",
+    client.categories.updateKeywordRule
+  ),
+  "categories.deleteKeywordRule": bind(
+    "categories.deleteKeywordRule",
+    client.categories.deleteKeywordRule
+  ),
+});
+
+const dashboardClientOperations = (
+  client: FidyClient,
+  bind: BindClientOperation
+): GroupClientOperations<"dashboard"> => ({
+  "dashboard.getDashboard": bind("dashboard.getDashboard", client.dashboard.getDashboard),
+  "dashboard.listDashboardCatalog": bind(
+    "dashboard.listDashboardCatalog",
+    client.dashboard.listDashboardCatalog
+  ),
+  "dashboard.applyDashboardEdit": bind(
+    "dashboard.applyDashboardEdit",
+    client.dashboard.applyDashboardEdit
+  ),
+});
+
+const transactionClientOperations = (
+  client: FidyClient,
+  bind: BindClientOperation
+): GroupClientOperations<"transactions"> => ({
+  "transactions.createTransaction": bind(
+    "transactions.createTransaction",
+    client.transactions.createTransaction
+  ),
+  "transactions.listTransactions": bind(
+    "transactions.listTransactions",
+    client.transactions.listTransactions
+  ),
+  "transactions.getTransaction": bind(
+    "transactions.getTransaction",
+    client.transactions.getTransaction
+  ),
+  "transactions.updateTransaction": bind(
+    "transactions.updateTransaction",
+    client.transactions.updateTransaction
+  ),
+  "transactions.deleteTransaction": bind(
+    "transactions.deleteTransaction",
+    client.transactions.deleteTransaction
+  ),
+  "transactions.listSourceAttestations": bind(
+    "transactions.listSourceAttestations",
+    client.transactions.listSourceAttestations
+  ),
+});
+
+const ingestionClientOperations = (
+  client: FidyClient,
+  bind: BindClientOperation
+): GroupClientOperations<"ingestion"> => ({
+  "ingestion.submitForExtraction": bind(
+    "ingestion.submitForExtraction",
+    client.ingestion.submitForExtraction
+  ),
+  "ingestion.getStatementSubmission": bind(
+    "ingestion.getStatementSubmission",
+    client.ingestion.getStatementSubmission
+  ),
+  "ingestion.listNeedsReviewItems": bind(
+    "ingestion.listNeedsReviewItems",
+    client.ingestion.listNeedsReviewItems
+  ),
+  "ingestion.resolveNeedsReviewItem": bind(
+    "ingestion.resolveNeedsReviewItem",
+    client.ingestion.resolveNeedsReviewItem
+  ),
+});
+
+const insightClientOperations = (
+  client: FidyClient,
+  bind: BindClientOperation
+): GroupClientOperations<"insights"> => ({
+  "insights.listPendingInsights": bind(
+    "insights.listPendingInsights",
+    client.insights.listPendingInsights
+  ),
+  "insights.markInsightDelivered": bind(
+    "insights.markInsightDelivered",
+    client.insights.markInsightDelivered
+  ),
+  "insights.markInsightRead": bind("insights.markInsightRead", client.insights.markInsightRead),
+  "insights.dismissInsight": bind("insights.dismissInsight", client.insights.dismissInsight),
+});
+
+const memoryClientOperations = (
+  client: FidyClient,
+  bind: BindClientOperation
+): GroupClientOperations<"memory"> => ({
+  "memory.remember": bind("memory.remember", client.memory.remember),
+  "memory.revise": bind("memory.revise", client.memory.revise),
+  "memory.forget": bind("memory.forget", client.memory.forget),
+  "memory.recall": bind("memory.recall", client.memory.recall),
+});
+
+const remainingClientOperations = (
+  client: FidyClient,
+  bind: BindClientOperation
+): GroupClientOperations<"subscription"> & GroupClientOperations<"operations"> => ({
+  "subscription.getUpgradeUrl": bind(
+    "subscription.getUpgradeUrl",
+    client.subscription.getUpgradeUrl
+  ),
+  "operations.executeAtomicBatch": bind(
+    "operations.executeAtomicBatch",
+    client.operations.executeAtomicBatch
+  ),
+});
+
+const makeClientOperations = (
+  client: FidyClient,
+  bind: BindClientOperation
+): Record<OperationId, ClientOperation> => ({
+  ...identityClientOperations(client, bind),
+  ...categoryClientOperations(client, bind),
+  ...dashboardClientOperations(client, bind),
+  ...transactionClientOperations(client, bind),
+  ...ingestionClientOperations(client, bind),
+  ...insightClientOperations(client, bind),
+  ...memoryClientOperations(client, bind),
+  ...remainingClientOperations(client, bind),
+});
 
 /**
  * Binds the derived toolkit to a turn-scoped TokenBearer. Each handler restores
@@ -211,14 +377,19 @@ export const makeAgentToolkit = (
       onSome: (url) => HttpApiClient.make(FidyApi, { baseUrl: url.href }),
     });
     const client = yield* derivedClient.pipe(Effect.provide(middlewareContext));
+    const bind: BindClientOperation = (operation, invoke) =>
+      bindClientOperation(requireBinding(operation), invoke);
+    const clientOperations = makeClientOperations(client, bind);
+    const operationsById = new Map(Object.entries(clientOperations));
     const handlers = Object.fromEntries(
       agentOperationBindings.map((binding) => [
         binding.wireName,
-        (input: unknown): Effect.Effect<unknown, object> =>
-          Schema.decodeUnknownEffect(binding.canonicalParameters)(input).pipe(
-            Effect.orDie,
-            Effect.flatMap((canonicalInput) => callOperation(client, binding, canonicalInput))
-          ),
+        (input: unknown): Effect.Effect<unknown, object> => {
+          const operation = operationsById.get(binding.operation);
+          return operation === undefined
+            ? Effect.die(new Error("Derived canonical API client operation is missing"))
+            : operation(input);
+        },
       ])
     );
     const handlerContext = yield* AgentToolkit.toHandlers(handlers);

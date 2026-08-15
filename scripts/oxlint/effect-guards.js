@@ -81,6 +81,36 @@ const noDisableValidation = {
 // the v3 spelling of `callback`; both are listed so the fence survives either.
 const ESCAPE_HATCHES = new Set(["sync", "promise", "tryPromise", "async", "callback"]);
 
+/** Rejects type-only cast helpers that suppress assignability errors without runtime proof. */
+const noTypeCast = {
+  meta: {
+    type: "problem",
+    docs: { description: "Disallow type-only cast helpers" },
+    messages: {
+      noTypeCast:
+        "Do not call cast helpers. Preserve the type relationship in the module interface or validate the value at runtime.",
+    },
+    schema: [],
+  },
+  create(context) {
+    return {
+      MemberExpression(node) {
+        if (staticMemberName(node) === "cast") {
+          context.report({ node, messageId: "noTypeCast" });
+        }
+      },
+      ImportDeclaration(node) {
+        for (const specifier of node.specifiers) {
+          if (specifier.type !== "ImportSpecifier") continue;
+          if (specifier.imported.type === "Identifier" && specifier.imported.name === "cast") {
+            context.report({ node: specifier, messageId: "noTypeCast" });
+          }
+        }
+      },
+    };
+  },
+};
+
 /** The member name a `.prop` or `["prop"]` access reads, or undefined. */
 const staticMemberName = (node) => {
   if (!node.computed && node.property.type === "Identifier") return node.property.name;
@@ -673,6 +703,7 @@ const plugin = {
   meta: { name: "effect-guards" },
   rules: {
     "no-ambient-nondeterminism": noAmbientNondeterminism,
+    "no-type-cast": noTypeCast,
     "no-nullable-type": noNullableType,
     "no-unknown-parameters": noUnknownParameters,
     "no-unsafe-dictionary-type": noUnsafeDictionaryType,

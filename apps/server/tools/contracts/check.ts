@@ -3,15 +3,13 @@
 import {
   type ContractAcknowledgement,
   type ContractArtifacts,
-  type ContractFinding,
   acknowledgementCovers,
-  asJsonObject,
   canonicalJson,
   compareOperationPolicies,
+  contractAcknowledgementFrom,
   contractArtifactsFrom,
   contractDigest,
   findOpenApiBreakingChanges,
-  isUnknownRecord,
 } from "./compatibility";
 
 const serverRoot = Bun.fileURLToPath(new URL("../..", import.meta.url)).replace(/\/$/u, "");
@@ -45,8 +43,6 @@ const readJson = async (path: string): Promise<unknown> => {
     throw new Error(`Could not read JSON contract ${path}: ${String(cause)}`);
   }
 };
-
-const isUnknownArray = (value: unknown): value is ReadonlyArray<unknown> => Array.isArray(value);
 
 const committedBaseArtifacts = (baseRef: string): ContractArtifacts | undefined => {
   const paths = [
@@ -127,45 +123,14 @@ const bootstrapBaseArtifacts = async (baseRef: string): Promise<ContractArtifact
   }
 };
 
-const isFinding = (value: unknown): value is ContractFinding => {
-  if (
-    !isUnknownRecord(value) ||
-    typeof value.rule !== "string" ||
-    typeof value.detail !== "string"
-  ) {
-    return false;
-  }
-  if (value.source === "openapi") {
-    try {
-      asJsonObject(value.location);
-      return true;
-    } catch {
-      return false;
-    }
-  }
-  return value.source === "operation-policy" && typeof value.operationId === "string";
-};
-
 const readAcknowledgement = async (): Promise<ContractAcknowledgement | undefined> => {
   const file = Bun.file(acknowledgementPath);
   if (!(await file.exists())) return undefined;
-  const value: unknown = await file.json();
-  if (
-    !isUnknownRecord(value) ||
-    typeof value.baseDigest !== "string" ||
-    typeof value.candidateDigest !== "string" ||
-    typeof value.rolloutIssue !== "string" ||
-    !isUnknownArray(value.findings) ||
-    !value.findings.every(isFinding)
-  ) {
+  try {
+    return contractAcknowledgementFrom(await file.json());
+  } catch {
     throw new Error(`${acknowledgementPath} is not a valid exact-finding acknowledgement`);
   }
-  return {
-    baseDigest: value.baseDigest,
-    candidateDigest: value.candidateDigest,
-    rolloutIssue: value.rolloutIssue,
-    findings: value.findings,
-  };
 };
 
 const parseBaseRef = (): string => {

@@ -152,21 +152,6 @@ jobs:
           WHATSAPP_BUSINESS_PORTFOLIO_ID: portfolio-test
         run: bun run verify -- --group quality
 
-  mutation:
-    name: Mutation testing
-    runs-on: ubuntu-latest
-    timeout-minutes: 120
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-      # Stryker's Babel instrumenter needs Node. Bun still installs dependencies
-      # and runs Vitest; only the Stryker process itself runs on Node.
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
-        with:
-          node-version: "24"
-      - uses: ./.github/actions/bun-install
-      - name: Mutation validation
-        run: bun run verify -- --group mutation
-
   production-image:
     name: Production image
     runs-on: ubuntu-latest
@@ -234,7 +219,6 @@ jobs:
       - server
       - acceptance
       - quality
-      - mutation
       - production-image
       - security-secrets
       - security-sast

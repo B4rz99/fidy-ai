@@ -1,7 +1,0 @@
-{
-  "buildCommand": "bun run build",
-  "outputDirectory": "dist",
-  "cleanUrls": true,
-  "redirects": [{ "source": "/", "destination": "/es", "statusCode": 302 }],
-  "rewrites": [{ "source": "/es/privacy", "destination": "/politica" }]
-}

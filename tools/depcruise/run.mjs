@@ -1,4 +1,4 @@
-// Runs the module-graph gate defined in `.dependency-cruiser.mjs`.
+// Runs the module-graph gate defined in the current package's `.dependency-cruiser.mjs`.
 //
 // Not the `depcruise` binary, for two reasons. The cruiser reads .ts sources
 // and the tsconfig `paths` aliases through the classic TypeScript compiler API,
@@ -10,20 +10,19 @@
 // failure this repo already had once, so `assertCruisedSomething` below turns
 // it into an error.
 
-import { dirname, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { resolve } from "node:path";
 import { cruise } from "dependency-cruiser";
 import extractDepcruiseConfig from "dependency-cruiser/config-utl/extract-depcruise-config";
 import extractTSConfig from "dependency-cruiser/config-utl/extract-ts-config";
 
-const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
+const packageRoot = resolve(process.argv[2] ?? process.cwd());
 
 // The cruiser resolves every path against the cwd, and the reported module
-// names are what the rule patterns match, so both must be repo-root-relative.
-process.chdir(repoRoot);
+// names are what the rule patterns match, so both must be package-root-relative.
+process.chdir(packageRoot);
 
-const ruleSet = await extractDepcruiseConfig(resolve(repoRoot, ".dependency-cruiser.mjs"));
-const tsConfig = extractTSConfig(ruleSet.options.tsConfig.fileName);
+const ruleSet = await extractDepcruiseConfig(resolve(packageRoot, ".dependency-cruiser.mjs"));
+const tsConfig = extractTSConfig(resolve(packageRoot, ruleSet.options.tsConfig.fileName));
 
 const cruiseSource = (options) => cruise(["src"], { ruleSet, ...options }, null, { tsConfig });
 
@@ -61,11 +60,16 @@ const ruleReason = (ruleName) => {
   process.exit(1);
 };
 
+const displayPath = (path) => path.replace(/^(?:\.\.\/)+node_modules\//u, "node_modules/");
+
 const reportViolations = (report) => {
   for (const violation of report.summary.violations) {
     const path = violation.cycle
-      ? [violation.from, ...violation.cycle.map((step) => step.name)].join(" → ")
-      : `${violation.from} → ${violation.to}`;
+      ? [
+          displayPath(violation.from),
+          ...violation.cycle.map((step) => displayPath(step.name)),
+        ].join(" → ")
+      : `${displayPath(violation.from)} → ${displayPath(violation.to)}`;
     console.error(`${violation.rule.severity} ${violation.rule.name}: ${path}`);
     console.error(`  ${ruleReason(violation.rule.name)}\n`);
   }

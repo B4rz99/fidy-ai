@@ -105,6 +105,18 @@ Judge a `Record` by its actual keyspace and value contract.
 - Do not return `Record<string, unknown>` for a value whose fields are already known. Use the
   canonical schema-derived type or a named first-party shape.
 
+### Runtime checks
+
+- Never write generic runtime guards such as `isRecord`, `isObject`, or `isString`, including under
+  another name. Use Effect's `Predicate` as the one vocabulary for lightweight refinement.
+- Decode untrusted boundary values with the owning `Schema` or its derived boundary abstraction.
+  Boundaries include HTTP, parsed JSON, browser storage, URLs, uploads, provider data, and database
+  projections. A generic object check is refinement, not validation.
+- `Predicate.isObject` proves only non-null and non-array; it also accepts class instances, `Date`,
+  `Map`, and typed arrays. It does not prove that a value is a plain JSON record.
+- Domain predicates are allowed when they name and fully check a meaningful invariant over
+  already-decoded values, rather than disguising primitive runtime inspection.
+
 ### Other defaults
 
 - Core functions do not accept explicit `unknown` parameters. Raw input is decoded at the shell

@@ -6,14 +6,27 @@ How fidy-ai is put together, and why.
 
 ## 1. System shape
 
-`src/` is layer-major:
+The repository root is a private Bun workspace. It owns the single lockfile, CI, shared compiler
+policy, repository-wide quality policy, and stable orchestration commands. Root commands deliberately
+delegate application work to its owning workspace package: this gives contributors and automation one
+repository entrypoint while keeping runtime dependencies and behavior inside the application that
+owns them.
+
+The workspace contains exactly two application packages: `@fidy/server` and `@fidy/web`.
+`apps/server` is the `@fidy/server` application package. Its `src/` is layer-major:
 
 - `core/` contains pure business decisions typed `Effect<A, E, never>` and touches no external
   service.
 - `shell/` contains repositories, handlers, API assembly, adapters, and every other side effect.
-- `src/main.ts` is the only production application entrypoint. Command-level preloads may initialize
-  process infrastructure before it, but cannot start application work. Scripts compose shell layers
-  and contain no domain decisions.
+- `apps/server/src/main.ts` is the only server production entrypoint. Command-level preloads may
+  initialize process infrastructure before it, but cannot start application work. Scripts compose
+  shell layers and contain no domain decisions.
+
+`apps/web` is the `@fidy/web` React/Vite application package and produces a portable static artifact.
+It owns browser routing, providers, styles, and public policy copy. Its only server import is the
+browser-safe `@fidy/server/client` declaration seam; Effect Atom derives browser transport from that
+canonical API without importing server implementations. The API process never serves web routes or
+static assets.
 
 The directory boundary is intentional. It is enforced by lint and dependency checks so a naming
 convention cannot be mistaken for a purity boundary. A feature may touch both trees; that cost is
@@ -23,6 +36,33 @@ sessions.
 The API assembly imports slice operation definitions. Handlers import the assembled API as required
 by the HTTP builder, and `http.ts` composes the handler layers. This direction is acyclic and is
 protected by the dependency graph.
+
+Server-specific build and deployment adapters live with `@fidy/server`. Its Dockerfile intentionally
+uses the repository root as build context so Bun can install the one workspace lockfile, while the
+runtime image receives only built server artifacts. Railway must use `/apps/server/railway.json` as
+its config-as-code path; that adapter selects `apps/server/Dockerfile` without changing the repository
+source root.
+
+### Production topology
+
+[ADR 0018](docs/adr/0018-independent-production-deployments.md) makes the application boundary a
+runtime boundary. Railway builds and runs only the server image at `api.fidyapp.com`; Cloudflare
+serves only the validated static web output at `fidyapp.com`. Cloudflare has no Worker entrypoint and
+the API has no static-file route. The browser CSP permits connections only to the stable API origin.
+
+GitHub Actions is the sole release coordinator. A trunk release selects one immutable source commit,
+deploys it through Railway's connected-repository API, and verifies that public health reports its
+full Git revision and canonical contract digest. Only then does it build an identically marked web
+artifact, upload one immutable Cloudflare version, recheck trunk head, and promote that exact version.
+The contract digest is derived from the checked-in server-owned canonical artifacts; the web still
+consumes only `@fidy/server/client` rather than owning a copied contract.
+
+Releases are serialized without cancelling an active deployment. A server failure stops before web
+work. A web failure or superseded release leaves the prior Cloudflare version active; the newly
+successful server remains temporarily compatible under the documented add/use/remove rollout. No
+cross-provider rollback transaction exists. Provider source-triggered deployments are disabled, and
+[the Production runbook](docs/operations/production-releases.md) owns configuration, diagnostics, and
+recovery.
 
 ---
 
@@ -100,6 +140,25 @@ not an implementation-readiness flag.
 
 The operation references the core schema. All public API and agent surfaces derive from the
 canonical operation definition; parallel operation maps are not maintained.
+
+The server-owned package has one browser-safe `@fidy/server/client` export backed by
+`apps/server/src/client.ts`. It re-exports the assembled `FidyApi`, the client-side authorization
+layer factory required by the middleware declaration, and genuinely useful derived types such as
+`OperationId` and `CanonicalInput`. A web package derives its typed client directly from `FidyApi`
+with `AtomHttpApi.Service()("FidyClient", { api: FidyApi, httpClient: ... })`; the facade does not
+wrap transport or declare a second canonical surface. Its transitive browser build may reach core and
+declaration-only operation modules, but not live middleware, repositories, handlers, workers, adapters,
+observability implementations, database, filesystem, provider, or runtime modules. The browser build and module
+graph guards are executable checks for that boundary.
+
+The root TypeScript project-reference build expresses the server-before-web declaration dependency.
+Server-owned OpenAPI and complete reflected operation-policy artifacts live under
+`apps/server/contracts/`; they are deterministic review evidence, never another declaration. The
+mandatory root gate checks freshness and compares them with the pull-request base, failing structural
+or policy breaks unless an acknowledgement is bound to the exact base digest, candidate digest,
+finding set, and coordinated rollout issue. See
+[Contract compatibility](docs/contract-compatibility.md) for the artifact lifecycle and the
+one-time base bootstrap used by the architecture PR that introduces them.
 
 Every shape that differs from a canonical shape is derived from it. This includes extraction
 schemas, response variants, and relational row projections. Money remains nested in domain and

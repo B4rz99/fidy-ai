@@ -7,8 +7,8 @@ operational state expected by dependent deployments.
 ## Ownership and routing
 
 - `fidyapp.com` is registered in the operator's Spaceship account.
-- Vercel hosts the public web origin from `landing` in this repository and manages the authoritative
-  DNS zone.
+- `apps/web` owns the portable static web artifact. Cloudflare hosts Production at `fidyapp.com`;
+  Railway hosts the independently deployed API at `api.fidyapp.com`.
 - Google Workspace handles mail for `@fidyapp.com`.
 - Resend is configured to send and receive for `ingest.fidyapp.com`; the domain uses the São Paulo
   sending region and enforced TLS.
@@ -19,19 +19,21 @@ Workspace MX record with Resend's inbound record.
 ## Runtime configuration
 
 The shared `externalEndpoints` configuration in
-[`src/shell/_shared/external-endpoints.ts`](../../src/shell/_shared/external-endpoints.ts) derives all
-stable paths from these variables. Browser login uses `/auth/pair`; PAT management uses
+[`apps/server/src/shell/_shared/external-endpoints.ts`](../../apps/server/src/shell/_shared/external-endpoints.ts)
+derives all stable paths from these variables. The web build validates `VITE_API_ORIGIN` separately. Browser login uses `/auth/pair`; PAT management uses
 `/settings/pats`. The former `/auth/magic` entry is retired by ADR 0015:
 
 | Variable              | Production value          |
 | --------------------- | ------------------------- |
 | `PUBLIC_WEB_ORIGIN`   | `https://fidyapp.com`     |
 | `PUBLIC_API_ORIGIN`   | `https://api.fidyapp.com` |
+| `VITE_API_ORIGIN`     | `https://api.fidyapp.com` |
 | `INGEST_EMAIL_DOMAIN` | `ingest.fidyapp.com`      |
 
-Every deployment must set all three variables. Production uses the values above; local and preview
-deployments use their own origins and ingestion domain so they cannot silently call production
-addresses.
+Every deployment must set the variables applicable to its process or build. Production uses the
+values above; local and preview deployments use their own origins and ingestion domain so they cannot
+silently call production addresses. See the [Production release runbook](production-releases.md) for
+the provider and GitHub environment configuration.
 
 ## Verification
 
@@ -43,8 +45,10 @@ dig +short MX fidyapp.com
 dig +short MX ingest.fidyapp.com
 ```
 
-The expected nameservers are `ns1.vercel-dns.com` and `ns2.vercel-dns.com`. The root MX must remain
-Google Workspace, while the ingestion MX must resolve to Resend's inbound SMTP target.
+The expected nameservers are the two assigned by the active Cloudflare zone. The root MX must remain
+Google Workspace, while the ingestion MX must resolve to Resend's inbound SMTP target. Follow the
+[DNS and registrar migration runbook](dns-and-registrar-migration.md) when moving authority or
+registration.
 
 Check Resend after DNS propagation:
 

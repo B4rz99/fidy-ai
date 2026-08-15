@@ -5,9 +5,11 @@ node_modules/
 dist/
 build/
 out/
+apps/web/preview.tar
 
 # TypeScript
 *.tsbuildinfo
+.tsbuild/
 
 # Environment variables
 .env

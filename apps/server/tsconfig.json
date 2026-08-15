@@ -1,0 +1,25 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "composite": true,
+    "declaration": true,
+    "emitDeclarationOnly": true,
+    "noEmit": false,
+    "outDir": "../../.tsbuild/server",
+    "tsBuildInfoFile": "../../.tsbuild/server.tsbuildinfo",
+    // Imports that leave a directory are aliased (`~/core/budgets/model`);
+    // imports within one stay relative. Both halves are enforced by
+    // `.dependency-cruiser.mjs`, which explains itself when either fires.
+    "paths": {
+      "~/*": ["./src/*"]
+    }
+  },
+  "include": [
+    "scripts/**/*.ts",
+    "src/**/*.ts",
+    "src/**/*.tsx",
+    "tools/contracts/**/*.ts",
+    "tools/observability-compatibility/**/*.ts"
+  ],
+  "exclude": ["**/node_modules/**", "**/dist/**", "**/build/**"]
+}

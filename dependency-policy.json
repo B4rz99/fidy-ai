@@ -21,22 +21,9 @@
     {
       "name": "@effect/tsgo",
       "manifest": "package.json",
-      "reason": "0.33.0 crashes Linux CI with a nil-pointer panic in prefer_typed_schema_decoder; defer until the verified fixed 0.35.0 release clears the seven-day install delay.",
-      "until": "2026-08-15T00:00:00Z"
+      "reason": "0.35.0 makes the project-reference build fail on repository-wide preferTypedSchemaDecoder suggestions; migrate those call sites in a dedicated change before upgrading.",
+      "until": "2026-09-15T00:00:00Z"
     }
   ],
-  "acceptedVulnerabilities": [
-    {
-      "cve": "CVE-2026-67213",
-      "path": "bun.lock",
-      "reason": "The nanoid 3.3.18 transitive fix remains blocked by the seven-day minimum release age until 2026-08-14T16:41:05.696Z; retain 3.3.17 only until the fix becomes policy-eligible.",
-      "until": "2026-08-15T00:00:00Z"
-    },
-    {
-      "cve": "CVE-2026-67213",
-      "path": "tools/mutation/bun.lock",
-      "reason": "The nanoid 3.3.18 transitive fix remains blocked by the seven-day minimum release age until 2026-08-14T16:41:05.696Z; retain 3.3.17 only until the fix becomes policy-eligible.",
-      "until": "2026-08-15T00:00:00Z"
-    }
-  ]
+  "acceptedVulnerabilities": []
 }

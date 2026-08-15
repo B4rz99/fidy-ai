@@ -18,8 +18,50 @@ jobs:
   static:
     name: Workspace Gate
     runs-on: ubuntu-latest
-    # This is the mandatory repository-owned verdict. Provider-hosted security
-    # scans remain required sibling jobs below because they are not local tools.
+    # This is the mandatory repository-owned static verdict. The longer-running
+    # repository-owned checks are separate sibling jobs below so one failure does
+    # not hide the result of unrelated checks behind a serial verifier.
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      # The *tip* of the base branch, not the merge base. A branch cut before a
+      # higher migration id landed on trunk must still be measured against that
+      # id — the merge base predates it, so comparing there would wave through
+      # exactly the migration the migrator will silently skip. Depth 1 suffices:
+      # only the tip's copy of the registry is read.
+      - name: Fetch base branch tip
+        env:
+          BASE_BRANCH: ${{ github.event.pull_request.base.ref }}
+        run: git fetch --no-tags --depth=1 origin "+refs/heads/$BASE_BRANCH:refs/remotes/origin/$BASE_BRANCH"
+      - uses: ./.github/actions/bun-install
+      - name: Static repository validation
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          BASE_REF: origin/${{ github.event.pull_request.base.ref }}
+        run: bun run verify -- --group static
+
+  builds:
+    name: Builds
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: ./.github/actions/bun-install
+      - name: Build validation
+        env:
+          RELEASE_GIT_SHA: ${{ github.event.pull_request.head.sha }}
+        run: bun run verify -- --group builds
+
+  unit:
+    name: Unit and artifact tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: ./.github/actions/bun-install
+      - name: Unit and artifact validation
+        run: bun run verify -- --group unit
+
+  server:
+    name: Server integration
+    runs-on: ubuntu-latest
     services:
       postgres:
         image: postgres:16-alpine
@@ -36,28 +78,104 @@ jobs:
           --health-retries 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-      # The *tip* of the base branch, not the merge base. A branch cut before a
-      # higher migration id landed on trunk must still be measured against that
-      # id — the merge base predates it, so comparing there would wave through
-      # exactly the migration the migrator will silently skip. Depth 1 suffices:
-      # only the tip's copy of the registry is read.
-      - name: Fetch base branch tip
-        env:
-          BASE_BRANCH: ${{ github.event.pull_request.base.ref }}
-        run: git fetch --no-tags --depth=1 origin "+refs/heads/$BASE_BRANCH:refs/remotes/origin/$BASE_BRANCH"
       - uses: ./.github/actions/bun-install
       - name: Create restricted runtime role
         env:
           PGPASSWORD: fidy
         run: psql -h localhost -U fidy -d fidy -v ON_ERROR_STOP=1 -f deploy/local-postgres-init.sql
-      - name: Complete repository-owned validation
+      - name: Server integration validation
         env:
-          PR_TITLE: ${{ github.event.pull_request.title }}
-          BASE_REF: origin/${{ github.event.pull_request.base.ref }}
           DATABASE_URL: postgres://fidy_runtime:fidy_runtime@localhost:5432/fidy
           MIGRATION_DATABASE_URL: postgres://fidy:fidy@localhost:5432/fidy
           WHATSAPP_BUSINESS_PORTFOLIO_ID: portfolio-test
-        run: bun run verify
+        run: bun run verify -- --group server
+
+  acceptance:
+    name: WhatsApp acceptance
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: fidy
+          POSTGRES_PASSWORD: fidy
+          POSTGRES_DB: fidy
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U fidy"
+          --health-interval 2s
+          --health-timeout 2s
+          --health-retries 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: ./.github/actions/bun-install
+      - name: Create restricted runtime role
+        env:
+          PGPASSWORD: fidy
+        run: psql -h localhost -U fidy -d fidy -v ON_ERROR_STOP=1 -f deploy/local-postgres-init.sql
+      - name: WhatsApp acceptance validation
+        env:
+          DATABASE_URL: postgres://fidy_runtime:fidy_runtime@localhost:5432/fidy
+          MIGRATION_DATABASE_URL: postgres://fidy:fidy@localhost:5432/fidy
+          WHATSAPP_BUSINESS_PORTFOLIO_ID: portfolio-test
+        run: bun run verify -- --group acceptance
+
+  quality:
+    name: Quality thresholds
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: fidy
+          POSTGRES_PASSWORD: fidy
+          POSTGRES_DB: fidy
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U fidy"
+          --health-interval 2s
+          --health-timeout 2s
+          --health-retries 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: ./.github/actions/bun-install
+      - name: Create restricted runtime role
+        env:
+          PGPASSWORD: fidy
+        run: psql -h localhost -U fidy -d fidy -v ON_ERROR_STOP=1 -f deploy/local-postgres-init.sql
+      - name: CRAP threshold validation
+        env:
+          DATABASE_URL: postgres://fidy_runtime:fidy_runtime@localhost:5432/fidy
+          MIGRATION_DATABASE_URL: postgres://fidy:fidy@localhost:5432/fidy
+          WHATSAPP_BUSINESS_PORTFOLIO_ID: portfolio-test
+        run: bun run verify -- --group quality
+
+  mutation:
+    name: Mutation testing
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      # Stryker's Babel instrumenter needs Node. Bun still installs dependencies
+      # and runs Vitest; only the Stryker process itself runs on Node.
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: "24"
+      - uses: ./.github/actions/bun-install
+      - name: Mutation validation
+        run: bun run verify -- --group mutation
+
+  production-image:
+    name: Production image
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: ./.github/actions/bun-install
+      - name: Production image validation
+        run: bun run verify -- --group image
 
   security-secrets:
     name: Secrets
@@ -111,6 +229,13 @@ jobs:
     runs-on: ubuntu-latest
     needs:
       - static
+      - builds
+      - unit
+      - server
+      - acceptance
+      - quality
+      - mutation
+      - production-image
       - security-secrets
       - security-sast
       - security-sca

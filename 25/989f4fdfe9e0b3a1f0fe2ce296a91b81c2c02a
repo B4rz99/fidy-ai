@@ -1,0 +1,28 @@
+apps/server/src/shell/agent/working-context.ts
+  s_3f1fa8b9f51d3c::t_357b8412b50371 47
+  s_3f1fa8b9f51d3c::t_763a9530364ede 48-54,145,152
+  s_3f1fa8b9f51d3c::t_a1491a1f26c223 116-125,134
+apps/server/src/shell/agent/hosted-inference.test.ts
+  s_3f1fa8b9f51d3c::t_357b8412b50371 420-421
+  s_3f1fa8b9f51d3c::t_a5d899156cc571 450-452
+  s_3f1fa8b9f51d3c::t_fd4eb6f378ea7a 2,5,20,387-391,393-395,397-402,405-418,432,436-449
+  s_3f1fa8b9f51d3c::t_26fed3d015b3c0 4,396
+  s_3f1fa8b9f51d3c::t_ad4eef94838695 392,403-404
+  s_3f1fa8b9f51d3c::t_858e3bd566b60d 419,422-431,433-435
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "25989f4fdfe9e0b3a1f0fe2ce296a91b81c2c02a",
+  "prompts": {},
+  "sessions": {
+    "s_3f1fa8b9f51d3c": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0072d-12a1-78c7-88f1-e4b8b22f8c96",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

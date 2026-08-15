@@ -1,0 +1,23 @@
+scripts/check-continuity-invariants.ts
+  s_802d9c285983b2::t_1e07cc621cf7c3 397-398,400-409,411-413,418-419,421-422,428-429,435,439,442,444-445,455-456,459-473,475-480,492-493,501-508,569
+  s_802d9c285983b2::t_69503348d917ed 6,399,410,420,423-427,430-434,436-438,440-441,443,446-454,457-458,474,481-491,494-499
+  s_802d9c285983b2::t_fa54233edf6076 509-557,658-664
+  s_802d9c285983b2::t_48261182a8eee1 414-417
+  s_802d9c285983b2::t_924d88cbeee347 500
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "ece5e0bccfbe641650f28f013ec514ca109fe2ee",
+  "prompts": {},
+  "sessions": {
+    "s_802d9c285983b2": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0072d-1267-7c2b-a3d3-91e60010a01e",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

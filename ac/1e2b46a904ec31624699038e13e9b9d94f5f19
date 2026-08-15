@@ -1,0 +1,19 @@
+apps/server/src/shell/_shared/exact-origin-cors.test.ts
+  s_a2d9eff2180721::t_31f5956f736ebc 56-93
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "ac1e2b46a904ec31624699038e13e9b9d94f5f19",
+  "prompts": {},
+  "sessions": {
+    "s_a2d9eff2180721": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019ffd84-2ac8-787e-ab7a-e21ea5906d9e",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

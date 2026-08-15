@@ -1,0 +1,106 @@
+apps/server/src/shell/http.test.ts
+  s_e3f85bae1a9685::t_a3077415db5c49 36,41-43
+apps/server/scripts/check-production-http.ts
+  s_e3f85bae1a9685::t_d67e2dcb682ae0 13-17,95-101
+tsconfig.base.json
+  s_e3f85bae1a9685::t_5bdb628a3a0b4f 114-118,135-136
+apps/web/vite.config.ts
+  s_e3f85bae1a9685::t_730d54ec03041b 6-11,14
+apps/web/scripts/preview-artifact.ts
+  s_e3f85bae1a9685::t_8994539f30c0be 1
+  s_e3f85bae1a9685::t_4ebf583eca376f 4,6-7,9-14
+apps/web/cloudflare/wrangler.json
+  s_e3f85bae1a9685::t_f56550d3d29e1d 6
+apps/web/cloudflare/production/_headers
+  s_e3f85bae1a9685::t_c62cba14404dd5 1-17
+apps/server/src/shell/http.ts
+  s_e3f85bae1a9685::t_1195cf5306b9d4 69
+  s_e3f85bae1a9685::t_12dead7401038e 71-73,76-81
+  s_e3f85bae1a9685::t_6472d43917f854 70
+scripts/production/railway-release.ts
+  s_e3f85bae1a9685::t_5792f9a6f920e3 7-10,46-62,64-66,70-71,80,82,86,89,91,102-111,116-133,138-139,143,145-146,148-153,156-158,161-165,168,170,173-195,213
+  s_e3f85bae1a9685::t_99a40945d35e58 35
+  s_e3f85bae1a9685::t_9afcef0b49fe67 1-6,11-34,37-45,72-73,75-76,78-79,81,83-85,87-88,90,92-101,112-115,134-137,140-142,144,147,154-155,160,166-167,169,171-172,196-212,214
+  s_e3f85bae1a9685::t_a129ad447d565f 36,74,77,159
+  s_e3f85bae1a9685::t_925e025922f3a7 63,67-69
+package.json
+  s_e3f85bae1a9685::t_0e3702830c93e5 36
+docs/operations/dns-and-registrar-migration.md
+  s_e3f85bae1a9685::t_5469ad8457914e 1-75
+apps/web/package.json
+  s_e3f85bae1a9685::t_09d115635b1f96 11
+docs/operations/production-releases.md
+  s_e3f85bae1a9685::t_d67f1f6f8e17ef 1-10,19-71
+  s_e3f85bae1a9685::t_ff7adc1dc19d42 11-18
+apps/server/package.json
+  s_e3f85bae1a9685::t_103bfb893c7854 15
+apps/web/scripts/release-metadata.ts
+  s_e3f85bae1a9685::t_63626a3ce71f98 1-47
+apps/web/scripts/build-production.test.ts
+  s_e3f85bae1a9685::t_648ae8a6b217ff 4
+  s_e3f85bae1a9685::t_9783b5e91cee81 1
+  s_e3f85bae1a9685::t_ea039398668b82 5-8,10,32-46,72-73
+  s_e3f85bae1a9685::t_12473907c832e4 2-3,9,11-18,23-31,47-52,58-65,71
+  s_e3f85bae1a9685::t_ff7adc1dc19d42 19-22,53-57,66-70
+ARCHITECTURE.md
+  s_e3f85bae1a9685::t_413bd9eb20006a 46-66
+scripts/verify.ts
+  s_e3f85bae1a9685::t_a90571ccc0bc9c 22-24,52-55,65
+scripts/production/cloudflare-version.ts
+  s_e3f85bae1a9685::t_c7868308bbc65a 1-4,7-26
+  s_e3f85bae1a9685::t_ff7adc1dc19d42 5-6
+apps/server/scripts/check-production-image.sh
+  s_e3f85bae1a9685::t_c17d8560af4966 21,348-349
+scripts/production/railway-release.test.ts
+  s_e3f85bae1a9685::t_aaa3f4792942b8 6-7,11,21,28,35-45,50,57,62-64,66-67,77,89-91
+  s_e3f85bae1a9685::t_7a0acbe54f9c68 12,19,59-60,75,87
+  s_e3f85bae1a9685::t_cafb4ae568563b 2
+  s_e3f85bae1a9685::t_7d9168177bf50f 13-18,58
+  s_e3f85bae1a9685::t_647179e42bc35f 1,3-5,8-10,20,22-27,29-34,46-49,51-56,61,65,68-74,76,78-86,88,92-93
+apps/web/cloudflare/production-policy/artifact.ts
+  s_e3f85bae1a9685::t_9e54264b713fff 3
+  s_e3f85bae1a9685::t_ff7adc1dc19d42 71-75
+  s_e3f85bae1a9685::t_7c2c49376bbc52 36,42-61,80,82-83,93-94
+  s_e3f85bae1a9685::t_45633e9c0bedd9 1-2
+  s_e3f85bae1a9685::t_fe99f6c4064251 4-6,33-35
+  s_e3f85bae1a9685::t_9327d5091e0a98 37-41
+  s_e3f85bae1a9685::t_4bafef3c6f8bc1 62-64,68-70
+  s_e3f85bae1a9685::t_5171c03d650458 76-79
+  s_e3f85bae1a9685::t_71c3d536508464 81
+  s_e3f85bae1a9685::t_e3efe735826b23 84-86,90-92
+  s_e3f85bae1a9685::t_524206b9f6e17a 7-32,65-67,87-89
+scripts/production/cloudflare-version.test.ts
+  s_e3f85bae1a9685::t_ff7adc1dc19d42 8-10
+  s_e3f85bae1a9685::t_2631e63361e05b 1-7,11-19
+docs/operations/external-endpoints.md
+  s_e3f85bae1a9685::t_adc056f50db043 10-11,33-36,48-51
+apps/web/scripts/build-production.ts
+  s_e3f85bae1a9685::t_b7b9fdf55813b4 3
+  s_e3f85bae1a9685::t_0fc59dcda63948 1-2,4-51
+docs/contract-compatibility.md
+  s_e3f85bae1a9685::t_01c84200cd6d8c 64-70
+apps/web/scripts/cloudflare-adapter.test.ts
+  s_e3f85bae1a9685::t_709965518aa173 19,23-35
+apps/web/scripts/production-workflow.test.ts
+  s_e3f85bae1a9685::t_3847bf896ac10c 1-47
+.github/workflows/production.yml
+  s_e3f85bae1a9685::t_eae29deabb4b64 1-120
+docs/adr/0018-independent-production-deployments.md
+  s_e3f85bae1a9685::t_1d4a649c91133a 1-58
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "be4720343b679b58dc061987e970ef1e235541ff",
+  "prompts": {},
+  "sessions": {
+    "s_e3f85bae1a9685": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a002c7-21f2-74fb-902e-e3565f4911ab",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

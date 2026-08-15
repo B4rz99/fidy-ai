@@ -1,0 +1,21 @@
+apps/web/package.json
+  s_a2d9eff2180721::t_56a796327c12bc 46-47
+bun.lock
+  s_a2d9eff2180721::t_07f97e070fc0fc 75,159-174,219-272,291-344,499-504,569-570,573-574,733-734,859-860,869-870,1143-1144,1217,1341-1342,1441-1442,1477-1480,1503-1506,1513-1514,1527-1528,1571-1574,1585-1586,1591-1592,1599-1600
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "3e6fd2a2114c66be3e91e549f903a65a29a44990",
+  "prompts": {},
+  "sessions": {
+    "s_a2d9eff2180721": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019ffd84-2ac8-787e-ab7a-e21ea5906d9e",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

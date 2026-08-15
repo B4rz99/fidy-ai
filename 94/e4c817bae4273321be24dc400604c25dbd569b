@@ -1,0 +1,164 @@
+apps/server/scripts/check-lint-guards.ts
+  s_2df9c58e401882::t_333ba4e368b494 19-22
+  s_2df9c58e401882::t_b1033f5efb455b 18
+apps/server/src/shell/observability/envelope-recorder.test.ts
+  s_2df9c58e401882::t_f31682fb147c4b 145
+  s_2df9c58e401882::t_127d4895789401 14,130-134,143-144,156-179
+  s_2df9c58e401882::t_fc3dfc43183222 2,21,23,25,129,135-142,155
+apps/server/src/shell/observability/registry.ts
+  s_2df9c58e401882::t_63c88abdbc6936 1-2,4,6-16,19
+ARCHITECTURE.md
+  s_2df9c58e401882::t_3995135b5939ec 192
+apps/server/src/shell/observability/telemetry-config.ts
+  s_2df9c58e401882::t_c1b9e07fc6fb09 31
+  s_2df9c58e401882::t_b33b89de3d8e65 1,16-17,19-22,25-26,29-30,32-33,139-148,157-159,271-278
+apps/server/src/shell/observability/telemetry-config.test.ts
+  s_2df9c58e401882::t_3b81adf9bca8a5 322
+  s_2df9c58e401882::t_23f86ce7703f87 2,321,323-324
+apps/web/scripts/build-metafile.test.ts
+  s_2df9c58e401882::t_b571792e5ba6d5 11
+  s_2df9c58e401882::t_970d80ada76ce2 1-10,12-14
+apps/server/src/shell/observability/sentry-adapter.ts
+  s_2df9c58e401882::t_6d61caddd854f0 334-349,365
+  s_2df9c58e401882::t_718cf1f7982a58 302-306
+  s_2df9c58e401882::t_28b1da50f1a38a 2,72-78,80-93,155,166-189,231
+  s_2df9c58e401882::t_0628ed9f99e63b 79
+apps/web/cloudflare/preview-policy/artifact.ts
+  s_2df9c58e401882::t_087bda107edea3 5,7,195-206,245-248
+  s_2df9c58e401882::t_2b7a687817d6be 356-358
+  s_2df9c58e401882::t_edf33c46139f16 6,219
+  s_2df9c58e401882::t_ef8de3a2fe44f0 211,213,220
+  s_2df9c58e401882::t_28e9dad0ddff10 217
+  s_2df9c58e401882::t_f745d6d1eee3b8 218
+apps/server/tools/contracts/compatibility.ts
+  s_2df9c58e401882::t_8258c09e508b88 25-39,41-47,49-51,59,62-68,71-75,91-94,99,103-110
+  s_2df9c58e401882::t_46b3f084b218ac 111
+  s_2df9c58e401882::t_0536c7b124795d 5
+  s_2df9c58e401882::t_770b6ccab6b9a7 2,4,7,9-17
+  s_2df9c58e401882::t_28944b4d096905 52,54,56
+.oxlintrc.json
+  s_2df9c58e401882::t_243971aaf705ed 20
+apps/server/src/shell/agent/toolkit.ts
+  s_2df9c58e401882::t_2648daf60f9636 144,146,148-149,152-165,168-169
+  s_2df9c58e401882::t_03e222aada7b77 150-151
+  s_2df9c58e401882::t_dac4d776003488 1,166-167,170-172,174-175
+  s_2df9c58e401882::t_63defc84046635 183-186,191,202,225,240,270,292,308,318
+  s_2df9c58e401882::t_02de5b05e4acfb 382,386-391
+  s_2df9c58e401882::t_e916325e820f37 11,203
+  s_2df9c58e401882::t_7192c3b778f2df 178-182,187,192-198,204-221,226-236,241-266,271-288,293-304,309-314,319-342
+  s_2df9c58e401882::t_fc4456d019106b 188-190,199-201,222-224,237-239,267-269,289-291,305-307,315-317
+  s_2df9c58e401882::t_8ce0006adab709 379-381
+apps/web/scripts/check-browser-bundle.ts
+  s_2df9c58e401882::t_db89c59e70a916 3-4,49-50
+docs/adr/0014-deep-hosted-turn-modules.md
+  s_2df9c58e401882::t_f8692637099339 86
+  s_2df9c58e401882::t_a0a7e65edc4b6c 27,45,47,51-52,54,79
+apps/server/src/shell/transcript/conversation-continuity.ts
+  s_2df9c58e401882::t_7f8919f8b59b35 83-84,1100
+apps/server/scripts/build-metafile.ts
+  s_2df9c58e401882::t_c44609fdfa9338 7,9
+  s_2df9c58e401882::t_143af943842914 1-6,8,10-18
+apps/server/tools/observability-compatibility/preload.ts
+  s_2df9c58e401882::t_d7271d8f94e1d7 20
+apps/server/src/shell/observability/telemetry-bootstrap.test.ts
+  s_2df9c58e401882::t_72046cfffc95f5 162
+  s_2df9c58e401882::t_242a8b678ffe54 2,9,79
+  s_2df9c58e401882::t_8b0921775b13f4 137-138,140-148,151-155,157-161,163-168,176-181,184-187
+  s_2df9c58e401882::t_8945e978458534 139
+  s_2df9c58e401882::t_932235cf3592c2 169-175
+  s_2df9c58e401882::t_fc9e04f016961c 149-150,156,182-183
+  s_2df9c58e401882::t_db80b007fc0268 80-81,88,97
+  s_a793232f83d332::t_27f662d1575edf 188-190
+apps/server/tools/observability-compatibility/handoff.ts
+  s_2df9c58e401882::t_b5c9ab8e87c454 1,7,53-54,58-59
+apps/server/src/shell/agent/hosted-inference.test.ts
+  s_2df9c58e401882::t_22bb9ed48b7093 144-145
+  s_2df9c58e401882::t_62a42dd2a75b15 322,325,331-332
+  s_2df9c58e401882::t_4df84363701353 147-149
+  s_2df9c58e401882::t_b990f08b12f485 588,597
+  s_2df9c58e401882::t_fcf26780d03b12 142
+  s_2df9c58e401882::t_e555d710fb4465 99-108,110-111,113-131,133-141,349,353-355,357-359,361-362
+  s_2df9c58e401882::t_6877a9761b4965 146,326-330
+apps/server/src/shell/observability/sentry-adapter.test.ts
+  s_2df9c58e401882::t_56ad9e0ab3e683 2,4,9,18,52-53,55-57
+apps/server/tools/contracts/build-metafile.test.ts
+  s_2df9c58e401882::t_ad33b2c5c082d9 1-10,12-14
+  s_2df9c58e401882::t_b571792e5ba6d5 11
+apps/server/tools/contracts/check.ts
+  s_2df9c58e401882::t_5d74215384649c 9,129-131
+apps/server/scripts/check-browser-client.ts
+  s_2df9c58e401882::t_f8bb4127799ded 3-4,85-86
+apps/web/cloudflare/preview-policy/artifact.test.ts
+  s_2df9c58e401882::t_fd710a0b7e913e 240-247
+apps/web/cloudflare/preview-policy/request.ts
+  s_2df9c58e401882::t_3f9b4bda716b23 17,24
+  s_2df9c58e401882::t_65a61a65790cef 20-21
+  s_2df9c58e401882::t_0c629e52daee01 3-4,11-16,18-19,22-23,25-41,48-49,59,61,64-65,93-98,103-104
+  s_2df9c58e401882::t_202b32466ee617 53
+apps/web/cloudflare/preview-policy/request.test.ts
+  s_2df9c58e401882::t_ed247a079fa7a5 49-55
+apps/server/src/shell/agent/working-context.test.ts
+  s_2df9c58e401882::t_52be77dec0075b 2
+  s_2df9c58e401882::t_b3b36b9ba4253d 10,14,17-20,23,28,32
+  s_2df9c58e401882::t_6b0cfe9352e46d 34-35
+apps/web/scripts/build-metafile.ts
+  s_2df9c58e401882::t_47ae9444782e8b 7,9
+  s_2df9c58e401882::t_a56fb884ddce3c 1-6,8,10-18
+apps/server/src/shell/observability/telemetry-bootstrap.ts
+  s_2df9c58e401882::t_109d8671b56ba4 61-63
+  s_2df9c58e401882::t_75b8ed63f1c3cd 64
+  s_2df9c58e401882::t_c0b081be949e12 77-79,86,91
+  s_2df9c58e401882::t_ee494254bcb652 1,73,80-84
+  s_a793232f83d332::t_4ca1d88516b256 85
+docs/architecture/agent-continuity-invariant-matrix.md
+  s_2df9c58e401882::t_7803f6d9bbbdc0 36-43
+apps/server/src/shell/agent/hosted-inference.ts
+  s_2df9c58e401882::t_6025b739a0abce 194
+  s_2df9c58e401882::t_2f9f105cd835ab 6,15-16,18-19,23,25,27,29-30,358
+  s_2df9c58e401882::t_d20ba0951020f6 201,207,211,213
+  s_2df9c58e401882::t_dcb7df6d45c34a 497-499,502
+  s_2df9c58e401882::t_a146142aa70b0b 1,338,483
+  s_2df9c58e401882::t_47899fb9de8648 387,391-395,398-401,403,422,426
+apps/server/tools/contracts/compatibility.test.ts
+  s_2df9c58e401882::t_fbcd3b7b21a8c7 7-8,90-109
+  s_2df9c58e401882::t_f3527a5cc9556e 110
+apps/server/src/shell/observability/projectors.ts
+  s_2df9c58e401882::t_fdd4b95ce880b4 325
+  s_2df9c58e401882::t_99fca9d4ad019e 5,125-126,305
+apps/server/src/shell/agent/working-context.ts
+  s_2df9c58e401882::t_444408b5098da4 10-11,17-20,106-107,112,115-116
+  s_2df9c58e401882::t_7d4dc83b961cf6 1
+scripts/oxlint/effect-guards.js
+  s_2df9c58e401882::t_ed0780e89f05b6 84-90,92-113,706
+  s_2df9c58e401882::t_1cb906de2cdad2 91
+CONTEXT.md
+  s_2df9c58e401882::t_775e7702f1b8a3 201-203
+CODING_STANDARDS.md
+  s_2df9c58e401882::t_b58fe240b4bbdf 125
+  s_2df9c58e401882::t_4f5bc41881ef39 126
+  s_2df9c58e401882::t_c35761e9619242 122-124
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "94e4c817bae4273321be24dc400604c25dbd569b",
+  "prompts": {},
+  "sessions": {
+    "s_2df9c58e401882": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a005d6-bf4c-772b-953f-d26851c60523",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": null
+    },
+    "s_a793232f83d332": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a005d9-6470-7b01-9c7e-dae023aecd75",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

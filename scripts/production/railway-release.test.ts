@@ -31,6 +31,7 @@ const releaseRequest = {
   contractDigest,
   environmentId: "production-environment",
   gitRevision,
+  projectId: "fidy-project",
   serviceId: "fidy-server",
 };
 
@@ -46,12 +47,44 @@ const dependencies = (
 });
 
 describe("Railway Production release adapter", () => {
-  it("deploys the exact connected-repository commit and verifies its health identity", async () => {
+  it("triggers the connected service and verifies the selected revision and health identity", async () => {
     const requests: Array<{ readonly url: string; readonly init: RequestInit }> = [];
+    const priorRevision = "f".repeat(40);
     const responses = requestSequence([
-      jsonResponse({ data: { serviceInstanceDeployV2: "deployment-1" } }),
-      jsonResponse({ data: { deployment: { id: "deployment-1", status: "BUILDING" } } }),
-      jsonResponse({ data: { deployment: { id: "deployment-1", status: "SUCCESS" } } }),
+      jsonResponse({
+        data: {
+          serviceInstance: {
+            latestDeployment: {
+              id: "deployment-0",
+              status: "SUCCESS",
+              meta: { commitHash: priorRevision },
+            },
+          },
+        },
+      }),
+      jsonResponse({ data: { environmentTriggersDeploy: true } }),
+      jsonResponse({
+        data: {
+          serviceInstance: {
+            latestDeployment: {
+              id: "deployment-1",
+              status: "BUILDING",
+              meta: { commitHash: gitRevision },
+            },
+          },
+        },
+      }),
+      jsonResponse({
+        data: {
+          serviceInstance: {
+            latestDeployment: {
+              id: "deployment-1",
+              status: "SUCCESS",
+              meta: { commitHash: gitRevision },
+            },
+          },
+        },
+      }),
       jsonResponse({ status: "ok", gitRevision, contractDigest }),
     ]);
     const request: HttpRequest = async (url, init): Promise<Response> => {
@@ -64,14 +97,26 @@ describe("Railway Production release adapter", () => {
     );
     expect(requests[0]?.url).toBe("https://backboard.railway.app/graphql/v2");
     expect(requests[0]?.init.headers).toMatchObject({ Authorization: "Bearer railway-token" });
-    expect(requests[0]?.init.body).toContain(`"commitSha":"${gitRevision}"`);
+    expect(requests[1]?.init.body).toContain("environmentTriggersDeploy");
+    expect(requests[1]?.init.body).toContain('"projectId":"fidy-project"');
     expect(requests.at(-1)?.url).toBe("https://api.fidyapp.com/health");
   });
 
   it("stops before health verification when Railway reports a failed deployment", async () => {
     const request = requestSequence([
-      jsonResponse({ data: { serviceInstanceDeployV2: "deployment-1" } }),
-      jsonResponse({ data: { deployment: { id: "deployment-1", status: "FAILED" } } }),
+      jsonResponse({ data: { serviceInstance: { latestDeployment: null } } }),
+      jsonResponse({ data: { environmentTriggersDeploy: true } }),
+      jsonResponse({
+        data: {
+          serviceInstance: {
+            latestDeployment: {
+              id: "deployment-1",
+              status: "FAILED",
+              meta: { commitHash: gitRevision },
+            },
+          },
+        },
+      }),
     ]);
 
     await expect(deployRailwayRelease(releaseRequest, dependencies(request))).rejects.toThrow(
@@ -79,10 +124,54 @@ describe("Railway Production release adapter", () => {
     );
   });
 
+  it("rejects a provider trigger that selects a different repository revision", async () => {
+    const selectedRevision = "f".repeat(40);
+    const request = requestSequence([
+      jsonResponse({ data: { serviceInstance: { latestDeployment: null } } }),
+      jsonResponse({ data: { environmentTriggersDeploy: true } }),
+      jsonResponse({
+        data: {
+          serviceInstance: {
+            latestDeployment: {
+              id: "deployment-1",
+              status: "BUILDING",
+              meta: { commitHash: selectedRevision },
+            },
+          },
+        },
+      }),
+    ]);
+
+    await expect(deployRailwayRelease(releaseRequest, dependencies(request))).rejects.toThrow(
+      `Railway selected revision ${selectedRevision} instead of ${gitRevision}`
+    );
+  });
+
+  it("reports Railway GraphQL failures before decoding successful data", async () => {
+    const request = requestSequence([
+      jsonResponse({ data: null, errors: [{ message: "Cannot deploy this trigger" }] }),
+    ]);
+
+    await expect(deployRailwayRelease(releaseRequest, dependencies(request))).rejects.toThrow(
+      "Railway GraphQL failed: Cannot deploy this trigger"
+    );
+  });
+
   it("rejects a healthy server carrying a different immutable release identity", async () => {
     const request = requestSequence([
-      jsonResponse({ data: { serviceInstanceDeployV2: "deployment-1" } }),
-      jsonResponse({ data: { deployment: { id: "deployment-1", status: "SUCCESS" } } }),
+      jsonResponse({ data: { serviceInstance: { latestDeployment: null } } }),
+      jsonResponse({ data: { environmentTriggersDeploy: true } }),
+      jsonResponse({
+        data: {
+          serviceInstance: {
+            latestDeployment: {
+              id: "deployment-1",
+              status: "SUCCESS",
+              meta: { commitHash: gitRevision },
+            },
+          },
+        },
+      }),
       jsonResponse({ status: "ok", gitRevision: "f".repeat(40), contractDigest }),
     ]);
 

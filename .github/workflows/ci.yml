@@ -82,7 +82,7 @@ jobs:
       - name: Create restricted runtime role
         env:
           PGPASSWORD: fidy
-        run: psql -h localhost -U fidy -d fidy -v ON_ERROR_STOP=1 -f deploy/local-postgres-init.sql
+        run: psql -h localhost -U fidy -d fidy -v ON_ERROR_STOP=1 -f apps/server/tools/local-postgres-init.sql
       - name: Server integration validation
         env:
           DATABASE_URL: postgres://fidy_runtime:fidy_runtime@localhost:5432/fidy
@@ -113,7 +113,7 @@ jobs:
       - name: Create restricted runtime role
         env:
           PGPASSWORD: fidy
-        run: psql -h localhost -U fidy -d fidy -v ON_ERROR_STOP=1 -f deploy/local-postgres-init.sql
+        run: psql -h localhost -U fidy -d fidy -v ON_ERROR_STOP=1 -f apps/server/tools/local-postgres-init.sql
       - name: WhatsApp acceptance validation
         env:
           DATABASE_URL: postgres://fidy_runtime:fidy_runtime@localhost:5432/fidy
@@ -144,7 +144,7 @@ jobs:
       - name: Create restricted runtime role
         env:
           PGPASSWORD: fidy
-        run: psql -h localhost -U fidy -d fidy -v ON_ERROR_STOP=1 -f deploy/local-postgres-init.sql
+        run: psql -h localhost -U fidy -d fidy -v ON_ERROR_STOP=1 -f apps/server/tools/local-postgres-init.sql
       - name: CRAP threshold validation
         env:
           DATABASE_URL: postgres://fidy_runtime:fidy_runtime@localhost:5432/fidy

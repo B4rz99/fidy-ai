@@ -1,0 +1,21 @@
+scripts/production/cloudflare-dns.test.ts
+  s_a2d9eff2180721::t_2d81d575f43c56 20-25,33
+docs/operations/production-releases.md
+  s_a2d9eff2180721::t_50556cfc989164 11-23
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "9929d38e9accaef5bea7edc08082072ae6005665",
+  "prompts": {},
+  "sessions": {
+    "s_a2d9eff2180721": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019ffd84-2ac8-787e-ab7a-e21ea5906d9e",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

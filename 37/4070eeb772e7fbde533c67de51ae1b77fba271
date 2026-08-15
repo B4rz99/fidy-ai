@@ -1,0 +1,19 @@
+.oxfmtrc.json
+  s_7a7f7e7abc3316::t_e8afa3d9b00c5a 22-23
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "374070eeb772e7fbde533c67de51ae1b77fba271",
+  "prompts": {},
+  "sessions": {
+    "s_7a7f7e7abc3316": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a00363-1b67-7318-873e-696e4d3ecafb",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

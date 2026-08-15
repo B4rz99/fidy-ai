@@ -54,19 +54,22 @@ const acceptedPreflight = (
     },
   });
 
+const requestedMethodIsAllowed = (
+  method: Option.Option<string>,
+  allowedMethods: ReadonlySet<string>
+): boolean => Option.exists(method, (value) => allowedMethods.has(value.toUpperCase()));
+
 const preflightIsAllowed = (
   request: HttpServerRequest.HttpServerRequest,
   allowedMethods: ReadonlySet<string>
-): boolean => {
-  const method = request.headers["access-control-request-method"];
-  return (
-    method !== undefined &&
-    allowedMethods.has(method.toUpperCase()) &&
-    requestedHeadersAreAllowed(
-      Option.fromUndefinedOr(request.headers["access-control-request-headers"])
-    )
+): boolean =>
+  requestedMethodIsAllowed(
+    Option.fromUndefinedOr(request.headers["access-control-request-method"]),
+    allowedMethods
+  ) &&
+  requestedHeadersAreAllowed(
+    Option.fromUndefinedOr(request.headers["access-control-request-headers"])
   );
-};
 
 type ExactOriginCors = <E, R>(
   httpEffect: Effect.Effect<HttpServerResponse.HttpServerResponse, E, R>

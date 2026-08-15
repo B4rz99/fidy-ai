@@ -1,0 +1,30 @@
+.github/workflows/ci.yml
+  s_a2d9eff2180721::t_e121addbc261a8 21-64,81-82,84-111,117,122-178,232-238
+scripts/verify.ts
+  s_a2d9eff2180721::t_d358d53f3bb658 70,102-106,111-117,161-165
+  s_a2d9eff2180721::t_b553dd93cb6065 148,183,191-193
+  s_a2d9eff2180721::t_bfb22fe05e7f76 3-4,34,36,39-41,43,45-48,50,53-59,61,68-69
+  s_a2d9eff2180721::t_59d9a77f75aed8 145
+  s_a2d9eff2180721::t_a1dc73799955e6 155
+  s_a2d9eff2180721::t_69241b839081c3 42
+  s_a2d9eff2180721::t_221c859b68ae81 7-18,20,27-33,35,37-38,44,49,51-52,60,62-67,71,87,93-101,107-109,120,124,127-143,149,152,156-160,166-182,184-188,197
+  s_a2d9eff2180721::t_05a5850180a557 144
+docs/contract-compatibility.md
+  s_a2d9eff2180721::t_95adac8fb0eb8e 56-59
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "36eeb8fca2f95704b12774b145152b861845eaaf",
+  "prompts": {},
+  "sessions": {
+    "s_a2d9eff2180721": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019ffd84-2ac8-787e-ab7a-e21ea5906d9e",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

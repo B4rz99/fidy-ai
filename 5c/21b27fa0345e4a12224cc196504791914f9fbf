@@ -1,0 +1,19 @@
+apps/server/src/shell/agent/agent-service.test.ts
+  s_7179c10d426bec::t_af0eba132429d6 1530
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "5c21b27fa0345e4a12224cc196504791914f9fbf",
+  "prompts": {},
+  "sessions": {
+    "s_7179c10d426bec": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0072d-127a-74a1-9ab1-a5f953c0a9b8",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

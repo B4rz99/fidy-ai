@@ -17,6 +17,12 @@ type RecordedRequest = {
   readonly init: RequestInit;
 };
 
+const requestUrl = (input: string | URL | Request): string => {
+  if (typeof input === "string") return input;
+  if (input instanceof URL) return input.href;
+  return input.url;
+};
+
 const dependencies = (
   responses: ReadonlyArray<Response>,
   requests: Array<RecordedRequest>
@@ -24,7 +30,7 @@ const dependencies = (
   const pending = [...responses];
   return {
     request: async (input, init): Promise<Response> => {
-      requests.push({ url: input.toString(), init });
+      requests.push({ url: requestUrl(input), init });
       const response = pending.shift();
       if (response === undefined) throw new Error("unexpected request");
       return response;

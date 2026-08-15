@@ -8,19 +8,19 @@ application from a provider's repository integration or from a workstation.
 
 Create the GitHub `production` environment without required reviewers. Configure:
 
-| Kind     | Name                     | Purpose                                   |
-| -------- | ------------------------ | ----------------------------------------- |
-| Secret   | `RAILWAY_API_TOKEN`      | Railway public GraphQL API authentication |
-| Secret   | `CLOUDFLARE_API_TOKEN`   | Worker Versions upload and deployment     |
-| Variable | `RAILWAY_PROJECT_ID`     | Railway project containing Production     |
-| Variable | `RAILWAY_SERVICE_ID`     | Connected `@fidy/server` Railway service  |
-| Variable | `RAILWAY_ENVIRONMENT_ID` | Railway Production environment            |
-| Variable | `PRODUCTION_API_ORIGIN`  | Exact `https://api.fidyapp.com` origin    |
-| Variable | `CLOUDFLARE_ACCOUNT_ID`  | Account owning `fidy-web` and public DNS  |
-| Variable | `PRODUCTION_DNS_ZONE`     | Exact `fidyapp.com` Cloudflare zone       |
-| Variable | `PRODUCTION_API_CNAME_TARGET` | Railway target for the API custom domain |
-| Variable | `PRODUCTION_API_VERIFICATION_NAME` | Railway ownership-proof record name |
-| Variable | `PRODUCTION_API_VERIFICATION_VALUE` | Railway ownership-proof record value |
+| Kind     | Name                                | Purpose                                   |
+| -------- | ----------------------------------- | ----------------------------------------- |
+| Secret   | `RAILWAY_API_TOKEN`                 | Railway public GraphQL API authentication |
+| Secret   | `CLOUDFLARE_API_TOKEN`              | Worker Versions upload and deployment     |
+| Variable | `RAILWAY_PROJECT_ID`                | Railway project containing Production     |
+| Variable | `RAILWAY_SERVICE_ID`                | Connected `@fidy/server` Railway service  |
+| Variable | `RAILWAY_ENVIRONMENT_ID`            | Railway Production environment            |
+| Variable | `PRODUCTION_API_ORIGIN`             | Exact `https://api.fidyapp.com` origin    |
+| Variable | `CLOUDFLARE_ACCOUNT_ID`             | Account owning `fidy-web` and public DNS  |
+| Variable | `PRODUCTION_DNS_ZONE`               | Exact `fidyapp.com` Cloudflare zone       |
+| Variable | `PRODUCTION_API_CNAME_TARGET`       | Railway target for the API custom domain  |
+| Variable | `PRODUCTION_API_VERIFICATION_NAME`  | Railway ownership-proof record name       |
+| Variable | `PRODUCTION_API_VERIFICATION_VALUE` | Railway ownership-proof record value      |
 
 In Railway, keep `apps/server/railway.json` as the config-as-code path and the repository root as the
 source root. Keep the GitHub source connected but disable automatic deployments for every service.

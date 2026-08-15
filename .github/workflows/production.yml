@@ -41,12 +41,26 @@ jobs:
           [[ "$DIGEST" =~ ^[0-9a-f]{64}$ ]]
           echo "digest=$DIGEST" >> "$GITHUB_OUTPUT"
 
+      - name: Confirm the release is still the current trunk revision
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_GIT_SHA: ${{ github.sha }}
+        run: |
+          CURRENT_TRUNK_SHA=$(gh api \
+            "repos/$GITHUB_REPOSITORY/commits/${{ github.event.repository.default_branch }}" \
+            --jq .sha)
+          if [[ "$CURRENT_TRUNK_SHA" != "$RELEASE_GIT_SHA" ]]; then
+            echo "Release $RELEASE_GIT_SHA was superseded by $CURRENT_TRUNK_SHA; skipping Railway." >&2
+            exit 1
+          fi
+
       - name: Deploy and verify the exact Railway revision
         id: railway
         env:
           PRODUCTION_API_ORIGIN: ${{ vars.PRODUCTION_API_ORIGIN }}
           RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
           RAILWAY_ENVIRONMENT_ID: ${{ vars.RAILWAY_ENVIRONMENT_ID }}
+          RAILWAY_PROJECT_ID: ${{ vars.RAILWAY_PROJECT_ID }}
           RAILWAY_SERVICE_ID: ${{ vars.RAILWAY_SERVICE_ID }}
           RELEASE_CONTRACT_DIGEST: ${{ steps.contract.outputs.digest }}
           RELEASE_GIT_SHA: ${{ github.sha }}

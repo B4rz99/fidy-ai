@@ -12,15 +12,18 @@ Create the GitHub `production` environment without required reviewers. Configure
 | -------- | ------------------------ | ----------------------------------------- |
 | Secret   | `RAILWAY_API_TOKEN`      | Railway public GraphQL API authentication |
 | Secret   | `CLOUDFLARE_API_TOKEN`   | Worker Versions upload and deployment     |
+| Variable | `RAILWAY_PROJECT_ID`     | Railway project containing Production     |
 | Variable | `RAILWAY_SERVICE_ID`     | Connected `@fidy/server` Railway service  |
 | Variable | `RAILWAY_ENVIRONMENT_ID` | Railway Production environment            |
 | Variable | `PRODUCTION_API_ORIGIN`  | Exact `https://api.fidyapp.com` origin    |
 | Variable | `CLOUDFLARE_ACCOUNT_ID`  | Account owning `fidy-web`                 |
 
 In Railway, keep `apps/server/railway.json` as the config-as-code path and the repository root as the
-source root. Disable automatic deployments from GitHub; the workflow calls Railway's public API with
-an exact `commitSha`. Do not replace this with `railway up`, because that uploads mutable local
-content rather than selecting the connected repository revision.
+source root. Keep the GitHub source connected but disable automatic deployments for every service;
+the workflow invokes the server's connected trigger and rejects any deployment whose `commitHash`
+is not the workflow's exact trunk revision. Do not replace this with `railway up`, because that
+uploads mutable local content rather than selecting repository state. The server's `/health` check
+replaces the former Railway `health-cron` service; do not recreate that service.
 
 Provision `fidy-web` in Cloudflare before the first release, confirm Worker Versions are enabled, and
 bind its Production custom domain to `fidyapp.com`. Disable provider-controlled source deployments.
@@ -35,8 +38,10 @@ The workflow allows one active release. GitHub does not cancel an active deploym
 replace an older pending run.
 
 1. Calculate the digest of the checked-in canonical contract artifacts.
-2. Ask Railway to build and deploy the exact event SHA. Railway runs image build, Sentry release
-   preparation, runtime-role provisioning, migrations, and its `/health` check.
+2. Confirm that the event SHA is still the current trunk revision, invoke the connected Railway
+   trigger, and accept only a new deployment whose provider metadata names that exact SHA. Railway
+   runs image build, Sentry release preparation, runtime-role provisioning, migrations, and its
+   `/health` check.
 3. Poll Railway to a successful terminal status, then require public `/health` to report that full
    SHA and digest.
 4. Build the web with `https://api.fidyapp.com`, write `/deployment-metadata.json`, and reject any

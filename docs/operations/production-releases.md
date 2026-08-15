@@ -16,14 +16,19 @@ Create the GitHub `production` environment without required reviewers. Configure
 | Variable | `RAILWAY_SERVICE_ID`     | Connected `@fidy/server` Railway service  |
 | Variable | `RAILWAY_ENVIRONMENT_ID` | Railway Production environment            |
 | Variable | `PRODUCTION_API_ORIGIN`  | Exact `https://api.fidyapp.com` origin    |
-| Variable | `CLOUDFLARE_ACCOUNT_ID`  | Account owning `fidy-web`                 |
+| Variable | `CLOUDFLARE_ACCOUNT_ID`  | Account owning `fidy-web` and public DNS  |
+| Variable | `PRODUCTION_DNS_ZONE`     | Exact `fidyapp.com` Cloudflare zone       |
+| Variable | `PRODUCTION_API_CNAME_TARGET` | Railway target for the API custom domain |
+| Variable | `PRODUCTION_API_VERIFICATION_NAME` | Railway ownership-proof record name |
+| Variable | `PRODUCTION_API_VERIFICATION_VALUE` | Railway ownership-proof record value |
 
 In Railway, keep `apps/server/railway.json` as the config-as-code path and the repository root as the
-source root. Keep the GitHub source connected but disable automatic deployments for every service;
-the workflow invokes the server's connected trigger and rejects any deployment whose `commitHash`
-is not the workflow's exact trunk revision. Do not replace this with `railway up`, because that
-uploads mutable local content rather than selecting repository state. The server's `/health` check
-replaces the former Railway `health-cron` service; do not recreate that service.
+source root. Keep the GitHub source connected but disable automatic deployments for every service.
+The workflow briefly enables the server trigger only around its explicit request, disables it again
+before polling, and rejects any deployment whose `commitHash` is not the workflow's exact trunk
+revision. Do not replace this with `railway up`, because that uploads mutable local content rather
+than selecting repository state. The server's `/health` check replaces the former Railway
+`health-cron` service; do not recreate that service.
 
 Provision `fidy-web` in Cloudflare before the first release, confirm Worker Versions are enabled, and
 bind its Production custom domain to `fidyapp.com`. Disable provider-controlled source deployments.
@@ -38,16 +43,18 @@ The workflow allows one active release. GitHub does not cancel an active deploym
 replace an older pending run.
 
 1. Calculate the digest of the checked-in canonical contract artifacts.
-2. Confirm that the event SHA is still the current trunk revision, invoke the connected Railway
-   trigger, and accept only a new deployment whose provider metadata names that exact SHA. Railway
+2. Confirm that the event SHA is still the current trunk revision, reconcile the direct Cloudflare
+   CNAME and Railway ownership-proof records for `api.fidyapp.com`, then invoke the connected Railway
+   trigger with automatic deployment enabled only for that bounded request.
+3. Accept only a new deployment whose provider metadata names that exact SHA. Railway
    runs image build, Sentry release preparation, runtime-role provisioning, migrations, and its
    `/health` check.
-3. Poll Railway to a successful terminal status, then require public `/health` to report that full
+4. Poll Railway to a successful terminal status, then require public `/health` to report that full
    SHA and digest.
-4. Build the web with `https://api.fidyapp.com`, write `/deployment-metadata.json`, and reject any
+5. Build the web with `https://api.fidyapp.com`, write `/deployment-metadata.json`, and reject any
    non-static, server-shaped, source-map, or known Secret material.
-5. Upload one immutable Cloudflare version and capture the exact version ID from Wrangler.
-6. Read the current default-branch head. If the release was superseded, stop and leave the current
+6. Upload one immutable Cloudflare version and capture the exact version ID from Wrangler.
+7. Read the current default-branch head. If the release was superseded, stop and leave the current
    Cloudflare deployment active. Otherwise promote only the captured version ID.
 
 The server embeds the contract digest during its build and obtains its revision from Railway's

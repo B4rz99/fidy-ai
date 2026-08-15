@@ -54,6 +54,16 @@ jobs:
             exit 1
           fi
 
+      - name: Reconcile the public API DNS route
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          PRODUCTION_API_CNAME_TARGET: ${{ vars.PRODUCTION_API_CNAME_TARGET }}
+          PRODUCTION_API_VERIFICATION_NAME: ${{ vars.PRODUCTION_API_VERIFICATION_NAME }}
+          PRODUCTION_API_VERIFICATION_VALUE: ${{ vars.PRODUCTION_API_VERIFICATION_VALUE }}
+          PRODUCTION_DNS_ZONE: ${{ vars.PRODUCTION_DNS_ZONE }}
+        run: bun scripts/production/cloudflare-dns.ts
+
       - name: Deploy and verify the exact Railway revision
         id: railway
         env:

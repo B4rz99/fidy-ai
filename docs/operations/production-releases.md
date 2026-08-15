@@ -21,6 +21,7 @@ Create the GitHub `production` environment without required reviewers. Configure
 | Variable | `PRODUCTION_API_CNAME_TARGET`       | Railway target for the API custom domain  |
 | Variable | `PRODUCTION_API_VERIFICATION_NAME`  | Railway ownership-proof record name       |
 | Variable | `PRODUCTION_API_VERIFICATION_VALUE` | Railway ownership-proof record value      |
+| Variable | `CLOUDFLARE_BOOTSTRAP_REQUIRED`     | `true` only until first Worker deployment |
 
 In Railway, keep `apps/server/railway.json` as the config-as-code path and the repository root as the
 source root. Keep the GitHub source connected but disable automatic deployments for every service.
@@ -30,9 +31,10 @@ revision. Do not replace this with `railway up`, because that uploads mutable lo
 than selecting repository state. The server's `/health` check replaces the former Railway
 `health-cron` service; do not recreate that service.
 
-Provision `fidy-web` in Cloudflare before the first release, confirm Worker Versions are enabled, and
-bind its Production custom domain to `fidyapp.com`. Disable provider-controlled source deployments.
-The checked-in Wrangler adapter has static assets and SPA fallback only; it has no Worker entrypoint.
+Set `CLOUDFLARE_BOOTSTRAP_REQUIRED` to `true` for the first release so the workflow can provision
+`fidy-web`, then immediately set it to `false` after that release succeeds. Bind the Production custom
+domain to `fidyapp.com` and disable provider-controlled source deployments. The checked-in Wrangler
+adapter has static assets and SPA fallback only; it has no Worker entrypoint.
 
 Branch protection on `trunk` must continue to require the complete pull-request gate. The deployment
 workflow is a post-merge consequence, not a replacement for that gate.
@@ -53,8 +55,10 @@ replace an older pending run.
    SHA and digest.
 5. Build the web with `https://api.fidyapp.com`, write `/deployment-metadata.json`, and reject any
    non-static, server-shaped, source-map, or known Secret material.
-6. Upload one immutable Cloudflare version and capture the exact version ID from Wrangler.
-7. Read the current default-branch head. If the release was superseded, stop and leave the current
+6. If `CLOUDFLARE_BOOTSTRAP_REQUIRED` is explicitly `true`, create the static Worker with the exact
+   release artifact. Set the variable to `false` immediately after that first deployment succeeds.
+7. Upload one immutable Cloudflare version and capture the exact version ID from Wrangler.
+8. Read the current default-branch head. If the release was superseded, stop and leave the current
    Cloudflare deployment active. Otherwise promote only the captured version ID.
 
 The server embeds the contract digest during its build and obtains its revision from Railway's

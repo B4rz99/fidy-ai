@@ -163,10 +163,9 @@ layer(TransactionHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         );
 
         yield* Effect.gen(function* () {
-          const failure = yield* Effect.flip(
+          yield* Effect.flip(
             client.transactions.createTransaction({ payload: transactionPayload() })
           );
-          expect(failure).toBeDefined();
           const history = yield* client.transactions.listTransactions({ query: {} });
           expect(history.data).toEqual([]);
         }).pipe(Effect.ensuring(removeFailure));

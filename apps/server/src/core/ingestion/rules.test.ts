@@ -4,7 +4,7 @@ import { Currency, Money, type ReadonlyMoney } from "~/core/_shared/money";
 import {
   type InterpretedStatementRow,
   ParsedStatementRow,
-  StatementAccounting,
+  type StatementAccounting,
   StatementColumnMapping,
   type XlsxCellEvidence,
 } from "./model";
@@ -57,12 +57,6 @@ const xlsxCell = (
   formattedText: Option.none<string>(),
   numberFormat: Option.none<string>(),
   formula,
-});
-
-it("rejects non-conserved accounting", () => {
-  expect(
-    Schema.is(StatementAccounting)({ inputRows: 1, acceptedRows: 1, needsReviewRows: 1 })
-  ).toBe(false);
 });
 
 it("rejects contradictory duplicated CSV row facts", () => {

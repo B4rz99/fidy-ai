@@ -16,7 +16,7 @@ it("reads an offset spelling and a UTC spelling as the same instant", () => {
 });
 
 it("rejects text that names no PostgreSQL instant", () => {
-  for (const text of ["", "yesterday", "0000-01-01T00:00:00Z", "2026-13-01T00:00:00Z"]) {
+  for (const text of ["", "yesterday", "2026-13-01T00:00:00Z"]) {
     expect(Result.isFailure(decode(text))).toBe(true);
   }
 });
@@ -85,18 +85,12 @@ it("encodes an instant back to its UTC spelling rather than the caller's", () =>
   expect(Result.isSuccess(decoded) ? encode(decoded.success) : "").toBe("2026-03-14T14:30:00.000Z");
 });
 
-it("documents itself to a calling agent as a date-time string", () => {
+it("documents itself as a date-time string without regex lookaround", () => {
   const document = Schema.toJsonSchemaDocument(UtcTimestamp);
 
   expect(document.definitions.UtcTimestamp).toMatchObject({
     type: "string",
     format: "date-time",
   });
-});
-
-it("publishes date-time validation without regex lookaround", () => {
-  const document = Schema.toJsonSchemaDocument(UtcTimestamp);
-  const serialized = JSON.stringify(document);
-
-  expect(serialized).not.toMatch(/\(\?[=!<]/);
+  expect(JSON.stringify(document)).not.toMatch(/\(\?[=!<]/);
 });

@@ -27,24 +27,32 @@ it("accepts only normalized E.164 WhatsApp phone numbers", () => {
   expect(Result.isFailure(decodePhoneNumber("+573001234567x"))).toBe(true);
 });
 
-it("requires a complete WhatsApp Business Scoped User ID grammar", () => {
-  const decodeBusinessScopedUserId = Schema.decodeUnknownResult(WhatsAppBusinessScopedUserId);
+it("requires complete WhatsApp Business Scoped User ID grammars", () => {
+  const assertGrammar = <A, E>(
+    decode: (value: string) => Result.Result<A, E>,
+    valid: string,
+    invalid: ReadonlyArray<string>
+  ): void => {
+    expect(Result.isSuccess(decode(valid))).toBe(true);
+    for (const value of invalid) {
+      expect(Result.isFailure(decode(value))).toBe(true);
+    }
+  };
 
-  expect(Result.isSuccess(decodeBusinessScopedUserId("CO.ab"))).toBe(true);
-  for (const invalid of ["xCO.ab", "CO.ab!", "C.ab", "1O.ab", "CO.ab-1"]) {
-    expect(Result.isFailure(decodeBusinessScopedUserId(invalid))).toBe(true);
-  }
-});
-
-it("requires a complete parent Business Scoped User ID grammar", () => {
-  const decodeParentBusinessScopedUserId = Schema.decodeUnknownResult(
-    WhatsAppParentBusinessScopedUserId
-  );
-
-  expect(Result.isSuccess(decodeParentBusinessScopedUserId("CO.ENT.ab"))).toBe(true);
-  for (const invalid of ["xCO.ENT.ab", "CO.ENT.ab!", "C.ENT.ab", "1O.ENT.ab", "CO.ENT.ab-1"]) {
-    expect(Result.isFailure(decodeParentBusinessScopedUserId(invalid))).toBe(true);
-  }
+  assertGrammar(Schema.decodeUnknownResult(WhatsAppBusinessScopedUserId), "CO.ab", [
+    "xCO.ab",
+    "CO.ab!",
+    "C.ab",
+    "1O.ab",
+    "CO.ab-1",
+  ]);
+  assertGrammar(Schema.decodeUnknownResult(WhatsAppParentBusinessScopedUserId), "CO.ENT.ab", [
+    "xCO.ENT.ab",
+    "CO.ENT.ab!",
+    "C.ENT.ab",
+    "1O.ENT.ab",
+    "CO.ENT.ab-1",
+  ]);
 });
 
 it("projects a WhatsApp caller to its stable cross-slice reference", () => {

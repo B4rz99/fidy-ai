@@ -59,6 +59,17 @@ jobs:
       - name: Unit and artifact validation
         run: bun run verify -- --group unit
 
+  browser:
+    name: Web browser and accessibility checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: ./.github/actions/bun-install
+      - name: Install Chromium
+        run: bunx --bun playwright install --with-deps chromium
+      - name: Static-shell browser validation
+        run: bun run verify -- --group browser
+
   server:
     name: Server integration
     runs-on: ubuntu-latest
@@ -185,6 +196,7 @@ jobs:
       - static
       - builds
       - unit
+      - browser
       - server
       - quality
       - production-image

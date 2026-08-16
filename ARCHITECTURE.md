@@ -151,6 +151,13 @@ declaration-only operation modules, but not live middleware, repositories, handl
 observability implementations, database, filesystem, provider, or runtime modules. The browser build and module
 graph guards are executable checks for that boundary.
 
+### Web vertical composition
+
+The web application is organized by behavioral ownership rather than by route visibility. Marketing,
+audience, company, and legal pages form one public website surface because they share presentation
+and lifecycle. Publicly accessible flows with independent product behavior, such as login, pairing,
+or onboarding, remain separate features.
+
 The root TypeScript project-reference build expresses the server-before-web declaration dependency.
 Server-owned OpenAPI and complete reflected operation-policy artifacts live under
 `apps/server/contracts/`; they are deterministic review evidence, never another declaration. The

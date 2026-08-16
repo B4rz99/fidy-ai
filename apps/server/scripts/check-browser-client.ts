@@ -42,7 +42,7 @@ const forbiddenDependency = [
   /^node_modules\/@kapso\//u,
   /^node_modules\/@sentry\//u,
   /^node_modules\/(?:pg|postgres|postgres-array|postgres-bytea)(?:\/|$)/u,
-  /^(?:node:)?(?:child_process|cluster|dns|fs|http|https|net|os|stream|tls|worker_threads)(?:\/|$)/u,
+  /^(?:node:|bun:)?(?:assert|child_process|cluster|crypto|dgram|dns|fs|http|https|module|net|os|path|perf_hooks|process|stream|timers|tls|tty|util|v8|vm|worker_threads)(?:\/|$)/u,
 ] as const;
 
 const repositoryPath = (path: string): string => {

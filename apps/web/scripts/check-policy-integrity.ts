@@ -1,7 +1,9 @@
 #!/usr/bin/env bun
 
 const webRoot = Bun.fileURLToPath(new URL("..", import.meta.url)).replace(/\/$/u, "");
-const policy = await Bun.file(`${webRoot}/src/policy/policy.html`).arrayBuffer();
+const policy = await Bun.file(
+  `${webRoot}/src/features/public-site/legal/policy.html`
+).arrayBuffer();
 const actualDigest = new Bun.CryptoHasher("sha256").update(policy).digest("hex");
 
 const disclosurePath = new URL(

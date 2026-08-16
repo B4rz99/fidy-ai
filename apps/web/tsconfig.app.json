@@ -20,6 +20,8 @@
   "include": [
     "cloudflare/**/*.ts",
     "scripts/**/*.ts",
+    "e2e/**/*.ts",
+    "playwright.config.ts",
     "server-client-boundary.ts",
     "src/**/*.ts",
     "src/**/*.tsx",

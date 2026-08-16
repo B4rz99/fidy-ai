@@ -11,6 +11,30 @@ export default defineConfig({
   },
   test: {
     environment: "jsdom",
+    include: [
+      "src/**/*.test.ts",
+      "src/**/*.test.tsx",
+      "cloudflare/**/*.test.ts",
+      "scripts/**/*.test.ts",
+    ],
     setupFiles: ["./src/testing/setup.ts"],
+    coverage: {
+      provider: "istanbul",
+      reporter: ["text", "json-summary", "html"],
+      include: [
+        "src/app/**/*.{ts,tsx}",
+        "src/features/**/*.{ts,tsx}",
+        "src/session/**/*.{ts,tsx}",
+        "src/transport/**/*.{ts,tsx}",
+        "src/ui/**/*.{ts,tsx}",
+      ],
+      exclude: ["src/testing/**", "src/ui/components/**"],
+      thresholds: {
+        branches: 90,
+        functions: 90,
+        lines: 90,
+        statements: 90,
+      },
+    },
   },
 });

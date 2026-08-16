@@ -224,6 +224,12 @@ React application code is event-driven and keeps only irreducible interaction st
   one narrow adapter and add an explicit file-scoped lint override. Do not add speculative
   exceptions or expose the synchronization mechanism to application components.
 
+### Web feature ownership
+
+Group web behavior by ownership and lifecycle, not merely by whether a route is public. Marketing,
+audience, company, and legal pages belong to the public website surface. Login, pairing, onboarding,
+and other publicly accessible product flows remain independent features.
+
 ---
 
 ## Agent-facing documentation

@@ -6,6 +6,9 @@ dist/
 build/
 out/
 apps/web/preview.tar
+apps/web/playwright-dist/
+apps/web/test-results/
+apps/web/playwright-report/
 
 # TypeScript
 *.tsbuildinfo

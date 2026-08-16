@@ -1,0 +1,27 @@
+apps/server/src/core/_shared/immutable.ts
+  s_7d3319db851730::t_e135efee3dc05a 1-10
+apps/server/src/core/budgets/rules.ts
+  s_7d3319db851730::t_11f4fe09874c4d 3
+  s_7d3319db851730::t_0b01f1dc163310 24-27
+apps/server/src/core/budgets/model.ts
+  s_7d3319db851730::t_db0b0e55d1b73d 3
+  s_7d3319db851730::t_d679d7a55d6ec9 96
+apps/server/src/shell/budgets/errors.ts
+  s_7d3319db851730::t_97710c5cd571a6 33,88-91
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "101534794350eab5ededf6fc639aec1dc655937f",
+  "prompts": {},
+  "sessions": {
+    "s_7d3319db851730": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a007d1-5622-73c4-b68c-4be7887ad784",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

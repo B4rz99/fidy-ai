@@ -1,0 +1,93 @@
+apps/server/src/shell/agent/hosted-inference.ts
+  s_a793232f83d332::t_6b584305c0f8a9 7-8,129-130,168,204,208,225,257,262-264,381,383,389,402,420,425-431,447,449-450,518,520,526-527
+  s_a793232f83d332::t_1aebde9283954a 21-22,24-25,248-250,255,286,382,419,421,423-424,432,478,481-483,510,519
+  s_a793232f83d332::t_ab12c86e9c3e5e 251-254,256,374
+  s_a793232f83d332::t_29a3235b65a035 521-525
+  s_a793232f83d332::t_adee3d3bb366da 265-267,283-285
+  s_a793232f83d332::t_895b985206e7ce 287
+  s_a793232f83d332::t_f82590bdbb57d7 451
+  s_a793232f83d332::t_9f6fc9b9c26282 12-13,83-87,97,115-117,268-282,292-310
+apps/server/src/shell/agent/agent-service.ts
+  s_a793232f83d332::t_9952b3f8ab5209 1044-1048,1089-1090
+  s_a793232f83d332::t_5c03a67e48f4af 939,946-947,1596,1609
+  s_a793232f83d332::t_a08252d94ee915 1052,1092-1095
+  s_a793232f83d332::t_ec634b910b2428 1091
+  s_a793232f83d332::t_6458611a19a6e6 1096
+  s_a793232f83d332::t_03569dd800b97d 1462
+apps/server/src/shell/agent/hosted-inference.test.ts
+  s_a793232f83d332::t_267591f1db85c8 15,32-34
+  s_a793232f83d332::t_974934f73e1148 18
+  s_a793232f83d332::t_505fd3336cf61b 108
+  s_a793232f83d332::t_dc8f94587488c0 101,136,149,182,207,248,736
+  s_a793232f83d332::t_36a6dd20516dee 342,389-396,398,443,449,452,456,510
+  s_a793232f83d332::t_973f73b336f187 35-37
+  s_a793232f83d332::t_8dc881f66f0bb3 339-341
+  s_a793232f83d332::t_5d922686efa436 343-345
+  s_a793232f83d332::t_c457173cac05b5 440-442
+  s_a793232f83d332::t_9df453eb0d667f 444-448
+  s_a793232f83d332::t_de4e070706fe66 450-451
+  s_a793232f83d332::t_fb3e36b219ea35 453-455
+  s_a793232f83d332::t_367299d72ff2e8 457-459,507-509
+  s_a793232f83d332::t_059119085615ba 511-513
+  s_a793232f83d332::t_b4b507f753b2a6 1-2,4-10,23,38-39,105,337-338,346-384,415-439,460-506,514-532,740,773,780-781
+apps/server/src/shell/agent/openai.test.ts
+  s_a793232f83d332::t_dc8f94587488c0 149,153,168,180,197,251-252,254-257,576,606,643,647,768-779
+  s_a793232f83d332::t_b8d3988ce57e67 13,16,29,38-40
+  s_a793232f83d332::t_57d2d884bd5d84 12
+  s_a793232f83d332::t_8841a17063d47b 41
+  s_a793232f83d332::t_64237bb21a56d2 780-782
+  s_a793232f83d332::t_0bde5df45ad0c2 783-863,869-889
+apps/server/src/shell/agent/openai.ts
+  s_a793232f83d332::t_c3717a37386abf 39,43,46,52-70,290
+  s_a793232f83d332::t_55492b2a0f4671 5,17-22,348-349,355,613-614,620-625,640,651,665-666,677,694-695,698,707,721-765,769-770,776,779,789-793,798-799,802-810,815
+ARCHITECTURE.md
+  s_a793232f83d332::t_700018befb885c 191-200
+apps/server/.dependency-cruiser.mjs
+  s_a793232f83d332::t_af67265b7a1eae 145,148
+apps/server/scripts/check-dependency-guards.ts
+  s_a793232f83d332::t_3fa9634b15de30 57-58,286-321
+apps/server/scripts/verify-sentry-account.ts
+  s_a793232f83d332::t_6809bac78dbf5e 4,12,17
+apps/server/src/shell/agent/agent-service.test.ts
+  s_a793232f83d332::t_85fd63d1b2203f 56,64,1254-1276,1451-1533,1894-1916,1951-1953,3555-3560,3639-3644
+apps/server/src/shell/agent/toolkit.test.ts
+  s_a793232f83d332::t_12c7d2c89325ca 2,5-6,23-32,53-73,75-76,80-100
+apps/server/src/shell/agent/working-context.ts
+  s_a793232f83d332::t_5474e6a9c206b8 7-13,18,22-25,28,50-57,93-109,116,127,134,139-142,146-189,191-192,200
+apps/server/src/shell/audit/audit-log.test.ts
+  s_a793232f83d332::t_1184b62978a1a0 124,127-128,141-143
+apps/server/src/shell/observability/sentry-account-reader.test.ts
+  s_a793232f83d332::t_092b657c5ff569 3,14,79-98
+apps/server/src/shell/observability/sentry-account-reader.ts
+  s_a793232f83d332::t_9316317b91b455 1,61-68
+apps/server/src/shell/transcript/conversation-continuity.test.ts
+  s_a793232f83d332::t_0cf182343cca75 20,24,34,37,40,49-52,55,75,95-96,99-101,103-105,112-115,124-133,197-252,287-290,294-296,298-300,306-314,317,328-349,819-843,1444-1529,1610-1701,1728-1732,1868-1904,1970-2022,2070-2075
+apps/server/src/shell/transcript/conversation-continuity.ts
+  s_a793232f83d332::t_309ca4995ee1c8 118-121,124-138,183,621-622,624-636,640-662,672,674-686,1273
+bun.lock
+  s_a793232f83d332::t_7b71e57ec2fd46 8-10,13,631-632
+docs/architecture/agent-continuity-invariant-matrix.md
+  s_a793232f83d332::t_dd51de8db3ae57 19,23-29
+package.json
+  s_a793232f83d332::t_edc70a04a41d9c 46,53-55,58
+scripts/check-continuity-invariants.ts
+  s_a793232f83d332::t_c73a59bc22de76 1-716
+scripts/verify.ts
+  s_a793232f83d332::t_61e6504960f9c8 109-113
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "045cdd10522666ae3fe49b5ab0fa20c16cbab8ea",
+  "prompts": {},
+  "sessions": {
+    "s_a793232f83d332": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a005d9-6470-7b01-9c7e-dae023aecd75",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

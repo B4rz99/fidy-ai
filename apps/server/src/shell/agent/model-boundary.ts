@@ -95,8 +95,11 @@ const accountNumberCandidatePattern =
 const hasAccountNumber = (text: string): boolean =>
   accountContextPattern.test(text) && accountNumberCandidatePattern.test(text);
 
+const paymentCardCandidatePattern = /(?<![0-9a-f])(?:\d[\s./-]*){13,}(?![0-9a-f])/giu;
+
 const hasValidPaymentCardNumber = (text: string): boolean => {
-  const candidates = text.replaceAll(identifierPattern, "").match(/(?:\d[\s./-]*){13,}/gu) ?? [];
+  const candidates =
+    text.replaceAll(identifierPattern, "").match(paymentCardCandidatePattern) ?? [];
   return candidates.some((candidate) => {
     const digits = candidate.replaceAll(/\D/gu, "");
     if (

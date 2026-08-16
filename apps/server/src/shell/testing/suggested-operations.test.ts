@@ -1,8 +1,10 @@
 import { expect, layer } from "@effect/vitest";
-import { Context, DateTime, Effect, Layer, Option, Result, Schema } from "effect";
+import { BigDecimal, Context, DateTime, Effect, Layer, Option, Result, Schema } from "effect";
 import { type SqlClient } from "effect/unstable/sql";
 import { PATId } from "~/core/tokens/reference";
 import { IanaTimeZone } from "~/core/_shared/context";
+import { Money } from "~/core/_shared/money";
+import { BudgetId } from "~/core/budgets/reference";
 import { MemoryText } from "~/core/memory/model";
 import { UserId } from "~/core/identity/reference";
 import { Base64FileContent, StatementIdempotencyKey } from "~/core/ingestion/model";
@@ -23,6 +25,7 @@ import {
 import { type OperationId, operationCatalog } from "~/shell/api";
 import { AtomicBatchCallId } from "~/shell/operations/operations";
 import { truncateDashboards } from "~/shell/dashboard/fixtures";
+import { MigrationSqlClient } from "~/shell/db/client";
 import { seedConsentedPatIdentity } from "~/shell/db/development-seed";
 import { truncateInsights, weeklySummaryInput } from "~/shell/insights/fixtures";
 import { truncateStatementIngestion } from "~/shell/ingestion/fixtures";
@@ -40,6 +43,11 @@ type SuggestedOperationProbe = (
 ) => Effect.Effect<ReadonlyArray<NavigableResponse>, ApiCallFailure, SqlClient.SqlClient>;
 
 const absentId = TransactionId.make("f1d1a000-0000-4000-8000-00000000dead");
+const absentBudgetId = BudgetId.make("f1d1a000-0000-4000-8000-00000000dea4");
+const budgetCap = Money.make({
+  amount: BigDecimal.fromStringUnsafe("1000000"),
+  currency: "COP",
+});
 
 /**
  * One probe per canonical operation, keyed by the `OperationId` union derived
@@ -61,6 +69,56 @@ const probes: Record<OperationId, SuggestedOperationProbe> = {
 
   "subscription.getUpgradeUrl": (client) =>
     Effect.map(client.subscription.getUpgradeUrl(), (response) => [response]),
+
+  "budgets.createBudget": (client) =>
+    Effect.map(
+      client.budgets.createBudget({
+        payload: { categoryId: categoryIds.restaurantes, cap: budgetCap },
+      }),
+      (response) => [response]
+    ),
+
+  "budgets.listBudgets": (client) =>
+    Effect.map(client.budgets.listBudgets(), (response) => [response]),
+
+  "budgets.getBudget": (client) =>
+    Effect.gen(function* () {
+      const result = yield* Effect.result(
+        client.budgets.getBudget({ params: { id: absentBudgetId } })
+      );
+      if (Result.isSuccess(result)) {
+        return yield* Effect.die("expected the absent Budget to fail");
+      }
+      return [yield* Schema.decodeUnknownEffect(NotFound)(result.failure)];
+    }),
+
+  "budgets.updateBudget": (client) =>
+    Effect.gen(function* () {
+      const created = yield* client.budgets.createBudget({
+        payload: { categoryId: categoryIds.restaurantes, cap: budgetCap },
+      });
+      const updated = yield* client.budgets.updateBudget({
+        params: { id: created.data.id },
+        payload: { categoryId: categoryIds.mercado, cap: budgetCap },
+      });
+      return [updated];
+    }),
+
+  "budgets.deleteBudget": (client) =>
+    Effect.gen(function* () {
+      const created = yield* client.budgets.createBudget({
+        payload: { categoryId: categoryIds.restaurantes, cap: budgetCap },
+      });
+      return [yield* client.budgets.deleteBudget({ params: { id: created.data.id } })];
+    }),
+
+  "budgets.getBudgetStatus": (client) =>
+    Effect.map(
+      client.budgets.getBudgetStatus({
+        query: { timeZone: IanaTimeZone.make("America/Bogota") },
+      }),
+      (response) => [response]
+    ),
 
   "memory.remember": (client) =>
     Effect.map(
@@ -406,6 +464,8 @@ layer(SuggestedOperationsHarness, { excludeTestServices: true, timeout: "30 seco
           yield* truncateStatementIngestion;
           yield* truncateInsights;
           yield* truncateDashboards;
+          const sql = yield* MigrationSqlClient;
+          yield* sql`TRUNCATE budget_month_latches, budgets`;
           const source = Option.getOrThrow(
             Option.fromUndefinedOr(operationCatalog.byId.get(sourceOperation))
           );

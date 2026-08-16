@@ -1,7 +1,10 @@
 import { expect, layer } from "@effect/vitest";
-import { Context, DateTime, Effect, Layer, Option } from "effect";
+import { BigDecimal, Context, DateTime, Effect, Equal, Layer, Option } from "effect";
 import { HttpBody, HttpClient } from "effect/unstable/http";
 import { IanaTimeZone } from "~/core/_shared/context";
+import { Money } from "~/core/_shared/money";
+import { type Budget } from "~/core/budgets/model";
+import { BudgetId } from "~/core/budgets/reference";
 import { UserId } from "~/core/identity/reference";
 import { Base64FileContent, StatementIdempotencyKey } from "~/core/ingestion/model";
 import { NeedsReviewItemId, type StatementSubmissionId } from "~/core/ingestion/reference";
@@ -35,6 +38,18 @@ const stranger = UserId.make("f1d1a000-0000-4000-8000-0000000000b2");
 const ownerBearer = TokenBearer.make("fin_owner001_0123456789abcdefghijklmnopqrstuvwxyzABCD");
 const strangerBearer = TokenBearer.make("fin_strange1_ABCDabcdefghijklmnopqrstuvwxyz0123456789");
 const absentMemoryId = MemoryId.make("f1d1a000-0000-4000-8000-00000000dead");
+const absentBudgetId = BudgetId.make("f1d1a000-0000-4000-8000-00000000dea4");
+const budgetCap = Money.make({
+  amount: BigDecimal.fromStringUnsafe("1000000"),
+  currency: "COP",
+});
+
+const expectSameBudget = (actual: Budget, expected: Budget): void => {
+  expect(actual.id).toBe(expected.id);
+  expect(actual.categoryId).toBe(expected.categoryId);
+  expect(actual.cap.currency).toBe(expected.cap.currency);
+  expect(Equal.equals(actual.cap.amount, expected.cap.amount)).toBe(true);
+};
 
 class OwnerApiClient extends Context.Service<OwnerApiClient, ApiClient>()(
   "@fidy/server/shell/testing/isolation.test/OwnerApiClient"
@@ -57,6 +72,7 @@ type IsolationAttempt = {
   readonly ownerClient: ApiClient;
   readonly strangerClient: ApiClient;
   readonly ownedTransaction: Transaction;
+  readonly ownedBudget: Budget;
   readonly ownedInsight: InsightEvent;
   readonly ownedStatementSubmissionId: StatementSubmissionId;
   readonly ownedReviewItemId: NeedsReviewItemId;
@@ -101,6 +117,93 @@ const probes: Record<OperationId, IsolationProbe> = {
   "subscription.getUpgradeUrl": (attempt) =>
     attempt.strangerClient.subscription.getUpgradeUrl().pipe(Effect.asVoid),
 
+  "budgets.createBudget": (attempt) =>
+    Effect.gen(function* () {
+      yield* attempt.strangerClient.budgets.createBudget({
+        payload: { categoryId: categoryIds.restaurantes, cap: budgetCap },
+      });
+      const retained = (yield* attempt.ownerClient.budgets.listBudgets()).data;
+      expect(retained).toHaveLength(1);
+      expectSameBudget(retained[0] ?? attempt.ownedBudget, attempt.ownedBudget);
+    }),
+
+  "budgets.listBudgets": (attempt) =>
+    Effect.gen(function* () {
+      expect((yield* attempt.strangerClient.budgets.listBudgets()).data).toEqual([]);
+    }),
+
+  "budgets.getBudget": (attempt) =>
+    Effect.gen(function* () {
+      const denied = yield* Effect.result(
+        attempt.strangerClient.budgets.getBudget({
+          params: { id: attempt.ownedBudget.id },
+        })
+      );
+      const absent = yield* Effect.result(
+        attempt.strangerClient.budgets.getBudget({
+          params: { id: absentBudgetId },
+        })
+      );
+      expect(denied).toEqual(absent);
+      expect(denied).toMatchObject({
+        _tag: "Failure",
+        failure: { error: { code: "not_found" } },
+      });
+    }),
+
+  "budgets.updateBudget": (attempt) =>
+    Effect.gen(function* () {
+      const denied = yield* Effect.result(
+        attempt.strangerClient.budgets.updateBudget({
+          params: { id: attempt.ownedBudget.id },
+          payload: { categoryId: categoryIds.mercado, cap: budgetCap },
+        })
+      );
+      const absent = yield* Effect.result(
+        attempt.strangerClient.budgets.updateBudget({
+          params: { id: absentBudgetId },
+          payload: { categoryId: categoryIds.mercado, cap: budgetCap },
+        })
+      );
+      expect(denied).toEqual(absent);
+      expectSameBudget(
+        (yield* attempt.ownerClient.budgets.getBudget({
+          params: { id: attempt.ownedBudget.id },
+        })).data,
+        attempt.ownedBudget
+      );
+    }),
+
+  "budgets.deleteBudget": (attempt) =>
+    Effect.gen(function* () {
+      const denied = yield* Effect.result(
+        attempt.strangerClient.budgets.deleteBudget({
+          params: { id: attempt.ownedBudget.id },
+        })
+      );
+      const absent = yield* Effect.result(
+        attempt.strangerClient.budgets.deleteBudget({
+          params: { id: absentBudgetId },
+        })
+      );
+      expect(denied).toEqual(absent);
+      expectSameBudget(
+        (yield* attempt.ownerClient.budgets.getBudget({
+          params: { id: attempt.ownedBudget.id },
+        })).data,
+        attempt.ownedBudget
+      );
+    }),
+
+  "budgets.getBudgetStatus": (attempt) =>
+    Effect.gen(function* () {
+      const statuses = yield* attempt.strangerClient.budgets.getBudgetStatus({
+        query: { timeZone: IanaTimeZone.make("America/Bogota") },
+      });
+      expect(statuses.data.statuses).toEqual([]);
+      expect(statuses.data.period.timeZone).toBe("America/Bogota");
+    }),
+
   "memory.remember": (attempt) =>
     Effect.gen(function* () {
       yield* attempt.strangerClient.memory.remember({
@@ -143,7 +246,9 @@ const probes: Record<OperationId, IsolationProbe> = {
         attempt.strangerClient.memory.forget({ params: { id: owned.data.id } })
       );
       const absent = yield* Effect.result(
-        attempt.strangerClient.memory.forget({ params: { id: absentMemoryId } })
+        attempt.strangerClient.memory.forget({
+          params: { id: absentMemoryId },
+        })
       );
       expect(denied).toEqual(absent);
       expect(denied).toMatchObject({
@@ -168,7 +273,10 @@ const probes: Record<OperationId, IsolationProbe> = {
           params: { id: attempt.ownedStatementSubmissionId },
         })
       );
-      expect(result).toMatchObject({ _tag: "Failure", failure: { error: { code: "not_found" } } });
+      expect(result).toMatchObject({
+        _tag: "Failure",
+        failure: { error: { code: "not_found" } },
+      });
       const retained = yield* attempt.ownerClient.ingestion.getStatementSubmission({
         params: { id: attempt.ownedStatementSubmissionId },
       });
@@ -216,7 +324,10 @@ const probes: Record<OperationId, IsolationProbe> = {
           },
         })
       );
-      expect(result).toMatchObject({ _tag: "Failure", failure: { error: { code: "not_found" } } });
+      expect(result).toMatchObject({
+        _tag: "Failure",
+        failure: { error: { code: "not_found" } },
+      });
       const retained = yield* attempt.ownerClient.ingestion.listNeedsReviewItems({
         query: { offset: Option.none(), limit: Option.none() },
       });
@@ -262,7 +373,10 @@ const probes: Record<OperationId, IsolationProbe> = {
         })
       );
       const retained = yield* attempt.ownerClient.categories.listKeywordRules({});
-      expect(denied).toMatchObject({ _tag: "Failure", failure: { error: { code: "not_found" } } });
+      expect(denied).toMatchObject({
+        _tag: "Failure",
+        failure: { error: { code: "not_found" } },
+      });
       expect(retained.data).toEqual([ownerRule.data]);
     }),
 
@@ -302,16 +416,23 @@ const probes: Record<OperationId, IsolationProbe> = {
         },
       });
       const denied = yield* Effect.result(
-        attempt.strangerClient.categories.deleteKeywordRule({ params: { id: ownerRule.data.id } })
+        attempt.strangerClient.categories.deleteKeywordRule({
+          params: { id: ownerRule.data.id },
+        })
       );
       const retained = yield* attempt.ownerClient.categories.listKeywordRules({});
-      expect(denied).toMatchObject({ _tag: "Failure", failure: { error: { code: "not_found" } } });
+      expect(denied).toMatchObject({
+        _tag: "Failure",
+        failure: { error: { code: "not_found" } },
+      });
       expect(retained.data).toEqual([ownerRule.data]);
     }),
 
   "transactions.listTransactions": (attempt) =>
     Effect.gen(function* () {
-      const listed = yield* attempt.strangerClient.transactions.listTransactions({ query: {} });
+      const listed = yield* attempt.strangerClient.transactions.listTransactions({
+        query: {},
+      });
 
       expect(listed.data).toEqual([]);
     }),
@@ -423,7 +544,10 @@ const probes: Record<OperationId, IsolationProbe> = {
       const retained = yield* attempt.ownerClient.transactions.getTransaction({
         params: { id: attempt.ownedTransaction.id },
       });
-      expect(denied).toMatchObject({ _tag: "Failure", failure: { error: { code: "not_found" } } });
+      expect(denied).toMatchObject({
+        _tag: "Failure",
+        failure: { error: { code: "not_found" } },
+      });
       expect(retained.data).toEqual(attempt.ownedTransaction);
     }),
 
@@ -437,7 +561,10 @@ const probes: Record<OperationId, IsolationProbe> = {
       const retained = yield* attempt.ownerClient.transactions.getTransaction({
         params: { id: attempt.ownedTransaction.id },
       });
-      expect(denied).toMatchObject({ _tag: "Failure", failure: { error: { code: "not_found" } } });
+      expect(denied).toMatchObject({
+        _tag: "Failure",
+        failure: { error: { code: "not_found" } },
+      });
       expect(retained.data).toEqual(attempt.ownedTransaction);
     }),
 
@@ -448,7 +575,10 @@ const probes: Record<OperationId, IsolationProbe> = {
           params: { id: attempt.ownedTransaction.id },
         })
       );
-      expect(denied).toMatchObject({ _tag: "Failure", failure: { error: { code: "not_found" } } });
+      expect(denied).toMatchObject({
+        _tag: "Failure",
+        failure: { error: { code: "not_found" } },
+      });
     }),
 
   "transactions.getTransaction": (attempt) =>
@@ -508,6 +638,11 @@ const seedAttempt = Effect.gen(function* () {
 
   const ownerClient = yield* OwnerApiClient;
   const strangerClient = yield* StrangerApiClient;
+  const sql = yield* MigrationSqlClient;
+  yield* sql`DELETE FROM budgets`;
+  const ownedBudget = yield* ownerClient.budgets.createBudget({
+    payload: { categoryId: categoryIds.restaurantes, cap: budgetCap },
+  });
   const created = yield* ownerClient.transactions.createTransaction({
     payload: transactionPayload(),
   });
@@ -526,7 +661,6 @@ const seedAttempt = Effect.gen(function* () {
     },
   });
   const ownedReviewItemId = NeedsReviewItemId.make("f1d1a000-0000-4000-8000-00000000a182");
-  const sql = yield* MigrationSqlClient;
   yield* sql`
     INSERT INTO needs_review_items(
       id, user_id, submission_id, record_number, reason, service_market, locale, time_zone,
@@ -548,6 +682,7 @@ const seedAttempt = Effect.gen(function* () {
     ownerClient,
     strangerClient,
     ownedTransaction: created.data,
+    ownedBudget: ownedBudget.data,
     ownedInsight,
     ownedStatementSubmissionId: ownedSubmission.data.id,
     ownedReviewItemId,

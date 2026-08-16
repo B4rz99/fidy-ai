@@ -1,6 +1,7 @@
 import { type Crypto, Effect } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
 import type { ResolvedToken } from "~/core/tokens/model";
+import { createBudget, deleteBudget, updateBudget } from "~/shell/budgets/mutations";
 import {
   createKeywordRule,
   deleteKeywordRule,
@@ -84,6 +85,28 @@ export const canonicalMutationImplementations = {
         caller: suggestedCaller(caller),
         keywordRuleId: input.params.id,
       })
+  ),
+  "budgets.createBudget": mutationAdapter((input: CanonicalInput<"budgets.createBudget">, caller) =>
+    createBudget({
+      userId: caller.resolved.subjectUserId,
+      caller: suggestedCaller(caller),
+      payload: input.payload,
+    })
+  ),
+  "budgets.updateBudget": mutationAdapter((input: CanonicalInput<"budgets.updateBudget">, caller) =>
+    updateBudget({
+      userId: caller.resolved.subjectUserId,
+      caller: suggestedCaller(caller),
+      budgetId: input.params.id,
+      payload: input.payload,
+    })
+  ),
+  "budgets.deleteBudget": mutationAdapter((input: CanonicalInput<"budgets.deleteBudget">, caller) =>
+    deleteBudget({
+      userId: caller.resolved.subjectUserId,
+      caller: suggestedCaller(caller),
+      budgetId: input.params.id,
+    })
   ),
   "dashboard.getDashboard": mutationAdapter(
     (_input: CanonicalInput<"dashboard.getDashboard">, caller) =>

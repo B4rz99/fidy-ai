@@ -1,6 +1,66 @@
 {
   "operations": [
     {
+      "id": "budgets.createBudget",
+      "policy": {
+        "agentConfirmation": "not-required",
+        "kind": "mutation",
+        "requiredScope": "write",
+        "requiredTier": "free",
+        "scopeEvaluation": "endpoint"
+      }
+    },
+    {
+      "id": "budgets.deleteBudget",
+      "policy": {
+        "agentConfirmation": "required",
+        "kind": "mutation",
+        "requiredScope": "write",
+        "requiredTier": "free",
+        "scopeEvaluation": "endpoint"
+      }
+    },
+    {
+      "id": "budgets.getBudget",
+      "policy": {
+        "agentConfirmation": "not-required",
+        "kind": "query",
+        "requiredScope": "read",
+        "requiredTier": "free",
+        "scopeEvaluation": "endpoint"
+      }
+    },
+    {
+      "id": "budgets.getBudgetStatus",
+      "policy": {
+        "agentConfirmation": "not-required",
+        "kind": "query",
+        "requiredScope": "read",
+        "requiredTier": "free",
+        "scopeEvaluation": "endpoint"
+      }
+    },
+    {
+      "id": "budgets.listBudgets",
+      "policy": {
+        "agentConfirmation": "not-required",
+        "kind": "query",
+        "requiredScope": "read",
+        "requiredTier": "free",
+        "scopeEvaluation": "endpoint"
+      }
+    },
+    {
+      "id": "budgets.updateBudget",
+      "policy": {
+        "agentConfirmation": "required",
+        "kind": "mutation",
+        "requiredScope": "write",
+        "requiredTier": "free",
+        "scopeEvaluation": "endpoint"
+      }
+    },
+    {
       "id": "categories.createKeywordRule",
       "policy": {
         "agentConfirmation": "not-required",

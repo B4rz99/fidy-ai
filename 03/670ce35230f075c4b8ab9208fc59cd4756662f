@@ -1,0 +1,84 @@
+bun.lock
+  s_a793232f83d332::t_0bf1e8aad669a2 8-10,13,631-632
+scripts/verify.ts
+  s_a793232f83d332::t_c688cdf158c67f 109-113
+apps/server/src/shell/agent/openai.ts
+  s_a793232f83d332::t_cb5f98989986c2 5,17-22,43,46,52-70,348-349,355,613-614,620-625,640,651,665-666,677,694-695,698,707,721-765,769-770,776,780,790-794,799-800,803-811,816
+apps/server/src/shell/observability/sentry-account-reader.ts
+  s_a793232f83d332::t_6a3caea67742ad 1,61-68
+apps/server/src/shell/agent/agent-service.test.ts
+  s_a793232f83d332::t_cf0698c79dcf80 56,64,1254-1276,1451-1533,1894-1916,1951-1953,3555-3560,3639-3644
+apps/server/src/shell/agent/agent-service.ts
+  s_a793232f83d332::t_d24d62a98380a8 948,1049-1050,1087-1093,1460
+apps/server/src/shell/transcript/conversation-continuity.ts
+  s_a793232f83d332::t_3a33ad3707fc33 1273
+  s_a793232f83d332::t_994a63c5dbf27d 118-121,124-138,183,621-622,624-636,640-662,672,674-686
+apps/server/scripts/check-dependency-guards.ts
+  s_a793232f83d332::t_8daa0fc27d7e1d 57,286-321
+  s_a793232f83d332::t_b722d6ba218008 58
+apps/server/src/shell/transcript/conversation-continuity.test.ts
+  s_a793232f83d332::t_3ed74827083632 20,24,34,37,40,49-52,55,75,95-96,99-101,103-105,112-115,124-133,197-252,287-290,294-296,298-300,306-314,317,328-349,819-843,1444-1529,1610-1701,1728-1732,1868-1904,1970-2022,2070-2075
+apps/server/src/shell/agent/toolkit.test.ts
+  s_a793232f83d332::t_f2b9f7d8b99ff2 2,5-6,23-32,53-73,75-76,80-100
+scripts/check-continuity-invariants.ts
+  s_a793232f83d332::t_e153b920409d94 3-5,445,448-451,456-457,460-463,466-467,470-473,476,478-479,482-484,486-488,492,496-497,507-508,510-511,515,523-524,530-531,535-536,541,543-551
+  s_a793232f83d332::t_14dc97a889acfe 23,41-44,76,80
+  s_a793232f83d332::t_4c1d7121351966 1-2,6-22,24-40,45-75,77-79,81-444,446-447,452-455,458-459,464-465,468-469,474-475,477,480-481,485,489-491,493-495,498-506,509,512-514,516-522,525-529,532-534,537-540,542,552-716
+apps/server/.dependency-cruiser.mjs
+  s_a793232f83d332::t_450060cd0c01e9 148
+  s_a793232f83d332::t_c0384863df6c87 145
+apps/server/src/shell/agent/working-context.ts
+  s_a793232f83d332::t_686f8847b1726f 181
+  s_a793232f83d332::t_1b85ea3a2b41b1 151
+  s_a793232f83d332::t_7a92dd3522e36a 28,50-57,93-109,116,127,134,139-142,146-150,152,191-192,200
+  s_45807ae4c11b63::t_16939bc8231357 7-13,18,22-25,153-180,182-189
+apps/server/src/shell/agent/openai.test.ts
+  s_a793232f83d332::t_0f907be99dec52 12,29,150,194,248-249,251-254,603,644,765-860,866-886
+ARCHITECTURE.md
+  s_a793232f83d332::t_bf03ce21bc561c 191-200
+package.json
+  s_a793232f83d332::t_7b5d25bcffbf8e 46
+  s_a793232f83d332::t_cc5b0200450b7f 53-55,58
+apps/server/src/shell/observability/sentry-account-reader.test.ts
+  s_a793232f83d332::t_f1d07e6efb055a 3,14,79-98
+apps/server/src/shell/agent/hosted-inference.test.ts
+  s_a793232f83d332::t_57a8c801bd4c5f 338
+  s_a793232f83d332::t_67ffcd13b325ff 391
+  s_a793232f83d332::t_6f665f1e21af49 777-778
+  s_a793232f83d332::t_c227b4e0bf1cea 1-2,4-10,24,33-36,102,335-337,339-382,411-529,737,770
+apps/server/src/shell/audit/audit-log.test.ts
+  s_a793232f83d332::t_2b4ff08b395737 124,127-128,141-143
+docs/architecture/agent-continuity-invariant-matrix.md
+  s_a793232f83d332::t_e79627aaf12621 19,23-29
+apps/server/src/shell/agent/hosted-inference.ts
+  s_a793232f83d332::t_87983716647779 90-94,104,122-124,267-292,297-315,429
+  s_a793232f83d332::t_ef6c2d91025247 25,29,428,430-432,434,453,457
+  s_a793232f83d332::t_edd5e6b8753505 13-14
+  s_a793232f83d332::t_04655ba85eb762 218,222
+apps/server/scripts/verify-sentry-account.ts
+  s_a793232f83d332::t_389fcd8960ae14 4,12,17
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "03670ce35230f075c4b8ab9208fc59cd4756662f",
+  "prompts": {},
+  "sessions": {
+    "s_45807ae4c11b63": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a007d2-e6d7-7697-bba7-e0841f8e3bc1",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_a793232f83d332": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a005d9-6470-7b01-9c7e-dae023aecd75",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": null
+    }
+  }
+}

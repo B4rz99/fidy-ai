@@ -1,5 +1,6 @@
 import { BigDecimal, DateTime, Schema, Struct } from "effect";
 import { IanaTimeZone } from "~/core/_shared/context";
+import { type Immutable } from "~/core/_shared/immutable";
 import { Money } from "~/core/_shared/money";
 import { UtcTimestamp } from "~/core/_shared/time";
 import { CategoryId } from "~/core/categories/reference";
@@ -92,15 +93,7 @@ const OverBudget = Schema.Struct({
   overBy: Money,
 });
 
-type DeepReadonly<Value> = Value extends CallableFunction
-  ? Value
-  : Value extends string | number | boolean | bigint | symbol
-    ? Value
-    : Value extends object
-      ? { readonly [Key in keyof Value]: DeepReadonly<Value[Key]> }
-      : Value;
-
-type StatusCurrencyView = DeepReadonly<
+type StatusCurrencyView = Immutable<
   typeof UnderBudget.Type | typeof ReachedBudget.Type | typeof OverBudget.Type
 >;
 

@@ -1,15 +1,8 @@
 import { BigDecimal, DateTime, Effect } from "effect";
 import { type IanaTimeZone } from "~/core/_shared/context";
+import { type Immutable } from "~/core/_shared/immutable";
 import { CurrencyMismatch, Money, type ReadonlyMoney } from "~/core/_shared/money";
 import { type AppliedBudgetMonth, type Budget, type BudgetStatus } from "./model";
-
-type DeepReadonly<Value> = Value extends CallableFunction
-  ? Value
-  : Value extends string | number | boolean | bigint | symbol
-    ? Value
-    : Value extends object
-      ? { readonly [Key in keyof Value]: DeepReadonly<Value[Key]> }
-      : Value;
 
 /** Derives one calendar month's half-open UTC bounds from an explicit instant and IANA zone. */
 export const deriveCurrentBudgetMonth = ({
@@ -28,10 +21,10 @@ export const deriveCurrentBudgetMonth = ({
   };
 };
 
-type BudgetStatusInput = Readonly<{
-  budget: DeepReadonly<Budget>;
-  spent: DeepReadonly<ReadonlyMoney>;
-  period: DeepReadonly<AppliedBudgetMonth>;
+type BudgetStatusInput = Immutable<{
+  budget: Budget;
+  spent: ReadonlyMoney;
+  period: AppliedBudgetMonth;
 }>;
 
 /** Compares exact same-Currency spending with a cap and returns its closed monthly status. */

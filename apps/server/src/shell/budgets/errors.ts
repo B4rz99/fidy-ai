@@ -30,6 +30,7 @@ type FailureInput<Failure extends BudgetFailure> = Readonly<{
   caller: SuggestedOperationCaller;
 }>;
 
+/** Maps each closed Budget failure subtype to its precise public API failure. */
 export function toApiFailure(input: FailureInput<BudgetNotFound>): NotFound;
 export function toApiFailure(
   input: FailureInput<BudgetAlreadyExists | BudgetCurrencyImmutable>
@@ -84,5 +85,7 @@ export function toApiFailure({
 export const mapBudgetCategoryFailure = ({
   failure,
   caller,
-}: Readonly<{ failure: CategoryNotFound; caller: SuggestedOperationCaller }>): NotFound =>
-  categoryToApiFailure({ failure, caller });
+}: Readonly<{
+  failure: CategoryNotFound;
+  caller: SuggestedOperationCaller;
+}>): NotFound => categoryToApiFailure({ failure, caller });

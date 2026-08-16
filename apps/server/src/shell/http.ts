@@ -9,6 +9,7 @@ import { AuditRetentionLive } from "~/shell/audit/retention";
 import { PendingConsentRetentionLive } from "~/shell/consent/retention";
 import { AgentService } from "~/shell/agent/agent-service";
 import { OpenAiHostedInferenceLive, OpenAiLanguageModelLive } from "~/shell/agent/openai";
+import { BudgetsLive } from "~/shell/budgets/handlers";
 import { CategoriesLive } from "~/shell/categories/handlers";
 import { KapsoClient } from "~/shell/channels/whatsapp/kapso-client";
 import { KapsoWebhookLive } from "~/shell/channels/whatsapp/routes";
@@ -55,6 +56,7 @@ export const ApiLive = HttpApiBuilder.layer(FidyApi, { openapiPath: "/openapi.js
     Layer.mergeAll(
       IdentityLive,
       CategoriesLive,
+      BudgetsLive,
       DashboardLive,
       TransactionsLive,
       IngestionLive,

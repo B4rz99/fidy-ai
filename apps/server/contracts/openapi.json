@@ -64,6 +64,26 @@
         },
         "type": "object"
       },
+      "AppliedBudgetMonth": {
+        "additionalProperties": false,
+        "properties": {
+          "from": {
+            "$ref": "#/components/schemas/UtcTimestamp"
+          },
+          "timeZone": {
+            "$ref": "#/components/schemas/IanaTimeZone"
+          },
+          "to": {
+            "$ref": "#/components/schemas/UtcTimestamp"
+          }
+        },
+        "required": [
+          "from",
+          "to",
+          "timeZone"
+        ],
+        "type": "object"
+      },
       "AtomicBatchCallId": {
         "allOf": [
           {
@@ -200,6 +220,34 @@
         },
         "type": "object"
       },
+      "Budget": {
+        "additionalProperties": false,
+        "properties": {
+          "cap": {
+            "$ref": "#/components/schemas/Money5"
+          },
+          "categoryId": {
+            "$ref": "#/components/schemas/CategoryId"
+          },
+          "createdAt": {
+            "$ref": "#/components/schemas/UtcTimestamp"
+          },
+          "id": {
+            "$ref": "#/components/schemas/BudgetId"
+          },
+          "updatedAt": {
+            "$ref": "#/components/schemas/UtcTimestamp"
+          }
+        },
+        "required": [
+          "id",
+          "categoryId",
+          "cap",
+          "createdAt",
+          "updatedAt"
+        ],
+        "type": "object"
+      },
       "BudgetBarTemplate": {
         "additionalProperties": false,
         "properties": {
@@ -311,6 +359,127 @@
             "type": "string"
           }
         },
+        "type": "object"
+      },
+      "BudgetId": {
+        "allOf": [
+          {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|[fF]{8}-[fF]{4}-[fF]{4}-[fF]{4}-[fF]{12})$"
+          }
+        ],
+        "type": "string"
+      },
+      "BudgetStatus": {
+        "anyOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "budget": {
+                "$ref": "#/components/schemas/Budget"
+              },
+              "period": {
+                "$ref": "#/components/schemas/AppliedBudgetMonth"
+              },
+              "remaining": {
+                "$ref": "#/components/schemas/Money5"
+              },
+              "spent": {
+                "$ref": "#/components/schemas/Money5"
+              },
+              "type": {
+                "enum": [
+                  "under"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "budget",
+              "spent",
+              "period",
+              "type",
+              "remaining"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "budget": {
+                "$ref": "#/components/schemas/Budget"
+              },
+              "period": {
+                "$ref": "#/components/schemas/AppliedBudgetMonth"
+              },
+              "spent": {
+                "$ref": "#/components/schemas/Money5"
+              },
+              "type": {
+                "enum": [
+                  "reached"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "budget",
+              "spent",
+              "period",
+              "type"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "budget": {
+                "$ref": "#/components/schemas/Budget"
+              },
+              "overBy": {
+                "$ref": "#/components/schemas/Money5"
+              },
+              "period": {
+                "$ref": "#/components/schemas/AppliedBudgetMonth"
+              },
+              "spent": {
+                "$ref": "#/components/schemas/Money5"
+              },
+              "type": {
+                "enum": [
+                  "over"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "budget",
+              "spent",
+              "period",
+              "type",
+              "overBy"
+            ],
+            "type": "object"
+          }
+        ]
+      },
+      "BudgetStatusReport": {
+        "additionalProperties": false,
+        "properties": {
+          "period": {
+            "$ref": "#/components/schemas/AppliedBudgetMonth"
+          },
+          "statuses": {
+            "items": {
+              "$ref": "#/components/schemas/BudgetStatus"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "period",
+          "statuses"
+        ],
         "type": "object"
       },
       "CanonicalOperationId": {
@@ -431,6 +600,34 @@
         ],
         "type": "object"
       },
+      "CreateBudgetInput": {
+        "additionalProperties": false,
+        "properties": {
+          "cap": {
+            "$ref": "#/components/schemas/Money"
+          },
+          "categoryId": {
+            "$ref": "#/components/schemas/CategoryId"
+          }
+        },
+        "type": "object"
+      },
+      "CreateBudgetInput2": {
+        "additionalProperties": false,
+        "properties": {
+          "cap": {
+            "$ref": "#/components/schemas/Money5"
+          },
+          "categoryId": {
+            "$ref": "#/components/schemas/CategoryId"
+          }
+        },
+        "required": [
+          "categoryId",
+          "cap"
+        ],
+        "type": "object"
+      },
       "CreateKeywordRuleInput": {
         "additionalProperties": false,
         "properties": {
@@ -541,7 +738,7 @@
             "type": "string"
           },
           "money": {
-            "$ref": "#/components/schemas/Money3"
+            "$ref": "#/components/schemas/Money5"
           },
           "notes": {
             "allOf": [
@@ -1964,7 +2161,7 @@
         },
         "type": "object"
       },
-      "Money3": {
+      "Money5": {
         "additionalProperties": false,
         "description": "A non-negative exact decimal amount together with its ISO 4217 Currency. Currency precision is enforced and no conversion is implied.",
         "properties": {
@@ -1987,7 +2184,7 @@
         ],
         "type": "object"
       },
-      "Money4": {
+      "Money6": {
         "additionalProperties": false,
         "description": "A non-negative exact decimal amount together with its ISO 4217 Currency. Currency precision is enforced and no conversion is implied.",
         "properties": {
@@ -2017,10 +2214,10 @@
             "$ref": "#/components/schemas/Currency"
           },
           "inflow": {
-            "$ref": "#/components/schemas/Money3"
+            "$ref": "#/components/schemas/Money5"
           },
           "outflow": {
-            "$ref": "#/components/schemas/Money3"
+            "$ref": "#/components/schemas/Money5"
           }
         },
         "required": [
@@ -2138,7 +2335,7 @@
                 "type": "array"
               },
               "knownMoney": {
-                "$ref": "#/components/schemas/Money4"
+                "$ref": "#/components/schemas/Money6"
               },
               "locale": {
                 "$ref": "#/components/schemas/Locale"
@@ -2412,7 +2609,7 @@
                 "type": "array"
               },
               "knownMoney": {
-                "$ref": "#/components/schemas/Money4"
+                "$ref": "#/components/schemas/Money6"
               },
               "locale": {
                 "$ref": "#/components/schemas/Locale"
@@ -2536,7 +2733,7 @@
                 "type": "array"
               },
               "knownMoney": {
-                "$ref": "#/components/schemas/Money4"
+                "$ref": "#/components/schemas/Money6"
               },
               "locale": {
                 "$ref": "#/components/schemas/Locale"
@@ -4085,6 +4282,275 @@
           {
             "additionalProperties": false,
             "properties": {
+              "args": {
+                "additionalProperties": false,
+                "description": "Arguments already worked out for that call. Partial by design: merge them into the operation's own input rather than sending them as the whole of it.",
+                "properties": {
+                  "payload": {
+                    "$ref": "#/components/schemas/CreateBudgetInput"
+                  }
+                },
+                "type": "object"
+              },
+              "hint": {
+                "allOf": [
+                  {
+                    "minLength": 1
+                  },
+                  {
+                    "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
+                  },
+                  {
+                    "maxLength": 140
+                  }
+                ],
+                "type": "string"
+              },
+              "tool": {
+                "description": "The canonical operation to call, spelled exactly as its `operationId` in this spec. Look that id up here to see the complete input and result.",
+                "enum": [
+                  "budgets.createBudget"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "tool",
+              "hint"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "hint": {
+                "allOf": [
+                  {
+                    "minLength": 1
+                  },
+                  {
+                    "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
+                  },
+                  {
+                    "maxLength": 140
+                  }
+                ],
+                "type": "string"
+              },
+              "tool": {
+                "description": "The canonical operation to call, spelled exactly as its `operationId` in this spec. Look that id up here to see the complete input and result.",
+                "enum": [
+                  "budgets.listBudgets"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "tool",
+              "hint"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "args": {
+                "additionalProperties": false,
+                "description": "Arguments already worked out for that call. Partial by design: merge them into the operation's own input rather than sending them as the whole of it.",
+                "properties": {
+                  "params": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "id": {
+                        "$ref": "#/components/schemas/BudgetId"
+                      }
+                    },
+                    "type": "object"
+                  }
+                },
+                "type": "object"
+              },
+              "hint": {
+                "allOf": [
+                  {
+                    "minLength": 1
+                  },
+                  {
+                    "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
+                  },
+                  {
+                    "maxLength": 140
+                  }
+                ],
+                "type": "string"
+              },
+              "tool": {
+                "description": "The canonical operation to call, spelled exactly as its `operationId` in this spec. Look that id up here to see the complete input and result.",
+                "enum": [
+                  "budgets.getBudget"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "tool",
+              "hint"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "args": {
+                "additionalProperties": false,
+                "description": "Arguments already worked out for that call. Partial by design: merge them into the operation's own input rather than sending them as the whole of it.",
+                "properties": {
+                  "params": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "id": {
+                        "$ref": "#/components/schemas/BudgetId"
+                      }
+                    },
+                    "type": "object"
+                  },
+                  "payload": {
+                    "$ref": "#/components/schemas/UpdateBudgetInput"
+                  }
+                },
+                "type": "object"
+              },
+              "hint": {
+                "allOf": [
+                  {
+                    "minLength": 1
+                  },
+                  {
+                    "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
+                  },
+                  {
+                    "maxLength": 140
+                  }
+                ],
+                "type": "string"
+              },
+              "tool": {
+                "description": "The canonical operation to call, spelled exactly as its `operationId` in this spec. Look that id up here to see the complete input and result.",
+                "enum": [
+                  "budgets.updateBudget"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "tool",
+              "hint"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "args": {
+                "additionalProperties": false,
+                "description": "Arguments already worked out for that call. Partial by design: merge them into the operation's own input rather than sending them as the whole of it.",
+                "properties": {
+                  "params": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "id": {
+                        "$ref": "#/components/schemas/BudgetId"
+                      }
+                    },
+                    "type": "object"
+                  }
+                },
+                "type": "object"
+              },
+              "hint": {
+                "allOf": [
+                  {
+                    "minLength": 1
+                  },
+                  {
+                    "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
+                  },
+                  {
+                    "maxLength": 140
+                  }
+                ],
+                "type": "string"
+              },
+              "tool": {
+                "description": "The canonical operation to call, spelled exactly as its `operationId` in this spec. Look that id up here to see the complete input and result.",
+                "enum": [
+                  "budgets.deleteBudget"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "tool",
+              "hint"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "args": {
+                "additionalProperties": false,
+                "description": "Arguments already worked out for that call. Partial by design: merge them into the operation's own input rather than sending them as the whole of it.",
+                "properties": {
+                  "query": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "categoryId": {
+                        "$ref": "#/components/schemas/CategoryId"
+                      },
+                      "currency": {
+                        "$ref": "#/components/schemas/CurrencyPartial"
+                      },
+                      "timeZone": {
+                        "$ref": "#/components/schemas/IanaTimeZone"
+                      }
+                    },
+                    "type": "object"
+                  }
+                },
+                "type": "object"
+              },
+              "hint": {
+                "allOf": [
+                  {
+                    "minLength": 1
+                  },
+                  {
+                    "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
+                  },
+                  {
+                    "maxLength": 140
+                  }
+                ],
+                "type": "string"
+              },
+              "tool": {
+                "description": "The canonical operation to call, spelled exactly as its `operationId` in this spec. Look that id up here to see the complete input and result.",
+                "enum": [
+                  "budgets.getBudgetStatus"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "tool",
+              "hint"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
               "hint": {
                 "allOf": [
                   {
@@ -5205,6 +5671,93 @@
                                 },
                                 "input": {
                                   "additionalProperties": false,
+                                  "properties": {
+                                    "payload": {
+                                      "$ref": "#/components/schemas/CreateBudgetInput"
+                                    }
+                                  },
+                                  "type": "object"
+                                },
+                                "operation": {
+                                  "enum": [
+                                    "budgets.createBudget"
+                                  ],
+                                  "type": "string"
+                                }
+                              },
+                              "type": "object"
+                            },
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "callId": {
+                                  "$ref": "#/components/schemas/AtomicBatchCallId"
+                                },
+                                "input": {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "params": {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "id": {
+                                          "$ref": "#/components/schemas/BudgetId"
+                                        }
+                                      },
+                                      "type": "object"
+                                    },
+                                    "payload": {
+                                      "$ref": "#/components/schemas/UpdateBudgetInput"
+                                    }
+                                  },
+                                  "type": "object"
+                                },
+                                "operation": {
+                                  "enum": [
+                                    "budgets.updateBudget"
+                                  ],
+                                  "type": "string"
+                                }
+                              },
+                              "type": "object"
+                            },
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "callId": {
+                                  "$ref": "#/components/schemas/AtomicBatchCallId"
+                                },
+                                "input": {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "params": {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "id": {
+                                          "$ref": "#/components/schemas/BudgetId"
+                                        }
+                                      },
+                                      "type": "object"
+                                    }
+                                  },
+                                  "type": "object"
+                                },
+                                "operation": {
+                                  "enum": [
+                                    "budgets.deleteBudget"
+                                  ],
+                                  "type": "string"
+                                }
+                              },
+                              "type": "object"
+                            },
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "callId": {
+                                  "$ref": "#/components/schemas/AtomicBatchCallId"
+                                },
+                                "input": {
+                                  "additionalProperties": false,
                                   "type": "object"
                                 },
                                 "operation": {
@@ -5675,6 +6228,93 @@
                                   "operation": {
                                     "enum": [
                                       "categories.deleteKeywordRule"
+                                    ],
+                                    "type": "string"
+                                  }
+                                },
+                                "type": "object"
+                              },
+                              {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "callId": {
+                                    "$ref": "#/components/schemas/AtomicBatchCallId"
+                                  },
+                                  "input": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "payload": {
+                                        "$ref": "#/components/schemas/CreateBudgetInput"
+                                      }
+                                    },
+                                    "type": "object"
+                                  },
+                                  "operation": {
+                                    "enum": [
+                                      "budgets.createBudget"
+                                    ],
+                                    "type": "string"
+                                  }
+                                },
+                                "type": "object"
+                              },
+                              {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "callId": {
+                                    "$ref": "#/components/schemas/AtomicBatchCallId"
+                                  },
+                                  "input": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "params": {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "id": {
+                                            "$ref": "#/components/schemas/BudgetId"
+                                          }
+                                        },
+                                        "type": "object"
+                                      },
+                                      "payload": {
+                                        "$ref": "#/components/schemas/UpdateBudgetInput"
+                                      }
+                                    },
+                                    "type": "object"
+                                  },
+                                  "operation": {
+                                    "enum": [
+                                      "budgets.updateBudget"
+                                    ],
+                                    "type": "string"
+                                  }
+                                },
+                                "type": "object"
+                              },
+                              {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "callId": {
+                                    "$ref": "#/components/schemas/AtomicBatchCallId"
+                                  },
+                                  "input": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "params": {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "id": {
+                                            "$ref": "#/components/schemas/BudgetId"
+                                          }
+                                        },
+                                        "type": "object"
+                                      }
+                                    },
+                                    "type": "object"
+                                  },
+                                  "operation": {
+                                    "enum": [
+                                      "budgets.deleteBudget"
                                     ],
                                     "type": "string"
                                   }
@@ -6366,6 +7006,275 @@
           {
             "additionalProperties": false,
             "properties": {
+              "args": {
+                "additionalProperties": false,
+                "description": "Arguments already worked out for that call. Partial by design: merge them into the operation's own input rather than sending them as the whole of it.",
+                "properties": {
+                  "payload": {
+                    "$ref": "#/components/schemas/CreateBudgetInput"
+                  }
+                },
+                "type": "object"
+              },
+              "hint": {
+                "allOf": [
+                  {
+                    "minLength": 1
+                  },
+                  {
+                    "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
+                  },
+                  {
+                    "maxLength": 140
+                  }
+                ],
+                "type": "string"
+              },
+              "tool": {
+                "description": "The canonical operation to call, spelled exactly as its `operationId` in this spec. Look that id up here to see the complete input and result.",
+                "enum": [
+                  "budgets.createBudget"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "tool",
+              "hint"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "hint": {
+                "allOf": [
+                  {
+                    "minLength": 1
+                  },
+                  {
+                    "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
+                  },
+                  {
+                    "maxLength": 140
+                  }
+                ],
+                "type": "string"
+              },
+              "tool": {
+                "description": "The canonical operation to call, spelled exactly as its `operationId` in this spec. Look that id up here to see the complete input and result.",
+                "enum": [
+                  "budgets.listBudgets"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "tool",
+              "hint"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "args": {
+                "additionalProperties": false,
+                "description": "Arguments already worked out for that call. Partial by design: merge them into the operation's own input rather than sending them as the whole of it.",
+                "properties": {
+                  "params": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "id": {
+                        "$ref": "#/components/schemas/BudgetId"
+                      }
+                    },
+                    "type": "object"
+                  }
+                },
+                "type": "object"
+              },
+              "hint": {
+                "allOf": [
+                  {
+                    "minLength": 1
+                  },
+                  {
+                    "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
+                  },
+                  {
+                    "maxLength": 140
+                  }
+                ],
+                "type": "string"
+              },
+              "tool": {
+                "description": "The canonical operation to call, spelled exactly as its `operationId` in this spec. Look that id up here to see the complete input and result.",
+                "enum": [
+                  "budgets.getBudget"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "tool",
+              "hint"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "args": {
+                "additionalProperties": false,
+                "description": "Arguments already worked out for that call. Partial by design: merge them into the operation's own input rather than sending them as the whole of it.",
+                "properties": {
+                  "params": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "id": {
+                        "$ref": "#/components/schemas/BudgetId"
+                      }
+                    },
+                    "type": "object"
+                  },
+                  "payload": {
+                    "$ref": "#/components/schemas/UpdateBudgetInput"
+                  }
+                },
+                "type": "object"
+              },
+              "hint": {
+                "allOf": [
+                  {
+                    "minLength": 1
+                  },
+                  {
+                    "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
+                  },
+                  {
+                    "maxLength": 140
+                  }
+                ],
+                "type": "string"
+              },
+              "tool": {
+                "description": "The canonical operation to call, spelled exactly as its `operationId` in this spec. Look that id up here to see the complete input and result.",
+                "enum": [
+                  "budgets.updateBudget"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "tool",
+              "hint"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "args": {
+                "additionalProperties": false,
+                "description": "Arguments already worked out for that call. Partial by design: merge them into the operation's own input rather than sending them as the whole of it.",
+                "properties": {
+                  "params": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "id": {
+                        "$ref": "#/components/schemas/BudgetId"
+                      }
+                    },
+                    "type": "object"
+                  }
+                },
+                "type": "object"
+              },
+              "hint": {
+                "allOf": [
+                  {
+                    "minLength": 1
+                  },
+                  {
+                    "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
+                  },
+                  {
+                    "maxLength": 140
+                  }
+                ],
+                "type": "string"
+              },
+              "tool": {
+                "description": "The canonical operation to call, spelled exactly as its `operationId` in this spec. Look that id up here to see the complete input and result.",
+                "enum": [
+                  "budgets.deleteBudget"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "tool",
+              "hint"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "args": {
+                "additionalProperties": false,
+                "description": "Arguments already worked out for that call. Partial by design: merge them into the operation's own input rather than sending them as the whole of it.",
+                "properties": {
+                  "query": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "categoryId": {
+                        "$ref": "#/components/schemas/CategoryId"
+                      },
+                      "currency": {
+                        "$ref": "#/components/schemas/CurrencyPartial"
+                      },
+                      "timeZone": {
+                        "$ref": "#/components/schemas/IanaTimeZone"
+                      }
+                    },
+                    "type": "object"
+                  }
+                },
+                "type": "object"
+              },
+              "hint": {
+                "allOf": [
+                  {
+                    "minLength": 1
+                  },
+                  {
+                    "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
+                  },
+                  {
+                    "maxLength": 140
+                  }
+                ],
+                "type": "string"
+              },
+              "tool": {
+                "description": "The canonical operation to call, spelled exactly as its `operationId` in this spec. Look that id up here to see the complete input and result.",
+                "enum": [
+                  "budgets.getBudgetStatus"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "tool",
+              "hint"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
               "hint": {
                 "allOf": [
                   {
@@ -7486,6 +8395,93 @@
                                 },
                                 "input": {
                                   "additionalProperties": false,
+                                  "properties": {
+                                    "payload": {
+                                      "$ref": "#/components/schemas/CreateBudgetInput"
+                                    }
+                                  },
+                                  "type": "object"
+                                },
+                                "operation": {
+                                  "enum": [
+                                    "budgets.createBudget"
+                                  ],
+                                  "type": "string"
+                                }
+                              },
+                              "type": "object"
+                            },
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "callId": {
+                                  "$ref": "#/components/schemas/AtomicBatchCallId"
+                                },
+                                "input": {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "params": {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "id": {
+                                          "$ref": "#/components/schemas/BudgetId"
+                                        }
+                                      },
+                                      "type": "object"
+                                    },
+                                    "payload": {
+                                      "$ref": "#/components/schemas/UpdateBudgetInput"
+                                    }
+                                  },
+                                  "type": "object"
+                                },
+                                "operation": {
+                                  "enum": [
+                                    "budgets.updateBudget"
+                                  ],
+                                  "type": "string"
+                                }
+                              },
+                              "type": "object"
+                            },
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "callId": {
+                                  "$ref": "#/components/schemas/AtomicBatchCallId"
+                                },
+                                "input": {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "params": {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "id": {
+                                          "$ref": "#/components/schemas/BudgetId"
+                                        }
+                                      },
+                                      "type": "object"
+                                    }
+                                  },
+                                  "type": "object"
+                                },
+                                "operation": {
+                                  "enum": [
+                                    "budgets.deleteBudget"
+                                  ],
+                                  "type": "string"
+                                }
+                              },
+                              "type": "object"
+                            },
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "callId": {
+                                  "$ref": "#/components/schemas/AtomicBatchCallId"
+                                },
+                                "input": {
+                                  "additionalProperties": false,
                                   "type": "object"
                                 },
                                 "operation": {
@@ -7970,6 +8966,93 @@
                                   },
                                   "input": {
                                     "additionalProperties": false,
+                                    "properties": {
+                                      "payload": {
+                                        "$ref": "#/components/schemas/CreateBudgetInput"
+                                      }
+                                    },
+                                    "type": "object"
+                                  },
+                                  "operation": {
+                                    "enum": [
+                                      "budgets.createBudget"
+                                    ],
+                                    "type": "string"
+                                  }
+                                },
+                                "type": "object"
+                              },
+                              {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "callId": {
+                                    "$ref": "#/components/schemas/AtomicBatchCallId"
+                                  },
+                                  "input": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "params": {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "id": {
+                                            "$ref": "#/components/schemas/BudgetId"
+                                          }
+                                        },
+                                        "type": "object"
+                                      },
+                                      "payload": {
+                                        "$ref": "#/components/schemas/UpdateBudgetInput"
+                                      }
+                                    },
+                                    "type": "object"
+                                  },
+                                  "operation": {
+                                    "enum": [
+                                      "budgets.updateBudget"
+                                    ],
+                                    "type": "string"
+                                  }
+                                },
+                                "type": "object"
+                              },
+                              {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "callId": {
+                                    "$ref": "#/components/schemas/AtomicBatchCallId"
+                                  },
+                                  "input": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "params": {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "id": {
+                                            "$ref": "#/components/schemas/BudgetId"
+                                          }
+                                        },
+                                        "type": "object"
+                                      }
+                                    },
+                                    "type": "object"
+                                  },
+                                  "operation": {
+                                    "enum": [
+                                      "budgets.deleteBudget"
+                                    ],
+                                    "type": "string"
+                                  }
+                                },
+                                "type": "object"
+                              },
+                              {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "callId": {
+                                    "$ref": "#/components/schemas/AtomicBatchCallId"
+                                  },
+                                  "input": {
+                                    "additionalProperties": false,
                                     "type": "object"
                                   },
                                   "operation": {
@@ -8406,7 +9489,7 @@
             "$ref": "#/components/schemas/TransactionId"
           },
           "money": {
-            "$ref": "#/components/schemas/Money3"
+            "$ref": "#/components/schemas/Money5"
           },
           "notes": {
             "allOf": [
@@ -8508,7 +9591,7 @@
             "type": "string"
           },
           "money": {
-            "$ref": "#/components/schemas/Money3"
+            "$ref": "#/components/schemas/Money5"
           },
           "occurredAt": {
             "$ref": "#/components/schemas/TransactionOccurredAt"
@@ -8826,6 +9909,34 @@
         ],
         "type": "object"
       },
+      "UpdateBudgetInput": {
+        "additionalProperties": false,
+        "properties": {
+          "cap": {
+            "$ref": "#/components/schemas/Money"
+          },
+          "categoryId": {
+            "$ref": "#/components/schemas/CategoryId"
+          }
+        },
+        "type": "object"
+      },
+      "UpdateBudgetInput2": {
+        "additionalProperties": false,
+        "properties": {
+          "cap": {
+            "$ref": "#/components/schemas/Money5"
+          },
+          "categoryId": {
+            "$ref": "#/components/schemas/CategoryId"
+          }
+        },
+        "required": [
+          "categoryId",
+          "cap"
+        ],
+        "type": "object"
+      },
       "UpdateKeywordRuleInput": {
         "additionalProperties": false,
         "properties": {
@@ -8936,7 +10047,7 @@
             "type": "string"
           },
           "money": {
-            "$ref": "#/components/schemas/Money3"
+            "$ref": "#/components/schemas/Money5"
           },
           "notes": {
             "allOf": [
@@ -9233,6 +10344,669 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/budget-status": {
+      "get": {
+        "description": "Answer current monthly Budget status in one call. Supply the IANA time zone whose calendar boundaries apply; optional Category and Currency filters combine, and omitted Currency returns separate deterministically ordered results without conversion or aggregation.",
+        "operationId": "budgets.getBudgetStatus",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "categoryId",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/CategoryId"
+            }
+          },
+          {
+            "in": "query",
+            "name": "currency",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/Currency"
+            }
+          },
+          {
+            "in": "query",
+            "name": "timeZone",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/IanaTimeZone"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/BudgetStatusReport"
+                    },
+                    "next": {
+                      "allOf": [
+                        {
+                          "description": "Where to go next: up to three canonical operations worth calling after this one, best first. Empty when there is nothing worth suggesting, which is an answer rather than an omission. Each entry has passed the target-input and caller-authorization checkpoint.",
+                          "maxItems": 3
+                        }
+                      ],
+                      "items": {
+                        "$ref": "#/components/schemas/SuggestedOperation"
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "next"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationFailed"
+                }
+              }
+            },
+            "description": "ValidationFailed"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Unauthenticated"
+                }
+              }
+            },
+            "description": "Unauthenticated"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ConsentRequired"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ScopeMissing"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "ConsentRequired | ScopeMissing"
+          }
+        },
+        "security": [
+          {
+            "agentBearer": []
+          }
+        ],
+        "tags": [
+          "budgets"
+        ],
+        "x-fidy-agent-confirmation": "not-required",
+        "x-fidy-operation-kind": "query",
+        "x-fidy-required-scope": "read",
+        "x-fidy-required-tier": "free"
+      }
+    },
+    "/budgets": {
+      "get": {
+        "description": "List all of the caller's Budgets in deterministic Currency and Category order.",
+        "operationId": "budgets.listBudgets",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "items": {
+                        "$ref": "#/components/schemas/Budget"
+                      },
+                      "type": "array"
+                    },
+                    "next": {
+                      "allOf": [
+                        {
+                          "description": "Where to go next: up to three canonical operations worth calling after this one, best first. Empty when there is nothing worth suggesting, which is an answer rather than an omission. Each entry has passed the target-input and caller-authorization checkpoint.",
+                          "maxItems": 3
+                        }
+                      ],
+                      "items": {
+                        "$ref": "#/components/schemas/SuggestedOperation"
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "next"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationFailed"
+                }
+              }
+            },
+            "description": "ValidationFailed"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Unauthenticated"
+                }
+              }
+            },
+            "description": "Unauthenticated"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ConsentRequired"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ScopeMissing"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "ConsentRequired | ScopeMissing"
+          }
+        },
+        "security": [
+          {
+            "agentBearer": []
+          }
+        ],
+        "tags": [
+          "budgets"
+        ],
+        "x-fidy-agent-confirmation": "not-required",
+        "x-fidy-operation-kind": "query",
+        "x-fidy-required-scope": "read",
+        "x-fidy-required-tier": "free"
+      },
+      "post": {
+        "description": "Create one positive monthly Money cap for a stable Category and Currency. Only one Budget may exist for the same Category and Currency.",
+        "operationId": "budgets.createBudget",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateBudgetInput2"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/Budget"
+                    },
+                    "next": {
+                      "allOf": [
+                        {
+                          "description": "Where to go next: up to three canonical operations worth calling after this one, best first. Empty when there is nothing worth suggesting, which is an answer rather than an omission. Each entry has passed the target-input and caller-authorization checkpoint.",
+                          "maxItems": 3
+                        }
+                      ],
+                      "items": {
+                        "$ref": "#/components/schemas/SuggestedOperation"
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "next"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ValidationFailed"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ValidationFailed"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "ValidationFailed"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Unauthenticated"
+                }
+              }
+            },
+            "description": "Unauthenticated"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ConsentRequired"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ScopeMissing"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "ConsentRequired | ScopeMissing"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFound"
+                }
+              }
+            },
+            "description": "NotFound"
+          }
+        },
+        "security": [
+          {
+            "agentBearer": []
+          }
+        ],
+        "tags": [
+          "budgets"
+        ],
+        "x-fidy-agent-confirmation": "not-required",
+        "x-fidy-operation-kind": "mutation",
+        "x-fidy-required-scope": "write",
+        "x-fidy-required-tier": "free"
+      }
+    },
+    "/budgets/{id}": {
+      "delete": {
+        "description": "Permanently delete one Budget and its operational monthly alert marks.",
+        "operationId": "budgets.deleteBudget",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/BudgetId"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/BudgetId"
+                    },
+                    "next": {
+                      "allOf": [
+                        {
+                          "description": "Where to go next: up to three canonical operations worth calling after this one, best first. Empty when there is nothing worth suggesting, which is an answer rather than an omission. Each entry has passed the target-input and caller-authorization checkpoint.",
+                          "maxItems": 3
+                        }
+                      ],
+                      "items": {
+                        "$ref": "#/components/schemas/SuggestedOperation"
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "next"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationFailed"
+                }
+              }
+            },
+            "description": "ValidationFailed"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Unauthenticated"
+                }
+              }
+            },
+            "description": "Unauthenticated"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ConsentRequired"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ScopeMissing"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "ConsentRequired | ScopeMissing"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFound"
+                }
+              }
+            },
+            "description": "NotFound"
+          }
+        },
+        "security": [
+          {
+            "agentBearer": []
+          }
+        ],
+        "tags": [
+          "budgets"
+        ],
+        "x-fidy-agent-confirmation": "required",
+        "x-fidy-operation-kind": "mutation",
+        "x-fidy-required-scope": "write",
+        "x-fidy-required-tier": "free"
+      },
+      "get": {
+        "description": "Fetch one caller-owned Budget by stable identity.",
+        "operationId": "budgets.getBudget",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/BudgetId"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/Budget"
+                    },
+                    "next": {
+                      "allOf": [
+                        {
+                          "description": "Where to go next: up to three canonical operations worth calling after this one, best first. Empty when there is nothing worth suggesting, which is an answer rather than an omission. Each entry has passed the target-input and caller-authorization checkpoint.",
+                          "maxItems": 3
+                        }
+                      ],
+                      "items": {
+                        "$ref": "#/components/schemas/SuggestedOperation"
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "next"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationFailed"
+                }
+              }
+            },
+            "description": "ValidationFailed"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Unauthenticated"
+                }
+              }
+            },
+            "description": "Unauthenticated"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ConsentRequired"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ScopeMissing"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "ConsentRequired | ScopeMissing"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFound"
+                }
+              }
+            },
+            "description": "NotFound"
+          }
+        },
+        "security": [
+          {
+            "agentBearer": []
+          }
+        ],
+        "tags": [
+          "budgets"
+        ],
+        "x-fidy-agent-confirmation": "not-required",
+        "x-fidy-operation-kind": "query",
+        "x-fidy-required-scope": "read",
+        "x-fidy-required-tier": "free"
+      },
+      "put": {
+        "description": "Replace a Budget's Category and positive cap. Its Currency is immutable; changing Category resets current-month alert marks.",
+        "operationId": "budgets.updateBudget",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/BudgetId"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateBudgetInput2"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/Budget"
+                    },
+                    "next": {
+                      "allOf": [
+                        {
+                          "description": "Where to go next: up to three canonical operations worth calling after this one, best first. Empty when there is nothing worth suggesting, which is an answer rather than an omission. Each entry has passed the target-input and caller-authorization checkpoint.",
+                          "maxItems": 3
+                        }
+                      ],
+                      "items": {
+                        "$ref": "#/components/schemas/SuggestedOperation"
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "next"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ValidationFailed"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ValidationFailed"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "ValidationFailed"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Unauthenticated"
+                }
+              }
+            },
+            "description": "Unauthenticated"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ConsentRequired"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ScopeMissing"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "ConsentRequired | ScopeMissing"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFound"
+                }
+              }
+            },
+            "description": "NotFound"
+          }
+        },
+        "security": [
+          {
+            "agentBearer": []
+          }
+        ],
+        "tags": [
+          "budgets"
+        ],
+        "x-fidy-agent-confirmation": "required",
+        "x-fidy-operation-kind": "mutation",
+        "x-fidy-required-scope": "write",
+        "x-fidy-required-tier": "free"
+      }
+    },
     "/categories": {
       "get": {
         "description": "List the Colombian Categories in presentation order. Use the stable id, not the Spanish label or list position, when recording or correcting a Transaction.",
@@ -11627,6 +13401,124 @@
                             },
                             "input": {
                               "additionalProperties": false,
+                              "properties": {
+                                "payload": {
+                                  "$ref": "#/components/schemas/CreateBudgetInput2"
+                                }
+                              },
+                              "required": [
+                                "payload"
+                              ],
+                              "type": "object"
+                            },
+                            "operation": {
+                              "enum": [
+                                "budgets.createBudget"
+                              ],
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "callId",
+                            "operation",
+                            "input"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "callId": {
+                              "$ref": "#/components/schemas/AtomicBatchCallId"
+                            },
+                            "input": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "params": {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "id": {
+                                      "$ref": "#/components/schemas/BudgetId"
+                                    }
+                                  },
+                                  "required": [
+                                    "id"
+                                  ],
+                                  "type": "object"
+                                },
+                                "payload": {
+                                  "$ref": "#/components/schemas/UpdateBudgetInput2"
+                                }
+                              },
+                              "required": [
+                                "params",
+                                "payload"
+                              ],
+                              "type": "object"
+                            },
+                            "operation": {
+                              "enum": [
+                                "budgets.updateBudget"
+                              ],
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "callId",
+                            "operation",
+                            "input"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "callId": {
+                              "$ref": "#/components/schemas/AtomicBatchCallId"
+                            },
+                            "input": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "params": {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "id": {
+                                      "$ref": "#/components/schemas/BudgetId"
+                                    }
+                                  },
+                                  "required": [
+                                    "id"
+                                  ],
+                                  "type": "object"
+                                }
+                              },
+                              "required": [
+                                "params"
+                              ],
+                              "type": "object"
+                            },
+                            "operation": {
+                              "enum": [
+                                "budgets.deleteBudget"
+                              ],
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "callId",
+                            "operation",
+                            "input"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "callId": {
+                              "$ref": "#/components/schemas/AtomicBatchCallId"
+                            },
+                            "input": {
+                              "additionalProperties": false,
                               "type": "object"
                             },
                             "operation": {
@@ -12260,6 +14152,124 @@
                               "operation": {
                                 "enum": [
                                   "categories.deleteKeywordRule"
+                                ],
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "callId",
+                              "operation",
+                              "input"
+                            ],
+                            "type": "object"
+                          },
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "callId": {
+                                "$ref": "#/components/schemas/AtomicBatchCallId"
+                              },
+                              "input": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "payload": {
+                                    "$ref": "#/components/schemas/CreateBudgetInput2"
+                                  }
+                                },
+                                "required": [
+                                  "payload"
+                                ],
+                                "type": "object"
+                              },
+                              "operation": {
+                                "enum": [
+                                  "budgets.createBudget"
+                                ],
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "callId",
+                              "operation",
+                              "input"
+                            ],
+                            "type": "object"
+                          },
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "callId": {
+                                "$ref": "#/components/schemas/AtomicBatchCallId"
+                              },
+                              "input": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "params": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "id": {
+                                        "$ref": "#/components/schemas/BudgetId"
+                                      }
+                                    },
+                                    "required": [
+                                      "id"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "payload": {
+                                    "$ref": "#/components/schemas/UpdateBudgetInput2"
+                                  }
+                                },
+                                "required": [
+                                  "params",
+                                  "payload"
+                                ],
+                                "type": "object"
+                              },
+                              "operation": {
+                                "enum": [
+                                  "budgets.updateBudget"
+                                ],
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "callId",
+                              "operation",
+                              "input"
+                            ],
+                            "type": "object"
+                          },
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "callId": {
+                                "$ref": "#/components/schemas/AtomicBatchCallId"
+                              },
+                              "input": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "params": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "id": {
+                                        "$ref": "#/components/schemas/BudgetId"
+                                      }
+                                    },
+                                    "required": [
+                                      "id"
+                                    ],
+                                    "type": "object"
+                                  }
+                                },
+                                "required": [
+                                  "params"
+                                ],
+                                "type": "object"
+                              },
+                              "operation": {
+                                "enum": [
+                                  "budgets.deleteBudget"
                                 ],
                                 "type": "string"
                               }
@@ -12952,6 +14962,141 @@
                                     "properties": {
                                       "data": {
                                         "$ref": "#/components/schemas/KeywordRuleId"
+                                      },
+                                      "next": {
+                                        "allOf": [
+                                          {
+                                            "description": "Where to go next: up to three canonical operations worth calling after this one, best first. Empty when there is nothing worth suggesting, which is an answer rather than an omission. Each entry has passed the target-input and caller-authorization checkpoint.",
+                                            "maxItems": 3
+                                          }
+                                        ],
+                                        "items": {
+                                          "$ref": "#/components/schemas/SuggestedOperation2"
+                                        },
+                                        "type": "array"
+                                      }
+                                    },
+                                    "required": [
+                                      "data",
+                                      "next"
+                                    ],
+                                    "type": "object"
+                                  }
+                                },
+                                "required": [
+                                  "callId",
+                                  "operation",
+                                  "output"
+                                ],
+                                "type": "object"
+                              },
+                              {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "callId": {
+                                    "$ref": "#/components/schemas/AtomicBatchCallId"
+                                  },
+                                  "operation": {
+                                    "enum": [
+                                      "budgets.createBudget"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "output": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "data": {
+                                        "$ref": "#/components/schemas/Budget"
+                                      },
+                                      "next": {
+                                        "allOf": [
+                                          {
+                                            "description": "Where to go next: up to three canonical operations worth calling after this one, best first. Empty when there is nothing worth suggesting, which is an answer rather than an omission. Each entry has passed the target-input and caller-authorization checkpoint.",
+                                            "maxItems": 3
+                                          }
+                                        ],
+                                        "items": {
+                                          "$ref": "#/components/schemas/SuggestedOperation2"
+                                        },
+                                        "type": "array"
+                                      }
+                                    },
+                                    "required": [
+                                      "data",
+                                      "next"
+                                    ],
+                                    "type": "object"
+                                  }
+                                },
+                                "required": [
+                                  "callId",
+                                  "operation",
+                                  "output"
+                                ],
+                                "type": "object"
+                              },
+                              {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "callId": {
+                                    "$ref": "#/components/schemas/AtomicBatchCallId"
+                                  },
+                                  "operation": {
+                                    "enum": [
+                                      "budgets.updateBudget"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "output": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "data": {
+                                        "$ref": "#/components/schemas/Budget"
+                                      },
+                                      "next": {
+                                        "allOf": [
+                                          {
+                                            "description": "Where to go next: up to three canonical operations worth calling after this one, best first. Empty when there is nothing worth suggesting, which is an answer rather than an omission. Each entry has passed the target-input and caller-authorization checkpoint.",
+                                            "maxItems": 3
+                                          }
+                                        ],
+                                        "items": {
+                                          "$ref": "#/components/schemas/SuggestedOperation2"
+                                        },
+                                        "type": "array"
+                                      }
+                                    },
+                                    "required": [
+                                      "data",
+                                      "next"
+                                    ],
+                                    "type": "object"
+                                  }
+                                },
+                                "required": [
+                                  "callId",
+                                  "operation",
+                                  "output"
+                                ],
+                                "type": "object"
+                              },
+                              {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "callId": {
+                                    "$ref": "#/components/schemas/AtomicBatchCallId"
+                                  },
+                                  "operation": {
+                                    "enum": [
+                                      "budgets.deleteBudget"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "output": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "data": {
+                                        "$ref": "#/components/schemas/BudgetId"
                                       },
                                       "next": {
                                         "allOf": [
@@ -13736,6 +15881,141 @@
                                       "properties": {
                                         "data": {
                                           "$ref": "#/components/schemas/KeywordRuleId"
+                                        },
+                                        "next": {
+                                          "allOf": [
+                                            {
+                                              "description": "Where to go next: up to three canonical operations worth calling after this one, best first. Empty when there is nothing worth suggesting, which is an answer rather than an omission. Each entry has passed the target-input and caller-authorization checkpoint.",
+                                              "maxItems": 3
+                                            }
+                                          ],
+                                          "items": {
+                                            "$ref": "#/components/schemas/SuggestedOperation2"
+                                          },
+                                          "type": "array"
+                                        }
+                                      },
+                                      "required": [
+                                        "data",
+                                        "next"
+                                      ],
+                                      "type": "object"
+                                    }
+                                  },
+                                  "required": [
+                                    "callId",
+                                    "operation",
+                                    "output"
+                                  ],
+                                  "type": "object"
+                                },
+                                {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "callId": {
+                                      "$ref": "#/components/schemas/AtomicBatchCallId"
+                                    },
+                                    "operation": {
+                                      "enum": [
+                                        "budgets.createBudget"
+                                      ],
+                                      "type": "string"
+                                    },
+                                    "output": {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "data": {
+                                          "$ref": "#/components/schemas/Budget"
+                                        },
+                                        "next": {
+                                          "allOf": [
+                                            {
+                                              "description": "Where to go next: up to three canonical operations worth calling after this one, best first. Empty when there is nothing worth suggesting, which is an answer rather than an omission. Each entry has passed the target-input and caller-authorization checkpoint.",
+                                              "maxItems": 3
+                                            }
+                                          ],
+                                          "items": {
+                                            "$ref": "#/components/schemas/SuggestedOperation2"
+                                          },
+                                          "type": "array"
+                                        }
+                                      },
+                                      "required": [
+                                        "data",
+                                        "next"
+                                      ],
+                                      "type": "object"
+                                    }
+                                  },
+                                  "required": [
+                                    "callId",
+                                    "operation",
+                                    "output"
+                                  ],
+                                  "type": "object"
+                                },
+                                {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "callId": {
+                                      "$ref": "#/components/schemas/AtomicBatchCallId"
+                                    },
+                                    "operation": {
+                                      "enum": [
+                                        "budgets.updateBudget"
+                                      ],
+                                      "type": "string"
+                                    },
+                                    "output": {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "data": {
+                                          "$ref": "#/components/schemas/Budget"
+                                        },
+                                        "next": {
+                                          "allOf": [
+                                            {
+                                              "description": "Where to go next: up to three canonical operations worth calling after this one, best first. Empty when there is nothing worth suggesting, which is an answer rather than an omission. Each entry has passed the target-input and caller-authorization checkpoint.",
+                                              "maxItems": 3
+                                            }
+                                          ],
+                                          "items": {
+                                            "$ref": "#/components/schemas/SuggestedOperation2"
+                                          },
+                                          "type": "array"
+                                        }
+                                      },
+                                      "required": [
+                                        "data",
+                                        "next"
+                                      ],
+                                      "type": "object"
+                                    }
+                                  },
+                                  "required": [
+                                    "callId",
+                                    "operation",
+                                    "output"
+                                  ],
+                                  "type": "object"
+                                },
+                                {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "callId": {
+                                      "$ref": "#/components/schemas/AtomicBatchCallId"
+                                    },
+                                    "operation": {
+                                      "enum": [
+                                        "budgets.deleteBudget"
+                                      ],
+                                      "type": "string"
+                                    },
+                                    "output": {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "data": {
+                                          "$ref": "#/components/schemas/BudgetId"
                                         },
                                         "next": {
                                           "allOf": [
@@ -15475,6 +17755,9 @@
     },
     {
       "name": "categories"
+    },
+    {
+      "name": "budgets"
     },
     {
       "name": "dashboard"

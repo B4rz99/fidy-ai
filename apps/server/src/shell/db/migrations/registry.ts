@@ -22,6 +22,7 @@ import { createMemories } from "./0021-create-memories";
 import { statementIngestion } from "./0022-statement-ingestion";
 import { memoryRevisions } from "./0023-memory-revisions";
 import { compactedConversations } from "./0024-compacted-conversations";
+import { monthlyBudgets } from "./0025-monthly-budgets";
 
 /**
  * The explicit index ARCHITECTURE.md §7 calls for: one ordered, append-only
@@ -56,4 +57,5 @@ export const migrations = {
   "0022_statement_ingestion": statementIngestion,
   "0023_memory_revisions": memoryRevisions,
   "0024_compacted_conversations": compactedConversations,
+  "0025_monthly_budgets": monthlyBudgets,
 };

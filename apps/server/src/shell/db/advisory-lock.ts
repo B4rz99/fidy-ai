@@ -25,6 +25,10 @@ export const advisoryLockKey = {
     value: `keyword-rules:${userId}`,
     seed: 0,
   }),
+  budgets: (userId: UserId): AdvisoryLockKey => ({
+    value: `budgets:${userId}`,
+    seed: 0,
+  }),
   dashboard: (userId: UserId): AdvisoryLockKey => ({ value: userId, seed: 15 }),
   hostedAttempt: hostedAttemptLockKey,
   memories: (userId: UserId): AdvisoryLockKey => ({

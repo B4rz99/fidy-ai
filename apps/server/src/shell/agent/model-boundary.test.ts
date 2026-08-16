@@ -16,6 +16,7 @@ import {
   UserTranscriptEntry,
 } from "~/core/transcript/model";
 import {
+  containsSensitiveChatValue,
   exactTranscriptPrompt,
   projectTranscriptForModel,
   systemPrompt,
@@ -30,6 +31,14 @@ const userContext = {
 };
 const occurredAt = DateTime.makeUnsafe("2026-07-20T12:00:00Z");
 const projectionTurnId = TranscriptTurnId.make("f1d1a000-0000-4000-8000-0000000004f2");
+
+it("does not mistake a card-like digit run inside a hexadecimal digest for a card", () => {
+  const digest = `a${"4222222222222"}${"a".repeat(50)}`;
+
+  expect(digest).toHaveLength(64);
+  expect(containsSensitiveChatValue(`CONFIRMAR LOTE ${digest}`)).toBe(false);
+  expect(containsSensitiveChatValue("tarjeta 4222222222222")).toBe(true);
+});
 
 it("excludes lifecycle markers from the model projection", () => {
   const turnId = TranscriptTurnId.make("f1d1a000-0000-4000-8000-0000000004f1");

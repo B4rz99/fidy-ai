@@ -43,7 +43,9 @@ export type CanonicalApiUrl = typeof CanonicalApiUrl.Type;
  */
 export const CanonicalApiBaseUrl = Context.Reference<Option.Option<CanonicalApiUrl>>(
   "@fidy/server/shell/agent/toolkit/CanonicalApiBaseUrl",
-  { defaultValue: Option.none }
+  {
+    defaultValue: Option.none,
+  }
 );
 
 /** OpenAI-compatible alias mechanically derived from a canonical operation id. */
@@ -172,7 +174,9 @@ const requireBinding = (operation: OperationId): AgentOperationBinding => {
   const binding = agentOperationBindings.find(
     (candidate) => candidate.operation === catalogOperation.id
   );
-  if (binding === undefined) throw new Error(`Agent operation binding is missing: ${operation}`);
+  if (binding === undefined) {
+    throw new Error(`Agent operation binding is missing: ${operation}`);
+  }
   return binding;
 };
 
@@ -218,6 +222,18 @@ const categoryClientOperations = (
     "categories.deleteKeywordRule",
     client.categories.deleteKeywordRule
   ),
+});
+
+const budgetClientOperations = (
+  client: FidyClient,
+  bind: BindClientOperation
+): GroupClientOperations<"budgets"> => ({
+  "budgets.createBudget": bind("budgets.createBudget", client.budgets.createBudget),
+  "budgets.listBudgets": bind("budgets.listBudgets", client.budgets.listBudgets),
+  "budgets.getBudget": bind("budgets.getBudget", client.budgets.getBudget),
+  "budgets.updateBudget": bind("budgets.updateBudget", client.budgets.updateBudget),
+  "budgets.deleteBudget": bind("budgets.deleteBudget", client.budgets.deleteBudget),
+  "budgets.getBudgetStatus": bind("budgets.getBudgetStatus", client.budgets.getBudgetStatus),
 });
 
 const dashboardClientOperations = (
@@ -333,6 +349,7 @@ const makeClientOperations = (
 ): Record<OperationId, ClientOperation> => ({
   ...identityClientOperations(client, bind),
   ...categoryClientOperations(client, bind),
+  ...budgetClientOperations(client, bind),
   ...dashboardClientOperations(client, bind),
   ...transactionClientOperations(client, bind),
   ...ingestionClientOperations(client, bind),

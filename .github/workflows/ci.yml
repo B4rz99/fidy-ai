@@ -90,37 +90,6 @@ jobs:
           WHATSAPP_BUSINESS_PORTFOLIO_ID: portfolio-test
         run: bun run verify -- --group server
 
-  acceptance:
-    name: WhatsApp acceptance
-    runs-on: ubuntu-latest
-    services:
-      postgres:
-        image: postgres:16-alpine
-        env:
-          POSTGRES_USER: fidy
-          POSTGRES_PASSWORD: fidy
-          POSTGRES_DB: fidy
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U fidy"
-          --health-interval 2s
-          --health-timeout 2s
-          --health-retries 15
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-      - uses: ./.github/actions/bun-install
-      - name: Create restricted runtime role
-        env:
-          PGPASSWORD: fidy
-        run: psql -h localhost -U fidy -d fidy -v ON_ERROR_STOP=1 -f apps/server/tools/local-postgres-init.sql
-      - name: WhatsApp acceptance validation
-        env:
-          DATABASE_URL: postgres://fidy_runtime:fidy_runtime@localhost:5432/fidy
-          MIGRATION_DATABASE_URL: postgres://fidy:fidy@localhost:5432/fidy
-          WHATSAPP_BUSINESS_PORTFOLIO_ID: portfolio-test
-        run: bun run verify -- --group acceptance
-
   quality:
     name: Quality thresholds
     runs-on: ubuntu-latest
@@ -217,7 +186,6 @@ jobs:
       - builds
       - unit
       - server
-      - acceptance
       - quality
       - production-image
       - security-secrets

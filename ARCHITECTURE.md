@@ -188,10 +188,16 @@ Hosted turns coordinate three deep shell modules under [ADR 0014](docs/adr/0014-
 
 The legal sequence is continuity preparation and recovery, one WorkingContext construction, complete
 hosted preflight, stale-snapshot-checked Turn admission, prepared execution, delivery without replay,
-and explicit terminalization. Provider state, model or tokenizer identity, context capacity, prompt
-fragments, and constructible executable authorities do not cross these public boundaries. The executable
-contract and implementation-ticket ownership live in the
-[agent-continuity invariant matrix](docs/architecture/agent-continuity-invariant-matrix.md).
+and explicit terminalization. Production startup submits separately framed 15K Memory, 15K
+CompactedConversation, approximately 100K exact Transcript, and 16K active-request token maxima
+through that same complete preparer, with every canonical tool and the 16K output reserve. The active
+request also retains its independent 16K-character storage bound and is never silently truncated.
+Provider state, model or tokenizer identity, context capacity, prompt fragments, and constructible
+executable authorities do not cross these public boundaries. The executable contract, named test
+evidence, and implementation-ticket ownership live in the
+[agent-continuity invariant matrix](docs/architecture/agent-continuity-invariant-matrix.md); its
+completeness and every configured credential path are enforced by
+`bun run check:continuity-invariants`.
 
 ### Browser authentication and PAT lifecycle
 

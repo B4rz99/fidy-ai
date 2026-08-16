@@ -2,6 +2,7 @@ import { OpenAiClient, OpenAiLanguageModel, OpenAiSchema } from "@effect/ai-open
 import * as Generated from "@effect/ai-openai/Generated";
 import {
   Config,
+  DateTime,
   type Duration,
   Effect,
   type JsonSchema,
@@ -13,6 +14,12 @@ import {
 import { Tiktoken } from "js-tiktoken/lite";
 import o200kBase from "js-tiktoken/ranks/o200k_base";
 import type { ConfigError } from "effect/Config";
+import { IanaTimeZone } from "~/core/_shared/context";
+import { maximumAggregateMemoryTokens } from "~/core/memory/rules";
+import {
+  defaultCompactionMaximumTokens,
+  defaultCompactionTriggerTokens,
+} from "~/shell/transcript/conversation-continuity";
 import { type Prompt, Tool } from "effect/unstable/ai";
 import { toCodecOpenAI } from "effect/unstable/ai/OpenAiStructuredOutput";
 import { exactTranscriptPrompt } from "./model-boundary";
@@ -29,19 +36,38 @@ import {
   type HostedInferenceService,
   type HostedInvalidOutputDescription,
   type HostedStructuredAdapter,
-  type HostedTextProjection,
+  type HostedTextContext,
   type HostedTextResult,
   HostedToolCallMaximum,
   makeHostedInference,
-  makeHostedTextContext,
+  maximumActiveRequestTokens,
 } from "./hosted-inference";
 import { agentOperationBindings, agentOperationToolDescription } from "./toolkit";
+import { type WorkingContext, makeStartupWorkingContext } from "./working-context";
 
 /** Direct launch model for Fidy's agent; model selection is not runtime-configurable. */
 export const FidyAgentModel = "gpt-5.6-luna";
 
 const hostedContextCapacity = 1_050_000;
-const hostedOutputTokenReserve = 16_000;
+/** Server-owned production output allowance included in every complete capacity decision. */
+export const hostedOutputTokenReserve = 16_000;
+
+type ContinuityBudget =
+  | "memory"
+  | "compactedConversation"
+  | "exactTranscript"
+  | "activeRequest"
+  | "outputReserve";
+
+type ContinuityBudgets = Readonly<Record<ContinuityBudget, number>>;
+
+const productionContinuityBudgets: ContinuityBudgets = Object.freeze({
+  memory: maximumAggregateMemoryTokens,
+  compactedConversation: defaultCompactionMaximumTokens,
+  exactTranscript: defaultCompactionTriggerTokens,
+  activeRequest: maximumActiveRequestTokens,
+  outputReserve: hostedOutputTokenReserve,
+});
 // Matches the existing maximum bounded canonical evidence contract; this is decimal bytes, not MiB.
 const maximumStructuredResponseBytes = 1_000_000;
 const structuredExecutionTimeout = "30 seconds";
@@ -53,7 +79,6 @@ type StructuredExecutionPolicy = Readonly<{
 const productionStructuredExecutionPolicy: StructuredExecutionPolicy = {
   timeout: structuredExecutionTimeout,
 };
-const startupMaximumTranscriptCharacters = 32_000;
 const startupMaximumToolCalls = 12;
 
 /** Fixed generation controls for predictable low-latency hosted turns. */
@@ -262,7 +287,7 @@ type ProjectedOpenAiInput = Readonly<{
 
 const projectMessages = (
   basePrefix: ReadonlyArray<Prompt.MessageEncoded>,
-  projection: HostedTextProjection,
+  projection: HostedTextContext,
   continuation: Option.Option<OpenAiContinuation>
 ): Effect.Effect<ProjectedOpenAiInput, HostedInferenceError> =>
   Effect.try({
@@ -320,13 +345,14 @@ const makeCountedRequest = (
 
 const makeExecutionRequest = (
   countedRequest: OpenAiCountedRequest,
-  maximumToolCalls: number
+  maximumToolCalls: number,
+  outputTokenReserve: number
 ): OpenAiRequest => {
   const controls = {
     temperature: HostedAgentGenerationConfig.temperature,
     store: HostedAgentGenerationConfig.store,
     include: ["reasoning.encrypted_content"] as const,
-    max_output_tokens: hostedOutputTokenReserve,
+    max_output_tokens: outputTokenReserve,
   };
   return countedRequest.tool_choice === "none"
     ? { ...countedRequest, ...controls }
@@ -584,13 +610,19 @@ const executeStructuredRequest = function <Output>(
 
 const makeStructuredAdapter = (
   client: OpenAiClient.Service,
-  policy: StructuredExecutionPolicy
+  policy: StructuredExecutionPolicy,
+  outputTokenReserve: number
 ): HostedStructuredAdapter => ({
   prepare: (input) =>
     Effect.gen(function* () {
       const projected = yield* projectMessages(
         [],
-        { prefix: input.projection.messages, continuationTail: [], suffix: [] },
+        {
+          prefix: input.projection.messages,
+          continuationTail: [],
+          suffix: [],
+          activeRequest: { _tag: "Absent" },
+        },
         Option.none()
       );
       const transformed = yield* Effect.try({
@@ -605,7 +637,7 @@ const makeStructuredAdapter = (
       };
       const counted = makeStructuredCountedRequest(projected.input, format);
       const inputTokens = yield* countStructuredInputTokens(client, counted, policy);
-      if (inputTokens + hostedOutputTokenReserve > hostedContextCapacity) {
+      if (inputTokens + outputTokenReserve > hostedContextCapacity) {
         return yield* new HostedInferenceError({
           reason: { _tag: "CapacityExceeded", inputTokens },
           retryable: false,
@@ -616,7 +648,7 @@ const makeStructuredAdapter = (
         ...counted,
         temperature: HostedAgentGenerationConfig.temperature,
         store: false,
-        max_output_tokens: hostedOutputTokenReserve,
+        max_output_tokens: outputTokenReserve,
       };
       return {
         execute: executeStructuredRequest(client, {
@@ -630,7 +662,8 @@ const makeStructuredAdapter = (
 
 const makeOpenAiHostedInference = (
   client: OpenAiClient.Service,
-  structuredPolicy: StructuredExecutionPolicy
+  structuredPolicy: StructuredExecutionPolicy,
+  outputTokenReserve: number
 ): HostedInferenceService => {
   const adapter: HostedInferenceAdapter<PreparedOpenAiRequest, OpenAiContinuation> = {
     countText: (text) => Effect.sync(() => memoryTokenizer.encode(text).length),
@@ -641,6 +674,7 @@ const makeOpenAiHostedInference = (
           prefix: exactTranscriptPrompt(entries),
           continuationTail: [],
           suffix: [],
+          activeRequest: { _tag: "Absent" },
         },
         Option.none()
       ).pipe(
@@ -657,10 +691,11 @@ const makeOpenAiHostedInference = (
         const countedRequest = makeCountedRequest(projected.input, semanticInput.toolChoice);
         const request = makeExecutionRequest(
           countedRequest,
-          semanticInput.toolChoice === "none" ? 0 : semanticInput.maximumToolCalls
+          semanticInput.toolChoice === "none" ? 0 : semanticInput.maximumToolCalls,
+          outputTokenReserve
         );
         const inputTokens = yield* countInputTokens(client, countedRequest);
-        if (inputTokens + hostedOutputTokenReserve > hostedContextCapacity) {
+        if (inputTokens + outputTokenReserve > hostedContextCapacity) {
           return yield* new HostedInferenceError({
             reason: { _tag: "CapacityExceeded", inputTokens },
             retryable: false,
@@ -669,7 +704,7 @@ const makeOpenAiHostedInference = (
         }
         return { wire: request, continuationPrefix: projected.continuationPrefix };
       }),
-    structured: makeStructuredAdapter(client, structuredPolicy),
+    structured: makeStructuredAdapter(client, structuredPolicy, outputTokenReserve),
     execute: (request) =>
       executeRequest(client, request.wire).pipe(
         Effect.flatMap((response) =>
@@ -683,31 +718,65 @@ const makeOpenAiHostedInference = (
   return makeHostedInference(adapter);
 };
 
-const startupContext = (): ReturnType<typeof makeHostedTextContext> =>
-  makeHostedTextContext({
-    prefix: [
-      {
-        role: "system",
-        content: "x".repeat(startupMaximumTranscriptCharacters),
-      },
-    ],
-    continuationTail: [],
-    suffix: [{ role: "system", content: "maximum hosted turn framing" }],
-  });
+const startupMemoryChunkCharacters = 1_800;
+const startupTranscriptChunkCharacters = 15_000;
+
+const startupMaximumText = (marker: string, maximumTokens: number): string => {
+  const candidate = `${marker}\n${"㐀".repeat(maximumTokens)}`;
+  return memoryTokenizer.decode(memoryTokenizer.encode(candidate).slice(0, maximumTokens));
+};
+
+const startupChunks = (text: string, maximumCharacters: number): ReadonlyArray<string> =>
+  Array.from({ length: Math.ceil(text.length / maximumCharacters) }, (_, index) =>
+    text.slice(index * maximumCharacters, (index + 1) * maximumCharacters)
+  );
+
+const startupContext = (budgets: ContinuityBudgets): Effect.Effect<WorkingContext> => {
+  const memory = startupMaximumText(
+    `[STARTUP_MAXIMUM_MEMORY:${budgets.memory}_TOKENS]`,
+    budgets.memory
+  );
+  const compactedConversation = startupMaximumText(
+    `[STARTUP_MAXIMUM_COMPACTED_CONVERSATION:${budgets.compactedConversation}_TOKENS]`,
+    budgets.compactedConversation
+  );
+  const exactTranscript = startupMaximumText(
+    `[STARTUP_MAXIMUM_EXACT_TRANSCRIPT:${budgets.exactTranscript}_TOKENS]`,
+    budgets.exactTranscript
+  );
+  const activeRequest = startupMaximumText(
+    `[STARTUP_MAXIMUM_ACTIVE_REQUEST:${budgets.activeRequest}_TOKENS]`,
+    budgets.activeRequest
+  );
+  return makeStartupWorkingContext({
+    user: Option.some({
+      serviceMarket: "CO",
+      locale: "es-CO",
+      timeZone: IanaTimeZone.make("America/Bogota"),
+    }),
+    memories: startupChunks(memory, startupMemoryChunkCharacters).map((text) => ({ text })),
+    transcript: startupChunks(exactTranscript, startupTranscriptChunkCharacters).map((text) => ({
+      text,
+    })),
+    compactedConversation: Option.some({ text: compactedConversation }),
+    request: { text: activeRequest },
+    startedAt: DateTime.makeUnsafe("2000-01-01T00:00:00Z"),
+  }).pipe(Effect.orDie);
+};
 
 const makeOpenAiLayer = (
   validateStartup: boolean,
-  structuredPolicy: StructuredExecutionPolicy
+  structuredPolicy: StructuredExecutionPolicy,
+  budgets: ContinuityBudgets
 ): Layer.Layer<HostedInference, ConfigError | HostedInferenceError, HttpClient.HttpClient> =>
   Layer.effect(
     HostedInference,
     Effect.gen(function* () {
       const client = yield* OpenAiClient.OpenAiClient;
-      const inference = makeOpenAiHostedInference(client, structuredPolicy);
+      const inference = makeOpenAiHostedInference(client, structuredPolicy, budgets.outputReserve);
       if (validateStartup) {
         yield* inference.validateText({
-          _tag: "Initial",
-          context: startupContext(),
+          context: yield* startupContext(budgets),
           toolChoice: "auto",
           maximumToolCalls: HostedToolCallMaximum.make(startupMaximumToolCalls),
         });
@@ -717,16 +786,30 @@ const makeOpenAiLayer = (
   ).pipe(Layer.provide(OpenAiClientLive));
 
 /** Production OpenAI adapter with fail-closed maximum-request startup validation. */
-export const OpenAiHostedInferenceLive = makeOpenAiLayer(true, productionStructuredExecutionPolicy);
+export const OpenAiHostedInferenceLive = makeOpenAiLayer(
+  true,
+  productionStructuredExecutionPolicy,
+  productionContinuityBudgets
+);
 
 /** Production adapter without startup validation for focused transport tests. */
 export const OpenAiHostedInferenceWithoutStartupValidation = makeOpenAiLayer(
   false,
-  productionStructuredExecutionPolicy
+  productionStructuredExecutionPolicy,
+  productionContinuityBudgets
 );
+
+/** Fixed one-budget variation used only to prove independence at the startup seam. @internal */
+export const openAiHostedInferenceBudgetVariation = (
+  budget: ContinuityBudget
+): Layer.Layer<HostedInference, ConfigError | HostedInferenceError, HttpClient.HttpClient> =>
+  makeOpenAiLayer(true, productionStructuredExecutionPolicy, {
+    ...productionContinuityBudgets,
+    [budget]: productionContinuityBudgets[budget] - 1,
+  });
 
 /** Test-only constructor for proving adapter-owned structured execution deadlines. @internal */
 export const makeOpenAiHarness = (
   timeout: Duration.Input
 ): Layer.Layer<HostedInference, ConfigError | HostedInferenceError, HttpClient.HttpClient> =>
-  makeOpenAiLayer(false, { timeout });
+  makeOpenAiLayer(false, { timeout }, productionContinuityBudgets);

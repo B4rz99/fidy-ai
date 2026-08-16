@@ -121,10 +121,11 @@ layer(AuditHarness, { excludeTestServices: true, timeout: "30 seconds" })(
     it.effect("appends failed evidence when canonical input is rejected", () =>
       Effect.gen(function* () {
         yield* truncateAuditLogEntries;
+        const canary = "rejected-caller-prose-and-id-canary";
 
         const response = yield* HttpClient.patch("/user/preferences", {
-          headers: headersFor(defaultPatBearer),
-          body: HttpBody.jsonUnsafe({ locale: "es-CO", timeZone: "-05:00" }),
+          headers: { ...headersFor(defaultPatBearer), "x-kapso-contact-id": canary },
+          body: HttpBody.jsonUnsafe({ locale: canary, timeZone: "-05:00" }),
         });
         const entries = yield* observeAuditLogEntries(defaultUserId);
 
@@ -137,6 +138,9 @@ layer(AuditHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           outcome: "failed",
         });
         expect(DateTime.isUtc(entries[0]?.occurredAt ?? DateTime.makeUnsafe(0))).toBe(true);
+        const serialized = yield* Schema.encodeEffect(Schema.UnknownFromJsonString)(entries);
+        expect(serialized).not.toContain(canary);
+        expect(serialized).not.toContain(defaultPatBearer);
       })
     );
 

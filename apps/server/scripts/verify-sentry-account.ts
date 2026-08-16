@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 
 import { BunRuntime } from "@effect/platform-bun";
-import { Config, Console, Effect, Layer } from "effect";
+import { Console, Effect, Layer } from "effect";
 import { FetchHttpClient } from "effect/unstable/http";
 import {
   renderSentryVerificationReport,
@@ -9,18 +9,12 @@ import {
 } from "~/shell/observability/account-policy";
 import {
   inspectSentryAccount,
+  sentryAccountConfig,
   unavailableSentryAccountObservation,
 } from "~/shell/observability/sentry-account-reader";
 
-const accountConfig = Config.all({
-  authToken: Config.redacted("SENTRY_AUTH_TOKEN"),
-  organizationSlug: Config.redacted("SENTRY_ORGANIZATION_SLUG"),
-  productionProjectSlug: Config.redacted("SENTRY_PRODUCTION_PROJECT_SLUG"),
-  nonProductionProjectSlug: Config.redacted("SENTRY_NON_PRODUCTION_PROJECT_SLUG"),
-});
-
 const verify = Effect.gen(function* () {
-  const config = yield* accountConfig;
+  const config = yield* sentryAccountConfig;
   const observation = yield* inspectSentryAccount(config).pipe(
     Effect.catchTag("SentryAccountReadError", () =>
       Effect.succeed(unavailableSentryAccountObservation)

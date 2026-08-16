@@ -54,6 +54,8 @@ const ALIAS_SAME_DIRECTORY = dir("alias-same-directory");
 const RELATIVE_CROSS_DIRECTORY = dir("relative-cross-directory");
 const HOSTED_PROVIDER = `src/shell/agent/${PROBE_PREFIX}hosted-provider`;
 const HOSTED_MODEL = `src/shell/agent/${PROBE_PREFIX}hosted-model`;
+const HOSTED_TOKENIZER = `src/shell/agent/${PROBE_PREFIX}hosted-tokenizer`;
+const HOSTED_JS_TOKENIZER = `src/shell/agent/${PROBE_PREFIX}hosted-js-tokenizer`;
 
 const PROBES: readonly Probe[] = [
   {
@@ -280,6 +282,42 @@ const PROBES: readonly Probe[] = [
       },
     ],
     name: "cross-directory-import-is-relative rejects `../` across directories",
+  },
+  {
+    directory: HOSTED_TOKENIZER,
+    expect: {
+      kind: "rejected",
+      mustContain: [
+        `error hosted-inference-orchestration-imports-provider: ${HOSTED_TOKENIZER}/probe.ts`,
+      ],
+    },
+    files: [
+      {
+        path: `${HOSTED_TOKENIZER}/probe.ts`,
+        source:
+          'import { Tokenizer } from "effect/unstable/ai";\n\n' +
+          "export const hostedTokenizerProbe = Tokenizer;\n",
+      },
+    ],
+    name: "hosted inference orchestration rejects tokenizer imports",
+  },
+  {
+    directory: HOSTED_JS_TOKENIZER,
+    expect: {
+      kind: "rejected",
+      mustContain: [
+        `error hosted-inference-orchestration-imports-provider: ${HOSTED_JS_TOKENIZER}/probe.ts`,
+      ],
+    },
+    files: [
+      {
+        path: `${HOSTED_JS_TOKENIZER}/probe.ts`,
+        source:
+          'import { encodingForModel } from "js-tiktoken";\n\n' +
+          "export const hostedJsTokenizerProbe = encodingForModel;\n",
+      },
+    ],
+    name: "hosted inference orchestration rejects js-tiktoken imports",
   },
   {
     directory: HOSTED_PROVIDER,

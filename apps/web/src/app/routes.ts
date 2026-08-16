@@ -5,18 +5,17 @@ import {
   createRoute,
   createRouter,
 } from "@tanstack/react-router";
-import { NotFoundFeature } from "@/features/not-found/feature";
 import { HomeFeature } from "@/features/home/feature";
 import { PrivacyPolicyFeature } from "@/features/privacy-policy/feature";
-import { PublicShellFeature } from "@/features/public-shell/feature";
 import type { FidyClient } from "@/transport/client";
+import { RootNotFound, RootRoute } from "./root-route";
 
 type WebRouterContext = Readonly<{ apiClient: FidyClient }>;
 type WebRouterOptions = WebRouterContext & Readonly<{ history: Option.Option<RouterHistory> }>;
 
 const rootRoute = createRootRouteWithContext<WebRouterContext>()({
-  component: PublicShellFeature,
-  notFoundComponent: NotFoundFeature,
+  component: RootRoute,
+  notFoundComponent: RootNotFound,
 });
 const homeRoute = createRoute({
   getParentRoute: () => rootRoute,

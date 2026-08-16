@@ -15,7 +15,7 @@ const renderRoute = async (path: string): Promise<void> => {
   });
 
   render(
-    <SessionRegistryProvider authenticationLifetime={`test-${path}`}>
+    <SessionRegistryProvider>
       <RouterProvider router={router} />
     </SessionRegistryProvider>
   );

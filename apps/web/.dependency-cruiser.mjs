@@ -37,6 +37,34 @@ export default {
       },
     },
     {
+      name: "main-imports-only-application",
+      severity: "error",
+      comment:
+        "The browser entrypoint may mount only WebApplication. Compose session, transport, and " +
+        "features in app rather than turning main.tsx into a second composition root.",
+      from: { path: "^src/main\\.tsx$" },
+      to: {
+        path: "^src/",
+        pathNot: ["^src/app/application\\.tsx$", "^src/index\\.css$"],
+      },
+    },
+    {
+      name: "generic-dumping-ground",
+      severity: "error",
+      comment:
+        "A generic components, hooks, services, stores, or utils directory hides ownership. " +
+        "Place code in its vertical app, feature, session, transport, or UI module instead.",
+      from: { path: "^src/" },
+      to: {
+        path:
+          "^(?:src/(?:components|hooks|services|stores|utils)/|" +
+          "src/[^/]+/(?:components|hooks|services|stores|utils)/|" +
+          "src/[^/]+/[^/]+/(?:components|hooks|services|stores|utils)/|" +
+          "src/[^/]+/[^/]+/[^/]+/(?:components|hooks|services|stores|utils)/)",
+        pathNot: "^src/ui/components/",
+      },
+    },
+    {
       name: "non-feature-imports-feature-private",
       severity: "error",
       comment:

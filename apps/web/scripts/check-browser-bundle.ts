@@ -1,50 +1,15 @@
 #!/usr/bin/env bun
 
-import { decodeBuildMetafile } from "./build-metafile";
-
+/**
+ * This gate checks browser-owned source imports. The server-owned browser-client gate is the sole
+ * transitive allowlist for what the canonical @fidy/server/client facade may bring into a browser.
+ */
 const webRoot = Bun.fileURLToPath(new URL("..", import.meta.url)).replace(/\/$/u, "");
 const workspaceRoot = Bun.fileURLToPath(new URL("../../../", import.meta.url)).replace(/\/$/u, "");
 const outdir = `/tmp/fidy-web-bundle-${process.pid}`;
 
-const forbiddenDependencies = [
-  /(^|\/)node_modules\/@effect\/ai-openai\//u,
-  /(^|\/)node_modules\/@effect\/platform\//u,
-  /(^|\/)node_modules\/@effect\/platform-bun\//u,
-  /(^|\/)node_modules\/@effect\/sql-pg\//u,
-  /(^|\/)node_modules\/@kapso\//u,
-  /(^|\/)node_modules\/@sentry\//u,
-  /(^|\/)node_modules\/pg\//u,
-  /(^|\/)node_modules\/postgres\//u,
-] as const;
-
-const forbiddenNodeModules =
-  /(^|\/)node_modules\/(?:effect\/dist\/unstable\/sql|(?:pg|postgres)(?:\/|$))/u;
-const forbiddenNodeBuiltin =
-  /^(?:node:|bun:)(?:assert|child_process|cluster|crypto|dgram|dns|fs|http|https|module|net|os|path|perf_hooks|process|stream|timers|tls|tty|util|v8|vm|worker_threads)(?:\/|$)/u;
-const allowedServerSource = [
-  /^apps\/server\/src\/client\.ts$/u,
-  /^apps\/server\/src\/http-origin\.ts$/u,
-  /^apps\/server\/src\/core\//u,
-  /^apps\/server\/src\/shell\/api\.ts$/u,
-  /^apps\/server\/src\/shell\/[^/]+\/operations\.ts$/u,
-  /^apps\/server\/src\/shell\/ingestion\/input\.ts$/u,
-  /^apps\/server\/src\/shell\/memory\/errors\.ts$/u,
-  /^apps\/server\/src\/shell\/_shared\/(?:authz|canonical-telemetry|errors|http-status|operation-catalog|operation-policy|partial-input|response)\.ts$/u,
-  /^apps\/server\/src\/shell\/_shared\/canonical-input\.ts$/u,
-] as const;
-
 const removeOutput = (): void => {
   Bun.spawnSync(["rm", "-rf", outdir]);
-};
-
-const repositoryPath = (input: string): string => {
-  const normalized = input.replaceAll("\\", "/");
-  const absolute = normalized.startsWith("/")
-    ? normalized
-    : Bun.fileURLToPath(new URL(normalized, `file://${webRoot}/`)).replaceAll("\\", "/");
-  return absolute.startsWith(`${workspaceRoot}/`)
-    ? absolute.slice(workspaceRoot.length + 1)
-    : absolute;
 };
 
 const resolveSourcePath = async (basePath: string): Promise<string> => {
@@ -70,7 +35,6 @@ try {
     entrypoints: [`${webRoot}/src/main.tsx`],
     outdir,
     target: "browser",
-    metafile: true,
     loader: { ".html": "text" },
     plugins: [
       {
@@ -99,31 +63,6 @@ try {
     throw new Error(result.logs.map((log) => JSON.stringify(log)).join("\n"));
   }
 
-  const metafile = decodeBuildMetafile(result.metafile);
-  const inputs = Object.keys(metafile.inputs).map(repositoryPath);
-  const forbidden = inputs.filter(
-    (input) =>
-      forbiddenDependencies.some((dependency) => dependency.test(input)) ||
-      forbiddenNodeModules.test(input) ||
-      forbiddenNodeBuiltin.test(input)
-  );
-  const unexpectedServerInput = inputs.filter(
-    (input) =>
-      input.startsWith("apps/server/src/") &&
-      !allowedServerSource.some((pattern) => pattern.test(input))
-  );
-  if (forbidden.length > 0 || unexpectedServerInput.length > 0) {
-    const sections = [
-      forbidden.length > 0
-        ? `Browser-incompatible runtime modules entered the web bundle:\n${forbidden.join("\n")}`
-        : undefined,
-      unexpectedServerInput.length > 0
-        ? `Unexpected server modules entered the web bundle:\n${unexpectedServerInput.join("\n")}`
-        : undefined,
-    ].filter((section): section is string => section !== undefined);
-    throw new Error(sections.join("\n"));
-  }
-
   const sourceFiles = Array.from(new Bun.Glob("src/**/*.{ts,tsx}").scanSync({ cwd: webRoot }));
   const sources = await Promise.all(
     sourceFiles.map((sourceFile) =>
@@ -150,6 +89,9 @@ try {
       importPath
     )
   );
+  const alternateHttpClient = imports.find(({ importPath }) =>
+    /^(?:axios|graphql-request|ky|superagent)(?:\/|$)/u.test(importPath)
+  );
   if (forbiddenServerImport !== undefined) {
     throw new Error(
       `${forbiddenServerImport.sourceFile} imports a server client outside transport: ${forbiddenServerImport.importPath}`
@@ -163,10 +105,13 @@ try {
       `${alternateStateClient.sourceFile} imports alternate server state ${alternateStateClient.importPath}`
     );
   }
+  if (alternateHttpClient !== undefined) {
+    throw new Error(
+      `${alternateHttpClient.sourceFile} imports alternate HTTP client ${alternateHttpClient.importPath}`
+    );
+  }
 
-  process.stdout.write(
-    `web browser graph clean: ${inputs.length} bundled modules (${workspaceRoot})\n`
-  );
+  process.stdout.write("web browser source boundary clean\n");
 } finally {
   removeOutput();
 }

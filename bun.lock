@@ -74,7 +74,6 @@
         "@vitejs/plugin-react": "6.0.5",
         "@vitest/coverage-istanbul": "4.1.10",
         "jsdom": "30.0.1",
-        "playwright-core": "1.62.1",
         "shadcn": "4.16.2",
         "tailwindcss": "4.3.3",
         "typescript": "7.0.2",

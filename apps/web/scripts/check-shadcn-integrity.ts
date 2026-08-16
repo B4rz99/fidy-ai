@@ -9,10 +9,20 @@ const ComponentsConfig = Schema.Struct({
     utils: Schema.String,
   }),
 });
+const TypeScriptConfig = Schema.Struct({
+  compilerOptions: Schema.Struct({
+    paths: Schema.Struct({
+      "@/*": Schema.Tuple([Schema.Literal("./src/*")]),
+    }),
+  }),
+});
 
 const webRoot = Bun.fileURLToPath(new URL("..", import.meta.url)).replace(/\/$/u, "");
 const config = Schema.decodeUnknownSync(ComponentsConfig)(
   await Bun.file(`${webRoot}/components.json`).json()
+);
+const typeScriptConfig = Schema.decodeUnknownSync(TypeScriptConfig)(
+  await Bun.file(`${webRoot}/tsconfig.json`).json()
 );
 if (
   config.aliases.components !== "@/ui/components" ||
@@ -24,21 +34,20 @@ if (
   );
 }
 
-const result = Bun.spawnSync(["bunx", "--bun", "shadcn", "add", "button", "--dry-run"], {
-  cwd: webRoot,
-  stderr: "pipe",
-  stdout: "pipe",
-});
-const decode = (bytes: Uint8Array): string => new TextDecoder().decode(bytes);
-const report = `${decode(result.stdout)}\n${decode(result.stderr)}`;
-if (result.exitCode !== 0) {
-  throw new Error(`Shadcn dry run failed:\n${report}`);
+const aliasTarget = typeScriptConfig.compilerOptions.paths["@/*"][0];
+const resolveAlias = (alias: string): string =>
+  `${aliasTarget.slice(0, -1)}${alias.slice(2)}`.replace(/^\.\//u, "");
+const expectedPrimitivePath = "src/ui/components/button.tsx";
+const resolvedPrimitivePaths = [config.aliases.components, config.aliases.ui].map((alias) =>
+  resolveAlias(`${alias}/button.tsx`)
+);
+if (resolvedPrimitivePaths.some((path) => path !== expectedPrimitivePath)) {
+  throw new Error(
+    `Shadcn primitive aliases must resolve to ${expectedPrimitivePath}: ${resolvedPrimitivePaths.join(", ")}`
+  );
 }
-if (!report.includes("src/ui/components/button.tsx")) {
-  throw new Error(`Shadcn dry run did not resolve src/ui/components/button.tsx:\n${report}`);
-}
-if (report.includes("@/ui/button.tsx") || report.includes("apps/web/@/")) {
-  throw new Error(`Shadcn dry run escaped the web source tree:\n${report}`);
+if (resolveAlias(config.aliases.utils) !== "src/ui/class-names") {
+  throw new Error("Shadcn utility alias must resolve to src/ui/class-names");
 }
 
-process.stdout.write("shadcn output integrity clean: src/ui/components/button.tsx\n");
+process.stdout.write(`shadcn output integrity clean: ${expectedPrimitivePath}\n`);

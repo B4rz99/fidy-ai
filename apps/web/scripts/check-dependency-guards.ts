@@ -36,10 +36,16 @@ const transportSession = transportPath("session");
 const transportUi = transportPath("ui");
 const transportOwner = featurePath("client-bypass");
 const sourceEntrypoint = sourcePath("entrypoint");
+const sourceMain = "src/main.tsx";
+const sourceGeneric = sourcePath("generic-dumping-ground");
+const genericDirectory = `src/utils/${probePrefix}generic-dumping-ground`;
 const sourceCycle = sourcePath("cycle");
 const sourceBarrel = sourcePath("barrel");
 const sourceAlias = appPath("alias");
 const sourceRelative = appPath("relative");
+const preservedProbeSources = new Map<string, string>([
+  [sourceMain, await Bun.file(`${webRoot}/${sourceMain}`).text()],
+]);
 
 const probes: readonly Probe[] = [
   {
@@ -66,6 +72,40 @@ const probes: readonly Probe[] = [
       {
         path: `${appInterface}/probe.ts`,
         source: `import { HomeFeature } from "@/features/home/feature";\n\nexport const featureInterfaceProbe = HomeFeature;\n`,
+      },
+    ],
+  },
+  {
+    name: "entrypoint only mounts the application",
+    expect: {
+      kind: "rejected",
+      mustContain: [`error main-imports-only-application: ${sourceMain}`],
+    },
+    files: [
+      {
+        path: sourceMain,
+        source:
+          'import { HomeFeature } from "@/features/home/feature";\n\n' +
+          "export const mainProbe = HomeFeature;\n",
+      },
+    ],
+  },
+  {
+    name: "generic dumping grounds are rejected",
+    expect: {
+      kind: "rejected",
+      mustContain: [`error generic-dumping-ground: ${sourceGeneric}/probe.ts`],
+    },
+    files: [
+      {
+        path: `${sourceGeneric}/probe.ts`,
+        source:
+          `import { genericValue } from "@/${genericDirectory.replace("src/", "")}/value";\n\n` +
+          "export const genericDumpingGroundProbe = genericValue;\n",
+      },
+      {
+        path: `${genericDirectory}/value.ts`,
+        source: 'export const genericValue = "probe" as const;\n',
       },
     ],
   },
@@ -366,8 +406,16 @@ const remove = (path: string): void => {
   const result = Bun.spawnSync(["rm", "-rf", path], { stderr: "pipe" });
   if (result.exitCode !== 0) throw new Error(decode(result.stderr));
 };
-const removeProbeFiles = (probe: Probe): void => {
-  const directories = new Set(probe.files.map(({ path }) => path.slice(0, path.lastIndexOf("/"))));
+const removeProbeFiles = async (probe: Probe): Promise<void> => {
+  const directories = new Set<string>();
+  for (const { path } of probe.files) {
+    const original = Option.fromUndefinedOr(preservedProbeSources.get(path));
+    if (Option.isSome(original)) {
+      await Bun.write(`${webRoot}/${path}`, original.value);
+    } else {
+      directories.add(path.slice(0, path.lastIndexOf("/")));
+    }
+  }
   for (const directory of directories) remove(`${webRoot}/${directory}`);
 };
 const missingFrom = (report: string, expected: readonly string[]): readonly string[] =>
@@ -397,7 +445,7 @@ for (const probe of probes) {
     await Promise.all(probe.files.map((file) => Bun.write(`${webRoot}/${file.path}`, file.source)));
     assertProbe(probe);
   } finally {
-    removeProbeFiles(probe);
+    await removeProbeFiles(probe);
   }
   process.stdout.write(`ok  ${probe.name}\n`);
 }

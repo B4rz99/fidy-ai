@@ -156,26 +156,30 @@ graph guards are executable checks for that boundary.
 The web application is deliberately vertical rather than another flat shell:
 
 - `src/main.tsx` only mounts `WebApplication`.
-- `src/app/` is the composition root. `routes.ts` composes feature interfaces, and
+- `src/app/` is the composition root. `root-route.tsx` owns application chrome and not-found
+  presentation; `routes.ts` composes that root with genuine feature interfaces, and
   `create-application.tsx` composes the route tree, transport, and session registry lifetime.
 - `src/features/<feature>/feature.tsx` is the only public feature interface. A feature's private
   atoms, views, policies, and transport use stay in that feature; features never import one another.
 - `src/transport/` is the only owner of `@fidy/server/client`. It derives the sole browser client
   from `FidyApi`; it does not introduce a parallel product client or server-state cache. Tests
   replace only the underlying `HttpClient` layer.
-- `src/session/` owns authentication-lifetime registry replacement. A changed lifetime key remounts
-  `RegistryProvider`, so Atom server state cannot cross a future login, logout, or expiry. It does
-  not own Atom state, TanStack Router state, or local React interaction state, and this issue does
-  not implement pairing or web-session authentication.
+- `src/session/` owns a non-secret numeric authentication epoch and its explicit replacement
+  transition. A changed epoch remounts `RegistryProvider`, so Atom server state cannot cross a
+  future login, logout, or expiry. It does not own Atom state, TanStack Router state, or local
+  React interaction state, and this issue does not implement pairing or web-session authentication.
 - `src/ui/` contains ownerless visual primitives. They receive children and values and do not import
   application, feature, session, or transport code.
 
 Dependency-cruiser rules and rejected-import probes enforce these arrows: app composes features,
 session, and transport; session does not reach app or UI; and transport does not reach app, session,
-UI, or features. The same checks enforce same-directory relative imports, cross-directory aliases,
-the non-importable entrypoint, and the absence of barrels. The browser bundle check additionally
-rejects server runtime modules, direct `fetch` calls, alternate
-server-state clients, and any server source outside the browser-safe allowlist.
+UI, or features. The same checks enforce main's sole application import, reject generic dumping-ground
+directories, enforce same-directory relative imports, cross-directory aliases, the non-importable
+entrypoint, and the absence of barrels. The server-owned browser-client check is the sole transitive
+allowlist for the facade and rejects server runtime modules or declaration modules outside that
+allowlist. The web source-boundary check additionally rejects direct `fetch` calls, alternate
+server-state or HTTP clients, and any web source entry into server code outside
+`@fidy/server/client` through `src/transport/`.
 
 The root TypeScript project-reference build expresses the server-before-web declaration dependency.
 Server-owned OpenAPI and complete reflected operation-policy artifacts live under

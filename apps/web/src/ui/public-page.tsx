@@ -6,7 +6,7 @@ type PublicPageProps = Readonly<{
   readonly layout: "centered" | "document";
 }>;
 
-/** Provides the ownerless page geometry shared by public feature surfaces. */
+/** Provides ownerless page geometry shared by public route surfaces. */
 export const PublicPage = ({ children, layout }: PublicPageProps): React.JSX.Element => (
   <main
     className={cn(

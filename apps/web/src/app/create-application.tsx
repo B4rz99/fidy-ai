@@ -17,7 +17,7 @@ export const createWebApplication = (options: WebApplicationOptions): JSX.Elemen
   const router = createWebRouter({ apiClient, history: options.history });
 
   return (
-    <SessionRegistryProvider authenticationLifetime="anonymous">
+    <SessionRegistryProvider>
       <RouterProvider router={router} />
     </SessionRegistryProvider>
   );

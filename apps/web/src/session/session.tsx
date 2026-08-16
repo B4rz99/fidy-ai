@@ -1,20 +1,32 @@
 import { RegistryProvider } from "@effect/atom-react";
+import { Option } from "effect";
+import { useState } from "react";
 import type { ReactNode } from "react";
+import { SessionContext } from "./session-context";
 
-export type AuthenticationLifetime = string;
+/** A local, non-secret epoch identifying one authentication lifetime. */
+export type AuthenticationLifetime = number;
 
 type SessionRegistryProviderProps = Readonly<{
-  readonly authenticationLifetime: AuthenticationLifetime;
   readonly children: ReactNode;
 }>;
 
 /**
- * Isolates Atom state to one authentication lifetime. Cached server state from a prior lifetime is
- * unavailable after the lifetime changes, including across login, logout, and expiry transitions.
+ * Provides session transitions and isolates Atom state to one authentication lifetime. Calling
+ * `replaceAuthenticationLifetime` remounts the registry, making cached server state from the prior
+ * lifetime unavailable across login, logout, and expiry transitions.
  */
 export const SessionRegistryProvider = ({
-  authenticationLifetime,
   children,
-}: SessionRegistryProviderProps): React.JSX.Element => (
-  <RegistryProvider key={authenticationLifetime}>{children}</RegistryProvider>
-);
+}: SessionRegistryProviderProps): React.JSX.Element => {
+  const [authenticationEpoch, setAuthenticationEpoch] = useState<AuthenticationLifetime>(0);
+  const replaceAuthenticationLifetime = (): void => {
+    setAuthenticationEpoch((currentEpoch) => currentEpoch + 1);
+  };
+
+  return (
+    <SessionContext.Provider value={Option.some({ replaceAuthenticationLifetime })}>
+      <RegistryProvider key={authenticationEpoch}>{children}</RegistryProvider>
+    </SessionContext.Provider>
+  );
+};

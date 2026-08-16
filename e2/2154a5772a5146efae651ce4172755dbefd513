@@ -1,0 +1,29 @@
+apps/web/src/app/routes.ts
+  s_45807ae4c11b63::t_aec5ed6a9beda0 13
+apps/web/vitest.config.ts
+  s_45807ae4c11b63::t_59c509c2b169ac 24-31
+apps/web/scripts/check-dependency-guards.ts
+  s_45807ae4c11b63::t_c7e0431908ce40 139-140
+ARCHITECTURE.md
+  s_45807ae4c11b63::t_a2f992fee71708 159-161
+CODING_STANDARDS.md
+  s_45807ae4c11b63::t_f453fe686ecebd 232-234
+apps/web/src/app/application.tsx
+  s_45807ae4c11b63::t_b9746046cacf8d 1,4-5,7,10-19
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "e22154a5772a5146efae651ce4172755dbefd513",
+  "prompts": {},
+  "sessions": {
+    "s_45807ae4c11b63": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a007d2-e6d7-7697-bba7-e0841f8e3bc1",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

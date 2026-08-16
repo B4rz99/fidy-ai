@@ -1,10 +1,12 @@
-import { RegistryProvider } from "@effect/atom-react";
 import { RouterProvider, createMemoryHistory } from "@tanstack/react-router";
 import { Option } from "effect";
-import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
-import { makeFidyClient } from "./api-client";
-import { createWebRouter } from "./router";
+import { cleanup, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { WebApplication } from "@/app/application";
+import { createWebApplication } from "@/app/create-application";
+import { createWebRouter } from "@/app/routes";
+import { SessionRegistryProvider } from "@/session/session";
+import { makeFidyClient } from "@/transport/client";
 
 const renderRoute = async (path: string): Promise<void> => {
   const router = createWebRouter({
@@ -13,14 +15,18 @@ const renderRoute = async (path: string): Promise<void> => {
   });
 
   render(
-    <RegistryProvider>
+    <SessionRegistryProvider authenticationLifetime={`test-${path}`}>
       <RouterProvider router={router} />
-    </RegistryProvider>
+    </SessionRegistryProvider>
   );
   await router.load();
 };
 
 describe("web application routes", () => {
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllEnvs();
+  });
   it("renders the minimal root through the real router and Atom provider", async () => {
     await renderRoute("/");
 
@@ -47,5 +53,23 @@ describe("web application routes", () => {
     await renderRoute("/ruta-inexistente");
 
     expect(await screen.findByRole("heading", { name: "Página no encontrada" })).toBeVisible();
+  });
+
+  it("composes the application with an injected memory history", async () => {
+    render(
+      createWebApplication({
+        apiOrigin: "https://api.test.fidyapp.com",
+        history: Option.some(createMemoryHistory({ initialEntries: ["/"] })),
+      })
+    );
+
+    expect(await screen.findByRole("heading", { level: 1, name: "Fidy" })).toBeVisible();
+  });
+
+  it("uses the configured browser application origin", async () => {
+    vi.stubEnv("VITE_API_ORIGIN", "https://api.test.fidyapp.com");
+    render(<WebApplication />);
+
+    expect(await screen.findByRole("heading", { level: 1, name: "Fidy" })).toBeVisible();
   });
 });

@@ -8,6 +8,7 @@ const verifyGroups = [
   "static",
   "builds",
   "unit",
+  "browser",
   "server",
   "acceptance",
   "quality",
@@ -98,6 +99,7 @@ const checks: Array<Check> = [
   rootCheck("static", "Module graph", ["bun", "run", "lint:deps"]),
   rootCheck("static", "Browser client graph", ["bun", "run", "check:browser-client"]),
   rootCheck("static", "Web policy integrity", ["bun", "run", "check:policy"]),
+  rootCheck("static", "Shadcn output integrity", ["bun", "run", "check:shadcn"]),
   rootCheck("static", "Generated contract freshness", ["bun", "run", "contracts:check:freshness"]),
   rootCheck("static", "Base contract compatibility", [
     "bun",
@@ -130,9 +132,17 @@ const checks: Array<Check> = [
     env: coreEnvironment,
   },
   rootCheck("unit", "Web tests", ["bun", "run", "--cwd", "apps/web", "test"]),
+  rootCheck("unit", "Web Istanbul coverage", ["bun", "run", "--cwd", "apps/web", "test:coverage"]),
   rootCheck("unit", "Trusted preview artifact policy", ["bun", "run", "test:preview-policy"]),
   rootCheck("unit", "Production deployment adapters", ["bun", "run", "test:production-adapters"]),
   rootCheck("unit", "Contract checker tests", ["bun", "run", "test:contracts"]),
+  rootCheck("browser", "Web static-shell browser checks", [
+    "bun",
+    "run",
+    "--cwd",
+    "apps/web",
+    "test:browser",
+  ]),
   {
     group: "quality",
     label: "Install CRAP analyzer",

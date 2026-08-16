@@ -1,14 +1,14 @@
 import { isHttpOrigin } from "@fidy/server/client";
+import { Predicate } from "effect";
 
 const originConfigurationMessage = "VITE_API_ORIGIN must be an HTTP origin";
 
 /**
- * Parses required browser configuration as one credential-free HTTP(S) API
- * origin. Paths, queries, fragments, and non-URL values throw; valid values are
- * normalized to the platform URL origin used for every canonical API request.
+ * Parses required browser configuration as one credential-free HTTP(S) API origin. Paths, queries,
+ * fragments, credentials, and non-URL values fail closed before the transport is constructed.
  */
 export const parseApiOrigin = (configured: unknown): string => {
-  if (typeof configured !== "string" || configured.length === 0) {
+  if (!Predicate.isString(configured) || configured.length === 0) {
     throw new Error(originConfigurationMessage);
   }
 

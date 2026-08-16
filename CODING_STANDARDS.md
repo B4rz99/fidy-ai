@@ -224,6 +224,32 @@ React application code is event-driven and keeps only irreducible interaction st
   one narrow adapter and add an explicit file-scoped lint override. Do not add speculative
   exceptions or expose the synchronization mechanism to application components.
 
+### Web module boundaries
+
+The web source tree has one composition root and explicit vertical modules:
+
+- `src/main.tsx` is mount-only. Application wiring belongs in `src/app/`.
+- `src/app/routes.ts` may compose feature interfaces, but a feature may not import another feature
+  or reach back into `app/`.
+- A feature publishes only `features/<name>/feature.tsx`; private atoms, policies, views, and
+  transport use stay below that feature directory.
+- Only `src/transport/` imports `@fidy/server/client`. Use its one `FidyApi`-derived client and
+  injectable `HttpClient` layer; never add a second client, direct `fetch`, or a second server-state
+  cache.
+- `src/session/` may replace the Atom `RegistryProvider` for an authentication-lifetime transition,
+  but it does not become the owner of feature atoms, router navigation, or local interaction state.
+- `src/ui/` is ownerless: primitives accept children and values and do not import application code.
+  Generic `components/`, `hooks/`, `services/`, `stores/`, and `utils/` directories are not created.
+
+The root Oxlint policy includes React Hooks/refresh rules and mandatory JSX accessibility rules. The
+web Istanbul scope includes behavioural app, feature, session, transport, and UI modules and requires
+at least 90% branches, functions, lines, and statements. Entrypoint wiring, test helpers, and future
+generated `src/ui/components/` primitives are excluded only because they are not behavioural modules.
+The web solution config resolves Shadcn's `@/` aliases, and the `check:shadcn` dry run must keep
+future generated primitives under `src/ui/components/`.
+Every public route is also exercised from the built static shell by Playwright with tracing,
+screenshots, and video disabled; serious and critical axe violations fail the check.
+
 ---
 
 ## Agent-facing documentation

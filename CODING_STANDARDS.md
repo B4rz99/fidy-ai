@@ -229,11 +229,13 @@ React application code is event-driven and keeps only irreducible interaction st
 The web source tree has one composition root and explicit vertical modules:
 
 - `src/main.tsx` is mount-only. Application wiring belongs in `src/app/`.
-- `src/app/root-route.tsx` owns application chrome and not-found presentation; these are not product
-  features. `src/app/routes.ts` composes the root route with genuine feature interfaces, but a
+- `src/app/root-route.tsx` only hosts independently owned route subtrees. `src/app/routes.ts`
+  composes feature interfaces without owning page paths, navigation, or other product decisions; a
   feature may not import another feature or reach back into `app/`.
 - A feature publishes only `features/<name>/feature.tsx`; private atoms, policies, views, and
-  transport use stay below that feature directory.
+  transport use stay below that feature directory. `features/public-site/` owns the public website
+  route subtree and keeps its marketing, audience, company, and legal pages private. Publicly
+  accessible product flows with independent behavior remain separate features.
 - Only `src/transport/` imports `@fidy/server/client`. Use its one `FidyApi`-derived client and
   injectable `HttpClient` layer; never add a second client, direct `fetch`, or a second server-state
   cache.

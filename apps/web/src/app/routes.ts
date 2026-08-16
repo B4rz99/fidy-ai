@@ -2,35 +2,22 @@ import { Option } from "effect";
 import {
   type RouterHistory,
   createRootRouteWithContext,
-  createRoute,
   createRouter,
 } from "@tanstack/react-router";
-import { HomeFeature } from "@/features/home/feature";
-import { PrivacyPolicyFeature } from "@/features/privacy-policy/feature";
+import { createPublicSiteRoute } from "@/features/public-site/feature";
 import type { FidyClient } from "@/transport/client";
-import { RootNotFound, RootRoute } from "./root-route";
+import { ApplicationRoot } from "./root-route";
 
 type WebRouterContext = Readonly<{ apiClient: FidyClient }>;
 type WebRouterOptions = WebRouterContext & Readonly<{ history: Option.Option<RouterHistory> }>;
 
 const rootRoute = createRootRouteWithContext<WebRouterContext>()({
-  component: RootRoute,
-  notFoundComponent: RootNotFound,
+  component: ApplicationRoot,
 });
-const homeRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "/",
-  component: HomeFeature,
-});
-const policyRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "/politica",
-  component: PrivacyPolicyFeature,
-});
-const routeTree = rootRoute.addChildren([homeRoute, policyRoute]);
+const routeTree = rootRoute.addChildren([createPublicSiteRoute(rootRoute)]);
 
-/** Builds the public router for browser startup and isolated memory-history tests. */
-export const createWebRouter = (options: WebRouterOptions): ReturnType<typeof createRouter> =>
+/** Builds the application router from independently owned route subtrees. */
+export const createWebRouter = (options: WebRouterOptions) =>
   createRouter({
     routeTree,
     context: { apiClient: options.apiClient },

@@ -71,7 +71,7 @@ const probes: readonly Probe[] = [
     files: [
       {
         path: `${appInterface}/probe.ts`,
-        source: `import { HomeFeature } from "@/features/home/feature";\n\nexport const featureInterfaceProbe = HomeFeature;\n`,
+        source: `import { createPublicSiteRoute } from "@/features/public-site/feature";\n\nexport const featureInterfaceProbe = createPublicSiteRoute;\n`,
       },
     ],
   },
@@ -85,8 +85,8 @@ const probes: readonly Probe[] = [
       {
         path: sourceMain,
         source:
-          'import { HomeFeature } from "@/features/home/feature";\n\n' +
-          "export const mainProbe = HomeFeature;\n",
+          'import { createPublicSiteRoute } from "@/features/public-site/feature";\n\n' +
+          "export const mainProbe = createPublicSiteRoute;\n",
       },
     ],
   },
@@ -151,8 +151,8 @@ const probes: readonly Probe[] = [
       {
         path: `${uiApplication}/probe.ts`,
         source:
-          'import { HomeFeature } from "@/features/home/feature";\n\n' +
-          "export const uiApplicationProbe = HomeFeature;\n",
+          'import { createPublicSiteRoute } from "@/features/public-site/feature";\n\n' +
+          "export const uiApplicationProbe = createPublicSiteRoute;\n",
       },
     ],
   },
@@ -200,8 +200,8 @@ const probes: readonly Probe[] = [
       {
         path: `${sessionFeature}/probe.ts`,
         source:
-          'import { HomeFeature } from "@/features/home/feature";\n\n' +
-          "export const sessionFeatureProbe = HomeFeature;\n",
+          'import { createPublicSiteRoute } from "@/features/public-site/feature";\n\n' +
+          "export const sessionFeatureProbe = createPublicSiteRoute;\n",
       },
     ],
   },
@@ -230,8 +230,7 @@ const probes: readonly Probe[] = [
       {
         path: `${sessionUi}/probe.ts`,
         source:
-          'import { PublicPage } from "@/ui/public-page";\n\n' +
-          "export const sessionUiProbe = PublicPage;\n",
+          'import { cn } from "@/ui/class-names";\n\n' + "export const sessionUiProbe = cn;\n",
       },
     ],
   },
@@ -245,8 +244,8 @@ const probes: readonly Probe[] = [
       {
         path: `${transportFeature}/probe.ts`,
         source:
-          'import { HomeFeature } from "@/features/home/feature";\n\n' +
-          "export const transportFeatureProbe = HomeFeature;\n",
+          'import { createPublicSiteRoute } from "@/features/public-site/feature";\n\n' +
+          "export const transportFeatureProbe = createPublicSiteRoute;\n",
       },
     ],
   },
@@ -290,8 +289,7 @@ const probes: readonly Probe[] = [
       {
         path: `${transportUi}/probe.ts`,
         source:
-          'import { PublicPage } from "@/ui/public-page";\n\n' +
-          "export const transportUiProbe = PublicPage;\n",
+          'import { cn } from "@/ui/class-names";\n\n' + "export const transportUiProbe = cn;\n",
       },
     ],
   },
@@ -383,8 +381,8 @@ const probes: readonly Probe[] = [
       {
         path: `${sourceRelative}/probe.ts`,
         source:
-          'import { HomeFeature } from "../../features/home/feature";\n\n' +
-          "export const relativeProbe = HomeFeature;\n",
+          'import { createPublicSiteRoute } from "../../features/public-site/feature";\n\n' +
+          "export const relativeProbe = createPublicSiteRoute;\n",
       },
     ],
   },

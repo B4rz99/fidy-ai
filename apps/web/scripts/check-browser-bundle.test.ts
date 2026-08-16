@@ -9,14 +9,14 @@ const workspaceRoot = join(webRoot, "..", "..");
 it("rejects a forbidden runtime dependency reachable from the web entrypoint", async () => {
   const fixtureRoot = await mkdtemp(join(webRoot, ".bundle-test-"));
   try {
-    await mkdir(join(fixtureRoot, "src/features/home"), { recursive: true });
+    await mkdir(join(fixtureRoot, "src/features/public-site"), { recursive: true });
     await Bun.write(
       join(fixtureRoot, "src/main.tsx"),
-      'import { HomeFeature } from "@/features/home/feature";\n\nexport const Root = HomeFeature;\n'
+      'import { PublicSiteFeature } from "@/features/public-site/feature";\n\nexport const Root = PublicSiteFeature;\n'
     );
     await Bun.write(
-      join(fixtureRoot, "src/features/home/feature.tsx"),
-      'import { BunRuntime } from "@effect/platform-bun";\n\nexport const HomeFeature = BunRuntime;\n'
+      join(fixtureRoot, "src/features/public-site/feature.tsx"),
+      'import { BunRuntime } from "@effect/platform-bun";\n\nexport const PublicSiteFeature = BunRuntime;\n'
     );
 
     await expect(

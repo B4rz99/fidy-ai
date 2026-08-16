@@ -1,13 +1,16 @@
 import type { ReactNode } from "react";
-import { cn } from "./class-names";
+import { cn } from "@/ui/class-names";
 
-type PublicPageProps = Readonly<{
+type PublicPageLayoutProps = Readonly<{
   readonly children: ReactNode;
   readonly layout: "centered" | "document";
 }>;
 
-/** Provides ownerless page geometry shared by public route surfaces. */
-export const PublicPage = ({ children, layout }: PublicPageProps): React.JSX.Element => (
+/** Provides page geometry owned by the public website surface. */
+export const PublicPageLayout = ({
+  children,
+  layout,
+}: PublicPageLayoutProps): React.JSX.Element => (
   <main
     className={cn(
       "mx-auto max-w-3xl px-6",

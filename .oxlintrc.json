@@ -196,6 +196,15 @@
         ]
       }
     },
+    // TanStack Router must infer the complete literal route subtree through both factories so
+    // registered links reject unknown paths. Explicit return types widen the tree to AnyRoute and
+    // silently remove that compile-time contract; tsc grades the inferred tree.
+    {
+      "files": ["apps/web/src/app/routes.ts", "apps/web/src/features/public-site/feature.tsx"],
+      "rules": {
+        "typescript/explicit-function-return-type": "off"
+      }
+    },
     // The staged generic needs its concrete canonical API to preserve each operation in the
     // resulting Atom client. Oxc cannot type the workspace source export and marks that one
     // assignment as `error`; tsc and both browser module-graph checks grade the boundary.

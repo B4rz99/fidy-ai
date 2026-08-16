@@ -156,11 +156,15 @@ graph guards are executable checks for that boundary.
 The web application is deliberately vertical rather than another flat shell:
 
 - `src/main.tsx` only mounts `WebApplication`.
-- `src/app/` is the composition root. `root-route.tsx` owns application chrome and not-found
-  presentation; `routes.ts` composes that root with genuine feature interfaces, and
-  `create-application.tsx` composes the route tree, transport, and session registry lifetime.
+- `src/app/` is the composition root. Its root route only hosts independently owned route
+  subtrees; `routes.ts` composes feature interfaces, and `create-application.tsx` composes the route
+  tree, transport, and session registry lifetime without product decisions.
 - `src/features/<feature>/feature.tsx` is the only public feature interface. A feature's private
   atoms, views, policies, and transport use stay in that feature; features never import one another.
+  `features/public-site/` is the public website surface: its one route-subtree interface hides
+  marketing, audience, company, and legal pages together with their navigation, layout, metadata,
+  and not-found presentation. A public route with independent product behavior remains its own
+  feature rather than becoming public-site content.
 - `src/transport/` is the only owner of `@fidy/server/client`. It derives the sole browser client
   from `FidyApi`; it does not introduce a parallel product client or server-state cache. Tests
   replace only the underlying `HttpClient` layer.

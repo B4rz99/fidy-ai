@@ -1,0 +1,34 @@
+apps/web/scripts/build-metafile.ts
+  s_abb6d1bf2b63ee::t_b8b687f59c8709 1-18
+apps/web/scripts/check-browser-bundle.ts
+  s_abb6d1bf2b63ee::t_5e13f68e04dcf7 151-158
+  s_abb6d1bf2b63ee::t_06792b8ac6d01b 24-27,30-31,35-36,40,67-87,89,91-92,94,96,101-109,111,113,120,122-138,140-147,163-169,197,199-217,219-220
+  s_abb6d1bf2b63ee::t_4e36674da1a240 66
+  s_abb6d1bf2b63ee::t_d63e998e4beab8 3,32,148-150,159-161,179,181
+  s_abb6d1bf2b63ee::t_cde4f17ecbe63a 4-23,28-29,41-55,121,162,198,218,221,223
+  s_abb6d1bf2b63ee::t_d84b46b262ecef 34,37-39,224
+apps/web/scripts/build-metafile.test.ts
+  s_abb6d1bf2b63ee::t_4fa88e93d20474 1-14
+apps/web/scripts/check-browser-bundle.test.ts
+  s_abb6d1bf2b63ee::t_b2417ac2523a89 1-5,8-9,11,13,16-17,20-23,27-30,32-33
+  s_abb6d1bf2b63ee::t_461fb7e8a7b071 24
+  s_abb6d1bf2b63ee::t_4d811951340bda 6-7,10,12,14,18,25-26,31
+  s_abb6d1bf2b63ee::t_c01a6b61ba506d 15
+  s_abb6d1bf2b63ee::t_8f24704213d88e 19
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "d94e6eb0a99cd8c66e2f978e73a8489d45eab7c5",
+  "prompts": {},
+  "sessions": {
+    "s_abb6d1bf2b63ee": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a007ff-69d2-75e7-a3c9-7d7793f0d805",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

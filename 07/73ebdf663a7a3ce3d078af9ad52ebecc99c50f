@@ -1,0 +1,21 @@
+ARCHITECTURE.md
+  s_45807ae4c11b63::t_a48ad7089c17ab 156-159
+CODING_STANDARDS.md
+  s_45807ae4c11b63::t_f6c7c9fe06eb08 227-231
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "0773ebdf663a7a3ce3d078af9ad52ebecc99c50f",
+  "prompts": {},
+  "sessions": {
+    "s_45807ae4c11b63": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a007d2-e6d7-7697-bba7-e0841f8e3bc1",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

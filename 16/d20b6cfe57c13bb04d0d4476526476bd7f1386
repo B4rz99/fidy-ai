@@ -1,0 +1,161 @@
+apps/web/scripts/check-dependency-guards.ts
+  s_abb6d1bf2b63ee::t_0b224d8570cef1 28-29,116-149
+  s_abb6d1bf2b63ee::t_426b52c78fc9a6 58,98-99,113-114,162-163,207-208,267-268,295-296,300-301,315-316,330-331,345-346,370,397
+  s_abb6d1bf2b63ee::t_977f3aaa346b1b 169-198,210-254
+  s_abb6d1bf2b63ee::t_dd5341099c6175 31-32,34-36
+  s_abb6d1bf2b63ee::t_c7cf73888c3f5e 37
+  s_abb6d1bf2b63ee::t_1be635b88bc917 361
+  s_abb6d1bf2b63ee::t_ec0345e9ffe193 1-27,30,33,38-57,59-97,100-112,115,150-161,164-168,199-206,209,255-266,269-294,297-299,302-314,317-329,332-344,347-360,362-369,371-396,398-405
+apps/web/src/transport/client.ts
+  s_abb6d1bf2b63ee::t_bf413e66e8e325 11-13,16-22,40,45
+  s_abb6d1bf2b63ee::t_f39d26504a9d8a 7,38-39,41
+  s_abb6d1bf2b63ee::t_79363f7c42afe7 10,14,33-36
+  s_abb6d1bf2b63ee::t_e8f408d33ff7cf 15
+apps/web/e2e/static-shell.spec.ts
+  s_abb6d1bf2b63ee::t_c28af2abef2887 2
+  s_abb6d1bf2b63ee::t_f901b20282eac6 1,3,5-12,16-41
+  s_abb6d1bf2b63ee::t_40c3e9f8b4f4aa 4
+  s_abb6d1bf2b63ee::t_426b52c78fc9a6 13-15
+apps/web/src/ui/public-page.tsx
+  s_abb6d1bf2b63ee::t_5b3a6fac3511c3 1-20
+apps/web/source-scope.ts
+  s_abb6d1bf2b63ee::t_426b52c78fc9a6 1-9
+apps/web/src/transport/client.test.ts
+  s_abb6d1bf2b63ee::t_a1e0d42d3aa945 1-2
+  s_abb6d1bf2b63ee::t_61af5115acdee9 11,13,24-25
+  s_abb6d1bf2b63ee::t_64a5b6936e2ce2 4
+  s_abb6d1bf2b63ee::t_7964b5a7953dbb 48
+  s_abb6d1bf2b63ee::t_2676d3f64ea5db 3,5-10,12,14-23,26-47,49-66
+apps/web/src/main.tsx
+  s_abb6d1bf2b63ee::t_994583dfb464fa 3,13
+CODING_STANDARDS.md
+  s_abb6d1bf2b63ee::t_ed64852e4918b9 248-249
+  s_abb6d1bf2b63ee::t_71ff93c29a973a 227-247,250-252
+apps/web/src/session/session.test.tsx
+  s_abb6d1bf2b63ee::t_7378d18ca7538d 1-37
+apps/web/components.json
+  s_abb6d1bf2b63ee::t_cb05f54bb98f6d 19-20
+  s_abb6d1bf2b63ee::t_5a0557a32c4eb1 16-18
+apps/web/src/app/application.tsx
+  s_abb6d1bf2b63ee::t_e8220ce20bf823 4
+  s_abb6d1bf2b63ee::t_06bf90840483a0 1-3,5-11
+tsconfig.base.json
+  s_abb6d1bf2b63ee::t_6d8dc7f07975ff 158
+  s_abb6d1bf2b63ee::t_236d93a58a28af 142-150,157,159-166
+apps/server/scripts/check-browser-client.ts
+  s_abb6d1bf2b63ee::t_a1f7a0aed76405 45
+apps/web/.dependency-cruiser.mjs
+  s_abb6d1bf2b63ee::t_65306e03c4ebeb 1-44,49-72,91-97,125-133,135-144,147-213
+  s_abb6d1bf2b63ee::t_5ee3e8d729e5c6 45-48
+  s_abb6d1bf2b63ee::t_844aad7152d7be 73-90,98-124
+  s_abb6d1bf2b63ee::t_1b8bd2ef97c781 134,145
+  s_abb6d1bf2b63ee::t_d97cdf0dae941a 146
+.github/workflows/ci.yml
+  s_abb6d1bf2b63ee::t_095b424d7459ec 62-72,230
+apps/web/playwright.config.ts
+  s_abb6d1bf2b63ee::t_50d207f5c9fda6 1-24
+ARCHITECTURE.md
+  s_abb6d1bf2b63ee::t_e0d14da00c0e1e 173-177
+  s_abb6d1bf2b63ee::t_ff4da75e7a967e 154-172,178-179
+apps/web/package.json
+  s_abb6d1bf2b63ee::t_22aabd010137df 17,19-21,48
+  s_abb6d1bf2b63ee::t_c053340825a43b 40
+  s_abb6d1bf2b63ee::t_e085ddc419ba2b 18
+  s_abb6d1bf2b63ee::t_474256c3d0f4d8 41
+  s_abb6d1bf2b63ee::t_af0096767004a3 14
+  s_abb6d1bf2b63ee::t_c09890960de25d 50
+apps/web/tsconfig.app.json
+  s_abb6d1bf2b63ee::t_169be6c2def0e4 23-24,26
+apps/web/src/features/privacy-policy/feature.tsx
+  s_abb6d1bf2b63ee::t_200bf2206d7378 1-13
+apps/web/src/features/public-shell/feature.tsx
+  s_abb6d1bf2b63ee::t_e7632b15fdf788 1-22
+.oxlintrc.json
+  s_abb6d1bf2b63ee::t_426b52c78fc9a6 7
+  s_abb6d1bf2b63ee::t_38ef8fac3f51b8 18-33,57-58,176,187-198,203
+  s_abb6d1bf2b63ee::t_4a0efd76a2d087 182
+  s_abb6d1bf2b63ee::t_374d442b5f8437 139-144
+  s_abb6d1bf2b63ee::t_1461308b198163 388
+apps/web/src/transport/origin.ts
+  s_abb6d1bf2b63ee::t_d026c3a46502b8 2,11
+  s_abb6d1bf2b63ee::t_13647453ca6dc0 7-8
+apps/web/src/session/session.tsx
+  s_abb6d1bf2b63ee::t_658afbfda815b6 12-13
+  s_abb6d1bf2b63ee::t_d3d5de56c2b346 1-11,14-20
+apps/web/src/application.test.tsx
+  s_abb6d1bf2b63ee::t_2606b7d7322f5a 5-6
+  s_abb6d1bf2b63ee::t_19d3713e47025f 3,27
+  s_abb6d1bf2b63ee::t_f59c7e8d9ae6fe 4,7-9,18,20,26,28-29,57-74
+apps/web/tsconfig.json
+  s_abb6d1bf2b63ee::t_b8959af6a23343 4
+  s_abb6d1bf2b63ee::t_6c8e0cf95874d0 2-3,5-6
+apps/web/src/features/not-found/feature.tsx
+  s_abb6d1bf2b63ee::t_be4fc69bd1df2d 1-14
+apps/web/src/ui/class-names.ts
+  s_abb6d1bf2b63ee::t_629562774c497e 4
+apps/web/scripts/check-browser-bundle.ts
+  s_abb6d1bf2b63ee::t_f4f6ffa0a8b65b 58-60
+  s_abb6d1bf2b63ee::t_426b52c78fc9a6 20-23,62-63
+  s_7d3319db851730::t_7f78be90248403 18-19,66
+  s_abb6d1bf2b63ee::t_3a76a75ed74ee4 10-17,106
+  s_abb6d1bf2b63ee::t_687213491e8f25 50-57,79-80,82-83
+  s_abb6d1bf2b63ee::t_63dde5a1f5d75d 24-33,40-49,61,64-65,103-105,107-113,115-124,135-150,152,155-163
+  s_abb6d1bf2b63ee::t_7046db26907d31 81,84-87
+package.json
+  s_abb6d1bf2b63ee::t_5795cd6704a0a3 45
+  s_abb6d1bf2b63ee::t_a20b0c1b0a7fe1 13-14
+.gitignore
+  s_abb6d1bf2b63ee::t_c05db95d4ec8ca 9-11
+apps/web/src/ui/public-shell.tsx
+  s_abb6d1bf2b63ee::t_46fe1a4962e5ff 1-29
+apps/web/src/app/create-application.tsx
+  s_abb6d1bf2b63ee::t_c17ca6c412400b 4-24
+  s_abb6d1bf2b63ee::t_21aa090f34f4e4 3
+  s_abb6d1bf2b63ee::t_f032f91e3d32c3 1-2
+apps/web/src/app/routes.ts
+  s_abb6d1bf2b63ee::t_b072d66e6325b6 8-11,18-24,29
+  s_abb6d1bf2b63ee::t_8b712ea79b408b 12,15,33
+apps/web/src/features/home/feature.tsx
+  s_abb6d1bf2b63ee::t_5126243d2005b0 1-13
+scripts/verify.ts
+  s_abb6d1bf2b63ee::t_426b52c78fc9a6 130
+  s_abb6d1bf2b63ee::t_c9563b1d892afe 102
+  s_abb6d1bf2b63ee::t_5d542940dffa53 11,134-140
+apps/web/scripts/check-policy-integrity.ts
+  s_abb6d1bf2b63ee::t_426b52c78fc9a6 4
+apps/web/vitest.config.ts
+  s_abb6d1bf2b63ee::t_6e4f7d0599303b 22-33
+  s_abb6d1bf2b63ee::t_7938ffa5f035e6 4
+  s_abb6d1bf2b63ee::t_3c0e52b1182d00 15-20
+apps/web/src/transport/origin.test.ts
+  s_abb6d1bf2b63ee::t_bbc68612d01c71 2
+bun.lock
+  s_abb6d1bf2b63ee::t_7bc5193260f619 63-64,71,73,99-100,505-506,733-734,1259-1262,1595-1596
+apps/web/scripts/check-shadcn-integrity.ts
+  s_abb6d1bf2b63ee::t_00209f422ab731 3,5-12,14-16,18-20
+  s_abb6d1bf2b63ee::t_0a35406eb718a6 1-2,4,13,17,21-44
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "16d20b6cfe57c13bb04d0d4476526476bd7f1386",
+  "prompts": {},
+  "sessions": {
+    "s_7d3319db851730": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a007d1-5622-73c4-b68c-4be7887ad784",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_abb6d1bf2b63ee": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a007ff-69d2-75e7-a3c9-7d7793f0d805",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": null
+    }
+  }
+}

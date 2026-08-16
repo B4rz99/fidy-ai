@@ -3,7 +3,6 @@ import { Option } from "effect";
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { WebApplication } from "@/app/application";
-import { createWebApplication } from "@/app/create-application";
 import { createWebRouter } from "@/app/routes";
 import { SessionRegistryProvider } from "@/session/session";
 import { makeFidyClient } from "@/transport/client";
@@ -53,17 +52,6 @@ describe("web application routes", () => {
     await renderRoute("/ruta-inexistente");
 
     expect(await screen.findByRole("heading", { name: "Página no encontrada" })).toBeVisible();
-  });
-
-  it("composes the application with an injected memory history", async () => {
-    render(
-      createWebApplication({
-        apiOrigin: "https://api.test.fidyapp.com",
-        history: Option.some(createMemoryHistory({ initialEntries: ["/"] })),
-      })
-    );
-
-    expect(await screen.findByRole("heading", { level: 1, name: "Fidy" })).toBeVisible();
   });
 
   it("uses the configured browser application origin", async () => {

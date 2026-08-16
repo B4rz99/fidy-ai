@@ -1,7 +1,6 @@
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vitest/config";
 import { serverClientBoundary } from "./server-client-boundary.ts";
-import { WEB_BEHAVIOR_EXCLUDE, WEB_BEHAVIOR_SOURCE } from "./source-scope.ts";
 
 export default defineConfig({
   plugins: [serverClientBoundary(), react()],
@@ -22,8 +21,14 @@ export default defineConfig({
     coverage: {
       provider: "istanbul",
       reporter: ["text", "json-summary", "html"],
-      include: WEB_BEHAVIOR_SOURCE,
-      exclude: WEB_BEHAVIOR_EXCLUDE,
+      include: [
+        "src/app/**/*.{ts,tsx}",
+        "src/features/**/*.{ts,tsx}",
+        "src/session/**/*.{ts,tsx}",
+        "src/transport/**/*.{ts,tsx}",
+        "src/ui/**/*.{ts,tsx}",
+      ],
+      exclude: ["src/testing/**", "src/ui/components/**"],
       thresholds: {
         branches: 90,
         functions: 90,

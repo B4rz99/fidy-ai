@@ -229,9 +229,9 @@ React application code is event-driven and keeps only irreducible interaction st
 The web source tree has one composition root and explicit vertical modules:
 
 - `src/main.tsx` is mount-only. Application wiring belongs in `src/app/`.
-- `src/app/root-route.tsx` only hosts independently owned route subtrees. `src/app/routes.ts`
-  composes feature interfaces without owning page paths, navigation, or other product decisions; a
-  feature may not import another feature or reach back into `app/`.
+- `src/app/routes.ts` composes independently owned feature route subtrees beneath TanStack Router's
+  default root outlet without owning page paths, navigation, or other product decisions; a feature
+  may not import another feature or reach back into `app/`.
 - A feature publishes only `features/<name>/feature.tsx`; private atoms, policies, views, and
   transport use stay below that feature directory. `features/public-site/` owns the public website
   route subtree and keeps its marketing, audience, company, and legal pages private. Publicly

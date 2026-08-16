@@ -6,14 +6,11 @@ import {
 } from "@tanstack/react-router";
 import { createPublicSiteRoute } from "@/features/public-site/feature";
 import type { FidyClient } from "@/transport/client";
-import { ApplicationRoot } from "./root-route";
 
 type WebRouterContext = Readonly<{ apiClient: FidyClient }>;
 type WebRouterOptions = WebRouterContext & Readonly<{ history: Option.Option<RouterHistory> }>;
 
-const rootRoute = createRootRouteWithContext<WebRouterContext>()({
-  component: ApplicationRoot,
-});
+const rootRoute = createRootRouteWithContext<WebRouterContext>()({});
 const routeTree = rootRoute.addChildren([createPublicSiteRoute(rootRoute)]);
 
 /** Builds the application router from independently owned route subtrees. */

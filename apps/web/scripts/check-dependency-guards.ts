@@ -136,8 +136,8 @@ const probes: readonly Probe[] = [
       {
         path: `${featureApplication}/probe.ts`,
         source:
-          'import { createWebApplication } from "@/app/application";\n\n' +
-          "export const featureApplicationProbe = createWebApplication;\n",
+          'import { WebApplication } from "@/app/application";\n\n' +
+          "export const featureApplicationProbe = WebApplication;\n",
       },
     ],
   },

@@ -156,9 +156,9 @@ graph guards are executable checks for that boundary.
 The web application is deliberately vertical rather than another flat shell:
 
 - `src/main.tsx` only mounts `WebApplication`.
-- `src/app/` is the composition root. Its root route only hosts independently owned route
-  subtrees; `routes.ts` composes feature interfaces, and `create-application.tsx` composes the route
-  tree, transport, and session registry lifetime without product decisions.
+- `src/app/` is the composition root. `routes.ts` composes independently owned feature route
+  subtrees beneath TanStack Router's default root outlet; `application.tsx` composes that route tree,
+  transport, and session registry lifetime without product decisions.
 - `src/features/<feature>/feature.tsx` is the only public feature interface. A feature's private
   atoms, views, policies, and transport use stay in that feature; features never import one another.
   `features/public-site/` is the public website surface: its one route-subtree interface hides

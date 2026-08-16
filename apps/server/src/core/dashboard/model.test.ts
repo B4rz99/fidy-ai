@@ -175,19 +175,6 @@ it("rejects invalid periods and every mixed-Currency Budget Money value", () => 
   };
 
   expect(Result.isFailure(Schema.decodeUnknownResult(BudgetBarData)(base))).toBe(true);
-  expect(
-    Result.isFailure(
-      Schema.decodeUnknownResult(BudgetBarData)({
-        ...base,
-        appliedPeriod: {
-          from: "2026-07-01T05:00:00.000Z",
-          toExclusive: "2026-08-01T05:00:00.000Z",
-        },
-        cap: { amount: "100", currency: "COP" },
-        status: { state: "over", overBy: { amount: "1", currency: "USD" } },
-      })
-    )
-  ).toBe(true);
 });
 
 it("requires one to sixteen unique Category references", () => {

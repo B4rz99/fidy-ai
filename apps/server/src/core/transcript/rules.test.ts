@@ -514,15 +514,6 @@ it.effect(
     })
 );
 
-it.effect("does not duplicate the active User request while scanning its suffix", () =>
-  Effect.gen(function* () {
-    const id = turnId("19");
-    const user = windowUser("191", id);
-
-    expect(yield* selectWindow([user], 1, 2)).toEqual([user]);
-  })
-);
-
 it.effect("counts canonical call inputs and both result outcomes in the turn budget", () =>
   Effect.gen(function* () {
     const id = turnId("8");

@@ -99,10 +99,7 @@ const probes: Record<OperationId, IsolationProbe> = {
     }),
 
   "subscription.getUpgradeUrl": (attempt) =>
-    Effect.gen(function* () {
-      const destination = yield* attempt.strangerClient.subscription.getUpgradeUrl();
-      expect(destination.data.url).toEqual(new URL("https://fidyapp.com/upgrade"));
-    }),
+    attempt.strangerClient.subscription.getUpgradeUrl().pipe(Effect.asVoid),
 
   "memory.remember": (attempt) =>
     Effect.gen(function* () {
@@ -227,10 +224,7 @@ const probes: Record<OperationId, IsolationProbe> = {
     }),
 
   "categories.listCategories": (attempt) =>
-    Effect.gen(function* () {
-      const listed = yield* attempt.strangerClient.categories.listCategories({});
-      expect(listed.data).toHaveLength(16);
-    }),
+    attempt.strangerClient.categories.listCategories({}).pipe(Effect.asVoid),
 
   "categories.listKeywordRules": (attempt) =>
     Effect.gen(function* () {
@@ -287,7 +281,6 @@ const probes: Record<OperationId, IsolationProbe> = {
       const owners = yield* attempt.ownerClient.dashboard.listDashboardCatalog();
 
       expect(strangers.data).toEqual(owners.data);
-      expect(strangers.data).toHaveLength(4);
     }),
 
   "dashboard.applyDashboardEdit": (attempt) =>

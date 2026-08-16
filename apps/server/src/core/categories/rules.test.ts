@@ -111,7 +111,7 @@ it.effect("detects only a normalized duplicate when no rule is excluded", () =>
   })
 );
 
-it.effect("treats a None exclusion as absent even when it carries an incidental value", () =>
+it.effect("treats a None exclusion as absent even when it carries incidental runtime data", () =>
   Effect.gen(function* () {
     const noneWithIncidentalValue = { _tag: "None" as const, value: firstRuleId };
 

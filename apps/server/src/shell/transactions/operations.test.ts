@@ -266,16 +266,6 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         })
     );
 
-    it.effect("the derived server answers a request that names no caller with a 401", () =>
-      Effect.gen(function* () {
-        yield* truncateTransactions;
-
-        const response = yield* HttpClient.get("/transactions");
-
-        expect(response.status).toBe(401);
-      })
-    );
-
     it.effect(
       "a request that names no caller is told so, and offered no way out over the API",
       () =>

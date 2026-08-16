@@ -44,16 +44,21 @@ const makeEvidence = (
   providerMessageId,
 });
 
-it("requires policy revisions to match their complete lexical grammar", () => {
-  for (const revision of ["@policy-2026-01", "policy-2026-01@"]) {
-    expect(Result.isFailure(Schema.decodeUnknownResult(PolicyRevision)(revision))).toBe(true);
-  }
-});
+it("requires policy and disclosure revisions to match their complete lexical grammars", () => {
+  const assertInvalid = <A, E>(
+    decode: (value: string) => Result.Result<A, E>,
+    revisions: ReadonlyArray<string>
+  ): void => {
+    for (const revision of revisions) {
+      expect(Result.isFailure(decode(revision))).toBe(true);
+    }
+  };
 
-it("requires disclosure revisions to match their complete lexical grammar", () => {
-  for (const revision of ["@onboarding-2026-01", "onboarding-2026-01@"]) {
-    expect(Result.isFailure(Schema.decodeUnknownResult(DisclosureRevision)(revision))).toBe(true);
-  }
+  assertInvalid(Schema.decodeUnknownResult(PolicyRevision), ["@policy-2026-01", "policy-2026-01@"]);
+  assertInvalid(Schema.decodeUnknownResult(DisclosureRevision), [
+    "@onboarding-2026-01",
+    "onboarding-2026-01@",
+  ]);
 });
 
 it("requires a SHA-256 digest to occupy the complete input", () => {

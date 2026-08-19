@@ -1,0 +1,48 @@
+name: React Doctor
+
+# Deliberately its own workflow rather than a job in ci.yml: that workflow's
+# `required-checks` gate demands `success` from every job it names, and a
+# path-filtered job reports `skipped` on pull requests that leave apps/web alone.
+on:
+  pull_request:
+    branches:
+      - trunk
+    paths:
+      - "apps/web/**"
+      - ".github/workflows/react-doctor.yml"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# The scan needs only `contents: read`. The write scopes are what the action
+# reports through: sticky summary comment, inline review comments, commit status.
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+  statuses: write
+
+jobs:
+  react-doctor:
+    name: React health
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        # `scope: changed` resolves the merge base to tell the issues this branch
+        # introduced from the ones it inherited; a shallow checkout cannot reach
+        # the base and reports every issue in the changed files instead.
+        with:
+          fetch-depth: 0
+      - name: Scan apps/web
+        uses: millionco/react-doctor@01820bb4fd4d0a4aebcd8df2b2a143a098649cb2 # v2.2.8
+        with:
+          directory: apps/web
+          scope: changed
+          # Blocking on errors only. apps/web/doctor.config.jsonc leaves every
+          # rule .oxlintrc.json owns to oxlint, so a full scan is error-free
+          # today and only newly introduced errors can fail this job.
+          blocking: error
+          # Pinned, not `latest`: newest release older than the 7-day
+          # supply-chain delay bunfig.toml applies to every other dependency.
+          version: "0.9.11"

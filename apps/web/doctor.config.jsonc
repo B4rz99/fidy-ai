@@ -1,0 +1,15 @@
+{
+  // oxlint is the sole authority on the rules .oxlintrc.json configures. React
+  // Doctor otherwise pulls those rule names in via `extends` but re-stamps them
+  // with its own options — its local config wins over the extended one, so
+  // `import/extensions: never` came back as oxlint's default `always` and
+  // reported 23 errors on a tree `bun run lint` passes. Off, React Doctor scans
+  // only its curated React-health rules and the two cannot disagree.
+  "adoptExistingLintConfig": false,
+
+  // Same reasoning for dependencies: .fluidattacks/sca.yaml and
+  // dependency-policy.json already own supply chain, and this check grades every
+  // direct dependency against Socket.dev at error severity — which would put a
+  // third-party service in the merge path for a verdict this repo already makes.
+  "supplyChain": { "enabled": false },
+}

@@ -1,0 +1,40 @@
+name: React Doctor
+
+# Own workflow, not a ci.yml job: `required-checks` there fails on the `skipped`
+# a path filter produces.
+on:
+  pull_request:
+    branches:
+      - trunk
+    paths:
+      - "apps/web/**"
+      - ".github/workflows/react-doctor.yml"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# The scan needs only `contents: read`; the write scopes are how it reports.
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+  statuses: write
+
+jobs:
+  react-doctor:
+    name: React health
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        # `scope: changed` needs the merge base; a shallow checkout can't reach it.
+        with:
+          fetch-depth: 0
+      - name: Scan apps/web
+        uses: millionco/react-doctor@01820bb4fd4d0a4aebcd8df2b2a143a098649cb2 # v2.2.8
+        with:
+          directory: apps/web
+          scope: changed
+          blocking: error
+          # Pinned, not `latest`: newest release past bunfig.toml's 7-day delay.
+          version: "0.9.11"

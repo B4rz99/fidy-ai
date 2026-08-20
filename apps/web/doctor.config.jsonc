@@ -1,0 +1,9 @@
+{
+  // Adoption re-runs .oxlintrc.json's rules with React Doctor's own options, so
+  // `import/extensions: never` came back as `always`. oxlint owns those rules.
+  "adoptExistingLintConfig": false,
+
+  // .fluidattacks/sca.yaml already owns this verdict; keeps Socket.dev out of
+  // the merge path.
+  "supplyChain": { "enabled": false },
+}

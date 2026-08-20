@@ -83,11 +83,10 @@ jobs:
 
       - name: Bootstrap the static Worker when explicitly requested
         if: vars.CLOUDFLARE_BOOTSTRAP_REQUIRED == 'true'
-        uses: cloudflare/wrangler-action@9acf94ace14e7dc412b076f2c5c20b8ce93c79cd # v3
+        uses: cloudflare/wrangler-action@ebbaa1584979971c8614a24965b4405ff95890e0 # v4.0.0
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
-          wranglerVersion: "4.123.0"
           workingDirectory: apps/web
           command: >-
             deploy
@@ -97,11 +96,10 @@ jobs:
 
       - name: Upload one immutable Cloudflare version
         id: cloudflare-upload
-        uses: cloudflare/wrangler-action@9acf94ace14e7dc412b076f2c5c20b8ce93c79cd # v3
+        uses: cloudflare/wrangler-action@ebbaa1584979971c8614a24965b4405ff95890e0 # v4.0.0
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
-          wranglerVersion: "4.123.0"
           workingDirectory: apps/web
           command: >-
             versions upload
@@ -130,11 +128,10 @@ jobs:
 
       - name: Promote only the uploaded Cloudflare version
         id: cloudflare-deploy
-        uses: cloudflare/wrangler-action@9acf94ace14e7dc412b076f2c5c20b8ce93c79cd # v3
+        uses: cloudflare/wrangler-action@ebbaa1584979971c8614a24965b4405ff95890e0 # v4.0.0
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
-          wranglerVersion: "4.123.0"
           workingDirectory: apps/web
           command: >-
             versions deploy

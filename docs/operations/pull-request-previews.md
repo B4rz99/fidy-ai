@@ -74,5 +74,5 @@ bun run test:preview-policy
 Wrangler configuration can be checked without uploading:
 
 ```sh
-bunx wrangler@4.123.0 deploy --config apps/web/cloudflare/wrangler.json --dry-run
+bunx wrangler deploy --config apps/web/cloudflare/wrangler.json --dry-run
 ```

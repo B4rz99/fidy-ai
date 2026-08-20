@@ -25,7 +25,10 @@ describe("pull-request preview workflow policy", () => {
     expect(previewWorkflow.indexOf("preview-policy/artifact.ts")).toBeLessThan(
       previewWorkflow.indexOf("cloudflare/wrangler-action@")
     );
-    expect(previewWorkflow).toContain('wranglerVersion: "4.123.0"');
+    expect(previewWorkflow).not.toContain("wranglerVersion");
+    expect(previewWorkflow.indexOf("bun install --frozen-lockfile")).toBeLessThan(
+      previewWorkflow.indexOf("cloudflare/wrangler-action@")
+    );
   });
 
   it("pins every external Action to a complete commit SHA", () => {

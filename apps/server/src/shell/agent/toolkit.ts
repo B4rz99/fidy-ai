@@ -329,6 +329,20 @@ const memoryClientOperations = (
   "memory.recall": bind("memory.recall", client.memory.recall),
 });
 
+const recurringClientOperations = (
+  client: FidyClient,
+  bind: BindClientOperation
+): GroupClientOperations<"recurring"> => ({
+  "recurring.listRecurringSeries": bind(
+    "recurring.listRecurringSeries",
+    client.recurring.listRecurringSeries
+  ),
+  "recurring.detectRecurringSeries": bind(
+    "recurring.detectRecurringSeries",
+    client.recurring.detectRecurringSeries
+  ),
+});
+
 const remainingClientOperations = (
   client: FidyClient,
   bind: BindClientOperation
@@ -355,6 +369,7 @@ const makeClientOperations = (
   ...ingestionClientOperations(client, bind),
   ...insightClientOperations(client, bind),
   ...memoryClientOperations(client, bind),
+  ...recurringClientOperations(client, bind),
   ...remainingClientOperations(client, bind),
 });
 

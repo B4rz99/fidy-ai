@@ -291,6 +291,26 @@
       }
     },
     {
+      "id": "recurring.detectRecurringSeries",
+      "policy": {
+        "agentConfirmation": "not-required",
+        "kind": "mutation",
+        "requiredScope": "write",
+        "requiredTier": "free",
+        "scopeEvaluation": "endpoint"
+      }
+    },
+    {
+      "id": "recurring.listRecurringSeries",
+      "policy": {
+        "agentConfirmation": "not-required",
+        "kind": "query",
+        "requiredScope": "read",
+        "requiredTier": "free",
+        "scopeEvaluation": "endpoint"
+      }
+    },
+    {
       "id": "subscription.getUpgradeUrl",
       "policy": {
         "agentConfirmation": "not-required",

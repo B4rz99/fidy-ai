@@ -2207,6 +2207,29 @@
         ],
         "type": "object"
       },
+      "Money7": {
+        "additionalProperties": false,
+        "description": "A non-negative exact decimal amount together with its ISO 4217 Currency. Currency precision is enforced and no conversion is implied.",
+        "properties": {
+          "amount": {
+            "allOf": [
+              {
+                "description": "A non-negative exact amount as plain decimal text. Responses remove insignificant trailing zeros and never use exponent or locale notation.",
+                "pattern": "^(?:0|[1-9]\\d*)(?:\\.\\d+)?$"
+              }
+            ],
+            "type": "string"
+          },
+          "currency": {
+            "$ref": "#/components/schemas/Currency"
+          }
+        },
+        "required": [
+          "amount",
+          "currency"
+        ],
+        "type": "object"
+      },
       "MoneyGroup": {
         "additionalProperties": false,
         "properties": {
@@ -2958,6 +2981,212 @@
           "$ref": "#/components/schemas/Memory"
         },
         "type": "array"
+      },
+      "RecurringAnnouncement": {
+        "anyOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "state": {
+                "enum": [
+                  "announceable"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "state"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "reason": {
+                "$ref": "#/components/schemas/RecurringSuppressionReason"
+              },
+              "state": {
+                "enum": [
+                  "suppressed"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "state",
+              "reason"
+            ],
+            "type": "object"
+          }
+        ],
+        "description": "Whether fidy may raise this series as news. A suppressed series is still a real recurring charge worth answering questions about; only the unprompted announcement is withheld."
+      },
+      "RecurringCadence": {
+        "description": "How often the charge repeats. It describes the observed rhythm of the series, not a promise about exactly when the next one lands.",
+        "enum": [
+          "weekly",
+          "fortnightly",
+          "monthly",
+          "quarterly",
+          "yearly"
+        ],
+        "type": "string"
+      },
+      "RecurringCurrencyGroup": {
+        "additionalProperties": false,
+        "properties": {
+          "currency": {
+            "$ref": "#/components/schemas/Currency"
+          },
+          "perOccurrence": {
+            "$ref": "#/components/schemas/MoneyGroup"
+          },
+          "series": {
+            "items": {
+              "$ref": "#/components/schemas/RecurringSeries"
+            },
+            "minItems": 1,
+            "prefixItems": [
+              {
+                "$ref": "#/components/schemas/RecurringSeries"
+              }
+            ],
+            "type": "array"
+          }
+        },
+        "required": [
+          "currency",
+          "series",
+          "perOccurrence"
+        ],
+        "type": "object"
+      },
+      "RecurringDetectionOutcome": {
+        "additionalProperties": false,
+        "properties": {
+          "announcement": {
+            "$ref": "#/components/schemas/MoneyGroups"
+          },
+          "confirmed": {
+            "items": {
+              "$ref": "#/components/schemas/RecurringSeries"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "confirmed",
+          "announcement"
+        ],
+        "type": "object"
+      },
+      "RecurringSeries": {
+        "additionalProperties": false,
+        "properties": {
+          "announcement": {
+            "$ref": "#/components/schemas/RecurringAnnouncement"
+          },
+          "cadence": {
+            "$ref": "#/components/schemas/RecurringCadence"
+          },
+          "counterparty": {
+            "allOf": [
+              {
+                "minLength": 1
+              },
+              {
+                "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
+              },
+              {
+                "description": "The person or organization the charge repeats with. A series is only formed where the captured Transactions explicitly identified one, so this is never inferred.",
+                "maxLength": 120
+              }
+            ],
+            "type": "string"
+          },
+          "detectedAt": {
+            "$ref": "#/components/schemas/UtcTimestamp"
+          },
+          "direction": {
+            "description": "Which way the money moved, seen from the user: `outflow` is money leaving them, `inflow` is money reaching them. The amount is unsigned, so this is the only field that carries the sign.",
+            "enum": [
+              "inflow",
+              "outflow"
+            ],
+            "type": "string"
+          },
+          "firstOccurredAt": {
+            "$ref": "#/components/schemas/UtcTimestamp"
+          },
+          "id": {
+            "$ref": "#/components/schemas/RecurringSeriesId"
+          },
+          "lastOccurredAt": {
+            "$ref": "#/components/schemas/UtcTimestamp"
+          },
+          "occurrences": {
+            "allOf": [
+              {
+                "uniqueItems": true
+              },
+              {
+                "description": "The Transactions that confirmed this series, oldest first. At least three, because two movements are one interval and one interval is not yet a rhythm.",
+                "minItems": 3
+              }
+            ],
+            "items": {
+              "$ref": "#/components/schemas/TransactionId"
+            },
+            "type": "array"
+          },
+          "typicalMoney": {
+            "$ref": "#/components/schemas/Money7"
+          }
+        },
+        "required": [
+          "id",
+          "counterparty",
+          "direction",
+          "cadence",
+          "typicalMoney",
+          "occurrences",
+          "firstOccurredAt",
+          "lastOccurredAt",
+          "announcement",
+          "detectedAt"
+        ],
+        "type": "object"
+      },
+      "RecurringSeriesId": {
+        "allOf": [
+          {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|[fF]{8}-[fF]{4}-[fF]{4}-[fF]{4}-[fF]{12})$"
+          }
+        ],
+        "type": "string"
+      },
+      "RecurringSeriesReport": {
+        "additionalProperties": false,
+        "properties": {
+          "groups": {
+            "items": {
+              "$ref": "#/components/schemas/RecurringCurrencyGroup"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "groups"
+        ],
+        "type": "object"
+      },
+      "RecurringSuppressionReason": {
+        "enum": [
+          "backfill",
+          "cold-start"
+        ],
+        "type": "string"
       },
       "RememberInput": {
         "additionalProperties": false,
@@ -5523,6 +5752,68 @@
               "tool": {
                 "description": "The canonical operation to call, spelled exactly as its `operationId` in this spec. Look that id up here to see the complete input and result.",
                 "enum": [
+                  "recurring.listRecurringSeries"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "tool",
+              "hint"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "hint": {
+                "allOf": [
+                  {
+                    "minLength": 1
+                  },
+                  {
+                    "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
+                  },
+                  {
+                    "maxLength": 140
+                  }
+                ],
+                "type": "string"
+              },
+              "tool": {
+                "description": "The canonical operation to call, spelled exactly as its `operationId` in this spec. Look that id up here to see the complete input and result.",
+                "enum": [
+                  "recurring.detectRecurringSeries"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "tool",
+              "hint"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "hint": {
+                "allOf": [
+                  {
+                    "minLength": 1
+                  },
+                  {
+                    "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
+                  },
+                  {
+                    "maxLength": 140
+                  }
+                ],
+                "type": "string"
+              },
+              "tool": {
+                "description": "The canonical operation to call, spelled exactly as its `operationId` in this spec. Look that id up here to see the complete input and result.",
+                "enum": [
                   "subscription.getUpgradeUrl"
                 ],
                 "type": "string"
@@ -6116,6 +6407,25 @@
                                 }
                               },
                               "type": "object"
+                            },
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "callId": {
+                                  "$ref": "#/components/schemas/AtomicBatchCallId"
+                                },
+                                "input": {
+                                  "additionalProperties": false,
+                                  "type": "object"
+                                },
+                                "operation": {
+                                  "enum": [
+                                    "recurring.detectRecurringSeries"
+                                  ],
+                                  "type": "string"
+                                }
+                              },
+                              "type": "object"
                             }
                           ]
                         },
@@ -6682,6 +6992,25 @@
                                   "operation": {
                                     "enum": [
                                       "memory.forget"
+                                    ],
+                                    "type": "string"
+                                  }
+                                },
+                                "type": "object"
+                              },
+                              {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "callId": {
+                                    "$ref": "#/components/schemas/AtomicBatchCallId"
+                                  },
+                                  "input": {
+                                    "additionalProperties": false,
+                                    "type": "object"
+                                  },
+                                  "operation": {
+                                    "enum": [
+                                      "recurring.detectRecurringSeries"
                                     ],
                                     "type": "string"
                                   }
@@ -8247,6 +8576,68 @@
               "tool": {
                 "description": "The canonical operation to call, spelled exactly as its `operationId` in this spec. Look that id up here to see the complete input and result.",
                 "enum": [
+                  "recurring.listRecurringSeries"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "tool",
+              "hint"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "hint": {
+                "allOf": [
+                  {
+                    "minLength": 1
+                  },
+                  {
+                    "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
+                  },
+                  {
+                    "maxLength": 140
+                  }
+                ],
+                "type": "string"
+              },
+              "tool": {
+                "description": "The canonical operation to call, spelled exactly as its `operationId` in this spec. Look that id up here to see the complete input and result.",
+                "enum": [
+                  "recurring.detectRecurringSeries"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "tool",
+              "hint"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "hint": {
+                "allOf": [
+                  {
+                    "minLength": 1
+                  },
+                  {
+                    "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
+                  },
+                  {
+                    "maxLength": 140
+                  }
+                ],
+                "type": "string"
+              },
+              "tool": {
+                "description": "The canonical operation to call, spelled exactly as its `operationId` in this spec. Look that id up here to see the complete input and result.",
+                "enum": [
                   "subscription.getUpgradeUrl"
                 ],
                 "type": "string"
@@ -8840,6 +9231,25 @@
                                 }
                               },
                               "type": "object"
+                            },
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "callId": {
+                                  "$ref": "#/components/schemas/AtomicBatchCallId"
+                                },
+                                "input": {
+                                  "additionalProperties": false,
+                                  "type": "object"
+                                },
+                                "operation": {
+                                  "enum": [
+                                    "recurring.detectRecurringSeries"
+                                  ],
+                                  "type": "string"
+                                }
+                              },
+                              "type": "object"
                             }
                           ]
                         },
@@ -9406,6 +9816,25 @@
                                   "operation": {
                                     "enum": [
                                       "memory.forget"
+                                    ],
+                                    "type": "string"
+                                  }
+                                },
+                                "type": "object"
+                              },
+                              {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "callId": {
+                                    "$ref": "#/components/schemas/AtomicBatchCallId"
+                                  },
+                                  "input": {
+                                    "additionalProperties": false,
+                                    "type": "object"
+                                  },
+                                  "operation": {
+                                    "enum": [
+                                      "recurring.detectRecurringSeries"
                                     ],
                                     "type": "string"
                                   }
@@ -14006,6 +14435,30 @@
                             "input"
                           ],
                           "type": "object"
+                        },
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "callId": {
+                              "$ref": "#/components/schemas/AtomicBatchCallId"
+                            },
+                            "input": {
+                              "additionalProperties": false,
+                              "type": "object"
+                            },
+                            "operation": {
+                              "enum": [
+                                "recurring.detectRecurringSeries"
+                              ],
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "callId",
+                            "operation",
+                            "input"
+                          ],
+                          "type": "object"
                         }
                       ]
                     },
@@ -14766,6 +15219,30 @@
                               "operation": {
                                 "enum": [
                                   "memory.forget"
+                                ],
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "callId",
+                              "operation",
+                              "input"
+                            ],
+                            "type": "object"
+                          },
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "callId": {
+                                "$ref": "#/components/schemas/AtomicBatchCallId"
+                              },
+                              "input": {
+                                "additionalProperties": false,
+                                "type": "object"
+                              },
+                              "operation": {
+                                "enum": [
+                                  "recurring.detectRecurringSeries"
                                 ],
                                 "type": "string"
                               }
@@ -15722,6 +16199,51 @@
                                   "output"
                                 ],
                                 "type": "object"
+                              },
+                              {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "callId": {
+                                    "$ref": "#/components/schemas/AtomicBatchCallId"
+                                  },
+                                  "operation": {
+                                    "enum": [
+                                      "recurring.detectRecurringSeries"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "output": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "data": {
+                                        "$ref": "#/components/schemas/RecurringDetectionOutcome"
+                                      },
+                                      "next": {
+                                        "allOf": [
+                                          {
+                                            "description": "Where to go next: up to three canonical operations worth calling after this one, best first. Empty when there is nothing worth suggesting, which is an answer rather than an omission. Each entry has passed the target-input and caller-authorization checkpoint.",
+                                            "maxItems": 3
+                                          }
+                                        ],
+                                        "items": {
+                                          "$ref": "#/components/schemas/SuggestedOperation2"
+                                        },
+                                        "type": "array"
+                                      }
+                                    },
+                                    "required": [
+                                      "data",
+                                      "next"
+                                    ],
+                                    "type": "object"
+                                  }
+                                },
+                                "required": [
+                                  "callId",
+                                  "operation",
+                                  "output"
+                                ],
+                                "type": "object"
                               }
                             ]
                           },
@@ -16641,6 +17163,51 @@
                                     "output"
                                   ],
                                   "type": "object"
+                                },
+                                {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "callId": {
+                                      "$ref": "#/components/schemas/AtomicBatchCallId"
+                                    },
+                                    "operation": {
+                                      "enum": [
+                                        "recurring.detectRecurringSeries"
+                                      ],
+                                      "type": "string"
+                                    },
+                                    "output": {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "data": {
+                                          "$ref": "#/components/schemas/RecurringDetectionOutcome"
+                                        },
+                                        "next": {
+                                          "allOf": [
+                                            {
+                                              "description": "Where to go next: up to three canonical operations worth calling after this one, best first. Empty when there is nothing worth suggesting, which is an answer rather than an omission. Each entry has passed the target-input and caller-authorization checkpoint.",
+                                              "maxItems": 3
+                                            }
+                                          ],
+                                          "items": {
+                                            "$ref": "#/components/schemas/SuggestedOperation2"
+                                          },
+                                          "type": "array"
+                                        }
+                                      },
+                                      "required": [
+                                        "data",
+                                        "next"
+                                      ],
+                                      "type": "object"
+                                    }
+                                  },
+                                  "required": [
+                                    "callId",
+                                    "operation",
+                                    "output"
+                                  ],
+                                  "type": "object"
                                 }
                               ]
                             }
@@ -16730,6 +17297,186 @@
           "operations"
         ],
         "x-fidy-agent-confirmation": "required",
+        "x-fidy-operation-kind": "mutation",
+        "x-fidy-required-scope": "write",
+        "x-fidy-required-tier": "free"
+      }
+    },
+    "/recurring-series": {
+      "get": {
+        "description": "Answer what recurring charges the caller has. Results arrive grouped by explicit Currency, each group carrying what one occurrence of its series costs. Nothing is converted between Currencies, so read each group on its own rather than adding them.",
+        "operationId": "recurring.listRecurringSeries",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/RecurringSeriesReport"
+                    },
+                    "next": {
+                      "allOf": [
+                        {
+                          "description": "Where to go next: up to three canonical operations worth calling after this one, best first. Empty when there is nothing worth suggesting, which is an answer rather than an omission. Each entry has passed the target-input and caller-authorization checkpoint.",
+                          "maxItems": 3
+                        }
+                      ],
+                      "items": {
+                        "$ref": "#/components/schemas/SuggestedOperation"
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "next"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationFailed"
+                }
+              }
+            },
+            "description": "ValidationFailed"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Unauthenticated"
+                }
+              }
+            },
+            "description": "Unauthenticated"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ConsentRequired"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ScopeMissing"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "ConsentRequired | ScopeMissing"
+          }
+        },
+        "security": [
+          {
+            "agentBearer": []
+          }
+        ],
+        "tags": [
+          "recurring"
+        ],
+        "x-fidy-agent-confirmation": "not-required",
+        "x-fidy-operation-kind": "query",
+        "x-fidy-required-scope": "read",
+        "x-fidy-required-tier": "free"
+      }
+    },
+    "/recurring-series/detection": {
+      "post": {
+        "description": "Re-examine the caller's whole Transaction history and record the repeating charges it confirms. `confirmed` holds only the series fidy had not recorded before, and `announcement` is the Currency-grouped Money worth telling the user about, leaving out series held back as backfill or cold-start. Reach for this after importing a statement or logging several movements; listing series does not run detection itself.",
+        "operationId": "recurring.detectRecurringSeries",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/RecurringDetectionOutcome"
+                    },
+                    "next": {
+                      "allOf": [
+                        {
+                          "description": "Where to go next: up to three canonical operations worth calling after this one, best first. Empty when there is nothing worth suggesting, which is an answer rather than an omission. Each entry has passed the target-input and caller-authorization checkpoint.",
+                          "maxItems": 3
+                        }
+                      ],
+                      "items": {
+                        "$ref": "#/components/schemas/SuggestedOperation"
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "next"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationFailed"
+                }
+              }
+            },
+            "description": "ValidationFailed"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Unauthenticated"
+                }
+              }
+            },
+            "description": "Unauthenticated"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ConsentRequired"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ScopeMissing"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "ConsentRequired | ScopeMissing"
+          }
+        },
+        "security": [
+          {
+            "agentBearer": []
+          }
+        ],
+        "tags": [
+          "recurring"
+        ],
+        "x-fidy-agent-confirmation": "not-required",
         "x-fidy-operation-kind": "mutation",
         "x-fidy-required-scope": "write",
         "x-fidy-required-tier": "free"
@@ -17773,6 +18520,9 @@
     },
     {
       "name": "memory"
+    },
+    {
+      "name": "recurring"
     },
     {
       "name": "subscription"

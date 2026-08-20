@@ -35,6 +35,10 @@ export const advisoryLockKey = {
     value: `memories:${userId}`,
     seed: 0,
   }),
+  recurringSeries: (userId: UserId): AdvisoryLockKey => ({
+    value: `recurring-series:${userId}`,
+    seed: 0,
+  }),
   consentSubject: (userId: UserId): AdvisoryLockKey => ({
     value: `consent-subject:${userId}`,
     seed: 0,

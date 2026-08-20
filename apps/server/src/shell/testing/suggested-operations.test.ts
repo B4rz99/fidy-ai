@@ -354,6 +354,16 @@ const probes: Record<OperationId, SuggestedOperationProbe> = {
       return [yield* client.insights.listPendingInsights()];
     }),
 
+  "recurring.listRecurringSeries": (client) =>
+    Effect.gen(function* () {
+      return [yield* client.recurring.listRecurringSeries()];
+    }),
+
+  "recurring.detectRecurringSeries": (client) =>
+    Effect.gen(function* () {
+      return [yield* client.recurring.detectRecurringSeries()];
+    }),
+
   "insights.markInsightDelivered": (client) =>
     Effect.gen(function* () {
       const insight = yield* generateInsightEvent(writeOnlyUser, weeklySummaryInput());

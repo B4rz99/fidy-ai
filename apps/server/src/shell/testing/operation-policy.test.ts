@@ -109,6 +109,8 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           "ingestion.listNeedsReviewItems": "query",
           "ingestion.submitForExtraction": "mutation",
           "ingestion.resolveNeedsReviewItem": "mutation",
+          "recurring.listRecurringSeries": "query",
+          "recurring.detectRecurringSeries": "mutation",
           "operations.executeAtomicBatch": "mutation",
         } satisfies Record<OperationId, CanonicalOperationKind>;
         const operations = yield* publishedOperations;
@@ -183,6 +185,8 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           "ingestion.listNeedsReviewItems": "not-required",
           "ingestion.submitForExtraction": "not-required",
           "ingestion.resolveNeedsReviewItem": "required",
+          "recurring.listRecurringSeries": "not-required",
+          "recurring.detectRecurringSeries": "not-required",
           "operations.executeAtomicBatch": "required",
         } satisfies Record<OperationId, AgentConfirmation>;
         const operations = yield* publishedOperations;

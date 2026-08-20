@@ -11,6 +11,7 @@ import { InsightsGroup } from "~/shell/insights/operations";
 import { IngestionGroup } from "~/shell/ingestion/operations";
 import { MemoryGroup } from "~/shell/memory/operations";
 import { makeOperationsGroup } from "~/shell/operations/operations";
+import { RecurringGroup } from "~/shell/recurring/operations";
 import { SubscriptionGroup } from "~/shell/subscription/operations";
 import { TransactionsGroup } from "~/shell/transactions/operations";
 
@@ -23,6 +24,7 @@ const OrdinaryFidyApi = HttpApi.make("fidy")
   .add(IngestionGroup)
   .add(InsightsGroup)
   .add(MemoryGroup)
+  .add(RecurringGroup)
   .add(SubscriptionGroup);
 
 // The child union is reflected before the batch group exists, so queries and recursive batches are

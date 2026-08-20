@@ -4,13 +4,12 @@ import { IanaTimeZone, Locale, ServiceMarket } from "~/core/_shared/context";
 import { Currency, Money } from "~/core/_shared/money";
 import { UtcTimestamp } from "~/core/_shared/time";
 import { StatementSourceFormat, StatementSubmissionId } from "~/core/ingestion/reference";
-import { TransactionId } from "./reference";
+import { Counterparty, Direction, TransactionId } from "./reference";
 
-export { TransactionId } from "./reference";
+export { Counterparty, Direction, TransactionId } from "./reference";
 
 const zero = BigDecimal.make(0n, 0);
 const maximumTransactionNotesLength = 500;
-const maximumCounterpartyLength = 120;
 const maximumAttestationNameLength = 80;
 
 // Money itself permits zero. A Transaction is specifically a movement, so the
@@ -25,28 +24,6 @@ const positiveTransactionMoney = Schema.makeFilter<{
     ? undefined
     : { path: ["money", "amount"], issue: "Transaction Money must be greater than zero" }
 );
-
-/**
- * A closed pair rather than a sign on `Amount`, so "how much" and "which way"
- * stay separate questions: an amount cannot be silently negated, arithmetic on
- * a history has to say which direction it is summing, and a third kind of
- * movement — a transfer between the user's own accounts, say — would be a
- * domain decision that fails the build everywhere until it is answered.
- */
-export const Direction = Schema.Literals(["inflow", "outflow"]).annotate({
-  description:
-    "Which way the money moved, seen from the user: `outflow` is money leaving them, " +
-    "`inflow` is money reaching them. The amount is unsigned, so this is the only field " +
-    "that carries the sign.",
-});
-export type Direction = typeof Direction.Type;
-
-/** A user-recognizable person or organization explicitly identified on the other side. */
-export const Counterparty = Schema.NonEmptyString.check(
-  Schema.isTrimmed(),
-  Schema.isMaxLength(maximumCounterpartyLength)
-);
-export type Counterparty = typeof Counterparty.Type;
 
 /** Named so the derived documents carry one definition each rather than a copy per payload. */
 const OccurredAt = UtcTimestamp.pipe(

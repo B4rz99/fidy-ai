@@ -444,6 +444,22 @@ const probes: Record<OperationId, IsolationProbe> = {
       expect(listed.data).toEqual([]);
     }),
 
+  "recurring.listRecurringSeries": (attempt) =>
+    Effect.gen(function* () {
+      const listed = yield* attempt.strangerClient.recurring.listRecurringSeries();
+
+      expect(listed.data.groups).toEqual([]);
+    }),
+
+  "recurring.detectRecurringSeries": (attempt) =>
+    Effect.gen(function* () {
+      const detected = yield* attempt.strangerClient.recurring.detectRecurringSeries();
+      const ownersSeries = yield* attempt.ownerClient.recurring.listRecurringSeries();
+
+      expect(detected.data).toEqual([]);
+      expect(ownersSeries.data.groups).toEqual([]);
+    }),
+
   "insights.markInsightDelivered": (attempt) =>
     Effect.gen(function* () {
       const denied = yield* Effect.result(

@@ -18,6 +18,7 @@ import {
 import { forgetMemory, rememberMemory, reviseMemory } from "~/shell/memory/mutations";
 import type { Telemetry } from "~/shell/observability/telemetry";
 import { dismissInsight, markInsightDelivered, markInsightRead } from "~/shell/insights/mutations";
+import { detectRecurringSeries } from "~/shell/recurring/mutations";
 import {
   correctTransaction,
   createTransaction,
@@ -208,6 +209,10 @@ export const canonicalMutationImplementations = {
         caller: suggestedCaller(caller),
         insightEventId: input.params.id,
       })
+  ),
+  "recurring.detectRecurringSeries": mutationAdapter(
+    (_input: CanonicalInput<"recurring.detectRecurringSeries">, caller) =>
+      detectRecurringSeries({ userId: caller.resolved.subjectUserId })
   ),
 } as const;
 

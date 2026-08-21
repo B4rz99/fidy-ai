@@ -56,6 +56,10 @@ const HOSTED_PROVIDER = `src/shell/agent/${PROBE_PREFIX}hosted-provider`;
 const HOSTED_MODEL = `src/shell/agent/${PROBE_PREFIX}hosted-model`;
 const HOSTED_TOKENIZER = `src/shell/agent/${PROBE_PREFIX}hosted-tokenizer`;
 const HOSTED_JS_TOKENIZER = `src/shell/agent/${PROBE_PREFIX}hosted-js-tokenizer`;
+const ADAPTER_TO_HANDLER = `src/shell/${PROBE_PREFIX}adapter-to-handler`;
+const REGISTRY_TO_HANDLER = `src/shell/_shared/${PROBE_PREFIX}registry-to-handler`;
+const ADAPTER_TO_COORDINATION = `src/shell/${PROBE_PREFIX}adapter-to-coordination`;
+const REGISTRY_TO_COORDINATION = `src/shell/_shared/${PROBE_PREFIX}registry-to-coordination`;
 const ADAPTER_TO_REPO = `src/shell/${PROBE_PREFIX}adapter-to-repo`;
 const ADAPTER_TO_QUERIES = `src/shell/${PROBE_PREFIX}adapter-to-queries`;
 const CONTINUITY_OUTSIDE = `src/shell/audit/${PROBE_PREFIX}continuity-outside-runtime`;
@@ -279,6 +283,68 @@ const PROBES: readonly Probe[] = [
       },
     ],
     name: "a test inside the hosted agent runtime may build continuity directly",
+  },
+  {
+    directory: ADAPTER_TO_HANDLER,
+    expect: {
+      kind: "rejected",
+      mustContain: [
+        `error adapter-imports-handler-adapter: ${ADAPTER_TO_HANDLER}/handlers.ts \u2192 src/shell/budgets/handlers.ts`,
+      ],
+    },
+    files: [
+      {
+        path: `${ADAPTER_TO_HANDLER}/handlers.ts`,
+        source:
+          'import { BudgetsLive } from "~/shell/budgets/handlers";\n\n' +
+          "export const adapterToHandlerProbe = BudgetsLive;\n",
+      },
+    ],
+    name: "an HTTP handler cannot import another HTTP handler adapter",
+  },
+  {
+    directory: REGISTRY_TO_HANDLER,
+    expect: {
+      kind: "rejected",
+      mustContain: [
+        `error adapter-imports-handler-adapter: ${REGISTRY_TO_HANDLER}/canonical-operation-registry.ts \u2192 src/shell/budgets/handlers.ts`,
+      ],
+    },
+    files: [
+      {
+        path: `${REGISTRY_TO_HANDLER}/canonical-operation-registry.ts`,
+        source:
+          'import { BudgetsLive } from "~/shell/budgets/handlers";\n\n' +
+          "export const registryToHandlerProbe = BudgetsLive;\n",
+      },
+    ],
+    name: "a canonical registry cannot import an HTTP handler adapter",
+  },
+  {
+    directory: ADAPTER_TO_COORDINATION,
+    expect: { kind: "allowed" },
+    files: [
+      {
+        path: `${ADAPTER_TO_COORDINATION}/handlers.ts`,
+        source:
+          'import { executeAtomicBatch } from "~/shell/operations/atomic-batch";\n\n' +
+          "export const adapterToCoordinationProbe = executeAtomicBatch;\n",
+      },
+    ],
+    name: "an HTTP handler may delegate to the atomic batch coordination module",
+  },
+  {
+    directory: REGISTRY_TO_COORDINATION,
+    expect: { kind: "allowed" },
+    files: [
+      {
+        path: `${REGISTRY_TO_COORDINATION}/canonical-operation-registry.ts`,
+        source:
+          'import { executeAtomicBatch } from "~/shell/operations/atomic-batch";\n\n' +
+          "export const registryToCoordinationProbe = executeAtomicBatch;\n",
+      },
+    ],
+    name: "a canonical registry may delegate to the atomic batch coordination module",
   },
   {
     directory: ADAPTER_TO_REPO,
@@ -523,15 +589,21 @@ const stale = Array.from(
 const staleSource = Array.from(
   new Bun.Glob("__probe-*").scanSync({ cwd: `${serverRoot}/src`, onlyFiles: false })
 );
+const staleShared = Array.from(
+  new Bun.Glob("__probe-*").scanSync({ cwd: `${serverRoot}/src/shell/_shared`, onlyFiles: false })
+);
 for (const entry of stale) {
   remove(`${serverRoot}${PROBE_PARENT}/${entry}`);
 }
 for (const entry of staleSource) {
   remove(`${serverRoot}/src/${entry}`);
 }
-if (stale.length > 0 || staleSource.length > 0) {
+for (const entry of staleShared) {
+  remove(`${serverRoot}/src/shell/_shared/${entry}`);
+}
+if (stale.length > 0 || staleSource.length > 0 || staleShared.length > 0) {
   process.stderr.write(
-    `swept ${stale.length + staleSource.length} probe directory(ies) from an interrupted run\n`
+    `swept ${stale.length + staleSource.length + staleShared.length} probe directory(ies) from an interrupted run\n`
   );
 }
 

@@ -138,6 +138,11 @@ remaining pre-existing mutations migrate in the follow-up slice issues linked fr
 batch operation remains unpublished until that migration is complete. During expansion, `kind` is
 not an implementation-readiness flag.
 
+Cross-operation coordination that owns no data stays in its shell area as a named implementation
+module rather than being forced into `queries.ts` or `mutations.ts`. Atomic batch execution therefore
+lives in `shell/operations/atomic-batch.ts`: HTTP handlers and canonical registries are peer adapters
+that delegate to it and never import one another.
+
 The operation references the core schema. All public API and agent surfaces derive from the
 canonical operation definition; parallel operation maps are not maintained.
 

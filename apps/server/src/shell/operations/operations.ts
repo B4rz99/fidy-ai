@@ -4,7 +4,7 @@ import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
 import { CanonicalOperationId } from "~/core/_shared/canonical-operation";
 import { ErrorCode, FieldIssue } from "~/shell/_shared/errors";
 import type { CatalogOperation, OperationCatalog } from "~/shell/_shared/operation-catalog";
-import { childScopeOperationPolicy } from "~/shell/_shared/operation-policy";
+import { childCapabilityOperationPolicy } from "~/shell/_shared/operation-policy";
 import { NextOperations, OperationResponse } from "~/shell/_shared/response";
 
 const operationsGroupName = "operations";
@@ -179,8 +179,8 @@ export const makeOperationsGroup = (ordinaryCatalog: OperationCatalog): Operatio
         "Execute a non-empty ordered set of canonical mutations in one User-scoped PostgreSQL transaction. Use this when several state changes must commit together; each child keeps its own scope, Subscription tier, confirmation policy, validation, and canonical failure. Queries and nested batches are not valid children."
       )
       .annotateMerge(
-        childScopeOperationPolicy({
-          requiredScope: "write",
+        childCapabilityOperationPolicy({
+          requiredCapability: "write",
           requiredTier: "free",
           agentConfirmation: "required",
           kind: "mutation",

@@ -15,7 +15,7 @@ export const SubscriptionGroup = HttpApiGroup.make("subscription").add(
     )
     .annotateMerge(
       operationPolicy({
-        requiredScope: "read",
+        requiredCapability: "read",
         requiredTier: "free",
         agentConfirmation: "not-required",
         kind: "query",

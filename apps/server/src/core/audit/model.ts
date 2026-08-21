@@ -4,6 +4,7 @@ import { UtcTimestamp } from "~/core/_shared/time";
 import { UserId } from "~/core/identity/reference";
 import { PATId } from "~/core/tokens/reference";
 import { HostedAgentSessionId } from "~/core/transcript/reference";
+import { WebSessionId } from "~/core/web-session/reference";
 
 export { CanonicalOperationId } from "~/core/_shared/canonical-operation";
 
@@ -20,6 +21,7 @@ export type AuditOutcome = typeof AuditOutcome.Type;
 /** Exactly one credential-neutral source of canonical-call authority. */
 export const AuditCaller = Schema.Union([
   Schema.TaggedStruct("PAT", { patId: PATId }),
+  Schema.TaggedStruct("WebSession", { webSessionId: WebSessionId }),
   Schema.TaggedStruct("HostedAgentSession", { hostedAgentSessionId: HostedAgentSessionId }),
 ]).annotate({ identifier: "AuditCaller" });
 export type AuditCaller = typeof AuditCaller.Type;

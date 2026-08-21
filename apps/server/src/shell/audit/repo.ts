@@ -4,6 +4,7 @@ import { type AuditCaller, AuditLogEntry } from "~/core/audit/model";
 import { UserId } from "~/core/identity/reference";
 import { PATId } from "~/core/tokens/reference";
 import { HostedAgentSessionId } from "~/core/transcript/hosted-agent-session";
+import { WebSessionId } from "~/core/web-session/reference";
 import { withUserTransaction } from "~/shell/db/user-transaction";
 
 const AuditLogEntryWithoutIdentity = AuditLogEntry.mapFields(
@@ -13,35 +14,56 @@ const AuditLogEntryRow = Schema.Struct({
   id: AuditLogEntry.fields.id,
   subjectUserId: UserId,
   patId: Schema.OptionFromNullOr(PATId),
+  webSessionId: Schema.OptionFromNullOr(WebSessionId),
   hostedAgentSessionId: Schema.OptionFromNullOr(HostedAgentSessionId),
   ...AuditLogEntryWithoutIdentity.fields,
   occurredAt: Schema.DateTimeUtcFromDate,
 });
 const AppendAuditLogEntryRow = AuditLogEntryRow.mapFields(Struct.omit(["id"]));
 
-const callerColumns = (
-  caller: AuditCaller
-): Readonly<{
+type CallerColumns = Readonly<{
   patId: Option.Option<PATId>;
+  webSessionId: Option.Option<WebSessionId>;
   hostedAgentSessionId: Option.Option<HostedAgentSessionId>;
-}> =>
-  caller._tag === "PAT"
-    ? {
-        patId: Option.some(caller.patId),
-        hostedAgentSessionId: Option.none<HostedAgentSessionId>(),
-      }
-    : {
-        patId: Option.none<PATId>(),
-        hostedAgentSessionId: Option.some(caller.hostedAgentSessionId),
-      };
+}>;
+
+type SessionAuditCaller = Exclude<AuditCaller, { readonly _tag: "PAT" }>;
+
+const sessionCallerColumns = (caller: SessionAuditCaller): CallerColumns => {
+  if (caller._tag === "WebSession") {
+    return {
+      patId: Option.none<PATId>(),
+      webSessionId: Option.some(caller.webSessionId),
+      hostedAgentSessionId: Option.none<HostedAgentSessionId>(),
+    };
+  }
+  return {
+    patId: Option.none<PATId>(),
+    webSessionId: Option.none<WebSessionId>(),
+    hostedAgentSessionId: Option.some(caller.hostedAgentSessionId),
+  };
+};
+
+const callerColumns = (caller: AuditCaller): CallerColumns => {
+  if (caller._tag !== "PAT") return sessionCallerColumns(caller);
+  return {
+    patId: Option.some(caller.patId),
+    webSessionId: Option.none<WebSessionId>(),
+    hostedAgentSessionId: Option.none<HostedAgentSessionId>(),
+  };
+};
 
 /**
- * Reads the one caller a row names. A row naming both is broken evidence, not a PAT: the database
- * CHECK forbids it, so preferring either column here would read a corrupted row as a valid one.
+ * Reads the one caller a row names. A row naming multiple callers is broken evidence, not a PAT:
+ * the database CHECK forbids it, so preferring a column would read a corrupted row as valid.
  */
 const auditCaller = (row: typeof AuditLogEntryRow.Type): AuditCaller => {
   const named = [
     Option.map(row.patId, (patId): AuditCaller => ({ _tag: "PAT", patId })),
+    Option.map(row.webSessionId, (webSessionId): AuditCaller => ({
+      _tag: "WebSession",
+      webSessionId,
+    })),
     Option.map(row.hostedAgentSessionId, (hostedAgentSessionId): AuditCaller => ({
       _tag: "HostedAgentSession",
       hostedAgentSessionId,
@@ -80,13 +102,14 @@ export const appendAuditLogEntry = Effect.fn("appendAuditLogEntry")(function* (
       Result: AuditLogEntryRow,
       execute: (row) => sql`
         INSERT INTO audit_log_entries (
-          user_id, pat_id, hosted_agent_session_id, operation, outcome, occurred_at
+          user_id, pat_id, web_session_id, hosted_agent_session_id, operation, outcome, occurred_at
         )
         VALUES (
-          ${row.subjectUserId}, ${row.patId}, ${row.hostedAgentSessionId}, ${row.operation},
-          ${row.outcome}, ${row.occurredAt}
+          ${row.subjectUserId}, ${row.patId}, ${row.webSessionId}, ${row.hostedAgentSessionId},
+          ${row.operation}, ${row.outcome}, ${row.occurredAt}
         )
         RETURNING id, user_id AS "subjectUserId", pat_id AS "patId",
+          web_session_id AS "webSessionId",
           hosted_agent_session_id AS "hostedAgentSessionId", operation, outcome,
           occurred_at AS "occurredAt"
       `,
@@ -107,6 +130,7 @@ export const observeAuditLogEntries = (
         Result: AuditLogEntryRow,
         execute: (userId) => sql`
           SELECT id, user_id AS "subjectUserId", pat_id AS "patId",
+            web_session_id AS "webSessionId",
             hosted_agent_session_id AS "hostedAgentSessionId", operation, outcome,
             occurred_at AS "occurredAt"
           FROM audit_log_entries

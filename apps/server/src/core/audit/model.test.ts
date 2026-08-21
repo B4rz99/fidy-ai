@@ -20,11 +20,19 @@ it("accepts exactly the canonical call outcome vocabulary", () => {
   expect(Result.isFailure(decodeOutcome("unknown"))).toBe(true);
 });
 
-it("attributes evidence to exactly one PAT or Hosted Agent Session caller", () => {
+it("attributes evidence to exactly one PAT, WebSession, or Hosted Agent Session caller", () => {
   const decodeCaller = Schema.decodeUnknownResult(AuditCaller, { onExcessProperty: "error" });
 
   expect(
     Result.isSuccess(decodeCaller({ _tag: "PAT", patId: "f1d1a000-0000-4000-8000-000000000001" }))
+  ).toBe(true);
+  expect(
+    Result.isSuccess(
+      decodeCaller({
+        _tag: "WebSession",
+        webSessionId: "f1d1a000-0000-4000-8000-000000000003",
+      })
+    )
   ).toBe(true);
   expect(
     Result.isSuccess(
@@ -35,6 +43,18 @@ it("attributes evidence to exactly one PAT or Hosted Agent Session caller", () =
     )
   ).toBe(true);
   expect(Result.isFailure(decodeCaller({ _tag: "PAT" }))).toBe(true);
+  expect(Result.isFailure(decodeCaller({ _tag: "WebSession", webSessionId: "not-a-uuid" }))).toBe(
+    true
+  );
+  expect(
+    Result.isFailure(
+      decodeCaller({
+        _tag: "WebSession",
+        patId: "f1d1a000-0000-4000-8000-000000000001",
+        webSessionId: "f1d1a000-0000-4000-8000-000000000003",
+      })
+    )
+  ).toBe(true);
   expect(
     Result.isFailure(
       decodeCaller({

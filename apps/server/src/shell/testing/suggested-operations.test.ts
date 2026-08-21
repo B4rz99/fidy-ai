@@ -470,11 +470,11 @@ layer(SuggestedOperationsHarness, { excludeTestServices: true, timeout: "30 seco
             Option.fromUndefinedOr(operationCatalog.byId.get(sourceOperation))
           );
           const sourceCaller: SuggestedOperationCaller = {
-            capabilities: [source.policy.requiredScope],
+            capabilities: [source.policy.requiredCapability],
             tier: source.policy.requiredTier,
           };
           const responses = yield* probe(
-            clientsByScope[source.policy.requiredScope],
+            clientsByScope[source.policy.requiredCapability],
             readOwnerWriter
           );
 

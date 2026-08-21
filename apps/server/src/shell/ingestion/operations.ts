@@ -14,19 +14,19 @@ import { OperationResponse } from "~/shell/_shared/response";
 import { ResolveNeedsReviewItemInput } from "./input";
 
 const read = operationPolicy({
-  requiredScope: "read",
+  requiredCapability: "read",
   requiredTier: "free",
   agentConfirmation: "not-required",
   kind: "query",
 });
 const write = operationPolicy({
-  requiredScope: "write",
+  requiredCapability: "write",
   requiredTier: "free",
   agentConfirmation: "not-required",
   kind: "mutation",
 });
 const confirmedWrite = operationPolicy({
-  requiredScope: "write",
+  requiredCapability: "write",
   requiredTier: "free",
   agentConfirmation: "required",
   kind: "mutation",

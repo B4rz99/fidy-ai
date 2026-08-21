@@ -1,6 +1,5 @@
-import { Effect, Option } from "effect";
+import { type Effect, Option } from "effect";
 import type { CanonicalOperationId } from "~/core/_shared/canonical-operation";
-import { ResolvedCaller as ResolvedCallerTag } from "./authz";
 import type {
   CanonicalImplementationCaller,
   CanonicalImplementationRequirements,
@@ -21,7 +20,7 @@ import { getStatementSubmission, listNeedsReviewItems } from "~/shell/ingestion/
 import { listPendingInsights } from "~/shell/insights/queries";
 import { recall } from "~/shell/memory/queries";
 import { getUpgradeUrl } from "~/shell/subscription/queries";
-import { executeAtomicBatch } from "~/shell/operations/handlers";
+import { executeAtomicBatch } from "~/shell/operations/atomic-batch";
 
 export type { CanonicalImplementationCaller } from "./canonical-implementation";
 
@@ -112,8 +111,8 @@ export const canonicalOperationImplementations: CanonicalOperationImplementation
 
   "subscription.getUpgradeUrl": (_input, _caller) => getUpgradeUrl(),
 
-  "operations.executeAtomicBatch": (input, { resolved }) =>
-    executeAtomicBatch(input.payload).pipe(Effect.provideService(ResolvedCallerTag, resolved)),
+  "operations.executeAtomicBatch": (input, { resolved: caller }) =>
+    executeAtomicBatch({ payload: input.payload, caller }),
 } as const;
 
 const implementationsById: ReadonlyMap<string, ErasedCanonicalImplementation> = new Map(

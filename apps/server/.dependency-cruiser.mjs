@@ -125,6 +125,21 @@ export default {
       },
     },
     {
+      name: "adapter-imports-handler-adapter",
+      severity: "error",
+      comment:
+        "An HTTP handler or canonical registry imported an HTTP handler adapter. Both are adapters: " +
+        "they delegate to reusable slice modules rather than composing one another. Import the " +
+        "owning queries, mutations, or named coordination module instead (ARCHITECTURE.md §4).",
+      from: {
+        path:
+          "^src/shell/([^/]+/handlers\\.ts|" +
+          "_shared/canonical-(mutation|operation)-registry\\.ts|" +
+          "_shared/__probe-[^/]+/canonical-operation-registry\\.ts)$",
+      },
+      to: { path: "^src/shell/[^/]+/handlers\\.ts$" },
+    },
+    {
       name: "adapter-reaches-slice-persistence",
       severity: "error",
       comment:

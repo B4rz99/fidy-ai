@@ -1,0 +1,24 @@
+apps/server/src/shell/_shared/canonical-implementation.test.ts
+  s_3ad149c6ee40f7::t_38063d1853e6f1 10-22,36-38
+  s_3ad149c6ee40f7::t_25cbd502cbf29d 28
+  s_3ad149c6ee40f7::t_730616077d006f 39
+apps/server/src/shell/_shared/canonical-implementation.ts
+  s_3ad149c6ee40f7::t_1baa765120653c 25-29,35,43-44
+  s_3ad149c6ee40f7::t_e5691b2039b1d6 39
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.23",
+  "base_commit_sha": "5fb3e5850c13345dfc86b41a2da9d76c8f23d430",
+  "prompts": {},
+  "sessions": {
+    "s_3ad149c6ee40f7": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0255a-33e2-7840-8f36-f822a43b4e79",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

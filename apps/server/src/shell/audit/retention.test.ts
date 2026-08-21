@@ -45,7 +45,7 @@ layer(AuditRetentionHarness, { excludeTestServices: true, timeout: "30 seconds" 
 
         yield* Effect.forEach(entries, (entry) =>
           appendAuditLogEntry(defaultUserId, {
-            tokenId: attributed.tokenId,
+            caller: attributed.caller,
             operation: CanonicalOperationId.make(entry.operation),
             outcome: "succeeded",
             occurredAt: DateTime.makeUnsafe(entry.occurredAt),

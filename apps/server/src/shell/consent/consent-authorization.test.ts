@@ -18,6 +18,8 @@ const unconsentedUserId = UserId.make("f1d1a000-0000-4000-8000-0000000008a1");
 const unconsentedBearer = TokenBearer.make("fin_noconsnt_abcdefghijklmnopqrstuvwxyz0123456789ABCD");
 const revokedUserId = UserId.make("f1d1a000-0000-4000-8000-0000000008a2");
 const revokedBearer = TokenBearer.make("fin_revokrac_abcdefghijklmnopqrstuvwxyz0123456789ABCD");
+const staleTermsUserId = UserId.make("f1d1a000-0000-4000-8000-0000000008a3");
+const staleTermsBearer = TokenBearer.make("fin_staleter_abcdefghijklmnopqrstuvwxyz0123456789ABCD");
 
 layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
   "canonical consent enforcement",
@@ -33,6 +35,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         const admin = yield* MigrationSqlClient;
         yield* truncateTransactions;
         yield* admin`DELETE FROM audit_log_entries WHERE user_id = ${unconsentedUserId}`;
+        yield* admin`DELETE FROM hosted_agent_sessions WHERE user_id = ${unconsentedUserId}`;
         yield* admin`DELETE FROM consent_records WHERE subject_user_id = ${unconsentedUserId}`;
 
         const TokenUseState = Schema.Struct({
@@ -91,12 +94,47 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
       })
     );
 
+    it.effect("keeps PAT canonical requests working after a terms revision", () =>
+      Effect.gen(function* () {
+        yield* seedConsentedPatIdentity({
+          userId: staleTermsUserId,
+          bearer: staleTermsBearer,
+          scopes: ["read"],
+        });
+        const admin = yield* MigrationSqlClient;
+        yield* admin`DELETE FROM audit_log_entries WHERE user_id = ${staleTermsUserId}`;
+
+        // A terms bump supersedes the revision the grant was captured against. PAT access is
+        // deliberately unaffected: only explicit revocation closes it, so a User is never locked
+        // out of their own data by a document they have not been asked to accept yet.
+        yield* admin`
+          UPDATE consent_records SET disclosure_revision = 'onboarding-2026-07'
+          WHERE subject_user_id = ${staleTermsUserId}
+            AND event_type = 'granted' AND grant_type = 'onboarding'
+        `;
+
+        const response = yield* HttpClient.get("/user", {
+          headers: headersFor(staleTermsBearer),
+        });
+        const audits = yield* observeAuditLogEntries(staleTermsUserId);
+
+        expect(response.status).toBe(200);
+        expect(audits).toHaveLength(1);
+        expect(audits[0]).toMatchObject({
+          subjectUserId: staleTermsUserId,
+          operation: "identity.getCurrentUser",
+          outcome: "succeeded",
+        });
+      })
+    );
+
     it.effect("does not execute when a concurrent revocation wins authorization", () =>
       Effect.gen(function* () {
         const sql = yield* SqlClient.SqlClient;
         const admin = yield* MigrationSqlClient;
         yield* admin`DELETE FROM transactions WHERE user_id = ${revokedUserId}`;
         yield* admin`DELETE FROM audit_log_entries WHERE user_id = ${revokedUserId}`;
+        yield* admin`DELETE FROM hosted_agent_sessions WHERE user_id = ${revokedUserId}`;
         yield* admin`DELETE FROM consent_records WHERE subject_user_id = ${revokedUserId}`;
         yield* admin`DELETE FROM tokens WHERE user_id = ${revokedUserId}`;
         yield* admin`DELETE FROM users WHERE id = ${revokedUserId}`;
@@ -148,7 +186,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         );
 
         expect(response.status).toBe(403);
-        expect(body).toMatchObject({ error: { code: "consent_required" } });
+        expect(body).toMatchObject({ error: { code: "user_action_required" } });
         expect(rows).toHaveLength(0);
       })
     );

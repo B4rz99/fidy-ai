@@ -1,53 +1,41 @@
-import { type Crypto, Effect } from "effect";
-import type { SqlClient } from "effect/unstable/sql";
-import type { ResolvedToken } from "~/core/tokens/model";
+import { Effect } from "effect";
+import type { CanonicalCaller } from "./authz";
 import { createBudget, deleteBudget, updateBudget } from "~/shell/budgets/mutations";
 import {
   createKeywordRule,
   deleteKeywordRule,
   updateKeywordRule,
 } from "~/shell/categories/mutations";
-import { applyDashboardEdit, loadOrCreateDashboard } from "~/shell/dashboard/mutations";
-import { withDashboardLockInScope } from "~/shell/dashboard/repo";
+import { applyDashboardEdit, getDashboard } from "~/shell/dashboard/mutations";
 import { updateUserPreferences } from "~/shell/identity/mutations";
-import type { HostedInference } from "~/shell/agent/hosted-inference";
 import {
   resolveNeedsReviewItemMutation,
   submitForExtractionInScope,
 } from "~/shell/ingestion/mutations";
 import { forgetMemory, rememberMemory, reviseMemory } from "~/shell/memory/mutations";
-import type { Telemetry } from "~/shell/observability/telemetry";
 import { dismissInsight, markInsightDelivered, markInsightRead } from "~/shell/insights/mutations";
 import {
   correctTransaction,
   createTransaction,
   deleteTransaction,
 } from "~/shell/transactions/mutations";
-import type { CanonicalInput } from "./canonical-input";
+import type {
+  CanonicalExecutionRequirements,
+  CanonicalImplementationCaller,
+  CanonicalOperationImplementations,
+} from "./canonical-implementation";
 import type { OperationCatalog } from "./operation-catalog";
 
 /** Caller facts supplied to every registered canonical mutation adapter. */
-export type CanonicalMutationCaller = Readonly<{ resolved: ResolvedToken }>;
-
-type MutationAdapter<Input, Output, Failure> = {
-  execute(
-    input: Input,
-    caller: CanonicalMutationCaller
-  ): Effect.Effect<
-    Output,
-    Failure,
-    SqlClient.SqlClient | Telemetry | Crypto.Crypto | HostedInference
-  >;
-}["execute"];
-
-const mutationAdapter = <Input, Output, Failure>(
-  execute: MutationAdapter<Input, Output, Failure>
-): MutationAdapter<Input, Output, Failure> => execute;
+export type CanonicalMutationCaller = CanonicalImplementationCaller;
 
 const suggestedCaller = ({
   resolved,
-}: CanonicalMutationCaller): Readonly<{ scopes: ResolvedToken["scopes"]; tier: "free" }> => ({
-  scopes: resolved.scopes,
+}: CanonicalMutationCaller): Readonly<{
+  capabilities: CanonicalCaller["capabilities"];
+  tier: "free";
+}> => ({
+  capabilities: resolved.capabilities,
   tier: "free" as const,
 });
 
@@ -57,159 +45,122 @@ const suggestedCaller = ({
  * reflected canonical catalog and rejects missing or extra ordinary mutations.
  */
 export const canonicalMutationImplementations = {
-  "identity.updateUserPreferences": mutationAdapter(
-    (input: CanonicalInput<"identity.updateUserPreferences">, { resolved }) =>
-      updateUserPreferences({ userId: resolved.subjectUserId, payload: input.payload })
-  ),
-  "categories.createKeywordRule": mutationAdapter(
-    (input: CanonicalInput<"categories.createKeywordRule">, caller) =>
-      createKeywordRule({
-        userId: caller.resolved.subjectUserId,
-        caller: suggestedCaller(caller),
-        payload: input.payload,
-      })
-  ),
-  "categories.updateKeywordRule": mutationAdapter(
-    (input: CanonicalInput<"categories.updateKeywordRule">, caller) =>
-      updateKeywordRule({
-        userId: caller.resolved.subjectUserId,
-        caller: suggestedCaller(caller),
-        keywordRuleId: input.params.id,
-        payload: input.payload,
-      })
-  ),
-  "categories.deleteKeywordRule": mutationAdapter(
-    (input: CanonicalInput<"categories.deleteKeywordRule">, caller) =>
-      deleteKeywordRule({
-        userId: caller.resolved.subjectUserId,
-        caller: suggestedCaller(caller),
-        keywordRuleId: input.params.id,
-      })
-  ),
-  "budgets.createBudget": mutationAdapter((input: CanonicalInput<"budgets.createBudget">, caller) =>
+  "identity.updateUserPreferences": (input, { resolved }) =>
+    updateUserPreferences({ userId: resolved.subjectUserId, payload: input.payload }),
+  "categories.createKeywordRule": (input, caller) =>
+    createKeywordRule({
+      userId: caller.resolved.subjectUserId,
+      caller: suggestedCaller(caller),
+      payload: input.payload,
+    }),
+  "categories.updateKeywordRule": (input, caller) =>
+    updateKeywordRule({
+      userId: caller.resolved.subjectUserId,
+      caller: suggestedCaller(caller),
+      keywordRuleId: input.params.id,
+      payload: input.payload,
+    }),
+  "categories.deleteKeywordRule": (input, caller) =>
+    deleteKeywordRule({
+      userId: caller.resolved.subjectUserId,
+      caller: suggestedCaller(caller),
+      keywordRuleId: input.params.id,
+    }),
+  "budgets.createBudget": (input, caller) =>
     createBudget({
       userId: caller.resolved.subjectUserId,
       caller: suggestedCaller(caller),
       payload: input.payload,
-    })
-  ),
-  "budgets.updateBudget": mutationAdapter((input: CanonicalInput<"budgets.updateBudget">, caller) =>
+    }),
+  "budgets.updateBudget": (input, caller) =>
     updateBudget({
       userId: caller.resolved.subjectUserId,
       caller: suggestedCaller(caller),
       budgetId: input.params.id,
       payload: input.payload,
-    })
-  ),
-  "budgets.deleteBudget": mutationAdapter((input: CanonicalInput<"budgets.deleteBudget">, caller) =>
+    }),
+  "budgets.deleteBudget": (input, caller) =>
     deleteBudget({
       userId: caller.resolved.subjectUserId,
       caller: suggestedCaller(caller),
       budgetId: input.params.id,
-    })
-  ),
-  "dashboard.getDashboard": mutationAdapter(
-    (_input: CanonicalInput<"dashboard.getDashboard">, caller) =>
-      withDashboardLockInScope(
-        caller.resolved.subjectUserId,
-        loadOrCreateDashboard(caller.resolved.subjectUserId)
-      ).pipe(Effect.map((data) => ({ data, next: [] })))
-  ),
-  "dashboard.applyDashboardEdit": mutationAdapter(
-    (input: CanonicalInput<"dashboard.applyDashboardEdit">, caller) =>
-      applyDashboardEdit({
-        userId: caller.resolved.subjectUserId,
-        caller: suggestedCaller(caller),
-        edit: input.payload,
-      })
-  ),
-  "transactions.createTransaction": mutationAdapter(
-    (input: CanonicalInput<"transactions.createTransaction">, caller) =>
-      createTransaction({
-        userId: caller.resolved.subjectUserId,
-        caller: suggestedCaller(caller),
-        payload: input.payload,
-      })
-  ),
-  "transactions.updateTransaction": mutationAdapter(
-    (input: CanonicalInput<"transactions.updateTransaction">, caller) =>
-      correctTransaction({
-        userId: caller.resolved.subjectUserId,
-        caller: suggestedCaller(caller),
-        transactionId: input.params.id,
-        payload: input.payload,
-      })
-  ),
-  "transactions.deleteTransaction": mutationAdapter(
-    (input: CanonicalInput<"transactions.deleteTransaction">, caller) =>
-      deleteTransaction({
-        userId: caller.resolved.subjectUserId,
-        caller: suggestedCaller(caller),
-        transactionId: input.params.id,
-      })
-  ),
-  "memory.remember": mutationAdapter((input: CanonicalInput<"memory.remember">, caller) =>
+    }),
+  "dashboard.getDashboard": (_input, caller) =>
+    getDashboard({ userId: caller.resolved.subjectUserId }),
+  "dashboard.applyDashboardEdit": (input, caller) =>
+    applyDashboardEdit({
+      userId: caller.resolved.subjectUserId,
+      caller: suggestedCaller(caller),
+      edit: input.payload,
+    }),
+  "transactions.createTransaction": (input, caller) =>
+    createTransaction({
+      userId: caller.resolved.subjectUserId,
+      caller: suggestedCaller(caller),
+      payload: input.payload,
+    }),
+  "transactions.updateTransaction": (input, caller) =>
+    correctTransaction({
+      userId: caller.resolved.subjectUserId,
+      caller: suggestedCaller(caller),
+      transactionId: input.params.id,
+      payload: input.payload,
+    }),
+  "transactions.deleteTransaction": (input, caller) =>
+    deleteTransaction({
+      userId: caller.resolved.subjectUserId,
+      caller: suggestedCaller(caller),
+      transactionId: input.params.id,
+    }),
+  "memory.remember": (input, caller) =>
     rememberMemory({
       userId: caller.resolved.subjectUserId,
       payload: input.payload,
-    })
-  ),
-  "memory.revise": mutationAdapter((input: CanonicalInput<"memory.revise">, caller) =>
+    }),
+  "memory.revise": (input, caller) =>
     reviseMemory({
       userId: caller.resolved.subjectUserId,
       memoryId: input.params.id,
       payload: input.payload,
-    })
-  ),
-  "memory.forget": mutationAdapter((input: CanonicalInput<"memory.forget">, caller) =>
+    }),
+  "memory.forget": (input, caller) =>
     forgetMemory({
       userId: caller.resolved.subjectUserId,
       memoryId: input.params.id,
-    })
-  ),
-  "ingestion.submitForExtraction": mutationAdapter(
-    (input: CanonicalInput<"ingestion.submitForExtraction">, caller) =>
-      submitForExtractionInScope({
-        userId: caller.resolved.subjectUserId,
-        caller: suggestedCaller(caller),
-        payload: input.payload,
-      })
-  ),
-  "ingestion.resolveNeedsReviewItem": mutationAdapter(
-    (input: CanonicalInput<"ingestion.resolveNeedsReviewItem">, caller) =>
-      resolveNeedsReviewItemMutation({
-        userId: caller.resolved.subjectUserId,
-        caller: suggestedCaller(caller),
-        id: input.params.id,
-        extraction: input.payload.extraction,
-      })
-  ),
-  "insights.markInsightDelivered": mutationAdapter(
-    (input: CanonicalInput<"insights.markInsightDelivered">, caller) =>
-      markInsightDelivered({
-        userId: caller.resolved.subjectUserId,
-        caller: suggestedCaller(caller),
-        insightEventId: input.params.id,
-        payload: input.payload,
-      })
-  ),
-  "insights.markInsightRead": mutationAdapter(
-    (input: CanonicalInput<"insights.markInsightRead">, caller) =>
-      markInsightRead({
-        userId: caller.resolved.subjectUserId,
-        caller: suggestedCaller(caller),
-        insightEventId: input.params.id,
-      })
-  ),
-  "insights.dismissInsight": mutationAdapter(
-    (input: CanonicalInput<"insights.dismissInsight">, caller) =>
-      dismissInsight({
-        userId: caller.resolved.subjectUserId,
-        caller: suggestedCaller(caller),
-        insightEventId: input.params.id,
-      })
-  ),
-} as const;
+    }),
+  "ingestion.submitForExtraction": (input, caller) =>
+    submitForExtractionInScope({
+      userId: caller.resolved.subjectUserId,
+      caller: suggestedCaller(caller),
+      payload: input.payload,
+    }),
+  "ingestion.resolveNeedsReviewItem": (input, caller) =>
+    resolveNeedsReviewItemMutation({
+      userId: caller.resolved.subjectUserId,
+      caller: suggestedCaller(caller),
+      id: input.params.id,
+      extraction: input.payload.extraction,
+    }),
+  "insights.markInsightDelivered": (input, caller) =>
+    markInsightDelivered({
+      userId: caller.resolved.subjectUserId,
+      caller: suggestedCaller(caller),
+      insightEventId: input.params.id,
+      payload: input.payload,
+    }),
+  "insights.markInsightRead": (input, caller) =>
+    markInsightRead({
+      userId: caller.resolved.subjectUserId,
+      caller: suggestedCaller(caller),
+      insightEventId: input.params.id,
+    }),
+  "insights.dismissInsight": (input, caller) =>
+    dismissInsight({
+      userId: caller.resolved.subjectUserId,
+      caller: suggestedCaller(caller),
+      insightEventId: input.params.id,
+    }),
+} as const satisfies Partial<CanonicalOperationImplementations>;
 
 /** Every ordinary canonical mutation id, derived from the reusable implementation registry. */
 export type CanonicalMutationId = keyof typeof canonicalMutationImplementations;
@@ -236,6 +187,22 @@ export type CanonicalMutationResult = {
 type AnyMutationImplementation = MutationImplementation<CanonicalMutationId>;
 export type CanonicalMutationFailure = Effect.Error<ReturnType<AnyMutationImplementation>>;
 
+/**
+ * One mutation implementation with its input erased for runtime dispatch. Declaring `execute` as a
+ * method and indexing it out keeps the widening a checked assignment; the registry above has
+ * already fixed every declaration's input to its own operation.
+ */
+type ErasedMutationImplementation = {
+  execute(
+    input: CanonicalMutationCall["input"],
+    caller: CanonicalMutationCaller
+  ): Effect.Effect<
+    CanonicalMutationResult["output"],
+    CanonicalMutationFailure,
+    CanonicalExecutionRequirements
+  >;
+}["execute"];
+
 /** Dispatches a schema-decoded child through its operation-correlated implementation. */
 export const dispatchCanonicalMutation = Effect.fn("dispatchCanonicalMutation")(function* (
   call: CanonicalMutationCall,
@@ -243,11 +210,7 @@ export const dispatchCanonicalMutation = Effect.fn("dispatchCanonicalMutation")(
 ) {
   // The reflected tagged-union decoder establishes the operation/input correlation before this
   // boundary; the registry's mapped types preserve the same relation for callers.
-  const execute: MutationAdapter<
-    CanonicalMutationCall["input"],
-    CanonicalMutationResult["output"],
-    CanonicalMutationFailure
-  > = canonicalMutationImplementations[call.operation];
+  const execute: ErasedMutationImplementation = canonicalMutationImplementations[call.operation];
   return yield* execute(call.input, caller);
 });
 

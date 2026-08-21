@@ -1,8 +1,10 @@
 import { expect, layer } from "@effect/vitest";
-import { Context, DateTime, Effect, Layer, Schema } from "effect";
+import assert from "node:assert/strict";
+import { Cause, Context, DateTime, Effect, Exit, Layer, Option, Schema } from "effect";
 import { HttpBody, HttpClient } from "effect/unstable/http";
 import { MigrationSqlClient } from "~/shell/db/client";
-import { PATId, type TokenId } from "~/core/tokens/reference";
+import type { AuditLogEntry } from "~/core/audit/model";
+import { PATId } from "~/core/tokens/reference";
 import { IanaTimeZone } from "~/core/_shared/context";
 import { UserId } from "~/core/identity/reference";
 import { CreateTransactionInput, TransactionId } from "~/core/transactions/model";
@@ -25,17 +27,29 @@ import { transactionPayload } from "~/shell/transactions/fixtures";
 import { truncateAuditLogEntries } from "./fixtures";
 import { observeAuditLogEntries } from "./repo";
 
+/**
+ * Names the constraint that refused a write. Asserting the constraint rather than mere failure is
+ * what stops a typo in the statement passing for the invariant under test.
+ */
+const refusedBy = (exit: Exit.Exit<unknown, unknown>): string => {
+  assert.ok(Exit.isFailure(exit), "the write must be refused");
+  return Cause.pretty(exit.cause);
+};
+
 const atomicUserId = UserId.make("f1d1a000-0000-4000-8000-0000000007a1");
-const atomicWriteTokenId = PATId.make("f1d1a000-0000-4000-8000-0000000007a2");
+const atomicWritePatId = PATId.make("f1d1a000-0000-4000-8000-0000000007a2");
 const atomicWriteBearer = TokenBearer.make("fin_atomicw1_abcdefghijklmnopqrstuvwxyz0123456789ABCD");
 const atomicObserverBearer = TokenBearer.make(
   "fin_atomicro_abcdefghijklmnopqrstuvwxyz0123456789ABCD"
 );
 const encodeTransactionInput = Schema.encodeSync(CreateTransactionInput);
-const evidenceForToken = <Entry extends { readonly tokenId: TokenId }>(
-  entries: ReadonlyArray<Entry>,
-  tokenId: TokenId
-): ReadonlyArray<Entry> => entries.filter((entry) => entry.tokenId === tokenId);
+
+/** Evidence attributed to one PAT. The caller union narrows, so no structural probing is needed. */
+const evidenceForPat = (
+  entries: ReadonlyArray<AuditLogEntry>,
+  patId: PATId
+): ReadonlyArray<AuditLogEntry> =>
+  entries.filter((entry) => entry.caller._tag === "PAT" && entry.caller.patId === patId);
 
 class AtomicObserverApiClient extends Context.Service<AtomicObserverApiClient, ApiClient>()(
   "@fidy/server/shell/audit/audit-log.test/AtomicObserverApiClient"
@@ -62,7 +76,7 @@ layer(AuditHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         expect(entries).toHaveLength(1);
         expect(entries[0]).toMatchObject({
           subjectUserId: defaultUserId,
-          tokenId: defaultPATId,
+          caller: { _tag: "PAT", patId: defaultPATId },
           operation: "identity.getCurrentUser",
           outcome: "succeeded",
         });
@@ -76,12 +90,12 @@ layer(AuditHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           DateTime.toEpochMillis(finishedAt)
         );
         expect(Object.keys(entries[0] ?? {}).sort()).toEqual([
+          "caller",
           "id",
           "occurredAt",
           "operation",
           "outcome",
           "subjectUserId",
-          "tokenId",
         ]);
         expect(Object.values(entry)).not.toContain(defaultPatBearer);
       })
@@ -133,7 +147,7 @@ layer(AuditHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         expect(entries).toHaveLength(1);
         expect(entries[0]).toMatchObject({
           subjectUserId: defaultUserId,
-          tokenId: defaultPATId,
+          caller: { _tag: "PAT", patId: defaultPATId },
           operation: "identity.updateUserPreferences",
           outcome: "failed",
         });
@@ -149,7 +163,7 @@ layer(AuditHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         yield* truncateAuditLogEntries;
         yield* seedConsentedPatIdentity({
           userId: atomicUserId,
-          tokenId: atomicWriteTokenId,
+          tokenId: atomicWritePatId,
           bearer: atomicWriteBearer,
           scopes: ["write"],
         });
@@ -164,7 +178,7 @@ layer(AuditHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           CREATE OR REPLACE FUNCTION reject_atomic_success_audit()
           RETURNS trigger AS $$
           BEGIN
-            IF NEW.token_id = 'f1d1a000-0000-4000-8000-0000000007a2'::uuid
+            IF NEW.pat_id = 'f1d1a000-0000-4000-8000-0000000007a2'::uuid
               AND NEW.outcome = 'succeeded' THEN
               RAISE EXCEPTION 'injected successful-audit failure';
             END IF;
@@ -194,7 +208,7 @@ layer(AuditHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           });
           const history = yield* observer.transactions.listTransactions({ query: {} });
           const entries = yield* observeAuditLogEntries(atomicUserId);
-          const writeEvidence = evidenceForToken(entries, atomicWriteTokenId);
+          const writeEvidence = evidenceForPat(entries, atomicWritePatId);
 
           expect(response.status).toBe(500);
           expect(history.data).toEqual([]);
@@ -205,6 +219,39 @@ layer(AuditHarness, { excludeTestServices: true, timeout: "30 seconds" })(
             outcome: "failed",
           });
         }).pipe(Effect.ensuring(removeFailureInjection));
+      })
+    );
+
+    it.effect("refuses evidence that does not name exactly one caller", () =>
+      Effect.gen(function* () {
+        yield* truncateAuditLogEntries;
+        const sql = yield* MigrationSqlClient;
+        const append = (
+          patId: Option.Option<string>,
+          hostedAgentSessionId: Option.Option<string>
+        ): Effect.Effect<Exit.Exit<unknown, unknown>> =>
+          Effect.exit(sql`
+            INSERT INTO audit_log_entries (
+              user_id, pat_id, hosted_agent_session_id, operation, outcome, occurred_at
+            )
+            VALUES (
+              ${defaultUserId}, ${Option.getOrNull(patId)},
+              ${Option.getOrNull(hostedAgentSessionId)},
+              'identity.getCurrentUser', 'succeeded', now()
+            )
+          `);
+
+        // A PAT and a Hosted Agent Session are mutually exclusive callers, so evidence naming both
+        // or neither would make attribution unreadable rather than merely incomplete.
+        const both = yield* append(
+          Option.some(defaultPATId),
+          Option.some("f1d1a000-0000-4000-8000-0000000009a1")
+        );
+        const neither = yield* append(Option.none(), Option.none());
+
+        expect(refusedBy(both)).toContain("audit_log_entries_exactly_one_caller");
+        expect(refusedBy(neither)).toContain("audit_log_entries_exactly_one_caller");
+        expect(yield* observeAuditLogEntries(defaultUserId)).toEqual([]);
       })
     );
 
@@ -223,7 +270,7 @@ layer(AuditHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         expect(entries).toHaveLength(1);
         expect(entries[0]).toMatchObject({
           subjectUserId: defaultUserId,
-          tokenId: defaultPATId,
+          caller: { _tag: "PAT", patId: defaultPATId },
           operation: "transactions.getTransaction",
           outcome: "failed",
         });

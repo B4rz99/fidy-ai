@@ -8,8 +8,6 @@ type AdvisoryLockKey = {
   readonly seed: number;
 };
 
-// Hosted-attempt acceptance orchestration belongs to #205; #204 covers this key at its DB seam.
-/* istanbul ignore next */
 const hostedAttemptLockKey = (userId: UserId): AdvisoryLockKey => ({
   value: `hosted-attempt:${userId}`,
   seed: 0,
@@ -45,6 +43,38 @@ export const advisoryLockKey = {
   }),
   whatsAppAdmission: (userId: string): AdvisoryLockKey => ({ value: userId, seed: 0 }),
 } as const;
+
+const acquireUserTurnLock = Effect.fn("acquireUserTurnLock")(function* (userId: UserId) {
+  const sql = yield* SqlClient.SqlClient;
+  const connection = yield* sql.reserve.pipe(Effect.orDie);
+  const lockKey = hostedAttemptLockKey(userId);
+  yield* Effect.addFinalizer(() =>
+    connection
+      .executeRaw("SELECT pg_advisory_unlock(hashtextextended($1, $2))", [
+        lockKey.value,
+        lockKey.seed,
+      ])
+      .pipe(Effect.orDie)
+  );
+  yield* connection
+    .executeRaw("SELECT pg_advisory_lock(hashtextextended($1, $2))", [lockKey.value, lockKey.seed])
+    .pipe(Effect.orDie, Effect.interruptible);
+});
+
+/**
+ * Serializes one User's hosted work across runtime instances for exactly the duration of `use`.
+ * Unlike the transaction-scoped locks above this one is held on a reserved connection, so it spans
+ * the several transactions one hosted Turn commits. The unlock finalizer is registered before the
+ * lock is taken so an interrupted wait still releases it, and waiting stays interruptible so a
+ * cancelled Turn stops queueing instead of blocking the next one. Taking the lock is not reachable
+ * apart from the work it guards, so no caller can hold one past the flow that acquired it.
+ */
+export const withUserTurnLock = Effect.fn("withUserTurnLock")(function* <A, E, R>(
+  userId: UserId,
+  use: Effect.Effect<A, E, R>
+) {
+  return yield* Effect.scoped(Effect.andThen(acquireUserTurnLock(userId), use));
+});
 
 /** Acquires one User-owned advisory lock inside the caller's active transaction. */
 export const withUserLockInScope = Effect.fn("withUserLockInScope")(function* <A, E, R>(

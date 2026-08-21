@@ -1,8 +1,7 @@
 import { expect, it } from "@effect/vitest";
 import { DateTime, Effect, Option, Result, Schema } from "effect";
-import { HostedTurnTokenId, PATId, TokenId } from "./reference";
+import { PATId } from "./reference";
 import {
-  HostedTurnScopes,
   PatScopes,
   ResolvedToken,
   TokenBearer,
@@ -43,14 +42,11 @@ it.effect("builds and reads the TokenBearer bearer through one encoding contract
   })
 );
 
-it("accepts both token id variants in resolved authorization facts", () => {
-  const id = "f1d1a000-0000-4000-8000-000000000012";
-
-  expect(Result.isSuccess(Schema.decodeUnknownResult(TokenId)(id))).toBe(true);
+it("accepts PAT identity in resolved authorization facts", () => {
   expect(
     Result.isSuccess(
       Schema.decodeUnknownResult(ResolvedToken)({
-        tokenId: id,
+        tokenId: "f1d1a000-0000-4000-8000-000000000012",
         subjectUserId: "f1d1a000-0000-4000-8000-000000000013",
         scopes: ["read"],
         lastUsedAt: "2026-07-28T12:34:56Z",
@@ -76,77 +72,6 @@ it("accepts exactly the non-empty unique TokenBearer scope vocabulary", () => {
   expect(Result.isFailure(decodeScopes([]))).toBe(true);
   expect(Result.isFailure(decodeScopes(["read", "read"]))).toBe(true);
   expect(Result.isFailure(decodeScopes(["admin"]))).toBe(true);
-});
-
-it("requires every canonical scope for an internal HostedTurnToken", () => {
-  const decodeScopes = Schema.decodeUnknownResult(HostedTurnScopes);
-
-  expect(Result.isSuccess(decodeScopes(["read", "write", "dashboard"]))).toBe(true);
-  expect(Result.isSuccess(decodeScopes(["dashboard", "read", "write"]))).toBe(true);
-  expect(Result.isFailure(decodeScopes([]))).toBe(true);
-  expect(Result.isFailure(decodeScopes(["read", "write"]))).toBe(true);
-  expect(Result.isFailure(decodeScopes(["read", "write", "write"]))).toBe(true);
-  expect(Result.isFailure(decodeScopes(["read", "write", "admin"]))).toBe(true);
-});
-
-it("documents the hosted scope set as one array rather than a variant per ordering", () => {
-  const document = Schema.toJsonSchemaDocument(HostedTurnScopes);
-
-  expect(document.definitions.HostedTurnScopes).toMatchObject({ type: "array" });
-});
-
-it("rejects HostedTurnToken use and revocation outside its hard lifetime", () => {
-  const decodeToken = Schema.decodeUnknownResult(Schema.toType(TokenGrant));
-  const createdAt = DateTime.makeUnsafe("2026-07-28T12:34:56Z");
-  const expiresAt = DateTime.addDuration(createdAt, "15 minutes");
-  const usedAt = DateTime.addDuration(createdAt, "1 minute");
-  const validToken = {
-    _tag: "HostedTurnToken" as const,
-    id: HostedTurnTokenId.make("f1d1a000-0000-4000-8000-000000000011"),
-    shortId: TokenShortId.make("hosted01"),
-    scopes: HostedTurnScopes.make(["read", "write", "dashboard"]),
-    lastUsedAt: Option.some(usedAt),
-    expiresAt,
-    revokedAt: Option.some(usedAt),
-    createdAt,
-  };
-
-  const invalidExpiry = decodeToken({ ...validToken, expiresAt: createdAt });
-  const invalidEarlyUse = decodeToken({
-    ...validToken,
-    lastUsedAt: Option.some(DateTime.subtractDuration(createdAt, "1 millis")),
-    revokedAt: Option.none(),
-  });
-  const invalidLateUse = decodeToken({
-    ...validToken,
-    lastUsedAt: Option.some(expiresAt),
-    revokedAt: Option.none(),
-  });
-  const invalidRevocation = decodeToken({
-    ...validToken,
-    revokedAt: Option.some(createdAt),
-  });
-
-  expect(Result.isSuccess(decodeToken(validToken))).toBe(true);
-  expect(
-    Result.isSuccess(
-      decodeToken({ ...validToken, lastUsedAt: Option.none(), revokedAt: Option.none() })
-    )
-  ).toBe(true);
-  expect(Result.isFailure(invalidExpiry)).toBe(true);
-  expect(String(Option.getOrThrow(Result.getFailure(invalidExpiry)))).toContain('at ["expiresAt"]');
-  expect(Result.isFailure(invalidEarlyUse)).toBe(true);
-  expect(String(Option.getOrThrow(Result.getFailure(invalidEarlyUse)))).toContain(
-    'at ["lastUsedAt"]'
-  );
-  expect(Result.isFailure(invalidLateUse)).toBe(true);
-  expect(String(Option.getOrThrow(Result.getFailure(invalidLateUse)))).toContain(
-    'at ["lastUsedAt"]'
-  );
-  expect(Result.isFailure(invalidRevocation)).toBe(true);
-  expect(String(Option.getOrThrow(Result.getFailure(invalidRevocation)))).toContain(
-    'at ["revokedAt"]'
-  );
 });
 
 it("carries bearer grant instants over the wire as date-time strings", () => {

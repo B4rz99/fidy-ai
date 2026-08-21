@@ -5,7 +5,6 @@ import { createCategorizedTransactions } from "./0004-categorized-transactions";
 import { createInsights } from "./0005-create-insights";
 import { createDashboards } from "./0006-create-dashboards";
 import { createTranscripts } from "./0007-create-transcripts";
-import { hostedTurnTokens } from "./0008-hosted-turn-tokens";
 import { rowLevelSecurity } from "./0009-row-level-security";
 import { createConsentLedger } from "./0010-create-consent-ledger";
 import { bindPendingConsentInitiator } from "./0011-bind-pending-consent-initiator";
@@ -40,7 +39,6 @@ export const migrations = {
   "0005_create_insights": createInsights,
   "0006_create_dashboards": createDashboards,
   "0007_create_transcripts": createTranscripts,
-  "0008_hosted_turn_tokens": hostedTurnTokens,
   "0009_row_level_security": rowLevelSecurity,
   "0010_create_consent_ledger": createConsentLedger,
   "0011_bind_pending_consent_initiator": bindPendingConsentInitiator,

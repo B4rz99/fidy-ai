@@ -1,81 +1,31 @@
-import { Context, Effect, Function, Layer, Option, Schema, type Scope } from "effect";
-import { HttpClient, HttpClientRequest } from "effect/unstable/http";
-import { HttpApiClient, HttpApiMiddleware } from "effect/unstable/httpapi";
+import { Crypto, Effect, Function, Option, Schema } from "effect";
 import { Tool, Toolkit } from "effect/unstable/ai";
+import { SqlClient } from "effect/unstable/sql";
 import { toCodecOpenAI } from "effect/unstable/ai/OpenAiStructuredOutput";
-import type { CanonicalOperationId } from "~/core/_shared/canonical-operation";
-import { type TokenBearer } from "~/core/tokens/model";
-import { TokenAuthorization } from "~/shell/_shared/authz";
-import { type CatalogOperation } from "~/shell/_shared/operation-catalog";
 import { type AgentConfirmation } from "~/shell/_shared/operation-policy";
-import { FidyApi, type FidyApiGroups, type OperationId, operationCatalog } from "~/shell/api";
-import { Telemetry, encodeTraceParent } from "~/shell/observability/telemetry";
+import { operationCatalog } from "~/shell/api";
+import type { CanonicalCaller } from "~/shell/_shared/authz";
+import { Telemetry } from "~/shell/observability/telemetry";
+import {
+  CanonicalCallRejected,
+  executeHostedCanonicalOperation,
+  recordHostedPreflightRejection,
+} from "~/shell/_shared/canonical-operation-executor";
+import { canonicalJsonString } from "./canonical-json";
+import type { CanonicalExecutionRequirements } from "~/shell/_shared/canonical-implementation";
+import { HostedInference } from "./hosted-inference";
+import type { ConfirmationPermit } from "./tool-confirmation-model";
+import {
+  type AgentOperationBinding,
+  OpenAiToolName,
+  encodeOpenAiToolName,
+} from "./agent-operation-binding";
 
-const maximumOpenAiToolNameLength = 64;
-
-const loopbackHostnames = new Set(["127.0.0.1", "localhost", "[::1]"]);
-const httpProtocols = new Set(["http:", "https:"]);
-
-const isSafeCanonicalApiUrl = (url: URL): boolean =>
-  [
-    loopbackHostnames.has(url.hostname),
-    httpProtocols.has(url.protocol),
-    url.username === "",
-    url.password === "",
-    url.pathname === "/",
-    url.search === "",
-    url.hash === "",
-  ].every(Boolean);
-
-const safeCanonicalApiUrl = Schema.makeFilter<URL>((url) =>
-  isSafeCanonicalApiUrl(url)
-    ? undefined
-    : "Expected a loopback canonical API origin without credentials"
-);
-
-/** Runtime-validated origin used by standalone canonical API clients. */
-export const CanonicalApiUrl = Schema.URLFromString.check(safeCanonicalApiUrl);
-export type CanonicalApiUrl = typeof CanonicalApiUrl.Type;
-
-/**
- * Optional validated base URL for the canonical HTTP client. Test servers provide
- * a pre-addressed HttpClient; standalone adapters override this with their server.
- */
-export const CanonicalApiBaseUrl = Context.Reference<Option.Option<CanonicalApiUrl>>(
-  "@fidy/server/shell/agent/toolkit/CanonicalApiBaseUrl",
-  {
-    defaultValue: Option.none,
-  }
-);
-
-/** OpenAI-compatible alias mechanically derived from a canonical operation id. */
-export const OpenAiToolName = Schema.String.check(
-  Schema.isPattern(/^[A-Za-z0-9_-]+$/),
-  Schema.isMaxLength(maximumOpenAiToolNameLength)
-).pipe(Schema.brand("OpenAiToolName"));
-export type OpenAiToolName = typeof OpenAiToolName.Type;
-
-/**
- * Connects one provider-safe tool to its canonical operation declaration. `canonicalParameters`
- * governs API input, while `providerResponseParameters` accepts either strict OpenAI arguments or
- * the canonical encoded form returned by Effect's provider adapter. `wireJsonSchema` is the exact
- * strict schema published to OpenAI and must remain paired with that response codec.
- */
-export type AgentOperationBinding = {
-  readonly operation: CanonicalOperationId;
-  readonly wireName: OpenAiToolName;
-  readonly description: string;
-  readonly canonicalParameters: CatalogOperation["input"];
-  readonly providerResponseParameters: Schema.Codec<unknown, unknown, never, never>;
-  readonly wireJsonSchema: ReturnType<typeof toCodecOpenAI>["jsonSchema"];
-  readonly success: CatalogOperation["success"];
-  readonly failure: CatalogOperation["failure"];
-  readonly policy: CatalogOperation["policy"];
-};
-
-/** Encodes a canonical dot without changing any other operation identity text. */
-export const encodeOpenAiToolName = (operation: CanonicalOperationId): OpenAiToolName =>
-  OpenAiToolName.make(operation.replaceAll(".", "__"));
+export {
+  type AgentOperationBinding,
+  OpenAiToolName,
+  encodeOpenAiToolName,
+} from "./agent-operation-binding";
 
 /** Every hosted tool binding, derived from the assembled FidyApi catalog. */
 export const agentOperationBindings: ReadonlyArray<AgentOperationBinding> =
@@ -144,271 +94,149 @@ const tools = agentOperationBindings.map((binding) =>
 /** Toolkit definition containing exactly the operations reflected from FidyApi. */
 export const AgentToolkit = Toolkit.make(...tools);
 
-type ClientOperation = (input: unknown) => Effect.Effect<unknown, object>;
+export type AgentToolkitInstance = Toolkit.WithHandler<typeof AgentToolkit.tools> &
+  Readonly<{
+    prepare: (
+      binding: AgentOperationBinding,
+      canonicalInput: Schema.Json,
+      permit: ConfirmationPermit
+    ) => Effect.Effect<void, CanonicalCallRejected>;
+    recordPreflightRejection: (binding: AgentOperationBinding) => Effect.Effect<void>;
+  }>;
 
-const bindClientOperation = <Input, Success, Failure extends object>(
-  binding: AgentOperationBinding,
-  operation: (input: Input) => Effect.Effect<Success, Failure, never>
-): ClientOperation => {
-  const parameters = Schema.make<Schema.Codec<Input, unknown, never, never>>(
-    binding.canonicalParameters.ast
-  );
-  return (input) =>
-    Schema.decodeUnknownEffect(parameters)(input).pipe(
-      Effect.orDie,
-      Effect.flatMap(operation),
-      Effect.provideService(HttpClient.TracerPropagationEnabled, false),
-      Effect.catch((error) =>
-        Schema.is(binding.failure)(error)
-          ? Effect.fail(error)
-          : Effect.die(new Error("Canonical API client returned an undeclared failure"))
-      )
-    );
-};
+const isJsonInput = Schema.is(Schema.Json);
 
-const requireBinding = (operation: OperationId): AgentOperationBinding => {
-  const catalogOperation = Option.getOrThrowWith(
-    Option.fromNullishOr(operationCatalog.byId.get(operation)),
-    () => new Error(`Agent operation binding is missing: ${operation}`)
-  );
-  const binding = agentOperationBindings.find(
-    (candidate) => candidate.operation === catalogOperation.id
-  );
-  if (binding === undefined) {
-    throw new Error(`Agent operation binding is missing: ${operation}`);
-  }
-  return binding;
-};
-
-type FidyClient = HttpApiClient.Client<FidyApiGroups>;
-type BindClientOperation = <Input, Success, Failure extends object>(
-  operation: OperationId,
-  invoke: (input: Input) => Effect.Effect<Success, Failure, never>
-) => ClientOperation;
-type GroupClientOperations<Group extends string> = Record<
-  Extract<OperationId, `${Group}.${string}`>,
-  ClientOperation
->;
-
-const identityClientOperations = (
-  client: FidyClient,
-  bind: BindClientOperation
-): GroupClientOperations<"identity"> => ({
-  "identity.getCurrentUser": bind("identity.getCurrentUser", client.identity.getCurrentUser),
-  "identity.updateUserPreferences": bind(
-    "identity.updateUserPreferences",
-    client.identity.updateUserPreferences
-  ),
-});
-
-const categoryClientOperations = (
-  client: FidyClient,
-  bind: BindClientOperation
-): GroupClientOperations<"categories"> => ({
-  "categories.listCategories": bind("categories.listCategories", client.categories.listCategories),
-  "categories.listKeywordRules": bind(
-    "categories.listKeywordRules",
-    client.categories.listKeywordRules
-  ),
-  "categories.createKeywordRule": bind(
-    "categories.createKeywordRule",
-    client.categories.createKeywordRule
-  ),
-  "categories.updateKeywordRule": bind(
-    "categories.updateKeywordRule",
-    client.categories.updateKeywordRule
-  ),
-  "categories.deleteKeywordRule": bind(
-    "categories.deleteKeywordRule",
-    client.categories.deleteKeywordRule
-  ),
-});
-
-const budgetClientOperations = (
-  client: FidyClient,
-  bind: BindClientOperation
-): GroupClientOperations<"budgets"> => ({
-  "budgets.createBudget": bind("budgets.createBudget", client.budgets.createBudget),
-  "budgets.listBudgets": bind("budgets.listBudgets", client.budgets.listBudgets),
-  "budgets.getBudget": bind("budgets.getBudget", client.budgets.getBudget),
-  "budgets.updateBudget": bind("budgets.updateBudget", client.budgets.updateBudget),
-  "budgets.deleteBudget": bind("budgets.deleteBudget", client.budgets.deleteBudget),
-  "budgets.getBudgetStatus": bind("budgets.getBudgetStatus", client.budgets.getBudgetStatus),
-});
-
-const dashboardClientOperations = (
-  client: FidyClient,
-  bind: BindClientOperation
-): GroupClientOperations<"dashboard"> => ({
-  "dashboard.getDashboard": bind("dashboard.getDashboard", client.dashboard.getDashboard),
-  "dashboard.listDashboardCatalog": bind(
-    "dashboard.listDashboardCatalog",
-    client.dashboard.listDashboardCatalog
-  ),
-  "dashboard.applyDashboardEdit": bind(
-    "dashboard.applyDashboardEdit",
-    client.dashboard.applyDashboardEdit
-  ),
-});
-
-const transactionClientOperations = (
-  client: FidyClient,
-  bind: BindClientOperation
-): GroupClientOperations<"transactions"> => ({
-  "transactions.createTransaction": bind(
-    "transactions.createTransaction",
-    client.transactions.createTransaction
-  ),
-  "transactions.listTransactions": bind(
-    "transactions.listTransactions",
-    client.transactions.listTransactions
-  ),
-  "transactions.getTransaction": bind(
-    "transactions.getTransaction",
-    client.transactions.getTransaction
-  ),
-  "transactions.updateTransaction": bind(
-    "transactions.updateTransaction",
-    client.transactions.updateTransaction
-  ),
-  "transactions.deleteTransaction": bind(
-    "transactions.deleteTransaction",
-    client.transactions.deleteTransaction
-  ),
-  "transactions.listSourceAttestations": bind(
-    "transactions.listSourceAttestations",
-    client.transactions.listSourceAttestations
-  ),
-});
-
-const ingestionClientOperations = (
-  client: FidyClient,
-  bind: BindClientOperation
-): GroupClientOperations<"ingestion"> => ({
-  "ingestion.submitForExtraction": bind(
-    "ingestion.submitForExtraction",
-    client.ingestion.submitForExtraction
-  ),
-  "ingestion.getStatementSubmission": bind(
-    "ingestion.getStatementSubmission",
-    client.ingestion.getStatementSubmission
-  ),
-  "ingestion.listNeedsReviewItems": bind(
-    "ingestion.listNeedsReviewItems",
-    client.ingestion.listNeedsReviewItems
-  ),
-  "ingestion.resolveNeedsReviewItem": bind(
-    "ingestion.resolveNeedsReviewItem",
-    client.ingestion.resolveNeedsReviewItem
-  ),
-});
-
-const insightClientOperations = (
-  client: FidyClient,
-  bind: BindClientOperation
-): GroupClientOperations<"insights"> => ({
-  "insights.listPendingInsights": bind(
-    "insights.listPendingInsights",
-    client.insights.listPendingInsights
-  ),
-  "insights.markInsightDelivered": bind(
-    "insights.markInsightDelivered",
-    client.insights.markInsightDelivered
-  ),
-  "insights.markInsightRead": bind("insights.markInsightRead", client.insights.markInsightRead),
-  "insights.dismissInsight": bind("insights.dismissInsight", client.insights.dismissInsight),
-});
-
-const memoryClientOperations = (
-  client: FidyClient,
-  bind: BindClientOperation
-): GroupClientOperations<"memory"> => ({
-  "memory.remember": bind("memory.remember", client.memory.remember),
-  "memory.revise": bind("memory.revise", client.memory.revise),
-  "memory.forget": bind("memory.forget", client.memory.forget),
-  "memory.recall": bind("memory.recall", client.memory.recall),
-});
-
-const remainingClientOperations = (
-  client: FidyClient,
-  bind: BindClientOperation
-): GroupClientOperations<"subscription"> & GroupClientOperations<"operations"> => ({
-  "subscription.getUpgradeUrl": bind(
-    "subscription.getUpgradeUrl",
-    client.subscription.getUpgradeUrl
-  ),
-  "operations.executeAtomicBatch": bind(
-    "operations.executeAtomicBatch",
-    client.operations.executeAtomicBatch
-  ),
-});
-
-const makeClientOperations = (
-  client: FidyClient,
-  bind: BindClientOperation
-): Record<OperationId, ClientOperation> => ({
-  ...identityClientOperations(client, bind),
-  ...categoryClientOperations(client, bind),
-  ...budgetClientOperations(client, bind),
-  ...dashboardClientOperations(client, bind),
-  ...transactionClientOperations(client, bind),
-  ...ingestionClientOperations(client, bind),
-  ...insightClientOperations(client, bind),
-  ...memoryClientOperations(client, bind),
-  ...remainingClientOperations(client, bind),
-});
+const permitKey = (binding: AgentOperationBinding, input: Schema.Json): string =>
+  `${binding.operation}\n${canonicalJsonString(input)}`;
 
 /**
- * Binds the derived toolkit to a turn-scoped TokenBearer. Each handler restores
- * the canonical id and calls the generated HTTP client through TokenAuthorization.
+ * Closure-owned queue of single-use confirmation permits keyed by exact operation and input. It is
+ * never serialized, so an admitted permit cannot be replayed from outside its workflow.
  */
-export const makeAgentToolkit = (
-  bearer: TokenBearer
-): Effect.Effect<
-  Toolkit.WithHandler<typeof AgentToolkit.tools>,
-  never,
-  HttpClient.HttpClient | Scope.Scope | Telemetry
-> =>
-  Effect.gen(function* () {
-    const baseUrl = yield* CanonicalApiBaseUrl;
-    const telemetry = yield* Telemetry;
-    const authorization = HttpApiMiddleware.layerClient(TokenAuthorization, ({ next, request }) =>
-      Effect.flatMap(telemetry.captureDurableContext, (context) => {
-        const authorized = HttpClientRequest.bearerToken(request, bearer);
-        return next(
-          Option.match(context, {
-            onNone: () => authorized,
-            onSome: (coordinates) =>
-              HttpClientRequest.setHeader(
-                authorized,
-                "traceparent",
-                encodeTraceParent(coordinates)
-              ),
-          })
-        );
-      })
-    );
-    const middlewareContext = yield* Layer.build(authorization);
-    const derivedClient = Option.match(baseUrl, {
-      onNone: () => HttpApiClient.make(FidyApi),
-      onSome: (url) => HttpApiClient.make(FidyApi, { baseUrl: url.href }),
+type PermitLedger = Readonly<{
+  offer: (
+    binding: AgentOperationBinding,
+    canonicalInput: Schema.Json,
+    permit: ConfirmationPermit
+  ) => void;
+  take: (binding: AgentOperationBinding, input: unknown) => Option.Option<ConfirmationPermit>;
+}>;
+
+const makePermitLedger = (): PermitLedger => {
+  const permits = new Map<string, Array<ConfirmationPermit>>();
+  const queueFor = (key: string): Array<ConfirmationPermit> =>
+    Option.match(Option.fromUndefinedOr(permits.get(key)), {
+      onNone: () => {
+        const created: Array<ConfirmationPermit> = [];
+        permits.set(key, created);
+        return created;
+      },
+      onSome: (queued) => queued,
     });
-    const client = yield* derivedClient.pipe(Effect.provide(middlewareContext));
-    const bind: BindClientOperation = (operation, invoke) =>
-      bindClientOperation(requireBinding(operation), invoke);
-    const clientOperations = makeClientOperations(client, bind);
-    const operationsById = new Map(Object.entries(clientOperations));
+  return {
+    offer: (binding, canonicalInput, permit) => {
+      queueFor(permitKey(binding, canonicalInput)).push(permit);
+    },
+    take: (binding, input) => {
+      // A tool input JSON cannot represent has no canonical text, so it matches no permit and the
+      // caller's refusal path records it like any other unmatched call.
+      if (!isJsonInput(input)) return Option.none();
+      const key = permitKey(binding, input);
+      const queued = queueFor(key);
+      const permit = Option.fromUndefinedOr(queued.shift());
+      if (queued.length === 0) permits.delete(key);
+      return permit;
+    },
+  };
+};
+
+/**
+ * Everything hosted canonical execution requires. A handler must provide all of it: the AI SDK
+ * invokes handlers wherever the model runs, so an ambient service is not a guarantee.
+ */
+type HostedExecutionRequirements = CanonicalExecutionRequirements;
+
+/** Spends the prepared permit this exact call was issued, or refuses the call with evidence. */
+const spendPermit = (input: {
+  readonly caller: CanonicalCaller;
+  readonly isExecutionActive: () => boolean;
+  readonly ledger: PermitLedger;
+  readonly binding: AgentOperationBinding;
+  readonly untrustedInput: unknown;
+}): Effect.Effect<unknown, object, HostedExecutionRequirements> =>
+  Option.match(input.ledger.take(input.binding, input.untrustedInput), {
+    // A missed permit is the correlation defense firing, so it leaves evidence like every other
+    // refusal on this boundary rather than being the one silent one.
+    onNone: () =>
+      recordHostedPreflightRejection(input.caller, input.binding.operation).pipe(
+        Effect.andThen(Effect.fail(new CanonicalCallRejected({ reason: "confirmation_rejected" })))
+      ),
+    onSome: (confirmationPermit) =>
+      executeHostedCanonicalOperation({
+        caller: input.caller,
+        binding: input.binding,
+        untrustedInput: input.untrustedInput,
+        confirmationPermit,
+        isExecutionActive: input.isExecutionActive,
+      }),
+  });
+
+/**
+ * Creates session-attributed handlers inside one structured hosted workflow. Prepared permits and
+ * handlers are closure-owned, never serialized, and become unusable when the workflow closes.
+ */
+export const makeAgentToolkit = (input: {
+  readonly caller: CanonicalCaller;
+  readonly isExecutionActive: () => boolean;
+}): Effect.Effect<AgentToolkitInstance, never, HostedExecutionRequirements> =>
+  Effect.gen(function* () {
+    const sql = yield* SqlClient.SqlClient;
+    const telemetry = yield* Telemetry;
+    const crypto = yield* Crypto.Crypto;
+    const inference = yield* HostedInference;
+    const ledger = makePermitLedger();
+    const invoke = (
+      binding: AgentOperationBinding,
+      untrustedInput: unknown
+    ): Effect.Effect<unknown, object, HostedExecutionRequirements> =>
+      Effect.suspend(() => spendPermit({ ...input, ledger, binding, untrustedInput }));
     const handlers = Object.fromEntries(
       agentOperationBindings.map((binding) => [
         binding.wireName,
-        (input: unknown): Effect.Effect<unknown, object> => {
-          const operation = operationsById.get(binding.operation);
-          return operation === undefined
-            ? Effect.die(new Error("Derived canonical API client operation is missing"))
-            : operation(input);
-        },
+        (untrustedInput: unknown): Effect.Effect<unknown, object> =>
+          invoke(binding, untrustedInput).pipe(
+            Effect.provideService(SqlClient.SqlClient, sql),
+            Effect.provideService(Telemetry, telemetry),
+            Effect.provideService(Crypto.Crypto, crypto),
+            Effect.provideService(HostedInference, inference),
+            // A refusal the declared failure schema cannot carry back to the model ends the Turn.
+            // It is already audited as `rejected` before reaching here, so dying with the rejection
+            // itself keeps its reason in the Cause for the log rather than replacing it with prose.
+            // Terminalization cannot read it: a defect carries no typed error, so the Turn records
+            // the generic hosted reason.
+            Effect.catch((failure) =>
+              Schema.is(binding.failure)(failure) ? Effect.fail(failure) : Effect.die(failure)
+            )
+          ),
       ])
     );
     const handlerContext = yield* AgentToolkit.toHandlers(handlers);
-    return yield* AgentToolkit.pipe(Effect.provide(handlerContext));
+    const toolkit = yield* AgentToolkit.pipe(Effect.provide(handlerContext));
+    return {
+      ...toolkit,
+      prepare: (
+        binding: AgentOperationBinding,
+        canonicalInput: Schema.Json,
+        permit: ConfirmationPermit
+      ) =>
+        Effect.suspend(() =>
+          input.isExecutionActive()
+            ? Effect.sync(() => ledger.offer(binding, canonicalInput, permit))
+            : Effect.fail(new CanonicalCallRejected({ reason: "authority_closed" }))
+        ),
+      recordPreflightRejection: (binding: AgentOperationBinding) =>
+        recordHostedPreflightRejection(input.caller, binding.operation).pipe(
+          Effect.provideService(SqlClient.SqlClient, sql)
+        ),
+    };
   });

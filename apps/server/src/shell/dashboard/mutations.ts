@@ -39,6 +39,20 @@ export const loadOrCreateDashboard = (
     return yield* insertDashboardInScope(userId, makeDefaultDashboard({ widgetId }));
   });
 
+/**
+ * Reads the caller's DashboardDocument, creating its first-use default when none exists. Declared a
+ * canonical mutation because that first read persists a document, and it takes the aggregate lock
+ * so concurrent first use resolves to one document rather than two.
+ */
+export const getDashboard: CanonicalMutationImplementation<
+  Readonly<{ userId: UserId }>,
+  MutationResponse<typeof DashboardDocument>,
+  never
+> = Effect.fn("getDashboard")(function* ({ userId }) {
+  const data = yield* withDashboardLockInScope(userId, loadOrCreateDashboard(userId));
+  return { data, next: [] };
+});
+
 const resolveCategoryReferencePath = (
   reference: Readonly<DashboardCategoryReference>,
   edit: Readonly<DashboardEdit>

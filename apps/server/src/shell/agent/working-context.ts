@@ -1,9 +1,6 @@
 import { Data, Effect, Option } from "effect";
 import type { Prompt } from "effect/unstable/ai";
-import {
-  type PreparedAttemptContext,
-  type PreparedWorkingContextSnapshot,
-} from "~/shell/transcript/conversation-continuity";
+import { type PreparedWorkingContextSnapshot } from "~/shell/transcript/conversation-continuity";
 import {
   type TranscriptEntry,
   TranscriptEntryId,
@@ -11,6 +8,7 @@ import {
   TranscriptTurnId,
   UserTranscriptEntry,
 } from "~/core/transcript/model";
+import { HostedAgentSessionId } from "~/core/transcript/hosted-agent-session";
 import { freezeDeep } from "~/shell/_shared/deep-freeze";
 import { exactTranscriptPrompt, systemPrompt, turnPrompt } from "./model-boundary";
 
@@ -27,11 +25,14 @@ type WorkingContextProjection = Readonly<{
 
 /** Immutable semantic snapshot reused by every hosted round of one admitted Turn. */
 export type WorkingContext = WorkingContextProjection &
-  Readonly<{ startedAt: PreparedWorkingContextSnapshot["startedAt"] }>;
+  Readonly<{
+    hostedAgentSessionId: PreparedWorkingContextSnapshot["hostedAgentSessionId"];
+    startedAt: PreparedWorkingContextSnapshot["startedAt"];
+  }>;
 
 /** Content-free construction failure. */
 export class WorkingContextUnavailable extends Data.TaggedError("WorkingContextUnavailable")<{
-  readonly reason: "InvalidAuthority" | "UnknownUser";
+  readonly reason: "UnknownUser";
 }> {}
 
 const untrustedText = (kind: string, value: unknown): string =>
@@ -97,11 +98,15 @@ type WorkingContextProjectionInput = Readonly<{
   transcript: ReadonlyArray<TranscriptEntry>;
   compactedConversation: Option.Option<Readonly<{ text: string }>>;
   request: Readonly<{ text: string }>;
+  hostedAgentSessionId: PreparedWorkingContextSnapshot["hostedAgentSessionId"];
   startedAt: PreparedWorkingContextSnapshot["startedAt"];
 }>;
 
 /** Semantic input used only by startup validation; prompt sections remain WorkingContext-owned. */
-export type StartupWorkingContextInput = Omit<WorkingContextProjectionInput, "transcript"> & {
+export type StartupWorkingContextInput = Omit<
+  WorkingContextProjectionInput,
+  "transcript" | "hostedAgentSessionId"
+> & {
   readonly transcript: ReadonlyArray<Readonly<{ text: string }>>;
 };
 
@@ -148,9 +153,17 @@ const makeWorkingContextFromInput = (
 ): Effect.Effect<WorkingContext, WorkingContextUnavailable> =>
   projectWorkingContext(input).pipe(
     Effect.map((projection) =>
-      Object.freeze({ ...freezeDeep(structuredClone(projection)), startedAt: input.startedAt })
+      Object.freeze({
+        ...freezeDeep(structuredClone(projection)),
+        hostedAgentSessionId: input.hostedAgentSessionId,
+        startedAt: input.startedAt,
+      })
     )
   );
+
+const startupHostedAgentSessionId = HostedAgentSessionId.make(
+  "00000000-0000-4000-8000-000000000001"
+);
 
 const startupUuidHexRadix = 16;
 const startupUuidSuffixLength = 12;
@@ -184,18 +197,17 @@ export const makeStartupWorkingContext = (
 ): Effect.Effect<WorkingContext, WorkingContextUnavailable> =>
   makeWorkingContextFromInput({
     ...input,
+    hostedAgentSessionId: startupHostedAgentSessionId,
     transcript: startupTranscript(input.transcript, input.startedAt),
   });
 
 /**
- * The sole live-Turn WorkingContext constructor. It projects one active prepared snapshot into an
- * immutable provider-neutral semantic context without retaining persistence state.
+ * The sole live-Turn WorkingContext constructor. It projects one prepared snapshot into an
+ * immutable provider-neutral semantic context without retaining persistence state. Whether the
+ * preparation is still current is the hosted runtime's decision, checked before this is called.
  */
 export const makeWorkingContext = Effect.fn("WorkingContext.make")(function* (
-  context: PreparedAttemptContext
+  context: PreparedWorkingContextSnapshot
 ) {
-  if (!context.isActive()) {
-    return yield* new WorkingContextUnavailable({ reason: "InvalidAuthority" });
-  }
   return yield* makeWorkingContextFromInput(context);
 });

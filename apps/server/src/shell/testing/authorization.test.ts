@@ -1,7 +1,7 @@
 import { expect, layer } from "@effect/vitest";
 import { Context, DateTime, Effect, Layer, Option, Schema } from "effect";
 import { HttpBody, HttpClient } from "effect/unstable/http";
-import { SqlSchema } from "effect/unstable/sql";
+import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import { PATId } from "~/core/tokens/reference";
 import { UserId } from "~/core/identity/reference";
 import { CategoryKeyword } from "~/core/categories/model";
@@ -13,6 +13,7 @@ import { TokenBearer } from "~/core/tokens/model";
 import { authenticateTokenBearer } from "~/shell/_shared/authz-live";
 import { ScopeMissing } from "~/shell/_shared/errors";
 import { MigrationSqlClient } from "~/shell/db/client";
+import { withUserTransaction } from "~/shell/db/user-transaction";
 import { truncateAuditLogEntries } from "~/shell/audit/fixtures";
 import { observeAuditLogEntries } from "~/shell/audit/repo";
 import { truncateInsights, weeklySummaryInput } from "~/shell/insights/fixtures";
@@ -85,6 +86,27 @@ const seedWriteOnlyIdentity = seedConsentedPatIdentity({
   userId: writeOnlyUser,
   bearer: writeOnlyBearer,
   scopes: ["write"],
+});
+
+const tokenUseState = Schema.Struct({
+  lastUsedAt: Schema.OptionFromNullOr(Schema.DateTimeUtcFromDate),
+  idleExpiresAt: Schema.DateTimeUtcFromDate,
+});
+
+/** Renewal state a rejected canonical call must leave exactly as it found it. */
+const readTokenUse = Effect.fn("readTokenUse")(function* (userId: UserId) {
+  const sql = yield* SqlClient.SqlClient;
+  return yield* withUserTransaction(
+    userId,
+    SqlSchema.findOne({
+      Request: UserId,
+      Result: tokenUseState,
+      execute: (owner) => sql`
+        SELECT last_used_at AS "lastUsedAt", idle_expires_at AS "idleExpiresAt"
+        FROM tokens WHERE user_id = ${owner}
+      `,
+    })(userId)
+  );
 });
 
 layer(AuthorizationHarness, {
@@ -278,10 +300,30 @@ layer(AuthorizationHarness, {
       expect(auditEntries).toHaveLength(1);
       expect(auditEntries[0]).toMatchObject({
         subjectUserId: readOnlyUser,
-        tokenId: readOnlyTokenId,
+        caller: { _tag: "PAT", patId: readOnlyTokenId },
         operation: "transactions.createTransaction",
         outcome: "rejected",
       });
+    })
+  );
+
+  it.effect("leaves the PAT idle deadline untouched when an under-scoped write is rejected", () =>
+    Effect.gen(function* () {
+      yield* truncateTransactions;
+      yield* truncateAuditLogEntries;
+      yield* seedReadOnlyIdentity;
+      const before = yield* readTokenUse(readOnlyUser);
+
+      const denied = yield* HttpClient.post("/transactions", {
+        headers: headersFor(readOnlyBearer),
+        body: HttpBody.jsonUnsafe(
+          encodeTransactionPayload(transactionPayload({ counterparty: "Tostao" }))
+        ),
+      });
+      const after = yield* readTokenUse(readOnlyUser);
+
+      expect(denied.status).toBe(403);
+      expect(after).toEqual(before);
     })
   );
 

@@ -1,7 +1,7 @@
 import { DateTime, Effect, Schema } from "effect";
 import { HttpApiBuilder } from "effect/unstable/httpapi";
 import { CanonicalOperationId } from "~/core/_shared/canonical-operation";
-import type { ResolvedToken } from "~/core/tokens/model";
+import type { CanonicalCaller } from "~/shell/_shared/authz";
 import {
   ChildOperationAudit,
   type ChildOperationAuditService,
@@ -96,7 +96,7 @@ const rejectChild = (
 type ExecuteChild = Readonly<{
   call: AtomicBatchInput["calls"][number];
   index: number;
-  resolved: ResolvedToken;
+  resolved: CanonicalCaller;
   childAudit: ChildOperationAuditService;
 }>;
 
@@ -125,13 +125,13 @@ const executeChild = Effect.fn("executeAtomicBatchChild")(function* ({
         "The child is not an executable canonical mutation. Correct the operation and retry the whole batch.",
     });
   }
-  if (!resolved.scopes.includes(catalogOperation.policy.requiredScope)) {
+  if (!resolved.capabilities.includes(catalogOperation.policy.requiredScope)) {
     return yield* rejectChild(childAudit, {
       index,
       operation: call.operation,
       code: "scope_missing",
       message:
-        "This PAT does not grant the scope declared by this child mutation. Broaden the token before retrying the whole batch.",
+        "The caller does not grant the capability declared by this child mutation. Correct authority before retrying the whole batch.",
     });
   }
   if (catalogOperation.policy.requiredTier !== "free") {
@@ -167,7 +167,9 @@ const executeChild = Effect.fn("executeAtomicBatchChild")(function* ({
   }).pipe(Effect.orDie);
 });
 
-const executeAtomicBatch = Effect.fn("executeAtomicBatch")(function* (payload: AtomicBatchInput) {
+export const executeAtomicBatch = Effect.fn("executeAtomicBatch")(function* (
+  payload: AtomicBatchInput
+) {
   const resolved = yield* ResolvedCaller;
   const childAudit = yield* ChildOperationAudit;
   const results: Array<AtomicBatchResult> = [];

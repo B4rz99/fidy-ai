@@ -12,14 +12,13 @@ import { countAndAdmitMemory, countAndAdmitMemoryRevision } from "./memory-polic
 import {
   deleteMemoryInScope,
   insertMemoryInScope,
-  listMemoriesInScope,
+  selectMemoriesInScope,
   updateMemoryInScope,
 } from "./repo";
 
 type MemoryResponse = ReturnType<typeof OperationResponse<typeof Memory>>["Type"];
 type MemoryIdResponse = ReturnType<typeof OperationResponse<typeof MemoryId>>["Type"];
 
-/** Final server-owned facts supplied after canonical decoding and authorization. */
 export type RememberMemoryInput = Readonly<{
   userId: UserId;
   payload: RememberInput;
@@ -46,7 +45,7 @@ export const rememberMemory: CanonicalMutationImplementation<
   return yield* withUserLockInScope(
     advisoryLockKey.memories(userId),
     Effect.gen(function* () {
-      const current = yield* listMemoriesInScope(userId);
+      const current = yield* selectMemoriesInScope(userId);
       const admitted = yield* countAndAdmitMemory(current, candidate).pipe(
         Effect.mapError((failure) => mapMemoryFailure(failure))
       );
@@ -56,7 +55,6 @@ export const rememberMemory: CanonicalMutationImplementation<
   );
 });
 
-/** Final server-owned facts supplied after canonical decoding and authorization. */
 export type ReviseMemoryInput = Readonly<{
   userId: UserId;
   memoryId: MemoryId;
@@ -77,7 +75,7 @@ export const reviseMemory: CanonicalMutationImplementation<
   return yield* withUserLockInScope(
     advisoryLockKey.memories(userId),
     Effect.gen(function* () {
-      const current = yield* listMemoriesInScope(userId);
+      const current = yield* selectMemoriesInScope(userId);
       const previous = yield* Option.fromUndefinedOr(
         current.find((memory) => memory.id === memoryId)
       ).pipe(
@@ -101,7 +99,6 @@ export const reviseMemory: CanonicalMutationImplementation<
   );
 });
 
-/** Final server-owned facts supplied after canonical decoding and authorization. */
 export type ForgetMemoryInput = Readonly<{ userId: UserId; memoryId: MemoryId }>;
 
 /**

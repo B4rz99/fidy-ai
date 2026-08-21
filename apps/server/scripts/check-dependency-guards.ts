@@ -56,6 +56,13 @@ const HOSTED_PROVIDER = `src/shell/agent/${PROBE_PREFIX}hosted-provider`;
 const HOSTED_MODEL = `src/shell/agent/${PROBE_PREFIX}hosted-model`;
 const HOSTED_TOKENIZER = `src/shell/agent/${PROBE_PREFIX}hosted-tokenizer`;
 const HOSTED_JS_TOKENIZER = `src/shell/agent/${PROBE_PREFIX}hosted-js-tokenizer`;
+const ADAPTER_TO_REPO = `src/shell/${PROBE_PREFIX}adapter-to-repo`;
+const ADAPTER_TO_QUERIES = `src/shell/${PROBE_PREFIX}adapter-to-queries`;
+const CONTINUITY_OUTSIDE = `src/shell/audit/${PROBE_PREFIX}continuity-outside-runtime`;
+const CONTINUITY_SIBLING = `src/shell/agent/${PROBE_PREFIX}continuity-runtime-sibling`;
+const CONTINUITY_TYPE_ONLY = `src/shell/agent/${PROBE_PREFIX}continuity-type-only`;
+const CONTINUITY_OUTSIDE_TEST = `src/shell/audit/${PROBE_PREFIX}continuity-outside-test`;
+const CONTINUITY_RUNTIME_TEST = `src/shell/agent/${PROBE_PREFIX}continuity-runtime-test`;
 
 const PROBES: readonly Probe[] = [
   {
@@ -191,6 +198,124 @@ const PROBES: readonly Probe[] = [
       },
     ],
     name: "browser-facing code cannot bypass the package-level client facade",
+  },
+  {
+    directory: CONTINUITY_OUTSIDE,
+    expect: {
+      kind: "rejected",
+      mustContain: [
+        `error continuity-reached-outside-hosted-runtime: ${CONTINUITY_OUTSIDE}/probe.ts → src/shell/transcript/conversation-continuity.ts`,
+      ],
+    },
+    files: [
+      {
+        path: `${CONTINUITY_OUTSIDE}/probe.ts`,
+        source:
+          'import { ConversationContinuity } from "~/shell/transcript/conversation-continuity";\n\n' +
+          "export const continuityOutsideProbe = ConversationContinuity;\n",
+      },
+    ],
+    name: "continuity is unreachable from outside the hosted agent runtime",
+  },
+  {
+    directory: CONTINUITY_SIBLING,
+    expect: {
+      kind: "rejected",
+      mustContain: [
+        `error continuity-reached-outside-hosted-runtime: ${CONTINUITY_SIBLING}/probe.ts \u2192 src/shell/transcript/conversation-continuity.ts`,
+      ],
+    },
+    files: [
+      {
+        path: `${CONTINUITY_SIBLING}/probe.ts`,
+        source:
+          'import { ConversationContinuity } from "~/shell/transcript/conversation-continuity";\n\n' +
+          "export const continuitySiblingProbe = ConversationContinuity;\n",
+      },
+    ],
+    name: "continuity is unreachable even from a sibling of the hosted agent runtime",
+  },
+  {
+    directory: CONTINUITY_TYPE_ONLY,
+    expect: { kind: "allowed" },
+    files: [
+      {
+        path: `${CONTINUITY_TYPE_ONLY}/probe.ts`,
+        source:
+          "import type { ConversationContinuityService } " +
+          'from "~/shell/transcript/conversation-continuity";\n\n' +
+          "export type ContinuityTypeOnlyProbe = ConversationContinuityService;\n",
+      },
+    ],
+    name: "a type carries no capability, so a type-only continuity import stays legal",
+  },
+  {
+    directory: CONTINUITY_OUTSIDE_TEST,
+    expect: {
+      kind: "rejected",
+      mustContain: [
+        `error continuity-reached-outside-hosted-runtime: ${CONTINUITY_OUTSIDE_TEST}/probe.test.ts → src/shell/transcript/conversation-continuity.ts`,
+      ],
+    },
+    files: [
+      {
+        path: `${CONTINUITY_OUTSIDE_TEST}/probe.test.ts`,
+        source:
+          'import { ConversationContinuity } from "~/shell/transcript/conversation-continuity";\n\n' +
+          "export const continuityOutsideTestProbe = ConversationContinuity;\n",
+      },
+    ],
+    name: "a test outside the hosted agent runtime buys no continuity exemption",
+  },
+  {
+    directory: CONTINUITY_RUNTIME_TEST,
+    expect: { kind: "allowed" },
+    files: [
+      {
+        path: `${CONTINUITY_RUNTIME_TEST}/probe.test.ts`,
+        source:
+          'import { ConversationContinuity } from "~/shell/transcript/conversation-continuity";\n\n' +
+          "export const continuityRuntimeTestProbe = ConversationContinuity;\n",
+      },
+    ],
+    name: "a test inside the hosted agent runtime may build continuity directly",
+  },
+  {
+    directory: ADAPTER_TO_REPO,
+    expect: {
+      kind: "rejected",
+      mustContain: [
+        `error adapter-reaches-slice-persistence: ${ADAPTER_TO_REPO}/handlers.ts \u2192 src/shell/budgets/repo.ts`,
+      ],
+    },
+    files: [
+      {
+        path: `${ADAPTER_TO_REPO}/handlers.ts`,
+        source:
+          'import { selectBudgets } from "~/shell/budgets/repo";\n\n' +
+          "export const adapterToRepoProbe = selectBudgets;\n",
+      },
+    ],
+    name: "an adapter cannot reach a slice repo around its one operation implementation",
+  },
+  {
+    directory: ADAPTER_TO_QUERIES,
+    expect: { kind: "allowed" },
+    files: [
+      {
+        path: `${ADAPTER_TO_QUERIES}/handlers.ts`,
+        source:
+          'import { probeQuery } from "./queries";\n\n' +
+          "export const adapterToQueriesProbe = probeQuery;\n",
+      },
+      {
+        path: `${ADAPTER_TO_QUERIES}/queries.ts`,
+        source:
+          'import { selectBudgets } from "~/shell/budgets/repo";\n\n' +
+          "export const probeQuery = selectBudgets;\n",
+      },
+    ],
+    name: "an adapter delegating to its slice queries module is how persistence is reached",
   },
   {
     directory: SENTRY_OUTSIDE_OBSERVABILITY,

@@ -1,16 +1,16 @@
 import { Duration, Effect, Schema } from "effect";
-import { HostedTurnTokenId, PATId } from "./reference";
+import { PATId } from "./reference";
 import { UserId } from "~/core/identity/reference";
+import { CanonicalCapability } from "~/core/_shared/canonical-capability";
 import { UtcTimestamp } from "~/core/_shared/time";
 
-const CanonicalScope = Schema.Literals(["read", "write", "dashboard"]);
-
 /**
- * One access capability a User may grant to a PAT. Scopes are independent: a
- * caller receives only the canonical operations whose declared scope appears
- * in its PAT.
+ * One access capability a User may grant to a PAT, named in the public token vocabulary. Scopes are
+ * independent: a caller receives only the canonical operations whose declared scope appears in its
+ * PAT. The literal set is the credential-neutral capability set, so a capability cannot become
+ * grantable here without also being enforceable there.
  */
-export const PatScope = CanonicalScope.annotate({ identifier: "PatScope" });
+export const PatScope = CanonicalCapability.annotate({ identifier: "PatScope" });
 export type PatScope = typeof PatScope.Type;
 
 /**
@@ -148,73 +148,16 @@ export const PAT = Schema.TaggedStruct("PAT", {
   .annotate({ identifier: "PAT" });
 export type PAT = typeof PAT.Type;
 
-/**
- * The fixed capability set carried only by a HostedTurnToken: every canonical scope exactly once,
- * in any order. The internal grant does not inherit the User-authorized PatScope concept.
- */
-export const HostedTurnScopes = Schema.UniqueArray(CanonicalScope)
-  .check(Schema.isNonEmpty())
-  .check(
-    Schema.isMinLength(CanonicalScope.members.length, {
-      expected: "every canonical scope exactly once",
-    })
-  )
-  .annotate({ identifier: "HostedTurnScopes" });
-export type HostedTurnScopes = typeof HostedTurnScopes.Type;
-
-const validHostedTurnTokenTimes = Schema.makeFilter<
-  Readonly<{
-    lastUsedAt: OptionalTokenInstant;
-    expiresAt: TokenInstant;
-    revokedAt: OptionalTokenInstant;
-    createdAt: TokenInstant;
-  }>
->((token) => {
-  const createdAt = token.createdAt.epochMilliseconds;
-  const expiresAt = token.expiresAt.epochMilliseconds;
-  const lastUsedAt =
-    token.lastUsedAt._tag === "Some" ? token.lastUsedAt.value.epochMilliseconds : createdAt;
-  if (expiresAt <= createdAt) {
-    return { path: ["expiresAt"], issue: "HostedTurnToken expiry must follow creation" };
-  }
-  if (lastUsedAt < createdAt || lastUsedAt >= expiresAt) {
-    return { path: ["lastUsedAt"], issue: "HostedTurnToken use must be inside its hard lifetime" };
-  }
-  if (token.revokedAt._tag === "Some" && token.revokedAt.value.epochMilliseconds < lastUsedAt) {
-    return { path: ["revokedAt"], issue: "HostedTurnToken revocation cannot precede its use" };
-  }
-  return undefined;
-});
-
-/**
- * An internal all-scope HostedTurnToken created for one hosted Turn. Its absolute
- * expiry never renews, and the turn revokes it sooner during normal cleanup.
- */
-export const HostedTurnToken = Schema.TaggedStruct("HostedTurnToken", {
-  ...SharedTokenFields,
-  id: HostedTurnTokenId,
-  scopes: HostedTurnScopes,
-  expiresAt: UtcTimestamp,
-})
-  .check(validHostedTurnTokenTimes)
-  .annotate({ identifier: "HostedTurnToken" });
-export type HostedTurnToken = typeof HostedTurnToken.Type;
-
 /** Every persisted bearer grant accepted by canonical TokenAuthorization. */
-export const TokenGrant = Schema.Union([PAT, HostedTurnToken]).annotate({
-  identifier: "TokenGrant",
-});
-export type TokenGrant = typeof TokenGrant.Type;
+export const TokenGrant = PAT;
+/** Decoded persisted bearer grant accepted by canonical TokenAuthorization. */
+export type TokenGrant = PAT;
 
-/**
- * The authenticated bearer facts authorization needs after lookup.
- * This resolution adds the stable subject and renames the canonical token id to
- * distinguish it from the User id; it never leaves the process as a response.
- */
+/** The authenticated PAT facts produced by bearer lookup at the HTTP edge. */
 export const ResolvedToken = Schema.Struct({
-  tokenId: Schema.Union([PATId, HostedTurnTokenId]),
+  tokenId: PATId,
   subjectUserId: UserId,
-  scopes: Schema.UniqueArray(CanonicalScope).check(Schema.isNonEmpty()),
+  scopes: PatScopes,
   // Bearer resolution has already recorded this use, so the timestamp is present.
   lastUsedAt: UtcTimestamp,
 });

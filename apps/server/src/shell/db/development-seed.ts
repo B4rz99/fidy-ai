@@ -73,7 +73,8 @@ const uuidNodeEnd = 32;
 const uuidTimeHighStart = uuidTimeMidEnd + 1;
 const uuidClockSequenceStart = uuidTimeHighEnd + 1;
 
-const seedOnboardingConsent = (
+/** Seeds one current onboarding grant so a fixture User can admit a Hosted Agent Session. */
+export const seedOnboardingConsent = (
   userId: UserId
 ): Effect.Effect<void, Config.ConfigError, Crypto.Crypto | SqlClient.SqlClient> =>
   Effect.gen(function* () {

@@ -185,13 +185,18 @@ is invalid: it can advertise `null` values that its own handler rejects.
 
 ### Hosted-turn continuity
 
-Hosted turns coordinate three deep shell modules under [ADR 0014](docs/adr/0014-deep-hosted-turn-modules.md):
+Hosted turns run inside the hosted agent runtime, whose whole public seam for callers is
+`AgentService.handleMessage` — one inbound message in, one delivered reply out
+([ADR 0019](docs/adr/0019-hosted-runtime-owns-conversation-continuity.md)). Behind it are three deep
+shell modules under [ADR 0014](docs/adr/0014-deep-hosted-turn-modules.md):
 
 - HostedInference alone converts, completely measures, and executes opaque provider requests.
 - WorkingContext alone constructs the trusted-policy-first semantic context order and projects
   persisted prose as untrusted User material.
 - ConversationContinuity alone owns explicit Turn lifecycle, exact retained Transcript,
-  complete-prefix Compaction, optimistic replacement, and physical deletion.
+  complete-prefix Compaction, optimistic replacement, and physical deletion. It is a private helper
+  of the runtime rather than a boundary a peer coordinates with, fenced by a module-graph rule whose
+  exact arms ADR 0019 records.
 
 The legal sequence is continuity preparation and recovery, one WorkingContext construction, complete
 hosted preflight, stale-snapshot-checked Turn admission, prepared execution, delivery without replay,
@@ -200,11 +205,9 @@ CompactedConversation, approximately 100K exact Transcript, and 16K active-reque
 through that same complete preparer, with every canonical tool and the 16K output reserve. The active
 request also retains its independent 16K-character storage bound and is never silently truncated.
 Provider state, model or tokenizer identity, context capacity, prompt fragments, and constructible
-executable authorities do not cross these public boundaries. The executable contract, named test
-evidence, and implementation-ticket ownership live in the
-[agent-continuity invariant matrix](docs/architecture/agent-continuity-invariant-matrix.md); its
-completeness and every configured credential path are enforced by
-`bun run check:continuity-invariants`.
+executable authorities do not cross these public boundaries. The tests in the ordinary suite are the
+contract; every configured credential path additionally needs its own named evidence, enforced by
+`bun run check:credential-evidence`.
 
 ### Browser authentication and PAT lifecycle
 
@@ -252,10 +255,12 @@ later interpretation retain the relevant context at creation.
 Authorization is the auditing boundary for every reflected canonical operation. Resolved calls
 record metadata-only audit entries; unresolved bearers create no invented evidence. Successful
 state and success evidence share a database transaction, while rejection and failure evidence
-survives the operation transaction. ADR 0008 additionally keeps the subject Consent lock across
-PAT or HostedTurnToken use renewal and canonical execution so revocation is linearizable with authorized work.
-Hosted-model context is loaded after the same serialized consent decision, but the provider call
-starts only after that short database transaction commits.
+survives the operation transaction. Hosted Agent Session admission serializes the current Consent basis without holding a transaction
+across inference or delivery. That basis governs the active session until 15 minutes of inactivity;
+terms updates wait for the next session, while explicit revocation prevents another Turn without
+interrupting one already admitted. User-owned agents never manage Consent: terms updates neither
+revoke nor block PATs, while explicit revocation prevents subsequent PAT work with
+`user_action_required`.
 
 Every canonical operation declares hosted-agent confirmation policy. A confirmation for a risky
 operation is bound to the exact operation and canonical input, is single-use, and is recoverable
@@ -313,8 +318,13 @@ Use these seams:
 - **Core seam:** exported pure decisions, with no server or database.
 - **API seam:** operation decoding, authorization, handlers, repositories, and real PostgreSQL.
   It proves persistence, responses, suggested operations, and per-user isolation.
-- **Agent seam:** `AgentService.handleTurn` through the CLI harness, with external language-model
+- **Agent seam:** `AgentService.handleMessage` through the CLI harness, with external language-model
   and terminal adapters substituted while the canonical application path remains real.
+- **Hosted execution-boundary seam:** `makeAgentToolkit` and `executeHostedCanonicalOperation`
+  driven directly against real PostgreSQL. `AgentService.handleMessage` cannot reach a refused
+  canonical call, because its own preflight never issues a mismatched permit, so this seam is the
+  only place the refusal paths, their audit evidence, and their all-or-nothing rollback are
+  observable.
 - **Channel-worker seam:** the exported durable worker step with real Consent, Identity, RLS
   repositories, and AgentService; only language-model and provider clients are substituted.
 - **Public-channel acceptance seam:** the signed provider webhook over a real socket, real PostgreSQL,

@@ -1,26 +1,14 @@
-import { Cause, Clock, Effect, Layer, Option, Schema } from "effect";
-import { HttpServerRequest } from "effect/unstable/http";
+import { Cause, Effect, Layer, Option, Schema } from "effect";
 import { CanonicalTelemetry } from "~/shell/_shared/canonical-telemetry";
 import { operationCatalog } from "~/shell/api";
 import {
-  type DeclaredOutcome,
   type SpanDescriptor,
   TelemetryHttpMethod,
   type TelemetryHttpMethod as TelemetryHttpMethodType,
 } from "./protocol";
 import { type TelemetryCode, TelemetryCodeSchema } from "./registry";
-import { Telemetry, type TelemetryService, decodeTraceParent } from "./telemetry";
-
-const ExpectedFailure = Schema.Struct({
-  error: Schema.Struct({ code: TelemetryCodeSchema.error }),
-});
-
-const expectedOutcome = (failure: unknown): Option.Option<DeclaredOutcome> =>
-  Option.map(Schema.decodeUnknownOption(ExpectedFailure)(failure), ({ error }) => ({
-    outcome: "rejected",
-    error: Option.some(error.code),
-    retryable: false,
-  }));
+import { Telemetry, type TelemetryService } from "./telemetry";
+import { operationDescriptor, recordExpectedOutcome } from "./canonical-operation-span";
 
 const httpDescriptor = (input: {
   readonly method: TelemetryHttpMethodType;
@@ -33,23 +21,6 @@ const httpDescriptor = (input: {
   workKind: "http_request",
   metadata: { _tag: "Http", ...input, status: Option.none() },
 });
-
-const operationDescriptor = (operation: TelemetryCode<"operation">): SpanDescriptor => ({
-  component: "api",
-  operation,
-  trigger: "api",
-  spanOperation: "fidy.operation",
-  workKind: "canonical_operation",
-  metadata: { _tag: "None" },
-});
-
-const recordExpectedOutcome =
-  (telemetry: TelemetryService) =>
-  (failure: unknown): Effect.Effect<void> =>
-    Option.match(expectedOutcome(failure), {
-      onNone: () => Effect.void,
-      onSome: telemetry.recordOutcome,
-    });
 
 const captureUnexpectedDefect =
   (telemetry: TelemetryService, operation: TelemetryCode<"operation">) =>
@@ -85,29 +56,12 @@ const makeCanonicalTelemetry = (
       const classified = Effect.tapError(httpEffect, recordExpectedOutcome(telemetry));
       const operation = telemetry.span(operationDescriptor(canonicalOperation), classified);
       const classifiedRoot = Effect.tapError(operation, recordExpectedOutcome(telemetry));
-      const descriptor = httpDescriptor({ method, route });
-      const request = yield* Effect.serviceOption(HttpServerRequest.HttpServerRequest);
-      const receivedAt = yield* Clock.currentTimeMillis;
-      const continued = Option.flatMap(request, ({ headers }) =>
-        decodeTraceParent({
-          value: Option.fromUndefinedOr(headers.traceparent),
-          receivedAtUnixMilliseconds: receivedAt,
-        })
+      // Every canonical HTTP request roots its own trace. Hosted calls execute in-process and never
+      // re-enter this middleware, so an inbound traceparent is never a Fidy-owned parent span.
+      return yield* telemetry.span(
+        httpDescriptor({ method, route }),
+        Effect.tapCause(classifiedRoot, captureUnexpectedDefect(telemetry, canonicalOperation))
       );
-      const hostedTurnContext = yield* Option.match(continued, {
-        onNone: () => Effect.succeed(Option.none()),
-        onSome: (context) =>
-          Effect.map(telemetry.isActiveSpan(context, "agent.hostedTurn"), (isActive) =>
-            isActive ? Option.some(context) : Option.none()
-          ),
-      });
-      const ownedWork = Option.isSome(hostedTurnContext)
-        ? classifiedRoot
-        : Effect.tapCause(classifiedRoot, captureUnexpectedDefect(telemetry, canonicalOperation));
-      return yield* Option.match(hostedTurnContext, {
-        onNone: () => telemetry.span(descriptor, ownedWork),
-        onSome: (context) => telemetry.continueSpan(context, descriptor, ownedWork),
-      });
     })
   );
 

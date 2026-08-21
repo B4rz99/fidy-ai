@@ -125,6 +125,18 @@ export default {
       },
     },
     {
+      name: "adapter-reaches-slice-persistence",
+      severity: "error",
+      comment:
+        "An HTTP handler or a canonical registry imported a slice repo directly. Import the " +
+        "slice's queries.ts or mutations.ts instead, so one operation cannot answer differently " +
+        "over HTTP and under hosted Turn authority (ADR 0004).",
+      from: {
+        path: "^src/shell/([^/]+/handlers\\.ts|_shared/canonical-(mutation|operation)-registry\\.ts)$",
+      },
+      to: { path: "^src/shell/[^/]+/repo\\.ts$" },
+    },
+    {
       name: "entrypoint-is-imported",
       severity: "error",
       comment:
@@ -146,6 +158,24 @@ export default {
       },
       to: {
         path: "^(src/shell/agent/openai\\.ts|(^|.*/)node_modules/@effect/ai-openai/|(^|.*/)node_modules/js-tiktoken/|(^|.*/)node_modules/effect/.*/unstable/ai/(index|LanguageModel|Tokenizer))",
+        dependencyTypesNot: ["type-only"],
+      },
+    },
+    {
+      name: "continuity-reached-outside-hosted-runtime",
+      severity: "error",
+      comment:
+        "Conversation Continuity, Hosted Agent Session, and Transcript operations belong to the " +
+        "hosted runtime, whose public seam is AgentService.handleMessage (ADR 0019). Import them " +
+        "only from src/shell/transcript, agent-service.ts, or a test under src/shell/agent; " +
+        "type-only imports and transcript/repo.ts stay open.",
+      from: {
+        path: "^src/",
+        pathNot:
+          "^src/shell/transcript/|^src/shell/agent/agent-service\\.ts$|^src/shell/agent/.*\\.test\\.ts$",
+      },
+      to: {
+        path: "^src/shell/transcript/(conversation-continuity|hosted-agent-session|transcript-service)\\.ts$",
         dependencyTypesNot: ["type-only"],
       },
     },

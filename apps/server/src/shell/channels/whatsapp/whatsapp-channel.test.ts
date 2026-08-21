@@ -79,7 +79,7 @@ import { associateWhatsAppIdentity, resolveWhatsAppCaller } from "~/shell/identi
 import { removeWhatsAppIdentityForTesting } from "~/shell/identity/testing";
 import { defaultPatBearer } from "~/shell/testing/identity-fixtures";
 import { transactionPayload } from "~/shell/transactions/fixtures";
-import { listTranscriptEntries } from "~/shell/transcript/repo";
+import { selectTranscriptEntries } from "~/shell/transcript/repo";
 import { TranscriptText } from "~/core/transcript/model";
 import { categoryIds } from "~/core/categories/taxonomy";
 import { KapsoClient, type KapsoClientService, KapsoSendFailed } from "./kapso-client";
@@ -488,11 +488,10 @@ const agentReplyFixture = (text: string, overrides: Partial<AgentReply> = {}): A
 type AgentServiceFixture = Parameters<typeof AgentService.of>[0];
 const agentServiceFixture = (overrides: Partial<AgentServiceFixture> = {}): AgentServiceFixture =>
   AgentService.of({
-    handleTurn: (_userId, _message, deliver) => {
+    handleMessage: (_userId, _message, deliver) => {
       const reply = agentReplyFixture("Respuesta entregada.");
       return deliver(reply).pipe(Effect.as(reply));
     },
-    handleSynchronousTurn: () => Effect.succeed(agentReplyFixture("Respuesta entregada.")),
     ...overrides,
   });
 const kapsoClientFixture = (
@@ -1341,7 +1340,7 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           const eventTime = yield* DateTime.now;
           const recordings = yield* Ref.make(0);
           const agent = agentServiceFixture({
-            handleTurn: (_userId, _message, deliver) => {
+            handleMessage: (_userId, _message, deliver) => {
               const reply = agentReplyFixture("Respuesta entregada.");
               return Ref.update(recordings, (count) => count + 1).pipe(
                 Effect.andThen(deliver(reply)),
@@ -1387,7 +1386,7 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         const handledTurns = yield* Ref.make(0);
         const deliveredTexts = yield* Ref.make<Array<TranscriptText>>([]);
         const agent = agentServiceFixture({
-          handleTurn: (_userId, _message, deliver) => {
+          handleMessage: (_userId, _message, deliver) => {
             const reply = agentReplyFixture("Respuesta exacta para reintentos.");
             return Ref.update(handledTurns, (count) => count + 1).pipe(
               Effect.andThen(deliver(reply)),
@@ -1641,7 +1640,7 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           event: inbound,
           deliveryKey,
         });
-        const assistantCountBefore = (yield* listTranscriptEntries(defaultUserId)).filter(
+        const assistantCountBefore = (yield* selectTranscriptEntries(defaultUserId)).filter(
           (entry) => entry._tag === "AssistantTranscriptEntry"
         ).length;
 
@@ -1676,7 +1675,7 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           )
         ).toEqual([{ direction: "inbound" }]);
         expect(
-          (yield* listTranscriptEntries(defaultUserId)).filter(
+          (yield* selectTranscriptEntries(defaultUserId)).filter(
             (entry) => entry._tag === "AssistantTranscriptEntry"
           )
         ).toHaveLength(assistantCountBefore);

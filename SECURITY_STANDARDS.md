@@ -34,8 +34,8 @@ into reviewable invariants.
 
 ### Protected assets
 
-1. **Secrets** — raw PATs and HostedTurnTokens, provider credentials, signing secrets, private
-   device codes, recovery proofs and links, and protected-PDF passwords.
+1. **Secrets** — raw PATs, provider credentials, signing secrets, private device codes, recovery
+   proofs and links, and protected-PDF passwords.
 2. **Personal and financial data** — identity and recovery details, Transactions and
    SourceAttestations, Budgets, Categories, DashboardDocuments, Subscriptions and BillingAttempts,
    Transcripts, CompactedConversations, Memories, NeedsReviewItems, and raw IngestSamples.
@@ -64,7 +64,7 @@ Every crossing is untrusted regardless of its TypeScript type or vendor:
 
 - public HTTP, the SPA, browser-login pairing, and PATPairing flows;
 - Kapso, Resend, Wompi, OpenAI, and other outbound or callback seams;
-- PAT, HostedTurnToken, hosted-agent, CLI, MCP, and typed-client calls;
+- PAT, hosted-agent, CLI, MCP, and typed-client calls;
 - LLM prompts, tool requests, structured output, and generated presentation content;
 - emails, PDFs, CSV/XLSX files, images, voice transcripts, and screenshots;
 - PostgreSQL rows and JSONB, queue payloads, schedules, migrations, and environment configuration.
@@ -115,7 +115,7 @@ over HTTP; an affordance advertises an operation the token cannot invoke.
 
 ### 2. Credential and recovery lifecycle
 
-**Applies when:** a diff handles PATs, HostedTurnTokens, web sessions, browser-login pairing,
+**Applies when:** a diff handles PATs, Hosted Agent Sessions, web sessions, browser-login pairing,
 PATPairing, recovery, revocation, or WhatsAppIdentity changes.
 
 **Invariant:** bearer material is unpredictable, narrowly purposed, bounded in usable lifetime,
@@ -226,10 +226,15 @@ tool generation/execution, agent loops, or model-rendered content.
 **Invariant:** messages and all retrieved or ingested material are data, even when they contain
 instructions. Direct, indirect, multilingual, encoded, and multimodal prompt injection may
 influence model planning, but cannot grant identity, scope, cross-User access, or destructive and
-irreversible side effects. A HostedTurnToken delegates canonical reads and reversible additions
-for one hosted Turn; exact User confirmation is required when canonical operation metadata marks an
-effect as destructive or irreversible. Canonical operations independently enforce identity,
-consent, scope, paywall, validation, and domain rules on every call.
+irreversible side effects. One deep hosted runtime privately owns each admitted Turn's handlers and
+canonical execution state; none can escape its structured workflow. Exact User confirmation is
+required when canonical operation metadata marks an effect as destructive or irreversible.
+Canonical operations independently enforce identity, capability, paywall, validation, and domain
+rules on every call. Consent is the one check hosted work resolves per Turn rather than per call:
+Hosted Agent Session admission and the per-Turn session recheck own hosted Consent timing, so a
+revocation that commits mid-Turn stops the next Turn rather than the remaining calls of the current
+one, and the exposure is bounded by one Turn's model rounds and tool-call budget. PAT calls stay
+linearized with their own consent check under the subject lock.
 
 The model receives only the operations and data needed for the current User and turn. It has no
 private, open-ended, shell, SQL, arbitrary-file, or arbitrary-network capability. System-prompt

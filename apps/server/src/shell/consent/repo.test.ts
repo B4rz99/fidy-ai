@@ -8,11 +8,9 @@ import {
   PendingConsentExchangeId,
 } from "~/core/consent/model";
 import { E164PhoneNumber, UserId, whatsAppCallerReference } from "~/core/identity/reference";
-import { PATId } from "~/core/tokens/reference";
 import { makeColombianUser } from "~/core/identity/rules";
 import { MigrationSqlClient } from "~/shell/db/client";
-import { issueHostedTurnToken } from "~/shell/tokens/hosted-turn-token";
-import { defaultPATId, defaultUserId } from "~/shell/db/development-seed";
+import { defaultPATId, defaultUserId, seedOnboardingConsent } from "~/shell/db/development-seed";
 import { insertUser } from "~/shell/identity/repo";
 import { ApiHarness } from "~/shell/testing/api-harness";
 import { deliverConsentDisclosureForTesting } from "~/shell/testing/consent-disclosure";
@@ -49,8 +47,16 @@ const clearConsent = Effect.gen(function* () {
   yield* sql`DELETE FROM pending_consent_exchanges
     WHERE business_portfolio_id = ${caller.businessPortfolioId}
       AND business_scoped_user_id = ${caller.businessScopedUserId}`;
+  yield* sql`DELETE FROM hosted_agent_sessions WHERE user_id = ${defaultUserId}`;
   yield* sql`DELETE FROM consent_records WHERE subject_user_id = ${defaultUserId}`;
 });
+
+// Every case rewrites the seeded User's Consent evidence, so the seeded onboarding basis is
+// restored afterwards; otherwise later test files observe a revoked User.
+const restoreSeededConsent = clearConsent.pipe(
+  Effect.andThen(seedOnboardingConsent(defaultUserId)),
+  Effect.orDie
+);
 
 layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
   "consent persistence",
@@ -117,7 +123,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         expect(
           Option.isNone(yield* findPendingConsentExchange(testWhatsAppCaller(phoneNumber)))
         ).toBe(true);
-      })
+      }).pipe(Effect.ensuring(restoreSeededConsent))
     );
 
     it.effect("rejects referenced grants owned by another subject", () =>
@@ -178,37 +184,18 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         expect(Exit.isFailure(yield* Effect.exit(appendConsentRecord(crossUserTokenGrant)))).toBe(
           true
         );
-
-        const hostedToken = yield* issueHostedTurnToken(
-          defaultUserId,
-          DateTime.makeUnsafe("2026-08-01T12:00:04Z")
-        );
-        const hostedTokenPatGrant = ConsentRecord.make({
-          ...grant,
-          id: ConsentRecordId.make("f1d1a000-0000-4000-8000-000000000838"),
-          event: {
-            _tag: "Granted",
-            // Forge the external UUID as a PAT reference to exercise the persistence kind guard.
-            grant: { _tag: "PAT", tokenId: PATId.make(hostedToken.tokenId) },
-          },
-          occurredAt: DateTime.makeUnsafe("2026-08-01T12:00:05Z"),
-          decisionMessage: {
-            ...decisionMessage,
-            providerMessageId: "wamid.repo-hosted-token-pat",
-          },
-        });
-        expect(Exit.isFailure(yield* Effect.exit(appendConsentRecord(hostedTokenPatGrant)))).toBe(
-          true
-        );
       }).pipe(
         Effect.ensuring(
           Effect.gen(function* () {
             const sql = yield* MigrationSqlClient;
+            yield* sql`DELETE FROM hosted_agent_sessions
+              WHERE user_id IN (${otherUserId}, ${defaultUserId})`;
             yield* sql`DELETE FROM consent_records WHERE subject_user_id = ${otherUserId}`;
             yield* sql`DELETE FROM consent_records WHERE subject_user_id = ${defaultUserId}`;
             yield* sql`DELETE FROM users WHERE id = ${otherUserId}`;
           }).pipe(Effect.orDie)
-        )
+        ),
+        Effect.ensuring(restoreSeededConsent)
       )
     );
 
@@ -236,7 +223,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         );
 
         expect(yield* hasCurrentOnboardingConsent(defaultUserId)).toBe(false);
-      })
+      }).pipe(Effect.ensuring(restoreSeededConsent))
     );
 
     it.effect("appends grants and revocations without mutating the original evidence", () =>
@@ -308,7 +295,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           patGrant,
           insightDeliveryGrant,
         ]);
-      })
+      }).pipe(Effect.ensuring(restoreSeededConsent))
     );
   }
 );

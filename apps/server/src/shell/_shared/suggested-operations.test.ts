@@ -10,8 +10,8 @@ import {
 } from "./suggested-operations";
 import { SuggestedOperation } from "./response";
 
-const allScopes = ["read", "write", "dashboard"] as const;
-const freeCaller = { scopes: allScopes, tier: "free" } as const;
+const allCapabilities = ["read", "write", "dashboard"] as const;
+const freeCaller = { capabilities: allCapabilities, tier: "free" } as const;
 const strictEncoding = { errors: "all", onExcessProperty: "error" } as const;
 
 const SuggestedMemberSpec = Schema.Struct({
@@ -175,7 +175,7 @@ it("filters missing scopes before enforcing the three-item cap", () => {
   expect(
     checkpointSuggestedOperations({
       candidates: [write, write, write, read],
-      caller: { scopes: ["read"], tier: "free" },
+      caller: { capabilities: ["read"], tier: "free" },
     })
   ).toEqual([read]);
 });
@@ -205,5 +205,5 @@ it("keeps Pro operations out of free responses", () => {
   } as const;
 
   expect(canCallOperation(policy, freeCaller)).toBe(false);
-  expect(canCallOperation({ scopes: ["read"], tier: "pro" })(policy)).toBe(true);
+  expect(canCallOperation({ capabilities: ["read"], tier: "pro" })(policy)).toBe(true);
 });

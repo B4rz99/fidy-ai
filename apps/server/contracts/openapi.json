@@ -105,6 +105,7 @@
                   "unauthenticated",
                   "scope_missing",
                   "consent_required",
+                  "user_action_required",
                   "paywall_required",
                   "rate_limited",
                   "quota_exhausted",
@@ -556,7 +557,7 @@
             "additionalProperties": false,
             "properties": {
               "code": {
-                "description": "What went wrong, drawn from one closed set shared by every operation: `validation_failed`, `unauthenticated`, `scope_missing`, `consent_required`, `paywall_required`, `rate_limited`, `quota_exhausted`, `not_found`. Branch on this rather than on the status or the message; the set is small enough to cover exhaustively.",
+                "description": "What went wrong, drawn from one closed set shared by every operation: `validation_failed`, `unauthenticated`, `scope_missing`, `consent_required`, `user_action_required`, `paywall_required`, `rate_limited`, `quota_exhausted`, `not_found`. Branch on this rather than on the status or the message; the set is small enough to cover exhaustively.",
                 "enum": [
                   "consent_required"
                 ],
@@ -2852,7 +2853,7 @@
             "additionalProperties": false,
             "properties": {
               "code": {
-                "description": "What went wrong, drawn from one closed set shared by every operation: `validation_failed`, `unauthenticated`, `scope_missing`, `consent_required`, `paywall_required`, `rate_limited`, `quota_exhausted`, `not_found`. Branch on this rather than on the status or the message; the set is small enough to cover exhaustively.",
+                "description": "What went wrong, drawn from one closed set shared by every operation: `validation_failed`, `unauthenticated`, `scope_missing`, `consent_required`, `user_action_required`, `paywall_required`, `rate_limited`, `quota_exhausted`, `not_found`. Branch on this rather than on the status or the message; the set is small enough to cover exhaustively.",
                 "enum": [
                   "not_found"
                 ],
@@ -2909,7 +2910,7 @@
             "additionalProperties": false,
             "properties": {
               "code": {
-                "description": "What went wrong, drawn from one closed set shared by every operation: `validation_failed`, `unauthenticated`, `scope_missing`, `consent_required`, `paywall_required`, `rate_limited`, `quota_exhausted`, `not_found`. Branch on this rather than on the status or the message; the set is small enough to cover exhaustively.",
+                "description": "What went wrong, drawn from one closed set shared by every operation: `validation_failed`, `unauthenticated`, `scope_missing`, `consent_required`, `user_action_required`, `paywall_required`, `rate_limited`, `quota_exhausted`, `not_found`. Branch on this rather than on the status or the message; the set is small enough to cover exhaustively.",
                 "enum": [
                   "paywall_required"
                 ],
@@ -3127,7 +3128,7 @@
             "additionalProperties": false,
             "properties": {
               "code": {
-                "description": "What went wrong, drawn from one closed set shared by every operation: `validation_failed`, `unauthenticated`, `scope_missing`, `consent_required`, `paywall_required`, `rate_limited`, `quota_exhausted`, `not_found`. Branch on this rather than on the status or the message; the set is small enough to cover exhaustively.",
+                "description": "What went wrong, drawn from one closed set shared by every operation: `validation_failed`, `unauthenticated`, `scope_missing`, `consent_required`, `user_action_required`, `paywall_required`, `rate_limited`, `quota_exhausted`, `not_found`. Branch on this rather than on the status or the message; the set is small enough to cover exhaustively.",
                 "enum": [
                   "scope_missing"
                 ],
@@ -9865,7 +9866,7 @@
             "additionalProperties": false,
             "properties": {
               "code": {
-                "description": "What went wrong, drawn from one closed set shared by every operation: `validation_failed`, `unauthenticated`, `scope_missing`, `consent_required`, `paywall_required`, `rate_limited`, `quota_exhausted`, `not_found`. Branch on this rather than on the status or the message; the set is small enough to cover exhaustively.",
+                "description": "What went wrong, drawn from one closed set shared by every operation: `validation_failed`, `unauthenticated`, `scope_missing`, `consent_required`, `user_action_required`, `paywall_required`, `rate_limited`, `quota_exhausted`, `not_found`. Branch on this rather than on the status or the message; the set is small enough to cover exhaustively.",
                 "enum": [
                   "unauthenticated"
                 ],
@@ -10161,6 +10162,63 @@
         ],
         "type": "object"
       },
+      "UserActionRequired": {
+        "additionalProperties": false,
+        "properties": {
+          "_tag": {
+            "enum": [
+              "UserActionRequired"
+            ],
+            "type": "string"
+          },
+          "error": {
+            "additionalProperties": false,
+            "properties": {
+              "code": {
+                "description": "What went wrong, drawn from one closed set shared by every operation: `validation_failed`, `unauthenticated`, `scope_missing`, `consent_required`, `user_action_required`, `paywall_required`, `rate_limited`, `quota_exhausted`, `not_found`. Branch on this rather than on the status or the message; the set is small enough to cover exhaustively.",
+                "enum": [
+                  "user_action_required"
+                ],
+                "type": "string"
+              },
+              "message": {
+                "allOf": [
+                  {
+                    "minLength": 1
+                  },
+                  {
+                    "description": "Why the call failed and what to do about it, written to you rather than to the user. Decide your next move from it; do not relay it verbatim.",
+                    "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
+                  }
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "message"
+            ],
+            "type": "object"
+          },
+          "next": {
+            "allOf": [
+              {
+                "description": "Where to go next: up to three canonical operations worth calling after this one, best first. Empty when there is nothing worth suggesting, which is an answer rather than an omission. Each entry has passed the target-input and caller-authorization checkpoint.",
+                "maxItems": 3
+              }
+            ],
+            "items": {
+              "$ref": "#/components/schemas/SuggestedOperation"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "error",
+          "next"
+        ],
+        "type": "object"
+      },
       "UserId": {
         "allOf": [
           {
@@ -10220,7 +10278,7 @@
             "additionalProperties": false,
             "properties": {
               "code": {
-                "description": "What went wrong, drawn from one closed set shared by every operation: `validation_failed`, `unauthenticated`, `scope_missing`, `consent_required`, `paywall_required`, `rate_limited`, `quota_exhausted`, `not_found`. Branch on this rather than on the status or the message; the set is small enough to cover exhaustively.",
+                "description": "What went wrong, drawn from one closed set shared by every operation: `validation_failed`, `unauthenticated`, `scope_missing`, `consent_required`, `user_action_required`, `paywall_required`, `rate_limited`, `quota_exhausted`, `not_found`. Branch on this rather than on the status or the message; the set is small enough to cover exhaustively.",
                 "enum": [
                   "validation_failed"
                 ],
@@ -10436,13 +10494,16 @@
                       "$ref": "#/components/schemas/ConsentRequired"
                     },
                     {
+                      "$ref": "#/components/schemas/UserActionRequired"
+                    },
+                    {
                       "$ref": "#/components/schemas/ScopeMissing"
                     }
                   ]
                 }
               }
             },
-            "description": "ConsentRequired | ScopeMissing"
+            "description": "ConsentRequired | UserActionRequired | ScopeMissing"
           }
         },
         "security": [
@@ -10529,13 +10590,16 @@
                       "$ref": "#/components/schemas/ConsentRequired"
                     },
                     {
+                      "$ref": "#/components/schemas/UserActionRequired"
+                    },
+                    {
                       "$ref": "#/components/schemas/ScopeMissing"
                     }
                   ]
                 }
               }
             },
-            "description": "ConsentRequired | ScopeMissing"
+            "description": "ConsentRequired | UserActionRequired | ScopeMissing"
           }
         },
         "security": [
@@ -10634,13 +10698,16 @@
                       "$ref": "#/components/schemas/ConsentRequired"
                     },
                     {
+                      "$ref": "#/components/schemas/UserActionRequired"
+                    },
+                    {
                       "$ref": "#/components/schemas/ScopeMissing"
                     }
                   ]
                 }
               }
             },
-            "description": "ConsentRequired | ScopeMissing"
+            "description": "ConsentRequired | UserActionRequired | ScopeMissing"
           },
           "404": {
             "content": {
@@ -10743,13 +10810,16 @@
                       "$ref": "#/components/schemas/ConsentRequired"
                     },
                     {
+                      "$ref": "#/components/schemas/UserActionRequired"
+                    },
+                    {
                       "$ref": "#/components/schemas/ScopeMissing"
                     }
                   ]
                 }
               }
             },
-            "description": "ConsentRequired | ScopeMissing"
+            "description": "ConsentRequired | UserActionRequired | ScopeMissing"
           },
           "404": {
             "content": {
@@ -10850,13 +10920,16 @@
                       "$ref": "#/components/schemas/ConsentRequired"
                     },
                     {
+                      "$ref": "#/components/schemas/UserActionRequired"
+                    },
+                    {
                       "$ref": "#/components/schemas/ScopeMissing"
                     }
                   ]
                 }
               }
             },
-            "description": "ConsentRequired | ScopeMissing"
+            "description": "ConsentRequired | UserActionRequired | ScopeMissing"
           },
           "404": {
             "content": {
@@ -10974,13 +11047,16 @@
                       "$ref": "#/components/schemas/ConsentRequired"
                     },
                     {
+                      "$ref": "#/components/schemas/UserActionRequired"
+                    },
+                    {
                       "$ref": "#/components/schemas/ScopeMissing"
                     }
                   ]
                 }
               }
             },
-            "description": "ConsentRequired | ScopeMissing"
+            "description": "ConsentRequired | UserActionRequired | ScopeMissing"
           },
           "404": {
             "content": {
@@ -11077,13 +11153,16 @@
                       "$ref": "#/components/schemas/ConsentRequired"
                     },
                     {
+                      "$ref": "#/components/schemas/UserActionRequired"
+                    },
+                    {
                       "$ref": "#/components/schemas/ScopeMissing"
                     }
                   ]
                 }
               }
             },
-            "description": "ConsentRequired | ScopeMissing"
+            "description": "ConsentRequired | UserActionRequired | ScopeMissing"
           }
         },
         "security": [
@@ -11170,13 +11249,16 @@
                       "$ref": "#/components/schemas/ConsentRequired"
                     },
                     {
+                      "$ref": "#/components/schemas/UserActionRequired"
+                    },
+                    {
                       "$ref": "#/components/schemas/ScopeMissing"
                     }
                   ]
                 }
               }
             },
-            "description": "ConsentRequired | ScopeMissing"
+            "description": "ConsentRequired | UserActionRequired | ScopeMissing"
           }
         },
         "security": [
@@ -11275,13 +11357,16 @@
                       "$ref": "#/components/schemas/ConsentRequired"
                     },
                     {
+                      "$ref": "#/components/schemas/UserActionRequired"
+                    },
+                    {
                       "$ref": "#/components/schemas/ScopeMissing"
                     }
                   ]
                 }
               }
             },
-            "description": "ConsentRequired | ScopeMissing"
+            "description": "ConsentRequired | UserActionRequired | ScopeMissing"
           },
           "404": {
             "content": {
@@ -11384,13 +11469,16 @@
                       "$ref": "#/components/schemas/ConsentRequired"
                     },
                     {
+                      "$ref": "#/components/schemas/UserActionRequired"
+                    },
+                    {
                       "$ref": "#/components/schemas/ScopeMissing"
                     }
                   ]
                 }
               }
             },
-            "description": "ConsentRequired | ScopeMissing"
+            "description": "ConsentRequired | UserActionRequired | ScopeMissing"
           },
           "404": {
             "content": {
@@ -11508,13 +11596,16 @@
                       "$ref": "#/components/schemas/ConsentRequired"
                     },
                     {
+                      "$ref": "#/components/schemas/UserActionRequired"
+                    },
+                    {
                       "$ref": "#/components/schemas/ScopeMissing"
                     }
                   ]
                 }
               }
             },
-            "description": "ConsentRequired | ScopeMissing"
+            "description": "ConsentRequired | UserActionRequired | ScopeMissing"
           },
           "404": {
             "content": {
@@ -11608,13 +11699,16 @@
                       "$ref": "#/components/schemas/ConsentRequired"
                     },
                     {
+                      "$ref": "#/components/schemas/UserActionRequired"
+                    },
+                    {
                       "$ref": "#/components/schemas/ScopeMissing"
                     }
                   ]
                 }
               }
             },
-            "description": "ConsentRequired | ScopeMissing"
+            "description": "ConsentRequired | UserActionRequired | ScopeMissing"
           }
         },
         "security": [
@@ -11714,13 +11808,16 @@
                       "$ref": "#/components/schemas/ConsentRequired"
                     },
                     {
+                      "$ref": "#/components/schemas/UserActionRequired"
+                    },
+                    {
                       "$ref": "#/components/schemas/ScopeMissing"
                     }
                   ]
                 }
               }
             },
-            "description": "ConsentRequired | ScopeMissing"
+            "description": "ConsentRequired | UserActionRequired | ScopeMissing"
           }
         },
         "security": [
@@ -11821,13 +11918,16 @@
                       "$ref": "#/components/schemas/ConsentRequired"
                     },
                     {
+                      "$ref": "#/components/schemas/UserActionRequired"
+                    },
+                    {
                       "$ref": "#/components/schemas/ScopeMissing"
                     }
                   ]
                 }
               }
             },
-            "description": "ConsentRequired | ScopeMissing"
+            "description": "ConsentRequired | UserActionRequired | ScopeMissing"
           },
           "404": {
             "content": {
@@ -11951,13 +12051,16 @@
                       "$ref": "#/components/schemas/ConsentRequired"
                     },
                     {
+                      "$ref": "#/components/schemas/UserActionRequired"
+                    },
+                    {
                       "$ref": "#/components/schemas/ScopeMissing"
                     }
                   ]
                 }
               }
             },
-            "description": "ConsentRequired | ScopeMissing"
+            "description": "ConsentRequired | UserActionRequired | ScopeMissing"
           }
         },
         "security": [
@@ -12067,13 +12170,16 @@
                       "$ref": "#/components/schemas/ConsentRequired"
                     },
                     {
+                      "$ref": "#/components/schemas/UserActionRequired"
+                    },
+                    {
                       "$ref": "#/components/schemas/ScopeMissing"
                     }
                   ]
                 }
               }
             },
-            "description": "ConsentRequired | ScopeMissing"
+            "description": "ConsentRequired | UserActionRequired | ScopeMissing"
           },
           "404": {
             "content": {
@@ -12194,13 +12300,16 @@
                       "$ref": "#/components/schemas/ConsentRequired"
                     },
                     {
+                      "$ref": "#/components/schemas/UserActionRequired"
+                    },
+                    {
                       "$ref": "#/components/schemas/ScopeMissing"
                     }
                   ]
                 }
               }
             },
-            "description": "ConsentRequired | ScopeMissing"
+            "description": "ConsentRequired | UserActionRequired | ScopeMissing"
           }
         },
         "security": [
@@ -12293,13 +12402,16 @@
                       "$ref": "#/components/schemas/ConsentRequired"
                     },
                     {
+                      "$ref": "#/components/schemas/UserActionRequired"
+                    },
+                    {
                       "$ref": "#/components/schemas/ScopeMissing"
                     }
                   ]
                 }
               }
             },
-            "description": "ConsentRequired | ScopeMissing"
+            "description": "ConsentRequired | UserActionRequired | ScopeMissing"
           },
           "404": {
             "content": {
@@ -12432,13 +12544,16 @@
                       "$ref": "#/components/schemas/ConsentRequired"
                     },
                     {
+                      "$ref": "#/components/schemas/UserActionRequired"
+                    },
+                    {
                       "$ref": "#/components/schemas/ScopeMissing"
                     }
                   ]
                 }
               }
             },
-            "description": "ConsentRequired | ScopeMissing"
+            "description": "ConsentRequired | UserActionRequired | ScopeMissing"
           },
           "404": {
             "content": {
@@ -12548,13 +12663,16 @@
                       "$ref": "#/components/schemas/ConsentRequired"
                     },
                     {
+                      "$ref": "#/components/schemas/UserActionRequired"
+                    },
+                    {
                       "$ref": "#/components/schemas/ScopeMissing"
                     }
                   ]
                 }
               }
             },
-            "description": "ConsentRequired | ScopeMissing"
+            "description": "ConsentRequired | UserActionRequired | ScopeMissing"
           },
           "404": {
             "content": {
@@ -12664,13 +12782,16 @@
                       "$ref": "#/components/schemas/ConsentRequired"
                     },
                     {
+                      "$ref": "#/components/schemas/UserActionRequired"
+                    },
+                    {
                       "$ref": "#/components/schemas/ScopeMissing"
                     }
                   ]
                 }
               }
             },
-            "description": "ConsentRequired | ScopeMissing"
+            "description": "ConsentRequired | UserActionRequired | ScopeMissing"
           },
           "404": {
             "content": {
@@ -12767,13 +12888,16 @@
                       "$ref": "#/components/schemas/ConsentRequired"
                     },
                     {
+                      "$ref": "#/components/schemas/UserActionRequired"
+                    },
+                    {
                       "$ref": "#/components/schemas/ScopeMissing"
                     }
                   ]
                 }
               }
             },
-            "description": "ConsentRequired | ScopeMissing"
+            "description": "ConsentRequired | UserActionRequired | ScopeMissing"
           }
         },
         "security": [
@@ -12857,13 +12981,16 @@
                       "$ref": "#/components/schemas/ConsentRequired"
                     },
                     {
+                      "$ref": "#/components/schemas/UserActionRequired"
+                    },
+                    {
                       "$ref": "#/components/schemas/ScopeMissing"
                     }
                   ]
                 }
               }
             },
-            "description": "ConsentRequired | ScopeMissing"
+            "description": "ConsentRequired | UserActionRequired | ScopeMissing"
           }
         },
         "security": [
@@ -12955,13 +13082,16 @@
                       "$ref": "#/components/schemas/ConsentRequired"
                     },
                     {
+                      "$ref": "#/components/schemas/UserActionRequired"
+                    },
+                    {
                       "$ref": "#/components/schemas/ScopeMissing"
                     }
                   ]
                 }
               }
             },
-            "description": "ConsentRequired | ScopeMissing"
+            "description": "ConsentRequired | UserActionRequired | ScopeMissing"
           },
           "409": {
             "content": {
@@ -13064,13 +13194,16 @@
                       "$ref": "#/components/schemas/ConsentRequired"
                     },
                     {
+                      "$ref": "#/components/schemas/UserActionRequired"
+                    },
+                    {
                       "$ref": "#/components/schemas/ScopeMissing"
                     }
                   ]
                 }
               }
             },
-            "description": "ConsentRequired | ScopeMissing"
+            "description": "ConsentRequired | UserActionRequired | ScopeMissing"
           },
           "404": {
             "content": {
@@ -13181,13 +13314,16 @@
                       "$ref": "#/components/schemas/ConsentRequired"
                     },
                     {
+                      "$ref": "#/components/schemas/UserActionRequired"
+                    },
+                    {
                       "$ref": "#/components/schemas/ScopeMissing"
                     }
                   ]
                 }
               }
             },
-            "description": "ConsentRequired | ScopeMissing"
+            "description": "ConsentRequired | UserActionRequired | ScopeMissing"
           },
           "404": {
             "content": {
@@ -16712,13 +16848,16 @@
                       "$ref": "#/components/schemas/ConsentRequired"
                     },
                     {
+                      "$ref": "#/components/schemas/UserActionRequired"
+                    },
+                    {
                       "$ref": "#/components/schemas/ScopeMissing"
                     }
                   ]
                 }
               }
             },
-            "description": "ConsentRequired | ScopeMissing"
+            "description": "ConsentRequired | UserActionRequired | ScopeMissing"
           }
         },
         "security": [
@@ -16802,13 +16941,16 @@
                       "$ref": "#/components/schemas/ConsentRequired"
                     },
                     {
+                      "$ref": "#/components/schemas/UserActionRequired"
+                    },
+                    {
                       "$ref": "#/components/schemas/ScopeMissing"
                     }
                   ]
                 }
               }
             },
-            "description": "ConsentRequired | ScopeMissing"
+            "description": "ConsentRequired | UserActionRequired | ScopeMissing"
           }
         },
         "security": [
@@ -16967,13 +17109,16 @@
                       "$ref": "#/components/schemas/ConsentRequired"
                     },
                     {
+                      "$ref": "#/components/schemas/UserActionRequired"
+                    },
+                    {
                       "$ref": "#/components/schemas/ScopeMissing"
                     }
                   ]
                 }
               }
             },
-            "description": "ConsentRequired | ScopeMissing"
+            "description": "ConsentRequired | UserActionRequired | ScopeMissing"
           }
         },
         "security": [
@@ -17072,13 +17217,16 @@
                       "$ref": "#/components/schemas/ConsentRequired"
                     },
                     {
+                      "$ref": "#/components/schemas/UserActionRequired"
+                    },
+                    {
                       "$ref": "#/components/schemas/ScopeMissing"
                     }
                   ]
                 }
               }
             },
-            "description": "ConsentRequired | ScopeMissing"
+            "description": "ConsentRequired | UserActionRequired | ScopeMissing"
           },
           "404": {
             "content": {
@@ -17181,13 +17329,16 @@
                       "$ref": "#/components/schemas/ConsentRequired"
                     },
                     {
+                      "$ref": "#/components/schemas/UserActionRequired"
+                    },
+                    {
                       "$ref": "#/components/schemas/ScopeMissing"
                     }
                   ]
                 }
               }
             },
-            "description": "ConsentRequired | ScopeMissing"
+            "description": "ConsentRequired | UserActionRequired | ScopeMissing"
           },
           "404": {
             "content": {
@@ -17288,13 +17439,16 @@
                       "$ref": "#/components/schemas/ConsentRequired"
                     },
                     {
+                      "$ref": "#/components/schemas/UserActionRequired"
+                    },
+                    {
                       "$ref": "#/components/schemas/ScopeMissing"
                     }
                   ]
                 }
               }
             },
-            "description": "ConsentRequired | ScopeMissing"
+            "description": "ConsentRequired | UserActionRequired | ScopeMissing"
           },
           "404": {
             "content": {
@@ -17412,13 +17566,16 @@
                       "$ref": "#/components/schemas/ConsentRequired"
                     },
                     {
+                      "$ref": "#/components/schemas/UserActionRequired"
+                    },
+                    {
                       "$ref": "#/components/schemas/ScopeMissing"
                     }
                   ]
                 }
               }
             },
-            "description": "ConsentRequired | ScopeMissing"
+            "description": "ConsentRequired | UserActionRequired | ScopeMissing"
           },
           "404": {
             "content": {
@@ -17524,13 +17681,16 @@
                       "$ref": "#/components/schemas/ConsentRequired"
                     },
                     {
+                      "$ref": "#/components/schemas/UserActionRequired"
+                    },
+                    {
                       "$ref": "#/components/schemas/ScopeMissing"
                     }
                   ]
                 }
               }
             },
-            "description": "ConsentRequired | ScopeMissing"
+            "description": "ConsentRequired | UserActionRequired | ScopeMissing"
           },
           "404": {
             "content": {
@@ -17624,13 +17784,16 @@
                       "$ref": "#/components/schemas/ConsentRequired"
                     },
                     {
+                      "$ref": "#/components/schemas/UserActionRequired"
+                    },
+                    {
                       "$ref": "#/components/schemas/ScopeMissing"
                     }
                   ]
                 }
               }
             },
-            "description": "ConsentRequired | ScopeMissing"
+            "description": "ConsentRequired | UserActionRequired | ScopeMissing"
           }
         },
         "security": [
@@ -17724,13 +17887,16 @@
                       "$ref": "#/components/schemas/ConsentRequired"
                     },
                     {
+                      "$ref": "#/components/schemas/UserActionRequired"
+                    },
+                    {
                       "$ref": "#/components/schemas/ScopeMissing"
                     }
                   ]
                 }
               }
             },
-            "description": "ConsentRequired | ScopeMissing"
+            "description": "ConsentRequired | UserActionRequired | ScopeMissing"
           }
         },
         "security": [

@@ -9,7 +9,7 @@ import {
 import { MigrationSqlClient } from "~/shell/db/client";
 import { defaultUserId } from "~/shell/db/development-seed";
 import { ApiHarness } from "~/shell/testing/api-harness";
-import { appendTranscriptEntries, listTranscriptEntries } from "./repo";
+import { appendTranscriptEntries, selectTranscriptEntries } from "./repo";
 
 layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
   "Transcript persistence",
@@ -29,7 +29,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         const outcome = yield* Effect.exit(appendTranscriptEntries(defaultUserId, [entry, entry]));
         expect(Exit.isFailure(outcome)).toBe(true);
 
-        const retained = yield* listTranscriptEntries(defaultUserId);
+        const retained = yield* selectTranscriptEntries(defaultUserId);
         expect(retained.some((candidate) => candidate.id === entryId)).toBe(false);
       })
     );

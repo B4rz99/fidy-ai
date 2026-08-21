@@ -540,10 +540,27 @@ const reviewFromRow = Effect.fn("reviewFromRow")(function* (row: typeof ReviewRo
   });
 });
 
-/** Lists one bounded page of visible review items, pending first. */
-export const listNeedsReviewItems = Effect.fn("listNeedsReviewItems")(function* (
+/** Requested bounds, where an absent offset or limit accepts the default rather than meaning zero. */
+export type NeedsReviewPageRequest = Readonly<{
+  offset: Option.Option<number>;
+  limit: Option.Option<number>;
+}>;
+
+/** Bounds already resolved against the default, as every review listing reads them. */
+export type NeedsReviewPage = Readonly<{ offset: number; limit: number }>;
+
+const defaultNeedsReviewPage: NeedsReviewPage = { offset: 0, limit: 100 };
+
+/** The one page policy every surface that lists reviews reads an absent offset or limit through. */
+export const applyNeedsReviewPageDefaults = (request: NeedsReviewPageRequest): NeedsReviewPage => ({
+  offset: Option.getOrElse(request.offset, () => defaultNeedsReviewPage.offset),
+  limit: Option.getOrElse(request.limit, () => defaultNeedsReviewPage.limit),
+});
+
+/** Lists one bounded page of the User's visible review items, pending first. */
+export const selectNeedsReviewItems = Effect.fn("selectNeedsReviewItems")(function* (
   userId: UserId,
-  page: { readonly offset: number; readonly limit: number }
+  page: NeedsReviewPage
 ) {
   return yield* withUserTransaction(
     userId,

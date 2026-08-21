@@ -108,11 +108,7 @@ const checks: Array<Check> = [
   ]),
   rootCheck("static", "Dependency policy", ["bun", "run", "lint:dependencies"]),
   rootCheck("static", "Migration ids", ["bun", "run", "check:migration-ids"]),
-  rootCheck("static", "Continuity invariant evidence", [
-    "bun",
-    "run",
-    "check:continuity-invariants",
-  ]),
+  rootCheck("static", "Credential path evidence", ["bun", "run", "check:credential-evidence"]),
   rootCheck("builds", "Server production build", ["bun", "run", "build:production"]),
   {
     ...rootCheck("builds", "Production web build", [

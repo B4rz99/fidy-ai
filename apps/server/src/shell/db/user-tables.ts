@@ -9,6 +9,7 @@ export const userTableNames = [
   "conversation_continuity",
   "conversation_turns",
   "dashboards",
+  "hosted_agent_sessions",
   "insight_delivery_attempts",
   "insight_events",
   "insight_money_groups",

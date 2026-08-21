@@ -1,6 +1,8 @@
-import { Function, type Option, Schema } from "effect";
-import { type PatScope } from "~/core/tokens/model";
+import { Effect, Function, type Option, Schema } from "effect";
+import type { CanonicalCapability } from "~/core/_shared/canonical-capability";
+import type { UserId } from "~/core/identity/reference";
 import { type OperationId, operationCatalog } from "~/shell/api";
+import { ResolvedCaller } from "./authz";
 import type { CanonicalInput } from "./canonical-input";
 import { type OperationPolicyValue, type OperationTier } from "./operation-policy";
 import { type PartialInput } from "./partial-input";
@@ -35,14 +37,27 @@ export const suggestOperation = <Id extends OperationId>(
 
 /** The explicit caller facts needed to decide whether a target is callable. */
 export type SuggestedOperationCaller = {
-  readonly scopes: ReadonlyArray<PatScope>;
+  readonly capabilities: ReadonlyArray<CanonicalCapability>;
   readonly tier: OperationTier;
 };
 
 /** Converts the current free-tier authorization facts into suggestion checkpoint input. */
 export const makeFreeSuggestedOperationCaller = (
-  scopes: SuggestedOperationCaller["scopes"]
-): SuggestedOperationCaller => ({ scopes, tier: "free" });
+  capabilities: SuggestedOperationCaller["capabilities"]
+): SuggestedOperationCaller => ({ capabilities, tier: "free" });
+
+/**
+ * Resolves the authorized caller into the owner id and free-tier suggestion facts a scoped handler
+ * takes. Every caller is free tier today, so a paid tier changes this and `makeFree…` alone.
+ */
+export const resolveFreeSuggestedOperationCaller: Effect.Effect<
+  Readonly<{ userId: UserId; caller: SuggestedOperationCaller }>,
+  never,
+  ResolvedCaller
+> = Effect.map(ResolvedCaller, ({ capabilities, subjectUserId }) => ({
+  userId: subjectUserId,
+  caller: makeFreeSuggestedOperationCaller(capabilities),
+}));
 
 const hasRequiredTier = (requiredTier: OperationTier, callerTier: OperationTier): boolean =>
   requiredTier === "free" || callerTier === "pro";
@@ -58,7 +73,8 @@ export const canCallOperation: {
 } = Function.dual(
   2,
   (self: OperationPolicyValue, caller: SuggestedOperationCaller): boolean =>
-    caller.scopes.includes(self.requiredScope) && hasRequiredTier(self.requiredTier, caller.tier)
+    caller.capabilities.includes(self.requiredScope) &&
+    hasRequiredTier(self.requiredTier, caller.tier)
 );
 
 const validationOptions = {

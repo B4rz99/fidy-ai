@@ -6,6 +6,7 @@ import {
   Cause,
   Clock,
   Context,
+  type Crypto,
   Deferred,
   Duration,
   Effect,
@@ -22,17 +23,17 @@ import {
 } from "effect";
 import { OpenAiLanguageModel } from "@effect/ai-openai";
 import { AiError, LanguageModel, type Response, Tool } from "effect/unstable/ai";
-import { SqlClient, SqlSchema } from "effect/unstable/sql";
+import { SqlClient, type SqlError, SqlSchema } from "effect/unstable/sql";
 import { E164PhoneNumber, UserId, WhatsAppBusinessScopedUserId } from "~/core/identity/reference";
 import { MigrationSqlClient } from "~/shell/db/client";
 import { categoryIds } from "~/core/categories/taxonomy";
+import { ConversationCompactionTokenCount } from "~/core/transcript/compaction-policy";
 import { type TranscriptEntry, TranscriptText } from "~/core/transcript/model";
 import { TokenBearer } from "~/core/tokens/model";
-import {
-  ConversationCompactionPolicy,
-  ConversationCompactionTokenCount,
-} from "~/shell/transcript/conversation-continuity";
+import { ConversationCompactionPolicy } from "~/shell/transcript/conversation-continuity";
+import type { AuditLogEntry } from "~/core/audit/model";
 import { observeAuditLogEntries } from "~/shell/audit/repo";
+import { HostedAgentSessionId } from "~/core/transcript/hosted-agent-session";
 import { withSubjectLock } from "~/shell/consent/repo";
 import { resolveWhatsAppCaller } from "~/shell/identity/repo";
 import {
@@ -50,7 +51,7 @@ import {
   defaultWhatsAppPhone,
   seedConsentedPatIdentity,
 } from "~/shell/db/development-seed";
-import { listRecentTranscriptEntries, listTranscriptEntries } from "~/shell/transcript/repo";
+import { selectRecentTranscriptEntries, selectTranscriptEntries } from "~/shell/transcript/repo";
 import { ApiHarness, ApiHarnessClient, ApiTelemetryHarness } from "~/shell/testing/api-harness";
 import { testWhatsAppCaller } from "~/shell/testing/whatsapp-caller";
 import { HostedInference, HostedInferenceError } from "./hosted-inference";
@@ -65,7 +66,18 @@ import {
   InboundMessage,
   ModelUnavailable,
 } from "./agent-service";
+import { makeTurnConfirmation } from "./tool-confirmation";
+import { agentOperationBindings } from "./toolkit";
 
+// An HTTP caller returns the reply in its response, so it delivers nothing incrementally.
+const noDelivery = (): Effect.Effect<void> => Effect.void;
+
+/** Reads the exact confirmation command out of a challenge, failing if the reply carries none. */
+const confirmationCommand = (replyText: string): string => {
+  const command = /Responde exactamente: (CONFIRMAR [^\n]+)/u.exec(replyText)?.[1];
+  assert.ok(command !== undefined, "the challenge must carry an exact confirmation command");
+  return command;
+};
 const declinedOnboardingPhone = E164PhoneNumber.make("+573009997332");
 const acceptedOnboardingPhone = E164PhoneNumber.make("+573009997333");
 const compactionUserId = UserId.make("f1d1a000-0000-4000-8000-0000000004c0");
@@ -135,6 +147,16 @@ type CreateTransactionToolCall = Readonly<{
       nullableAbsentFields: boolean;
     }>
   >;
+
+/** Names each recorded canonical attempt by operation and outcome, so evidence stays exact. */
+const auditOutcomes = (entries: ReadonlyArray<AuditLogEntry>): ReadonlyArray<string> =>
+  entries.map((entry) => `${entry.operation}:${entry.outcome}`);
+
+const succeededOnly = (outcomes: ReadonlyArray<string>): ReadonlyArray<string> =>
+  outcomes.filter((outcome) => outcome.endsWith(":succeeded")).toSorted();
+
+const rejectedOnly = (outcomes: ReadonlyArray<string>): ReadonlyArray<string> =>
+  outcomes.filter((outcome) => outcome.endsWith(":rejected")).toSorted();
 
 const encodedCounterparty = (
   counterparty: Option.Option<string>,
@@ -1268,6 +1290,85 @@ const CapacityFailingHostedInference = Layer.effect(
   )
 ).pipe(Layer.provide(ScriptedHostedInference));
 
+// Advancing the revision inside preflight makes every prepared snapshot stale by the time the
+// runtime admits it, so preparation retries deterministically instead of racing.
+const StaleContinuityHostedInference = Layer.effect(
+  HostedInference,
+  Effect.gen(function* () {
+    const inference = yield* HostedInference;
+    const sql = yield* MigrationSqlClient;
+    return HostedInference.of({
+      ...inference,
+      prepareText: (input) =>
+        sql`
+          UPDATE conversation_continuity SET revision = revision + 1
+          WHERE user_id = ${defaultUserId}
+        `.pipe(Effect.orDie, Effect.andThen(inference.prepareText(input))),
+    });
+  })
+).pipe(Layer.provide(ScriptedHostedInference));
+
+// A model whose generation dies rather than fails stands in for any defect raised inside hosted
+// generation, a refused canonical call among them.
+const DefectiveHostedInference = Layer.effect(
+  HostedInference,
+  Effect.map(HostedInference, (inference) =>
+    HostedInference.of({
+      ...inference,
+      prepareText: (request) =>
+        Effect.map(inference.prepareText(request), (prepared) => ({
+          ...prepared,
+          execute: Effect.die(new Error("hosted generation defect")),
+        })),
+    })
+  )
+).pipe(Layer.provide(ScriptedHostedInference));
+
+const DefectiveAgentHarness = AgentService.layer.pipe(
+  Layer.provideMerge(DefectiveHostedInference),
+  Layer.provideMerge(ApiHarness),
+  Layer.provideMerge(TelemetryEnvelopeRecording)
+);
+
+const StaleContinuityAgentHarness = AgentService.layer.pipe(
+  Layer.provideMerge(StaleContinuityHostedInference),
+  Layer.provideMerge(ApiHarness),
+  Layer.provideMerge(TelemetryEnvelopeRecording)
+);
+
+const SingleRevisionRow = Schema.Tuple([Schema.Struct({ revision: Schema.Finite })]);
+
+const SingleSessionRow = Schema.Tuple([Schema.Struct({ id: HostedAgentSessionId })]);
+
+/** The User's one active Hosted Agent Session, which scopes every session-bounded Transcript read. */
+const activeHostedAgentSession = (
+  userId: UserId
+): Effect.Effect<
+  HostedAgentSessionId,
+  SqlError.SqlError | Schema.SchemaError,
+  MigrationSqlClient
+> =>
+  Effect.gen(function* () {
+    const sql = yield* MigrationSqlClient;
+    const [session] = yield* Schema.decodeUnknownEffect(SingleSessionRow)(
+      yield* sql`
+        SELECT id FROM hosted_agent_sessions
+        WHERE user_id = ${userId} AND status = 'active'
+      `
+    );
+    return session.id;
+  });
+
+const continuityRevision = Effect.gen(function* () {
+  const sql = yield* MigrationSqlClient;
+  const rows = yield* sql`
+    SELECT revision::int AS revision FROM conversation_continuity
+    WHERE user_id = ${defaultUserId}
+  `;
+  const [{ revision }] = yield* Schema.decodeUnknownEffect(SingleRevisionRow)(rows);
+  return revision;
+});
+
 const CapacityFailingAgentHarness = AgentService.layer.pipe(
   Layer.provideMerge(CapacityFailingHostedInference),
   Layer.provideMerge(ApiHarness),
@@ -1324,6 +1425,7 @@ layer(CompactingAgentHarness, { excludeTestServices: true, timeout: "30 seconds"
         const clearCompactionFixture = Effect.all(
           [
             sql`DELETE FROM tokens WHERE user_id = ${compactionUserId}`,
+            sql`DELETE FROM hosted_agent_sessions WHERE user_id = ${compactionUserId}`,
             sql`DELETE FROM consent_records WHERE subject_user_id = ${compactionUserId}`,
             sql`DELETE FROM users WHERE id = ${compactionUserId}`,
           ],
@@ -1335,18 +1437,21 @@ layer(CompactingAgentHarness, { excludeTestServices: true, timeout: "30 seconds"
           bearer: compactionBearer,
         });
         yield* Effect.gen(function* () {
-          yield* service.handleSynchronousTurn(
+          yield* service.handleMessage(
             compactionUserId,
-            InboundMessage.make({ text: TranscriptText.make("MARCADOR_COMPACTADO") })
+            InboundMessage.make({ text: TranscriptText.make("MARCADOR_COMPACTADO") }),
+            noDelivery
           );
-          yield* service.handleSynchronousTurn(
+          yield* service.handleMessage(
             compactionUserId,
-            InboundMessage.make({ text: TranscriptText.make("ACTIVA_COMPACTACION") })
+            InboundMessage.make({ text: TranscriptText.make("ACTIVA_COMPACTACION") }),
+            noDelivery
           );
           for (const index of Arr.range(1, 41)) {
-            yield* service.handleSynchronousTurn(
+            yield* service.handleMessage(
               compactionUserId,
-              InboundMessage.make({ text: TranscriptText.make(`HISTORIAL_PROFUNDO_${index}`) })
+              InboundMessage.make({ text: TranscriptText.make(`HISTORIAL_PROFUNDO_${index}`) }),
+              noDelivery
             );
           }
           const compacted = yield* sql`
@@ -1358,9 +1463,10 @@ layer(CompactingAgentHarness, { excludeTestServices: true, timeout: "30 seconds"
               AND entry ->> 'text' = 'MARCADOR_COMPACTADO'
           `;
 
-          const reply = yield* service.handleSynchronousTurn(
+          const reply = yield* service.handleMessage(
             compactionUserId,
-            InboundMessage.make({ text: TranscriptText.make("RECUERDA_COMPACTADO") })
+            InboundMessage.make({ text: TranscriptText.make("RECUERDA_COMPACTADO") }),
+            noDelivery
           );
 
           expect(compacted).toEqual([{ text: "MARCADOR_COMPACTADO" }]);
@@ -1375,18 +1481,19 @@ layer(CompactingAgentHarness, { excludeTestServices: true, timeout: "30 seconds"
 layer(AgentTelemetryHarness, { excludeTestServices: true, timeout: "30 seconds" })(
   "hosted agent telemetry",
   (it) => {
-    it.effect("traces a complete turn, model work, and localhost canonical calls", () =>
+    it.effect("traces a complete turn, model work, and in-process canonical calls", () =>
       Effect.gen(function* () {
         const { service, telemetry, recorder } = yield* prepareTelemetryTest;
 
         const reply = yield* telemetry.span(
           activeCallerDescriptor,
-          service.handleSynchronousTurn(
+          service.handleMessage(
             defaultUserId,
-            InboundMessage.make({ text: TranscriptText.make("Lista las categorías") })
+            InboundMessage.make({ text: TranscriptText.make("Lista las categorías") }),
+            noDelivery
           )
         );
-        const transcript = yield* listTranscriptEntries(defaultUserId);
+        const transcript = yield* selectTranscriptEntries(defaultUserId);
         const envelopes = yield* recorder.serializedEnvelopes;
         const transactions = transactionEnvelopePayloads(envelopes);
         const caller = transactions
@@ -1398,16 +1505,11 @@ layer(AgentTelemetryHarness, { excludeTestServices: true, timeout: "30 seconds" 
         const modelSpans = transactions.filter(
           ({ contexts }) => contexts.trace.op === "agent.model"
         );
-        const canonicalHttp = transactions
-          .filter(({ contexts }) => contexts.trace.op === "http.server")
-          .filter(({ contexts }) => contexts.trace.parent_span_id === turn.contexts.trace.span_id)
-          .find(({ tags }) => tags.operation === "http.canonicalRequest");
+        // The hosted runtime executes canonical operations in process, so the operation span is a
+        // direct child of its Turn without an intermediate localhost request.
         const canonical = transactions
           .filter(({ contexts }) => contexts.trace.op === "fidy.operation")
-          .filter(
-            ({ contexts }) =>
-              contexts.trace.parent_span_id === canonicalHttp?.contexts.trace.span_id
-          )
+          .filter(({ contexts }) => contexts.trace.parent_span_id === turn.contexts.trace.span_id)
           .find(({ tags }) => tags.operation === "categories.listCategories");
         const serialized = envelopes.map((bytes) => new TextDecoder().decode(bytes)).join("\n");
 
@@ -1418,7 +1520,6 @@ layer(AgentTelemetryHarness, { excludeTestServices: true, timeout: "30 seconds" 
           "CanonicalToolResultEntry",
           "AssistantTranscriptEntry",
         ]);
-        assert(canonicalHttp !== undefined);
         assert(canonical !== undefined);
         const firstModelSpan = modelSpans[0];
         assert(firstModelSpan !== undefined);
@@ -1438,8 +1539,7 @@ layer(AgentTelemetryHarness, { excludeTestServices: true, timeout: "30 seconds" 
         expect(typeof firstModelSpan.contexts.trace.data["fidy.duration_milliseconds"]).toBe(
           "number"
         );
-        expect(canonicalHttp.contexts.trace.parent_span_id).toBe(turn.contexts.trace.span_id);
-        expect(canonical.contexts.trace.parent_span_id).toBe(canonicalHttp.contexts.trace.span_id);
+        expect(canonical.contexts.trace.parent_span_id).toBe(turn.contexts.trace.span_id);
         expect(errorEnvelopePayloads(envelopes)).toEqual([]);
         expect(serialized).not.toContain("Lista las categorías");
         expect(serialized).not.toContain("Estas son las categorías disponibles.");
@@ -1493,9 +1593,10 @@ layer(AgentTelemetryHarness, { excludeTestServices: true, timeout: "30 seconds" 
             yield* recorder.clear;
             const turn = telemetry.span(
               activeCallerDescriptor,
-              service.handleSynchronousTurn(
+              service.handleMessage(
                 defaultUserId,
-                InboundMessage.make({ text: TranscriptText.make(scenario.text) })
+                InboundMessage.make({ text: TranscriptText.make(scenario.text) }),
+                noDelivery
               )
             );
             const exit = yield* Effect.exit(
@@ -1538,9 +1639,10 @@ layer(AgentTelemetryHarness, { excludeTestServices: true, timeout: "30 seconds" 
         const exit = yield* telemetry
           .span(
             activeCallerDescriptor,
-            service.handleSynchronousTurn(
+            service.handleMessage(
               defaultUserId,
-              InboundMessage.make({ text: TranscriptText.make("RETRY_NON_RETRYABLE") })
+              InboundMessage.make({ text: TranscriptText.make("RETRY_NON_RETRYABLE") }),
+              noDelivery
             )
           )
           .pipe(Effect.exit);
@@ -1570,9 +1672,10 @@ layer(AgentTelemetryHarness, { excludeTestServices: true, timeout: "30 seconds" 
         const { service } = yield* prepareTelemetryTest;
 
         const exit = yield* Effect.exit(
-          service.handleSynchronousTurn(
+          service.handleMessage(
             defaultUserId,
-            InboundMessage.make({ text: TranscriptText.make("SALIDA_INVALIDA_OTRA_CAUSA") })
+            InboundMessage.make({ text: TranscriptText.make("SALIDA_INVALIDA_OTRA_CAUSA") }),
+            noDelivery
           )
         );
 
@@ -1605,9 +1708,10 @@ layer(AgentTelemetryHarness, { excludeTestServices: true, timeout: "30 seconds" 
 
         const reply = yield* telemetry.span(
           activeCallerDescriptor,
-          service.handleSynchronousTurn(
+          service.handleMessage(
             defaultUserId,
-            InboundMessage.make({ text: TranscriptText.make("SALIDA_INVALIDA_RECUPERABLE") })
+            InboundMessage.make({ text: TranscriptText.make("SALIDA_INVALIDA_RECUPERABLE") }),
+            noDelivery
           )
         );
         const envelopes = yield* recorder.serializedEnvelopes;
@@ -1628,9 +1732,10 @@ layer(AgentTelemetryHarness, { excludeTestServices: true, timeout: "30 seconds" 
 
         const reply = yield* telemetry.span(
           activeCallerDescriptor,
-          service.handleSynchronousTurn(
+          service.handleMessage(
             defaultUserId,
-            InboundMessage.make({ text: TranscriptText.make("SALIDA_INVALIDA_PERSISTENTE") })
+            InboundMessage.make({ text: TranscriptText.make("SALIDA_INVALIDA_PERSISTENTE") }),
+            noDelivery
           )
         );
         const envelopes = yield* recorder.serializedEnvelopes;
@@ -1659,9 +1764,10 @@ layer(AgentTelemetryHarness, { excludeTestServices: true, timeout: "30 seconds" 
         const exit = yield* telemetry
           .span(
             activeCallerDescriptor,
-            service.handleSynchronousTurn(
+            service.handleMessage(
               defaultUserId,
-              InboundMessage.make({ text: TranscriptText.make("RESPUESTA_TRUNCADA") })
+              InboundMessage.make({ text: TranscriptText.make("RESPUESTA_TRUNCADA") }),
+              noDelivery
             )
           )
           .pipe(Effect.exit);
@@ -1685,9 +1791,10 @@ layer(AgentTelemetryHarness, { excludeTestServices: true, timeout: "30 seconds" 
 
         const reply = yield* telemetry.span(
           activeCallerDescriptor,
-          service.handleSynchronousTurn(
+          service.handleMessage(
             defaultUserId,
-            InboundMessage.make({ text: TranscriptText.make("Busca la transacción inexistente") })
+            InboundMessage.make({ text: TranscriptText.make("Busca la transacción inexistente") }),
+            noDelivery
           )
         );
         const canonicalEnvelopes = yield* recorder.serializedEnvelopes;
@@ -1700,9 +1807,10 @@ layer(AgentTelemetryHarness, { excludeTestServices: true, timeout: "30 seconds" 
         const identityExit = yield* telemetry
           .span(
             activeCallerDescriptor,
-            service.handleSynchronousTurn(
+            service.handleMessage(
               unknownUser,
-              InboundMessage.make({ text: TranscriptText.make("identidad ausente") })
+              InboundMessage.make({ text: TranscriptText.make("identidad ausente") }),
+              noDelivery
             )
           )
           .pipe(Effect.exit);
@@ -1730,9 +1838,10 @@ layer(AgentTelemetryHarness, { excludeTestServices: true, timeout: "30 seconds" 
         const exit = yield* telemetry
           .span(
             activeCallerDescriptor,
-            service.handleSynchronousTurn(
+            service.handleMessage(
               defaultUserId,
-              InboundMessage.make({ text: TranscriptText.make("MODELO_DEFECTUOSO") })
+              InboundMessage.make({ text: TranscriptText.make("MODELO_DEFECTUOSO") }),
+              noDelivery
             )
           )
           .pipe(Effect.exit);
@@ -1775,9 +1884,10 @@ layer(AgentTelemetryHarness, { excludeTestServices: true, timeout: "30 seconds" 
         const exit = yield* telemetry
           .span(
             activeCallerDescriptor,
-            service.handleSynchronousTurn(
+            service.handleMessage(
               defaultUserId,
-              InboundMessage.make({ text: TranscriptText.make("almuerzo 25 mil") })
+              InboundMessage.make({ text: TranscriptText.make("almuerzo 25 mil") }),
+              noDelivery
             )
           )
           .pipe(Effect.exit, Effect.ensuring(removeFailure));
@@ -1803,9 +1913,10 @@ layer(AgentTelemetryHarness, { excludeTestServices: true, timeout: "30 seconds" 
         const fiber = yield* telemetry
           .span(
             activeCallerDescriptor,
-            service.handleSynchronousTurn(
+            service.handleMessage(
               defaultUserId,
-              InboundMessage.make({ text: TranscriptText.make("MODELO_BLOQUEADO") })
+              InboundMessage.make({ text: TranscriptText.make("MODELO_BLOQUEADO") }),
+              noDelivery
             )
           )
           .pipe(
@@ -1846,18 +1957,20 @@ layer(AgentTelemetryHarness, { excludeTestServices: true, timeout: "30 seconds" 
             telemetry
               .span(
                 activeCallerDescriptor,
-                service.handleSynchronousTurn(
+                service.handleMessage(
                   defaultUserId,
-                  InboundMessage.make({ text: TranscriptText.make("RETRY_AFTER_SUCCESS") })
+                  InboundMessage.make({ text: TranscriptText.make("RETRY_AFTER_SUCCESS") }),
+                  noDelivery
                 )
               )
               .pipe(Effect.exit),
             telemetry
               .span(
                 activeCallerDescriptor,
-                service.handleSynchronousTurn(
+                service.handleMessage(
                   userB,
-                  InboundMessage.make({ text: TranscriptText.make("RESPUESTA_TRUNCADA") })
+                  InboundMessage.make({ text: TranscriptText.make("RESPUESTA_TRUNCADA") }),
+                  noDelivery
                 )
               )
               .pipe(Effect.exit),
@@ -1901,15 +2014,102 @@ layer(CapacityFailingAgentHarness, { excludeTestServices: true, timeout: "30 sec
           yield* clearTranscript;
           const service = yield* AgentService;
           const failure = yield* service
-            .handleSynchronousTurn(
+            .handleMessage(
               defaultUserId,
-              InboundMessage.make({ text: TranscriptText.make("solicitud demasiado grande") })
+              InboundMessage.make({ text: TranscriptText.make("solicitud demasiado grande") }),
+              noDelivery
             )
             .pipe(Effect.flip);
 
           expect(failure).toBeInstanceOf(HostedCapacityExceeded);
-          expect(yield* listTranscriptEntries(defaultUserId)).toEqual([]);
+          expect(yield* selectTranscriptEntries(defaultUserId)).toEqual([]);
         })
+    );
+  }
+);
+
+layer(StaleContinuityAgentHarness, { excludeTestServices: true, timeout: "30 seconds" })(
+  "hosted agent bounded continuity preparation",
+  (it) => {
+    it.effect("bounds preparation at three attempts and leaves the User lock reusable", () =>
+      Effect.gen(function* () {
+        yield* clearTranscript;
+        const service = yield* AgentService;
+        const message = InboundMessage.make({
+          text: TranscriptText.make("continuidad siempre desactualizada"),
+        });
+
+        const first = yield* service
+          .handleMessage(defaultUserId, message, noDelivery)
+          .pipe(Effect.flip);
+        expect(first).toBeInstanceOf(ModelUnavailable);
+        expect(yield* selectTranscriptEntries(defaultUserId)).toEqual([]);
+        const afterFirst = yield* continuityRevision;
+
+        // A second message is the lock-and-connection assertion: each preparation advances the
+        // revision exactly once, so the delta is the retry bound, and a leaked advisory lock or
+        // reserved connection would block this call instead of letting it fail closed again.
+        const second = yield* service
+          .handleMessage(defaultUserId, message, noDelivery)
+          .pipe(Effect.flip);
+        expect(second).toBeInstanceOf(ModelUnavailable);
+        expect((yield* continuityRevision) - afterFirst).toBe(3);
+        expect(yield* selectTranscriptEntries(defaultUserId)).toEqual([]);
+      })
+    );
+  }
+);
+
+const latestTerminalTurn = (
+  userId: UserId
+): Effect.Effect<
+  ReadonlyArray<{ readonly state: string; readonly failureReason: Option.Option<string> }>,
+  SqlError.SqlError | Schema.SchemaError,
+  MigrationSqlClient
+> =>
+  Effect.flatMap(MigrationSqlClient, (sql) =>
+    SqlSchema.findAll({
+      Request: UserId,
+      Result: Schema.Struct({
+        state: Schema.String,
+        failureReason: Schema.OptionFromNullOr(Schema.String),
+      }),
+      execute: (subject) => sql`SELECT state, failure_reason AS "failureReason"
+        FROM conversation_turns
+        WHERE user_id = ${subject}
+        ORDER BY started_at DESC
+        LIMIT 1`,
+    })(userId)
+  );
+
+layer(DefectiveAgentHarness, { excludeTestServices: true, timeout: "30 seconds" })(
+  "hosted generation defects",
+  (it) => {
+    it.effect("terminalizes a hosted Turn whose generation dies", () =>
+      Effect.gen(function* () {
+        yield* clearTranscript;
+        const service = yield* AgentService;
+        const exit = yield* Effect.exit(
+          service.handleMessage(
+            defaultUserId,
+            InboundMessage.make({ text: TranscriptText.make("Lista las categorías") }),
+            noDelivery
+          )
+        );
+        const terminal = yield* latestTerminalTurn(defaultUserId);
+
+        // The defect must stay a defect: a Turn that recorded Failed still owes the caller the
+        // original Cause, not a failure synthesised from it.
+        assert.ok(Exit.isFailure(exit));
+        expect(Cause.hasDies(exit.cause)).toBe(true);
+        expect(terminal[0]).toEqual({
+          state: "Failed",
+          failureReason: Option.some("HostedInferenceFailed"),
+        });
+        expect((yield* selectTranscriptEntries(defaultUserId)).at(-1)?._tag).toBe(
+          "FailedTurnTranscriptEntry"
+        );
+      })
     );
   }
 );
@@ -1922,26 +2122,14 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       const deliveryFailure = { _tag: "TestDeliveryFailure" } as const;
 
       const exit = yield* Effect.exit(
-        service.handleTurn(
+        service.handleMessage(
           defaultUserId,
           InboundMessage.make({ text: TranscriptText.make("Lista las categorías") }),
           () => Effect.fail(deliveryFailure)
         )
       );
-      const sql = yield* MigrationSqlClient;
-      const terminal = yield* SqlSchema.findAll({
-        Request: UserId,
-        Result: Schema.Struct({
-          state: Schema.String,
-          failureReason: Schema.OptionFromNullOr(Schema.String),
-        }),
-        execute: (userId) => sql`SELECT state, failure_reason AS "failureReason"
-          FROM conversation_turns
-          WHERE user_id = ${userId}
-          ORDER BY started_at DESC
-          LIMIT 1`,
-      })(defaultUserId);
-      const transcript = yield* listTranscriptEntries(defaultUserId);
+      const terminal = yield* latestTerminalTurn(defaultUserId);
+      const transcript = yield* selectTranscriptEntries(defaultUserId);
 
       expect(Exit.isFailure(exit)).toBe(true);
       expect(terminal[0]).toEqual({
@@ -1954,13 +2142,37 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
     })
   );
 
+  it.effect("marks a hosted Turn failed when delivery dies rather than fails", () =>
+    Effect.gen(function* () {
+      yield* clearTranscript;
+      const service = yield* AgentService;
+
+      const exit = yield* Effect.exit(
+        service.handleMessage(
+          defaultUserId,
+          InboundMessage.make({ text: TranscriptText.make("Lista las categorías") }),
+          () => Effect.die(new Error("delivery channel defect"))
+        )
+      );
+      const terminal = yield* latestTerminalTurn(defaultUserId);
+      const transcript = yield* selectTranscriptEntries(defaultUserId);
+
+      expect(Exit.isFailure(exit)).toBe(true);
+      expect(terminal[0]).toEqual({
+        state: "Failed",
+        failureReason: Option.some("DeliveryFailed"),
+      });
+      expect(transcript.at(-1)?._tag).toBe("FailedTurnTranscriptEntry");
+    })
+  );
+
   it.effect("leaves interrupted delivery Pending for the next serialized preparation", () =>
     Effect.gen(function* () {
       yield* clearTranscript;
       const service = yield* AgentService;
       const deliveryStarted = yield* Deferred.make<void>();
       const interrupted = yield* service
-        .handleTurn(
+        .handleMessage(
           defaultUserId,
           InboundMessage.make({ text: TranscriptText.make("Lista las categorías") }),
           () => Deferred.succeed(deliveryStarted, undefined).pipe(Effect.andThen(Effect.never))
@@ -1976,10 +2188,10 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
         LIMIT 1`;
       expect(pending).toEqual([{ state: "Pending" }]);
 
-      yield* service.handleTurn(
+      yield* service.handleMessage(
         defaultUserId,
         InboundMessage.make({ text: TranscriptText.make("Lista las categorías de nuevo") }),
-        () => Effect.void
+        noDelivery
       );
       const recovered = yield* sql`SELECT state FROM conversation_turns
         WHERE user_id = ${defaultUserId}
@@ -1995,9 +2207,10 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       yield* clearTranscript;
       const service = yield* AgentService;
 
-      const challenge = yield* service.handleSynchronousTurn(
+      const challenge = yield* service.handleMessage(
         defaultUserId,
-        InboundMessage.make({ text: TranscriptText.make("LOTE_ATOMICO_EXITO") })
+        InboundMessage.make({ text: TranscriptText.make("LOTE_ATOMICO_EXITO") }),
+        noDelivery
       );
       expect(batchConfirmationCommand(challenge.text)).toMatch(/^CONFIRMAR LOTE/u);
       const transactionCountAfterChallenge =
@@ -2007,9 +2220,10 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       expect(challenge.text).toContain("2. transactions.createTransaction");
       expect(transactionCountAfterChallenge[0]?.count).toBe(0);
 
-      const altered = yield* service.handleSynchronousTurn(
+      const altered = yield* service.handleMessage(
         defaultUserId,
-        InboundMessage.make({ text: TranscriptText.make(`CONFIRMAR LOTE ${"0".repeat(64)}`) })
+        InboundMessage.make({ text: TranscriptText.make(`CONFIRMAR LOTE ${"0".repeat(64)}`) }),
+        noDelivery
       );
       const transactionCountAfterAlteredConfirmation =
         yield* sql`SELECT count(*)::int AS count FROM transactions WHERE deleted_at IS NULL`;
@@ -2018,13 +2232,14 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       expect(altered.text).toContain("Este lote atómico requiere una sola confirmación");
       expect(transactionCountAfterAlteredConfirmation[0]?.count).toBe(0);
 
-      const completed = yield* service.handleSynchronousTurn(
+      const completed = yield* service.handleMessage(
         defaultUserId,
-        InboundMessage.make({ text: TranscriptText.make(correctedCommand) })
+        InboundMessage.make({ text: TranscriptText.make(correctedCommand) }),
+        noDelivery
       );
       const createdTransactions =
         yield* sql`SELECT counterparty FROM transactions WHERE deleted_at IS NULL ORDER BY occurred_at`;
-      const transcript = yield* listTranscriptEntries(defaultUserId);
+      const transcript = yield* selectTranscriptEntries(defaultUserId);
       const batchResult = Option.getOrThrow(succeededAtomicBatchResult(transcript));
 
       expect(completed.text).toBe("El lote quedó aplicado por completo.");
@@ -2045,13 +2260,15 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
         },
       });
 
-      const replayed = yield* service.handleSynchronousTurn(
+      const replayed = yield* service.handleMessage(
         defaultUserId,
-        InboundMessage.make({ text: TranscriptText.make(correctedCommand) })
+        InboundMessage.make({ text: TranscriptText.make(correctedCommand) }),
+        noDelivery
       );
-      const replayedAgain = yield* service.handleSynchronousTurn(
+      const replayedAgain = yield* service.handleMessage(
         defaultUserId,
-        InboundMessage.make({ text: TranscriptText.make(correctedCommand) })
+        InboundMessage.make({ text: TranscriptText.make(correctedCommand) }),
+        noDelivery
       );
       const afterReplay =
         yield* sql`SELECT count(*)::int AS count FROM transactions WHERE deleted_at IS NULL`;
@@ -2070,15 +2287,17 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       yield* clearTranscript;
       const service = yield* AgentService;
 
-      const challenge = yield* service.handleSynchronousTurn(
+      const challenge = yield* service.handleMessage(
         defaultUserId,
-        InboundMessage.make({ text: TranscriptText.make("LOTE_ATOMICO_ENTRADA_ALTERADA") })
+        InboundMessage.make({ text: TranscriptText.make("LOTE_ATOMICO_ENTRADA_ALTERADA") }),
+        noDelivery
       );
-      const rejected = yield* service.handleSynchronousTurn(
+      const rejected = yield* service.handleMessage(
         defaultUserId,
         InboundMessage.make({
           text: TranscriptText.make(batchConfirmationCommand(challenge.text)),
-        })
+        }),
+        noDelivery
       );
       const rows =
         yield* sql`SELECT count(*)::int AS count FROM transactions WHERE deleted_at IS NULL`;
@@ -2108,19 +2327,22 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
         scopes: ["read"],
       });
 
-      const userAChallenge = yield* service.handleSynchronousTurn(
+      const userAChallenge = yield* service.handleMessage(
         defaultUserId,
-        InboundMessage.make({ text: TranscriptText.make("LOTE_ATOMICO_CROSS_USER") })
+        InboundMessage.make({ text: TranscriptText.make("LOTE_ATOMICO_CROSS_USER") }),
+        noDelivery
       );
-      const userBChallenge = yield* service.handleSynchronousTurn(
+      const userBChallenge = yield* service.handleMessage(
         userB,
-        InboundMessage.make({ text: TranscriptText.make("LOTE_ATOMICO_CROSS_USER") })
+        InboundMessage.make({ text: TranscriptText.make("LOTE_ATOMICO_CROSS_USER") }),
+        noDelivery
       );
-      const rejected = yield* service.handleSynchronousTurn(
+      const rejected = yield* service.handleMessage(
         userB,
         InboundMessage.make({
           text: TranscriptText.make(batchConfirmationCommand(userAChallenge.text)),
-        })
+        }),
+        noDelivery
       );
       const rows = yield* sql`SELECT count(*)::int AS count FROM transactions`;
       const consumptions = yield* sql`
@@ -2145,20 +2367,23 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       yield* clearTranscript;
       const service = yield* AgentService;
 
-      const challenge = yield* service.handleSynchronousTurn(
+      const challenge = yield* service.handleMessage(
         defaultUserId,
-        InboundMessage.make({ text: TranscriptText.make("LOTE_ATOMICO_EXITO") })
+        InboundMessage.make({ text: TranscriptText.make("LOTE_ATOMICO_EXITO") }),
+        noDelivery
       );
       const command = batchConfirmationCommand(challenge.text);
       const replies = yield* Effect.all(
         [
-          service.handleSynchronousTurn(
+          service.handleMessage(
             defaultUserId,
-            InboundMessage.make({ text: TranscriptText.make(command) })
+            InboundMessage.make({ text: TranscriptText.make(command) }),
+            noDelivery
           ),
-          service.handleSynchronousTurn(
+          service.handleMessage(
             defaultUserId,
-            InboundMessage.make({ text: TranscriptText.make(command) })
+            InboundMessage.make({ text: TranscriptText.make(command) }),
+            noDelivery
           ),
         ],
         { concurrency: "unbounded" }
@@ -2185,17 +2410,19 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       const manualClock = makeManualClock();
 
       const challenge = yield* service
-        .handleSynchronousTurn(
+        .handleMessage(
           defaultUserId,
-          InboundMessage.make({ text: TranscriptText.make("LOTE_ATOMICO_EXPIRA") })
+          InboundMessage.make({ text: TranscriptText.make("LOTE_ATOMICO_EXPIRA") }),
+          noDelivery
         )
         .pipe(Effect.provideService(Clock.Clock, manualClock.clock));
       const command = batchConfirmationCommand(challenge.text);
       yield* manualClock.advance(Duration.toMillis("11 minutes"));
       const expired = yield* service
-        .handleSynchronousTurn(
+        .handleMessage(
           defaultUserId,
-          InboundMessage.make({ text: TranscriptText.make(command) })
+          InboundMessage.make({ text: TranscriptText.make(command) }),
+          noDelivery
         )
         .pipe(Effect.provideService(Clock.Clock, manualClock.clock));
       const rows =
@@ -2213,13 +2440,15 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       const client = yield* ApiHarnessClient;
       yield* sql`TRUNCATE source_attestations, transactions, keyword_rules`;
       yield* clearTranscript;
-      yield* service.handleSynchronousTurn(
+      yield* service.handleMessage(
         defaultUserId,
-        InboundMessage.make({ text: TranscriptText.make("almuerzo 25 mil") })
+        InboundMessage.make({ text: TranscriptText.make("almuerzo 25 mil") }),
+        noDelivery
       );
-      yield* service.handleSynchronousTurn(
+      yield* service.handleMessage(
         defaultUserId,
-        InboundMessage.make({ text: TranscriptText.make("registra papelería 25 usd") })
+        InboundMessage.make({ text: TranscriptText.make("registra papelería 25 usd") }),
+        noDelivery
       );
       const seeded = yield* client.transactions.listTransactions({ query: {} });
       const [first, second] = seeded.data;
@@ -2227,11 +2456,12 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       yield* clearTranscript;
       yield* resetModelPrompts;
 
-      const reply = yield* service.handleSynchronousTurn(
+      const reply = yield* service.handleMessage(
         defaultUserId,
         InboundMessage.make({
           text: TranscriptText.make(`LOTE_MUTACIONES_INDEPENDIENTES ${first.id} ${second.id}`),
-        })
+        }),
+        noDelivery
       );
       const remaining = yield* client.transactions.listTransactions({ query: {} });
       const prompts = yield* readModelPrompts;
@@ -2250,9 +2480,10 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       yield* clearTranscript;
       const service = yield* AgentService;
 
-      const reply = yield* service.handleSynchronousTurn(
+      const reply = yield* service.handleMessage(
         defaultUserId,
-        InboundMessage.make({ text: TranscriptText.make("LOTE_RESPUESTA_MALFORMADA") })
+        InboundMessage.make({ text: TranscriptText.make("LOTE_RESPUESTA_MALFORMADA") }),
+        noDelivery
       );
       const rows =
         yield* sql`SELECT count(*)::int AS count FROM transactions WHERE deleted_at IS NULL`;
@@ -2269,14 +2500,16 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       yield* clearTranscript;
       const service = yield* AgentService;
 
-      const challenge = yield* service.handleSynchronousTurn(
+      const challenge = yield* service.handleMessage(
         defaultUserId,
-        InboundMessage.make({ text: TranscriptText.make("LOTE_ATOMICO_FALLA") })
+        InboundMessage.make({ text: TranscriptText.make("LOTE_ATOMICO_FALLA") }),
+        noDelivery
       );
       const command = batchConfirmationCommand(challenge.text);
-      const failed = yield* service.handleSynchronousTurn(
+      const failed = yield* service.handleMessage(
         defaultUserId,
-        InboundMessage.make({ text: TranscriptText.make(command) })
+        InboundMessage.make({ text: TranscriptText.make(command) }),
+        noDelivery
       );
       const rows =
         yield* sql`SELECT count(*)::int AS count FROM transactions WHERE deleted_at IS NULL`;
@@ -2284,9 +2517,10 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       expect(failed.text).toContain("segunda operación no encontró la Transaction");
       expect(rows[0]?.count).toBe(0);
 
-      const replayed = yield* service.handleSynchronousTurn(
+      const replayed = yield* service.handleMessage(
         defaultUserId,
-        InboundMessage.make({ text: TranscriptText.make(command) })
+        InboundMessage.make({ text: TranscriptText.make(command) }),
+        noDelivery
       );
       const afterReplay =
         yield* sql`SELECT count(*)::int AS count FROM transactions WHERE deleted_at IS NULL`;
@@ -2299,19 +2533,87 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
     Effect.gen(function* () {
       yield* clearTranscript;
       const firstService = yield* AgentService;
-      const firstReply = yield* firstService.handleSynchronousTurn(
+      const firstReply = yield* firstService.handleMessage(
         defaultUserId,
-        InboundMessage.make({ text: TranscriptText.make("Primer mensaje") })
+        InboundMessage.make({ text: TranscriptText.make("Primer mensaje") }),
+        noDelivery
       );
 
       const secondService = yield* AgentService;
-      const secondReply = yield* secondService.handleSynchronousTurn(
+      const secondReply = yield* secondService.handleMessage(
         defaultUserId,
-        InboundMessage.make({ text: TranscriptText.make("¿Qué dije antes?") })
+        InboundMessage.make({ text: TranscriptText.make("¿Qué dije antes?") }),
+        noDelivery
       );
 
       expect(firstReply.text).toBe("Primera respuesta");
       expect(secondReply.text).toBe("Sí, recuerdo el turno anterior.");
+    })
+  );
+
+  it.effect("excludes a closed session's Transcript from the next session's context", () =>
+    Effect.gen(function* () {
+      const sql = yield* MigrationSqlClient;
+      yield* clearTranscript;
+      yield* sql`DELETE FROM hosted_agent_sessions WHERE user_id = ${defaultUserId}`;
+      const service = yield* AgentService;
+      const first = yield* service.handleMessage(
+        defaultUserId,
+        InboundMessage.make({ text: TranscriptText.make("Primer mensaje") }),
+        noDelivery
+      );
+      // Idling the first session out is what makes the next message open a second one.
+      yield* sql`
+        UPDATE hosted_agent_sessions
+        SET started_at = started_at - interval '20 minutes',
+          last_terminal_turn_at = last_terminal_turn_at - interval '20 minutes'
+        WHERE user_id = ${defaultUserId}
+      `;
+      // A CompactedConversation belongs to the session that produced it, so the boundary has to
+      // exclude it on the same terms as the exact Transcript.
+      yield* sql`
+        INSERT INTO compacted_conversations
+          (user_id, session_id, text, through_sequence, revision, updated_at)
+        SELECT ${defaultUserId}, id, 'RESUMEN_SESION_ANTERIOR', 0, 1, now()
+        FROM hosted_agent_sessions WHERE user_id = ${defaultUserId}
+      `;
+      // Memories are User-owned, not session-owned: the boundary must keep carrying them.
+      yield* sql`
+        INSERT INTO memories (user_id, id, text, created_at, updated_at)
+        VALUES (
+          ${defaultUserId}, '01a01ccd-0000-4000-8000-0000000000fe',
+          'MEMORIA_PERSISTENTE', now(), now()
+        )
+        ON CONFLICT (user_id, id) DO UPDATE SET text = excluded.text
+      `;
+      yield* resetModelPrompts;
+
+      const second = yield* service.handleMessage(
+        defaultUserId,
+        InboundMessage.make({ text: TranscriptText.make("¿Qué dije antes?") }),
+        noDelivery
+      );
+      const sessions = yield* sql`
+        SELECT count(*)::int AS count FROM hosted_agent_sessions WHERE user_id = ${defaultUserId}
+      `;
+      const retained = yield* Schema.encodeEffect(Schema.UnknownFromJsonString)(
+        yield* selectTranscriptEntries(defaultUserId)
+      );
+      const [secondPrompt] = yield* modelAttemptPrompts("¿Qué dije antes?");
+      assert.ok(secondPrompt !== undefined);
+
+      expect(first.text).toBe("Primera respuesta");
+      expect(sessions).toEqual([{ count: 2 }]);
+      // The Transcript still holds the first Turn, so the exclusion is the session boundary rather
+      // than missing history.
+      expect(retained).toContain("Primer mensaje");
+      // Asserting on the prompt, not the reply: the reply only shows what the model chose to say.
+      expect(secondPrompt).not.toContain("Primer mensaje");
+      expect(secondPrompt).not.toContain("Primera respuesta");
+      expect(secondPrompt).not.toContain("RESUMEN_SESION_ANTERIOR");
+      expect(secondPrompt).toContain("MEMORIA_PERSISTENTE");
+      expect(secondPrompt).toContain("America/Bogota");
+      expect(second.text).toBe("Primera respuesta");
     })
   );
 
@@ -2323,16 +2625,18 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
         yield* resetModelPrompts;
         const service = yield* AgentService;
 
-        const activeReply = yield* service.handleSynchronousTurn(
+        const activeReply = yield* service.handleMessage(
           defaultUserId,
-          InboundMessage.make({ text: TranscriptText.make("CONTEXT_ACTIVE_TURN") })
+          InboundMessage.make({ text: TranscriptText.make("CONTEXT_ACTIVE_TURN") }),
+          noDelivery
         );
-        const activeTranscript = yield* listTranscriptEntries(defaultUserId);
+        const activeTranscript = yield* selectTranscriptEntries(defaultUserId);
 
         yield* resetModelPrompts;
-        const laterReply = yield* service.handleSynchronousTurn(
+        const laterReply = yield* service.handleMessage(
           defaultUserId,
-          InboundMessage.make({ text: TranscriptText.make("CONTEXT_LATER_TURN") })
+          InboundMessage.make({ text: TranscriptText.make("CONTEXT_LATER_TURN") }),
+          noDelivery
         );
         const laterPrompts = yield* readModelPrompts;
 
@@ -2369,19 +2673,21 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
         scopes: ["read"],
       });
 
-      yield* service.handleSynchronousTurn(
+      yield* service.handleMessage(
         userA,
-        InboundMessage.make({ text: TranscriptText.make("A_PRIVATE_TRANSCRIPT_MARKER") })
+        InboundMessage.make({ text: TranscriptText.make("A_PRIVATE_TRANSCRIPT_MARKER") }),
+        noDelivery
       );
-      const userABefore = yield* listTranscriptEntries(userA);
+      const userABefore = yield* selectTranscriptEntries(userA);
       yield* resetModelPrompts;
 
-      const reply = yield* service.handleSynchronousTurn(
+      const reply = yield* service.handleMessage(
         userB,
-        InboundMessage.make({ text: TranscriptText.make("registra aislamientob 25 cop") })
+        InboundMessage.make({ text: TranscriptText.make("registra aislamientob 25 cop") }),
+        noDelivery
       );
-      const userAAfter = yield* listTranscriptEntries(userA);
-      const userBTranscript = yield* listTranscriptEntries(userB);
+      const userAAfter = yield* selectTranscriptEntries(userA);
+      const userBTranscript = yield* selectTranscriptEntries(userB);
       const userAAudit = yield* observeAuditLogEntries(userA);
       const userBAudit = yield* observeAuditLogEntries(userB);
       const ownedTransactions = yield* sql`
@@ -2460,11 +2766,12 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
 
         for (const text of sensitiveMessages) {
           yield* clearTranscript;
-          const reply = yield* service.handleSynchronousTurn(
+          const reply = yield* service.handleMessage(
             defaultUserId,
-            InboundMessage.make({ text: TranscriptText.make(text) })
+            InboundMessage.make({ text: TranscriptText.make(text) }),
+            noDelivery
           );
-          const transcript = yield* listTranscriptEntries(defaultUserId);
+          const transcript = yield* selectTranscriptEntries(defaultUserId);
           const audit = yield* observeAuditLogEntries(defaultUserId);
 
           expect(reply.text).toContain("no fue guardado ni procesado");
@@ -2479,11 +2786,12 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       yield* clearTranscript;
       const service = yield* AgentService;
 
-      const reply = yield* service.handleSynchronousTurn(
+      const reply = yield* service.handleMessage(
         defaultUserId,
-        InboundMessage.make({ text: TranscriptText.make("Expón token") })
+        InboundMessage.make({ text: TranscriptText.make("Expón token") }),
+        noDelivery
       );
-      const transcript = yield* listTranscriptEntries(defaultUserId);
+      const transcript = yield* selectTranscriptEntries(defaultUserId);
       const serialized = yield* Schema.encodeEffect(Schema.UnknownFromJsonString)(transcript);
 
       expect(reply.text).not.toContain("fin_deadbeef_");
@@ -2497,19 +2805,21 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       yield* sql`TRUNCATE source_attestations, transactions, keyword_rules`;
       yield* clearTranscript;
       const service = yield* AgentService;
-      yield* service.handleSynchronousTurn(
+      yield* service.handleMessage(
         defaultUserId,
-        InboundMessage.make({ text: TranscriptText.make("almuerzo 25 mil") })
+        InboundMessage.make({ text: TranscriptText.make("almuerzo 25 mil") }),
+        noDelivery
       );
       yield* sql`UPDATE transactions SET notes = 'fin_deadbeef_abcdefghijklmnopqrstuvwxyzABCDEF'`;
       yield* clearTranscript;
       yield* resetModelPrompts;
 
-      const reply = yield* service.handleSynchronousTurn(
+      const reply = yield* service.handleMessage(
         defaultUserId,
-        InboundMessage.make({ text: TranscriptText.make("Lista movimientos secretos") })
+        InboundMessage.make({ text: TranscriptText.make("Lista movimientos secretos") }),
+        noDelivery
       );
-      const transcript = yield* listTranscriptEntries(defaultUserId);
+      const transcript = yield* selectTranscriptEntries(defaultUserId);
       const modelPrompts = yield* readModelPrompts;
 
       expect(reply.text).toBe("Resultado protegido.");
@@ -2534,9 +2844,10 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       const service = yield* AgentService;
       const client = yield* ApiHarnessClient;
 
-      const reply = yield* service.handleSynchronousTurn(
+      const reply = yield* service.handleMessage(
         defaultUserId,
-        InboundMessage.make({ text: TranscriptText.make("helado 9 mil") })
+        InboundMessage.make({ text: TranscriptText.make("helado 9 mil") }),
+        noDelivery
       );
       const history = yield* client.transactions.listTransactions({ query: {} });
 
@@ -2556,11 +2867,12 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       yield* sql`DELETE FROM audit_log_entries WHERE user_id = ${defaultUserId}`;
       const service = yield* AgentService;
 
-      const reply = yield* service.handleSynchronousTurn(
+      const reply = yield* service.handleMessage(
         defaultUserId,
         InboundMessage.make({
           text: TranscriptText.make("debería registrar almuerzo 25 mil"),
-        })
+        }),
+        noDelivery
       );
       const rows = yield* sql`SELECT count(*)::int AS count FROM transactions`;
       const audit = yield* observeAuditLogEntries(defaultUserId);
@@ -2573,6 +2885,38 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
     })
   );
 
+  it.effect("attributes hosted canonical evidence to the admitted Hosted Agent Session", () =>
+    Effect.gen(function* () {
+      const sql = yield* MigrationSqlClient;
+      yield* clearTranscript;
+      yield* sql`DELETE FROM audit_log_entries WHERE user_id = ${defaultUserId}`;
+      yield* sql`DELETE FROM hosted_agent_sessions WHERE user_id = ${defaultUserId}`;
+      const service = yield* AgentService;
+
+      yield* service.handleMessage(
+        defaultUserId,
+        InboundMessage.make({ text: TranscriptText.make("Lista las categorías") }),
+        noDelivery
+      );
+      const [admitted] = yield* Schema.decodeUnknownEffect(SingleSessionRow)(
+        yield* sql`SELECT id FROM hosted_agent_sessions WHERE user_id = ${defaultUserId}`
+      );
+      const audit = yield* observeAuditLogEntries(defaultUserId);
+
+      // No PAT exists in a hosted Turn, so evidence that named one would be attributing a User's
+      // own credential to work the host did on their behalf.
+      expect(
+        audit.map(({ operation, outcome, caller }) => ({ operation, outcome, caller }))
+      ).toEqual([
+        {
+          operation: "categories.listCategories",
+          outcome: "succeeded",
+          caller: { _tag: "HostedAgentSession", hostedAgentSessionId: admitted.id },
+        },
+      ]);
+    })
+  );
+
   it.effect("executes a transaction capture without asking for confirmation", () =>
     Effect.gen(function* () {
       const sql = yield* MigrationSqlClient;
@@ -2580,9 +2924,10 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       yield* clearTranscript;
       const service = yield* AgentService;
 
-      const reply = yield* service.handleSynchronousTurn(
+      const reply = yield* service.handleMessage(
         defaultUserId,
-        InboundMessage.make({ text: TranscriptText.make("captura sin confirmación 25 mil") })
+        InboundMessage.make({ text: TranscriptText.make("captura sin confirmación 25 mil") }),
+        noDelivery
       );
       const rows = yield* sql`SELECT count(*)::int AS count FROM transactions`;
 
@@ -2598,9 +2943,10 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       yield* clearTranscript;
       const service = yield* AgentService;
 
-      const reply = yield* service.handleSynchronousTurn(
+      const reply = yield* service.handleMessage(
         defaultUserId,
-        InboundMessage.make({ text: TranscriptText.make("Guarda una memoria sintética") })
+        InboundMessage.make({ text: TranscriptText.make("Guarda una memoria sintética") }),
+        noDelivery
       );
       const rows = yield* sql`SELECT text FROM memories WHERE user_id = ${defaultUserId}`;
 
@@ -2640,13 +2986,14 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
           VALUES (${defaultUserId}, ${testCase.id}, ${testCase.before}, now(), now())
         `;
 
-        const challenge = yield* service.handleSynchronousTurn(
+        const challenge = yield* service.handleMessage(
           defaultUserId,
           InboundMessage.make({
             text: TranscriptText.make(`${testCase.prompt} ${testCase.id}`),
-          })
+          }),
+          noDelivery
         );
-        const command = /Responde exactamente: (CONFIRMAR [^\n]+)/u.exec(challenge.text)?.[1];
+        const command = confirmationCommand(challenge.text);
         expect(command).toMatch(
           new RegExp(`^CONFIRMAR ${testCase.operation.replace(".", "\\.")} [0-9a-f]{64}$`, "u")
         );
@@ -2654,31 +3001,32 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
           { text: testCase.before },
         ]);
 
-        const altered = yield* service.handleSynchronousTurn(
+        const altered = yield* service.handleMessage(
           defaultUserId,
           InboundMessage.make({
-            text: TranscriptText.make(`${command ?? "confirmación ausente"}x`),
-          })
+            text: TranscriptText.make(`${command}x`),
+          }),
+          noDelivery
         );
         expect(altered.text).toContain(`Operación exacta: ${testCase.operation}`);
         expect(yield* sql`SELECT text FROM memories WHERE id = ${testCase.id}`).toEqual([
           { text: testCase.before },
         ]);
-        const correctedCommand = /Responde exactamente: (CONFIRMAR [^\n]+)/u.exec(
-          altered.text
-        )?.[1];
+        const correctedCommand = confirmationCommand(altered.text);
 
-        yield* service.handleSynchronousTurn(
+        yield* service.handleMessage(
           defaultUserId,
           InboundMessage.make({
-            text: TranscriptText.make(correctedCommand ?? "confirmación ausente"),
-          })
+            text: TranscriptText.make(correctedCommand),
+          }),
+          noDelivery
         );
-        yield* service.handleSynchronousTurn(
+        yield* service.handleMessage(
           defaultUserId,
           InboundMessage.make({
-            text: TranscriptText.make(correctedCommand ?? "confirmación ausente"),
-          })
+            text: TranscriptText.make(correctedCommand),
+          }),
+          noDelivery
         );
         const rows = yield* sql`SELECT text FROM memories WHERE id = ${testCase.id}`;
         const audit = (yield* observeAuditLogEntries(defaultUserId)).filter(
@@ -2686,7 +3034,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
         );
 
         expect(rows).toEqual(testCase.after === undefined ? [] : [{ text: testCase.after }]);
-        expect(audit).toHaveLength(1);
+        expect(succeededOnly(auditOutcomes(audit))).toEqual([`${testCase.operation}:succeeded`]);
       }
     })
   );
@@ -2699,11 +3047,12 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       yield* sql`DELETE FROM audit_log_entries WHERE user_id = ${defaultUserId}`;
       const service = yield* AgentService;
 
-      const reply = yield* service.handleSynchronousTurn(
+      const reply = yield* service.handleMessage(
         defaultUserId,
-        InboundMessage.make({ text: TranscriptText.make("anota almuerzo 25 mil") })
+        InboundMessage.make({ text: TranscriptText.make("anota almuerzo 25 mil") }),
+        noDelivery
       );
-      const transcript = yield* listTranscriptEntries(defaultUserId);
+      const transcript = yield* selectTranscriptEntries(defaultUserId);
       const audit = yield* observeAuditLogEntries(defaultUserId);
       const injectedRead = transcript.find(
         (entry) =>
@@ -2754,6 +3103,11 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
   it.effect("does not process a finance request during an accepted onboarding conversation", () =>
     Effect.gen(function* () {
       const sql = yield* MigrationSqlClient;
+      yield* sql`
+        DELETE FROM hosted_agent_sessions WHERE user_id IN (
+          SELECT user_id FROM whatsapp_identities WHERE phone_number = ${acceptedOnboardingPhone}
+        )
+      `;
       yield* sql`
         DELETE FROM consent_records WHERE subject_user_id IN (
           SELECT user_id FROM whatsapp_identities WHERE phone_number = ${acceptedOnboardingPhone}
@@ -2817,13 +3171,15 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
         yield* runAgentRepl(replCaller(defaultWhatsAppPhone)).pipe(
           Effect.provideService(Terminal.Terminal, terminal)
         );
-        yield* service.handleSynchronousTurn(
+        yield* service.handleMessage(
           defaultUserId,
-          InboundMessage.make({ text: TranscriptText.make("almuerzo 25 usd") })
+          InboundMessage.make({ text: TranscriptText.make("almuerzo 25 usd") }),
+          noDelivery
         );
-        yield* service.handleSynchronousTurn(
+        yield* service.handleMessage(
           defaultUserId,
-          InboundMessage.make({ text: TranscriptText.make("registra papelería 25 usd") })
+          InboundMessage.make({ text: TranscriptText.make("registra papelería 25 usd") }),
+          noDelivery
         );
         const history = yield* client.transactions.listTransactions({ query: {} });
         const cop = history.data.find((transaction) => transaction.money.currency === "COP");
@@ -2864,9 +3220,10 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       const service = yield* AgentService;
       yield* sql`TRUNCATE source_attestations, transactions, keyword_rules`;
       yield* clearTranscript;
-      yield* service.handleSynchronousTurn(
+      yield* service.handleMessage(
         defaultUserId,
-        InboundMessage.make({ text: TranscriptText.make("almuerzo 25 mil") })
+        InboundMessage.make({ text: TranscriptText.make("almuerzo 25 mil") }),
+        noDelivery
       );
       yield* sql`
         INSERT INTO transactions (
@@ -2884,12 +3241,13 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
 
       const limits = agentLimits({ maxToolResultCharacters: 1_000 });
       const reply = yield* service
-        .handleSynchronousTurn(
+        .handleMessage(
           defaultUserId,
-          InboundMessage.make({ text: TranscriptText.make("Lista historial acotado") })
+          InboundMessage.make({ text: TranscriptText.make("Lista historial acotado") }),
+          noDelivery
         )
         .pipe(Effect.provideService(CurrentAgentLimits, limits));
-      const transcript = yield* listTranscriptEntries(defaultUserId);
+      const transcript = yield* selectTranscriptEntries(defaultUserId);
       const result = transcript.find((entry) => entry._tag === "CanonicalToolResultEntry");
       const BoundedHistory = Schema.Struct({ data: Schema.Array(Schema.Unknown) });
       const retained = yield* Schema.encodeEffect(Schema.UnknownFromJsonString)(transcript);
@@ -2934,11 +3292,12 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       const service = yield* AgentService;
       const auditBefore = yield* observeAuditLogEntries(defaultUserId);
 
-      const reply = yield* service.handleSynchronousTurn(
+      const reply = yield* service.handleMessage(
         defaultUserId,
-        InboundMessage.make({ text: TranscriptText.make("Provoca entrada malformada") })
+        InboundMessage.make({ text: TranscriptText.make("Provoca entrada malformada") }),
+        noDelivery
       );
-      const transcript = yield* listTranscriptEntries(defaultUserId);
+      const transcript = yield* selectTranscriptEntries(defaultUserId);
 
       expect(reply.text).toBe("Corregí los argumentos malformados.");
       expect(transcript.map((entry) => entry._tag)).toEqual([
@@ -2954,9 +3313,10 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       yield* clearTranscript;
       const service = yield* AgentService;
 
-      const reply = yield* service.handleSynchronousTurn(
+      const reply = yield* service.handleMessage(
         defaultUserId,
-        InboundMessage.make({ text: TranscriptText.make("Provoca herramienta desconocida") })
+        InboundMessage.make({ text: TranscriptText.make("Provoca herramienta desconocida") }),
+        noDelivery
       );
 
       expect(reply.text).toBe("Corregí la herramienta desconocida.");
@@ -2968,11 +3328,12 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       yield* clearTranscript;
       const service = yield* AgentService;
 
-      const reply = yield* service.handleSynchronousTurn(
+      const reply = yield* service.handleMessage(
         defaultUserId,
-        InboundMessage.make({ text: TranscriptText.make("Provoca entrada sensible en Memoria") })
+        InboundMessage.make({ text: TranscriptText.make("Provoca entrada sensible en Memoria") }),
+        noDelivery
       );
-      const transcript = yield* listTranscriptEntries(defaultUserId);
+      const transcript = yield* selectTranscriptEntries(defaultUserId);
 
       expect(reply.text).toBe(
         "No pude completar la solicitud dentro del límite seguro de operaciones. Intenta de nuevo."
@@ -2988,14 +3349,15 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       const service = yield* AgentService;
 
       const exit = yield* Effect.exit(
-        service.handleSynchronousTurn(
+        service.handleMessage(
           defaultUserId,
           InboundMessage.make({
             text: TranscriptText.make("Provoca entrada sensible en mutación válida"),
-          })
+          }),
+          noDelivery
         )
       );
-      const transcript = yield* listTranscriptEntries(defaultUserId);
+      const transcript = yield* selectTranscriptEntries(defaultUserId);
 
       expect(Exit.isFailure(exit)).toBe(true);
       expect(transcript.map((entry) => entry._tag)).toEqual([
@@ -3011,14 +3373,15 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       const service = yield* AgentService;
 
       const exit = yield* Effect.exit(
-        service.handleSynchronousTurn(
+        service.handleMessage(
           defaultUserId,
           InboundMessage.make({
             text: TranscriptText.make("Provoca entrada sensible en herramienta"),
-          })
+          }),
+          noDelivery
         )
       );
-      const transcript = yield* listTranscriptEntries(defaultUserId);
+      const transcript = yield* selectTranscriptEntries(defaultUserId);
 
       expect(Exit.isSuccess(exit)).toBe(true);
       expect(transcript.map((entry) => entry._tag)).toEqual([
@@ -3034,12 +3397,13 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       const service = yield* AgentService;
 
       const exit = yield* service
-        .handleSynchronousTurn(
+        .handleMessage(
           defaultUserId,
-          InboundMessage.make({ text: TranscriptText.make("Provoca salida sensible") })
+          InboundMessage.make({ text: TranscriptText.make("Provoca salida sensible") }),
+          noDelivery
         )
         .pipe(Effect.exit);
-      const transcript = yield* listTranscriptEntries(defaultUserId);
+      const transcript = yield* selectTranscriptEntries(defaultUserId);
 
       expect(Exit.isSuccess(exit)).toBe(true);
       if (Exit.isSuccess(exit)) {
@@ -3063,13 +3427,14 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       yield* clearTranscript;
       const service = yield* AgentService;
 
-      const reply = yield* service.handleSynchronousTurn(
+      const reply = yield* service.handleMessage(
         defaultUserId,
         InboundMessage.make({
           text: TranscriptText.make("Almuerzo 25000 2099-07-20T17:30:00Z"),
-        })
+        }),
+        noDelivery
       );
-      const transcript = yield* listTranscriptEntries(defaultUserId);
+      const transcript = yield* selectTranscriptEntries(defaultUserId);
 
       expect(reply.text).toBe("Corregí la solicitud inválida.");
       const result = transcript.find((entry) => entry._tag === "CanonicalToolResultEntry");
@@ -3093,15 +3458,16 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       yield* clearTranscript;
       const service = yield* AgentService;
 
-      const reply = yield* service.handleSynchronousTurn(
+      const reply = yield* service.handleMessage(
         defaultUserId,
         InboundMessage.make({
           text: TranscriptText.make(
             "Busca la transacción inexistente f1d1a000-0000-4000-8000-00000000dead"
           ),
-        })
+        }),
+        noDelivery
       );
-      const transcript = yield* listTranscriptEntries(defaultUserId);
+      const transcript = yield* selectTranscriptEntries(defaultUserId);
       const result = transcript.find((entry) => entry._tag === "CanonicalToolResultEntry");
 
       expect(reply.text).toBe("No encontré esa transacción.");
@@ -3119,9 +3485,10 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       const client = yield* ApiHarnessClient;
       yield* sql`TRUNCATE source_attestations, transactions, keyword_rules`;
       yield* clearTranscript;
-      yield* service.handleSynchronousTurn(
+      yield* service.handleMessage(
         defaultUserId,
-        InboundMessage.make({ text: TranscriptText.make("almuerzo 25 mil") })
+        InboundMessage.make({ text: TranscriptText.make("almuerzo 25 mil") }),
+        noDelivery
       );
       const history = yield* client.transactions.listTransactions({ query: {} });
       const transaction = history.data[0];
@@ -3129,13 +3496,14 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       yield* clearTranscript;
       yield* sql`DELETE FROM audit_log_entries WHERE user_id = ${defaultUserId}`;
 
-      const reply = yield* service.handleSynchronousTurn(
+      const reply = yield* service.handleMessage(
         defaultUserId,
         InboundMessage.make({
           text: TranscriptText.make(`Describe el movimiento ${transaction?.id}`),
-        })
+        }),
+        noDelivery
       );
-      const transcript = yield* listTranscriptEntries(defaultUserId);
+      const transcript = yield* selectTranscriptEntries(defaultUserId);
       const audit = yield* observeAuditLogEntries(defaultUserId);
 
       expect(reply.text).toBe("Este es el movimiento solicitado.");
@@ -3158,13 +3526,14 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
         const limits = agentLimits({ maxIterations: 4, maxToolCallsPerTurn: 2 });
 
         const reply = yield* service
-          .handleSynchronousTurn(
+          .handleMessage(
             defaultUserId,
-            InboundMessage.make({ text: TranscriptText.make("Prueba el presupuesto") })
+            InboundMessage.make({ text: TranscriptText.make("Prueba el presupuesto") }),
+            noDelivery
           )
           .pipe(Effect.provideService(CurrentAgentLimits, limits));
         const policies = yield* readModelToolPolicies;
-        const transcript = yield* listTranscriptEntries(defaultUserId);
+        const transcript = yield* selectTranscriptEntries(defaultUserId);
 
         expect(reply.text).toBe("Presupuesto finalizado.");
         expect(policies).toEqual([
@@ -3185,9 +3554,10 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       yield* sql`DELETE FROM audit_log_entries WHERE user_id = ${defaultUserId}`;
       const service = yield* AgentService;
 
-      const reply = yield* service.handleSynchronousTurn(
+      const reply = yield* service.handleMessage(
         defaultUserId,
-        InboundMessage.make({ text: TranscriptText.make("Desborda herramientas") })
+        InboundMessage.make({ text: TranscriptText.make("Desborda herramientas") }),
+        noDelivery
       );
       const audit = yield* observeAuditLogEntries(defaultUserId);
 
@@ -3203,12 +3573,13 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       const limits = agentLimits({ maxIterations: 2 });
 
       const reply = yield* service
-        .handleSynchronousTurn(
+        .handleMessage(
           defaultUserId,
-          InboundMessage.make({ text: TranscriptText.make("Prueba el límite") })
+          InboundMessage.make({ text: TranscriptText.make("Prueba el límite") }),
+          noDelivery
         )
         .pipe(Effect.provideService(CurrentAgentLimits, limits));
-      const transcript = yield* listTranscriptEntries(defaultUserId);
+      const transcript = yield* selectTranscriptEntries(defaultUserId);
 
       expect(reply.text).toContain("límite seguro");
       expect(transcript.filter((entry) => entry._tag === "CanonicalToolCallEntry")).toHaveLength(2);
@@ -3219,18 +3590,24 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
     Effect.gen(function* () {
       yield* clearTranscript;
       const service = yield* AgentService;
-      yield* service.handleSynchronousTurn(
+      yield* service.handleMessage(
         defaultUserId,
-        InboundMessage.make({ text: TranscriptText.make("MARCADOR_ANTIGUO") })
+        InboundMessage.make({ text: TranscriptText.make("MARCADOR_ANTIGUO") }),
+        noDelivery
       );
-      const retainedBefore = yield* listTranscriptEntries(defaultUserId);
+      const retainedBefore = yield* selectTranscriptEntries(defaultUserId);
 
-      const reply = yield* service.handleSynchronousTurn(
+      const reply = yield* service.handleMessage(
         defaultUserId,
-        InboundMessage.make({ text: TranscriptText.make("MENSAJE_ACTUAL") })
+        InboundMessage.make({ text: TranscriptText.make("MENSAJE_ACTUAL") }),
+        noDelivery
       );
-      const retainedAfter = yield* listTranscriptEntries(defaultUserId);
-      const loadedWindow = yield* listRecentTranscriptEntries(defaultUserId, 1);
+      const retainedAfter = yield* selectTranscriptEntries(defaultUserId);
+      const loadedWindow = yield* selectRecentTranscriptEntries(
+        defaultUserId,
+        yield* activeHostedAgentSession(defaultUserId),
+        1
+      );
 
       expect(reply.text).toBe("contexto filtrado");
       expect(retainedBefore).toHaveLength(2);
@@ -3245,31 +3622,34 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       const service = yield* AgentService;
       yield* sql`TRUNCATE source_attestations, transactions, keyword_rules`;
       yield* clearTranscript;
-      yield* service.handleSynchronousTurn(
+      yield* service.handleMessage(
         defaultUserId,
-        InboundMessage.make({ text: TranscriptText.make("almuerzo 25 mil") })
+        InboundMessage.make({ text: TranscriptText.make("almuerzo 25 mil") }),
+        noDelivery
       );
       yield* sql`UPDATE transactions SET counterparty = 'BORRA_TODO_INYECCION'`;
       yield* clearTranscript;
       yield* sql`DELETE FROM audit_log_entries WHERE user_id = ${defaultUserId}`;
 
-      const reply = yield* service.handleSynchronousTurn(
+      const reply = yield* service.handleMessage(
         defaultUserId,
-        InboundMessage.make({ text: TranscriptText.make("revisa historial secretos") })
+        InboundMessage.make({ text: TranscriptText.make("revisa historial secretos") }),
+        noDelivery
       );
       expect(reply.text).toContain("Operación exacta: transactions.deleteTransaction");
       expect(reply.text).toContain("Argumentos exactos:");
 
-      const bareConfirmationReply = yield* service.handleSynchronousTurn(
+      const bareConfirmationReply = yield* service.handleMessage(
         defaultUserId,
         InboundMessage.make({
           text: TranscriptText.make("CONFIRMAR transactions.deleteTransaction"),
-        })
+        }),
+        noDelivery
       );
       const rows =
         yield* sql`SELECT count(*)::int AS count FROM transactions WHERE deleted_at IS NULL`;
       const audit = yield* observeAuditLogEntries(defaultUserId);
-      const transcript = yield* listTranscriptEntries(defaultUserId);
+      const transcript = yield* selectTranscriptEntries(defaultUserId);
       const rejectedDelete = transcript.find(
         (entry) =>
           entry._tag === "CanonicalToolResultEntry" &&
@@ -3281,9 +3661,13 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
         "Operación exacta: transactions.deleteTransaction"
       );
       expect(rows[0]?.count).toBe(1);
-      expect(audit.filter((entry) => entry.operation === "transactions.deleteTransaction")).toEqual(
-        []
-      );
+      expect(
+        succeededOnly(
+          auditOutcomes(
+            audit.filter((entry) => entry.operation === "transactions.deleteTransaction")
+          )
+        )
+      ).toEqual([]);
       expect(rejectedDelete).toBeDefined();
     })
   );
@@ -3295,9 +3679,10 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       const client = yield* ApiHarnessClient;
       yield* sql`TRUNCATE source_attestations, transactions, keyword_rules`;
       yield* clearTranscript;
-      yield* service.handleSynchronousTurn(
+      yield* service.handleMessage(
         defaultUserId,
-        InboundMessage.make({ text: TranscriptText.make("almuerzo 25 mil") })
+        InboundMessage.make({ text: TranscriptText.make("almuerzo 25 mil") }),
+        noDelivery
       );
       const history = yield* client.transactions.listTransactions({ query: {} });
       const transaction = history.data[0];
@@ -3305,18 +3690,20 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       yield* clearTranscript;
       yield* sql`DELETE FROM audit_log_entries WHERE user_id = ${defaultUserId}`;
 
-      const challenge = yield* service.handleSynchronousTurn(
+      const challenge = yield* service.handleMessage(
         defaultUserId,
         InboundMessage.make({
           text: TranscriptText.make(`borra con lectura posterior ${transaction?.id}`),
-        })
+        }),
+        noDelivery
       );
-      const command = /Responde exactamente: (CONFIRMAR [^\n]+)/u.exec(challenge.text)?.[1];
+      const command = confirmationCommand(challenge.text);
       expect(command).toMatch(/^CONFIRMAR transactions\.deleteTransaction [0-9a-f]{64}$/u);
 
-      const confirmed = yield* service.handleSynchronousTurn(
+      const confirmed = yield* service.handleMessage(
         defaultUserId,
-        InboundMessage.make({ text: TranscriptText.make(command ?? "confirmación ausente") })
+        InboundMessage.make({ text: TranscriptText.make(command) }),
+        noDelivery
       );
       const rows =
         yield* sql`SELECT count(*)::int AS count FROM transactions WHERE deleted_at IS NULL`;
@@ -3324,7 +3711,63 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
 
       expect(confirmed.text).toBe("Listo, completé la operación solicitada.");
       expect(rows[0]?.count).toBe(0);
-      expect(audit.map(({ operation }) => operation)).toEqual(["transactions.deleteTransaction"]);
+      const deferredOutcomes = auditOutcomes(audit);
+      expect(succeededOnly(deferredOutcomes)).toEqual(["transactions.deleteTransaction:succeeded"]);
+      expect(rejectedOnly(deferredOutcomes)).toEqual([
+        "categories.listCategories:rejected",
+        "transactions.deleteTransaction:rejected",
+      ]);
+    })
+  );
+
+  it.effect("recovers a pending confirmation only inside the session that issued it", () =>
+    Effect.gen(function* () {
+      const sql = yield* MigrationSqlClient;
+      const service = yield* AgentService;
+      const client = yield* ApiHarnessClient;
+      yield* sql`TRUNCATE source_attestations, transactions, keyword_rules`;
+      yield* clearTranscript;
+      yield* service.handleMessage(
+        defaultUserId,
+        InboundMessage.make({ text: TranscriptText.make("almuerzo 25 mil") }),
+        noDelivery
+      );
+      const history = yield* client.transactions.listTransactions({ query: {} });
+      const transaction = history.data[0];
+      assert.ok(transaction !== undefined);
+
+      const challenge = yield* service.handleMessage(
+        defaultUserId,
+        InboundMessage.make({
+          text: TranscriptText.make(`borra con lectura posterior ${transaction.id}`),
+        }),
+        noDelivery
+      );
+      const command = confirmationCommand(challenge.text);
+      const issuingSession = yield* activeHostedAgentSession(defaultUserId);
+      const binding = agentOperationBindings.find(
+        (candidate) => candidate.operation === "transactions.deleteTransaction"
+      );
+      assert.ok(binding !== undefined);
+      const decideWithin = (
+        session: HostedAgentSessionId
+      ): Effect.Effect<string, never, Crypto.Crypto | SqlClient.SqlClient> =>
+        Effect.gen(function* () {
+          // Reading one session's own recent Transcript is what scopes a challenge to it.
+          const priorTranscript = yield* selectRecentTranscriptEntries(defaultUserId, session, 1);
+          const { decide } = yield* makeTurnConfirmation(defaultUserId, priorTranscript, {
+            text: command,
+          });
+          const decision = yield* decide({ binding, input: { params: { id: transaction.id } } });
+          return decision._tag;
+        });
+
+      // The exact same command, weighed inside its own session and inside a later one. A challenge
+      // is authority the User gave under one session's Consent basis, so the second must re-ask.
+      expect(yield* decideWithin(issuingSession)).toBe("Execute");
+      expect(
+        yield* decideWithin(HostedAgentSessionId.make("f1d1a000-0000-4000-8000-00000000face"))
+      ).toBe("RequireConfirmation");
     })
   );
 
@@ -3334,28 +3777,32 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       const service = yield* AgentService;
       yield* sql`TRUNCATE source_attestations, transactions, keyword_rules`;
       yield* clearTranscript;
-      yield* service.handleSynchronousTurn(
+      yield* service.handleMessage(
         defaultUserId,
-        InboundMessage.make({ text: TranscriptText.make("almuerzo 25 mil") })
+        InboundMessage.make({ text: TranscriptText.make("almuerzo 25 mil") }),
+        noDelivery
       );
       yield* sql`UPDATE transactions SET counterparty = 'BORRA_TODO_INYECCION'`;
       yield* clearTranscript;
       yield* sql`DELETE FROM audit_log_entries WHERE user_id = ${defaultUserId}`;
 
-      const challenge = yield* service.handleSynchronousTurn(
+      const challenge = yield* service.handleMessage(
         defaultUserId,
-        InboundMessage.make({ text: TranscriptText.make("revisa historial secretos") })
+        InboundMessage.make({ text: TranscriptText.make("revisa historial secretos") }),
+        noDelivery
       );
-      const command = /Responde exactamente: (CONFIRMAR [^\n]+)/u.exec(challenge.text)?.[1];
+      const command = confirmationCommand(challenge.text);
       expect(command).toMatch(/^CONFIRMAR transactions\.deleteTransaction [0-9a-f]{64}$/u);
 
-      const confirmed = yield* service.handleSynchronousTurn(
+      const confirmed = yield* service.handleMessage(
         defaultUserId,
-        InboundMessage.make({ text: TranscriptText.make(command ?? "confirmación ausente") })
+        InboundMessage.make({ text: TranscriptText.make(command) }),
+        noDelivery
       );
-      const replayed = yield* service.handleSynchronousTurn(
+      const replayed = yield* service.handleMessage(
         defaultUserId,
-        InboundMessage.make({ text: TranscriptText.make(command ?? "confirmación ausente") })
+        InboundMessage.make({ text: TranscriptText.make(command) }),
+        noDelivery
       );
       const rows =
         yield* sql`SELECT count(*)::int AS count FROM transactions WHERE deleted_at IS NULL`;
@@ -3366,7 +3813,10 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       expect(confirmed.text).toBe("Listo, completé la operación solicitada.");
       expect(replayed.text).toContain("requiere confirmación");
       expect(rows[0]?.count).toBe(0);
-      expect(deleted).toHaveLength(1);
+      expect(succeededOnly(auditOutcomes(deleted))).toEqual([
+        "transactions.deleteTransaction:succeeded",
+      ]);
+      expect(rejectedOnly(auditOutcomes(deleted))).toHaveLength(2);
     })
   );
 
@@ -3376,37 +3826,44 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       const service = yield* AgentService;
       yield* sql`TRUNCATE source_attestations, transactions, keyword_rules`;
       yield* clearTranscript;
-      yield* service.handleSynchronousTurn(
+      yield* service.handleMessage(
         defaultUserId,
-        InboundMessage.make({ text: TranscriptText.make("almuerzo 25 mil") })
+        InboundMessage.make({ text: TranscriptText.make("almuerzo 25 mil") }),
+        noDelivery
       );
       yield* sql`UPDATE transactions SET counterparty = 'BORRA_TODO_INYECCION'`;
       yield* clearTranscript;
       yield* sql`DELETE FROM audit_log_entries WHERE user_id = ${defaultUserId}`;
 
-      yield* service.handleSynchronousTurn(
+      yield* service.handleMessage(
         defaultUserId,
-        InboundMessage.make({ text: TranscriptText.make("revisa historial secretos") })
+        InboundMessage.make({ text: TranscriptText.make("revisa historial secretos") }),
+        noDelivery
       );
       yield* sql`
         DELETE FROM transcript_entries
         WHERE user_id = ${defaultUserId}
           AND entry->>'_tag' = 'AssistantTranscriptEntry'
       `;
-      yield* service.handleSynchronousTurn(
+      yield* service.handleMessage(
         defaultUserId,
         InboundMessage.make({
           text: TranscriptText.make("CONFIRMAR transactions.deleteTransaction"),
-        })
+        }),
+        noDelivery
       );
       const rows =
         yield* sql`SELECT count(*)::int AS count FROM transactions WHERE deleted_at IS NULL`;
       const audit = yield* observeAuditLogEntries(defaultUserId);
 
       expect(rows[0]?.count).toBe(1);
-      expect(audit.filter((entry) => entry.operation === "transactions.deleteTransaction")).toEqual(
-        []
-      );
+      expect(
+        succeededOnly(
+          auditOutcomes(
+            audit.filter((entry) => entry.operation === "transactions.deleteTransaction")
+          )
+        )
+      ).toEqual([]);
     })
   );
 
@@ -3415,12 +3872,13 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       yield* clearTranscript;
       const service = yield* AgentService;
 
-      const reply = yield* service.handleSynchronousTurn(
+      const reply = yield* service.handleMessage(
         defaultUserId,
-        InboundMessage.make({ text: TranscriptText.make("RETRY_AFTER_SUCCESS") })
+        InboundMessage.make({ text: TranscriptText.make("RETRY_AFTER_SUCCESS") }),
+        noDelivery
       );
       const attempts = yield* modelAttemptPrompts("RETRY_AFTER_SUCCESS");
-      const transcript = yield* listTranscriptEntries(defaultUserId);
+      const transcript = yield* selectTranscriptEntries(defaultUserId);
 
       expect(reply.text).toBe("Reintento completado.");
       expect(attempts).toHaveLength(2);
@@ -3438,9 +3896,10 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       const recorder = yield* EnvelopeRecorder;
       yield* recorder.clear;
       const replyFiber = yield* service
-        .handleSynchronousTurn(
+        .handleMessage(
           defaultUserId,
-          InboundMessage.make({ text: TranscriptText.make("RETRY_FALLBACK_SUCCESS") })
+          InboundMessage.make({ text: TranscriptText.make("RETRY_FALLBACK_SUCCESS") }),
+          noDelivery
         )
         .pipe(
           Effect.provideService(Clock.Clock, manualClock.clock),
@@ -3476,9 +3935,10 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       const service = yield* AgentService;
       const manualClock = makeManualClock();
       const replyFiber = yield* service
-        .handleSynchronousTurn(
+        .handleMessage(
           defaultUserId,
-          InboundMessage.make({ text: TranscriptText.make("RETRY_AFTER_FALLBACK_SUCCESS") })
+          InboundMessage.make({ text: TranscriptText.make("RETRY_AFTER_FALLBACK_SUCCESS") }),
+          noDelivery
         )
         .pipe(
           Effect.provideService(Clock.Clock, manualClock.clock),
@@ -3503,9 +3963,10 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       const service = yield* AgentService;
       const manualClock = makeManualClock();
       const replyFiber = yield* service
-        .handleSynchronousTurn(
+        .handleMessage(
           defaultUserId,
-          InboundMessage.make({ text: TranscriptText.make("RETRY_SHARED_DEADLINE") })
+          InboundMessage.make({ text: TranscriptText.make("RETRY_SHARED_DEADLINE") }),
+          noDelivery
         )
         .pipe(
           Effect.provideService(CurrentAgentLimits, agentLimits({ maxModelRoundMillis: 300 })),
@@ -3529,9 +3990,10 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       const service = yield* AgentService;
 
       const exit = yield* service
-        .handleSynchronousTurn(
+        .handleMessage(
           defaultUserId,
-          InboundMessage.make({ text: TranscriptText.make("RETRY_NON_RETRYABLE") })
+          InboundMessage.make({ text: TranscriptText.make("RETRY_NON_RETRYABLE") }),
+          noDelivery
         )
         .pipe(Effect.exit);
       const attempts = yield* modelAttemptPrompts("RETRY_NON_RETRYABLE");
@@ -3552,7 +4014,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
         )
       );
       expect(attempts).toHaveLength(1);
-      const terminal = (yield* listTranscriptEntries(defaultUserId)).at(-1);
+      const terminal = (yield* selectTranscriptEntries(defaultUserId)).at(-1);
       expect(terminal).toMatchObject({
         _tag: "FailedTurnTranscriptEntry",
         reason: "HostedInferenceFailed",
@@ -3567,9 +4029,10 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       const service = yield* AgentService;
 
       const failure = yield* service
-        .handleSynchronousTurn(
+        .handleMessage(
           defaultUserId,
-          InboundMessage.make({ text: TranscriptText.make("RETRY_DEADLINE_EXHAUSTED") })
+          InboundMessage.make({ text: TranscriptText.make("RETRY_DEADLINE_EXHAUSTED") }),
+          noDelivery
         )
         .pipe(
           Effect.provideService(CurrentAgentLimits, agentLimits({ maxModelRoundMillis: 100 })),
@@ -3588,9 +4051,10 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       const service = yield* AgentService;
 
       const failure = yield* service
-        .handleSynchronousTurn(
+        .handleMessage(
           defaultUserId,
-          InboundMessage.make({ text: TranscriptText.make("PROVEEDOR_LIMITADO") })
+          InboundMessage.make({ text: TranscriptText.make("PROVEEDOR_LIMITADO") }),
+          noDelivery
         )
         .pipe(Effect.flip);
       const attempts = yield* modelAttemptPrompts("PROVEEDOR_LIMITADO");
@@ -3606,12 +4070,13 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       const service = yield* AgentService;
 
       const failure = yield* service
-        .handleSynchronousTurn(
+        .handleMessage(
           defaultUserId,
-          InboundMessage.make({ text: TranscriptText.make("RESPUESTA_TRUNCADA") })
+          InboundMessage.make({ text: TranscriptText.make("RESPUESTA_TRUNCADA") }),
+          noDelivery
         )
         .pipe(Effect.flip);
-      const transcript = yield* listTranscriptEntries(defaultUserId);
+      const transcript = yield* selectTranscriptEntries(defaultUserId);
 
       expect(failure._tag).toBe("ModelResponseRejected");
       expect(transcript.map((entry) => entry._tag)).toEqual([
@@ -3626,9 +4091,10 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       yield* clearTranscript;
       const service = yield* AgentService;
       const failure = yield* service
-        .handleSynchronousTurn(
+        .handleMessage(
           defaultUserId,
-          InboundMessage.make({ text: TranscriptText.make("MODELO_BLOQUEADO") })
+          InboundMessage.make({ text: TranscriptText.make("MODELO_BLOQUEADO") }),
+          noDelivery
         )
         .pipe(
           Effect.provideService(CurrentAgentLimits, agentLimits({ maxModelRoundMillis: 20 })),
@@ -3636,7 +4102,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
         );
 
       expect(failure._tag).toBe("ModelUnavailable");
-      const terminal = (yield* listTranscriptEntries(defaultUserId)).at(-1);
+      const terminal = (yield* selectTranscriptEntries(defaultUserId)).at(-1);
       expect(terminal).toMatchObject({
         _tag: "FailedTurnTranscriptEntry",
         reason: "HostedInferenceTimedOut",
@@ -3653,11 +4119,12 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       yield* sql`DELETE FROM audit_log_entries WHERE user_id = ${defaultUserId}`;
       const service = yield* AgentService;
 
-      const reply = yield* service.handleSynchronousTurn(
+      const reply = yield* service.handleMessage(
         defaultUserId,
-        InboundMessage.make({ text: TranscriptText.make("Lista las categorías") })
+        InboundMessage.make({ text: TranscriptText.make("Lista las categorías") }),
+        noDelivery
       );
-      const transcript = yield* listTranscriptEntries(defaultUserId);
+      const transcript = yield* selectTranscriptEntries(defaultUserId);
       const audit = yield* observeAuditLogEntries(defaultUserId);
 
       expect(reply.text).toBe("Estas son las categorías disponibles.");

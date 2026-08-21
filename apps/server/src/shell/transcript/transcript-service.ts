@@ -1,24 +1,14 @@
 import { Effect } from "effect";
 import type { UserId } from "~/core/identity/reference";
-import type { TranscriptContentEntry, TranscriptTurnId } from "~/core/transcript/model";
-import {
-  listRecentTranscriptEntries as loadRecentTranscriptEntries,
-  listTranscriptTurnEntries as loadTranscriptTurnEntries,
-  appendTranscriptEntries as persistTranscriptEntries,
-} from "./repo";
+import type { HostedAgentSessionId } from "~/core/transcript/hosted-agent-session";
+import { selectRecentTranscriptEntries as loadRecentTranscriptEntries } from "./repo";
 
-/** Appends exact Transcript evidence for one explicit User in supplied order. */
-export const appendTranscriptEntries = Effect.fn("appendTranscriptEntriesOperation")(
-  (userId: UserId, entries: ReadonlyArray<TranscriptContentEntry>) =>
-    persistTranscriptEntries(userId, entries)
-);
-
-/** Loads the newest completed Transcript turns for one explicit User. */
-export const listRecentTranscriptEntries = Effect.fn("listRecentTranscriptEntriesOperation")(
-  (userId: UserId, maxTurns: number) => loadRecentTranscriptEntries(userId, maxTurns)
-);
-
-/** Loads one explicit Transcript turn, including its in-progress entries. */
-export const listTranscriptTurnEntries = Effect.fn("listTranscriptTurnEntriesOperation")(
-  (userId: UserId, turnId: TranscriptTurnId) => loadTranscriptTurnEntries(userId, turnId)
+/**
+ * Loads the newest completed Transcript turns of one explicit Hosted Agent Session. This delegates
+ * to `repo.ts` on purpose: the module-graph rule fences this module, so the runtime's continuity
+ * read stays inside the fence while `repo.ts` stays open for tests asserting on committed rows.
+ */
+export const listRecentTranscriptEntries = Effect.fn("listRecentTranscriptEntries")(
+  (userId: UserId, hostedAgentSessionId: HostedAgentSessionId, maxTurns: number) =>
+    loadRecentTranscriptEntries(userId, hostedAgentSessionId, maxTurns)
 );

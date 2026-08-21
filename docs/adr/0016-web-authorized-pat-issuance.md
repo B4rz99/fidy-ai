@@ -9,7 +9,7 @@ A User needs to delegate canonical operations to an agent they control. Issuing 
 
 ## Decision
 
-The durable User-owned bearer is a **PAT (Personal Access Token)**. The internal one-Turn bearer is a **HostedTurnToken** and is never a PAT.
+The durable User-owned bearer is a **PAT (Personal Access Token)**. The internal hosted credential is a **Hosted Agent Session** and is never a PAT.
 
 Only a freshly authenticated web session may authorize a PAT. The stable management entry is
 `https://fidyapp.com/settings/pats`. The web app supports two issuance paths behind one grant policy:
@@ -24,7 +24,7 @@ scope. Domain operations are PAT-scoped with `read`, `write`, or `dashboard`; PA
 fresh-web-session-only; safe PAT listing, activity, and revocation are web-or-hosted. Derived HTTP,
 hosted-tool, MCP, CLI, and SuggestedOperation surfaces all consume that declaration.
 
-PATs have no fixed lifetime. The inactivity deadline is exactly 90×24 hours after activation or the latest successful authenticated use. Web and chat may list safe PAT metadata, answer from at most the latest 50 retained metadata-only AuditLogEntries, and revoke one or all PATs; chat may not issue or approve them. PAT-wide revocation never affects HostedTurnTokens.
+PATs have no fixed lifetime. The inactivity deadline is exactly 90×24 hours after activation or the latest successful authenticated use. Web and chat may list safe PAT metadata, answer from at most the latest 50 retained metadata-only AuditLogEntries, and revoke one or all PATs; chat may not issue or approve them. PAT-wide revocation never affects Hosted Agent Sessions.
 
 ## Rejected alternatives
 

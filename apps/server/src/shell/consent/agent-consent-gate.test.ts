@@ -13,7 +13,10 @@ import { ApiHarness } from "~/shell/testing/api-harness";
 import { HostedInferenceFromLanguageModel } from "~/shell/testing/hosted-inference-fixtures";
 import { currentDisclosure } from "./current-disclosure";
 import { appendConsentRecord, withSubjectLock } from "./repo";
-import { listTranscriptEntries } from "~/shell/transcript/repo";
+import { selectTranscriptEntries } from "~/shell/transcript/repo";
+
+// An HTTP caller returns the reply in its response, so it delivers nothing incrementally.
+const noDelivery = (): Effect.Effect<void> => Effect.void;
 
 const unconsentedUserId = UserId.make("f1d1a000-0000-4000-8000-0000000008b1");
 const concurrentlyRevokedUserId = UserId.make("f1d1a000-0000-4000-8000-0000000008b2");
@@ -58,7 +61,7 @@ const makeOnboardingGrant = Effect.gen(function* () {
 layer(AgentConsentHarness, { excludeTestServices: true, timeout: "30 seconds" })(
   "agent consent defense",
   (it) => {
-    it.effect("fails before model, transcript, hosted token, or canonical execution", () =>
+    it.effect("fails before model, transcript, Turn authority, or canonical execution", () =>
       Effect.gen(function* () {
         const user = yield* makeColombianUser(unconsentedUserId, {
           createdAt: DateTime.makeUnsafe("2026-08-01T12:00:00Z"),
@@ -70,20 +73,22 @@ layer(AgentConsentHarness, { excludeTestServices: true, timeout: "30 seconds" })
 
         const service = yield* AgentService;
         const failure = yield* service
-          .handleSynchronousTurn(
+          .handleMessage(
             unconsentedUserId,
-            InboundMessage.make({ text: TranscriptText.make("registra este dato privado") })
+            InboundMessage.make({ text: TranscriptText.make("registra este dato privado") }),
+            noDelivery
           )
           .pipe(Effect.flip);
 
         expect(failure._tag).toBe("OnboardingConsentRequired");
-        expect(yield* listTranscriptEntries(unconsentedUserId)).toEqual([]);
+        expect(yield* selectTranscriptEntries(unconsentedUserId)).toEqual([]);
       })
     );
 
     it.effect("lets a winning concurrent revocation stop transcript and model work", () =>
       Effect.gen(function* () {
         const admin = yield* MigrationSqlClient;
+        yield* admin`DELETE FROM hosted_agent_sessions WHERE user_id = ${concurrentlyRevokedUserId}`;
         yield* admin`DELETE FROM consent_records WHERE subject_user_id = ${concurrentlyRevokedUserId}`;
         yield* admin`DELETE FROM transcript_entries WHERE user_id = ${concurrentlyRevokedUserId}`;
         yield* admin`DELETE FROM users WHERE id = ${concurrentlyRevokedUserId}`;
@@ -119,9 +124,10 @@ layer(AgentConsentHarness, { excludeTestServices: true, timeout: "30 seconds" })
         yield* Deferred.await(lockHeld);
         const service = yield* AgentService;
         const turnFiber = yield* service
-          .handleSynchronousTurn(
+          .handleMessage(
             concurrentlyRevokedUserId,
-            InboundMessage.make({ text: TranscriptText.make("registra dato concurrente") })
+            InboundMessage.make({ text: TranscriptText.make("registra dato concurrente") }),
+            noDelivery
           )
           .pipe(Effect.flip, Effect.forkChild);
         yield* Deferred.succeed(commitRevocation, undefined);
@@ -129,7 +135,7 @@ layer(AgentConsentHarness, { excludeTestServices: true, timeout: "30 seconds" })
         const failure = yield* Fiber.join(turnFiber);
 
         expect(failure._tag).toBe("OnboardingConsentRequired");
-        expect(yield* listTranscriptEntries(concurrentlyRevokedUserId)).toEqual([]);
+        expect(yield* selectTranscriptEntries(concurrentlyRevokedUserId)).toEqual([]);
       })
     );
   }

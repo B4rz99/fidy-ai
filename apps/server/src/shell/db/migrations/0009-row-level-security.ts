@@ -246,10 +246,7 @@ const createTokenBearerUseGateway = Effect.gen(function* () {
         SET revoked_at = use_time
         FROM candidate
         WHERE token.id = candidate.id
-          AND (
-            (token.kind = 'pat' AND token.idle_expires_at <= use_time)
-            OR (token.kind = 'hosted-turn' AND token.expires_at <= use_time)
-          )
+          AND token.idle_expires_at <= use_time
       ),
       active AS (
         UPDATE public.tokens AS token
@@ -257,10 +254,7 @@ const createTokenBearerUseGateway = Effect.gen(function* () {
           idle_expires_at = GREATEST(token.idle_expires_at, renewed_idle_expiry)
         FROM candidate
         WHERE token.id = candidate.id
-          AND (
-            (token.kind = 'pat' AND token.idle_expires_at > use_time)
-            OR (token.kind = 'hosted-turn' AND token.expires_at > use_time)
-          )
+          AND token.idle_expires_at > use_time
         RETURNING token.id, token.user_id, token.scopes, token.last_used_at
       )
       SELECT active.id, active.user_id, active.scopes, active.last_used_at FROM active

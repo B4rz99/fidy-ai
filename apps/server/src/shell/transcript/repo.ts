@@ -1,6 +1,7 @@
 import { Effect, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import { UserId } from "~/core/identity/reference";
+import { HostedAgentSessionId } from "~/core/transcript/hosted-agent-session";
 import { withUserTransaction } from "~/shell/db/user-transaction";
 import {
   TranscriptContentEntry,
@@ -14,6 +15,7 @@ const PersistedTranscriptContentEntry = Schema.toCodecJson(TranscriptContentEntr
 const TranscriptEntryRow = Schema.Struct({ entry: PersistedTranscriptEntry });
 const RecentTranscriptRequest = Schema.Struct({
   subjectUserId: UserId,
+  hostedAgentSessionId: HostedAgentSessionId,
   maxTurns: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 100 })),
 });
 const TranscriptTurnRequest = Schema.Struct({
@@ -61,9 +63,14 @@ export const appendTranscriptEntries = Effect.fn("appendTranscriptEntries")(func
   );
 });
 
-/** Reads only the newest bounded complete turns for model-context selection. */
-export const listRecentTranscriptEntries = Effect.fn("listRecentTranscriptEntries")(function* (
+/**
+ * Reads only the newest bounded complete turns of one Hosted Agent Session for model-context
+ * selection. Entries carry no session of their own, so the owning Turn supplies it: a prior
+ * session's material must not re-enter a later one.
+ */
+export const selectRecentTranscriptEntries = Effect.fn("selectRecentTranscriptEntries")(function* (
   subjectUserId: UserId,
+  hostedAgentSessionId: HostedAgentSessionId,
   maxTurns: number
 ): Effect.fn.Return<ReadonlyArray<TranscriptEntry>, never, SqlClient.SqlClient> {
   const sql = yield* SqlClient.SqlClient;
@@ -74,11 +81,15 @@ export const listRecentTranscriptEntries = Effect.fn("listRecentTranscriptEntrie
       Result: TranscriptEntryRow,
       execute: (request) => sql`
         WITH recent_turns AS (
-          SELECT turn_id, max(sequence) AS newest_sequence
-          FROM transcript_entries
-          WHERE user_id = ${request.subjectUserId}
-          GROUP BY turn_id
-          HAVING (array_agg(entry->>'_tag' ORDER BY sequence DESC))[1] = 'AssistantTranscriptEntry'
+          SELECT transcript.turn_id, max(transcript.sequence) AS newest_sequence
+          FROM transcript_entries AS transcript
+          INNER JOIN conversation_turns AS turn
+            ON turn.user_id = transcript.user_id AND turn.id = transcript.turn_id
+          WHERE transcript.user_id = ${request.subjectUserId}
+            AND turn.session_id = ${request.hostedAgentSessionId}
+          GROUP BY transcript.turn_id
+          HAVING (array_agg(transcript.entry->>'_tag' ORDER BY transcript.sequence DESC))[1]
+            = 'AssistantTranscriptEntry'
           ORDER BY newest_sequence DESC
           LIMIT ${request.maxTurns}
         )
@@ -88,13 +99,13 @@ export const listRecentTranscriptEntries = Effect.fn("listRecentTranscriptEntrie
         WHERE transcript.user_id = ${request.subjectUserId}
         ORDER BY transcript.sequence
       `,
-    })({ subjectUserId, maxTurns }).pipe(Effect.orDie)
+    })({ subjectUserId, hostedAgentSessionId, maxTurns }).pipe(Effect.orDie)
   );
   return rows.map(({ entry }) => entry);
 });
 
 /** Reads one explicit turn, including an in-progress turn, in append order. */
-export const listTranscriptTurnEntries = Effect.fn("listTranscriptTurnEntries")(function* (
+export const selectTranscriptTurnEntries = Effect.fn("selectTranscriptTurnEntries")(function* (
   subjectUserId: UserId,
   turnId: TranscriptTurnId
 ): Effect.fn.Return<ReadonlyArray<TranscriptEntry>, never, SqlClient.SqlClient> {
@@ -116,7 +127,7 @@ export const listTranscriptTurnEntries = Effect.fn("listTranscriptTurnEntries")(
 });
 
 /** Reads one User's complete Transcript in append order, decoding every JSONB row. */
-export const listTranscriptEntries = (
+export const selectTranscriptEntries = (
   subjectUserId: UserId
 ): Effect.Effect<ReadonlyArray<TranscriptEntry>, never, SqlClient.SqlClient> =>
   withUserTransaction(

@@ -139,7 +139,7 @@ export const findTransaction = Effect.fn("findTransaction")(function* (
 });
 
 /** Loads active Transactions for one User matching every supplied half-open history filter. */
-export const listTransactions = Effect.fn("listTransactions")(function* (
+export const selectTransactions = Effect.fn("selectTransactions")(function* (
   userId: UserId,
   query: TransactionQuery
 ) {
@@ -390,7 +390,7 @@ export const insertStatementLineSourceAttestationInScope = Effect.fn(
 });
 
 /** Lists retained immutable provenance for one User-owned Transaction, including after deletion. */
-export const listSourceAttestations = Effect.fn("listSourceAttestations")(function* (
+export const selectSourceAttestations = Effect.fn("selectSourceAttestations")(function* (
   userId: UserId,
   id: TransactionId
 ) {

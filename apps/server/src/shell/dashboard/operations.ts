@@ -20,7 +20,7 @@ export const DashboardGroup = HttpApiGroup.make("dashboard")
       )
       .annotateMerge(
         operationPolicy({
-          requiredScope: "read",
+          requiredCapability: "read",
           requiredTier: "free",
           agentConfirmation: "not-required",
           kind: "mutation",
@@ -39,7 +39,7 @@ export const DashboardGroup = HttpApiGroup.make("dashboard")
       )
       .annotateMerge(
         operationPolicy({
-          requiredScope: "read",
+          requiredCapability: "read",
           requiredTier: "free",
           agentConfirmation: "not-required",
           kind: "query",
@@ -60,7 +60,7 @@ export const DashboardGroup = HttpApiGroup.make("dashboard")
       )
       .annotateMerge(
         operationPolicy({
-          requiredScope: "dashboard",
+          requiredCapability: "dashboard",
           requiredTier: "free",
           agentConfirmation: "required",
           kind: "mutation",

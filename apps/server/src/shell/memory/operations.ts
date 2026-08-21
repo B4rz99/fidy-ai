@@ -8,19 +8,19 @@ import { OperationResponse } from "~/shell/_shared/response";
 import { MemoryCapacityExceededApi } from "./errors";
 
 const rememberPolicy = operationPolicy({
-  requiredScope: "write",
+  requiredCapability: "write",
   requiredTier: "free",
   agentConfirmation: "not-required",
   kind: "mutation",
 });
 const destructiveWritePolicy = operationPolicy({
-  requiredScope: "write",
+  requiredCapability: "write",
   requiredTier: "free",
   agentConfirmation: "required",
   kind: "mutation",
 });
 const recallPolicy = operationPolicy({
-  requiredScope: "read",
+  requiredCapability: "read",
   requiredTier: "free",
   agentConfirmation: "not-required",
   kind: "query",

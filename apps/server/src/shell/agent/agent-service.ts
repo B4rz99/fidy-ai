@@ -388,7 +388,7 @@ const toolCallOutcome = (
 const completesTurn = (binding: AgentOperationBinding, outcome: CanonicalToolOutcome): boolean =>
   [
     binding.operation !== atomicBatchOperation,
-    binding.policy.requiredScope === "write",
+    binding.policy.requiredCapability === "write",
     outcome._tag === "Succeeded",
   ].every(Boolean);
 

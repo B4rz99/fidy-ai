@@ -5,7 +5,7 @@ import { makeOperationCatalog } from "./operation-catalog";
 import { operationPolicy } from "./operation-policy";
 
 const policy = operationPolicy({
-  requiredScope: "read",
+  requiredCapability: "read",
   requiredTier: "free",
   agentConfirmation: "not-required",
   kind: "query",
@@ -25,6 +25,7 @@ it("reads inherited descriptive metadata through reflected annotations", () => {
 
   expect(reflected?.description).toBe("Inspect the available items before choosing one.");
   expect(reflected?.policy.kind).toBe("query");
+  expect(reflected?.policy.requiredCapability).toBe("read");
 });
 
 it("rejects an OpenAPI operation id that is not the group-qualified identifier", () => {

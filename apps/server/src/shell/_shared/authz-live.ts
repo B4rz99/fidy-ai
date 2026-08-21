@@ -153,7 +153,7 @@ const annotateOperationPolicy = (
   policy: ReturnType<typeof getOperationPolicy>
 ): Effect.Effect<void> =>
   Effect.annotateCurrentSpan({
-    "fidy.operation.required_scope": policy.requiredScope,
+    "fidy.operation.required_capability": policy.requiredCapability,
   });
 
 const recordRejectedAttempt = (

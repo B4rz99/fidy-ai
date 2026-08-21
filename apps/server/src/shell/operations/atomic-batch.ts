@@ -123,7 +123,7 @@ const executeChild = Effect.fn("executeAtomicBatchChild")(function* ({
         "The child is not an executable canonical mutation. Correct the operation and retry the whole batch.",
     });
   }
-  if (!caller.capabilities.includes(catalogOperation.policy.requiredScope)) {
+  if (!caller.capabilities.includes(catalogOperation.policy.requiredCapability)) {
     return yield* rejectChild(childAudit, {
       index,
       operation: call.operation,
@@ -152,7 +152,7 @@ const executeChild = Effect.fn("executeAtomicBatchChild")(function* ({
     Effect.withSpan(`fidy.batch.${call.operation}`, {
       attributes: {
         "fidy.batch.call_index": index,
-        "fidy.operation.required_scope": catalogOperation.policy.requiredScope,
+        "fidy.operation.required_capability": catalogOperation.policy.requiredCapability,
         "fidy.operation.required_tier": catalogOperation.policy.requiredTier,
         "fidy.operation.agent_confirmation": catalogOperation.policy.agentConfirmation,
       },

@@ -3,8 +3,9 @@ import assert from "node:assert/strict";
 import { Cause, Context, DateTime, Effect, Exit, Layer, Option, Schema } from "effect";
 import { HttpBody, HttpClient } from "effect/unstable/http";
 import { MigrationSqlClient } from "~/shell/db/client";
-import type { AuditLogEntry } from "~/core/audit/model";
+import { type AuditLogEntry, CanonicalOperationId } from "~/core/audit/model";
 import { PATId } from "~/core/tokens/reference";
+import { WebSessionId } from "~/core/web-session/reference";
 import { IanaTimeZone } from "~/core/_shared/context";
 import { UserId } from "~/core/identity/reference";
 import { CreateTransactionInput, TransactionId } from "~/core/transactions/model";
@@ -25,7 +26,7 @@ import {
 import { defaultPatBearer } from "~/shell/testing/identity-fixtures";
 import { transactionPayload } from "~/shell/transactions/fixtures";
 import { truncateAuditLogEntries } from "./fixtures";
-import { observeAuditLogEntries } from "./repo";
+import { appendAuditLogEntry, observeAuditLogEntries } from "./repo";
 
 /**
  * Names the constraint that refused a write. Asserting the constraint rather than mere failure is
@@ -42,6 +43,7 @@ const atomicWriteBearer = TokenBearer.make("fin_atomicw1_abcdefghijklmnopqrstuvw
 const atomicObserverBearer = TokenBearer.make(
   "fin_atomicro_abcdefghijklmnopqrstuvwxyz0123456789ABCD"
 );
+const webSessionId = WebSessionId.make("f1d1a000-0000-4000-8000-0000000007a3");
 const encodeTransactionInput = Schema.encodeSync(CreateTransactionInput);
 
 /** Evidence attributed to one PAT. The caller union narrows, so no structural probing is needed. */
@@ -222,34 +224,81 @@ layer(AuditHarness, { excludeTestServices: true, timeout: "30 seconds" })(
       })
     );
 
+    it.effect("round-trips metadata-only WebSession caller evidence", () =>
+      Effect.gen(function* () {
+        yield* truncateAuditLogEntries;
+        const occurredAt = yield* DateTime.now;
+
+        yield* appendAuditLogEntry(defaultUserId, {
+          caller: { _tag: "WebSession", webSessionId },
+          operation: CanonicalOperationId.make("identity.getCurrentUser"),
+          outcome: "succeeded",
+          occurredAt,
+        });
+
+        const entries = yield* observeAuditLogEntries(defaultUserId);
+        expect(entries).toHaveLength(1);
+        expect(entries[0]).toMatchObject({
+          subjectUserId: defaultUserId,
+          caller: { _tag: "WebSession", webSessionId },
+          operation: "identity.getCurrentUser",
+          outcome: "succeeded",
+          occurredAt,
+        });
+        expect(Object.keys(entries[0] ?? {}).sort()).toEqual([
+          "caller",
+          "id",
+          "occurredAt",
+          "operation",
+          "outcome",
+          "subjectUserId",
+        ]);
+      })
+    );
+
     it.effect("refuses evidence that does not name exactly one caller", () =>
       Effect.gen(function* () {
         yield* truncateAuditLogEntries;
         const sql = yield* MigrationSqlClient;
         const append = (
           patId: Option.Option<string>,
+          webSessionId: Option.Option<string>,
           hostedAgentSessionId: Option.Option<string>
         ): Effect.Effect<Exit.Exit<unknown, unknown>> =>
           Effect.exit(sql`
             INSERT INTO audit_log_entries (
-              user_id, pat_id, hosted_agent_session_id, operation, outcome, occurred_at
+              user_id, pat_id, web_session_id, hosted_agent_session_id,
+              operation, outcome, occurred_at
             )
             VALUES (
-              ${defaultUserId}, ${Option.getOrNull(patId)},
+              ${defaultUserId}, ${Option.getOrNull(patId)}, ${Option.getOrNull(webSessionId)},
               ${Option.getOrNull(hostedAgentSessionId)},
               'identity.getCurrentUser', 'succeeded', now()
             )
           `);
 
-        // A PAT and a Hosted Agent Session are mutually exclusive callers, so evidence naming both
-        // or neither would make attribution unreadable rather than merely incomplete.
-        const both = yield* append(
+        // Credential evidence variants are mutually exclusive callers, so evidence naming multiple
+        // callers or none would make attribution unreadable rather than merely incomplete.
+        const patAndWebSession = yield* append(
           Option.some(defaultPATId),
+          Option.some(webSessionId),
+          Option.none()
+        );
+        const webAndHostedSession = yield* append(
+          Option.none(),
+          Option.some(webSessionId),
           Option.some("f1d1a000-0000-4000-8000-0000000009a1")
         );
-        const neither = yield* append(Option.none(), Option.none());
+        const patAndHostedSession = yield* append(
+          Option.some(defaultPATId),
+          Option.none(),
+          Option.some("f1d1a000-0000-4000-8000-0000000009a1")
+        );
+        const neither = yield* append(Option.none(), Option.none(), Option.none());
 
-        expect(refusedBy(both)).toContain("audit_log_entries_exactly_one_caller");
+        expect(refusedBy(patAndWebSession)).toContain("audit_log_entries_exactly_one_caller");
+        expect(refusedBy(webAndHostedSession)).toContain("audit_log_entries_exactly_one_caller");
+        expect(refusedBy(patAndHostedSession)).toContain("audit_log_entries_exactly_one_caller");
         expect(refusedBy(neither)).toContain("audit_log_entries_exactly_one_caller");
         expect(yield* observeAuditLogEntries(defaultUserId)).toEqual([]);
       })

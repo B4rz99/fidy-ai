@@ -1,6 +1,6 @@
 import { Context, Option, Schema } from "effect";
 import { OpenApi } from "effect/unstable/httpapi";
-import { type PatScope } from "~/core/tokens/model";
+import type { CanonicalCapability } from "~/core/_shared/canonical-capability";
 
 /** The Subscription tier a caller currently has or an operation requires. */
 export const OperationTier = Schema.Literals(["free", "pro"]);
@@ -16,9 +16,9 @@ export type CanonicalOperationKind = typeof CanonicalOperationKind.Type;
 
 /** Route-independent authorization, availability, accounting, and agent policy carried by an operation. */
 export type OperationPolicyValue = {
-  readonly requiredScope: PatScope;
-  /** Whether authorization checks this endpoint or each schema-derived child operation. */
-  readonly scopeEvaluation: "endpoint" | "children";
+  readonly requiredCapability: CanonicalCapability;
+  /** Whether authorization checks this canonical operation or each schema-derived child operation. */
+  readonly capabilityEvaluation: "operation" | "children";
   readonly requiredTier: OperationTier;
   readonly agentConfirmation: AgentConfirmation;
   readonly kind: CanonicalOperationKind;
@@ -46,21 +46,21 @@ export const getOperationPolicy = (endpoint: PolicyAnnotatedOperation): Operatio
  * runtime policy and generated OpenAPI extensions are created together so they
  * cannot drift into separate route maps.
  */
-type OperationPolicyInput = Omit<OperationPolicyValue, "scopeEvaluation">;
+type OperationPolicyInput = Omit<OperationPolicyValue, "capabilityEvaluation">;
 
 const makeOperationPolicy = (
-  { requiredScope, requiredTier, agentConfirmation, kind }: OperationPolicyInput,
-  scopeEvaluation: OperationPolicyValue["scopeEvaluation"]
+  { requiredCapability, requiredTier, agentConfirmation, kind }: OperationPolicyInput,
+  capabilityEvaluation: OperationPolicyValue["capabilityEvaluation"]
 ): Context.Context<OperationPolicy | OpenApi.Override> =>
   Context.make(OperationPolicy, {
-    requiredScope,
-    scopeEvaluation,
+    requiredCapability,
+    capabilityEvaluation,
     requiredTier,
     agentConfirmation,
     kind,
   }).pipe(
     Context.add(OpenApi.Override, {
-      "x-fidy-required-scope": requiredScope,
+      "x-fidy-required-scope": requiredCapability,
       "x-fidy-required-tier": requiredTier,
       "x-fidy-agent-confirmation": agentConfirmation,
       "x-fidy-operation-kind": kind,
@@ -69,9 +69,9 @@ const makeOperationPolicy = (
 
 export const operationPolicy = (
   policy: OperationPolicyInput
-): Context.Context<OperationPolicy | OpenApi.Override> => makeOperationPolicy(policy, "endpoint");
+): Context.Context<OperationPolicy | OpenApi.Override> => makeOperationPolicy(policy, "operation");
 
-/** Policy constructor reserved for operations whose children carry authoritative scopes. */
-export const childScopeOperationPolicy = (
+/** Policy constructor reserved for operations whose children carry authoritative capabilities. */
+export const childCapabilityOperationPolicy = (
   policy: OperationPolicyInput
 ): Context.Context<OperationPolicy | OpenApi.Override> => makeOperationPolicy(policy, "children");

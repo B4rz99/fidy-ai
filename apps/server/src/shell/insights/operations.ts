@@ -38,7 +38,7 @@ export const InsightsGroup = HttpApiGroup.make("insights")
       )
       .annotateMerge(
         operationPolicy({
-          requiredScope: "read",
+          requiredCapability: "read",
           requiredTier: "free",
           agentConfirmation: "not-required",
           kind: "query",
@@ -60,7 +60,7 @@ export const InsightsGroup = HttpApiGroup.make("insights")
       )
       .annotateMerge(
         operationPolicy({
-          requiredScope: "write",
+          requiredCapability: "write",
           requiredTier: "free",
           agentConfirmation: "required",
           kind: "mutation",
@@ -81,7 +81,7 @@ export const InsightsGroup = HttpApiGroup.make("insights")
       )
       .annotateMerge(
         operationPolicy({
-          requiredScope: "write",
+          requiredCapability: "write",
           requiredTier: "free",
           agentConfirmation: "required",
           kind: "mutation",
@@ -101,7 +101,7 @@ export const InsightsGroup = HttpApiGroup.make("insights")
       )
       .annotateMerge(
         operationPolicy({
-          requiredScope: "write",
+          requiredCapability: "write",
           requiredTier: "free",
           agentConfirmation: "required",
           kind: "mutation",

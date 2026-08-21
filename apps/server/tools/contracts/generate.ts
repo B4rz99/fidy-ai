@@ -20,7 +20,16 @@ export const makeContractArtifacts = (): ContractArtifacts => ({
     operations: operationCatalog.operations
       .map(({ id, policy }) => ({
         id,
-        policy: asJsonValue(policy),
+        // This generated artifact is PAT-facing: preserve its scope vocabulary while runtime
+        // authorization consumes credential-neutral canonical capabilities.
+        policy: asJsonValue({
+          requiredScope: policy.requiredCapability,
+          scopeEvaluation:
+            policy.capabilityEvaluation === "operation" ? "endpoint" : policy.capabilityEvaluation,
+          requiredTier: policy.requiredTier,
+          agentConfirmation: policy.agentConfirmation,
+          kind: policy.kind,
+        }),
       }))
       .sort((left, right) => left.id.localeCompare(right.id)),
   },

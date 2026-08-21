@@ -65,7 +65,7 @@ const hasRequiredTier = (requiredTier: OperationTier, callerTier: OperationTier)
 /**
  * Decides callability from the same policy authorization and generated surfaces
  * read. `free` operations are available to both tiers; Pro operations require a
- * Pro caller, and every operation still requires its declared TokenBearer scope.
+ * Pro caller, and every operation still requires its declared canonical capability.
  */
 export const canCallOperation: {
   (caller: SuggestedOperationCaller): (self: OperationPolicyValue) => boolean;
@@ -73,7 +73,7 @@ export const canCallOperation: {
 } = Function.dual(
   2,
   (self: OperationPolicyValue, caller: SuggestedOperationCaller): boolean =>
-    caller.capabilities.includes(self.requiredScope) &&
+    caller.capabilities.includes(self.requiredCapability) &&
     hasRequiredTier(self.requiredTier, caller.tier)
 );
 

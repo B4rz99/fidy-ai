@@ -14,19 +14,19 @@ import { operationPolicy } from "~/shell/_shared/operation-policy";
 import { OperationResponse } from "~/shell/_shared/response";
 
 const read = operationPolicy({
-  requiredScope: "read",
+  requiredCapability: "read",
   requiredTier: "free",
   agentConfirmation: "not-required",
   kind: "query",
 });
 const additiveWrite = operationPolicy({
-  requiredScope: "write",
+  requiredCapability: "write",
   requiredTier: "free",
   agentConfirmation: "not-required",
   kind: "mutation",
 });
 const destructiveWrite = operationPolicy({
-  requiredScope: "write",
+  requiredCapability: "write",
   requiredTier: "free",
   agentConfirmation: "required",
   kind: "mutation",

@@ -107,8 +107,8 @@ export const executeCanonicalEffect = Effect.fn("executeCanonicalEffect")(functi
 }) {
   const { caller, effect, executionCheckpoint, occurredAt, operation, policy } = input;
   if (
-    policy.scopeEvaluation !== "children" &&
-    !caller.capabilities.includes(policy.requiredScope)
+    policy.capabilityEvaluation !== "children" &&
+    !caller.capabilities.includes(policy.requiredCapability)
   ) {
     yield* appendOutcome({ caller, operation, outcome: "rejected", occurredAt });
     return yield* new CanonicalCallRejected({ reason: "capability_missing" });

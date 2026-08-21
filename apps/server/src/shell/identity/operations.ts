@@ -19,7 +19,7 @@ export const IdentityGroup = HttpApiGroup.make("identity").add(
     )
     .annotateMerge(
       operationPolicy({
-        requiredScope: "read",
+        requiredCapability: "read",
         requiredTier: "free",
         agentConfirmation: "not-required",
         kind: "query",
@@ -36,7 +36,7 @@ export const IdentityGroup = HttpApiGroup.make("identity").add(
     )
     .annotateMerge(
       operationPolicy({
-        requiredScope: "write",
+        requiredCapability: "write",
         requiredTier: "free",
         agentConfirmation: "not-required",
         kind: "mutation",

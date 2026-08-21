@@ -1,0 +1,22 @@
+apps/server/src/shell/db/advisory-lock.test.ts
+  s_ac6bb3ab35e99f::t_be8ce76ff66a77 3
+  s_ac6bb3ab35e99f::t_9e5411df403748 1-2,10-12,15,51-272,275,277-286
+  s_ac6bb3ab35e99f::t_396914aa09e053 273-274
+  s_ac6bb3ab35e99f::t_49812ffdef0933 276
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.23",
+  "base_commit_sha": "cbe0f0c9e75c41aa3f18283181af8ff89f3ede1c",
+  "prompts": {},
+  "sessions": {
+    "s_ac6bb3ab35e99f": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a02529-f9f5-72a1-a37f-15447f3a7de2",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

@@ -1,0 +1,27 @@
+apps/server/src/shell/_shared/canonical-implementation.test.ts
+  s_c48fba3ded310a::t_095fb5e24ebab7 1-8,10-18,20-23,25
+  s_c48fba3ded310a::t_d67f850d86d328 9
+  s_c48fba3ded310a::t_8160ba214820f6 19,24
+apps/server/src/shell/_shared/canonical-implementation.ts
+  s_c48fba3ded310a::t_5777443678132d 2,5,8,25-35,37-39,42
+apps/server/src/shell/_shared/canonical-input.ts
+  s_c48fba3ded310a::t_d67f850d86d328 5-10,12
+  s_c48fba3ded310a::t_e92433fbc1866a 4
+  s_c48fba3ded310a::t_9d46db08420e3c 27
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.23",
+  "base_commit_sha": "eafb4316de875043676033c8da53617280fc8182",
+  "prompts": {},
+  "sessions": {
+    "s_c48fba3ded310a": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a02529-5a6b-726c-b03e-90b37efb47a7",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

@@ -22,21 +22,26 @@ export type CanonicalImplementationRequirements =
   | CanonicalExecutionRequirements
   | ChildOperationAudit;
 
+/** The decoded success value represented by an assembled canonical operation declaration. */
+export type CanonicalSuccess<Id extends OperationId> = HttpApiEndpoint.Success<
+  CanonicalEndpoint<Id>
+>["Type"];
+
 /** Every failure represented by an assembled canonical operation declaration. */
 export type CanonicalFailure<Id extends OperationId> = HttpApiEndpoint.Errors<
   CanonicalEndpoint<Id>
 >;
 
-/** One implementation pinned to its operation's decoded input and declared failures. */
+/** One implementation pinned to its operation's decoded input, success, and failure channels. */
 export type CanonicalImplementation<Id extends OperationId> = (
   input: CanonicalInput<Id>,
   caller: CanonicalImplementationCaller
-) => Effect.Effect<unknown, CanonicalFailure<Id>, CanonicalImplementationRequirements>;
+) => Effect.Effect<CanonicalSuccess<Id>, CanonicalFailure<Id>, CanonicalImplementationRequirements>;
 
 /**
  * Every canonical implementation, each keyed by the operation it implements. Declarations take
- * their input and failure types from the key rather than restating either one, so an implementation
- * cannot be filed under an incompatible operation or answer with an undeclared failure.
+ * their input, success, and failure types from the key rather than restating any one, so an
+ * implementation cannot be filed under an incompatible operation or answer outside its declaration.
  */
 export type CanonicalOperationImplementations = {
   readonly [Id in OperationId]: CanonicalImplementation<Id>;

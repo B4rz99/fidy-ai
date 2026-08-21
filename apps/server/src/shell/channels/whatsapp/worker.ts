@@ -42,7 +42,7 @@ const processStartedTurn = Effect.fn("WhatsApp.processStartedTurn")(function* (i
   const { claim, inboundMessage } = input.started;
   const service = yield* AgentService;
   const handled = yield* service
-    .handleTurn(claim.userId, inboundMessage, (reply) =>
+    .handleMessage(claim.userId, inboundMessage, (reply) =>
       deliverPreparedReply({ userId: claim.userId, reply }).pipe(Effect.asVoid)
     )
     .pipe(

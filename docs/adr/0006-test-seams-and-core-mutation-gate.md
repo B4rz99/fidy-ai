@@ -20,7 +20,7 @@ Use two primary application seams and three focused asynchronous seams:
 - **Core seam:** call exported pure decisions directly, with no server or database.
 - **API seam:** traverse operation decoding, authorization, handlers, repositories, and real
   PostgreSQL to verify integration, persistence, responses, suggested operations, and isolation.
-- **Agent seam:** call `AgentService.handleTurn` through the CLI harness with external language
+- **Agent seam:** call `AgentService.handleMessage` through the CLI harness with external language
   model and terminal adapters substituted, while canonical handlers, authorization, repositories,
   PostgreSQL, and the generated client remain real.
 - **Channel-worker seam:** call one exported durable worker step with the external language model and

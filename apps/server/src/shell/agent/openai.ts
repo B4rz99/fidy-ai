@@ -19,7 +19,7 @@ import { maximumAggregateMemoryTokens } from "~/core/memory/rules";
 import {
   defaultCompactionMaximumTokens,
   defaultCompactionTriggerTokens,
-} from "~/shell/transcript/conversation-continuity";
+} from "~/core/transcript/compaction-policy";
 import { type Prompt, Tool } from "effect/unstable/ai";
 import { toCodecOpenAI } from "effect/unstable/ai/OpenAiStructuredOutput";
 import { exactTranscriptPrompt } from "./model-boundary";

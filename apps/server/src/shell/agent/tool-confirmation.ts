@@ -7,13 +7,14 @@ import {
   atomicBatchOperation,
   getAtomicBatchInputSchema,
 } from "~/shell/operations/operations";
-import { listRecentTranscriptEntries } from "~/shell/transcript/transcript-service";
 import {
   ConfirmationDigest,
   type ConfirmationDigest as ConfirmationDigestType,
+  type ConfirmationPermit,
 } from "./tool-confirmation-model";
+import { canonicalJsonString } from "./canonical-json";
 import { consumeConfirmation } from "./tool-confirmation-repo";
-import type { AgentOperationBinding } from "./toolkit";
+import type { AgentOperationBinding } from "./agent-operation-binding";
 
 const hexadecimalRadix = 16;
 const confirmationNonceBytes = 32;
@@ -37,8 +38,10 @@ type ConfirmationSubject = Pick<
 type PendingConfirmation = ConfirmationSubject & Readonly<{ challenge: TranscriptText }>;
 type ConfirmationSubmission = PendingConfirmation & Readonly<{ digest: ConfirmationDigestType }>;
 
+export type { ConfirmationPermit } from "./tool-confirmation-model";
+
 type ConfirmationDecision =
-  | { readonly _tag: "Execute" }
+  | { readonly _tag: "Execute"; readonly permit: ConfirmationPermit }
   | {
       readonly _tag: "RequireConfirmation";
       readonly failure: ConfirmationRequiredFailure;
@@ -112,19 +115,6 @@ const findPendingConfirmation = (
   }
   return Option.none();
 };
-
-const canonicalJsonString = (value: Schema.Json): string =>
-  Option.getOrThrow(
-    Option.fromNullishOr(
-      JSON.stringify(value, (_key, nested: unknown) =>
-        typeof nested === "object" && nested !== null && !Array.isArray(nested)
-          ? Object.fromEntries(
-              Object.entries(nested).toSorted(([left], [right]) => left.localeCompare(right))
-            )
-          : nested
-      )
-    )
-  );
 
 const matchesConfirmationSubject = (
   pending: Readonly<PendingConfirmation>,
@@ -233,63 +223,146 @@ const confirmationIsFresh = (pending: Readonly<PendingConfirmation>, now: DateTi
     DateTime.add(pending.issuedAt, { minutes: confirmationLifetimeMinutes })
   );
 
+const permitMatches = (input: {
+  readonly expectedBinding: Readonly<AgentOperationBinding>;
+  readonly expectedInput: Schema.Json;
+  readonly attemptedBinding: Readonly<AgentOperationBinding>;
+  readonly attemptedInput: Schema.Json;
+}): boolean =>
+  input.attemptedBinding.operation === input.expectedBinding.operation &&
+  canonicalJsonString(input.attemptedInput) === canonicalJsonString(input.expectedInput);
+
+/** Single-use permit for a call needing no confirmation: it grants exactly this binding and input. */
+export const immediatePermit = ({
+  binding,
+  input,
+}: Readonly<{
+  binding: Readonly<AgentOperationBinding>;
+  input: Schema.Json;
+}>): ConfirmationPermit => {
+  let active = true;
+  return {
+    consume: ({ binding: attemptedBinding, canonicalInput }) =>
+      Effect.sync(() => {
+        if (
+          !active ||
+          !permitMatches({
+            expectedBinding: binding,
+            expectedInput: input,
+            attemptedBinding,
+            attemptedInput: canonicalInput,
+          })
+        ) {
+          return false;
+        }
+        active = false;
+        return true;
+      }),
+  };
+};
+
+const submittedPermit = (input: {
+  readonly userId: UserId;
+  readonly binding: Readonly<AgentOperationBinding>;
+  readonly canonicalInput: Schema.Json;
+  readonly submission: ConfirmationSubmission;
+  readonly now: DateTime.Utc;
+}): ConfirmationPermit => {
+  const { binding, canonicalInput: expectedInput, now, submission, userId } = input;
+  let active = true;
+  return {
+    consume: ({ binding: attemptedBinding, canonicalInput: attemptedInput }) => {
+      if (
+        !active ||
+        !permitMatches({
+          expectedBinding: binding,
+          expectedInput,
+          attemptedBinding,
+          attemptedInput,
+        })
+      ) {
+        return Effect.succeed(false);
+      }
+      active = false;
+      return consumeConfirmation(userId, submission.digest, now);
+    },
+  };
+};
+
+type SubmittedConfirmationState = {
+  value: Option.Option<ConfirmationSubmission>;
+};
+
+const decideConfirmation = Effect.fn("ToolConfirmation.decide")(function* (input: {
+  readonly userId: UserId;
+  readonly now: DateTime.Utc;
+  readonly submitted: SubmittedConfirmationState;
+  readonly binding: Readonly<AgentOperationBinding>;
+  readonly canonicalInput: Schema.Json;
+}): Effect.fn.Return<ConfirmationDecision, never, Crypto.Crypto | SqlClient.SqlClient> {
+  const { binding, canonicalInput, now, submitted, userId } = input;
+  if (binding.policy.agentConfirmation === "not-required") {
+    return { _tag: "Execute", permit: immediatePermit({ binding, input: canonicalInput }) };
+  }
+  if (
+    Option.isSome(submitted.value) &&
+    matchesConfirmationSubject(submitted.value.value, binding, canonicalInput)
+  ) {
+    const submission = submitted.value.value;
+    submitted.value = Option.none();
+    return {
+      _tag: "Execute",
+      permit: submittedPermit({ userId, binding, canonicalInput, submission, now }),
+    };
+  }
+  const pending: ConfirmationSubject = {
+    operation: binding.operation,
+    input: canonicalInput,
+    issuedAt: yield* DateTime.now,
+  };
+  const { digest, serializedInput } = yield* confirmationBinding(pending);
+  return {
+    _tag: "RequireConfirmation",
+    failure: ConfirmationRequiredFailure.make({
+      code: "explicit_confirmation_required",
+      message:
+        "Use the exact host-rendered confirmation command, including its operation id and digest.",
+      challenge: confirmationChallenge(pending, digest, serializedInput),
+    }),
+  };
+});
+
 /**
  * Recovers at most one exact confirmation for a hosted turn and hides confirmation
- * digesting, replay prevention, and single-use consumption behind one decision.
+ * digesting, replay prevention, and single-use consumption behind one decision. The runtime supplies
+ * the session's own recent Transcript, so a challenge issued under a closed session's Consent basis
+ * is never consumable under the basis that replaced it.
  */
 export const makeTurnConfirmation = Effect.fn("ToolConfirmation.makeTurn")(function* (
   userId: UserId,
+  priorTranscript: ReadonlyArray<TranscriptEntry>,
   message: { readonly text: string }
 ) {
-  const priorTranscript = yield* listRecentTranscriptEntries(userId, 1);
   const now = yield* DateTime.now;
-  let submittedConfirmation = findPendingConfirmation(priorTranscript).pipe(
-    Option.filter((pending) => confirmationIsFresh(pending, now)),
-    Option.flatMap((pending) =>
-      authorizationFromChallenge(pending).pipe(
-        Option.filter(({ command }) => message.text.trim() === command),
-        Option.map(({ digest }) => ({ ...pending, digest }))
+  const submitted: SubmittedConfirmationState = {
+    value: findPendingConfirmation(priorTranscript).pipe(
+      Option.filter((pending) => confirmationIsFresh(pending, now)),
+      Option.flatMap((pending) =>
+        authorizationFromChallenge(pending).pipe(
+          Option.filter(({ command }) => message.text.trim() === command),
+          Option.map(({ digest }) => ({ ...pending, digest }))
+        )
       )
-    )
-  );
+    ),
+  };
 
-  const decide = Effect.fn("ToolConfirmation.decide")(function* ({
-    binding,
-    input,
-  }: {
-    readonly binding: Readonly<AgentOperationBinding>;
-    readonly input: Schema.Json;
-  }): Effect.fn.Return<ConfirmationDecision, never, Crypto.Crypto | SqlClient.SqlClient> {
-    if (binding.policy.agentConfirmation === "not-required") {
-      return { _tag: "Execute" };
-    }
-    if (
-      Option.isSome(submittedConfirmation) &&
-      matchesConfirmationSubject(submittedConfirmation.value, binding, input)
-    ) {
-      const submission: ConfirmationSubmission = submittedConfirmation.value;
-      submittedConfirmation = Option.none();
-      const consumed = yield* consumeConfirmation(userId, submission.digest, now);
-      if (consumed) return { _tag: "Execute" };
-    }
-
-    const pending: ConfirmationSubject = {
-      operation: binding.operation,
+  return {
+    decide: ({
+      binding,
       input,
-      issuedAt: yield* DateTime.now,
-    };
-    const { digest, serializedInput } = yield* confirmationBinding(pending);
-    const challenge = confirmationChallenge(pending, digest, serializedInput);
-    return {
-      _tag: "RequireConfirmation",
-      failure: ConfirmationRequiredFailure.make({
-        code: "explicit_confirmation_required",
-        message:
-          "Use the exact host-rendered confirmation command, including its operation id and digest.",
-        challenge,
-      }),
-    };
-  });
-
-  return { decide } as const;
+    }: {
+      readonly binding: AgentOperationBinding;
+      readonly input: Schema.Json;
+    }) => decideConfirmation({ userId, now, submitted, binding, canonicalInput: input }),
+  } as const;
 });

@@ -40,7 +40,7 @@ const budgetFromRow = Effect.fn("budgetFromRow")((row: typeof BudgetFlatRow.Type
 const BudgetLookup = Schema.Struct({ userId: UserId, budgetId: BudgetId });
 
 /** Lists one User's Budgets in deterministic Currency, Category, identity order in scope. */
-export const listBudgetsInScope = Effect.fn("listBudgetsInScope")(function* (userId: UserId) {
+export const selectBudgetsInScope = Effect.fn("selectBudgetsInScope")(function* (userId: UserId) {
   const sql = yield* SqlClient.SqlClient;
   const rows = yield* SqlSchema.findAll({
     Request: UserId,
@@ -55,8 +55,8 @@ export const listBudgetsInScope = Effect.fn("listBudgetsInScope")(function* (use
 });
 
 /** Lists one User's Budgets under an independently established User transaction. */
-export const listBudgets = Effect.fn("listBudgets")((userId: UserId) =>
-  withUserTransaction(userId, listBudgetsInScope(userId))
+export const selectBudgets = Effect.fn("selectBudgets")((userId: UserId) =>
+  withUserTransaction(userId, selectBudgetsInScope(userId))
 );
 
 /** Finds one User-owned Budget in scope; foreign and absent ids are indistinguishable. */
@@ -201,7 +201,7 @@ const statusFromRow = Effect.fn("statusFromRow")(function* (
 });
 
 /** Loads filtered monthly status without mutating Budget or latch state. */
-export const listBudgetStatuses = Effect.fn("listBudgetStatuses")(function* (
+export const selectBudgetStatuses = Effect.fn("selectBudgetStatuses")(function* (
   userId: UserId,
   query: BudgetStatusQuery,
   period: AppliedBudgetMonth

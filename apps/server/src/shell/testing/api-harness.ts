@@ -13,6 +13,7 @@ import type {
   PaywallRequired,
   ScopeMissing,
   Unauthenticated,
+  UserActionRequired,
   ValidationFailed,
 } from "~/shell/_shared/errors";
 import { FidyApi } from "~/shell/api";
@@ -52,6 +53,7 @@ export type ApiCallFailure =
   | PaywallRequired
   | ScopeMissing
   | Unauthenticated
+  | UserActionRequired
   | ValidationFailed
   | MemoryCapacityExceededApi
   | AtomicBatchRejected;

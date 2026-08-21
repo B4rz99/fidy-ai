@@ -17,6 +17,7 @@ import {
   Schedule,
   Schema,
 } from "effect";
+import type { ConfigError } from "effect/Config";
 import { TestClock } from "effect/testing";
 import { SqlClient, type SqlError } from "effect/unstable/sql";
 import { expectTypeOf } from "vitest";
@@ -24,6 +25,8 @@ import { CanonicalOperationId } from "~/core/_shared/canonical-operation";
 import { CompactedConversationOutput } from "~/core/transcript/compacted-conversation";
 import { ConsentRecord, ConsentRecordId } from "~/core/consent/model";
 import { UserId } from "~/core/identity/reference";
+import { ConversationCompactionTokenCount } from "~/core/transcript/compaction-policy";
+import type { HostedAgentSessionId } from "~/core/transcript/hosted-agent-session";
 import {
   AgentIteration,
   type AssistantTranscriptEntry,
@@ -42,9 +45,9 @@ import {
 import { projectTranscriptForModel } from "~/shell/agent/model-boundary";
 import { currentDisclosure } from "~/shell/consent/current-disclosure";
 import { appendConsentRecord } from "~/shell/consent/repo";
-import { advisoryLockKey } from "~/shell/db/advisory-lock";
-import { MigrationSqlClient, PgLive } from "~/shell/db/client";
-import { defaultUserId } from "~/shell/db/development-seed";
+import { advisoryLockKey, withUserTurnLock } from "~/shell/db/advisory-lock";
+import { MigrationSqlClient } from "~/shell/db/client";
+import { defaultUserId, seedOnboardingConsent } from "~/shell/db/development-seed";
 import { ApiHarness } from "~/shell/testing/api-harness";
 import {
   ConversationCompactionInference,
@@ -52,17 +55,16 @@ import {
 } from "./conversation-compaction-inference";
 import {
   type ActiveTurnRequest,
+  type AdmittedTurn,
   CompactionCommitObserver,
   ContinuityChanged,
   type ContinuityView,
   ConversationCompactionPolicy,
-  ConversationCompactionTokenCount,
   ConversationContinuity,
   type ConversationContinuityService,
   type DeliveredAssistantContent,
-  type PendingTurn,
-  type PreparedAttempt,
-  type SerializedAttempt,
+  HostedAgentSessionConsentRequired,
+  type PreparedTurnContext,
   type TurnContinuationContent,
 } from "./conversation-continuity";
 
@@ -77,15 +79,42 @@ const encodePersistedTranscriptEntry = Schema.encodeSync(Schema.toCodecJson(Tran
 expectTypeOf<ActiveTurnRequest>().toEqualTypeOf<ExpectedActiveTurnRequest>();
 expectTypeOf<TurnContinuationContent>().toEqualTypeOf<ExpectedContinuationContent>();
 expectTypeOf<DeliveredAssistantContent>().toEqualTypeOf<ExpectedAssistantContent>();
-expectTypeOf<keyof SerializedAttempt>().toEqualTypeOf<"prepare">();
-expectTypeOf<keyof PreparedAttempt>().toEqualTypeOf<"context" | "begin">();
-expectTypeOf<keyof PendingTurn>().toEqualTypeOf<"append" | "complete" | "fail">();
+// The whole module surface is plain data in and plain data out: no capability, handle, or callback
+// crosses it, so nothing a caller retains can carry a Turn's authority.
+expectTypeOf<keyof ConversationContinuityService>().toEqualTypeOf<
+  | "observe"
+  | "admitSession"
+  | "requireSession"
+  | "prepareTurn"
+  | "admitTurn"
+  | "appendTurn"
+  | "completeTurn"
+  | "failTurn"
+>();
+expectTypeOf<AdmittedTurn>().toEqualTypeOf<
+  Readonly<{ turnId: TranscriptTurnId; hostedAgentSessionId: HostedAgentSessionId }>
+>();
 expectTypeOf<
-  Effect.Error<ReturnType<PreparedAttempt["begin"]>>
->().toEqualTypeOf<ContinuityChanged>();
-expectTypeOf<Effect.Error<ReturnType<PendingTurn["append"]>>>().toEqualTypeOf<never>();
-expectTypeOf<Effect.Error<ReturnType<PendingTurn["complete"]>>>().toEqualTypeOf<never>();
-expectTypeOf<Effect.Error<ReturnType<PendingTurn["fail"]>>>().toEqualTypeOf<never>();
+  Effect.Error<ReturnType<ConversationContinuityService["admitSession"]>>
+>().toEqualTypeOf<HostedAgentSessionConsentRequired>();
+expectTypeOf<
+  Effect.Error<ReturnType<ConversationContinuityService["requireSession"]>>
+>().toEqualTypeOf<HostedAgentSessionConsentRequired>();
+expectTypeOf<
+  Effect.Error<ReturnType<ConversationContinuityService["prepareTurn"]>>
+>().toEqualTypeOf<never>();
+expectTypeOf<Effect.Error<ReturnType<ConversationContinuityService["admitTurn"]>>>().toEqualTypeOf<
+  ContinuityChanged | HostedAgentSessionConsentRequired
+>();
+expectTypeOf<
+  Effect.Error<ReturnType<ConversationContinuityService["appendTurn"]>>
+>().toEqualTypeOf<never>();
+expectTypeOf<
+  Effect.Error<ReturnType<ConversationContinuityService["completeTurn"]>>
+>().toEqualTypeOf<never>();
+expectTypeOf<
+  Effect.Error<ReturnType<ConversationContinuityService["failTurn"]>>
+>().toEqualTypeOf<never>();
 
 type CryptoRaceGate = {
   readonly entered: Deferred.Deferred<void>;
@@ -423,6 +452,10 @@ const assertDefect = (exit: Exit.Exit<unknown, unknown>): void => {
   if (Exit.isFailure(exit)) expect(Cause.hasDies(exit.cause)).toBe(true);
 };
 
+/** Recognizes the closed-session refusal, so an unrelated failure cannot satisfy the assertion. */
+const hostedSessionClosed = (error: unknown): boolean =>
+  error instanceof HostedAgentSessionConsentRequired;
+
 const assertContentFreeDefect = (exit: Exit.Exit<unknown, unknown>, secret: string): void => {
   assertDefect(exit);
   if (Exit.isFailure(exit)) expect(Cause.pretty(exit.cause)).not.toContain(secret);
@@ -432,11 +465,18 @@ const resetDefaultContinuity = Effect.gen(function* () {
   const sql = yield* MigrationSqlClient;
   yield* sql`DELETE FROM transcript_entries WHERE user_id = ${defaultUserId}`;
   yield* sql`DELETE FROM conversation_continuity WHERE user_id = ${defaultUserId}`;
+  yield* sql`DELETE FROM hosted_agent_sessions WHERE user_id = ${defaultUserId}`;
+  // Whether a session may carry work reads the User's whole Consent standing, not only the grant it
+  // pinned, so every program starts from the seeded basis instead of decisions an earlier one left.
+  yield* sql`DELETE FROM consent_records WHERE subject_user_id = ${defaultUserId}`;
+  yield* seedOnboardingConsent(defaultUserId).pipe(Effect.orDie);
 });
 
 const isolatedUserId = UserId.make("f1d1a000-0000-4000-8000-0000000004b0");
 const resetIsolatedUser = Effect.gen(function* () {
   const sql = yield* MigrationSqlClient;
+  yield* sql`DELETE FROM hosted_agent_sessions WHERE user_id = ${isolatedUserId}`;
+  yield* sql`DELETE FROM consent_records WHERE subject_user_id = ${isolatedUserId}`;
   yield* sql`DELETE FROM users WHERE id = ${isolatedUserId}`;
   yield* sql`
     INSERT INTO users (
@@ -448,6 +488,7 @@ const resetIsolatedUser = Effect.gen(function* () {
       '2026-08-11T00:00:00Z', '2026-08-18T00:00:00Z'
     )
   `;
+  yield* seedOnboardingConsent(isolatedUserId).pipe(Effect.orDie);
 });
 
 const assertGeneratedMetadata = (completed: ContinuityView): void => {
@@ -467,6 +508,53 @@ const assertGeneratedMetadata = (completed: ContinuityView): void => {
   }
 };
 
+/**
+ * Mirrors the hosted runtime's own preamble: one serialized User, one admitted Hosted Agent
+ * Session, one rechecked session, one prepared snapshot. Composed from the public operations, so
+ * nothing here is a capability the module handed out.
+ */
+type PreparedTurnInput = Readonly<{
+  continuity: ConversationContinuityService;
+  userId: UserId;
+  request: ActiveTurnRequest;
+}>;
+
+const withPreparedTurn = <A, E, R>(
+  { continuity, userId, request }: PreparedTurnInput,
+  use: (prepared: PreparedTurnContext) => Effect.Effect<A, E, R>
+): Effect.Effect<A, E | HostedAgentSessionConsentRequired, R | SqlClient.SqlClient> =>
+  withUserTurnLock(
+    userId,
+    Effect.flatMap(continuity.admitSession(userId), (hostedAgentSessionId) =>
+      continuity
+        .requireSession(userId, hostedAgentSessionId)
+        .pipe(
+          Effect.andThen(continuity.prepareTurn(userId, hostedAgentSessionId, request)),
+          Effect.flatMap(use)
+        )
+    )
+  );
+
+/** The Turn operations one admission enables, each naming the durable Turn rather than holding it. */
+type AdmittedTurnOperations = Readonly<{
+  turnId: TranscriptTurnId;
+  append: (entries: Arr.NonEmptyReadonlyArray<TurnContinuationContent>) => Effect.Effect<void>;
+  complete: (assistant: DeliveredAssistantContent) => Effect.Effect<void>;
+  fail: (reason: TurnFailureReason) => Effect.Effect<void>;
+}>;
+
+const admitTurn = (
+  continuity: ConversationContinuityService,
+  userId: UserId,
+  prepared: PreparedTurnContext
+): Effect.Effect<AdmittedTurnOperations, ContinuityChanged | HostedAgentSessionConsentRequired> =>
+  Effect.map(continuity.admitTurn({ userId, prepared }), ({ turnId }) => ({
+    turnId,
+    append: (entries) => continuity.appendTurn({ userId, turnId, entries }),
+    complete: (assistant) => continuity.completeTurn({ userId, turnId, assistant }),
+    fail: (reason) => continuity.failTurn({ userId, turnId, reason }),
+  }));
+
 const generatedMetadataProgram = Effect.gen(function* () {
   const continuity = yield* ConversationContinuity;
   yield* resetDefaultContinuity;
@@ -477,22 +565,20 @@ const generatedMetadataProgram = Effect.gen(function* () {
     "generated"
   );
 
-  yield* continuity.withSerializedAttempt(defaultUserId, request, (attempt) =>
-    attempt.prepare((prepared) =>
-      Effect.gen(function* () {
-        expect(yield* continuity.observe(defaultUserId)).toEqual({ entries: [], turns: [] });
-        const pending = yield* prepared.begin();
-        const admitted = yield* continuity.observe(defaultUserId);
-        expect(admitted.turns[0]?._tag).toBe("Pending");
-        expect(admitted.entries).toHaveLength(1);
-        expect(withoutMetadata(Option.getOrThrow(Arr.head(admitted.entries)))).toEqual({
-          _tag: "UserTranscriptEntry",
-          ...request,
-        });
-        yield* pending.append([call, result]);
-        yield* pending.complete(assistantContent());
-      })
-    )
+  yield* withPreparedTurn({ continuity, userId: defaultUserId, request }, (prepared) =>
+    Effect.gen(function* () {
+      expect(yield* continuity.observe(defaultUserId)).toEqual({ entries: [], turns: [] });
+      const pending = yield* admitTurn(continuity, defaultUserId, prepared);
+      const admitted = yield* continuity.observe(defaultUserId);
+      expect(admitted.turns[0]?._tag).toBe("Pending");
+      expect(admitted.entries).toHaveLength(1);
+      expect(withoutMetadata(Option.getOrThrow(Arr.head(admitted.entries)))).toEqual({
+        _tag: "UserTranscriptEntry",
+        ...request,
+      });
+      yield* pending.append([call, result]);
+      yield* pending.complete(assistantContent());
+    })
   );
 
   const completed = yield* continuity.observe(defaultUserId);
@@ -509,21 +595,18 @@ const stalePreparedProgram = Effect.gen(function* () {
   const continuity = yield* ConversationContinuity;
   const migrationSql = yield* MigrationSqlClient;
   yield* resetDefaultContinuity;
-  yield* continuity.withSerializedAttempt(
-    defaultUserId,
-    activeRequest("stale request must stay absent"),
-    (attempt) =>
-      attempt.prepare((prepared) =>
-        Effect.gen(function* () {
-          yield* migrationSql`
-            UPDATE conversation_continuity
-            SET revision = revision + 1
-            WHERE user_id = ${defaultUserId}
-          `;
-          const changed = yield* prepared.begin().pipe(Effect.flip);
-          assert.deepStrictEqual(changed, new ContinuityChanged());
-        })
-      )
+  yield* withPreparedTurn(
+    { continuity, userId: defaultUserId, request: activeRequest("stale request must stay absent") },
+    (prepared) =>
+      Effect.gen(function* () {
+        yield* migrationSql`
+          UPDATE conversation_continuity
+          SET revision = revision + 1
+          WHERE user_id = ${defaultUserId}
+        `;
+        const changed = yield* Effect.flip(admitTurn(continuity, defaultUserId, prepared));
+        assert.deepStrictEqual(changed, new ContinuityChanged());
+      })
   );
   expect((yield* continuity.observe(defaultUserId)).entries).toEqual([]);
 });
@@ -532,32 +615,502 @@ const staleMemoryPreparedProgram = Effect.gen(function* () {
   const continuity = yield* ConversationContinuity;
   const migrationSql = yield* MigrationSqlClient;
   yield* resetDefaultContinuity;
-  yield* continuity.withSerializedAttempt(
-    defaultUserId,
-    activeRequest("stale memory request must stay absent"),
-    (attempt) =>
-      attempt.prepare((prepared) =>
-        Effect.gen(function* () {
-          yield* migrationSql`
-            INSERT INTO memory_revisions (user_id, revision)
-            VALUES (${defaultUserId}, 1)
-            ON CONFLICT (user_id) DO UPDATE
-            SET revision = memory_revisions.revision + 1
-          `;
-          const changed = yield* prepared.begin().pipe(Effect.flip);
-          assert.deepStrictEqual(changed, new ContinuityChanged());
-        })
-      )
+  yield* withPreparedTurn(
+    {
+      continuity,
+      userId: defaultUserId,
+      request: activeRequest("stale memory request must stay absent"),
+    },
+    (prepared) =>
+      Effect.gen(function* () {
+        yield* migrationSql`
+          INSERT INTO memory_revisions (user_id, revision)
+          VALUES (${defaultUserId}, 1)
+          ON CONFLICT (user_id) DO UPDATE
+          SET revision = memory_revisions.revision + 1
+        `;
+        const changed = yield* Effect.flip(admitTurn(continuity, defaultUserId, prepared));
+        assert.deepStrictEqual(changed, new ContinuityChanged());
+      })
   );
   expect((yield* continuity.observe(defaultUserId)).entries).toEqual([]);
+});
+
+// The idle boundary is measured from the session's last terminal Turn, so the test backdates that
+// evidence rather than waiting. `started_at` moves too: the table forbids a terminal Turn older
+// than its session.
+const idleBoundaryProgram = Effect.gen(function* () {
+  const continuity = yield* ConversationContinuity;
+  const sql = yield* MigrationSqlClient;
+  yield* resetDefaultContinuity;
+
+  const first = yield* withPreparedTurn(
+    { continuity, userId: defaultUserId, request: activeRequest("primera sesion") },
+    (prepared) =>
+      Effect.flatMap(admitTurn(continuity, defaultUserId, prepared), (turn) =>
+        turn.complete(assistantContent())
+      ).pipe(Effect.as(prepared.snapshot.hostedAgentSessionId))
+  );
+
+  yield* sql`
+    UPDATE hosted_agent_sessions
+    SET started_at = started_at - interval '20 minutes',
+        last_terminal_turn_at = last_terminal_turn_at - interval '20 minutes'
+    WHERE user_id = ${defaultUserId} AND id = ${first}
+  `;
+
+  const second = yield* withUserTurnLock(defaultUserId, continuity.admitSession(defaultUserId));
+
+  expect(second).not.toBe(first);
+  expect(
+    yield* sql`
+      SELECT id, status FROM hosted_agent_sessions
+      WHERE user_id = ${defaultUserId} ORDER BY started_at
+    `
+  ).toEqual([
+    { id: first, status: "idle-ended" },
+    { id: second, status: "active" },
+  ]);
+});
+
+// A session whose first Turn never terminalized has no terminal evidence to measure from, so the
+// boundary runs from `started_at`. Without that an orphan session would hold its captured Consent
+// basis open forever.
+const idleBoundaryWithoutTerminalTurnProgram = Effect.gen(function* () {
+  const continuity = yield* ConversationContinuity;
+  const sql = yield* MigrationSqlClient;
+  yield* resetDefaultContinuity;
+
+  const first = yield* withUserTurnLock(defaultUserId, continuity.admitSession(defaultUserId));
+  expect(
+    yield* sql`
+      SELECT last_terminal_turn_at AS "lastTerminalTurnAt" FROM hosted_agent_sessions
+      WHERE user_id = ${defaultUserId} AND id = ${first}
+    `
+  ).toEqual([{ lastTerminalTurnAt: null }]);
+
+  yield* sql`
+    UPDATE hosted_agent_sessions SET started_at = started_at - interval '20 minutes'
+    WHERE user_id = ${defaultUserId} AND id = ${first}
+  `;
+
+  const second = yield* withUserTurnLock(defaultUserId, continuity.admitSession(defaultUserId));
+
+  expect(second).not.toBe(first);
+  expect(
+    yield* sql`
+      SELECT id, status FROM hosted_agent_sessions
+      WHERE user_id = ${defaultUserId} ORDER BY started_at
+    `
+  ).toEqual([
+    { id: first, status: "idle-ended" },
+    { id: second, status: "active" },
+  ]);
+});
+
+// A Pending Turn is evidence of activity, not an exemption. Admission runs under the Turn lock, so
+// any Pending Turn it observes was abandoned by a crashed or interrupted holder; letting one
+// override the boundary would let an ancient session roll forward on its own recovery. Recovery is
+// User-scoped, so the abandoned Turn is still terminalized under the fresh session.
+const idleBoundaryWithAbandonedPendingTurnProgram = Effect.gen(function* () {
+  const continuity = yield* ConversationContinuity;
+  const sql = yield* MigrationSqlClient;
+  yield* resetDefaultContinuity;
+
+  const first = yield* withPreparedTurn(
+    { continuity, userId: defaultUserId, request: activeRequest("turno abandonado") },
+    (prepared) =>
+      Effect.as(
+        admitTurn(continuity, defaultUserId, prepared),
+        prepared.snapshot.hostedAgentSessionId
+      )
+  );
+  yield* sql`
+    UPDATE hosted_agent_sessions SET started_at = started_at - interval '20 minutes'
+    WHERE user_id = ${defaultUserId} AND id = ${first}
+  `;
+  yield* sql`
+    UPDATE conversation_turns SET started_at = started_at - interval '20 minutes'
+    WHERE user_id = ${defaultUserId} AND session_id = ${first}
+  `;
+
+  const second = yield* withUserTurnLock(defaultUserId, continuity.admitSession(defaultUserId));
+
+  expect(second).not.toBe(first);
+  expect(
+    yield* sql`
+      SELECT id, status FROM hosted_agent_sessions
+      WHERE user_id = ${defaultUserId} ORDER BY started_at
+    `
+  ).toEqual([
+    { id: first, status: "idle-ended" },
+    { id: second, status: "active" },
+  ]);
+});
+
+// The boundary always applies, but it measures from real activity: an unfinished Turn admitted a
+// moment ago is the User still working, so a long-opened session continues on its evidence.
+const idleBoundaryFromPendingTurnActivityProgram = Effect.gen(function* () {
+  const continuity = yield* ConversationContinuity;
+  const sql = yield* MigrationSqlClient;
+  yield* resetDefaultContinuity;
+
+  const first = yield* withPreparedTurn(
+    { continuity, userId: defaultUserId, request: activeRequest("turno reciente") },
+    (prepared) =>
+      Effect.as(
+        admitTurn(continuity, defaultUserId, prepared),
+        prepared.snapshot.hostedAgentSessionId
+      )
+  );
+  yield* sql`
+    UPDATE hosted_agent_sessions SET started_at = started_at - interval '20 minutes'
+    WHERE user_id = ${defaultUserId} AND id = ${first}
+  `;
+
+  const second = yield* withUserTurnLock(defaultUserId, continuity.admitSession(defaultUserId));
+
+  expect(second).toBe(first);
+  expect(
+    yield* sql`
+      SELECT status FROM hosted_agent_sessions WHERE user_id = ${defaultUserId} AND id = ${first}
+    `
+  ).toEqual([{ status: "active" }]);
+});
+
+/**
+ * Runs `use` while the User's onboarding grants sit on a superseded disclosure revision, which is
+ * exactly the state a terms bump leaves them in. The revision is restored afterwards because the
+ * default User's Consent is shared fixture state.
+ */
+const withStaleOnboardingGrants = <A, E, R>(
+  use: Effect.Effect<A, E, R>
+): Effect.Effect<A, E | ConfigError | SqlError.SqlError, R | MigrationSqlClient> =>
+  Effect.gen(function* () {
+    const sql = yield* MigrationSqlClient;
+    const disclosure = yield* currentDisclosure;
+    const pinRevision = (revision: string): Effect.Effect<unknown, SqlError.SqlError> => sql`
+      UPDATE consent_records SET disclosure_revision = ${revision}
+      WHERE subject_user_id = ${defaultUserId}
+        AND event_type = 'granted' AND grant_type = 'onboarding'
+    `;
+    yield* pinRevision("onboarding-2026-07");
+    return yield* Effect.ensuring(use, Effect.orDie(pinRevision(disclosure.revision)));
+  });
+
+// Terms changes must not interrupt work already admitted: the captured basis governs the session it
+// was captured for, so the recheck that guards each Turn ignores the newer revision.
+const staleTermsKeepActiveSessionProgram = Effect.gen(function* () {
+  const continuity = yield* ConversationContinuity;
+  const sql = yield* MigrationSqlClient;
+  yield* resetDefaultContinuity;
+
+  const session = yield* withUserTurnLock(defaultUserId, continuity.admitSession(defaultUserId));
+
+  yield* withStaleOnboardingGrants(
+    Effect.gen(function* () {
+      yield* continuity.requireSession(defaultUserId, session);
+      const continued = yield* withUserTurnLock(
+        defaultUserId,
+        continuity.admitSession(defaultUserId)
+      );
+
+      expect(continued).toBe(session);
+      expect(
+        yield* sql`
+          SELECT status FROM hosted_agent_sessions
+          WHERE user_id = ${defaultUserId} AND id = ${session}
+        `
+      ).toEqual([{ status: "active" }]);
+    })
+  );
+});
+
+// The first request after the idle boundary is the point where current Consent is required again,
+// so a session cannot be renewed on a basis the disclosure has since superseded.
+const idleBoundaryRequiresCurrentConsentProgram = Effect.gen(function* () {
+  const continuity = yield* ConversationContinuity;
+  const sql = yield* MigrationSqlClient;
+  yield* resetDefaultContinuity;
+
+  const session = yield* withUserTurnLock(defaultUserId, continuity.admitSession(defaultUserId));
+  yield* sql`
+    UPDATE hosted_agent_sessions SET started_at = started_at - interval '20 minutes'
+    WHERE user_id = ${defaultUserId} AND id = ${session}
+  `;
+
+  yield* withStaleOnboardingGrants(
+    Effect.gen(function* () {
+      const refused = yield* Effect.flip(
+        withUserTurnLock(defaultUserId, continuity.admitSession(defaultUserId))
+      );
+
+      expect(refused).toBeInstanceOf(HostedAgentSessionConsentRequired);
+      expect(
+        yield* sql`SELECT id FROM hosted_agent_sessions WHERE user_id = ${defaultUserId}`
+      ).toEqual([{ id: session }]);
+    })
+  );
+});
+
+/** Fresh continuity with no session, which every session-boundary program starts from. */
+const CapturedGrantRow = Schema.Tuple([Schema.Struct({ grantId: ConsentRecordId })]);
+
+const consentDecision = (input: {
+  readonly id: string;
+  readonly event: typeof ConsentRecord.fields.event.Type;
+  readonly occurredAt: string;
+  readonly disclosure: typeof ConsentRecord.fields.disclosure.Type;
+}): ConsentRecord =>
+  ConsentRecord.make({
+    id: ConsentRecordId.make(input.id),
+    subjectUserId: defaultUserId,
+    event: input.event,
+    disclosure: input.disclosure,
+    occurredAt: DateTime.makeUnsafe(input.occurredAt),
+    disclosureMessage: {
+      channel: "test",
+      provider: "test",
+      providerMessageId: `${input.id}:disclosure`,
+    },
+    decisionMessage: {
+      channel: "test",
+      provider: "test",
+      providerMessageId: `${input.id}:decision`,
+    },
+  });
+
+const capturedGrantId = (
+  session: HostedAgentSessionId
+): Effect.Effect<ConsentRecordId, Schema.SchemaError | SqlError.SqlError, MigrationSqlClient> =>
+  Effect.gen(function* () {
+    const sql = yield* MigrationSqlClient;
+    const [row] = yield* Schema.decodeUnknownEffect(CapturedGrantRow)(
+      yield* sql`
+        SELECT consent_grant_id AS "grantId" FROM hosted_agent_sessions
+        WHERE user_id = ${defaultUserId} AND id = ${session}
+      `
+    );
+    return row.grantId;
+  });
+
+// The captured basis is what a later terms revision is compared against, so admission must copy the
+// grant's exact revisions and digests instead of re-deriving them when the session is next used.
+const consentBasisCaptureProgram = Effect.gen(function* () {
+  const continuity = yield* ConversationContinuity;
+  const sql = yield* MigrationSqlClient;
+  yield* resetDefaultContinuity;
+
+  const admitted = yield* withUserTurnLock(defaultUserId, continuity.admitSession(defaultUserId));
+  const basisColumns = sql.literal(
+    `disclosure_revision AS "disclosureRevision", disclosure_sha256 AS "disclosureSha256", ` +
+      `policy_revision AS "policyRevision", policy_sha256 AS "policySha256"`
+  );
+  const grant = yield* sql`
+    SELECT id AS "grantId", ${basisColumns} FROM consent_records
+    WHERE subject_user_id = ${defaultUserId} AND event_type = 'granted'
+      AND grant_type = 'onboarding'
+    ORDER BY occurred_at DESC, id DESC
+    LIMIT 1
+  `;
+  const session = yield* sql`
+    SELECT consent_grant_id AS "grantId", ${basisColumns} FROM hosted_agent_sessions
+    WHERE user_id = ${defaultUserId} AND id = ${admitted}
+  `;
+
+  expect(grant).toHaveLength(1);
+  expect(session).toEqual(grant);
+});
+
+// Revocation closes the session, but the unfinished Turn is durable recovery state: only recovery
+// decides its terminal outcome, so revocation must leave the row Pending rather than erase it.
+const pendingTurnSurvivesRevocationProgram = Effect.gen(function* () {
+  const continuity = yield* ConversationContinuity;
+  const sql = yield* MigrationSqlClient;
+  const disclosure = yield* currentDisclosure;
+  yield* resetDefaultContinuity;
+
+  const session = yield* withPreparedTurn(
+    { continuity, userId: defaultUserId, request: activeRequest("turno sin terminar") },
+    (prepared) =>
+      Effect.as(
+        admitTurn(continuity, defaultUserId, prepared),
+        prepared.snapshot.hostedAgentSessionId
+      )
+  );
+  const grantId = yield* capturedGrantId(session);
+  yield* appendConsentRecord(
+    consentDecision({
+      id: "f1d1a000-0000-4000-8000-0000000004fe",
+      event: { _tag: "Revoked", grantId },
+      occurredAt: "2026-08-14T12:00:00Z",
+      disclosure,
+    })
+  ).pipe(Effect.provideService(SqlClient.SqlClient, sql));
+
+  const rejected = yield* Effect.flip(continuity.requireSession(defaultUserId, session));
+
+  expect(rejected).toBeInstanceOf(HostedAgentSessionConsentRequired);
+  expect(
+    yield* sql`
+      SELECT state FROM conversation_turns
+      WHERE user_id = ${defaultUserId} AND session_id = ${session}
+    `
+  ).toEqual([{ state: "Pending" }]);
+  // Revocation closes the session durably, so a User who revokes and never messages again does not
+  // leave a session that still reads as active.
+  expect(
+    yield* sql`
+      SELECT status FROM hosted_agent_sessions
+      WHERE user_id = ${defaultUserId} AND id = ${session}
+    `
+  ).toEqual([{ status: "revoked" }]);
+});
+
+// One active session per User is a database invariant, so a stale session that revocation left
+// behind would refuse every later message. Admission closes it and opens a fresh one against
+// current Consent, which is what lets a User who re-grants talk again.
+const revokedSessionReadmissionProgram = Effect.gen(function* () {
+  const continuity = yield* ConversationContinuity;
+  const sql = yield* MigrationSqlClient;
+  const disclosure = yield* currentDisclosure;
+  yield* resetDefaultContinuity;
+  const admit = withUserTurnLock(defaultUserId, continuity.admitSession(defaultUserId));
+
+  const first = yield* admit;
+  const grantId = yield* capturedGrantId(first);
+  const appendDecision = (record: ConsentRecord): Effect.Effect<void> =>
+    appendConsentRecord(record).pipe(
+      Effect.provideService(SqlClient.SqlClient, sql),
+      Effect.asVoid,
+      Effect.orDie
+    );
+  yield* appendDecision(
+    consentDecision({
+      id: "f1d1a000-0000-4000-8000-000000000501",
+      event: { _tag: "Revoked", grantId },
+      occurredAt: "2026-08-14T12:00:00Z",
+      disclosure,
+    })
+  );
+
+  expect(yield* Effect.flip(admit)).toBeInstanceOf(HostedAgentSessionConsentRequired);
+
+  yield* appendDecision(
+    consentDecision({
+      id: "f1d1a000-0000-4000-8000-000000000502",
+      event: { _tag: "Granted", grant: { _tag: "Onboarding" } },
+      occurredAt: "2026-08-14T12:00:01Z",
+      disclosure,
+    })
+  );
+  const second = yield* admit;
+
+  expect(second).not.toBe(first);
+  expect(
+    yield* sql`
+      SELECT id, status FROM hosted_agent_sessions
+      WHERE user_id = ${defaultUserId} ORDER BY started_at
+    `
+  ).toEqual([
+    { id: first, status: "revoked" },
+    { id: second, status: "active" },
+  ]);
+});
+
+// Revocation targets the User's latest onboarding grant, which after a re-grant is no longer the
+// one the active session pinned. The session must still close: the hosted seam and the PAT seam
+// answer "is this User's Consent revoked" with one predicate, or a revoked User keeps a live agent.
+const revokedLatestGrantClosesSessionProgram = Effect.gen(function* () {
+  const continuity = yield* ConversationContinuity;
+  const sql = yield* MigrationSqlClient;
+  const disclosure = yield* currentDisclosure;
+  yield* resetDefaultContinuity;
+
+  const session = yield* withUserTurnLock(defaultUserId, continuity.admitSession(defaultUserId));
+  const pinnedGrantId = yield* capturedGrantId(session);
+  const appendDecision = (record: ConsentRecord): Effect.Effect<void> =>
+    appendConsentRecord(record).pipe(
+      Effect.provideService(SqlClient.SqlClient, sql),
+      Effect.asVoid,
+      Effect.orDie
+    );
+
+  const regrantedId = ConsentRecordId.make("f1d1a000-0000-4000-8000-000000000503");
+  yield* appendDecision(
+    consentDecision({
+      id: regrantedId,
+      event: { _tag: "Granted", grant: { _tag: "Onboarding" } },
+      occurredAt: "2026-08-14T12:00:00Z",
+      disclosure,
+    })
+  );
+  yield* appendDecision(
+    consentDecision({
+      id: "f1d1a000-0000-4000-8000-000000000504",
+      event: { _tag: "Revoked", grantId: regrantedId },
+      occurredAt: "2026-08-14T12:00:01Z",
+      disclosure,
+    })
+  );
+
+  const rejected = yield* Effect.flip(continuity.requireSession(defaultUserId, session));
+
+  expect(pinnedGrantId).not.toBe(regrantedId);
+  expect(rejected).toBeInstanceOf(HostedAgentSessionConsentRequired);
+});
+
+// Revocation targets the latest grant, not every grant a User ever accepted. Admission must read
+// the same standing every other credential reads, or an earlier unrevoked grant would still admit
+// hosted work while the PAT seam refuses on the revocation the User actually performed.
+const revokedLatestGrantRefusesAdmissionProgram = Effect.gen(function* () {
+  const continuity = yield* ConversationContinuity;
+  const sql = yield* MigrationSqlClient;
+  const disclosure = yield* currentDisclosure;
+  yield* resetDefaultContinuity;
+
+  const appendDecision = (record: ConsentRecord): Effect.Effect<void> =>
+    appendConsentRecord(record).pipe(
+      Effect.provideService(SqlClient.SqlClient, sql),
+      Effect.asVoid,
+      Effect.orDie
+    );
+
+  const laterGrantId = ConsentRecordId.make("f1d1a000-0000-4000-8000-000000000505");
+  yield* appendDecision(
+    consentDecision({
+      id: laterGrantId,
+      event: { _tag: "Granted", grant: { _tag: "Onboarding" } },
+      occurredAt: "2026-08-14T13:00:00Z",
+      disclosure,
+    })
+  );
+  yield* appendDecision(
+    consentDecision({
+      id: "f1d1a000-0000-4000-8000-000000000506",
+      event: { _tag: "Revoked", grantId: laterGrantId },
+      occurredAt: "2026-08-14T13:00:01Z",
+      disclosure,
+    })
+  );
+
+  const refused = yield* Effect.flip(
+    withUserTurnLock(defaultUserId, continuity.admitSession(defaultUserId))
+  );
+
+  expect(refused).toBeInstanceOf(HostedAgentSessionConsentRequired);
+  expect(yield* sql`SELECT id FROM hosted_agent_sessions WHERE user_id = ${defaultUserId}`).toEqual(
+    []
+  );
 });
 
 const prepareAndInspectRecovery = (
   continuity: ConversationContinuityService,
   expectedCall: TurnContinuationContent
-): Effect.Effect<void> =>
-  continuity.withSerializedAttempt(defaultUserId, activeRequest("next request"), (attempt) =>
-    attempt.prepare(() =>
+): Effect.Effect<void, HostedAgentSessionConsentRequired, SqlClient.SqlClient> =>
+  withPreparedTurn(
+    { continuity, userId: defaultUserId, request: activeRequest("next request") },
+    () =>
       continuity.observe(defaultUserId).pipe(
         Effect.tap((view) =>
           Effect.sync(() => {
@@ -570,12 +1123,14 @@ const prepareAndInspectRecovery = (
           })
         )
       )
-    )
   );
 
-const assertSingleInterruption = (continuity: ConversationContinuityService): Effect.Effect<void> =>
-  continuity.withSerializedAttempt(defaultUserId, activeRequest("later request"), (attempt) =>
-    attempt.prepare(() =>
+const assertSingleInterruption = (
+  continuity: ConversationContinuityService
+): Effect.Effect<void, HostedAgentSessionConsentRequired, SqlClient.SqlClient> =>
+  withPreparedTurn(
+    { continuity, userId: defaultUserId, request: activeRequest("later request") },
+    () =>
       continuity
         .observe(defaultUserId)
         .pipe(
@@ -585,43 +1140,40 @@ const assertSingleInterruption = (continuity: ConversationContinuityService): Ef
             ).toHaveLength(1)
           )
         )
-    )
   );
 
 const recoveryProgram = Effect.gen(function* () {
   const continuity = yield* ConversationContinuity;
   yield* resetDefaultContinuity;
-  let escapedPending = Option.none<PendingTurn>();
+  let abandoned = Option.none<AdmittedTurnOperations>();
   const call = toolCallContent("recovery");
-  yield* continuity.withSerializedAttempt(defaultUserId, activeRequest("recover me"), (attempt) =>
-    attempt.prepare((prepared) =>
+  yield* withPreparedTurn(
+    { continuity, userId: defaultUserId, request: activeRequest("recover me") },
+    (prepared) =>
       Effect.gen(function* () {
-        escapedPending = Option.some(yield* prepared.begin());
-        yield* Option.getOrThrow(escapedPending).append([call]);
+        abandoned = Option.some(yield* admitTurn(continuity, defaultUserId, prepared));
+        yield* Option.getOrThrow(abandoned).append([call]);
       })
-    )
   );
   expect((yield* continuity.observe(defaultUserId)).turns[0]?._tag).toBe("Pending");
   yield* prepareAndInspectRecovery(continuity, call);
   yield* assertSingleInterruption(continuity);
-  const pending = Option.getOrThrow(escapedPending);
-  assertDefect(yield* pending.append([toolCallContent("escaped")]).pipe(Effect.exit));
+  // Recovery terminalized the Turn, so naming it again finds no Pending row and dies.
+  const recovered = Option.getOrThrow(abandoned);
+  assertDefect(yield* recovered.append([toolCallContent("escaped")]).pipe(Effect.exit));
 });
 
 const recoveryTimestampProgram = Effect.gen(function* () {
   const continuity = yield* ConversationContinuity;
   const sql = yield* MigrationSqlClient;
   yield* resetDefaultContinuity;
-  yield* continuity.withSerializedAttempt(
-    defaultUserId,
-    activeRequest("recover chronology"),
-    (attempt) =>
-      attempt.prepare((prepared) =>
-        Effect.gen(function* () {
-          const pending = yield* prepared.begin();
-          yield* pending.append([toolCallContent("future")]);
-        })
-      )
+  yield* withPreparedTurn(
+    { continuity, userId: defaultUserId, request: activeRequest("recover chronology") },
+    (prepared) =>
+      Effect.gen(function* () {
+        const pending = yield* admitTurn(continuity, defaultUserId, prepared);
+        yield* pending.append([toolCallContent("future")]);
+      })
   );
 
   const latestPersistedAt = DateTime.makeUnsafe("2099-08-12T12:00:00.000Z");
@@ -651,168 +1203,33 @@ const recoveryTimestampProgram = Effect.gen(function* () {
         })
       )
     );
-  yield* continuity.withSerializedAttempt(defaultUserId, activeRequest("next request"), (attempt) =>
-    attempt.prepare(assertRecoveryTime)
+  yield* withPreparedTurn(
+    { continuity, userId: defaultUserId, request: activeRequest("next request") },
+    () => assertRecoveryTime()
   );
 });
 
-const captureScopedCapabilities = (
-  continuity: ConversationContinuityService,
-  setAttempt: (attempt: SerializedAttempt) => void,
-  setPrepared: (attempt: PreparedAttempt) => void
-): Effect.Effect<void> =>
-  continuity.withSerializedAttempt(defaultUserId, activeRequest("scoped"), (attempt) => {
-    setAttempt(attempt);
-    return attempt.prepare((prepared) => {
-      setPrepared(prepared);
-      return Effect.void;
-    });
-  });
-
-const assertSupersededPreparation = (
-  continuity: ConversationContinuityService
-): Effect.Effect<void> =>
-  continuity.withSerializedAttempt(defaultUserId, activeRequest("superseded"), (attempt) =>
-    attempt.prepare((prepared) =>
+/**
+ * Once-only terminalization is a durable property, not a retained capability: every operation
+ * rechecks Pending state inside its own transaction, so naming an already-terminal Turn dies.
+ */
+const durableTerminalizationProgram = Effect.gen(function* () {
+  const continuity = yield* ConversationContinuity;
+  yield* resetDefaultContinuity;
+  const terminal = yield* withPreparedTurn(
+    { continuity, userId: defaultUserId, request: activeRequest("terminal") },
+    (prepared) =>
       Effect.gen(function* () {
-        yield* attempt.prepare(() => Effect.void);
-        assertDefect(yield* prepared.begin().pipe(Effect.exit));
-      })
-    )
-  );
-
-const terminalizeAndReuse = (
-  continuity: ConversationContinuityService
-): Effect.Effect<PendingTurn, ContinuityChanged> =>
-  continuity.withSerializedAttempt(defaultUserId, activeRequest("terminal"), (attempt) =>
-    attempt.prepare((prepared) =>
-      Effect.gen(function* () {
-        const pending = yield* prepared.begin();
+        const pending = yield* admitTurn(continuity, defaultUserId, prepared);
         yield* pending.complete(assistantContent("done"));
         assertDefect(yield* pending.fail("DeliveryFailed").pipe(Effect.exit));
         return pending;
       })
-    )
   );
-
-const capabilityDefectsProgram = Effect.gen(function* () {
-  const continuity = yield* ConversationContinuity;
-  yield* resetDefaultContinuity;
-  let escapedSerialized = Option.none<SerializedAttempt>();
-  let escapedPrepared = Option.none<PreparedAttempt>();
-  yield* captureScopedCapabilities(
-    continuity,
-    (attempt) => {
-      escapedSerialized = Option.some(attempt);
-    },
-    (prepared) => {
-      escapedPrepared = Option.some(prepared);
-    }
-  );
-  assertDefect(
-    yield* Option.getOrThrow(escapedSerialized)
-      .prepare(() => Effect.void)
-      .pipe(Effect.exit)
-  );
-  assertDefect(yield* Option.getOrThrow(escapedPrepared).begin().pipe(Effect.exit));
-  yield* assertSupersededPreparation(continuity);
-  const terminalPending = yield* terminalizeAndReuse(continuity);
-  assertDefect(yield* terminalPending.append([toolCallContent("after-scope")]).pipe(Effect.exit));
+  assertDefect(yield* terminal.append([toolCallContent("after-terminal")]).pipe(Effect.exit));
+  assertDefect(yield* terminal.complete(assistantContent("again")).pipe(Effect.exit));
   expect((yield* continuity.observe(defaultUserId)).entries).toHaveLength(2);
 });
-
-type PendingRaceOperation = "append" | "complete" | "fail";
-
-const pendingRaceOperation = (
-  pending: PendingTurn,
-  operation: PendingRaceOperation
-): Effect.Effect<void> => {
-  switch (operation) {
-    case "append":
-      return pending.append([toolCallContent("superseded-race")]);
-    case "complete":
-      return pending.complete(assistantContent("superseded-race"));
-    case "fail":
-      return pending.fail("DeliveryFailed");
-  }
-};
-
-const raceAdmission = (
-  race: CryptoRaceControl["Service"],
-  attempt: SerializedAttempt,
-  prepared: PreparedAttempt
-): Effect.Effect<void> =>
-  Effect.gen(function* () {
-    const gate = yield* race.arm;
-    const admission = yield* Effect.forkChild(prepared.begin());
-    yield* Deferred.await(gate.entered);
-    yield* attempt.prepare(() => Effect.void);
-    yield* Deferred.succeed(gate.release, undefined);
-    assertDefect(yield* Fiber.await(admission));
-  });
-
-const supersedeDuringBeginProgram = Effect.gen(function* () {
-  const continuity = yield* ConversationContinuity;
-  const race = yield* CryptoRaceControl;
-  yield* resetDefaultContinuity;
-  yield* continuity.withSerializedAttempt(defaultUserId, activeRequest("racing begin"), (attempt) =>
-    attempt.prepare((prepared) => raceAdmission(race, attempt, prepared))
-  );
-  expect(yield* continuity.observe(defaultUserId)).toEqual({ entries: [], turns: [] });
-});
-
-type PendingMutationRace = {
-  readonly continuity: ConversationContinuityService;
-  readonly race: CryptoRaceControl["Service"];
-  readonly attempt: SerializedAttempt;
-  readonly prepared: PreparedAttempt;
-  readonly operation: PendingRaceOperation;
-};
-
-const racePendingMutation = ({
-  continuity,
-  race,
-  attempt,
-  prepared,
-  operation,
-}: PendingMutationRace): Effect.Effect<void, ContinuityChanged> =>
-  Effect.gen(function* () {
-    const pending = yield* prepared.begin();
-    const admitted = yield* continuity.observe(defaultUserId);
-    const gate = yield* race.arm;
-    const mutation = yield* Effect.forkChild(pendingRaceOperation(pending, operation));
-    yield* Deferred.await(gate.entered);
-    yield* attempt.prepare(() => Effect.void);
-    yield* Deferred.succeed(gate.release, undefined);
-    assertDefect(yield* Fiber.await(mutation));
-    const after = yield* continuity.observe(defaultUserId);
-    expect(after.entries.map(withoutMetadata)).toEqual([
-      ...admitted.entries.map(withoutMetadata),
-      { _tag: "InterruptedTurnTranscriptEntry" },
-    ]);
-    expect(after.turns[0]?._tag).toBe("Interrupted");
-  });
-
-const supersedeDuringPendingMutationProgram = (
-  operation: PendingRaceOperation
-): Effect.Effect<
-  void,
-  ContinuityChanged | SqlError.SqlError,
-  ConversationContinuity | CryptoRaceControl | MigrationSqlClient
-> =>
-  Effect.gen(function* () {
-    const continuity = yield* ConversationContinuity;
-    const race = yield* CryptoRaceControl;
-    yield* resetDefaultContinuity;
-    yield* continuity.withSerializedAttempt(
-      defaultUserId,
-      activeRequest(`racing ${operation}`),
-      (attempt) =>
-        attempt.prepare((prepared) =>
-          racePendingMutation({ continuity, race, attempt, prepared, operation })
-        )
-    );
-  });
 
 const fixedFailureProgram = Effect.gen(function* () {
   const continuity = yield* ConversationContinuity;
@@ -825,13 +1242,13 @@ const fixedFailureProgram = Effect.gen(function* () {
 
   for (const reason of reasons) {
     yield* resetDefaultContinuity;
-    yield* continuity.withSerializedAttempt(defaultUserId, activeRequest(canary), (attempt) =>
-      attempt.prepare((prepared) =>
+    yield* withPreparedTurn(
+      { continuity, userId: defaultUserId, request: activeRequest(canary) },
+      (prepared) =>
         Effect.gen(function* () {
-          const pending = yield* prepared.begin();
+          const pending = yield* admitTurn(continuity, defaultUserId, prepared);
           yield* pending.fail(reason);
         })
-      )
     );
     const failed = yield* continuity.observe(defaultUserId);
     expect(failed.turns[0]).toMatchObject({ _tag: "Failed", reason });
@@ -864,14 +1281,14 @@ const outcomeRoundTripProgram = Effect.gen(function* () {
       4
     ),
   ];
-  yield* continuity.withSerializedAttempt(defaultUserId, activeRequest("all outcomes"), (attempt) =>
-    attempt.prepare((prepared) =>
+  yield* withPreparedTurn(
+    { continuity, userId: defaultUserId, request: activeRequest("all outcomes") },
+    (prepared) =>
       Effect.gen(function* () {
-        const pending = yield* prepared.begin();
+        const pending = yield* admitTurn(continuity, defaultUserId, prepared);
         yield* pending.append(contents);
         yield* pending.complete(assistantContent("complete", 5));
       })
-    )
   );
   const persisted = (yield* continuity.observe(defaultUserId)).entries.slice(1, -1);
   expect(persisted.map(withoutMetadata)).toEqual(contents);
@@ -895,14 +1312,14 @@ const maximumPayloadProgram = Effect.gen(function* () {
       toolResultContent(outcome, `maximum-result-${index}`, index + 1)
     ),
   ];
-  yield* continuity.withSerializedAttempt(defaultUserId, activeRequest(maximumText), (attempt) =>
-    attempt.prepare((prepared) =>
+  yield* withPreparedTurn(
+    { continuity, userId: defaultUserId, request: activeRequest(maximumText) },
+    (prepared) =>
       Effect.gen(function* () {
-        const pending = yield* prepared.begin();
+        const pending = yield* admitTurn(continuity, defaultUserId, prepared);
         yield* pending.append(contents);
         yield* pending.complete(assistantContent(maximumText, 5));
       })
-    )
   );
   expect((yield* continuity.observe(defaultUserId)).entries.map(withoutMetadata)).toEqual([
     { _tag: "UserTranscriptEntry", ...activeRequest(maximumText) },
@@ -915,8 +1332,8 @@ const generatedContentProgram = (
   entry: TranscriptContentEntry
 ): Effect.Effect<
   void,
-  ContinuityChanged | SqlError.SqlError,
-  ConversationContinuity | MigrationSqlClient
+  ContinuityChanged | HostedAgentSessionConsentRequired | SqlError.SqlError,
+  ConversationContinuity | MigrationSqlClient | Crypto.Crypto | SqlClient.SqlClient
 > =>
   Effect.gen(function* () {
     const continuity = yield* ConversationContinuity;
@@ -925,29 +1342,27 @@ const generatedContentProgram = (
       entry._tag === "UserTranscriptEntry"
         ? { text: entry.text }
         : activeRequest("generated entry round-trip");
-    yield* continuity.withSerializedAttempt(defaultUserId, request, (attempt) =>
-      attempt.prepare((prepared) =>
-        Effect.gen(function* () {
-          const pending = yield* prepared.begin();
-          switch (entry._tag) {
-            case "UserTranscriptEntry":
-              break;
-            case "AssistantTranscriptEntry":
-              yield* pending.complete({ iteration: entry.iteration, text: entry.text });
-              break;
-            case "CanonicalToolCallEntry": {
-              const { id: _id, turnId: _turnId, occurredAt: _occurredAt, ...content } = entry;
-              yield* pending.append([content]);
-              break;
-            }
-            case "CanonicalToolResultEntry": {
-              const { id: _id, turnId: _turnId, occurredAt: _occurredAt, ...content } = entry;
-              yield* pending.append([content]);
-              break;
-            }
+    yield* withPreparedTurn({ continuity, userId: defaultUserId, request }, (prepared) =>
+      Effect.gen(function* () {
+        const pending = yield* admitTurn(continuity, defaultUserId, prepared);
+        switch (entry._tag) {
+          case "UserTranscriptEntry":
+            break;
+          case "AssistantTranscriptEntry":
+            yield* pending.complete({ iteration: entry.iteration, text: entry.text });
+            break;
+          case "CanonicalToolCallEntry": {
+            const { id: _id, turnId: _turnId, occurredAt: _occurredAt, ...content } = entry;
+            yield* pending.append([content]);
+            break;
           }
-        })
-      )
+          case "CanonicalToolResultEntry": {
+            const { id: _id, turnId: _turnId, occurredAt: _occurredAt, ...content } = entry;
+            yield* pending.append([content]);
+            break;
+          }
+        }
+      })
     );
     const observed = yield* continuity.observe(defaultUserId);
     expect(withoutMetadata(Option.getOrThrow(Arr.last(observed.entries)))).toEqual(
@@ -960,9 +1375,10 @@ const malformedRequestProgram = Effect.gen(function* () {
   yield* resetDefaultContinuity;
   const secret = "request-secret\u0000";
   const malformed = yield* Schema.decodeUnknownEffect(ForgedActiveTurnRequest)({ text: secret });
-  const rejected = yield* continuity
-    .withSerializedAttempt(defaultUserId, malformed, () => Effect.void)
-    .pipe(Effect.exit);
+  const rejected = yield* withPreparedTurn(
+    { continuity, userId: defaultUserId, request: malformed },
+    () => Effect.void
+  ).pipe(Effect.exit);
   assertContentFreeDefect(rejected, secret);
   expect(yield* continuity.observe(defaultUserId)).toEqual({ entries: [], turns: [] });
 });
@@ -975,20 +1391,17 @@ const malformedContinuationProgram = Effect.gen(function* () {
     ...toolCallContent("malformed"),
     input: { secret },
   });
-  yield* continuity.withSerializedAttempt(
-    defaultUserId,
-    activeRequest("continue safely"),
-    (attempt) =>
-      attempt.prepare((prepared) =>
-        Effect.gen(function* () {
-          const pending = yield* prepared.begin();
-          const rejected = yield* pending.append([malformed]).pipe(Effect.exit);
-          assertContentFreeDefect(rejected, secret);
-          expect((yield* continuity.observe(defaultUserId)).entries).toHaveLength(1);
-          yield* pending.append([toolCallContent("corrected")]);
-          yield* pending.complete(assistantContent("corrected"));
-        })
-      )
+  yield* withPreparedTurn(
+    { continuity, userId: defaultUserId, request: activeRequest("continue safely") },
+    (prepared) =>
+      Effect.gen(function* () {
+        const pending = yield* admitTurn(continuity, defaultUserId, prepared);
+        const rejected = yield* pending.append([malformed]).pipe(Effect.exit);
+        assertContentFreeDefect(rejected, secret);
+        expect((yield* continuity.observe(defaultUserId)).entries).toHaveLength(1);
+        yield* pending.append([toolCallContent("corrected")]);
+        yield* pending.complete(assistantContent("corrected"));
+      })
   );
 });
 
@@ -1000,19 +1413,16 @@ const malformedAssistantProgram = Effect.gen(function* () {
     ...assistantContent(),
     text: secret,
   });
-  yield* continuity.withSerializedAttempt(
-    defaultUserId,
-    activeRequest("complete safely"),
-    (attempt) =>
-      attempt.prepare((prepared) =>
-        Effect.gen(function* () {
-          const pending = yield* prepared.begin();
-          const rejected = yield* pending.complete(malformed).pipe(Effect.exit);
-          assertContentFreeDefect(rejected, secret);
-          expect((yield* continuity.observe(defaultUserId)).turns[0]?._tag).toBe("Pending");
-          yield* pending.complete(assistantContent("corrected"));
-        })
-      )
+  yield* withPreparedTurn(
+    { continuity, userId: defaultUserId, request: activeRequest("complete safely") },
+    (prepared) =>
+      Effect.gen(function* () {
+        const pending = yield* admitTurn(continuity, defaultUserId, prepared);
+        const rejected = yield* pending.complete(malformed).pipe(Effect.exit);
+        assertContentFreeDefect(rejected, secret);
+        expect((yield* continuity.observe(defaultUserId)).turns[0]?._tag).toBe("Pending");
+        yield* pending.complete(assistantContent("corrected"));
+      })
   );
   expect((yield* continuity.observe(defaultUserId)).turns[0]?._tag).toBe("Completed");
 });
@@ -1022,16 +1432,16 @@ const malformedFailureProgram = Effect.gen(function* () {
   yield* resetDefaultContinuity;
   const secret = "failure-reason-secret";
   const malformed = yield* Schema.decodeUnknownEffect(ForgedTurnFailureReason)(secret);
-  yield* continuity.withSerializedAttempt(defaultUserId, activeRequest("fail safely"), (attempt) =>
-    attempt.prepare((prepared) =>
+  yield* withPreparedTurn(
+    { continuity, userId: defaultUserId, request: activeRequest("fail safely") },
+    (prepared) =>
       Effect.gen(function* () {
-        const pending = yield* prepared.begin();
+        const pending = yield* admitTurn(continuity, defaultUserId, prepared);
         const rejected = yield* pending.fail(malformed).pipe(Effect.exit);
         assertContentFreeDefect(rejected, secret);
         expect((yield* continuity.observe(defaultUserId)).turns[0]?._tag).toBe("Pending");
         yield* pending.fail("DeliveryFailed");
       })
-    )
   );
   expect((yield* continuity.observe(defaultUserId)).turns[0]).toMatchObject({
     _tag: "Failed",
@@ -1043,10 +1453,9 @@ const malformedPersistedEntryProgram = Effect.gen(function* () {
   const continuity = yield* ConversationContinuity;
   const sql = yield* MigrationSqlClient;
   yield* resetDefaultContinuity;
-  yield* continuity.withSerializedAttempt(
-    defaultUserId,
-    activeRequest("persisted secret"),
-    (attempt) => attempt.prepare((prepared) => prepared.begin().pipe(Effect.asVoid))
+  yield* withPreparedTurn(
+    { continuity, userId: defaultUserId, request: activeRequest("persisted secret") },
+    (prepared) => Effect.asVoid(admitTurn(continuity, defaultUserId, prepared))
   );
 
   const secret = "persisted-transcript-secret";
@@ -1062,11 +1471,10 @@ const malformedPersistedEntryProgram = Effect.gen(function* () {
   const observed = yield* continuity.observe(defaultUserId).pipe(Effect.exit);
   assertContentFreeDefect(observed, secret);
 
-  const prepared = yield* continuity
-    .withSerializedAttempt(defaultUserId, activeRequest("must roll back recovery"), (attempt) =>
-      attempt.prepare(() => Effect.void)
-    )
-    .pipe(Effect.exit);
+  const prepared = yield* withPreparedTurn(
+    { continuity, userId: defaultUserId, request: activeRequest("must roll back recovery") },
+    () => Effect.void
+  ).pipe(Effect.exit);
   assertContentFreeDefect(prepared, secret);
 
   expect(
@@ -1087,31 +1495,41 @@ const beginPending = (
   continuity: ConversationContinuityService,
   userId: UserId,
   request: ActiveTurnRequest
-): Effect.Effect<void, ContinuityChanged> =>
-  continuity.withSerializedAttempt(userId, request, (attempt) =>
-    attempt.prepare((prepared) => prepared.begin().pipe(Effect.asVoid))
+): Effect.Effect<
+  void,
+  ContinuityChanged | HostedAgentSessionConsentRequired,
+  SqlClient.SqlClient
+> =>
+  withPreparedTurn({ continuity, userId, request }, (prepared) =>
+    Effect.asVoid(admitTurn(continuity, userId, prepared))
   );
 
 const completeIsolatedTurn = (
   continuity: ConversationContinuityService
-): Effect.Effect<void, ContinuityChanged> =>
-  continuity.withSerializedAttempt(isolatedUserId, activeRequest("second user"), (attempt) =>
-    attempt.prepare((prepared) =>
+): Effect.Effect<
+  void,
+  ContinuityChanged | HostedAgentSessionConsentRequired,
+  SqlClient.SqlClient
+> =>
+  withPreparedTurn(
+    { continuity, userId: isolatedUserId, request: activeRequest("second user") },
+    (prepared) =>
       Effect.gen(function* () {
         expect(yield* continuity.observe(isolatedUserId)).toEqual({ entries: [], turns: [] });
-        const pending = yield* prepared.begin();
+        const pending = yield* admitTurn(continuity, isolatedUserId, prepared);
         yield* pending.complete(assistantContent("second complete"));
       })
-    )
   );
 
-const recoverFirstUser = (continuity: ConversationContinuityService): Effect.Effect<void> =>
-  continuity.withSerializedAttempt(defaultUserId, activeRequest("recover first"), (attempt) =>
-    attempt.prepare(() =>
+const recoverFirstUser = (
+  continuity: ConversationContinuityService
+): Effect.Effect<void, HostedAgentSessionConsentRequired, SqlClient.SqlClient> =>
+  withPreparedTurn(
+    { continuity, userId: defaultUserId, request: activeRequest("recover first") },
+    () =>
       continuity
         .observe(defaultUserId)
         .pipe(Effect.map((view) => expect(view.turns[0]?._tag).toBe("Interrupted")))
-    )
   );
 
 const userIsolationProgram = Effect.gen(function* () {
@@ -1134,37 +1552,6 @@ const userIsolationProgram = Effect.gen(function* () {
     { _tag: "AssistantTranscriptEntry", ...assistantContent("second complete") },
   ]);
 });
-
-const capturePrepared = (
-  continuity: ConversationContinuityService,
-  setPrepared: (prepared: PreparedAttempt) => void
-): Effect.Effect<void> =>
-  continuity.withSerializedAttempt(defaultUserId, activeRequest("original"), (attempt) =>
-    attempt.prepare((prepared) => {
-      setPrepared(prepared);
-      return Effect.void;
-    })
-  );
-
-const prepareWithRebuiltModule = Effect.gen(function* () {
-  const rebuiltContext = yield* Layer.build(Layer.fresh(ConversationContinuity.layer));
-  const rebuilt = Context.get(rebuiltContext, ConversationContinuity);
-  yield* rebuilt.withSerializedAttempt(defaultUserId, activeRequest("rebuilt"), (attempt) =>
-    attempt.prepare(() =>
-      rebuilt
-        .observe(defaultUserId)
-        .pipe(Effect.map((view) => expect(view).toEqual({ entries: [], turns: [] })))
-    )
-  );
-});
-
-const FreshConversationContinuityRuntime = ConversationContinuity.layer.pipe(
-  Layer.provide(Layer.fresh(PgLive))
-);
-
-const makeFreshContinuity = Layer.build(Layer.fresh(FreshConversationContinuityRuntime)).pipe(
-  Effect.map((services) => Context.get(services, ConversationContinuity))
-);
 
 const awaitHostedAttemptWaiter = (userId: UserId): Effect.Effect<void, never, MigrationSqlClient> =>
   Effect.gen(function* () {
@@ -1189,41 +1576,36 @@ const awaitHostedAttemptWaiter = (userId: UserId): Effect.Effect<void, never, Mi
     }
   }).pipe(Effect.retry({ schedule: Schedule.spaced("10 millis"), times: 100 }), Effect.orDie);
 
-type HeldAttempt = {
-  readonly continuity: ConversationContinuityService;
+type HeldTurnLock = {
   readonly userId: UserId;
   readonly entered: Deferred.Deferred<void>;
   readonly release: Deferred.Deferred<void>;
 };
 
-const holdSerializedAttempt = ({
-  continuity,
+const holdTurnLock = ({
   userId,
   entered,
   release,
-}: HeldAttempt): Effect.Effect<void> =>
-  continuity.withSerializedAttempt(userId, activeRequest("hosted work"), () =>
+}: HeldTurnLock): Effect.Effect<void, never, SqlClient.SqlClient> =>
+  withUserTurnLock(
+    userId,
     Deferred.succeed(entered, undefined).pipe(Effect.andThen(Deferred.await(release)))
   );
 
 const sameUserSerializationProgram = Effect.scoped(
   Effect.gen(function* () {
-    const firstContinuity = yield* makeFreshContinuity;
-    const secondContinuity = yield* makeFreshContinuity;
     const firstEntered = yield* Deferred.make<void>();
     const releaseFirst = yield* Deferred.make<void>();
     const secondEntered = yield* Deferred.make<void>();
     const releaseSecond = yield* Deferred.make<void>();
 
-    const first = yield* holdSerializedAttempt({
-      continuity: firstContinuity,
+    const first = yield* holdTurnLock({
       userId: defaultUserId,
       entered: firstEntered,
       release: releaseFirst,
     }).pipe(Effect.forkChild);
     yield* Deferred.await(firstEntered);
-    const second = yield* holdSerializedAttempt({
-      continuity: secondContinuity,
+    const second = yield* holdTurnLock({
       userId: defaultUserId,
       entered: secondEntered,
       release: releaseSecond,
@@ -1241,20 +1623,16 @@ const sameUserSerializationProgram = Effect.scoped(
 
 const crossUserConcurrencyProgram = Effect.scoped(
   Effect.gen(function* () {
-    const firstContinuity = yield* makeFreshContinuity;
-    const secondContinuity = yield* makeFreshContinuity;
     const firstEntered = yield* Deferred.make<void>();
     const secondEntered = yield* Deferred.make<void>();
     const release = yield* Deferred.make<void>();
 
-    const first = yield* holdSerializedAttempt({
-      continuity: firstContinuity,
+    const first = yield* holdTurnLock({
       userId: defaultUserId,
       entered: firstEntered,
       release,
     }).pipe(Effect.forkChild);
-    const second = yield* holdSerializedAttempt({
-      continuity: secondContinuity,
+    const second = yield* holdTurnLock({
       userId: isolatedUserId,
       entered: secondEntered,
       release,
@@ -1270,12 +1648,10 @@ const crossUserConcurrencyProgram = Effect.scoped(
 
 const noLongTransactionProgram = Effect.scoped(
   Effect.gen(function* () {
-    const continuity = yield* makeFreshContinuity;
     const migrationSql = yield* MigrationSqlClient;
     const entered = yield* Deferred.make<void>();
     const release = yield* Deferred.make<void>();
-    const holder = yield* holdSerializedAttempt({
-      continuity,
+    const holder = yield* holdTurnLock({
       userId: defaultUserId,
       entered,
       release,
@@ -1312,10 +1688,10 @@ const noLongTransactionProgram = Effect.scoped(
 
 class ExpectedAttemptFailure extends Data.TaggedError("ExpectedAttemptFailure")<{}> {}
 
-const assertFreshAttemptCanEnter = Effect.fnUntraced(function* () {
-  const continuity = yield* makeFreshContinuity;
+const assertFreshTurnLockCanEnter = Effect.fnUntraced(function* () {
   let entered = false;
-  yield* continuity.withSerializedAttempt(defaultUserId, activeRequest("next attempt"), () =>
+  yield* withUserTurnLock(
+    defaultUserId,
     Effect.sync(() => {
       entered = true;
     })
@@ -1323,89 +1699,64 @@ const assertFreshAttemptCanEnter = Effect.fnUntraced(function* () {
   expect(entered).toBe(true);
 });
 
+// Whatever ends the work the lock guards -- success, typed failure, defect, thrown defect, or
+// interruption -- the next holder must be able to enter.
 const releaseMatrixProgram = Effect.scoped(
   Effect.gen(function* () {
-    const success = yield* makeFreshContinuity;
-    yield* success.withSerializedAttempt(
+    yield* withUserTurnLock(defaultUserId, Effect.void);
+    yield* assertFreshTurnLockCanEnter();
+
+    const failed = yield* withUserTurnLock(
       defaultUserId,
-      activeRequest("success"),
-      () => Effect.void
-    );
-    yield* assertFreshAttemptCanEnter();
-
-    const typedFailure = yield* makeFreshContinuity;
-    const failed = yield* typedFailure
-      .withSerializedAttempt(defaultUserId, activeRequest("typed failure"), () =>
-        Effect.fail(new ExpectedAttemptFailure())
-      )
-      .pipe(Effect.exit);
+      Effect.fail(new ExpectedAttemptFailure())
+    ).pipe(Effect.exit);
     expect(Exit.isFailure(failed)).toBe(true);
-    yield* assertFreshAttemptCanEnter();
+    yield* assertFreshTurnLockCanEnter();
 
-    const defective = yield* makeFreshContinuity;
     assertDefect(
-      yield* defective
-        .withSerializedAttempt(defaultUserId, activeRequest("defect"), () =>
-          Effect.die("expected hosted-attempt defect")
-        )
-        .pipe(Effect.exit)
-    );
-    yield* assertFreshAttemptCanEnter();
-
-    const throwing = yield* makeFreshContinuity;
-    let escaped = Option.none<SerializedAttempt>();
-    assertDefect(
-      yield* throwing
-        .withSerializedAttempt(
-          defaultUserId,
-          activeRequest("synchronous defect"),
-          (attempt): Effect.Effect<never> => {
-            escaped = Option.some(attempt);
-            throw new Error("expected synchronous hosted-attempt defect");
-          }
-        )
-        .pipe(Effect.exit)
-    );
-    assertDefect(
-      yield* Option.getOrThrow(escaped)
-        .prepare(() => Effect.void)
-        .pipe(Effect.exit)
-    );
-    yield* assertFreshAttemptCanEnter();
-
-    const interrupted = yield* makeFreshContinuity;
-    const entered = yield* Deferred.make<void>();
-    const fiber = yield* interrupted
-      .withSerializedAttempt(defaultUserId, activeRequest("interrupted"), () =>
-        Deferred.succeed(entered, undefined).pipe(Effect.andThen(Effect.never))
+      yield* withUserTurnLock(defaultUserId, Effect.die("expected hosted-turn defect")).pipe(
+        Effect.exit
       )
-      .pipe(Effect.forkChild);
+    );
+    yield* assertFreshTurnLockCanEnter();
+
+    assertDefect(
+      yield* withUserTurnLock(
+        defaultUserId,
+        Effect.sync((): never => {
+          throw new Error("expected synchronous hosted-turn defect");
+        })
+      ).pipe(Effect.exit)
+    );
+    yield* assertFreshTurnLockCanEnter();
+
+    const entered = yield* Deferred.make<void>();
+    const fiber = yield* withUserTurnLock(
+      defaultUserId,
+      Deferred.succeed(entered, undefined).pipe(Effect.andThen(Effect.never))
+    ).pipe(Effect.forkChild);
     yield* Deferred.await(entered);
     yield* Fiber.interrupt(fiber);
-    yield* assertFreshAttemptCanEnter();
+    yield* assertFreshTurnLockCanEnter();
   })
 );
 
 const waitingCancellationProgram = Effect.scoped(
   Effect.gen(function* () {
-    const holderContinuity = yield* makeFreshContinuity;
-    const waitingContinuity = yield* makeFreshContinuity;
     const holderEntered = yield* Deferred.make<void>();
     const releaseHolder = yield* Deferred.make<void>();
     const waitingEntered = yield* Deferred.make<void>();
 
-    const holder = yield* holdSerializedAttempt({
-      continuity: holderContinuity,
+    const holder = yield* holdTurnLock({
       userId: defaultUserId,
       entered: holderEntered,
       release: releaseHolder,
     }).pipe(Effect.forkChild);
     yield* Deferred.await(holderEntered);
-    const waiter = yield* waitingContinuity
-      .withSerializedAttempt(defaultUserId, activeRequest("cancelled waiter"), () =>
-        Deferred.succeed(waitingEntered, undefined)
-      )
-      .pipe(Effect.forkChild);
+    const waiter = yield* withUserTurnLock(
+      defaultUserId,
+      Deferred.succeed(waitingEntered, undefined)
+    ).pipe(Effect.forkChild);
     yield* awaitHostedAttemptWaiter(defaultUserId);
     expect(yield* Deferred.isDone(waitingEntered)).toBe(false);
 
@@ -1413,32 +1764,25 @@ const waitingCancellationProgram = Effect.scoped(
       concurrency: "unbounded",
     });
     yield* Fiber.join(holder);
-    yield* assertFreshAttemptCanEnter();
+    yield* assertFreshTurnLockCanEnter();
   })
 );
-
-const moduleInstanceProgram = Effect.gen(function* () {
-  const continuity = yield* ConversationContinuity;
-  yield* resetDefaultContinuity;
-  let escaped = Option.none<PreparedAttempt>();
-  yield* capturePrepared(continuity, (prepared) => {
-    escaped = Option.some(prepared);
-  });
-  yield* Effect.scoped(prepareWithRebuiltModule);
-  assertDefect(yield* Option.getOrThrow(escaped).begin().pipe(Effect.exit));
-});
 
 const completeTestTurn = (
   continuity: ConversationContinuityService,
   text: string
-): Effect.Effect<void, ContinuityChanged> =>
-  continuity.withSerializedAttempt(defaultUserId, activeRequest(text), (attempt) =>
-    attempt.prepare((prepared) =>
+): Effect.Effect<
+  void,
+  ContinuityChanged | HostedAgentSessionConsentRequired,
+  SqlClient.SqlClient
+> =>
+  withPreparedTurn(
+    { continuity, userId: defaultUserId, request: activeRequest(text) },
+    (prepared) =>
       Effect.gen(function* () {
-        const pending = yield* prepared.begin();
+        const pending = yield* admitTurn(continuity, defaultUserId, prepared);
         yield* pending.complete(assistantContent());
       })
-    )
   );
 
 const concurrentCompactionProgram = Effect.scoped(
@@ -1452,68 +1796,76 @@ const concurrentCompactionProgram = Effect.scoped(
     yield* completeTestTurn(continuity, "segundo");
     const gate = yield* control.arm(undefined, true);
 
-    yield* continuity.withSerializedAttempt(
+    yield* withUserTurnLock(
       defaultUserId,
-      activeRequest("concurrent compaction"),
-      (attempt) =>
-        Effect.gen(function* () {
-          const older = yield* attempt.prepare(() => Effect.void).pipe(Effect.forkChild);
-          yield* Deferred.await(gate.entered);
-          const newer = yield* attempt.prepare(() => Effect.void).pipe(Effect.forkChild);
-          yield* Deferred.await(gate.enteredAgain);
+      Effect.gen(function* () {
+        const hostedAgentSessionId = yield* continuity.admitSession(defaultUserId);
+        const prepare = continuity.prepareTurn(
+          defaultUserId,
+          hostedAgentSessionId,
+          activeRequest("concurrent compaction")
+        );
+        const older = yield* Effect.forkChild(prepare);
+        yield* Deferred.await(gate.entered);
+        const newer = yield* Effect.forkChild(prepare);
+        yield* Deferred.await(gate.enteredAgain);
 
-          // Release the newer generation first. The older generation must then lose its optimistic
-          // commit rather than overwrite the newer replacement or delete its retained entries.
-          yield* Deferred.succeed(gate.releaseNewer, undefined);
-          const newerExit = yield* Fiber.await(newer);
-          expect(Exit.isSuccess(newerExit)).toBe(true);
-          expect(yield* Ref.get(gate.commitResults)).toEqual(["Committed"]);
-          expect(
-            yield* sql`SELECT text FROM compacted_conversations WHERE user_id = ${defaultUserId}`
-          ).toEqual([{ text: "newer-compaction" }]);
+        // Release the newer generation first. The older generation must then lose its optimistic
+        // commit rather than overwrite the newer replacement or delete its retained entries.
+        yield* Deferred.succeed(gate.releaseNewer, undefined);
+        const newerExit = yield* Fiber.await(newer);
+        expect(Exit.isSuccess(newerExit)).toBe(true);
+        expect(yield* Ref.get(gate.commitResults)).toEqual(["Committed"]);
+        expect(
+          yield* sql`SELECT text FROM compacted_conversations WHERE user_id = ${defaultUserId}`
+        ).toEqual([{ text: "newer-compaction" }]);
 
-          const protectedTurnId = TranscriptTurnId.make("f1d1a000-0000-4000-8000-0000000005f1");
-          const protectedEntry = UserTranscriptEntry.make({
-            id: TranscriptEntryId.make("f1d1a000-0000-4000-8000-0000000005f2"),
-            turnId: protectedTurnId,
-            occurredAt: DateTime.makeUnsafe("2026-08-15T12:00:02Z"),
-            text: TranscriptText.make("protected newer attempt entry"),
-          });
-          const protectedPersistedEntry = encodePersistedTranscriptEntry(protectedEntry);
-          yield* sql`
-            INSERT INTO conversation_turns (user_id, id, state, started_at, terminal_at)
-            VALUES (
-              ${defaultUserId},
-              ${protectedTurnId},
-              'Completed',
-              ${protectedEntry.occurredAt},
-              ${protectedEntry.occurredAt}
-            )
-          `;
-          yield* sql`
-            INSERT INTO transcript_entries (user_id, entry_id, turn_id, entry)
-            VALUES (
-              ${defaultUserId},
-              ${protectedEntry.id},
-              ${protectedEntry.turnId},
-              ${protectedPersistedEntry}::jsonb
-            )
-          `;
-          yield* sql`
-            UPDATE conversation_continuity
-            SET revision = revision + 1
-            WHERE user_id = ${defaultUserId}
-          `;
-          yield* Deferred.succeed(gate.releaseOlder, undefined);
+        const protectedTurnId = TranscriptTurnId.make("f1d1a000-0000-4000-8000-0000000005f1");
+        const protectedEntry = UserTranscriptEntry.make({
+          id: TranscriptEntryId.make("f1d1a000-0000-4000-8000-0000000005f2"),
+          turnId: protectedTurnId,
+          occurredAt: DateTime.makeUnsafe("2026-08-15T12:00:02Z"),
+          text: TranscriptText.make("protected newer attempt entry"),
+        });
+        const protectedPersistedEntry = encodePersistedTranscriptEntry(protectedEntry);
+        yield* sql`
+          INSERT INTO conversation_turns (user_id, session_id, id, state, started_at, terminal_at)
+          VALUES (
+            ${defaultUserId},
+            (SELECT id FROM hosted_agent_sessions
+              WHERE user_id = ${defaultUserId} AND status = 'active'),
+            ${protectedTurnId},
+            'Completed',
+            ${protectedEntry.occurredAt},
+            ${protectedEntry.occurredAt}
+          )
+        `;
+        yield* sql`
+          INSERT INTO transcript_entries (user_id, entry_id, turn_id, entry)
+          VALUES (
+            ${defaultUserId},
+            ${protectedEntry.id},
+            ${protectedEntry.turnId},
+            ${protectedPersistedEntry}::jsonb
+          )
+        `;
+        yield* sql`
+          UPDATE conversation_continuity
+          SET revision = revision + 1
+          WHERE user_id = ${defaultUserId}
+        `;
+        yield* Deferred.succeed(gate.releaseOlder, undefined);
 
-          const olderExit = yield* Fiber.await(older);
-          expect(Exit.isFailure(olderExit)).toBe(true);
-          expect(yield* Ref.get(gate.commitResults)).toEqual(["Committed", "Stale"]);
-          expect(
-            yield* sql`SELECT entry_id AS "entryId" FROM transcript_entries
-              WHERE user_id = ${defaultUserId} AND entry_id = ${protectedEntry.id}`
-          ).toEqual([{ entryId: String(protectedEntry.id) }]);
-        })
+        // The older generation still prepares, but its compaction commit is refused as stale, so
+        // it neither replaces the newer text nor deletes the entries that text stands for.
+        const olderExit = yield* Fiber.await(older);
+        expect(Exit.isSuccess(olderExit)).toBe(true);
+        expect(yield* Ref.get(gate.commitResults)).toEqual(["Committed", "Stale"]);
+        expect(
+          yield* sql`SELECT entry_id AS "entryId" FROM transcript_entries
+            WHERE user_id = ${defaultUserId} AND entry_id = ${protectedEntry.id}`
+        ).toEqual([{ entryId: String(protectedEntry.id) }]);
+      })
     );
 
     expect(
@@ -1636,33 +1988,31 @@ layer(FixedFailureCompactionHarness, { excludeTestServices: true, timeout: "30 s
       })
     );
 
-    it.effect(
-      "CP-08 retries Compaction without losing exact Transcript after inference failure",
-      () =>
-        Effect.gen(function* () {
-          const continuity = yield* ConversationContinuity;
-          const control = yield* CompactionFailureControl;
-          const sql = yield* MigrationSqlClient;
-          yield* resetDefaultContinuity;
-          yield* sql`DELETE FROM compacted_conversations WHERE user_id = ${defaultUserId}`;
-          yield* completeTestTurn(continuity, "primero");
-          yield* completeTestTurn(continuity, "segundo");
-          yield* control.select("failed");
-          yield* completeTestTurn(continuity, "tercero");
+    it.effect("retries Compaction without losing exact Transcript after inference failure", () =>
+      Effect.gen(function* () {
+        const continuity = yield* ConversationContinuity;
+        const control = yield* CompactionFailureControl;
+        const sql = yield* MigrationSqlClient;
+        yield* resetDefaultContinuity;
+        yield* sql`DELETE FROM compacted_conversations WHERE user_id = ${defaultUserId}`;
+        yield* completeTestTurn(continuity, "primero");
+        yield* completeTestTurn(continuity, "segundo");
+        yield* control.select("failed");
+        yield* completeTestTurn(continuity, "tercero");
 
-          expect(
-            yield* sql`SELECT text FROM compacted_conversations WHERE user_id = ${defaultUserId}`
-          ).toHaveLength(0);
-          expect((yield* continuity.observe(defaultUserId)).entries).toHaveLength(6);
+        expect(
+          yield* sql`SELECT text FROM compacted_conversations WHERE user_id = ${defaultUserId}`
+        ).toHaveLength(0);
+        expect((yield* continuity.observe(defaultUserId)).entries).toHaveLength(6);
 
-          yield* control.select("success");
-          yield* completeTestTurn(continuity, "cuarto");
-          const recovered = yield* continuity.observe(defaultUserId);
-          expect(
-            yield* sql`SELECT text FROM compacted_conversations WHERE user_id = ${defaultUserId}`
-          ).toEqual([{ text: "recovered" }]);
-          expect(recovered.entries).toHaveLength(4);
-        })
+        yield* control.select("success");
+        yield* completeTestTurn(continuity, "cuarto");
+        const recovered = yield* continuity.observe(defaultUserId);
+        expect(
+          yield* sql`SELECT text FROM compacted_conversations WHERE user_id = ${defaultUserId}`
+        ).toEqual([{ text: "recovered" }]);
+        expect(recovered.entries).toHaveLength(4);
+      })
     );
   }
 );
@@ -1726,7 +2076,7 @@ layer(ConsentLockedCompactionHarness, { excludeTestServices: true, timeout: "30 
   "ConversationContinuity consent-locked Compaction",
   (it) => {
     it.effect(
-      "CP-07 keeps concurrent Compaction generations from committing out of order",
+      "keeps concurrent Compaction generations from committing out of order",
       () => concurrentCompactionProgram
     );
 
@@ -1768,6 +2118,39 @@ layer(ConsentLockedCompactionHarness, { excludeTestServices: true, timeout: "30 
           })
         ),
       30_000
+    );
+
+    // The captured basis governs the session it was captured for, so a terms revision must not stall
+    // Compaction. Reading current-terms grants instead stops it for the session's whole life and
+    // lets the exact Transcript grow past its trigger unbounded.
+    it.effect("keeps compacting a session whose basis a terms revision superseded", () =>
+      Effect.gen(function* () {
+        const continuity = yield* ConversationContinuity;
+        const sql = yield* MigrationSqlClient;
+        yield* resetDefaultContinuity;
+        yield* sql`DELETE FROM compacted_conversations WHERE user_id = ${defaultUserId}`;
+        yield* completeTestTurn(continuity, "primero");
+        const before = yield* withUserTurnLock(
+          defaultUserId,
+          continuity.admitSession(defaultUserId)
+        );
+
+        yield* withStaleOnboardingGrants(
+          Effect.gen(function* () {
+            yield* completeTestTurn(continuity, "segundo");
+            yield* completeTestTurn(continuity, "tercero");
+            const after = yield* withUserTurnLock(
+              defaultUserId,
+              continuity.admitSession(defaultUserId)
+            );
+
+            expect(after).toBe(before);
+            expect(
+              yield* sql`SELECT text FROM compacted_conversations WHERE user_id = ${defaultUserId}`
+            ).toHaveLength(1);
+          })
+        );
+      })
     );
 
     it.effect(
@@ -1850,7 +2233,15 @@ layer(ConsentLockedCompactionHarness, { excludeTestServices: true, timeout: "30 
             );
             yield* Deferred.await(gate.entered);
             yield* Deferred.succeed(gate.release, undefined);
-            yield* Fiber.join(compacting);
+            // Revocation closed the session the racing attempt was admitted under, so its Turn is
+            // refused; the re-grant only opens the next session.
+            const refused = yield* Fiber.await(compacting);
+            expect(Exit.isFailure(refused)).toBe(true);
+            if (Exit.isFailure(refused)) {
+              expect(Option.map(Cause.findErrorOption(refused.cause), hostedSessionClosed)).toEqual(
+                Option.some(true)
+              );
+            }
 
             expect(
               yield* sql`
@@ -1858,8 +2249,7 @@ layer(ConsentLockedCompactionHarness, { excludeTestServices: true, timeout: "30 
             `
             ).toHaveLength(0);
             const observed = yield* continuity.observe(defaultUserId);
-            expect(observed.entries.slice(0, before.entries.length)).toEqual(before.entries);
-            expect(observed.entries).toHaveLength(before.entries.length + 2);
+            expect(observed.entries).toEqual(before.entries);
           })
         ),
       30_000
@@ -2004,10 +2394,13 @@ layer(CompactionHarness, { excludeTestServices: true, timeout: "30 seconds" })(
             AND constraint_type = 'PRIMARY KEY'
         `;
         expect(primaryKey).toHaveLength(1);
+        // Selecting the existing row's own session reproduces the exact composite key, so the
+        // refusal is the uniqueness constraint rather than a missing column.
         const duplicate = yield* sql`
           INSERT INTO compacted_conversations
-            (user_id, text, through_sequence, revision, updated_at)
-          VALUES (${defaultUserId}, 'duplicate', 0, 1, now())
+            (user_id, session_id, text, through_sequence, revision, updated_at)
+          SELECT user_id, session_id, 'duplicate', 0, 1, now()
+          FROM compacted_conversations WHERE user_id = ${defaultUserId}
         `.pipe(Effect.exit);
         expect(Exit.isFailure(duplicate)).toBe(true);
         expect(
@@ -2090,23 +2483,57 @@ layer(ContinuityHarness, { excludeTestServices: true, timeout: "30 seconds" })(
       () => recoveryProgram
     );
     it.effect(
+      "ends an idle session at its boundary and admits a fresh one",
+      () => idleBoundaryProgram
+    );
+    it.effect(
+      "ends an idle session that never recorded a terminal Turn",
+      () => idleBoundaryWithoutTerminalTurnProgram
+    );
+    it.effect(
+      "ends an idle session whose Pending Turn was abandoned before the boundary",
+      () => idleBoundaryWithAbandonedPendingTurnProgram
+    );
+    it.effect(
+      "continues a long-opened session whose Pending Turn is recent activity",
+      () => idleBoundaryFromPendingTurnActivityProgram
+    );
+    it.effect(
+      "continues an active session after a terms revision supersedes its basis",
+      () => staleTermsKeepActiveSessionProgram
+    );
+    it.effect(
+      "requires current Consent for the first session after the idle boundary",
+      () => idleBoundaryRequiresCurrentConsentProgram
+    );
+    it.effect(
+      "captures the exact onboarding Consent basis when it admits a session",
+      () => consentBasisCaptureProgram
+    );
+    it.effect(
+      "retains a Pending Turn when Consent revocation closes its session",
+      () => pendingTurnSurvivesRevocationProgram
+    );
+    it.effect(
+      "admits a fresh session after revocation and a later re-grant",
+      () => revokedSessionReadmissionProgram
+    );
+    it.effect(
+      "closes an active session when the User's latest onboarding grant is revoked",
+      () => revokedLatestGrantClosesSessionProgram
+    );
+    it.effect(
+      "refuses admission on a revoked latest grant despite an earlier unrevoked one",
+      () => revokedLatestGrantRefusesAdmissionProgram
+    );
+    it.effect(
       "recovers after clock rollback without preceding persisted Turn evidence",
       () => recoveryTimestampProgram
     );
     it.effect(
-      "rejects escaped superseded and terminal capabilities as defects",
-      () => capabilityDefectsProgram
+      "refuses append and terminalization for a Turn that is no longer Pending",
+      () => durableTerminalizationProgram
     );
-    it.effect(
-      "prevents a superseded attempt from admitting after asynchronous preparation",
-      () => supersedeDuringBeginProgram
-    );
-    for (const operation of ["append", "complete", "fail"] as const) {
-      it.effect(
-        `prevents a superseded attempt from committing ${operation} after asynchronous preparation`,
-        () => supersedeDuringPendingMutationProgram(operation)
-      );
-    }
     it.effect("persists fixed failure evidence outside model input", () => fixedFailureProgram);
     it.effect("round-trips every canonical outcome variant exactly", () => outcomeRoundTripProgram);
     it.effect(
@@ -2159,10 +2586,6 @@ layer(ContinuityHarness, { excludeTestServices: true, timeout: "30 seconds" })(
     it.effect(
       "cancels an advisory-lock wait without entering or poisoning the next attempt",
       () => waitingCancellationProgram
-    );
-    it.effect(
-      "keeps capabilities bound to their creating module instance",
-      () => moduleInstanceProgram
     );
   }
 );

@@ -1,6 +1,6 @@
 # Deep hosted-turn modules enforce continuity invariants
 
-- **Status:** Accepted
+- **Status:** Accepted; ownership model superseded by [ADR 0019](0019-hosted-runtime-owns-conversation-continuity.md)
 - **Date:** 2026-08-11
 
 ## Context
@@ -15,9 +15,9 @@ That shape exposes several illegal states: measuring one request and executing a
 
 ### Recommended architecture
 
-Replace that distributed policy with three deep modules. Their public contracts make provider fidelity, context order, and conversation lifecycle module invariants rather than caller conventions. The detailed executable contract is the [agent-continuity invariant matrix](../architecture/agent-continuity-invariant-matrix.md).
+Replace that distributed policy with three deep modules. Their public contracts make provider fidelity, context order, and conversation lifecycle module invariants rather than caller conventions.
 
-The research sketches under `reports/issue-11/` are decision inputs, not accepted interfaces. This ADR and its invariant matrix supersede those sketches wherever they expose caller-owned policy, capacity, or prompt assembly.
+The research sketches under `reports/issue-11/` are decision inputs, not accepted interfaces. This ADR supersedes those sketches wherever they expose caller-owned policy, capacity, or prompt assembly.
 
 ## Decision
 
@@ -44,7 +44,7 @@ This section is the accepted public-type proposal; no type sketch under `reports
 - caller-assembled system policy, per-turn policy, prompt arrays, or fragments that can be appended or reordered after WorkingContext construction;
 - constructible prepared requests, Turn handles, or cross-User persistence authorities.
 
-Server-owned policy values remain independently named even when launch values coincide. Prepared requests and mutation authorities are bound to the adapter, User, revision, or Turn that created them and are rejected when stale or already consumed. Prepared continuity context and WorkingContext are immutable data: their owning modules construct them, trusted shell callers may reuse them while their attempt is active, and runtime capability registries do not authenticate them.
+Server-owned policy values remain independently named even when launch values coincide. Prepared requests and mutation authorities are bound to the adapter, User, revision, or Turn that created them and are rejected when stale or already consumed. Prepared continuity context and WorkingContext are immutable data: their owning modules construct them, and runtime capability registries do not authenticate them. (ADR 0019: prepared continuity context no longer crosses a module seam at all, and no Turn authority is reachable by any caller.)
 
 ### Legal hosted-Turn sequence
 
@@ -76,7 +76,7 @@ AuditLogEntries, terminal markers, logs, telemetry, and errors contain allowlist
 
 ## Consequences
 
-An unmeasured hosted request, caller-selected capacity, and indefinitely blocking abandoned Turn are no longer caller-constructable states. WorkingContext keeps semantic ordering local to its constructor without turning immutable data into a runtime capability. Provider conversion, capacity arithmetic, lifecycle recovery, retention, and Compaction remain local to their owners. `AgentService` is a coordinator over the three boundaries, and tests use the same interfaces as production callers.
+An unmeasured hosted request, caller-selected capacity, and indefinitely blocking abandoned Turn are no longer caller-constructable states. WorkingContext keeps semantic ordering local to its constructor without turning immutable data into a runtime capability. Provider conversion, capacity arithmetic, lifecycle recovery, retention, and Compaction remain local to their owners. Tests use the same interfaces as production callers. (ADR 0019 supersedes this paragraph's coordinator model: `AgentService` owns conversation continuity lexically rather than coordinating with it.)
 
 A continuity snapshot can become stale between preflight and `beginTurn`; this is an explicit retry result rather than a partial admission. Failed and Interrupted User text can eventually become lossy CompactedConversation and be physically deleted under the same disclosed retention semantics as completed conversation.
 

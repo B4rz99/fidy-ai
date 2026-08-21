@@ -16,15 +16,16 @@ import { NextOperations } from "./response";
  * `payment_required`, because it is the Paywall the caller has met (CONTEXT.md)
  * and the string is the contract.
  *
- * `unauthenticated` and `consent_required` are repository additions to the
- * spec's open-ended list: callers must distinguish a request that names nobody
- * from one whose User has not authorized processing.
+ * `unauthenticated`, `consent_required`, and `user_action_required` are repository additions to
+ * the spec's open-ended list: callers distinguish an unknown bearer, missing hosted Consent, and
+ * explicit revocation that only the User can resolve on a Fidy-owned surface.
  */
 export const ErrorCode = Schema.Literals([
   "validation_failed",
   "unauthenticated",
   "scope_missing",
   "consent_required",
+  "user_action_required",
   "paywall_required",
   "rate_limited",
   "quota_exhausted",
@@ -116,6 +117,7 @@ const validationFailedTag = "ValidationFailed";
 const unauthenticatedTag = "Unauthenticated";
 const scopeMissingTag = "ScopeMissing";
 const consentRequiredTag = "ConsentRequired";
+const userActionRequiredTag = "UserActionRequired";
 const paywallRequiredTag = "PaywallRequired";
 const notFoundTag = "NotFound";
 
@@ -168,6 +170,11 @@ export class ConsentRequired extends Schema.ErrorClass<ConsentRequired>(consentR
   { httpApiStatus: 403 }
 ) {}
 
+/** Explicit revocation requires the User to return to a Fidy-owned surface before PAT work. */
+export class UserActionRequired extends Schema.ErrorClass<UserActionRequired>(
+  userActionRequiredTag
+)(errorResponse(userActionRequiredTag, detail("user_action_required")), { httpApiStatus: 403 }) {}
+
 /** The User has exhausted Free access to a capability that remains available in Pro. */
 export class PaywallRequired extends Schema.ErrorClass<PaywallRequired>(paywallRequiredTag)(
   errorResponse(paywallRequiredTag, detail("paywall_required")),
@@ -200,6 +207,7 @@ forwardErrorMessage(
   Unauthenticated.prototype,
   ScopeMissing.prototype,
   ConsentRequired.prototype,
+  UserActionRequired.prototype,
   PaywallRequired.prototype,
   NotFound.prototype
 );

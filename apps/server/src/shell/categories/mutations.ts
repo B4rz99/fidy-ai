@@ -27,7 +27,7 @@ import {
   deleteKeywordRuleInScope,
   findCategory,
   insertKeywordRuleInScope,
-  listKeywordRulesInScope,
+  selectKeywordRulesInScope,
   updateKeywordRuleInScope,
   withKeywordLockInScope,
 } from "./repo";
@@ -87,7 +87,7 @@ export const createKeywordRule: CanonicalMutationImplementation<
   const rule = yield* withKeywordLockInScope(
     userId,
     Effect.gen(function* () {
-      const rules = yield* listKeywordRulesInScope(userId);
+      const rules = yield* selectKeywordRulesInScope(userId);
       yield* validateKeywordRules({
         rules,
         keyword: payload.keyword,
@@ -122,7 +122,7 @@ export const updateKeywordRule: CanonicalMutationImplementation<
   const found = yield* withKeywordLockInScope(
     userId,
     Effect.gen(function* () {
-      const rules = yield* listKeywordRulesInScope(userId);
+      const rules = yield* selectKeywordRulesInScope(userId);
       yield* validateKeywordRules({
         rules,
         keyword: payload.keyword,

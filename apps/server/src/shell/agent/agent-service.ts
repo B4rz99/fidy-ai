@@ -1,10 +1,11 @@
 import {
+  type Array as Arr,
   Cause,
   Clock,
   Context,
   Crypto,
   Data,
-  DateTime,
+  type DateTime,
   Duration,
   Effect,
   Exit,
@@ -19,9 +20,12 @@ import {
 import type { Tool } from "effect/unstable/ai";
 import { HttpClient } from "effect/unstable/http";
 import { SqlClient } from "effect/unstable/sql";
+import { allCanonicalCapabilities } from "~/core/_shared/canonical-capability";
+import type { CanonicalCaller } from "~/shell/_shared/authz";
 import type { User } from "~/core/identity/model";
 import type { UserId } from "~/core/identity/reference";
 import { CompactedConversationOutput } from "~/core/transcript/compacted-conversation";
+import type { HostedAgentSessionId } from "~/core/transcript/hosted-agent-session";
 import {
   ConversationCompactionInference,
   ConversationCompactionInferenceError,
@@ -31,9 +35,11 @@ import {
   type CanonicalToolOutcome,
   ToolCallId,
   TranscriptText,
+  type TurnFailureReason,
 } from "~/core/transcript/model";
+import { withUserTurnLock } from "~/shell/db/advisory-lock";
+import { listRecentTranscriptEntries } from "~/shell/transcript/transcript-service";
 import { ValidationFailed } from "~/shell/_shared/errors";
-import { useCurrentConsent } from "~/shell/consent/repo";
 import { findUser } from "~/shell/identity/repo";
 import {
   type DeclaredOutcome,
@@ -46,13 +52,12 @@ import {
 } from "~/shell/observability/protocol";
 import { Telemetry, type TelemetryService } from "~/shell/observability/telemetry";
 import { atomicBatchOperation } from "~/shell/operations/operations";
-import { issueHostedTurnToken, revokeHostedTurnToken } from "~/shell/tokens/hosted-turn-token";
 import {
-  type ContinuityChanged,
+  type AdmittedTurn,
   ConversationContinuity,
-  type PendingTurn,
-  type PreparedAttempt,
-  type SerializedAttempt,
+  type DeliveredAssistantContent,
+  type HostedAgentSessionConsentRequired,
+  type PreparedTurnContext,
   type TurnContinuationContent,
 } from "~/shell/transcript/conversation-continuity";
 import {
@@ -83,6 +88,29 @@ import {
   findAgentOperationBinding,
   makeAgentToolkit,
 } from "./toolkit";
+
+type ContinuityService = ConversationContinuity["Service"];
+
+/**
+ * Operations for exactly one admitted Pending Turn. Created and consumed inside this module and
+ * never returned from `handleMessage`, so no caller can retain a Turn's authority.
+ */
+type TurnExecution = Readonly<{
+  append: (entries: Arr.NonEmptyReadonlyArray<TurnContinuationContent>) => Effect.Effect<void>;
+  complete: (assistant: DeliveredAssistantContent) => Effect.Effect<void>;
+  fail: (reason: TurnFailureReason) => Effect.Effect<void>;
+}>;
+
+const makeTurnExecution = (
+  continuity: ContinuityService,
+  userId: UserId,
+  { turnId }: AdmittedTurn
+): TurnExecution =>
+  Object.freeze({
+    append: (entries) => continuity.appendTurn({ userId, turnId, entries }),
+    complete: (assistant) => continuity.completeTurn({ userId, turnId, assistant }),
+    fail: (reason) => continuity.failTurn({ userId, turnId, reason }),
+  });
 
 const attemptWindowMillis = 250;
 const modelRetryPolicy = {
@@ -206,22 +234,6 @@ export type AgentTurnError =
   | ModelUnavailable
   | ModelResponseRejected;
 
-const withCurrentConsent = <A, E, R>(
-  subjectUserId: UserId,
-  use: Effect.Effect<A, E, R>
-): Effect.Effect<A, E | OnboardingConsentRequired, R | SqlClient.SqlClient> =>
-  Effect.flatMap(SqlClient.SqlClient, (sql) =>
-    sql
-      .withTransaction(
-        useCurrentConsent(
-          subjectUserId,
-          () => Effect.fail(new OnboardingConsentRequired({ userId: subjectUserId })),
-          use
-        )
-      )
-      .pipe(Effect.catchTag("SqlError", Effect.die))
-  );
-
 const makeTextReply = (text: TranscriptText): AgentReply =>
   AgentReply.make({ text, attachments: Option.none(), choices: Option.none() });
 
@@ -322,7 +334,7 @@ type HostedTurn = Readonly<{
   limits: AgentLimits;
   confirmation: Effect.Success<ReturnType<typeof makeTurnConfirmation>>;
   toolkit: AgentToolkitInstance;
-  pending: PendingTurn;
+  pending: TurnExecution;
   continuationEntries: Array<TurnContinuationContent>;
   initialPrepared: PreparedHostedText;
 }>;
@@ -512,7 +524,7 @@ const recordRejectedPreflight = (
       recordToolOutcome(turn, call, {
         _tag: "ToolInputRejected",
         failure,
-      }),
+      }).pipe(Effect.andThen(turn.toolkit.recordPreflightRejection(call.binding))),
     { concurrency: 1, discard: true }
   );
 
@@ -606,7 +618,19 @@ const settleGeneratedConfirmation = Effect.fn("AgentService.settleGeneratedConfi
     const challenge = settledCalls.find(
       ({ confirmation }) => confirmation._tag === "RequireConfirmation"
     );
-    if (challenge?.confirmation._tag !== "RequireConfirmation") return Option.none();
+    if (challenge?.confirmation._tag !== "RequireConfirmation") {
+      yield* Effect.forEach(
+        settledCalls,
+        ({ call, input, confirmation }) =>
+          confirmation._tag === "Execute"
+            ? turn.toolkit
+                .prepare(call.binding, input, confirmation.permit)
+                .pipe(Effect.mapError(modelResponseRejected))
+            : Effect.void,
+        { concurrency: 1, discard: true }
+      );
+      return Option.none();
+    }
     yield* Effect.forEach(
       settledCalls,
       ({ call, confirmation }) =>
@@ -614,7 +638,7 @@ const settleGeneratedConfirmation = Effect.fn("AgentService.settleGeneratedConfi
           _tag: "ToolInputRejected",
           failure:
             confirmation._tag === "RequireConfirmation" ? confirmation.failure : preflightRejected,
-        }),
+        }).pipe(Effect.andThen(turn.toolkit.recordPreflightRejection(call.binding))),
       { concurrency: 1, discard: true }
     );
     return Option.some(challenge.confirmation.failure.challenge);
@@ -1094,6 +1118,15 @@ const terminalTurnFailureReason = (
 ): "HostedInferenceFailed" | "HostedInferenceTimedOut" =>
   isTimedOutModelUnavailable(failure) ? "HostedInferenceTimedOut" : "HostedInferenceFailed";
 
+/** A defect carries no declared failure to classify, so it takes the generic hosted reason. */
+const terminalCauseFailureReason = (
+  cause: Cause.Cause<unknown>
+): ReturnType<typeof terminalTurnFailureReason> =>
+  Option.match(Cause.findErrorOption(cause), {
+    onNone: () => "HostedInferenceFailed" as const,
+    onSome: terminalTurnFailureReason,
+  });
+
 const acceptModelRoundFailure = (
   failure: ModelRoundFailure
 ): Effect.Effect<
@@ -1117,27 +1150,28 @@ const acceptModelRound = (
 
 const loadTurnContext = (
   userId: UserId,
+  hostedAgentSessionId: HostedAgentSessionId,
   message: InboundMessage
 ): Effect.Effect<
   Readonly<{ user: User; confirmation: HostedTurn["confirmation"] }>,
-  OnboardingConsentRequired | UnknownUser,
+  UnknownUser,
   Crypto.Crypto | SqlClient.SqlClient
 > =>
-  withCurrentConsent(
-    userId,
-    Effect.gen(function* () {
-      const user = yield* findUser(userId).pipe(
-        Effect.flatMap(
-          Option.match({
-            onNone: () => Effect.fail(new UnknownUser({ userId })),
-            onSome: Effect.succeed,
-          })
-        )
-      );
-      const confirmation = yield* makeTurnConfirmation(userId, message);
-      return { user, confirmation } as const;
-    })
-  );
+  Effect.gen(function* () {
+    const user = yield* findUser(userId).pipe(
+      Effect.flatMap(
+        Option.match({
+          onNone: () => Effect.fail(new UnknownUser({ userId })),
+          onSome: Effect.succeed,
+        })
+      )
+    );
+    // The runtime owns every Transcript read, so the confirmation decision receives this session's
+    // own recent entries as plain data rather than reaching into persistence for them.
+    const priorTranscript = yield* listRecentTranscriptEntries(userId, hostedAgentSessionId, 1);
+    const confirmation = yield* makeTurnConfirmation(userId, priorTranscript, message);
+    return { user, confirmation } as const;
+  });
 
 const iterationReply = (
   turn: HostedTurn,
@@ -1360,12 +1394,19 @@ const prepareInitialRound = (
     maximumToolCalls: HostedToolCallMaximum.make(maximumToolCalls),
   });
 
-const beginPreparedTurn = Effect.fn("AgentService.beginPreparedTurn")(function* (
-  prepared: PreparedAttempt,
-  firstRound: PreparedHostedText
-): Effect.fn.Return<PendingTurn, ContinuityChanged | ModelUnavailable> {
-  const admission = yield* Effect.result(prepared.begin());
-  if (Result.isSuccess(admission)) return admission.success;
+// Admission follows the first model round so a model failure admits nothing, and a superseded or
+// revoked admission discards the round it can no longer use.
+const beginPreparedTurn = Effect.fn("AgentService.beginPreparedTurn")(function* (input: {
+  readonly continuity: ContinuityService;
+  readonly userId: UserId;
+  readonly prepared: PreparedTurnContext;
+  readonly firstRound: PreparedHostedText;
+}) {
+  const { continuity, firstRound, prepared, userId } = input;
+  const admission = yield* Effect.result(continuity.admitTurn({ userId, prepared }));
+  if (Result.isSuccess(admission)) {
+    return makeTurnExecution(continuity, userId, admission.success);
+  }
   yield* firstRound.discard.pipe(
     Effect.catchTag("HostedInferenceError", (cause) => Effect.fail(new ModelUnavailable({ cause })))
   );
@@ -1378,49 +1419,62 @@ const generateHostedReply = Effect.fn("AgentService.generateHostedReply")(functi
   message: InboundMessage;
   limits: AgentLimits;
   context: WorkingContext;
-  pending: PendingTurn;
+  pending: TurnExecution;
   firstRound: PreparedHostedText;
 }) {
   const { dependencies, userId, message, limits, context, pending, firstRound } = input;
-  const { user, confirmation } = yield* loadTurnContext(userId, message);
-  const hostedToken = yield* withCurrentConsent(
+  const { user, confirmation } = yield* loadTurnContext(
     userId,
-    issueHostedTurnToken(userId, context.startedAt)
+    context.hostedAgentSessionId,
+    message
   );
-  return yield* Effect.scoped(
-    Effect.gen(function* () {
-      const toolkit = yield* makeAgentToolkit(hostedToken.bearer);
-      return yield* runHostedTurn(dependencies.inference, {
-        userId,
-        user,
-        startedAt: context.startedAt,
-        limits,
-        confirmation,
-        toolkit,
-        pending,
-        continuationEntries: [],
-        initialPrepared: firstRound,
-      });
-    })
-  ).pipe(
+  let executionActive = true;
+  const caller: CanonicalCaller = {
+    subjectUserId: userId,
+    capabilities: allCanonicalCapabilities,
+    auditCaller: {
+      _tag: "HostedAgentSession",
+      hostedAgentSessionId: context.hostedAgentSessionId,
+    },
+  };
+  return yield* Effect.gen(function* () {
+    const toolkit = yield* makeAgentToolkit({
+      caller,
+      isExecutionActive: () => executionActive,
+    });
+    return yield* runHostedTurn(dependencies.inference, {
+      userId,
+      user,
+      startedAt: context.startedAt,
+      limits,
+      confirmation,
+      toolkit,
+      pending,
+      continuationEntries: [],
+      initialPrepared: firstRound,
+    });
+  }).pipe(
     Effect.ensuring(
-      DateTime.now.pipe(
-        Effect.flatMap((revokedAt) => revokeHostedTurnToken(userId, hostedToken.tokenId, revokedAt))
-      )
+      Effect.sync(() => {
+        executionActive = false;
+      })
     )
   );
 });
 
 const deliverAndComplete = Effect.fn("AgentService.deliverAndComplete")(function* <E, R>(input: {
-  pending: PendingTurn;
+  pending: TurnExecution;
   generated: PreparedAgentReply;
   deliver: (reply: AgentReply) => Effect.Effect<void, E, R>;
 }) {
   const { pending, generated, deliver } = input;
-  const delivered = yield* Effect.result(deliver(generated.reply));
-  if (Result.isFailure(delivered)) {
+  // Delivery is caller-supplied, so a defect in it is as terminal for the Turn as a failure.
+  // Interruption needs no branch here: an interrupted fiber never reaches the terminalization
+  // below, which is what leaves the Turn Pending for recovery.
+  const delivered = yield* Effect.exit(deliver(generated.reply));
+  if (Exit.isFailure(delivered)) {
     yield* pending.fail("DeliveryFailed");
-    return yield* Effect.fail(delivered.failure);
+    return yield* Effect.failCause(delivered.cause);
   }
   yield* Option.match(generated.assistantEntry, {
     onNone: () => pending.fail("HostedInferenceFailed"),
@@ -1429,16 +1483,16 @@ const deliverAndComplete = Effect.fn("AgentService.deliverAndComplete")(function
   return generated.reply;
 });
 
-const runPreparedAttempt = Effect.fn("AgentService.runPreparedAttempt")(function* <E, R>(input: {
+const runPreparedTurn = Effect.fn("AgentService.runPreparedTurn")(function* <E, R>(input: {
   dependencies: AgentServiceDependencies;
   userId: UserId;
   message: InboundMessage;
-  prepared: PreparedAttempt;
+  prepared: PreparedTurnContext;
   deliver: (reply: AgentReply) => Effect.Effect<void, E, R>;
 }) {
   const { dependencies, userId, message, prepared, deliver } = input;
   const limits = yield* CurrentAgentLimits;
-  const context = yield* makeWorkingContext(prepared.context).pipe(
+  const context = yield* makeWorkingContext(prepared.snapshot).pipe(
     Effect.mapError(() => new UnknownUser({ userId }))
   );
   const firstRound = yield* prepareInitialRound(
@@ -1446,8 +1500,16 @@ const runPreparedAttempt = Effect.fn("AgentService.runPreparedAttempt")(function
     context,
     limits.maxToolCallsPerTurn
   ).pipe(Effect.mapError(mapHostedInferenceFailure));
-  const pending = yield* beginPreparedTurn(prepared, firstRound);
-  const generation = yield* Effect.result(
+  const pending = yield* beginPreparedTurn({
+    continuity: dependencies.continuity,
+    userId,
+    prepared,
+    firstRound,
+  });
+  // Generation is captured as an Exit, not a Result: a refused canonical call reaches here as a
+  // defect, and a defect still owes this Turn a terminal state. An interrupted fiber never reaches
+  // the terminalization below, so recovery — not this fiber — decides that Turn's outcome.
+  const generation = yield* Effect.exit(
     generateHostedReply({
       dependencies,
       userId,
@@ -1458,11 +1520,11 @@ const runPreparedAttempt = Effect.fn("AgentService.runPreparedAttempt")(function
       firstRound,
     })
   );
-  if (Result.isFailure(generation)) {
-    yield* pending.fail(terminalTurnFailureReason(generation.failure));
-    return yield* generation.failure;
+  if (Exit.isFailure(generation)) {
+    yield* pending.fail(terminalCauseFailureReason(generation.cause));
+    return yield* Effect.failCause(generation.cause);
   }
-  return yield* deliverAndComplete({ pending, generated: generation.success, deliver });
+  return yield* deliverAndComplete({ pending, generated: generation.value, deliver });
 });
 
 type SerializedTurnInput<E, R> = Readonly<{
@@ -1472,39 +1534,56 @@ type SerializedTurnInput<E, R> = Readonly<{
   deliver: (reply: AgentReply) => Effect.Effect<void, E, R>;
 }>;
 
+// Each preparation rechecks the session before any Transcript is read, so an explicit revocation
+// between rounds closes the session rather than feeding a stale basis to the model.
 const runBoundedPreparation = <E, R>(
   input: SerializedTurnInput<E, R> &
-    Readonly<{ attempt: SerializedAttempt; preparationNumber: number }>
+    Readonly<{ hostedAgentSessionId: HostedAgentSessionId; preparationNumber: number }>
 ): Effect.Effect<
   AgentReply,
-  AgentTurnError | E,
-  R | Crypto.Crypto | HttpClient.HttpClient | SqlClient.SqlClient
+  AgentTurnError | E | HostedAgentSessionConsentRequired,
+  R | Crypto.Crypto | HttpClient.HttpClient | SqlClient.SqlClient | HostedInference
 > => {
-  const { dependencies, attempt, userId, message, deliver, preparationNumber } = input;
-  return attempt
-    .prepare((prepared) =>
-      runPreparedAttempt({ dependencies, userId, message, prepared, deliver }).pipe(
+  const { dependencies, hostedAgentSessionId, userId, message, deliver, preparationNumber } = input;
+  const { continuity } = dependencies;
+  return continuity.requireSession(userId, hostedAgentSessionId).pipe(
+    Effect.andThen(continuity.prepareTurn(userId, hostedAgentSessionId, message)),
+    Effect.flatMap((prepared) =>
+      runPreparedTurn({ dependencies, userId, message, prepared, deliver }).pipe(
         Effect.provideService(Telemetry, dependencies.telemetry)
       )
+    ),
+    Effect.catchTag("ContinuityChanged", (changed) =>
+      preparationNumber < maximumContinuityPreparations
+        ? runBoundedPreparation({ ...input, preparationNumber: preparationNumber + 1 })
+        : Effect.fail(new ModelUnavailable({ cause: changed }))
     )
-    .pipe(
-      Effect.catchTag("ContinuityChanged", (changed) =>
-        preparationNumber < maximumContinuityPreparations
-          ? runBoundedPreparation({ ...input, preparationNumber: preparationNumber + 1 })
-          : Effect.fail(new ModelUnavailable({ cause: changed }))
-      )
-    );
+  );
 };
 
+// One User's hosted work is serialized across runtime instances for the whole turn: session
+// admission, inference, canonical calls, delivery, and terminalization.
 const runSerializedTurn = <E, R>(
   input: SerializedTurnInput<E, R>
 ): Effect.Effect<
   AgentReply,
   AgentTurnError | E,
-  R | Crypto.Crypto | HttpClient.HttpClient | SqlClient.SqlClient
+  R | Crypto.Crypto | HttpClient.HttpClient | SqlClient.SqlClient | HostedInference
 > =>
-  input.dependencies.continuity.withSerializedAttempt(input.userId, input.message, (attempt) =>
-    runBoundedPreparation({ ...input, attempt, preparationNumber: 1 })
+  withUserTurnLock(
+    input.userId,
+    Effect.gen(function* () {
+      const session = yield* input.dependencies.continuity.admitSession(input.userId);
+      return yield* runBoundedPreparation({
+        ...input,
+        hostedAgentSessionId: session,
+        preparationNumber: 1,
+      });
+    })
+  ).pipe(
+    Effect.catchTag("HostedAgentSessionConsentRequired", () =>
+      Effect.fail(new OnboardingConsentRequired({ userId: input.userId }))
+    )
   );
 
 const provideAgentDependencies = <A, E, R>(
@@ -1513,28 +1592,36 @@ const provideAgentDependencies = <A, E, R>(
 ): Effect.Effect<
   A,
   E,
-  Exclude<Exclude<Exclude<R, Crypto.Crypto>, HttpClient.HttpClient>, SqlClient.SqlClient>
+  // Nested rather than one union Exclude: for an unresolved `R` these are deferred conditional
+  // types, and TypeScript will not accept the collapsed form as equivalent.
+  Exclude<
+    Exclude<Exclude<Exclude<R, Crypto.Crypto>, HttpClient.HttpClient>, SqlClient.SqlClient>,
+    HostedInference
+  >
 > =>
   effect.pipe(
     Effect.provideService(Crypto.Crypto, dependencies.crypto),
     Effect.provideService(HttpClient.HttpClient, dependencies.httpClient),
-    Effect.provideService(SqlClient.SqlClient, dependencies.sqlClient)
+    Effect.provideService(SqlClient.SqlClient, dependencies.sqlClient),
+    // A canonical mutation reached from a hosted tool call may run inference of its own, so the
+    // runtime hands down its own model rather than trusting the caller's ambient context.
+    Effect.provideService(HostedInference, dependencies.inference)
   );
 
-const makeHandleTurn =
+const makeHandleMessage =
   (dependencies: AgentServiceDependencies) =>
   <E, R>(
     userId: UserId,
     message: InboundMessage,
     deliver: (reply: AgentReply) => Effect.Effect<void, E, R>
   ): Effect.Effect<AgentReply, AgentTurnError | E, R> => {
+    // Refusing a credential still owes the User the refusal: a channel caller reads its reply from
+    // delivery, not from this return value.
     if (containsSensitiveChatValue(message.text)) {
-      return Effect.succeed(makeTextReply(credentialRejectedReply));
+      const refusal = makeTextReply(credentialRejectedReply);
+      return Effect.as(deliver(refusal), refusal);
     }
-    const authorized = withCurrentConsent(userId, Effect.succeed(message));
-    const work = Effect.flatMap(authorized, (currentMessage) =>
-      runSerializedTurn({ dependencies, userId, message: currentMessage, deliver })
-    );
+    const work = runSerializedTurn({ dependencies, userId, message, deliver });
     const traced = dependencies.telemetry.span(
       turnDescriptor,
       Effect.onExit(work.pipe(Effect.provideService(Telemetry, dependencies.telemetry)), (exit) =>
@@ -1553,29 +1640,23 @@ const makeAgentService = Effect.gen(function* () {
     httpClient: yield* HttpClient.HttpClient,
     sqlClient: yield* SqlClient.SqlClient,
   };
-  const handleTurn = makeHandleTurn(dependencies);
-  return AgentService.of({
-    handleTurn,
-    handleSynchronousTurn: (userId, message) => handleTurn(userId, message, () => Effect.void),
-  });
+  return AgentService.of({ handleMessage: makeHandleMessage(dependencies) });
 });
 
 /**
- * Runs one hosted Turn wholly inside a callback-scoped User serialization authority. Complete
- * hosted preflight precedes admission; delivery and terminalization precede callback closure.
+ * The hosted agent runtime's whole public seam: one inbound message in, one delivered reply out.
+ * Session admission, Turn admission, inference, preflight, canonical execution, delivery, and
+ * terminalization are owned lexically here; no Turn lifecycle handle or Transcript operation
+ * crosses this boundary.
  */
 export class AgentService extends Context.Service<
   AgentService,
   {
-    readonly handleTurn: <E, R>(
+    readonly handleMessage: <E, R>(
       userId: UserId,
       message: InboundMessage,
       deliver: (reply: AgentReply) => Effect.Effect<void, E, R>
     ) => Effect.Effect<AgentReply, AgentTurnError | E, R>;
-    readonly handleSynchronousTurn: (
-      userId: UserId,
-      message: InboundMessage
-    ) => Effect.Effect<AgentReply, AgentTurnError>;
   }
 >()("@fidy/server/shell/agent/agent-service/AgentService") {
   /** Constructs the hosted agent from the external model and persistent slice seams. */

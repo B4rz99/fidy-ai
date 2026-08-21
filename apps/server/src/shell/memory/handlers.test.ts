@@ -220,7 +220,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })("Memory 
         false
       );
       expect(audit.map((entry) => Object.keys(entry).toSorted())).toEqual(
-        audit.map(() => ["id", "occurredAt", "operation", "outcome", "subjectUserId", "tokenId"])
+        audit.map(() => ["caller", "id", "occurredAt", "operation", "outcome", "subjectUserId"])
       );
       expect(audit.map(({ operation }) => operation)).toContain("memory.remember");
     })

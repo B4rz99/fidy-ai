@@ -78,6 +78,7 @@ const seedRows = Effect.gen(function* () {
 });
 
 const policyOwner = UserId.make("f1d1a000-0000-4000-8000-0000000001a1");
+const policyOwnerSessionId = "f1d1a000-0000-4000-8000-0000000001a9";
 const policyStranger = UserId.make("f1d1a000-0000-4000-8000-0000000001b2");
 const policyInsertVictim = UserId.make("f1d1a000-0000-4000-8000-0000000003a1");
 const policyContinuityVictim = UserId.make("f1d1a000-0000-4000-8000-0000000003a2");
@@ -183,7 +184,7 @@ const seedEveryPolicyShape = Effect.gen(function* () {
     )
   `;
   yield* admin`
-    INSERT INTO audit_log_entries (id, user_id, token_id, operation, outcome, occurred_at)
+    INSERT INTO audit_log_entries (id, user_id, pat_id, operation, outcome, occurred_at)
     VALUES (
       'f1d1a000-0000-4000-8000-0000000001e5', ${policyOwner},
       'f1d1a000-0000-4000-8000-0000000001d4', 'probe.read', 'succeeded',
@@ -244,9 +245,19 @@ const seedEveryPolicyShape = Effect.gen(function* () {
     VALUES (${policyOwner}, 1), (${policyInsertVictim}, 0)
   `;
   yield* admin`
-    INSERT INTO conversation_turns (user_id, id, state, started_at)
+    INSERT INTO hosted_agent_sessions (
+      user_id, id, consent_grant_id, disclosure_revision, disclosure_sha256,
+      policy_revision, policy_sha256, status, started_at
+    ) VALUES (
+      ${policyOwner}, ${policyOwnerSessionId}, 'f1d1a000-0000-4000-8000-0000000001d5',
+      'policy-probe', repeat('a', 64), 'policy-probe', repeat('b', 64),
+      'active', '2026-01-01T00:00:00Z'
+    )
+  `;
+  yield* admin`
+    INSERT INTO conversation_turns (user_id, session_id, id, state, started_at)
     VALUES (
-      ${policyOwner}, 'f1d1a000-0000-4000-8000-0000000002f6',
+      ${policyOwner}, ${policyOwnerSessionId}, 'f1d1a000-0000-4000-8000-0000000002f6',
       'Pending', '2026-01-01T00:00:00Z'
     )
   `;
@@ -288,8 +299,12 @@ const seedEveryPolicyShape = Effect.gen(function* () {
     )
   `;
   yield* admin`
-    INSERT INTO compacted_conversations(user_id, text, through_sequence, revision, updated_at)
-    VALUES (${policyOwner}, 'policy compacted conversation', 1, 1, '2026-01-01T00:00:00Z')
+    INSERT INTO compacted_conversations(
+      user_id, session_id, text, through_sequence, revision, updated_at
+    ) VALUES (
+      ${policyOwner}, ${policyOwnerSessionId}, 'policy compacted conversation',
+      1, 1, '2026-01-01T00:00:00Z'
+    )
   `;
   yield* admin`
     INSERT INTO whatsapp_conversation_windows(
@@ -338,6 +353,11 @@ const policyProbes: ReadonlyArray<PolicyProbe> = [
     tableName: "compacted_conversations",
     stableColumn: "revision",
     ownerPredicate: `user_id = '${policyOwner}'`,
+  },
+  {
+    tableName: "hosted_agent_sessions",
+    stableColumn: "status",
+    ownerPredicate: `id = '${policyOwnerSessionId}'`,
   },
   {
     tableName: "conversation_turns",
@@ -571,7 +591,7 @@ const deniedInsertProbes = (sql: SqlClient.SqlClient) =>
     {
       tableName: "audit_log_entries",
       insert: sql`
-      INSERT INTO audit_log_entries (id, user_id, token_id, operation, outcome, occurred_at)
+      INSERT INTO audit_log_entries (id, user_id, pat_id, operation, outcome, occurred_at)
       VALUES (
         'f1d1a000-0000-4000-8000-0000000003e5', ${policyOwner},
         'f1d1a000-0000-4000-8000-0000000001d4', 'probe.insert', 'succeeded',
@@ -649,11 +669,24 @@ const deniedInsertProbes = (sql: SqlClient.SqlClient) =>
       `,
     },
     {
+      tableName: "hosted_agent_sessions",
+      insert: sql`
+        INSERT INTO hosted_agent_sessions (
+          user_id, id, consent_grant_id, disclosure_revision, disclosure_sha256,
+          policy_revision, policy_sha256, status, started_at
+        ) VALUES (
+          ${policyOwner}, 'f1d1a000-0000-4000-8000-0000000004a9',
+          'f1d1a000-0000-4000-8000-0000000001d5', 'policy-probe', repeat('a', 64),
+          'policy-probe', repeat('b', 64), 'idle-ended', '2026-01-02T00:00:00Z'
+        )
+      `,
+    },
+    {
       tableName: "conversation_turns",
       insert: sql`
-        INSERT INTO conversation_turns (user_id, id, state, started_at)
+        INSERT INTO conversation_turns (user_id, session_id, id, state, started_at)
         VALUES (
-          ${policyOwner}, 'f1d1a000-0000-4000-8000-0000000004f7',
+          ${policyOwner}, ${policyOwnerSessionId}, 'f1d1a000-0000-4000-8000-0000000004f7',
           'Pending', '2026-01-02T00:00:00Z'
         )
       `,
@@ -991,6 +1024,10 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           )
           UNION ALL SELECT 'conversation_continuity' WHERE EXISTS (
             SELECT 1 FROM conversation_continuity WHERE user_id = ${policyContinuityVictim}
+          )
+          UNION ALL SELECT 'hosted_agent_sessions' WHERE EXISTS (
+            SELECT 1 FROM hosted_agent_sessions
+            WHERE id = 'f1d1a000-0000-4000-8000-0000000004a9'
           )
           UNION ALL SELECT 'conversation_turns' WHERE EXISTS (
             SELECT 1 FROM conversation_turns

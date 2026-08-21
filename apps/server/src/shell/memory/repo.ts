@@ -33,7 +33,7 @@ const decodeMemory = (row: typeof MemoryRow.Type): Memory =>
   });
 
 /** Lists every current Memory inside the active User scope in stable recall order. */
-export const listMemoriesInScope = Effect.fn("listMemoriesInScope")(function* (userId: UserId) {
+export const selectMemoriesInScope = Effect.fn("selectMemoriesInScope")(function* (userId: UserId) {
   const sql = yield* SqlClient.SqlClient;
   const rows = yield* SqlSchema.findAll({
     Request: MemoryLookup,

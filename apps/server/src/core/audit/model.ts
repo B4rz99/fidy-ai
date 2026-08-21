@@ -1,8 +1,9 @@
 import { Schema } from "effect";
-import { TokenId } from "~/core/tokens/reference";
 import { CanonicalOperationId } from "~/core/_shared/canonical-operation";
-import { UserId } from "~/core/identity/reference";
 import { UtcTimestamp } from "~/core/_shared/time";
+import { UserId } from "~/core/identity/reference";
+import { PATId } from "~/core/tokens/reference";
+import { HostedAgentSessionId } from "~/core/transcript/reference";
 
 export { CanonicalOperationId } from "~/core/_shared/canonical-operation";
 
@@ -16,15 +17,22 @@ export type AuditLogEntryId = typeof AuditLogEntryId.Type;
 export const AuditOutcome = Schema.Literals(["succeeded", "rejected", "failed"]);
 export type AuditOutcome = typeof AuditOutcome.Type;
 
+/** Exactly one credential-neutral source of canonical-call authority. */
+export const AuditCaller = Schema.Union([
+  Schema.TaggedStruct("PAT", { patId: PATId }),
+  Schema.TaggedStruct("HostedAgentSession", { hostedAgentSessionId: HostedAgentSessionId }),
+]).annotate({ identifier: "AuditCaller" });
+export type AuditCaller = typeof AuditCaller.Type;
+
 /**
  * Metadata-only evidence for one canonical call. It identifies the stable User,
- * token grant, operation, outcome, and UTC occurrence without retaining a
+ * authority source, operation, outcome, and UTC occurrence without retaining a
  * request, response, bearer, or financial value.
  */
 export const AuditLogEntry = Schema.Struct({
   id: AuditLogEntryId,
   subjectUserId: UserId,
-  tokenId: TokenId,
+  caller: AuditCaller,
   operation: CanonicalOperationId,
   outcome: AuditOutcome,
   occurredAt: UtcTimestamp,

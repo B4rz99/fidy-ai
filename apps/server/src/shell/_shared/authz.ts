@@ -2,16 +2,21 @@ import { Context, type Crypto, type DateTime, type Effect, type Layer } from "ef
 import { HttpClientRequest } from "effect/unstable/http";
 import type { SqlClient } from "effect/unstable/sql";
 import { HttpApiMiddleware, HttpApiSecurity, OpenApi } from "effect/unstable/httpapi";
-import type { AuditOutcome, CanonicalOperationId } from "~/core/audit/model";
-import { type ResolvedToken, type TokenBearer, TokenBearerFormat } from "~/core/tokens/model";
-import { ConsentRequired, ScopeMissing, Unauthenticated } from "./errors";
+import type { AuditCaller, AuditOutcome, CanonicalOperationId } from "~/core/audit/model";
+import type { CanonicalCapabilities } from "~/core/_shared/canonical-capability";
+import type { UserId } from "~/core/identity/reference";
+import { type TokenBearer, TokenBearerFormat } from "~/core/tokens/model";
+import { ConsentRequired, ScopeMissing, Unauthenticated, UserActionRequired } from "./errors";
 
-/**
- * The request-scoped result of bearer authorization. Handlers read it once and
- * continue passing its stable UserId explicitly; core and repositories never
- * depend on request context.
- */
-export class ResolvedCaller extends Context.Service<ResolvedCaller, ResolvedToken>()(
+/** Credential-neutral authority facts supplied to every canonical implementation. */
+export type CanonicalCaller = Readonly<{
+  subjectUserId: UserId;
+  capabilities: CanonicalCapabilities;
+  auditCaller: AuditCaller;
+}>;
+
+/** Request- or Turn-scoped canonical caller; repositories still receive explicit UserId. */
+export class ResolvedCaller extends Context.Service<ResolvedCaller, CanonicalCaller>()(
   "@fidy/server/shell/_shared/authz/ResolvedCaller"
 ) {}
 
@@ -54,7 +59,7 @@ export class TokenAuthorization extends HttpApiMiddleware.Service<
       HttpApiSecurity.annotate(OpenApi.Format, TokenBearerFormat)
     ),
   },
-  error: [Unauthenticated, ConsentRequired, ScopeMissing],
+  error: [Unauthenticated, ConsentRequired, UserActionRequired, ScopeMissing],
 }) {}
 
 /** Lets an unauthenticated derived client call the API and receive its declared 401 response. */

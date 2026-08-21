@@ -1,10 +1,10 @@
 import { Effect } from "effect";
 import { HttpApiBuilder } from "effect/unstable/httpapi";
 import { ResolvedCaller } from "~/shell/_shared/authz";
-import { makeFreeSuggestedOperationCaller } from "~/shell/_shared/suggested-operations";
+import { resolveFreeSuggestedOperationCaller } from "~/shell/_shared/suggested-operations";
 import { FidyApi } from "~/shell/api";
 import { createKeywordRule, deleteKeywordRule, updateKeywordRule } from "./mutations";
-import { listCategories, listKeywordRules } from "./repo";
+import { listCategories, listKeywordRules } from "./queries";
 
 /** Provides public Categories and bounded, deterministic User keyword-rule management. */
 export const CategoriesLive = HttpApiBuilder.group(FidyApi, "categories", (handlers) =>
@@ -12,44 +12,31 @@ export const CategoriesLive = HttpApiBuilder.group(FidyApi, "categories", (handl
     .handle("listCategories", () =>
       Effect.gen(function* () {
         yield* ResolvedCaller;
-        return { data: yield* listCategories, next: [] };
+        return yield* listCategories();
       })
     )
     .handle("listKeywordRules", () =>
       Effect.gen(function* () {
         const { subjectUserId } = yield* ResolvedCaller;
-        return { data: yield* listKeywordRules(subjectUserId), next: [] };
+        return yield* listKeywordRules({ userId: subjectUserId });
       })
     )
     .handle("createKeywordRule", ({ payload }) =>
       Effect.gen(function* () {
-        const { scopes, subjectUserId } = yield* ResolvedCaller;
-        return yield* createKeywordRule({
-          userId: subjectUserId,
-          caller: makeFreeSuggestedOperationCaller(scopes),
-          payload,
-        });
+        const { userId, caller } = yield* resolveFreeSuggestedOperationCaller;
+        return yield* createKeywordRule({ userId, caller, payload });
       })
     )
     .handle("updateKeywordRule", ({ params, payload }) =>
       Effect.gen(function* () {
-        const { scopes, subjectUserId } = yield* ResolvedCaller;
-        return yield* updateKeywordRule({
-          userId: subjectUserId,
-          caller: makeFreeSuggestedOperationCaller(scopes),
-          keywordRuleId: params.id,
-          payload,
-        });
+        const { userId, caller } = yield* resolveFreeSuggestedOperationCaller;
+        return yield* updateKeywordRule({ userId, caller, keywordRuleId: params.id, payload });
       })
     )
     .handle("deleteKeywordRule", ({ params }) =>
       Effect.gen(function* () {
-        const { scopes, subjectUserId } = yield* ResolvedCaller;
-        return yield* deleteKeywordRule({
-          userId: subjectUserId,
-          caller: makeFreeSuggestedOperationCaller(scopes),
-          keywordRuleId: params.id,
-        });
+        const { userId, caller } = yield* resolveFreeSuggestedOperationCaller;
+        return yield* deleteKeywordRule({ userId, caller, keywordRuleId: params.id });
       })
     )
 );

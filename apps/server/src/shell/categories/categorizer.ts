@@ -4,7 +4,7 @@ import { type CategoryId } from "~/core/categories/reference";
 import { type UserId } from "~/core/identity/reference";
 import { findKeywordCategory, findKnownCaptureCategory } from "~/core/categories/rules";
 import { categoryIds } from "~/core/categories/taxonomy";
-import { listKeywordRulesInScope } from "./repo";
+import { selectKeywordRulesInScope } from "./repo";
 
 /** Stand-in for the future model adapter; absence there resolves explicitly to Otros. */
 const modelFallback = (): Effect.Effect<CategoryId> => Effect.succeed(categoryIds.otros);
@@ -23,7 +23,7 @@ export const categorizeCapture = ({
   readonly callerCategory: Option.Option<CategoryId>;
 }): Effect.Effect<CategoryId, never, SqlClient.SqlClient> =>
   Effect.gen(function* () {
-    const rules = yield* listKeywordRulesInScope(userId);
+    const rules = yield* selectKeywordRulesInScope(userId);
     const keywordCategory = yield* Option.match(counterparty, {
       onNone: () => Effect.succeed(Option.none<CategoryId>()),
       onSome: (knownCounterparty) =>

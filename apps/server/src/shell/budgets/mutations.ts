@@ -23,7 +23,7 @@ import {
   findBudgetInScope,
   initializeBudgetMonthLatchInScope,
   insertBudgetInScope,
-  listBudgetsInScope,
+  selectBudgetsInScope,
   updateBudgetInScope,
 } from "./repo";
 
@@ -103,7 +103,7 @@ export const createBudget: CanonicalMutationImplementation<
     advisoryLockKey.budgets(userId),
     Effect.gen(function* () {
       yield* rejectDuplicate({
-        budgets: yield* listBudgetsInScope(userId),
+        budgets: yield* selectBudgetsInScope(userId),
         input: payload,
         excluding: Option.none(),
         caller,
@@ -140,7 +140,7 @@ export const updateBudget: CanonicalMutationImplementation<
         });
       }
       yield* rejectDuplicate({
-        budgets: yield* listBudgetsInScope(userId),
+        budgets: yield* selectBudgetsInScope(userId),
         input: payload,
         excluding: Option.some(budgetId),
         caller,

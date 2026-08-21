@@ -1,4 +1,5 @@
 import {
+  type Cause,
   Crypto,
   Data,
   DateTime,
@@ -7,26 +8,22 @@ import {
   Exit,
   Function,
   Layer,
-  type Option,
+  Option,
   Redacted,
-  Ref,
   Schema,
 } from "effect";
 import { SqlClient } from "effect/unstable/sql";
 import { type AuditLogEntry, type AuditOutcome, CanonicalOperationId } from "~/core/audit/model";
+import { canonicalCapabilitiesFromPatScopes } from "~/core/_shared/canonical-capability";
 import { type ResolvedToken, TokenBearer } from "~/core/tokens/model";
 import { computePatIdleExpiry } from "~/core/tokens/rules";
 import { appendAuditLogEntry } from "~/shell/audit/repo";
-import { useCurrentConsent } from "~/shell/consent/repo";
+import { onboardingConsentStandingInScope, withSubjectLock } from "~/shell/consent/repo";
 import { withUserTransaction } from "~/shell/db/user-transaction";
 import { TokenHash, useToken } from "~/shell/tokens/repo";
-import { ConsentRequired, ScopeMissing, Unauthenticated } from "./errors";
-import {
-  ChildOperationAudit,
-  type ChildOperationAuditService,
-  ResolvedCaller,
-  TokenAuthorization,
-} from "./authz";
+import { executeCanonicalEffect, findCanonicalCallRejected } from "./canonical-operation-executor";
+import { ConsentRequired, ScopeMissing, Unauthenticated, UserActionRequired } from "./errors";
+import { type CanonicalCaller, TokenAuthorization } from "./authz";
 import { getOperationPolicy } from "./operation-policy";
 
 const decodeBearer = Schema.decodeUnknownEffect(TokenBearer);
@@ -36,8 +33,8 @@ const unauthenticated = (): Unauthenticated =>
     error: {
       code: "unauthenticated",
       message:
-        "Every operation requires a known PAT or internal HostedTurnToken. Send its opaque fin_ " +
-        "bearer in the Authorization header and retry.",
+        "Every HTTP operation requires a known PAT. Send its opaque fin_ bearer in the " +
+        "Authorization header and retry.",
     },
     next: [],
   });
@@ -58,19 +55,43 @@ const consentRequired = (): ConsentRequired =>
     error: {
       code: "consent_required",
       message:
-        "The User has no current onboarding consent. Return to the chat disclosure flow; " +
-        "do not retry or execute any canonical operation until explicit acceptance.",
+        "This User has not accepted Fidy's onboarding Consent. Ask them to accept it on a " +
+        "Fidy-owned surface; this agent cannot accept Consent on their behalf.",
     },
     next: [],
   });
 
-class ConsentAuthenticationRejected extends Data.TaggedError("ConsentAuthenticationRejected")<{
-  readonly resolved: ResolvedToken;
-}> {}
+const userActionRequired = (): UserActionRequired =>
+  UserActionRequired.make({
+    error: {
+      code: "user_action_required",
+      message:
+        "The User explicitly revoked Consent. Ask them to return to a Fidy-owned surface; " +
+        "this agent cannot accept Consent or retry canonical work on their behalf.",
+    },
+    next: [],
+  });
+
+/** Reports the action the User must take, keeping absent onboarding distinct from revocation. */
+const consentFailure = (
+  access: "never-granted" | "revoked"
+): Effect.Effect<never, ConsentRequired | UserActionRequired> =>
+  access === "revoked" ? Effect.fail(userActionRequired()) : Effect.fail(consentRequired());
+
+class UserActionAuthenticationRejected extends Data.TaggedError(
+  "UserActionAuthenticationRejected"
+)<{ readonly resolved: ResolvedToken; readonly access: "never-granted" | "revoked" }> {}
 
 class ScopeAuthenticationRejected extends Data.TaggedError("ScopeAuthenticationRejected")<{
   readonly resolved: ResolvedToken;
 }> {}
+
+/** A declared scope the bearer never held. Only the hosted seam raises the other reasons. */
+const isCapabilityMissing = (cause: Cause.Cause<unknown>): boolean =>
+  Option.exists(
+    findCanonicalCallRejected(cause),
+    (rejection) => rejection.reason === "capability_missing"
+  );
 
 /**
  * SHA-256 hashes one opaque bearer with the platform Crypto service. Token
@@ -122,7 +143,7 @@ const recordAuthorizationOutcome = ({
   occurredAt: DateTime.Utc;
 }>): Effect.Effect<AuditLogEntry, never, SqlClient.SqlClient> =>
   appendAuditLogEntry(resolved.subjectUserId, {
-    tokenId: resolved.tokenId,
+    caller: { _tag: "PAT", patId: resolved.tokenId },
     operation,
     outcome,
     occurredAt,
@@ -144,38 +165,10 @@ const recordRejectedAttempt = (
 ): Effect.Effect<AuditLogEntry, never, SqlClient.SqlClient> =>
   recordAuthorizationOutcome({ ...attempt, outcome: "rejected" });
 
-const operationAudit =
-  (attempt: {
-    readonly resolved: ResolvedToken;
-    readonly operation: CanonicalOperationId;
-    readonly occurredAt: DateTime.Utc;
-  }): ((outcome: AuditOutcome) => Effect.Effect<AuditLogEntry, never, SqlClient.SqlClient>) =>
-  (outcome) =>
-    recordAuthorizationOutcome({ ...attempt, outcome });
-
-const provideRequestServices = <A, E, R>(
-  effect: Effect.Effect<A, E, R>,
-  resolved: ResolvedToken,
-  childOperationAudit: ChildOperationAuditService
-): Effect.Effect<A, E, Exclude<Exclude<R, ResolvedCaller>, ChildOperationAudit>> =>
-  effect.pipe(
-    Effect.provideService(ResolvedCaller, resolved),
-    Effect.provideService(ChildOperationAudit, childOperationAudit)
-  );
-
-type ChildAuditEvidence = Readonly<{
-  operation: CanonicalOperationId;
-  outcome: AuditOutcome;
-  occurredAt: DateTime.Utc;
-}>;
-
-const flushChildEvidence = Effect.fn("flushChildOperationAuditEvidence")(function* (
-  childEvidence: Ref.Ref<ReadonlyArray<ChildAuditEvidence>>,
-  resolved: ResolvedToken
-) {
-  for (const evidence of yield* Ref.get(childEvidence)) {
-    yield* recordAuthorizationOutcome({ resolved, ...evidence });
-  }
+const canonicalCallerFromPat = (resolved: ResolvedToken): CanonicalCaller => ({
+  subjectUserId: resolved.subjectUserId,
+  capabilities: canonicalCapabilitiesFromPatScopes(resolved.scopes),
+  auditCaller: { _tag: "PAT", patId: resolved.tokenId },
 });
 
 type AuthorizedEndpointInput<A, E, R> = Readonly<{
@@ -193,38 +186,31 @@ const executeAuthorizedEndpoint = Effect.fn("executeAuthorizedEndpoint")(functio
   policy,
   resolved,
 }: AuthorizedEndpointInput<A, E, R>) {
-  if (policy.scopeEvaluation !== "children" && !resolved.scopes.includes(policy.requiredScope)) {
+  yield* annotateOperationPolicy(policy);
+  const exit = yield* Effect.exit(
+    executeCanonicalEffect({
+      caller: canonicalCallerFromPat(resolved),
+      operation,
+      policy,
+      effect: httpEffect,
+      executionCheckpoint: Effect.void,
+      occurredAt,
+    })
+  );
+  // An unauthorized call is not successful use, so its rejection escapes the bearer transaction and
+  // takes the idle renewal down with it. A failed *authorized* operation keeps the renewal: the
+  // bearer did work it was entitled to. Evidence is re-appended after the rollback.
+  if (Exit.isFailure(exit) && isCapabilityMissing(exit.cause)) {
     return yield* new ScopeAuthenticationRejected({ resolved });
   }
-
-  yield* annotateOperationPolicy(policy);
-  const sql = yield* SqlClient.SqlClient;
-  const audit = operationAudit({ resolved, operation, occurredAt });
-  const childEvidence = yield* Ref.make<ReadonlyArray<ChildAuditEvidence>>([]);
-  const childOperationAudit = ChildOperationAudit.of({
-    record: (evidence) => Ref.update(childEvidence, (entries) => [...entries, evidence]),
-  });
-  const authorizedEffect = provideRequestServices(httpEffect, resolved, childOperationAudit);
-  const exit = yield* Effect.exit(
-    sql.withTransaction(authorizedEffect.pipe(Effect.tap(audit.bind(null, "succeeded"))))
-  );
-  if (Exit.isFailure(exit)) {
-    yield* audit("failed");
-    yield* Ref.update(childEvidence, (entries) =>
-      entries.map((entry) =>
-        entry.outcome === "succeeded" ? { ...entry, outcome: "failed" as const } : entry
-      )
-    );
-  }
-  yield* flushChildEvidence(childEvidence, resolved);
   return { _tag: "OperationCompleted", exit } as const;
 });
 
 /**
  * Live operation-derived bearer authorization for the HTTP server. Each call
- * authenticates its bearer, requires current onboarding consent, rejects a
+ * authenticates its bearer, rejects access after explicit Consent revocation, rejects a
  * missing declared scope, and appends metadata-only AuditLogEntry evidence.
- * Missing consent rolls back token renewal and returns `ConsentRequired` after
+ * Explicit revocation rolls back token renewal and returns `UserActionRequired` after
  * recording rejection evidence. A successful operation and its evidence commit
  * in one SQL transaction; rejected and failed attempts append their evidence
  * separately. Authentication, consent, and scope failures remain typed HTTP
@@ -249,15 +235,22 @@ export const TokenAuthorizationLive = Layer.succeed(
             );
             return yield* withUserTransaction(
               resolved.subjectUserId,
-              useCurrentConsent(
+              // The subject lock spans the check and the work it authorizes, so a revocation
+              // committing in between cannot let an authorized write land (ADR 0008).
+              withSubjectLock(
                 resolved.subjectUserId,
-                () => Effect.fail(new ConsentAuthenticationRejected({ resolved })),
-                executeAuthorizedEndpoint({
-                  httpEffect,
-                  resolved,
-                  policy,
-                  operation,
-                  occurredAt,
+                Effect.gen(function* () {
+                  const access = yield* onboardingConsentStandingInScope(resolved.subjectUserId);
+                  if (access !== "granted") {
+                    return yield* new UserActionAuthenticationRejected({ resolved, access });
+                  }
+                  return yield* executeAuthorizedEndpoint({
+                    httpEffect,
+                    resolved,
+                    policy,
+                    operation,
+                    occurredAt,
+                  });
                 })
               )
             );
@@ -265,19 +258,20 @@ export const TokenAuthorizationLive = Layer.succeed(
         )
         .pipe(
           Effect.catchTags({
-            ConsentAuthenticationRejected: ({ resolved }) =>
+            UserActionAuthenticationRejected: ({ access, resolved }) =>
               recordRejectedAttempt({ resolved, operation, occurredAt }).pipe(
-                Effect.andThen(consentRequired())
+                Effect.andThen(consentFailure(access))
               ),
             ScopeAuthenticationRejected: ({ resolved }) =>
               recordRejectedAttempt({ resolved, operation, occurredAt }).pipe(
-                Effect.andThen(scopeMissing())
+                Effect.andThen(Effect.fail(scopeMissing()))
               ),
             SqlError: Effect.die,
           })
         );
 
-      return yield* result.exit.pipe(Effect.catchTag("SqlError", Effect.die));
+      // Scope rejection already left as a typed failure above; any other reason is hosted-only.
+      return yield* result.exit.pipe(Effect.catchTag("CanonicalCallRejected", Effect.die));
     }),
   })
 );

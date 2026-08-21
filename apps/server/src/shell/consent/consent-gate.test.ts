@@ -77,6 +77,11 @@ const clearPhone = (
     const sql = yield* MigrationSqlClient;
     const caller = testWhatsAppCaller(phoneNumber);
     yield* sql`
+      DELETE FROM hosted_agent_sessions WHERE user_id IN (
+        SELECT user_id FROM whatsapp_identities WHERE phone_number = ${phoneNumber}
+      )
+    `;
+    yield* sql`
       DELETE FROM consent_records WHERE subject_user_id IN (
         SELECT user_id FROM whatsapp_identities WHERE phone_number = ${phoneNumber}
       )

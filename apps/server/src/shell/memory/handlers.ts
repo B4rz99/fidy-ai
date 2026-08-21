@@ -3,7 +3,7 @@ import { HttpApiBuilder } from "effect/unstable/httpapi";
 import { ResolvedCaller } from "~/shell/_shared/authz";
 import { FidyApi } from "~/shell/api";
 import { forgetMemory, rememberMemory, reviseMemory } from "./mutations";
-import { listMemoriesInScope } from "./repo";
+import { recall } from "./queries";
 
 /** Provides caller-owned Memory creation, replacement, deletion, and deterministic recall. */
 export const MemoryLive = HttpApiBuilder.group(FidyApi, "memory", (handlers) =>
@@ -33,8 +33,7 @@ export const MemoryLive = HttpApiBuilder.group(FidyApi, "memory", (handlers) =>
     .handle("recall", () =>
       Effect.gen(function* () {
         const { subjectUserId } = yield* ResolvedCaller;
-        const memories = yield* listMemoriesInScope(subjectUserId);
-        return { data: memories, next: [] };
+        return yield* recall({ userId: subjectUserId });
       })
     )
 );

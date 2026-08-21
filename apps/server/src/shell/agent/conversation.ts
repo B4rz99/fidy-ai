@@ -56,6 +56,10 @@ export const handleAgentConversationTurn = Effect.fn("handleAgentConversationTur
   const admission = yield* admitAgentConversationTurn(input);
   if (admission._tag !== "AuthorizedTurn") return admission;
   const service = yield* AgentService;
-  const reply = yield* service.handleSynchronousTurn(admission.userId, admission.inboundMessage);
+  const reply = yield* service.handleMessage(
+    admission.userId,
+    admission.inboundMessage,
+    () => Effect.void
+  );
   return { _tag: "AgentReplied", reply } as const;
 });

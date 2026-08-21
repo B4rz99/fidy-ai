@@ -326,7 +326,6 @@ export const appendConsentRecord = Effect.fn("appendConsentRecord")(function* (
             SELECT 1 FROM tokens AS granted_token
             WHERE granted_token.id = ${input.patId}
               AND granted_token.user_id = ${input.subjectUserId}
-              AND granted_token.kind = 'pat'
           )
         )
       )
@@ -422,17 +421,16 @@ export const hasCurrentOnboardingConsentAt = Effect.fn("Consent.hasCurrentOnboar
     )
 );
 
-/** Returns the complete sorted identities of current onboarding grants for optimistic ABA checks. */
-export const currentOnboardingGrantIdsInScope = Effect.fn("Consent.currentOnboardingGrantIds")(
+/** Returns the latest unrevoked onboarding grant matching the complete current Consent basis. */
+export const currentOnboardingGrantInScope = Effect.fn("Consent.currentOnboardingGrantInScope")(
   function* (subjectUserId: UserId) {
     const sql = yield* SqlClient.SqlClient;
     const disclosure = yield* currentDisclosure;
-    const rows = yield* SqlSchema.findAll({
+    return yield* SqlSchema.findOneOption({
       Request: UserId,
-      Result: Schema.Struct({ id: ConsentRecordId }),
+      Result: ConsentRecordFromRow,
       execute: (userId) => sql`
-        SELECT grant_record.id
-        FROM consent_records AS grant_record
+        SELECT ${sql.literal(consentColumns)} FROM consent_records AS grant_record
         WHERE grant_record.subject_user_id = ${userId}
           AND grant_record.event_type = 'granted'
           AND grant_record.grant_type = 'onboarding'
@@ -446,12 +444,79 @@ export const currentOnboardingGrantIdsInScope = Effect.fn("Consent.currentOnboar
               AND revocation.subject_user_id = grant_record.subject_user_id
               AND revocation.revoked_grant_id = grant_record.id
           )
-        ORDER BY grant_record.id
+        ORDER BY grant_record.occurred_at DESC, grant_record.id DESC
+        LIMIT 1
       `,
-    })(subjectUserId);
-    return rows.map(({ id }) => id);
+    })(subjectUserId).pipe(Effect.orDie);
   }
 );
+
+/** Reports whether one captured onboarding grant remains explicitly unrevoked. */
+export const isOnboardingGrantUnrevokedInScope = Effect.fn(
+  "Consent.isOnboardingGrantUnrevokedInScope"
+)(function* (subjectUserId: UserId, grantId: ConsentRecordId) {
+  const sql = yield* SqlClient.SqlClient;
+  const result = yield* SqlSchema.findOne({
+    Request: Schema.Struct({ subjectUserId: UserId, grantId: ConsentRecordId }),
+    Result: Schema.Struct({ unrevoked: Schema.Boolean }),
+    execute: (input) => sql`
+      SELECT EXISTS (
+        SELECT 1 FROM consent_records AS grant_record
+        WHERE grant_record.subject_user_id = ${input.subjectUserId}
+          AND grant_record.id = ${input.grantId}
+          AND grant_record.event_type = 'granted'
+          AND grant_record.grant_type = 'onboarding'
+          AND NOT EXISTS (
+            SELECT 1 FROM consent_records AS revocation
+            WHERE revocation.event_type = 'revoked'
+              AND revocation.subject_user_id = grant_record.subject_user_id
+              AND revocation.revoked_grant_id = grant_record.id
+          )
+      ) AS unrevoked
+    `,
+  })({ subjectUserId, grantId }).pipe(Effect.orDie);
+  return result.unrevoked;
+});
+
+/**
+ * Why a User's onboarding Consent stands or does not. A User who never accepted onboarding must be
+ * told to accept it; a User whose grant was revoked must act on a Fidy-owned surface instead.
+ */
+export type OnboardingConsentStanding = "granted" | "never-granted" | "revoked";
+
+/**
+ * The one revocation predicate every credential shares. It ignores later terms revisions but closes
+ * after explicit revocation of the latest onboarding grant, so a hosted session and a PAT answer
+ * "is this User's Consent revoked" identically. A later Fidy-owned acceptance opens access again;
+ * absent and revoked Consent stay distinct so each boundary reports the action the User must take.
+ */
+export const onboardingConsentStandingInScope = Effect.fn(
+  "Consent.onboardingConsentStandingInScope"
+)(function* (subjectUserId: UserId) {
+  const sql = yield* SqlClient.SqlClient;
+  const latest = yield* SqlSchema.findOneOption({
+    Request: UserId,
+    Result: Schema.Struct({ unrevoked: Schema.Boolean }),
+    execute: (userId) => sql`
+      SELECT NOT EXISTS (
+        SELECT 1 FROM consent_records AS revocation
+        WHERE revocation.event_type = 'revoked'
+          AND revocation.subject_user_id = grant_record.subject_user_id
+          AND revocation.revoked_grant_id = grant_record.id
+      ) AS unrevoked
+      FROM consent_records AS grant_record
+      WHERE grant_record.subject_user_id = ${userId}
+        AND grant_record.event_type = 'granted'
+        AND grant_record.grant_type = 'onboarding'
+      ORDER BY grant_record.occurred_at DESC, grant_record.id DESC
+      LIMIT 1
+    `,
+  })(subjectUserId).pipe(Effect.orDie);
+  if (Option.isNone(latest)) return "never-granted" satisfies OnboardingConsentStanding;
+  return latest.value.unrevoked
+    ? ("granted" satisfies OnboardingConsentStanding)
+    : ("revoked" satisfies OnboardingConsentStanding);
+});
 
 /** Reports whether an unrevoked onboarding grant matches the complete current consent basis. */
 export const hasCurrentOnboardingConsent = (

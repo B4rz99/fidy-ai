@@ -113,7 +113,8 @@ _Avoid_: Endpoint, route, API call, tool.
 
 **Canonical query**:
 A canonical operation that observes domain state without requesting a domain transition or external
-effect. Audit, quota, and access-accounting writes do not change its classification.
+effect. Audit, quota, and access-accounting writes do not change its classification. Every canonical
+query uses one reusable implementation for HTTP and hosted-agent execution.
 _Avoid_: Read operation, read-only endpoint.
 
 **Canonical mutation**:
@@ -139,13 +140,9 @@ _Avoid_: Notification, alert, push (those are delivery, not the record).
 A User-authorized bearer grant for one of their own agents to invoke canonical operations with a
 non-empty subset of `read`, `write`, and `dashboard`. It has no fixed lifetime, dies after 90 days
 without successful use, and its raw bearer is disclosed once to its immediate caller and never
-persisted.
-_Avoid_: API key, credential.
-
-**HostedTurnToken**:
-A short-lived internal all-scope bearer used for one hosted Turn and revoked during normal Turn
-cleanup. It is never a PAT and is never available to the User or their own agents.
-_Avoid_: PAT, hosted grant.
+persisted. A User-owned agent never manages Consent; terms updates neither revoke nor block its PAT,
+while explicit Consent revocation prevents later work with `user_action_required`.
+_Avoid_: API key, credential, Agent Session.
 
 **PATPairing**:
 A short-lived bootstrap in which a User-owned client retains a private device code and presents a
@@ -167,13 +164,28 @@ Transcript records what happened while retained; it never silently becomes a Mem
 truth.
 _Avoid_: Memory, preference, context window, CompactedConversation.
 
+**Hosted Agent Session**:
+A Fidy-owned sequence of hosted Turns for one User separated from the next Hosted Agent Session by
+at least 15 minutes without activity: its opening, its latest Turn becoming terminal, or a Pending
+Turn starting. A Pending Turn counts as activity from when it started rather than exempting the
+Hosted Agent Session indefinitely, because admission evaluates the boundary while holding the Turn
+lock, so every Pending Turn it can observe was abandoned. It retains the onboarding Consent basis
+accepted when it begins and may continue indefinitely while active.
+Policy or terms updates take effect when the next Hosted Agent Session begins; explicit revocation
+prevents admission of another Turn but does not interrupt a Turn already in progress. User-owned
+agents do not receive or manage Hosted Agent Sessions.
+_Avoid_: Conversation (the retained conversation crosses Hosted Agent Sessions), WhatsApp service
+window, PAT session, external-agent session.
+
 **Turn**:
-One admitted User request and its serialized hosted attempt. It is Pending after complete hosted
-preflight succeeds and the exact User entry is retained; it becomes Completed after a visible assistant reply
-is delivered, Failed after a handled model or delivery failure, or Interrupted when abandoned work
-is recovered. Completed, Failed, and Interrupted are terminal. A terminal Turn may participate in a
-contiguous Compaction prefix; a Failed or Interrupted Turn contributes its exact User entry and a
-fixed metadata-only terminal marker.
+One admitted User request and its serialized hosted attempt within one Hosted Agent Session. It is Pending
+after complete hosted preflight succeeds and the exact User entry is retained; it becomes Completed
+after a visible assistant reply is delivered, Failed after a handled model or delivery failure, or
+Interrupted when abandoned work is recovered. Completed, Failed, and Interrupted are terminal. A
+terminal Turn may participate in a contiguous Compaction prefix; a Failed or Interrupted Turn
+contributes its exact User entry and a fixed metadata-only terminal marker. Turn identity remains
+unique across Hosted Agent Sessions, and retained Transcript entries carry one sequence that is
+authoritative across Turns rather than restarting per Hosted Agent Session.
 _Avoid_: Message, model round, tool call, request.
 
 **Memory**:
@@ -192,15 +204,17 @@ incorporated Transcript segment.
 _Avoid_: Summarization, Transcript rewrite, Memory creation.
 
 **CompactedConversation**:
-The stored lossy conversation continuity produced by Compaction. It becomes the only retained
+The stored lossy continuity for one Hosted Agent Session produced by Compaction. It is never loaded
+into another Hosted Agent Session and becomes the only retained
 conversation continuity for incorporated Transcript entries; it is neither exact evidence nor a
 Memory or authoritative financial truth.
 _Avoid_: Summary, history, context window, Transcript.
 
 **WorkingContext**:
 The ordered, transient material assembled for one hosted Turn from system policy, current Memories,
-any CompactedConversation, the exact uncompacted conversation, and the active request, then reused
-across its hosted rounds. It is never stored as another source of User truth.
+the current Hosted Agent Session's CompactedConversation and exact uncompacted conversation, and the
+active request, then reused across its hosted rounds. Prior Hosted Agent Sessions remain retained but
+are excluded. It is never stored as another source of User truth.
 _Avoid_: Memory, Transcript, context window, prompt.
 
 ### Identity, consent, accountability

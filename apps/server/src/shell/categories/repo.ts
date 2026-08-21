@@ -14,7 +14,7 @@ import { advisoryLockKey } from "~/shell/db/advisory-lock";
 import { withUserTransaction } from "~/shell/db/user-transaction";
 
 /** Loads Categories in presentation order. Database failures are defects. */
-export const listCategories = Effect.flatMap(SqlClient.SqlClient, (sql) =>
+export const selectCategories = Effect.flatMap(SqlClient.SqlClient, (sql) =>
   SqlSchema.findAll({
     Request: Schema.Void,
     Result: Category,
@@ -45,7 +45,7 @@ const keywordRuleColumns = `id, keyword, category_id AS "categoryId",
   created_at AS "createdAt", updated_at AS "updatedAt"`;
 
 /** Loads one User's keyword rules inside the caller's User-scoped transaction. */
-export const listKeywordRulesInScope = (
+export const selectKeywordRulesInScope = (
   userId: UserId
 ): Effect.Effect<ReadonlyArray<typeof KeywordRuleRow.Type>, never, SqlClient.SqlClient> =>
   Effect.flatMap(SqlClient.SqlClient, (sql) =>
@@ -60,10 +60,10 @@ export const listKeywordRulesInScope = (
   ).pipe(Effect.orDie);
 
 /** Loads only one User's keyword rules in stable creation order. Database failures are defects. */
-export const listKeywordRules = (
+export const selectKeywordRules = (
   userId: UserId
 ): Effect.Effect<ReadonlyArray<typeof KeywordRuleRow.Type>, never, SqlClient.SqlClient> =>
-  withUserTransaction(userId, listKeywordRulesInScope(userId));
+  withUserTransaction(userId, selectKeywordRulesInScope(userId));
 
 /**
  * Serializes one keyword-rule load-decide-write body inside the caller's User-scoped transaction.

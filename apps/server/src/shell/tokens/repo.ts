@@ -2,7 +2,7 @@ import { Effect, type Option, Schema, Struct } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import { UserId } from "~/core/identity/reference";
 import { withUserTransaction } from "~/shell/db/user-transaction";
-import { HostedTurnToken, PAT, ResolvedToken } from "~/core/tokens/model";
+import { PAT, ResolvedToken } from "~/core/tokens/model";
 
 /** A lowercase SHA-256 digest used only at the token storage boundary. */
 export const TokenHash = Schema.String.check(Schema.isPattern(/^[0-9a-f]{64}$/)).pipe(
@@ -21,24 +21,6 @@ const SeedPATGrant = Schema.Struct({
 const SeedPATRow = Schema.Struct({
   subjectUserId: UserId,
   ...SeedPATGrant.fields,
-});
-
-const HostedTurnTokenGrant = HostedTurnToken.mapFields(
-  Struct.omit(["_tag", "lastUsedAt", "revokedAt"])
-);
-const StoreHostedTurnTokenRow = Schema.Struct({
-  subjectUserId: UserId,
-  tokenHash: TokenHash,
-  storageIdleExpiresAt: Schema.DateTimeUtcFromDate,
-  ...HostedTurnTokenGrant.fields,
-  expiresAt: Schema.DateTimeUtcFromDate,
-  createdAt: Schema.DateTimeUtcFromDate,
-});
-const StoreHostedTurnTokenGrant = StoreHostedTurnTokenRow.mapFields(Struct.omit(["subjectUserId"]));
-const RevokeHostedTurnTokenRow = Schema.Struct({
-  subjectUserId: UserId,
-  tokenId: HostedTurnToken.fields.id,
-  revokedAt: Schema.DateTimeUtcFromDate,
 });
 
 const TokenLookup = Schema.Struct({ tokenHash: TokenHash });
@@ -73,12 +55,11 @@ export const upsertPAT = Effect.fn("upsertPAT")(function* (
       execute: (row) => sql`
       INSERT INTO tokens (
         id, user_id, short_id, token_hash, scopes, last_used_at,
-        idle_expires_at, revoked_at, created_at, kind, expires_at
+        idle_expires_at, revoked_at, created_at
       )
       VALUES (
         ${row.id}, ${row.subjectUserId}, ${row.shortId}, ${row.tokenHash},
-        ${row.scopes}, NULL, ${row.idleExpiresAt}, ${row.revokedAt}, ${row.createdAt},
-        'pat', NULL
+        ${row.scopes}, NULL, ${row.idleExpiresAt}, ${row.revokedAt}, ${row.createdAt}
       )
       ON CONFLICT (id) DO UPDATE SET
         user_id = EXCLUDED.user_id,
@@ -88,74 +69,13 @@ export const upsertPAT = Effect.fn("upsertPAT")(function* (
         last_used_at = NULL,
         idle_expires_at = EXCLUDED.idle_expires_at,
         revoked_at = EXCLUDED.revoked_at,
-        created_at = EXCLUDED.created_at,
-        kind = 'pat',
-        expires_at = NULL
+        created_at = EXCLUDED.created_at
       RETURNING token_hash AS "tokenHash"
     `,
     })({ subjectUserId, ...grant }).pipe(Effect.orDie)
   );
 
   return row.tokenHash;
-});
-
-/**
- * Stores one hard-expiring HostedTurnToken by digest. The storage-only idle
- * deadline maintains the shared relational chronology but never authorizes or
- * extends this variant's absolute lifetime.
- */
-export const insertHostedTurnToken = Effect.fn("insertHostedTurnToken")(function* (
-  subjectUserId: UserId,
-  grant: typeof StoreHostedTurnTokenGrant.Type
-) {
-  const input = StoreHostedTurnTokenRow.make({ subjectUserId, ...grant });
-  const sql = yield* SqlClient.SqlClient;
-  yield* withUserTransaction(
-    subjectUserId,
-    SqlSchema.findOne({
-      Request: StoreHostedTurnTokenRow,
-      Result: Schema.Struct({ id: HostedTurnToken.fields.id }),
-      execute: (row) => sql`
-      INSERT INTO tokens (
-        id, user_id, short_id, token_hash, scopes, last_used_at,
-        idle_expires_at, revoked_at, created_at, kind, expires_at
-      )
-      VALUES (
-        ${row.id}, ${row.subjectUserId}, ${row.shortId}, ${row.tokenHash}, ${row.scopes},
-        NULL, ${row.storageIdleExpiresAt}, NULL, ${row.createdAt}, 'hosted-turn', ${row.expiresAt}
-      )
-      RETURNING id
-    `,
-    })(input).pipe(Effect.orDie)
-  );
-});
-
-/**
- * Revokes one active HostedTurnToken owned by the subject User. Returns None when ownership,
- * token kind, or active state does not match; database failures are defects.
- */
-export const revokeHostedTurnToken = Effect.fn("revokeHostedTurnToken")(function* (
-  subjectUserId: UserId,
-  tokenId: typeof HostedTurnToken.fields.id.Type,
-  revokedAt: typeof Schema.DateTimeUtc.Type
-) {
-  const sql = yield* SqlClient.SqlClient;
-  return yield* withUserTransaction(
-    subjectUserId,
-    SqlSchema.findOneOption({
-      Request: RevokeHostedTurnTokenRow,
-      Result: Schema.Struct({ id: HostedTurnToken.fields.id }),
-      execute: (row) => sql`
-      UPDATE tokens
-      SET revoked_at = ${row.revokedAt}
-      WHERE id = ${row.tokenId}
-        AND user_id = ${row.subjectUserId}
-        AND kind = 'hosted-turn'
-        AND revoked_at IS NULL
-      RETURNING id
-    `,
-    })({ subjectUserId, tokenId, revokedAt }).pipe(Effect.orDie)
-  );
 });
 
 /**

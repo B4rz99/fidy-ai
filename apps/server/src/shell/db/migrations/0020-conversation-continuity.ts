@@ -17,8 +17,32 @@ export const conversationContinuity = Effect.gen(function* () {
   `;
 
   yield* sql`
+    CREATE TABLE hosted_agent_sessions (
+      user_id uuid NOT NULL REFERENCES conversation_continuity(user_id) ON DELETE CASCADE,
+      id uuid NOT NULL,
+      consent_grant_id uuid NOT NULL REFERENCES consent_records(id),
+      disclosure_revision text NOT NULL,
+      disclosure_sha256 text NOT NULL,
+      policy_revision text NOT NULL,
+      policy_sha256 text NOT NULL,
+      status text NOT NULL CHECK (status IN ('active', 'idle-ended', 'revoked')),
+      started_at timestamptz NOT NULL,
+      last_terminal_turn_at timestamptz,
+      PRIMARY KEY (user_id, id),
+      UNIQUE (id),
+      CHECK (last_terminal_turn_at IS NULL OR last_terminal_turn_at >= started_at)
+    )
+  `;
+
+  yield* sql`
+    CREATE UNIQUE INDEX hosted_agent_sessions_one_active_per_user
+      ON hosted_agent_sessions (user_id) WHERE status = 'active'
+  `;
+
+  yield* sql`
     CREATE TABLE conversation_turns (
       user_id uuid NOT NULL REFERENCES conversation_continuity(user_id) ON DELETE CASCADE,
+      session_id uuid NOT NULL,
       id uuid NOT NULL,
       state text NOT NULL CHECK (state IN ('Pending', 'Completed', 'Failed', 'Interrupted')),
       started_at timestamptz NOT NULL,
@@ -27,6 +51,8 @@ export const conversationContinuity = Effect.gen(function* () {
         failure_reason IN ('HostedInferenceFailed', 'HostedInferenceTimedOut', 'DeliveryFailed')
       ),
       PRIMARY KEY (user_id, id),
+      FOREIGN KEY (user_id, session_id)
+        REFERENCES hosted_agent_sessions(user_id, id) ON DELETE CASCADE,
       CHECK (terminal_at IS NULL OR terminal_at >= started_at),
       CHECK (
         (state = 'Pending' AND terminal_at IS NULL AND failure_reason IS NULL)
@@ -48,6 +74,12 @@ export const conversationContinuity = Effect.gen(function* () {
       USING (user_id = NULLIF(current_setting('fidy.user_id', true), '')::uuid)
       WITH CHECK (user_id = NULLIF(current_setting('fidy.user_id', true), '')::uuid);
 
+    ALTER TABLE hosted_agent_sessions ENABLE ROW LEVEL SECURITY;
+    ALTER TABLE hosted_agent_sessions FORCE ROW LEVEL SECURITY;
+    CREATE POLICY hosted_agent_sessions_by_user ON hosted_agent_sessions
+      USING (user_id = NULLIF(current_setting('fidy.user_id', true), '')::uuid)
+      WITH CHECK (user_id = NULLIF(current_setting('fidy.user_id', true), '')::uuid);
+
     ALTER TABLE conversation_turns ENABLE ROW LEVEL SECURITY;
     ALTER TABLE conversation_turns FORCE ROW LEVEL SECURITY;
     CREATE POLICY conversation_turns_by_user ON conversation_turns
@@ -58,7 +90,7 @@ export const conversationContinuity = Effect.gen(function* () {
 
   yield* sql`
     GRANT SELECT, INSERT, UPDATE, DELETE ON
-      conversation_continuity, conversation_turns
+      conversation_continuity, hosted_agent_sessions, conversation_turns
     TO fidy_runtime
   `;
 }).pipe(Effect.asVoid);

@@ -5,6 +5,7 @@ import { UserId, WhatsAppCallerReference } from "~/core/identity/reference";
 import { InsightKind } from "~/core/insights/reference";
 import { PATId } from "~/core/tokens/reference";
 import { UtcTimestamp } from "~/core/_shared/time";
+import { ConsentRecordId, DisclosureRevision, PolicyRevision, Sha256Digest } from "./reference";
 
 const maximumLegalFactLength = 1_000;
 const maximumPolicyUrlLength = 2_048;
@@ -15,41 +16,13 @@ const legalFact = Schema.NonEmptyString.check(
   Schema.isMaxLength(maximumLegalFactLength)
 );
 
-/** Stable identity of one append-only ConsentRecord. */
-export const ConsentRecordId = Schema.String.check(Schema.isUUID())
-  .pipe(Schema.brand("ConsentRecordId"))
-  .annotate({ identifier: "ConsentRecordId" });
-export type ConsentRecordId = typeof ConsentRecordId.Type;
+export { ConsentRecordId, DisclosureRevision, PolicyRevision, Sha256Digest };
 
 /** Stable identity of one temporary pre-User disclosure exchange. */
 export const PendingConsentExchangeId = Schema.String.check(Schema.isUUID())
   .pipe(Schema.brand("PendingConsentExchangeId"))
   .annotate({ identifier: "PendingConsentExchangeId" });
 export type PendingConsentExchangeId = typeof PendingConsentExchangeId.Type;
-
-/** Immutable source-control identifier of one full policy version. */
-export const PolicyRevision = Schema.String.check(
-  Schema.isTrimmed(),
-  Schema.isPattern(/^[a-z0-9][a-z0-9._-]{0,63}$/u)
-)
-  .pipe(Schema.brand("PolicyRevision"))
-  .annotate({ identifier: "PolicyRevision" });
-export type PolicyRevision = typeof PolicyRevision.Type;
-
-/** Immutable identifier of the shorter disclosure presented in chat. */
-export const DisclosureRevision = Schema.String.check(
-  Schema.isTrimmed(),
-  Schema.isPattern(/^[a-z0-9][a-z0-9._-]{0,63}$/u)
-)
-  .pipe(Schema.brand("DisclosureRevision"))
-  .annotate({ identifier: "DisclosureRevision" });
-export type DisclosureRevision = typeof DisclosureRevision.Type;
-
-/** Lowercase SHA-256 digest that pins exact source-controlled content bytes. */
-export const Sha256Digest = Schema.String.check(Schema.isPattern(/^[0-9a-f]{64}$/u))
-  .pipe(Schema.brand("Sha256Digest"))
-  .annotate({ identifier: "Sha256Digest" });
-export type Sha256Digest = typeof Sha256Digest.Type;
 
 /** Stable HTTPS location of a source-controlled policy revision. */
 export const PolicyUrl = Schema.String.check(

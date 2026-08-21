@@ -5,10 +5,10 @@ import { toCodecOpenAI } from "effect/unstable/ai/OpenAiStructuredOutput";
 import { HttpApi, OpenApi } from "effect/unstable/httpapi";
 import { FidyApi as ClientFidyApi } from "~/client";
 import { categoryIds } from "~/core/categories/taxonomy";
+import { assertCanonicalOperationRegistry } from "~/shell/_shared/canonical-operation-registry";
 import { FidyApi } from "~/shell/api";
 import {
   AgentToolkit,
-  CanonicalApiUrl,
   agentOperationBindings,
   decodeAgentOperationInput,
   findAgentOperationBinding,
@@ -39,6 +39,7 @@ it("derives exactly one hosted tool for every FidyApi canonical operation", () =
     },
   });
 
+  assertCanonicalOperationRegistry(reflected);
   expect(agentOperationBindings.map(({ operation }) => operation)).toEqual(reflected);
   expect(Object.keys(AgentToolkit.tools)).toEqual(
     reflected.map((operation) => operation.replaceAll(".", "__"))
@@ -147,17 +148,3 @@ it("tells the hosted model which transaction operations need confirmation", () =
   expect(createDescription).toContain("does not require User confirmation");
   expect(deleteDescription).toContain("host manages exact confirmation");
 });
-
-it.effect("rejects canonical API destinations that could leak a HostedTurnToken", () =>
-  Effect.gen(function* () {
-    const decode = Schema.decodeUnknownEffect(CanonicalApiUrl);
-    yield* Effect.flip(decode("http://attacker.example"));
-    yield* Effect.flip(decode("https://user:secret@localhost"));
-    yield* Effect.flip(decode("https://api.example"));
-    yield* Effect.flip(decode("http://localhost?redirect=attacker"));
-    yield* Effect.flip(decode("http://localhost/proxy"));
-    yield* Effect.flip(decode("http://localhost/#fragment"));
-    expect((yield* decode("http://127.0.0.1:3000")).href).toBe("http://127.0.0.1:3000/");
-    expect((yield* decode("https://localhost:3443")).href).toBe("https://localhost:3443/");
-  })
-);

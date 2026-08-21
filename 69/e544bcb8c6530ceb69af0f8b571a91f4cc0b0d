@@ -1,0 +1,81 @@
+apps/server/src/core/audit/model.test.ts
+  s_c9a426110eb336::t_62516e1636afc1 46-48
+  s_c9a426110eb336::t_c02886875251fd 49
+  s_c9a426110eb336::t_71a71fa6026b35 23,29-36,50-57
+apps/server/src/shell/_shared/operation-policy.ts
+  s_c9a426110eb336::t_4bda710cd39b60 3,19,21,49,52-53,56-57,63,74-75
+apps/server/src/shell/_shared/authz-live.ts
+  s_c9a426110eb336::t_f07968eff5df80 156
+reports/issue-237/issue-237-plan.html
+  s_c9a426110eb336::t_60133913bb545a 78-295
+  s_c9a426110eb336::t_ad120c29cb73a2 75-77
+  s_c9a426110eb336::t_3015d478f0ddb6 296-298
+  s_c9a426110eb336::t_5424a1c274b1e9 1-74,299
+apps/server/tools/contracts/generate.ts
+  s_c9a426110eb336::t_35861b580eb25b 23-31
+apps/server/src/shell/_shared/operation-catalog.test.ts
+  s_c9a426110eb336::t_385817bd4ace52 8,28
+apps/server/src/core/audit/model.ts
+  s_c9a426110eb336::t_393c474fb4a2e9 7,24
+apps/server/src/shell/operations/operations.ts
+  s_c9a426110eb336::t_b13dd1946c739c 7,182-183
+apps/server/src/shell/transactions/operations.ts
+  s_c9a426110eb336::t_3653ede9e74648 17,23,29
+apps/server/src/shell/db/migrations/0003-create-audit-log.ts
+  s_c9a426110eb336::t_7a0649d30bbde5 4,15,23
+  s_c9a426110eb336::t_9fd9bd84ea8a84 5-6
+apps/server/src/shell/_shared/suggested-operations.ts
+  s_c9a426110eb336::t_752758fd81312d 68,76
+apps/server/src/shell/ingestion/operations.ts
+  s_c9a426110eb336::t_b70d6dd18f6415 17,23,29
+apps/server/src/shell/memory/operations.ts
+  s_c9a426110eb336::t_41e4822e9c6c01 11,17,23
+apps/server/src/shell/budgets/operations.ts
+  s_c9a426110eb336::t_febd88d99e3633 17,23,29
+apps/server/src/shell/_shared/canonical-operation-executor.ts
+  s_c9a426110eb336::t_3a907361e530e2 110-111
+apps/server/src/core/web-session/reference.ts
+  s_c9a426110eb336::t_fd59a7acd1fb72 1-7
+apps/server/src/shell/categories/operations.ts
+  s_c9a426110eb336::t_8476a064d8e885 16,22,28
+apps/server/src/shell/audit/audit-log.test.ts
+  s_c9a426110eb336::t_62516e1636afc1 299-301
+  s_c9a426110eb336::t_8bc29b824897ae 8,29,46,227-233,235-258,265,270-271,274,280-292,294,297
+  s_c9a426110eb336::t_50b283744aeedf 6,234
+apps/server/src/shell/insights/operations.ts
+  s_c9a426110eb336::t_cfd6b2c12f1038 41,63,84,104
+apps/server/src/shell/operations/atomic-batch.ts
+  s_c9a426110eb336::t_5bc81b32bbc040 126,155
+apps/server/src/shell/subscription/operations.ts
+  s_c9a426110eb336::t_0b162455d87c1f 18
+apps/server/src/shell/agent/agent-service.ts
+  s_c9a426110eb336::t_679f0b75c1fdc5 391
+apps/server/src/shell/identity/operations.ts
+  s_c9a426110eb336::t_0fc369217a231f 22,39
+apps/server/src/shell/dashboard/operations.ts
+  s_c9a426110eb336::t_00974f93af3f39 23,42,63
+apps/server/src/shell/_shared/suggested-operations.test.ts
+  s_c9a426110eb336::t_e2fbed27a68741 200-201
+apps/server/src/shell/audit/repo.ts
+  s_c9a426110eb336::t_929755268365c6 7,17,28,30-33,35,37-45,47,50-51,54-55,60-63,102,105-106,109,130
+apps/server/src/shell/testing/suggested-operations.test.ts
+  s_c9a426110eb336::t_c7d8f8824f702a 473,477
+reports/issue-237/proposed-types.ts
+  s_c9a426110eb336::t_ef81725e08834d 1-114
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.23",
+  "base_commit_sha": "69e544bcb8c6530ceb69af0f8b571a91f4cc0b0d",
+  "prompts": {},
+  "sessions": {
+    "s_c9a426110eb336": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a02524-4dbc-707d-abca-6212dff864ce",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

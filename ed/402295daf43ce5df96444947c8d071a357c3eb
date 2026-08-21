@@ -1,0 +1,41 @@
+apps/server/src/shell/operations/handlers.ts
+  s_38b06ff03222ef::t_26237ff5fba47c 1,3-5,9-14
+apps/server/scripts/check-dependency-guards.ts
+  s_38b06ff03222ef::t_e70c4e7ed5569e 61-62,305,322-347
+  s_38b06ff03222ef::t_1d1e36a87d4417 59,287-303
+  s_38b06ff03222ef::t_7193f990516498 60,304,306-321,348,592-594,601-604,606
+apps/server/.dependency-cruiser.mjs
+  s_38b06ff03222ef::t_d50d94100623a8 131-132,134-139
+  s_38b06ff03222ef::t_543699f861674a 128-130,133,140-141
+  s_ac6bb3ab35e99f::t_7c343ea8af19f8 127
+ARCHITECTURE.md
+  s_38b06ff03222ef::t_2adc39af4d2caf 141-145
+apps/server/src/shell/operations/atomic-batch.ts
+  s_38b06ff03222ef::t_48db114ddaf2c3 1-191
+apps/server/src/shell/_shared/canonical-operation-registry.ts
+  s_38b06ff03222ef::t_8bc0d51ce0bbfa 1,23,114-115
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.23",
+  "base_commit_sha": "ed402295daf43ce5df96444947c8d071a357c3eb",
+  "prompts": {},
+  "sessions": {
+    "s_38b06ff03222ef": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0252a-5bf4-7aa1-b14d-018d47236bd3",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_ac6bb3ab35e99f": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a02529-f9f5-72a1-a37f-15447f3a7de2",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

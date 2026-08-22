@@ -12,9 +12,9 @@ const row: TransactionListRow = {
   categoryLabel: "Restaurantes",
   counterpartyLabel: "El Corral",
   direction: "outflow",
-  directionLabel: "Salida",
+  transactionTypeLabel: "Gasto",
   moneyText: "COP 25.000,00",
-  occurredOnText: "20 de jul. de 2026",
+  occurredOnText: "20-07-2026",
 };
 
 describe("current-month Transaction list", () => {
@@ -35,13 +35,14 @@ describe("current-month Transaction list", () => {
     const desktop = within(screen.getByLabelText("Tabla de transacciones"));
     expect(desktop.getByText("El Corral")).toBeVisible();
     expect(desktop.getByText("Restaurantes")).toBeVisible();
-    expect(desktop.getByText("Salida")).toBeVisible();
+    expect(desktop.getByText("Tipo")).toBeVisible();
+    expect(desktop.getByText("Gasto")).toBeVisible();
     expect(desktop.getByText("COP 25.000,00")).toBeVisible();
-    expect(desktop.getByText("20 de jul. de 2026")).toBeVisible();
+    expect(desktop.getByText("20-07-2026")).toBeVisible();
 
     const mobile = within(screen.getByLabelText("Lista móvil de transacciones"));
     expect(mobile.getByText("El Corral")).toBeVisible();
-    expect(mobile.getByText("Salida")).toBeVisible();
+    expect(mobile.getByText("Gasto")).toBeVisible();
   });
 
   it("renders the current-month empty state with its applied zone", () => {

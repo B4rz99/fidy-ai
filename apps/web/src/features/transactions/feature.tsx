@@ -77,7 +77,7 @@ const DesktopTransactions = ({
         <TableRow>
           <TableHead>Contraparte</TableHead>
           <TableHead>Categoría</TableHead>
-          <TableHead>Dirección</TableHead>
+          <TableHead>Tipo</TableHead>
           <TableHead>Fecha</TableHead>
           <TableHead className="text-right">Monto</TableHead>
         </TableRow>
@@ -89,7 +89,7 @@ const DesktopTransactions = ({
             <TableCell>{row.categoryLabel}</TableCell>
             <TableCell>
               <Badge variant={row.direction === "inflow" ? "secondary" : "outline"}>
-                {row.directionLabel}
+                {row.transactionTypeLabel}
               </Badge>
             </TableCell>
             <TableCell>{row.occurredOnText}</TableCell>
@@ -117,7 +117,7 @@ const MobileTransactions = ({
           </CardHeader>
           <CardContent className="flex items-center justify-between gap-3">
             <Badge variant={row.direction === "inflow" ? "secondary" : "outline"}>
-              {row.directionLabel}
+              {row.transactionTypeLabel}
             </Badge>
             <span className="text-sm text-muted-foreground">{row.occurredOnText}</span>
           </CardContent>

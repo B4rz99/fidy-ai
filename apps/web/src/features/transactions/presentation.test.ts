@@ -61,7 +61,7 @@ describe("current-month Transaction presentation", () => {
     ).toBe("COP 25.000,00");
   });
 
-  it("joins Category labels and presents Counterparty, direction, Money, and local occurrence", () => {
+  it("joins Category labels and presents Counterparty, expense or income, Money, and local date", () => {
     const rows = presentTransactionRows({
       categories: [category],
       counterpartyFallback: "Contraparte no identificada",
@@ -87,18 +87,18 @@ describe("current-month Transaction presentation", () => {
         categoryLabel: "Restaurantes",
         counterpartyLabel: "El Corral",
         direction: "outflow",
-        directionLabel: "Salida",
+        transactionTypeLabel: "Gasto",
         moneyText: "COP 25.000,00",
-        occurredOnText: "20 de jul. de 2026",
+        occurredOnText: "20-07-2026",
       },
       {
         id: "24000000-0000-4000-8000-000000000003",
         categoryLabel: "Restaurantes",
         counterpartyLabel: "Contraparte no identificada",
         direction: "inflow",
-        directionLabel: "Ingreso",
+        transactionTypeLabel: "Ingreso",
         moneyText: "USD 19,90",
-        occurredOnText: "20 de jul. de 2026",
+        occurredOnText: "20-07-2026",
       },
     ]);
   });

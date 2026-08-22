@@ -52,7 +52,7 @@ export type TransactionListRow = Readonly<{
   categoryLabel: string;
   counterpartyLabel: string;
   direction: Transaction["direction"];
-  directionLabel: "Ingreso" | "Salida";
+  transactionTypeLabel: "Gasto" | "Ingreso";
   moneyText: string;
   occurredOnText: string;
 }>;
@@ -65,13 +65,20 @@ const formatOccurrence = ({
   locale: string;
   occurredAt: Transaction["occurredAt"];
   timeZone: string;
-}>): string =>
-  new Intl.DateTimeFormat(locale, {
-    day: "numeric",
-    month: "short",
+}>): string => {
+  const parts = new Intl.DateTimeFormat(locale, {
+    day: "2-digit",
+    month: "2-digit",
     timeZone,
     year: "numeric",
-  }).format(occurredAt.epochMilliseconds);
+  }).formatToParts(occurredAt.epochMilliseconds);
+  const valueOf = (type: "day" | "month" | "year"): string =>
+    Option.fromNullishOr(parts.find((part) => part.type === type)).pipe(
+      Option.map((part) => part.value),
+      Option.getOrThrow
+    );
+  return `${valueOf("day")}-${valueOf("month")}-${valueOf("year")}`;
+};
 
 export type TransactionPresentationCategory = Readonly<{
   id: string;
@@ -107,7 +114,7 @@ export const presentTransactionRows = ({
     categoryLabel: categoryLabels.get(transaction.categoryId) ?? "Categoría no disponible",
     counterpartyLabel: Option.getOrElse(transaction.counterparty, () => counterpartyFallback),
     direction: transaction.direction,
-    directionLabel: transaction.direction === "inflow" ? "Ingreso" : "Salida",
+    transactionTypeLabel: transaction.direction === "inflow" ? "Ingreso" : "Gasto",
     moneyText: formatMoney({ locale, money: transaction.money }),
     occurredOnText: formatOccurrence({ locale, occurredAt: transaction.occurredAt, timeZone }),
   }));

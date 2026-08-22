@@ -10630,6 +10630,11 @@
         "bearerFormat": "fin_<short-id>_<secret>",
         "scheme": "Bearer",
         "type": "http"
+      },
+      "webSession": {
+        "in": "cookie",
+        "name": "__Host-fidy_session",
+        "type": "apiKey"
       }
     }
   },
@@ -10746,6 +10751,9 @@
           }
         },
         "security": [
+          {
+            "webSession": []
+          },
           {
             "agentBearer": []
           }
@@ -10866,6 +10874,9 @@
         },
         "security": [
           {
+            "webSession": []
+          },
+          {
             "agentBearer": []
           }
         ],
@@ -10962,6 +10973,9 @@
           }
         },
         "security": [
+          {
+            "webSession": []
+          },
           {
             "agentBearer": []
           }
@@ -11082,6 +11096,9 @@
         },
         "security": [
           {
+            "webSession": []
+          },
+          {
             "agentBearer": []
           }
         ],
@@ -11195,6 +11212,9 @@
         },
         "security": [
           {
+            "webSession": []
+          },
+          {
             "agentBearer": []
           }
         ],
@@ -11305,6 +11325,9 @@
           }
         },
         "security": [
+          {
+            "webSession": []
+          },
           {
             "agentBearer": []
           }
@@ -11434,6 +11457,9 @@
         },
         "security": [
           {
+            "webSession": []
+          },
+          {
             "agentBearer": []
           }
         ],
@@ -11531,6 +11557,9 @@
         },
         "security": [
           {
+            "webSession": []
+          },
+          {
             "agentBearer": []
           }
         ],
@@ -11627,6 +11656,9 @@
           }
         },
         "security": [
+          {
+            "webSession": []
+          },
           {
             "agentBearer": []
           }
@@ -11747,6 +11779,9 @@
         },
         "security": [
           {
+            "webSession": []
+          },
+          {
             "agentBearer": []
           }
         ],
@@ -11859,6 +11894,9 @@
           }
         },
         "security": [
+          {
+            "webSession": []
+          },
           {
             "agentBearer": []
           }
@@ -11988,6 +12026,9 @@
         },
         "security": [
           {
+            "webSession": []
+          },
+          {
             "agentBearer": []
           }
         ],
@@ -12081,6 +12122,9 @@
           }
         },
         "security": [
+          {
+            "webSession": []
+          },
           {
             "agentBearer": []
           }
@@ -12191,6 +12235,9 @@
           }
         },
         "security": [
+          {
+            "webSession": []
+          },
           {
             "agentBearer": []
           }
@@ -12312,6 +12359,9 @@
           }
         },
         "security": [
+          {
+            "webSession": []
+          },
           {
             "agentBearer": []
           }
@@ -12436,6 +12486,9 @@
           }
         },
         "security": [
+          {
+            "webSession": []
+          },
           {
             "agentBearer": []
           }
@@ -12567,6 +12620,9 @@
         },
         "security": [
           {
+            "webSession": []
+          },
+          {
             "agentBearer": []
           }
         ],
@@ -12688,6 +12744,9 @@
         },
         "security": [
           {
+            "webSession": []
+          },
+          {
             "agentBearer": []
           }
         ],
@@ -12800,6 +12859,9 @@
           }
         },
         "security": [
+          {
+            "webSession": []
+          },
           {
             "agentBearer": []
           }
@@ -12944,6 +13006,9 @@
         },
         "security": [
           {
+            "webSession": []
+          },
+          {
             "agentBearer": []
           }
         ],
@@ -13063,6 +13128,9 @@
           }
         },
         "security": [
+          {
+            "webSession": []
+          },
           {
             "agentBearer": []
           }
@@ -13184,6 +13252,9 @@
         },
         "security": [
           {
+            "webSession": []
+          },
+          {
             "agentBearer": []
           }
         ],
@@ -13281,6 +13352,9 @@
         },
         "security": [
           {
+            "webSession": []
+          },
+          {
             "agentBearer": []
           }
         ],
@@ -13374,6 +13448,9 @@
           }
         },
         "security": [
+          {
+            "webSession": []
+          },
           {
             "agentBearer": []
           }
@@ -13487,6 +13564,9 @@
         },
         "security": [
           {
+            "webSession": []
+          },
+          {
             "agentBearer": []
           }
         ],
@@ -13599,6 +13679,9 @@
           }
         },
         "security": [
+          {
+            "webSession": []
+          },
           {
             "agentBearer": []
           }
@@ -13730,6 +13813,9 @@
           }
         },
         "security": [
+          {
+            "webSession": []
+          },
           {
             "agentBearer": []
           }
@@ -17246,6 +17332,9 @@
         },
         "security": [
           {
+            "webSession": []
+          },
+          {
             "agentBearer": []
           }
         ],
@@ -17339,6 +17428,9 @@
           }
         },
         "security": [
+          {
+            "webSession": []
+          },
           {
             "agentBearer": []
           }
@@ -17509,6 +17601,9 @@
         },
         "security": [
           {
+            "webSession": []
+          },
+          {
             "agentBearer": []
           }
         ],
@@ -17628,6 +17723,9 @@
         },
         "security": [
           {
+            "webSession": []
+          },
+          {
             "agentBearer": []
           }
         ],
@@ -17741,6 +17839,9 @@
         },
         "security": [
           {
+            "webSession": []
+          },
+          {
             "agentBearer": []
           }
         ],
@@ -17851,6 +17952,9 @@
           }
         },
         "security": [
+          {
+            "webSession": []
+          },
           {
             "agentBearer": []
           }
@@ -17980,6 +18084,9 @@
         },
         "security": [
           {
+            "webSession": []
+          },
+          {
             "agentBearer": []
           }
         ],
@@ -18096,6 +18203,9 @@
         },
         "security": [
           {
+            "webSession": []
+          },
+          {
             "agentBearer": []
           }
         ],
@@ -18189,6 +18299,9 @@
           }
         },
         "security": [
+          {
+            "webSession": []
+          },
           {
             "agentBearer": []
           }
@@ -18293,6 +18406,9 @@
           }
         },
         "security": [
+          {
+            "webSession": []
+          },
           {
             "agentBearer": []
           }

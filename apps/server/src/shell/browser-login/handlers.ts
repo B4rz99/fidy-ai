@@ -15,6 +15,11 @@ import {
   redeemBrowserLoginPairing,
   startBrowserLoginPairing,
 } from "./service";
+import {
+  initialWebSessionCookieOptions,
+  webSessionCookieName,
+  webSessionCookieOptions,
+} from "~/shell/web-session/cookie";
 import { logoutWebSession } from "~/shell/web-session/service";
 
 const WebAuthNoStoreLive = HttpRouter.middleware((httpEffect) =>
@@ -62,21 +67,6 @@ const BrowserLoginEvidenceRetentionLive = Layer.effectDiscard(
   )
 );
 
-export const webSessionCookieName = "__Host-fidy_session";
-const webSessionCookieOptions = {
-  secure: true,
-  httpOnly: true,
-  sameSite: "strict",
-  path: "/",
-  maxAge: "30 days",
-} as const;
-const expiredWebSessionCookieOptions = {
-  secure: true,
-  httpOnly: true,
-  sameSite: "strict",
-  path: "/",
-} as const;
-
 const handleAdmittedRedemption = Effect.fn("BrowserLogin.handleAdmittedRedemption")(function* (
   payload: RedeemBrowserLoginPairingPayload
 ) {
@@ -98,7 +88,7 @@ const handleAdmittedRedemption = Effect.fn("BrowserLogin.handleAdmittedRedemptio
     response,
     webSessionCookieName,
     Redacted.value(redeemed.sessionBearer),
-    webSessionCookieOptions
+    initialWebSessionCookieOptions
   );
 });
 
@@ -120,7 +110,7 @@ const handleLogout = Effect.fn("WebSession.handleLogout")(function* () {
   return HttpServerResponse.expireCookieUnsafe(
     HttpServerResponse.empty({ status: 204 }),
     webSessionCookieName,
-    expiredWebSessionCookieOptions
+    webSessionCookieOptions
   );
 });
 

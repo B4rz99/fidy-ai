@@ -41,6 +41,27 @@ const installStartAndLogoutRoutes = async (
       }),
     });
   });
+  await page.route("**/user", (route) =>
+    route.fulfill({
+      contentType: "application/json",
+      status: successStatus,
+      body: JSON.stringify({
+        data: {
+          id: "24000000-0000-4000-8000-000000000241",
+          serviceMarket: "CO",
+          locale: "es-CO",
+          timeZone: "America/Bogota",
+          paidTier: "free",
+          trialPeriod: {
+            startedAt: "2026-08-01T00:00:00Z",
+            endsAt: "2026-08-08T00:00:00Z",
+          },
+          createdAt: "2026-08-01T00:00:00Z",
+        },
+        next: [],
+      }),
+    })
+  );
   await page.route("**/web/session/logout", async (route) => {
     fixture.logoutCount += 1;
     await route.fulfill({
@@ -122,7 +143,7 @@ test("keeps the verifier ephemeral, polls sequentially, retains the cookie, and 
   await expect(page.getByText(publicCode, { exact: true })).toBeVisible();
   expect(api.startCount).toBe(1);
   await expectVerifierIsBrowserEphemeral(page);
-  await expect(page.getByText("Sesión iniciada", { exact: true })).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByText("es-CO", { exact: true })).toBeVisible({ timeout: 15_000 });
 
   expect(api.redeemCount).toBe(2);
   expect(api.maximumActiveRedeems).toBe(1);
@@ -140,14 +161,12 @@ test("keeps the verifier ephemeral, polls sequentially, retains the cookie, and 
   );
 
   await page.reload();
-  await expect(page.getByRole("button", { name: "Iniciar sesión en el navegador" })).toBeVisible();
+  await expect(page.getByText("America/Bogota", { exact: true })).toBeVisible();
   expect(api.startCount).toBe(1);
   expect(await context.cookies()).toEqual(
     expect.arrayContaining([expect.objectContaining({ name: "__Host-fidy_session" })])
   );
 
-  await page.getByRole("button", { name: "Iniciar sesión en el navegador" }).click();
-  await expect(page.getByText("Sesión iniciada", { exact: true })).toBeVisible({ timeout: 10_000 });
   await page.getByRole("button", { name: "Cerrar sesión" }).click();
   await expect(page.getByRole("button", { name: "Iniciar sesión en el navegador" })).toBeVisible();
   expect(api.logoutCount).toBe(1);

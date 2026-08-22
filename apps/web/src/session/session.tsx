@@ -2,7 +2,7 @@ import { RegistryProvider } from "@effect/atom-react";
 import { Option } from "effect";
 import { useState } from "react";
 import type { ReactNode } from "react";
-import { SessionContext } from "./session-context";
+import { type BrowserAuthentication, SessionContext } from "./session-context";
 
 /** A local, non-secret epoch identifying one authentication lifetime. */
 export type AuthenticationLifetime = number;
@@ -21,25 +21,27 @@ export const SessionRegistryProvider = ({
   children,
 }: SessionRegistryProviderProps): React.JSX.Element => {
   const [authenticationEpoch, setAuthenticationEpoch] = useState<AuthenticationLifetime>(0);
-  const [loginCompletedInLifetime, setLoginCompletedInLifetime] = useState(false);
+  const [authentication, setAuthentication] = useState<BrowserAuthentication>("signed-out");
   const replaceAuthenticationLifetime = (): void => {
     setAuthenticationEpoch((currentEpoch) => currentEpoch + 1);
   };
-  const completeLogin = (): void => {
-    setLoginCompletedInLifetime(true);
+  const transitionAuthentication = (next: typeof authentication): void => {
+    setAuthentication(next);
     replaceAuthenticationLifetime();
   };
-  const completeLogout = (): void => {
-    setLoginCompletedInLifetime(false);
-    replaceAuthenticationLifetime();
+  const completeLogin = (): void => transitionAuthentication("signed-in");
+  const completeLogout = (): void => transitionAuthentication("signed-out");
+  const expireAuthentication = (): void => {
+    if (authentication !== "expired") transitionAuthentication("expired");
   };
 
   return (
     <SessionContext.Provider
       value={Option.some({
-        loginCompletedInLifetime,
+        authentication,
         completeLogin,
         completeLogout,
+        expireAuthentication,
         replaceAuthenticationLifetime,
       })}
     >

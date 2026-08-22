@@ -35,6 +35,32 @@ it.effect("rejects an unconfigured Origin without executing route behavior", () 
   })
 );
 
+it.effect(
+  "rejects null, malformed, suffix-lookalike, and unconfigured origins before routing",
+  () =>
+    Effect.gen(function* () {
+      const executions = yield* Ref.make(0);
+      const origins = [
+        "null",
+        "not-an-origin",
+        "https://fidyapp.com.attacker.example",
+        "https://unconfigured.fidyapp.com",
+      ];
+
+      const responses = yield* Effect.forEach(origins, (origin) =>
+        applyCors(
+          new Request("https://api.fidyapp.com/user", { headers: { origin } }),
+          Ref.update(executions, (count) => count + 1).pipe(
+            Effect.as(HttpServerResponse.empty({ status: 200 }))
+          )
+        )
+      );
+
+      expect(responses.map(({ status }) => status)).toEqual([403, 403, 403, 403]);
+      expect(yield* Ref.get(executions)).toBe(0);
+    })
+);
+
 it.effect("preserves existing response variation for an accepted Origin", () =>
   Effect.gen(function* () {
     const response = yield* applyCors(

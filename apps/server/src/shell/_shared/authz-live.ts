@@ -3,6 +3,7 @@ import {
   Crypto,
   Data,
   DateTime,
+  Duration,
   Effect,
   Encoding,
   Exit,
@@ -12,29 +13,40 @@ import {
   Redacted,
   Schema,
 } from "effect";
+import { HttpServerRequest } from "effect/unstable/http";
 import { SqlClient } from "effect/unstable/sql";
+import { HttpApiBuilder } from "effect/unstable/httpapi";
 import { type AuditLogEntry, type AuditOutcome, CanonicalOperationId } from "~/core/audit/model";
-import { canonicalCapabilitiesFromPatScopes } from "~/core/_shared/canonical-capability";
+import {
+  allCanonicalCapabilities,
+  canonicalCapabilitiesFromPatScopes,
+} from "~/core/_shared/canonical-capability";
 import { type ResolvedToken, TokenBearer } from "~/core/tokens/model";
 import { computePatIdleExpiry } from "~/core/tokens/rules";
 import { appendAuditLogEntry } from "~/shell/audit/repo";
 import { onboardingConsentStandingInScope, withSubjectLock } from "~/shell/consent/repo";
 import { withUserTransaction } from "~/shell/db/user-transaction";
 import { TokenHash, useToken } from "~/shell/tokens/repo";
+import {
+  renewedWebSessionCookieOptions,
+  webSessionCookieOptions,
+} from "~/shell/web-session/cookie";
+import type { ResolvedWebSession } from "~/shell/web-session/repo";
+import { authenticateWebSession } from "~/shell/web-session/service";
 import { executeCanonicalEffect, findCanonicalCallRejected } from "./canonical-operation-executor";
 import { ConsentRequired, ScopeMissing, Unauthenticated, UserActionRequired } from "./errors";
-import { type CanonicalCaller, TokenAuthorization } from "./authz";
+import { type CanonicalCaller, TokenAuthorization, webSessionSecurity } from "./authz";
 import { getOperationPolicy } from "./operation-policy";
 
-const decodeBearer = Schema.decodeUnknownEffect(TokenBearer);
+const decodeBearer = Schema.decodeUnknownOption(TokenBearer);
 
 const unauthenticated = (): Unauthenticated =>
   Unauthenticated.make({
     error: {
       code: "unauthenticated",
       message:
-        "Every HTTP operation requires a known PAT. Send its opaque fin_ bearer in the " +
-        "Authorization header and retry.",
+        "Every HTTP operation requires an active WebSession or known PAT. Present the host-only " +
+        "browser cookie or send an opaque fin_ bearer in the Authorization header and retry.",
     },
     next: [],
   });
@@ -44,8 +56,8 @@ const scopeMissing = (): ScopeMissing =>
     error: {
       code: "scope_missing",
       message:
-        "This bearer does not grant the scope declared by the attempted operation. " +
-        "Ask the User to mint or broaden a PAT in /settings/pats before retrying.",
+        "This caller does not grant the authority declared by the attempted operation. " +
+        "A PAT User can mint or broaden it in /settings/pats before retrying.",
     },
     next: [],
   });
@@ -78,16 +90,27 @@ const consentFailure = (
 ): Effect.Effect<never, ConsentRequired | UserActionRequired> =>
   access === "revoked" ? Effect.fail(userActionRequired()) : Effect.fail(consentRequired());
 
+type ResolvedCredential =
+  | Readonly<{ _tag: "PAT"; resolved: ResolvedToken }>
+  | Readonly<{
+      _tag: "WebSession";
+      resolved: ResolvedWebSession;
+      bearer: string;
+    }>;
+
 class UserActionAuthenticationRejected extends Data.TaggedError(
   "UserActionAuthenticationRejected"
-)<{ readonly resolved: ResolvedToken; readonly access: "never-granted" | "revoked" }> {}
-
-class ScopeAuthenticationRejected extends Data.TaggedError("ScopeAuthenticationRejected")<{
-  readonly resolved: ResolvedToken;
+)<{
+  readonly credential: ResolvedCredential;
+  readonly access: "never-granted" | "revoked";
 }> {}
 
-/** A transferable bearer can neither exceed its scope nor invoke hosted-only authority. */
-const isBearerIneligible = (cause: Cause.Cause<unknown>): boolean =>
+class ScopeAuthenticationRejected extends Data.TaggedError("ScopeAuthenticationRejected")<{
+  readonly credential: ResolvedCredential;
+}> {}
+
+/** A direct credential can neither exceed its capability nor invoke hosted-only authority. */
+const isCredentialIneligible = (cause: Cause.Cause<unknown>): boolean =>
   Option.exists(findCanonicalCallRejected(cause), (rejection) =>
     ["capability_missing", "caller_ineligible"].includes(rejection.reason)
   );
@@ -108,9 +131,7 @@ export const hashTokenBearer = (
 
 /**
  * Resolves a typed TokenBearer bearer to its stable User and atomically records
- * the supplied use time while renewing its 90-day idle deadline. The caller
- * supplies one UTC instant for both writes. Unknown, revoked, and idle-expired
- * grants remain `None`; database failures are defects.
+ * the supplied use time while renewing its 90-day idle deadline.
  */
 export const authenticateTokenBearer: {
   (
@@ -130,19 +151,28 @@ export const authenticateTokenBearer: {
   })
 );
 
+const subjectUserIdOf = (
+  credential: ResolvedCredential
+): ResolvedCredential["resolved"]["subjectUserId"] => credential.resolved.subjectUserId;
+
+const auditCallerOf = (credential: ResolvedCredential): CanonicalCaller["auditCaller"] =>
+  credential._tag === "PAT"
+    ? { _tag: "PAT", patId: credential.resolved.tokenId }
+    : { _tag: "WebSession", webSessionId: credential.resolved.webSessionId };
+
 const recordAuthorizationOutcome = ({
-  resolved,
+  credential,
   operation,
   outcome,
   occurredAt,
 }: Readonly<{
-  resolved: ResolvedToken;
+  credential: ResolvedCredential;
   operation: CanonicalOperationId;
   outcome: AuditOutcome;
   occurredAt: DateTime.Utc;
 }>): Effect.Effect<AuditLogEntry, never, SqlClient.SqlClient> =>
-  appendAuditLogEntry(resolved.subjectUserId, {
-    caller: { _tag: "PAT", patId: resolved.tokenId },
+  appendAuditLogEntry(subjectUserIdOf(credential), {
+    caller: auditCallerOf(credential),
     operation,
     outcome,
     occurredAt,
@@ -157,23 +187,76 @@ const annotateOperationPolicy = (
 
 const recordRejectedAttempt = (
   attempt: Readonly<{
-    resolved: ResolvedToken;
+    credential: ResolvedCredential;
     operation: CanonicalOperationId;
     occurredAt: DateTime.Utc;
   }>
 ): Effect.Effect<AuditLogEntry, never, SqlClient.SqlClient> =>
   recordAuthorizationOutcome({ ...attempt, outcome: "rejected" });
 
-const canonicalCallerFromPat = (resolved: ResolvedToken): CanonicalCaller => ({
-  subjectUserId: resolved.subjectUserId,
-  capabilities: canonicalCapabilitiesFromPatScopes(resolved.scopes),
-  auditCaller: { _tag: "PAT", patId: resolved.tokenId },
-  authorityRoot: "no-verified-whatsapp-authority",
+const canonicalCallerFromCredential = (credential: ResolvedCredential): CanonicalCaller => {
+  if (credential._tag === "PAT") {
+    return {
+      subjectUserId: credential.resolved.subjectUserId,
+      capabilities: canonicalCapabilitiesFromPatScopes(credential.resolved.scopes),
+      auditCaller: { _tag: "PAT", patId: credential.resolved.tokenId },
+      authorityRoot: "no-verified-whatsapp-authority",
+    };
+  }
+  return {
+    subjectUserId: credential.resolved.subjectUserId,
+    capabilities: allCanonicalCapabilities,
+    auditCaller: { _tag: "WebSession", webSessionId: credential.resolved.webSessionId },
+    authorityRoot: "no-verified-whatsapp-authority",
+    freshUntil: credential.resolved.freshUntil,
+  };
+};
+
+const expireWebSessionCookie = HttpApiBuilder.securitySetCookie(webSessionSecurity, "", {
+  ...webSessionCookieOptions,
+  maxAge: Duration.zero,
 });
+
+const resolveWebSessionCredential = (
+  redactedBearer: Redacted.Redacted<string>,
+  usedAt: DateTime.Utc
+) =>
+  Effect.gen(function* () {
+    const bearer = Redacted.value(redactedBearer);
+    if (bearer === "") return Option.none<ResolvedCredential>();
+    const resolved = yield* authenticateWebSession(bearer, usedAt);
+    if (Option.isNone(resolved)) {
+      yield* expireWebSessionCookie;
+      return Option.none<ResolvedCredential>();
+    }
+    return Option.some({
+      _tag: "WebSession",
+      resolved: resolved.value,
+      bearer,
+    } as const satisfies ResolvedCredential);
+  });
+
+const resolvePatCredential = (
+  redactedBearer: Redacted.Redacted<string>,
+  usedAt: DateTime.Utc
+): Effect.Effect<Option.Option<ResolvedCredential>, never, Crypto.Crypto | SqlClient.SqlClient> => {
+  const bearer = decodeBearer(Redacted.value(redactedBearer));
+  if (Option.isNone(bearer)) return Effect.succeed(Option.none<ResolvedCredential>());
+  return Effect.map(authenticateTokenBearer(bearer.value, usedAt), (resolved) =>
+    Option.map(
+      resolved,
+      (token) =>
+        ({
+          _tag: "PAT",
+          resolved: token,
+        }) as const satisfies ResolvedCredential
+    )
+  );
+};
 
 type AuthorizedEndpointInput<A, E, R> = Readonly<{
   httpEffect: Effect.Effect<A, E, R>;
-  resolved: ResolvedToken;
+  credential: ResolvedCredential;
   policy: ReturnType<typeof getOperationPolicy>;
   operation: CanonicalOperationId;
   occurredAt: DateTime.Utc;
@@ -184,12 +267,12 @@ const executeAuthorizedEndpoint = Effect.fn("executeAuthorizedEndpoint")(functio
   occurredAt,
   operation,
   policy,
-  resolved,
+  credential,
 }: AuthorizedEndpointInput<A, E, R>) {
   yield* annotateOperationPolicy(policy);
   const exit = yield* Effect.exit(
     executeCanonicalEffect({
-      caller: canonicalCallerFromPat(resolved),
+      caller: canonicalCallerFromCredential(credential),
       operation,
       policy,
       effect: httpEffect,
@@ -197,81 +280,161 @@ const executeAuthorizedEndpoint = Effect.fn("executeAuthorizedEndpoint")(functio
       occurredAt,
     })
   );
-  // An unauthorized call is not successful use, so its rejection escapes the bearer transaction and
-  // takes the idle renewal down with it. A failed *authorized* operation keeps the renewal: the
-  // bearer did work it was entitled to. Evidence is re-appended after the rollback.
-  if (Exit.isFailure(exit) && isBearerIneligible(exit.cause)) {
-    return yield* new ScopeAuthenticationRejected({ resolved });
+  // An unauthorized call rolls credential renewal back. A failed authorized operation keeps it:
+  // the credential performed work it was entitled to, matching the sealed #241 renewal decision.
+  if (Exit.isFailure(exit) && isCredentialIneligible(exit.cause)) {
+    return yield* new ScopeAuthenticationRejected({ credential });
   }
-  return { _tag: "OperationCompleted", exit } as const;
+  return { _tag: "OperationCompleted", exit, credential } as const;
+});
+
+type SecurityContext = Readonly<{
+  endpoint: Parameters<typeof getOperationPolicy>[0] & Readonly<{ identifier: string }>;
+  group: Readonly<{ identifier: string }>;
+}>;
+
+const renewWebSessionResponseCookie = (
+  credential: ResolvedCredential,
+  occurredAt: DateTime.Utc
+) => {
+  if (credential._tag === "PAT") return Effect.void;
+  return HttpApiBuilder.securitySetCookie(
+    webSessionSecurity,
+    credential.bearer,
+    renewedWebSessionCookieOptions(DateTime.distance(occurredAt, credential.resolved.idleExpiresAt))
+  );
+};
+
+type CredentialTransactionInput<A, E, R, RR> = Readonly<{
+  httpEffect: Effect.Effect<A, E, R>;
+  occurredAt: DateTime.Utc;
+  operation: CanonicalOperationId;
+  policy: ReturnType<typeof getOperationPolicy>;
+  resolveCredential: (
+    usedAt: DateTime.Utc
+  ) => Effect.Effect<Option.Option<ResolvedCredential>, never, RR>;
+}>;
+
+const executeCredentialTransaction = <A, E, R, RR>({
+  httpEffect,
+  occurredAt,
+  operation,
+  policy,
+  resolveCredential,
+}: CredentialTransactionInput<A, E, R, RR>) =>
+  Effect.gen(function* () {
+    const credential = yield* resolveCredential(occurredAt).pipe(
+      Effect.flatMap(Effect.fromOption(unauthenticated))
+    );
+    const subjectUserId = subjectUserIdOf(credential);
+    return yield* withUserTransaction(
+      subjectUserId,
+      withSubjectLock(
+        subjectUserId,
+        Effect.gen(function* () {
+          const access = yield* onboardingConsentStandingInScope(subjectUserId);
+          if (access !== "granted") {
+            return yield* new UserActionAuthenticationRejected({ credential, access });
+          }
+          return yield* executeAuthorizedEndpoint({
+            httpEffect,
+            credential,
+            policy,
+            operation,
+            occurredAt,
+          });
+        })
+      )
+    );
+  });
+
+type AuthorizationAttempt<RR> = Readonly<{
+  resolveCredential: (
+    usedAt: DateTime.Utc
+  ) => Effect.Effect<Option.Option<ResolvedCredential>, never, RR>;
+  recordRejection: boolean;
+}>;
+
+const authorizeCanonicalRequest = Effect.fn("CanonicalAuthorization.authorize")(function* <
+  A,
+  E,
+  R,
+  RR,
+>(
+  httpEffect: Effect.Effect<A, E, R>,
+  { endpoint, group }: SecurityContext,
+  { resolveCredential, recordRejection }: AuthorizationAttempt<RR>
+) {
+  const policy = getOperationPolicy(endpoint);
+  const operation = CanonicalOperationId.make(`${group.identifier}.${endpoint.identifier}`);
+  const occurredAt = yield* DateTime.now;
+  const sql = yield* SqlClient.SqlClient;
+  const result = yield* sql
+    .withTransaction(
+      executeCredentialTransaction({
+        httpEffect,
+        occurredAt,
+        operation,
+        policy,
+        resolveCredential,
+      })
+    )
+    .pipe(
+      Effect.catchTags({
+        UserActionAuthenticationRejected: ({ access, credential }) =>
+          recordRejection
+            ? recordRejectedAttempt({ credential, operation, occurredAt }).pipe(
+                Effect.andThen(consentFailure(access))
+              )
+            : consentFailure(access),
+        ScopeAuthenticationRejected: ({ credential }) =>
+          recordRejection
+            ? recordRejectedAttempt({ credential, operation, occurredAt }).pipe(
+                Effect.andThen(Effect.fail(scopeMissing()))
+              )
+            : Effect.fail(scopeMissing()),
+        SqlError: Effect.die,
+      })
+    );
+
+  yield* renewWebSessionResponseCookie(result.credential, occurredAt);
+  return yield* result.exit.pipe(Effect.catchTag("CanonicalCallRejected", Effect.die));
+});
+
+const presentedPatBearer = Effect.map(HttpServerRequest.HttpServerRequest, (request) => {
+  const authorization = request.headers.authorization;
+  return typeof authorization === "string" && authorization.startsWith("Bearer ")
+    ? Redacted.make(authorization.slice("Bearer ".length))
+    : Redacted.make("");
 });
 
 /**
- * Live operation-derived bearer authorization for the HTTP server. Each call
- * authenticates its bearer, rejects access after explicit Consent revocation, rejects a
- * missing declared scope, and appends metadata-only AuditLogEntry evidence.
- * Explicit revocation rolls back token renewal and returns `UserActionRequired` after
- * recording rejection evidence. A successful operation and its evidence commit
- * in one SQL transaction; rejected and failed attempts append their evidence
- * separately. Authentication, consent, and scope failures remain typed HTTP
- * failures, while persistence failures are defects.
+ * Authorizes every canonical request from either an active WebSession cookie or PAT bearer. It
+ * preserves the credential's stable UserId and capabilities, serializes current Consent with the
+ * operation, records metadata-only audit evidence, and renews only credentials that pass caller
+ * policy. Declared operation failures remain operation results rather than authentication errors.
  */
 export const TokenAuthorizationLive = Layer.succeed(
   TokenAuthorization,
   TokenAuthorization.of({
-    agentBearer: Effect.fn(function* (httpEffect, { credential: redactedBearer, endpoint, group }) {
-      const policy = getOperationPolicy(endpoint);
-      const operation = CanonicalOperationId.make(`${group.identifier}.${endpoint.identifier}`);
-      const bearer = yield* decodeBearer(Redacted.value(redactedBearer)).pipe(
-        Effect.mapError(unauthenticated)
-      );
-      const occurredAt = yield* DateTime.now;
-      const sql = yield* SqlClient.SqlClient;
-      const result = yield* sql
-        .withTransaction(
-          Effect.gen(function* () {
-            const resolved = yield* authenticateTokenBearer(bearer, occurredAt).pipe(
-              Effect.flatMap(Effect.fromOption(unauthenticated))
-            );
-            return yield* withUserTransaction(
-              resolved.subjectUserId,
-              // The subject lock spans the check and the work it authorizes, so a revocation
-              // committing in between cannot let an authorized write land (ADR 0008).
-              withSubjectLock(
-                resolved.subjectUserId,
-                Effect.gen(function* () {
-                  const access = yield* onboardingConsentStandingInScope(resolved.subjectUserId);
-                  if (access !== "granted") {
-                    return yield* new UserActionAuthenticationRejected({ resolved, access });
-                  }
-                  return yield* executeAuthorizedEndpoint({
-                    httpEffect,
-                    resolved,
-                    policy,
-                    operation,
-                    occurredAt,
-                  });
-                })
-              )
-            );
-          })
-        )
-        .pipe(
-          Effect.catchTags({
-            UserActionAuthenticationRejected: ({ access, resolved }) =>
-              recordRejectedAttempt({ resolved, operation, occurredAt }).pipe(
-                Effect.andThen(consentFailure(access))
-              ),
-            ScopeAuthenticationRejected: ({ resolved }) =>
-              recordRejectedAttempt({ resolved, operation, occurredAt }).pipe(
-                Effect.andThen(Effect.fail(scopeMissing()))
-              ),
-            SqlError: Effect.die,
-          })
-        );
-
-      // Scope rejection already left as a typed failure above; any other reason is hosted-only.
-      return yield* result.exit.pipe(Effect.catchTag("CanonicalCallRejected", Effect.die));
-    }),
+    webSession: (httpEffect, { credential, ...context }) =>
+      Effect.gen(function* () {
+        const patBearer = yield* presentedPatBearer;
+        if (Redacted.value(patBearer) !== "") {
+          return yield* authorizeCanonicalRequest(httpEffect, context, {
+            resolveCredential: (usedAt) => resolvePatCredential(patBearer, usedAt),
+            recordRejection: false,
+          });
+        }
+        return yield* authorizeCanonicalRequest(httpEffect, context, {
+          resolveCredential: (usedAt) => resolveWebSessionCredential(credential, usedAt),
+          recordRejection: true,
+        });
+      }),
+    agentBearer: (httpEffect, { credential, ...context }) =>
+      authorizeCanonicalRequest(httpEffect, context, {
+        resolveCredential: (usedAt) => resolvePatCredential(credential, usedAt),
+        recordRejection: true,
+      }),
   })
 );

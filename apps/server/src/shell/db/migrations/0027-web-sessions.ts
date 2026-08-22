@@ -35,7 +35,7 @@ export const webSessions = Effect.gen(function* () {
       fresh_until timestamptz NOT NULL
         CHECK (fresh_until = paired_at + interval '10 minutes'),
       idle_expires_at timestamptz NOT NULL
-        CHECK (idle_expires_at = paired_at + interval '30 days'),
+        CHECK (idle_expires_at > paired_at),
       hard_expires_at timestamptz NOT NULL
         CHECK (hard_expires_at = paired_at + interval '90 days'),
       last_used_at timestamptz,
@@ -176,6 +176,35 @@ export const webSessions = Effect.gen(function* () {
       ) SELECT EXISTS (SELECT 1 FROM inserted)
     $function$;
 
+    CREATE FUNCTION fidy_use_web_session(
+      requested_bearer_digest bytea,
+      used_at timestamptz,
+      requested_idle_expires_at timestamptz
+    ) RETURNS TABLE (
+      web_session_id uuid,
+      subject_user_id uuid,
+      paired_at timestamptz,
+      fresh_until timestamptz,
+      last_used_at timestamptz,
+      idle_expires_at timestamptz,
+      hard_expires_at timestamptz
+    )
+    LANGUAGE sql SECURITY DEFINER SET search_path = pg_catalog, pg_temp
+    AS $function$
+      UPDATE public.web_sessions
+      SET last_used_at = GREATEST(COALESCE(web_sessions.last_used_at, used_at), used_at),
+        idle_expires_at = LEAST(
+          web_sessions.hard_expires_at,
+          GREATEST(web_sessions.idle_expires_at, requested_idle_expires_at)
+        )
+      WHERE bearer_digest = requested_bearer_digest
+        AND revoked_at IS NULL
+        AND idle_expires_at > used_at
+        AND hard_expires_at > used_at
+      RETURNING id, user_id, web_sessions.paired_at, web_sessions.fresh_until,
+        web_sessions.last_used_at, web_sessions.idle_expires_at, web_sessions.hard_expires_at
+    $function$;
+
     CREATE FUNCTION fidy_revoke_web_session(
       requested_bearer_digest bytea, revocation_time timestamptz
     ) RETURNS boolean
@@ -199,6 +228,8 @@ export const webSessions = Effect.gen(function* () {
     ALTER FUNCTION fidy_redeem_pairing_to_web_session(
       uuid, uuid, bytea, timestamptz, timestamptz, timestamptz, timestamptz
     ) OWNER TO fidy_gateway;
+    ALTER FUNCTION fidy_use_web_session(bytea, timestamptz, timestamptz)
+      OWNER TO fidy_gateway;
     ALTER FUNCTION fidy_revoke_web_session(bytea, timestamptz) OWNER TO fidy_gateway;
 
     REVOKE ALL ON FUNCTION fidy_lock_browser_login_pairing(uuid) FROM PUBLIC;
@@ -211,6 +242,7 @@ export const webSessions = Effect.gen(function* () {
     REVOKE ALL ON FUNCTION fidy_redeem_pairing_to_web_session(
       uuid, uuid, bytea, timestamptz, timestamptz, timestamptz, timestamptz
     ) FROM PUBLIC;
+    REVOKE ALL ON FUNCTION fidy_use_web_session(bytea, timestamptz, timestamptz) FROM PUBLIC;
     REVOKE ALL ON FUNCTION fidy_revoke_web_session(bytea, timestamptz) FROM PUBLIC;
 
     GRANT EXECUTE ON FUNCTION fidy_lock_browser_login_pairing(uuid) TO fidy_runtime;
@@ -223,6 +255,8 @@ export const webSessions = Effect.gen(function* () {
     GRANT EXECUTE ON FUNCTION fidy_redeem_pairing_to_web_session(
       uuid, uuid, bytea, timestamptz, timestamptz, timestamptz, timestamptz
     ) TO fidy_runtime;
+    GRANT EXECUTE ON FUNCTION fidy_use_web_session(bytea, timestamptz, timestamptz)
+      TO fidy_runtime;
     GRANT EXECUTE ON FUNCTION fidy_revoke_web_session(bytea, timestamptz) TO fidy_runtime
   `;
 }).pipe(Effect.asVoid);

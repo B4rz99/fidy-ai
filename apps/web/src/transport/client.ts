@@ -4,10 +4,11 @@ import {
   FidyApi,
   type FidyApiGroups,
   TokenAuthorizationClientAnonymousLive,
+  Unauthenticated,
   WebAuthApi,
   type WebAuthApiGroups,
 } from "@fidy/server/client";
-import { Layer } from "effect";
+import { Effect, Layer, Schema } from "effect";
 import { FetchHttpClient, type HttpClient } from "effect/unstable/http";
 import { AtomHttpApi } from "effect/unstable/reactivity";
 
@@ -28,7 +29,20 @@ const withCredentials = (httpClient: FidyClientLayer): FidyClientLayer =>
 const withBrowserTransportInvariants = (httpClient: FidyClientLayer): FidyClientLayer =>
   Layer.merge(withCredentials(httpClient), TokenAuthorizationClientAnonymousLive);
 
-/** Layer-backed Atom client exposing every operation in the server-owned canonical API. */
+/** Receives the single browser-lifetime transition caused by a canonical 401 response. */
+export type CanonicalAuthenticationObserver = Readonly<{
+  onAuthenticationExpired: () => void;
+}>;
+
+const observeAuthenticationExpiration =
+  (observer?: CanonicalAuthenticationObserver) =>
+  <A, E, R>(response: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
+    Effect.tapError(response, (error) =>
+      observer !== undefined && Schema.is(Unauthenticated)(error)
+        ? Effect.sync(observer.onAuthenticationExpired)
+        : Effect.void
+    );
+
 export type FidyClient = AtomHttpApi.AtomHttpApiClient<
   never,
   "@fidy/web/FidyClient",
@@ -44,12 +58,14 @@ export type FidyClient = AtomHttpApi.AtomHttpApiClient<
  */
 export const makeFidyClient = (
   apiOrigin: string,
-  httpClient: FidyClientLayer = FetchHttpClient.layer
+  httpClient: FidyClientLayer = FetchHttpClient.layer,
+  observer?: CanonicalAuthenticationObserver
 ): FidyClient =>
   AtomHttpApi.Service<never>()("@fidy/web/FidyClient", {
     api: FidyApi,
     baseUrl: apiOrigin,
     httpClient: withBrowserTransportInvariants(httpClient),
+    transformResponse: observeAuthenticationExpiration(observer),
   });
 
 /** Direct authentication transport, separate from product operations because it carries proofs. */

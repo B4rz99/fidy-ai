@@ -35,10 +35,16 @@ enabled. Colombia (`CO`) is the only enabled ServiceMarket. It is independent of
 time zone, channel, and identity.
 _Avoid_: Country (when product enablement is meant), region, country settings.
 
+**FinancialRecord**:
+The coherent, best-available history of a User's financial life assembled from every available
+capture path. It exposes its coverage and uncertainty; it never claims to be complete or authoritative.
+_Avoid_: Complete financial record, authoritative ledger, source of truth.
+
 **Transaction**:
-One movement of Money, with a direction, optional Counterparty, and Category. It contains normalized
-financial facts; where those facts came from and the context used to interpret them belong to its
-SourceAttestations.
+One completed movement of Money, with a direction, optional Counterparty, and Category. Provisional,
+rejected, and cancelled institution movements are neither shown nor made Transactions. It contains
+normalized financial facts; where those facts came from and the context used to interpret them belong
+to its SourceAttestations.
 _Avoid_: Expense, payment, purchase, movimiento.
 
 **Counterparty**:
@@ -48,11 +54,24 @@ a substitute.
 _Avoid_: Merchant, comercio, vendor, inferred business name, "Sin especificar".
 
 **SourceAttestation**:
-An immutable record of where a Transaction was learned from — a notification email, a statement
-line, or a manual entry — together with the captured ServiceMarket, locale, IANA time zone, source
-channel or provider, and interpretation revision needed to explain it later. A Transaction may have several;
-none is ever deleted.
-_Avoid_: Source, origin, evidence.
+An append-only record of where a Transaction was learned from — a notification email, statement line,
+manual entry, or Connection movement — together with the captured ServiceMarket, locale, IANA time
+zone, source channel or institution, and interpretation revision needed to explain it later. While
+retained, its historical contents are not rewritten; personal evidence remains only for its documented
+purpose and period and may be suppressed, irreversibly anonymized where appropriate, or deleted when
+required by Titular rights, purpose expiry, law, or institution contract.
+_Avoid_: Source, origin, evidence, permanently retained provenance.
+
+**Correction**:
+Replacing normalized facts for the same real-world movement when newer institution evidence or an
+explicit User decision establishes they were wrong. It does not create another Transaction; an
+explicit User correction takes precedence over later institution metadata for the corrected fields.
+_Avoid_: Reversal, deletion, reconciliation.
+
+**Reversal**:
+A completed movement that economically undoes an earlier completed movement. Each is a separate
+Transaction in the FinancialRecord; the earlier Transaction is never rewritten out of existence.
+_Avoid_: Correction, deletion, cancellation, refund (unless that is what the movement actually is).
 
 **Reconciliation**:
 Deciding that two records describe the same real-world purchase, and linking them. Candidates must
@@ -88,8 +107,56 @@ _Avoid_: Subscription (that word means the user's own paid plan).
 
 **Ingestion**:
 Turning something the user forwards, uploads, or says into a Transaction. Email, statement,
-receipt photo, screenshot, voice note, or typed sentence.
-_Avoid_: Import, sync, parsing (that is one step inside it).
+receipt photo, screenshot, voice note, or typed sentence. An institution's notification email is
+accepted only when that User has no Connection to it or the Connection is Ended; material received
+in any other Connection state is not retained.
+_Avoid_: Import, Synchronization, parsing (that is one step inside it).
+
+**Account**:
+An institution-held financial account a User authorized Fidy to access through a Connection. Access
+does not imply that the User is its sole legal owner; removing authorization stops future
+Synchronization without ordinary lifecycle changes deleting prior Transactions that retain a valid
+purpose.
+_Avoid_: User account, provider account, exclusively owned account.
+
+**Balance**:
+The latest institution-reported available Money for one Account, paired with when Fidy observed it
+unless the institution contract supplies a distinct as-of time. When no conclusive available Balance
+exists, it is unavailable: Fidy does not substitute another balance kind, combine Account Balances
+into a financial position, or derive Balance from Transactions.
+_Avoid_: Total, processed balance, ledger balance, Known Financial Position.
+
+**SupportedInstitution**:
+A financial institution enabled for Connections only after Fidy establishes production eligibility,
+secure durable authorization, Account and completed-movement semantics, stable traversal, observable
+coverage and freshness, and revocation and deletion obligations.
+_Avoid_: Research candidate, sandbox integration, available bank.
+
+**ConnectionAttempt**:
+A short-lived, single-use initiation that binds one User and SupportedInstitution to a secure browser
+handoff. The browser must prove the same Fidy User before institution authorization; expiry or callback
+replay requires a new attempt. It is not yet a Connection or authorization.
+_Avoid_: Connection, session, login link, ConsentRecord.
+
+**Connection**:
+A stable, revocable association through which a User authorizes one SupportedInstitution to expose
+selected Accounts and financial data to Fidy. A User has at most one active Connection per institution;
+ending it stops future access without ordinary lifecycle changes deleting prior Transactions that
+retain a valid purpose, and later reauthorization preserves the Connection and Account identities. It
+is Connecting until authorization and Account discovery
+succeed, then Active even while historical Synchronization continues; Action required and Ended are
+the other states. Temporary Synchronization failures do not change its lifecycle.
+_Avoid_: FinancialConnection, integration, bank link, provider account, ConsentRecord.
+
+**Synchronization**:
+Retrieving the maximum available authorized account, balance, and movement data through a Connection,
+then refreshing as frequently as its institution contract and rate budget safely permit. Institution
+events may wake it early but are never financial evidence; polling remains the correctness fallback.
+Coverage and last successful refresh are tracked per Account and summarized for the Connection; an
+Account becomes stale after two expected successful refreshes are missed. Completed Transactions become
+visible as each page commits, concurrent requests share one pending refresh, and only minimal institution
+evidence for hidden provisional movements is retained.
+_Avoid_: Ingestion, real-time feed, import, sync.
 
 **NeedsReviewItem**:
 Something ingestion could not confidently turn into a Transaction, held in a visible queue with
@@ -222,7 +289,8 @@ _Avoid_: Memory, Transcript, context window, prompt.
 **User**:
 A person with a stable identity independent of phone numbers, channels, providers, and recovery
 credentials. Their current ServiceMarket, locale, and IANA time zone are explicit, independent
-context. No KYC; optional recovery email.
+context. Fidy performs no KYC; institution-required identifying data never becomes the User's identity.
+Recovery email is optional.
 _Avoid_: Account, customer, client, titular (that word is reserved for its legal sense).
 
 **WhatsAppIdentity**:

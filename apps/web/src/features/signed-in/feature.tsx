@@ -9,8 +9,10 @@ import { Alert, AlertDescription, AlertTitle } from "@/ui/components/alert";
 import { Button } from "@/ui/components/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/ui/components/card";
 import { Spinner } from "@/ui/components/spinner";
+import { completeLogoutNavigation, makeLogoutOperation } from "./logout";
 
-const AuthenticationExpired = (): JSX.Element => (
+/** Explains the authentication-lifetime transition without exposing or retaining credentials. */
+export const AuthenticationExpired = (): JSX.Element => (
   <main className="flex min-h-svh items-center justify-center bg-muted/40 px-4 py-12">
     <Alert className="max-w-md" variant="destructive">
       <AlertTitle>Sesión vencida</AlertTitle>
@@ -53,33 +55,16 @@ const CurrentUserCard = ({
   </main>
 );
 
-const CurrentUserShell = (): JSX.Element => {
-  const router = useRouter();
-  const { completeLogout } = useSession();
-  const [currentUser] = useState(() =>
-    router.options.context.apiClient.query("identity", "getCurrentUser", {})
-  );
-  const [logout] = useState(() =>
-    router.options.context.webAuthClient.runtime.fn<{ onLoggedOut: () => void }>()(
-      ({ onLoggedOut }) =>
-        Effect.gen(function* () {
-          const client = yield* router.options.context.webAuthClient;
-          yield* client.browserLogin.logout();
-          yield* Effect.sync(onLoggedOut);
-        }).pipe(Effect.orDie)
-    )
-  );
-  const result = useAtomValue(currentUser);
-  const runLogout = useAtomSet(logout);
-  const onLogout = (): void => {
-    runLogout({
-      onLoggedOut: () => {
-        completeLogout();
-        router.navigate({ to: "/auth/pair" }).catch(() => undefined);
-      },
-    });
-  };
+type CurrentUserResult = AsyncResult.AsyncResult<
+  Readonly<{ data: Readonly<{ locale: string; timeZone: string }> }>,
+  unknown
+>;
 
+/** Renders the complete current-User query state without owning transport or session effects. */
+export const CurrentUserResultView = ({
+  onLogout,
+  result,
+}: Readonly<{ onLogout: () => void; result: CurrentUserResult }>): JSX.Element => {
   if (AsyncResult.isSuccess(result)) {
     return (
       <CurrentUserCard
@@ -106,6 +91,31 @@ const CurrentUserShell = (): JSX.Element => {
       <Spinner />
     </main>
   );
+};
+
+const CurrentUserShell = (): JSX.Element => {
+  const router = useRouter();
+  const { completeLogout } = useSession();
+  const [currentUser] = useState(() =>
+    router.options.context.apiClient.query("identity", "getCurrentUser", {})
+  );
+  const logoutRequest = router.options.context.webAuthClient.pipe(
+    Effect.flatMap((client) => client.browserLogin.logout())
+  );
+  const [logout] = useState(() =>
+    router.options.context.webAuthClient.runtime.fn<{ onLoggedOut: () => void }>()(
+      logoutRequest.pipe(makeLogoutOperation)
+    )
+  );
+  const result = useAtomValue(currentUser);
+  const runLogout = useAtomSet(logout);
+  const onLogout = completeLogoutNavigation.bind(undefined, {
+    completeLogout,
+    navigate: () => router.navigate({ to: "/auth/pair" }),
+    runLogout,
+  });
+
+  return <CurrentUserResultView onLogout={onLogout} result={result} />;
 };
 
 /** Authenticated shell whose server state is owned exclusively by the derived query Atom. */

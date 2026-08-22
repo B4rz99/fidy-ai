@@ -5,6 +5,7 @@ import {
   InvalidTelemetryConfig,
   type TelemetryConfig,
   decodeSentryAccountSmokeConfig,
+  telemetryConfig,
   telemetryConfigForProjects,
 } from "./telemetry-config";
 
@@ -31,6 +32,35 @@ const enabledInput = (input: Input): Input => ({
   SENTRY_RELEASE: release,
   ...input,
 });
+
+it.effect("accepts the provisioned production runtime project", () =>
+  Effect.gen(function* () {
+    const config = yield* telemetryConfig.pipe(
+      Effect.provideService(
+        ConfigProvider.ConfigProvider,
+        ConfigProvider.fromUnknown({
+          SENTRY_ENVIRONMENT: "production",
+          SENTRY_CAPTURE_ERRORS: "true",
+          SENTRY_CAPTURE_TRACES: "true",
+          SENTRY_PRODUCTION_DSN:
+            "https://production-public@o4511006514085888.ingest.us.sentry.io/4511877571411968",
+          SENTRY_RELEASE: release,
+          SENTRY_TRACE_SAMPLE_RATE: "0.1",
+        })
+      )
+    );
+
+    expect(config).toMatchObject({
+      _tag: "ProductionEnabled",
+      environment: "production",
+      project: "production",
+      capture: { errors: true, traces: true },
+      release,
+      errorSampleRate: 1,
+      rootTraceRate: 0.1,
+    });
+  })
+);
 
 it.effect.each([
   { environment: undefined, expectedEnvironment: "local" as const },

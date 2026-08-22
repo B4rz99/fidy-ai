@@ -1,0 +1,21 @@
+apps/server/src/shell/db/migrations/0028-persisted-schema-reconciliation.ts
+  s_fbb0ccf33e8e69::t_4b56dcc03d351f 1-341
+apps/server/src/shell/db/migrations/registry.ts
+  s_fbb0ccf33e8e69::t_e106f3f41ae0fb 27,64
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.23",
+  "base_commit_sha": "4556d1d90e1bfff31f8c0c7086b849f08fd086b4",
+  "prompts": {},
+  "sessions": {
+    "s_fbb0ccf33e8e69": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a02b48-2850-75cc-9939-e19b2a2b7788",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

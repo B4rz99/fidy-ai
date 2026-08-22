@@ -1,9 +1,10 @@
 import { expect, it } from "@effect/vitest";
-import { Option, Schema } from "effect";
+import { DateTime, Option, Schema } from "effect";
 import {
   BrowserLoginPublicCodeInput,
   browserLoginPublicCodeAlphabet,
   decideApprovalTransition,
+  decideBrowserLoginRedemption,
   selectPublicCodeSymbols,
 } from "./rules";
 
@@ -46,4 +47,71 @@ it("binds only when no newer or equal Ready challenge exists", () => {
   expect(decideApprovalTransition({ candidateOrdinal: 2n, readyOrdinal: Option.some(2n) })).toBe(
     "reject"
   );
+});
+
+it("owns the wrong-verifier attempt and lifecycle transition", () => {
+  const base = {
+    lifecycle: "ready",
+    verifierMatches: false,
+    minimumPollIntervalSeconds: 5,
+    lastAcceptedPollAt: Option.none(),
+    expiresAt: DateTime.makeUnsafe("2026-03-01T12:10:00.000Z"),
+    attemptedAt: DateTime.makeUnsafe("2026-03-01T12:00:05.000Z"),
+  } as const;
+
+  expect(decideBrowserLoginRedemption({ ...base, wrongVerifierAttempts: 3 })).toEqual({
+    _tag: "WrongVerifier",
+    wrongVerifierAttempts: 4,
+    lifecycle: "ready",
+  });
+  expect(decideBrowserLoginRedemption({ ...base, wrongVerifierAttempts: 4 })).toEqual({
+    _tag: "WrongVerifier",
+    wrongVerifierAttempts: 5,
+    lifecycle: "invalidated",
+  });
+});
+
+it("expires an active pairing before evaluating its verifier", () => {
+  const expiresAt = DateTime.makeUnsafe("2026-03-01T12:10:00.000Z");
+
+  expect(
+    decideBrowserLoginRedemption({
+      lifecycle: "ready",
+      verifierMatches: false,
+      wrongVerifierAttempts: 4,
+      minimumPollIntervalSeconds: 5,
+      lastAcceptedPollAt: Option.none(),
+      expiresAt,
+      attemptedAt: expiresAt,
+    })
+  ).toEqual({ _tag: "Expired" });
+});
+
+it("accepts the first correct pending poll and slows every repeated too-fast poll by five seconds", () => {
+  const expiresAt = DateTime.makeUnsafe("2026-03-01T12:10:00.000Z");
+  const firstPollAt = DateTime.makeUnsafe("2026-03-01T12:00:05.000Z");
+
+  expect(
+    decideBrowserLoginRedemption({
+      lifecycle: "pending_approval",
+      verifierMatches: true,
+      wrongVerifierAttempts: 0,
+      minimumPollIntervalSeconds: 5,
+      lastAcceptedPollAt: Option.none(),
+      expiresAt,
+      attemptedAt: firstPollAt,
+    })
+  ).toEqual({ _tag: "Pending", acceptedAt: firstPollAt, minimumPollIntervalSeconds: 5 });
+
+  expect(
+    decideBrowserLoginRedemption({
+      lifecycle: "pending_approval",
+      verifierMatches: true,
+      wrongVerifierAttempts: 0,
+      minimumPollIntervalSeconds: 5,
+      lastAcceptedPollAt: Option.some(firstPollAt),
+      expiresAt,
+      attemptedAt: DateTime.addDuration(firstPollAt, "2 seconds"),
+    })
+  ).toEqual({ _tag: "SlowDown", minimumPollIntervalSeconds: 10, retryAfterSeconds: 8 });
 });

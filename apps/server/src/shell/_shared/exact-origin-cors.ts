@@ -8,7 +8,14 @@ const forbidden = HttpServerResponse.empty({
     vary: "Origin",
   },
 });
-const allowedRequestHeaders = ["authorization", "content-type"] as const;
+const allowedRequestHeaders = [
+  "authorization",
+  "b3",
+  "baggage",
+  "content-type",
+  "traceparent",
+  "tracestate",
+] as const;
 const allowedRequestHeaderSet = new Set<string>(allowedRequestHeaders);
 
 const mergeVary = (current: Option.Option<string>, required: ReadonlyArray<string>): string => {
@@ -84,7 +91,7 @@ type ExactOriginCors = <E, R>(
  * Requests without Origin pass through without CORS headers; every other origin
  * is rejected before route behavior. Exact-origin requests receive credentialed
  * headers, while OPTIONS requests additionally require one of `methods` and
- * only the fixed authorization/content-type header set. The middleware has no
+ * only the fixed authorization, content, and standard trace-propagation header set. The middleware has no
  * external side effects and represents rejected requests as HTTP 403 responses.
  */
 export const makeExactOriginCors = ({

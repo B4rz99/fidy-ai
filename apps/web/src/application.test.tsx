@@ -5,11 +5,13 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { WebApplication } from "@/app/application";
 import { createWebRouter } from "@/app/routes";
 import { SessionRegistryProvider } from "@/session/session";
-import { makeFidyClient } from "@/transport/client";
+import { makeFidyClient, makeWebAuthClient } from "@/transport/client";
 
 const renderRoute = async (path: string): Promise<void> => {
+  const apiOrigin = "https://api.test.fidyapp.com";
   const router = createWebRouter({
-    apiClient: makeFidyClient("https://api.test.fidyapp.com"),
+    apiClient: makeFidyClient(apiOrigin),
+    webAuthClient: makeWebAuthClient(apiOrigin),
     history: Option.some(createMemoryHistory({ initialEntries: [path] })),
   });
 
@@ -46,6 +48,14 @@ describe("web application routes", () => {
     expect(screen.getByText(/Estados Unidos/iu)).toBeVisible();
     expect(screen.queryByText(/cuentas|saldos/iu)).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /términos de servicio/iu })).not.toBeInTheDocument();
+  });
+
+  it("does not start browser pairing merely by opening its route", async () => {
+    await renderRoute("/auth/pair");
+
+    expect(await screen.findByRole("heading", { name: "Inicia sesión en Fidy" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Iniciar sesión en el navegador" })).toBeVisible();
+    expect(screen.queryByText(/pairing code/iu)).not.toBeInTheDocument();
   });
 
   it("renders not-found behavior for an unknown route", async () => {

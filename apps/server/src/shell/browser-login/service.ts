@@ -1,23 +1,42 @@
-import { Crypto, DateTime, Effect, Encoding, Option, Redacted } from "effect";
+import { timingSafeEqual } from "node:crypto";
+import { Crypto, DateTime, Effect, Encoding, Option, Predicate, Redacted, Schema } from "effect";
 import { SqlClient } from "effect/unstable/sql";
+import { normalizeOpaqueProof32 } from "~/core/_shared/opaque-proof";
 import {
   BrowserLoginPrivateVerifier,
   type StartedBrowserLoginPairing,
 } from "~/core/browser-login/model";
-import type { BrowserLoginPairingId } from "~/core/browser-login/reference";
+import { BrowserLoginPairingId } from "~/core/browser-login/reference";
 import {
   type BrowserLoginPublicCode,
   BrowserLoginPublicCodeSymbols,
+  type BrowserLoginRedemptionDecision,
   browserLoginPairingExpiry,
   browserLoginPollingIntervalSeconds,
+  decideBrowserLoginRedemption,
   formatPublicCode,
   selectPublicCodeSymbols,
 } from "~/core/browser-login/rules";
-import type { BrowserLoginCapacityExceeded, BrowserLoginStartRateLimited } from "./errors";
+import { WebSessionBearer, WebSessionId } from "~/core/web-session/reference";
+import { calculateWebSessionDeadlines } from "~/core/web-session/rules";
+import { redeemPairingToWebSession } from "~/shell/web-auth/repo";
 import {
+  type BrowserLoginCapacityExceeded,
+  BrowserLoginPairingInvalid,
+  BrowserLoginPollingRateLimited,
+  type BrowserLoginStartRateLimited,
+} from "./errors";
+import type { PendingBrowserLoginPairing, RedeemBrowserLoginPairingPayload } from "~/web-auth-api";
+import {
+  type LockedRedemptionCandidate,
   type StartPairingWrite,
+  acceptBrowserLoginPoll,
+  expireBrowserLoginPairing,
   insertPendingBrowserLoginPairing,
+  lockBrowserLoginRedemptionCandidate,
   purgeExpiredAnonymousEvidence,
+  rejectBrowserLoginVerifier,
+  slowBrowserLoginPoll,
 } from "./repo";
 
 const verifierOctets = 32;
@@ -106,4 +125,146 @@ export const startBrowserLoginPairing = Effect.fn("BrowserLogin.startPairing")(f
     expiresAt,
     pollingIntervalSeconds: browserLoginPollingIntervalSeconds,
   } satisfies StartedBrowserLoginPairing;
+});
+
+const dummyPairingId = BrowserLoginPairingId.make("00000000-0000-4000-8000-000000000000");
+const stringOrEmpty = (input: unknown): string => (Predicate.isString(input) ? input : "");
+
+export type RedeemedBrowserLoginPairing =
+  | PendingBrowserLoginPairing
+  | Readonly<{
+      status: "authenticated";
+      sessionBearer: Redacted.Redacted<WebSessionBearer>;
+    }>;
+
+type RedemptionTransactionOutcome =
+  | Readonly<{ _tag: "Invalid" }>
+  | Readonly<{ _tag: "RateLimited"; retryAfterSeconds: number }>
+  | Readonly<{ _tag: "Redeemed"; value: RedeemedBrowserLoginPairing }>;
+
+const changedRateLimitOutcome = (
+  changed: boolean,
+  retryAfterSeconds: number
+): RedemptionTransactionOutcome =>
+  changed ? { _tag: "RateLimited", retryAfterSeconds } : { _tag: "Invalid" };
+
+const changedRedemptionOutcome = (
+  changed: boolean,
+  value: RedeemedBrowserLoginPairing
+): RedemptionTransactionOutcome => (changed ? { _tag: "Redeemed", value } : { _tag: "Invalid" });
+
+const applyRedemptionDecision = Effect.fn("BrowserLogin.applyRedemptionDecision")(function* (
+  candidate: LockedRedemptionCandidate,
+  decision: BrowserLoginRedemptionDecision,
+  attemptedAt: DateTime.Utc
+): Effect.fn.Return<RedemptionTransactionOutcome, never, Crypto.Crypto | SqlClient.SqlClient> {
+  switch (decision._tag) {
+    case "Invalid":
+      return { _tag: "Invalid" };
+    case "Expired":
+      yield* expireBrowserLoginPairing(candidate.pairingId, attemptedAt);
+      return { _tag: "Invalid" };
+    case "WrongVerifier":
+      yield* rejectBrowserLoginVerifier({
+        pairingId: candidate.pairingId,
+        wrongVerifierAttempts: decision.wrongVerifierAttempts,
+        lifecycle: decision.lifecycle,
+        rejectedAt: attemptedAt,
+      });
+      return { _tag: "Invalid" };
+    case "SlowDown": {
+      const changed = yield* slowBrowserLoginPoll(
+        candidate.pairingId,
+        decision.minimumPollIntervalSeconds
+      );
+      return changedRateLimitOutcome(changed, decision.retryAfterSeconds);
+    }
+    case "Pending": {
+      const changed = yield* acceptBrowserLoginPoll(candidate.pairingId, decision.acceptedAt);
+      return changedRedemptionOutcome(changed, {
+        status: "pending_approval",
+        expiresAt: candidate.expiresAt,
+        pollingIntervalSeconds: decision.minimumPollIntervalSeconds,
+      });
+    }
+    case "Consume": {
+      if (Option.isNone(candidate.userId)) return { _tag: "Invalid" };
+      const crypto = yield* Crypto.Crypto;
+      const sessionId = WebSessionId.make(yield* crypto.randomUUIDv4.pipe(Effect.orDie));
+      const bearerBytes = yield* crypto.randomBytes(verifierOctets).pipe(Effect.orDie);
+      const sessionBearer = WebSessionBearer.make(Encoding.encodeBase64Url(bearerBytes));
+      const bearerDigest = yield* sha256(new TextEncoder().encode(sessionBearer));
+      const redeemed = yield* redeemPairingToWebSession({
+        pairingId: candidate.pairingId,
+        sessionId,
+        bearerDigest,
+        pairedAt: attemptedAt,
+        ...calculateWebSessionDeadlines(attemptedAt),
+      });
+      return changedRedemptionOutcome(redeemed, {
+        status: "authenticated",
+        sessionBearer: Redacted.make(sessionBearer),
+      });
+    }
+  }
+});
+
+const redeemLockedCandidate = Effect.fn("BrowserLogin.redeemLockedCandidate")(function* (input: {
+  pairingId: BrowserLoginPairingId;
+  parsedPairingId: Option.Option<BrowserLoginPairingId>;
+  attemptedDigest: Uint8Array;
+  attemptedAt: DateTime.Utc;
+}): Effect.fn.Return<RedemptionTransactionOutcome, never, Crypto.Crypto | SqlClient.SqlClient> {
+  const candidate = yield* lockBrowserLoginRedemptionCandidate(input.pairingId);
+  const expectedDigest = Option.match(candidate, {
+    onNone: () => new Uint8Array(verifierOctets),
+    onSome: ({ verifierDigest }) => verifierDigest,
+  });
+  const verifierMatches = timingSafeEqual(input.attemptedDigest, expectedDigest);
+  if (Option.isNone(candidate) || Option.isNone(input.parsedPairingId)) return { _tag: "Invalid" };
+  const decision = decideBrowserLoginRedemption({
+    lifecycle: candidate.value.lifecycle,
+    verifierMatches,
+    wrongVerifierAttempts: candidate.value.wrongVerifierAttempts,
+    minimumPollIntervalSeconds: candidate.value.minimumPollIntervalSeconds,
+    lastAcceptedPollAt: candidate.value.lastAcceptedPollAt,
+    expiresAt: candidate.value.expiresAt,
+    attemptedAt: input.attemptedAt,
+  });
+  return yield* applyRedemptionDecision(candidate.value, decision, input.attemptedAt);
+});
+
+/**
+ * Polls or redeems one pairing inside a row-locking transaction. Every input hashes one bounded
+ * verifier and performs one constant-time digest comparison before a public decision is made.
+ * HTTP span telemetry records latency and the bounded response status; custom values are omitted
+ * so pairing ids, verifier material, and lifecycle details cannot enter diagnostics.
+ */
+export const redeemBrowserLoginPairing = Effect.fn("BrowserLogin.redeemPairing")(function* (
+  input: RedeemBrowserLoginPairingPayload
+) {
+  const sql = yield* SqlClient.SqlClient;
+  const attemptedAt = yield* DateTime.now;
+  const parsedPairingId = Schema.decodeUnknownOption(BrowserLoginPairingId)(input.pairingId);
+  const pairingId = Option.getOrElse(parsedPairingId, () => dummyPairingId);
+  const attemptedDigest = yield* sha256(
+    new TextEncoder().encode(normalizeOpaqueProof32(stringOrEmpty(input.privateVerifier)))
+  );
+
+  const outcome = yield* sql
+    .withTransaction(
+      redeemLockedCandidate({ pairingId, parsedPairingId, attemptedDigest, attemptedAt })
+    )
+    .pipe(Effect.catchTag("SqlError", Effect.die));
+
+  switch (outcome._tag) {
+    case "Invalid":
+      return yield* new BrowserLoginPairingInvalid();
+    case "RateLimited":
+      return yield* new BrowserLoginPollingRateLimited({
+        retryAfterSeconds: outcome.retryAfterSeconds,
+      });
+    case "Redeemed":
+      return outcome.value;
+  }
 });

@@ -1,11 +1,17 @@
 import {
+  BrowserLoginPairingInvalidApi,
+  BrowserLoginPollingRateLimitedApi,
   FidyApi,
   type FidyApiGroups,
   TokenAuthorizationClientAnonymousLive,
+  WebAuthApi,
+  type WebAuthApiGroups,
 } from "@fidy/server/client";
 import { Layer } from "effect";
 import { FetchHttpClient, type HttpClient } from "effect/unstable/http";
 import { AtomHttpApi } from "effect/unstable/reactivity";
+
+export { BrowserLoginPairingInvalidApi, BrowserLoginPollingRateLimitedApi };
 
 /**
  * Supplies the substitute HTTP runtime for the derived browser client. Production uses Fetch;
@@ -14,16 +20,17 @@ import { AtomHttpApi } from "effect/unstable/reactivity";
  */
 export type FidyClientLayer = Layer.Layer<HttpClient.HttpClient>;
 
-const withBrowserTransportInvariants = (httpClient: FidyClientLayer): FidyClientLayer =>
-  Layer.mergeAll(
-    httpClient,
-    Layer.succeed(FetchHttpClient.RequestInit, { credentials: "include" }),
-    TokenAuthorizationClientAnonymousLive
+const withCredentials = (httpClient: FidyClientLayer): FidyClientLayer =>
+  httpClient.pipe(
+    Layer.provide(Layer.succeed(FetchHttpClient.RequestInit, { credentials: "include" }))
   );
+
+const withBrowserTransportInvariants = (httpClient: FidyClientLayer): FidyClientLayer =>
+  Layer.merge(withCredentials(httpClient), TokenAuthorizationClientAnonymousLive);
 
 /** Layer-backed Atom client exposing every operation in the server-owned canonical API. */
 export type FidyClient = AtomHttpApi.AtomHttpApiClient<
-  unknown,
+  never,
   "@fidy/web/FidyClient",
   FidyApiGroups
 >;
@@ -39,8 +46,26 @@ export const makeFidyClient = (
   apiOrigin: string,
   httpClient: FidyClientLayer = FetchHttpClient.layer
 ): FidyClient =>
-  AtomHttpApi.Service<unknown>()("@fidy/web/FidyClient", {
+  AtomHttpApi.Service<never>()("@fidy/web/FidyClient", {
     api: FidyApi,
     baseUrl: apiOrigin,
     httpClient: withBrowserTransportInvariants(httpClient),
+  });
+
+/** Direct authentication transport, separate from product operations because it carries proofs. */
+export type WebAuthClient = AtomHttpApi.AtomHttpApiClient<
+  never,
+  "@fidy/web/WebAuthClient",
+  WebAuthApiGroups
+>;
+
+/** Derives browser authentication calls from the server declaration over the same Fetch runtime. */
+export const makeWebAuthClient = (
+  apiOrigin: string,
+  httpClient: FidyClientLayer = FetchHttpClient.layer
+): WebAuthClient =>
+  AtomHttpApi.Service<never>()("@fidy/web/WebAuthClient", {
+    api: WebAuthApi,
+    baseUrl: apiOrigin,
+    httpClient: withCredentials(httpClient),
   });

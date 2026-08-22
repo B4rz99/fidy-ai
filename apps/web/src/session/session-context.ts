@@ -1,8 +1,11 @@
 import { Option } from "effect";
 import { createContext, useContext } from "react";
 
-/** Exposes only the explicit transition that replaces the current authentication lifetime. */
+/** Owns browser-visible session state and every explicit authentication-lifetime transition. */
 export type SessionContextValue = Readonly<{
+  readonly loginCompletedInLifetime: boolean;
+  readonly completeLogin: () => void;
+  readonly completeLogout: () => void;
   readonly replaceAuthenticationLifetime: () => void;
 }>;
 

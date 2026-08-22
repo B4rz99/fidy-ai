@@ -18,6 +18,7 @@ const entrypoint = "src/client.ts";
 const safeSource = [
   /^src\/client\.ts$/u,
   /^src\/http-origin\.ts$/u,
+  /^src\/web-auth-api\.ts$/u,
   /^src\/core\//u,
   /^src\/shell\/api\.ts$/u,
   /^src\/shell\/[^/]+\/operations\.ts$/u,

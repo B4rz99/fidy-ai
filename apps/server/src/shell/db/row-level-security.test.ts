@@ -762,6 +762,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
               "categories",
               "effect_sql_migrations",
               "pending_consent_exchanges",
+              "web_sessions",
               "whatsapp_consent_disclosure_delivery_attempts",
               "whatsapp_ingress_budget_receipts",
               "whatsapp_ingress_budgets",

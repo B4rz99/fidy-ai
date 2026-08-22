@@ -42,8 +42,11 @@ const processStartedTurn = Effect.fn("WhatsApp.processStartedTurn")(function* (i
   const { claim, inboundMessage } = input.started;
   const service = yield* AgentService;
   const handled = yield* service
-    .handleMessage(claim.userId, inboundMessage, (reply) =>
-      deliverPreparedReply({ userId: claim.userId, reply }).pipe(Effect.asVoid)
+    .handleMessage(
+      claim.userId,
+      inboundMessage,
+      (reply) => deliverPreparedReply({ userId: claim.userId, reply }).pipe(Effect.asVoid),
+      "verified-whatsapp"
     )
     .pipe(
       Effect.match({

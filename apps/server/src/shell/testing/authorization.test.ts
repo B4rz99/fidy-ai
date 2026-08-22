@@ -1,5 +1,6 @@
 import { expect, layer } from "@effect/vitest";
 import { Context, DateTime, Effect, Layer, Option, Schema } from "effect";
+import { BrowserLoginPublicCode } from "~/core/browser-login/rules";
 import { HttpBody, HttpClient } from "effect/unstable/http";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import { PATId } from "~/core/tokens/reference";
@@ -93,6 +94,11 @@ const tokenUseState = Schema.Struct({
   idleExpiresAt: Schema.DateTimeUtcFromDate,
 });
 
+const pairingBindingState = Schema.Struct({
+  lifecycle: Schema.String,
+  userId: Schema.OptionFromNullOr(UserId),
+});
+
 /** Renewal state a rejected canonical call must leave exactly as it found it. */
 const readTokenUse = Effect.fn("readTokenUse")(function* (userId: UserId) {
   const sql = yield* SqlClient.SqlClient;
@@ -122,6 +128,49 @@ layer(AuthorizationHarness, {
       });
 
       expect(response.status).toBe(401);
+    })
+  );
+
+  it.effect("rejects browser pairing approval from every PAT before mutation work", () =>
+    Effect.gen(function* () {
+      yield* truncateAuditLogEntries;
+      yield* seedWriteOnlyIdentity;
+      const migrationSql = yield* MigrationSqlClient;
+      const publicCode = BrowserLoginPublicCode.make("BCDF-GHJK");
+      yield* migrationSql`
+        DELETE FROM browser_login_pairings
+        WHERE id = 'f1d1a000-0000-4000-8000-000000000238'::uuid
+          OR public_code = ${publicCode}
+      `;
+      yield* migrationSql`
+        INSERT INTO browser_login_pairings (
+          id, verifier_digest, public_code, lifecycle, created_at, expires_at
+        ) VALUES (
+          'f1d1a000-0000-4000-8000-000000000238'::uuid,
+          decode(repeat('01', 32), 'hex'), ${publicCode}, 'pending_approval', now(),
+          now() + interval '10 minutes'
+        )
+      `;
+      const writer = yield* WriteOnlyApiClient;
+      const denied = yield* Effect.result(
+        writer.browserLogin.approvePairing({ payload: { publicCode } })
+      );
+      const binding = yield* SqlSchema.findOne({
+        Request: BrowserLoginPublicCode,
+        Result: pairingBindingState,
+        execute: (code) => migrationSql`
+          SELECT lifecycle, user_id AS "userId"
+          FROM browser_login_pairings WHERE public_code = ${code}
+        `,
+      })(publicCode);
+      const auditEntries = yield* observeAuditLogEntries(writeOnlyUser);
+
+      expect(denied).toHaveProperty("_tag", "Failure");
+      if (denied._tag === "Failure") expect(Schema.is(ScopeMissing)(denied.failure)).toBe(true);
+      expect(binding).toEqual({ lifecycle: "pending_approval", userId: Option.none() });
+      expect(auditEntries.map((entry) => [entry.operation, entry.outcome])).toEqual([
+        ["browserLogin.approvePairing", "rejected"],
+      ]);
     })
   );
 

@@ -1,6 +1,7 @@
 import { Effect } from "effect";
 import type { CanonicalCaller } from "./authz";
 import { createBudget, deleteBudget, updateBudget } from "~/shell/budgets/mutations";
+import { approveBrowserLoginPairing } from "~/shell/browser-login/mutations";
 import {
   createKeywordRule,
   deleteKeywordRule,
@@ -45,6 +46,11 @@ const suggestedCaller = ({
  * reflected canonical catalog and rejects missing or extra ordinary mutations.
  */
 export const canonicalMutationImplementations = {
+  "browserLogin.approvePairing": (input, { resolved }) =>
+    approveBrowserLoginPairing({
+      userId: resolved.subjectUserId,
+      publicCode: input.payload.publicCode,
+    }),
   "identity.updateUserPreferences": (input, { resolved }) =>
     updateUserPreferences({ userId: resolved.subjectUserId, payload: input.payload }),
   "categories.createKeywordRule": (input, caller) =>

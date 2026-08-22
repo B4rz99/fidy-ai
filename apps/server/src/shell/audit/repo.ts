@@ -1,5 +1,6 @@
-import { Effect, Option, Schema, Struct } from "effect";
+import { type DateTime, Effect, Option, Schema, Struct } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
+import { CanonicalOperationId } from "~/core/_shared/canonical-operation";
 import { type AuditCaller, AuditLogEntry } from "~/core/audit/model";
 import { UserId } from "~/core/identity/reference";
 import { PATId } from "~/core/tokens/reference";
@@ -28,6 +29,48 @@ type CallerColumns = Readonly<{
 }>;
 
 type SessionAuditCaller = Exclude<AuditCaller, { readonly _tag: "PAT" }>;
+
+const RejectedOperationAdmission = Schema.Struct({
+  rejectionCount: Schema.Int,
+  retryAfterSeconds: Schema.Int,
+});
+
+/** Counts one User's recent rejected calls without exposing Audit persistence to another slice. */
+export const getRejectedOperationAdmission = Effect.fn("Audit.getRejectedOperationAdmission")(
+  function* (
+    sql: SqlClient.SqlClient,
+    input: Readonly<{
+      userId: UserId;
+      operation: CanonicalOperationId;
+      attemptedAt: DateTime.Utc;
+      windowMinutes: number;
+    }>
+  ) {
+    return yield* SqlSchema.findOne({
+      Request: Schema.Struct({
+        userId: UserId,
+        operation: CanonicalOperationId,
+        attemptedAt: Schema.DateTimeUtcFromDate,
+        windowMinutes: Schema.Int.check(Schema.isGreaterThan(0)),
+      }),
+      Result: RejectedOperationAdmission,
+      execute: (request) => sql`
+        SELECT count(*)::int AS "rejectionCount",
+          COALESCE(CEIL(EXTRACT(EPOCH FROM (
+            min(occurred_at) + (${request.windowMinutes} * interval '1 minute')
+              - ${request.attemptedAt}::timestamptz
+          )))::int, 1) AS "retryAfterSeconds"
+        FROM audit_log_entries
+        WHERE user_id = ${request.userId}::uuid
+          AND operation = ${request.operation}
+          AND outcome = 'rejected'
+          AND hosted_agent_session_id IS NOT NULL
+          AND occurred_at > ${request.attemptedAt}::timestamptz
+            - (${request.windowMinutes} * interval '1 minute')
+      `,
+    })(input).pipe(Effect.orDie);
+  }
+);
 
 const sessionCallerColumns = (caller: SessionAuditCaller): CallerColumns => {
   if (caller._tag === "WebSession") {

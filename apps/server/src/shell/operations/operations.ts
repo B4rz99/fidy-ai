@@ -96,7 +96,10 @@ export const decodeAtomicBatchResult = (
   )(value);
 
 const mutationOperations = (catalog: OperationCatalog): ReadonlyArray<CatalogOperation> =>
-  catalog.operations.filter((operation) => operation.policy.kind === "mutation");
+  catalog.operations.filter(
+    (operation) =>
+      operation.policy.kind === "mutation" && operation.policy.callerEligibility === "authenticated"
+  );
 
 const mutationCallMember = (operation: CatalogOperation): Schema.Top =>
   Schema.Struct({

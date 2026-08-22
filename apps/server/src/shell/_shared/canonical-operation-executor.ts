@@ -18,6 +18,7 @@ import {
   ResolvedCaller,
 } from "./authz";
 import { findCanonicalOperationImplementation } from "./canonical-operation-registry";
+import { isCanonicalRejectedFailure } from "./errors";
 import { getBoundOperationCatalog } from "./operation-catalog";
 import type { OperationPolicyValue } from "./operation-policy";
 
@@ -25,6 +26,7 @@ export class CanonicalCallRejected extends Data.TaggedError("CanonicalCallReject
   readonly reason:
     | "authority_closed"
     | "capability_missing"
+    | "caller_ineligible"
     | "confirmation_rejected"
     | "input_rejected";
 }> {}
@@ -75,17 +77,23 @@ const demoteSucceededChildren = (
   );
 
 /** Separates a declared rejection from an unexpected failure in the rolled-back attempt's evidence. */
+const isDeclaredRejection = (cause: Cause.Cause<unknown>): boolean =>
+  Option.exists(Cause.findErrorOption(cause), isCanonicalRejectedFailure);
+
 const recordRolledBackAttempt = (input: {
   readonly caller: CanonicalCaller;
   readonly operation: CanonicalOperationId;
   readonly occurredAt: DateTime.Utc;
   readonly cause: Cause.Cause<unknown>;
-}): ReturnType<typeof appendOutcome> =>
+}): Effect.Effect<void, never, SqlClient.SqlClient> =>
   appendOutcome({
     caller: input.caller,
     operation: input.operation,
     occurredAt: input.occurredAt,
-    outcome: Option.isSome(findCanonicalCallRejected(input.cause)) ? "rejected" : "failed",
+    outcome:
+      Option.isSome(findCanonicalCallRejected(input.cause)) || isDeclaredRejection(input.cause)
+        ? "rejected"
+        : "failed",
   });
 
 /**
@@ -106,6 +114,14 @@ export const executeCanonicalEffect = Effect.fn("executeCanonicalEffect")(functi
   readonly occurredAt: DateTime.Utc;
 }) {
   const { caller, effect, executionCheckpoint, occurredAt, operation, policy } = input;
+  if (
+    policy.callerEligibility === "verified-whatsapp-hosted-only" &&
+    (caller.auditCaller._tag !== "HostedAgentSession" ||
+      caller.authorityRoot !== "verified-whatsapp")
+  ) {
+    yield* appendOutcome({ caller, operation, outcome: "rejected", occurredAt });
+    return yield* new CanonicalCallRejected({ reason: "caller_ineligible" });
+  }
   if (
     policy.capabilityEvaluation !== "children" &&
     !caller.capabilities.includes(policy.requiredCapability)

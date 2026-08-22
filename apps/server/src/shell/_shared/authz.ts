@@ -8,12 +8,24 @@ import type { UserId } from "~/core/identity/reference";
 import { type TokenBearer, TokenBearerFormat } from "~/core/tokens/model";
 import { ConsentRequired, ScopeMissing, Unauthenticated, UserActionRequired } from "./errors";
 
+/** Non-credential provenance retained across a hosted Turn for caller eligibility. */
+export type CanonicalAuthorityRoot = "verified-whatsapp" | "no-verified-whatsapp-authority";
+
+type HostedAuditCaller = Extract<AuditCaller, { readonly _tag: "HostedAgentSession" }>;
+type DirectAuditCaller = Exclude<AuditCaller, HostedAuditCaller>;
+type CanonicalAuthority =
+  | Readonly<{ auditCaller: HostedAuditCaller; authorityRoot: CanonicalAuthorityRoot }>
+  | Readonly<{
+      auditCaller: DirectAuditCaller;
+      authorityRoot: "no-verified-whatsapp-authority";
+    }>;
+
 /** Credential-neutral authority facts supplied to every canonical implementation. */
 export type CanonicalCaller = Readonly<{
   subjectUserId: UserId;
   capabilities: CanonicalCapabilities;
-  auditCaller: AuditCaller;
-}>;
+}> &
+  CanonicalAuthority;
 
 /** Request- or Turn-scoped canonical caller; repositories still receive explicit UserId. */
 export class ResolvedCaller extends Context.Service<ResolvedCaller, CanonicalCaller>()(

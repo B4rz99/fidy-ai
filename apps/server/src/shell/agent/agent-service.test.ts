@@ -1071,6 +1071,28 @@ const listingScript = (serialized: string): Option.Option<ModelReply> => {
   return Option.none();
 };
 
+const browserPairingScript = (serialized: string): Option.Option<ModelReply> => {
+  const publicCode =
+    /EMPAREJA_NAVEGADOR ([BCDFGHJKLMNPQRSTVWXZ]{4}-[BCDFGHJKLMNPQRSTVWXZ]{4})/u.exec(
+      serialized
+    )?.[1];
+  if (publicCode === undefined) return Option.none();
+  if (
+    serialized.lastIndexOf("tool-result") >
+    serialized.lastIndexOf("CONFIRMAR browserLogin.approvePairing")
+  ) {
+    return Option.some([{ type: "text", text: `Aprobé el código público ${publicCode}.` }]);
+  }
+  return Option.some([
+    {
+      type: "tool-call",
+      id: "approve-browser-pairing",
+      name: "browserLogin__approvePairing",
+      params: { payload: { publicCode } },
+    },
+  ]);
+};
+
 const recallScript = (serialized: string): ModelReply => {
   const priorTurnWasLoaded = serialized.includes("Primera respuesta");
   return [
@@ -1096,6 +1118,7 @@ const scriptedReply = (
     Option.orElse(() => deletionScript(serialized)),
     Option.orElse(() => privateReadScript(serialized)),
     Option.orElse(() => turnContextScript(serialized)),
+    Option.orElse(() => browserPairingScript(serialized)),
     Option.orElse(() => plainTextScript(serialized)),
     Option.orElse(() => atomicBatchScript(serialized)),
     Option.orElse(() => quickLogScript(serialized)),
@@ -2115,6 +2138,46 @@ layer(DefectiveAgentHarness, { excludeTestServices: true, timeout: "30 seconds" 
 );
 
 layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hosted agent", (it) => {
+  it.effect("retains only public pairing evidence through verified WhatsApp approval", () =>
+    Effect.gen(function* () {
+      yield* clearTranscript;
+      const sql = yield* MigrationSqlClient;
+      yield* sql`DELETE FROM browser_login_pairings`;
+      yield* sql`
+        INSERT INTO browser_login_pairings (
+          public_code, verifier_digest, created_at, expires_at
+        ) VALUES (
+          'BCDF-GHJK', decode(repeat('00', 32), 'hex'), now(), now() + interval '10 minutes'
+        )
+      `;
+      const service = yield* AgentService;
+      const challenge = yield* service.handleMessage(
+        defaultUserId,
+        InboundMessage.make({
+          text: TranscriptText.make("EMPAREJA_NAVEGADOR BCDF-GHJK"),
+        }),
+        noDelivery,
+        "verified-whatsapp"
+      );
+      const command = confirmationCommand(challenge.text);
+      const approved = yield* service.handleMessage(
+        defaultUserId,
+        InboundMessage.make({ text: TranscriptText.make(command) }),
+        noDelivery,
+        "verified-whatsapp"
+      );
+
+      expect(approved.text).toBe("Listo, completé la operación solicitada.");
+      const retained = yield* Schema.encodeEffect(Schema.UnknownFromJsonString)(
+        yield* selectTranscriptEntries(defaultUserId)
+      );
+      expect(retained).toContain("BCDF-GHJK");
+      expect(retained).toContain("Listo, completé la operación solicitada.");
+      expect(retained).not.toContain("privateVerifier");
+      expect(retained).not.toContain("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA");
+    })
+  );
+
   it.effect("marks a hosted Turn failed when delivery rejects the generated reply", () =>
     Effect.gen(function* () {
       yield* clearTranscript;

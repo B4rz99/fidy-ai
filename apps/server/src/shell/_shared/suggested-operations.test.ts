@@ -199,6 +199,7 @@ it("keeps Pro operations out of free responses", () => {
   const policy = {
     requiredCapability: "read",
     capabilityEvaluation: "operation",
+    callerEligibility: "authenticated",
     requiredTier: "pro",
     agentConfirmation: "not-required",
     kind: "query",

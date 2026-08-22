@@ -757,6 +757,8 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           expect(publicTables.map((row) => row.tableName)).toEqual(
             [
               ...userTableNames,
+              "browser_login_pairings",
+              "browser_login_start_attempts",
               "categories",
               "effect_sql_migrations",
               "pending_consent_exchanges",

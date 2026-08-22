@@ -21,7 +21,7 @@ import type { Tool } from "effect/unstable/ai";
 import { HttpClient } from "effect/unstable/http";
 import { SqlClient } from "effect/unstable/sql";
 import { allCanonicalCapabilities } from "~/core/_shared/canonical-capability";
-import type { CanonicalCaller } from "~/shell/_shared/authz";
+import type { CanonicalAuthorityRoot, CanonicalCaller } from "~/shell/_shared/authz";
 import type { User } from "~/core/identity/model";
 import type { UserId } from "~/core/identity/reference";
 import { CompactedConversationOutput } from "~/core/transcript/compacted-conversation";
@@ -1421,8 +1421,10 @@ const generateHostedReply = Effect.fn("AgentService.generateHostedReply")(functi
   context: WorkingContext;
   pending: TurnExecution;
   firstRound: PreparedHostedText;
+  authorityRoot: CanonicalAuthorityRoot;
 }) {
-  const { dependencies, userId, message, limits, context, pending, firstRound } = input;
+  const { authorityRoot, dependencies, userId, message, limits, context, pending, firstRound } =
+    input;
   const { user, confirmation } = yield* loadTurnContext(
     userId,
     context.hostedAgentSessionId,
@@ -1436,6 +1438,7 @@ const generateHostedReply = Effect.fn("AgentService.generateHostedReply")(functi
       _tag: "HostedAgentSession",
       hostedAgentSessionId: context.hostedAgentSessionId,
     },
+    authorityRoot,
   };
   return yield* Effect.gen(function* () {
     const toolkit = yield* makeAgentToolkit({
@@ -1488,9 +1491,10 @@ const runPreparedTurn = Effect.fn("AgentService.runPreparedTurn")(function* <E, 
   userId: UserId;
   message: InboundMessage;
   prepared: PreparedTurnContext;
+  authorityRoot: CanonicalAuthorityRoot;
   deliver: (reply: AgentReply) => Effect.Effect<void, E, R>;
 }) {
-  const { dependencies, userId, message, prepared, deliver } = input;
+  const { authorityRoot, dependencies, userId, message, prepared, deliver } = input;
   const limits = yield* CurrentAgentLimits;
   const context = yield* makeWorkingContext(prepared.snapshot).pipe(
     Effect.mapError(() => new UnknownUser({ userId }))
@@ -1514,6 +1518,7 @@ const runPreparedTurn = Effect.fn("AgentService.runPreparedTurn")(function* <E, 
       dependencies,
       userId,
       message,
+      authorityRoot,
       limits,
       context,
       pending,
@@ -1531,6 +1536,7 @@ type SerializedTurnInput<E, R> = Readonly<{
   dependencies: AgentServiceDependencies;
   userId: UserId;
   message: InboundMessage;
+  authorityRoot: CanonicalAuthorityRoot;
   deliver: (reply: AgentReply) => Effect.Effect<void, E, R>;
 }>;
 
@@ -1544,12 +1550,20 @@ const runBoundedPreparation = <E, R>(
   AgentTurnError | E | HostedAgentSessionConsentRequired,
   R | Crypto.Crypto | HttpClient.HttpClient | SqlClient.SqlClient | HostedInference
 > => {
-  const { dependencies, hostedAgentSessionId, userId, message, deliver, preparationNumber } = input;
+  const {
+    authorityRoot,
+    dependencies,
+    hostedAgentSessionId,
+    userId,
+    message,
+    deliver,
+    preparationNumber,
+  } = input;
   const { continuity } = dependencies;
   return continuity.requireSession(userId, hostedAgentSessionId).pipe(
     Effect.andThen(continuity.prepareTurn(userId, hostedAgentSessionId, message)),
     Effect.flatMap((prepared) =>
-      runPreparedTurn({ dependencies, userId, message, prepared, deliver }).pipe(
+      runPreparedTurn({ dependencies, userId, message, prepared, authorityRoot, deliver }).pipe(
         Effect.provideService(Telemetry, dependencies.telemetry)
       )
     ),
@@ -1613,15 +1627,19 @@ const makeHandleMessage =
   <E, R>(
     userId: UserId,
     message: InboundMessage,
-    deliver: (reply: AgentReply) => Effect.Effect<void, E, R>
+    ...turn: readonly [
+      deliver: (reply: AgentReply) => Effect.Effect<void, E, R>,
+      authorityRoot?: CanonicalAuthorityRoot,
+    ]
   ): Effect.Effect<AgentReply, AgentTurnError | E, R> => {
+    const [deliver, authorityRoot = "no-verified-whatsapp-authority"] = turn;
     // Refusing a credential still owes the User the refusal: a channel caller reads its reply from
     // delivery, not from this return value.
     if (containsSensitiveChatValue(message.text)) {
       const refusal = makeTextReply(credentialRejectedReply);
       return Effect.as(deliver(refusal), refusal);
     }
-    const work = runSerializedTurn({ dependencies, userId, message, deliver });
+    const work = runSerializedTurn({ dependencies, userId, message, authorityRoot, deliver });
     const traced = dependencies.telemetry.span(
       turnDescriptor,
       Effect.onExit(work.pipe(Effect.provideService(Telemetry, dependencies.telemetry)), (exit) =>
@@ -1655,7 +1673,10 @@ export class AgentService extends Context.Service<
     readonly handleMessage: <E, R>(
       userId: UserId,
       message: InboundMessage,
-      deliver: (reply: AgentReply) => Effect.Effect<void, E, R>
+      ...turn: readonly [
+        deliver: (reply: AgentReply) => Effect.Effect<void, E, R>,
+        authorityRoot?: CanonicalAuthorityRoot,
+      ]
     ) => Effect.Effect<AgentReply, AgentTurnError | E, R>;
   }
 >()("@fidy/server/shell/agent/agent-service/AgentService") {

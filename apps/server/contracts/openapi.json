@@ -84,6 +84,27 @@
         ],
         "type": "object"
       },
+      "ApproveBrowserLoginPairingPayload": {
+        "additionalProperties": false,
+        "properties": {
+          "publicCode": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "publicCode"
+        ],
+        "type": "object"
+      },
+      "ApproveBrowserLoginPairingPayloadPartial": {
+        "additionalProperties": false,
+        "properties": {
+          "publicCode": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "AtomicBatchCallId": {
         "allOf": [
           {
@@ -220,6 +241,140 @@
           }
         },
         "type": "object"
+      },
+      "BrowserLoginPairingApproval": {
+        "additionalProperties": false,
+        "properties": {
+          "expiresAt": {
+            "$ref": "#/components/schemas/UtcTimestamp"
+          },
+          "pairingId": {
+            "$ref": "#/components/schemas/BrowserLoginPairingId"
+          }
+        },
+        "required": [
+          "pairingId",
+          "expiresAt"
+        ],
+        "type": "object"
+      },
+      "BrowserLoginPairingApprovalRateLimited": {
+        "additionalProperties": false,
+        "properties": {
+          "_tag": {
+            "enum": [
+              "BrowserLoginPairingApprovalRateLimited"
+            ],
+            "type": "string"
+          },
+          "error": {
+            "additionalProperties": false,
+            "properties": {
+              "code": {
+                "enum": [
+                  "rate_limited"
+                ],
+                "type": "string"
+              },
+              "message": {
+                "enum": [
+                  "This pairing is no longer valid. Start again."
+                ],
+                "type": "string"
+              },
+              "retryAfterSeconds": {
+                "allOf": [
+                  {
+                    "exclusiveMinimum": 0
+                  }
+                ],
+                "type": "integer"
+              }
+            },
+            "required": [
+              "code",
+              "message",
+              "retryAfterSeconds"
+            ],
+            "type": "object"
+          },
+          "next": {
+            "allOf": [
+              {
+                "description": "Where to go next: up to three canonical operations worth calling after this one, best first. Empty when there is nothing worth suggesting, which is an answer rather than an omission. Each entry has passed the target-input and caller-authorization checkpoint.",
+                "maxItems": 3
+              }
+            ],
+            "items": {
+              "$ref": "#/components/schemas/SuggestedOperation"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "error",
+          "next"
+        ],
+        "type": "object"
+      },
+      "BrowserLoginPairingApprovalRejected": {
+        "additionalProperties": false,
+        "properties": {
+          "_tag": {
+            "enum": [
+              "BrowserLoginPairingApprovalRejected"
+            ],
+            "type": "string"
+          },
+          "error": {
+            "additionalProperties": false,
+            "properties": {
+              "code": {
+                "enum": [
+                  "validation_failed"
+                ],
+                "type": "string"
+              },
+              "message": {
+                "enum": [
+                  "This pairing is no longer valid. Start again."
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "message"
+            ],
+            "type": "object"
+          },
+          "next": {
+            "allOf": [
+              {
+                "description": "Where to go next: up to three canonical operations worth calling after this one, best first. Empty when there is nothing worth suggesting, which is an answer rather than an omission. Each entry has passed the target-input and caller-authorization checkpoint.",
+                "maxItems": 3
+              }
+            ],
+            "items": {
+              "$ref": "#/components/schemas/SuggestedOperation"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "error",
+          "next"
+        ],
+        "type": "object"
+      },
+      "BrowserLoginPairingId": {
+        "allOf": [
+          {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|[fF]{8}-[fF]{4}-[fF]{4}-[fF]{4}-[fF]{12})$"
+          }
+        ],
+        "type": "string"
       },
       "Budget": {
         "additionalProperties": false,
@@ -4011,6 +4166,47 @@
           {
             "additionalProperties": false,
             "properties": {
+              "args": {
+                "additionalProperties": false,
+                "description": "Arguments already worked out for that call. Partial by design: merge them into the operation's own input rather than sending them as the whole of it.",
+                "properties": {
+                  "payload": {
+                    "$ref": "#/components/schemas/ApproveBrowserLoginPairingPayloadPartial"
+                  }
+                },
+                "type": "object"
+              },
+              "hint": {
+                "allOf": [
+                  {
+                    "minLength": 1
+                  },
+                  {
+                    "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
+                  },
+                  {
+                    "maxLength": 140
+                  }
+                ],
+                "type": "string"
+              },
+              "tool": {
+                "description": "The canonical operation to call, spelled exactly as its `operationId` in this spec. Look that id up here to see the complete input and result.",
+                "enum": [
+                  "browserLogin.approvePairing"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "tool",
+              "hint"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
               "hint": {
                 "allOf": [
                   {
@@ -6732,6 +6928,47 @@
       },
       "SuggestedOperation2": {
         "anyOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "args": {
+                "additionalProperties": false,
+                "description": "Arguments already worked out for that call. Partial by design: merge them into the operation's own input rather than sending them as the whole of it.",
+                "properties": {
+                  "payload": {
+                    "$ref": "#/components/schemas/ApproveBrowserLoginPairingPayloadPartial"
+                  }
+                },
+                "type": "object"
+              },
+              "hint": {
+                "allOf": [
+                  {
+                    "minLength": 1
+                  },
+                  {
+                    "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
+                  },
+                  {
+                    "maxLength": 140
+                  }
+                ],
+                "type": "string"
+              },
+              "tool": {
+                "description": "The canonical operation to call, spelled exactly as its `operationId` in this spec. Look that id up here to see the complete input and result.",
+                "enum": [
+                  "browserLogin.approvePairing"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "tool",
+              "hint"
+            ],
+            "type": "object"
+          },
           {
             "additionalProperties": false,
             "properties": {
@@ -10402,6 +10639,127 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/browser-login/pairings/approve": {
+      "post": {
+        "description": "Approve the displayed browser pairing code for this User. The host requires exact explicit confirmation before execution; the code is public and is never a browser credential.",
+        "operationId": "browserLogin.approvePairing",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApproveBrowserLoginPairingPayload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/BrowserLoginPairingApproval"
+                    },
+                    "next": {
+                      "allOf": [
+                        {
+                          "description": "Where to go next: up to three canonical operations worth calling after this one, best first. Empty when there is nothing worth suggesting, which is an answer rather than an omission. Each entry has passed the target-input and caller-authorization checkpoint.",
+                          "maxItems": 3
+                        }
+                      ],
+                      "items": {
+                        "$ref": "#/components/schemas/SuggestedOperation"
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "next"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/BrowserLoginPairingApprovalRejected"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ValidationFailed"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "BrowserLoginPairingApprovalRejected | ValidationFailed"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Unauthenticated"
+                }
+              }
+            },
+            "description": "Unauthenticated"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ConsentRequired"
+                    },
+                    {
+                      "$ref": "#/components/schemas/UserActionRequired"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ScopeMissing"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "ConsentRequired | UserActionRequired | ScopeMissing"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BrowserLoginPairingApprovalRateLimited"
+                }
+              }
+            },
+            "description": "BrowserLoginPairingApprovalRateLimited"
+          }
+        },
+        "security": [
+          {
+            "agentBearer": []
+          }
+        ],
+        "tags": [
+          "browserLogin"
+        ],
+        "x-fidy-agent-confirmation": "required",
+        "x-fidy-caller-eligibility": "verified-whatsapp-hosted-only",
+        "x-fidy-operation-kind": "mutation",
+        "x-fidy-required-scope": "write",
+        "x-fidy-required-tier": "free"
+      }
+    },
     "/budget-status": {
       "get": {
         "description": "Answer current monthly Budget status in one call. Supply the IANA time zone whose calendar boundaries apply; optional Category and Currency filters combine, and omitted Currency returns separate deterministically ordered results without conversion or aggregation.",
@@ -10515,6 +10873,7 @@
           "budgets"
         ],
         "x-fidy-agent-confirmation": "not-required",
+        "x-fidy-caller-eligibility": "authenticated",
         "x-fidy-operation-kind": "query",
         "x-fidy-required-scope": "read",
         "x-fidy-required-tier": "free"
@@ -10611,6 +10970,7 @@
           "budgets"
         ],
         "x-fidy-agent-confirmation": "not-required",
+        "x-fidy-caller-eligibility": "authenticated",
         "x-fidy-operation-kind": "query",
         "x-fidy-required-scope": "read",
         "x-fidy-required-tier": "free"
@@ -10729,6 +11089,7 @@
           "budgets"
         ],
         "x-fidy-agent-confirmation": "not-required",
+        "x-fidy-caller-eligibility": "authenticated",
         "x-fidy-operation-kind": "mutation",
         "x-fidy-required-scope": "write",
         "x-fidy-required-tier": "free"
@@ -10841,6 +11202,7 @@
           "budgets"
         ],
         "x-fidy-agent-confirmation": "required",
+        "x-fidy-caller-eligibility": "authenticated",
         "x-fidy-operation-kind": "mutation",
         "x-fidy-required-scope": "write",
         "x-fidy-required-tier": "free"
@@ -10951,6 +11313,7 @@
           "budgets"
         ],
         "x-fidy-agent-confirmation": "not-required",
+        "x-fidy-caller-eligibility": "authenticated",
         "x-fidy-operation-kind": "query",
         "x-fidy-required-scope": "read",
         "x-fidy-required-tier": "free"
@@ -11078,6 +11441,7 @@
           "budgets"
         ],
         "x-fidy-agent-confirmation": "required",
+        "x-fidy-caller-eligibility": "authenticated",
         "x-fidy-operation-kind": "mutation",
         "x-fidy-required-scope": "write",
         "x-fidy-required-tier": "free"
@@ -11174,6 +11538,7 @@
           "categories"
         ],
         "x-fidy-agent-confirmation": "not-required",
+        "x-fidy-caller-eligibility": "authenticated",
         "x-fidy-operation-kind": "query",
         "x-fidy-required-scope": "read",
         "x-fidy-required-tier": "free"
@@ -11270,6 +11635,7 @@
           "categories"
         ],
         "x-fidy-agent-confirmation": "not-required",
+        "x-fidy-caller-eligibility": "authenticated",
         "x-fidy-operation-kind": "query",
         "x-fidy-required-scope": "read",
         "x-fidy-required-tier": "free"
@@ -11388,6 +11754,7 @@
           "categories"
         ],
         "x-fidy-agent-confirmation": "not-required",
+        "x-fidy-caller-eligibility": "authenticated",
         "x-fidy-operation-kind": "mutation",
         "x-fidy-required-scope": "write",
         "x-fidy-required-tier": "free"
@@ -11500,6 +11867,7 @@
           "categories"
         ],
         "x-fidy-agent-confirmation": "required",
+        "x-fidy-caller-eligibility": "authenticated",
         "x-fidy-operation-kind": "mutation",
         "x-fidy-required-scope": "write",
         "x-fidy-required-tier": "free"
@@ -11627,6 +11995,7 @@
           "categories"
         ],
         "x-fidy-agent-confirmation": "required",
+        "x-fidy-caller-eligibility": "authenticated",
         "x-fidy-operation-kind": "mutation",
         "x-fidy-required-scope": "write",
         "x-fidy-required-tier": "free"
@@ -11720,6 +12089,7 @@
           "dashboard"
         ],
         "x-fidy-agent-confirmation": "not-required",
+        "x-fidy-caller-eligibility": "authenticated",
         "x-fidy-operation-kind": "mutation",
         "x-fidy-required-scope": "read",
         "x-fidy-required-tier": "free"
@@ -11829,6 +12199,7 @@
           "dashboard"
         ],
         "x-fidy-agent-confirmation": "not-required",
+        "x-fidy-caller-eligibility": "authenticated",
         "x-fidy-operation-kind": "query",
         "x-fidy-required-scope": "read",
         "x-fidy-required-tier": "free"
@@ -11949,6 +12320,7 @@
           "dashboard"
         ],
         "x-fidy-agent-confirmation": "required",
+        "x-fidy-caller-eligibility": "authenticated",
         "x-fidy-operation-kind": "mutation",
         "x-fidy-required-scope": "dashboard",
         "x-fidy-required-tier": "free"
@@ -12072,6 +12444,7 @@
           "ingestion"
         ],
         "x-fidy-agent-confirmation": "not-required",
+        "x-fidy-caller-eligibility": "authenticated",
         "x-fidy-operation-kind": "query",
         "x-fidy-required-scope": "read",
         "x-fidy-required-tier": "free"
@@ -12201,6 +12574,7 @@
           "ingestion"
         ],
         "x-fidy-agent-confirmation": "required",
+        "x-fidy-caller-eligibility": "authenticated",
         "x-fidy-operation-kind": "mutation",
         "x-fidy-required-scope": "write",
         "x-fidy-required-tier": "free"
@@ -12321,6 +12695,7 @@
           "ingestion"
         ],
         "x-fidy-agent-confirmation": "not-required",
+        "x-fidy-caller-eligibility": "authenticated",
         "x-fidy-operation-kind": "mutation",
         "x-fidy-required-scope": "write",
         "x-fidy-required-tier": "free"
@@ -12433,6 +12808,7 @@
           "ingestion"
         ],
         "x-fidy-agent-confirmation": "not-required",
+        "x-fidy-caller-eligibility": "authenticated",
         "x-fidy-operation-kind": "query",
         "x-fidy-required-scope": "read",
         "x-fidy-required-tier": "free"
@@ -12575,6 +12951,7 @@
           "insights"
         ],
         "x-fidy-agent-confirmation": "required",
+        "x-fidy-caller-eligibility": "authenticated",
         "x-fidy-operation-kind": "mutation",
         "x-fidy-required-scope": "write",
         "x-fidy-required-tier": "free"
@@ -12694,6 +13071,7 @@
           "insights"
         ],
         "x-fidy-agent-confirmation": "required",
+        "x-fidy-caller-eligibility": "authenticated",
         "x-fidy-operation-kind": "mutation",
         "x-fidy-required-scope": "write",
         "x-fidy-required-tier": "free"
@@ -12813,6 +13191,7 @@
           "insights"
         ],
         "x-fidy-agent-confirmation": "required",
+        "x-fidy-caller-eligibility": "authenticated",
         "x-fidy-operation-kind": "mutation",
         "x-fidy-required-scope": "write",
         "x-fidy-required-tier": "free"
@@ -12909,6 +13288,7 @@
           "insights"
         ],
         "x-fidy-agent-confirmation": "not-required",
+        "x-fidy-caller-eligibility": "authenticated",
         "x-fidy-operation-kind": "query",
         "x-fidy-required-scope": "read",
         "x-fidy-required-tier": "free"
@@ -13002,6 +13382,7 @@
           "memory"
         ],
         "x-fidy-agent-confirmation": "not-required",
+        "x-fidy-caller-eligibility": "authenticated",
         "x-fidy-operation-kind": "query",
         "x-fidy-required-scope": "read",
         "x-fidy-required-tier": "free"
@@ -13113,6 +13494,7 @@
           "memory"
         ],
         "x-fidy-agent-confirmation": "not-required",
+        "x-fidy-caller-eligibility": "authenticated",
         "x-fidy-operation-kind": "mutation",
         "x-fidy-required-scope": "write",
         "x-fidy-required-tier": "free"
@@ -13225,6 +13607,7 @@
           "memory"
         ],
         "x-fidy-agent-confirmation": "required",
+        "x-fidy-caller-eligibility": "authenticated",
         "x-fidy-operation-kind": "mutation",
         "x-fidy-required-scope": "write",
         "x-fidy-required-tier": "free"
@@ -13355,6 +13738,7 @@
           "memory"
         ],
         "x-fidy-agent-confirmation": "required",
+        "x-fidy-caller-eligibility": "authenticated",
         "x-fidy-operation-kind": "mutation",
         "x-fidy-required-scope": "write",
         "x-fidy-required-tier": "free"
@@ -16869,6 +17253,7 @@
           "operations"
         ],
         "x-fidy-agent-confirmation": "required",
+        "x-fidy-caller-eligibility": "authenticated",
         "x-fidy-operation-kind": "mutation",
         "x-fidy-required-scope": "write",
         "x-fidy-required-tier": "free"
@@ -16962,6 +17347,7 @@
           "subscription"
         ],
         "x-fidy-agent-confirmation": "not-required",
+        "x-fidy-caller-eligibility": "authenticated",
         "x-fidy-operation-kind": "query",
         "x-fidy-required-scope": "read",
         "x-fidy-required-tier": "free"
@@ -17130,6 +17516,7 @@
           "transactions"
         ],
         "x-fidy-agent-confirmation": "not-required",
+        "x-fidy-caller-eligibility": "authenticated",
         "x-fidy-operation-kind": "query",
         "x-fidy-required-scope": "read",
         "x-fidy-required-tier": "free"
@@ -17248,6 +17635,7 @@
           "transactions"
         ],
         "x-fidy-agent-confirmation": "not-required",
+        "x-fidy-caller-eligibility": "authenticated",
         "x-fidy-operation-kind": "mutation",
         "x-fidy-required-scope": "write",
         "x-fidy-required-tier": "free"
@@ -17360,6 +17748,7 @@
           "transactions"
         ],
         "x-fidy-agent-confirmation": "required",
+        "x-fidy-caller-eligibility": "authenticated",
         "x-fidy-operation-kind": "mutation",
         "x-fidy-required-scope": "write",
         "x-fidy-required-tier": "free"
@@ -17470,6 +17859,7 @@
           "transactions"
         ],
         "x-fidy-agent-confirmation": "not-required",
+        "x-fidy-caller-eligibility": "authenticated",
         "x-fidy-operation-kind": "query",
         "x-fidy-required-scope": "read",
         "x-fidy-required-tier": "free"
@@ -17597,6 +17987,7 @@
           "transactions"
         ],
         "x-fidy-agent-confirmation": "required",
+        "x-fidy-caller-eligibility": "authenticated",
         "x-fidy-operation-kind": "mutation",
         "x-fidy-required-scope": "write",
         "x-fidy-required-tier": "free"
@@ -17712,6 +18103,7 @@
           "transactions"
         ],
         "x-fidy-agent-confirmation": "not-required",
+        "x-fidy-caller-eligibility": "authenticated",
         "x-fidy-operation-kind": "query",
         "x-fidy-required-scope": "read",
         "x-fidy-required-tier": "free"
@@ -17805,6 +18197,7 @@
           "identity"
         ],
         "x-fidy-agent-confirmation": "not-required",
+        "x-fidy-caller-eligibility": "authenticated",
         "x-fidy-operation-kind": "query",
         "x-fidy-required-scope": "read",
         "x-fidy-required-tier": "free"
@@ -17908,6 +18301,7 @@
           "identity"
         ],
         "x-fidy-agent-confirmation": "not-required",
+        "x-fidy-caller-eligibility": "authenticated",
         "x-fidy-operation-kind": "mutation",
         "x-fidy-required-scope": "write",
         "x-fidy-required-tier": "free"
@@ -17916,6 +18310,9 @@
   },
   "security": [],
   "tags": [
+    {
+      "name": "browserLogin"
+    },
     {
       "name": "identity"
     },

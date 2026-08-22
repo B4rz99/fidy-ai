@@ -486,14 +486,13 @@ const agentReplyFixture = (text: string, overrides: Partial<AgentReply> = {}): A
     ...overrides,
   });
 type AgentServiceFixture = Parameters<typeof AgentService.of>[0];
-const agentServiceFixture = (overrides: Partial<AgentServiceFixture> = {}): AgentServiceFixture =>
-  AgentService.of({
-    handleMessage: (_userId, _message, deliver) => {
-      const reply = agentReplyFixture("Respuesta entregada.");
-      return deliver(reply).pipe(Effect.as(reply));
-    },
-    ...overrides,
-  });
+const agentServiceFixture = (overrides: Partial<AgentServiceFixture> = {}): AgentServiceFixture => {
+  const fallback: AgentServiceFixture["handleMessage"] = (_userId, _message, deliver) => {
+    const reply = agentReplyFixture("Respuesta entregada.");
+    return deliver(reply).pipe(Effect.as(reply));
+  };
+  return AgentService.of({ handleMessage: overrides.handleMessage ?? fallback });
+};
 const kapsoClientFixture = (
   providerMessageId: string,
   sentAt: DateTime.Utc,

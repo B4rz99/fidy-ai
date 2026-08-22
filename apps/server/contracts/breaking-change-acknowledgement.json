@@ -1,0 +1,223 @@
+{
+  "baseDigest": "76b04807777d11d7670c3680975e46f078d2f37c1a61497e6beaed0f8ea2b58c",
+  "candidateDigest": "28b531359371bd215d2ca4dd88e7d7166eb72d8824512b6a8aa691b445e16406",
+  "findings": [
+    {
+      "source": "operation-policy",
+      "rule": "operation-policy-changed",
+      "operationId": "dashboard.getDashboard",
+      "detail": "{\"base\":{\"agentConfirmation\":\"not-required\",\"kind\":\"mutation\",\"requiredScope\":\"read\",\"requiredTier\":\"free\",\"scopeEvaluation\":\"endpoint\"},\"candidate\":{\"agentConfirmation\":\"not-required\",\"callerEligibility\":\"authenticated\",\"kind\":\"mutation\",\"requiredScope\":\"read\",\"requiredTier\":\"free\",\"scopeEvaluation\":\"endpoint\"}}"
+    },
+    {
+      "source": "operation-policy",
+      "rule": "operation-policy-changed",
+      "operationId": "budgets.createBudget",
+      "detail": "{\"base\":{\"agentConfirmation\":\"not-required\",\"kind\":\"mutation\",\"requiredScope\":\"write\",\"requiredTier\":\"free\",\"scopeEvaluation\":\"endpoint\"},\"candidate\":{\"agentConfirmation\":\"not-required\",\"callerEligibility\":\"authenticated\",\"kind\":\"mutation\",\"requiredScope\":\"write\",\"requiredTier\":\"free\",\"scopeEvaluation\":\"endpoint\"}}"
+    },
+    {
+      "source": "operation-policy",
+      "rule": "operation-policy-changed",
+      "operationId": "categories.createKeywordRule",
+      "detail": "{\"base\":{\"agentConfirmation\":\"not-required\",\"kind\":\"mutation\",\"requiredScope\":\"write\",\"requiredTier\":\"free\",\"scopeEvaluation\":\"endpoint\"},\"candidate\":{\"agentConfirmation\":\"not-required\",\"callerEligibility\":\"authenticated\",\"kind\":\"mutation\",\"requiredScope\":\"write\",\"requiredTier\":\"free\",\"scopeEvaluation\":\"endpoint\"}}"
+    },
+    {
+      "source": "operation-policy",
+      "rule": "operation-policy-changed",
+      "operationId": "identity.updateUserPreferences",
+      "detail": "{\"base\":{\"agentConfirmation\":\"not-required\",\"kind\":\"mutation\",\"requiredScope\":\"write\",\"requiredTier\":\"free\",\"scopeEvaluation\":\"endpoint\"},\"candidate\":{\"agentConfirmation\":\"not-required\",\"callerEligibility\":\"authenticated\",\"kind\":\"mutation\",\"requiredScope\":\"write\",\"requiredTier\":\"free\",\"scopeEvaluation\":\"endpoint\"}}"
+    },
+    {
+      "source": "operation-policy",
+      "rule": "operation-policy-changed",
+      "operationId": "ingestion.submitForExtraction",
+      "detail": "{\"base\":{\"agentConfirmation\":\"not-required\",\"kind\":\"mutation\",\"requiredScope\":\"write\",\"requiredTier\":\"free\",\"scopeEvaluation\":\"endpoint\"},\"candidate\":{\"agentConfirmation\":\"not-required\",\"callerEligibility\":\"authenticated\",\"kind\":\"mutation\",\"requiredScope\":\"write\",\"requiredTier\":\"free\",\"scopeEvaluation\":\"endpoint\"}}"
+    },
+    {
+      "source": "operation-policy",
+      "rule": "operation-policy-changed",
+      "operationId": "memory.remember",
+      "detail": "{\"base\":{\"agentConfirmation\":\"not-required\",\"kind\":\"mutation\",\"requiredScope\":\"write\",\"requiredTier\":\"free\",\"scopeEvaluation\":\"endpoint\"},\"candidate\":{\"agentConfirmation\":\"not-required\",\"callerEligibility\":\"authenticated\",\"kind\":\"mutation\",\"requiredScope\":\"write\",\"requiredTier\":\"free\",\"scopeEvaluation\":\"endpoint\"}}"
+    },
+    {
+      "source": "operation-policy",
+      "rule": "operation-policy-changed",
+      "operationId": "transactions.createTransaction",
+      "detail": "{\"base\":{\"agentConfirmation\":\"not-required\",\"kind\":\"mutation\",\"requiredScope\":\"write\",\"requiredTier\":\"free\",\"scopeEvaluation\":\"endpoint\"},\"candidate\":{\"agentConfirmation\":\"not-required\",\"callerEligibility\":\"authenticated\",\"kind\":\"mutation\",\"requiredScope\":\"write\",\"requiredTier\":\"free\",\"scopeEvaluation\":\"endpoint\"}}"
+    },
+    {
+      "source": "operation-policy",
+      "rule": "operation-policy-changed",
+      "operationId": "budgets.getBudget",
+      "detail": "{\"base\":{\"agentConfirmation\":\"not-required\",\"kind\":\"query\",\"requiredScope\":\"read\",\"requiredTier\":\"free\",\"scopeEvaluation\":\"endpoint\"},\"candidate\":{\"agentConfirmation\":\"not-required\",\"callerEligibility\":\"authenticated\",\"kind\":\"query\",\"requiredScope\":\"read\",\"requiredTier\":\"free\",\"scopeEvaluation\":\"endpoint\"}}"
+    },
+    {
+      "source": "operation-policy",
+      "rule": "operation-policy-changed",
+      "operationId": "budgets.getBudgetStatus",
+      "detail": "{\"base\":{\"agentConfirmation\":\"not-required\",\"kind\":\"query\",\"requiredScope\":\"read\",\"requiredTier\":\"free\",\"scopeEvaluation\":\"endpoint\"},\"candidate\":{\"agentConfirmation\":\"not-required\",\"callerEligibility\":\"authenticated\",\"kind\":\"query\",\"requiredScope\":\"read\",\"requiredTier\":\"free\",\"scopeEvaluation\":\"endpoint\"}}"
+    },
+    {
+      "source": "operation-policy",
+      "rule": "operation-policy-changed",
+      "operationId": "budgets.listBudgets",
+      "detail": "{\"base\":{\"agentConfirmation\":\"not-required\",\"kind\":\"query\",\"requiredScope\":\"read\",\"requiredTier\":\"free\",\"scopeEvaluation\":\"endpoint\"},\"candidate\":{\"agentConfirmation\":\"not-required\",\"callerEligibility\":\"authenticated\",\"kind\":\"query\",\"requiredScope\":\"read\",\"requiredTier\":\"free\",\"scopeEvaluation\":\"endpoint\"}}"
+    },
+    {
+      "source": "operation-policy",
+      "rule": "operation-policy-changed",
+      "operationId": "categories.listCategories",
+      "detail": "{\"base\":{\"agentConfirmation\":\"not-required\",\"kind\":\"query\",\"requiredScope\":\"read\",\"requiredTier\":\"free\",\"scopeEvaluation\":\"endpoint\"},\"candidate\":{\"agentConfirmation\":\"not-required\",\"callerEligibility\":\"authenticated\",\"kind\":\"query\",\"requiredScope\":\"read\",\"requiredTier\":\"free\",\"scopeEvaluation\":\"endpoint\"}}"
+    },
+    {
+      "source": "operation-policy",
+      "rule": "operation-policy-changed",
+      "operationId": "categories.listKeywordRules",
+      "detail": "{\"base\":{\"agentConfirmation\":\"not-required\",\"kind\":\"query\",\"requiredScope\":\"read\",\"requiredTier\":\"free\",\"scopeEvaluation\":\"endpoint\"},\"candidate\":{\"agentConfirmation\":\"not-required\",\"callerEligibility\":\"authenticated\",\"kind\":\"query\",\"requiredScope\":\"read\",\"requiredTier\":\"free\",\"scopeEvaluation\":\"endpoint\"}}"
+    },
+    {
+      "source": "operation-policy",
+      "rule": "operation-policy-changed",
+      "operationId": "dashboard.listDashboardCatalog",
+      "detail": "{\"base\":{\"agentConfirmation\":\"not-required\",\"kind\":\"query\",\"requiredScope\":\"read\",\"requiredTier\":\"free\",\"scopeEvaluation\":\"endpoint\"},\"candidate\":{\"agentConfirmation\":\"not-required\",\"callerEligibility\":\"authenticated\",\"kind\":\"query\",\"requiredScope\":\"read\",\"requiredTier\":\"free\",\"scopeEvaluation\":\"endpoint\"}}"
+    },
+    {
+      "source": "operation-policy",
+      "rule": "operation-policy-changed",
+      "operationId": "identity.getCurrentUser",
+      "detail": "{\"base\":{\"agentConfirmation\":\"not-required\",\"kind\":\"query\",\"requiredScope\":\"read\",\"requiredTier\":\"free\",\"scopeEvaluation\":\"endpoint\"},\"candidate\":{\"agentConfirmation\":\"not-required\",\"callerEligibility\":\"authenticated\",\"kind\":\"query\",\"requiredScope\":\"read\",\"requiredTier\":\"free\",\"scopeEvaluation\":\"endpoint\"}}"
+    },
+    {
+      "source": "operation-policy",
+      "rule": "operation-policy-changed",
+      "operationId": "ingestion.getStatementSubmission",
+      "detail": "{\"base\":{\"agentConfirmation\":\"not-required\",\"kind\":\"query\",\"requiredScope\":\"read\",\"requiredTier\":\"free\",\"scopeEvaluation\":\"endpoint\"},\"candidate\":{\"agentConfirmation\":\"not-required\",\"callerEligibility\":\"authenticated\",\"kind\":\"query\",\"requiredScope\":\"read\",\"requiredTier\":\"free\",\"scopeEvaluation\":\"endpoint\"}}"
+    },
+    {
+      "source": "operation-policy",
+      "rule": "operation-policy-changed",
+      "operationId": "ingestion.listNeedsReviewItems",
+      "detail": "{\"base\":{\"agentConfirmation\":\"not-required\",\"kind\":\"query\",\"requiredScope\":\"read\",\"requiredTier\":\"free\",\"scopeEvaluation\":\"endpoint\"},\"candidate\":{\"agentConfirmation\":\"not-required\",\"callerEligibility\":\"authenticated\",\"kind\":\"query\",\"requiredScope\":\"read\",\"requiredTier\":\"free\",\"scopeEvaluation\":\"endpoint\"}}"
+    },
+    {
+      "source": "operation-policy",
+      "rule": "operation-policy-changed",
+      "operationId": "insights.listPendingInsights",
+      "detail": "{\"base\":{\"agentConfirmation\":\"not-required\",\"kind\":\"query\",\"requiredScope\":\"read\",\"requiredTier\":\"free\",\"scopeEvaluation\":\"endpoint\"},\"candidate\":{\"agentConfirmation\":\"not-required\",\"callerEligibility\":\"authenticated\",\"kind\":\"query\",\"requiredScope\":\"read\",\"requiredTier\":\"free\",\"scopeEvaluation\":\"endpoint\"}}"
+    },
+    {
+      "source": "operation-policy",
+      "rule": "operation-policy-changed",
+      "operationId": "memory.recall",
+      "detail": "{\"base\":{\"agentConfirmation\":\"not-required\",\"kind\":\"query\",\"requiredScope\":\"read\",\"requiredTier\":\"free\",\"scopeEvaluation\":\"endpoint\"},\"candidate\":{\"agentConfirmation\":\"not-required\",\"callerEligibility\":\"authenticated\",\"kind\":\"query\",\"requiredScope\":\"read\",\"requiredTier\":\"free\",\"scopeEvaluation\":\"endpoint\"}}"
+    },
+    {
+      "source": "operation-policy",
+      "rule": "operation-policy-changed",
+      "operationId": "subscription.getUpgradeUrl",
+      "detail": "{\"base\":{\"agentConfirmation\":\"not-required\",\"kind\":\"query\",\"requiredScope\":\"read\",\"requiredTier\":\"free\",\"scopeEvaluation\":\"endpoint\"},\"candidate\":{\"agentConfirmation\":\"not-required\",\"callerEligibility\":\"authenticated\",\"kind\":\"query\",\"requiredScope\":\"read\",\"requiredTier\":\"free\",\"scopeEvaluation\":\"endpoint\"}}"
+    },
+    {
+      "source": "operation-policy",
+      "rule": "operation-policy-changed",
+      "operationId": "transactions.getTransaction",
+      "detail": "{\"base\":{\"agentConfirmation\":\"not-required\",\"kind\":\"query\",\"requiredScope\":\"read\",\"requiredTier\":\"free\",\"scopeEvaluation\":\"endpoint\"},\"candidate\":{\"agentConfirmation\":\"not-required\",\"callerEligibility\":\"authenticated\",\"kind\":\"query\",\"requiredScope\":\"read\",\"requiredTier\":\"free\",\"scopeEvaluation\":\"endpoint\"}}"
+    },
+    {
+      "source": "operation-policy",
+      "rule": "operation-policy-changed",
+      "operationId": "transactions.listSourceAttestations",
+      "detail": "{\"base\":{\"agentConfirmation\":\"not-required\",\"kind\":\"query\",\"requiredScope\":\"read\",\"requiredTier\":\"free\",\"scopeEvaluation\":\"endpoint\"},\"candidate\":{\"agentConfirmation\":\"not-required\",\"callerEligibility\":\"authenticated\",\"kind\":\"query\",\"requiredScope\":\"read\",\"requiredTier\":\"free\",\"scopeEvaluation\":\"endpoint\"}}"
+    },
+    {
+      "source": "operation-policy",
+      "rule": "operation-policy-changed",
+      "operationId": "transactions.listTransactions",
+      "detail": "{\"base\":{\"agentConfirmation\":\"not-required\",\"kind\":\"query\",\"requiredScope\":\"read\",\"requiredTier\":\"free\",\"scopeEvaluation\":\"endpoint\"},\"candidate\":{\"agentConfirmation\":\"not-required\",\"callerEligibility\":\"authenticated\",\"kind\":\"query\",\"requiredScope\":\"read\",\"requiredTier\":\"free\",\"scopeEvaluation\":\"endpoint\"}}"
+    },
+    {
+      "source": "operation-policy",
+      "rule": "operation-policy-changed",
+      "operationId": "dashboard.applyDashboardEdit",
+      "detail": "{\"base\":{\"agentConfirmation\":\"required\",\"kind\":\"mutation\",\"requiredScope\":\"dashboard\",\"requiredTier\":\"free\",\"scopeEvaluation\":\"endpoint\"},\"candidate\":{\"agentConfirmation\":\"required\",\"callerEligibility\":\"authenticated\",\"kind\":\"mutation\",\"requiredScope\":\"dashboard\",\"requiredTier\":\"free\",\"scopeEvaluation\":\"endpoint\"}}"
+    },
+    {
+      "source": "operation-policy",
+      "rule": "operation-policy-changed",
+      "operationId": "operations.executeAtomicBatch",
+      "detail": "{\"base\":{\"agentConfirmation\":\"required\",\"kind\":\"mutation\",\"requiredScope\":\"write\",\"requiredTier\":\"free\",\"scopeEvaluation\":\"children\"},\"candidate\":{\"agentConfirmation\":\"required\",\"callerEligibility\":\"authenticated\",\"kind\":\"mutation\",\"requiredScope\":\"write\",\"requiredTier\":\"free\",\"scopeEvaluation\":\"children\"}}"
+    },
+    {
+      "source": "operation-policy",
+      "rule": "operation-policy-changed",
+      "operationId": "budgets.deleteBudget",
+      "detail": "{\"base\":{\"agentConfirmation\":\"required\",\"kind\":\"mutation\",\"requiredScope\":\"write\",\"requiredTier\":\"free\",\"scopeEvaluation\":\"endpoint\"},\"candidate\":{\"agentConfirmation\":\"required\",\"callerEligibility\":\"authenticated\",\"kind\":\"mutation\",\"requiredScope\":\"write\",\"requiredTier\":\"free\",\"scopeEvaluation\":\"endpoint\"}}"
+    },
+    {
+      "source": "operation-policy",
+      "rule": "operation-policy-changed",
+      "operationId": "budgets.updateBudget",
+      "detail": "{\"base\":{\"agentConfirmation\":\"required\",\"kind\":\"mutation\",\"requiredScope\":\"write\",\"requiredTier\":\"free\",\"scopeEvaluation\":\"endpoint\"},\"candidate\":{\"agentConfirmation\":\"required\",\"callerEligibility\":\"authenticated\",\"kind\":\"mutation\",\"requiredScope\":\"write\",\"requiredTier\":\"free\",\"scopeEvaluation\":\"endpoint\"}}"
+    },
+    {
+      "source": "operation-policy",
+      "rule": "operation-policy-changed",
+      "operationId": "categories.deleteKeywordRule",
+      "detail": "{\"base\":{\"agentConfirmation\":\"required\",\"kind\":\"mutation\",\"requiredScope\":\"write\",\"requiredTier\":\"free\",\"scopeEvaluation\":\"endpoint\"},\"candidate\":{\"agentConfirmation\":\"required\",\"callerEligibility\":\"authenticated\",\"kind\":\"mutation\",\"requiredScope\":\"write\",\"requiredTier\":\"free\",\"scopeEvaluation\":\"endpoint\"}}"
+    },
+    {
+      "source": "operation-policy",
+      "rule": "operation-policy-changed",
+      "operationId": "categories.updateKeywordRule",
+      "detail": "{\"base\":{\"agentConfirmation\":\"required\",\"kind\":\"mutation\",\"requiredScope\":\"write\",\"requiredTier\":\"free\",\"scopeEvaluation\":\"endpoint\"},\"candidate\":{\"agentConfirmation\":\"required\",\"callerEligibility\":\"authenticated\",\"kind\":\"mutation\",\"requiredScope\":\"write\",\"requiredTier\":\"free\",\"scopeEvaluation\":\"endpoint\"}}"
+    },
+    {
+      "source": "operation-policy",
+      "rule": "operation-policy-changed",
+      "operationId": "ingestion.resolveNeedsReviewItem",
+      "detail": "{\"base\":{\"agentConfirmation\":\"required\",\"kind\":\"mutation\",\"requiredScope\":\"write\",\"requiredTier\":\"free\",\"scopeEvaluation\":\"endpoint\"},\"candidate\":{\"agentConfirmation\":\"required\",\"callerEligibility\":\"authenticated\",\"kind\":\"mutation\",\"requiredScope\":\"write\",\"requiredTier\":\"free\",\"scopeEvaluation\":\"endpoint\"}}"
+    },
+    {
+      "source": "operation-policy",
+      "rule": "operation-policy-changed",
+      "operationId": "insights.dismissInsight",
+      "detail": "{\"base\":{\"agentConfirmation\":\"required\",\"kind\":\"mutation\",\"requiredScope\":\"write\",\"requiredTier\":\"free\",\"scopeEvaluation\":\"endpoint\"},\"candidate\":{\"agentConfirmation\":\"required\",\"callerEligibility\":\"authenticated\",\"kind\":\"mutation\",\"requiredScope\":\"write\",\"requiredTier\":\"free\",\"scopeEvaluation\":\"endpoint\"}}"
+    },
+    {
+      "source": "operation-policy",
+      "rule": "operation-policy-changed",
+      "operationId": "insights.markInsightDelivered",
+      "detail": "{\"base\":{\"agentConfirmation\":\"required\",\"kind\":\"mutation\",\"requiredScope\":\"write\",\"requiredTier\":\"free\",\"scopeEvaluation\":\"endpoint\"},\"candidate\":{\"agentConfirmation\":\"required\",\"callerEligibility\":\"authenticated\",\"kind\":\"mutation\",\"requiredScope\":\"write\",\"requiredTier\":\"free\",\"scopeEvaluation\":\"endpoint\"}}"
+    },
+    {
+      "source": "operation-policy",
+      "rule": "operation-policy-changed",
+      "operationId": "insights.markInsightRead",
+      "detail": "{\"base\":{\"agentConfirmation\":\"required\",\"kind\":\"mutation\",\"requiredScope\":\"write\",\"requiredTier\":\"free\",\"scopeEvaluation\":\"endpoint\"},\"candidate\":{\"agentConfirmation\":\"required\",\"callerEligibility\":\"authenticated\",\"kind\":\"mutation\",\"requiredScope\":\"write\",\"requiredTier\":\"free\",\"scopeEvaluation\":\"endpoint\"}}"
+    },
+    {
+      "source": "operation-policy",
+      "rule": "operation-policy-changed",
+      "operationId": "memory.forget",
+      "detail": "{\"base\":{\"agentConfirmation\":\"required\",\"kind\":\"mutation\",\"requiredScope\":\"write\",\"requiredTier\":\"free\",\"scopeEvaluation\":\"endpoint\"},\"candidate\":{\"agentConfirmation\":\"required\",\"callerEligibility\":\"authenticated\",\"kind\":\"mutation\",\"requiredScope\":\"write\",\"requiredTier\":\"free\",\"scopeEvaluation\":\"endpoint\"}}"
+    },
+    {
+      "source": "operation-policy",
+      "rule": "operation-policy-changed",
+      "operationId": "memory.revise",
+      "detail": "{\"base\":{\"agentConfirmation\":\"required\",\"kind\":\"mutation\",\"requiredScope\":\"write\",\"requiredTier\":\"free\",\"scopeEvaluation\":\"endpoint\"},\"candidate\":{\"agentConfirmation\":\"required\",\"callerEligibility\":\"authenticated\",\"kind\":\"mutation\",\"requiredScope\":\"write\",\"requiredTier\":\"free\",\"scopeEvaluation\":\"endpoint\"}}"
+    },
+    {
+      "source": "operation-policy",
+      "rule": "operation-policy-changed",
+      "operationId": "transactions.deleteTransaction",
+      "detail": "{\"base\":{\"agentConfirmation\":\"required\",\"kind\":\"mutation\",\"requiredScope\":\"write\",\"requiredTier\":\"free\",\"scopeEvaluation\":\"endpoint\"},\"candidate\":{\"agentConfirmation\":\"required\",\"callerEligibility\":\"authenticated\",\"kind\":\"mutation\",\"requiredScope\":\"write\",\"requiredTier\":\"free\",\"scopeEvaluation\":\"endpoint\"}}"
+    },
+    {
+      "source": "operation-policy",
+      "rule": "operation-policy-changed",
+      "operationId": "transactions.updateTransaction",
+      "detail": "{\"base\":{\"agentConfirmation\":\"required\",\"kind\":\"mutation\",\"requiredScope\":\"write\",\"requiredTier\":\"free\",\"scopeEvaluation\":\"endpoint\"},\"candidate\":{\"agentConfirmation\":\"required\",\"callerEligibility\":\"authenticated\",\"kind\":\"mutation\",\"requiredScope\":\"write\",\"requiredTier\":\"free\",\"scopeEvaluation\":\"endpoint\"}}"
+    }
+  ],
+  "rolloutIssue": "https://github.com/B4rz99/fidy-ai/issues/238"
+}

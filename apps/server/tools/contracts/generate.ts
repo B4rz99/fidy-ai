@@ -26,6 +26,7 @@ export const makeContractArtifacts = (): ContractArtifacts => ({
           requiredScope: policy.requiredCapability,
           scopeEvaluation:
             policy.capabilityEvaluation === "operation" ? "endpoint" : policy.capabilityEvaluation,
+          callerEligibility: policy.callerEligibility,
           requiredTier: policy.requiredTier,
           agentConfirmation: policy.agentConfirmation,
           kind: policy.kind,

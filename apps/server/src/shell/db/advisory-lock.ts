@@ -27,6 +27,10 @@ export const advisoryLockKey = {
     value: `budgets:${userId}`,
     seed: 0,
   }),
+  browserLoginApproval: (userId: UserId): AdvisoryLockKey => ({
+    value: `browser-login-approval:${userId}`,
+    seed: 0,
+  }),
   dashboard: (userId: UserId): AdvisoryLockKey => ({ value: userId, seed: 15 }),
   hostedAttempt: hostedAttemptLockKey,
   memories: (userId: UserId): AdvisoryLockKey => ({

@@ -65,15 +65,31 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         for (const operation of operations) {
           expect(Option.isSome(operation.requiredScope), operation.id).toBe(true);
           expect(Option.isSome(operation.requiredTier), operation.id).toBe(true);
+          expect(Option.isSome(operation.callerEligibility), operation.id).toBe(true);
           expect(Option.isSome(operation.agentConfirmation), operation.id).toBe(true);
           expect(Option.isSome(operation.kind), operation.id).toBe(true);
         }
       })
     );
 
+    it.effect("publishes browser approval as the only hosted-WhatsApp-only operation", () =>
+      Effect.gen(function* () {
+        const operations = yield* publishedOperations;
+        const restricted = operations
+          .filter(
+            (operation) =>
+              Option.getOrUndefined(operation.callerEligibility) === "verified-whatsapp-hosted-only"
+          )
+          .map((operation) => operation.id);
+
+        expect(restricted).toEqual(["browserLogin.approvePairing"]);
+      })
+    );
+
     it.effect("classifies every canonical operation as a query or mutation", () =>
       Effect.gen(function* () {
         const expected = {
+          "browserLogin.approvePairing": "mutation",
           "identity.getCurrentUser": "query",
           "identity.updateUserPreferences": "mutation",
           "categories.listCategories": "query",
@@ -148,6 +164,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
     it.effect("assigns explicit hosted-agent confirmation policy to every operation", () =>
       Effect.gen(function* () {
         const expected = {
+          "browserLogin.approvePairing": "required",
           "identity.getCurrentUser": "not-required",
           "identity.updateUserPreferences": "not-required",
           "categories.listCategories": "not-required",

@@ -1,5 +1,5 @@
 import { expect, it } from "@effect/vitest";
-import { Effect, Option, Schema } from "effect";
+import { Option, Schema } from "effect";
 import {
   BrowserLoginPublicCodeInput,
   browserLoginPublicCodeAlphabet,
@@ -36,16 +36,14 @@ it("maps equal byte ranges to every symbol and rejects the biased tail", () => {
   ).toBe("ZB");
 });
 
-it.effect("binds only when no newer or equal Ready challenge exists", () =>
-  Effect.gen(function* () {
-    expect(
-      yield* decideApprovalTransition({ candidateOrdinal: 2n, readyOrdinal: Option.none() })
-    ).toBe("bind");
-    expect(
-      yield* decideApprovalTransition({ candidateOrdinal: 2n, readyOrdinal: Option.some(1n) })
-    ).toBe("bind");
-    expect(
-      yield* decideApprovalTransition({ candidateOrdinal: 2n, readyOrdinal: Option.some(2n) })
-    ).toBe("reject");
-  })
-);
+it("binds only when no newer or equal Ready challenge exists", () => {
+  expect(decideApprovalTransition({ candidateOrdinal: 2n, readyOrdinal: Option.none() })).toBe(
+    "bind"
+  );
+  expect(decideApprovalTransition({ candidateOrdinal: 2n, readyOrdinal: Option.some(1n) })).toBe(
+    "bind"
+  );
+  expect(decideApprovalTransition({ candidateOrdinal: 2n, readyOrdinal: Option.some(2n) })).toBe(
+    "reject"
+  );
+});

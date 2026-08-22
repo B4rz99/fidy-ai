@@ -198,10 +198,10 @@ const bindApprovalCandidate = Effect.fn("BrowserLogin.bindApprovalCandidate")(fu
     `,
   })(input.userId).pipe(Effect.orDie);
   if (
-    (yield* decideApprovalTransition({
+    decideApprovalTransition({
       candidateOrdinal: input.candidate.createdOrdinal,
       readyOrdinal: Option.map(readyOrdinal, ({ createdOrdinal }) => createdOrdinal),
-    })) === "reject"
+    }) === "reject"
   ) {
     return yield* browserLoginApprovalRejected();
   }

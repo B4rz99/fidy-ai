@@ -1,4 +1,4 @@
-import { DateTime, Effect, Option, Schema, SchemaTransformation } from "effect";
+import { DateTime, Option, Schema, SchemaTransformation } from "effect";
 /** Minimum cadence advertised to browsers polling a pairing challenge. */
 export const browserLoginPollingIntervalSeconds = 5;
 
@@ -48,12 +48,11 @@ export const formatPublicCode = (symbols: BrowserLoginPublicCodeSymbols): Browse
 export const decideApprovalTransition = (input: {
   readonly candidateOrdinal: bigint;
   readonly readyOrdinal: Option.Option<bigint>;
-}): Effect.Effect<"bind" | "reject"> =>
-  Effect.succeed(
-    Option.isNone(input.readyOrdinal) || input.readyOrdinal.value < input.candidateOrdinal
-      ? "bind"
-      : "reject"
-  );
+}): "bind" | "reject" =>
+  Option.match(input.readyOrdinal, {
+    onNone: () => "bind",
+    onSome: (readyOrdinal) => (readyOrdinal < input.candidateOrdinal ? "bind" : "reject"),
+  });
 
 /** Expiry is fixed by the challenge creation instant, not caller input. */
 export const browserLoginPairingExpiry = (createdAt: DateTime.Utc): DateTime.Utc =>

@@ -77,7 +77,8 @@ export const validateProductionArtifact = async (
       onlyFiles: true,
     })
   ).sort();
-  const missing = [...REQUIRED_PATHS].filter((path) => !paths.includes(path));
+  const pathSet = new Set(paths);
+  const missing = [...REQUIRED_PATHS].filter((path) => !pathSet.has(path));
   if (missing.length > 0) {
     throw new Error(`production artifact is missing required files: ${missing.join(", ")}`);
   }
@@ -90,7 +91,7 @@ export const validateProductionArtifact = async (
   }
   const shell = await Bun.file(`${request.directory}/index.html`).text();
   const shellAssets = Array.from(shell.matchAll(SHELL_ASSET_REFERENCE), (match) => match[1]);
-  const missingShellAsset = shellAssets.find((path) => path === undefined || !paths.includes(path));
+  const missingShellAsset = shellAssets.find((path) => path === undefined || !pathSet.has(path));
   if (shellAssets.length === 0 || missingShellAsset !== undefined) {
     throw new Error(
       `production artifact shell references a missing hashed asset${

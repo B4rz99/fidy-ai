@@ -10,6 +10,13 @@ export type OperationTier = typeof OperationTier.Type;
 export const AgentConfirmation = Schema.Literals(["not-required", "required"]);
 export type AgentConfirmation = typeof AgentConfirmation.Type;
 
+/** Which attributable caller kinds may invoke a canonical operation. */
+export const CallerEligibility = Schema.Literals([
+  "authenticated",
+  "verified-whatsapp-hosted-only",
+]);
+export type CallerEligibility = typeof CallerEligibility.Type;
+
 /** Whether an operation observes domain state or requests a transition, durable work, or external effect. */
 export const CanonicalOperationKind = Schema.Literals(["query", "mutation"]);
 export type CanonicalOperationKind = typeof CanonicalOperationKind.Type;
@@ -19,6 +26,8 @@ export type OperationPolicyValue = {
   readonly requiredCapability: CanonicalCapability;
   /** Whether authorization checks this canonical operation or each schema-derived child operation. */
   readonly capabilityEvaluation: "operation" | "children";
+  /** Restricts security-sensitive operations that must never be callable with a transferable bearer. */
+  readonly callerEligibility: CallerEligibility;
   readonly requiredTier: OperationTier;
   readonly agentConfirmation: AgentConfirmation;
   readonly kind: CanonicalOperationKind;
@@ -46,21 +55,27 @@ export const getOperationPolicy = (endpoint: PolicyAnnotatedOperation): Operatio
  * runtime policy and generated OpenAPI extensions are created together so they
  * cannot drift into separate route maps.
  */
-type OperationPolicyInput = Omit<OperationPolicyValue, "capabilityEvaluation">;
+type OperationPolicyInput = Omit<
+  OperationPolicyValue,
+  "capabilityEvaluation" | "callerEligibility"
+>;
 
 const makeOperationPolicy = (
   { requiredCapability, requiredTier, agentConfirmation, kind }: OperationPolicyInput,
-  capabilityEvaluation: OperationPolicyValue["capabilityEvaluation"]
+  capabilityEvaluation: OperationPolicyValue["capabilityEvaluation"],
+  callerEligibility: OperationPolicyValue["callerEligibility"]
 ): Context.Context<OperationPolicy | OpenApi.Override> =>
   Context.make(OperationPolicy, {
     requiredCapability,
     capabilityEvaluation,
+    callerEligibility,
     requiredTier,
     agentConfirmation,
     kind,
   }).pipe(
     Context.add(OpenApi.Override, {
       "x-fidy-required-scope": requiredCapability,
+      "x-fidy-caller-eligibility": callerEligibility,
       "x-fidy-required-tier": requiredTier,
       "x-fidy-agent-confirmation": agentConfirmation,
       "x-fidy-operation-kind": kind,
@@ -69,9 +84,17 @@ const makeOperationPolicy = (
 
 export const operationPolicy = (
   policy: OperationPolicyInput
-): Context.Context<OperationPolicy | OpenApi.Override> => makeOperationPolicy(policy, "operation");
+): Context.Context<OperationPolicy | OpenApi.Override> =>
+  makeOperationPolicy(policy, "operation", "authenticated");
+
+/** Restricts one canonical operation to the non-transferable hosted WhatsApp Turn authority. */
+export const hostedWhatsAppOperationPolicy = (
+  policy: OperationPolicyInput
+): Context.Context<OperationPolicy | OpenApi.Override> =>
+  makeOperationPolicy(policy, "operation", "verified-whatsapp-hosted-only");
 
 /** Policy constructor reserved for operations whose children carry authoritative capabilities. */
 export const childCapabilityOperationPolicy = (
   policy: OperationPolicyInput
-): Context.Context<OperationPolicy | OpenApi.Override> => makeOperationPolicy(policy, "children");
+): Context.Context<OperationPolicy | OpenApi.Override> =>
+  makeOperationPolicy(policy, "children", "authenticated");

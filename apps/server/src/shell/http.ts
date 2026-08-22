@@ -1,14 +1,16 @@
-import { Config, Effect, Layer, Schema } from "effect";
-import { HttpRouter, HttpServerResponse } from "effect/unstable/http";
+import { Config, Effect, Layer, Option, Schema } from "effect";
+import { HttpRouter, type HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
 import { HttpApiBuilder, HttpApiScalar } from "effect/unstable/httpapi";
 import { TokenAuthorizationLive } from "~/shell/_shared/authz-live";
 import { makeExactOriginCors } from "~/shell/_shared/exact-origin-cors";
 import { ValidationGateLive } from "~/shell/_shared/errors-live";
+import { CanonicalRetryAfterBody } from "~/shell/_shared/errors";
 import { externalEndpoints } from "~/shell/_shared/external-endpoints";
 import { AuditRetentionLive } from "~/shell/audit/retention";
 import { PendingConsentRetentionLive } from "~/shell/consent/retention";
 import { AgentService } from "~/shell/agent/agent-service";
 import { OpenAiHostedInferenceLive, OpenAiLanguageModelLive } from "~/shell/agent/openai";
+import { BrowserLoginLive, BrowserLoginWebAuthLive } from "~/shell/browser-login/handlers";
 import { BudgetsLive } from "~/shell/budgets/handlers";
 import { CategoriesLive } from "~/shell/categories/handlers";
 import { KapsoClient } from "~/shell/channels/whatsapp/kapso-client";
@@ -54,6 +56,7 @@ export const ApiLive = HttpApiBuilder.layer(FidyApi, { openapiPath: "/openapi.js
   // its routes, so a sibling layer would not be found.
   Layer.provide(
     Layer.mergeAll(
+      BrowserLoginLive,
       IdentityLive,
       CategoriesLive,
       BudgetsLive,
@@ -100,6 +103,33 @@ const canonicalCorsMethods = Array.from(
  * namespace. Missing or malformed origin configuration fails Layer startup,
  * before the router can serve any canonical or callback behavior.
  */
+const tooManyRequestsStatus = 429;
+
+type RetryAfterHeader = <E, R>(
+  httpEffect: Effect.Effect<HttpServerResponse.HttpServerResponse, E, R>
+) => Effect.Effect<
+  HttpServerResponse.HttpServerResponse,
+  E,
+  R | HttpServerRequest.HttpServerRequest
+>;
+
+/** Adds the standard HTTP delay header to every typed 429 carrying an exact retry interval. */
+const addRetryAfterHeader: RetryAfterHeader = (httpEffect) =>
+  Effect.map(httpEffect, (response) => {
+    if (response.status !== tooManyRequestsStatus || response.body._tag !== "Uint8Array") {
+      return response;
+    }
+    const decoded = Schema.decodeUnknownOption(Schema.fromJsonString(CanonicalRetryAfterBody))(
+      new TextDecoder().decode(response.body.body)
+    );
+    return Option.match(decoded, {
+      onNone: () => response,
+      onSome: ({ error }) =>
+        HttpServerResponse.setHeader(response, "retry-after", String(error.retryAfterSeconds)),
+    });
+  });
+const RetryAfterHeaderLive = HttpRouter.middleware(addRetryAfterHeader, { global: true });
+
 export const ExactOriginCorsLive = Layer.unwrap(
   Effect.map(externalEndpoints, ({ webOrigin }) =>
     HttpRouter.middleware(
@@ -120,10 +150,12 @@ export const ExactOriginCorsLive = Layer.unwrap(
 export const HttpLive = HttpRouter.serve(
   Layer.mergeAll(
     ApiLive,
+    BrowserLoginWebAuthLive,
     HttpApiScalar.layer(FidyApi, { path: "/docs" }),
     HealthLive,
     KapsoWebhookLive,
-    ExactOriginCorsLive
+    ExactOriginCorsLive,
+    RetryAfterHeaderLive
   )
 );
 

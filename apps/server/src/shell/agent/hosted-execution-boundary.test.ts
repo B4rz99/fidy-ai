@@ -29,6 +29,7 @@ const hostedCaller: CanonicalCaller = {
   subjectUserId: boundaryUserId,
   capabilities: allCanonicalCapabilities,
   auditCaller: { _tag: "HostedAgentSession", hostedAgentSessionId: boundarySessionId },
+  authorityRoot: "verified-whatsapp",
 };
 
 const bindingFor = (operation: string): (typeof agentOperationBindings)[number] => {

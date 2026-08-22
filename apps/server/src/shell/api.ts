@@ -3,6 +3,7 @@ import { TokenAuthorization } from "~/shell/_shared/authz";
 import { CanonicalTelemetry } from "~/shell/_shared/canonical-telemetry";
 import { ValidationGate } from "~/shell/_shared/errors";
 import { bindOperationCatalog, makeOperationCatalog } from "~/shell/_shared/operation-catalog";
+import { BrowserLoginGroup } from "~/shell/browser-login/operations";
 import { BudgetsGroup } from "~/shell/budgets/operations";
 import { CategoriesGroup } from "~/shell/categories/operations";
 import { DashboardGroup } from "~/shell/dashboard/operations";
@@ -15,6 +16,7 @@ import { SubscriptionGroup } from "~/shell/subscription/operations";
 import { TransactionsGroup } from "~/shell/transactions/operations";
 
 const OrdinaryFidyApi = HttpApi.make("fidy")
+  .add(BrowserLoginGroup)
   .add(IdentityGroup)
   .add(CategoriesGroup)
   .add(BudgetsGroup)

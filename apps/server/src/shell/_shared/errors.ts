@@ -2,6 +2,11 @@ import { Schema } from "effect";
 import { HttpApiMiddleware } from "effect/unstable/httpapi";
 import { NextOperations } from "./response";
 
+/** Canonical typed-error fragment used to derive the HTTP Retry-After header. */
+export const CanonicalRetryAfterBody = Schema.Struct({
+  error: Schema.Struct({ retryAfterSeconds: Schema.Int.check(Schema.isGreaterThan(0)) }),
+});
+
 /**
  * Every code an error response may carry, for every slice. Closed on purpose:
  * a calling agent can branch on this set and know it has covered the space, and
@@ -32,6 +37,15 @@ export const ErrorCode = Schema.Literals([
   "not_found",
 ]);
 export type ErrorCode = typeof ErrorCode.Type;
+
+/** Shared protocol for expected canonical refusals that audit as rejected rather than failed. */
+export const CanonicalRejectedFailure = Schema.Struct({
+  canonicalOutcome: Schema.Literal("rejected"),
+});
+export type CanonicalRejectedFailure = typeof CanonicalRejectedFailure.Type;
+
+/** Recognizes the declared canonical-rejection protocol without inspecting arbitrary objects. */
+export const isCanonicalRejectedFailure = Schema.is(CanonicalRejectedFailure);
 
 // The vocabulary an agent is handed, rendered from the set itself: spelling the
 // codes out again in the prose would be a second copy of a closed set, drifting

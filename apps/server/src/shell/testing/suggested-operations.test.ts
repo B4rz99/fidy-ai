@@ -13,7 +13,7 @@ import { CategoryKeyword } from "~/core/categories/model";
 import { categoryIds } from "~/core/categories/taxonomy";
 import { TransactionId } from "~/core/transactions/model";
 import { type PatScope, TokenBearer } from "~/core/tokens/model";
-import { NotFound } from "~/shell/_shared/errors";
+import { NotFound, ScopeMissing } from "~/shell/_shared/errors";
 import {
   type SuggestedOperationCaller,
   canCallOperation,
@@ -56,6 +56,15 @@ const budgetCap = Money.make({
  * in the guard.
  */
 const probes: Record<OperationId, SuggestedOperationProbe> = {
+  "browserLogin.approvePairing": (client) =>
+    Effect.gen(function* () {
+      const result = yield* Effect.result(
+        client.browserLogin.approvePairing({ payload: { publicCode: "BCDF-GHJK" } })
+      );
+      if (Result.isSuccess(result)) return yield* Effect.die("expected bearer refusal");
+      return [yield* Schema.decodeUnknownEffect(ScopeMissing)(result.failure)];
+    }),
+
   "identity.getCurrentUser": (client) =>
     Effect.map(client.identity.getCurrentUser(), (response) => [response]),
 

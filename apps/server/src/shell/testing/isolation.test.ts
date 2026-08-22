@@ -91,6 +91,11 @@ type IsolationProbe = (
  * catches the runtime case — a published operation this union never heard of.
  */
 const probes: Record<OperationId, IsolationProbe> = {
+  "browserLogin.approvePairing": (attempt) =>
+    Effect.result(
+      attempt.strangerClient.browserLogin.approvePairing({ payload: { publicCode: "BCDF-GHJK" } })
+    ).pipe(Effect.asVoid),
+
   "identity.getCurrentUser": (attempt) =>
     Effect.gen(function* () {
       const current = yield* attempt.strangerClient.identity.getCurrentUser();

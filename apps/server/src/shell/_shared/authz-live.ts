@@ -86,11 +86,10 @@ class ScopeAuthenticationRejected extends Data.TaggedError("ScopeAuthenticationR
   readonly resolved: ResolvedToken;
 }> {}
 
-/** A declared scope the bearer never held. Only the hosted seam raises the other reasons. */
-const isCapabilityMissing = (cause: Cause.Cause<unknown>): boolean =>
-  Option.exists(
-    findCanonicalCallRejected(cause),
-    (rejection) => rejection.reason === "capability_missing"
+/** A transferable bearer can neither exceed its scope nor invoke hosted-only authority. */
+const isBearerIneligible = (cause: Cause.Cause<unknown>): boolean =>
+  Option.exists(findCanonicalCallRejected(cause), (rejection) =>
+    ["capability_missing", "caller_ineligible"].includes(rejection.reason)
   );
 
 /**
@@ -169,6 +168,7 @@ const canonicalCallerFromPat = (resolved: ResolvedToken): CanonicalCaller => ({
   subjectUserId: resolved.subjectUserId,
   capabilities: canonicalCapabilitiesFromPatScopes(resolved.scopes),
   auditCaller: { _tag: "PAT", patId: resolved.tokenId },
+  authorityRoot: "no-verified-whatsapp-authority",
 });
 
 type AuthorizedEndpointInput<A, E, R> = Readonly<{
@@ -200,7 +200,7 @@ const executeAuthorizedEndpoint = Effect.fn("executeAuthorizedEndpoint")(functio
   // An unauthorized call is not successful use, so its rejection escapes the bearer transaction and
   // takes the idle renewal down with it. A failed *authorized* operation keeps the renewal: the
   // bearer did work it was entitled to. Evidence is re-appended after the rollback.
-  if (Exit.isFailure(exit) && isCapabilityMissing(exit.cause)) {
+  if (Exit.isFailure(exit) && isBearerIneligible(exit.cause)) {
     return yield* new ScopeAuthenticationRejected({ resolved });
   }
   return { _tag: "OperationCompleted", exit } as const;

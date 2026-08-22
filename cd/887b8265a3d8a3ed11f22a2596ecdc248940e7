@@ -1,0 +1,36 @@
+apps/server/tools/contracts/check.ts
+  s_e1a8dd16afdc3b::t_1e99b4d4e12fdc 3-4,8-9,30,146,148,150-151,154-156,186-229
+  s_e1a8dd16afdc3b::t_5d03be61efa738 17-18,28-29,163-172,230
+  s_e1a8dd16afdc3b::t_48ab474e2b1b52 265
+  s_e1a8dd16afdc3b::t_bed0479786f5cb 31,147,149,152-153,157-162
+  s_e1a8dd16afdc3b::t_744a24cf0e1560 231
+apps/server/tools/contracts/compatibility.ts
+  s_e1a8dd16afdc3b::t_cb27b23a51b681 171-173
+  s_e1a8dd16afdc3b::t_8bac03e442180d 49-54,118-123,230-256
+  s_e1a8dd16afdc3b::t_aee0bd744bedbe 125,143-150,196-197
+  s_e1a8dd16afdc3b::t_7965ed5614af46 124
+  s_e1a8dd16afdc3b::t_407c73a924f46a 126
+apps/server/tools/contracts/compatibility.test.ts
+  s_e1a8dd16afdc3b::t_ba32d9fee47b04 10-11,201-237,239-257
+  s_e1a8dd16afdc3b::t_efa207995f4d4d 113-165
+  s_e1a8dd16afdc3b::t_48ab474e2b1b52 238
+  s_e1a8dd16afdc3b::t_1c65f1579b7d24 258
+docs/contract-compatibility.md
+  s_e1a8dd16afdc3b::t_84fe83a3353e6f 37-42,49-58,78-82
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.23",
+  "base_commit_sha": "cd887b8265a3d8a3ed11f22a2596ecdc248940e7",
+  "prompts": {},
+  "sessions": {
+    "s_e1a8dd16afdc3b": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a02960-f57f-7294-87fe-cdf115627d2c",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

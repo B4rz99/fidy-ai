@@ -1,0 +1,21 @@
+apps/server/src/shell/_shared/authz-live.ts
+  s_a3db3434426441::t_6dd6d6f081d962 233-237,313,322-323,325-327,344-345,348
+  s_a3db3434426441::t_08d80ae78afd1e 36,38-40,42-48,324,346-347
+  s_a3db3434426441::t_1a6580a556e8a7 37
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.23",
+  "base_commit_sha": "0e1be6e3c20da25c5538424d664dc4158af07f9c",
+  "prompts": {},
+  "sessions": {
+    "s_a3db3434426441": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a02a5c-8e88-7a4e-b7a1-54096a34f70a",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

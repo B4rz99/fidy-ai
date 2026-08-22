@@ -1,0 +1,24 @@
+apps/server/src/shell/browser-login/repo.ts
+  s_a617e4dca5fc42::t_6b785a31cb8f2a 201,204
+apps/server/src/core/browser-login/rules.ts
+  s_a617e4dca5fc42::t_3c3404d5ba5c8a 52-55
+  s_a617e4dca5fc42::t_57294eaf6de20a 1,51
+apps/server/src/core/browser-login/rules.test.ts
+  s_a617e4dca5fc42::t_ee99d94843fa11 2,39-49
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.23",
+  "base_commit_sha": "e0f1139e9f0037ac1c73ef2cd6447dafaca82937",
+  "prompts": {},
+  "sessions": {
+    "s_a617e4dca5fc42": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a025ec-41cb-7aa9-9839-b13766741a6b",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

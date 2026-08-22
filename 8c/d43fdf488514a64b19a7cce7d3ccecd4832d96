@@ -1,0 +1,64 @@
+apps/server/tools/contracts/compatibility.ts
+  s_e1a8dd16afdc3b::t_aee0bd744bedbe 128,146-153,199-200
+  s_e1a8dd16afdc3b::t_407c73a924f46a 129
+  s_e1a8dd16afdc3b::t_7965ed5614af46 127
+  s_e1a8dd16afdc3b::t_cb27b23a51b681 174-176
+  s_e1a8dd16afdc3b::t_8bac03e442180d 49-54,122-126,233-259
+  s_e1a8dd16afdc3b::t_6909da8515b3cb 118-121
+apps/server/tools/contracts/check.test.ts
+  s_e1a8dd16afdc3b::t_ff30e4adefbf24 1,3,6-10,23-24,26-29,31-36,40-41,46-50,52-56,60-65,67-71,146
+  s_e1a8dd16afdc3b::t_0caecd499dd013 42
+  s_e1a8dd16afdc3b::t_c04c4e45698b97 66,72-75
+  s_e1a8dd16afdc3b::t_bcf2375434cf68 2,30,51
+  s_e1a8dd16afdc3b::t_72b40f7ab305c0 76-85
+  s_e1a8dd16afdc3b::t_18765a5396c365 25,37-39
+  s_e1a8dd16afdc3b::t_28efd459a97ed3 5,11-22,86-145
+  s_dbb20a9054d4bc::t_1f7c478fcc2689 43-45,57-59
+  s_e1a8dd16afdc3b::t_281bf74ab88ae0 4
+apps/server/tools/contracts/compatibility.test.ts
+  s_e1a8dd16afdc3b::t_48ab474e2b1b52 238
+  s_e1a8dd16afdc3b::t_efa207995f4d4d 113-165
+  s_e1a8dd16afdc3b::t_1c65f1579b7d24 258
+  s_e1a8dd16afdc3b::t_ba32d9fee47b04 10-11,201-237,239-257
+apps/server/tools/contracts/check.ts
+  s_e1a8dd16afdc3b::t_47775ee38e5045 255-296,308-313,322,329
+  s_e1a8dd16afdc3b::t_8d6e0c94efa91d 33-35,150,153,155-160,163-180,187-197,199-201,221-225
+  s_e1a8dd16afdc3b::t_744a24cf0e1560 334
+  s_e1a8dd16afdc3b::t_670049474c228b 32
+  s_e1a8dd16afdc3b::t_18765a5396c365 4,303,306
+  s_e1a8dd16afdc3b::t_1544ef3c6d54d0 3,202-220
+  s_e1a8dd16afdc3b::t_48ab474e2b1b52 364
+  s_e1a8dd16afdc3b::t_1e99b4d4e12fdc 8-9,30,297-302,304-305,307,314-321,323-328,330-332
+  s_e1a8dd16afdc3b::t_bed0479786f5cb 31,161-162
+  s_e1a8dd16afdc3b::t_5d03be61efa738 17-18,28-29,333
+  s_e1a8dd16afdc3b::t_6e585c1e31bce0 151-152,154,181-186,198
+  s_e1a8dd16afdc3b::t_689817132b1ceb 226
+  s_e1a8dd16afdc3b::t_b799aafca6c07e 227-241,356
+docs/contract-compatibility.md
+  s_e1a8dd16afdc3b::t_8eb8856cdd9228 37-42
+  s_e1a8dd16afdc3b::t_84fe83a3353e6f 43-44,51-60,80-84
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.23",
+  "base_commit_sha": "8cd43fdf488514a64b19a7cce7d3ccecd4832d96",
+  "prompts": {},
+  "sessions": {
+    "s_dbb20a9054d4bc": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a02980-5bca-7358-813d-27eec5a79b80",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": null
+    },
+    "s_e1a8dd16afdc3b": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a02960-f57f-7294-87fe-cdf115627d2c",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": null
+    }
+  }
+}

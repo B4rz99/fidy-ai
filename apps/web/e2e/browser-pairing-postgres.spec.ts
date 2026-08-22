@@ -6,6 +6,7 @@ const apiOrigin = "https://127.0.0.1:4174";
 const controlOrigin = "https://127.0.0.1:4175";
 const opaqueProofEncodedLength = 43;
 const successStatus = 200;
+const createdStatus = 201;
 const noContentStatus = 204;
 const invalidStatus = 400;
 const invalidPairingBody = {
@@ -46,8 +47,19 @@ const completePairing = async (page: Page, request: APIRequestContext): Promise<
   const publicCode = Option.getOrThrow(Option.fromNullishOr(await codeNode.textContent())).trim();
   expect(publicCode).toMatch(/^[A-Z2-9]{4}-[A-Z2-9]{4}$/u);
   await approvePairing(request, publicCode);
-  await expect(page.getByText("es-CO", { exact: true })).toBeVisible({ timeout: 10_000 });
+  await expect(page).toHaveURL(/\/app\/transactions$/u, { timeout: 10_000 });
+  await expect(page.getByRole("heading", { name: "Transacciones" })).toBeVisible();
   await expect(page.getByText("America/Bogota", { exact: true })).toBeVisible();
+};
+
+const SeededTransaction = Schema.Struct({ categoryLabel: Schema.String });
+
+const seedCurrentMonthTransaction = async (
+  request: APIRequestContext
+): Promise<typeof SeededTransaction.Type> => {
+  const response = await request.post(`${controlOrigin}/seed-current-month-transaction`);
+  expect(response.status()).toBe(createdStatus);
+  return Schema.decodeUnknownSync(SeededTransaction)(await response.json());
 };
 
 const observeSession = async (request: APIRequestContext): Promise<SessionObservation> => {
@@ -136,6 +148,23 @@ test("establishes, retains, replays, and revokes a real PostgreSQL WebSession", 
   await assertUnknownWrongVerifierRefused(request);
 });
 
+test("renders real current-month PostgreSQL Transactions and Categories", async ({
+  page,
+  request,
+}) => {
+  await resetAcceptanceState(request);
+  await completePairing(page, request);
+  const seeded = await seedCurrentMonthTransaction(request);
+
+  await page.reload();
+
+  await expect(page.getByText("Exactitud S.A.").first()).toBeVisible();
+  await expect(page.getByText(seeded.categoryLabel, { exact: true }).first()).toBeVisible();
+  await expect(page.getByText(/USD\s+9\.007\.199\.254\.740\.993,12/u).first()).toBeVisible();
+  await expect(page.getByText("Ingreso", { exact: true }).first()).toBeVisible();
+  await expect(page.getByText("America/Bogota", { exact: true })).toBeVisible();
+});
+
 test("drops Atom-owned User state when a real WebSession expires", async ({
   context,
   page,
@@ -155,5 +184,5 @@ test("drops Atom-owned User state when a real WebSession expires", async ({
   await expect
     .poll(async () => (await context.cookies()).some(({ name }) => name === "__Host-fidy_session"))
     .toBe(false);
-  await expect(page.getByText("es-CO", { exact: true })).not.toBeVisible();
+  await expect(page.getByRole("heading", { name: "Transacciones" })).not.toBeVisible();
 });

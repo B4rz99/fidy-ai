@@ -1,7 +1,12 @@
 // @vitest-environment node
 
-import { Effect, Layer } from "effect";
-import { HttpClient, type HttpClientRequest, HttpClientResponse } from "effect/unstable/http";
+import { DateTime, Effect, Layer, Option } from "effect";
+import {
+  HttpClient,
+  type HttpClientRequest,
+  HttpClientResponse,
+  UrlParams,
+} from "effect/unstable/http";
 import type * as HttpClientError from "effect/unstable/http/HttpClientError";
 import { AtomRegistry } from "effect/unstable/reactivity";
 import { describe, expect, it } from "vitest";
@@ -59,6 +64,50 @@ describe("canonical browser transport", () => {
 
       expect(response.data.url.href).toBe("https://upgrade.fidyapp.com/");
       expect(requests).toEqual(["https://api.test.fidyapp.com/subscription/upgrade-url"]);
+    } finally {
+      unmount();
+      registry.dispose();
+    }
+  });
+
+  it("serializes exact half-open UTC Transaction bounds through the derived client", async () => {
+    const requests: Array<
+      Readonly<{
+        url: string;
+        from: Option.Option<string>;
+        to: Option.Option<string>;
+      }>
+    > = [];
+    const httpClient = makeHttpClient((request) => {
+      requests.push({
+        url: request.url,
+        from: UrlParams.getFirst(request.urlParams, "from"),
+        to: UrlParams.getFirst(request.urlParams, "to"),
+      });
+      return Effect.succeed(responseJson(request, { data: [], next: [] }));
+    });
+    const client = makeFidyClient(
+      "https://api.test.fidyapp.com",
+      Layer.succeed(HttpClient.HttpClient, httpClient)
+    );
+    const atom = client.query("transactions", "listTransactions", {
+      query: {
+        from: DateTime.makeUnsafe("2026-03-01T05:00:00Z"),
+        to: DateTime.makeUnsafe("2026-04-01T04:00:00Z"),
+      },
+    });
+    const registry = AtomRegistry.make();
+    const unmount = registry.mount(atom);
+
+    try {
+      await Effect.runPromise(AtomRegistry.getResult(registry, atom));
+      expect(requests).toEqual([
+        {
+          url: "https://api.test.fidyapp.com/transactions",
+          from: Option.some("2026-03-01T05:00:00.000Z"),
+          to: Option.some("2026-04-01T04:00:00.000Z"),
+        },
+      ]);
     } finally {
       unmount();
       registry.dispose();

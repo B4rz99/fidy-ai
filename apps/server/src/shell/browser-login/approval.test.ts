@@ -22,10 +22,10 @@ import { upsertUser } from "~/shell/identity/repo";
 import { TelemetryDisabled } from "~/shell/observability/disabled";
 import { ApiHarness } from "~/shell/testing/api-harness";
 import {
+  BrowserLoginPairingApproval,
   BrowserLoginPairingApprovalRateLimited,
   BrowserLoginPairingApprovalRejected,
-} from "./approval-errors";
-import { BrowserLoginPairingApproval } from "./operations";
+} from "./operations";
 
 const firstUserId = UserId.make("f1d1a000-0000-4000-8000-0000000008a1");
 const secondUserId = UserId.make("f1d1a000-0000-4000-8000-0000000008a2");

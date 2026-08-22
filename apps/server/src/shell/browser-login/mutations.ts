@@ -1,11 +1,11 @@
 import { Effect } from "effect";
 import type { UserId } from "~/core/identity/reference";
 import type { CanonicalMutationImplementation } from "~/shell/_shared/canonical-mutation";
-import type { BrowserLoginPairingApproval } from "./operations";
 import type {
+  BrowserLoginPairingApproval,
   BrowserLoginPairingApprovalRateLimited,
   BrowserLoginPairingApprovalRejected,
-} from "./approval-errors";
+} from "./operations";
 import { approveBrowserLoginPairingInScope } from "./repo";
 
 export type ApproveBrowserLoginPairingInput = Readonly<{

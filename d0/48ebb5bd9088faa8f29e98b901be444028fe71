@@ -1,0 +1,22 @@
+docs/research/bun-1.4-for-fidy.md
+  s_a896b3b3cf4e04::t_129d03f8a8589b 94
+  s_a896b3b3cf4e04::t_9d51e7d2b5abf5 82
+  s_a896b3b3cf4e04::t_bed2de7c894a72 1-57,72-81,83-93,95
+  s_a896b3b3cf4e04::t_2776859e12a7b4 58-71
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.23",
+  "base_commit_sha": "d048ebb5bd9088faa8f29e98b901be444028fe71",
+  "prompts": {},
+  "sessions": {
+    "s_a896b3b3cf4e04": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a02a5d-32bd-7047-8f0b-5795268c0456",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

@@ -3175,8 +3175,32 @@ layer(WhatsAppTraceHarness, { excludeTestServices: true, timeout: "30 seconds" }
           expect.objectContaining({ "fidy.attempt": 1 }),
         ]);
         expect(providerAttempts.map((transaction) => transaction.contexts.trace.data)).toEqual([
-          expect.objectContaining({ "fidy.attempt": 1, "http.response.status_code": 429 }),
-          expect.objectContaining({ "fidy.attempt": 2, "http.response.status_code": 200 }),
+          expect.objectContaining({
+            "fidy.attempt": 1,
+            "http.response.status_code": 429,
+          }),
+          expect.objectContaining({
+            "fidy.attempt": 2,
+            "http.response.status_code": 200,
+          }),
+        ]);
+        for (const providerAttempt of providerAttempts) {
+          expect(typeof providerAttempt.contexts.trace.data["fidy.duration_milliseconds"]).toBe(
+            "number"
+          );
+        }
+        expect(providerAttempts.map((transaction) => transaction.tags)).toEqual([
+          expect.objectContaining({
+            operation: "whatsapp.sendText",
+            outcome: "failed",
+            error: "rate_limited",
+            retryable: "true",
+          }),
+          expect.objectContaining({
+            operation: "whatsapp.sendText",
+            outcome: "succeeded",
+            retryable: "false",
+          }),
         ]);
         const processing = processingAttempts[0];
         expect(processing?.contexts.trace).toMatchObject({

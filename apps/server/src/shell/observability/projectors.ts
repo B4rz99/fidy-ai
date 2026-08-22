@@ -178,6 +178,8 @@ export const projectBreadcrumb = (input: {
 const maximumTelemetryDurationMilliseconds = 86_400_000;
 const millisecondsPerSecond = 1_000;
 const durationWorkKinds = new Set<SpanDescriptor["workKind"]>([
+  "http_request",
+  "provider_call",
   "scheduled_execution",
   "model_call",
 ]);

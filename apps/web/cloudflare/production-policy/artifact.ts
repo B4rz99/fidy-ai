@@ -19,6 +19,8 @@ const ASSET_SUFFIXES = new Set([
   ".woff",
   ".woff2",
 ]);
+const CONTENT_HASHED_ASSET = /^assets\/.+-[A-Za-z0-9_-]{8,}\.[A-Za-z0-9]+$/u;
+const SHELL_ASSET_REFERENCE = /(?:href|src)=["']\/(assets\/[^"'?#]+)(?:[?#][^"']*)?["']/gu;
 const FORBIDDEN_CONTENT = [
   "BEGIN PRIVATE KEY",
   "CLOUDFLARE_API_TOKEN",
@@ -61,8 +63,9 @@ const validateContents = (directory: string, path: string): Promise<void> =>
 
 /**
  * Verifies the complete Production upload tree and its release identity before Cloudflare receives
- * it. The accepted tree is static-only and cannot contain source maps, server-shaped paths, or
- * known Secret material.
+ * it. The accepted tree is static-only, every browser asset is content-hashed, and the shell
+ * references at least one asset present in that tree. It cannot contain source maps, server-shaped
+ * paths, or known Secret material.
  */
 export const validateProductionArtifact = async (
   request: ProductionArtifactRequest
@@ -80,6 +83,21 @@ export const validateProductionArtifact = async (
   }
 
   paths.forEach(validatePath);
+  const assetPaths = paths.filter((path) => path.startsWith("assets/"));
+  const unhashedAsset = assetPaths.find((path) => !CONTENT_HASHED_ASSET.test(path));
+  if (unhashedAsset !== undefined) {
+    throw new Error(`production artifact asset is not content-hashed: ${unhashedAsset}`);
+  }
+  const shell = await Bun.file(`${request.directory}/index.html`).text();
+  const shellAssets = Array.from(shell.matchAll(SHELL_ASSET_REFERENCE), (match) => match[1]);
+  const missingShellAsset = shellAssets.find((path) => path === undefined || !paths.includes(path));
+  if (shellAssets.length === 0 || missingShellAsset !== undefined) {
+    throw new Error(
+      `production artifact shell references a missing hashed asset${
+        missingShellAsset === undefined ? "" : `: ${missingShellAsset}`
+      }`
+    );
+  }
   await Promise.all(paths.map((path) => validateContents(request.directory, path)));
 
   const metadata = Schema.decodeUnknownSync(ReleaseMetadata)(

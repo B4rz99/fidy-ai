@@ -1,0 +1,27 @@
+apps/server/src/shell/browser-login/approval-errors.ts
+  s_a617e4dca5fc42::t_993bc9596bb9dd 4
+  s_a617e4dca5fc42::t_df82da874eb275 1-3,5,10,21
+apps/server/src/shell/browser-login/mutations.ts
+  s_a617e4dca5fc42::t_5e8cf09d521dd5 5,8
+apps/server/src/shell/browser-login/operations.ts
+  s_a617e4dca5fc42::t_b2eba4b1015300 6,8,15-58
+  s_a617e4dca5fc42::t_ba4e5a2d6a801f 59
+apps/server/src/shell/browser-login/approval.test.ts
+  s_a617e4dca5fc42::t_e2deedf01ed6e6 25,28
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.23",
+  "base_commit_sha": "2ace0c6fbda3b6fc436eef0176bc0760b642a410",
+  "prompts": {},
+  "sessions": {
+    "s_a617e4dca5fc42": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a025ec-41cb-7aa9-9839-b13766741a6b",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

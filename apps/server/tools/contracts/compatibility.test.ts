@@ -7,6 +7,8 @@ import {
   contractAcknowledgementFrom,
   contractArtifactsFrom,
   findOpenApiBreakingChanges,
+  productionWebReleaseFrom,
+  removalAcknowledgementCovers,
 } from "./compatibility";
 
 const operation = (
@@ -108,6 +110,59 @@ it("rejects malformed compatibility acknowledgements at the acknowledgement boun
   ).toThrow("exact-finding acknowledgement");
 });
 
+it("treats an explicit default caller eligibility as equivalent to the historical omission", () => {
+  const base = {
+    operations: [
+      {
+        id: "widgets.createWidget",
+        policy: { requiredScope: "write" },
+      },
+    ],
+  } satisfies OperationPolicyManifest;
+  const candidate = {
+    operations: [
+      {
+        id: "widgets.createWidget",
+        policy: { requiredScope: "write", callerEligibility: "authenticated" },
+      },
+    ],
+  } satisfies OperationPolicyManifest;
+
+  expect(compareOperationPolicies(base, candidate)).toEqual([]);
+});
+
+it("reports a caller eligibility restriction on an existing operation", () => {
+  const base = {
+    operations: [
+      {
+        id: "widgets.createWidget",
+        policy: { requiredScope: "write", callerEligibility: "authenticated" },
+      },
+    ],
+  } satisfies OperationPolicyManifest;
+  const candidate = {
+    operations: [
+      {
+        id: "widgets.createWidget",
+        policy: {
+          requiredScope: "write",
+          callerEligibility: "verified-whatsapp-hosted-only",
+        },
+      },
+    ],
+  } satisfies OperationPolicyManifest;
+
+  expect(compareOperationPolicies(base, candidate)).toEqual([
+    {
+      source: "operation-policy",
+      rule: "operation-policy-changed",
+      operationId: "widgets.createWidget",
+      detail:
+        '{"base":{"callerEligibility":"authenticated","requiredScope":"write"},"candidate":{"callerEligibility":"verified-whatsapp-hosted-only","requiredScope":"write"}}',
+    },
+  ]);
+});
+
 it("compares the complete reflected policy value without a field allowlist", () => {
   const base = {
     operations: [
@@ -141,6 +196,64 @@ it("compares the complete reflected policy value without a field allowlist", () 
         '{"base":{"accessRequirement":{"_tag":"User","futureVariant":{"mode":"strict"}},"requiredScope":"transactions:write"},"candidate":{"accessRequirement":{"_tag":"User","futureVariant":{"mode":"relaxed"}},"requiredScope":"transactions:write"}}',
     },
   ]);
+});
+
+it("rejects malformed Production web release evidence", () => {
+  expect(() =>
+    productionWebReleaseFrom({ contractDigest: "digest", gitRevision: "revision" })
+  ).toThrow("Production web release evidence");
+});
+
+it("authorizes removal only when the unchanged web and exact base contract are deployed", () => {
+  const finding: ContractFinding = {
+    source: "openapi",
+    rule: "api-operation-removed",
+    location: {},
+    detail: "removed POST /widgets",
+  };
+  const baseDigest = "b".repeat(64);
+  const candidateDigest = "c".repeat(64);
+  const baseRevision = "a".repeat(40);
+  const acknowledgement = {
+    baseDigest,
+    candidateDigest,
+    findings: [finding],
+    rolloutIssue: "https://github.com/B4rz99/fidy-ai/issues/999",
+  };
+  const deployedWeb = productionWebReleaseFrom({
+    contractDigest: baseDigest,
+    gitRevision: baseRevision,
+  });
+  const request = {
+    acknowledgement,
+    baseDigest,
+    candidateDigest,
+    findings: [finding],
+    baseRevision,
+    deployedWeb,
+    candidateChangesWeb: false,
+  };
+
+  expect(removalAcknowledgementCovers(request)).toBe(true);
+  expect(removalAcknowledgementCovers({ ...request, candidateChangesWeb: true })).toBe(false);
+  expect(
+    removalAcknowledgementCovers({
+      ...request,
+      deployedWeb: productionWebReleaseFrom({
+        contractDigest: "d".repeat(64),
+        gitRevision: baseRevision,
+      }),
+    })
+  ).toBe(false);
+  expect(
+    removalAcknowledgementCovers({
+      ...request,
+      deployedWeb: productionWebReleaseFrom({
+        contractDigest: baseDigest,
+        gitRevision: "e".repeat(40),
+      }),
+    })
+  ).toBe(false);
 });
 
 it("requires an acknowledgement to match both digests, every exact finding, and a rollout issue", () => {

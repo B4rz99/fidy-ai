@@ -46,6 +46,12 @@ const ContractAcknowledgement = Schema.Struct({
 });
 export type ContractAcknowledgement = typeof ContractAcknowledgement.Type;
 
+const ProductionWebRelease = Schema.Struct({
+  contractDigest: Schema.String.check(Schema.isPattern(/^[0-9a-f]{64}$/u)),
+  gitRevision: Schema.String.check(Schema.isPattern(/^[0-9a-f]{40}$/u)),
+});
+export type ProductionWebRelease = typeof ProductionWebRelease.Type;
+
 const sortJson = (value: JsonValue): JsonValue => {
   if (Array.isArray(value)) return value.map(sortJson);
   if (Predicate.isObject(value)) {
@@ -109,6 +115,18 @@ export const contractAcknowledgementFrom = (value: unknown): ContractAcknowledge
   }
 };
 
+/**
+ * Decodes the public identity of the web artifact that Cloudflare currently serves in Production.
+ * Throws when the value is not an exact contract digest and Git revision pair.
+ */
+export const productionWebReleaseFrom = (value: unknown): ProductionWebRelease => {
+  try {
+    return Schema.decodeUnknownSync(ProductionWebRelease)(value);
+  } catch {
+    throw new Error("Production web release evidence is not a valid release identity");
+  }
+};
+
 const normalizeOpenApiChange = (change: IOasdiffChange): ContractFinding => ({
   source: "openapi",
   rule: change.id ?? "unclassified-breaking-change",
@@ -124,6 +142,14 @@ const normalizeOpenApiChange = (change: IOasdiffChange): ContractFinding => ({
 
 const byCanonicalValue = (left: ContractFinding, right: ContractFinding): number =>
   canonicalJson(left).localeCompare(canonicalJson(right));
+
+const normalizeHistoricalPolicy = (policy: JsonValue): JsonValue => {
+  if (!Predicate.isObject(policy)) return policy;
+  const object = Schema.decodeUnknownSync(JsonObject)(policy);
+  return Object.hasOwn(object, "callerEligibility")
+    ? object
+    : { ...object, callerEligibility: "authenticated" };
+};
 
 /**
  * Finds structural breaks from `base` to `candidate`. Both arguments must be complete OpenAPI
@@ -145,8 +171,9 @@ export const findOpenApiBreakingChanges = async (
 };
 
 /**
- * Compares each existing operation's complete reflected policy value. Additions are compatible;
- * removals and any nested policy change are rollout findings. No policy field allowlist exists.
+ * Compares each existing operation's effective reflected policy. Additions are compatible; removals
+ * and nested policy changes are rollout findings. Historical omission of default authenticated caller
+ * eligibility is normalized without introducing a field allowlist for future policy variants.
  */
 export const compareOperationPolicies = (
   base: OperationPolicyManifest,
@@ -169,7 +196,8 @@ export const compareOperationPolicies = (
         ];
       }
       const candidatePolicy = candidateById.get(operation.id);
-      return canonicalJson(operation.policy) === canonicalJson(candidatePolicy)
+      return canonicalJson(normalizeHistoricalPolicy(operation.policy)) ===
+        canonicalJson(candidatePolicy)
         ? []
         : [
             {
@@ -202,3 +230,30 @@ export const acknowledgementCovers = ({
   rolloutIssue.test(acknowledgement.rolloutIssue) &&
   canonicalJson([...acknowledgement.findings].sort(byCanonicalValue)) ===
     canonicalJson([...findings].sort(byCanonicalValue));
+
+/**
+ * Authorizes a final contract removal only after the exact base web artifact reached Production.
+ * The candidate must leave web source unchanged so same-revision compilation exercises that deployed
+ * consumer against the candidate server declaration.
+ */
+export const removalAcknowledgementCovers = ({
+  acknowledgement,
+  baseDigest,
+  candidateDigest,
+  findings,
+  baseRevision,
+  deployedWeb,
+  candidateChangesWeb,
+}: {
+  readonly acknowledgement: ContractAcknowledgement;
+  readonly baseDigest: string;
+  readonly candidateDigest: string;
+  readonly findings: ReadonlyArray<ContractFinding>;
+  readonly baseRevision: string;
+  readonly deployedWeb: ProductionWebRelease;
+  readonly candidateChangesWeb: boolean;
+}): boolean =>
+  !candidateChangesWeb &&
+  deployedWeb.contractDigest === baseDigest &&
+  deployedWeb.gitRevision === baseRevision &&
+  acknowledgementCovers({ acknowledgement, baseDigest, candidateDigest, findings });

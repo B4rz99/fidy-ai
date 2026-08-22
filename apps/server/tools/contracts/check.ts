@@ -1,8 +1,12 @@
 #!/usr/bin/env bun
 
+import { type Cause, Data, type Duration, Effect, Schema, Stream } from "effect";
+import { FetchHttpClient, HttpClient, type HttpClientError } from "effect/unstable/http";
 import {
   type ContractAcknowledgement,
   type ContractArtifacts,
+  type ContractFinding,
+  type ProductionWebRelease,
   acknowledgementCovers,
   canonicalJson,
   compareOperationPolicies,
@@ -10,6 +14,8 @@ import {
   contractArtifactsFrom,
   contractDigest,
   findOpenApiBreakingChanges,
+  productionWebReleaseFrom,
+  removalAcknowledgementCovers,
 } from "./compatibility";
 
 const serverRoot = Bun.fileURLToPath(new URL("../..", import.meta.url)).replace(/\/$/u, "");
@@ -19,6 +25,14 @@ const workspaceRoot = Bun.fileURLToPath(new URL("../../../..", import.meta.url))
 );
 const contractsDirectory = `${serverRoot}/contracts`;
 const acknowledgementPath = `${contractsDirectory}/breaking-change-acknowledgement.json`;
+const productionWebMetadataUrl = "https://fidyapp.com/deployment-metadata.json";
+const maximumReleaseMetadataBytes = 4_096;
+const productionEvidenceTimeout = "10 seconds";
+const httpOk = 200;
+
+class ProductionEvidenceRejected extends Data.TaggedError("ProductionEvidenceRejected")<{
+  readonly message: string;
+}> {}
 
 const run = (
   command: ReadonlyArray<string>,
@@ -133,6 +147,98 @@ const readAcknowledgement = async (): Promise<ContractAcknowledgement | undefine
   }
 };
 
+const appendBounded = (
+  accumulated: Uint8Array<ArrayBufferLike>,
+  chunk: Uint8Array<ArrayBufferLike>,
+  maximumBytes: number
+): Effect.Effect<Uint8Array<ArrayBufferLike>, ProductionEvidenceRejected> => {
+  const byteLength = accumulated.byteLength + chunk.byteLength;
+  if (byteLength > maximumBytes) {
+    return Effect.fail(
+      new ProductionEvidenceRejected({
+        message: `Production web release evidence exceeds ${maximumBytes} bytes`,
+      })
+    );
+  }
+  const combined = new Uint8Array(byteLength);
+  combined.set(accumulated);
+  combined.set(chunk, accumulated.byteLength);
+  return Effect.succeed(combined);
+};
+
+/**
+ * Reads and validates the bounded public identity of the web artifact served in Production.
+ * Fails for transport errors, timeouts, non-success responses, oversized bodies, and invalid JSON
+ * or release identities.
+ */
+export const readProductionWebRelease = ({
+  url = productionWebMetadataUrl,
+  maximumBytes = maximumReleaseMetadataBytes,
+  timeout = productionEvidenceTimeout,
+}: {
+  readonly url?: string;
+  readonly maximumBytes?: number;
+  readonly timeout?: Duration.Input;
+} = {}): Effect.Effect<
+  ProductionWebRelease,
+  Cause.TimeoutError | HttpClientError.HttpClientError | ProductionEvidenceRejected,
+  HttpClient.HttpClient
+> =>
+  HttpClient.get(url).pipe(
+    Effect.flatMap((response) => {
+      if (response.status !== httpOk) {
+        return Effect.fail(
+          new ProductionEvidenceRejected({
+            message: `Could not verify the deployed web release at ${url}: HTTP ${response.status}`,
+          })
+        );
+      }
+      return response.stream.pipe(
+        Stream.runFoldEffect(
+          (): Uint8Array<ArrayBufferLike> => new Uint8Array(),
+          (accumulated, chunk) => appendBounded(accumulated, chunk, maximumBytes)
+        ),
+        Effect.flatMap((bytes) =>
+          Schema.decodeUnknownEffect(Schema.UnknownFromJsonString)(
+            new TextDecoder().decode(bytes)
+          ).pipe(
+            Effect.mapError(
+              (cause) =>
+                new ProductionEvidenceRejected({
+                  message: `Could not verify the deployed web release: ${String(cause)}`,
+                })
+            ),
+            Effect.flatMap((value) =>
+              Effect.try({
+                try: () => productionWebReleaseFrom(value),
+                catch: (cause) =>
+                  new ProductionEvidenceRejected({
+                    message: `Could not verify the deployed web release: ${String(cause)}`,
+                  }),
+              })
+            )
+          )
+        )
+      );
+    }),
+    Effect.timeout(timeout)
+  );
+
+/** Throws when an acknowledgement remains after its comparison has no breaking findings. */
+export const rejectStaleAcknowledgement = ({
+  acknowledgement,
+  findings,
+  path = acknowledgementPath,
+}: {
+  readonly acknowledgement: ContractAcknowledgement | undefined;
+  readonly findings: ReadonlyArray<ContractFinding>;
+  readonly path?: string;
+}): void => {
+  if (findings.length === 0 && acknowledgement !== undefined) {
+    throw new Error(`Delete stale ${path}; this comparison has no breaking findings.`);
+  }
+};
+
 const parseBaseRef = (): string => {
   const argumentIndex = Bun.argv.indexOf("--base");
   const argument = argumentIndex === -1 ? undefined : Bun.argv[argumentIndex + 1];
@@ -144,6 +250,86 @@ const parseBaseRef = (): string => {
     );
   }
   return baseRef;
+};
+
+type RemovalAuthorizationDependencies = {
+  readonly runCommand: (command: ReadonlyArray<string>) => {
+    readonly exitCode: number;
+    readonly stdout: string;
+    readonly stderr: string;
+  };
+  readonly readDeployedWeb: () => Promise<ProductionWebRelease>;
+  readonly writeOutput: (message: string) => void;
+};
+
+const liveRemovalAuthorizationDependencies: RemovalAuthorizationDependencies = {
+  runCommand: run,
+  readDeployedWeb: () =>
+    readProductionWebRelease().pipe(
+      // This contract checker is the tooling entry point that owns the HTTP client lifetime.
+      // @effect-diagnostics-next-line strictEffectProvide:off
+      Effect.provide(FetchHttpClient.layer),
+      Effect.runPromise
+    ),
+  writeOutput: (message) => process.stdout.write(message),
+};
+
+/**
+ * Checks exact acknowledgement, Git, and deployed-artifact evidence for a final removal.
+ * Returns false when no exact acknowledgement exists; throws when claimed removal evidence fails.
+ */
+export const authorizeRemoval = async (
+  {
+    acknowledgement,
+    baseRef,
+    baseDigest,
+    candidateDigest,
+    findings,
+  }: {
+    readonly acknowledgement: ContractAcknowledgement | undefined;
+    readonly baseRef: string;
+    readonly baseDigest: string;
+    readonly candidateDigest: string;
+    readonly findings: ReadonlyArray<ContractFinding>;
+  },
+  dependencies: RemovalAuthorizationDependencies = liveRemovalAuthorizationDependencies
+): Promise<boolean> => {
+  if (
+    acknowledgement === undefined ||
+    !acknowledgementCovers({ acknowledgement, baseDigest, candidateDigest, findings })
+  ) {
+    return false;
+  }
+  const baseRevisionResult = dependencies.runCommand(["git", "rev-parse", `${baseRef}^{commit}`]);
+  if (baseRevisionResult.exitCode !== 0) throw new Error(baseRevisionResult.stderr);
+  const baseRevision = baseRevisionResult.stdout.trim();
+  const webDiff = dependencies.runCommand(["git", "diff", "--quiet", baseRef, "--", "apps/web"]);
+  if (webDiff.exitCode > 1) throw new Error(webDiff.stderr);
+  if (webDiff.exitCode === 1) {
+    throw new Error(
+      "The exact acknowledgement cannot authorize an initial break; final removal requires an unchanged candidate web."
+    );
+  }
+  const deployedWeb = await dependencies.readDeployedWeb();
+  if (
+    !removalAcknowledgementCovers({
+      acknowledgement,
+      baseDigest,
+      candidateDigest,
+      findings,
+      baseRevision,
+      deployedWeb,
+      candidateChangesWeb: false,
+    })
+  ) {
+    throw new Error(
+      `The exact acknowledgement cannot authorize an initial break. Final removal requires an unchanged candidate web and Production deployment of base revision ${baseRevision} with contract ${baseDigest}; found ${deployedWeb.gitRevision} with ${deployedWeb.contractDigest}.`
+    );
+  }
+  dependencies.writeOutput(
+    `acknowledged ${findings.length} final-removal finding(s) for ${acknowledgement.rolloutIssue}; Production web ${deployedWeb.gitRevision} carries the exact base contract\n`
+  );
+  return true;
 };
 
 const main = async (): Promise<void> => {
@@ -167,25 +353,15 @@ const main = async (): Promise<void> => {
   const candidateDigest = contractDigest(candidate);
   const acknowledgement = await readAcknowledgement();
 
+  rejectStaleAcknowledgement({ acknowledgement, findings });
   if (findings.length === 0) {
-    if (acknowledgement !== undefined) {
-      throw new Error(
-        `Delete stale ${acknowledgementPath}; this comparison has no breaking findings.`
-      );
-    }
     process.stdout.write(
       `server contracts compatible: ${baseDigest} -> ${candidateDigest} (${baseRef})\n`
     );
     return;
   }
 
-  if (
-    acknowledgement !== undefined &&
-    acknowledgementCovers({ acknowledgement, baseDigest, candidateDigest, findings })
-  ) {
-    process.stdout.write(
-      `acknowledged ${findings.length} exact contract finding(s) for ${acknowledgement.rolloutIssue}\n`
-    );
+  if (await authorizeRemoval({ acknowledgement, baseRef, baseDigest, candidateDigest, findings })) {
     return;
   }
 

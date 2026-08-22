@@ -34,17 +34,30 @@ pure generator against the base's `FidyApi`. A base containing only one artifact
 artifacts are on trunk, comparisons consume the committed base artifacts whose own required gate
 verified freshness.
 
-Breaking findings fail closed. An intentional break may commit
-`apps/server/contracts/breaking-change-acknowledgement.json` with:
+Breaking findings fail closed. Every candidate server must remain compatible with the web currently
+served in Production, and the candidate web must remain compatible with that candidate server.
+Compatibility work uses two trunk releases. The first release may add a temporarily compatible
+server shape and then, under the normal server-first ordering, promote the web that uses it. If web
+promotion fails, the prior web remains compatible with that server. A later release may remove the
+old server shape only after the adapted web is confirmed in Production.
+
+That final removal may commit `apps/server/contracts/breaking-change-acknowledgement.json` with:
 
 - the exact base contract digest;
 - the exact candidate contract digest;
 - the complete normalized finding set reported by the checker;
 - a rollout issue URL in `B4rz99/fidy-ai`.
 
-The acknowledgement applies only when all four values match. It fails as stale when there are no
-findings and cannot authorize a later contract pair or a different finding. Delete it when the
-coordinated add/use/remove rollout is complete.
+The acknowledgement is not permission to make the first release incompatible. In addition to exact
+acknowledgement matching, the gate reads the public Production `deployment-metadata.json` and requires
+its Git revision and contract digest to equal the pull-request base. The removal candidate may not
+change `apps/web`, so the mandatory same-revision build exercises the deployed web source against the
+candidate server declaration. These checks turn the promoted web artifact, rather than the rollout
+issue alone, into removal evidence.
+
+An acknowledgement fails as stale when there are no findings and cannot authorize a later contract
+pair, a different finding, a simultaneous web adaptation, or removal based on a web release that has
+not reached Production. Delete it after the removal reaches trunk.
 
 ## Repository verdict
 
@@ -64,9 +77,10 @@ detect a type-compatible semantic change—for example, returning a different me
 string field. Existing API-seam tests remain authoritative for request encoding, routing,
 authorization, real handlers, PostgreSQL persistence, response encoding, and client decoding.
 
-Production deploys the server before the web. A contract change therefore uses three separate trunk
-releases: **add** a temporarily backward-compatible server shape, **use** it from the web after that
-server is healthy, then **remove** the old shape only after the new web is active. Do not combine add
-and remove in one release or treat the shared digest as a substitute for rollout compatibility. See
+Production deploys the server before the web. One trunk release may **add and use** a temporarily
+backward-compatible shape: Railway receives the server that accepts both forms before Cloudflare
+promotes the web that uses the new form. Only after that web artifact is active may a later release
+**remove** the old form. Do not combine use and removal in one release or treat the shared digest as
+a substitute for rollout compatibility. See
 [ADR 0018](adr/0018-independent-production-deployments.md) and the
 [Production runbook](operations/production-releases.md).

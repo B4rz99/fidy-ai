@@ -1,0 +1,19 @@
+apps/web/cloudflare/production-policy/artifact.ts
+  s_91e2e3d2962a2c::t_b9e78aeda90622 80-81,94
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.23",
+  "base_commit_sha": "670d3a7b564a64b934b5f2ad0c6a869c3f8ad4de",
+  "prompts": {},
+  "sessions": {
+    "s_91e2e3d2962a2c": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a02b52-e5e9-7b88-acb7-69d7eb23c75c",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

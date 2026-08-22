@@ -1,0 +1,40 @@
+apps/web/src/features/signed-in/feature.tsx
+  s_a3db3434426441::t_0c8a8c1727c489 107
+  s_a3db3434426441::t_f0b0b1e8a5ca90 112-116
+  s_a3db3434426441::t_592f7eb3613675 58-61,63-67,96-101,105-106,108-111,117-118
+  s_a3db3434426441::t_5be597f73f6059 14-15
+  s_a3db3434426441::t_d3d4f45cfc019f 102-104
+  s_a3db3434426441::t_39258e2ecf3644 12
+  s_a3db3434426441::t_fd6eb384c24ae2 119-120
+apps/web/src/features/signed-in/feature.test.tsx
+  s_a3db3434426441::t_47bd36ea98cd60 1,44,48-68
+  s_a3db3434426441::t_c2eb79980ba876 5,10-15
+  s_a3db3434426441::t_e76fb553bc2ae0 6
+  s_a3db3434426441::t_6dc862d92f9599 2-4,7-9,16-43,69-70
+  s_a3db3434426441::t_6cc571df4fa2d8 45-47
+apps/web/src/features/signed-in/logout.ts
+  s_a3db3434426441::t_fd136108b9650f 1-28
+  s_a3db3434426441::t_d00d8a3f75fe52 29
+apps/web/src/application.test.tsx
+  s_a3db3434426441::t_be72e4ebe8acb4 89,91
+  s_a3db3434426441::t_47db1f6b61a3ff 52-56,58
+  s_a3db3434426441::t_9edacbc4995342 2-4,12-36,39,90,92-100
+  s_a3db3434426441::t_15ea6a11e827ee 101
+  s_a3db3434426441::t_e5cfb485295eb1 102-103
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.23",
+  "base_commit_sha": "4314e0a7c654184e260fc980a28cf153abe7fa40",
+  "prompts": {},
+  "sessions": {
+    "s_a3db3434426441": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a02a5c-8e88-7a4e-b7a1-54096a34f70a",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

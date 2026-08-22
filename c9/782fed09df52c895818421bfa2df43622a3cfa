@@ -1,0 +1,21 @@
+apps/server/src/core/browser-login/rules.test.ts
+  s_a617e4dca5fc42::t_793d0297eb9fe6 2,6,38-51
+apps/server/src/shell/_shared/canonical-operation-executor.ts
+  s_a617e4dca5fc42::t_4ba0e03f0ac30b 83-85,96
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.23",
+  "base_commit_sha": "c9782fed09df52c895818421bfa2df43622a3cfa",
+  "prompts": {},
+  "sessions": {
+    "s_a617e4dca5fc42": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a025ec-41cb-7aa9-9839-b13766741a6b",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

@@ -290,10 +290,17 @@ export const decodeSentryAccountSmokeConfig = (input: {
   });
 
 /**
- * Reads raw Sentry variables once. Enabled capture remains fail-closed until provisioned project
- * coordinates replace this empty checked-in policy.
+ * The production project is public DSN metadata, not a credential. Keeping its origin and numeric
+ * project id in the checked-in policy prevents a DSN for another Sentry project from enabling the
+ * runtime accidentally. Non-production capture remains opt-in until its separate project is
+ * provisioned.
  */
+const approvedProductionProject = {
+  origin: "https://o4511006514085888.ingest.us.sentry.io",
+  projectId: "4511877571411968",
+} satisfies SentryProjectIdentity;
+
 export const telemetryConfig = telemetryConfigForProjects({
-  production: Option.none(),
+  production: Option.some(approvedProductionProject),
   nonProduction: Option.none(),
 });

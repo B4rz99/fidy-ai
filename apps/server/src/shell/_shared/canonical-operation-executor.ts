@@ -80,6 +80,9 @@ const demoteSucceededChildren = (
 const isDeclaredRejection = (cause: Cause.Cause<unknown>): boolean =>
   Option.exists(Cause.findErrorOption(cause), isCanonicalRejectedFailure);
 
+const isRolledBackRejection = (cause: Cause.Cause<unknown>): boolean =>
+  Option.isSome(findCanonicalCallRejected(cause)) || isDeclaredRejection(cause);
+
 const recordRolledBackAttempt = (input: {
   readonly caller: CanonicalCaller;
   readonly operation: CanonicalOperationId;
@@ -90,10 +93,7 @@ const recordRolledBackAttempt = (input: {
     caller: input.caller,
     operation: input.operation,
     occurredAt: input.occurredAt,
-    outcome:
-      Option.isSome(findCanonicalCallRejected(input.cause)) || isDeclaredRejection(input.cause)
-        ? "rejected"
-        : "failed",
+    outcome: isRolledBackRejection(input.cause) ? "rejected" : "failed",
   });
 
 /**

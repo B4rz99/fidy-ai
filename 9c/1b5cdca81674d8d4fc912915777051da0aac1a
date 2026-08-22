@@ -1,0 +1,24 @@
+.env.example
+  s_fbb0ccf33e8e69::t_3df4d123e1cd17 21
+apps/server/src/shell/observability/telemetry-config.test.ts
+  s_fbb0ccf33e8e69::t_69523bd7f00ef6 8,36-63
+  s_fbb0ccf33e8e69::t_7c12289c6164be 64
+apps/server/src/shell/observability/telemetry-config.ts
+  s_fbb0ccf33e8e69::t_cf06c6e1bc16e1 293-296,298-302,304
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.23",
+  "base_commit_sha": "9c1b5cdca81674d8d4fc912915777051da0aac1a",
+  "prompts": {},
+  "sessions": {
+    "s_fbb0ccf33e8e69": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a02b48-2850-75cc-9939-e19b2a2b7788",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": null
+    }
+  }
+}

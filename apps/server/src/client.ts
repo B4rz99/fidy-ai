@@ -11,3 +11,12 @@ export { FidyApi, type FidyApiGroups, type OperationId } from "~/shell/api";
 export { isHttpOrigin } from "./http-origin";
 export { TokenBearer, TokenBearerFormat } from "~/core/tokens/model";
 export type { CanonicalInput } from "~/shell/_shared/canonical-input";
+export {
+  AuthenticatedBrowserLoginPairing,
+  PendingBrowserLoginPairing,
+  RedeemBrowserLoginPairingPayload,
+  WebAuthApi,
+  type WebAuthApiGroups,
+} from "./web-auth-api";
+export { StartedBrowserLoginPairing } from "~/core/browser-login/model";
+export { BrowserLoginPairingInvalidApi, BrowserLoginPollingRateLimitedApi } from "./web-auth-api";

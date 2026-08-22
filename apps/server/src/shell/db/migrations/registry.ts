@@ -23,6 +23,7 @@ import { memoryRevisions } from "./0023-memory-revisions";
 import { compactedConversations } from "./0024-compacted-conversations";
 import { monthlyBudgets } from "./0025-monthly-budgets";
 import { browserLoginPairings } from "./0026-browser-login-pairings";
+import { webSessions } from "./0027-web-sessions";
 
 /**
  * The explicit index ARCHITECTURE.md §7 calls for: one ordered, append-only
@@ -58,4 +59,5 @@ export const migrations = {
   "0024_compacted_conversations": compactedConversations,
   "0025_monthly_budgets": monthlyBudgets,
   "0026_browser_login_pairings": browserLoginPairings,
+  "0027_web_sessions": webSessions,
 };

@@ -123,7 +123,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         expect(response.headers["access-control-allow-credentials"]).toBe("true");
         expect(response.headers["access-control-allow-methods"]).toContain("GET");
         expect(response.headers["access-control-allow-headers"]).toBe(
-          "authorization, content-type"
+          "authorization, b3, baggage, content-type, traceparent, tracestate"
         );
         expect(response.headers.vary).toContain("Origin");
         expect(response.headers.vary).toContain("Access-Control-Request-Method");

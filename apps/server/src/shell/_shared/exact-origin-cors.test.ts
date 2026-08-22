@@ -70,7 +70,9 @@ it.effect("accepts a preflight for an allowed method and header set", () =>
 
     expect(response.status).toBe(204);
     expect(response.headers["access-control-allow-methods"]).toBe("GET, POST");
-    expect(response.headers["access-control-allow-headers"]).toBe("authorization, content-type");
+    expect(response.headers["access-control-allow-headers"]).toBe(
+      "authorization, b3, baggage, content-type, traceparent, tracestate"
+    );
   })
 );
 

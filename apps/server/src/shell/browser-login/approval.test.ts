@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { expect, layer } from "@effect/vitest";
-import { DateTime, Effect, Layer, Redacted, Result, Schema } from "effect";
-import { HttpClient } from "effect/unstable/http";
+import { Crypto, DateTime, Effect, Encoding, Layer, Redacted, Result, Schema } from "effect";
+import { HttpBody, HttpClient } from "effect/unstable/http";
 import { SqlSchema } from "effect/unstable/sql";
 import { allCanonicalCapabilities } from "~/core/_shared/canonical-capability";
 import { StartedBrowserLoginPairing } from "~/core/browser-login/model";
@@ -49,7 +49,7 @@ const secondCaller = caller(secondUserId, "b2");
 
 const prepare = Effect.gen(function* () {
   const sql = yield* MigrationSqlClient;
-  yield* sql`TRUNCATE browser_login_start_attempts, browser_login_pairings`;
+  yield* sql`TRUNCATE web_sessions, browser_login_start_attempts, browser_login_pairings`;
   yield* sql`DELETE FROM audit_log_entries WHERE user_id IN (${firstUserId}, ${secondUserId})`;
   for (const userId of [firstUserId, secondUserId]) {
     yield* upsertUser(
@@ -63,7 +63,7 @@ const prepare = Effect.gen(function* () {
 });
 
 const start = Effect.gen(function* () {
-  const response = yield* HttpClient.post("/web-auth/pairings");
+  const response = yield* HttpClient.post("/web/pairings");
   assert.equal(response.status, 200);
   return yield* Schema.decodeUnknownEffect(StartedBrowserLoginPairing)(yield* response.json);
 });
@@ -123,6 +123,111 @@ layer(ApprovalHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           replacementId: null,
         });
       })
+    );
+
+    it.effect(
+      "lets exactly one concurrent correct redemption create one digest-only WebSession",
+      () =>
+        Effect.gen(function* () {
+          yield* prepare;
+          const challenge = yield* start;
+          yield* approve(firstCaller, challenge.publicCode);
+          const sql = yield* MigrationSqlClient;
+          yield* sql`
+          UPDATE browser_login_pairings
+          SET last_accepted_poll_at = now() - interval '5 seconds'
+          WHERE id = ${challenge.pairingId}::uuid
+        `;
+          const request = {
+            body: HttpBody.jsonUnsafe({
+              pairingId: challenge.pairingId,
+              privateVerifier: Redacted.value(challenge.privateVerifier),
+            }),
+          };
+
+          const responses = yield* Effect.all(
+            [
+              HttpClient.post("/web/pairings/redeem", request),
+              HttpClient.post("/web/pairings/redeem", request),
+            ],
+            { concurrency: "unbounded" }
+          );
+          const winner = responses.find(({ status }) => status === 200);
+          const rejected = responses.find(({ status }) => status === 400);
+          assert.ok(winner);
+          assert.ok(rejected);
+          const setCookie = winner.headers["set-cookie"] ?? "";
+          const bearer = /__Host-fidy_session=([A-Za-z0-9_-]{43})/u.exec(setCookie)?.[1];
+          assert.ok(bearer);
+          expect(setCookie).toContain("HttpOnly");
+          expect(setCookie).toContain("Secure");
+          expect(setCookie).toContain("SameSite=Strict");
+          expect(setCookie).toContain("Path=/");
+          expect(setCookie).not.toContain("Domain=");
+          expect(yield* rejected.json).toEqual({
+            error: {
+              code: "pairing_invalid",
+              message: "Esta vinculación ya no es válida. Inicia de nuevo.",
+            },
+          });
+
+          const stored = yield* sql`
+          SELECT pairing.lifecycle,
+            (SELECT count(*)::int FROM web_sessions
+              WHERE user_id = pairing.user_id) AS sessions,
+            (SELECT encode(bearer_digest, 'hex') FROM web_sessions
+              WHERE user_id = pairing.user_id LIMIT 1) AS digest,
+            (SELECT count(*)::int FROM web_sessions
+              WHERE row_to_json(web_sessions)::text LIKE ${`%${bearer}%`})
+              AS "bearerOccurrences"
+          FROM browser_login_pairings AS pairing
+          WHERE pairing.id = ${challenge.pairingId}::uuid
+        `;
+          const crypto = yield* Crypto.Crypto;
+          const expectedDigest = Encoding.encodeHex(
+            yield* crypto.digest("SHA-256", new TextEncoder().encode(bearer))
+          );
+          expect(stored).toEqual([
+            {
+              lifecycle: "consumed",
+              sessions: 1,
+              digest: expectedDigest,
+              bearerOccurrences: 0,
+            },
+          ]);
+
+          const unrelatedBearer = "u".repeat(43);
+          const nonOwnerLogouts = yield* Effect.all([
+            HttpClient.post("/web/session/logout"),
+            HttpClient.post("/web/session/logout", {
+              headers: { cookie: "__Host-fidy_session=malformed" },
+            }),
+            HttpClient.post("/web/session/logout", {
+              headers: { cookie: `__Host-fidy_session=${unrelatedBearer}` },
+            }),
+          ]);
+          expect(nonOwnerLogouts.map(({ status }) => status)).toEqual([204, 204, 204]);
+          expect(
+            nonOwnerLogouts.every(({ headers }) => headers["set-cookie"]?.includes("Max-Age=0"))
+          ).toBe(true);
+          expect(yield* sql`SELECT (revoked_at IS NOT NULL) AS revoked FROM web_sessions`).toEqual([
+            { revoked: false },
+          ]);
+
+          const logout = yield* HttpClient.post("/web/session/logout", {
+            headers: { cookie: `__Host-fidy_session=${bearer}` },
+          });
+          const repeatedLogout = yield* HttpClient.post("/web/session/logout", {
+            headers: { cookie: `__Host-fidy_session=${bearer}` },
+          });
+          expect(logout.status).toBe(204);
+          expect(logout.headers["set-cookie"]).toContain("__Host-fidy_session=");
+          expect(logout.headers["set-cookie"]).toContain("Max-Age=0");
+          expect(repeatedLogout.status).toBe(204);
+          expect(yield* sql`SELECT (revoked_at IS NOT NULL) AS revoked FROM web_sessions`).toEqual([
+            { revoked: true },
+          ]);
+        })
     );
 
     it.effect("renders exact confirmation with only the public code in hosted evidence", () =>
@@ -206,12 +311,26 @@ layer(ApprovalHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         yield* approve(firstCaller, older.publicCode);
         const newer = yield* start;
         yield* approve(firstCaller, newer.publicCode);
+        const response = yield* HttpClient.post("/web/pairings/redeem", {
+          body: HttpBody.jsonUnsafe({
+            pairingId: older.pairingId,
+            privateVerifier: Redacted.value(older.privateVerifier),
+          }),
+        });
         const sql = yield* MigrationSqlClient;
         const rows = yield* sql`
           SELECT id, lifecycle, replacement_id AS "replacementId"
           FROM browser_login_pairings ORDER BY created_at
         `;
 
+        expect(response.status).toBe(400);
+        expect(yield* response.json).toEqual({
+          error: {
+            code: "pairing_invalid",
+            message: "Esta vinculación ya no es válida. Inicia de nuevo.",
+          },
+        });
+        expect(yield* sql`SELECT count(*)::int AS count FROM web_sessions`).toEqual([{ count: 0 }]);
         expect(rows).toEqual([
           { id: older.pairingId, lifecycle: "superseded", replacementId: newer.pairingId },
           { id: newer.pairingId, lifecycle: "ready", replacementId: null },

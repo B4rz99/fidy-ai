@@ -9,15 +9,18 @@ export default defineConfig({
   workers: 1,
   reporter: "line",
   use: {
-    baseURL: "http://127.0.0.1:4173",
+    baseURL: "https://127.0.0.1:4173",
+    ignoreHTTPSErrors: true,
+    launchOptions: { args: ["--ignore-certificate-errors"] },
     trace: "off",
     screenshot: "off",
     video: "off",
   },
   webServer: {
     command:
-      "VITE_API_ORIGIN=https://playwright.invalid bun --bun vite build --mode test --outDir playwright-dist && bun --bun vite preview --host 127.0.0.1 --port 4173 --outDir playwright-dist",
-    url: "http://127.0.0.1:4173",
+      "VITE_API_ORIGIN=https://127.0.0.1:4174 bun --bun vite build --mode test --outDir playwright-dist && cd ../server && DATABASE_URL=${DATABASE_URL:-postgres://fidy_runtime:fidy_runtime@127.0.0.1:5433/fidy} MIGRATION_DATABASE_URL=${MIGRATION_DATABASE_URL:-postgres://fidy:fidy@127.0.0.1:5433/fidy} bun scripts/run-browser-pairing-acceptance-server.ts",
+    url: "https://127.0.0.1:4174/health",
+    ignoreHTTPSErrors: true,
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,
   },

@@ -2,6 +2,7 @@ import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import { BrowserLoginPairingId } from "~/core/browser-login/reference";
 import {
+  BrowserLoginPairingLifecycle,
   BrowserLoginPublicCode,
   BrowserLoginPublicCodeInput,
   decideApprovalTransition,
@@ -131,10 +132,10 @@ export const insertPendingBrowserLoginPairing = Effect.fn("BrowserLogin.insertPe
             execute: (request) => sql`
           WITH inserted_pairing AS (
             INSERT INTO browser_login_pairings (
-              public_code, verifier_digest, created_at, expires_at
+              public_code, verifier_digest, created_at, expires_at, last_accepted_poll_at
             ) VALUES (
               ${request.publicCode}, ${request.verifierDigest},
-              ${request.createdAt}, ${request.expiresAt}
+              ${request.createdAt}, ${request.expiresAt}, ${request.createdAt}
             )
             ON CONFLICT (public_code)
               WHERE lifecycle IN ('pending_approval', 'ready') DO NOTHING
@@ -223,6 +224,115 @@ const bindApprovalCandidate = Effect.fn("BrowserLogin.bindApprovalCandidate")(fu
  * Binds one challenge inside the canonical User transaction. Prior metadata-only audit rejections
  * are the durable rolling-window evidence, so invalid submissions retain no code or secret.
  */
+const LockedRedemptionCandidate = Schema.Struct({
+  pairingId: BrowserLoginPairingId,
+  userId: Schema.OptionFromNullOr(UserId),
+  verifierDigest: Schema.Uint8Array,
+  lifecycle: BrowserLoginPairingLifecycle,
+  wrongVerifierAttempts: Schema.Int,
+  minimumPollIntervalSeconds: Schema.Int,
+  lastAcceptedPollAt: Schema.OptionFromNullOr(Schema.DateTimeUtcFromDate),
+  expiresAt: Schema.DateTimeUtcFromDate,
+});
+
+export type LockedRedemptionCandidate = typeof LockedRedemptionCandidate.Type;
+
+/** Locks one candidate through the narrow pre-subject gateway for the surrounding transaction. */
+export const lockBrowserLoginRedemptionCandidate = Effect.fn(
+  "BrowserLogin.lockRedemptionCandidate"
+)(function* (pairingId: BrowserLoginPairingId) {
+  const sql = yield* SqlClient.SqlClient;
+  return yield* SqlSchema.findOneOption({
+    Request: BrowserLoginPairingId,
+    Result: LockedRedemptionCandidate,
+    execute: (id) => sql`
+        SELECT pairing_id AS "pairingId", user_id AS "userId",
+          verifier_digest AS "verifierDigest", lifecycle,
+          wrong_verifier_attempts AS "wrongVerifierAttempts",
+          minimum_poll_interval_seconds AS "minimumPollIntervalSeconds",
+          last_accepted_poll_at AS "lastAcceptedPollAt", expires_at AS "expiresAt"
+        FROM fidy_lock_browser_login_pairing(${id}::uuid)
+      `,
+  })(pairingId).pipe(Effect.orDie);
+});
+
+const GatewayChanged = Schema.Struct({ changed: Schema.Boolean });
+
+/** Persists one accepted poll while the caller holds the pairing row lock. */
+export const acceptBrowserLoginPoll = Effect.fn("BrowserLogin.acceptPoll")(function* (
+  pairingId: BrowserLoginPairingId,
+  acceptedAt: DateTime.Utc
+) {
+  const sql = yield* SqlClient.SqlClient;
+  const { changed } = yield* SqlSchema.findOne({
+    Request: Schema.Void,
+    Result: GatewayChanged,
+    execute: () => sql`
+      SELECT fidy_accept_browser_login_poll(${pairingId}::uuid, ${acceptedAt}) AS changed
+    `,
+  })(undefined).pipe(Effect.orDie);
+  return changed;
+});
+
+/** Persists server-directed slowdown while the caller holds the pairing row lock. */
+export const slowBrowserLoginPoll = Effect.fn("BrowserLogin.slowPoll")(function* (
+  pairingId: BrowserLoginPairingId,
+  minimumPollIntervalSeconds: number
+) {
+  const sql = yield* SqlClient.SqlClient;
+  const { changed } = yield* SqlSchema.findOne({
+    Request: Schema.Void,
+    Result: GatewayChanged,
+    execute: () => sql`
+      SELECT fidy_slow_browser_login_poll(
+        ${pairingId}::uuid, ${minimumPollIntervalSeconds}::integer
+      ) AS changed
+    `,
+  })(undefined).pipe(Effect.orDie);
+  return changed;
+});
+
+/** Persists one bounded verifier refusal while the caller holds the pairing row lock. */
+export const rejectBrowserLoginVerifier = Effect.fn("BrowserLogin.rejectVerifier")(function* (
+  input: Readonly<{
+    pairingId: BrowserLoginPairingId;
+    wrongVerifierAttempts: number;
+    lifecycle: "pending_approval" | "ready" | "invalidated";
+    rejectedAt: DateTime.Utc;
+  }>
+) {
+  const sql = yield* SqlClient.SqlClient;
+  const { changed } = yield* SqlSchema.findOne({
+    Request: Schema.Void,
+    Result: GatewayChanged,
+    execute: () => sql`
+      SELECT fidy_reject_browser_login_verifier(
+        ${input.pairingId}::uuid,
+        ${input.wrongVerifierAttempts}::integer,
+        ${input.lifecycle}::text,
+        ${input.rejectedAt}
+      ) AS changed
+    `,
+  })(undefined).pipe(Effect.orDie);
+  return changed;
+});
+
+/** Expires one active pairing while the caller holds its row lock. */
+export const expireBrowserLoginPairing = Effect.fn("BrowserLogin.expirePairing")(function* (
+  pairingId: BrowserLoginPairingId,
+  expiredAt: DateTime.Utc
+) {
+  const sql = yield* SqlClient.SqlClient;
+  const { changed } = yield* SqlSchema.findOne({
+    Request: Schema.Void,
+    Result: GatewayChanged,
+    execute: () => sql`
+      SELECT fidy_expire_browser_login_pairing(${pairingId}::uuid, ${expiredAt}) AS changed
+    `,
+  })(undefined).pipe(Effect.orDie);
+  return changed;
+});
+
 export const approveBrowserLoginPairingInScope = Effect.fn("BrowserLogin.approvePairingInScope")(
   function* (input: Readonly<{ userId: UserId; publicCode: string }>) {
     const sql = yield* SqlClient.SqlClient;

@@ -1,7 +1,23 @@
 import { BunHttpServer, BunServices } from "@effect/platform-bun";
-import { Context, DateTime, Effect, Layer, Option, Ref, type Schema } from "effect";
-import { type HttpClient, type HttpClientError } from "effect/unstable/http";
+import {
+  type Config,
+  ConfigProvider,
+  Context,
+  DateTime,
+  Effect,
+  Layer,
+  Option,
+  Ref,
+  type Schema,
+} from "effect";
+import {
+  FetchHttpClient,
+  type HttpClient,
+  type HttpClientError,
+  HttpServer,
+} from "effect/unstable/http";
 import { HttpApiClient } from "effect/unstable/httpapi";
+import type { Migrator, SqlError } from "effect/unstable/sql";
 import { type TokenBearer } from "~/core/tokens/model";
 import { HostedInference } from "~/shell/agent/hosted-inference";
 import { ConversationCompactionInference } from "~/shell/transcript/conversation-compaction-inference";
@@ -17,6 +33,7 @@ import type {
   ValidationFailed,
 } from "~/shell/_shared/errors";
 import { FidyApi } from "~/shell/api";
+import { maximumPublicRequestBodySizeBytes } from "~/shell/runtime";
 import type { MemoryCapacityExceededApi } from "~/shell/memory/errors";
 import type { AtomicBatchRejected } from "~/shell/operations/operations";
 import {
@@ -154,6 +171,17 @@ const BaselineCompactionInference = Layer.succeed(ConversationCompactionInferenc
   generate: () => Effect.die("Compaction is below threshold in the API harness"),
 });
 
+const BoundedBunHttpServerTest = HttpServer.layerTestClient.pipe(
+  Layer.provide(
+    FetchHttpClient.layer.pipe(
+      Layer.provide(Layer.succeed(FetchHttpClient.RequestInit)({ keepalive: false }))
+    )
+  ),
+  Layer.provideMerge(
+    BunHttpServer.layer({ port: 0, maxRequestBodySize: maximumPublicRequestBodySizeBytes })
+  )
+);
+
 const ApiHarnessBase = makeApiClientLive({
   tag: ApiHarnessClient,
   bearer: defaultPatBearer,
@@ -163,7 +191,7 @@ const ApiHarnessBase = makeApiClientLive({
   Layer.provideMerge(MemoryInferenceTest),
   Layer.provideMerge(BaselineCompactionInference),
   Layer.provideMerge(makeDevelopmentSeedLive(defaultPatBearer)),
-  Layer.provideMerge(BunHttpServer.layerTest),
+  Layer.provideMerge(BoundedBunHttpServerTest),
   Layer.provideMerge(BunServices.layer),
   Layer.provideMerge(MigrationSqlClient.layer),
   Layer.provideMerge(PgLive),
@@ -172,6 +200,49 @@ const ApiHarnessBase = makeApiClientLive({
 
 /** The ordinary API test stack, with observability fully disabled and no SDK transport. */
 export const ApiHarness = ApiHarnessBase.pipe(Layer.provide(TelemetryDisabled));
+
+const AcceptancePublicNamespace = ConfigProvider.layer(
+  ConfigProvider.orElse(
+    ConfigProvider.fromEnv({
+      env: {
+        PUBLIC_WEB_ORIGIN: "https://127.0.0.1:4173",
+        PUBLIC_API_ORIGIN: "https://127.0.0.1:4174",
+        INGEST_EMAIL_DOMAIN: "ingest.fidyapp.com",
+        KAPSO_WEBHOOK_SECRET: "test-webhook-secret-32-characters",
+        WHATSAPP_BUSINESS_PORTFOLIO_ID: "portfolio-test",
+      },
+    }),
+    ConfigProvider.fromEnv()
+  )
+);
+
+/** Real handler/PostgreSQL stack on the TLS socket used by the built-browser acceptance runner. */
+export const makeBrowserLoginPairingAcceptanceServer = ({
+  certificate,
+  privateKey,
+}: {
+  readonly certificate: Bun.BunFile;
+  readonly privateKey: Bun.BunFile;
+}): Layer.Layer<never, Config.ConfigError | Migrator.MigrationError | SqlError.SqlError> =>
+  HttpLive.pipe(
+    Layer.provide(MigratorLive),
+    Layer.provide(TestKapsoClient),
+    Layer.provide(MemoryInferenceTest),
+    Layer.provide(BaselineCompactionInference),
+    Layer.provide(
+      BunHttpServer.layer({
+        hostname: "127.0.0.1",
+        port: 4174,
+        maxRequestBodySize: maximumPublicRequestBodySizeBytes,
+        tls: { cert: certificate, key: privateKey },
+      })
+    ),
+    Layer.provide(BunServices.layer),
+    Layer.provide(MigrationSqlClient.layer),
+    Layer.provide(PgLive),
+    Layer.provide(AcceptancePublicNamespace),
+    Layer.provide(TelemetryDisabled)
+  );
 
 /** The API seam with exact serialized telemetry exposed for observability behavior tests. */
 export const ApiTelemetryHarness = Layer.merge(

@@ -4,10 +4,12 @@ import {
   createRootRouteWithContext,
   createRoute,
   createRouter,
+  redirect,
 } from "@tanstack/react-router";
 import { BrowserLoginPairingFeature } from "@/features/browser-login/feature";
 import { createPublicSiteRoute } from "@/features/public-site/feature";
 import { SignedInFeature } from "@/features/signed-in/feature";
+import { TransactionListFeature } from "@/features/transactions/feature";
 import type { FidyClient, WebAuthClient } from "@/transport/client";
 
 type WebRouterContext = Readonly<{
@@ -25,6 +27,16 @@ const signedInRoute = createRoute({
   path: "/app",
   component: SignedInFeature,
 });
+const signedInIndexRoute = createRoute({
+  getParentRoute: () => signedInRoute,
+  path: "/",
+  beforeLoad: () => redirect({ to: "/app/transactions" }),
+});
+const transactionsRoute = createRoute({
+  getParentRoute: () => signedInRoute,
+  path: "/transactions",
+  component: TransactionListFeature,
+});
 const browserLoginPairingRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/auth/pair",
@@ -33,7 +45,7 @@ const browserLoginPairingRoute = createRoute({
 const routeTree = rootRoute.addChildren([
   createPublicSiteRoute(rootRoute),
   browserLoginPairingRoute,
-  signedInRoute,
+  signedInRoute.addChildren([signedInIndexRoute, transactionsRoute]),
 ]);
 
 /** Builds the application router from independently owned route subtrees. */

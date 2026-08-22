@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { WebApplication } from "@/app/application";
 import { createWebRouter } from "@/app/routes";
 import { SessionRegistryProvider } from "@/session/session";
-import { makeFidyClient, makeWebAuthClient } from "@/transport/client";
+import { type FidyClient, makeFidyClient, makeWebAuthClient } from "@/transport/client";
 
 const responseJson = (
   request: HttpClientRequest.HttpClientRequest,
@@ -51,10 +51,21 @@ const renderRoute = async (
 
 const resetApplicationTest = (): void => {
   cleanup();
+  vi.useRealTimers();
   vi.unstubAllEnvs();
 };
 
-describe("web application routes", () => {
+const malformedFidyClient = (): FidyClient => {
+  const httpClient = makeHttpClient((request) =>
+    Effect.succeed(responseJson(request, { unexpected: true }))
+  );
+  return makeFidyClient(
+    "https://api.test.fidyapp.com",
+    Layer.succeed(HttpClient.HttpClient, httpClient)
+  );
+};
+
+describe("public web application routes", () => {
   afterEach(resetApplicationTest);
   it("renders the minimal root through the real router and Atom provider", async () => {
     await renderRoute("/");
@@ -85,21 +96,26 @@ describe("web application routes", () => {
     expect(screen.getByRole("button", { name: "Iniciar sesión en el navegador" })).toBeVisible();
     expect(screen.queryByText(/pairing code/iu)).not.toBeInTheDocument();
   });
+});
 
-  it("routes malformed current-User responses into the signed-in failure state", async () => {
-    const httpClient = makeHttpClient((request) =>
-      Effect.succeed(responseJson(request, { unexpected: true }))
-    );
-    await renderRoute(
-      "/app",
-      makeFidyClient(
-        "https://api.test.fidyapp.com",
-        Layer.succeed(HttpClient.HttpClient, httpClient)
-      )
-    );
+describe("signed-in web application routes", () => {
+  afterEach(resetApplicationTest);
 
-    expect(await screen.findByText("No pudimos cargar tu perfil")).toBeVisible();
+  it("owns Transactions at /app/transactions and routes malformed canonical data to failure", async () => {
+    await renderRoute("/app/transactions", malformedFidyClient());
+
+    expect(await screen.findByText("No pudimos cargar tus transacciones")).toBeVisible();
   });
+
+  it("redirects the authenticated /app index to Transactions", async () => {
+    await renderRoute("/app", malformedFidyClient());
+
+    expect(await screen.findByRole("heading", { name: "Transacciones" })).toBeVisible();
+  });
+});
+
+describe("web application fallbacks", () => {
+  afterEach(resetApplicationTest);
 
   it("renders not-found behavior for an unknown route", async () => {
     await renderRoute("/ruta-inexistente");

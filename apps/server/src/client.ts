@@ -11,6 +11,7 @@ export { FidyApi, type FidyApiGroups, type OperationId } from "~/shell/api";
 export { isHttpOrigin } from "./http-origin";
 export { TokenBearer, TokenBearerFormat } from "~/core/tokens/model";
 export type { CanonicalInput } from "~/shell/_shared/canonical-input";
+export type { CanonicalSuccess } from "~/shell/_shared/canonical-success";
 export {
   AuthenticatedBrowserLoginPairing,
   PendingBrowserLoginPairing,

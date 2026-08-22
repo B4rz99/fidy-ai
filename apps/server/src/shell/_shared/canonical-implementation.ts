@@ -6,6 +6,7 @@ import type { OperationId } from "~/shell/api";
 import type { Telemetry } from "~/shell/observability/telemetry";
 import type { CanonicalCaller, ChildOperationAudit } from "./authz";
 import type { CanonicalEndpoint, CanonicalInput } from "./canonical-input";
+import type { CanonicalSuccess } from "./canonical-success";
 
 /** Caller facts supplied to every canonical implementation once the executor has resolved one. */
 export type CanonicalImplementationCaller = Readonly<{ resolved: CanonicalCaller }>;
@@ -21,11 +22,6 @@ export type CanonicalExecutionRequirements =
 export type CanonicalImplementationRequirements =
   | CanonicalExecutionRequirements
   | ChildOperationAudit;
-
-/** The decoded success value represented by an assembled canonical operation declaration. */
-export type CanonicalSuccess<Id extends OperationId> = HttpApiEndpoint.Success<
-  CanonicalEndpoint<Id>
->["Type"];
 
 /** Every failure represented by an assembled canonical operation declaration. */
 export type CanonicalFailure<Id extends OperationId> = HttpApiEndpoint.Errors<

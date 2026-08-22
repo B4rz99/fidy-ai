@@ -23,6 +23,16 @@ type PairingApiFixture = {
   readonly redeemTimes: Array<number>;
 };
 
+const installCanonicalProductRoutes = async (page: Page): Promise<void> => {
+  const emptyList = JSON.stringify({ data: [], next: [] });
+  await page.route("**/categories", (route) =>
+    route.fulfill({ contentType: "application/json", status: successStatus, body: emptyList })
+  );
+  await page.route(/^https:\/\/127\.0\.0\.1:4174\/transactions(?:\?.*)?$/u, (route) =>
+    route.fulfill({ contentType: "application/json", status: successStatus, body: emptyList })
+  );
+};
+
 const installStartAndLogoutRoutes = async (
   page: Page,
   fixture: PairingApiFixture
@@ -62,6 +72,7 @@ const installStartAndLogoutRoutes = async (
       }),
     })
   );
+  await installCanonicalProductRoutes(page);
   await page.route("**/web/session/logout", async (route) => {
     fixture.logoutCount += 1;
     await route.fulfill({
@@ -143,7 +154,8 @@ test("keeps the verifier ephemeral, polls sequentially, retains the cookie, and 
   await expect(page.getByText(publicCode, { exact: true })).toBeVisible();
   expect(api.startCount).toBe(1);
   await expectVerifierIsBrowserEphemeral(page);
-  await expect(page.getByText("es-CO", { exact: true })).toBeVisible({ timeout: 15_000 });
+  await expect(page).toHaveURL(/\/app\/transactions$/u, { timeout: 15_000 });
+  await expect(page.getByRole("heading", { name: "Transacciones" })).toBeVisible();
 
   expect(api.redeemCount).toBe(2);
   expect(api.maximumActiveRedeems).toBe(1);

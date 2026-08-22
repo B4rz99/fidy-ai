@@ -3,6 +3,7 @@ import { type Config, ConfigProvider, Effect, Layer, Option, Schema } from "effe
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
 import { type SqlError, SqlSchema } from "effect/unstable/sql";
 import { BrowserLoginPublicCode } from "~/core/browser-login/rules";
+import { categoryIds } from "~/core/categories/taxonomy";
 import { UserId } from "~/core/identity/reference";
 import { seedOnboardingConsent } from "~/shell/db/development-seed";
 import { MigrationSqlClient, PgLive } from "~/shell/db/client";
@@ -17,12 +18,14 @@ const SessionObservation = Schema.Struct({
   revoked: Schema.Boolean,
 });
 
+const createdStatus = 201;
 const noContentStatus = 204;
 const conflictStatus = 409;
 
 const reset = Effect.gen(function* () {
   const sql = yield* MigrationSqlClient;
   yield* sql`TRUNCATE web_sessions, browser_login_start_attempts, browser_login_pairings`;
+  yield* sql`DELETE FROM transactions WHERE user_id = ${acceptanceUserId}`;
   yield* sql`
     INSERT INTO users (
       id, service_market, locale, time_zone, created_at,
@@ -81,6 +84,23 @@ const expireSession = Effect.gen(function* () {
   return HttpServerResponse.empty({ status: noContentStatus });
 });
 
+const seedCurrentMonthTransaction = Effect.gen(function* () {
+  const sql = yield* MigrationSqlClient;
+  yield* sql`
+    INSERT INTO transactions (
+      user_id, amount, currency, counterparty, direction, category_id, occurred_at
+    )
+    VALUES (
+      ${acceptanceUserId}, 9007199254740993.12, 'USD', 'Exactitud S.A.', 'inflow',
+      ${categoryIds.restaurantes}, now() - interval '1 minute'
+    )
+  `;
+  return yield* HttpServerResponse.json(
+    { categoryLabel: "Restaurantes" },
+    { status: createdStatus }
+  );
+});
+
 const AcceptanceControlConfig = ConfigProvider.layer(
   ConfigProvider.fromEnv({
     env: {
@@ -97,6 +117,7 @@ const ControlRoutesLive = Layer.mergeAll(
   HttpRouter.add("POST", "/reset", reset),
   HttpRouter.add("POST", "/approve-pairing", approvePairing),
   HttpRouter.add("POST", "/expire-session", expireSession),
+  HttpRouter.add("POST", "/seed-current-month-transaction", seedCurrentMonthTransaction),
   HttpRouter.add("GET", "/session-observation", observeSession)
 );
 

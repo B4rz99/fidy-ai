@@ -112,7 +112,7 @@ export default {
       severity: "error",
       comment:
         "The browser client facade imported a shell implementation directly. It may expose only " +
-        "the assembled FidyApi, declaration-only client authorization, and derived input helpers; " +
+        "the assembled FidyApi, declaration-only client authorization, and derived operation projections; " +
         "live middleware and server adapters stay behind the server assembly.",
       from: { path: "^src/client\\.ts$" },
       to: {
@@ -121,6 +121,7 @@ export default {
           "^src/shell/api\\.ts$",
           "^src/shell/_shared/authz\\.ts$",
           "^src/shell/_shared/canonical-input\\.ts$",
+          "^src/shell/_shared/canonical-success\\.ts$",
         ],
       },
     },

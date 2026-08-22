@@ -217,7 +217,7 @@ export const useBrowserLoginPairing = (): BrowserLoginPairing => {
     startPairing({
       onAuthenticated: () => {
         completeLogin();
-        router.navigate({ to: "/app" }).catch(() => undefined);
+        router.navigate({ to: "/app/transactions" }).catch(() => undefined);
       },
       onStateChange: setPairingState,
     });

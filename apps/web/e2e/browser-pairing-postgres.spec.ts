@@ -33,6 +33,23 @@ const approvePairing = async (request: APIRequestContext, publicCode: string): P
   expect(response.status()).toBe(noContentStatus);
 };
 
+const completePairing = async (page: Page, request: APIRequestContext): Promise<void> => {
+  await page.goto("/auth/pair");
+  const startResponse = page.waitForResponse(
+    (response) =>
+      response.url() === `${apiOrigin}/web/pairings` && response.request().method() === "POST"
+  );
+  await page.getByRole("button", { name: "Iniciar sesión en el navegador" }).click();
+  expect((await startResponse).status()).toBe(successStatus);
+  const codeNode = page.locator('[aria-label^="Código de vinculación "]');
+  await expect(codeNode).toBeVisible();
+  const publicCode = Option.getOrThrow(Option.fromNullishOr(await codeNode.textContent())).trim();
+  expect(publicCode).toMatch(/^[A-Z2-9]{4}-[A-Z2-9]{4}$/u);
+  await approvePairing(request, publicCode);
+  await expect(page.getByText("es-CO", { exact: true })).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByText("America/Bogota", { exact: true })).toBeVisible();
+};
+
 const observeSession = async (request: APIRequestContext): Promise<SessionObservation> => {
   const response = await request.get(`${controlOrigin}/session-observation`);
   expect(response.status()).toBe(successStatus);
@@ -101,20 +118,7 @@ test("establishes, retains, replays, and revokes a real PostgreSQL WebSession", 
     }
   });
 
-  await page.goto("/auth/pair");
-  const startResponse = page.waitForResponse(
-    (response) =>
-      response.url() === `${apiOrigin}/web/pairings` && response.request().method() === "POST"
-  );
-  await page.getByRole("button", { name: "Iniciar sesión en el navegador" }).click();
-  expect((await startResponse).status()).toBe(successStatus);
-  const codeNode = page.locator('[aria-label^="Código de vinculación "]');
-  await expect(codeNode).toBeVisible();
-  const publicCode = Option.getOrThrow(Option.fromNullishOr(await codeNode.textContent())).trim();
-  expect(publicCode).toMatch(/^[A-Z2-9]{4}-[A-Z2-9]{4}$/u);
-  await approvePairing(request, publicCode);
-
-  await expect(page.getByText("Sesión iniciada", { exact: true })).toBeVisible({ timeout: 10_000 });
+  await completePairing(page, request);
   expect(redemptionPayload).toBeDefined();
   expect(await observeSession(request)).toEqual({ sessionCount: 1, revoked: false });
   await expect
@@ -130,4 +134,26 @@ test("establishes, retains, replays, and revokes a real PostgreSQL WebSession", 
     .toBe(false);
   expect(await observeSession(request)).toEqual({ sessionCount: 1, revoked: true });
   await assertUnknownWrongVerifierRefused(request);
+});
+
+test("drops Atom-owned User state when a real WebSession expires", async ({
+  context,
+  page,
+  request,
+}) => {
+  await resetAcceptanceState(request);
+  await completePairing(page, request);
+  expect((await context.cookies()).map(({ name }) => name)).toContain("__Host-fidy_session");
+
+  const expired = await request.post(`${controlOrigin}/expire-session`);
+  expect(expired.status()).toBe(noContentStatus);
+  await page.reload();
+
+  await expect(
+    page.getByText("Tu sesión venció. Inicia sesión de nuevo.", { exact: true })
+  ).toBeVisible();
+  await expect
+    .poll(async () => (await context.cookies()).some(({ name }) => name === "__Host-fidy_session"))
+    .toBe(false);
+  await expect(page.getByText("es-CO", { exact: true })).not.toBeVisible();
 });

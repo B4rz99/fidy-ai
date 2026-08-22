@@ -66,7 +66,8 @@
     "import/no-cycle": "error",
     "import/no-default-export": "error",
     "import/no-self-import": "error",
-    "jsdoc/check-tag-names": "error",
+    // Effect's compiler plugin reads this tag to make intentional middleware requirements explicit.
+    "jsdoc/check-tag-names": ["error", { "definedTags": ["effect-expect-leaking"] }],
     "jsdoc/empty-tags": "error",
     "jsdoc/require-param-description": "error",
     "jsdoc/require-param-type": "off",

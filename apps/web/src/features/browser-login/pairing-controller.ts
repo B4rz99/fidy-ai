@@ -202,7 +202,7 @@ export type BrowserLoginPairing = Readonly<{
  */
 export const useBrowserLoginPairing = (): BrowserLoginPairing => {
   const router = useRouter();
-  const { loginCompletedInLifetime, completeLogin, completeLogout, replaceAuthenticationLifetime } =
+  const { authentication, completeLogin, completeLogout, replaceAuthenticationLifetime } =
     useSession();
   const [controller] = useState(() =>
     makeBrowserLoginPairingController(router.options.context.webAuthClient)
@@ -210,12 +210,17 @@ export const useBrowserLoginPairing = (): BrowserLoginPairing => {
   const [pairingState, setPairingState] = useState<BrowserLoginPairingViewState>({ _tag: "Idle" });
   const startPairing = useAtomSet(controller.startPairing);
   const runLogout = useAtomSet(controller.logout);
-  const state: BrowserLoginPairingViewState = loginCompletedInLifetime
-    ? { _tag: "Authenticated" }
-    : pairingState;
+  const state: BrowserLoginPairingViewState =
+    authentication === "signed-in" ? { _tag: "Authenticated" } : pairingState;
 
   const start = (): void => {
-    startPairing({ onAuthenticated: completeLogin, onStateChange: setPairingState });
+    startPairing({
+      onAuthenticated: () => {
+        completeLogin();
+        router.navigate({ to: "/app" }).catch(() => undefined);
+      },
+      onStateChange: setPairingState,
+    });
   };
   const logout = (): void => {
     runLogout({ onLoggedOut: completeLogout });

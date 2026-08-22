@@ -1,5 +1,7 @@
 import { RouterProvider, createMemoryHistory } from "@tanstack/react-router";
-import { Option } from "effect";
+import { Effect, Layer, Option } from "effect";
+import { HttpClient, type HttpClientRequest, HttpClientResponse } from "effect/unstable/http";
+import type * as HttpClientError from "effect/unstable/http/HttpClientError";
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { WebApplication } from "@/app/application";
@@ -7,10 +9,34 @@ import { createWebRouter } from "@/app/routes";
 import { SessionRegistryProvider } from "@/session/session";
 import { makeFidyClient, makeWebAuthClient } from "@/transport/client";
 
-const renderRoute = async (path: string): Promise<void> => {
+const responseJson = (
+  request: HttpClientRequest.HttpClientRequest,
+  body: unknown
+): HttpClientResponse.HttpClientResponse =>
+  HttpClientResponse.fromWeb(
+    request,
+    new Response(JSON.stringify(body), { headers: { "content-type": "application/json" } })
+  );
+
+const makeHttpClient = (
+  handler: (
+    request: HttpClientRequest.HttpClientRequest
+  ) => Effect.Effect<HttpClientResponse.HttpClientResponse, HttpClientError.HttpClientError>
+): HttpClient.HttpClient =>
+  HttpClient.makeWith<
+    HttpClientError.HttpClientError,
+    never,
+    HttpClientError.HttpClientError,
+    never
+  >((effect) => Effect.flatMap(effect, handler), Effect.succeed);
+
+const renderRoute = async (
+  path: string,
+  apiClient = makeFidyClient("https://api.test.fidyapp.com")
+): Promise<void> => {
   const apiOrigin = "https://api.test.fidyapp.com";
   const router = createWebRouter({
-    apiClient: makeFidyClient(apiOrigin),
+    apiClient,
     webAuthClient: makeWebAuthClient(apiOrigin),
     history: Option.some(createMemoryHistory({ initialEntries: [path] })),
   });
@@ -23,11 +49,13 @@ const renderRoute = async (path: string): Promise<void> => {
   await router.load();
 };
 
+const resetApplicationTest = (): void => {
+  cleanup();
+  vi.unstubAllEnvs();
+};
+
 describe("web application routes", () => {
-  afterEach(() => {
-    cleanup();
-    vi.unstubAllEnvs();
-  });
+  afterEach(resetApplicationTest);
   it("renders the minimal root through the real router and Atom provider", async () => {
     await renderRoute("/");
 
@@ -56,6 +84,21 @@ describe("web application routes", () => {
     expect(await screen.findByRole("heading", { name: "Inicia sesión en Fidy" })).toBeVisible();
     expect(screen.getByRole("button", { name: "Iniciar sesión en el navegador" })).toBeVisible();
     expect(screen.queryByText(/pairing code/iu)).not.toBeInTheDocument();
+  });
+
+  it("routes malformed current-User responses into the signed-in failure state", async () => {
+    const httpClient = makeHttpClient((request) =>
+      Effect.succeed(responseJson(request, { unexpected: true }))
+    );
+    await renderRoute(
+      "/app",
+      makeFidyClient(
+        "https://api.test.fidyapp.com",
+        Layer.succeed(HttpClient.HttpClient, httpClient)
+      )
+    );
+
+    expect(await screen.findByText("No pudimos cargar tu perfil")).toBeVisible();
   });
 
   it("renders not-found behavior for an unknown route", async () => {

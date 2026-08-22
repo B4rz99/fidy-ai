@@ -1,11 +1,15 @@
 import { Option } from "effect";
 import { createContext, useContext } from "react";
 
+/** Browser-visible authentication state; it contains no credential or server-owned User data. */
+export type BrowserAuthentication = "signed-out" | "signed-in" | "expired";
+
 /** Owns browser-visible session state and every explicit authentication-lifetime transition. */
 export type SessionContextValue = Readonly<{
-  readonly loginCompletedInLifetime: boolean;
+  readonly authentication: BrowserAuthentication;
   readonly completeLogin: () => void;
   readonly completeLogout: () => void;
+  readonly expireAuthentication: () => void;
   readonly replaceAuthenticationLifetime: () => void;
 }>;
 

@@ -1,7 +1,7 @@
 import { Effect, Layer, Option, Redacted, Semaphore } from "effect";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
 import { HttpApiBuilder } from "effect/unstable/httpapi";
-import { ResolvedCaller } from "~/shell/_shared/authz";
+import { ResolvedCaller, webSessionCookieName } from "~/shell/_shared/authz";
 import { FidyApi } from "~/shell/api";
 import {
   type RedeemBrowserLoginPairingPayload,
@@ -15,6 +15,10 @@ import {
   redeemBrowserLoginPairing,
   startBrowserLoginPairing,
 } from "./service";
+import {
+  initialWebSessionCookieOptions,
+  webSessionCookieOptions,
+} from "~/shell/web-session/cookie";
 import { logoutWebSession } from "~/shell/web-session/service";
 
 const WebAuthNoStoreLive = HttpRouter.middleware((httpEffect) =>
@@ -62,21 +66,6 @@ const BrowserLoginEvidenceRetentionLive = Layer.effectDiscard(
   )
 );
 
-export const webSessionCookieName = "__Host-fidy_session";
-const webSessionCookieOptions = {
-  secure: true,
-  httpOnly: true,
-  sameSite: "strict",
-  path: "/",
-  maxAge: "30 days",
-} as const;
-const expiredWebSessionCookieOptions = {
-  secure: true,
-  httpOnly: true,
-  sameSite: "strict",
-  path: "/",
-} as const;
-
 const handleAdmittedRedemption = Effect.fn("BrowserLogin.handleAdmittedRedemption")(function* (
   payload: RedeemBrowserLoginPairingPayload
 ) {
@@ -98,7 +87,7 @@ const handleAdmittedRedemption = Effect.fn("BrowserLogin.handleAdmittedRedemptio
     response,
     webSessionCookieName,
     Redacted.value(redeemed.sessionBearer),
-    webSessionCookieOptions
+    initialWebSessionCookieOptions
   );
 });
 
@@ -120,7 +109,7 @@ const handleLogout = Effect.fn("WebSession.handleLogout")(function* () {
   return HttpServerResponse.expireCookieUnsafe(
     HttpServerResponse.empty({ status: 204 }),
     webSessionCookieName,
-    expiredWebSessionCookieOptions
+    webSessionCookieOptions
   );
 });
 

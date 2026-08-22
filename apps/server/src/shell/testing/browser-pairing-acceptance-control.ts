@@ -1,12 +1,14 @@
 import { BunHttpServer, BunServices } from "@effect/platform-bun";
-import { type Config, Effect, Layer, Option, Schema } from "effect";
+import { type Config, ConfigProvider, Effect, Layer, Option, Schema } from "effect";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
 import { type SqlError, SqlSchema } from "effect/unstable/sql";
 import { BrowserLoginPublicCode } from "~/core/browser-login/rules";
+import { UserId } from "~/core/identity/reference";
+import { seedOnboardingConsent } from "~/shell/db/development-seed";
 import { MigrationSqlClient, PgLive } from "~/shell/db/client";
 import { maximumPublicRequestBodySizeBytes } from "~/shell/runtime";
 
-const acceptanceUserId = "24000000-0000-4000-8000-000000000241";
+const acceptanceUserId = UserId.make("24000000-0000-4000-8000-000000000241");
 
 const ApprovePairingRequest = Schema.Struct({ publicCode: BrowserLoginPublicCode });
 const ApprovedPairing = Schema.Struct({ publicCode: BrowserLoginPublicCode });
@@ -32,6 +34,7 @@ const reset = Effect.gen(function* () {
     )
     ON CONFLICT (id) DO NOTHING
   `;
+  yield* seedOnboardingConsent(acceptanceUserId);
   return HttpServerResponse.empty({ status: noContentStatus });
 });
 
@@ -69,9 +72,31 @@ const observeSession = Effect.gen(function* () {
   return yield* HttpServerResponse.json(Option.getOrThrow(Option.fromNullishOr(observations[0])));
 });
 
+const expireSession = Effect.gen(function* () {
+  const sql = yield* MigrationSqlClient;
+  yield* sql`
+    UPDATE web_sessions SET idle_expires_at = paired_at + interval '1 millisecond'
+    WHERE user_id = ${acceptanceUserId} AND revoked_at IS NULL
+  `;
+  return HttpServerResponse.empty({ status: noContentStatus });
+});
+
+const AcceptanceControlConfig = ConfigProvider.layer(
+  ConfigProvider.fromEnv({
+    env: {
+      PUBLIC_WEB_ORIGIN: "https://127.0.0.1:4173",
+      PUBLIC_API_ORIGIN: "https://127.0.0.1:4174",
+      INGEST_EMAIL_DOMAIN: "ingest.fidyapp.com",
+      KAPSO_WEBHOOK_SECRET: "test-webhook-secret-32-characters",
+      WHATSAPP_BUSINESS_PORTFOLIO_ID: "portfolio-test",
+    },
+  })
+);
+
 const ControlRoutesLive = Layer.mergeAll(
   HttpRouter.add("POST", "/reset", reset),
   HttpRouter.add("POST", "/approve-pairing", approvePairing),
+  HttpRouter.add("POST", "/expire-session", expireSession),
   HttpRouter.add("GET", "/session-observation", observeSession)
 );
 
@@ -87,6 +112,7 @@ export const makeBrowserLoginPairingAcceptanceControlServer = ({
   readonly privateKey: Bun.BunFile;
 }): Layer.Layer<never, Config.ConfigError | SqlError.SqlError> =>
   HttpRouter.serve(ControlRoutesLive).pipe(
+    Layer.provide(AcceptanceControlConfig),
     Layer.provide(
       BunHttpServer.layer({
         hostname: "127.0.0.1",

@@ -9,12 +9,13 @@ import { makeFidyClient } from "./client";
 
 const responseJson = (
   request: HttpClientRequest.HttpClientRequest,
-  body: unknown
+  body: unknown,
+  status = 200
 ): HttpClientResponse.HttpClientResponse =>
   HttpClientResponse.fromWeb(
     request,
     new Response(JSON.stringify(body), {
-      status: 200,
+      status,
       headers: { "content-type": "application/json" },
     })
   );
@@ -58,6 +59,38 @@ describe("canonical browser transport", () => {
 
       expect(response.data.url.href).toBe("https://upgrade.fidyapp.com/");
       expect(requests).toEqual(["https://api.test.fidyapp.com/subscription/upgrade-url"]);
+    } finally {
+      unmount();
+      registry.dispose();
+    }
+  });
+
+  it("notifies the authentication lifetime when the canonical API rejects the session", async () => {
+    let expirations = 0;
+    const httpClient = makeHttpClient((request) =>
+      Effect.succeed(
+        responseJson(
+          request,
+          {
+            error: { code: "unauthenticated", message: "Authentication expired." },
+            next: [],
+          },
+          401
+        )
+      )
+    );
+    const client = makeFidyClient(
+      "https://api.test.fidyapp.com",
+      Layer.succeed(HttpClient.HttpClient, httpClient),
+      { onAuthenticationExpired: () => expirations++ }
+    );
+    const atom = client.query("identity", "getCurrentUser", {});
+    const registry = AtomRegistry.make();
+    const unmount = registry.mount(atom);
+
+    try {
+      await Effect.runPromise(Effect.result(AtomRegistry.getResult(registry, atom)));
+      expect(expirations).toBe(1);
     } finally {
       unmount();
       registry.dispose();

@@ -20,4 +20,3 @@ export {
 } from "./web-auth-api";
 export { StartedBrowserLoginPairing } from "~/core/browser-login/model";
 export { BrowserLoginPairingInvalidApi, BrowserLoginPollingRateLimitedApi } from "./web-auth-api";
-export { Unauthenticated } from "~/shell/_shared/errors";

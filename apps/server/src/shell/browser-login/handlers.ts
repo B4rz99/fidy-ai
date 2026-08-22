@@ -1,7 +1,7 @@
 import { Effect, Layer, Option, Redacted, Semaphore } from "effect";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
 import { HttpApiBuilder } from "effect/unstable/httpapi";
-import { ResolvedCaller } from "~/shell/_shared/authz";
+import { ResolvedCaller, webSessionCookieName } from "~/shell/_shared/authz";
 import { FidyApi } from "~/shell/api";
 import {
   type RedeemBrowserLoginPairingPayload,
@@ -17,7 +17,6 @@ import {
 } from "./service";
 import {
   initialWebSessionCookieOptions,
-  webSessionCookieName,
   webSessionCookieOptions,
 } from "~/shell/web-session/cookie";
 import { logoutWebSession } from "~/shell/web-session/service";

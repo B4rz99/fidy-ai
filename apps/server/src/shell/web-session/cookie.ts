@@ -1,7 +1,5 @@
 import type { Duration } from "effect";
 
-export const webSessionCookieName = "__Host-fidy_session";
-
 export const webSessionCookieOptions = {
   secure: true,
   httpOnly: true,

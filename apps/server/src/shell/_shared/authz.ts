@@ -6,8 +6,10 @@ import type { AuditCaller, AuditOutcome, CanonicalOperationId } from "~/core/aud
 import type { CanonicalCapabilities } from "~/core/_shared/canonical-capability";
 import type { UserId } from "~/core/identity/reference";
 import { type TokenBearer, TokenBearerFormat } from "~/core/tokens/model";
-import { webSessionCookieName } from "~/shell/web-session/cookie";
 import { ConsentRequired, ScopeMissing, Unauthenticated, UserActionRequired } from "./errors";
+
+/** Host-only cookie name published as part of the declaration-only browser authorization scheme. */
+export const webSessionCookieName = "__Host-fidy_session";
 
 /** Non-credential provenance retained across a hosted Turn for caller eligibility. */
 export type CanonicalAuthorityRoot = "verified-whatsapp" | "no-verified-whatsapp-authority";

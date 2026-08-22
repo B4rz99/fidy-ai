@@ -4,7 +4,6 @@ import {
   FidyApi,
   type FidyApiGroups,
   TokenAuthorizationClientAnonymousLive,
-  Unauthenticated,
   WebAuthApi,
   type WebAuthApiGroups,
 } from "@fidy/server/client";
@@ -34,11 +33,15 @@ export type CanonicalAuthenticationObserver = Readonly<{
   onAuthenticationExpired: () => void;
 }>;
 
+const UnauthenticatedResponse = Schema.Struct({
+  error: Schema.Struct({ code: Schema.Literal("unauthenticated") }),
+});
+
 const observeAuthenticationExpiration =
   (observer?: CanonicalAuthenticationObserver) =>
   <A, E, R>(response: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
     Effect.tapError(response, (error) =>
-      observer !== undefined && Schema.is(Unauthenticated)(error)
+      observer !== undefined && Schema.is(UnauthenticatedResponse)(error)
         ? Effect.sync(observer.onAuthenticationExpired)
         : Effect.void
     );

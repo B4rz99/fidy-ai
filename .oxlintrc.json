@@ -197,14 +197,6 @@
         ]
       }
     },
-    // Effect.fn must infer generic endpoint error and requirement channels through the canonical
-    // authorization dispatcher; an explicit annotation would widen or duplicate that contract.
-    {
-      "files": ["apps/server/src/shell/_shared/authz-live.ts"],
-      "rules": {
-        "typescript/explicit-function-return-type": "off"
-      }
-    },
     // TanStack Router must infer the complete literal route subtree through both factories so
     // registered links reject unknown paths. Explicit return types widen the tree to AnyRoute and
     // silently remove that compile-time contract; tsc grades the inferred tree.

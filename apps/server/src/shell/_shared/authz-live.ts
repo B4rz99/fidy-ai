@@ -33,9 +33,19 @@ import {
 } from "~/shell/web-session/cookie";
 import type { ResolvedWebSession } from "~/shell/web-session/repo";
 import { authenticateWebSession } from "~/shell/web-session/service";
-import { executeCanonicalEffect, findCanonicalCallRejected } from "./canonical-operation-executor";
+import {
+  type CanonicalCallRejected,
+  executeCanonicalEffect,
+  findCanonicalCallRejected,
+} from "./canonical-operation-executor";
 import { ConsentRequired, ScopeMissing, Unauthenticated, UserActionRequired } from "./errors";
-import { type CanonicalCaller, TokenAuthorization, webSessionSecurity } from "./authz";
+import {
+  type CanonicalCaller,
+  type ChildOperationAudit,
+  type ResolvedCaller,
+  TokenAuthorization,
+  webSessionSecurity,
+} from "./authz";
 import { getOperationPolicy } from "./operation-policy";
 
 const decodeBearer = Schema.decodeUnknownOption(TokenBearer);
@@ -220,7 +230,11 @@ const expireWebSessionCookie = HttpApiBuilder.securitySetCookie(webSessionSecuri
 const resolveWebSessionCredential = (
   redactedBearer: Redacted.Redacted<string>,
   usedAt: DateTime.Utc
-) =>
+): Effect.Effect<
+  Option.Option<ResolvedCredential>,
+  never,
+  Crypto.Crypto | HttpServerRequest.HttpServerRequest | SqlClient.SqlClient
+> =>
   Effect.gen(function* () {
     const bearer = Redacted.value(redactedBearer);
     if (bearer === "") return Option.none<ResolvedCredential>();
@@ -296,7 +310,7 @@ type SecurityContext = Readonly<{
 const renewWebSessionResponseCookie = (
   credential: ResolvedCredential,
   occurredAt: DateTime.Utc
-) => {
+): Effect.Effect<void, never, HttpServerRequest.HttpServerRequest> => {
   if (credential._tag === "PAT") return Effect.void;
   return HttpApiBuilder.securitySetCookie(
     webSessionSecurity,
@@ -304,6 +318,12 @@ const renewWebSessionResponseCookie = (
     renewedWebSessionCookieOptions(DateTime.distance(occurredAt, credential.resolved.idleExpiresAt))
   );
 };
+
+type CompletedOperation<A, E> = Readonly<{
+  _tag: "OperationCompleted";
+  exit: Exit.Exit<A, E | CanonicalCallRejected>;
+  credential: ResolvedCredential;
+}>;
 
 type CredentialTransactionInput<A, E, R, RR> = Readonly<{
   httpEffect: Effect.Effect<A, E, R>;
@@ -321,7 +341,11 @@ const executeCredentialTransaction = <A, E, R, RR>({
   operation,
   policy,
   resolveCredential,
-}: CredentialTransactionInput<A, E, R, RR>) =>
+}: CredentialTransactionInput<A, E, R, RR>): Effect.Effect<
+  CompletedOperation<A, E>,
+  Unauthenticated | UserActionAuthenticationRejected | ScopeAuthenticationRejected,
+  RR | SqlClient.SqlClient | Exclude<Exclude<R, ResolvedCaller>, ChildOperationAudit>
+> =>
   Effect.gen(function* () {
     const credential = yield* resolveCredential(occurredAt).pipe(
       Effect.flatMap(Effect.fromOption(unauthenticated))

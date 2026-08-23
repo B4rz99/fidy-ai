@@ -53,7 +53,7 @@ WhatsApp gateway is replaced by a portfolio-plus-BSUID gateway while its
 narrow-output and privilege rules remain. ADR-0010's phone-scoped ingress wording and phone-addressed
 delivery no longer apply; ingress, windows, and delivery bind to the authoritative association.
 Users who lose that association may recover browser access through their independently established
-RecoveryEmailCredential or BackupRecoveryCode, but recovery never replaces or reassociates
+VerifiedEmailCredential or BackupRecoveryCode, but recovery never replaces or reassociates
 WhatsAppIdentity.
 
 ## Rejected alternatives

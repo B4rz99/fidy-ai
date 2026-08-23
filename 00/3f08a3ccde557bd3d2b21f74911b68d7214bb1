@@ -1,0 +1,20 @@
+.github/workflows/react-doctor.yml
+  s_76c6776e3f294d::t_0334b59ad243a8 43-44
+  s_76c6776e3f294d::t_93ff8f70eb4f3d 34,42,45-51
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.23",
+  "base_commit_sha": "003f08a3ccde557bd3d2b21f74911b68d7214bb1",
+  "prompts": {},
+  "sessions": {
+    "s_76c6776e3f294d": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a02bae-163d-70a9-aeec-39e6a469949c",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": null
+    }
+  }
+}

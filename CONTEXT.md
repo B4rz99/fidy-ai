@@ -218,10 +218,11 @@ scope set; only the initiating client can claim the PAT bearer, once.
 _Avoid_: Device login, magic-link delivery, WhatsApp approval, token exchange.
 
 **BrowserLoginPairing**:
-A short-lived web authentication bootstrap in which the browser retains a private verifier and the
-User approves only a public code through their WhatsAppIdentity. The public code cannot establish a
-session, and one approved pairing can bootstrap one stable-User web session.
-_Avoid_: Magic-link login, device login, WhatsApp login link.
+A short-lived web authentication bootstrap in which the browser retains a private verifier while an
+established WhatsAppIdentity, RecoveryEmailCredential, or SupportRecoveryCase approves the pairing
+for the same stable User. Public references cannot establish a session, and one approved pairing can
+bootstrap one stable-User web session.
+_Avoid_: Magic-link login, device login, WhatsApp login link, recovery session.
 
 **Transcript**:
 The exact append-only record of retained User text, visible assistant text, canonical tool calls and
@@ -288,9 +289,9 @@ _Avoid_: Memory, Transcript, context window, prompt.
 
 **User**:
 A person with a stable identity independent of phone numbers, channels, providers, and recovery
-credentials. Their current ServiceMarket, locale, and IANA time zone are explicit, independent
-context. Fidy performs no KYC; institution-required identifying data never becomes the User's identity.
-Recovery email is optional.
+credentials. A User comes into existence only with one verified RecoveryEmailCredential, which never
+becomes their identity. Their current ServiceMarket, locale, and IANA time zone are explicit,
+independent context; Fidy performs no KYC, and institution data never defines identity.
 _Avoid_: Account, customer, client, titular (that word is reserved for its legal sense).
 
 **WhatsAppIdentity**:
@@ -298,8 +299,24 @@ The concrete association between a User and a WhatsApp Business Portfolio-scoped
 Its identity key is Business Portfolio plus BSUID. A normalized E.164 phone number, parent BSUID,
 and username are optional mutable evidence on that association: none can resolve, authorize,
 reassociate, or address communication to a User. It is the launch channel identity, not the User
-itself; message, contact, and conversation identifiers are delivery evidence, not identity.
+itself; recovery can restore access to the User but cannot replace this association.
 _Avoid_: Phone identity, User identity, root identity, generic channel identity, provider identity.
+
+**RecoveryEmailCredential**:
+The one verified mailbox credential required for a User. It can prove access to that same stable User
+but is neither the User's identity nor authority to create another User or change WhatsAppIdentity.
+_Avoid_: EmailIdentity, account email, login identity, identity provider.
+
+**BackupRecoveryCode**:
+A one-time credential disclosed to a User for the exceptional case where both their
+RecoveryEmailCredential and WhatsAppIdentity are unavailable; after disclosure only its digest
+remains with Fidy. Losing all three established proofs leaves no safe recovery path.
+_Avoid_: Support override, recovery answer, identity document, financial proof.
+
+**SupportRecoveryCase**:
+A tracked support decision that uses a User's pre-issued BackupRecoveryCode to approve an existing
+BrowserLoginPairing. Its evidence is closed, metadata-only, and never redefines User ownership.
+_Avoid_: Manual account transfer, support note, identity review, WhatsApp reassociation.
 
 **ConsentRecord**:
 An append-only entry recording that a stable User agreed to a specific disclosure at a specific UTC
@@ -325,10 +342,10 @@ _Avoid_: Advice (unqualified), recommendation.
 ### Money in, money out
 
 **TrialPeriod**:
-The immutable half-open UTC interval during which a newly consented User receives Pro access without
-a Subscription. It starts once, when onboarding consent creates the stable User, and ends exactly
-168 hours later. Returning identity resolution, consent restoration, and WhatsApp reassociation
-never replace or extend it.
+The immutable half-open UTC interval during which a newly onboarded User receives Pro access without
+a Subscription. It starts once, when verified recovery email completes onboarding and creates the
+stable User, and ends exactly 168 hours later. Returning identity resolution, consent restoration,
+and WhatsApp reassociation never replace or extend it.
 _Avoid_: Trial status, renewable trial, onboarding window.
 
 **Subscription**:

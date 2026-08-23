@@ -19,8 +19,9 @@ Fidy's durable identity depend on one channel provider.
 
 `UserId` remains Fidy's stable subject. A WhatsApp association is authorized only by the pair
 `(BusinessPortfolioId, BSUID)`, where the portfolio comes from trusted deployment configuration and
-the BSUID comes from an authenticated provider event or explicit support-recovery verification. The
-privileged pre-subject resolver accepts only that pair and returns only `UserId`.
+the BSUID comes from an authenticated provider event. Recovery proof is authority for an existing
+User, never for a WhatsAppIdentity association. The privileged pre-subject resolver accepts only the
+portfolio-plus-BSUID pair and returns only `UserId`.
 
 Phone number, username, and parent BSUID are nullable mutable evidence. They may be refreshed only
 after the authoritative pair resolves and may never independently resolve, authorize, or
@@ -51,8 +52,9 @@ endpoint for exact raw Meta events; it is not a canonical product API route. ADR
 WhatsApp gateway is replaced by a portfolio-plus-BSUID gateway while its
 narrow-output and privilege rules remain. ADR-0010's phone-scoped ingress wording and phone-addressed
 delivery no longer apply; ingress, windows, and delivery bind to the authoritative association.
-Users who lose that association need an authenticated identity-change or support-mediated recovery
-path rather than automatic phone fallback.
+Users who lose that association may recover browser access through their independently established
+RecoveryEmailCredential or BackupRecoveryCode, but recovery never replaces or reassociates
+WhatsAppIdentity.
 
 ## Rejected alternatives
 

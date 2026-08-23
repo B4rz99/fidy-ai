@@ -92,8 +92,8 @@ Use three checks when drawing a boundary:
 
 1. Data that must commit atomically belongs to one slice unless an accepted coordination decision
    says otherwise. ADR 0005 coordinates canonical state with Audit evidence, ADR 0009 coordinates
-   initial User bootstrap, ADR 0008 serializes consent revocation with consent-dependent work, and
-   ADR 0013 lets the deep WhatsApp disclosure-delivery module atomically coordinate verified
+   verified onboarding bootstrap, ADR 0008 serializes consent revocation with consent-dependent
+   work, ADR 0013 lets the deep WhatsApp disclosure-delivery module atomically coordinate verified
    attempt evidence with the Consent owner operation, and ADR 0017 coordinates PAT lifecycle with
    its append-only Consent evidence. These exceptions compose only owner-published operations and
    do not transfer data ownership.
@@ -225,16 +225,30 @@ executable authorities do not cross these public boundaries. The tests in the or
 contract; every configured credential path additionally needs its own named evidence, enforced by
 `bun run check:credential-evidence`.
 
-### Browser authentication and PAT lifecycle
+### Browser authentication, recovery, and PAT lifecycle
 
 ADR 0015 replaces WhatsApp-delivered web login links with browser-initiated pairing at
-`/auth/pair`. The browser retains the private verifier and WhatsApp sees only a public code that
-cannot establish a session. Pairing expires after ten minutes and succeeds once. Security-sensitive
-web actions require pairing completed within the preceding ten minutes; passkeys are deferred under
-the accepted MVP threat model. The hosted Kapso delivery attempt and direct-browser redemption emit
+`/auth/pair`. The browser retains the private verifier while WhatsApp, email recovery, and support
+recovery receive only the proof each authority needs; none can establish a session without the
+browser proof. Pairing expires after ten minutes and succeeds once. Security-sensitive web actions
+require pairing completed within the preceding ten minutes; passkeys are deferred under the
+accepted MVP threat model. The hosted Kapso delivery attempt and direct-browser redemption emit
 only registry-closed operation, outcome, safe reason, retry, HTTP status, attempt, and latency
 coordinates. They never project the private verifier, public code, bearer, cookie, URL, reply text,
 UserId, request/response payload, User prose, or domain data.
+
+[ADR 0020](docs/adr/0020-mandatory-verified-email-account-recovery.md) makes one verified recovery
+email a prerequisite to stable User creation. Recovery owns pre-User email verification attempts,
+the User's single verified credential, digest-only backup credential, Resend delivery state, and
+tracked support cases. Identity still owns User and WhatsAppIdentity; Consent still owns pending
+decision evidence and ConsentRecords. The shell-only onboarding completion process composes those
+owners under ADR 0009 and creates all stable onboarding state only after email proof succeeds.
+
+Email and support recovery approve an existing BrowserLoginPairing for the existing UserId. They do
+not create a parallel session, create another User, replace the verified recovery email, or change
+WhatsAppIdentity. The browser's private verifier remains necessary to create the WebSession. A User
+whose Consent is explicitly revoked may authenticate only to reach Fidy-owned re-consent and
+data-rights surfaces; ordinary canonical work remains blocked with `user_action_required`.
 
 ADR 0016 makes `/settings/pats` the only PAT-issuance authority. Manual issuance reveals the raw PAT
 once to the first-party browser; PATPairing returns it once directly to the initiating client that
@@ -298,7 +312,9 @@ know which transport exposes it.
 
 External providers stay at shell edges behind narrow services. Launch-specific behavior remains
 in its owning module rather than being hidden behind speculative provider or market registries.
-The WhatsApp edge authenticates bounded exact webhook bytes before decoding and bounds Kapso
+Resend is Recovery's launch outbound-email adapter; it receives only the recipient and bounded
+message projection required for the current proof, and provider work is driven by durable delivery
+state. The WhatsApp edge authenticates bounded exact webhook bytes before decoding and bounds Kapso
 response bytes before SDK decoding. Its worker appends a visible assistant Transcript entry only
 after provider delivery succeeds; failed or ambiguous sends do not claim that the User saw a reply.
 

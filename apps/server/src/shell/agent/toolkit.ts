@@ -2,7 +2,7 @@ import { Crypto, Effect, Function, Option, Schema } from "effect";
 import { Tool, Toolkit } from "effect/unstable/ai";
 import { SqlClient } from "effect/unstable/sql";
 import { toCodecOpenAI } from "effect/unstable/ai/OpenAiStructuredOutput";
-import { type AgentConfirmation } from "~/shell/_shared/operation-policy";
+import { type AgentConfirmation, isHostedVisible } from "~/shell/_shared/operation-policy";
 import { operationCatalog } from "~/shell/api";
 import type { CanonicalCaller } from "~/shell/_shared/authz";
 import { Telemetry } from "~/shell/observability/telemetry";
@@ -29,25 +29,28 @@ export {
 
 /** Every hosted tool binding, derived from the assembled FidyApi catalog. */
 export const agentOperationBindings: ReadonlyArray<AgentOperationBinding> =
-  operationCatalog.operations.map((operation) => {
-    const { codec: wireCodec, jsonSchema: wireJsonSchema } = toCodecOpenAI(operation.input);
-    const wireParameters: Schema.Codec<unknown, unknown, never, never> = Schema.make(wireCodec.ast);
-    const providerResponseParameters: Schema.Codec<unknown, unknown, never, never> = Schema.Union([
-      wireParameters,
-      operation.input,
-    ]);
-    return {
-      operation: operation.id,
-      wireName: encodeOpenAiToolName(operation.id),
-      description: operation.description,
-      canonicalParameters: operation.input,
-      providerResponseParameters,
-      wireJsonSchema,
-      success: operation.success,
-      failure: operation.failure,
-      policy: operation.policy,
-    };
-  });
+  operationCatalog.operations
+    .filter((operation) => isHostedVisible(operation.policy.access, "verified-whatsapp"))
+    .map((operation) => {
+      const { codec: wireCodec, jsonSchema: wireJsonSchema } = toCodecOpenAI(operation.input);
+      const wireParameters: Schema.Codec<unknown, unknown, never, never> = Schema.make(
+        wireCodec.ast
+      );
+      const providerResponseParameters: Schema.Codec<unknown, unknown, never, never> = Schema.Union(
+        [wireParameters, operation.input]
+      );
+      return {
+        operation: operation.id,
+        wireName: encodeOpenAiToolName(operation.id),
+        description: operation.description,
+        canonicalParameters: operation.input,
+        providerResponseParameters,
+        wireJsonSchema,
+        success: operation.success,
+        failure: operation.failure,
+        policy: operation.policy,
+      };
+    });
 
 const bindingsByWireName = new Map(
   agentOperationBindings.map((binding) => [binding.wireName, binding] as const)
@@ -55,6 +58,12 @@ const bindingsByWireName = new Map(
 if (bindingsByWireName.size !== agentOperationBindings.length) {
   throw new Error("Canonical operation aliases must remain unique for OpenAI");
 }
+
+/** Filters provider-visible bindings using the current hosted caller's authority. */
+export const hostedBindings = (
+  authorityRoot: CanonicalCaller["authorityRoot"]
+): ReadonlyArray<AgentOperationBinding> =>
+  agentOperationBindings.filter(({ policy }) => isHostedVisible(policy.access, authorityRoot));
 
 /** Finds the canonical binding for one provider-safe tool name. */
 export const findAgentOperationBinding = (
@@ -91,7 +100,7 @@ const tools = agentOperationBindings.map((binding) =>
   })
 );
 
-/** Toolkit definition containing exactly the operations reflected from FidyApi. */
+/** Canonical hosted toolkit; each provider request narrows these tools to its caller's authority. */
 export const AgentToolkit = Toolkit.make(...tools);
 
 export type AgentToolkitInstance = Toolkit.WithHandler<typeof AgentToolkit.tools> &

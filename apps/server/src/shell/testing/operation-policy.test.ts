@@ -63,9 +63,8 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
 
         expect(operations.length).toBeGreaterThan(0);
         for (const operation of operations) {
-          expect(Option.isSome(operation.requiredScope), operation.id).toBe(true);
+          expect(Option.isSome(operation.access), operation.id).toBe(true);
           expect(Option.isSome(operation.requiredTier), operation.id).toBe(true);
-          expect(Option.isSome(operation.callerEligibility), operation.id).toBe(true);
           expect(Option.isSome(operation.agentConfirmation), operation.id).toBe(true);
           expect(Option.isSome(operation.kind), operation.id).toBe(true);
         }
@@ -78,11 +77,25 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         const restricted = operations
           .filter(
             (operation) =>
-              Option.getOrUndefined(operation.callerEligibility) === "verified-whatsapp-hosted-only"
+              Option.getOrUndefined(operation.access)?.type === "verified-whatsapp-hosted-only"
           )
           .map((operation) => operation.id);
 
         expect(restricted).toEqual(["browserLogin.approvePairing"]);
+      })
+    );
+
+    it.effect("publishes atomic batch with authoritative child scope evaluation", () =>
+      Effect.gen(function* () {
+        const operations = yield* publishedOperations;
+        const batch = operations.find(
+          (operation) => operation.id === "operations.executeAtomicBatch"
+        );
+
+        expect(Option.getOrUndefined(batch?.access ?? Option.none())).toEqual({
+          type: "pat-scoped",
+          scope: { evaluation: "children" },
+        });
       })
     );
 

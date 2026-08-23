@@ -2,9 +2,14 @@ import { Effect, Function, type Option, Schema } from "effect";
 import type { CanonicalCapability } from "~/core/_shared/canonical-capability";
 import type { UserId } from "~/core/identity/reference";
 import { type OperationId, operationCatalog } from "~/shell/api";
-import { ResolvedCaller } from "./authz";
+import { ResolvedCaller, toAccessCaller } from "./authz";
 import type { CanonicalInput } from "./canonical-input";
-import { type OperationPolicyValue, type OperationTier } from "./operation-policy";
+import {
+  type OperationAccessCaller,
+  type OperationPolicyValue,
+  type OperationTier,
+  decideOperationAccess,
+} from "./operation-policy";
 import { type PartialInput } from "./partial-input";
 import {
   NextOperations,
@@ -37,14 +42,19 @@ export const suggestOperation = <Id extends OperationId>(
 
 /** The explicit caller facts needed to decide whether a target is callable. */
 export type SuggestedOperationCaller = {
-  readonly capabilities: ReadonlyArray<CanonicalCapability>;
+  readonly accessCaller: OperationAccessCaller;
   readonly tier: OperationTier;
 };
 
 /** Converts the current free-tier authorization facts into suggestion checkpoint input. */
 export const makeFreeSuggestedOperationCaller = (
-  capabilities: SuggestedOperationCaller["capabilities"]
-): SuggestedOperationCaller => ({ capabilities, tier: "free" });
+  accessCaller: OperationAccessCaller
+): SuggestedOperationCaller => ({ accessCaller, tier: "free" });
+
+/** Explicit test and worker adapter for a free-tier PAT with fixed capabilities. */
+export const freePatCaller = (
+  capabilities: ReadonlyArray<CanonicalCapability>
+): SuggestedOperationCaller => makeFreeSuggestedOperationCaller({ _tag: "PAT", capabilities });
 
 /**
  * Resolves the authorized caller into the owner id and free-tier suggestion facts a scoped handler
@@ -54,9 +64,9 @@ export const resolveFreeSuggestedOperationCaller: Effect.Effect<
   Readonly<{ userId: UserId; caller: SuggestedOperationCaller }>,
   never,
   ResolvedCaller
-> = Effect.map(ResolvedCaller, ({ capabilities, subjectUserId }) => ({
-  userId: subjectUserId,
-  caller: makeFreeSuggestedOperationCaller(capabilities),
+> = Effect.map(ResolvedCaller, (resolved) => ({
+  userId: resolved.subjectUserId,
+  caller: makeFreeSuggestedOperationCaller(toAccessCaller(resolved)),
 }));
 
 const hasRequiredTier = (requiredTier: OperationTier, callerTier: OperationTier): boolean =>
@@ -65,7 +75,7 @@ const hasRequiredTier = (requiredTier: OperationTier, callerTier: OperationTier)
 /**
  * Decides callability from the same policy authorization and generated surfaces
  * read. `free` operations are available to both tiers; Pro operations require a
- * Pro caller, and every operation still requires its declared canonical capability.
+ * Pro caller, and every operation still requires its declared caller-access requirement.
  */
 export const canCallOperation: {
   (caller: SuggestedOperationCaller): (self: OperationPolicyValue) => boolean;
@@ -73,7 +83,7 @@ export const canCallOperation: {
 } = Function.dual(
   2,
   (self: OperationPolicyValue, caller: SuggestedOperationCaller): boolean =>
-    caller.capabilities.includes(self.requiredCapability) &&
+    decideOperationAccess(self.access, caller.accessCaller)._tag === "Allowed" &&
     hasRequiredTier(self.requiredTier, caller.tier)
 );
 

@@ -18,6 +18,7 @@ import {
   type SuggestedOperationCaller,
   canCallOperation,
 } from "~/shell/_shared/suggested-operations";
+import { patScopeCapability } from "~/shell/_shared/operation-policy";
 import {
   SuggestedOperation,
   type SuggestedOperation as SuggestedOperationValue,
@@ -481,14 +482,15 @@ layer(SuggestedOperationsHarness, { excludeTestServices: true, timeout: "30 seco
           const source = Option.getOrThrow(
             Option.fromUndefinedOr(operationCatalog.byId.get(sourceOperation))
           );
+          const sourceCapability = Option.getOrElse(
+            patScopeCapability(source.policy.access),
+            () => "write" as const
+          );
           const sourceCaller: SuggestedOperationCaller = {
-            capabilities: [source.policy.requiredCapability],
+            accessCaller: { _tag: "PAT", capabilities: [sourceCapability] },
             tier: source.policy.requiredTier,
           };
-          const responses = yield* probe(
-            clientsByScope[source.policy.requiredCapability],
-            readOwnerWriter
-          );
+          const responses = yield* probe(clientsByScope[sourceCapability], readOwnerWriter);
 
           for (const response of responses) {
             for (const suggestedOperation of response.next) {

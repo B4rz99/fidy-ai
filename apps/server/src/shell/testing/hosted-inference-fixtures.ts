@@ -43,7 +43,11 @@ const prepareDeterministic: DeterministicAdapter["prepare"] = (input) => {
     ...input.projection.continuationTail,
     ...input.projection.suffix,
   ];
-  const providerInput = { prompt, toolkit: AgentToolkit };
+  const providerInput = {
+    prompt,
+    toolkit: AgentToolkit,
+    availableOperations: input.availableOperations,
+  };
   return Effect.succeed(
     input.toolChoice === "none"
       ? { ...providerInput, toolChoice: input.toolChoice }

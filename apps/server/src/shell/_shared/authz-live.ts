@@ -61,6 +61,16 @@ const unauthenticated = (): Unauthenticated =>
     next: [],
   });
 
+const freshWebSessionRequired = (): Unauthenticated =>
+  Unauthenticated.make({
+    error: {
+      code: "unauthenticated",
+      message:
+        "This operation requires a freshly paired browser session. Pair this browser again and retry.",
+    },
+    next: [],
+  });
+
 const scopeMissing = (): ScopeMissing =>
   ScopeMissing.make({
     error: {
@@ -115,14 +125,17 @@ class UserActionAuthenticationRejected extends Data.TaggedError(
   readonly access: "never-granted" | "revoked";
 }> {}
 
-class ScopeAuthenticationRejected extends Data.TaggedError("ScopeAuthenticationRejected")<{
+class AccessAuthenticationRejected extends Data.TaggedError("AccessAuthenticationRejected")<{
   readonly credential: ResolvedCredential;
+  readonly reason: CanonicalCallRejected["reason"];
 }> {}
 
-/** A direct credential can neither exceed its capability nor invoke hosted-only authority. */
-const isCredentialIneligible = (cause: Cause.Cause<unknown>): boolean =>
-  Option.exists(findCanonicalCallRejected(cause), (rejection) =>
-    ["capability_missing", "caller_ineligible"].includes(rejection.reason)
+/** Finds an access refusal that must roll credential renewal back and map at the HTTP boundary. */
+const credentialAccessRejection = (
+  cause: Cause.Cause<unknown>
+): Option.Option<CanonicalCallRejected> =>
+  Option.filter(findCanonicalCallRejected(cause), ({ reason }) =>
+    ["pat_scope_missing", "fresh_web_session_required", "caller_ineligible"].includes(reason)
   );
 
 /**
@@ -192,7 +205,7 @@ const annotateOperationPolicy = (
   policy: ReturnType<typeof getOperationPolicy>
 ): Effect.Effect<void> =>
   Effect.annotateCurrentSpan({
-    "fidy.operation.required_capability": policy.requiredCapability,
+    "fidy.operation.access": policy.access._tag,
   });
 
 const recordRejectedAttempt = (
@@ -204,7 +217,10 @@ const recordRejectedAttempt = (
 ): Effect.Effect<AuditLogEntry, never, SqlClient.SqlClient> =>
   recordAuthorizationOutcome({ ...attempt, outcome: "rejected" });
 
-const canonicalCallerFromCredential = (credential: ResolvedCredential): CanonicalCaller => {
+const canonicalCallerFromCredential = (
+  credential: ResolvedCredential,
+  occurredAt: DateTime.Utc
+): CanonicalCaller => {
   if (credential._tag === "PAT") {
     return {
       subjectUserId: credential.resolved.subjectUserId,
@@ -218,7 +234,8 @@ const canonicalCallerFromCredential = (credential: ResolvedCredential): Canonica
     capabilities: allCanonicalCapabilities,
     auditCaller: { _tag: "WebSession", webSessionId: credential.resolved.webSessionId },
     authorityRoot: "no-verified-whatsapp-authority",
-    freshUntil: credential.resolved.freshUntil,
+    fresh:
+      DateTime.toEpochMillis(occurredAt) < DateTime.toEpochMillis(credential.resolved.freshUntil),
   };
 };
 
@@ -286,7 +303,7 @@ const executeAuthorizedEndpoint = Effect.fn("executeAuthorizedEndpoint")(functio
   yield* annotateOperationPolicy(policy);
   const exit = yield* Effect.exit(
     executeCanonicalEffect({
-      caller: canonicalCallerFromCredential(credential),
+      caller: canonicalCallerFromCredential(credential, occurredAt),
       operation,
       policy,
       effect: httpEffect,
@@ -296,8 +313,14 @@ const executeAuthorizedEndpoint = Effect.fn("executeAuthorizedEndpoint")(functio
   );
   // An unauthorized call rolls credential renewal back. A failed authorized operation keeps it:
   // the credential performed work it was entitled to, matching the sealed #241 renewal decision.
-  if (Exit.isFailure(exit) && isCredentialIneligible(exit.cause)) {
-    return yield* new ScopeAuthenticationRejected({ credential });
+  if (Exit.isFailure(exit)) {
+    const rejection = credentialAccessRejection(exit.cause);
+    if (Option.isSome(rejection)) {
+      return yield* new AccessAuthenticationRejected({
+        credential,
+        reason: rejection.value.reason,
+      });
+    }
   }
   return { _tag: "OperationCompleted", exit, credential } as const;
 });
@@ -343,7 +366,7 @@ const executeCredentialTransaction = <A, E, R, RR>({
   resolveCredential,
 }: CredentialTransactionInput<A, E, R, RR>): Effect.Effect<
   CompletedOperation<A, E>,
-  Unauthenticated | UserActionAuthenticationRejected | ScopeAuthenticationRejected,
+  Unauthenticated | UserActionAuthenticationRejected | AccessAuthenticationRejected,
   RR | SqlClient.SqlClient | Exclude<Exclude<R, ResolvedCaller>, ChildOperationAudit>
 > =>
   Effect.gen(function* () {
@@ -411,12 +434,15 @@ const authorizeCanonicalRequest = Effect.fn("CanonicalAuthorization.authorize")(
                 Effect.andThen(consentFailure(access))
               )
             : consentFailure(access),
-        ScopeAuthenticationRejected: ({ credential }) =>
-          recordRejection
+        AccessAuthenticationRejected: ({ credential, reason }) => {
+          const failure =
+            reason === "fresh_web_session_required" ? freshWebSessionRequired() : scopeMissing();
+          return recordRejection
             ? recordRejectedAttempt({ credential, operation, occurredAt }).pipe(
-                Effect.andThen(Effect.fail(scopeMissing()))
+                Effect.andThen(Effect.fail(failure))
               )
-            : Effect.fail(scopeMissing()),
+            : Effect.fail(failure);
+        },
         SqlError: Effect.die,
       })
     );

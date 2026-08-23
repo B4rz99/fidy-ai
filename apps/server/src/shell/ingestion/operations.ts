@@ -9,24 +9,24 @@ import { NeedsReviewItemId, StatementSubmissionId } from "~/core/ingestion/refer
 import { Transaction } from "~/core/transactions/model";
 import { NotFound, PaywallRequired, ValidationFailed } from "~/shell/_shared/errors";
 import { acceptedStatus } from "~/shell/_shared/http-status";
-import { operationPolicy } from "~/shell/_shared/operation-policy";
+import { operationPolicy, patScoped } from "~/shell/_shared/operation-policy";
 import { OperationResponse } from "~/shell/_shared/response";
 import { ResolveNeedsReviewItemInput } from "./input";
 
 const read = operationPolicy({
-  requiredCapability: "read",
+  access: patScoped("read"),
   requiredTier: "free",
   agentConfirmation: "not-required",
   kind: "query",
 });
 const write = operationPolicy({
-  requiredCapability: "write",
+  access: patScoped("write"),
   requiredTier: "free",
   agentConfirmation: "not-required",
   kind: "mutation",
 });
 const confirmedWrite = operationPolicy({
-  requiredCapability: "write",
+  access: patScoped("write"),
   requiredTier: "free",
   agentConfirmation: "required",
   kind: "mutation",

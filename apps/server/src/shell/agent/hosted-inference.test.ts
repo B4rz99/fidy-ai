@@ -109,6 +109,7 @@ const request = (hostedContext: HostedTextContext): HostedTextRequest => ({
   context: hostedContext,
   toolChoice: "auto",
   maximumToolCalls: HostedToolCallMaximum.make(2),
+  availableOperations: [],
 });
 
 it.effect("keeps discarded and executed structured preparations one-shot", () =>
@@ -371,6 +372,7 @@ it.effect("exposes only provider-neutral preparation data to the HostedInference
     const input = (yield* Ref.get(captured))[0];
     if (input === undefined) return yield* Effect.die("missing adapter preparation capture");
     expect(Object.keys(input).sort()).toEqual([
+      "availableOperations",
       "basePrefix",
       "continuation",
       "maximumToolCalls",
@@ -432,6 +434,7 @@ it.effect("frames hostile continuity as untrusted data in the prepared hosted tu
     const prepared = yield* inference.prepareText({
       context: yield* makeStartupWorkingContext(snapshot),
       toolChoice: "none",
+      availableOperations: [],
     });
 
     yield* prepared.execute;
@@ -554,12 +557,16 @@ it.effect("discarding an unexecuted continued request consumes its continuation"
     const generated = yield* first.execute;
     const continued = yield* generated.continuation.prepare(context("continued"), {
       toolChoice: "none",
+      availableOperations: [],
     });
 
     yield* continued.discard;
 
     const replacement = yield* Effect.exit(
-      generated.continuation.prepare(context("replacement"), { toolChoice: "none" })
+      generated.continuation.prepare(context("replacement"), {
+        toolChoice: "none",
+        availableOperations: [],
+      })
     );
     expect(Exit.isFailure(replacement)).toBe(true);
   })
@@ -573,11 +580,15 @@ it.effect("validates a continued request without retaining its continuation", ()
 
     const validation = yield* generated.continuation.prepare(context("validation"), {
       toolChoice: "none",
+      availableOperations: [],
     });
     yield* validation.discard;
 
     const replay = yield* Effect.exit(
-      generated.continuation.prepare(context("replay"), { toolChoice: "none" })
+      generated.continuation.prepare(context("replay"), {
+        toolChoice: "none",
+        availableOperations: [],
+      })
     );
     expect(replay._tag).toBe("Failure");
   })
@@ -621,14 +632,20 @@ it.effect("releases a claimed continuation when continued preparation fails", ()
     expect(
       Exit.isFailure(
         yield* Effect.exit(
-          generated.continuation.prepare(context("failed continuation"), { toolChoice: "none" })
+          generated.continuation.prepare(context("failed continuation"), {
+            toolChoice: "none",
+            availableOperations: [],
+          })
         )
       )
     ).toBe(true);
     expect(
       Exit.isFailure(
         yield* Effect.exit(
-          generated.continuation.prepare(context("released continuation"), { toolChoice: "none" })
+          generated.continuation.prepare(context("released continuation"), {
+            toolChoice: "none",
+            availableOperations: [],
+          })
         )
       )
     ).toBe(false);
@@ -683,7 +700,10 @@ it.effect("recovers invalid output only through an opaque one-shot continuation"
     yield* Effect.flip(prepared.execute);
     const continuation = yield* prepared.recover;
     const replay = yield* Effect.exit(prepared.recover);
-    const continued = yield* continuation.prepare(context("feedback"), { toolChoice: "none" });
+    const continued = yield* continuation.prepare(context("feedback"), {
+      toolChoice: "none",
+      availableOperations: [],
+    });
 
     expect(replay._tag).toBe("Failure");
     expect(Exit.isFailure(yield* Effect.exit(continued.execute))).toBe(true);
@@ -712,11 +732,15 @@ it.effect("recovers invalid continued output and consumes its source continuatio
     const generated = yield* first.execute;
     const continued = yield* generated.continuation.prepare(context("continued"), {
       toolChoice: "none",
+      availableOperations: [],
     });
     yield* Effect.flip(continued.execute);
 
     const recovered = yield* continued.recover;
-    const prepared = yield* recovered.prepare(context("recovered"), { toolChoice: "none" });
+    const prepared = yield* recovered.prepare(context("recovered"), {
+      toolChoice: "none",
+      availableOperations: [],
+    });
 
     expect(Exit.isSuccess(yield* Effect.exit(prepared.execute))).toBe(true);
   })
@@ -732,6 +756,7 @@ it.effect("continues only through an opaque one-shot adapter continuation", () =
     const foreignGenerated = yield* foreignPrepared.execute;
     const foreignUse = yield* foreignGenerated.continuation.prepare(context("foreign use"), {
       toolChoice: "none",
+      availableOperations: [],
     });
     const continuedContext = testTextContext({
       prefix: [{ role: "system", content: "stable prefix" }],
@@ -740,10 +765,16 @@ it.effect("continues only through an opaque one-shot adapter continuation", () =
       activeRequest: { _tag: "Absent" },
     });
 
-    const second = yield* generated.continuation.prepare(continuedContext, { toolChoice: "none" });
+    const second = yield* generated.continuation.prepare(continuedContext, {
+      toolChoice: "none",
+      availableOperations: [],
+    });
     yield* second.execute;
     const replay = yield* Effect.exit(
-      generated.continuation.prepare(context("replay"), { toolChoice: "none" })
+      generated.continuation.prepare(context("replay"), {
+        toolChoice: "none",
+        availableOperations: [],
+      })
     );
 
     expect(Exit.isSuccess(yield* Effect.exit(foreignUse.execute))).toBe(true);

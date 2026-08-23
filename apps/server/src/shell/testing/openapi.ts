@@ -1,21 +1,20 @@
 import { expect } from "@effect/vitest";
 import { Effect, Option, Schema } from "effect";
 import { HttpClient } from "effect/unstable/http";
-import { PatScope } from "~/core/tokens/model";
 import { okStatus } from "~/shell/_shared/http-status";
 import {
   AgentConfirmation,
-  CallerEligibility,
   CanonicalOperationKind,
   OperationTier,
+  PublishedOperationAccess,
+  type PublishedOperationAccess as PublishedOperationAccessValue,
 } from "~/shell/_shared/operation-policy";
 
 const SpecOperation = Schema.Struct({
   operationId: Schema.String,
   description: Schema.optional(Schema.String),
-  "x-fidy-required-scope": Schema.optional(PatScope),
+  "x-fidy-access": Schema.optional(PublishedOperationAccess),
   "x-fidy-required-tier": Schema.optional(OperationTier),
-  "x-fidy-caller-eligibility": Schema.optional(CallerEligibility),
   "x-fidy-agent-confirmation": Schema.optional(AgentConfirmation),
   "x-fidy-operation-kind": Schema.optional(CanonicalOperationKind),
 });
@@ -36,12 +35,10 @@ export type PublishedOperation = {
   readonly id: string;
   /** `None` when the spec carries no `description` at all for this operation. */
   readonly description: Option.Option<string>;
-  /** `None` when the spec omits the canonical operation's required-scope metadata. */
-  readonly requiredScope: Option.Option<PatScope>;
+  /** `None` when the spec omits the canonical operation's access metadata. */
+  readonly access: Option.Option<PublishedOperationAccessValue>;
   /** `None` when the spec omits the canonical operation's required-tier metadata. */
   readonly requiredTier: Option.Option<OperationTier>;
-  /** `None` when the spec omits attributable caller eligibility metadata. */
-  readonly callerEligibility: Option.Option<CallerEligibility>;
   /** `None` when the spec omits the hosted-agent confirmation metadata. */
   readonly agentConfirmation: Option.Option<AgentConfirmation>;
   /** `None` when the spec omits the canonical operation kind metadata. */
@@ -62,9 +59,8 @@ export const publishedOperations = Effect.gen(function* () {
       Object.values(methods).map((operation): PublishedOperation => ({
         id: operation.operationId,
         description: Option.fromUndefinedOr(operation.description),
-        requiredScope: Option.fromUndefinedOr(operation["x-fidy-required-scope"]),
+        access: Option.fromUndefinedOr(operation["x-fidy-access"]),
         requiredTier: Option.fromUndefinedOr(operation["x-fidy-required-tier"]),
-        callerEligibility: Option.fromUndefinedOr(operation["x-fidy-caller-eligibility"]),
         agentConfirmation: Option.fromUndefinedOr(operation["x-fidy-agent-confirmation"]),
         kind: Option.fromUndefinedOr(operation["x-fidy-operation-kind"]),
       }))

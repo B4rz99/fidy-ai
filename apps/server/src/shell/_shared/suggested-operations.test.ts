@@ -6,12 +6,14 @@ import { FidyApi, operationCatalog } from "~/shell/api";
 import {
   canCallOperation,
   checkpointSuggestedOperations,
+  freePatCaller,
   suggestOperation,
 } from "./suggested-operations";
+import { patScoped, webOrHosted } from "./operation-policy";
 import { SuggestedOperation } from "./response";
 
 const allCapabilities = ["read", "write", "dashboard"] as const;
-const freeCaller = { capabilities: allCapabilities, tier: "free" } as const;
+const freeCaller = freePatCaller(allCapabilities);
 const strictEncoding = { errors: "all", onExcessProperty: "error" } as const;
 
 const SuggestedMemberSpec = Schema.Struct({
@@ -175,7 +177,7 @@ it("filters missing scopes before enforcing the three-item cap", () => {
   expect(
     checkpointSuggestedOperations({
       candidates: [write, write, write, read],
-      caller: { capabilities: ["read"], tier: "free" },
+      caller: freePatCaller(["read"]),
     })
   ).toEqual([read]);
 });
@@ -195,16 +197,33 @@ it("fails loudly when more than three callable operations remain", () => {
   ).toThrow();
 });
 
+it("hides non-PAT operations from PAT suggestions while allowing an eligible web caller", () => {
+  const policy = {
+    access: webOrHosted,
+    requiredTier: "free",
+    agentConfirmation: "not-required",
+    kind: "query",
+  } as const;
+
+  expect(canCallOperation(policy, freeCaller)).toBe(false);
+  expect(
+    canCallOperation(policy, {
+      accessCaller: { _tag: "WebSession", fresh: false },
+      tier: "free",
+    })
+  ).toBe(true);
+});
+
 it("keeps Pro operations out of free responses", () => {
   const policy = {
-    requiredCapability: "read",
-    capabilityEvaluation: "operation",
-    callerEligibility: "authenticated",
+    access: patScoped("read"),
     requiredTier: "pro",
     agentConfirmation: "not-required",
     kind: "query",
   } as const;
 
   expect(canCallOperation(policy, freeCaller)).toBe(false);
-  expect(canCallOperation({ capabilities: ["read"], tier: "pro" })(policy)).toBe(true);
+  expect(
+    canCallOperation({ accessCaller: { _tag: "PAT", capabilities: ["read"] }, tier: "pro" })(policy)
+  ).toBe(true);
 });

@@ -6,6 +6,7 @@ import type {
   CanonicalOperationImplementations,
 } from "./canonical-implementation";
 import { canonicalMutationImplementations } from "./canonical-mutation-registry";
+import { toAccessCaller } from "./authz";
 import { makeFreeSuggestedOperationCaller } from "./suggested-operations";
 import { getCurrentUser } from "~/shell/identity/queries";
 import { listCategories, listKeywordRules } from "~/shell/categories/queries";
@@ -41,7 +42,7 @@ type ErasedCanonicalImplementation = {
 const suggestedCaller = ({
   resolved,
 }: CanonicalImplementationCaller): ReturnType<typeof makeFreeSuggestedOperationCaller> =>
-  makeFreeSuggestedOperationCaller(resolved.capabilities);
+  makeFreeSuggestedOperationCaller(toAccessCaller(resolved));
 
 /**
  * Every canonical implementation behind both HTTP handlers and hosted Turn authority. Catalog

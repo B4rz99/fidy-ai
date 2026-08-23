@@ -4,7 +4,9 @@ import {
   type CanonicalCaller,
   ChildOperationAudit,
   type ChildOperationAuditService,
+  toAccessCaller,
 } from "~/shell/_shared/authz";
+import { type OperationPolicyValue, decideOperationAccess } from "~/shell/_shared/operation-policy";
 import {
   type CanonicalMutationCall,
   type CanonicalMutationFailure,
@@ -107,6 +109,9 @@ const decodeCanonicalMutationCall = (
     )
   )(value);
 
+const hasChildAccess = (operation: OperationPolicyValue, caller: CanonicalCaller): boolean =>
+  decideOperationAccess(operation.access, toAccessCaller(caller))._tag === "Allowed";
+
 const executeChild = Effect.fn("executeAtomicBatchChild")(function* ({
   call,
   childAudit,
@@ -123,13 +128,13 @@ const executeChild = Effect.fn("executeAtomicBatchChild")(function* ({
         "The child is not an executable canonical mutation. Correct the operation and retry the whole batch.",
     });
   }
-  if (!caller.capabilities.includes(catalogOperation.policy.requiredCapability)) {
+  if (!hasChildAccess(catalogOperation.policy, caller)) {
     return yield* rejectChild(childAudit, {
       index,
       operation: call.operation,
       code: "scope_missing",
       message:
-        "The caller does not grant the capability declared by this child mutation. Correct authority before retrying the whole batch.",
+        "The caller does not grant the access declared by this child mutation. Correct authority before retrying the whole batch.",
     });
   }
   if (catalogOperation.policy.requiredTier !== "free") {
@@ -152,7 +157,7 @@ const executeChild = Effect.fn("executeAtomicBatchChild")(function* ({
     Effect.withSpan(`fidy.batch.${call.operation}`, {
       attributes: {
         "fidy.batch.call_index": index,
-        "fidy.operation.required_capability": catalogOperation.policy.requiredCapability,
+        "fidy.operation.access": catalogOperation.policy.access._tag,
         "fidy.operation.required_tier": catalogOperation.policy.requiredTier,
         "fidy.operation.agent_confirmation": catalogOperation.policy.agentConfirmation,
       },

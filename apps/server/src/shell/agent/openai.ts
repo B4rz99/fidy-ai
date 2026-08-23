@@ -22,6 +22,7 @@ import {
 } from "~/core/transcript/compaction-policy";
 import { type Prompt, Tool } from "effect/unstable/ai";
 import { toCodecOpenAI } from "effect/unstable/ai/OpenAiStructuredOutput";
+import type { TranscriptEntry } from "~/core/transcript/model";
 import { exactTranscriptPrompt } from "./model-boundary";
 import {
   HttpBody,
@@ -38,6 +39,7 @@ import {
   type HostedStructuredAdapter,
   type HostedTextContext,
   type HostedTextResult,
+  type HostedTextToolPolicy,
   HostedToolCallMaximum,
   makeHostedInference,
   maximumActiveRequestTokens,
@@ -318,17 +320,28 @@ const projectMessages = (
     )
   );
 
-const completeCanonicalTools: ReadonlyArray<OpenAiTool> = agentOperationBindings.map((binding) => ({
-  type: "function" as const,
+const makeOpenAiTool = (binding: (typeof agentOperationBindings)[number]): OpenAiTool => ({
+  type: "function",
   name: binding.wireName,
   description: agentOperationToolDescription(binding),
   parameters: binding.wireJsonSchema,
   strict: true,
-}));
+});
+
+const allOperationIds = agentOperationBindings.map(({ operation }) => operation);
+
+const toolsFor = (
+  availableOperations: HostedTextToolPolicy["availableOperations"]
+): ReadonlyArray<OpenAiTool> => {
+  const available = new Set(availableOperations);
+  return agentOperationBindings
+    .filter(({ operation }) => available.has(operation))
+    .map(makeOpenAiTool);
+};
 
 const makeCountedRequest = (
   input: ReadonlyArray<OpenAiSchema.InputItem>,
-  toolChoice: "auto" | "none"
+  policy: HostedTextToolPolicy
 ): OpenAiCountedRequest => {
   const framing = {
     model: FidyAgentModel,
@@ -338,9 +351,11 @@ const makeCountedRequest = (
     text: { format: { type: "text" as const } },
     truncation: "disabled" as const,
   };
-  return toolChoice === "none"
-    ? { ...framing, tool_choice: toolChoice, tools: completeCanonicalTools }
-    : { ...framing, tool_choice: toolChoice, tools: completeCanonicalTools };
+  return {
+    ...framing,
+    tool_choice: policy.toolChoice,
+    tools: toolsFor(policy.availableOperations),
+  };
 };
 
 const makeExecutionRequest = (
@@ -660,6 +675,32 @@ const makeStructuredAdapter = (
     }),
 });
 
+const countTranscriptTokens = (
+  client: OpenAiClient.Service,
+  entries: ReadonlyArray<TranscriptEntry>
+): Effect.Effect<number> =>
+  projectMessages(
+    [],
+    {
+      prefix: exactTranscriptPrompt(entries),
+      continuationTail: [],
+      suffix: [],
+      activeRequest: { _tag: "Absent" },
+    },
+    Option.none()
+  ).pipe(
+    Effect.flatMap(({ input }) =>
+      countInputTokens(
+        client,
+        makeCountedRequest(input, {
+          toolChoice: "none",
+          availableOperations: allOperationIds,
+        })
+      )
+    ),
+    Effect.orDie
+  );
+
 const makeOpenAiHostedInference = (
   client: OpenAiClient.Service,
   structuredPolicy: StructuredExecutionPolicy,
@@ -667,20 +708,7 @@ const makeOpenAiHostedInference = (
 ): HostedInferenceService => {
   const adapter: HostedInferenceAdapter<PreparedOpenAiRequest, OpenAiContinuation> = {
     countText: (text) => Effect.sync(() => memoryTokenizer.encode(text).length),
-    countTranscript: (entries) =>
-      projectMessages(
-        [],
-        {
-          prefix: exactTranscriptPrompt(entries),
-          continuationTail: [],
-          suffix: [],
-          activeRequest: { _tag: "Absent" },
-        },
-        Option.none()
-      ).pipe(
-        Effect.flatMap(({ input }) => countInputTokens(client, makeCountedRequest(input, "none"))),
-        Effect.orDie
-      ),
+    countTranscript: (entries) => countTranscriptTokens(client, entries),
     prepare: (semanticInput) =>
       Effect.gen(function* () {
         const projected = yield* projectMessages(
@@ -688,7 +716,7 @@ const makeOpenAiHostedInference = (
           semanticInput.projection,
           semanticInput.continuation
         );
-        const countedRequest = makeCountedRequest(projected.input, semanticInput.toolChoice);
+        const countedRequest = makeCountedRequest(projected.input, semanticInput);
         const request = makeExecutionRequest(
           countedRequest,
           semanticInput.toolChoice === "none" ? 0 : semanticInput.maximumToolCalls,
@@ -779,6 +807,7 @@ const makeOpenAiLayer = (
           context: yield* startupContext(budgets),
           toolChoice: "auto",
           maximumToolCalls: HostedToolCallMaximum.make(startupMaximumToolCalls),
+          availableOperations: allOperationIds,
         });
       }
       return inference;

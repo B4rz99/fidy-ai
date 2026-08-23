@@ -4,7 +4,7 @@ import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
 import { CanonicalOperationId } from "~/core/_shared/canonical-operation";
 import { ErrorCode, FieldIssue } from "~/shell/_shared/errors";
 import type { CatalogOperation, OperationCatalog } from "~/shell/_shared/operation-catalog";
-import { childCapabilityOperationPolicy } from "~/shell/_shared/operation-policy";
+import { isPatScoped, operationPolicy, patScopedChildren } from "~/shell/_shared/operation-policy";
 import { NextOperations, OperationResponse } from "~/shell/_shared/response";
 
 const operationsGroupName = "operations";
@@ -97,8 +97,7 @@ export const decodeAtomicBatchResult = (
 
 const mutationOperations = (catalog: OperationCatalog): ReadonlyArray<CatalogOperation> =>
   catalog.operations.filter(
-    (operation) =>
-      operation.policy.kind === "mutation" && operation.policy.callerEligibility === "authenticated"
+    (operation) => operation.policy.kind === "mutation" && isPatScoped(operation.policy.access)
   );
 
 const mutationCallMember = (operation: CatalogOperation): Schema.Top =>
@@ -182,8 +181,8 @@ export const makeOperationsGroup = (ordinaryCatalog: OperationCatalog): Operatio
         "Execute a non-empty ordered set of canonical mutations in one User-scoped PostgreSQL transaction. Use this when several state changes must commit together; each child keeps its own scope, Subscription tier, confirmation policy, validation, and canonical failure. Queries and nested batches are not valid children."
       )
       .annotateMerge(
-        childCapabilityOperationPolicy({
-          requiredCapability: "write",
+        operationPolicy({
+          access: patScopedChildren,
           requiredTier: "free",
           agentConfirmation: "required",
           kind: "mutation",

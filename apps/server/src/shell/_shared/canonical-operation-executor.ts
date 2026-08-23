@@ -16,16 +16,18 @@ import {
   ChildOperationAudit,
   type ChildOperationAuditService,
   ResolvedCaller,
+  toAccessCaller,
 } from "./authz";
 import { findCanonicalOperationImplementation } from "./canonical-operation-registry";
 import { isCanonicalRejectedFailure } from "./errors";
 import { getBoundOperationCatalog } from "./operation-catalog";
-import type { OperationPolicyValue } from "./operation-policy";
+import { type OperationPolicyValue, decideOperationAccess } from "./operation-policy";
 
 export class CanonicalCallRejected extends Data.TaggedError("CanonicalCallRejected")<{
   readonly reason:
     | "authority_closed"
-    | "capability_missing"
+    | "pat_scope_missing"
+    | "fresh_web_session_required"
     | "caller_ineligible"
     | "confirmation_rejected"
     | "input_rejected";
@@ -114,20 +116,10 @@ export const executeCanonicalEffect = Effect.fn("executeCanonicalEffect")(functi
   readonly occurredAt: DateTime.Utc;
 }) {
   const { caller, effect, executionCheckpoint, occurredAt, operation, policy } = input;
-  if (
-    policy.callerEligibility === "verified-whatsapp-hosted-only" &&
-    (caller.auditCaller._tag !== "HostedAgentSession" ||
-      caller.authorityRoot !== "verified-whatsapp")
-  ) {
+  const access = decideOperationAccess(policy.access, toAccessCaller(caller));
+  if (access._tag === "Denied") {
     yield* appendOutcome({ caller, operation, outcome: "rejected", occurredAt });
-    return yield* new CanonicalCallRejected({ reason: "caller_ineligible" });
-  }
-  if (
-    policy.capabilityEvaluation !== "children" &&
-    !caller.capabilities.includes(policy.requiredCapability)
-  ) {
-    yield* appendOutcome({ caller, operation, outcome: "rejected", occurredAt });
-    return yield* new CanonicalCallRejected({ reason: "capability_missing" });
+    return yield* new CanonicalCallRejected({ reason: access.reason });
   }
 
   const childEvidence = yield* Ref.make<ReadonlyArray<ChildAuditEvidence>>([]);

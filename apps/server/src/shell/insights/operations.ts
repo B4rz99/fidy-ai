@@ -7,7 +7,7 @@ import {
   InsightEventId,
 } from "~/core/insights/model";
 import { NotFound, ValidationFailed } from "~/shell/_shared/errors";
-import { operationPolicy } from "~/shell/_shared/operation-policy";
+import { operationPolicy, patScoped } from "~/shell/_shared/operation-policy";
 import { OperationResponse } from "~/shell/_shared/response";
 
 /** Canonical operations over the caller's shared InsightEvent stream. */
@@ -38,7 +38,7 @@ export const InsightsGroup = HttpApiGroup.make("insights")
       )
       .annotateMerge(
         operationPolicy({
-          requiredCapability: "read",
+          access: patScoped("read"),
           requiredTier: "free",
           agentConfirmation: "not-required",
           kind: "query",
@@ -60,7 +60,7 @@ export const InsightsGroup = HttpApiGroup.make("insights")
       )
       .annotateMerge(
         operationPolicy({
-          requiredCapability: "write",
+          access: patScoped("write"),
           requiredTier: "free",
           agentConfirmation: "required",
           kind: "mutation",
@@ -81,7 +81,7 @@ export const InsightsGroup = HttpApiGroup.make("insights")
       )
       .annotateMerge(
         operationPolicy({
-          requiredCapability: "write",
+          access: patScoped("write"),
           requiredTier: "free",
           agentConfirmation: "required",
           kind: "mutation",
@@ -101,7 +101,7 @@ export const InsightsGroup = HttpApiGroup.make("insights")
       )
       .annotateMerge(
         operationPolicy({
-          requiredCapability: "write",
+          access: patScoped("write"),
           requiredTier: "free",
           agentConfirmation: "required",
           kind: "mutation",

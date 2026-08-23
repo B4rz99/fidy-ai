@@ -1,0 +1,35 @@
+apps/server/src/shell/db/migrations/0028-persisted-schema-reconciliation.test.ts
+  s_fbb0ccf33e8e69::t_0c5fe4b22b9d22 15-17,141-151,154-163,166-173,401-434
+  s_fbb0ccf33e8e69::t_9d0a72a658b8f4 152-153,164-165
+  s_fbb0ccf33e8e69::t_3ec2c2973d4507 444-508,546-549,551-553
+  s_fbb0ccf33e8e69::t_798d5ac79db50a 529
+  s_fbb0ccf33e8e69::t_d41fe6d9908fd5 18-19,435-443,509-528,530-545
+  s_fbb0ccf33e8e69::t_4ef4073ff4a8f3 20-21
+  s_fbb0ccf33e8e69::t_5c9bd975a82d0d 550
+  s_fbb0ccf33e8e69::t_fb5c7d7ce2468c 554
+apps/server/src/shell/db/migrations/0028-persisted-schema-reconciliation.ts
+  s_fbb0ccf33e8e69::t_4684388be37a0e 391-392,504-532
+  s_fbb0ccf33e8e69::t_6698e6f4331ff9 287-290,393
+  s_fbb0ccf33e8e69::t_4a0b241ca53c6c 672
+  s_fbb0ccf33e8e69::t_e25631a1311f83 284-286,291-330,337-342
+  s_fbb0ccf33e8e69::t_a059d65eaaf07f 219-283,331-336,343-345
+  s_fbb0ccf33e8e69::t_2c4894484034eb 394-399
+  s_fbb0ccf33e8e69::t_4fe6fb318c0f59 459-503
+  s_fbb0ccf33e8e69::t_7aff8e812c5fbb 667,669,671,673
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.23",
+  "base_commit_sha": "5116b62e7d558f2424501d51b26d64140447fe21",
+  "prompts": {},
+  "sessions": {
+    "s_fbb0ccf33e8e69": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a02b48-2850-75cc-9939-e19b2a2b7788",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

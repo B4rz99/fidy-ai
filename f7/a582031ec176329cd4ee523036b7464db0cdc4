@@ -1,0 +1,21 @@
+apps/server/src/shell/browser-login/handlers.ts
+  s_91e2e3d2962a2c::t_e7963b531a93a5 202-208
+  s_91e2e3d2962a2c::t_63dc22029097f8 80
+  s_91e2e3d2962a2c::t_0d31b2d2923a41 83
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.23",
+  "base_commit_sha": "f7a582031ec176329cd4ee523036b7464db0cdc4",
+  "prompts": {},
+  "sessions": {
+    "s_91e2e3d2962a2c": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a02b52-e5e9-7b88-acb7-69d7eb23c75c",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

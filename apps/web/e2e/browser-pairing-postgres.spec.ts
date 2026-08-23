@@ -1,6 +1,7 @@
+import { StartedBrowserLoginPairing } from "@fidy/server/client";
 import { expect, test } from "@playwright/test";
 import type { APIRequestContext, Page } from "@playwright/test";
-import { Option, Schema } from "effect";
+import { Option, Redacted, Schema, Struct } from "effect";
 
 const apiOrigin = "https://127.0.0.1:4174";
 const controlOrigin = "https://127.0.0.1:4175";
@@ -9,12 +10,17 @@ const successStatus = 200;
 const createdStatus = 201;
 const noContentStatus = 204;
 const invalidStatus = 400;
+const unauthorizedStatus = 401;
+const notFoundStatus = 404;
 const invalidPairingBody = {
   error: {
     code: "pairing_invalid",
     message: "Esta vinculación ya no es válida. Inicia de nuevo.",
   },
 };
+
+const PairingStartBody = StartedBrowserLoginPairing.mapFields(Struct.pick(["privateVerifier"]));
+const OpenApi = Schema.Struct({ openapi: Schema.String });
 
 const SessionObservation = Schema.Struct({
   sessionCount: Schema.Int,
@@ -41,15 +47,45 @@ const completePairing = async (page: Page, request: APIRequestContext): Promise<
       response.url() === `${apiOrigin}/web/pairings` && response.request().method() === "POST"
   );
   await page.getByRole("button", { name: "Iniciar sesión en el navegador" }).click();
-  expect((await startResponse).status()).toBe(successStatus);
+  const startedResponse = await startResponse;
+  expect(startedResponse.status()).toBe(successStatus);
+  const started = Schema.decodeUnknownSync(PairingStartBody)(await startedResponse.json());
+  const privateVerifier = Redacted.value(started.privateVerifier);
+  expect(privateVerifier).toHaveLength(opaqueProofEncodedLength);
+  await expect(page.locator("body")).not.toContainText(privateVerifier);
+  expect(
+    await page.evaluate(() =>
+      [
+        ...[localStorage, sessionStorage].flatMap((storage) =>
+          Array.from({ length: storage.length }, (_, index) => {
+            const key = storage.key(index);
+            return key === null ? "" : (storage.getItem(key) ?? "");
+          })
+        ),
+        document.documentElement.outerHTML,
+        window.location.href,
+      ].join("\n")
+    )
+  ).not.toContain(privateVerifier);
   const codeNode = page.locator('[aria-label^="Código de vinculación "]');
   await expect(codeNode).toBeVisible();
   const publicCode = Option.getOrThrow(Option.fromNullishOr(await codeNode.textContent())).trim();
   expect(publicCode).toMatch(/^[A-Z2-9]{4}-[A-Z2-9]{4}$/u);
+  const currentUserResponse = page.waitForResponse(
+    (response) =>
+      response.url() === `${apiOrigin}/user` &&
+      response.request().method() === "GET" &&
+      response.status() === successStatus
+  );
   await approvePairing(request, publicCode);
   await expect(page).toHaveURL(/\/app\/transactions$/u, { timeout: 10_000 });
   await expect(page.getByRole("heading", { name: "Transacciones" })).toBeVisible();
   await expect(page.getByText("America/Bogota", { exact: true })).toBeVisible();
+  const userResponse = await currentUserResponse;
+  expect(userResponse.status()).toBe(successStatus);
+  expect(userResponse.headers()["access-control-allow-origin"]).toBe("https://127.0.0.1:4173");
+  expect(userResponse.headers()["access-control-allow-credentials"]).toBe("true");
+  expect(userResponse.headers()["access-control-allow-origin"]).not.toBe("*");
 };
 
 const SeededTransaction = Schema.Struct({ categoryLabel: Schema.String });
@@ -69,13 +105,12 @@ const observeSession = async (request: APIRequestContext): Promise<SessionObserv
 };
 
 const revokeRetainedSession = async (page: Page): Promise<void> => {
-  await page.evaluate((origin) => {
-    const form = document.createElement("form");
-    form.method = "POST";
-    form.action = `${origin}/web/session/logout`;
-    document.body.append(form);
-    form.submit();
-  }, apiOrigin);
+  const logoutResponse = page.waitForResponse(
+    (response) =>
+      response.url() === `${apiOrigin}/web/session/logout` && response.request().method() === "POST"
+  );
+  await page.getByRole("button", { name: "Cerrar sesión" }).click();
+  expect((await logoutResponse).status()).toBe(noContentStatus);
 };
 
 const assertReplayRefused = async (
@@ -100,6 +135,56 @@ const assertUnknownWrongVerifierRefused = async (request: APIRequestContext): Pr
   expect(response.status()).toBe(invalidStatus);
   expect(await response.json()).toEqual(invalidPairingBody);
 };
+
+test("proves independent production-like web and API route ownership", async ({ request }) => {
+  const shellPaths = ["/", "/auth/pair", "/app/transactions"];
+  const shellResponses = await Promise.all(shellPaths.map((path) => request.get(path)));
+  for (const response of shellResponses) {
+    expect(response.status()).toBe(successStatus);
+    expect(response.headers()["cache-control"]).toBe("no-cache");
+    expect(response.headers()["content-security-policy"]).toContain(
+      "connect-src https://127.0.0.1:4174"
+    );
+    expect(response.headers()["cross-origin-opener-policy"]).toBe("same-origin");
+    expect(response.headers()["cross-origin-resource-policy"]).toBe("same-origin");
+    expect(response.headers()["permissions-policy"]).toContain("camera=()");
+    expect(response.headers()["referrer-policy"]).toBe("no-referrer");
+    expect(response.headers()["x-content-type-options"]).toBe("nosniff");
+    expect(response.headers()["x-frame-options"]).toBe("DENY");
+  }
+
+  const shell = await (await request.get("/")).text();
+  const assetPath = Option.getOrThrow(
+    Option.fromNullishOr(shell.match(/src="(\/assets\/[^"?]+\.js)"/u)?.[1])
+  );
+  expect(assetPath).toMatch(/^\/assets\/.+-[A-Za-z0-9_-]{8,}\.js$/u);
+  const asset = await request.get(assetPath);
+  expect(asset.status()).toBe(successStatus);
+  expect(asset.headers()["cache-control"]).toBe("public, max-age=31536000, immutable");
+  expect((await request.get(`${assetPath}.map`)).status()).toBe(notFoundStatus);
+
+  expect((await request.get(`${apiOrigin}/`)).status()).toBe(notFoundStatus);
+  expect((await request.get(`${apiOrigin}/auth/pair`)).status()).toBe(notFoundStatus);
+  const health = await request.get(`${apiOrigin}/health`);
+  expect(health.status()).toBe(successStatus);
+  expect(await health.json()).toMatchObject({ status: "ok" });
+  const openApi = await request.get(`${apiOrigin}/openapi.json`);
+  expect(openApi.status()).toBe(successStatus);
+  expect(Schema.decodeUnknownSync(OpenApi)(await openApi.json()).openapi).toMatch(/^3\./u);
+  const docs = await request.get(`${apiOrigin}/docs`);
+  expect(docs.status()).toBe(successStatus);
+  expect(docs.headers()["content-type"]).toContain("text/html");
+  expect((await request.get(`${apiOrigin}/user`)).status()).toBe(unauthorizedStatus);
+  const invalidRedemption = await request.post(`${apiOrigin}/web/pairings/redeem`, {
+    data: {
+      pairingId: "24000000-0000-4000-8000-000000000243",
+      privateVerifier: "x".repeat(opaqueProofEncodedLength),
+    },
+  });
+  expect(invalidRedemption.status()).toBe(invalidStatus);
+  expect(invalidRedemption.headers()["cache-control"]).toBe("no-store");
+  expect(await invalidRedemption.json()).toEqual(invalidPairingBody);
+});
 
 test("shows real PostgreSQL pairing expiry without creating a WebSession", async ({
   page,
@@ -136,6 +221,15 @@ test("establishes, retains, replays, and revokes a real PostgreSQL WebSession", 
   await expect
     .poll(async () => (await context.cookies()).some(({ name }) => name === "__Host-fidy_session"))
     .toBe(true);
+  expect(
+    (await context.cookies()).find(({ name }) => name === "__Host-fidy_session")
+  ).toMatchObject({
+    domain: "127.0.0.1",
+    httpOnly: true,
+    path: "/",
+    sameSite: "Strict",
+    secure: true,
+  });
   await assertReplayRefused(request, redemptionPayload);
 
   await page.reload();

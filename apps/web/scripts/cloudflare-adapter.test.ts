@@ -2,6 +2,9 @@ import { describe, expect, it } from "vitest";
 
 const cloudflareRoot = `${process.cwd()}/cloudflare`;
 
+const matchingLines = (text: string, value: string): ReadonlyArray<string> =>
+  text.split("\n").filter((line) => line.trim() === value);
+
 describe("Cloudflare static hosting adapter", () => {
   it("serves the plain web artifact with SPA fallback and no Worker entrypoint", async () => {
     const configuration: unknown = await Bun.file(`${cloudflareRoot}/wrangler.json`).json();
@@ -28,8 +31,11 @@ describe("Cloudflare static hosting adapter", () => {
     expect(headers).toContain("frame-ancestors 'none'");
     expect(headers).toContain("worker-src 'none'");
     expect(headers).not.toContain("X-Robots-Tag: noindex");
-    expect(headers).toContain("Cache-Control: no-cache");
-    expect(headers).toContain("Cache-Control: public, max-age=31536000, immutable");
+    expect(matchingLines(headers, "Cache-Control: no-cache")).toHaveLength(1);
+    expect(matchingLines(headers, "! Cache-Control")).toHaveLength(1);
+    expect(
+      matchingLines(headers, "Cache-Control: public, max-age=31536000, immutable")
+    ).toHaveLength(1);
   });
 
   it("denies network access and applies separate preview security and cache policy", async () => {
@@ -40,7 +46,10 @@ describe("Cloudflare static hosting adapter", () => {
     expect(headers).toContain("frame-ancestors 'none'");
     expect(headers).toContain("worker-src 'none'");
     expect(headers).toContain("X-Robots-Tag: noindex, nofollow");
-    expect(headers).toContain("Cache-Control: no-cache");
-    expect(headers).toContain("Cache-Control: public, max-age=31536000, immutable");
+    expect(matchingLines(headers, "Cache-Control: no-cache")).toHaveLength(1);
+    expect(matchingLines(headers, "! Cache-Control")).toHaveLength(1);
+    expect(
+      matchingLines(headers, "Cache-Control: public, max-age=31536000, immutable")
+    ).toHaveLength(1);
   });
 });

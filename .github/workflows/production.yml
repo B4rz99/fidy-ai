@@ -81,6 +81,13 @@ jobs:
           RELEASE_GIT_SHA: ${{ github.sha }}
         run: bun run --cwd apps/web build:production
 
+      - name: Validate the static-only Cloudflare adapter
+        working-directory: apps/web
+        run: >-
+          bunx wrangler deploy --dry-run
+          --config cloudflare/wrangler.json
+          --outdir /tmp/fidy-cloudflare-dry-run
+
       - name: Bootstrap the static Worker when explicitly requested
         if: vars.CLOUDFLARE_BOOTSTRAP_REQUIRED == 'true'
         uses: cloudflare/wrangler-action@ebbaa1584979971c8614a24965b4405ff95890e0 # v4.0.0

@@ -49,6 +49,17 @@ source root.
 runtime boundary. Railway builds and runs only the server image at `api.fidyapp.com`; Cloudflare
 serves only the validated static web output at `fidyapp.com`. Cloudflare has no Worker entrypoint and
 the API has no static-file route. The browser CSP permits connections only to the stable API origin.
+Cloudflare applies the same security headers to every SPA fallback, keeps shells and release metadata
+revalidating with `no-cache`, and removes that inherited value before assigning one-year immutable
+caching to content-hashed assets. Production artifact validation rejects unhashed assets, missing
+shell entry assets, source maps, server-shaped output, and known Secret material.
+
+The PostgreSQL-backed browser acceptance runs the production Vite mode and the checked-in Cloudflare
+header policy on a dedicated HTTPS web origin, with the real API on a second HTTPS origin. It probes
+shell fallbacks, hashed assets, cache and security headers, OpenAPI/canonical/WebAuth ownership, then
+executes pairing, one-time redemption, session retention/revocation, and real Categories and
+Transactions presentation. The loopback-only acceptance control may arrange database state but does
+not replace those public HTTP paths.
 
 GitHub Actions is the sole release coordinator. A trunk release selects one immutable source commit,
 deploys it through Railway's connected-repository API, and verifies that public health reports its
@@ -220,7 +231,10 @@ ADR 0015 replaces WhatsApp-delivered web login links with browser-initiated pair
 `/auth/pair`. The browser retains the private verifier and WhatsApp sees only a public code that
 cannot establish a session. Pairing expires after ten minutes and succeeds once. Security-sensitive
 web actions require pairing completed within the preceding ten minutes; passkeys are deferred under
-the accepted MVP threat model.
+the accepted MVP threat model. The hosted Kapso delivery attempt and direct-browser redemption emit
+only registry-closed operation, outcome, safe reason, retry, HTTP status, attempt, and latency
+coordinates. They never project the private verifier, public code, bearer, cookie, URL, reply text,
+UserId, request/response payload, User prose, or domain data.
 
 ADR 0016 makes `/settings/pats` the only PAT-issuance authority. Manual issuance reveals the raw PAT
 once to the first-party browser; PATPairing returns it once directly to the initiating client that

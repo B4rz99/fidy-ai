@@ -23,6 +23,16 @@ describe("Production release workflow policy", () => {
     expect(webBuild).toBeLessThan(cloudflare);
   });
 
+  it("validates the static-only Wrangler adapter before uploading a version", () => {
+    const webBuild = workflow.indexOf("build:production");
+    const dryRun = workflow.indexOf("wrangler deploy --dry-run");
+    const upload = workflow.indexOf("versions upload");
+
+    expect(dryRun).toBeGreaterThan(webBuild);
+    expect(dryRun).toBeLessThan(upload);
+    expect(workflow).toContain("--config cloudflare/wrangler.json");
+  });
+
   it("rechecks trunk and promotes only the exact uploaded Cloudflare version", () => {
     const upload = workflow.indexOf("versions upload");
     const parse = workflow.indexOf("scripts/production/cloudflare-version.ts");

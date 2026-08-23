@@ -1,4 +1,4 @@
-import { Effect, Layer, Option, Redacted, Semaphore } from "effect";
+import { Effect, Layer, Option, Redacted, Schema, Semaphore } from "effect";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
 import { HttpApiBuilder } from "effect/unstable/httpapi";
 import { ResolvedCaller, webSessionCookieName } from "~/shell/_shared/authz";
@@ -20,6 +20,12 @@ import {
   webSessionCookieOptions,
 } from "~/shell/web-session/cookie";
 import { logoutWebSession } from "~/shell/web-session/service";
+import {
+  type DeclaredOutcome,
+  type SpanDescriptor,
+  TelemetryHttpStatus,
+} from "~/shell/observability/protocol";
+import { Telemetry, type TelemetryService } from "~/shell/observability/telemetry";
 
 const WebAuthNoStoreLive = HttpRouter.middleware((httpEffect) =>
   Effect.map(httpEffect, (response) =>
@@ -29,10 +35,15 @@ const WebAuthNoStoreLive = HttpRouter.middleware((httpEffect) =>
 
 const maximumConcurrentStarts = 8;
 const maximumConcurrentRedemptions = 4;
+const authenticatedStatus = 200;
+const pendingStatus = 202;
+const invalidStatus = 400;
+const rateLimitedStatus = 429;
+const unavailableStatus = 503;
 const concurrentStartAdmission = Semaphore.makeUnsafe(maximumConcurrentStarts);
 const concurrentRedemptionAdmission = Semaphore.makeUnsafe(maximumConcurrentRedemptions);
 const temporarilyUnavailable = HttpServerResponse.json(browserLoginUnavailableBody, {
-  status: 503,
+  status: unavailableStatus,
 }).pipe(Effect.orDie);
 
 const handleAdmittedStart = Effect.fn("BrowserLogin.handleAdmittedStart")(function* () {
@@ -42,7 +53,7 @@ const handleAdmittedStart = Effect.fn("BrowserLogin.handleAdmittedStart")(functi
     Effect.catchTags({
       BrowserLoginStartRateLimited: ({ retryAfterSeconds }) =>
         HttpServerResponse.json(browserLoginUnavailableBody, {
-          status: 429,
+          status: rateLimitedStatus,
           headers: { "retry-after": String(retryAfterSeconds) },
         }).pipe(Effect.orDie),
       BrowserLoginCapacityExceeded: () => temporarilyUnavailable,
@@ -66,41 +77,139 @@ const BrowserLoginEvidenceRetentionLive = Layer.effectDiscard(
   )
 );
 
+type RedeemedBrowserLoginPairing = Effect.Success<ReturnType<typeof redeemBrowserLoginPairing>>;
+type RedemptionResponse =
+  | HttpServerResponse.HttpServerResponse
+  | Extract<RedeemedBrowserLoginPairing, { readonly status: "pending_approval" }>;
+
+type ObservedRedemption = {
+  readonly response: RedemptionResponse;
+  readonly status: TelemetryHttpStatus;
+  readonly outcome: DeclaredOutcome;
+};
+
+const observedRedemption = (
+  response: RedemptionResponse,
+  status: number,
+  outcome: DeclaredOutcome
+): ObservedRedemption => ({
+  response,
+  status: Schema.decodeUnknownSync(TelemetryHttpStatus)(status),
+  outcome,
+});
+const succeededRedemption: DeclaredOutcome = {
+  outcome: "succeeded",
+  error: Option.none(),
+  retryable: false,
+};
+const invalidRedemption: DeclaredOutcome = {
+  outcome: "rejected",
+  error: Option.some("pairing_invalid"),
+  retryable: false,
+};
+const rateLimitedRedemption: DeclaredOutcome = {
+  outcome: "failed",
+  error: Option.some("rate_limited"),
+  retryable: true,
+};
+
 const handleAdmittedRedemption = Effect.fn("BrowserLogin.handleAdmittedRedemption")(function* (
   payload: RedeemBrowserLoginPairingPayload
 ) {
-  const redeemed = yield* redeemBrowserLoginPairing(payload).pipe(
+  const result = yield* redeemBrowserLoginPairing(payload).pipe(
+    Effect.map((redeemed) => ({ _tag: "Redeemed" as const, redeemed })),
     Effect.catchTags({
       BrowserLoginPairingInvalid: () =>
-        HttpServerResponse.json(browserLoginPairingInvalidBody, { status: 400 }).pipe(Effect.orDie),
+        HttpServerResponse.json(browserLoginPairingInvalidBody, { status: invalidStatus }).pipe(
+          Effect.orDie,
+          Effect.map((response) => ({ _tag: "Invalid" as const, response }))
+        ),
       BrowserLoginPollingRateLimited: ({ retryAfterSeconds }) =>
         HttpServerResponse.json(
           { error: { code: "rate_limited", retryAfterSeconds } },
-          { status: 429, headers: { "retry-after": String(retryAfterSeconds) } }
-        ).pipe(Effect.orDie),
+          {
+            status: rateLimitedStatus,
+            headers: { "retry-after": String(retryAfterSeconds) },
+          }
+        ).pipe(
+          Effect.orDie,
+          Effect.map((response) => ({ _tag: "RateLimited" as const, response }))
+        ),
     })
   );
-  if (HttpServerResponse.isHttpServerResponse(redeemed)) return redeemed;
-  if (redeemed.status === "pending_approval") return redeemed;
-  const response = yield* HttpServerResponse.json({ status: "authenticated" }).pipe(Effect.orDie);
-  return HttpServerResponse.setCookieUnsafe(
-    response,
-    webSessionCookieName,
-    Redacted.value(redeemed.sessionBearer),
-    initialWebSessionCookieOptions
-  );
+  switch (result._tag) {
+    case "Invalid":
+      return observedRedemption(result.response, invalidStatus, invalidRedemption);
+    case "RateLimited":
+      return observedRedemption(result.response, rateLimitedStatus, rateLimitedRedemption);
+    case "Redeemed": {
+      if (result.redeemed.status === "pending_approval") {
+        return observedRedemption(result.redeemed, pendingStatus, succeededRedemption);
+      }
+      const response = yield* HttpServerResponse.json({ status: "authenticated" }).pipe(
+        Effect.orDie
+      );
+      return observedRedemption(
+        HttpServerResponse.setCookieUnsafe(
+          response,
+          webSessionCookieName,
+          Redacted.value(result.redeemed.sessionBearer),
+          initialWebSessionCookieOptions
+        ),
+        authenticatedStatus,
+        succeededRedemption
+      );
+    }
+  }
 });
+
+const redemptionDescriptor: SpanDescriptor = {
+  component: "api",
+  operation: "browserLogin.redeemPairing",
+  trigger: "api",
+  spanOperation: "http.server",
+  workKind: "http_request",
+  metadata: {
+    _tag: "Http",
+    method: "POST",
+    route: "/web/pairings/redeem",
+    status: Option.none(),
+  },
+};
+
+const recordRedemptionObservation = (
+  telemetry: TelemetryService,
+  redemption: ObservedRedemption
+): Effect.Effect<void> =>
+  Effect.all(
+    [
+      telemetry.recordResponseStatus(redemption.status),
+      telemetry.recordOutcome(redemption.outcome),
+    ],
+    { discard: true }
+  );
 
 const handleRedeemPairing = Effect.fn("BrowserLogin.handleRedeemPairing")(function* (
   payload: RedeemBrowserLoginPairingPayload
 ) {
-  const admitted = yield* concurrentRedemptionAdmission.withPermitsIfAvailable(1)(
-    handleAdmittedRedemption(payload)
+  const telemetry = yield* Telemetry;
+  return yield* telemetry.rootSpan(
+    redemptionDescriptor,
+    Effect.gen(function* () {
+      const admitted = yield* concurrentRedemptionAdmission.withPermitsIfAvailable(1)(
+        handleAdmittedRedemption(payload)
+      );
+      const redemption = Option.isSome(admitted)
+        ? admitted.value
+        : observedRedemption(yield* temporarilyUnavailable, unavailableStatus, {
+            outcome: "failed",
+            error: Option.some("capacity_exceeded"),
+            retryable: true,
+          });
+      yield* recordRedemptionObservation(telemetry, redemption);
+      return redemption.response;
+    })
   );
-  return yield* Option.match(admitted, {
-    onNone: () => temporarilyUnavailable,
-    onSome: Effect.succeed,
-  });
 });
 
 const handleLogout = Effect.fn("WebSession.handleLogout")(function* () {

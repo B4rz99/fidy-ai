@@ -53,8 +53,9 @@ replace an older pending run.
    `/health` check.
 4. Poll Railway to a successful terminal status, then require public `/health` to report that full
    SHA and digest.
-5. Build the web with `https://api.fidyapp.com`, write `/deployment-metadata.json`, and reject any
-   non-static, server-shaped, source-map, or known Secret material.
+5. Build the web with `https://api.fidyapp.com`, write `/deployment-metadata.json`, reject any
+   unhashed or missing shell asset, non-static, server-shaped, source-map, or known Secret material,
+   then run Wrangler's credential-free deployment dry run against the static-only adapter.
 6. If `CLOUDFLARE_BOOTSTRAP_REQUIRED` is explicitly `true`, create the static Worker with the exact
    release artifact. Set the variable to `false` immediately after that first deployment succeeds.
 7. Upload one immutable Cloudflare version and capture the exact version ID from Wrangler.
@@ -70,6 +71,45 @@ curl --fail --silent https://fidyapp.com/deployment-metadata.json | jq
 ```
 
 Both must report the same 40-character `gitRevision` and 64-character `contractDigest`.
+
+## Route and response verification
+
+Cloudflare owns `/`, `/auth/pair`, `/app/transactions`, all other SPA fallbacks, and `/assets/*` on
+`fidyapp.com`. Railway owns `/health`, `/openapi.json`, canonical routes such as `/user`, WebAuth
+routes under `/web/*`, and provider webhooks on `api.fidyapp.com`; it must return 404 for `/` and web
+page paths. A successful smoke therefore proves both positive and negative ownership rather than
+merely proving that each host responds.
+
+Every Cloudflare response inherits the checked-in CSP, opener/resource isolation, permissions,
+referrer, MIME-sniffing, and frame-denial policy. SPA shells and `/deployment-metadata.json` use
+`Cache-Control: no-cache`. The `/assets/*` rule explicitly removes that inherited value before
+setting `public, max-age=31536000, immutable`; do not add overlapping cache rules because Cloudflare
+joins duplicate header values.
+
+After release, verify representative ownership and cache behavior:
+
+```sh
+curl --fail --silent --dump-header - https://fidyapp.com/auth/pair --output /dev/null
+curl --fail --silent --dump-header - https://fidyapp.com/app/transactions --output /dev/null
+curl --fail --silent https://api.fidyapp.com/openapi.json | jq -r .openapi
+curl --silent --output /dev/null --write-out '%{http_code}\n' https://api.fidyapp.com/
+curl --silent --output /dev/null --write-out '%{http_code}\n' https://api.fidyapp.com/auth/pair
+```
+
+The two API ownership probes must print `404`. Inspect the built shell for its hashed script path and
+confirm that path returns the immutable cache policy while the shell returns `no-cache`. The cohesive
+local proof uses separate trusted HTTPS origins, the production Vite mode and Cloudflare header file,
+and real PostgreSQL:
+
+```sh
+docker compose up -d db
+bun run --cwd apps/web test:browser -- e2e/browser-pairing-postgres.spec.ts
+```
+
+It covers SPA fallback and security/cache headers, API/OpenAPI/WebAuth separation, exact-origin
+credentialed browser pairing, a host-only WebSession cookie, one-time redemption and replay refusal,
+logout/expiry, and real Categories/Transactions presentation. The acceptance control listens only on
+loopback and may reset or arrange PostgreSQL state; it is not a Production route.
 
 ## Failure and recovery
 

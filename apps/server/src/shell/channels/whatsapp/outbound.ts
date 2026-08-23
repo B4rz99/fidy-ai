@@ -5,10 +5,15 @@ import { TranscriptText } from "~/core/transcript/model";
 import type { AgentReply } from "~/shell/agent/agent-service";
 import type { AgentConversationAdmission } from "~/shell/agent/conversation";
 import { CURRENT_DISCLOSURE_TEXT } from "~/shell/consent/current-disclosure";
-import type { TelemetryAttempt } from "~/shell/observability/protocol";
+import type { DeclaredOutcome, TelemetryAttempt } from "~/shell/observability/protocol";
 import { Telemetry } from "~/shell/observability/telemetry";
 import { requestConsentDisclosureDelivery } from "./disclosure-delivery";
-import { KapsoClient, type KapsoClientService, kapsoDestinationFor } from "./kapso-client";
+import {
+  KapsoClient,
+  type KapsoClientService,
+  type KapsoSendFailed,
+  kapsoDestinationFor,
+} from "./kapso-client";
 import type { WhatsAppInboundEvent } from "./model";
 import {
   type WhatsAppReceiptInvalid,
@@ -75,6 +80,20 @@ export const deliverWhatsAppConsentOutcome = Effect.fn("WhatsApp.deliverConsentO
   });
 });
 
+/** Classifies one safe provider failure without inspecting its response or outbound text. */
+const kapsoDeliveryOutcome = (failure: KapsoSendFailed): DeclaredOutcome =>
+  failure.deliveryCertainty === "rejected" && !failure.automaticRetry
+    ? {
+        outcome: "rejected",
+        error: Option.some(failure.safeReason),
+        retryable: false,
+      }
+    : {
+        outcome: "failed",
+        error: Option.some(failure.safeReason),
+        retryable: failure.automaticRetry,
+      };
+
 const sendKapsoText = Effect.fn("WhatsApp.sendText")(function* (request: {
   readonly businessPhoneNumberId: WhatsAppInboundEvent["businessPhoneNumberId"];
   readonly destination: Parameters<KapsoClientService["sendText"]>[0]["destination"];
@@ -106,10 +125,16 @@ const sendKapsoText = Effect.fn("WhatsApp.sendText")(function* (request: {
         work.pipe(
           Effect.tap((sent) => service.recordResponseStatus(sent.responseStatus)),
           Effect.tapError((failure) =>
-            Option.match(failure.responseStatus, {
-              onNone: () => Effect.void,
-              onSome: service.recordResponseStatus,
-            })
+            Effect.all(
+              [
+                Option.match(failure.responseStatus, {
+                  onNone: () => Effect.void,
+                  onSome: service.recordResponseStatus,
+                }),
+                service.recordOutcome(kapsoDeliveryOutcome(failure)),
+              ],
+              { discard: true }
+            )
           )
         )
       ),

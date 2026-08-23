@@ -6,7 +6,7 @@ export default defineConfig({
   fullyParallel: false,
   forbidOnly: Boolean(process.env.CI),
   retries: process.env.CI ? 2 : 0,
-  workers: 1,
+  workers: 2,
   reporter: "line",
   use: {
     baseURL: "https://127.0.0.1:4173",
@@ -18,7 +18,7 @@ export default defineConfig({
   },
   webServer: {
     command:
-      "VITE_API_ORIGIN=https://127.0.0.1:4174 bun --bun vite build --mode test --outDir playwright-dist && cd ../server && DATABASE_URL=${DATABASE_URL:-postgres://fidy_runtime:fidy_runtime@127.0.0.1:5433/fidy} MIGRATION_DATABASE_URL=${MIGRATION_DATABASE_URL:-postgres://fidy:fidy@127.0.0.1:5433/fidy} bun scripts/run-browser-pairing-acceptance-server.ts",
+      "VITE_API_ORIGIN=https://127.0.0.1:4174 bun --bun vite build --mode production --outDir playwright-dist && cd ../server && DATABASE_URL=${DATABASE_URL:-postgres://fidy_runtime:fidy_runtime@127.0.0.1:5433/fidy} MIGRATION_DATABASE_URL=${MIGRATION_DATABASE_URL:-postgres://fidy:fidy@127.0.0.1:5433/fidy} bun scripts/run-browser-pairing-acceptance-server.ts",
     url: "https://127.0.0.1:4174/health",
     ignoreHTTPSErrors: true,
     reuseExistingServer: !process.env.CI,

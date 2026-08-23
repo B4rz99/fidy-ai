@@ -14,6 +14,8 @@ const publicCode = "BCDF-GHJK";
 const expiresAt = "2099-01-01T00:00:00.000Z";
 const invalidPairingMessage = "Esta vinculación ya no es válida. Inicia de nuevo.";
 
+test.describe.configure({ mode: "parallel" });
+
 type PairingApiFixture = {
   startCount: number;
   redeemCount: number;

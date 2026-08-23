@@ -462,7 +462,9 @@ it.effect("projects only the bounded attributes its own work kind admits", () =>
         "fidy.work_kind": work.workKind,
         "fidy.outcome": "succeeded",
         "fidy.retryable": false,
-        ...(work.workKind === "scheduled_execution" ? { "fidy.duration_milliseconds": 0 } : {}),
+        ...(["http_request", "provider_call", "scheduled_execution"].includes(work.workKind)
+          ? { "fidy.duration_milliseconds": 0 }
+          : {}),
         ...attributes,
       }))
     );
@@ -487,10 +489,12 @@ it.effect("records a response status learned while provider work is active", () 
     yield* telemetry.span(provider, telemetry.recordResponseStatus(TelemetryHttpStatus.make(202)));
 
     const transactions = transactionPayloads(yield* recorder.serializedEnvelopes);
-    expect(transactions[0]?.contexts.trace.data).toMatchObject({
+    const data = transactions[0]?.contexts.trace.data;
+    expect(data).toMatchObject({
       "fidy.attempt": 2,
       "http.response.status_code": 202,
     });
+    expect(typeof data?.["fidy.duration_milliseconds"]).toBe("number");
   })
 );
 

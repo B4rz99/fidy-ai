@@ -12,20 +12,20 @@ afterEach(async () => {
   await Promise.all(temporaryDirectories.splice(0).map((path) => rm(path, { recursive: true })));
 });
 
-const productionOutput = async (): Promise<string> => {
+const productionOutput = async (assetName = "app-AbCd1234.js"): Promise<string> => {
   const directory = await mkdtemp("/tmp/fidy-production-artifact-");
   temporaryDirectories.push(directory);
   await mkdir(join(directory, "assets"));
   await Bun.write(
     join(directory, "index.html"),
-    "<!doctype html><script src=/assets/app.js></script>"
+    `<!doctype html><script type="module" src="/assets/${assetName}"></script>`
   );
   await Bun.write(join(directory, "_headers"), "/*\n  X-Frame-Options: DENY\n");
   await Bun.write(
     join(directory, "deployment-metadata.json"),
     `${JSON.stringify({ contractDigest, gitRevision })}\n`
   );
-  await Bun.write(join(directory, "assets/app.js"), "console.log('web')");
+  await Bun.write(join(directory, `assets/${assetName}`), "console.log('web')");
   return directory;
 };
 
@@ -58,9 +58,47 @@ describe("production static release identity", () => {
     ).resolves.toBeUndefined();
   });
 
-  it("rejects server code and source maps from the production artifact", async () => {
+  it("rejects an unhashed browser asset", async () => {
+    const directory = await productionOutput("app.js");
+
+    await expect(
+      validateProductionArtifact({
+        directory,
+        expectedDigest: contractDigest,
+        expectedSha: gitRevision,
+      })
+    ).rejects.toThrow("content-hashed");
+  });
+
+  it("rejects a shell whose hashed entry asset is missing", async () => {
+    const directory = await productionOutput();
+    await rm(join(directory, "assets"), { recursive: true });
+
+    await expect(
+      validateProductionArtifact({
+        directory,
+        expectedDigest: contractDigest,
+        expectedSha: gitRevision,
+      })
+    ).rejects.toThrow("missing hashed asset");
+  });
+
+  it("rejects server code from the production artifact", async () => {
     const directory = await productionOutput();
     await Bun.write(join(directory, "assets/server.js"), "DATABASE_URL");
+
+    await expect(
+      validateProductionArtifact({
+        directory,
+        expectedDigest: contractDigest,
+        expectedSha: gitRevision,
+      })
+    ).rejects.toThrow("forbidden production artifact path");
+  });
+
+  it("rejects source maps from the production artifact", async () => {
+    const directory = await productionOutput();
+    await Bun.write(join(directory, "assets/app-AbCd1234.js.map"), "{}");
 
     await expect(
       validateProductionArtifact({

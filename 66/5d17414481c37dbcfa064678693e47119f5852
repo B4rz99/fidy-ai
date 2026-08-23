@@ -1,0 +1,71 @@
+apps/server/src/shell/db/migrations/0028-persisted-schema-reconciliation.ts
+  s_fbb0ccf33e8e69::t_cd55506ea24272 44,51
+  s_fbb0ccf33e8e69::t_c3b780c15b7b62 4-5,10-18,28-43,45-50,52-53
+  s_fbb0ccf33e8e69::t_09a099d7a182d4 1,6-9
+  s_fbb0ccf33e8e69::t_a059d65eaaf07f 270-279,281-282,284-293,295,298-338,387-392,403-405
+  s_fbb0ccf33e8e69::t_1f8a0f7a35f839 400-401
+  s_fbb0ccf33e8e69::t_4684388be37a0e 453-454,572-573,576,581,598-599
+  s_fbb0ccf33e8e69::t_2c4894484034eb 460-464
+  s_fbb0ccf33e8e69::t_44e13b430065d4 280,283,294,296-297,393-394,397,399
+  s_fbb0ccf33e8e69::t_4fe6fb318c0f59 526-570,613
+  s_fbb0ccf33e8e69::t_6698e6f4331ff9 342-345,455
+  s_fbb0ccf33e8e69::t_95dc6ece1ec601 571,574-575,577-580,583-597
+  s_fbb0ccf33e8e69::t_9d93182a22da4f 3,19-27
+  s_fbb0ccf33e8e69::t_c97bd9fa82bbb7 615-619,635-639,761,910-914
+  s_fbb0ccf33e8e69::t_6a418cbe5d6c78 614
+  s_fbb0ccf33e8e69::t_7aff8e812c5fbb 762,764,766,768
+  s_fbb0ccf33e8e69::t_4a0b241ca53c6c 767
+  s_fbb0ccf33e8e69::t_0bb54d52ed9f62 420,437,456-459,487,503,582
+  s_fbb0ccf33e8e69::t_b134cefa0f8604 620-634
+  s_fbb0ccf33e8e69::t_e25631a1311f83 339-341,347-386,395-396,398,402
+  s_fbb0ccf33e8e69::t_1ce98283d11595 346
+apps/server/src/shell/db/migrations/0028-persisted-schema-reconciliation.test.ts
+  s_fbb0ccf33e8e69::t_4ef4073ff4a8f3 20
+  s_fbb0ccf33e8e69::t_5c9bd975a82d0d 755
+  s_fbb0ccf33e8e69::t_b64b8e24c2d95f 21,463,467
+  s_fbb0ccf33e8e69::t_844fce7399e877 26,614,640
+  s_fbb0ccf33e8e69::t_28da216a50ef54 22-25
+  s_fbb0ccf33e8e69::t_b70eb21658c5cd 641,652,664-713
+  s_fbb0ccf33e8e69::t_0c5fe4b22b9d22 15-17,146-156,159-168,171-178,406-439
+  s_fbb0ccf33e8e69::t_fb5c7d7ce2468c 759
+  s_fbb0ccf33e8e69::t_f9aeaf72e7e3c4 483-490,498
+  s_fbb0ccf33e8e69::t_d41fe6d9908fd5 18-19,440-448,642,644-651,653-654,714-733,735-750
+  s_fbb0ccf33e8e69::t_99ce0e84ab46cf 734
+  s_e83421d19948ea::t_133c9525e6b884 514,518
+  s_fbb0ccf33e8e69::t_8768be9588854b 501-509,519-613,615-639
+  s_fbb0ccf33e8e69::t_3ec2c2973d4507 449-462,464-466,468-482,491-497,499-500,510-513,515-517,655-658,660-662,751-754,756-758
+  s_fbb0ccf33e8e69::t_9d0a72a658b8f4 157-158,169-170
+  s_13f215ccd9a385::t_63593691d66c00 643,659,663
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.23",
+  "base_commit_sha": "665d17414481c37dbcfa064678693e47119f5852",
+  "prompts": {},
+  "sessions": {
+    "s_13f215ccd9a385": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a02f35-213f-7f17-b7f5-740289213edc",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_e83421d19948ea": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a02fe1-bc2c-7118-9d84-f3bec90b49af",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_fbb0ccf33e8e69": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a02b48-2850-75cc-9939-e19b2a2b7788",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": null
+    }
+  }
+}

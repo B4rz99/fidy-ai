@@ -1,0 +1,34 @@
+CONTEXT.md
+  s_baecd4a9cc7ba4::t_c5fa0ffa9d0827 347
+  s_baecd4a9cc7ba4::t_6535387a73c6fa 222,292-293,305-309,313
+docs/adr/0015-browser-paired-web-authentication.md
+  s_baecd4a9cc7ba4::t_fadd423eed92e3 6,13,22-28,36-37,42,58-59
+ARCHITECTURE.md
+  s_baecd4a9cc7ba4::t_07f9c76f23ad2d 233-234,251-252
+  s_baecd4a9cc7ba4::t_f02475232554cb 231-232,241-250
+docs/adr/0009-atomic-consent-bootstrap-across-owner-seams.md
+  s_baecd4a9cc7ba4::t_cfe1b8ec6868c9 6,10-16,19-21,25-32,34-37,47,50-51
+docs/adr/0020-mandatory-verified-email-authentication-and-recovery.md
+  s_baecd4a9cc7ba4::t_2e1ac116da0354 1-65
+docs/adr/0011-bsuid-authority-for-whatsapp-identity.md
+  s_baecd4a9cc7ba4::t_03fd59933597c1 56
+SECURITY_STANDARDS.md
+  s_baecd4a9cc7ba4::t_53e91a23c351e6 137-138
+  s_baecd4a9cc7ba4::t_97aca012a9d889 127-133,136,159-160,166
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.23",
+  "base_commit_sha": "670334bc0040e7885fe7de62426485b48728a5ae",
+  "prompts": {},
+  "sessions": {
+    "s_baecd4a9cc7ba4": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a02eeb-bc2a-7008-87f1-7923c3f612cd",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

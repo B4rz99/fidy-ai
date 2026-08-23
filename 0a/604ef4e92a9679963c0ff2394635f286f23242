@@ -1,0 +1,86 @@
+apps/server/src/shell/db/migrations/0028-persisted-schema-reconciliation.ts
+  s_fbb0ccf33e8e69::t_09a099d7a182d4 1,6-9
+  s_fbb0ccf33e8e69::t_0bb54d52ed9f62 527,544,563-566,594,610,689
+  s_fbb0ccf33e8e69::t_4684388be37a0e 560-561,679-680,683,688,705-706
+  s_fbb0ccf33e8e69::t_c3b780c15b7b62 4-5,10-18,28-43,48-53,55-56
+  s_fbb0ccf33e8e69::t_1f8a0f7a35f839 507-508
+  s_fbb0ccf33e8e69::t_4fe6fb318c0f59 633-677,720
+  s_fbb0ccf33e8e69::t_6a418cbe5d6c78 721
+  s_fbb0ccf33e8e69::t_2c46ac849bae54 321-359,420-426,435,437-438,442,449,453,456,469,474,479
+  s_fbb0ccf33e8e69::t_9b95a40a3d8136 361-376,427-430,443-445,457-459
+  s_fbb0ccf33e8e69::t_1ce98283d11595 431
+  s_fbb0ccf33e8e69::t_e25631a1311f83 409-411,432-434,440-441,446-448,451-452,455,460-468,471-473,476-478,481-493,502-503,505,509
+  s_fbb0ccf33e8e69::t_95dc6ece1ec601 678,681-682,684-687,690-704
+  s_fbb0ccf33e8e69::t_44e13b430065d4 283,286,297,299-300,500-501,504,506
+  s_fbb0ccf33e8e69::t_9d93182a22da4f 3,19-27
+  s_fbb0ccf33e8e69::t_c97bd9fa82bbb7 722-726,742-746,868,1017-1021
+  s_fbb0ccf33e8e69::t_cd55506ea24272 54
+  s_fbb0ccf33e8e69::t_48b55b42eab9cb 44-47
+  s_fbb0ccf33e8e69::t_b134cefa0f8604 727-741
+  s_fbb0ccf33e8e69::t_2c4894484034eb 567-571
+  s_fbb0ccf33e8e69::t_a059d65eaaf07f 273-282,284-285,287-296,298,301-307,320,360,377-408,494-499,510-512
+  s_fbb0ccf33e8e69::t_d23f189adcf90e 308-319,416-419,436,439,450,454,470,475
+  s_fbb0ccf33e8e69::t_bd7222f23cdb0e 480
+  s_fbb0ccf33e8e69::t_7aff8e812c5fbb 869,871,873,875
+  s_fbb0ccf33e8e69::t_4a0b241ca53c6c 874
+  s_fbb0ccf33e8e69::t_6698e6f4331ff9 412-415,562
+apps/server/src/shell/db/migrations/0028-persisted-schema-reconciliation.test.ts
+  s_fbb0ccf33e8e69::t_99ce0e84ab46cf 836
+  s_fbb0ccf33e8e69::t_5c9bd975a82d0d 853
+  s_13f215ccd9a385::t_63593691d66c00 759,771,775
+  s_fbb0ccf33e8e69::t_2f580856edb66a 702
+  s_fbb0ccf33e8e69::t_b1c058af4ad311 19,607-635
+  s_fbb0ccf33e8e69::t_4ef4073ff4a8f3 22
+  s_fbb0ccf33e8e69::t_f9aeaf72e7e3c4 469-476,484
+  s_fbb0ccf33e8e69::t_9a3bcda9bc5d8c 183-198
+  s_fbb0ccf33e8e69::t_3ec2c2973d4507 442-447,449-452,454-456,458-464,466-468,477-483,485-486,496-499,501-503,767-770,772-774,849-852,854-856
+  s_fbb0ccf33e8e69::t_844fce7399e877 30,733,756
+  s_fbb0ccf33e8e69::t_82dba0e0248b74 224,266,295,335,388,415,465,572,715-717,760,803,842,909
+  s_fbb0ccf33e8e69::t_b70eb21658c5cd 757,764,776-781,783-802,804-818
+  s_fbb0ccf33e8e69::t_ddf332508c19be 739,782
+  s_fbb0ccf33e8e69::t_fb5c7d7ce2468c 857
+  s_e83421d19948ea::t_133c9525e6b884 500,504
+  s_fbb0ccf33e8e69::t_63686325d99a58 636-666
+  s_fbb0ccf33e8e69::t_28da216a50ef54 24-26,29
+  s_fbb0ccf33e8e69::t_2802f120f31ec5 693,701,709-711
+  s_fbb0ccf33e8e69::t_9d0a72a658b8f4 161-162,173-174
+  s_fbb0ccf33e8e69::t_b2f45c5a37e092 18,577-606,667-674
+  s_fbb0ccf33e8e69::t_d41fe6d9908fd5 20-21,433-441,758,761-763,765-766,819-824,826-835,837-841,843-848
+  s_fbb0ccf33e8e69::t_b64b8e24c2d95f 23,453,457
+  s_fbb0ccf33e8e69::t_772de259b1b3c5 412,448,511,534,559,825
+  s_fbb0ccf33e8e69::t_028a25bec13530 27-28,677-692,694-700,703-708,712-714,718-723
+  s_fbb0ccf33e8e69::t_8768be9588854b 487-495,505-510,512-533,535-558,560-571,573-576,675-676,724-732,734-738,740-755
+  s_fbb0ccf33e8e69::t_0c5fe4b22b9d22 15-17,150-160,163-172,175-182,406-411,413-414,416-432
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.23",
+  "base_commit_sha": "0a604ef4e92a9679963c0ff2394635f286f23242",
+  "prompts": {},
+  "sessions": {
+    "s_13f215ccd9a385": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a02f35-213f-7f17-b7f5-740289213edc",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_e83421d19948ea": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a02fe1-bc2c-7118-9d84-f3bec90b49af",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_fbb0ccf33e8e69": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a02b48-2850-75cc-9939-e19b2a2b7788",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": null
+    }
+  }
+}

@@ -79,6 +79,7 @@ apps/server/src/shell/transactions/handlers.test.ts
   s_7ae1b9a62a8e23::t_fd4c801544b20d 14,394,417
 apps/server/src/shell/subscription/operations.ts
   s_7ae1b9a62a8e23::t_368334183bcb6e 3
+  s_7ae1b9a62a8e23::t_25590f109c360c 16,35
 apps/server/src/shell/agent/openai.test.ts
   s_7ae1b9a62a8e23::t_b0d8302d937f00 148-149,159,202-206
   s_7ae1b9a62a8e23::t_4ede985fe91804 289-311

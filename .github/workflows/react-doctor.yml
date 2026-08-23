@@ -31,6 +31,7 @@ jobs:
         with:
           fetch-depth: 0
       - name: Scan apps/web
+        id: react-doctor
         uses: millionco/react-doctor@01820bb4fd4d0a4aebcd8df2b2a143a098649cb2 # v2.2.8
         with:
           directory: apps/web
@@ -38,3 +39,13 @@ jobs:
           blocking: error
           # Pinned, not `latest`: newest release past bunfig.toml's 7-day delay.
           version: "0.9.11"
+      - name: Require a perfect React health score
+        # React Doctor intentionally skips PRs with no React-eligible changes.
+        if: ${{ always() && steps.react-doctor.outputs.score != '' }}
+        env:
+          SCORE: ${{ steps.react-doctor.outputs.score }}
+        run: |
+          if [[ "$SCORE" != "100" ]]; then
+            echo "React Doctor score must be 100; got ${SCORE:-unavailable}." >&2
+            exit 1
+          fi

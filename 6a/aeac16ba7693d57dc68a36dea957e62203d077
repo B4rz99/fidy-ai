@@ -1,0 +1,38 @@
+docs/adr/0011-bsuid-authority-for-whatsapp-identity.md
+  s_baecd4a9cc7ba4::t_df9bf330eaaddd 22-24,55-57
+CONTEXT.md
+  s_baecd4a9cc7ba4::t_5f855be77c60b8 221-225,293-294,302,305-310,314-320,345-348
+  s_baecd4a9cc7ba4::t_e4f3e16d936693 292
+  s_baecd4a9cc7ba4::t_6b841fd0685358 311-313
+docs/adr/0009-atomic-consent-bootstrap-across-owner-seams.md
+  s_baecd4a9cc7ba4::t_9a9fe3c15d5f74 6
+  s_baecd4a9cc7ba4::t_b2cc3c963afcee 1,5,10-20,24-34,36-39,43-51
+SECURITY_STANDARDS.md
+  s_baecd4a9cc7ba4::t_70116965df7e9c 38,127-133,135-139,142-143,146-147,154-166,190-192
+  s_baecd4a9cc7ba4::t_02519eb22adbb9 42-44
+ARCHITECTURE.md
+  s_baecd4a9cc7ba4::t_ed5da04cf42a7e 228
+  s_baecd4a9cc7ba4::t_e4adba652b0561 95-96,231-235,240-252,315-317
+docs/adr/0015-browser-paired-web-authentication.md
+  s_baecd4a9cc7ba4::t_96fb96eb4c1984 5,10-15,19-49,53-62
+  s_baecd4a9cc7ba4::t_6ac5ed367b39a5 6
+docs/adr/0020-mandatory-verified-email-account-recovery.md
+  s_baecd4a9cc7ba4::t_f0d3aea1458545 2-4,6-63
+  s_baecd4a9cc7ba4::t_04fbc21885fad9 1,5
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.23",
+  "base_commit_sha": "6aaeac16ba7693d57dc68a36dea957e62203d077",
+  "prompts": {},
+  "sessions": {
+    "s_baecd4a9cc7ba4": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a02eeb-bc2a-7008-87f1-7923c3f612cd",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

@@ -24,6 +24,7 @@ import { compactedConversations } from "./0024-compacted-conversations";
 import { monthlyBudgets } from "./0025-monthly-budgets";
 import { browserLoginPairings } from "./0026-browser-login-pairings";
 import { webSessions } from "./0027-web-sessions";
+import { persistedSchemaReconciliation } from "./0028-persisted-schema-reconciliation";
 
 /**
  * The explicit index ARCHITECTURE.md §7 calls for: one ordered, append-only
@@ -60,4 +61,5 @@ export const migrations = {
   "0025_monthly_budgets": monthlyBudgets,
   "0026_browser_login_pairings": browserLoginPairings,
   "0027_web_sessions": webSessions,
+  "0028_persisted_schema_reconciliation": persistedSchemaReconciliation,
 };

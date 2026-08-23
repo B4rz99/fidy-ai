@@ -313,7 +313,7 @@ docker run --rm --network "$network" \
   --env MIGRATION_DATABASE_URL --env WHATSAPP_BUSINESS_PORTFOLIO_ID \
   "$image" bun dist/commands/migrate.js
 expectedMigrationCount=$(find "$serverRoot/src/shell/db/migrations" -maxdepth 1 -type f \
-  -name '[0-9][0-9][0-9][0-9]-*.ts' | wc -l | tr -d '[:space:]')
+  -name '[0-9][0-9][0-9][0-9]-*.ts' ! -name '*.test.ts' | wc -l | tr -d '[:space:]')
 assertSqlResult "$expectedMigrationCount" \
   "SELECT count(*) FROM effect_sql_migrations" \
   "Pre-deploy migration count"

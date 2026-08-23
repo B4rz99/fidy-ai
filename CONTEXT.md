@@ -219,7 +219,7 @@ _Avoid_: Device login, magic-link delivery, WhatsApp approval, token exchange.
 
 **BrowserLoginPairing**:
 A short-lived web authentication bootstrap in which the browser retains a private verifier while an
-established WhatsAppIdentity, RecoveryEmailCredential, or SupportRecoveryCase approves the pairing
+established WhatsAppIdentity, VerifiedEmailCredential, or SupportRecoveryCase approves the pairing
 for the same stable User. Public references cannot establish a session, and one approved pairing can
 bootstrap one stable-User web session.
 _Avoid_: Magic-link login, device login, WhatsApp login link, recovery session.
@@ -289,8 +289,8 @@ _Avoid_: Memory, Transcript, context window, prompt.
 
 **User**:
 A person with a stable identity independent of phone numbers, channels, providers, and recovery
-credentials. A User comes into existence only with one verified RecoveryEmailCredential, which never
-becomes their identity. Their current ServiceMarket, locale, and IANA time zone are explicit,
+credentials. A User comes into existence only with one VerifiedEmailCredential, which never becomes
+their identity. Their current ServiceMarket, locale, and IANA time zone are explicit,
 independent context; Fidy performs no KYC, and institution data never defines identity.
 _Avoid_: Account, customer, client, titular (that word is reserved for its legal sense).
 
@@ -302,14 +302,15 @@ reassociate, or address communication to a User. It is the launch channel identi
 itself; recovery can restore access to the User but cannot replace this association.
 _Avoid_: Phone identity, User identity, root identity, generic channel identity, provider identity.
 
-**RecoveryEmailCredential**:
-The one verified mailbox credential required for a User. It can prove access to that same stable User
-but is neither the User's identity nor authority to create another User or change WhatsAppIdentity.
-_Avoid_: EmailIdentity, account email, login identity, identity provider.
+**VerifiedEmailCredential**:
+The one verified mailbox credential required for a User. It can approve BrowserLoginPairing for
+ordinary email login or recovery to that same stable User, but is neither the User's identity nor
+session authority and cannot create another User or change WhatsAppIdentity.
+_Avoid_: EmailIdentity, account email, recovery email, login identity, identity provider.
 
 **BackupRecoveryCode**:
 A one-time credential disclosed to a User for the exceptional case where both their
-RecoveryEmailCredential and WhatsAppIdentity are unavailable; after disclosure only its digest
+VerifiedEmailCredential and WhatsAppIdentity are unavailable; after disclosure only its digest
 remains with Fidy. Losing all three established proofs leaves no safe recovery path.
 _Avoid_: Support override, recovery answer, identity document, financial proof.
 
@@ -343,7 +344,7 @@ _Avoid_: Advice (unqualified), recommendation.
 
 **TrialPeriod**:
 The immutable half-open UTC interval during which a newly onboarded User receives Pro access without
-a Subscription. It starts once, when verified recovery email completes onboarding and creates the
+a Subscription. It starts once, when verified email completes onboarding and creates the
 stable User, and ends exactly 168 hours later. Returning identity resolution, consent restoration,
 and WhatsApp reassociation never replace or extend it.
 _Avoid_: Trial status, renewable trial, onboarding window.

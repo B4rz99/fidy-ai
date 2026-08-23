@@ -228,25 +228,28 @@ contract; every configured credential path additionally needs its own named evid
 ### Browser authentication, recovery, and PAT lifecycle
 
 ADR 0015 replaces WhatsApp-delivered web login links with browser-initiated pairing at
-`/auth/pair`. The browser retains the private verifier while WhatsApp, email recovery, and support
-recovery receive only the proof each authority needs; none can establish a session without the
-browser proof. Pairing expires after ten minutes and succeeds once. Security-sensitive web actions
+`/auth/pair`. The browser retains the private verifier while WhatsApp approval, email
+authentication, and support recovery receive only the proof each authority needs; none can establish
+a session without the browser proof. Pairing expires after ten minutes and succeeds once.
+Security-sensitive web actions
 require pairing completed within the preceding ten minutes; passkeys are deferred under the
 accepted MVP threat model. The hosted Kapso delivery attempt and direct-browser redemption emit
 only registry-closed operation, outcome, safe reason, retry, HTTP status, attempt, and latency
 coordinates. They never project the private verifier, public code, bearer, cookie, URL, reply text,
 UserId, request/response payload, User prose, or domain data.
 
-[ADR 0020](docs/adr/0020-mandatory-verified-email-account-recovery.md) makes one verified recovery
-email a prerequisite to stable User creation. Recovery owns pre-User email verification attempts,
-the User's single verified credential, digest-only backup credential, Resend delivery state, and
-tracked support cases. Identity still owns User and WhatsAppIdentity; Consent still owns pending
-decision evidence and ConsentRecords. The shell-only onboarding completion process composes those
-owners under ADR 0009 and creates all stable onboarding state only after email proof succeeds.
+[ADR 0020](docs/adr/0020-mandatory-verified-email-authentication-and-recovery.md) makes one
+VerifiedEmailCredential a prerequisite to stable User creation. EmailAuthentication owns pre-User
+mailbox verification attempts, the User's single credential, and Resend delivery state; Recovery
+owns the digest-only BackupRecoveryCode and tracked support cases. Identity still owns User,
+WhatsAppIdentity, and TrialPeriod facts; Consent still owns pending decision evidence and
+ConsentRecords. The shell-only onboarding completion process composes those owners under ADR 0009
+and creates all stable onboarding state only after email proof succeeds.
 
-Email and support recovery approve an existing BrowserLoginPairing for the existing UserId. They do
-not create a parallel session, create another User, replace the verified recovery email, or change
-WhatsAppIdentity. The browser's private verifier remains necessary to create the WebSession. A User
+Email authentication and support recovery approve an existing BrowserLoginPairing for the existing
+UserId. They do not create a parallel session, create another User, replace the
+VerifiedEmailCredential, or change WhatsAppIdentity. The browser's private verifier remains
+necessary to create the WebSession. A User
 whose Consent is explicitly revoked may authenticate only to reach Fidy-owned re-consent and
 data-rights surfaces; ordinary canonical work remains blocked with `user_action_required`.
 

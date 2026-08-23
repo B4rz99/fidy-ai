@@ -124,16 +124,18 @@ and disclosed only through its intended one-time channel. Verification does not 
 recoverable bearer material when a digest suffices. Use, expiry, revocation, and replay are decided
 at the authoritative boundary and take effect across every client surface.
 
-One verified RecoveryEmailCredential is mandatory before stable User creation and is globally
-unique after trim-and-lowercase normalization; provider-specific dot or plus-address folding is not
-proof of equivalence. Replacement proves the candidate before atomically removing the old
-credential. Email and support recovery approve an existing BrowserLoginPairing for its existing
-UserId; they never create a User, mint a parallel session, substitute a newly supplied credential,
-or change WhatsAppIdentity. The pairing's browser-private verifier remains independently required.
+One VerifiedEmailCredential is mandatory before stable User creation and is globally unique after
+trim-and-lowercase normalization; provider-specific dot or plus-address folding is not proof of
+equivalence. The credential may approve BrowserLoginPairing for ordinary email login or recovery to
+its existing UserId but never becomes User identity or direct session authority. Replacement proves
+the candidate before atomically removing the old credential. Email authentication and support
+recovery never create a User, mint a parallel session, substitute a newly supplied credential, or
+change WhatsAppIdentity. The pairing's browser-private verifier remains independently required.
 
 Browser authentication state must resist theft, fixation, cross-origin use, and leakage through
-URLs, referrers, scripts, caches, or diagnostics. Known and unknown email recovery attempts share a
-bounded non-enumerating response. A BackupRecoveryCode is disclosed once, stored only as a digest,
+URLs, referrers, scripts, caches, or diagnostics. Known and unknown email-authentication attempts
+share a bounded non-enumerating response. A BackupRecoveryCode is disclosed once, stored only as a
+digest,
 and consumed by an approved tracked support decision. Support does not infer ownership from identity
 documents, financial facts, email, phone, or free-form operator judgment; loss of every established
 proof ends recovery.
@@ -154,13 +156,14 @@ anonymisation, provider payloads, reporting context, or personal-data deletion.
 **Invariant:** before onboarding Consent acceptance, Fidy performs no financial processing, answers
 no finance question, and persists no personal content beyond what is strictly required to present
 and record the pending decision. Acceptance permits bounded collection and Resend delivery needed to
-prove the mandatory recovery email, but no stable User, WhatsAppIdentity, ConsentRecord, Transcript,
+prove the mandatory VerifiedEmailCredential, but no stable User, WhatsAppIdentity, ConsentRecord,
+Transcript,
 or financial processing exists until verification atomically completes onboarding. The onboarding
 Consent covers that mandatory contact and authentication purpose; no separate email Consent grant is
 created. Consent and revocation evidence is tied to the stable User and retains the exact historical
 context needed to remain interpretable.
 
-Explicit Consent revocation does not block authentication recovery needed to reach Fidy-owned
+Explicit Consent revocation does not block authentication needed to reach Fidy-owned
 re-consent and data-rights surfaces. It continues to block ordinary canonical work. Personal and
 financial data is collected, retained, loaded into model context, and sent to a provider only for an
 explicit current purpose. Outbound payloads are projections of what the

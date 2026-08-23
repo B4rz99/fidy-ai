@@ -3,6 +3,7 @@ import {
   BrowserLoginPollingRateLimitedApi,
   FidyApi,
   type FidyApiGroups,
+  PriceRevisionId,
   TokenAuthorizationClientAnonymousLive,
   WebAuthApi,
   type WebAuthApiGroups,
@@ -12,7 +13,7 @@ import { FetchHttpClient, type HttpClient } from "effect/unstable/http";
 import { AtomHttpApi } from "effect/unstable/reactivity";
 
 export type { CanonicalSuccess } from "@fidy/server/client";
-export { BrowserLoginPairingInvalidApi, BrowserLoginPollingRateLimitedApi };
+export { BrowserLoginPairingInvalidApi, BrowserLoginPollingRateLimitedApi, PriceRevisionId };
 
 /**
  * Supplies the substitute HTTP runtime for the derived browser client. Production uses Fetch;

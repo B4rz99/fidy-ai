@@ -1,5 +1,6 @@
 import type { CanonicalSuccess } from "@/transport/client";
-import { BigDecimal, DateTime, Option, Schema } from "effect";
+import { DateTime, Option } from "effect";
+import { formatMoney } from "@/ui/money";
 
 /** Canonical values remain derived from FidyApi rather than redeclared by the browser. */
 export type CurrentUser = CanonicalSuccess<"identity.getCurrentUser">["data"];
@@ -29,22 +30,6 @@ export const deriveCurrentMonthPeriod = ({
     timeZone,
   };
 };
-
-const StringNumericLiteral = Schema.TemplateLiteral([Schema.Finite]);
-
-/** Formats exact canonical Money with the User's Locale and the Money's explicit Currency. */
-export const formatMoney = ({
-  locale,
-  money,
-}: Readonly<{
-  locale: string;
-  money: Transaction["money"];
-}>): string =>
-  new Intl.NumberFormat(locale, {
-    currency: money.currency,
-    currencyDisplay: "code",
-    style: "currency",
-  }).format(Schema.decodeUnknownSync(StringNumericLiteral)(BigDecimal.format(money.amount)));
 
 /** Presentation-only projection consumed by both desktop and mobile Transaction views. */
 export type TransactionListRow = Readonly<{

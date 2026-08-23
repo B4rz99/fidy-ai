@@ -9,6 +9,7 @@ import {
 import { BrowserLoginPairingFeature } from "@/features/browser-login/feature";
 import { createPublicSiteRoute } from "@/features/public-site/feature";
 import { SignedInFeature } from "@/features/signed-in/feature";
+import { SubscriptionOffersFeature } from "@/features/subscription/feature";
 import { TransactionListFeature } from "@/features/transactions/feature";
 import type { FidyClient, WebAuthClient } from "@/transport/client";
 
@@ -37,6 +38,11 @@ const transactionsRoute = createRoute({
   path: "/transactions",
   component: TransactionListFeature,
 });
+const subscriptionOffersRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/upgrade",
+  component: SubscriptionOffersFeature,
+});
 const browserLoginPairingRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/auth/pair",
@@ -45,6 +51,7 @@ const browserLoginPairingRoute = createRoute({
 const routeTree = rootRoute.addChildren([
   createPublicSiteRoute(rootRoute),
   browserLoginPairingRoute,
+  subscriptionOffersRoute,
   signedInRoute.addChildren([signedInIndexRoute, transactionsRoute]),
 ]);
 

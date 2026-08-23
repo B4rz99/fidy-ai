@@ -174,22 +174,29 @@ layer(AuthorizationHarness, {
     })
   );
 
-  it.effect("rejects unauthorized Subscription upgrade destination reads", () =>
+  it.effect("rejects unauthorized Subscription offer discovery reads", () =>
     Effect.gen(function* () {
       yield* truncateAuditLogEntries;
       yield* seedWriteOnlyIdentity;
-
-      const missing = yield* HttpClient.get("/subscription/upgrade-url");
-      const underScoped = yield* HttpClient.get("/subscription/upgrade-url", {
+      const missingUpgrade = yield* HttpClient.get("/subscription/upgrade-url");
+      const underScopedUpgrade = yield* HttpClient.get("/subscription/upgrade-url", {
+        headers: headersFor(writeOnlyBearer),
+      });
+      const missingOffers = yield* HttpClient.get("/subscription/offers");
+      const underScopedOffers = yield* HttpClient.get("/subscription/offers", {
         headers: headersFor(writeOnlyBearer),
       });
       const auditEntries = yield* observeAuditLogEntries(writeOnlyUser);
+      const auditOutcomes = auditEntries.map((entry) => [entry.operation, entry.outcome]);
 
-      expect([missing.status, underScoped.status]).toEqual([401, 403]);
-      expect(auditEntries.map((entry) => [entry.operation, entry.outcome])).toContainEqual([
-        "subscription.getUpgradeUrl",
-        "rejected",
-      ]);
+      expect([
+        missingUpgrade.status,
+        underScopedUpgrade.status,
+        missingOffers.status,
+        underScopedOffers.status,
+      ]).toEqual([401, 403, 401, 403]);
+      expect(auditOutcomes).toContainEqual(["subscription.getUpgradeUrl", "rejected"]);
+      expect(auditOutcomes).toContainEqual(["subscription.listSubscriptionOffers", "rejected"]);
     })
   );
 

@@ -79,6 +79,9 @@ const probes: Record<OperationId, SuggestedOperationProbe> = {
   "subscription.getUpgradeUrl": (client) =>
     Effect.map(client.subscription.getUpgradeUrl(), (response) => [response]),
 
+  "subscription.listSubscriptionOffers": (client) =>
+    Effect.map(client.subscription.listSubscriptionOffers(), (response) => [response]),
+
   "budgets.createBudget": (client) =>
     Effect.map(
       client.budgets.createBudget({

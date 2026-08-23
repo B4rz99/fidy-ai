@@ -122,6 +122,9 @@ const probes: Record<OperationId, IsolationProbe> = {
   "subscription.getUpgradeUrl": (attempt) =>
     attempt.strangerClient.subscription.getUpgradeUrl().pipe(Effect.asVoid),
 
+  "subscription.listSubscriptionOffers": (attempt) =>
+    attempt.strangerClient.subscription.listSubscriptionOffers().pipe(Effect.asVoid),
+
   "budgets.createBudget": (attempt) =>
     Effect.gen(function* () {
       yield* attempt.strangerClient.budgets.createBudget({

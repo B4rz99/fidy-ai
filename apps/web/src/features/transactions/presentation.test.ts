@@ -1,10 +1,10 @@
 import { BigDecimal, DateTime, Option } from "effect";
 import { describe, expect, it } from "vitest";
+import { formatMoney } from "@/ui/money";
 import {
   type TransactionPresentationCategory,
   type TransactionPresentationRecord,
   deriveCurrentMonthPeriod,
-  formatMoney,
   presentTransactionRows,
 } from "./presentation";
 

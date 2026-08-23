@@ -77,9 +77,10 @@ const BrowserLoginEvidenceRetentionLive = Layer.effectDiscard(
   )
 );
 
+type RedeemedBrowserLoginPairing = Effect.Success<ReturnType<typeof redeemBrowserLoginPairing>>;
 type RedemptionResponse =
   | HttpServerResponse.HttpServerResponse
-  | { readonly status: "pending_approval" };
+  | Extract<RedeemedBrowserLoginPairing, { readonly status: "pending_approval" }>;
 
 type ObservedRedemption = {
   readonly response: RedemptionResponse;
@@ -198,17 +199,13 @@ const handleRedeemPairing = Effect.fn("BrowserLogin.handleRedeemPairing")(functi
       const admitted = yield* concurrentRedemptionAdmission.withPermitsIfAvailable(1)(
         handleAdmittedRedemption(payload)
       );
-      const redemption = yield* Option.match(admitted, {
-        onNone: () =>
-          Effect.map(temporarilyUnavailable, (response) =>
-            observedRedemption(response, unavailableStatus, {
-              outcome: "failed",
-              error: Option.some("capacity_exceeded"),
-              retryable: true,
-            })
-          ),
-        onSome: (observed) => Effect.succeed(observed),
-      });
+      const redemption = Option.isSome(admitted)
+        ? admitted.value
+        : observedRedemption(yield* temporarilyUnavailable, unavailableStatus, {
+            outcome: "failed",
+            error: Option.some("capacity_exceeded"),
+            retryable: true,
+          });
       yield* recordRedemptionObservation(telemetry, redemption);
       return redemption.response;
     })

@@ -1,6 +1,6 @@
 import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi";
 import { SubscriptionOffers, UpgradeDestination } from "~/core/subscription/model";
-import { operationPolicy } from "~/shell/_shared/operation-policy";
+import { operationPolicy, patScoped } from "~/shell/_shared/operation-policy";
 import { OperationResponse } from "~/shell/_shared/response";
 
 const getUpgradeUrl = HttpApiEndpoint.get("getUpgradeUrl", "/subscription/upgrade-url", {
@@ -13,7 +13,7 @@ const getUpgradeUrl = HttpApiEndpoint.get("getUpgradeUrl", "/subscription/upgrad
   )
   .annotateMerge(
     operationPolicy({
-      requiredCapability: "read",
+      access: patScoped("read"),
       requiredTier: "free",
       agentConfirmation: "not-required",
       kind: "query",
@@ -32,7 +32,7 @@ const listSubscriptionOffers = HttpApiEndpoint.get(
   )
   .annotateMerge(
     operationPolicy({
-      requiredCapability: "read",
+      access: patScoped("read"),
       requiredTier: "free",
       agentConfirmation: "not-required",
       kind: "query",

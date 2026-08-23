@@ -2,6 +2,7 @@
 
 import { OpenApi } from "effect/unstable/httpapi";
 import { FidyApi, operationCatalog } from "~/shell/api";
+import { publishOperationAccess } from "~/shell/_shared/operation-policy";
 import {
   type ContractArtifacts,
   type JsonValue,
@@ -20,13 +21,8 @@ export const makeContractArtifacts = (): ContractArtifacts => ({
     operations: operationCatalog.operations
       .map(({ id, policy }) => ({
         id,
-        // This generated artifact is PAT-facing: preserve its scope vocabulary while runtime
-        // authorization consumes credential-neutral canonical capabilities.
         policy: asJsonValue({
-          requiredScope: policy.requiredCapability,
-          scopeEvaluation:
-            policy.capabilityEvaluation === "operation" ? "endpoint" : policy.capabilityEvaluation,
-          callerEligibility: policy.callerEligibility,
+          access: publishOperationAccess(policy.access),
           requiredTier: policy.requiredTier,
           agentConfirmation: policy.agentConfirmation,
           kind: policy.kind,

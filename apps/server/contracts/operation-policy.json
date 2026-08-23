@@ -3,419 +3,566 @@
     {
       "id": "browserLogin.approvePairing",
       "policy": {
+        "access": {
+          "type": "verified-whatsapp-hosted-only"
+        },
         "agentConfirmation": "required",
-        "callerEligibility": "verified-whatsapp-hosted-only",
         "kind": "mutation",
-        "requiredScope": "write",
-        "requiredTier": "free",
-        "scopeEvaluation": "endpoint"
+        "requiredTier": "free"
       }
     },
     {
       "id": "budgets.createBudget",
       "policy": {
+        "access": {
+          "scope": {
+            "capability": "write",
+            "evaluation": "operation"
+          },
+          "type": "pat-scoped"
+        },
         "agentConfirmation": "not-required",
-        "callerEligibility": "authenticated",
         "kind": "mutation",
-        "requiredScope": "write",
-        "requiredTier": "free",
-        "scopeEvaluation": "endpoint"
+        "requiredTier": "free"
       }
     },
     {
       "id": "budgets.deleteBudget",
       "policy": {
+        "access": {
+          "scope": {
+            "capability": "write",
+            "evaluation": "operation"
+          },
+          "type": "pat-scoped"
+        },
         "agentConfirmation": "required",
-        "callerEligibility": "authenticated",
         "kind": "mutation",
-        "requiredScope": "write",
-        "requiredTier": "free",
-        "scopeEvaluation": "endpoint"
+        "requiredTier": "free"
       }
     },
     {
       "id": "budgets.getBudget",
       "policy": {
+        "access": {
+          "scope": {
+            "capability": "read",
+            "evaluation": "operation"
+          },
+          "type": "pat-scoped"
+        },
         "agentConfirmation": "not-required",
-        "callerEligibility": "authenticated",
         "kind": "query",
-        "requiredScope": "read",
-        "requiredTier": "free",
-        "scopeEvaluation": "endpoint"
+        "requiredTier": "free"
       }
     },
     {
       "id": "budgets.getBudgetStatus",
       "policy": {
+        "access": {
+          "scope": {
+            "capability": "read",
+            "evaluation": "operation"
+          },
+          "type": "pat-scoped"
+        },
         "agentConfirmation": "not-required",
-        "callerEligibility": "authenticated",
         "kind": "query",
-        "requiredScope": "read",
-        "requiredTier": "free",
-        "scopeEvaluation": "endpoint"
+        "requiredTier": "free"
       }
     },
     {
       "id": "budgets.listBudgets",
       "policy": {
+        "access": {
+          "scope": {
+            "capability": "read",
+            "evaluation": "operation"
+          },
+          "type": "pat-scoped"
+        },
         "agentConfirmation": "not-required",
-        "callerEligibility": "authenticated",
         "kind": "query",
-        "requiredScope": "read",
-        "requiredTier": "free",
-        "scopeEvaluation": "endpoint"
+        "requiredTier": "free"
       }
     },
     {
       "id": "budgets.updateBudget",
       "policy": {
+        "access": {
+          "scope": {
+            "capability": "write",
+            "evaluation": "operation"
+          },
+          "type": "pat-scoped"
+        },
         "agentConfirmation": "required",
-        "callerEligibility": "authenticated",
         "kind": "mutation",
-        "requiredScope": "write",
-        "requiredTier": "free",
-        "scopeEvaluation": "endpoint"
+        "requiredTier": "free"
       }
     },
     {
       "id": "categories.createKeywordRule",
       "policy": {
+        "access": {
+          "scope": {
+            "capability": "write",
+            "evaluation": "operation"
+          },
+          "type": "pat-scoped"
+        },
         "agentConfirmation": "not-required",
-        "callerEligibility": "authenticated",
         "kind": "mutation",
-        "requiredScope": "write",
-        "requiredTier": "free",
-        "scopeEvaluation": "endpoint"
+        "requiredTier": "free"
       }
     },
     {
       "id": "categories.deleteKeywordRule",
       "policy": {
+        "access": {
+          "scope": {
+            "capability": "write",
+            "evaluation": "operation"
+          },
+          "type": "pat-scoped"
+        },
         "agentConfirmation": "required",
-        "callerEligibility": "authenticated",
         "kind": "mutation",
-        "requiredScope": "write",
-        "requiredTier": "free",
-        "scopeEvaluation": "endpoint"
+        "requiredTier": "free"
       }
     },
     {
       "id": "categories.listCategories",
       "policy": {
+        "access": {
+          "scope": {
+            "capability": "read",
+            "evaluation": "operation"
+          },
+          "type": "pat-scoped"
+        },
         "agentConfirmation": "not-required",
-        "callerEligibility": "authenticated",
         "kind": "query",
-        "requiredScope": "read",
-        "requiredTier": "free",
-        "scopeEvaluation": "endpoint"
+        "requiredTier": "free"
       }
     },
     {
       "id": "categories.listKeywordRules",
       "policy": {
+        "access": {
+          "scope": {
+            "capability": "read",
+            "evaluation": "operation"
+          },
+          "type": "pat-scoped"
+        },
         "agentConfirmation": "not-required",
-        "callerEligibility": "authenticated",
         "kind": "query",
-        "requiredScope": "read",
-        "requiredTier": "free",
-        "scopeEvaluation": "endpoint"
+        "requiredTier": "free"
       }
     },
     {
       "id": "categories.updateKeywordRule",
       "policy": {
+        "access": {
+          "scope": {
+            "capability": "write",
+            "evaluation": "operation"
+          },
+          "type": "pat-scoped"
+        },
         "agentConfirmation": "required",
-        "callerEligibility": "authenticated",
         "kind": "mutation",
-        "requiredScope": "write",
-        "requiredTier": "free",
-        "scopeEvaluation": "endpoint"
+        "requiredTier": "free"
       }
     },
     {
       "id": "dashboard.applyDashboardEdit",
       "policy": {
+        "access": {
+          "scope": {
+            "capability": "dashboard",
+            "evaluation": "operation"
+          },
+          "type": "pat-scoped"
+        },
         "agentConfirmation": "required",
-        "callerEligibility": "authenticated",
         "kind": "mutation",
-        "requiredScope": "dashboard",
-        "requiredTier": "free",
-        "scopeEvaluation": "endpoint"
+        "requiredTier": "free"
       }
     },
     {
       "id": "dashboard.getDashboard",
       "policy": {
+        "access": {
+          "scope": {
+            "capability": "read",
+            "evaluation": "operation"
+          },
+          "type": "pat-scoped"
+        },
         "agentConfirmation": "not-required",
-        "callerEligibility": "authenticated",
         "kind": "mutation",
-        "requiredScope": "read",
-        "requiredTier": "free",
-        "scopeEvaluation": "endpoint"
+        "requiredTier": "free"
       }
     },
     {
       "id": "dashboard.listDashboardCatalog",
       "policy": {
+        "access": {
+          "scope": {
+            "capability": "read",
+            "evaluation": "operation"
+          },
+          "type": "pat-scoped"
+        },
         "agentConfirmation": "not-required",
-        "callerEligibility": "authenticated",
         "kind": "query",
-        "requiredScope": "read",
-        "requiredTier": "free",
-        "scopeEvaluation": "endpoint"
+        "requiredTier": "free"
       }
     },
     {
       "id": "identity.getCurrentUser",
       "policy": {
+        "access": {
+          "scope": {
+            "capability": "read",
+            "evaluation": "operation"
+          },
+          "type": "pat-scoped"
+        },
         "agentConfirmation": "not-required",
-        "callerEligibility": "authenticated",
         "kind": "query",
-        "requiredScope": "read",
-        "requiredTier": "free",
-        "scopeEvaluation": "endpoint"
+        "requiredTier": "free"
       }
     },
     {
       "id": "identity.updateUserPreferences",
       "policy": {
+        "access": {
+          "scope": {
+            "capability": "write",
+            "evaluation": "operation"
+          },
+          "type": "pat-scoped"
+        },
         "agentConfirmation": "not-required",
-        "callerEligibility": "authenticated",
         "kind": "mutation",
-        "requiredScope": "write",
-        "requiredTier": "free",
-        "scopeEvaluation": "endpoint"
+        "requiredTier": "free"
       }
     },
     {
       "id": "ingestion.getStatementSubmission",
       "policy": {
+        "access": {
+          "scope": {
+            "capability": "read",
+            "evaluation": "operation"
+          },
+          "type": "pat-scoped"
+        },
         "agentConfirmation": "not-required",
-        "callerEligibility": "authenticated",
         "kind": "query",
-        "requiredScope": "read",
-        "requiredTier": "free",
-        "scopeEvaluation": "endpoint"
+        "requiredTier": "free"
       }
     },
     {
       "id": "ingestion.listNeedsReviewItems",
       "policy": {
+        "access": {
+          "scope": {
+            "capability": "read",
+            "evaluation": "operation"
+          },
+          "type": "pat-scoped"
+        },
         "agentConfirmation": "not-required",
-        "callerEligibility": "authenticated",
         "kind": "query",
-        "requiredScope": "read",
-        "requiredTier": "free",
-        "scopeEvaluation": "endpoint"
+        "requiredTier": "free"
       }
     },
     {
       "id": "ingestion.resolveNeedsReviewItem",
       "policy": {
+        "access": {
+          "scope": {
+            "capability": "write",
+            "evaluation": "operation"
+          },
+          "type": "pat-scoped"
+        },
         "agentConfirmation": "required",
-        "callerEligibility": "authenticated",
         "kind": "mutation",
-        "requiredScope": "write",
-        "requiredTier": "free",
-        "scopeEvaluation": "endpoint"
+        "requiredTier": "free"
       }
     },
     {
       "id": "ingestion.submitForExtraction",
       "policy": {
+        "access": {
+          "scope": {
+            "capability": "write",
+            "evaluation": "operation"
+          },
+          "type": "pat-scoped"
+        },
         "agentConfirmation": "not-required",
-        "callerEligibility": "authenticated",
         "kind": "mutation",
-        "requiredScope": "write",
-        "requiredTier": "free",
-        "scopeEvaluation": "endpoint"
+        "requiredTier": "free"
       }
     },
     {
       "id": "insights.dismissInsight",
       "policy": {
+        "access": {
+          "scope": {
+            "capability": "write",
+            "evaluation": "operation"
+          },
+          "type": "pat-scoped"
+        },
         "agentConfirmation": "required",
-        "callerEligibility": "authenticated",
         "kind": "mutation",
-        "requiredScope": "write",
-        "requiredTier": "free",
-        "scopeEvaluation": "endpoint"
+        "requiredTier": "free"
       }
     },
     {
       "id": "insights.listPendingInsights",
       "policy": {
+        "access": {
+          "scope": {
+            "capability": "read",
+            "evaluation": "operation"
+          },
+          "type": "pat-scoped"
+        },
         "agentConfirmation": "not-required",
-        "callerEligibility": "authenticated",
         "kind": "query",
-        "requiredScope": "read",
-        "requiredTier": "free",
-        "scopeEvaluation": "endpoint"
+        "requiredTier": "free"
       }
     },
     {
       "id": "insights.markInsightDelivered",
       "policy": {
+        "access": {
+          "scope": {
+            "capability": "write",
+            "evaluation": "operation"
+          },
+          "type": "pat-scoped"
+        },
         "agentConfirmation": "required",
-        "callerEligibility": "authenticated",
         "kind": "mutation",
-        "requiredScope": "write",
-        "requiredTier": "free",
-        "scopeEvaluation": "endpoint"
+        "requiredTier": "free"
       }
     },
     {
       "id": "insights.markInsightRead",
       "policy": {
+        "access": {
+          "scope": {
+            "capability": "write",
+            "evaluation": "operation"
+          },
+          "type": "pat-scoped"
+        },
         "agentConfirmation": "required",
-        "callerEligibility": "authenticated",
         "kind": "mutation",
-        "requiredScope": "write",
-        "requiredTier": "free",
-        "scopeEvaluation": "endpoint"
+        "requiredTier": "free"
       }
     },
     {
       "id": "memory.forget",
       "policy": {
+        "access": {
+          "scope": {
+            "capability": "write",
+            "evaluation": "operation"
+          },
+          "type": "pat-scoped"
+        },
         "agentConfirmation": "required",
-        "callerEligibility": "authenticated",
         "kind": "mutation",
-        "requiredScope": "write",
-        "requiredTier": "free",
-        "scopeEvaluation": "endpoint"
+        "requiredTier": "free"
       }
     },
     {
       "id": "memory.recall",
       "policy": {
+        "access": {
+          "scope": {
+            "capability": "read",
+            "evaluation": "operation"
+          },
+          "type": "pat-scoped"
+        },
         "agentConfirmation": "not-required",
-        "callerEligibility": "authenticated",
         "kind": "query",
-        "requiredScope": "read",
-        "requiredTier": "free",
-        "scopeEvaluation": "endpoint"
+        "requiredTier": "free"
       }
     },
     {
       "id": "memory.remember",
       "policy": {
+        "access": {
+          "scope": {
+            "capability": "write",
+            "evaluation": "operation"
+          },
+          "type": "pat-scoped"
+        },
         "agentConfirmation": "not-required",
-        "callerEligibility": "authenticated",
         "kind": "mutation",
-        "requiredScope": "write",
-        "requiredTier": "free",
-        "scopeEvaluation": "endpoint"
+        "requiredTier": "free"
       }
     },
     {
       "id": "memory.revise",
       "policy": {
+        "access": {
+          "scope": {
+            "capability": "write",
+            "evaluation": "operation"
+          },
+          "type": "pat-scoped"
+        },
         "agentConfirmation": "required",
-        "callerEligibility": "authenticated",
         "kind": "mutation",
-        "requiredScope": "write",
-        "requiredTier": "free",
-        "scopeEvaluation": "endpoint"
+        "requiredTier": "free"
       }
     },
     {
       "id": "operations.executeAtomicBatch",
       "policy": {
+        "access": {
+          "scope": {
+            "evaluation": "children"
+          },
+          "type": "pat-scoped"
+        },
         "agentConfirmation": "required",
-        "callerEligibility": "authenticated",
         "kind": "mutation",
-        "requiredScope": "write",
-        "requiredTier": "free",
-        "scopeEvaluation": "children"
+        "requiredTier": "free"
       }
     },
     {
       "id": "subscription.getUpgradeUrl",
       "policy": {
+        "access": {
+          "scope": {
+            "capability": "read",
+            "evaluation": "operation"
+          },
+          "type": "pat-scoped"
+        },
         "agentConfirmation": "not-required",
-        "callerEligibility": "authenticated",
         "kind": "query",
-        "requiredScope": "read",
-        "requiredTier": "free",
-        "scopeEvaluation": "endpoint"
+        "requiredTier": "free"
       }
     },
     {
       "id": "subscription.listSubscriptionOffers",
       "policy": {
+        "access": {
+          "scope": {
+            "capability": "read",
+            "evaluation": "operation"
+          },
+          "type": "pat-scoped"
+        },
         "agentConfirmation": "not-required",
-        "callerEligibility": "authenticated",
         "kind": "query",
-        "requiredScope": "read",
-        "requiredTier": "free",
-        "scopeEvaluation": "endpoint"
+        "requiredTier": "free"
       }
     },
     {
       "id": "transactions.createTransaction",
       "policy": {
+        "access": {
+          "scope": {
+            "capability": "write",
+            "evaluation": "operation"
+          },
+          "type": "pat-scoped"
+        },
         "agentConfirmation": "not-required",
-        "callerEligibility": "authenticated",
         "kind": "mutation",
-        "requiredScope": "write",
-        "requiredTier": "free",
-        "scopeEvaluation": "endpoint"
+        "requiredTier": "free"
       }
     },
     {
       "id": "transactions.deleteTransaction",
       "policy": {
+        "access": {
+          "scope": {
+            "capability": "write",
+            "evaluation": "operation"
+          },
+          "type": "pat-scoped"
+        },
         "agentConfirmation": "required",
-        "callerEligibility": "authenticated",
         "kind": "mutation",
-        "requiredScope": "write",
-        "requiredTier": "free",
-        "scopeEvaluation": "endpoint"
+        "requiredTier": "free"
       }
     },
     {
       "id": "transactions.getTransaction",
       "policy": {
+        "access": {
+          "scope": {
+            "capability": "read",
+            "evaluation": "operation"
+          },
+          "type": "pat-scoped"
+        },
         "agentConfirmation": "not-required",
-        "callerEligibility": "authenticated",
         "kind": "query",
-        "requiredScope": "read",
-        "requiredTier": "free",
-        "scopeEvaluation": "endpoint"
+        "requiredTier": "free"
       }
     },
     {
       "id": "transactions.listSourceAttestations",
       "policy": {
+        "access": {
+          "scope": {
+            "capability": "read",
+            "evaluation": "operation"
+          },
+          "type": "pat-scoped"
+        },
         "agentConfirmation": "not-required",
-        "callerEligibility": "authenticated",
         "kind": "query",
-        "requiredScope": "read",
-        "requiredTier": "free",
-        "scopeEvaluation": "endpoint"
+        "requiredTier": "free"
       }
     },
     {
       "id": "transactions.listTransactions",
       "policy": {
+        "access": {
+          "scope": {
+            "capability": "read",
+            "evaluation": "operation"
+          },
+          "type": "pat-scoped"
+        },
         "agentConfirmation": "not-required",
-        "callerEligibility": "authenticated",
         "kind": "query",
-        "requiredScope": "read",
-        "requiredTier": "free",
-        "scopeEvaluation": "endpoint"
+        "requiredTier": "free"
       }
     },
     {
       "id": "transactions.updateTransaction",
       "policy": {
+        "access": {
+          "scope": {
+            "capability": "write",
+            "evaluation": "operation"
+          },
+          "type": "pat-scoped"
+        },
         "agentConfirmation": "required",
-        "callerEligibility": "authenticated",
         "kind": "mutation",
-        "requiredScope": "write",
-        "requiredTier": "free",
-        "scopeEvaluation": "endpoint"
+        "requiredTier": "free"
       }
     }
   ]

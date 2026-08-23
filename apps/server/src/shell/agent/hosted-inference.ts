@@ -1,6 +1,7 @@
 import { Context, Data, Effect, Exit, Option, Schema } from "effect";
 import type { Duration } from "effect";
 import type { Prompt, Response } from "effect/unstable/ai";
+import type { CanonicalOperationId } from "~/core/audit/model";
 import type { TranscriptEntry } from "~/core/transcript/model";
 import { freezeDeep } from "~/shell/_shared/deep-freeze";
 
@@ -121,10 +122,14 @@ export const HostedToolCallMaximum = Schema.Int.check(Schema.isGreaterThan(0)).p
 );
 export type HostedToolCallMaximum = typeof HostedToolCallMaximum.Type;
 
-/** Canonical tools are always present; `none` forbids calls and `auto` bounds their count. */
-export type HostedTextToolPolicy =
-  | Readonly<{ toolChoice: "none" }>
-  | Readonly<{ toolChoice: "auto"; maximumToolCalls: HostedToolCallMaximum }>;
+/** Caller-visible canonical operations plus whether calls are forbidden or bounded. */
+export type HostedTextToolPolicy = Readonly<{
+  availableOperations: ReadonlyArray<CanonicalOperationId>;
+}> &
+  (
+    | Readonly<{ toolChoice: "none" }>
+    | Readonly<{ toolChoice: "auto"; maximumToolCalls: HostedToolCallMaximum }>
+  );
 
 /** One initial semantic request; later rounds are prepared directly by their continuation. */
 export type HostedTextRequest = Readonly<{ context: HostedTextContext }> & HostedTextToolPolicy;
@@ -256,8 +261,12 @@ const makeOpaqueBehavior: MakeOpaqueBehavior = (behavior) => {
 
 const toolPolicy = (request: HostedTextRequest): HostedTextToolPolicy =>
   request.toolChoice === "none"
-    ? { toolChoice: "none" }
-    : { toolChoice: "auto", maximumToolCalls: request.maximumToolCalls };
+    ? { toolChoice: "none", availableOperations: request.availableOperations }
+    : {
+        toolChoice: "auto",
+        maximumToolCalls: request.maximumToolCalls,
+        availableOperations: request.availableOperations,
+      };
 
 const validateActiveRequest = <Request, Continuation>(
   adapter: HostedInferenceAdapter<Request, Continuation>,
@@ -298,6 +307,7 @@ const prepareAdapterRequest = <Request, Continuation>(
               projection: input.projection,
               continuation: input.continuation,
               toolChoice: "none",
+              availableOperations: input.policy.availableOperations,
             }
           : {
               basePrefix: input.basePrefix,
@@ -305,6 +315,7 @@ const prepareAdapterRequest = <Request, Continuation>(
               continuation: input.continuation,
               toolChoice: "auto",
               maximumToolCalls: input.policy.maximumToolCalls,
+              availableOperations: input.policy.availableOperations,
             }
       )
     )

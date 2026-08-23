@@ -4,7 +4,7 @@ import { CanonicalOperationId } from "~/core/_shared/canonical-operation";
 import { UtcTimestamp } from "~/core/_shared/time";
 import { BrowserLoginPairingId } from "~/core/browser-login/reference";
 import type { CanonicalRejectedFailure } from "~/shell/_shared/errors";
-import { hostedWhatsAppOperationPolicy } from "~/shell/_shared/operation-policy";
+import { operationPolicy, verifiedWhatsAppHostedOnly } from "~/shell/_shared/operation-policy";
 import { NextOperations, OperationResponse } from "~/shell/_shared/response";
 
 /** Stable canonical identity of hosted browser-pairing approval. */
@@ -79,8 +79,8 @@ export const BrowserLoginGroup = HttpApiGroup.make("browserLogin").add(
         "confirmation before execution; the code is public and is never a browser credential."
     )
     .annotateMerge(
-      hostedWhatsAppOperationPolicy({
-        requiredCapability: "write",
+      operationPolicy({
+        access: verifiedWhatsAppHostedOnly,
         requiredTier: "free",
         agentConfirmation: "required",
         kind: "mutation",

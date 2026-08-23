@@ -7,12 +7,10 @@ import type { CanonicalCapabilities } from "~/core/_shared/canonical-capability"
 import type { UserId } from "~/core/identity/reference";
 import { type TokenBearer, TokenBearerFormat } from "~/core/tokens/model";
 import { ConsentRequired, ScopeMissing, Unauthenticated, UserActionRequired } from "./errors";
+import type { CanonicalAuthorityRoot, OperationAccessCaller } from "./operation-policy";
 
 /** Host-only cookie name published as part of the declaration-only browser authorization scheme. */
 export const webSessionCookieName = "__Host-fidy_session";
-
-/** Non-credential provenance retained across a hosted Turn for caller eligibility. */
-export type CanonicalAuthorityRoot = "verified-whatsapp" | "no-verified-whatsapp-authority";
 
 type HostedAuditCaller = Extract<AuditCaller, { readonly _tag: "HostedAgentSession" }>;
 type PatAuditCaller = Extract<AuditCaller, { readonly _tag: "PAT" }>;
@@ -26,7 +24,8 @@ type CanonicalAuthority =
   | Readonly<{
       auditCaller: WebSessionAuditCaller;
       authorityRoot: "no-verified-whatsapp-authority";
-      freshUntil: DateTime.Utc;
+      /** Freshness at this canonical operation's authorization checkpoint. */
+      fresh: boolean;
     }>;
 
 /** Credential-neutral authority facts supplied to every canonical implementation. */
@@ -35,6 +34,17 @@ export type CanonicalCaller = Readonly<{
   capabilities: CanonicalCapabilities;
 }> &
   CanonicalAuthority;
+
+/** Projects attributable authority into the identity-free facts consumed by access policy. */
+export const toAccessCaller = (caller: CanonicalCaller): OperationAccessCaller => {
+  if (caller.auditCaller._tag === "PAT") {
+    return { _tag: "PAT", capabilities: caller.capabilities };
+  }
+  if ("fresh" in caller) {
+    return { _tag: "WebSession", fresh: caller.fresh };
+  }
+  return { _tag: "HostedAgentSession", authorityRoot: caller.authorityRoot };
+};
 
 /** Request- or Turn-scoped canonical caller; repositories still receive explicit UserId. */
 export class ResolvedCaller extends Context.Service<ResolvedCaller, CanonicalCaller>()(

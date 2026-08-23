@@ -5,7 +5,7 @@ import { MigrationSqlClient } from "~/shell/db/client";
 import { CategoryId } from "~/core/categories/reference";
 import { SplitWeight, TransactionListLimit, WidgetId } from "~/core/dashboard/model";
 import { NotFound, ValidationFailed } from "~/shell/_shared/errors";
-import { makeFreeSuggestedOperationCaller } from "~/shell/_shared/suggested-operations";
+import { freePatCaller } from "~/shell/_shared/suggested-operations";
 import { defaultUserId } from "~/shell/db/development-seed";
 import { withUserTransaction } from "~/shell/db/user-transaction";
 import { defaultPatBearer } from "~/shell/testing/identity-fixtures";
@@ -92,7 +92,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
       Effect.gen(function* () {
         yield* truncateDashboards;
         const sql = yield* MigrationSqlClient;
-        const caller = makeFreeSuggestedOperationCaller(["dashboard"]);
+        const caller = freePatCaller(["dashboard"]);
 
         const rollback = yield* Effect.result(
           withUserTransaction(

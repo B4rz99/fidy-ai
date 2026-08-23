@@ -21,7 +21,7 @@ import { MigrationSqlClient } from "~/shell/db/client";
 import { withUserTransaction } from "~/shell/db/user-transaction";
 import { ValidationFailed } from "~/shell/_shared/errors";
 import { type SuggestedOperation } from "~/shell/_shared/response";
-import { makeFreeSuggestedOperationCaller } from "~/shell/_shared/suggested-operations";
+import { freePatCaller } from "~/shell/_shared/suggested-operations";
 import {
   type ApiClient,
   ApiHarness,
@@ -250,7 +250,7 @@ layer(InsightsHarness, { excludeTestServices: true, timeout: "30 seconds" })(
       Effect.gen(function* () {
         yield* truncateInsights;
         const client = yield* ApiHarnessClient;
-        const caller = makeFreeSuggestedOperationCaller(["write"]);
+        const caller = freePatCaller(["write"]);
         const deliveredEvent = yield* generateWeeklySummary;
         const readEvent = yield* generateWeeklySummary;
         const dismissedEvent = yield* generateWeeklySummary;

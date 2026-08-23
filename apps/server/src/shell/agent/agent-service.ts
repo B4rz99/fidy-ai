@@ -21,7 +21,8 @@ import type { Tool } from "effect/unstable/ai";
 import { HttpClient } from "effect/unstable/http";
 import { SqlClient } from "effect/unstable/sql";
 import { allCanonicalCapabilities } from "~/core/_shared/canonical-capability";
-import type { CanonicalAuthorityRoot, CanonicalCaller } from "~/shell/_shared/authz";
+import type { CanonicalCaller } from "~/shell/_shared/authz";
+import { type CanonicalAuthorityRoot, completesHostedTurn } from "~/shell/_shared/operation-policy";
 import type { User } from "~/core/identity/model";
 import type { UserId } from "~/core/identity/reference";
 import { CompactedConversationOutput } from "~/core/transcript/compacted-conversation";
@@ -86,6 +87,7 @@ import {
   agentOperationBindings,
   decodeAgentOperationInput,
   findAgentOperationBinding,
+  hostedBindings,
   makeAgentToolkit,
 } from "./toolkit";
 
@@ -337,6 +339,7 @@ type HostedTurn = Readonly<{
   pending: TurnExecution;
   continuationEntries: Array<TurnContinuationContent>;
   initialPrepared: PreparedHostedText;
+  availableOperations: ReadonlyArray<AgentOperationBinding["operation"]>;
 }>;
 
 type RecordedCall = Readonly<{
@@ -386,11 +389,7 @@ const toolCallOutcome = (
     : makeToolOutcome(executed.isFailure, result);
 
 const completesTurn = (binding: AgentOperationBinding, outcome: CanonicalToolOutcome): boolean =>
-  [
-    binding.operation !== atomicBatchOperation,
-    binding.policy.requiredCapability === "write",
-    outcome._tag === "Succeeded",
-  ].every(Boolean);
+  completesHostedTurn(binding.policy) && outcome._tag === "Succeeded";
 
 const recordToolOutcome = Effect.fn("AgentService.recordToolOutcome")(function* (
   turn: HostedTurn,
@@ -972,10 +971,11 @@ const generateCurrentTurn = (
               return continued.prepare(
                 context,
                 remainingToolCalls === 0
-                  ? { toolChoice: "none" }
+                  ? { toolChoice: "none", availableOperations: turn.availableOperations }
                   : {
                       toolChoice: "auto",
                       maximumToolCalls: HostedToolCallMaximum.make(remainingToolCalls),
+                      availableOperations: turn.availableOperations,
                     }
               );
             },
@@ -1385,13 +1385,17 @@ type AgentServiceDependencies = Readonly<{
 
 const prepareInitialRound = (
   inference: HostedInferenceService,
-  context: WorkingContext,
-  maximumToolCalls: number
+  input: Readonly<{
+    context: WorkingContext;
+    maximumToolCalls: number;
+    availableOperations: ReadonlyArray<AgentOperationBinding["operation"]>;
+  }>
 ): Effect.Effect<PreparedHostedText, HostedInferenceError> =>
   inference.prepareText({
-    context,
+    context: input.context,
     toolChoice: "auto",
-    maximumToolCalls: HostedToolCallMaximum.make(maximumToolCalls),
+    maximumToolCalls: HostedToolCallMaximum.make(input.maximumToolCalls),
+    availableOperations: input.availableOperations,
   });
 
 // Admission follows the first model round so a model failure admits nothing, and a superseded or
@@ -1413,6 +1417,20 @@ const beginPreparedTurn = Effect.fn("AgentService.beginPreparedTurn")(function* 
   return yield* admission.failure;
 });
 
+const makeHostedCaller = (input: {
+  readonly userId: UserId;
+  readonly context: WorkingContext;
+  readonly authorityRoot: CanonicalAuthorityRoot;
+}): CanonicalCaller => ({
+  subjectUserId: input.userId,
+  capabilities: allCanonicalCapabilities,
+  auditCaller: {
+    _tag: "HostedAgentSession",
+    hostedAgentSessionId: input.context.hostedAgentSessionId,
+  },
+  authorityRoot: input.authorityRoot,
+});
+
 const generateHostedReply = Effect.fn("AgentService.generateHostedReply")(function* (input: {
   dependencies: AgentServiceDependencies;
   userId: UserId;
@@ -1422,39 +1440,31 @@ const generateHostedReply = Effect.fn("AgentService.generateHostedReply")(functi
   pending: TurnExecution;
   firstRound: PreparedHostedText;
   authorityRoot: CanonicalAuthorityRoot;
+  availableOperations: ReadonlyArray<AgentOperationBinding["operation"]>;
 }) {
-  const { authorityRoot, dependencies, userId, message, limits, context, pending, firstRound } =
-    input;
   const { user, confirmation } = yield* loadTurnContext(
-    userId,
-    context.hostedAgentSessionId,
-    message
+    input.userId,
+    input.context.hostedAgentSessionId,
+    input.message
   );
   let executionActive = true;
-  const caller: CanonicalCaller = {
-    subjectUserId: userId,
-    capabilities: allCanonicalCapabilities,
-    auditCaller: {
-      _tag: "HostedAgentSession",
-      hostedAgentSessionId: context.hostedAgentSessionId,
-    },
-    authorityRoot,
-  };
+  const caller = makeHostedCaller(input);
   return yield* Effect.gen(function* () {
     const toolkit = yield* makeAgentToolkit({
       caller,
       isExecutionActive: () => executionActive,
     });
-    return yield* runHostedTurn(dependencies.inference, {
-      userId,
+    return yield* runHostedTurn(input.dependencies.inference, {
+      userId: input.userId,
       user,
-      startedAt: context.startedAt,
-      limits,
+      startedAt: input.context.startedAt,
+      limits: input.limits,
       confirmation,
       toolkit,
-      pending,
+      pending: input.pending,
       continuationEntries: [],
-      initialPrepared: firstRound,
+      initialPrepared: input.firstRound,
+      availableOperations: input.availableOperations,
     });
   }).pipe(
     Effect.ensuring(
@@ -1499,11 +1509,12 @@ const runPreparedTurn = Effect.fn("AgentService.runPreparedTurn")(function* <E, 
   const context = yield* makeWorkingContext(prepared.snapshot).pipe(
     Effect.mapError(() => new UnknownUser({ userId }))
   );
-  const firstRound = yield* prepareInitialRound(
-    dependencies.inference,
+  const availableOperations = hostedBindings(authorityRoot).map(({ operation }) => operation);
+  const firstRound = yield* prepareInitialRound(dependencies.inference, {
     context,
-    limits.maxToolCallsPerTurn
-  ).pipe(Effect.mapError(mapHostedInferenceFailure));
+    maximumToolCalls: limits.maxToolCallsPerTurn,
+    availableOperations,
+  }).pipe(Effect.mapError(mapHostedInferenceFailure));
   const pending = yield* beginPreparedTurn({
     continuity: dependencies.continuity,
     userId,
@@ -1523,6 +1534,7 @@ const runPreparedTurn = Effect.fn("AgentService.runPreparedTurn")(function* <E, 
       context,
       pending,
       firstRound,
+      availableOperations,
     })
   );
   if (Exit.isFailure(generation)) {

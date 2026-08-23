@@ -4,7 +4,7 @@ import { HttpBody, HttpClient } from "effect/unstable/http";
 import { CategoryKeyword } from "~/core/categories/model";
 import { CategoryId } from "~/core/categories/reference";
 import { categoryIds } from "~/core/categories/taxonomy";
-import { makeFreeSuggestedOperationCaller } from "~/shell/_shared/suggested-operations";
+import { freePatCaller } from "~/shell/_shared/suggested-operations";
 import { defaultUserId } from "~/shell/db/development-seed";
 import { withUserTransaction } from "~/shell/db/user-transaction";
 import { ApiHarness, ApiHarnessClient, headersFor } from "~/shell/testing/api-harness";
@@ -142,7 +142,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
       Effect.gen(function* () {
         yield* truncateTransactions;
         const client = yield* ApiHarnessClient;
-        const caller = makeFreeSuggestedOperationCaller(["write"]);
+        const caller = freePatCaller(["write"]);
 
         const rollback = yield* Effect.result(
           withUserTransaction(
@@ -168,7 +168,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
       Effect.gen(function* () {
         yield* truncateTransactions;
         const client = yield* ApiHarnessClient;
-        const caller = makeFreeSuggestedOperationCaller(["write"]);
+        const caller = freePatCaller(["write"]);
         const created = yield* client.categories.createKeywordRule({
           payload: {
             keyword: CategoryKeyword.make("Rappi"),

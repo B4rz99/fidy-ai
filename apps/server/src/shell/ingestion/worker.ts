@@ -8,7 +8,7 @@ import type {
 import { interpretStatementRows } from "~/core/ingestion/rules";
 import { NeedsReviewItemId } from "~/core/ingestion/reference";
 import { InterpretationRevision, TransactionExtraction } from "~/core/transactions/model";
-import { makeFreeSuggestedOperationCaller } from "~/shell/_shared/suggested-operations";
+import { freePatCaller } from "~/shell/_shared/suggested-operations";
 import { withUserTransaction } from "~/shell/db/user-transaction";
 import { captureStatementTransactionInScope } from "~/shell/transactions/mutations";
 import { StatementColumnMapper } from "./column-mapper";
@@ -109,7 +109,7 @@ const finalizeOutcome = Effect.fn("finalizeStatementOutcome")(function* (
   const captured = yield* Effect.result(
     captureStatementTransactionInScope({
       userId: claimed.userId,
-      caller: makeFreeSuggestedOperationCaller(["write"]),
+      caller: freePatCaller(["write"]),
       extraction: outcome.extraction,
       context: {
         serviceMarket: claimed.serviceMarket,

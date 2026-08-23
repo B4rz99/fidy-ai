@@ -146,9 +146,35 @@ const byCanonicalValue = (left: ContractFinding, right: ContractFinding): number
 const normalizeHistoricalPolicy = (policy: JsonValue): JsonValue => {
   if (!Predicate.isObject(policy)) return policy;
   const object = Schema.decodeUnknownSync(JsonObject)(policy);
-  return Object.hasOwn(object, "callerEligibility")
-    ? object
-    : { ...object, callerEligibility: "authenticated" };
+  if (Object.hasOwn(object, "access")) return object;
+
+  const capability = object.requiredScope;
+  const evaluation = object.scopeEvaluation;
+  const eligibility = object.callerEligibility ?? "authenticated";
+  if (
+    (capability !== "read" && capability !== "write" && capability !== "dashboard") ||
+    (evaluation !== "endpoint" && evaluation !== "children") ||
+    (eligibility !== "authenticated" && eligibility !== "verified-whatsapp-hosted-only")
+  ) {
+    return Object.hasOwn(object, "callerEligibility")
+      ? object
+      : { ...object, callerEligibility: "authenticated" };
+  }
+
+  const { requiredScope: _, scopeEvaluation: __, callerEligibility: ___, ...orthogonal } = object;
+  return {
+    ...orthogonal,
+    access:
+      eligibility === "verified-whatsapp-hosted-only"
+        ? { type: "verified-whatsapp-hosted-only" }
+        : {
+            type: "pat-scoped",
+            scope:
+              evaluation === "children"
+                ? { evaluation: "children" }
+                : { evaluation: "operation", capability },
+          },
+  };
 };
 
 /**

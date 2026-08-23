@@ -1,6 +1,6 @@
 import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi";
 import { User, UserPreferences } from "~/core/identity/model";
-import { operationPolicy } from "~/shell/_shared/operation-policy";
+import { operationPolicy, patScoped } from "~/shell/_shared/operation-policy";
 import { OperationResponse } from "~/shell/_shared/response";
 
 /**
@@ -19,7 +19,7 @@ export const IdentityGroup = HttpApiGroup.make("identity").add(
     )
     .annotateMerge(
       operationPolicy({
-        requiredCapability: "read",
+        access: patScoped("read"),
         requiredTier: "free",
         agentConfirmation: "not-required",
         kind: "query",
@@ -36,7 +36,7 @@ export const IdentityGroup = HttpApiGroup.make("identity").add(
     )
     .annotateMerge(
       operationPolicy({
-        requiredCapability: "write",
+        access: patScoped("write"),
         requiredTier: "free",
         agentConfirmation: "not-required",
         kind: "mutation",

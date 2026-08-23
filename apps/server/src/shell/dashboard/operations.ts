@@ -1,7 +1,7 @@
 import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi";
 import { DashboardCatalog, DashboardDocument, DashboardEdit } from "~/core/dashboard/model";
 import { NotFound, ValidationFailed } from "~/shell/_shared/errors";
-import { operationPolicy } from "~/shell/_shared/operation-policy";
+import { operationPolicy, patScoped } from "~/shell/_shared/operation-policy";
 import { OperationResponse } from "~/shell/_shared/response";
 
 const DashboardEditFailures = [NotFound, ValidationFailed] as const;
@@ -20,7 +20,7 @@ export const DashboardGroup = HttpApiGroup.make("dashboard")
       )
       .annotateMerge(
         operationPolicy({
-          requiredCapability: "read",
+          access: patScoped("read"),
           requiredTier: "free",
           agentConfirmation: "not-required",
           kind: "mutation",
@@ -39,7 +39,7 @@ export const DashboardGroup = HttpApiGroup.make("dashboard")
       )
       .annotateMerge(
         operationPolicy({
-          requiredCapability: "read",
+          access: patScoped("read"),
           requiredTier: "free",
           agentConfirmation: "not-required",
           kind: "query",
@@ -60,7 +60,7 @@ export const DashboardGroup = HttpApiGroup.make("dashboard")
       )
       .annotateMerge(
         operationPolicy({
-          requiredCapability: "dashboard",
+          access: patScoped("dashboard"),
           requiredTier: "free",
           agentConfirmation: "required",
           kind: "mutation",

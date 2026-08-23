@@ -11,7 +11,7 @@ import { defaultUserId } from "~/shell/db/development-seed";
 import { TelemetryDisabled } from "~/shell/observability/disabled";
 import { ApiHarness, ApiHarnessClient } from "~/shell/testing/api-harness";
 import { withUserTransaction } from "~/shell/db/user-transaction";
-import { makeFreeSuggestedOperationCaller } from "~/shell/_shared/suggested-operations";
+import { freePatCaller } from "~/shell/_shared/suggested-operations";
 import { transactionPayload, truncateTransactions } from "./fixtures";
 import { correctTransaction, createTransaction, deleteTransaction } from "./mutations";
 
@@ -391,7 +391,7 @@ layer(TransactionHarness, { excludeTestServices: true, timeout: "30 seconds" })(
       Effect.gen(function* () {
         yield* truncateTransactions;
         const client = yield* ApiHarnessClient;
-        const caller = makeFreeSuggestedOperationCaller(["write"]);
+        const caller = freePatCaller(["write"]);
 
         const rollback = yield* Effect.result(
           withUserTransaction(
@@ -414,7 +414,7 @@ layer(TransactionHarness, { excludeTestServices: true, timeout: "30 seconds" })(
       Effect.gen(function* () {
         yield* truncateTransactions;
         const client = yield* ApiHarnessClient;
-        const caller = makeFreeSuggestedOperationCaller(["write"]);
+        const caller = freePatCaller(["write"]);
         const created = yield* client.transactions.createTransaction({
           payload: transactionPayload(),
         });

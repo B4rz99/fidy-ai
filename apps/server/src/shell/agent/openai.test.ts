@@ -145,6 +145,8 @@ it.effect("builds the structured-output LanguageModel adapter", () =>
   })
 );
 
+const allOperationIds = agentOperationBindings.map(({ operation }) => operation);
+
 const textRequest = (): HostedTextRequest => ({
   context: testTextContext({
     prefix: [{ role: "system", content: "system framing" }],
@@ -154,6 +156,7 @@ const textRequest = (): HostedTextRequest => ({
   }),
   toolChoice: "auto",
   maximumToolCalls: HostedToolCallMaximum.make(12),
+  availableOperations: allOperationIds,
 });
 
 const StructuredOutput = Schema.Struct({
@@ -196,7 +199,11 @@ const continuationRequest = (
       suffix: [{ role: "user", content: [{ type: "text", text: "continue" }] }],
       activeRequest: { _tag: "Absent" },
     }),
-    { toolChoice: "auto", maximumToolCalls: HostedToolCallMaximum.make(12) }
+    {
+      toolChoice: "auto",
+      maximumToolCalls: HostedToolCallMaximum.make(12),
+      availableOperations: allOperationIds,
+    }
   );
 
 it.effect("fails closed when the OpenAI secret is absent", () =>
@@ -276,6 +283,29 @@ it.effect("counts complete framing and executes the exact prepared request", () 
     const disabledCount = (yield* Ref.get(transport.requests))[2];
     if (disabledCount === undefined) return yield* Effect.die("missing disabled count request");
     expect((yield* requestBody(disabledCount)).tool_choice).toBe("none");
+  })
+);
+
+it.effect("publishes only the caller-visible canonical tools", () =>
+  Effect.gen(function* () {
+    const visible = agentOperationBindings.find(
+      ({ operation }) => operation === "identity.getCurrentUser"
+    );
+    if (visible === undefined) return yield* Effect.die("missing visible operation");
+    const transport = yield* makeTransport(100);
+    const inference = yield* buildInference(transport.layer);
+
+    yield* inference.prepareText({
+      ...textRequest(),
+      availableOperations: [visible.operation],
+    });
+
+    const counted = (yield* Ref.get(transport.requests))[0];
+    if (counted === undefined) return yield* Effect.die("missing counted request");
+    const tools = yield* Schema.decodeUnknownEffect(
+      Schema.Array(Schema.Struct({ name: Schema.String }))
+    )((yield* requestBody(counted)).tools);
+    expect(tools).toEqual([{ name: visible.wireName }]);
   })
 );
 

@@ -131,6 +131,67 @@ it("treats an explicit default caller eligibility as equivalent to the historica
   expect(compareOperationPolicies(base, candidate)).toEqual([]);
 });
 
+it("normalizes the legacy complete policy into equivalent canonical access", () => {
+  const base = {
+    operations: [
+      {
+        id: "widgets.createWidget",
+        policy: {
+          requiredScope: "write",
+          scopeEvaluation: "endpoint",
+          callerEligibility: "authenticated",
+          requiredTier: "free",
+        },
+      },
+      {
+        id: "operations.executeAtomicBatch",
+        policy: {
+          requiredScope: "write",
+          scopeEvaluation: "children",
+          callerEligibility: "authenticated",
+          requiredTier: "free",
+        },
+      },
+      {
+        id: "browserLogin.approvePairing",
+        policy: {
+          requiredScope: "write",
+          scopeEvaluation: "endpoint",
+          callerEligibility: "verified-whatsapp-hosted-only",
+          requiredTier: "free",
+        },
+      },
+    ],
+  } satisfies OperationPolicyManifest;
+  const candidate: OperationPolicyManifest = {
+    operations: [
+      {
+        id: "widgets.createWidget",
+        policy: {
+          access: {
+            type: "pat-scoped",
+            scope: { evaluation: "operation", capability: "write" },
+          },
+          requiredTier: "free",
+        },
+      },
+      {
+        id: "operations.executeAtomicBatch",
+        policy: {
+          access: { type: "pat-scoped", scope: { evaluation: "children" } },
+          requiredTier: "free",
+        },
+      },
+      {
+        id: "browserLogin.approvePairing",
+        policy: { access: { type: "verified-whatsapp-hosted-only" }, requiredTier: "free" },
+      },
+    ],
+  };
+
+  expect(compareOperationPolicies(base, candidate)).toEqual([]);
+});
+
 it("reports a caller eligibility restriction on an existing operation", () => {
   const base = {
     operations: [

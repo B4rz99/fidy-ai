@@ -10959,10 +10959,11 @@
         "tags": [
           "browserLogin"
         ],
+        "x-fidy-access": {
+          "type": "verified-whatsapp-hosted-only"
+        },
         "x-fidy-agent-confirmation": "required",
-        "x-fidy-caller-eligibility": "verified-whatsapp-hosted-only",
         "x-fidy-operation-kind": "mutation",
-        "x-fidy-required-scope": "write",
         "x-fidy-required-tier": "free"
       }
     },
@@ -11081,10 +11082,15 @@
         "tags": [
           "budgets"
         ],
+        "x-fidy-access": {
+          "scope": {
+            "capability": "read",
+            "evaluation": "operation"
+          },
+          "type": "pat-scoped"
+        },
         "x-fidy-agent-confirmation": "not-required",
-        "x-fidy-caller-eligibility": "authenticated",
         "x-fidy-operation-kind": "query",
-        "x-fidy-required-scope": "read",
         "x-fidy-required-tier": "free"
       }
     },
@@ -11181,10 +11187,15 @@
         "tags": [
           "budgets"
         ],
+        "x-fidy-access": {
+          "scope": {
+            "capability": "read",
+            "evaluation": "operation"
+          },
+          "type": "pat-scoped"
+        },
         "x-fidy-agent-confirmation": "not-required",
-        "x-fidy-caller-eligibility": "authenticated",
         "x-fidy-operation-kind": "query",
-        "x-fidy-required-scope": "read",
         "x-fidy-required-tier": "free"
       },
       "post": {
@@ -11303,10 +11314,15 @@
         "tags": [
           "budgets"
         ],
+        "x-fidy-access": {
+          "scope": {
+            "capability": "write",
+            "evaluation": "operation"
+          },
+          "type": "pat-scoped"
+        },
         "x-fidy-agent-confirmation": "not-required",
-        "x-fidy-caller-eligibility": "authenticated",
         "x-fidy-operation-kind": "mutation",
-        "x-fidy-required-scope": "write",
         "x-fidy-required-tier": "free"
       }
     },
@@ -11419,10 +11435,15 @@
         "tags": [
           "budgets"
         ],
+        "x-fidy-access": {
+          "scope": {
+            "capability": "write",
+            "evaluation": "operation"
+          },
+          "type": "pat-scoped"
+        },
         "x-fidy-agent-confirmation": "required",
-        "x-fidy-caller-eligibility": "authenticated",
         "x-fidy-operation-kind": "mutation",
-        "x-fidy-required-scope": "write",
         "x-fidy-required-tier": "free"
       },
       "get": {
@@ -11533,10 +11554,15 @@
         "tags": [
           "budgets"
         ],
+        "x-fidy-access": {
+          "scope": {
+            "capability": "read",
+            "evaluation": "operation"
+          },
+          "type": "pat-scoped"
+        },
         "x-fidy-agent-confirmation": "not-required",
-        "x-fidy-caller-eligibility": "authenticated",
         "x-fidy-operation-kind": "query",
-        "x-fidy-required-scope": "read",
         "x-fidy-required-tier": "free"
       },
       "put": {
@@ -11664,10 +11690,15 @@
         "tags": [
           "budgets"
         ],
+        "x-fidy-access": {
+          "scope": {
+            "capability": "write",
+            "evaluation": "operation"
+          },
+          "type": "pat-scoped"
+        },
         "x-fidy-agent-confirmation": "required",
-        "x-fidy-caller-eligibility": "authenticated",
         "x-fidy-operation-kind": "mutation",
-        "x-fidy-required-scope": "write",
         "x-fidy-required-tier": "free"
       }
     },
@@ -11764,10 +11795,15 @@
         "tags": [
           "categories"
         ],
+        "x-fidy-access": {
+          "scope": {
+            "capability": "read",
+            "evaluation": "operation"
+          },
+          "type": "pat-scoped"
+        },
         "x-fidy-agent-confirmation": "not-required",
-        "x-fidy-caller-eligibility": "authenticated",
         "x-fidy-operation-kind": "query",
-        "x-fidy-required-scope": "read",
         "x-fidy-required-tier": "free"
       }
     },
@@ -11864,10 +11900,15 @@
         "tags": [
           "categories"
         ],
+        "x-fidy-access": {
+          "scope": {
+            "capability": "read",
+            "evaluation": "operation"
+          },
+          "type": "pat-scoped"
+        },
         "x-fidy-agent-confirmation": "not-required",
-        "x-fidy-caller-eligibility": "authenticated",
         "x-fidy-operation-kind": "query",
-        "x-fidy-required-scope": "read",
         "x-fidy-required-tier": "free"
       },
       "post": {
@@ -11986,10 +12027,15 @@
         "tags": [
           "categories"
         ],
+        "x-fidy-access": {
+          "scope": {
+            "capability": "write",
+            "evaluation": "operation"
+          },
+          "type": "pat-scoped"
+        },
         "x-fidy-agent-confirmation": "not-required",
-        "x-fidy-caller-eligibility": "authenticated",
         "x-fidy-operation-kind": "mutation",
-        "x-fidy-required-scope": "write",
         "x-fidy-required-tier": "free"
       }
     },
@@ -12102,10 +12148,15 @@
         "tags": [
           "categories"
         ],
+        "x-fidy-access": {
+          "scope": {
+            "capability": "write",
+            "evaluation": "operation"
+          },
+          "type": "pat-scoped"
+        },
         "x-fidy-agent-confirmation": "required",
-        "x-fidy-caller-eligibility": "authenticated",
         "x-fidy-operation-kind": "mutation",
-        "x-fidy-required-scope": "write",
         "x-fidy-required-tier": "free"
       },
       "put": {
@@ -12233,10 +12284,15 @@
         "tags": [
           "categories"
         ],
+        "x-fidy-access": {
+          "scope": {
+            "capability": "write",
+            "evaluation": "operation"
+          },
+          "type": "pat-scoped"
+        },
         "x-fidy-agent-confirmation": "required",
-        "x-fidy-caller-eligibility": "authenticated",
         "x-fidy-operation-kind": "mutation",
-        "x-fidy-required-scope": "write",
         "x-fidy-required-tier": "free"
       }
     },
@@ -12330,10 +12386,15 @@
         "tags": [
           "dashboard"
         ],
+        "x-fidy-access": {
+          "scope": {
+            "capability": "read",
+            "evaluation": "operation"
+          },
+          "type": "pat-scoped"
+        },
         "x-fidy-agent-confirmation": "not-required",
-        "x-fidy-caller-eligibility": "authenticated",
         "x-fidy-operation-kind": "mutation",
-        "x-fidy-required-scope": "read",
         "x-fidy-required-tier": "free"
       }
     },
@@ -12443,10 +12504,15 @@
         "tags": [
           "dashboard"
         ],
+        "x-fidy-access": {
+          "scope": {
+            "capability": "read",
+            "evaluation": "operation"
+          },
+          "type": "pat-scoped"
+        },
         "x-fidy-agent-confirmation": "not-required",
-        "x-fidy-caller-eligibility": "authenticated",
         "x-fidy-operation-kind": "query",
-        "x-fidy-required-scope": "read",
         "x-fidy-required-tier": "free"
       }
     },
@@ -12567,10 +12633,15 @@
         "tags": [
           "dashboard"
         ],
+        "x-fidy-access": {
+          "scope": {
+            "capability": "dashboard",
+            "evaluation": "operation"
+          },
+          "type": "pat-scoped"
+        },
         "x-fidy-agent-confirmation": "required",
-        "x-fidy-caller-eligibility": "authenticated",
         "x-fidy-operation-kind": "mutation",
-        "x-fidy-required-scope": "dashboard",
         "x-fidy-required-tier": "free"
       }
     },
@@ -12694,10 +12765,15 @@
         "tags": [
           "ingestion"
         ],
+        "x-fidy-access": {
+          "scope": {
+            "capability": "read",
+            "evaluation": "operation"
+          },
+          "type": "pat-scoped"
+        },
         "x-fidy-agent-confirmation": "not-required",
-        "x-fidy-caller-eligibility": "authenticated",
         "x-fidy-operation-kind": "query",
-        "x-fidy-required-scope": "read",
         "x-fidy-required-tier": "free"
       }
     },
@@ -12827,10 +12903,15 @@
         "tags": [
           "ingestion"
         ],
+        "x-fidy-access": {
+          "scope": {
+            "capability": "write",
+            "evaluation": "operation"
+          },
+          "type": "pat-scoped"
+        },
         "x-fidy-agent-confirmation": "required",
-        "x-fidy-caller-eligibility": "authenticated",
         "x-fidy-operation-kind": "mutation",
-        "x-fidy-required-scope": "write",
         "x-fidy-required-tier": "free"
       }
     },
@@ -12951,10 +13032,15 @@
         "tags": [
           "ingestion"
         ],
+        "x-fidy-access": {
+          "scope": {
+            "capability": "write",
+            "evaluation": "operation"
+          },
+          "type": "pat-scoped"
+        },
         "x-fidy-agent-confirmation": "not-required",
-        "x-fidy-caller-eligibility": "authenticated",
         "x-fidy-operation-kind": "mutation",
-        "x-fidy-required-scope": "write",
         "x-fidy-required-tier": "free"
       }
     },
@@ -13067,10 +13153,15 @@
         "tags": [
           "ingestion"
         ],
+        "x-fidy-access": {
+          "scope": {
+            "capability": "read",
+            "evaluation": "operation"
+          },
+          "type": "pat-scoped"
+        },
         "x-fidy-agent-confirmation": "not-required",
-        "x-fidy-caller-eligibility": "authenticated",
         "x-fidy-operation-kind": "query",
-        "x-fidy-required-scope": "read",
         "x-fidy-required-tier": "free"
       }
     },
@@ -13213,10 +13304,15 @@
         "tags": [
           "insights"
         ],
+        "x-fidy-access": {
+          "scope": {
+            "capability": "write",
+            "evaluation": "operation"
+          },
+          "type": "pat-scoped"
+        },
         "x-fidy-agent-confirmation": "required",
-        "x-fidy-caller-eligibility": "authenticated",
         "x-fidy-operation-kind": "mutation",
-        "x-fidy-required-scope": "write",
         "x-fidy-required-tier": "free"
       }
     },
@@ -13336,10 +13432,15 @@
         "tags": [
           "insights"
         ],
+        "x-fidy-access": {
+          "scope": {
+            "capability": "write",
+            "evaluation": "operation"
+          },
+          "type": "pat-scoped"
+        },
         "x-fidy-agent-confirmation": "required",
-        "x-fidy-caller-eligibility": "authenticated",
         "x-fidy-operation-kind": "mutation",
-        "x-fidy-required-scope": "write",
         "x-fidy-required-tier": "free"
       }
     },
@@ -13459,10 +13560,15 @@
         "tags": [
           "insights"
         ],
+        "x-fidy-access": {
+          "scope": {
+            "capability": "write",
+            "evaluation": "operation"
+          },
+          "type": "pat-scoped"
+        },
         "x-fidy-agent-confirmation": "required",
-        "x-fidy-caller-eligibility": "authenticated",
         "x-fidy-operation-kind": "mutation",
-        "x-fidy-required-scope": "write",
         "x-fidy-required-tier": "free"
       }
     },
@@ -13559,10 +13665,15 @@
         "tags": [
           "insights"
         ],
+        "x-fidy-access": {
+          "scope": {
+            "capability": "read",
+            "evaluation": "operation"
+          },
+          "type": "pat-scoped"
+        },
         "x-fidy-agent-confirmation": "not-required",
-        "x-fidy-caller-eligibility": "authenticated",
         "x-fidy-operation-kind": "query",
-        "x-fidy-required-scope": "read",
         "x-fidy-required-tier": "free"
       }
     },
@@ -13656,10 +13767,15 @@
         "tags": [
           "memory"
         ],
+        "x-fidy-access": {
+          "scope": {
+            "capability": "read",
+            "evaluation": "operation"
+          },
+          "type": "pat-scoped"
+        },
         "x-fidy-agent-confirmation": "not-required",
-        "x-fidy-caller-eligibility": "authenticated",
         "x-fidy-operation-kind": "query",
-        "x-fidy-required-scope": "read",
         "x-fidy-required-tier": "free"
       },
       "post": {
@@ -13771,10 +13887,15 @@
         "tags": [
           "memory"
         ],
+        "x-fidy-access": {
+          "scope": {
+            "capability": "write",
+            "evaluation": "operation"
+          },
+          "type": "pat-scoped"
+        },
         "x-fidy-agent-confirmation": "not-required",
-        "x-fidy-caller-eligibility": "authenticated",
         "x-fidy-operation-kind": "mutation",
-        "x-fidy-required-scope": "write",
         "x-fidy-required-tier": "free"
       }
     },
@@ -13887,10 +14008,15 @@
         "tags": [
           "memory"
         ],
+        "x-fidy-access": {
+          "scope": {
+            "capability": "write",
+            "evaluation": "operation"
+          },
+          "type": "pat-scoped"
+        },
         "x-fidy-agent-confirmation": "required",
-        "x-fidy-caller-eligibility": "authenticated",
         "x-fidy-operation-kind": "mutation",
-        "x-fidy-required-scope": "write",
         "x-fidy-required-tier": "free"
       },
       "put": {
@@ -14021,10 +14147,15 @@
         "tags": [
           "memory"
         ],
+        "x-fidy-access": {
+          "scope": {
+            "capability": "write",
+            "evaluation": "operation"
+          },
+          "type": "pat-scoped"
+        },
         "x-fidy-agent-confirmation": "required",
-        "x-fidy-caller-eligibility": "authenticated",
         "x-fidy-operation-kind": "mutation",
-        "x-fidy-required-scope": "write",
         "x-fidy-required-tier": "free"
       }
     },
@@ -17539,10 +17670,14 @@
         "tags": [
           "operations"
         ],
+        "x-fidy-access": {
+          "scope": {
+            "evaluation": "children"
+          },
+          "type": "pat-scoped"
+        },
         "x-fidy-agent-confirmation": "required",
-        "x-fidy-caller-eligibility": "authenticated",
         "x-fidy-operation-kind": "mutation",
-        "x-fidy-required-scope": "write",
         "x-fidy-required-tier": "free"
       }
     },
@@ -17636,10 +17771,15 @@
         "tags": [
           "subscription"
         ],
+        "x-fidy-access": {
+          "scope": {
+            "capability": "read",
+            "evaluation": "operation"
+          },
+          "type": "pat-scoped"
+        },
         "x-fidy-agent-confirmation": "not-required",
-        "x-fidy-caller-eligibility": "authenticated",
         "x-fidy-operation-kind": "query",
-        "x-fidy-required-scope": "read",
         "x-fidy-required-tier": "free"
       }
     },
@@ -17733,10 +17873,15 @@
         "tags": [
           "subscription"
         ],
+        "x-fidy-access": {
+          "scope": {
+            "capability": "read",
+            "evaluation": "operation"
+          },
+          "type": "pat-scoped"
+        },
         "x-fidy-agent-confirmation": "not-required",
-        "x-fidy-caller-eligibility": "authenticated",
         "x-fidy-operation-kind": "query",
-        "x-fidy-required-scope": "read",
         "x-fidy-required-tier": "free"
       }
     },
@@ -17905,10 +18050,15 @@
         "tags": [
           "transactions"
         ],
+        "x-fidy-access": {
+          "scope": {
+            "capability": "read",
+            "evaluation": "operation"
+          },
+          "type": "pat-scoped"
+        },
         "x-fidy-agent-confirmation": "not-required",
-        "x-fidy-caller-eligibility": "authenticated",
         "x-fidy-operation-kind": "query",
-        "x-fidy-required-scope": "read",
         "x-fidy-required-tier": "free"
       },
       "post": {
@@ -18027,10 +18177,15 @@
         "tags": [
           "transactions"
         ],
+        "x-fidy-access": {
+          "scope": {
+            "capability": "write",
+            "evaluation": "operation"
+          },
+          "type": "pat-scoped"
+        },
         "x-fidy-agent-confirmation": "not-required",
-        "x-fidy-caller-eligibility": "authenticated",
         "x-fidy-operation-kind": "mutation",
-        "x-fidy-required-scope": "write",
         "x-fidy-required-tier": "free"
       }
     },
@@ -18143,10 +18298,15 @@
         "tags": [
           "transactions"
         ],
+        "x-fidy-access": {
+          "scope": {
+            "capability": "write",
+            "evaluation": "operation"
+          },
+          "type": "pat-scoped"
+        },
         "x-fidy-agent-confirmation": "required",
-        "x-fidy-caller-eligibility": "authenticated",
         "x-fidy-operation-kind": "mutation",
-        "x-fidy-required-scope": "write",
         "x-fidy-required-tier": "free"
       },
       "get": {
@@ -18257,10 +18417,15 @@
         "tags": [
           "transactions"
         ],
+        "x-fidy-access": {
+          "scope": {
+            "capability": "read",
+            "evaluation": "operation"
+          },
+          "type": "pat-scoped"
+        },
         "x-fidy-agent-confirmation": "not-required",
-        "x-fidy-caller-eligibility": "authenticated",
         "x-fidy-operation-kind": "query",
-        "x-fidy-required-scope": "read",
         "x-fidy-required-tier": "free"
       },
       "put": {
@@ -18388,10 +18553,15 @@
         "tags": [
           "transactions"
         ],
+        "x-fidy-access": {
+          "scope": {
+            "capability": "write",
+            "evaluation": "operation"
+          },
+          "type": "pat-scoped"
+        },
         "x-fidy-agent-confirmation": "required",
-        "x-fidy-caller-eligibility": "authenticated",
         "x-fidy-operation-kind": "mutation",
-        "x-fidy-required-scope": "write",
         "x-fidy-required-tier": "free"
       }
     },
@@ -18507,10 +18677,15 @@
         "tags": [
           "transactions"
         ],
+        "x-fidy-access": {
+          "scope": {
+            "capability": "read",
+            "evaluation": "operation"
+          },
+          "type": "pat-scoped"
+        },
         "x-fidy-agent-confirmation": "not-required",
-        "x-fidy-caller-eligibility": "authenticated",
         "x-fidy-operation-kind": "query",
-        "x-fidy-required-scope": "read",
         "x-fidy-required-tier": "free"
       }
     },
@@ -18604,10 +18779,15 @@
         "tags": [
           "identity"
         ],
+        "x-fidy-access": {
+          "scope": {
+            "capability": "read",
+            "evaluation": "operation"
+          },
+          "type": "pat-scoped"
+        },
         "x-fidy-agent-confirmation": "not-required",
-        "x-fidy-caller-eligibility": "authenticated",
         "x-fidy-operation-kind": "query",
-        "x-fidy-required-scope": "read",
         "x-fidy-required-tier": "free"
       }
     },
@@ -18711,10 +18891,15 @@
         "tags": [
           "identity"
         ],
+        "x-fidy-access": {
+          "scope": {
+            "capability": "write",
+            "evaluation": "operation"
+          },
+          "type": "pat-scoped"
+        },
         "x-fidy-agent-confirmation": "not-required",
-        "x-fidy-caller-eligibility": "authenticated",
         "x-fidy-operation-kind": "mutation",
-        "x-fidy-required-scope": "write",
         "x-fidy-required-tier": "free"
       }
     }

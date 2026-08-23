@@ -2,16 +2,18 @@ import { expect, it } from "@effect/vitest";
 import { Context, Effect, Layer, Option, Schema } from "effect";
 import { McpServer, Tool } from "effect/unstable/ai";
 import { toCodecOpenAI } from "effect/unstable/ai/OpenAiStructuredOutput";
-import { HttpApi, OpenApi } from "effect/unstable/httpapi";
+import { OpenApi } from "effect/unstable/httpapi";
 import { FidyApi as ClientFidyApi } from "~/client";
 import { categoryIds } from "~/core/categories/taxonomy";
 import { assertCanonicalOperationRegistry } from "~/shell/_shared/canonical-operation-registry";
-import { FidyApi } from "~/shell/api";
+import { isHostedVisible } from "~/shell/_shared/operation-policy";
+import { FidyApi, operationCatalog } from "~/shell/api";
 import {
   AgentToolkit,
   agentOperationBindings,
   decodeAgentOperationInput,
   findAgentOperationBinding,
+  hostedBindings,
 } from "./toolkit";
 
 const hostedTool = (name: string): Tool.AnyDynamic => {
@@ -30,21 +32,31 @@ const mcpProbeHandlersDefinition: {
 );
 const mcpProbeHandlers = AgentToolkit.of(mcpProbeHandlersDefinition);
 
-it("derives exactly one hosted tool for every FidyApi canonical operation", () => {
-  const reflected: Array<string> = [];
-  HttpApi.reflect(FidyApi, {
-    onGroup: () => {},
-    onEndpoint: ({ endpoint, group }) => {
-      reflected.push(`${group.identifier}.${endpoint.identifier}`);
-    },
-  });
+it("derives exactly one hosted tool for every hosted-visible canonical operation", () => {
+  const reflected = operationCatalog.operations.map(({ id }) => id);
+  const hostedVisible = operationCatalog.operations
+    .filter(({ policy }) => isHostedVisible(policy.access, "verified-whatsapp"))
+    .map(({ id }) => id);
 
   assertCanonicalOperationRegistry(reflected);
-  expect(agentOperationBindings.map(({ operation }) => operation)).toEqual(reflected);
+  expect(agentOperationBindings.map(({ operation }) => operation)).toEqual(hostedVisible);
   expect(Object.keys(AgentToolkit.tools)).toEqual(
-    reflected.map((operation) => operation.replaceAll(".", "__"))
+    hostedVisible.map((operation) => operation.replaceAll(".", "__"))
   );
   expect(agentOperationBindings.every(({ description }) => description.length > 0)).toBe(true);
+});
+
+it("omits authority-inaccessible operations from hosted discovery", () => {
+  expect(
+    hostedBindings("verified-whatsapp").some(
+      ({ operation }) => operation === "browserLogin.approvePairing"
+    )
+  ).toBe(true);
+  expect(
+    hostedBindings("no-verified-whatsapp-authority").some(
+      ({ operation }) => operation === "browserLogin.approvePairing"
+    )
+  ).toBe(false);
 });
 
 it("rejects names outside the provider-safe operation vocabulary", () => {

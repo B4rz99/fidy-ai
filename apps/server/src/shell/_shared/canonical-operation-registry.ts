@@ -19,7 +19,7 @@ import {
 import { getStatementSubmission, listNeedsReviewItems } from "~/shell/ingestion/queries";
 import { listPendingInsights } from "~/shell/insights/queries";
 import { recall } from "~/shell/memory/queries";
-import { getUpgradeUrl } from "~/shell/subscription/queries";
+import { getUpgradeUrl, listSubscriptionOffers } from "~/shell/subscription/queries";
 import { executeAtomicBatch } from "~/shell/operations/atomic-batch";
 
 export type { CanonicalImplementationCaller } from "./canonical-implementation";
@@ -110,6 +110,7 @@ export const canonicalOperationImplementations: CanonicalOperationImplementation
   "memory.recall": (_input, { resolved }) => recall({ userId: resolved.subjectUserId }),
 
   "subscription.getUpgradeUrl": (_input, _caller) => getUpgradeUrl(),
+  "subscription.listSubscriptionOffers": (_input, _caller) => listSubscriptionOffers(),
 
   "operations.executeAtomicBatch": (input, { resolved: caller }) =>
     executeAtomicBatch({ payload: input.payload, caller }),

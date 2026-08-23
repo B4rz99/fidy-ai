@@ -18,6 +18,53 @@ const invalidPairingBody = {
     message: "Esta vinculación ya no es válida. Inicia de nuevo.",
   },
 };
+const subscriptionOffersBody = {
+  data: [
+    {
+      id: "22700000-0000-4000-8000-000000000001",
+      money: { amount: "9900", currency: "COP" },
+      billingPeriod: "weekly",
+      serviceMarket: "CO",
+      taxTreatment: "not-taxable",
+      renewalTerms: {
+        automaticRenewal: true,
+        renewalReminder: "none",
+        cancellation: "future-renewals-only",
+        paidAccessEnds: "paid-period-end",
+      },
+      paymentMethods: ["card", "nequi", "daviplata"],
+    },
+    {
+      id: "22700000-0000-4000-8000-000000000002",
+      money: { amount: "28900", currency: "COP" },
+      billingPeriod: "monthly",
+      serviceMarket: "CO",
+      taxTreatment: "not-taxable",
+      renewalTerms: {
+        automaticRenewal: true,
+        renewalReminder: "none",
+        cancellation: "future-renewals-only",
+        paidAccessEnds: "paid-period-end",
+      },
+      paymentMethods: ["card", "nequi", "daviplata"],
+    },
+    {
+      id: "22700000-0000-4000-8000-000000000003",
+      money: { amount: "289900", currency: "COP" },
+      billingPeriod: "yearly",
+      serviceMarket: "CO",
+      taxTreatment: "not-taxable",
+      renewalTerms: {
+        automaticRenewal: true,
+        renewalReminder: "none",
+        cancellation: "future-renewals-only",
+        paidAccessEnds: "paid-period-end",
+      },
+      paymentMethods: ["card", "nequi", "daviplata"],
+    },
+  ],
+  next: [],
+};
 
 const PairingStartBody = StartedBrowserLoginPairing.mapFields(Struct.pick(["privateVerifier"]));
 const OpenApi = Schema.Struct({ openapi: Schema.String });
@@ -137,7 +184,7 @@ const assertUnknownWrongVerifierRefused = async (request: APIRequestContext): Pr
 };
 
 test("proves independent production-like web and API route ownership", async ({ request }) => {
-  const shellPaths = ["/", "/auth/pair", "/app/transactions"];
+  const shellPaths = ["/", "/auth/pair", "/upgrade", "/app/transactions"];
   const shellResponses = await Promise.all(shellPaths.map((path) => request.get(path)));
   for (const response of shellResponses) {
     expect(response.status()).toBe(successStatus);
@@ -240,6 +287,56 @@ test("establishes, retains, replays, and revokes a real PostgreSQL WebSession", 
     .toBe(false);
   expect(await observeSession(request)).toEqual({ sessionCount: 1, revoked: true });
   await assertUnknownWrongVerifierRefused(request);
+});
+
+test("renders authoritative PostgreSQL Subscription offers without starting payment", async ({
+  page,
+  request,
+}) => {
+  await resetAcceptanceState(request);
+  await completePairing(page, request);
+  const mutatingRequests: Array<string> = [];
+  page.on("request", (browserRequest) => {
+    if (browserRequest.url().startsWith(apiOrigin) && browserRequest.method() !== "GET") {
+      mutatingRequests.push(`${browserRequest.method()} ${browserRequest.url()}`);
+    }
+  });
+
+  const offersResponse = page.waitForResponse(
+    (response) =>
+      response.url() === `${apiOrigin}/subscription/offers` && response.request().method() === "GET"
+  );
+  await page.goto("/upgrade");
+  const response = await offersResponse;
+  expect(response.status()).toBe(successStatus);
+  expect(await response.json()).toEqual(subscriptionOffersBody);
+
+  await expect(page.getByText(/COP\s+9\.900\/semana$/u)).toBeVisible();
+  await expect(page.getByText(/COP\s+28\.900\/mes$/u)).toBeVisible();
+  await expect(page.getByText(/COP\s+289\.900\/año$/u)).toBeVisible();
+  await expect(page.getByText(/Elige la frecuencia que prefieras/iu)).toHaveCount(0);
+  const terms = page.getByRole("region", { name: "Condiciones de suscripción" });
+  await expect(
+    terms.getByText("Tu suscripción se renueva automáticamente al terminar cada período.")
+  ).toBeVisible();
+  await expect(
+    terms.getByText(
+      "Puedes cancelar renovaciones futuras y conservarás el acceso hasta terminar el período pagado."
+    )
+  ).toBeVisible();
+  await expect(page.getByText(/no enviaremos un recordatorio/iu)).toHaveCount(0);
+  await expect(page.getByText(/Precio final|No se cobra IVA/iu)).toHaveCount(0);
+  await expect(page.getByText(/Colombia · Cobro/iu)).toHaveCount(0);
+  await page.getByRole("button", { name: "Elegir mensual" }).click();
+  await expect(page).toHaveURL(/\/upgrade$/u);
+  const methods = page.getByRole("region", { name: "Métodos de pago" });
+  await expect(
+    methods.getByText("Elegiste la oferta mensual. La selección todavía no genera ningún cobro.")
+  ).toBeVisible();
+  await expect(methods.getByText("Tarjeta")).toBeVisible();
+  await expect(methods.getByText("Nequi")).toBeVisible();
+  await expect(methods.getByText("DaviPlata")).toBeVisible();
+  expect(mutatingRequests).toEqual([]);
 });
 
 test("renders real current-month PostgreSQL Transactions and Categories", async ({

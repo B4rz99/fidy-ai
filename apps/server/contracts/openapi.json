@@ -242,6 +242,14 @@
         },
         "type": "object"
       },
+      "BillingPeriod": {
+        "enum": [
+          "weekly",
+          "monthly",
+          "yearly"
+        ],
+        "type": "string"
+      },
       "BrowserLoginPairingApproval": {
         "additionalProperties": false,
         "properties": {
@@ -1978,6 +1986,31 @@
         ],
         "type": "string"
       },
+      "LaunchPaymentMethods": {
+        "maxItems": 3,
+        "minItems": 3,
+        "prefixItems": [
+          {
+            "enum": [
+              "card"
+            ],
+            "type": "string"
+          },
+          {
+            "enum": [
+              "nequi"
+            ],
+            "type": "string"
+          },
+          {
+            "enum": [
+              "daviplata"
+            ],
+            "type": "string"
+          }
+        ],
+        "type": "array"
+      },
       "LayoutNode": {
         "anyOf": [
           {
@@ -3109,6 +3142,51 @@
         ],
         "type": "object"
       },
+      "PriceRevision": {
+        "additionalProperties": false,
+        "properties": {
+          "billingPeriod": {
+            "$ref": "#/components/schemas/BillingPeriod"
+          },
+          "id": {
+            "$ref": "#/components/schemas/PriceRevisionId"
+          },
+          "money": {
+            "$ref": "#/components/schemas/Money5"
+          },
+          "paymentMethods": {
+            "$ref": "#/components/schemas/LaunchPaymentMethods"
+          },
+          "renewalTerms": {
+            "$ref": "#/components/schemas/RenewalTerms"
+          },
+          "serviceMarket": {
+            "$ref": "#/components/schemas/ServiceMarket"
+          },
+          "taxTreatment": {
+            "$ref": "#/components/schemas/TaxTreatment"
+          }
+        },
+        "required": [
+          "id",
+          "money",
+          "billingPeriod",
+          "serviceMarket",
+          "taxTreatment",
+          "renewalTerms",
+          "paymentMethods"
+        ],
+        "type": "object"
+      },
+      "PriceRevisionId": {
+        "allOf": [
+          {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|[fF]{8}-[fF]{4}-[fF]{4}-[fF]{4}-[fF]{12})$"
+          }
+        ],
+        "type": "string"
+      },
       "RecallOutput": {
         "items": {
           "$ref": "#/components/schemas/Memory"
@@ -3168,6 +3246,42 @@
             "$ref": "#/components/schemas/WidgetId"
           }
         },
+        "type": "object"
+      },
+      "RenewalTerms": {
+        "additionalProperties": false,
+        "properties": {
+          "automaticRenewal": {
+            "enum": [
+              true
+            ],
+            "type": "boolean"
+          },
+          "cancellation": {
+            "enum": [
+              "future-renewals-only"
+            ],
+            "type": "string"
+          },
+          "paidAccessEnds": {
+            "enum": [
+              "paid-period-end"
+            ],
+            "type": "string"
+          },
+          "renewalReminder": {
+            "enum": [
+              "none"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "automaticRenewal",
+          "renewalReminder",
+          "cancellation",
+          "paidAccessEnds"
+        ],
         "type": "object"
       },
       "ResizeWidget": {
@@ -4160,6 +4274,22 @@
           }
         },
         "type": "object"
+      },
+      "SubscriptionOffers": {
+        "maxItems": 3,
+        "minItems": 3,
+        "prefixItems": [
+          {
+            "$ref": "#/components/schemas/PriceRevision"
+          },
+          {
+            "$ref": "#/components/schemas/PriceRevision"
+          },
+          {
+            "$ref": "#/components/schemas/PriceRevision"
+          }
+        ],
+        "type": "array"
       },
       "SuggestedOperation": {
         "anyOf": [
@@ -5721,6 +5851,37 @@
                 "description": "The canonical operation to call, spelled exactly as its `operationId` in this spec. Look that id up here to see the complete input and result.",
                 "enum": [
                   "subscription.getUpgradeUrl"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "tool",
+              "hint"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "hint": {
+                "allOf": [
+                  {
+                    "minLength": 1
+                  },
+                  {
+                    "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
+                  },
+                  {
+                    "maxLength": 140
+                  }
+                ],
+                "type": "string"
+              },
+              "tool": {
+                "description": "The canonical operation to call, spelled exactly as its `operationId` in this spec. Look that id up here to see the complete input and result.",
+                "enum": [
+                  "subscription.listSubscriptionOffers"
                 ],
                 "type": "string"
               }
@@ -8499,6 +8660,37 @@
           {
             "additionalProperties": false,
             "properties": {
+              "hint": {
+                "allOf": [
+                  {
+                    "minLength": 1
+                  },
+                  {
+                    "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
+                  },
+                  {
+                    "maxLength": 140
+                  }
+                ],
+                "type": "string"
+              },
+              "tool": {
+                "description": "The canonical operation to call, spelled exactly as its `operationId` in this spec. Look that id up here to see the complete input and result.",
+                "enum": [
+                  "subscription.listSubscriptionOffers"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "tool",
+              "hint"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
               "args": {
                 "additionalProperties": false,
                 "description": "Arguments already worked out for that call. Partial by design: merge them into the operation's own input rather than sending them as the whole of it.",
@@ -9690,6 +9882,12 @@
             "type": "object"
           }
         ]
+      },
+      "TaxTreatment": {
+        "enum": [
+          "not-taxable"
+        ],
+        "type": "string"
       },
       "Transaction": {
         "additionalProperties": false,
@@ -17345,6 +17543,103 @@
         "x-fidy-caller-eligibility": "authenticated",
         "x-fidy-operation-kind": "mutation",
         "x-fidy-required-scope": "write",
+        "x-fidy-required-tier": "free"
+      }
+    },
+    "/subscription/offers": {
+      "get": {
+        "description": "List the authoritative immutable Colombia PriceRevisions and renewal terms available before payment-method enrollment.",
+        "operationId": "subscription.listSubscriptionOffers",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/SubscriptionOffers"
+                    },
+                    "next": {
+                      "allOf": [
+                        {
+                          "description": "Where to go next: up to three canonical operations worth calling after this one, best first. Empty when there is nothing worth suggesting, which is an answer rather than an omission. Each entry has passed the target-input and caller-authorization checkpoint.",
+                          "maxItems": 3
+                        }
+                      ],
+                      "items": {
+                        "$ref": "#/components/schemas/SuggestedOperation"
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "next"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationFailed"
+                }
+              }
+            },
+            "description": "ValidationFailed"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Unauthenticated"
+                }
+              }
+            },
+            "description": "Unauthenticated"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ConsentRequired"
+                    },
+                    {
+                      "$ref": "#/components/schemas/UserActionRequired"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ScopeMissing"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "ConsentRequired | UserActionRequired | ScopeMissing"
+          }
+        },
+        "security": [
+          {
+            "agentBearer": []
+          },
+          {
+            "webSession": []
+          }
+        ],
+        "tags": [
+          "subscription"
+        ],
+        "x-fidy-agent-confirmation": "not-required",
+        "x-fidy-caller-eligibility": "authenticated",
+        "x-fidy-operation-kind": "query",
+        "x-fidy-required-scope": "read",
         "x-fidy-required-tier": "free"
       }
     },

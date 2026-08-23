@@ -762,6 +762,8 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
               "categories",
               "effect_sql_migrations",
               "pending_consent_exchanges",
+              "price_revisions",
+              "published_price_revisions",
               "web_sessions",
               "whatsapp_consent_disclosure_delivery_attempts",
               "whatsapp_ingress_budget_receipts",
@@ -770,6 +772,51 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
             ].sort()
           );
         })
+    );
+
+    it.effect("keeps authoritative PriceRevision rows readable and immutable to runtime SQL", () =>
+      Effect.gen(function* () {
+        const sql = yield* SqlClient.SqlClient;
+        const revisions = yield* sql`
+          SELECT id::text FROM price_revisions ORDER BY billing_period
+        `;
+        const publications = yield* sql`
+          SELECT price_revision_id::text FROM published_price_revisions ORDER BY offer_order
+        `;
+        const inserted = yield* Effect.exit(sql`
+          INSERT INTO price_revisions (
+            id, amount, currency, billing_period, service_market, tax_treatment,
+            automatic_renewal, renewal_reminder, cancellation, paid_access_ends,
+            payment_methods
+          ) VALUES (
+            '22700000-0000-4000-8000-000000000099', 1, 'COP', 'weekly', 'CO', 'not-taxable',
+            true, 'none', 'future-renewals-only', 'paid-period-end',
+            ARRAY['card', 'nequi', 'daviplata']::text[]
+          )
+        `);
+        const updated = yield* Effect.exit(sql`UPDATE price_revisions SET amount = 1`);
+        const deleted = yield* Effect.exit(sql`DELETE FROM price_revisions`);
+        const publicationInserted = yield* Effect.exit(sql`
+          INSERT INTO published_price_revisions (offer_order, price_revision_id)
+          VALUES (1, '22700000-0000-4000-8000-000000000001')
+          ON CONFLICT DO NOTHING
+        `);
+        const publicationUpdated = yield* Effect.exit(sql`
+          UPDATE published_price_revisions SET offer_order = 1
+        `);
+        const publicationDeleted = yield* Effect.exit(sql`DELETE FROM published_price_revisions`);
+
+        expect(revisions).toHaveLength(3);
+        expect(publications).toHaveLength(3);
+        expect([
+          inserted._tag,
+          updated._tag,
+          deleted._tag,
+          publicationInserted._tag,
+          publicationUpdated._tag,
+          publicationDeleted._tag,
+        ]).toEqual(["Failure", "Failure", "Failure", "Failure", "Failure", "Failure"]);
+      })
     );
 
     it.effect("keeps WhatsApp gateway-owned rows inaccessible to ordinary runtime SQL", () =>

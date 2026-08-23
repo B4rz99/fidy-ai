@@ -342,6 +342,17 @@
       }
     },
     {
+      "id": "subscription.listSubscriptionOffers",
+      "policy": {
+        "agentConfirmation": "not-required",
+        "callerEligibility": "authenticated",
+        "kind": "query",
+        "requiredScope": "read",
+        "requiredTier": "free",
+        "scopeEvaluation": "endpoint"
+      }
+    },
+    {
       "id": "transactions.createTransaction",
       "policy": {
         "agentConfirmation": "not-required",

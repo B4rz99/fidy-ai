@@ -20,4 +20,5 @@ export {
   type WebAuthApiGroups,
 } from "./web-auth-api";
 export { StartedBrowserLoginPairing } from "~/core/browser-login/model";
+export { PriceRevisionId } from "~/core/subscription/reference";
 export { BrowserLoginPairingInvalidApi, BrowserLoginPollingRateLimitedApi } from "./web-auth-api";

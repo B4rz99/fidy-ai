@@ -107,6 +107,13 @@ describe("signed-in web application routes", () => {
     expect(await screen.findByText("No pudimos cargar tus transacciones")).toBeVisible();
   });
 
+  it("owns the authenticated Subscription offer page at /upgrade", async () => {
+    await renderRoute("/upgrade", malformedFidyClient());
+
+    expect(await screen.findByRole("heading", { name: "Mejora tu suscripción" })).toBeVisible();
+    expect(await screen.findByText("No pudimos cargar las ofertas")).toBeVisible();
+  });
+
   it("redirects the authenticated /app index to Transactions", async () => {
     await renderRoute("/app", malformedFidyClient());
 

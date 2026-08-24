@@ -1,0 +1,23 @@
+apps/web/src/features/dashboard/feature.tsx
+  s_fab41f0a144bb0::t_0ee01c90246579 1-2
+apps/web/src/app/routes.ts
+  s_fab41f0a144bb0::t_b887a279897401 29
+apps/web/src/application.test.tsx
+  s_fab41f0a144bb0::t_e345dee278aaa6 120-122,128-130
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.24",
+  "base_commit_sha": "aa65410dd1f9b962f7732e75609e10e185163dc2",
+  "prompts": {},
+  "sessions": {
+    "s_fab41f0a144bb0": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a02eec-6a0c-77e3-aaac-cc821b933f6d",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

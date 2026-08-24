@@ -1,0 +1,93 @@
+apps/server/src/shell/db/migrations/0028-persisted-schema-reconciliation.ts
+  s_fbb0ccf33e8e69::t_0bb54d52ed9f62 551,568,587-590,618,634,713
+  s_fbb0ccf33e8e69::t_6698e6f4331ff9 441-444,586
+  s_fbb0ccf33e8e69::t_4a0b241ca53c6c 898
+  s_fbb0ccf33e8e69::t_9b95a40a3d8136 370-385,458-460,473-475
+  s_fbb0ccf33e8e69::t_4684388be37a0e 584-585,703-704,707,712,729-730
+  s_fbb0ccf33e8e69::t_56d2f10540ea42 320-325
+  s_fbb0ccf33e8e69::t_c3b780c15b7b62 4-5,10,26-29,41,54-55
+  s_fbb0ccf33e8e69::t_1ce98283d11595 445
+  s_fbb0ccf33e8e69::t_4fe6fb318c0f59 657-701,744
+  s_fbb0ccf33e8e69::t_c97bd9fa82bbb7 746-750,766-770,892,1041-1045
+  s_fbb0ccf33e8e69::t_b134cefa0f8604 751-765
+  s_fbb0ccf33e8e69::t_09a099d7a182d4 6-9
+  s_fbb0ccf33e8e69::t_1f8a0f7a35f839 531-532
+  s_fbb0ccf33e8e69::t_7aff8e812c5fbb 893,895,897,899
+  s_fbb0ccf33e8e69::t_6a418cbe5d6c78 745
+  s_fbb0ccf33e8e69::t_ce28d63a64b1bd 301-319,326-336,413,415-438,447-448,462-463,483-484,493-495,497-498,505-507,517
+  s_fbb0ccf33e8e69::t_95dc6ece1ec601 702,705-706,708-711,714-728
+  s_fbb0ccf33e8e69::t_379eb5c9b82a69 1,11-16,30-40,42-53
+  s_fbb0ccf33e8e69::t_bd7222f23cdb0e 501
+  s_fbb0ccf33e8e69::t_9d93182a22da4f 3,17-25
+  s_fbb0ccf33e8e69::t_2c46ac849bae54 355-368,450,452-453,457,465,469,472,486,491,500
+  s_fbb0ccf33e8e69::t_2c4894484034eb 591-595
+  s_fbb0ccf33e8e69::t_a059d65eaaf07f 272-281,283-284,286-295,297,300,337-341,354,369,386-412,414,518-523,534-536
+  s_fbb0ccf33e8e69::t_d23f189adcf90e 342-353,451,454,466,470,487,492
+  s_fbb0ccf33e8e69::t_e25631a1311f83 439-440,446,449,455-456,461,464,467-468,471,476-482,485,488-490,496,499,502-504,508-516,526-527,529,533
+  s_fbb0ccf33e8e69::t_44e13b430065d4 282,285,296,298-299,524-525,528,530
+apps/server/src/shell/db/migrations/0028-persisted-schema-reconciliation.test.ts
+  s_fbb0ccf33e8e69::t_3ec2c2973d4507 448-453,455-458,460-462,464-470,472-474,483-489,491-492,502-505,507-509,683-686,688-690,865-868,870-872,947-950,952-954
+  s_fbb0ccf33e8e69::t_d41fe6d9908fd5 26-27,439-447,674,677-682,856,859-861,863-864,917-922,924-933,935-939,941-946
+  s_fbb0ccf33e8e69::t_2802f120f31ec5 791,799,807-809
+  s_fbb0ccf33e8e69::t_5c9bd975a82d0d 951
+  s_fbb0ccf33e8e69::t_b64b8e24c2d95f 29,459,463
+  s_fbb0ccf33e8e69::t_b70eb21658c5cd 855,862,874-879,881-900,902-916
+  s_fbb0ccf33e8e69::t_9d0a72a658b8f4 167-168,179-180
+  s_fbb0ccf33e8e69::t_93a3f9ec2aa8cc 692-764,766-783
+  s_fbb0ccf33e8e69::t_63686325d99a58 642-672
+  s_fbb0ccf33e8e69::t_b2f45c5a37e092 18,583-612,673
+  s_fbb0ccf33e8e69::t_ddf332508c19be 837,880
+  s_fbb0ccf33e8e69::t_c1dba9916d14f6 765
+  s_fbb0ccf33e8e69::t_fb5c7d7ce2468c 955
+  s_fbb0ccf33e8e69::t_844fce7399e877 36,831,854
+  s_fbb0ccf33e8e69::t_9a3bcda9bc5d8c 189-204
+  s_fbb0ccf33e8e69::t_772de259b1b3c5 418,454,517,540,565,923
+  s_fbb0ccf33e8e69::t_99ce0e84ab46cf 934
+  s_fbb0ccf33e8e69::t_8768be9588854b 493-501,511-516,518-539,541-564,566-577,579-582,822-830,832-836,838-853
+  s_e83421d19948ea::t_133c9525e6b884 506,510
+  s_fbb0ccf33e8e69::t_2f580856edb66a 800
+  s_13f215ccd9a385::t_63593691d66c00 857,869,873
+  s_fbb0ccf33e8e69::t_e600f41ab76e52 20-25
+  s_fbb0ccf33e8e69::t_b1c058af4ad311 19,613-641
+  s_fbb0ccf33e8e69::t_f9aeaf72e7e3c4 475-482,490
+  s_fbb0ccf33e8e69::t_0c5fe4b22b9d22 15-17,156-166,169-178,181-188,412-417,419-420,422-438
+  s_fbb0ccf33e8e69::t_82dba0e0248b74 230,272,301,341,394,421,471,578,676,813-815,858,901,940,1007
+  s_fbb0ccf33e8e69::t_4ef4073ff4a8f3 28
+  s_fbb0ccf33e8e69::t_028a25bec13530 33-34,784-790,792-798,801-806,810-812,816-821
+  s_fbb0ccf33e8e69::t_28da216a50ef54 30-32,35
+  s_fbb0ccf33e8e69::t_3b04f4dd91c4b1 675
+  s_fbb0ccf33e8e69::t_d50e9e13041f64 687
+  s_fbb0ccf33e8e69::t_99f75ab4c511ba 691
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.23",
+  "base_commit_sha": "749da0e67690973b61095869063926a1f33fa43e",
+  "prompts": {},
+  "sessions": {
+    "s_13f215ccd9a385": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a02f35-213f-7f17-b7f5-740289213edc",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_e83421d19948ea": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a02fe1-bc2c-7118-9d84-f3bec90b49af",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_fbb0ccf33e8e69": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a02b48-2850-75cc-9939-e19b2a2b7788",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": null
+    }
+  }
+}

@@ -103,6 +103,7 @@ type FixtureOptions = Readonly<{
   chartEmpty: boolean;
   exact: boolean;
   metricEmpty: boolean;
+  transactionEmpty: boolean;
   transactionInflow: boolean;
 }>;
 const transactionListLimit = 5;
@@ -112,6 +113,7 @@ const standardOptions: FixtureOptions = {
   chartEmpty: false,
   exact: false,
   metricEmpty: false,
+  transactionEmpty: false,
   transactionInflow: false,
 };
 
@@ -161,7 +163,18 @@ const chartResult = (options: FixtureOptions): SpendingResult => {
   };
   let buckets: SpendingResult["buckets"] = [firstBucket];
   if (options.chartEmpty) {
-    buckets = [];
+    buckets = [
+      {
+        ...firstBucket,
+        moneyGroups: [
+          {
+            currency,
+            inflow: money(amount, currency),
+            outflow: money("0", currency),
+          },
+        ],
+      },
+    ];
   } else if (options.exact) {
     buckets = [
       firstBucket,
@@ -175,9 +188,9 @@ const chartResult = (options: FixtureOptions): SpendingResult => {
         },
         moneyGroups: [
           {
-            currency,
-            inflow: money("9007199254740993.13", currency),
-            outflow: money("25000", currency),
+            currency: "COP",
+            inflow: money("100000", "COP"),
+            outflow: money("25000", "COP"),
           },
         ],
       },
@@ -197,17 +210,19 @@ const metricResult = (options: FixtureOptions): MetricResult => {
   };
 };
 
-const listResult = (inflow: boolean): ListResult => ({
-  transactions: [
-    {
-      id: Schema.decodeUnknownSync(TestTransactionId)("f1d1a000-0000-4000-8000-000000000706"),
-      category,
-      counterparty: inflow ? Option.none() : Option.some("El Corral"),
-      direction: inflow ? "inflow" : "outflow",
-      money: money("25000", "COP"),
-      occurredAt: DateTime.makeUnsafe("2026-07-20T12:30:00Z"),
-    },
-  ],
+const listResult = (options: FixtureOptions): ListResult => ({
+  transactions: options.transactionEmpty
+    ? []
+    : [
+        {
+          id: Schema.decodeUnknownSync(TestTransactionId)("f1d1a000-0000-4000-8000-000000000706"),
+          category,
+          counterparty: options.transactionInflow ? Option.none() : Option.some("El Corral"),
+          direction: options.transactionInflow ? "inflow" : "outflow",
+          money: money("25000", "COP"),
+          occurredAt: DateTime.makeUnsafe("2026-07-20T12:30:00Z"),
+        },
+      ],
 });
 
 const leftLayout = (options: FixtureOptions): DashboardLayout => ({
@@ -222,7 +237,6 @@ const leftLayout = (options: FixtureOptions): DashboardLayout => ({
           widget: {
             id: ids.chart,
             type: "spending-chart",
-            title: "Transacciones",
             groupBy: "category",
             period: "this-month",
           },
@@ -262,7 +276,7 @@ const rightLayout = (options: FixtureOptions): DashboardLayout => ({
             type: "transaction-list",
             limit: Schema.decodeUnknownSync(TestTransactionListLimit)(transactionListLimit),
           },
-          result: listResult(options.transactionInflow),
+          result: listResult(options),
         },
       },
     },
@@ -370,12 +384,16 @@ describe("Dashboard result and Money states", () => {
         budgetState: "over",
         chartEmpty: true,
         metricEmpty: true,
+        transactionEmpty: true,
         transactionInflow: true,
       })
     );
     expect(screen.getByText("No hay transacciones en este periodo")).toBeVisible();
+    expect(screen.getByText("No hay transacciones para mostrar")).toBeVisible();
     expect(screen.getByText("No hay transacciones para calcular")).toBeVisible();
     expect(screen.getByText(/Excedido por/u)).toBeVisible();
+    cleanup();
+    await renderDashboardView(makeView({ ...standardOptions, transactionInflow: true }));
     expect(screen.getByText("Ingreso")).toBeVisible();
     expect(screen.getByText("Sin contraparte")).toBeVisible();
     cleanup();

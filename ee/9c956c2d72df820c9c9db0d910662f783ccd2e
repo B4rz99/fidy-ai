@@ -1,0 +1,106 @@
+apps/server/src/shell/db/migrations/0028-persisted-schema-reconciliation.ts
+  s_fbb0ccf33e8e69::t_379eb5c9b82a69 11-16,30-40,42-53
+  s_fbb0ccf33e8e69::t_e25631a1311f83 439-440,446,449,455-456,461,464,467-468,471,476-482,485,488-490,496,499,502-504,508-516,526-527,529,533
+  s_fbb0ccf33e8e69::t_2c4894484034eb 591-595
+  s_fbb0ccf33e8e69::t_6698e6f4331ff9 441-444,586
+  s_fbb0ccf33e8e69::t_c3b780c15b7b62 4-5,10,26-29,41,54-55
+  s_fbb0ccf33e8e69::t_7aff8e812c5fbb 919,921,923,925
+  s_fbb0ccf33e8e69::t_4684388be37a0e 584-585,703-704,755-756
+  s_fbb0ccf33e8e69::t_6a418cbe5d6c78 771
+  s_fbb0ccf33e8e69::t_2c46ac849bae54 355-368,450,452-453,457,465,469,472,486,491,500
+  s_fbb0ccf33e8e69::t_83cddab4e3db2b 23,708,711-716,718,720,722-729,731-736,747-748,751-753
+  s_fbb0ccf33e8e69::t_ce28d63a64b1bd 301-319,326-336,413,415-418,420-438,447-448,462-463,483-484,493-495,497-498,505-507,517
+  s_fbb0ccf33e8e69::t_bd7222f23cdb0e 501
+  s_fbb0ccf33e8e69::t_4fe6fb318c0f59 657-701,770
+  s_fbb0ccf33e8e69::t_fce8e9b7a00628 1,25,706,709-710,717,719,730,749-750,754
+  s_fbb0ccf33e8e69::t_44e13b430065d4 282,285,296,298-299,524-525,528,530
+  s_fbb0ccf33e8e69::t_09a099d7a182d4 6-9
+  s_fbb0ccf33e8e69::t_a059d65eaaf07f 272-281,283-284,286-295,297,300,337-341,354,369,386-412,414,518-523,534-536
+  s_fbb0ccf33e8e69::t_ea3e2509129d61 705,707
+  s_fbb0ccf33e8e69::t_0bb54d52ed9f62 551,568,587-590,618,634
+  s_fbb0ccf33e8e69::t_1ce98283d11595 445
+  s_fbb0ccf33e8e69::t_9d93182a22da4f 3,24
+  s_fbb0ccf33e8e69::t_d23f189adcf90e 342-353,451,454,466,470,487,492
+  s_fbb0ccf33e8e69::t_4a0b241ca53c6c 924
+  s_fbb0ccf33e8e69::t_9b95a40a3d8136 370-385,458-460,473-475
+  s_fbb0ccf33e8e69::t_56d2f10540ea42 320-325
+  s_fbb0ccf33e8e69::t_1f8a0f7a35f839 531-532
+  s_fbb0ccf33e8e69::t_c97bd9fa82bbb7 772-776,792-796,918,1067-1071
+  s_fbb0ccf33e8e69::t_95dc6ece1ec601 702
+  s_fbb0ccf33e8e69::t_d10946b3bd4b54 17-22,419,737-746
+  s_fbb0ccf33e8e69::t_cd77bba0aa65ea 721
+  s_fbb0ccf33e8e69::t_b134cefa0f8604 777-791
+  s_fbb0ccf33e8e69::t_877870a2dd875c 2
+apps/server/src/shell/db/migrations/0028-persisted-schema-reconciliation.test.ts
+  s_fbb0ccf33e8e69::t_d50e9e13041f64 739
+  s_fbb0ccf33e8e69::t_b1c058af4ad311 19,665-693
+  s_fbb0ccf33e8e69::t_b2f45c5a37e092 18,635-664,725
+  s_fbb0ccf33e8e69::t_2f580856edb66a 920
+  s_fbb0ccf33e8e69::t_b70eb21658c5cd 975,982,994-999,1001-1020,1022-1036
+  s_fbb0ccf33e8e69::t_5c9bd975a82d0d 1071
+  s_13f215ccd9a385::t_63593691d66c00 977,989,993
+  s_fbb0ccf33e8e69::t_ddf332508c19be 957,1000
+  s_fbb0ccf33e8e69::t_30fc2a6442d716 26
+  s_fbb0ccf33e8e69::t_9a3bcda9bc5d8c 190-205
+  s_fbb0ccf33e8e69::t_84240ba68cd6f4 512-562
+  s_fbb0ccf33e8e69::t_2802f120f31ec5 911,919,927-929
+  s_fbb0ccf33e8e69::t_fb5c7d7ce2468c 1075
+  s_e83421d19948ea::t_133c9525e6b884 507,511
+  s_fbb0ccf33e8e69::t_3ec2c2973d4507 449-454,456-459,461-463,465-471,473-475,484-490,492-493,503-506,508-510,735-738,740-742,784-787,789-791,985-988,990-992,1067-1070,1072-1074
+  s_fbb0ccf33e8e69::t_9d0a72a658b8f4 168-169,180-181
+  s_fbb0ccf33e8e69::t_63686325d99a58 694-724
+  s_fbb0ccf33e8e69::t_82dba0e0248b74 231,273,302,342,395,422,472,630,728,777,933-935,978,1021,1060,1127
+  s_fbb0ccf33e8e69::t_b64b8e24c2d95f 30,460,464
+  s_fbb0ccf33e8e69::t_8768be9588854b 494-502,563-568,570-591,593-616,618-629,631-634,942-950,952-956,958-973
+  s_fbb0ccf33e8e69::t_d41fe6d9908fd5 27-28,440-448,726,729-734,775,778-783,976,979-981,983-984,1037-1042,1044-1053,1055-1059,1061-1066
+  s_fbb0ccf33e8e69::t_0c5fe4b22b9d22 15-17,157-167,170-179,182-189,413-418,420-421,423-439
+  s_fbb0ccf33e8e69::t_99ce0e84ab46cf 1054
+  s_fbb0ccf33e8e69::t_844fce7399e877 37,951,974
+  s_fbb0ccf33e8e69::t_772de259b1b3c5 419,455,569,592,617,1043
+  s_fbb0ccf33e8e69::t_3b04f4dd91c4b1 727
+  s_fbb0ccf33e8e69::t_7410684aa2a406 801-803,814-816,822-824
+  s_fbb0ccf33e8e69::t_93a3f9ec2aa8cc 744-774,861-884,886-903
+  s_fbb0ccf33e8e69::t_c1dba9916d14f6 885
+  s_fbb0ccf33e8e69::t_4ef4073ff4a8f3 29
+  s_fbb0ccf33e8e69::t_028a25bec13530 34-35,904-910,912-918,921-926,930-932,936-941
+  s_fbb0ccf33e8e69::t_99f75ab4c511ba 743
+  s_fbb0ccf33e8e69::t_28da216a50ef54 31-33,36
+  s_fbb0ccf33e8e69::t_e600f41ab76e52 20-25
+  s_fbb0ccf33e8e69::t_db576e1d87d417 793-800,804-813,817-821,825-860
+  s_fbb0ccf33e8e69::t_f9aeaf72e7e3c4 476-483,491
+  s_fbb0ccf33e8e69::t_32de935fcfc437 776
+  s_fbb0ccf33e8e69::t_0f145c93503ee0 788
+  s_fbb0ccf33e8e69::t_548e3c036c4e7c 792
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.23",
+  "base_commit_sha": "ee9c956c2d72df820c9c9db0d910662f783ccd2e",
+  "prompts": {},
+  "sessions": {
+    "s_13f215ccd9a385": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a02f35-213f-7f17-b7f5-740289213edc",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_e83421d19948ea": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a02fe1-bc2c-7118-9d84-f3bec90b49af",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_fbb0ccf33e8e69": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a02b48-2850-75cc-9939-e19b2a2b7788",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": null
+    }
+  }
+}

@@ -49,7 +49,20 @@ const secondCaller = caller(secondUserId, "b2");
 
 const prepare = Effect.gen(function* () {
   const sql = yield* MigrationSqlClient;
-  yield* sql`DELETE FROM consent_records WHERE decision_web_session_id IS NOT NULL`;
+  yield* sql`
+    DO $reset$
+    BEGIN
+      IF EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'consent_records'
+          AND column_name = 'decision_web_session_id'
+      ) THEN
+        EXECUTE 'DELETE FROM consent_records WHERE decision_web_session_id IS NOT NULL';
+      END IF;
+    END
+    $reset$
+  `;
   yield* sql`TRUNCATE web_sessions, browser_login_start_attempts, browser_login_pairings`;
   yield* sql`DELETE FROM audit_log_entries WHERE user_id IN (${firstUserId}, ${secondUserId})`;
   for (const userId of [firstUserId, secondUserId]) {

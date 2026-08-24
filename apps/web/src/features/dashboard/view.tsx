@@ -1,6 +1,8 @@
 import { BigDecimal, Option } from "effect";
 import { AsyncResult } from "effect/unstable/reactivity";
-import { type JSX } from "react";
+import { type JSX, useMemo } from "react";
+// Dashboard presentation is already route-lazy.
+// react-doctor-disable-next-line prefer-dynamic-import
 import { Bar, BarChart, CartesianGrid, XAxis } from "recharts";
 import { Alert, AlertDescription, AlertTitle } from "@/ui/components/alert";
 import { Badge } from "@/ui/components/badge";
@@ -35,6 +37,7 @@ import {
 } from "./presentation";
 
 type SpendingResult = Extract<DashboardWidgetView["result"], { readonly buckets: unknown }>;
+type SpendingCurrency = SpendingResult["buckets"][number]["moneyGroups"][number]["currency"];
 type BudgetResult = Extract<DashboardWidgetView["result"], { readonly availability: unknown }>;
 type ListResult = Extract<DashboardWidgetView["result"], { readonly transactions: unknown }>;
 type MetricResult = Extract<DashboardWidgetView["result"], { readonly moneyGroups: unknown }>;
@@ -118,15 +121,13 @@ const SpendingChart = ({
   data,
   locale,
 }: Readonly<{ data: SpendingResult; locale: DashboardLocale }>): JSX.Element => {
-  const currencies = Array.from(
-    new Set(
-      data.buckets.flatMap(({ moneyGroups }) =>
-        moneyGroups
-          .filter(({ outflow }) => BigDecimal.isPositive(outflow.amount))
-          .map(({ currency }) => currency)
-      )
-    )
-  ).sort();
+  const currencySet = new Set<SpendingCurrency>();
+  for (const { moneyGroups } of data.buckets) {
+    for (const { currency, outflow } of moneyGroups) {
+      if (BigDecimal.isPositive(outflow.amount)) currencySet.add(currency);
+    }
+  }
+  const currencies = Array.from(currencySet).sort();
   if (currencies.length === 0) {
     return (
       <Empty className="border">
@@ -228,6 +229,15 @@ const TransactionList = ({
   locale: DashboardLocale;
   timeZone: DashboardTimeZone;
 }>): JSX.Element => {
+  const dateFormatter = useMemo(
+    () =>
+      new Intl.DateTimeFormat(locale, {
+        day: "2-digit",
+        month: "short",
+        timeZone,
+      }),
+    [locale, timeZone]
+  );
   if (data.transactions.length === 0) {
     return (
       <Empty className="border">
@@ -255,11 +265,7 @@ const TransactionList = ({
               </span>
               <span className="block text-xs text-muted-foreground">
                 {transaction.category.label} ·{" "}
-                {new Intl.DateTimeFormat(locale, {
-                  day: "2-digit",
-                  month: "short",
-                  timeZone,
-                }).format(transaction.occurredAt.epochMilliseconds)}
+                {dateFormatter.format(transaction.occurredAt.epochMilliseconds)}
               </span>
             </TableCell>
             <TableCell>{transaction.direction === "inflow" ? "Ingreso" : "Gasto"}</TableCell>

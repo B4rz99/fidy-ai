@@ -1,4 +1,6 @@
 import * as React from "react";
+// Dashboard presentation is already route-lazy.
+// react-doctor-disable-next-line prefer-dynamic-import
 import * as RechartsPrimitive from "recharts";
 import { cn } from "@/ui/class-names";
 

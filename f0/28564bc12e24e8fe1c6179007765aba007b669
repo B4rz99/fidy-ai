@@ -1,0 +1,31 @@
+apps/web/e2e/browser-pairing-postgres.spec.ts
+  s_7cc9bd52ec94c4::t_d498c41d62f732 265
+apps/web/src/features/pats/view.tsx
+  s_7cc9bd52ec94c4::t_4019ffea11ede7 149,188
+  s_7cc9bd52ec94c4::t_ecbe9a16163402 157
+  s_7cc9bd52ec94c4::t_4a4e796bf36ed8 15,33-34,60,62-63,67-71,263-276,294
+  s_7cc9bd52ec94c4::t_fa960011f0c607 61,64-66,79,81
+apps/web/src/features/pats/feature.tsx
+  s_7cc9bd52ec94c4::t_8070d13eefd01f 28-33
+apps/server/src/core/tokens/rules.ts
+  s_7cc9bd52ec94c4::t_8098e9072c57a3 18,22,26
+  s_7cc9bd52ec94c4::t_0394d5ef01f3c1 32
+apps/web/src/features/pats/feature.test.tsx
+  s_7cc9bd52ec94c4::t_133aa670348284 42
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.24",
+  "base_commit_sha": "f028564bc12e24e8fe1c6179007765aba007b669",
+  "prompts": {},
+  "sessions": {
+    "s_7cc9bd52ec94c4": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a02fcf-f40a-7ce3-a147-2f69f493ef46",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

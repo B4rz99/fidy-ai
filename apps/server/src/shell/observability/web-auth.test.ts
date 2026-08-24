@@ -9,10 +9,11 @@ import { ApiTelemetryHarness } from "~/shell/testing/api-harness";
 import { transactionEnvelopePayloads } from "~/shell/testing/telemetry-envelope-fixtures";
 import { EnvelopeRecorder } from "./envelope-recorder";
 
-const resetBrowserLogin = Effect.flatMap(
-  MigrationSqlClient,
-  (sql) => sql`TRUNCATE web_sessions, browser_login_start_attempts, browser_login_pairings`
-);
+const resetBrowserLogin = Effect.gen(function* () {
+  const sql = yield* MigrationSqlClient;
+  yield* sql`DELETE FROM consent_records WHERE decision_web_session_id IS NOT NULL`;
+  yield* sql`TRUNCATE web_sessions, browser_login_start_attempts, browser_login_pairings`;
+});
 const telemetryUserId = UserId.make("24000000-0000-4000-8000-000000000244");
 
 layer(ApiTelemetryHarness, { excludeTestServices: true, timeout: "30 seconds" })(

@@ -7,10 +7,11 @@ import { MigrationSqlClient } from "~/shell/db/client";
 import { ApiHarness, ApiHarnessClient } from "~/shell/testing/api-harness";
 import { purgeBrowserLoginAnonymousEvidence } from "./service";
 
-const resetBrowserLogin = Effect.flatMap(
-  MigrationSqlClient,
-  (sql) => sql`TRUNCATE web_sessions, browser_login_start_attempts, browser_login_pairings`
-);
+const resetBrowserLogin = Effect.gen(function* () {
+  const sql = yield* MigrationSqlClient;
+  yield* sql`DELETE FROM consent_records WHERE decision_web_session_id IS NOT NULL`;
+  yield* sql`TRUNCATE web_sessions, browser_login_start_attempts, browser_login_pairings`;
+});
 
 const StoredPairingProof = Schema.Struct({
   digest: Schema.String,

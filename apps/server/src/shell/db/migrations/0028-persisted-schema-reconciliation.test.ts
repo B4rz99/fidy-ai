@@ -963,7 +963,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
                   policy_revision, policy_sha256, purposes, data_categories, duration,
                   revocation_method, disclosure_channel, disclosure_provider,
                   disclosure_provider_message_id, decision_channel, decision_provider,
-                  decision_provider_message_id, occurred_at
+                  decision_provider_message_id, decision_origin, occurred_at
                 )
                 SELECT
                   ${laterOnboardingConsentId}, subject_user_id, event_type, grant_type,
@@ -971,7 +971,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
                   policy_url, policy_revision, policy_sha256, purposes, data_categories, duration,
                   revocation_method, disclosure_channel, disclosure_provider,
                   'later-disclosure', decision_channel, decision_provider, 'later-decision',
-                  '2026-01-01T00:00:00Z'
+                  decision_origin, '2026-01-01T00:00:00Z'
                 FROM consent_records WHERE id = ${legacyOnboardingConsentId}
               `;
 
@@ -1006,7 +1006,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
                   policy_url, policy_revision, policy_sha256, purposes, data_categories, duration,
                   revocation_method, disclosure_channel, disclosure_provider,
                   disclosure_provider_message_id, decision_channel, decision_provider,
-                  decision_provider_message_id, occurred_at
+                  decision_provider_message_id, decision_origin, occurred_at
                 )
                 SELECT
                   ${onboardingRevocationId}, subject_user_id, 'revoked', NULL,
@@ -1014,7 +1014,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
                   disclosure_sha256, disclosure_text, policy_url, policy_revision, policy_sha256,
                   purposes, data_categories, duration, revocation_method, disclosure_channel,
                   disclosure_provider, 'revocation-disclosure', decision_channel, decision_provider,
-                  'revocation-decision', '2026-01-01T00:00:00Z'
+                  'revocation-decision', decision_origin, '2026-01-01T00:00:00Z'
                 FROM consent_records WHERE id = ${legacyOnboardingConsentId}
               `;
 

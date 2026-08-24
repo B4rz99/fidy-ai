@@ -1,5 +1,5 @@
 import { useAtomSet } from "@effect/atom-react";
-import { Outlet, useRouter } from "@tanstack/react-router";
+import { Link, Outlet, useRouter } from "@tanstack/react-router";
 import { Effect } from "effect";
 import { useState } from "react";
 import type { JSX } from "react";
@@ -43,10 +43,20 @@ const SignedInShell = (): JSX.Element => {
           aria-label="Aplicación"
           className="mx-auto flex w-full max-w-6xl items-center justify-between px-4 py-4 sm:px-6 lg:px-8"
         >
-          <span className="font-heading text-xl font-semibold">Fidy</span>
-          <Button onClick={onLogout} type="button" variant="outline">
-            Cerrar sesión
-          </Button>
+          <Link className="font-heading text-xl font-semibold" to="/app/transactions">
+            Fidy
+          </Link>
+          <div className="flex items-center gap-2">
+            <Button render={<Link to="/app/transactions" />} variant="ghost">
+              Transacciones
+            </Button>
+            <Button render={<Link to="/settings/pats" />} variant="ghost">
+              PATs
+            </Button>
+            <Button onClick={onLogout} type="button" variant="outline">
+              Cerrar sesión
+            </Button>
+          </div>
         </nav>
       </header>
       <Outlet />

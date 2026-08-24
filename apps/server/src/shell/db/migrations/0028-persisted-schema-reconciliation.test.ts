@@ -97,10 +97,10 @@ const insertLegacyToken = (
     });
     yield* sql`
       INSERT INTO agent_tokens (
-        id, user_id, short_id, token_hash, scopes,
+        id, user_id, short_id, recipient_label, token_hash, scopes,
         last_used_at, idle_expires_at, revoked_at, created_at, kind, expires_at
       ) VALUES (
-        ${fixture.tokenId}, ${legacyUserId}, ${fixture.shortId},
+        ${fixture.tokenId}, ${legacyUserId}, ${fixture.shortId}, 'Legacy PAT',
         ${fixture.tokenHash},
         ARRAY['read']::text[], NULL, '2026-04-01T00:00:00Z',
         ${revokedAtValue},
@@ -118,7 +118,7 @@ const insertLegacyConsent = Effect.gen(function* () {
       service_market, locale, disclosure_revision, disclosure_sha256, disclosure_text,
       policy_url, policy_revision, policy_sha256, purposes, data_categories, duration,
       revocation_method, disclosure_channel, disclosure_provider, disclosure_provider_message_id,
-      decision_channel, decision_provider, decision_provider_message_id, occurred_at
+      decision_channel, decision_provider, decision_provider_message_id, decision_origin, occurred_at
     ) VALUES (
       ${legacyOnboardingConsentId}, ${legacyUserId}, 'granted', 'onboarding',
       NULL, NULL, 'CO', 'es-CO', 'onboarding-test',
@@ -127,7 +127,7 @@ const insertLegacyConsent = Effect.gen(function* () {
       'cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc',
       ARRAY['test']::text[], ARRAY['test']::text[], 'test duration', 'test revocation',
       'whatsapp', 'kapso', 'legacy-disclosure', 'whatsapp', 'kapso', 'legacy-decision',
-      '2026-01-01T00:00:00Z'
+      'provider-qualified-messages', '2026-01-01T00:00:00Z'
     )
   `;
 });
@@ -140,7 +140,7 @@ const insertLegacyPatConsent = Effect.gen(function* () {
       service_market, locale, disclosure_revision, disclosure_sha256, disclosure_text,
       policy_url, policy_revision, policy_sha256, purposes, data_categories, duration,
       revocation_method, disclosure_channel, disclosure_provider, disclosure_provider_message_id,
-      decision_channel, decision_provider, decision_provider_message_id, occurred_at
+      decision_channel, decision_provider, decision_provider_message_id, decision_origin, occurred_at
     ) VALUES (
       ${legacyPatConsentId}, ${legacyUserId}, 'granted', 'pat', NULL, NULL, ${legacyPatTokenId},
       'CO', 'es-CO', 'pat-test',
@@ -149,7 +149,7 @@ const insertLegacyPatConsent = Effect.gen(function* () {
       'cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc',
       ARRAY['test']::text[], ARRAY['test']::text[], 'test duration', 'test revocation',
       'whatsapp', 'kapso', 'legacy-pat-disclosure', 'whatsapp', 'kapso', 'legacy-pat-decision',
-      '2026-01-01T12:00:00Z'
+      'provider-qualified-messages', '2026-01-01T12:00:00Z'
     )
   `;
 });

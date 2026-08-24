@@ -159,8 +159,11 @@ const acceptPending = Effect.fn("acceptPendingConsent")(function* (
     event: { _tag: "Granted", grant: { _tag: "Onboarding" } },
     disclosure: pending.disclosure,
     occurredAt: input.receivedAt,
-    disclosureMessage: pending.disclosureMessage,
-    decisionMessage: input.message,
+    evidence: {
+      _tag: "ProviderQualifiedMessages",
+      disclosureMessage: pending.disclosureMessage,
+      decisionMessage: input.message,
+    },
   });
   yield* appendConsentRecord(record);
   yield* removePendingConsentExchange(pending.id);

@@ -44,15 +44,18 @@ const makeOnboardingGrant = Effect.gen(function* () {
     subjectUserId: concurrentlyRevokedUserId,
     event: { _tag: "Granted", grant: { _tag: "Onboarding" } },
     disclosure: yield* currentDisclosure,
-    disclosureMessage: {
-      channel: "whatsapp",
-      provider: "kapso",
-      providerMessageId: "wamid.concurrent-agent-disclosure",
-    },
-    decisionMessage: {
-      channel: "whatsapp",
-      provider: "kapso",
-      providerMessageId: "wamid.concurrent-agent-grant",
+    evidence: {
+      _tag: "ProviderQualifiedMessages",
+      disclosureMessage: {
+        channel: "whatsapp",
+        provider: "kapso",
+        providerMessageId: "wamid.concurrent-agent-disclosure",
+      },
+      decisionMessage: {
+        channel: "whatsapp",
+        provider: "kapso",
+        providerMessageId: "wamid.concurrent-agent-grant",
+      },
     },
     occurredAt,
   });
@@ -99,6 +102,10 @@ layer(AgentConsentHarness, { excludeTestServices: true, timeout: "30 seconds" })
         });
         yield* upsertUser(concurrentlyRevokedUserId, user);
         const grant = yield* makeOnboardingGrant;
+        if (grant.evidence._tag !== "ProviderQualifiedMessages") {
+          return yield* Effect.die("unexpected onboarding evidence origin");
+        }
+        const grantEvidence = grant.evidence;
         yield* appendConsentRecord(grant);
         const lockHeld = yield* Deferred.make<void>();
         const commitRevocation = yield* Deferred.make<void>();
@@ -110,9 +117,13 @@ layer(AgentConsentHarness, { excludeTestServices: true, timeout: "30 seconds" })
                 ...grant,
                 id: ConsentRecordId.make("f1d1a000-0000-4000-8000-0000000008b4"),
                 event: { _tag: "Revoked", grantId: grant.id },
-                decisionMessage: {
-                  ...grant.decisionMessage,
-                  providerMessageId: "wamid.concurrent-agent-revocation",
+                evidence: {
+                  _tag: "ProviderQualifiedMessages",
+                  disclosureMessage: grantEvidence.disclosureMessage,
+                  decisionMessage: {
+                    ...grantEvidence.decisionMessage,
+                    providerMessageId: "wamid.concurrent-agent-revocation",
+                  },
                 },
                 occurredAt: DateTime.makeUnsafe("2026-08-01T12:00:01Z"),
               })

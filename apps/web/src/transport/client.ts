@@ -1,9 +1,6 @@
 import {
-  BrowserLoginPairingInvalidApi,
-  BrowserLoginPollingRateLimitedApi,
   FidyApi,
   type FidyApiGroups,
-  PriceRevisionId,
   TokenAuthorizationClientAnonymousLive,
   WebAuthApi,
   type WebAuthApiGroups,
@@ -13,7 +10,25 @@ import { FetchHttpClient, type HttpClient } from "effect/unstable/http";
 import { AtomHttpApi } from "effect/unstable/reactivity";
 
 export type { CanonicalSuccess } from "@fidy/server/client";
-export { BrowserLoginPairingInvalidApi, BrowserLoginPollingRateLimitedApi, PriceRevisionId };
+export {
+  BrowserLoginPairingInvalidApi,
+  BrowserLoginPollingRateLimitedApi,
+  CreateManualPATPayload,
+  IssuedManualPAT,
+  ManualPATGrantInput,
+  ManualPATRequestId,
+  PATId,
+  PATRecipientLabel,
+  PATScope,
+  PATScopes,
+  PriceRevisionId,
+  TokenBearer,
+  TokenShortId,
+  buildPATDisclosure,
+  countPATLabelCharacters,
+  patScopeCopy,
+  recipientLabelLimit,
+} from "@fidy/server/client";
 
 /**
  * Supplies the substitute HTTP runtime for the derived browser client. Production uses Fetch;

@@ -12,7 +12,7 @@ import { CategoryKeyword } from "~/core/categories/model";
 import { categoryIds } from "~/core/categories/taxonomy";
 import { type InsightEvent } from "~/core/insights/model";
 import { type Transaction } from "~/core/transactions/model";
-import { TokenBearer } from "~/core/tokens/model";
+import { ManualPATRequestId, PATRecipientLabel, TokenBearer } from "~/core/tokens/model";
 import type { OperationId } from "~/shell/api";
 import { truncateInsights, weeklySummaryInput } from "~/shell/insights/fixtures";
 import { truncateStatementIngestion } from "~/shell/ingestion/fixtures";
@@ -94,6 +94,16 @@ const probes: Record<OperationId, IsolationProbe> = {
   "browserLogin.approvePairing": (attempt) =>
     Effect.result(
       attempt.strangerClient.browserLogin.approvePairing({ payload: { publicCode: "BCDF-GHJK" } })
+    ).pipe(Effect.asVoid),
+
+  "pats.createManualPAT": (attempt) =>
+    Effect.result(
+      attempt.strangerClient.pats.createManualPAT({
+        payload: {
+          requestId: ManualPATRequestId.make("f1d1a000-0000-4000-8000-000000000252"),
+          grant: { recipientLabel: PATRecipientLabel.make("Denied PAT"), scopes: ["read"] },
+        },
+      })
     ).pipe(Effect.asVoid),
 
   "identity.getCurrentUser": (attempt) =>

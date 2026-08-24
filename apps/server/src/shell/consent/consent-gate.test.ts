@@ -195,10 +195,11 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })("consent
         expect(Option.getOrThrow(yield* findUser(accepted.userId)).trialPeriod).toEqual(
           acceptedUser.trialPeriod
         );
-        expect(evidenceBeforeChange[0]?.disclosureMessage).toEqual(
-          message("wamid.gate-disclosure")
-        );
-        expect(evidenceBeforeChange[0]?.decisionMessage).toEqual(message("wamid.gate-acceptance"));
+        expect(evidenceBeforeChange[0]?.evidence).toMatchObject({
+          _tag: "ProviderQualifiedMessages",
+          disclosureMessage: message("wamid.gate-disclosure"),
+          decisionMessage: message("wamid.gate-acceptance"),
+        });
       })
   );
 
@@ -298,12 +299,19 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })("consent
       );
       const [grant] = yield* observeConsentRecords(returningUserId);
       if (grant === undefined) return yield* Effect.die("missing consent grant");
+      if (grant.evidence._tag !== "ProviderQualifiedMessages") {
+        return yield* Effect.die("unexpected onboarding evidence origin");
+      }
       yield* appendConsentRecord(
         ConsentRecord.make({
           ...grant,
           id: ConsentRecordId.make("f1d1a000-0000-4000-8000-0000000008c1"),
           event: { _tag: "Revoked", grantId: grant.id },
-          decisionMessage: message("wamid.returning-revocation"),
+          evidence: {
+            _tag: "ProviderQualifiedMessages",
+            disclosureMessage: grant.evidence.disclosureMessage,
+            decisionMessage: message("wamid.returning-revocation"),
+          },
           occurredAt: DateTime.makeUnsafe("2026-08-01T12:00:03Z"),
         })
       );

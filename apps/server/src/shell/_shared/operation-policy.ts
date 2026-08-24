@@ -15,14 +15,14 @@ export const CanonicalOperationKind = Schema.Literals(["query", "mutation"]);
 export type CanonicalOperationKind = typeof CanonicalOperationKind.Type;
 
 /** The capability checkpoint for a normal PAT call or each child of a canonical batch. */
-export const PatScopeCheck = Schema.Union([
+export const PATScopeCheck = Schema.Union([
   Schema.TaggedStruct("Operation", { capability: CanonicalCapability }),
   Schema.TaggedStruct("Children", {}),
 ]);
-export type PatScopeCheck = typeof PatScopeCheck.Type;
+export type PATScopeCheck = typeof PATScopeCheck.Type;
 
 const CanonicalOperationAccess = Schema.Union([
-  Schema.TaggedStruct("PatScoped", { scope: PatScopeCheck }),
+  Schema.TaggedStruct("PATScoped", { scope: PATScopeCheck }),
   Schema.TaggedStruct("FreshWebSessionOnly", {}),
   Schema.TaggedStruct("WebOrHosted", {}),
   Schema.TaggedStruct("VerifiedWhatsAppHostedOnly", {}),
@@ -51,7 +51,7 @@ const decodePublishedAccess = (access: PublishedOperationAccessWire): CanonicalO
   switch (access.type) {
     case "pat-scoped":
       return {
-        _tag: "PatScoped",
+        _tag: "PATScoped",
         scope:
           access.scope.evaluation === "operation"
             ? { _tag: "Operation", capability: access.scope.capability }
@@ -68,7 +68,7 @@ const decodePublishedAccess = (access: PublishedOperationAccessWire): CanonicalO
 
 const encodePublishedAccess = (access: CanonicalOperationAccess): PublishedOperationAccessWire => {
   switch (access._tag) {
-    case "PatScoped":
+    case "PATScoped":
       return {
         type: "pat-scoped",
         scope:
@@ -126,13 +126,13 @@ export type OperationAccessDecision =
 
 /** Declares an operation-level PAT capability while admitting web and hosted callers. */
 export const patScoped = (capability: CanonicalCapability): OperationAccess => ({
-  _tag: "PatScoped",
+  _tag: "PATScoped",
   scope: { _tag: "Operation", capability },
 });
 
 /** Declares that the canonical atomic batch evaluates every child's PAT capability. */
 export const patScopedChildren: OperationAccess = {
-  _tag: "PatScoped",
+  _tag: "PATScoped",
   scope: { _tag: "Children" },
 };
 
@@ -159,20 +159,20 @@ const decidePatCapability = (
 ): OperationAccessDecision =>
   capabilities.includes(capability) ? allowed : denied("pat_scope_missing");
 
-const decidePatScope = (
-  scope: PatScopeCheck,
+const decidePATScope = (
+  scope: PATScopeCheck,
   capabilities: ReadonlyArray<CanonicalCapability>
 ): OperationAccessDecision => {
   if (scope._tag === "Children") return allowed;
   return decidePatCapability(scope.capability, capabilities);
 };
 
-const decidePatScoped = (
-  requirement: Extract<OperationAccess, { readonly _tag: "PatScoped" }>,
+const decidePATScoped = (
+  requirement: Extract<OperationAccess, { readonly _tag: "PATScoped" }>,
   caller: OperationAccessCaller
 ): OperationAccessDecision => {
   if (caller._tag !== "PAT") return allowed;
-  return decidePatScope(requirement.scope, caller.capabilities);
+  return decidePATScope(requirement.scope, caller.capabilities);
 };
 
 const decideFreshWebSession = (caller: OperationAccessCaller): OperationAccessDecision => {
@@ -194,8 +194,8 @@ export const decideOperationAccess: {
   (self: OperationAccess, caller: OperationAccessCaller): OperationAccessDecision;
 } = Function.dual(2, (requirement: OperationAccess, caller: OperationAccessCaller) => {
   switch (requirement._tag) {
-    case "PatScoped":
-      return decidePatScoped(requirement, caller);
+    case "PATScoped":
+      return decidePATScoped(requirement, caller);
     case "FreshWebSessionOnly":
       return decideFreshWebSession(caller);
     case "WebOrHosted":
@@ -212,14 +212,14 @@ export const publishOperationAccess = (access: OperationAccess): PublishedOperat
   encodeOperationAccess(access);
 
 /** Whether an operation carries PAT scope policy and may therefore be an atomic-batch child. */
-export const isPatScoped = (access: OperationAccess): boolean => access._tag === "PatScoped";
+export const isPATScoped = (access: OperationAccess): boolean => access._tag === "PATScoped";
 
-const scopeCapability = (scope: PatScopeCheck): Option.Option<CanonicalCapability> =>
+const scopeCapability = (scope: PATScopeCheck): Option.Option<CanonicalCapability> =>
   scope._tag === "Operation" ? Option.some(scope.capability) : Option.none();
 
 /** Returns the operation-level PAT capability, excluding child-evaluated and non-PAT access. */
 export const patScopeCapability = (access: OperationAccess): Option.Option<CanonicalCapability> => {
-  if (access._tag !== "PatScoped") return Option.none();
+  if (access._tag !== "PATScoped") return Option.none();
   return scopeCapability(access.scope);
 };
 
@@ -244,7 +244,7 @@ export type OperationPolicyValue = {
 /** Whether a successful hosted tool call completes the Turn without another model round. */
 export const completesHostedTurn = (policy: OperationPolicyValue): boolean => {
   if (policy.kind !== "mutation") return false;
-  if (policy.access._tag === "PatScoped") {
+  if (policy.access._tag === "PATScoped") {
     return policy.access.scope._tag === "Operation" && policy.access.scope.capability === "write";
   }
   return policy.access._tag !== "FreshWebSessionOnly";

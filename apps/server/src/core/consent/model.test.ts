@@ -100,12 +100,40 @@ it("decodes complete immutable onboarding consent evidence", () => {
     event: { _tag: "Granted", grant: { _tag: "Onboarding" } },
     disclosure: makeDisclosure(),
     occurredAt: "2026-08-01T12:00:00Z",
-    disclosureMessage: makeEvidence("wamid.disclosure-801"),
-    decisionMessage: makeEvidence("wamid.acceptance-801"),
+    evidence: {
+      _tag: "ProviderQualifiedMessages",
+      disclosureMessage: makeEvidence("wamid.disclosure-801"),
+      decisionMessage: makeEvidence("wamid.acceptance-801"),
+    },
   });
 
   expect(record.event).toEqual({ _tag: "Granted", grant: { _tag: "Onboarding" } });
-  expect(record.decisionMessage.provider).toBe("kapso");
+  expect(record.evidence).toMatchObject({
+    _tag: "ProviderQualifiedMessages",
+    decisionMessage: { provider: "kapso" },
+  });
+});
+
+it("records an authenticated WebSession as honest PAT decision evidence", () => {
+  const record = Schema.decodeUnknownSync(ConsentRecord)({
+    id: "f1d1a000-0000-4000-8000-000000000805",
+    subjectUserId: "f1d1a000-0000-4000-8000-000000000802",
+    event: {
+      _tag: "Granted",
+      grant: { _tag: "PAT", tokenId: "f1d1a000-0000-4000-8000-000000000803" },
+    },
+    disclosure: makeDisclosure({ revision: "pat-grant-2026-08" }),
+    occurredAt: "2026-08-01T12:00:00Z",
+    evidence: {
+      _tag: "AuthenticatedWeb",
+      webSessionId: "f1d1a000-0000-4000-8000-000000000806",
+    },
+  });
+
+  expect(record.evidence).toEqual({
+    _tag: "AuthenticatedWeb",
+    webSessionId: "f1d1a000-0000-4000-8000-000000000806",
+  });
 });
 
 it("supports the explicitly reusable grant and revocation shapes", () => {
@@ -114,8 +142,11 @@ it("supports the explicitly reusable grant and revocation shapes", () => {
     subjectUserId: "f1d1a000-0000-4000-8000-000000000802",
     disclosure: makeDisclosure(),
     occurredAt: "2026-08-01T12:00:00Z",
-    disclosureMessage: makeEvidence("wamid.disclosure-801"),
-    decisionMessage: makeEvidence("wamid.acceptance-801"),
+    evidence: {
+      _tag: "ProviderQualifiedMessages",
+      disclosureMessage: makeEvidence("wamid.disclosure-801"),
+      decisionMessage: makeEvidence("wamid.acceptance-801"),
+    },
   };
   const events = [
     {

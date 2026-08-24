@@ -12,7 +12,12 @@ import { NeedsReviewItemId, StatementSubmissionId } from "~/core/ingestion/refer
 import { CategoryKeyword } from "~/core/categories/model";
 import { categoryIds } from "~/core/categories/taxonomy";
 import { TransactionId } from "~/core/transactions/model";
-import { type PatScope, TokenBearer } from "~/core/tokens/model";
+import {
+  ManualPATRequestId,
+  PATRecipientLabel,
+  type PATScope,
+  TokenBearer,
+} from "~/core/tokens/model";
 import { NotFound, ScopeMissing } from "~/shell/_shared/errors";
 import {
   type SuggestedOperationCaller,
@@ -61,6 +66,20 @@ const probes: Record<OperationId, SuggestedOperationProbe> = {
     Effect.gen(function* () {
       const result = yield* Effect.result(
         client.browserLogin.approvePairing({ payload: { publicCode: "BCDF-GHJK" } })
+      );
+      if (Result.isSuccess(result)) return yield* Effect.die("expected bearer refusal");
+      return [yield* Schema.decodeUnknownEffect(ScopeMissing)(result.failure)];
+    }),
+
+  "pats.createManualPAT": (client) =>
+    Effect.gen(function* () {
+      const result = yield* Effect.result(
+        client.pats.createManualPAT({
+          payload: {
+            requestId: ManualPATRequestId.make("f1d1a000-0000-4000-8000-000000000251"),
+            grant: { recipientLabel: PATRecipientLabel.make("Denied PAT"), scopes: ["read"] },
+          },
+        })
       );
       if (Result.isSuccess(result)) return yield* Effect.die("expected bearer refusal");
       return [yield* Schema.decodeUnknownEffect(ScopeMissing)(result.failure)];
@@ -461,7 +480,7 @@ layer(SuggestedOperationsHarness, { excludeTestServices: true, timeout: "30 seco
           tokenId: dashboardOnlyTokenId,
           scopes: ["dashboard"],
         });
-        const clientsByScope: Record<PatScope, ApiClient> = {
+        const clientsByScope: Record<PATScope, ApiClient> = {
           read: yield* ReadOnlyApiClient,
           write: yield* WriteOnlyApiClient,
           dashboard: yield* DashboardOnlyApiClient,

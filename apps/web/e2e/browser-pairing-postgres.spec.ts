@@ -74,6 +74,16 @@ const SessionObservation = Schema.Struct({
   revoked: Schema.Boolean,
 });
 
+const browserStorageValues = (): string =>
+  [localStorage, sessionStorage]
+    .flatMap((storage) =>
+      Array.from({ length: storage.length }, (_, index) => {
+        const key = storage.key(index);
+        return key === null ? "" : (storage.getItem(key) ?? "");
+      })
+    )
+    .join("\n");
+
 type SessionObservation = typeof SessionObservation.Type;
 
 const resetAcceptanceState = async (request: APIRequestContext): Promise<void> => {
@@ -100,20 +110,10 @@ const completePairing = async (page: Page, request: APIRequestContext): Promise<
   const privateVerifier = Redacted.value(started.privateVerifier);
   expect(privateVerifier).toHaveLength(opaqueProofEncodedLength);
   await expect(page.locator("body")).not.toContainText(privateVerifier);
-  expect(
-    await page.evaluate(() =>
-      [
-        ...[localStorage, sessionStorage].flatMap((storage) =>
-          Array.from({ length: storage.length }, (_, index) => {
-            const key = storage.key(index);
-            return key === null ? "" : (storage.getItem(key) ?? "");
-          })
-        ),
-        document.documentElement.outerHTML,
-        window.location.href,
-      ].join("\n")
-    )
-  ).not.toContain(privateVerifier);
+  const retainedBrowserValues = await page.evaluate(browserStorageValues);
+  expect([retainedBrowserValues, await page.content(), page.url()].join("\n")).not.toContain(
+    privateVerifier
+  );
   const codeNode = page.locator('[aria-label^="Código de vinculación "]');
   await expect(codeNode).toBeVisible();
   const publicCode = Option.getOrThrow(Option.fromNullishOr(await codeNode.textContent())).trim();
@@ -184,7 +184,7 @@ const assertUnknownWrongVerifierRefused = async (request: APIRequestContext): Pr
 };
 
 test("proves independent production-like web and API route ownership", async ({ request }) => {
-  const shellPaths = ["/", "/auth/pair", "/upgrade", "/app/transactions"];
+  const shellPaths = ["/", "/auth/pair", "/upgrade", "/app/transactions", "/settings/pats"];
   const shellResponses = await Promise.all(shellPaths.map((path) => request.get(path)));
   for (const response of shellResponses) {
     expect(response.status()).toBe(successStatus);
@@ -247,6 +247,52 @@ test("shows real PostgreSQL pairing expiry without creating a WebSession", async
 
   await expect(page.getByText(invalidPairingBody.error.message, { exact: true })).toBeVisible();
   expect(await observeSession(request)).toEqual({ sessionCount: 0, revoked: false });
+});
+
+test("creates, copies, and clears a manual PAT from a freshly paired browser", async ({
+  context,
+  page,
+  request,
+}) => {
+  await resetAcceptanceState(request);
+  await context.grantPermissions(["clipboard-read", "clipboard-write"], {
+    origin: "https://127.0.0.1:4173",
+  });
+  await completePairing(page, request);
+
+  await page.getByRole("link", { name: "PATs" }).click();
+  await expect(page).toHaveURL(/\/settings\/pats$/u);
+  await page.getByLabel("Destinatario").fill("  Automatización casa  ");
+  await page.getByRole("checkbox", { name: /Lectura/iu }).click();
+  await page.getByRole("checkbox", { name: /Tablero/iu }).click();
+  await page.getByRole("button", { name: "Revisar PAT" }).click();
+  await expect(page.getByRole("heading", { name: "Revisa el acceso" })).toBeVisible();
+  await expect(page.getByText(/exactamente 90 días \(2\.160 horas\)/iu)).toBeVisible();
+
+  const issueResponse = page.waitForResponse(
+    (response) => response.url() === `${apiOrigin}/pats` && response.request().method() === "POST"
+  );
+  await page.getByRole("button", { name: "Confirmar y crear PAT" }).click();
+  const response = await issueResponse;
+  expect(response.status()).toBe(successStatus);
+  expect(response.headers()["cache-control"]).toBe("no-store");
+  const issuedBody = Schema.decodeUnknownSync(
+    Schema.Struct({ data: Schema.Struct({ bearer: Schema.String }) })
+  )(await response.json());
+  const bearer = issuedBody.data.bearer;
+  await expect(page.getByText(bearer)).toBeVisible();
+  expect(page.url()).not.toContain(bearer);
+  expect(await page.evaluate(browserStorageValues)).not.toContain(bearer);
+
+  await page.getByRole("button", { name: "Copiar PAT" }).click();
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(bearer);
+  await page.getByRole("link", { name: "Transacciones" }).click();
+  await page.evaluate(() => history.back());
+  await expect(page).toHaveURL(/\/settings\/pats$/u);
+  await expect(page.getByText(bearer)).toHaveCount(0);
+  await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe("");
+  await page.reload();
+  await expect(page.getByText(bearer)).toHaveCount(0);
 });
 
 test("establishes, retains, replays, and revokes a real PostgreSQL WebSession", async ({

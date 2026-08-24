@@ -2743,16 +2743,23 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         );
         const grant = EffectArray.head(yield* observeConsentRecords(userId));
         if (Option.isNone(grant)) return yield* Effect.die("missing onboarding grant");
+        if (grant.value.evidence._tag !== "ProviderQualifiedMessages") {
+          return yield* Effect.die("unexpected onboarding evidence origin");
+        }
         yield* appendConsentRecord(
           ConsentRecord.make({
             ...grant.value,
             id: ConsentRecordId.make("f1d1a000-0000-4000-8000-000000000911"),
             event: { _tag: "Revoked", grantId: grant.value.id },
             occurredAt: DateTime.add(eventTime, { minutes: 1 }),
-            decisionMessage: {
-              channel: "whatsapp",
-              provider: "kapso",
-              providerMessageId: "wamid.revoked-decision",
+            evidence: {
+              _tag: "ProviderQualifiedMessages",
+              disclosureMessage: grant.value.evidence.disclosureMessage,
+              decisionMessage: {
+                channel: "whatsapp",
+                provider: "kapso",
+                providerMessageId: "wamid.revoked-decision",
+              },
             },
           })
         );

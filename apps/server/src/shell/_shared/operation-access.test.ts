@@ -7,7 +7,7 @@ import {
   decideOperationAccess,
   freshWebSessionOnly,
   isHostedVisible,
-  isPatScoped,
+  isPATScoped,
   patScopeCapability,
   patScoped,
   patScopedChildren,
@@ -98,10 +98,10 @@ it("decides every canonical caller class from one access requirement", () => {
 });
 
 it("derives PAT and hosted discovery from the same access requirement", () => {
-  expect(isPatScoped(patScoped("read"))).toBe(true);
-  expect(isPatScoped(freshWebSessionOnly)).toBe(false);
-  expect(isPatScoped(webOrHosted)).toBe(false);
-  expect(isPatScoped(verifiedWhatsAppHostedOnly)).toBe(false);
+  expect(isPATScoped(patScoped("read"))).toBe(true);
+  expect(isPATScoped(freshWebSessionOnly)).toBe(false);
+  expect(isPATScoped(webOrHosted)).toBe(false);
+  expect(isPATScoped(verifiedWhatsAppHostedOnly)).toBe(false);
 
   expect(Option.getOrUndefined(patScopeCapability(patScoped("dashboard")))).toBe("dashboard");
   expect(Option.isNone(patScopeCapability(patScopedChildren))).toBe(true);

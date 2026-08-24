@@ -22,7 +22,8 @@ import { PATId } from "~/core/tokens/reference";
 import type { User } from "~/core/identity/model";
 import { makeColombianUser } from "~/core/identity/rules";
 import {
-  PatScopes,
+  PATRecipientLabel,
+  PATScopes,
   type TokenBearer,
   TokenSecret,
   TokenShortId,
@@ -31,7 +32,7 @@ import {
   makeTokenBearer,
 } from "~/core/tokens/model";
 import { computePatIdleExpiry } from "~/core/tokens/rules";
-import { hashTokenBearer } from "~/shell/_shared/authz-live";
+import { hashTokenBearer } from "~/shell/_shared/token-digest";
 import { currentDisclosure } from "~/shell/consent/current-disclosure";
 import { appendConsentRecord, hasCurrentOnboardingConsent } from "~/shell/consent/repo";
 import { associateWhatsAppIdentity, upsertUser } from "~/shell/identity/repo";
@@ -47,7 +48,7 @@ export const defaultWhatsAppPhone = E164PhoneNumber.make("+573001234567");
 const defaultCreatedAt = DateTime.makeUnsafe("2026-01-01T00:00:00Z");
 /** Stable PAT id behind the local development and API-seam bearer. */
 export const defaultPATId = PATId.make("f1d1a000-0000-4000-8000-000000000002");
-const defaultPatScopes = PatScopes.make(["read", "write", "dashboard"]);
+const defaultPATScopes = PATScopes.make(["read", "write", "dashboard"]);
 
 /**
  * Generates the one-time development bearer from platform cryptographic bytes.
@@ -89,15 +90,18 @@ export const seedOnboardingConsent = (
         event: { _tag: "Granted", grant: { _tag: "Onboarding" } },
         disclosure,
         occurredAt: defaultCreatedAt,
-        disclosureMessage: {
-          channel: "development",
-          provider: "development-seed",
-          providerMessageId: `${seedMessageId}:disclosure`,
-        },
-        decisionMessage: {
-          channel: "development",
-          provider: "development-seed",
-          providerMessageId: `${seedMessageId}:acceptance`,
+        evidence: {
+          _tag: "ProviderQualifiedMessages",
+          disclosureMessage: {
+            channel: "development",
+            provider: "development-seed",
+            providerMessageId: `${seedMessageId}:disclosure`,
+          },
+          decisionMessage: {
+            channel: "development",
+            provider: "development-seed",
+            providerMessageId: `${seedMessageId}:acceptance`,
+          },
         },
       })
     );
@@ -111,7 +115,7 @@ const tokenIdFromHash = (tokenHash: TokenHash): PATId =>
 type SeededPatIdentity = Readonly<{
   userId: UserId;
   tokenId: PATId;
-  scopes: PatScopes;
+  scopes: PATScopes;
   tokenCreatedAt: DateTime.Utc;
   idleExpiresAt: DateTime.Utc;
   revokedAt: Option.Option<DateTime.Utc>;
@@ -136,7 +140,7 @@ export const seedConsentedPatIdentity = (
   Effect.gen(function* () {
     const userId = overrides.userId ?? defaultUserId;
     const bearer = overrides.bearer;
-    const scopes = overrides.scopes ?? defaultPatScopes;
+    const scopes = overrides.scopes ?? defaultPATScopes;
     const tokenCreatedAt = overrides.tokenCreatedAt ?? (yield* DateTime.now);
     const idleExpiresAt = overrides.idleExpiresAt ?? (yield* computePatIdleExpiry(tokenCreatedAt));
     const revokedAt = overrides.revokedAt ?? Option.none();
@@ -151,6 +155,7 @@ export const seedConsentedPatIdentity = (
     yield* upsertPAT(userId, {
       id: overrides.tokenId ?? tokenIdFromHash(tokenHash),
       shortId: yield* getTokenShortId(bearer),
+      recipientLabel: PATRecipientLabel.make("Development PAT"),
       tokenHash,
       scopes,
       idleExpiresAt,

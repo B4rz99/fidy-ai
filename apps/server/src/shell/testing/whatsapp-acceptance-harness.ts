@@ -16,10 +16,10 @@ import { type Response as AiResponse, LanguageModel } from "effect/unstable/ai";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import { type ConsentRecord, PendingConsentExchangeId } from "~/core/consent/model";
 import type { UserId, WhatsAppCallerReference } from "~/core/identity/reference";
-import { PatScopes, TokenBearer, getTokenShortId } from "~/core/tokens/model";
+import { PATRecipientLabel, PATScopes, TokenBearer, getTokenShortId } from "~/core/tokens/model";
 import { PATId } from "~/core/tokens/reference";
 import { computePatIdleExpiry } from "~/core/tokens/rules";
-import { hashTokenBearer } from "~/shell/_shared/authz-live";
+import { hashTokenBearer } from "~/shell/_shared/token-digest";
 import { categoryIds } from "~/core/categories/taxonomy";
 import { AgentService } from "~/shell/agent/agent-service";
 import { HostedInferenceFromLanguageModel } from "./hosted-inference-fixtures";
@@ -475,8 +475,9 @@ const AcceptanceCallerProbe = Layer.effect(
           yield* upsertPAT(userId.value, {
             id: credentials.tokenId,
             shortId: yield* getTokenShortId(credentials.bearer),
+            recipientLabel: PATRecipientLabel.make("Acceptance probe"),
             tokenHash,
-            scopes: PatScopes.make(["read"]),
+            scopes: PATScopes.make(["read"]),
             idleExpiresAt: yield* computePatIdleExpiry(createdAt),
             revokedAt: Option.none(),
             createdAt,

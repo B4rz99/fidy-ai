@@ -145,6 +145,9 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         });
         const [grant] = yield* observeConsentRecords(revokedUserId);
         if (grant === undefined) return yield* Effect.die("missing onboarding grant");
+        if (grant.evidence._tag !== "ProviderQualifiedMessages") {
+          return yield* Effect.die("unexpected onboarding evidence origin");
+        }
 
         const lockAcquired = yield* Deferred.make<void>();
         const commitRevocation = yield* Deferred.make<void>();
@@ -153,10 +156,14 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           id: ConsentRecordId.make("f1d1a000-0000-4000-8000-0000000008a2"),
           event: { _tag: "Revoked", grantId: grant.id },
           occurredAt: DateTime.makeUnsafe("2026-08-02T15:00:00Z"),
-          decisionMessage: {
-            channel: "whatsapp",
-            provider: "kapso",
-            providerMessageId: "wamid.concurrent-revocation",
+          evidence: {
+            _tag: "ProviderQualifiedMessages",
+            disclosureMessage: grant.evidence.disclosureMessage,
+            decisionMessage: {
+              channel: "whatsapp",
+              provider: "kapso",
+              providerMessageId: "wamid.concurrent-revocation",
+            },
           },
         });
         const revocationFiber = yield* withSubjectLock(

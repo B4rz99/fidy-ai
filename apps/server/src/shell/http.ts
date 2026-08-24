@@ -27,6 +27,7 @@ import { MemoryLive } from "~/shell/memory/handlers";
 import { OperationsLive } from "~/shell/operations/handlers";
 import { CanonicalTelemetryLive } from "~/shell/observability/canonical-api";
 import { SubscriptionLive } from "~/shell/subscription/handlers";
+import { PATsLive } from "~/shell/tokens/handlers";
 import { TransactionsLive } from "~/shell/transactions/handlers";
 import { FidyApi, operationCatalog } from "./api";
 
@@ -66,6 +67,7 @@ export const ApiLive = HttpApiBuilder.layer(FidyApi, { openapiPath: "/openapi.js
       InsightsLive,
       MemoryLive,
       SubscriptionLive,
+      PATsLive,
       OperationsLive
     ).pipe(Layer.provide([ValidationGateLive, TokenAuthorizationLive, CanonicalTelemetryLive]))
   )

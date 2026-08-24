@@ -21,7 +21,8 @@ import {
 } from "~/core/identity/reference";
 import { InsightKind } from "~/core/insights/reference";
 import { PATId } from "~/core/tokens/reference";
-import { advisoryLockKey, withUserLock } from "~/shell/db/advisory-lock";
+import { WebSessionId } from "~/core/web-session/reference";
+import { advisoryLockKey, withUserLock, withUserLockInScope } from "~/shell/db/advisory-lock";
 import { withUserTransaction } from "~/shell/db/user-transaction";
 import { currentDisclosure } from "./current-disclosure";
 
@@ -31,6 +32,10 @@ const OptionalInsightKind = Schema.OptionFromNullOr(InsightKind);
 const OptionalMessageChannel = Schema.OptionFromNullOr(ProviderMessageEvidence.fields.channel);
 const OptionalMessageProvider = Schema.OptionFromNullOr(ProviderMessageEvidence.fields.provider);
 const OptionalMessageId = Schema.OptionFromNullOr(ProviderMessageEvidence.fields.providerMessageId);
+const OptionalWebSessionId = Schema.OptionFromNullOr(Schema.toEncoded(WebSessionId));
+const OptionalAutomaticPolicy = Schema.OptionFromNullOr(
+  Schema.Literals(["pat-approved-unclaimed-expiry", "pat-inactivity-expiry"])
+);
 const OptionalUtcDate = Schema.OptionFromNullOr(Schema.DateTimeUtcFromDate);
 const StoredGrantType = Schema.Literals(["onboarding", "pat", "insight-delivery"]);
 type StoredGrantType = typeof StoredGrantType.Type;
@@ -61,12 +66,19 @@ const ConsentRecordRow = Schema.Struct({
   insightKind: OptionalInsightKind,
   revokedGrantId: OptionalConsentRecordId,
   ...DisclosureRowFields,
-  disclosureChannel: ProviderMessageEvidence.fields.channel,
-  disclosureProvider: ProviderMessageEvidence.fields.provider,
-  disclosureProviderMessageId: ProviderMessageEvidence.fields.providerMessageId,
-  decisionChannel: ProviderMessageEvidence.fields.channel,
-  decisionProvider: ProviderMessageEvidence.fields.provider,
-  decisionProviderMessageId: ProviderMessageEvidence.fields.providerMessageId,
+  decisionOrigin: Schema.Literals([
+    "provider-qualified-messages",
+    "authenticated-web",
+    "automatic-policy",
+  ]),
+  disclosureChannel: OptionalMessageChannel,
+  disclosureProvider: OptionalMessageProvider,
+  disclosureProviderMessageId: OptionalMessageId,
+  decisionChannel: OptionalMessageChannel,
+  decisionProvider: OptionalMessageProvider,
+  decisionProviderMessageId: OptionalMessageId,
+  webSessionId: OptionalWebSessionId,
+  automaticPolicy: OptionalAutomaticPolicy,
   occurredAt: Schema.DateTimeUtcFromDate,
 });
 type ConsentRecordRow = typeof ConsentRecordRow.Type;
@@ -78,10 +90,13 @@ const consentColumns = `id, subject_user_id AS "subjectUserId", event_type AS "e
   disclosure_text AS "disclosureText", policy_url AS "policyUrl",
   policy_revision AS "policyRevision", policy_sha256 AS "policySha256", purposes,
   data_categories AS "dataCategories", duration, revocation_method AS "revocationMethod",
-  disclosure_channel AS "disclosureChannel", disclosure_provider AS "disclosureProvider",
+  decision_origin AS "decisionOrigin", disclosure_channel AS "disclosureChannel",
+  disclosure_provider AS "disclosureProvider",
   disclosure_provider_message_id AS "disclosureProviderMessageId",
   decision_channel AS "decisionChannel", decision_provider AS "decisionProvider",
-  decision_provider_message_id AS "decisionProviderMessageId", occurred_at AS "occurredAt"`;
+  decision_provider_message_id AS "decisionProviderMessageId",
+  web_session_id AS "webSessionId", automatic_policy AS "automaticPolicy",
+  occurred_at AS "occurredAt"`;
 
 const disclosureFromRow = (row: DisclosureRow): typeof DisclosureSnapshot.Encoded => ({
   serviceMarket: row.serviceMarket,
@@ -201,6 +216,79 @@ const eventToRow = (
   };
 };
 
+type EvidenceRow = Pick<
+  ConsentRecordRow,
+  | "decisionOrigin"
+  | "disclosureChannel"
+  | "disclosureProvider"
+  | "disclosureProviderMessageId"
+  | "decisionChannel"
+  | "decisionProvider"
+  | "decisionProviderMessageId"
+  | "webSessionId"
+  | "automaticPolicy"
+>;
+
+const evidenceFromRow = (row: EvidenceRow): unknown => {
+  if (row.decisionOrigin === "authenticated-web") {
+    return { _tag: "AuthenticatedWeb", webSessionId: Option.getOrUndefined(row.webSessionId) };
+  }
+  if (row.decisionOrigin === "automatic-policy") {
+    return { _tag: "AutomaticPolicy", policy: Option.getOrUndefined(row.automaticPolicy) };
+  }
+  return {
+    _tag: "ProviderQualifiedMessages",
+    disclosureMessage: {
+      channel: Option.getOrUndefined(row.disclosureChannel),
+      provider: Option.getOrUndefined(row.disclosureProvider),
+      providerMessageId: Option.getOrUndefined(row.disclosureProviderMessageId),
+    },
+    decisionMessage: {
+      channel: Option.getOrUndefined(row.decisionChannel),
+      provider: Option.getOrUndefined(row.decisionProvider),
+      providerMessageId: Option.getOrUndefined(row.decisionProviderMessageId),
+    },
+  };
+};
+
+const emptyEvidenceRow = {
+  disclosureChannel: Option.none(),
+  disclosureProvider: Option.none(),
+  disclosureProviderMessageId: Option.none(),
+  decisionChannel: Option.none(),
+  decisionProvider: Option.none(),
+  decisionProviderMessageId: Option.none(),
+  webSessionId: Option.none(),
+  automaticPolicy: Option.none(),
+} as const;
+
+const evidenceToRow = (evidence: (typeof ConsentRecord.Encoded)["evidence"]): EvidenceRow => {
+  if (evidence._tag === "AuthenticatedWeb") {
+    return {
+      ...emptyEvidenceRow,
+      decisionOrigin: "authenticated-web",
+      webSessionId: Option.some(evidence.webSessionId),
+    };
+  }
+  if (evidence._tag === "AutomaticPolicy") {
+    return {
+      ...emptyEvidenceRow,
+      decisionOrigin: "automatic-policy",
+      automaticPolicy: Option.some(evidence.policy),
+    };
+  }
+  return {
+    ...emptyEvidenceRow,
+    decisionOrigin: "provider-qualified-messages",
+    disclosureChannel: Option.some(evidence.disclosureMessage.channel),
+    disclosureProvider: Option.some(evidence.disclosureMessage.provider),
+    disclosureProviderMessageId: Option.some(evidence.disclosureMessage.providerMessageId),
+    decisionChannel: Option.some(evidence.decisionMessage.channel),
+    decisionProvider: Option.some(evidence.decisionMessage.provider),
+    decisionProviderMessageId: Option.some(evidence.decisionMessage.providerMessageId),
+  };
+};
+
 const ConsentRecordFromRow = ConsentRecordRow.pipe(
   Schema.decodeTo(
     ConsentRecord,
@@ -213,16 +301,7 @@ const ConsentRecordFromRow = ConsentRecordRow.pipe(
               subjectUserId: row.subjectUserId,
               event,
               disclosure: disclosureFromRow(row),
-              disclosureMessage: {
-                channel: row.disclosureChannel,
-                provider: row.disclosureProvider,
-                providerMessageId: row.disclosureProviderMessageId,
-              },
-              decisionMessage: {
-                channel: row.decisionChannel,
-                provider: row.decisionProvider,
-                providerMessageId: row.decisionProviderMessageId,
-              },
+              evidence: evidenceFromRow(row),
               occurredAt: DateTime.formatIso(row.occurredAt),
             })
           )
@@ -234,12 +313,7 @@ const ConsentRecordFromRow = ConsentRecordRow.pipe(
             subjectUserId: record.subjectUserId,
             ...eventToRow(record.event),
             ...disclosureToRow(record.disclosure),
-            disclosureChannel: record.disclosureMessage.channel,
-            disclosureProvider: record.disclosureMessage.provider,
-            disclosureProviderMessageId: record.disclosureMessage.providerMessageId,
-            decisionChannel: record.decisionMessage.channel,
-            decisionProvider: record.decisionMessage.provider,
-            decisionProviderMessageId: record.decisionMessage.providerMessageId,
+            ...evidenceToRow(record.evidence),
             occurredAt: utcFromIso(record.occurredAt),
           }))
         ),
@@ -247,10 +321,15 @@ const ConsentRecordFromRow = ConsentRecordRow.pipe(
   )
 );
 
-/**
- * Runs one Consent-dependent unit under the stable subject's namespaced lock. The lock covers the
- * supplied body and cannot be acquired independently of its User-scoped transaction.
- */
+/** Runs one Consent-dependent unit under the subject lock in the caller-owned transaction. */
+export const withSubjectLockInScope = Effect.fn("withSubjectLockInScope")(function* <A, E, R>(
+  subjectUserId: UserId,
+  body: Effect.Effect<A, E, R>
+) {
+  return yield* withUserLockInScope(advisoryLockKey.consentSubject(subjectUserId), body);
+});
+
+/** Opens one User transaction and serializes a Consent-dependent unit by stable subject. */
 export const withSubjectLock = Effect.fn("withSubjectLock")(function* <A, E, R>(
   subjectUserId: UserId,
   body: Effect.Effect<A, E, R>
@@ -283,23 +362,22 @@ export const useCurrentConsent = Effect.fn("useCurrentConsent")(function* <A, E,
  * token grant must reference that subject's existing token. Violating
  * either ownership prerequisite or any persistence invariant is a defect.
  */
-export const appendConsentRecord = Effect.fn("appendConsentRecord")(function* (
+export const appendConsentRecordInScope = Effect.fn("appendConsentRecordInScope")(function* (
   record: ConsentRecord
 ) {
   const sql = yield* SqlClient.SqlClient;
-  return yield* withSubjectLock(
-    record.subjectUserId,
-    SqlSchema.findOne({
-      Request: ConsentRecordFromRow,
-      Result: ConsentRecordFromRow,
-      execute: (input) => sql`
+  return yield* SqlSchema.findOne({
+    Request: ConsentRecordFromRow,
+    Result: ConsentRecordFromRow,
+    execute: (input) => sql`
       INSERT INTO consent_records (
         id, subject_user_id, event_type, grant_type, pat_id, insight_kind,
         revoked_grant_id, service_market, locale, disclosure_revision,
         disclosure_sha256, disclosure_text, policy_url, policy_revision, policy_sha256,
-        purposes, data_categories, duration, revocation_method, disclosure_channel,
-        disclosure_provider, disclosure_provider_message_id, decision_channel,
-        decision_provider, decision_provider_message_id, occurred_at
+        purposes, data_categories, duration, revocation_method, decision_origin,
+        disclosure_channel, disclosure_provider, disclosure_provider_message_id,
+        decision_channel, decision_provider, decision_provider_message_id,
+        web_session_id, automatic_policy, occurred_at
       ) SELECT
         ${input.id}, ${input.subjectUserId}, ${input.eventType}, ${input.grantType},
         ${input.patId}, ${input.insightKind}, ${input.revokedGrantId},
@@ -307,9 +385,10 @@ export const appendConsentRecord = Effect.fn("appendConsentRecord")(function* (
         ${input.disclosureSha256}, ${input.disclosureText}, ${input.policyUrl},
         ${input.policyRevision}, ${input.policySha256}, ${input.purposes},
         ${input.dataCategories}, ${input.duration}, ${input.revocationMethod},
-        ${input.disclosureChannel}, ${input.disclosureProvider},
+        ${input.decisionOrigin}, ${input.disclosureChannel}, ${input.disclosureProvider},
         ${input.disclosureProviderMessageId}, ${input.decisionChannel},
-        ${input.decisionProvider}, ${input.decisionProviderMessageId}, ${input.occurredAt}
+        ${input.decisionProvider}, ${input.decisionProviderMessageId},
+        ${input.webSessionId}, ${input.automaticPolicy}, ${input.occurredAt}
       WHERE (
         ${input.eventType} = 'revoked'
         AND EXISTS (
@@ -331,8 +410,14 @@ export const appendConsentRecord = Effect.fn("appendConsentRecord")(function* (
       )
           RETURNING ${sql.literal(consentColumns)}
         `,
-    })(record).pipe(Effect.orDie)
-  );
+  })(record).pipe(Effect.orDie);
+});
+
+/** Opens the transaction and subject lock before appending one immutable Consent record. */
+export const appendConsentRecord = Effect.fn("appendConsentRecord")(function* (
+  record: ConsentRecord
+) {
+  return yield* withSubjectLock(record.subjectUserId, appendConsentRecordInScope(record));
 });
 
 const ResolvedConsentSubject = Schema.Struct({ subjectUserId: UserId });

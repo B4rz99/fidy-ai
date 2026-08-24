@@ -1,11 +1,10 @@
 import {
   type Cause,
-  Crypto,
+  type Crypto,
   Data,
   DateTime,
   Duration,
   Effect,
-  Encoding,
   Exit,
   Function,
   Layer,
@@ -19,14 +18,14 @@ import { HttpApiBuilder } from "effect/unstable/httpapi";
 import { type AuditLogEntry, type AuditOutcome, CanonicalOperationId } from "~/core/audit/model";
 import {
   allCanonicalCapabilities,
-  canonicalCapabilitiesFromPatScopes,
+  canonicalCapabilitiesFromPATScopes,
 } from "~/core/_shared/canonical-capability";
 import { type ResolvedToken, TokenBearer } from "~/core/tokens/model";
 import { computePatIdleExpiry } from "~/core/tokens/rules";
 import { appendAuditLogEntry } from "~/shell/audit/repo";
 import { onboardingConsentStandingInScope, withSubjectLock } from "~/shell/consent/repo";
 import { withUserTransaction } from "~/shell/db/user-transaction";
-import { TokenHash, useToken } from "~/shell/tokens/repo";
+import { useToken } from "~/shell/tokens/repo";
 import {
   renewedWebSessionCookieOptions,
   webSessionCookieOptions,
@@ -47,6 +46,7 @@ import {
   webSessionSecurity,
 } from "./authz";
 import { getOperationPolicy } from "./operation-policy";
+import { hashTokenBearer } from "./token-digest";
 
 const decodeBearer = Schema.decodeUnknownOption(TokenBearer);
 
@@ -139,20 +139,6 @@ const credentialAccessRejection = (
   );
 
 /**
- * SHA-256 hashes one opaque bearer with the platform Crypto service. Token
- * lookup accepts this lowercase digest and never the full bearer or its secret.
- */
-export const hashTokenBearer = (
-  bearer: TokenBearer
-): Effect.Effect<TokenHash, never, Crypto.Crypto> =>
-  Effect.flatMap(Crypto.Crypto, (crypto) =>
-    crypto.digest("SHA-256", new TextEncoder().encode(bearer))
-  ).pipe(
-    Effect.map((digest) => TokenHash.make(Encoding.encodeHex(digest))),
-    Effect.orDie
-  );
-
-/**
  * Resolves a typed TokenBearer bearer to its stable User and atomically records
  * the supplied use time while renewing its 90-day idle deadline.
  */
@@ -224,7 +210,7 @@ const canonicalCallerFromCredential = (
   if (credential._tag === "PAT") {
     return {
       subjectUserId: credential.resolved.subjectUserId,
-      capabilities: canonicalCapabilitiesFromPatScopes(credential.resolved.scopes),
+      capabilities: canonicalCapabilitiesFromPATScopes(credential.resolved.scopes),
       auditCaller: { _tag: "PAT", patId: credential.resolved.tokenId },
       authorityRoot: "no-verified-whatsapp-authority",
     };

@@ -15,10 +15,7 @@ import {
 import { HttpServerRequest } from "effect/unstable/http";
 import { SqlClient } from "effect/unstable/sql";
 import { HttpApiBuilder } from "effect/unstable/httpapi";
-import {
-  requiresCanonicalSnapshot,
-  retryCanonicalSnapshot,
-} from "~/shell/_shared/canonical-snapshot";
+import { requiresCanonicalSnapshot, retryCanonicalSnapshot } from "./canonical-snapshot";
 import { type AuditLogEntry, type AuditOutcome, CanonicalOperationId } from "~/core/audit/model";
 import {
   allCanonicalCapabilities,

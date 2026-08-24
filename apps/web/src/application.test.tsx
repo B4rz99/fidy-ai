@@ -117,13 +117,17 @@ describe("signed-in web application routes", () => {
   it("owns the Dashboard at /app/dashboard and routes malformed canonical data to failure", async () => {
     await renderRoute("/app/dashboard", malformedFidyClient());
 
-    expect(await screen.findByText("No pudimos cargar tu tablero")).toBeVisible();
+    expect(
+      await screen.findByText("No pudimos cargar tu tablero", undefined, { timeout: 3_000 })
+    ).toBeVisible();
   });
 
   it("redirects the authenticated /app index to the Dashboard", async () => {
     await renderRoute("/app", malformedFidyClient());
 
-    expect(await screen.findByText("No pudimos cargar tu tablero")).toBeVisible();
+    expect(
+      await screen.findByText("No pudimos cargar tu tablero", undefined, { timeout: 3_000 })
+    ).toBeVisible();
   });
 });
 

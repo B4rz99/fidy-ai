@@ -27,7 +27,7 @@ type WebRouterOptions = WebRouterContext &
   }>;
 
 const DashboardRouteContent = lazy(() =>
-  import("@/features/dashboard/view").then((module) => ({
+  import("@/features/dashboard/feature").then((module) => ({
     default: module.DashboardRouteContent,
   }))
 );

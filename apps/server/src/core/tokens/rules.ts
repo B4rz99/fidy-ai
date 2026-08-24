@@ -15,22 +15,21 @@ export const patScopeCopy: Record<
 > = {
   read: {
     label: "Lectura",
-    description: "Consultar datos financieros mediante operaciones canónicas autorizadas.",
+    description: "Consultar tus datos financieros en Fidy.",
   },
   write: {
     label: "Escritura",
-    description: "Crear o modificar datos financieros mediante operaciones canónicas autorizadas.",
+    description: "Crear y modificar tus datos financieros en Fidy.",
   },
   dashboard: {
     label: "Tablero",
-    description:
-      "Consultar y editar el tablero financiero mediante operaciones canónicas autorizadas.",
+    description: "Consultar y modificar tu tablero financiero en Fidy.",
   },
 };
 
 /** Builds the exact Spanish grant text reviewed for one normalized recipient and scope set. */
 export const buildPATDisclosure = ({ recipientLabel, scopes }: ManualPATGrantInput): string =>
-  `Autorizas a Fidy a crear un token de acceso personal (PAT) para “${recipientLabel}”. La etiqueta identifica al destinatario solo como referencia visible y no verifica su identidad.
+  `Nombre: “${recipientLabel}”.
 
 Alcances autorizados:
 ${scopes.map((scope) => `- ${patScopeCopy[scope].label}: ${patScopeCopy[scope].description}`).join("\n")}

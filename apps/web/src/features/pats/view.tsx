@@ -12,7 +12,7 @@ import {
   patScopeCopy,
   recipientLabelLimit,
 } from "@/transport/client";
-import { Duration } from "effect";
+import { Crypto, Effect } from "effect";
 import { bearerRevealLifetime } from "./policy";
 import {
   type Dispatch,
@@ -30,8 +30,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/ui/components/card";
 import { Checkbox } from "@/ui/components/checkbox";
 import { Input } from "@/ui/components/input";
 
-type IssuedPAT = typeof IssuedManualPAT.Type;
-type PATScopeValue = (typeof PATScopes.Type)[number];
+type IssuedPAT = IssuedManualPAT;
+type PATScopeValue = PATScope;
 
 /** One confirmed manual PAT request plus callbacks for its terminal server outcome. */
 export type IssueManualPATCommand = Readonly<{
@@ -57,7 +57,18 @@ export type ManualPATCreationState =
     }>
   | Readonly<{ _tag: "Issued"; issued: IssuedPAT }>;
 
-const bearerRevealLifetimeMs = Duration.toMillis(bearerRevealLifetime);
+const browserCrypto = Crypto.make({
+  randomBytes: (size) => globalThis.crypto.getRandomValues(new Uint8Array(size)),
+  digest: (algorithm, data) =>
+    Effect.promise(() =>
+      globalThis.crypto.subtle
+        .digest(algorithm, Uint8Array.from(data))
+        .then((digest) => new Uint8Array(digest))
+    ),
+});
+
+const makeManualPATRequestId = (): ManualPATRequestIdType =>
+  ManualPATRequestId.make(Effect.runSync(browserCrypto.randomUUIDv4.pipe(Effect.orDie)));
 
 const initialState: ManualPATCreationState = {
   _tag: "Editing",
@@ -65,9 +76,9 @@ const initialState: ManualPATCreationState = {
   scopes: [],
 };
 
-const scopeOptions = Object.entries(patScopeCopy).map(([scope, details]) => ({
+const scopeOptions = (["read", "write", "dashboard"] as const).map((scope) => ({
   scope: PATScope.make(scope),
-  ...details,
+  ...patScopeCopy[scope],
 }));
 
 const toggleScope = (
@@ -131,16 +142,11 @@ const GrantEditor = ({
 
   return (
     <Card>
-      <CardHeader>
-        <CardTitle>
-          <h2>Nuevo PAT</h2>
-        </CardTitle>
-      </CardHeader>
       <CardContent>
         <form className="flex flex-col gap-6" onSubmit={submit}>
           <div className="flex flex-col gap-2">
             <label className="font-medium" htmlFor="pat-recipient">
-              Destinatario
+              Nombre
             </label>
             <Input
               id="pat-recipient"
@@ -148,9 +154,7 @@ const GrantEditor = ({
               placeholder="Ej. Automatización casa"
               value={state.recipientLabel}
             />
-            <p className="text-sm text-muted-foreground">
-              Una etiqueta visible de 1 a 80 caracteres; no verifica la identidad del destinatario.
-            </p>
+            <p className="text-sm text-muted-foreground">Un nombre visible de 1 a 80 caracteres.</p>
           </div>
           <ScopeSelector state={state} update={update} />
           <Button disabled={!valid} type="submit">
@@ -181,7 +185,7 @@ const GrantReview = ({
     </CardHeader>
     <CardContent className="flex flex-col gap-5">
       <dl className="grid gap-2 sm:grid-cols-[10rem_1fr]">
-        <dt className="text-muted-foreground">Destinatario</dt>
+        <dt className="text-muted-foreground">Nombre</dt>
         <dd className="font-medium">{grant.recipientLabel}</dd>
         <dt className="text-muted-foreground">Alcances</dt>
         <dd className="flex flex-wrap gap-2">
@@ -256,12 +260,20 @@ const revealIssuedPAT = (
   clearClipboard: (bearer: TokenBearer) => void
 ): void => {
   setState({ _tag: "Issued", issued });
-  setTimeout(() => {
-    clearClipboard(issued.bearer);
-    setState((current) =>
-      current._tag === "Issued" && current.issued.pat.id === issued.pat.id ? initialState : current
-    );
-  }, bearerRevealLifetimeMs);
+  Effect.runFork(
+    Effect.sleep(bearerRevealLifetime).pipe(
+      Effect.andThen(
+        Effect.sync(() => {
+          clearClipboard(issued.bearer);
+          setState((current) =>
+            current._tag === "Issued" && current.issued.pat.id === issued.pat.id
+              ? initialState
+              : current
+          );
+        })
+      )
+    )
+  );
 };
 
 const EditingState = ({
@@ -279,7 +291,7 @@ const EditingState = ({
           recipientLabel: PATRecipientLabel.make(state.recipientLabel.trim()),
           scopes: PATScopes.make(state.scopes),
         },
-        requestId: ManualPATRequestId.make(crypto.randomUUID()),
+        requestId: makeManualPATRequestId(),
       })
     }
     state={state}

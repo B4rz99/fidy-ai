@@ -25,11 +25,12 @@ const makeIssueCommand = (
 
 const clearClipboard = (bearer: TokenBearer): void => {
   Effect.runFork(
-    Effect.promise(async () => {
-      if ((await navigator.clipboard.readText()) === bearer) {
-        await navigator.clipboard.writeText("");
-      }
-    }).pipe(Effect.ignore)
+    Effect.promise(() => navigator.clipboard.readText()).pipe(
+      Effect.flatMap((current) =>
+        current === bearer ? Effect.promise(() => navigator.clipboard.writeText("")) : Effect.void
+      ),
+      Effect.ignore
+    )
   );
 };
 

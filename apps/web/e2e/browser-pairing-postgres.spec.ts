@@ -262,7 +262,7 @@ test("creates, copies, and clears a manual PAT from a freshly paired browser", a
 
   await page.getByRole("link", { name: "PATs" }).click();
   await expect(page).toHaveURL(/\/settings\/pats$/u);
-  await page.getByLabel("Destinatario").fill("  Automatización casa  ");
+  await page.getByLabel("Nombre").fill("  Automatización casa  ");
   await page.getByRole("checkbox", { name: /Lectura/iu }).click();
   await page.getByRole("checkbox", { name: /Tablero/iu }).click();
   await page.getByRole("button", { name: "Revisar PAT" }).click();

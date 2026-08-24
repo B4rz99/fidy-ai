@@ -39,7 +39,7 @@ describe("manual PAT presentation", () => {
       />
     );
 
-    fireEvent.change(screen.getByLabelText("Destinatario"), {
+    fireEvent.change(screen.getByLabelText("Nombre"), {
       target: { value: "  Automatización casa  " },
     });
     fireEvent.click(screen.getByRole("checkbox", { name: /Lectura/iu }));

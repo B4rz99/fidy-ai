@@ -1,0 +1,260 @@
+apps/server/src/shell/db/row-level-security.test.ts
+  s_7cc9bd52ec94c4::t_5e7218ee52d265 125,127,552,554
+  s_7cc9bd52ec94c4::t_9d7f14aed9f65f 138,145,568,575
+apps/web/src/ui/components/checkbox.tsx
+  s_7cc9bd52ec94c4::t_96cae3fb61a5b9 2,7,23
+  s_7cc9bd52ec94c4::t_9353d8ca1713d7 3,6,19,24
+  s_7cc9bd52ec94c4::t_1fd83084e0ca58 1,4-5,25
+  s_7cc9bd52ec94c4::t_dabe1071660d5e 8-18,20-22
+apps/server/src/shell/_shared/operation-policy.ts
+  s_7cc9bd52ec94c4::t_8a52b0c67e3f7e 18,22,25,54,71,129,135,162-163,170-171,175,197-198,215,217,222,247
+apps/server/src/shell/transcript/conversation-continuity.test.ts
+  s_7cc9bd52ec94c4::t_b25272319336ce 869-880,1961-1972,1987-1998,2009-2020
+apps/server/src/client.ts
+  s_7cc9bd52ec94c4::t_2a39b54c646beb 12,15,21-23,25-26
+  s_7cc9bd52ec94c4::t_3e539b25ddefec 13
+  s_7cc9bd52ec94c4::t_9353effd1527ef 14,16
+  s_7cc9bd52ec94c4::t_f4e6c1c3f68b03 17,24
+  s_7cc9bd52ec94c4::t_a8e27752feef93 27
+  s_7cc9bd52ec94c4::t_8a52b0c67e3f7e 18-20
+apps/server/src/shell/testing/browser-pairing-acceptance-control.ts
+  s_7cc9bd52ec94c4::t_382ab0e401c457 27-31
+apps/server/src/shell/consent/repo.test.ts
+  s_7cc9bd52ec94c4::t_1fd83084e0ca58 43-47
+  s_7cc9bd52ec94c4::t_d21fedf739312e 4,48
+  s_7cc9bd52ec94c4::t_5371167137ef8d 42,49-52,157,160,170,173,190,193,228,231,249,263,266,278,281,293,296
+apps/server/src/shell/consent/repo.ts
+  s_7cc9bd52ec94c4::t_04016e4c29bc58 377-380,388,390-391
+  s_7cc9bd52ec94c4::t_e4c55d44dd816f 219-264,266-291,304,316
+  s_7cc9bd52ec94c4::t_8a0ea12457becf 324-332
+  s_7cc9bd52ec94c4::t_62c78dee105416 265
+  s_7cc9bd52ec94c4::t_408441e6cf5d84 25,370-372,420
+  s_7cc9bd52ec94c4::t_7ae06cac600078 365,369,413-419
+  s_7cc9bd52ec94c4::t_45a6c3f797523c 24,35-38,69-81,93-94,97-99
+apps/server/src/shell/api.ts
+  s_7cc9bd52ec94c4::t_55662b9efb42cb 16,29-30
+apps/server/src/shell/testing/whatsapp-acceptance-harness.ts
+  s_7cc9bd52ec94c4::t_1c0317dc31d2b3 22
+  s_7cc9bd52ec94c4::t_8a52b0c67e3f7e 19,478,480
+apps/server/src/shell/http.ts
+  s_7cc9bd52ec94c4::t_e19eb437218543 30,70
+apps/server/src/shell/_shared/operation-access.test.ts
+  s_7cc9bd52ec94c4::t_8a52b0c67e3f7e 10,101-104
+apps/server/src/shell/db/migrations/0028-persisted-schema-reconciliation.test.ts
+  s_7cc9bd52ec94c4::t_fbdf07d4ad97eb 84,87,105,114,127,136
+apps/web/src/features/pats/feature.tsx
+  s_7cc9bd52ec94c4::t_1fd83084e0ca58 443
+  s_7cc9bd52ec94c4::t_f5ff475f12caf8 24,403-404,411
+  s_7cc9bd52ec94c4::t_5a31f124200517 15,127,129-130
+  s_7cc9bd52ec94c4::t_8a52b0c67e3f7e 10-12,38,50,74,79-80,82,284-285
+  s_7cc9bd52ec94c4::t_ee800c1a532da6 2,6,84-96,98-101,103-115,131,160,444-445
+  s_7cc9bd52ec94c4::t_28e7f34dd4947f 77
+  s_7cc9bd52ec94c4::t_63605f850e0d7b 271-283,286,288-298,300-303,305-307,310-311,315-343,347-359,361-365,367-369,378-383,388-391,432,434-438
+  s_7cc9bd52ec94c4::t_786887a4323f11 40,48,392
+  s_7cc9bd52ec94c4::t_c8f748f082500d 8-9,43,51-61,287,308-309,312,314,344-346,450-452
+  s_7cc9bd52ec94c4::t_7c30c2108f78fc 75-76
+  s_7cc9bd52ec94c4::t_2b6d55c544dc84 5,18
+  s_7cc9bd52ec94c4::t_5b8730712ae0db 19,64-65,256-257,263,270
+  s_7cc9bd52ec94c4::t_6674c1c80adba4 464-472,474-480,482-489
+  s_7cc9bd52ec94c4::t_039ba86b7972f5 66,461
+  s_7cc9bd52ec94c4::t_24288ba1a3bac8 16,73
+  s_7cc9bd52ec94c4::t_dd4671edb1f60e 97,102
+  s_7cc9bd52ec94c4::t_4d448880fcb959 454
+  s_7cc9bd52ec94c4::t_5fe2eba066aa49 1,3-4,13,30-37,39,41,44-47,49,62-63,67-72,78,81,83,116-126,128,132-145,150-155,157,161-175,177-201,203-255,393-395,397-399,401-402,418,423-431,439-442,446-449,453,455-460,462-463,473,481,490
+  s_7cc9bd52ec94c4::t_30e30787ecd9ef 7,14,17,29,42,176,202
+  s_7cc9bd52ec94c4::t_b0b5e5a7da2d74 20-23,25-28,258-262,264-269,299,304,313,360,366,370-377,384-387,396,400,405-410,412-417,419-422,433
+  s_7cc9bd52ec94c4::t_938d0c85d7dc86 146-149,156,158-159
+apps/server/contracts/operation-policy.json
+  s_7cc9bd52ec94c4::t_60770ea29a8e67 449-458
+  s_7cc9bd52ec94c4::t_cd23f49178275f 448
+apps/server/src/core/consent/model.test.ts
+  s_7cc9bd52ec94c4::t_d23b8bede83908 103-107,111-136,145-149
+apps/server/src/shell/operations/operations.ts
+  s_7cc9bd52ec94c4::t_8a52b0c67e3f7e 7,100
+apps/server/src/shell/tokens/handlers.test.ts
+  s_7cc9bd52ec94c4::t_a413e3fc8a425a 192,231,265
+  s_7cc9bd52ec94c4::t_01cc6e1dda8aa7 92,101-102
+  s_7cc9bd52ec94c4::t_cb7af9f598dd81 6,93-100
+  s_7cc9bd52ec94c4::t_7fec96bd602c51 150-153,156-161,163-187
+  s_7cc9bd52ec94c4::t_f910bf723cf03a 111-112
+  s_7cc9bd52ec94c4::t_d7bcafc42d4ee0 22-27,31
+  s_7cc9bd52ec94c4::t_d7796c34902a4d 154-155,162
+  s_7cc9bd52ec94c4::t_b9df9830c2264a 223-230,232-252
+  s_7cc9bd52ec94c4::t_3ef21a470bd270 37
+  s_7cc9bd52ec94c4::t_32eb8e3889f649 63,212,216,219,349,353,360-362
+  s_7cc9bd52ec94c4::t_cd7b96cbf9771a 271
+  s_7cc9bd52ec94c4::t_b9bd3913d607d9 1-5,7-9,11-17,20-21,46,49,51-57,59,64-69,71-86,90-91,103-110,113-144,147-148,367-370
+  s_7cc9bd52ec94c4::t_596944ca46726c 70,145-146
+  s_7cc9bd52ec94c4::t_f95dd420f22525 323
+  s_7cc9bd52ec94c4::t_44b6c92110ff2b 340
+  s_7cc9bd52ec94c4::t_a0ea9cc4d0c4bb 18-19,220-222,253-255,261-264,266,268-270,272-310
+  s_7cc9bd52ec94c4::t_d9860d838c6d49 28-30,32-36,87-89
+  s_7cc9bd52ec94c4::t_7c7bfd94ac799b 62
+  s_7cc9bd52ec94c4::t_a1b1efe82a0292 60-61,188-191,193-211,213-215,217-218,311-322,324-339,341-348,350-352,354-356,363-366
+  s_7cc9bd52ec94c4::t_1fd83084e0ca58 357-359
+  s_7cc9bd52ec94c4::t_dabe1071660d5e 38-45,47-48,50,58
+  s_7cc9bd52ec94c4::t_1b26af0e20560b 256-260,267
+  s_7cc9bd52ec94c4::t_0a9805eff2f98e 10
+  s_7cc9bd52ec94c4::t_860bbce9d414b6 149
+apps/server/src/shell/db/development-seed.ts
+  s_7cc9bd52ec94c4::t_8a52b0c67e3f7e 25-26,51,118,143,158
+  s_7cc9bd52ec94c4::t_bd3d2eb8733e29 35
+  s_7cc9bd52ec94c4::t_0fdb544dae3f9e 93-104
+apps/server/src/shell/consent/consent-gate.ts
+  s_7cc9bd52ec94c4::t_bbd146807db266 162-166
+apps/server/src/shell/_shared/token-digest.ts
+  s_7cc9bd52ec94c4::t_00b15bd61219d4 1-14
+apps/server/src/shell/channels/whatsapp/whatsapp-channel.test.ts
+  s_7cc9bd52ec94c4::t_77d23818990853 2746-2748,2755-2762
+apps/server/src/core/consent/model.ts
+  s_7cc9bd52ec94c4::t_92ac57e6937ce3 8,82-96,98-99,107
+apps/server/src/core/_shared/canonical-capability.test.ts
+  s_7cc9bd52ec94c4::t_8a52b0c67e3f7e 3,7,11-12,15
+apps/server/src/core/tokens/model.ts
+  s_7cc9bd52ec94c4::t_7307e05c03a869 1,25,37,39,41,45-46,52,54-58,61-63,66-68,213-218
+  s_7cc9bd52ec94c4::t_cec37fea74a556 219
+  s_7cc9bd52ec94c4::t_65ed3e761de422 26-36,40
+  s_7cc9bd52ec94c4::t_8a52b0c67e3f7e 13-14,20-21,38,42-44,47-48,53,60,64-65,205-206,229
+  s_7cc9bd52ec94c4::t_6fcf8d1eb19eba 70-72
+  s_7cc9bd52ec94c4::t_5a2a9a1046916c 73-74
+  s_7cc9bd52ec94c4::t_827585390ab79d 69,75-82
+  s_7cc9bd52ec94c4::t_2de59bb74947b2 23-24
+  s_7cc9bd52ec94c4::t_eee80a286c85de 49-51,59
+  s_7cc9bd52ec94c4::t_11bfbb9b68991a 22
+apps/server/contracts/openapi.json
+  s_7cc9bd52ec94c4::t_c8710e7530cf7d 19562
+  s_7cc9bd52ec94c4::t_a682b43766d851 3461-3462
+  s_7cc9bd52ec94c4::t_02665adfdf823f 2376-2433,2443,18274-18283
+  s_7cc9bd52ec94c4::t_60770ea29a8e67 1980-1995,2276-2279,2281-2291,2293-2306,2308-2315,2362-2364,2366-2369,2374-2375,3300-3362,3364-3418,3420-3448,3450-3460,3465-3466,3468-3474,3476-3482,6290-6297,6299-6330,9127-9134,9136-9167,10369-10384,18177-18185,18187-18263,18284-18304,19560-19561
+  s_7cc9bd52ec94c4::t_96ccc771bfa0a8 823-850,2280,2292,2307,2316-2361,2365,2370-2373,2434-2442,3363,3419,3449,3463,3467,3475,6298,9135,18186,18264-18273
+  s_7cc9bd52ec94c4::t_9c5f586b4d4c74 3464
+apps/web/e2e/browser-pairing-postgres.spec.ts
+  s_7cc9bd52ec94c4::t_994a3b32ea650f 252-284,286-288,292,294-297
+  s_7cc9bd52ec94c4::t_aea3ea619604f5 289
+  s_7cc9bd52ec94c4::t_9c4441a2e8a47a 290-291
+  s_7cc9bd52ec94c4::t_02f98320c76057 293
+  s_7cc9bd52ec94c4::t_0d68bb3ad3ef82 77-86
+  s_7cc9bd52ec94c4::t_54dbb2f6902ce8 113-116
+  s_7cc9bd52ec94c4::t_dabe1071660d5e 285
+  s_7cc9bd52ec94c4::t_079ecbb95a0a3e 187
+apps/web/src/features/signed-in/feature.tsx
+  s_7cc9bd52ec94c4::t_0a2aad3efa1dc3 2,46-59
+apps/web/src/ui/components/input.tsx
+  s_7cc9bd52ec94c4::t_1fd83084e0ca58 1-2,4,18
+  s_7cc9bd52ec94c4::t_9353d8ca1713d7 3,5,17
+  s_7cc9bd52ec94c4::t_dabe1071660d5e 6-15
+  s_7cc9bd52ec94c4::t_495fa418c92a42 16
+apps/server/src/shell/testing/suggested-operations.test.ts
+  s_7cc9bd52ec94c4::t_446c3880884747 15-20,78-81
+  s_7cc9bd52ec94c4::t_5f3c791519b698 74-77,82-84
+  s_7cc9bd52ec94c4::t_8a52b0c67e3f7e 483
+  s_7cc9bd52ec94c4::t_9fdee756ead342 85-87
+apps/web/src/transport/client.ts
+  s_7cc9bd52ec94c4::t_b470a2808d55c6 28
+  s_7cc9bd52ec94c4::t_ab450289bbcfae 18,27,30
+  s_7cc9bd52ec94c4::t_17f42b0b599d89 13-15,17,20,24-26,31
+  s_7cc9bd52ec94c4::t_8a52b0c67e3f7e 21-23
+  s_7cc9bd52ec94c4::t_09b1d91e8ce329 29
+  s_7cc9bd52ec94c4::t_83755b0b8386d2 16,19
+apps/server/src/shell/consent/consent-authorization.test.ts
+  s_7cc9bd52ec94c4::t_b17e9a898de50a 148-150,159-166
+apps/server/src/shell/consent/consent-gate.test.ts
+  s_7cc9bd52ec94c4::t_ad75bb7c23fa57 198-202,302-304,310-314
+apps/web/src/features/pats/feature.test.tsx
+  s_7cc9bd52ec94c4::t_ee738148331b56 1-3,6-13,16-27,30-31,41-58,60-62,67-72,81,83-84
+  s_7cc9bd52ec94c4::t_8a52b0c67e3f7e 4,14-15,59
+  s_7cc9bd52ec94c4::t_faf3f3c53f2669 5,28-29,63-65
+  s_7cc9bd52ec94c4::t_ec23539ab78ae2 32,34-39,66,73-80,82
+  s_7cc9bd52ec94c4::t_613c1a2623469b 33,40
+apps/server/src/shell/db/migrations/0031-retry-safe-manual-pat-issuance.ts
+  s_7cc9bd52ec94c4::t_7fdde1e06083ce 1-17
+apps/server/src/shell/tokens/repo.ts
+  s_7cc9bd52ec94c4::t_8e666d086acfa7 33-36,113-129,131-132,138-140
+  s_7cc9bd52ec94c4::t_333eb8d70a3848 133-137
+  s_7cc9bd52ec94c4::t_87b109d521b7ad 1
+  s_7cc9bd52ec94c4::t_0c508969e737ea 5,27-31,93-110,149,153,157,161
+  s_7cc9bd52ec94c4::t_b7e570f501846a 67,71-73,78,143-148,150-152,154-156,158-160,162-164
+  s_7cc9bd52ec94c4::t_1ae87902c5cdd6 111,141,165-166
+  s_7cc9bd52ec94c4::t_747d8346984d65 130
+  s_7cc9bd52ec94c4::t_2bfb021832213f 142
+  s_7cc9bd52ec94c4::t_cca88c1cecaa76 32
+  s_7cc9bd52ec94c4::t_1fcb8236ba7953 112
+apps/server/src/shell/tokens/current-disclosure.ts
+  s_7cc9bd52ec94c4::t_1280c0be5604b4 2,12
+  s_7cc9bd52ec94c4::t_0ce8d9d005bc0e 1,4-7,9-11,13-14,16-20,22-30
+  s_7cc9bd52ec94c4::t_4fe304f9dcf648 3,8,15,21
+apps/server/src/shell/db/migrations/registry.ts
+  s_7cc9bd52ec94c4::t_e3e598af89aec7 29-30,69-70
+apps/server/src/shell/_shared/operation-catalog.test.ts
+  s_7cc9bd52ec94c4::t_8a52b0c67e3f7e 29
+apps/server/src/shell/tokens/mutations.ts
+  s_7cc9bd52ec94c4::t_1bcfca3bc3d531 19
+  s_7cc9bd52ec94c4::t_0a7c2340f22a2e 6,23,25,30,39,55-58,82-83,89,99,109
+  s_7cc9bd52ec94c4::t_1224f40d675918 16,35,38,48,51-54,105
+  s_7cc9bd52ec94c4::t_8a942d8a70abca 70-72,74
+  s_7cc9bd52ec94c4::t_408441e6cf5d84 20
+  s_7cc9bd52ec94c4::t_2116ce14645d93 67
+  s_7cc9bd52ec94c4::t_25ff801ac4311f 1-5,7-15,17-18,21,31-34,36-37,40-45,59-60,69,73,75-81,84-88,90-98,101-103
+  s_7cc9bd52ec94c4::t_695c676160e0af 22,27-29,46-47,49-50,61-66,68,104,106-108,110
+  s_7cc9bd52ec94c4::t_562996543a77c9 100,111
+  s_7cc9bd52ec94c4::t_e4090a1f0415cd 24,26
+apps/server/src/shell/_shared/canonical-mutation-registry.ts
+  s_7cc9bd52ec94c4::t_3e51042fcdefdd 168-172
+  s_7cc9bd52ec94c4::t_45ca9f5d7d99ec 27,167
+apps/server/src/shell/tokens/errors.ts
+  s_7cc9bd52ec94c4::t_90e505efb4f66d 10-18,20-33,35-37
+  s_7cc9bd52ec94c4::t_f70de32535ea94 59-69
+  s_7cc9bd52ec94c4::t_9326345c650595 19,34
+  s_7cc9bd52ec94c4::t_3e3b0e7fd1a404 1-9,38-58
+apps/server/src/shell/testing/isolation.test.ts
+  s_7cc9bd52ec94c4::t_5aee9f864f7846 99-101,106-108
+  s_7cc9bd52ec94c4::t_fa0a8d6a73bde6 15,102-105
+apps/server/src/shell/tokens/operations.ts
+  s_7cc9bd52ec94c4::t_e5325d0ea8521f 1,3-4,6-7,9,11-26
+  s_7cc9bd52ec94c4::t_75ed5be0d085a2 2,5,8,10
+apps/server/src/core/_shared/canonical-capability.ts
+  s_7cc9bd52ec94c4::t_8a52b0c67e3f7e 23
+apps/server/src/shell/consent/agent-consent-gate.test.ts
+  s_7cc9bd52ec94c4::t_4bcaf055c576fa 105-108,122,124
+  s_7cc9bd52ec94c4::t_ae1871608b5545 47-58,120-121,123,125-126
+apps/server/src/core/tokens/model.test.ts
+  s_7cc9bd52ec94c4::t_995fbc2ab542ae 89-93
+  s_7cc9bd52ec94c4::t_401039ea0cc0ef 5,79-83,85-87,94-96
+  s_7cc9bd52ec94c4::t_8a52b0c67e3f7e 6-7,71,84,103-104,122-123
+  s_7cc9bd52ec94c4::t_6040dba9f7d058 88
+apps/server/src/shell/_shared/authz-live.ts
+  s_7cc9bd52ec94c4::t_4975184bafe62e 28,49
+  s_7cc9bd52ec94c4::t_a2ebdad89103bc 3
+  s_7cc9bd52ec94c4::t_8a52b0c67e3f7e 21,213
+apps/server/src/shell/testing/operation-policy.test.ts
+  s_7cc9bd52ec94c4::t_e742a815565e8c 106,183
+apps/web/src/app/routes.ts
+  s_7cc9bd52ec94c4::t_15101b8460f9ca 11,27,29,32-35,46-50,65-68
+apps/server/src/shell/db/migrations/0030-manual-pat-issuance.ts
+  s_7cc9bd52ec94c4::t_ef1696617a2ebf 5,9
+  s_7cc9bd52ec94c4::t_68bfb1daa0c12d 1-4,6-8,10-78
+apps/server/src/shell/tokens/handlers.ts
+  s_7cc9bd52ec94c4::t_10277469350865 12
+  s_7cc9bd52ec94c4::t_808da4c23d007e 1-11,13-15
+apps/server/src/core/tokens/rules.ts
+  s_7cc9bd52ec94c4::t_72c88c0aee5868 10,29-31,33-35,37-40
+  s_7cc9bd52ec94c4::t_0f8ece6b3995ad 11-12,14-25,28,36
+  s_7cc9bd52ec94c4::t_8a52b0c67e3f7e 3,13
+  s_7cc9bd52ec94c4::t_408441e6cf5d84 26-27,32
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.24",
+  "base_commit_sha": "5498035607f021602fca31bc4d333f5ac6b8097b",
+  "prompts": {},
+  "sessions": {
+    "s_7cc9bd52ec94c4": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a02fcf-f40a-7ce3-a147-2f69f493ef46",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": null
+    }
+  }
+}

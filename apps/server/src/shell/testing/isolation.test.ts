@@ -410,7 +410,7 @@ const probes: Record<OperationId, IsolationProbe> = {
       const strangers = yield* attempt.strangerClient.dashboard.getDashboard();
       const owners = yield* attempt.ownerClient.dashboard.getDashboard();
 
-      expect(strangers.data.title).toBe("Mi tablero");
+      expect(strangers.data.title).toBe("Tablero");
       expect(owners.data.title).toBe("Panel privado del dueño");
     }),
 
@@ -469,7 +469,7 @@ const probes: Record<OperationId, IsolationProbe> = {
       };
       visit(strangers.data.layout);
 
-      expect(strangers.data.title).toBe("Mi tablero");
+      expect(strangers.data.title).toBe("Tablero");
       expect(widgets).toHaveLength(4);
       for (const { result } of widgets) {
         if ("buckets" in result) expect(result.buckets).toEqual([]);

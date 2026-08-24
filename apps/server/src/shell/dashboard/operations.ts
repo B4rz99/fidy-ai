@@ -163,7 +163,7 @@ export const DashboardGroup = HttpApiGroup.make("dashboard")
       )
       .annotateMerge(
         operationPolicy({
-          requiredCapability: "read",
+          access: patScoped("read"),
           requiredTier: "free",
           agentConfirmation: "not-required",
           kind: "mutation",

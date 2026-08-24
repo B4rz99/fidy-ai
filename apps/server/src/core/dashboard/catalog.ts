@@ -83,7 +83,7 @@ export const makeCatalogWidget = (
 export const makeDefaultDashboard = (
   input: Readonly<{ readonly widgetId: WidgetId }>
 ): DashboardDocument => ({
-  title: DashboardTitle.make("Mi tablero"),
+  title: DashboardTitle.make("Tablero"),
   layout: {
     kind: "leaf",
     widget: makeCatalogWidget({ entry: monthlySpending, id: input.widgetId }),

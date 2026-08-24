@@ -4,7 +4,7 @@ import { type JSX } from "react";
 import { Bar, BarChart, CartesianGrid, XAxis } from "recharts";
 import { Alert, AlertDescription, AlertTitle } from "@/ui/components/alert";
 import { Badge } from "@/ui/components/badge";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/ui/components/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/ui/components/card";
 import { type ChartConfig, ChartContainer, ChartTooltip } from "@/ui/components/chart";
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/ui/components/empty";
 import { Progress, ProgressLabel } from "@/ui/components/progress";
@@ -59,20 +59,15 @@ const titleFor = (widget: DashboardWidget): string => {
 const WidgetFrame = ({
   children,
   title,
-  timeZone,
 }: Readonly<{
   children: JSX.Element;
   title: string;
-  timeZone: string;
 }>): JSX.Element => (
   <Card className="h-full min-h-56">
     <CardHeader>
       <CardTitle>
         <h2>{title}</h2>
       </CardTitle>
-      <CardDescription>
-        Zona horaria aplicada: <span className="font-medium text-foreground">{timeZone}</span>
-      </CardDescription>
     </CardHeader>
     <CardContent className="min-w-0 flex-1">{children}</CardContent>
   </Card>
@@ -90,15 +85,12 @@ const bucketLabel = (key: SpendingResult["buckets"][number]["key"]): string => {
 };
 
 const chartConfig = {
-  inflow: { label: "Ingresos", color: "var(--chart-2)" },
   outflow: { label: "Gastos", color: "var(--chart-4)" },
 } satisfies ChartConfig;
 
 type CurrencyChartDatum = Readonly<{
   label: string;
-  inflowExact: string;
   outflowExact: string;
-  inflow: number;
   outflow: number;
 }>;
 
@@ -111,21 +103,14 @@ const currencyChartData = (
     const group = bucket.moneyGroups.find((candidate) => candidate.currency === currency);
     return {
       label: bucketLabel(bucket.key),
-      inflowExact: group === undefined ? "0" : moneyDecimalText(group.inflow),
       outflowExact: group === undefined ? "0" : moneyDecimalText(group.outflow),
-      inflowAmount: group?.inflow.amount ?? zero,
       outflowAmount: group?.outflow.amount ?? zero,
     };
   });
-  const amounts = values.flatMap(({ inflowAmount, outflowAmount }) => [
-    inflowAmount,
-    outflowAmount,
-  ]);
-  const geometry = moneySeriesGeometry(amounts);
-  return values.map(({ inflowAmount: _inflow, outflowAmount: _outflow, ...value }, index) => ({
+  const geometry = moneySeriesGeometry(values.map(({ outflowAmount }) => outflowAmount));
+  return values.map(({ outflowAmount: _outflow, ...value }, index) => ({
     ...value,
-    inflow: geometry[index * 2] ?? 0,
-    outflow: geometry[index * 2 + 1] ?? 0,
+    outflow: geometry[index] ?? 0,
   }));
 };
 
@@ -134,7 +119,13 @@ const SpendingChart = ({
   locale,
 }: Readonly<{ data: SpendingResult; locale: DashboardLocale }>): JSX.Element => {
   const currencies = Array.from(
-    new Set(data.buckets.flatMap(({ moneyGroups }) => moneyGroups.map(({ currency }) => currency)))
+    new Set(
+      data.buckets.flatMap(({ moneyGroups }) =>
+        moneyGroups
+          .filter(({ outflow }) => BigDecimal.isPositive(outflow.amount))
+          .map(({ currency }) => currency)
+      )
+    )
   ).sort();
   if (currencies.length === 0) {
     return (
@@ -154,25 +145,26 @@ const SpendingChart = ({
           <section className="flex flex-col gap-2" key={currency} aria-label={`Serie ${currency}`}>
             <div className="flex items-center justify-between gap-3">
               <Badge variant="outline">{currency}</Badge>
-              <span className="text-xs text-muted-foreground">Ingresos · Gastos</span>
+              <span className="text-xs text-muted-foreground">Gastos</span>
             </div>
             <ChartContainer config={chartConfig} className="h-48 min-h-48 w-full">
               <BarChart accessibilityLayer data={chartData}>
                 <CartesianGrid vertical={false} />
                 <XAxis dataKey="label" axisLine={false} tickLine={false} tickMargin={8} />
                 <ChartTooltip
-                  formatter={(_value: unknown, name: unknown, item) => {
-                    const series = name === "inflow" ? "inflow" : "outflow";
-                    const amount = exactChartAmount({ payload: item.payload, series }).pipe(
+                  formatter={(_value: unknown, _name: unknown, item) => {
+                    const amount = exactChartAmount({
+                      payload: item.payload,
+                      series: "outflow",
+                    }).pipe(
                       Option.map((exact) =>
                         formatCurrencyAmount({ amount: exact, currency, locale })
                       ),
                       Option.getOrElse(() => "No disponible")
                     );
-                    return [amount, series === "inflow" ? "Ingresos" : "Gastos"];
+                    return [amount, "Gastos"];
                   }}
                 />
-                <Bar dataKey="inflow" fill="var(--color-inflow)" radius={4} />
                 <Bar dataKey="outflow" fill="var(--color-outflow)" radius={4} />
               </BarChart>
             </ChartContainer>
@@ -320,24 +312,16 @@ const RenderWidget = ({
   context,
 }: Readonly<{ view: DashboardWidgetView; context: DashboardView["context"] }>): JSX.Element => {
   let content: JSX.Element;
-  let timeZone = context.timeZone;
   if ("buckets" in result) {
     content = <SpendingChart data={result} locale={context.locale} />;
-    timeZone = result.appliedPeriod.timeZone;
   } else if ("availability" in result) {
     content = <BudgetBar data={result} locale={context.locale} />;
-    timeZone = result.appliedPeriod.timeZone;
   } else if ("transactions" in result) {
-    content = <TransactionList data={result} locale={context.locale} timeZone={timeZone} />;
+    content = <TransactionList data={result} locale={context.locale} timeZone={context.timeZone} />;
   } else {
     content = <CustomMetric data={result} locale={context.locale} />;
-    timeZone = result.appliedPeriod.timeZone;
   }
-  return (
-    <WidgetFrame title={titleFor(widget)} timeZone={timeZone}>
-      {content}
-    </WidgetFrame>
-  );
+  return <WidgetFrame title={titleFor(widget)}>{content}</WidgetFrame>;
 };
 
 const layoutKey = (layout: DashboardLayout): string =>

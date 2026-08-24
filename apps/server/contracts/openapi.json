@@ -14067,10 +14067,15 @@
         "tags": [
           "dashboard"
         ],
+        "x-fidy-access": {
+          "scope": {
+            "capability": "read",
+            "evaluation": "operation"
+          },
+          "type": "pat-scoped"
+        },
         "x-fidy-agent-confirmation": "not-required",
-        "x-fidy-caller-eligibility": "authenticated",
         "x-fidy-operation-kind": "mutation",
-        "x-fidy-required-scope": "read",
         "x-fidy-required-tier": "free"
       }
     },

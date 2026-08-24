@@ -341,15 +341,21 @@ describe("read-only Dashboard responsive rendering", () => {
     );
   });
 
-  it("renders colocated Categories, separated directions, Currency, and applied zones", async () => {
+  it("renders colocated Categories, separated directions, and Currency without repeated zones", async () => {
     await renderDashboardView(makeView(standardOptions));
     const dashboard = within(screen.getByLabelText("Diseño responsivo del tablero"));
     expect(dashboard.getAllByText("Restaurantes").length).toBeGreaterThan(0);
     expect(dashboard.getAllByText("COP").length).toBeGreaterThan(1);
-    expect(dashboard.getAllByText("Ingresos").length).toBeGreaterThan(0);
-    expect(dashboard.getAllByText("Gastos").length).toBeGreaterThan(0);
+    const spendingHeading = dashboard.getAllByRole("heading", { level: 2 })[0];
+    if (spendingHeading === undefined) throw new Error("Expected the spending heading");
+    const spendingCard = spendingHeading.closest('[data-slot="card"]');
+    expect(spendingCard).not.toBeNull();
+    if (!(spendingCard instanceof HTMLElement)) throw new Error("Expected the spending Card");
+    expect(within(spendingCard).queryByText("Ingresos")).not.toBeInTheDocument();
+    expect(within(spendingCard).getByText("Gastos")).toBeVisible();
     expect(dashboard.getByText("El Corral")).toBeVisible();
-    expect(dashboard.getAllByText("America/Bogota")).toHaveLength(4);
+    expect(dashboard.queryByText("America/Bogota")).not.toBeInTheDocument();
+    expect(screen.queryByText(/Zona horaria aplicada/u)).not.toBeInTheDocument();
   });
 });
 
@@ -385,10 +391,8 @@ describe("Dashboard result and Money states", () => {
       ).length
     ).toBeGreaterThan(0);
     const chart = document.querySelector("[data-chart-values]");
-    expect(chart?.getAttribute("data-chart-values")).toContain(
-      '"inflowExact":"9007199254740993.12"'
-    );
-    expect(chart?.getAttribute("data-chart-values")).toContain('"inflow":1');
+    expect(chart?.getAttribute("data-chart-values")).not.toContain("inflowExact");
+    expect(chart?.getAttribute("data-chart-values")).not.toContain('"inflow":');
     expect(screen.queryByText(/9\.007\.199\.254\.740\.993,13/u)).not.toBeInTheDocument();
   });
 });

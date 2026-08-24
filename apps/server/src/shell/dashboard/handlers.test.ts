@@ -133,7 +133,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         const first = yield* client.dashboard.getDashboard();
         const second = yield* client.dashboard.getDashboard();
 
-        expect(first.data.title).toBe("Mi tablero");
+        expect(first.data.title).toBe("Tablero");
         expect(first.data.layout.kind).toBe("leaf");
         expect(second.data).toEqual(first.data);
       })
@@ -152,7 +152,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           timeZone: "America/Bogota",
         });
         expect(response.data.context.calculatedAt).toBeDefined();
-        expect(response.data.title).toBe("Mi tablero");
+        expect(response.data.title).toBe("Tablero");
         expect(response.data.layout.kind).toBe("leaf");
         if (response.data.layout.kind === "leaf") {
           expect(response.data.layout.widget).toMatchObject({

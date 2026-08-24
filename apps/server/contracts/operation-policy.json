@@ -209,12 +209,16 @@
     {
       "id": "dashboard.getDashboardView",
       "policy": {
+        "access": {
+          "scope": {
+            "capability": "read",
+            "evaluation": "operation"
+          },
+          "type": "pat-scoped"
+        },
         "agentConfirmation": "not-required",
-        "callerEligibility": "authenticated",
         "kind": "mutation",
-        "requiredScope": "read",
-        "requiredTier": "free",
-        "scopeEvaluation": "endpoint"
+        "requiredTier": "free"
       }
     },
     {

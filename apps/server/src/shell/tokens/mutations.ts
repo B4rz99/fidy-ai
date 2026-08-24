@@ -20,13 +20,12 @@ import { hashTokenBearer } from "~/shell/_shared/token-digest";
 import { appendConsentRecordInScope, withSubjectLockInScope } from "~/shell/consent/repo";
 import { currentManualPATDisclosure } from "./current-disclosure";
 import {
-  type ManualPATIssuanceConsumed,
-  type ManualPATIssuanceRateLimited,
   makePATIssuanceConsumed,
   makePATRateLimit,
   manualPATIssuanceLimit,
   manualPATIssuanceWindowMinutes,
 } from "./errors";
+import type { ManualPATIssuanceConsumed, ManualPATIssuanceRateLimited } from "./operations";
 import { getPATIssuanceAdmission, hasConsumedPATRequest, insertPATInScope } from "./repo";
 
 const shortIdBytes = 4;

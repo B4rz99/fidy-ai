@@ -27,6 +27,7 @@ apps/server/src/shell/_shared/authz-live.ts
   s_fab41f0a144bb0::t_14a42aacb9f6de 444
   s_fab41f0a144bb0::t_813fd3e2895c20 413
   s_fab41f0a144bb0::t_36242b6220f9f4 445-451,456,458,461-463
+  s_fab41f0a144bb0::t_057859bc628b26 452-455,457,459-460
 apps/server/src/shell/testing/suggested-operations.test.ts
   s_fab41f0a144bb0::t_b30db5bd10512b 274-275
   s_fab41f0a144bb0::t_5164366c1ddcdd 273
@@ -325,6 +326,8 @@ apps/server/src/core/categories/model.ts
   s_fab41f0a144bb0::t_e884bc03adb487 3,22
 bun.lock
   s_fab41f0a144bb0::t_50a5b827fdf8dd 62,517-518,591-592,647-664,675-676,845-866,875-876,933-934,951-952,1037-1038,1049-1050,1371-1372,1375-1376,1379-1382,1549-1550
+apps/server/src/shell/db/migrations/registry.ts
+  s_fab41f0a144bb0::t_c716ce1e389478 29,68
 ---
 {
   "schema_version": "authorship/3.0.0",

@@ -1,5 +1,6 @@
 import { Schema, Struct } from "effect";
 import { CategoryId } from "./reference";
+import { normalizeSearchText } from "~/core/_shared/search";
 import { UtcTimestamp } from "~/core/_shared/time";
 
 const maximumCategoryTextLength = 80;
@@ -18,11 +19,7 @@ export const CategoryLabel = Schema.NonEmptyString.check(Schema.isTrimmed())
 export type CategoryLabel = typeof CategoryLabel.Type;
 
 /** Normalizes a counterparty fragment for case- and diacritic-insensitive comparison. */
-export const normalizeCategoryKeyword = (value: string): string =>
-  value
-    .normalize("NFD")
-    .replaceAll(/[\u0300-\u036f]/g, "")
-    .toLocaleLowerCase("es-CO");
+export const normalizeCategoryKeyword = normalizeSearchText;
 
 /** User-authored counterparty fragment retained with its spelling but normalized only while matching. */
 export const CategoryKeyword = Schema.NonEmptyString.check(Schema.isTrimmed())

@@ -84,6 +84,38 @@
         ],
         "type": "object"
       },
+      "AppliedDashboardPeriod": {
+        "additionalProperties": false,
+        "properties": {
+          "from": {
+            "$ref": "#/components/schemas/UtcTimestamp"
+          },
+          "requested": {
+            "enum": [
+              "this-week",
+              "this-month",
+              "last-week",
+              "last-month",
+              "last-7-days",
+              "last-30-days"
+            ],
+            "type": "string"
+          },
+          "timeZone": {
+            "$ref": "#/components/schemas/IanaTimeZone"
+          },
+          "toExclusive": {
+            "$ref": "#/components/schemas/UtcTimestamp"
+          }
+        },
+        "required": [
+          "requested",
+          "from",
+          "toExclusive",
+          "timeZone"
+        ],
+        "type": "object"
+      },
       "ApproveBrowserLoginPairingPayload": {
         "additionalProperties": false,
         "properties": {
@@ -411,6 +443,130 @@
           "updatedAt"
         ],
         "type": "object"
+      },
+      "BudgetBarResult": {
+        "anyOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "appliedPeriod": {
+                "$ref": "#/components/schemas/AppliedDashboardPeriod"
+              },
+              "availability": {
+                "enum": [
+                  "available"
+                ],
+                "type": "string"
+              },
+              "cap": {
+                "$ref": "#/components/schemas/Money5"
+              },
+              "category": {
+                "$ref": "#/components/schemas/Category"
+              },
+              "currency": {
+                "$ref": "#/components/schemas/Currency"
+              },
+              "spent": {
+                "$ref": "#/components/schemas/Money5"
+              },
+              "status": {
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "remaining": {
+                        "$ref": "#/components/schemas/Money5"
+                      },
+                      "type": {
+                        "enum": [
+                          "under"
+                        ],
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "type",
+                      "remaining"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "type": {
+                        "enum": [
+                          "reached"
+                        ],
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "type"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "overBy": {
+                        "$ref": "#/components/schemas/Money5"
+                      },
+                      "type": {
+                        "enum": [
+                          "over"
+                        ],
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "type",
+                      "overBy"
+                    ],
+                    "type": "object"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "availability",
+              "appliedPeriod",
+              "category",
+              "currency",
+              "cap",
+              "spent",
+              "status"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "appliedPeriod": {
+                "$ref": "#/components/schemas/AppliedDashboardPeriod"
+              },
+              "availability": {
+                "enum": [
+                  "missing-budget"
+                ],
+                "type": "string"
+              },
+              "category": {
+                "$ref": "#/components/schemas/Category"
+              },
+              "currency": {
+                "$ref": "#/components/schemas/Currency"
+              }
+            },
+            "required": [
+              "availability",
+              "appliedPeriod",
+              "category",
+              "currency"
+            ],
+            "type": "object"
+          }
+        ]
       },
       "BudgetBarTemplate": {
         "additionalProperties": false,
@@ -1281,6 +1437,22 @@
         ],
         "type": "string"
       },
+      "CustomMetricResult": {
+        "additionalProperties": false,
+        "properties": {
+          "appliedPeriod": {
+            "$ref": "#/components/schemas/AppliedDashboardPeriod"
+          },
+          "moneyGroups": {
+            "$ref": "#/components/schemas/MoneyGroups"
+          }
+        },
+        "required": [
+          "appliedPeriod",
+          "moneyGroups"
+        ],
+        "type": "object"
+      },
       "CustomMetricTemplate": {
         "additionalProperties": false,
         "properties": {
@@ -1684,6 +1856,420 @@
           },
           {
             "$ref": "#/components/schemas/UpdateWidgetPartial"
+          }
+        ]
+      },
+      "DashboardTransaction": {
+        "additionalProperties": false,
+        "properties": {
+          "category": {
+            "$ref": "#/components/schemas/Category"
+          },
+          "counterparty": {
+            "allOf": [
+              {
+                "minLength": 1
+              },
+              {
+                "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
+              },
+              {
+                "description": "The person or organization on the other side when the captured material explicitly identifies one — \"El Corral\", \"Claro\", \"Acme S.A.\". Omit this field rather than inferring a business, using a purchased item or purpose, or sending a placeholder.",
+                "maxLength": 120
+              }
+            ],
+            "type": "string"
+          },
+          "direction": {
+            "description": "Which way the money moved, seen from the user: `outflow` is money leaving them, `inflow` is money reaching them. The amount is unsigned, so this is the only field that carries the sign.",
+            "enum": [
+              "inflow",
+              "outflow"
+            ],
+            "type": "string"
+          },
+          "id": {
+            "$ref": "#/components/schemas/TransactionId"
+          },
+          "money": {
+            "$ref": "#/components/schemas/Money5"
+          },
+          "occurredAt": {
+            "$ref": "#/components/schemas/TransactionOccurredAt"
+          }
+        },
+        "required": [
+          "id",
+          "money",
+          "direction",
+          "category",
+          "occurredAt"
+        ],
+        "type": "object"
+      },
+      "DashboardView": {
+        "additionalProperties": false,
+        "properties": {
+          "context": {
+            "$ref": "#/components/schemas/DashboardViewContext"
+          },
+          "layout": {
+            "$ref": "#/components/schemas/DashboardViewLayout"
+          },
+          "title": {
+            "allOf": [
+              {
+                "minLength": 1
+              },
+              {
+                "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
+              },
+              {
+                "maxLength": 80
+              }
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "context",
+          "layout"
+        ],
+        "type": "object"
+      },
+      "DashboardView1": {
+        "additionalProperties": false,
+        "properties": {
+          "context": {
+            "$ref": "#/components/schemas/DashboardViewContext"
+          },
+          "layout": {
+            "$ref": "#/components/schemas/DashboardViewLayout1"
+          },
+          "title": {
+            "allOf": [
+              {
+                "minLength": 1
+              },
+              {
+                "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
+              },
+              {
+                "maxLength": 80
+              }
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "context",
+          "layout"
+        ],
+        "type": "object"
+      },
+      "DashboardViewContext": {
+        "additionalProperties": false,
+        "properties": {
+          "calculatedAt": {
+            "$ref": "#/components/schemas/UtcTimestamp"
+          },
+          "locale": {
+            "$ref": "#/components/schemas/Locale"
+          },
+          "serviceMarket": {
+            "$ref": "#/components/schemas/ServiceMarket"
+          },
+          "timeZone": {
+            "$ref": "#/components/schemas/IanaTimeZone"
+          }
+        },
+        "required": [
+          "serviceMarket",
+          "locale",
+          "timeZone",
+          "calculatedAt"
+        ],
+        "type": "object"
+      },
+      "DashboardViewLayout": {
+        "anyOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "enum": [
+                  "leaf"
+                ],
+                "type": "string"
+              },
+              "widget": {
+                "$ref": "#/components/schemas/DashboardWidgetView"
+              }
+            },
+            "required": [
+              "kind",
+              "widget"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "axis": {
+                "enum": [
+                  "row",
+                  "column"
+                ],
+                "type": "string"
+              },
+              "children": {
+                "allOf": [
+                  {
+                    "maxItems": 24
+                  }
+                ],
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "node": {
+                      "$ref": "#/components/schemas/DashboardViewLayout"
+                    },
+                    "weight": {
+                      "$ref": "#/components/schemas/SplitWeight"
+                    }
+                  },
+                  "required": [
+                    "weight",
+                    "node"
+                  ],
+                  "type": "object"
+                },
+                "minItems": 2,
+                "prefixItems": [
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "node": {
+                        "$ref": "#/components/schemas/DashboardViewLayout"
+                      },
+                      "weight": {
+                        "$ref": "#/components/schemas/SplitWeight"
+                      }
+                    },
+                    "required": [
+                      "weight",
+                      "node"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "node": {
+                        "$ref": "#/components/schemas/DashboardViewLayout"
+                      },
+                      "weight": {
+                        "$ref": "#/components/schemas/SplitWeight"
+                      }
+                    },
+                    "required": [
+                      "weight",
+                      "node"
+                    ],
+                    "type": "object"
+                  }
+                ],
+                "type": "array"
+              },
+              "kind": {
+                "enum": [
+                  "split"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "axis",
+              "children"
+            ],
+            "type": "object"
+          }
+        ]
+      },
+      "DashboardViewLayout1": {
+        "anyOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "enum": [
+                  "leaf"
+                ],
+                "type": "string"
+              },
+              "widget": {
+                "$ref": "#/components/schemas/DashboardWidgetView"
+              }
+            },
+            "required": [
+              "kind",
+              "widget"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "axis": {
+                "enum": [
+                  "row",
+                  "column"
+                ],
+                "type": "string"
+              },
+              "children": {
+                "allOf": [
+                  {
+                    "maxItems": 24
+                  }
+                ],
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "node": {
+                      "$ref": "#/components/schemas/DashboardViewLayout1"
+                    },
+                    "weight": {
+                      "$ref": "#/components/schemas/SplitWeight"
+                    }
+                  },
+                  "required": [
+                    "weight",
+                    "node"
+                  ],
+                  "type": "object"
+                },
+                "minItems": 2,
+                "prefixItems": [
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "node": {
+                        "$ref": "#/components/schemas/DashboardViewLayout1"
+                      },
+                      "weight": {
+                        "$ref": "#/components/schemas/SplitWeight"
+                      }
+                    },
+                    "required": [
+                      "weight",
+                      "node"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "node": {
+                        "$ref": "#/components/schemas/DashboardViewLayout1"
+                      },
+                      "weight": {
+                        "$ref": "#/components/schemas/SplitWeight"
+                      }
+                    },
+                    "required": [
+                      "weight",
+                      "node"
+                    ],
+                    "type": "object"
+                  }
+                ],
+                "type": "array"
+              },
+              "kind": {
+                "enum": [
+                  "split"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "axis",
+              "children"
+            ],
+            "type": "object"
+          }
+        ]
+      },
+      "DashboardWidgetView": {
+        "anyOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "result": {
+                "$ref": "#/components/schemas/SpendingChartResult"
+              },
+              "widget": {
+                "$ref": "#/components/schemas/SpendingChartWidget"
+              }
+            },
+            "required": [
+              "widget",
+              "result"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "result": {
+                "$ref": "#/components/schemas/BudgetBarResult"
+              },
+              "widget": {
+                "$ref": "#/components/schemas/BudgetBarWidget"
+              }
+            },
+            "required": [
+              "widget",
+              "result"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "result": {
+                "$ref": "#/components/schemas/TransactionListResult"
+              },
+              "widget": {
+                "$ref": "#/components/schemas/TransactionListWidget"
+              }
+            },
+            "required": [
+              "widget",
+              "result"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "result": {
+                "$ref": "#/components/schemas/CustomMetricResult"
+              },
+              "widget": {
+                "$ref": "#/components/schemas/CustomMetricWidget"
+              }
+            },
+            "required": [
+              "widget",
+              "result"
+            ],
+            "type": "object"
           }
         ]
       },
@@ -4087,6 +4673,106 @@
         ],
         "type": "string"
       },
+      "SpendingChartResult": {
+        "additionalProperties": false,
+        "properties": {
+          "appliedPeriod": {
+            "$ref": "#/components/schemas/AppliedDashboardPeriod"
+          },
+          "buckets": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "key": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "category": {
+                          "$ref": "#/components/schemas/Category"
+                        },
+                        "kind": {
+                          "enum": [
+                            "category"
+                          ],
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "category"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "date": {
+                          "allOf": [
+                            {
+                              "pattern": "^\\d{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\\d|3[01])$"
+                            }
+                          ],
+                          "type": "string"
+                        },
+                        "kind": {
+                          "enum": [
+                            "day"
+                          ],
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "date"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "kind": {
+                          "enum": [
+                            "month"
+                          ],
+                          "type": "string"
+                        },
+                        "month": {
+                          "allOf": [
+                            {
+                              "pattern": "^\\d{4}-(?:0[1-9]|1[0-2])$"
+                            }
+                          ],
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "month"
+                      ],
+                      "type": "object"
+                    }
+                  ]
+                },
+                "moneyGroups": {
+                  "$ref": "#/components/schemas/MoneyGroups"
+                }
+              },
+              "required": [
+                "key",
+                "moneyGroups"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "appliedPeriod",
+          "buckets"
+        ],
+        "type": "object"
+      },
       "SpendingChartTemplate": {
         "additionalProperties": false,
         "properties": {
@@ -5321,6 +6007,37 @@
               "tool": {
                 "description": "The canonical operation to call, spelled exactly as its `operationId` in this spec. Look that id up here to see the complete input and result.",
                 "enum": [
+                  "dashboard.getDashboardView"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "tool",
+              "hint"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "hint": {
+                "allOf": [
+                  {
+                    "minLength": 1
+                  },
+                  {
+                    "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
+                  },
+                  {
+                    "maxLength": 140
+                  }
+                ],
+                "type": "string"
+              },
+              "tool": {
+                "description": "The canonical operation to call, spelled exactly as its `operationId` in this spec. Look that id up here to see the complete input and result.",
+                "enum": [
                   "dashboard.listDashboardCatalog"
                 ],
                 "type": "string"
@@ -6571,6 +7288,25 @@
                                 },
                                 "input": {
                                   "additionalProperties": false,
+                                  "type": "object"
+                                },
+                                "operation": {
+                                  "enum": [
+                                    "dashboard.getDashboardView"
+                                  ],
+                                  "type": "string"
+                                }
+                              },
+                              "type": "object"
+                            },
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "callId": {
+                                  "$ref": "#/components/schemas/AtomicBatchCallId"
+                                },
+                                "input": {
+                                  "additionalProperties": false,
                                   "properties": {
                                     "payload": {
                                       "$ref": "#/components/schemas/DashboardEditPartial"
@@ -7128,6 +7864,25 @@
                                   "operation": {
                                     "enum": [
                                       "dashboard.getDashboard"
+                                    ],
+                                    "type": "string"
+                                  }
+                                },
+                                "type": "object"
+                              },
+                              {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "callId": {
+                                    "$ref": "#/components/schemas/AtomicBatchCallId"
+                                  },
+                                  "input": {
+                                    "additionalProperties": false,
+                                    "type": "object"
+                                  },
+                                  "operation": {
+                                    "enum": [
+                                      "dashboard.getDashboardView"
                                     ],
                                     "type": "string"
                                   }
@@ -8158,6 +8913,37 @@
               "tool": {
                 "description": "The canonical operation to call, spelled exactly as its `operationId` in this spec. Look that id up here to see the complete input and result.",
                 "enum": [
+                  "dashboard.getDashboardView"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "tool",
+              "hint"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "hint": {
+                "allOf": [
+                  {
+                    "minLength": 1
+                  },
+                  {
+                    "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
+                  },
+                  {
+                    "maxLength": 140
+                  }
+                ],
+                "type": "string"
+              },
+              "tool": {
+                "description": "The canonical operation to call, spelled exactly as its `operationId` in this spec. Look that id up here to see the complete input and result.",
+                "enum": [
                   "dashboard.listDashboardCatalog"
                 ],
                 "type": "string"
@@ -9408,6 +10194,25 @@
                                 },
                                 "input": {
                                   "additionalProperties": false,
+                                  "type": "object"
+                                },
+                                "operation": {
+                                  "enum": [
+                                    "dashboard.getDashboardView"
+                                  ],
+                                  "type": "string"
+                                }
+                              },
+                              "type": "object"
+                            },
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "callId": {
+                                  "$ref": "#/components/schemas/AtomicBatchCallId"
+                                },
+                                "input": {
+                                  "additionalProperties": false,
                                   "properties": {
                                     "payload": {
                                       "$ref": "#/components/schemas/DashboardEditPartial"
@@ -9965,6 +10770,25 @@
                                   "operation": {
                                     "enum": [
                                       "dashboard.getDashboard"
+                                    ],
+                                    "type": "string"
+                                  }
+                                },
+                                "type": "object"
+                              },
+                              {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "callId": {
+                                    "$ref": "#/components/schemas/AtomicBatchCallId"
+                                  },
+                                  "input": {
+                                    "additionalProperties": false,
+                                    "type": "object"
+                                  },
+                                  "operation": {
+                                    "enum": [
+                                      "dashboard.getDashboardView"
                                     ],
                                     "type": "string"
                                   }
@@ -10550,6 +11374,21 @@
           }
         ],
         "type": "integer"
+      },
+      "TransactionListResult": {
+        "additionalProperties": false,
+        "properties": {
+          "transactions": {
+            "items": {
+              "$ref": "#/components/schemas/DashboardTransaction"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "transactions"
+        ],
+        "type": "object"
       },
       "TransactionListTemplate": {
         "additionalProperties": false,
@@ -12791,7 +13630,7 @@
     },
     "/dashboard": {
       "get": {
-        "description": "Get the caller's complete DashboardDocument. Reach for this before editing or rendering the dashboard; first use creates and retains one valid spending widget, and every later call returns the same latest document.",
+        "description": "Get the caller's complete DashboardDocument. Reach for this before editing; first use creates and retains one valid spending widget, and later calls return the same document.",
         "operationId": "dashboard.getDashboard",
         "parameters": [],
         "responses": {
@@ -13135,6 +13974,103 @@
         },
         "x-fidy-agent-confirmation": "required",
         "x-fidy-operation-kind": "mutation",
+        "x-fidy-required-tier": "free"
+      }
+    },
+    "/dashboard/view": {
+      "get": {
+        "description": "Render one complete enriched projection of the caller's decoded DashboardDocument using current User context and purpose-specific exact facts. First use creates the same document.",
+        "operationId": "dashboard.getDashboardView",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/DashboardView"
+                    },
+                    "next": {
+                      "allOf": [
+                        {
+                          "description": "Where to go next: up to three canonical operations worth calling after this one, best first. Empty when there is nothing worth suggesting, which is an answer rather than an omission. Each entry has passed the target-input and caller-authorization checkpoint.",
+                          "maxItems": 3
+                        }
+                      ],
+                      "items": {
+                        "$ref": "#/components/schemas/SuggestedOperation"
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "next"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationFailed"
+                }
+              }
+            },
+            "description": "ValidationFailed"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Unauthenticated"
+                }
+              }
+            },
+            "description": "Unauthenticated"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ConsentRequired"
+                    },
+                    {
+                      "$ref": "#/components/schemas/UserActionRequired"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ScopeMissing"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "ConsentRequired | UserActionRequired | ScopeMissing"
+          }
+        },
+        "security": [
+          {
+            "agentBearer": []
+          },
+          {
+            "webSession": []
+          }
+        ],
+        "tags": [
+          "dashboard"
+        ],
+        "x-fidy-agent-confirmation": "not-required",
+        "x-fidy-caller-eligibility": "authenticated",
+        "x-fidy-operation-kind": "mutation",
+        "x-fidy-required-scope": "read",
         "x-fidy-required-tier": "free"
       }
     },
@@ -14971,6 +15907,30 @@
                             },
                             "input": {
                               "additionalProperties": false,
+                              "type": "object"
+                            },
+                            "operation": {
+                              "enum": [
+                                "dashboard.getDashboardView"
+                              ],
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "callId",
+                            "operation",
+                            "input"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "callId": {
+                              "$ref": "#/components/schemas/AtomicBatchCallId"
+                            },
+                            "input": {
+                              "additionalProperties": false,
                               "properties": {
                                 "payload": {
                                   "$ref": "#/components/schemas/DashboardEdit"
@@ -15722,6 +16682,30 @@
                               "operation": {
                                 "enum": [
                                   "dashboard.getDashboard"
+                                ],
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "callId",
+                              "operation",
+                              "input"
+                            ],
+                            "type": "object"
+                          },
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "callId": {
+                                "$ref": "#/components/schemas/AtomicBatchCallId"
+                              },
+                              "input": {
+                                "additionalProperties": false,
+                                "type": "object"
+                              },
+                              "operation": {
+                                "enum": [
+                                  "dashboard.getDashboardView"
                                 ],
                                 "type": "string"
                               }
@@ -16570,6 +17554,51 @@
                                     "properties": {
                                       "data": {
                                         "$ref": "#/components/schemas/DashboardDocument1"
+                                      },
+                                      "next": {
+                                        "allOf": [
+                                          {
+                                            "description": "Where to go next: up to three canonical operations worth calling after this one, best first. Empty when there is nothing worth suggesting, which is an answer rather than an omission. Each entry has passed the target-input and caller-authorization checkpoint.",
+                                            "maxItems": 3
+                                          }
+                                        ],
+                                        "items": {
+                                          "$ref": "#/components/schemas/SuggestedOperation2"
+                                        },
+                                        "type": "array"
+                                      }
+                                    },
+                                    "required": [
+                                      "data",
+                                      "next"
+                                    ],
+                                    "type": "object"
+                                  }
+                                },
+                                "required": [
+                                  "callId",
+                                  "operation",
+                                  "output"
+                                ],
+                                "type": "object"
+                              },
+                              {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "callId": {
+                                    "$ref": "#/components/schemas/AtomicBatchCallId"
+                                  },
+                                  "operation": {
+                                    "enum": [
+                                      "dashboard.getDashboardView"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "output": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "data": {
+                                        "$ref": "#/components/schemas/DashboardView1"
                                       },
                                       "next": {
                                         "allOf": [
@@ -17489,6 +18518,51 @@
                                       "properties": {
                                         "data": {
                                           "$ref": "#/components/schemas/DashboardDocument1"
+                                        },
+                                        "next": {
+                                          "allOf": [
+                                            {
+                                              "description": "Where to go next: up to three canonical operations worth calling after this one, best first. Empty when there is nothing worth suggesting, which is an answer rather than an omission. Each entry has passed the target-input and caller-authorization checkpoint.",
+                                              "maxItems": 3
+                                            }
+                                          ],
+                                          "items": {
+                                            "$ref": "#/components/schemas/SuggestedOperation2"
+                                          },
+                                          "type": "array"
+                                        }
+                                      },
+                                      "required": [
+                                        "data",
+                                        "next"
+                                      ],
+                                      "type": "object"
+                                    }
+                                  },
+                                  "required": [
+                                    "callId",
+                                    "operation",
+                                    "output"
+                                  ],
+                                  "type": "object"
+                                },
+                                {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "callId": {
+                                      "$ref": "#/components/schemas/AtomicBatchCallId"
+                                    },
+                                    "operation": {
+                                      "enum": [
+                                        "dashboard.getDashboardView"
+                                      ],
+                                      "type": "string"
+                                    },
+                                    "output": {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "data": {
+                                          "$ref": "#/components/schemas/DashboardView1"
                                         },
                                         "next": {
                                           "allOf": [

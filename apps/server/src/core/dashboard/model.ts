@@ -1,7 +1,7 @@
 import { DateTime, Option, Schema, Struct } from "effect";
 import { CategoryId } from "~/core/categories/reference";
 import { IanaTimeZone, Locale, ServiceMarket } from "~/core/_shared/context";
-import { Currency, Money, MoneyGroups, type ReadonlyMoney } from "~/core/_shared/money";
+import { Currency } from "~/core/_shared/money";
 import { UtcTimestamp } from "~/core/_shared/time";
 
 const maximumDashboardLabelLength = 80;
@@ -74,107 +74,14 @@ const validAppliedPeriod = Schema.makeFilter<
 
 /** Half-open UTC interval resolved from a relative period in the applied time zone. */
 export const AppliedDashboardPeriod = Schema.Struct({
+  requested: DashboardPeriod,
   from: UtcTimestamp,
   toExclusive: UtcTimestamp,
+  timeZone: IanaTimeZone,
 })
   .check(validAppliedPeriod)
   .annotate({ identifier: "AppliedDashboardPeriod" });
 export type AppliedDashboardPeriod = typeof AppliedDashboardPeriod.Type;
-
-const LocalCalendarDate = Schema.String.check(
-  Schema.isPattern(/^\d{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])$/u)
-);
-const LocalCalendarMonth = Schema.String.check(Schema.isPattern(/^\d{4}-(?:0[1-9]|1[0-2])$/u));
-
-const SpendingBucketKey = Schema.Union([
-  Schema.Struct({ kind: Schema.Literal("category"), categoryId: CategoryId }),
-  Schema.Struct({ kind: Schema.Literal("day"), date: LocalCalendarDate }),
-  Schema.Struct({ kind: Schema.Literal("month"), month: LocalCalendarMonth }),
-]);
-
-/** One chart bucket whose monetary values remain separated by Currency and direction. */
-export const SpendingChartBucket = Schema.Struct({
-  key: SpendingBucketKey,
-  moneyGroups: MoneyGroups,
-}).annotate({ identifier: "SpendingChartBucket" });
-export type SpendingChartBucket = typeof SpendingChartBucket.Type;
-
-/** Ephemeral spending-chart result; it is never retained in DashboardDocument JSONB. */
-export const SpendingChartData = Schema.Struct({
-  type: Schema.Literal("spending-chart"),
-  widgetId: WidgetId,
-  context: DashboardQueryContext,
-  appliedPeriod: AppliedDashboardPeriod,
-  buckets: Schema.Array(SpendingChartBucket),
-}).annotate({ identifier: "SpendingChartData" });
-export type SpendingChartData = typeof SpendingChartData.Type;
-
-const BudgetStatus = Schema.Union([
-  Schema.Struct({ state: Schema.Literal("under"), remaining: Money }),
-  Schema.Struct({ state: Schema.Literal("reached") }),
-  Schema.Struct({ state: Schema.Literal("over"), overBy: Money }),
-]);
-
-const validBudgetCurrencies = Schema.makeFilter<
-  Readonly<{
-    readonly currency: Currency;
-    readonly cap: ReadonlyMoney;
-    readonly spent: ReadonlyMoney;
-    readonly status:
-      | Readonly<{ readonly state: "under"; readonly remaining: ReadonlyMoney }>
-      | Readonly<{ readonly state: "reached" }>
-      | Readonly<{ readonly state: "over"; readonly overBy: ReadonlyMoney }>;
-  }>
->((data) => {
-  if (data.cap.currency !== data.currency) {
-    return { path: ["cap", "currency"], issue: "Expected the Budget Currency" };
-  }
-  if (data.spent.currency !== data.currency) {
-    return { path: ["spent", "currency"], issue: "Expected the Budget Currency" };
-  }
-  if (data.status.state === "under" && data.status.remaining.currency !== data.currency) {
-    return { path: ["status", "remaining", "currency"], issue: "Expected the Budget Currency" };
-  }
-  if (data.status.state === "over" && data.status.overBy.currency !== data.currency) {
-    return { path: ["status", "overBy", "currency"], issue: "Expected the Budget Currency" };
-  }
-  return undefined;
-});
-
-/** Ephemeral Budget result with every Money value checked against its explicit Currency. */
-export const BudgetBarData = Schema.Struct({
-  type: Schema.Literal("budget-bar"),
-  widgetId: WidgetId,
-  context: DashboardQueryContext,
-  appliedPeriod: AppliedDashboardPeriod,
-  categoryId: CategoryId,
-  currency: Currency,
-  cap: Money,
-  spent: Money,
-  status: BudgetStatus,
-})
-  .check(validBudgetCurrencies)
-  .annotate({ identifier: "BudgetBarData" });
-export type BudgetBarData = typeof BudgetBarData.Type;
-
-/** Ephemeral monetary metric result with no mixed-Currency scalar or signed net. */
-export const CustomMetricData = Schema.Struct({
-  type: Schema.Literal("custom-metric"),
-  widgetId: WidgetId,
-  context: DashboardQueryContext,
-  appliedPeriod: AppliedDashboardPeriod,
-  aggregation: MoneyAggregation,
-  moneyGroups: MoneyGroups,
-}).annotate({ identifier: "CustomMetricData" });
-export type CustomMetricData = typeof CustomMetricData.Type;
-
-/** Currency-safe calculated widget results owned by later rendering/data operations. */
-export const DashboardMonetaryWidgetData = Schema.Union([
-  SpendingChartData,
-  BudgetBarData,
-  CustomMetricData,
-]).annotate({ identifier: "DashboardMonetaryWidgetData" });
-export type DashboardMonetaryWidgetData = typeof DashboardMonetaryWidgetData.Type;
 
 const TransactionSearch = Schema.NonEmptyString.check(Schema.isTrimmed()).check(
   Schema.isMaxLength(100)
@@ -241,7 +148,6 @@ export const Widget = Schema.Union([
   .annotate({ identifier: "Widget" })
   .pipe(Schema.toTaggedUnion("type"));
 export type Widget = typeof Widget.Type;
-type WidgetEncoded = typeof Widget.Encoded;
 
 // `mapFields` keeps no struct-level annotation, so each template renames itself.
 const SpendingChartTemplate = SpendingChartWidget.mapFields(Struct.omit(["id"])).annotate({
@@ -278,71 +184,82 @@ export const SplitWeight = Schema.Int.check(Schema.isBetween({ minimum: 1, maxim
   .annotate({ identifier: "SplitWeight" });
 export type SplitWeight = typeof SplitWeight.Type;
 
-const LeafNode = Schema.Struct({
-  kind: Schema.Literal("leaf"),
-  widget: Widget,
-});
-
-/** Terminal layout region containing exactly one Widget. */
-export type LeafNode = Readonly<{
+/** Terminal region of the one recursive Dashboard layout grammar. */
+export type LayoutLeaf<Leaf> = Readonly<{
   readonly kind: "leaf";
-  readonly widget: Widget;
+  readonly widget: Leaf;
 }>;
-
-/** Input accepted by the LayoutNode decoder; its Widget fields are not validated until decoding. */
-export type LeafNodeEncoded = {
-  readonly kind: "leaf";
-  readonly widget: WidgetEncoded;
-};
-
-const SplitChild: Schema.Codec<SplitChild, SplitChildEncoded> = Schema.Struct({
-  weight: SplitWeight,
-  node: Schema.suspend((): Schema.Codec<LayoutNode, LayoutNodeEncoded> => LayoutNode),
-});
 
 /** One weighted child region whose share is relative only to its siblings. */
-export type SplitChild = Readonly<{
-  readonly weight: SplitWeight;
-  readonly node: LayoutNode;
+export type WeightedLayoutChild<Leaf, Weight = SplitWeight> = Readonly<{
+  readonly weight: Weight;
+  readonly node: LayoutNodeFor<Leaf, Weight>;
 }>;
-
-/** LayoutNode decoder input; callers must not treat its numeric weight as already validated. */
-export type SplitChildEncoded = {
-  readonly weight: number;
-  readonly node: LayoutNodeEncoded;
-};
-
-const SplitNode = Schema.Struct({
-  kind: Schema.Literal("split"),
-  axis: Axis,
-  children: Schema.TupleWithRest(Schema.Tuple([SplitChild, SplitChild]), [SplitChild]).check(
-    Schema.isMaxLength(maximumWidgetsPerDashboard)
-  ),
-});
 
 /** Canonical row or column of at least two weighted child regions. */
-export type SplitNode = Readonly<{
+export type LayoutSplit<Leaf, Weight = SplitWeight> = Readonly<{
   readonly kind: "split";
   readonly axis: Axis;
-  readonly children: readonly [SplitChild, SplitChild, ...Array<SplitChild>];
+  readonly children: readonly [
+    WeightedLayoutChild<Leaf, Weight>,
+    WeightedLayoutChild<Leaf, Weight>,
+    ...Array<WeightedLayoutChild<Leaf, Weight>>,
+  ];
 }>;
 
-/** LayoutNode decoder input; depth and maximum-widget constraints are enforced only on decode. */
-export type SplitNodeEncoded = {
-  readonly kind: "split";
-  readonly axis: Axis;
-  readonly children: readonly [SplitChildEncoded, SplitChildEncoded, ...Array<SplitChildEncoded>];
+/** One recursive grammar parameterized by its leaf value and decoded/encoded weight. */
+export type LayoutNodeFor<Leaf, Weight = SplitWeight> =
+  | LayoutLeaf<Leaf>
+  | LayoutSplit<Leaf, Weight>;
+
+type LayoutSchemaInput<Leaf extends Schema.Top> = Readonly<{
+  leaf: () => Leaf;
+  identifier: string;
+}>;
+
+type LayoutNodeSchema<Leaf extends Schema.Top> = Schema.Codec<
+  LayoutNodeFor<Leaf["Type"]>,
+  LayoutNodeFor<Leaf["Encoded"], number>,
+  Leaf["DecodingServices"],
+  Leaf["EncodingServices"]
+>;
+
+/**
+ * Builds the shared recursive layout codec. DashboardDocument and DashboardView instantiate this
+ * grammar with different closed leaf schemas; neither owns a parallel layout implementation.
+ */
+export const makeLayoutNodeSchema = <Leaf extends Schema.Top>(
+  input: LayoutSchemaInput<Leaf>
+): LayoutNodeSchema<Leaf> => {
+  const { identifier } = input;
+  const leaf = input.leaf();
+  const node: Schema.Codec<unknown, unknown, unknown, unknown> = Schema.suspend(() => {
+    const child = Schema.Struct({
+      weight: SplitWeight,
+      node: Schema.suspend((): Schema.Codec<unknown, unknown, unknown, unknown> => node),
+    });
+    return Schema.Union([
+      Schema.Struct({ kind: Schema.Literal("leaf"), widget: leaf }),
+      Schema.Struct({
+        kind: Schema.Literal("split"),
+        axis: Axis,
+        children: Schema.TupleWithRest(Schema.Tuple([child, child]), [child]).check(
+          Schema.isMaxLength(maximumWidgetsPerDashboard)
+        ),
+      }),
+    ]);
+  }).annotate({ identifier });
+  return Schema.make(node.ast);
 };
 
+/** Recursive persisted layout instantiated from the shared grammar. */
+export const LayoutNode = makeLayoutNodeSchema({ leaf: () => Widget, identifier: "LayoutNode" });
 /** Recursive Dashboard layout whose in-order leaves define mobile order. */
-export type LayoutNode = LeafNode | SplitNode;
-/** Unvalidated JSON-side input and output of the recursive LayoutNode codec. */
-export type LayoutNodeEncoded = LeafNodeEncoded | SplitNodeEncoded;
-
-/** Recursive structural layout; in-order leaves define mobile reading order. */
-export const LayoutNode: Schema.Codec<LayoutNode, LayoutNodeEncoded> = Schema.suspend(() =>
-  Schema.Union([LeafNode, SplitNode])
-).annotate({ identifier: "LayoutNode" });
+export type LayoutNode = typeof LayoutNode.Type;
+/** Terminal persisted layout region containing exactly one Widget. */
+export type LeafNode = Extract<LayoutNode, { readonly kind: "leaf" }>;
+/** Canonical persisted split region. */
+export type SplitNode = Extract<LayoutNode, { readonly kind: "split" }>;
 
 const DashboardDocumentShape = Schema.Struct({
   title: DashboardTitle,

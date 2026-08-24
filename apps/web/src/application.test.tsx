@@ -114,10 +114,16 @@ describe("signed-in web application routes", () => {
     expect(await screen.findByText("No pudimos cargar las ofertas")).toBeVisible();
   });
 
-  it("redirects the authenticated /app index to Transactions", async () => {
+  it("owns the Dashboard at /app/dashboard and routes malformed canonical data to failure", async () => {
+    await renderRoute("/app/dashboard", malformedFidyClient());
+
+    expect(await screen.findByText("No pudimos cargar tu tablero")).toBeVisible();
+  });
+
+  it("redirects the authenticated /app index to the Dashboard", async () => {
     await renderRoute("/app", malformedFidyClient());
 
-    expect(await screen.findByRole("heading", { name: "Transacciones" })).toBeVisible();
+    expect(await screen.findByText("No pudimos cargar tu tablero")).toBeVisible();
   });
 });
 

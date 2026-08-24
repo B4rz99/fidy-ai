@@ -1,7 +1,7 @@
 import { BigDecimal, DateTime, Schema, Struct } from "effect";
 import { IanaTimeZone } from "~/core/_shared/context";
 import { type Immutable } from "~/core/_shared/immutable";
-import { Money } from "~/core/_shared/money";
+import { Money, type ReadonlyMoney } from "~/core/_shared/money";
 import { UtcTimestamp } from "~/core/_shared/time";
 import { CategoryId } from "~/core/categories/reference";
 import { BudgetId } from "./reference";
@@ -78,16 +78,19 @@ const BudgetStatusCommon = {
   period: AppliedBudgetMonth,
 } as const;
 
-const UnderBudget = Schema.Struct({
+/** Canonical under-cap Budget status, including the exact remaining Money. */
+export const UnderBudget = Schema.Struct({
   ...BudgetStatusCommon,
   type: Schema.Literal("under"),
   remaining: Money,
 });
-const ReachedBudget = Schema.Struct({
+/** Canonical exactly-reached Budget status. */
+export const ReachedBudget = Schema.Struct({
   ...BudgetStatusCommon,
   type: Schema.Literal("reached"),
 });
-const OverBudget = Schema.Struct({
+/** Canonical over-cap Budget status, including the exact overage Money. */
+export const OverBudget = Schema.Struct({
   ...BudgetStatusCommon,
   type: Schema.Literal("over"),
   overBy: Money,
@@ -96,6 +99,37 @@ const OverBudget = Schema.Struct({
 type StatusCurrencyView = Immutable<
   typeof UnderBudget.Type | typeof ReachedBudget.Type | typeof OverBudget.Type
 >;
+
+/** Minimal cap, spending, and projected status facts used to preserve exact Budget progress. */
+export type BudgetProgressFact = Readonly<{
+  cap: ReadonlyMoney;
+  spent: ReadonlyMoney;
+  status:
+    | Readonly<{ type: "under"; remaining: ReadonlyMoney }>
+    | Readonly<{ type: "reached" }>
+    | Readonly<{ type: "over"; overBy: ReadonlyMoney }>;
+}>;
+
+/** Whether projected progress exactly represents one positive Budget cap and its spending. */
+export const hasExactBudgetProgress = ({
+  cap,
+  spent,
+  status,
+}: Immutable<BudgetProgressFact>): boolean => {
+  if (BigDecimal.Order(cap.amount, zero) !== 1) return false;
+  const comparison = BigDecimal.Order(spent.amount, cap.amount);
+  if (status.type === "under") {
+    return (
+      comparison < 0 &&
+      BigDecimal.equals(status.remaining.amount, BigDecimal.subtract(cap.amount, spent.amount))
+    );
+  }
+  if (status.type === "reached") return comparison === 0;
+  return (
+    comparison > 0 &&
+    BigDecimal.equals(status.overBy.amount, BigDecimal.subtract(spent.amount, cap.amount))
+  );
+};
 
 const sameStatusCurrency = Schema.makeFilter<StatusCurrencyView>((status) => {
   const currency = status.budget.cap.currency;
@@ -120,26 +154,12 @@ const sameStatusCurrency = Schema.makeFilter<StatusCurrencyView>((status) => {
   return undefined;
 });
 
-const hasExactStatusAmounts = (status: StatusCurrencyView): boolean => {
-  const comparison = BigDecimal.Order(status.spent.amount, status.budget.cap.amount);
-  if (status.type === "under") {
-    return (
-      comparison < 0 &&
-      BigDecimal.equals(
-        status.remaining.amount,
-        BigDecimal.subtract(status.budget.cap.amount, status.spent.amount)
-      )
-    );
-  }
-  if (status.type === "reached") return comparison === 0;
-  return (
-    comparison > 0 &&
-    BigDecimal.equals(
-      status.overBy.amount,
-      BigDecimal.subtract(status.spent.amount, status.budget.cap.amount)
-    )
-  );
-};
+const hasExactStatusAmounts = (status: StatusCurrencyView): boolean =>
+  hasExactBudgetProgress({
+    cap: status.budget.cap,
+    spent: status.spent,
+    status,
+  });
 
 const exactStatusAmounts = Schema.makeFilter<StatusCurrencyView>((status) =>
   hasExactStatusAmounts(status)

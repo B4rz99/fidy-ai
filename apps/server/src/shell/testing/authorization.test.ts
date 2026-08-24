@@ -30,6 +30,7 @@ import {
   makeApiClientLive,
 } from "./api-harness";
 import { seedConsentedPatIdentity } from "~/shell/db/development-seed";
+import { truncateDashboards } from "~/shell/dashboard/fixtures";
 
 const encodeTransactionPayload = Schema.encodeSync(CreateTransactionInput);
 
@@ -229,6 +230,25 @@ layer(AuthorizationHarness, {
       });
       expect(recalled.data).toEqual([]);
       expect(remembered.data.text).toBe("write-only memory");
+    })
+  );
+
+  it.effect("denies Dashboard projection and first-use creation to a write-only PAT", () =>
+    Effect.gen(function* () {
+      yield* seedWriteOnlyIdentity;
+      yield* truncateDashboards;
+      const response = yield* HttpClient.get("/dashboard/view", {
+        headers: headersFor(writeOnlyBearer),
+      });
+      const body = yield* response.json;
+      const sql = yield* MigrationSqlClient;
+      const dashboards = yield* sql`
+        SELECT count(*)::int AS count FROM dashboards WHERE user_id = ${writeOnlyUser}
+      `;
+
+      expect(response.status).toBe(403);
+      expect(body).toMatchObject({ error: { code: "scope_missing" } });
+      expect(dashboards[0]?.count).toBe(0);
     })
   );
 

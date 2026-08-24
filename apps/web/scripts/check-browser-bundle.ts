@@ -92,6 +92,7 @@ const buildBrowserBundle = async (options: BrowserBundleCheckOptions): Promise<u
     outdir: options.outdir,
     target: "browser",
     metafile: true,
+    splitting: true,
     loader: { ".html": "text" },
     plugins: browserBuildPlugins(options.webRoot, options.workspaceRoot),
   });
@@ -119,12 +120,92 @@ const readWebSources = async (webRoot: string): Promise<ReadonlyArray<Source>> =
   );
 };
 
+type BuildOutputs = NonNullable<ReturnType<typeof decodeBuildMetafile>["outputs"]>;
+
+const outputImportPath = (
+  importer: string,
+  importPath: string,
+  outputs: BuildOutputs
+): Option.Option<string> => {
+  if (outputs[importPath] !== undefined) return Option.some(importPath);
+  const directory = importer.slice(0, importer.lastIndexOf("/") + 1);
+  const relative = importPath.startsWith("./") ? importPath.slice(2) : importPath;
+  const candidate = `${directory}${relative}`;
+  return Option.fromUndefinedOr(outputs[candidate]).pipe(Option.as(candidate));
+};
+
+const staticOutputImports = (outputPath: string, outputs: BuildOutputs): ReadonlyArray<string> =>
+  (outputs[outputPath]?.imports ?? [])
+    .filter(({ kind }) => kind !== "dynamic-import")
+    .flatMap(({ path }) => Option.toArray(outputImportPath(outputPath, path, outputs)));
+
+const collectStaticOutputs = (entry: string, outputs: BuildOutputs): ReadonlySet<string> => {
+  const pending = [entry];
+  const visited = new Set<string>();
+  while (pending.length > 0) {
+    const outputPath = pending.pop();
+    if (outputPath === undefined || visited.has(outputPath)) continue;
+    visited.add(outputPath);
+    pending.push(...staticOutputImports(outputPath, outputs));
+  }
+  return visited;
+};
+
+const findBrowserEntry = (outputs: BuildOutputs): Option.Option<string> =>
+  Option.fromUndefinedOr(
+    Object.entries(outputs).find(([, output]) =>
+      (output.entryPoint ?? "").replaceAll("\\", "/").endsWith("src/main.tsx")
+    )
+  ).pipe(Option.map(([outputPath]) => outputPath));
+
+const assertNoDashboardInInitialInputs = (inputs: ReadonlyArray<string>): void => {
+  const leaked = inputs.filter(
+    (input) => input.includes("/features/dashboard/") || input.includes("node_modules/recharts/")
+  );
+  if (leaked.length > 0) {
+    throw new Error(
+      `Dashboard modules entered the public/auth initial chunk:\n${leaked.join("\n")}`
+    );
+  }
+};
+
+const assertDashboardSplitEvidence = (inputs: ReadonlyArray<string>): void => {
+  if (!inputs.some((input) => input.includes("/features/dashboard/"))) {
+    throw new Error("Dashboard split-chunk evidence is missing from the browser build");
+  }
+  if (!inputs.some((input) => input.includes("node_modules/recharts/"))) {
+    throw new Error("Recharts split-chunk evidence is missing from the browser build");
+  }
+};
+
+const assertDashboardChunkIsolation = (
+  metafile: ReturnType<typeof decodeBuildMetafile>,
+  webRoot: string,
+  workspaceRoot: string
+): void => {
+  const outputs = Option.fromUndefinedOr(metafile.outputs).pipe(
+    Option.getOrThrowWith(() => new Error("Browser build did not report split outputs"))
+  );
+  const entry = findBrowserEntry(outputs).pipe(
+    Option.getOrThrowWith(() => new Error("Browser build did not report the web entry chunk"))
+  );
+  const initialInputs = [...collectStaticOutputs(entry, outputs)].flatMap((outputPath) =>
+    Object.keys(outputs[outputPath]?.inputs ?? {}).map((input) =>
+      repositoryPath(input, webRoot, workspaceRoot)
+    )
+  );
+  assertNoDashboardInInitialInputs(initialInputs);
+  assertDashboardSplitEvidence(
+    Object.keys(metafile.inputs).map((input) => repositoryPath(input, webRoot, workspaceRoot))
+  );
+};
+
 const validateForbiddenInputs = (
-  metafile: unknown,
+  metafile: ReturnType<typeof decodeBuildMetafile>,
   webRoot: string,
   workspaceRoot: string
 ): number => {
-  const inputs = Object.keys(decodeBuildMetafile(metafile).inputs).map((input) =>
+  const inputs = Object.keys(metafile.inputs).map((input) =>
     repositoryPath(input, webRoot, workspaceRoot)
   );
   const forbidden = inputs.filter(
@@ -204,11 +285,9 @@ const assertSourceBoundary = (
 export const checkBrowserBundle = async (options: BrowserBundleCheckOptions): Promise<void> => {
   removeOutput(options.outdir);
   try {
-    const inputs = validateForbiddenInputs(
-      await buildBrowserBundle(options),
-      options.webRoot,
-      options.workspaceRoot
-    );
+    const metafile = decodeBuildMetafile(await buildBrowserBundle(options));
+    const inputs = validateForbiddenInputs(metafile, options.webRoot, options.workspaceRoot);
+    assertDashboardChunkIsolation(metafile, options.webRoot, options.workspaceRoot);
     assertSourceBoundary(
       await readWebSources(options.webRoot),
       options.webRoot,

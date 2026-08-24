@@ -2,14 +2,9 @@ import { expect, it } from "@effect/vitest";
 import { Option, Result, Schema } from "effect";
 import {
   AppliedDashboardPeriod,
-  BudgetBarData,
-  CustomMetricData,
   DashboardCatalog,
   DashboardDocument,
-  DashboardMonetaryWidgetData,
   DashboardTitle,
-  type SpendingChartBucket,
-  SpendingChartData,
   SplitWeight,
   TransactionListLimit,
   WidgetId,
@@ -105,78 +100,6 @@ it("decodes every closed widget variant without implicit monetary defaults", () 
   ]);
 });
 
-it("decodes currency-safe ephemeral widget results without a mixed-Currency scalar", () => {
-  const shared = {
-    widgetId: "f1d1a000-0000-4000-8000-000000000315",
-    context: {
-      serviceMarket: "CO",
-      locale: "es-CO",
-      timeZone: "America/Bogota",
-    },
-    appliedPeriod: {
-      from: "2026-07-01T05:00:00.000Z",
-      toExclusive: "2026-08-01T05:00:00.000Z",
-    },
-  } as const;
-  const moneyGroups = [
-    {
-      currency: "COP",
-      inflow: { amount: "0", currency: "COP" },
-      outflow: { amount: "25", currency: "COP" },
-    },
-  ] as const;
-
-  const spending = Schema.decodeUnknownSync(SpendingChartData)({
-    type: "spending-chart",
-    ...shared,
-    buckets: [
-      {
-        key: { kind: "category", categoryId },
-        moneyGroups,
-      },
-    ],
-  });
-  const metric = Schema.decodeUnknownSync(CustomMetricData)({
-    type: "custom-metric",
-    ...shared,
-    aggregation: "sum",
-    moneyGroups,
-  });
-  const budget = Schema.decodeUnknownSync(BudgetBarData)({
-    type: "budget-bar",
-    ...shared,
-    categoryId,
-    currency: "COP",
-    cap: { amount: "100", currency: "COP" },
-    spent: { amount: "25", currency: "COP" },
-    status: { state: "under", remaining: { amount: "75", currency: "COP" } },
-  });
-
-  expect(spending.buckets).toHaveLength(1);
-  expect(metric.moneyGroups[0]?.currency).toBe("COP");
-  expect(budget.status.state).toBe("under");
-  expect(Reflect.has(Schema.encodeSync(CustomMetricData)(metric), "net")).toBe(false);
-});
-
-it("rejects invalid periods and every mixed-Currency Budget Money value", () => {
-  const base = {
-    type: "budget-bar",
-    widgetId: "f1d1a000-0000-4000-8000-000000000316",
-    context: { serviceMarket: "CO", locale: "es-CO", timeZone: "America/Bogota" },
-    appliedPeriod: {
-      from: "2026-08-01T05:00:00.000Z",
-      toExclusive: "2026-07-01T05:00:00.000Z",
-    },
-    categoryId,
-    currency: "COP",
-    cap: { amount: "100", currency: "USD" },
-    spent: { amount: "25", currency: "COP" },
-    status: { state: "under", remaining: { amount: "75", currency: "COP" } },
-  };
-
-  expect(Result.isFailure(Schema.decodeUnknownResult(BudgetBarData)(base))).toBe(true);
-});
-
 it("requires one to sixteen unique Category references", () => {
   const makeDocument = (
     categories: ReadonlyArray<string>
@@ -213,158 +136,24 @@ it("requires one to sixteen unique Category references", () => {
 
 it("requires an applied period to end strictly after it starts", () => {
   const from = "2026-07-01T05:00:00.000Z";
+  const shared = { requested: "this-month", timeZone: "America/Bogota", from };
 
   expect(
     Schema.decodeUnknownSync(AppliedDashboardPeriod)({
-      from,
+      ...shared,
       toExclusive: "2026-07-01T05:00:00.001Z",
     })
   ).toBeDefined();
   for (const toExclusive of [from, "2026-07-01T04:59:59.999Z"]) {
-    const result = Schema.decodeUnknownResult(AppliedDashboardPeriod)({ from, toExclusive });
+    const result = Schema.decodeUnknownResult(AppliedDashboardPeriod)({
+      ...shared,
+      toExclusive,
+    });
     expect(Result.isFailure(result)).toBe(true);
     if (Result.isFailure(result)) {
       expect(String(result.failure)).toContain('["toExclusive"]');
     }
   }
-});
-
-it("accepts only exact local calendar day and month bucket keys", () => {
-  const shared = {
-    type: "spending-chart",
-    widgetId: "f1d1a000-0000-4000-8000-000000000319",
-    context: { serviceMarket: "CO", locale: "es-CO", timeZone: "America/Bogota" },
-    appliedPeriod: {
-      from: "2026-07-01T05:00:00.000Z",
-      toExclusive: "2026-08-01T05:00:00.000Z",
-    },
-  };
-  type SpendingBucketKeyInput = (typeof SpendingChartBucket.Encoded)["key"];
-  const decodeKey = (
-    key: SpendingBucketKeyInput
-  ): Result.Result<SpendingChartData, Schema.SchemaError> =>
-    Schema.decodeUnknownResult(SpendingChartData)({
-      ...shared,
-      buckets: [{ key, moneyGroups: [] }],
-    });
-
-  for (const key of [
-    { kind: "day", date: "2026-01-01" },
-    { kind: "day", date: "2026-12-31" },
-    { kind: "month", month: "2026-01" },
-    { kind: "month", month: "2026-12" },
-  ] satisfies ReadonlyArray<SpendingBucketKeyInput>) {
-    expect(Result.isSuccess(decodeKey(key))).toBe(true);
-  }
-  for (const date of [
-    "x2026-01-01",
-    "2026-01-01x",
-    "026-01-01",
-    "2x26-01-01",
-    "2026-00-01",
-    "2026-13-01",
-    "2026-x1-01",
-    "2026-01-00",
-    "2026-01-32",
-    "2026-01-x1",
-    "2026-01-1x",
-    "2026-01-3x",
-  ]) {
-    expect(Result.isFailure(decodeKey({ kind: "day", date }))).toBe(true);
-  }
-  for (const month of [
-    "x2026-01",
-    "2026-01x",
-    "026-01",
-    "2x26-01",
-    "2026-00",
-    "2026-13",
-    "2026-x1",
-    "2026-1x",
-  ]) {
-    expect(Result.isFailure(decodeKey({ kind: "month", month }))).toBe(true);
-  }
-});
-
-it("checks every Budget Money branch and preserves the failing field path", () => {
-  const valid = {
-    type: "budget-bar",
-    widgetId: "f1d1a000-0000-4000-8000-000000000318",
-    context: { serviceMarket: "CO", locale: "es-CO", timeZone: "America/Bogota" },
-    appliedPeriod: {
-      from: "2026-07-01T05:00:00.000Z",
-      toExclusive: "2026-08-01T05:00:00.000Z",
-    },
-    categoryId,
-    currency: "COP",
-    cap: { amount: "100", currency: "COP" },
-    spent: { amount: "25", currency: "COP" },
-    status: { state: "reached" },
-  } as const;
-  const cases = [
-    [{ ...valid, cap: { amount: "100", currency: "USD" } }, '["cap"]["currency"]'],
-    [{ ...valid, spent: { amount: "25", currency: "USD" } }, '["spent"]["currency"]'],
-    [
-      { ...valid, status: { state: "under", remaining: { amount: "75", currency: "USD" } } },
-      '["status"]["remaining"]["currency"]',
-    ],
-    [
-      { ...valid, status: { state: "over", overBy: { amount: "1", currency: "USD" } } },
-      '["status"]["overBy"]["currency"]',
-    ],
-  ] as const;
-
-  expect(Result.isSuccess(Schema.decodeUnknownResult(BudgetBarData)(valid))).toBe(true);
-  for (const [invalid, path] of cases) {
-    const result = Schema.decodeUnknownResult(BudgetBarData)(invalid);
-    expect(Result.isFailure(result)).toBe(true);
-    if (Result.isFailure(result)) {
-      expect(String(result.failure)).toContain(path);
-    }
-  }
-  for (const status of [
-    { state: "under", remaining: { amount: "75", currency: "COP" } },
-    { state: "over", overBy: { amount: "1", currency: "COP" } },
-  ]) {
-    expect(Result.isSuccess(Schema.decodeUnknownResult(BudgetBarData)({ ...valid, status }))).toBe(
-      true
-    );
-  }
-});
-
-it("decodes each monetary result through the shared closed result schema", () => {
-  const shared = {
-    widgetId: "f1d1a000-0000-4000-8000-000000000317",
-    context: { serviceMarket: "CO", locale: "es-CO", timeZone: "America/Bogota" },
-    appliedPeriod: {
-      from: "2026-07-01T05:00:00.000Z",
-      toExclusive: "2026-08-01T05:00:00.000Z",
-    },
-  };
-  const results = [
-    { type: "spending-chart", ...shared, buckets: [] },
-    {
-      type: "budget-bar",
-      ...shared,
-      categoryId,
-      currency: "COP",
-      cap: { amount: "100", currency: "COP" },
-      spent: { amount: "100", currency: "COP" },
-      status: { state: "reached" },
-    },
-    { type: "custom-metric", ...shared, aggregation: "average", moneyGroups: [] },
-  ];
-
-  for (const result of results) {
-    expect(Result.isSuccess(Schema.decodeUnknownResult(DashboardMonetaryWidgetData)(result))).toBe(
-      true
-    );
-  }
-  expect(
-    Result.isFailure(
-      Schema.decodeUnknownResult(DashboardMonetaryWidgetData)({ type: "transaction-list" })
-    )
-  ).toBe(true);
 });
 
 it("requires every split to contain at least two child regions", () => {

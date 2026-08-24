@@ -200,46 +200,47 @@ const statusFromRow = Effect.fn("statusFromRow")(function* (
   }).pipe(Effect.orDie);
 });
 
-/** Loads filtered monthly status without mutating Budget or latch state. */
-export const selectBudgetStatuses = Effect.fn("selectBudgetStatuses")(function* (
+/** Loads filtered monthly status inside the caller's User-scoped transaction. */
+export const selectBudgetStatusesInScope = Effect.fn("selectBudgetStatusesInScope")(function* (
   userId: UserId,
   query: BudgetStatusQuery,
   period: AppliedBudgetMonth
 ) {
-  return yield* withUserTransaction(
-    userId,
-    Effect.gen(function* () {
-      const sql = yield* SqlClient.SqlClient;
-      const conditions = [sql`budget.user_id = ${userId}`];
-      if (Option.isSome(query.categoryId)) {
-        conditions.push(sql`budget.category_id = ${query.categoryId.value}`);
-      }
-      if (Option.isSome(query.currency)) {
-        conditions.push(sql`budget.cap_currency = ${query.currency.value}`);
-      }
-      const rows = yield* SqlSchema.findAll({
-        Request: Schema.Void,
-        Result: BudgetStatusFlatRow,
-        execute: () => sql`
-          SELECT budget.id, budget.category_id AS "categoryId",
-            budget.cap_amount AS "capAmount", budget.cap_currency AS "capCurrency",
-            budget.created_at AS "createdAt", budget.updated_at AS "updatedAt",
-            COALESCE(SUM(transaction.amount), 0) AS "spentAmount"
-          FROM budgets budget
-          LEFT JOIN transactions transaction
-            ON transaction.user_id = budget.user_id
-            AND transaction.category_id = budget.category_id
-            AND transaction.currency = budget.cap_currency
-            AND transaction.direction = 'outflow'
-            AND transaction.deleted_at IS NULL
-            AND transaction.occurred_at >= ${period.from}
-            AND transaction.occurred_at < ${period.to}
-          WHERE ${sql.and(conditions)}
-          GROUP BY budget.id
-          ORDER BY budget.cap_currency, budget.category_id, budget.id
-        `,
-      })(undefined).pipe(Effect.orDie);
-      return yield* Effect.forEach(rows, (row) => statusFromRow(row, period)).pipe(Effect.orDie);
-    })
-  );
+  const sql = yield* SqlClient.SqlClient;
+  const conditions = [sql`budget.user_id = ${userId}`];
+  if (Option.isSome(query.categoryId)) {
+    conditions.push(sql`budget.category_id = ${query.categoryId.value}`);
+  }
+  if (Option.isSome(query.currency)) {
+    conditions.push(sql`budget.cap_currency = ${query.currency.value}`);
+  }
+  const rows = yield* SqlSchema.findAll({
+    Request: Schema.Void,
+    Result: BudgetStatusFlatRow,
+    execute: () => sql`
+      SELECT budget.id, budget.category_id AS "categoryId",
+        budget.cap_amount AS "capAmount", budget.cap_currency AS "capCurrency",
+        budget.created_at AS "createdAt", budget.updated_at AS "updatedAt",
+        COALESCE(SUM(transaction.amount), 0) AS "spentAmount"
+      FROM budgets budget
+      LEFT JOIN transactions transaction
+        ON transaction.user_id = budget.user_id
+        AND transaction.category_id = budget.category_id
+        AND transaction.currency = budget.cap_currency
+        AND transaction.direction = 'outflow'
+        AND transaction.deleted_at IS NULL
+        AND transaction.occurred_at >= ${period.from}
+        AND transaction.occurred_at < ${period.to}
+      WHERE ${sql.and(conditions)}
+      GROUP BY budget.id
+      ORDER BY budget.cap_currency, budget.category_id, budget.id
+    `,
+  })(undefined).pipe(Effect.orDie);
+  return yield* Effect.forEach(rows, (row) => statusFromRow(row, period)).pipe(Effect.orDie);
 });
+
+/** Loads filtered monthly status under an independently established User transaction. */
+export const selectBudgetStatuses = Effect.fn("selectBudgetStatuses")(
+  (userId: UserId, query: BudgetStatusQuery, period: AppliedBudgetMonth) =>
+    withUserTransaction(userId, selectBudgetStatusesInScope(userId, query, period))
+);

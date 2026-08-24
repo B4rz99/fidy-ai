@@ -207,6 +207,17 @@
       }
     },
     {
+      "id": "dashboard.getDashboardView",
+      "policy": {
+        "agentConfirmation": "not-required",
+        "callerEligibility": "authenticated",
+        "kind": "mutation",
+        "requiredScope": "read",
+        "requiredTier": "free",
+        "scopeEvaluation": "endpoint"
+      }
+    },
+    {
       "id": "dashboard.listDashboardCatalog",
       "policy": {
         "access": {

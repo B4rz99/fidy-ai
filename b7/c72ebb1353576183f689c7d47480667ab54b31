@@ -1,0 +1,27 @@
+apps/server/src/shell/browser-login/handlers.test.ts
+  s_7cc9bd52ec94c4::t_bbbaaa1d0b4564 10-14
+apps/server/src/shell/browser-login/approval.test.ts
+  s_7cc9bd52ec94c4::t_49ad48a6209972 52
+apps/server/src/shell/db/migrations/0028-persisted-schema-reconciliation.test.ts
+  s_7cc9bd52ec94c4::t_8f658302a6cca7 966,974,1009,1017
+apps/server/src/shell/web-session/authorization.test.ts
+  s_7cc9bd52ec94c4::t_c433d556396550 228-230
+apps/server/src/shell/observability/web-auth.test.ts
+  s_7cc9bd52ec94c4::t_df515f12893238 12-16
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.24",
+  "base_commit_sha": "b7c72ebb1353576183f689c7d47480667ab54b31",
+  "prompts": {},
+  "sessions": {
+    "s_7cc9bd52ec94c4": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a02fcf-f40a-7ce3-a147-2f69f493ef46",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

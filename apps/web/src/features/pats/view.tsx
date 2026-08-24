@@ -94,31 +94,34 @@ const ScopeSelector = ({
 }: Readonly<{
   state: Extract<ManualPATCreationState, { _tag: "Editing" }>;
   update: (state: Extract<ManualPATCreationState, { _tag: "Editing" }>) => void;
-}>): JSX.Element => (
-  <fieldset className="flex flex-col gap-3">
-    <legend className="font-medium">Alcances</legend>
-    {scopeOptions.map((option) => (
-      <label
-        className="flex cursor-pointer items-start gap-3 rounded-lg border p-4"
-        htmlFor={`pat-scope-${option.scope}`}
-        key={option.scope}
-      >
-        <Checkbox
-          aria-label={`${option.label}: ${option.description}`}
-          id={`pat-scope-${option.scope}`}
-          checked={state.scopes.includes(option.scope)}
-          onCheckedChange={(checked) =>
-            update({ ...state, scopes: toggleScope(state.scopes, option.scope, checked) })
-          }
-        />
-        <span>
-          <span className="block font-medium">{option.label}</span>
-          <span className="text-sm text-muted-foreground">{option.description}</span>
-        </span>
-      </label>
-    ))}
-  </fieldset>
-);
+}>): JSX.Element => {
+  const selectedScopes = new Set(state.scopes);
+  return (
+    <fieldset className="flex flex-col gap-3">
+      <legend className="font-medium">Alcances</legend>
+      {scopeOptions.map((option) => (
+        <label
+          className="flex cursor-pointer items-start gap-3 rounded-lg border p-4"
+          htmlFor={`pat-scope-${option.scope}`}
+          key={option.scope}
+        >
+          <Checkbox
+            aria-label={`${option.label}: ${option.description}`}
+            id={`pat-scope-${option.scope}`}
+            checked={selectedScopes.has(option.scope)}
+            onCheckedChange={(checked) =>
+              update({ ...state, scopes: toggleScope(state.scopes, option.scope, checked) })
+            }
+          />
+          <span>
+            <span className="block font-medium">{option.label}</span>
+            <span className="text-sm text-muted-foreground">{option.description}</span>
+          </span>
+        </label>
+      ))}
+    </fieldset>
+  );
+};
 
 const GrantEditor = ({
   state,
@@ -396,6 +399,11 @@ const CreationContent = ({
   );
 };
 
+const onPageHide = (listener: () => void): (() => void) => {
+  window.addEventListener("pagehide", listener);
+  return () => window.removeEventListener("pagehide", listener);
+};
+
 /** Guides one exact PAT grant from editing through review and one-time disclosure. */
 export const ManualPATView = ({
   issue,
@@ -414,9 +422,9 @@ export const ManualPATView = ({
         clearClipboard(state.issued.bearer);
         setState(initialState);
       };
-      window.addEventListener("pagehide", clearBearer);
+      const stopListening = onPageHide(clearBearer);
       return (): void => {
-        window.removeEventListener("pagehide", clearBearer);
+        stopListening();
         clearBearer();
       };
     },

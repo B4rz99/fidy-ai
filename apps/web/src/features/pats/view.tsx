@@ -96,6 +96,12 @@ const lifetimeOptions = patLifetimeDayOptions.map((lifetimeDays) => ({
   label: `${lifetimeDays} días`,
 }));
 
+const patExpirationFormatter = new Intl.DateTimeFormat("es-CO", {
+  dateStyle: "long",
+  timeStyle: "short",
+  timeZone: "America/Bogota",
+});
+
 const scopeOptions = (["read", "write", "dashboard"] as const).map((scope) => ({
   scope: PATScope.make(scope),
   ...patScopeCopy[scope],
@@ -251,11 +257,7 @@ const GrantReview = ({
         <dt className="text-muted-foreground">Vencimiento</dt>
         <dd className="font-medium">
           <time dateTime={DateTime.formatIso(grant.reviewExpiresAt)}>
-            {new Intl.DateTimeFormat("es-CO", {
-              dateStyle: "long",
-              timeStyle: "short",
-              timeZone: "America/Bogota",
-            }).format(DateTime.toDate(grant.reviewExpiresAt))}
+            {patExpirationFormatter.format(DateTime.toDate(grant.reviewExpiresAt))}
           </time>
         </dd>
       </dl>

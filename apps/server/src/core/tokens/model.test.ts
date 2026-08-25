@@ -85,8 +85,14 @@ it("normalizes one manual PAT recipient label before enforcing the grant boundar
     lifetimeDays: 90,
   });
 
-  expect(Result.getOrThrow(accepted)).toEqual({
+  const decoded = Result.getOrThrow(accepted);
+  expect(decoded).toEqual({
     recipientLabel: PATRecipientLabel.make("Automatización casa"),
+    scopes: ["read"],
+    lifetimeDays: 90,
+  });
+  expect(Schema.encodeSync(ManualPATGrantInput)(decoded)).toEqual({
+    recipientLabel: "Automatización casa",
     scopes: ["read"],
     lifetimeDays: 90,
   });

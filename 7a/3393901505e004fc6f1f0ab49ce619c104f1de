@@ -1,0 +1,19 @@
+apps/server/src/core/_shared/opaque-proof.test.ts
+  s_a0be21e0e55716::t_3a05080886bf28 1-32
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.24",
+  "base_commit_sha": "7a3393901505e004fc6f1f0ab49ce619c104f1de",
+  "prompts": {},
+  "sessions": {
+    "s_a0be21e0e55716": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0375d-015d-78c3-a833-72b2cb0d3d86",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

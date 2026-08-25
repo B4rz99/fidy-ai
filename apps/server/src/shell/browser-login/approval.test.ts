@@ -18,9 +18,9 @@ import { immediatePermit, makeTurnConfirmation } from "~/shell/agent/tool-confir
 import { OperationResponse } from "~/shell/_shared/response";
 import { agentOperationBindings } from "~/shell/agent/toolkit";
 import { MigrationSqlClient } from "~/shell/db/client";
-import { upsertUser } from "~/shell/identity/repo";
 import { TelemetryDisabled } from "~/shell/observability/disabled";
 import { ApiHarness } from "~/shell/testing/api-harness";
+import { upsertStableUserFixture } from "~/shell/testing/identity-fixtures";
 import {
   BrowserLoginPairingApproval,
   BrowserLoginPairingApprovalRateLimited,
@@ -68,7 +68,7 @@ const prepare = Effect.gen(function* () {
   yield* sql`DELETE FROM browser_login_pairings`;
   yield* sql`DELETE FROM audit_log_entries WHERE user_id IN (${firstUserId}, ${secondUserId})`;
   for (const userId of [firstUserId, secondUserId]) {
-    yield* upsertUser(
+    yield* upsertStableUserFixture(
       userId,
       yield* makeColombianUser(userId, {
         createdAt: DateTime.makeUnsafe("2026-08-01T12:00:00Z"),

@@ -26,9 +26,30 @@ const acceptanceExclude = [
   // focused suites; acceptance supplies an ApiHarness implementation instead.
   "src/shell/agent/hosted-inference.ts",
   "src/shell/agent/model-boundary.ts",
-  // Dashboard reads are not reachable from the WhatsApp channel acceptance surface.
+  // Browser authentication and session authority are independent HTTP surfaces with focused
+  // PostgreSQL-backed integration suites; signed WhatsApp transport does not exercise them.
+  "src/core/browser-login/**",
+  "src/core/web-session/**",
+  "src/shell/browser-login/**",
+  "src/shell/web-auth/**",
+  "src/shell/web-session/**",
+  // Canonical financial capabilities are downstream tools, not WhatsApp transport behavior. Their
+  // validation, persistence, authorization, and audit semantics have dedicated integration suites.
+  "src/core/audit/**",
+  "src/core/budgets/**",
+  "src/core/categories/**",
   "src/core/dashboard/**",
+  "src/core/insights/**",
+  "src/core/operations/**",
+  "src/core/subscription/**",
+  "src/core/transactions/**",
+  "src/shell/audit/**",
+  "src/shell/budgets/**",
   "src/shell/dashboard/**",
+  "src/shell/insights/**",
+  "src/shell/operations/**",
+  "src/shell/subscription/**",
+  "src/shell/transactions/**",
   // Transcript lifecycle persistence is covered against PostgreSQL at its public service seam.
   "src/shell/transcript/conversation-continuity.ts",
   // Memory's canonical API and aggregate policy are covered by their real-PostgreSQL integration
@@ -70,8 +91,8 @@ export default defineConfig({
       exclude: acceptanceExclude,
       thresholds: {
         autoUpdate: true,
-        branches: 43.76,
-        lines: 73.61,
+        branches: 45.08,
+        lines: 76.82,
       },
     },
   },

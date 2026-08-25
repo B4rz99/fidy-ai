@@ -1,57 +1,61 @@
 import { Effect, Option, Schema } from "effect";
 import {
-  type ConsentGateInput,
-  type ConsentGateOutcome,
-  evaluateConsentGate,
-} from "~/shell/consent/consent-gate";
+  type OnboardingTurn,
+  type OnboardingTurnOutcome,
+  handleOnboardingTurn,
+} from "~/shell/onboarding/onboarding";
 import { type AgentReply, AgentService, InboundMessage } from "./agent-service";
 
 /**
- * Consent-terminal outcome or a validated text turn bound to the resolved stable User. Admission
- * may persist consent state through the consent gate, but never invokes AgentService.
+ * Onboarding-terminal outcome or a validated text turn bound to the resolved stable User. Admission
+ * may persist onboarding state through the deep process, but never invokes AgentService.
  */
 export type AgentConversationAdmission =
-  | Exclude<ConsentGateOutcome, { readonly _tag: "Proceed" }>
+  | Exclude<OnboardingTurnOutcome, { readonly _tag: "Proceed" }>
   | Readonly<{
       readonly _tag: "AuthorizedTurn";
-      readonly userId: Extract<ConsentGateOutcome, { readonly _tag: "Proceed" }>["userId"];
+      readonly userId: Extract<OnboardingTurnOutcome, { readonly _tag: "Proceed" }>["userId"];
       readonly inboundMessage: InboundMessage;
     }>;
 
-/** Tells an adapter whether consent ended the turn or an authorized agent reply may be sent. */
+/** Tells an adapter whether onboarding ended the turn or an authorized reply may be sent. */
 export type AgentConversationOutcome =
-  | Exclude<ConsentGateOutcome, { readonly _tag: "Proceed" }>
+  | Exclude<OnboardingTurnOutcome, { readonly _tag: "Proceed" }>
   | Readonly<{ readonly _tag: "AgentReplied"; readonly reply: AgentReply }>;
 
-const invalidAgentMessage = (): Exclude<ConsentGateOutcome, { readonly _tag: "Proceed" }> => ({
+const invalidAgentMessage = (): Exclude<OnboardingTurnOutcome, { readonly _tag: "Proceed" }> => ({
   _tag: "ClarifyDecision",
-  text: "Escribe un mensaje de texto no vacío de hasta 16.000 caracteres.",
+  reason: "invalid-message",
 });
 
 /**
- * Evaluates the consent gate, preserving its typed failures and side effects, then validates
- * admitted text against InboundMessage. Consent outcomes terminate; valid text returns an
+ * Evaluates verified onboarding, preserving its typed outcomes and side effects, then validates
+ * admitted text against InboundMessage. Onboarding outcomes terminate; valid text returns an
  * AuthorizedTurn without invoking the model.
  */
 export const admitAgentConversationTurn = Effect.fn("admitAgentConversationTurn")(function* (
-  input: ConsentGateInput
+  input: OnboardingTurn
 ) {
-  const gate = yield* evaluateConsentGate(input);
-  if (gate._tag !== "Proceed") return gate;
+  const onboarding = yield* handleOnboardingTurn(input);
+  if (onboarding._tag !== "Proceed") return onboarding;
   if (input.content._tag !== "Text") return invalidAgentMessage();
 
   const inbound = Schema.decodeUnknownOption(InboundMessage)({ text: input.content.text });
   if (Option.isNone(inbound)) return invalidAgentMessage();
-  return { _tag: "AuthorizedTurn", userId: gate.userId, inboundMessage: inbound.value } as const;
+  return {
+    _tag: "AuthorizedTurn",
+    userId: onboarding.userId,
+    inboundMessage: inbound.value,
+  } as const;
 });
 
 /**
- * Owns the immediate channel-neutral conversation boundary. Consent outcomes terminate the turn;
- * only admitted text enters AgentService. Consent-gate and AgentService failures are preserved,
- * and successful AgentService execution may persist canonical state and transcript evidence.
+ * Owns the immediate channel-neutral conversation boundary. Onboarding outcomes terminate the turn;
+ * only admitted text enters AgentService. Process and AgentService failures are preserved, and
+ * successful AgentService execution may persist canonical state and Transcript evidence.
  */
 export const handleAgentConversationTurn = Effect.fn("handleAgentConversationTurn")(function* (
-  input: ConsentGateInput
+  input: OnboardingTurn
 ) {
   const admission = yield* admitAgentConversationTurn(input);
   if (admission._tag !== "AuthorizedTurn") return admission;

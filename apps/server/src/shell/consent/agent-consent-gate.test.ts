@@ -7,10 +7,11 @@ import { UserId } from "~/core/identity/reference";
 import { TranscriptText } from "~/core/transcript/model";
 import { makeColombianUser } from "~/core/identity/rules";
 import { AgentService, InboundMessage } from "~/shell/agent/agent-service";
-import { upsertUser } from "~/shell/identity/repo";
 import { TelemetryDisabled } from "~/shell/observability/disabled";
 import { ApiHarness } from "~/shell/testing/api-harness";
 import { HostedInferenceFromLanguageModel } from "~/shell/testing/hosted-inference-fixtures";
+import { revokeCurrentOnboardingConsentForTesting } from "~/shell/testing/consent";
+import { upsertStableUserFixture } from "~/shell/testing/identity-fixtures";
 import { currentDisclosure } from "./current-disclosure";
 import { appendConsentRecord, withSubjectLock } from "./repo";
 import { selectTranscriptEntries } from "~/shell/transcript/repo";
@@ -70,8 +71,12 @@ layer(AgentConsentHarness, { excludeTestServices: true, timeout: "30 seconds" })
           createdAt: DateTime.makeUnsafe("2026-08-01T12:00:00Z"),
           paidTier: "free",
         });
-        yield* upsertUser(unconsentedUserId, user);
+        yield* upsertStableUserFixture(unconsentedUserId, user);
         const sql = yield* MigrationSqlClient;
+        yield* revokeCurrentOnboardingConsentForTesting(
+          unconsentedUserId,
+          ConsentRecordId.make("f1d1a000-0000-4000-8000-0000000008bf")
+        );
         yield* sql`DELETE FROM transcript_entries WHERE user_id = ${unconsentedUserId}`;
 
         const service = yield* AgentService;
@@ -91,16 +96,24 @@ layer(AgentConsentHarness, { excludeTestServices: true, timeout: "30 seconds" })
     it.effect("lets a winning concurrent revocation stop transcript and model work", () =>
       Effect.gen(function* () {
         const admin = yield* MigrationSqlClient;
-        yield* admin`DELETE FROM hosted_agent_sessions WHERE user_id = ${concurrentlyRevokedUserId}`;
-        yield* admin`DELETE FROM consent_records WHERE subject_user_id = ${concurrentlyRevokedUserId}`;
-        yield* admin`DELETE FROM transcript_entries WHERE user_id = ${concurrentlyRevokedUserId}`;
-        yield* admin`DELETE FROM users WHERE id = ${concurrentlyRevokedUserId}`;
+        yield* admin.withTransaction(
+          Effect.gen(function* () {
+            yield* admin`DELETE FROM hosted_agent_sessions WHERE user_id = ${concurrentlyRevokedUserId}`;
+            yield* admin`DELETE FROM consent_records WHERE subject_user_id = ${concurrentlyRevokedUserId}`;
+            yield* admin`DELETE FROM transcript_entries WHERE user_id = ${concurrentlyRevokedUserId}`;
+            yield* admin`DELETE FROM users WHERE id = ${concurrentlyRevokedUserId}`;
+          })
+        );
         const occurredAt = DateTime.makeUnsafe("2026-08-01T12:00:00Z");
         const user = yield* makeColombianUser(concurrentlyRevokedUserId, {
           createdAt: occurredAt,
           paidTier: "free",
         });
-        yield* upsertUser(concurrentlyRevokedUserId, user);
+        yield* upsertStableUserFixture(concurrentlyRevokedUserId, user);
+        yield* revokeCurrentOnboardingConsentForTesting(
+          concurrentlyRevokedUserId,
+          ConsentRecordId.make("f1d1a000-0000-4000-8000-0000000008be")
+        );
         const grant = yield* makeOnboardingGrant;
         if (grant.evidence._tag !== "ProviderQualifiedMessages") {
           return yield* Effect.die("unexpected onboarding evidence origin");

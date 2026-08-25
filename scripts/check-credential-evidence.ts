@@ -23,6 +23,16 @@ const credentialEvidence = [
     testName: "counts complete framing and executes the exact prepared request",
   },
   {
+    configuration: "EMAIL_ADMISSION_HMAC_KEY",
+    testFile: "apps/server/src/shell/onboarding/onboarding-turn.test.ts",
+    testName: "keeps the email admission HMAC credential out of persistence and outcomes",
+  },
+  {
+    configuration: "RESEND_API_KEY",
+    testFile: "apps/server/src/shell/email-authentication/delivery.test.ts",
+    testName: "keeps Resend credentials out of typed failures",
+  },
+  {
     configuration: "KAPSO_API_KEY",
     testFile: "apps/server/src/shell/channels/whatsapp/kapso-client.test.ts",
     testName: "keeps provider bodies and send inputs out of typed failures",

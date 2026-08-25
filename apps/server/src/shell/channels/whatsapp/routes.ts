@@ -37,7 +37,7 @@ import {
   type ConsentDisclosureDeliveryUnavailable,
   applyConsentDisclosureLifecycle,
 } from "./disclosure-delivery";
-import { deliverWhatsAppConsentOutcome } from "./outbound";
+import { deliverWhatsAppOnboardingOutcome } from "./outbound";
 import {
   DisclosureLifecycleEventName,
   type InvalidKapsoPayload,
@@ -111,7 +111,7 @@ const readBoundedBody = (
     );
 
 type ReceiptClaim = Parameters<typeof releaseWhatsAppReceipt>[0];
-type InboundEventOutcome = "enqueued" | "duplicate" | "consent-turn";
+type InboundEventOutcome = "enqueued" | "duplicate" | "onboarding-turn";
 
 const chargeIngressBudgets = (
   event: WhatsAppInboundEvent
@@ -177,7 +177,7 @@ const deliverConsentTurn = (
   admission: Exclude<AgentConversationAdmission, { readonly _tag: "AuthorizedTurn" }>,
   claim: ReceiptClaim
 ): Effect.Effect<
-  "consent-turn",
+  "onboarding-turn",
   | ConsentDisclosureDeliveryUnavailable
   | KapsoSendFailed
   | Schema.SchemaError
@@ -185,8 +185,8 @@ const deliverConsentTurn = (
   Crypto.Crypto | KapsoClient | SqlClient.SqlClient
 > =>
   Effect.as(
-    deliverWhatsAppConsentOutcome(event, admission, markWhatsAppReceiptOutboundStarted(claim)),
-    "consent-turn" as const
+    deliverWhatsAppOnboardingOutcome(event, admission, markWhatsAppReceiptOutboundStarted(claim)),
+    "onboarding-turn" as const
   );
 
 const admitInboundEvent = (

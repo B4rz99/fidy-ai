@@ -30,6 +30,7 @@ import { manualPATIssuance } from "./0030-manual-pat-issuance";
 import { retrySafeManualPATIssuance } from "./0031-retry-safe-manual-pat-issuance";
 import { dashboardTransactionAccess } from "./0032-dashboard-transaction-access";
 import { fixedPATLifetimes } from "./0033-fixed-pat-lifetimes";
+import { verifiedEmailOnboarding } from "./0034-verified-email-onboarding";
 
 /**
  * The explicit index ARCHITECTURE.md §7 calls for: one ordered, append-only
@@ -72,4 +73,5 @@ export const migrations = {
   "0031_retry_safe_manual_pat_issuance": retrySafeManualPATIssuance,
   "0032_dashboard_transaction_access": dashboardTransactionAccess,
   "0033_fixed_pat_lifetimes": fixedPATLifetimes,
+  "0034_verified_email_onboarding": verifiedEmailOnboarding,
 };

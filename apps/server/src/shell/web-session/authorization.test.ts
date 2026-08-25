@@ -5,6 +5,7 @@ import { SqlSchema } from "effect/unstable/sql";
 import { MigrationSqlClient } from "~/shell/db/client";
 import { seedConsentedPatIdentity } from "~/shell/db/development-seed";
 import { StartedBrowserLoginPairing } from "~/core/browser-login/model";
+import { ConsentRecordId } from "~/core/consent/model";
 import { UserId } from "~/core/identity/reference";
 import { TokenBearer } from "~/core/tokens/model";
 import { WebSessionId } from "~/core/web-session/reference";
@@ -15,6 +16,7 @@ import {
 import { truncateAuditLogEntries } from "~/shell/audit/fixtures";
 import { observeAuditLogEntries } from "~/shell/audit/repo";
 import { ApiHarness } from "~/shell/testing/api-harness";
+import { revokeCurrentOnboardingConsentForTesting } from "~/shell/testing/consent";
 
 const userId = UserId.make("f1d1a000-0000-4000-8000-000000000241");
 const patBearer = TokenBearer.make("fin_websess1_abcdefghijklmnopqrstuvwxyz0123456789ABCD");
@@ -250,7 +252,10 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           `,
         });
         const before = yield* readUseState(undefined);
-        yield* sql`DELETE FROM consent_records WHERE subject_user_id = ${userId}`;
+        yield* revokeCurrentOnboardingConsentForTesting(
+          userId,
+          ConsentRecordId.make("f1d1a000-0000-4000-8000-00000000024f")
+        );
 
         const response = yield* HttpClient.get("/user", {
           headers: { cookie: `${sessionCookieName}=${webSessionBearer}` },

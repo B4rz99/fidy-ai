@@ -1,11 +1,13 @@
 import { expect, layer } from "@effect/vitest";
-import { Effect, Redacted, Schema } from "effect";
+import { DateTime, Effect, Redacted, Schema } from "effect";
 import { HttpBody, HttpClient } from "effect/unstable/http";
 import { StartedBrowserLoginPairing } from "~/core/browser-login/model";
 import { UserId } from "~/core/identity/reference";
+import { makeColombianUser } from "~/core/identity/rules";
 import { WebSessionBearer } from "~/core/web-session/reference";
 import { MigrationSqlClient } from "~/shell/db/client";
 import { ApiTelemetryHarness } from "~/shell/testing/api-harness";
+import { upsertStableUserFixture } from "~/shell/testing/identity-fixtures";
 import { transactionEnvelopePayloads } from "~/shell/testing/telemetry-envelope-fixtures";
 import { EnvelopeRecorder } from "./envelope-recorder";
 
@@ -66,16 +68,11 @@ layer(ApiTelemetryHarness, { excludeTestServices: true, timeout: "30 seconds" })
             privateVerifier: "x".repeat(43),
           }),
         });
-        yield* sql`
-          INSERT INTO users (
-            id, service_market, locale, time_zone, created_at,
-            paid_tier, trial_started_at, trial_ends_at
-          ) VALUES (
-            ${telemetryUserId}, 'CO', 'es-CO', 'America/Bogota', now(),
-            'free', now(), now() + interval '168 hours'
-          )
-          ON CONFLICT (id) DO NOTHING
-        `;
+        const telemetryUser = yield* makeColombianUser(telemetryUserId, {
+          createdAt: DateTime.makeUnsafe("2026-08-01T00:00:00Z"),
+          paidTier: "free",
+        });
+        yield* upsertStableUserFixture(telemetryUserId, telemetryUser);
         yield* sql`
           UPDATE browser_login_pairings
           SET user_id = ${telemetryUserId}, lifecycle = 'ready', approved_at = now(),

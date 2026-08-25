@@ -12,6 +12,7 @@ import { seedConsentedPatIdentity } from "~/shell/db/development-seed";
 import { withUserTransaction } from "~/shell/db/user-transaction";
 import { appendConsentRecord, observeConsentRecords, withSubjectLock } from "./repo";
 import { ApiHarness, headersFor } from "~/shell/testing/api-harness";
+import { revokeCurrentOnboardingConsentForTesting } from "~/shell/testing/consent";
 import { transactionPayload, truncateTransactions } from "~/shell/transactions/fixtures";
 
 const unconsentedUserId = UserId.make("f1d1a000-0000-4000-8000-0000000008a1");
@@ -36,7 +37,10 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         yield* truncateTransactions;
         yield* admin`DELETE FROM audit_log_entries WHERE user_id = ${unconsentedUserId}`;
         yield* admin`DELETE FROM hosted_agent_sessions WHERE user_id = ${unconsentedUserId}`;
-        yield* admin`DELETE FROM consent_records WHERE subject_user_id = ${unconsentedUserId}`;
+        yield* revokeCurrentOnboardingConsentForTesting(
+          unconsentedUserId,
+          ConsentRecordId.make("f1d1a000-0000-4000-8000-0000000008af")
+        );
 
         const TokenUseState = Schema.Struct({
           lastUsedAt: Schema.OptionFromNullOr(Schema.DateTimeUtcFromDate),
@@ -81,7 +85,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         const audits = yield* observeAuditLogEntries(unconsentedUserId);
 
         expect(response.status).toBe(403);
-        expect(body).toMatchObject({ error: { code: "consent_required" } });
+        expect(body).toMatchObject({ error: { code: "user_action_required" } });
         expect(transactions.count).toBe(0);
         expect(tokenUseAfter).toEqual(tokenUseBefore);
         expect(Option.isNone(tokenUseAfter.lastUsedAt)).toBe(true);
@@ -132,12 +136,16 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
       Effect.gen(function* () {
         const sql = yield* SqlClient.SqlClient;
         const admin = yield* MigrationSqlClient;
-        yield* admin`DELETE FROM transactions WHERE user_id = ${revokedUserId}`;
-        yield* admin`DELETE FROM audit_log_entries WHERE user_id = ${revokedUserId}`;
-        yield* admin`DELETE FROM hosted_agent_sessions WHERE user_id = ${revokedUserId}`;
-        yield* admin`DELETE FROM consent_records WHERE subject_user_id = ${revokedUserId}`;
-        yield* admin`DELETE FROM tokens WHERE user_id = ${revokedUserId}`;
-        yield* admin`DELETE FROM users WHERE id = ${revokedUserId}`;
+        yield* admin.withTransaction(
+          Effect.gen(function* () {
+            yield* admin`DELETE FROM transactions WHERE user_id = ${revokedUserId}`;
+            yield* admin`DELETE FROM audit_log_entries WHERE user_id = ${revokedUserId}`;
+            yield* admin`DELETE FROM hosted_agent_sessions WHERE user_id = ${revokedUserId}`;
+            yield* admin`DELETE FROM consent_records WHERE subject_user_id = ${revokedUserId}`;
+            yield* admin`DELETE FROM tokens WHERE user_id = ${revokedUserId}`;
+            yield* admin`DELETE FROM users WHERE id = ${revokedUserId}`;
+          })
+        );
         yield* seedConsentedPatIdentity({
           userId: revokedUserId,
           bearer: revokedBearer,

@@ -7,10 +7,14 @@ import { ValidationGateLive } from "~/shell/_shared/errors-live";
 import { CanonicalRetryAfterBody } from "~/shell/_shared/errors";
 import { externalEndpoints } from "~/shell/_shared/external-endpoints";
 import { AuditRetentionLive } from "~/shell/audit/retention";
-import { PendingConsentRetentionLive } from "~/shell/consent/retention";
+import { OnboardingRetentionLive } from "~/shell/onboarding/retention";
 import { AgentService } from "~/shell/agent/agent-service";
 import { OpenAiHostedInferenceLive, OpenAiLanguageModelLive } from "~/shell/agent/openai";
-import { BrowserLoginLive, BrowserLoginWebAuthLive } from "~/shell/browser-login/handlers";
+import {
+  BrowserLoginEvidenceRetentionLive,
+  BrowserLoginLive,
+  BrowserLoginWebAuthHandlersLive,
+} from "~/shell/browser-login/handlers";
 import { BudgetsLive } from "~/shell/budgets/handlers";
 import { CategoriesLive } from "~/shell/categories/handlers";
 import { KapsoClient } from "~/shell/channels/whatsapp/kapso-client";
@@ -24,11 +28,15 @@ import { StatementColumnMapper } from "~/shell/ingestion/column-mapper";
 import { IngestionLive } from "~/shell/ingestion/handlers";
 import { StatementIngestionWorkerLive } from "~/shell/ingestion/worker";
 import { MemoryLive } from "~/shell/memory/handlers";
+import { EmailDeliveryPort } from "~/shell/email-authentication/delivery";
+import { EmailOnboardingWebAuthHandlersLive } from "~/shell/email-authentication/handlers";
+import { OnboardingDeliveryWorkerLive } from "~/shell/onboarding/delivery-worker";
 import { OperationsLive } from "~/shell/operations/handlers";
 import { CanonicalTelemetryLive } from "~/shell/observability/canonical-api";
 import { SubscriptionLive } from "~/shell/subscription/handlers";
 import { PATsLive } from "~/shell/tokens/handlers";
 import { TransactionsLive } from "~/shell/transactions/handlers";
+import { WebAuthApi } from "~/web-auth-api";
 import { FidyApi, operationCatalog } from "./api";
 
 /** Prevents authenticated canonical responses from remaining in caller caches. */
@@ -37,6 +45,17 @@ const CanonicalApiNoStoreLive = HttpRouter.middleware((httpEffect) =>
     HttpServerResponse.setHeader(response, "cache-control", "no-store")
   )
 ).layer;
+
+const WebAuthNoStoreLive = HttpRouter.middleware((httpEffect) =>
+  Effect.map(httpEffect, (response) =>
+    HttpServerResponse.setHeader(response, "cache-control", "no-store")
+  )
+).layer;
+
+const WebAuthLive = HttpApiBuilder.layer(WebAuthApi).pipe(
+  Layer.provide(WebAuthNoStoreLive),
+  Layer.provide(Layer.merge(BrowserLoginWebAuthHandlersLive, EmailOnboardingWebAuthHandlersLive))
+);
 
 /**
  * The canonical API as live routes: every operation `FidyApi` declares, mounted
@@ -152,7 +171,8 @@ export const ExactOriginCorsLive = Layer.unwrap(
 export const HttpLive = HttpRouter.serve(
   Layer.mergeAll(
     ApiLive,
-    BrowserLoginWebAuthLive,
+    WebAuthLive,
+    BrowserLoginEvidenceRetentionLive,
     HttpApiScalar.layer(FidyApi, { path: "/docs" }),
     HealthLive,
     KapsoWebhookLive,
@@ -177,12 +197,17 @@ const HostedStatementIngestionWorkerLive = StatementIngestionWorkerLive.pipe(
   Layer.provide(StatementColumnMapper.layer.pipe(Layer.provide(OpenAiLanguageModelLive)))
 );
 
+const HostedOnboardingDeliveryWorkerLive = OnboardingDeliveryWorkerLive.pipe(
+  Layer.provide(EmailDeliveryPort.layer)
+);
+
 export const AppLive = Layer.mergeAll(
   HttpLive.pipe(Layer.provide(KapsoClient.layer)),
   HostedWhatsAppWorkerLive,
   HostedStatementIngestionWorkerLive,
+  HostedOnboardingDeliveryWorkerLive,
   AuditRetentionLive,
-  PendingConsentRetentionLive
+  OnboardingRetentionLive
 ).pipe(
   Layer.provide(OpenAiHostedInferenceLive),
   Layer.provide(RuntimeAuthorityLive),

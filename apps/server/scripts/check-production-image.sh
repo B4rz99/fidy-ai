@@ -77,6 +77,7 @@ assertApplicationRejected() {
     --env MIGRATION_DATABASE_URL --env DATABASE_URL \
     --env KAPSO_API_KEY --env KAPSO_WEBHOOK_SECRET --env WHATSAPP_BUSINESS_PORTFOLIO_ID \
     --env OPENAI_API_KEY --env OPENAI_API_URL \
+    --env RESEND_API_KEY --env RESEND_FROM_EMAIL --env RESEND_FROM_NAME \
     --env PUBLIC_WEB_ORIGIN --env PUBLIC_API_ORIGIN --env INGEST_EMAIL_DOMAIN \
     --env "RAILWAY_GIT_COMMIT_SHA=${releaseSha}" \
     --env SENTRY_ENVIRONMENT --env SENTRY_CAPTURE_ERRORS --env SENTRY_CAPTURE_TRACES \
@@ -162,7 +163,7 @@ assertRetentionStarted() {
     applicationLogs=$(docker logs "$application" 2>&1)
     if grep --fixed-strings --quiet 'Applied WhatsApp operational retention' <<<"$applicationLogs" && \
       grep --fixed-strings --quiet 'Applied AuditLogEntry retention' <<<"$applicationLogs" && \
-      grep --fixed-strings --quiet 'Applied pending Consent retention' <<<"$applicationLogs"; then
+      grep --fixed-strings --quiet 'Applied onboarding retention' <<<"$applicationLogs"; then
       return 0
     fi
     sleep 0.5
@@ -255,6 +256,9 @@ export KAPSO_WEBHOOK_SECRET="production-smoke-webhook-secret"
 export WHATSAPP_BUSINESS_PORTFOLIO_ID="portfolio-production-smoke"
 export OPENAI_API_KEY="production-smoke-openai-key"
 export OPENAI_API_URL="http://${openAiProbe}:8080/v1"
+export RESEND_API_KEY="re_production_smoke_resend_key"
+export RESEND_FROM_EMAIL="obarboza@fidyapp.com"
+export RESEND_FROM_NAME="Fidy"
 export PUBLIC_WEB_ORIGIN="https://fidyapp.com"
 export PUBLIC_API_ORIGIN="https://api.fidyapp.com"
 export INGEST_EMAIL_DOMAIN="ingest.fidyapp.com"
@@ -335,6 +339,7 @@ docker run --detach --name "$application" --network "$network" \
   --env MIGRATION_DATABASE_URL --env DATABASE_URL \
   --env KAPSO_API_KEY --env KAPSO_WEBHOOK_SECRET --env WHATSAPP_BUSINESS_PORTFOLIO_ID \
   --env OPENAI_API_KEY --env OPENAI_API_URL \
+  --env RESEND_API_KEY --env RESEND_FROM_EMAIL --env RESEND_FROM_NAME \
   --env PUBLIC_WEB_ORIGIN --env PUBLIC_API_ORIGIN --env INGEST_EMAIL_DOMAIN \
   --env "RAILWAY_GIT_COMMIT_SHA=${releaseSha}" \
   --env SENTRY_ENVIRONMENT --env SENTRY_CAPTURE_ERRORS --env SENTRY_CAPTURE_TRACES \

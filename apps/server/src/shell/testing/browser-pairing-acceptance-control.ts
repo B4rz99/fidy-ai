@@ -1,13 +1,14 @@
 import { BunHttpServer, BunServices } from "@effect/platform-bun";
-import { type Config, ConfigProvider, Effect, Layer, Option, Schema } from "effect";
+import { type Config, ConfigProvider, DateTime, Effect, Layer, Option, Schema } from "effect";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
 import { type SqlError, SqlSchema } from "effect/unstable/sql";
 import { BrowserLoginPublicCode } from "~/core/browser-login/rules";
 import { categoryIds } from "~/core/categories/taxonomy";
 import { UserId } from "~/core/identity/reference";
-import { seedOnboardingConsent } from "~/shell/db/development-seed";
+import { makeColombianUser } from "~/core/identity/rules";
 import { MigrationSqlClient, PgLive } from "~/shell/db/client";
 import { maximumPublicRequestBodySizeBytes } from "~/shell/runtime";
+import { upsertStableUserFixture } from "./identity-fixtures";
 
 const acceptanceUserId = UserId.make("24000000-0000-4000-8000-000000000241");
 
@@ -30,18 +31,11 @@ const reset = Effect.gen(function* () {
   yield* sql`DELETE FROM web_sessions WHERE user_id = ${acceptanceUserId}`;
   yield* sql`TRUNCATE browser_login_start_attempts, browser_login_pairings`;
   yield* sql`DELETE FROM transactions WHERE user_id = ${acceptanceUserId}`;
-  yield* sql`
-    INSERT INTO users (
-      id, service_market, locale, time_zone, created_at,
-      paid_tier, trial_started_at, trial_ends_at
-    )
-    VALUES (
-      ${acceptanceUserId}, 'CO', 'es-CO', 'America/Bogota', now(),
-      'free', now(), now() + INTERVAL '168 hours'
-    )
-    ON CONFLICT (id) DO NOTHING
-  `;
-  yield* seedOnboardingConsent(acceptanceUserId);
+  const user = yield* makeColombianUser(acceptanceUserId, {
+    createdAt: yield* DateTime.now,
+    paidTier: "free",
+  });
+  yield* upsertStableUserFixture(acceptanceUserId, user);
   return HttpServerResponse.empty({ status: noContentStatus });
 });
 

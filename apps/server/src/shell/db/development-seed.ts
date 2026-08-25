@@ -12,6 +12,7 @@ import {
 import type { ChildProcessSpawner } from "effect/unstable/process";
 import type { Migrator, SqlClient, SqlError } from "effect/unstable/sql";
 import { ConsentRecord, ConsentRecordId } from "~/core/consent/model";
+import { EmailAddress } from "~/core/email-authentication/model";
 import {
   E164PhoneNumber,
   UserId,
@@ -37,8 +38,11 @@ import { computePATExpiration } from "~/core/tokens/rules";
 import { hashTokenBearer } from "~/shell/_shared/token-digest";
 import { currentDisclosure } from "~/shell/consent/current-disclosure";
 import { appendConsentRecord, hasCurrentOnboardingConsent } from "~/shell/consent/repo";
-import { associateWhatsAppIdentity, upsertUser } from "~/shell/identity/repo";
+import { associateWhatsAppIdentity, upsertDevelopmentUser } from "~/shell/identity/repo";
+import { installVerifiedEmailCredentialInScope } from "~/shell/email-authentication/repo";
+import { upsertDevelopmentBackupRecoveryCredentialInScope } from "~/shell/recovery/repo";
 import { type TokenHash, upsertPAT } from "~/shell/tokens/repo";
+import { withUserTransaction } from "./user-transaction";
 import { MigrationPgLive, MigratorLive } from "./client";
 
 /** The stable User used by the local development seed and API-seam tests. */
@@ -136,6 +140,38 @@ const resolveSeededPATLifetime = Effect.fn("resolveSeededPATLifetime")(function*
   return { expiresAt, lifetimeDays };
 });
 
+const installDevelopmentIdentityState = Effect.fn("installDevelopmentIdentityState")(function* (
+  userId: UserId
+) {
+  const isDefaultUser = userId === defaultUserId;
+  yield* associateWhatsAppIdentity(userId, {
+    businessPortfolioId: WhatsAppBusinessPortfolioId.make(
+      isDefaultUser ? "portfolio-test" : "fidy-development"
+    ),
+    businessScopedUserId: WhatsAppBusinessScopedUserId.make(
+      isDefaultUser ? "CO.573001234567" : `CO.${userId.replaceAll("-", "")}`
+    ),
+    parentBusinessScopedUserId: Option.none(),
+    username: Option.none(),
+    phoneNumber: isDefaultUser ? Option.some(defaultWhatsAppPhone) : Option.none(),
+    verifiedAt: defaultCreatedAt,
+  });
+  const crypto = yield* Crypto.Crypto;
+  const recoveryDigest = yield* crypto
+    .digest("SHA-256", new TextEncoder().encode(`development-recovery:${userId}`))
+    .pipe(Effect.orDie);
+  yield* installVerifiedEmailCredentialInScope({
+    userId,
+    email: EmailAddress.make(`seed-${userId}@fidyapp.com`),
+    verifiedAt: defaultCreatedAt,
+  });
+  yield* upsertDevelopmentBackupRecoveryCredentialInScope({
+    userId,
+    codeDigest: recoveryDigest,
+    createdAt: defaultCreatedAt,
+  });
+});
+
 /**
  * Seeds one stable User, current onboarding ConsentRecord, and hashed PAT bearer
  * through slice-owned persistence operations. When consent is absent, it adds
@@ -152,32 +188,40 @@ export const seedConsentedPatIdentity = (
 > =>
   Effect.gen(function* () {
     const userId = overrides.userId ?? defaultUserId;
-    const bearer = overrides.bearer;
-    const scopes = overrides.scopes ?? defaultPATScopes;
-    const tokenCreatedAt = overrides.tokenCreatedAt ?? (yield* DateTime.now);
-    const { expiresAt, lifetimeDays } = yield* resolveSeededPATLifetime(overrides, tokenCreatedAt);
-    const revokedAt = overrides.revokedAt ?? Option.none();
-    const user = yield* makeColombianUser(userId, { createdAt: defaultCreatedAt, paidTier: "pro" });
-    yield* upsertUser(userId, user);
+    return yield* withUserTransaction(
+      userId,
+      Effect.gen(function* () {
+        const bearer = overrides.bearer;
+        const scopes = overrides.scopes ?? defaultPATScopes;
+        const tokenCreatedAt = overrides.tokenCreatedAt ?? (yield* DateTime.now);
+        const { expiresAt, lifetimeDays } = yield* resolveSeededPATLifetime(
+          overrides,
+          tokenCreatedAt
+        );
+        const revokedAt = overrides.revokedAt ?? Option.none();
+        const user = yield* makeColombianUser(userId, {
+          createdAt: defaultCreatedAt,
+          paidTier: "pro",
+        });
+        yield* upsertDevelopmentUser(userId, user);
+        if (!(yield* hasCurrentOnboardingConsent(userId))) yield* seedOnboardingConsent(userId);
+        yield* installDevelopmentIdentityState(userId);
 
-    if (!(yield* hasCurrentOnboardingConsent(userId))) {
-      yield* seedOnboardingConsent(userId);
-    }
-
-    const tokenHash = yield* hashTokenBearer(bearer);
-    yield* upsertPAT(userId, {
-      id: overrides.tokenId ?? tokenIdFromHash(tokenHash),
-      shortId: yield* getTokenShortId(bearer),
-      recipientLabel: PATRecipientLabel.make("Development PAT"),
-      tokenHash,
-      scopes,
-      lifetimeDays,
-      expiresAt,
-      revokedAt,
-      createdAt: tokenCreatedAt,
-    });
-
-    return { user, tokenHash };
+        const tokenHash = yield* hashTokenBearer(bearer);
+        yield* upsertPAT(userId, {
+          id: overrides.tokenId ?? tokenIdFromHash(tokenHash),
+          shortId: yield* getTokenShortId(bearer),
+          recipientLabel: PATRecipientLabel.make("Development PAT"),
+          tokenHash,
+          scopes,
+          lifetimeDays,
+          expiresAt,
+          revokedAt,
+          createdAt: tokenCreatedAt,
+        });
+        return { user, tokenHash };
+      })
+    );
   });
 
 /**

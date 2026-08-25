@@ -4,7 +4,8 @@ import { UserId } from "~/core/identity/reference";
 import { makeColombianUser } from "~/core/identity/rules";
 import { MigrationSqlClient } from "~/shell/db/client";
 import { ApiHarness } from "~/shell/testing/api-harness";
-import { findUser, upsertUser } from "./repo";
+import { upsertStableUserFixture } from "~/shell/testing/identity-fixtures";
+import { findUser, upsertDevelopmentUser } from "./repo";
 
 const userId = UserId.make("f1d1a000-0000-4000-8000-0000000008e1");
 const originalCreatedAt = DateTime.makeUnsafe("2026-08-01T12:00:00Z");
@@ -20,13 +21,13 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           createdAt: originalCreatedAt,
           paidTier: "free",
         });
-        yield* upsertUser(userId, original);
+        yield* upsertStableUserFixture(userId, original);
 
         const attemptedReplacement = yield* makeColombianUser(userId, {
           createdAt: DateTime.makeUnsafe("2026-09-01T12:00:00Z"),
           paidTier: "pro",
         });
-        const upserted = yield* upsertUser(userId, attemptedReplacement);
+        const upserted = yield* upsertDevelopmentUser(userId, attemptedReplacement);
         const persisted = Option.getOrThrow(yield* findUser(userId));
 
         expect(upserted).toMatchObject({

@@ -420,6 +420,70 @@ export const appendConsentRecord = Effect.fn("appendConsentRecord")(function* (
   return yield* withSubjectLock(record.subjectUserId, appendConsentRecordInScope(record));
 });
 
+/** Marks one delivered pending exchange accepted while the Consent caller lock is held. */
+export const markPendingConsentAcceptedInScope = Effect.fn(
+  "Consent.markPendingConsentAcceptedInScope"
+)(function* (
+  input: Readonly<{
+    pendingExchangeId: PendingConsentExchangeId;
+    decisionMessage: ProviderMessageEvidence;
+    acceptedAt: DateTime.Utc;
+  }>
+) {
+  const sql = yield* SqlClient.SqlClient;
+  yield* SqlSchema.findOne({
+    Request: Schema.Void,
+    Result: Schema.Struct({ id: PendingConsentExchangeId }),
+    execute: () => sql`
+      UPDATE pending_consent_exchanges SET
+        decision_channel = ${input.decisionMessage.channel},
+        decision_provider = ${input.decisionMessage.provider},
+        decision_provider_message_id = ${input.decisionMessage.providerMessageId},
+        accepted_at = ${input.acceptedAt}
+      WHERE id = ${input.pendingExchangeId}
+        AND lifecycle = 'awaiting-decision'
+        AND decision_channel IS NULL
+      RETURNING id
+    `,
+  })(undefined).pipe(Effect.orDie);
+});
+
+/** Consent-owned append from bounded accepted evidence inside onboarding's open transaction. */
+export const appendVerifiedOnboardingConsentInScope = Effect.fn(
+  "Consent.appendVerifiedOnboardingConsentInScope"
+)(function* (
+  input: Readonly<{
+    recordId: ConsentRecordId;
+    subjectUserId: UserId;
+    pendingExchangeId: PendingConsentExchangeId;
+  }>
+) {
+  const sql = yield* SqlClient.SqlClient;
+  yield* SqlSchema.findOne({
+    Request: Schema.Void,
+    Result: Schema.Struct({ id: ConsentRecordId }),
+    execute: () => sql`
+      INSERT INTO consent_records (
+        id, subject_user_id, event_type, grant_type, service_market, locale,
+        disclosure_revision, disclosure_sha256, disclosure_text, policy_url,
+        policy_revision, policy_sha256, purposes, data_categories, duration,
+        revocation_method, decision_origin, disclosure_channel, disclosure_provider,
+        disclosure_provider_message_id, decision_channel, decision_provider,
+        decision_provider_message_id, occurred_at
+      ) SELECT
+        ${input.recordId}, ${input.subjectUserId}, 'granted', 'onboarding',
+        service_market, locale, disclosure_revision, disclosure_sha256, disclosure_text,
+        policy_url, policy_revision, policy_sha256, purposes, data_categories, duration,
+        revocation_method, 'provider-qualified-messages', disclosure_channel, disclosure_provider,
+        disclosure_provider_message_id, decision_channel,
+        decision_provider, decision_provider_message_id, accepted_at
+      FROM pending_consent_exchanges
+      WHERE id = ${input.pendingExchangeId} AND accepted_at IS NOT NULL
+      RETURNING id
+    `,
+  })(undefined).pipe(Effect.orDie);
+}, Effect.orDie);
+
 const ResolvedConsentSubject = Schema.Struct({ subjectUserId: UserId });
 
 /** Finds the immutable decision already associated with one provider-qualified replay key. */
@@ -938,13 +1002,26 @@ export const removePendingConsentExchange = (
   `
   ).pipe(Effect.asVoid, Effect.orDie);
 
-/** Deletes abandoned pending exchanges whose 24-hour lifetime has ended. */
+const retentionBatchSize = 100;
+
+/** Deletes one fixed-size indexed batch of expired Consent-owned pending exchanges. */
 export const removeExpiredPendingConsentExchanges = (
   now: DateTime.Utc
 ): Effect.Effect<void, never, SqlClient.SqlClient> =>
   Effect.flatMap(
     SqlClient.SqlClient,
     (sql) => sql`
-      DELETE FROM pending_consent_exchanges WHERE expires_at <= ${now}
+      WITH expired AS (
+        SELECT id
+        FROM pending_consent_exchanges
+        WHERE expires_at <= ${now}
+          AND accepted_at IS NULL
+        ORDER BY expires_at, id
+        LIMIT ${retentionBatchSize}
+        FOR UPDATE SKIP LOCKED
+      )
+      DELETE FROM pending_consent_exchanges AS pending
+      USING expired
+      WHERE pending.id = expired.id
     `
   ).pipe(Effect.asVoid, Effect.orDie);

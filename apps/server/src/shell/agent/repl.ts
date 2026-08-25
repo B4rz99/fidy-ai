@@ -4,6 +4,7 @@ import {
   WhatsAppBusinessPortfolioId,
   type WhatsAppBusinessScopedUserId,
 } from "~/core/identity/reference";
+import { CURRENT_DISCLOSURE_TEXT } from "~/shell/consent/current-disclosure";
 import { recordLocalConsentDisclosureDelivery } from "~/shell/consent/repo";
 import { type AgentConversationOutcome, handleAgentConversationTurn } from "./conversation";
 import { InboundMessage } from "./agent-service";
@@ -31,6 +32,17 @@ const renderTerminalText = (text: string): string =>
       : character;
   }).join("");
 
+const terminalOutcomeText = (
+  outcome: Exclude<AgentConversationOutcome, { readonly _tag: "AgentReplied" }>
+): string => {
+  if (outcome._tag === "SendDisclosure") return CURRENT_DISCLOSURE_TEXT;
+  if (outcome._tag === "AwaitingEmail") return "Autorización registrada. Escribe tu correo.";
+  if (outcome._tag === "EmailSubmitted") return "Revisa tu correo para verificarlo.";
+  if (outcome._tag === "Accepted") return "Tu cuenta ya está lista.";
+  if (outcome._tag === "Declined") return "No creé una cuenta.";
+  return "Aclara tu respuesta para continuar.";
+};
+
 const displayConversationOutcome = Effect.fn("displayConversationOutcome")(function* (
   outcome: AgentConversationOutcome
 ) {
@@ -43,9 +55,9 @@ const displayConversationOutcome = Effect.fn("displayConversationOutcome")(funct
   }
 
   if (outcome._tag !== "SendDisclosure") {
-    return yield* terminal.display(`${renderTerminalText(outcome.text)}\n`);
+    return yield* terminal.display(`${renderTerminalText(terminalOutcomeText(outcome))}\n`);
   }
-  yield* terminal.display(`${renderTerminalText(outcome.text)}\n`);
+  yield* terminal.display(`${renderTerminalText(terminalOutcomeText(outcome))}\n`);
   const crypto = yield* Crypto.Crypto;
   const recorded = yield* recordLocalConsentDisclosureDelivery({
     exchangeId: outcome.exchangeId,

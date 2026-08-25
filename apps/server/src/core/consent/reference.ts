@@ -1,5 +1,11 @@
 import { Schema } from "effect";
 
+/** Stable identity of one temporary pre-User disclosure exchange. */
+export const PendingConsentExchangeId = Schema.String.check(Schema.isUUID())
+  .pipe(Schema.brand("PendingConsentExchangeId"))
+  .annotate({ identifier: "PendingConsentExchangeId" });
+export type PendingConsentExchangeId = typeof PendingConsentExchangeId.Type;
+
 /** Stable identity of one append-only ConsentRecord. */
 export const ConsentRecordId = Schema.String.check(Schema.isUUID())
   .pipe(Schema.brand("ConsentRecordId"))

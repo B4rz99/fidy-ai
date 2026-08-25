@@ -7,7 +7,7 @@ export const CURRENT_DISCLOSURE_TEXT = `Soy Fidy. Antes de crear tu cuenta neces
 
 Política completa: https://fidyapp.com/politica
 
-Para autorizar, responde exactamente “Acepto” o usa la opción Aceptar. Para continuar sin crear una cuenta, responde “No acepto”.`;
+Para crear tu cuenta, responde exactamente “Acepto” o usa la opción Aceptar. Si no quieres crearla, responde “No acepto”.`;
 
 /**
  * Current immutable disclosure facts at the configured public policy URL.
@@ -18,8 +18,8 @@ export const currentDisclosure = Config.map(externalEndpoints, ({ policyUrl }) =
   Schema.decodeUnknownSync(DisclosureSnapshot)({
     serviceMarket: "CO",
     locale: "es-CO",
-    revision: "onboarding-2026-08",
-    contentSha256: "baeed2db4f3545103cef440d961dffd436679e0ac3dcfcddd6376847c283bb3b",
+    revision: "onboarding-2026-08-25",
+    contentSha256: "e3d53b771ad54c0d05777aeefed717b8b93475aa35dcc52d381d8e1d629008c4",
     text: CURRENT_DISCLOSURE_TEXT,
     policy: {
       publicUrl: policyUrl,

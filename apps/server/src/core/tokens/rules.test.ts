@@ -5,8 +5,12 @@ import { buildPATDisclosure, computePATExpiration } from "./rules";
 
 it("includes the named recipient and every granted scope in Spanish disclosure", () => {
   const disclosure = buildPATDisclosure({
-    recipientLabel: PATRecipientLabel.make("Mi agente financiero"),
-    scopes: ["read", "write", "dashboard"],
+    grant: {
+      recipientLabel: PATRecipientLabel.make("Mi agente financiero"),
+      scopes: ["read", "write", "dashboard"],
+      lifetimeDays: 90,
+    },
+    expiresAt: DateTime.makeUnsafe("2026-04-01T00:00:00Z"),
   });
 
   expect(disclosure).toContain("Nombre: “Mi agente financiero”.");

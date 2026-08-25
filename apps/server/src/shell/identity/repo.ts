@@ -9,6 +9,7 @@ import {
   WhatsAppUsername,
 } from "~/core/identity/reference";
 import { User, UserPreferences, WhatsAppIdentity } from "~/core/identity/model";
+import type { WhatsAppCaller } from "~/shell/channels/whatsapp/model";
 import { withUserTransaction } from "~/shell/db/user-transaction";
 
 const UserWithoutId = User.mapFields(Struct.omit(["id"]));
@@ -109,14 +110,46 @@ const writeUser = Effect.fn("Identity.writeUser")(function* (
  * Inserts or refreshes one development User with independently supplied
  * context, returning the canonical persisted row; database failures are defects.
  */
-export const upsertUser = Effect.fn("upsertUser")(
+export const upsertDevelopmentUser = Effect.fn("upsertDevelopmentUser")(
   (userId: UserId, attributes: typeof UserWithoutId.Type) => writeUser("upsert", userId, attributes)
 );
 
-/** Inserts a production User exactly once; identity conflicts are defects. */
-export const insertUser = Effect.fn("insertUser")(
-  (userId: UserId, attributes: typeof UserWithoutId.Type) => writeUser("insert", userId, attributes)
-);
+/**
+ * Identity-owned write used only by the verified-onboarding coordinator's already-open transaction.
+ * It creates the complete stable User, TrialPeriod, and first WhatsAppIdentity together.
+ */
+export const createVerifiedOnboardingIdentityInScope = Effect.fn(
+  "Identity.createVerifiedOnboardingIdentityInScope"
+)(function* (
+  input: Readonly<{
+    userId: UserId;
+    caller: WhatsAppCaller;
+    createdAt: DateTime.Utc;
+  }>
+) {
+  const sql = yield* SqlClient.SqlClient;
+  yield* sql`
+    INSERT INTO users (
+      id, service_market, locale, time_zone, paid_tier,
+      trial_started_at, trial_ends_at, created_at
+    ) VALUES (
+      ${input.userId}, 'CO', 'es-CO', 'America/Bogota', 'free',
+      ${input.createdAt}, ${DateTime.add(input.createdAt, { hours: 168 })}, ${input.createdAt}
+    )
+  `;
+  yield* sql`
+    INSERT INTO whatsapp_identities (
+      user_id, business_portfolio_id, business_scoped_user_id,
+      parent_business_scoped_user_id, username, phone_number, verified_at
+    ) VALUES (
+      ${input.userId}, ${input.caller.businessPortfolioId},
+      ${input.caller.businessScopedUserId},
+      ${Option.getOrNull(input.caller.parentBusinessScopedUserId)},
+      ${Option.getOrNull(input.caller.username)}, ${Option.getOrNull(input.caller.phoneNumber)},
+      ${input.createdAt}
+    )
+  `;
+}, Effect.orDie);
 
 /** Finds the stable User inside the caller's User-scoped transaction. */
 export const findUserInScope = (

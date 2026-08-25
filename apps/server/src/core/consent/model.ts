@@ -6,7 +6,13 @@ import { InsightKind } from "~/core/insights/reference";
 import { PATId } from "~/core/tokens/reference";
 import { UtcTimestamp } from "~/core/_shared/time";
 import { WebSessionId } from "~/core/web-session/reference";
-import { ConsentRecordId, DisclosureRevision, PolicyRevision, Sha256Digest } from "./reference";
+import {
+  ConsentRecordId,
+  DisclosureRevision,
+  PendingConsentExchangeId,
+  PolicyRevision,
+  Sha256Digest,
+} from "./reference";
 
 const maximumLegalFactLength = 1_000;
 const maximumPolicyUrlLength = 2_048;
@@ -17,13 +23,13 @@ const legalFact = Schema.NonEmptyString.check(
   Schema.isMaxLength(maximumLegalFactLength)
 );
 
-export { ConsentRecordId, DisclosureRevision, PolicyRevision, Sha256Digest };
-
-/** Stable identity of one temporary pre-User disclosure exchange. */
-export const PendingConsentExchangeId = Schema.String.check(Schema.isUUID())
-  .pipe(Schema.brand("PendingConsentExchangeId"))
-  .annotate({ identifier: "PendingConsentExchangeId" });
-export type PendingConsentExchangeId = typeof PendingConsentExchangeId.Type;
+export {
+  ConsentRecordId,
+  DisclosureRevision,
+  PendingConsentExchangeId,
+  PolicyRevision,
+  Sha256Digest,
+};
 
 /** Stable HTTPS location of a source-controlled policy revision. */
 export const PolicyUrl = Schema.String.check(

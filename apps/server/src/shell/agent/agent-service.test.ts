@@ -1454,7 +1454,7 @@ layer(CompactingAgentHarness, { excludeTestServices: true, timeout: "30 seconds"
           ],
           { discard: true, concurrency: 1 }
         );
-        yield* clearCompactionFixture;
+        yield* sql.withTransaction(clearCompactionFixture);
         yield* seedConsentedPatIdentity({
           userId: compactionUserId,
           bearer: compactionBearer,
@@ -1495,7 +1495,7 @@ layer(CompactingAgentHarness, { excludeTestServices: true, timeout: "30 seconds"
           expect(compacted).toEqual([{ text: "MARCADOR_COMPACTADO" }]);
           expect(exactSource).toHaveLength(0);
           expect(reply.text).toBe("recordado desde conversación compactada");
-        }).pipe(Effect.ensuring(clearCompactionFixture.pipe(Effect.orDie)));
+        }).pipe(Effect.ensuring(sql.withTransaction(clearCompactionFixture).pipe(Effect.orDie)));
       })
     );
   }
@@ -3163,7 +3163,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
     })
   );
 
-  it.effect("does not process a finance request during an accepted onboarding conversation", () =>
+  it.effect("does not create stable state or process finance during accepted onboarding", () =>
     Effect.gen(function* () {
       const sql = yield* MigrationSqlClient;
       yield* sql`
@@ -3211,7 +3211,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
         WHERE wi.phone_number = ${acceptedOnboardingPhone}
       `;
 
-      expect(users).toHaveLength(1);
+      expect(users).toEqual([]);
       expect(transactions).toEqual([]);
       expect(displayed.join("\n")).toContain("Antes de crear tu cuenta");
       expect(displayed.join("\n")).toContain("Autorización registrada");

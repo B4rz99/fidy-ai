@@ -1,9 +1,11 @@
 import { expect, layer } from "@effect/vitest";
-import { Effect, Exit, Option, Schema } from "effect";
+import { DateTime, Effect, Exit, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import { UserId } from "~/core/identity/reference";
+import { makeColombianUser } from "~/core/identity/rules";
 import { TransactionId } from "~/core/transactions/model";
 import { ApiHarness } from "~/shell/testing/api-harness";
+import { upsertStableUserFixture } from "~/shell/testing/identity-fixtures";
 import { MigrationSqlClient, assertRuntimeAuthority } from "./client";
 import { userTableNames } from "./user-tables";
 import { withUserTransaction } from "./user-transaction";
@@ -49,7 +51,25 @@ const observeContext = Effect.fn("observeRlsContext")(function* (userId: UserId)
   );
 });
 
+const seedStableUsers = Effect.fn("Testing.seedStableUsers")(function* (
+  userIds: ReadonlyArray<UserId>
+) {
+  yield* Effect.forEach(
+    userIds,
+    (userId) =>
+      Effect.gen(function* () {
+        const user = yield* makeColombianUser(userId, {
+          createdAt: DateTime.makeUnsafe("2026-01-01T00:00:00Z"),
+          paidTier: "free",
+        });
+        yield* upsertStableUserFixture(userId, user);
+      }),
+    { discard: true }
+  );
+});
+
 const seedRows = Effect.gen(function* () {
+  yield* seedStableUsers([owner, stranger]);
   const admin = yield* MigrationSqlClient;
   yield* admin`
     INSERT INTO users (
@@ -86,6 +106,7 @@ const policyForgedUser = UserId.make("f1d1a000-0000-4000-8000-0000000003b2");
 const policyTransactionId = TransactionId.make("f1d1a000-0000-4000-8000-0000000001c3");
 
 const seedEveryPolicyShape = Effect.gen(function* () {
+  yield* seedStableUsers([policyOwner, policyStranger, policyInsertVictim, policyContinuityVictim]);
   const admin = yield* MigrationSqlClient;
   yield* admin`
     INSERT INTO users (
@@ -108,6 +129,17 @@ const seedEveryPolicyShape = Effect.gen(function* () {
         ${policyContinuityVictim}, 'CO', 'es-CO', 'America/Bogota', 'free',
         '2026-01-01T00:00:00Z', '2026-01-08T00:00:00Z', '2026-01-01T00:00:00Z'
       )
+    ON CONFLICT (id) DO NOTHING
+  `;
+  yield* admin`
+    INSERT INTO verified_email_credentials (user_id, email_address, verified_at)
+    VALUES (${policyOwner}, 'rls-probe@fidyapp.com', '2026-01-01T00:00:00Z')
+    ON CONFLICT (user_id) DO NOTHING
+  `;
+  yield* admin`
+    INSERT INTO backup_recovery_credentials (user_id, code_digest, created_at)
+    VALUES (${policyOwner}, ${new Uint8Array(32)}, '2026-01-01T00:00:00Z')
+    ON CONFLICT (user_id) DO NOTHING
   `;
   yield* admin`
     INSERT INTO agent_confirmation_consumptions (user_id, digest, consumed_at)
@@ -328,6 +360,16 @@ const policyProbes: ReadonlyArray<PolicyProbe> = [
     tableName: "agent_confirmation_consumptions",
     stableColumn: "consumed_at",
     ownerPredicate: `user_id = '${policyOwner}' AND digest = '${"a".repeat(64)}'`,
+  },
+  {
+    tableName: "backup_recovery_credentials",
+    stableColumn: "created_at",
+    ownerPredicate: `user_id = '${policyOwner}'`,
+  },
+  {
+    tableName: "verified_email_credentials",
+    stableColumn: "verified_at",
+    ownerPredicate: `user_id = '${policyOwner}'`,
   },
   {
     tableName: "tokens",
@@ -761,6 +803,10 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
               "browser_login_start_attempts",
               "categories",
               "effect_sql_migrations",
+              "email_delivery_admission_budgets",
+              "email_delivery_intents",
+              "email_verification_admission_slots",
+              "email_enrollments",
               "pending_consent_exchanges",
               "price_revisions",
               "published_price_revisions",
@@ -989,7 +1035,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
             policyOwner,
             sql`SELECT id FROM consent_records WHERE subject_user_id = ${policyOwner}`
           )
-        ).toHaveLength(1);
+        ).toHaveLength(2);
         expect(
           yield* withUserTransaction(
             policyStranger,

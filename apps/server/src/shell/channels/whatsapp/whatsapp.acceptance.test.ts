@@ -1,5 +1,5 @@
 import { expect, layer } from "@effect/vitest";
-import { Crypto, DateTime, Effect, Option, Schedule, Schema } from "effect";
+import { Crypto, DateTime, Effect, Option, Ref, Schedule, Schema } from "effect";
 import { HttpBody, HttpClient, HttpClientResponse } from "effect/unstable/http";
 import { decideEffectiveAccess } from "~/core/identity/rules";
 import {
@@ -9,6 +9,11 @@ import {
 } from "~/core/identity/reference";
 import { TranscriptText } from "~/core/transcript/model";
 import { CURRENT_DISCLOSURE_TEXT } from "~/shell/consent/current-disclosure";
+import { EmailDeliveryPort, EmailSendFailed } from "~/shell/email-authentication/delivery";
+import { processOneOnboardingDelivery } from "~/shell/onboarding/delivery-worker";
+import { handleOnboardingTurn } from "~/shell/onboarding/onboarding";
+import { TelemetrySpanId, TelemetryTraceId } from "~/shell/observability/protocol";
+import { Telemetry, makeTelemetryService } from "~/shell/observability/telemetry";
 import { DisclosureDeliveryCorrelationToken } from "./disclosure-model";
 import { WhatsAppProviderMessageId } from "./model";
 import {
@@ -216,6 +221,24 @@ const postSignedLifecycleEvidence = Effect.fn("Acceptance.postSignedDisclosureLi
   }
 );
 
+const acceptanceTelemetry = makeTelemetryService({
+  startSpan: () =>
+    Effect.succeed(
+      Option.some({
+        traceId: TelemetryTraceId.make("0".repeat(32)),
+        spanId: TelemetrySpanId.make("0".repeat(16)),
+        sampled: true,
+        state: undefined,
+      })
+    ),
+  finishSpan: () => Effect.void,
+  recordOutcome: () => Effect.void,
+  recordResponseStatus: () => Effect.void,
+  captureFailure: () => Effect.void,
+  addBreadcrumb: () => Effect.void,
+  recordModelUsage: () => Effect.void,
+});
+
 const acceptanceCaller = (
   businessScopedUserId: WhatsAppBusinessScopedUserId
 ): Readonly<{
@@ -271,6 +294,66 @@ const establishCaller = Effect.fn("Acceptance.establishWhatsAppCaller")(function
     DateTime.add(startedAt, { seconds: 2 })
   );
   const decisionResponse = yield* postSignedDelivery(decisionDelivery);
+  const emailIdentity = yield* makeScenarioIdentity(input.scenarioId);
+  const emailDelivery = yield* makeSignedWebhookAt(
+    {
+      providerMessageId: emailIdentity.providerMessageId,
+      businessScopedUserId: identity.businessScopedUserId,
+      phoneNumber: Option.some(input.phoneNumber),
+      text: TranscriptText.make(`${emailIdentity.businessScopedUserId.slice(3)}@example.com`),
+    },
+    DateTime.add(startedAt, { seconds: 3 })
+  );
+  const emailResponse = yield* postSignedDelivery(emailDelivery);
+  const deliveredCode = yield* Ref.make(Option.none<string>());
+  const deliveryAttempts = yield* Ref.make(0);
+  const deliveryPort = EmailDeliveryPort.of({
+    send: ({ combinedCode }) =>
+      Effect.gen(function* () {
+        const attempt = yield* Ref.getAndUpdate(deliveryAttempts, (count) => count + 1);
+        if (input.scenarioId === "WA-A04" && attempt === 0) {
+          return yield* new EmailSendFailed({ certainty: "rejected", retryable: true });
+        }
+        if (input.scenarioId === "WA-A05" && attempt === 0) {
+          return yield* new EmailSendFailed({ certainty: "rejected", retryable: false });
+        }
+        yield* Ref.set(deliveredCode, Option.some(combinedCode));
+      }),
+  });
+  yield* processOneOnboardingDelivery().pipe(
+    Effect.provideService(EmailDeliveryPort, deliveryPort),
+    Effect.provideService(Telemetry, acceptanceTelemetry)
+  );
+  if (Option.isNone(yield* Ref.get(deliveredCode))) {
+    const replacementIdentity = yield* makeScenarioIdentity(input.scenarioId);
+    yield* handleOnboardingTurn({
+      caller: {
+        ...acceptanceCaller(identity.businessScopedUserId),
+        parentBusinessScopedUserId: Option.none(),
+        username: Option.none(),
+        phoneNumber: Option.some(input.phoneNumber),
+      },
+      content: {
+        _tag: "Text",
+        text: `${replacementIdentity.businessScopedUserId.slice(3)}-replacement@example.com`,
+      },
+      message: {
+        channel: "whatsapp",
+        provider: "kapso",
+        providerMessageId: replacementIdentity.providerMessageId,
+      },
+      receivedAt: DateTime.add(startedAt, { seconds: 4 }),
+    });
+    yield* processOneOnboardingDelivery().pipe(
+      Effect.provideService(EmailDeliveryPort, deliveryPort),
+      Effect.provideService(Telemetry, acceptanceTelemetry)
+    );
+  }
+  const verificationResponse = yield* HttpClient.post("/web/onboarding/email/verify", {
+    headers: { origin: "https://fidyapp.com" },
+    body: HttpBody.jsonUnsafe({ combinedCode: Option.getOrThrow(yield* Ref.get(deliveredCode)) }),
+  });
+  if (verificationResponse.status !== 200) return yield* Effect.die("email proof was rejected");
   return {
     identity,
     startedAt,
@@ -278,6 +361,8 @@ const establishCaller = Effect.fn("Acceptance.establishWhatsAppCaller")(function
     disclosureResponse,
     decisionDelivery,
     decisionResponse,
+    emailDelivery,
+    emailResponse,
   };
 });
 
@@ -487,7 +572,7 @@ layer(WhatsAppAcceptanceHarness, { excludeTestServices: true, timeout: "30 secon
         expect(onboarding.decisionResponse.status).toBe(200);
 
         const outbound = yield* kapso.requests;
-        expect(outbound).toHaveLength(2);
+        expect(outbound).toHaveLength(3);
         const disclosure = yield* Schema.decodeUnknownEffect(KapsoTextRequest)(outbound[0]?.body);
         expect(disclosure).toEqual({
           to: "573004040404",
@@ -521,7 +606,7 @@ layer(WhatsAppAcceptanceHarness, { excludeTestServices: true, timeout: "30 secon
         yield* kapso.reset;
         yield* model.reset;
         yield* kapso.setDeliveryMode("sandbox-phone");
-        yield* kapso.setOutcomes(["accepted", "accepted", "rejected", "accepted"]);
+        yield* kapso.setOutcomes(["accepted", "accepted", "accepted", "rejected", "accepted"]);
 
         const { onboarding, probe, financialResponse } = yield* submitAcceptedFinancialTurn({
           scenarioId: "WA-A05",
@@ -542,9 +627,9 @@ layer(WhatsAppAcceptanceHarness, { excludeTestServices: true, timeout: "30 secon
         const history = yield* awaitAcceptanceTransaction(probe);
         expect(history.data).toHaveLength(1);
 
-        const outbound = yield* awaitKapsoRequests(4);
-        expect(outbound[3]?.body).toEqual(outbound[2]?.body);
-        const reply = yield* Schema.decodeUnknownEffect(KapsoTextRequest)(outbound[3]?.body);
+        const outbound = yield* awaitKapsoRequests(5);
+        expect(outbound[4]?.body).toEqual(outbound[3]?.body);
+        const reply = yield* Schema.decodeUnknownEffect(KapsoTextRequest)(outbound[4]?.body);
         expect(reply).toHaveProperty("to", "573005050505");
         expect(reply).not.toHaveProperty("recipient");
         expect(reply.text.body).toContain("Gasto guardado");
@@ -563,9 +648,9 @@ layer(WhatsAppAcceptanceHarness, { excludeTestServices: true, timeout: "30 secon
           )
         );
         expect(plainResponse.status).toBe(200);
-        const plainOutbound = yield* awaitKapsoRequests(5);
+        const plainOutbound = yield* awaitKapsoRequests(6);
         const plainReply = yield* Schema.decodeUnknownEffect(KapsoTextRequest)(
-          plainOutbound[4]?.body
+          plainOutbound[5]?.body
         );
         expect(plainReply.text.body).toBe("Todo listo.");
         expect((yield* model.calls).length).toBeGreaterThan(0);
@@ -597,9 +682,9 @@ layer(WhatsAppAcceptanceHarness, { excludeTestServices: true, timeout: "30 secon
           }
         );
 
-        const outboundBeforeReplay = yield* awaitKapsoRequests(3);
+        const outboundBeforeReplay = yield* awaitKapsoRequests(4);
         const reply = yield* Schema.decodeUnknownEffect(KapsoTextRequest)(
-          outboundBeforeReplay[2]?.body
+          outboundBeforeReplay[3]?.body
         );
         expect(reply.text.body).toContain("Gasto guardado");
         const historyBeforeReplay = yield* awaitAcceptanceTransaction(probe);

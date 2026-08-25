@@ -249,7 +249,7 @@ know which transport exposes it.
 
 External providers stay at shell edges behind narrow services. Launch-specific behavior remains
 in its owning module rather than being hidden behind speculative provider or market registries.
-Resend is Recovery's launch outbound-email adapter; it receives only the recipient and bounded
+Resend is EmailAuthentication's launch outbound-email adapter; it receives only the recipient and bounded
 message projection required for the current proof, and provider work is driven by durable delivery
 state. The WhatsApp edge authenticates bounded exact webhook bytes before decoding and bounds Kapso
 response bytes before SDK decoding. Its worker appends a visible assistant Transcript entry only

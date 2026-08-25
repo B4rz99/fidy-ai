@@ -76,7 +76,6 @@ import {
   observeConsentRecords,
 } from "~/shell/consent/repo";
 import { associateWhatsAppIdentity, resolveWhatsAppCaller } from "~/shell/identity/repo";
-import { removeWhatsAppIdentityForTesting } from "~/shell/identity/testing";
 import { defaultPatBearer } from "~/shell/testing/identity-fixtures";
 import { transactionPayload } from "~/shell/transactions/fixtures";
 import { selectTranscriptEntries } from "~/shell/transcript/repo";
@@ -90,7 +89,7 @@ import {
   type WhatsAppInboundEvent,
   WhatsAppProviderMessageId,
 } from "./model";
-import { deliverWhatsAppConsentOutcome, sendKapsoFreeForm } from "./outbound";
+import { deliverWhatsAppOnboardingOutcome, sendKapsoFreeForm } from "./outbound";
 import { truncateWhatsAppChannel } from "./fixtures";
 import {
   claimWhatsAppReceipt,
@@ -1896,12 +1895,12 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
             Effect.andThen(Deferred.await(allowSend))
           )
         );
-        const first = yield* deliverWhatsAppConsentOutcome(event, admission).pipe(
+        const first = yield* deliverWhatsAppOnboardingOutcome(event, admission).pipe(
           Effect.provideService(KapsoClient, kapsoService),
           Effect.forkChild
         );
         yield* Deferred.await(sendStarted);
-        const secondFailure = yield* deliverWhatsAppConsentOutcome(event, admission).pipe(
+        const secondFailure = yield* deliverWhatsAppOnboardingOutcome(event, admission).pipe(
           Effect.provideService(KapsoClient, kapsoService),
           Effect.flip
         );
@@ -1967,7 +1966,7 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         if (Option.isNone(receipt)) return yield* Effect.die("missing ambiguous receipt claim");
         const sends = yield* Ref.make(0);
         yield* Effect.exit(
-          deliverWhatsAppConsentOutcome(
+          deliverWhatsAppOnboardingOutcome(
             event,
             admission,
             markWhatsAppReceiptOutboundStarted(receipt.value)
@@ -2107,7 +2106,7 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           return yield* Effect.die("missing rejected disclosure admission");
         }
         yield* Effect.exit(
-          deliverWhatsAppConsentOutcome(event, admission).pipe(
+          deliverWhatsAppOnboardingOutcome(event, admission).pipe(
             Effect.provideService(KapsoClient, {
               sendText: () =>
                 Effect.fail(
@@ -2199,7 +2198,7 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         });
         if (admission._tag !== "SendDisclosure") return yield* Effect.die("missing disclosure");
         yield* Effect.exit(
-          deliverWhatsAppConsentOutcome(event, admission).pipe(
+          deliverWhatsAppOnboardingOutcome(event, admission).pipe(
             Effect.provideService(KapsoClient, {
               sendText: () =>
                 Effect.fail(
@@ -2286,7 +2285,7 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           receivedAt: now,
         });
         if (admission._tag !== "SendDisclosure") return yield* Effect.die("missing disclosure");
-        yield* deliverWhatsAppConsentOutcome(event, admission).pipe(
+        yield* deliverWhatsAppOnboardingOutcome(event, admission).pipe(
           Effect.provideService(KapsoClient, kapsoClientFixture("wamid.atomic-send", now))
         );
         const attempt = yield* Effect.fromOption(
@@ -2338,7 +2337,7 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         if (admission._tag !== "SendDisclosure") {
           return yield* Effect.die("missing terminal disclosure admission");
         }
-        const failure = yield* deliverWhatsAppConsentOutcome(event, admission).pipe(
+        const failure = yield* deliverWhatsAppOnboardingOutcome(event, admission).pipe(
           Effect.provideService(KapsoClient, {
             sendText: () =>
               Effect.fail(
@@ -2422,7 +2421,7 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
             DateTime.add(receivedAt, { minutes: 1 })
           )).status
         ).toBe(200);
-        expect(Option.isSome(yield* resolveWhatsAppCaller(testWhatsAppCaller(phoneNumber)))).toBe(
+        expect(Option.isNone(yield* resolveWhatsAppCaller(testWhatsAppCaller(phoneNumber)))).toBe(
           true
         );
 
@@ -2612,16 +2611,28 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           eventTime,
           Ref.update(sends, (count) => count + 1)
         );
-        yield* deliverWhatsAppConsentOutcome(
+        yield* deliverWhatsAppOnboardingOutcome(
           { ...event, occurredAt: DateTime.subtract(eventTime, { hours: 25 }) },
-          { _tag: "ClarifyDecision", text: "Aclara tu decisión." }
+          { _tag: "ClarifyDecision", reason: "unrecognized-decision" }
         ).pipe(Effect.provideService(KapsoClient, kapsoService));
         expect(yield* Ref.get(sends)).toBe(0);
-        yield* deliverWhatsAppConsentOutcome(event, {
+        yield* deliverWhatsAppOnboardingOutcome(event, {
           _tag: "Declined",
-          text: "No se creó una cuenta.",
+          reason: "declined",
         }).pipe(Effect.provideService(KapsoClient, kapsoService));
-        expect(yield* Ref.get(sends)).toBe(1);
+        yield* deliverWhatsAppOnboardingOutcome(event, {
+          _tag: "Declined",
+          reason: "expired",
+        }).pipe(Effect.provideService(KapsoClient, kapsoService));
+        yield* deliverWhatsAppOnboardingOutcome(event, {
+          _tag: "Accepted",
+          userId: defaultUserId,
+        }).pipe(Effect.provideService(KapsoClient, kapsoService));
+        yield* deliverWhatsAppOnboardingOutcome(event, {
+          _tag: "EmailSubmitted",
+          status: "sent",
+        }).pipe(Effect.provideService(KapsoClient, kapsoService));
+        expect(yield* Ref.get(sends)).toBe(4);
       })
     );
 
@@ -2803,14 +2814,19 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         ).pipe(Effect.provideService(KapsoClient, kapsoNeverCalled), Effect.flip);
         expect(missingWindow._tag).toBe("WhatsAppWindowClosed");
 
-        yield* removeWhatsAppIdentityForTesting(defaultUserId);
-        const missingIdentity = yield* sendFreeFormFixture(
+        yield* withUserTransaction(
           defaultUserId,
-          agentReplyFixture("No hay destinatario."),
-          eventTime
-        ).pipe(Effect.provideService(KapsoClient, kapsoNeverCalled), Effect.flip);
-        expect(missingIdentity._tag).toBe("WhatsAppIdentityMissing");
-        yield* seedDevelopmentIdentity(defaultPatBearer);
+          Effect.gen(function* () {
+            yield* sql`DELETE FROM whatsapp_identities WHERE user_id = ${defaultUserId}`;
+            const missingIdentity = yield* sendFreeFormFixture(
+              defaultUserId,
+              agentReplyFixture("No hay destinatario."),
+              eventTime
+            ).pipe(Effect.provideService(KapsoClient, kapsoNeverCalled), Effect.flip);
+            expect(missingIdentity._tag).toBe("WhatsAppIdentityMissing");
+            yield* seedDevelopmentIdentity(defaultPatBearer);
+          })
+        );
 
         const [inbound] = yield* recordedEvents(eventTime);
         const admission = yield* admitAgentConversationTurn({

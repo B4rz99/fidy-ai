@@ -23,6 +23,7 @@ import { CanonicalOperationId } from "~/core/_shared/canonical-operation";
 import { CompactedConversationOutput } from "~/core/transcript/compacted-conversation";
 import { ConsentRecord, ConsentRecordId } from "~/core/consent/model";
 import { UserId } from "~/core/identity/reference";
+import { makeColombianUser } from "~/core/identity/rules";
 import { ConversationCompactionTokenCount } from "~/core/transcript/compaction-policy";
 import type { HostedAgentSessionId } from "~/core/transcript/hosted-agent-session";
 import {
@@ -45,6 +46,7 @@ import { currentDisclosure } from "~/shell/consent/current-disclosure";
 import { appendConsentRecord } from "~/shell/consent/repo";
 import { advisoryLockKey, withUserTurnLock } from "~/shell/db/advisory-lock";
 import { MigrationSqlClient } from "~/shell/db/client";
+import { upsertStableUserFixture } from "~/shell/testing/identity-fixtures";
 import { defaultUserId, seedOnboardingConsent } from "~/shell/db/development-seed";
 import { ApiHarness } from "~/shell/testing/api-harness";
 import {
@@ -466,27 +468,27 @@ const resetDefaultContinuity = Effect.gen(function* () {
   yield* sql`DELETE FROM hosted_agent_sessions WHERE user_id = ${defaultUserId}`;
   // Whether a session may carry work reads the User's whole Consent standing, not only the grant it
   // pinned, so every program starts from the seeded basis instead of decisions an earlier one left.
-  yield* sql`DELETE FROM consent_records WHERE subject_user_id = ${defaultUserId}`;
-  yield* seedOnboardingConsent(defaultUserId).pipe(Effect.orDie);
+  yield* sql.withTransaction(
+    Effect.gen(function* () {
+      yield* sql`DELETE FROM consent_records WHERE subject_user_id = ${defaultUserId}`;
+      yield* seedOnboardingConsent(defaultUserId).pipe(Effect.orDie);
+    })
+  );
 });
 
 const isolatedUserId = UserId.make("f1d1a000-0000-4000-8000-0000000004b0");
 const resetIsolatedUser = Effect.gen(function* () {
   const sql = yield* MigrationSqlClient;
-  yield* sql`DELETE FROM hosted_agent_sessions WHERE user_id = ${isolatedUserId}`;
-  yield* sql`DELETE FROM consent_records WHERE subject_user_id = ${isolatedUserId}`;
-  yield* sql`DELETE FROM users WHERE id = ${isolatedUserId}`;
-  yield* sql`
-    INSERT INTO users (
-      id, service_market, locale, time_zone, created_at,
-      paid_tier, trial_started_at, trial_ends_at
-    ) VALUES (
-      ${isolatedUserId}, 'CO', 'es-CO', 'America/Bogota',
-      '2026-08-11T00:00:00Z', 'free',
-      '2026-08-11T00:00:00Z', '2026-08-18T00:00:00Z'
-    )
-  `;
-  yield* seedOnboardingConsent(isolatedUserId).pipe(Effect.orDie);
+  yield* sql.withTransaction(
+    Effect.gen(function* () {
+      yield* sql`DELETE FROM hosted_agent_sessions WHERE user_id = ${isolatedUserId}`;
+      yield* sql`DELETE FROM consent_records WHERE subject_user_id = ${isolatedUserId}`;
+      yield* sql`DELETE FROM users WHERE id = ${isolatedUserId}`;
+      const createdAt = DateTime.makeUnsafe("2026-08-11T00:00:00Z");
+      const user = yield* makeColombianUser(isolatedUserId, { createdAt, paidTier: "free" });
+      yield* upsertStableUserFixture(isolatedUserId, user);
+    })
+  );
 });
 
 const assertGeneratedMetadata = (completed: ContinuityView): void => {

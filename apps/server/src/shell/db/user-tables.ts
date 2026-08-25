@@ -2,6 +2,7 @@
 export const userTableNames = [
   "agent_confirmation_consumptions",
   "audit_log_entries",
+  "backup_recovery_credentials",
   "budget_month_latches",
   "budgets",
   "compacted_conversations",
@@ -25,6 +26,7 @@ export const userTableNames = [
   "transactions",
   "transcript_entries",
   "users",
+  "verified_email_credentials",
   "whatsapp_conversation_windows",
   "whatsapp_identities",
   "whatsapp_identity_change_evidence",

@@ -10,6 +10,7 @@ import {
   useRouter,
 } from "@tanstack/react-router";
 import { BrowserLoginPairingFeature } from "@/features/browser-login/feature";
+import { EmailOnboardingFeature } from "@/features/email-onboarding/feature";
 import { createPublicSiteRoute } from "@/features/public-site/feature";
 import { ManualPATFeature } from "@/features/pats/feature";
 import { SignedInFeature } from "@/features/signed-in/feature";
@@ -84,10 +85,16 @@ const browserLoginPairingRoute = createRoute({
   path: "/auth/pair",
   component: BrowserLoginPairingFeature,
 });
+const emailOnboardingRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/auth/verify-email",
+  component: EmailOnboardingFeature,
+});
 const routeTree = rootRoute.addChildren([
   createPublicSiteRoute(rootRoute),
   browserLoginPairingRoute,
   subscriptionOffersRoute,
+  emailOnboardingRoute,
   authenticatedRoute.addChildren([
     signedInRoute.addChildren([signedInIndexRoute, dashboardRoute, transactionsRoute]),
     manualPATRoute,

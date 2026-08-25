@@ -1,5 +1,5 @@
 import { Effect, Layer, Option, Redacted, Schema, Semaphore } from "effect";
-import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
+import { HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
 import { HttpApiBuilder } from "effect/unstable/httpapi";
 import { ResolvedCaller, webSessionCookieName } from "~/shell/_shared/authz";
 import { FidyApi } from "~/shell/api";
@@ -26,12 +26,6 @@ import {
   TelemetryHttpStatus,
 } from "~/shell/observability/protocol";
 import { Telemetry, type TelemetryService } from "~/shell/observability/telemetry";
-
-const WebAuthNoStoreLive = HttpRouter.middleware((httpEffect) =>
-  Effect.map(httpEffect, (response) =>
-    HttpServerResponse.setHeader(response, "cache-control", "no-store")
-  )
-).layer;
 
 const maximumConcurrentStarts = 8;
 const maximumConcurrentRedemptions = 4;
@@ -69,7 +63,7 @@ const handleStartPairing = Effect.fn("BrowserLogin.handleStartPairing")(function
   });
 });
 
-const BrowserLoginEvidenceRetentionLive = Layer.effectDiscard(
+export const BrowserLoginEvidenceRetentionLive = Layer.effectDiscard(
   purgeBrowserLoginAnonymousEvidence().pipe(
     Effect.delay("10 minutes"),
     Effect.forever,
@@ -222,7 +216,7 @@ const handleLogout = Effect.fn("WebSession.handleLogout")(function* () {
   );
 });
 
-const BrowserLoginWebAuthHandlersLive = HttpApiBuilder.group(
+export const BrowserLoginWebAuthHandlersLive = HttpApiBuilder.group(
   WebAuthApi,
   "browserLogin",
   (handlers) =>
@@ -243,15 +237,4 @@ export const BrowserLoginLive = HttpApiBuilder.group(FidyApi, "browserLogin", (h
       });
     })
   )
-);
-
-const BrowserLoginWebAuthRoutesLive = HttpApiBuilder.layer(WebAuthApi).pipe(
-  Layer.provide(WebAuthNoStoreLive),
-  Layer.provide(BrowserLoginWebAuthHandlersLive)
-);
-
-/** Unauthenticated direct-browser routes plus independent anonymous-evidence retention. */
-export const BrowserLoginWebAuthLive = Layer.merge(
-  BrowserLoginWebAuthRoutesLive,
-  BrowserLoginEvidenceRetentionLive
 );

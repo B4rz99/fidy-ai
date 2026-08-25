@@ -12,9 +12,9 @@ import {
   executeHostedCanonicalOperation,
 } from "~/shell/_shared/canonical-operation-executor";
 import type { CanonicalCaller } from "~/shell/_shared/authz";
-import { upsertUser } from "~/shell/identity/repo";
 import { TelemetryDisabled } from "~/shell/observability/disabled";
 import { ApiHarness } from "~/shell/testing/api-harness";
+import { upsertStableUserFixture } from "~/shell/testing/identity-fixtures";
 import { MigrationSqlClient } from "~/shell/db/client";
 import type { ConfirmationPermit } from "./tool-confirmation-model";
 import { immediatePermit } from "./tool-confirmation";
@@ -64,7 +64,7 @@ const prepareBoundaryUser = Effect.gen(function* () {
   const sql = yield* MigrationSqlClient;
   yield* sql`DELETE FROM audit_log_entries WHERE user_id = ${boundaryUserId}`;
   yield* sql`DELETE FROM memories WHERE user_id = ${boundaryUserId}`;
-  yield* upsertUser(
+  yield* upsertStableUserFixture(
     boundaryUserId,
     yield* makeColombianUser(boundaryUserId, {
       createdAt: DateTime.makeUnsafe("2026-08-01T12:00:00Z"),

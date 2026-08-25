@@ -1,0 +1,19 @@
+apps/server/src/core/browser-login/rules.test.ts
+  s_a93d19068616a6::t_8b434592f65e72 4-5,7-8,12,17-18,29-38,44-74,138-191,220-225
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.24",
+  "base_commit_sha": "f316731043fcdcd64894d9de6b47f4dbb983d632",
+  "prompts": {},
+  "sessions": {
+    "s_a93d19068616a6": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0377c-ac1e-72f6-8d5d-2c3938b854fd",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

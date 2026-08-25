@@ -1,0 +1,21 @@
+apps/server/src/core/budgets/model.test.ts
+  s_a5d36f82ecc1cb::t_11547cc6da459b 45-59,61-63,66-74,76,78-81,83-111,115-126,155-168,223-225,232,234-241
+  s_a5d36f82ecc1cb::t_f724f2e5894a66 128-130
+  s_a5d36f82ecc1cb::t_46a3b3d3ec6a1f 199-221
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.24",
+  "base_commit_sha": "05d5a3575b05c709c01daa45dda0c15e19d294e4",
+  "prompts": {},
+  "sessions": {
+    "s_a5d36f82ecc1cb": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a03743-4554-738d-ac34-10b059e78b95",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

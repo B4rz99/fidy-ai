@@ -95,7 +95,7 @@ it("decodes text and every supported explicit consent choice", () => {
 });
 
 it("accepts both automatic expiry policies and rejects an unknown policy", () => {
-  for (const policy of ["pat-approved-unclaimed-expiry", "pat-inactivity-expiry"]) {
+  for (const policy of ["pat-approved-unclaimed-expiry", "pat-fixed-lifetime-expiry"]) {
     expect(
       Result.isSuccess(
         Schema.decodeUnknownResult(ConsentDecisionEvidence)({

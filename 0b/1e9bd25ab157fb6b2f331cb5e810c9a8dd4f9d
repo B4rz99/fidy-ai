@@ -1,0 +1,48 @@
+apps/server/ARCHITECTURE.md
+  s_5a7fb85ef499e5::t_08e152597dc1dc 110-116
+  s_5a7fb85ef499e5::t_6df374f75cc36d 5
+  s_5a7fb85ef499e5::t_f8cf6b1ddeed24 1-4,6-109,117-312
+docs/research/open-source-deterministic-document-ingestion.md
+  s_5a7fb85ef499e5::t_9c5369a06d9797 51,101
+research/008-sentry-tracing.md
+  s_5a7fb85ef499e5::t_54243ca1cb735d 82
+research/006-kapso-channel-adapter.md
+  s_5a7fb85ef499e5::t_c22bbad7985f85 46
+AGENTS.md
+  s_5a7fb85ef499e5::t_3719d55f692c9a 17,20,23-29
+ARCHITECTURE.md
+  s_5a7fb85ef499e5::t_9a453a81732a53 27-30,33-37
+  s_5a7fb85ef499e5::t_758d5d2a061085 13,15-17,20-22,24,26,32,39-40,42-47,57-59,61,63-67,69-71,73,75-80,82-83
+docs/research/anydoc-for-fidy-ingestion.md
+  s_5a7fb85ef499e5::t_c7a36eb597ac8e 104
+SECURITY_STANDARDS.md
+  s_5a7fb85ef499e5::t_54243ca1cb735d 92-98
+  s_5a7fb85ef499e5::t_46a9b136e0bb27 1,3-5,12-16,89-91,423-428
+research/008-sentry-redaction-controls.md
+  s_5a7fb85ef499e5::t_48712b2343adba 24,363
+README.md
+  s_5a7fb85ef499e5::t_612046455c5bfd 40-42
+docs/research/davivienda-api-237.md
+  s_5a7fb85ef499e5::t_3ce755ea33c5b4 6,548
+research/008-sentry-ci-e2e-instrumentation-and-artifacts.md
+  s_5a7fb85ef499e5::t_95edf966321797 99,231
+apps/web/ARCHITECTURE.md
+  s_5a7fb85ef499e5::t_3a7fc94bb3c289 5
+  s_5a7fb85ef499e5::t_6ff230a8201146 1-4,6-63
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.24",
+  "base_commit_sha": "0b1e9bd25ab157fb6b2f331cb5e810c9a8dd4f9d",
+  "prompts": {},
+  "sessions": {
+    "s_5a7fb85ef499e5": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a03677-f9e5-7560-89fa-680bc145dc34",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": null
+    }
+  }
+}

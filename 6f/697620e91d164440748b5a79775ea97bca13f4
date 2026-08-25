@@ -1,0 +1,38 @@
+apps/server/contracts/operation-policy.json
+  s_fab41f0a144bb0::t_9dbb6905fadc06 212-218,221
+apps/web/src/features/dashboard/feature.test.tsx
+  s_fab41f0a144bb0::t_e1f12c9581e3ae 354-355
+  s_fab41f0a144bb0::t_7e031c7a278411 349-351,353
+  s_fab41f0a144bb0::t_562c33d91adc24 344,352,357-358,394-395
+apps/web/src/features/dashboard/view.tsx
+  s_fab41f0a144bb0::t_6f977c87fec9fe 320
+  s_fab41f0a144bb0::t_562c33d91adc24 7,110-111,113,122-128,148,155-159,165,324
+apps/server/src/core/dashboard/catalog.test.ts
+  s_fab41f0a144bb0::t_562c33d91adc24 39
+apps/server/src/core/dashboard/catalog.ts
+  s_fab41f0a144bb0::t_562c33d91adc24 86
+apps/server/src/shell/testing/isolation.test.ts
+  s_fab41f0a144bb0::t_562c33d91adc24 413,472
+apps/server/contracts/openapi.json
+  s_fab41f0a144bb0::t_9dbb6905fadc06 14070-14076
+apps/server/src/shell/dashboard/operations.ts
+  s_fab41f0a144bb0::t_166a3504839346 166
+apps/server/src/shell/dashboard/handlers.test.ts
+  s_fab41f0a144bb0::t_562c33d91adc24 136,155
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.24",
+  "base_commit_sha": "6f697620e91d164440748b5a79775ea97bca13f4",
+  "prompts": {},
+  "sessions": {
+    "s_fab41f0a144bb0": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a02eec-6a0c-77e3-aaac-cc821b933f6d",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

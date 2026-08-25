@@ -1,0 +1,19 @@
+apps/server/src/core/web-session/reference.test.ts
+  s_00ec555a7950ba::t_df73a9e3ac72e7 1-27
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.24",
+  "base_commit_sha": "b9796fb614d2a6bd752687e458b0a48c12e5e7a1",
+  "prompts": {},
+  "sessions": {
+    "s_00ec555a7950ba": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a03766-70ce-7d62-a019-e13e77cb7aac",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

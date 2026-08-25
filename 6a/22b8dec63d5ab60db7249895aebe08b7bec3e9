@@ -1,0 +1,35 @@
+apps/server/src/core/dashboard/calculation.test.ts
+  s_b0e387d551265b::t_4152c33a887d21 15-16,54-67,151-180
+apps/server/src/core/dashboard/catalog.test.ts
+  s_b0e387d551265b::t_b3f21886c2ce70 2,53
+  s_b0e387d551265b::t_d711f4add313fd 73-75
+  s_b0e387d551265b::t_5c087e9e8b4253 23
+  s_b0e387d551265b::t_4818196d014538 5,36-37,40-48,51-52,54-72
+  s_b0e387d551265b::t_4c89bb08ea5865 76
+apps/server/src/core/dashboard/model.test.ts
+  s_b0e387d551265b::t_f058b35f9fcf67 10,12,43-80,177-274,474,476-513,515
+  s_b0e387d551265b::t_d56038ea9f3fc9 398-405,475
+  s_b0e387d551265b::t_48be41bc23b4b6 275
+  s_b0e387d551265b::t_e233450ad43e47 514
+  s_b0e387d551265b::t_dc6e463eb315b5 516
+apps/server/src/core/dashboard/rules.test.ts
+  s_b0e387d551265b::t_c72a2a9f165e76 1,3-18
+  s_b0e387d551265b::t_44181adcc45368 318-440
+  s_b0e387d551265b::t_8de70f569794a5 441-457
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.24",
+  "base_commit_sha": "6a22b8dec63d5ab60db7249895aebe08b7bec3e9",
+  "prompts": {},
+  "sessions": {
+    "s_b0e387d551265b": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a036c7-57d3-7911-b638-e2d15fb99cb3",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

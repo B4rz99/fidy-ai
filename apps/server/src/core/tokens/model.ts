@@ -1,4 +1,4 @@
-import { Duration, Effect, Schema } from "effect";
+import { Duration, Effect, Schema, SchemaTransformation } from "effect";
 import { PATId } from "./reference";
 import { UserId } from "~/core/identity/reference";
 import { CanonicalCapability } from "~/core/_shared/canonical-capability";
@@ -10,15 +10,76 @@ import { UtcTimestamp } from "~/core/_shared/time";
  * PAT. The literal set is the credential-neutral capability set, so a capability cannot become
  * grantable here without also being enforceable there.
  */
-export const PatScope = CanonicalCapability.annotate({ identifier: "PatScope" });
-export type PatScope = typeof PatScope.Type;
+export const PATScope = CanonicalCapability.annotate({ identifier: "PATScope" });
+export type PATScope = typeof PATScope.Type;
 
 /**
  * A non-empty set of PAT scopes. Duplicate entries are rejected so each
  * granted scope appears at most once; declaration order is retained.
  */
-export const PatScopes = Schema.UniqueArray(PatScope).check(Schema.isNonEmpty());
-export type PatScopes = typeof PatScopes.Type;
+export const PATScopes = Schema.UniqueArray(PATScope).check(Schema.isNonEmpty());
+export type PATScopes = typeof PATScopes.Type;
+
+/** Maximum normalized length accepted for a PAT recipient label. */
+export const recipientLabelLimit = 80;
+
+/** Counts Unicode code points in recipient display metadata. */
+export const countPATLabelCharacters = (label: string): number => Array.from(label).length;
+
+const hasValidRecipientLabelLength = Schema.makeFilter<string>(
+  (label) => countPATLabelCharacters(label) <= recipientLabelLimit,
+  {
+    expected: `a string with at most ${recipientLabelLimit} Unicode characters`,
+    meta: { _tag: "isMaxLength", maxLength: recipientLabelLimit },
+  }
+);
+
+/** Immutable display metadata naming the intended PAT recipient, not verified identity. */
+export const PATRecipientLabel = Schema.NonEmptyString.check(
+  Schema.isTrimmed(),
+  hasValidRecipientLabelLength
+)
+  .pipe(Schema.brand("PATRecipientLabel"))
+  .annotate({ identifier: "PATRecipientLabel" });
+export type PATRecipientLabel = typeof PATRecipientLabel.Type;
+
+/** Public codec that canonicalizes outer whitespace before validating recipient metadata. */
+export const PATRecipientLabelInput = Schema.String.annotate({
+  identifier: "PATRecipientLabelInput",
+  description:
+    "PAT recipient label whose surrounding whitespace is removed before enforcing 1 to 80 characters.",
+}).pipe(
+  Schema.decodeTo(
+    PATRecipientLabel,
+    SchemaTransformation.transform({
+      decode: (label) => label.trim(),
+      encode: (label) => label,
+    })
+  )
+);
+export type PATRecipientLabelInput = typeof PATRecipientLabelInput.Type;
+
+/** Exact recipient and non-empty capability set confirmed for one manual PAT grant. */
+export const ManualPATGrantInput = Schema.Struct({
+  recipientLabel: PATRecipientLabelInput,
+  scopes: PATScopes,
+}).annotate({ identifier: "ManualPATGrantInput" });
+export type ManualPATGrantInput = typeof ManualPATGrantInput.Type;
+
+/** Browser-generated identity that makes one confirmed manual PAT issuance retry-safe. */
+export const ManualPATRequestId = Schema.String.check(Schema.isUUID(4))
+  .pipe(Schema.brand("ManualPATRequestId"))
+  .annotate({
+    identifier: "ManualPATRequestId",
+  });
+export type ManualPATRequestId = typeof ManualPATRequestId.Type;
+
+/** Retry-safe canonical payload containing one reviewed grant. */
+export const CreateManualPATPayload = Schema.Struct({
+  requestId: ManualPATRequestId,
+  grant: ManualPATGrantInput,
+}).annotate({ identifier: "CreateManualPATPayload" });
+export type CreateManualPATPayload = typeof CreateManualPATPayload.Type;
 
 const bearerPrefix = "fin_";
 const patShortIdLength = 8;
@@ -141,12 +202,20 @@ const SharedTokenFields = {
 export const PAT = Schema.TaggedStruct("PAT", {
   ...SharedTokenFields,
   id: PATId,
-  scopes: PatScopes,
+  recipientLabel: PATRecipientLabel,
+  scopes: PATScopes,
   idleExpiresAt: UtcTimestamp,
 })
   .check(validPatTimes)
   .annotate({ identifier: "PAT" });
 export type PAT = typeof PAT.Type;
+
+/** One successful manual issuance; the bearer cannot be recovered after this response. */
+export const IssuedManualPAT = Schema.Struct({
+  pat: PAT,
+  bearer: TokenBearer,
+}).annotate({ identifier: "IssuedManualPAT" });
+export type IssuedManualPAT = typeof IssuedManualPAT.Type;
 
 /** Every persisted bearer grant accepted by canonical TokenAuthorization. */
 export const TokenGrant = PAT;
@@ -157,7 +226,7 @@ export type TokenGrant = PAT;
 export const ResolvedToken = Schema.Struct({
   tokenId: PATId,
   subjectUserId: UserId,
-  scopes: PatScopes,
+  scopes: PATScopes,
   // Bearer resolution has already recorded this use, so the timestamp is present.
   lastUsedAt: UtcTimestamp,
 });

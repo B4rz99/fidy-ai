@@ -5,6 +5,7 @@ import { UserId, WhatsAppCallerReference } from "~/core/identity/reference";
 import { InsightKind } from "~/core/insights/reference";
 import { PATId } from "~/core/tokens/reference";
 import { UtcTimestamp } from "~/core/_shared/time";
+import { WebSessionId } from "~/core/web-session/reference";
 import { ConsentRecordId, DisclosureRevision, PolicyRevision, Sha256Digest } from "./reference";
 
 const maximumLegalFactLength = 1_000;
@@ -78,9 +79,24 @@ export const ConsentEvent = Schema.Union([
 ]);
 export type ConsentEvent = typeof ConsentEvent.Type;
 
+/** Closed evidence for the channel or policy that produced one Consent decision. */
+export const ConsentDecisionEvidence = Schema.Union([
+  Schema.TaggedStruct("ProviderQualifiedMessages", {
+    disclosureMessage: ProviderMessageEvidence,
+    decisionMessage: ProviderMessageEvidence,
+  }),
+  Schema.TaggedStruct("AuthenticatedWeb", {
+    webSessionId: WebSessionId,
+  }),
+  Schema.TaggedStruct("AutomaticPolicy", {
+    policy: Schema.Literals(["pat-approved-unclaimed-expiry", "pat-inactivity-expiry"]),
+  }),
+]).annotate({ identifier: "ConsentDecisionEvidence" });
+export type ConsentDecisionEvidence = typeof ConsentDecisionEvidence.Type;
+
 /**
- * Immutable evidence tying one decision to a stable User and the exact legal and
- * provider-qualified message context that made the decision interpretable.
+ * Immutable evidence tying one decision to a stable User, exact legal context,
+ * and the honest origin that made the decision interpretable.
  */
 export const ConsentRecord = Schema.Struct({
   id: ConsentRecordId,
@@ -88,8 +104,7 @@ export const ConsentRecord = Schema.Struct({
   event: ConsentEvent,
   disclosure: DisclosureSnapshot,
   occurredAt: UtcTimestamp,
-  disclosureMessage: ProviderMessageEvidence,
-  decisionMessage: ProviderMessageEvidence,
+  evidence: ConsentDecisionEvidence,
 }).annotate({ identifier: "ConsentRecord" });
 export type ConsentRecord = typeof ConsentRecord.Type;
 

@@ -8,6 +8,7 @@ import {
 } from "@tanstack/react-router";
 import { BrowserLoginPairingFeature } from "@/features/browser-login/feature";
 import { createPublicSiteRoute } from "@/features/public-site/feature";
+import { ManualPATFeature } from "@/features/pats/feature";
 import { SignedInFeature } from "@/features/signed-in/feature";
 import { SubscriptionOffersFeature } from "@/features/subscription/feature";
 import { TransactionListFeature } from "@/features/transactions/feature";
@@ -23,10 +24,14 @@ type WebRouterOptions = WebRouterContext &
   }>;
 
 const rootRoute = createRootRouteWithContext<WebRouterContext>()({});
-const signedInRoute = createRoute({
+const authenticatedRoute = createRoute({
   getParentRoute: () => rootRoute,
-  path: "/app",
+  id: "authenticated",
   component: SignedInFeature,
+});
+const signedInRoute = createRoute({
+  getParentRoute: () => authenticatedRoute,
+  path: "/app",
 });
 const signedInIndexRoute = createRoute({
   getParentRoute: () => signedInRoute,
@@ -37,6 +42,11 @@ const transactionsRoute = createRoute({
   getParentRoute: () => signedInRoute,
   path: "/transactions",
   component: TransactionListFeature,
+});
+const manualPATRoute = createRoute({
+  getParentRoute: () => authenticatedRoute,
+  path: "/settings/pats",
+  component: ManualPATFeature,
 });
 const subscriptionOffersRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -52,7 +62,10 @@ const routeTree = rootRoute.addChildren([
   createPublicSiteRoute(rootRoute),
   browserLoginPairingRoute,
   subscriptionOffersRoute,
-  signedInRoute.addChildren([signedInIndexRoute, transactionsRoute]),
+  authenticatedRoute.addChildren([
+    signedInRoute.addChildren([signedInIndexRoute, transactionsRoute]),
+    manualPATRoute,
+  ]),
 ]);
 
 /** Builds the application router from independently owned route subtrees. */

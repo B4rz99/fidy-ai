@@ -1,6 +1,7 @@
 import { expect, layer } from "@effect/vitest";
 import { DateTime, Effect, Exit, Option } from "effect";
 import {
+  type ConsentDecisionEvidence,
   ConsentRecord,
   ConsentRecordId,
   DisclosureRevision,
@@ -38,6 +39,17 @@ const decisionMessage = {
   provider: "kapso",
   providerMessageId: "wamid.repo-decision",
 } as const;
+const providerEvidence = (
+  decision: Readonly<{
+    channel: string;
+    provider: string;
+    providerMessageId: string;
+  }> = decisionMessage
+): ConsentDecisionEvidence => ({
+  _tag: "ProviderQualifiedMessages" as const,
+  disclosureMessage,
+  decisionMessage: decision,
+});
 const createdAt = DateTime.makeUnsafe("2026-08-01T12:00:00Z");
 const otherUserId = UserId.make("f1d1a000-0000-4000-8000-0000000008d1");
 
@@ -142,11 +154,10 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           event: { _tag: "Granted", grant: { _tag: "Onboarding" } },
           disclosure,
           occurredAt: DateTime.makeUnsafe("2026-08-01T12:00:02Z"),
-          disclosureMessage,
-          decisionMessage: {
+          evidence: providerEvidence({
             ...decisionMessage,
             providerMessageId: "wamid.repo-owner-grant",
-          },
+          }),
         });
         yield* appendConsentRecord(grant);
 
@@ -156,10 +167,10 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           subjectUserId: otherUserId,
           event: { _tag: "Revoked", grantId: grant.id },
           occurredAt: DateTime.makeUnsafe("2026-08-01T12:00:03Z"),
-          decisionMessage: {
+          evidence: providerEvidence({
             ...decisionMessage,
             providerMessageId: "wamid.repo-cross-user-revocation",
-          },
+          }),
         });
 
         expect(Exit.isFailure(yield* Effect.exit(appendConsentRecord(crossUserRevocation)))).toBe(
@@ -176,10 +187,10 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
             grant: { _tag: "PAT", tokenId: defaultPATId },
           },
           occurredAt: DateTime.makeUnsafe("2026-08-01T12:00:04Z"),
-          decisionMessage: {
+          evidence: providerEvidence({
             ...decisionMessage,
             providerMessageId: "wamid.repo-cross-user-pat",
-          },
+          }),
         });
         expect(Exit.isFailure(yield* Effect.exit(appendConsentRecord(crossUserTokenGrant)))).toBe(
           true
@@ -214,11 +225,10 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
             event: { _tag: "Granted", grant: { _tag: "Onboarding" } },
             disclosure: stale,
             occurredAt: createdAt,
-            disclosureMessage,
-            decisionMessage: {
+            evidence: providerEvidence({
               ...decisionMessage,
               providerMessageId: "wamid.repo-stale-decision",
-            },
+            }),
           })
         );
 
@@ -236,8 +246,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           event: { _tag: "Granted", grant: { _tag: "Onboarding" } },
           disclosure,
           occurredAt: DateTime.makeUnsafe("2026-08-01T12:00:02Z"),
-          disclosureMessage,
-          decisionMessage,
+          evidence: providerEvidence(),
         });
 
         yield* appendConsentRecord(grant);
@@ -251,10 +260,10 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           id: ConsentRecordId.make("f1d1a000-0000-4000-8000-000000000832"),
           event: { _tag: "Revoked", grantId: grant.id },
           occurredAt: DateTime.makeUnsafe("2026-08-01T12:00:03Z"),
-          decisionMessage: {
+          evidence: providerEvidence({
             ...decisionMessage,
             providerMessageId: "wamid.repo-revocation",
-          },
+          }),
         });
         yield* appendConsentRecord(revocation);
 
@@ -266,10 +275,10 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
             grant: { _tag: "PAT", tokenId: defaultPATId },
           },
           occurredAt: DateTime.makeUnsafe("2026-08-01T12:00:04Z"),
-          decisionMessage: {
+          evidence: providerEvidence({
             ...decisionMessage,
             providerMessageId: "wamid.repo-pat",
-          },
+          }),
         });
         yield* appendConsentRecord(patGrant);
 
@@ -281,10 +290,10 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
             grant: { _tag: "InsightDelivery", insightKind: "weekly-summary" },
           },
           occurredAt: DateTime.makeUnsafe("2026-08-01T12:00:05Z"),
-          decisionMessage: {
+          evidence: providerEvidence({
             ...decisionMessage,
             providerMessageId: "wamid.repo-insight-delivery",
-          },
+          }),
         });
         yield* appendConsentRecord(insightDeliveryGrant);
 

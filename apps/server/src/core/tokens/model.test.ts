@@ -2,7 +2,9 @@ import { expect, it } from "@effect/vitest";
 import { DateTime, Effect, Option, Result, Schema } from "effect";
 import { PATId } from "./reference";
 import {
-  PatScopes,
+  ManualPATGrantInput,
+  PATRecipientLabel,
+  PATScopes,
   ResolvedToken,
   TokenBearer,
   TokenGrant,
@@ -66,12 +68,30 @@ it("accepts exactly eight lowercase alphanumeric characters as the TokenBearer s
 });
 
 it("accepts exactly the non-empty unique TokenBearer scope vocabulary", () => {
-  const decodeScopes = Schema.decodeUnknownResult(PatScopes);
+  const decodeScopes = Schema.decodeUnknownResult(PATScopes);
 
   expect(Result.isSuccess(decodeScopes(["read", "write", "dashboard"]))).toBe(true);
   expect(Result.isFailure(decodeScopes([]))).toBe(true);
   expect(Result.isFailure(decodeScopes(["read", "read"]))).toBe(true);
   expect(Result.isFailure(decodeScopes(["admin"]))).toBe(true);
+});
+
+it("normalizes one manual PAT recipient label before enforcing the grant boundary", () => {
+  const decodeGrant = Schema.decodeUnknownResult(ManualPATGrantInput);
+  const accepted = decodeGrant({ recipientLabel: "  Automatización casa  ", scopes: ["read"] });
+
+  expect(Result.getOrThrow(accepted)).toEqual({
+    recipientLabel: PATRecipientLabel.make("Automatización casa"),
+    scopes: ["read"],
+  });
+  expect(Result.isFailure(decodeGrant({ recipientLabel: "   ", scopes: ["read"] }))).toBe(true);
+  expect(Result.isSuccess(decodeGrant({ recipientLabel: "🧭".repeat(80), scopes: ["read"] }))).toBe(
+    true
+  );
+  expect(Result.isFailure(decodeGrant({ recipientLabel: "🧭".repeat(81), scopes: ["read"] }))).toBe(
+    true
+  );
+  expect(Result.isFailure(decodeGrant({ recipientLabel: "Agente", scopes: [] }))).toBe(true);
 });
 
 it("carries bearer grant instants over the wire as date-time strings", () => {
@@ -80,7 +100,8 @@ it("carries bearer grant instants over the wire as date-time strings", () => {
     _tag: "PAT",
     id: PATId.make("f1d1a000-0000-4000-8000-000000000010"),
     shortId: TokenShortId.make("default1"),
-    scopes: PatScopes.make(["read"]),
+    recipientLabel: PATRecipientLabel.make("Agente de prueba"),
+    scopes: PATScopes.make(["read"]),
     lastUsedAt: Option.none(),
     idleExpiresAt: DateTime.addDuration(createdAt, "90 days"),
     revokedAt: Option.none(),
@@ -98,7 +119,8 @@ it("rejects PAT timestamps outside lifecycle order", () => {
     _tag: "PAT" as const,
     id: PATId.make("f1d1a000-0000-4000-8000-000000000010"),
     shortId: TokenShortId.make("default1"),
-    scopes: PatScopes.make(["read"]),
+    recipientLabel: PATRecipientLabel.make("Agente de prueba"),
+    scopes: PATScopes.make(["read"]),
     lastUsedAt: Option.none(),
     idleExpiresAt: DateTime.addDuration(createdAt, "90 days"),
     revokedAt: Option.none(),

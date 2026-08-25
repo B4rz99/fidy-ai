@@ -26,7 +26,7 @@ it("reads inherited descriptive metadata through reflected annotations", () => {
   expect(reflected?.description).toBe("Inspect the available items before choosing one.");
   expect(reflected?.policy.kind).toBe("query");
   expect(reflected?.policy.access).toEqual({
-    _tag: "PatScoped",
+    _tag: "PATScoped",
     scope: { _tag: "Operation", capability: "read" },
   });
   const published = OpenApi.fromApi(api).paths["/items"]?.get;

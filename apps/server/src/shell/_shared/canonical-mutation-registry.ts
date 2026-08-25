@@ -24,6 +24,7 @@ import {
   createTransaction,
   deleteTransaction,
 } from "~/shell/transactions/mutations";
+import { createManualPAT } from "~/shell/tokens/mutations";
 import type {
   CanonicalExecutionRequirements,
   CanonicalImplementationCaller,
@@ -162,6 +163,12 @@ export const canonicalMutationImplementations = {
       userId: caller.resolved.subjectUserId,
       caller: suggestedCaller(caller),
       insightEventId: input.params.id,
+    }),
+  "pats.createManualPAT": (input, { resolved }) =>
+    createManualPAT({
+      userId: resolved.subjectUserId,
+      caller: resolved,
+      payload: input.payload,
     }),
 } as const satisfies Partial<CanonicalOperationImplementations>;
 

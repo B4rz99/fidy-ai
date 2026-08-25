@@ -20,6 +20,6 @@ export const allCanonicalCapabilities: CanonicalCapabilities = CanonicalCapabili
 ]);
 
 /** Translates the public PAT scope vocabulary at the authentication edge. */
-export const canonicalCapabilitiesFromPatScopes = (
+export const canonicalCapabilitiesFromPATScopes = (
   scopes: ReadonlyArray<CanonicalCapability>
 ): CanonicalCapabilities => CanonicalCapabilities.make([...scopes]);

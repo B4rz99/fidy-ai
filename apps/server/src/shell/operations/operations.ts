@@ -4,7 +4,7 @@ import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
 import { CanonicalOperationId } from "~/core/_shared/canonical-operation";
 import { ErrorCode, FieldIssue } from "~/shell/_shared/errors";
 import type { CatalogOperation, OperationCatalog } from "~/shell/_shared/operation-catalog";
-import { isPatScoped, operationPolicy, patScopedChildren } from "~/shell/_shared/operation-policy";
+import { isPATScoped, operationPolicy, patScopedChildren } from "~/shell/_shared/operation-policy";
 import { NextOperations, OperationResponse } from "~/shell/_shared/response";
 
 const operationsGroupName = "operations";
@@ -97,7 +97,7 @@ export const decodeAtomicBatchResult = (
 
 const mutationOperations = (catalog: OperationCatalog): ReadonlyArray<CatalogOperation> =>
   catalog.operations.filter(
-    (operation) => operation.policy.kind === "mutation" && isPatScoped(operation.policy.access)
+    (operation) => operation.policy.kind === "mutation" && isPATScoped(operation.policy.access)
   );
 
 const mutationCallMember = (operation: CatalogOperation): Schema.Top =>

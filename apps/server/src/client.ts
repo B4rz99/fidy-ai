@@ -9,7 +9,22 @@ export {
 } from "~/shell/_shared/authz";
 export { FidyApi, type FidyApiGroups, type OperationId } from "~/shell/api";
 export { isHttpOrigin } from "./http-origin";
-export { TokenBearer, TokenBearerFormat } from "~/core/tokens/model";
+export {
+  countPATLabelCharacters,
+  CreateManualPATPayload,
+  IssuedManualPAT,
+  ManualPATRequestId,
+  ManualPATGrantInput,
+  PATRecipientLabel,
+  PATScope,
+  PATScopes,
+  TokenBearer,
+  TokenBearerFormat,
+  TokenShortId,
+  recipientLabelLimit,
+} from "~/core/tokens/model";
+export { PATId } from "~/core/tokens/reference";
+export { buildPATDisclosure, patScopeCopy } from "~/core/tokens/rules";
 export type { CanonicalInput } from "~/shell/_shared/canonical-input";
 export type { CanonicalSuccess } from "~/shell/_shared/canonical-success";
 export {

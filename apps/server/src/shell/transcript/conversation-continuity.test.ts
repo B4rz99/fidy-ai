@@ -866,15 +866,18 @@ const consentDecision = (input: {
     event: input.event,
     disclosure: input.disclosure,
     occurredAt: DateTime.makeUnsafe(input.occurredAt),
-    disclosureMessage: {
-      channel: "test",
-      provider: "test",
-      providerMessageId: `${input.id}:disclosure`,
-    },
-    decisionMessage: {
-      channel: "test",
-      provider: "test",
-      providerMessageId: `${input.id}:decision`,
+    evidence: {
+      _tag: "ProviderQualifiedMessages",
+      disclosureMessage: {
+        channel: "test",
+        provider: "test",
+        providerMessageId: `${input.id}:disclosure`,
+      },
+      decisionMessage: {
+        channel: "test",
+        provider: "test",
+        providerMessageId: `${input.id}:decision`,
+      },
     },
   });
 
@@ -1955,15 +1958,18 @@ layer(ConsentLockedCompactionHarness, { excludeTestServices: true, timeout: "30 
                 event: { _tag: "Granted", grant: { _tag: "Onboarding" } },
                 disclosure,
                 occurredAt: DateTime.makeUnsafe("2026-08-13T11:59:59Z"),
-                disclosureMessage: {
-                  channel: "test",
-                  provider: "test",
-                  providerMessageId: "compaction-aba-initial-disclosure",
-                },
-                decisionMessage: {
-                  channel: "test",
-                  provider: "test",
-                  providerMessageId: "compaction-aba-initial-decision",
+                evidence: {
+                  _tag: "ProviderQualifiedMessages",
+                  disclosureMessage: {
+                    channel: "test",
+                    provider: "test",
+                    providerMessageId: "compaction-aba-initial-disclosure",
+                  },
+                  decisionMessage: {
+                    channel: "test",
+                    provider: "test",
+                    providerMessageId: "compaction-aba-initial-decision",
+                  },
                 },
               })
             );
@@ -1978,15 +1984,18 @@ layer(ConsentLockedCompactionHarness, { excludeTestServices: true, timeout: "30 
                   event: { _tag: "Revoked", grantId },
                   disclosure,
                   occurredAt: DateTime.makeUnsafe("2026-08-13T12:00:00Z"),
-                  disclosureMessage: {
-                    channel: "test",
-                    provider: "test",
-                    providerMessageId: "compaction-aba-revoke-disclosure",
-                  },
-                  decisionMessage: {
-                    channel: "test",
-                    provider: "test",
-                    providerMessageId: "compaction-aba-revoke-decision",
+                  evidence: {
+                    _tag: "ProviderQualifiedMessages",
+                    disclosureMessage: {
+                      channel: "test",
+                      provider: "test",
+                      providerMessageId: "compaction-aba-revoke-disclosure",
+                    },
+                    decisionMessage: {
+                      channel: "test",
+                      provider: "test",
+                      providerMessageId: "compaction-aba-revoke-decision",
+                    },
                   },
                 })
               );
@@ -1997,15 +2006,18 @@ layer(ConsentLockedCompactionHarness, { excludeTestServices: true, timeout: "30 
                   event: { _tag: "Granted", grant: { _tag: "Onboarding" } },
                   disclosure,
                   occurredAt: DateTime.makeUnsafe("2026-08-13T12:00:01Z"),
-                  disclosureMessage: {
-                    channel: "test",
-                    provider: "test",
-                    providerMessageId: "compaction-aba-grant-disclosure",
-                  },
-                  decisionMessage: {
-                    channel: "test",
-                    provider: "test",
-                    providerMessageId: "compaction-aba-grant-decision",
+                  evidence: {
+                    _tag: "ProviderQualifiedMessages",
+                    disclosureMessage: {
+                      channel: "test",
+                      provider: "test",
+                      providerMessageId: "compaction-aba-grant-disclosure",
+                    },
+                    decisionMessage: {
+                      channel: "test",
+                      provider: "test",
+                      providerMessageId: "compaction-aba-grant-decision",
+                    },
                   },
                 })
               );

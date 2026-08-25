@@ -225,7 +225,9 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           expect(auditEntries).toEqual([]);
           expect(
             yield* sql`
-            SELECT count(*)::int AS count FROM web_sessions WHERE last_used_at IS NOT NULL
+            SELECT count(*)::int AS count
+              FROM web_sessions
+              WHERE user_id = ${userId} AND last_used_at IS NOT NULL
           `
           ).toEqual([{ count: 0 }]);
         })

@@ -122,9 +122,9 @@ const seedEveryPolicyShape = Effect.gen(function* () {
   `;
   yield* admin`
     INSERT INTO tokens (
-      id, user_id, short_id, token_hash, scopes, idle_expires_at, created_at
+      id, user_id, short_id, recipient_label, token_hash, scopes, idle_expires_at, created_at
     ) VALUES (
-      'f1d1a000-0000-4000-8000-0000000001d4', ${policyOwner}, 'rlsprobe',
+      'f1d1a000-0000-4000-8000-0000000001d4', ${policyOwner}, 'rlsprobe', 'RLS probe',
       repeat('a', 64), ARRAY['read'], '2026-04-01T00:00:00Z', '2026-01-01T00:00:00Z'
     )
   `;
@@ -135,14 +135,14 @@ const seedEveryPolicyShape = Effect.gen(function* () {
       policy_revision, policy_sha256, purposes, data_categories, duration,
       revocation_method, disclosure_channel, disclosure_provider,
       disclosure_provider_message_id, decision_channel, decision_provider,
-      decision_provider_message_id, occurred_at
+      decision_provider_message_id, decision_origin, occurred_at
     ) VALUES (
       'f1d1a000-0000-4000-8000-0000000001d5', ${policyOwner}, 'granted', 'onboarding',
       'CO', 'es-CO', 'policy-probe', repeat('a', 64), 'policy probe',
       'https://fidyapp.com/politica', 'policy-probe', repeat('b', 64),
       ARRAY['service'], ARRAY['identity'], 'until revoked', 'chat',
       'whatsapp', 'probe', 'policy-disclosure', 'whatsapp', 'probe',
-      'policy-decision', '2026-01-01T00:00:00Z'
+      'policy-decision', 'provider-qualified-messages', '2026-01-01T00:00:00Z'
     )
   `;
   yield* admin`
@@ -549,9 +549,9 @@ const deniedInsertProbes = (sql: SqlClient.SqlClient) =>
       tableName: "tokens",
       insert: sql`
       INSERT INTO tokens (
-        id, user_id, short_id, token_hash, scopes, idle_expires_at, created_at
+        id, user_id, short_id, recipient_label, token_hash, scopes, idle_expires_at, created_at
       ) VALUES (
-        'f1d1a000-0000-4000-8000-0000000003c3', ${policyOwner}, 'insertprobe',
+        'f1d1a000-0000-4000-8000-0000000003c3', ${policyOwner}, 'insertprobe', 'Insert probe',
         repeat('b', 64), ARRAY['read'], '2026-04-02T00:00:00Z', '2026-01-02T00:00:00Z'
       )
     `,
@@ -565,14 +565,14 @@ const deniedInsertProbes = (sql: SqlClient.SqlClient) =>
         policy_revision, policy_sha256, purposes, data_categories, duration,
         revocation_method, disclosure_channel, disclosure_provider,
         disclosure_provider_message_id, decision_channel, decision_provider,
-        decision_provider_message_id, occurred_at
+        decision_provider_message_id, decision_origin, occurred_at
       ) VALUES (
         'f1d1a000-0000-4000-8000-0000000003b2', ${policyOwner}, 'granted', 'onboarding',
         'CO', 'es-CO', 'denied-insert', repeat('a', 64), 'denied insert',
         'https://fidyapp.com/politica', 'denied-insert', repeat('b', 64),
         ARRAY['service'], ARRAY['identity'], 'until revoked', 'chat',
         'whatsapp', 'probe', 'denied-disclosure', 'whatsapp', 'probe',
-        'denied-decision', '2026-01-02T00:00:00Z'
+        'denied-decision', 'provider-qualified-messages', '2026-01-02T00:00:00Z'
       )
     `,
     },

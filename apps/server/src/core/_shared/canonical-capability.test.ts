@@ -1,18 +1,18 @@
 import { expect, it } from "@effect/vitest";
 import { Result, Schema } from "effect";
-import { PatScopes } from "~/core/tokens/model";
+import { PATScopes } from "~/core/tokens/model";
 import {
   CanonicalCapabilities,
   allCanonicalCapabilities,
-  canonicalCapabilitiesFromPatScopes,
+  canonicalCapabilitiesFromPATScopes,
 } from "./canonical-capability";
 
 it("keeps canonical capabilities distinct from public PAT scopes", () => {
-  const decodedPatScopes = Schema.decodeUnknownSync(PatScopes)(["write", "read"]);
-  const capabilities = canonicalCapabilitiesFromPatScopes(decodedPatScopes);
+  const decodedPATScopes = Schema.decodeUnknownSync(PATScopes)(["write", "read"]);
+  const capabilities = canonicalCapabilitiesFromPATScopes(decodedPATScopes);
 
   expect(capabilities).toEqual(["write", "read"]);
-  expect(capabilities).not.toBe(decodedPatScopes);
+  expect(capabilities).not.toBe(decodedPATScopes);
   expect(Result.isFailure(Schema.decodeUnknownResult(CanonicalCapabilities)([]))).toBe(true);
   expect(
     Result.isFailure(Schema.decodeUnknownResult(CanonicalCapabilities)(["read", "read"]))

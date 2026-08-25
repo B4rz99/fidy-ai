@@ -28,9 +28,14 @@ export default defineConfig({
         "src/transport/**/*.{ts,tsx}",
         "src/ui/**/*.{ts,tsx}",
       ],
-      // Browser-pairing orchestration is exercised through its real timers, transport, and DOM in
-      // Playwright; Istanbul's jsdom unit runtime cannot represent that acceptance seam.
-      exclude: ["src/testing/**", "src/ui/components/**", "src/features/browser-login/**"],
+      // Browser orchestration is exercised through its real timers, transport, clipboard, and DOM
+      // in Playwright; Istanbul's jsdom unit runtime cannot represent those acceptance seams.
+      exclude: [
+        "src/testing/**",
+        "src/ui/components/**",
+        "src/features/browser-login/**",
+        "src/features/pats/feature.tsx",
+      ],
       thresholds: {
         branches: 90,
         functions: 90,

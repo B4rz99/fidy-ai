@@ -24,7 +24,11 @@ const conflictStatus = 409;
 
 const reset = Effect.gen(function* () {
   const sql = yield* MigrationSqlClient;
-  yield* sql`TRUNCATE web_sessions, browser_login_start_attempts, browser_login_pairings`;
+  yield* sql`DELETE FROM consent_records
+    WHERE subject_user_id = ${acceptanceUserId} AND grant_type = 'pat'`;
+  yield* sql`DELETE FROM tokens WHERE user_id = ${acceptanceUserId}`;
+  yield* sql`DELETE FROM web_sessions WHERE user_id = ${acceptanceUserId}`;
+  yield* sql`TRUNCATE browser_login_start_attempts, browser_login_pairings`;
   yield* sql`DELETE FROM transactions WHERE user_id = ${acceptanceUserId}`;
   yield* sql`
     INSERT INTO users (

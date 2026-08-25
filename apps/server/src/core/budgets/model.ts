@@ -110,6 +110,22 @@ export type BudgetProgressFact = Readonly<{
     | Readonly<{ type: "over"; overBy: ReadonlyMoney }>;
 }>;
 
+const hasExactUnderProgress = (
+  cap: ReadonlyMoney,
+  spent: ReadonlyMoney,
+  remaining: ReadonlyMoney
+): boolean =>
+  BigDecimal.Order(spent.amount, cap.amount) < 0 &&
+  BigDecimal.equals(remaining.amount, BigDecimal.subtract(cap.amount, spent.amount));
+
+const hasExactOverProgress = (
+  cap: ReadonlyMoney,
+  spent: ReadonlyMoney,
+  overBy: ReadonlyMoney
+): boolean =>
+  BigDecimal.Order(spent.amount, cap.amount) > 0 &&
+  BigDecimal.equals(overBy.amount, BigDecimal.subtract(spent.amount, cap.amount));
+
 /** Whether projected progress exactly represents one positive Budget cap and its spending. */
 export const hasExactBudgetProgress = ({
   cap,
@@ -117,18 +133,14 @@ export const hasExactBudgetProgress = ({
   status,
 }: Immutable<BudgetProgressFact>): boolean => {
   if (BigDecimal.Order(cap.amount, zero) !== 1) return false;
-  const comparison = BigDecimal.Order(spent.amount, cap.amount);
-  if (status.type === "under") {
-    return (
-      comparison < 0 &&
-      BigDecimal.equals(status.remaining.amount, BigDecimal.subtract(cap.amount, spent.amount))
-    );
-  }
-  if (status.type === "reached") return comparison === 0;
-  return (
-    comparison > 0 &&
-    BigDecimal.equals(status.overBy.amount, BigDecimal.subtract(spent.amount, cap.amount))
-  );
+  const checks = {
+    under: (): boolean =>
+      status.type === "under" && hasExactUnderProgress(cap, spent, status.remaining),
+    reached: (): boolean =>
+      status.type === "reached" && BigDecimal.equals(spent.amount, cap.amount),
+    over: (): boolean => status.type === "over" && hasExactOverProgress(cap, spent, status.overBy),
+  };
+  return checks[status.type]();
 };
 
 const sameStatusCurrency = Schema.makeFilter<StatusCurrencyView>((status) => {

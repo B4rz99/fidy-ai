@@ -238,14 +238,21 @@ const dashboardSumKey = (
   row: typeof DashboardSumRow.Type,
   groupBy: DashboardTransactionGroup
 ): DashboardTransactionSumFact["key"] => {
-  switch (groupBy) {
-    case "category":
-      return { kind: "category", categoryId: Option.getOrThrow(row.categoryId) };
-    case "day":
-      return { kind: "day", date: Option.getOrThrow(row.date) };
-    case "month":
-      return { kind: "month", month: Option.getOrThrow(row.month) };
-  }
+  const keys = {
+    category: (): DashboardTransactionSumFact["key"] => ({
+      kind: "category",
+      categoryId: Option.getOrThrow(row.categoryId),
+    }),
+    day: (): DashboardTransactionSumFact["key"] => ({
+      kind: "day",
+      date: Option.getOrThrow(row.date),
+    }),
+    month: (): DashboardTransactionSumFact["key"] => ({
+      kind: "month",
+      month: Option.getOrThrow(row.month),
+    }),
+  };
+  return keys[groupBy]();
 };
 
 type DashboardSumGrouping = Readonly<{
@@ -352,6 +359,23 @@ const DashboardMetricAverageRow = Schema.Struct({
   count: Schema.BigIntFromString,
 });
 
+const dashboardMetricConditions = (
+  sql: SqlClient.SqlClient,
+  userId: UserId,
+  query: DashboardTransactionMetricQuery
+): Array<Statement.Fragment> => {
+  const conditions = [
+    sql`user_id = ${userId}`,
+    sql`deleted_at IS NULL`,
+    sql`occurred_at >= ${query.from}`,
+    sql`occurred_at < ${query.toExclusive}`,
+  ];
+  if (query.categories.length > 0) {
+    conditions.push(sql`category_id IN ${sql.in(query.categories)}`);
+  }
+  return conditions;
+};
+
 /** Builds the production custom-metric statement, also serving query-plan verification. */
 export const dashboardMetricStatement = ({
   sql,
@@ -362,15 +386,7 @@ export const dashboardMetricStatement = ({
   userId: UserId;
   query: DashboardTransactionMetricQuery;
 }>): Statement.Statement<unknown> => {
-  const conditions = [
-    sql`user_id = ${userId}`,
-    sql`deleted_at IS NULL`,
-    sql`occurred_at >= ${query.from}`,
-    sql`occurred_at < ${query.toExclusive}`,
-  ];
-  if (query.categories.length > 0) {
-    conditions.push(sql`category_id IN ${sql.in(query.categories)}`);
-  }
+  const conditions = dashboardMetricConditions(sql, userId, query);
   if (query.aggregation === "average") {
     return sql`
       SELECT currency, direction, SUM(amount) AS sum, COUNT(*)::text AS count
@@ -380,9 +396,12 @@ export const dashboardMetricStatement = ({
       ORDER BY currency, direction
     `;
   }
-  const aggregate = query.aggregation === "sum" ? sql`SUM(amount)` : sql`MAX(amount)`;
+  const aggregates = {
+    sum: sql`SUM(amount)`,
+    maximum: sql`MAX(amount)`,
+  };
   return sql`
-    SELECT currency, direction, ${aggregate} AS amount
+    SELECT currency, direction, ${aggregates[query.aggregation]} AS amount
     FROM transactions
     WHERE ${sql.and(conditions)}
     GROUP BY currency, direction
@@ -449,6 +468,38 @@ export type DashboardTransactionProjection = Readonly<
     readonly money: ReadonlyMoney;
   }
 >;
+const dashboardListConditions = (
+  sql: SqlClient.SqlClient,
+  userId: UserId,
+  query: DashboardTransactionListQuery
+): Array<Statement.Fragment> => {
+  const conditions = [sql`transaction.user_id = ${userId}`, sql`transaction.deleted_at IS NULL`];
+  if (query.categories.length > 0) {
+    conditions.push(sql`transaction.category_id IN ${sql.in(query.categories)}`);
+  }
+  return conditions;
+};
+
+const dashboardSearchCategoryCondition = (
+  sql: SqlClient.SqlClient,
+  categoryIds: ReadonlyArray<CategoryId>
+): Statement.Fragment =>
+  categoryIds.length === 0 ? sql`FALSE` : sql`transaction.category_id IN ${sql.in(categoryIds)}`;
+
+const appendDashboardSearchCondition = (
+  sql: SqlClient.SqlClient,
+  query: DashboardTransactionListQuery,
+  conditions: Array<Statement.Fragment>
+): void => {
+  if (Option.isNone(query.search)) return;
+  const pattern = searchLikePattern(query.search.value);
+  const categoryMatch = dashboardSearchCategoryCondition(sql, query.searchCategoryIds);
+  conditions.push(sql`(
+    ${sql.literal(normalizedTransactionSearchSql)} LIKE ${pattern} ESCAPE '\\'
+    OR ${categoryMatch}
+  )`);
+};
+
 /** Builds the production top-K statement, also serving query-plan verification. */
 export const dashboardListStatement = ({
   sql,
@@ -459,21 +510,8 @@ export const dashboardListStatement = ({
   userId: UserId;
   query: DashboardTransactionListQuery;
 }>): Statement.Statement<unknown> => {
-  const conditions = [sql`transaction.user_id = ${userId}`, sql`transaction.deleted_at IS NULL`];
-  if (query.categories.length > 0) {
-    conditions.push(sql`transaction.category_id IN ${sql.in(query.categories)}`);
-  }
-  if (Option.isSome(query.search)) {
-    const pattern = searchLikePattern(query.search.value);
-    const categoryMatch =
-      query.searchCategoryIds.length === 0
-        ? sql`FALSE`
-        : sql`transaction.category_id IN ${sql.in(query.searchCategoryIds)}`;
-    conditions.push(sql`(
-      ${sql.literal(normalizedTransactionSearchSql)} LIKE ${pattern} ESCAPE '\\'
-      OR ${categoryMatch}
-    )`);
-  }
+  const conditions = dashboardListConditions(sql, userId, query);
+  appendDashboardSearchCondition(sql, query, conditions);
   return sql`
     SELECT transaction.id, transaction.amount, transaction.currency,
       transaction.counterparty, transaction.direction,

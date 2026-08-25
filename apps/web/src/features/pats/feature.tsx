@@ -34,9 +34,10 @@ const clearClipboard = (bearer: TokenBearer): void => {
   );
 };
 
-const copyToClipboard = (bearer: TokenBearer): void => {
+const copyToClipboard = (bearer: TokenBearer, onCopied: () => void): void => {
   Effect.runFork(
     Effect.promise(() => navigator.clipboard.writeText(bearer)).pipe(
+      Effect.tap(() => Effect.sync(onCopied)),
       Effect.tap(() => Effect.sleep(bearerRevealLifetime)),
       Effect.tap(() => Effect.sync(() => clearClipboard(bearer))),
       Effect.ignore

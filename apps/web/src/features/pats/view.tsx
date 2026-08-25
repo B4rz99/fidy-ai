@@ -8,7 +8,6 @@ import {
   PATScope,
   PATScopes,
   type TokenBearer,
-  buildPATDisclosure,
   countPATLabelCharacters,
   defaultPATLifetimeDays,
   patLifetimeDayOptions,
@@ -119,7 +118,7 @@ const LifetimeSelector = ({
   <fieldset className="flex flex-col gap-3">
     <legend className="font-medium">Duración</legend>
     <ToggleGroup
-      aria-label="Duración fija del PAT"
+      aria-label="Duración del token"
       className="flex-wrap"
       onValueChange={(values) => {
         const selected = lifetimeOptions.find((option) => option.value === values[0]);
@@ -133,9 +132,6 @@ const LifetimeSelector = ({
         </ToggleGroupItem>
       ))}
     </ToggleGroup>
-    <p className="text-sm text-muted-foreground">
-      El vencimiento queda fijo al crear el PAT y no se extiende con el uso.
-    </p>
   </fieldset>
 );
 
@@ -213,7 +209,7 @@ const GrantEditor = ({
           <ScopeSelector state={state} update={update} />
           <LifetimeSelector state={state} update={update} />
           <Button disabled={!valid} type="submit">
-            Revisar PAT
+            Revisar token
           </Button>
         </form>
       </CardContent>
@@ -263,17 +259,12 @@ const GrantReview = ({
           </time>
         </dd>
       </dl>
-      <section aria-label="Divulgación exacta del PAT">
-        <p className="whitespace-pre-line text-sm text-muted-foreground">
-          {buildPATDisclosure({ grant, expiresAt: grant.reviewExpiresAt })}
-        </p>
-      </section>
       <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
         <Button disabled={issuing} onClick={edit} type="button" variant="outline">
           Editar
         </Button>
         <Button disabled={issuing} onClick={confirm} type="button">
-          {issuing ? "Creando PAT…" : "Confirmar y crear PAT"}
+          {issuing ? "Creando token…" : "Confirmar y crear token"}
         </Button>
       </div>
     </CardContent>
@@ -286,38 +277,30 @@ const IssuedGrant = ({
   reset,
 }: Readonly<{
   issued: IssuedPAT;
-  copyToClipboard: (bearer: TokenBearer) => void;
+  copyToClipboard: (bearer: TokenBearer, onCopied: () => void) => void;
   reset: () => void;
-}>): JSX.Element => (
-  <Card>
-    <CardHeader>
-      <CardTitle>
-        <h2>Guarda este PAT ahora</h2>
-      </CardTitle>
-    </CardHeader>
-    <CardContent className="flex flex-col gap-5">
-      <Alert>
-        <AlertTitle>Se muestra una sola vez</AlertTitle>
-        <AlertDescription>
-          Fidy no puede recuperar este valor. Guárdalo directamente en el administrador seguro del
-          destinatario.
-        </AlertDescription>
-      </Alert>
-      <code className="break-all rounded-lg border bg-muted p-4 text-sm">{issued.bearer}</code>
-      <p className="text-sm text-muted-foreground">
-        Identificador seguro: <strong>{issued.pat.shortId}</strong>
-      </p>
-      <div className="flex flex-col gap-2 sm:flex-row">
-        <Button onClick={() => copyToClipboard(issued.bearer)} type="button">
-          Copiar PAT
-        </Button>
-        <Button onClick={reset} type="button" variant="outline">
-          Crear otro PAT
-        </Button>
-      </div>
-    </CardContent>
-  </Card>
-);
+}>): JSX.Element => {
+  const [copied, setCopied] = useState(false);
+  return (
+    <Card>
+      <CardContent className="flex flex-col gap-5">
+        <code className="break-all rounded-lg border bg-muted p-4 text-sm">{issued.bearer}</code>
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <Button
+            aria-live="polite"
+            onClick={() => copyToClipboard(issued.bearer, () => setCopied(true))}
+            type="button"
+          >
+            {copied ? "Copiado" : "Copiar token"}
+          </Button>
+          <Button onClick={reset} type="button" variant="outline">
+            Crear otro token
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+};
 
 type SetCreationState = Dispatch<SetStateAction<ManualPATCreationState>>;
 
@@ -416,7 +399,7 @@ const FailedState = ({
 }>): JSX.Element => (
   <div className="flex flex-col gap-4">
     <Alert variant="destructive">
-      <AlertTitle>No pudimos crear el PAT</AlertTitle>
+      <AlertTitle>No pudimos crear el token</AlertTitle>
       <AlertDescription>
         Vuelve a emparejar el navegador si pasaron diez minutos y luego intenta de nuevo.
       </AlertDescription>
@@ -447,7 +430,7 @@ const CreationContent = ({
   state: ManualPATCreationState;
   setState: SetCreationState;
   issue: (command: IssueManualPATCommand) => void;
-  copyToClipboard: (bearer: TokenBearer) => void;
+  copyToClipboard: (bearer: TokenBearer, onCopied: () => void) => void;
   clearClipboard: (bearer: TokenBearer) => void;
 }>): JSX.Element => {
   if (state._tag === "Editing") return <EditingState setState={setState} state={state} />;
@@ -486,7 +469,7 @@ export const ManualPATView = ({
   clearClipboard,
 }: Readonly<{
   issue: (command: IssueManualPATCommand) => void;
-  copyToClipboard: (bearer: TokenBearer) => void;
+  copyToClipboard: (bearer: TokenBearer, onCopied: () => void) => void;
   clearClipboard: (bearer: TokenBearer) => void;
 }>): JSX.Element => {
   const [state, setState] = useState<ManualPATCreationState>(initialState);
@@ -516,7 +499,7 @@ export const ManualPATView = ({
         </Badge>
         <h1 className="font-heading text-3xl font-semibold tracking-tight">Tokens de acceso</h1>
         <p className="text-muted-foreground">
-          Crea un PAT con el acceso mínimo que necesita su destinatario.
+          Crea un token con el acceso mínimo que necesita su destinatario.
         </p>
       </header>
       <CreationContent

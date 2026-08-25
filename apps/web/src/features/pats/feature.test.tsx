@@ -44,7 +44,7 @@ const prepareGrantReview = (): void => {
   });
   fireEvent.click(screen.getByRole("checkbox", { name: /Lectura/iu }));
   fireEvent.click(screen.getByRole("checkbox", { name: /Tablero/iu }));
-  fireEvent.click(screen.getByRole("button", { name: "Revisar PAT" }));
+  fireEvent.click(screen.getByRole("button", { name: "Revisar token" }));
 };
 
 it("defaults to 90 days, reviews exact expiration, and issues the selected fixed lifetime", () => {
@@ -53,7 +53,7 @@ it("defaults to 90 days, reviews exact expiration, and issues the selected fixed
   const issue = vi.fn((command: IssueManualPATCommand) => {
     command.onIssued(issued);
   });
-  const copyToClipboard = vi.fn();
+  const copyToClipboard = vi.fn((_bearer: TokenBearer, onCopied: () => void) => onCopied());
   const clearClipboard = vi.fn();
   const { rerender } = render(
     <ManualPATView
@@ -71,10 +71,9 @@ it("defaults to 90 days, reviews exact expiration, and issues the selected fixed
   expect(screen.getByText("Automatización casa", { exact: true })).toBeVisible();
   expect(screen.getByText("90 días", { selector: "dd" })).toBeVisible();
   expect(screen.getByText(/8 de noviembre de 2026/iu)).toBeVisible();
-  expect(screen.getByText(/Duración fija: 90 días \(2160 horas\)/iu)).toBeVisible();
   expect(screen.queryByText(bearer)).not.toBeInTheDocument();
 
-  fireEvent.click(screen.getByRole("button", { name: "Confirmar y crear PAT" }));
+  fireEvent.click(screen.getByRole("button", { name: "Confirmar y crear token" }));
 
   expect(issue).toHaveBeenCalledWith(
     expect.objectContaining({
@@ -89,11 +88,12 @@ it("defaults to 90 days, reviews exact expiration, and issues the selected fixed
   expect(issue.mock.calls[0]?.[0].requestId).toMatch(
     /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u
   );
-  expect(screen.getByRole("heading", { name: "Guarda este PAT ahora" })).toBeVisible();
   expect(screen.getByText(bearer)).toBeVisible();
+  expect(screen.queryByText("Se muestra una sola vez")).not.toBeInTheDocument();
 
-  fireEvent.click(screen.getByRole("button", { name: "Copiar PAT" }));
-  expect(copyToClipboard).toHaveBeenCalledWith(bearer);
+  fireEvent.click(screen.getByRole("button", { name: "Copiar token" }));
+  expect(copyToClipboard).toHaveBeenCalledWith(bearer, expect.any(Function));
+  expect(screen.getByRole("button", { name: "Copiado" })).toBeVisible();
 
   rerender(
     <ManualPATView
@@ -125,31 +125,31 @@ it("edits a reviewed grant and preserves one request identity across a failed re
   const issue = vi.fn<(command: IssueManualPATCommand) => void>();
   render(<ManualPATView clearClipboard={vi.fn()} copyToClipboard={vi.fn()} issue={issue} />);
 
-  expect(screen.getByRole("button", { name: "Revisar PAT" })).toBeDisabled();
+  expect(screen.getByRole("button", { name: "Revisar token" })).toBeDisabled();
   fireEvent.change(screen.getByLabelText("Nombre"), {
     target: { value: "x".repeat(recipientLabelLimit + 1) },
   });
   fireEvent.click(screen.getByRole("checkbox", { name: /Escritura/iu }));
-  expect(screen.getByRole("button", { name: "Revisar PAT" })).toBeDisabled();
+  expect(screen.getByRole("button", { name: "Revisar token" })).toBeDisabled();
   fireEvent.change(screen.getByLabelText("Nombre"), { target: { value: "Robot" } });
   fireEvent.click(screen.getByRole("checkbox", { name: /Escritura/iu }));
   fireEvent.click(screen.getByRole("checkbox", { name: /Escritura/iu }));
   fireEvent.click(screen.getByRole("checkbox", { name: /Escritura/iu }));
-  expect(screen.getByRole("button", { name: "Revisar PAT" })).toBeDisabled();
+  expect(screen.getByRole("button", { name: "Revisar token" })).toBeDisabled();
   fireEvent.click(screen.getByRole("checkbox", { name: /Escritura/iu }));
-  fireEvent.click(screen.getByRole("button", { name: "Revisar PAT" }));
+  fireEvent.click(screen.getByRole("button", { name: "Revisar token" }));
   fireEvent.click(screen.getByRole("button", { name: "Editar" }));
   expect(screen.getByLabelText("Nombre")).toHaveValue("Robot");
 
-  fireEvent.click(screen.getByRole("button", { name: "Revisar PAT" }));
-  fireEvent.click(screen.getByRole("button", { name: "Confirmar y crear PAT" }));
-  expect(screen.getByRole("button", { name: "Creando PAT…" })).toBeDisabled();
+  fireEvent.click(screen.getByRole("button", { name: "Revisar token" }));
+  fireEvent.click(screen.getByRole("button", { name: "Confirmar y crear token" }));
+  expect(screen.getByRole("button", { name: "Creando token…" })).toBeDisabled();
   const firstRequest = issue.mock.calls[0]?.[0];
   act(() => firstRequest?.onFailed());
 
-  expect(screen.getByText("No pudimos crear el PAT")).toBeVisible();
+  expect(screen.getByText("No pudimos crear el token")).toBeVisible();
   fireEvent.click(screen.getByRole("button", { name: "Volver a la revisión" }));
-  fireEvent.click(screen.getByRole("button", { name: "Confirmar y crear PAT" }));
+  fireEvent.click(screen.getByRole("button", { name: "Confirmar y crear token" }));
   expect(issue.mock.calls[1]?.[0].requestId).toBe(firstRequest?.requestId);
 });
 
@@ -160,13 +160,13 @@ it("clears an issued bearer on reset and page hide", async () => {
   render(<ManualPATView clearClipboard={clearClipboard} copyToClipboard={vi.fn()} issue={issue} />);
 
   prepareGrantReview();
-  fireEvent.click(screen.getByRole("button", { name: "Confirmar y crear PAT" }));
-  fireEvent.click(screen.getByRole("button", { name: "Crear otro PAT" }));
+  fireEvent.click(screen.getByRole("button", { name: "Confirmar y crear token" }));
+  fireEvent.click(screen.getByRole("button", { name: "Crear otro token" }));
   expect(clearClipboard).toHaveBeenCalledWith(bearer);
   await vi.advanceTimersByTimeAsync(Duration.toMillis(bearerRevealLifetime));
 
   prepareGrantReview();
-  fireEvent.click(screen.getByRole("button", { name: "Confirmar y crear PAT" }));
+  fireEvent.click(screen.getByRole("button", { name: "Confirmar y crear token" }));
   act(() => {
     window.dispatchEvent(new Event("pagehide"));
   });

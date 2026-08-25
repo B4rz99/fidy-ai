@@ -1,0 +1,19 @@
+apps/server/src/core/tokens/rules.test.ts
+  s_c4aa9d06e27852::t_e1e5e78fe7dd4d 8-13
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.24",
+  "base_commit_sha": "374314c65b1bc0fbba5cd33a14b23b8c0235835a",
+  "prompts": {},
+  "sessions": {
+    "s_c4aa9d06e27852": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a036b2-55d6-7faa-a278-088ee5334980",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

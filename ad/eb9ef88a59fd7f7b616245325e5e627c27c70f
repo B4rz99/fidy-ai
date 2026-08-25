@@ -1,0 +1,124 @@
+apps/server/src/core/tokens/model.test.ts
+  s_c4aa9d06e27852::t_91b8f700c926be 88-89,94-95
+  s_c4aa9d06e27852::t_a1954a8b1f2976 96,98
+  s_b6234d387d568c::t_0927d625bff0cb 88-89,94-95
+  s_b6234d387d568c::t_8278c151559bbc 96,98
+apps/server/src/core/subscription/model.test.ts
+  s_f8da608310e5d7::t_b10f1070644005 61-63,66-76
+  s_f8da608310e5d7::t_6a2f2ab50578b2 77-93
+apps/server/src/core/budgets/model.test.ts
+  s_a5d36f82ecc1cb::t_11547cc6da459b 45-59,61-63,66-74,76,78-81,83-111,115-126,155-168,223-225,232,234-241
+  s_a5d36f82ecc1cb::t_f724f2e5894a66 128-130
+  s_a5d36f82ecc1cb::t_46a3b3d3ec6a1f 199-221
+apps/server/src/core/_shared/opaque-proof.test.ts
+  s_a0be21e0e55716::t_3a05080886bf28 1-32
+apps/server/src/core/browser-login/model.test.ts
+  s_358109ece6e851::t_a1c37c28b76d78 1-29
+apps/server/src/core/web-session/reference.test.ts
+  s_00ec555a7950ba::t_df73a9e3ac72e7 1-27
+apps/server/src/core/_shared/search.test.ts
+  s_4855c951b8f354::t_3bc97333f87cce 1-6
+apps/server/src/core/consent/model.test.ts
+  s_b69a2b567d1401::t_d8d90996ea1168 9,97-114
+  s_c4aa9d06e27852::t_f233b396530b78 115-118
+apps/server/src/core/dashboard/calculation.test.ts
+  s_0554bccf13a21b::t_ef89e7394588ce 41-52
+apps/server/src/core/tokens/rules.test.ts
+  s_0e69afe7159cb7::t_7333642225bf59 3,5-16
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.24",
+  "base_commit_sha": "adeb9ef88a59fd7f7b616245325e5e627c27c70f",
+  "prompts": {},
+  "sessions": {
+    "s_00ec555a7950ba": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a03766-70ce-7d62-a019-e13e77cb7aac",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_0554bccf13a21b": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a03770-a130-7a2c-8cb6-80040653d1bc",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_0e69afe7159cb7": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a03775-3163-7e7d-98a6-f053134da33a",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_358109ece6e851": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a03762-86a5-79ca-8db4-533e6b87dc43",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_4855c951b8f354": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0376a-5368-7e6f-9cd7-bbd3b474e07a",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_a0be21e0e55716": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0375d-015d-78c3-a833-72b2cb0d3d86",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_a5d36f82ecc1cb": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a03743-4554-738d-ac34-10b059e78b95",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_b6234d387d568c": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a036d8-d1f7-7606-9bc6-d9ebaad42b29",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_b69a2b567d1401": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0376d-144e-7399-b08b-65e702544eb3",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_c4aa9d06e27852": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a036b2-55d6-7faa-a278-088ee5334980",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_f8da608310e5d7": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a036df-cac1-73a1-9ed7-16df79d53a6f",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

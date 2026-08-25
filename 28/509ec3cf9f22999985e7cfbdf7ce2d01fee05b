@@ -1,0 +1,28 @@
+apps/server/src/core/consent/model.test.ts
+  s_b69a2b567d1401::t_d8d90996ea1168 9,97-114
+  s_c4aa9d06e27852::t_f233b396530b78 115-118
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.24",
+  "base_commit_sha": "28509ec3cf9f22999985e7cfbdf7ce2d01fee05b",
+  "prompts": {},
+  "sessions": {
+    "s_b69a2b567d1401": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0376d-144e-7399-b08b-65e702544eb3",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_c4aa9d06e27852": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a036b2-55d6-7faa-a278-088ee5334980",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

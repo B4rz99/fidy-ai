@@ -38,6 +38,18 @@ it("keeps local week boundaries exact across daylight-saving transitions", () =>
   expect(DateTime.formatIso(previous.toExclusive)).toBe("2026-03-09T04:00:00.000Z");
 });
 
+it("resolves the last 30 days from local day boundaries", () => {
+  const now = DateTime.makeUnsafe("2026-07-22T12:00:00.000Z");
+  const lastThirty = resolveDashboardPeriod({
+    now,
+    period: "last-30-days",
+    timeZone: bogota,
+  });
+
+  expect(DateTime.formatIso(lastThirty.from)).toBe("2026-06-23T05:00:00.000Z");
+  expect(DateTime.formatIso(lastThirty.toExclusive)).toBe("2026-07-23T05:00:00.000Z");
+});
+
 it("resolves complete current and previous calendar months", () => {
   const now = DateTime.makeUnsafe("2026-03-15T12:00:00.000Z");
   const current = resolveDashboardPeriod({ now, period: "this-month", timeZone: bogota });

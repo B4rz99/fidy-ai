@@ -1,0 +1,77 @@
+apps/server/src/core/_shared/time.test.ts
+  s_e3616f75150a60::t_e9b83f296e0093 39,43,47,49-50,56-57
+apps/server/src/core/budgets/rules.test.ts
+  s_e3616f75150a60::t_9d2e35bf87147b 4
+  s_e3616f75150a60::t_2d0f5090784e5f 1,53
+  s_e3616f75150a60::t_7b6b07caa8b328 2,54-55,64
+apps/server/src/core/_shared/opaque-proof.test.ts
+  s_e3616f75150a60::t_ade4a1445cdc2f 1-10,13-16
+  s_e3616f75150a60::t_58f8ef655ae1c5 11-12
+apps/server/src/core/_shared/canonical-operation.test.ts
+  s_e3616f75150a60::t_d18420073e1022 1-8,10-24
+  s_e3616f75150a60::t_047be2e3a19a41 9
+apps/server/src/core/_shared/provider-message-evidence.test.ts
+  s_e3616f75150a60::t_bb71d28762a279 15-28,34-35
+apps/server/src/core/_shared/search.test.ts
+  s_e3616f75150a60::t_09c2ce2036d996 1-10
+apps/server/src/core/budgets/model.test.ts
+  s_e3616f75150a60::t_29d92a113b6af2 166-178
+  s_e3616f75150a60::t_017dac04e7c407 2,9-10,33-46,49-57,60,73-79,81-123,135-140,165,209-211,218,220-228,230-236,240-248
+  s_e3616f75150a60::t_c547a0d10fc7ca 124-134
+  s_e3616f75150a60::t_58f8ef655ae1c5 47-48,237-239
+apps/server/src/core/categories/taxonomy.test.ts
+  s_e3616f75150a60::t_a28a2eec028c1e 1-29
+apps/server/src/core/_shared/money.test.ts
+  s_e3616f75150a60::t_dcbefd7ddd7e74 13,64-69,75,86-90,112-138,149-153
+  s_c4aa9d06e27852::t_08d39dc21a5a84 154
+apps/server/src/core/transactions/errors.test.ts
+  s_e3616f75150a60::t_bbbc3b80427bea 1
+  s_e3616f75150a60::t_84e779c41e4b8e 2-3,5-29
+  s_e3616f75150a60::t_58f8ef655ae1c5 4
+apps/server/src/core/categories/model.test.ts
+  s_e3616f75150a60::t_44b687db7886d2 1-53
+apps/server/src/core/_shared/context.test.ts
+  s_e3616f75150a60::t_ebf3c6e0ad782f 3,9-16,23
+apps/server/src/core/budgets/errors.test.ts
+  s_e3616f75150a60::t_58f8ef655ae1c5 5,22
+  s_e3616f75150a60::t_1637765d981462 1
+  s_e3616f75150a60::t_c9b903b63a1e13 2-4,6-21,23-26
+apps/server/src/core/categories/errors.test.ts
+  s_e3616f75150a60::t_d591dc073484c8 2-37
+  s_e3616f75150a60::t_97ded1224b6652 1
+apps/server/src/core/_shared/canonical-capability.test.ts
+  s_e3616f75150a60::t_58f8ef655ae1c5 20
+apps/server/src/core/transactions/rules.test.ts
+  s_e3616f75150a60::t_7451f20028cb88 1-3,25-27,29-32,46-48,51
+  s_e3616f75150a60::t_58f8ef655ae1c5 50
+apps/server/src/core/transactions/model.test.ts
+  s_e3616f75150a60::t_b9df4e1be3a23c 2,10,60-62,65-67,80-86,93-94,119-120,122,124,127,143-154,187-224
+  s_e3616f75150a60::t_58f8ef655ae1c5 87-92
+  s_e3616f75150a60::t_c2b20a91c0b94a 63-64,126
+  s_e3616f75150a60::t_062f0e8bd520bd 56-59,125
+  s_e3616f75150a60::t_410e6857c3d702 225
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.24",
+  "base_commit_sha": "75b20fc5a2535faca3ab5ae316c5259bd93b68b0",
+  "prompts": {},
+  "sessions": {
+    "s_c4aa9d06e27852": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a036b2-55d6-7faa-a278-088ee5334980",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_e3616f75150a60": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a036c7-5805-7081-a54f-886e13a98a58",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

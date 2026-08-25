@@ -1,0 +1,19 @@
+apps/server/src/core/dashboard/calculation.test.ts
+  s_0554bccf13a21b::t_ef89e7394588ce 41-52
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.24",
+  "base_commit_sha": "23d090a44a528a3b39dd6fee3d89c03337e12169",
+  "prompts": {},
+  "sessions": {
+    "s_0554bccf13a21b": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a03770-a130-7a2c-8cb6-80040653d1bc",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

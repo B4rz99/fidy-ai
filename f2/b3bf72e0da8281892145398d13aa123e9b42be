@@ -1,0 +1,19 @@
+apps/server/src/shell/testing/authorization.test.ts
+  s_6b2861de8771eb::t_f3d207229b9d27 104,109,111,113,115,393,401,736,740
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.24",
+  "base_commit_sha": "f2b3bf72e0da8281892145398d13aa123e9b42be",
+  "prompts": {},
+  "sessions": {
+    "s_6b2861de8771eb": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a03668-ea94-7fa3-aeb4-424476556d4c",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

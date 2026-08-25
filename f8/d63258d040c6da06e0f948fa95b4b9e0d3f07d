@@ -119,6 +119,8 @@ apps/server/src/core/tokens/model.ts
   s_6b2861de8771eb::t_4da4cb943a49e5 190,193
   s_6b2861de8771eb::t_47b998fb441dd7 65
   s_6b2861de8771eb::t_2dd3010d369959 62,81-85,180,182,188-189,192,196-198,200-201,224-225,232-233
+apps/server/ARCHITECTURE.md
+  s_6b2861de8771eb::t_91dc2d32a509c4 192-195
 ---
 {
   "schema_version": "authorship/3.0.0",

@@ -58,6 +58,36 @@ it("rejects reordered periods and payment methods outside the launch set", () =>
     paymentMethods: ["card", "pse", "daviplata"],
   });
 
-  expect(Result.isFailure(reorderedPeriods)).toBe(true);
+  expect(Result.isFailure(reorderedPeriods) ? String(reorderedPeriods.failure) : "").toContain(
+    'at [0]["billingPeriod"]'
+  );
   expect(Result.isFailure(unsupportedMethod)).toBe(true);
+});
+
+it("rejects duplicate PriceRevision identities and reports the identity failure path", () => {
+  const duplicateIdentity = Schema.decodeUnknownResult(SubscriptionOffers)([
+    weekly,
+    monthly,
+    { ...yearly, id: monthly.id },
+  ]);
+
+  expect(Result.isFailure(duplicateIdentity) ? String(duplicateIdentity.failure) : "").toContain(
+    'at ["id"]'
+  );
+});
+
+it("reports the ordering path when an authoritative offer check sees a missing period", () => {
+  const checkableOffers = SubscriptionOffers.mapElements(
+    () => [Schema.Unknown, Schema.Unknown, Schema.Unknown] as const,
+    { unsafePreserveChecks: true }
+  );
+  const missingPeriod = Schema.decodeUnknownResult(checkableOffers)([
+    { id: weekly.id, billingPeriod: "weekly" },
+    { id: monthly.id, billingPeriod: "monthly" },
+    undefined,
+  ]);
+
+  expect(Result.isFailure(missingPeriod) ? String(missingPeriod.failure) : "").toContain(
+    'at [2]["billingPeriod"]'
+  );
 });

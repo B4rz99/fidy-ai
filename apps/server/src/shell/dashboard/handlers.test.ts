@@ -5,6 +5,7 @@ import { HttpBody, HttpClient } from "effect/unstable/http";
 import { SqlSchema } from "effect/unstable/sql";
 import { MigrationSqlClient, PgLive } from "~/shell/db/client";
 import { CategoryId } from "~/core/categories/reference";
+import { IanaTimeZone } from "~/core/_shared/context";
 import { categoryIds } from "~/core/categories/taxonomy";
 import { SplitWeight, TransactionListLimit, WidgetId } from "~/core/dashboard/model";
 import { NotFound, ValidationFailed } from "~/shell/_shared/errors";
@@ -12,7 +13,11 @@ import { freePatCaller } from "~/shell/_shared/suggested-operations";
 import { defaultUserId } from "~/shell/db/development-seed";
 import { withUserTransaction } from "~/shell/db/user-transaction";
 import { defaultPatBearer } from "~/shell/testing/identity-fixtures";
-import { dashboardListStatement, dashboardMetricStatement } from "~/shell/transactions/repo";
+import {
+  dashboardListStatement,
+  dashboardMetricStatement,
+  selectDashboardTransactionSumsInScope,
+} from "~/shell/transactions/repo";
 import { ApiHarness, ApiHarnessClient, headersFor } from "~/shell/testing/api-harness";
 import { truncateDashboards } from "./fixtures";
 import { applyDashboardEdit } from "./mutations";
@@ -62,6 +67,7 @@ const assertMetricResult = (candidate: Option.Option<DashboardWidgetView>): void
 };
 
 const ExplainRow = Schema.Struct({ "QUERY PLAN": Schema.String });
+const testDashboardTimeZone = Schema.decodeUnknownSync(IanaTimeZone)("America/Bogota");
 const explainDashboardTransactionAccess = Effect.gen(function* () {
   const admin = yield* MigrationSqlClient;
   return yield* admin.withTransaction(
@@ -95,6 +101,40 @@ const explainDashboardTransactionAccess = Effect.gen(function* () {
         Result: ExplainRow,
         execute: () => sql`EXPLAIN ${aggregateStatement}`,
       })(undefined).pipe(Effect.orDie);
+      const period = {
+        from: DateTime.makeUnsafe("2026-01-01T00:00:00Z"),
+        toExclusive: DateTime.makeUnsafe("2026-02-01T00:00:00Z"),
+      };
+      yield* sql`EXPLAIN ${dashboardMetricStatement({
+        sql,
+        userId: defaultUserId,
+        query: { ...period, aggregation: "average", categories: [categoryIds.restaurantes] },
+      })}`;
+      yield* sql`EXPLAIN ${dashboardMetricStatement({
+        sql,
+        userId: defaultUserId,
+        query: { ...period, aggregation: "maximum", categories: [] },
+      })}`;
+      yield* sql`EXPLAIN ${dashboardListStatement({
+        sql,
+        userId: defaultUserId,
+        query: {
+          categories: [categoryIds.restaurantes],
+          search: Option.some("restaurante"),
+          searchCategoryIds: [],
+          limit: 12,
+        },
+      })}`;
+      yield* sql`EXPLAIN ${dashboardListStatement({
+        sql,
+        userId: defaultUserId,
+        query: {
+          categories: [],
+          search: Option.some("restaurante"),
+          searchCategoryIds: [categoryIds.restaurantes],
+          limit: 12,
+        },
+      })}`;
       return { recent, aggregate };
     })
   );
@@ -302,6 +342,39 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           secondId,
           thirdId,
         ]);
+      })
+    );
+
+    it.effect("projects every requested Dashboard Transaction grouping key", () =>
+      Effect.gen(function* () {
+        const sql = yield* MigrationSqlClient;
+        const marker = "dashboard-grouping-coverage";
+        yield* sql`
+          INSERT INTO transactions
+            (user_id, amount, currency, direction, category_id, notes, occurred_at)
+          VALUES
+            (${defaultUserId}, 25, 'COP', 'outflow', ${categoryIds.restaurantes},
+              ${marker}, '2026-07-20T12:00:00Z')
+        `;
+        const period = {
+          from: DateTime.makeUnsafe("2000-01-01T00:00:00Z"),
+          toExclusive: DateTime.makeUnsafe("2100-01-01T00:00:00Z"),
+        };
+        const groups = yield* withUserTransaction(
+          defaultUserId,
+          Effect.forEach(["category", "day", "month"] as const, (groupBy) =>
+            selectDashboardTransactionSumsInScope(defaultUserId, {
+              ...period,
+              categories: [],
+              groupBy,
+              timeZone: testDashboardTimeZone,
+            })
+          )
+        );
+        expect(groups.map((facts) => Array.get(facts, 0).pipe(Option.getOrThrow).key.kind)).toEqual(
+          ["category", "day", "month"]
+        );
+        yield* sql`DELETE FROM transactions WHERE notes = ${marker}`;
       })
     );
 

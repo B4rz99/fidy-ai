@@ -336,7 +336,8 @@ const acquireList = (
     ]);
   });
 
-const budgetStatusResult = (status: BudgetStatus): AvailableBudgetResult["status"] => {
+/** Projects the closed Budget status without leaking persistence facts. */
+export const budgetStatusResult = (status: BudgetStatus): AvailableBudgetResult["status"] => {
   switch (status.type) {
     case "under":
       return { type: "under", remaining: status.remaining };

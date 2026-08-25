@@ -267,7 +267,7 @@ test("creates, copies, and clears a manual PAT from a freshly paired browser", a
   await page.getByRole("checkbox", { name: /Tablero/iu }).click();
   await page.getByRole("button", { name: "Revisar token" }).click();
   await expect(page.getByRole("heading", { name: "Revisa el acceso" })).toBeVisible();
-  await expect(page.getByText(/Duración fija: 90 días \(2160 horas\)/iu)).toBeVisible();
+  await expect(page.getByText("90 días", { exact: true })).toBeVisible();
 
   const issueResponse = page.waitForResponse(
     (response) => response.url() === `${apiOrigin}/pats` && response.request().method() === "POST"

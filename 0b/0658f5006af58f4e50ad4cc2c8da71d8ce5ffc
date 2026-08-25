@@ -1,0 +1,20 @@
+apps/server/src/core/subscription/model.test.ts
+  s_f8da608310e5d7::t_b10f1070644005 61-63,66-76
+  s_f8da608310e5d7::t_6a2f2ab50578b2 77-93
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.24",
+  "base_commit_sha": "0b0658f5006af58f4e50ad4cc2c8da71d8ce5ffc",
+  "prompts": {},
+  "sessions": {
+    "s_f8da608310e5d7": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a036df-cac1-73a1-9ed7-16df79d53a6f",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

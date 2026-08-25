@@ -21,7 +21,7 @@ The central invariant is: **an event may contain only stable operational metadat
 
 Fidy's `Transaction` contains normalized financial facts such as Money, merchant, and Category ([`CONTEXT.md:38-42`](../CONTEXT.md#L38-L42)). A `Transcript` is the exact accepted User text, assistant text, canonical tool calls, and outcomes ([`CONTEXT.md:129-134`](../CONTEXT.md#L129-L134)); `UserNote` is user-requested free text ([`CONTEXT.md:136-139`](../CONTEXT.md#L136-L139)); and `IngestSample` retains raw or derived ingestion material ([`CONTEXT.md:93-98`](../CONTEXT.md#L93-L98)). These are all payloads, not observability metadata.
 
-The architecture already defines `AuditLogEntry` as metadata-only and explicitly says it never contains bodies ([`CONTEXT.md:167-170`](../CONTEXT.md#L167-L170)). It also requires provider edges to stay narrow and bounds provider response bytes before SDK decoding ([`ARCHITECTURE.md:127-137`](../ARCHITECTURE.md#L127-L137)). **[Design conclusion]** The Sentry boundary should be at least as strict as that audit boundary, and should not use Sentry to mirror AuditLogEntries, Transcripts, queue jobs, or provider evidence.
+The architecture already defines `AuditLogEntry` as metadata-only and explicitly says it never contains bodies ([`CONTEXT.md:167-170`](../CONTEXT.md#L167-L170)). It also requires provider edges to stay narrow and bounds provider response bytes before SDK decoding ([server architecture, external effects](../apps/server/ARCHITECTURE.md#6-errors-and-external-effects)). **[Design conclusion]** The Sentry boundary should be at least as strict as that audit boundary, and should not use Sentry to mirror AuditLogEntries, Transcripts, queue jobs, or provider evidence.
 
 ### Proposed Sentry allowlist
 
@@ -360,4 +360,4 @@ All source links below are pinned to `5e76abe234ff0117cccb042ad1140c5a4e11dde6`:
 
 - [F1 — map #91](https://github.com/B4rz99/fidy-ai/issues/91)
 - [`CONTEXT.md`](../CONTEXT.md), especially [Transaction](../CONTEXT.md#L38-L42), [IngestSample](../CONTEXT.md#L93-L98), [Transcript/UserNote](../CONTEXT.md#L129-L139), and [AuditLogEntry](../CONTEXT.md#L167-L170)
-- [`ARCHITECTURE.md`](../ARCHITECTURE.md), especially [user isolation/audit boundary](../ARCHITECTURE.md#L88-L118), [external effects](../ARCHITECTURE.md#L127-L137), and [testing seams](../ARCHITECTURE.md#L153-L168)
+- [Server architecture](../apps/server/ARCHITECTURE.md), especially [user isolation and audit](../apps/server/ARCHITECTURE.md#5-user-context-and-isolation), [external effects](../apps/server/ARCHITECTURE.md#6-errors-and-external-effects), and [testing seams](../apps/server/ARCHITECTURE.md#8-testing-seams)

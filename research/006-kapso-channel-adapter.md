@@ -43,7 +43,7 @@ Sources:
 - [Kapso webhook overview](https://docs.kapso.ai/docs/platform/webhooks/overview)
 - [Kapso message event payloads](https://docs.kapso.ai/docs/platform/webhooks/event-types)
 - [`CONTEXT.md`](../CONTEXT.md), `WhatsAppIdentity`
-- [`ARCHITECTURE.md`](../ARCHITECTURE.md), §5
+- [Server architecture](../apps/server/ARCHITECTURE.md), §5
 
 **Conclusion:** decode with `E164PhoneNumber` from `core/identity/reference.ts` and resolve an accepted association with the existing `resolveWhatsAppCaller`. Never use Kapso conversation ids, WAMIDs, BSUIDs, usernames, or contact ids as authority. A phone-less event is unsupported. An unassociated real phone enters issue #8's onboarding boundary instead of being discarded or sent to the agent.
 

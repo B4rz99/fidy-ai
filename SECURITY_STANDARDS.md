@@ -1,17 +1,19 @@
-# Security review
+# Security standards
 
-The security policy for reviewing changes to Fidy. It describes the attack surface of the planned
-product in issue #1, not only the code that exists today. It is deliberately narrower than a
-security programme: every rule here must be decidable from a code or configuration diff and its
+The security standards for reviewing changes to Fidy. They describe the attack surface of the
+planned product in issue #1, not only the code that exists today. They are deliberately narrower than
+a security programme: every rule here must be decidable from a code or configuration diff and its
 tests.
 
 A review applies a rule only when the diff introduces, changes, exposes, or worsens that rule's
 attack surface. An unbuilt future capability is not a finding. A pre-existing weakness is a finding
 only when the diff newly exposes it, worsens it, or relies on it.
 
-The review asks **what must remain secure**, not how to implement it. Issue #1 and
-`ARCHITECTURE.md` own already-adopted mechanics; this document turns their security consequences
-into reviewable invariants.
+The review asks **what must remain secure**, not how to implement it. Issue #1, root
+[`ARCHITECTURE.md`](ARCHITECTURE.md), and the application architecture documents for
+[`@fidy/server`](apps/server/ARCHITECTURE.md) and [`@fidy/web`](apps/web/ARCHITECTURE.md) own
+already-adopted mechanics; this document turns their security consequences into reviewable
+invariants.
 
 ---
 
@@ -84,7 +86,16 @@ Every crossing is untrusted regardless of its TypeScript type or vendor:
 ## Review invariants
 
 Each section states when it applies, what must hold, and the evidence a reviewer should seek. The
-examples are representative, not an exhaustive checklist.
+examples are representative, not an exhaustive checklist. These common change areas are a navigation
+aid, not a substitute for each section's `Applies when` clause:
+
+| change area                                      | commonly applicable sections |
+| ------------------------------------------------ | ---------------------------- |
+| server operations, repositories, and persistence | 1, 3–5, 8–10                 |
+| browser authentication and application delivery  | 1–4, 8–10                    |
+| hosted agents and canonical tools                | 1, 3, 4, 6, 8, 10            |
+| ingestion and uploaded material                  | 3, 4, 6–8, 10                |
+| providers, callbacks, queues, and scheduled work | 1, 3–5, 8–10                 |
 
 ### 1. Authentication, authorization, and User isolation
 
@@ -409,7 +420,9 @@ Update this file when a change alters a protected asset, data class, threat acto
 accepted external risk, or security invariant. Implementing an already-documented invariant does
 not require a policy edit.
 
-OWASP ASVS 5.0.0, OWASP API Security Top 10 (2023), and OWASP Top 10 for LLM Applications (2025)
-were used as completeness checks for technical controls, API isolation and resource abuse, prompt
-injection, unsafe model output, excessive agency, and unbounded consumption. They are not
-substitute finding sources, and this policy does not claim ASVS compliance.
+OWASP ASVS 5.0.0, OWASP Top 10 (2025), OWASP API Security Top 10 (2023), and OWASP Top 10 for
+LLM Applications (2025) were used as pinned completeness checks for technical and browser controls,
+API isolation and resource abuse, prompt injection, unsafe model output, excessive agency, and
+unbounded consumption. They are not substitute finding sources, and this policy does not claim
+compliance with any of them. A later edition requires a deliberate comparison before this list is
+updated.

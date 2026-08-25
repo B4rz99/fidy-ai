@@ -14,13 +14,19 @@ Issues and PRDs live as **GitHub issues** in `B4rz99/fidy-ai`, managed via the `
 
 ## Architecture and conventions
 
-Read all three before writing code:
+Before writing code, always read:
 
 - **`CONTEXT.md`** — the ubiquitous language. Use these terms; avoid the listed synonyms.
-- **`ARCHITECTURE.md`** — the shape and why; read it before proposing a change, because most
-  obvious alternatives were considered and turned down for reasons not visible in the code.
+- **`ARCHITECTURE.md`** — the system shape and cross-application boundaries.
 - **`CODING_STANDARDS.md`** — how code is written inside that shape. Its two closing sections are
   the ones to check against: what is mechanically enforced, and what is review-only.
+- **`SECURITY_STANDARDS.md`** — the mandatory security review invariants.
+
+Then read the architecture document for every application the change touches:
+
+- **`apps/server/ARCHITECTURE.md`** for server changes.
+- **`apps/web/ARCHITECTURE.md`** for web changes.
+- **Both application documents** for cross-application changes.
 
 ## Effect reference
 

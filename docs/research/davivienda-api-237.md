@@ -3,7 +3,7 @@
 Research date: 2026-08-22
 
 Scope: Davivienda API 237, authenticated laboratory portal and downloaded laboratory materials, with an official Bancolombia Account Information comparison baseline.
-Repository context: Fidy terminology and gate from [`CONTEXT.md`](../../CONTEXT.md), [`ARCHITECTURE.md`](../../ARCHITECTURE.md), and [`CODING_STANDARDS.md`](../../CODING_STANDARDS.md).
+Repository context: Fidy terminology and gates from [`CONTEXT.md`](../../CONTEXT.md), [system architecture](../../ARCHITECTURE.md), [server architecture](../../apps/server/ARCHITECTURE.md), and [`CODING_STANDARDS.md`](../../CODING_STANDARDS.md).
 
 ## 1. Executive verdict
 
@@ -545,7 +545,7 @@ Use Davivienda’s official contact/commercial path to request the production el
 ### Fidy repository sources
 
 - [`CONTEXT.md`](../../CONTEXT.md) — ubiquitous language and SupportedInstitution gate.
-- [`ARCHITECTURE.md`](../../ARCHITECTURE.md) — shell boundaries and external Work.
+- [Server architecture](../../apps/server/ARCHITECTURE.md) — shell boundaries and external Work.
 - [`CODING_STANDARDS.md`](../../CODING_STANDARDS.md) — naming, schemas, and external-workflow guidance.
 
 ### Davivienda official public sources

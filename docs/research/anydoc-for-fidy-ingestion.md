@@ -101,7 +101,7 @@ For Fidy, hosted Parse should **not** be added merely to avoid OpenAI vision:
 - failures and partial output would still need Fidy's NeedsReview semantics; and
 - it would add a provider seam that the current MVP does not require.
 
-The first two points are documented in the official Parse API (`zeroDataRetention` defaults to `false` and requires contacting Firecrawl); the remaining points are conclusions from Fidy's canonical-operation and Ingestion requirements. [Parse API](https://docs.firecrawl.dev/api-reference/endpoint/parse) · [Fidy architecture](../../ARCHITECTURE.md) · [Fidy #18](https://github.com/B4rz99/fidy-ai/issues/18)
+The first two points are documented in the official Parse API (`zeroDataRetention` defaults to `false` and requires contacting Firecrawl); the remaining points are conclusions from Fidy's canonical-operation and Ingestion requirements. [Parse API](https://docs.firecrawl.dev/api-reference/endpoint/parse) · [Fidy server architecture](../../apps/server/ARCHITECTURE.md) · [Fidy #18](https://github.com/B4rz99/fidy-ai/issues/18)
 
 A future provider evaluation could compare Firecrawl Parse's OCR-only Markdown against OpenAI native PDF/image input using Fidy's anonymized IngestSamples, measuring Transaction field accuracy, table-row conservation, latency, cost, Colombia data-processing terms, ZDR availability, and failure behavior. Until that evidence exists, switching providers is not justified.
 

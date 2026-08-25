@@ -96,7 +96,7 @@ A viable experiment is to start a Sentry root span in a test fixture, obtain its
 
 1. The API request span should continue the browser's trace.
 2. Database work and each external provider operation should be a child span with an allowlisted operation/name and provider hostname only; provider request/response content stays out of telemetry.
-3. If a durable queue job is causally caused by the API request, carry only the Sentry propagation metadata in the queue record or message and call `continueTrace` in the worker. The worker must end the short API transaction before model/provider waits, in keeping with Fidy's existing transaction boundaries ([`ARCHITECTURE.md`, §5–§6](../ARCHITECTURE.md)).
+3. If a durable queue job is causally caused by the API request, carry only the Sentry propagation metadata in the queue record or message and call `continueTrace` in the worker. The worker must end the short API transaction before model/provider waits, in keeping with Fidy's existing transaction boundaries ([server architecture, §5–§6](../apps/server/ARCHITECTURE.md)).
 4. Independently scheduled work must start a new root trace. It may carry a safe run/correlation tag, but it must not be made a false child merely because it happened near the test.
 5. A provider call span proves that Fidy made and timed an outbound operation. It does not make Kapso, Resend, Wompi, PostgreSQL, or another provider's internal work part of the Sentry trace unless that external system emits compatible telemetry and propagates it back.
 
@@ -228,7 +228,7 @@ This is a **design conclusion**, not an implementation plan for this ticket:
 - [`package.json`](../package.json)
 - [`.github/workflows/ci.yml`](../.github/workflows/ci.yml)
 - [`vitest.config.ts`](../vitest.config.ts)
-- [`ARCHITECTURE.md`](../ARCHITECTURE.md)
+- [Server architecture](../apps/server/ARCHITECTURE.md)
 
 ### Sentry documentation and first-party source
 

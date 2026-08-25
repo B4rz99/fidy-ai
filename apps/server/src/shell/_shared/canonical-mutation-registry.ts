@@ -12,6 +12,7 @@ import {
   updateKeywordRule,
 } from "~/shell/categories/mutations";
 import { applyDashboardEdit, getDashboard } from "~/shell/dashboard/mutations";
+import { getDashboardView } from "~/shell/dashboard/view";
 import { updateUserPreferences } from "~/shell/identity/mutations";
 import {
   resolveNeedsReviewItemMutation,
@@ -91,6 +92,8 @@ export const canonicalMutationImplementations = {
     }),
   "dashboard.getDashboard": (_input, caller) =>
     getDashboard({ userId: caller.resolved.subjectUserId }),
+  "dashboard.getDashboardView": (_input, caller) =>
+    getDashboardView({ userId: caller.resolved.subjectUserId }),
   "dashboard.applyDashboardEdit": (input, caller) =>
     applyDashboardEdit({
       userId: caller.resolved.subjectUserId,

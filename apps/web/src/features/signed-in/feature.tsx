@@ -43,10 +43,13 @@ const SignedInShell = (): JSX.Element => {
           aria-label="Aplicación"
           className="mx-auto flex w-full max-w-6xl items-center justify-between px-4 py-4 sm:px-6 lg:px-8"
         >
-          <Link className="font-heading text-xl font-semibold" to="/app/transactions">
+          <Link className="font-heading text-xl font-semibold" to="/app/dashboard">
             Fidy
           </Link>
           <div className="flex items-center gap-2">
+            <Button render={<Link to="/app/dashboard" />} variant="ghost">
+              Tablero
+            </Button>
             <Button render={<Link to="/app/transactions" />} variant="ghost">
               Transacciones
             </Button>

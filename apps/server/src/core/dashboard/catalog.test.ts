@@ -36,6 +36,6 @@ it("creates a valid non-empty first-use DashboardDocument", () => {
     widgetId: WidgetId.make("f1d1a000-0000-4000-8000-000000000511"),
   });
 
-  expect(document.title).toBe("Mi tablero");
+  expect(document.title).toBe("Tablero");
   expect(() => Schema.encodeSync(DashboardDocument)(document)).not.toThrow();
 });

@@ -290,6 +290,9 @@ const probes: Record<OperationId, SuggestedOperationProbe> = {
   "dashboard.getDashboard": (client) =>
     Effect.map(client.dashboard.getDashboard(), (response) => [response]),
 
+  "dashboard.getDashboardView": (client) =>
+    Effect.map(client.dashboard.getDashboardView(), (response) => [response]),
+
   "dashboard.listDashboardCatalog": (client) =>
     Effect.map(client.dashboard.listDashboardCatalog(), (response) => [response]),
 

@@ -1,13 +1,20 @@
 import { expect, it } from "@effect/vitest";
-import { Result, Schema } from "effect";
+import { BigDecimal, Result, Schema } from "effect";
 import {
   AppliedBudgetMonth,
   Budget,
   BudgetMonthLatch,
+  type BudgetProgressFact,
   BudgetStatus,
   CreateBudgetInput,
   UpdateBudgetInput,
+  hasExactBudgetProgress,
 } from "./model";
+
+const money = (amount: string): BudgetProgressFact["cap"] => ({
+  amount: BigDecimal.fromStringUnsafe(amount),
+  currency: "COP" as const,
+});
 
 const budgetInput = {
   id: "f1d1a000-0000-4000-8000-0000000000bb",
@@ -72,6 +79,58 @@ it("rejects a Budget status whose Money values do not share the cap Currency", (
 
   expect(Result.isFailure(decoded)).toBe(true);
   expect(Result.isFailure(contradictory)).toBe(true);
+});
+
+it("recognizes every exact Budget progress state and rejects contradictions", () => {
+  expect(
+    hasExactBudgetProgress({
+      cap: money("100"),
+      spent: money("25"),
+      status: { type: "under", remaining: money("75") },
+    })
+  ).toBe(true);
+  expect(
+    hasExactBudgetProgress({
+      cap: money("100"),
+      spent: money("100"),
+      status: { type: "reached" },
+    })
+  ).toBe(true);
+  expect(
+    hasExactBudgetProgress({
+      cap: money("100"),
+      spent: money("125"),
+      status: { type: "over", overBy: money("25") },
+    })
+  ).toBe(true);
+  expect(
+    hasExactBudgetProgress({
+      cap: money("0"),
+      spent: money("0"),
+      status: { type: "reached" },
+    })
+  ).toBe(false);
+  expect(
+    hasExactBudgetProgress({
+      cap: money("100"),
+      spent: money("25"),
+      status: { type: "under", remaining: money("74") },
+    })
+  ).toBe(false);
+  expect(
+    hasExactBudgetProgress({
+      cap: money("100"),
+      spent: money("99"),
+      status: { type: "reached" },
+    })
+  ).toBe(false);
+  expect(
+    hasExactBudgetProgress({
+      cap: money("100"),
+      spent: money("125"),
+      status: { type: "over", overBy: money("24") },
+    })
+  ).toBe(false);
 });
 
 it("models monthly threshold marks as closed boolean state", () => {

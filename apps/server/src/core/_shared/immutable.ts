@@ -3,8 +3,8 @@ export type Immutable<Value> = Value extends CallableFunction
   ? Value
   : Value extends string | number | boolean | bigint | symbol
     ? Value
-    : Value extends ReadonlyArray<infer Element>
-      ? ReadonlyArray<Immutable<Element>>
+    : Value extends ReadonlyArray<unknown>
+      ? { readonly [Index in keyof Value]: Immutable<Value[Index]> }
       : Value extends object
         ? { readonly [Key in keyof Value]: Immutable<Value[Key]> }
         : Value;

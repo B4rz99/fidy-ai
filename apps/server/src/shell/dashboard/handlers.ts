@@ -5,6 +5,7 @@ import { resolveFreeSuggestedOperationCaller } from "~/shell/_shared/suggested-o
 import { FidyApi } from "~/shell/api";
 import { applyDashboardEdit, getDashboard } from "./mutations";
 import { listDashboardCatalog } from "./queries";
+import { getDashboardView } from "./view";
 
 /** Resolves User ownership before every dashboard read or atomic edit. */
 export const DashboardLive = HttpApiBuilder.group(FidyApi, "dashboard", (handlers) =>
@@ -13,6 +14,12 @@ export const DashboardLive = HttpApiBuilder.group(FidyApi, "dashboard", (handler
       Effect.gen(function* () {
         const { subjectUserId: userId } = yield* ResolvedCaller;
         return yield* getDashboard({ userId });
+      })
+    )
+    .handle("getDashboardView", () =>
+      Effect.gen(function* () {
+        const { subjectUserId: userId } = yield* ResolvedCaller;
+        return yield* getDashboardView({ userId });
       })
     )
     .handle("listDashboardCatalog", () =>

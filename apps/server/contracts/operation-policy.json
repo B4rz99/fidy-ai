@@ -207,6 +207,21 @@
       }
     },
     {
+      "id": "dashboard.getDashboardView",
+      "policy": {
+        "access": {
+          "scope": {
+            "capability": "read",
+            "evaluation": "operation"
+          },
+          "type": "pat-scoped"
+        },
+        "agentConfirmation": "not-required",
+        "kind": "mutation",
+        "requiredTier": "free"
+      }
+    },
+    {
       "id": "dashboard.listDashboardCatalog",
       "policy": {
         "access": {

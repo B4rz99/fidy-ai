@@ -1,5 +1,6 @@
 import { Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
+import { searchLikePattern } from "~/core/_shared/search";
 import { CategoryId } from "~/core/categories/reference";
 import { UserId } from "~/core/identity/reference";
 import {
@@ -21,6 +22,42 @@ export const selectCategories = Effect.flatMap(SqlClient.SqlClient, (sql) =>
     execute: () => sql`SELECT id, label FROM categories ORDER BY display_order`,
   })(undefined)
 ).pipe(Effect.orDie);
+
+/** Loads only requested public Categories in presentation order. */
+export const selectCategoriesByIds = (
+  categoryIds: ReadonlyArray<CategoryId>
+): Effect.Effect<ReadonlyArray<Category>, never, SqlClient.SqlClient> =>
+  categoryIds.length === 0
+    ? Effect.succeed([])
+    : Effect.flatMap(SqlClient.SqlClient, (sql) =>
+        SqlSchema.findAll({
+          Request: Schema.Void,
+          Result: Category,
+          execute: () => sql`
+            SELECT id, label FROM categories
+            WHERE id IN ${sql.in(categoryIds)}
+            ORDER BY display_order
+          `,
+        })(undefined)
+      ).pipe(Effect.orDie);
+
+/** Selects public Categories whose labels match already-normalized search text. */
+export const selectCategoriesMatching = (
+  search: string
+): Effect.Effect<ReadonlyArray<Category>, never, SqlClient.SqlClient> =>
+  Effect.flatMap(SqlClient.SqlClient, (sql) => {
+    const pattern = searchLikePattern(search);
+    return SqlSchema.findAll({
+      Request: Schema.Void,
+      Result: Category,
+      execute: () => sql`
+        SELECT id, label FROM categories
+        WHERE lower(regexp_replace(normalize(label, NFD), '[̀-ͯ]', '', 'g'))
+          LIKE ${pattern} ESCAPE '\\'
+        ORDER BY display_order
+      `,
+    })(undefined);
+  }).pipe(Effect.orDie);
 
 /** Looks up public Category metadata by stable identity; absence remains explicit. */
 export const findCategory = (

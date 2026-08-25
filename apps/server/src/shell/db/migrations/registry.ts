@@ -28,6 +28,7 @@ import { persistedSchemaReconciliation } from "./0028-persisted-schema-reconcili
 import { subscriptionPriceRevisions } from "./0029-subscription-price-revisions";
 import { manualPATIssuance } from "./0030-manual-pat-issuance";
 import { retrySafeManualPATIssuance } from "./0031-retry-safe-manual-pat-issuance";
+import { dashboardTransactionAccess } from "./0032-dashboard-transaction-access";
 
 /**
  * The explicit index ARCHITECTURE.md §7 calls for: one ordered, append-only
@@ -68,4 +69,5 @@ export const migrations = {
   "0029_subscription_price_revisions": subscriptionPriceRevisions,
   "0030_manual_pat_issuance": manualPATIssuance,
   "0031_retry_safe_manual_pat_issuance": retrySafeManualPATIssuance,
+  "0032_dashboard_transaction_access": dashboardTransactionAccess,
 };

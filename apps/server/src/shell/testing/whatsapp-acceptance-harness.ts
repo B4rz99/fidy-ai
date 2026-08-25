@@ -137,7 +137,16 @@ export class WhatsAppAcceptanceApiClient extends Context.Service<
   ApiClient
 >()("@fidy/server/shell/testing/whatsapp-acceptance-harness/WhatsAppAcceptanceApiClient") {}
 
-const acceptanceProbeCredentials = {
+type AcceptanceApiClientKey = Context.Key<ApiClient, ApiClient>;
+type AcceptanceProbeCredential = Readonly<{
+  bearer: TokenBearer;
+  tokenId: PATId;
+  tag: AcceptanceApiClientKey;
+}>;
+type AcceptanceProbeCredentials = Readonly<
+  Record<"WA-A04" | "WA-A05" | "WA-A06", AcceptanceProbeCredential>
+>;
+const acceptanceProbeCredentials: AcceptanceProbeCredentials = {
   "WA-A04": {
     bearer: TokenBearer.make("fin_obsa0401_0123456789abcdefghijklmnopqrstuvwxyzABCD"),
     tokenId: PATId.make("f1d1a000-0000-4000-8000-000000001214"),
@@ -159,10 +168,10 @@ const acceptanceProbeCredentials = {
       "@fidy/server/shell/testing/whatsapp-acceptance-harness/WhatsAppAcceptanceA06ApiClient"
     ),
   },
-} as const;
+};
 
 /** Scenarios whose established caller can be inspected through canonical read operations. */
-export type WhatsAppAcceptanceObserverId = keyof typeof acceptanceProbeCredentials;
+export type WhatsAppAcceptanceObserverId = keyof AcceptanceProbeCredentials;
 
 const AcceptanceProbeApiClients = Layer.mergeAll(
   makeApiClientLive(acceptanceProbeCredentials["WA-A04"]),

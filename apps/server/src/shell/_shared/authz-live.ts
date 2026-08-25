@@ -15,6 +15,7 @@ import {
 import { HttpServerRequest } from "effect/unstable/http";
 import { SqlClient } from "effect/unstable/sql";
 import { HttpApiBuilder } from "effect/unstable/httpapi";
+import { requiresCanonicalSnapshot, retryCanonicalSnapshot } from "./canonical-snapshot";
 import { type AuditLogEntry, type AuditOutcome, CanonicalOperationId } from "~/core/audit/model";
 import {
   allCanonicalCapabilities,
@@ -388,6 +389,14 @@ type AuthorizationAttempt<RR> = Readonly<{
   recordRejection: boolean;
 }>;
 
+const establishCanonicalSnapshot = (
+  sql: SqlClient.SqlClient,
+  operation: CanonicalOperationId
+): Effect.Effect<void> =>
+  requiresCanonicalSnapshot(operation)
+    ? sql`SET TRANSACTION ISOLATION LEVEL REPEATABLE READ`.pipe(Effect.orDie)
+    : Effect.void;
+
 const authorizeCanonicalRequest = Effect.fn("CanonicalAuthorization.authorize")(function* <
   A,
   E,
@@ -402,36 +411,39 @@ const authorizeCanonicalRequest = Effect.fn("CanonicalAuthorization.authorize")(
   const operation = CanonicalOperationId.make(`${group.identifier}.${endpoint.identifier}`);
   const occurredAt = yield* DateTime.now;
   const sql = yield* SqlClient.SqlClient;
-  const result = yield* sql
-    .withTransaction(
-      executeCredentialTransaction({
-        httpEffect,
-        occurredAt,
-        operation,
-        policy,
-        resolveCredential,
-      })
+  const transaction = sql.withTransaction(
+    establishCanonicalSnapshot(sql, operation).pipe(
+      Effect.andThen(
+        executeCredentialTransaction({
+          httpEffect,
+          occurredAt,
+          operation,
+          policy,
+          resolveCredential,
+        })
+      )
     )
-    .pipe(
-      Effect.catchTags({
-        UserActionAuthenticationRejected: ({ access, credential }) =>
-          recordRejection
-            ? recordRejectedAttempt({ credential, operation, occurredAt }).pipe(
-                Effect.andThen(consentFailure(access))
-              )
-            : consentFailure(access),
-        AccessAuthenticationRejected: ({ credential, reason }) => {
-          const failure =
-            reason === "fresh_web_session_required" ? freshWebSessionRequired() : scopeMissing();
-          return recordRejection
-            ? recordRejectedAttempt({ credential, operation, occurredAt }).pipe(
-                Effect.andThen(Effect.fail(failure))
-              )
-            : Effect.fail(failure);
-        },
-        SqlError: Effect.die,
-      })
-    );
+  );
+  const result = yield* retryCanonicalSnapshot({ operation, effect: transaction }).pipe(
+    Effect.catchTags({
+      UserActionAuthenticationRejected: ({ access, credential }) =>
+        recordRejection
+          ? recordRejectedAttempt({ credential, operation, occurredAt }).pipe(
+              Effect.andThen(consentFailure(access))
+            )
+          : consentFailure(access),
+      AccessAuthenticationRejected: ({ credential, reason }) => {
+        const failure =
+          reason === "fresh_web_session_required" ? freshWebSessionRequired() : scopeMissing();
+        return recordRejection
+          ? recordRejectedAttempt({ credential, operation, occurredAt }).pipe(
+              Effect.andThen(Effect.fail(failure))
+            )
+          : Effect.fail(failure);
+      },
+      SqlError: Effect.die,
+    })
+  );
 
   yield* renewWebSessionResponseCookie(result.credential, occurredAt);
   return yield* result.exit.pipe(Effect.catchTag("CanonicalCallRejected", Effect.die));

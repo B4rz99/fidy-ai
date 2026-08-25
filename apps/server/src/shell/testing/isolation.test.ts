@@ -11,6 +11,13 @@ import { NeedsReviewItemId, type StatementSubmissionId } from "~/core/ingestion/
 import { CategoryKeyword } from "~/core/categories/model";
 import { categoryIds } from "~/core/categories/taxonomy";
 import { type InsightEvent } from "~/core/insights/model";
+import {
+  BudgetBarWidget,
+  CustomMetricWidget,
+  TransactionListLimit,
+  TransactionListWidget,
+  WidgetId,
+} from "~/core/dashboard/model";
 import { type Transaction } from "~/core/transactions/model";
 import { ManualPATRequestId, PATRecipientLabel, TokenBearer } from "~/core/tokens/model";
 import type { OperationId } from "~/shell/api";
@@ -403,8 +410,75 @@ const probes: Record<OperationId, IsolationProbe> = {
       const strangers = yield* attempt.strangerClient.dashboard.getDashboard();
       const owners = yield* attempt.ownerClient.dashboard.getDashboard();
 
-      expect(strangers.data.title).toBe("Mi tablero");
+      expect(strangers.data.title).toBe("Tablero");
       expect(owners.data.title).toBe("Panel privado del dueño");
+    }),
+
+  "dashboard.getDashboardView": (attempt) =>
+    Effect.gen(function* () {
+      yield* attempt.strangerClient.dashboard.applyDashboardEdit({
+        payload: {
+          op: "add-widget",
+          at: "bottom",
+          widget: TransactionListWidget.make({
+            id: WidgetId.make("f1d1a000-0000-4000-8000-0000000000b3"),
+            type: "transaction-list",
+            limit: TransactionListLimit.make(10),
+          }),
+        },
+      });
+      yield* attempt.strangerClient.dashboard.applyDashboardEdit({
+        payload: {
+          op: "add-widget",
+          at: "bottom",
+          widget: CustomMetricWidget.make({
+            id: WidgetId.make("f1d1a000-0000-4000-8000-0000000000b4"),
+            type: "custom-metric",
+            label: "Total",
+            period: "this-month",
+            aggregation: "sum",
+          }),
+        },
+      });
+      yield* attempt.strangerClient.dashboard.applyDashboardEdit({
+        payload: {
+          op: "add-widget",
+          at: "bottom",
+          widget: BudgetBarWidget.make({
+            id: WidgetId.make("f1d1a000-0000-4000-8000-0000000000b5"),
+            type: "budget-bar",
+            categoryId: categoryIds.restaurantes,
+            currency: "COP",
+          }),
+        },
+      });
+
+      const strangers = yield* attempt.strangerClient.dashboard.getDashboardView();
+      const ownerTransaction = yield* attempt.ownerClient.transactions.getTransaction({
+        params: { id: attempt.ownedTransaction.id },
+      });
+      const ownerBudget = yield* attempt.ownerClient.budgets.getBudget({
+        params: { id: attempt.ownedBudget.id },
+      });
+      type StrangerLayout = typeof strangers.data.layout;
+      type StrangerWidget = Extract<StrangerLayout, { readonly kind: "leaf" }>["widget"];
+      const widgets: Array<StrangerWidget> = [];
+      const visit = (layout: StrangerLayout): void => {
+        if (layout.kind === "leaf") widgets.push(layout.widget);
+        else for (const child of layout.children) visit(child.node);
+      };
+      visit(strangers.data.layout);
+
+      expect(strangers.data.title).toBe("Tablero");
+      expect(widgets).toHaveLength(4);
+      for (const { result } of widgets) {
+        if ("buckets" in result) expect(result.buckets).toEqual([]);
+        else if ("moneyGroups" in result) expect(result.moneyGroups).toEqual([]);
+        else if ("transactions" in result) expect(result.transactions).toEqual([]);
+        else expect(result.availability).toBe("missing-budget");
+      }
+      expect(ownerTransaction.data).toEqual(attempt.ownedTransaction);
+      expectSameBudget(ownerBudget.data, attempt.ownedBudget);
     }),
 
   "dashboard.listDashboardCatalog": (attempt) =>
@@ -661,8 +735,9 @@ const seedAttempt = Effect.gen(function* () {
   const ownedBudget = yield* ownerClient.budgets.createBudget({
     payload: { categoryId: categoryIds.restaurantes, cap: budgetCap },
   });
+  const now = yield* DateTime.now;
   const created = yield* ownerClient.transactions.createTransaction({
-    payload: transactionPayload(),
+    payload: transactionPayload({ occurredAt: now }),
   });
   const ownedInsight = yield* generateInsightEvent(owner, weeklySummaryInput());
   yield* ownerClient.dashboard.applyDashboardEdit({
@@ -732,5 +807,30 @@ layer(IsolationHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         })
       );
     }
+
+    it.effect("does not serialize one User's Dashboard view with another User's write", () =>
+      Effect.gen(function* () {
+        yield* truncateInsights;
+        yield* truncateTransactions;
+        yield* truncateStatementIngestion;
+        yield* truncateDashboards;
+        yield* truncateMemories;
+        const attempt = yield* seedAttempt;
+        const now = yield* DateTime.now;
+
+        const [view, created] = yield* Effect.all(
+          [
+            attempt.ownerClient.dashboard.getDashboardView(),
+            attempt.strangerClient.transactions.createTransaction({
+              payload: transactionPayload({ occurredAt: now }),
+            }),
+          ],
+          { concurrency: "unbounded" }
+        );
+
+        expect(view.data.title).toBe("Panel privado del dueño");
+        expect(created.data.id).toBeDefined();
+      })
+    );
   }
 );

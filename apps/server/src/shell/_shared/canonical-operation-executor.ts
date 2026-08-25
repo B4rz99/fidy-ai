@@ -19,6 +19,7 @@ import {
   toAccessCaller,
 } from "./authz";
 import { findCanonicalOperationImplementation } from "./canonical-operation-registry";
+import { canonicalTransactionIsolation, retryCanonicalSnapshot } from "./canonical-snapshot";
 import { isCanonicalRejectedFailure } from "./errors";
 import { getBoundOperationCatalog } from "./operation-catalog";
 import { type OperationPolicyValue, decideOperationAccess } from "./operation-policy";
@@ -131,13 +132,15 @@ export const executeCanonicalEffect = Effect.fn("executeCanonicalEffect")(functi
     caller,
     childAudit
   );
+  const operationTransaction = withUserTransaction(
+    caller.subjectUserId,
+    execution.pipe(
+      Effect.tap(() => appendOutcome({ caller, operation, outcome: "succeeded", occurredAt }))
+    ),
+    canonicalTransactionIsolation(operation)
+  );
   const exit = yield* Effect.exit(
-    withUserTransaction(
-      caller.subjectUserId,
-      execution.pipe(
-        Effect.tap(() => appendOutcome({ caller, operation, outcome: "succeeded", occurredAt }))
-      )
-    )
+    retryCanonicalSnapshot({ operation, effect: operationTransaction })
   );
 
   if (Exit.isFailure(exit)) {

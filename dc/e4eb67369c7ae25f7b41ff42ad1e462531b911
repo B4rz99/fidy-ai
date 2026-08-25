@@ -10,6 +10,7 @@ apps/web/src/app/routes.ts
   s_fab41f0a144bb0::t_3db0215f36c247 60-64
   s_fab41f0a144bb0::t_ab08cd4c7d7256 29-32,43
   s_fab41f0a144bb0::t_d0d1a951ed662b 2-3,10,34-40,45
+  s_fab41f0a144bb0::t_38a34caedc11e7 92
 apps/web/scripts/check-browser-bundle.ts
   s_fab41f0a144bb0::t_696f32bb563ee6 137
   s_fab41f0a144bb0::t_f52f0642d168e6 157
@@ -116,6 +117,7 @@ apps/server/src/shell/_shared/canonical-mutation-registry.ts
   s_fab41f0a144bb0::t_2f2fe331b5bade 15,95-96
 apps/web/src/features/signed-in/feature.tsx
   s_fab41f0a144bb0::t_22a972971bd9d7 2,62
+  s_fab41f0a144bb0::t_59ebabeedc0d49 46,50-52
 apps/server/src/shell/db/migrations/0032-dashboard-transaction-access.ts
   s_fab41f0a144bb0::t_6e4c70f1cc41dd 1-2,4-24,26-29
   s_fab41f0a144bb0::t_899aecc14166ee 3,25
@@ -326,6 +328,8 @@ apps/server/src/core/categories/model.ts
   s_fab41f0a144bb0::t_e884bc03adb487 3,22
 bun.lock
   s_fab41f0a144bb0::t_50a5b827fdf8dd 62,517-518,591-592,647-664,675-676,845-866,875-876,933-934,951-952,1037-1038,1049-1050,1371-1372,1375-1376,1379-1382,1549-1550
+apps/server/src/shell/db/migrations/registry.ts
+  s_fab41f0a144bb0::t_6a7a1aff2f84e5 31,72
 ---
 {
   "schema_version": "authorship/3.0.0",

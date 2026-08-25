@@ -1,0 +1,138 @@
+apps/server/src/shell/_shared/authz-live.ts
+  s_6b2861de8771eb::t_754aca96c7e39b 142-143,158
+apps/web/src/features/pats/view.tsx
+  s_6b2861de8771eb::t_21ba3293821e4a 39,59,64,69,230,257,262,268
+  s_6b2861de8771eb::t_c4f5eae5b0ba3c 372
+  s_6b2861de8771eb::t_63ddcfa73bab74 18,35,51-56,60-63,95-99,112-141,214,253-256,258-261,263-264,402,426-430
+  s_6b2861de8771eb::t_dade230b8e58fa 6,13-14,91,94
+  s_6b2861de8771eb::t_03adf40ad3e0be 346-364
+CONTEXT.md
+  s_6b2861de8771eb::t_4887490b6f00f3 208-211
+apps/server/src/shell/tokens/errors.ts
+  s_6b2861de8771eb::t_5df0a521c8143c 4,7,14-15,24-27
+  s_6b2861de8771eb::t_ad91f9036a7b0e 28-30
+apps/server/src/shell/db/migrations/0033-fixed-pat-lifetimes.ts
+  s_6b2861de8771eb::t_371325c8e5eea1 47-49
+  s_6b2861de8771eb::t_347997d61e4612 51-88
+  s_6b2861de8771eb::t_9e9ecc3cf84199 1-41,46,50,89-130
+  s_6b2861de8771eb::t_e5d630c68a4ef0 42-45
+apps/server/src/shell/tokens/current-disclosure.ts
+  s_6b2861de8771eb::t_f5abf1e642923d 1,16
+  s_6b2861de8771eb::t_36c42cab85a4a5 8,12-13,27
+apps/server/src/core/tokens/rules.ts
+  s_6b2861de8771eb::t_fe9ce48689d38c 5-11,36-39
+  s_6b2861de8771eb::t_b9cda52b4e88ff 33-34,45
+  s_6b2861de8771eb::t_b7d9e053ef6bed 1-2,4,12,35
+apps/server/src/client.ts
+  s_6b2861de8771eb::t_6323e075d966af 15,20
+  s_6b2861de8771eb::t_f068b1f41590c1 19
+docs/adr/0017-atomic-pat-consent-lifecycle.md
+  s_6b2861de8771eb::t_824ea9bc40f858 12,14
+apps/server/src/shell/testing/suggested-operations.test.ts
+  s_6b2861de8771eb::t_397b9b627a1e59 80-84
+apps/server/src/shell/tokens/repo.ts
+  s_6b2861de8771eb::t_110cf52a393337 17,66-67,71-72,80,82,156-157,160-161,187,189
+apps/web/src/transport/client.ts
+  s_6b2861de8771eb::t_a1694e19e92993 21,30-31
+apps/web/e2e/browser-pairing-postgres.spec.ts
+  s_6b2861de8771eb::t_e5ad1fa3ff24e6 270
+apps/server/contracts/openapi.json
+  s_6b2861de8771eb::t_f3d62f8964a97a 3016-3018,3049-3051,3187-3235,19430-19439
+  s_6b2861de8771eb::t_66f7df7819c11c 2566,2573-2718,3044,19355
+  s_6b2861de8771eb::t_7e6aa36aa44ec6 3010-3012,3043,3045,4102-4109
+  s_6b2861de8771eb::t_7d00adacc3825f 3236,4110
+docs/adr/0016-web-authorized-pat-issuance.md
+  s_6b2861de8771eb::t_8ca1a0859708cc 17,27
+apps/server/src/shell/testing/authorization.test.ts
+  s_6b2861de8771eb::t_7e6aa36aa44ec6 386-393,395-401,403-405
+  s_6b2861de8771eb::t_27cefdad26d6ab 658,678,684
+  s_6b2861de8771eb::t_97ef0d18fdb4fc 705-708,726,736,740,751-752
+  s_6b2861de8771eb::t_f62cb0f43ccfed 95,103,112,650,669
+apps/server/src/shell/db/development-seed.ts
+  s_6b2861de8771eb::t_c8ad04749939ed 25,122
+  s_6b2861de8771eb::t_ae06db4314eb61 32,129-138,158
+  s_6b2861de8771eb::t_80eef542fa7076 36,123,174-175
+apps/server/src/shell/consent/consent-authorization.test.ts
+  s_6b2861de8771eb::t_4317fc17b0415d 43,49
+apps/server/src/shell/tokens/handlers.test.ts
+  s_6b2861de8771eb::t_205d5d74d38a96 46-58
+  s_6b2861de8771eb::t_a69147dcf63e64 156
+  s_6b2861de8771eb::t_aee98780d29936 14,370-372,374-376,378-382,397,401,403-404
+  s_6b2861de8771eb::t_e690515b4163ed 10,32,35,37-43,59,107-111,118-122,182
+  s_6b2861de8771eb::t_d6642cf45be64b 373,396,405,410,417-418
+  s_6b2861de8771eb::t_237f1c8c4652dd 398-400
+  s_6b2861de8771eb::t_e347e98ac82e08 343-369,377,383-395,402,406-409,411-416
+  s_6b2861de8771eb::t_c264dc73f36294 132,167
+  s_6b2861de8771eb::t_43545c85f9a91e 7,179-181,183-184
+  s_6b2861de8771eb::t_896ad76b803162 93-95,146-147,175
+apps/server/src/shell/testing/whatsapp-acceptance-harness.ts
+  s_6b2861de8771eb::t_6225e11056d4b2 21,490-491
+apps/server/src/shell/consent/repo.ts
+  s_6b2861de8771eb::t_4f2b232948d4de 37
+apps/server/src/shell/db/migrations/registry.ts
+  s_6b2861de8771eb::t_01cf4865d04e75 32,74
+apps/server/src/shell/tokens/mutations.ts
+  s_6b2861de8771eb::t_0a6455e9dacb23 62
+  s_6b2861de8771eb::t_58a56d122a8488 1,7,26,29,35,40,54-61,63-75,127,151
+  s_6b2861de8771eb::t_8eebd948d4f7fa 16,125,131
+  s_6b2861de8771eb::t_b368b0c610723f 31-34,36,150
+  s_6b2861de8771eb::t_1e172efdf27006 9,43,45-53,144
+  s_6b2861de8771eb::t_eb22e9fe5865da 44
+apps/server/src/shell/tokens/operations.ts
+  s_6b2861de8771eb::t_6e4e2732cff9f2 57-70,72-77,105
+  s_6b2861de8771eb::t_bd4d56970a9967 9,97-98,100-101,104
+  s_6b2861de8771eb::t_7df67a40690f00 3-8,78-96,99
+  s_6b2861de8771eb::t_9402838be31c45 71
+apps/server/src/shell/db/row-level-security.test.ts
+  s_6b2861de8771eb::t_2d63fcafac9b31 125,128,552,555
+apps/server/src/core/tokens/model.test.ts
+  s_6b2861de8771eb::t_7e6aa36aa44ec6 94,188
+  s_6b2861de8771eb::t_96dc51c8c5bee7 6,82-86,91,93,95-121,132,134,143,152,154,164,173,184,186
+  s_6b2861de8771eb::t_41eee18a4c7902 160-163,165-168,185,187
+apps/server/src/core/consent/model.ts
+  s_6b2861de8771eb::t_3310a43d128535 92
+apps/web/src/ui/components/toggle-group.tsx
+  s_6b2861de8771eb::t_7e6aa36aa44ec6 1,3-4,6
+  s_6b2861de8771eb::t_0b49e621c6ece0 5,8,11-19,22-27
+  s_6b2861de8771eb::t_4e69b860573c54 2,7,9-10,20-21
+apps/server/src/shell/db/migrations/0028-persisted-schema-reconciliation.test.ts
+  s_6b2861de8771eb::t_41f8a3353d533b 46-47
+  s_6b2861de8771eb::t_3c3a4081feb376 258
+apps/web/src/features/pats/feature.test.tsx
+  s_6b2861de8771eb::t_b623bf382923b9 36-39
+  s_6b2861de8771eb::t_7e6aa36aa44ec6 67
+  s_6b2861de8771eb::t_4b6132499cdc4e 85
+  s_6b2861de8771eb::t_2ca229bb5e9b3c 5,20
+  s_6b2861de8771eb::t_c8b4e6f8396409 29,50-51,72-74,84,108-113,115-121
+  s_6b2861de8771eb::t_3558068ed7ebd3 11-12,27,52,114
+apps/server/src/core/tokens/rules.test.ts
+  s_6b2861de8771eb::t_15ef035820f94d 9-12
+  s_6b2861de8771eb::t_055c05c2c602da 3,5,7-8,13,15-20
+apps/server/src/shell/testing/isolation.test.ts
+  s_6b2861de8771eb::t_7f16f0d21f13c8 111-115
+apps/server/src/core/tokens/model.ts
+  s_6b2861de8771eb::t_2bc67ae655989f 63-64,66-67,69-74,77,80,89-91
+  s_6b2861de8771eb::t_841a860576097d 92
+  s_6b2861de8771eb::t_3c99e3152a73b0 76,79
+  s_6b2861de8771eb::t_564b5fb5534ab1 68,75,78
+  s_6b2861de8771eb::t_89c1994ff9a4c6 177-178,235
+  s_6b2861de8771eb::t_4da4cb943a49e5 190,193
+  s_6b2861de8771eb::t_47b998fb441dd7 65
+  s_6b2861de8771eb::t_2dd3010d369959 62,81-85,180,182,188-189,192,196-198,200-201,224-225,232-233
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.24",
+  "base_commit_sha": "f8d63258d040c6da06e0f948fa95b4b9e0d3f07d",
+  "prompts": {},
+  "sessions": {
+    "s_6b2861de8771eb": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a03668-ea94-7fa3-aeb4-424476556d4c",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

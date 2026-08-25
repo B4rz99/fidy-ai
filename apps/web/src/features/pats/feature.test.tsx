@@ -2,11 +2,14 @@ import { act, cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { DateTime, Duration, Option } from "effect";
 import { afterEach, expect, it, vi } from "vitest";
 import {
+  type IssuedManualPAT,
   PATId,
   PATRecipientLabel,
   PATScopes,
   TokenBearer,
   TokenShortId,
+  defaultPATLifetimeDays,
+  patLifetimeDayOptions,
   recipientLabelLimit,
 } from "@/transport/client";
 import { bearerRevealLifetime } from "./policy";
@@ -14,22 +17,26 @@ import { type IssueManualPATCommand, ManualPATView } from "./view";
 
 const bearer = TokenBearer.make("fin_created1_abcdefghijklmnopqrstuvwxyz0123456789ABCD");
 const createdAt = DateTime.makeUnsafe("2026-08-10T12:00:00Z");
-const issued = {
+const issued: IssuedManualPAT = {
   pat: {
     _tag: "PAT" as const,
     id: PATId.make("f1d1a000-0000-4000-8000-000000000248"),
     shortId: TokenShortId.make("created1"),
     recipientLabel: PATRecipientLabel.make("Automatización casa"),
     scopes: PATScopes.make(["read", "dashboard"]),
+    lifetimeDays: defaultPATLifetimeDays,
     lastUsedAt: Option.none(),
-    idleExpiresAt: DateTime.addDuration(createdAt, "90 days"),
+    expiresAt: DateTime.addDuration(createdAt, "90 days"),
     revokedAt: Option.none(),
     createdAt,
   },
   bearer,
 };
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.useRealTimers();
+});
 
 const prepareGrantReview = (): void => {
   fireEvent.change(screen.getByLabelText("Nombre"), {
@@ -40,7 +47,9 @@ const prepareGrantReview = (): void => {
   fireEvent.click(screen.getByRole("button", { name: "Revisar PAT" }));
 };
 
-it("requires exact review, issues once, copies explicitly, and clears the revealed bearer", () => {
+it("defaults to 90 days, reviews exact expiration, and issues the selected fixed lifetime", () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(DateTime.toEpochMillis(createdAt));
   const issue = vi.fn((command: IssueManualPATCommand) => {
     command.onIssued(issued);
   });
@@ -55,11 +64,14 @@ it("requires exact review, issues once, copies explicitly, and clears the reveal
     />
   );
 
+  expect(screen.getByRole("button", { name: "90 días" })).toHaveAttribute("aria-pressed", "true");
   prepareGrantReview();
 
   expect(screen.getByRole("heading", { name: "Revisa el acceso" })).toBeVisible();
   expect(screen.getByText("Automatización casa", { exact: true })).toBeVisible();
-  expect(screen.getByText(/exactamente 90 días \(2\.160 horas\)/iu)).toBeVisible();
+  expect(screen.getByText("90 días", { selector: "dd" })).toBeVisible();
+  expect(screen.getByText(/8 de noviembre de 2026/iu)).toBeVisible();
+  expect(screen.getByText(/Duración fija: 90 días \(2160 horas\)/iu)).toBeVisible();
   expect(screen.queryByText(bearer)).not.toBeInTheDocument();
 
   fireEvent.click(screen.getByRole("button", { name: "Confirmar y crear PAT" }));
@@ -69,6 +81,8 @@ it("requires exact review, issues once, copies explicitly, and clears the reveal
       grant: {
         recipientLabel: PATRecipientLabel.make("Automatización casa"),
         scopes: ["read", "dashboard"],
+        lifetimeDays: 90,
+        reviewExpiresAt: issued.pat.expiresAt,
       },
     })
   );
@@ -91,6 +105,20 @@ it("requires exact review, issues once, copies explicitly, and clears the reveal
   );
   expect(screen.queryByText(bearer)).not.toBeInTheDocument();
   expect(clearClipboard).toHaveBeenCalledWith(bearer);
+  vi.useRealTimers();
+});
+
+it("offers every fixed lifetime preset and preserves a changed selection through editing", () => {
+  render(<ManualPATView clearClipboard={vi.fn()} copyToClipboard={vi.fn()} issue={vi.fn()} />);
+
+  for (const days of patLifetimeDayOptions) {
+    expect(screen.getByRole("button", { name: `${days} días` })).toBeVisible();
+  }
+  fireEvent.click(screen.getByRole("button", { name: "30 días" }));
+  prepareGrantReview();
+  expect(screen.getByText("30 días", { selector: "dd" })).toBeVisible();
+  fireEvent.click(screen.getByRole("button", { name: "Editar" }));
+  expect(screen.getByRole("button", { name: "30 días" })).toHaveAttribute("aria-pressed", "true");
 });
 
 it("edits a reviewed grant and preserves one request identity across a failed retry", () => {

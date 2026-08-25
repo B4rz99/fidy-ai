@@ -43,6 +43,8 @@ const prepareLegacyTableShape = Effect.gen(function* () {
   // from rows left by other persistence tests.
   yield* sql`TRUNCATE TABLE users CASCADE`;
   yield* sql`ALTER TABLE tokens RENAME TO agent_tokens`;
+  yield* sql`ALTER TABLE agent_tokens RENAME COLUMN expires_at TO idle_expires_at`;
+  yield* sql`ALTER TABLE agent_tokens DROP COLUMN lifetime_days`;
   yield* sql`ALTER TABLE audit_log_entries RENAME COLUMN pat_id TO token_id`;
   yield* sql`ALTER TABLE consent_records RENAME COLUMN pat_id TO agent_token_id`;
   yield* sql`
@@ -253,7 +255,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
             SELECT 1
             FROM information_schema.columns
             WHERE table_schema = 'public' AND table_name = 'tokens'
-              AND column_name IN ('kind', 'expires_at')
+              AND column_name = 'kind'
           `
         ).toEqual([]);
       })

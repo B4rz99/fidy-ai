@@ -12,9 +12,12 @@ export { isHttpOrigin } from "./http-origin";
 export {
   countPATLabelCharacters,
   CreateManualPATPayload,
+  defaultPATLifetimeDays,
   IssuedManualPAT,
   ManualPATRequestId,
   ManualPATGrantInput,
+  PATLifetimeDays,
+  patLifetimeDayOptions,
   PATRecipientLabel,
   PATScope,
   PATScopes,

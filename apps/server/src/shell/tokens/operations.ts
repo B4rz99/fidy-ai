@@ -1,6 +1,12 @@
 import { Schema } from "effect";
 import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi";
-import { CreateManualPATPayload, IssuedManualPAT } from "~/core/tokens/model";
+import {
+  CreateManualPATPayload,
+  IssuedManualPAT,
+  PAT,
+  PATLifecycleCheck,
+} from "~/core/tokens/model";
+import { UtcTimestamp } from "~/core/_shared/time";
 import type { CanonicalRejectedFailure } from "~/shell/_shared/errors";
 import { freshWebSessionOnly, operationPolicy } from "~/shell/_shared/operation-policy";
 import { NextOperations, OperationResponse } from "~/shell/_shared/response";
@@ -48,10 +54,55 @@ export class ManualPATIssuanceRateLimited
   readonly canonicalOutcome = "rejected" as const;
 }
 
+export const reviewExpiredMessage =
+  "This PAT review is stale or inconsistent. Review the grant again before creating it.";
+
+/** Safe refusal when confirmation no longer matches one recent reviewed absolute expiration. */
+export class ManualPATReviewExpired
+  extends Schema.ErrorClass<ManualPATReviewExpired>("ManualPATReviewExpired")(
+    {
+      _tag: Schema.tagDefaultOmit("ManualPATReviewExpired"),
+      error: Schema.Struct({
+        code: Schema.Literal("user_action_required"),
+        message: Schema.Literal(reviewExpiredMessage),
+      }),
+      next: NextOperations,
+    },
+    { httpApiStatus: 422 }
+  )
+  implements CanonicalRejectedFailure
+{
+  readonly canonicalOutcome = "rejected" as const;
+}
+
+const fixedExpirationAlias = Schema.makeFilter<
+  Readonly<{
+    expiresAt: Readonly<{ epochMilliseconds: number }>;
+    idleExpiresAt: Readonly<{ epochMilliseconds: number }>;
+  }>
+>((pat) =>
+  pat.idleExpiresAt.epochMilliseconds === pat.expiresAt.epochMilliseconds
+    ? undefined
+    : { path: ["idleExpiresAt"], issue: "Compatibility alias must equal fixed expiration" }
+);
+
+const PATWithExpirationAlias = Schema.Struct({
+  ...PAT.fields,
+  idleExpiresAt: UtcTimestamp.annotate({
+    description:
+      "Deprecated compatibility alias for expiresAt. This fixed value is never renewed by PAT use.",
+  }),
+}).check(PATLifecycleCheck, fixedExpirationAlias);
+
+export const IssuedManualPATResponse = Schema.Struct({
+  ...IssuedManualPAT.fields,
+  pat: PATWithExpirationAlias,
+}).annotate({ identifier: "IssuedManualPATResponse" });
+
 const createManualPAT = HttpApiEndpoint.post("createManualPAT", "/pats", {
   payload: CreateManualPATPayload,
-  success: OperationResponse(IssuedManualPAT),
-  error: [ManualPATIssuanceConsumed, ManualPATIssuanceRateLimited],
+  success: OperationResponse(IssuedManualPATResponse),
+  error: [ManualPATIssuanceConsumed, ManualPATIssuanceRateLimited, ManualPATReviewExpired],
 })
   .annotate(
     OpenApi.Description,

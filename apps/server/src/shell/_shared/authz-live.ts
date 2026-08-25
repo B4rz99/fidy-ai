@@ -22,7 +22,6 @@ import {
   canonicalCapabilitiesFromPATScopes,
 } from "~/core/_shared/canonical-capability";
 import { type ResolvedToken, TokenBearer } from "~/core/tokens/model";
-import { computePatIdleExpiry } from "~/core/tokens/rules";
 import { appendAuditLogEntry } from "~/shell/audit/repo";
 import { onboardingConsentStandingInScope, withSubjectLock } from "~/shell/consent/repo";
 import { withUserTransaction } from "~/shell/db/user-transaction";
@@ -140,8 +139,8 @@ const credentialAccessRejection = (
   );
 
 /**
- * Resolves a typed TokenBearer bearer to its stable User and atomically records
- * the supplied use time while renewing its 90-day idle deadline.
+ * Resolves a typed TokenBearer to its stable User and atomically records the supplied successful
+ * use time without changing its fixed expiration.
  */
 export const authenticateTokenBearer: {
   (
@@ -156,8 +155,7 @@ export const authenticateTokenBearer: {
 } = Function.dual(2, (self: TokenBearer, usedAt: DateTime.Utc) =>
   Effect.gen(function* () {
     const tokenHash = yield* hashTokenBearer(self);
-    const renewedIdleExpiresAt = yield* computePatIdleExpiry(usedAt);
-    return yield* useToken({ tokenHash, usedAt, renewedIdleExpiresAt });
+    return yield* useToken({ tokenHash, usedAt });
   })
 );
 

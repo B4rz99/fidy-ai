@@ -22,16 +22,18 @@ import { PATId } from "~/core/tokens/reference";
 import type { User } from "~/core/identity/model";
 import { makeColombianUser } from "~/core/identity/rules";
 import {
+  type PATLifetimeDays,
   PATRecipientLabel,
   PATScopes,
   type TokenBearer,
   TokenSecret,
   TokenShortId,
   bearerSecretBytes,
+  defaultPATLifetimeDays,
   getTokenShortId,
   makeTokenBearer,
 } from "~/core/tokens/model";
-import { computePatIdleExpiry } from "~/core/tokens/rules";
+import { computePATExpiration } from "~/core/tokens/rules";
 import { hashTokenBearer } from "~/shell/_shared/token-digest";
 import { currentDisclosure } from "~/shell/consent/current-disclosure";
 import { appendConsentRecord, hasCurrentOnboardingConsent } from "~/shell/consent/repo";
@@ -117,11 +119,22 @@ type SeededPatIdentity = Readonly<{
   tokenId: PATId;
   scopes: PATScopes;
   tokenCreatedAt: DateTime.Utc;
-  idleExpiresAt: DateTime.Utc;
+  lifetimeDays: PATLifetimeDays;
+  expiresAt: DateTime.Utc;
   revokedAt: Option.Option<DateTime.Utc>;
 }>;
 
 type SeededPatIdentityOverrides = Readonly<{ bearer: TokenBearer }> & Partial<SeededPatIdentity>;
+
+const resolveSeededPATLifetime = Effect.fn("resolveSeededPATLifetime")(function* (
+  overrides: SeededPatIdentityOverrides,
+  createdAt: DateTime.Utc
+) {
+  const lifetimeDays = overrides.lifetimeDays ?? defaultPATLifetimeDays;
+  const expiresAt =
+    overrides.expiresAt ?? (yield* computePATExpiration({ createdAt, lifetimeDays }));
+  return { expiresAt, lifetimeDays };
+});
 
 /**
  * Seeds one stable User, current onboarding ConsentRecord, and hashed PAT bearer
@@ -142,7 +155,7 @@ export const seedConsentedPatIdentity = (
     const bearer = overrides.bearer;
     const scopes = overrides.scopes ?? defaultPATScopes;
     const tokenCreatedAt = overrides.tokenCreatedAt ?? (yield* DateTime.now);
-    const idleExpiresAt = overrides.idleExpiresAt ?? (yield* computePatIdleExpiry(tokenCreatedAt));
+    const { expiresAt, lifetimeDays } = yield* resolveSeededPATLifetime(overrides, tokenCreatedAt);
     const revokedAt = overrides.revokedAt ?? Option.none();
     const user = yield* makeColombianUser(userId, { createdAt: defaultCreatedAt, paidTier: "pro" });
     yield* upsertUser(userId, user);
@@ -158,7 +171,8 @@ export const seedConsentedPatIdentity = (
       recipientLabel: PATRecipientLabel.make("Development PAT"),
       tokenHash,
       scopes,
-      idleExpiresAt,
+      lifetimeDays,
+      expiresAt,
       revokedAt,
       createdAt: tokenCreatedAt,
     });

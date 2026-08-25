@@ -1,18 +1,19 @@
-import { Crypto, DateTime, Effect, Encoding, Option } from "effect";
+import { Crypto, DateTime, Duration, Effect, Encoding, Option } from "effect";
 import type { Schema } from "effect";
 import { ConsentRecord, ConsentRecordId } from "~/core/consent/model";
 import type { UserId } from "~/core/identity/reference";
 import {
   type CreateManualPATPayload,
-  IssuedManualPAT,
+  type ManualPATGrantInput,
   PAT,
+  type TokenBearer,
   TokenSecret,
   TokenShortId,
   bearerSecretBytes,
   makeTokenBearer,
 } from "~/core/tokens/model";
 import { PATId } from "~/core/tokens/reference";
-import { computePatIdleExpiry } from "~/core/tokens/rules";
+import { computePATExpiration } from "~/core/tokens/rules";
 import type { CanonicalCaller } from "~/shell/_shared/authz";
 import type { CanonicalMutationImplementation } from "~/shell/_shared/canonical-mutation";
 import type { OperationResponse } from "~/shell/_shared/response";
@@ -22,14 +23,55 @@ import { currentManualPATDisclosure } from "./current-disclosure";
 import {
   makePATIssuanceConsumed,
   makePATRateLimit,
+  makePATReviewExpired,
   manualPATIssuanceLimit,
   manualPATIssuanceWindowMinutes,
+  manualPATReviewWindowMinutes,
 } from "./errors";
-import type { ManualPATIssuanceConsumed, ManualPATIssuanceRateLimited } from "./operations";
+import {
+  IssuedManualPATResponse,
+  type ManualPATIssuanceConsumed,
+  type ManualPATIssuanceRateLimited,
+  type ManualPATReviewExpired,
+} from "./operations";
 import { getPATIssuanceAdmission, hasConsumedPATRequest, insertPATInScope } from "./repo";
 
 const shortIdBytes = 4;
+const reviewWindow = Duration.minutes(manualPATReviewWindowMinutes);
 type MutationResponse<Data extends Schema.Top> = ReturnType<typeof OperationResponse<Data>>["Type"];
+
+const manualPATResponse = (
+  pat: PAT,
+  bearer: TokenBearer
+): MutationResponse<typeof IssuedManualPATResponse> => ({
+  data: IssuedManualPATResponse.make({
+    pat: { ...pat, idleExpiresAt: pat.expiresAt },
+    bearer,
+  }),
+  next: [],
+});
+
+const resolveReviewedExpiration = Effect.fn("resolveReviewedExpiration")(function* (
+  grant: ManualPATGrantInput,
+  issuedAt: DateTime.Utc
+) {
+  const latestExpiration = yield* computePATExpiration({
+    createdAt: issuedAt,
+    lifetimeDays: grant.lifetimeDays,
+  });
+  if (grant.reviewExpiresAt === undefined) return yield* makePATReviewExpired();
+
+  const earliestExpiration = DateTime.subtractDuration(latestExpiration, reviewWindow);
+  const expirationMillis = DateTime.toEpochMillis(grant.reviewExpiresAt);
+  if (
+    expirationMillis <= DateTime.toEpochMillis(issuedAt) ||
+    expirationMillis > DateTime.toEpochMillis(latestExpiration) ||
+    expirationMillis < DateTime.toEpochMillis(earliestExpiration)
+  ) {
+    return yield* makePATReviewExpired();
+  }
+  return grant.reviewExpiresAt;
+});
 
 /** User and attributable caller facts required to create one reviewed manual PAT grant. */
 export type CreateManualPATInput = Readonly<{
@@ -80,12 +122,13 @@ const createManualPATInScope = Effect.fn("createManualPATInScope")(function* ({
     shortId,
     recipientLabel: grant.recipientLabel,
     scopes: grant.scopes,
+    lifetimeDays: grant.lifetimeDays,
     lastUsedAt: Option.none(),
-    idleExpiresAt: yield* computePatIdleExpiry(createdAt),
+    expiresAt: yield* resolveReviewedExpiration(grant, createdAt),
     revokedAt: Option.none(),
     createdAt,
   });
-  const disclosure = yield* currentManualPATDisclosure(grant).pipe(Effect.orDie);
+  const disclosure = yield* currentManualPATDisclosure(grant, pat.expiresAt).pipe(Effect.orDie);
   const consent = ConsentRecord.make({
     id: ConsentRecordId.make(yield* crypto.randomUUIDv7.pipe(Effect.orDie)),
     subjectUserId: userId,
@@ -98,13 +141,13 @@ const createManualPATInScope = Effect.fn("createManualPATInScope")(function* ({
   yield* insertPATInScope(userId, { ...pat, tokenHash, requestId });
   yield* appendConsentRecordInScope(consent);
 
-  return { data: IssuedManualPAT.make({ pat, bearer }), next: [] };
+  return manualPATResponse(pat, bearer);
 });
 
 /** Issues one manual PAT with matching Consent evidence or a typed admission failure. */
 export const createManualPAT: CanonicalMutationImplementation<
   CreateManualPATInput,
-  MutationResponse<typeof IssuedManualPAT>,
-  ManualPATIssuanceConsumed | ManualPATIssuanceRateLimited,
+  MutationResponse<typeof IssuedManualPATResponse>,
+  ManualPATIssuanceConsumed | ManualPATIssuanceRateLimited | ManualPATReviewExpired,
   Crypto.Crypto
 > = (input) => withSubjectLockInScope(input.userId, createManualPATInScope(input));

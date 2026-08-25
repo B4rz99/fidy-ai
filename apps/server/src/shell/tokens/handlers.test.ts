@@ -4,12 +4,14 @@ import { HttpBody, HttpClient } from "effect/unstable/http";
 import { SqlSchema } from "effect/unstable/sql";
 import { ConsentRecord, ConsentRecordId } from "~/core/consent/model";
 import { UserId } from "~/core/identity/reference";
-import { TokenBearer } from "~/core/tokens/model";
+import { TokenBearer, defaultPATLifetimeDays } from "~/core/tokens/model";
 import { WebSessionId } from "~/core/web-session/reference";
 import { calculateWebSessionDeadlines } from "~/core/web-session/rules";
+import { computePATExpiration } from "~/core/tokens/rules";
 import { MigrationSqlClient } from "~/shell/db/client";
 import { appendConsentRecord, observeConsentRecords } from "~/shell/consent/repo";
 import { manualPATIssuanceLimit } from "./errors";
+import { ManualPATReviewExpired } from "./operations";
 import { seedConsentedPatIdentity } from "~/shell/db/development-seed";
 import { ApiHarness } from "~/shell/testing/api-harness";
 
@@ -27,14 +29,33 @@ const nextRequestId = (): string => {
   return `f1d1a000-0000-4000-8000-${requestSequence.toString().padStart(12, "0")}`;
 };
 
-const manualPATPayload = (
+const reviewedManualPATPayload = (
   recipientLabel: string,
   scopes: ReadonlyArray<string>,
-  requestId = nextRequestId()
+  reviewExpiresAt: DateTime.Utc
 ): Readonly<Record<string, unknown>> => ({
-  requestId,
-  grant: { recipientLabel, scopes },
+  requestId: nextRequestId(),
+  grant: {
+    recipientLabel,
+    scopes,
+    lifetimeDays: defaultPATLifetimeDays,
+    reviewExpiresAt: DateTime.formatIso(reviewExpiresAt),
+  },
 });
+
+const manualPATPayload = (
+  recipientLabel: string,
+  scopes: ReadonlyArray<string>
+): Readonly<Record<string, unknown>> => {
+  const reviewExpiresAt = Effect.runSync(
+    DateTime.now.pipe(
+      Effect.flatMap((createdAt) =>
+        computePATExpiration({ createdAt, lifetimeDays: defaultPATLifetimeDays })
+      )
+    )
+  );
+  return reviewedManualPATPayload(recipientLabel, scopes, reviewExpiresAt);
+};
 
 const seedWebSession = Effect.fn("seedWebSession")(function* (pairedAt: DateTime.Utc) {
   yield* seedConsentedPatIdentity({ userId, bearer: seedBearer });
@@ -69,7 +90,9 @@ const persistedManualGrant = Schema.Struct({
   shortId: Schema.String,
   tokenHash: Schema.String,
   scopes: Schema.Array(Schema.String),
-  idleHours: Schema.Finite,
+  lifetimeDays: Schema.Int,
+  expiresAt: Schema.DateTimeUtcFromDate,
+  createdAt: Schema.DateTimeUtcFromDate,
   decisionOrigin: Schema.String,
   consentWebSessionId: WebSessionId,
   disclosureText: Schema.String,
@@ -81,13 +104,22 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
     it.effect("issues once to a fresh paired browser and persists only the matching digest", () =>
       Effect.gen(function* () {
         yield* seedFreshWebSession;
+        const reviewedAt = yield* DateTime.now;
+        const reviewExpiresAt = yield* computePATExpiration({
+          createdAt: reviewedAt,
+          lifetimeDays: defaultPATLifetimeDays,
+        });
         const response = yield* HttpClient.post("/pats", {
           headers: {
             cookie: `${sessionCookieName}=${webSessionBearer}`,
             "content-type": "application/json",
           },
           body: HttpBody.jsonUnsafe(
-            manualPATPayload("  Automatización casa  ", ["read", "dashboard"])
+            reviewedManualPATPayload(
+              "  Automatización casa  ",
+              ["read", "dashboard"],
+              reviewExpiresAt
+            )
           ),
         });
         const body = yield* Schema.decodeUnknownEffect(
@@ -97,6 +129,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
                 recipientLabel: Schema.String,
                 scopes: Schema.Array(Schema.String),
                 shortId: Schema.String,
+                expiresAt: Schema.String,
               }),
               bearer: TokenBearer,
             }),
@@ -110,9 +143,8 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           execute: () => sql`
             SELECT token.user_id AS "userId", token.recipient_label AS "recipientLabel",
               token.short_id AS "shortId", token.token_hash AS "tokenHash", token.scopes,
-              (EXTRACT(EPOCH FROM (token.idle_expires_at - token.created_at)) / 3600)
-                ::double precision AS "idleHours",
-              consent.decision_origin AS "decisionOrigin",
+              token.lifetime_days AS "lifetimeDays", token.expires_at AS "expiresAt",
+              token.created_at AS "createdAt", consent.decision_origin AS "decisionOrigin",
               consent.web_session_id AS "consentWebSessionId",
               consent.disclosure_text AS "disclosureText"
             FROM tokens AS token
@@ -121,6 +153,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
               AND token.recipient_label = 'Automatización casa'
           `,
         })(undefined);
+        if (stored === undefined) return yield* Effect.die("manual PAT was not persisted");
         const digest = yield* (yield* Crypto.Crypto)
           .digest("SHA-256", new TextEncoder().encode(body.data.bearer))
           .pipe(Effect.orDie);
@@ -131,6 +164,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         expect(body.next).toEqual([]);
         expect(body.data.pat.recipientLabel).toBe("Automatización casa");
         expect(body.data.pat.scopes).toEqual(["read", "dashboard"]);
+        expect(body.data.pat.expiresAt).toBe(DateTime.formatIso(reviewExpiresAt));
         expect(body.data.bearer).toMatch(/^fin_[a-z0-9]{8}_[A-Za-z0-9_-]{32,}$/u);
         expect(stored).toMatchObject({
           userId,
@@ -138,14 +172,16 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           shortId: body.data.pat.shortId,
           tokenHash: digestHex,
           scopes: ["read", "dashboard"],
-          idleHours: 2160,
+          lifetimeDays: 90,
           decisionOrigin: "authenticated-web",
           consentWebSessionId: webSessionId,
         });
-        expect(stored?.disclosureText).toContain("Automatización casa");
-        expect(stored?.disclosureText).toContain("90 días");
-        expect(stored?.tokenHash).not.toBe(body.data.bearer);
-        expect(stored?.disclosureText).not.toContain(body.data.bearer);
+        expect(stored.disclosureText).toContain("Automatización casa");
+        expect(stored.disclosureText).toContain("Duración fija: 90 días");
+        expect(stored.disclosureText).toContain(DateTime.formatIso(stored.expiresAt));
+        expect(DateTime.formatIso(stored.expiresAt)).toBe(DateTime.formatIso(reviewExpiresAt));
+        expect(stored.tokenHash).not.toBe(body.data.bearer);
+        expect(stored.disclosureText).not.toContain(body.data.bearer);
       })
     );
 
@@ -302,6 +338,82 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         expect(tokenCount?.count).toBe(0);
         expect(consentCount?.count).toBe(0);
       })
+    );
+
+    it.effect(
+      "rejects omitted, stale, or substituted expirations without partial persistence",
+      () =>
+        Effect.gen(function* () {
+          yield* seedFreshWebSession;
+          const requestReviewedExpiration = Effect.fn("requestReviewedExpiration")(function* (
+            recipientLabel: string,
+            reviewExpiresAt: DateTime.Utc
+          ) {
+            return yield* HttpClient.post("/pats", {
+              headers: {
+                cookie: `${sessionCookieName}=${webSessionBearer}`,
+                "content-type": "application/json",
+              },
+              body: HttpBody.jsonUnsafe({
+                requestId: nextRequestId(),
+                grant: {
+                  recipientLabel,
+                  scopes: ["read"],
+                  lifetimeDays: defaultPATLifetimeDays,
+                  reviewExpiresAt: DateTime.formatIso(reviewExpiresAt),
+                },
+              }),
+            });
+          });
+          const now = yield* DateTime.now;
+          const omitted = yield* HttpClient.post("/pats", {
+            headers: {
+              cookie: `${sessionCookieName}=${webSessionBearer}`,
+              "content-type": "application/json",
+            },
+            body: HttpBody.jsonUnsafe({
+              requestId: nextRequestId(),
+              grant: {
+                recipientLabel: "Omitted review PAT",
+                scopes: ["read"],
+                lifetimeDays: defaultPATLifetimeDays,
+              },
+            }),
+          });
+          const stale = yield* requestReviewedExpiration(
+            "Stale review PAT",
+            DateTime.subtractDuration(now, "1 day")
+          );
+          const substituted = yield* requestReviewedExpiration(
+            "Substituted review PAT",
+            DateTime.addDuration(now, "1 day")
+          );
+          yield* Schema.decodeUnknownEffect(ManualPATReviewExpired)(yield* omitted.json);
+          yield* Schema.decodeUnknownEffect(ManualPATReviewExpired)(yield* stale.json);
+          yield* Schema.decodeUnknownEffect(ManualPATReviewExpired)(yield* substituted.json);
+          const sql = yield* MigrationSqlClient;
+          const tokenRows = yield* sql`
+          SELECT count(*)::int AS count FROM tokens
+          WHERE user_id = ${userId}
+            AND recipient_label IN (
+              'Omitted review PAT', 'Stale review PAT', 'Substituted review PAT'
+            )
+        `;
+          const consentRows = yield* sql`
+          SELECT count(*)::int AS count FROM consent_records
+          WHERE subject_user_id = ${userId} AND grant_type = 'pat'
+        `;
+          const [tokenCount] = yield* Schema.decodeUnknownEffect(Schema.Array(CountRow))(tokenRows);
+          const [consentCount] = yield* Schema.decodeUnknownEffect(Schema.Array(CountRow))(
+            consentRows
+          );
+
+          expect(omitted.status).toBe(422);
+          expect(stale.status).toBe(422);
+          expect(substituted.status).toBe(422);
+          expect(tokenCount?.count).toBe(0);
+          expect(consentCount?.count).toBe(0);
+        })
     );
 
     it.effect("limits issuance across fresh sessions without partial persistence", () =>

@@ -14,7 +14,7 @@ const PATGrant = PAT.mapFields(Struct.omit(["_tag", "lastUsedAt", "createdAt"]))
 const SeedPATGrant = Schema.Struct({
   ...PATGrant.fields,
   tokenHash: TokenHash,
-  idleExpiresAt: Schema.DateTimeUtcFromDate,
+  expiresAt: Schema.DateTimeUtcFromDate,
   revokedAt: Schema.OptionFromNullOr(Schema.DateTimeUtcFromDate),
   createdAt: Schema.DateTimeUtcFromDate,
 });
@@ -38,7 +38,6 @@ const IssuanceAdmission = Schema.Struct({
 const UseTokenRow = Schema.Struct({
   ...TokenLookup.fields,
   usedAt: Schema.DateTimeUtcFromDate,
-  renewedIdleExpiresAt: Schema.DateTimeUtcFromDate,
 });
 
 const ResolvedTokenWithoutLastUsedAt = ResolvedToken.mapFields(Struct.omit(["lastUsedAt"]));
@@ -64,13 +63,13 @@ export const upsertPAT = Effect.fn("upsertPAT")(function* (
       Result: Schema.Struct({ tokenHash: TokenHash }),
       execute: (row) => sql`
       INSERT INTO tokens (
-        id, user_id, short_id, recipient_label, token_hash, scopes, last_used_at,
-        idle_expires_at, revoked_at, created_at
+        id, user_id, short_id, recipient_label, token_hash, scopes, lifetime_days, last_used_at,
+        expires_at, revoked_at, created_at
       )
       VALUES (
         ${row.id}, ${row.subjectUserId}, ${row.shortId}, ${row.recipientLabel},
-        ${row.tokenHash}, ${row.scopes}, NULL, ${row.idleExpiresAt}, ${row.revokedAt},
-        ${row.createdAt}
+        ${row.tokenHash}, ${row.scopes}, ${row.lifetimeDays}, NULL, ${row.expiresAt},
+        ${row.revokedAt}, ${row.createdAt}
       )
       ON CONFLICT (id) DO UPDATE SET
         user_id = EXCLUDED.user_id,
@@ -78,8 +77,9 @@ export const upsertPAT = Effect.fn("upsertPAT")(function* (
         recipient_label = EXCLUDED.recipient_label,
         token_hash = EXCLUDED.token_hash,
         scopes = EXCLUDED.scopes,
+        lifetime_days = EXCLUDED.lifetime_days,
         last_used_at = NULL,
-        idle_expires_at = EXCLUDED.idle_expires_at,
+        expires_at = EXCLUDED.expires_at,
         revoked_at = EXCLUDED.revoked_at,
         created_at = EXCLUDED.created_at
       RETURNING token_hash AS "tokenHash"
@@ -153,12 +153,12 @@ export const insertPATInScope = Effect.fn("insertPATInScope")(function* (
     Request: ManualPATInsert,
     execute: (row) => sql`
       INSERT INTO tokens (
-        id, user_id, short_id, recipient_label, token_hash, scopes, last_used_at,
-        idle_expires_at, revoked_at, created_at, issuance_request_id
+        id, user_id, short_id, recipient_label, token_hash, scopes, lifetime_days, last_used_at,
+        expires_at, revoked_at, created_at, issuance_request_id
       ) VALUES (
         ${row.id}, ${row.subjectUserId}, ${row.shortId}, ${row.recipientLabel},
-        ${row.tokenHash}, ${row.scopes}, NULL, ${row.idleExpiresAt}, ${row.revokedAt},
-        ${row.createdAt}, ${row.requestId}
+        ${row.tokenHash}, ${row.scopes}, ${row.lifetimeDays}, NULL, ${row.expiresAt},
+        ${row.revokedAt}, ${row.createdAt}, ${row.requestId}
       )
     `,
   })({ subjectUserId, ...grant }).pipe(Effect.orDie);
@@ -172,7 +172,6 @@ export const insertPATInScope = Effect.fn("insertPATInScope")(function* (
 export const useToken = ({
   tokenHash,
   usedAt,
-  renewedIdleExpiresAt,
 }: typeof UseTokenRow.Type): Effect.Effect<
   Option.Option<ResolvedToken>,
   never,
@@ -185,9 +184,7 @@ export const useToken = ({
       execute: (row) => sql`
         SELECT token_id AS "tokenId", subject_user_id AS "subjectUserId",
           scopes, last_used_at AS "lastUsedAt"
-        FROM fidy_use_token(
-          ${row.tokenHash}, ${row.usedAt}, ${row.renewedIdleExpiresAt}
-        )
+        FROM fidy_use_token(${row.tokenHash}, ${row.usedAt})
       `,
-    })({ tokenHash, usedAt, renewedIdleExpiresAt })
+    })({ tokenHash, usedAt })
   ).pipe(Effect.orDie);

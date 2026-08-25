@@ -189,8 +189,10 @@ ADR 0016 makes `/settings/pats` the only PAT-issuance authority. Manual issuance
 once to the first-party browser; PATPairing returns it once directly to the initiating client that
 retained the private device code. WhatsApp may list safe PAT metadata, answer bounded activity
 questions, and revoke PATs, but cannot issue or approve them and never transports a PAT, private
-proof, or bearer-equivalent link. ADR 0017 commits each PAT grant or revocation with its ConsentRecord
-through owner-published operations in one User-scoped transaction.
+proof, or bearer-equivalent link. Manual issuance offers 7, 30, 90, and 365-day fixed lifetimes,
+records one reviewed absolute expiration, and never changes that expiration on successful use.
+ADR 0017 commits each PAT grant or revocation with its ConsentRecord through owner-published
+operations in one User-scoped transaction.
 
 ---
 

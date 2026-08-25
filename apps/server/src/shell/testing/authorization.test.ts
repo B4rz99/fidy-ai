@@ -92,7 +92,7 @@ const seedWriteOnlyIdentity = seedConsentedPatIdentity({
 
 const tokenUseState = Schema.Struct({
   lastUsedAt: Schema.OptionFromNullOr(Schema.DateTimeUtcFromDate),
-  idleExpiresAt: Schema.DateTimeUtcFromDate,
+  expiresAt: Schema.DateTimeUtcFromDate,
 });
 
 const pairingBindingState = Schema.Struct({
@@ -100,19 +100,19 @@ const pairingBindingState = Schema.Struct({
   userId: Schema.OptionFromNullOr(UserId),
 });
 
-/** Renewal state a rejected canonical call must leave exactly as it found it. */
-const readTokenUse = Effect.fn("readTokenUse")(function* (userId: UserId) {
+/** PAT usage state a rejected canonical call must leave exactly as it found it. */
+const readTokenUse = Effect.fn("readTokenUse")(function* (userId: UserId, tokenId: PATId) {
   const sql = yield* SqlClient.SqlClient;
   return yield* withUserTransaction(
     userId,
     SqlSchema.findOne({
-      Request: UserId,
+      Request: PATId,
       Result: tokenUseState,
-      execute: (owner) => sql`
-        SELECT last_used_at AS "lastUsedAt", idle_expires_at AS "idleExpiresAt"
-        FROM tokens WHERE user_id = ${owner}
+      execute: (id) => sql`
+        SELECT last_used_at AS "lastUsedAt", expires_at AS "expiresAt"
+        FROM tokens WHERE id = ${id}
       `,
-    })(userId)
+    })(tokenId)
   );
 });
 
@@ -383,24 +383,26 @@ layer(AuthorizationHarness, {
     })
   );
 
-  it.effect("leaves the PAT idle deadline untouched when an under-scoped write is rejected", () =>
-    Effect.gen(function* () {
-      yield* truncateTransactions;
-      yield* truncateAuditLogEntries;
-      yield* seedReadOnlyIdentity;
-      const before = yield* readTokenUse(readOnlyUser);
+  it.effect(
+    "leaves PAT usage and fixed expiration untouched when an under-scoped write is rejected",
+    () =>
+      Effect.gen(function* () {
+        yield* truncateTransactions;
+        yield* truncateAuditLogEntries;
+        yield* seedReadOnlyIdentity;
+        const before = yield* readTokenUse(readOnlyUser, readOnlyTokenId);
 
-      const denied = yield* HttpClient.post("/transactions", {
-        headers: headersFor(readOnlyBearer),
-        body: HttpBody.jsonUnsafe(
-          encodeTransactionPayload(transactionPayload({ counterparty: "Tostao" }))
-        ),
-      });
-      const after = yield* readTokenUse(readOnlyUser);
+        const denied = yield* HttpClient.post("/transactions", {
+          headers: headersFor(readOnlyBearer),
+          body: HttpBody.jsonUnsafe(
+            encodeTransactionPayload(transactionPayload({ counterparty: "Tostao" }))
+          ),
+        });
+        const after = yield* readTokenUse(readOnlyUser, readOnlyTokenId);
 
-      expect(denied.status).toBe(403);
-      expect(after).toEqual(before);
-    })
+        expect(denied.status).toBe(403);
+        expect(after).toEqual(before);
+      })
   );
 
   it.effect("rejects every new under-scoped mutation without changing owned records", () =>
@@ -645,7 +647,7 @@ layer(AuthorizationHarness, {
     })
   );
 
-  it.effect("keeps a PAT active throughout its 90-day idle window", () =>
+  it.effect("keeps a PAT active before its fixed expiration", () =>
     Effect.gen(function* () {
       const now = yield* DateTime.now;
       const tokenCreatedAt = DateTime.subtractDuration(now, "60 days");
@@ -653,7 +655,7 @@ layer(AuthorizationHarness, {
         userId: idleUser,
         bearer: idleBearer,
         tokenCreatedAt,
-        idleExpiresAt: DateTime.addDuration(tokenCreatedAt, "90 days"),
+        expiresAt: DateTime.addDuration(tokenCreatedAt, "90 days"),
       });
 
       const response = yield* HttpClient.get("/transactions", {
@@ -664,7 +666,7 @@ layer(AuthorizationHarness, {
     })
   );
 
-  it.effect("rejects idle-expired and revoked writes before storing a Transaction", () =>
+  it.effect("rejects expired and revoked PAT writes before storing a Transaction", () =>
     Effect.gen(function* () {
       yield* truncateTransactions;
       const expiredCreatedAt = DateTime.makeUnsafe("1999-01-01T00:00:00Z");
@@ -673,13 +675,13 @@ layer(AuthorizationHarness, {
         userId: expiredUser,
         bearer: expiredBearer,
         tokenCreatedAt: expiredCreatedAt,
-        idleExpiresAt: DateTime.addDuration(expiredCreatedAt, "90 days"),
+        expiresAt: DateTime.addDuration(expiredCreatedAt, "90 days"),
       });
       yield* seedConsentedPatIdentity({
         userId: revokedUser,
         bearer: revokedBearer,
         tokenCreatedAt: revokedCreatedAt,
-        idleExpiresAt: DateTime.addDuration(revokedCreatedAt, "90 days"),
+        expiresAt: DateTime.addDuration(revokedCreatedAt, "90 days"),
         revokedAt: Option.some(DateTime.makeUnsafe("2026-07-01T00:00:00Z")),
       });
       yield* seedConsentedPatIdentity({
@@ -700,6 +702,10 @@ layer(AuthorizationHarness, {
         headers: headersFor(expiredBearer),
         body,
       });
+      const expiredRetry = yield* HttpClient.post("/transactions", {
+        headers: headersFor(expiredBearer),
+        body,
+      });
       const revoked = yield* HttpClient.post("/transactions", {
         headers: headersFor(revokedBearer),
         body,
@@ -717,7 +723,7 @@ layer(AuthorizationHarness, {
         revokedHistory.json,
       ]);
 
-      expect([expired.status, revoked.status]).toEqual([401, 401]);
+      expect([expired.status, expiredRetry.status, revoked.status]).toEqual([401, 401, 401]);
       expect([expiredHistory.status, revokedHistory.status]).toEqual([200, 200]);
       expect(expiredHistoryBody).toMatchObject({ data: [] });
       expect(revokedHistoryBody).toMatchObject({ data: [] });
@@ -727,9 +733,11 @@ layer(AuthorizationHarness, {
   it.effect("stores a SHA-256 bearer hash and updates last-used time on resolution", () =>
     Effect.gen(function* () {
       const seeded = yield* seedReadOnlyIdentity;
+      const expirationBefore = (yield* readTokenUse(readOnlyUser, readOnlyTokenId)).expiresAt;
       const usedAt = yield* DateTime.now;
       const found = yield* authenticateTokenBearer(usedAt)(readOnlyBearer);
       const resolved = Option.getOrThrow(found);
+      const useAfter = yield* readTokenUse(readOnlyUser, readOnlyTokenId);
 
       expect(seeded.tokenHash).toBe(
         "a4a3272af8c2a5c5127af2aea12b848e93eb29ed2d1ab00d04752231b9224bae"
@@ -740,6 +748,8 @@ layer(AuthorizationHarness, {
         scopes: ["read"],
         lastUsedAt: usedAt,
       });
+      expect(useAfter.lastUsedAt).toEqual(Option.some(usedAt));
+      expect(useAfter.expiresAt).toEqual(expirationBefore);
     })
   );
 

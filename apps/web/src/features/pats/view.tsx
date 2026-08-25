@@ -3,16 +3,18 @@ import {
   type ManualPATGrantInput,
   ManualPATRequestId,
   type ManualPATRequestId as ManualPATRequestIdType,
+  type PATLifetimeDays,
   PATRecipientLabel,
   PATScope,
   PATScopes,
   type TokenBearer,
-  buildPATDisclosure,
   countPATLabelCharacters,
+  defaultPATLifetimeDays,
+  patLifetimeDayOptions,
   patScopeCopy,
   recipientLabelLimit,
 } from "@/transport/client";
-import { Crypto, Effect } from "effect";
+import { Crypto, DateTime, Duration, Effect } from "effect";
 import { bearerRevealLifetime } from "./policy";
 import {
   type Dispatch,
@@ -29,9 +31,11 @@ import { Button } from "@/ui/components/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/ui/components/card";
 import { Checkbox } from "@/ui/components/checkbox";
 import { Input } from "@/ui/components/input";
+import { ToggleGroup, ToggleGroupItem } from "@/ui/components/toggle-group";
 
 type IssuedPAT = IssuedManualPAT;
 type PATScopeValue = PATScope;
+type ReviewedManualPATGrant = ManualPATGrantInput & Readonly<{ reviewExpiresAt: DateTime.Utc }>;
 
 /** One confirmed manual PAT request plus callbacks for its terminal server outcome. */
 export type IssueManualPATCommand = Readonly<{
@@ -43,16 +47,25 @@ export type IssueManualPATCommand = Readonly<{
 
 /** Closed UI lifecycle that prevents issuance before exact grant review. */
 export type ManualPATCreationState =
-  | Readonly<{ _tag: "Editing"; recipientLabel: string; scopes: ReadonlyArray<PATScopeValue> }>
+  | Readonly<{
+      _tag: "Editing";
+      recipientLabel: string;
+      scopes: ReadonlyArray<PATScopeValue>;
+      lifetimeDays: PATLifetimeDays;
+    }>
   | Readonly<{
       _tag: "Reviewing";
-      grant: ManualPATGrantInput;
+      grant: ReviewedManualPATGrant;
       requestId: ManualPATRequestIdType;
     }>
-  | Readonly<{ _tag: "Issuing"; grant: ManualPATGrantInput; requestId: ManualPATRequestIdType }>
+  | Readonly<{
+      _tag: "Issuing";
+      grant: ReviewedManualPATGrant;
+      requestId: ManualPATRequestIdType;
+    }>
   | Readonly<{
       _tag: "IssueFailed";
-      grant: ManualPATGrantInput;
+      grant: ReviewedManualPATGrant;
       requestId: ManualPATRequestIdType;
     }>
   | Readonly<{ _tag: "Issued"; issued: IssuedPAT }>;
@@ -74,7 +87,20 @@ const initialState: ManualPATCreationState = {
   _tag: "Editing",
   recipientLabel: "",
   scopes: [],
+  lifetimeDays: defaultPATLifetimeDays,
 };
+
+const lifetimeOptions = patLifetimeDayOptions.map((lifetimeDays) => ({
+  lifetimeDays,
+  value: String(lifetimeDays),
+  label: `${lifetimeDays} días`,
+}));
+
+const patExpirationFormatter = new Intl.DateTimeFormat("es-CO", {
+  dateStyle: "long",
+  timeStyle: "short",
+  timeZone: "America/Bogota",
+});
 
 const scopeOptions = (["read", "write", "dashboard"] as const).map((scope) => ({
   scope: PATScope.make(scope),
@@ -87,6 +113,33 @@ const toggleScope = (
   checked: boolean
 ): ReadonlyArray<PATScope> =>
   checked ? [...scopes, scope] : scopes.filter((candidate) => candidate !== scope);
+
+const LifetimeSelector = ({
+  state,
+  update,
+}: Readonly<{
+  state: Extract<ManualPATCreationState, { _tag: "Editing" }>;
+  update: (state: Extract<ManualPATCreationState, { _tag: "Editing" }>) => void;
+}>): JSX.Element => (
+  <fieldset className="flex flex-col gap-3">
+    <legend className="font-medium">Duración</legend>
+    <ToggleGroup
+      aria-label="Duración del token"
+      className="flex-wrap"
+      onValueChange={(values) => {
+        const selected = lifetimeOptions.find((option) => option.value === values[0]);
+        if (selected !== undefined) update({ ...state, lifetimeDays: selected.lifetimeDays });
+      }}
+      value={[String(state.lifetimeDays)]}
+    >
+      {lifetimeOptions.map((option) => (
+        <ToggleGroupItem key={option.value} value={option.value}>
+          {option.label}
+        </ToggleGroupItem>
+      ))}
+    </ToggleGroup>
+  </fieldset>
+);
 
 const ScopeSelector = ({
   state,
@@ -160,8 +213,9 @@ const GrantEditor = ({
             <p className="text-sm text-muted-foreground">Un nombre visible de 1 a 80 caracteres.</p>
           </div>
           <ScopeSelector state={state} update={update} />
+          <LifetimeSelector state={state} update={update} />
           <Button disabled={!valid} type="submit">
-            Revisar PAT
+            Revisar token
           </Button>
         </form>
       </CardContent>
@@ -175,7 +229,7 @@ const GrantReview = ({
   confirm,
   edit,
 }: Readonly<{
-  grant: ManualPATGrantInput;
+  grant: ReviewedManualPATGrant;
   issuing: boolean;
   confirm: () => void;
   edit: () => void;
@@ -198,18 +252,21 @@ const GrantReview = ({
             </Badge>
           ))}
         </dd>
+        <dt className="text-muted-foreground">Duración</dt>
+        <dd className="font-medium">{grant.lifetimeDays} días</dd>
+        <dt className="text-muted-foreground">Vencimiento</dt>
+        <dd className="font-medium">
+          <time dateTime={DateTime.formatIso(grant.reviewExpiresAt)}>
+            {patExpirationFormatter.format(DateTime.toDate(grant.reviewExpiresAt))}
+          </time>
+        </dd>
       </dl>
-      <section aria-label="Divulgación exacta del PAT">
-        <p className="whitespace-pre-line text-sm text-muted-foreground">
-          {buildPATDisclosure(grant)}
-        </p>
-      </section>
       <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
         <Button disabled={issuing} onClick={edit} type="button" variant="outline">
           Editar
         </Button>
         <Button disabled={issuing} onClick={confirm} type="button">
-          {issuing ? "Creando PAT…" : "Confirmar y crear PAT"}
+          {issuing ? "Creando token…" : "Confirmar y crear token"}
         </Button>
       </div>
     </CardContent>
@@ -222,38 +279,30 @@ const IssuedGrant = ({
   reset,
 }: Readonly<{
   issued: IssuedPAT;
-  copyToClipboard: (bearer: TokenBearer) => void;
+  copyToClipboard: (bearer: TokenBearer, onCopied: () => void) => void;
   reset: () => void;
-}>): JSX.Element => (
-  <Card>
-    <CardHeader>
-      <CardTitle>
-        <h2>Guarda este PAT ahora</h2>
-      </CardTitle>
-    </CardHeader>
-    <CardContent className="flex flex-col gap-5">
-      <Alert>
-        <AlertTitle>Se muestra una sola vez</AlertTitle>
-        <AlertDescription>
-          Fidy no puede recuperar este valor. Guárdalo directamente en el administrador seguro del
-          destinatario.
-        </AlertDescription>
-      </Alert>
-      <code className="break-all rounded-lg border bg-muted p-4 text-sm">{issued.bearer}</code>
-      <p className="text-sm text-muted-foreground">
-        Identificador seguro: <strong>{issued.pat.shortId}</strong>
-      </p>
-      <div className="flex flex-col gap-2 sm:flex-row">
-        <Button onClick={() => copyToClipboard(issued.bearer)} type="button">
-          Copiar PAT
-        </Button>
-        <Button onClick={reset} type="button" variant="outline">
-          Crear otro PAT
-        </Button>
-      </div>
-    </CardContent>
-  </Card>
-);
+}>): JSX.Element => {
+  const [copied, setCopied] = useState(false);
+  return (
+    <Card>
+      <CardContent className="flex flex-col gap-5">
+        <code className="break-all rounded-lg border bg-muted p-4 text-sm">{issued.bearer}</code>
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <Button
+            aria-live="polite"
+            onClick={() => copyToClipboard(issued.bearer, () => setCopied(true))}
+            type="button"
+          >
+            {copied ? "Copiado" : "Copiar token"}
+          </Button>
+          <Button onClick={reset} type="button" variant="outline">
+            Crear otro token
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+};
 
 type SetCreationState = Dispatch<SetStateAction<ManualPATCreationState>>;
 
@@ -279,6 +328,25 @@ const revealIssuedPAT = (
   );
 };
 
+const beginReview = (
+  state: Extract<ManualPATCreationState, { _tag: "Editing" }>
+): Extract<ManualPATCreationState, { _tag: "Reviewing" }> => {
+  const reviewExpiresAt = DateTime.addDuration(
+    Effect.runSync(DateTime.now),
+    Duration.days(state.lifetimeDays)
+  );
+  return {
+    _tag: "Reviewing",
+    grant: {
+      recipientLabel: PATRecipientLabel.make(state.recipientLabel.trim()),
+      scopes: PATScopes.make(state.scopes),
+      lifetimeDays: state.lifetimeDays,
+      reviewExpiresAt,
+    },
+    requestId: makeManualPATRequestId(),
+  };
+};
+
 const EditingState = ({
   state,
   setState,
@@ -286,20 +354,7 @@ const EditingState = ({
   state: Extract<ManualPATCreationState, { _tag: "Editing" }>;
   setState: SetCreationState;
 }>): JSX.Element => (
-  <GrantEditor
-    review={() =>
-      setState({
-        _tag: "Reviewing",
-        grant: {
-          recipientLabel: PATRecipientLabel.make(state.recipientLabel.trim()),
-          scopes: PATScopes.make(state.scopes),
-        },
-        requestId: makeManualPATRequestId(),
-      })
-    }
-    state={state}
-    update={setState}
-  />
+  <GrantEditor review={() => setState(beginReview(state))} state={state} update={setState} />
 );
 
 const ReviewState = ({
@@ -329,6 +384,7 @@ const ReviewState = ({
         _tag: "Editing",
         recipientLabel: state.grant.recipientLabel,
         scopes: state.grant.scopes,
+        lifetimeDays: state.grant.lifetimeDays,
       })
     }
     grant={state.grant}
@@ -345,14 +401,18 @@ const FailedState = ({
 }>): JSX.Element => (
   <div className="flex flex-col gap-4">
     <Alert variant="destructive">
-      <AlertTitle>No pudimos crear el PAT</AlertTitle>
+      <AlertTitle>No pudimos crear el token</AlertTitle>
       <AlertDescription>
         Vuelve a emparejar el navegador si pasaron diez minutos y luego intenta de nuevo.
       </AlertDescription>
     </Alert>
     <Button
       onClick={() =>
-        setState({ _tag: "Reviewing", grant: state.grant, requestId: state.requestId })
+        setState({
+          _tag: "Reviewing",
+          grant: state.grant,
+          requestId: state.requestId,
+        })
       }
       type="button"
       variant="outline"
@@ -372,7 +432,7 @@ const CreationContent = ({
   state: ManualPATCreationState;
   setState: SetCreationState;
   issue: (command: IssueManualPATCommand) => void;
-  copyToClipboard: (bearer: TokenBearer) => void;
+  copyToClipboard: (bearer: TokenBearer, onCopied: () => void) => void;
   clearClipboard: (bearer: TokenBearer) => void;
 }>): JSX.Element => {
   if (state._tag === "Editing") return <EditingState setState={setState} state={state} />;
@@ -411,7 +471,7 @@ export const ManualPATView = ({
   clearClipboard,
 }: Readonly<{
   issue: (command: IssueManualPATCommand) => void;
-  copyToClipboard: (bearer: TokenBearer) => void;
+  copyToClipboard: (bearer: TokenBearer, onCopied: () => void) => void;
   clearClipboard: (bearer: TokenBearer) => void;
 }>): JSX.Element => {
   const [state, setState] = useState<ManualPATCreationState>(initialState);
@@ -441,7 +501,7 @@ export const ManualPATView = ({
         </Badge>
         <h1 className="font-heading text-3xl font-semibold tracking-tight">Tokens de acceso</h1>
         <p className="text-muted-foreground">
-          Crea un PAT con el acceso mínimo que necesita su destinatario.
+          Crea un token con el acceso mínimo que necesita su destinatario.
         </p>
       </header>
       <CreationContent

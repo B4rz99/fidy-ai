@@ -54,7 +54,7 @@ const SignedInShell = (): JSX.Element => {
               Transacciones
             </Button>
             <Button render={<Link to="/settings/pats" />} variant="ghost">
-              PATs
+              Tokens
             </Button>
             <Button onClick={onLogout} type="button" variant="outline">
               Cerrar sesión

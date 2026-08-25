@@ -122,10 +122,10 @@ const seedEveryPolicyShape = Effect.gen(function* () {
   `;
   yield* admin`
     INSERT INTO tokens (
-      id, user_id, short_id, recipient_label, token_hash, scopes, idle_expires_at, created_at
+      id, user_id, short_id, recipient_label, token_hash, scopes, lifetime_days, expires_at, created_at
     ) VALUES (
       'f1d1a000-0000-4000-8000-0000000001d4', ${policyOwner}, 'rlsprobe', 'RLS probe',
-      repeat('a', 64), ARRAY['read'], '2026-04-01T00:00:00Z', '2026-01-01T00:00:00Z'
+      repeat('a', 64), ARRAY['read'], 90, '2026-04-01T00:00:00Z', '2026-01-01T00:00:00Z'
     )
   `;
   yield* admin`
@@ -549,10 +549,10 @@ const deniedInsertProbes = (sql: SqlClient.SqlClient) =>
       tableName: "tokens",
       insert: sql`
       INSERT INTO tokens (
-        id, user_id, short_id, recipient_label, token_hash, scopes, idle_expires_at, created_at
+        id, user_id, short_id, recipient_label, token_hash, scopes, lifetime_days, expires_at, created_at
       ) VALUES (
         'f1d1a000-0000-4000-8000-0000000003c3', ${policyOwner}, 'insertprobe', 'Insert probe',
-        repeat('b', 64), ARRAY['read'], '2026-04-02T00:00:00Z', '2026-01-02T00:00:00Z'
+        repeat('b', 64), ARRAY['read'], 90, '2026-04-02T00:00:00Z', '2026-01-02T00:00:00Z'
       )
     `,
     },

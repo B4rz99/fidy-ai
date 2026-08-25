@@ -34,7 +34,7 @@ const OptionalMessageProvider = Schema.OptionFromNullOr(ProviderMessageEvidence.
 const OptionalMessageId = Schema.OptionFromNullOr(ProviderMessageEvidence.fields.providerMessageId);
 const OptionalWebSessionId = Schema.OptionFromNullOr(Schema.toEncoded(WebSessionId));
 const OptionalAutomaticPolicy = Schema.OptionFromNullOr(
-  Schema.Literals(["pat-approved-unclaimed-expiry", "pat-inactivity-expiry"])
+  Schema.Literals(["pat-approved-unclaimed-expiry", "pat-fixed-lifetime-expiry"])
 );
 const OptionalUtcDate = Schema.OptionFromNullOr(Schema.DateTimeUtcFromDate);
 const StoredGrantType = Schema.Literals(["onboarding", "pat", "insight-delivery"]);

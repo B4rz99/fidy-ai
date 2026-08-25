@@ -1,12 +1,15 @@
-import { DateTime, Effect } from "effect";
-import { PatIdleDuration } from "./model";
-import type { ManualPATGrantInput, PATScopes } from "./model";
+import { DateTime, Duration, Effect } from "effect";
+import type { ManualPATGrantInput, PATLifetimeDays, PATScopes } from "./model";
 
-/** Computes a PAT's renewable idle deadline 90 days after creation or authenticated use. */
-export const computePatIdleExpiry = (
-  usedAt: DateTime.Utc
-): Effect.Effect<DateTime.Utc, never, never> =>
-  Effect.succeed(DateTime.addDuration(usedAt, PatIdleDuration));
+/** Derives the one absolute PAT expiration from its issuance instant and reviewed lifetime. */
+export const computePATExpiration = ({
+  createdAt,
+  lifetimeDays,
+}: Readonly<{
+  createdAt: DateTime.Utc;
+  lifetimeDays: PATLifetimeDays;
+}>): Effect.Effect<DateTime.Utc, never, never> =>
+  Effect.succeed(DateTime.addDuration(createdAt, Duration.days(lifetimeDays)));
 
 /** Exact Spanish scope labels and descriptions shared by review and Consent disclosure. */
 export const patScopeCopy: Record<
@@ -27,13 +30,18 @@ export const patScopeCopy: Record<
   },
 };
 
-/** Builds the exact Spanish grant text reviewed for one normalized recipient and scope set. */
-export const buildPATDisclosure = ({ recipientLabel, scopes }: ManualPATGrantInput): string =>
+const hoursPerDay = 24;
+
+/** Builds the exact Spanish grant text reviewed for one normalized grant and fixed expiration. */
+export const buildPATDisclosure = ({
+  grant: { recipientLabel, scopes, lifetimeDays },
+  expiresAt,
+}: Readonly<{ grant: ManualPATGrantInput; expiresAt: DateTime.Utc }>): string =>
   `Nombre: “${recipientLabel}”.
 
 Alcances autorizados:
 ${scopes.map((scope) => `- ${patScopeCopy[scope].label}: ${patScopeCopy[scope].description}`).join("\n")}
 
-El PAT no tiene una fecha fija de vencimiento. Vence después de exactamente 90 días (2.160 horas) sin una autenticación exitosa. Cada uso autenticado exitoso reinicia ese plazo de inactividad. Puedes revocarlo desde la administración de PATs.
+Duración fija: ${lifetimeDays} días (${lifetimeDays * hoursPerDay} horas). Vencimiento exacto: ${DateTime.formatIso(expiresAt)}. El vencimiento no se extiende con el uso. Para obtener una fecha posterior debes crear un PAT de reemplazo. Puedes revocarlo antes desde la administración de PATs.
 
 Fidy mostrará el PAT completo una sola vez en esta respuesta. Después conservará únicamente su resumen criptográfico; no podrá recuperar el valor original.`;

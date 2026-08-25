@@ -108,7 +108,11 @@ const probes: Record<OperationId, IsolationProbe> = {
       attempt.strangerClient.pats.createManualPAT({
         payload: {
           requestId: ManualPATRequestId.make("f1d1a000-0000-4000-8000-000000000252"),
-          grant: { recipientLabel: PATRecipientLabel.make("Denied PAT"), scopes: ["read"] },
+          grant: {
+            recipientLabel: PATRecipientLabel.make("Denied PAT"),
+            scopes: ["read"],
+            lifetimeDays: 90,
+          },
         },
       })
     ).pipe(Effect.asVoid),

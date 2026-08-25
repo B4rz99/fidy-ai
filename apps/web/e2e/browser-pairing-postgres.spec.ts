@@ -260,19 +260,19 @@ test("creates, copies, and clears a manual PAT from a freshly paired browser", a
   });
   await completePairing(page, request);
 
-  await page.getByRole("link", { name: "PATs" }).click();
+  await page.getByRole("link", { name: "Tokens" }).click();
   await expect(page).toHaveURL(/\/settings\/pats$/u);
   await page.getByLabel("Nombre").fill("  Automatización casa  ");
   await page.getByRole("checkbox", { name: /Lectura/iu }).click();
   await page.getByRole("checkbox", { name: /Tablero/iu }).click();
-  await page.getByRole("button", { name: "Revisar PAT" }).click();
+  await page.getByRole("button", { name: "Revisar token" }).click();
   await expect(page.getByRole("heading", { name: "Revisa el acceso" })).toBeVisible();
-  await expect(page.getByText(/exactamente 90 días \(2\.160 horas\)/iu)).toBeVisible();
+  await expect(page.getByText("90 días", { exact: true })).toBeVisible();
 
   const issueResponse = page.waitForResponse(
     (response) => response.url() === `${apiOrigin}/pats` && response.request().method() === "POST"
   );
-  await page.getByRole("button", { name: "Confirmar y crear PAT" }).click();
+  await page.getByRole("button", { name: "Confirmar y crear token" }).click();
   const response = await issueResponse;
   expect(response.status()).toBe(successStatus);
   expect(response.headers()["cache-control"]).toBe("no-store");
@@ -284,7 +284,8 @@ test("creates, copies, and clears a manual PAT from a freshly paired browser", a
   expect(page.url()).not.toContain(bearer);
   expect(await page.evaluate(browserStorageValues)).not.toContain(bearer);
 
-  await page.getByRole("button", { name: "Copiar PAT" }).click();
+  await page.getByRole("button", { name: "Copiar token" }).click();
+  await expect(page.getByRole("button", { name: "Copiado" })).toBeVisible();
   expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(bearer);
   await page.getByRole("link", { name: "Transacciones" }).click();
   await page.evaluate(() => history.back());

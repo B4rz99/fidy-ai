@@ -2563,14 +2563,159 @@
         ],
         "type": "string"
       },
-      "IssuedManualPAT": {
+      "IssuedManualPATResponse": {
         "additionalProperties": false,
         "properties": {
           "bearer": {
             "$ref": "#/components/schemas/TokenBearer"
           },
           "pat": {
-            "$ref": "#/components/schemas/PAT"
+            "additionalProperties": false,
+            "properties": {
+              "_tag": {
+                "enum": [
+                  "PAT"
+                ],
+                "type": "string"
+              },
+              "createdAt": {
+                "$ref": "#/components/schemas/UtcTimestamp"
+              },
+              "expiresAt": {
+                "$ref": "#/components/schemas/UtcTimestamp"
+              },
+              "id": {
+                "$ref": "#/components/schemas/PATId"
+              },
+              "idleExpiresAt": {
+                "$ref": "#/components/schemas/UtcTimestamp"
+              },
+              "lastUsedAt": {
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "_tag": {
+                        "enum": [
+                          "Some"
+                        ],
+                        "type": "string"
+                      },
+                      "value": {
+                        "allOf": [
+                          {
+                            "pattern": "^(?:[0-9]{3}[1-9]|[0-9]{2}[1-9][0-9]|[0-9][1-9][0-9]{2}|[1-9][0-9]{3})-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12][0-9]|3[01])T(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9](?:\\.[0-9]+)?(?:Z|[+-](?:0[0-9]|1[0-5]):[0-5][0-9])$"
+                          }
+                        ],
+                        "format": "date-time",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "_tag",
+                      "value"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "_tag": {
+                        "enum": [
+                          "None"
+                        ],
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "_tag"
+                    ],
+                    "type": "object"
+                  }
+                ]
+              },
+              "lifetimeDays": {
+                "$ref": "#/components/schemas/PATLifetimeDays"
+              },
+              "recipientLabel": {
+                "$ref": "#/components/schemas/PATRecipientLabel"
+              },
+              "revokedAt": {
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "_tag": {
+                        "enum": [
+                          "Some"
+                        ],
+                        "type": "string"
+                      },
+                      "value": {
+                        "allOf": [
+                          {
+                            "pattern": "^(?:[0-9]{3}[1-9]|[0-9]{2}[1-9][0-9]|[0-9][1-9][0-9]{2}|[1-9][0-9]{3})-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12][0-9]|3[01])T(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9](?:\\.[0-9]+)?(?:Z|[+-](?:0[0-9]|1[0-5]):[0-5][0-9])$"
+                          }
+                        ],
+                        "format": "date-time",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "_tag",
+                      "value"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "_tag": {
+                        "enum": [
+                          "None"
+                        ],
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "_tag"
+                    ],
+                    "type": "object"
+                  }
+                ]
+              },
+              "scopes": {
+                "allOf": [
+                  {
+                    "uniqueItems": true
+                  },
+                  {
+                    "minItems": 1
+                  }
+                ],
+                "items": {
+                  "$ref": "#/components/schemas/PATScope"
+                },
+                "type": "array"
+              },
+              "shortId": {
+                "$ref": "#/components/schemas/TokenShortId"
+              }
+            },
+            "required": [
+              "_tag",
+              "shortId",
+              "lastUsedAt",
+              "revokedAt",
+              "createdAt",
+              "id",
+              "recipientLabel",
+              "scopes",
+              "lifetimeDays",
+              "expiresAt",
+              "idleExpiresAt"
+            ],
+            "type": "object"
           }
         },
         "required": [
@@ -2862,8 +3007,14 @@
       "ManualPATGrantInput": {
         "additionalProperties": false,
         "properties": {
+          "lifetimeDays": {
+            "$ref": "#/components/schemas/PATLifetimeDays"
+          },
           "recipientLabel": {
             "$ref": "#/components/schemas/PATRecipientLabelInput"
+          },
+          "reviewExpiresAt": {
+            "$ref": "#/components/schemas/UtcTimestamp"
           },
           "scopes": {
             "allOf": [
@@ -2889,8 +3040,14 @@
       "ManualPATGrantInputPartial": {
         "additionalProperties": false,
         "properties": {
+          "lifetimeDays": {
+            "$ref": "#/components/schemas/PATLifetimeDays"
+          },
           "recipientLabel": {
             "$ref": "#/components/schemas/PATRecipientLabelInput"
+          },
+          "reviewExpiresAt": {
+            "$ref": "#/components/schemas/UtcTimestamp"
           },
           "scopes": {
             "allOf": [
@@ -3026,6 +3183,56 @@
           }
         ],
         "type": "string"
+      },
+      "ManualPATReviewExpired": {
+        "additionalProperties": false,
+        "properties": {
+          "_tag": {
+            "enum": [
+              "ManualPATReviewExpired"
+            ],
+            "type": "string"
+          },
+          "error": {
+            "additionalProperties": false,
+            "properties": {
+              "code": {
+                "enum": [
+                  "user_action_required"
+                ],
+                "type": "string"
+              },
+              "message": {
+                "enum": [
+                  "This PAT review is stale or inconsistent. Review the grant again before creating it."
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "message"
+            ],
+            "type": "object"
+          },
+          "next": {
+            "allOf": [
+              {
+                "description": "Where to go next: up to three canonical operations worth calling after this one, best first. Empty when there is nothing worth suggesting, which is an answer rather than an omission. Each entry has passed the target-input and caller-authorization checkpoint.",
+                "maxItems": 3
+              }
+            ],
+            "items": {
+              "$ref": "#/components/schemas/SuggestedOperation"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "error",
+          "next"
+        ],
+        "type": "object"
       },
       "Memory": {
         "additionalProperties": false,
@@ -3883,146 +4090,6 @@
         ],
         "type": "object"
       },
-      "PAT": {
-        "additionalProperties": false,
-        "properties": {
-          "_tag": {
-            "enum": [
-              "PAT"
-            ],
-            "type": "string"
-          },
-          "createdAt": {
-            "$ref": "#/components/schemas/UtcTimestamp"
-          },
-          "id": {
-            "$ref": "#/components/schemas/PATId"
-          },
-          "idleExpiresAt": {
-            "$ref": "#/components/schemas/UtcTimestamp"
-          },
-          "lastUsedAt": {
-            "anyOf": [
-              {
-                "additionalProperties": false,
-                "properties": {
-                  "_tag": {
-                    "enum": [
-                      "Some"
-                    ],
-                    "type": "string"
-                  },
-                  "value": {
-                    "allOf": [
-                      {
-                        "pattern": "^(?:[0-9]{3}[1-9]|[0-9]{2}[1-9][0-9]|[0-9][1-9][0-9]{2}|[1-9][0-9]{3})-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12][0-9]|3[01])T(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9](?:\\.[0-9]+)?(?:Z|[+-](?:0[0-9]|1[0-5]):[0-5][0-9])$"
-                      }
-                    ],
-                    "format": "date-time",
-                    "type": "string"
-                  }
-                },
-                "required": [
-                  "_tag",
-                  "value"
-                ],
-                "type": "object"
-              },
-              {
-                "additionalProperties": false,
-                "properties": {
-                  "_tag": {
-                    "enum": [
-                      "None"
-                    ],
-                    "type": "string"
-                  }
-                },
-                "required": [
-                  "_tag"
-                ],
-                "type": "object"
-              }
-            ]
-          },
-          "recipientLabel": {
-            "$ref": "#/components/schemas/PATRecipientLabel"
-          },
-          "revokedAt": {
-            "anyOf": [
-              {
-                "additionalProperties": false,
-                "properties": {
-                  "_tag": {
-                    "enum": [
-                      "Some"
-                    ],
-                    "type": "string"
-                  },
-                  "value": {
-                    "allOf": [
-                      {
-                        "pattern": "^(?:[0-9]{3}[1-9]|[0-9]{2}[1-9][0-9]|[0-9][1-9][0-9]{2}|[1-9][0-9]{3})-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12][0-9]|3[01])T(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9](?:\\.[0-9]+)?(?:Z|[+-](?:0[0-9]|1[0-5]):[0-5][0-9])$"
-                      }
-                    ],
-                    "format": "date-time",
-                    "type": "string"
-                  }
-                },
-                "required": [
-                  "_tag",
-                  "value"
-                ],
-                "type": "object"
-              },
-              {
-                "additionalProperties": false,
-                "properties": {
-                  "_tag": {
-                    "enum": [
-                      "None"
-                    ],
-                    "type": "string"
-                  }
-                },
-                "required": [
-                  "_tag"
-                ],
-                "type": "object"
-              }
-            ]
-          },
-          "scopes": {
-            "allOf": [
-              {
-                "uniqueItems": true
-              },
-              {
-                "minItems": 1
-              }
-            ],
-            "items": {
-              "$ref": "#/components/schemas/PATScope"
-            },
-            "type": "array"
-          },
-          "shortId": {
-            "$ref": "#/components/schemas/TokenShortId"
-          }
-        },
-        "required": [
-          "_tag",
-          "shortId",
-          "lastUsedAt",
-          "revokedAt",
-          "createdAt",
-          "id",
-          "recipientLabel",
-          "scopes",
-          "idleExpiresAt"
-        ],
-        "type": "object"
-      },
       "PATId": {
         "allOf": [
           {
@@ -4031,6 +4098,15 @@
           }
         ],
         "type": "string"
+      },
+      "PATLifetimeDays": {
+        "enum": [
+          7,
+          30,
+          90,
+          365
+        ],
+        "type": "number"
       },
       "PATRecipientLabel": {
         "allOf": [
@@ -19276,7 +19352,7 @@
                   "additionalProperties": false,
                   "properties": {
                     "data": {
-                      "$ref": "#/components/schemas/IssuedManualPAT"
+                      "$ref": "#/components/schemas/IssuedManualPATResponse"
                     },
                     "next": {
                       "allOf": [
@@ -19350,6 +19426,16 @@
               }
             },
             "description": "ManualPATIssuanceConsumed"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManualPATReviewExpired"
+                }
+              }
+            },
+            "description": "ManualPATReviewExpired"
           },
           "429": {
             "content": {

@@ -77,7 +77,11 @@ const probes: Record<OperationId, SuggestedOperationProbe> = {
         client.pats.createManualPAT({
           payload: {
             requestId: ManualPATRequestId.make("f1d1a000-0000-4000-8000-000000000251"),
-            grant: { recipientLabel: PATRecipientLabel.make("Denied PAT"), scopes: ["read"] },
+            grant: {
+              recipientLabel: PATRecipientLabel.make("Denied PAT"),
+              scopes: ["read"],
+              lifetimeDays: 90,
+            },
           },
         })
       );

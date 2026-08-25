@@ -18,6 +18,7 @@ export {
   ManualPATGrantInput,
   ManualPATRequestId,
   PATId,
+  PATLifetimeDays,
   PATRecipientLabel,
   PATScope,
   PATScopes,
@@ -26,6 +27,8 @@ export {
   TokenShortId,
   buildPATDisclosure,
   countPATLabelCharacters,
+  defaultPATLifetimeDays,
+  patLifetimeDayOptions,
   patScopeCopy,
   recipientLabelLimit,
 } from "@fidy/server/client";

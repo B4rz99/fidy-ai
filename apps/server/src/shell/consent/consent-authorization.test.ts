@@ -40,13 +40,13 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
 
         const TokenUseState = Schema.Struct({
           lastUsedAt: Schema.OptionFromNullOr(Schema.DateTimeUtcFromDate),
-          idleExpiresAt: Schema.DateTimeUtcFromDate,
+          expiresAt: Schema.DateTimeUtcFromDate,
         });
         const readTokenUse = SqlSchema.findOne({
           Request: UserId,
           Result: TokenUseState,
           execute: (userId) => sql`
-            SELECT last_used_at AS "lastUsedAt", idle_expires_at AS "idleExpiresAt"
+            SELECT last_used_at AS "lastUsedAt", expires_at AS "expiresAt"
             FROM tokens WHERE user_id = ${userId}
           `,
         });

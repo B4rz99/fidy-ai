@@ -3,6 +3,7 @@ import { DateTime, Effect, Option, Result, Schema } from "effect";
 import { PATId } from "./reference";
 import {
   ManualPATGrantInput,
+  PATLifetimeDays,
   PATRecipientLabel,
   PATScopes,
   ResolvedToken,
@@ -78,20 +79,46 @@ it("accepts exactly the non-empty unique TokenBearer scope vocabulary", () => {
 
 it("normalizes one manual PAT recipient label before enforcing the grant boundary", () => {
   const decodeGrant = Schema.decodeUnknownResult(ManualPATGrantInput);
-  const accepted = decodeGrant({ recipientLabel: "  Automatización casa  ", scopes: ["read"] });
+  const accepted = decodeGrant({
+    recipientLabel: "  Automatización casa  ",
+    scopes: ["read"],
+    lifetimeDays: 90,
+  });
 
   expect(Result.getOrThrow(accepted)).toEqual({
     recipientLabel: PATRecipientLabel.make("Automatización casa"),
     scopes: ["read"],
+    lifetimeDays: 90,
   });
-  expect(Result.isFailure(decodeGrant({ recipientLabel: "   ", scopes: ["read"] }))).toBe(true);
-  expect(Result.isSuccess(decodeGrant({ recipientLabel: "🧭".repeat(80), scopes: ["read"] }))).toBe(
-    true
-  );
-  expect(Result.isFailure(decodeGrant({ recipientLabel: "🧭".repeat(81), scopes: ["read"] }))).toBe(
-    true
-  );
-  expect(Result.isFailure(decodeGrant({ recipientLabel: "Agente", scopes: [] }))).toBe(true);
+  expect(
+    Result.isFailure(decodeGrant({ recipientLabel: "   ", scopes: ["read"], lifetimeDays: 90 }))
+  ).toBe(true);
+  expect(
+    Result.isSuccess(
+      decodeGrant({ recipientLabel: "🧭".repeat(80), scopes: ["read"], lifetimeDays: 7 })
+    )
+  ).toBe(true);
+  expect(
+    Result.isFailure(
+      decodeGrant({ recipientLabel: "🧭".repeat(81), scopes: ["read"], lifetimeDays: 365 })
+    )
+  ).toBe(true);
+  expect(
+    Result.isFailure(decodeGrant({ recipientLabel: "Agente", scopes: [], lifetimeDays: 30 }))
+  ).toBe(true);
+});
+
+it("accepts only the four fixed PAT lifetime presets", () => {
+  const decodeLifetime = Schema.decodeUnknownResult(PATLifetimeDays);
+
+  expect([7, 30, 90, 365].map((days) => Result.isSuccess(decodeLifetime(days)))).toEqual([
+    true,
+    true,
+    true,
+    true,
+  ]);
+  expect(Result.isFailure(decodeLifetime(0))).toBe(true);
+  expect(Result.isFailure(decodeLifetime(91))).toBe(true);
 });
 
 it("carries bearer grant instants over the wire as date-time strings", () => {
@@ -102,8 +129,9 @@ it("carries bearer grant instants over the wire as date-time strings", () => {
     shortId: TokenShortId.make("default1"),
     recipientLabel: PATRecipientLabel.make("Agente de prueba"),
     scopes: PATScopes.make(["read"]),
+    lifetimeDays: 90,
     lastUsedAt: Option.none(),
-    idleExpiresAt: DateTime.addDuration(createdAt, "90 days"),
+    expiresAt: DateTime.addDuration(createdAt, "90 days"),
     revokedAt: Option.none(),
     createdAt,
   });
@@ -112,7 +140,7 @@ it("carries bearer grant instants over the wire as date-time strings", () => {
   expect(Result.isSuccess(Schema.decodeUnknownResult(TokenGrant)(encoded))).toBe(true);
 });
 
-it("rejects PAT timestamps outside lifecycle order", () => {
+it("keeps fixed PAT expiration independent from successful use", () => {
   const decodeToken = Schema.decodeUnknownResult(Schema.toType(TokenGrant));
   const createdAt = DateTime.makeUnsafe("2026-07-28T12:34:56Z");
   const validToken = {
@@ -121,68 +149,46 @@ it("rejects PAT timestamps outside lifecycle order", () => {
     shortId: TokenShortId.make("default1"),
     recipientLabel: PATRecipientLabel.make("Agente de prueba"),
     scopes: PATScopes.make(["read"]),
+    lifetimeDays: 90 as const,
     lastUsedAt: Option.none(),
-    idleExpiresAt: DateTime.addDuration(createdAt, "90 days"),
+    expiresAt: DateTime.addDuration(createdAt, "90 days"),
     revokedAt: Option.none(),
     createdAt,
   };
 
   const usedAt = DateTime.addDuration(createdAt, "1 day");
-  const invalidIdleExpiry = decodeToken({ ...validToken, idleExpiresAt: createdAt });
+  const validReviewedExpiry = decodeToken({
+    ...validToken,
+    expiresAt: DateTime.subtractDuration(validToken.expiresAt, "1 minute"),
+  });
+  const invalidExpiry = decodeToken({ ...validToken, expiresAt: createdAt });
+  const invalidExtendedExpiry = decodeToken({
+    ...validToken,
+    expiresAt: DateTime.addDuration(validToken.expiresAt, "1 millis"),
+  });
   const invalidEarlyUse = decodeToken({
     ...validToken,
     lastUsedAt: Option.some(DateTime.subtractDuration(createdAt, "1 millis")),
   });
-  const invalidUnrenewedUse = decodeToken({
+  const validUseWithoutRenewal = decodeToken({
     ...validToken,
     lastUsedAt: Option.some(usedAt),
-  });
-  const invalidRevocation = decodeToken({
-    ...validToken,
-    revokedAt: Option.some(DateTime.subtractDuration(createdAt, "1 millis")),
   });
   const invalidRevocationBeforeUse = decodeToken({
     ...validToken,
     lastUsedAt: Option.some(usedAt),
-    idleExpiresAt: DateTime.addDuration(usedAt, "90 days"),
     revokedAt: Option.some(createdAt),
   });
 
   expect(Result.isSuccess(decodeToken(validToken))).toBe(true);
-  expect(
-    Result.isSuccess(
-      decodeToken({
-        ...validToken,
-        lastUsedAt: Option.some(createdAt),
-        revokedAt: Option.some(createdAt),
-      })
-    )
-  ).toBe(true);
-  expect(
-    Result.isSuccess(
-      decodeToken({
-        ...validToken,
-        lastUsedAt: Option.some(usedAt),
-        idleExpiresAt: DateTime.addDuration(usedAt, "90 days"),
-        revokedAt: Option.some(usedAt),
-      })
-    )
-  ).toBe(true);
-  expect(Result.isFailure(invalidIdleExpiry)).toBe(true);
-  expect(String(Option.getOrThrow(Result.getFailure(invalidIdleExpiry)))).toContain(
-    'at ["idleExpiresAt"]'
-  );
+  expect(Result.isSuccess(validUseWithoutRenewal)).toBe(true);
+  expect(Result.isSuccess(validReviewedExpiry)).toBe(true);
+  expect(Result.isFailure(invalidExpiry)).toBe(true);
+  expect(Result.isFailure(invalidExtendedExpiry)).toBe(true);
+  expect(String(Option.getOrThrow(Result.getFailure(invalidExpiry)))).toContain('at ["expiresAt"]');
   expect(Result.isFailure(invalidEarlyUse)).toBe(true);
   expect(String(Option.getOrThrow(Result.getFailure(invalidEarlyUse)))).toContain(
     'at ["lastUsedAt"]'
-  );
-  expect(Result.isFailure(invalidUnrenewedUse)).toBe(true);
-  expect(String(Option.getOrThrow(Result.getFailure(invalidUnrenewedUse)))).toContain(
-    'at ["idleExpiresAt"]'
-  );
-  expect(Result.isFailure(invalidRevocation)).toBe(true);
-  expect(String(Option.getOrThrow(Result.getFailure(invalidRevocation)))).toContain(
-    'at ["revokedAt"]'
   );
   expect(Result.isFailure(invalidRevocationBeforeUse)).toBe(true);
   expect(String(Option.getOrThrow(Result.getFailure(invalidRevocationBeforeUse)))).toContain(

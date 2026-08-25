@@ -14,7 +14,7 @@ The durable User-owned bearer is a **PAT (Personal Access Token)**. The internal
 Only a freshly authenticated web session may authorize a PAT. The stable management entry is
 `https://fidyapp.com/settings/pats`. The web app supports two issuance paths behind one grant policy:
 
-- **Manual creation:** the User enters a recipient label and scopes, reviews the disclosure and 90-day inactivity policy, confirms, and receives the raw PAT once in the first-party browser response.
+- **Manual creation:** the User enters a recipient label and scopes, selects a fixed 7, 30, 90, or 365-day lifetime (90 days by default), reviews that duration and the resulting absolute expiration, confirms, and receives the raw PAT once in the first-party browser response.
 - **PATPairing:** a User-owned client starts a ten-minute pairing with immutable recipient and scopes, retains a high-entropy private device code, and shows a public user code. The User reviews and approves that exact request in the web app; the initiating client polls with its private code and receives the raw PAT once over its direct HTTPS connection.
 
 The recipient label is trimmed, 1–80 characters, and display metadata rather than verified identity; duplicates are allowed and the safe PAT short id disambiguates them. A public user code identifies a request but cannot approve or claim it. A private device code, PAT bearer, and bearer-equivalent link never cross WhatsApp, Kapso, Transcript, Memory, model context, logs, analytics, URLs, or recoverable storage. Persistence retains digests. An unapproved expired pairing creates no PAT grant; an approved but unclaimed pairing expires as a revoked grant with Consent evidence.
@@ -24,7 +24,7 @@ scope. Domain operations are PAT-scoped with `read`, `write`, or `dashboard`; PA
 fresh-web-session-only; safe PAT listing, activity, and revocation are web-or-hosted. Derived HTTP,
 hosted-tool, MCP, CLI, and SuggestedOperation surfaces all consume that declaration.
 
-PATs have no fixed lifetime. The inactivity deadline is exactly 90×24 hours after activation or the latest successful authenticated use. Web and chat may list safe PAT metadata, answer from at most the latest 50 retained metadata-only AuditLogEntries, and revoke one or all PATs; chat may not issue or approve them. PAT-wide revocation never affects Hosted Agent Sessions.
+Each PAT receives one absolute expiration at issuance from the reviewed 7, 30, 90, or 365-day lifetime. Successful authenticated use may advance `lastUsedAt`, but it never changes, renews, or revives that expiration; creating a replacement PAT is the only way to obtain a later expiration. Web and chat may list safe PAT metadata, answer from at most the latest 50 retained metadata-only AuditLogEntries, and revoke one or all PATs; chat may not issue or approve them. PAT-wide revocation never affects Hosted Agent Sessions.
 
 ## Rejected alternatives
 

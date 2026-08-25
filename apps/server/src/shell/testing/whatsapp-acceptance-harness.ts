@@ -18,7 +18,7 @@ import { type ConsentRecord, PendingConsentExchangeId } from "~/core/consent/mod
 import type { UserId, WhatsAppCallerReference } from "~/core/identity/reference";
 import { PATRecipientLabel, PATScopes, TokenBearer, getTokenShortId } from "~/core/tokens/model";
 import { PATId } from "~/core/tokens/reference";
-import { computePatIdleExpiry } from "~/core/tokens/rules";
+import { computePATExpiration } from "~/core/tokens/rules";
 import { hashTokenBearer } from "~/shell/_shared/token-digest";
 import { categoryIds } from "~/core/categories/taxonomy";
 import { AgentService } from "~/shell/agent/agent-service";
@@ -487,7 +487,8 @@ const AcceptanceCallerProbe = Layer.effect(
             recipientLabel: PATRecipientLabel.make("Acceptance probe"),
             tokenHash,
             scopes: PATScopes.make(["read"]),
-            idleExpiresAt: yield* computePatIdleExpiry(createdAt),
+            lifetimeDays: 90,
+            expiresAt: yield* computePATExpiration({ createdAt, lifetimeDays: 90 }),
             revokedAt: Option.none(),
             createdAt,
           });

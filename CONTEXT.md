@@ -205,9 +205,10 @@ _Avoid_: Notification, alert, push (those are delivery, not the record).
 
 **PAT (Personal Access Token)**:
 A User-authorized bearer grant for one of their own agents to invoke canonical operations with a
-non-empty subset of `read`, `write`, and `dashboard`. It has no fixed lifetime, dies after 90 days
-without successful use, and its raw bearer is disclosed once to its immediate caller and never
-persisted. A User-owned agent never manages Consent; terms updates neither revoke nor block its PAT,
+non-empty subset of `read`, `write`, and `dashboard`. At issuance it receives one absolute
+expiration selected from a 7, 30, 90, or 365-day fixed lifetime; successful use may record activity
+but never extends, renews, or revives that expiration. Its raw bearer is disclosed once to its
+immediate caller and never persisted. A User-owned agent never manages Consent; terms updates neither revoke nor block its PAT,
 while explicit Consent revocation prevents later work with `user_action_required`.
 _Avoid_: API key, credential, Agent Session.
 

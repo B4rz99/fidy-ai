@@ -59,10 +59,37 @@ export const PATRecipientLabelInput = Schema.String.annotate({
 );
 export type PATRecipientLabelInput = typeof PATRecipientLabelInput.Type;
 
-/** Exact recipient and non-empty capability set confirmed for one manual PAT grant. */
+/** Fixed lifetime presets, measured as exact 24-hour days from PAT issuance. */
+const oneWeekInDays = 7;
+const oneMonthInDays = 30;
+const threeMonthsInDays = 90;
+const oneYearInDays = 365;
+
+/** Complete ordered set of lifetimes the User may select for a newly issued PAT. */
+export const patLifetimeDayOptions = [
+  oneWeekInDays,
+  oneMonthInDays,
+  threeMonthsInDays,
+  oneYearInDays,
+] as const;
+
+/** Default selected lifetime for clients that have not made an explicit lifetime choice. */
+export const defaultPATLifetimeDays = threeMonthsInDays;
+
+/** Validates one supported fixed PAT lifetime measured in exact 24-hour days. */
+export const PATLifetimeDays = Schema.Literals(patLifetimeDayOptions).annotate({
+  identifier: "PATLifetimeDays",
+});
+export type PATLifetimeDays = typeof PATLifetimeDays.Type;
+
+/** Exact recipient, capability set, and fixed lifetime confirmed for one manual PAT grant. */
 export const ManualPATGrantInput = Schema.Struct({
   recipientLabel: PATRecipientLabelInput,
   scopes: PATScopes,
+  lifetimeDays: PATLifetimeDays.pipe(
+    Schema.withDecodingDefaultKey(Effect.succeed(defaultPATLifetimeDays))
+  ),
+  reviewExpiresAt: Schema.optionalKey(UtcTimestamp),
 }).annotate({ identifier: "ManualPATGrantInput" });
 export type ManualPATGrantInput = typeof ManualPATGrantInput.Type;
 
@@ -85,7 +112,6 @@ const bearerPrefix = "fin_";
 const patShortIdLength = 8;
 const patShortIdPattern = `[a-z0-9]{${patShortIdLength}}`;
 const bearerSecretPattern = "[A-Za-z0-9_-]{32,}";
-const patIdleDays = 90;
 /** Human-readable notation for the one opaque bearer encoding. */
 export const TokenBearerFormat = "fin_<short-id>_<secret>";
 
@@ -143,37 +169,36 @@ export const getTokenShortId = (bearer: Readonly<TokenBearer>): Effect.Effect<To
     TokenShortId.make(bearer.slice(bearerPrefix.length, bearerPrefix.length + patShortIdLength))
   );
 
-/** The rolling inactivity window after creation or the most recent use. */
-export const PatIdleDuration = Duration.days(patIdleDays);
-const patIdleDurationMilliseconds = Duration.toMillis(PatIdleDuration);
-
 type TokenInstant = Readonly<{ epochMilliseconds: number }>;
 type OptionalTokenInstant =
   | Readonly<{ _tag: "None" }>
   | Readonly<{ _tag: "Some"; value: TokenInstant }>;
 
-const validPatTimes = Schema.makeFilter<
+/** Shared PAT lifecycle invariant for schemas that derive additional transport fields. */
+export const PATLifecycleCheck = Schema.makeFilter<
   Readonly<{
+    lifetimeDays: PATLifetimeDays;
     lastUsedAt: OptionalTokenInstant;
-    idleExpiresAt: TokenInstant;
+    expiresAt: TokenInstant;
     revokedAt: OptionalTokenInstant;
     createdAt: TokenInstant;
   }>
 >((token) => {
   const createdAt = token.createdAt.epochMilliseconds;
-  const lastUsedAt =
-    token.lastUsedAt._tag === "Some" ? token.lastUsedAt.value.epochMilliseconds : createdAt;
-  if (lastUsedAt < createdAt) {
+  const expiresAt = token.expiresAt.epochMilliseconds;
+  const expectedExpiresAt = createdAt + Duration.toMillis(Duration.days(token.lifetimeDays));
+  if (expiresAt <= createdAt || expiresAt > expectedExpiresAt) {
     return {
-      path: ["lastUsedAt"],
-      issue: "PAT use cannot be before its creation time",
+      path: ["expiresAt"],
+      issue: "PAT expiration must be positive and no later than its fixed lifetime after creation",
     };
   }
-  const idleExpiresAt = token.idleExpiresAt.epochMilliseconds;
-  if (idleExpiresAt !== lastUsedAt + patIdleDurationMilliseconds) {
+  const lastUsedAt =
+    token.lastUsedAt._tag === "Some" ? token.lastUsedAt.value.epochMilliseconds : createdAt;
+  if (lastUsedAt < createdAt || lastUsedAt >= expiresAt) {
     return {
-      path: ["idleExpiresAt"],
-      issue: "PAT idle expiry must be exactly 90 days after creation or last use",
+      path: ["lastUsedAt"],
+      issue: "PAT use must be at or after creation and before fixed expiration",
     };
   }
   if (token.revokedAt._tag === "Some") {
@@ -196,17 +221,18 @@ const SharedTokenFields = {
 };
 
 /**
- * A User-minted PAT grant. Its idle deadline advances on use and
- * disables the grant after 90 inactive days; revocation can disable it sooner.
+ * A User-minted PAT grant. Its absolute expiration is fixed at issuance and cannot be renewed by
+ * successful use; revocation can disable it sooner.
  */
 export const PAT = Schema.TaggedStruct("PAT", {
   ...SharedTokenFields,
   id: PATId,
   recipientLabel: PATRecipientLabel,
   scopes: PATScopes,
-  idleExpiresAt: UtcTimestamp,
+  lifetimeDays: PATLifetimeDays,
+  expiresAt: UtcTimestamp,
 })
-  .check(validPatTimes)
+  .check(PATLifecycleCheck)
   .annotate({ identifier: "PAT" });
 export type PAT = typeof PAT.Type;
 

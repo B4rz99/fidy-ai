@@ -89,7 +89,7 @@ export const ConsentDecisionEvidence = Schema.Union([
     webSessionId: WebSessionId,
   }),
   Schema.TaggedStruct("AutomaticPolicy", {
-    policy: Schema.Literals(["pat-approved-unclaimed-expiry", "pat-inactivity-expiry"]),
+    policy: Schema.Literals(["pat-approved-unclaimed-expiry", "pat-fixed-lifetime-expiry"]),
   }),
 ]).annotate({ identifier: "ConsentDecisionEvidence" });
 export type ConsentDecisionEvidence = typeof ConsentDecisionEvidence.Type;

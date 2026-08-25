@@ -6,6 +6,7 @@ import {
   WhatsAppBusinessScopedUserId,
 } from "~/core/identity/reference";
 import {
+  ConsentDecisionEvidence,
   ConsentInboundContent,
   ConsentRecord,
   DisclosureRevision,
@@ -89,6 +90,28 @@ it("decodes text and every supported explicit consent choice", () => {
   expect(
     Result.isFailure(
       Schema.decodeUnknownResult(ConsentInboundContent)({ _tag: "Choice", choice: "maybe" })
+    )
+  ).toBe(true);
+});
+
+it("accepts both automatic expiry policies and rejects an unknown policy", () => {
+  for (const policy of ["pat-approved-unclaimed-expiry", "pat-fixed-lifetime-expiry"]) {
+    expect(
+      Result.isSuccess(
+        Schema.decodeUnknownResult(ConsentDecisionEvidence)({
+          _tag: "AutomaticPolicy",
+          policy,
+        })
+      )
+    ).toBe(true);
+  }
+
+  expect(
+    Result.isFailure(
+      Schema.decodeUnknownResult(ConsentDecisionEvidence)({
+        _tag: "AutomaticPolicy",
+        policy: "unknown-policy",
+      })
     )
   ).toBe(true);
 });

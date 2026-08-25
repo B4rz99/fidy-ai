@@ -1,0 +1,19 @@
+apps/server/src/core/consent/model.test.ts
+  s_c4aa9d06e27852::t_c34824df73d706 98
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.24",
+  "base_commit_sha": "58299359ff4726707d003026dffbe44786959518",
+  "prompts": {},
+  "sessions": {
+    "s_c4aa9d06e27852": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a036b2-55d6-7faa-a278-088ee5334980",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

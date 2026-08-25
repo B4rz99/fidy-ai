@@ -101,18 +101,18 @@ const pairingBindingState = Schema.Struct({
 });
 
 /** PAT usage state a rejected canonical call must leave exactly as it found it. */
-const readTokenUse = Effect.fn("readTokenUse")(function* (userId: UserId) {
+const readTokenUse = Effect.fn("readTokenUse")(function* (userId: UserId, tokenId: PATId) {
   const sql = yield* SqlClient.SqlClient;
   return yield* withUserTransaction(
     userId,
     SqlSchema.findOne({
-      Request: UserId,
+      Request: PATId,
       Result: tokenUseState,
-      execute: (owner) => sql`
+      execute: (id) => sql`
         SELECT last_used_at AS "lastUsedAt", expires_at AS "expiresAt"
-        FROM tokens WHERE user_id = ${owner}
+        FROM tokens WHERE id = ${id}
       `,
-    })(userId)
+    })(tokenId)
   );
 });
 
@@ -390,7 +390,7 @@ layer(AuthorizationHarness, {
         yield* truncateTransactions;
         yield* truncateAuditLogEntries;
         yield* seedReadOnlyIdentity;
-        const before = yield* readTokenUse(readOnlyUser);
+        const before = yield* readTokenUse(readOnlyUser, readOnlyTokenId);
 
         const denied = yield* HttpClient.post("/transactions", {
           headers: headersFor(readOnlyBearer),
@@ -398,7 +398,7 @@ layer(AuthorizationHarness, {
             encodeTransactionPayload(transactionPayload({ counterparty: "Tostao" }))
           ),
         });
-        const after = yield* readTokenUse(readOnlyUser);
+        const after = yield* readTokenUse(readOnlyUser, readOnlyTokenId);
 
         expect(denied.status).toBe(403);
         expect(after).toEqual(before);
@@ -733,11 +733,11 @@ layer(AuthorizationHarness, {
   it.effect("stores a SHA-256 bearer hash and updates last-used time on resolution", () =>
     Effect.gen(function* () {
       const seeded = yield* seedReadOnlyIdentity;
-      const expirationBefore = (yield* readTokenUse(readOnlyUser)).expiresAt;
+      const expirationBefore = (yield* readTokenUse(readOnlyUser, readOnlyTokenId)).expiresAt;
       const usedAt = yield* DateTime.now;
       const found = yield* authenticateTokenBearer(usedAt)(readOnlyBearer);
       const resolved = Option.getOrThrow(found);
-      const useAfter = yield* readTokenUse(readOnlyUser);
+      const useAfter = yield* readTokenUse(readOnlyUser, readOnlyTokenId);
 
       expect(seeded.tokenHash).toBe(
         "a4a3272af8c2a5c5127af2aea12b848e93eb29ed2d1ab00d04752231b9224bae"

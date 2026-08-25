@@ -48,7 +48,7 @@ untrusted bytes
   -> Transaction + SourceAttestation | NeedsReviewItem
 ```
 
-The reusable decoder should answer only “what records/cells/text items are in these bytes?” Fidy's adapter should answer “which units are statement rows, what do their fields mean, and where is the immutable evidence?” This keeps third-party parser models out of the domain and preserves Fidy's canonical decode gate. [Fidy architecture](../../ARCHITECTURE.md) · [Fidy #18](https://github.com/B4rz99/fidy-ai/issues/18)
+The reusable decoder should answer only “what records/cells/text items are in these bytes?” Fidy's adapter should answer “which units are statement rows, what do their fields mean, and where is the immutable evidence?” This keeps third-party parser models out of the domain and preserves Fidy's canonical decode gate. [Fidy server architecture](../../apps/server/ARCHITECTURE.md) · [Fidy #18](https://github.com/B4rz99/fidy-ai/issues/18)
 
 ### Do not implement CSV or XLSX syntax from scratch
 
@@ -98,7 +98,7 @@ StatementSource
     malformedUnits
 ```
 
-This is a conclusion from #18's SourceAttestation and “nothing silently discarded” requirements. The intermediate belongs in the shell because it represents parser-specific evidence, not canonical domain state. [Fidy #18](https://github.com/B4rz99/fidy-ai/issues/18) · [Fidy architecture](../../ARCHITECTURE.md)
+This is a conclusion from #18's SourceAttestation and “nothing silently discarded” requirements. The intermediate belongs in the shell because it represents parser-specific evidence, not canonical domain state. [Fidy #18](https://github.com/B4rz99/fidy-ai/issues/18) · [Fidy server architecture](../../apps/server/ARCHITECTURE.md)
 
 The issue currently says “input line count = accepted Transactions + NeedsReviewItems,” but does not define how headers, blank lines, footers, or XLSX sheet rows count. Before implementation, refine it to an executable invariant such as:
 

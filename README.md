@@ -37,7 +37,9 @@ See [`.env.example`](./.env.example) for configuration and the project documenta
 context:
 
 - [Domain context](./CONTEXT.md)
-- [Architecture](./ARCHITECTURE.md)
+- [System architecture](./ARCHITECTURE.md)
+- [Server architecture](./apps/server/ARCHITECTURE.md)
+- [Web architecture](./apps/web/ARCHITECTURE.md)
 - [Coding standards](./CODING_STANDARDS.md)
 
 ## Commit messages

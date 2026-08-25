@@ -25,7 +25,9 @@ const resetBrowserLogin = Effect.gen(function* () {
     END
     $reset$
   `;
-  yield* sql`TRUNCATE web_sessions, browser_login_start_attempts, browser_login_pairings`;
+  yield* sql`DELETE FROM web_sessions`;
+  yield* sql`DELETE FROM browser_login_start_attempts`;
+  yield* sql`DELETE FROM browser_login_pairings`;
 });
 const telemetryUserId = UserId.make("24000000-0000-4000-8000-000000000244");
 

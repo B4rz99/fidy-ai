@@ -63,7 +63,9 @@ const prepare = Effect.gen(function* () {
     END
     $reset$
   `;
-  yield* sql`TRUNCATE web_sessions, browser_login_start_attempts, browser_login_pairings`;
+  yield* sql`DELETE FROM web_sessions`;
+  yield* sql`DELETE FROM browser_login_start_attempts`;
+  yield* sql`DELETE FROM browser_login_pairings`;
   yield* sql`DELETE FROM audit_log_entries WHERE user_id IN (${firstUserId}, ${secondUserId})`;
   for (const userId of [firstUserId, secondUserId]) {
     yield* upsertUser(

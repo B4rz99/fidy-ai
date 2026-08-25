@@ -23,7 +23,9 @@ const resetBrowserLogin = Effect.gen(function* () {
     END
     $reset$
   `;
-  yield* sql`TRUNCATE web_sessions, browser_login_start_attempts, browser_login_pairings`;
+  yield* sql`DELETE FROM web_sessions`;
+  yield* sql`DELETE FROM browser_login_start_attempts`;
+  yield* sql`DELETE FROM browser_login_pairings`;
 });
 
 const StoredPairingProof = Schema.Struct({

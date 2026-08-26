@@ -1,10 +1,10 @@
 import { timingSafeEqual } from "node:crypto";
 import { Crypto, Data, DateTime, Effect, Option, Redacted, Schema } from "effect";
-import { SqlClient, SqlSchema } from "effect/unstable/sql";
+import { SqlClient } from "effect/unstable/sql";
 import {
-  type EmailEnrollmentCombinedCode,
-  EmailEnrollmentPublicCode,
-  RedactedEmailEnrollmentCombinedCode,
+  type EmailVerificationCode,
+  EmailVerificationPublicCode,
+  RedactedEmailVerificationCode,
 } from "~/core/email-authentication/model";
 import {
   decideProofAttempt,
@@ -22,6 +22,7 @@ import {
 } from "~/shell/consent/repo";
 import {
   type EmailEnrollmentRow,
+  acquireEmailVerificationAdmissionInScope,
   findAndLockEmailEnrollmentByPublicCode,
   installVerifiedEmailCredentialInScope,
   recordWrongProofAttemptInScope,
@@ -36,7 +37,7 @@ export class EmailAlreadyEnrolled extends Data.TaggedError("EmailAlreadyEnrolled
 // Produces a code like XXXXX-XXXXX-XXXXX-XXXXX-XXXXX.
 const backupRecoveryCodeCharacterCount = 25;
 const backupRecoveryCodeCharactersPerGroup = 5;
-const decodeCombinedCode = Schema.decodeUnknownOption(RedactedEmailEnrollmentCombinedCode);
+const decodeCombinedCode = Schema.decodeUnknownOption(RedactedEmailVerificationCode);
 
 const constantTimeEqual = (left: Uint8Array, right: Uint8Array): boolean =>
   timingSafeEqual(left, right);
@@ -48,29 +49,14 @@ const deleteBoundedEvidence = Effect.fn("Onboarding.deleteBoundedEvidence")(func
   yield* removePendingConsentExchange(enrollment.consent.pendingConsentExchangeId);
 });
 
-const acquireVerificationAdmission = Effect.fn("Onboarding.acquireVerificationAdmission")(
-  function* () {
-    const sql = yield* SqlClient.SqlClient;
-    const slot = yield* SqlSchema.findOneOption({
-      Request: Schema.Void,
-      Result: Schema.Struct({ slot: Schema.Int }),
-      execute: () => sql`
-        SELECT slot FROM email_verification_admission_slots
-        ORDER BY slot FOR UPDATE SKIP LOCKED LIMIT 1
-      `,
-    })(undefined).pipe(Effect.orDie);
-    return Option.isSome(slot);
-  }
-);
-
 const makeProofCandidate = Effect.fn("Onboarding.makeProofCandidate")(function* (
-  combinedCode: EmailEnrollmentCombinedCode
+  combinedCode: EmailVerificationCode
 ) {
   const crypto = yield* Crypto.Crypto;
   const groups = combinedCode.split("-");
   const proof = groups.slice(2).join("-");
   return {
-    publicCode: EmailEnrollmentPublicCode.make(`${groups[0]}-${groups[1]}`),
+    publicCode: EmailVerificationPublicCode.make(`${groups[0]}-${groups[1]}`),
     digest: yield* crypto.digest("SHA-256", new TextEncoder().encode(proof)).pipe(Effect.orDie),
   };
 });
@@ -166,7 +152,9 @@ const createStableState = Effect.fn("Onboarding.createStableState")(function* (
 const runCompletionTransaction = Effect.fn("Onboarding.runCompletionTransaction")(function* (
   input: Readonly<{ combinedCode: Redacted.Redacted<unknown> }>
 ) {
-  if (!(yield* acquireVerificationAdmission())) return Option.none<BackupRecoveryCode>();
+  if (!(yield* acquireEmailVerificationAdmissionInScope())) {
+    return Option.none<BackupRecoveryCode>();
+  }
   const decoded = decodeCombinedCode(Redacted.value(input.combinedCode));
   if (Option.isNone(decoded)) return Option.none<BackupRecoveryCode>();
   const candidate = yield* makeProofCandidate(Redacted.value(decoded.value));

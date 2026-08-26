@@ -41,6 +41,27 @@ export const useWebSession = Effect.fn("WebSession.use")(function* (
   })(undefined).pipe(Effect.orDie);
 });
 
+/** Locks and revalidates one same-User session at an authoritative User-scoped commit boundary. */
+export const lockFreshWebSessionInScope = Effect.fn("WebSession.lockFreshInScope")(
+  function* (input: {
+    webSessionId: WebSessionId;
+    subjectUserId: UserId;
+    attemptedAt: DateTime.Utc;
+  }) {
+    const sql = yield* SqlClient.SqlClient;
+    const result = yield* SqlSchema.findOne({
+      Request: Schema.Void,
+      Result: Schema.Struct({ fresh: Schema.Boolean }),
+      execute: () => sql`
+        SELECT fidy_lock_fresh_web_session_for_user(
+          ${input.webSessionId}, ${input.subjectUserId}, ${input.attemptedAt}
+        ) AS fresh
+      `,
+    })(undefined).pipe(Effect.orDie);
+    return result.fresh;
+  }
+);
+
 /** Revokes the active session matching one digest through the narrow pre-subject gateway. */
 export const revokeWebSession = Effect.fn("WebSession.revoke")(function* (
   bearerDigest: Uint8Array,

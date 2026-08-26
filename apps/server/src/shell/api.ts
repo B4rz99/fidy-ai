@@ -7,6 +7,7 @@ import { BrowserLoginGroup } from "~/shell/browser-login/operations";
 import { BudgetsGroup } from "~/shell/budgets/operations";
 import { CategoriesGroup } from "~/shell/categories/operations";
 import { DashboardGroup } from "~/shell/dashboard/operations";
+import { EmailAuthenticationGroup } from "~/shell/email-authentication/operations";
 import { IdentityGroup } from "~/shell/identity/operations";
 import { InsightsGroup } from "~/shell/insights/operations";
 import { IngestionGroup } from "~/shell/ingestion/operations";
@@ -22,6 +23,7 @@ const OrdinaryFidyApi = HttpApi.make("fidy")
   .add(CategoriesGroup)
   .add(BudgetsGroup)
   .add(DashboardGroup)
+  .add(EmailAuthenticationGroup)
   .add(TransactionsGroup)
   .add(IngestionGroup)
   .add(InsightsGroup)

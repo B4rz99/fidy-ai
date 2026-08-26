@@ -4,10 +4,10 @@ import {
   EmailAddress,
   EmailDeliveryClaimToken,
   EmailDeliveryIntentId,
-  EmailEnrollmentCombinedCode,
   EmailEnrollmentId,
-  EmailEnrollmentPublicCode,
+  EmailVerificationCode,
   EmailVerificationProof,
+  EmailVerificationPublicCode,
   PendingEmailEnrollment,
   type PendingEmailEnrollment as PendingEmailEnrollmentType,
 } from "~/core/email-authentication/model";
@@ -27,9 +27,25 @@ import {
   WhatsAppUsername,
 } from "~/core/identity/reference";
 
+/** Acquires one transaction-scoped verification-capacity slot without waiting. */
+export const acquireEmailVerificationAdmissionInScope = Effect.fn(
+  "EmailAuthentication.acquireVerificationAdmissionInScope"
+)(function* () {
+  const sql = yield* SqlClient.SqlClient;
+  const slot = yield* SqlSchema.findOneOption({
+    Request: Schema.Void,
+    Result: Schema.Struct({ slot: Schema.Int }),
+    execute: () => sql`
+      SELECT slot FROM email_verification_admission_slots
+      ORDER BY slot FOR UPDATE SKIP LOCKED LIMIT 1
+    `,
+  })(undefined).pipe(Effect.orDie);
+  return Option.isSome(slot);
+});
+
 const EnrollmentStorageRow = Schema.Struct({
   id: EmailEnrollmentId,
-  publicCode: EmailEnrollmentPublicCode,
+  publicCode: EmailVerificationPublicCode,
   businessPortfolioId: WhatsAppBusinessPortfolioId,
   businessScopedUserId: WhatsAppBusinessScopedUserId,
   parentBusinessScopedUserId: Schema.OptionFromNullOr(WhatsAppParentBusinessScopedUserId),
@@ -114,7 +130,7 @@ const columns = `id, public_code AS "publicCode", business_portfolio_id AS "busi
 export const insertEmailEnrollment = Effect.fn("EmailAuthentication.insertEnrollment")(function* (
   input: Readonly<{
     id: EmailEnrollmentId;
-    publicCode: EmailEnrollmentPublicCode;
+    publicCode: EmailVerificationPublicCode;
     caller: WhatsAppCaller;
     pendingConsentExchangeId: PendingConsentExchangeId;
     expiresAt: DateTime.Utc;
@@ -185,7 +201,7 @@ export const findAndLockEmailEnrollmentByCaller = Effect.fn(
 /** Locks current proof state by public code in the completion transaction; absence returns none. */
 export const findAndLockEmailEnrollmentByPublicCode = Effect.fn(
   "EmailAuthentication.findAndLockEnrollmentByPublicCode"
-)(function* (publicCode: EmailEnrollmentPublicCode) {
+)(function* (publicCode: EmailVerificationPublicCode) {
   const sql = yield* SqlClient.SqlClient;
   const row = yield* SqlSchema.findOneOption({
     Request: Schema.Void,
@@ -302,34 +318,36 @@ const ClaimedIntent = Schema.Struct({
   enrollmentId: Schema.toEncoded(EmailEnrollmentId),
   generation: Schema.Int,
   email: EmailAddress,
-  publicCode: Schema.toEncoded(EmailEnrollmentPublicCode),
+  publicCode: Schema.toEncoded(EmailVerificationPublicCode),
   idempotencyKey: Schema.String,
   claimToken: Schema.toEncoded(EmailDeliveryClaimToken),
   enrollmentExpiresAt: Schema.DateTimeUtcFromDate,
 });
 type ClaimedEmailDeliveryIntentRow = typeof ClaimedIntent.Type;
 export type ClaimedEmailDeliveryIntent = ClaimedEmailDeliveryIntentRow &
-  Readonly<{ combinedCode: EmailEnrollmentCombinedCode }>;
+  Readonly<{ combinedCode: EmailVerificationCode }>;
 
 const proofSymbolCount = 16;
 const verificationGroupSize = 4;
 
-const makeDeliveryProof = Effect.fn("EmailAuthentication.makeDeliveryProof")(function* () {
-  const crypto = yield* Crypto.Crypto;
-  const proof = EmailVerificationProof.make(
-    formatEmailCode({
-      symbols: selectEmailCodeSymbols({
-        bytes: yield* crypto.randomBytes(proofSymbolCount).pipe(Effect.orDie),
-        maximum: proofSymbolCount,
-      }),
-      groupSize: verificationGroupSize,
-    })
-  );
-  const digest = yield* crypto
-    .digest("SHA-256", new TextEncoder().encode(proof))
-    .pipe(Effect.orDie);
-  return { digest, proof };
-});
+export const makeEmailDeliveryProof = Effect.fn("EmailAuthentication.makeDeliveryProof")(
+  function* () {
+    const crypto = yield* Crypto.Crypto;
+    const proof = EmailVerificationProof.make(
+      formatEmailCode({
+        symbols: selectEmailCodeSymbols({
+          bytes: yield* crypto.randomBytes(proofSymbolCount).pipe(Effect.orDie),
+          maximum: proofSymbolCount,
+        }),
+        groupSize: verificationGroupSize,
+      })
+    );
+    const digest = yield* crypto
+      .digest("SHA-256", new TextEncoder().encode(proof))
+      .pipe(Effect.orDie);
+    return { digest, proof };
+  }
+);
 
 /** Atomically claims one current intent and installs only its fresh proof digest. */
 export const claimAndArmEmailDeliveryIntent = Effect.fn("EmailAuthentication.claimAndArmDelivery")(
@@ -371,7 +389,7 @@ export const claimAndArmEmailDeliveryIntent = Effect.fn("EmailAuthentication.cla
         })(undefined).pipe(Effect.orDie);
         const claimed = Option.fromNullishOr(rows[0]);
         if (Option.isNone(claimed)) return Option.none<ClaimedEmailDeliveryIntent>();
-        const { digest, proof } = yield* makeDeliveryProof();
+        const { digest, proof } = yield* makeEmailDeliveryProof();
         const intent = claimed.value;
         const armed = yield* sql`
         UPDATE email_enrollments AS enrollment
@@ -387,7 +405,7 @@ export const claimAndArmEmailDeliveryIntent = Effect.fn("EmailAuthentication.cla
         if (armed.length !== 1) return yield* Effect.die("claimed delivery could not be armed");
         return Option.some({
           ...intent,
-          combinedCode: EmailEnrollmentCombinedCode.make(`${intent.publicCode}-${proof}`),
+          combinedCode: EmailVerificationCode.make(`${intent.publicCode}-${proof}`),
         });
       })
     );

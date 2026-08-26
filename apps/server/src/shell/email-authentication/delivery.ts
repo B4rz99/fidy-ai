@@ -1,9 +1,14 @@
 import { Config, Context, Data, Effect, Layer, Option, Redacted, Result, Schema } from "effect";
 import { HttpBody, HttpClient, type HttpClientResponse } from "effect/unstable/http";
-import type { EmailAddress, EmailEnrollmentCombinedCode } from "~/core/email-authentication/model";
+import type {
+  EmailAddress,
+  EmailProofPurpose,
+  EmailVerificationCode,
+} from "~/core/email-authentication/model";
 import { collectBoundedBytes } from "~/shell/_shared/bounded-bytes";
 
-const subject = "Verifica tu correo en Fidy";
+const onboardingSubject = "Verifica tu correo en Fidy";
+const replacementSubject = "Verifica tu nuevo correo en Fidy";
 const successfulStatusMinimum = 200;
 const successfulStatusMaximumExclusive = 300;
 const rateLimitedStatus = 429;
@@ -12,13 +17,28 @@ const serverErrorStatusMinimum = 500;
 type VerificationEmail = Readonly<{ subject: string; text: string; html: string }>;
 
 /** Immutable provider projection; only the fixed-format combined code varies. */
-export const verificationEmail = (
-  combinedCode: EmailEnrollmentCombinedCode
-): VerificationEmail => ({
-  subject,
+export const verificationEmail = (combinedCode: EmailVerificationCode): VerificationEmail => ({
+  subject: onboardingSubject,
   text: `Tu código de verificación es:\n\n${combinedCode}\n\nEscríbelo en https://fidyapp.com/auth/verify-email. Este código vence en 10 minutos.\n\nSi no solicitaste este correo, ignóralo.\n\nFidy nunca te pedirá este código por WhatsApp ni por soporte.`,
   html: `<p>Tu código de verificación es:</p><p><strong><code>${combinedCode}</code></strong></p><p>Escríbelo en <a href="https://fidyapp.com/auth/verify-email">https://fidyapp.com/auth/verify-email</a>. Este código vence en 10 minutos.</p><p>Si no solicitaste este correo, ignóralo.</p><p>Fidy nunca te pedirá este código por WhatsApp ni por soporte.</p>`,
 });
+
+/** Fixed replacement projection; the schema-bounded code is its only variable content. */
+export const replacementVerificationEmail = (
+  combinedCode: EmailVerificationCode
+): VerificationEmail => ({
+  subject: replacementSubject,
+  text: `Tu código para cambiar el correo de acceso a Fidy es:\n\n${combinedCode}\n\nEscríbelo en https://fidyapp.com/settings/email. Este código vence en 10 minutos.\n\nSi no solicitaste este cambio, ignora este correo. Tu correo actual seguirá funcionando.\n\nFidy nunca te pedirá este código por WhatsApp ni por soporte.`,
+  html: `<p>Tu código para cambiar el correo de acceso a Fidy es:</p><p><strong><code>${combinedCode}</code></strong></p><p>Escríbelo en <a href="https://fidyapp.com/settings/email">https://fidyapp.com/settings/email</a>. Este código vence en 10 minutos.</p><p>Si no solicitaste este cambio, ignora este correo. Tu correo actual seguirá funcionando.</p><p>Fidy nunca te pedirá este código por WhatsApp ni por soporte.</p>`,
+});
+
+const verificationEmailFor = (
+  purpose: EmailProofPurpose,
+  combinedCode: EmailVerificationCode
+): VerificationEmail =>
+  purpose === "verified-onboarding"
+    ? verificationEmail(combinedCode)
+    : replacementVerificationEmail(combinedCode);
 
 export class EmailSendFailed extends Data.TaggedError("EmailSendFailed")<{
   readonly certainty: "rejected" | "ambiguous";
@@ -27,8 +47,9 @@ export class EmailSendFailed extends Data.TaggedError("EmailSendFailed")<{
 
 export type EmailDeliveryPortService = {
   readonly send: (input: {
+    readonly purpose: EmailProofPurpose;
     readonly to: EmailAddress;
-    readonly combinedCode: EmailEnrollmentCombinedCode;
+    readonly combinedCode: EmailVerificationCode;
     readonly idempotencyKey: string;
   }) => Effect.Effect<void, EmailSendFailed>;
 };
@@ -121,7 +142,7 @@ export class EmailDeliveryPort extends Context.Service<
       const fromName = yield* Config.schema(Schema.Literal("Fidy"), "RESEND_FROM_NAME");
       return EmailDeliveryPort.of({
         send: (input) => {
-          const projection = verificationEmail(input.combinedCode);
+          const projection = verificationEmailFor(input.purpose, input.combinedCode);
           return httpClient
             .post("https://api.resend.com/emails", {
               headers: {

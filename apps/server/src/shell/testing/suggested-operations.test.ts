@@ -6,6 +6,7 @@ import { PATPairingId } from "~/core/tokens/pairing";
 import { IanaTimeZone } from "~/core/_shared/context";
 import { Money } from "~/core/_shared/money";
 import { BudgetId } from "~/core/budgets/reference";
+import { EmailAddress } from "~/core/email-authentication/model";
 import { MemoryText } from "~/core/memory/model";
 import { UserId } from "~/core/identity/reference";
 import { Base64FileContent, StatementIdempotencyKey } from "~/core/ingestion/model";
@@ -107,6 +108,17 @@ const probes: Record<OperationId, SuggestedOperationProbe> = {
             pairingId: PATPairingId.make("f1d1a000-0000-4000-8000-000000000249"),
             patExpiresAt: DateTime.makeUnsafe("2027-01-01T00:00:00.000Z"),
           },
+        })
+      );
+      if (Result.isSuccess(result)) return yield* Effect.die("expected bearer refusal");
+      return [yield* Schema.decodeUnknownEffect(ScopeMissing)(result.failure)];
+    }),
+
+  "emailAuthentication.requestEmailReplacement": (client) =>
+    Effect.gen(function* () {
+      const result = yield* Effect.result(
+        client.emailAuthentication.requestEmailReplacement({
+          payload: { candidateEmail: EmailAddress.make("replacement@example.com") },
         })
       );
       if (Result.isSuccess(result)) return yield* Effect.die("expected bearer refusal");

@@ -11,6 +11,7 @@ import {
 } from "@tanstack/react-router";
 import { BrowserLoginPairingFeature } from "@/features/browser-login/feature";
 import { EmailOnboardingFeature } from "@/features/email-onboarding/feature";
+import { EmailReplacementFeature } from "@/features/email-replacement/feature";
 import { createPublicSiteRoute } from "@/features/public-site/feature";
 import { PATManagementFeature } from "@/features/pats/feature";
 import { SignedInFeature } from "@/features/signed-in/feature";
@@ -75,6 +76,11 @@ const patManagementRoute = createRoute({
   path: "/settings/pats",
   component: PATManagementFeature,
 });
+const emailReplacementRoute = createRoute({
+  getParentRoute: () => authenticatedRoute,
+  path: "/settings/email",
+  component: EmailReplacementFeature,
+});
 const subscriptionOffersRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/upgrade",
@@ -98,6 +104,7 @@ const routeTree = rootRoute.addChildren([
   authenticatedRoute.addChildren([
     signedInRoute.addChildren([signedInIndexRoute, dashboardRoute, transactionsRoute]),
     patManagementRoute,
+    emailReplacementRoute,
   ]),
 ]);
 

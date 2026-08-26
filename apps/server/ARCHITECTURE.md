@@ -83,15 +83,16 @@ session or a web-or-hosted caller.
 A canonical query observes domain state without requesting a domain transition or external effect;
 audit, quota, and access-accounting writes do not change that classification. A canonical mutation
 requests a domain transition, records durable work, or causes an external effect. As decided in ADR
-0012, every canonical mutation is transaction-composable by definition: its individual operation
-and an atomic batch call the same reusable implementation inside a caller-owned, User-scoped
-PostgreSQL transaction. The implementation does not open or commit an inner transaction. External
-work is inserted as a durable job in that transaction and performed after commit when rollback
-compatibility requires it.
+0012, PAT-scoped canonical mutations are transaction-composable: an individual operation and an
+atomic batch call the same reusable implementation inside a caller-owned, User-scoped PostgreSQL
+transaction. The implementation does not open or commit an inner transaction. External work is
+inserted as a durable job in that transaction and performed after commit when rollback compatibility
+requires it. Account-security mutations that require fresh WebSession or hosted confirmation
+instead remain outside PAT and atomic-batch authority.
 
-The atomic-batch child union derives from every reflected canonical mutation and its encoded input
-schema. There is no independent eligibility allowlist; the batch excludes itself structurally, and a
-new mutation cannot ship without its reusable transaction-aware implementation.
+The atomic-batch child union derives from reflected PAT-scoped canonical mutations and their encoded
+input schemas through the shared policy predicate. There is no feature-specific eligibility
+allowlist; the batch excludes itself structurally.
 
 ADR 0012 is adopted through an expand sequence. Operation kind records semantics immediately;
 Transaction creation, correction, and deletion establish the implementation tracer, and the
@@ -126,9 +127,10 @@ schemas, response variants, and relational row projections. Money remains nested
 canonical operation shapes; repositories may flatten it into exact adjacent columns and reconstruct
 it on read. A type that never mentions the schema it derives from is a review smell.
 
-A non-empty `SuggestedOperation` is validated against its target operation and filtered by caller
-access and tier before it reaches a response. The operation checkpoint is the source of truth, not
-a parallel tool map or a host-side parser.
+A non-empty `SuggestedOperation` derives only from PAT-scoped canonical operations, then is validated
+against its target operation and filtered by caller access and tier before it reaches a response.
+Account-security operations outside PAT authority are not suggestion candidates. The operation
+checkpoint is the source of truth, not a parallel tool map or a host-side parser.
 
 OpenAI hosted-tool bindings derive one strict-mode wire codec from each canonical input schema.
 Tools expose the canonical schema's encoded side so the provider applies strict adaptation exactly
@@ -185,9 +187,11 @@ ConsentRecords. The shell-only onboarding completion process composes those owne
 and creates all stable onboarding state only after email proof succeeds.
 
 Email authentication and support recovery approve an existing BrowserLoginPairing for the existing
-UserId. They do not create a parallel session, create another User, replace the
-VerifiedEmailCredential, or change WhatsAppIdentity. The browser's private verifier remains
-necessary to create the WebSession. A User
+UserId. They do not create a parallel session, create another User, or change WhatsAppIdentity. A
+fresh same-User WebSession may replace the mailbox on the existing VerifiedEmailCredential after a
+replacement-specific proof; the old mailbox remains authoritative until the credential update,
+workflow cleanup, and metadata-only lifecycle event commit atomically. The browser's private
+verifier remains necessary to create the WebSession. A User
 whose Consent is explicitly revoked may authenticate only to reach Fidy-owned re-consent and
 data-rights surfaces; ordinary canonical work remains blocked with `user_action_required`.
 

@@ -9,7 +9,7 @@ import {
   freePatCaller,
   suggestOperation,
 } from "./suggested-operations";
-import { patScoped, webOrHosted } from "./operation-policy";
+import { patScopeCapability, patScoped, webOrHosted } from "./operation-policy";
 import { SuggestedOperation } from "./response";
 
 const allCapabilities = ["read", "write", "dashboard"] as const;
@@ -23,15 +23,12 @@ const SuggestedMemberSpec = Schema.Struct({
   }),
 });
 
-it("publishes one partial-input OpenAPI member per canonical operation", () => {
+it("publishes one partial-input OpenAPI member per PAT-callable canonical operation", () => {
   const spec = OpenApi.fromApi(FidyApi);
   const suggested = Schema.decodeUnknownSync(
     Schema.Struct({ anyOf: Schema.Array(SuggestedMemberSpec) })
   )(spec.components.schemas.SuggestedOperation);
   const publishedTools = suggested.anyOf.flatMap((member) => member.properties.tool.enum);
-  const publishedOperationIds = Object.values(spec.paths).flatMap((path) =>
-    Object.values(path).map((operation) => operation.operationId)
-  );
   const createMember = suggested.anyOf.find((member) =>
     member.properties.tool.enum.includes("transactions.createTransaction")
   );
@@ -45,10 +42,13 @@ it("publishes one partial-input OpenAPI member per canonical operation", () => {
     })
   )(createMember?.properties.args);
 
-  expect(publishedTools.sort()).toEqual(publishedOperationIds.sort());
-  expect(publishedTools).toEqual(
-    operationCatalog.operations.map((operation) => operation.id).sort()
+  expect(publishedTools.sort()).toEqual(
+    operationCatalog.operations
+      .filter((operation) => Option.isSome(patScopeCapability(operation.policy.access)))
+      .map((operation) => operation.id)
+      .sort()
   );
+  expect(publishedTools).not.toContain("emailAuthentication.requestEmailReplacement");
   expect(createArgs.properties.payload.required).toBeUndefined();
 });
 

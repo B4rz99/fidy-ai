@@ -51,5 +51,11 @@ export {
   type WebAuthApiGroups,
 } from "./web-auth-api";
 export { StartedBrowserLoginPairing } from "~/core/browser-login/model";
+export { EmailAddress } from "~/core/email-authentication/model";
 export { PriceRevisionId } from "~/core/subscription/reference";
-export { BrowserLoginPairingInvalidApi, BrowserLoginPollingRateLimitedApi } from "./web-auth-api";
+export {
+  BrowserLoginPairingInvalidApi,
+  BrowserLoginPollingRateLimitedApi,
+  EmailReplacementFreshPairingRequiredApi,
+  EmailReplacementInvalidApi,
+} from "./web-auth-api";

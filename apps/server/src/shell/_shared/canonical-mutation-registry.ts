@@ -12,6 +12,7 @@ import {
   updateKeywordRule,
 } from "~/shell/categories/mutations";
 import { applyDashboardEdit, getDashboard } from "~/shell/dashboard/mutations";
+import { requestEmailReplacement } from "~/shell/email-authentication/replacement-mutations";
 import { getDashboardView } from "~/shell/dashboard/view";
 import { updateUserPreferences } from "~/shell/identity/mutations";
 import {
@@ -100,6 +101,11 @@ export const canonicalMutationImplementations = {
       userId: caller.resolved.subjectUserId,
       caller: suggestedCaller(caller),
       edit: input.payload,
+    }),
+  "emailAuthentication.requestEmailReplacement": (input, { resolved }) =>
+    requestEmailReplacement({
+      userId: resolved.subjectUserId,
+      payload: input.payload,
     }),
   "transactions.createTransaction": (input, caller) =>
     createTransaction({

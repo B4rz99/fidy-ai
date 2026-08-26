@@ -137,6 +137,34 @@ const seedEveryPolicyShape = Effect.gen(function* () {
     ON CONFLICT (user_id) DO NOTHING
   `;
   yield* admin`
+    INSERT INTO email_replacement_workflows (
+      id, user_id, candidate_email_address, public_code, started_at, expires_at,
+      delivery_generation, resend_available_at
+    ) VALUES (
+      'f1d1a000-0000-4000-8000-0000000006c1', ${policyOwner},
+      'replacement-rls-probe@fidyapp.com', 'ABCD-EFGH', '2026-01-01T00:00:00Z',
+      '2026-01-02T00:00:00Z', 1, '2026-01-01T00:01:00Z'
+    ) ON CONFLICT (id) DO NOTHING
+  `;
+  yield* admin`
+    INSERT INTO email_replacement_delivery_intents (
+      id, workflow_id, generation, email_address, status, idempotency_key, created_at
+    ) VALUES (
+      'f1d1a000-0000-4000-8000-0000000006c2',
+      'f1d1a000-0000-4000-8000-0000000006c1', 1,
+      'replacement-rls-probe@fidyapp.com', 'pending',
+      'f1d1a000-0000-4000-8000-0000000006c2', '2026-01-01T00:00:00Z'
+    ) ON CONFLICT (id) DO NOTHING
+  `;
+  yield* admin`
+    INSERT INTO verified_email_credential_lifecycle_events (
+      id, subject_user_id, authorizing_web_session_id, occurred_at
+    ) VALUES (
+      'f1d1a000-0000-4000-8000-0000000006c3', ${policyOwner},
+      'f1d1a000-0000-4000-8000-0000000006c4', '2026-01-01T00:00:00Z'
+    ) ON CONFLICT (id) DO NOTHING
+  `;
+  yield* admin`
     INSERT INTO backup_recovery_credentials (user_id, code_digest, created_at)
     VALUES (${policyOwner}, ${new Uint8Array(32)}, '2026-01-01T00:00:00Z')
     ON CONFLICT (user_id) DO NOTHING
@@ -370,6 +398,16 @@ const policyProbes: ReadonlyArray<PolicyProbe> = [
     tableName: "verified_email_credentials",
     stableColumn: "verified_at",
     ownerPredicate: `user_id = '${policyOwner}'`,
+  },
+  {
+    tableName: "email_replacement_workflows",
+    stableColumn: "resend_available_at",
+    ownerPredicate: `user_id = '${policyOwner}'`,
+  },
+  {
+    tableName: "email_replacement_delivery_intents",
+    stableColumn: "status",
+    ownerPredicate: "id = 'f1d1a000-0000-4000-8000-0000000006c2'",
   },
   {
     tableName: "tokens",
@@ -1146,6 +1184,35 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
             sql`SELECT id FROM transactions WHERE id = ${policyTransactionId}`
           )
         ).toEqual([{ id: policyTransactionId }]);
+        expect(yield* sql`SELECT id FROM verified_email_credential_lifecycle_events`).toEqual([]);
+        expect(
+          yield* withUserTransaction(
+            policyStranger,
+            sql`SELECT id FROM verified_email_credential_lifecycle_events WHERE subject_user_id = ${policyOwner}`
+          )
+        ).toEqual([]);
+        expect(
+          yield* withUserTransaction(
+            policyOwner,
+            sql`SELECT id FROM verified_email_credential_lifecycle_events WHERE subject_user_id = ${policyOwner}`
+          )
+        ).toEqual([{ id: "f1d1a000-0000-4000-8000-0000000006c3" }]);
+        expect(
+          (yield* Effect.exit(
+            withUserTransaction(
+              policyOwner,
+              sql`UPDATE verified_email_credential_lifecycle_events SET occurred_at = occurred_at WHERE subject_user_id = ${policyOwner}`
+            )
+          ))._tag
+        ).toBe("Failure");
+        expect(
+          (yield* Effect.exit(
+            withUserTransaction(
+              policyOwner,
+              sql`DELETE FROM verified_email_credential_lifecycle_events WHERE subject_user_id = ${policyOwner}`
+            )
+          ))._tag
+        ).toBe("Failure");
       })
     );
 

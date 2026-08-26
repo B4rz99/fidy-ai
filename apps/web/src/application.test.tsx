@@ -2,21 +2,31 @@ import { RouterProvider, createMemoryHistory } from "@tanstack/react-router";
 import { Effect, Layer, Option } from "effect";
 import { HttpClient, type HttpClientRequest, HttpClientResponse } from "effect/unstable/http";
 import type * as HttpClientError from "effect/unstable/http/HttpClientError";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { WebApplication } from "@/app/application";
 import { createWebRouter } from "@/app/routes";
 import { SessionRegistryProvider } from "@/session/session";
-import { type FidyClient, makeFidyClient, makeWebAuthClient } from "@/transport/client";
+import {
+  type FidyClient,
+  type WebAuthClient,
+  makeFidyClient,
+  makeWebAuthClient,
+} from "@/transport/client";
 
 const responseJson = (
   request: HttpClientRequest.HttpClientRequest,
   body: unknown
-): HttpClientResponse.HttpClientResponse =>
-  HttpClientResponse.fromWeb(
-    request,
-    new Response(JSON.stringify(body), { headers: { "content-type": "application/json" } })
-  );
+): HttpClientResponse.HttpClientResponse => {
+  const encoded = new TextEncoder().encode(JSON.stringify(body));
+  const realmBytes = new window.Uint8Array(encoded.length);
+  realmBytes.set(encoded);
+  const response = new Response(encoded, { headers: { "content-type": "application/json" } });
+  Object.defineProperty(response, "arrayBuffer", {
+    value: () => Promise.resolve(realmBytes.buffer),
+  });
+  return HttpClientResponse.fromWeb(request, response);
+};
 
 const makeHttpClient = (
   handler: (
@@ -32,12 +42,12 @@ const makeHttpClient = (
 
 const renderRoute = async (
   path: string,
-  apiClient = makeFidyClient("https://api.test.fidyapp.com")
+  apiClient = makeFidyClient("https://api.test.fidyapp.com"),
+  webAuthClient: WebAuthClient = makeWebAuthClient("https://api.test.fidyapp.com")
 ): Promise<void> => {
-  const apiOrigin = "https://api.test.fidyapp.com";
   const router = createWebRouter({
     apiClient,
-    webAuthClient: makeWebAuthClient(apiOrigin),
+    webAuthClient,
     history: Option.some(createMemoryHistory({ initialEntries: [path] })),
   });
 
@@ -53,6 +63,42 @@ const resetApplicationTest = (): void => {
   cleanup();
   vi.useRealTimers();
   vi.unstubAllEnvs();
+};
+
+const emailReplacementClients = (
+  requests: Array<string>
+): Readonly<{ apiClient: FidyClient; webAuthClient: WebAuthClient }> => {
+  const httpClient = makeHttpClient((request) => {
+    requests.push(new URL(request.url).pathname);
+    return Effect.succeed(
+      responseJson(
+        request,
+        request.url.endsWith("/web/email/replacement/verify")
+          ? { status: "replaced" }
+          : { data: { status: "pending" }, next: [] }
+      )
+    );
+  });
+  const layer = Layer.succeed(HttpClient.HttpClient, httpClient);
+  return {
+    apiClient: makeFidyClient("https://api.test.fidyapp.com", layer),
+    webAuthClient: makeWebAuthClient("https://api.test.fidyapp.com", layer),
+  };
+};
+
+const submitRenderedEmailReplacement = async (requests: Array<string>): Promise<void> => {
+  fireEvent.change(await screen.findByLabelText("Nuevo correo"), {
+    target: { value: "new.mailbox@example.com" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Enviar código" }));
+  expect(await screen.findByText("Enviamos un código a new.mailbox@example.com.")).toBeVisible();
+  fireEvent.click(screen.getByRole("button", { name: "Reenviar código" }));
+  await waitFor(() => expect(requests).toHaveLength(2));
+  fireEvent.change(await screen.findByLabelText("Código de verificación"), {
+    target: { value: "bcdf-ghjk-mnpq-rstw-xy23-4567" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Cambiar correo" }));
+  expect(await screen.findByText("Tu nuevo correo verificado ya está activo.")).toBeVisible();
 };
 
 const malformedFidyClient = (): FidyClient => {
@@ -105,6 +151,23 @@ describe("signed-in web application routes", () => {
     await renderRoute("/app/transactions", malformedFidyClient());
 
     expect(await screen.findByText("No pudimos cargar tus transacciones")).toBeVisible();
+  });
+
+  it("runs verified-email replacement through the rendered route and typed clients", async () => {
+    localStorage.clear();
+    sessionStorage.clear();
+    const requests: Array<string> = [];
+    const clients = emailReplacementClients(requests);
+    await renderRoute("/settings/email", clients.apiClient, clients.webAuthClient);
+    await submitRenderedEmailReplacement(requests);
+    expect(requests).toEqual([
+      "/email/replacement",
+      "/email/replacement",
+      "/web/email/replacement/verify",
+    ]);
+    expect(window.location.search).toBe("");
+    expect(localStorage.length).toBe(0);
+    expect(sessionStorage.length).toBe(0);
   });
 
   it("owns the authenticated Subscription offer page at /upgrade", async () => {

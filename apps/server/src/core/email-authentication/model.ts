@@ -2,6 +2,7 @@ import { Schema, SchemaTransformation } from "effect";
 import { UtcTimestamp } from "~/core/_shared/time";
 import { PendingConsentExchangeId } from "~/core/consent/reference";
 import { UserId, WhatsAppCallerReference } from "~/core/identity/reference";
+import { WebSessionId } from "~/core/web-session/reference";
 import { EmailEnrollmentId } from "./reference";
 
 const maximumEmailAddressLength = 254;
@@ -34,13 +35,13 @@ export const EmailAddress = Schema.Trim.pipe(
 );
 export type EmailAddress = typeof EmailAddress.Type;
 
-/** Random public lookup shown as the first two groups of the combined verification code. */
-export const EmailEnrollmentPublicCode = Schema.String.check(
+/** Random public lookup shown as the first two groups of an email verification code. */
+export const EmailVerificationPublicCode = Schema.String.check(
   Schema.isPattern(new RegExp(`^${unambiguousGroup}{4}-${unambiguousGroup}{4}$`, "u"))
 )
-  .pipe(Schema.brand("EmailEnrollmentPublicCode"))
-  .annotate({ identifier: "EmailEnrollmentPublicCode" });
-export type EmailEnrollmentPublicCode = typeof EmailEnrollmentPublicCode.Type;
+  .pipe(Schema.brand("EmailVerificationPublicCode"))
+  .annotate({ identifier: "EmailVerificationPublicCode" });
+export type EmailVerificationPublicCode = typeof EmailVerificationPublicCode.Type;
 
 /** Fresh 80-bit mailbox-control proof that exists raw only in one claimed worker process. */
 export const EmailVerificationProof = Schema.String.check(
@@ -50,19 +51,17 @@ export const EmailVerificationProof = Schema.String.check(
   .annotate({ identifier: "EmailVerificationProof" });
 export type EmailVerificationProof = typeof EmailVerificationProof.Type;
 
-/** One browser field containing the public enrollment lookup and secret mailbox proof. */
-export const EmailEnrollmentCombinedCode = Schema.String.check(
+/** One browser field containing the public lookup and secret mailbox proof. */
+export const EmailVerificationCode = Schema.String.check(
   Schema.isPattern(new RegExp(`^${unambiguousGroup}{4}(?:-${unambiguousGroup}{4}){5}$`, "u"))
 )
-  .pipe(Schema.brand("EmailEnrollmentCombinedCode"))
-  .annotate({ identifier: "EmailEnrollmentCombinedCode" });
-export type EmailEnrollmentCombinedCode = typeof EmailEnrollmentCombinedCode.Type;
+  .pipe(Schema.brand("EmailVerificationCode"))
+  .annotate({ identifier: "EmailVerificationCode" });
+export type EmailVerificationCode = typeof EmailVerificationCode.Type;
 
 /** Redacted decoder used wherever untrusted proof-bearing input first becomes structured. */
-export const RedactedEmailEnrollmentCombinedCode = Schema.RedactedFromValue(
-  EmailEnrollmentCombinedCode
-);
-export type RedactedEmailEnrollmentCombinedCode = typeof RedactedEmailEnrollmentCombinedCode.Type;
+export const RedactedEmailVerificationCode = Schema.RedactedFromValue(EmailVerificationCode);
+export type RedactedEmailVerificationCode = typeof RedactedEmailVerificationCode.Type;
 
 /** Stable identity of one versioned durable proof-delivery intent. */
 export const EmailDeliveryIntentId = Schema.String.check(Schema.isUUID())
@@ -76,6 +75,10 @@ export const EmailDeliveryClaimToken = Schema.String.check(Schema.isUUID())
   .annotate({ identifier: "EmailDeliveryClaimToken" });
 export type EmailDeliveryClaimToken = typeof EmailDeliveryClaimToken.Type;
 
+/** Closed selector for the fixed content of one EmailAuthentication proof delivery. */
+export const EmailProofPurpose = Schema.Literals(["verified-onboarding", "credential-replacement"]);
+export type EmailProofPurpose = typeof EmailProofPurpose.Type;
+
 /** Consent-owned accepted evidence referenced without importing Consent's model. */
 export const AcceptedPendingConsentReference = Schema.Struct({
   pendingConsentExchangeId: PendingConsentExchangeId,
@@ -84,7 +87,7 @@ export type AcceptedPendingConsentReference = typeof AcceptedPendingConsentRefer
 
 const PendingEmailEnrollmentBase = {
   id: EmailEnrollmentId,
-  publicCode: EmailEnrollmentPublicCode,
+  publicCode: EmailVerificationPublicCode,
   caller: WhatsAppCallerReference,
   consent: AcceptedPendingConsentReference,
   expiresAt: UtcTimestamp,
@@ -96,14 +99,40 @@ const sha256DigestLength = Schema.makeFilter<{ readonly length: number }>((diges
   digest.length === sha256ByteLength ? undefined : "Expected a 32-byte SHA-256 digest"
 );
 
+/** Irreversible SHA-256 digest of one current email verification proof. */
+export const EmailVerificationDigest = Schema.Uint8Array.check(sha256DigestLength).annotate({
+  identifier: "EmailVerificationDigest",
+});
+export type EmailVerificationDigest = typeof EmailVerificationDigest.Type;
+
+/** Proof-bearing state reconstructed from the replacement workflow's paired nullable columns. */
+export const EmailReplacementProofState = Schema.Union([
+  Schema.TaggedStruct("AwaitingDelivery", {}),
+  Schema.TaggedStruct("AwaitingProof", {
+    proofDigest: EmailVerificationDigest,
+    proofExpiresAt: UtcTimestamp,
+  }),
+]);
+export type EmailReplacementProofState = typeof EmailReplacementProofState.Type;
+
+/** One admitted email delivery generation within the fixed five-generation workflow bound. */
+export const EmailDeliveryGeneration = Schema.Int.check(
+  Schema.isBetween({ minimum: 1, maximum: maximumEmailDeliveryGenerations })
+).annotate({ identifier: "EmailDeliveryGeneration" });
+export type EmailDeliveryGeneration = typeof EmailDeliveryGeneration.Type;
+
+/** Persisted failed-proof count before the fifth failure deletes its bounded workflow. */
+export const EmailWrongProofAttempts = Schema.Int.check(
+  Schema.isBetween({ minimum: 0, maximum: 4 })
+).annotate({ identifier: "EmailWrongProofAttempts" });
+export type EmailWrongProofAttempts = typeof EmailWrongProofAttempts.Type;
+
 const PendingEmailEnrollmentDelivery = {
   ...PendingEmailEnrollmentBase,
   email: EmailAddress,
-  deliveryGeneration: Schema.Int.check(
-    Schema.isBetween({ minimum: 1, maximum: maximumEmailDeliveryGenerations })
-  ),
+  deliveryGeneration: EmailDeliveryGeneration,
   resendAvailableAt: UtcTimestamp,
-  wrongProofAttempts: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 4 })),
+  wrongProofAttempts: EmailWrongProofAttempts,
 };
 
 /** Canonical bounded pre-User lifecycle; persisted nullable fields decode into these variants. */
@@ -112,7 +141,7 @@ export const PendingEmailEnrollment = Schema.Union([
   Schema.TaggedStruct("AwaitingProofDelivery", PendingEmailEnrollmentDelivery),
   Schema.TaggedStruct("AwaitingProof", {
     ...PendingEmailEnrollmentDelivery,
-    proofDigest: Schema.Uint8Array.check(sha256DigestLength),
+    proofDigest: EmailVerificationDigest,
     proofExpiresAt: UtcTimestamp,
   }),
 ]);
@@ -128,5 +157,52 @@ export const VerifiedEmailCredential = Schema.Struct({
   verifiedAt: UtcTimestamp,
 }).annotate({ identifier: "VerifiedEmailCredential" });
 export type VerifiedEmailCredential = typeof VerifiedEmailCredential.Type;
+
+/** Stable identity of one retained committed credential-lifecycle event. */
+export const VerifiedEmailCredentialLifecycleEventId = Schema.String.check(Schema.isUUID())
+  .pipe(Schema.brand("VerifiedEmailCredentialLifecycleEventId"))
+  .annotate({ identifier: "VerifiedEmailCredentialLifecycleEventId" });
+export type VerifiedEmailCredentialLifecycleEventId =
+  typeof VerifiedEmailCredentialLifecycleEventId.Type;
+
+/**
+ * Metadata-only evidence of a committed credential replacement. It deliberately cannot represent
+ * a mailbox, workflow, proof, request body, provider value, prose, or financial fact.
+ */
+export const VerifiedEmailCredentialLifecycleEvent = Schema.Struct({
+  id: VerifiedEmailCredentialLifecycleEventId,
+  subjectUserId: UserId,
+  authorizingWebSessionId: WebSessionId,
+  kind: Schema.Literal("Replaced"),
+  occurredAt: UtcTimestamp,
+}).annotate({ identifier: "VerifiedEmailCredentialLifecycleEvent" });
+export type VerifiedEmailCredentialLifecycleEvent =
+  typeof VerifiedEmailCredentialLifecycleEvent.Type;
+
+/** Stable identity of one User's bounded active credential-replacement workflow. */
+export const EmailReplacementWorkflowId = Schema.String.check(Schema.isUUID())
+  .pipe(Schema.brand("EmailReplacementWorkflowId"))
+  .annotate({ identifier: "EmailReplacementWorkflowId" });
+export type EmailReplacementWorkflowId = typeof EmailReplacementWorkflowId.Type;
+
+/** One User's bounded active transition toward a candidate verified-email credential. */
+export const EmailReplacementWorkflow = Schema.Struct({
+  id: EmailReplacementWorkflowId,
+  candidateEmailAddress: EmailAddress,
+  publicCode: EmailVerificationPublicCode,
+  startedAt: UtcTimestamp,
+  expiresAt: UtcTimestamp,
+  deliveryGeneration: EmailDeliveryGeneration,
+  resendAvailableAt: UtcTimestamp,
+  proofState: EmailReplacementProofState,
+  wrongProofAttempts: EmailWrongProofAttempts,
+}).annotate({ identifier: "EmailReplacementWorkflow" });
+export type EmailReplacementWorkflow = typeof EmailReplacementWorkflow.Type;
+
+/** Random lease fence for one globally claimed replacement-retention step. */
+export const EmailReplacementRetentionClaimToken = Schema.String.check(Schema.isUUID())
+  .pipe(Schema.brand("EmailReplacementRetentionClaimToken"))
+  .annotate({ identifier: "EmailReplacementRetentionClaimToken" });
+export type EmailReplacementRetentionClaimToken = typeof EmailReplacementRetentionClaimToken.Type;
 
 export { EmailEnrollmentId };

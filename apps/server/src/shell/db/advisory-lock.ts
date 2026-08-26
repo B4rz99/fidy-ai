@@ -1,5 +1,6 @@
 import { Effect } from "effect";
 import { SqlClient } from "effect/unstable/sql";
+import type { EmailAddress } from "~/core/email-authentication/model";
 import type { UserId, WhatsAppCallerReference } from "~/core/identity/reference";
 import { withUserTransaction } from "./user-transaction";
 
@@ -29,6 +30,10 @@ export const advisoryLockKey = {
   }),
   browserLoginApproval: (userId: UserId): AdvisoryLockKey => ({
     value: `browser-login-approval:${userId}`,
+    seed: 0,
+  }),
+  emailReplacementCandidate: (emailAddress: EmailAddress): AdvisoryLockKey => ({
+    value: `email-authentication:replacement-candidate:${emailAddress}`,
     seed: 0,
   }),
   dashboard: (userId: UserId): AdvisoryLockKey => ({ value: userId, seed: 15 }),

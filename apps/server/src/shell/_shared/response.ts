@@ -1,6 +1,7 @@
 import * as Arr from "effect/Array";
 import { Option, Schema } from "effect";
 import { type CatalogOperation, getBoundOperationCatalog } from "./operation-catalog";
+import { patScopeCapability } from "./operation-policy";
 
 const englishSentenceSegmenter = new Intl.Segmenter("en", { granularity: "sentence" });
 
@@ -64,7 +65,9 @@ const suggestedOperationMember = (
  * input.
  */
 export const SuggestedOperation = Schema.suspend(() => {
-  const members = getBoundOperationCatalog().operations.map(suggestedOperationMember);
+  const members = getBoundOperationCatalog()
+    .operations.filter((operation) => Option.isSome(patScopeCapability(operation.policy.access)))
+    .map(suggestedOperationMember);
   if (!Arr.isReadonlyArrayNonEmpty(members)) {
     throw new Error("SuggestedOperation requires at least one canonical operation");
   }

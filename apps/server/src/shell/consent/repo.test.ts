@@ -8,7 +8,7 @@ import {
   DisclosureSnapshot,
   PendingConsentExchangeId,
 } from "~/core/consent/model";
-import { EmailEnrollmentId, EmailEnrollmentPublicCode } from "~/core/email-authentication/model";
+import { EmailEnrollmentId, EmailVerificationPublicCode } from "~/core/email-authentication/model";
 import { E164PhoneNumber, UserId, whatsAppCallerReference } from "~/core/identity/reference";
 import { makeColombianUser } from "~/core/identity/rules";
 import { MigrationSqlClient } from "~/shell/db/client";
@@ -245,7 +245,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
                   pending_consent_exchange_id, expires_at
                 ) VALUES (
                   ${EmailEnrollmentId.make("f1d1a000-0000-4000-8000-000000000824")},
-                  ${EmailEnrollmentPublicCode.make("ABCD-EFGH")}, ${caller.businessPortfolioId},
+                  ${EmailVerificationPublicCode.make("ABCD-EFGH")}, ${caller.businessPortfolioId},
                   ${caller.businessScopedUserId}, ${Option.getOrNull(caller.parentBusinessScopedUserId)},
                   ${Option.getOrNull(caller.username)}, ${Option.getOrNull(caller.phoneNumber)},
                   ${exchangeId}, ${enrollmentExpiresAt}

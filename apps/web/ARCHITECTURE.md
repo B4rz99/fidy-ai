@@ -38,6 +38,9 @@ state, or static artifacts.
 The web uses the server's canonical authentication paths and session authority. It does not implement
 identity resolution, proof verification, PAT issuance, Consent decisions, or recovery authority.
 Security-sensitive browser actions use the server-established fresh-session requirement.
+`/settings/email` keeps candidate mailbox and proof only in mounted form state: initiation uses the
+canonical typed client, while proof completion uses the direct no-store WebAuth client. Neither
+value enters a URL, browser storage, or application-wide state.
 
 ## 4. Static production artifact
 

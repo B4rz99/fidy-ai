@@ -66,6 +66,7 @@ export const TelemetryRegistry = {
     "postgres.repositoryOperation",
     "postgres.compatibilityProbe",
     "task.auditRetention",
+    "task.emailAuthenticationRetention",
     "task.onboardingRetention",
     "task.whatsappRetention",
     "provider.request",

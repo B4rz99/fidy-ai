@@ -5,6 +5,7 @@ import {
   type OperationAccessCaller,
   completesHostedTurn,
   decideOperationAccess,
+  freshWebOrVerifiedWhatsAppHosted,
   freshWebSessionOnly,
   isHostedVisible,
   isPATScoped,
@@ -45,6 +46,10 @@ it("round-trips every published access variant through the canonical codec", () 
     {
       published: { type: "verified-whatsapp-hosted-only" },
       canonical: verifiedWhatsAppHostedOnly,
+    },
+    {
+      published: { type: "fresh-web-or-verified-whatsapp-hosted" },
+      canonical: freshWebOrVerifiedWhatsAppHosted,
     },
   ] as const;
 
@@ -95,6 +100,27 @@ it("decides every canonical caller class from one access requirement", () => {
     _tag: "Denied",
     reason: "caller_ineligible",
   });
+
+  expect(decideOperationAccess(freshWebOrVerifiedWhatsAppHosted, web(true))).toEqual({
+    _tag: "Allowed",
+  });
+  expect(decideOperationAccess(freshWebOrVerifiedWhatsAppHosted, web(false))).toEqual({
+    _tag: "Denied",
+    reason: "fresh_web_session_required",
+  });
+  expect(
+    decideOperationAccess(freshWebOrVerifiedWhatsAppHosted, hosted("verified-whatsapp"))
+  ).toEqual({ _tag: "Allowed" });
+  expect(
+    decideOperationAccess(
+      freshWebOrVerifiedWhatsAppHosted,
+      hosted("no-verified-whatsapp-authority")
+    )
+  ).toEqual({ _tag: "Denied", reason: "caller_ineligible" });
+  expect(decideOperationAccess(freshWebOrVerifiedWhatsAppHosted, pat(["write"]))).toEqual({
+    _tag: "Denied",
+    reason: "caller_ineligible",
+  });
 });
 
 it("derives PAT and hosted discovery from the same access requirement", () => {
@@ -102,6 +128,7 @@ it("derives PAT and hosted discovery from the same access requirement", () => {
   expect(isPATScoped(freshWebSessionOnly)).toBe(false);
   expect(isPATScoped(webOrHosted)).toBe(false);
   expect(isPATScoped(verifiedWhatsAppHostedOnly)).toBe(false);
+  expect(isPATScoped(freshWebOrVerifiedWhatsAppHosted)).toBe(false);
 
   expect(Option.getOrUndefined(patScopeCapability(patScoped("dashboard")))).toBe("dashboard");
   expect(Option.isNone(patScopeCapability(patScopedChildren))).toBe(true);
@@ -112,6 +139,10 @@ it("derives PAT and hosted discovery from the same access requirement", () => {
   expect(isHostedVisible(webOrHosted, "verified-whatsapp")).toBe(true);
   expect(isHostedVisible(verifiedWhatsAppHostedOnly, "verified-whatsapp")).toBe(true);
   expect(isHostedVisible(verifiedWhatsAppHostedOnly, "no-verified-whatsapp-authority")).toBe(false);
+  expect(isHostedVisible(freshWebOrVerifiedWhatsAppHosted, "verified-whatsapp")).toBe(true);
+  expect(isHostedVisible(freshWebOrVerifiedWhatsAppHosted, "no-verified-whatsapp-authority")).toBe(
+    false
+  );
 });
 
 it("derives hosted turn completion without a separate operation allowlist", () => {
@@ -126,4 +157,7 @@ it("derives hosted turn completion without a separate operation allowlist", () =
   expect(completesHostedTurn({ ...mutationPolicy, access: patScopedChildren })).toBe(false);
   expect(completesHostedTurn({ ...mutationPolicy, access: verifiedWhatsAppHostedOnly })).toBe(true);
   expect(completesHostedTurn({ ...mutationPolicy, access: freshWebSessionOnly })).toBe(false);
+  expect(completesHostedTurn({ ...mutationPolicy, access: freshWebOrVerifiedWhatsAppHosted })).toBe(
+    true
+  );
 });

@@ -237,6 +237,17 @@
       }
     },
     {
+      "id": "emailAuthentication.requestEmailReplacement",
+      "policy": {
+        "access": {
+          "type": "fresh-web-or-verified-whatsapp-hosted"
+        },
+        "agentConfirmation": "required",
+        "kind": "mutation",
+        "requiredTier": "free"
+      }
+    },
+    {
       "id": "identity.getCurrentUser",
       "policy": {
         "access": {

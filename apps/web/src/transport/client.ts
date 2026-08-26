@@ -13,6 +13,9 @@ export type { CanonicalSuccess } from "@fidy/server/client";
 export {
   BrowserLoginPairingInvalidApi,
   BrowserLoginPollingRateLimitedApi,
+  EmailAddress,
+  EmailReplacementFreshPairingRequiredApi,
+  EmailReplacementInvalidApi,
   CreateManualPATPayload,
   IssuedPAT,
   ManualPATGrantInput,

@@ -26,6 +26,7 @@ const CanonicalOperationAccess = Schema.Union([
   Schema.TaggedStruct("FreshWebSessionOnly", {}),
   Schema.TaggedStruct("WebOrHosted", {}),
   Schema.TaggedStruct("VerifiedWhatsAppHostedOnly", {}),
+  Schema.TaggedStruct("FreshWebOrVerifiedWhatsAppHosted", {}),
 ]);
 
 const PublishedOperationAccessWire = Schema.Union([
@@ -42,6 +43,7 @@ const PublishedOperationAccessWire = Schema.Union([
   Schema.Struct({ type: Schema.Literal("fresh-web-session-only") }),
   Schema.Struct({ type: Schema.Literal("web-or-hosted") }),
   Schema.Struct({ type: Schema.Literal("verified-whatsapp-hosted-only") }),
+  Schema.Struct({ type: Schema.Literal("fresh-web-or-verified-whatsapp-hosted") }),
 ]);
 
 type CanonicalOperationAccess = typeof CanonicalOperationAccess.Type;
@@ -63,6 +65,8 @@ const decodePublishedAccess = (access: PublishedOperationAccessWire): CanonicalO
       return { _tag: "WebOrHosted" };
     case "verified-whatsapp-hosted-only":
       return { _tag: "VerifiedWhatsAppHostedOnly" };
+    case "fresh-web-or-verified-whatsapp-hosted":
+      return { _tag: "FreshWebOrVerifiedWhatsAppHosted" };
   }
 };
 
@@ -82,6 +86,8 @@ const encodePublishedAccess = (access: CanonicalOperationAccess): PublishedOpera
       return { type: "web-or-hosted" };
     case "VerifiedWhatsAppHostedOnly":
       return { type: "verified-whatsapp-hosted-only" };
+    case "FreshWebOrVerifiedWhatsAppHosted":
+      return { type: "fresh-web-or-verified-whatsapp-hosted" };
   }
 };
 
@@ -147,6 +153,11 @@ export const verifiedWhatsAppHostedOnly: OperationAccess = {
   _tag: "VerifiedWhatsAppHostedOnly",
 };
 
+/** Declares account-security work available to fresh web or verified-WhatsApp hosted authority. */
+export const freshWebOrVerifiedWhatsAppHosted: OperationAccess = {
+  _tag: "FreshWebOrVerifiedWhatsAppHosted",
+};
+
 const allowed: OperationAccessDecision = { _tag: "Allowed" };
 const denied = (reason: OperationAccessDenial): OperationAccessDecision => ({
   _tag: "Denied",
@@ -202,6 +213,10 @@ export const decideOperationAccess: {
       return caller._tag === "PAT" ? denied("caller_ineligible") : allowed;
     case "VerifiedWhatsAppHostedOnly":
       return decideVerifiedWhatsAppHosted(caller);
+    case "FreshWebOrVerifiedWhatsAppHosted":
+      return caller._tag === "WebSession"
+        ? decideFreshWebSession(caller)
+        : decideVerifiedWhatsAppHosted(caller);
   }
 });
 

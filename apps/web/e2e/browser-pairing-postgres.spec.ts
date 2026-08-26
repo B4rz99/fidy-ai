@@ -273,9 +273,10 @@ test("reviews in the fresh browser and delivers a paired PAT only to the initiat
   await page.goto("/settings/pats");
   await page.getByLabel("Código").fill(started.publicCode);
   await page.getByRole("button", { name: "Continuar" }).click();
-  await expect(page.getByText("Cliente CLI", { exact: true })).toBeVisible();
-  await expect(page.getByText("Lectura", { exact: true })).toBeVisible();
-  await expect(page.getByText("Tablero", { exact: true })).toBeVisible();
+  const reviewDetails = page.getByText("Permisos solicitados", { exact: true }).locator("..");
+  await expect(reviewDetails.getByText("Cliente CLI", { exact: true })).toBeVisible();
+  await expect(reviewDetails.getByText("Lectura", { exact: true })).toBeVisible();
+  await expect(reviewDetails.getByText("Tablero", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Autorizar acceso" }).click();
   await expect(page.getByText("Acceso autorizado", { exact: true })).toBeVisible();
 

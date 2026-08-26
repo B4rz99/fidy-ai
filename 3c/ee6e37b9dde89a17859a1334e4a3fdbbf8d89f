@@ -1,0 +1,325 @@
+apps/server/src/client.ts
+  s_eab6b9ca1492c6::t_b7537b5b386f25 41,43-48
+apps/server/ARCHITECTURE.md
+  s_eab6b9ca1492c6::t_aaccd341186db5 124-127
+  s_eab6b9ca1492c6::t_05a61ff4a3acc5 86-91,93-95,184-188
+apps/server/src/shell/db/row-level-security.test.ts
+  s_eab6b9ca1492c6::t_cc9685a5df639a 1183-1200,1202-1206,1208,1210-1211
+  s_eab6b9ca1492c6::t_f62ac504706ce7 139-146,148-156,158-164,166,402-411
+  s_eab6b9ca1492c6::t_3774ad21916d91 147,157,165
+  s_eab6b9ca1492c6::t_f6dd3c0ff07070 1201,1207,1209
+apps/server/src/shell/email-authentication/handlers.ts
+  s_eab6b9ca1492c6::t_a681458529ac66 1,5-7,14-15,20-23,73-82,89,91-92,94,104-105,111,116-120,133-134,136-140
+  s_eab6b9ca1492c6::t_481789441a8aa2 8-10,83-88,95,97,102-103
+  s_eab6b9ca1492c6::t_c0c20e543e8824 96
+  s_eab6b9ca1492c6::t_3eb35774d37eb9 93
+  s_eab6b9ca1492c6::t_37139032c06572 24,98,121,123-126,128-132
+  s_eab6b9ca1492c6::t_a0d4606aff9b29 135
+  s_eab6b9ca1492c6::t_c950596dc29a31 99-101,122
+  s_eab6b9ca1492c6::t_4921b0e631d325 90,106-110,112-115,127
+apps/server/src/shell/email-authentication/admission.ts
+  s_eab6b9ca1492c6::t_04487055f7eab0 1-25
+apps/server/src/shell/onboarding/turn-transition.ts
+  s_eab6b9ca1492c6::t_b1cdd73b696947 19,22,129,137
+  s_eab6b9ca1492c6::t_3f09b57f749e5f 1,30,292,295
+apps/server/src/shell/observability/registry.ts
+  s_eab6b9ca1492c6::t_7f264ddbebbfc3 69
+apps/server/src/shell/testing/suggested-operations.test.ts
+  s_eab6b9ca1492c6::t_d706f1ab3262a5 93-96,98-103
+  s_eab6b9ca1492c6::t_da5c1b20e492d2 8,97
+apps/server/src/shell/testing/operation-policy.test.ts
+  s_eab6b9ca1492c6::t_392482f585c9e0 138,217
+apps/server/src/shell/email-authentication/replacement-repo.ts
+  s_eab6b9ca1492c6::t_57a63eb277f68e 337-338
+  s_eab6b9ca1492c6::t_182ff55b50b5f8 408,413-414,435-440,442-448,450-451,460,473-475,481-482,484-485,489-490,506-510,529,536-544,546
+  s_eab6b9ca1492c6::t_3db17459c48413 18,135-138,144
+  s_eab6b9ca1492c6::t_16853073d8d004 491-505,530-534
+  s_eab6b9ca1492c6::t_1abc41c5733a6e 12,61,415-434,441,449,459,464-465,467
+  s_eab6b9ca1492c6::t_9e10eab4183b3d 1,3-7,10-11,13-14,16-17,20-26,29-32,36,74-81,146,151-156,182,218,225,244-246,248,256-262,265-275,277,279-288,290-291,298-301,304-306,317-318,320-336,339-349,393-394,406-407,409-412,454,461,488,535,547
+  s_eab6b9ca1492c6::t_3f91bd0751d8e6 19,462-463,466,468-472,476-480,483
+  s_eab6b9ca1492c6::t_42c0653e9c6d5b 2,9,37-43,46-52,54,57-58,60
+  s_eab6b9ca1492c6::t_7f9918c360e997 157-160,179
+  s_eab6b9ca1492c6::t_7fc02a3bd0b2f1 128
+  s_eab6b9ca1492c6::t_5cd3203116a855 511-528
+  s_eab6b9ca1492c6::t_d5d205e09f26ae 73,263,319,405
+  s_eab6b9ca1492c6::t_ee7d6d2ce899e0 44-45,55-56
+  s_eab6b9ca1492c6::t_21c2119ab6f0f9 97-99,240
+  s_eab6b9ca1492c6::t_26622a7fcc0e22 456,458
+  s_eab6b9ca1492c6::t_b9e763bef422a8 67,82-84,94-96,100-102,117,142
+  s_eab6b9ca1492c6::t_973ce117e3efb7 64-66,241,243
+  s_eab6b9ca1492c6::t_75b900b4ed4782 292-293,297,311-312
+  s_eab6b9ca1492c6::t_fcdcdd4e542100 455
+  s_eab6b9ca1492c6::t_39fec764ca0918 129-134
+  s_eab6b9ca1492c6::t_2a7f6facc57cf7 27,33-35,53,62-63,72,85-93,103,105,107-116,118-127,139-141,143,145,147-150,161-167,169-178,180-181,183-217,219-224,226-239,242
+  s_eab6b9ca1492c6::t_f26df5bf08e5fa 28,104,106,457
+  s_eab6b9ca1492c6::t_7bd6eb47524f06 68-71
+  s_eab6b9ca1492c6::t_776f4f7e2f8ba5 168
+  s_eab6b9ca1492c6::t_488431628bba7d 8,247,249-255,264,276,278,289,294-296,302-303,307-310,313-316,350-392
+  s_eab6b9ca1492c6::t_e0633d228dede2 395-404
+  s_eab6b9ca1492c6::t_a57d8c123552eb 15,59
+  s_eab6b9ca1492c6::t_ced2021b39478b 452-453,545
+  s_92fd415a2f0e43::t_c8cafcdcd0a4a4 486-487
+apps/server/src/shell/email-authentication/replacement-mutations.ts
+  s_eab6b9ca1492c6::t_009f0ca4a600cb 12
+  s_eab6b9ca1492c6::t_bbda0d5f7301dc 22,25,28
+  s_eab6b9ca1492c6::t_411683c7f4b50b 9,55
+  s_eab6b9ca1492c6::t_cdc6765ddc822e 1,3-4,7,11,13,15-21,23-24,26-27,29-30
+  s_eab6b9ca1492c6::t_17890630d6d0a4 6
+  s_eab6b9ca1492c6::t_c950596dc29a31 14
+  s_eab6b9ca1492c6::t_ee12e5c13f6cba 8
+  s_eab6b9ca1492c6::t_ce938e71dfc54f 2,5,10,31-45,62-66
+  s_eab6b9ca1492c6::t_c6b480a2702ad9 48-54,56-61
+  s_eab6b9ca1492c6::t_c45f685e16e815 46-47
+apps/server/src/shell/db/migrations/registry.ts
+  s_eab6b9ca1492c6::t_ced99dca9a8c09 34,78
+apps/web/src/transport/client.ts
+  s_eab6b9ca1492c6::t_9d461688afa995 16-18
+apps/server/src/shell/evidence-retention.ts
+  s_eab6b9ca1492c6::t_b0132a3220ada9 11,22,43-44
+  s_eab6b9ca1492c6::t_cb4cb8a4487079 42,45,47
+  s_eab6b9ca1492c6::t_5c561f3397a5da 14-20,25-31
+  s_eab6b9ca1492c6::t_bb2f0e17ddcba2 1,3-5,7,10,21,32-36,40-41,46,48-55
+  s_eab6b9ca1492c6::t_a74563fa2cf46a 2,6,8-9,12-13,23-24,37-39
+apps/server/src/shell/email-authentication/delivery.test.ts
+  s_eab6b9ca1492c6::t_b1cdd73b696947 3,9
+  s_eab6b9ca1492c6::t_0f3ece9221ed38 79
+apps/server/src/shell/email-authentication/delivery-retry.ts
+  s_eab6b9ca1492c6::t_60387e33dbc071 1-97
+apps/web/src/app/routes.ts
+  s_eab6b9ca1492c6::t_08fedea2e02e01 14,79-83,107
+apps/server/src/shell/audit/retention.ts
+  s_eab6b9ca1492c6::t_e2c97c3672da54 10
+  s_eab6b9ca1492c6::t_d0f93bd6fdf6e4 11-15,19
+apps/server/contracts/operation-policy.json
+  s_eab6b9ca1492c6::t_b5383eb5e86112 240-249
+  s_eab6b9ca1492c6::t_ddb8ebe2b131ec 239
+apps/web/src/features/email-replacement/controller.ts
+  s_eab6b9ca1492c6::t_51f461a1b8dd01 1-7,9-13,15-17,21-27,30-78,88-95,98-101
+  s_eab6b9ca1492c6::t_e80cd78e200eaa 8,28-29
+  s_eab6b9ca1492c6::t_efa792a616275b 18-20,82,97
+  s_eab6b9ca1492c6::t_c950596dc29a31 96
+  s_eab6b9ca1492c6::t_a6bd377b9fb4d7 14,86
+  s_eab6b9ca1492c6::t_5bdffb6cf7cfbc 79-81,83-85,87
+apps/web/src/features/signed-in/feature.tsx
+  s_eab6b9ca1492c6::t_ccf25b02a5c94c 56-58
+apps/server/src/shell/web-session/repo.ts
+  s_eab6b9ca1492c6::t_08491c03e2ff04 44-51,62-64
+  s_eab6b9ca1492c6::t_4d56d963fa574d 52-61
+apps/server/src/shell/onboarding/delivery-worker.ts
+  s_eab6b9ca1492c6::t_745db3e65c1e58 30
+  s_eab6b9ca1492c6::t_92148fa2fe2208 1,3,29
+apps/server/src/shell/api.ts
+  s_eab6b9ca1492c6::t_5fcfb2acb3126c 10
+  s_eab6b9ca1492c6::t_759a8482e306ba 26
+apps/server/src/shell/email-authentication/delivery.ts
+  s_eab6b9ca1492c6::t_b1cdd73b696947 52
+  s_eab6b9ca1492c6::t_c950596dc29a31 20
+  s_eab6b9ca1492c6::t_867980ef51d27a 3-7,10-11,21,26-42,50,145
+apps/web/src/application.test.tsx
+  s_eab6b9ca1492c6::t_555e3667302d5b 21-28,68-76,79-80,82,84-86,160-170
+  s_eab6b9ca1492c6::t_0d0e5430e52553 12,87-93,95-101,171
+  s_eab6b9ca1492c6::t_b81ae732990c7c 94
+  s_eab6b9ca1492c6::t_55d889de8e8180 5
+  s_eab6b9ca1492c6::t_19ae0954338c26 20,29
+  s_eab6b9ca1492c6::t_0edc4a1f411e51 10-11,13-15,45-46,50,77-78,81,83,102-103,156-159
+  s_eab6b9ca1492c6::t_22a0a9c6fa6841 172
+apps/server/src/shell/db/advisory-lock.ts
+  s_eab6b9ca1492c6::t_6ceff63842733e 3,35-36
+  s_eab6b9ca1492c6::t_17167c8b37b161 37-38
+apps/server/src/core/email-authentication/rules.test.ts
+  s_eab6b9ca1492c6::t_2da23312c4b94b 4,79-81,96-97,109-110,122
+  s_eab6b9ca1492c6::t_6665d5748637a7 2
+  s_eab6b9ca1492c6::t_b1cdd73b696947 14
+  s_eab6b9ca1492c6::t_089a8401adf3dc 82-95,98-108,111-121
+  s_eab6b9ca1492c6::t_c950596dc29a31 3,5-9
+  s_eab6b9ca1492c6::t_382a240aefd4d1 123-124
+apps/server/src/web-auth-api.ts
+  s_eab6b9ca1492c6::t_840a5a535f6fec 162-170,172-174,176-177,179-182,191-192,194,211-222,224,226-227,229-232,240-245,250
+  s_eab6b9ca1492c6::t_a22c703f48d46a 196-197,199,201-202,204,206-207,209,233-239
+  s_eab6b9ca1492c6::t_7fd4cdf6d770b8 171,175,178,190,195,200,205,210,223,225,228
+  s_eab6b9ca1492c6::t_833ecf2c81aba4 183-189,193,198,203,208
+apps/web/src/features/email-replacement/feature.tsx
+  s_eab6b9ca1492c6::t_edfd33e0e06434 103,109-111,116-118,127-129,149-151
+  s_eab6b9ca1492c6::t_839bb6b44b02c6 152
+  s_eab6b9ca1492c6::t_0e2726a8d8f8e9 1-8,10-15,17-51,53-54,56-57,59-91,95-102,104-108,112-115,119-122,124-126,130-141,168,170-172
+  s_eab6b9ca1492c6::t_8f535db6c605f6 142-148
+  s_eab6b9ca1492c6::t_447a936233b1c2 153-167
+  s_eab6b9ca1492c6::t_d0637b9ef44e3e 55
+  s_eab6b9ca1492c6::t_870ba2004cbabc 9,16
+  s_eab6b9ca1492c6::t_bf181a4483fc08 52,58,92-94,123
+  s_eab6b9ca1492c6::t_3481b8040a9ec0 169
+apps/web/src/features/email-replacement/feature.test.tsx
+  s_eab6b9ca1492c6::t_1107d838ae4713 49-51
+  s_eab6b9ca1492c6::t_c950596dc29a31 2,4-8
+  s_eab6b9ca1492c6::t_5a15c0b42da9f0 38,40-45,47-48,52-54,56-58
+  s_eab6b9ca1492c6::t_f1c3f0e5b30832 10,29,46
+  s_eab6b9ca1492c6::t_3fac5c936723e2 11-12,16-28,31,35-36,59-67
+  s_eab6b9ca1492c6::t_9eb080a76d29f9 3,13-15
+  s_eab6b9ca1492c6::t_7df6891757ea3f 39,55
+  s_eab6b9ca1492c6::t_0857cf414c7e99 1,9,30,32-34
+  s_eab6b9ca1492c6::t_1543b58111bb74 37
+apps/web/ARCHITECTURE.md
+  s_eab6b9ca1492c6::t_8aec924d28344d 41-43
+apps/server/src/shell/db/migrations/0035-verified-email-replacement.ts
+  s_eab6b9ca1492c6::t_2808e45d89ade9 157-158,162
+  s_eab6b9ca1492c6::t_ba5afda2dbbe33 22-24,98-99,120,122-136,165,170,175
+  s_eab6b9ca1492c6::t_e832adda478ad4 52-53,87-96,163,168,173
+  s_eab6b9ca1492c6::t_fe0e621163d964 159
+  s_eab6b9ca1492c6::t_248d7681785bee 101-108,110,112-118
+  s_eab6b9ca1492c6::t_cc0fb995260c61 161
+  s_eab6b9ca1492c6::t_6bdb2ed396e6fc 137-148,160,166,171,176
+  s_eab6b9ca1492c6::t_a6c74b864aa828 1-21,25-51,54-86,97,100,109,111,119,121,149-156,164,167,169,172,174,177-183
+apps/server/src/shell/db/user-tables.ts
+  s_eab6b9ca1492c6::t_51265237d7dbb4 13-14,31
+apps/server/src/shell/consent/repo.test.ts
+  s_eab6b9ca1492c6::t_b1cdd73b696947 11,248
+apps/server/src/shell/_shared/suggested-operations.test.ts
+  s_eab6b9ca1492c6::t_bb0b3ecde41df8 12,26,46-49,51
+  s_eab6b9ca1492c6::t_f6833e9d86678f 45
+apps/server/src/shell/email-authentication/replacement-handlers.ts
+  s_eab6b9ca1492c6::t_eb08f28eaa2acd 1-6,8-18
+  s_eab6b9ca1492c6::t_e29993e59dae06 7
+apps/server/src/shell/http.ts
+  s_eab6b9ca1492c6::t_ee59b2fb5c4da5 32-36,65-71,98
+  s_eab6b9ca1492c6::t_5bf019a0126ebd 229
+  s_eab6b9ca1492c6::t_b945109fd8ba0f 37-40,218-220,227-228
+  s_eab6b9ca1492c6::t_0ee9bc237f030e 9
+apps/server/src/shell/_shared/operation-access.test.ts
+  s_eab6b9ca1492c6::t_7b1914020fc800 8,50-53,103-123,131,142
+  s_eab6b9ca1492c6::t_c950596dc29a31 143-145,160-162
+apps/server/src/shell/email-authentication/replacement-delivery-worker.ts
+  s_eab6b9ca1492c6::t_0f8e283e1dee56 1,7,9,45-66,68-83
+  s_eab6b9ca1492c6::t_c950596dc29a31 14-20,22-44,84
+  s_eab6b9ca1492c6::t_2f8cfdbdda2d6b 67
+  s_eab6b9ca1492c6::t_085e6412cb43db 2-6,8,10-13,21
+apps/server/src/core/email-authentication/model.ts
+  s_eab6b9ca1492c6::t_e7fdb63f12e514 78,80-81
+  s_eab6b9ca1492c6::t_182bcbed978349 188-201
+  s_eab6b9ca1492c6::t_c950596dc29a31 63,79,206
+  s_eab6b9ca1492c6::t_806647bbebb4b8 5,38,54,102-107,118-129,133,135,144,161-187,202-205
+  s_eab6b9ca1492c6::t_b1cdd73b696947 39,42-44,55,58-60,64,90
+  s_eab6b9ca1492c6::t_f7fadcba0c863e 108-117
+  s_eab6b9ca1492c6::t_9d200ccf7247da 207
+apps/server/src/shell/onboarding/retention.test.ts
+  s_eab6b9ca1492c6::t_b1cdd73b696947 5,111
+apps/server/src/shell/onboarding/completion-transition.ts
+  s_eab6b9ca1492c6::t_b1cdd73b696947 5-7,40,53,59
+  s_eab6b9ca1492c6::t_ea5ee6547da532 155-157
+  s_eab6b9ca1492c6::t_fadc8bbb5d695b 3,25
+apps/server/src/shell/email-authentication/replacement.test.ts
+  s_eab6b9ca1492c6::t_1d1d021ff8cb24 338
+  s_eab6b9ca1492c6::t_8cc7676f0f56d7 499-500,835-844,846-883,887-895
+  s_eab6b9ca1492c6::t_ffdb14ef215f0f 896-947,949-961
+  s_eab6b9ca1492c6::t_65997db3b5769d 45-46,265,288,310,355
+  s_eab6b9ca1492c6::t_c5d9916642ee7f 544
+  s_eab6b9ca1492c6::t_20afb2031d3970 175-185
+  s_eab6b9ca1492c6::t_1875af1ae06691 4,845
+  s_eab6b9ca1492c6::t_e556778b00e44a 424-468
+  s_eab6b9ca1492c6::t_a259265c73e6b8 503-530
+  s_eab6b9ca1492c6::t_dc9a3764667c91 612-613,1084-1126
+  s_eab6b9ca1492c6::t_c47d2e12d716a9 207
+  s_eab6b9ca1492c6::t_8a9ad8bc689e70 501,665-732
+  s_eab6b9ca1492c6::t_ee68584c8adacc 37-39,367-381,391-394
+  s_eab6b9ca1492c6::t_555ba1a06d0cc5 18,422-423,567-611
+  s_eab6b9ca1492c6::t_a4efe6b50c91bf 948
+  s_eab6b9ca1492c6::t_d21c1ef5290f39 274,277
+  s_eab6b9ca1492c6::t_49a3c164dd2bca 733-834
+  s_eab6b9ca1492c6::t_7f71a7513fb110 962-1011
+  s_eab6b9ca1492c6::t_852a0c60825ca1 1016,1065-1066
+  s_eab6b9ca1492c6::t_c950596dc29a31 127-131,198-206,208-213,215-217,219-231,233-234,255-264,266-271,273,278-287,289-292,298-309,311-315,322-336,342-343,345-354,356-359
+  s_eab6b9ca1492c6::t_77067b7ebab1a6 19-22,663-664,1062-1064,1067-1081
+  s_eab6b9ca1492c6::t_2fe6e286617c31 143
+  s_eab6b9ca1492c6::t_8939c7edb3270b 403
+  s_eab6b9ca1492c6::t_cfbd5244018956 147-149,155-160,166-171,188-197
+  s_eab6b9ca1492c6::t_46a1a31690ec5c 339
+  s_eab6b9ca1492c6::t_ab718c7ae72204 40-42,44,48-54,59,62-64,66-67,69,74,79-85,122
+  s_eab6b9ca1492c6::t_6d7f29f15873b5 275-276,293-296
+  s_eab6b9ca1492c6::t_fca9cdf4b43cb4 235-254
+  s_eab6b9ca1492c6::t_e481e819e22134 5-8,360-366,382-390,395-402,404-414,418-419,421
+  s_eab6b9ca1492c6::t_ae332623d5dbfa 489-491
+  s_eab6b9ca1492c6::t_6a4ace00132bcc 35,43
+  s_eab6b9ca1492c6::t_764e5b35c828ec 1012-1015,1017-1061
+  s_eab6b9ca1492c6::t_d40b7262dd20f5 150-154,161-165,172-174,186-187,614-639,641-662
+  s_eab6b9ca1492c6::t_a963bea2c65ef2 2,13,16,23-29,86-121
+  s_eab6b9ca1492c6::t_8e77898b65bd41 1,3,9-12,14-15,17,30-34,36,47,55-58,60-61,70-73,75-78,123-126,214,218,232,297,316-321,337,340-341,1127-1130
+  s_eab6b9ca1492c6::t_991d3df009d81d 65,68
+  s_eab6b9ca1492c6::t_ef99fab0971c4c 132,134-137,139-142,144,146
+  s_eab6b9ca1492c6::t_3a1cd9e6b4cbca 138
+  s_eab6b9ca1492c6::t_4cf70ea969565f 640,1082-1083
+  s_eab6b9ca1492c6::t_256658e837b5e0 272,344
+  s_eab6b9ca1492c6::t_e26e3dfb1d4f0d 469-488,492-496,502,531-534,536-539,541-543,545-566
+  s_eab6b9ca1492c6::t_b5deae334373b4 415-417
+  s_eab6b9ca1492c6::t_67b351cfa21118 133,145
+  s_eab6b9ca1492c6::t_b36e594c4322d1 420
+  s_eab6b9ca1492c6::t_132646235c7772 884-886
+  s_92fd415a2f0e43::t_99c7dec90c6caa 497-498,535,540
+apps/server/src/shell/_shared/canonical-mutation-registry.ts
+  s_eab6b9ca1492c6::t_f776832fe7ddba 15,104-107
+  s_eab6b9ca1492c6::t_985c3aa7ade086 108
+apps/server/src/shell/testing/isolation.test.ts
+  s_eab6b9ca1492c6::t_656a8fe683c475 121-123,125-127
+  s_eab6b9ca1492c6::t_066823c5ffacc3 8,124
+apps/server/src/core/email-authentication/rules.ts
+  s_eab6b9ca1492c6::t_7b45dce217835b 43,49-52
+  s_eab6b9ca1492c6::t_c9f1d9483ae901 59-70
+  s_eab6b9ca1492c6::t_4b187d4205cc91 56-58,71-74
+  s_eab6b9ca1492c6::t_2fd78d3ade9d08 1,42,47-48,53-54
+  s_eab6b9ca1492c6::t_0dea0d2c114b54 44-46,55,75
+  s_eab6b9ca1492c6::t_553b6bd5d271a3 2
+  s_eab6b9ca1492c6::t_885b28bafb90f4 8-10
+apps/server/src/shell/_shared/response.ts
+  s_eab6b9ca1492c6::t_2f8cfdbdda2d6b 68-69
+  s_eab6b9ca1492c6::t_db218e9fa46e2c 4,70
+apps/server/src/core/email-authentication/model.test.ts
+  s_eab6b9ca1492c6::t_b1cdd73b696947 5,46,48,57
+  s_eab6b9ca1492c6::t_bee88f74b3eb44 7
+  s_eab6b9ca1492c6::t_c950596dc29a31 100,102
+  s_eab6b9ca1492c6::t_93c42c04b62b60 10-11,19,97-99,101,103-116
+  s_eab6b9ca1492c6::t_80548c37d2af83 117
+apps/server/src/shell/email-authentication/operations.ts
+  s_eab6b9ca1492c6::t_52cd5ffaaff3b2 41
+  s_eab6b9ca1492c6::t_f84a06e1b9404e 30
+  s_eab6b9ca1492c6::t_372218318995a1 10-15
+  s_eab6b9ca1492c6::t_d6b81b78c199c6 7-9
+  s_eab6b9ca1492c6::t_ee70b96e23c5cc 16-18,27-29
+  s_eab6b9ca1492c6::t_e51d4b2beae93f 31-33,38-40
+  s_eab6b9ca1492c6::t_7fe696902a3bc8 42-43
+  s_eab6b9ca1492c6::t_0b470c9d63dc63 1-6,19-26,34-37
+apps/server/contracts/openapi.json
+  s_eab6b9ca1492c6::t_defed4f8d318e1 926,1038,7521,7617,8370,8746,9913,11712,11756,11910,11954,12506,12550,12704,12748,13193,13238,13283,13328,13373,13418,13463,13508,13553,13598,13643,13688,13733,13778,13823,13881,13926,13971,14016,14061,14106,14157,14202,14247,14292,14337,14382,14427,14472,14517,14562,14607,14652,14697,14742,14787,14845,14890,14935,14980,15025,15070,15719,16095
+  s_eab6b9ca1492c6::t_b5383eb5e86112 2372-2389,4304-4315,6837,6839,6850,6853,6866-6867,6871,6873-6874,6913-6914,6918,6920-6921,6928,6931,6944-6945,6949,6951-6952,6959,6962,6975-6976,6980,6982-6983,6990,6993,9911-9912,9914-10014,16571-16572
+  s_eab6b9ca1492c6::t_e26bd24a673fbf 6827-6836,6838,6840-6849,6851-6852,6854-6865,6868-6870,6872,6875-6885,6910-6912,6915-6917,6919,6922-6927,6929-6930,6932-6943,6946-6948,6950,6953-6958,6960-6961,6963-6974,6977-6979,6981,6984-6989,6991-6992,6994-7003,10015-10018,16573
+apps/server/src/shell/email-authentication/repo.ts
+  s_eab6b9ca1492c6::t_a58de806b60ec9 8,10
+  s_eab6b9ca1492c6::t_b1cdd73b696947 48,133,204,321,328,408
+  s_eab6b9ca1492c6::t_c950596dc29a31 333-350
+  s_eab6b9ca1492c6::t_7e552ef2f5fbb5 392
+  s_eab6b9ca1492c6::t_6ea8cc7354853c 30-44
+  s_92fd415a2f0e43::t_bb1236532cceea 45
+apps/server/src/shell/_shared/operation-policy.ts
+  s_eab6b9ca1492c6::t_1f5a4aa9283b0f 29,46,68-69,89-90,156-160,216-219
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.24",
+  "base_commit_sha": "3cee6e37b9dde89a17859a1334e4a3fdbbf8d89f",
+  "prompts": {},
+  "sessions": {
+    "s_92fd415a2f0e43": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a03a9a-286b-7874-abf7-c9b0dde8456b",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_eab6b9ca1492c6": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a03a99-5587-7c47-a82d-a7302a002737",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

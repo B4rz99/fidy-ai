@@ -137,6 +137,50 @@
         },
         "type": "object"
       },
+      "ApprovedPATPairing": {
+        "additionalProperties": false,
+        "properties": {
+          "claimBy": {
+            "$ref": "#/components/schemas/UtcTimestamp"
+          },
+          "pairingId": {
+            "$ref": "#/components/schemas/PATPairingId"
+          }
+        },
+        "required": [
+          "pairingId",
+          "claimBy"
+        ],
+        "type": "object"
+      },
+      "ApprovePATPairingPayload": {
+        "additionalProperties": false,
+        "properties": {
+          "pairingId": {
+            "$ref": "#/components/schemas/PATPairingId"
+          },
+          "patExpiresAt": {
+            "$ref": "#/components/schemas/UtcTimestamp"
+          }
+        },
+        "required": [
+          "pairingId",
+          "patExpiresAt"
+        ],
+        "type": "object"
+      },
+      "ApprovePATPairingPayloadPartial": {
+        "additionalProperties": false,
+        "properties": {
+          "pairingId": {
+            "$ref": "#/components/schemas/PATPairingId"
+          },
+          "patExpiresAt": {
+            "$ref": "#/components/schemas/UtcTimestamp"
+          }
+        },
+        "type": "object"
+      },
       "AtomicBatchCallId": {
         "allOf": [
           {
@@ -4108,6 +4152,170 @@
         ],
         "type": "number"
       },
+      "PATPairingId": {
+        "allOf": [
+          {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+          }
+        ],
+        "type": "string"
+      },
+      "PATPairingReview": {
+        "additionalProperties": false,
+        "properties": {
+          "claimBy": {
+            "$ref": "#/components/schemas/UtcTimestamp"
+          },
+          "lifetimeDays": {
+            "enum": [
+              90
+            ],
+            "type": "number"
+          },
+          "pairingId": {
+            "$ref": "#/components/schemas/PATPairingId"
+          },
+          "patExpiresAt": {
+            "$ref": "#/components/schemas/UtcTimestamp"
+          },
+          "recipientLabel": {
+            "$ref": "#/components/schemas/PATRecipientLabel"
+          },
+          "scopes": {
+            "allOf": [
+              {
+                "uniqueItems": true
+              },
+              {
+                "minItems": 1
+              }
+            ],
+            "items": {
+              "$ref": "#/components/schemas/PATScope"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "pairingId",
+          "recipientLabel",
+          "scopes",
+          "lifetimeDays",
+          "patExpiresAt",
+          "claimBy"
+        ],
+        "type": "object"
+      },
+      "PATPairingReviewRateLimited": {
+        "additionalProperties": false,
+        "properties": {
+          "_tag": {
+            "enum": [
+              "PATPairingReviewRateLimited"
+            ],
+            "type": "string"
+          },
+          "error": {
+            "additionalProperties": false,
+            "properties": {
+              "code": {
+                "enum": [
+                  "rate_limited"
+                ],
+                "type": "string"
+              },
+              "message": {
+                "enum": [
+                  "This PAT pairing is invalid or no longer available. Start a new request."
+                ],
+                "type": "string"
+              },
+              "retryAfterSeconds": {
+                "allOf": [
+                  {
+                    "exclusiveMinimum": 0
+                  }
+                ],
+                "type": "integer"
+              }
+            },
+            "required": [
+              "code",
+              "message",
+              "retryAfterSeconds"
+            ],
+            "type": "object"
+          },
+          "next": {
+            "allOf": [
+              {
+                "description": "Where to go next: up to three canonical operations worth calling after this one, best first. Empty when there is nothing worth suggesting, which is an answer rather than an omission. Each entry has passed the target-input and caller-authorization checkpoint.",
+                "maxItems": 3
+              }
+            ],
+            "items": {
+              "$ref": "#/components/schemas/SuggestedOperation"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "error",
+          "next"
+        ],
+        "type": "object"
+      },
+      "PATPairingReviewRejected": {
+        "additionalProperties": false,
+        "properties": {
+          "_tag": {
+            "enum": [
+              "PATPairingReviewRejected"
+            ],
+            "type": "string"
+          },
+          "error": {
+            "additionalProperties": false,
+            "properties": {
+              "code": {
+                "enum": [
+                  "validation_failed"
+                ],
+                "type": "string"
+              },
+              "message": {
+                "enum": [
+                  "This PAT pairing is invalid or no longer available. Start a new request."
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "message"
+            ],
+            "type": "object"
+          },
+          "next": {
+            "allOf": [
+              {
+                "description": "Where to go next: up to three canonical operations worth calling after this one, best first. Empty when there is nothing worth suggesting, which is an answer rather than an omission. Each entry has passed the target-input and caller-authorization checkpoint.",
+                "maxItems": 3
+              }
+            ],
+            "items": {
+              "$ref": "#/components/schemas/SuggestedOperation"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "error",
+          "next"
+        ],
+        "type": "object"
+      },
       "PATRecipientLabel": {
         "allOf": [
           {
@@ -7131,6 +7339,94 @@
                   "payload": {
                     "additionalProperties": false,
                     "properties": {
+                      "publicCode": {
+                        "type": "string"
+                      }
+                    },
+                    "type": "object"
+                  }
+                },
+                "type": "object"
+              },
+              "hint": {
+                "allOf": [
+                  {
+                    "minLength": 1
+                  },
+                  {
+                    "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
+                  },
+                  {
+                    "maxLength": 140
+                  }
+                ],
+                "type": "string"
+              },
+              "tool": {
+                "description": "The canonical operation to call, spelled exactly as its `operationId` in this spec. Look that id up here to see the complete input and result.",
+                "enum": [
+                  "pats.inspectPATPairing"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "tool",
+              "hint"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "args": {
+                "additionalProperties": false,
+                "description": "Arguments already worked out for that call. Partial by design: merge them into the operation's own input rather than sending them as the whole of it.",
+                "properties": {
+                  "payload": {
+                    "$ref": "#/components/schemas/ApprovePATPairingPayloadPartial"
+                  }
+                },
+                "type": "object"
+              },
+              "hint": {
+                "allOf": [
+                  {
+                    "minLength": 1
+                  },
+                  {
+                    "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
+                  },
+                  {
+                    "maxLength": 140
+                  }
+                ],
+                "type": "string"
+              },
+              "tool": {
+                "description": "The canonical operation to call, spelled exactly as its `operationId` in this spec. Look that id up here to see the complete input and result.",
+                "enum": [
+                  "pats.approvePATPairing"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "tool",
+              "hint"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "args": {
+                "additionalProperties": false,
+                "description": "Arguments already worked out for that call. Partial by design: merge them into the operation's own input rather than sending them as the whole of it.",
+                "properties": {
+                  "payload": {
+                    "additionalProperties": false,
+                    "properties": {
                       "calls": {
                         "allOf": [
                           {
@@ -10017,6 +10313,94 @@
                 "description": "The canonical operation to call, spelled exactly as its `operationId` in this spec. Look that id up here to see the complete input and result.",
                 "enum": [
                   "pats.createManualPAT"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "tool",
+              "hint"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "args": {
+                "additionalProperties": false,
+                "description": "Arguments already worked out for that call. Partial by design: merge them into the operation's own input rather than sending them as the whole of it.",
+                "properties": {
+                  "payload": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "publicCode": {
+                        "type": "string"
+                      }
+                    },
+                    "type": "object"
+                  }
+                },
+                "type": "object"
+              },
+              "hint": {
+                "allOf": [
+                  {
+                    "minLength": 1
+                  },
+                  {
+                    "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
+                  },
+                  {
+                    "maxLength": 140
+                  }
+                ],
+                "type": "string"
+              },
+              "tool": {
+                "description": "The canonical operation to call, spelled exactly as its `operationId` in this spec. Look that id up here to see the complete input and result.",
+                "enum": [
+                  "pats.inspectPATPairing"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "tool",
+              "hint"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "args": {
+                "additionalProperties": false,
+                "description": "Arguments already worked out for that call. Partial by design: merge them into the operation's own input rather than sending them as the whole of it.",
+                "properties": {
+                  "payload": {
+                    "$ref": "#/components/schemas/ApprovePATPairingPayloadPartial"
+                  }
+                },
+                "type": "object"
+              },
+              "hint": {
+                "allOf": [
+                  {
+                    "minLength": 1
+                  },
+                  {
+                    "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
+                  },
+                  {
+                    "maxLength": 140
+                  }
+                ],
+                "type": "string"
+              },
+              "tool": {
+                "description": "The canonical operation to call, spelled exactly as its `operationId` in this spec. Look that id up here to see the complete input and result.",
+                "enum": [
+                  "pats.approvePATPairing"
                 ],
                 "type": "string"
               }
@@ -19446,6 +19830,265 @@
               }
             },
             "description": "ManualPATIssuanceRateLimited"
+          }
+        },
+        "security": [
+          {
+            "agentBearer": []
+          },
+          {
+            "webSession": []
+          }
+        ],
+        "tags": [
+          "pats"
+        ],
+        "x-fidy-access": {
+          "type": "fresh-web-session-only"
+        },
+        "x-fidy-agent-confirmation": "not-required",
+        "x-fidy-operation-kind": "mutation",
+        "x-fidy-required-tier": "free"
+      }
+    },
+    "/pats/pairings/approve": {
+      "post": {
+        "description": "Approve exactly one reviewed PAT pairing. The initiating client claims the bearer directly; this response contains no credential.",
+        "operationId": "pats.approvePATPairing",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApprovePATPairingPayload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/ApprovedPATPairing"
+                    },
+                    "next": {
+                      "allOf": [
+                        {
+                          "description": "Where to go next: up to three canonical operations worth calling after this one, best first. Empty when there is nothing worth suggesting, which is an answer rather than an omission. Each entry has passed the target-input and caller-authorization checkpoint.",
+                          "maxItems": 3
+                        }
+                      ],
+                      "items": {
+                        "$ref": "#/components/schemas/SuggestedOperation"
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "next"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/PATPairingReviewRejected"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ValidationFailed"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "PATPairingReviewRejected | ValidationFailed"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Unauthenticated"
+                }
+              }
+            },
+            "description": "Unauthenticated"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ConsentRequired"
+                    },
+                    {
+                      "$ref": "#/components/schemas/UserActionRequired"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ScopeMissing"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "ConsentRequired | UserActionRequired | ScopeMissing"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManualPATIssuanceRateLimited"
+                }
+              }
+            },
+            "description": "ManualPATIssuanceRateLimited"
+          }
+        },
+        "security": [
+          {
+            "agentBearer": []
+          },
+          {
+            "webSession": []
+          }
+        ],
+        "tags": [
+          "pats"
+        ],
+        "x-fidy-access": {
+          "type": "fresh-web-session-only"
+        },
+        "x-fidy-agent-confirmation": "not-required",
+        "x-fidy-operation-kind": "mutation",
+        "x-fidy-required-tier": "free"
+      }
+    },
+    "/pats/pairings/inspect": {
+      "post": {
+        "description": "Inspect immutable recipient, scopes, fixed lifetime, and deadlines before approving a client-started PAT request.",
+        "operationId": "pats.inspectPATPairing",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "publicCode": {
+                    "$ref": "#/components/schemas/MemoryText"
+                  }
+                },
+                "required": [
+                  "publicCode"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/PATPairingReview"
+                    },
+                    "next": {
+                      "allOf": [
+                        {
+                          "description": "Where to go next: up to three canonical operations worth calling after this one, best first. Empty when there is nothing worth suggesting, which is an answer rather than an omission. Each entry has passed the target-input and caller-authorization checkpoint.",
+                          "maxItems": 3
+                        }
+                      ],
+                      "items": {
+                        "$ref": "#/components/schemas/SuggestedOperation"
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "next"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/PATPairingReviewRejected"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ValidationFailed"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "PATPairingReviewRejected | ValidationFailed"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Unauthenticated"
+                }
+              }
+            },
+            "description": "Unauthenticated"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ConsentRequired"
+                    },
+                    {
+                      "$ref": "#/components/schemas/UserActionRequired"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ScopeMissing"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "ConsentRequired | UserActionRequired | ScopeMissing"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PATPairingReviewRateLimited"
+                }
+              }
+            },
+            "description": "PATPairingReviewRateLimited"
           }
         },
         "security": [

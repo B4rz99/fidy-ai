@@ -12,7 +12,7 @@ import {
 import { BrowserLoginPairingFeature } from "@/features/browser-login/feature";
 import { EmailOnboardingFeature } from "@/features/email-onboarding/feature";
 import { createPublicSiteRoute } from "@/features/public-site/feature";
-import { ManualPATFeature } from "@/features/pats/feature";
+import { PATManagementFeature } from "@/features/pats/feature";
 import { SignedInFeature } from "@/features/signed-in/feature";
 import { SubscriptionOffersFeature } from "@/features/subscription/feature";
 import { TransactionListFeature } from "@/features/transactions/feature";
@@ -70,10 +70,10 @@ const transactionsRoute = createRoute({
   path: "/transactions",
   component: TransactionListFeature,
 });
-const manualPATRoute = createRoute({
+const patManagementRoute = createRoute({
   getParentRoute: () => authenticatedRoute,
   path: "/settings/pats",
-  component: ManualPATFeature,
+  component: PATManagementFeature,
 });
 const subscriptionOffersRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -97,7 +97,7 @@ const routeTree = rootRoute.addChildren([
   emailOnboardingRoute,
   authenticatedRoute.addChildren([
     signedInRoute.addChildren([signedInIndexRoute, dashboardRoute, transactionsRoute]),
-    manualPATRoute,
+    patManagementRoute,
   ]),
 ]);
 

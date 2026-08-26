@@ -26,6 +26,7 @@ import {
   deleteTransaction,
 } from "~/shell/transactions/mutations";
 import { createManualPAT } from "~/shell/tokens/mutations";
+import { approvePATPairing, inspectPATPairing } from "~/shell/tokens/pat-pairing";
 import type {
   CanonicalExecutionRequirements,
   CanonicalImplementationCaller,
@@ -167,8 +168,19 @@ export const canonicalMutationImplementations = {
       caller: suggestedCaller(caller),
       insightEventId: input.params.id,
     }),
+  "pats.inspectPATPairing": (input, { resolved }) =>
+    inspectPATPairing({
+      userId: resolved.subjectUserId,
+      publicCode: input.payload.publicCode,
+    }),
   "pats.createManualPAT": (input, { resolved }) =>
     createManualPAT({
+      userId: resolved.subjectUserId,
+      caller: resolved,
+      payload: input.payload,
+    }),
+  "pats.approvePATPairing": (input, { resolved }) =>
+    approvePATPairing({
       userId: resolved.subjectUserId,
       caller: resolved,
       payload: input.payload,
@@ -216,15 +228,25 @@ type ErasedMutationImplementation = {
   >;
 }["execute"];
 
+/** Exact child Effect construction used by dispatch and outer canonical preparation. */
+export const CanonicalMutationEffects = {
+  make(
+    call: CanonicalMutationCall,
+    caller: CanonicalMutationCaller
+  ): ReturnType<ErasedMutationImplementation> {
+    // The reflected tagged-union decoder establishes the operation/input correlation before this
+    // boundary; the registry's mapped types preserve the same relation for callers.
+    const execute: ErasedMutationImplementation = canonicalMutationImplementations[call.operation];
+    return execute(call.input, caller);
+  },
+} as const;
+
 /** Dispatches a schema-decoded child through its operation-correlated implementation. */
 export const dispatchCanonicalMutation = Effect.fn("dispatchCanonicalMutation")(function* (
   call: CanonicalMutationCall,
   caller: CanonicalMutationCaller
 ) {
-  // The reflected tagged-union decoder establishes the operation/input correlation before this
-  // boundary; the registry's mapped types preserve the same relation for callers.
-  const execute: ErasedMutationImplementation = canonicalMutationImplementations[call.operation];
-  return yield* execute(call.input, caller);
+  return yield* CanonicalMutationEffects.make(call, caller);
 });
 
 /**

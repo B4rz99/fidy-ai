@@ -36,8 +36,11 @@ candidate digest, finding set, and coordinated rollout issue. See
 [Contract compatibility](docs/contract-compatibility.md) for the artifact lifecycle and the one-time
 base bootstrap used by the architecture change that introduced it.
 
-Every public API and agent surface derives from the server's canonical operation definition. A shape
-that differs from a canonical shape is derived from it rather than maintained as a parallel contract.
+Every stable-User domain API and agent surface derives from the server's canonical operation
+definition. A shape that differs from a canonical shape is derived from it rather than maintained as
+a parallel contract. A proof-bearing credential-bootstrap API that has no stable User yet is the
+narrow exception: it is declared once by the server from core schemas, stays unavailable to hosted
+agents, and joins the canonical surface only after proof exchange establishes a stable User.
 
 ## 3. Production topology
 

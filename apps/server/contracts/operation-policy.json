@@ -461,7 +461,29 @@
       }
     },
     {
+      "id": "pats.approvePATPairing",
+      "policy": {
+        "access": {
+          "type": "fresh-web-session-only"
+        },
+        "agentConfirmation": "not-required",
+        "kind": "mutation",
+        "requiredTier": "free"
+      }
+    },
+    {
       "id": "pats.createManualPAT",
+      "policy": {
+        "access": {
+          "type": "fresh-web-session-only"
+        },
+        "agentConfirmation": "not-required",
+        "kind": "mutation",
+        "requiredTier": "free"
+      }
+    },
+    {
+      "id": "pats.inspectPATPairing",
       "policy": {
         "access": {
           "type": "fresh-web-session-only"

@@ -35,6 +35,9 @@ import { OperationsLive } from "~/shell/operations/handlers";
 import { CanonicalTelemetryLive } from "~/shell/observability/canonical-api";
 import { SubscriptionLive } from "~/shell/subscription/handlers";
 import { PATsLive } from "~/shell/tokens/handlers";
+import { PATPairingHandlersLive } from "~/shell/tokens/pairing-handlers";
+import { PATPairingExpiryWorkerLive } from "~/shell/tokens/pairing-expiry";
+import { PATPairingApi } from "~/pat-pairing-api";
 import { TransactionsLive } from "~/shell/transactions/handlers";
 import { WebAuthApi } from "~/web-auth-api";
 import { FidyApi, operationCatalog } from "./api";
@@ -55,6 +58,11 @@ const WebAuthNoStoreLive = HttpRouter.middleware((httpEffect) =>
 const WebAuthLive = HttpApiBuilder.layer(WebAuthApi).pipe(
   Layer.provide(WebAuthNoStoreLive),
   Layer.provide(Layer.merge(BrowserLoginWebAuthHandlersLive, EmailOnboardingWebAuthHandlersLive))
+);
+
+const PATPairingDirectLive = HttpApiBuilder.layer(PATPairingApi).pipe(
+  Layer.provide(WebAuthNoStoreLive),
+  Layer.provide(PATPairingHandlersLive)
 );
 
 /**
@@ -172,6 +180,7 @@ export const HttpLive = HttpRouter.serve(
   Layer.mergeAll(
     ApiLive,
     WebAuthLive,
+    PATPairingDirectLive,
     BrowserLoginEvidenceRetentionLive,
     HttpApiScalar.layer(FidyApi, { path: "/docs" }),
     HealthLive,
@@ -207,7 +216,8 @@ export const AppLive = Layer.mergeAll(
   HostedStatementIngestionWorkerLive,
   HostedOnboardingDeliveryWorkerLive,
   AuditRetentionLive,
-  OnboardingRetentionLive
+  OnboardingRetentionLive,
+  PATPairingExpiryWorkerLive
 ).pipe(
   Layer.provide(OpenAiHostedInferenceLive),
   Layer.provide(RuntimeAuthorityLive),

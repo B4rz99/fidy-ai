@@ -570,7 +570,24 @@ export const hasCurrentOnboardingConsentAt = Effect.fn("Consent.hasCurrentOnboar
     )
 );
 
-/** Returns the latest unrevoked onboarding grant matching the complete current Consent basis. */
+/** Finds the immutable grant record for one User-owned PAT inside its current transaction. */
+export const findPATGrantInScope = Effect.fn("Consent.findPATGrantInScope")(function* (
+  subjectUserId: UserId,
+  patId: PATId
+) {
+  const sql = yield* SqlClient.SqlClient;
+  return yield* SqlSchema.findOneOption({
+    Request: Schema.Struct({ subjectUserId: UserId, patId: PATId }),
+    Result: ConsentRecordFromRow,
+    execute: (request) => sql`
+      SELECT ${sql.literal(consentColumns)} FROM consent_records
+      WHERE subject_user_id = ${request.subjectUserId}
+        AND event_type = 'granted' AND grant_type = 'pat' AND pat_id = ${request.patId}
+      ORDER BY occurred_at, id LIMIT 1
+    `,
+  })({ subjectUserId, patId }).pipe(Effect.orDie);
+});
+
 export const currentOnboardingGrantInScope = Effect.fn("Consent.currentOnboardingGrantInScope")(
   function* (subjectUserId: UserId) {
     const sql = yield* SqlClient.SqlClient;

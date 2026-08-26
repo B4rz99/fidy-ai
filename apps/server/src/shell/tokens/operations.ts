@@ -1,12 +1,13 @@
 import { Schema } from "effect";
 import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi";
-import {
-  CreateManualPATPayload,
-  IssuedManualPAT,
-  PAT,
-  PATLifecycleCheck,
-} from "~/core/tokens/model";
+import { CreateManualPATPayload, IssuedPAT, PAT, PATLifecycleCheck } from "~/core/tokens/model";
 import { UtcTimestamp } from "~/core/_shared/time";
+import { CanonicalOperationId } from "~/core/_shared/canonical-operation";
+import {
+  ApprovePATPairingPayload,
+  ApprovedPATPairing,
+  PATPairingReview,
+} from "~/core/tokens/pairing";
 import type { CanonicalRejectedFailure } from "~/shell/_shared/errors";
 import { freshWebSessionOnly, operationPolicy } from "~/shell/_shared/operation-policy";
 import { NextOperations, OperationResponse } from "~/shell/_shared/response";
@@ -95,7 +96,7 @@ const PATWithExpirationAlias = Schema.Struct({
 }).check(PATLifecycleCheck, fixedExpirationAlias);
 
 export const IssuedManualPATResponse = Schema.Struct({
-  ...IssuedManualPAT.fields,
+  ...IssuedPAT.fields,
   pat: PATWithExpirationAlias,
 }).annotate({ identifier: "IssuedManualPATResponse" });
 
@@ -117,5 +118,86 @@ const createManualPAT = HttpApiEndpoint.post("createManualPAT", "/pats", {
     })
   );
 
-/** Fresh authenticated-web operations that create and disclose PAT authority. */
-export const PATsGroup = HttpApiGroup.make("pats").add(createManualPAT);
+export const patPairingInspectOperation = CanonicalOperationId.make("pats.inspectPATPairing");
+export const patPairingApproveOperation = CanonicalOperationId.make("pats.approvePATPairing");
+export const patPairingGenericMessage =
+  "This PAT pairing is invalid or no longer available. Start a new request." as const;
+
+/** One generic non-enumerating refusal for malformed, unknown, expired, or cross-User requests. */
+export class PATPairingReviewRejected
+  extends Schema.ErrorClass<PATPairingReviewRejected>("PATPairingReviewRejected")(
+    {
+      _tag: Schema.tagDefaultOmit("PATPairingReviewRejected"),
+      error: Schema.Struct({
+        code: Schema.Literal("validation_failed"),
+        message: Schema.Literal(patPairingGenericMessage),
+      }),
+      next: NextOperations,
+    },
+    { httpApiStatus: 400 }
+  )
+  implements CanonicalRejectedFailure
+{
+  readonly canonicalOutcome = "rejected" as const;
+}
+
+/** Bounded review admission failure without revealing whether a submitted code exists. */
+export class PATPairingReviewRateLimited
+  extends Schema.ErrorClass<PATPairingReviewRateLimited>("PATPairingReviewRateLimited")(
+    {
+      _tag: Schema.tagDefaultOmit("PATPairingReviewRateLimited"),
+      error: Schema.Struct({
+        code: Schema.Literal("rate_limited"),
+        message: Schema.Literal(patPairingGenericMessage),
+        retryAfterSeconds: Schema.Int.check(Schema.isGreaterThan(0)),
+      }),
+      next: NextOperations,
+    },
+    { httpApiStatus: 429 }
+  )
+  implements CanonicalRejectedFailure
+{
+  readonly canonicalOutcome = "rejected" as const;
+}
+
+const inspectPATPairing = HttpApiEndpoint.post("inspectPATPairing", "/pats/pairings/inspect", {
+  payload: Schema.Struct({ publicCode: Schema.String }),
+  success: OperationResponse(PATPairingReview),
+  error: [PATPairingReviewRejected, PATPairingReviewRateLimited],
+})
+  .annotate(
+    OpenApi.Description,
+    "Inspect immutable recipient, scopes, fixed lifetime, and deadlines before approving a client-started PAT request."
+  )
+  .annotateMerge(
+    operationPolicy({
+      access: freshWebSessionOnly,
+      requiredTier: "free",
+      agentConfirmation: "not-required",
+      kind: "mutation",
+    })
+  );
+
+const approvePATPairing = HttpApiEndpoint.post("approvePATPairing", "/pats/pairings/approve", {
+  payload: ApprovePATPairingPayload,
+  success: OperationResponse(ApprovedPATPairing),
+  error: [PATPairingReviewRejected, ManualPATIssuanceRateLimited],
+})
+  .annotate(
+    OpenApi.Description,
+    "Approve exactly one reviewed PAT pairing. The initiating client claims the bearer directly; this response contains no credential."
+  )
+  .annotateMerge(
+    operationPolicy({
+      access: freshWebSessionOnly,
+      requiredTier: "free",
+      agentConfirmation: "not-required",
+      kind: "mutation",
+    })
+  );
+
+/** Fresh authenticated-web operations for manual and direct-client PAT authority. */
+export const PATsGroup = HttpApiGroup.make("pats")
+  .add(createManualPAT)
+  .add(inspectPATPairing)
+  .add(approvePATPairing);

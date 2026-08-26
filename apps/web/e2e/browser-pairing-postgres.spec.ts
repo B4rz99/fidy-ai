@@ -1,4 +1,8 @@
-import { StartedBrowserLoginPairing } from "@fidy/server/client";
+import {
+  ClaimedPATPairing,
+  StartedBrowserLoginPairing,
+  StartedPATPairing,
+} from "@fidy/server/client";
 import { expect, test } from "@playwright/test";
 import type { APIRequestContext, Page } from "@playwright/test";
 import { Option, Redacted, Schema, Struct } from "effect";
@@ -6,12 +10,14 @@ import { Option, Redacted, Schema, Struct } from "effect";
 const apiOrigin = "https://127.0.0.1:4174";
 const controlOrigin = "https://127.0.0.1:4175";
 const opaqueProofEncodedLength = 43;
+const millisecondsPerSecond = 1_000;
 const successStatus = 200;
 const createdStatus = 201;
 const noContentStatus = 204;
 const invalidStatus = 400;
 const unauthorizedStatus = 401;
 const notFoundStatus = 404;
+const anonymousSourceHeaders = { "x-forwarded-for": "198.51.100.249" };
 const invalidPairingBody = {
   error: {
     code: "pairing_invalid",
@@ -247,6 +253,53 @@ test("shows real PostgreSQL pairing expiry without creating a WebSession", async
 
   await expect(page.getByText(invalidPairingBody.error.message, { exact: true })).toBeVisible();
   expect(await observeSession(request)).toEqual({ sessionCount: 0, revoked: false });
+});
+
+test("reviews in the fresh browser and delivers a paired PAT only to the initiating client", async ({
+  page,
+  request,
+}) => {
+  await resetAcceptanceState(request);
+  await completePairing(page, request);
+  const start = await request.post(`${apiOrigin}/pat-pairings`, {
+    headers: anonymousSourceHeaders,
+    data: { recipientLabel: "Cliente CLI", scopes: ["read", "dashboard"] },
+  });
+  expect(start.status()).toBe(successStatus);
+  expect(start.headers()["cache-control"]).toContain("no-store");
+  const started = Schema.decodeUnknownSync(StartedPATPairing)(await start.json());
+  const privateDeviceCode = Redacted.value(started.privateDeviceCode);
+
+  await page.goto("/settings/pats");
+  await page.getByLabel("Código de vinculación").fill(started.publicCode);
+  await page.getByRole("button", { name: "Revisar solicitud" }).click();
+  await expect(page.getByText("Cliente CLI", { exact: true })).toBeVisible();
+  await expect(page.getByText("Lectura", { exact: true })).toBeVisible();
+  await expect(page.getByText("Tablero", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Aprobar vinculación" }).click();
+  await expect(page.getByText("Vinculación aprobada", { exact: true })).toBeVisible();
+
+  await page.waitForTimeout(started.pollingIntervalSeconds * millisecondsPerSecond);
+  const claim = await request.post(`${apiOrigin}/pat-pairings/claim`, {
+    headers: anonymousSourceHeaders,
+    data: { pairingId: started.pairingId, privateDeviceCode },
+  });
+  expect(claim.status()).toBe(successStatus);
+  expect(claim.headers()["cache-control"]).toContain("no-store");
+  const issued = Schema.decodeUnknownSync(ClaimedPATPairing)(await claim.json());
+  const browserEvidence = [
+    await page.content(),
+    page.url(),
+    await page.evaluate(browserStorageValues),
+  ];
+  expect(browserEvidence.join("\n")).not.toContain(privateDeviceCode);
+  expect(browserEvidence.join("\n")).not.toContain(issued.bearer);
+
+  const replay = await request.post(`${apiOrigin}/pat-pairings/claim`, {
+    headers: anonymousSourceHeaders,
+    data: { pairingId: started.pairingId, privateDeviceCode },
+  });
+  expect(replay.status()).toBe(invalidStatus);
 });
 
 test("creates, copies, and clears a manual PAT from a freshly paired browser", async ({

@@ -19,6 +19,10 @@ import {
   toAccessCaller,
 } from "./authz";
 import { findCanonicalOperationImplementation } from "./canonical-operation-registry";
+import {
+  CanonicalPreTransactionStates,
+  CanonicalPreTransactions,
+} from "./canonical-pre-transaction";
 import { canonicalTransactionIsolation, retryCanonicalSnapshot } from "./canonical-snapshot";
 import { isCanonicalRejectedFailure } from "./errors";
 import { getBoundOperationCatalog } from "./operation-catalog";
@@ -86,7 +90,7 @@ const isDeclaredRejection = (cause: Cause.Cause<unknown>): boolean =>
 const isRolledBackRejection = (cause: Cause.Cause<unknown>): boolean =>
   Option.isSome(findCanonicalCallRejected(cause)) || isDeclaredRejection(cause);
 
-const recordRolledBackAttempt = (input: {
+const recordRejectedOrFailedAttempt = (input: {
   readonly caller: CanonicalCaller;
   readonly operation: CanonicalOperationId;
   readonly occurredAt: DateTime.Utc;
@@ -98,6 +102,21 @@ const recordRolledBackAttempt = (input: {
     occurredAt: input.occurredAt,
     outcome: isRolledBackRejection(input.cause) ? "rejected" : "failed",
   });
+
+const runPreTransactionCheckpoint = (input: {
+  readonly caller: CanonicalCaller;
+  readonly operation: CanonicalOperationId;
+  readonly occurredAt: DateTime.Utc;
+  readonly effect: object;
+}): Effect.Effect<ReadonlyArray<Schema.Json>, never, SqlClient.SqlClient> =>
+  Effect.gen(function* () {
+    const checkpoint = CanonicalPreTransactions.find(input.effect, input.caller, input.operation);
+    if (Option.isNone(checkpoint)) return [];
+    const exit = yield* Effect.exit(checkpoint.value);
+    if (Exit.isSuccess(exit)) return exit.value;
+    yield* recordRejectedOrFailedAttempt({ ...input, cause: exit.cause });
+    return yield* exit;
+  }).pipe(Effect.withSpan("runCanonicalPreTransactionCheckpoint"));
 
 /**
  * Shared transaction and audit checkpoint used after either PAT or hosted authorization resolves
@@ -123,12 +142,22 @@ export const executeCanonicalEffect = Effect.fn("executeCanonicalEffect")(functi
     return yield* new CanonicalCallRejected({ reason: access.reason });
   }
 
+  const preparedStates = yield* runPreTransactionCheckpoint({
+    caller,
+    operation,
+    occurredAt,
+    effect,
+  });
+  const preTransactionStates = yield* Ref.make(preparedStates);
   const childEvidence = yield* Ref.make<ReadonlyArray<ChildAuditEvidence>>([]);
   const childAudit = ChildOperationAudit.of({
     record: (evidence) => Ref.update(childEvidence, (entries) => [...entries, evidence]),
   });
   const execution = provideCaller(
-    executionCheckpoint.pipe(Effect.andThen(effect)),
+    executionCheckpoint.pipe(
+      Effect.andThen(effect),
+      Effect.provideService(CanonicalPreTransactionStates, Option.some(preTransactionStates))
+    ),
     caller,
     childAudit
   );
@@ -144,7 +173,7 @@ export const executeCanonicalEffect = Effect.fn("executeCanonicalEffect")(functi
   );
 
   if (Exit.isFailure(exit)) {
-    yield* recordRolledBackAttempt({ caller, operation, occurredAt, cause: exit.cause });
+    yield* recordRejectedOrFailedAttempt({ caller, operation, occurredAt, cause: exit.cause });
     yield* Ref.update(childEvidence, demoteSucceededChildren);
   }
   for (const evidence of yield* Ref.get(childEvidence)) {

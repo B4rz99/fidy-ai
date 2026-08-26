@@ -3,6 +3,8 @@ import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import { UserId } from "~/core/identity/reference";
 import { withUserTransaction } from "~/shell/db/user-transaction";
 import { ManualPATRequestId, PAT, ResolvedToken } from "~/core/tokens/model";
+import { PATId } from "~/core/tokens/reference";
+import { PATPairingId } from "~/core/tokens/pairing";
 
 /** A lowercase SHA-256 digest used only at the token storage boundary. */
 export const TokenHash = Schema.String.check(Schema.isPattern(/^[0-9a-f]{64}$/)).pipe(
@@ -28,6 +30,17 @@ const ManualPATInsert = Schema.Struct({
   subjectUserId: UserId,
   ...SeedPATGrant.fields,
   requestId: ManualPATRequestId,
+});
+const PairedPATInsert = Schema.Struct({
+  subjectUserId: UserId,
+  pairingId: PATPairingId,
+  id: PATId,
+  shortId: PAT.fields.shortId,
+  recipientLabel: PAT.fields.recipientLabel,
+  scopes: PAT.fields.scopes,
+  lifetimeDays: PAT.fields.lifetimeDays,
+  expiresAt: Schema.DateTimeUtcFromDate,
+  createdAt: Schema.DateTimeUtcFromDate,
 });
 
 const IssuanceAdmission = Schema.Struct({
@@ -162,6 +175,53 @@ export const insertPATInScope = Effect.fn("insertPATInScope")(function* (
       )
     `,
   })({ subjectUserId, ...grant }).pipe(Effect.orDie);
+});
+
+/** Inserts the one stable awaiting-claim PAT with no bearer digest. */
+export const insertAwaitingClaimPATInScope = Effect.fn("insertAwaitingClaimPATInScope")(function* (
+  subjectUserId: UserId,
+  grant: Omit<typeof PairedPATInsert.Type, "subjectUserId">
+) {
+  const sql = yield* SqlClient.SqlClient;
+  yield* SqlSchema.void({
+    Request: PairedPATInsert,
+    execute: (row) => sql`
+        INSERT INTO tokens (
+          id, user_id, short_id, recipient_label, token_hash, scopes, lifetime_days,
+          last_used_at, expires_at, revoked_at, created_at, pat_pairing_id
+        ) VALUES (
+          ${row.id}, ${row.subjectUserId}, ${row.shortId}, ${row.recipientLabel}, NULL,
+          ${row.scopes}, ${row.lifetimeDays}, NULL, ${row.expiresAt}, NULL,
+          ${row.createdAt}, ${row.pairingId}
+        )
+      `,
+  })({ subjectUserId, ...grant }).pipe(Effect.orDie);
+});
+
+/** Revokes one paired PAT inside the caller-owned User transaction. */
+export const revokePairedPATInScope = Effect.fn("revokePairedPATInScope")(function* (
+  subjectUserId: UserId,
+  patId: PATId,
+  revokedAt: DateTime.Utc
+) {
+  const sql = yield* SqlClient.SqlClient;
+  const row = yield* SqlSchema.findOne({
+    Request: Schema.Struct({
+      subjectUserId: UserId,
+      patId: PATId,
+      revokedAt: Schema.DateTimeUtcFromDate,
+    }),
+    Result: Schema.Struct({ changed: Schema.Boolean }),
+    execute: (request) => sql`
+      WITH changed AS (
+        UPDATE tokens SET revoked_at = ${request.revokedAt}
+        WHERE id = ${request.patId} AND user_id = ${request.subjectUserId}
+          AND revoked_at IS NULL AND token_hash IS NULL
+        RETURNING 1
+      ) SELECT EXISTS (SELECT 1 FROM changed) AS changed
+    `,
+  })({ subjectUserId, patId, revokedAt }).pipe(Effect.orDie);
+  return row.changed;
 });
 
 /**

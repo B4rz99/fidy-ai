@@ -143,7 +143,11 @@ it("carries bearer grant instants over the wire as date-time strings", () => {
   });
 
   expect(encoded.createdAt).toBe("2026-07-28T12:34:56.000Z");
-  expect(Result.isSuccess(Schema.decodeUnknownResult(TokenGrant)(encoded))).toBe(true);
+  expect(encoded.lastUsedAt).toBeNull();
+  expect(encoded.revokedAt).toBeNull();
+  expect(
+    Result.isSuccess(Schema.decodeUnknownResult(TokenGrant)(JSON.parse(JSON.stringify(encoded))))
+  ).toBe(true);
 });
 
 it("keeps fixed PAT expiration independent from successful use", () => {

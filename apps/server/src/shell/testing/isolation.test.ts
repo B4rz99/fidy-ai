@@ -20,6 +20,7 @@ import {
 } from "~/core/dashboard/model";
 import { type Transaction } from "~/core/transactions/model";
 import { ManualPATRequestId, PATRecipientLabel, TokenBearer } from "~/core/tokens/model";
+import { PATPairingId } from "~/core/tokens/pairing";
 import type { OperationId } from "~/shell/api";
 import { truncateInsights, weeklySummaryInput } from "~/shell/insights/fixtures";
 import { truncateStatementIngestion } from "~/shell/ingestion/fixtures";
@@ -113,6 +114,21 @@ const probes: Record<OperationId, IsolationProbe> = {
             scopes: ["read"],
             lifetimeDays: 90,
           },
+        },
+      })
+    ).pipe(Effect.asVoid),
+
+  "pats.inspectPATPairing": (attempt) =>
+    Effect.result(
+      attempt.strangerClient.pats.inspectPATPairing({ payload: { publicCode: "BCDF-GHJK" } })
+    ).pipe(Effect.asVoid),
+
+  "pats.approvePATPairing": (attempt) =>
+    Effect.result(
+      attempt.strangerClient.pats.approvePATPairing({
+        payload: {
+          pairingId: PATPairingId.make("f1d1a000-0000-4000-8000-000000000249"),
+          patExpiresAt: DateTime.makeUnsafe("2027-01-01T00:00:00.000Z"),
         },
       })
     ).pipe(Effect.asVoid),

@@ -1,5 +1,5 @@
 import {
-  type IssuedManualPAT,
+  type IssuedPAT,
   type ManualPATGrantInput,
   ManualPATRequestId,
   type ManualPATRequestId as ManualPATRequestIdType,
@@ -33,7 +33,6 @@ import { Checkbox } from "@/ui/components/checkbox";
 import { Input } from "@/ui/components/input";
 import { ToggleGroup, ToggleGroupItem } from "@/ui/components/toggle-group";
 
-type IssuedPAT = IssuedManualPAT;
 type PATScopeValue = PATScope;
 type ReviewedManualPATGrant = ManualPATGrantInput & Readonly<{ reviewExpiresAt: DateTime.Utc }>;
 

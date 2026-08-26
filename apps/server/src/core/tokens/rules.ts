@@ -32,16 +32,33 @@ export const patScopeCopy: Record<
 
 const hoursPerDay = 24;
 
-/** Builds the exact Spanish grant text reviewed for one normalized grant and fixed expiration. */
-export const buildPATDisclosure = ({
-  grant: { recipientLabel, scopes, lifetimeDays },
-  expiresAt,
-}: Readonly<{ grant: ManualPATGrantInput; expiresAt: DateTime.Utc }>): string =>
-  `Nombre: “${recipientLabel}”.
+const disclosureFor = (
+  { recipientLabel, scopes, lifetimeDays }: ManualPATGrantInput,
+  expiresAt: DateTime.Utc,
+  delivery: string
+): string => `Nombre: “${recipientLabel}”.
 
 Alcances autorizados:
 ${scopes.map((scope) => `- ${patScopeCopy[scope].label}: ${patScopeCopy[scope].description}`).join("\n")}
 
 Duración fija: ${lifetimeDays} días (${lifetimeDays * hoursPerDay} horas). Vencimiento exacto: ${DateTime.formatIso(expiresAt)}. El vencimiento no se extiende con el uso. Para obtener una fecha posterior debes crear un PAT de reemplazo. Puedes revocarlo antes desde la administración de PATs.
 
-Fidy mostrará el PAT completo una sola vez en esta respuesta. Después conservará únicamente su resumen criptográfico; no podrá recuperar el valor original.`;
+${delivery} Después conservará únicamente su resumen criptográfico; no podrá recuperar el valor original.`;
+
+/** Builds the exact Spanish grant text reviewed for one normalized grant and fixed expiration. */
+export const buildPATDisclosure = ({
+  grant,
+  expiresAt,
+}: Readonly<{ grant: ManualPATGrantInput; expiresAt: DateTime.Utc }>): string =>
+  disclosureFor(grant, expiresAt, "Fidy mostrará el PAT completo una sola vez en esta respuesta.");
+
+/** Builds the distinct disclosure for direct delivery to the initiating User-owned client. */
+export const buildPairedPATDisclosure = ({
+  grant,
+  expiresAt,
+}: Readonly<{ grant: ManualPATGrantInput; expiresAt: DateTime.Utc }>): string =>
+  disclosureFor(
+    grant,
+    expiresAt,
+    "Fidy entregará el PAT completo una sola vez directamente al cliente que inició esta vinculación; este navegador no lo recibirá."
+  );

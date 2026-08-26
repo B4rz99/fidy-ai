@@ -13,7 +13,7 @@ export {
   countPATLabelCharacters,
   CreateManualPATPayload,
   defaultPATLifetimeDays,
-  IssuedManualPAT,
+  IssuedPAT,
   ManualPATRequestId,
   ManualPATGrantInput,
   PATLifetimeDays,
@@ -27,6 +27,19 @@ export {
   recipientLabelLimit,
 } from "~/core/tokens/model";
 export { PATId } from "~/core/tokens/reference";
+export {
+  ApprovedPATPairing,
+  ApprovePATPairingPayload,
+  ClaimedPATPairing,
+  PATPairingDeviceCode,
+  PATPairingId,
+  PATPairingPublicCode,
+  PATPairingPublicCodeInput,
+  PATPairingReview,
+  PendingPATPairingClaim,
+  StartedPATPairing,
+  StartPATPairingPayload,
+} from "~/core/tokens/pairing";
 export { buildPATDisclosure, patScopeCopy } from "~/core/tokens/rules";
 export type { CanonicalInput } from "~/shell/_shared/canonical-input";
 export type { CanonicalSuccess } from "~/shell/_shared/canonical-success";

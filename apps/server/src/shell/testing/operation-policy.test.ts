@@ -104,6 +104,8 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         const expected = {
           "browserLogin.approvePairing": "mutation",
           "pats.createManualPAT": "mutation",
+          "pats.inspectPATPairing": "mutation",
+          "pats.approvePATPairing": "mutation",
           "identity.getCurrentUser": "query",
           "identity.updateUserPreferences": "mutation",
           "categories.listCategories": "query",
@@ -182,6 +184,8 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         const expected = {
           "browserLogin.approvePairing": "required",
           "pats.createManualPAT": "not-required",
+          "pats.inspectPATPairing": "not-required",
+          "pats.approvePATPairing": "not-required",
           "identity.getCurrentUser": "not-required",
           "identity.updateUserPreferences": "not-required",
           "categories.listCategories": "not-required",

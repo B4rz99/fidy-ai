@@ -215,8 +215,8 @@ export const PATLifecycleCheck = Schema.makeFilter<
 
 const SharedTokenFields = {
   shortId: TokenShortId,
-  lastUsedAt: Schema.Option(UtcTimestamp),
-  revokedAt: Schema.Option(UtcTimestamp),
+  lastUsedAt: Schema.OptionFromNullOr(UtcTimestamp),
+  revokedAt: Schema.OptionFromNullOr(UtcTimestamp),
   createdAt: UtcTimestamp,
 };
 
@@ -236,12 +236,12 @@ export const PAT = Schema.TaggedStruct("PAT", {
   .annotate({ identifier: "PAT" });
 export type PAT = typeof PAT.Type;
 
-/** One successful manual issuance; the bearer cannot be recovered after this response. */
-export const IssuedManualPAT = Schema.Struct({
+/** One successful issuance; the bearer cannot be recovered after this immediate response. */
+export const IssuedPAT = Schema.Struct({
   pat: PAT,
   bearer: TokenBearer,
-}).annotate({ identifier: "IssuedManualPAT" });
-export type IssuedManualPAT = typeof IssuedManualPAT.Type;
+}).annotate({ identifier: "IssuedPAT" });
+export type IssuedPAT = typeof IssuedPAT.Type;
 
 /** Every persisted bearer grant accepted by canonical TokenAuthorization. */
 export const TokenGrant = PAT;

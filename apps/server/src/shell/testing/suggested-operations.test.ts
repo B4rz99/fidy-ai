@@ -2,6 +2,7 @@ import { expect, layer } from "@effect/vitest";
 import { BigDecimal, Context, DateTime, Effect, Layer, Option, Result, Schema } from "effect";
 import { type SqlClient } from "effect/unstable/sql";
 import { PATId } from "~/core/tokens/reference";
+import { PATPairingId } from "~/core/tokens/pairing";
 import { IanaTimeZone } from "~/core/_shared/context";
 import { Money } from "~/core/_shared/money";
 import { BudgetId } from "~/core/budgets/reference";
@@ -82,6 +83,29 @@ const probes: Record<OperationId, SuggestedOperationProbe> = {
               scopes: ["read"],
               lifetimeDays: 90,
             },
+          },
+        })
+      );
+      if (Result.isSuccess(result)) return yield* Effect.die("expected bearer refusal");
+      return [yield* Schema.decodeUnknownEffect(ScopeMissing)(result.failure)];
+    }),
+
+  "pats.inspectPATPairing": (client) =>
+    Effect.gen(function* () {
+      const result = yield* Effect.result(
+        client.pats.inspectPATPairing({ payload: { publicCode: "BCDF-GHJK" } })
+      );
+      if (Result.isSuccess(result)) return yield* Effect.die("expected bearer refusal");
+      return [yield* Schema.decodeUnknownEffect(ScopeMissing)(result.failure)];
+    }),
+
+  "pats.approvePATPairing": (client) =>
+    Effect.gen(function* () {
+      const result = yield* Effect.result(
+        client.pats.approvePATPairing({
+          payload: {
+            pairingId: PATPairingId.make("f1d1a000-0000-4000-8000-000000000249"),
+            patExpiresAt: DateTime.makeUnsafe("2027-01-01T00:00:00.000Z"),
           },
         })
       );

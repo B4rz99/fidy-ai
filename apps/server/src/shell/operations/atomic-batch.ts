@@ -1,4 +1,4 @@
-import { DateTime, Effect, Schema } from "effect";
+import { DateTime, Effect, Option, Schema } from "effect";
 import { CanonicalOperationId } from "~/core/_shared/canonical-operation";
 import {
   type CanonicalCaller,
@@ -9,14 +9,21 @@ import {
 import { type OperationPolicyValue, decideOperationAccess } from "~/shell/_shared/operation-policy";
 import {
   type CanonicalMutationCall,
+  CanonicalMutationEffects,
   type CanonicalMutationFailure,
   assertCanonicalMutationRegistry,
   dispatchCanonicalMutation,
 } from "~/shell/_shared/canonical-mutation-registry";
+import type { CanonicalImplementationRequirements } from "~/shell/_shared/canonical-implementation";
+import {
+  CanonicalPreTransactions,
+  withCanonicalPreTransaction,
+} from "~/shell/_shared/canonical-pre-transaction";
 import { operationCatalog } from "~/shell/api";
 import {
   type AtomicBatchCall,
   type AtomicBatchInput,
+  type AtomicBatchOutput,
   AtomicBatchRejected,
   type AtomicBatchResult,
   decodeAtomicBatchResult,
@@ -176,21 +183,56 @@ export type AtomicBatchExecutionInput = Readonly<{
   caller: CanonicalCaller;
 }>;
 
+const prepareAtomicBatch = Effect.fn("prepareAtomicBatch")(function* ({
+  payload,
+  caller,
+}: AtomicBatchExecutionInput) {
+  const preparedStates: Array<Schema.Json> = [];
+  for (const call of payload.calls) {
+    const catalogOperation = operationById.get(CanonicalOperationId.make(call.operation));
+    if (
+      catalogOperation?.policy.kind !== "mutation" ||
+      !hasChildAccess(catalogOperation.policy, caller) ||
+      catalogOperation.policy.requiredTier !== "free"
+    ) {
+      continue;
+    }
+    const mutationCall = yield* decodeCanonicalMutationCall(call).pipe(Effect.orDie);
+    const preparation = CanonicalPreTransactions.find(
+      CanonicalMutationEffects.make(mutationCall, { resolved: caller }),
+      caller,
+      catalogOperation.id
+    );
+    if (Option.isSome(preparation)) preparedStates.push(...(yield* preparation.value));
+  }
+  return preparedStates;
+});
+
 /**
  * Executes child canonical mutations in order without owning their data or transaction. This named
  * shell coordination module is deliberately neither queries.ts nor mutations.ts: HTTP and hosted
  * adapters supply the resolved caller, while the canonical executor owns commit or rollback.
  */
-export const executeAtomicBatch = Effect.fn("executeAtomicBatch")(function* ({
-  payload,
-  caller,
-}: AtomicBatchExecutionInput) {
-  const childAudit = yield* ChildOperationAudit;
-  const results: Array<AtomicBatchResult> = [];
-  for (const [index, call] of payload.calls.entries()) {
-    results.push(yield* executeChild({ call, childAudit, index, caller }));
-  }
-  const [first, ...rest] = results;
-  if (first === undefined) return yield* Effect.die("Non-empty batch produced no results");
-  return { data: { results: [first, ...rest] as const }, next: [] };
-});
+export const executeAtomicBatch = (
+  input: AtomicBatchExecutionInput
+): Effect.Effect<
+  Readonly<{ data: AtomicBatchOutput; next: readonly [] }>,
+  AtomicBatchRejected,
+  ChildOperationAudit | CanonicalImplementationRequirements
+> => {
+  const execute = Effect.gen(function* () {
+    const childAudit = yield* ChildOperationAudit;
+    const results: Array<AtomicBatchResult> = [];
+    for (const [index, call] of input.payload.calls.entries()) {
+      results.push(yield* executeChild({ call, childAudit, index, caller: input.caller }));
+    }
+    const [first, ...rest] = results;
+    if (first === undefined) return yield* Effect.die("Non-empty batch produced no results");
+    const next: readonly [] = [];
+    return { data: { results: [first, ...rest] as const }, next };
+  });
+  return withCanonicalPreTransaction(
+    execute.pipe(Effect.withSpan("executeAtomicBatch")),
+    prepareAtomicBatch(input)
+  );
+};

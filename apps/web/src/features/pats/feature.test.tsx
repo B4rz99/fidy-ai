@@ -2,7 +2,7 @@ import { act, cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { DateTime, Duration, Option } from "effect";
 import { afterEach, expect, it, vi } from "vitest";
 import {
-  type IssuedManualPAT,
+  type IssuedPAT,
   PATId,
   PATRecipientLabel,
   PATScopes,
@@ -17,7 +17,7 @@ import { type IssueManualPATCommand, ManualPATView } from "./view";
 
 const bearer = TokenBearer.make("fin_created1_abcdefghijklmnopqrstuvwxyz0123456789ABCD");
 const createdAt = DateTime.makeUnsafe("2026-08-10T12:00:00Z");
-const issued: IssuedManualPAT = {
+const issued: IssuedPAT = {
   pat: {
     _tag: "PAT" as const,
     id: PATId.make("f1d1a000-0000-4000-8000-000000000248"),

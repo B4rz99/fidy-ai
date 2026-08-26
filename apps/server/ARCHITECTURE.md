@@ -104,8 +104,14 @@ module rather than being forced into `queries.ts` or `mutations.ts`. Atomic batc
 lives in `shell/operations/atomic-batch.ts`: HTTP handlers and canonical registries are peer adapters
 that delegate to it and never import one another.
 
-The operation references the core schema. All public API and agent surfaces derive from the
-canonical operation definition; parallel operation maps are not maintained.
+The operation references the core schema. All stable-User domain API and agent surfaces derive from
+the canonical operation definition; parallel operation maps are not maintained. A credential
+bootstrap with no stable User may expose one separate proof-bearing `HttpApi`, as browser login and
+PATPairing do. Such an API reuses core schemas, has no hosted-agent binding, persists only proof
+digests, and ends at the transition into stable-User canonical authority. Anonymous admission keys
+use the socket peer directly unless it is a private or loopback trusted ingress proxy. A trusted
+proxy request must carry a valid `X-Forwarded-For` chain; the server uses only its rightmost,
+proxy-observed address and rejects missing or malformed source identity.
 
 The package has one browser-safe `@fidy/server/client` export backed by `src/client.ts`. It
 re-exports the assembled `FidyApi`, the client-side authorization layer factory required by the

@@ -1,8 +1,8 @@
 import { cleanup, render, screen, within } from "@testing-library/react";
 import { BigDecimal, Cause, DateTime, Option, Schema } from "effect";
 import { AsyncResult } from "effect/unstable/reactivity";
-import type { JSX, ReactNode } from "react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { type JSX, type ReactNode, createContext, useContext } from "react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { DashboardLayout, DashboardView, DashboardWidgetView } from "./presentation";
 import { DashboardRouteContent } from "./view";
 
@@ -15,7 +15,7 @@ type DashboardCategory = Extract<
   { readonly kind: "category" }
 >["category"];
 
-const chartMocks = vi.hoisted(() => ({ data: new Array<Record<string, string>>() }));
+const ChartDataContext = createContext<ReadonlyArray<Record<string, string>>>([]);
 
 vi.mock("recharts", () => {
   const Passthrough = ({ children }: Readonly<{ children: ReactNode }>): JSX.Element => (
@@ -31,7 +31,10 @@ vi.mock("recharts", () => {
       item: Readonly<{ payload: Record<string, string> }>
     ) => ReactNode;
   }>): JSX.Element => {
-    const payload = chartMocks.data[0] ?? { inflowExact: "0", outflowExact: "0" };
+    const payload = useContext(ChartDataContext)[0] ?? {
+      inflowExact: "0",
+      outflowExact: "0",
+    };
     return (
       <div>
         {formatter("1", "inflow", { payload })}
@@ -45,10 +48,11 @@ vi.mock("recharts", () => {
   }: Readonly<{
     children: ReactNode;
     data: ReadonlyArray<Record<string, string>>;
-  }>): JSX.Element => {
-    chartMocks.data = [...data];
-    return <div data-chart-values={JSON.stringify(data)}>{children}</div>;
-  };
+  }>): JSX.Element => (
+    <ChartDataContext.Provider value={data}>
+      <div data-chart-values={JSON.stringify(data)}>{children}</div>
+    </ChartDataContext.Provider>
+  );
   return {
     Bar: EmptyChartPart,
     BarChart,
@@ -317,9 +321,6 @@ const renderDashboardView = async (data: DashboardView): Promise<void> => {
   await screen.findByLabelText("Diseño responsivo del tablero");
 };
 
-beforeEach(() => {
-  chartMocks.data = [];
-});
 afterEach(cleanup);
 
 describe("read-only Dashboard resources", () => {

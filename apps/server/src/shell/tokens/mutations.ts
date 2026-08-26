@@ -1,5 +1,4 @@
-import { Crypto, DateTime, Duration, Effect, Encoding, Option } from "effect";
-import type { Schema } from "effect";
+import { Crypto, DateTime, Duration, Effect, Encoding, Option, type Schema } from "effect";
 import { ConsentRecord, ConsentRecordId } from "~/core/consent/model";
 import type { UserId } from "~/core/identity/reference";
 import {

@@ -52,15 +52,12 @@ export const PATPairingPublicCodeInput = Schema.String.pipe(
 export const selectPATPairingPublicCodeSymbols = (input: {
   readonly bytes: ReadonlyArray<number>;
   readonly maximum: number;
-}): string => {
-  let accepted = "";
-  for (const byte of input.bytes) {
-    if (byte >= unbiasedBase20ByteLimit) continue;
-    accepted += publicCodeAlphabet[byte % publicCodeAlphabet.length];
-    if (accepted.length === input.maximum) break;
-  }
-  return accepted;
-};
+}): string =>
+  input.bytes
+    .filter((byte) => byte < unbiasedBase20ByteLimit)
+    .slice(0, input.maximum)
+    .map((byte) => publicCodeAlphabet[byte % publicCodeAlphabet.length])
+    .join("");
 
 /** Fixed server-owned PATPairing lifetime. */
 export const patPairingLifetime = "10 minutes" as const;

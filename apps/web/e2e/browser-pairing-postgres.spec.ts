@@ -271,13 +271,13 @@ test("reviews in the fresh browser and delivers a paired PAT only to the initiat
   const privateDeviceCode = Redacted.value(started.privateDeviceCode);
 
   await page.goto("/settings/pats");
-  await page.getByLabel("Código de vinculación").fill(started.publicCode);
-  await page.getByRole("button", { name: "Revisar solicitud" }).click();
+  await page.getByLabel("Código").fill(started.publicCode);
+  await page.getByRole("button", { name: "Continuar" }).click();
   await expect(page.getByText("Cliente CLI", { exact: true })).toBeVisible();
   await expect(page.getByText("Lectura", { exact: true })).toBeVisible();
   await expect(page.getByText("Tablero", { exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "Aprobar vinculación" }).click();
-  await expect(page.getByText("Vinculación aprobada", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Autorizar acceso" }).click();
+  await expect(page.getByText("Acceso autorizado", { exact: true })).toBeVisible();
 
   await page.waitForTimeout(started.pollingIntervalSeconds * millisecondsPerSecond);
   const claim = await request.post(`${apiOrigin}/pat-pairings/claim`, {

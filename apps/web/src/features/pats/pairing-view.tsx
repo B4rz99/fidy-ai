@@ -5,7 +5,7 @@ import { patScopeCopy } from "@/transport/client";
 import { Alert, AlertDescription, AlertTitle } from "@/ui/components/alert";
 import { Badge } from "@/ui/components/badge";
 import { Button } from "@/ui/components/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/ui/components/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/ui/components/card";
 import { Input } from "@/ui/components/input";
 
 export type InspectPATPairingCommand = Readonly<{
@@ -40,9 +40,9 @@ const format = (value: DateTime.Utc): JSX.Element => (
 
 const PairingReviewDetails = ({ review }: Readonly<{ review: PATPairingReview }>): JSX.Element => (
   <dl className="grid gap-2 sm:grid-cols-[10rem_1fr]">
-    <dt className="text-muted-foreground">Nombre</dt>
+    <dt className="text-muted-foreground">Nombre indicado</dt>
     <dd className="font-medium">{review.recipientLabel}</dd>
-    <dt className="text-muted-foreground">Alcances</dt>
+    <dt className="text-muted-foreground">Permisos solicitados</dt>
     <dd className="flex flex-wrap gap-2">
       {review.scopes.map((scope) => (
         <Badge key={scope} variant="secondary">
@@ -52,9 +52,9 @@ const PairingReviewDetails = ({ review }: Readonly<{ review: PATPairingReview }>
     </dd>
     <dt className="text-muted-foreground">Duración</dt>
     <dd className="font-medium">{review.lifetimeDays} días</dd>
-    <dt className="text-muted-foreground">Vencimiento del PAT</dt>
+    <dt className="text-muted-foreground">Acceso válido hasta</dt>
     <dd className="font-medium">{format(review.patExpiresAt)}</dd>
-    <dt className="text-muted-foreground">Reclamar antes de</dt>
+    <dt className="text-muted-foreground">Completar la conexión antes de</dt>
     <dd className="font-medium">{format(review.claimBy)}</dd>
   </dl>
 );
@@ -63,10 +63,8 @@ const InvalidPairingCard = ({ reset }: Readonly<{ reset: () => void }>): JSX.Ele
   <Card>
     <CardContent className="flex flex-col gap-4">
       <Alert variant="destructive">
-        <AlertTitle>No pudimos revisar la vinculación</AlertTitle>
-        <AlertDescription>
-          El código no es válido o la solicitud ya no está disponible.
-        </AlertDescription>
+        <AlertTitle>No encontramos ese código</AlertTitle>
+        <AlertDescription>El código no es válido o ya no está disponible.</AlertDescription>
       </Alert>
       <Button onClick={reset} type="button" variant="outline">
         Ingresar otro código
@@ -79,10 +77,10 @@ const ApprovedPairingCard = (): JSX.Element => (
   <Card>
     <CardContent>
       <Alert>
-        <AlertTitle>Vinculación aprobada</AlertTitle>
+        <AlertTitle>Acceso autorizado</AlertTitle>
         <AlertDescription>
-          El cliente que inició la solicitud ya puede reclamar el PAT directamente. Este navegador
-          no recibe ni muestra el token.
+          Vuelve al lugar donde obtuviste el código para completar la conexión. Este navegador no
+          recibe ni muestra la clave de acceso.
         </AlertDescription>
       </Alert>
     </CardContent>
@@ -107,7 +105,7 @@ const PairingReviewCard = ({
     <Card>
       <CardHeader>
         <CardTitle>
-          <h2>Revisa la vinculación del PAT</h2>
+          <h2>Confirma el acceso</h2>
         </CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col gap-5">
@@ -128,7 +126,7 @@ const PairingReviewCard = ({
             }
             type="button"
           >
-            {busy ? "Aprobando…" : "Aprobar vinculación"}
+            {busy ? "Autorizando…" : "Autorizar acceso"}
           </Button>
         </div>
       </CardContent>
@@ -154,14 +152,15 @@ const PairingCodeCard = ({
     <Card>
       <CardHeader>
         <CardTitle>
-          <h2>Vincular PAT de un cliente</h2>
+          <h2>Autorizar acceso con código</h2>
         </CardTitle>
+        <CardDescription>Ingresa el código que aparece donde quieres usar Fidy.</CardDescription>
       </CardHeader>
       <CardContent>
         <form className="flex flex-col gap-4" onSubmit={submit}>
           <div className="flex flex-col gap-2">
             <label className="font-medium" htmlFor="pat-pairing-code">
-              Código de vinculación
+              Código
             </label>
             <Input
               autoComplete="off"
@@ -173,7 +172,7 @@ const PairingCodeCard = ({
             />
           </div>
           <Button disabled={busy || state.publicCode.trim().length === 0} type="submit">
-            {busy ? "Revisando…" : "Revisar solicitud"}
+            {busy ? "Buscando…" : "Continuar"}
           </Button>
         </form>
       </CardContent>

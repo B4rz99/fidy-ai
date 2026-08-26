@@ -34,10 +34,8 @@ import {
   EmailReplacementWebAuthHandlersLive,
 } from "~/shell/email-authentication/handlers";
 import { EmailAuthenticationLive } from "~/shell/email-authentication/replacement-handlers";
-import {
-  EmailReplacementDeliveryWorkerLive,
-  EmailReplacementRetentionLive,
-} from "~/shell/email-authentication/replacement-delivery-worker";
+import { EmailReplacementDeliveryWorkerLive } from "~/shell/email-authentication/replacement-delivery-worker";
+import { EmailReplacementRetentionLive } from "~/shell/email-authentication/replacement-retention";
 import { OnboardingDeliveryWorkerLive } from "~/shell/onboarding/delivery-worker";
 import { OperationsLive } from "~/shell/operations/handlers";
 import { CanonicalTelemetryLive } from "~/shell/observability/canonical-api";

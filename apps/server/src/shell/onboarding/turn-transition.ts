@@ -17,6 +17,7 @@ import {
   EmailDeliveryIntentId,
   EmailEnrollmentId,
   EmailVerificationPublicCode,
+  maximumEmailDeliveryGenerations,
 } from "~/core/email-authentication/model";
 import {
   emailWorkflowExpiry,
@@ -27,7 +28,7 @@ import {
 import type { WhatsAppCaller } from "~/shell/channels/whatsapp/model";
 import { findWhatsAppCaller, resolveWhatsAppCaller } from "~/shell/identity/repo";
 import type { OnboardingTurn, OnboardingTurnOutcome } from "./types";
-import { emailDeliveryBudgetKey } from "~/shell/email-authentication/admission";
+import { admitEmailDeliveryInScope } from "~/shell/email-authentication/admission";
 import {
   type EmailEnrollmentRow,
   findAndLockEmailEnrollmentByCaller,
@@ -221,6 +222,7 @@ type EmailInstruction =
   | Readonly<{ _tag: "Await" }>
   | Readonly<{ _tag: "AlreadySubmitted" }>
   | Readonly<{ _tag: "Cooldown" }>
+  | Readonly<{ _tag: "QuotaReached" }>
   | Readonly<{ _tag: "Submit"; email: EmailAddress }>;
 
 const inboundText = (input: OnboardingTurn): string =>
@@ -236,10 +238,14 @@ const deliveryCooldownActive = (input: OnboardingTurn, enrollment: EmailEnrollme
 const submittedResendInstruction = (
   input: OnboardingTurn,
   enrollment: Exclude<EmailEnrollmentRow, { readonly _tag: "AwaitingEmail" }>
-): EmailInstruction =>
-  deliveryCooldownActive(input, enrollment)
+): EmailInstruction => {
+  if (enrollment.deliveryGeneration >= maximumEmailDeliveryGenerations) {
+    return { _tag: "QuotaReached" };
+  }
+  return deliveryCooldownActive(input, enrollment)
     ? { _tag: "Cooldown" }
     : { _tag: "Submit", email: enrollment.email };
+};
 
 const resendInstruction = (
   input: OnboardingTurn,
@@ -264,9 +270,11 @@ const chooseEmailInstruction = (
 ): EmailInstruction => {
   const raw = inboundText(input);
   const decoded = decodeEmailAddress(raw);
-  return Result.isSuccess(decoded)
-    ? { _tag: "Submit", email: decoded.success }
-    : nonEmailInstruction(input, enrollment, raw);
+  if (Result.isFailure(decoded)) return nonEmailInstruction(input, enrollment, raw);
+  return enrollment._tag !== "AwaitingEmail" &&
+    enrollment.deliveryGeneration >= maximumEmailDeliveryGenerations
+    ? { _tag: "QuotaReached" }
+    : { _tag: "Submit", email: decoded.success };
 };
 
 const handleEmailEnrollment = Effect.fn("handleEmailEnrollment")(function* (
@@ -282,6 +290,21 @@ const handleEmailEnrollment = Effect.fn("handleEmailEnrollment")(function* (
   if (instruction._tag === "Cooldown") {
     return { _tag: "EmailSubmitted" as const, status: "cooldown" as const };
   }
+  if (instruction._tag === "QuotaReached") {
+    return { _tag: "EmailSubmitted" as const, status: "quota-reached" as const };
+  }
+  const deliveryAdmitted = yield* admitEmailDeliveryInScope({
+    requester: {
+      _tag: "WhatsAppCaller",
+      businessPortfolioId: input.caller.businessPortfolioId,
+      businessScopedUserId: input.caller.businessScopedUserId,
+    },
+    recipient: instruction.email,
+    attemptedAt: input.receivedAt,
+  });
+  if (!deliveryAdmitted) {
+    return { _tag: "EmailSubmitted" as const, status: "quota-reached" as const };
+  }
   const crypto = yield* Crypto.Crypto;
   const intentId = EmailDeliveryIntentId.make(yield* crypto.randomUUIDv7.pipe(Effect.orDie));
   const admitted = yield* submitEnrollmentEmail({
@@ -289,15 +312,11 @@ const handleEmailEnrollment = Effect.fn("handleEmailEnrollment")(function* (
     email: instruction.email,
     intentId,
     idempotencyKey: intentId,
-    callerBudgetKey: yield* emailDeliveryBudgetKey(
-      `caller:${input.caller.businessPortfolioId}:${input.caller.businessScopedUserId}`
-    ),
-    recipientBudgetKey: yield* emailDeliveryBudgetKey(`recipient:${instruction.email}`),
     submittedAt: input.receivedAt,
     resendAvailableAt: resendAvailability(input.receivedAt),
   });
   if (Option.isNone(admitted)) {
-    return { _tag: "EmailSubmitted" as const, status: "quota-reached" as const };
+    return yield* Effect.die("Admitted email delivery did not advance its locked enrollment");
   }
   return emailSubmittedOutcome;
 });

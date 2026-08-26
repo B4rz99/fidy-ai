@@ -1,7 +1,7 @@
 import { DateTime, Duration, Effect, Layer, Schedule } from "effect";
 import type { SqlClient, SqlError } from "effect/unstable/sql";
 import { runAuditRetentionBefore } from "~/shell/audit/retention";
-import { removeLifecycleEventsBefore } from "~/shell/email-authentication/replacement-repo";
+import { removeReplacementLifecycleEventsBefore } from "~/shell/email-authentication/replacement-retention";
 import { runScheduledWork } from "~/shell/observability/scheduled-work";
 import type { Telemetry } from "~/shell/observability/telemetry";
 
@@ -22,7 +22,7 @@ const deleteAuditEvidenceBefore = (
 const deleteEmailAuthenticationEvidenceBefore = (
   cutoff: DateTime.Utc
 ): Effect.Effect<void, SqlError.SqlError, SqlClient.SqlClient | Telemetry> =>
-  removeLifecycleEventsBefore(cutoff).pipe(
+  removeReplacementLifecycleEventsBefore(cutoff).pipe(
     runScheduledWork({
       component: "api",
       schedule: "task.emailAuthenticationRetention",

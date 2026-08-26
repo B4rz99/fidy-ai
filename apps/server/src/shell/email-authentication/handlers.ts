@@ -21,7 +21,7 @@ import { EmailVerificationCode } from "~/core/email-authentication/model";
 import { webSessionCookieName } from "~/shell/_shared/authz";
 import { externalEndpoints } from "~/shell/_shared/external-endpoints";
 import { authenticateWebSession } from "~/shell/web-session/service";
-import { completeEmailReplacement } from "./replacement-mutations";
+import { completeEmailReplacement } from "./replacement-transition";
 
 const maximumEmailVerificationRequestBytes = 128;
 const decodeVerificationPayload = Schema.decodeUnknownResult(
@@ -122,9 +122,10 @@ const completeReplacement = Effect.fn("EmailAuthentication.completeReplacement")
     return yield* freshPairingRequired();
   }
   const result = yield* completeEmailReplacement({
-    session: session.value,
+    subjectUserId: session.value.subjectUserId,
+    authorizingWebSessionId: session.value.webSessionId,
     attemptedAt,
-    combinedCode,
+    combinedCode: Redacted.make(combinedCode),
   });
   if (result === "fresh-pairing-required") {
     return yield* freshPairingRequired();

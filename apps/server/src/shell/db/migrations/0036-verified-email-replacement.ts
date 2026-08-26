@@ -34,18 +34,19 @@ export const verifiedEmailReplacement = Effect.gen(function* () {
       workflow_id uuid NOT NULL REFERENCES email_replacement_workflows(id) ON DELETE CASCADE,
       generation integer NOT NULL CHECK (generation BETWEEN 1 AND 5),
       email_address text NOT NULL,
-      status text NOT NULL CHECK (status IN ('pending', 'claimed', 'sent', 'rejected', 'uncertain', 'superseded')),
+      status text NOT NULL CHECK (status IN ('pending', 'claimed', 'armed', 'sent', 'rejected', 'uncertain', 'superseded')),
       idempotency_key uuid NOT NULL UNIQUE,
       created_at timestamptz NOT NULL,
       claim_token uuid,
       claim_expires_at timestamptz,
       provider_message_id text,
-      CHECK ((status = 'claimed') = (claim_token IS NOT NULL AND claim_expires_at IS NOT NULL)),
+      CHECK ((status IN ('claimed', 'armed')) =
+        (claim_token IS NOT NULL AND claim_expires_at IS NOT NULL)),
       UNIQUE (workflow_id, generation)
     );
     CREATE INDEX email_replacement_delivery_claimable_idx
       ON email_replacement_delivery_intents (created_at, id)
-      WHERE status IN ('pending', 'claimed');
+      WHERE status IN ('pending', 'claimed', 'armed');
 
     CREATE TABLE verified_email_credential_lifecycle_events (
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -102,8 +103,8 @@ export const verifiedEmailReplacement = Effect.gen(function* () {
         UPDATE email_replacement_delivery_intents intent SET
           status = 'uncertain', claim_token = NULL, claim_expires_at = NULL
         FROM email_replacement_workflows workflow
-        WHERE intent.workflow_id = workflow.id AND intent.status = 'claimed'
-          AND intent.claim_expires_at <= $1 AND workflow.proof_digest IS NOT NULL
+        WHERE intent.workflow_id = workflow.id AND intent.status = 'armed'
+          AND intent.claim_expires_at <= $1
         RETURNING intent.id
       ), claimed AS (
         SELECT candidate.id FROM email_replacement_delivery_intents candidate

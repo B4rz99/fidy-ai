@@ -57,13 +57,13 @@ const getStartAdmission = Effect.fn("BrowserLogin.getStartAdmission")(function* 
             WHERE source_digest = ${request.sourceDigest}
               AND attempted_at > ${request.attemptedAt}::timestamptz - interval '10 minutes'
           ) AS "windowCount",
-          COALESCE((SELECT CEIL(EXTRACT(EPOCH FROM (
+          COALESCE((SELECT ROUND(EXTRACT(EPOCH FROM (
             min(attempted_at) + interval '1 minute' - ${request.attemptedAt}::timestamptz
           )))::int FROM browser_login_start_attempts
             WHERE source_digest = ${request.sourceDigest}
               AND attempted_at > ${request.attemptedAt}::timestamptz - interval '1 minute'
           ), 1) AS "burstRetryAfterSeconds",
-          COALESCE((SELECT CEIL(EXTRACT(EPOCH FROM (
+          COALESCE((SELECT ROUND(EXTRACT(EPOCH FROM (
             min(attempted_at) + interval '10 minutes' - ${request.attemptedAt}::timestamptz
           )))::int FROM browser_login_start_attempts
             WHERE source_digest = ${request.sourceDigest}

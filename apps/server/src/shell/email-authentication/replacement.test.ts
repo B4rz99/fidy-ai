@@ -1,5 +1,5 @@
 import { expect, layer } from "@effect/vitest";
-import { Crypto, DateTime, Deferred, Effect, Fiber, Option, Ref, Schema } from "effect";
+import { Crypto, DateTime, Deferred, Effect, Fiber, Option, Redacted, Ref, Schema } from "effect";
 import { HttpBody, HttpClient } from "effect/unstable/http";
 import type { SqlClient } from "effect/unstable/sql";
 import {
@@ -10,23 +10,15 @@ import { UserId } from "~/core/identity/reference";
 import { TokenBearer } from "~/core/tokens/model";
 import { WebSessionId } from "~/core/web-session/reference";
 import { calculateWebSessionDeadlines } from "~/core/web-session/rules";
-import { withSubjectLock } from "~/shell/consent/repo";
 import { seedConsentedPatIdentity } from "~/shell/db/development-seed";
 import { MigrationSqlClient } from "~/shell/db/client";
-import { withUserTransaction } from "~/shell/db/user-transaction";
 import { EmailDeliveryPort } from "./delivery";
-import { completeEmailReplacement } from "./replacement-mutations";
+import { processOneReplacementDelivery } from "./replacement-delivery-worker";
 import {
-  processOneReplacementDelivery,
   processOneReplacementRetention,
-} from "./replacement-delivery-worker";
-import {
-  armClaimedReplacementInScope,
-  claimExpiredReplacementWorkflow,
-  claimReplacementDeliveryGateway,
-  removeClaimedExpiredReplacementWorkflowInScope,
-  removeLifecycleEventsBefore,
-} from "./replacement-repo";
+  removeReplacementLifecycleEventsBefore,
+} from "./replacement-retention";
+import { completeEmailReplacement } from "./replacement-transition";
 import { ApiHarness } from "~/shell/testing/api-harness";
 
 const userId = UserId.make("f1d1a000-0000-4000-8000-000000000325");
@@ -225,6 +217,14 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
                   send: ({ combinedCode, purpose }) =>
                     Effect.gen(function* () {
                       expect(purpose).toBe("credential-replacement");
+                      expect(
+                        yield* sql`
+                          SELECT status FROM email_replacement_delivery_intents
+                          WHERE workflow_id IN (
+                            SELECT id FROM email_replacement_workflows WHERE user_id = ${userId}
+                          )
+                        `.pipe(Effect.orDie)
+                      ).toEqual([{ status: "armed" }]);
                       yield* Ref.set(deliveredCode, Option.some(combinedCode));
                     }),
                 })
@@ -466,6 +466,153 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
       })
     );
 
+    it.effect("keeps gateway claims matched to their forced-RLS workflow owner", () =>
+      Effect.gen(function* () {
+        yield* seedFreshSession();
+        yield* seedReplacementSession({
+          subjectUserId: strangerUserId,
+          tokenBearer: strangerBearer,
+          sessionId: strangerWebSessionId,
+          sessionBearer: strangerWebSessionBearer,
+        });
+        const sql = yield* MigrationSqlClient;
+        yield* sql`DELETE FROM email_delivery_admission_budgets`;
+        const owners = new Map([
+          ["owner-matched@example.com", userId],
+          ["stranger-matched@example.com", strangerUserId],
+        ]);
+        yield* requestCandidate("owner-matched@example.com");
+        yield* requestCandidate("stranger-matched@example.com", strangerSessionCookie);
+        const sent = yield* Ref.make(0);
+        const processDelivery = processOneReplacementDelivery().pipe(
+          Effect.provideService(
+            EmailDeliveryPort,
+            EmailDeliveryPort.of({
+              send: ({ to }) =>
+                Effect.gen(function* () {
+                  const armed = yield* sql`
+                    SELECT workflow.user_id, intent.email_address, intent.status
+                    FROM email_replacement_delivery_intents intent
+                    JOIN email_replacement_workflows workflow ON workflow.id = intent.workflow_id
+                    WHERE intent.email_address = ${to}
+                  `.pipe(Effect.orDie);
+                  expect(armed).toEqual([
+                    { user_id: owners.get(to), email_address: to, status: "armed" },
+                  ]);
+                  yield* Ref.set(sent, (yield* Ref.get(sent)) + 1);
+                }),
+            })
+          )
+        );
+        expect(yield* processDelivery).toBe(true);
+        expect(yield* processDelivery).toBe(true);
+        expect(yield* Ref.get(sent)).toBe(2);
+        yield* sql`DELETE FROM email_delivery_admission_budgets`;
+      })
+    );
+
+    it.effect("rejects mismatched gateway owners through the deep worker Interfaces", () =>
+      Effect.gen(function* () {
+        yield* seedFreshSession();
+        yield* seedReplacementSession({
+          subjectUserId: strangerUserId,
+          tokenBearer: strangerBearer,
+          sessionId: strangerWebSessionId,
+          sessionBearer: strangerWebSessionBearer,
+        });
+        const sql = yield* MigrationSqlClient;
+        yield* sql`DELETE FROM email_delivery_admission_budgets`;
+        yield* requestCandidate("mismatched-delivery-owner@example.com");
+        const providerSends = yield* Ref.make(0);
+        const dropDeliveryMismatch = sql`
+          DROP TRIGGER IF EXISTS fidy_test_mismatch_delivery_owner
+            ON email_replacement_delivery_intents;
+          DROP FUNCTION IF EXISTS fidy_test_mismatch_delivery_owner()
+        `.pipe(Effect.orDie, Effect.asVoid);
+        yield* Effect.gen(function* () {
+          yield* sql`
+            CREATE FUNCTION fidy_test_mismatch_delivery_owner() RETURNS trigger
+            LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public AS $$
+            BEGIN
+              IF NEW.status = 'claimed'
+                AND NEW.email_address = 'mismatched-delivery-owner@example.com' THEN
+                UPDATE email_replacement_workflows
+                SET user_id = 'f1d1a000-0000-4000-8000-000000000327'::uuid
+                WHERE id = NEW.workflow_id;
+              END IF;
+              RETURN NEW;
+            END
+            $$;
+            CREATE TRIGGER fidy_test_mismatch_delivery_owner
+              AFTER UPDATE ON email_replacement_delivery_intents
+              FOR EACH ROW EXECUTE FUNCTION fidy_test_mismatch_delivery_owner()
+          `;
+          expect(
+            yield* processOneReplacementDelivery().pipe(
+              Effect.provideService(
+                EmailDeliveryPort,
+                EmailDeliveryPort.of({
+                  send: () => Ref.set(providerSends, 1),
+                })
+              )
+            )
+          ).toBe(false);
+        }).pipe(Effect.ensuring(dropDeliveryMismatch));
+        expect(yield* Ref.get(providerSends)).toBe(0);
+        expect(
+          yield* sql`
+            SELECT workflow.user_id, workflow.proof_digest, intent.status
+            FROM email_replacement_delivery_intents intent
+            JOIN email_replacement_workflows workflow ON workflow.id = intent.workflow_id
+            WHERE intent.email_address = 'mismatched-delivery-owner@example.com'
+          `
+        ).toEqual([{ user_id: strangerUserId, proof_digest: null, status: "claimed" }]);
+        yield* sql`
+          DELETE FROM email_replacement_workflows
+          WHERE candidate_email_address = 'mismatched-delivery-owner@example.com'
+        `;
+
+        yield* requestCandidate("mismatched-retention-owner@example.com");
+        yield* sql`
+          UPDATE email_replacement_workflows SET
+            started_at = started_at - interval '25 hours',
+            expires_at = expires_at - interval '25 hours'
+          WHERE candidate_email_address = 'mismatched-retention-owner@example.com'
+        `;
+        const dropRetentionMismatch = sql`
+          DROP TRIGGER IF EXISTS fidy_test_mismatch_retention_owner ON email_replacement_workflows;
+          DROP FUNCTION IF EXISTS fidy_test_mismatch_retention_owner()
+        `.pipe(Effect.orDie, Effect.asVoid);
+        yield* Effect.gen(function* () {
+          yield* sql`
+            CREATE FUNCTION fidy_test_mismatch_retention_owner() RETURNS trigger
+            LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public AS $$
+            BEGIN
+              IF OLD.retention_claim_token IS NULL AND NEW.retention_claim_token IS NOT NULL
+                AND NEW.candidate_email_address = 'mismatched-retention-owner@example.com' THEN
+                UPDATE email_replacement_workflows
+                SET user_id = 'f1d1a000-0000-4000-8000-000000000327'::uuid
+                WHERE id = NEW.id;
+              END IF;
+              RETURN NEW;
+            END
+            $$;
+            CREATE TRIGGER fidy_test_mismatch_retention_owner
+              AFTER UPDATE ON email_replacement_workflows
+              FOR EACH ROW EXECUTE FUNCTION fidy_test_mismatch_retention_owner()
+          `;
+          expect(yield* processOneReplacementRetention()).toBe(false);
+        }).pipe(Effect.ensuring(dropRetentionMismatch));
+        expect(
+          yield* sql`
+            SELECT user_id FROM email_replacement_workflows
+            WHERE candidate_email_address = 'mismatched-retention-owner@example.com'
+          `
+        ).toEqual([{ user_id: strangerUserId }]);
+        yield* sql`DELETE FROM email_delivery_admission_budgets`;
+      })
+    );
+
     it.effect(
       "supersedes old proofs, reclaims abandoned delivery, and rejects global duplicates",
       () =>
@@ -504,7 +651,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
             SELECT proof_digest FROM email_replacement_workflows WHERE user_id = ${userId}
           `;
           yield* sql`
-            UPDATE email_replacement_delivery_intents SET status = 'claimed',
+            UPDATE email_replacement_delivery_intents SET status = 'armed',
               claim_token = gen_random_uuid(), claim_expires_at = now() - interval '1 second'
             WHERE workflow_id IN (
               SELECT id FROM email_replacement_workflows WHERE user_id = ${userId}
@@ -584,18 +731,11 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         const attemptedAt = yield* DateTime.now;
         yield* sql`UPDATE web_sessions SET revoked_at = ${attemptedAt} WHERE id = ${webSessionId}`;
         const result = yield* completeEmailReplacement({
-          session: {
-            webSessionId,
-            subjectUserId: userId,
-            pairedAt: DateTime.subtract(attemptedAt, { minutes: 1 }),
-            freshUntil: DateTime.add(attemptedAt, { minutes: 1 }),
-            lastUsedAt: attemptedAt,
-            idleExpiresAt: DateTime.add(attemptedAt, { hours: 1 }),
-            hardExpiresAt: DateTime.add(attemptedAt, { hours: 1 }),
-          },
+          subjectUserId: userId,
+          authorizingWebSessionId: webSessionId,
           attemptedAt,
-          combinedCode: EmailVerificationCode.make(
-            Option.getOrThrow(yield* Ref.get(deliveredCode))
+          combinedCode: Redacted.make(
+            EmailVerificationCode.make(Option.getOrThrow(yield* Ref.get(deliveredCode)))
           ),
         });
         expect(result).toBe("fresh-pairing-required");
@@ -660,74 +800,6 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
             { user_id: strangerUserId, email_address: `seed-${strangerUserId}@fidyapp.com` },
           ]);
         })
-    );
-
-    it.effect("rejects mismatched background claims without cross-User send or deletion", () =>
-      Effect.gen(function* () {
-        yield* seedFreshSession();
-        yield* seedReplacementSession({
-          subjectUserId: strangerUserId,
-          tokenBearer: strangerBearer,
-          sessionId: strangerWebSessionId,
-          sessionBearer: strangerWebSessionBearer,
-        });
-        const sql = yield* MigrationSqlClient;
-        yield* sql`DELETE FROM email_delivery_admission_budgets`;
-        yield* requestCandidate("mismatched-claim@example.com");
-        const claimedAt = yield* DateTime.now;
-        const deliveryClaim = Option.getOrThrow(yield* claimReplacementDeliveryGateway(claimedAt));
-        const mismatchedDeliveryClaim = { ...deliveryClaim, userId: strangerUserId };
-        expect(
-          yield* withUserTransaction(
-            strangerUserId,
-            withSubjectLock(
-              strangerUserId,
-              armClaimedReplacementInScope(mismatchedDeliveryClaim, claimedAt)
-            )
-          )
-        ).toEqual(Option.none());
-        expect(
-          yield* sql`
-            SELECT workflow.proof_digest, intent.status
-            FROM email_replacement_workflows workflow
-            JOIN email_replacement_delivery_intents intent ON intent.workflow_id = workflow.id
-            WHERE workflow.user_id = ${userId}
-          `
-        ).toEqual([{ proof_digest: null, status: "claimed" }]);
-
-        yield* seedFreshSession();
-        yield* sql`DELETE FROM email_delivery_admission_budgets`;
-        yield* requestCandidate("mismatched-retention@example.com");
-        yield* sql`
-          UPDATE email_replacement_workflows SET
-            started_at = started_at - interval '25 hours',
-            expires_at = expires_at - interval '25 hours'
-          WHERE user_id = ${userId}
-        `;
-        const retentionAttemptedAt = yield* DateTime.now;
-        const retentionClaim = Option.getOrThrow(
-          yield* claimExpiredReplacementWorkflow(retentionAttemptedAt)
-        );
-        const mismatchedRetentionClaim = { ...retentionClaim, userId: strangerUserId };
-        expect(
-          yield* withUserTransaction(
-            strangerUserId,
-            withSubjectLock(
-              strangerUserId,
-              removeClaimedExpiredReplacementWorkflowInScope(
-                mismatchedRetentionClaim,
-                retentionAttemptedAt
-              )
-            )
-          )
-        ).toBe(false);
-        expect(
-          yield* sql`SELECT id FROM email_replacement_workflows WHERE user_id = ${userId}`
-        ).toHaveLength(1);
-        expect(
-          yield* sql`SELECT id FROM email_replacement_workflows WHERE user_id = ${strangerUserId}`
-        ).toEqual([]);
-      })
     );
 
     it.effect("serializes both initiation/completion lock orders without partial replacement", () =>
@@ -1114,7 +1186,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           `
         ).toEqual([{ count: 0 }]);
 
-        yield* removeLifecycleEventsBefore(cutoff);
+        yield* removeReplacementLifecycleEventsBefore(cutoff);
         expect(
           yield* sql`
             SELECT id FROM verified_email_credential_lifecycle_events

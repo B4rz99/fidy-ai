@@ -12,7 +12,7 @@ import {
   updateKeywordRule,
 } from "~/shell/categories/mutations";
 import { applyDashboardEdit, getDashboard } from "~/shell/dashboard/mutations";
-import { requestEmailReplacement } from "~/shell/email-authentication/replacement-mutations";
+import { requestEmailReplacement } from "~/shell/email-authentication/replacement-transition";
 import { getDashboardView } from "~/shell/dashboard/view";
 import { updateUserPreferences } from "~/shell/identity/mutations";
 import {

@@ -190,8 +190,14 @@ Email authentication and support recovery approve an existing BrowserLoginPairin
 UserId. They do not create a parallel session, create another User, or change WhatsAppIdentity. A
 fresh same-User WebSession may replace the mailbox on the existing VerifiedEmailCredential after a
 replacement-specific proof; the old mailbox remains authoritative until the credential update,
-workflow cleanup, and metadata-only lifecycle event commit atomically. The browser's private
-verifier remains necessary to create the WebSession. A User
+workflow cleanup, and metadata-only lifecycle event commit atomically. EmailReplacementTransition
+owns initiation and completion lock order, workflow decoding, admission, and atomic commit behind
+one operation per transition. EmailReplacementDelivery owns claim, durable `Armed` proof state,
+provider work outside PostgreSQL transactions, fully fenced settlement, and ambiguous-outcome
+reconciliation behind one worker step. Separate EmailAuthentication operations own expired-workflow
+and lifecycle-evidence retention; PostgreSQL remains their private implementation, and
+EmailDeliveryPort remains the only replacement-delivery Seam. The browser's private verifier
+remains necessary to create the WebSession. A User
 whose Consent is explicitly revoked may authenticate only to reach Fidy-owned re-consent and
 data-rights surfaces; ordinary canonical work remains blocked with `user_action_required`.
 

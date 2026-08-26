@@ -1,0 +1,29 @@
+apps/web/package.json
+  s_92fd415a2f0e43::t_d99f0653c7ef14 28,49,55-56
+package.json
+  s_92fd415a2f0e43::t_35e49ccc17db80 63-64
+apps/web/src/features/dashboard/feature.test.tsx
+  s_92fd415a2f0e43::t_50849ea2f71697 4
+  s_92fd415a2f0e43::t_b9c3ee08593c44 18,34-37,51-55
+  s_92fd415a2f0e43::t_d35a91c78f1a07 5
+apps/server/package.json
+  s_92fd415a2f0e43::t_679cbba1ebb7dc 55,58
+bun.lock
+  s_92fd415a2f0e43::t_9d4241a9ff85f8 17-18,41,44,55,76,82-83,173,175,177,179,181,421,423,425,427,429,431,433,435,437,439,441,443,445,447,449,451,453,455,457,471,473,475,477,479,481,483,485,487,489,491,493,495,497,499,501,503,505,507,625,629,723,725,727,729,731,733,735,737,1215,1261,1263,1553,1567,1569
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.24",
+  "base_commit_sha": "938c013688361edbef802379c31c6b34245511de",
+  "prompts": {},
+  "sessions": {
+    "s_92fd415a2f0e43": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a03a9a-286b-7874-abf7-c9b0dde8456b",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

@@ -5,6 +5,7 @@ import { IanaTimeZone } from "~/core/_shared/context";
 import { Money } from "~/core/_shared/money";
 import { type Budget } from "~/core/budgets/model";
 import { BudgetId } from "~/core/budgets/reference";
+import { EmailAddress } from "~/core/email-authentication/model";
 import { UserId } from "~/core/identity/reference";
 import { Base64FileContent, StatementIdempotencyKey } from "~/core/ingestion/model";
 import { NeedsReviewItemId, type StatementSubmissionId } from "~/core/ingestion/reference";
@@ -130,6 +131,13 @@ const probes: Record<OperationId, IsolationProbe> = {
           pairingId: PATPairingId.make("f1d1a000-0000-4000-8000-000000000249"),
           patExpiresAt: DateTime.makeUnsafe("2027-01-01T00:00:00.000Z"),
         },
+      })
+    ).pipe(Effect.asVoid),
+
+  "emailAuthentication.requestEmailReplacement": (attempt) =>
+    Effect.result(
+      attempt.strangerClient.emailAuthentication.requestEmailReplacement({
+        payload: { candidateEmail: EmailAddress.make("stranger-replacement@example.com") },
       })
     ).pipe(Effect.asVoid),
 

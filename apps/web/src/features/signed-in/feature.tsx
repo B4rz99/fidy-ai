@@ -53,6 +53,9 @@ const SignedInShell = (): JSX.Element => {
             <Button render={<Link to="/app/transactions" />} variant="ghost">
               Transacciones
             </Button>
+            <Button render={<Link to="/settings/email" />} variant="ghost">
+              Correo
+            </Button>
             <Button render={<Link to="/settings/pats" />} variant="ghost">
               Tokens
             </Button>

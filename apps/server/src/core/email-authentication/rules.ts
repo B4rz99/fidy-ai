@@ -1,12 +1,13 @@
-import { DateTime, Effect } from "effect";
+import { DateTime, Effect, Option } from "effect";
+import { maximumEmailDeliveryGenerations } from "./model";
 
 /** Uniform 32-symbol alphabet without visually ambiguous I, O, 0, or 1. */
 export const emailCodeAlphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789" as const;
 const maximumWrongProofAttempts = 5;
 
-/** Returns the exact end of the 24-hour bounded pre-User enrollment. */
-export const enrollmentExpiry = (acceptedAt: DateTime.Utc): DateTime.Utc =>
-  DateTime.add(acceptedAt, { hours: 24 });
+/** Returns the exact end of a 24-hour bounded email-control workflow. */
+export const emailWorkflowExpiry = (startedAt: DateTime.Utc): DateTime.Utc =>
+  DateTime.add(startedAt, { hours: 24 });
 
 /** Returns the exact end of a fresh proof's ten-minute half-open validity interval. */
 export const proofExpiry = (generatedAt: DateTime.Utc): DateTime.Utc =>
@@ -37,6 +38,40 @@ export const formatEmailCode = (input: {
   }
   return groups.join("-");
 };
+
+/** Persistence action selected for one locked replacement-workflow request. */
+export type EmailReplacementRequestDecision = "Start" | "ReplaceExpired" | "UseExisting" | "Reject";
+
+/** Decides resend/supersession admission from one already-locked replacement workflow. */
+export const decideEmailReplacementRequest = (input: {
+  readonly existing: Option.Option<
+    Readonly<{
+      candidateMatches: boolean;
+      deliveryGeneration: number;
+      resendAvailableAt: DateTime.Utc;
+      expiresAt: DateTime.Utc;
+    }>
+  >;
+  readonly requestedAt: DateTime.Utc;
+}): Effect.Effect<EmailReplacementRequestDecision> =>
+  Effect.succeed(
+    Option.match(input.existing, {
+      onNone: () => "Start",
+      onSome: (existing) => {
+        if (DateTime.isGreaterThanOrEqualTo(input.requestedAt, existing.expiresAt)) {
+          return "ReplaceExpired";
+        }
+        if (existing.deliveryGeneration >= maximumEmailDeliveryGenerations) return "Reject";
+        if (
+          existing.candidateMatches &&
+          DateTime.isGreaterThan(existing.resendAvailableAt, input.requestedAt)
+        ) {
+          return "Reject";
+        }
+        return "UseExisting";
+      },
+    })
+  );
 
 /** Applies the enrollment's half-open lifetime at every owner boundary. */
 export const isEmailEnrollmentExpired = (input: {

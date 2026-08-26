@@ -1,12 +1,12 @@
 import { expect, it } from "@effect/vitest";
 import { Cause, ConfigProvider, Effect, Exit, Layer, Option } from "effect";
-import { EmailAddress, EmailEnrollmentCombinedCode } from "~/core/email-authentication/model";
+import { EmailAddress, EmailVerificationCode } from "~/core/email-authentication/model";
 import { HttpClient, HttpClientResponse } from "effect/unstable/http";
 import type { HttpClientRequest } from "effect/unstable/http";
 import { EmailDeliveryPort, verificationEmail } from "./delivery";
 import type { EmailSendFailed } from "./delivery";
 
-const combinedCode = EmailEnrollmentCombinedCode.make("ABCD-2345-F7KM-9Q2D-X4PT-6RWC");
+const combinedCode = EmailVerificationCode.make("ABCD-2345-F7KM-9Q2D-X4PT-6RWC");
 const emailAddress = EmailAddress.make("persona@example.com");
 
 it("renders the fixed Spanish plain-text and minimal-HTML verification email", () => {
@@ -76,6 +76,7 @@ const failedResponseBodyLayer = (status: number): Layer.Layer<EmailDeliveryPort>
 
 const send = Effect.flatMap(EmailDeliveryPort, (sender) =>
   sender.send({
+    purpose: "verified-onboarding",
     to: emailAddress,
     combinedCode,
     idempotencyKey: "email-enrollment-generation-1",

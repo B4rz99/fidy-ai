@@ -2,11 +2,13 @@ import { expect, it } from "@effect/vitest";
 import { DateTime, Redacted, Result, Schema } from "effect";
 import {
   EmailAddress,
-  EmailEnrollmentCombinedCode,
-  EmailEnrollmentPublicCode,
+  EmailVerificationCode,
   EmailVerificationProof,
+  EmailVerificationPublicCode,
   PendingEmailEnrollment,
   VerifiedEmailCredential,
+  VerifiedEmailCredentialLifecycleEvent,
+  VerifiedEmailCredentialLifecycleEventId,
 } from "./model";
 import { PendingConsentExchangeId } from "~/core/consent/reference";
 import {
@@ -14,6 +16,7 @@ import {
   WhatsAppBusinessPortfolioId,
   WhatsAppBusinessScopedUserId,
 } from "~/core/identity/reference";
+import { WebSessionId } from "~/core/web-session/reference";
 import { EmailEnrollmentId } from "./reference";
 
 const decodeEmail = Schema.decodeUnknownResult(EmailAddress);
@@ -40,9 +43,9 @@ it("rejects mailbox forms outside the bounded launch grammar", () => {
 });
 
 it("models the public lookup separately from the redacted verification proof", () => {
-  expect(EmailEnrollmentPublicCode.make("ABCD-2345")).toBe("ABCD-2345");
+  expect(EmailVerificationPublicCode.make("ABCD-2345")).toBe("ABCD-2345");
   expect(EmailVerificationProof.make("F7KM-9Q2D-X4PT-6RWC")).toBe("F7KM-9Q2D-X4PT-6RWC");
-  expect(EmailEnrollmentCombinedCode.make("ABCD-2345-F7KM-9Q2D-X4PT-6RWC")).toBe(
+  expect(EmailVerificationCode.make("ABCD-2345-F7KM-9Q2D-X4PT-6RWC")).toBe(
     "ABCD-2345-F7KM-9Q2D-X4PT-6RWC"
   );
 });
@@ -51,7 +54,7 @@ it("rejects out-of-range delivery generations and non-SHA-256 proof digests", ()
   const enrollment = {
     _tag: "AwaitingProof" as const,
     id: EmailEnrollmentId.make("f1d1a000-0000-4000-8000-000000000902"),
-    publicCode: EmailEnrollmentPublicCode.make("ABCD-2345"),
+    publicCode: EmailVerificationPublicCode.make("ABCD-2345"),
     caller: {
       businessPortfolioId: WhatsAppBusinessPortfolioId.make("portfolio-test"),
       businessScopedUserId: WhatsAppBusinessScopedUserId.make("CO.test"),
@@ -90,4 +93,25 @@ it("keeps VerifiedEmailCredential separate from User identity and session author
   });
   expect(credential).not.toHaveProperty("sessionBearer");
   expect(Redacted.isRedacted(credential.email)).toBe(false);
+});
+
+it("models committed replacement evidence with exactly stable metadata", () => {
+  const event = VerifiedEmailCredentialLifecycleEvent.make({
+    id: VerifiedEmailCredentialLifecycleEventId.make("f1d1a000-0000-4000-8000-000000000904"),
+    subjectUserId: UserId.make("f1d1a000-0000-4000-8000-000000000901"),
+    authorizingWebSessionId: WebSessionId.make("f1d1a000-0000-4000-8000-000000000905"),
+    kind: "Replaced",
+    occurredAt: DateTime.makeUnsafe("2026-08-23T12:30:00Z"),
+  });
+
+  expect(Object.keys(event)).toEqual([
+    "id",
+    "subjectUserId",
+    "authorizingWebSessionId",
+    "kind",
+    "occurredAt",
+  ]);
+  expect(event).not.toHaveProperty("email");
+  expect(event).not.toHaveProperty("workflowId");
+  expect(event).not.toHaveProperty("proofDigest");
 });

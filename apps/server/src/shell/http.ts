@@ -6,7 +6,7 @@ import { makeExactOriginCors } from "~/shell/_shared/exact-origin-cors";
 import { ValidationGateLive } from "~/shell/_shared/errors-live";
 import { CanonicalRetryAfterBody } from "~/shell/_shared/errors";
 import { externalEndpoints } from "~/shell/_shared/external-endpoints";
-import { AuditRetentionLive } from "~/shell/audit/retention";
+import { EvidenceRetentionLive } from "./evidence-retention";
 import { OnboardingRetentionLive } from "~/shell/onboarding/retention";
 import { AgentService } from "~/shell/agent/agent-service";
 import { OpenAiHostedInferenceLive, OpenAiLanguageModelLive } from "~/shell/agent/openai";
@@ -29,7 +29,13 @@ import { IngestionLive } from "~/shell/ingestion/handlers";
 import { StatementIngestionWorkerLive } from "~/shell/ingestion/worker";
 import { MemoryLive } from "~/shell/memory/handlers";
 import { EmailDeliveryPort } from "~/shell/email-authentication/delivery";
-import { EmailOnboardingWebAuthHandlersLive } from "~/shell/email-authentication/handlers";
+import {
+  EmailOnboardingWebAuthHandlersLive,
+  EmailReplacementWebAuthHandlersLive,
+} from "~/shell/email-authentication/handlers";
+import { EmailAuthenticationLive } from "~/shell/email-authentication/replacement-handlers";
+import { EmailReplacementDeliveryWorkerLive } from "~/shell/email-authentication/replacement-delivery-worker";
+import { EmailReplacementRetentionLive } from "~/shell/email-authentication/replacement-retention";
 import { OnboardingDeliveryWorkerLive } from "~/shell/onboarding/delivery-worker";
 import { OperationsLive } from "~/shell/operations/handlers";
 import { CanonicalTelemetryLive } from "~/shell/observability/canonical-api";
@@ -57,7 +63,13 @@ const WebAuthNoStoreLive = HttpRouter.middleware((httpEffect) =>
 
 const WebAuthLive = HttpApiBuilder.layer(WebAuthApi).pipe(
   Layer.provide(WebAuthNoStoreLive),
-  Layer.provide(Layer.merge(BrowserLoginWebAuthHandlersLive, EmailOnboardingWebAuthHandlersLive))
+  Layer.provide(
+    Layer.mergeAll(
+      BrowserLoginWebAuthHandlersLive,
+      EmailOnboardingWebAuthHandlersLive,
+      EmailReplacementWebAuthHandlersLive
+    )
+  )
 );
 
 const PATPairingDirectLive = HttpApiBuilder.layer(PATPairingApi).pipe(
@@ -89,6 +101,7 @@ export const ApiLive = HttpApiBuilder.layer(FidyApi, { openapiPath: "/openapi.js
       CategoriesLive,
       BudgetsLive,
       DashboardLive,
+      EmailAuthenticationLive,
       TransactionsLive,
       IngestionLive,
       InsightsLive,
@@ -209,13 +222,18 @@ const HostedStatementIngestionWorkerLive = StatementIngestionWorkerLive.pipe(
 const HostedOnboardingDeliveryWorkerLive = OnboardingDeliveryWorkerLive.pipe(
   Layer.provide(EmailDeliveryPort.layer)
 );
+const HostedEmailReplacementDeliveryWorkerLive = EmailReplacementDeliveryWorkerLive.pipe(
+  Layer.provide(EmailDeliveryPort.layer)
+);
 
 export const AppLive = Layer.mergeAll(
   HttpLive.pipe(Layer.provide(KapsoClient.layer)),
   HostedWhatsAppWorkerLive,
   HostedStatementIngestionWorkerLive,
   HostedOnboardingDeliveryWorkerLive,
-  AuditRetentionLive,
+  HostedEmailReplacementDeliveryWorkerLive,
+  EmailReplacementRetentionLive,
+  EvidenceRetentionLive,
   OnboardingRetentionLive,
   PATPairingExpiryWorkerLive
 ).pipe(

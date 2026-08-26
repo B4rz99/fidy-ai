@@ -7,14 +7,16 @@ import { removeAuditLogEntriesBefore } from "./repo";
 const auditRetentionDays = 365;
 const auditRetentionDuration = Duration.days(auditRetentionDays);
 
-/**
- * Removes evidence strictly older than 365 days at one caller-supplied UTC instant.
- * Entries exactly at the cutoff remain.
- */
+/** Removes AuditLogEntry evidence strictly before the caller-supplied cutoff. */
+export const runAuditRetentionBefore = (
+  cutoff: DateTime.Utc
+): Effect.Effect<void, SqlError.SqlError, SqlClient.SqlClient> =>
+  removeAuditLogEntriesBefore(cutoff);
+
 export const runAuditRetention = (
   now: DateTime.Utc
 ): Effect.Effect<void, SqlError.SqlError, SqlClient.SqlClient> =>
-  removeAuditLogEntriesBefore(DateTime.subtractDuration(now, auditRetentionDuration));
+  runAuditRetentionBefore(DateTime.subtractDuration(now, auditRetentionDuration));
 
 /** Runs one independently observed AuditLogEntry retention execution at the supplied UTC instant. */
 export const runScheduledAuditRetention = (

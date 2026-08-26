@@ -1,15 +1,4 @@
-import { createHmac } from "node:crypto";
-import {
-  Config,
-  ConfigProvider,
-  Crypto,
-  DateTime,
-  Effect,
-  Option,
-  Redacted,
-  Result,
-  Schema,
-} from "effect";
+import { Crypto, DateTime, Effect, Option, Result, Schema } from "effect";
 import { ProviderMessageEvidence } from "~/core/_shared/provider-message-evidence";
 import {
   type ConsentRecord,
@@ -27,10 +16,11 @@ import {
   EmailAddress,
   EmailDeliveryIntentId,
   EmailEnrollmentId,
-  EmailEnrollmentPublicCode,
+  EmailVerificationPublicCode,
+  maximumEmailDeliveryGenerations,
 } from "~/core/email-authentication/model";
 import {
-  enrollmentExpiry,
+  emailWorkflowExpiry,
   formatEmailCode,
   resendAvailability,
   selectEmailCodeSymbols,
@@ -38,6 +28,7 @@ import {
 import type { WhatsAppCaller } from "~/shell/channels/whatsapp/model";
 import { findWhatsAppCaller, resolveWhatsAppCaller } from "~/shell/identity/repo";
 import type { OnboardingTurn, OnboardingTurnOutcome } from "./types";
+import { admitEmailDeliveryInScope } from "~/shell/email-authentication/admission";
 import {
   type EmailEnrollmentRow,
   findAndLockEmailEnrollmentByCaller,
@@ -136,7 +127,7 @@ const acceptPending = Effect.fn("acceptPendingConsent")(function* (
   });
   yield* insertEmailEnrollment({
     id: EmailEnrollmentId.make(yield* crypto.randomUUIDv7.pipe(Effect.orDie)),
-    publicCode: EmailEnrollmentPublicCode.make(
+    publicCode: EmailVerificationPublicCode.make(
       formatEmailCode({
         symbols: publicSymbols,
         groupSize: groupedCodeSymbolCount,
@@ -144,7 +135,7 @@ const acceptPending = Effect.fn("acceptPendingConsent")(function* (
     ),
     caller: input.caller,
     pendingConsentExchangeId: pending.id,
-    expiresAt: enrollmentExpiry(input.receivedAt),
+    expiresAt: emailWorkflowExpiry(input.receivedAt),
   });
   return awaitingEmailOutcome;
 });
@@ -231,6 +222,7 @@ type EmailInstruction =
   | Readonly<{ _tag: "Await" }>
   | Readonly<{ _tag: "AlreadySubmitted" }>
   | Readonly<{ _tag: "Cooldown" }>
+  | Readonly<{ _tag: "QuotaReached" }>
   | Readonly<{ _tag: "Submit"; email: EmailAddress }>;
 
 const inboundText = (input: OnboardingTurn): string =>
@@ -243,13 +235,21 @@ const deliveryCooldownActive = (input: OnboardingTurn, enrollment: EmailEnrollme
   enrollment._tag !== "AwaitingEmail" &&
   DateTime.isLessThan(input.receivedAt, enrollment.resendAvailableAt);
 
-const submittedResendInstruction = (
+const availableResendInstruction = (
   input: OnboardingTurn,
   enrollment: Exclude<EmailEnrollmentRow, { readonly _tag: "AwaitingEmail" }>
 ): EmailInstruction =>
   deliveryCooldownActive(input, enrollment)
     ? { _tag: "Cooldown" }
     : { _tag: "Submit", email: enrollment.email };
+
+const submittedResendInstruction = (
+  input: OnboardingTurn,
+  enrollment: Exclude<EmailEnrollmentRow, { readonly _tag: "AwaitingEmail" }>
+): EmailInstruction =>
+  enrollment.deliveryGeneration >= maximumEmailDeliveryGenerations
+    ? { _tag: "QuotaReached" }
+    : availableResendInstruction(input, enrollment);
 
 const resendInstruction = (
   input: OnboardingTurn,
@@ -268,36 +268,32 @@ const nonEmailInstruction = (
     ? resendInstruction(input, enrollment)
     : priorEmailInstruction(enrollment);
 
+const submittedAddressInstruction = (
+  enrollment: Exclude<EmailEnrollmentRow, { readonly _tag: "AwaitingEmail" }>,
+  email: EmailAddress
+): EmailInstruction =>
+  enrollment.deliveryGeneration >= maximumEmailDeliveryGenerations
+    ? { _tag: "QuotaReached" }
+    : { _tag: "Submit", email };
+
+const decodedAddressInstruction = (
+  enrollment: EmailEnrollmentRow,
+  email: EmailAddress
+): EmailInstruction =>
+  enrollment._tag === "AwaitingEmail"
+    ? { _tag: "Submit", email }
+    : submittedAddressInstruction(enrollment, email);
+
 const chooseEmailInstruction = (
   input: OnboardingTurn,
   enrollment: EmailEnrollmentRow
 ): EmailInstruction => {
   const raw = inboundText(input);
-  const decoded = decodeEmailAddress(raw);
-  return Result.isSuccess(decoded)
-    ? { _tag: "Submit", email: decoded.success }
-    : nonEmailInstruction(input, enrollment, raw);
+  return Result.match(decodeEmailAddress(raw), {
+    onFailure: () => nonEmailInstruction(input, enrollment, raw),
+    onSuccess: (email) => decodedAddressInstruction(enrollment, email),
+  });
 };
-
-const emailAdmissionHmacKeyPattern = /^[0-9a-f]{64}$/u;
-const invalidEmailAdmissionHmacKey = (): Config.ConfigError =>
-  new Config.ConfigError(
-    new ConfigProvider.SourceError({
-      message: "EMAIL_ADMISSION_HMAC_KEY must be a 32-byte lowercase hexadecimal key",
-    })
-  );
-
-const deliveryBudgetKey = Effect.fn("Onboarding.deliveryBudgetKey")(function* (scope: string) {
-  const environment = yield* Config.string("NODE_ENV").pipe(Config.withDefault("development"));
-  let secret = Redacted.make("local-email-admission-key-not-for-production");
-  if (environment === "production") {
-    secret = yield* Config.redacted("EMAIL_ADMISSION_HMAC_KEY");
-    if (!emailAdmissionHmacKeyPattern.test(Redacted.value(secret))) {
-      return yield* Effect.fail(invalidEmailAdmissionHmacKey());
-    }
-  }
-  return createHmac("sha256", Redacted.value(secret)).update(scope).digest("hex");
-});
 
 const handleEmailEnrollment = Effect.fn("handleEmailEnrollment")(function* (
   input: OnboardingTurn,
@@ -312,6 +308,21 @@ const handleEmailEnrollment = Effect.fn("handleEmailEnrollment")(function* (
   if (instruction._tag === "Cooldown") {
     return { _tag: "EmailSubmitted" as const, status: "cooldown" as const };
   }
+  if (instruction._tag === "QuotaReached") {
+    return { _tag: "EmailSubmitted" as const, status: "quota-reached" as const };
+  }
+  const deliveryAdmitted = yield* admitEmailDeliveryInScope({
+    requester: {
+      _tag: "WhatsAppCaller",
+      businessPortfolioId: input.caller.businessPortfolioId,
+      businessScopedUserId: input.caller.businessScopedUserId,
+    },
+    recipient: instruction.email,
+    attemptedAt: input.receivedAt,
+  });
+  if (!deliveryAdmitted) {
+    return { _tag: "EmailSubmitted" as const, status: "quota-reached" as const };
+  }
   const crypto = yield* Crypto.Crypto;
   const intentId = EmailDeliveryIntentId.make(yield* crypto.randomUUIDv7.pipe(Effect.orDie));
   const admitted = yield* submitEnrollmentEmail({
@@ -319,15 +330,11 @@ const handleEmailEnrollment = Effect.fn("handleEmailEnrollment")(function* (
     email: instruction.email,
     intentId,
     idempotencyKey: intentId,
-    callerBudgetKey: yield* deliveryBudgetKey(
-      `caller:${input.caller.businessPortfolioId}:${input.caller.businessScopedUserId}`
-    ),
-    recipientBudgetKey: yield* deliveryBudgetKey(`recipient:${instruction.email}`),
     submittedAt: input.receivedAt,
     resendAvailableAt: resendAvailability(input.receivedAt),
   });
   if (Option.isNone(admitted)) {
-    return { _tag: "EmailSubmitted" as const, status: "quota-reached" as const };
+    return yield* Effect.die("Admitted email delivery did not advance its locked enrollment");
   }
   return emailSubmittedOutcome;
 });

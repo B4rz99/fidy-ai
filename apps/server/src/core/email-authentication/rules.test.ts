@@ -1,11 +1,17 @@
 import { expect, it } from "@effect/vitest";
-import { DateTime, Effect } from "effect";
-import { decideProofAttempt, enrollmentExpiry, proofExpiry, selectEmailCodeSymbols } from "./rules";
+import { DateTime, Effect, Option } from "effect";
+import {
+  decideEmailReplacementRequest,
+  decideProofAttempt,
+  emailWorkflowExpiry,
+  proofExpiry,
+  selectEmailCodeSymbols,
+} from "./rules";
 
 const acceptedAt = DateTime.makeUnsafe("2026-08-23T12:00:00Z");
 
 it("uses exact half-open enrollment and proof lifetimes", () => {
-  expect(enrollmentExpiry(acceptedAt)).toEqual(DateTime.makeUnsafe("2026-08-24T12:00:00Z"));
+  expect(emailWorkflowExpiry(acceptedAt)).toEqual(DateTime.makeUnsafe("2026-08-24T12:00:00Z"));
   expect(proofExpiry(acceptedAt)).toEqual(DateTime.makeUnsafe("2026-08-23T12:10:00Z"));
   expect(
     Effect.runSync(
@@ -68,6 +74,52 @@ it("deletes bounded evidence on the fifth wrong proof", () => {
       })
     )
   ).toEqual({ _tag: "Delete" });
+});
+
+it("decides bounded replacement resend and supersession from locked state", () => {
+  const requestedAt = DateTime.makeUnsafe("2026-08-23T12:00:00Z");
+  expect(
+    Effect.runSync(decideEmailReplacementRequest({ existing: Option.none(), requestedAt }))
+  ).toBe("Start");
+  expect(
+    Effect.runSync(
+      decideEmailReplacementRequest({
+        existing: Option.some({
+          candidateMatches: true,
+          deliveryGeneration: 1,
+          resendAvailableAt: DateTime.makeUnsafe("2026-08-23T12:00:01Z"),
+          expiresAt: DateTime.makeUnsafe("2026-08-24T12:00:00Z"),
+        }),
+        requestedAt,
+      })
+    )
+  ).toBe("Reject");
+  expect(
+    Effect.runSync(
+      decideEmailReplacementRequest({
+        existing: Option.some({
+          candidateMatches: false,
+          deliveryGeneration: 1,
+          resendAvailableAt: DateTime.makeUnsafe("2026-08-23T12:00:01Z"),
+          expiresAt: DateTime.makeUnsafe("2026-08-24T12:00:00Z"),
+        }),
+        requestedAt,
+      })
+    )
+  ).toBe("UseExisting");
+  expect(
+    Effect.runSync(
+      decideEmailReplacementRequest({
+        existing: Option.some({
+          candidateMatches: true,
+          deliveryGeneration: 1,
+          resendAvailableAt: requestedAt,
+          expiresAt: requestedAt,
+        }),
+        requestedAt,
+      })
+    )
+  ).toBe("ReplaceExpired");
 });
 
 it("selects only complete unbiased symbols from the unambiguous alphabet", () => {

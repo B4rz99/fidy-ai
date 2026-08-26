@@ -2,7 +2,7 @@ import { expect, layer } from "@effect/vitest";
 import { DateTime, Effect, Layer, Option } from "effect";
 import { SqlClient } from "effect/unstable/sql";
 import { PendingConsentExchangeId } from "~/core/consent/model";
-import { EmailEnrollmentId, EmailEnrollmentPublicCode } from "~/core/email-authentication/model";
+import { EmailEnrollmentId, EmailVerificationPublicCode } from "~/core/email-authentication/model";
 import { E164PhoneNumber, whatsAppCallerReference } from "~/core/identity/reference";
 import { TelemetryDisabled } from "~/shell/observability/disabled";
 import { ApiHarness } from "~/shell/testing/api-harness";
@@ -108,7 +108,7 @@ layer(OnboardingRetentionHarness, { excludeTestServices: true, timeout: "30 seco
               pending_consent_exchange_id, expires_at
             ) VALUES (
               ${EmailEnrollmentId.make("f1d1a000-0000-4000-8000-000000000864")},
-              ${EmailEnrollmentPublicCode.make("JKLM-NPQR")}, ${caller.businessPortfolioId},
+              ${EmailVerificationPublicCode.make("JKLM-NPQR")}, ${caller.businessPortfolioId},
               ${caller.businessScopedUserId}, ${exchangeId}, ${expiresAt}
             )`;
           })

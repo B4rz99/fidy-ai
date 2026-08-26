@@ -49,6 +49,7 @@ import type { ClaimPATPairingPayload } from "~/pat-pairing-api";
 import type { CanonicalCaller } from "~/shell/_shared/authz";
 import type { CanonicalMutationImplementation } from "~/shell/_shared/canonical-mutation";
 import {
+  CanonicalPreTransactions,
   takeCanonicalPreTransactionState,
   withCanonicalPreTransaction,
 } from "~/shell/_shared/canonical-pre-transaction";
@@ -67,6 +68,7 @@ import {
   PATPairingReviewRateLimited,
   PATPairingReviewRejected,
   patPairingGenericMessage,
+  patPairingInspectOperation,
 } from "./operations";
 import {
   type ApprovedLockedPATPairingCandidate,
@@ -390,6 +392,12 @@ const preparePATPairingInspection = (
       ])
     )
   );
+
+// HttpApi may wrap a handler Effect before authorization executes it. The operation fallback keeps
+// inspection admission durable even when that adapter cannot preserve the original Effect identity.
+CanonicalPreTransactions.registerFallback(patPairingInspectOperation, (caller) =>
+  preparePATPairingInspection(caller.subjectUserId)
+);
 
 /** Binds one durably admitted live request and returns its immutable safe review. */
 export const inspectPATPairing = (

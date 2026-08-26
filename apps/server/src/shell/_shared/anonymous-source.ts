@@ -1,6 +1,5 @@
 import { isIP } from "node:net";
 import { Option } from "effect";
-import type { HttpServerRequest } from "effect/unstable/http";
 
 const mappedIpv4Prefix = "::ffff:";
 
@@ -26,10 +25,13 @@ const forwardedClientAddress = (header: Option.Option<string>): Option.Option<st
     return Option.fromUndefinedOr(addresses.at(-1));
   });
 
+type AnonymousSourceRequest = Readonly<{
+  remoteAddress: Option.Option<string>;
+  headers: Readonly<Record<string, string>>;
+}>;
+
 /** Resolves an anonymous abuse-control key without trusting client-supplied forwarding metadata. */
-export const anonymousRequestSource = (
-  request: HttpServerRequest.HttpServerRequest
-): Option.Option<string> =>
+export const anonymousRequestSource = (request: AnonymousSourceRequest): Option.Option<string> =>
   Option.flatMap(request.remoteAddress, (peerAddress) => {
     const peer = normalizeAddress(peerAddress);
     if (isIP(peer) === 0) return Option.none();

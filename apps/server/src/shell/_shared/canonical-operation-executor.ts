@@ -110,7 +110,7 @@ const runPreTransactionCheckpoint = (input: {
   readonly effect: object;
 }): Effect.Effect<ReadonlyArray<Schema.Json>, never, SqlClient.SqlClient> =>
   Effect.gen(function* () {
-    const checkpoint = CanonicalPreTransactions.find(input.effect, input.caller);
+    const checkpoint = CanonicalPreTransactions.find(input.effect, input.caller, input.operation);
     if (Option.isNone(checkpoint)) return [];
     const exit = yield* Effect.exit(checkpoint.value);
     if (Exit.isSuccess(exit)) return exit.value;

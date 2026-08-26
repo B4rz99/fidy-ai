@@ -13,20 +13,7 @@ import { EnvelopeRecorder } from "./envelope-recorder";
 
 const resetBrowserLogin = Effect.gen(function* () {
   const sql = yield* MigrationSqlClient;
-  yield* sql`
-    DO $reset$
-    BEGIN
-      IF EXISTS (
-        SELECT 1 FROM information_schema.columns
-        WHERE table_schema = 'public'
-          AND table_name = 'consent_records'
-          AND column_name = 'decision_web_session_id'
-      ) THEN
-        EXECUTE 'DELETE FROM consent_records WHERE decision_web_session_id IS NOT NULL';
-      END IF;
-    END
-    $reset$
-  `;
+  yield* sql`DELETE FROM consent_records WHERE web_session_id IS NOT NULL`;
   yield* sql`DELETE FROM web_sessions`;
   yield* sql`DELETE FROM browser_login_start_attempts`;
   yield* sql`DELETE FROM browser_login_pairings`;

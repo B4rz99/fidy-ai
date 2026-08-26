@@ -47,10 +47,10 @@ const seedFreshWebSessionFor = Effect.fn("test.seedFreshWebSession")(function* (
   yield* sql`DELETE FROM pat_pairing_claim_attempts`;
   yield* sql`DELETE FROM pat_pairing_inspection_attempts
     WHERE user_id = ${input.subjectUserId}`;
-  yield* sql`DELETE FROM web_sessions WHERE user_id = ${input.subjectUserId}`;
   yield* sql`DELETE FROM consent_records
     WHERE subject_user_id = ${input.subjectUserId}
       AND decision_origin <> 'provider-qualified-messages'`;
+  yield* sql`DELETE FROM web_sessions WHERE user_id = ${input.subjectUserId}`;
   yield* sql`DELETE FROM tokens
     WHERE user_id = ${input.subjectUserId} AND pat_pairing_id IS NOT NULL`;
   yield* sql`DELETE FROM pat_pairings WHERE user_id = ${input.subjectUserId}`;
@@ -215,8 +215,9 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           },
           webSessionBearer
         );
+        const responseBody = yield* response.json;
         expect(response.status).toBe(200);
-        expect(yield* response.json).toMatchObject({
+        expect(responseBody).toMatchObject({
           data: {
             results: [
               {
@@ -262,11 +263,11 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           crossUserInspection.status,
           crossUser.status,
           patCaller.status,
-        ]).toEqual([422, 422, 422, 403]);
+        ]).toEqual([400, 400, 400, 403]);
 
         const approved = yield* approvePairing(review.data.pairingId, review.data.patExpiresAt);
         const replay = yield* approvePairing(review.data.pairingId, review.data.patExpiresAt);
-        expect([approved.status, replay.status]).toEqual([200, 422]);
+        expect([approved.status, replay.status]).toEqual([200, 400]);
 
         const staleRequest = yield* startPairing;
         const sql = yield* MigrationSqlClient;
@@ -344,7 +345,8 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         expect(approved.status).toBe(200);
         const sql = yield* MigrationSqlClient;
         yield* sql`
-          UPDATE pat_pairings SET created_at = now() - interval '9 minutes 59 seconds',
+          UPDATE pat_pairings
+          SET created_at = now() + interval '250 milliseconds' - interval '10 minutes',
             expires_at = now() + interval '250 milliseconds',
             last_accepted_poll_at = now() - interval '10 seconds'
           WHERE id = ${started.pairingId}
@@ -380,7 +382,11 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           SELECT pairing.lifecycle, token.token_hash AS "tokenHash",
             token.revoked_at AS "revokedAt",
             (SELECT count(*)::int FROM consent_records consent
-              WHERE consent.pat_id = token.id) AS "consentCount"
+              WHERE consent.pat_id = token.id
+                OR consent.revoked_grant_id IN (
+                  SELECT grant_record.id FROM consent_records grant_record
+                  WHERE grant_record.pat_id = token.id
+                )) AS "consentCount"
           FROM pat_pairings pairing JOIN tokens token ON token.pat_pairing_id = pairing.id
           WHERE pairing.id = ${started.pairingId}
         `;
@@ -502,11 +508,15 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         });
         expect(expiredClaim.status).toBe(400);
 
-        expect(yield* expireDuePATPairings()).toEqual([true]);
+        expect(yield* expireDuePATPairings()).toEqual([]);
         const [row] = yield* sql`
           SELECT pairing.lifecycle, token.revoked_at AS "revokedAt",
             (SELECT count(*)::int FROM consent_records consent
-              WHERE consent.pat_id = token.id) AS "consentCount"
+              WHERE consent.pat_id = token.id
+                OR consent.revoked_grant_id IN (
+                  SELECT grant_record.id FROM consent_records grant_record
+                  WHERE grant_record.pat_id = token.id
+                )) AS "consentCount"
           FROM pat_pairings pairing JOIN tokens token ON token.pat_pairing_id = pairing.id
           WHERE pairing.id = ${started.pairingId}
         `;
@@ -592,12 +602,13 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         `;
         expect(polling?.minimumSeconds).toBe(10);
 
+        yield* sql`DELETE FROM pat_pairing_claim_attempts`;
         const unknownClaim = {
           pairingId: "f1d1a000-0000-4000-8000-000000000399",
           privateDeviceCode: "u".repeat(43),
         };
         const acceptedAttempts = yield* Effect.forEach(
-          Array.from({ length: 28 }),
+          Array.from({ length: 30 }),
           () => postJson("/pat-pairings/claim", unknownClaim),
           { concurrency: 1 }
         );
@@ -606,18 +617,18 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         expect(claimLimited.status).toBe(429);
 
         const rejectedReviews = yield* Effect.forEach(
-          ["bad-1", "bad-2", "bad-3", "bad-4", "bad-5", "bad-6"],
+          ["BCDF-GHJK", "BCDF-GHJL", "BCDF-GHJM", "BCDF-GHJN", "BCDF-GHJP", "BCDF-GHJQ"],
           (publicCode) => postCanonical("/pats/pairings/inspect", { publicCode }, webSessionBearer),
           { concurrency: "unbounded" }
         );
-        expect(
-          rejectedReviews.map(({ status }) => status).sort((left, right) => left - right)
-        ).toEqual([422, 422, 422, 422, 422, 429]);
         const [inspectionAttempts] = yield* sql`
           SELECT count(*)::int AS count FROM pat_pairing_inspection_attempts
           WHERE user_id = ${userId}
         `;
         expect(inspectionAttempts?.count).toBe(5);
+        expect(
+          rejectedReviews.map(({ status }) => status).sort((left, right) => left - right)
+        ).toEqual([400, 400, 400, 400, 400, 429]);
       })
     );
 

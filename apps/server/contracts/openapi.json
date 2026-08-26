@@ -7950,6 +7950,84 @@
                                 }
                               },
                               "type": "object"
+                            },
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "callId": {
+                                  "$ref": "#/components/schemas/AtomicBatchCallId"
+                                },
+                                "input": {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "payload": {
+                                      "$ref": "#/components/schemas/CreateManualPATPayloadPartial"
+                                    }
+                                  },
+                                  "type": "object"
+                                },
+                                "operation": {
+                                  "enum": [
+                                    "pats.createManualPAT"
+                                  ],
+                                  "type": "string"
+                                }
+                              },
+                              "type": "object"
+                            },
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "callId": {
+                                  "$ref": "#/components/schemas/AtomicBatchCallId"
+                                },
+                                "input": {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "payload": {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "publicCode": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "type": "object"
+                                    }
+                                  },
+                                  "type": "object"
+                                },
+                                "operation": {
+                                  "enum": [
+                                    "pats.inspectPATPairing"
+                                  ],
+                                  "type": "string"
+                                }
+                              },
+                              "type": "object"
+                            },
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "callId": {
+                                  "$ref": "#/components/schemas/AtomicBatchCallId"
+                                },
+                                "input": {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "payload": {
+                                      "$ref": "#/components/schemas/ApprovePATPairingPayloadPartial"
+                                    }
+                                  },
+                                  "type": "object"
+                                },
+                                "operation": {
+                                  "enum": [
+                                    "pats.approvePATPairing"
+                                  ],
+                                  "type": "string"
+                                }
+                              },
+                              "type": "object"
                             }
                           ]
                         },
@@ -8535,6 +8613,84 @@
                                   "operation": {
                                     "enum": [
                                       "memory.forget"
+                                    ],
+                                    "type": "string"
+                                  }
+                                },
+                                "type": "object"
+                              },
+                              {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "callId": {
+                                    "$ref": "#/components/schemas/AtomicBatchCallId"
+                                  },
+                                  "input": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "payload": {
+                                        "$ref": "#/components/schemas/CreateManualPATPayloadPartial"
+                                      }
+                                    },
+                                    "type": "object"
+                                  },
+                                  "operation": {
+                                    "enum": [
+                                      "pats.createManualPAT"
+                                    ],
+                                    "type": "string"
+                                  }
+                                },
+                                "type": "object"
+                              },
+                              {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "callId": {
+                                    "$ref": "#/components/schemas/AtomicBatchCallId"
+                                  },
+                                  "input": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "payload": {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "publicCode": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "type": "object"
+                                      }
+                                    },
+                                    "type": "object"
+                                  },
+                                  "operation": {
+                                    "enum": [
+                                      "pats.inspectPATPairing"
+                                    ],
+                                    "type": "string"
+                                  }
+                                },
+                                "type": "object"
+                              },
+                              {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "callId": {
+                                    "$ref": "#/components/schemas/AtomicBatchCallId"
+                                  },
+                                  "input": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "payload": {
+                                        "$ref": "#/components/schemas/ApprovePATPairingPayloadPartial"
+                                      }
+                                    },
+                                    "type": "object"
+                                  },
+                                  "operation": {
+                                    "enum": [
+                                      "pats.approvePATPairing"
                                     ],
                                     "type": "string"
                                   }
@@ -10944,6 +11100,84 @@
                                 }
                               },
                               "type": "object"
+                            },
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "callId": {
+                                  "$ref": "#/components/schemas/AtomicBatchCallId"
+                                },
+                                "input": {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "payload": {
+                                      "$ref": "#/components/schemas/CreateManualPATPayloadPartial"
+                                    }
+                                  },
+                                  "type": "object"
+                                },
+                                "operation": {
+                                  "enum": [
+                                    "pats.createManualPAT"
+                                  ],
+                                  "type": "string"
+                                }
+                              },
+                              "type": "object"
+                            },
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "callId": {
+                                  "$ref": "#/components/schemas/AtomicBatchCallId"
+                                },
+                                "input": {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "payload": {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "publicCode": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "type": "object"
+                                    }
+                                  },
+                                  "type": "object"
+                                },
+                                "operation": {
+                                  "enum": [
+                                    "pats.inspectPATPairing"
+                                  ],
+                                  "type": "string"
+                                }
+                              },
+                              "type": "object"
+                            },
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "callId": {
+                                  "$ref": "#/components/schemas/AtomicBatchCallId"
+                                },
+                                "input": {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "payload": {
+                                      "$ref": "#/components/schemas/ApprovePATPairingPayloadPartial"
+                                    }
+                                  },
+                                  "type": "object"
+                                },
+                                "operation": {
+                                  "enum": [
+                                    "pats.approvePATPairing"
+                                  ],
+                                  "type": "string"
+                                }
+                              },
+                              "type": "object"
                             }
                           ]
                         },
@@ -11529,6 +11763,84 @@
                                   "operation": {
                                     "enum": [
                                       "memory.forget"
+                                    ],
+                                    "type": "string"
+                                  }
+                                },
+                                "type": "object"
+                              },
+                              {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "callId": {
+                                    "$ref": "#/components/schemas/AtomicBatchCallId"
+                                  },
+                                  "input": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "payload": {
+                                        "$ref": "#/components/schemas/CreateManualPATPayloadPartial"
+                                      }
+                                    },
+                                    "type": "object"
+                                  },
+                                  "operation": {
+                                    "enum": [
+                                      "pats.createManualPAT"
+                                    ],
+                                    "type": "string"
+                                  }
+                                },
+                                "type": "object"
+                              },
+                              {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "callId": {
+                                    "$ref": "#/components/schemas/AtomicBatchCallId"
+                                  },
+                                  "input": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "payload": {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "publicCode": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "type": "object"
+                                      }
+                                    },
+                                    "type": "object"
+                                  },
+                                  "operation": {
+                                    "enum": [
+                                      "pats.inspectPATPairing"
+                                    ],
+                                    "type": "string"
+                                  }
+                                },
+                                "type": "object"
+                              },
+                              {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "callId": {
+                                    "$ref": "#/components/schemas/AtomicBatchCallId"
+                                  },
+                                  "input": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "payload": {
+                                        "$ref": "#/components/schemas/ApprovePATPairingPayloadPartial"
+                                      }
+                                    },
+                                    "type": "object"
+                                  },
+                                  "operation": {
+                                    "enum": [
+                                      "pats.approvePATPairing"
                                     ],
                                     "type": "string"
                                   }
@@ -16791,6 +17103,111 @@
                             "input"
                           ],
                           "type": "object"
+                        },
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "callId": {
+                              "$ref": "#/components/schemas/AtomicBatchCallId"
+                            },
+                            "input": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "payload": {
+                                  "$ref": "#/components/schemas/CreateManualPATPayload"
+                                }
+                              },
+                              "required": [
+                                "payload"
+                              ],
+                              "type": "object"
+                            },
+                            "operation": {
+                              "enum": [
+                                "pats.createManualPAT"
+                              ],
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "callId",
+                            "operation",
+                            "input"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "callId": {
+                              "$ref": "#/components/schemas/AtomicBatchCallId"
+                            },
+                            "input": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "payload": {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "publicCode": {
+                                      "$ref": "#/components/schemas/MemoryText"
+                                    }
+                                  },
+                                  "required": [
+                                    "publicCode"
+                                  ],
+                                  "type": "object"
+                                }
+                              },
+                              "required": [
+                                "payload"
+                              ],
+                              "type": "object"
+                            },
+                            "operation": {
+                              "enum": [
+                                "pats.inspectPATPairing"
+                              ],
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "callId",
+                            "operation",
+                            "input"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "callId": {
+                              "$ref": "#/components/schemas/AtomicBatchCallId"
+                            },
+                            "input": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "payload": {
+                                  "$ref": "#/components/schemas/ApprovePATPairingPayload"
+                                }
+                              },
+                              "required": [
+                                "payload"
+                              ],
+                              "type": "object"
+                            },
+                            "operation": {
+                              "enum": [
+                                "pats.approvePATPairing"
+                              ],
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "callId",
+                            "operation",
+                            "input"
+                          ],
+                          "type": "object"
                         }
                       ]
                     },
@@ -17575,6 +17992,111 @@
                               "operation": {
                                 "enum": [
                                   "memory.forget"
+                                ],
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "callId",
+                              "operation",
+                              "input"
+                            ],
+                            "type": "object"
+                          },
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "callId": {
+                                "$ref": "#/components/schemas/AtomicBatchCallId"
+                              },
+                              "input": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "payload": {
+                                    "$ref": "#/components/schemas/CreateManualPATPayload"
+                                  }
+                                },
+                                "required": [
+                                  "payload"
+                                ],
+                                "type": "object"
+                              },
+                              "operation": {
+                                "enum": [
+                                  "pats.createManualPAT"
+                                ],
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "callId",
+                              "operation",
+                              "input"
+                            ],
+                            "type": "object"
+                          },
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "callId": {
+                                "$ref": "#/components/schemas/AtomicBatchCallId"
+                              },
+                              "input": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "payload": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "publicCode": {
+                                        "$ref": "#/components/schemas/MemoryText"
+                                      }
+                                    },
+                                    "required": [
+                                      "publicCode"
+                                    ],
+                                    "type": "object"
+                                  }
+                                },
+                                "required": [
+                                  "payload"
+                                ],
+                                "type": "object"
+                              },
+                              "operation": {
+                                "enum": [
+                                  "pats.inspectPATPairing"
+                                ],
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "callId",
+                              "operation",
+                              "input"
+                            ],
+                            "type": "object"
+                          },
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "callId": {
+                                "$ref": "#/components/schemas/AtomicBatchCallId"
+                              },
+                              "input": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "payload": {
+                                    "$ref": "#/components/schemas/ApprovePATPairingPayload"
+                                  }
+                                },
+                                "required": [
+                                  "payload"
+                                ],
+                                "type": "object"
+                              },
+                              "operation": {
+                                "enum": [
+                                  "pats.approvePATPairing"
                                 ],
                                 "type": "string"
                               }
@@ -18576,6 +19098,141 @@
                                   "output"
                                 ],
                                 "type": "object"
+                              },
+                              {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "callId": {
+                                    "$ref": "#/components/schemas/AtomicBatchCallId"
+                                  },
+                                  "operation": {
+                                    "enum": [
+                                      "pats.createManualPAT"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "output": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "data": {
+                                        "$ref": "#/components/schemas/IssuedManualPATResponse"
+                                      },
+                                      "next": {
+                                        "allOf": [
+                                          {
+                                            "description": "Where to go next: up to three canonical operations worth calling after this one, best first. Empty when there is nothing worth suggesting, which is an answer rather than an omission. Each entry has passed the target-input and caller-authorization checkpoint.",
+                                            "maxItems": 3
+                                          }
+                                        ],
+                                        "items": {
+                                          "$ref": "#/components/schemas/SuggestedOperation2"
+                                        },
+                                        "type": "array"
+                                      }
+                                    },
+                                    "required": [
+                                      "data",
+                                      "next"
+                                    ],
+                                    "type": "object"
+                                  }
+                                },
+                                "required": [
+                                  "callId",
+                                  "operation",
+                                  "output"
+                                ],
+                                "type": "object"
+                              },
+                              {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "callId": {
+                                    "$ref": "#/components/schemas/AtomicBatchCallId"
+                                  },
+                                  "operation": {
+                                    "enum": [
+                                      "pats.inspectPATPairing"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "output": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "data": {
+                                        "$ref": "#/components/schemas/PATPairingReview"
+                                      },
+                                      "next": {
+                                        "allOf": [
+                                          {
+                                            "description": "Where to go next: up to three canonical operations worth calling after this one, best first. Empty when there is nothing worth suggesting, which is an answer rather than an omission. Each entry has passed the target-input and caller-authorization checkpoint.",
+                                            "maxItems": 3
+                                          }
+                                        ],
+                                        "items": {
+                                          "$ref": "#/components/schemas/SuggestedOperation2"
+                                        },
+                                        "type": "array"
+                                      }
+                                    },
+                                    "required": [
+                                      "data",
+                                      "next"
+                                    ],
+                                    "type": "object"
+                                  }
+                                },
+                                "required": [
+                                  "callId",
+                                  "operation",
+                                  "output"
+                                ],
+                                "type": "object"
+                              },
+                              {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "callId": {
+                                    "$ref": "#/components/schemas/AtomicBatchCallId"
+                                  },
+                                  "operation": {
+                                    "enum": [
+                                      "pats.approvePATPairing"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "output": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "data": {
+                                        "$ref": "#/components/schemas/ApprovedPATPairing"
+                                      },
+                                      "next": {
+                                        "allOf": [
+                                          {
+                                            "description": "Where to go next: up to three canonical operations worth calling after this one, best first. Empty when there is nothing worth suggesting, which is an answer rather than an omission. Each entry has passed the target-input and caller-authorization checkpoint.",
+                                            "maxItems": 3
+                                          }
+                                        ],
+                                        "items": {
+                                          "$ref": "#/components/schemas/SuggestedOperation2"
+                                        },
+                                        "type": "array"
+                                      }
+                                    },
+                                    "required": [
+                                      "data",
+                                      "next"
+                                    ],
+                                    "type": "object"
+                                  }
+                                },
+                                "required": [
+                                  "callId",
+                                  "operation",
+                                  "output"
+                                ],
+                                "type": "object"
                               }
                             ]
                           },
@@ -19513,6 +20170,141 @@
                                       "properties": {
                                         "data": {
                                           "$ref": "#/components/schemas/MemoryId"
+                                        },
+                                        "next": {
+                                          "allOf": [
+                                            {
+                                              "description": "Where to go next: up to three canonical operations worth calling after this one, best first. Empty when there is nothing worth suggesting, which is an answer rather than an omission. Each entry has passed the target-input and caller-authorization checkpoint.",
+                                              "maxItems": 3
+                                            }
+                                          ],
+                                          "items": {
+                                            "$ref": "#/components/schemas/SuggestedOperation2"
+                                          },
+                                          "type": "array"
+                                        }
+                                      },
+                                      "required": [
+                                        "data",
+                                        "next"
+                                      ],
+                                      "type": "object"
+                                    }
+                                  },
+                                  "required": [
+                                    "callId",
+                                    "operation",
+                                    "output"
+                                  ],
+                                  "type": "object"
+                                },
+                                {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "callId": {
+                                      "$ref": "#/components/schemas/AtomicBatchCallId"
+                                    },
+                                    "operation": {
+                                      "enum": [
+                                        "pats.createManualPAT"
+                                      ],
+                                      "type": "string"
+                                    },
+                                    "output": {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "data": {
+                                          "$ref": "#/components/schemas/IssuedManualPATResponse"
+                                        },
+                                        "next": {
+                                          "allOf": [
+                                            {
+                                              "description": "Where to go next: up to three canonical operations worth calling after this one, best first. Empty when there is nothing worth suggesting, which is an answer rather than an omission. Each entry has passed the target-input and caller-authorization checkpoint.",
+                                              "maxItems": 3
+                                            }
+                                          ],
+                                          "items": {
+                                            "$ref": "#/components/schemas/SuggestedOperation2"
+                                          },
+                                          "type": "array"
+                                        }
+                                      },
+                                      "required": [
+                                        "data",
+                                        "next"
+                                      ],
+                                      "type": "object"
+                                    }
+                                  },
+                                  "required": [
+                                    "callId",
+                                    "operation",
+                                    "output"
+                                  ],
+                                  "type": "object"
+                                },
+                                {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "callId": {
+                                      "$ref": "#/components/schemas/AtomicBatchCallId"
+                                    },
+                                    "operation": {
+                                      "enum": [
+                                        "pats.inspectPATPairing"
+                                      ],
+                                      "type": "string"
+                                    },
+                                    "output": {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "data": {
+                                          "$ref": "#/components/schemas/PATPairingReview"
+                                        },
+                                        "next": {
+                                          "allOf": [
+                                            {
+                                              "description": "Where to go next: up to three canonical operations worth calling after this one, best first. Empty when there is nothing worth suggesting, which is an answer rather than an omission. Each entry has passed the target-input and caller-authorization checkpoint.",
+                                              "maxItems": 3
+                                            }
+                                          ],
+                                          "items": {
+                                            "$ref": "#/components/schemas/SuggestedOperation2"
+                                          },
+                                          "type": "array"
+                                        }
+                                      },
+                                      "required": [
+                                        "data",
+                                        "next"
+                                      ],
+                                      "type": "object"
+                                    }
+                                  },
+                                  "required": [
+                                    "callId",
+                                    "operation",
+                                    "output"
+                                  ],
+                                  "type": "object"
+                                },
+                                {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "callId": {
+                                      "$ref": "#/components/schemas/AtomicBatchCallId"
+                                    },
+                                    "operation": {
+                                      "enum": [
+                                        "pats.approvePATPairing"
+                                      ],
+                                      "type": "string"
+                                    },
+                                    "output": {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "data": {
+                                          "$ref": "#/components/schemas/ApprovedPATPairing"
                                         },
                                         "next": {
                                           "allOf": [

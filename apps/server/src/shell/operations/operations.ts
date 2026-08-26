@@ -97,7 +97,10 @@ export const decodeAtomicBatchResult = (
 
 const mutationOperations = (catalog: OperationCatalog): ReadonlyArray<CatalogOperation> =>
   catalog.operations.filter(
-    (operation) => operation.policy.kind === "mutation" && isPATScoped(operation.policy.access)
+    (operation) =>
+      operation.policy.kind === "mutation" &&
+      (isPATScoped(operation.policy.access) ||
+        operation.policy.access._tag === "FreshWebSessionOnly")
   );
 
 const mutationCallMember = (operation: CatalogOperation): Schema.Top =>

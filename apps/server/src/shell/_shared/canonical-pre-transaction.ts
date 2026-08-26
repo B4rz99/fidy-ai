@@ -1,5 +1,6 @@
 import { Context, Effect, Function, Option, Ref, type Schema } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
+import type { CanonicalOperationId } from "~/core/_shared/canonical-operation";
 import type { CanonicalCaller } from "./authz";
 
 type CanonicalPreTransactionPlan = Effect.Effect<
@@ -11,6 +12,7 @@ type CanonicalPreTransactionPlan = Effect.Effect<
 type CanonicalPreTransactionPlanFactory = (caller: CanonicalCaller) => CanonicalPreTransactionPlan;
 
 const plans = new WeakMap<object, CanonicalPreTransactionPlanFactory>();
+const operationFallbacks = new Map<CanonicalOperationId, CanonicalPreTransactionPlanFactory>();
 
 /** Call-local preparation states consumed by workflows inside one canonical transaction. */
 export const CanonicalPreTransactionStates = Context.Reference<
@@ -58,8 +60,22 @@ export const CanonicalPreTransactions = {
     );
     return effect;
   },
-  find(effect: object, caller: CanonicalCaller): Option.Option<CanonicalPreTransactionPlan> {
-    return findCanonicalPreTransaction(effect, caller);
+  registerFallback(
+    operation: CanonicalOperationId,
+    prepare: CanonicalPreTransactionPlanFactory
+  ): void {
+    operationFallbacks.set(operation, prepare);
+  },
+  find(
+    effect: object,
+    caller: CanonicalCaller,
+    operation: CanonicalOperationId
+  ): Option.Option<CanonicalPreTransactionPlan> {
+    return Option.orElse(findCanonicalPreTransaction(effect, caller), () =>
+      Option.map(Option.fromNullishOr(operationFallbacks.get(operation)), (prepare) =>
+        prepare(caller)
+      )
+    );
   },
 } as const;
 

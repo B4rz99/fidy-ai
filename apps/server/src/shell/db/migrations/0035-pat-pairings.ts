@@ -208,10 +208,10 @@ export const patPairings = Effect.gen(function* () {
       ) SELECT
         (SELECT count(*)::int FROM public.pat_pairing_claim_attempts
           WHERE source_digest = requested_source_digest
-            AND attempted_at > attempt_time - interval '1 minute'),
+            AND attempted_at > attempt_time - interval '1 minute') + 1,
         (SELECT count(*)::int FROM public.pat_pairing_claim_attempts
           WHERE source_digest = requested_source_digest
-            AND attempted_at > attempt_time - interval '10 minutes'),
+            AND attempted_at > attempt_time - interval '10 minutes') + 1,
         COALESCE((SELECT CEIL(EXTRACT(EPOCH FROM (
           min(attempted_at) + interval '10 minutes' - attempt_time
         )))::int FROM public.pat_pairing_claim_attempts

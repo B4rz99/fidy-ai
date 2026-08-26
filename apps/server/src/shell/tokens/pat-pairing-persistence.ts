@@ -417,14 +417,23 @@ export const reservePATPairingInspectionAttempt = Effect.fn("PATPairing.reserveI
     const sql = yield* SqlClient.SqlClient;
     const admission = yield* withUserTransaction(
       input.userId,
-      SqlSchema.findOne({
-        Request: Schema.Void,
-        Result: InspectionAdmission,
-        execute: () => sql`
-          SELECT admitted, retry_after_seconds AS "retryAfterSeconds"
-          FROM fidy_reserve_pat_pairing_inspection(${input.userId}, ${input.attemptedAt})
-        `,
-      })(undefined).pipe(Effect.orDie)
+      Effect.gen(function* () {
+        // Acquire admission serialization before the counting statement takes its READ COMMITTED
+        // snapshot, so concurrent requests observe attempts committed by the preceding holder.
+        yield* sql`
+          SELECT pg_advisory_xact_lock(
+            hashtextextended('pat-pairing-inspection:' || ${input.userId}::text, 249)
+          )
+        `;
+        return yield* SqlSchema.findOne({
+          Request: Schema.Void,
+          Result: InspectionAdmission,
+          execute: () => sql`
+            SELECT admitted, retry_after_seconds AS "retryAfterSeconds"
+            FROM fidy_reserve_pat_pairing_inspection(${input.userId}, ${input.attemptedAt})
+          `,
+        })(undefined);
+      }).pipe(Effect.orDie)
     );
     if (!admission.admitted) {
       return yield* PATPairingReviewRateLimited.make({

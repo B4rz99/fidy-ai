@@ -200,7 +200,8 @@ const prepareAtomicBatch = Effect.fn("prepareAtomicBatch")(function* ({
     const mutationCall = yield* decodeCanonicalMutationCall(call).pipe(Effect.orDie);
     const preparation = CanonicalPreTransactions.find(
       CanonicalMutationEffects.make(mutationCall, { resolved: caller }),
-      caller
+      caller,
+      catalogOperation.id
     );
     if (Option.isSome(preparation)) preparedStates.push(...(yield* preparation.value));
   }

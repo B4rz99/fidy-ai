@@ -295,6 +295,8 @@ apps/server/src/shell/email-authentication/repo.ts
   s_92fd415a2f0e43::t_bb1236532cceea 45
 apps/server/src/shell/_shared/operation-policy.ts
   s_eab6b9ca1492c6::t_1f5a4aa9283b0f 29,46,68-69,89-90,156-160,216-219
+apps/server/src/shell/db/migrations/registry.ts
+  s_eab6b9ca1492c6::t_a36779641415e1 35,80
 ---
 {
   "schema_version": "authorship/3.0.0",

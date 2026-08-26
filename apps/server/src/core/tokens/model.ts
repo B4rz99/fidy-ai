@@ -215,8 +215,8 @@ export const PATLifecycleCheck = Schema.makeFilter<
 
 const SharedTokenFields = {
   shortId: TokenShortId,
-  lastUsedAt: Schema.Option(UtcTimestamp),
-  revokedAt: Schema.Option(UtcTimestamp),
+  lastUsedAt: Schema.OptionFromNullOr(UtcTimestamp),
+  revokedAt: Schema.OptionFromNullOr(UtcTimestamp),
   createdAt: UtcTimestamp,
 };
 

@@ -16,12 +16,16 @@ import {
 
 const responseJson = (
   request: HttpClientRequest.HttpClientRequest,
-  body: unknown
+  body: unknown,
+  status = 200
 ): HttpClientResponse.HttpClientResponse => {
   const encoded = new TextEncoder().encode(JSON.stringify(body));
   const realmBytes = new window.Uint8Array(encoded.length);
   realmBytes.set(encoded);
-  const response = new Response(encoded, { headers: { "content-type": "application/json" } });
+  const response = new Response(encoded, {
+    status,
+    headers: { "content-type": "application/json" },
+  });
   Object.defineProperty(response, "arrayBuffer", {
     value: () => Promise.resolve(realmBytes.buffer),
   });
@@ -65,19 +69,28 @@ const resetApplicationTest = (): void => {
   vi.unstubAllEnvs();
 };
 
+type StubResponse = Readonly<{ status: number; body: unknown }>;
+
+const successfulReplacementRequest: StubResponse = {
+  status: 200,
+  body: { data: { status: "pending" }, next: [] },
+};
+const successfulReplacementCompletion: StubResponse = {
+  status: 200,
+  body: { status: "replaced" },
+};
+
 const emailReplacementClients = (
-  requests: Array<string>
+  requests: Array<string>,
+  requestResponse = successfulReplacementRequest,
+  completionResponse = successfulReplacementCompletion
 ): Readonly<{ apiClient: FidyClient; webAuthClient: WebAuthClient }> => {
   const httpClient = makeHttpClient((request) => {
     requests.push(new URL(request.url).pathname);
-    return Effect.succeed(
-      responseJson(
-        request,
-        request.url.endsWith("/web/email/replacement/verify")
-          ? { status: "replaced" }
-          : { data: { status: "pending" }, next: [] }
-      )
-    );
+    const response = request.url.endsWith("/web/email/replacement/verify")
+      ? completionResponse
+      : requestResponse;
+    return Effect.succeed(responseJson(request, response.body, response.status));
   });
   const layer = Layer.succeed(HttpClient.HttpClient, httpClient);
   return {
@@ -86,18 +99,26 @@ const emailReplacementClients = (
   };
 };
 
-const submitRenderedEmailReplacement = async (requests: Array<string>): Promise<void> => {
+const beginRenderedEmailReplacement = async (candidateEmail: string): Promise<void> => {
   fireEvent.change(await screen.findByLabelText("Nuevo correo"), {
-    target: { value: "new.mailbox@example.com" },
+    target: { value: candidateEmail },
   });
   fireEvent.click(screen.getByRole("button", { name: "Enviar código" }));
-  expect(await screen.findByText("Enviamos un código a new.mailbox@example.com.")).toBeVisible();
-  fireEvent.click(screen.getByRole("button", { name: "Reenviar código" }));
-  await waitFor(() => expect(requests).toHaveLength(2));
+  expect(await screen.findByText(`Enviamos un código a ${candidateEmail}.`)).toBeVisible();
+};
+
+const enterReplacementCode = async (): Promise<void> => {
   fireEvent.change(await screen.findByLabelText("Código de verificación"), {
-    target: { value: "bcdf-ghjk-mnpq-rstw-xy23-4567" },
+    target: { value: "BCDF-GHJK-MNPQ-RSTW-XY23-4567" },
   });
   fireEvent.click(screen.getByRole("button", { name: "Cambiar correo" }));
+};
+
+const submitRenderedEmailReplacement = async (requests: Array<string>): Promise<void> => {
+  await beginRenderedEmailReplacement("new.mailbox@example.com");
+  fireEvent.click(screen.getByRole("button", { name: "Reenviar código" }));
+  await waitFor(() => expect(requests).toHaveLength(2));
+  await enterReplacementCode();
   expect(await screen.findByText("Tu nuevo correo verificado ya está activo.")).toBeVisible();
 };
 
@@ -152,6 +173,10 @@ describe("signed-in web application routes", () => {
 
     expect(await screen.findByText("No pudimos cargar tus transacciones")).toBeVisible();
   });
+});
+
+describe("verified-email replacement request route", () => {
+  afterEach(resetApplicationTest);
 
   it("runs verified-email replacement through the rendered route and typed clients", async () => {
     localStorage.clear();
@@ -169,6 +194,87 @@ describe("signed-in web application routes", () => {
     expect(localStorage.length).toBe(0);
     expect(sessionStorage.length).toBe(0);
   });
+
+  it("requires fresh pairing when replacement initiation is refused", async () => {
+    const requests: Array<string> = [];
+    const clients = emailReplacementClients(requests, {
+      status: 401,
+      body: {
+        error: { code: "unauthenticated", message: "Authenticate before continuing." },
+        next: [],
+      },
+    });
+    await renderRoute("/settings/email", clients.apiClient, clients.webAuthClient);
+
+    fireEvent.change(await screen.findByLabelText("Nuevo correo"), {
+      target: { value: "new.mailbox@example.com" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Enviar código" }));
+
+    expect(await screen.findByText("Vincula el navegador de nuevo")).toBeVisible();
+    expect(requests).toEqual(["/email/replacement"]);
+  });
+});
+
+describe("verified-email replacement completion failures", () => {
+  afterEach(resetApplicationTest);
+
+  it("distinguishes stale authority from an invalid replacement proof", async () => {
+    const freshPairingResponse: StubResponse = {
+      status: 401,
+      body: {
+        error: {
+          code: "fresh_pairing_required",
+          message: "Vincula el navegador de nuevo antes de cambiar tu correo.",
+        },
+      },
+    };
+    const freshRequests: Array<string> = [];
+    const freshClients = emailReplacementClients(
+      freshRequests,
+      successfulReplacementRequest,
+      freshPairingResponse
+    );
+    await renderRoute("/settings/email", freshClients.apiClient, freshClients.webAuthClient);
+    await beginRenderedEmailReplacement("fresh@example.com");
+    await enterReplacementCode();
+    expect(await screen.findByText("Vincula el navegador de nuevo")).toBeVisible();
+
+    cleanup();
+    const invalidRequests: Array<string> = [];
+    const invalidClients = emailReplacementClients(invalidRequests, successfulReplacementRequest, {
+      status: 400,
+      body: {
+        error: {
+          code: "verification_invalid",
+          message: "El código no es válido. Revisa el correo o solicita uno nuevo.",
+        },
+      },
+    });
+    await renderRoute("/settings/email", invalidClients.apiClient, invalidClients.webAuthClient);
+    await beginRenderedEmailReplacement("invalid@example.com");
+    await enterReplacementCode();
+    expect(await screen.findByText("El código no es válido")).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Usar otro correo" }));
+    expect(await screen.findByLabelText("Nuevo correo")).toBeVisible();
+  });
+
+  it("keeps malformed candidate email local to the editing state", async () => {
+    const requests: Array<string> = [];
+    const clients = emailReplacementClients(requests);
+    await renderRoute("/settings/email", clients.apiClient, clients.webAuthClient);
+    const input = await screen.findByLabelText("Nuevo correo");
+    fireEvent.change(input, { target: { value: "not-an-email" } });
+    const form = input.closest("form");
+    if (form === null) throw new Error("replacement form missing");
+    fireEvent.submit(form);
+    await waitFor(() => expect(requests).toHaveLength(0));
+    expect(screen.getByLabelText("Nuevo correo")).toBeVisible();
+  });
+});
+
+describe("signed-in web application data routes", () => {
+  afterEach(resetApplicationTest);
 
   it("owns the authenticated Subscription offer page at /upgrade", async () => {
     await renderRoute("/upgrade", malformedFidyClient());

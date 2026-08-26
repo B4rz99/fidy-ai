@@ -235,17 +235,21 @@ const deliveryCooldownActive = (input: OnboardingTurn, enrollment: EmailEnrollme
   enrollment._tag !== "AwaitingEmail" &&
   DateTime.isLessThan(input.receivedAt, enrollment.resendAvailableAt);
 
+const availableResendInstruction = (
+  input: OnboardingTurn,
+  enrollment: Exclude<EmailEnrollmentRow, { readonly _tag: "AwaitingEmail" }>
+): EmailInstruction =>
+  deliveryCooldownActive(input, enrollment)
+    ? { _tag: "Cooldown" }
+    : { _tag: "Submit", email: enrollment.email };
+
 const submittedResendInstruction = (
   input: OnboardingTurn,
   enrollment: Exclude<EmailEnrollmentRow, { readonly _tag: "AwaitingEmail" }>
-): EmailInstruction => {
-  if (enrollment.deliveryGeneration >= maximumEmailDeliveryGenerations) {
-    return { _tag: "QuotaReached" };
-  }
-  return deliveryCooldownActive(input, enrollment)
-    ? { _tag: "Cooldown" }
-    : { _tag: "Submit", email: enrollment.email };
-};
+): EmailInstruction =>
+  enrollment.deliveryGeneration >= maximumEmailDeliveryGenerations
+    ? { _tag: "QuotaReached" }
+    : availableResendInstruction(input, enrollment);
 
 const resendInstruction = (
   input: OnboardingTurn,
@@ -264,17 +268,31 @@ const nonEmailInstruction = (
     ? resendInstruction(input, enrollment)
     : priorEmailInstruction(enrollment);
 
+const submittedAddressInstruction = (
+  enrollment: Exclude<EmailEnrollmentRow, { readonly _tag: "AwaitingEmail" }>,
+  email: EmailAddress
+): EmailInstruction =>
+  enrollment.deliveryGeneration >= maximumEmailDeliveryGenerations
+    ? { _tag: "QuotaReached" }
+    : { _tag: "Submit", email };
+
+const decodedAddressInstruction = (
+  enrollment: EmailEnrollmentRow,
+  email: EmailAddress
+): EmailInstruction =>
+  enrollment._tag === "AwaitingEmail"
+    ? { _tag: "Submit", email }
+    : submittedAddressInstruction(enrollment, email);
+
 const chooseEmailInstruction = (
   input: OnboardingTurn,
   enrollment: EmailEnrollmentRow
 ): EmailInstruction => {
   const raw = inboundText(input);
-  const decoded = decodeEmailAddress(raw);
-  if (Result.isFailure(decoded)) return nonEmailInstruction(input, enrollment, raw);
-  return enrollment._tag !== "AwaitingEmail" &&
-    enrollment.deliveryGeneration >= maximumEmailDeliveryGenerations
-    ? { _tag: "QuotaReached" }
-    : { _tag: "Submit", email: decoded.success };
+  return Result.match(decodeEmailAddress(raw), {
+    onFailure: () => nonEmailInstruction(input, enrollment, raw),
+    onSuccess: (email) => decodedAddressInstruction(enrollment, email),
+  });
 };
 
 const handleEmailEnrollment = Effect.fn("handleEmailEnrollment")(function* (

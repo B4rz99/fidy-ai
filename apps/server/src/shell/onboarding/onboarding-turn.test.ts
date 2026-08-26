@@ -252,6 +252,33 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })("consent
     })
   );
 
+  it.effect("refuses a replacement when shared delivery admission is exhausted", () =>
+    Effect.gen(function* () {
+      yield* clear;
+      yield* acceptDisclosure;
+      expect(
+        (yield* handleOnboardingTurn(
+          turn("first@example.com", "wamid.budget-first", DateTime.add(receivedAt, { seconds: 3 }))
+        ))._tag
+      ).toBe("EmailSubmitted");
+      const sql = yield* MigrationSqlClient;
+      yield* sql`
+        UPDATE email_delivery_admission_budgets
+        SET delivery_count = 5, expires_at = now() + interval '1 hour'
+      `;
+      expect(
+        yield* handleOnboardingTurn(
+          turn(
+            "second@example.com",
+            "wamid.budget-second",
+            DateTime.add(receivedAt, { seconds: 4 })
+          )
+        )
+      ).toEqual({ _tag: "EmailSubmitted", status: "quota-reached" });
+      yield* clear;
+    })
+  );
+
   it.effect("bounds rapid address replacement without applying the explicit-resend cooldown", () =>
     Effect.gen(function* () {
       yield* clear;
@@ -273,6 +300,11 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })("consent
         _tag: "EmailSubmitted",
         status: "quota-reached",
       });
+      expect(
+        yield* handleOnboardingTurn(
+          turn("Reenviar", "wamid.resend-after-quota", DateTime.add(receivedAt, { seconds: 70 }))
+        )
+      ).toEqual({ _tag: "EmailSubmitted", status: "quota-reached" });
       const sql = yield* MigrationSqlClient;
       expect(
         yield* sql`

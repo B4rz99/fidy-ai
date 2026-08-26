@@ -12,6 +12,7 @@ const deleteAuditEvidenceBefore = (
   cutoff: DateTime.Utc
 ): Effect.Effect<void, SqlError.SqlError, SqlClient.SqlClient | Telemetry> =>
   runAuditRetentionBefore(cutoff).pipe(
+    Effect.tap(() => Effect.logInfo("Applied AuditLogEntry retention")),
     runScheduledWork({
       component: "api",
       schedule: "task.auditRetention",

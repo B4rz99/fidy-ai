@@ -1,8 +1,21 @@
 import { expect, layer } from "@effect/vitest";
-import { Crypto, DateTime, Deferred, Effect, Fiber, Option, Redacted, Ref, Schema } from "effect";
+import {
+  ConfigProvider,
+  Crypto,
+  DateTime,
+  Deferred,
+  Effect,
+  Exit,
+  Fiber,
+  Option,
+  Redacted,
+  Ref,
+  Schema,
+} from "effect";
 import { HttpBody, HttpClient } from "effect/unstable/http";
 import type { SqlClient } from "effect/unstable/sql";
 import {
+  EmailAddress,
   EmailVerificationCode,
   maximumEmailDeliveryGenerations,
 } from "~/core/email-authentication/model";
@@ -12,6 +25,8 @@ import { WebSessionId } from "~/core/web-session/reference";
 import { calculateWebSessionDeadlines } from "~/core/web-session/rules";
 import { seedConsentedPatIdentity } from "~/shell/db/development-seed";
 import { MigrationSqlClient } from "~/shell/db/client";
+import { withUserTransaction } from "~/shell/db/user-transaction";
+import { admitEmailDeliveryInScope } from "./admission";
 import { EmailDeliveryPort } from "./delivery";
 import { processOneReplacementDelivery } from "./replacement-delivery-worker";
 import {
@@ -613,6 +628,87 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
       })
     );
 
+    it.effect("deletes a workflow after the bounded wrong-proof allowance", () =>
+      Effect.gen(function* () {
+        yield* seedFreshSession();
+        const sql = yield* MigrationSqlClient;
+        yield* sql`DELETE FROM email_replacement_workflows`;
+        yield* sql`DELETE FROM email_delivery_admission_budgets`;
+        yield* requestCandidate("wrong-proof-limit@example.com");
+        expect(
+          yield* sql`
+            SELECT intent.status FROM email_replacement_delivery_intents intent
+            JOIN email_replacement_workflows workflow ON workflow.id = intent.workflow_id
+            WHERE workflow.user_id = ${userId}
+          `
+        ).toEqual([{ status: "pending" }]);
+        const combinedCode = yield* captureNextDelivery();
+        const wrongCode = `${combinedCode.slice(0, 10)}BCDF-GHJK-MNPQ-RSTW`;
+        for (let attempt = 0; attempt < 5; attempt += 1) {
+          expect((yield* verifyCode(wrongCode)).status).toBe(400);
+        }
+        expect(
+          yield* sql`SELECT id FROM email_replacement_workflows WHERE user_id = ${userId}`
+        ).toEqual([]);
+        yield* sql`DELETE FROM email_delivery_admission_budgets`;
+      })
+    );
+
+    it.effect("replaces an expired workflow and rejects proof before delivery", () =>
+      Effect.gen(function* () {
+        yield* seedFreshSession();
+        const sql = yield* MigrationSqlClient;
+        yield* sql`DELETE FROM email_replacement_workflows`;
+        yield* sql`DELETE FROM email_delivery_admission_budgets`;
+        yield* requestCandidate("expired-first@example.com");
+        const [pending] = yield* sql`
+          SELECT public_code FROM email_replacement_workflows WHERE user_id = ${userId}
+        `;
+        const pendingPublicCode = yield* Schema.decodeUnknownEffect(Schema.String)(
+          pending?.public_code
+        );
+        expect((yield* verifyCode(`${pendingPublicCode}-AAAA-AAAA-AAAA-AAAA`)).status).toBe(400);
+        yield* sql`
+          UPDATE email_replacement_workflows SET
+            started_at = started_at - interval '25 hours',
+            expires_at = expires_at - interval '25 hours'
+          WHERE user_id = ${userId}
+        `;
+        yield* requestCandidate("expired-second@example.com");
+        expect(
+          yield* sql`
+            SELECT candidate_email_address FROM email_replacement_workflows
+            WHERE user_id = ${userId}
+          `
+        ).toEqual([{ candidate_email_address: "expired-second@example.com" }]);
+        yield* sql`DELETE FROM email_replacement_workflows WHERE user_id = ${userId}`;
+        yield* sql`DELETE FROM email_delivery_admission_budgets`;
+      })
+    );
+
+    it.effect("fails closed on a malformed production admission key", () =>
+      Effect.gen(function* () {
+        yield* seedFreshSession();
+        const attempted = withUserTransaction(
+          userId,
+          admitEmailDeliveryInScope({
+            requester: { _tag: "User", userId },
+            recipient: EmailAddress.make("malformed-key@example.com"),
+            attemptedAt: yield* DateTime.now,
+          })
+        ).pipe(
+          Effect.provideService(
+            ConfigProvider.ConfigProvider,
+            ConfigProvider.fromEnv({
+              env: { NODE_ENV: "production", EMAIL_ADMISSION_HMAC_KEY: "malformed" },
+            })
+          ),
+          Effect.exit
+        );
+        expect(Exit.isFailure(yield* attempted)).toBe(true);
+      })
+    );
+
     it.effect(
       "supersedes old proofs, reclaims abandoned delivery, and rejects global duplicates",
       () =>
@@ -1150,6 +1246,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         expect(
           yield* sql`SELECT id FROM email_replacement_workflows WHERE user_id = ${userId}`
         ).toEqual([]);
+        expect(yield* processOneReplacementRetention()).toBe(false);
       })
     );
 

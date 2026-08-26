@@ -1,0 +1,19 @@
+apps/web/e2e/browser-pairing-postgres.spec.ts
+  s_92fd415a2f0e43::t_e2c0b600de8bcc 276-279
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.24",
+  "base_commit_sha": "770f795595732af8db63fa1979316ad174d93431",
+  "prompts": {},
+  "sessions": {
+    "s_92fd415a2f0e43": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a03a9a-286b-7874-abf7-c9b0dde8456b",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

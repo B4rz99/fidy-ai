@@ -1,0 +1,23 @@
+apps/server/src/core/tokens/model.test.ts
+  s_92fd415a2f0e43::t_97060008b1e31a 146-150
+apps/server/src/core/tokens/model.ts
+  s_92fd415a2f0e43::t_17f112942f46df 218-219
+apps/server/contracts/openapi.json
+  s_92fd415a2f0e43::t_f8f1e4e756c8f7 2640,2643,2656,2659
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.24",
+  "base_commit_sha": "66b76b0f6d6767f65be5086610564fc3df250dd5",
+  "prompts": {},
+  "sessions": {
+    "s_92fd415a2f0e43": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a03a9a-286b-7874-abf7-c9b0dde8456b",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

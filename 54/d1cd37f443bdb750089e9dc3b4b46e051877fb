@@ -1,0 +1,83 @@
+apps/server/src/shell/browser-login/repo.ts
+  s_eab6b9ca1492c6::t_3ba41a1accfdc4 60,66
+apps/server/src/shell/email-authentication/replacement.test.ts
+  s_eab6b9ca1492c6::t_78727d0581d875 16,19-21,1189
+  s_eab6b9ca1492c6::t_1af486003bba26 226
+  s_eab6b9ca1492c6::t_1747e0b9a12701 555
+  s_eab6b9ca1492c6::t_f03fd7d3bd26ff 734-735
+  s_eab6b9ca1492c6::t_4338bce36efb8a 502
+  s_eab6b9ca1492c6::t_83ace3b0192ce2 2,737-738
+  s_eab6b9ca1492c6::t_34851d7712429a 220-225,227
+  s_eab6b9ca1492c6::t_37b89df072ae31 469-501,503-513
+  s_eab6b9ca1492c6::t_fbc5b1b0053fb5 654
+  s_eab6b9ca1492c6::t_36855b35b25437 514-538,541-554,556-592,595-615
+  s_eab6b9ca1492c6::t_1c431eda377ded 539-540,593-594
+apps/server/src/shell/email-authentication/admission.ts
+  s_eab6b9ca1492c6::t_146b1e792bddaa 55-58
+  s_eab6b9ca1492c6::t_7213f96a85b50e 3-12,15,23,36-54,59-69,73-78,80-101,103-104
+  s_eab6b9ca1492c6::t_ee87d9d1a52d05 2,79,102
+  s_eab6b9ca1492c6::t_005d597d4ca6bd 70-72
+apps/server/src/shell/email-authentication/replacement-retention.ts
+  s_eab6b9ca1492c6::t_005d597d4ca6bd 65
+  s_eab6b9ca1492c6::t_1f127c485b179d 1-7,11-16,18-32,34-51,57-64,69-87
+  s_eab6b9ca1492c6::t_ae53c463807911 52-56
+apps/server/src/shell/evidence-retention.ts
+  s_eab6b9ca1492c6::t_fbc816b7282005 4,25
+apps/server/src/shell/email-authentication/repo.ts
+  s_eab6b9ca1492c6::t_316b8c453515d5 255,260
+apps/server/src/shell/email-authentication/handlers.ts
+  s_eab6b9ca1492c6::t_1b8084828c5c43 24,125-126
+  s_eab6b9ca1492c6::t_bde23790f1f3a9 128
+apps/server/src/shell/email-authentication/replacement-handlers.ts
+  s_eab6b9ca1492c6::t_9d7b1f5cd22176 5
+apps/server/src/shell/http.ts
+  s_eab6b9ca1492c6::t_205b6e73862147 37-38
+apps/server/src/shell/onboarding/turn-transition.ts
+  s_eab6b9ca1492c6::t_a37afee1b8c46d 20,225
+  s_eab6b9ca1492c6::t_3fd7196be058aa 241-245,248
+  s_eab6b9ca1492c6::t_569c1f5aadb503 273-277
+  s_eab6b9ca1492c6::t_dc4fb1084fe4bd 293-294
+  s_eab6b9ca1492c6::t_2059e0e4d8a83e 31,295-307
+  s_eab6b9ca1492c6::t_e3004cfab7c1a0 319
+apps/server/ARCHITECTURE.md
+  s_eab6b9ca1492c6::t_067e29ad5c721b 187-194
+apps/server/src/shell/email-authentication/replacement-transition.ts
+  s_eab6b9ca1492c6::t_3bcb3cbbe6df9a 9,22,253
+  s_eab6b9ca1492c6::t_7ade88d0bb75ac 2,37-42,51-106,108,260-264,311,402-407,413
+  s_eab6b9ca1492c6::t_102e7378484139 30
+  s_eab6b9ca1492c6::t_2ab6d860d7c543 111,114,188,305,358
+  s_eab6b9ca1492c6::t_6fcd00959d2c22 113,115
+  s_eab6b9ca1492c6::t_7a76c55d533578 126-133,309
+  s_eab6b9ca1492c6::t_005d597d4ca6bd 395-397
+  s_eab6b9ca1492c6::t_d3af562599c0a0 24,26-29,241,258,265-276,393-394,398-401,408-412,414-435
+  s_eab6b9ca1492c6::t_b6cedef8ec4f42 118,124-125,156,167,245-252,259,292,298-299,310,391-392
+  s_eab6b9ca1492c6::t_57e4be38213e0d 307
+  s_eab6b9ca1492c6::t_1d04d9a7fbe363 300-301
+  s_eab6b9ca1492c6::t_4cd4b24e1f2252 45,47
+apps/server/src/shell/email-authentication/replacement-delivery-worker.ts
+  s_eab6b9ca1492c6::t_91d319b5dec7d1 1
+  s_eab6b9ca1492c6::t_c4052252051a3e 9,33,83,89,137-139
+  s_eab6b9ca1492c6::t_482e2e07808127 62,86-88,90
+  s_eab6b9ca1492c6::t_6109ed2ba39db0 119-124
+  s_eab6b9ca1492c6::t_662dcdd2d79906 2-8,10-12,14,16-32,34-61,63-82,84-85,91-117,128,133,150
+apps/server/src/shell/db/migrations/0035-verified-email-replacement.ts
+  s_eab6b9ca1492c6::t_dc66d1308b10db 37,43-44,49,106-107
+apps/server/src/shell/_shared/canonical-mutation-registry.ts
+  s_eab6b9ca1492c6::t_a3841e99eb33f7 15
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.24",
+  "base_commit_sha": "54d1cd37f443bdb750089e9dc3b4b46e051877fb",
+  "prompts": {},
+  "sessions": {
+    "s_eab6b9ca1492c6": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a03a99-5587-7c47-a82d-a7302a002737",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": null
+    }
+  }
+}

@@ -1,0 +1,19 @@
+apps/server/src/core/tokens/pairing.ts
+  s_92fd415a2f0e43::t_1dd6f1750b8df1 55-60
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.24",
+  "base_commit_sha": "85bd69a9667a49dff5f58bf62d7a8903e54f7bc1",
+  "prompts": {},
+  "sessions": {
+    "s_92fd415a2f0e43": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a03a9a-286b-7874-abf7-c9b0dde8456b",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

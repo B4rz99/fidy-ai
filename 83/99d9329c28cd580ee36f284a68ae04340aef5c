@@ -1,0 +1,62 @@
+apps/server/src/shell/observability/web-auth.test.ts
+  s_92fd415a2f0e43::t_6fd65c97831b54 16
+apps/server/contracts/openapi.json
+  s_92fd415a2f0e43::t_4ba4d4f69901fa 7953-8030,8621-8698,11103-11180,11771-11891,17106-17210,18005-18012,18015-18148,19101-19235,20181-20315
+apps/server/src/shell/tokens/pat-pairing-persistence.ts
+  s_92fd415a2f0e43::t_fcc3edc2830f17 427,435-436
+  s_92fd415a2f0e43::t_0800b02752614f 420-426,428-434
+apps/server/src/shell/tokens/pairing-handlers.test.ts
+  s_92fd415a2f0e43::t_fea65b86b6129c 218,220
+  s_92fd415a2f0e43::t_6e17fb5079a0bc 620
+  s_92fd415a2f0e43::t_892bf8a7c5a99a 266,348-349,511,605,611
+  s_92fd415a2f0e43::t_ab7c6b8701084d 53
+  s_92fd415a2f0e43::t_c1e263d87fe4fb 270,385-389,515-519
+  s_92fd415a2f0e43::t_674766741ce7ca 629-631
+apps/server/src/shell/operations/atomic-batch.ts
+  s_92fd415a2f0e43::t_738634b206fd85 203-204
+apps/server/src/shell/browser-login/approval.test.ts
+  s_92fd415a2f0e43::t_e94995d35a22b2 52
+apps/server/src/shell/db/row-level-security.test.ts
+  s_92fd415a2f0e43::t_15988a4aa32417 810-813
+apps/server/src/shell/_shared/canonical-operation-executor.ts
+  s_92fd415a2f0e43::t_f6be901fb97bb3 113
+apps/server/src/shell/_shared/canonical-pre-transaction.test.ts
+  s_92fd415a2f0e43::t_ab52d9e6127128 1-9
+apps/server/src/shell/browser-login/handlers.test.ts
+  s_92fd415a2f0e43::t_21a5c254dccfd4 12
+  s_92fd415a2f0e43::t_55fd1628a26839 325
+apps/server/src/shell/tokens/pat-pairing.ts
+  s_92fd415a2f0e43::t_e46d4f7e854a56 52,71,396-400
+  s_92fd415a2f0e43::t_7c61f36b99f468 401
+apps/server/src/shell/_shared/anonymous-source.ts
+  s_92fd415a2f0e43::t_318bd3aca887f5 30
+  s_92fd415a2f0e43::t_c3ddf994e51da2 28-29,31-32,34
+apps/server/src/shell/_shared/canonical-pre-transaction.ts
+  s_92fd415a2f0e43::t_9dab42b7803305 3,15,63-77
+  s_92fd415a2f0e43::t_ac6218a17326fb 78
+apps/server/src/shell/_shared/anonymous-source.test.ts
+  s_92fd415a2f0e43::t_c526521fa34567 6-14,16-17,23,25-28,32-35,39-43,45-47,51-55
+  s_92fd415a2f0e43::t_ff4bef3d3c13f0 1-5,15,18,24,29-31,36-38,44,48-50,56,58
+  s_92fd415a2f0e43::t_c84bf3717b534e 19-22
+  s_92fd415a2f0e43::t_391b5b771259da 57
+apps/server/src/shell/operations/operations.ts
+  s_92fd415a2f0e43::t_4be44f5ce14121 100-103
+apps/server/src/shell/db/migrations/0035-pat-pairings.ts
+  s_92fd415a2f0e43::t_ef4725fe7a3520 211,214
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.24",
+  "base_commit_sha": "8399d9329c28cd580ee36f284a68ae04340aef5c",
+  "prompts": {},
+  "sessions": {
+    "s_92fd415a2f0e43": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a03a9a-286b-7874-abf7-c9b0dde8456b",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

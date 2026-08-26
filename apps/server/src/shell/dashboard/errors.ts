@@ -106,13 +106,22 @@ const toNonInvalidApiFailure = (
         },
         next: dashboardRecovery(caller),
       });
-    case "RootWidgetResize":
+    case "RootRegionResize":
       return ValidationFailed.make({
         error: {
           code: "validation_failed",
           message:
-            "The root widget has no sibling-relative weight to resize. Add a sibling before resizing it.",
-          fields: [{ path: "weight", message: "Expected a widget inside a split region." }],
+            "The root region has no sibling-relative weight to resize. Add a sibling before resizing it.",
+          fields: [{ path: "widgetIds", message: "Expected a child region inside a split." }],
+        },
+        next: dashboardRecovery(caller),
+      });
+    case "RegionNotFound":
+      return NotFound.make({
+        error: {
+          code: "not_found",
+          message:
+            "No current layout region contains exactly those widgets. Get the latest dashboard and choose one complete child region.",
         },
         next: dashboardRecovery(caller),
       });

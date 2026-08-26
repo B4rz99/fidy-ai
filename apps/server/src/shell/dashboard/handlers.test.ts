@@ -322,7 +322,11 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           },
         });
         yield* client.dashboard.applyDashboardEdit({
-          payload: { op: "resize-widget", widgetId: thirdId, weight: SplitWeight.make(3) },
+          payload: {
+            op: "resize-region",
+            widgetIds: [thirdId],
+            size: { kind: "weight", weight: SplitWeight.make(3) },
+          },
         });
 
         const response = yield* client.dashboard.getDashboardView();
@@ -620,6 +624,33 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
       })
     );
 
+    it.effect("rejects a malformed region selector without changing the stored document", () =>
+      Effect.gen(function* () {
+        yield* truncateDashboards;
+        const client = yield* ApiHarnessClient;
+        const before = yield* client.dashboard.getDashboard();
+        if (before.data.layout.kind !== "leaf") {
+          return yield* Effect.die("expected the first-use dashboard to have one root widget");
+        }
+
+        const response = yield* HttpClient.post("/dashboard/edits", {
+          headers: headersFor(defaultPatBearer),
+          body: HttpBody.jsonUnsafe({
+            op: "resize-region",
+            widgetIds: [before.data.layout.widget.id, before.data.layout.widget.id],
+            size: { kind: "weight", weight: 2 },
+          }),
+        });
+        const failure = yield* Schema.decodeUnknownEffect(ValidationFailed)(yield* response.json);
+        const after = yield* client.dashboard.getDashboard();
+
+        expect(response.status).toBe(400);
+        expect(failure.error.code).toBe("validation_failed");
+        expect(failure.error.fields[0]?.path).toBe("widgetIds");
+        expect(after.data).toEqual(before.data);
+      })
+    );
+
     it.effect("rolls a domain-rejected edit back without replacing the latest document", () =>
       Effect.gen(function* () {
         yield* truncateDashboards;
@@ -685,7 +716,11 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         );
         const rootResize = yield* Effect.result(
           client.dashboard.applyDashboardEdit({
-            payload: { op: "resize-widget", widgetId: rootId, weight: SplitWeight.make(2) },
+            payload: {
+              op: "resize-region",
+              widgetIds: [rootId],
+              size: { kind: "weight", weight: SplitWeight.make(2) },
+            },
           })
         );
         const selfPlacement = yield* Effect.result(

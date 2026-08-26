@@ -1,10 +1,11 @@
-import { cleanup, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { BigDecimal, Cause, DateTime, Option, Schema } from "effect";
 import { AsyncResult } from "effect/unstable/reactivity";
 import { type JSX, type ReactNode, createContext, useContext } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { DashboardCatalogEntry, DashboardGesture } from "./editor-model";
 import type { DashboardLayout, DashboardView, DashboardWidgetView } from "./presentation";
-import { DashboardRouteContent } from "./view";
+import { type DashboardEditorError, DashboardRouteContent, DashboardViewComponent } from "./view";
 
 type SpendingResult = Extract<DashboardWidgetView["result"], { readonly buckets: unknown }>;
 type BudgetResult = Extract<DashboardWidgetView["result"], { readonly availability: unknown }>;
@@ -371,6 +372,125 @@ describe("read-only Dashboard responsive rendering", () => {
     expect(dashboard.getByText("El Corral")).toBeVisible();
     expect(dashboard.queryByText("America/Bogota")).not.toBeInTheDocument();
     expect(screen.queryByText(/Zona horaria aplicada/u)).not.toBeInTheDocument();
+  });
+});
+
+const editorCatalog: ReadonlyArray<DashboardCatalogEntry> = [
+  {
+    id: "recent-transactions",
+    name: "Más transacciones",
+    description: "Añade otra lista.",
+    widget: {
+      type: "transaction-list",
+      title: "Otra lista",
+      limit: Schema.decodeUnknownSync(TestTransactionListLimit)(transactionListLimit),
+    },
+  },
+];
+
+const renderInteractiveDashboard = (
+  onGesture: (gesture: DashboardGesture) => void,
+  catalog: ReadonlyArray<DashboardCatalogEntry> = [],
+  error: Option.Option<DashboardEditorError> = Option.none()
+): ReturnType<typeof render> =>
+  render(
+    <DashboardViewComponent
+      editor={Option.some({ catalog, error, onGesture, submitting: false })}
+      view={makeView(standardOptions)}
+    />
+  );
+
+describe("Dashboard title editing", () => {
+  it("offers a visible Dashboard retitle control that emits one closed gesture", async () => {
+    const onGesture = vi.fn<(gesture: DashboardGesture) => void>();
+    renderInteractiveDashboard(onGesture);
+
+    fireEvent.change(screen.getByLabelText("Nuevo título del tablero"), {
+      target: { value: "Flujo de caja" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Guardar título del tablero" }));
+
+    expect(onGesture).toHaveBeenCalledOnce();
+    expect(onGesture).toHaveBeenCalledWith({
+      kind: "retitle-dashboard",
+      title: "Flujo de caja",
+    });
+  });
+});
+
+describe("Dashboard Widget editing", () => {
+  it("offers catalog, Widget move, retitle, remove, and recursive ratio controls", () => {
+    const onGesture = vi.fn<(gesture: DashboardGesture) => void>();
+    renderInteractiveDashboard(onGesture, editorCatalog);
+
+    fireEvent.change(screen.getByLabelText("Título de Transacciones"), {
+      target: { value: "Gastos diarios" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Guardar título de Transacciones" }));
+    const retitleGesture = onGesture.mock.lastCall?.[0];
+    expect(retitleGesture?.kind).toBe("retitle-widget");
+    if (retitleGesture?.kind !== "retitle-widget") throw new Error("Expected a retitle gesture");
+    expect(retitleGesture.widget.id).toBe(ids.chart);
+    expect(retitleGesture.title).toBe("Gastos diarios");
+
+    fireEvent.change(screen.getByLabelText("Mover Transacciones"), { target: { value: "4" } });
+    fireEvent.click(
+      within(screen.getByLabelText("Editar Transacciones")).getByText("Mover Widget")
+    );
+    expect(onGesture).toHaveBeenLastCalledWith({
+      kind: "move-widget",
+      widgetId: ids.chart,
+      target: { kind: "widget-edge", widgetId: ids.budget, edge: "bottom" },
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Eliminar Transacciones" }));
+    expect(onGesture).toHaveBeenLastCalledWith({ kind: "remove-widget", widgetId: ids.chart });
+
+    const ratio = screen.getAllByLabelText("Proporción de región Transacciones")[0];
+    if (ratio === undefined) throw new Error("Expected a recursive region ratio control");
+    fireEvent.change(ratio, { target: { value: "4" } });
+    const ratioForm = ratio.closest("form");
+    if (ratioForm === null) throw new Error("Expected a ratio form");
+    fireEvent.submit(ratioForm);
+    expect(onGesture).toHaveBeenLastCalledWith(
+      expect.objectContaining({ kind: "resize-region", ratio: "three-quarters" })
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Añadir Widget" }));
+    expect(onGesture).toHaveBeenLastCalledWith(
+      expect.objectContaining({ kind: "add-catalog-widget", entry: editorCatalog[0] })
+    );
+    expect(screen.getByRole("button", { name: "Arrastrar Transacciones" })).toBeVisible();
+  });
+});
+
+describe("Dashboard edit rejection", () => {
+  it("keeps the successful canvas visible while showing a safe edit rejection", () => {
+    renderInteractiveDashboard(
+      vi.fn(),
+      [],
+      Option.some({
+        title: "No pudimos guardar el cambio",
+        message: "El cambio fue rechazado. Revisa los valores e intenta de nuevo.",
+      })
+    );
+
+    expect(screen.getByRole("alert")).toHaveTextContent("El cambio fue rechazado");
+    expect(screen.getAllByRole("heading", { level: 2 })).toHaveLength(4);
+  });
+
+  it("distinguishes a saved edit with a stale refresh from a rejected edit", () => {
+    renderInteractiveDashboard(
+      vi.fn(),
+      [],
+      Option.some({
+        title: "El cambio se guardó, pero no pudimos actualizar el tablero",
+        message: "Mostramos el último tablero disponible. Intenta actualizarlo de nuevo.",
+      })
+    );
+
+    expect(screen.getByRole("alert")).toHaveTextContent("El cambio se guardó");
+    expect(screen.getByRole("alert")).not.toHaveTextContent("No pudimos guardar el cambio");
   });
 });
 

@@ -5,7 +5,8 @@ import {
   DuplicateWidgetId,
   InvalidDashboardResult,
   LastWidgetRemoval,
-  RootWidgetResize,
+  RegionNotFound,
+  RootRegionResize,
   SelfPlacement,
   WidgetNotFound,
 } from "./errors";
@@ -15,11 +16,14 @@ import {
   DashboardDocument,
   type DashboardEdit,
   type LayoutNode,
+  type LayoutRegionRatio,
+  type LayoutRegionSelector,
   type Placement,
   type SplitNode,
   SplitWeight,
   type Widget,
   type WidgetId,
+  collectLayoutWidgets,
   isBesidePlacement,
 } from "./model";
 
@@ -390,27 +394,58 @@ const applyUpdate = (
     : Effect.fail(new WidgetNotFound({ widgetId: widget.id, role: "edit-target" }));
 };
 
-const resizeWidget = (
-  input: Readonly<{
-    readonly node: LayoutNode;
-    readonly widgetId: WidgetId;
-    readonly weight: SplitWeight;
-  }>
-): Option.Option<LayoutNode> => {
-  const { node, widgetId, weight } = input;
-  if (node.kind === "leaf") {
-    return Option.none();
+const regionMatches = (
+  node: Readonly<LayoutNode>,
+  widgetIds: Readonly<LayoutRegionSelector>
+): boolean => {
+  const regionWidgetIds = collectLayoutWidgets(node).map(({ id }) => id);
+  return (
+    regionWidgetIds.length === widgetIds.length &&
+    regionWidgetIds.every((widgetId, index) => widgetId === widgetIds[index])
+  );
+};
+
+const ratioParts: Readonly<Record<LayoutRegionRatio, readonly [number, number]>> = {
+  "one-quarter": [1, 4],
+  "one-third": [1, 3],
+  "one-half": [1, 2],
+  "two-thirds": [2, 3],
+  "three-quarters": [3, 4],
+};
+
+const resizeChildren = (
+  children: Readonly<SplitNode["children"]>,
+  resizedIndex: number,
+  size: Extract<DashboardEdit, { readonly op: "resize-region" }>["size"]
+): SplitNode["children"] => {
+  if (size.kind === "weight") {
+    return mapAtLeastTwo(children, (child, index) =>
+      index === resizedIndex ? { ...child, weight: size.weight } : child
+    );
   }
+  const [numerator, denominator] = ratioParts[size.ratio];
+  const siblingCount = children.length - 1;
+  const targetWeight = Schema.decodeUnknownSync(SplitWeight)(numerator * siblingCount);
+  const siblingWeight = Schema.decodeUnknownSync(SplitWeight)(denominator - numerator);
+  return mapAtLeastTwo(children, (child, index) => ({
+    ...child,
+    weight: index === resizedIndex ? targetWeight : siblingWeight,
+  }));
+};
+
+const resizeRegion = (
+  node: Readonly<LayoutNode>,
+  edit: Readonly<Extract<DashboardEdit, { readonly op: "resize-region" }>>
+): Option.Option<LayoutNode> => {
+  if (node.kind === "leaf") return Option.none();
   for (const [index, child] of node.children.entries()) {
-    if (child.node.kind === "leaf" && child.node.widget.id === widgetId) {
+    if (regionMatches(child.node, edit.widgetIds)) {
       return Option.some({
         ...node,
-        children: mapAtLeastTwo(node.children, (current, childIndex) =>
-          childIndex === index ? { ...current, weight } : current
-        ),
+        children: resizeChildren(node.children, index, edit.size),
       });
     }
-    const replacement = resizeWidget({ node: child.node, widgetId, weight });
+    const replacement = resizeRegion(child.node, edit);
     if (Option.isSome(replacement)) {
       return Option.some({
         ...node,
@@ -425,21 +460,15 @@ const resizeWidget = (
 
 const applyResize = (
   document: Readonly<DashboardDocument>,
-  edit: Readonly<Extract<DashboardEdit, { readonly op: "resize-widget" }>>
+  edit: Readonly<Extract<DashboardEdit, { readonly op: "resize-region" }>>
 ): Effect.Effect<DashboardDocument, DashboardFailure> => {
-  if (document.layout.kind === "leaf") {
-    return document.layout.widget.id === edit.widgetId
-      ? Effect.fail(new RootWidgetResize({ widgetId: edit.widgetId }))
-      : Effect.fail(new WidgetNotFound({ widgetId: edit.widgetId, role: "edit-target" }));
+  if (regionMatches(document.layout, edit.widgetIds)) {
+    return Effect.fail(new RootRegionResize({ widgetIds: edit.widgetIds }));
   }
-  const layout = resizeWidget({
-    node: document.layout,
-    widgetId: edit.widgetId,
-    weight: edit.weight,
-  });
+  const layout = resizeRegion(document.layout, edit);
   return Option.isSome(layout)
     ? revalidateDocument({ ...document, layout: layout.value })
-    : Effect.fail(new WidgetNotFound({ widgetId: edit.widgetId, role: "edit-target" }));
+    : Effect.fail(new RegionNotFound({ widgetIds: edit.widgetIds }));
 };
 
 /** The sibling Widget a Placement names, when it names one rather than a document edge. */
@@ -479,7 +508,7 @@ const applyAppearanceEdit = (
   document: Readonly<DashboardDocument>,
   edit: Readonly<AppearanceEdit>
 ): Effect.Effect<DashboardDocument, DashboardFailure> =>
-  edit.op === "resize-widget" ? applyResize(document, edit) : applyUpdate(document, edit.widget);
+  edit.op === "resize-region" ? applyResize(document, edit) : applyUpdate(document, edit.widget);
 
 const applyPositionedWidgetEdit = (
   document: Readonly<DashboardDocument>,
@@ -504,7 +533,7 @@ const applyNonTitleEdit = (
 /**
  * Applies one decoded UI-or-agent edit and re-proves the complete result.
  * Fails for absent targets, duplicate or self placement, removing the last Widget, resizing the
- * root Widget, or any edit whose complete result violates Dashboard invariants.
+ * root region, or any edit whose complete result violates Dashboard invariants.
  */
 export const applyDashboardEdit = (
   input: Readonly<{

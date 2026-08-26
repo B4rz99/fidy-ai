@@ -1,5 +1,5 @@
 import { Option } from "effect";
-import { useAtomValue } from "@effect/atom-react";
+import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import { type JSX, Suspense, createElement, lazy, useState } from "react";
 import {
   type RouterHistory,
@@ -36,13 +36,20 @@ const DashboardRouteContent = lazy(() =>
 const DashboardRoute = (): JSX.Element => {
   const router = useRouter();
   const [dashboard] = useState(() =>
-    router.options.context.apiClient.query("dashboard", "getDashboardView", {})
+    router.options.context.apiClient.query("dashboard", "getDashboardView", {
+      reactivityKeys: ["dashboard"],
+    })
   );
   const result = useAtomValue(dashboard);
+  const refresh = useAtomRefresh(dashboard);
   return createElement(
     Suspense,
     { fallback: createElement("p", { "aria-live": "polite" }, "Cargando tablero…") },
-    createElement(DashboardRouteContent, { result })
+    createElement(DashboardRouteContent, {
+      apiClient: router.options.context.apiClient,
+      onRefresh: refresh,
+      result,
+    })
   );
 };
 

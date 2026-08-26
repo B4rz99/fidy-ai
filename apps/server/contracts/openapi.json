@@ -1891,50 +1891,6 @@
         ],
         "type": "object"
       },
-      "DashboardEdit": {
-        "anyOf": [
-          {
-            "$ref": "#/components/schemas/SetTitle"
-          },
-          {
-            "$ref": "#/components/schemas/AddWidget"
-          },
-          {
-            "$ref": "#/components/schemas/RemoveWidget"
-          },
-          {
-            "$ref": "#/components/schemas/MoveWidget"
-          },
-          {
-            "$ref": "#/components/schemas/ResizeWidget"
-          },
-          {
-            "$ref": "#/components/schemas/UpdateWidget"
-          }
-        ]
-      },
-      "DashboardEditPartial": {
-        "anyOf": [
-          {
-            "$ref": "#/components/schemas/SetTitlePartial"
-          },
-          {
-            "$ref": "#/components/schemas/AddWidgetPartial"
-          },
-          {
-            "$ref": "#/components/schemas/RemoveWidgetPartial"
-          },
-          {
-            "$ref": "#/components/schemas/MoveWidgetPartial"
-          },
-          {
-            "$ref": "#/components/schemas/ResizeWidgetPartial"
-          },
-          {
-            "$ref": "#/components/schemas/UpdateWidgetPartial"
-          }
-        ]
-      },
       "DashboardTransaction": {
         "additionalProperties": false,
         "properties": {
@@ -3023,6 +2979,26 @@
             "type": "object"
           }
         ]
+      },
+      "LayoutRegionSelector": {
+        "allOf": [
+          {
+            "maxItems": 24
+          },
+          {
+            "uniqueItems": true
+          }
+        ],
+        "items": {
+          "$ref": "#/components/schemas/WidgetId"
+        },
+        "minItems": 1,
+        "prefixItems": [
+          {
+            "$ref": "#/components/schemas/WidgetId"
+          }
+        ],
+        "type": "array"
       },
       "Locale": {
         "enum": [
@@ -4504,6 +4480,131 @@
         "required": [
           "candidateEmail"
         ],
+        "type": "object"
+      },
+      "ResizeRegion": {
+        "additionalProperties": false,
+        "properties": {
+          "op": {
+            "enum": [
+              "resize-region"
+            ],
+            "type": "string"
+          },
+          "size": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "kind": {
+                    "enum": [
+                      "weight"
+                    ],
+                    "type": "string"
+                  },
+                  "weight": {
+                    "$ref": "#/components/schemas/SplitWeight"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "weight"
+                ],
+                "type": "object"
+              },
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "kind": {
+                    "enum": [
+                      "ratio"
+                    ],
+                    "type": "string"
+                  },
+                  "ratio": {
+                    "enum": [
+                      "one-quarter",
+                      "one-third",
+                      "one-half",
+                      "two-thirds",
+                      "three-quarters"
+                    ],
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "ratio"
+                ],
+                "type": "object"
+              }
+            ]
+          },
+          "widgetIds": {
+            "$ref": "#/components/schemas/LayoutRegionSelector"
+          }
+        },
+        "required": [
+          "op",
+          "widgetIds",
+          "size"
+        ],
+        "type": "object"
+      },
+      "ResizeRegionPartial": {
+        "additionalProperties": false,
+        "properties": {
+          "op": {
+            "enum": [
+              "resize-region"
+            ],
+            "type": "string"
+          },
+          "size": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "kind": {
+                    "enum": [
+                      "weight"
+                    ],
+                    "type": "string"
+                  },
+                  "weight": {
+                    "$ref": "#/components/schemas/SplitWeight"
+                  }
+                },
+                "type": "object"
+              },
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "kind": {
+                    "enum": [
+                      "ratio"
+                    ],
+                    "type": "string"
+                  },
+                  "ratio": {
+                    "enum": [
+                      "one-quarter",
+                      "one-third",
+                      "one-half",
+                      "two-thirds",
+                      "three-quarters"
+                    ],
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              }
+            ]
+          },
+          "widgetIds": {
+            "$ref": "#/components/schemas/LayoutRegionSelector"
+          }
+        },
         "type": "object"
       },
       "ResizeWidget": {
@@ -6286,7 +6387,29 @@
                 "description": "Arguments already worked out for that call. Partial by design: merge them into the operation's own input rather than sending them as the whole of it.",
                 "properties": {
                   "payload": {
-                    "$ref": "#/components/schemas/DashboardEditPartial"
+                    "anyOf": [
+                      {
+                        "$ref": "#/components/schemas/SetTitlePartial"
+                      },
+                      {
+                        "$ref": "#/components/schemas/AddWidgetPartial"
+                      },
+                      {
+                        "$ref": "#/components/schemas/RemoveWidgetPartial"
+                      },
+                      {
+                        "$ref": "#/components/schemas/MoveWidgetPartial"
+                      },
+                      {
+                        "$ref": "#/components/schemas/ResizeRegionPartial"
+                      },
+                      {
+                        "$ref": "#/components/schemas/UpdateWidgetPartial"
+                      },
+                      {
+                        "$ref": "#/components/schemas/ResizeWidgetPartial"
+                      }
+                    ]
                   }
                 },
                 "type": "object"
@@ -9901,14 +10024,36 @@
     },
     "/dashboard/edits": {
       "post": {
-        "description": "Apply one structural DashboardEdit to the caller's latest locked document. Use the same add, remove, move, resize, replace, or title edit the web UI uses; invalid edits and invalid resulting documents leave the stored dashboard unchanged.",
+        "description": "Apply one structural DashboardEdit to the caller's latest locked document. Use the same add, remove, move, region-resize, replace, or title edit the web UI uses; invalid edits and invalid resulting documents leave the stored dashboard unchanged.",
         "operationId": "dashboard.applyDashboardEdit",
         "parameters": [],
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/DashboardEdit"
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/SetTitle"
+                  },
+                  {
+                    "$ref": "#/components/schemas/AddWidget"
+                  },
+                  {
+                    "$ref": "#/components/schemas/RemoveWidget"
+                  },
+                  {
+                    "$ref": "#/components/schemas/MoveWidget"
+                  },
+                  {
+                    "$ref": "#/components/schemas/ResizeRegion"
+                  },
+                  {
+                    "$ref": "#/components/schemas/UpdateWidget"
+                  },
+                  {
+                    "$ref": "#/components/schemas/ResizeWidget"
+                  }
+                ]
               }
             }
           },
@@ -12097,7 +12242,29 @@
                               "additionalProperties": false,
                               "properties": {
                                 "payload": {
-                                  "$ref": "#/components/schemas/DashboardEdit"
+                                  "anyOf": [
+                                    {
+                                      "$ref": "#/components/schemas/SetTitle"
+                                    },
+                                    {
+                                      "$ref": "#/components/schemas/AddWidget"
+                                    },
+                                    {
+                                      "$ref": "#/components/schemas/RemoveWidget"
+                                    },
+                                    {
+                                      "$ref": "#/components/schemas/MoveWidget"
+                                    },
+                                    {
+                                      "$ref": "#/components/schemas/ResizeRegion"
+                                    },
+                                    {
+                                      "$ref": "#/components/schemas/UpdateWidget"
+                                    },
+                                    {
+                                      "$ref": "#/components/schemas/ResizeWidget"
+                                    }
+                                  ]
                                 }
                               },
                               "required": [
@@ -12996,7 +13163,29 @@
                                 "additionalProperties": false,
                                 "properties": {
                                   "payload": {
-                                    "$ref": "#/components/schemas/DashboardEdit"
+                                    "anyOf": [
+                                      {
+                                        "$ref": "#/components/schemas/SetTitle"
+                                      },
+                                      {
+                                        "$ref": "#/components/schemas/AddWidget"
+                                      },
+                                      {
+                                        "$ref": "#/components/schemas/RemoveWidget"
+                                      },
+                                      {
+                                        "$ref": "#/components/schemas/MoveWidget"
+                                      },
+                                      {
+                                        "$ref": "#/components/schemas/ResizeRegion"
+                                      },
+                                      {
+                                        "$ref": "#/components/schemas/UpdateWidget"
+                                      },
+                                      {
+                                        "$ref": "#/components/schemas/ResizeWidget"
+                                      }
+                                    ]
                                   }
                                 },
                                 "required": [

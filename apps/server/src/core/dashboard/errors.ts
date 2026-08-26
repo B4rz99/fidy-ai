@@ -1,5 +1,5 @@
 import { Data, type Option } from "effect";
-import type { WidgetId } from "./model";
+import type { LayoutRegionSelector, WidgetId } from "./model";
 
 /** One actionable invariant violation found by the complete-document validation gate. */
 export type DashboardIssue = Readonly<{
@@ -19,9 +19,14 @@ export class WidgetNotFound extends Data.TaggedError("WidgetNotFound")<{
   readonly role: "edit-target" | "placement-target";
 }> {}
 
-/** A root leaf has no sibling-relative region whose weight can change. */
-export class RootWidgetResize extends Data.TaggedError("RootWidgetResize")<{
-  readonly widgetId: WidgetId;
+/** The root layout has no sibling-relative region whose weight can change. */
+export class RootRegionResize extends Data.TaggedError("RootRegionResize")<{
+  readonly widgetIds: LayoutRegionSelector;
+}> {}
+
+/** No current leaf or compound layout region has exactly the supplied Widget contents. */
+export class RegionNotFound extends Data.TaggedError("RegionNotFound")<{
+  readonly widgetIds: LayoutRegionSelector;
 }> {}
 
 /** A move cannot use its own Widget as the sibling destination. */
@@ -43,7 +48,8 @@ export class DuplicateWidgetId extends Data.TaggedError("DuplicateWidgetId")<{
 export type DashboardFailure =
   | InvalidDashboardResult
   | WidgetNotFound
-  | RootWidgetResize
+  | RootRegionResize
+  | RegionNotFound
   | SelfPlacement
   | LastWidgetRemoval
   | DuplicateWidgetId;

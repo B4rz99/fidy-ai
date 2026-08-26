@@ -51,8 +51,11 @@ const reset = Effect.gen(function* () {
         WHERE subject_user_id = ${acceptanceUserId} AND grant_type = 'pat'
       )`;
   yield* sql`DELETE FROM consent_records
+    WHERE subject_user_id = ${acceptanceUserId} AND revoked_grant_id IS NOT NULL`;
+  yield* sql`DELETE FROM consent_records
     WHERE subject_user_id = ${acceptanceUserId} AND grant_type = 'pat'`;
   yield* sql`DELETE FROM audit_log_entries WHERE user_id = ${acceptanceUserId}`;
+  yield* sql`DELETE FROM dashboards WHERE user_id = ${acceptanceUserId}`;
   yield* sql`DELETE FROM tokens WHERE user_id = ${acceptanceUserId}`;
   yield* sql`DELETE FROM pat_pairings WHERE user_id = ${acceptanceUserId}`;
   yield* sql`DELETE FROM web_sessions WHERE user_id = ${acceptanceUserId}`;

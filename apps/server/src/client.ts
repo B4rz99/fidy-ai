@@ -46,6 +46,12 @@ export { buildPATDisclosure, patScopeCopy } from "~/core/tokens/rules";
 export type { CanonicalInput } from "~/shell/_shared/canonical-input";
 export type { CanonicalSuccess } from "~/shell/_shared/canonical-success";
 export {
+  DashboardCatalogEntry,
+  DashboardEdit,
+  SplitWeight,
+  WidgetId,
+} from "~/core/dashboard/model";
+export {
   ApprovedBrowserPairingEmailAuthentication,
   AuthenticatedBrowserLoginPairing,
   CompleteBrowserPairingEmailAuthenticationPayload,

@@ -19,13 +19,34 @@ import {
   DashboardQueryContext,
   DashboardTitle,
   SpendingChartWidget,
+  SplitWeight,
   TransactionListWidget,
+  WidgetId,
   makeLayoutNodeSchema,
 } from "~/core/dashboard/model";
 import { Transaction } from "~/core/transactions/model";
 import { NotFound, ValidationFailed } from "~/shell/_shared/errors";
 import { operationPolicy, patScoped } from "~/shell/_shared/operation-policy";
 import { OperationResponse } from "~/shell/_shared/response";
+
+const LegacyResizeWidgetInput = Schema.Struct({
+  op: Schema.tag("resize-widget"),
+  widgetId: WidgetId,
+  weight: SplitWeight,
+}).annotate({ identifier: "ResizeWidget" });
+
+/** Transport-only compatibility input; handlers normalize it to canonical region-resize. */
+export const DashboardEditInput = Schema.Union([...DashboardEdit.members, LegacyResizeWidgetInput]);
+export type DashboardEditInput = typeof DashboardEditInput.Type;
+
+export const normalizeDashboardEditInput = (edit: DashboardEditInput): DashboardEdit =>
+  edit.op === "resize-widget"
+    ? {
+        op: "resize-region",
+        widgetIds: [edit.widgetId],
+        size: { kind: "weight", weight: edit.weight },
+      }
+    : edit;
 
 const LocalCalendarDate = Schema.String.check(
   Schema.isPattern(/^\d{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])$/u)
@@ -209,14 +230,14 @@ export const DashboardGroup = HttpApiGroup.make("dashboard")
   )
   .add(
     HttpApiEndpoint.post("applyDashboardEdit", "/dashboard/edits", {
-      payload: DashboardEdit,
+      payload: DashboardEditInput,
       success: OperationResponse(DashboardDocument),
       error: DashboardEditFailures,
     })
       .annotate(
         OpenApi.Description,
         "Apply one structural DashboardEdit to the caller's latest locked document. Use the same " +
-          "add, remove, move, resize, replace, or title edit the web UI uses; invalid edits and " +
+          "add, remove, move, region-resize, replace, or title edit the web UI uses; invalid edits and " +
           "invalid resulting documents leave the stored dashboard unchanged."
       )
       .annotateMerge(

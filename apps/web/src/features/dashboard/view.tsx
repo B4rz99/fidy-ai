@@ -1,14 +1,17 @@
 import { BigDecimal, Option } from "effect";
 import { AsyncResult } from "effect/unstable/reactivity";
-import { type JSX, useMemo } from "react";
+import { type FormEvent, type JSX, useMemo, useState } from "react";
 // Dashboard presentation is already route-lazy.
 // react-doctor-disable-next-line prefer-dynamic-import
 import { Bar, BarChart, CartesianGrid, XAxis } from "recharts";
 import { Alert, AlertDescription, AlertTitle } from "@/ui/components/alert";
 import { Badge } from "@/ui/components/badge";
+import { Button } from "@/ui/components/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/ui/components/card";
 import { type ChartConfig, ChartContainer, ChartTooltip } from "@/ui/components/chart";
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/ui/components/empty";
+import { Input } from "@/ui/components/input";
+import { Label } from "@/ui/components/label";
 import { Progress, ProgressLabel } from "@/ui/components/progress";
 import { Skeleton } from "@/ui/components/skeleton";
 import {
@@ -27,6 +30,14 @@ import {
   moneyProgressGeometry,
   moneySeriesGeometry,
 } from "./money-presentation";
+import {
+  DashboardCatalogControls,
+  DashboardRegionControls,
+  DashboardWidgetControls,
+  type PlacementChoice,
+} from "./editor-controls";
+import { DashboardDragHandle, DashboardDragProvider, DashboardDropZone } from "./drag-adapter";
+import { type DashboardCatalogEntry, type DashboardGesture, freshWidgetId } from "./editor-model";
 import {
   type DashboardLayout,
   type DashboardView,
@@ -333,41 +344,309 @@ const RenderWidget = ({
 const layoutKey = (layout: DashboardLayout): string =>
   layout.kind === "leaf" ? layout.widget.widget.id : layoutKey(layout.children[0].node);
 
-const ResponsiveLayout = ({
-  layout,
+const collectWidgetViews = (layout: DashboardLayout): ReadonlyArray<DashboardWidgetView> =>
+  layout.kind === "leaf"
+    ? [layout.widget]
+    : layout.children.flatMap(({ node }) => collectWidgetViews(node));
+
+const regionWidgetIds = (
+  layout: DashboardLayout
+): Extract<DashboardGesture, { readonly kind: "resize-region" }>["widgetIds"] => {
+  const ids = collectWidgetViews(layout).map(({ widget }) => widget.id);
+  const first = ids[0];
+  if (first === undefined) throw new Error("A Dashboard region must contain a Widget");
+  return [first, ...ids.slice(1)];
+};
+
+const regionLabel = (layout: DashboardLayout): string => {
+  const first = collectWidgetViews(layout)[0];
+  if (first === undefined) throw new Error("A Dashboard region must contain a Widget");
+  return titleFor(first.widget);
+};
+
+const placementChoices = (
+  layout: DashboardLayout,
+  excludedWidgetId: Option.Option<DashboardWidget["id"]>
+): ReadonlyArray<PlacementChoice> => [
+  { label: "Al inicio del tablero", target: { kind: "dashboard-edge", edge: "top" } },
+  { label: "Al final del tablero", target: { kind: "dashboard-edge", edge: "bottom" } },
+  ...collectWidgetViews(layout).flatMap(({ widget }) =>
+    Option.exists(excludedWidgetId, (excludedId) => widget.id === excludedId)
+      ? []
+      : ([
+          {
+            label: `Arriba de ${titleFor(widget)}`,
+            target: { kind: "widget-edge", widgetId: widget.id, edge: "top" },
+          },
+          {
+            label: `A la derecha de ${titleFor(widget)}`,
+            target: { kind: "widget-edge", widgetId: widget.id, edge: "right" },
+          },
+          {
+            label: `Debajo de ${titleFor(widget)}`,
+            target: { kind: "widget-edge", widgetId: widget.id, edge: "bottom" },
+          },
+          {
+            label: `A la izquierda de ${titleFor(widget)}`,
+            target: { kind: "widget-edge", widgetId: widget.id, edge: "left" },
+          },
+        ] as const)
+  ),
+];
+
+const EditableLeaf = ({
   context,
-}: Readonly<{ layout: DashboardLayout; context: DashboardView["context"] }>): JSX.Element =>
-  layout.kind === "leaf" ? (
-    <RenderWidget view={layout.widget} context={context} />
-  ) : (
+  depth,
+  editor,
+  layout,
+  rootLayout,
+}: Readonly<{
+  context: DashboardView["context"];
+  depth: number;
+  editor: DashboardEditor;
+  layout: Extract<DashboardLayout, { readonly kind: "leaf" }>;
+  rootLayout: DashboardLayout;
+}>): JSX.Element => {
+  const { widget } = layout.widget;
+  const label = titleFor(widget);
+  return (
+    <div className="relative flex min-h-0 min-w-0 flex-1 flex-col gap-2">
+      <div className="flex justify-end">
+        <DashboardDragHandle
+          disabled={editor.submitting}
+          label={`Arrastrar ${label}`}
+          source={{ kind: "widget", widgetId: widget.id, label }}
+        />
+      </div>
+      <DashboardWidgetControls
+        choices={placementChoices(rootLayout, Option.some(widget.id))}
+        key={`${widget.id}:${label}`}
+        disabled={editor.submitting}
+        label={label}
+        onGesture={editor.onGesture}
+        widget={widget}
+      />
+      <div className="relative min-h-56 flex-1">
+        {(["top", "right", "bottom", "left"] as const).map((edge) => (
+          <DashboardDropZone
+            depth={depth + 1}
+            disabled={editor.submitting}
+            key={edge}
+            label={`Colocar ${edge} de ${label}`}
+            target={{ kind: "widget-edge", widgetId: widget.id, edge }}
+          />
+        ))}
+        <RenderWidget view={layout.widget} context={context} />
+      </div>
+    </div>
+  );
+};
+
+const ResponsiveLayout = ({
+  context,
+  depth,
+  editor,
+  layout,
+  rootLayout,
+}: Readonly<{
+  context: DashboardView["context"];
+  depth: number;
+  editor: Option.Option<DashboardEditor>;
+  layout: DashboardLayout;
+  rootLayout: DashboardLayout;
+}>): JSX.Element => {
+  if (layout.kind === "leaf") {
+    return Option.isNone(editor) ? (
+      <RenderWidget view={layout.widget} context={context} />
+    ) : (
+      <EditableLeaf
+        context={context}
+        depth={depth}
+        editor={editor.value}
+        layout={layout}
+        rootLayout={rootLayout}
+      />
+    );
+  }
+  return (
     <div className={`flex min-h-0 min-w-0 flex-1 gap-4 ${responsiveSplitClass(layout.axis)}`}>
       {layout.children.map(({ node, weight }) => (
         <div
-          className="flex min-h-0 min-w-0 flex-none md:[flex:var(--dashboard-weight)_1_0%]"
+          className="flex min-h-0 min-w-0 flex-none flex-col gap-2 md:[flex:var(--dashboard-weight)_1_0%]"
           data-testid={`responsive-weight-${weight}`}
           key={layoutKey(node)}
           style={weightedChildStyle(weight)}
         >
-          <ResponsiveLayout layout={node} context={context} />
+          {Option.isNone(editor) ? null : (
+            <DashboardRegionControls
+              disabled={editor.value.submitting}
+              label={regionLabel(node)}
+              onGesture={editor.value.onGesture}
+              widgetIds={regionWidgetIds(node)}
+            />
+          )}
+          <ResponsiveLayout
+            context={context}
+            depth={depth + 1}
+            editor={editor}
+            layout={node}
+            rootLayout={rootLayout}
+          />
         </div>
       ))}
     </div>
   );
+};
 
-/** Read-only responsive projection of one schema-decoded canonical Dashboard view. */
-export const DashboardViewComponent = ({
-  view,
-}: Readonly<{ view: DashboardView }>): JSX.Element => (
-  <main className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-4 py-8 sm:px-6 lg:px-8">
-    <header className="flex flex-col gap-2">
-      <h1 className="font-heading text-3xl font-semibold tracking-tight">{view.title}</h1>
-      <p className="text-muted-foreground">Lectura actual de tus finanzas.</p>
-    </header>
-    <section aria-label="Diseño responsivo del tablero" className="flex min-h-[36rem] flex-col">
-      <ResponsiveLayout layout={view.layout} context={view.context} />
-    </section>
-  </main>
+export type DashboardEditorError = Readonly<{
+  message: string;
+  title: string;
+}>;
+
+export type DashboardEditor = Readonly<{
+  catalog: ReadonlyArray<DashboardCatalogEntry>;
+  error: Option.Option<DashboardEditorError>;
+  onGesture: (gesture: DashboardGesture) => void;
+  submitting: boolean;
+}>;
+
+const DashboardTitleEditor = ({
+  editor,
+  title,
+}: Readonly<{ editor: DashboardEditor; title: string }>): JSX.Element => {
+  const [nextTitle, setNextTitle] = useState(title);
+  const submit = (event: FormEvent<HTMLFormElement>): void => {
+    event.preventDefault();
+    editor.onGesture({ kind: "retitle-dashboard", title: nextTitle });
+  };
+  return (
+    <form className="flex flex-wrap items-end gap-2" onSubmit={submit}>
+      <div className="grid min-w-56 flex-1 gap-1.5">
+        <Label htmlFor="dashboard-title">Nuevo título del tablero</Label>
+        <Input
+          disabled={editor.submitting}
+          id="dashboard-title"
+          maxLength={80}
+          onChange={(event) => setNextTitle(event.currentTarget.value)}
+          value={nextTitle}
+        />
+      </div>
+      <Button disabled={editor.submitting} type="submit" variant="outline">
+        Guardar título del tablero
+      </Button>
+    </form>
+  );
+};
+
+const CatalogDragSources = ({
+  catalog,
+  disabled,
+}: Readonly<{ catalog: ReadonlyArray<DashboardCatalogEntry>; disabled: boolean }>): JSX.Element => (
+  <ul
+    aria-label="Widgets disponibles para arrastrar"
+    className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4"
+  >
+    {catalog.map((entry) => (
+      <li
+        className="flex items-center justify-between gap-3 rounded-lg border bg-card p-3"
+        key={entry.id}
+      >
+        <span>
+          <span className="block text-sm font-medium">{entry.name}</span>
+          <span className="block text-xs text-muted-foreground">{entry.description}</span>
+        </span>
+        <DashboardDragHandle
+          disabled={disabled}
+          label={`Arrastrar ${entry.name}`}
+          source={{ kind: "catalog", entry }}
+        />
+      </li>
+    ))}
+  </ul>
 );
+
+const DashboardCanvas = ({
+  editor,
+  view,
+}: Readonly<{
+  editor: Option.Option<DashboardEditor>;
+  view: DashboardView;
+}>): JSX.Element => (
+  <section
+    aria-label="Diseño responsivo del tablero"
+    className="relative flex min-h-[36rem] flex-col"
+  >
+    {Option.isNone(editor) ? null : (
+      <DashboardDropZone
+        depth={0}
+        disabled={editor.value.submitting}
+        label="Colocar al inicio del tablero"
+        target={{ kind: "dashboard-edge", edge: "top" }}
+      />
+    )}
+    <ResponsiveLayout
+      context={view.context}
+      depth={0}
+      editor={editor}
+      layout={view.layout}
+      rootLayout={view.layout}
+    />
+    {Option.isNone(editor) ? null : (
+      <DashboardDropZone
+        depth={0}
+        disabled={editor.value.submitting}
+        label="Colocar al final del tablero"
+        target={{ kind: "dashboard-edge", edge: "bottom" }}
+      />
+    )}
+  </section>
+);
+
+/** Responsive projection of one schema-decoded canonical Dashboard view. */
+export const DashboardViewComponent = ({
+  editor,
+  view,
+}: Readonly<{
+  editor: Option.Option<DashboardEditor>;
+  view: DashboardView;
+}>): JSX.Element => {
+  const choices = placementChoices(view.layout, Option.none());
+  const content = (
+    <main className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-4 py-8 sm:px-6 lg:px-8">
+      <header className="flex flex-col gap-3">
+        <h1 className="font-heading text-3xl font-semibold tracking-tight">{view.title}</h1>
+        <p className="text-muted-foreground">Lectura actual de tus finanzas.</p>
+        {Option.isNone(editor) ? null : (
+          <DashboardTitleEditor editor={editor.value} key={view.title} title={view.title} />
+        )}
+        {Option.isNone(editor) || Option.isNone(editor.value.error) ? null : (
+          <Alert variant="destructive" role="alert">
+            <AlertTitle>{editor.value.error.value.title}</AlertTitle>
+            <AlertDescription>{editor.value.error.value.message}</AlertDescription>
+          </Alert>
+        )}
+      </header>
+      {Option.isNone(editor) ? null : (
+        <section aria-label="Catálogo de Widgets" className="grid gap-3">
+          <DashboardCatalogControls
+            catalog={editor.value.catalog}
+            choices={choices}
+            disabled={editor.value.submitting}
+            makeWidgetId={freshWidgetId}
+            onGesture={editor.value.onGesture}
+          />
+          <CatalogDragSources catalog={editor.value.catalog} disabled={editor.value.submitting} />
+        </section>
+      )}
+      <DashboardCanvas editor={editor} view={view} />
+    </main>
+  );
+  return Option.isNone(editor) ? (
+    content
+  ) : (
+    <DashboardDragProvider onGesture={editor.value.onGesture}>{content}</DashboardDragProvider>
+  );
+};
 
 const LoadingDashboard = (): JSX.Element => (
   <main
@@ -397,7 +676,7 @@ export const DashboardRouteContent = ({
 }>): JSX.Element => {
   if (AsyncResult.isFailure(result)) return <DashboardError />;
   return AsyncResult.isSuccess(result) ? (
-    <DashboardViewComponent view={result.value.data} />
+    <DashboardViewComponent editor={Option.none()} view={result.value.data} />
   ) : (
     <LoadingDashboard />
   );

@@ -45,6 +45,7 @@ Distilled research on how Effect actually works, extracted from the `.repos/effe
 - `.patterns/concurrency-time.md` — v4 fibers/Queue/Schedule/Cron/Clock/TestClock and `unstable/persistence` RateLimiter: fork lifetimes, queue termination semantics, the per-user serialized-turn + debounce pattern, cron time zones, zone-aware DateTime math.
 - `.patterns/testing.md` — `@effect/vitest` v4 + `effect/testing`: it.effect/it.live/it.layer semantics, TestClock/TestConsole defaults, layer memoization and teardown fine print, Schema-driven property tests, Exit/Equal assertion idioms, HttpClient stub pattern, testcontainers Postgres practice, Bun caveats.
 - `.patterns/effect-atom.md` — Effect Atom + `@effect/atom-react`: Layer-backed runtimes, scoped resource ownership, AsyncResult, derived and family atoms, typed HttpApi queries/mutations, invalidation, cache lifetime, React hooks, and testing seams.
+- `.patterns/dnd-kit.md` — `@dnd-kit/react` 0.5: adapter boundaries, provider and hook lifecycles, pointer/touch/keyboard sensors, accessibility, nested collision priority, drop completion, overlays, and Dashboard integration rules. Read before dnd-kit or drag-and-drop work.
 
 ## React reference
 

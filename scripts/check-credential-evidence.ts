@@ -28,6 +28,11 @@ const credentialEvidence = [
     testName: "keeps the email admission HMAC credential out of persistence and outcomes",
   },
   {
+    configuration: "EMAIL_CREDENTIAL_LOOKUP_HMAC_KEY",
+    testFile: "apps/server/src/shell/email-authentication/replacement.test.ts",
+    testName: "keeps the credential lookup HMAC key out of persistence and outcomes",
+  },
+  {
     configuration: "RESEND_API_KEY",
     testFile: "apps/server/src/shell/email-authentication/delivery.test.ts",
     testName: "keeps Resend credentials out of typed failures",

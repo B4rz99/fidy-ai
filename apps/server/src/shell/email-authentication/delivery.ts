@@ -9,6 +9,7 @@ import { collectBoundedBytes } from "~/shell/_shared/bounded-bytes";
 
 const onboardingSubject = "Verifica tu correo en Fidy";
 const replacementSubject = "Verifica tu nuevo correo en Fidy";
+const browserPairingSubject = "Tu código para iniciar sesión en Fidy";
 const successfulStatusMinimum = 200;
 const successfulStatusMaximumExclusive = 300;
 const rateLimitedStatus = 429;
@@ -32,13 +33,27 @@ export const replacementVerificationEmail = (
   html: `<p>Tu código para cambiar el correo de acceso a Fidy es:</p><p><strong><code>${combinedCode}</code></strong></p><p>Escríbelo en <a href="https://fidyapp.com/settings/email">https://fidyapp.com/settings/email</a>. Este código vence en 10 minutos.</p><p>Si no solicitaste este cambio, ignora este correo. Tu correo actual seguirá funcionando.</p><p>Fidy nunca te pedirá este código por WhatsApp ni por soporte.</p>`,
 });
 
+/** Fixed login projection; no pairing identity, mailbox, or verifier enters provider content. */
+export const browserPairingVerificationEmail = (
+  combinedCode: EmailVerificationCode
+): VerificationEmail => ({
+  subject: browserPairingSubject,
+  text: `Tu código para iniciar sesión en Fidy es:\n\n${combinedCode}\n\nEscríbelo en https://fidyapp.com/auth/pair. Este código vence cuando termine la vinculación actual del navegador, como máximo 10 minutos después de iniciarla.\n\nSi no solicitaste este correo, ignóralo.\n\nFidy nunca te pedirá este código por WhatsApp ni por soporte.`,
+  html: `<p>Tu código para iniciar sesión en Fidy es:</p><p><strong><code>${combinedCode}</code></strong></p><p>Escríbelo en <a href="https://fidyapp.com/auth/pair">https://fidyapp.com/auth/pair</a>. Este código vence cuando termine la vinculación actual del navegador, como máximo 10 minutos después de iniciarla.</p><p>Si no solicitaste este correo, ignóralo.</p><p>Fidy nunca te pedirá este código por WhatsApp ni por soporte.</p>`,
+});
+
+const verificationEmailByPurpose: Readonly<
+  Record<EmailProofPurpose, (combinedCode: EmailVerificationCode) => VerificationEmail>
+> = {
+  "verified-onboarding": verificationEmail,
+  "credential-replacement": replacementVerificationEmail,
+  "browser-pairing-approval": browserPairingVerificationEmail,
+};
+
 const verificationEmailFor = (
   purpose: EmailProofPurpose,
   combinedCode: EmailVerificationCode
-): VerificationEmail =>
-  purpose === "verified-onboarding"
-    ? verificationEmail(combinedCode)
-    : replacementVerificationEmail(combinedCode);
+): VerificationEmail => verificationEmailByPurpose[purpose](combinedCode);
 
 export class EmailSendFailed extends Data.TaggedError("EmailSendFailed")<{
   readonly certainty: "rejected" | "ambiguous";

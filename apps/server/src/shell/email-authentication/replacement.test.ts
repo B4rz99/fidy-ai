@@ -26,7 +26,7 @@ import { calculateWebSessionDeadlines } from "~/core/web-session/rules";
 import { seedConsentedPatIdentity } from "~/shell/db/development-seed";
 import { MigrationSqlClient } from "~/shell/db/client";
 import { withUserTransaction } from "~/shell/db/user-transaction";
-import { admitEmailDeliveryInScope } from "./admission";
+import { admitEmailDeliveryInScope, emailCredentialLookupKey } from "./admission";
 import { EmailDeliveryPort } from "./delivery";
 import { processOneReplacementDelivery } from "./replacement-delivery-worker";
 import {
@@ -310,6 +310,24 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
             hard_expires_at = hard_expires_at + interval '1 hour' WHERE id = ${webSessionId}
         `;
 
+          yield* sql`
+            INSERT INTO browser_login_pairings (
+              id, public_code, verifier_digest, created_at, expires_at, last_accepted_poll_at
+            ) VALUES (
+              'f1d1a000-0000-4000-8000-000000000426', 'XXXX-XXXX', decode(repeat('00', 32), 'hex'),
+              now(), now() + interval '10 minutes', now()
+            )
+          `;
+          yield* sql`
+            INSERT INTO browser_pairing_email_workflows (
+              id, user_id, pairing_id, credential_verified_at, public_code, started_at,
+              expires_at, delivery_generation, resend_available_at
+            ) SELECT 'f1d1a000-0000-4000-8000-000000000427', user_id,
+              'f1d1a000-0000-4000-8000-000000000426', verified_at, 'ABCD-EFGH', now(),
+              now() + interval '10 minutes', 1, now()
+            FROM verified_email_credentials WHERE user_id = ${userId}
+          `;
+
           const completed = yield* HttpClient.post("/web/email/replacement/verify", {
             headers: {
               cookie: sessionCookie,
@@ -326,6 +344,9 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           expect(
             yield* sql`SELECT email_address FROM verified_email_credentials WHERE user_id = ${userId}`
           ).toEqual([{ email_address: "new.mailbox+fidy@example.com" }]);
+          expect(
+            yield* sql`SELECT id FROM browser_pairing_email_workflows WHERE user_id = ${userId}`
+          ).toEqual([]);
           expect(
             yield* sql`
             SELECT subject_user_id, authorizing_web_session_id, event_kind,
@@ -706,6 +727,35 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           Effect.exit
         );
         expect(Exit.isFailure(yield* attempted)).toBe(true);
+      })
+    );
+
+    it.effect("keeps the credential lookup HMAC key out of persistence and outcomes", () =>
+      Effect.gen(function* () {
+        const secret = "a".repeat(64);
+        const lookup = yield* emailCredentialLookupKey(
+          EmailAddress.make("lookup-key@example.com")
+        ).pipe(
+          Effect.provideService(
+            ConfigProvider.ConfigProvider,
+            ConfigProvider.fromEnv({
+              env: { NODE_ENV: "production", EMAIL_CREDENTIAL_LOOKUP_HMAC_KEY: secret },
+            })
+          )
+        );
+        expect(lookup).not.toContain(secret);
+        const malformed = yield* emailCredentialLookupKey(
+          EmailAddress.make("lookup-key@example.com")
+        ).pipe(
+          Effect.provideService(
+            ConfigProvider.ConfigProvider,
+            ConfigProvider.fromEnv({
+              env: { NODE_ENV: "production", EMAIL_CREDENTIAL_LOOKUP_HMAC_KEY: "malformed" },
+            })
+          ),
+          Effect.exit
+        );
+        expect(Exit.isFailure(malformed)).toBe(true);
       })
     );
 

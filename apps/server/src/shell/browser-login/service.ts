@@ -7,6 +7,7 @@ import {
   type StartedBrowserLoginPairing,
 } from "~/core/browser-login/model";
 import { BrowserLoginPairingId } from "~/core/browser-login/reference";
+import type { UserId } from "~/core/identity/reference";
 import {
   type BrowserLoginPublicCode,
   BrowserLoginPublicCodeSymbols,
@@ -14,6 +15,7 @@ import {
   browserLoginPairingExpiry,
   browserLoginPollingIntervalSeconds,
   decideBrowserLoginRedemption,
+  decidePendingBrowserLoginProof,
   formatPublicCode,
   selectPublicCodeSymbols,
 } from "~/core/browser-login/rules";
@@ -31,6 +33,7 @@ import {
   type LockedRedemptionCandidate,
   type StartPairingWrite,
   acceptBrowserLoginPoll,
+  approveBrowserLoginPairingIdInScope,
   expireBrowserLoginPairing,
   insertPendingBrowserLoginPairing,
   lockBrowserLoginRedemptionCandidate,
@@ -129,6 +132,107 @@ export const startBrowserLoginPairing = Effect.fn("BrowserLogin.startPairing")(f
 
 const dummyPairingId = BrowserLoginPairingId.make("00000000-0000-4000-8000-000000000000");
 const stringOrEmpty = (input: unknown): string => (Predicate.isString(input) ? input : "");
+
+/** Live pairing identity returned only after constant-time private-verifier validation. */
+export type CheckedBrowserLoginPrivateVerifier = Readonly<{
+  pairingId: BrowserLoginPairingId;
+  expiresAt: DateTime.Utc;
+}>;
+
+const digestBrowserLoginVerifierInput = Effect.fn("BrowserLogin.digestVerifierInput")(
+  (input: unknown) => sha256(new TextEncoder().encode(normalizeOpaqueProof32(stringOrEmpty(input))))
+);
+
+/**
+ * Checks one private verifier while holding the target pairing row. It deliberately does not apply
+ * poll cadence, but it shares BrowserLogin's expiry and five-wrong-verifier lifecycle.
+ */
+export const checkBrowserLoginPrivateVerifierInScope = Effect.fn(
+  "BrowserLogin.checkPrivateVerifierInScope"
+)(function* (
+  input: Readonly<{ pairingId: unknown; privateVerifier: unknown; attemptedAt: DateTime.Utc }>
+) {
+  const parsedPairingId = Schema.decodeUnknownOption(BrowserLoginPairingId)(input.pairingId);
+  const pairingId = Option.getOrElse(parsedPairingId, () => dummyPairingId);
+  const attemptedDigest = yield* digestBrowserLoginVerifierInput(input.privateVerifier);
+  const candidate = yield* lockBrowserLoginRedemptionCandidate(pairingId);
+  const expectedDigest = Option.match(candidate, {
+    onNone: () => new Uint8Array(verifierOctets),
+    onSome: ({ verifierDigest }) => verifierDigest,
+  });
+  const verifierMatches = timingSafeEqual(attemptedDigest, expectedDigest);
+  if (Option.isNone(parsedPairingId) || Option.isNone(candidate)) return Option.none();
+  const pairing = candidate.value;
+  const decision = decidePendingBrowserLoginProof({
+    lifecycle: pairing.lifecycle,
+    verifierMatches,
+    wrongVerifierAttempts: pairing.wrongVerifierAttempts,
+    expiresAt: pairing.expiresAt,
+    attemptedAt: input.attemptedAt,
+  });
+  if (decision._tag === "Invalid") return Option.none();
+  if (decision._tag === "Expired") {
+    yield* expireBrowserLoginPairing(pairing.pairingId, input.attemptedAt);
+    return Option.none();
+  }
+  if (decision._tag === "WrongVerifier") {
+    yield* rejectBrowserLoginVerifier({
+      pairingId: pairing.pairingId,
+      wrongVerifierAttempts: decision.wrongVerifierAttempts,
+      lifecycle: decision.lifecycle,
+      rejectedAt: input.attemptedAt,
+    });
+    return Option.none();
+  }
+  return Option.some({ pairingId: pairing.pairingId, expiresAt: pairing.expiresAt });
+});
+
+/** Locks and rechecks a pairing after an earlier browser-proof check in an ordered approval scope. */
+export const lockPendingBrowserLoginPairingInScope = Effect.fn(
+  "BrowserLogin.lockPendingPairingInScope"
+)(function* (pairingId: BrowserLoginPairingId, attemptedAt: DateTime.Utc) {
+  const candidate = yield* lockBrowserLoginRedemptionCandidate(pairingId);
+  if (Option.isNone(candidate)) return Option.none<CheckedBrowserLoginPrivateVerifier>();
+  const pairing = candidate.value;
+  if (pairing.lifecycle !== "pending_approval") return Option.none();
+  if (DateTime.isGreaterThanOrEqualTo(attemptedAt, pairing.expiresAt)) {
+    yield* expireBrowserLoginPairing(pairing.pairingId, attemptedAt);
+    return Option.none();
+  }
+  return Option.some({ pairingId: pairing.pairingId, expiresAt: pairing.expiresAt });
+});
+
+/** Opens the short anonymous transaction used before any credential lookup or User lock. */
+export const checkBrowserLoginPrivateVerifier = Effect.fn("BrowserLogin.checkPrivateVerifier")(
+  function* (
+    input: Readonly<{ pairingId: unknown; privateVerifier: unknown; attemptedAt: DateTime.Utc }>
+  ) {
+    const sql = yield* SqlClient.SqlClient;
+    return yield* sql
+      .withTransaction(checkBrowserLoginPrivateVerifierInScope(input))
+      .pipe(Effect.catchTag("SqlError", Effect.die));
+  }
+);
+
+/** Rechecks browser proof and lets BrowserLogin alone bind the supplied existing User. */
+export const approveBrowserLoginPairingWithPrivateVerifierInScope = Effect.fn(
+  "BrowserLogin.approveWithPrivateVerifierInScope"
+)(function* (
+  input: Readonly<{
+    pairingId: unknown;
+    privateVerifier: unknown;
+    userId: UserId;
+    attemptedAt: DateTime.Utc;
+  }>
+) {
+  const checked = yield* checkBrowserLoginPrivateVerifierInScope(input);
+  if (Option.isNone(checked)) return false;
+  return yield* approveBrowserLoginPairingIdInScope({
+    userId: input.userId,
+    pairingId: checked.value.pairingId,
+    attemptedAt: input.attemptedAt,
+  });
+});
 
 export type RedeemedBrowserLoginPairing =
   | PendingBrowserLoginPairing

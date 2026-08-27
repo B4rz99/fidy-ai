@@ -1,19 +1,37 @@
 import { BunHttpServer, BunServices } from "@effect/platform-bun";
-import { type Config, ConfigProvider, DateTime, Effect, Layer, Option, Schema } from "effect";
+import { type Config, ConfigProvider, DateTime, Effect, Layer, Option, Ref, Schema } from "effect";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
 import { type SqlError, SqlSchema } from "effect/unstable/sql";
 import { BrowserLoginPublicCode } from "~/core/browser-login/rules";
+import { EmailAddress, type EmailVerificationCode } from "~/core/email-authentication/model";
 import { categoryIds } from "~/core/categories/taxonomy";
 import { UserId } from "~/core/identity/reference";
 import { makeColombianUser } from "~/core/identity/rules";
 import { MigrationSqlClient, PgLive } from "~/shell/db/client";
+import { emailCredentialLookupKey } from "~/shell/email-authentication/admission";
+import { browserPairingEmailAuthentication } from "~/shell/email-authentication/pairing-authentication";
+import { EmailDeliveryPort } from "~/shell/email-authentication/delivery";
 import { maximumPublicRequestBodySizeBytes } from "~/shell/runtime";
 import { upsertStableUserFixture } from "./identity-fixtures";
 
 const acceptanceUserId = UserId.make("24000000-0000-4000-8000-000000000241");
+const acceptanceEmail = "browser-pairing-acceptance@fidyapp.com";
+const acceptanceRevocationId = "24000000-0000-4000-8000-000000000326";
 
 const ApprovePairingRequest = Schema.Struct({ publicCode: BrowserLoginPublicCode });
 const ApprovedPairing = Schema.Struct({ publicCode: BrowserLoginPublicCode });
+const IdentityObservation = Schema.Struct({
+  userCount: Schema.Int,
+  verifiedEmailCount: Schema.Int,
+  verifiedEmailAddress: Schema.NullOr(Schema.String),
+  verifiedEmailRevision: Schema.NullOr(Schema.String),
+  whatsAppIdentityCount: Schema.Int,
+  transactionCount: Schema.Int,
+  userRecordSha256: Schema.String,
+  verifiedEmailRecordSha256: Schema.String,
+  whatsAppIdentityRecordsSha256: Schema.String,
+  transactionRecordsSha256: Schema.String,
+});
 const SessionObservation = Schema.Struct({
   sessionCount: Schema.Int,
   revoked: Schema.Boolean,
@@ -25,6 +43,7 @@ const conflictStatus = 409;
 
 const reset = Effect.gen(function* () {
   const sql = yield* MigrationSqlClient;
+  yield* sql`DELETE FROM consent_records WHERE id = ${acceptanceRevocationId}`;
   yield* sql`DELETE FROM consent_records
     WHERE subject_user_id = ${acceptanceUserId}
       AND revoked_grant_id IN (
@@ -37,13 +56,56 @@ const reset = Effect.gen(function* () {
   yield* sql`DELETE FROM tokens WHERE user_id = ${acceptanceUserId}`;
   yield* sql`DELETE FROM pat_pairings WHERE user_id = ${acceptanceUserId}`;
   yield* sql`DELETE FROM web_sessions WHERE user_id = ${acceptanceUserId}`;
-  yield* sql`TRUNCATE browser_login_start_attempts, browser_login_pairings`;
+  yield* sql`
+    TRUNCATE browser_pairing_email_start_requests, browser_pairing_email_delivery_intents,
+      browser_pairing_email_workflows, browser_login_start_attempts, browser_login_pairings
+  `;
+  yield* sql`DELETE FROM email_pairing_login_admission_scopes`;
+  yield* sql`DELETE FROM email_delivery_admission_budgets`;
   yield* sql`DELETE FROM transactions WHERE user_id = ${acceptanceUserId}`;
   const user = yield* makeColombianUser(acceptanceUserId, {
     createdAt: yield* DateTime.now,
     paidTier: "free",
   });
   yield* upsertStableUserFixture(acceptanceUserId, user);
+  const lookupKey = yield* emailCredentialLookupKey(EmailAddress.make(acceptanceEmail)).pipe(
+    Effect.orDie
+  );
+  yield* sql`
+    INSERT INTO verified_email_credentials (user_id, email_address, verified_at)
+    VALUES (${acceptanceUserId}, ${acceptanceEmail}, ${yield* DateTime.now})
+    ON CONFLICT (user_id) DO UPDATE SET email_address = EXCLUDED.email_address,
+      verified_at = EXCLUDED.verified_at
+  `;
+  yield* sql`
+    INSERT INTO verified_email_credential_authentication_lookups (
+      user_id, authentication_lookup_key
+    ) VALUES (${acceptanceUserId}, ${lookupKey})
+    ON CONFLICT (user_id) DO UPDATE
+      SET authentication_lookup_key = EXCLUDED.authentication_lookup_key
+  `;
+  return HttpServerResponse.empty({ status: noContentStatus });
+});
+
+const revokeConsent = Effect.gen(function* () {
+  const sql = yield* MigrationSqlClient;
+  yield* sql`
+    INSERT INTO consent_records (
+      id, subject_user_id, event_type, revoked_grant_id, service_market, locale,
+      disclosure_revision, disclosure_sha256, disclosure_text, policy_url, policy_revision,
+      policy_sha256, purposes, data_categories, duration, revocation_method, decision_origin,
+      disclosure_channel, disclosure_provider, disclosure_provider_message_id, decision_channel,
+      decision_provider, decision_provider_message_id, occurred_at
+    ) SELECT ${acceptanceRevocationId}, subject_user_id, 'revoked', id, service_market, locale,
+      disclosure_revision, disclosure_sha256, disclosure_text, policy_url, policy_revision,
+      policy_sha256, purposes, data_categories, duration, revocation_method,
+      'provider-qualified-messages', disclosure_channel, disclosure_provider,
+      disclosure_provider_message_id, decision_channel, decision_provider,
+      'browser-pairing-acceptance-revocation', now()
+    FROM consent_records WHERE subject_user_id = ${acceptanceUserId} AND event_type = 'granted'
+      AND grant_type = 'onboarding' ORDER BY occurred_at DESC LIMIT 1
+    ON CONFLICT (id) DO NOTHING
+  `;
   return HttpServerResponse.empty({ status: noContentStatus });
 });
 
@@ -63,6 +125,59 @@ const approvePairing = Effect.gen(function* () {
   return HttpServerResponse.empty({
     status: approved.length === 1 ? noContentStatus : conflictStatus,
   });
+});
+
+const processEmailDelivery = Effect.gen(function* () {
+  const delivered = yield* Ref.make(Option.none<EmailVerificationCode>());
+  const processed = yield* browserPairingEmailAuthentication.processNextBackgroundStep().pipe(
+    Effect.provideService(
+      EmailDeliveryPort,
+      EmailDeliveryPort.of({
+        send: ({ combinedCode }) => Ref.set(delivered, Option.some(combinedCode)),
+      })
+    )
+  );
+  const combinedCode = yield* Ref.get(delivered);
+  if (processed._tag === "Idle" || Option.isNone(combinedCode)) {
+    return HttpServerResponse.empty({ status: conflictStatus });
+  }
+  return yield* HttpServerResponse.json({ combinedCode: combinedCode.value });
+});
+
+const observeIdentity = Effect.gen(function* () {
+  const sql = yield* MigrationSqlClient;
+  const observations = yield* SqlSchema.findAll({
+    Request: Schema.Void,
+    Result: IdentityObservation,
+    execute: () => sql`
+      SELECT
+        (SELECT count(*)::int FROM users) AS "userCount",
+        (SELECT count(*)::int FROM verified_email_credentials
+          WHERE user_id = ${acceptanceUserId}) AS "verifiedEmailCount",
+        (SELECT email_address FROM verified_email_credentials
+          WHERE user_id = ${acceptanceUserId}) AS "verifiedEmailAddress",
+        (SELECT verified_at::text FROM verified_email_credentials
+          WHERE user_id = ${acceptanceUserId}) AS "verifiedEmailRevision",
+        (SELECT count(*)::int FROM whatsapp_identities
+          WHERE user_id = ${acceptanceUserId}) AS "whatsAppIdentityCount",
+        (SELECT count(*)::int FROM transactions
+          WHERE user_id = ${acceptanceUserId}) AS "transactionCount",
+        (SELECT encode(sha256(to_jsonb(user_record)::text::bytea), 'hex') FROM users user_record
+          WHERE id = ${acceptanceUserId}) AS "userRecordSha256",
+        (SELECT encode(sha256(to_jsonb(credential)::text::bytea), 'hex')
+          FROM verified_email_credentials credential
+          WHERE user_id = ${acceptanceUserId}) AS "verifiedEmailRecordSha256",
+        (SELECT encode(sha256(COALESCE(
+          jsonb_agg(to_jsonb(identity) ORDER BY identity.phone_number), '[]'::jsonb
+        )::text::bytea), 'hex') FROM whatsapp_identities identity
+          WHERE user_id = ${acceptanceUserId}) AS "whatsAppIdentityRecordsSha256",
+        (SELECT encode(sha256(COALESCE(
+          jsonb_agg(to_jsonb(transaction_record) ORDER BY transaction_record.id), '[]'::jsonb
+        )::text::bytea), 'hex') FROM transactions transaction_record
+          WHERE user_id = ${acceptanceUserId}) AS "transactionRecordsSha256"
+    `,
+  })(undefined);
+  return yield* HttpServerResponse.json(Option.getOrThrow(Option.fromNullishOr(observations[0])));
 });
 
 const observeSession = Effect.gen(function* () {
@@ -122,14 +237,18 @@ const AcceptanceControlConfig = ConfigProvider.layer(
 const ControlRoutesLive = Layer.mergeAll(
   HttpRouter.add("POST", "/reset", reset),
   HttpRouter.add("POST", "/approve-pairing", approvePairing),
+  HttpRouter.add("POST", "/revoke-consent", revokeConsent),
+  HttpRouter.add("POST", "/process-email-delivery", processEmailDelivery),
   HttpRouter.add("POST", "/expire-session", expireSession),
   HttpRouter.add("POST", "/seed-current-month-transaction", seedCurrentMonthTransaction),
-  HttpRouter.add("GET", "/session-observation", observeSession)
+  HttpRouter.add("GET", "/session-observation", observeSession),
+  HttpRouter.add("GET", "/identity-observation", observeIdentity)
 );
 
 /**
  * Loopback-only behavior control for the built-browser acceptance executable. This layer is never
- * composed into HttpLive and exposes no arbitrary User, proof, bearer, or SQL capability.
+ * composed into HttpLive. Its fixed-fixture delivery route returns only the ephemeral code needed
+ * by the browser acceptance test and exposes no arbitrary User, bearer, or SQL capability.
  */
 export const makeBrowserLoginPairingAcceptanceControlServer = ({
   certificate,

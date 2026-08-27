@@ -4,6 +4,8 @@ import { maximumEmailDeliveryGenerations } from "./model";
 /** Uniform 32-symbol alphabet without visually ambiguous I, O, 0, or 1. */
 export const emailCodeAlphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789" as const;
 const maximumWrongProofAttempts = 5;
+/** Fixed public delay attached to every non-enumerating email-login start response. */
+export const browserPairingEmailRetryAfterSeconds = 60;
 
 /** Returns the exact end of a 24-hour bounded email-control workflow. */
 export const emailWorkflowExpiry = (startedAt: DateTime.Utc): DateTime.Utc =>
@@ -72,6 +74,30 @@ export const decideEmailReplacementRequest = (input: {
       },
     })
   );
+
+/** Decides whether a locked BrowserLogin email workflow may create its next generation. */
+export const decideBrowserPairingEmailRequest = (input: {
+  readonly existing: Option.Option<
+    Readonly<{
+      credentialRevisionMatches: boolean;
+      deliveryGeneration: number;
+      resendAvailableAt: DateTime.Utc;
+      expiresAt: DateTime.Utc;
+    }>
+  >;
+  readonly requestedAt: DateTime.Utc;
+  readonly processedAt: DateTime.Utc;
+}): "Continue" | "Reject" =>
+  Option.exists(
+    input.existing,
+    (workflow) =>
+      DateTime.isGreaterThan(workflow.resendAvailableAt, input.requestedAt) ||
+      DateTime.isGreaterThanOrEqualTo(input.processedAt, workflow.expiresAt) ||
+      workflow.deliveryGeneration >= maximumEmailDeliveryGenerations ||
+      !workflow.credentialRevisionMatches
+  )
+    ? "Reject"
+    : "Continue";
 
 /** Applies the enrollment's half-open lifetime at every owner boundary. */
 export const isEmailEnrollmentExpired = (input: {

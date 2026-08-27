@@ -25,7 +25,7 @@ import { withSubjectLock } from "~/shell/consent/repo";
 import { advisoryLockKey } from "~/shell/db/advisory-lock";
 import { withUserTransaction } from "~/shell/db/user-transaction";
 import { lockFreshWebSessionInScope } from "~/shell/web-session/repo";
-import { admitEmailDeliveryInScope } from "./admission";
+import { admitEmailDeliveryInScope, emailCredentialLookupKey } from "./admission";
 import type { RequestEmailReplacementPayload } from "./operations";
 import { acquireEmailVerificationAdmissionInScope } from "./repo";
 
@@ -359,25 +359,42 @@ const commitReplacement = Effect.fn("EmailAuthentication.commitReplacement")(fun
   input: CompleteReplacementInput
 ) {
   const sql = yield* SqlClient.SqlClient;
+  const lookupKey = yield* emailCredentialLookupKey(workflow.candidateEmailAddress).pipe(
+    Effect.orDie
+  );
   const credentialUpdated = yield* sql
     .withTransaction(
-      sql`
-        UPDATE verified_email_credentials SET email_address = ${workflow.candidateEmailAddress},
-          verified_at = ${input.attemptedAt} WHERE user_id = ${input.userId}
-        RETURNING user_id
-      `
+      Effect.gen(function* () {
+        const updated = yield* sql`
+          UPDATE verified_email_credentials SET email_address = ${workflow.candidateEmailAddress},
+            verified_at = ${input.attemptedAt}
+          WHERE user_id = ${input.userId}
+          RETURNING user_id
+        `;
+        if (updated.length !== 1) return false;
+        yield* sql`
+          UPDATE verified_email_credential_authentication_lookups
+          SET authentication_lookup_key = ${lookupKey}
+          WHERE user_id = ${input.userId}
+        `;
+        return true;
+      })
     )
     .pipe(
-      Effect.map((rows) => rows.length === 1),
       Effect.catch((error) =>
         error.reason._tag === "UniqueViolation" &&
-        error.reason.constraint === "verified_email_credentials_normalized_email_unique"
+        (error.reason.constraint === "verified_email_credentials_normalized_email_unique" ||
+          error.reason.constraint === "verified_email_auth_lookup_key_unique")
           ? Effect.succeed(false)
           : Effect.fail(error)
       ),
       Effect.orDie
     );
   if (!credentialUpdated) return false;
+  // Credential revision replacement invalidates every proof pinned to the former revision.
+  yield* sql`
+    DELETE FROM browser_pairing_email_workflows WHERE user_id = ${input.userId}
+  `.pipe(Effect.orDie);
   yield* appendReplacedLifecycleEvent({
     userId: input.userId,
     authorizingWebSessionId: input.authorizingWebSessionId,

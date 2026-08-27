@@ -35,6 +35,7 @@ import { patPairings } from "./0035-pat-pairings";
 import { verifiedEmailReplacement } from "./0036-verified-email-replacement";
 import { patManagement } from "./0037-pat-management";
 import { whatsappConfirmationEvidence } from "./0038-whatsapp-confirmation-evidence";
+import { verifiedEmailLogin } from "./0039-verified-email-login";
 
 /**
  * The explicit index ARCHITECTURE.md §7 calls for: one ordered, append-only
@@ -82,4 +83,5 @@ export const migrations = {
   "0036_verified_email_replacement": verifiedEmailReplacement,
   "0037_pat_management": patManagement,
   "0038_whatsapp_confirmation_evidence": whatsappConfirmationEvidence,
+  "0039_verified_email_login": verifiedEmailLogin,
 };

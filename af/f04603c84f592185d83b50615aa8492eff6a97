@@ -1,0 +1,88 @@
+apps/web/src/features/dashboard/editor-model.test.ts
+  s_28b8e1e0dbe2ca::t_c3691ccf89eab3 37-44
+apps/server/src/core/dashboard/rules.ts
+  s_28b8e1e0dbe2ca::t_d8edd038c06256 501-502,504-521,523,525-544,557-574
+apps/web/src/features/dashboard/drag-data.ts
+  s_28b8e1e0dbe2ca::t_9ee87bf877a7f8 21
+apps/web/src/features/dashboard/drop-geometry.ts
+  s_28b8e1e0dbe2ca::t_a895f541ad8df1 18-21
+  s_28b8e1e0dbe2ca::t_02eaf6bd8f081b 12,25-26
+  s_28b8e1e0dbe2ca::t_5322363404fd2b 1-11,13-17,22-24,27-32
+apps/server/src/core/dashboard/rules.test.ts
+  s_28b8e1e0dbe2ca::t_5a9edd67538932 607-627
+apps/server/src/shell/dashboard/mutations.ts
+  s_28b8e1e0dbe2ca::t_d3481d5f031ea0 3,39-51
+apps/web/src/features/dashboard/drag-adapter.tsx
+  s_28b8e1e0dbe2ca::t_24442a00f4dc76 85-92,99
+  s_28b8e1e0dbe2ca::t_9d19b59073f4d0 189,221,225-227,229,238-239,249-250,253-255
+  s_28b8e1e0dbe2ca::t_7ea3df22175066 4,12,19,42-43,84,93-98,100-103,105-107,116,121-122,130-156,190-194,209,215,240-246,248,251-252
+  s_28b8e1e0dbe2ca::t_f15f6df9a1618b 104
+  s_28b8e1e0dbe2ca::t_15649ea5585e18 222-224,228,230-237
+apps/web/src/features/dashboard/drag-model.ts
+  s_28b8e1e0dbe2ca::t_35ce90d80986ed 17-24,44
+  s_28b8e1e0dbe2ca::t_304db8ea0f7470 40-41,43,47,49
+.patterns/dnd-kit.md
+  s_28b8e1e0dbe2ca::t_906c56b54f2168 119-122,150-151
+apps/web/src/features/dashboard/view.tsx
+  s_28b8e1e0dbe2ca::t_2281fadc8eadd3 533
+  s_28b8e1e0dbe2ca::t_3fc429794b1019 481-502,539
+  s_28b8e1e0dbe2ca::t_3da0c1f1b12c77 75,79,82-83,333-335,337,348-352
+  s_28b8e1e0dbe2ca::t_63545af08ba03e 332,336,518
+  s_28b8e1e0dbe2ca::t_ff8b1e56e6614c 412-442,467
+  s_28b8e1e0dbe2ca::t_b95eadd003f378 459-460,468,475
+  s_28b8e1e0dbe2ca::t_2388315293c069 621-647,693,695,697-702,704-710,713-720,722,725,728-730
+  s_28b8e1e0dbe2ca::t_7ebd2c098ee26c 657
+  s_28b8e1e0dbe2ca::t_71a0ff66823f23 404-407,469-474
+apps/web/src/features/dashboard/feature.test.tsx
+  s_28b8e1e0dbe2ca::t_1449b6b627411b 408
+  s_28b8e1e0dbe2ca::t_5bacaaec480cc7 404,409-413,432-433,457-459,470
+apps/server/src/core/dashboard/model.ts
+  s_28b8e1e0dbe2ca::t_057843a87105c4 428-435,478
+apps/web/src/features/signed-in/feature.tsx
+  s_28b8e1e0dbe2ca::t_51ff1f74dcbb7b 40-44,47,49-72,74-77
+apps/server/src/core/dashboard/catalog.test.ts
+  s_28b8e1e0dbe2ca::t_5efefeee54879e 34,36-42,46-55
+apps/web/src/features/dashboard/drag-adapter.test.tsx
+  s_28b8e1e0dbe2ca::t_168945d2049e96 64-74
+apps/server/src/shell/dashboard/handlers.test.ts
+  s_28b8e1e0dbe2ca::t_39fd2db197a8b1 829-832,857-860,874
+  s_28b8e1e0dbe2ca::t_1389d4769c36e7 679-681,686-688,699,713-714
+  s_28b8e1e0dbe2ca::t_44bda7253f529b 772-774,781
+  s_28b8e1e0dbe2ca::t_138aff31ca461a 700,761
+  s_28b8e1e0dbe2ca::t_ddb8f8eb3ef7b3 10,12-16
+  s_28b8e1e0dbe2ca::t_9b69de2173c781 11,741-742
+  s_28b8e1e0dbe2ca::t_af93f26debe131 183-184,203-216,238-243,322-327,652-654,660
+  s_28b8e1e0dbe2ca::t_a3d6107a05c346 740
+apps/server/src/shell/testing/browser-pairing-acceptance-control.ts
+  s_28b8e1e0dbe2ca::t_41c3ce64331082 38,96-110
+apps/web/src/features/dashboard/drop-geometry.test.ts
+  s_28b8e1e0dbe2ca::t_dedcf5746f1218 6
+  s_28b8e1e0dbe2ca::t_b2cfb0446a780f 1-5,8-15,18-24
+  s_28b8e1e0dbe2ca::t_128b6bced61898 7,16-17
+apps/web/src/features/dashboard/feature.tsx
+  s_28b8e1e0dbe2ca::t_d9934cf5fde3ea 46-47
+apps/web/src/features/dashboard/editor-model.ts
+  s_28b8e1e0dbe2ca::t_6087dcc8e0757e 50,77-78,86-91
+apps/server/src/core/dashboard/catalog.ts
+  s_28b8e1e0dbe2ca::t_a5cde4719d3cfd 98,102,106,110
+  s_28b8e1e0dbe2ca::t_627bebd38ee1ad 9,83-87,89-94,112-143
+  s_28b8e1e0dbe2ca::t_17b1f420d1aa47 95-97,99-101,103-105,107-109,111
+apps/server/contracts/openapi.json
+  s_28b8e1e0dbe2ca::t_f521e5e371e1c9 6309-6311,7270-7310,9997-9999,12211-12213,13135-13137
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.24",
+  "base_commit_sha": "aff04603c84f592185d83b50615aa8492eff6a97",
+  "prompts": {},
+  "sessions": {
+    "s_28b8e1e0dbe2ca": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0401a-a202-7f44-b015-8c6906affc63",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

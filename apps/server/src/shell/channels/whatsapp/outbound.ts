@@ -4,6 +4,7 @@ import type { UserId } from "~/core/identity/reference";
 import { TranscriptText } from "~/core/transcript/model";
 import type { AgentReply } from "~/shell/agent/agent-service";
 import type { AgentConversationAdmission } from "~/shell/agent/conversation";
+import { confirmationDigestFromChallenge } from "~/shell/agent/tool-confirmation-model";
 import { CURRENT_DISCLOSURE_TEXT } from "~/shell/consent/current-disclosure";
 import type { DeclaredOutcome, TelemetryAttempt } from "~/shell/observability/protocol";
 import { Telemetry } from "~/shell/observability/telemetry";
@@ -201,6 +202,11 @@ export const sendKapsoFreeForm = Effect.fn("WhatsApp.sendFreeForm")(function* (
     text: renderWhatsAppText(reply.text),
     attempt,
   });
-  yield* retainOutboundEvidence(userId, sent.messageEvidence, sent.sentAt);
+  yield* retainOutboundEvidence({
+    userId,
+    message: sent.messageEvidence,
+    occurredAt: sent.sentAt,
+    confirmationDigest: confirmationDigestFromChallenge(reply.text),
+  });
   return sent;
 });

@@ -22,6 +22,7 @@ import { listPendingInsights } from "~/shell/insights/queries";
 import { recall } from "~/shell/memory/queries";
 import { getUpgradeUrl, listSubscriptionOffers } from "~/shell/subscription/queries";
 import { executeAtomicBatch } from "~/shell/operations/atomic-batch";
+import { listPATs } from "~/shell/tokens/queries";
 
 export type { CanonicalImplementationCaller } from "./canonical-implementation";
 
@@ -113,8 +114,14 @@ export const canonicalOperationImplementations: CanonicalOperationImplementation
   "subscription.getUpgradeUrl": (_input, _caller) => getUpgradeUrl(),
   "subscription.listSubscriptionOffers": (_input, _caller) => listSubscriptionOffers(),
 
-  "operations.executeAtomicBatch": (input, { resolved: caller }) =>
-    executeAtomicBatch({ payload: input.payload, caller }),
+  "pats.listPATs": (_input, { resolved }) => listPATs({ userId: resolved.subjectUserId }),
+
+  "operations.executeAtomicBatch": (input, caller) =>
+    executeAtomicBatch({
+      payload: input.payload,
+      caller: caller.resolved,
+      confirmationEvidence: caller.confirmationEvidence,
+    }),
 } as const;
 
 const implementationsById: ReadonlyMap<string, ErasedCanonicalImplementation> = new Map(

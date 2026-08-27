@@ -33,6 +33,8 @@ import { fixedPATLifetimes } from "./0033-fixed-pat-lifetimes";
 import { verifiedEmailOnboarding } from "./0034-verified-email-onboarding";
 import { patPairings } from "./0035-pat-pairings";
 import { verifiedEmailReplacement } from "./0036-verified-email-replacement";
+import { patManagement } from "./0037-pat-management";
+import { whatsappConfirmationEvidence } from "./0038-whatsapp-confirmation-evidence";
 
 /**
  * The explicit index ARCHITECTURE.md §7 calls for: one ordered, append-only
@@ -78,4 +80,6 @@ export const migrations = {
   "0034_verified_email_onboarding": verifiedEmailOnboarding,
   "0035_pat_pairings": patPairings,
   "0036_verified_email_replacement": verifiedEmailReplacement,
+  "0037_pat_management": patManagement,
+  "0038_whatsapp_confirmation_evidence": whatsappConfirmationEvidence,
 };

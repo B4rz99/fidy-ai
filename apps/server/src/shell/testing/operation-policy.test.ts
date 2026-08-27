@@ -103,6 +103,9 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
       Effect.gen(function* () {
         const expected = {
           "browserLogin.approvePairing": "mutation",
+          "pats.listPATs": "query",
+          "pats.revokePAT": "mutation",
+          "pats.revokeAllPATs": "mutation",
           "pats.createManualPAT": "mutation",
           "pats.inspectPATPairing": "mutation",
           "pats.approvePATPairing": "mutation",
@@ -184,6 +187,9 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
       Effect.gen(function* () {
         const expected = {
           "browserLogin.approvePairing": "required",
+          "pats.listPATs": "not-required",
+          "pats.revokePAT": "required",
+          "pats.revokeAllPATs": "required",
           "pats.createManualPAT": "not-required",
           "pats.inspectPATPairing": "not-required",
           "pats.approvePATPairing": "not-required",

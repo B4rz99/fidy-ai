@@ -2,6 +2,7 @@ import { act, cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { DateTime, Duration, Option } from "effect";
 import { afterEach, expect, it, vi } from "vitest";
 import {
+  type ActivePATMetadata,
   type IssuedPAT,
   PATId,
   PATRecipientLabel,
@@ -14,6 +15,11 @@ import {
 } from "@/transport/client";
 import { bearerRevealLifetime } from "./policy";
 import { type IssueManualPATCommand, ManualPATView } from "./view";
+import {
+  ActivePATManagementView,
+  type RevokeActivePATCommand,
+  type RevokeAllActivePATsCommand,
+} from "./management-view";
 
 const bearer = TokenBearer.make("fin_created1_abcdefghijklmnopqrstuvwxyz0123456789ABCD");
 const createdAt = DateTime.makeUnsafe("2026-08-10T12:00:00Z");
@@ -151,6 +157,131 @@ it("edits a reviewed grant and preserves one request identity across a failed re
   fireEvent.click(screen.getByRole("button", { name: "Volver a la revisión" }));
   fireEvent.click(screen.getByRole("button", { name: "Confirmar y crear token" }));
   expect(issue.mock.calls[1]?.[0].requestId).toBe(firstRequest?.requestId);
+});
+
+it("lists safe active metadata and confirms one revocation before refreshing", () => {
+  const activePat: ActivePATMetadata = {
+    shortId: TokenShortId.make("active01"),
+    recipientLabel: PATRecipientLabel.make("Robot de reportes"),
+    scopes: PATScopes.make(["read", "dashboard"]),
+    createdAt,
+    lastUsedAt: Option.some(DateTime.add(createdAt, { days: 1 })),
+    expiresAt: DateTime.add(createdAt, { days: 90 }),
+  };
+  const revokeOne = vi.fn((command: RevokeActivePATCommand) => command.onRevoked());
+  const revokeAll = vi.fn<(command: RevokeAllActivePATsCommand) => void>();
+  const { rerender } = render(
+    <ActivePATManagementView
+      state={{ _tag: "Ready", result: { pats: [activePat] } }}
+      revokeAll={revokeAll}
+      revokeOne={revokeOne}
+    />
+  );
+
+  expect(screen.getByRole("heading", { name: "Tokens activos" })).toBeVisible();
+  expect(screen.getByText("Robot de reportes")).toBeVisible();
+  expect(screen.getByText("active01")).toBeVisible();
+  expect(screen.getByText("Lectura")).toBeVisible();
+  expect(screen.getByText("Tablero")).toBeVisible();
+  expect(screen.queryByText(bearer)).not.toBeInTheDocument();
+
+  fireEvent.click(screen.getByRole("button", { name: "Desactivar" }));
+  expect(revokeOne).not.toHaveBeenCalled();
+  expect(screen.getByText(/dejará de funcionar de inmediato/iu)).toBeVisible();
+  fireEvent.click(screen.getByRole("button", { name: "Sí, desactivar" }));
+
+  expect(revokeOne).toHaveBeenCalledWith(
+    expect.objectContaining({ shortId: TokenShortId.make("active01") })
+  );
+  expect(screen.getByText(/dejó de funcionar de inmediato/iu)).toBeVisible();
+  rerender(
+    <ActivePATManagementView
+      state={{ _tag: "Ready", result: { pats: [] } }}
+      revokeAll={revokeAll}
+      revokeOne={revokeOne}
+    />
+  );
+  expect(screen.getByText("No tienes tokens activos.")).toBeVisible();
+  expect(screen.getByRole("button", { name: "Desactivar todos los tokens" })).toBeVisible();
+});
+
+it("confirms revoke-all and reports only the server's active PAT count", () => {
+  const activePat: ActivePATMetadata = {
+    shortId: TokenShortId.make("active02"),
+    recipientLabel: PATRecipientLabel.make("Robot doméstico"),
+    scopes: PATScopes.make(["write"]),
+    createdAt,
+    lastUsedAt: Option.none(),
+    expiresAt: DateTime.add(createdAt, { days: 90 }),
+  };
+  const revokeAll = vi.fn((command: RevokeAllActivePATsCommand) => command.onRevoked(1));
+  render(
+    <ActivePATManagementView
+      state={{ _tag: "Ready", result: { pats: [activePat] } }}
+      revokeAll={revokeAll}
+      revokeOne={vi.fn()}
+    />
+  );
+
+  fireEvent.click(screen.getByRole("button", { name: "Desactivar todos los tokens" }));
+  expect(revokeAll).not.toHaveBeenCalled();
+  expect(screen.getByText(/tokens pendientes de activación/iu)).toBeVisible();
+  fireEvent.click(screen.getByRole("button", { name: "Sí, desactivar todos" }));
+
+  expect(revokeAll).toHaveBeenCalledTimes(1);
+  expect(screen.getByText("Se desactivó 1 token activo.")).toBeVisible();
+});
+
+it("renders loading and load-failure states", () => {
+  const { rerender } = render(
+    <ActivePATManagementView state={{ _tag: "Loading" }} revokeAll={vi.fn()} revokeOne={vi.fn()} />
+  );
+
+  expect(screen.getByText("Cargando tokens activos…")).toBeVisible();
+  rerender(
+    <ActivePATManagementView
+      state={{ _tag: "LoadFailure" }}
+      revokeAll={vi.fn()}
+      revokeOne={vi.fn()}
+    />
+  );
+  expect(screen.getByText("No pudimos cargar tus tokens")).toBeVisible();
+});
+
+it("serializes revocation, allows cancellation, and reports failures and plural counts", () => {
+  const activePat: ActivePATMetadata = {
+    shortId: TokenShortId.make("active03"),
+    recipientLabel: PATRecipientLabel.make("Robot de pruebas"),
+    scopes: PATScopes.make(["read"]),
+    createdAt,
+    lastUsedAt: Option.none(),
+    expiresAt: DateTime.add(createdAt, { days: 90 }),
+  };
+  const revokeOne = vi.fn<(command: RevokeActivePATCommand) => void>();
+  const revokeAll = vi.fn<(command: RevokeAllActivePATsCommand) => void>();
+  render(
+    <ActivePATManagementView
+      state={{ _tag: "Ready", result: { pats: [activePat] } }}
+      revokeAll={revokeAll}
+      revokeOne={revokeOne}
+    />
+  );
+
+  fireEvent.click(screen.getByRole("button", { name: "Desactivar" }));
+  fireEvent.click(screen.getByRole("button", { name: "Sí, desactivar" }));
+  expect(screen.getByRole("button", { name: "Desactivando…" })).toBeDisabled();
+  expect(screen.getByRole("button", { name: "Desactivar todos los tokens" })).toBeDisabled();
+
+  act(() => revokeOne.mock.calls[0]?.[0].onFailed());
+  expect(screen.getByText(/no pudimos desactivar el token/iu)).toBeVisible();
+  fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
+  expect(screen.queryByText(/no pudimos desactivar el token/iu)).not.toBeInTheDocument();
+
+  fireEvent.click(screen.getByRole("button", { name: "Desactivar todos los tokens" }));
+  fireEvent.click(screen.getByRole("button", { name: "Sí, desactivar todos" }));
+  expect(screen.getByRole("button", { name: "Desactivando todos…" })).toBeDisabled();
+  act(() => revokeAll.mock.calls[0]?.[0].onRevoked(2));
+  expect(screen.getByText("Se desactivaron 2 tokens activos.")).toBeVisible();
 });
 
 it("clears an issued bearer on reset and page hide", async () => {

@@ -1,6 +1,16 @@
 import assert from "node:assert/strict";
 import { expect, layer } from "@effect/vitest";
-import { Crypto, DateTime, Effect, Encoding, Layer, Redacted, Result, Schema } from "effect";
+import {
+  Crypto,
+  DateTime,
+  Effect,
+  Encoding,
+  Layer,
+  Option,
+  Redacted,
+  Result,
+  Schema,
+} from "effect";
 import { HttpBody, HttpClient } from "effect/unstable/http";
 import { SqlSchema } from "effect/unstable/sql";
 import { allCanonicalCapabilities } from "~/core/_shared/canonical-capability";
@@ -240,6 +250,7 @@ layer(ApprovalHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         const input = { payload: { publicCode: challenge.publicCode } };
         const confirmation = yield* makeTurnConfirmation(firstUserId, [], {
           text: TranscriptText.make(`Approve ${challenge.publicCode}`),
+          confirmationEvidence: Option.none(),
         });
         const decision = yield* confirmation.decide({ binding, input });
         assert.equal(decision._tag, "RequireConfirmation");

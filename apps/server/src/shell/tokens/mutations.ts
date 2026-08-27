@@ -1,10 +1,17 @@
 import { Crypto, DateTime, Duration, Effect, Encoding, Option, type Schema } from "effect";
-import { ConsentRecord, ConsentRecordId } from "~/core/consent/model";
+import {
+  type ConsentDecisionEvidence,
+  ConsentRecord,
+  ConsentRecordId,
+  type ProviderQualifiedMessages,
+} from "~/core/consent/model";
 import type { UserId } from "~/core/identity/reference";
 import {
   type CreateManualPATPayload,
   type ManualPATGrantInput,
   PAT,
+  RevokedPAT,
+  RevokedPATCount,
   type TokenBearer,
   TokenSecret,
   TokenShortId,
@@ -15,9 +22,14 @@ import { PATId } from "~/core/tokens/reference";
 import { computePATExpiration } from "~/core/tokens/rules";
 import type { CanonicalCaller } from "~/shell/_shared/authz";
 import type { CanonicalMutationImplementation } from "~/shell/_shared/canonical-mutation";
+import { NotFound } from "~/shell/_shared/errors";
 import type { OperationResponse } from "~/shell/_shared/response";
 import { hashTokenBearer } from "~/shell/_shared/token-digest";
-import { appendConsentRecordInScope, withSubjectLockInScope } from "~/shell/consent/repo";
+import {
+  appendConsentRecordInScope,
+  findPATGrantInScope,
+  withSubjectLockInScope,
+} from "~/shell/consent/repo";
 import { currentManualPATDisclosure } from "./current-disclosure";
 import {
   makePATIssuanceConsumed,
@@ -33,7 +45,15 @@ import {
   type ManualPATIssuanceRateLimited,
   type ManualPATReviewExpired,
 } from "./operations";
-import { getPATIssuanceAdmission, hasConsumedPATRequest, insertPATInScope } from "./repo";
+import {
+  getPATIssuanceAdmission,
+  hasConsumedPATRequest,
+  insertPATInScope,
+  lockAllPATsForRevocationInScope,
+  lockPATForRevocationInScope,
+  revokeApprovedPATPairingsInScope,
+  revokeSelectedPATInScope,
+} from "./repo";
 
 const shortIdBytes = 4;
 const reviewWindow = Duration.minutes(manualPATReviewWindowMinutes);
@@ -150,3 +170,120 @@ export const createManualPAT: CanonicalMutationImplementation<
   ManualPATIssuanceConsumed | ManualPATIssuanceRateLimited | ManualPATReviewExpired,
   Crypto.Crypto
 > = (input) => withSubjectLockInScope(input.userId, createManualPATInScope(input));
+
+export type RevokePATInput = Readonly<{
+  userId: UserId;
+  caller: CanonicalCaller;
+  confirmationEvidence: () => Option.Option<ProviderQualifiedMessages>;
+  shortId: TokenShortId;
+}>;
+
+const patNotFound = (): NotFound =>
+  NotFound.make({
+    error: {
+      code: "not_found",
+      message: "No manageable PAT has that short id. Refresh the active PAT list before retrying.",
+    },
+    next: [],
+  });
+
+const revocationEvidence = Effect.fn("PAT.revocationEvidence")(function* (input: {
+  readonly caller: CanonicalCaller;
+  readonly confirmationEvidence: () => Option.Option<ProviderQualifiedMessages>;
+}): Effect.fn.Return<ConsentDecisionEvidence> {
+  if (input.caller.auditCaller._tag === "WebSession") {
+    return { _tag: "AuthenticatedWeb", webSessionId: input.caller.auditCaller.webSessionId };
+  }
+  const evidence = input.confirmationEvidence();
+  if (Option.isNone(evidence)) {
+    return yield* Effect.die("Verified WhatsApp PAT revocation lacked provider evidence");
+  }
+  return evidence.value;
+});
+
+/** Revokes one claimed PAT and appends its symmetric Consent evidence exactly once. */
+export const revokePAT: CanonicalMutationImplementation<
+  RevokePATInput,
+  MutationResponse<typeof RevokedPAT>,
+  NotFound,
+  Crypto.Crypto
+> = Effect.fn("revokePAT")(function* ({ userId, caller, confirmationEvidence, shortId }) {
+  return yield* withSubjectLockInScope(
+    userId,
+    Effect.gen(function* () {
+      const candidate = yield* lockPATForRevocationInScope(userId, shortId);
+      if (Option.isNone(candidate) || Option.isNone(candidate.value.tokenHash)) {
+        return yield* patNotFound();
+      }
+      if (Option.isSome(candidate.value.revokedAt)) {
+        return { data: RevokedPAT.make({ shortId }), next: [] };
+      }
+      const grant = yield* findPATGrantInScope(userId, candidate.value.id).pipe(
+        Effect.flatMap(Effect.fromOption),
+        Effect.orDie
+      );
+      const revokedAt = yield* DateTime.now;
+      yield* revokeSelectedPATInScope(userId, candidate.value.id, revokedAt);
+      const crypto = yield* Crypto.Crypto;
+      yield* appendConsentRecordInScope(
+        ConsentRecord.make({
+          id: ConsentRecordId.make(yield* crypto.randomUUIDv7.pipe(Effect.orDie)),
+          subjectUserId: userId,
+          event: { _tag: "Revoked", grantId: grant.id },
+          disclosure: grant.disclosure,
+          occurredAt: revokedAt,
+          evidence: yield* revocationEvidence({ caller, confirmationEvidence }),
+        })
+      );
+      return { data: RevokedPAT.make({ shortId }), next: [] };
+    })
+  );
+});
+
+export type RevokeAllPATsInput = Readonly<{
+  userId: UserId;
+  caller: CanonicalCaller;
+  confirmationEvidence: () => Option.Option<ProviderQualifiedMessages>;
+}>;
+
+/** Revokes all active PATs and closes all approved unclaimed PAT authorization atomically. */
+export const revokeAllPATs: CanonicalMutationImplementation<
+  RevokeAllPATsInput,
+  MutationResponse<typeof RevokedPATCount>,
+  never,
+  Crypto.Crypto
+> = Effect.fn("revokeAllPATs")(function* ({ userId, caller, confirmationEvidence }) {
+  return yield* withSubjectLockInScope(
+    userId,
+    Effect.gen(function* () {
+      const revokedAt = yield* DateTime.now;
+      const selected = yield* lockAllPATsForRevocationInScope(userId, revokedAt);
+      const crypto = yield* Crypto.Crypto;
+      const evidence = yield* revocationEvidence({ caller, confirmationEvidence });
+      for (const pat of selected) {
+        const grant = yield* findPATGrantInScope(userId, pat.id).pipe(
+          Effect.flatMap(Effect.fromOption),
+          Effect.orDie
+        );
+        yield* revokeSelectedPATInScope(userId, pat.id, revokedAt);
+        yield* appendConsentRecordInScope(
+          ConsentRecord.make({
+            id: ConsentRecordId.make(yield* crypto.randomUUIDv7.pipe(Effect.orDie)),
+            subjectUserId: userId,
+            event: { _tag: "Revoked", grantId: grant.id },
+            disclosure: grant.disclosure,
+            occurredAt: revokedAt,
+            evidence,
+          })
+        );
+      }
+      yield* revokeApprovedPATPairingsInScope(userId, revokedAt);
+      return {
+        data: RevokedPATCount.make({
+          revokedCount: selected.filter(({ countedActive }) => countedActive).length,
+        }),
+        next: [],
+      };
+    })
+  );
+});

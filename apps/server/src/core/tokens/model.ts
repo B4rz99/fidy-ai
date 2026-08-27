@@ -236,6 +236,40 @@ export const PAT = Schema.TaggedStruct("PAT", {
   .annotate({ identifier: "PAT" });
 export type PAT = typeof PAT.Type;
 
+/**
+ * Safe public metadata for one currently usable PAT. Presence in a management listing establishes
+ * active lifecycle, so terminal state, stable identity, and all credential material stay absent.
+ */
+export const ActivePATMetadata = Schema.Struct({
+  shortId: TokenShortId,
+  recipientLabel: PATRecipientLabel,
+  scopes: PATScopes,
+  createdAt: UtcTimestamp,
+  lastUsedAt: Schema.OptionFromNullOr(UtcTimestamp),
+  expiresAt: UtcTimestamp,
+}).annotate({ identifier: "ActivePATMetadata" });
+export type ActivePATMetadata = typeof ActivePATMetadata.Type;
+
+/** Bounded product result containing only the User's currently active PATs. */
+export const ActivePATList = Schema.Struct({
+  pats: Schema.Array(ActivePATMetadata),
+}).annotate({ identifier: "ActivePATList" });
+export type ActivePATList = typeof ActivePATList.Type;
+
+/** One safe acknowledgement of a selected PAT revocation. */
+export const RevokedPAT = Schema.Struct({ shortId: TokenShortId }).annotate({
+  identifier: "RevokedPAT",
+});
+export type RevokedPAT = typeof RevokedPAT.Type;
+
+/** Bounded acknowledgement for an all-PAT revocation. */
+export const RevokedPATCount = Schema.Struct({
+  revokedCount: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+}).annotate({
+  identifier: "RevokedPATCount",
+});
+export type RevokedPATCount = typeof RevokedPATCount.Type;
+
 /** One successful issuance; the bearer cannot be recovered after this immediate response. */
 export const IssuedPAT = Schema.Struct({
   pat: PAT,

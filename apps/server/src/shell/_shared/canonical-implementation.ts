@@ -1,4 +1,5 @@
-import type { Crypto, Effect } from "effect";
+import type { Crypto, Effect, Option } from "effect";
+import type { ProviderQualifiedMessages } from "~/core/consent/model";
 import type { HttpApiEndpoint } from "effect/unstable/httpapi";
 import type { SqlClient } from "effect/unstable/sql";
 import type { HostedInference } from "~/shell/agent/hosted-inference";
@@ -9,7 +10,11 @@ import type { CanonicalEndpoint, CanonicalInput } from "./canonical-input";
 import type { CanonicalSuccess } from "./canonical-success";
 
 /** Caller facts supplied to every canonical implementation once the executor has resolved one. */
-export type CanonicalImplementationCaller = Readonly<{ resolved: CanonicalCaller }>;
+export type CanonicalImplementationCaller = Readonly<{
+  resolved: CanonicalCaller;
+  /** Exact provider evidence exposed lazily only after the hosted confirmation permit is consumed. */
+  confirmationEvidence: () => Option.Option<ProviderQualifiedMessages>;
+}>;
 
 /** What canonical execution itself requires, before any child-operation auditing. */
 export type CanonicalExecutionRequirements =

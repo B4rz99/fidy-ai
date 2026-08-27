@@ -10,6 +10,8 @@ export {
 export { FidyApi, type FidyApiGroups, type OperationId } from "~/shell/api";
 export { isHttpOrigin } from "./http-origin";
 export {
+  ActivePATList,
+  ActivePATMetadata,
   countPATLabelCharacters,
   CreateManualPATPayload,
   defaultPATLifetimeDays,

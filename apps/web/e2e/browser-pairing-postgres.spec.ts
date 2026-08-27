@@ -157,6 +157,30 @@ const observeSession = async (request: APIRequestContext): Promise<SessionObserv
   return Schema.decodeUnknownSync(SessionObservation)(await response.json());
 };
 
+const revokeVisiblePAT = async (
+  page: Page,
+  request: APIRequestContext,
+  bearer: string
+): Promise<void> => {
+  await expect(page.getByText("Automatización casa", { exact: true }).last()).toBeVisible();
+  const shortId = Option.getOrThrow(Option.fromNullishOr(bearer.split("_")[1]));
+  await expect(page.getByText(shortId, { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Desactivar", exact: true }).click();
+  await expect(page.getByText(/dejará de funcionar de inmediato/iu)).toBeVisible();
+  const response = page.waitForResponse(
+    (candidate) =>
+      candidate.url() === `${apiOrigin}/pats/${shortId}` &&
+      candidate.request().method() === "DELETE"
+  );
+  await page.getByRole("button", { name: "Sí, desactivar" }).click();
+  expect((await response).status()).toBe(successStatus);
+  await expect(page.getByText(/dejó de funcionar de inmediato/iu)).toBeVisible();
+  const revokedBearer = await request.get(`${apiOrigin}/categories`, {
+    headers: { authorization: `Bearer ${bearer}` },
+  });
+  expect(revokedBearer.status()).toBe(unauthorizedStatus);
+};
+
 const revokeRetainedSession = async (page: Page): Promise<void> => {
   const logoutResponse = page.waitForResponse(
     (response) =>
@@ -341,6 +365,9 @@ test("creates, copies, and clears a manual PAT from a freshly paired browser", a
   await page.getByRole("button", { name: "Copiar token" }).click();
   await expect(page.getByRole("button", { name: "Copiado" })).toBeVisible();
   expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(bearer);
+
+  await revokeVisiblePAT(page, request, bearer);
+
   await page.getByRole("link", { name: "Transacciones" }).click();
   await page.evaluate(() => history.back());
   await expect(page).toHaveURL(/\/settings\/pats$/u);

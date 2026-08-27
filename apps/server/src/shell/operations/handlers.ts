@@ -1,4 +1,4 @@
-import { Effect } from "effect";
+import { Effect, Option } from "effect";
 import { HttpApiBuilder } from "effect/unstable/httpapi";
 import { ResolvedCaller } from "~/shell/_shared/authz";
 import { CanonicalPreTransactions } from "~/shell/_shared/canonical-pre-transaction";
@@ -11,9 +11,13 @@ export const OperationsLive = HttpApiBuilder.group(FidyApi, "operations", (handl
     CanonicalPreTransactions.preserve(
       Effect.gen(function* () {
         const caller = yield* ResolvedCaller;
-        return yield* executeAtomicBatch({ payload, caller });
+        return yield* executeAtomicBatch({
+          payload,
+          caller,
+          confirmationEvidence: Option.none,
+        });
       }),
-      (caller) => executeAtomicBatch({ payload, caller })
+      (caller) => executeAtomicBatch({ payload, caller, confirmationEvidence: Option.none })
     )
   )
 );

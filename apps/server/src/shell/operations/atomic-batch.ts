@@ -14,7 +14,10 @@ import {
   assertCanonicalMutationRegistry,
   dispatchCanonicalMutation,
 } from "~/shell/_shared/canonical-mutation-registry";
-import type { CanonicalImplementationRequirements } from "~/shell/_shared/canonical-implementation";
+import type {
+  CanonicalImplementationCaller,
+  CanonicalImplementationRequirements,
+} from "~/shell/_shared/canonical-implementation";
 import {
   CanonicalPreTransactions,
   withCanonicalPreTransaction,
@@ -104,6 +107,7 @@ type ExecuteChild = Readonly<{
   call: AtomicBatchInput["calls"][number];
   index: number;
   caller: CanonicalCaller;
+  confirmationEvidence: CanonicalImplementationCaller["confirmationEvidence"];
   childAudit: ChildOperationAuditService;
 }>;
 
@@ -119,11 +123,14 @@ const decodeCanonicalMutationCall = (
 const hasChildAccess = (operation: OperationPolicyValue, caller: CanonicalCaller): boolean =>
   decideOperationAccess(operation.access, toAccessCaller(caller))._tag === "Allowed";
 
+// The catalog-derived HTTP decoder establishes the operation/input correlation before this
+// implementation registry's exact dispatch interface.
 const executeChild = Effect.fn("executeAtomicBatchChild")(function* ({
   call,
   childAudit,
   index,
   caller,
+  confirmationEvidence,
 }: ExecuteChild) {
   const catalogOperation = operationById.get(CanonicalOperationId.make(call.operation));
   if (catalogOperation?.policy.kind !== "mutation") {
@@ -154,10 +161,11 @@ const executeChild = Effect.fn("executeAtomicBatchChild")(function* ({
     });
   }
 
-  // Recover the operation/input correlation established by the catalog-derived HTTP decoder before
-  // crossing into the implementation registry's exact dispatch interface.
   const mutationCall = yield* decodeCanonicalMutationCall(call).pipe(Effect.orDie);
-  const output = yield* dispatchCanonicalMutation(mutationCall, { resolved: caller }).pipe(
+  const output = yield* dispatchCanonicalMutation(mutationCall, {
+    resolved: caller,
+    confirmationEvidence,
+  }).pipe(
     Effect.tap(() => recordChild(childAudit, call.operation, "succeeded")),
     Effect.tapError(() => recordChild(childAudit, call.operation, "failed")),
     Effect.mapError((failure) => rejected(index, call.operation, failure)),
@@ -181,11 +189,13 @@ const executeChild = Effect.fn("executeAtomicBatchChild")(function* ({
 export type AtomicBatchExecutionInput = Readonly<{
   payload: AtomicBatchInput;
   caller: CanonicalCaller;
+  confirmationEvidence: CanonicalImplementationCaller["confirmationEvidence"];
 }>;
 
 const prepareAtomicBatch = Effect.fn("prepareAtomicBatch")(function* ({
   payload,
   caller,
+  confirmationEvidence,
 }: AtomicBatchExecutionInput) {
   const preparedStates: Array<Schema.Json> = [];
   for (const call of payload.calls) {
@@ -199,7 +209,10 @@ const prepareAtomicBatch = Effect.fn("prepareAtomicBatch")(function* ({
     }
     const mutationCall = yield* decodeCanonicalMutationCall(call).pipe(Effect.orDie);
     const preparation = CanonicalPreTransactions.find(
-      CanonicalMutationEffects.make(mutationCall, { resolved: caller }),
+      CanonicalMutationEffects.make(mutationCall, {
+        resolved: caller,
+        confirmationEvidence,
+      }),
       caller,
       catalogOperation.id
     );
@@ -224,7 +237,15 @@ export const executeAtomicBatch = (
     const childAudit = yield* ChildOperationAudit;
     const results: Array<AtomicBatchResult> = [];
     for (const [index, call] of input.payload.calls.entries()) {
-      results.push(yield* executeChild({ call, childAudit, index, caller: input.caller }));
+      results.push(
+        yield* executeChild({
+          call,
+          childAudit,
+          index,
+          caller: input.caller,
+          confirmationEvidence: input.confirmationEvidence,
+        })
+      );
     }
     const [first, ...rest] = results;
     if (first === undefined) return yield* Effect.die("Non-empty batch produced no results");

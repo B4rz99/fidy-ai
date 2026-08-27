@@ -1,0 +1,133 @@
+apps/server/src/shell/_shared/canonical-mutation-registry.ts
+  s_28b8e1e0dbe2ca::t_4df9dd96587d21 103
+apps/web/src/features/dashboard/editor-model.ts
+  s_28b8e1e0dbe2ca::t_59ed756ac7af4d 59,100
+  s_28b8e1e0dbe2ca::t_289f5dcad4a303 62
+apps/server/src/shell/dashboard/handlers.ts
+  s_28b8e1e0dbe2ca::t_ae3fba9ccde699 36
+.patterns/dnd-kit.md
+  s_28b8e1e0dbe2ca::t_9c67b5a70d10ea 89-90,119-122
+apps/web/src/features/dashboard/drag-adapter.test.tsx
+  s_28b8e1e0dbe2ca::t_7857132cc77790 46,62
+  s_28b8e1e0dbe2ca::t_60ffea7ebe759b 7,47-61,63
+apps/server/contracts/openapi.json
+  s_28b8e1e0dbe2ca::t_59a8846c0d031a 1829-1878,6305,9968,12157,13056
+  s_28b8e1e0dbe2ca::t_b4cff9b86086ce 5278,5281,9961
+apps/server/src/core/dashboard/rules.ts
+  s_28b8e1e0dbe2ca::t_fdce463b6027fd 96-101,109,112,114
+  s_28b8e1e0dbe2ca::t_b4a204fb4afaf0 110,125
+  s_28b8e1e0dbe2ca::t_ec452d8781fcc0 423-425,432-436,448-451
+  s_28b8e1e0dbe2ca::t_8bb6720676aff6 437-443
+  s_28b8e1e0dbe2ca::t_513df4e84b0825 445-447
+apps/web/src/features/dashboard/drag-adapter.tsx
+  s_28b8e1e0dbe2ca::t_f4ac397396ccb7 205-211,218
+  s_28b8e1e0dbe2ca::t_6fbaed4bed3a5c 64
+  s_28b8e1e0dbe2ca::t_6cf4836852db4d 124-131
+  s_28b8e1e0dbe2ca::t_a76c576216b50e 176-180,190-192,227,254-258,261
+  s_28b8e1e0dbe2ca::t_1be70199d03daa 100,111,113-122,132-137,220,223
+  s_28b8e1e0dbe2ca::t_01426a5c2e7e96 195-204,221
+  s_28b8e1e0dbe2ca::t_0b52507ec9052e 183-189,193-194,233
+  s_28b8e1e0dbe2ca::t_947d5d50ac6a28 84,172-175
+  s_28b8e1e0dbe2ca::t_f408c4cc58f574 8,17,83,222
+  s_28b8e1e0dbe2ca::t_aea34e1c539db1 76
+apps/server/src/core/dashboard/model.ts
+  s_28b8e1e0dbe2ca::t_cc217ef1b82e3c 181
+  s_28b8e1e0dbe2ca::t_c81f5288dedd2d 182
+apps/server/src/core/dashboard/rules.test.ts
+  s_28b8e1e0dbe2ca::t_70a011578731eb 738
+  s_28b8e1e0dbe2ca::t_0cf4bd8071ca4e 739-740,742-743,747-750
+  s_28b8e1e0dbe2ca::t_76f5875dd975ca 687,689-714
+  s_28b8e1e0dbe2ca::t_3dd405a1c63ec5 686,795
+  s_28b8e1e0dbe2ca::t_7df3840f435395 667,679
+  s_28b8e1e0dbe2ca::t_834c0947a1dd7a 716-735,737,751
+  s_28b8e1e0dbe2ca::t_b4a204fb4afaf0 736,741,744-746
+  s_28b8e1e0dbe2ca::t_99cf0416e5d86e 688
+  s_28b8e1e0dbe2ca::t_717ec554fbec61 715
+apps/web/e2e/browser-pairing-postgres.spec.ts
+  s_28b8e1e0dbe2ca::t_f9666a3f8eb4d4 110
+  s_28b8e1e0dbe2ca::t_1be481fcd0d5ac 107-109,508
+apps/server/src/shell/dashboard/operations.ts
+  s_28b8e1e0dbe2ca::t_bf3456767c453d 212
+  s_28b8e1e0dbe2ca::t_7510f0f99b2ece 218-219
+apps/web/src/features/dashboard/editor-model.test.ts
+  s_28b8e1e0dbe2ca::t_51a28dfdb53782 1
+  s_28b8e1e0dbe2ca::t_8bc91b39c2848a 84-91
+  s_28b8e1e0dbe2ca::t_35edb6445f1376 92,97,102
+apps/web/src/features/dashboard/feature.test.tsx
+  s_28b8e1e0dbe2ca::t_7195fc4ffc82ac 406-407,415-419,421-424,433,448,521,528
+  s_28b8e1e0dbe2ca::t_e4e4b4f4679b5e 405,408-409,411,436,447,449-450
+  s_28b8e1e0dbe2ca::t_c21f59e8b4795c 453-454,456,460,462-463,470
+  s_28b8e1e0dbe2ca::t_9c229e5684eba3 513-516,518-520,522,546
+  s_28b8e1e0dbe2ca::t_26f9e0f186f719 469,551-559,566-574,577-578,580-587
+  s_28b8e1e0dbe2ca::t_4f57b4f15699dd 560-565
+  s_28b8e1e0dbe2ca::t_e092a91dbdc8e6 531-534,536-537
+  s_28b8e1e0dbe2ca::t_9a4733dbd2b647 579
+  s_28b8e1e0dbe2ca::t_5f0aae1f70edf8 434-435,442-446
+  s_28b8e1e0dbe2ca::t_bbc43149f761be 370
+  s_28b8e1e0dbe2ca::t_424ee8ee3f88c5 474-485,487,489-491
+  s_28b8e1e0dbe2ca::t_1640f26cc09140 458,472
+  s_28b8e1e0dbe2ca::t_f90b478a7a0eb7 517
+  s_28b8e1e0dbe2ca::t_44593e63ec2e51 524
+  s_28b8e1e0dbe2ca::t_280c8f11e6108b 538-545
+  s_28b8e1e0dbe2ca::t_7542411f9da88b 426-432,438-440,465,548,550,576
+  s_28b8e1e0dbe2ca::t_c3c845e08588b5 467-468,492-497,503,507,509
+  s_28b8e1e0dbe2ca::t_f965a08abecb6a 525-527,529-530
+  s_28b8e1e0dbe2ca::t_2ad5385010c919 404,410,412-414,420,425,437,441,451-452,464,547
+  s_28b8e1e0dbe2ca::t_52669506d3e524 457
+  s_28b8e1e0dbe2ca::t_dc022c93c7ffa4 466
+  s_28b8e1e0dbe2ca::t_4fc974c45f2c26 471
+  s_28b8e1e0dbe2ca::t_34e8adfdffc5a1 473
+  s_28b8e1e0dbe2ca::t_a47cfbe43ecda9 523
+apps/web/src/features/dashboard/view.tsx
+  s_28b8e1e0dbe2ca::t_f5517805aa5f39 3,80,340,358
+  s_28b8e1e0dbe2ca::t_fbd95dd1a0a149 4,7-13,633,669-671,673-678,684-686,691,709-710,712-717,728,744-745
+  s_28b8e1e0dbe2ca::t_a147f505cee2f5 632,680-682,711,727
+  s_28b8e1e0dbe2ca::t_4cc814187b5895 655-659,662-663
+  s_28b8e1e0dbe2ca::t_14a8f6122a9c7a 501,506-508
+  s_28b8e1e0dbe2ca::t_5e9bcb1c2bd63b 630-631,634-638,654,660
+  s_28b8e1e0dbe2ca::t_814e45e4ac1687 765-767,769
+  s_28b8e1e0dbe2ca::t_d1bde99e4d5d18 424-430,436
+  s_28b8e1e0dbe2ca::t_4bd9ee90fe2cea 564,568-570
+  s_28b8e1e0dbe2ca::t_2421c725b6fd4d 511-515,525-530,538-541
+  s_28b8e1e0dbe2ca::t_2bd7bcd8bfd2a0 565,593,595-602,607-610,613-614,622,625-626,639-653,672,701
+  s_28b8e1e0dbe2ca::t_69075653e072b1 876
+  s_28b8e1e0dbe2ca::t_7c6f7b7f81f174 581,587-591,603-605,618,628-629,661,665-668,683,687-690,696-698,718-726,729-732,734-735,741,748
+  s_28b8e1e0dbe2ca::t_7affe3a1a7f670 43,87,531,850-854,902,921
+  s_28b8e1e0dbe2ca::t_ac409d68106939 477,479-481,483-500,532,535-537,542-553
+  s_28b8e1e0dbe2ca::t_91a5d809dd4ad5 703-706
+  s_28b8e1e0dbe2ca::t_25e4d4707045ac 572-580,623,664,692-694,702,707
+  s_28b8e1e0dbe2ca::t_fe3bc6e292dd61 88
+  s_28b8e1e0dbe2ca::t_983fdb3b752dca 563,620
+  s_28b8e1e0dbe2ca::t_bd9633e493f08b 911
+  s_28b8e1e0dbe2ca::t_8efb3270458833 592,594,606,611-612,615-617,619,624,627
+  s_28b8e1e0dbe2ca::t_aa7fd8d5d1a547 775,777-779,781-788,805
+  s_28b8e1e0dbe2ca::t_a07639be8efe47 772,780,789-792,794-804
+  s_28b8e1e0dbe2ca::t_0b1414e95f266d 793
+  s_28b8e1e0dbe2ca::t_5448e816bce653 5,387,390,395,398-405,407-419,422-423,431-435,437-475
+  s_28b8e1e0dbe2ca::t_0bebe0a52880f3 391,396,561,566-567,571,582-586,679,695,699-700,708,733,736-740,742-743,746-747,749-750
+  s_28b8e1e0dbe2ca::t_066d177fed6f64 6,85,91,345
+  s_28b8e1e0dbe2ca::t_7df74bab569997 560,562,621
+  s_28b8e1e0dbe2ca::t_4cc2c22a06b563 313,315,320,326
+  s_28b8e1e0dbe2ca::t_11ebd5dbda80d4 90
+  s_28b8e1e0dbe2ca::t_dea88a0c04f901 92
+  s_28b8e1e0dbe2ca::t_47a8c27c761dab 476
+  s_28b8e1e0dbe2ca::t_d0ec040977f3be 771
+apps/web/src/features/dashboard/drag-model.ts
+  s_28b8e1e0dbe2ca::t_05de9bafd433c4 17-28
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.24",
+  "base_commit_sha": "b0d715fecbd157e7fd718708994a73db9e10529d",
+  "prompts": {},
+  "sessions": {
+    "s_28b8e1e0dbe2ca": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0401a-a202-7f44-b015-8c6906affc63",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

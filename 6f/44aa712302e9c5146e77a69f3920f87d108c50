@@ -1,0 +1,25 @@
+apps/server/src/shell/testing/browser-pairing-acceptance-control.ts
+  s_2bd1c52768ae48::t_e7ca28aabeea96 38
+  s_2bd1c52768ae48::t_5b81d2012615ec 36
+  s_2bd1c52768ae48::t_c41bbf334c44aa 29-33
+  s_2bd1c52768ae48::t_d67030958debb3 28
+apps/web/src/features/pats/feature.test.tsx
+  s_2bd1c52768ae48::t_57dae7e9ef498d 235-269,271-286
+  s_2bd1c52768ae48::t_5decd0345987f0 270
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.24",
+  "base_commit_sha": "6f44aa712302e9c5146e77a69f3920f87d108c50",
+  "prompts": {},
+  "sessions": {
+    "s_2bd1c52768ae48": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a04018-8da1-76a0-9adb-ec12dab268eb",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

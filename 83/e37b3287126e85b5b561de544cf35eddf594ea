@@ -353,6 +353,7 @@ apps/server/src/shell/_shared/operation-policy.ts
   s_eab6b9ca1492c6::t_1f5a4aa9283b0f 29,46,68-69,89-90,156-160,216-219
 apps/server/src/shell/db/migrations/registry.ts
   s_eab6b9ca1492c6::t_a36779641415e1 35,83
+  s_44bbf2114e0ae0::t_9cb0c2ac1da4a0 38,86
 apps/server/src/shell/email-authentication/replacement-transition.ts
   s_eab6b9ca1492c6::t_6fcd00959d2c22 113,115
   s_eab6b9ca1492c6::t_7a76c55d533578 126-133,189,214,221,229,231,306,309,331,336,348-349

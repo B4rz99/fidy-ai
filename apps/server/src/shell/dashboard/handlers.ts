@@ -4,7 +4,6 @@ import { ResolvedCaller } from "~/shell/_shared/authz";
 import { resolveFreeSuggestedOperationCaller } from "~/shell/_shared/suggested-operations";
 import { FidyApi } from "~/shell/api";
 import { applyDashboardEdit, getDashboard } from "./mutations";
-import { normalizeDashboardEditInput } from "./operations";
 import { listDashboardCatalog } from "./queries";
 import { getDashboardView } from "./view";
 
@@ -34,7 +33,7 @@ export const DashboardLive = HttpApiBuilder.group(FidyApi, "dashboard", (handler
         const { userId, caller } = yield* resolveFreeSuggestedOperationCaller;
         return yield* applyDashboardEdit({
           userId,
-          edit: normalizeDashboardEditInput(edit),
+          edit,
           caller,
         });
       })

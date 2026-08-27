@@ -93,6 +93,12 @@ type DenominatedChild = Readonly<{ child: SplitChild; denominator: bigint }>;
 /** The parent's common denominator, and the factor that lifts a nested split's own weights. */
 type ChildScale = Readonly<{ keep: bigint; flatten: bigint }>;
 
+const splitWeightPrecision = 1000;
+
+/** Converts a bounded three-decimal weight into an integer for exact normalization arithmetic. */
+const splitWeightInteger = (weight: SplitChild["weight"]): bigint =>
+  BigInt(Math.round(weight * splitWeightPrecision));
+
 /** Restates one child against the parent's common denominator, flattening same-axis nesting. */
 const expandChild = (child: SplitChild, axis: Axis, scale: ChildScale): Expansion => {
   switch (child.node.kind) {
@@ -100,11 +106,12 @@ const expandChild = (child: SplitChild, axis: Axis, scale: ChildScale): Expansio
       return child.node.axis === axis
         ? child.node.children.map((nested) => ({
             node: nested.node,
-            weight: BigInt(child.weight) * BigInt(nested.weight) * scale.flatten,
+            weight:
+              splitWeightInteger(child.weight) * splitWeightInteger(nested.weight) * scale.flatten,
           }))
-        : [{ node: child.node, weight: BigInt(child.weight) * scale.keep }];
+        : [{ node: child.node, weight: splitWeightInteger(child.weight) * scale.keep }];
     case "leaf":
-      return [{ node: child.node, weight: BigInt(child.weight) * scale.keep }];
+      return [{ node: child.node, weight: splitWeightInteger(child.weight) * scale.keep }];
   }
 };
 
@@ -115,7 +122,7 @@ const normalizeSplit = (node: Readonly<SplitNode>): SplitNode => {
     denominator:
       child.node.kind === "leaf"
         ? 1n
-        : child.node.children.reduce((sum, nested) => sum + BigInt(nested.weight), 0n),
+        : child.node.children.reduce((sum, nested) => sum + splitWeightInteger(nested.weight), 0n),
   }));
   const common = weighted.reduce((product, entry) => product * entry.denominator, 1n);
   const expanded = weighted.flatMap(({ child, denominator }) =>
@@ -413,15 +420,35 @@ const ratioParts: Readonly<Record<LayoutRegionRatio, readonly [number, number]>>
   "three-quarters": [3, 4],
 };
 
+const minimumSplitWeight = 0.001;
+const maximumSplitWeight = 1000;
+
 const resizeChildren = (
   children: Readonly<SplitNode["children"]>,
   resizedIndex: number,
   size: Extract<DashboardEdit, { readonly op: "resize-region" }>["size"]
 ): SplitNode["children"] => {
   if (size.kind === "weight") {
-    return mapAtLeastTwo(children, (child, index) =>
-      index === resizedIndex ? { ...child, weight: size.weight } : child
+    const adjacentIndex = resizedIndex < children.length - 1 ? resizedIndex + 1 : resizedIndex - 1;
+    const resized = Option.getOrThrow(Option.fromUndefinedOr(children[resizedIndex]));
+    const adjacent = Option.getOrThrow(Option.fromUndefinedOr(children[adjacentIndex]));
+    const pairWeight = resized.weight + adjacent.weight;
+    const resizedWeight = SplitWeight.make(
+      Math.round(
+        Math.min(
+          maximumSplitWeight,
+          pairWeight - minimumSplitWeight,
+          Math.max(minimumSplitWeight, pairWeight - maximumSplitWeight, size.weight)
+        ) * splitWeightPrecision
+      ) / splitWeightPrecision
     );
+    const adjacentWeight = SplitWeight.make(
+      Math.round((pairWeight - resizedWeight) * splitWeightPrecision) / splitWeightPrecision
+    );
+    return mapAtLeastTwo(children, (child, index) => {
+      if (index === resizedIndex) return { ...child, weight: resizedWeight };
+      return index === adjacentIndex ? { ...child, weight: adjacentWeight } : child;
+    });
   }
   const [numerator, denominator] = ratioParts[size.ratio];
   const siblingCount = children.length - 1;

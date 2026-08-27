@@ -5,7 +5,6 @@ import type { DashboardDropTarget } from "./drag-data";
 
 type CanonicalDashboardEdit = DashboardEdit;
 type AddWidgetEdit = Extract<CanonicalDashboardEdit, { readonly op: "add-widget" }>;
-type MoveWidgetEdit = Extract<CanonicalDashboardEdit, { readonly op: "move-widget" }>;
 type ResizeRegionEdit = Extract<CanonicalDashboardEdit, { readonly op: "resize-region" }>;
 type Placement = AddWidgetEdit["at"];
 type DashboardWidget = AddWidgetEdit["widget"];
@@ -57,11 +56,10 @@ export type DashboardGesture =
   | Readonly<{
       kind: "resize-region";
       widgetIds: ResizeRegionEdit["widgetIds"];
-      ratio: Extract<ResizeRegionEdit["size"], { readonly kind: "ratio" }>["ratio"];
+      weight: number;
     }>
   | Readonly<{ kind: "remove-widget"; widgetId: WidgetId }>
-  | Readonly<{ kind: "retitle-dashboard"; title: string }>
-  | Readonly<{ kind: "retitle-widget"; widget: DashboardWidget; title: string }>;
+  | Readonly<{ kind: "retitle-widget"; title: string; widget: DashboardWidget }>;
 
 const placementFor = (target: Readonly<DashboardDropTarget>): Placement => {
   if (target.kind === "dashboard-edge") return target.edge;
@@ -99,12 +97,10 @@ const editFor = (gesture: Readonly<DashboardGesture>): unknown => {
       return {
         op: "resize-region",
         widgetIds: gesture.widgetIds,
-        size: { kind: "ratio", ratio: gesture.ratio },
+        size: { kind: "weight", weight: gesture.weight },
       };
     case "remove-widget":
       return { op: "remove-widget", widgetId: gesture.widgetId };
-    case "retitle-dashboard":
-      return { op: "set-title", title: gesture.title };
     case "retitle-widget":
       return { op: "update-widget", widget: { ...gesture.widget, title: gesture.title } };
   }
@@ -115,6 +111,3 @@ export const compileDashboardGesture = (
   gesture: Readonly<DashboardGesture>
 ): Result.Result<CanonicalDashboardEdit, Schema.SchemaError> =>
   Schema.decodeUnknownResult(DashboardEdit)(editFor(gesture));
-
-/** The canonical move edit emitted for one existing Widget drop. */
-export type CompiledMoveEdit = MoveWidgetEdit;

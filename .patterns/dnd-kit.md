@@ -86,8 +86,8 @@ not understand the Dashboard's structural grammar by itself.
 Key matching uses `KeyboardEvent.key`, respects keyboard layouts, and supports a Space alias
 (`apps/docs/docs/extend/sensors/keyboard-sensor.mdx:74-80`). Use a visible focus ring on every drag
 handle and test Space, Enter, arrows, Escape, and drop against the actual recursive target geometry.
-Visible move/add/ratio controls remain mandatory: they provide a deterministic non-spatial route to
-every operation and are not replaced by KeyboardSensor.
+Give KeyboardSensor one semantic destination per Dashboard outcome. Keep resize separators and direct
+Widget actions focusable; catalog additions remain keyboard drags rather than a parallel form flow.
 
 The default Accessibility plugin adds focusability and ARIA state to each activator, associates
 screen-reader instructions, and maintains a polite live region
@@ -116,10 +116,10 @@ type, then score; the first candidate becomes the operation target
 
 Consequences for a recursive Dashboard:
 
-- Render four non-overlapping edge targets that partition each Widget body instead of one ambiguous
-  container target or narrow edge strips. The full body should resolve to one semantic edge.
-- Keep the target elements transparent and non-intercepting so normal Widget controls remain usable;
-  show the selected edge as feedback through `isDropTarget`.
+- Render five non-overlapping targets that partition each Widget body: four directional edges plus a
+  center swap target. The full body should resolve to one semantic outcome for pointer and keyboard.
+- Keep targets transparent and non-intercepting so normal Widget controls remain usable; show only
+  the selected target as feedback through `isDropTarget`.
 - When a descendant edge overlaps an ancestor edge, assign a greater numeric
   `collisionPriority` to the deeper target. Upstream explicitly supports numeric priority for
   overlapping targets (`apps/docs/docs/react/guides/collision-detection.mdx:100-118`).

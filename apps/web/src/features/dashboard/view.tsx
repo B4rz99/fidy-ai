@@ -1,6 +1,16 @@
 import { BigDecimal, Option } from "effect";
 import { AsyncResult } from "effect/unstable/reactivity";
-import { type FormEvent, type JSX, useMemo, useState } from "react";
+import { CheckIcon, PencilIcon, XIcon } from "lucide-react";
+import {
+  type FormEvent,
+  Fragment,
+  type JSX,
+  type KeyboardEvent,
+  type PointerEvent,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 // Dashboard presentation is already route-lazy.
 // react-doctor-disable-next-line prefer-dynamic-import
 import { Bar, BarChart, CartesianGrid, XAxis } from "recharts";
@@ -11,7 +21,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/ui/components/card";
 import { type ChartConfig, ChartContainer, ChartTooltip } from "@/ui/components/chart";
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/ui/components/empty";
 import { Input } from "@/ui/components/input";
-import { Label } from "@/ui/components/label";
 import { Progress, ProgressLabel } from "@/ui/components/progress";
 import { Skeleton } from "@/ui/components/skeleton";
 import {
@@ -30,14 +39,8 @@ import {
   moneyProgressGeometry,
   moneySeriesGeometry,
 } from "./money-presentation";
-import {
-  DashboardCatalogControls,
-  DashboardRegionControls,
-  DashboardWidgetControls,
-  type PlacementChoice,
-} from "./editor-controls";
 import { DashboardDragHandle, DashboardDragProvider, DashboardDropZone } from "./drag-adapter";
-import { type DashboardCatalogEntry, type DashboardGesture, freshWidgetId } from "./editor-model";
+import type { DashboardCatalogEntry, DashboardGesture } from "./editor-model";
 import {
   type DashboardLayout,
   type DashboardView,
@@ -74,15 +77,19 @@ const WidgetFrame = ({
   children,
   editing,
   title,
+  titleEditor,
 }: Readonly<{
   children: JSX.Element;
   editing: boolean;
   title: string;
+  titleEditor: Option.Option<JSX.Element>;
 }>): JSX.Element => (
-  <Card className="h-full min-h-72 shadow-sm">
-    <CardHeader className={editing ? "px-14" : undefined}>
+  <Card className="min-h-72 flex-1 shadow-sm">
+    <CardHeader className={editing ? "px-14 pr-20" : undefined}>
       <CardTitle>
-        <h2>{title}</h2>
+        {Option.getOrElse(titleEditor, () => (
+          <h2>{title}</h2>
+        ))}
       </CardTitle>
     </CardHeader>
     <CardContent className="min-w-0 flex-1">{children}</CardContent>
@@ -303,20 +310,20 @@ const CustomMetric = ({
       </EmptyHeader>
     </Empty>
   ) : (
-    <div className="grid gap-4 sm:grid-cols-2">
+    <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,14rem),1fr))] gap-4">
       {data.moneyGroups.map((group) => (
-        <section className="rounded-lg border p-4" key={group.currency}>
+        <section className="min-w-0 rounded-lg border p-4" key={group.currency}>
           <Badge variant="outline">{group.currency}</Badge>
           <dl className="mt-4 grid gap-3">
             <div>
               <dt className="text-xs text-muted-foreground">Ingresos</dt>
-              <dd className="font-heading text-xl font-semibold tabular-nums">
+              <dd className="font-heading text-xl font-semibold break-words tabular-nums [overflow-wrap:anywhere]">
                 {formatMoney({ money: group.inflow, locale })}
               </dd>
             </div>
             <div>
               <dt className="text-xs text-muted-foreground">Gastos</dt>
-              <dd className="font-heading text-xl font-semibold tabular-nums">
+              <dd className="font-heading text-xl font-semibold break-words tabular-nums [overflow-wrap:anywhere]">
                 {formatMoney({ money: group.outflow, locale })}
               </dd>
             </div>
@@ -330,10 +337,12 @@ const RenderWidget = ({
   view: { widget, result },
   context,
   editing,
+  titleEditor,
 }: Readonly<{
   view: DashboardWidgetView;
   context: DashboardView["context"];
   editing: boolean;
+  titleEditor: Option.Option<JSX.Element>;
 }>): JSX.Element => {
   let content: JSX.Element;
   if ("buckets" in result) {
@@ -346,7 +355,7 @@ const RenderWidget = ({
     content = <CustomMetric data={result} locale={context.locale} />;
   }
   return (
-    <WidgetFrame editing={editing} title={titleFor(widget)}>
+    <WidgetFrame editing={editing} title={titleFor(widget)} titleEditor={titleEditor}>
       {content}
     </WidgetFrame>
   );
@@ -375,86 +384,135 @@ const regionLabel = (layout: DashboardLayout): string => {
   return titleFor(first.widget);
 };
 
-const placementChoices = (
-  layout: DashboardLayout,
-  excludedWidgetId: Option.Option<DashboardWidget["id"]>
-): ReadonlyArray<PlacementChoice> => [
-  { label: "Al inicio del tablero", target: { kind: "dashboard-edge", edge: "top" } },
-  { label: "Al final del tablero", target: { kind: "dashboard-edge", edge: "bottom" } },
-  ...collectWidgetViews(layout).flatMap(({ widget }) =>
-    Option.exists(excludedWidgetId, (excludedId) => widget.id === excludedId)
-      ? []
-      : ([
-          {
-            label: `Arriba de ${titleFor(widget)}`,
-            target: { kind: "widget-edge", widgetId: widget.id, edge: "top" },
-          },
-          {
-            label: `A la derecha de ${titleFor(widget)}`,
-            target: { kind: "widget-edge", widgetId: widget.id, edge: "right" },
-          },
-          {
-            label: `Debajo de ${titleFor(widget)}`,
-            target: { kind: "widget-edge", widgetId: widget.id, edge: "bottom" },
-          },
-          {
-            label: `A la izquierda de ${titleFor(widget)}`,
-            target: { kind: "widget-edge", widgetId: widget.id, edge: "left" },
-          },
-          {
-            label: `Intercambiar con ${titleFor(widget)}`,
-            target: { kind: "widget-edge", widgetId: widget.id, edge: "center" },
-          },
-        ] as const)
-  ),
-];
-
-const WidgetConfiguration = ({
+const WidgetActions = ({
   editor,
   label,
-  rootLayout,
-  widget,
+  onRename,
+  widgetId,
 }: Readonly<{
   editor: DashboardEditor;
   label: string;
-  rootLayout: DashboardLayout;
-  widget: DashboardWidget;
+  onRename: () => void;
+  widgetId: DashboardWidget["id"];
 }>): JSX.Element => (
-  <details className="absolute top-3 right-3 z-40">
-    <summary
-      aria-label={`Configurar ${label}`}
-      className="flex size-8 cursor-pointer list-none items-center justify-center rounded-md border bg-background text-muted-foreground shadow-sm hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+  <div className="absolute top-3 right-3 z-40 flex">
+    <Button
+      aria-label={`Renombrar ${label}`}
+      disabled={editor.submitting}
+      onClick={onRename}
+      size="icon"
+      type="button"
+      variant="ghost"
     >
-      <span aria-hidden="true">•••</span>
-    </summary>
-    <div className="absolute top-10 right-0 w-[min(28rem,calc(100vw-3rem))] rounded-xl border bg-background p-2 shadow-xl">
-      <DashboardWidgetControls
-        choices={placementChoices(rootLayout, Option.some(widget.id))}
-        key={`${widget.id}:${label}`}
-        disabled={editor.submitting}
-        label={label}
-        onGesture={editor.onGesture}
-        widget={widget}
-      />
-    </div>
-  </details>
+      <PencilIcon />
+    </Button>
+    <Button
+      aria-label={`Eliminar ${label}`}
+      disabled={editor.submitting}
+      onClick={() => editor.onGesture({ kind: "remove-widget", widgetId })}
+      size="icon"
+      type="button"
+      variant="ghost"
+    >
+      <XIcon />
+    </Button>
+  </div>
 );
 
-const EditableLeaf = ({
-  context,
+const maximumWidgetTitleLength = 80;
+
+type WidgetTitleEditorProps = Readonly<{
+  disabled: boolean;
+  initialTitle: string;
+  onCancel: () => void;
+  onSave: (title: string) => void;
+}>;
+
+const WidgetTitleEditor = ({
+  disabled,
+  initialTitle,
+  onCancel,
+  onSave,
+}: WidgetTitleEditorProps): JSX.Element => {
+  const [title, setTitle] = useState(initialTitle);
+  const submit = (event: FormEvent<HTMLFormElement>): void => {
+    event.preventDefault();
+    const trimmedTitle = title.trim();
+    if (trimmedTitle.length > 0) onSave(trimmedTitle);
+  };
+  return (
+    <form className="flex min-w-0 items-center gap-1" onSubmit={submit}>
+      <Input
+        aria-label="Nuevo nombre del Widget"
+        disabled={disabled}
+        maxLength={maximumWidgetTitleLength}
+        onChange={(event) => setTitle(event.currentTarget.value)}
+        onKeyDown={(event) => {
+          if (event.key === "Escape") onCancel();
+        }}
+        value={title}
+      />
+      <Button
+        aria-label="Guardar nombre del Widget"
+        disabled={disabled || title.trim().length === 0}
+        size="icon-sm"
+        type="submit"
+        variant="ghost"
+      >
+        <CheckIcon />
+      </Button>
+    </form>
+  );
+};
+
+const widgetDropEdges = ["top", "right", "bottom", "left", "center"] as const;
+const widgetDropLabel: Record<(typeof widgetDropEdges)[number], string> = {
+  top: "arriba de",
+  right: "a la derecha de",
+  bottom: "debajo de",
+  left: "a la izquierda de",
+  center: "sobre",
+};
+
+const WidgetDropTargets = ({
   depth,
-  editor,
-  layout,
-  rootLayout,
+  disabled,
+  label,
+  widgetId,
 }: Readonly<{
+  depth: number;
+  disabled: boolean;
+  label: string;
+  widgetId: DashboardWidget["id"];
+}>): JSX.Element => (
+  <>
+    {widgetDropEdges.map((edge) => (
+      <DashboardDropZone
+        depth={depth}
+        disabled={disabled}
+        key={edge}
+        label={`Colocar ${widgetDropLabel[edge]} ${label}`}
+        target={{ kind: "widget-edge", widgetId, edge }}
+      />
+    ))}
+  </>
+);
+
+type EditableLeafProps = Readonly<{
   context: DashboardView["context"];
   depth: number;
   editor: DashboardEditor;
   layout: Extract<DashboardLayout, { readonly kind: "leaf" }>;
-  rootLayout: DashboardLayout;
-}>): JSX.Element => {
+}>;
+
+const EditableLeaf = ({ context, depth, editor, layout }: EditableLeafProps): JSX.Element => {
   const { widget } = layout.widget;
   const label = titleFor(widget);
+  const [renaming, setRenaming] = useState(false);
+  const saveTitle = (title: string): void => {
+    editor.onGesture({ kind: "retitle-widget", title, widget });
+    setRenaming(false);
+  };
   return (
     <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
       <div className="absolute top-3 left-3 z-30">
@@ -464,88 +522,287 @@ const EditableLeaf = ({
           source={{ kind: "widget", widgetId: widget.id, label }}
         />
       </div>
-      <WidgetConfiguration editor={editor} label={label} rootLayout={rootLayout} widget={widget} />
-      <div className="relative min-h-72 flex-1">
-        <DashboardDropZone
+      <WidgetActions
+        editor={editor}
+        label={label}
+        onRename={() => setRenaming(true)}
+        widgetId={widget.id}
+      />
+      <div className="relative flex min-h-72 flex-1 flex-col">
+        <WidgetDropTargets
           depth={depth + 1}
           disabled={editor.submitting}
-          label={`Colocar sobre ${label}`}
-          target={{ kind: "widget-edge", widgetId: widget.id, edge: "center" }}
+          label={label}
+          widgetId={widget.id}
         />
-        <RenderWidget editing view={layout.widget} context={context} />
+        <RenderWidget
+          editing
+          view={layout.widget}
+          context={context}
+          titleEditor={
+            renaming
+              ? Option.some(
+                  <WidgetTitleEditor
+                    disabled={editor.submitting}
+                    initialTitle={label}
+                    onCancel={() => setRenaming(false)}
+                    onSave={saveTitle}
+                  />
+                )
+              : Option.none()
+          }
+        />
       </div>
     </div>
   );
 };
 
-const RegionConfiguration = ({
-  editor,
-  layout,
-}: Readonly<{ editor: DashboardEditor; layout: DashboardLayout }>): JSX.Element => (
-  <details className="absolute right-12 bottom-3 z-40">
-    <summary
-      aria-label={`Ajustar proporción de región ${regionLabel(layout)}`}
-      className="flex h-8 cursor-pointer list-none items-center rounded-md border bg-background px-2 text-xs text-muted-foreground shadow-sm hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-    >
-      Proporción
-    </summary>
-    <div className="absolute right-0 bottom-10 w-72 rounded-xl border bg-background p-2 shadow-xl">
-      <DashboardRegionControls
-        disabled={editor.submitting}
-        label={regionLabel(layout)}
-        onGesture={editor.onGesture}
-        widgetIds={regionWidgetIds(layout)}
-      />
-    </div>
-  </details>
-);
+const minimumResizeWeight = 0.001;
+const maximumResizeWeight = 1000;
+const minimumRegionPixels = 32;
+const maximumMinimumShare = 0.49;
+const resizeWeightPrecision = 1000;
+const keyboardResizeSteps = 20;
+
+const clampResizeWeight = (weight: number): number =>
+  Math.round(
+    Math.min(maximumResizeWeight, Math.max(minimumResizeWeight, weight)) * resizeWeightPrecision
+  ) / resizeWeightPrecision;
+
+const clampResizePairWeight = (weight: number, pairWeight: number): number =>
+  clampResizeWeight(
+    Math.min(
+      maximumResizeWeight,
+      pairWeight - minimumResizeWeight,
+      Math.max(minimumResizeWeight, pairWeight - maximumResizeWeight, weight)
+    )
+  );
+
+type ResizeBoundaryProps = Readonly<{
+  axis: "row" | "column";
+  childIndex: number;
+  disabled: boolean;
+  label: string;
+  onResize: (weight: number) => void;
+  siblings: Extract<DashboardLayout, { readonly kind: "split" }>["children"];
+}>;
+
+type ResizeBoundaryEvent = PointerEvent<HTMLHRElement>;
+
+type ResizePreview = Readonly<{ adjacentWeight: number; weight: number }>;
+type ResizeElements = Readonly<{ adjacent: HTMLElement; child: HTMLElement }>;
+
+const resizeElements = (event: ResizeBoundaryEvent): Option.Option<ResizeElements> => {
+  const child = event.currentTarget.previousElementSibling;
+  const adjacent = event.currentTarget.nextElementSibling;
+  return child instanceof HTMLElement && adjacent instanceof HTMLElement
+    ? Option.some({ adjacent, child })
+    : Option.none();
+};
+
+const previewResizeWeight = (
+  event: ResizeBoundaryEvent,
+  { axis, childIndex, siblings }: ResizeBoundaryProps
+): Option.Option<ResizePreview> => {
+  const elements = resizeElements(event);
+  const current = Option.fromUndefinedOr(siblings[childIndex]);
+  const following = Option.fromUndefinedOr(siblings[childIndex + 1]);
+  if (Option.isNone(elements) || Option.isNone(current) || Option.isNone(following)) {
+    return Option.none();
+  }
+  const childBounds = elements.value.child.getBoundingClientRect();
+  const adjacentBounds = elements.value.adjacent.getBoundingClientRect();
+  const start = axis === "row" ? childBounds.left : childBounds.top;
+  const end = axis === "row" ? adjacentBounds.right : adjacentBounds.bottom;
+  const extent = end - start;
+  if (extent <= 0) return Option.none();
+  const coordinate = axis === "row" ? event.clientX - start : event.clientY - start;
+  const minimumShare = Math.min(maximumMinimumShare, minimumRegionPixels / extent);
+  const boundaryShare = Math.min(1 - minimumShare, Math.max(minimumShare, coordinate / extent));
+  const pairWeight = current.value.weight + following.value.weight;
+  const nextWeight = clampResizePairWeight(pairWeight * boundaryShare, pairWeight);
+  const adjacentWeight = clampResizeWeight(pairWeight - nextWeight);
+  elements.value.child.style.setProperty("--dashboard-weight", String(nextWeight));
+  elements.value.adjacent.style.setProperty("--dashboard-weight", String(adjacentWeight));
+  return Option.some({ adjacentWeight, weight: nextWeight });
+};
+
+type ResizeBoundaryHandlers = Readonly<{
+  onKeyDown: (event: KeyboardEvent<HTMLHRElement>) => void;
+  onLostPointerCapture: (event: ResizeBoundaryEvent) => void;
+  onPointerCancel: (event: ResizeBoundaryEvent) => void;
+  onPointerDown: (event: ResizeBoundaryEvent) => void;
+  onPointerMove: (event: ResizeBoundaryEvent) => void;
+  onPointerUp: (event: ResizeBoundaryEvent) => void;
+  weight: number;
+}>;
+
+const restoreResizePreview = (
+  event: ResizeBoundaryEvent,
+  weight: number,
+  adjacentWeight: number
+): void => {
+  event.currentTarget.previousElementSibling?.setAttribute(
+    "style",
+    `--dashboard-weight: ${String(weight)};`
+  );
+  event.currentTarget.nextElementSibling?.setAttribute(
+    "style",
+    `--dashboard-weight: ${String(adjacentWeight)};`
+  );
+};
+
+const resizeWeightAt = (props: ResizeBoundaryProps, index: number): number =>
+  Option.getOrThrow(
+    Option.map(Option.fromUndefinedOr(props.siblings[index]), ({ weight }) => weight)
+  );
+
+const useResizeBoundary = (props: ResizeBoundaryProps): ResizeBoundaryHandlers => {
+  const pointerId = useRef(Option.none<number>());
+  const weight = resizeWeightAt(props, props.childIndex);
+  const adjacentWeight = resizeWeightAt(props, props.childIndex + 1);
+  const pairWeight = weight + adjacentWeight;
+  const onPointerDown = (event: ResizeBoundaryEvent): void => {
+    pointerId.current = Option.some(event.pointerId);
+    event.currentTarget.setPointerCapture(event.pointerId);
+    previewResizeWeight(event, props);
+  };
+  const resetPointer = (event: ResizeBoundaryEvent): void => {
+    pointerId.current = Option.none();
+    restoreResizePreview(event, weight, adjacentWeight);
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+  };
+  const onPointerCancel = (event: ResizeBoundaryEvent): void => {
+    if (Option.contains(pointerId.current, event.pointerId)) resetPointer(event);
+  };
+  const onLostPointerCapture = (event: ResizeBoundaryEvent): void => {
+    if (Option.contains(pointerId.current, event.pointerId)) resetPointer(event);
+  };
+  const onPointerMove = (event: ResizeBoundaryEvent): void => {
+    if (!Option.contains(pointerId.current, event.pointerId)) return;
+    if (event.buttons === 0) return resetPointer(event);
+    previewResizeWeight(event, props);
+  };
+  const onPointerUp = (event: ResizeBoundaryEvent): void => {
+    if (!Option.contains(pointerId.current, event.pointerId)) return;
+    const nextWeight = previewResizeWeight(event, props);
+    resetPointer(event);
+    if (Option.isSome(nextWeight) && nextWeight.value.weight !== weight) {
+      props.onResize(nextWeight.value.weight);
+    }
+  };
+  const onKeyDown = (event: KeyboardEvent<HTMLHRElement>): void => {
+    const decrementKey = props.axis === "row" ? "ArrowLeft" : "ArrowUp";
+    const incrementKey = props.axis === "row" ? "ArrowRight" : "ArrowDown";
+    if (event.key !== decrementKey && event.key !== incrementKey) return;
+    event.preventDefault();
+    const keyboardStep = pairWeight / keyboardResizeSteps;
+    props.onResize(
+      clampResizePairWeight(
+        weight + (event.key === incrementKey ? keyboardStep : -keyboardStep),
+        pairWeight
+      )
+    );
+  };
+  return {
+    onKeyDown,
+    onLostPointerCapture,
+    onPointerCancel,
+    onPointerDown,
+    onPointerMove,
+    onPointerUp,
+    weight,
+  } as const;
+};
+
+const DashboardResizeBoundary = (props: ResizeBoundaryProps): JSX.Element => {
+  const { axis, disabled, label } = props;
+  const handlers = useResizeBoundary(props);
+  const interactionProps = disabled
+    ? {}
+    : {
+        onKeyDown: handlers.onKeyDown,
+        onLostPointerCapture: handlers.onLostPointerCapture,
+        onPointerCancel: handlers.onPointerCancel,
+        onPointerDown: handlers.onPointerDown,
+        onPointerMove: handlers.onPointerMove,
+        onPointerUp: handlers.onPointerUp,
+      };
+  return (
+    <hr
+      {...interactionProps}
+      aria-disabled={disabled}
+      aria-label={`Redimensionar límite después de ${label}`}
+      aria-orientation={axis === "row" ? "vertical" : "horizontal"}
+      aria-valuemax={maximumResizeWeight}
+      aria-valuemin={minimumResizeWeight}
+      aria-valuenow={handlers.weight}
+      className={
+        axis === "row"
+          ? "pointer-events-none h-4 w-full flex-none touch-none border-0 bg-transparent outline-none focus-visible:ring-2 focus-visible:ring-ring md:pointer-events-auto md:h-auto md:w-4 md:cursor-col-resize"
+          : "h-4 w-full flex-none cursor-row-resize touch-none border-0 bg-transparent outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      }
+      tabIndex={disabled ? -1 : 0}
+    />
+  );
+};
 
 const ResponsiveLayout = ({
   context,
   depth,
   editor,
   layout,
-  rootLayout,
 }: Readonly<{
   context: DashboardView["context"];
   depth: number;
   editor: Option.Option<DashboardEditor>;
   layout: DashboardLayout;
-  rootLayout: DashboardLayout;
 }>): JSX.Element => {
   if (layout.kind === "leaf") {
     return Option.isNone(editor) ? (
-      <RenderWidget editing={false} view={layout.widget} context={context} />
-    ) : (
-      <EditableLeaf
+      <RenderWidget
+        editing={false}
+        view={layout.widget}
         context={context}
-        depth={depth}
-        editor={editor.value}
-        layout={layout}
-        rootLayout={rootLayout}
+        titleEditor={Option.none()}
       />
+    ) : (
+      <EditableLeaf context={context} depth={depth} editor={editor.value} layout={layout} />
     );
   }
+  const gapClassName = Option.isNone(editor) ? "gap-4" : "gap-0";
   return (
-    <div className={`flex min-h-0 min-w-0 flex-1 gap-4 ${responsiveSplitClass(layout.axis)}`}>
-      {layout.children.map(({ node, weight }) => (
-        <div
-          className="relative flex min-h-0 min-w-0 flex-none flex-col md:[flex:var(--dashboard-weight)_1_0%]"
-          data-testid={`responsive-weight-${weight}`}
-          key={layoutKey(node)}
-          style={weightedChildStyle(weight)}
-        >
-          {Option.isNone(editor) ? null : (
-            <RegionConfiguration editor={editor.value} layout={node} />
-          )}
-          <ResponsiveLayout
-            context={context}
-            depth={depth + 1}
-            editor={editor}
-            layout={node}
-            rootLayout={rootLayout}
-          />
-        </div>
+    <div
+      className={`flex min-h-0 min-w-0 flex-1 ${gapClassName} ${responsiveSplitClass(layout.axis)}`}
+    >
+      {layout.children.map(({ node, weight }, childIndex) => (
+        <Fragment key={layoutKey(node)}>
+          <div
+            className="relative flex min-h-0 min-w-0 flex-none flex-col md:[flex:var(--dashboard-weight)_1_0%]"
+            data-testid={`responsive-weight-${weight}`}
+            style={weightedChildStyle(weight)}
+          >
+            <ResponsiveLayout context={context} depth={depth + 1} editor={editor} layout={node} />
+          </div>
+          {Option.isSome(editor) && childIndex < layout.children.length - 1 ? (
+            <DashboardResizeBoundary
+              axis={layout.axis}
+              childIndex={childIndex}
+              siblings={layout.children}
+              disabled={editor.value.submitting}
+              label={regionLabel(node)}
+              onResize={(nextWeight) =>
+                editor.value.onGesture({
+                  kind: "resize-region",
+                  widgetIds: regionWidgetIds(node),
+                  weight: nextWeight,
+                })
+              }
+            />
+          ) : null}
+        </Fragment>
       ))}
     </div>
   );
@@ -562,34 +819,6 @@ export type DashboardEditor = Readonly<{
   onGesture: (gesture: DashboardGesture) => void;
   submitting: boolean;
 }>;
-
-const DashboardTitleEditor = ({
-  editor,
-  title,
-}: Readonly<{ editor: DashboardEditor; title: string }>): JSX.Element => {
-  const [nextTitle, setNextTitle] = useState(title);
-  const submit = (event: FormEvent<HTMLFormElement>): void => {
-    event.preventDefault();
-    editor.onGesture({ kind: "retitle-dashboard", title: nextTitle });
-  };
-  return (
-    <form className="flex flex-wrap items-end gap-2" onSubmit={submit}>
-      <div className="grid min-w-56 flex-1 gap-1.5">
-        <Label htmlFor="dashboard-title">Nuevo título del tablero</Label>
-        <Input
-          disabled={editor.submitting}
-          id="dashboard-title"
-          maxLength={80}
-          onChange={(event) => setNextTitle(event.currentTarget.value)}
-          value={nextTitle}
-        />
-      </div>
-      <Button disabled={editor.submitting} type="submit" variant="outline">
-        Guardar título del tablero
-      </Button>
-    </form>
-  );
-};
 
 const CatalogDragSources = ({
   catalog,
@@ -618,31 +847,11 @@ const CatalogDragSources = ({
   </ul>
 );
 
-const DashboardConfiguration = ({
-  choices,
-  editor,
-  title,
-}: Readonly<{
-  choices: ReadonlyArray<PlacementChoice>;
-  editor: DashboardEditor;
-  title: string;
-}>): JSX.Element => (
-  <details className="rounded-xl border bg-background">
-    <summary className="cursor-pointer list-none px-4 py-3 font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-      Configuración y catálogo
-    </summary>
-    <div className="grid gap-4 border-t p-4">
-      <DashboardTitleEditor editor={editor} key={title} title={title} />
-      <DashboardCatalogControls
-        catalog={editor.catalog}
-        choices={choices}
-        disabled={editor.submitting}
-        makeWidgetId={freshWidgetId}
-        onGesture={editor.onGesture}
-      />
-      <CatalogDragSources catalog={editor.catalog} disabled={editor.submitting} />
-    </div>
-  </details>
+const DashboardCatalogTray = ({ editor }: Readonly<{ editor: DashboardEditor }>): JSX.Element => (
+  <section className="grid gap-3 rounded-xl border bg-background p-4">
+    <h2 className="font-medium">Widgets disponibles</h2>
+    <CatalogDragSources catalog={editor.catalog} disabled={editor.submitting} />
+  </section>
 );
 
 const DashboardCanvas = ({
@@ -664,13 +873,7 @@ const DashboardCanvas = ({
         target={{ kind: "dashboard-edge", edge: "top" }}
       />
     )}
-    <ResponsiveLayout
-      context={view.context}
-      depth={0}
-      editor={editor}
-      layout={view.layout}
-      rootLayout={view.layout}
-    />
+    <ResponsiveLayout context={view.context} depth={0} editor={editor} layout={view.layout} />
     {Option.isNone(editor) ? null : (
       <DashboardDropZone
         depth={0}
@@ -691,13 +894,12 @@ export const DashboardViewComponent = ({
   view: DashboardView;
 }>): JSX.Element => {
   const [editing, setEditing] = useState(false);
-  const choices = placementChoices(view.layout, Option.none());
   const activeEditor = Option.filter(editor, () => editing);
   const content = (
     <main className="flex w-full flex-col gap-5 p-4 sm:p-6">
       <header className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h1 className="font-heading text-3xl font-semibold tracking-tight">{view.title}</h1>
+          <h1 className="font-heading text-3xl font-semibold tracking-tight">Tablero</h1>
           <p className="text-muted-foreground">Lectura actual de tus finanzas.</p>
         </div>
         {Option.isNone(editor) ? null : (
@@ -706,7 +908,7 @@ export const DashboardViewComponent = ({
             type="button"
             variant={editing ? "outline" : "default"}
           >
-            {editing ? "Terminar edición" : "Editar tablero"}
+            {editing ? "Guardar" : "Personalizar"}
           </Button>
         )}
       </header>
@@ -716,9 +918,7 @@ export const DashboardViewComponent = ({
           <AlertDescription>{editor.value.error.value.message}</AlertDescription>
         </Alert>
       )}
-      {Option.isNone(activeEditor) ? null : (
-        <DashboardConfiguration choices={choices} editor={activeEditor.value} title={view.title} />
-      )}
+      {Option.isNone(activeEditor) ? null : <DashboardCatalogTray editor={activeEditor.value} />}
       <DashboardCanvas editor={activeEditor} view={view} />
     </main>
   );

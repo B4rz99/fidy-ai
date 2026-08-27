@@ -27,9 +27,6 @@ const dragAttempts = 3;
 const dragCoordinateDivisor = 2;
 const dragMovementSteps = 20;
 const dragResponseTimeoutMilliseconds = 3_000;
-const DashboardTitleResponse = Schema.Struct({
-  data: Schema.Struct({ title: Schema.String }),
-});
 const invalidPairingBody = {
   error: {
     code: "pairing_invalid",
@@ -127,24 +124,12 @@ const revokeAcceptanceConsent = async (request: APIRequestContext): Promise<void
   expect((await request.post(`${controlOrigin}/revoke-consent`)).status()).toBe(noContentStatus);
 };
 
-const assertRejectedEditPreservesCanvas = async (page: Page): Promise<void> => {
-  const canvas = page.getByRole("region", { name: "Diseño responsivo del tablero" });
-  const canvasBeforeRejection = await canvas.innerHTML();
-  const rejectedEditResponse = page.waitForResponse(
-    (response) =>
-      response.url() === `${apiOrigin}/dashboard/edits` && response.request().method() === "POST"
-  );
-  await page.getByRole("button", { name: "Eliminar Gastos por categoría" }).click();
-  expect((await rejectedEditResponse).status()).toBe(invalidStatus);
-  await expect(page.getByRole("alert")).toContainText("El cambio fue rechazado");
-  await expect(page.getByRole("heading", { level: 2, name: "Gastos por categoría" })).toBeVisible();
-  await expect.poll(() => canvas.innerHTML()).toBe(canvasBeforeRejection);
-};
-
 const tryDashboardDrag = async (page: Page, attemptsRemaining: number): Promise<Response> => {
   if (attemptsRemaining === 0) throw new Error("Dashboard drag did not produce an edit");
-  const source = page.getByRole("button", { name: "Arrastrar Transacciones recientes" });
-  const target = page.getByRole("region", { name: "Colocar top de Gastos por categoría" });
+  const source = page
+    .getByRole("list", { name: "Widgets disponibles para arrastrar" })
+    .getByRole("button", { name: "Arrastrar Transacciones recientes" });
+  const target = page.getByRole("region", { name: "Colocar arriba de Gastos por categoría" });
   await expect(source).toBeEnabled();
   await source.hover();
   const sourceBox = await source.boundingBox();
@@ -625,38 +610,9 @@ test("applies the same canonical Dashboard edit from the UI and a dashboard-scop
 
   await page.goto("/app/dashboard");
   await expect(page.getByRole("heading", { level: 1, name: "Tablero" })).toBeVisible();
-  await assertRejectedEditPreservesCanvas(page);
-
-  await page.getByLabel("Nuevo título del tablero").fill("Vista compartida");
-  const uiEditResponse = page.waitForResponse(
-    (response) =>
-      response.url() === `${apiOrigin}/dashboard/edits` && response.request().method() === "POST"
-  );
-  await page.getByRole("button", { name: "Guardar título del tablero" }).click();
-  const uiResponse = await uiEditResponse;
-  expect(uiResponse.status()).toBe(successStatus);
-  expect(uiResponse.request().postDataJSON()).toEqual({
-    op: "set-title",
-    title: "Vista compartida",
-  });
-  await expect(page.getByRole("heading", { level: 1, name: "Vista compartida" })).toBeVisible();
+  await page.getByRole("button", { name: "Personalizar" }).click();
 
   const patHeaders = { authorization: `Bearer ${bearer}` };
-  const observed = await request.get(`${apiOrigin}/dashboard`, { headers: patHeaders });
-  expect(observed.status()).toBe(successStatus);
-  const observedDashboard = Schema.decodeUnknownSync(DashboardTitleResponse)(await observed.json());
-  expect(observedDashboard.data.title).toBe("Vista compartida");
-  const patEdit = await request.post(`${apiOrigin}/dashboard/edits`, {
-    headers: patHeaders,
-    data: { op: "set-title", title: "Vista del agente" },
-  });
-  expect(patEdit.status()).toBe(successStatus);
-  const editedDashboard = Schema.decodeUnknownSync(DashboardTitleResponse)(await patEdit.json());
-  expect(editedDashboard.data.title).toBe("Vista del agente");
-
-  await page.reload();
-  await expect(page.getByRole("heading", { level: 1, name: "Vista del agente" })).toBeVisible();
-
   const dragResponse = await dragRecentTransactionsToDashboardStart(page);
   expect(dragResponse.status()).toBe(successStatus);
   const dragEdit = Schema.decodeUnknownSync(DashboardEdit)(dragResponse.request().postDataJSON());

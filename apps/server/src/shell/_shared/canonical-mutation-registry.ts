@@ -12,7 +12,6 @@ import {
   updateKeywordRule,
 } from "~/shell/categories/mutations";
 import { applyDashboardEdit, getDashboard } from "~/shell/dashboard/mutations";
-import { normalizeDashboardEditInput } from "~/shell/dashboard/operations";
 import { requestEmailReplacement } from "~/shell/email-authentication/replacement-transition";
 import { getDashboardView } from "~/shell/dashboard/view";
 import { updateUserPreferences } from "~/shell/identity/mutations";
@@ -101,7 +100,7 @@ export const canonicalMutationImplementations = {
     applyDashboardEdit({
       userId: caller.resolved.subjectUserId,
       caller: suggestedCaller(caller),
-      edit: normalizeDashboardEditInput(input.payload),
+      edit: input.payload,
     }),
   "emailAuthentication.requestEmailReplacement": (input, { resolved }) =>
     requestEmailReplacement({

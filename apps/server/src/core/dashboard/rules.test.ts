@@ -664,7 +664,7 @@ it("moves a widget to either root edge while preserving the requested order", ()
   expect(collectLayoutWidgets(bottom.layout).map(({ id }) => id)).toEqual([retainedId, movingId]);
 });
 
-it("resizes a leaf region identified by its exact Widget contents", () => {
+it("continuously resizes a leaf region identified by its exact Widget contents", () => {
   const targetId = "f1d1a000-0000-4000-8000-000000000441";
   const source = makeSplitDocument([
     { weight: 1, widget: transactionListWidget(targetId) },
@@ -676,14 +676,79 @@ it("resizes a leaf region identified by its exact Widget contents", () => {
   const edit = Schema.decodeUnknownSync(DashboardEdit)({
     op: "resize-region",
     widgetIds: [targetId],
-    size: { kind: "weight", weight: 3 },
+    size: { kind: "weight", weight: 1.375 },
   });
 
   const updated = Effect.runSync(applyDashboardEdit({ document: source, edit }));
 
   expect(
     updated.layout.kind === "split" ? updated.layout.children.map(({ weight }) => weight) : []
-  ).toEqual([3, 1]);
+  ).toEqual([1.375, 0.625]);
+});
+
+it("resizes only the selected boundary between adjacent regions", () => {
+  const targetId = "f1d1a000-0000-4000-8000-000000000442";
+  const source = makeSplitDocument([
+    {
+      weight: 1,
+      widget: transactionListWidget("f1d1a000-0000-4000-8000-000000000441"),
+    },
+    { weight: 1, widget: customMetricWidget(targetId) },
+    {
+      weight: 1,
+      widget: transactionListWidget("f1d1a000-0000-4000-8000-000000000443"),
+    },
+  ]);
+  const edit = Schema.decodeUnknownSync(DashboardEdit)({
+    op: "resize-region",
+    widgetIds: [targetId],
+    size: { kind: "weight", weight: 1.5 },
+  });
+
+  const updated = Effect.runSync(applyDashboardEdit({ document: source, edit }));
+
+  expect(
+    updated.layout.kind === "split" ? updated.layout.children.map(({ weight }) => weight) : []
+  ).toEqual([1, 1.5, 0.5]);
+});
+
+it.each([
+  [
+    "move-widget",
+    {
+      op: "move-widget",
+      widgetId: "f1d1a000-0000-4000-8000-000000000462",
+      at: {
+        besideWidget: "f1d1a000-0000-4000-8000-000000000461",
+        axis: "column",
+        side: "after",
+      },
+    },
+    [
+      "f1d1a000-0000-4000-8000-000000000461",
+      "f1d1a000-0000-4000-8000-000000000462",
+      "f1d1a000-0000-4000-8000-000000000463",
+    ],
+  ],
+  [
+    "remove-widget",
+    { op: "remove-widget", widgetId: "f1d1a000-0000-4000-8000-000000000462" },
+    ["f1d1a000-0000-4000-8000-000000000461", "f1d1a000-0000-4000-8000-000000000463"],
+  ],
+] as const)("normalizes decimal weights while applying %s", (_operation, input, expectedIds) => {
+  const resize = Schema.decodeUnknownSync(DashboardEdit)({
+    op: "resize-region",
+    widgetIds: ["f1d1a000-0000-4000-8000-000000000462", "f1d1a000-0000-4000-8000-000000000463"],
+    size: { kind: "weight", weight: 1.375 },
+  });
+  const resized = Effect.runSync(
+    applyDashboardEdit({ document: makeNestedDocument(), edit: resize })
+  );
+  const edit = Schema.decodeUnknownSync(DashboardEdit)(input);
+
+  const updated = Effect.runSync(applyDashboardEdit({ document: resized, edit }));
+
+  expect(collectLayoutWidgets(updated.layout).map(({ id }) => id)).toEqual(expectedIds);
 });
 
 it.each([
@@ -727,7 +792,7 @@ it("resizes a compound region through the same canonical edit", () => {
 
   expect(
     updated.layout.kind === "split" ? updated.layout.children.map(({ weight }) => weight) : []
-  ).toEqual([1, 4]);
+  ).toEqual([0.001, 1.999]);
 });
 
 it("rejects resizing the root region because it has no sibling-relative weight", () => {

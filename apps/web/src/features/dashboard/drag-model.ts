@@ -14,6 +14,18 @@ type ResolveDropInput = Readonly<{
 const isOwnEdge = (source: DashboardDragSource, target: DashboardDropTarget): boolean =>
   source.kind === "widget" && target.kind === "widget-edge" && source.widgetId === target.widgetId;
 
+/** Filters transport targets before they become visible Dashboard feedback. */
+export const dashboardDropPreview = ({
+  source,
+  target,
+}: Readonly<{
+  source: Option.Option<DashboardDragSource>;
+  target: Option.Option<DashboardDropTarget>;
+}>): Option.Option<DashboardDropTarget> =>
+  Option.isSome(source) && Option.isSome(target) && !isOwnEdge(source.value, target.value)
+    ? target
+    : Option.none();
+
 const existingWidgetGesture = (
   source: Extract<DashboardDragSource, { readonly kind: "widget" }>,
   target: DashboardDropTarget

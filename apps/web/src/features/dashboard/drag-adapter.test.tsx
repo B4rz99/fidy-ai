@@ -4,7 +4,7 @@ import { WidgetId } from "@/transport/client";
 import { dashboardDragData } from "./drag-data";
 import type { DashboardDragSource, DashboardDropTarget } from "./drag-data";
 import type { DashboardCatalogEntry } from "./editor-model";
-import { resolveDashboardDrop } from "./drag-model";
+import { dashboardDropPreview, resolveDashboardDrop } from "./drag-model";
 
 const sourceId = Schema.decodeUnknownSync(WidgetId)("f1d1a000-0000-4000-8000-000000000801");
 const targetId = Schema.decodeUnknownSync(WidgetId)("f1d1a000-0000-4000-8000-000000000802");
@@ -40,6 +40,24 @@ describe("Dashboard drag transport data", () => {
     expect(dashboardDragData.decodeSource({ kind: "catalog", entry })).toEqual(
       Option.some({ kind: "catalog", entry })
     );
+  });
+});
+
+describe("Dashboard drag preview", () => {
+  it("never previews a Widget as a destination for itself", () => {
+    const source = Option.some({ kind: "widget" as const, widgetId: sourceId, label: "Gastos" });
+    expect(
+      dashboardDropPreview({
+        source,
+        target: Option.some({ kind: "widget-edge", widgetId: sourceId, edge: "right" }),
+      })
+    ).toEqual(Option.none());
+    expect(
+      dashboardDropPreview({
+        source,
+        target: Option.some({ kind: "widget-edge", widgetId: targetId, edge: "center" }),
+      })
+    ).toEqual(Option.some({ kind: "widget-edge", widgetId: targetId, edge: "center" }));
   });
 });
 

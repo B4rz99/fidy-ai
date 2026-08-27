@@ -367,6 +367,7 @@ describe("read-only Dashboard responsive rendering", () => {
     const spendingCard = spendingHeading.closest('[data-slot="card"]');
     expect(spendingCard).not.toBeNull();
     if (!(spendingCard instanceof HTMLElement)) throw new Error("Expected the spending Card");
+    expect(spendingCard).toHaveClass("flex-1");
     expect(within(spendingCard).queryByText("Ingresos")).not.toBeInTheDocument();
     expect(within(spendingCard).getByText("Gastos")).toBeVisible();
     expect(dashboard.getByText("El Corral")).toBeVisible();
@@ -400,79 +401,190 @@ const renderInteractiveDashboard = (
     />
   );
 
-describe("Dashboard title editing", () => {
-  it("keeps editing chrome hidden until edit mode emits one closed gesture", async () => {
+const dragBoundaryContinuously = (boundary: HTMLElement): void => {
+  const resizedRegion = boundary.previousElementSibling;
+  const adjacentRegion = boundary.nextElementSibling;
+  if (!(resizedRegion instanceof HTMLElement) || !(adjacentRegion instanceof HTMLElement)) {
+    throw new Error("Expected a neutral separator between split regions");
+  }
+  Object.defineProperties(boundary, {
+    hasPointerCapture: { configurable: true, value: vi.fn(() => true) },
+    releasePointerCapture: { configurable: true, value: vi.fn() },
+    setPointerCapture: { configurable: true, value: vi.fn() },
+  });
+  const regionRect = (start: number, end: number): DOMRect => ({
+    bottom: end,
+    height: end - start,
+    left: start,
+    right: end,
+    toJSON: vi.fn(),
+    top: start,
+    width: end - start,
+    x: start,
+    y: start,
+  });
+  const regionMidpoint = 500;
+  const regionEnd = 1000;
+  const expectedAdjacentWeight = 0.75;
+  vi.spyOn(resizedRegion, "getBoundingClientRect").mockReturnValue(regionRect(0, regionMidpoint));
+  vi.spyOn(adjacentRegion, "getBoundingClientRect").mockReturnValue(
+    regionRect(regionMidpoint, regionEnd)
+  );
+  const expectedPreviewWeight = 1.25;
+  fireEvent.pointerDown(boundary, { buttons: 1, clientX: 500, clientY: 500, pointerId: 1 });
+  fireEvent.pointerMove(boundary, { buttons: 1, clientX: 625, clientY: 625, pointerId: 1 });
+  expect(Number(resizedRegion.style.getPropertyValue("--dashboard-weight"))).toBeCloseTo(
+    expectedPreviewWeight
+  );
+  expect(Number(adjacentRegion.style.getPropertyValue("--dashboard-weight"))).toBeCloseTo(
+    expectedAdjacentWeight
+  );
+  const precedingRegion = resizedRegion.previousElementSibling?.previousElementSibling;
+  if (precedingRegion instanceof HTMLElement) {
+    expect(precedingRegion.style.getPropertyValue("--dashboard-weight")).toBe("1");
+  }
+  fireEvent.pointerUp(boundary, { buttons: 0, clientX: 750, clientY: 750, pointerId: 1 });
+  expect(resizedRegion.style.getPropertyValue("--dashboard-weight")).toBe("1");
+  expect(adjacentRegion.style.getPropertyValue("--dashboard-weight")).toBe("1");
+  fireEvent.pointerMove(boundary, { buttons: 0, clientX: 900, clientY: 900, pointerId: 1 });
+  expect(resizedRegion.style.getPropertyValue("--dashboard-weight")).toBe("1");
+};
+
+describe("Dashboard edit mode", () => {
+  it("offers only draggable catalog additions and labels the exit action Guardar", () => {
     const onGesture = vi.fn<(gesture: DashboardGesture) => void>();
-    renderInteractiveDashboard(onGesture);
+    renderInteractiveDashboard(onGesture, editorCatalog);
 
+    fireEvent.click(screen.getByRole("button", { name: "Personalizar" }));
+
+    expect(screen.getByRole("button", { name: "Guardar" })).toBeVisible();
     expect(screen.queryByLabelText("Nuevo título del tablero")).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", { name: "Arrastrar Transacciones" })
-    ).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Editar tablero" }));
-    fireEvent.click(screen.getByText("Configuración y catálogo"));
-    fireEvent.change(screen.getByLabelText("Nuevo título del tablero"), {
-      target: { value: "Flujo de caja" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "Guardar título del tablero" }));
+    expect(screen.queryByRole("button", { name: "Añadir Widget" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Arrastrar Más transacciones" })).toBeVisible();
+  });
+});
 
-    expect(onGesture).toHaveBeenCalledOnce();
-    expect(onGesture).toHaveBeenCalledWith({
-      kind: "retitle-dashboard",
-      title: "Flujo de caja",
+describe("Dashboard Widget retitling and placement", () => {
+  it("offers one named semantic destination per keyboard drag outcome and retitles a Widget", () => {
+    const onGesture = vi.fn<(gesture: DashboardGesture) => void>();
+    renderInteractiveDashboard(onGesture, editorCatalog);
+
+    fireEvent.click(screen.getByRole("button", { name: "Personalizar" }));
+
+    for (const destination of [
+      "Colocar arriba de Transacciones",
+      "Colocar a la derecha de Transacciones",
+      "Colocar debajo de Transacciones",
+      "Colocar a la izquierda de Transacciones",
+      "Colocar sobre Transacciones",
+    ]) {
+      expect(screen.getByRole("region", { name: destination })).toBeInTheDocument();
+    }
+    fireEvent.click(screen.getByRole("button", { name: "Renombrar Transacciones" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "Nuevo nombre del Widget" }), {
+      target: { value: "Resumen mensual" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Guardar nombre del Widget" }));
+
+    expect(onGesture).toHaveBeenLastCalledWith({
+      kind: "retitle-widget",
+      title: "Resumen mensual",
+      widget: {
+        id: ids.chart,
+        type: "spending-chart",
+        groupBy: "category",
+        period: "this-month",
+      },
     });
   });
 });
 
 describe("Dashboard Widget editing", () => {
-  it("offers catalog, Widget move, retitle, remove, and recursive ratio controls", () => {
+  it("offers direct Widget removal and keyboard-resizable recursive boundaries", () => {
     const onGesture = vi.fn<(gesture: DashboardGesture) => void>();
     renderInteractiveDashboard(onGesture, editorCatalog);
 
-    fireEvent.click(screen.getByRole("button", { name: "Editar tablero" }));
-    fireEvent.click(screen.getByLabelText("Configurar Transacciones"));
-    fireEvent.change(screen.getByLabelText("Título de Transacciones"), {
-      target: { value: "Gastos diarios" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "Guardar título de Transacciones" }));
-    const retitleGesture = onGesture.mock.lastCall?.[0];
-    expect(retitleGesture?.kind).toBe("retitle-widget");
-    if (retitleGesture?.kind !== "retitle-widget") throw new Error("Expected a retitle gesture");
-    expect(retitleGesture.widget.id).toBe(ids.chart);
-    expect(retitleGesture.title).toBe("Gastos diarios");
+    fireEvent.click(screen.getByRole("button", { name: "Personalizar" }));
 
-    fireEvent.change(screen.getByLabelText("Mover Transacciones"), { target: { value: "4" } });
-    fireEvent.click(
-      within(screen.getByLabelText("Editar Transacciones")).getByText("Mover Widget")
-    );
-    expect(onGesture).toHaveBeenLastCalledWith({
-      kind: "move-widget",
-      widgetId: ids.chart,
-      target: { kind: "widget-edge", widgetId: ids.budget, edge: "bottom" },
-    });
-
+    expect(screen.queryByLabelText("Configurar Transacciones")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Eliminar Transacciones" }));
     expect(onGesture).toHaveBeenLastCalledWith({ kind: "remove-widget", widgetId: ids.chart });
 
-    const regionControl = screen.getAllByLabelText("Ajustar proporción de región Transacciones")[0];
-    if (regionControl === undefined) throw new Error("Expected a recursive region control");
-    fireEvent.click(regionControl);
-    const ratio = screen.getAllByLabelText("Proporción de región Transacciones")[0];
-    if (ratio === undefined) throw new Error("Expected a recursive region ratio control");
-    fireEvent.change(ratio, { target: { value: "4" } });
-    const ratioForm = ratio.closest("form");
-    if (ratioForm === null) throw new Error("Expected a ratio form");
-    fireEvent.submit(ratioForm);
-    expect(onGesture).toHaveBeenLastCalledWith(
-      expect.objectContaining({ kind: "resize-region", ratio: "three-quarters" })
-    );
+    const boundary = screen.getAllByRole("separator", {
+      name: "Redimensionar límite después de Transacciones",
+    })[0];
+    if (boundary === undefined) throw new Error("Expected a recursive resize boundary");
+    fireEvent.keyDown(boundary, { key: "ArrowDown" });
+    expect(onGesture).toHaveBeenLastCalledWith({
+      kind: "resize-region",
+      widgetIds: [ids.chart],
+      weight: 1.1,
+    });
 
-    fireEvent.click(screen.getByText("Configuración y catálogo"));
-    fireEvent.click(screen.getByRole("button", { name: "Añadir Widget" }));
-    expect(onGesture).toHaveBeenLastCalledWith(
-      expect.objectContaining({ kind: "add-catalog-widget", entry: editorCatalog[0] })
+    dragBoundaryContinuously(boundary);
+    expect(onGesture).toHaveBeenLastCalledWith({
+      kind: "resize-region",
+      widgetIds: [ids.chart],
+      weight: 1.5,
+    });
+
+    const boundaries = screen.getAllByRole("separator");
+    expect(boundaries).toHaveLength(3);
+    expect(boundaries.every((candidate) => candidate.classList.contains("bg-transparent"))).toBe(
+      true
     );
-    expect(screen.getByRole("button", { name: "Arrastrar Transacciones" })).toBeVisible();
+    expect(
+      boundaries.find((candidate) => candidate.getAttribute("aria-orientation") === "vertical")
+    ).toHaveClass("md:h-auto", "md:w-4");
+    expect(
+      boundaries.every(
+        (candidate) =>
+          candidate.previousElementSibling instanceof HTMLElement &&
+          candidate.nextElementSibling instanceof HTMLElement
+      )
+    ).toBe(true);
+    expect(screen.queryByText("Proporción")).not.toBeInTheDocument();
+  });
+});
+
+describe("Dashboard multi-Widget resizing", () => {
+  it("moves only the selected boundary in a row with three Widgets", () => {
+    const onGesture = vi.fn<(gesture: DashboardGesture) => void>();
+    const left = leftLayout(standardOptions);
+    const right = rightLayout(standardOptions);
+    if (left.kind !== "split" || right.kind !== "split") {
+      throw new Error("Expected split fixture regions");
+    }
+    render(
+      <DashboardViewComponent
+        editor={Option.some({
+          catalog: editorCatalog,
+          error: Option.none(),
+          onGesture,
+          submitting: false,
+        })}
+        view={{
+          ...makeView(standardOptions),
+          layout: {
+            kind: "split",
+            axis: "row",
+            children: [left.children[0], left.children[1], right.children[0]],
+          },
+        }}
+      />
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Personalizar" }));
+
+    const boundary = screen.getByRole("separator", {
+      name: "Redimensionar límite después de Presupuesto",
+    });
+    dragBoundaryContinuously(boundary);
+
+    expect(onGesture).toHaveBeenLastCalledWith({
+      kind: "resize-region",
+      widgetIds: [ids.budget],
+      weight: 1.5,
+    });
   });
 });
 

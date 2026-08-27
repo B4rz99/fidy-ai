@@ -1,0 +1,24 @@
+apps/web/src/features/pats/feature.test.tsx
+  s_2bd1c52768ae48::t_56acbec54c87f0 181,184-185,188,190-191,196,204-205,226,228-229,232
+apps/web/e2e/browser-pairing-postgres.spec.ts
+  s_2bd1c52768ae48::t_dc4ba856e0e5f1 168-169,175,177
+apps/web/src/features/pats/management-view.tsx
+  s_2bd1c52768ae48::t_45a7e995dbd9d7 7
+  s_2bd1c52768ae48::t_ba5197fda5d98a 3-6,8,46,50,54,58,62,65,71,138-139,142-144,168-169,172-174,211,213-216,223-225,227-230,254,290,294,315,318-319,327
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.24",
+  "base_commit_sha": "6e1e47525d86658f4a850a1be7e674bc615a670d",
+  "prompts": {},
+  "sessions": {
+    "s_2bd1c52768ae48": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a04018-8da1-76a0-9adb-ec12dab268eb",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

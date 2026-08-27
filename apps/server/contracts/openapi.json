@@ -1,6 +1,71 @@
 {
   "components": {
     "schemas": {
+      "ActivePATList": {
+        "additionalProperties": false,
+        "properties": {
+          "pats": {
+            "items": {
+              "$ref": "#/components/schemas/ActivePATMetadata"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "pats"
+        ],
+        "type": "object"
+      },
+      "ActivePATMetadata": {
+        "additionalProperties": false,
+        "properties": {
+          "createdAt": {
+            "$ref": "#/components/schemas/UtcTimestamp"
+          },
+          "expiresAt": {
+            "$ref": "#/components/schemas/UtcTimestamp"
+          },
+          "lastUsedAt": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UtcTimestamp"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "recipientLabel": {
+            "$ref": "#/components/schemas/PATRecipientLabel"
+          },
+          "scopes": {
+            "allOf": [
+              {
+                "uniqueItems": true
+              },
+              {
+                "minItems": 1
+              }
+            ],
+            "items": {
+              "$ref": "#/components/schemas/PATScope"
+            },
+            "type": "array"
+          },
+          "shortId": {
+            "$ref": "#/components/schemas/TokenShortId"
+          }
+        },
+        "required": [
+          "shortId",
+          "recipientLabel",
+          "scopes",
+          "createdAt",
+          "lastUsedAt",
+          "expiresAt"
+        ],
+        "type": "object"
+      },
       "AddWidget": {
         "additionalProperties": false,
         "properties": {
@@ -4522,6 +4587,35 @@
             "$ref": "#/components/schemas/MemoryText"
           }
         },
+        "type": "object"
+      },
+      "RevokedPAT": {
+        "additionalProperties": false,
+        "properties": {
+          "shortId": {
+            "$ref": "#/components/schemas/TokenShortId"
+          }
+        },
+        "required": [
+          "shortId"
+        ],
+        "type": "object"
+      },
+      "RevokedPATCount": {
+        "additionalProperties": false,
+        "properties": {
+          "revokedCount": {
+            "allOf": [
+              {
+                "minimum": 0
+              }
+            ],
+            "type": "integer"
+          }
+        },
+        "required": [
+          "revokedCount"
+        ],
         "type": "object"
       },
       "ScheduleId": {
@@ -15799,6 +15893,198 @@
       }
     },
     "/pats": {
+      "delete": {
+        "description": "Revoke every active PAT and close approved unclaimed PAT authorization for the User. The count describes active PATs only.",
+        "operationId": "pats.revokeAllPATs",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/RevokedPATCount"
+                    },
+                    "next": {
+                      "allOf": [
+                        {
+                          "description": "Where to go next: up to three canonical operations worth calling after this one, best first. Empty when there is nothing worth suggesting, which is an answer rather than an omission. Each entry has passed the target-input and caller-authorization checkpoint.",
+                          "maxItems": 3
+                        }
+                      ],
+                      "items": {
+                        "$ref": "#/components/schemas/SuggestedOperation"
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "next"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationFailed"
+                }
+              }
+            },
+            "description": "ValidationFailed"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Unauthenticated"
+                }
+              }
+            },
+            "description": "Unauthenticated"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ConsentRequired"
+                    },
+                    {
+                      "$ref": "#/components/schemas/UserActionRequired"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ScopeMissing"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "ConsentRequired | UserActionRequired | ScopeMissing"
+          }
+        },
+        "security": [
+          {
+            "agentBearer": []
+          },
+          {
+            "webSession": []
+          }
+        ],
+        "tags": [
+          "pats"
+        ],
+        "x-fidy-access": {
+          "type": "fresh-web-or-verified-whatsapp-hosted"
+        },
+        "x-fidy-agent-confirmation": "required",
+        "x-fidy-operation-kind": "mutation",
+        "x-fidy-required-tier": "free"
+      },
+      "get": {
+        "description": "List safe metadata for the User's currently usable PATs. Credential material and terminal lifecycle history are never returned.",
+        "operationId": "pats.listPATs",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/ActivePATList"
+                    },
+                    "next": {
+                      "allOf": [
+                        {
+                          "description": "Where to go next: up to three canonical operations worth calling after this one, best first. Empty when there is nothing worth suggesting, which is an answer rather than an omission. Each entry has passed the target-input and caller-authorization checkpoint.",
+                          "maxItems": 3
+                        }
+                      ],
+                      "items": {
+                        "$ref": "#/components/schemas/SuggestedOperation"
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "next"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationFailed"
+                }
+              }
+            },
+            "description": "ValidationFailed"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Unauthenticated"
+                }
+              }
+            },
+            "description": "Unauthenticated"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ConsentRequired"
+                    },
+                    {
+                      "$ref": "#/components/schemas/UserActionRequired"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ScopeMissing"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "ConsentRequired | UserActionRequired | ScopeMissing"
+          }
+        },
+        "security": [
+          {
+            "agentBearer": []
+          },
+          {
+            "webSession": []
+          }
+        ],
+        "tags": [
+          "pats"
+        ],
+        "x-fidy-access": {
+          "type": "web-or-hosted"
+        },
+        "x-fidy-agent-confirmation": "not-required",
+        "x-fidy-operation-kind": "query",
+        "x-fidy-required-tier": "free"
+      },
       "post": {
         "description": "Create one PAT after first-party browser review. The response discloses the raw bearer once; retain it securely because Fidy persists only its digest.",
         "operationId": "pats.createManualPAT",
@@ -15932,6 +16218,123 @@
           "type": "fresh-web-session-only"
         },
         "x-fidy-agent-confirmation": "not-required",
+        "x-fidy-operation-kind": "mutation",
+        "x-fidy-required-tier": "free"
+      }
+    },
+    "/pats/{shortId}": {
+      "delete": {
+        "description": "Revoke one User-owned PAT by safe short id. Unknown and foreign identifiers are indistinguishable; an owned retry is idempotent.",
+        "operationId": "pats.revokePAT",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "shortId",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/TokenShortId"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/RevokedPAT"
+                    },
+                    "next": {
+                      "allOf": [
+                        {
+                          "description": "Where to go next: up to three canonical operations worth calling after this one, best first. Empty when there is nothing worth suggesting, which is an answer rather than an omission. Each entry has passed the target-input and caller-authorization checkpoint.",
+                          "maxItems": 3
+                        }
+                      ],
+                      "items": {
+                        "$ref": "#/components/schemas/SuggestedOperation"
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "next"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationFailed"
+                }
+              }
+            },
+            "description": "ValidationFailed"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Unauthenticated"
+                }
+              }
+            },
+            "description": "Unauthenticated"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ConsentRequired"
+                    },
+                    {
+                      "$ref": "#/components/schemas/UserActionRequired"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ScopeMissing"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "ConsentRequired | UserActionRequired | ScopeMissing"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFound"
+                }
+              }
+            },
+            "description": "NotFound"
+          }
+        },
+        "security": [
+          {
+            "agentBearer": []
+          },
+          {
+            "webSession": []
+          }
+        ],
+        "tags": [
+          "pats"
+        ],
+        "x-fidy-access": {
+          "type": "fresh-web-or-verified-whatsapp-hosted"
+        },
+        "x-fidy-agent-confirmation": "required",
         "x-fidy-operation-kind": "mutation",
         "x-fidy-required-tier": "free"
       }

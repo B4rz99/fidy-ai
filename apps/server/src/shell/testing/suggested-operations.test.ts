@@ -19,6 +19,7 @@ import {
   PATRecipientLabel,
   type PATScope,
   TokenBearer,
+  TokenShortId,
 } from "~/core/tokens/model";
 import { NotFound, ScopeMissing } from "~/shell/_shared/errors";
 import {
@@ -69,6 +70,29 @@ const probes: Record<OperationId, SuggestedOperationProbe> = {
       const result = yield* Effect.result(
         client.browserLogin.approvePairing({ payload: { publicCode: "BCDF-GHJK" } })
       );
+      if (Result.isSuccess(result)) return yield* Effect.die("expected bearer refusal");
+      return [yield* Schema.decodeUnknownEffect(ScopeMissing)(result.failure)];
+    }),
+
+  "pats.listPATs": (client) =>
+    Effect.gen(function* () {
+      const result = yield* Effect.result(client.pats.listPATs());
+      if (Result.isSuccess(result)) return yield* Effect.die("expected bearer refusal");
+      return [yield* Schema.decodeUnknownEffect(ScopeMissing)(result.failure)];
+    }),
+
+  "pats.revokePAT": (client) =>
+    Effect.gen(function* () {
+      const result = yield* Effect.result(
+        client.pats.revokePAT({ params: { shortId: TokenShortId.make("deadbeef") } })
+      );
+      if (Result.isSuccess(result)) return yield* Effect.die("expected bearer refusal");
+      return [yield* Schema.decodeUnknownEffect(ScopeMissing)(result.failure)];
+    }),
+
+  "pats.revokeAllPATs": (client) =>
+    Effect.gen(function* () {
+      const result = yield* Effect.result(client.pats.revokeAllPATs());
       if (Result.isSuccess(result)) return yield* Effect.die("expected bearer refusal");
       return [yield* Schema.decodeUnknownEffect(ScopeMissing)(result.failure)];
     }),

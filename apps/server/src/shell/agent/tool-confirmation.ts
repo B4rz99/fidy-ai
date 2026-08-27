@@ -1,5 +1,6 @@
 import { Crypto, DateTime, Effect, Option, Schema } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
+import type { ProviderQualifiedMessages } from "~/core/consent/model";
 import type { UserId } from "~/core/identity/reference";
 import { type TranscriptEntry, TranscriptText } from "~/core/transcript/model";
 import {
@@ -11,6 +12,8 @@ import {
   ConfirmationDigest,
   type ConfirmationDigest as ConfirmationDigestType,
   type ConfirmationPermit,
+  confirmationCommandFromChallenge,
+  renderConfirmationChallengeText,
 } from "./tool-confirmation-model";
 import { canonicalJsonString } from "./canonical-json";
 import { consumeConfirmation } from "./tool-confirmation-repo";
@@ -36,7 +39,11 @@ type ConfirmationSubject = Pick<
   Readonly<{ issuedAt: DateTime.Utc }>;
 
 type PendingConfirmation = ConfirmationSubject & Readonly<{ challenge: TranscriptText }>;
-type ConfirmationSubmission = PendingConfirmation & Readonly<{ digest: ConfirmationDigestType }>;
+type ConfirmationSubmission = PendingConfirmation &
+  Readonly<{
+    digest: ConfirmationDigestType;
+    evidence: Option.Option<ProviderQualifiedMessages>;
+  }>;
 
 export type { ConfirmationPermit } from "./tool-confirmation-model";
 
@@ -197,7 +204,11 @@ const confirmationChallenge = (
 ): TranscriptText => {
   const format = confirmationFormat(pending, serializedInput);
   return TranscriptText.make(
-    `${format.challengeBody}\nResponde exactamente: ${format.commandPrefix}${digest}`
+    renderConfirmationChallengeText({
+      challengeBody: format.challengeBody,
+      commandPrefix: format.commandPrefix,
+      digest,
+    })
   );
 };
 
@@ -205,9 +216,7 @@ const authorizationFromChallenge = (
   pending: Readonly<PendingConfirmation>
 ): Option.Option<Readonly<{ command: string; digest: ConfirmationDigestType }>> => {
   const { commandPrefix } = confirmationFormat(pending, canonicalJsonString(pending.input));
-  return Option.fromUndefinedOr(pending.challenge.split("\n").at(-1)).pipe(
-    Option.filter((line) => line.startsWith("Responde exactamente: ")),
-    Option.map((line) => line.slice("Responde exactamente: ".length)),
+  return confirmationCommandFromChallenge(pending.challenge).pipe(
     Option.filter((command) => command.startsWith(commandPrefix)),
     Option.flatMap((command) =>
       Schema.decodeUnknownOption(ConfirmationDigest)(command.slice(commandPrefix.length)).pipe(
@@ -253,10 +262,10 @@ export const immediatePermit = ({
             attemptedInput: canonicalInput,
           })
         ) {
-          return false;
+          return { confirmed: false, evidence: Option.none() };
         }
         active = false;
-        return true;
+        return { confirmed: true, evidence: Option.none() };
       }),
   };
 };
@@ -281,10 +290,15 @@ const submittedPermit = (input: {
           attemptedInput,
         })
       ) {
-        return Effect.succeed(false);
+        return Effect.succeed({ confirmed: false, evidence: Option.none() });
       }
       active = false;
-      return consumeConfirmation(userId, submission.digest, now);
+      return consumeConfirmation(userId, submission.digest, now).pipe(
+        Effect.map((confirmed) => ({
+          confirmed,
+          evidence: confirmed ? submission.evidence : Option.none(),
+        }))
+      );
     },
   };
 };
@@ -341,7 +355,10 @@ const decideConfirmation = Effect.fn("ToolConfirmation.decide")(function* (input
 export const makeTurnConfirmation = Effect.fn("ToolConfirmation.makeTurn")(function* (
   userId: UserId,
   priorTranscript: ReadonlyArray<TranscriptEntry>,
-  message: { readonly text: string }
+  message: {
+    readonly text: string;
+    readonly confirmationEvidence: Option.Option<ProviderQualifiedMessages>;
+  }
 ) {
   const now = yield* DateTime.now;
   const submitted: SubmittedConfirmationState = {
@@ -350,7 +367,11 @@ export const makeTurnConfirmation = Effect.fn("ToolConfirmation.makeTurn")(funct
       Option.flatMap((pending) =>
         authorizationFromChallenge(pending).pipe(
           Option.filter(({ command }) => message.text.trim() === command),
-          Option.map(({ digest }) => ({ ...pending, digest }))
+          Option.map(({ digest }) => ({
+            ...pending,
+            digest,
+            evidence: message.confirmationEvidence,
+          }))
         )
       )
     ),

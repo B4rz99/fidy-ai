@@ -85,12 +85,16 @@ export const ConsentEvent = Schema.Union([
 ]);
 export type ConsentEvent = typeof ConsentEvent.Type;
 
+/** Provider-qualified disclosure and decision messages for one channel-mediated decision. */
+export const ProviderQualifiedMessages = Schema.TaggedStruct("ProviderQualifiedMessages", {
+  disclosureMessage: ProviderMessageEvidence,
+  decisionMessage: ProviderMessageEvidence,
+}).annotate({ identifier: "ProviderQualifiedMessages" });
+export type ProviderQualifiedMessages = typeof ProviderQualifiedMessages.Type;
+
 /** Closed evidence for the channel or policy that produced one Consent decision. */
 export const ConsentDecisionEvidence = Schema.Union([
-  Schema.TaggedStruct("ProviderQualifiedMessages", {
-    disclosureMessage: ProviderMessageEvidence,
-    decisionMessage: ProviderMessageEvidence,
-  }),
+  ProviderQualifiedMessages,
   Schema.TaggedStruct("AuthenticatedWeb", {
     webSessionId: WebSessionId,
   }),

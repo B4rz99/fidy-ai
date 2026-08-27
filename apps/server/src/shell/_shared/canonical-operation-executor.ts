@@ -1,6 +1,7 @@
 import { Cause, Data, DateTime, Effect, Exit, Option, Ref, Schema } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
 import type { CanonicalOperationId } from "~/core/audit/model";
+import type { ProviderQualifiedMessages } from "~/core/consent/model";
 import { appendAuditLogEntry } from "~/shell/audit/repo";
 import { withUserTransaction } from "~/shell/db/user-transaction";
 import {
@@ -240,14 +241,16 @@ const hostedExecutionCheckpoint = (input: {
   readonly binding: AgentOperationBinding;
   readonly canonicalJson: Schema.Json;
   readonly isExecutionActive: () => boolean;
+  readonly retainEvidence: (evidence: Option.Option<ProviderQualifiedMessages>) => void;
 }): Effect.Effect<void, CanonicalCallRejected, SqlClient.SqlClient> =>
   input.confirmationPermit
     .consume({ binding: input.binding, canonicalInput: input.canonicalJson })
     .pipe(
-      Effect.flatMap((confirmed) => {
-        if (!confirmed) {
+      Effect.flatMap((consumption) => {
+        if (!consumption.confirmed) {
           return Effect.fail(new CanonicalCallRejected({ reason: "confirmation_rejected" }));
         }
+        input.retainEvidence(consumption.evidence);
         return input.isExecutionActive()
           ? Effect.void
           : Effect.fail(new CanonicalCallRejected({ reason: "authority_closed" }));
@@ -277,6 +280,7 @@ export const executeHostedCanonicalOperation = Effect.fn("executeHostedCanonical
       });
     }
     const call = yield* resolveHostedCall({ caller, binding, untrustedInput, occurredAt });
+    let confirmationEvidence = Option.none<ProviderQualifiedMessages>();
     // In-process hosted execution reuses the canonical operation span the HTTP middleware emits, so
     // a hosted call stays as observable as the same operation invoked by the User's own agent.
     const telemetry = yield* Telemetry;
@@ -289,12 +293,18 @@ export const executeHostedCanonicalOperation = Effect.fn("executeHostedCanonical
         caller,
         operation: binding.operation,
         policy: call.policy,
-        effect: call.execute(call.canonicalInput, { resolved: caller }),
+        effect: call.execute(call.canonicalInput, {
+          resolved: caller,
+          confirmationEvidence: () => confirmationEvidence,
+        }),
         executionCheckpoint: hostedExecutionCheckpoint({
           confirmationPermit,
           binding,
           canonicalJson: call.canonicalJson,
           isExecutionActive,
+          retainEvidence: (evidence) => {
+            confirmationEvidence = evidence;
+          },
         }),
         occurredAt,
       }).pipe(Effect.tapError(recordExpectedOutcome(telemetry)))

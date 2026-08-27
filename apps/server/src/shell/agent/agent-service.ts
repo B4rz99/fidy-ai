@@ -21,6 +21,7 @@ import type { Tool } from "effect/unstable/ai";
 import { HttpClient } from "effect/unstable/http";
 import { SqlClient } from "effect/unstable/sql";
 import { allCanonicalCapabilities } from "~/core/_shared/canonical-capability";
+import { ProviderQualifiedMessages } from "~/core/consent/model";
 import type { CanonicalCaller } from "~/shell/_shared/authz";
 import { type CanonicalAuthorityRoot, completesHostedTurn } from "~/shell/_shared/operation-policy";
 import type { User } from "~/core/identity/model";
@@ -163,8 +164,11 @@ export const CurrentAgentLimits = Context.Reference<AgentLimits>(
   }
 );
 
-/** Channel-neutral text accepted by the hosted agent. */
-export const InboundMessage = Schema.Struct({ text: TranscriptText });
+/** Channel-neutral text and optional provider evidence accepted by the hosted agent. */
+export const InboundMessage = Schema.Struct({
+  text: TranscriptText,
+  confirmationEvidence: Schema.optionalKey(ProviderQualifiedMessages),
+});
 export type InboundMessage = typeof InboundMessage.Type;
 
 /** One channel-neutral media reference that an adapter may render or deliver. */
@@ -1169,7 +1173,10 @@ const loadTurnContext = (
     // The runtime owns every Transcript read, so the confirmation decision receives this session's
     // own recent entries as plain data rather than reaching into persistence for them.
     const priorTranscript = yield* listRecentTranscriptEntries(userId, hostedAgentSessionId, 1);
-    const confirmation = yield* makeTurnConfirmation(userId, priorTranscript, message);
+    const confirmation = yield* makeTurnConfirmation(userId, priorTranscript, {
+      text: message.text,
+      confirmationEvidence: Option.fromUndefinedOr(message.confirmationEvidence),
+    });
     return { user, confirmation } as const;
   });
 

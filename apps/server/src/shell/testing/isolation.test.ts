@@ -20,7 +20,12 @@ import {
   WidgetId,
 } from "~/core/dashboard/model";
 import { type Transaction } from "~/core/transactions/model";
-import { ManualPATRequestId, PATRecipientLabel, TokenBearer } from "~/core/tokens/model";
+import {
+  ManualPATRequestId,
+  PATRecipientLabel,
+  TokenBearer,
+  TokenShortId,
+} from "~/core/tokens/model";
 import { PATPairingId } from "~/core/tokens/pairing";
 import type { OperationId } from "~/shell/api";
 import { truncateInsights, weeklySummaryInput } from "~/shell/insights/fixtures";
@@ -104,6 +109,19 @@ const probes: Record<OperationId, IsolationProbe> = {
     Effect.result(
       attempt.strangerClient.browserLogin.approvePairing({ payload: { publicCode: "BCDF-GHJK" } })
     ).pipe(Effect.asVoid),
+
+  "pats.listPATs": (attempt) =>
+    Effect.result(attempt.strangerClient.pats.listPATs()).pipe(Effect.asVoid),
+
+  "pats.revokePAT": (attempt) =>
+    Effect.result(
+      attempt.strangerClient.pats.revokePAT({
+        params: { shortId: TokenShortId.make("owner001") },
+      })
+    ).pipe(Effect.asVoid),
+
+  "pats.revokeAllPATs": (attempt) =>
+    Effect.result(attempt.strangerClient.pats.revokeAllPATs()).pipe(Effect.asVoid),
 
   "pats.createManualPAT": (attempt) =>
     Effect.result(

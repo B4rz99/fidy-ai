@@ -30,10 +30,11 @@ import { SqlClient, type SqlConnection, SqlSchema, type Statement } from "effect
 import { ConsentRecord, ConsentRecordId } from "~/core/consent/model";
 import { E164PhoneNumber, UserId, WhatsAppBusinessScopedUserId } from "~/core/identity/reference";
 import { TokenBearer } from "~/core/tokens/model";
-import { AgentReply, AgentService } from "~/shell/agent/agent-service";
+import { AgentReply, AgentService, type InboundMessage } from "~/shell/agent/agent-service";
 import { makeOpenAiFunctionCallResponse } from "~/shell/agent/fixtures/openai";
 import { OpenAiHostedInferenceWithoutStartupValidation } from "~/shell/agent/openai";
 import { admitAgentConversationTurn } from "~/shell/agent/conversation";
+import { confirmationDigestFromChallenge } from "~/shell/agent/tool-confirmation-model";
 import { MigrationSqlClient } from "~/shell/db/client";
 import {
   defaultUserId,
@@ -99,6 +100,7 @@ import {
   getWhatsAppWindowState,
   markWhatsAppReceiptOutboundStarted,
   releaseWhatsAppReceipt,
+  retainOutboundEvidence,
   startWhatsAppTurn,
 } from "./repo";
 import { CurrentDeliveryPolicy, DeliveryAttemptLimit } from "./reply-delivery";
@@ -1498,6 +1500,82 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           yield* processTurnWith(DateTime.add(ambiguousTime, { seconds: 3 }), agent, ambiguousKapso)
         ).toBe(true);
         expect(yield* Ref.get(ambiguousAttempts)).toBe(1);
+      })
+    );
+
+    it.effect("links the exact outbound challenge across an unrelated later message", () =>
+      Effect.gen(function* () {
+        yield* seedDevelopmentIdentity(defaultPatBearer);
+        yield* truncateWhatsAppChannel;
+        const challengeAt = DateTime.makeUnsafe("2026-04-03T12:01:00.000Z");
+        const confirmationAt = DateTime.add(challengeAt, { seconds: 2 });
+        const command = `CONFIRMAR pats.revokeAllPATs ${"a".repeat(64)}`;
+        yield* retainOutboundEvidence({
+          userId: defaultUserId,
+          message: {
+            channel: "whatsapp",
+            provider: "kapso",
+            providerMessageId: WhatsAppProviderMessageId.make("wamid.confirmation-challenge"),
+          },
+          occurredAt: challengeAt,
+          confirmationDigest: confirmationDigestFromChallenge(
+            `Esta operación requiere confirmación.\nResponde exactamente: ${command}`
+          ),
+        });
+        yield* retainOutboundEvidence({
+          userId: defaultUserId,
+          message: {
+            channel: "whatsapp",
+            provider: "kapso",
+            providerMessageId: WhatsAppProviderMessageId.make("wamid.unrelated-outbound"),
+          },
+          occurredAt: DateTime.add(challengeAt, { seconds: 1 }),
+          confirmationDigest: Option.none(),
+        });
+        const inbound = makeKapsoTextEvent("wamid.confirmation-decision", command, confirmationAt);
+        yield* enqueueTurn({
+          admission: authorizedTurn(inbound),
+          event: inbound,
+          deliveryKey,
+        });
+        const sql = yield* SqlClient.SqlClient;
+        yield* withUserTransaction(
+          defaultUserId,
+          sql`UPDATE whatsapp_conversation_windows
+              SET window_open_until = ${DateTime.add(yield* DateTime.now, { hours: 1 })}
+              WHERE user_id = ${defaultUserId}`
+        );
+        const captured = yield* Ref.make<Option.Option<InboundMessage>>(Option.none());
+        const agent = agentServiceFixture({
+          handleMessage: (_userId, message, deliver) => {
+            const reply = agentReplyFixture("Confirmación recibida.");
+            return Ref.set(captured, Option.some(message)).pipe(
+              Effect.andThen(deliver(reply)),
+              Effect.as(reply)
+            );
+          },
+        });
+
+        expect(
+          yield* processTurnWith(
+            DateTime.add(confirmationAt, { seconds: 3 }),
+            agent,
+            kapsoClientFixture("wamid.confirmation-reply", confirmationAt)
+          )
+        ).toBe(true);
+        expect(Option.getOrThrow(yield* Ref.get(captured)).confirmationEvidence).toEqual({
+          _tag: "ProviderQualifiedMessages",
+          disclosureMessage: {
+            channel: "whatsapp",
+            provider: "kapso",
+            providerMessageId: "wamid.confirmation-challenge",
+          },
+          decisionMessage: {
+            channel: "whatsapp",
+            provider: "kapso",
+            providerMessageId: "wamid.confirmation-decision",
+          },
+        });
       })
     );
 

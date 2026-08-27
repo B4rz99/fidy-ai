@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
 import { expect, layer } from "@effect/vitest";
 import {
   Array as Arr,
@@ -6,7 +7,8 @@ import {
   Cause,
   Clock,
   Context,
-  type Crypto,
+  Crypto,
+  DateTime,
   Deferred,
   Duration,
   Effect,
@@ -24,17 +26,27 @@ import {
 import { OpenAiLanguageModel } from "@effect/ai-openai";
 import { AiError, LanguageModel, type Response, Tool } from "effect/unstable/ai";
 import { SqlClient, type SqlError, SqlSchema } from "effect/unstable/sql";
+import { allCanonicalCapabilities } from "~/core/_shared/canonical-capability";
 import { E164PhoneNumber, UserId, WhatsAppBusinessScopedUserId } from "~/core/identity/reference";
 import { MigrationSqlClient } from "~/shell/db/client";
 import { categoryIds } from "~/core/categories/taxonomy";
 import { ConversationCompactionTokenCount } from "~/core/transcript/compaction-policy";
 import { type TranscriptEntry, TranscriptText } from "~/core/transcript/model";
-import { TokenBearer } from "~/core/tokens/model";
+import {
+  ManualPATRequestId,
+  PATRecipientLabel,
+  TokenBearer,
+  defaultPATLifetimeDays,
+} from "~/core/tokens/model";
+import { computePATExpiration } from "~/core/tokens/rules";
+import { WebSessionId } from "~/core/web-session/reference";
+import { calculateWebSessionDeadlines } from "~/core/web-session/rules";
 import { ConversationCompactionPolicy } from "~/shell/transcript/conversation-continuity";
 import type { AuditLogEntry } from "~/core/audit/model";
 import { observeAuditLogEntries } from "~/shell/audit/repo";
 import { HostedAgentSessionId } from "~/core/transcript/hosted-agent-session";
 import { withSubjectLock } from "~/shell/consent/repo";
+import { withUserTransaction } from "~/shell/db/user-transaction";
 import { resolveWhatsAppCaller } from "~/shell/identity/repo";
 import {
   EnvelopeRecorder,
@@ -68,6 +80,7 @@ import {
 } from "./agent-service";
 import { makeTurnConfirmation } from "./tool-confirmation";
 import { agentOperationBindings } from "./toolkit";
+import { createManualPAT } from "~/shell/tokens/mutations";
 
 // An HTTP caller returns the reply in its response, so it delivers nothing incrementally.
 const noDelivery = (): Effect.Effect<void> => Effect.void;
@@ -490,6 +503,40 @@ const exactMemoryMutationScript = (serialized: string): Option.Option<ModelReply
               id: "forget-memory-exact",
               name: "memory__forget",
               params: { params: { id: forgetId } },
+            },
+          ]
+    );
+  }
+  return Option.none();
+};
+
+const patManagementScript = (serialized: string): Option.Option<ModelReply> => {
+  const shortId = /Revoca PAT administrable ([0-9a-f]{8})/u.exec(serialized)?.[1];
+  if (shortId !== undefined) {
+    const confirmationIndex = serialized.lastIndexOf("CONFIRMAR pats.revokePAT");
+    return Option.some(
+      confirmationIndex >= 0 && serialized.lastIndexOf("tool-result") > confirmationIndex
+        ? [{ type: "text" as const, text: "Revoqué el PAT solicitado." }]
+        : [
+            {
+              type: "tool-call" as const,
+              id: "revoke-managed-pat",
+              name: "pats__revokePAT",
+              params: { params: { shortId } },
+            },
+          ]
+    );
+  }
+  if (serialized.includes("Lista PATs administrables")) {
+    return Option.some(
+      hasToolResultAfter(serialized, "Lista PATs administrables")
+        ? [{ type: "text" as const, text: "Listé los PAT activos." }]
+        : [
+            {
+              type: "tool-call" as const,
+              id: "list-managed-pats",
+              name: "pats__listPATs",
+              params: {},
             },
           ]
     );
@@ -1111,6 +1158,7 @@ const scriptedReply = (
   isolationScript(serialized).pipe(
     Option.orElse(() => toolBudgetScript(serialized, toolChoice)),
     Option.orElse(() => toolCapScript(serialized)),
+    Option.orElse(() => patManagementScript(serialized)),
     Option.orElse(() => memoryScript(serialized)),
     Option.orElse(() => captureScript(serialized, tools)),
     Option.orElse(() => invalidModelOutputScript(serialized)),
@@ -2175,6 +2223,121 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       expect(retained).toContain("Listo, completé la operación solicitada.");
       expect(retained).not.toContain("privateVerifier");
       expect(retained).not.toContain("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA");
+    })
+  );
+
+  it.effect("lists and exactly confirms PAT revocation with provider-qualified evidence", () =>
+    Effect.gen(function* () {
+      yield* clearTranscript;
+      const sql = yield* MigrationSqlClient;
+      const crypto = yield* Crypto.Crypto;
+      const createdAt = yield* DateTime.now;
+      const webSessionId = WebSessionId.make(yield* crypto.randomUUIDv7.pipe(Effect.orDie));
+      const deadlines = calculateWebSessionDeadlines(createdAt);
+      yield* sql`
+        INSERT INTO web_sessions (
+          id, user_id, bearer_digest, paired_at, fresh_until, idle_expires_at, hard_expires_at
+        ) VALUES (
+          ${webSessionId}, ${defaultUserId}, decode(repeat('25', 32), 'hex'), ${createdAt},
+          ${deadlines.freshUntil}, ${deadlines.idleExpiresAt}, ${deadlines.hardExpiresAt}
+        )
+      `;
+      const issued = yield* withUserTransaction(
+        defaultUserId,
+        createManualPAT({
+          userId: defaultUserId,
+          caller: {
+            subjectUserId: defaultUserId,
+            capabilities: allCanonicalCapabilities,
+            auditCaller: { _tag: "WebSession", webSessionId },
+            authorityRoot: "no-verified-whatsapp-authority",
+            fresh: true,
+          },
+          payload: {
+            requestId: ManualPATRequestId.make(randomUUID()),
+            grant: {
+              recipientLabel: PATRecipientLabel.make("Hosted revocation robot"),
+              scopes: ["read"],
+              lifetimeDays: defaultPATLifetimeDays,
+              reviewExpiresAt: yield* computePATExpiration({
+                createdAt,
+                lifetimeDays: defaultPATLifetimeDays,
+              }),
+            },
+          },
+        })
+      );
+      const service = yield* AgentService;
+      const listed = yield* service.handleMessage(
+        defaultUserId,
+        InboundMessage.make({ text: TranscriptText.make("Lista PATs administrables") }),
+        noDelivery,
+        "verified-whatsapp"
+      );
+      expect(listed.text).toBe("Listé los PAT activos.");
+      const listingTranscript = yield* Schema.encodeEffect(Schema.UnknownFromJsonString)(
+        yield* selectTranscriptEntries(defaultUserId)
+      );
+      expect(listingTranscript).toContain(issued.data.pat.shortId);
+      expect(listingTranscript).toContain("Hosted revocation robot");
+      expect(listingTranscript).not.toContain(issued.data.bearer);
+
+      const challenge = yield* service.handleMessage(
+        defaultUserId,
+        InboundMessage.make({
+          text: TranscriptText.make(`Revoca PAT administrable ${issued.data.pat.shortId}`),
+        }),
+        noDelivery,
+        "verified-whatsapp"
+      );
+      const command = confirmationCommand(challenge.text);
+      expect(command).toMatch(/^CONFIRMAR pats\.revokePAT [0-9a-f]{64}$/u);
+      const confirmed = yield* service.handleMessage(
+        defaultUserId,
+        InboundMessage.make({
+          text: TranscriptText.make(command),
+          confirmationEvidence: {
+            _tag: "ProviderQualifiedMessages",
+            disclosureMessage: {
+              channel: "whatsapp",
+              provider: "kapso",
+              providerMessageId: "wamid.pat-revocation-challenge",
+            },
+            decisionMessage: {
+              channel: "whatsapp",
+              provider: "kapso",
+              providerMessageId: "wamid.pat-revocation-confirmation",
+            },
+          },
+        }),
+        noDelivery,
+        "verified-whatsapp"
+      );
+      const replayed = yield* service.handleMessage(
+        defaultUserId,
+        InboundMessage.make({ text: TranscriptText.make(command) }),
+        noDelivery,
+        "verified-whatsapp"
+      );
+      const records = yield* sql`
+        SELECT token.revoked_at IS NOT NULL AS revoked, consent.decision_origin,
+          consent.disclosure_provider_message_id, consent.decision_provider_message_id
+        FROM tokens token
+        JOIN consent_records grant_record ON grant_record.pat_id = token.id
+        JOIN consent_records consent ON consent.revoked_grant_id = grant_record.id
+        WHERE token.id = ${issued.data.pat.id}
+      `;
+
+      expect(confirmed.text).toBe("Listo, completé la operación solicitada.");
+      expect(replayed.text).toContain("Operación exacta: pats.revokePAT");
+      expect(records).toEqual([
+        {
+          revoked: true,
+          decision_origin: "provider-qualified-messages",
+          disclosure_provider_message_id: "wamid.pat-revocation-challenge",
+          decision_provider_message_id: "wamid.pat-revocation-confirmation",
+        },
+      ]);
     })
   );
 
@@ -3820,6 +3983,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
           const priorTranscript = yield* selectRecentTranscriptEntries(defaultUserId, session, 1);
           const { decide } = yield* makeTurnConfirmation(defaultUserId, priorTranscript, {
             text: command,
+            confirmationEvidence: Option.none(),
           });
           const decision = yield* decide({ binding, input: { params: { id: transaction.id } } });
           return decision._tag;

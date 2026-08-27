@@ -505,6 +505,39 @@
       }
     },
     {
+      "id": "pats.listPATs",
+      "policy": {
+        "access": {
+          "type": "web-or-hosted"
+        },
+        "agentConfirmation": "not-required",
+        "kind": "query",
+        "requiredTier": "free"
+      }
+    },
+    {
+      "id": "pats.revokeAllPATs",
+      "policy": {
+        "access": {
+          "type": "fresh-web-or-verified-whatsapp-hosted"
+        },
+        "agentConfirmation": "required",
+        "kind": "mutation",
+        "requiredTier": "free"
+      }
+    },
+    {
+      "id": "pats.revokePAT",
+      "policy": {
+        "access": {
+          "type": "fresh-web-or-verified-whatsapp-hosted"
+        },
+        "agentConfirmation": "required",
+        "kind": "mutation",
+        "requiredTier": "free"
+      }
+    },
+    {
       "id": "subscription.getUpgradeUrl",
       "policy": {
         "access": {

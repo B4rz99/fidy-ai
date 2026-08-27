@@ -22,6 +22,8 @@ export {
   ManualPATRequestId,
   PATId,
   PATLifetimeDays,
+  ActivePATList,
+  ActivePATMetadata,
   ApprovedPATPairing,
   PATPairingId,
   PATPairingPublicCode,

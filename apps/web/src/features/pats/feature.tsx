@@ -1,17 +1,56 @@
-import { useAtomSet } from "@effect/atom-react";
+import { useAtomSet, useAtomValue } from "@effect/atom-react";
 import { useRouter } from "@tanstack/react-router";
 import { Effect } from "effect";
-import type { Atom } from "effect/unstable/reactivity";
+import { AsyncResult, type Atom, Reactivity } from "effect/unstable/reactivity";
 import { type JSX, useState } from "react";
 import { useSession } from "@/session/session-context";
 import { type FidyClient, type TokenBearer } from "@/transport/client";
 import { bearerRevealLifetime } from "./policy";
 import { type IssueManualPATCommand, ManualPATView } from "./view";
 import {
+  type ActivePATManagementState,
+  ActivePATManagementView,
+  type RevokeActivePATCommand,
+  type RevokeAllActivePATsCommand,
+} from "./management-view";
+import {
   type ApprovePATPairingCommand,
   type InspectPATPairingCommand,
   PATPairingView,
 } from "./pairing-view";
+
+const activePATReactivityKey = ["pats", "active"] as const;
+
+const makeRevokeActivePATCommand = (
+  apiClient: FidyClient
+): Atom.AtomResultFn<RevokeActivePATCommand, void, never> =>
+  apiClient.runtime.fn<RevokeActivePATCommand>()(
+    (command) =>
+      Effect.gen(function* () {
+        const client = yield* apiClient;
+        yield* Reactivity.mutation(
+          client.pats.revokePAT({ params: { shortId: command.shortId } }),
+          [activePATReactivityKey]
+        );
+        yield* Effect.sync(command.onRevoked);
+      }).pipe(Effect.catch(() => Effect.sync(command.onFailed))),
+    { concurrent: false }
+  );
+
+const makeRevokeAllActivePATsCommand = (
+  apiClient: FidyClient
+): Atom.AtomResultFn<RevokeAllActivePATsCommand, void, never> =>
+  apiClient.runtime.fn<RevokeAllActivePATsCommand>()(
+    (command) =>
+      Effect.gen(function* () {
+        const client = yield* apiClient;
+        const response = yield* Reactivity.mutation(client.pats.revokeAllPATs({}), [
+          activePATReactivityKey,
+        ]);
+        yield* Effect.sync(() => command.onRevoked(response.data.revokedCount));
+      }).pipe(Effect.catch(() => Effect.sync(command.onFailed))),
+    { concurrent: false }
+  );
 
 const makeIssueCommand = (
   apiClient: FidyClient
@@ -20,9 +59,12 @@ const makeIssueCommand = (
     (command) =>
       Effect.gen(function* () {
         const client = yield* apiClient;
-        const response = yield* client.pats.createManualPAT({
-          payload: { requestId: command.requestId, grant: command.grant },
-        });
+        const response = yield* Reactivity.mutation(
+          client.pats.createManualPAT({
+            payload: { requestId: command.requestId, grant: command.grant },
+          }),
+          [activePATReactivityKey]
+        );
         yield* Effect.sync(() => command.onIssued(response.data));
       }).pipe(Effect.catch(() => Effect.sync(command.onFailed))),
     { concurrent: false }
@@ -88,14 +130,32 @@ const copyToClipboard = (bearer: TokenBearer, onCopied: () => void): void => {
 export const PATManagementFeature = (): JSX.Element => {
   const router = useRouter();
   const { authentication } = useSession();
+  const [activePATs] = useState(() =>
+    router.options.context.apiClient.query("pats", "listPATs", {
+      reactivityKeys: [activePATReactivityKey],
+    })
+  );
+  const activePATResult = useAtomValue(activePATs);
+  let activePATState: ActivePATManagementState = { _tag: "Loading" };
+  if (AsyncResult.isFailure(activePATResult)) activePATState = { _tag: "LoadFailure" };
+  if (AsyncResult.isSuccess(activePATResult)) {
+    activePATState = { _tag: "Ready", result: activePATResult.value.data };
+  }
+  const [revokeAtom] = useState(() => makeRevokeActivePATCommand(router.options.context.apiClient));
+  const [revokeAllAtom] = useState(() =>
+    makeRevokeAllActivePATsCommand(router.options.context.apiClient)
+  );
   const [issueAtom] = useState(() => makeIssueCommand(router.options.context.apiClient));
   const [inspectAtom] = useState(() => makeInspectPairingCommand(router.options.context.apiClient));
   const [approveAtom] = useState(() => makeApprovePairingCommand(router.options.context.apiClient));
+  const revoke = useAtomSet(revokeAtom);
+  const revokeAll = useAtomSet(revokeAllAtom);
   const issue = useAtomSet(issueAtom);
   const inspect = useAtomSet(inspectAtom);
   const approve = useAtomSet(approveAtom);
   return (
     <div className="flex flex-col gap-8" key={authentication}>
+      <ActivePATManagementView state={activePATState} revokeAll={revokeAll} revokeOne={revoke} />
       <PATPairingView approve={approve} inspect={inspect} />
       <ManualPATView
         clearClipboard={clearClipboard}

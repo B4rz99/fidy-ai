@@ -26,7 +26,7 @@ import {
   createTransaction,
   deleteTransaction,
 } from "~/shell/transactions/mutations";
-import { createManualPAT } from "~/shell/tokens/mutations";
+import { createManualPAT, revokeAllPATs, revokePAT } from "~/shell/tokens/mutations";
 import { approvePATPairing, inspectPATPairing } from "~/shell/tokens/pat-pairing";
 import type {
   CanonicalExecutionRequirements,
@@ -178,6 +178,19 @@ export const canonicalMutationImplementations = {
     inspectPATPairing({
       userId: resolved.subjectUserId,
       publicCode: input.payload.publicCode,
+    }),
+  "pats.revokePAT": (input, caller) =>
+    revokePAT({
+      userId: caller.resolved.subjectUserId,
+      caller: caller.resolved,
+      confirmationEvidence: caller.confirmationEvidence,
+      shortId: input.params.shortId,
+    }),
+  "pats.revokeAllPATs": (_input, caller) =>
+    revokeAllPATs({
+      userId: caller.resolved.subjectUserId,
+      caller: caller.resolved,
+      confirmationEvidence: caller.confirmationEvidence,
     }),
   "pats.createManualPAT": (input, { resolved }) =>
     createManualPAT({

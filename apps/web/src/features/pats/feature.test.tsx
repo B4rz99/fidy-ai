@@ -2,6 +2,7 @@ import { act, cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { DateTime, Duration, Option } from "effect";
 import { afterEach, expect, it, vi } from "vitest";
 import {
+  type ActivePATMetadata,
   type IssuedPAT,
   PATId,
   PATRecipientLabel,
@@ -14,6 +15,11 @@ import {
 } from "@/transport/client";
 import { bearerRevealLifetime } from "./policy";
 import { type IssueManualPATCommand, ManualPATView } from "./view";
+import {
+  ActivePATManagementView,
+  type RevokeActivePATCommand,
+  type RevokeAllActivePATsCommand,
+} from "./management-view";
 
 const bearer = TokenBearer.make("fin_created1_abcdefghijklmnopqrstuvwxyz0123456789ABCD");
 const createdAt = DateTime.makeUnsafe("2026-08-10T12:00:00Z");
@@ -151,6 +157,79 @@ it("edits a reviewed grant and preserves one request identity across a failed re
   fireEvent.click(screen.getByRole("button", { name: "Volver a la revisión" }));
   fireEvent.click(screen.getByRole("button", { name: "Confirmar y crear token" }));
   expect(issue.mock.calls[1]?.[0].requestId).toBe(firstRequest?.requestId);
+});
+
+it("lists safe active metadata and confirms one revocation before refreshing", () => {
+  const activePat: ActivePATMetadata = {
+    shortId: TokenShortId.make("active01"),
+    recipientLabel: PATRecipientLabel.make("Robot de reportes"),
+    scopes: PATScopes.make(["read", "dashboard"]),
+    createdAt,
+    lastUsedAt: Option.some(DateTime.add(createdAt, { days: 1 })),
+    expiresAt: DateTime.add(createdAt, { days: 90 }),
+  };
+  const revokeOne = vi.fn((command: RevokeActivePATCommand) => command.onRevoked());
+  const revokeAll = vi.fn<(command: RevokeAllActivePATsCommand) => void>();
+  const { rerender } = render(
+    <ActivePATManagementView
+      state={{ _tag: "Ready", result: { pats: [activePat] } }}
+      revokeAll={revokeAll}
+      revokeOne={revokeOne}
+    />
+  );
+
+  expect(screen.getByRole("heading", { name: "PATs activos" })).toBeVisible();
+  expect(screen.getByText("Robot de reportes")).toBeVisible();
+  expect(screen.getByText("active01")).toBeVisible();
+  expect(screen.getByText("read")).toBeVisible();
+  expect(screen.getByText("dashboard")).toBeVisible();
+  expect(screen.queryByText(bearer)).not.toBeInTheDocument();
+
+  fireEvent.click(screen.getByRole("button", { name: "Revocar" }));
+  expect(revokeOne).not.toHaveBeenCalled();
+  expect(screen.getByText(/dejará de funcionar inmediatamente/iu)).toBeVisible();
+  fireEvent.click(screen.getByRole("button", { name: "Confirmar revocación" }));
+
+  expect(revokeOne).toHaveBeenCalledWith(
+    expect.objectContaining({ shortId: TokenShortId.make("active01") })
+  );
+  expect(screen.getByText(/acceso quedó deshabilitado inmediatamente/iu)).toBeVisible();
+  rerender(
+    <ActivePATManagementView
+      state={{ _tag: "Ready", result: { pats: [] } }}
+      revokeAll={revokeAll}
+      revokeOne={revokeOne}
+    />
+  );
+  expect(screen.getByText("No tienes PATs activos.")).toBeVisible();
+  expect(screen.getByRole("button", { name: "Revocar todos los PATs" })).toBeVisible();
+});
+
+it("confirms revoke-all and reports only the server's active PAT count", () => {
+  const activePat: ActivePATMetadata = {
+    shortId: TokenShortId.make("active02"),
+    recipientLabel: PATRecipientLabel.make("Robot doméstico"),
+    scopes: PATScopes.make(["write"]),
+    createdAt,
+    lastUsedAt: Option.none(),
+    expiresAt: DateTime.add(createdAt, { days: 90 }),
+  };
+  const revokeAll = vi.fn((command: RevokeAllActivePATsCommand) => command.onRevoked(1));
+  render(
+    <ActivePATManagementView
+      state={{ _tag: "Ready", result: { pats: [activePat] } }}
+      revokeAll={revokeAll}
+      revokeOne={vi.fn()}
+    />
+  );
+
+  fireEvent.click(screen.getByRole("button", { name: "Revocar todos los PATs" }));
+  expect(revokeAll).not.toHaveBeenCalled();
+  expect(screen.getByText(/aprobado que todavía no haya sido reclamado/iu)).toBeVisible();
+  fireEvent.click(screen.getByRole("button", { name: "Confirmar revocación total" }));
+
+  expect(revokeAll).toHaveBeenCalledTimes(1);
+  expect(screen.getByText("Se revocó 1 PAT activo.")).toBeVisible();
 });
 
 it("clears an issued bearer on reset and page hide", async () => {

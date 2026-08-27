@@ -1,6 +1,15 @@
 import { Schema } from "effect";
 import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi";
-import { CreateManualPATPayload, IssuedPAT, PAT, PATLifecycleCheck } from "~/core/tokens/model";
+import {
+  ActivePATList,
+  CreateManualPATPayload,
+  IssuedPAT,
+  PAT,
+  PATLifecycleCheck,
+  RevokedPAT,
+  RevokedPATCount,
+  TokenShortId,
+} from "~/core/tokens/model";
 import { UtcTimestamp } from "~/core/_shared/time";
 import { CanonicalOperationId } from "~/core/_shared/canonical-operation";
 import {
@@ -8,8 +17,13 @@ import {
   ApprovedPATPairing,
   PATPairingReview,
 } from "~/core/tokens/pairing";
-import type { CanonicalRejectedFailure } from "~/shell/_shared/errors";
-import { freshWebSessionOnly, operationPolicy } from "~/shell/_shared/operation-policy";
+import { type CanonicalRejectedFailure, NotFound } from "~/shell/_shared/errors";
+import {
+  freshWebOrVerifiedWhatsAppHosted,
+  freshWebSessionOnly,
+  operationPolicy,
+  webOrHosted,
+} from "~/shell/_shared/operation-policy";
 import { NextOperations, OperationResponse } from "~/shell/_shared/response";
 
 export const issuanceConsumedMessage =
@@ -99,6 +113,56 @@ export const IssuedManualPATResponse = Schema.Struct({
   ...IssuedPAT.fields,
   pat: PATWithExpirationAlias,
 }).annotate({ identifier: "IssuedManualPATResponse" });
+
+const listPATs = HttpApiEndpoint.get("listPATs", "/pats", {
+  success: OperationResponse(ActivePATList),
+})
+  .annotate(
+    OpenApi.Description,
+    "List safe metadata for the User's currently usable PATs. Credential material and terminal lifecycle history are never returned."
+  )
+  .annotateMerge(
+    operationPolicy({
+      access: webOrHosted,
+      requiredTier: "free",
+      agentConfirmation: "not-required",
+      kind: "query",
+    })
+  );
+
+const revokePAT = HttpApiEndpoint.delete("revokePAT", "/pats/:shortId", {
+  params: Schema.Struct({ shortId: TokenShortId }),
+  success: OperationResponse(RevokedPAT),
+  error: NotFound,
+})
+  .annotate(
+    OpenApi.Description,
+    "Revoke one User-owned PAT by safe short id. Unknown and foreign identifiers are indistinguishable; an owned retry is idempotent."
+  )
+  .annotateMerge(
+    operationPolicy({
+      access: freshWebOrVerifiedWhatsAppHosted,
+      requiredTier: "free",
+      agentConfirmation: "required",
+      kind: "mutation",
+    })
+  );
+
+const revokeAllPATs = HttpApiEndpoint.delete("revokeAllPATs", "/pats", {
+  success: OperationResponse(RevokedPATCount),
+})
+  .annotate(
+    OpenApi.Description,
+    "Revoke every active PAT and close approved unclaimed PAT authorization for the User. The count describes active PATs only."
+  )
+  .annotateMerge(
+    operationPolicy({
+      access: freshWebOrVerifiedWhatsAppHosted,
+      requiredTier: "free",
+      agentConfirmation: "required",
+      kind: "mutation",
+    })
+  );
 
 const createManualPAT = HttpApiEndpoint.post("createManualPAT", "/pats", {
   payload: CreateManualPATPayload,
@@ -198,6 +262,9 @@ const approvePATPairing = HttpApiEndpoint.post("approvePATPairing", "/pats/pairi
 
 /** Fresh authenticated-web operations for manual and direct-client PAT authority. */
 export const PATsGroup = HttpApiGroup.make("pats")
+  .add(listPATs)
+  .add(revokePAT)
+  .add(revokeAllPATs)
   .add(createManualPAT)
   .add(inspectPATPairing)
   .add(approvePATPairing);

@@ -18,6 +18,10 @@ import {
 import { UserId, type WhatsAppCallerReference } from "~/core/identity/reference";
 import { InboundMessage, OnboardingConsentRequired } from "~/shell/agent/agent-service";
 import type { AgentConversationAdmission } from "~/shell/agent/conversation";
+import {
+  ConfirmationDigest,
+  confirmationDigestFromCommand,
+} from "~/shell/agent/tool-confirmation-model";
 import { hasCurrentOnboardingConsentAt, useCurrentConsent } from "~/shell/consent/repo";
 import { advisoryLockKey } from "~/shell/db/advisory-lock";
 import { withUserTransaction } from "~/shell/db/user-transaction";
@@ -484,6 +488,7 @@ export const claimWhatsAppTurn = (
 const ClaimedJob = Schema.Struct({
   text: InboundMessage.fields.text,
   providerMessageId: WhatsAppProviderMessageId,
+  occurredAt: Schema.DateTimeUtcFromDate,
   enqueuedAt: Schema.DateTimeUtcFromDate,
   traceVersion: Schema.OptionFromNullOr(Schema.Unknown),
   traceId: Schema.OptionFromNullOr(Schema.Unknown),
@@ -538,7 +543,7 @@ const loadClaimedJobs = Effect.fn("WhatsApp.loadClaimedJobs")(function* (
     Result: ClaimedJob,
     execute: (row) => sql`
       SELECT job.content AS text, evidence.provider_message_id AS "providerMessageId",
-        job.enqueued_at AS "enqueuedAt", job.trace_version AS "traceVersion", job.trace_id AS "traceId",
+        evidence.occurred_at AS "occurredAt", job.enqueued_at AS "enqueuedAt", job.trace_version AS "traceVersion", job.trace_id AS "traceId",
         job.parent_span_id AS "parentSpanId", job.trace_sampled AS "traceSampled",
         job.trace_captured_at AS "traceCapturedAt", job.processing_attempt AS "processingAttempt"
       FROM whatsapp_inbound_jobs AS job
@@ -559,15 +564,53 @@ const durableContextFromJob = (job: ClaimedJob): Option.Option<DurableTraceConte
     capturedAtUnixMilliseconds: job.traceCapturedAt,
   }).pipe(Option.flatMap(Schema.decodeUnknownOption(StoredDurableTraceContext)));
 
-const prepareStartedTurn = Effect.fn("WhatsApp.prepareStartedTurn")(function* (
-  claim: WhatsAppTurnClaim,
-  claimTime: DateTime.Utc,
-  jobs: EffectArray.NonEmptyReadonlyArray<ClaimedJob>
-) {
+const PreviousOutboundEvidence = Schema.Struct({
+  providerMessageId: WhatsAppProviderMessageId,
+});
+
+const loadConfirmationOutboundEvidence = Effect.fn("WhatsApp.loadConfirmationOutboundEvidence")(
+  function* (sql: SqlClient.SqlClient, userId: UserId, digest: ConfirmationDigest) {
+    return yield* SqlSchema.findOneOption({
+      Request: Schema.Struct({
+        userId: UserId,
+        digest: ConfirmationDigest,
+      }),
+      Result: PreviousOutboundEvidence,
+      execute: (request) => sql`
+        SELECT provider_message_id AS "providerMessageId"
+        FROM whatsapp_message_evidence
+        WHERE user_id = ${request.userId} AND direction = 'outbound'
+          AND confirmation_digest = ${request.digest}
+        LIMIT 1
+      `,
+    })({ userId, digest });
+  }
+);
+
+const prepareStartedTurn = Effect.fn("WhatsApp.prepareStartedTurn")(function* (input: {
+  readonly claim: WhatsAppTurnClaim;
+  readonly claimTime: DateTime.Utc;
+  readonly jobs: EffectArray.NonEmptyReadonlyArray<ClaimedJob>;
+  readonly previousOutbound: Option.Option<typeof PreviousOutboundEvidence.Type>;
+}) {
+  const { claim, claimTime, jobs, previousOutbound } = input;
+  const newest = EffectArray.lastNonEmpty(jobs);
+  const confirmationEvidence = Option.map(previousOutbound, ({ providerMessageId }) => ({
+    _tag: "ProviderQualifiedMessages" as const,
+    disclosureMessage: { channel: "whatsapp" as const, provider: "kapso", providerMessageId },
+    decisionMessage: {
+      channel: "whatsapp" as const,
+      provider: "kapso",
+      providerMessageId: newest.providerMessageId,
+    },
+  }));
   const inboundMessage = yield* Schema.decodeUnknownEffect(InboundMessage)({
     text: jobs.map(({ text }) => text).join("\n"),
+    ...Option.match(confirmationEvidence, {
+      onNone: () => ({}),
+      onSome: (evidence) => ({ confirmationEvidence: evidence }),
+    }),
   });
-  const newest = EffectArray.lastNonEmpty(jobs);
   const queueDelayMilliseconds = TelemetryDuration.make(
     Math.min(
       maximumQueueDelayMilliseconds,
@@ -605,7 +648,14 @@ export const startWhatsAppTurn = Effect.fn("WhatsApp.startTurn")(function* (
       if (!EffectArray.isArrayNonEmpty(jobs)) {
         return yield* Effect.die(new Error("Started WhatsApp claim contained no jobs"));
       }
-      return yield* prepareStartedTurn(claim, claimTime, jobs);
+      const command = jobs.map(({ text }) => text).join("\n");
+      const previousOutbound = yield* confirmationDigestFromCommand(command).pipe(
+        Option.match({
+          onNone: () => Effect.succeed(Option.none()),
+          onSome: (digest) => loadConfirmationOutboundEvidence(sql, claim.userId, digest),
+        })
+      );
+      return yield* prepareStartedTurn({ claim, claimTime, jobs, previousOutbound });
     }).pipe(Effect.catchTag("SqlError", Effect.die))
   );
 });
@@ -699,16 +749,21 @@ const OutboundEvidenceRequest = Schema.Struct({
   userId: UserId,
   providerMessageId: WhatsAppProviderMessageId,
   occurredAt: Schema.DateTimeUtcFromDate,
+  confirmationDigest: Schema.OptionFromNullOr(ConfirmationDigest),
 });
 /**
  * Retains metadata-only evidence for a successfully decoded outbound provider send. Fails with
  * WhatsAppEvidenceConflict when that provider id is already attributed to different evidence.
  */
 export const retainOutboundEvidence = Effect.fn("WhatsApp.retainOutboundEvidence")(function* (
-  userId: UserId,
-  message: WhatsAppMessageEvidence,
-  occurredAt: DateTime.Utc
+  input: Readonly<{
+    userId: UserId;
+    message: WhatsAppMessageEvidence;
+    occurredAt: DateTime.Utc;
+    confirmationDigest: Option.Option<ConfirmationDigest>;
+  }>
 ) {
+  const { userId, message, occurredAt, confirmationDigest } = input;
   const sql = yield* SqlClient.SqlClient;
   const retained = yield* withUserTransaction(
     userId,
@@ -717,12 +772,20 @@ export const retainOutboundEvidence = Effect.fn("WhatsApp.retainOutboundEvidence
       Result: Schema.Struct({ retained: Schema.Boolean }),
       execute: (request) => sql`
         INSERT INTO whatsapp_message_evidence(
-          provider_message_id, user_id, direction, occurred_at
-        ) VALUES (${request.providerMessageId}, ${request.userId}, 'outbound', ${request.occurredAt})
+          provider_message_id, user_id, direction, occurred_at, confirmation_digest
+        ) VALUES (
+          ${request.providerMessageId}, ${request.userId}, 'outbound', ${request.occurredAt},
+          ${request.confirmationDigest}
+        )
         ON CONFLICT (provider_message_id) DO NOTHING
         RETURNING true AS retained
       `,
-    })({ userId, providerMessageId: message.providerMessageId, occurredAt }).pipe(Effect.orDie)
+    })({
+      userId,
+      providerMessageId: message.providerMessageId,
+      occurredAt,
+      confirmationDigest,
+    }).pipe(Effect.orDie)
   );
   if (Option.isNone(retained)) return yield* new WhatsAppEvidenceConflict();
 });

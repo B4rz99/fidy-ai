@@ -1,6 +1,11 @@
 import { DateTime, Option } from "effect";
 import { type JSX, useState } from "react";
-import type { ActivePATList, ActivePATMetadata, TokenShortId } from "@/transport/client";
+import {
+  type ActivePATList,
+  type ActivePATMetadata,
+  type TokenShortId,
+  patScopeCopy,
+} from "@/transport/client";
 import { Alert, AlertDescription, AlertTitle } from "@/ui/components/alert";
 import { Badge } from "@/ui/components/badge";
 import { Button } from "@/ui/components/button";
@@ -38,32 +43,32 @@ const formatInstant = (instant: DateTime.Utc): string =>
 
 const PATMetadata = ({ pat }: Readonly<{ pat: ActivePATMetadata }>): JSX.Element => (
   <dl className="grid gap-2 sm:grid-cols-[9rem_1fr]">
-    <dt className="text-muted-foreground">Identificador</dt>
+    <dt className="text-muted-foreground">Código</dt>
     <dd>
       <code>{pat.shortId}</code>
     </dd>
-    <dt className="text-muted-foreground">Alcances</dt>
+    <dt className="text-muted-foreground">Permisos</dt>
     <dd className="flex flex-wrap gap-2">
       {pat.scopes.map((scope) => (
         <Badge key={scope} variant="secondary">
-          {scope}
+          {patScopeCopy[scope].label}
         </Badge>
       ))}
     </dd>
-    <dt className="text-muted-foreground">Creado</dt>
+    <dt className="text-muted-foreground">Creado el</dt>
     <dd>
       <time dateTime={DateTime.formatIso(pat.createdAt)}>{formatInstant(pat.createdAt)}</time>
     </dd>
-    <dt className="text-muted-foreground">Último uso</dt>
+    <dt className="text-muted-foreground">Usado por última vez</dt>
     <dd>
       {Option.match(pat.lastUsedAt, {
-        onNone: () => "Sin uso",
+        onNone: () => "Nunca se ha usado",
         onSome: (lastUsedAt) => (
           <time dateTime={DateTime.formatIso(lastUsedAt)}>{formatInstant(lastUsedAt)}</time>
         ),
       })}
     </dd>
-    <dt className="text-muted-foreground">Vence</dt>
+    <dt className="text-muted-foreground">Vence el</dt>
     <dd>
       <time dateTime={DateTime.formatIso(pat.expiresAt)}>{formatInstant(pat.expiresAt)}</time>
     </dd>
@@ -130,13 +135,13 @@ const OneRevocationControl = (
     {...props}
     confirmation={
       <p>
-        Confirma que quieres revocar <strong>{props.pat.recipientLabel}</strong>. Este PAT dejará de
-        funcionar inmediatamente.
+        ¿Quieres desactivar el token <strong>{props.pat.recipientLabel}</strong>? Dejará de
+        funcionar de inmediato.
       </p>
     }
-    confirmLabel="Confirmar revocación"
-    revokingLabel="Revocando…"
-    triggerLabel="Revocar"
+    confirmLabel="Sí, desactivar"
+    revokingLabel="Desactivando…"
+    triggerLabel="Desactivar"
     triggerVariant="outline"
   />
 );
@@ -160,13 +165,13 @@ const AllRevocationControl = (props: RevocationActionProps): JSX.Element => (
     {...props}
     confirmation={
       <p>
-        Confirma que quieres revocar todos los PATs. También se cancelará cualquier PAT aprobado que
-        todavía no haya sido reclamado.
+        ¿Quieres desactivar todos tus tokens? También se cancelarán los tokens pendientes de
+        activación.
       </p>
     }
-    confirmLabel="Confirmar revocación total"
-    revokingLabel="Revocando todos…"
-    triggerLabel="Revocar todos los PATs"
+    confirmLabel="Sí, desactivar todos"
+    revokingLabel="Desactivando todos…"
+    triggerLabel="Desactivar todos los tokens"
     triggerVariant="destructive"
   />
 );
@@ -203,18 +208,26 @@ const useRevocationController = (input: {
     setState({ _tag: "Revoking", selection: shortId });
     input.revokeOne({
       shortId,
-      onRevoked: () => complete("PAT revocado. El acceso quedó deshabilitado inmediatamente."),
+      onRevoked: () => complete("Token desactivado. Dejó de funcionar de inmediato."),
       onFailed: () =>
-        fail(shortId, "No pudimos revocar el PAT. Actualiza la lista e inténtalo de nuevo."),
+        fail(
+          shortId,
+          "No pudimos desactivar el token. Vuelve a cargar la página e inténtalo de nuevo."
+        ),
     });
   };
   const revokeAll = (): void => {
     setState({ _tag: "Revoking", selection: "all" });
     input.revokeAll({
       onRevoked: (count) =>
-        complete(count === 1 ? "Se revocó 1 PAT activo." : `Se revocaron ${count} PATs activos.`),
+        complete(
+          count === 1 ? "Se desactivó 1 token activo." : `Se desactivaron ${count} tokens activos.`
+        ),
       onFailed: () =>
-        fail("all", "No pudimos revocar todos los PATs. Actualiza la lista e inténtalo de nuevo."),
+        fail(
+          "all",
+          "No pudimos desactivar todos los tokens. Vuelve a cargar la página e inténtalo de nuevo."
+        ),
     });
   };
   return {
@@ -238,7 +251,7 @@ const ReadyPATs = ({
   return (
     <>
       {pats.length === 0 ? (
-        <p className="rounded-lg border p-4 text-muted-foreground">No tienes PATs activos.</p>
+        <p className="rounded-lg border p-4 text-muted-foreground">No tienes tokens activos.</p>
       ) : (
         <div className="grid gap-4">
           {pats.map((pat) => (
@@ -274,11 +287,11 @@ const PATQueryContent = ({
   state: ActivePATManagementState;
   controller: ReturnType<typeof useRevocationController>;
 }>): JSX.Element => {
-  if (state._tag === "Loading") return <p aria-live="polite">Cargando PATs activos…</p>;
+  if (state._tag === "Loading") return <p aria-live="polite">Cargando tokens activos…</p>;
   if (state._tag === "Ready") return <ReadyPATs controller={controller} pats={state.result.pats} />;
   return (
     <Alert variant="destructive">
-      <AlertTitle>No pudimos cargar tus PATs</AlertTitle>
+      <AlertTitle>No pudimos cargar tus tokens</AlertTitle>
       <AlertDescription>Vuelve a abrir esta página para intentarlo de nuevo.</AlertDescription>
     </Alert>
   );
@@ -299,10 +312,11 @@ export const ActivePATManagementView = ({
     <section aria-labelledby="active-pats-title" className="flex flex-col gap-5">
       <div>
         <h2 className="text-xl font-semibold" id="active-pats-title">
-          PATs activos
+          Tokens activos
         </h2>
         <p className="text-sm text-muted-foreground">
-          Solo se muestran metadatos seguros; los tokens secretos nunca se pueden volver a ver.
+          Aquí puedes ver y desactivar los tokens que has creado. Por seguridad, el código completo
+          solo se muestra una vez.
         </p>
       </div>
       {controller.state._tag !== "Revoking" &&
@@ -310,7 +324,7 @@ export const ActivePATManagementView = ({
           onNone: () => null,
           onSome: (notice) => (
             <Alert aria-live="polite">
-              <AlertTitle>Administración de PATs</AlertTitle>
+              <AlertTitle>Tokens de acceso</AlertTitle>
               <AlertDescription>{notice}</AlertDescription>
             </Alert>
           ),

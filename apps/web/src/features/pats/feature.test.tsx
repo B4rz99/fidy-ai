@@ -178,22 +178,22 @@ it("lists safe active metadata and confirms one revocation before refreshing", (
     />
   );
 
-  expect(screen.getByRole("heading", { name: "PATs activos" })).toBeVisible();
+  expect(screen.getByRole("heading", { name: "Tokens activos" })).toBeVisible();
   expect(screen.getByText("Robot de reportes")).toBeVisible();
   expect(screen.getByText("active01")).toBeVisible();
-  expect(screen.getByText("read")).toBeVisible();
-  expect(screen.getByText("dashboard")).toBeVisible();
+  expect(screen.getByText("Lectura")).toBeVisible();
+  expect(screen.getByText("Tablero")).toBeVisible();
   expect(screen.queryByText(bearer)).not.toBeInTheDocument();
 
-  fireEvent.click(screen.getByRole("button", { name: "Revocar" }));
+  fireEvent.click(screen.getByRole("button", { name: "Desactivar" }));
   expect(revokeOne).not.toHaveBeenCalled();
-  expect(screen.getByText(/dejará de funcionar inmediatamente/iu)).toBeVisible();
-  fireEvent.click(screen.getByRole("button", { name: "Confirmar revocación" }));
+  expect(screen.getByText(/dejará de funcionar de inmediato/iu)).toBeVisible();
+  fireEvent.click(screen.getByRole("button", { name: "Sí, desactivar" }));
 
   expect(revokeOne).toHaveBeenCalledWith(
     expect.objectContaining({ shortId: TokenShortId.make("active01") })
   );
-  expect(screen.getByText(/acceso quedó deshabilitado inmediatamente/iu)).toBeVisible();
+  expect(screen.getByText(/dejó de funcionar de inmediato/iu)).toBeVisible();
   rerender(
     <ActivePATManagementView
       state={{ _tag: "Ready", result: { pats: [] } }}
@@ -201,8 +201,8 @@ it("lists safe active metadata and confirms one revocation before refreshing", (
       revokeOne={revokeOne}
     />
   );
-  expect(screen.getByText("No tienes PATs activos.")).toBeVisible();
-  expect(screen.getByRole("button", { name: "Revocar todos los PATs" })).toBeVisible();
+  expect(screen.getByText("No tienes tokens activos.")).toBeVisible();
+  expect(screen.getByRole("button", { name: "Desactivar todos los tokens" })).toBeVisible();
 });
 
 it("confirms revoke-all and reports only the server's active PAT count", () => {
@@ -223,13 +223,13 @@ it("confirms revoke-all and reports only the server's active PAT count", () => {
     />
   );
 
-  fireEvent.click(screen.getByRole("button", { name: "Revocar todos los PATs" }));
+  fireEvent.click(screen.getByRole("button", { name: "Desactivar todos los tokens" }));
   expect(revokeAll).not.toHaveBeenCalled();
-  expect(screen.getByText(/aprobado que todavía no haya sido reclamado/iu)).toBeVisible();
-  fireEvent.click(screen.getByRole("button", { name: "Confirmar revocación total" }));
+  expect(screen.getByText(/tokens pendientes de activación/iu)).toBeVisible();
+  fireEvent.click(screen.getByRole("button", { name: "Sí, desactivar todos" }));
 
   expect(revokeAll).toHaveBeenCalledTimes(1);
-  expect(screen.getByText("Se revocó 1 PAT activo.")).toBeVisible();
+  expect(screen.getByText("Se desactivó 1 token activo.")).toBeVisible();
 });
 
 it("clears an issued bearer on reset and page hide", async () => {

@@ -165,16 +165,16 @@ const revokeVisiblePAT = async (
   await expect(page.getByText("Automatización casa", { exact: true }).last()).toBeVisible();
   const shortId = Option.getOrThrow(Option.fromNullishOr(bearer.split("_")[1]));
   await expect(page.getByText(shortId, { exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "Revocar", exact: true }).click();
-  await expect(page.getByText(/dejará de funcionar inmediatamente/iu)).toBeVisible();
+  await page.getByRole("button", { name: "Desactivar", exact: true }).click();
+  await expect(page.getByText(/dejará de funcionar de inmediato/iu)).toBeVisible();
   const response = page.waitForResponse(
     (candidate) =>
       candidate.url() === `${apiOrigin}/pats/${shortId}` &&
       candidate.request().method() === "DELETE"
   );
-  await page.getByRole("button", { name: "Confirmar revocación" }).click();
+  await page.getByRole("button", { name: "Sí, desactivar" }).click();
   expect((await response).status()).toBe(successStatus);
-  await expect(page.getByText(/acceso quedó deshabilitado inmediatamente/iu)).toBeVisible();
+  await expect(page.getByText(/dejó de funcionar de inmediato/iu)).toBeVisible();
   const revokedBearer = await request.get(`${apiOrigin}/categories`, {
     headers: { authorization: `Bearer ${bearer}` },
   });

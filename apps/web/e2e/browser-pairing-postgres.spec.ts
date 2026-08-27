@@ -1,5 +1,6 @@
 import {
   ClaimedPATPairing,
+  DashboardDocument,
   DashboardEdit,
   EmailVerificationCode,
   StartedBrowserLoginPairing,
@@ -83,6 +84,7 @@ const subscriptionOffersBody = {
 
 const PairingStartBody = StartedBrowserLoginPairing.mapFields(Struct.pick(["privateVerifier"]));
 const OpenApi = Schema.Struct({ openapi: Schema.String });
+const DashboardDocumentResponse = Schema.Struct({ data: DashboardDocument });
 
 const DeliveredEmailCode = Schema.Struct({ combinedCode: EmailVerificationCode });
 const IdentityObservation = Schema.Struct({
@@ -156,6 +158,24 @@ const tryDashboardDrag = async (page: Page, attemptsRemaining: number): Promise<
 
 const dragRecentTransactionsToDashboardStart = (page: Page): Promise<Response> =>
   tryDashboardDrag(page, dragAttempts);
+
+const moveBudgetWithKeyboard = async (page: Page): Promise<Response> => {
+  const source = page
+    .getByRole("region", { name: "Diseño responsivo del tablero" })
+    .getByRole("button", { name: "Arrastrar Presupuesto de restaurantes", exact: true });
+  await source.focus();
+  await source.press("Enter");
+  await expect(source).toHaveAttribute("aria-pressed", "true");
+  await source.press("ArrowRight");
+  await source.press("ArrowRight");
+  await source.press("ArrowRight");
+  const response = page.waitForResponse(
+    (candidate) =>
+      candidate.url() === `${apiOrigin}/dashboard/edits` && candidate.request().method() === "POST"
+  );
+  await source.press("Enter");
+  return response;
+};
 
 const approvePairing = async (request: APIRequestContext, publicCode: string): Promise<void> => {
   const response = await request.post(`${controlOrigin}/approve-pairing`, {
@@ -617,7 +637,7 @@ test("applies the same canonical Dashboard edit from the UI and a dashboard-scop
   expect(dragResponse.status()).toBe(successStatus);
   const dragEdit = Schema.decodeUnknownSync(DashboardEdit)(dragResponse.request().postDataJSON());
   if (dragEdit.op !== "add-widget") throw new Error("Expected the drag to compile an add edit");
-  const uiDocument: unknown = await dragResponse.json();
+  const uiDocument = Schema.decodeUnknownSync(DashboardDocumentResponse)(await dragResponse.json());
   const undo = await request.post(`${apiOrigin}/dashboard/edits`, {
     headers: patHeaders,
     data: { op: "remove-widget", widgetId: dragEdit.widget.id },
@@ -628,8 +648,17 @@ test("applies the same canonical Dashboard edit from the UI and a dashboard-scop
     data: dragEdit,
   });
   expect(agentDrag.status()).toBe(successStatus);
-  const agentDocument: unknown = await agentDrag.json();
+  const agentDocument = Schema.decodeUnknownSync(DashboardDocumentResponse)(await agentDrag.json());
   expect(agentDocument).toEqual(uiDocument);
+});
+
+test("moves a Dashboard Widget with the real keyboard sensor", async ({ page, request }) => {
+  await resetAcceptanceState(request);
+  await completePairing(page, request);
+  await page.goto("/app/dashboard");
+  await page.getByRole("button", { name: "Personalizar" }).click();
+
+  expect((await moveBudgetWithKeyboard(page)).status()).toBe(successStatus);
 });
 
 test("renders real current-month PostgreSQL Transactions and Categories", async ({

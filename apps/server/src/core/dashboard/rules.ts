@@ -25,6 +25,8 @@ import {
   type WidgetId,
   collectLayoutWidgets,
   isBesidePlacement,
+  maximumSplitWeight,
+  minimumSplitWeight,
 } from "./model";
 
 const formatIssues = SchemaIssue.makeFormatterStandardSchemaV1();
@@ -419,9 +421,6 @@ const ratioParts: Readonly<Record<LayoutRegionRatio, readonly [number, number]>>
   "two-thirds": [2, 3],
   "three-quarters": [3, 4],
 };
-
-const minimumSplitWeight = 0.001;
-const maximumSplitWeight = 1000;
 
 const resizeChildren = (
   children: Readonly<SplitNode["children"]>,

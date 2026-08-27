@@ -147,8 +147,8 @@ leave the last successful Dashboard view rendered.
 - Stable semantic source and target IDs, with a closed discriminated `data` union.
 - Widget and catalog sources use explicit button handles with visible focus and
   `touch-action: none` only on the handles.
-- Four non-overlapping Widget edge targets covering the full Widget body, plus lower-priority
-  dashboard top/bottom targets.
+- Five non-overlapping Widget targets covering the full Widget body, plus lower-priority dashboard
+  top/bottom targets.
 - Descendant priority beats ancestor priority in overlapping recursive regions.
 - Default PointerSensor and KeyboardSensor retained.
 - Localized Accessibility plugin configuration and a direct `@dnd-kit/dom` dependency if imported.
@@ -163,7 +163,7 @@ leave the last successful Dashboard view rendered.
 ## Known limits to test rather than assume
 
 Spatial keyboard movement advances by pixels rather than logical edge order. Deep or very small
-recursive regions may therefore require several arrow presses or Shift+Arrow; retain visible
-non-drag controls regardless. Pointer target selection is geometry-dependent at overlapping corners;
+recursive regions may therefore require several arrow presses or Shift+Arrow; retain generous,
+semantic target geometry. Pointer target selection is geometry-dependent at overlapping corners;
 verify the actual styled target dimensions in browser tests. These are integration questions, not
 reasons to let dnd kit own Dashboard layout semantics.

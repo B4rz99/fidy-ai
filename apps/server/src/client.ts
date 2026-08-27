@@ -47,7 +47,10 @@ export type { CanonicalInput } from "~/shell/_shared/canonical-input";
 export type { CanonicalSuccess } from "~/shell/_shared/canonical-success";
 export {
   DashboardCatalogEntry,
+  DashboardDocument,
   DashboardEdit,
+  maximumSplitWeight,
+  minimumSplitWeight,
   SplitWeight,
   WidgetId,
 } from "~/core/dashboard/model";

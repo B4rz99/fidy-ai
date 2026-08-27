@@ -178,8 +178,15 @@ export type WidgetTemplate = typeof WidgetTemplate.Type;
 export const Axis = Schema.Literals(["row", "column"]);
 export type Axis = typeof Axis.Type;
 
+/** Lowest persisted relative share for one Dashboard region. */
+export const minimumSplitWeight = 0.001;
+/** Highest persisted relative share for one Dashboard region. */
+export const maximumSplitWeight = 1000;
+
 /** Positive bounded finite number interpreted only relative to sibling weights. */
-export const SplitWeight = Schema.Finite.check(Schema.isBetween({ minimum: 0.001, maximum: 1000 }))
+export const SplitWeight = Schema.Finite.check(
+  Schema.isBetween({ minimum: minimumSplitWeight, maximum: maximumSplitWeight })
+)
   .pipe(Schema.brand("SplitWeight"))
   .annotate({ identifier: "SplitWeight" });
 export type SplitWeight = typeof SplitWeight.Type;

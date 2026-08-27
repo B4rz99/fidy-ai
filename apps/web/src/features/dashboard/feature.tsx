@@ -66,9 +66,8 @@ const useQueuedDashboardEdits = (
     })
   );
   const applyEdit = useAtomSet(editAtom, { mode: "promiseExit" });
-  const [submitting, setSubmitting] = useState(false);
+  const [pendingEdits, setPendingEdits] = useState(0);
   const [editError, setEditError] = useState(Option.none<DashboardEditorError>());
-  const pendingEdits = useRef(0);
   const editQueue = useRef<Promise<void>>(Promise.resolve());
   const onGesture = (gesture: DashboardGesture): void => {
     const compiled = compileDashboardGesture(gesture);
@@ -76,8 +75,7 @@ const useQueuedDashboardEdits = (
       setEditError(Option.some(rejectedEditError));
       return;
     }
-    pendingEdits.current += 1;
-    setSubmitting(true);
+    setPendingEdits((pending) => pending + 1);
     const applyQueuedEdit = (): Promise<void> => {
       setEditError(Option.none());
       return applyEdit(compiled.success).then(
@@ -87,12 +85,11 @@ const useQueuedDashboardEdits = (
         () => setEditError(Option.some(rejectedEditError))
       );
     };
-    editQueue.current = editQueue.current.then(applyQueuedEdit).finally(() => {
-      pendingEdits.current -= 1;
-      if (pendingEdits.current === 0) setSubmitting(false);
-    });
+    editQueue.current = editQueue.current
+      .then(applyQueuedEdit)
+      .finally(() => setPendingEdits((pending) => pending - 1));
   };
-  return { editError, onGesture, submitting };
+  return { editError, onGesture, submitting: pendingEdits > 0 };
 };
 
 const resolveEditorError = (

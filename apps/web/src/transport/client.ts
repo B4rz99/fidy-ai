@@ -19,6 +19,8 @@ export {
   EmailReplacementInvalidApi,
   DashboardCatalogEntry,
   DashboardEdit,
+  maximumSplitWeight,
+  minimumSplitWeight,
   SplitWeight,
   WidgetId,
   CreateManualPATPayload,

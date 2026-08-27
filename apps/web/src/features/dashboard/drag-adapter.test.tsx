@@ -1,10 +1,11 @@
 import { Option, Schema } from "effect";
 import { describe, expect, it } from "vitest";
 import { WidgetId } from "@/transport/client";
+import { dashboardAnnouncementText, dashboardCollisionPriority } from "./drag-accessibility";
 import { dashboardDragData } from "./drag-data";
 import type { DashboardDragSource, DashboardDropTarget } from "./drag-data";
 import type { DashboardCatalogEntry } from "./editor-model";
-import { dashboardDropPreview, resolveDashboardDrop } from "./drag-model";
+import { dashboardTargetAcceptsSource, resolveDashboardDrop } from "./drag-model";
 
 const sourceId = Schema.decodeUnknownSync(WidgetId)("f1d1a000-0000-4000-8000-000000000801");
 const targetId = Schema.decodeUnknownSync(WidgetId)("f1d1a000-0000-4000-8000-000000000802");
@@ -21,6 +22,29 @@ const entry = {
     limit: Schema.decodeUnknownSync(TransactionListLimit)(transactionListLimit),
   },
 } satisfies DashboardCatalogEntry;
+
+describe("Dashboard drag accessibility and collision ordering", () => {
+  it("gives deeper recursive targets greater collision priority", () => {
+    expect(dashboardCollisionPriority(3)).toBeGreaterThan(dashboardCollisionPriority(2));
+  });
+
+  it("announces keyboard drag lifecycle in localized semantic terms", () => {
+    const source = { data: { kind: "widget", widgetId: sourceId, label: "Gastos" } };
+    const target = { kind: "widget-edge", widgetId: targetId, edge: "center" };
+    expect(dashboardAnnouncementText.started(source.data)).toEqual(Option.some("Moviendo Gastos."));
+    expect(
+      dashboardAnnouncementText.over(source.data, target, Option.some("Colocar sobre Presupuesto"))
+    ).toEqual(Option.some("Gastos. Colocar sobre Presupuesto."));
+    expect(
+      dashboardAnnouncementText.ended({
+        canceled: true,
+        sourceData: source.data,
+        targetAriaLabel: Option.none(),
+        targetData: target,
+      })
+    ).toEqual(Option.some("Movimiento de Gastos cancelado."));
+  });
+});
 
 describe("Dashboard drag transport data", () => {
   it("rejects incomplete or malformed dnd-kit transport data", () => {
@@ -43,21 +67,21 @@ describe("Dashboard drag transport data", () => {
   });
 });
 
-describe("Dashboard drag preview", () => {
-  it("never previews a Widget as a destination for itself", () => {
+describe("Dashboard drag acceptance", () => {
+  it("rejects a Widget's own destinations and accepts another Widget", () => {
     const source = Option.some({ kind: "widget" as const, widgetId: sourceId, label: "Gastos" });
     expect(
-      dashboardDropPreview({
+      dashboardTargetAcceptsSource({
         source,
-        target: Option.some({ kind: "widget-edge", widgetId: sourceId, edge: "right" }),
+        target: { kind: "widget-edge", widgetId: sourceId, edge: "right" },
       })
-    ).toEqual(Option.none());
+    ).toBe(false);
     expect(
-      dashboardDropPreview({
+      dashboardTargetAcceptsSource({
         source,
-        target: Option.some({ kind: "widget-edge", widgetId: targetId, edge: "center" }),
+        target: { kind: "widget-edge", widgetId: targetId, edge: "center" },
       })
-    ).toEqual(Option.some({ kind: "widget-edge", widgetId: targetId, edge: "center" }));
+    ).toBe(true);
   });
 });
 

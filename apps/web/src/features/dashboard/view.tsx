@@ -22,6 +22,7 @@ import { type ChartConfig, ChartContainer, ChartTooltip } from "@/ui/components/
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/ui/components/empty";
 import { Input } from "@/ui/components/input";
 import { Progress, ProgressLabel } from "@/ui/components/progress";
+import { maximumSplitWeight, minimumSplitWeight } from "@/transport/client";
 import { Skeleton } from "@/ui/components/skeleton";
 import {
   Table,
@@ -557,8 +558,6 @@ const EditableLeaf = ({ context, depth, editor, layout }: EditableLeafProps): JS
   );
 };
 
-const minimumResizeWeight = 0.001;
-const maximumResizeWeight = 1000;
 const minimumRegionPixels = 32;
 const maximumMinimumShare = 0.49;
 const resizeWeightPrecision = 1000;
@@ -566,15 +565,15 @@ const keyboardResizeSteps = 20;
 
 const clampResizeWeight = (weight: number): number =>
   Math.round(
-    Math.min(maximumResizeWeight, Math.max(minimumResizeWeight, weight)) * resizeWeightPrecision
+    Math.min(maximumSplitWeight, Math.max(minimumSplitWeight, weight)) * resizeWeightPrecision
   ) / resizeWeightPrecision;
 
 const clampResizePairWeight = (weight: number, pairWeight: number): number =>
   clampResizeWeight(
     Math.min(
-      maximumResizeWeight,
-      pairWeight - minimumResizeWeight,
-      Math.max(minimumResizeWeight, pairWeight - maximumResizeWeight, weight)
+      maximumSplitWeight,
+      pairWeight - minimumSplitWeight,
+      Math.max(minimumSplitWeight, pairWeight - maximumSplitWeight, weight)
     )
   );
 
@@ -736,8 +735,8 @@ const DashboardResizeBoundary = (props: ResizeBoundaryProps): JSX.Element => {
       aria-disabled={disabled}
       aria-label={`Redimensionar límite después de ${label}`}
       aria-orientation={axis === "row" ? "vertical" : "horizontal"}
-      aria-valuemax={maximumResizeWeight}
-      aria-valuemin={minimumResizeWeight}
+      aria-valuemax={maximumSplitWeight}
+      aria-valuemin={minimumSplitWeight}
       aria-valuenow={handlers.weight}
       className={
         axis === "row"
@@ -813,6 +812,7 @@ export type DashboardEditorError = Readonly<{
   title: string;
 }>;
 
+/** Editing capabilities supplied by the route controller to the Dashboard canvas. */
 export type DashboardEditor = Readonly<{
   catalog: ReadonlyArray<DashboardCatalogEntry>;
   error: Option.Option<DashboardEditorError>;

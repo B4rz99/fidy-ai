@@ -1,0 +1,183 @@
+apps/web/src/features/dashboard/feature.tsx
+  s_28b8e1e0dbe2ca::t_0f19afd5a4854b 7,29,52
+  s_28b8e1e0dbe2ca::t_ad0875cda17ae9 28
+  s_28b8e1e0dbe2ca::t_011d2ea03eda38 30-34,37-44,46-49,51,61-64
+  s_28b8e1e0dbe2ca::t_28052422ead2d0 6
+  s_28b8e1e0dbe2ca::t_9aefa1a6b70b41 50
+  s_28b8e1e0dbe2ca::t_c53aa1cb4a49fe 4-5,35-36,69-70,77,79-82,84,86-91,130-145
+  s_28b8e1e0dbe2ca::t_b841615af24c72 2
+  s_28b8e1e0dbe2ca::t_4f8f7dff61cdb3 1,3,8-9,12-14,27,60,65-67,71-73,75-76,78,92,128-129,146-147
+  s_28b8e1e0dbe2ca::t_8cfd8561526359 53-55,57-59,93-96,98-99,101,104-127
+  s_28b8e1e0dbe2ca::t_dc107affe933a5 11
+  s_28b8e1e0dbe2ca::t_691b3ba199b654 45
+  s_28b8e1e0dbe2ca::t_e32e9006517486 10,15-26,56,68,74,83,85,97,100,102-103
+research/009-dashboard-drag-and-drop-dependency.md
+  s_28b8e1e0dbe2ca::t_2abd9763aa25e5 1-51
+apps/web/src/features/dashboard/editor-controls.tsx
+  s_28b8e1e0dbe2ca::t_90641aba9d6d0f 247-260,302
+  s_28b8e1e0dbe2ca::t_011d2ea03eda38 8,222-225
+  s_28b8e1e0dbe2ca::t_b01a60a11e8920 276,278,300-301,303-304
+  s_28b8e1e0dbe2ca::t_77312e44abbc25 7,277
+  s_28b8e1e0dbe2ca::t_5284696205b873 1-6,9-41,112-141,160-162,189-221,231-245,261-274,279-299,305-312
+  s_28b8e1e0dbe2ca::t_c329c9ca1da7d6 42-111,142-159,163-188,226-230,246,275
+apps/server/src/shell/dashboard/operations.ts
+  s_28b8e1e0dbe2ca::t_d9736c6f477780 13,22-25,29,45-53
+  s_28b8e1e0dbe2ca::t_c46df550ff9113 30,38-44,54,60,243
+  s_28b8e1e0dbe2ca::t_662de1d1dad551 55,57-59
+  s_28b8e1e0dbe2ca::t_177e3655dad495 27
+  s_28b8e1e0dbe2ca::t_95433b21f0f01d 19
+  s_28b8e1e0dbe2ca::t_8669d4bfd31845 56
+  s_28b8e1e0dbe2ca::t_44fe2f4b42944a 250
+apps/web/src/features/dashboard/feature.test.tsx
+  s_28b8e1e0dbe2ca::t_3d71dbf870d976 8
+  s_28b8e1e0dbe2ca::t_011d2ea03eda38 437-439
+  s_28b8e1e0dbe2ca::t_45b3409712fe86 473-475
+  s_28b8e1e0dbe2ca::t_7e75700c4a2052 480-494
+  s_28b8e1e0dbe2ca::t_00f851ead77097 496
+  s_28b8e1e0dbe2ca::t_827014aa323b11 451,456
+  s_28b8e1e0dbe2ca::t_c9b11fc07add46 6,392
+  s_28b8e1e0dbe2ca::t_b3aa5df9d46410 1,408-409,411
+  s_28b8e1e0dbe2ca::t_8b4299994d8312 394,472
+  s_28b8e1e0dbe2ca::t_cc9a6cec63580b 378-391,393,395-403,406,419,421,424,461,465,467,469-471,495
+  s_28b8e1e0dbe2ca::t_90142e473e5cd8 404,407,410,412-417
+  s_28b8e1e0dbe2ca::t_f6e873078a5be6 405,423
+  s_28b8e1e0dbe2ca::t_24716a1086fcb0 418,420,422,425-429,435-436,440-450,452-455,457-460,462-464,466,468,476-479
+  s_28b8e1e0dbe2ca::t_2afdb7926d2f75 430-434
+apps/web/src/testing/setup.ts
+  s_28b8e1e0dbe2ca::t_fb58ba660dea61 2-9
+apps/server/src/client.ts
+  s_28b8e1e0dbe2ca::t_45b3409712fe86 46-51
+apps/server/src/shell/dashboard/handlers.ts
+  s_28b8e1e0dbe2ca::t_f31fef164a74c1 7,35-39
+apps/web/src/features/dashboard/editor-model.test.ts
+  s_28b8e1e0dbe2ca::t_007636d579b265 140-149
+  s_28b8e1e0dbe2ca::t_76ab813230e305 2-3,5-13,15-26,30-102,104-129,150-153
+  s_28b8e1e0dbe2ca::t_11909d57a27fda 130-139
+  s_28b8e1e0dbe2ca::t_41186cf662daac 4,27-29
+  s_28b8e1e0dbe2ca::t_240585e07f768e 1,14,103
+apps/server/src/core/dashboard/model.ts
+  s_28b8e1e0dbe2ca::t_f7fac9fd01d51c 428-437,439-440,455
+apps/web/package.json
+  s_28b8e1e0dbe2ca::t_16b2a73fee0f95 25
+  s_28b8e1e0dbe2ca::t_afb06ba063812d 26
+apps/server/src/shell/dashboard/errors.ts
+  s_28b8e1e0dbe2ca::t_df4330883de498 109,114-124
+apps/server/src/core/dashboard/rules.test.ts
+  s_28b8e1e0dbe2ca::t_011d2ea03eda38 672,978,982-983
+  s_28b8e1e0dbe2ca::t_4d78592e0ca5bc 646,656-657,668-669,671,673-686,692,974,976-977,986-989
+apps/server/contracts/openapi.json
+  s_28b8e1e0dbe2ca::t_24bd8579774c45 2918-2937,4420-4456,9849
+  s_28b8e1e0dbe2ca::t_d70b4427b1ac59 6212-6234,9856-9878,12067-12089,12988-13010
+  s_28b8e1e0dbe2ca::t_fa680c03473c24 4457-4460
+apps/server/src/shell/testing/browser-pairing-acceptance-control.ts
+  s_28b8e1e0dbe2ca::t_b862d4732e0014 28
+  s_28b8e1e0dbe2ca::t_0d8b71ec3fb877 33
+  s_28b8e1e0dbe2ca::t_8554de88ddebd5 29
+  s_28b8e1e0dbe2ca::t_2ffc341e755757 32
+apps/web/src/transport/client.ts
+  s_28b8e1e0dbe2ca::t_0e99e8dfb199d7 19
+  s_28b8e1e0dbe2ca::t_62da2a9837abca 20,22
+  s_28b8e1e0dbe2ca::t_deceab134ebc08 21
+  s_28b8e1e0dbe2ca::t_823130c3ad805d 12
+bun.lock
+  s_28b8e1e0dbe2ca::t_47ce43f3328488 52-53,199-210,531-532
+AGENTS.md
+  s_28b8e1e0dbe2ca::t_66b30c623e2cce 48
+apps/web/e2e/browser-pairing-postgres.spec.ts
+  s_28b8e1e0dbe2ca::t_6f9cdb75a8725e 527-533,535-539,544-545,548,551-552,554-555
+  s_28b8e1e0dbe2ca::t_5e413e55d7d22d 125
+  s_28b8e1e0dbe2ca::t_9aa8bc63303b25 200-213,513-524,534,540,543,546,549-550,553
+  s_28b8e1e0dbe2ca::t_f61df9fa07e84a 104-105
+  s_28b8e1e0dbe2ca::t_dbd427ca43b270 541-542,547
+  s_28b8e1e0dbe2ca::t_af4e087b1906c3 26-28
+  s_28b8e1e0dbe2ca::t_531d8d61b819c3 526
+  s_28b8e1e0dbe2ca::t_550012834c0193 3,8,23-24,106-107,124,126-136,139-145,198
+  s_28b8e1e0dbe2ca::t_3ceafa6dbbde34 556-573
+  s_28b8e1e0dbe2ca::t_70d98281b54905 22,25,122-123,137-138,146-152
+  s_28b8e1e0dbe2ca::t_edfa1b3869f92d 108-119,525
+  s_28b8e1e0dbe2ca::t_1df8eefffb56b9 199
+apps/web/src/features/dashboard/editor-model.ts
+  s_28b8e1e0dbe2ca::t_8e7df6fb4f7882 1,93-94,101-102
+  s_28b8e1e0dbe2ca::t_3da978f4239ad4 2,98-100
+  s_28b8e1e0dbe2ca::t_c3b0aae1c91c0b 13-26,29,36
+  s_28b8e1e0dbe2ca::t_bffd6add60cb49 12,27-28,37-38
+  s_28b8e1e0dbe2ca::t_011d2ea03eda38 30-34,41-42
+  s_28b8e1e0dbe2ca::t_66d65e043d973b 5
+  s_28b8e1e0dbe2ca::t_a49711f06f6e91 91-92,95,97,123-126
+  s_28b8e1e0dbe2ca::t_56c2d95e28d4b9 3
+  s_28b8e1e0dbe2ca::t_168d9313771378 103-107
+  s_28b8e1e0dbe2ca::t_3798cb1632a0ad 35
+  s_28b8e1e0dbe2ca::t_6c5585f1bd1f20 4,6-11,39-40,43-90,96,108,110-122,127-144
+  s_28b8e1e0dbe2ca::t_5070cea4f450e8 109
+apps/server/src/core/dashboard/errors.ts
+  s_28b8e1e0dbe2ca::t_77d4f243f19caa 2,22-29,51-52
+apps/web/src/features/dashboard/drag-model.ts
+  s_28b8e1e0dbe2ca::t_0c2ca7065dc108 1,3-17,20-46
+  s_28b8e1e0dbe2ca::t_011d2ea03eda38 2,18-19
+apps/server/src/core/dashboard/rules.ts
+  s_28b8e1e0dbe2ca::t_e6f40a28f5c891 8-9,19,25,396-409,411,413,417,421,436,438-439,441,444,509
+  s_28b8e1e0dbe2ca::t_e97fc0d811c162 484
+apps/web/src/app/routes.ts
+  s_28b8e1e0dbe2ca::t_c72be884109f06 39-41,48-49,51-52
+  s_28b8e1e0dbe2ca::t_3815b580c623c8 2,44,50
+apps/server/src/shell/dashboard/handlers.test.ts
+  s_28b8e1e0dbe2ca::t_bd163c65027623 325,715
+  s_28b8e1e0dbe2ca::t_16e5927ab6ac93 623-649
+apps/web/src/features/dashboard/drag-adapter.tsx
+  s_28b8e1e0dbe2ca::t_4e91a1451b83b2 13-14,41-48,53-56,61-65,74-84,87-89,100-101,183
+  s_28b8e1e0dbe2ca::t_b3c0040c63fed7 49-52,57-60,66-73,85-86,106-107,109,119,122,135,158,163,168
+  s_28b8e1e0dbe2ca::t_011d2ea03eda38 186
+  s_28b8e1e0dbe2ca::t_de77feb1a999b5 8,10-11,16-18,21-40,90-99,102-103,108,110-118,120-121,123-134,136-157,159-162,164-167,169-177,182,184,187-191
+  s_28b8e1e0dbe2ca::t_7e6db33614e401 178-181,185
+  s_28b8e1e0dbe2ca::t_1622b36899c00f 1-7,104-105
+  s_28b8e1e0dbe2ca::t_93aa6b5b503717 9,12,19-20
+  s_28b8e1e0dbe2ca::t_f47f0050f7c640 15
+apps/web/src/features/dashboard/drag-data.ts
+  s_28b8e1e0dbe2ca::t_5e919c221d7327 1-27
+.patterns/dnd-kit.md
+  s_28b8e1e0dbe2ca::t_a4e8fc2b3eadb2 1-165
+apps/server/src/shell/_shared/canonical-mutation-registry.ts
+  s_28b8e1e0dbe2ca::t_575fc1c512c261 15,104
+apps/web/src/features/dashboard/view.tsx
+  s_28b8e1e0dbe2ca::t_907e12c4a0f579 369,374,416,422,432,544-545,560,614,638
+  s_28b8e1e0dbe2ca::t_c1a4688245b362 572-575,580,610-613,620-623,630,633,635,637,645,648,680
+  s_28b8e1e0dbe2ca::t_f4fcfddd7d7799 578
+  s_28b8e1e0dbe2ca::t_c48fa1a0a9f281 582,590,597
+  s_28b8e1e0dbe2ca::t_60e5c70adf1184 639
+  s_28b8e1e0dbe2ca::t_011d2ea03eda38 39-40,546-549,551-554
+  s_28b8e1e0dbe2ca::t_96b9eef8372862 361-366,483
+  s_28b8e1e0dbe2ca::t_862f4c03d73ccd 581,583-586,595-596,598-602
+  s_28b8e1e0dbe2ca::t_7e033b33fb3cd3 446,449,452-453,455,458,464,480,482,484
+  s_28b8e1e0dbe2ca::t_070d9461aa3a42 541-543,550,555-559,561-570,576-577,579,587-589,591-594,603,615-619,624,627-629,631-632,634,636,640,642-644,646-647,649-650
+  s_28b8e1e0dbe2ca::t_f952c75f023033 609,651
+  s_28b8e1e0dbe2ca::t_f35f4bb3f26f14 3,9,13-14,507-508,510-540,606-608,641
+  s_28b8e1e0dbe2ca::t_a3a44e6f501d2a 33-38,347-360,367-368,370-373,375-400,402-415,417-421,423-431,433-444,447-448,450-451,454,456-457,459-463,465-471,475,481,485-495,500
+  s_28b8e1e0dbe2ca::t_5a987a35c0a0d5 502-506,509,625-626
+apps/web/src/features/dashboard/drag-adapter.test.tsx
+  s_28b8e1e0dbe2ca::t_9eacfa61ded57b 26,30-37
+  s_28b8e1e0dbe2ca::t_f743ecd40c0dac 39-41
+  s_28b8e1e0dbe2ca::t_86d6900199442e 2-3,7-10,13-16,46-50,58-59,61-63,74-75,77,85-86,88,92-96,105-106,108-109
+  s_28b8e1e0dbe2ca::t_0d0c9add2266a8 4,24,43,45
+  s_28b8e1e0dbe2ca::t_52c02f52205a96 6,11,17-19,21,89-91
+  s_28b8e1e0dbe2ca::t_79ee6d045db4d6 1,22,51-57,60,70-72,76,78-84,87,97-104,107
+  s_28b8e1e0dbe2ca::t_44dee097df1fe3 12,20
+  s_28b8e1e0dbe2ca::t_c85d85bc2ae62e 5,64-69,73
+  s_28b8e1e0dbe2ca::t_4ea1a6c9b43fd0 23
+  s_28b8e1e0dbe2ca::t_20b369616613c2 25,27-29,38,42,44
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.24",
+  "base_commit_sha": "1e8ed217fec33b49684cc1de4b3726e919ff7116",
+  "prompts": {},
+  "sessions": {
+    "s_28b8e1e0dbe2ca": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0401a-a202-7f44-b015-8c6906affc63",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": null
+    }
+  }
+}

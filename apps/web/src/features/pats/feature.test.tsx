@@ -232,6 +232,58 @@ it("confirms revoke-all and reports only the server's active PAT count", () => {
   expect(screen.getByText("Se desactivó 1 token activo.")).toBeVisible();
 });
 
+it("renders loading and load-failure states", () => {
+  const { rerender } = render(
+    <ActivePATManagementView state={{ _tag: "Loading" }} revokeAll={vi.fn()} revokeOne={vi.fn()} />
+  );
+
+  expect(screen.getByText("Cargando tokens activos…")).toBeVisible();
+  rerender(
+    <ActivePATManagementView
+      state={{ _tag: "LoadFailure" }}
+      revokeAll={vi.fn()}
+      revokeOne={vi.fn()}
+    />
+  );
+  expect(screen.getByText("No pudimos cargar tus tokens")).toBeVisible();
+});
+
+it("serializes revocation, allows cancellation, and reports failures and plural counts", () => {
+  const activePat: ActivePATMetadata = {
+    shortId: TokenShortId.make("active03"),
+    recipientLabel: PATRecipientLabel.make("Robot de pruebas"),
+    scopes: PATScopes.make(["read"]),
+    createdAt,
+    lastUsedAt: Option.none(),
+    expiresAt: DateTime.add(createdAt, { days: 90 }),
+  };
+  const revokeOne = vi.fn<(command: RevokeActivePATCommand) => void>();
+  const revokeAll = vi.fn<(command: RevokeAllActivePATsCommand) => void>();
+  render(
+    <ActivePATManagementView
+      state={{ _tag: "Ready", result: { pats: [activePat] } }}
+      revokeAll={revokeAll}
+      revokeOne={revokeOne}
+    />
+  );
+
+  fireEvent.click(screen.getByRole("button", { name: "Desactivar" }));
+  fireEvent.click(screen.getByRole("button", { name: "Sí, desactivar" }));
+  expect(screen.getByRole("button", { name: "Desactivando…" })).toBeDisabled();
+  expect(screen.getByRole("button", { name: "Desactivar todos los tokens" })).toBeDisabled();
+
+  act(() => revokeOne.mock.calls[0]?.[0].onFailed());
+  expect(screen.getByText(/no pudimos desactivar el token/iu)).toBeVisible();
+  fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
+  expect(screen.queryByText(/no pudimos desactivar el token/iu)).not.toBeInTheDocument();
+
+  fireEvent.click(screen.getByRole("button", { name: "Desactivar todos los tokens" }));
+  fireEvent.click(screen.getByRole("button", { name: "Sí, desactivar todos" }));
+  expect(screen.getByRole("button", { name: "Desactivando todos…" })).toBeDisabled();
+  act(() => revokeAll.mock.calls[0]?.[0].onRevoked(2));
+  expect(screen.getByText("Se desactivaron 2 tokens activos.")).toBeVisible();
+});
+
 it("clears an issued bearer on reset and page hide", async () => {
   vi.useFakeTimers();
   const clearClipboard = vi.fn();

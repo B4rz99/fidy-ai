@@ -14,6 +14,7 @@ export {
   BrowserLoginPairingInvalidApi,
   BrowserLoginPollingRateLimitedApi,
   EmailAddress,
+  EmailVerificationCode,
   EmailReplacementFreshPairingRequiredApi,
   EmailReplacementInvalidApi,
   CreateManualPATPayload,

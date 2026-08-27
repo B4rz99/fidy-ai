@@ -1,5 +1,5 @@
 import { expect, it } from "@effect/vitest";
-import { Effect, Ref } from "effect";
+import { Effect, Option, Ref } from "effect";
 import { HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
 import { makeExactOriginCors } from "./exact-origin-cors";
 
@@ -10,6 +10,7 @@ const applyCors = (
   makeExactOriginCors({
     allowedOrigin: "https://fidyapp.com",
     methods: ["GET", "POST"],
+    forbiddenResponse: Option.none(),
   })(response).pipe(
     Effect.provideService(HttpServerRequest.HttpServerRequest, HttpServerRequest.fromWeb(request))
   );

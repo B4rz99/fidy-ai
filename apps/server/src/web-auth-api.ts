@@ -7,8 +7,14 @@ import {
   OpenApi,
 } from "effect/unstable/httpapi";
 import { UtcTimestamp } from "~/core/_shared/time";
-import { StartedBrowserLoginPairing } from "~/core/browser-login/model";
+import {
+  BrowserLoginPrivateVerifier,
+  StartedBrowserLoginPairing,
+} from "~/core/browser-login/model";
+import { BrowserLoginPairingId } from "~/core/browser-login/reference";
 import { browserLoginPollingIntervalSeconds } from "~/core/browser-login/rules";
+import { EmailAddress, EmailVerificationCode } from "~/core/email-authentication/model";
+import { browserPairingEmailRetryAfterSeconds } from "~/core/email-authentication/rules";
 import { BackupRecoveryCode } from "~/core/recovery/model";
 
 const browserLoginUnavailableError = {
@@ -243,11 +249,112 @@ export const EmailReplacementWebAuthGroup = HttpApiGroup.make("emailReplacement"
   )
 );
 
+const browserPairingEmailAuthenticationInvalidError = {
+  code: "authentication_invalid",
+  message: "El código no es válido. Inicia de nuevo o solicita otro correo.",
+} as const;
+const BrowserPairingEmailAuthenticationInvalidFields = {
+  error: Schema.Struct({
+    code: Schema.Literal(browserPairingEmailAuthenticationInvalidError.code),
+    message: Schema.Literal(browserPairingEmailAuthenticationInvalidError.message),
+  }),
+};
+
+/** Stable non-enumerating browser error body shared by every email-authentication failure. */
+export const browserPairingEmailAuthenticationInvalidBody = {
+  error: browserPairingEmailAuthenticationInvalidError,
+} as const;
+
+/** Browser start request proving a live pairing while naming the already-verified mailbox. */
+export const StartBrowserPairingEmailAuthenticationPayload = Schema.Struct({
+  pairingId: BrowserLoginPairingId,
+  privateVerifier: BrowserLoginPrivateVerifier,
+  email: EmailAddress,
+});
+/** Decoded, branded start request accepted by the direct browser transport. */
+export type StartBrowserPairingEmailAuthenticationPayload =
+  typeof StartBrowserPairingEmailAuthenticationPayload.Type;
+
+/** Browser completion request carrying both the private pairing verifier and mailbox proof. */
+export const CompleteBrowserPairingEmailAuthenticationPayload = Schema.Struct({
+  pairingId: BrowserLoginPairingId,
+  privateVerifier: BrowserLoginPrivateVerifier,
+  combinedCode: EmailVerificationCode,
+});
+/** Decoded, branded completion request accepted by the direct browser transport. */
+export type CompleteBrowserPairingEmailAuthenticationPayload =
+  typeof CompleteBrowserPairingEmailAuthenticationPayload.Type;
+
+/** Fixed accepted response; it reveals neither credential existence nor delivery state. */
+export const PendingBrowserPairingEmailAuthentication = Schema.Struct({
+  status: Schema.Literal("pending"),
+  retryAfterSeconds: Schema.Literal(browserPairingEmailRetryAfterSeconds),
+}).annotate({ identifier: "PendingBrowserPairingEmailAuthentication", httpApiStatus: 202 });
+
+/** Completion response confirming only that the existing pairing is now redeemable. */
+export const ApprovedBrowserPairingEmailAuthentication = Schema.Struct({
+  status: Schema.Literal("pairing_approved"),
+}).annotate({ identifier: "ApprovedBrowserPairingEmailAuthentication" });
+
+/** Generic malformed, mismatched, expired, or exhausted email-authentication failure. */
+export class BrowserPairingEmailAuthenticationInvalidApi extends Schema.ErrorClass<BrowserPairingEmailAuthenticationInvalidApi>(
+  "BrowserPairingEmailAuthenticationInvalidApi"
+)(BrowserPairingEmailAuthenticationInvalidFields, { httpApiStatus: 400 }) {}
+/** Exact-origin rejection projected through the same non-enumerating error body. */
+export class BrowserPairingEmailAuthenticationOriginRejectedApi extends Schema.ErrorClass<BrowserPairingEmailAuthenticationOriginRejectedApi>(
+  "BrowserPairingEmailAuthenticationOriginRejectedApi"
+)(BrowserPairingEmailAuthenticationInvalidFields, { httpApiStatus: 403 }) {}
+/** Bounded-body rejection projected through the same non-enumerating error body. */
+export class BrowserPairingEmailAuthenticationPayloadTooLargeApi extends Schema.ErrorClass<BrowserPairingEmailAuthenticationPayloadTooLargeApi>(
+  "BrowserPairingEmailAuthenticationPayloadTooLargeApi"
+)(BrowserPairingEmailAuthenticationInvalidFields, { httpApiStatus: 413 }) {}
+/** Non-JSON request rejection projected through the same non-enumerating error body. */
+export class BrowserPairingEmailAuthenticationUnsupportedMediaTypeApi extends Schema.ErrorClass<BrowserPairingEmailAuthenticationUnsupportedMediaTypeApi>(
+  "BrowserPairingEmailAuthenticationUnsupportedMediaTypeApi"
+)(BrowserPairingEmailAuthenticationInvalidFields, { httpApiStatus: 415 }) {}
+/** Local concurrency rejection projected through the same non-enumerating error body. */
+export class BrowserPairingEmailAuthenticationUnavailableApi extends Schema.ErrorClass<BrowserPairingEmailAuthenticationUnavailableApi>(
+  "BrowserPairingEmailAuthenticationUnavailableApi"
+)(BrowserPairingEmailAuthenticationInvalidFields, { httpApiStatus: 503 }) {}
+
+/** Direct-browser start and completion operations; neither operation creates a WebSession. */
+export const BrowserPairingEmailAuthenticationWebAuthGroup = HttpApiGroup.make(
+  "browserPairingEmailAuthentication"
+)
+  .add(
+    HttpApiEndpoint.post("start", "/web/email/authentication/start", {
+      payload: StartBrowserPairingEmailAuthenticationPayload,
+      success: PendingBrowserPairingEmailAuthentication,
+      error: [
+        BrowserLoginPairingInvalidApi,
+        BrowserPairingEmailAuthenticationInvalidApi,
+        BrowserPairingEmailAuthenticationOriginRejectedApi,
+        BrowserPairingEmailAuthenticationPayloadTooLargeApi,
+        BrowserPairingEmailAuthenticationUnsupportedMediaTypeApi,
+        BrowserPairingEmailAuthenticationUnavailableApi,
+      ],
+    })
+  )
+  .add(
+    HttpApiEndpoint.post("complete", "/web/email/authentication/complete", {
+      payload: CompleteBrowserPairingEmailAuthenticationPayload,
+      success: ApprovedBrowserPairingEmailAuthentication,
+      error: [
+        BrowserPairingEmailAuthenticationInvalidApi,
+        BrowserPairingEmailAuthenticationOriginRejectedApi,
+        BrowserPairingEmailAuthenticationPayloadTooLargeApi,
+        BrowserPairingEmailAuthenticationUnsupportedMediaTypeApi,
+        BrowserPairingEmailAuthenticationUnavailableApi,
+      ],
+    })
+  );
+
 /** Direct browser authentication API. Secret-bearing responses never enter the canonical API. */
 export class WebAuthApi extends HttpApi.make("webAuth")
   .add(BrowserLoginWebAuthGroup)
   .add(EmailOnboardingWebAuthGroup)
   .add(EmailReplacementWebAuthGroup)
+  .add(BrowserPairingEmailAuthenticationWebAuthGroup)
   .annotate(OpenApi.Title, "fidy-ai WebAuth API") {}
 
 /** Group shape exported for deriving the dedicated credential-bearing browser client. */

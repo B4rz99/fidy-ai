@@ -9,6 +9,7 @@ import {
   browserLoginPublicCodeAlphabet,
   decideApprovalTransition,
   decideBrowserLoginRedemption,
+  decidePendingBrowserLoginProof,
   formatPublicCode,
   selectPublicCodeSymbols,
 } from "./rules";
@@ -16,6 +17,57 @@ import {
 const decode = Schema.decodeUnknownOption(BrowserLoginPublicCodeInput);
 const decodeCode = Schema.decodeUnknownOption(BrowserLoginPublicCode);
 const decodeSymbols = Schema.decodeUnknownOption(BrowserLoginPublicCodeSymbols);
+
+const pendingProofAttemptedAt = DateTime.makeUnsafe("2026-01-01T00:00:00Z");
+const pendingProofExpiresAt = DateTime.add(pendingProofAttemptedAt, { minutes: 10 });
+
+it("accepts a matching verifier for a pending pairing", () => {
+  expect(
+    decidePendingBrowserLoginProof({
+      lifecycle: "pending_approval",
+      verifierMatches: true,
+      wrongVerifierAttempts: 0,
+      expiresAt: pendingProofExpiresAt,
+      attemptedAt: pendingProofAttemptedAt,
+    })
+  ).toEqual({ _tag: "Accept" });
+});
+
+it("invalidates a pending pairing after the fifth wrong verifier", () => {
+  expect(
+    decidePendingBrowserLoginProof({
+      lifecycle: "pending_approval",
+      verifierMatches: false,
+      wrongVerifierAttempts: 4,
+      expiresAt: pendingProofExpiresAt,
+      attemptedAt: pendingProofAttemptedAt,
+    })
+  ).toEqual({ _tag: "WrongVerifier", wrongVerifierAttempts: 5, lifecycle: "invalidated" });
+});
+
+it("rejects unavailable and expired pairings while retaining a live wrong-verifier attempt", () => {
+  const input = {
+    verifierMatches: false,
+    wrongVerifierAttempts: 0,
+    expiresAt: pendingProofExpiresAt,
+    attemptedAt: pendingProofAttemptedAt,
+  } as const;
+  expect(decidePendingBrowserLoginProof({ ...input, lifecycle: "ready" })).toEqual({
+    _tag: "Invalid",
+  });
+  expect(
+    decidePendingBrowserLoginProof({
+      ...input,
+      lifecycle: "pending_approval",
+      attemptedAt: pendingProofExpiresAt,
+    })
+  ).toEqual({ _tag: "Expired" });
+  expect(decidePendingBrowserLoginProof({ ...input, lifecycle: "pending_approval" })).toEqual({
+    _tag: "WrongVerifier",
+    wrongVerifierAttempts: 1,
+    lifecycle: "pending_approval",
+  });
+});
 
 it("normalizes lowercase, surrounding ASCII whitespace, and an omitted display hyphen", () => {
   expect(Option.getOrThrow(decode("bcdfghjk"))).toBe("BCDF-GHJK");

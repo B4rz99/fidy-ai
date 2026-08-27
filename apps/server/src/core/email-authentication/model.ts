@@ -1,5 +1,6 @@
 import { Schema, SchemaTransformation } from "effect";
 import { UtcTimestamp } from "~/core/_shared/time";
+import { BrowserLoginPairingId } from "~/core/browser-login/reference";
 import { PendingConsentExchangeId } from "~/core/consent/reference";
 import { UserId, WhatsAppCallerReference } from "~/core/identity/reference";
 import { WebSessionId } from "~/core/web-session/reference";
@@ -76,7 +77,11 @@ export const EmailDeliveryClaimToken = Schema.String.check(Schema.isUUID())
 export type EmailDeliveryClaimToken = typeof EmailDeliveryClaimToken.Type;
 
 /** Closed selector for the fixed content of one EmailAuthentication proof delivery. */
-export const EmailProofPurpose = Schema.Literals(["verified-onboarding", "credential-replacement"]);
+export const EmailProofPurpose = Schema.Literals([
+  "verified-onboarding",
+  "credential-replacement",
+  "browser-pairing-approval",
+]);
 export type EmailProofPurpose = typeof EmailProofPurpose.Type;
 
 /** Consent-owned accepted evidence referenced without importing Consent's model. */
@@ -204,5 +209,61 @@ export const EmailReplacementRetentionClaimToken = Schema.String.check(Schema.is
   .pipe(Schema.brand("EmailReplacementRetentionClaimToken"))
   .annotate({ identifier: "EmailReplacementRetentionClaimToken" });
 export type EmailReplacementRetentionClaimToken = typeof EmailReplacementRetentionClaimToken.Type;
+
+/** Durable identity of one HMAC-only browser-pairing email start request. */
+export const BrowserPairingEmailStartRequestId = Schema.String.check(Schema.isUUID())
+  .pipe(Schema.brand("BrowserPairingEmailStartRequestId"))
+  .annotate({ identifier: "BrowserPairingEmailStartRequestId" });
+export type BrowserPairingEmailStartRequestId = typeof BrowserPairingEmailStartRequestId.Type;
+
+/** Lease fence for one globally claimed browser-pairing email start request. */
+export const BrowserPairingEmailStartRequestClaimToken = Schema.String.check(Schema.isUUID())
+  .pipe(Schema.brand("BrowserPairingEmailStartRequestClaimToken"))
+  .annotate({ identifier: "BrowserPairingEmailStartRequestClaimToken" });
+export type BrowserPairingEmailStartRequestClaimToken =
+  typeof BrowserPairingEmailStartRequestClaimToken.Type;
+
+/** Stable identity of one User-owned email approval workflow for an existing browser pairing. */
+export const BrowserPairingEmailWorkflowId = Schema.String.check(Schema.isUUID())
+  .pipe(Schema.brand("BrowserPairingEmailWorkflowId"))
+  .annotate({ identifier: "BrowserPairingEmailWorkflowId" });
+export type BrowserPairingEmailWorkflowId = typeof BrowserPairingEmailWorkflowId.Type;
+
+/** Random lease fence for one globally discovered, User-scoped retention step. */
+export const BrowserPairingEmailRetentionClaimToken = Schema.String.check(Schema.isUUID())
+  .pipe(Schema.brand("BrowserPairingEmailRetentionClaimToken"))
+  .annotate({ identifier: "BrowserPairingEmailRetentionClaimToken" });
+export type BrowserPairingEmailRetentionClaimToken =
+  typeof BrowserPairingEmailRetentionClaimToken.Type;
+
+const BrowserPairingEmailWorkflowBase = {
+  id: BrowserPairingEmailWorkflowId,
+  pairingId: BrowserLoginPairingId,
+  credentialVerifiedAt: UtcTimestamp,
+  publicCode: EmailVerificationPublicCode,
+  startedAt: UtcTimestamp,
+  expiresAt: UtcTimestamp,
+  deliveryGeneration: EmailDeliveryGeneration,
+  resendAvailableAt: UtcTimestamp,
+  wrongProofAttempts: EmailWrongProofAttempts,
+};
+
+/** Workflow projection before a current-generation mailbox proof has been armed. */
+export const BrowserPairingEmailWorkflowAwaitingDelivery = Schema.TaggedStruct(
+  "AwaitingDelivery",
+  BrowserPairingEmailWorkflowBase
+);
+/** Workflow projection carrying the digest and expiry of the currently armed mailbox proof. */
+export const BrowserPairingEmailWorkflowAwaitingProof = Schema.TaggedStruct("AwaitingProof", {
+  ...BrowserPairingEmailWorkflowBase,
+  proofDigest: EmailVerificationDigest,
+  proofExpiresAt: UtcTimestamp,
+});
+/** Exactly one active proof-delivery lifecycle pinned to one pairing and credential revision. */
+export const BrowserPairingEmailWorkflow = Schema.Union([
+  BrowserPairingEmailWorkflowAwaitingDelivery,
+  BrowserPairingEmailWorkflowAwaitingProof,
+]).annotate({ identifier: "BrowserPairingEmailWorkflow" });
+export type BrowserPairingEmailWorkflow = typeof BrowserPairingEmailWorkflow.Type;
 
 export { EmailEnrollmentId };

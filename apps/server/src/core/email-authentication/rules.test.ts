@@ -1,6 +1,7 @@
 import { expect, it } from "@effect/vitest";
 import { DateTime, Effect, Option } from "effect";
 import {
+  decideBrowserPairingEmailRequest,
   decideEmailReplacementRequest,
   decideProofAttempt,
   emailWorkflowExpiry,
@@ -9,6 +10,29 @@ import {
 } from "./rules";
 
 const acceptedAt = DateTime.makeUnsafe("2026-08-23T12:00:00Z");
+
+it("accepts a live matching workflow revision and rejects a stale revision", () => {
+  const workflow = {
+    credentialRevisionMatches: true,
+    deliveryGeneration: 1,
+    resendAvailableAt: DateTime.makeUnsafe("2026-08-23T11:59:00Z"),
+    expiresAt: DateTime.makeUnsafe("2026-08-23T12:10:00Z"),
+  };
+  expect(
+    decideBrowserPairingEmailRequest({
+      existing: Option.some(workflow),
+      requestedAt: acceptedAt,
+      processedAt: acceptedAt,
+    })
+  ).toBe("Continue");
+  expect(
+    decideBrowserPairingEmailRequest({
+      existing: Option.some({ ...workflow, credentialRevisionMatches: false }),
+      requestedAt: acceptedAt,
+      processedAt: acceptedAt,
+    })
+  ).toBe("Reject");
+});
 
 it("uses exact half-open enrollment and proof lifetimes", () => {
   expect(emailWorkflowExpiry(acceptedAt)).toEqual(DateTime.makeUnsafe("2026-08-24T12:00:00Z"));

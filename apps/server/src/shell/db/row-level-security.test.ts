@@ -137,6 +137,13 @@ const seedEveryPolicyShape = Effect.gen(function* () {
     ON CONFLICT (user_id) DO NOTHING
   `;
   yield* admin`
+    INSERT INTO verified_email_credential_authentication_lookups (
+      user_id, authentication_lookup_key
+    ) VALUES (
+      ${policyOwner}, 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+    ) ON CONFLICT (user_id) DO NOTHING
+  `;
+  yield* admin`
     INSERT INTO email_replacement_workflows (
       id, user_id, candidate_email_address, public_code, started_at, expires_at,
       delivery_generation, resend_available_at
@@ -392,6 +399,11 @@ const policyProbes: ReadonlyArray<PolicyProbe> = [
   {
     tableName: "backup_recovery_credentials",
     stableColumn: "created_at",
+    ownerPredicate: `user_id = '${policyOwner}'`,
+  },
+  {
+    tableName: "verified_email_credential_authentication_lookups",
+    stableColumn: "authentication_lookup_key",
     ownerPredicate: `user_id = '${policyOwner}'`,
   },
   {
@@ -839,12 +851,15 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
               ...userTableNames,
               "browser_login_pairings",
               "browser_login_start_attempts",
+              "browser_pairing_email_start_requests",
               "categories",
               "effect_sql_migrations",
               "email_delivery_admission_budgets",
               "email_delivery_intents",
               "email_verification_admission_slots",
               "email_enrollments",
+              "email_pairing_login_admission_attempts",
+              "email_pairing_login_admission_scopes",
               "pat_pairing_claim_attempts",
               "pat_pairing_inspection_attempts",
               "pat_pairing_start_attempts",

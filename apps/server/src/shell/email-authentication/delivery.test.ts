@@ -1,9 +1,13 @@
 import { expect, it } from "@effect/vitest";
 import { Cause, ConfigProvider, Effect, Exit, Layer, Option } from "effect";
-import { EmailAddress, EmailVerificationCode } from "~/core/email-authentication/model";
+import {
+  EmailAddress,
+  type EmailProofPurpose,
+  EmailVerificationCode,
+} from "~/core/email-authentication/model";
 import { HttpClient, HttpClientResponse } from "effect/unstable/http";
 import type { HttpClientRequest } from "effect/unstable/http";
-import { EmailDeliveryPort, verificationEmail } from "./delivery";
+import { EmailDeliveryPort, browserPairingVerificationEmail, verificationEmail } from "./delivery";
 import type { EmailSendFailed } from "./delivery";
 
 const combinedCode = EmailVerificationCode.make("ABCD-2345-F7KM-9Q2D-X4PT-6RWC");
@@ -14,6 +18,14 @@ it("renders the fixed Spanish plain-text and minimal-HTML verification email", (
     subject: "Verifica tu correo en Fidy",
     text: `Tu código de verificación es:\n\n${combinedCode}\n\nEscríbelo en https://fidyapp.com/auth/verify-email. Este código vence en 10 minutos.\n\nSi no solicitaste este correo, ignóralo.\n\nFidy nunca te pedirá este código por WhatsApp ni por soporte.`,
     html: `<p>Tu código de verificación es:</p><p><strong><code>${combinedCode}</code></strong></p><p>Escríbelo en <a href="https://fidyapp.com/auth/verify-email">https://fidyapp.com/auth/verify-email</a>. Este código vence en 10 minutos.</p><p>Si no solicitaste este correo, ignóralo.</p><p>Fidy nunca te pedirá este código por WhatsApp ni por soporte.</p>`,
+  });
+});
+
+it("renders fixed browser-login copy with only the bounded combined code varying", () => {
+  expect(browserPairingVerificationEmail(combinedCode)).toEqual({
+    subject: "Tu código para iniciar sesión en Fidy",
+    text: `Tu código para iniciar sesión en Fidy es:\n\n${combinedCode}\n\nEscríbelo en https://fidyapp.com/auth/pair. Este código vence cuando termine la vinculación actual del navegador, como máximo 10 minutos después de iniciarla.\n\nSi no solicitaste este correo, ignóralo.\n\nFidy nunca te pedirá este código por WhatsApp ni por soporte.`,
+    html: `<p>Tu código para iniciar sesión en Fidy es:</p><p><strong><code>${combinedCode}</code></strong></p><p>Escríbelo en <a href="https://fidyapp.com/auth/pair">https://fidyapp.com/auth/pair</a>. Este código vence cuando termine la vinculación actual del navegador, como máximo 10 minutos después de iniciarla.</p><p>Si no solicitaste este correo, ignóralo.</p><p>Fidy nunca te pedirá este código por WhatsApp ni por soporte.</p>`,
   });
 });
 
@@ -74,18 +86,26 @@ const failedResponseBodyLayer = (status: number): Layer.Layer<EmailDeliveryPort>
   );
 };
 
-const send = Effect.flatMap(EmailDeliveryPort, (sender) =>
-  sender.send({
-    purpose: "verified-onboarding",
-    to: emailAddress,
-    combinedCode,
-    idempotencyKey: "email-enrollment-generation-1",
-  })
-);
+const sendPurpose = (
+  purpose: EmailProofPurpose
+): Effect.Effect<void, EmailSendFailed, EmailDeliveryPort> =>
+  Effect.flatMap(EmailDeliveryPort, (sender) =>
+    sender.send({
+      purpose,
+      to: emailAddress,
+      combinedCode,
+      idempotencyKey: "email-enrollment-generation-1",
+    })
+  );
 
-const sendWith = (layer: Layer.Layer<EmailDeliveryPort>): Effect.Effect<void, EmailSendFailed> =>
+const send = sendPurpose("verified-onboarding");
+
+const sendWith = (
+  layer: Layer.Layer<EmailDeliveryPort>,
+  operation: Effect.Effect<void, EmailSendFailed, EmailDeliveryPort> = send
+): Effect.Effect<void, EmailSendFailed> =>
   Effect.scoped(
-    Effect.flatMap(Layer.build(layer), (context) => send.pipe(Effect.provide(context)))
+    Effect.flatMap(Layer.build(layer), (context) => operation.pipe(Effect.provide(context)))
   );
 
 it.effect("does not contact Resend outside production", () =>
@@ -114,6 +134,16 @@ it.effect("does not contact Resend outside production", () =>
       });
     }
     expect(requests).toEqual([]);
+  })
+);
+
+it.effect("selects the replacement and browser-pairing provider projections", () =>
+  Effect.gen(function* () {
+    for (const purpose of ["credential-replacement", "browser-pairing-approval"] as const) {
+      const requests: Array<HttpClientRequest.HttpClientRequest> = [];
+      yield* sendWith(senderLayer(200, requests), sendPurpose(purpose));
+      expect(requests).toHaveLength(1);
+    }
   })
 );
 

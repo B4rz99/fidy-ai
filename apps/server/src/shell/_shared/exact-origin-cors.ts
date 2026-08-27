@@ -97,9 +97,13 @@ type ExactOriginCors = <E, R>(
 export const makeExactOriginCors = ({
   allowedOrigin,
   methods,
+  forbiddenResponse,
 }: {
   readonly allowedOrigin: string;
   readonly methods: ReadonlyArray<string>;
+  readonly forbiddenResponse: Option.Option<
+    (request: HttpServerRequest.HttpServerRequest) => HttpServerResponse.HttpServerResponse
+  >;
 }): ExactOriginCors => {
   const allowedMethods = new Set(methods);
   return (httpEffect) =>
@@ -107,7 +111,12 @@ export const makeExactOriginCors = ({
       const request = yield* HttpServerRequest.HttpServerRequest;
       const origin = request.headers.origin;
       if (origin === undefined) return yield* httpEffect;
-      if (origin !== allowedOrigin) return forbidden;
+      if (origin !== allowedOrigin) {
+        return Option.match(forbiddenResponse, {
+          onNone: () => forbidden,
+          onSome: (responseFor) => responseFor(request),
+        });
+      }
       if (request.method !== "OPTIONS") {
         return yield* Effect.map(httpEffect, (response) => acceptedResponse(response, origin));
       }

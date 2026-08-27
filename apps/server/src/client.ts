@@ -46,18 +46,23 @@ export { buildPATDisclosure, patScopeCopy } from "~/core/tokens/rules";
 export type { CanonicalInput } from "~/shell/_shared/canonical-input";
 export type { CanonicalSuccess } from "~/shell/_shared/canonical-success";
 export {
+  ApprovedBrowserPairingEmailAuthentication,
   AuthenticatedBrowserLoginPairing,
+  CompleteBrowserPairingEmailAuthenticationPayload,
   PendingBrowserLoginPairing,
+  PendingBrowserPairingEmailAuthentication,
   RedeemBrowserLoginPairingPayload,
+  StartBrowserPairingEmailAuthenticationPayload,
   WebAuthApi,
   type WebAuthApiGroups,
 } from "./web-auth-api";
 export { StartedBrowserLoginPairing } from "~/core/browser-login/model";
-export { EmailAddress } from "~/core/email-authentication/model";
+export { EmailAddress, EmailVerificationCode } from "~/core/email-authentication/model";
 export { PriceRevisionId } from "~/core/subscription/reference";
 export {
   BrowserLoginPairingInvalidApi,
   BrowserLoginPollingRateLimitedApi,
+  BrowserPairingEmailAuthenticationInvalidApi,
   EmailReplacementFreshPairingRequiredApi,
   EmailReplacementInvalidApi,
 } from "./web-auth-api";

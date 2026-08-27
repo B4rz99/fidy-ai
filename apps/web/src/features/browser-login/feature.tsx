@@ -1,8 +1,11 @@
+import { EmailAddress, EmailVerificationCode } from "@/transport/client";
+import { Option, Schema } from "effect";
 import { KeyRoundIcon, MessageCircleIcon } from "lucide-react";
-import type { JSX } from "react";
+import type { FormEvent, JSX } from "react";
 import { Alert, AlertDescription, AlertTitle } from "@/ui/components/alert";
 import { Button } from "@/ui/components/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/ui/components/card";
+import { Input } from "@/ui/components/input";
 import { Spinner } from "@/ui/components/spinner";
 import {
   type BrowserLoginPairingViewState,
@@ -11,14 +14,145 @@ import {
 } from "./pairing-controller";
 import { browserLoginPairingWhatsAppUrl } from "./whatsapp-link";
 
+type VerifiedEmailAddress = EmailAddress;
+type VerifiedEmailCombinedCode = EmailVerificationCode;
+
 type PairingStatusProps = Readonly<{
   state: BrowserLoginPairingViewState;
   onStart: () => void;
   onRestart: () => void;
   onLogout: () => void;
+  onRequestEmail: (email: VerifiedEmailAddress) => void;
+  onResendEmail: () => void;
+  onCompleteEmail: (combinedCode: VerifiedEmailCombinedCode) => void;
 }>;
 
-const AwaitingPairing = ({ publicCode }: Readonly<{ publicCode: string }>): JSX.Element => (
+type EmailApprovalProps = Readonly<{
+  emailStep: Extract<BrowserLoginPairingViewState, { _tag: "AwaitingApproval" }>["emailStep"];
+  onRequestEmail: (email: VerifiedEmailAddress) => void;
+  onResendEmail: () => void;
+  onCompleteEmail: (combinedCode: VerifiedEmailCombinedCode) => void;
+}>;
+
+const EmailRequestForm = ({
+  sending,
+  onRequestEmail,
+}: Readonly<{
+  sending: boolean;
+  onRequestEmail: (email: VerifiedEmailAddress) => void;
+}>): JSX.Element => {
+  const submit = (event: FormEvent<HTMLFormElement>): void => {
+    event.preventDefault();
+    const email = Schema.decodeUnknownOption(EmailAddress)(
+      new FormData(event.currentTarget).get("email")
+    );
+    if (email._tag === "Some") onRequestEmail(email.value);
+  };
+  return (
+    <form className="space-y-2" onSubmit={submit}>
+      <label className="text-sm font-medium" htmlFor="browser-login-email">
+        O accede con tu correo verificado
+      </label>
+      <Input
+        autoComplete="email"
+        disabled={sending}
+        id="browser-login-email"
+        name="email"
+        placeholder="tu@correo.com"
+        required
+        type="email"
+      />
+      <Button className="w-full" disabled={sending} type="submit" variant="outline">
+        {sending ? <Spinner /> : null}
+        Enviar código por correo
+      </Button>
+    </form>
+  );
+};
+
+const EmailCodeForm = ({
+  emailStep,
+  onCompleteEmail,
+  onResendEmail,
+}: Pick<EmailApprovalProps, "emailStep" | "onCompleteEmail" | "onResendEmail">): JSX.Element => {
+  const submit = (event: FormEvent<HTMLFormElement>): void => {
+    event.preventDefault();
+    const code = Option.flatMap(
+      Schema.decodeUnknownOption(Schema.String)(
+        new FormData(event.currentTarget).get("combinedCode")
+      ),
+      (value) => Schema.decodeUnknownOption(EmailVerificationCode)(value.trim().toUpperCase())
+    );
+    if (code._tag === "Some") onCompleteEmail(code.value);
+  };
+  const rejected = emailStep === "rejected";
+  const submitting = emailStep === "submitting";
+  return (
+    <form className="space-y-2" onSubmit={submit}>
+      <label className="text-sm font-medium" htmlFor="browser-login-email-code">
+        Código recibido por correo
+      </label>
+      <Input
+        aria-describedby={rejected ? "browser-login-code-error" : undefined}
+        autoCapitalize="characters"
+        autoComplete="one-time-code"
+        disabled={submitting}
+        id="browser-login-email-code"
+        name="combinedCode"
+        placeholder="ABCD-EFGH-JKLM-NPQR-STUV-WXYZ"
+        required
+      />
+      {rejected ? (
+        <p className="text-sm text-destructive" id="browser-login-code-error" role="alert">
+          El código no es válido. Revisa el correo o solicita uno nuevo.
+        </p>
+      ) : null}
+      <Button className="w-full" disabled={submitting} type="submit" variant="outline">
+        {submitting ? <Spinner /> : null}
+        Aprobar este navegador
+      </Button>
+      <Button
+        className="w-full"
+        disabled={submitting}
+        onClick={onResendEmail}
+        type="button"
+        variant="ghost"
+      >
+        Solicitar otro código al mismo correo
+      </Button>
+    </form>
+  );
+};
+
+const EmailApproval = ({
+  emailStep,
+  onCompleteEmail,
+  onRequestEmail,
+  onResendEmail,
+}: EmailApprovalProps): JSX.Element =>
+  emailStep === "ready" || emailStep === "sending" ? (
+    <EmailRequestForm onRequestEmail={onRequestEmail} sending={emailStep === "sending"} />
+  ) : (
+    <EmailCodeForm
+      emailStep={emailStep}
+      onCompleteEmail={onCompleteEmail}
+      onResendEmail={onResendEmail}
+    />
+  );
+
+const AwaitingPairing = ({
+  emailStep,
+  onCompleteEmail,
+  onRequestEmail,
+  onResendEmail,
+  publicCode,
+}: Readonly<{
+  publicCode: string;
+  emailStep: Extract<BrowserLoginPairingViewState, { _tag: "AwaitingApproval" }>["emailStep"];
+  onRequestEmail: (email: VerifiedEmailAddress) => void;
+  onResendEmail: () => void;
+  onCompleteEmail: (combinedCode: VerifiedEmailCombinedCode) => void;
+}>): JSX.Element => (
   <div className="space-y-4">
     <Alert>
       <MessageCircleIcon aria-hidden="true" />
@@ -51,6 +185,13 @@ const AwaitingPairing = ({ publicCode }: Readonly<{ publicCode: string }>): JSX.
     >
       <Spinner /> Esperando aprobación…
     </p>
+    <div aria-hidden="true" className="border-t" />
+    <EmailApproval
+      emailStep={emailStep}
+      onCompleteEmail={onCompleteEmail}
+      onRequestEmail={onRequestEmail}
+      onResendEmail={onResendEmail}
+    />
   </div>
 );
 
@@ -71,6 +212,9 @@ const PairingStatus = ({
   onLogout,
   onRestart,
   onStart,
+  onRequestEmail,
+  onResendEmail,
+  onCompleteEmail,
 }: PairingStatusProps): JSX.Element => {
   switch (state._tag) {
     case "Idle":
@@ -86,7 +230,15 @@ const PairingStatus = ({
         </Button>
       );
     case "AwaitingApproval":
-      return <AwaitingPairing publicCode={state.publicCode} />;
+      return (
+        <AwaitingPairing
+          emailStep={state.emailStep}
+          onCompleteEmail={onCompleteEmail}
+          onRequestEmail={onRequestEmail}
+          onResendEmail={onResendEmail}
+          publicCode={state.publicCode}
+        />
+      );
     case "Authenticated":
       return <AuthenticatedSession onLogout={onLogout} />;
     case "Invalid":
@@ -124,7 +276,10 @@ export const BrowserLoginPairingFeature = (): JSX.Element => {
         </CardHeader>
         <CardContent className="space-y-5">
           <PairingStatus
+            onCompleteEmail={pairing.completeEmail}
             onLogout={pairing.logout}
+            onRequestEmail={pairing.requestEmail}
+            onResendEmail={pairing.resendEmail}
             onRestart={pairing.restart}
             onStart={pairing.start}
             state={pairing.state}

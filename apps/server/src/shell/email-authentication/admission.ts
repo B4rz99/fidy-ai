@@ -20,7 +20,31 @@ const invalidEmailAdmissionHmacKey = (): Config.ConfigError =>
     })
   );
 
-const emailDeliveryBudgetKey = Effect.fn("EmailAuthentication.deliveryBudgetKey")(function* (
+const credentialLookupHmacKeyPattern = /^[0-9a-f]{64}$/u;
+const invalidCredentialLookupHmacKey = (): Config.ConfigError =>
+  new Config.ConfigError(
+    new ConfigProvider.SourceError({
+      message: "EMAIL_CREDENTIAL_LOOKUP_HMAC_KEY must be a 32-byte lowercase hexadecimal key",
+    })
+  );
+
+export const emailCredentialLookupKey = Effect.fn("EmailAuthentication.credentialLookupKey")(
+  function* (email: EmailAddress) {
+    const environment = yield* Config.string("NODE_ENV").pipe(Config.withDefault("development"));
+    let secret = Redacted.make("local-email-credential-lookup-key-not-for-production");
+    if (environment === "production") {
+      secret = yield* Config.redacted("EMAIL_CREDENTIAL_LOOKUP_HMAC_KEY");
+      if (!credentialLookupHmacKeyPattern.test(Redacted.value(secret))) {
+        return yield* Effect.fail(invalidCredentialLookupHmacKey());
+      }
+    }
+    return createHmac("sha256", Redacted.value(secret))
+      .update(`verified-email-credential:${email}`)
+      .digest("hex");
+  }
+);
+
+export const emailAuthenticationHmacKey = Effect.fn("EmailAuthentication.hmacKey")(function* (
   scope: string
 ) {
   const environment = yield* Config.string("NODE_ENV").pipe(Config.withDefault("development"));
@@ -64,12 +88,12 @@ export const admitEmailDeliveryInScope = Effect.fn("EmailAuthentication.admitDel
     attemptedAt: DateTime.Utc;
   }) {
     const sql = yield* SqlClient.SqlClient;
-    const requesterBudgetKey = yield* emailDeliveryBudgetKey(requesterScope(input.requester)).pipe(
-      Effect.orDie
-    );
-    const recipientBudgetKey = yield* emailDeliveryBudgetKey(`recipient:${input.recipient}`).pipe(
-      Effect.orDie
-    );
+    const requesterBudgetKey = yield* emailAuthenticationHmacKey(
+      requesterScope(input.requester)
+    ).pipe(Effect.orDie);
+    const recipientBudgetKey = yield* emailAuthenticationHmacKey(
+      `recipient:${input.recipient}`
+    ).pipe(Effect.orDie);
     yield* sql`
       INSERT INTO email_delivery_admission_budgets (scope_key, delivery_count, expires_at)
       VALUES (${requesterBudgetKey}, 0, ${input.attemptedAt}),

@@ -20,7 +20,8 @@ export type BrowserLoginPublicCode = typeof BrowserLoginPublicCode.Type;
 export const browserLoginPairingLifetime = "10 minutes" as const;
 
 const unbiasedBase20ByteLimit = 240;
-const maximumWrongVerifierAttempts = 5;
+/** Shared terminal threshold for wrong private-verifier attempts against one pairing. */
+export const maximumWrongVerifierAttempts = 5;
 const millisecondsPerSecond = 1_000;
 const pollingSlowdownIncrementSeconds = 5;
 
@@ -103,6 +104,61 @@ export type BrowserLoginRedemptionDecision =
   | Readonly<{ _tag: "Expired" }>
   | Readonly<{ _tag: "Invalid" }>;
 
+/** Closed outcome for a proof check that deliberately excludes polling cadence and redemption. */
+export type PendingBrowserLoginProofDecision =
+  | Readonly<{ _tag: "Accept" }>
+  | Readonly<{ _tag: "Invalid" }>
+  | Readonly<{ _tag: "Expired" }>
+  | Readonly<{
+      _tag: "WrongVerifier";
+      wrongVerifierAttempts: number;
+      lifecycle: "pending_approval" | "invalidated";
+    }>;
+
+type PendingBrowserLoginProofInput = Readonly<{
+  lifecycle: BrowserLoginPairingLifecycle;
+  verifierMatches: boolean;
+  wrongVerifierAttempts: number;
+  expiresAt: DateTime.Utc;
+  attemptedAt: DateTime.Utc;
+}>;
+
+const wrongPendingBrowserLoginProof = (
+  wrongVerifierAttempts: number
+): PendingBrowserLoginProofDecision => {
+  const nextAttempts = nextWrongVerifierAttempts(wrongVerifierAttempts);
+  return {
+    _tag: "WrongVerifier",
+    wrongVerifierAttempts: nextAttempts,
+    lifecycle: nextAttempts === maximumWrongVerifierAttempts ? "invalidated" : "pending_approval",
+  };
+};
+
+const decideUnexpiredPendingBrowserLoginProof = (
+  input: PendingBrowserLoginProofInput
+): PendingBrowserLoginProofDecision =>
+  input.verifierMatches
+    ? { _tag: "Accept" }
+    : wrongPendingBrowserLoginProof(input.wrongVerifierAttempts);
+
+const decideLivePendingBrowserLoginProof = (
+  input: PendingBrowserLoginProofInput
+): PendingBrowserLoginProofDecision =>
+  DateTime.isGreaterThanOrEqualTo(input.attemptedAt, input.expiresAt)
+    ? { _tag: "Expired" }
+    : decideUnexpiredPendingBrowserLoginProof(input);
+
+/** Decides a non-polling proof check against one locked pending pairing. */
+export const decidePendingBrowserLoginProof = (
+  input: PendingBrowserLoginProofInput
+): PendingBrowserLoginProofDecision =>
+  input.lifecycle === "pending_approval"
+    ? decideLivePendingBrowserLoginProof(input)
+    : { _tag: "Invalid" };
+
+const nextWrongVerifierAttempts = (wrongVerifierAttempts: number): number =>
+  Math.min(maximumWrongVerifierAttempts, wrongVerifierAttempts + 1);
+
 const determineLifecycleAfterWrongVerifier = (
   activeLifecycle: "pending_approval" | "ready",
   wrongVerifierAttempts: number
@@ -123,10 +179,7 @@ export const decideBrowserLoginRedemption = (
     return { _tag: "Expired" };
   }
   if (!input.verifierMatches) {
-    const wrongVerifierAttempts = Math.min(
-      maximumWrongVerifierAttempts,
-      input.wrongVerifierAttempts + 1
-    );
+    const wrongVerifierAttempts = nextWrongVerifierAttempts(input.wrongVerifierAttempts);
     return {
       _tag: "WrongVerifier",
       wrongVerifierAttempts,

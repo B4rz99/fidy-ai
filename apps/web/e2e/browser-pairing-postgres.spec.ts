@@ -1,5 +1,6 @@
 import {
   ClaimedPATPairing,
+  EmailVerificationCode,
   StartedBrowserLoginPairing,
   StartedPATPairing,
 } from "@fidy/server/client";
@@ -9,13 +10,16 @@ import { Option, Redacted, Schema, Struct } from "effect";
 
 const apiOrigin = "https://127.0.0.1:4174";
 const controlOrigin = "https://127.0.0.1:4175";
+const acceptanceEmail = "browser-pairing-acceptance@fidyapp.com";
 const opaqueProofEncodedLength = 43;
 const millisecondsPerSecond = 1_000;
 const successStatus = 200;
 const createdStatus = 201;
+const pendingStatus = 202;
 const noContentStatus = 204;
 const invalidStatus = 400;
 const unauthorizedStatus = 401;
+const forbiddenStatus = 403;
 const notFoundStatus = 404;
 const anonymousSourceHeaders = { "x-forwarded-for": "198.51.100.249" };
 const invalidPairingBody = {
@@ -75,6 +79,19 @@ const subscriptionOffersBody = {
 const PairingStartBody = StartedBrowserLoginPairing.mapFields(Struct.pick(["privateVerifier"]));
 const OpenApi = Schema.Struct({ openapi: Schema.String });
 
+const DeliveredEmailCode = Schema.Struct({ combinedCode: EmailVerificationCode });
+const IdentityObservation = Schema.Struct({
+  userCount: Schema.Int,
+  verifiedEmailCount: Schema.Int,
+  verifiedEmailAddress: Schema.NullOr(Schema.String),
+  verifiedEmailRevision: Schema.NullOr(Schema.String),
+  whatsAppIdentityCount: Schema.Int,
+  transactionCount: Schema.Int,
+  userRecordSha256: Schema.String,
+  verifiedEmailRecordSha256: Schema.String,
+  whatsAppIdentityRecordsSha256: Schema.String,
+  transactionRecordsSha256: Schema.String,
+});
 const SessionObservation = Schema.Struct({
   sessionCount: Schema.Int,
   revoked: Schema.Boolean,
@@ -90,10 +107,15 @@ const browserStorageValues = (): string =>
     )
     .join("\n");
 
+type IdentityObservation = typeof IdentityObservation.Type;
 type SessionObservation = typeof SessionObservation.Type;
 
 const resetAcceptanceState = async (request: APIRequestContext): Promise<void> => {
   expect((await request.post(`${controlOrigin}/reset`)).status()).toBe(noContentStatus);
+};
+
+const revokeAcceptanceConsent = async (request: APIRequestContext): Promise<void> => {
+  expect((await request.post(`${controlOrigin}/revoke-consent`)).status()).toBe(noContentStatus);
 };
 
 const approvePairing = async (request: APIRequestContext, publicCode: string): Promise<void> => {
@@ -143,12 +165,46 @@ const completePairing = async (page: Page, request: APIRequestContext): Promise<
 
 const SeededTransaction = Schema.Struct({ categoryLabel: Schema.String });
 
+const completePairingByEmail = async (page: Page, request: APIRequestContext): Promise<void> => {
+  await page.goto("/auth/pair");
+  await page.getByRole("button", { name: "Iniciar sesión en el navegador" }).click();
+  await page.getByLabel("O accede con tu correo verificado").fill(acceptanceEmail);
+  const startResponse = page.waitForResponse(
+    (response) => response.url() === `${apiOrigin}/web/email/authentication/start`
+  );
+  await page.getByRole("button", { name: "Enviar código por correo" }).click();
+  expect((await startResponse).status()).toBe(pendingStatus);
+  await expect(page.getByLabel("Código recibido por correo")).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Solicitar otro código al mismo correo" })
+  ).toBeVisible();
+
+  const delivery = await request.post(`${controlOrigin}/process-email-delivery`);
+  expect(delivery.status()).toBe(successStatus);
+  const { combinedCode } = Schema.decodeUnknownSync(DeliveredEmailCode)(await delivery.json());
+  const completionResponse = page.waitForResponse(
+    (response) => response.url() === `${apiOrigin}/web/email/authentication/complete`
+  );
+  await page.getByLabel("Código recibido por correo").fill(combinedCode);
+  await page.getByRole("button", { name: "Aprobar este navegador" }).click();
+  const completed = await completionResponse;
+  expect(completed.status()).toBe(successStatus);
+  expect(completed.headers()["set-cookie"]).toBeUndefined();
+  await expect(page).toHaveURL(/\/app\/transactions$/u, { timeout: 15_000 });
+};
+
 const seedCurrentMonthTransaction = async (
   request: APIRequestContext
 ): Promise<typeof SeededTransaction.Type> => {
   const response = await request.post(`${controlOrigin}/seed-current-month-transaction`);
   expect(response.status()).toBe(createdStatus);
   return Schema.decodeUnknownSync(SeededTransaction)(await response.json());
+};
+
+const observeIdentity = async (request: APIRequestContext): Promise<IdentityObservation> => {
+  const response = await request.get(`${controlOrigin}/identity-observation`);
+  expect(response.status()).toBe(successStatus);
+  return Schema.decodeUnknownSync(IdentityObservation)(await response.json());
 };
 
 const observeSession = async (request: APIRequestContext): Promise<SessionObservation> => {
@@ -375,6 +431,28 @@ test("creates, copies, and clears a manual PAT from a freshly paired browser", a
   await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe("");
   await page.reload();
   await expect(page.getByText(bearer)).toHaveCount(0);
+});
+
+test("approves by verified email and creates the WebSession only on browser redemption", async ({
+  context,
+  page,
+  request,
+}) => {
+  await resetAcceptanceState(request);
+  await revokeAcceptanceConsent(request);
+  await seedCurrentMonthTransaction(request);
+  const identityBefore = await observeIdentity(request);
+  await completePairingByEmail(page, request);
+  expect(await observeSession(request)).toEqual({ sessionCount: 1, revoked: false });
+  expect(await observeIdentity(request)).toEqual(identityBefore);
+  const cookie = (await context.cookies(apiOrigin))
+    .map(({ name, value }) => `${name}=${value}`)
+    .join("; ");
+  const canonical = await request.get(`${apiOrigin}/transactions`, {
+    headers: { cookie },
+  });
+  expect(canonical.status()).toBe(forbiddenStatus);
+  expect(await canonical.json()).toMatchObject({ error: { code: "user_action_required" } });
 });
 
 test("establishes, retains, replays, and revokes a real PostgreSQL WebSession", async ({

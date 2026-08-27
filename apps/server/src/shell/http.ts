@@ -29,6 +29,9 @@ import { IngestionLive } from "~/shell/ingestion/handlers";
 import { StatementIngestionWorkerLive } from "~/shell/ingestion/worker";
 import { MemoryLive } from "~/shell/memory/handlers";
 import { EmailDeliveryPort } from "~/shell/email-authentication/delivery";
+import { BrowserPairingEmailDeliveryWorkerLive } from "~/shell/email-authentication/authentication-delivery-worker";
+import { BrowserPairingEmailAuthenticationWebAuthHandlersLive } from "~/shell/email-authentication/authentication-handlers";
+import { BrowserPairingEmailRetentionLive } from "~/shell/email-authentication/authentication-retention";
 import {
   EmailOnboardingWebAuthHandlersLive,
   EmailReplacementWebAuthHandlersLive,
@@ -45,7 +48,7 @@ import { PATPairingHandlersLive } from "~/shell/tokens/pairing-handlers";
 import { PATPairingExpiryWorkerLive } from "~/shell/tokens/pairing-expiry";
 import { PATPairingApi } from "~/pat-pairing-api";
 import { TransactionsLive } from "~/shell/transactions/handlers";
-import { WebAuthApi } from "~/web-auth-api";
+import { WebAuthApi, browserPairingEmailAuthenticationInvalidBody } from "~/web-auth-api";
 import { FidyApi, operationCatalog } from "./api";
 
 /** Prevents authenticated canonical responses from remaining in caller caches. */
@@ -66,6 +69,7 @@ const WebAuthLive = HttpApiBuilder.layer(WebAuthApi).pipe(
   Layer.provide(
     Layer.mergeAll(
       BrowserLoginWebAuthHandlersLive,
+      BrowserPairingEmailAuthenticationWebAuthHandlersLive,
       EmailOnboardingWebAuthHandlersLive,
       EmailReplacementWebAuthHandlersLive
     )
@@ -172,10 +176,31 @@ const addRetryAfterHeader: RetryAfterHeader = (httpEffect) =>
   });
 const RetryAfterHeaderLive = HttpRouter.middleware(addRetryAfterHeader, { global: true });
 
+const browserPairingEmailPaths = new Set([
+  "/web/email/authentication/start",
+  "/web/email/authentication/complete",
+]);
+const emailAuthenticationForbidden = (
+  request: HttpServerRequest.HttpServerRequest
+): HttpServerResponse.HttpServerResponse =>
+  browserPairingEmailPaths.has(new URL(request.url, "http://localhost").pathname)
+    ? HttpServerResponse.jsonUnsafe(browserPairingEmailAuthenticationInvalidBody, {
+        status: 403,
+        headers: { "cache-control": "no-store", vary: "Origin" },
+      })
+    : HttpServerResponse.empty({
+        status: 403,
+        headers: { "cache-control": "no-store", vary: "Origin" },
+      });
+
 export const ExactOriginCorsLive = Layer.unwrap(
   Effect.map(externalEndpoints, ({ webOrigin }) =>
     HttpRouter.middleware(
-      makeExactOriginCors({ allowedOrigin: webOrigin, methods: canonicalCorsMethods }),
+      makeExactOriginCors({
+        allowedOrigin: webOrigin,
+        methods: canonicalCorsMethods,
+        forbiddenResponse: Option.some(emailAuthenticationForbidden),
+      }),
       {
         global: true,
       }
@@ -225,6 +250,9 @@ const HostedOnboardingDeliveryWorkerLive = OnboardingDeliveryWorkerLive.pipe(
 const HostedEmailReplacementDeliveryWorkerLive = EmailReplacementDeliveryWorkerLive.pipe(
   Layer.provide(EmailDeliveryPort.layer)
 );
+const HostedBrowserPairingEmailDeliveryWorkerLive = BrowserPairingEmailDeliveryWorkerLive.pipe(
+  Layer.provide(EmailDeliveryPort.layer)
+);
 
 export const AppLive = Layer.mergeAll(
   HttpLive.pipe(Layer.provide(KapsoClient.layer)),
@@ -232,6 +260,8 @@ export const AppLive = Layer.mergeAll(
   HostedStatementIngestionWorkerLive,
   HostedOnboardingDeliveryWorkerLive,
   HostedEmailReplacementDeliveryWorkerLive,
+  HostedBrowserPairingEmailDeliveryWorkerLive,
+  BrowserPairingEmailRetentionLive,
   EmailReplacementRetentionLive,
   EvidenceRetentionLive,
   OnboardingRetentionLive,

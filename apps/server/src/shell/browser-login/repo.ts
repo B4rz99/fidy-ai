@@ -185,6 +185,28 @@ const findApprovalCandidate = Effect.fn("BrowserLogin.findApprovalCandidate")(fu
   })({ publicCode, attemptedAt }).pipe(Effect.orDie);
 });
 
+const findApprovalCandidateById = Effect.fn("BrowserLogin.findApprovalCandidateById")(function* (
+  sql: SqlClient.SqlClient,
+  pairingId: BrowserLoginPairingId,
+  attemptedAt: DateTime.Utc
+): Effect.fn.Return<Option.Option<typeof ApprovalCandidate.Type>, never> {
+  return yield* SqlSchema.findOneOption({
+    Request: Schema.Struct({
+      pairingId: BrowserLoginPairingId,
+      attemptedAt: Schema.DateTimeUtcFromDate,
+    }),
+    Result: ApprovalCandidate,
+    execute: (request) => sql`
+        SELECT id, created_at AS "createdAt", created_ordinal AS "createdOrdinal",
+          expires_at AS "expiresAt"
+        FROM browser_login_pairings
+        WHERE id = ${request.pairingId} AND lifecycle = 'pending_approval'
+          AND expires_at > ${request.attemptedAt}::timestamptz
+        FOR UPDATE
+      `,
+  })({ pairingId, attemptedAt }).pipe(Effect.orDie);
+});
+
 const bindApprovalCandidate = Effect.fn("BrowserLogin.bindApprovalCandidate")(function* (
   sql: SqlClient.SqlClient,
   input: Readonly<{ userId: UserId; candidate: typeof ApprovalCandidate.Type }>,
@@ -331,6 +353,23 @@ export const expireBrowserLoginPairing = Effect.fn("BrowserLogin.expirePairing")
     `,
   })(undefined).pipe(Effect.orDie);
   return changed;
+});
+
+/** Binds one already-proved pairing by owner identity inside the caller's ordered transaction. */
+export const approveBrowserLoginPairingIdInScope = Effect.fn(
+  "BrowserLogin.approvePairingIdInScope"
+)(function* (
+  input: Readonly<{ userId: UserId; pairingId: BrowserLoginPairingId; attemptedAt: DateTime.Utc }>
+) {
+  const sql = yield* SqlClient.SqlClient;
+  const candidate = yield* findApprovalCandidateById(sql, input.pairingId, input.attemptedAt);
+  if (Option.isNone(candidate)) return false;
+  yield* bindApprovalCandidate(
+    sql,
+    { userId: input.userId, candidate: candidate.value },
+    input.attemptedAt
+  );
+  return true;
 });
 
 export const approveBrowserLoginPairingInScope = Effect.fn("BrowserLogin.approvePairingInScope")(

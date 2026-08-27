@@ -18,7 +18,7 @@ export const DashboardDropTargetData = Schema.Union([
   Schema.Struct({
     kind: Schema.Literal("widget-edge"),
     widgetId: WidgetId,
-    edge: Schema.Literals(["top", "right", "bottom", "left"]),
+    edge: Schema.Literals(["top", "right", "bottom", "left", "center"]),
   }),
 ]);
 export type DashboardDropTarget = typeof DashboardDropTargetData.Type;

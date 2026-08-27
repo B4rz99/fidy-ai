@@ -498,37 +498,50 @@ const applyMove = (
   );
 };
 
-type ExistingWidgetEdit = Exclude<DashboardEdit, { readonly op: "set-title" | "add-widget" }>;
+const widgetById = (layout: Readonly<LayoutNode>, widgetId: WidgetId): Option.Option<Widget> =>
+  Option.fromUndefinedOr(collectLayoutWidgets(layout).find(({ id }) => id === widgetId));
 
-type PositionedWidgetEdit = Exclude<ExistingWidgetEdit, { readonly op: "remove-widget" }>;
+const replaceSwappedWidgets = (
+  layout: Readonly<LayoutNode>,
+  first: Readonly<Widget>,
+  second: Readonly<Widget>
+): LayoutNode => {
+  if (layout.kind === "leaf") {
+    if (layout.widget.id === first.id) return { ...layout, widget: second };
+    if (layout.widget.id === second.id) return { ...layout, widget: first };
+    return layout;
+  }
+  return {
+    ...layout,
+    children: mapAtLeastTwo(layout.children, (child) => ({
+      ...child,
+      node: replaceSwappedWidgets(child.node, first, second),
+    })),
+  };
+};
 
-type AppearanceEdit = Exclude<PositionedWidgetEdit, { readonly op: "move-widget" }>;
-
-const applyAppearanceEdit = (
+const applySwap = (
   document: Readonly<DashboardDocument>,
-  edit: Readonly<AppearanceEdit>
-): Effect.Effect<DashboardDocument, DashboardFailure> =>
-  edit.op === "resize-region" ? applyResize(document, edit) : applyUpdate(document, edit.widget);
-
-const applyPositionedWidgetEdit = (
-  document: Readonly<DashboardDocument>,
-  edit: Readonly<PositionedWidgetEdit>
-): Effect.Effect<DashboardDocument, DashboardFailure> =>
-  edit.op === "move-widget" ? applyMove(document, edit) : applyAppearanceEdit(document, edit);
-
-const applyExistingWidgetEdit = (
-  document: Readonly<DashboardDocument>,
-  edit: Readonly<ExistingWidgetEdit>
-): Effect.Effect<DashboardDocument, DashboardFailure> =>
-  edit.op === "remove-widget"
-    ? applyRemove({ document, widgetId: edit.widgetId })
-    : applyPositionedWidgetEdit(document, edit);
-
-const applyNonTitleEdit = (
-  document: Readonly<DashboardDocument>,
-  edit: Readonly<Exclude<DashboardEdit, { readonly op: "set-title" }>>
-): Effect.Effect<DashboardDocument, DashboardFailure> =>
-  edit.op === "add-widget" ? applyAdd(document, edit) : applyExistingWidgetEdit(document, edit);
+  edit: Readonly<Extract<DashboardEdit, { readonly op: "swap-widgets" }>>
+): Effect.Effect<DashboardDocument, DashboardFailure> => {
+  if (edit.widgetId === edit.withWidgetId) {
+    return Effect.fail(new SelfPlacement({ widgetId: edit.widgetId }));
+  }
+  const first = widgetById(document.layout, edit.widgetId);
+  if (Option.isNone(first)) {
+    return Effect.fail(new WidgetNotFound({ widgetId: edit.widgetId, role: "edit-target" }));
+  }
+  const second = widgetById(document.layout, edit.withWidgetId);
+  if (Option.isNone(second)) {
+    return Effect.fail(
+      new WidgetNotFound({ widgetId: edit.withWidgetId, role: "placement-target" })
+    );
+  }
+  return revalidateDocument({
+    ...document,
+    layout: replaceSwappedWidgets(document.layout, first.value, second.value),
+  });
+};
 
 /**
  * Applies one decoded UI-or-agent edit and re-proves the complete result.
@@ -541,6 +554,21 @@ export const applyDashboardEdit = (
     readonly edit: DashboardEdit;
   }>
 ): Effect.Effect<DashboardDocument, DashboardFailure> =>
-  input.edit.op === "set-title"
-    ? revalidateDocument({ ...input.document, title: input.edit.title })
-    : applyNonTitleEdit(input.document, input.edit);
+  Effect.suspend(() => {
+    switch (input.edit.op) {
+      case "set-title":
+        return revalidateDocument({ ...input.document, title: input.edit.title });
+      case "add-widget":
+        return applyAdd(input.document, input.edit);
+      case "remove-widget":
+        return applyRemove({ document: input.document, widgetId: input.edit.widgetId });
+      case "move-widget":
+        return applyMove(input.document, input.edit);
+      case "swap-widgets":
+        return applySwap(input.document, input.edit);
+      case "resize-region":
+        return applyResize(input.document, input.edit);
+      case "update-widget":
+        return applyUpdate(input.document, input.edit.widget);
+    }
+  });

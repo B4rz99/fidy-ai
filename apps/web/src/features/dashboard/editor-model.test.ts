@@ -34,6 +34,14 @@ const compile = (
 };
 
 describe("Dashboard gesture compilation", () => {
+  it("compiles a center drop into one canonical swap edit", () => {
+    expect(compile({ kind: "swap-widgets", widgetId: firstId, withWidgetId: secondId })).toEqual({
+      op: "swap-widgets",
+      widgetId: firstId,
+      withWidgetId: secondId,
+    });
+  });
+
   it("compiles each directional drop into one structural move edit", () => {
     expect(
       compile({

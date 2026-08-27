@@ -47,6 +47,7 @@ export type DashboardCatalogEntry =
  */
 export type DashboardGesture =
   | Readonly<{ kind: "move-widget"; widgetId: WidgetId; target: DashboardDropTarget }>
+  | Readonly<{ kind: "swap-widgets"; widgetId: WidgetId; withWidgetId: WidgetId }>
   | Readonly<{
       kind: "add-catalog-widget";
       entry: DashboardCatalogEntry;
@@ -73,6 +74,8 @@ const placementFor = (target: Readonly<DashboardDropTarget>): Placement => {
       return { besideWidget: target.widgetId, axis: "column", side: "after" };
     case "left":
       return { besideWidget: target.widgetId, axis: "row", side: "before" };
+    case "center":
+      return { besideWidget: target.widgetId, axis: "row", side: "after" };
   }
 };
 
@@ -80,6 +83,12 @@ const editFor = (gesture: Readonly<DashboardGesture>): unknown => {
   switch (gesture.kind) {
     case "move-widget":
       return { op: "move-widget", widgetId: gesture.widgetId, at: placementFor(gesture.target) };
+    case "swap-widgets":
+      return {
+        op: "swap-widgets",
+        widgetId: gesture.widgetId,
+        withWidgetId: gesture.withWidgetId,
+      };
     case "add-catalog-widget":
       return {
         op: "add-widget",

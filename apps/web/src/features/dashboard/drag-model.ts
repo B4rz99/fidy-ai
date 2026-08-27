@@ -14,6 +14,14 @@ type ResolveDropInput = Readonly<{
 const isOwnEdge = (source: DashboardDragSource, target: DashboardDropTarget): boolean =>
   source.kind === "widget" && target.kind === "widget-edge" && source.widgetId === target.widgetId;
 
+const existingWidgetGesture = (
+  source: Extract<DashboardDragSource, { readonly kind: "widget" }>,
+  target: DashboardDropTarget
+): DashboardGesture =>
+  target.kind === "widget-edge" && target.edge === "center"
+    ? { kind: "swap-widgets", widgetId: source.widgetId, withWidgetId: target.widgetId }
+    : { kind: "move-widget", widgetId: source.widgetId, target };
+
 /** Translates a completed library interaction into at most one application gesture. */
 export const resolveDashboardDrop = ({
   canceled,
@@ -29,14 +37,16 @@ export const resolveDashboardDrop = ({
   ) {
     return Option.none();
   }
+  const decodedSource = source.value;
+  const decodedTarget = target.value;
   return Option.some(
-    source.value.kind === "widget"
-      ? { kind: "move-widget", widgetId: source.value.widgetId, target: target.value }
+    decodedSource.kind === "widget"
+      ? existingWidgetGesture(decodedSource, decodedTarget)
       : {
           kind: "add-catalog-widget",
-          entry: source.value.entry,
+          entry: decodedSource.entry,
           newWidgetId: makeWidgetId(),
-          target: target.value,
+          target: decodedTarget,
         }
   );
 };

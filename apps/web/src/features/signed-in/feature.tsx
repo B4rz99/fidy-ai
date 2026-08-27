@@ -37,35 +37,44 @@ const SignedInShell = (): JSX.Element => {
   });
 
   return (
-    <div className="min-h-svh bg-muted/30">
-      <header className="border-b bg-background">
+    <div className="min-h-svh bg-muted/30 md:flex">
+      <aside className="flex border-b bg-background md:sticky md:top-0 md:h-svh md:w-56 md:flex-none md:flex-col md:border-r md:border-b-0">
+        <Link className="px-5 py-5 font-heading text-xl font-semibold" to="/app/dashboard">
+          Fidy
+        </Link>
         <nav
           aria-label="Aplicación"
-          className="mx-auto flex w-full max-w-6xl items-center justify-between px-4 py-4 sm:px-6 lg:px-8"
+          className="flex flex-1 flex-wrap items-center gap-1 px-3 pb-3 md:flex-col md:items-stretch"
         >
-          <Link className="font-heading text-xl font-semibold" to="/app/dashboard">
-            Fidy
-          </Link>
-          <div className="flex items-center gap-2">
-            <Button render={<Link to="/app/dashboard" />} variant="ghost">
-              Tablero
-            </Button>
-            <Button render={<Link to="/app/transactions" />} variant="ghost">
-              Transacciones
-            </Button>
-            <Button render={<Link to="/settings/email" />} variant="ghost">
-              Correo
-            </Button>
-            <Button render={<Link to="/settings/pats" />} variant="ghost">
-              Tokens
-            </Button>
-            <Button onClick={onLogout} type="button" variant="outline">
-              Cerrar sesión
-            </Button>
-          </div>
+          <Button className="justify-start" render={<Link to="/app/dashboard" />} variant="ghost">
+            Tablero
+          </Button>
+          <Button
+            className="justify-start"
+            render={<Link to="/app/transactions" />}
+            variant="ghost"
+          >
+            Transacciones
+          </Button>
+          <Button className="justify-start" render={<Link to="/settings/email" />} variant="ghost">
+            Correo
+          </Button>
+          <Button className="justify-start" render={<Link to="/settings/pats" />} variant="ghost">
+            Tokens
+          </Button>
+          <Button
+            className="justify-start md:mt-auto"
+            onClick={onLogout}
+            type="button"
+            variant="outline"
+          >
+            Cerrar sesión
+          </Button>
         </nav>
-      </header>
-      <Outlet />
+      </aside>
+      <div className="min-w-0 flex-1">
+        <Outlet />
+      </div>
     </div>
   );
 };

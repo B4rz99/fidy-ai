@@ -1,6 +1,7 @@
 import {
   Accessibility,
   type DragEndEvent,
+  type DragMoveEvent,
   type DragOverEvent,
   type DragStartEvent,
   type Draggable,
@@ -8,12 +9,14 @@ import {
 import { DragDropProvider, DragOverlay, useDraggable, useDroppable } from "@dnd-kit/react";
 import { Option } from "effect";
 import { GripVertical } from "lucide-react";
+import { createContext, useContext, useState } from "react";
 import type { JSX, ReactNode } from "react";
 import { dashboardDragData } from "./drag-data";
 import type { DashboardDragSource, DashboardDropTarget } from "./drag-data";
 import { freshWidgetId } from "./editor-model";
 import type { DashboardGesture } from "./editor-model";
 import { resolveDashboardDrop } from "./drag-model";
+import { widgetDropEdgeAt } from "./drop-geometry";
 
 type DashboardDragData = DashboardDragSource | DashboardDropTarget;
 
@@ -36,6 +39,8 @@ const targetLabel = (target: DashboardDropTarget): string => {
       return "debajo del Widget";
     case "left":
       return "a la izquierda del Widget";
+    case "center":
+      return "el centro del Widget para intercambiar posiciones";
   }
 };
 
@@ -76,6 +81,30 @@ const dashboardAccessibility = Accessibility.configure({
   },
 });
 
+const pointerCoordinates = (
+  event: Option.Option<Event>
+): Option.Option<Readonly<{ horizontal: number; vertical: number }>> =>
+  Option.filter(event, (candidate) => "clientX" in candidate && "clientY" in candidate).pipe(
+    Option.map((candidate) => ({
+      horizontal: Number(candidate.clientX),
+      vertical: Number(candidate.clientY),
+    }))
+  );
+
+const resolvedTarget = (
+  event: Pick<DragEndEvent | DragMoveEvent, "nativeEvent" | "operation">
+): Option.Option<DashboardDropTarget> => {
+  const target = decodeDashboardDropTarget(event.operation.target?.data);
+  if (Option.isNone(target) || target.value.kind === "dashboard-edge") return target;
+  const point = pointerCoordinates(Option.fromUndefinedOr(event.nativeEvent));
+  const element = event.operation.target?.element;
+  if (Option.isNone(point) || element === undefined) return target;
+  return Option.some({
+    ...target.value,
+    edge: widgetDropEdgeAt({ point: point.value, rectangle: element.getBoundingClientRect() }),
+  });
+};
+
 const completeDrag = (
   event: DragEndEvent,
   onGesture: (gesture: DashboardGesture) => void
@@ -84,10 +113,12 @@ const completeDrag = (
     canceled: event.canceled,
     makeWidgetId: freshWidgetId,
     source: decodeDashboardDragSource(event.operation.source?.data),
-    target: decodeDashboardDropTarget(event.operation.target?.data),
+    target: resolvedTarget(event),
   });
   if (Option.isSome(gesture)) onGesture(gesture.value);
 };
+
+const DropPreview = createContext<Option.Option<DashboardDropTarget>>(Option.none());
 
 /** Owns all dnd-kit lifecycle and emits only closed Dashboard gestures. */
 export const DashboardDragProvider = ({
@@ -96,24 +127,33 @@ export const DashboardDragProvider = ({
 }: Readonly<{
   children: ReactNode;
   onGesture: (gesture: DashboardGesture) => void;
-}>): JSX.Element => (
-  <DragDropProvider<DashboardDragData>
-    onDragEnd={(event) => completeDrag(event, onGesture)}
-    plugins={(defaults) => [...defaults, dashboardAccessibility]}
-  >
-    {children}
-    <DragOverlay>
-      {(source: Draggable<DashboardDragData>) => {
-        const data = decodeDashboardDragSource(source.data);
-        return Option.isSome(data) ? (
-          <div className="rounded-md border bg-background px-3 py-2 text-sm font-medium shadow-lg">
-            {sourceLabel(data.value)}
-          </div>
-        ) : null;
-      }}
-    </DragOverlay>
-  </DragDropProvider>
-);
+}>): JSX.Element => {
+  const [preview, setPreview] = useState<Option.Option<DashboardDropTarget>>(Option.none());
+  return (
+    <DropPreview value={preview}>
+      <DragDropProvider<DashboardDragData>
+        onDragEnd={(event) => {
+          setPreview(Option.none());
+          completeDrag(event, onGesture);
+        }}
+        onDragMove={(event) => setPreview(resolvedTarget(event))}
+        plugins={(defaults) => [...defaults, dashboardAccessibility]}
+      >
+        {children}
+        <DragOverlay>
+          {(source: Draggable<DashboardDragData>) => {
+            const data = decodeDashboardDragSource(source.data);
+            return Option.isSome(data) ? (
+              <div className="rounded-md border bg-background px-3 py-2 text-sm font-medium shadow-lg">
+                {sourceLabel(data.value)}
+              </div>
+            ) : null;
+          }}
+        </DragOverlay>
+      </DragDropProvider>
+    </DropPreview>
+  );
+};
 
 /** Visible, focusable activator for one existing or catalog Widget. */
 export const DashboardDragHandle = ({
@@ -146,11 +186,12 @@ export const DashboardDragHandle = ({
   );
 };
 
-const edgeClass: Record<DashboardDropTarget["edge"], string> = {
-  top: "inset-x-8 top-0 h-6 -translate-y-1/2",
-  right: "inset-y-8 right-0 w-6 translate-x-1/2",
-  bottom: "inset-x-8 bottom-0 h-6 translate-y-1/2",
-  left: "inset-y-8 left-0 w-6 -translate-x-1/2",
+const edgeIndicatorClass: Record<DashboardDropTarget["edge"], string> = {
+  top: "inset-x-3 top-2 h-[calc(50%-0.5rem)] border-2",
+  right: "inset-y-3 right-2 w-[calc(50%-0.5rem)] border-2",
+  bottom: "inset-x-3 bottom-2 h-[calc(50%-0.5rem)] border-2",
+  left: "inset-y-3 left-2 w-[calc(50%-0.5rem)] border-2",
+  center: "inset-3 border-2",
 };
 
 /** Geometry-only destination; semantic data remains in the adapter. */
@@ -165,28 +206,52 @@ export const DashboardDropZone = ({
   label: string;
   target: DashboardDropTarget;
 }>): JSX.Element => {
+  const preview = useContext(DropPreview);
   const { isDropTarget: active, ref } = useDroppable<DashboardDragData>({
     disabled,
     id:
       target.kind === "dashboard-edge"
         ? `dashboard-edge:${target.edge}`
-        : `widget-edge:${target.widgetId}:${target.edge}`,
+        : `widget:${target.widgetId}`,
     type: "dashboard-placement",
     accept: "dashboard-item",
     collisionPriority: depth,
     data: target,
   });
-  const geometryClass =
-    target.kind === "dashboard-edge"
-      ? "relative z-20 h-8 w-full"
-      : `absolute z-20 ${edgeClass[target.edge]}`;
+  if (target.kind === "dashboard-edge") {
+    const position = target.edge === "top" ? "inset-x-0 top-0" : "inset-x-0 bottom-0";
+    const indicator =
+      target.edge === "top" ? "inset-x-4 top-1 border-t-2" : "inset-x-4 bottom-1 border-b-2";
+    return (
+      <section
+        aria-label={label}
+        className={`pointer-events-none absolute z-20 h-16 ${position}`}
+        ref={ref}
+      >
+        <span
+          aria-hidden="true"
+          className={`absolute border-dashed transition-colors ${indicator} ${
+            active ? "border-primary" : "border-transparent"
+          }`}
+        />
+      </section>
+    );
+  }
+  const previewEdge = Option.filter(
+    preview,
+    (candidate) => candidate.kind === "widget-edge" && candidate.widgetId === target.widgetId
+  ).pipe(
+    Option.map((candidate) => candidate.edge),
+    Option.getOrElse(() => target.edge)
+  );
   return (
-    <section
-      aria-label={label}
-      className={`pointer-events-auto rounded-md border-2 border-dashed transition-colors ${geometryClass} ${
-        active ? "border-primary bg-primary/20" : "border-muted-foreground/25 bg-background/70"
-      }`}
-      ref={ref}
-    />
+    <section aria-label={label} className="pointer-events-none absolute inset-0 z-20" ref={ref}>
+      <span
+        aria-hidden="true"
+        className={`absolute rounded-xl bg-primary/10 transition-all ${edgeIndicatorClass[previewEdge]} ${
+          active ? "border-primary opacity-100" : "border-transparent opacity-0"
+        }`}
+      />
+    </section>
   );
 };

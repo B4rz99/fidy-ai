@@ -401,10 +401,16 @@ const renderInteractiveDashboard = (
   );
 
 describe("Dashboard title editing", () => {
-  it("offers a visible Dashboard retitle control that emits one closed gesture", async () => {
+  it("keeps editing chrome hidden until edit mode emits one closed gesture", async () => {
     const onGesture = vi.fn<(gesture: DashboardGesture) => void>();
     renderInteractiveDashboard(onGesture);
 
+    expect(screen.queryByLabelText("Nuevo título del tablero")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Arrastrar Transacciones" })
+    ).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Editar tablero" }));
+    fireEvent.click(screen.getByText("Configuración y catálogo"));
     fireEvent.change(screen.getByLabelText("Nuevo título del tablero"), {
       target: { value: "Flujo de caja" },
     });
@@ -423,6 +429,8 @@ describe("Dashboard Widget editing", () => {
     const onGesture = vi.fn<(gesture: DashboardGesture) => void>();
     renderInteractiveDashboard(onGesture, editorCatalog);
 
+    fireEvent.click(screen.getByRole("button", { name: "Editar tablero" }));
+    fireEvent.click(screen.getByLabelText("Configurar Transacciones"));
     fireEvent.change(screen.getByLabelText("Título de Transacciones"), {
       target: { value: "Gastos diarios" },
     });
@@ -446,6 +454,9 @@ describe("Dashboard Widget editing", () => {
     fireEvent.click(screen.getByRole("button", { name: "Eliminar Transacciones" }));
     expect(onGesture).toHaveBeenLastCalledWith({ kind: "remove-widget", widgetId: ids.chart });
 
+    const regionControl = screen.getAllByLabelText("Ajustar proporción de región Transacciones")[0];
+    if (regionControl === undefined) throw new Error("Expected a recursive region control");
+    fireEvent.click(regionControl);
     const ratio = screen.getAllByLabelText("Proporción de región Transacciones")[0];
     if (ratio === undefined) throw new Error("Expected a recursive region ratio control");
     fireEvent.change(ratio, { target: { value: "4" } });
@@ -456,6 +467,7 @@ describe("Dashboard Widget editing", () => {
       expect.objectContaining({ kind: "resize-region", ratio: "three-quarters" })
     );
 
+    fireEvent.click(screen.getByText("Configuración y catálogo"));
     fireEvent.click(screen.getByRole("button", { name: "Añadir Widget" }));
     expect(onGesture).toHaveBeenLastCalledWith(
       expect.objectContaining({ kind: "add-catalog-widget", entry: editorCatalog[0] })

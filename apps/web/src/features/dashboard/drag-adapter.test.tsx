@@ -61,6 +61,17 @@ describe("Dashboard drag adapter", () => {
     );
   });
 
+  it("translates a center drop into one closed swap gesture", () => {
+    expect(
+      resolveDashboardDrop({
+        canceled: false,
+        makeWidgetId: () => newId,
+        source: Option.some({ kind: "widget", widgetId: sourceId, label: "Gastos" }),
+        target: Option.some({ kind: "widget-edge", widgetId: targetId, edge: "center" }),
+      })
+    ).toEqual(Option.some({ kind: "swap-widgets", widgetId: sourceId, withWidgetId: targetId }));
+  });
+
   it("ignores cancellation, a missing target, and a Widget's own edge", () => {
     const source: Option.Option<DashboardDragSource> = Option.some({
       kind: "widget",

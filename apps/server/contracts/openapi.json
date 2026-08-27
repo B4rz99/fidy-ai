@@ -6401,6 +6401,9 @@
                         "$ref": "#/components/schemas/MoveWidgetPartial"
                       },
                       {
+                        "$ref": "#/components/schemas/SwapWidgetsPartial"
+                      },
+                      {
                         "$ref": "#/components/schemas/ResizeRegionPartial"
                       },
                       {
@@ -7357,6 +7360,47 @@
             "type": "object"
           }
         ]
+      },
+      "SwapWidgets": {
+        "additionalProperties": false,
+        "properties": {
+          "op": {
+            "enum": [
+              "swap-widgets"
+            ],
+            "type": "string"
+          },
+          "widgetId": {
+            "$ref": "#/components/schemas/WidgetId"
+          },
+          "withWidgetId": {
+            "$ref": "#/components/schemas/WidgetId"
+          }
+        },
+        "required": [
+          "op",
+          "widgetId",
+          "withWidgetId"
+        ],
+        "type": "object"
+      },
+      "SwapWidgetsPartial": {
+        "additionalProperties": false,
+        "properties": {
+          "op": {
+            "enum": [
+              "swap-widgets"
+            ],
+            "type": "string"
+          },
+          "widgetId": {
+            "$ref": "#/components/schemas/WidgetId"
+          },
+          "withWidgetId": {
+            "$ref": "#/components/schemas/WidgetId"
+          }
+        },
+        "type": "object"
       },
       "TaxTreatment": {
         "enum": [
@@ -10045,6 +10089,9 @@
                     "$ref": "#/components/schemas/MoveWidget"
                   },
                   {
+                    "$ref": "#/components/schemas/SwapWidgets"
+                  },
+                  {
                     "$ref": "#/components/schemas/ResizeRegion"
                   },
                   {
@@ -12256,6 +12303,9 @@
                                       "$ref": "#/components/schemas/MoveWidget"
                                     },
                                     {
+                                      "$ref": "#/components/schemas/SwapWidgets"
+                                    },
+                                    {
                                       "$ref": "#/components/schemas/ResizeRegion"
                                     },
                                     {
@@ -13175,6 +13225,9 @@
                                       },
                                       {
                                         "$ref": "#/components/schemas/MoveWidget"
+                                      },
+                                      {
+                                        "$ref": "#/components/schemas/SwapWidgets"
                                       },
                                       {
                                         "$ref": "#/components/schemas/ResizeRegion"

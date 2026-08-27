@@ -116,9 +116,10 @@ type, then score; the first candidate becomes the operation target
 
 Consequences for a recursive Dashboard:
 
-- Render four non-overlapping edge targets inside each Widget region instead of one ambiguous
-  container target.
-- Keep corner overlap small; equal-priority pointer targets select by distance to center.
+- Render four non-overlapping edge targets that partition each Widget body instead of one ambiguous
+  container target or narrow edge strips. The full body should resolve to one semantic edge.
+- Keep the target elements transparent and non-intercepting so normal Widget controls remain usable;
+  show the selected edge as feedback through `isDropTarget`.
 - When a descendant edge overlaps an ancestor edge, assign a greater numeric
   `collisionPriority` to the deeper target. Upstream explicitly supports numeric priority for
   overlapping targets (`apps/docs/docs/react/guides/collision-detection.mdx:100-118`).
@@ -146,7 +147,8 @@ leave the last successful Dashboard view rendered.
 - Stable semantic source and target IDs, with a closed discriminated `data` union.
 - Widget and catalog sources use explicit button handles with visible focus and
   `touch-action: none` only on the handles.
-- Four Widget edge targets plus lower-priority dashboard top/bottom targets.
+- Four non-overlapping Widget edge targets covering the full Widget body, plus lower-priority
+  dashboard top/bottom targets.
 - Descendant priority beats ancestor priority in overlapping recursive regions.
 - Default PointerSensor and KeyboardSensor retained.
 - Localized Accessibility plugin configuration and a direct `@dnd-kit/dom` dependency if imported.

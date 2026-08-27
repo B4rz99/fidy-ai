@@ -43,6 +43,8 @@ const canonicalEditEffect = Effect.fn("dashboard.applyCanonicalEdit")(function* 
       return yield* client.dashboard.applyDashboardEdit({ payload: edit });
     case "move-widget":
       return yield* client.dashboard.applyDashboardEdit({ payload: edit });
+    case "swap-widgets":
+      return yield* client.dashboard.applyDashboardEdit({ payload: edit });
     case "resize-region":
       return yield* client.dashboard.applyDashboardEdit({ payload: edit });
     case "update-widget":

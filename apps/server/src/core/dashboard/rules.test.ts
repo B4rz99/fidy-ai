@@ -604,6 +604,27 @@ it("moves a widget by removing and structurally placing the same identity", () =
   }
 });
 
+it("swaps two Widgets without changing the recursive layout topology", () => {
+  const firstId = "f1d1a000-0000-4000-8000-000000000461";
+  const secondId = "f1d1a000-0000-4000-8000-000000000463";
+  const source = makeNestedDocument();
+  const edit = Schema.decodeUnknownSync(DashboardEdit)({
+    op: "swap-widgets",
+    widgetId: firstId,
+    withWidgetId: secondId,
+  });
+
+  const updated = Effect.runSync(applyDashboardEdit({ document: source, edit }));
+
+  expect(updated.layout.kind).toBe("split");
+  expect(collectLayoutWidgets(updated.layout).map(({ id }) => id)).toEqual([
+    secondId,
+    "f1d1a000-0000-4000-8000-000000000462",
+    firstId,
+  ]);
+  expect(updated.layout.kind === "split" ? updated.layout.axis : undefined).toBe("row");
+});
+
 it("rejects moving a widget beside itself without changing the input document", () => {
   const widgetId = "f1d1a000-0000-4000-8000-000000000401";
   const edit = Schema.decodeUnknownSync(DashboardEdit)({

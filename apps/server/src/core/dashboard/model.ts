@@ -425,6 +425,14 @@ export const MoveWidget = Schema.Struct({
 }).annotate({ identifier: "MoveWidget" });
 export type MoveWidget = typeof MoveWidget.Type;
 
+/** Edit exchanging the layout positions of two existing Widgets. */
+export const SwapWidgets = Schema.Struct({
+  op: Schema.tag("swap-widgets"),
+  widgetId: WidgetId,
+  withWidgetId: WidgetId,
+}).annotate({ identifier: "SwapWidgets" });
+export type SwapWidgets = typeof SwapWidgets.Type;
+
 /** Exact in-order Widget identities naming one current leaf or compound layout region. */
 export const LayoutRegionSelector = Schema.TupleWithRest(Schema.Tuple([WidgetId]), [WidgetId])
   .check(Schema.isMaxLength(maximumWidgetsPerDashboard), Schema.isUnique())
@@ -467,6 +475,7 @@ export const DashboardEdit = Schema.Union([
   AddWidget,
   RemoveWidget,
   MoveWidget,
+  SwapWidgets,
   ResizeRegion,
   UpdateWidget,
 ])

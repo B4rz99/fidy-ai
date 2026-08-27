@@ -6,6 +6,7 @@ import {
   DashboardPeriod,
   DashboardTitle,
   SpendingGroupBy,
+  SplitWeight,
   TransactionListLimit,
   type Widget,
   type WidgetId,
@@ -79,13 +80,64 @@ export const makeCatalogWidget = (
   }>
 ): Widget => ({ ...input.entry.widget, id: input.id });
 
-/** Creates the non-empty first-use document retained for one User. */
+type DefaultWidgetIds = readonly [WidgetId, WidgetId, WidgetId, WidgetId];
+
+const defaultWeight = SplitWeight.make(1);
+
+/** Creates the four-Widget, two-by-two first-use document retained for one User. */
 export const makeDefaultDashboard = (
-  input: Readonly<{ readonly widgetId: WidgetId }>
-): DashboardDocument => ({
-  title: DashboardTitle.make("Tablero"),
-  layout: {
-    kind: "leaf",
-    widget: makeCatalogWidget({ entry: monthlySpending, id: input.widgetId }),
-  },
-});
+  input: Readonly<{
+    readonly restaurantCategoryId: CategoryId;
+    readonly widgetIds: DefaultWidgetIds;
+  }>
+): DashboardDocument => {
+  const catalog = makeDashboardCatalog({ restaurantCategoryId: input.restaurantCategoryId });
+  const [firstId, secondId, thirdId, fourthId] = input.widgetIds;
+  const first = {
+    kind: "leaf" as const,
+    widget: makeCatalogWidget({ entry: catalog[0], id: firstId }),
+  };
+  const second = {
+    kind: "leaf" as const,
+    widget: makeCatalogWidget({ entry: catalog[1], id: secondId }),
+  };
+  const third = {
+    kind: "leaf" as const,
+    widget: makeCatalogWidget({ entry: catalog[2], id: thirdId }),
+  };
+  const fourth = {
+    kind: "leaf" as const,
+    widget: makeCatalogWidget({ entry: catalog[3], id: fourthId }),
+  };
+  return {
+    title: DashboardTitle.make("Tablero"),
+    layout: {
+      kind: "split",
+      axis: "column",
+      children: [
+        {
+          weight: defaultWeight,
+          node: {
+            kind: "split",
+            axis: "row",
+            children: [
+              { weight: defaultWeight, node: first },
+              { weight: defaultWeight, node: second },
+            ],
+          },
+        },
+        {
+          weight: defaultWeight,
+          node: {
+            kind: "split",
+            axis: "row",
+            children: [
+              { weight: defaultWeight, node: third },
+              { weight: defaultWeight, node: fourth },
+            ],
+          },
+        },
+      ],
+    },
+  };
+};

@@ -1,0 +1,172 @@
+apps/server/contracts/openapi.json
+  s_c9720a58ac9654::t_ac2d66a84c404d 314-321,4739-4761,16783-16880,18142-18144
+apps/server/contracts/operation-policy.json
+  s_c9720a58ac9654::t_5385ea8f23ef14 540-550
+apps/web/src/features/recovery/feature.test.tsx
+  s_c9720a58ac9654::t_6cc68cc0ad4fd2 1-37
+apps/server/src/shell/_shared/operation-policy.ts
+  s_c9720a58ac9654::t_246d776ea03ecf 13-18
+apps/server/src/shell/recovery/recovery.test.ts
+  s_c9720a58ac9654::t_dd0f220ea32802 301-334
+  s_c9720a58ac9654::t_fef67dd49eddc4 663
+  s_c9720a58ac9654::t_a578f962cf0915 79
+  s_c9720a58ac9654::t_400b104075204b 295
+  s_c9720a58ac9654::t_6e114230172408 425-427,444-447,449,553
+  s_c9720a58ac9654::t_ba2a3dd70e9af0 452,567,936-942
+  s_c9720a58ac9654::t_25329d559199dc 533,536
+  s_c9720a58ac9654::t_fed83088d05b54 267,270,272,276,289,291,335
+  s_c9720a58ac9654::t_01d224fb7fef43 502-503,505
+  s_c9720a58ac9654::t_0da7ec160b8e1d 1-2,4-14,17-18,21-26,28-30,32,34-78,80-264,450-451,565-566,639-662,664-682,693-738,749-759,761-765,775-935
+  s_c9720a58ac9654::t_21e91493f91d88 568-638
+  s_c9720a58ac9654::t_c706d3b3dfb211 453-491
+  s_c9720a58ac9654::t_12e9b60a9bef9b 739-748
+  s_c9720a58ac9654::t_bc1e911f06fb4d 356-359,414
+  s_c9720a58ac9654::t_c45e0d580a6634 683-692
+  s_c9720a58ac9654::t_8889bf9520dd6e 760
+  s_c9720a58ac9654::t_adb1c144d68990 549-552,554
+  s_c9720a58ac9654::t_5cd784d420ee89 27,265-266,268-269,271,273-275,277-288,290,292-294,296-297
+  s_c9720a58ac9654::t_a7b1ad1c9ac60d 16,19-20,378-413,415-424,428-435,437,448
+  s_c9720a58ac9654::t_ffd6e7277ed863 15,298-300,336-355,360-377
+  s_c9720a58ac9654::t_e7532f701cd51c 3,31,33,492-501,504,506-519,524-532,534-535,537-548,555-564
+  s_c9720a58ac9654::t_4609de1c98725b 436
+  s_c9720a58ac9654::t_6287d990865c54 438-443
+  s_c9720a58ac9654::t_64bbb8fcee6a8f 520-523
+  s_c9720a58ac9654::t_cba33335b15f76 766-774
+apps/server/src/shell/browser-login/repo.ts
+  s_c9720a58ac9654::t_02857c683e5d8c 188-191,195-212
+  s_c9720a58ac9654::t_2d50d211af8402 213-215,219,237-240,244,395-399,401,435
+  s_44bbf2114e0ae0::t_f0ebee0424b523 216-218
+apps/server/src/shell/testing/api-harness.ts
+  s_c9720a58ac9654::t_7fa2c8463b800f 14,18,22-23,55,57-58,191-241,271
+apps/server/src/shell/db/migrations/registry.ts
+  s_c9720a58ac9654::t_d553a3ef0e7a32 39,88
+apps/server/src/shell/_shared/canonical-mutation-registry.ts
+  s_c9720a58ac9654::t_2f02130330ec3c 31,208
+  s_c9720a58ac9654::t_00accf46b6ffef 209-214
+apps/web/src/transport/client.ts
+  s_c9720a58ac9654::t_c83e8add5872dc 14
+apps/server/src/shell/recovery/repo.ts
+  s_c9720a58ac9654::t_cc7349b36103ee 1-5,7-12,20,37,46-47,50-439,446,448-449,452,456,458-510
+  s_c9720a58ac9654::t_5f9f6cc169df35 6,440-445,447,450-451,453,455,457
+  s_c9720a58ac9654::t_1ddec76d1a26ec 454
+apps/server/package.json
+  s_c9720a58ac9654::t_06a732ac505579 15,18,49
+apps/server/src/shell/db/user-tables.ts
+  s_c9720a58ac9654::t_a7c7bfdb3d856d 29-30
+apps/server/src/shell/recovery/routes.ts
+  s_c9720a58ac9654::t_8059430b73dae1 1-151
+apps/server/src/shell/recovery/access.ts
+  s_c9720a58ac9654::t_e64e30a064c992 1-73
+apps/server/src/shell/recovery/retention.ts
+  s_c9720a58ac9654::t_c5931725fe923c 1-34
+apps/server/src/shell/db/advisory-lock.ts
+  s_c9720a58ac9654::t_54ae0e227fa1eb 1-2,110-119
+  s_c9720a58ac9654::t_62b9f2245d717b 120-121
+  s_c9720a58ac9654::t_e10ba97a4b83c8 35-38,104-109
+apps/server/src/client.ts
+  s_c9720a58ac9654::t_e6471efece6fda 71
+apps/server/src/shell/testing/operation-policy.test.ts
+  s_c9720a58ac9654::t_dcdc13c9d17bae 106,191
+apps/server/src/shell/operations/operations.ts
+  s_c9720a58ac9654::t_77970293776dd4 101
+docs/operations/support-recovery.md
+  s_c9720a58ac9654::t_5e3b5d0a87bbea 1-113
+apps/server/src/shell/recovery/access.test.ts
+  s_c9720a58ac9654::t_823415c3fbebc2 1-2,4,10-40,65-124
+  s_c9720a58ac9654::t_556b092b02fc5a 3,5-9,41-43,46-50,53-64
+  s_c9720a58ac9654::t_0f1332adc64b0e 44-45,51-52
+apps/server/src/shell/observability/registry.ts
+  s_c9720a58ac9654::t_9382d4546a1bae 57,72,115,124
+apps/server/src/shell/http.ts
+  s_c9720a58ac9654::t_0a75f5b697e290 47-52,121,233,236-239,269,279-280
+apps/server/src/shell/testing/suggested-operations.test.ts
+  s_c9720a58ac9654::t_a76de5fef595a6 75-81
+apps/server/src/shell/api.ts
+  s_c9720a58ac9654::t_0b313ce9a9315b 18,33-34
+apps/server/src/shell/recovery/handlers.ts
+  s_c9720a58ac9654::t_f085acd6881d73 1-11,15,20-24
+  s_c9720a58ac9654::t_4b8a5c99301762 12-14,16-19
+apps/server/src/shell/recovery/service.ts
+  s_c9720a58ac9654::t_e165ac671898a0 6,288-289,299,301,305-311,315
+  s_c9720a58ac9654::t_14c1a1641690b9 268
+  s_c9720a58ac9654::t_ce509cebfa3fc9 188,190,202
+  s_c9720a58ac9654::t_69fc2b9dc7ee1f 1-5,7-13,19,21-23,25-173,191-201,203-217,226-227,229-267,269-270,283-287,290,314,323
+  s_c9720a58ac9654::t_0068504c5936ee 14-18,20,295-298,300,302-304,312-313,316-322
+  s_c9720a58ac9654::t_9bb75196af403a 174-187,189
+  s_c9720a58ac9654::t_fede7a8a4a577a 271-274,280-282
+  s_c9720a58ac9654::t_b149c6bdfa0aaa 218-225,228,275-279,291-294
+  s_c9720a58ac9654::t_061d0fe54e5f6e 24
+apps/server/src/core/recovery/model.ts
+  s_c9720a58ac9654::t_cc2dfdec45609e 3,24-68,70-149
+apps/web/src/app/routes.ts
+  s_c9720a58ac9654::t_a5b1619a1459fb 17,92-96,121
+apps/server/src/shell/testing/whatsapp-acceptance-harness.ts
+  s_c9720a58ac9654::t_ee7f63fffe9648 46,522
+apps/server/src/core/recovery/model.test.ts
+  s_c9720a58ac9654::t_0a49eeb2954ede 2-3,5-14,16-20,22-35,39-78,80-84
+apps/server/src/shell/recovery/operator-cli.test.ts
+  s_c9720a58ac9654::t_23500b2b704847 175-177
+  s_c9720a58ac9654::t_bd235384ec27ec 9-10,55,64
+  s_c9720a58ac9654::t_86bff76c2e661c 92-93,100-101,113-123,125-144
+  s_c9720a58ac9654::t_da5a1bb93ba6c8 4-6,11-13,15-27,36-39,44-47,49,51-54,57-58,60-63,65-85,87-88,94,96-98,146-153,155,159,162-163,167,170,173-174
+  s_c9720a58ac9654::t_84f8b27f2468a6 40-41,154,172
+  s_c9720a58ac9654::t_4f0a788674cde2 14,50,56,86,161
+  s_c9720a58ac9654::t_96ed8f3b3ba999 89-90,168-169,171
+  s_c9720a58ac9654::t_a184daae1030cd 2,95,102-106,108-111
+  s_c9720a58ac9654::t_242a74ba01fae5 164-166
+  s_c9720a58ac9654::t_93841735deec7c 7-8,59,91,99,112
+  s_c9720a58ac9654::t_5b9a69de614b64 1,3,156-158,160
+  s_c9720a58ac9654::t_46ee6688a63d51 28-35,42-43,48,107
+  s_c9720a58ac9654::t_c38c62e8345415 124
+  s_c9720a58ac9654::t_7b337d795ddcde 145
+bun.lock
+  s_c9720a58ac9654::t_ddc9937f506067 34
+apps/server/src/shell/testing/isolation.test.ts
+  s_c9720a58ac9654::t_e6eeb24ad30dda 113-115
+apps/server/src/shell/recovery/operations.ts
+  s_c9720a58ac9654::t_e9b089f49234dd 1-30
+apps/server/scripts/support-recovery.ts
+  s_c9720a58ac9654::t_13d3d56ffa63b6 80
+  s_c9720a58ac9654::t_d8d5a6eb89ad83 12-17
+  s_c9720a58ac9654::t_301b35d2596d0b 1-11,18-29,36-79,81-199,201-225
+  s_c9720a58ac9654::t_16943b45194450 30-35,200
+apps/server/src/shell/onboarding/completion-transition.ts
+  s_c9720a58ac9654::t_843a01694d0fa1 9,12,28,59,61-62
+apps/web/src/features/signed-in/feature.tsx
+  s_c9720a58ac9654::t_de1c1b9f35ebf1 21-40,42-46,71
+  s_c9720a58ac9654::t_d3331acaf7f6dd 41
+apps/server/src/shell/_shared/operation-catalog.ts
+  s_c9720a58ac9654::t_ad18fca18dcb73 5-9,26,136
+apps/server/src/shell/db/migrations/0040-support-recovery.ts
+  s_c9720a58ac9654::t_b65072717d7208 227-241,313,320,327
+  s_c9720a58ac9654::t_ede70064c157c4 37-38
+  s_c9720a58ac9654::t_1d87658b689e1a 9-32
+  s_c9720a58ac9654::t_e5dab32496b478 1-8,33-36,39-225,242-312,314-319,321-326,328-338
+  s_c9720a58ac9654::t_30b5a8f6893df0 226
+apps/web/src/features/recovery/feature.tsx
+  s_c9720a58ac9654::t_7194c28d62473f 1-141
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "f0c86bb0a5191280d89ac3c604bff9924ce8a074",
+  "prompts": {},
+  "sessions": {
+    "s_44bbf2114e0ae0": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0401d-3b9d-78b9-9a15-58823714a574",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": null
+    },
+    "s_c9720a58ac9654": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a04581-c42c-776c-af59-2ea8a0f4f0c2",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": null
+    }
+  }
+}

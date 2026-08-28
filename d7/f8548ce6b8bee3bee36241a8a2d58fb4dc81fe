@@ -1,0 +1,43 @@
+apps/server/src/shell/subscription/card-enrollment.ts
+  s_92114c81307c01::t_da2472eba6fb93 311-312,316-318
+apps/server/src/core/subscription/enrollment-model.ts
+  s_92114c81307c01::t_908194b8c3e756 12
+  s_92114c81307c01::t_3cf134100e6584 40
+apps/server/src/shell/testing/api-harness.ts
+  s_92114c81307c01::t_206aa75a74f656 205,213
+apps/server/src/shell/subscription/wompi-client.ts
+  s_92114c81307c01::t_34f7dc1dc3cf0b 50-53,142
+  s_92114c81307c01::t_908194b8c3e756 54,131-141,143-144
+  s_92114c81307c01::t_ec2a2fea8f1053 147-152,155-162,202-213
+  s_92114c81307c01::t_8f53cf34bd79c1 200
+  s_92114c81307c01::t_09d0226383c679 145
+apps/server/src/shell/db/migrations/0040-wompi-card-enrollments.ts
+  s_92114c81307c01::t_994eaa5b41306c 35-37,41-43,79,83
+apps/server/src/shell/subscription/enrollment-repo.ts
+  s_92114c81307c01::t_d54e97ead16993 37,41,56-60,154-155,160-162,338,346
+apps/web/src/features/subscription/feature.test.tsx
+  s_92114c81307c01::t_77cba613d62806 57,65
+apps/server/src/shell/subscription/wompi-client.test.ts
+  s_92114c81307c01::t_3d08c5b9d3a27a 168
+  s_92114c81307c01::t_cad73d7b12c1f1 158-163,167,169-174
+  s_92114c81307c01::t_4305258f74f770 164-166
+  s_92114c81307c01::t_8543c22aeecd0a 175-196
+  s_92114c81307c01::t_495fef9947c5ba 52
+  s_92114c81307c01::t_f99aa66ac42728 53-56,60,64
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "d7f8548ce6b8bee3bee36241a8a2d58fb4dc81fe",
+  "prompts": {},
+  "sessions": {
+    "s_92114c81307c01": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a04600-4f46-7cbd-ab2a-33c18887d7a4",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

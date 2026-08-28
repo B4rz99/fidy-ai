@@ -1,0 +1,34 @@
+scripts/check-web-design-system.ts
+  s_a7a506b717141e::t_8bbdd1ab8c9fd0 6,33-35,39,47-50,56,59,66,68,70,72-74,92-94
+  s_a7a506b717141e::t_65a3fb1519673d 53
+  s_a7a506b717141e::t_31f12666faa660 1-5,7-32,36-38,40-46,51-52,54-55,57-58,60-65,67,69,71,75-88,90-91,95-140
+  s_a7a506b717141e::t_6297fe6e91377c 89
+scripts/verify.ts
+  s_a7a506b717141e::t_80a40e863ab167 102
+package.json
+  s_a7a506b717141e::t_791f532b270ce6 45
+.oxlintrc.json
+  s_a7a506b717141e::t_be80fe39fbb8a2 246-254
+apps/web/src/features/email-onboarding/feature.tsx
+  s_a7a506b717141e::t_6c3f3a72503425 25,27,37,84,103,133
+apps/web/src/features/browser-login/feature.tsx
+  s_a7a506b717141e::t_299751d11ba6aa 52,91,156,199,248,277
+docs/research/agent-safe-design-system-learnings.md
+  s_a7a506b717141e::t_e34014f4733b4a 1-154
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "3c7986c4c744987631914d3ec0d4d17757004998",
+  "prompts": {},
+  "sessions": {
+    "s_a7a506b717141e": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a045e6-118d-7a44-b0da-e65fc7826600",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

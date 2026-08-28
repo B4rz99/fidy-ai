@@ -1,0 +1,21 @@
+apps/web/package.json
+  s_baecd4a9cc7ba4::t_18923eacfe5cc9 53
+bun.lock
+  s_baecd4a9cc7ba4::t_da5391972a0a2e 81,1442
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "cac4e953f993730fc32d6aa881bd9ff8c640fb76",
+  "prompts": {},
+  "sessions": {
+    "s_baecd4a9cc7ba4": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a02eeb-bc2a-7008-87f1-7923c3f612cd",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

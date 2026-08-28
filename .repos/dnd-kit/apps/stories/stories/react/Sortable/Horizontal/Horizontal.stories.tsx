@@ -1,0 +1,95 @@
+import type {Meta, StoryObj} from '@storybook/react-vite';
+import {RestrictToHorizontalAxis} from '@dnd-kit/abstract/modifiers';
+import {Feedback} from '@dnd-kit/dom';
+
+import {SortableExample} from '../SortableExample';
+import horizontalSortableSource from './HorizontalSortableApp.tsx?raw';
+import {baseStyles, sortableStyles} from '@dnd-kit/stories-shared/styles/sandbox';
+
+const meta: Meta<typeof SortableExample> = {
+  title: 'React/Sortable/Horizontal list',
+  component: SortableExample,
+};
+
+export default meta;
+type Story = StoryObj<typeof SortableExample>;
+
+const defaultArgs = {
+  debug: false,
+  layout: 'horizontal',
+  getItemStyle() {
+    return {width: 180};
+  },
+} as const;
+
+export const Horizontal: Story = {
+  name: 'Basic setup',
+  args: defaultArgs,
+  parameters: {
+    codesandbox: {
+      files: {
+        'src/App.tsx': horizontalSortableSource,
+        'src/styles.css': [baseStyles, sortableStyles].join('\n\n'),
+      },
+    },
+  },
+};
+
+export const DragHandle: Story = {
+  name: 'Drag handle',
+  args: {
+    ...defaultArgs,
+    dragHandle: true,
+  },
+};
+
+export const VariableWidths: Story = {
+  name: 'Variable widths',
+  args: {
+    ...defaultArgs,
+    getItemStyle(id) {
+      const widths = {0: 140, 2: 120, 4: 140, 5: 240, 8: 100, 12: 150};
+
+      return {
+        width: widths[id] ?? 180,
+      };
+    },
+  },
+};
+
+export const Clone: Story = {
+  name: 'Clone feedback',
+  args: {
+    ...defaultArgs,
+    plugins: [Feedback.configure({feedback: 'clone'})],
+  },
+};
+
+export const HorizontalAxis: Story = {
+  name: 'Restrict axis',
+  args: {
+    ...defaultArgs,
+    modifiers: [RestrictToHorizontalAxis],
+  },
+};
+
+export const Debug: Story = {
+  name: 'Debug',
+  args: {
+    ...defaultArgs,
+    debug: true,
+  },
+};
+
+export const NestedScroll: Story = {
+  name: 'Nested scroll',
+  args: {
+    ...defaultArgs,
+    itemCount: 50,
+  },
+  render: (args) => (
+    <div style={{width: '100vw', overflowX: 'auto', marginLeft: '50vw'}}>
+      <SortableExample {...args} />
+    </div>
+  ),
+};

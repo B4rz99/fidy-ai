@@ -1,0 +1,29 @@
+{
+  "editor.formatOnSave": true,
+  "typescript.tsdk": "node_modules/typescript/lib",
+  "search.exclude": {
+    "**/dist": true,
+    "**/.cache": true,
+    "packages/**/*.js": true,
+    "packages/**/*.js.map": true,
+    "packages/**/*.cjs": true,
+    "packages/**/*.cjs.map": true,
+    "packages/**/*.d.ts": true,
+    "packages/**/*.d.cts": true
+  },
+  "files.exclude": {
+    "**/dist": true,
+    "**/node_modules": true,
+    "**/.git": true,
+    "**/.cache": true,
+    "**/.DS_Store": true,
+    "**/coverage": true,
+    "**/storybook-static": true,
+    "packages/**/*.js": true,
+    "packages/**/*.js.map": true,
+    "packages/**/*.cjs": true,
+    "packages/**/*.cjs.map": true,
+    "packages/**/*.d.ts": true,
+    "packages/**/*.d.cts": true
+  }
+}

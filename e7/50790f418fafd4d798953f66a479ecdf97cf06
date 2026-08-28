@@ -1,0 +1,42 @@
+apps/server/scripts/support-recovery.ts
+  s_baecd4a9cc7ba4::t_c05b067ea504fa 147-149,152-155,219
+apps/server/src/shell/testing/api-harness.ts
+  s_baecd4a9cc7ba4::t_9a24e1414f5cc5 58,236,271
+apps/server/src/shell/recovery/service.ts
+  s_baecd4a9cc7ba4::t_bf35f1eecd6b1a 188-194,209-211,231-233
+  s_baecd4a9cc7ba4::t_1300ff34341b31 28,106,134,195-196,201-202,214-217,226
+  s_baecd4a9cc7ba4::t_14436afe030e99 203-208,212-213
+  s_baecd4a9cc7ba4::t_01cbad9b943045 2,4,37,55,58-59,200,224-225,263-267,281,291
+apps/server/src/shell/testing/whatsapp-acceptance-harness.ts
+  s_baecd4a9cc7ba4::t_b21e3ee2ad7354 46,522
+apps/server/src/shell/db/migrations/0040-support-recovery.ts
+  s_baecd4a9cc7ba4::t_7919971e1ff1a9 222-235,327,335,343
+apps/server/src/shell/recovery/recovery.test.ts
+  s_baecd4a9cc7ba4::t_9f8eea77199b72 496
+  s_baecd4a9cc7ba4::t_665f13814a3c56 490
+apps/server/src/shell/recovery/operator-cli.test.ts
+  s_baecd4a9cc7ba4::t_0d72d7264ba30f 167,187-188,190
+  s_baecd4a9cc7ba4::t_3c96107b0b8929 191
+apps/server/src/shell/recovery/repo.ts
+  s_baecd4a9cc7ba4::t_14436afe030e99 205-211,216-218
+  s_baecd4a9cc7ba4::t_4911040d429cb1 212-215,219
+  s_baecd4a9cc7ba4::t_9079688f5e1536 199-204
+apps/server/src/shell/recovery/routes.ts
+  s_baecd4a9cc7ba4::t_9f4b1f5765995d 3-4,20-21,140
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "e750790f418fafd4d798953f66a479ecdf97cf06",
+  "prompts": {},
+  "sessions": {
+    "s_baecd4a9cc7ba4": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a02eeb-bc2a-7008-87f1-7923c3f612cd",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": null
+    }
+  }
+}

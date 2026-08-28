@@ -1,0 +1,19 @@
+apps/server/contracts/breaking-change-acknowledgement.json
+  s_28b8e1e0dbe2ca::t_bd75e3e7e40a0a 1-103
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "0ac70878657c73216f0627ba0ae00339dc21816a",
+  "prompts": {},
+  "sessions": {
+    "s_28b8e1e0dbe2ca": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0401a-a202-7f44-b015-8c6906affc63",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

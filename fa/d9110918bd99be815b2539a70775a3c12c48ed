@@ -1,0 +1,21 @@
+docs/research/natural-person-subscription-iva-and-invoicing.md
+  s_d94dbf1dba2b93::t_7f79293d13cfd2 25-30,93-100,128-132,146-150
+  s_d94dbf1dba2b93::t_44401921533937 3-5
+  s_d94dbf1dba2b93::t_5263d72194a742 1-2,6-24,31-92,101-127,133-145,151-292
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "fad9110918bd99be815b2539a70775a3c12c48ed",
+  "prompts": {},
+  "sessions": {
+    "s_d94dbf1dba2b93": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019ff925-d677-7aa3-af12-5c44ab46aa2e",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

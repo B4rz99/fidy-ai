@@ -48,4 +48,4 @@ The dnd-kit adapter should own only:
 - drag overlay and active-target feedback; and
 - translating a completed library event into a closed, web-owned drag outcome.
 
-It must not own the Dashboard document, mutate the rendered tree optimistically, call the API, format canonical errors, or expose dnd-kit event types outside the adapter. Visible menu/dialog controls must offer the same move and placement outcomes without dragging.
+It must not own the Dashboard document, mutate the rendered tree optimistically, call the API, format canonical errors, or expose dnd-kit event types outside the adapter. The same drag handles must expose every move and placement outcome through dnd-kit's keyboard sensor; catalog additions remain drag-only.

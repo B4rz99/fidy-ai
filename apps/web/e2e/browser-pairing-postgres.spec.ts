@@ -3,11 +3,12 @@ import {
   DashboardDocument,
   DashboardEdit,
   EmailVerificationCode,
+  IssuedPAT,
   StartedBrowserLoginPairing,
   StartedPATPairing,
 } from "@fidy/server/client";
 import { expect, test } from "@playwright/test";
-import type { APIRequestContext, Page, Response } from "@playwright/test";
+import type { APIRequestContext, Locator, Page, Response } from "@playwright/test";
 import { Option, Redacted, Schema, Struct } from "effect";
 
 const apiOrigin = "https://127.0.0.1:4174";
@@ -159,10 +160,24 @@ const tryDashboardDrag = async (page: Page, attemptsRemaining: number): Promise<
 const dragRecentTransactionsToDashboardStart = (page: Page): Promise<Response> =>
   tryDashboardDrag(page, dragAttempts);
 
-const moveBudgetWithKeyboard = async (page: Page): Promise<Response> => {
-  const source = page
+const budgetDragHandle = (page: Page): Locator =>
+  page
     .getByRole("region", { name: "Diseño responsivo del tablero" })
     .getByRole("button", { name: "Arrastrar Presupuesto de restaurantes", exact: true });
+
+const cancelBudgetMoveWithKeyboard = async (page: Page): Promise<void> => {
+  const source = budgetDragHandle(page);
+  await source.focus();
+  await source.press("Space");
+  await expect(source).toHaveAttribute("aria-pressed", "true");
+  await source.press("ArrowRight");
+  await source.press("Escape");
+  await expect(source).toHaveAttribute("aria-pressed", "false");
+  await expect(source).not.toHaveAttribute("data-dnd-dropping", "");
+};
+
+const moveBudgetWithKeyboard = async (page: Page): Promise<Response> => {
+  const source = budgetDragHandle(page);
   await source.focus();
   await source.press("Enter");
   await expect(source).toHaveAttribute("aria-pressed", "true");
@@ -232,9 +247,9 @@ const issueDashboardPAT = async (page: Page): Promise<string> => {
     (response) => response.url() === `${apiOrigin}/pats` && response.request().method() === "POST"
   );
   await page.getByRole("button", { name: "Confirmar y crear token" }).click();
-  const body = Schema.decodeUnknownSync(
-    Schema.Struct({ data: Schema.Struct({ bearer: Schema.String }) })
-  )(await (await issueResponse).json());
+  const body = Schema.decodeUnknownSync(Schema.Struct({ data: IssuedPAT }))(
+    await (await issueResponse).json()
+  );
   return body.data.bearer;
 };
 
@@ -658,6 +673,7 @@ test("moves a Dashboard Widget with the real keyboard sensor", async ({ page, re
   await page.goto("/app/dashboard");
   await page.getByRole("button", { name: "Personalizar" }).click();
 
+  await cancelBudgetMoveWithKeyboard(page);
   expect((await moveBudgetWithKeyboard(page)).status()).toBe(successStatus);
 });
 

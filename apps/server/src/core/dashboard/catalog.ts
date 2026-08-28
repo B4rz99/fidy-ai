@@ -5,6 +5,7 @@ import {
   type DashboardDocument,
   DashboardPeriod,
   DashboardTitle,
+  type LeafNode,
   SpendingGroupBy,
   SplitWeight,
   TransactionListLimit,
@@ -84,6 +85,11 @@ type DefaultWidgetIds = readonly [WidgetId, WidgetId, WidgetId, WidgetId];
 
 const defaultWeight = SplitWeight.make(1);
 
+const defaultLeaf = (entry: DashboardCatalogEntry, id: WidgetId): LeafNode => ({
+  kind: "leaf",
+  widget: makeCatalogWidget({ entry, id }),
+});
+
 /** Creates the four-Widget, two-by-two first-use document retained for one User. */
 export const makeDefaultDashboard = (
   input: Readonly<{
@@ -93,22 +99,10 @@ export const makeDefaultDashboard = (
 ): DashboardDocument => {
   const catalog = makeDashboardCatalog({ restaurantCategoryId: input.restaurantCategoryId });
   const [firstId, secondId, thirdId, fourthId] = input.widgetIds;
-  const first = {
-    kind: "leaf" as const,
-    widget: makeCatalogWidget({ entry: catalog[0], id: firstId }),
-  };
-  const second = {
-    kind: "leaf" as const,
-    widget: makeCatalogWidget({ entry: catalog[1], id: secondId }),
-  };
-  const third = {
-    kind: "leaf" as const,
-    widget: makeCatalogWidget({ entry: catalog[2], id: thirdId }),
-  };
-  const fourth = {
-    kind: "leaf" as const,
-    widget: makeCatalogWidget({ entry: catalog[3], id: fourthId }),
-  };
+  const first = defaultLeaf(catalog[0], firstId);
+  const second = defaultLeaf(catalog[1], secondId);
+  const third = defaultLeaf(catalog[2], thirdId);
+  const fourth = defaultLeaf(catalog[3], fourthId);
   return {
     title: DashboardTitle.make("Tablero"),
     layout: {

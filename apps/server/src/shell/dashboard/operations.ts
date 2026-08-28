@@ -159,7 +159,7 @@ export const DashboardGroup = HttpApiGroup.make("dashboard")
       .annotate(
         OpenApi.Description,
         "Get the caller's complete DashboardDocument. Reach for this before editing; first use " +
-          "creates and retains one valid spending widget, and later calls return the same document."
+          "creates and retains one valid four-Widget Dashboard, and later calls return the same document."
       )
       .annotateMerge(
         operationPolicy({

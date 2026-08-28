@@ -1,6 +1,13 @@
 import { expect, it } from "@effect/vitest";
 import { Effect, Option, Result, Schema } from "effect";
-import { DashboardDocument, DashboardEdit, type Widget, collectLayoutWidgets } from "./model";
+import { RegionNotFound, RootRegionResize } from "./errors";
+import {
+  DashboardDocument,
+  DashboardEdit,
+  LayoutRegionSelector,
+  type Widget,
+  collectLayoutWidgets,
+} from "./model";
 import { applyDashboardEdit } from "./rules";
 
 const document = Schema.decodeUnknownSync(DashboardDocument)({
@@ -796,15 +803,18 @@ it("resizes a compound region through the same canonical edit", () => {
 });
 
 it("rejects resizing the root region because it has no sibling-relative weight", () => {
+  const widgetIds = Schema.decodeUnknownSync(LayoutRegionSelector)([
+    "f1d1a000-0000-4000-8000-000000000401",
+  ]);
   const edit = Schema.decodeUnknownSync(DashboardEdit)({
     op: "resize-region",
-    widgetIds: ["f1d1a000-0000-4000-8000-000000000401"],
+    widgetIds,
     size: { kind: "weight", weight: 2 },
   });
 
   const outcome = Effect.runSync(Effect.result(applyDashboardEdit({ document, edit })));
 
-  expect(Result.isFailure(outcome) ? outcome.failure._tag : undefined).toBe("RootRegionResize");
+  expect(outcome).toEqual(Result.fail(new RootRegionResize({ widgetIds })));
 });
 
 it("wraps an existing row when adding a widget at the dashboard bottom", () => {
@@ -1088,9 +1098,13 @@ it("updates a later nested Widget and rejects an absent update target", () => {
 
 it("rejects stale region selectors without resizing a different region", () => {
   const source = makeNestedDocument();
+  const widgetIds = Schema.decodeUnknownSync(LayoutRegionSelector)([
+    "f1d1a000-0000-4000-8000-000000000461",
+    "f1d1a000-0000-4000-8000-000000000463",
+  ]);
   const stale = Schema.decodeUnknownSync(DashboardEdit)({
     op: "resize-region",
-    widgetIds: ["f1d1a000-0000-4000-8000-000000000461", "f1d1a000-0000-4000-8000-000000000463"],
+    widgetIds,
     size: { kind: "weight", weight: 4 },
   });
 
@@ -1098,7 +1112,7 @@ it("rejects stale region selectors without resizing a different region", () => {
     Effect.result(applyDashboardEdit({ document: source, edit: stale }))
   );
 
-  expect(Result.isFailure(outcome) ? outcome.failure._tag : undefined).toBe("RegionNotFound");
+  expect(outcome).toEqual(Result.fail(new RegionNotFound({ widgetIds })));
   expect(
     source.layout.kind === "split" ? source.layout.children.map(({ weight }) => weight) : []
   ).toEqual([1, 1]);

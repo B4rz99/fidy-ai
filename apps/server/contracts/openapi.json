@@ -9832,7 +9832,7 @@
     },
     "/dashboard": {
       "get": {
-        "description": "Get the caller's complete DashboardDocument. Reach for this before editing; first use creates and retains one valid spending widget, and later calls return the same document.",
+        "description": "Get the caller's complete DashboardDocument. Reach for this before editing; first use creates and retains one valid four-Widget Dashboard, and later calls return the same document.",
         "operationId": "dashboard.getDashboard",
         "parameters": [],
         "responses": {

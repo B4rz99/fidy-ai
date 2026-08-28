@@ -69,6 +69,7 @@ export const DashboardDragHandle = ({
         : `dashboard-catalog:${source.entry.id}`,
     type: "dashboard-item",
     data: source,
+    disabled,
   });
   return (
     <button

@@ -1,12 +1,12 @@
 import { expect, it } from "@effect/vitest";
 import { Result, Schema } from "effect";
-import { PriceRevision, SubscriptionOffers } from "./model";
+import { Price, SubscriptionOffers } from "./model";
 
-const priceRevision = (
+const price = (
   id: string,
   billingPeriod: "weekly" | "monthly" | "yearly",
   amount: string
-): typeof PriceRevision.Encoded => ({
+): typeof Price.Encoded => ({
   id,
   money: { amount, currency: "COP" },
   billingPeriod,
@@ -21,9 +21,9 @@ const priceRevision = (
   paymentMethods: ["card", "nequi", "daviplata"],
 });
 
-const weekly = priceRevision("22700000-0000-4000-8000-000000000001", "weekly", "9900");
-const monthly = priceRevision("22700000-0000-4000-8000-000000000002", "monthly", "28900");
-const yearly = priceRevision("22700000-0000-4000-8000-000000000003", "yearly", "289900");
+const weekly = price("22700000-0000-4000-8000-000000000001", "weekly", "9900");
+const monthly = price("22700000-0000-4000-8000-000000000002", "monthly", "28900");
+const yearly = price("22700000-0000-4000-8000-000000000003", "yearly", "289900");
 
 it("accepts the exact ordered launch Subscription offers", () => {
   const decoded = Schema.decodeUnknownResult(SubscriptionOffers)([weekly, monthly, yearly]);
@@ -31,12 +31,12 @@ it("accepts the exact ordered launch Subscription offers", () => {
   expect(Result.isSuccess(decoded)).toBe(true);
 });
 
-it("rejects a PriceRevision that is free or not denominated in COP", () => {
-  const free = Schema.decodeUnknownResult(PriceRevision)({
+it("rejects a Price that is free or not denominated in COP", () => {
+  const free = Schema.decodeUnknownResult(Price)({
     ...weekly,
     money: { amount: "0", currency: "COP" },
   });
-  const foreignCurrency = Schema.decodeUnknownResult(PriceRevision)({
+  const foreignCurrency = Schema.decodeUnknownResult(Price)({
     ...weekly,
     money: { amount: "9.9", currency: "USD" },
   });
@@ -53,7 +53,7 @@ it("rejects reordered periods and payment methods outside the launch set", () =>
     weekly,
     yearly,
   ]);
-  const unsupportedMethod = Schema.decodeUnknownResult(PriceRevision)({
+  const unsupportedMethod = Schema.decodeUnknownResult(Price)({
     ...weekly,
     paymentMethods: ["card", "pse", "daviplata"],
   });
@@ -64,7 +64,7 @@ it("rejects reordered periods and payment methods outside the launch set", () =>
   expect(Result.isFailure(unsupportedMethod)).toBe(true);
 });
 
-it("rejects duplicate PriceRevision identities and reports the identity failure path", () => {
+it("rejects duplicate Price identities and reports the identity failure path", () => {
   const duplicateIdentity = Schema.decodeUnknownResult(SubscriptionOffers)([
     weekly,
     monthly,

@@ -36,6 +36,10 @@ export const advisoryLockKey = {
     value: `backup-recovery-rotation:${userId}`,
     seed: 0,
   }),
+  subscriptionEnrollment: (userId: UserId): AdvisoryLockKey => ({
+    value: `subscription-enrollment:${userId}`,
+    seed: 0,
+  }),
   emailReplacementCandidate: (emailAddress: EmailAddress): AdvisoryLockKey => ({
     value: `email-authentication:replacement-candidate:${emailAddress}`,
     seed: 0,

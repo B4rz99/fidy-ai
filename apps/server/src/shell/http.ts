@@ -43,6 +43,8 @@ import { OnboardingDeliveryWorkerLive } from "~/shell/onboarding/delivery-worker
 import { OperationsLive } from "~/shell/operations/handlers";
 import { CanonicalTelemetryLive } from "~/shell/observability/canonical-api";
 import { SubscriptionLive } from "~/shell/subscription/handlers";
+import { SubscriptionEnrollmentHandlersLive } from "~/shell/subscription/enrollment-handlers";
+import { WompiEnrollmentClient } from "~/shell/subscription/wompi-client";
 import { PATsLive } from "~/shell/tokens/handlers";
 import { RecoveryLive } from "~/shell/recovery/handlers";
 import {
@@ -55,6 +57,7 @@ import { PATPairingExpiryWorkerLive } from "~/shell/tokens/pairing-expiry";
 import { PATPairingApi } from "~/pat-pairing-api";
 import { TransactionsLive } from "~/shell/transactions/handlers";
 import { WebAuthApi, browserPairingEmailAuthenticationInvalidBody } from "~/web-auth-api";
+import { SubscriptionEnrollmentApi } from "~/subscription-enrollment-api";
 import { FidyApi, operationCatalog } from "./api";
 
 /** Prevents authenticated canonical responses from remaining in caller caches. */
@@ -85,6 +88,11 @@ const WebAuthLive = HttpApiBuilder.layer(WebAuthApi).pipe(
 const PATPairingDirectLive = HttpApiBuilder.layer(PATPairingApi).pipe(
   Layer.provide(WebAuthNoStoreLive),
   Layer.provide(PATPairingHandlersLive)
+);
+
+const SubscriptionEnrollmentDirectLive = HttpApiBuilder.layer(SubscriptionEnrollmentApi).pipe(
+  Layer.provide(WebAuthNoStoreLive),
+  Layer.provide(SubscriptionEnrollmentHandlersLive)
 );
 
 /**
@@ -226,6 +234,7 @@ export const HttpLive = HttpRouter.serve(
     ApiLive,
     WebAuthLive,
     PATPairingDirectLive,
+    SubscriptionEnrollmentDirectLive,
     BrowserLoginEvidenceRetentionLive,
     HttpApiScalar.layer(FidyApi, { path: "/docs" }),
     HealthLive,
@@ -279,6 +288,7 @@ export const AppLive = Layer.mergeAll(
   PATPairingExpiryWorkerLive,
   SupportRecoveryRetentionLive
 ).pipe(
+  Layer.provide(WompiEnrollmentClient.layer),
   Layer.provide(OpenAiHostedInferenceLive),
   Layer.provide(RuntimeAuthorityLive),
   Layer.provide(MigratorLive)

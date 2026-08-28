@@ -1,0 +1,3 @@
+# Isolate payment-credential enrollment from canonical authority
+
+Reusable payment-source enrollment uses a dedicated first-party browser API rather than a canonical operation. This deliberately sacrifices define-once canonical derivation so transient provider tokens cannot become representable to PATs, hosted agents, OpenAPI, chat, logs, or persistence; the exception is limited to exact-origin, fresh-WebSession, current-Consent enrollment with bounded no-store transport and browser-safe projections. Ambiguous available outcomes are settled only after a server-side authenticated Wompi lookup confirms that the source is available and carries the retained enrollment billing email.

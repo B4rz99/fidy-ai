@@ -4,7 +4,11 @@ import { useState } from "react";
 import type { JSX } from "react";
 import { SessionRegistryProvider } from "@/session/session";
 import { useSession } from "@/session/session-context";
-import { makeFidyClient, makeWebAuthClient } from "@/transport/client";
+import {
+  makeFidyClient,
+  makeSubscriptionEnrollmentClient,
+  makeWebAuthClient,
+} from "@/transport/client";
 import { parseApiOrigin } from "@/transport/origin";
 import { createWebRouter } from "./routes";
 
@@ -17,6 +21,7 @@ const RoutedApplication = (): JSX.Element => {
         onAuthenticationExpired: expireAuthentication,
       }),
       webAuthClient: makeWebAuthClient(apiOrigin),
+      subscriptionEnrollmentClient: makeSubscriptionEnrollmentClient(apiOrigin),
       history: Option.none(),
     });
   });

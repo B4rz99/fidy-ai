@@ -4,19 +4,11 @@ import { BrowserLoginPairingId } from "~/core/browser-login/reference";
 import { PendingConsentExchangeId } from "~/core/consent/reference";
 import { UserId, WhatsAppCallerReference } from "~/core/identity/reference";
 import { WebSessionId } from "~/core/web-session/reference";
-import { EmailEnrollmentId } from "./reference";
+import { EmailEnrollmentId, canonicalEmailAddressChecks } from "./reference";
 
-const maximumEmailAddressLength = 254;
-const mailboxGrammar =
-  /^[a-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\.[a-z0-9!#$%&'*+/=?^_`{|}~-]+)*@[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$/u;
 const unambiguousGroup = "[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]";
 
-const CanonicalEmailAddress = Schema.String.check(
-  Schema.isNonEmpty(),
-  Schema.isLowercased(),
-  Schema.isMaxLength(maximumEmailAddressLength),
-  Schema.isPattern(mailboxGrammar)
-)
+const CanonicalEmailAddress = Schema.String.check(...canonicalEmailAddressChecks)
   .pipe(Schema.brand("EmailAddress"))
   .annotate({ identifier: "EmailAddress" });
 

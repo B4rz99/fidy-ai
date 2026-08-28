@@ -106,9 +106,14 @@ lives in `shell/operations/atomic-batch.ts`: HTTP handlers and canonical registr
 that delegate to it and never import one another.
 
 The operation references the core schema. All stable-User domain API and agent surfaces derive from
-the canonical operation definition; parallel operation maps are not maintained. A credential
-bootstrap with no stable User may expose one separate proof-bearing `HttpApi`, as browser login and
-PATPairing do. Such an API reuses core schemas, has no hosted-agent binding, persists only proof
+the canonical operation definition; parallel operation maps are not maintained. A browser-only
+payment-credential enrollment boundary is the narrow exception recorded in ADR 0021: it may expose
+a separate first-party `HttpApi` only when its transient provider credential must remain
+unrepresentable in canonical operations, PATs, hosted-agent tools, OpenAPI, logs, and persistence.
+It requires an exact Origin, a fresh WebSession, current Consent serialized with the whole external
+workflow, no-store responses, bounded JSON, User-stable provider admission, and browser-safe output
+schemas. A credential bootstrap with no stable User may expose one separate proof-bearing `HttpApi`,
+as browser login and PATPairing do. Such an API reuses core schemas, has no hosted-agent binding, persists only proof
 digests, and ends at the transition into stable-User canonical authority. Anonymous admission keys
 use the socket peer directly unless it is a private or loopback trusted ingress proxy. A trusted
 proxy request must carry a valid `X-Forwarded-For` chain; the server uses only its rightmost,

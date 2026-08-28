@@ -17,6 +17,8 @@
     "agent:repl": "bun scripts/agent-repl.ts",
     "support:recovery": "bun scripts/support-recovery.ts",
     "sentry:verify": "bun scripts/verify-sentry-account.ts",
+    "wompi:reconcile-enrollment": "bun scripts/reconcile-wompi-enrollment.ts",
+    "wompi:sandbox:verify-source": "bun scripts/verify-wompi-sandbox-source.ts",
     "sentry:smoke:build": "bun build scripts/smoke-sentry-account.ts --target=bun --outdir=reports/sentry-smoke --entry-naming=smoke.js --sourcemap=external",
     "sentry:smoke": "bun reports/sentry-smoke/smoke.js",
     "typecheck": "tsc --noEmit",
@@ -46,7 +48,7 @@
     "@sentry/bun": "10.70.0",
     "csv-parse": "7.0.2",
     "effect": "4.0.0-beta.98",
-    "jose": "6.2.9",
+    "jose": "6.2.10",
     "js-tiktoken": "1.0.21",
     "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
   },

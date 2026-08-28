@@ -12,13 +12,15 @@ const entrypoint = "src/client.ts";
 
 /**
  * The browser seam is intentionally an allowlist of source and dependency modules. Slice operation
- * definitions may grow without editing this check; every other input must be admitted deliberately
- * so a server implementation cannot enter the client graph under a new filename or package.
+ * definitions and the dedicated enrollment declaration may grow without editing this check; every
+ * other input must be admitted deliberately so a server implementation cannot enter the client
+ * graph under a new filename or package.
  */
 const safeSource = [
   /^src\/client\.ts$/u,
   /^src\/http-origin\.ts$/u,
   /^src\/web-auth-api\.ts$/u,
+  /^src\/subscription-enrollment-api\.ts$/u,
   /^src\/core\//u,
   /^src\/shell\/api\.ts$/u,
   /^src\/shell\/[^/]+\/operations\.ts$/u,
@@ -104,7 +106,7 @@ try {
         : undefined,
     ].filter((section): section is string => section !== undefined);
     throw new Error(
-      `${sections.join("\n")}\nThe browser client seam may derive from canonical declarations, not server implementations.`
+      `${sections.join("\n")}\nThe browser client seam may derive from admitted declarations, not server implementations.`
     );
   }
 

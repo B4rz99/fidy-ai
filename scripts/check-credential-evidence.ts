@@ -48,6 +48,21 @@ const credentialEvidence = [
     testName: "rejects lifecycle proof that does not identify one valid latest event",
   },
   {
+    configuration: "WOMPI_PRIVATE_KEY",
+    testFile: "apps/server/src/shell/subscription/wompi-client.test.ts",
+    testName: "keeps provider credentials, card tokens, and response bodies out of failures",
+  },
+  {
+    configuration: "WOMPI_RECONCILIATION_SOURCE_ID",
+    testFile: "apps/server/src/shell/subscription/wompi-client.test.ts",
+    testName: "keeps reconciliation source IDs out of lookup failures",
+  },
+  {
+    configuration: "WOMPI_SANDBOX_CARD_TOKEN",
+    testFile: "apps/server/src/shell/subscription/wompi-client.test.ts",
+    testName: "keeps provider credentials, card tokens, and response bodies out of failures",
+  },
+  {
     configuration: "DATABASE_URL",
     testFile: "apps/server/src/shell/db/row-level-security.test.ts",
     testName: "starts only with a restricted runtime role and complete forced policy coverage",

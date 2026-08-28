@@ -1,9 +1,9 @@
 import { BigDecimal, Schema } from "effect";
 import { ServiceMarket } from "~/core/_shared/context";
 import { Money } from "~/core/_shared/money";
-import { PriceRevisionId } from "./reference";
+import { PriceId } from "./reference";
 
-export { PriceRevisionId } from "./reference";
+export { PriceId } from "./reference";
 
 /** The canonical public web destination where a User can start a Pro Subscription. */
 export const UpgradeDestination = Schema.Struct({
@@ -48,16 +48,16 @@ const colombiaPaidOffer = Schema.makeFilter<{
   };
 }>((revision) => {
   if (BigDecimal.Order(revision.money.amount, zero) !== 1) {
-    return { path: ["money", "amount"], issue: "PriceRevision Money must be greater than zero" };
+    return { path: ["money", "amount"], issue: "Price Money must be greater than zero" };
   }
   return revision.money.currency === "COP"
     ? undefined
-    : { path: ["money", "currency"], issue: "Colombia PriceRevision Money must use COP" };
+    : { path: ["money", "currency"], issue: "Colombia Price Money must use COP" };
 });
 
 /** One immutable authoritative version of Subscription price and renewal terms. */
-export const PriceRevision = Schema.Struct({
-  id: PriceRevisionId,
+export const Price = Schema.Struct({
+  id: PriceId,
   money: Money,
   billingPeriod: BillingPeriod,
   serviceMarket: ServiceMarket,
@@ -66,12 +66,12 @@ export const PriceRevision = Schema.Struct({
   paymentMethods: LaunchPaymentMethods,
 })
   .check(colombiaPaidOffer)
-  .annotate({ identifier: "PriceRevision" });
-export type PriceRevision = typeof PriceRevision.Type;
+  .annotate({ identifier: "Price" });
+export type Price = typeof Price.Type;
 
 const subscriptionOfferPeriodOrder: ReadonlyArray<BillingPeriod> = ["weekly", "monthly", "yearly"];
 type OfferIdentityAndPeriod = Readonly<{
-  id: PriceRevision["id"];
+  id: Price["id"];
   billingPeriod: BillingPeriod;
 }>;
 const authoritativeOfferSet = Schema.makeFilter<
@@ -87,11 +87,11 @@ const authoritativeOfferSet = Schema.makeFilter<
   }
   return new Set(offers.map((offer) => offer.id)).size === offers.length
     ? undefined
-    : { path: ["id"], issue: "Subscription offers must have distinct PriceRevision identities" };
+    : { path: ["id"], issue: "Subscription offers must have distinct Price identities" };
 });
 
 /** Exact authoritative offer set in weekly, monthly, yearly presentation order. */
-export const SubscriptionOffers = Schema.Tuple([PriceRevision, PriceRevision, PriceRevision])
+export const SubscriptionOffers = Schema.Tuple([Price, Price, Price])
   .check(authoritativeOfferSet)
   .annotate({ identifier: "SubscriptionOffers" });
 export type SubscriptionOffers = typeof SubscriptionOffers.Type;

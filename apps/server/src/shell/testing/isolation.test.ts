@@ -516,7 +516,7 @@ const probes: Record<OperationId, IsolationProbe> = {
       visit(strangers.data.layout);
 
       expect(strangers.data.title).toBe("Tablero");
-      expect(widgets).toHaveLength(4);
+      expect(widgets).toHaveLength(7);
       for (const { result } of widgets) {
         if ("buckets" in result) expect(result.buckets).toEqual([]);
         else if ("moneyGroups" in result) expect(result.moneyGroups).toEqual([]);

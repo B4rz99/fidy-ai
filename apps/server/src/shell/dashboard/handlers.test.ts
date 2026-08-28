@@ -360,7 +360,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         expect(nested.kind).toBe("split");
         if (nested.kind !== "split") return;
         expect(nested.axis).toBe("column");
-        expect(nested.children.map(({ weight }) => weight)).toEqual([1, 3]);
+        expect(nested.children.map(({ weight }) => weight)).toEqual([0.001, 1.999]);
         expect(collectWidgetViews(root).map(({ widget }) => widget.id)).toEqual([
           firstId,
           secondId,

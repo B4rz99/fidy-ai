@@ -22,6 +22,12 @@ const entry = {
     limit: Schema.decodeUnknownSync(TransactionListLimit)(transactionListLimit),
   },
 } satisfies DashboardCatalogEntry;
+const announcementSource = { kind: "widget" as const, widgetId: sourceId, label: "Gastos" };
+const centerTarget = {
+  kind: "widget-edge" as const,
+  widgetId: targetId,
+  edge: "center" as const,
+};
 
 describe("Dashboard drag accessibility and collision ordering", () => {
   it("gives deeper recursive targets greater collision priority", () => {
@@ -29,20 +35,66 @@ describe("Dashboard drag accessibility and collision ordering", () => {
   });
 
   it("announces keyboard drag lifecycle in localized semantic terms", () => {
-    const source = { data: { kind: "widget", widgetId: sourceId, label: "Gastos" } };
-    const target = { kind: "widget-edge", widgetId: targetId, edge: "center" };
-    expect(dashboardAnnouncementText.started(source.data)).toEqual(Option.some("Moviendo Gastos."));
+    expect(dashboardAnnouncementText.started(announcementSource)).toEqual(
+      Option.some("Moviendo Gastos.")
+    );
+    expect(dashboardAnnouncementText.started({ kind: "catalog", entry })).toEqual(
+      Option.some("Moviendo Transacciones recientes.")
+    );
+    expect(dashboardAnnouncementText.started({ kind: "unknown" })).toEqual(Option.none());
     expect(
-      dashboardAnnouncementText.over(source.data, target, Option.some("Colocar sobre Presupuesto"))
+      dashboardAnnouncementText.over(
+        announcementSource,
+        centerTarget,
+        Option.some("Colocar sobre Presupuesto")
+      )
     ).toEqual(Option.some("Gastos. Colocar sobre Presupuesto."));
     expect(
       dashboardAnnouncementText.ended({
         canceled: true,
-        sourceData: source.data,
+        sourceData: announcementSource,
         targetAriaLabel: Option.none(),
-        targetData: target,
+        targetData: centerTarget,
       })
     ).toEqual(Option.some("Movimiento de Gastos cancelado."));
+    expect(
+      dashboardAnnouncementText.ended({
+        canceled: false,
+        sourceData: announcementSource,
+        targetAriaLabel: Option.none(),
+        targetData: { kind: "unknown" },
+      })
+    ).toEqual(Option.some("Gastos no fue movido."));
+  });
+});
+
+describe("Dashboard semantic drag destinations", () => {
+  it("names every semantic destination without relying on pointer geometry", () => {
+    const destinations = [
+      [{ kind: "dashboard-edge", edge: "top" }, "inicio del tablero"],
+      [{ kind: "dashboard-edge", edge: "bottom" }, "final del tablero"],
+      [{ kind: "widget-edge", widgetId: targetId, edge: "top" }, "arriba del Widget"],
+      [{ kind: "widget-edge", widgetId: targetId, edge: "right" }, "a la derecha del Widget"],
+      [{ kind: "widget-edge", widgetId: targetId, edge: "bottom" }, "debajo del Widget"],
+      [{ kind: "widget-edge", widgetId: targetId, edge: "left" }, "a la izquierda del Widget"],
+      [centerTarget, "el centro del Widget para intercambiar posiciones"],
+    ] as const;
+    for (const [target, label] of destinations) {
+      expect(dashboardAnnouncementText.over(announcementSource, target, Option.none())).toEqual(
+        Option.some(`Gastos. ${label}.`)
+      );
+    }
+    expect(
+      dashboardAnnouncementText.over(announcementSource, { kind: "unknown" }, Option.none())
+    ).toEqual(Option.none());
+    expect(
+      dashboardAnnouncementText.ended({
+        canceled: false,
+        sourceData: announcementSource,
+        targetAriaLabel: Option.some("Destino exacto"),
+        targetData: centerTarget,
+      })
+    ).toEqual(Option.some("Gastos. Destino exacto."));
   });
 });
 

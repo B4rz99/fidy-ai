@@ -26,8 +26,10 @@ const fourthGroupEnd = 20;
 /** Generates one schema-decoded browser Widget identity for a canonical add operation. */
 export const freshWidgetId = (): WidgetId => {
   const bytes = globalThis.crypto.getRandomValues(new Uint8Array(uuidOctets));
-  bytes[uuidVersionOctet] = ((bytes[uuidVersionOctet] ?? 0) & lowNibbleMask) | uuidVersionFourBits;
-  bytes[uuidVariantOctet] = ((bytes[uuidVariantOctet] ?? 0) & lowSixBitsMask) | uuidRfcVariantBits;
+  const versionOctet = Schema.decodeUnknownSync(Schema.Int)(bytes[uuidVersionOctet]);
+  const variantOctet = Schema.decodeUnknownSync(Schema.Int)(bytes[uuidVariantOctet]);
+  bytes[uuidVersionOctet] = (versionOctet & lowNibbleMask) | uuidVersionFourBits;
+  bytes[uuidVariantOctet] = (variantOctet & lowSixBitsMask) | uuidRfcVariantBits;
   const hex = Array.from(bytes, (byte) => byte.toString(hexadecimalRadix).padStart(2, "0")).join(
     ""
   );

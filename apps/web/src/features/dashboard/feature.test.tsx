@@ -496,6 +496,15 @@ describe("Dashboard Widget retitling and placement", () => {
         period: "this-month",
       },
     });
+
+    fireEvent.click(screen.getByRole("button", { name: "Renombrar Presupuesto" }));
+    const titleInput = screen.getByRole("textbox", { name: "Nuevo nombre del Widget" });
+    fireEvent.change(titleInput, { target: { value: "   " } });
+    expect(screen.getByRole("button", { name: "Guardar nombre del Widget" })).toBeDisabled();
+    fireEvent.keyDown(titleInput, { key: "Escape" });
+    expect(
+      screen.queryByRole("textbox", { name: "Nuevo nombre del Widget" })
+    ).not.toBeInTheDocument();
   });
 });
 
@@ -544,6 +553,50 @@ describe("Dashboard Widget editing", () => {
       )
     ).toBe(true);
     expect(screen.queryByText("Proporción")).not.toBeInTheDocument();
+  });
+});
+
+const releasedButtonsPointerId = 5;
+
+describe("Dashboard resize termination", () => {
+  it("stops on cancellation, lost capture, released buttons, and ignores unrelated input", () => {
+    const onGesture = vi.fn<(gesture: DashboardGesture) => void>();
+    renderInteractiveDashboard(onGesture, editorCatalog);
+    fireEvent.click(screen.getByRole("button", { name: "Personalizar" }));
+    const boundary = screen.getAllByRole("separator", {
+      name: "Redimensionar límite después de Transacciones",
+    })[0];
+    if (boundary === undefined) throw new Error("Expected a recursive resize boundary");
+    const releasePointerCapture = vi.fn();
+    Object.defineProperties(boundary, {
+      hasPointerCapture: { configurable: true, value: vi.fn(() => true) },
+      releasePointerCapture: { configurable: true, value: releasePointerCapture },
+      setPointerCapture: { configurable: true, value: vi.fn() },
+    });
+
+    fireEvent.pointerMove(boundary, { buttons: 1, pointerId: 99 });
+    fireEvent.pointerUp(boundary, { buttons: 0, pointerId: 99 });
+    fireEvent.keyDown(boundary, { key: "Enter" });
+    fireEvent.keyDown(boundary, { key: "ArrowUp" });
+    expect(onGesture).toHaveBeenLastCalledWith({
+      kind: "resize-region",
+      widgetIds: [ids.chart],
+      weight: 0.9,
+    });
+
+    fireEvent.pointerDown(boundary, { buttons: 1, pointerId: 2 });
+    fireEvent.pointerCancel(boundary, { pointerId: 3 });
+    expect(releasePointerCapture).not.toHaveBeenCalled();
+    fireEvent.pointerCancel(boundary, { pointerId: 2 });
+    expect(releasePointerCapture).toHaveBeenCalledWith(2);
+
+    fireEvent.pointerDown(boundary, { buttons: 1, pointerId: 4 });
+    fireEvent.lostPointerCapture(boundary, { pointerId: 4 });
+    expect(releasePointerCapture).toHaveBeenCalledWith(4);
+
+    fireEvent.pointerDown(boundary, { buttons: 1, pointerId: releasedButtonsPointerId });
+    fireEvent.pointerMove(boundary, { buttons: 0, pointerId: releasedButtonsPointerId });
+    expect(releasePointerCapture).toHaveBeenCalledWith(releasedButtonsPointerId);
   });
 });
 

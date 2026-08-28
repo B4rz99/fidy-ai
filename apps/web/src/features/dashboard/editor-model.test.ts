@@ -42,28 +42,22 @@ describe("Dashboard gesture compilation", () => {
   });
 
   it("compiles each directional drop into one structural move edit", () => {
-    expect(
-      compile({
-        kind: "move-widget",
-        widgetId: firstId,
-        target: { kind: "widget-edge", widgetId: secondId, edge: "left" },
-      })
-    ).toEqual({
-      op: "move-widget",
-      widgetId: firstId,
-      at: { besideWidget: secondId, axis: "row", side: "before" },
-    });
-    expect(
-      compile({
-        kind: "move-widget",
-        widgetId: firstId,
-        target: { kind: "widget-edge", widgetId: secondId, edge: "bottom" },
-      })
-    ).toEqual({
-      op: "move-widget",
-      widgetId: firstId,
-      at: { besideWidget: secondId, axis: "column", side: "after" },
-    });
+    const placements = [
+      ["left", { besideWidget: secondId, axis: "row", side: "before" }],
+      ["right", { besideWidget: secondId, axis: "row", side: "after" }],
+      ["top", { besideWidget: secondId, axis: "column", side: "before" }],
+      ["bottom", { besideWidget: secondId, axis: "column", side: "after" }],
+      ["center", { besideWidget: secondId, axis: "row", side: "after" }],
+    ] as const;
+    for (const [edge, at] of placements) {
+      expect(
+        compile({
+          kind: "move-widget",
+          widgetId: firstId,
+          target: { kind: "widget-edge", widgetId: secondId, edge },
+        })
+      ).toEqual({ op: "move-widget", widgetId: firstId, at });
+    }
   });
 
   it("adds a catalog preset with browser-generated identity through the same placement", () => {
@@ -78,6 +72,13 @@ describe("Dashboard gesture compilation", () => {
       op: "add-widget",
       widget: { id: thirdId, type: "spending-chart", groupBy: "category", period: "this-month" },
       at: "top",
+    });
+  });
+
+  it("removes one Widget through the canonical edit", () => {
+    expect(compile({ kind: "remove-widget", widgetId: firstId })).toEqual({
+      op: "remove-widget",
+      widgetId: firstId,
     });
   });
 

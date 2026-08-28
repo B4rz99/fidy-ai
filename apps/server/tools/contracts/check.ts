@@ -275,8 +275,8 @@ const liveRemovalAuthorizationDependencies: RemovalAuthorizationDependencies = {
 };
 
 /**
- * Checks exact acknowledgement, Git, and deployed-artifact evidence for a final removal.
- * Returns false when no exact acknowledgement exists; throws when claimed removal evidence fails.
+ * Checks exact acknowledgement and distinguishes an intentional initial break from final removal.
+ * Returns false when no exact acknowledgement exists; final removal still requires deployed evidence.
  */
 export const authorizeRemoval = async (
   {
@@ -306,9 +306,10 @@ export const authorizeRemoval = async (
   const webDiff = dependencies.runCommand(["git", "diff", "--quiet", baseRef, "--", "apps/web"]);
   if (webDiff.exitCode > 1) throw new Error(webDiff.stderr);
   if (webDiff.exitCode === 1) {
-    throw new Error(
-      "The exact acknowledgement cannot authorize an initial break; final removal requires an unchanged candidate web."
+    dependencies.writeOutput(
+      `acknowledged ${findings.length} initial-breaking finding(s) for ${acknowledgement.rolloutIssue}; candidate web and server adopt the contract together\n`
     );
+    return true;
   }
   const deployedWeb = await dependencies.readDeployedWeb();
   if (

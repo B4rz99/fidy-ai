@@ -484,18 +484,22 @@ const resizeRegion = (
   return Option.none();
 };
 
+const resizeResult = (
+  document: Readonly<DashboardDocument>,
+  edit: Readonly<Extract<DashboardEdit, { readonly op: "resize-region" }>>
+): Effect.Effect<DashboardDocument, DashboardFailure> =>
+  Option.match(resizeRegion(document.layout, edit), {
+    onNone: () => Effect.fail(new RegionNotFound({ widgetIds: edit.widgetIds })),
+    onSome: (layout) => revalidateDocument({ ...document, layout }),
+  });
+
 const applyResize = (
   document: Readonly<DashboardDocument>,
   edit: Readonly<Extract<DashboardEdit, { readonly op: "resize-region" }>>
-): Effect.Effect<DashboardDocument, DashboardFailure> => {
-  if (regionMatches(document.layout, edit.widgetIds)) {
-    return Effect.fail(new RootRegionResize({ widgetIds: edit.widgetIds }));
-  }
-  const layout = resizeRegion(document.layout, edit);
-  return Option.isSome(layout)
-    ? revalidateDocument({ ...document, layout: layout.value })
-    : Effect.fail(new RegionNotFound({ widgetIds: edit.widgetIds }));
-};
+): Effect.Effect<DashboardDocument, DashboardFailure> =>
+  regionMatches(document.layout, edit.widgetIds)
+    ? Effect.fail(new RootRegionResize({ widgetIds: edit.widgetIds }))
+    : resizeResult(document, edit);
 
 /** The sibling Widget a Placement names, when it names one rather than a document edge. */
 const besideWidgetId = (at: Readonly<Placement>): Option.Option<WidgetId> =>
@@ -533,9 +537,14 @@ const replaceSwappedWidgets = (
   second: Readonly<Widget>
 ): LayoutNode => {
   if (layout.kind === "leaf") {
-    if (layout.widget.id === first.id) return { ...layout, widget: second };
-    if (layout.widget.id === second.id) return { ...layout, widget: first };
-    return layout;
+    const replacements = new Map([
+      [first.id, second],
+      [second.id, first],
+    ]);
+    return Option.match(Option.fromUndefinedOr(replacements.get(layout.widget.id)), {
+      onNone: () => layout,
+      onSome: (widget) => ({ ...layout, widget }),
+    });
   }
   return {
     ...layout,

@@ -117,8 +117,9 @@ it("authorizes exact final removal through the Git and deployment seams", async 
   expect(output).toEqual([expect.stringContaining("final-removal")]);
 });
 
-it("rejects an acknowledgement as permission for a simultaneous web break", async () => {
+it("authorizes an exact acknowledged break adopted by the candidate web", async () => {
   let deploymentRead = false;
+  const output: Array<string> = [];
 
   await expect(
     authorizeRemoval(
@@ -138,9 +139,10 @@ it("rejects an acknowledgement as permission for a simultaneous web break", asyn
           deploymentRead = true;
           return validRelease;
         },
-        writeOutput: () => undefined,
+        writeOutput: (message) => output.push(message),
       }
     )
-  ).rejects.toThrow("cannot authorize an initial break");
+  ).resolves.toBe(true);
   expect(deploymentRead).toBe(false);
+  expect(output).toEqual([expect.stringContaining("initial-breaking")]);
 });

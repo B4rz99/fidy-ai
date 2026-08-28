@@ -1,0 +1,21 @@
+apps/server/src/shell/testing/isolation.test.ts
+  s_28b8e1e0dbe2ca::t_cb60e7ac1d3179 519
+apps/server/src/shell/dashboard/handlers.test.ts
+  s_28b8e1e0dbe2ca::t_f389e93a83d389 363
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.24",
+  "base_commit_sha": "c32444f0d6179cf22720fcef6c6dea655ef1f200",
+  "prompts": {},
+  "sessions": {
+    "s_28b8e1e0dbe2ca": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0401a-a202-7f44-b015-8c6906affc63",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

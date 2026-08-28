@@ -1,5 +1,5 @@
 import { expect, layer } from "@effect/vitest";
-import { Crypto, DateTime, Effect, Redacted, Schema } from "effect";
+import { Crypto, DateTime, Effect, Encoding, Schema } from "effect";
 import { HttpBody, HttpClient, HttpClientResponse } from "effect/unstable/http";
 import { UserId } from "~/core/identity/reference";
 import {
@@ -9,7 +9,7 @@ import {
   TokenBearer,
   defaultPATLifetimeDays,
 } from "~/core/tokens/model";
-import { ClaimedPATPairing, PATPairingReview, StartedPATPairing } from "~/core/tokens/pairing";
+import { PATPairingReview, StartedPATPairing } from "~/core/tokens/pairing";
 import { computePATExpiration } from "~/core/tokens/rules";
 import { WebSessionId } from "~/core/web-session/reference";
 import { calculateWebSessionDeadlines } from "~/core/web-session/rules";
@@ -17,6 +17,7 @@ import { OperationResponse } from "~/shell/_shared/response";
 import { MigrationSqlClient } from "~/shell/db/client";
 import { seedConsentedPatIdentity } from "~/shell/db/development-seed";
 import { ApiHarness } from "~/shell/testing/api-harness";
+import { runReadCommittedScenario } from "~/shell/testing/postgres-concurrency";
 import { IssuedManualPATResponse } from "./operations";
 
 const userId = UserId.make("f1d1a000-0000-4000-8000-000000000250");
@@ -43,6 +44,9 @@ const seedFreshWebSessionFor = Effect.fn("test.seedFreshWebSessionFor")(function
     .digest("SHA-256", new TextEncoder().encode(input.sessionBearer))
     .pipe(Effect.orDie);
   const deadlines = calculateWebSessionDeadlines(now);
+  yield* sql`DELETE FROM pat_pairing_start_attempts`;
+  yield* sql`DELETE FROM pat_pairing_inspection_attempts`;
+  yield* sql`DELETE FROM pat_pairing_claim_attempts`;
   yield* sql`
     DELETE FROM consent_records
     WHERE subject_user_id = ${input.subjectUserId} AND revoked_grant_id IN (
@@ -332,7 +336,16 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })("PAT man
           FROM pat_pairings pairing JOIN tokens token ON token.pat_pairing_id = pairing.id
           WHERE pairing.id = ${started.pairingId}
         `;
+      const crypto = yield* Crypto.Crypto;
+      const laterClaim = yield* sql`
+        SELECT fidy_claim_pat_pairing(
+          ${started.pairingId}::uuid,
+          ${Encoding.encodeHex(yield* crypto.randomBytes(32).pipe(Effect.orDie))},
+          now()
+        ) AS changed
+      `;
 
+      expect(laterClaim).toEqual([{ changed: false }]);
       expect(revoked.status).toBe(200);
       expect(body.data.revokedCount).toBe(0);
       expect(stored).toEqual([
@@ -341,55 +354,64 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })("PAT man
     })
   );
 
+  it.effect(
+    "demonstrates why one revoke-all statement misses a claim committed while waiting",
+    () =>
+      Effect.gen(function* () {
+        yield* seedFreshWebSession;
+        const started = yield* seedApprovedUnclaimedPairing("203.0.113.254", "Historical robot");
+        const sql = yield* MigrationSqlClient;
+        const crypto = yield* Crypto.Crypto;
+        const claimDigest = Encoding.encodeHex(yield* crypto.randomBytes(32).pipe(Effect.orDie));
+        const selected = yield* runReadCommittedScenario({
+          holdUncommitted: sql`
+          SELECT fidy_claim_pat_pairing(
+            ${started.pairingId}::uuid, ${claimDigest}, now()
+          ) AS changed
+        `.pipe(Effect.asVoid),
+          mustWaitThenContinue: sql.withTransaction(sql`
+          WITH locked_pairings AS MATERIALIZED (
+            SELECT id FROM pat_pairings
+            WHERE user_id = ${userId} AND lifecycle = 'approved_awaiting_claim'
+            ORDER BY id FOR UPDATE
+          )
+          SELECT token.id FROM tokens AS token
+          WHERE token.user_id = ${userId} AND token.revoked_at IS NULL
+            AND (
+              token.token_hash IS NOT NULL
+              OR token.pat_pairing_id IN (SELECT id FROM locked_pairings)
+            )
+          ORDER BY token.id FOR UPDATE OF token
+        `),
+        });
+
+        expect(selected).toEqual([]);
+      })
+  );
+
   it.effect("keeps revoke-all coherent while an approved pairing is claimed", () =>
     Effect.gen(function* () {
       yield* seedFreshWebSession;
-      const started = yield* seedApprovedUnclaimedPairing("203.0.113.254", "Racing robot");
+      const started = yield* seedApprovedUnclaimedPairing("203.0.113.255", "Blocked robot");
       const sql = yield* MigrationSqlClient;
-      yield* sql`
-        UPDATE pat_pairings SET last_accepted_poll_at = now() - interval '10 seconds'
-        WHERE id = ${started.pairingId}
-      `;
+      const crypto = yield* Crypto.Crypto;
+      const claimDigest = Encoding.encodeHex(yield* crypto.randomBytes(32).pipe(Effect.orDie));
+      const revoked = yield* runReadCommittedScenario({
+        holdUncommitted: sql`
+          SELECT fidy_claim_pat_pairing(
+            ${started.pairingId}::uuid, ${claimDigest}, now()
+          ) AS changed
+        `.pipe(Effect.asVoid),
+        mustWaitThenContinue: HttpClient.del("/pats", { headers: webHeaders }),
+      });
 
-      const [claim, revoked] = yield* Effect.all(
-        [
-          HttpClient.post("/pat-pairings/claim", {
-            headers: {
-              "content-type": "application/json",
-              "x-forwarded-for": "203.0.113.254",
-            },
-            body: HttpBody.jsonUnsafe({
-              pairingId: started.pairingId,
-              privateDeviceCode: Redacted.value(started.privateDeviceCode),
-            }),
-          }),
-          HttpClient.del("/pats", { headers: webHeaders }),
-        ],
-        { concurrency: "unbounded" }
-      );
-      expect(revoked.status).toBe(200);
-      expect([200, 400]).toContain(claim.status);
-      if (claim.status === 200) {
-        const issued = yield* HttpClientResponse.schemaBodyJson(ClaimedPATPairing)(claim);
-        const rejectedBearer = yield* HttpClient.get("/categories", {
-          headers: { authorization: `Bearer ${issued.bearer}` },
-        });
-        expect(rejectedBearer.status).toBe(401);
-      }
       const [stored] = yield* sql`
-        SELECT pairing.lifecycle, token.revoked_at IS NOT NULL AS token_revoked,
-          (SELECT count(*)::int FROM consent_records consent
-            WHERE consent.pat_id = token.id AND consent.event_type = 'granted') AS grant_count,
-          (SELECT count(*)::int FROM consent_records consent
-            WHERE consent.revoked_grant_id IN (
-              SELECT id FROM consent_records grant_record
-              WHERE grant_record.pat_id = token.id AND grant_record.event_type = 'granted'
-            )) AS revocation_count
+        SELECT pairing.lifecycle, token.revoked_at IS NOT NULL AS token_revoked
         FROM pat_pairings pairing JOIN tokens token ON token.pat_pairing_id = pairing.id
         WHERE pairing.id = ${started.pairingId}
       `;
-      expect(["claimed", "revoked_unclaimed"]).toContain(stored?.lifecycle);
-      expect(stored).toMatchObject({ token_revoked: true, grant_count: 1, revocation_count: 1 });
+      expect(revoked.status).toBe(200);
+      expect(stored).toEqual({ lifecycle: "claimed", token_revoked: true });
     })
   );
 

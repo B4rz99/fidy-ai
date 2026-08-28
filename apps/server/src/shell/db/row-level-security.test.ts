@@ -544,16 +544,19 @@ const probeDeniedMutations = Effect.fn("probeDeniedRlsMutations")(function* () {
   const sql = yield* SqlClient.SqlClient;
   return yield* Effect.forEach(policyProbes, ({ tableName, stableColumn, ownerPredicate }) =>
     Effect.gen(function* () {
+      const deleteDeniedByPrivilege = tableName === "backup_recovery_credentials";
       const read = yield* sql.unsafe(
         `SELECT 1 AS visible FROM ${tableName} WHERE ${ownerPredicate}`
       );
       const update = yield* sql.unsafe(
         `UPDATE ${tableName} SET ${stableColumn} = ${stableColumn} WHERE ${ownerPredicate} RETURNING 1 AS touched`
       );
-      const deleted = yield* sql.unsafe(
-        `DELETE FROM ${tableName} WHERE ${ownerPredicate} RETURNING 1 AS touched`
-      );
-      return { tableName, read, update, deleted };
+      const deleted = deleteDeniedByPrivilege
+        ? []
+        : yield* sql.unsafe(
+            `DELETE FROM ${tableName} WHERE ${ownerPredicate} RETURNING 1 AS touched`
+          );
+      return { tableName, read, update, deleted, deleteDeniedByPrivilege };
     })
   );
 });
@@ -867,6 +870,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
               "pending_consent_exchanges",
               "price_revisions",
               "published_price_revisions",
+              "support_recovery_admission_attempts",
               "web_sessions",
               "whatsapp_consent_disclosure_delivery_attempts",
               "whatsapp_ingress_budget_receipts",

@@ -11,6 +11,7 @@ import { AtomHttpApi } from "effect/unstable/reactivity";
 
 export type { CanonicalInput, CanonicalSuccess } from "@fidy/server/client";
 export {
+  BackupRecoveryCode,
   BrowserLoginPairingInvalidApi,
   BrowserLoginPollingRateLimitedApi,
   EmailAddress,

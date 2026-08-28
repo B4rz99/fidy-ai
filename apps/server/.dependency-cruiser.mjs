@@ -126,6 +126,17 @@ export default {
       },
     },
     {
+      name: "browser-login-repository-reached-outside-owner",
+      severity: "error",
+      comment:
+        "A module outside BrowserLogin imported BrowserLogin persistence directly. BrowserLogin " +
+        "alone owns pairing binding and WebSession creation; cross-slice coordination must call " +
+        "an owner-published BrowserLogin operation so its transition invariants remain local " +
+        "(ARCHITECTURE.md §2).",
+      from: { path: "^src/shell/", pathNot: "^src/shell/browser-login/" },
+      to: { path: "^src/shell/browser-login/repo\\.ts$" },
+    },
+    {
       name: "adapter-imports-handler-adapter",
       severity: "error",
       comment:

@@ -68,6 +68,7 @@ export {
 export { StartedBrowserLoginPairing } from "~/core/browser-login/model";
 export { EmailAddress, EmailVerificationCode } from "~/core/email-authentication/model";
 export { PriceRevisionId } from "~/core/subscription/reference";
+export { BackupRecoveryCode, RotatedBackupRecoveryCode } from "~/core/recovery/model";
 export {
   BrowserLoginPairingInvalidApi,
   BrowserLoginPollingRateLimitedApi,

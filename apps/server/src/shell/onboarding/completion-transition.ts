@@ -6,15 +6,10 @@ import {
   EmailVerificationPublicCode,
   RedactedEmailVerificationCode,
 } from "~/core/email-authentication/model";
-import {
-  decideProofAttempt,
-  formatEmailCode,
-  isEmailEnrollmentExpired,
-  selectEmailCodeSymbols,
-} from "~/core/email-authentication/rules";
+import { decideProofAttempt, isEmailEnrollmentExpired } from "~/core/email-authentication/rules";
 import { ConsentRecordId } from "~/core/consent/reference";
 import { UserId } from "~/core/identity/reference";
-import { BackupRecoveryCode } from "~/core/recovery/model";
+import type { BackupRecoveryCode } from "~/core/recovery/model";
 import { WhatsAppCaller } from "~/shell/channels/whatsapp/model";
 import {
   appendVerifiedOnboardingConsentInScope,
@@ -30,13 +25,11 @@ import {
 } from "~/shell/email-authentication/repo";
 import { createVerifiedOnboardingIdentityInScope } from "~/shell/identity/repo";
 import { installBackupRecoveryCredentialInScope } from "~/shell/recovery/repo";
+import { generateBackupRecoveryMaterial } from "~/shell/recovery/service";
 
 export class EmailVerificationInvalid extends Data.TaggedError("EmailVerificationInvalid")<{}> {}
 export class EmailAlreadyEnrolled extends Data.TaggedError("EmailAlreadyEnrolled")<{}> {}
 
-// Produces a code like XXXXX-XXXXX-XXXXX-XXXXX-XXXXX.
-const backupRecoveryCodeCharacterCount = 25;
-const backupRecoveryCodeCharactersPerGroup = 5;
 const decodeCombinedCode = Schema.decodeUnknownOption(RedactedEmailVerificationCode);
 
 const constantTimeEqual = (left: Uint8Array, right: Uint8Array): boolean =>
@@ -63,21 +56,10 @@ const makeProofCandidate = Effect.fn("Onboarding.makeProofCandidate")(function* 
 
 const makeStableMaterial = Effect.fn("Onboarding.makeStableMaterial")(function* () {
   const crypto = yield* Crypto.Crypto;
-  const recoverySymbols = selectEmailCodeSymbols({
-    bytes: yield* crypto.randomBytes(backupRecoveryCodeCharacterCount).pipe(Effect.orDie),
-    maximum: backupRecoveryCodeCharacterCount,
-  });
-  const recoveryCode = BackupRecoveryCode.make(
-    formatEmailCode({
-      symbols: recoverySymbols,
-      groupSize: backupRecoveryCodeCharactersPerGroup,
-    })
-  );
+  const recovery = yield* generateBackupRecoveryMaterial();
   return {
-    recoveryCode,
-    recoveryDigest: yield* crypto
-      .digest("SHA-256", new TextEncoder().encode(recoveryCode))
-      .pipe(Effect.orDie),
+    recoveryCode: Redacted.value(recovery.code),
+    recoveryDigest: recovery.digest,
     userId: UserId.make(yield* crypto.randomUUIDv7.pipe(Effect.orDie)),
     consentRecordId: ConsentRecordId.make(yield* crypto.randomUUIDv7.pipe(Effect.orDie)),
   };

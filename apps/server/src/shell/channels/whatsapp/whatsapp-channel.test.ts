@@ -2454,7 +2454,7 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         > => postSignedTextFixture({ phoneNumber, providerMessageId, text, occurredAt });
         const receivedAt = yield* DateTime.now;
         expect((yield* postEvent("wamid.disclosure-trigger", "hola", receivedAt)).status).toBe(200);
-        expect(yield* deliverLatestDisclosure(phoneNumber, receivedAt)).toBe("applied");
+        expect(yield* deliverLatestDisclosure(phoneNumber, yield* DateTime.now)).toBe("applied");
         expect(
           (yield* postEvent(
             "wamid.predates-disclosure",
@@ -2488,7 +2488,7 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           HttpClient.HttpClient
         > => postEvent("wamid.pre-consent-financial", "almuerzo 25 mil", receivedAt);
         expect((yield* original()).status).toBe(200);
-        expect(yield* deliverLatestDisclosure(phoneNumber, receivedAt)).toBe("applied");
+        expect(yield* deliverLatestDisclosure(phoneNumber, yield* DateTime.now)).toBe("applied");
         // A minute, not a second: the fixture truncates the provider timestamp to whole seconds
         // while the harness stamps `disclosedAt` from the real clock, so any margin shorter than
         // the disclosure round trip lands the decision before it and only clarifies.

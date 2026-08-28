@@ -10,6 +10,12 @@ export type OperationTier = typeof OperationTier.Type;
 export const AgentConfirmation = Schema.Literals(["not-required", "required"]);
 export type AgentConfirmation = typeof AgentConfirmation.Type;
 
+/** Whether a mutation may be composed as one child of the canonical atomic batch. */
+export const AtomicBatchEligible = Context.Reference<boolean>(
+  "@fidy/server/shell/operation-policy/AtomicBatchEligible",
+  { defaultValue: () => true }
+);
+
 /** Whether an operation observes domain state or requests a transition, durable work, or external effect. */
 export const CanonicalOperationKind = Schema.Literals(["query", "mutation"]);
 export type CanonicalOperationKind = typeof CanonicalOperationKind.Type;

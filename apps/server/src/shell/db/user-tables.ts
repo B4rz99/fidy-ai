@@ -26,6 +26,8 @@ export const userTableNames = [
   "statement_backfill_entitlements",
   "statement_format_profiles",
   "statement_submissions",
+  "support_recovery_case_events",
+  "support_recovery_cases",
   "tokens",
   "transactions",
   "transcript_entries",

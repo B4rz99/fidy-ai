@@ -2,7 +2,11 @@ import * as Arr from "effect/Array";
 import { Context, Option, Schema, SchemaAST } from "effect";
 import { HttpApi, type HttpApiEndpoint, type HttpApiGroup, OpenApi } from "effect/unstable/httpapi";
 import { CanonicalOperationId } from "~/core/_shared/canonical-operation";
-import { type OperationPolicyValue, getOperationPolicy } from "./operation-policy";
+import {
+  AtomicBatchEligible,
+  type OperationPolicyValue,
+  getOperationPolicy,
+} from "./operation-policy";
 import { makePartialInputSchema } from "./partial-input";
 
 type OperationSchema = Schema.Codec<unknown, Schema.Json, never, never>;
@@ -19,6 +23,7 @@ export type CatalogOperation = {
   readonly success: OperationSchema;
   readonly failure: OperationSchema;
   readonly policy: OperationPolicyValue;
+  readonly atomicBatchEligible: boolean;
   /** None when the generated client accepts no operation input. */
   readonly partialInput: Option.Option<PartialInputSchema>;
 };
@@ -128,6 +133,7 @@ export const makeOperationCatalog = <Id extends string, Groups extends HttpApiGr
         // unlike descriptive OpenAPI metadata, group defaults could silently
         // authorize a newly added operation with a policy nobody reviewed.
         policy: getOperationPolicy(endpoint),
+        atomicBatchEligible: Context.get(mergedAnnotations, AtomicBatchEligible),
         partialInput: requestInput(endpoint),
       };
       operations.push(operation);

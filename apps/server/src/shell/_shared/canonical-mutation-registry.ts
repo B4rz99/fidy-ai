@@ -28,6 +28,7 @@ import {
 } from "~/shell/transactions/mutations";
 import { createManualPAT, revokeAllPATs, revokePAT } from "~/shell/tokens/mutations";
 import { approvePATPairing, inspectPATPairing } from "~/shell/tokens/pat-pairing";
+import { rotateBackupRecoveryCode } from "~/shell/recovery/service";
 import type {
   CanonicalExecutionRequirements,
   CanonicalImplementationCaller,
@@ -204,6 +205,13 @@ export const canonicalMutationImplementations = {
       caller: resolved,
       payload: input.payload,
     }),
+  "recovery.rotateBackupRecoveryCode": (_input, { resolved }) =>
+    resolved.auditCaller._tag === "WebSession"
+      ? Effect.map(
+          rotateBackupRecoveryCode(resolved.subjectUserId, resolved.auditCaller.webSessionId),
+          (data) => ({ data, next: [] })
+        )
+      : Effect.die("Fresh-WebSession operation reached without WebSession authority"),
 } as const satisfies Partial<CanonicalOperationImplementations>;
 
 /** Every ordinary canonical mutation id, derived from the reusable implementation registry. */

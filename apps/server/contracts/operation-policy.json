@@ -538,6 +538,17 @@
       }
     },
     {
+      "id": "recovery.rotateBackupRecoveryCode",
+      "policy": {
+        "access": {
+          "type": "fresh-web-session-only"
+        },
+        "agentConfirmation": "not-required",
+        "kind": "mutation",
+        "requiredTier": "free"
+      }
+    },
+    {
       "id": "subscription.getUpgradeUrl",
       "policy": {
         "access": {

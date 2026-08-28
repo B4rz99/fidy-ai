@@ -1,5 +1,5 @@
-import { Effect } from "effect";
-import { SqlClient } from "effect/unstable/sql";
+import { Effect, Option, Schema } from "effect";
+import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import type { EmailAddress } from "~/core/email-authentication/model";
 import type { UserId, WhatsAppCallerReference } from "~/core/identity/reference";
 import { withUserTransaction } from "./user-transaction";
@@ -30,6 +30,10 @@ export const advisoryLockKey = {
   }),
   browserLoginApproval: (userId: UserId): AdvisoryLockKey => ({
     value: `browser-login-approval:${userId}`,
+    seed: 0,
+  }),
+  backupRecoveryRotation: (userId: UserId): AdvisoryLockKey => ({
+    value: `backup-recovery-rotation:${userId}`,
     seed: 0,
   }),
   emailReplacementCandidate: (emailAddress: EmailAddress): AdvisoryLockKey => ({
@@ -95,6 +99,24 @@ export const withUserLockInScope = Effect.fn("withUserLockInScope")(function* <A
     SELECT pg_advisory_xact_lock(hashtextextended(${lockKey.value}, ${lockKey.seed}))
   `.pipe(Effect.orDie);
   return yield* body;
+});
+
+/** Runs a body only when its transaction can acquire the lock without waiting. */
+export const tryWithUserLockInScope = Effect.fn("tryWithUserLockInScope")(function* <A, E, R>(
+  lockKey: AdvisoryLockKey,
+  body: Effect.Effect<A, E, R>
+) {
+  const sql = yield* SqlClient.SqlClient;
+  const { acquired } = yield* SqlSchema.findOne({
+    Request: Schema.Void,
+    Result: Schema.Struct({ acquired: Schema.Boolean }),
+    execute: () => sql`
+      SELECT pg_try_advisory_xact_lock(
+        hashtextextended(${lockKey.value}, ${lockKey.seed})
+      ) AS acquired
+    `,
+  })(undefined).pipe(Effect.orDie);
+  return acquired ? Option.some(yield* body) : Option.none<A>();
 });
 
 /** Runs a User-scoped body in the same transaction that owns the supplied advisory lock. */

@@ -35,6 +35,7 @@ import {
   acceptBrowserLoginPoll,
   approveBrowserLoginPairingIdInScope,
   expireBrowserLoginPairing,
+  findBrowserLoginApprovalCandidateInScope,
   insertPendingBrowserLoginPairing,
   lockBrowserLoginRedemptionCandidate,
   purgeExpiredAnonymousEvidence,
@@ -214,6 +215,38 @@ export const checkBrowserLoginPrivateVerifier = Effect.fn("BrowserLogin.checkPri
   }
 );
 
+/**
+ * Observes whether an existing pairing can enter an ordered cross-owner approval transaction.
+ * This intentionally retains no row lock; the owner transition rechecks after the coordinator's
+ * own locks have been acquired.
+ */
+export const isBrowserLoginPairingApprovableInScope = Effect.fn(
+  "BrowserLogin.isPairingApprovableInScope"
+)(function* (pairingId: BrowserLoginPairingId, attemptedAt: DateTime.Utc) {
+  const sql = yield* SqlClient.SqlClient;
+  return Option.isSome(
+    yield* findBrowserLoginApprovalCandidateInScope(sql, pairingId, attemptedAt)
+  );
+});
+
+/**
+ * Locks, rechecks, and binds one pairing to an existing User inside the caller's transaction.
+ * BrowserLogin remains the sole owner; absence is claimant-neutral and success carries commit time.
+ */
+export const approveBrowserLoginPairingForExistingUserInScope = Effect.fn(
+  "BrowserLogin.approvePairingForExistingUserInScope"
+)(function* (input: {
+  userId: UserId;
+  pairingId: BrowserLoginPairingId;
+  attemptedAt: DateTime.Utc;
+}) {
+  return yield* approveBrowserLoginPairingIdInScope(input).pipe(
+    Effect.catchTag("BrowserLoginPairingApprovalRejected", () =>
+      Effect.succeed(Option.none<DateTime.Utc>())
+    )
+  );
+});
+
 /** Rechecks browser proof and lets BrowserLogin alone bind the supplied existing User. */
 export const approveBrowserLoginPairingWithPrivateVerifierInScope = Effect.fn(
   "BrowserLogin.approveWithPrivateVerifierInScope"
@@ -227,11 +260,13 @@ export const approveBrowserLoginPairingWithPrivateVerifierInScope = Effect.fn(
 ) {
   const checked = yield* checkBrowserLoginPrivateVerifierInScope(input);
   if (Option.isNone(checked)) return false;
-  return yield* approveBrowserLoginPairingIdInScope({
-    userId: input.userId,
-    pairingId: checked.value.pairingId,
-    attemptedAt: input.attemptedAt,
-  });
+  return Option.isSome(
+    yield* approveBrowserLoginPairingIdInScope({
+      userId: input.userId,
+      pairingId: checked.value.pairingId,
+      attemptedAt: input.attemptedAt,
+    })
+  );
 });
 
 export type RedeemedBrowserLoginPairing =

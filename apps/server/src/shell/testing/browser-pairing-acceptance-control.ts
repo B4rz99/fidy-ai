@@ -61,8 +61,9 @@ const reset = Effect.gen(function* () {
   yield* sql`DELETE FROM web_sessions WHERE user_id = ${acceptanceUserId}`;
   yield* sql`
     TRUNCATE browser_pairing_email_start_requests, browser_pairing_email_delivery_intents,
-      browser_pairing_email_workflows, browser_login_start_attempts, browser_login_pairings
+      browser_pairing_email_workflows, browser_login_start_attempts
   `;
+  yield* sql`DELETE FROM browser_login_pairings`;
   yield* sql`DELETE FROM email_pairing_login_admission_scopes`;
   yield* sql`DELETE FROM email_delivery_admission_budgets`;
   yield* sql`DELETE FROM transactions WHERE user_id = ${acceptanceUserId}`;

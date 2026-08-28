@@ -54,6 +54,7 @@ export const TelemetryRegistry = {
   operation: [
     ...canonicalOperationCodes,
     "http.canonicalRequest",
+    "http.supportRecovery",
     "http.kapsoWebhook",
     "http.kapsoIdentityWebhook",
     "authorization.agentBearer",
@@ -68,6 +69,7 @@ export const TelemetryRegistry = {
     "task.auditRetention",
     "task.emailAuthenticationRetention",
     "task.onboardingRetention",
+    "task.supportRecoveryRetention",
     "task.whatsappRetention",
     "provider.request",
     "observability.accountSmoke",
@@ -110,6 +112,7 @@ export const TelemetryRegistry = {
     "/compatibility/:case",
     "/webhooks/kapso",
     "/web/pairings/redeem",
+    "/internal/support-recovery",
   ],
   httpRequest: [
     ...canonicalHttpRequests,
@@ -118,6 +121,7 @@ export const TelemetryRegistry = {
     "DELETE /compatibility/:case",
     "POST /webhooks/kapso",
     "POST /web/pairings/redeem",
+    "POST /internal/support-recovery",
   ],
   repositoryOperation: ["capture_transaction", "compatibility_probe"],
   databaseSystem: ["postgresql"],

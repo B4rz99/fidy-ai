@@ -42,6 +42,7 @@
     "check:production-image": "bun run --cwd apps/server check:production-image",
     "check:browser-client": "bun run --cwd apps/server check:browser-client && bun run --cwd apps/web check:bundle",
     "check:policy": "bun run --cwd apps/web check:policy",
+    "check:design-system": "bun scripts/check-web-design-system.ts",
     "check:shadcn": "bun run --cwd apps/web check:shadcn",
     "check:migration-ids": "bun run --cwd apps/server check:migration-ids",
     "check:credential-evidence": "bun scripts/check-credential-evidence.ts",

@@ -243,6 +243,15 @@
         "max-params": "off"
       }
     },
+    // A className expression is one recursive Babel syntax tree. Keeping its
+    // literal, template, condition, array, and call cases together makes the
+    // design-system gate's accepted syntax visible in one place.
+    {
+      "files": ["scripts/check-web-design-system.ts"],
+      "rules": {
+        "complexity": "off"
+      }
+    },
     // Only the runner needs the `.mjs` exception turned back off. That
     // exception keys off the *resolved* file, so it also demands an extension
     // on a package subpath that happens to resolve to one — which an

@@ -49,7 +49,7 @@ const EmailRequestForm = ({
     if (email._tag === "Some") onRequestEmail(email.value);
   };
   return (
-    <form className="space-y-2" onSubmit={submit}>
+    <form className="flex flex-col gap-2" onSubmit={submit}>
       <label className="text-sm font-medium" htmlFor="browser-login-email">
         O accede con tu correo verificado
       </label>
@@ -88,7 +88,7 @@ const EmailCodeForm = ({
   const rejected = emailStep === "rejected";
   const submitting = emailStep === "submitting";
   return (
-    <form className="space-y-2" onSubmit={submit}>
+    <form className="flex flex-col gap-2" onSubmit={submit}>
       <label className="text-sm font-medium" htmlFor="browser-login-email-code">
         Código recibido por correo
       </label>
@@ -153,7 +153,7 @@ const AwaitingPairing = ({
   onResendEmail: () => void;
   onCompleteEmail: (combinedCode: VerifiedEmailCombinedCode) => void;
 }>): JSX.Element => (
-  <div className="space-y-4">
+  <div className="flex flex-col gap-4">
     <Alert>
       <MessageCircleIcon aria-hidden="true" />
       <AlertTitle>Aprueba en WhatsApp</AlertTitle>
@@ -196,7 +196,7 @@ const AwaitingPairing = ({
 );
 
 const AuthenticatedSession = ({ onLogout }: Readonly<{ onLogout: () => void }>): JSX.Element => (
-  <div className="space-y-4">
+  <div className="flex flex-col gap-4">
     <Alert>
       <AlertTitle>Sesión iniciada</AlertTitle>
       <AlertDescription>Este navegador ahora tiene una sesión de Fidy guardada.</AlertDescription>
@@ -245,7 +245,7 @@ const PairingStatus = ({
       return (
         <Alert variant="destructive">
           <AlertTitle>La vinculación terminó</AlertTitle>
-          <AlertDescription className="space-y-3">
+          <AlertDescription className="flex flex-col gap-3">
             <p>{invalidPairingMessage}</p>
             <Button onClick={onRestart} size="sm" type="button" variant="outline">
               Iniciar de nuevo
@@ -274,7 +274,7 @@ export const BrowserLoginPairingFeature = (): JSX.Element => {
             Empieza aquí y luego aprueba este navegador desde tu conversación con Fidy en WhatsApp.
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-5">
+        <CardContent className="flex flex-col gap-5">
           <PairingStatus
             onCompleteEmail={pairing.completeEmail}
             onLogout={pairing.logout}

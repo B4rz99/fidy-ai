@@ -1,0 +1,35 @@
+apps/web/e2e/browser-pairing-postgres.spec.ts
+  s_28b8e1e0dbe2ca::t_fcc5b867577ec7 5,142,145-153,155-158,228-230,571
+  s_28b8e1e0dbe2ca::t_a275e6cfbb6c59 10,141
+  s_28b8e1e0dbe2ca::t_603d49afa9eb21 154
+apps/web/src/features/dashboard/drag-adapter.tsx
+  s_28b8e1e0dbe2ca::t_1745afa42b7573 72
+apps/server/contracts/openapi.json
+  s_28b8e1e0dbe2ca::t_7e173015a65763 9741
+research/009-dashboard-drag-and-drop-dependency.md
+  s_28b8e1e0dbe2ca::t_3d2a6a779c78f3 51
+apps/server/src/core/dashboard/rules.test.ts
+  s_28b8e1e0dbe2ca::t_256fdd286f90da 4-10,806-808,811,817,1101-1104,1107,1115
+  s_28b8e1e0dbe2ca::t_17f39f782b6c61 3
+apps/server/src/core/dashboard/catalog.ts
+  s_28b8e1e0dbe2ca::t_6b61aceedd5015 8
+  s_28b8e1e0dbe2ca::t_9a05572c0c66db 88-92,102-105
+apps/server/src/shell/dashboard/operations.ts
+  s_28b8e1e0dbe2ca::t_983d7c096d3eeb 162
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.24",
+  "base_commit_sha": "b92a9710ac33846498fe1ad5d21779f834b2028c",
+  "prompts": {},
+  "sessions": {
+    "s_28b8e1e0dbe2ca": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0401a-a202-7f44-b015-8c6906affc63",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

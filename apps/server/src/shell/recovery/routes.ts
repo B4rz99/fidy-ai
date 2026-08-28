@@ -1,5 +1,7 @@
 import { DateTime, Effect, Layer, Option, Redacted, Schema } from "effect";
 import { HttpRouter, type HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
+import { BrowserLoginPublicCodeInput } from "~/core/browser-login/rules";
+import { BackupRecoveryCode } from "~/core/recovery/model";
 import { collectBoundedBytes } from "~/shell/_shared/bounded-bytes";
 import { TelemetryHttpStatus } from "~/shell/observability/protocol";
 import { Telemetry } from "~/shell/observability/telemetry";
@@ -15,8 +17,8 @@ const statusTooManyRequests = 429;
 const statusUnavailable = 503;
 const jsonMediaType = /^application\/json(?:\s*;.*)?$/iu;
 const TransportPayload = Schema.Struct({
-  pairingCode: Schema.Unknown,
-  backupRecoveryCode: Schema.Unknown,
+  pairingCode: BrowserLoginPublicCodeInput,
+  backupRecoveryCode: BackupRecoveryCode,
 });
 const decodePayload = Schema.decodeUnknownOption(Schema.fromJsonString(TransportPayload), {
   onExcessProperty: "error",
@@ -135,7 +137,7 @@ export const SupportRecoveryPrivateRouteLive = HttpRouter.add(
 export const SupportRecoveryAccessLive = SupportAccessVerifier.layer;
 
 /** Test verifier for real-route suites; it accepts one fixed non-secret assertion only. */
-export const SupportRecoveryTestAccessLive = Layer.succeed(
+export const SupportRecoveryTestAccess = Layer.succeed(
   SupportAccessVerifier,
   SupportAccessVerifier.of({
     verify: (assertion) =>

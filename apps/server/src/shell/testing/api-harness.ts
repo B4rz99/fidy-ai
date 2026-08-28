@@ -55,7 +55,7 @@ import { TelemetryDisabled } from "~/shell/observability/disabled";
 import type { Telemetry } from "~/shell/observability/telemetry";
 import { TelemetryEnvelopeRecording } from "~/shell/observability/envelope-recorder";
 import type { SupportAccessVerifier } from "~/shell/recovery/access";
-import { SupportRecoveryTestAccessLive } from "~/shell/recovery/routes";
+import { SupportRecoveryTestAccess } from "~/shell/recovery/routes";
 
 /**
  * Derives the typed client from the ambient HttpClient, which the test server
@@ -233,7 +233,7 @@ const makeApiHarnessBase = (access: Layer.Layer<SupportAccessVerifier>): Support
     Layer.provideMerge(TestPublicNamespace)
   );
 
-const ApiHarnessBase = makeApiHarnessBase(SupportRecoveryTestAccessLive);
+const ApiHarnessBase = makeApiHarnessBase(SupportRecoveryTestAccess);
 
 /** API test stack with a caller-supplied Access verifier, for production-verifier boundary tests. */
 export const makeApiHarnessWithSupportAccess = (
@@ -268,7 +268,7 @@ export const makeBrowserLoginPairingAcceptanceServer = ({
 }): Layer.Layer<never, Config.ConfigError | Migrator.MigrationError | SqlError.SqlError> =>
   HttpLive.pipe(
     Layer.provide(MigratorLive),
-    Layer.provide(SupportRecoveryTestAccessLive),
+    Layer.provide(SupportRecoveryTestAccess),
     Layer.provide(TestKapsoClient),
     Layer.provide(MemoryInferenceTest),
     Layer.provide(BaselineCompactionInference),

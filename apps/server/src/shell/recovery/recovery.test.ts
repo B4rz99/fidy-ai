@@ -487,13 +487,13 @@ layer(RecoveryHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           expect(
             yield* sql`
               SELECT recovery_case.user_id AS "userId", recovery_case.lifecycle,
-                count(event.id)::int AS "eventCount"
+                array_agg(event.action || '/' || event.outcome ORDER BY event.ordinal) AS events
               FROM support_recovery_cases recovery_case
               JOIN support_recovery_case_events event ON event.case_id = recovery_case.id
               WHERE recovery_case.pairing_id = ${pairing.pairingId}
               GROUP BY recovery_case.user_id, recovery_case.lifecycle
             `
-          ).toEqual([{ userId, lifecycle: "open", eventCount: 1 }]);
+          ).toEqual([{ userId, lifecycle: "open", events: ["open/accepted", "decide/rejected"] }]);
           expect(
             yield* sql`
               SELECT lifecycle, user_id AS "userId" FROM browser_login_pairings

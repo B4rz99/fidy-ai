@@ -164,7 +164,7 @@ it.effect("authenticates before hidden bounded input without exposing credential
   })
 );
 
-it.effect("accepts exactly bounded stdin without echo and rejects oversized stdin", () =>
+it.effect("rejects non-interactive recovery-code input before sending a recovery request", () =>
   Effect.gen(function* () {
     const fixture = yield* makeFixture({ response: "approved", cloudflaredExit: 0 });
     const child = Bun.spawn(["bun", "--preload", fixture.preloadPath, cliPath], {
@@ -184,36 +184,11 @@ it.effect("accepts exactly bounded stdin without echo and rejects oversized stdi
         child.exited,
       ])
     );
-    expect(exitCode).toBe(0);
-    expect(stdout).toContain("Recuperación aprobada.");
+    expect(exitCode).toBe(1);
+    expect(`${stdout}${stderr}`).toContain("La operación de soporte no está disponible.");
     expect(`${stdout}${stderr}`).not.toContain(recoveryCode);
-    expect(yield* Effect.promise(() => Bun.file(fixture.requestLog).text())).toContain(
-      recoveryCode
-    );
-    expect(yield* Effect.promise(() => Bun.file(fixture.cloudflaredLog).text())).toContain(
-      "access token"
-    );
-
-    const oversizedFixture = yield* makeFixture({ response: "approved", cloudflaredExit: 0 });
-    const oversizedChild = Bun.spawn(["bun", "--preload", oversizedFixture.preloadPath, cliPath], {
-      env: { PATH: `${oversizedFixture.directory}:${Bun.env.PATH ?? ""}` },
-      stdin: "pipe",
-      stdout: "pipe",
-      stderr: "pipe",
-    });
-    yield* Effect.promise(() =>
-      Promise.resolve(
-        oversizedChild.stdin.write(`${pairingCode}\n${oversizedRecoveryInput.repeat(2)}\n`)
-      )
-    );
-    yield* Effect.promise(() => Promise.resolve(oversizedChild.stdin.end()));
-    const [oversizedOutput, oversizedExit] = yield* Effect.promise(() =>
-      Promise.all([new Response(oversizedChild.stderr).text(), oversizedChild.exited])
-    );
-    expect(oversizedExit).toBe(1);
-    expect(oversizedOutput).toContain("La operación de soporte no está disponible.");
-    expect(oversizedOutput).not.toContain(oversizedRecoveryInput);
-    expect(yield* Effect.promise(() => Bun.file(oversizedFixture.requestLog).exists())).toBe(false);
+    expect(yield* Effect.promise(() => Bun.file(fixture.requestLog).exists())).toBe(false);
+    expect(yield* Effect.promise(() => Bun.file(fixture.cloudflaredLog).exists())).toBe(false);
   })
 );
 

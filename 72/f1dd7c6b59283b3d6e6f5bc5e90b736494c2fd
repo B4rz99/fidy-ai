@@ -1,0 +1,21 @@
+apps/web/src/features/dashboard/view.tsx
+  s_28b8e1e0dbe2ca::t_eda20820052654 659-660,662
+apps/web/src/features/dashboard/feature.tsx
+  s_28b8e1e0dbe2ca::t_1d5098b787e2ea 15-16,72-73
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "72f1dd7c6b59283b3d6e6f5bc5e90b736494c2fd",
+  "prompts": {},
+  "sessions": {
+    "s_28b8e1e0dbe2ca": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0401a-a202-7f44-b015-8c6906affc63",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

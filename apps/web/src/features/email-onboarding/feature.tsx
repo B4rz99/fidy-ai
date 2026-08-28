@@ -22,9 +22,9 @@ const VerificationForm = ({ invalid, restart, verify }: VerificationFormProps): 
     setCombinedCode("");
   };
   return (
-    <form className="space-y-4" onSubmit={submit}>
+    <form className="flex flex-col gap-4" onSubmit={submit}>
       {invalid && (
-        <div className="space-y-3">
+        <div className="flex flex-col gap-3">
           <Alert variant="destructive">
             <AlertTitle>El código no es válido</AlertTitle>
             <AlertDescription>Revisa el correo o solicita uno nuevo por WhatsApp.</AlertDescription>
@@ -34,7 +34,7 @@ const VerificationForm = ({ invalid, restart, verify }: VerificationFormProps): 
           </Button>
         </div>
       )}
-      <div className="space-y-2">
+      <div className="flex flex-col gap-2">
         <Label htmlFor="combined-code">Código de verificación</Label>
         <Input
           autoCapitalize="characters"
@@ -81,7 +81,7 @@ const OnboardingState = ({
   }
   if (state._tag === "Recovery") {
     return (
-      <div className="space-y-4">
+      <div className="flex flex-col gap-4">
         <Alert>
           <ShieldCheckIcon aria-hidden="true" />
           <AlertTitle>Guarda tu código de recuperación</AlertTitle>
@@ -100,7 +100,7 @@ const OnboardingState = ({
     );
   }
   return (
-    <div className="space-y-4">
+    <div className="flex flex-col gap-4">
       <Alert>
         <AlertTitle>Tu cuenta está lista</AlertTitle>
         <AlertDescription>Ya puedes vincular este navegador desde WhatsApp.</AlertDescription>
@@ -130,7 +130,7 @@ export const EmailOnboardingView = (onboarding: EmailOnboardingViewProps): JSX.E
         </CardTitle>
         <CardDescription>Escribe el código completo que enviamos a tu correo.</CardDescription>
       </CardHeader>
-      <CardContent className="space-y-5">
+      <CardContent className="flex flex-col gap-5">
         <OnboardingState {...onboarding} />
       </CardContent>
     </Card>

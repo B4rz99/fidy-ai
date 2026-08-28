@@ -219,6 +219,20 @@ export const supportRecovery = Effect.gen(function* () {
       LIMIT 1
     $$;
 
+    CREATE FUNCTION fidy_resolve_attributed_support_recovery(text)
+    RETURNS TABLE (user_id uuid, credential_revision integer, pairing_id uuid,
+      pairing_expires_at timestamptz)
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path = pg_catalog, public AS $$
+      SELECT recovery_case.user_id, recovery_case.credential_revision,
+        pairing.id, pairing.expires_at
+      FROM support_recovery_cases recovery_case
+      JOIN browser_login_pairings pairing ON pairing.id = recovery_case.pairing_id
+      WHERE pairing.public_code = $1 AND recovery_case.lifecycle = 'open'
+        AND pairing.lifecycle = 'pending_approval' AND pairing.expires_at > clock_timestamp()
+      LIMIT 1
+    $$;
+
     CREATE FUNCTION fidy_support_recovery_pairing_has_case(uuid)
     RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER
     SET search_path = pg_catalog, public AS $$
@@ -310,6 +324,7 @@ export const supportRecovery = Effect.gen(function* () {
     GRANT SELECT, UPDATE, DELETE ON support_recovery_cases TO fidy_gateway;
     GRANT SELECT, INSERT ON support_recovery_case_events TO fidy_gateway;
     ALTER FUNCTION fidy_resolve_support_recovery(bytea, text) OWNER TO fidy_gateway;
+    ALTER FUNCTION fidy_resolve_attributed_support_recovery(text) OWNER TO fidy_gateway;
     ALTER FUNCTION fidy_support_recovery_pairing_has_case(uuid) OWNER TO fidy_gateway;
     ALTER FUNCTION fidy_backup_recovery_rotation_allowed(uuid, uuid) OWNER TO fidy_gateway;
     ALTER FUNCTION fidy_has_support_recovery_open_capacity() OWNER TO fidy_gateway;
@@ -317,6 +332,7 @@ export const supportRecovery = Effect.gen(function* () {
     ALTER FUNCTION fidy_delete_expired_support_recovery(timestamptz) OWNER TO fidy_gateway;
     ALTER FUNCTION fidy_delete_support_recovery_for_titular() OWNER TO fidy_gateway;
     REVOKE ALL ON FUNCTION fidy_resolve_support_recovery(bytea, text) FROM PUBLIC;
+    REVOKE ALL ON FUNCTION fidy_resolve_attributed_support_recovery(text) FROM PUBLIC;
     REVOKE ALL ON FUNCTION fidy_support_recovery_pairing_has_case(uuid) FROM PUBLIC;
     REVOKE ALL ON FUNCTION fidy_backup_recovery_rotation_allowed(uuid, uuid) FROM PUBLIC;
     REVOKE ALL ON FUNCTION fidy_has_support_recovery_open_capacity() FROM PUBLIC;
@@ -324,6 +340,7 @@ export const supportRecovery = Effect.gen(function* () {
     REVOKE ALL ON FUNCTION fidy_delete_expired_support_recovery(timestamptz) FROM PUBLIC;
     REVOKE ALL ON FUNCTION fidy_delete_support_recovery_for_titular() FROM PUBLIC;
     GRANT EXECUTE ON FUNCTION fidy_resolve_support_recovery(bytea, text) TO fidy_runtime;
+    GRANT EXECUTE ON FUNCTION fidy_resolve_attributed_support_recovery(text) TO fidy_runtime;
     GRANT EXECUTE ON FUNCTION fidy_support_recovery_pairing_has_case(uuid) TO fidy_runtime;
     GRANT EXECUTE ON FUNCTION fidy_backup_recovery_rotation_allowed(uuid, uuid) TO fidy_runtime;
     GRANT EXECUTE ON FUNCTION fidy_has_support_recovery_open_capacity() TO fidy_runtime;

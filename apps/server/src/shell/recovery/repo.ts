@@ -196,6 +196,27 @@ export const resolveSupportRecovery = Effect.fn("Recovery.resolveCandidate")(fun
   })(undefined).pipe(Effect.orDie);
 });
 
+/**
+ * Resolves an already-tracked open case by its checked public pairing code so the caller can append
+ * safe refusal evidence. Returns none unless the pairing is still pending and unexpired. This
+ * read-only gateway can provide attribution only; the caller must recheck the case under User locks.
+ * Database failures defect rather than becoming claimant-visible outcomes.
+ */
+export const resolveAttributedSupportRecovery = Effect.fn("Recovery.resolveAttributedCandidate")(
+  function* (publicCode: BrowserLoginPublicCode) {
+    const sql = yield* SqlClient.SqlClient;
+    return yield* SqlSchema.findOneOption({
+      Request: Schema.Void,
+      Result: ResolvedSupportRecovery,
+      execute: () => sql`
+      SELECT user_id AS "userId", credential_revision AS "credentialRevision",
+        pairing_id AS "pairingId", pairing_expires_at AS "pairingExpiresAt"
+      FROM fidy_resolve_attributed_support_recovery(${publicCode})
+    `,
+    })(undefined).pipe(Effect.orDie);
+  }
+);
+
 const LockedCredential = Schema.Struct({
   codeDigest: Schema.OptionFromNullOr(BackupRecoveryDigest),
   revision: Schema.Int,

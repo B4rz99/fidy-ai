@@ -43,7 +43,7 @@ import { findWhatsAppCaller } from "~/shell/identity/repo";
 import { upsertPAT } from "~/shell/tokens/repo";
 import { HttpLive } from "~/shell/http";
 import { TelemetryDisabled } from "~/shell/observability/disabled";
-import { SupportRecoveryTestAccessLive } from "~/shell/recovery/routes";
+import { SupportRecoveryTestAccess } from "~/shell/recovery/routes";
 import { type ApiClient, makeApiClientLive } from "./api-harness";
 import { defaultPatBearer } from "./identity-fixtures";
 import { makeLanguageModelFinishPart } from "./language-model-fixtures";
@@ -519,7 +519,7 @@ const AcceptanceApplication = Layer.mergeAll(
   WhatsAppWorkerLive.pipe(Layer.provide(AgentService.layer))
 ).pipe(
   Layer.provide(DeterministicHostedInference),
-  Layer.provide(SupportRecoveryTestAccessLive),
+  Layer.provide(SupportRecoveryTestAccess),
   Layer.provide(RuntimeAuthorityLive),
   Layer.provide(MigratorLive),
   Layer.provide(TelemetryDisabled)

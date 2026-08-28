@@ -7,7 +7,6 @@ const supportUrl = "https://api.fidyapp.com/internal/support-recovery";
 const maximumPairingCharacters = 16;
 const maximumRecoveryCharacters = 40;
 const maximumResponseBytes = 1_024;
-const maximumStdinBytes = maximumPairingCharacters + maximumRecoveryCharacters + 4;
 const failureExitCode = 1;
 const refusalExitCode = 2;
 const successMessage =
@@ -145,53 +144,15 @@ const authenticateOperator = Effect.fn("SupportRecoveryCli.authenticate")(functi
   });
 });
 
-const readBoundedStdin = Effect.callback<
-  Readonly<{ pairingCode: string; backupRecoveryCode: string }>,
-  SupportCliFailure
->((resume) => {
-  const chunks: Array<Uint8Array> = [];
-  let byteLength = 0;
-  const cleanup = (): void => {
-    process.stdin.pause();
-    process.stdin.removeListener("data", onData);
-    process.stdin.removeListener("end", onEnd);
-  };
-  const fail = (): void => {
-    cleanup();
-    resume(Effect.fail(new SupportCliFailure({ message: unavailableMessage })));
-  };
-  const onData = (chunk: Uint8Array): void => {
-    byteLength += chunk.byteLength;
-    if (byteLength > maximumStdinBytes) return fail();
-    chunks.push(chunk);
-  };
-  const onEnd = (): void => {
-    cleanup();
-    const lines = new TextDecoder().decode(Buffer.concat(chunks)).split(/\r?\n/u);
-    if (lines.at(-1) === "") lines.pop();
-    const [pairingCode, backupRecoveryCode] = lines;
-    if (
-      lines.length !== 2 ||
-      pairingCode === undefined ||
-      backupRecoveryCode === undefined ||
-      pairingCode.length > maximumPairingCharacters ||
-      backupRecoveryCode.length > maximumRecoveryCharacters
-    ) {
-      return fail();
-    }
-    resume(Effect.succeed({ pairingCode, backupRecoveryCode }));
-  };
-  process.stdin.on("data", onData);
-  process.stdin.on("end", onEnd);
-  process.stdin.resume();
-  return Effect.sync(cleanup);
-});
-
-const readRecoveryInput = Effect.fn("SupportRecoveryCli.readInput")(function* () {
-  if (!process.stdin.isTTY) return yield* readBoundedStdin;
-  if (!process.stdout.isTTY) {
+const requireInteractiveTerminal = Effect.fn("SupportRecoveryCli.requireInteractiveTerminal")(
+  function* () {
+    if (process.stdin.isTTY && process.stdout.isTTY) return;
     return yield* new SupportCliFailure({ message: unavailableMessage });
   }
+);
+
+const readRecoveryInput = Effect.fn("SupportRecoveryCli.readInput")(function* () {
+  yield* requireInteractiveTerminal();
   const pairingCode = yield* readBoundedLine(
     "Referencia pública de vinculación: ",
     maximumPairingCharacters,
@@ -255,6 +216,7 @@ const displayResult = Effect.fn("SupportRecoveryCli.displayResult")(function* (
 });
 
 const program = Effect.gen(function* () {
+  yield* requireInteractiveTerminal();
   const accessToken = yield* authenticateOperator();
   const input = yield* readRecoveryInput();
   yield* displayResult(yield* callSupportRecovery(accessToken, input));

@@ -1,7 +1,7 @@
 import { timingSafeEqual } from "node:crypto";
-import { Crypto, Data, DateTime, Effect, Option, Redacted, Schema } from "effect";
+import { Crypto, Data, DateTime, Effect, Option, Redacted } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
-import { BrowserLoginPublicCodeInput } from "~/core/browser-login/rules";
+import type { BrowserLoginPublicCode } from "~/core/browser-login/rules";
 import type { UserId } from "~/core/identity/reference";
 import type { WebSessionId } from "~/core/web-session/reference";
 import {
@@ -25,6 +25,7 @@ import {
 } from "~/shell/browser-login/service";
 import {
   type OpenSupportRecoveryCase,
+  type ResolvedSupportRecovery,
   approveSupportRecoveryCase,
   expireSupportRecoveryCase,
   findOpenSupportRecoveryCase,
@@ -33,6 +34,7 @@ import {
   insertSupportRecoveryCase,
   lockBackupRecoveryCredential,
   rejectSupportRecoveryCase,
+  resolveAttributedSupportRecovery,
   resolveSupportRecovery,
   rotateBackupRecoveryDigestInScope,
 } from "./repo";
@@ -50,11 +52,11 @@ export class SupportRecoveryOperationalFailure extends Data.TaggedError(
   "SupportRecoveryOperationalFailure"
 )<{ readonly code: "support_recovery_unavailable" }> {}
 
-/** Raw values accepted only after the private transport has authenticated and safely decoded them. */
+/** Checked values accepted only after the private transport has authenticated and decoded them. */
 export type ApproveSupportRecoveryInput = Readonly<{
   operatorId: SupportOperatorId;
-  pairingCode: unknown;
-  backupRecoveryCode: Redacted.Redacted<unknown>;
+  pairingCode: BrowserLoginPublicCode;
+  backupRecoveryCode: Redacted.Redacted<BackupRecoveryCode>;
 }>;
 
 const digestRecoveryCode = Effect.fn("Recovery.digestCode")(function* (code: string) {
@@ -101,11 +103,7 @@ const rejectCase = Effect.fn("Recovery.rejectLockedCase")(function* (
 });
 
 const openCase = Effect.fn("Recovery.openCase")(function* (input: {
-  candidate: Effect.Success<ReturnType<typeof resolveSupportRecovery>> extends Option.Option<
-    infer A
-  >
-    ? A
-    : never;
+  candidate: ResolvedSupportRecovery;
   operatorId: SupportOperatorId;
   openedAt: DateTime.Utc;
 }) {
@@ -133,11 +131,7 @@ const openCase = Effect.fn("Recovery.openCase")(function* (input: {
 });
 
 const currentCase = Effect.fn("Recovery.currentCase")(function* (input: {
-  candidate: Effect.Success<ReturnType<typeof resolveSupportRecovery>> extends Option.Option<
-    infer A
-  >
-    ? A
-    : never;
+  candidate: ResolvedSupportRecovery;
   operatorId: SupportOperatorId;
   attemptedAt: DateTime.Utc;
 }) {
@@ -191,33 +185,52 @@ class SupportRecoveryAttributionLost extends Data.TaggedError(
   "SupportRecoveryAttributionLost"
 )<{}> {}
 
-const decideInUserScope = Effect.fn("Recovery.decideInUserScope")(function* (input: {
-  candidate: Effect.Success<ReturnType<typeof resolveSupportRecovery>> extends Option.Option<
-    infer A
-  >
-    ? A
-    : never;
+const caseMatchesCandidate = (
+  recoveryCase: OpenSupportRecoveryCase,
+  candidate: ResolvedSupportRecovery
+): boolean =>
+  recoveryCase.pairingId === candidate.pairingId &&
+  recoveryCase.credentialRevision === candidate.credentialRevision;
+
+type SupportRecoveryDecisionInput = Readonly<{
+  candidate: ResolvedSupportRecovery;
   attemptedDigest: BackupRecoveryDigest;
   operatorId: SupportOperatorId;
   attemptedAt: DateTime.Utc;
-}) {
+  caseAlreadyExists: boolean;
+}>;
+
+const rejectAttributedCredentialMismatch = Effect.fn("Recovery.rejectAttributedCredentialMismatch")(
+  function* (input: SupportRecoveryDecisionInput) {
+    if (!input.caseAlreadyExists) return "NotApproved" as const;
+    const attributedCase = yield* currentCaseForApprovablePairing(input);
+    if (Option.isNone(attributedCase)) return "NotApproved" as const;
+    const trackedCase = attributedCase.value;
+    return caseMatchesCandidate(trackedCase, input.candidate)
+      ? yield* rejectCase(trackedCase, input.operatorId, input.attemptedAt)
+      : ("NotApproved" as const);
+  }
+);
+
+const decideInUserScope = Effect.fn("Recovery.decideInUserScope")(function* (
+  input: SupportRecoveryDecisionInput
+) {
   const credential = yield* lockBackupRecoveryCredential(input.candidate.userId);
   const credentialMatches = credentialMatchesCandidate(
     credential,
     input.attemptedDigest,
     input.candidate.credentialRevision
   );
-  // The credential lock is the authoritative attribution recheck. A pre-lock resolver candidate
-  // becomes unattributable after a concurrent approval consumes or rotates that credential.
-  if (!credentialMatches) return "NotApproved";
+  // A valid pairing reference becomes attributable after its case opens even when this credential
+  // proof is wrong, stale, or belongs to another User. The event retains no matching detail.
+  if (!credentialMatches) return yield* rejectAttributedCredentialMismatch(input);
 
   const recoveryCase = yield* currentCaseForApprovablePairing(input);
   if (Option.isNone(recoveryCase)) return "NotApproved";
   const lockedCase = recoveryCase.value;
-  const caseMismatch =
-    lockedCase.pairingId !== input.candidate.pairingId ||
-    lockedCase.credentialRevision !== input.candidate.credentialRevision;
-  if (caseMismatch) return yield* rejectCase(lockedCase, input.operatorId, input.attemptedAt);
+  if (!caseMatchesCandidate(lockedCase, input.candidate)) {
+    return yield* rejectCase(lockedCase, input.operatorId, input.attemptedAt);
+  }
 
   const pairingApproval = yield* approveBrowserLoginPairingForExistingUserInScope({
     userId: input.candidate.userId,
@@ -247,18 +260,11 @@ const approveSupportRecoveryDecision = Effect.fn("Recovery.approveSupportRecover
     SupportRecoveryOperationalFailure | SupportRecoveryAttributionLost,
     Crypto.Crypto | SqlClient.SqlClient
   > {
-    const parsedCode = Schema.decodeUnknownOption(BackupRecoveryCode)(
-      Redacted.value(input.backupRecoveryCode)
-    );
-    const parsedPairing = Schema.decodeUnknownOption(BrowserLoginPublicCodeInput)(
-      input.pairingCode
-    );
-    const normalizedCode = Option.getOrElse(parsedCode, () =>
-      BackupRecoveryCode.make("AAAAA-AAAAA-AAAAA-AAAAA-AAAAA")
-    );
-    const attemptedDigest = yield* digestRecoveryCode(normalizedCode);
-    if (Option.isNone(parsedCode) || Option.isNone(parsedPairing)) return "NotApproved";
-    const candidate = yield* resolveSupportRecovery(attemptedDigest, parsedPairing.value);
+    const attemptedDigest = yield* digestRecoveryCode(Redacted.value(input.backupRecoveryCode));
+    const attributedCandidate = yield* resolveAttributedSupportRecovery(input.pairingCode);
+    const candidate = Option.isSome(attributedCandidate)
+      ? attributedCandidate
+      : yield* resolveSupportRecovery(attemptedDigest, input.pairingCode);
     if (Option.isNone(candidate)) return "NotApproved";
     const attemptedAt = yield* DateTime.now;
     return yield* withUserTransaction(
@@ -272,6 +278,7 @@ const approveSupportRecoveryDecision = Effect.fn("Recovery.approveSupportRecover
             attemptedDigest,
             operatorId: input.operatorId,
             attemptedAt,
+            caseAlreadyExists: Option.isSome(attributedCandidate),
           })
         )
       )
@@ -281,7 +288,7 @@ const approveSupportRecoveryDecision = Effect.fn("Recovery.approveSupportRecover
 
 /**
  * Verifies one pre-issued BackupRecoveryCode and approves an existing pairing in one transaction.
- * Malformed or unattributable input returns the same decision and creates no User-owned evidence.
+ * Unattributable input returns the same decision and creates no User-owned evidence.
  */
 export const approveSupportRecovery = Effect.fn("Recovery.approveSupportRecovery")(function* (
   input: ApproveSupportRecoveryInput

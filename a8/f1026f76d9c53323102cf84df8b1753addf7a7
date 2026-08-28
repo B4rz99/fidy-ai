@@ -1,0 +1,66 @@
+apps/server/src/shell/subscription/wompi-client.ts
+  s_92114c81307c01::t_f0fae593a3376f 17,21,52,56-62,65,85-91,93
+  s_92114c81307c01::t_d05e5cb04c4a62 104-106,236-262,265-266,343
+  s_92114c81307c01::t_4105a34d085b0c 232-233,263-264,310-311
+apps/server/src/core/subscription/enrollment-model.ts
+  s_92114c81307c01::t_3da96f859ac133 66-71
+apps/server/src/shell/testing/api-harness.ts
+  s_92114c81307c01::t_e6c950b183f985 12
+  s_92114c81307c01::t_2a34a40247f023 228,234
+  s_92114c81307c01::t_e6c1a44e9e93b8 186-190
+  s_92114c81307c01::t_8dfba6b080fa36 231-233,235-236
+  s_92114c81307c01::t_1b0db2adcb3c07 23,26,230
+apps/server/scripts/reconcile-wompi-enrollment.ts
+  s_92114c81307c01::t_0da3d940c213b3 4
+  s_92114c81307c01::t_5b23c41a37bfe8 7
+  s_92114c81307c01::t_13c607ea1ce96f 10,13,41-46
+apps/server/src/core/subscription/enrollment-rules.ts
+  s_92114c81307c01::t_3649724a647272 59-61,65
+apps/server/src/shell/subscription/enrollment-handlers.test.ts
+  s_92114c81307c01::t_73cf9766cf5d3d 107,210-213,215,217-220,222,235
+  s_92114c81307c01::t_5e7b070fb2900a 2,11,97-105,108-110
+  s_92114c81307c01::t_b09872ed91c9a0 197-209,214,216,221,223-234,236-254
+  s_92114c81307c01::t_75b54720440ae1 426-434
+  s_92114c81307c01::t_083686c1b92c39 156-169
+  s_92114c81307c01::t_6b2f9b7c414506 106
+  s_92114c81307c01::t_9fb940493c4c57 14,438
+  s_92114c81307c01::t_b403d74619ad95 111-112
+apps/server/src/shell/subscription/enrollment-repo.ts
+  s_92114c81307c01::t_e7b460c462225f 10,245,293
+apps/server/src/shell/subscription/enrollment-handlers.ts
+  s_92114c81307c01::t_abd099989ff2b5 151
+apps/server/scripts/verify-wompi-sandbox-source.ts
+  s_92114c81307c01::t_c4fe4f93faeb45 22-25
+apps/server/src/shell/subscription/wompi-client.test.ts
+  s_92114c81307c01::t_58b6ebb253f38d 134,137-152
+  s_92114c81307c01::t_c9a80d9af6ef27 14,94-98,119-121,123-133,135
+  s_92114c81307c01::t_2efb14a22d7c6d 122
+  s_92114c81307c01::t_89949c2408b419 136
+apps/server/src/core/subscription/enrollment-rules.test.ts
+  s_92114c81307c01::t_5817db6e1dfe46 68-72
+docs/adr/0021-browser-only-payment-credential-enrollment.md
+  s_92114c81307c01::t_80de0f5ef4b323 3
+apps/server/src/shell/subscription/card-enrollment.ts
+  s_92114c81307c01::t_349964f6484076 318-330,345
+  s_92114c81307c01::t_57abdab5729db0 478,532-539,541-542
+  s_92114c81307c01::t_5e9924de50ba7b 10,147-156,420-422,427-445
+  s_92114c81307c01::t_6b2f9b7c414506 301,540
+  s_92114c81307c01::t_480f3d273634ec 300,302
+  s_92114c81307c01::t_4b1abfff86bef0 543
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "a8f1026f76d9c53323102cf84df8b1753addf7a7",
+  "prompts": {},
+  "sessions": {
+    "s_92114c81307c01": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a04600-4f46-7cbd-ab2a-33c18887d7a4",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

@@ -79,6 +79,7 @@ assertApplicationRejected() {
     --env OPENAI_API_KEY --env OPENAI_API_URL \
     --env RESEND_API_KEY --env RESEND_FROM_EMAIL --env RESEND_FROM_NAME \
     --env PUBLIC_WEB_ORIGIN --env PUBLIC_API_ORIGIN --env INGEST_EMAIL_DOMAIN \
+    --env CLOUDFLARE_ACCESS_ISSUER --env CLOUDFLARE_ACCESS_AUDIENCE \
     --env "RAILWAY_GIT_COMMIT_SHA=${releaseSha}" \
     --env SENTRY_ENVIRONMENT --env SENTRY_CAPTURE_ERRORS --env SENTRY_CAPTURE_TRACES \
     --env SENTRY_PRODUCTION_DSN --env SENTRY_NON_PRODUCTION_DSN \
@@ -262,6 +263,8 @@ export RESEND_FROM_NAME="Fidy"
 export PUBLIC_WEB_ORIGIN="https://fidyapp.com"
 export PUBLIC_API_ORIGIN="https://api.fidyapp.com"
 export INGEST_EMAIL_DOMAIN="ingest.fidyapp.com"
+export CLOUDFLARE_ACCESS_ISSUER="https://production-smoke.cloudflareaccess.com"
+export CLOUDFLARE_ACCESS_AUDIENCE="production-smoke-audience"
 export SENTRY_ENVIRONMENT="production"
 export SENTRY_CAPTURE_ERRORS="false"
 export SENTRY_CAPTURE_TRACES="false"
@@ -341,6 +344,7 @@ docker run --detach --name "$application" --network "$network" \
   --env OPENAI_API_KEY --env OPENAI_API_URL \
   --env RESEND_API_KEY --env RESEND_FROM_EMAIL --env RESEND_FROM_NAME \
   --env PUBLIC_WEB_ORIGIN --env PUBLIC_API_ORIGIN --env INGEST_EMAIL_DOMAIN \
+  --env CLOUDFLARE_ACCESS_ISSUER --env CLOUDFLARE_ACCESS_AUDIENCE \
   --env "RAILWAY_GIT_COMMIT_SHA=${releaseSha}" \
   --env SENTRY_ENVIRONMENT --env SENTRY_CAPTURE_ERRORS --env SENTRY_CAPTURE_TRACES \
   --env SENTRY_PRODUCTION_DSN --env SENTRY_NON_PRODUCTION_DSN \

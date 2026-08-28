@@ -11,13 +11,16 @@ import {
   type Schema,
 } from "effect";
 import {
+  type Etag,
   FetchHttpClient,
   type HttpClient,
   type HttpClientError,
+  type HttpPlatform,
   HttpServer,
 } from "effect/unstable/http";
 import { HttpApiClient } from "effect/unstable/httpapi";
-import type { Migrator, SqlError } from "effect/unstable/sql";
+import type { PgClient } from "@effect/sql-pg/PgClient";
+import type { Migrator, SqlClient, SqlError } from "effect/unstable/sql";
 import { type TokenBearer } from "~/core/tokens/model";
 import { HostedInference } from "~/shell/agent/hosted-inference";
 import { ConversationCompactionInference } from "~/shell/transcript/conversation-compaction-inference";
@@ -49,7 +52,10 @@ import { defaultPatBearer } from "./identity-fixtures";
 import { TestPublicNamespace } from "./test-config";
 import { HttpLive } from "~/shell/http";
 import { TelemetryDisabled } from "~/shell/observability/disabled";
+import type { Telemetry } from "~/shell/observability/telemetry";
 import { TelemetryEnvelopeRecording } from "~/shell/observability/envelope-recorder";
+import type { SupportAccessVerifier } from "~/shell/recovery/access";
+import { SupportRecoveryTestAccessLive } from "~/shell/recovery/routes";
 
 /**
  * Derives the typed client from the ambient HttpClient, which the test server
@@ -182,21 +188,57 @@ const BoundedBunHttpServerTest = HttpServer.layerTestClient.pipe(
   )
 );
 
-const ApiHarnessBase = makeApiClientLive({
-  tag: ApiHarnessClient,
-  bearer: defaultPatBearer,
-}).pipe(
-  Layer.provideMerge(HttpLive.pipe(Layer.provide(MigratorLive))),
-  Layer.provideMerge(TestKapsoClient),
-  Layer.provideMerge(MemoryInferenceTest),
-  Layer.provideMerge(BaselineCompactionInference),
-  Layer.provideMerge(makeDevelopmentSeedLive(defaultPatBearer)),
-  Layer.provideMerge(BoundedBunHttpServerTest),
-  Layer.provideMerge(BunServices.layer),
-  Layer.provideMerge(MigrationSqlClient.layer),
-  Layer.provideMerge(PgLive),
-  Layer.provideMerge(TestPublicNamespace)
-);
+type SupportAccessApiHarnessOutput =
+  | ApiHarnessClient
+  | ApiHarnessKapsoControl
+  | ConversationCompactionInference
+  | Etag.Generator
+  | HostedInference
+  | HttpClient.HttpClient
+  | HttpPlatform.HttpPlatform
+  | HttpServer.HttpServer
+  | KapsoClient
+  | MigrationSqlClient
+  | PgClient
+  | SqlClient.SqlClient
+  | BunServices.BunServices;
+type SupportAccessApiHarnessError =
+  | Config.ConfigError
+  | Migrator.MigrationError
+  | SqlError.SqlError;
+type SupportAccessApiHarness = Layer.Layer<
+  SupportAccessApiHarnessOutput,
+  SupportAccessApiHarnessError,
+  Telemetry
+>;
+type SupportAccessApiHarnessLive = Layer.Layer<
+  SupportAccessApiHarnessOutput,
+  SupportAccessApiHarnessError
+>;
+
+const makeApiHarnessBase = (access: Layer.Layer<SupportAccessVerifier>): SupportAccessApiHarness =>
+  makeApiClientLive({
+    tag: ApiHarnessClient,
+    bearer: defaultPatBearer,
+  }).pipe(
+    Layer.provideMerge(HttpLive.pipe(Layer.provide(MigratorLive), Layer.provide(access))),
+    Layer.provideMerge(TestKapsoClient),
+    Layer.provideMerge(MemoryInferenceTest),
+    Layer.provideMerge(BaselineCompactionInference),
+    Layer.provideMerge(makeDevelopmentSeedLive(defaultPatBearer)),
+    Layer.provideMerge(BoundedBunHttpServerTest),
+    Layer.provideMerge(BunServices.layer),
+    Layer.provideMerge(MigrationSqlClient.layer),
+    Layer.provideMerge(PgLive),
+    Layer.provideMerge(TestPublicNamespace)
+  );
+
+const ApiHarnessBase = makeApiHarnessBase(SupportRecoveryTestAccessLive);
+
+/** API test stack with a caller-supplied Access verifier, for production-verifier boundary tests. */
+export const makeApiHarnessWithSupportAccess = (
+  access: Layer.Layer<SupportAccessVerifier>
+): SupportAccessApiHarnessLive => makeApiHarnessBase(access).pipe(Layer.provide(TelemetryDisabled));
 
 /** The ordinary API test stack, with observability fully disabled and no SDK transport. */
 export const ApiHarness = ApiHarnessBase.pipe(Layer.provide(TelemetryDisabled));
@@ -226,6 +268,7 @@ export const makeBrowserLoginPairingAcceptanceServer = ({
 }): Layer.Layer<never, Config.ConfigError | Migrator.MigrationError | SqlError.SqlError> =>
   HttpLive.pipe(
     Layer.provide(MigratorLive),
+    Layer.provide(SupportRecoveryTestAccessLive),
     Layer.provide(TestKapsoClient),
     Layer.provide(MemoryInferenceTest),
     Layer.provide(BaselineCompactionInference),

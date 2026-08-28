@@ -185,11 +185,38 @@ const findApprovalCandidate = Effect.fn("BrowserLogin.findApprovalCandidate")(fu
   })({ publicCode, attemptedAt }).pipe(Effect.orDie);
 });
 
-const findApprovalCandidateById = Effect.fn("BrowserLogin.findApprovalCandidateById")(function* (
+/** Reads one approvable pairing after the per-User owner lock, without retaining a row lock. */
+export const findBrowserLoginApprovalCandidateInScope = Effect.fn(
+  "BrowserLogin.findApprovalCandidateInScope"
+)(function* (
   sql: SqlClient.SqlClient,
   pairingId: BrowserLoginPairingId,
   attemptedAt: DateTime.Utc
-): Effect.fn.Return<Option.Option<typeof ApprovalCandidate.Type>, never> {
+): Effect.fn.Return<Option.Option<typeof ApprovalCandidate.Type>, never, never> {
+  return yield* SqlSchema.findOneOption({
+    Request: Schema.Struct({
+      pairingId: BrowserLoginPairingId,
+      attemptedAt: Schema.DateTimeUtcFromDate,
+    }),
+    Result: ApprovalCandidate,
+    execute: (request) => sql`
+        SELECT id, created_at AS "createdAt", created_ordinal AS "createdOrdinal",
+          expires_at AS "expiresAt"
+        FROM browser_login_pairings
+        WHERE id = ${request.pairingId} AND lifecycle = 'pending_approval'
+          AND expires_at > ${request.attemptedAt}::timestamptz
+      `,
+  })({ pairingId, attemptedAt }).pipe(Effect.orDie);
+});
+
+/** Locks one still-approvable pairing after recovery has taken its own row locks. */
+export const lockBrowserLoginApprovalCandidateInScope = Effect.fn(
+  "BrowserLogin.lockApprovalCandidateInScope"
+)(function* (
+  sql: SqlClient.SqlClient,
+  pairingId: BrowserLoginPairingId,
+  attemptedAt: DateTime.Utc
+): Effect.fn.Return<Option.Option<typeof ApprovalCandidate.Type>, never, never> {
   return yield* SqlSchema.findOneOption({
     Request: Schema.Struct({
       pairingId: BrowserLoginPairingId,
@@ -207,11 +234,14 @@ const findApprovalCandidateById = Effect.fn("BrowserLogin.findApprovalCandidateB
   })({ pairingId, attemptedAt }).pipe(Effect.orDie);
 });
 
-const bindApprovalCandidate = Effect.fn("BrowserLogin.bindApprovalCandidate")(function* (
+/** Performs BrowserLogin's owner transition for an already-locked approval candidate. */
+export const approveLockedBrowserLoginPairingInScope = Effect.fn(
+  "BrowserLogin.approveLockedPairingInScope"
+)(function* (
   sql: SqlClient.SqlClient,
   input: Readonly<{ userId: UserId; candidate: typeof ApprovalCandidate.Type }>,
   attemptedAt: DateTime.Utc
-): Effect.fn.Return<void, ReturnType<typeof browserLoginApprovalRejected>> {
+): Effect.fn.Return<void, ReturnType<typeof browserLoginApprovalRejected>, never> {
   const readyOrdinal = yield* SqlSchema.findOneOption({
     Request: UserId,
     Result: Schema.Struct({ createdOrdinal: Schema.BigIntFromString }),
@@ -362,14 +392,23 @@ export const approveBrowserLoginPairingIdInScope = Effect.fn(
   input: Readonly<{ userId: UserId; pairingId: BrowserLoginPairingId; attemptedAt: DateTime.Utc }>
 ) {
   const sql = yield* SqlClient.SqlClient;
-  const candidate = yield* findApprovalCandidateById(sql, input.pairingId, input.attemptedAt);
-  if (Option.isNone(candidate)) return false;
-  yield* bindApprovalCandidate(
+  const candidate = yield* lockBrowserLoginApprovalCandidateInScope(
     sql,
-    { userId: input.userId, candidate: candidate.value },
+    input.pairingId,
     input.attemptedAt
   );
-  return true;
+  if (Option.isNone(candidate)) return Option.none<DateTime.Utc>();
+  const approvedAt = yield* DateTime.now;
+  if (DateTime.isGreaterThanOrEqualTo(approvedAt, candidate.value.expiresAt)) {
+    yield* expireBrowserLoginPairing(candidate.value.id, approvedAt);
+    return Option.none<DateTime.Utc>();
+  }
+  yield* approveLockedBrowserLoginPairingInScope(
+    sql,
+    { userId: input.userId, candidate: candidate.value },
+    approvedAt
+  );
+  return Option.some(approvedAt);
 });
 
 export const approveBrowserLoginPairingInScope = Effect.fn("BrowserLogin.approvePairingInScope")(
@@ -398,7 +437,7 @@ export const approveBrowserLoginPairingInScope = Effect.fn("BrowserLogin.approve
         const candidate = yield* findApprovalCandidate(sql, publicCode.value, attemptedAt);
         if (Option.isNone(candidate)) return yield* browserLoginApprovalRejected();
 
-        yield* bindApprovalCandidate(
+        yield* approveLockedBrowserLoginPairingInScope(
           sql,
           { userId: input.userId, candidate: candidate.value },
           attemptedAt

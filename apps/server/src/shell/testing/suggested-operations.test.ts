@@ -74,6 +74,13 @@ const probes: Record<OperationId, SuggestedOperationProbe> = {
       return [yield* Schema.decodeUnknownEffect(ScopeMissing)(result.failure)];
     }),
 
+  "recovery.rotateBackupRecoveryCode": (client) =>
+    Effect.gen(function* () {
+      const result = yield* Effect.result(client.recovery.rotateBackupRecoveryCode());
+      if (Result.isSuccess(result)) return yield* Effect.die("expected bearer refusal");
+      return [yield* Schema.decodeUnknownEffect(ScopeMissing)(result.failure)];
+    }),
+
   "pats.listPATs": (client) =>
     Effect.gen(function* () {
       const result = yield* Effect.result(client.pats.listPATs());

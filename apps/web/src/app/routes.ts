@@ -14,6 +14,7 @@ import { EmailOnboardingFeature } from "@/features/email-onboarding/feature";
 import { EmailReplacementFeature } from "@/features/email-replacement/feature";
 import { createPublicSiteRoute } from "@/features/public-site/feature";
 import { PATManagementFeature } from "@/features/pats/feature";
+import { BackupRecoveryFeature } from "@/features/recovery/feature";
 import { SignedInFeature } from "@/features/signed-in/feature";
 import { SubscriptionOffersFeature } from "@/features/subscription/feature";
 import { TransactionListFeature } from "@/features/transactions/feature";
@@ -88,6 +89,11 @@ const emailReplacementRoute = createRoute({
   path: "/settings/email",
   component: EmailReplacementFeature,
 });
+const backupRecoveryRoute = createRoute({
+  getParentRoute: () => authenticatedRoute,
+  path: "/settings/recovery",
+  component: BackupRecoveryFeature,
+});
 const subscriptionOffersRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/upgrade",
@@ -112,6 +118,7 @@ const routeTree = rootRoute.addChildren([
     signedInRoute.addChildren([signedInIndexRoute, dashboardRoute, transactionsRoute]),
     patManagementRoute,
     emailReplacementRoute,
+    backupRecoveryRoute,
   ]),
 ]);
 

@@ -49,6 +49,7 @@ const resetAuthentication = Effect.gen(function* () {
   const sql = yield* MigrationSqlClient;
   yield* sql`DELETE FROM browser_pairing_email_start_requests`;
   yield* sql`DELETE FROM browser_pairing_email_workflows`;
+  yield* sql`DELETE FROM email_pairing_login_admission_attempts`;
   yield* sql`DELETE FROM email_pairing_login_admission_scopes`;
   yield* sql`DELETE FROM email_delivery_admission_budgets`;
   yield* sql`DELETE FROM browser_login_start_attempts`;

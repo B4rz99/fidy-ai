@@ -44,6 +44,12 @@ import { OperationsLive } from "~/shell/operations/handlers";
 import { CanonicalTelemetryLive } from "~/shell/observability/canonical-api";
 import { SubscriptionLive } from "~/shell/subscription/handlers";
 import { PATsLive } from "~/shell/tokens/handlers";
+import { RecoveryLive } from "~/shell/recovery/handlers";
+import {
+  SupportRecoveryAccessLive,
+  SupportRecoveryPrivateRouteLive,
+} from "~/shell/recovery/routes";
+import { SupportRecoveryRetentionLive } from "~/shell/recovery/retention";
 import { PATPairingHandlersLive } from "~/shell/tokens/pairing-handlers";
 import { PATPairingExpiryWorkerLive } from "~/shell/tokens/pairing-expiry";
 import { PATPairingApi } from "~/pat-pairing-api";
@@ -112,6 +118,7 @@ export const ApiLive = HttpApiBuilder.layer(FidyApi, { openapiPath: "/openapi.js
       MemoryLive,
       SubscriptionLive,
       PATsLive,
+      RecoveryLive,
       OperationsLive
     ).pipe(Layer.provide([ValidationGateLive, TokenAuthorizationLive, CanonicalTelemetryLive]))
   )
@@ -223,9 +230,13 @@ export const HttpLive = HttpRouter.serve(
     HttpApiScalar.layer(FidyApi, { path: "/docs" }),
     HealthLive,
     KapsoWebhookLive,
+    SupportRecoveryPrivateRouteLive,
     ExactOriginCorsLive,
     RetryAfterHeaderLive
-  )
+  ),
+  // Route-level opt-out is unavailable; canonical telemetry and explicit provider observations
+  // remain, while the generic logger cannot capture the private support request or headers.
+  { disableLogger: true }
 );
 
 /**
@@ -255,7 +266,7 @@ const HostedBrowserPairingEmailDeliveryWorkerLive = BrowserPairingEmailDeliveryW
 );
 
 export const AppLive = Layer.mergeAll(
-  HttpLive.pipe(Layer.provide(KapsoClient.layer)),
+  HttpLive.pipe(Layer.provide(KapsoClient.layer), Layer.provide(SupportRecoveryAccessLive)),
   HostedWhatsAppWorkerLive,
   HostedStatementIngestionWorkerLive,
   HostedOnboardingDeliveryWorkerLive,
@@ -265,7 +276,8 @@ export const AppLive = Layer.mergeAll(
   EmailReplacementRetentionLive,
   EvidenceRetentionLive,
   OnboardingRetentionLive,
-  PATPairingExpiryWorkerLive
+  PATPairingExpiryWorkerLive,
+  SupportRecoveryRetentionLive
 ).pipe(
   Layer.provide(OpenAiHostedInferenceLive),
   Layer.provide(RuntimeAuthorityLive),

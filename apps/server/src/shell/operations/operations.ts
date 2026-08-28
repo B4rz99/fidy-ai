@@ -98,6 +98,7 @@ export const decodeAtomicBatchResult = (
 const mutationOperations = (catalog: OperationCatalog): ReadonlyArray<CatalogOperation> =>
   catalog.operations.filter(
     (operation) =>
+      operation.atomicBatchEligible &&
       operation.policy.kind === "mutation" &&
       (isPATScoped(operation.policy.access) ||
         operation.policy.access._tag === "FreshWebSessionOnly")

@@ -26,6 +26,7 @@ const SeedPATRow = Schema.Struct({
 });
 
 const TokenLookup = Schema.Struct({ tokenHash: TokenHash });
+const LockedPATPairing = Schema.Struct({ id: PATPairingId });
 const ManualPATInsert = Schema.Struct({
   subjectUserId: UserId,
   ...SeedPATGrant.fields,
@@ -130,38 +131,48 @@ export const lockPATForRevocationInScope = Effect.fn("lockPATForRevocationInScop
 });
 
 /**
- * Locks all active PATs plus approved unclaimed PAT authorization in pairing-first order. Pairing
- * locks precede Token locks to match the anonymous claim path and avoid lock-order inversions.
+ * Locks every revocable PAT authorization behind one PAT-owned Interface. The pairing barrier must
+ * remain a separate statement: after waiting for an anonymous claim, the selection statement needs
+ * a fresh READ COMMITTED snapshot that includes the committed token digest.
  */
-export const lockAllPATsForRevocationInScope = Effect.fn("lockAllPATsForRevocationInScope")(
-  function* (subjectUserId: UserId, observedAt: DateTime.Utc) {
-    const sql = yield* SqlClient.SqlClient;
-    return yield* SqlSchema.findAll({
-      Request: Schema.Struct({
-        subjectUserId: UserId,
-        observedAt: Schema.DateTimeUtcFromDate,
-      }),
-      Result: LockedPATRevocationSelection,
-      execute: (request) => sql`
-      WITH locked_pairings AS MATERIALIZED (
-        SELECT id FROM pat_pairings
-        WHERE user_id = ${request.subjectUserId} AND lifecycle = 'approved_awaiting_claim'
-        ORDER BY id FOR UPDATE
-      )
+export const lockRevocablePATsInScope = Effect.fn("lockRevocablePATsInScope")(function* (
+  subjectUserId: UserId,
+  observedAt: DateTime.Utc
+) {
+  const sql = yield* SqlClient.SqlClient;
+  yield* SqlSchema.findAll({
+    Request: Schema.Struct({ subjectUserId: UserId }),
+    Result: LockedPATPairing,
+    execute: (request) => sql`
+      SELECT id FROM pat_pairings
+      WHERE user_id = ${request.subjectUserId} AND lifecycle = 'approved_awaiting_claim'
+      ORDER BY id FOR UPDATE
+    `,
+  })({ subjectUserId }).pipe(Effect.orDie);
+  return yield* SqlSchema.findAll({
+    Request: Schema.Struct({
+      subjectUserId: UserId,
+      observedAt: Schema.DateTimeUtcFromDate,
+    }),
+    Result: LockedPATRevocationSelection,
+    execute: (request) => sql`
       SELECT token.id, token.short_id AS "shortId",
         (token.token_hash IS NOT NULL AND token.expires_at > ${request.observedAt}) AS "countedActive"
       FROM tokens AS token
       WHERE token.user_id = ${request.subjectUserId} AND token.revoked_at IS NULL
         AND (
           (token.token_hash IS NOT NULL AND token.expires_at > ${request.observedAt})
-          OR token.pat_pairing_id IN (SELECT id FROM locked_pairings)
+          OR token.pat_pairing_id IN (
+            SELECT pairing.id FROM pat_pairings AS pairing
+            WHERE pairing.user_id = ${request.subjectUserId}
+              AND pairing.lifecycle = 'approved_awaiting_claim'
+          )
         )
       ORDER BY token.id
       FOR UPDATE OF token
     `,
-    })({ subjectUserId, observedAt }).pipe(Effect.orDie);
-  }
-);
+  })({ subjectUserId, observedAt }).pipe(Effect.orDie);
+});
 
 /** Closes every User-owned approved pairing selected by the pairing-first lock query. */
 export const revokeApprovedPATPairingsInScope = Effect.fn("revokeApprovedPATPairingsInScope")(

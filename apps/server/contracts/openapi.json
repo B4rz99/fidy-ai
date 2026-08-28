@@ -311,6 +311,14 @@
         ],
         "type": "object"
       },
+      "BackupRecoveryCode": {
+        "allOf": [
+          {
+            "pattern": "^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{5}(?:-[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{5}){4}$"
+          }
+        ],
+        "type": "string"
+      },
       "BesidePlacement": {
         "additionalProperties": false,
         "properties": {
@@ -4725,6 +4733,29 @@
         },
         "required": [
           "revokedCount"
+        ],
+        "type": "object"
+      },
+      "RotatedBackupRecoveryCode": {
+        "additionalProperties": false,
+        "properties": {
+          "backupRecoveryCode": {
+            "$ref": "#/components/schemas/BackupRecoveryCode"
+          },
+          "rotatedAt": {
+            "$ref": "#/components/schemas/UtcTimestamp"
+          },
+          "status": {
+            "enum": [
+              "rotated"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "backupRecoveryCode",
+          "rotatedAt"
         ],
         "type": "object"
       },
@@ -16749,6 +16780,104 @@
         "x-fidy-required-tier": "free"
       }
     },
+    "/recovery/backup-code/rotate": {
+      "post": {
+        "description": "Replace the User's one-time BackupRecoveryCode from a freshly paired browser session and disclose the new code once.",
+        "operationId": "recovery.rotateBackupRecoveryCode",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/RotatedBackupRecoveryCode"
+                    },
+                    "next": {
+                      "allOf": [
+                        {
+                          "description": "Where to go next: up to three canonical operations worth calling after this one, best first. Empty when there is nothing worth suggesting, which is an answer rather than an omission. Each entry has passed the target-input and caller-authorization checkpoint.",
+                          "maxItems": 3
+                        }
+                      ],
+                      "items": {
+                        "$ref": "#/components/schemas/SuggestedOperation"
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "next"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationFailed"
+                }
+              }
+            },
+            "description": "ValidationFailed"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Unauthenticated"
+                }
+              }
+            },
+            "description": "Unauthenticated"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ConsentRequired"
+                    },
+                    {
+                      "$ref": "#/components/schemas/UserActionRequired"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ScopeMissing"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "ConsentRequired | UserActionRequired | ScopeMissing"
+          }
+        },
+        "security": [
+          {
+            "agentBearer": []
+          },
+          {
+            "webSession": []
+          }
+        ],
+        "tags": [
+          "recovery"
+        ],
+        "x-fidy-access": {
+          "type": "fresh-web-session-only"
+        },
+        "x-fidy-agent-confirmation": "not-required",
+        "x-fidy-operation-kind": "mutation",
+        "x-fidy-required-tier": "free"
+      }
+    },
     "/subscription/offers": {
       "get": {
         "description": "List the authoritative immutable Colombia PriceRevisions and renewal terms available before payment-method enrollment.",
@@ -18009,6 +18138,9 @@
     },
     {
       "name": "pats"
+    },
+    {
+      "name": "recovery"
     },
     {
       "name": "operations"

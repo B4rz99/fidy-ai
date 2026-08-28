@@ -49,8 +49,8 @@ import {
   getPATIssuanceAdmission,
   hasConsumedPATRequest,
   insertPATInScope,
-  lockAllPATsForRevocationInScope,
   lockPATForRevocationInScope,
+  lockRevocablePATsInScope,
   revokeApprovedPATPairingsInScope,
   revokeSelectedPATInScope,
 } from "./repo";
@@ -257,7 +257,7 @@ export const revokeAllPATs: CanonicalMutationImplementation<
     userId,
     Effect.gen(function* () {
       const revokedAt = yield* DateTime.now;
-      const selected = yield* lockAllPATsForRevocationInScope(userId, revokedAt);
+      const selected = yield* lockRevocablePATsInScope(userId, revokedAt);
       const crypto = yield* Crypto.Crypto;
       const evidence = yield* revocationEvidence({ caller, confirmationEvidence });
       for (const pat of selected) {

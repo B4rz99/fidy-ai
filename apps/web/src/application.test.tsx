@@ -2,12 +2,13 @@ import { RouterProvider, createMemoryHistory } from "@tanstack/react-router";
 import { Effect, Layer, Option } from "effect";
 import { HttpClient, type HttpClientRequest, HttpClientResponse } from "effect/unstable/http";
 import type * as HttpClientError from "effect/unstable/http/HttpClientError";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { WebApplication } from "@/app/application";
 import { createWebRouter } from "@/app/routes";
 import { SessionRegistryProvider } from "@/session/session";
 import {
+  BackupRecoveryCode,
   type FidyClient,
   type WebAuthClient,
   makeFidyClient,
@@ -32,6 +33,16 @@ const responseJson = (
   return HttpClientResponse.fromWeb(request, response);
 };
 
+const responseNoContent = (
+  request: HttpClientRequest.HttpClientRequest
+): HttpClientResponse.HttpClientResponse => {
+  const response = new Response(null, { status: 204 });
+  Object.defineProperty(response, "arrayBuffer", {
+    value: () => Promise.resolve(new window.Uint8Array().buffer),
+  });
+  return HttpClientResponse.fromWeb(request, response);
+};
+
 const makeHttpClient = (
   handler: (
     request: HttpClientRequest.HttpClientRequest
@@ -48,7 +59,7 @@ const renderRoute = async (
   path: string,
   apiClient = makeFidyClient("https://api.test.fidyapp.com"),
   webAuthClient: WebAuthClient = makeWebAuthClient("https://api.test.fidyapp.com")
-): Promise<void> => {
+): Promise<ReturnType<typeof createWebRouter>> => {
   const router = createWebRouter({
     apiClient,
     webAuthClient,
@@ -61,6 +72,7 @@ const renderRoute = async (
     </SessionRegistryProvider>
   );
   await router.load();
+  return router;
 };
 
 const resetApplicationTest = (): void => {
@@ -96,6 +108,36 @@ const emailReplacementClients = (
   return {
     apiClient: makeFidyClient("https://api.test.fidyapp.com", layer),
     webAuthClient: makeWebAuthClient("https://api.test.fidyapp.com", layer),
+  };
+};
+
+const recoveryClients = (): Readonly<{
+  apiClient: FidyClient;
+  webAuthClient: WebAuthClient;
+  requests: Array<string>;
+}> => {
+  const requests: Array<string> = [];
+  const httpClient = makeHttpClient((request) => {
+    requests.push(new URL(request.url).pathname);
+    if (request.url.endsWith("/web/session/logout")) {
+      return Effect.succeed(responseNoContent(request));
+    }
+    return Effect.succeed(
+      responseJson(request, {
+        data: {
+          status: "rotated",
+          backupRecoveryCode: "ABCDE-FGHJK-LMNPQ-RSTUV-WXYZ2",
+          rotatedAt: "2026-08-28T03:00:00Z",
+        },
+        next: [],
+      })
+    );
+  });
+  const layer = Layer.succeed(HttpClient.HttpClient, httpClient);
+  return {
+    apiClient: makeFidyClient("https://api.test.fidyapp.com", layer),
+    webAuthClient: makeWebAuthClient("https://api.test.fidyapp.com", layer),
+    requests,
   };
 };
 
@@ -172,6 +214,40 @@ describe("signed-in web application routes", () => {
     await renderRoute("/app/transactions", malformedFidyClient());
 
     expect(await screen.findByText("No pudimos cargar tus transacciones")).toBeVisible();
+  });
+});
+
+describe("backup recovery route", () => {
+  afterEach(resetApplicationTest);
+
+  it("drops one-time disclosure through navigation, logout, and a fresh application mount", async () => {
+    const code = BackupRecoveryCode.make("ABCDE-FGHJK-LMNPQ-RSTUV-WXYZ2");
+    const clients = recoveryClients();
+    const router = await renderRoute(
+      "/settings/recovery",
+      clients.apiClient,
+      clients.webAuthClient
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: "Crear un código nuevo" }));
+    expect(await screen.findByText(code)).toBeVisible();
+
+    await act(() => router.navigate({ to: "/settings/email" }));
+    expect(screen.queryByText(code)).not.toBeInTheDocument();
+    await act(() => router.navigate({ to: "/settings/recovery" }));
+    expect(screen.queryByText(code)).not.toBeInTheDocument();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Crear un código nuevo" }));
+    expect(await screen.findByText(code)).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Cerrar sesión" }));
+    await waitFor(() => expect(clients.requests).toContain("/web/session/logout"));
+    expect(await screen.findByRole("heading", { name: "Inicia sesión en Fidy" })).toBeVisible();
+    expect(screen.queryByText(code)).not.toBeInTheDocument();
+
+    cleanup();
+    await renderRoute("/settings/recovery", clients.apiClient, clients.webAuthClient);
+    expect(await screen.findByRole("button", { name: "Crear un código nuevo" })).toBeVisible();
+    expect(screen.queryByText(code)).not.toBeInTheDocument();
   });
 });
 

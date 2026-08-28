@@ -110,6 +110,9 @@ const probes: Record<OperationId, IsolationProbe> = {
       attempt.strangerClient.browserLogin.approvePairing({ payload: { publicCode: "BCDF-GHJK" } })
     ).pipe(Effect.asVoid),
 
+  "recovery.rotateBackupRecoveryCode": (attempt) =>
+    Effect.result(attempt.strangerClient.recovery.rotateBackupRecoveryCode()).pipe(Effect.asVoid),
+
   "pats.listPATs": (attempt) =>
     Effect.result(attempt.strangerClient.pats.listPATs()).pipe(Effect.asVoid),
 

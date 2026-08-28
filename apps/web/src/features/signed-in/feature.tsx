@@ -18,6 +18,32 @@ export const AuthenticationExpired = (): JSX.Element => (
   </main>
 );
 
+const SignedInNavigation = ({ onLogout }: { readonly onLogout: () => void }): JSX.Element => (
+  <nav
+    aria-label="Aplicación"
+    className="flex flex-1 flex-wrap items-center gap-1 px-3 pb-3 md:flex-col md:items-stretch"
+  >
+    <Button className="justify-start" render={<Link to="/app/dashboard" />} variant="ghost">
+      Tablero
+    </Button>
+    <Button className="justify-start" render={<Link to="/app/transactions" />} variant="ghost">
+      Transacciones
+    </Button>
+    <Button className="justify-start" render={<Link to="/settings/email" />} variant="ghost">
+      Correo
+    </Button>
+    <Button className="justify-start" render={<Link to="/settings/pats" />} variant="ghost">
+      Tokens
+    </Button>
+    <Button className="justify-start" render={<Link to="/settings/recovery" />} variant="ghost">
+      Recuperación
+    </Button>
+    <Button className="justify-start md:mt-auto" onClick={onLogout} type="button" variant="outline">
+      Cerrar sesión
+    </Button>
+  </nav>
+);
+
 const SignedInShell = (): JSX.Element => {
   const router = useRouter();
   const { completeLogout } = useSession();
@@ -42,35 +68,7 @@ const SignedInShell = (): JSX.Element => {
         <Link className="px-5 py-5 font-heading text-xl font-semibold" to="/app/dashboard">
           Fidy
         </Link>
-        <nav
-          aria-label="Aplicación"
-          className="flex flex-1 flex-wrap items-center gap-1 px-3 pb-3 md:flex-col md:items-stretch"
-        >
-          <Button className="justify-start" render={<Link to="/app/dashboard" />} variant="ghost">
-            Tablero
-          </Button>
-          <Button
-            className="justify-start"
-            render={<Link to="/app/transactions" />}
-            variant="ghost"
-          >
-            Transacciones
-          </Button>
-          <Button className="justify-start" render={<Link to="/settings/email" />} variant="ghost">
-            Correo
-          </Button>
-          <Button className="justify-start" render={<Link to="/settings/pats" />} variant="ghost">
-            Tokens
-          </Button>
-          <Button
-            className="justify-start md:mt-auto"
-            onClick={onLogout}
-            type="button"
-            variant="outline"
-          >
-            Cerrar sesión
-          </Button>
-        </nav>
+        <SignedInNavigation onLogout={onLogout} />
       </aside>
       <div className="min-w-0 flex-1">
         <Outlet />

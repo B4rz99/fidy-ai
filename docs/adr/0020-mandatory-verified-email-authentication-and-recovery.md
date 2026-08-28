@@ -2,7 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** 2026-08-23
-- **Amended:** 2026-08-23
+- **Amended:** 2026-08-27
 - **Active specification:** [Email authentication and recovery specification](https://github.com/B4rz99/fidy-ai/issues/14)
 
 ## Context
@@ -48,6 +48,14 @@ an authenticated operator CLI may use that code and a tracked metadata-only Supp
 approve an existing BrowserLoginPairing. Approval consumes the code. If the User has also lost it,
 Fidy refuses recovery rather than attempting document-based KYC or inferring ownership from personal
 or financial facts.
+
+Support approval is an accepted cross-slice coordination transaction. Recovery owns its credential,
+case, and append-only evidence writes; after taking those locks it calls BrowserLogin's published
+owner operation, which alone locks, rechecks, and binds the existing pairing. Pairing binding,
+credential consumption, approval evidence, and case closure commit or roll back together. BrowserLogin
+alone creates the subsequent WebSession and records its source pairing. Recovery may use that stable
+pairing provenance to authorize one fresh-session BackupRecoveryCode rotation, but neither creates a
+WebSession nor writes BrowserLogin-owned state directly.
 
 ## Consequences
 

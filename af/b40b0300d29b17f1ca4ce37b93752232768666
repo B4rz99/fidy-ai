@@ -1,0 +1,1873 @@
+.repos/dnd-kit/packages/geometry/src/index.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-12
+.repos/dnd-kit/apps/docs/src/styles/prose.css
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-110
+.repos/dnd-kit/packages/dom/src/utilities/execution-context/getRoot.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-17
+.repos/dnd-kit/apps/stories/stories/components/docs/Preview/Preview.tsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-38
+.repos/dnd-kit/packages/abstract/src/core/collision/observer.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-166
+.repos/dnd-kit/apps/docs/src/lib/mintlify-components.tsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-89
+.repos/dnd-kit/apps/docs/docs/legacy/introduction/getting-started.mdx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-291
+.repos/dnd-kit/apps/docs/src/components/mintlify/Accordion.tsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-37
+.repos/dnd-kit/packages/dom/src/utilities/popover/index.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-3
+.repos/dnd-kit/packages/storybook-addon-codesandbox/src/manager.tsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-154
+.repos/dnd-kit/apps/stories-vanilla/stories/Draggable/DragHandle/DragHandleApp.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-28
+.repos/dnd-kit/apps/stories/stories/react/Sortable/Iframe/Iframe.stories.tsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-28
+.repos/dnd-kit/apps/stories/stories/react/Droppable/docs/examples/Droppable.jsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-22
+.repos/dnd-kit/apps/stories-svelte/tests/droppable.spec.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-6
+.repos/dnd-kit/apps/docs/src/styles/prose-components.css
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-35
+.repos/dnd-kit/apps/docs/docs/images/background-animated.svg
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-20
+.repos/dnd-kit/packages/abstract/src/core/entities/droppable/droppable.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-132
+.repos/dnd-kit/packages/dom/src/utilities/transform/computeTranslate.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-43
+.repos/dnd-kit/apps/stories-shared/components/Container/Container.css
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-68
+.repos/dnd-kit/apps/docs/src/components/mintlify/Frame.tsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-23
+.repos/dnd-kit/apps/stories-vue/stories/Sortable/Horizontal/Horizontal.stories.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-33
+.repos/dnd-kit/packages/dom/src/utilities/element/cloneElement.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-44
+.repos/dnd-kit/packages/dom/src/core/entities/index.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-2
+.repos/dnd-kit/apps/stories-svelte/stories/Sortable/Horizontal/HorizontalSortableApp.svelte
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-28
+.repos/dnd-kit/packages/dom/src/utilities/type-guards/isSVGElement.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-10
+.repos/dnd-kit/apps/stories/stories/react/components/index.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-13
+.repos/dnd-kit/apps/stories/stories/react/Sortable/Iframe/IframeExample.tsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-176
+.repos/dnd-kit/apps/docs/docs/react/hooks/use-drag-operation.mdx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-60
+.repos/dnd-kit/packages/collision/src/index.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-10
+.repos/dnd-kit/packages/dom/src/core/plugins/accessibility/Accessibility.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-231
+.repos/dnd-kit/apps/docs/docs/legacy/presets/sortable/overview.mdx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-712
+.repos/dnd-kit/apps/stories-vue/stories/Droppable/MultipleDroppable/MultipleDroppableApp.vue
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-53
+.repos/dnd-kit/apps/docs/src/components/Sidebar/MobileSidebar.tsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-145
+.repos/dnd-kit/apps/docs/docs/images/background.svg
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-15
+.repos/dnd-kit/apps/stories/.storybook/assets/dnd-kit-banner.svg
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-17
+.repos/dnd-kit/packages/state/src/decorators.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-78
+.repos/dnd-kit/packages/dom/src/utilities/bounding-rectangle/isOverflowVisible.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-24
+.repos/dnd-kit/config/typescript/vue.json
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-13
+.repos/dnd-kit/apps/templates/vue-draggable/src/styles.css
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-99
+.repos/dnd-kit/apps/docs/docs/react/hooks/use-sortable.mdx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-182
+.repos/dnd-kit/packages/react/src/core/context/context.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-10
+.repos/dnd-kit/apps/stories-svelte/stories/Sortable/Horizontal/Horizontal.stories.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-36
+.repos/dnd-kit/apps/stories-vanilla/package.json
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-26
+.repos/dnd-kit/apps/stories/stories/react/Sortable/SortableApp.tsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-39
+.repos/dnd-kit/apps/stories/tests/sortable-iframe.spec.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-101
+.repos/dnd-kit/apps/docs/docs/react/hooks/use-drag-drop-monitor.mdx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-72
+.repos/dnd-kit/apps/docs/src/components/mintlify/index.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-7
+.repos/dnd-kit/apps/stories-vue/package.json
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-32
+.repos/dnd-kit/packages/dom/src/utilities/execution-context/isSafari.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-3
+.repos/dnd-kit/apps/stories-vue/stories/Droppable/MultipleDroppable/MultipleDroppable.stories.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-24
+.repos/dnd-kit/packages/solid/src/hooks/index.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1
+.repos/dnd-kit/apps/stories-vue/.storybook/theme.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-8
+.repos/dnd-kit/apps/stories-solid/stories/Draggable/DraggableApp.tsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-15
+.repos/dnd-kit/packages/dom/src/core/plugins/scrolling/Scroller.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-237
+.repos/dnd-kit/apps/stories/stories/react/Sortable/Tree/utilities.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-111
+.repos/dnd-kit/apps/docs/docs/concepts/drag-drop-manager.mdx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-344
+.repos/dnd-kit/apps/templates/svelte-sortable/package.json
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-19
+.repos/dnd-kit/packages/dom/src/core/plugins/scrolling/ScrollIntent.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-76
+.repos/dnd-kit/apps/stories/stories/react/Draggable/docs/examples/MultipleDraggable.jsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-16
+.repos/dnd-kit/apps/stories-solid/stories/Sortable/MultipleLists/MultipleLists.stories.tsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-33
+.repos/dnd-kit/apps/docs/docs/vue/composables/use-droppable.mdx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-145
+.repos/dnd-kit/apps/stories-svelte/stories/Droppable/Droppable.stories.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-34
+.repos/dnd-kit/apps/docs/src/components/SandpackCodeEditor.tsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-186
+.repos/dnd-kit/packages/svelte/src/core/draggable/DragOverlay.svelte
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-88
+.repos/dnd-kit/packages/collision/src/algorithms/shapeIntersection.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-45
+.repos/dnd-kit/packages/collision/LICENSE
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-21
+.repos/dnd-kit/packages/svelte/src/sortable/index.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-4
+.repos/dnd-kit/apps/stories-shared/tests/sortable-transformed.tests.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-149
+.repos/dnd-kit/apps/stories-vanilla/.storybook/manager-head.html
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-25
+.repos/dnd-kit/apps/stories-vanilla/stories/Droppable/DroppableApp.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-49
+.repos/dnd-kit/packages/abstract/src/core/plugins/utilities.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-61
+.repos/dnd-kit/packages/dom/src/sortable/sortable.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-578
+.repos/dnd-kit/apps/stories/stories/react/Draggable/Sensors/Sensors.stories.tsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-22
+.repos/dnd-kit/apps/stories-vue/stories/Draggable/Draggable.stories.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-40
+.repos/dnd-kit/packages/dom/src/utilities/popover/hidePopover.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-17
+.repos/dnd-kit/apps/stories-svelte/stories/Sortable/Grid/GridSortableItem.svelte
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-19
+.repos/dnd-kit/apps/templates/vue-sortable/package.json
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-19
+.repos/dnd-kit/packages/vue/src/composables/useDeepSignal.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-58
+.repos/dnd-kit/packages/collision/package.json
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-47
+.repos/dnd-kit/apps/templates/react-sortable/src/styles.css
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-45
+.repos/dnd-kit/apps/docs/src/scripts/mintlify-analytics.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-221
+.repos/dnd-kit/packages/abstract/src/core/plugins/plugin.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-140
+.repos/dnd-kit/apps/stories-vue/stories/Sortable/Horizontal/HorizontalSortableApp.vue
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-53
+.repos/dnd-kit/packages/dom/src/utilities/bounding-rectangle/isRectEqual.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-16
+.repos/dnd-kit/apps/stories/stories/components/docs/Code/components/CodeHighlighter/CodeHighlighter.module.css
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-136
+.repos/dnd-kit/apps/stories/stories/react/components/Grid/Grid.tsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-22
+.repos/dnd-kit/apps/stories/stories/react/Sortable/Virtualized/ReactVirtualExample.tsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-120
+.repos/dnd-kit/apps/stories-vue/tests/draggable.spec.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-6
+.repos/dnd-kit/packages/solid/LICENSE
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-21
+.repos/dnd-kit/packages/eslint-config/README.md
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-3
+.repos/dnd-kit/packages/dom/src/utilities/scroll/detectScrollIntent.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-142
+.repos/dnd-kit/apps/stories/stories/react/components/Handle/Handle.tsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-11
+.repos/dnd-kit/apps/stories-shared/components/Container/index.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1
+.repos/dnd-kit/apps/templates/vue-sortable/src/App.vue
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-26
+.repos/dnd-kit/apps/stories-vanilla/stories/Sortable/SortableDynamicFeedbackApp.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-53
+.repos/dnd-kit/apps/stories/playwright.config.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-30
+.repos/dnd-kit/packages/dom/src/core/plugins/feedback/types.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-12
+.repos/dnd-kit/packages/geometry/LICENSE
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-21
+.repos/dnd-kit/apps/templates/react-draggable/src/main.jsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-10
+.repos/dnd-kit/apps/docs/docs/legacy/introduction/installation.mdx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-86
+.repos/dnd-kit/apps/stories-svelte/stories/Sortable/SortableApp.svelte
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-28
+.repos/dnd-kit/apps/stories/stories/react/Sortable/Transformed/Transformed.stories.tsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-25
+.repos/dnd-kit/packages/dom/src/core/index.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-49
+.repos/dnd-kit/apps/docs/docs/react/guides/sortable-state-management.mdx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-268
+.repos/dnd-kit/apps/stories-vue/.storybook/main.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-49
+.repos/dnd-kit/.github/FUNDING.yml
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-3
+.repos/dnd-kit/.github/workflows/tests.yml
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-27
+.repos/dnd-kit/packages/abstract/tests/manager-modifiers.test.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-256
+.repos/dnd-kit/packages/dom/src/modifiers/RestrictToElement.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-100
+.repos/dnd-kit/packages/abstract/src/core/sensors/index.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-13
+.repos/dnd-kit/packages/react/package.json
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-92
+.repos/dnd-kit/apps/stories-vanilla/stories/Sortable/Horizontal/HorizontalSortableApp.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-48
+.repos/dnd-kit/apps/stories-shared/utilities/createRange.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-5
+.repos/dnd-kit/packages/react/src/core/draggable/useDraggable.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-107
+.repos/dnd-kit/apps/docs/docs/images/sponsors/puck-logo.svg
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1
+.repos/dnd-kit/apps/stories/stories/react/Droppable/DroppableApp.tsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-39
+.repos/dnd-kit/apps/stories-vue/stories/Sortable/SortableDynamicFeedbackApp.vue
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-67
+.repos/dnd-kit/packages/geometry/src/shapes/Rectangle.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-169
+.repos/dnd-kit/apps/docs/docs/react/hooks/use-droppable.mdx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-155
+.repos/dnd-kit/packages/dom/src/core/manager/index.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-3
+.repos/dnd-kit/apps/docs/docs/images/sponsors/sentry-logo.svg
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1
+.repos/dnd-kit/packages/dom/src/utilities/bounding-rectangle/index.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-2
+.repos/dnd-kit/packages/dom/src/utilities/shapes/DOMRectangle.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-171
+.repos/dnd-kit/apps/stories-svelte/stories/Sortable/Grid/GridSortableApp.svelte
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-28
+.repos/dnd-kit/packages/solid/tsup.config.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-21
+.repos/dnd-kit/packages/dom/src/utilities/frame/getFrameElements.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-13
+.repos/dnd-kit/apps/templates/react-draggable/src/Droppable.jsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-11
+.repos/dnd-kit/apps/docs/docs/legacy/guides/accessibility.mdx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-229
+.repos/dnd-kit/apps/stories/stories/react/Draggable/DraggableExample.tsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-80
+.repos/dnd-kit/packages/state/src/types.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-5
+.repos/dnd-kit/packages/dom/src/utilities/scroll/documentScrollingElement.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-10
+.repos/dnd-kit/apps/stories/stories/react/components/Item/Item.tsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-42
+.repos/dnd-kit/packages/dom/src/core/plugins/feedback/dropAnimation.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-162
+.repos/dnd-kit/packages/dom/src/utilities/popover/showPopover.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-17
+.repos/dnd-kit/packages/dom/src/utilities/transform/parseTransform.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-74
+.repos/dnd-kit/apps/stories-vue/.storybook/assets/dnd-kit-banner.svg
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-17
+.repos/dnd-kit/packages/vue/src/core/droppable/useDroppable.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-53
+.repos/dnd-kit/apps/templates/vue-sortable/index.html
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-12
+.repos/dnd-kit/apps/docs/docs/svelte/components/drag-overlay.mdx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-117
+.repos/dnd-kit/apps/stories-svelte/.storybook/preview.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-82
+.repos/dnd-kit/apps/docs/docs/vue/components/drag-drop-provider.mdx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-63
+.repos/dnd-kit/apps/docs/src/hooks/useMessagesStore.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-22
+.repos/dnd-kit/apps/stories-vue/stories/Draggable/DragOverlay/DragOverlayApp.vue
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-36
+.repos/dnd-kit/apps/stories-solid/tests/droppable.spec.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-6
+.repos/dnd-kit/packages/dom/src/core/entities/draggable/draggable.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-74
+.repos/dnd-kit/apps/docs/docs/legacy/api-documentation/context-provider/collision-detection-algorithms.mdx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-199
+.repos/dnd-kit/packages/abstract/src/core/entities/draggable/index.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-2
+.repos/dnd-kit/packages/dom/src/utilities/observers/FrameObserver.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-150
+.repos/dnd-kit/packages/dom/src/utilities/type-guards/isTextInput.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-18
+.repos/dnd-kit/apps/templates/solid-draggable/src/styles.css
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-99
+.repos/dnd-kit/.github/workflows/release.yml
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-57
+.repos/dnd-kit/packages/vue/src/sortable/useSortable.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-108
+.repos/dnd-kit/apps/stories/stories/components/docs/Code/components/CodeHighlighter/index.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1
+.repos/dnd-kit/.eslintrc.js
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-7
+.repos/dnd-kit/apps/docs/docs/svelte/primitives/create-sortable.mdx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-252
+.repos/dnd-kit/apps/templates/svelte-draggable/src/main.js
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-7
+.repos/dnd-kit/apps/stories/stories/react/Draggable/DragHandles/DragHandles.stories.tsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-41
+.repos/dnd-kit/packages/abstract/src/core/plugins/index.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-9
+.repos/dnd-kit/packages/react/src/hooks/index.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-10
+.repos/dnd-kit/apps/docs/docs/snippets/story.mdx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-34
+.repos/dnd-kit/apps/docs/.prettierignore
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-4
+.repos/dnd-kit/apps/templates/vue-sortable/src/SortableItem.vue
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-18
+.repos/dnd-kit/packages/dom/src/utilities/scroll/scrollIntoViewIfNeeded.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-135
+.repos/dnd-kit/packages/svelte/src/core/context/renderer.svelte.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-45
+.repos/dnd-kit/apps/templates/vue-sortable/src/main.js
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-5
+.repos/dnd-kit/packages/state/src/store.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-22
+.repos/dnd-kit/packages/storybook-addon-codesandbox/src/constants.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-5
+.repos/dnd-kit/apps/docs/docs/images/logo/solid.svg
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1
+.repos/dnd-kit/packages/dom/src/utilities/type-guards/isDocument.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-10
+.repos/dnd-kit/apps/stories-svelte/stories/Sortable/SortableItemWithHandle.svelte
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-19
+.repos/dnd-kit/apps/stories/stories/components/docs/Info/Info.tsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-29
+.repos/dnd-kit/apps/stories/stories/components/docs/Code/Code.tsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-46
+.repos/dnd-kit/apps/docs/docs/react/guides/feedback.mdx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-130
+.repos/dnd-kit/packages/dom/src/core/plugins/stylesheet/StyleInjector.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-261
+.repos/dnd-kit/apps/stories-svelte/vite.config.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-8
+.repos/dnd-kit/apps/stories-solid/stories/Sortable/SortableDynamicFeedbackApp.tsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-56
+.repos/dnd-kit/apps/docs/src/components/Icon.tsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-108
+.repos/dnd-kit/packages/dom/src/utilities/scroll/isScrollable.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-15
+.repos/dnd-kit/apps/stories/tsconfig.json
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-6
+.repos/dnd-kit/apps/docs/src/env.d.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-11
+.repos/dnd-kit/packages/dom/src/utilities/index.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-77
+.repos/dnd-kit/packages/helpers/tsconfig.json
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-5
+.repos/dnd-kit/apps/stories-svelte/raw.d.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-4
+.repos/dnd-kit/packages/solid/README.md
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-61
+.repos/dnd-kit/packages/svelte/src/core/index.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-27
+.repos/dnd-kit/packages/dom/src/utilities/transform/parseScale.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-18
+.repos/dnd-kit/apps/docs/docs/react/quickstart.mdx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-228
+.repos/dnd-kit/apps/stories-shared/components/Container/Container.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-3
+.repos/dnd-kit/apps/templates/svelte-sortable/vite.config.js
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-6
+.repos/dnd-kit/packages/dom/src/utilities/shapes/index.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-2
+.repos/dnd-kit/packages/dom/src/core/sensors/keyboard/KeyboardSensor.helpers.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-67
+.repos/dnd-kit/apps/stories/stories/react/Sortable/Horizontal/Horizontal.stories.tsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-95
+.repos/dnd-kit/apps/stories-svelte/tests/sortable-vertical.spec.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-6
+.repos/dnd-kit/packages/abstract/LICENSE
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-21
+.repos/dnd-kit/apps/docs/docs/extend/modifiers.mdx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-206
+.repos/dnd-kit/apps/docs/docs/extend/plugins.mdx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-215
+.repos/dnd-kit/apps/stories-solid/stories/Sortable/Horizontal/HorizontalSortableApp.tsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-44
+.repos/dnd-kit/packages/abstract/src/core/entities/draggable/draggable.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-161
+.repos/dnd-kit/packages/solid/src/core/droppable/useDroppable.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-59
+.repos/dnd-kit/apps/docs/src/components/Sidebar/SidebarEntries.tsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-89
+.repos/dnd-kit/packages/dom/src/core/entities/droppable/index.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-2
+.repos/dnd-kit/.github/workflows/continous-release.yml
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-31
+.repos/dnd-kit/apps/docs/docs/images/hero.svg
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-202
+.repos/dnd-kit/packages/abstract/src/core/entities/index.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-3
+.repos/dnd-kit/apps/docs/docs/images/logo/svelte.svg
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1
+.repos/dnd-kit/apps/stories-vanilla/.storybook/main.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-39
+.repos/dnd-kit/packages/abstract/src/core/modifiers/modifier.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-82
+.repos/dnd-kit/apps/stories-solid/.storybook/preview.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-94
+.repos/dnd-kit/apps/docs/docs/changelog.mdx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-154
+.repos/dnd-kit/packages/dom/src/utilities/execution-context/canUseDOM.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-5
+.repos/dnd-kit/packages/abstract/README.md
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-75
+.repos/dnd-kit/packages/dom/src/utilities/element/index.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-3
+.repos/dnd-kit/apps/stories/stories/react/Sortable/Horizontal/HorizontalSortableApp.tsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-42
+.repos/dnd-kit/packages/storybook-addon-codesandbox/src/collect-files.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-135
+.repos/dnd-kit/apps/docs/src/components/TableOfContents.tsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-130
+.repos/dnd-kit/apps/docs/docs/snippets/sandbox.mdx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-19
+.repos/dnd-kit/apps/stories-svelte/stories/Draggable/Draggable.stories.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-29
+.repos/dnd-kit/apps/docs/src/components/LogoContextMenu.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-124
+.repos/dnd-kit/apps/docs/src/lib/analytics.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-12
+.repos/dnd-kit/apps/docs/docs/svelte/quickstart.mdx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-137
+.repos/dnd-kit/packages/dom/src/modifiers/index.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-2
+.repos/dnd-kit/apps/templates/svelte-sortable/src/App.svelte
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-28
+.repos/dnd-kit/apps/stories/stories/react/Sortable/docs/examples/ControlledExample.jsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-30
+.repos/dnd-kit/config/typescript/vanilla.json
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-13
+.repos/dnd-kit/apps/stories-svelte/.storybook/theme.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-8
+.repos/dnd-kit/apps/stories/stories/react/Sortable/Tree/TreeItemOverlay.tsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-19
+.repos/dnd-kit/packages/dom/src/utilities/bounding-rectangle/getVisibleBoundingRectangle.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-89
+.repos/dnd-kit/apps/stories/stories/components/docs/Code/components/CodeHighlighter/copy.svg
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-15
+.repos/dnd-kit/apps/docs/src/components/Assistant/AssistantProvider.tsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-18
+.repos/dnd-kit/packages/abstract/src/modifiers/snap.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-62
+.repos/dnd-kit/.changeset/README.md
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-8
+.repos/dnd-kit/packages/dom/src/sortable/plugins/SortableKeyboardPlugin.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-199
+.repos/dnd-kit/apps/stories-solid/package.json
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-32
+.repos/dnd-kit/apps/stories-shared/components/Item/Item.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-7
+.repos/dnd-kit/apps/docs/docs/react/guides/collision-detection.mdx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-149
+.repos/dnd-kit/packages/svelte/src/core/droppable/createDroppable.svelte.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-60
+.repos/dnd-kit/apps/docs/docs/images/sponsors/doist-logo.svg
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1
+.repos/dnd-kit/apps/docs/docs/snippets/code.mdx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-151
+.repos/dnd-kit/apps/templates/react-sortable/index.html
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-12
+.repos/dnd-kit/packages/vue/src/utilities/element.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-15
+.repos/dnd-kit/apps/docs/docs/legacy/api-documentation/droppable.mdx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-89
+.repos/dnd-kit/packages/react/tsconfig.json
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-5
+.repos/dnd-kit/apps/docs/docs/README.md
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-24
+.repos/dnd-kit/apps/stories/stories/react/Draggable/docs/DraggableDocs.mdx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-46
+.repos/dnd-kit/packages/react/src/core/context/DragDropProvider.tsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-168
+.repos/dnd-kit/apps/stories/stories/react/Droppable/MultipleDroppable/MultipleDroppableApp.tsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-44
+.repos/dnd-kit/packages/svelte/README.md
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-64
+.repos/dnd-kit/packages/state/CHANGELOG.md
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-135
+.repos/dnd-kit/apps/stories/stories/react/components/Actions/Actions.tsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-7
+.repos/dnd-kit/apps/docs/scripts/generate-og-image.mjs
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-388
+.repos/dnd-kit/apps/stories-solid/.storybook/manager-head.html
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-25
+.repos/dnd-kit/packages/abstract/src/core/manager/renderer.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-29
+.repos/dnd-kit/packages/solid/src/utilities/saveElementPosition.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-55
+.repos/dnd-kit/apps/docs/docs/solid/hooks/use-droppable.mdx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-129
+.repos/dnd-kit/apps/docs/src/components/Sidebar/SidebarGroupItem.tsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-140
+.repos/dnd-kit/packages/dom/src/utilities/type-guards/isWindow.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-8
+.repos/dnd-kit/packages/geometry/src/shapes/Shape.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-68
+.repos/dnd-kit/packages/geometry/src/distance/distance.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-32
+.repos/dnd-kit/apps/stories-svelte/stories/Draggable/DragOverlay/DraggableItem.svelte
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-13
+.repos/dnd-kit/apps/stories-svelte/stories/Draggable/DraggableApp.svelte
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-8
+.repos/dnd-kit/apps/docs/docs/react/guides/sensors.mdx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-219
+.repos/dnd-kit/apps/stories/stories/react/Draggable/DragOverlay/DragOverlay.stories.tsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-18
+.repos/dnd-kit/packages/abstract/tests/drag-event-order.test.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-89
+.repos/dnd-kit/apps/docs/docs/docs.json
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-382
+.repos/dnd-kit/apps/templates/solid-draggable/src/Droppable.tsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-11
+.repos/dnd-kit/packages/dom/src/utilities/element/proxiedElements.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1
+.repos/dnd-kit/packages/dom/src/utilities/type-guards/index.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-12
+.repos/dnd-kit/apps/docs/docs/quickstart.mdx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-212
+.repos/dnd-kit/apps/docs/src/components/mintlify/Update.tsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-31
+.repos/dnd-kit/packages/vue/README.md
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-55
+.repos/dnd-kit/apps/stories-shared/assets/sortableIcon.svg
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-20
+.repos/dnd-kit/apps/stories-solid/raw.d.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-9
+.repos/dnd-kit/.github/assets/dnd-kit-hero-banner.svg
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-86
+.repos/dnd-kit/packages/abstract/src/core/manager/index.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-18
+.repos/dnd-kit/packages/helpers/LICENSE
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-21
+.repos/dnd-kit/apps/stories-svelte/stories/Droppable/MultipleDroppable/MultipleDroppable.stories.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-37
+.repos/dnd-kit/apps/docs/docs/images/sponsors/any-do-logo.svg
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-15
+.repos/dnd-kit/apps/docs/src/components/Assistant/ChatItem.tsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-25
+.repos/dnd-kit/packages/abstract/src/modifiers/boundingRectangle.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-56
+.repos/dnd-kit/packages/dom/src/core/sensors/pointer/DelayConstraint.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-56
+.repos/dnd-kit/apps/docs/docs/solid/hooks/use-draggable.mdx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-158
+.repos/dnd-kit/apps/stories/.storybook/main.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-69
+.repos/dnd-kit/packages/dom/src/utilities/element/isInteractiveElement.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-14
+.repos/dnd-kit/packages/react/src/hooks/useIsomorphicLayoutEffect.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-15
+.repos/dnd-kit/.changeset/config.json
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-26
+.repos/dnd-kit/packages/react/src/core/context/renderer.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-55
+.repos/dnd-kit/apps/docs/package.json
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-51
+.repos/dnd-kit/apps/docs/src/hooks/useSwipeToDismiss.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-133
+.repos/dnd-kit/apps/stories-solid/stories/Sortable/Horizontal/Horizontal.stories.tsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-34
+.repos/dnd-kit/apps/docs/src/components/AssistantBar.tsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1
+.repos/dnd-kit/apps/stories/stories/react/Droppable/docs/examples/QuickStart.jsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-31
+.repos/dnd-kit/packages/solid/src/core/context/DragDropProvider.tsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-119
+.repos/dnd-kit/apps/docs/docs/concepts/droppable.mdx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-179
+.repos/dnd-kit/packages/abstract/src/core/entities/entity/registry.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-121
+.repos/dnd-kit/apps/stories-vue/stories/Draggable/DragHandles/DragHandles.stories.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-44
+.repos/dnd-kit/packages/dom/tests/modifiers-import.test.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-22
+.repos/dnd-kit/packages/geometry/src/types/bounding-rectangle.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-8
+.repos/dnd-kit/apps/stories-vue/stories/Sortable/MultipleLists/SortableItem.vue
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-39
+.repos/dnd-kit/apps/docs/docs/sandpack.js
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-225
+.repos/dnd-kit/packages/dom/LICENSE
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-21
+.repos/dnd-kit/apps/docs/docs/images/droppable/shape-intersection.svg
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-65
+.repos/dnd-kit/packages/react/src/hooks/useImmediateEffect.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-8
+.repos/dnd-kit/packages/dom/src/core/sensors/drag/DragSensor.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-173
+.repos/dnd-kit/apps/stories/stories/react/components/Grid/Grid.module.css
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-19
+.repos/dnd-kit/.prettierrc
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-6
+.repos/dnd-kit/packages/svelte/CHANGELOG.md
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-177
+.repos/dnd-kit/packages/dom/src/utilities/type-guards/isHTMLTableRowElement.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-5
+.repos/dnd-kit/apps/stories-svelte/stories/Sortable/Grid/Grid.stories.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-30
+.repos/dnd-kit/apps/docs/docs/extend/plugins/feedback.mdx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-185
+.repos/dnd-kit/packages/dom/src/utilities/scroll/getScrollableElement.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-33
+.repos/dnd-kit/apps/templates/react-draggable/package.json
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-19
+.repos/dnd-kit/packages/solid/src/hooks/useDeepSignal.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-57
+.repos/dnd-kit/packages/dom/src/sortable/index.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-14
+.repos/dnd-kit/package.json
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-33
+.repos/dnd-kit/packages/dom/src/utilities/type-guards/isElement.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-11
+.repos/dnd-kit/packages/geometry/src/position/position.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-74
+.repos/dnd-kit/apps/stories-solid/tests/sortable-vertical.spec.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-6
+.repos/dnd-kit/apps/docs/docs/extend/sensors.mdx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-200
+.repos/dnd-kit/apps/docs/docs/extend/sensors/pointer-sensor.mdx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-263
+.repos/dnd-kit/apps/stories-shared/assets/draggableIcon.svg
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-36
+.repos/dnd-kit/packages/solid/src/core/hooks/useInstance.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-26
+.repos/dnd-kit/packages/vue/LICENSE
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-21
+.repos/dnd-kit/apps/stories/.storybook/preview.tsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-83
+.repos/dnd-kit/apps/stories-vanilla/stories/Droppable/Droppable.stories.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-30
+.repos/dnd-kit/packages/abstract/src/core/collision/utilities.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-17
+.repos/dnd-kit/apps/docs/astro.config.mjs
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-117
+.repos/dnd-kit/apps/docs/src/styles/typography.css
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-26
+.repos/dnd-kit/packages/state/tests/comparators.test.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-45
+.repos/dnd-kit/packages/geometry/src/types/coordinates.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-3
+.repos/dnd-kit/apps/docs/docs/solid/components/drag-overlay.mdx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-106
+.repos/dnd-kit/apps/docs/docs/images/sponsors/any-do-logo-dark.svg
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-15
+.repos/dnd-kit/packages/react/src/utilities/index.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1
+.repos/dnd-kit/apps/stories-vanilla/.storybook/theme.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-8
+.repos/dnd-kit/.browserslistrc
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-4
+.repos/dnd-kit/apps/stories/package.json
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-48
+.repos/dnd-kit/apps/stories-solid/stories/Draggable/Draggable.stories.tsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-24
+.repos/dnd-kit/packages/abstract/src/core/manager/manager.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-197
+.repos/dnd-kit/packages/dom/src/core/plugins/accessibility/defaults.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-44
+.repos/dnd-kit/packages/dom/src/core/plugins/selection/PreventSelection.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-49
+.repos/dnd-kit/apps/stories-shared/tests/droppable.tests.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-96
+.repos/dnd-kit/apps/stories-shared/assets/droppableIcon.svg
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-60
+.repos/dnd-kit/apps/stories-svelte/stories/Sortable/Vertical/Vertical.stories.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-73
+.repos/dnd-kit/apps/docs/src/components/MobileHeaderActions.tsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-84
+.repos/dnd-kit/apps/docs/src/components/CodeGroup.tsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-63
+.repos/dnd-kit/packages/solid/src/sortable/useSortable.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-124
+.repos/dnd-kit/apps/stories/stories/react/Sortable/Virtualized/ReactTinyVirtualListExample.tsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-76
+.repos/dnd-kit/config/typescript/svelte.json
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-14
+.repos/dnd-kit/apps/stories/stories/react/Sortable/MultipleLists/docs/examples/Item.jsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-14
+.repos/dnd-kit/apps/stories-solid/stories/Droppable/DroppableApp.tsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-38
+.repos/dnd-kit/apps/stories/stories/react/Resizeable/Resizeable.css
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-160
+.repos/dnd-kit/apps/stories/stories/react/Draggable/docs/examples/QuickStart.jsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-12
+.repos/dnd-kit/apps/docs/src/components/Sidebar/Anchors.tsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-24
+.repos/dnd-kit/apps/stories-svelte/stories/Droppable/DroppableApp.svelte
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-25
+.repos/dnd-kit/apps/docs/src/layouts/Layout.astro
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-126
+.repos/dnd-kit/apps/stories-vue/.storybook/preview.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-78
+.repos/dnd-kit/apps/templates/solid-draggable/package.json
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-18
+.repos/dnd-kit/apps/docs/docs/images/sponsors/puck-logo-dark.svg
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1
+.repos/dnd-kit/apps/docs/src/components/Assistant/AssistantSheet.tsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-247
+.repos/dnd-kit/apps/stories-vue/stories/Sortable/MultipleLists/MultipleLists.stories.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-37
+.repos/dnd-kit/packages/abstract/src/core/entities/droppable/index.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-2
+.repos/dnd-kit/packages/dom/src/utilities/scroll/getScrollPosition.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-46
+.repos/dnd-kit/packages/geometry/src/types/alignment.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-6
+.repos/dnd-kit/apps/docs/docs/react/guides/multiple-sortable-lists.mdx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-420
+.repos/dnd-kit/apps/stories-vue/tests/droppable.spec.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-6
+.repos/dnd-kit/packages/svelte/src/core/hooks/createInstance.svelte.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-27
+.repos/dnd-kit/.changeset/fresh-teeth-kiss.md
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-5
+.repos/dnd-kit/packages/dom/src/core/plugins/feedback/constants.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-79
+.repos/dnd-kit/packages/vue/src/core/index.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-40
+.repos/dnd-kit/apps/docs/src/components/CodeBlock.tsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-192
+.repos/dnd-kit/apps/stories-solid/stories/Sortable/SortableApp.tsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-43
+.repos/dnd-kit/packages/react/src/hooks/useLatest.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-13
+.repos/dnd-kit/packages/helpers/package.json
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-46
+.repos/dnd-kit/apps/templates/solid-draggable/vite.config.js
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-6
+.repos/dnd-kit/apps/docs/docs/react/components/drag-overlay.mdx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-113
+.repos/dnd-kit/apps/docs/docs/solid/hooks/use-sortable.mdx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-228
+.repos/dnd-kit/apps/stories/stories/react/Sortable/CSSLayers/CSSLayers.stories.tsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-16
+.repos/dnd-kit/apps/docs/docs/legacy/api-documentation/modifiers.mdx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-107
+.repos/dnd-kit/packages/dom/src/core/plugins/scrolling/ScrollListener.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-46
+.repos/dnd-kit/apps/stories/stories/components/docs/Preview/index.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1
+.repos/dnd-kit/apps/docs/src/components/SearchBar.tsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-436
+.repos/dnd-kit/apps/stories/tests/sortable-scroll.spec.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-122
+.repos/dnd-kit/packages/storybook-addon-codesandbox/src/preview/CodeSandboxButton.tsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-191
+.repos/dnd-kit/apps/stories-svelte/.storybook/main.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-32
+.repos/dnd-kit/apps/stories-vue/stories/Sortable/SortableApp.vue
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-52
+.repos/dnd-kit/apps/docs/docs/react/hooks/use-drag-drop-manager.mdx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-61
+.repos/dnd-kit/packages/collision/src/algorithms/closestCorners.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-38
+.repos/dnd-kit/packages/geometry/CHANGELOG.md
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-307
+.repos/dnd-kit/apps/docs/docs/legacy/api-documentation/droppable/use-droppable.mdx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-127
+.repos/dnd-kit/apps/templates/vue-draggable/index.html
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-12
+.repos/dnd-kit/apps/stories-svelte/stories/Draggable/DragOverlay/DragOverlayApp.svelte
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-15
+.repos/dnd-kit/apps/docs/src/components/ThemeToggle.tsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-69
+.repos/dnd-kit/packages/abstract/tsconfig.json
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-5
+.repos/dnd-kit/packages/dom/src/core/plugins/accessibility/HiddenText.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-9
+.repos/dnd-kit/apps/docs/docs/react/components/drag-drop-provider.mdx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-229
+.repos/dnd-kit/packages/vue/src/core/context/renderer.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-49
+.repos/dnd-kit/apps/stories-shared/register.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-35
+.repos/dnd-kit/apps/stories-vanilla/stories/Draggable/DragHandle/DragHandle.stories.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-24
+.repos/dnd-kit/apps/templates/svelte-draggable/package.json
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-18
+.repos/dnd-kit/packages/dom/src/core/plugins/scrolling/ScrollLock.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-32
+.repos/dnd-kit/packages/dom/src/core/sensors/keyboard/KeyboardSensor.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-301
+.repos/dnd-kit/packages/dom/src/core/plugins/scrolling/index.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-4
+.repos/dnd-kit/packages/state/src/comparators.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-51
+.repos/dnd-kit/packages/vue/src/core/hooks/useDragDropManager.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-5
+.repos/dnd-kit/apps/stories-vue/stories/Droppable/Droppable.stories.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-24
+.repos/dnd-kit/packages/dom/src/utilities/popover/supportsPopover.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-11
+.repos/dnd-kit/apps/templates/vue-sortable/src/styles.css
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-45
+.repos/dnd-kit/packages/storybook-addon-codesandbox/src/preview/decorator.tsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-39
+.repos/dnd-kit/packages/dom/src/core/sensors/keyboard/index.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1
+.repos/dnd-kit/apps/docs/docs/legacy/api-documentation/context-provider/dnd-context.mdx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-234
+.repos/dnd-kit/packages/geometry/src/point/index.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1
+.repos/dnd-kit/packages/storybook-addon-codesandbox/package.json
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-19
+.repos/dnd-kit/apps/templates/svelte-draggable/src/styles.css
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-99
+.repos/dnd-kit/apps/docs/docs/legacy/presets/sortable/use-sortable.mdx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-248
+.repos/dnd-kit/apps/templates/svelte-sortable/src/main.js
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-7
+.repos/dnd-kit/apps/docs/docs/concepts/draggable.mdx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-160
+.repos/dnd-kit/apps/docs/src/components/Assistant/index.tsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-4
+.repos/dnd-kit/apps/docs/src/hooks/useContextualOptions.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-110
+.repos/dnd-kit/apps/stories/stories/react/Sortable/Table/TanstackTableExample.tsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-321
+.repos/dnd-kit/apps/stories/stories/react/Sortable/Vertical/Vertical.stories.tsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-182
+.repos/dnd-kit/apps/docs/docs/legacy/api-documentation/context-provider/use-dnd-context.mdx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-27
+.repos/dnd-kit/apps/stories/stories/react/Sortable/Virtualized/Virtualized.stories.tsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-27
+.repos/dnd-kit/packages/svelte/package.json
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-57
+.repos/dnd-kit/README.md
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-135
+.repos/dnd-kit/packages/dom/tests/sortable-utilities.test.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-265
+.repos/dnd-kit/apps/stories/stories/react/Droppable/Droppable.stories.tsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-30
+.repos/dnd-kit/packages/dom/src/core/plugins/feedback/Feedback.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-612
+.repos/dnd-kit/apps/stories/stories/react/components/Dropzone/Dropzone.tsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-17
+.repos/dnd-kit/apps/docs/src/icons/MintlifyLogo.tsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-45
+.repos/dnd-kit/packages/vue/src/core/hooks/useDragOperation.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-23
+.repos/dnd-kit/apps/templates/vue-draggable/vite.config.js
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-6
+.repos/dnd-kit/packages/collision/src/algorithms/closestCenter.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-37
+.repos/dnd-kit/packages/react/src/hooks/useOnValueChange.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-19
+.repos/dnd-kit/apps/stories/stories/react/components/Container/Container.tsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-53
+.repos/dnd-kit/packages/geometry/src/distance/types.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-7
+.repos/dnd-kit/apps/stories-shared/tests/fixtures.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-229
+.repos/dnd-kit/packages/abstract/src/core/collision/notifier.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-70
+.repos/dnd-kit/packages/state/tsconfig.json
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-8
+.repos/dnd-kit/apps/docs/docs/legacy/api-documentation/sensors/mouse.mdx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-48
+.repos/dnd-kit/apps/stories-vanilla/stories/Droppable/MultipleDroppable/MultipleDroppableApp.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-72
+.repos/dnd-kit/packages/vue/src/types.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-11
+.repos/dnd-kit/apps/stories-solid/stories/Sortable/MultipleLists/MultipleListsApp.tsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-140
+.repos/dnd-kit/apps/stories/.eslintrc.js
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-3
+.repos/dnd-kit/apps/docs/docs/legacy/api-documentation/context-provider/use-dnd-monitor.mdx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-43
+.repos/dnd-kit/apps/stories-shared/preview-head.html
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-85
+.repos/dnd-kit/apps/stories-svelte/stories/Draggable/DragHandles/DraggableWithHandle.svelte
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-14
+.repos/dnd-kit/packages/dom/src/utilities/coordinates/getEventCoordinates.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-8
+.repos/dnd-kit/apps/docs/src/components/mintlify/Callout.tsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-85
+.repos/dnd-kit/packages/dom/src/utilities/transform/animateTransform.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-9
+.repos/dnd-kit/.gitignore
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-25
+.repos/dnd-kit/apps/docs/src/components/CodeSandbox.tsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-196
+.repos/dnd-kit/packages/vue/src/core/hooks/useInstance.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-24
+.repos/dnd-kit/packages/vue/src/utilities/ref.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-8
+.repos/dnd-kit/apps/stories/stories/react/Sortable/MultipleLists/MultipleListsApp.tsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-162
+.repos/dnd-kit/apps/stories/stories/react/Sortable/Transformed/TransformedExample.tsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-104
+.repos/dnd-kit/packages/react/LICENSE
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-21
+.repos/dnd-kit/packages/dom/src/utilities/execution-context/getWindow.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-24
+.repos/dnd-kit/packages/state/src/index.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-24
+.repos/dnd-kit/apps/stories-vanilla/stories/Sortable/SortableApp.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-41
+.repos/dnd-kit/config/typescript/base.json
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-21
+.repos/dnd-kit/packages/svelte/src/core/hooks/createDragOperation.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-19
+.repos/dnd-kit/apps/docs/src/components/Assistant/AssistantHistoryList.tsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-61
+.repos/dnd-kit/apps/stories/stories/react/Draggable/Modifiers/Modifiers.stories.tsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-71
+.repos/dnd-kit/apps/stories/.storybook/theme.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-8
+.repos/dnd-kit/packages/abstract/tests/plugin-registry.test.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-341
+.repos/dnd-kit/apps/docs/docs/images/sponsors/httpie-logo-dark.svg
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1
+.repos/dnd-kit/packages/dom/src/sortable/plugins/OptimisticSortingPlugin.helpers.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-45
+.repos/dnd-kit/packages/vue/src/utilities/index.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-3
+.repos/dnd-kit/apps/docs/src/components/Header.astro
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-171
+.repos/dnd-kit/apps/stories-vue/stories/Sortable/MultipleLists/SortableColumn.vue
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-50
+.repos/dnd-kit/packages/dom/src/core/manager/manager.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-57
+.repos/dnd-kit/packages/dom/tsup.config.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-19
+.repos/dnd-kit/apps/templates/vue-draggable/package.json
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-18
+.repos/dnd-kit/packages/solid/src/core/hooks/useDragOperation.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-15
+.repos/dnd-kit/apps/stories/stories/components/docs/Info/index.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1
+.repos/dnd-kit/apps/docs/src/lib/cn.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-10
+.repos/dnd-kit/apps/docs/src/components/Assistant/AssistantButton.tsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-22
+.repos/dnd-kit/apps/stories/stories/react/Resizeable/Resizeable.tsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-395
+.repos/dnd-kit/packages/react/src/hooks/useForceUpdate.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-9
+.repos/dnd-kit/apps/docs/docs/legacy/api-documentation/sensors/touch.mdx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-65
+.repos/dnd-kit/apps/templates/svelte-draggable/src/App.svelte
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-26
+.repos/dnd-kit/apps/templates/svelte-draggable/vite.config.js
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-6
+.repos/dnd-kit/apps/stories-vanilla/stories/Droppable/MultipleDroppable/MultipleDroppable.stories.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-30
+.repos/dnd-kit/packages/dom/src/utilities/bounding-rectangle/getBoundingRectangle.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-8
+.repos/dnd-kit/packages/abstract/src/core/sensors/sensor.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-81
+.repos/dnd-kit/apps/stories/stories/react/Sortable/Table/TableExample.tsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-281
+.repos/dnd-kit/config/typescript/react.json
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-13
+.repos/dnd-kit/packages/dom/src/utilities/type-guards/supportsStyle.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-13
+.repos/dnd-kit/apps/stories/stories/react/Sortable/Grid/Grid.stories.tsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-93
+.repos/dnd-kit/apps/docs/src/components/SiteFooter.tsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-51
+.repos/dnd-kit/apps/stories-solid/stories/Sortable/SortableDragHandleApp.tsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-44
+.repos/dnd-kit/apps/stories-vue/stories/Sortable/Grid/Grid.stories.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-25
+.repos/dnd-kit/packages/dom/src/utilities/transform/parseTranslate.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-18
+.repos/dnd-kit/apps/stories-vue/stories/Sortable/MultipleLists/MultipleListsApp.vue
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-77
+.repos/dnd-kit/apps/templates/solid-sortable/src/main.tsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-5
+.repos/dnd-kit/apps/stories/stories/react/Droppable/MultipleDroppable/MultipleDroppable.stories.tsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-24
+.repos/dnd-kit/apps/stories-svelte/stories/Sortable/SortableDragHandleApp.svelte
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-28
+.repos/dnd-kit/packages/dom/src/utilities/observers/PositionObserver.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-188
+.repos/dnd-kit/apps/stories-vanilla/.storybook/assets/dnd-kit-banner.svg
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-17
+.repos/dnd-kit/apps/docs/src/components/HeroSvg.astro
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-15
+.repos/dnd-kit/packages/dom/src/utilities/scheduling/timeout.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-5
+.repos/dnd-kit/packages/state/src/history.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-76
+.repos/dnd-kit/packages/solid/package.json
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-87
+.repos/dnd-kit/apps/stories/stories/react/Draggable/DraggableApp.tsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-16
+.repos/dnd-kit/apps/stories-shared/package.json
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-15
+.repos/dnd-kit/apps/templates/vue-draggable/src/Draggable.vue
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-11
+.repos/dnd-kit/packages/abstract/src/core/collision/types.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-96
+.repos/dnd-kit/packages/abstract/src/core/entities/entity/index.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-6
+.repos/dnd-kit/packages/dom/src/utilities/scheduling/throttle.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-27
+.repos/dnd-kit/packages/vue/package.json
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-86
+.repos/dnd-kit/apps/stories/stories/react/Draggable/Draggable.stories.tsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-30
+.repos/dnd-kit/packages/vue/src/core/hooks/useDragDropMonitor.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-75
+.repos/dnd-kit/apps/docs/src/components/Sidebar/index.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-10
+.repos/dnd-kit/apps/stories/stories/react/components/Actions/index.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-6
+.repos/dnd-kit/apps/stories/stories/react/Sortable/MultipleLists/docs/MultipleLists.mdx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-31
+.repos/dnd-kit/packages/abstract/src/core/manager/events.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-252
+.repos/dnd-kit/packages/dom/src/utilities/type-guards/supportsViewTransition.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-14
+.repos/dnd-kit/apps/stories/stories/react/Sortable/Vertical/AnchorElementsExample.tsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-81
+.repos/dnd-kit/apps/stories/tests/sortable-vertical.spec.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-28
+.repos/dnd-kit/apps/stories/tests/draggable.spec.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-6
+.repos/dnd-kit/apps/stories/stories/react/Sortable/docs/examples/Example.jsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-30
+.repos/dnd-kit/apps/stories-vue/stories/Sortable/SortableDragHandleApp.vue
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-55
+.repos/dnd-kit/packages/dom/src/utilities/execution-context/getDocuments.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-48
+.repos/dnd-kit/apps/stories/stories/react/Sortable/Grid/GridSortableApp.tsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-42
+.repos/dnd-kit/packages/react/src/core/hooks/useInstance.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-28
+.repos/dnd-kit/apps/stories-solid/stories/Droppable/MultipleDroppable/MultipleDroppableApp.tsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-45
+.repos/dnd-kit/apps/stories-svelte/stories/Sortable/MultipleLists/MultipleListsApp.svelte
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-76
+.repos/dnd-kit/apps/stories/stories/react/Droppable/DroppableExample.tsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-78
+.repos/dnd-kit/apps/docs/docs/extend/plugins/auto-scroller.mdx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-291
+.repos/dnd-kit/packages/react/src/core/hooks/useDragOperation.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-25
+.repos/dnd-kit/apps/stories-vue/stories/Sortable/Grid/GridSortableApp.vue
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-53
+.repos/dnd-kit/apps/templates/solid-sortable/index.html
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-12
+.repos/dnd-kit/packages/abstract/package.json
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-65
+.repos/dnd-kit/packages/dom/src/core/entities/draggable/index.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-2
+.repos/dnd-kit/packages/dom/src/utilities/bounding-rectangle/getViewportBoundingRectangle.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-34
+.repos/dnd-kit/packages/dom/src/utilities/scheduling/scheduler.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-44
+.repos/dnd-kit/apps/stories-solid/stories/Draggable/DragHandles/DragHandlesApp.tsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-20
+.repos/dnd-kit/apps/stories/stories/react/Draggable/docs/examples/Draggable.jsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-14
+.repos/dnd-kit/packages/dom/src/core/manager/events.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-14
+.repos/dnd-kit/apps/stories-svelte/stories/Droppable/DraggableItem.svelte
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-7
+.repos/dnd-kit/packages/react/src/hooks/useComputed.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-18
+.repos/dnd-kit/apps/templates/vue-draggable/src/Droppable.vue
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-13
+.repos/dnd-kit/packages/collision/src/algorithms/directionBiased.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-51
+.repos/dnd-kit/apps/docs/docs/images/sponsors/mintlify-logo-dark.svg
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-18
+.repos/dnd-kit/apps/docs/src/components/ParamField.tsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-114
+.repos/dnd-kit/apps/stories-svelte/stories/Sortable/SortableItem.svelte
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-18
+.repos/dnd-kit/apps/templates/react-draggable/index.html
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-12
+.repos/dnd-kit/packages/geometry/package.json
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-36
+.repos/dnd-kit/packages/solid/src/core/hooks/useDragDropManager.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-7
+.repos/dnd-kit/packages/react/src/core/hooks/useDragDropMonitor.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-83
+.repos/dnd-kit/apps/stories-shared/utilities/classnames.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-5
+.repos/dnd-kit/packages/dom/package.json
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-98
+.repos/dnd-kit/packages/dom/src/sortable/plugins/OptimisticSortingPlugin.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-231
+.repos/dnd-kit/apps/stories-solid/stories/Sortable/Grid/Grid.stories.tsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-25
+.repos/dnd-kit/packages/dom/src/core/plugins/accessibility/LiveRegion.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-20
+.repos/dnd-kit/apps/stories/stories/react/Sortable/Virtualized/ReactWindowExample.tsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-88
+.repos/dnd-kit/packages/vue/src/sortable/index.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-4
+.repos/dnd-kit/packages/react/tsup.config.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-15
+.repos/dnd-kit/packages/geometry/README.md
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-19
+.repos/dnd-kit/apps/docs/src/components/Sidebar/SideNavItem.tsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-101
+.repos/dnd-kit/packages/abstract/src/core/manager/operation.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-220
+.repos/dnd-kit/packages/svelte/src/core/hooks/getDragDropManager.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-5
+.repos/dnd-kit/packages/geometry/src/distance/index.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-3
+.repos/dnd-kit/packages/storybook-addon-codesandbox/src/preset.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-3
+.repos/dnd-kit/apps/stories/stories/react/Resizeable/index.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1
+.repos/dnd-kit/apps/stories/stories/components/docs/Code/Code.module.css
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-69
+.repos/dnd-kit/apps/stories-solid/stories/Droppable/MultipleDroppable/MultipleDroppable.stories.tsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-24
+.repos/dnd-kit/packages/solid/src/core/context/renderer.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-41
+.repos/dnd-kit/apps/docs/src/components/Assistant/ChatMessage.tsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-38
+.repos/dnd-kit/packages/storybook-addon-codesandbox/src/index.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1
+.repos/dnd-kit/packages/dom/src/utilities/type-guards/isPointerEvent.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-11
+.repos/dnd-kit/packages/dom/src/utilities/execution-context/prefersReducedMotion.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-3
+.repos/dnd-kit/apps/stories/stories/react/Sortable/MultipleLists/docs/examples/QuickStart.jsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-34
+.repos/dnd-kit/packages/dom/src/utilities/styles/Styles.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-66
+.repos/dnd-kit/apps/templates/react-sortable/src/main.jsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-10
+.repos/dnd-kit/packages/abstract/src/core/entities/entity/entity.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-176
+.repos/dnd-kit/packages/dom/src/utilities/scroll/getScrollableAncestors.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-93
+.repos/dnd-kit/packages/vue/tsup.config.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-15
+.repos/dnd-kit/apps/stories-vanilla/stories/Sortable/Grid/Grid.stories.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-25
+.repos/dnd-kit/apps/stories-svelte/stories/Draggable/DragHandles/DragHandles.stories.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-32
+.repos/dnd-kit/apps/docs/docs/extend/plugins/accessibility.mdx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-246
+.repos/dnd-kit/packages/geometry/src/point/Point.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-47
+.repos/dnd-kit/packages/vue/CHANGELOG.md
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-171
+.repos/dnd-kit/apps/docs/wrangler.json
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-7
+.repos/dnd-kit/packages/react/src/core/droppable/useDroppable.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-77
+.repos/dnd-kit/apps/templates/react-sortable/package.json
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-20
+.repos/dnd-kit/packages/solid/src/sortable/index.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-4
+.repos/dnd-kit/packages/dom/src/core/plugins/cursor/Cursor.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-38
+.repos/dnd-kit/apps/stories/stories/react/Sortable/docs/examples/UncontrolledExample.jsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-24
+.repos/dnd-kit/apps/stories/stories/react/Sortable/MultipleLists/MultipleLists.stories.tsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-105
+.repos/dnd-kit/packages/react/README.md
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-50
+.repos/dnd-kit/apps/docs/docs/legacy/api-documentation/sensors/keyboard.mdx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-101
+.repos/dnd-kit/apps/stories/stories/react/components/Actions/Remove.tsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-15
+.repos/dnd-kit/apps/stories-svelte/stories/Draggable/Draggable.svelte
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-7
+.repos/dnd-kit/packages/collision/src/algorithms/pointerDistance.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-25
+.repos/dnd-kit/apps/docs/docs/extend/plugins/style-injector.mdx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-145
+.repos/dnd-kit/packages/react/src/hooks/useDeepSignal.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-66
+.repos/dnd-kit/packages/collision/CHANGELOG.md
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-345
+.repos/dnd-kit/apps/templates/vue-draggable/src/main.js
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-5
+.repos/dnd-kit/packages/helpers/README.md
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-34
+.repos/dnd-kit/apps/stories-vue/stories/Draggable/DraggableApp.vue
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-25
+.repos/dnd-kit/packages/svelte/src/utilities/createDeepSignal.svelte.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-67
+.repos/dnd-kit/apps/docs/src/components/Assistant/ChatResponse.tsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-482
+.repos/dnd-kit/apps/stories/stories/react/Sortable/Sortable.stories.tsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-38
+.repos/dnd-kit/apps/stories/stories/react/Sortable/Vertical/AutoScrollExample.tsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-67
+.repos/dnd-kit/apps/templates/vue-sortable/vite.config.js
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-6
+.repos/dnd-kit/apps/docs/src/components/Assistant/AssistantTextArea.tsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-96
+.repos/dnd-kit/apps/stories/stories/react/Draggable/Sensors/docs/SensorDocs.mdx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-167
+.repos/dnd-kit/packages/dom/src/sortable/utilities.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-24
+.repos/dnd-kit/packages/solid/src/core/index.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-28
+.repos/dnd-kit/apps/stories-svelte/stories/Sortable/SortableDynamicFeedbackApp.svelte
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-29
+.repos/dnd-kit/apps/stories-shared/tests/sortable-vertical.tests.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-113
+.repos/dnd-kit/apps/templates/svelte-sortable/src/SortableItem.svelte
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-14
+.repos/dnd-kit/apps/stories/stories/react/components/Actions/Action.tsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-28
+.repos/dnd-kit/apps/docs/.gitignore
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-33
+.repos/dnd-kit/apps/docs/scripts/diff-screenshots.mjs
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-219
+.repos/dnd-kit/packages/geometry/src/types/index.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-4
+.repos/dnd-kit/apps/stories/tests/sortable-autoscroll-options.spec.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-80
+.repos/dnd-kit/apps/docs/docs/images/logo/logo-arrows.svg
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-3
+.repos/dnd-kit/apps/stories/stories/components/docs/index.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-3
+.repos/dnd-kit/packages/collision/src/algorithms/default.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-14
+.repos/dnd-kit/apps/docs/src/icons/ContextMenuIcons.tsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-124
+.repos/dnd-kit/packages/dom/src/utilities/styles/index.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-2
+.repos/dnd-kit/.github/workflows/playwright.yml
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-53
+.repos/dnd-kit/packages/helpers/tests/move.test.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-901
+.repos/dnd-kit/apps/docs/src/components/Sidebar/types.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-15
+.repos/dnd-kit/apps/stories/tests/sortable-table.spec.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-66
+.repos/dnd-kit/apps/stories-vue/.storybook/manager-head.html
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-25
+.repos/dnd-kit/apps/stories/tests/sortable-horizontal.spec.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-33
+.repos/dnd-kit/apps/docs/docs/images/sponsors/httpie-logo.svg
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1
+.repos/dnd-kit/apps/stories-svelte/tests/draggable.spec.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-6
+.repos/dnd-kit/apps/stories/stories/react/Droppable/docs/examples/MultipleDroppable.jsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-34
+.repos/dnd-kit/apps/docs/docs/images/sponsors/sentry-logo-dark.svg
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1
+.repos/dnd-kit/apps/templates/solid-sortable/package.json
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-19
+.repos/dnd-kit/apps/stories-vanilla/stories/Sortable/Sortable.stories.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-54
+.repos/dnd-kit/packages/geometry/src/types/axis.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-6
+.repos/dnd-kit/packages/state/src/computed.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-26
+.repos/dnd-kit/apps/stories/tests/droppable.spec.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-6
+.repos/dnd-kit/packages/svelte/tsconfig.json
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-5
+.repos/dnd-kit/packages/react/src/hooks/useOnElementChange.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-20
+.repos/dnd-kit/packages/vue/tsconfig.json
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-5
+.repos/dnd-kit/apps/stories-svelte/svelte.config.js
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-5
+.repos/dnd-kit/packages/dom/src/utilities/styles/getComputedStyles.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-33
+.repos/dnd-kit/apps/docs/src/components/mintlify/Tabs.tsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-42
+.repos/dnd-kit/apps/stories-solid/stories/Sortable/Grid/GridSortableApp.tsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-44
+.repos/dnd-kit/packages/abstract/src/core/sensors/activation.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-75
+.repos/dnd-kit/apps/templates/react-sortable/vite.config.js
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-6
+.repos/dnd-kit/apps/stories/stories/react/Draggable/Modifiers/SnapToGridExample.tsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-60
+.repos/dnd-kit/apps/docs/src/styles/kbd.css
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-3
+.repos/dnd-kit/packages/abstract/src/core/index.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-68
+.repos/dnd-kit/packages/vue/src/utilities/context.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-27
+.repos/dnd-kit/packages/abstract/src/modifiers/axis.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-77
+.repos/dnd-kit/apps/stories-solid/tests/draggable.spec.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-6
+.repos/dnd-kit/packages/dom/CHANGELOG.md
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-1049
+.repos/dnd-kit/apps/stories-svelte/stories/Droppable/DroppableZone.svelte
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-16
+.repos/dnd-kit/apps/docs/src/styles/color-scheme.css
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-13
+.repos/dnd-kit/apps/templates/react-draggable/vite.config.js
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-6
+.repos/dnd-kit/apps/docs/src/components/Sidebar/TabsDropdown.tsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-66
+.repos/dnd-kit/packages/abstract/src/core/collision/index.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-4
+.repos/dnd-kit/packages/geometry/tsconfig.json
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-5
+.repos/dnd-kit/packages/dom/src/core/sensors/pointer/DistanceConstraint.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-54
+.repos/dnd-kit/apps/stories/.storybook/manager-head.html
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-25
+.repos/dnd-kit/packages/dom/src/core/sensors/drag/index.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1
+.repos/dnd-kit/apps/stories/stories/components/docs/Preview/Preview.module.css
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-76
+.repos/dnd-kit/apps/docs/docs/legacy/api-documentation/draggable/use-draggable.mdx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-321
+.repos/dnd-kit/packages/dom/src/utilities/type-guards/isNode.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-3
+.repos/dnd-kit/apps/stories-svelte/stories/Sortable/NestedScrollSortableApp.svelte
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-7
+.repos/dnd-kit/apps/stories/stories/react/Droppable/docs/examples/Draggable.jsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-14
+.repos/dnd-kit/apps/stories-vanilla/.storybook/preview.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-47
+.repos/dnd-kit/apps/docs/docs/legacy/api-documentation/draggable.mdx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-187
+.repos/dnd-kit/packages/react/src/hooks/useConstant.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-11
+.repos/dnd-kit/packages/solid/CHANGELOG.md
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-167
+.repos/dnd-kit/apps/docs/src/components/Sidebar/Anchor.tsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-46
+.repos/dnd-kit/apps/stories-shared/components/Item/Item.css
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-61
+.repos/dnd-kit/packages/collision/tsconfig.json
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-5
+.repos/dnd-kit/apps/stories-vanilla/raw.d.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-9
+.repos/dnd-kit/apps/docs/src/hooks/useAssistant.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-143
+.repos/dnd-kit/.github/workflows/chromatic.yml
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-316
+.repos/dnd-kit/apps/stories-solid/.storybook/main.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-39
+.repos/dnd-kit/packages/abstract/src/core/plugins/types.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-68
+.repos/dnd-kit/packages/solid/src/core/hooks/useDragDropMonitor.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-80
+.repos/dnd-kit/apps/stories-solid/stories/Draggable/DragHandles/DragHandles.stories.tsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-40
+.repos/dnd-kit/packages/svelte/src/core/context/context.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-21
+.repos/dnd-kit/config/typescript/solid.json
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-15
+.repos/dnd-kit/apps/docs/eslint.config.js
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-8
+.repos/dnd-kit/apps/docs/src/components/mintlify/Expandable.tsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-20
+.repos/dnd-kit/apps/stories-shared/components/Item/index.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1
+.repos/dnd-kit/apps/docs/docs/svelte/primitives/create-draggable.mdx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-152
+.repos/dnd-kit/apps/stories-svelte/stories/Sortable/SortableDynamicFeedbackItem.svelte
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-29
+.repos/dnd-kit/packages/dom/src/core/plugins/feedback/observers.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-216
+.repos/dnd-kit/apps/docs/docs/legacy/api-documentation/sensors/pointer.mdx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-81
+.repos/dnd-kit/packages/dom/src/core/sensors/types.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-5
+.repos/dnd-kit/apps/stories-svelte/stories/Sortable/MultipleLists/SortableColumn.svelte
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-47
+.repos/dnd-kit/apps/docs/src/components/Card.tsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-67
+.repos/dnd-kit/CONTRIBUTING.md
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-140
+.repos/dnd-kit/apps/templates/solid-sortable/vite.config.js
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-6
+.repos/dnd-kit/packages/dom/src/utilities/observers/index.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1
+.repos/dnd-kit/packages/svelte/src/core/context/DragDropProvider.svelte
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-108
+.repos/dnd-kit/apps/stories/stories/react/Sortable/MultipleLists/docs/examples/Column.jsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-28
+.repos/dnd-kit/packages/dom/src/utilities/observers/ResizeNotifier.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-22
+.repos/dnd-kit/packages/dom/src/plugins/debug/index.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1
+.repos/dnd-kit/packages/helpers/CHANGELOG.md
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-339
+.repos/dnd-kit/packages/vue/src/core/draggable/DragOverlay.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-129
+.repos/dnd-kit/apps/docs/docs/images/droppable/closest-center.svg
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-84
+.repos/dnd-kit/packages/abstract/src/core/plugins/registry.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-162
+.repos/dnd-kit/apps/stories-vanilla/.storybook/manager.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-8
+.repos/dnd-kit/apps/stories/stories/react/Sortable/Tree/Tree.module.css
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-63
+.repos/dnd-kit/packages/dom/src/core/plugins/accessibility/utilities.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-5
+.repos/dnd-kit/apps/docs/docs/solid/components/drag-drop-provider.mdx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-65
+.repos/dnd-kit/apps/stories-svelte/package.json
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-32
+.repos/dnd-kit/turbo.json
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-35
+.repos/dnd-kit/packages/geometry/src/shapes/index.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-3
+.repos/dnd-kit/apps/docs/docs/index.mdx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-166
+.repos/dnd-kit/apps/docs/docs/extend/plugins/debug.mdx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-101
+.repos/dnd-kit/packages/abstract/src/core/manager/types.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-31
+.repos/dnd-kit/apps/docs/docs/react/guides/migration.mdx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-416
+.repos/dnd-kit/apps/stories/stories/react/Sortable/Tree/Tree.tsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-185
+.repos/dnd-kit/packages/dom/src/utilities/transform/inverseTransform.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-28
+.repos/dnd-kit/apps/docs/docs/vue/composables/use-sortable.mdx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-228
+.repos/dnd-kit/packages/dom/src/core/plugins/cursor/index.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1
+.repos/dnd-kit/packages/dom/src/utilities/transform/index.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-6
+.repos/dnd-kit/apps/stories/raw.d.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-9
+.repos/dnd-kit/packages/dom/src/core/plugins/accessibility/types.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-21
+.repos/dnd-kit/apps/stories/stories/react/Sortable/Tree/TreeItem.tsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-56
+.repos/dnd-kit/apps/stories/stories/react/Draggable/DragHandles/docs/DragHandles.mdx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-52
+.repos/dnd-kit/apps/stories/stories/react/Sortable/Tree/types.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-11
+.repos/dnd-kit/packages/eslint-config/package.json
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-17
+.repos/dnd-kit/apps/docs/docs/legacy/api-documentation/draggable/drag-overlay.mdx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-339
+.repos/dnd-kit/packages/dom/src/utilities/execution-context/getDocument.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-29
+.repos/dnd-kit/packages/dom/src/core/sensors/pointer/PointerActivationConstraints.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-7
+.repos/dnd-kit/packages/vue/src/core/context/context.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-6
+.repos/dnd-kit/apps/stories-vanilla/stories/Sortable/Horizontal/Horizontal.stories.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-39
+.repos/dnd-kit/apps/templates/solid-draggable/src/main.tsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-5
+.repos/dnd-kit/apps/stories/stories/react/Sortable/Table/Table.stories.tsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-20
+.repos/dnd-kit/packages/dom/src/utilities/bounding-rectangle/isVisible.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-13
+.repos/dnd-kit/packages/dom/src/utilities/type-guards/isShadowRoot.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-7
+.repos/dnd-kit/packages/dom/src/utilities/transform/applyTransform.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-28
+.repos/dnd-kit/packages/solid/src/core/draggable/DragOverlay.tsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-130
+.repos/dnd-kit/apps/docs/src/components/PreElement.tsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-61
+.repos/dnd-kit/packages/dom/src/utilities/scroll/canScroll.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-24
+.repos/dnd-kit/packages/storybook-addon-codesandbox/src/preview/codesandbox-button-dom.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-217
+.repos/dnd-kit/apps/docs/docs/images/sponsors/doist-logo-dark.svg
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1
+.repos/dnd-kit/apps/stories/stories/react/icons/index.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1
+.repos/dnd-kit/apps/stories-svelte/stories/Droppable/MultipleDroppable/MultipleDroppableApp.svelte
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-30
+.repos/dnd-kit/apps/docs/docs/react/hooks/use-draggable.mdx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-252
+.repos/dnd-kit/apps/templates/svelte-sortable/svelte.config.js
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-5
+.repos/dnd-kit/apps/docs/docs/solid/quickstart.mdx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-144
+.repos/dnd-kit/packages/dom/src/utilities/event-listeners/Listeners.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-52
+.repos/dnd-kit/apps/stories-vanilla/stories/Draggable/Draggable.stories.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-24
+.repos/dnd-kit/packages/abstract/src/core/entities/entity/types.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-26
+.repos/dnd-kit/apps/templates/react-draggable/src/App.jsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-28
+.repos/dnd-kit/apps/stories/stories/react/Sortable/CSSLayers/CSSLayersExample.tsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-86
+.repos/dnd-kit/packages/dom/tests/keyboard-sensor.test.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-146
+.repos/dnd-kit/apps/stories-svelte/stories/Sortable/Horizontal/NestedScrollHorizontalSortableApp.svelte
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-7
+.repos/dnd-kit/apps/docs/docs/react/guides/modifiers.mdx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-193
+.repos/dnd-kit/apps/docs/src/components/Assistant/LazyAssistant.tsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-137
+.repos/dnd-kit/apps/stories/stories/react/components/Actions/Actions.module.css
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-63
+.repos/dnd-kit/apps/stories-solid/.storybook/manager.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-8
+.repos/dnd-kit/apps/stories-svelte/stories/Draggable/DragHandles/DragHandlesApp.svelte
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-8
+.repos/dnd-kit/packages/dom/src/core/plugins/scrolling/AutoScroller.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-80
+.repos/dnd-kit/packages/dom/src/core/sensors/pointer/PointerSensor.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-436
+.repos/dnd-kit/packages/dom/src/utilities/animations/forceFinishAnimations.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-80
+.repos/dnd-kit/packages/abstract/src/modifiers/index.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-9
+.repos/dnd-kit/apps/docs/docs/legacy/presets/sortable/sortable-context.mdx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-114
+.repos/dnd-kit/apps/stories-vue/tests/sortable-vertical.spec.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-6
+.repos/dnd-kit/apps/docs/docs/svelte/primitives/create-droppable.mdx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-121
+.repos/dnd-kit/apps/stories-svelte/.storybook/manager.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-8
+.repos/dnd-kit/packages/dom/tests/optimistic-sorting-plugin.test.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-90
+.repos/dnd-kit/apps/docs/.env.example
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-3
+.repos/dnd-kit/apps/stories-shared/utilities/index.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-2
+.repos/dnd-kit/packages/abstract/src/core/manager/status.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-103
+.repos/dnd-kit/packages/dom/src/plugins/debug/debug.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-156
+.repos/dnd-kit/packages/dom/src/core/plugins/index.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-22
+.repos/dnd-kit/apps/docs/docs/vue/composables/use-draggable.mdx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-185
+.repos/dnd-kit/apps/docs/.prettierrc
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-12
+.repos/dnd-kit/apps/docs/src/components/Assistant/events.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-22
+.repos/dnd-kit/packages/dom/src/utilities/frame/getFrameElement.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-7
+.repos/dnd-kit/packages/react/src/sortable/index.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-6
+.repos/dnd-kit/packages/vue/src/core/draggable/useDraggable.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-56
+.repos/dnd-kit/apps/docs/src/components/Sidebar/Sidebar.tsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-42
+.repos/dnd-kit/apps/stories-svelte/stories/Sortable/MultipleLists/MultipleLists.stories.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-35
+.repos/dnd-kit/packages/dom/src/core/plugins/feedback/utilities.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-141
+.repos/dnd-kit/apps/stories/stories/react/Droppable/docs/DroppableDocs.mdx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-51
+.repos/dnd-kit/apps/stories/stories/react/components/Button/Button.tsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-27
+.repos/dnd-kit/apps/docs/docs/style.css
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-281
+.repos/dnd-kit/apps/templates/solid-draggable/src/App.tsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-28
+.repos/dnd-kit/apps/stories-svelte/stories/Sortable/Horizontal/HorizontalSortableItem.svelte
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-19
+.repos/dnd-kit/apps/templates/solid-sortable/src/App.tsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-32
+.repos/dnd-kit/packages/solid/src/utilities/index.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1
+.repos/dnd-kit/apps/stories-vue/playwright.config.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-30
+.repos/dnd-kit/apps/stories-solid/custom-elements.d.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-23
+.repos/dnd-kit/apps/docs/src/styles/global.css
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-418
+.repos/dnd-kit/apps/stories-solid/stories/Sortable/Vertical/Vertical.stories.tsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-76
+.repos/dnd-kit/packages/abstract/CHANGELOG.md
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-561
+.repos/dnd-kit/.nvmrc
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1
+.repos/dnd-kit/apps/docs/public/robots.txt
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-4
+.repos/dnd-kit/apps/stories/tests/sortable-transformed.spec.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-6
+.repos/dnd-kit/apps/docs/src/components/Footer.tsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-50
+.repos/dnd-kit/packages/state/package.json
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-38
+.repos/dnd-kit/packages/solid/src/core/context/context.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-4
+.repos/dnd-kit/packages/vue/src/composables/index.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1
+.repos/dnd-kit/packages/dom/src/utilities/type-guards/isKeyframeEffect.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-9
+.repos/dnd-kit/apps/docs/docs/images/logo/logo.svg
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-17
+.repos/dnd-kit/packages/abstract/src/core/manager/registry.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-158
+.repos/dnd-kit/packages/dom/tests/pointer-sensor.test.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-81
+.repos/dnd-kit/packages/dom/src/utilities/type-guards/isHTMLElement.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-16
+.repos/dnd-kit/packages/react/src/core/context/hooks.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-24
+.repos/dnd-kit/packages/dom/src/utilities/execution-context/getFixedPositionOffset.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-15
+.repos/dnd-kit/packages/svelte/src/core/hooks/createDragDropMonitor.svelte.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-79
+.repos/dnd-kit/packages/dom/src/utilities/animations/getFinalKeyframe.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-22
+.repos/dnd-kit/packages/dom/src/core/sensors/drag/encoding.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-23
+.repos/dnd-kit/apps/docs/docs/extend/sensors/keyboard-sensor.mdx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-153
+.repos/dnd-kit/apps/stories/tests/sortable-multiple.spec.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-91
+.repos/dnd-kit/apps/docs/src/components/mintlify/Steps.tsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-57
+.repos/dnd-kit/apps/docs/docs/images/sponsors/mintlify-logo.svg
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-18
+.repos/dnd-kit/packages/dom/README.md
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-37
+.repos/dnd-kit/packages/react/src/core/index.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-36
+.repos/dnd-kit/apps/templates/svelte-draggable/svelte.config.js
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-5
+.repos/dnd-kit/apps/stories/stories/components/index.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1
+.repos/dnd-kit/packages/dom/src/modifiers/RestrictToWindow.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-57
+.repos/dnd-kit/apps/templates/react-draggable/src/styles.css
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-99
+.repos/dnd-kit/packages/dom/src/core/plugins/feedback/index.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-8
+.repos/dnd-kit/apps/stories-shared/tests/draggable.tests.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-61
+.repos/dnd-kit/packages/state/src/snapshot.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-13
+.repos/dnd-kit/apps/stories-solid/.storybook/theme.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-8
+.repos/dnd-kit/packages/dom/src/core/entities/droppable/droppable.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-122
+.repos/dnd-kit/apps/stories-solid/.storybook/assets/dnd-kit-banner.svg
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-17
+.repos/dnd-kit/apps/stories-vanilla/stories/Sortable/Grid/GridSortableApp.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-51
+.repos/dnd-kit/packages/svelte/src/core/draggable/createDraggable.svelte.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-71
+.repos/dnd-kit/apps/stories-svelte/playwright.config.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-30
+.repos/dnd-kit/packages/helpers/src/index.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1
+.repos/dnd-kit/packages/svelte/LICENSE
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-21
+.repos/dnd-kit/apps/stories-vue/stories/Draggable/DragOverlay/DragOverlay.stories.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-40
+.repos/dnd-kit/packages/dom/tsconfig.json
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-5
+.repos/dnd-kit/apps/templates/svelte-draggable/index.html
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-12
+.repos/dnd-kit/packages/dom/src/utilities/element/getElementFromPoint.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-29
+.repos/dnd-kit/apps/stories-solid/stories/Droppable/Droppable.stories.tsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-24
+.repos/dnd-kit/apps/docs/src/lib/mintlify-components-extended.tsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-9
+.repos/dnd-kit/apps/templates/react-sortable/src/App.jsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-32
+.repos/dnd-kit/apps/stories/stories/react/Sortable/Quickstart.tsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-19
+.repos/dnd-kit/apps/stories-shared/styles/sandbox.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-312
+.repos/dnd-kit/packages/collision/src/algorithms/pointerIntersection.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-47
+.repos/dnd-kit/apps/stories-svelte/stories/Draggable/DragOverlay/DragOverlay.stories.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-29
+.repos/dnd-kit/apps/stories-vue/.storybook/manager.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-8
+.repos/dnd-kit/packages/collision/src/algorithms/index.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-7
+.repos/dnd-kit/packages/svelte/src/sortable/createSortable.svelte.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-155
+.repos/dnd-kit/packages/state/README.md
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-16
+.repos/dnd-kit/packages/abstract/tsup.config.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-10
+.repos/dnd-kit/packages/abstract/src/core/modifiers/index.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-8
+.repos/dnd-kit/packages/state/src/effects.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-9
+.repos/dnd-kit/apps/templates/svelte-sortable/index.html
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-12
+.repos/dnd-kit/packages/storybook-addon-codesandbox/src/define.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-103
+.repos/dnd-kit/apps/stories/.storybook/preview-head.html
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-92
+.repos/dnd-kit/apps/stories/stories/components/docs/Code/components/CodeHighlighter/CodeHighlighter.tsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-86
+.repos/dnd-kit/packages/storybook-addon-codesandbox/src/types.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-52
+.repos/dnd-kit/apps/stories-shared/tests/drag-offset.tests.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-160
+.repos/dnd-kit/apps/docs/src/pages/[...slug].astro
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-270
+.repos/dnd-kit/apps/docs/public/_redirects
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-17
+.repos/dnd-kit/apps/stories/stories/react/Sortable/docs/SortableDocs.mdx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-76
+.repos/dnd-kit/apps/stories-vue/stories/Draggable/DragHandles/DragHandlesApp.vue
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-31
+.repos/dnd-kit/apps/stories/stories/components/docs/Code/index.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1
+.repos/dnd-kit/apps/stories/stories/react/icons/SortableIcon.tsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-13
+.repos/dnd-kit/apps/stories/tests/drag-offset.spec.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-6
+.repos/dnd-kit/apps/stories/stories/react/Sortable/MultipleLists/MultipleLists.tsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-250
+.repos/dnd-kit/packages/dom/src/utilities/frame/getFrameTransform.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-62
+.repos/dnd-kit/packages/solid/tsconfig.json
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-5
+.repos/dnd-kit/packages/dom/src/core/plugins/accessibility/index.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1
+.repos/dnd-kit/apps/stories/stories/react/Sortable/Tree/Tree.stories.tsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-47
+.repos/dnd-kit/apps/docs/docs/svelte/components/drag-drop-provider.mdx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-65
+.repos/dnd-kit/apps/docs/src/components/Assistant/AssistantEmptyState.tsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-11
+.repos/dnd-kit/apps/stories/stories/react/Draggable/Modifiers/styles.module.css
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-18
+.repos/dnd-kit/apps/docs/docs/vue/quickstart.mdx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-178
+.repos/dnd-kit/packages/react/src/core/hooks/useDragDropManager.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-14
+.repos/dnd-kit/apps/docs/docs/legacy/api-documentation/sensors.mdx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-130
+.repos/dnd-kit/apps/stories/tests/sortable-css-layers.spec.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-49
+.repos/dnd-kit/apps/templates/vue-draggable/src/App.vue
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-25
+.repos/dnd-kit/packages/storybook-addon-codesandbox/src/preview/decorator-dom.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-45
+.repos/dnd-kit/packages/vue/src/core/context/DragDropProvider.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-145
+.repos/dnd-kit/apps/stories-solid/tsconfig.json
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-5
+.repos/dnd-kit/packages/svelte/src/utilities/index.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1
+.repos/dnd-kit/apps/stories/tests/sortable-grid.spec.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-30
+.repos/dnd-kit/apps/stories-vue/stories/Droppable/DroppableApp.vue
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-46
+.repos/dnd-kit/apps/docs/docs/extend/plugins/cursor.mdx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-99
+.repos/dnd-kit/packages/abstract/src/core/manager/actions.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-317
+.repos/dnd-kit/packages/dom/src/utilities/type-guards/isKeyboardEvent.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-11
+.repos/dnd-kit/packages/dom/src/utilities/scroll/isFixed.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-10
+.repos/dnd-kit/apps/docs/src/styles/fonts.css
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-25
+.repos/dnd-kit/packages/helpers/src/move.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-342
+.repos/dnd-kit/packages/react/src/hooks/useSignal.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-42
+.repos/dnd-kit/apps/stories-vue/stories/Sortable/Vertical/Vertical.stories.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-67
+.repos/dnd-kit/apps/stories-vanilla/stories/Draggable/DraggableApp.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-15
+.repos/dnd-kit/apps/docs/docs/concepts/sortable.mdx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-374
+.repos/dnd-kit/packages/dom/src/utilities/event-listeners/index.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1
+.repos/dnd-kit/apps/stories/stories/react/Sortable/SortableExample.tsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-172
+.repos/dnd-kit/apps/stories/stories/components/docs/Code/components/index.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1
+.repos/dnd-kit/packages/geometry/src/position/index.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1
+.repos/dnd-kit/apps/docs/docs/vue/components/drag-overlay.mdx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-124
+.repos/dnd-kit/apps/docs/src/content.config.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-25
+.repos/dnd-kit/apps/docs/tsconfig.json
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-5
+.repos/dnd-kit/apps/stories/.storybook/manager.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-21
+.repos/dnd-kit/apps/stories-svelte/.storybook/assets/dnd-kit-banner.svg
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-17
+.repos/dnd-kit/apps/templates/solid-sortable/src/styles.css
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-45
+.repos/dnd-kit/packages/state/LICENSE
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-21
+.repos/dnd-kit/apps/stories-vue/raw.d.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-9
+.repos/dnd-kit/apps/stories-shared/components/index.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-2
+.repos/dnd-kit/packages/react/src/core/draggable/DragOverlay.tsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-133
+.repos/dnd-kit/apps/stories-shared/styles/index.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1
+.repos/dnd-kit/packages/react/src/utilities/currentValue.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-23
+.repos/dnd-kit/packages/solid/src/core/draggable/useDraggable.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-66
+.repos/dnd-kit/apps/stories-solid/playwright.config.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-30
+.repos/dnd-kit/apps/docs/src/components/PageContextMenu.tsx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-160
+.repos/dnd-kit/apps/docs/docs/snippets/quickstart/intro.mdx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-7
+.repos/dnd-kit/apps/stories/stories/react/Draggable/Modifiers/docs/ModifierDocs.mdx
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-68
+.repos/dnd-kit/LICENSE
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-21
+.repos/dnd-kit/packages/react/CHANGELOG.md
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-602
+.repos/dnd-kit/apps/stories/stories/components/docs/Info/Info.module.css
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-26
+.repos/dnd-kit/apps/templates/svelte-sortable/src/styles.css
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-45
+.repos/dnd-kit/packages/dom/src/utilities/scroll/index.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-12
+.repos/dnd-kit/.changeset/clever-keys-walk.md
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-5
+.repos/dnd-kit/apps/templates/solid-draggable/index.html
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-12
+.repos/dnd-kit/packages/dom/src/utilities/misc/generateUniqueId.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-8
+.repos/dnd-kit/packages/dom/src/utilities/scheduling/index.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-2
+.repos/dnd-kit/apps/docs/public/llms.txt
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-47
+.repos/dnd-kit/apps/stories-svelte/stories/Sortable/MultipleLists/SortableItem.svelte
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-36
+.repos/dnd-kit/packages/react/src/sortable/useSortable.ts
+  s_28b8e1e0dbe2ca::t_17455baaa290eb 1-200
+.repos/dnd-kit/.vscode/settings.json
+  s_28b8e1e0dbe2ca::t_5de5c9398aa05c 1-29
+.repos/dnd-kit/packages/abstract/.eslintrc.js
+  s_28b8e1e0dbe2ca::t_43d68cdf5d7f46 1-4
+.repos/dnd-kit/packages/geometry/.eslintrc.js
+  s_28b8e1e0dbe2ca::t_f2a1b52d17b63c 1-3
+.repos/dnd-kit/packages/state/.eslintrc.js
+  s_28b8e1e0dbe2ca::t_edc41accdee145 1-3
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.24",
+  "base_commit_sha": "afb40b0300d29b17f1ca4ce37b93752232768666",
+  "prompts": {},
+  "sessions": {
+    "s_28b8e1e0dbe2ca": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0401a-a202-7f44-b015-8c6906affc63",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

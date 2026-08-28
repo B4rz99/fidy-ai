@@ -656,8 +656,10 @@ const resizeWeightAt = (props: ResizeBoundaryProps, index: number): number =>
     Option.map(Option.fromUndefinedOr(props.siblings[index]), ({ weight }) => weight)
   );
 
+const noPointer = Option.none<number>();
+
 const useResizeBoundary = (props: ResizeBoundaryProps): ResizeBoundaryHandlers => {
-  const pointerId = useRef(Option.none<number>());
+  const pointerId = useRef(noPointer);
   const weight = resizeWeightAt(props, props.childIndex);
   const adjacentWeight = resizeWeightAt(props, props.childIndex + 1);
   const pairWeight = weight + adjacentWeight;

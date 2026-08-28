@@ -12,6 +12,8 @@ import {
   DashboardViewComponent,
 } from "./view";
 
+const settledEditQueue = Promise.resolve();
+
 const rejectedEditError: DashboardEditorError = {
   title: "No pudimos guardar el cambio",
   message: "El cambio fue rechazado. Revisa los valores e intenta de nuevo.",
@@ -67,8 +69,8 @@ const useQueuedDashboardEdits = (
   );
   const applyEdit = useAtomSet(editAtom, { mode: "promiseExit" });
   const [pendingEdits, setPendingEdits] = useState(0);
-  const [editError, setEditError] = useState(Option.none<DashboardEditorError>());
-  const editQueue = useRef<Promise<void>>(Promise.resolve());
+  const [editError, setEditError] = useState(() => Option.none<DashboardEditorError>());
+  const editQueue = useRef<Promise<void>>(settledEditQueue);
   const onGesture = (gesture: DashboardGesture): void => {
     const compiled = compileDashboardGesture(gesture);
     if (Result.isFailure(compiled)) {

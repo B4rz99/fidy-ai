@@ -1,0 +1,149 @@
+apps/server/src/shell/api.ts
+  s_c9720a58ac9654::t_0b313ce9a9315b 18,33-34
+apps/web/src/transport/client.ts
+  s_c9720a58ac9654::t_c83e8add5872dc 14
+apps/server/contracts/operation-policy.json
+  s_c9720a58ac9654::t_5385ea8f23ef14 540-550
+apps/server/src/shell/operations/operations.ts
+  s_c9720a58ac9654::t_77970293776dd4 101
+apps/server/src/shell/recovery/access.ts
+  s_c9720a58ac9654::t_e64e30a064c992 1-73
+apps/server/src/shell/_shared/canonical-mutation-registry.ts
+  s_c9720a58ac9654::t_2f02130330ec3c 31,208
+  s_c9720a58ac9654::t_00accf46b6ffef 209-214
+apps/server/src/client.ts
+  s_c9720a58ac9654::t_e6471efece6fda 71
+apps/server/src/shell/onboarding/completion-transition.ts
+  s_c9720a58ac9654::t_843a01694d0fa1 9,12,28,59,61-62
+apps/server/contracts/openapi.json
+  s_c9720a58ac9654::t_ac2d66a84c404d 314-321,4739-4761,16783-16880,18142-18144
+apps/server/src/shell/testing/suggested-operations.test.ts
+  s_c9720a58ac9654::t_a76de5fef595a6 75-81
+apps/server/src/shell/recovery/service.ts
+  s_c9720a58ac9654::t_f2d51c5f08b7d2 185-190
+  s_c9720a58ac9654::t_e165ac671898a0 6,278-279,289,291,295-301,305
+  s_c9720a58ac9654::t_0068504c5936ee 14-18,20,281-288,290,292-294,302-303,306-312
+  s_c9720a58ac9654::t_69fc2b9dc7ee1f 1-5,7-13,19,21-181,183-184,191-208,210-248,250-251,273-277,280,304,313
+  s_c9720a58ac9654::t_14c1a1641690b9 182,209,249,264-268
+  s_c9720a58ac9654::t_fede7a8a4a577a 252-263,269-272
+apps/server/src/shell/recovery/repo.ts
+  s_c9720a58ac9654::t_5f9f6cc169df35 6,440-445,447,450-451,453,455,457
+  s_c9720a58ac9654::t_1ddec76d1a26ec 454
+  s_c9720a58ac9654::t_cc7349b36103ee 1-5,7-12,20,37,46-47,50-439,446,448-449,452,456,458-510
+apps/server/src/shell/db/migrations/0040-support-recovery.ts
+  s_c9720a58ac9654::t_e5dab32496b478 1-8,33-36,39-225,242-312,314-319,321-326,328-338
+  s_c9720a58ac9654::t_ede70064c157c4 37-38
+  s_c9720a58ac9654::t_1d87658b689e1a 9-32
+  s_c9720a58ac9654::t_b65072717d7208 227-241,313,320,327
+  s_c9720a58ac9654::t_30b5a8f6893df0 226
+apps/server/src/shell/db/migrations/registry.ts
+  s_c9720a58ac9654::t_d553a3ef0e7a32 39,88
+apps/server/src/shell/_shared/operation-policy.ts
+  s_c9720a58ac9654::t_246d776ea03ecf 13-18
+apps/web/src/features/recovery/feature.tsx
+  s_c9720a58ac9654::t_7194c28d62473f 1-141
+apps/server/scripts/support-recovery.ts
+  s_c9720a58ac9654::t_301b35d2596d0b 1-11,18-29,36-199,201-225
+  s_c9720a58ac9654::t_d8d5a6eb89ad83 12-17
+  s_c9720a58ac9654::t_16943b45194450 30-35,200
+bun.lock
+  s_c9720a58ac9654::t_ddc9937f506067 34
+apps/web/src/features/signed-in/feature.tsx
+  s_c9720a58ac9654::t_de1c1b9f35ebf1 21-40,42-46,71
+  s_c9720a58ac9654::t_d3331acaf7f6dd 41
+apps/server/src/shell/recovery/handlers.ts
+  s_c9720a58ac9654::t_f085acd6881d73 1-11,15,20-24
+  s_c9720a58ac9654::t_4b8a5c99301762 12-14,16-19
+docs/operations/support-recovery.md
+  s_c9720a58ac9654::t_5e3b5d0a87bbea 1-113
+apps/server/src/shell/recovery/routes.ts
+  s_c9720a58ac9654::t_8059430b73dae1 1-151
+apps/server/src/shell/recovery/recovery.test.ts
+  s_c9720a58ac9654::t_e7532f701cd51c 3,31,33,482-491,494,496-509,514-522,524-525,527-538,544-553
+  s_c9720a58ac9654::t_cba33335b15f76 755-763
+  s_c9720a58ac9654::t_25329d559199dc 523,526
+  s_c9720a58ac9654::t_4609de1c98725b 433
+  s_c9720a58ac9654::t_fed83088d05b54 266,269,271,275,288,290,334
+  s_c9720a58ac9654::t_01d224fb7fef43 492-493,495
+  s_c9720a58ac9654::t_8889bf9520dd6e 749
+  s_c9720a58ac9654::t_400b104075204b 294
+  s_c9720a58ac9654::t_12e9b60a9bef9b 728-737
+  s_c9720a58ac9654::t_ffd6e7277ed863 15,297-299,335-354,359-376
+  s_c9720a58ac9654::t_dd0f220ea32802 300-333
+  s_c9720a58ac9654::t_adb1c144d68990 539-543
+  s_c9720a58ac9654::t_bc1e911f06fb4d 355-358,413
+  s_c9720a58ac9654::t_21e91493f91d88 557-627
+  s_c9720a58ac9654::t_a7b1ad1c9ac60d 16,19-20,377-412,414-432,434-439
+  s_c9720a58ac9654::t_fef67dd49eddc4 652
+  s_c9720a58ac9654::t_c706d3b3dfb211 443-481
+  s_c9720a58ac9654::t_64bbb8fcee6a8f 510-513
+  s_c9720a58ac9654::t_0da7ec160b8e1d 1-2,4-14,17-18,21-26,28-30,32,34-263,440-441,554-555,628-651,653-671,682-727,738-748,750-754,764-924
+  s_c9720a58ac9654::t_5cd784d420ee89 27,264-265,267-268,270,272-274,276-287,289,291-293,295-296
+  s_c9720a58ac9654::t_c45e0d580a6634 672-681
+  s_c9720a58ac9654::t_ba2a3dd70e9af0 442,556,925-931
+apps/server/src/shell/_shared/operation-catalog.ts
+  s_c9720a58ac9654::t_ad18fca18dcb73 5-9,26,136
+apps/server/src/shell/testing/isolation.test.ts
+  s_c9720a58ac9654::t_e6eeb24ad30dda 113-115
+apps/server/src/shell/recovery/retention.ts
+  s_c9720a58ac9654::t_c5931725fe923c 1-34
+apps/web/src/app/routes.ts
+  s_c9720a58ac9654::t_a5b1619a1459fb 17,92-96,121
+apps/web/src/features/recovery/feature.test.tsx
+  s_c9720a58ac9654::t_6cc68cc0ad4fd2 1-37
+apps/server/src/core/recovery/model.ts
+  s_c9720a58ac9654::t_cc2dfdec45609e 3,24-68,70-149
+apps/server/package.json
+  s_c9720a58ac9654::t_06a732ac505579 15,18,49
+apps/server/src/shell/recovery/operator-cli.test.ts
+  s_c9720a58ac9654::t_46ee6688a63d51 26-33,40-41,46,101
+  s_c9720a58ac9654::t_84f8b27f2468a6 38-39,116,134
+  s_c9720a58ac9654::t_23500b2b704847 137-139
+  s_c9720a58ac9654::t_242a74ba01fae5 126-128
+  s_c9720a58ac9654::t_a184daae1030cd 2,91,96-100,102-105
+  s_c9720a58ac9654::t_da5a1bb93ba6c8 4-6,9-11,13-25,34-37,42-45,47,49-53,55-56,58-83,85-86,90,92-94,107-115,117,121,124-125,129,132,135-136
+  s_c9720a58ac9654::t_93841735deec7c 7-8,57,89,95,106
+  s_c9720a58ac9654::t_96ed8f3b3ba999 87-88,130-131,133
+  s_c9720a58ac9654::t_5b9a69de614b64 1,3,118-120,122
+  s_c9720a58ac9654::t_4f0a788674cde2 12,48,54,84,123
+apps/server/src/shell/http.ts
+  s_c9720a58ac9654::t_0a75f5b697e290 47-52,121,233,236-239,269,279-280
+apps/server/src/core/recovery/model.test.ts
+  s_c9720a58ac9654::t_0a49eeb2954ede 2-3,5-14,16-20,22-35,39-78,80-84
+apps/server/src/shell/recovery/access.test.ts
+  s_c9720a58ac9654::t_823415c3fbebc2 1-96
+apps/server/src/shell/testing/api-harness.ts
+  s_c9720a58ac9654::t_7fa2c8463b800f 14,18,22-23,55,57-58,191-241,271
+apps/server/src/shell/recovery/operations.ts
+  s_c9720a58ac9654::t_e9b089f49234dd 1-30
+apps/server/src/shell/testing/operation-policy.test.ts
+  s_c9720a58ac9654::t_dcdc13c9d17bae 106,191
+apps/server/src/shell/db/advisory-lock.ts
+  s_c9720a58ac9654::t_e10ba97a4b83c8 35-38,104-109
+  s_c9720a58ac9654::t_54ae0e227fa1eb 1-2,110-119
+  s_c9720a58ac9654::t_62b9f2245d717b 120-121
+apps/server/src/shell/browser-login/repo.ts
+  s_c9720a58ac9654::t_2d50d211af8402 188-191,195,213-216,220,371-375,377,411
+apps/server/src/shell/db/user-tables.ts
+  s_c9720a58ac9654::t_a7c7bfdb3d856d 29-30
+apps/server/src/shell/testing/whatsapp-acceptance-harness.ts
+  s_c9720a58ac9654::t_ee7f63fffe9648 46,522
+apps/server/src/shell/observability/registry.ts
+  s_c9720a58ac9654::t_9382d4546a1bae 57,72,115,124
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "4959b07a09a8fa51d104b799155f93576d5ab2ff",
+  "prompts": {},
+  "sessions": {
+    "s_c9720a58ac9654": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a04581-c42c-776c-af59-2ea8a0f4f0c2",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": null
+    }
+  }
+}

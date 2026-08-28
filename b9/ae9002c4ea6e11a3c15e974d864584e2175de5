@@ -1,0 +1,69 @@
+apps/server/tools/contracts/check.ts
+  s_28b8e1e0dbe2ca::t_1d4fa5d7ef45dd 278-279,309-310,312
+apps/web/src/features/dashboard/feature.test.tsx
+  s_28b8e1e0dbe2ca::t_9e3b12cdcd5948 499-504,561-596
+  s_28b8e1e0dbe2ca::t_1ff15ff5b2ac39 505-507
+  s_28b8e1e0dbe2ca::t_29b65d9a89a54b 559-560,597-599
+  s_28b8e1e0dbe2ca::t_67294cdb526f5d 600-602
+apps/server/tools/contracts/check.test.ts
+  s_28b8e1e0dbe2ca::t_84b2c3cef2e250 120,122,142,145,147
+apps/web/src/features/dashboard/feature-controller.test.tsx
+  s_28b8e1e0dbe2ca::t_245df7ad3f7502 108-110
+  s_28b8e1e0dbe2ca::t_ecdb3b091e85e8 45
+  s_28b8e1e0dbe2ca::t_f87942139fe2c4 1,106,120,126-129,132,137
+  s_28b8e1e0dbe2ca::t_c334bdf8ead503 100-101,111
+  s_28b8e1e0dbe2ca::t_4ad9300f2a9981 2
+  s_28b8e1e0dbe2ca::t_1e1d99fcd7e72d 7,11-15,18-19,27,34-36,38-43,46,48-49,51-53,58-59,64,74-94,96,98
+  s_28b8e1e0dbe2ca::t_e36e75b74e8a2f 117-119,121-125
+  s_28b8e1e0dbe2ca::t_cc1ffde74d563b 3-6,8-10,16-17,20-24,26,28-33,37,44,47,50,54-57,60-63,65-73,95,97,99,102-105,107,112-116,130-131,133-136,138-141
+  s_28b8e1e0dbe2ca::t_8855cb659496be 25
+apps/web/src/features/dashboard/editor-model.test.ts
+  s_28b8e1e0dbe2ca::t_b02e97977c6c81 45-60,78-81
+  s_c9720a58ac9654::t_0c3c25124f8350 82-84
+apps/web/vitest.config.ts
+  s_28b8e1e0dbe2ca::t_2fbba7b168239a 37
+apps/web/package.json
+  s_28b8e1e0dbe2ca::t_eba32c76b2658b 58
+apps/web/src/features/dashboard/editor-model.ts
+  s_28b8e1e0dbe2ca::t_ad53b98d75044f 29-30
+  s_28b8e1e0dbe2ca::t_00691eb08a0337 31-32
+package.json
+  s_28b8e1e0dbe2ca::t_eba32c76b2658b 60
+apps/web/src/features/dashboard/drag-adapter.test.tsx
+  s_28b8e1e0dbe2ca::t_662bf2c8442cc2 25-30,38-41,46-50,55,57,60-68,72,80,83,88-89,93,95
+  s_28b8e1e0dbe2ca::t_2b2066be934f2e 42-44,73-79,81-82,84-87,90-92,94,96-97
+  s_28b8e1e0dbe2ca::t_6dfee61a5bf0e9 69-71
+apps/server/src/core/dashboard/rules.ts
+  s_28b8e1e0dbe2ca::t_63b4dae7fc94e7 544-547
+  s_28b8e1e0dbe2ca::t_f7101718944aad 487-495,499-502,540-543
+apps/server/src/shell/dashboard/errors.test.ts
+  s_28b8e1e0dbe2ca::t_d4bcbce54f8ecc 1-53
+apps/server/package.json
+  s_28b8e1e0dbe2ca::t_eba32c76b2658b 56
+bun.lock
+  s_28b8e1e0dbe2ca::t_84019a51776941 14,42,85,175,177,179,181,183,801,1233,1585,1587
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "b9ae9002c4ea6e11a3c15e974d864584e2175de5",
+  "prompts": {},
+  "sessions": {
+    "s_28b8e1e0dbe2ca": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0401a-a202-7f44-b015-8c6906affc63",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_c9720a58ac9654": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a04581-c42c-776c-af59-2ea8a0f4f0c2",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

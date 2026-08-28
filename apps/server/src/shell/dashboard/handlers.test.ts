@@ -7,7 +7,13 @@ import { MigrationSqlClient, PgLive } from "~/shell/db/client";
 import { CategoryId } from "~/core/categories/reference";
 import { IanaTimeZone } from "~/core/_shared/context";
 import { categoryIds } from "~/core/categories/taxonomy";
-import { SplitWeight, TransactionListLimit, WidgetId } from "~/core/dashboard/model";
+import {
+  LayoutRegionSelector,
+  SplitWeight,
+  TransactionListLimit,
+  WidgetId,
+  collectLayoutWidgets,
+} from "~/core/dashboard/model";
 import { NotFound, ValidationFailed } from "~/shell/_shared/errors";
 import { freePatCaller } from "~/shell/_shared/suggested-operations";
 import { defaultUserId } from "~/shell/db/development-seed";
@@ -174,7 +180,8 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         const second = yield* client.dashboard.getDashboard();
 
         expect(first.data.title).toBe("Tablero");
-        expect(first.data.layout.kind).toBe("leaf");
+        expect(first.data.layout.kind).toBe("split");
+        expect(collectLayoutWidgets(first.data.layout)).toHaveLength(4);
         expect(second.data).toEqual(first.data);
       })
     );
@@ -193,15 +200,20 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         });
         expect(response.data.context.calculatedAt).toBeDefined();
         expect(response.data.title).toBe("Tablero");
-        expect(response.data.layout.kind).toBe("leaf");
-        if (response.data.layout.kind === "leaf") {
-          expect(response.data.layout.widget).toMatchObject({
-            widget: { type: "spending-chart" },
-            result: {
-              appliedPeriod: { requested: "this-month", timeZone: "America/Bogota" },
-            },
-          });
-        }
+        expect(response.data.layout.kind).toBe("split");
+        const widgets = collectWidgetViews(response.data.layout);
+        expect(widgets.map(({ widget }) => widget.type)).toEqual([
+          "spending-chart",
+          "budget-bar",
+          "transaction-list",
+          "custom-metric",
+        ]);
+        expect(widgets[0]).toMatchObject({
+          widget: { type: "spending-chart" },
+          result: {
+            appliedPeriod: { requested: "this-month", timeZone: "America/Bogota" },
+          },
+        });
       })
     );
 
@@ -223,8 +235,12 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         `;
         const client = yield* ApiHarnessClient;
         const initial = yield* client.dashboard.getDashboard();
-        if (initial.data.layout.kind !== "leaf") return yield* Effect.die("Expected default leaf");
-        const chartId = initial.data.layout.widget.id;
+        const [chart, ...removedWidgets] = collectLayoutWidgets(initial.data.layout);
+        if (chart === undefined) return yield* Effect.die("Expected a default Widget");
+        yield* Effect.forEach(removedWidgets, ({ id }) =>
+          client.dashboard.applyDashboardEdit({ payload: { op: "remove-widget", widgetId: id } })
+        );
+        const chartId = chart.id;
         yield* client.dashboard.applyDashboardEdit({
           payload: {
             op: "update-widget",
@@ -303,8 +319,12 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         yield* truncateDashboards;
         const client = yield* ApiHarnessClient;
         const initial = yield* client.dashboard.getDashboard();
-        if (initial.data.layout.kind !== "leaf") return yield* Effect.die("Expected default leaf");
-        const firstId = initial.data.layout.widget.id;
+        const [first, ...removedWidgets] = collectLayoutWidgets(initial.data.layout);
+        if (first === undefined) return yield* Effect.die("Expected a default Widget");
+        yield* Effect.forEach(removedWidgets, ({ id }) =>
+          client.dashboard.applyDashboardEdit({ payload: { op: "remove-widget", widgetId: id } })
+        );
+        const firstId = first.id;
         const secondId = WidgetId.make("f1d1a000-0000-4000-8000-000000000721");
         const thirdId = WidgetId.make("f1d1a000-0000-4000-8000-000000000722");
         yield* client.dashboard.applyDashboardEdit({
@@ -322,7 +342,11 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           },
         });
         yield* client.dashboard.applyDashboardEdit({
-          payload: { op: "resize-widget", widgetId: thirdId, weight: SplitWeight.make(3) },
+          payload: {
+            op: "resize-region",
+            widgetIds: [thirdId],
+            size: { kind: "weight", weight: SplitWeight.make(3) },
+          },
         });
 
         const response = yield* client.dashboard.getDashboardView();
@@ -336,7 +360,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         expect(nested.kind).toBe("split");
         if (nested.kind !== "split") return;
         expect(nested.axis).toBe("column");
-        expect(nested.children.map(({ weight }) => weight)).toEqual([1, 3]);
+        expect(nested.children.map(({ weight }) => weight)).toEqual([0.001, 1.999]);
         expect(collectWidgetViews(root).map(({ widget }) => widget.id)).toEqual([
           firstId,
           secondId,
@@ -620,20 +644,48 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
       })
     );
 
+    it.effect("rejects a malformed region selector without changing the stored document", () =>
+      Effect.gen(function* () {
+        yield* truncateDashboards;
+        const client = yield* ApiHarnessClient;
+        const before = yield* client.dashboard.getDashboard();
+        const firstWidget = Option.getOrThrow(
+          Array.get(collectLayoutWidgets(before.data.layout), 0)
+        );
+
+        const response = yield* HttpClient.post("/dashboard/edits", {
+          headers: headersFor(defaultPatBearer),
+          body: HttpBody.jsonUnsafe({
+            op: "resize-region",
+            widgetIds: [firstWidget.id, firstWidget.id],
+            size: { kind: "weight", weight: 2 },
+          }),
+        });
+        const failure = yield* Schema.decodeUnknownEffect(ValidationFailed)(yield* response.json);
+        const after = yield* client.dashboard.getDashboard();
+
+        expect(response.status).toBe(400);
+        expect(failure.error.code).toBe("validation_failed");
+        expect(failure.error.fields[0]?.path).toBe("widgetIds");
+        expect(after.data).toEqual(before.data);
+      })
+    );
+
     it.effect("rolls a domain-rejected edit back without replacing the latest document", () =>
       Effect.gen(function* () {
         yield* truncateDashboards;
         const client = yield* ApiHarnessClient;
         const before = yield* client.dashboard.getDashboard();
-        if (before.data.layout.kind !== "leaf") {
-          return yield* Effect.die("expected the first-use dashboard to have one root widget");
-        }
+        const firstWidget = Option.getOrThrow(
+          Array.get(collectLayoutWidgets(before.data.layout), 0)
+        );
 
         const outcome = yield* Effect.result(
           client.dashboard.applyDashboardEdit({
             payload: {
-              op: "remove-widget",
-              widgetId: before.data.layout.widget.id,
+              op: "move-widget",
+              widgetId: firstWidget.id,
+              at: { besideWidget: firstWidget.id, axis: "row", side: "after" },
             },
           })
         );
@@ -644,8 +696,8 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           expect(Schema.is(ValidationFailed)(outcome.failure)).toBe(true);
           if (Schema.is(ValidationFailed)(outcome.failure)) {
             expect(outcome.failure.error.fields).toContainEqual({
-              path: "widgetId",
-              message: "Expected a removable non-final widget.",
+              path: "at.besideWidget",
+              message: "Expected a different WidgetId from widgetId.",
             });
           }
         }
@@ -658,10 +710,8 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         yield* truncateDashboards;
         const client = yield* ApiHarnessClient;
         const before = yield* client.dashboard.getDashboard();
-        if (before.data.layout.kind !== "leaf") {
-          return yield* Effect.die("expected the first-use dashboard to have one root widget");
-        }
-        const rootId = before.data.layout.widget.id;
+        const currentWidgets = collectLayoutWidgets(before.data.layout);
+        const rootId = Option.getOrThrow(Array.get(currentWidgets, 0)).id;
         const missingId = WidgetId.make("f1d1a000-0000-4000-8000-000000000699");
 
         const missingEditTarget = yield* Effect.result(
@@ -685,7 +735,13 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         );
         const rootResize = yield* Effect.result(
           client.dashboard.applyDashboardEdit({
-            payload: { op: "resize-widget", widgetId: rootId, weight: SplitWeight.make(2) },
+            payload: {
+              op: "resize-region",
+              widgetIds: yield* Schema.decodeUnknownEffect(LayoutRegionSelector)(
+                currentWidgets.map(({ id }) => id)
+              ),
+              size: { kind: "weight", weight: SplitWeight.make(2) },
+            },
           })
         );
         const selfPlacement = yield* Effect.result(
@@ -702,7 +758,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         expectNotFoundMessage(missingEditTarget, "available to edit");
         expectNotFoundMessage(missingPlacementTarget, "placement target");
         expectValidationFieldPath(duplicate, "widget.id");
-        expectValidationFieldPath(rootResize, "weight");
+        expectValidationFieldPath(rootResize, "widgetIds");
         expectValidationFieldPath(selfPlacement, "at.besideWidget");
         expect(after.data).toEqual(before.data);
       })
@@ -713,16 +769,16 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         yield* truncateDashboards;
         const client = yield* ApiHarnessClient;
         const before = yield* client.dashboard.getDashboard();
-        if (before.data.layout.kind !== "leaf") {
-          return yield* Effect.die("expected the first-use dashboard to have one root widget");
-        }
+        const firstWidget = Option.getOrThrow(
+          Array.get(collectLayoutWidgets(before.data.layout), 0)
+        );
 
         const outcome = yield* Effect.result(
           client.dashboard.applyDashboardEdit({
             payload: {
               op: "update-widget",
               widget: {
-                id: before.data.layout.widget.id,
+                id: firstWidget.id,
                 type: "budget-bar",
                 categoryId: CategoryId.make("f1d1a000-0000-4000-8000-00000000dead"),
                 currency: "COP",
@@ -770,16 +826,10 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         const retained = yield* client.dashboard.getDashboard();
 
         expect(retained.data.layout.kind).toBe("split");
-        if (retained.data.layout.kind === "split") {
-          expect(retained.data.layout.children).toHaveLength(3);
-          expect(
-            retained.data.layout.children.map(({ node }) => node.kind === "leaf" && node.widget.id)
-          ).toEqual([
-            "f1d1a000-0000-4000-8000-000000000601",
-            expect.any(String),
-            "f1d1a000-0000-4000-8000-000000000602",
-          ]);
-        }
+        const retainedIds = collectLayoutWidgets(retained.data.layout).map(({ id }) => id);
+        expect(retainedIds).toHaveLength(6);
+        expect(retainedIds[0]).toBe("f1d1a000-0000-4000-8000-000000000601");
+        expect(retainedIds.at(-1)).toBe("f1d1a000-0000-4000-8000-000000000602");
       })
     );
 
@@ -804,9 +854,10 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         );
         const widgetTypes = collectWidgetViews(view.data.layout).map(({ widget }) => widget.type);
 
-        expect([["spending-chart"], ["spending-chart", "transaction-list"]]).toContainEqual(
-          widgetTypes
-        );
+        expect([
+          ["spending-chart", "budget-bar", "transaction-list", "custom-metric"],
+          ["spending-chart", "budget-bar", "transaction-list", "custom-metric", "transaction-list"],
+        ]).toContainEqual(widgetTypes);
       })
     );
 
@@ -820,7 +871,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           UPDATE dashboards
           SET document = jsonb_set(
             document,
-            '{layout,widget,categories}',
+            '{layout,children,0,node,children,0,node,widget,categories}',
             '["f1d1a000-0000-4000-8000-00000000ca7e"]'::jsonb
           )
           WHERE user_id = ${defaultUserId}

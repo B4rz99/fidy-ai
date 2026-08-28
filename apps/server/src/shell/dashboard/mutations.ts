@@ -1,5 +1,6 @@
 import { Effect, Match, Option, type Schema } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
+import { categoryIds } from "~/core/categories/taxonomy";
 import {
   type DashboardCategoryReference,
   type DashboardDocument,
@@ -35,8 +36,19 @@ export const loadOrCreateDashboard = (
   Effect.gen(function* () {
     const found = yield* findDashboardInScope(userId);
     if (Option.isSome(found)) return found.value;
-    const widgetId = yield* generateDashboardWidgetId;
-    return yield* insertDashboardInScope(userId, makeDefaultDashboard({ widgetId }));
+    const widgetIds = yield* Effect.all([
+      generateDashboardWidgetId,
+      generateDashboardWidgetId,
+      generateDashboardWidgetId,
+      generateDashboardWidgetId,
+    ]);
+    return yield* insertDashboardInScope(
+      userId,
+      makeDefaultDashboard({
+        restaurantCategoryId: categoryIds.restaurantes,
+        widgetIds,
+      })
+    );
   });
 
 /**

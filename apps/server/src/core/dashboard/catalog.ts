@@ -5,7 +5,9 @@ import {
   type DashboardDocument,
   DashboardPeriod,
   DashboardTitle,
+  type LeafNode,
   SpendingGroupBy,
+  SplitWeight,
   TransactionListLimit,
   type Widget,
   type WidgetId,
@@ -79,13 +81,57 @@ export const makeCatalogWidget = (
   }>
 ): Widget => ({ ...input.entry.widget, id: input.id });
 
-/** Creates the non-empty first-use document retained for one User. */
-export const makeDefaultDashboard = (
-  input: Readonly<{ readonly widgetId: WidgetId }>
-): DashboardDocument => ({
-  title: DashboardTitle.make("Tablero"),
-  layout: {
-    kind: "leaf",
-    widget: makeCatalogWidget({ entry: monthlySpending, id: input.widgetId }),
-  },
+type DefaultWidgetIds = readonly [WidgetId, WidgetId, WidgetId, WidgetId];
+
+const defaultWeight = SplitWeight.make(1);
+
+const defaultLeaf = (entry: DashboardCatalogEntry, id: WidgetId): LeafNode => ({
+  kind: "leaf",
+  widget: makeCatalogWidget({ entry, id }),
 });
+
+/** Creates the four-Widget, two-by-two first-use document retained for one User. */
+export const makeDefaultDashboard = (
+  input: Readonly<{
+    readonly restaurantCategoryId: CategoryId;
+    readonly widgetIds: DefaultWidgetIds;
+  }>
+): DashboardDocument => {
+  const catalog = makeDashboardCatalog({ restaurantCategoryId: input.restaurantCategoryId });
+  const [firstId, secondId, thirdId, fourthId] = input.widgetIds;
+  const first = defaultLeaf(catalog[0], firstId);
+  const second = defaultLeaf(catalog[1], secondId);
+  const third = defaultLeaf(catalog[2], thirdId);
+  const fourth = defaultLeaf(catalog[3], fourthId);
+  return {
+    title: DashboardTitle.make("Tablero"),
+    layout: {
+      kind: "split",
+      axis: "column",
+      children: [
+        {
+          weight: defaultWeight,
+          node: {
+            kind: "split",
+            axis: "row",
+            children: [
+              { weight: defaultWeight, node: first },
+              { weight: defaultWeight, node: second },
+            ],
+          },
+        },
+        {
+          weight: defaultWeight,
+          node: {
+            kind: "split",
+            axis: "row",
+            children: [
+              { weight: defaultWeight, node: third },
+              { weight: defaultWeight, node: fourth },
+            ],
+          },
+        },
+      ],
+    },
+  };
+};

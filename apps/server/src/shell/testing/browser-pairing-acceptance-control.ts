@@ -51,8 +51,11 @@ const reset = Effect.gen(function* () {
         WHERE subject_user_id = ${acceptanceUserId} AND grant_type = 'pat'
       )`;
   yield* sql`DELETE FROM consent_records
+    WHERE subject_user_id = ${acceptanceUserId} AND revoked_grant_id IS NOT NULL`;
+  yield* sql`DELETE FROM consent_records
     WHERE subject_user_id = ${acceptanceUserId} AND grant_type = 'pat'`;
   yield* sql`DELETE FROM audit_log_entries WHERE user_id = ${acceptanceUserId}`;
+  yield* sql`DELETE FROM dashboards WHERE user_id = ${acceptanceUserId}`;
   yield* sql`DELETE FROM tokens WHERE user_id = ${acceptanceUserId}`;
   yield* sql`DELETE FROM pat_pairings WHERE user_id = ${acceptanceUserId}`;
   yield* sql`DELETE FROM web_sessions WHERE user_id = ${acceptanceUserId}`;
@@ -63,6 +66,7 @@ const reset = Effect.gen(function* () {
   yield* sql`DELETE FROM email_pairing_login_admission_scopes`;
   yield* sql`DELETE FROM email_delivery_admission_budgets`;
   yield* sql`DELETE FROM transactions WHERE user_id = ${acceptanceUserId}`;
+  yield* sql`DELETE FROM budgets WHERE user_id = ${acceptanceUserId}`;
   const user = yield* makeColombianUser(acceptanceUserId, {
     createdAt: yield* DateTime.now,
     paidTier: "free",
@@ -211,10 +215,21 @@ const seedCurrentMonthTransaction = Effect.gen(function* () {
     INSERT INTO transactions (
       user_id, amount, currency, counterparty, direction, category_id, occurred_at
     )
-    VALUES (
-      ${acceptanceUserId}, 9007199254740993.12, 'USD', 'Exactitud S.A.', 'inflow',
-      ${categoryIds.restaurantes}, now() - interval '1 minute'
-    )
+    VALUES
+      (${acceptanceUserId}, 9007199254740993.12, 'USD', 'Exactitud S.A.', 'inflow',
+        ${categoryIds.restaurantes}, now() - interval '1 minute'),
+      (${acceptanceUserId}, 85000, 'COP', 'Bistró Central', 'outflow',
+        ${categoryIds.restaurantes}, now() - interval '2 hours'),
+      (${acceptanceUserId}, 230000, 'COP', 'Mercado Local', 'outflow',
+        ${categoryIds.mercado}, now() - interval '1 day'),
+      (${acceptanceUserId}, 42000, 'COP', 'Transporte Urbano', 'outflow',
+        ${categoryIds.transporte}, now() - interval '2 days'),
+      (${acceptanceUserId}, 125000, 'COP', 'Servicios del hogar', 'outflow',
+        ${categoryIds.servicios}, now() - interval '3 days')
+  `;
+  yield* sql`
+    INSERT INTO budgets (user_id, category_id, cap_amount, cap_currency)
+    VALUES (${acceptanceUserId}, ${categoryIds.restaurantes}, 600000, 'COP')
   `;
   return yield* HttpServerResponse.json(
     { categoryLabel: "Restaurantes" },

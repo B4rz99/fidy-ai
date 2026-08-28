@@ -31,11 +31,27 @@ it("provides one valid direct-launch preset for every closed widget type", () =>
   }
 });
 
-it("creates a valid non-empty first-use DashboardDocument", () => {
+it("creates a valid four-Widget first-use DashboardDocument in a two-by-two layout", () => {
   const document = makeDefaultDashboard({
-    widgetId: WidgetId.make("f1d1a000-0000-4000-8000-000000000511"),
+    restaurantCategoryId: CategoryId.make("10000000-0000-4000-8000-000000000001"),
+    widgetIds: [
+      WidgetId.make("f1d1a000-0000-4000-8000-000000000511"),
+      WidgetId.make("f1d1a000-0000-4000-8000-000000000512"),
+      WidgetId.make("f1d1a000-0000-4000-8000-000000000513"),
+      WidgetId.make("f1d1a000-0000-4000-8000-000000000514"),
+    ],
   });
 
   expect(document.title).toBe("Tablero");
+  expect(document.layout.kind).toBe("split");
+  if (document.layout.kind !== "split") throw new Error("Expected the default row stack");
+  expect(document.layout.axis).toBe("column");
+  expect(document.layout.children).toHaveLength(2);
+  for (const row of document.layout.children) {
+    expect(row.node.kind).toBe("split");
+    if (row.node.kind !== "split") throw new Error("Expected a default Widget row");
+    expect(row.node.axis).toBe("row");
+    expect(row.node.children).toHaveLength(2);
+  }
   expect(() => Schema.encodeSync(DashboardDocument)(document)).not.toThrow();
 });

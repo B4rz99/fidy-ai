@@ -1,6 +1,13 @@
 import { expect, it } from "@effect/vitest";
 import { Effect, Option, Result, Schema } from "effect";
-import { DashboardDocument, DashboardEdit, type Widget, collectLayoutWidgets } from "./model";
+import { RegionNotFound, RootRegionResize } from "./errors";
+import {
+  DashboardDocument,
+  DashboardEdit,
+  LayoutRegionSelector,
+  type Widget,
+  collectLayoutWidgets,
+} from "./model";
 import { applyDashboardEdit } from "./rules";
 
 const document = Schema.decodeUnknownSync(DashboardDocument)({
@@ -604,6 +611,27 @@ it("moves a widget by removing and structurally placing the same identity", () =
   }
 });
 
+it("swaps two Widgets without changing the recursive layout topology", () => {
+  const firstId = "f1d1a000-0000-4000-8000-000000000461";
+  const secondId = "f1d1a000-0000-4000-8000-000000000463";
+  const source = makeNestedDocument();
+  const edit = Schema.decodeUnknownSync(DashboardEdit)({
+    op: "swap-widgets",
+    widgetId: firstId,
+    withWidgetId: secondId,
+  });
+
+  const updated = Effect.runSync(applyDashboardEdit({ document: source, edit }));
+
+  expect(updated.layout.kind).toBe("split");
+  expect(collectLayoutWidgets(updated.layout).map(({ id }) => id)).toEqual([
+    secondId,
+    "f1d1a000-0000-4000-8000-000000000462",
+    firstId,
+  ]);
+  expect(updated.layout.kind === "split" ? updated.layout.axis : undefined).toBe("row");
+});
+
 it("rejects moving a widget beside itself without changing the input document", () => {
   const widgetId = "f1d1a000-0000-4000-8000-000000000401";
   const edit = Schema.decodeUnknownSync(DashboardEdit)({
@@ -643,7 +671,7 @@ it("moves a widget to either root edge while preserving the requested order", ()
   expect(collectLayoutWidgets(bottom.layout).map(({ id }) => id)).toEqual([retainedId, movingId]);
 });
 
-it("resizes the immediate region containing a widget", () => {
+it("continuously resizes a leaf region identified by its exact Widget contents", () => {
   const targetId = "f1d1a000-0000-4000-8000-000000000441";
   const source = makeSplitDocument([
     { weight: 1, widget: transactionListWidget(targetId) },
@@ -653,28 +681,140 @@ it("resizes the immediate region containing a widget", () => {
     },
   ]);
   const edit = Schema.decodeUnknownSync(DashboardEdit)({
-    op: "resize-widget",
-    widgetId: targetId,
-    weight: 3,
+    op: "resize-region",
+    widgetIds: [targetId],
+    size: { kind: "weight", weight: 1.375 },
   });
 
   const updated = Effect.runSync(applyDashboardEdit({ document: source, edit }));
 
   expect(
     updated.layout.kind === "split" ? updated.layout.children.map(({ weight }) => weight) : []
-  ).toEqual([3, 1]);
+  ).toEqual([1.375, 0.625]);
 });
 
-it("rejects resizing the root widget because it has no sibling-relative weight", () => {
+it("resizes only the selected boundary between adjacent regions", () => {
+  const targetId = "f1d1a000-0000-4000-8000-000000000442";
+  const source = makeSplitDocument([
+    {
+      weight: 1,
+      widget: transactionListWidget("f1d1a000-0000-4000-8000-000000000441"),
+    },
+    { weight: 1, widget: customMetricWidget(targetId) },
+    {
+      weight: 1,
+      widget: transactionListWidget("f1d1a000-0000-4000-8000-000000000443"),
+    },
+  ]);
   const edit = Schema.decodeUnknownSync(DashboardEdit)({
-    op: "resize-widget",
-    widgetId: "f1d1a000-0000-4000-8000-000000000401",
-    weight: 2,
+    op: "resize-region",
+    widgetIds: [targetId],
+    size: { kind: "weight", weight: 1.5 },
+  });
+
+  const updated = Effect.runSync(applyDashboardEdit({ document: source, edit }));
+
+  expect(
+    updated.layout.kind === "split" ? updated.layout.children.map(({ weight }) => weight) : []
+  ).toEqual([1, 1.5, 0.5]);
+});
+
+it.each([
+  [
+    "move-widget",
+    {
+      op: "move-widget",
+      widgetId: "f1d1a000-0000-4000-8000-000000000462",
+      at: {
+        besideWidget: "f1d1a000-0000-4000-8000-000000000461",
+        axis: "column",
+        side: "after",
+      },
+    },
+    [
+      "f1d1a000-0000-4000-8000-000000000461",
+      "f1d1a000-0000-4000-8000-000000000462",
+      "f1d1a000-0000-4000-8000-000000000463",
+    ],
+  ],
+  [
+    "remove-widget",
+    { op: "remove-widget", widgetId: "f1d1a000-0000-4000-8000-000000000462" },
+    ["f1d1a000-0000-4000-8000-000000000461", "f1d1a000-0000-4000-8000-000000000463"],
+  ],
+] as const)("normalizes decimal weights while applying %s", (_operation, input, expectedIds) => {
+  const resize = Schema.decodeUnknownSync(DashboardEdit)({
+    op: "resize-region",
+    widgetIds: ["f1d1a000-0000-4000-8000-000000000462", "f1d1a000-0000-4000-8000-000000000463"],
+    size: { kind: "weight", weight: 1.375 },
+  });
+  const resized = Effect.runSync(
+    applyDashboardEdit({ document: makeNestedDocument(), edit: resize })
+  );
+  const edit = Schema.decodeUnknownSync(DashboardEdit)(input);
+
+  const updated = Effect.runSync(applyDashboardEdit({ document: resized, edit }));
+
+  expect(collectLayoutWidgets(updated.layout).map(({ id }) => id)).toEqual(expectedIds);
+});
+
+it.each([
+  ["one-quarter", [2, 3, 3]],
+  ["one-third", [2, 2, 2]],
+  ["one-half", [2, 1, 1]],
+  ["two-thirds", [4, 1, 1]],
+  ["three-quarters", [6, 1, 1]],
+] as const)(
+  "applies the exact %s ratio regardless of current sibling weights",
+  (ratio, weights) => {
+    const targetId = "f1d1a000-0000-4000-8000-000000000443";
+    const source = makeSplitDocument([
+      { weight: 1, widget: transactionListWidget(targetId) },
+      { weight: 999, widget: customMetricWidget("f1d1a000-0000-4000-8000-000000000444") },
+      { weight: 1, widget: customMetricWidget("f1d1a000-0000-4000-8000-000000000445") },
+    ]);
+    const edit = Schema.decodeUnknownSync(DashboardEdit)({
+      op: "resize-region",
+      widgetIds: [targetId],
+      size: { kind: "ratio", ratio },
+    });
+
+    const updated = Effect.runSync(applyDashboardEdit({ document: source, edit }));
+
+    expect(
+      updated.layout.kind === "split" ? updated.layout.children.map(({ weight }) => weight) : []
+    ).toEqual(weights);
+  }
+);
+
+it("resizes a compound region through the same canonical edit", () => {
+  const source = makeNestedDocument();
+  const edit = Schema.decodeUnknownSync(DashboardEdit)({
+    op: "resize-region",
+    widgetIds: ["f1d1a000-0000-4000-8000-000000000462", "f1d1a000-0000-4000-8000-000000000463"],
+    size: { kind: "weight", weight: 4 },
+  });
+
+  const updated = Effect.runSync(applyDashboardEdit({ document: source, edit }));
+
+  expect(
+    updated.layout.kind === "split" ? updated.layout.children.map(({ weight }) => weight) : []
+  ).toEqual([0.001, 1.999]);
+});
+
+it("rejects resizing the root region because it has no sibling-relative weight", () => {
+  const widgetIds = Schema.decodeUnknownSync(LayoutRegionSelector)([
+    "f1d1a000-0000-4000-8000-000000000401",
+  ]);
+  const edit = Schema.decodeUnknownSync(DashboardEdit)({
+    op: "resize-region",
+    widgetIds,
+    size: { kind: "weight", weight: 2 },
   });
 
   const outcome = Effect.runSync(Effect.result(applyDashboardEdit({ document, edit })));
 
-  expect(Result.isFailure(outcome) ? outcome.failure._tag : undefined).toBe("RootWidgetResize");
+  expect(outcome).toEqual(Result.fail(new RootRegionResize({ widgetIds })));
 });
 
 it("wraps an existing row when adding a widget at the dashboard bottom", () => {
@@ -956,42 +1096,26 @@ it("updates a later nested Widget and rejects an absent update target", () => {
   expect(Result.isFailure(rejected) ? rejected.failure._tag : undefined).toBe("WidgetNotFound");
 });
 
-it("resizes a nested region and distinguishes missing nested and root targets", () => {
+it("rejects stale region selectors without resizing a different region", () => {
   const source = makeNestedDocument();
-  const resize = Schema.decodeUnknownSync(DashboardEdit)({
-    op: "resize-widget",
-    widgetId: "f1d1a000-0000-4000-8000-000000000463",
-    weight: 4,
-  });
-  const missingNested = Schema.decodeUnknownSync(DashboardEdit)({
-    op: "resize-widget",
-    widgetId: "f1d1a000-0000-4000-8000-00000000047c",
-    weight: 2,
-  });
-  const missingRoot = Schema.decodeUnknownSync(DashboardEdit)({
-    op: "resize-widget",
-    widgetId: "f1d1a000-0000-4000-8000-00000000047d",
-    weight: 2,
+  const widgetIds = Schema.decodeUnknownSync(LayoutRegionSelector)([
+    "f1d1a000-0000-4000-8000-000000000461",
+    "f1d1a000-0000-4000-8000-000000000463",
+  ]);
+  const stale = Schema.decodeUnknownSync(DashboardEdit)({
+    op: "resize-region",
+    widgetIds,
+    size: { kind: "weight", weight: 4 },
   });
 
-  const updated = Effect.runSync(applyDashboardEdit({ document: source, edit: resize }));
-  const nestedFailure = Effect.runSync(
-    Effect.result(applyDashboardEdit({ document: source, edit: missingNested }))
-  );
-  const rootFailure = Effect.runSync(
-    Effect.result(applyDashboardEdit({ document, edit: missingRoot }))
+  const outcome = Effect.runSync(
+    Effect.result(applyDashboardEdit({ document: source, edit: stale }))
   );
 
-  expect(updated.layout.kind).toBe("split");
-  if (updated.layout.kind === "split" && updated.layout.children[1].node.kind === "split") {
-    expect(updated.layout.children[1].node.children.map(({ weight }) => weight)).toEqual([1, 4]);
-  }
-  expect(Result.isFailure(nestedFailure) ? nestedFailure.failure._tag : undefined).toBe(
-    "WidgetNotFound"
-  );
-  expect(Result.isFailure(rootFailure) ? rootFailure.failure._tag : undefined).toBe(
-    "WidgetNotFound"
-  );
+  expect(outcome).toEqual(Result.fail(new RegionNotFound({ widgetIds })));
+  expect(
+    source.layout.kind === "split" ? source.layout.children.map(({ weight }) => weight) : []
+  ).toEqual([1, 1]);
 });
 
 it("moves through the no-duplicate-check branch and flattens the destination row", () => {

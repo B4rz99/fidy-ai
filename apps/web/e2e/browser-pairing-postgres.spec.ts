@@ -1,11 +1,14 @@
 import {
   ClaimedPATPairing,
+  DashboardDocument,
+  DashboardEdit,
   EmailVerificationCode,
+  IssuedPAT,
   StartedBrowserLoginPairing,
   StartedPATPairing,
 } from "@fidy/server/client";
 import { expect, test } from "@playwright/test";
-import type { APIRequestContext, Page } from "@playwright/test";
+import type { APIRequestContext, Locator, Page, Response } from "@playwright/test";
 import { Option, Redacted, Schema, Struct } from "effect";
 
 const apiOrigin = "https://127.0.0.1:4174";
@@ -22,6 +25,10 @@ const unauthorizedStatus = 401;
 const forbiddenStatus = 403;
 const notFoundStatus = 404;
 const anonymousSourceHeaders = { "x-forwarded-for": "198.51.100.249" };
+const dragAttempts = 3;
+const dragCoordinateDivisor = 2;
+const dragMovementSteps = 20;
+const dragResponseTimeoutMilliseconds = 3_000;
 const invalidPairingBody = {
   error: {
     code: "pairing_invalid",
@@ -78,6 +85,7 @@ const subscriptionOffersBody = {
 
 const PairingStartBody = StartedBrowserLoginPairing.mapFields(Struct.pick(["privateVerifier"]));
 const OpenApi = Schema.Struct({ openapi: Schema.String });
+const DashboardDocumentResponse = Schema.Struct({ data: DashboardDocument });
 
 const DeliveredEmailCode = Schema.Struct({ combinedCode: EmailVerificationCode });
 const IdentityObservation = Schema.Struct({
@@ -111,11 +119,77 @@ type IdentityObservation = typeof IdentityObservation.Type;
 type SessionObservation = typeof SessionObservation.Type;
 
 const resetAcceptanceState = async (request: APIRequestContext): Promise<void> => {
-  expect((await request.post(`${controlOrigin}/reset`)).status()).toBe(noContentStatus);
+  const response = await request.post(`${controlOrigin}/reset`);
+  expect(response.status(), await response.text()).toBe(noContentStatus);
 };
 
 const revokeAcceptanceConsent = async (request: APIRequestContext): Promise<void> => {
   expect((await request.post(`${controlOrigin}/revoke-consent`)).status()).toBe(noContentStatus);
+};
+
+const tryDashboardDrag = async (page: Page, attemptsRemaining: number): Promise<Response> => {
+  if (attemptsRemaining === 0) throw new Error("Dashboard drag did not produce an edit");
+  const source = page
+    .getByRole("list", { name: "Widgets disponibles para arrastrar" })
+    .getByRole("button", { name: "Arrastrar Transacciones recientes" });
+  const target = page.getByRole("region", { name: "Colocar arriba de Gastos por categoría" });
+  await expect(source).toBeEnabled();
+  await source.hover();
+  const sourceBox = await source.boundingBox();
+  if (sourceBox === null) throw new Error("Expected visible drag source geometry");
+  await page.mouse.down();
+  await page.mouse.move(sourceBox.x + sourceBox.width, sourceBox.y + sourceBox.height);
+  await target.scrollIntoViewIfNeeded();
+  const targetBox = await target.boundingBox();
+  if (targetBox === null) throw new Error("Expected visible drop target geometry");
+  const response = page.waitForResponse(
+    (candidate) =>
+      candidate.url() === `${apiOrigin}/dashboard/edits` && candidate.request().method() === "POST",
+    { timeout: dragResponseTimeoutMilliseconds }
+  );
+  await page.mouse.move(
+    targetBox.x + targetBox.width / dragCoordinateDivisor,
+    targetBox.y + targetBox.height / dragCoordinateDivisor,
+    { steps: dragMovementSteps }
+  );
+  await page.mouse.up();
+  const outcome = await response.then(Option.some, () => Option.none<Response>());
+  return Option.isSome(outcome) ? outcome.value : tryDashboardDrag(page, attemptsRemaining - 1);
+};
+
+const dragRecentTransactionsToDashboardStart = (page: Page): Promise<Response> =>
+  tryDashboardDrag(page, dragAttempts);
+
+const budgetDragHandle = (page: Page): Locator =>
+  page
+    .getByRole("region", { name: "Diseño responsivo del tablero" })
+    .getByRole("button", { name: "Arrastrar Presupuesto de restaurantes", exact: true });
+
+const cancelBudgetMoveWithKeyboard = async (page: Page): Promise<void> => {
+  const source = budgetDragHandle(page);
+  await source.focus();
+  await source.press("Space");
+  await expect(source).toHaveAttribute("aria-pressed", "true");
+  await source.press("ArrowRight");
+  await source.press("Escape");
+  await expect(source).toHaveAttribute("aria-pressed", "false");
+  await expect(source).not.toHaveAttribute("data-dnd-dropping", "");
+};
+
+const moveBudgetWithKeyboard = async (page: Page): Promise<Response> => {
+  const source = budgetDragHandle(page);
+  await source.focus();
+  await source.press("Enter");
+  await expect(source).toHaveAttribute("aria-pressed", "true");
+  await source.press("ArrowRight");
+  await source.press("ArrowRight");
+  await source.press("ArrowRight");
+  const response = page.waitForResponse(
+    (candidate) =>
+      candidate.url() === `${apiOrigin}/dashboard/edits` && candidate.request().method() === "POST"
+  );
+  await source.press("Enter");
+  return response;
 };
 
 const approvePairing = async (request: APIRequestContext, publicCode: string): Promise<void> => {
@@ -161,6 +235,22 @@ const completePairing = async (page: Page, request: APIRequestContext): Promise<
   expect(userResponse.headers()["access-control-allow-origin"]).toBe("https://127.0.0.1:4173");
   expect(userResponse.headers()["access-control-allow-credentials"]).toBe("true");
   expect(userResponse.headers()["access-control-allow-origin"]).not.toBe("*");
+};
+
+const issueDashboardPAT = async (page: Page): Promise<string> => {
+  await page.goto("/settings/pats");
+  await page.getByLabel("Nombre").fill("Paridad del tablero");
+  await page.getByRole("checkbox", { name: /Lectura/iu }).click();
+  await page.getByRole("checkbox", { name: /Tablero/iu }).click();
+  await page.getByRole("button", { name: "Revisar token" }).click();
+  const issueResponse = page.waitForResponse(
+    (response) => response.url() === `${apiOrigin}/pats` && response.request().method() === "POST"
+  );
+  await page.getByRole("button", { name: "Confirmar y crear token" }).click();
+  const body = Schema.decodeUnknownSync(Schema.Struct({ data: IssuedPAT }))(
+    await (await issueResponse).json()
+  );
+  return body.data.bearer;
 };
 
 const SeededTransaction = Schema.Struct({ categoryLabel: Schema.String });
@@ -543,6 +633,48 @@ test("renders authoritative PostgreSQL Subscription offers without starting paym
   await expect(methods.getByText("Nequi")).toBeVisible();
   await expect(methods.getByText("DaviPlata")).toBeVisible();
   expect(mutatingRequests).toEqual([]);
+});
+
+test("applies the same canonical Dashboard edit from the UI and a dashboard-scoped PAT", async ({
+  page,
+  request,
+}) => {
+  await resetAcceptanceState(request);
+  await completePairing(page, request);
+  const bearer = await issueDashboardPAT(page);
+
+  await page.goto("/app/dashboard");
+  await expect(page.getByRole("heading", { level: 1, name: "Tablero" })).toBeVisible();
+  await page.getByRole("button", { name: "Personalizar" }).click();
+
+  const patHeaders = { authorization: `Bearer ${bearer}` };
+  const dragResponse = await dragRecentTransactionsToDashboardStart(page);
+  expect(dragResponse.status()).toBe(successStatus);
+  const dragEdit = Schema.decodeUnknownSync(DashboardEdit)(dragResponse.request().postDataJSON());
+  if (dragEdit.op !== "add-widget") throw new Error("Expected the drag to compile an add edit");
+  const uiDocument = Schema.decodeUnknownSync(DashboardDocumentResponse)(await dragResponse.json());
+  const undo = await request.post(`${apiOrigin}/dashboard/edits`, {
+    headers: patHeaders,
+    data: { op: "remove-widget", widgetId: dragEdit.widget.id },
+  });
+  expect(undo.status()).toBe(successStatus);
+  const agentDrag = await request.post(`${apiOrigin}/dashboard/edits`, {
+    headers: patHeaders,
+    data: dragEdit,
+  });
+  expect(agentDrag.status()).toBe(successStatus);
+  const agentDocument = Schema.decodeUnknownSync(DashboardDocumentResponse)(await agentDrag.json());
+  expect(agentDocument).toEqual(uiDocument);
+});
+
+test("moves a Dashboard Widget with the real keyboard sensor", async ({ page, request }) => {
+  await resetAcceptanceState(request);
+  await completePairing(page, request);
+  await page.goto("/app/dashboard");
+  await page.getByRole("button", { name: "Personalizar" }).click();
+
+  await cancelBudgetMoveWithKeyboard(page);
+  expect((await moveBudgetWithKeyboard(page)).status()).toBe(successStatus);
 });
 
 test("renders real current-month PostgreSQL Transactions and Categories", async ({

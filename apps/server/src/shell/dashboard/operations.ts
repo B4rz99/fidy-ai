@@ -159,7 +159,7 @@ export const DashboardGroup = HttpApiGroup.make("dashboard")
       .annotate(
         OpenApi.Description,
         "Get the caller's complete DashboardDocument. Reach for this before editing; first use " +
-          "creates and retains one valid spending widget, and later calls return the same document."
+          "creates and retains one valid four-Widget Dashboard, and later calls return the same document."
       )
       .annotateMerge(
         operationPolicy({
@@ -215,9 +215,8 @@ export const DashboardGroup = HttpApiGroup.make("dashboard")
     })
       .annotate(
         OpenApi.Description,
-        "Apply one structural DashboardEdit to the caller's latest locked document. Use the same " +
-          "add, remove, move, resize, replace, or title edit the web UI uses; invalid edits and " +
-          "invalid resulting documents leave the stored dashboard unchanged."
+        "Apply one DashboardEdit to the caller's latest locked document. Invalid edits and invalid " +
+          "resulting documents leave the stored Dashboard unchanged."
       )
       .annotateMerge(
         operationPolicy({

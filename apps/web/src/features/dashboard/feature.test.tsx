@@ -1,10 +1,11 @@
-import { cleanup, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { BigDecimal, Cause, DateTime, Option, Schema } from "effect";
 import { AsyncResult } from "effect/unstable/reactivity";
 import { type JSX, type ReactNode, createContext, useContext } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { DashboardCatalogEntry, DashboardGesture } from "./editor-model";
 import type { DashboardLayout, DashboardView, DashboardWidgetView } from "./presentation";
-import { DashboardRouteContent } from "./view";
+import { type DashboardEditorError, DashboardRouteContent, DashboardViewComponent } from "./view";
 
 type SpendingResult = Extract<DashboardWidgetView["result"], { readonly buckets: unknown }>;
 type BudgetResult = Extract<DashboardWidgetView["result"], { readonly availability: unknown }>;
@@ -366,11 +367,307 @@ describe("read-only Dashboard responsive rendering", () => {
     const spendingCard = spendingHeading.closest('[data-slot="card"]');
     expect(spendingCard).not.toBeNull();
     if (!(spendingCard instanceof HTMLElement)) throw new Error("Expected the spending Card");
+    expect(spendingCard).toHaveClass("flex-1");
     expect(within(spendingCard).queryByText("Ingresos")).not.toBeInTheDocument();
     expect(within(spendingCard).getByText("Gastos")).toBeVisible();
     expect(dashboard.getByText("El Corral")).toBeVisible();
     expect(dashboard.queryByText("America/Bogota")).not.toBeInTheDocument();
     expect(screen.queryByText(/Zona horaria aplicada/u)).not.toBeInTheDocument();
+  });
+});
+
+const editorCatalog: ReadonlyArray<DashboardCatalogEntry> = [
+  {
+    id: "recent-transactions",
+    name: "Más transacciones",
+    description: "Añade otra lista.",
+    widget: {
+      type: "transaction-list",
+      title: "Otra lista",
+      limit: Schema.decodeUnknownSync(TestTransactionListLimit)(transactionListLimit),
+    },
+  },
+];
+
+const renderInteractiveDashboard = (
+  onGesture: (gesture: DashboardGesture) => void,
+  catalog: ReadonlyArray<DashboardCatalogEntry> = [],
+  error: Option.Option<DashboardEditorError> = Option.none()
+): ReturnType<typeof render> =>
+  render(
+    <DashboardViewComponent
+      editor={Option.some({ catalog, error, onGesture, submitting: false })}
+      view={makeView(standardOptions)}
+    />
+  );
+
+const dragBoundaryContinuously = (boundary: HTMLElement): void => {
+  const resizedRegion = boundary.previousElementSibling;
+  const adjacentRegion = boundary.nextElementSibling;
+  if (!(resizedRegion instanceof HTMLElement) || !(adjacentRegion instanceof HTMLElement)) {
+    throw new Error("Expected a neutral separator between split regions");
+  }
+  Object.defineProperties(boundary, {
+    hasPointerCapture: { configurable: true, value: vi.fn(() => true) },
+    releasePointerCapture: { configurable: true, value: vi.fn() },
+    setPointerCapture: { configurable: true, value: vi.fn() },
+  });
+  const regionRect = (start: number, end: number): DOMRect => ({
+    bottom: end,
+    height: end - start,
+    left: start,
+    right: end,
+    toJSON: vi.fn(),
+    top: start,
+    width: end - start,
+    x: start,
+    y: start,
+  });
+  const regionMidpoint = 500;
+  const regionEnd = 1000;
+  const expectedAdjacentWeight = 0.75;
+  vi.spyOn(resizedRegion, "getBoundingClientRect").mockReturnValue(regionRect(0, regionMidpoint));
+  vi.spyOn(adjacentRegion, "getBoundingClientRect").mockReturnValue(
+    regionRect(regionMidpoint, regionEnd)
+  );
+  const expectedPreviewWeight = 1.25;
+  fireEvent.pointerDown(boundary, { buttons: 1, clientX: 500, clientY: 500, pointerId: 1 });
+  fireEvent.pointerMove(boundary, { buttons: 1, clientX: 625, clientY: 625, pointerId: 1 });
+  expect(Number(resizedRegion.style.getPropertyValue("--dashboard-weight"))).toBeCloseTo(
+    expectedPreviewWeight
+  );
+  expect(Number(adjacentRegion.style.getPropertyValue("--dashboard-weight"))).toBeCloseTo(
+    expectedAdjacentWeight
+  );
+  const precedingRegion = resizedRegion.previousElementSibling?.previousElementSibling;
+  if (precedingRegion instanceof HTMLElement) {
+    expect(precedingRegion.style.getPropertyValue("--dashboard-weight")).toBe("1");
+  }
+  fireEvent.pointerUp(boundary, { buttons: 0, clientX: 750, clientY: 750, pointerId: 1 });
+  expect(resizedRegion.style.getPropertyValue("--dashboard-weight")).toBe("1");
+  expect(adjacentRegion.style.getPropertyValue("--dashboard-weight")).toBe("1");
+  fireEvent.pointerMove(boundary, { buttons: 0, clientX: 900, clientY: 900, pointerId: 1 });
+  expect(resizedRegion.style.getPropertyValue("--dashboard-weight")).toBe("1");
+};
+
+describe("Dashboard edit mode", () => {
+  it("offers only draggable catalog additions and labels the exit action Guardar", () => {
+    const onGesture = vi.fn<(gesture: DashboardGesture) => void>();
+    renderInteractiveDashboard(onGesture, editorCatalog);
+
+    fireEvent.click(screen.getByRole("button", { name: "Personalizar" }));
+
+    expect(screen.getByRole("button", { name: "Guardar" })).toBeVisible();
+    expect(screen.queryByLabelText("Nuevo título del tablero")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Añadir Widget" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Arrastrar Más transacciones" })).toBeVisible();
+  });
+});
+
+describe("Dashboard Widget retitling and placement", () => {
+  it("offers one named semantic destination per keyboard drag outcome and retitles a Widget", () => {
+    const onGesture = vi.fn<(gesture: DashboardGesture) => void>();
+    renderInteractiveDashboard(onGesture, editorCatalog);
+
+    fireEvent.click(screen.getByRole("button", { name: "Personalizar" }));
+
+    for (const destination of [
+      "Colocar arriba de Transacciones",
+      "Colocar a la derecha de Transacciones",
+      "Colocar debajo de Transacciones",
+      "Colocar a la izquierda de Transacciones",
+      "Colocar sobre Transacciones",
+    ]) {
+      expect(screen.getByRole("region", { name: destination })).toBeInTheDocument();
+    }
+    fireEvent.click(screen.getByRole("button", { name: "Renombrar Transacciones" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "Nuevo nombre del Widget" }), {
+      target: { value: "Resumen mensual" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Guardar nombre del Widget" }));
+
+    expect(onGesture).toHaveBeenLastCalledWith({
+      kind: "retitle-widget",
+      title: "Resumen mensual",
+      widget: {
+        id: ids.chart,
+        type: "spending-chart",
+        groupBy: "category",
+        period: "this-month",
+      },
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Renombrar Presupuesto" }));
+    const titleInput = screen.getByRole("textbox", { name: "Nuevo nombre del Widget" });
+    fireEvent.change(titleInput, { target: { value: "   " } });
+    expect(screen.getByRole("button", { name: "Guardar nombre del Widget" })).toBeDisabled();
+    fireEvent.keyDown(titleInput, { key: "Escape" });
+    expect(
+      screen.queryByRole("textbox", { name: "Nuevo nombre del Widget" })
+    ).not.toBeInTheDocument();
+  });
+});
+
+describe("Dashboard Widget editing", () => {
+  it("offers direct Widget removal and keyboard-resizable recursive boundaries", () => {
+    const onGesture = vi.fn<(gesture: DashboardGesture) => void>();
+    renderInteractiveDashboard(onGesture, editorCatalog);
+
+    fireEvent.click(screen.getByRole("button", { name: "Personalizar" }));
+
+    expect(screen.queryByLabelText("Configurar Transacciones")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Eliminar Transacciones" }));
+    expect(onGesture).toHaveBeenLastCalledWith({ kind: "remove-widget", widgetId: ids.chart });
+
+    const boundary = screen.getAllByRole("separator", {
+      name: "Redimensionar límite después de Transacciones",
+    })[0];
+    if (boundary === undefined) throw new Error("Expected a recursive resize boundary");
+    fireEvent.keyDown(boundary, { key: "ArrowDown" });
+    expect(onGesture).toHaveBeenLastCalledWith({
+      kind: "resize-region",
+      widgetIds: [ids.chart],
+      weight: 1.1,
+    });
+
+    dragBoundaryContinuously(boundary);
+    expect(onGesture).toHaveBeenLastCalledWith({
+      kind: "resize-region",
+      widgetIds: [ids.chart],
+      weight: 1.5,
+    });
+
+    const boundaries = screen.getAllByRole("separator");
+    expect(boundaries).toHaveLength(3);
+    expect(boundaries.every((candidate) => candidate.classList.contains("bg-transparent"))).toBe(
+      true
+    );
+    expect(
+      boundaries.find((candidate) => candidate.getAttribute("aria-orientation") === "vertical")
+    ).toHaveClass("md:h-auto", "md:w-4");
+    expect(
+      boundaries.every(
+        (candidate) =>
+          candidate.previousElementSibling instanceof HTMLElement &&
+          candidate.nextElementSibling instanceof HTMLElement
+      )
+    ).toBe(true);
+    expect(screen.queryByText("Proporción")).not.toBeInTheDocument();
+  });
+});
+
+const releasedButtonsPointerId = 5;
+
+describe("Dashboard resize termination", () => {
+  it("stops on cancellation, lost capture, released buttons, and ignores unrelated input", () => {
+    const onGesture = vi.fn<(gesture: DashboardGesture) => void>();
+    renderInteractiveDashboard(onGesture, editorCatalog);
+    fireEvent.click(screen.getByRole("button", { name: "Personalizar" }));
+    const boundary = screen.getAllByRole("separator", {
+      name: "Redimensionar límite después de Transacciones",
+    })[0];
+    if (boundary === undefined) throw new Error("Expected a recursive resize boundary");
+    const releasePointerCapture = vi.fn();
+    Object.defineProperties(boundary, {
+      hasPointerCapture: { configurable: true, value: vi.fn(() => true) },
+      releasePointerCapture: { configurable: true, value: releasePointerCapture },
+      setPointerCapture: { configurable: true, value: vi.fn() },
+    });
+
+    fireEvent.pointerMove(boundary, { buttons: 1, pointerId: 99 });
+    fireEvent.pointerUp(boundary, { buttons: 0, pointerId: 99 });
+    fireEvent.keyDown(boundary, { key: "Enter" });
+    fireEvent.keyDown(boundary, { key: "ArrowUp" });
+    expect(onGesture).toHaveBeenLastCalledWith({
+      kind: "resize-region",
+      widgetIds: [ids.chart],
+      weight: 0.9,
+    });
+
+    fireEvent.pointerDown(boundary, { buttons: 1, pointerId: 2 });
+    fireEvent.pointerCancel(boundary, { pointerId: 3 });
+    expect(releasePointerCapture).not.toHaveBeenCalled();
+    fireEvent.pointerCancel(boundary, { pointerId: 2 });
+    expect(releasePointerCapture).toHaveBeenCalledWith(2);
+
+    fireEvent.pointerDown(boundary, { buttons: 1, pointerId: 4 });
+    fireEvent.lostPointerCapture(boundary, { pointerId: 4 });
+    expect(releasePointerCapture).toHaveBeenCalledWith(4);
+
+    fireEvent.pointerDown(boundary, { buttons: 1, pointerId: releasedButtonsPointerId });
+    fireEvent.pointerMove(boundary, { buttons: 0, pointerId: releasedButtonsPointerId });
+    expect(releasePointerCapture).toHaveBeenCalledWith(releasedButtonsPointerId);
+  });
+});
+
+describe("Dashboard multi-Widget resizing", () => {
+  it("moves only the selected boundary in a row with three Widgets", () => {
+    const onGesture = vi.fn<(gesture: DashboardGesture) => void>();
+    const left = leftLayout(standardOptions);
+    const right = rightLayout(standardOptions);
+    if (left.kind !== "split" || right.kind !== "split") {
+      throw new Error("Expected split fixture regions");
+    }
+    render(
+      <DashboardViewComponent
+        editor={Option.some({
+          catalog: editorCatalog,
+          error: Option.none(),
+          onGesture,
+          submitting: false,
+        })}
+        view={{
+          ...makeView(standardOptions),
+          layout: {
+            kind: "split",
+            axis: "row",
+            children: [left.children[0], left.children[1], right.children[0]],
+          },
+        }}
+      />
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Personalizar" }));
+
+    const boundary = screen.getByRole("separator", {
+      name: "Redimensionar límite después de Presupuesto",
+    });
+    dragBoundaryContinuously(boundary);
+
+    expect(onGesture).toHaveBeenLastCalledWith({
+      kind: "resize-region",
+      widgetIds: [ids.budget],
+      weight: 1.5,
+    });
+  });
+});
+
+describe("Dashboard edit rejection", () => {
+  it("keeps the successful canvas visible while showing a safe edit rejection", () => {
+    renderInteractiveDashboard(
+      vi.fn(),
+      [],
+      Option.some({
+        title: "No pudimos guardar el cambio",
+        message: "El cambio fue rechazado. Revisa los valores e intenta de nuevo.",
+      })
+    );
+
+    expect(screen.getByRole("alert")).toHaveTextContent("El cambio fue rechazado");
+    expect(screen.getAllByRole("heading", { level: 2 })).toHaveLength(4);
+  });
+
+  it("distinguishes a saved edit with a stale refresh from a rejected edit", () => {
+    renderInteractiveDashboard(
+      vi.fn(),
+      [],
+      Option.some({
+        title: "El cambio se guardó, pero no pudimos actualizar el tablero",
+        message: "Mostramos el último tablero disponible. Intenta actualizarlo de nuevo.",
+      })
+    );
+
+    expect(screen.getByRole("alert")).toHaveTextContent("El cambio se guardó");
+    expect(screen.getByRole("alert")).not.toHaveTextContent("No pudimos guardar el cambio");
   });
 });
 

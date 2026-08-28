@@ -9,7 +9,7 @@ import { Effect, Layer, Schema } from "effect";
 import { FetchHttpClient, type HttpClient } from "effect/unstable/http";
 import { AtomHttpApi } from "effect/unstable/reactivity";
 
-export type { CanonicalSuccess } from "@fidy/server/client";
+export type { CanonicalInput, CanonicalSuccess } from "@fidy/server/client";
 export {
   BrowserLoginPairingInvalidApi,
   BrowserLoginPollingRateLimitedApi,
@@ -17,6 +17,12 @@ export {
   EmailVerificationCode,
   EmailReplacementFreshPairingRequiredApi,
   EmailReplacementInvalidApi,
+  DashboardCatalogEntry,
+  DashboardEdit,
+  maximumSplitWeight,
+  minimumSplitWeight,
+  SplitWeight,
+  WidgetId,
   CreateManualPATPayload,
   IssuedPAT,
   ManualPATGrantInput,

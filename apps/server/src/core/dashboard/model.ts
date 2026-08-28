@@ -178,8 +178,15 @@ export type WidgetTemplate = typeof WidgetTemplate.Type;
 export const Axis = Schema.Literals(["row", "column"]);
 export type Axis = typeof Axis.Type;
 
-/** Positive bounded integer interpreted only relative to sibling weights. */
-export const SplitWeight = Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 1000 }))
+/** Lowest persisted relative share for one Dashboard region. */
+export const minimumSplitWeight = 0.001;
+/** Highest persisted relative share for one Dashboard region. */
+export const maximumSplitWeight = 1000;
+
+/** Positive bounded finite number interpreted only relative to sibling weights. */
+export const SplitWeight = Schema.Finite.check(
+  Schema.isBetween({ minimum: minimumSplitWeight, maximum: maximumSplitWeight })
+)
   .pipe(Schema.brand("SplitWeight"))
   .annotate({ identifier: "SplitWeight" });
 export type SplitWeight = typeof SplitWeight.Type;
@@ -425,13 +432,42 @@ export const MoveWidget = Schema.Struct({
 }).annotate({ identifier: "MoveWidget" });
 export type MoveWidget = typeof MoveWidget.Type;
 
-/** Edit changing the sibling-relative weight of a non-root Widget region. */
-export const ResizeWidget = Schema.Struct({
-  op: Schema.tag("resize-widget"),
+/** Edit exchanging the layout positions of two existing Widgets. */
+export const SwapWidgets = Schema.Struct({
+  op: Schema.tag("swap-widgets"),
   widgetId: WidgetId,
-  weight: SplitWeight,
-}).annotate({ identifier: "ResizeWidget" });
-export type ResizeWidget = typeof ResizeWidget.Type;
+  withWidgetId: WidgetId,
+}).annotate({ identifier: "SwapWidgets" });
+export type SwapWidgets = typeof SwapWidgets.Type;
+
+/** Exact in-order Widget identities naming one current leaf or compound layout region. */
+export const LayoutRegionSelector = Schema.TupleWithRest(Schema.Tuple([WidgetId]), [WidgetId])
+  .check(Schema.isMaxLength(maximumWidgetsPerDashboard), Schema.isUnique())
+  .annotate({ identifier: "LayoutRegionSelector" });
+export type LayoutRegionSelector = typeof LayoutRegionSelector.Type;
+
+/** Common exact shares supported by recursive Dashboard region resizing. */
+export const LayoutRegionRatio = Schema.Literals([
+  "one-quarter",
+  "one-third",
+  "one-half",
+  "two-thirds",
+  "three-quarters",
+]);
+export type LayoutRegionRatio = typeof LayoutRegionRatio.Type;
+
+const RegionResizeSize = Schema.Union([
+  Schema.Struct({ kind: Schema.Literal("weight"), weight: SplitWeight }),
+  Schema.Struct({ kind: Schema.Literal("ratio"), ratio: LayoutRegionRatio }),
+]);
+
+/** Edit changing the share of one exact non-root layout region. */
+export const ResizeRegion = Schema.Struct({
+  op: Schema.tag("resize-region"),
+  widgetIds: LayoutRegionSelector,
+  size: RegionResizeSize,
+}).annotate({ identifier: "ResizeRegion" });
+export type ResizeRegion = typeof ResizeRegion.Type;
 
 /** Edit replacing a Widget's complete configuration at its existing region. */
 export const UpdateWidget = Schema.Struct({
@@ -446,7 +482,8 @@ export const DashboardEdit = Schema.Union([
   AddWidget,
   RemoveWidget,
   MoveWidget,
-  ResizeWidget,
+  SwapWidgets,
+  ResizeRegion,
   UpdateWidget,
 ])
   .annotate({ identifier: "DashboardEdit" })

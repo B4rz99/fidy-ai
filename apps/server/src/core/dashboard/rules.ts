@@ -5,7 +5,8 @@ import {
   DuplicateWidgetId,
   InvalidDashboardResult,
   LastWidgetRemoval,
-  RootWidgetResize,
+  RegionNotFound,
+  RootRegionResize,
   SelfPlacement,
   WidgetNotFound,
 } from "./errors";
@@ -15,12 +16,17 @@ import {
   DashboardDocument,
   type DashboardEdit,
   type LayoutNode,
+  type LayoutRegionRatio,
+  type LayoutRegionSelector,
   type Placement,
   type SplitNode,
   SplitWeight,
   type Widget,
   type WidgetId,
+  collectLayoutWidgets,
   isBesidePlacement,
+  maximumSplitWeight,
+  minimumSplitWeight,
 } from "./model";
 
 const formatIssues = SchemaIssue.makeFormatterStandardSchemaV1();
@@ -89,6 +95,12 @@ type DenominatedChild = Readonly<{ child: SplitChild; denominator: bigint }>;
 /** The parent's common denominator, and the factor that lifts a nested split's own weights. */
 type ChildScale = Readonly<{ keep: bigint; flatten: bigint }>;
 
+const splitWeightPrecision = 1000;
+
+/** Converts a bounded three-decimal weight into an integer for exact normalization arithmetic. */
+const splitWeightInteger = (weight: SplitChild["weight"]): bigint =>
+  BigInt(Math.round(weight * splitWeightPrecision));
+
 /** Restates one child against the parent's common denominator, flattening same-axis nesting. */
 const expandChild = (child: SplitChild, axis: Axis, scale: ChildScale): Expansion => {
   switch (child.node.kind) {
@@ -96,11 +108,12 @@ const expandChild = (child: SplitChild, axis: Axis, scale: ChildScale): Expansio
       return child.node.axis === axis
         ? child.node.children.map((nested) => ({
             node: nested.node,
-            weight: BigInt(child.weight) * BigInt(nested.weight) * scale.flatten,
+            weight:
+              splitWeightInteger(child.weight) * splitWeightInteger(nested.weight) * scale.flatten,
           }))
-        : [{ node: child.node, weight: BigInt(child.weight) * scale.keep }];
+        : [{ node: child.node, weight: splitWeightInteger(child.weight) * scale.keep }];
     case "leaf":
-      return [{ node: child.node, weight: BigInt(child.weight) * scale.keep }];
+      return [{ node: child.node, weight: splitWeightInteger(child.weight) * scale.keep }];
   }
 };
 
@@ -111,7 +124,7 @@ const normalizeSplit = (node: Readonly<SplitNode>): SplitNode => {
     denominator:
       child.node.kind === "leaf"
         ? 1n
-        : child.node.children.reduce((sum, nested) => sum + BigInt(nested.weight), 0n),
+        : child.node.children.reduce((sum, nested) => sum + splitWeightInteger(nested.weight), 0n),
   }));
   const common = weighted.reduce((product, entry) => product * entry.denominator, 1n);
   const expanded = weighted.flatMap(({ child, denominator }) =>
@@ -390,27 +403,75 @@ const applyUpdate = (
     : Effect.fail(new WidgetNotFound({ widgetId: widget.id, role: "edit-target" }));
 };
 
-const resizeWidget = (
-  input: Readonly<{
-    readonly node: LayoutNode;
-    readonly widgetId: WidgetId;
-    readonly weight: SplitWeight;
-  }>
-): Option.Option<LayoutNode> => {
-  const { node, widgetId, weight } = input;
-  if (node.kind === "leaf") {
-    return Option.none();
+const regionMatches = (
+  node: Readonly<LayoutNode>,
+  widgetIds: Readonly<LayoutRegionSelector>
+): boolean => {
+  const regionWidgetIds = collectLayoutWidgets(node).map(({ id }) => id);
+  return (
+    regionWidgetIds.length === widgetIds.length &&
+    regionWidgetIds.every((widgetId, index) => widgetId === widgetIds[index])
+  );
+};
+
+const ratioParts: Readonly<Record<LayoutRegionRatio, readonly [number, number]>> = {
+  "one-quarter": [1, 4],
+  "one-third": [1, 3],
+  "one-half": [1, 2],
+  "two-thirds": [2, 3],
+  "three-quarters": [3, 4],
+};
+
+const resizeChildren = (
+  children: Readonly<SplitNode["children"]>,
+  resizedIndex: number,
+  size: Extract<DashboardEdit, { readonly op: "resize-region" }>["size"]
+): SplitNode["children"] => {
+  if (size.kind === "weight") {
+    const adjacentIndex = resizedIndex < children.length - 1 ? resizedIndex + 1 : resizedIndex - 1;
+    const resized = Option.getOrThrow(Option.fromUndefinedOr(children[resizedIndex]));
+    const adjacent = Option.getOrThrow(Option.fromUndefinedOr(children[adjacentIndex]));
+    const pairWeight = resized.weight + adjacent.weight;
+    const resizedWeight = SplitWeight.make(
+      Math.round(
+        Math.min(
+          maximumSplitWeight,
+          pairWeight - minimumSplitWeight,
+          Math.max(minimumSplitWeight, pairWeight - maximumSplitWeight, size.weight)
+        ) * splitWeightPrecision
+      ) / splitWeightPrecision
+    );
+    const adjacentWeight = SplitWeight.make(
+      Math.round((pairWeight - resizedWeight) * splitWeightPrecision) / splitWeightPrecision
+    );
+    return mapAtLeastTwo(children, (child, index) => {
+      if (index === resizedIndex) return { ...child, weight: resizedWeight };
+      return index === adjacentIndex ? { ...child, weight: adjacentWeight } : child;
+    });
   }
+  const [numerator, denominator] = ratioParts[size.ratio];
+  const siblingCount = children.length - 1;
+  const targetWeight = Schema.decodeUnknownSync(SplitWeight)(numerator * siblingCount);
+  const siblingWeight = Schema.decodeUnknownSync(SplitWeight)(denominator - numerator);
+  return mapAtLeastTwo(children, (child, index) => ({
+    ...child,
+    weight: index === resizedIndex ? targetWeight : siblingWeight,
+  }));
+};
+
+const resizeRegion = (
+  node: Readonly<LayoutNode>,
+  edit: Readonly<Extract<DashboardEdit, { readonly op: "resize-region" }>>
+): Option.Option<LayoutNode> => {
+  if (node.kind === "leaf") return Option.none();
   for (const [index, child] of node.children.entries()) {
-    if (child.node.kind === "leaf" && child.node.widget.id === widgetId) {
+    if (regionMatches(child.node, edit.widgetIds)) {
       return Option.some({
         ...node,
-        children: mapAtLeastTwo(node.children, (current, childIndex) =>
-          childIndex === index ? { ...current, weight } : current
-        ),
+        children: resizeChildren(node.children, index, edit.size),
       });
     }
-    const replacement = resizeWidget({ node: child.node, widgetId, weight });
+    const replacement = resizeRegion(child.node, edit);
     if (Option.isSome(replacement)) {
       return Option.some({
         ...node,
@@ -423,24 +484,22 @@ const resizeWidget = (
   return Option.none();
 };
 
+const resizeResult = (
+  document: Readonly<DashboardDocument>,
+  edit: Readonly<Extract<DashboardEdit, { readonly op: "resize-region" }>>
+): Effect.Effect<DashboardDocument, DashboardFailure> =>
+  Option.match(resizeRegion(document.layout, edit), {
+    onNone: () => Effect.fail(new RegionNotFound({ widgetIds: edit.widgetIds })),
+    onSome: (layout) => revalidateDocument({ ...document, layout }),
+  });
+
 const applyResize = (
   document: Readonly<DashboardDocument>,
-  edit: Readonly<Extract<DashboardEdit, { readonly op: "resize-widget" }>>
-): Effect.Effect<DashboardDocument, DashboardFailure> => {
-  if (document.layout.kind === "leaf") {
-    return document.layout.widget.id === edit.widgetId
-      ? Effect.fail(new RootWidgetResize({ widgetId: edit.widgetId }))
-      : Effect.fail(new WidgetNotFound({ widgetId: edit.widgetId, role: "edit-target" }));
-  }
-  const layout = resizeWidget({
-    node: document.layout,
-    widgetId: edit.widgetId,
-    weight: edit.weight,
-  });
-  return Option.isSome(layout)
-    ? revalidateDocument({ ...document, layout: layout.value })
-    : Effect.fail(new WidgetNotFound({ widgetId: edit.widgetId, role: "edit-target" }));
-};
+  edit: Readonly<Extract<DashboardEdit, { readonly op: "resize-region" }>>
+): Effect.Effect<DashboardDocument, DashboardFailure> =>
+  regionMatches(document.layout, edit.widgetIds)
+    ? Effect.fail(new RootRegionResize({ widgetIds: edit.widgetIds }))
+    : resizeResult(document, edit);
 
 /** The sibling Widget a Placement names, when it names one rather than a document edge. */
 const besideWidgetId = (at: Readonly<Placement>): Option.Option<WidgetId> =>
@@ -469,42 +528,60 @@ const applyMove = (
   );
 };
 
-type ExistingWidgetEdit = Exclude<DashboardEdit, { readonly op: "set-title" | "add-widget" }>;
+const widgetById = (layout: Readonly<LayoutNode>, widgetId: WidgetId): Option.Option<Widget> =>
+  Option.fromUndefinedOr(collectLayoutWidgets(layout).find(({ id }) => id === widgetId));
 
-type PositionedWidgetEdit = Exclude<ExistingWidgetEdit, { readonly op: "remove-widget" }>;
+const replaceSwappedWidgets = (
+  layout: Readonly<LayoutNode>,
+  first: Readonly<Widget>,
+  second: Readonly<Widget>
+): LayoutNode => {
+  if (layout.kind === "leaf") {
+    const replacements = new Map([
+      [first.id, second],
+      [second.id, first],
+    ]);
+    return Option.match(Option.fromUndefinedOr(replacements.get(layout.widget.id)), {
+      onNone: () => layout,
+      onSome: (widget) => ({ ...layout, widget }),
+    });
+  }
+  return {
+    ...layout,
+    children: mapAtLeastTwo(layout.children, (child) => ({
+      ...child,
+      node: replaceSwappedWidgets(child.node, first, second),
+    })),
+  };
+};
 
-type AppearanceEdit = Exclude<PositionedWidgetEdit, { readonly op: "move-widget" }>;
-
-const applyAppearanceEdit = (
+const applySwap = (
   document: Readonly<DashboardDocument>,
-  edit: Readonly<AppearanceEdit>
-): Effect.Effect<DashboardDocument, DashboardFailure> =>
-  edit.op === "resize-widget" ? applyResize(document, edit) : applyUpdate(document, edit.widget);
-
-const applyPositionedWidgetEdit = (
-  document: Readonly<DashboardDocument>,
-  edit: Readonly<PositionedWidgetEdit>
-): Effect.Effect<DashboardDocument, DashboardFailure> =>
-  edit.op === "move-widget" ? applyMove(document, edit) : applyAppearanceEdit(document, edit);
-
-const applyExistingWidgetEdit = (
-  document: Readonly<DashboardDocument>,
-  edit: Readonly<ExistingWidgetEdit>
-): Effect.Effect<DashboardDocument, DashboardFailure> =>
-  edit.op === "remove-widget"
-    ? applyRemove({ document, widgetId: edit.widgetId })
-    : applyPositionedWidgetEdit(document, edit);
-
-const applyNonTitleEdit = (
-  document: Readonly<DashboardDocument>,
-  edit: Readonly<Exclude<DashboardEdit, { readonly op: "set-title" }>>
-): Effect.Effect<DashboardDocument, DashboardFailure> =>
-  edit.op === "add-widget" ? applyAdd(document, edit) : applyExistingWidgetEdit(document, edit);
+  edit: Readonly<Extract<DashboardEdit, { readonly op: "swap-widgets" }>>
+): Effect.Effect<DashboardDocument, DashboardFailure> => {
+  if (edit.widgetId === edit.withWidgetId) {
+    return Effect.fail(new SelfPlacement({ widgetId: edit.widgetId }));
+  }
+  const first = widgetById(document.layout, edit.widgetId);
+  if (Option.isNone(first)) {
+    return Effect.fail(new WidgetNotFound({ widgetId: edit.widgetId, role: "edit-target" }));
+  }
+  const second = widgetById(document.layout, edit.withWidgetId);
+  if (Option.isNone(second)) {
+    return Effect.fail(
+      new WidgetNotFound({ widgetId: edit.withWidgetId, role: "placement-target" })
+    );
+  }
+  return revalidateDocument({
+    ...document,
+    layout: replaceSwappedWidgets(document.layout, first.value, second.value),
+  });
+};
 
 /**
  * Applies one decoded UI-or-agent edit and re-proves the complete result.
  * Fails for absent targets, duplicate or self placement, removing the last Widget, resizing the
- * root Widget, or any edit whose complete result violates Dashboard invariants.
+ * root region, or any edit whose complete result violates Dashboard invariants.
  */
 export const applyDashboardEdit = (
   input: Readonly<{
@@ -512,6 +589,21 @@ export const applyDashboardEdit = (
     readonly edit: DashboardEdit;
   }>
 ): Effect.Effect<DashboardDocument, DashboardFailure> =>
-  input.edit.op === "set-title"
-    ? revalidateDocument({ ...input.document, title: input.edit.title })
-    : applyNonTitleEdit(input.document, input.edit);
+  Effect.suspend(() => {
+    switch (input.edit.op) {
+      case "set-title":
+        return revalidateDocument({ ...input.document, title: input.edit.title });
+      case "add-widget":
+        return applyAdd(input.document, input.edit);
+      case "remove-widget":
+        return applyRemove({ document: input.document, widgetId: input.edit.widgetId });
+      case "move-widget":
+        return applyMove(input.document, input.edit);
+      case "swap-widgets":
+        return applySwap(input.document, input.edit);
+      case "resize-region":
+        return applyResize(input.document, input.edit);
+      case "update-widget":
+        return applyUpdate(input.document, input.edit.widget);
+    }
+  });

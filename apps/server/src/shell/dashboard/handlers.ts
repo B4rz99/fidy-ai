@@ -31,7 +31,11 @@ export const DashboardLive = HttpApiBuilder.group(FidyApi, "dashboard", (handler
     .handle("applyDashboardEdit", ({ payload: edit }) =>
       Effect.gen(function* () {
         const { userId, caller } = yield* resolveFreeSuggestedOperationCaller;
-        return yield* applyDashboardEdit({ userId, edit, caller });
+        return yield* applyDashboardEdit({
+          userId,
+          edit,
+          caller,
+        });
       })
     )
 );

@@ -1,0 +1,98 @@
+apps/web/src/features/signed-in/feature.tsx
+  s_c9720a58ac9654::t_d3331acaf7f6dd 41
+  s_c9720a58ac9654::t_de1c1b9f35ebf1 21-40,42-46,71
+apps/server/contracts/openapi.json
+  s_c9720a58ac9654::t_ac2d66a84c404d 314-321,4739-4761,16783-16880,18142-18144
+apps/server/contracts/operation-policy.json
+  s_c9720a58ac9654::t_5385ea8f23ef14 540-550
+apps/server/package.json
+  s_c9720a58ac9654::t_06a732ac505579 15,18,49
+apps/server/scripts/support-recovery.ts
+  s_c9720a58ac9654::t_301b35d2596d0b 1-213
+apps/server/src/client.ts
+  s_c9720a58ac9654::t_e6471efece6fda 71
+apps/server/src/core/recovery/model.test.ts
+  s_c9720a58ac9654::t_0a49eeb2954ede 2-3,5-14,16-20,22-35,39-78,80-84
+apps/server/src/core/recovery/model.ts
+  s_c9720a58ac9654::t_cc2dfdec45609e 3,24-68,70-149
+apps/server/src/shell/_shared/canonical-mutation-registry.ts
+  s_c9720a58ac9654::t_2f02130330ec3c 31,208-209
+apps/server/src/shell/_shared/operation-catalog.ts
+  s_c9720a58ac9654::t_ad18fca18dcb73 5-9,26,136
+apps/server/src/shell/_shared/operation-policy.ts
+  s_c9720a58ac9654::t_246d776ea03ecf 13-18
+apps/server/src/shell/api.ts
+  s_c9720a58ac9654::t_0b313ce9a9315b 18,33-34
+apps/server/src/shell/browser-login/repo.ts
+  s_c9720a58ac9654::t_2d50d211af8402 188-191,195,213-216,220,371-375,377,411
+apps/server/src/shell/db/migrations/0040-support-recovery.ts
+  s_c9720a58ac9654::t_e5dab32496b478 1-294
+apps/server/src/shell/db/migrations/registry.ts
+  s_c9720a58ac9654::t_d553a3ef0e7a32 39,88
+apps/server/src/shell/db/user-tables.ts
+  s_c9720a58ac9654::t_a7c7bfdb3d856d 29-30
+apps/server/src/shell/http.ts
+  s_c9720a58ac9654::t_0a75f5b697e290 47-52,121,233,236-239,269,279-280
+apps/server/src/shell/observability/registry.ts
+  s_c9720a58ac9654::t_9382d4546a1bae 57,72,115,124
+apps/server/src/shell/onboarding/completion-transition.ts
+  s_c9720a58ac9654::t_843a01694d0fa1 9,12,28,59,61-62
+apps/server/src/shell/operations/operations.ts
+  s_c9720a58ac9654::t_77970293776dd4 101
+apps/server/src/shell/recovery/access.test.ts
+  s_c9720a58ac9654::t_823415c3fbebc2 1-96
+apps/server/src/shell/recovery/access.ts
+  s_c9720a58ac9654::t_e64e30a064c992 1-73
+apps/server/src/shell/recovery/handlers.ts
+  s_c9720a58ac9654::t_f085acd6881d73 1-18
+apps/server/src/shell/recovery/operations.ts
+  s_c9720a58ac9654::t_e9b089f49234dd 1-30
+apps/server/src/shell/recovery/recovery.test.ts
+  s_c9720a58ac9654::t_0da7ec160b8e1d 1-530
+apps/server/src/shell/recovery/repo.ts
+  s_c9720a58ac9654::t_cc7349b36103ee 1-11,19,36,45-46,49-499
+apps/server/src/shell/recovery/retention.ts
+  s_c9720a58ac9654::t_c5931725fe923c 1-34
+apps/server/src/shell/recovery/routes.ts
+  s_c9720a58ac9654::t_8059430b73dae1 1-151
+apps/server/src/shell/recovery/service.ts
+  s_c9720a58ac9654::t_69fc2b9dc7ee1f 1-279
+apps/server/src/shell/testing/api-harness.ts
+  s_c9720a58ac9654::t_7fa2c8463b800f 14,18,22-23,55,57-58,191-241,271
+apps/server/src/shell/testing/isolation.test.ts
+  s_c9720a58ac9654::t_e6eeb24ad30dda 113-115
+apps/server/src/shell/testing/operation-policy.test.ts
+  s_c9720a58ac9654::t_dcdc13c9d17bae 106,191
+apps/server/src/shell/testing/suggested-operations.test.ts
+  s_c9720a58ac9654::t_a76de5fef595a6 75-81
+apps/server/src/shell/testing/whatsapp-acceptance-harness.ts
+  s_c9720a58ac9654::t_ee7f63fffe9648 46,522
+apps/web/src/app/routes.ts
+  s_c9720a58ac9654::t_a5b1619a1459fb 17,92-96,121
+apps/web/src/features/recovery/feature.test.tsx
+  s_c9720a58ac9654::t_6cc68cc0ad4fd2 1-37
+apps/web/src/features/recovery/feature.tsx
+  s_c9720a58ac9654::t_7194c28d62473f 1-141
+apps/web/src/transport/client.ts
+  s_c9720a58ac9654::t_c83e8add5872dc 14
+bun.lock
+  s_c9720a58ac9654::t_ddc9937f506067 34
+docs/operations/support-recovery.md
+  s_c9720a58ac9654::t_5e3b5d0a87bbea 1-113
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "16268e9b2cc0c88dc42b5d94abc41daed7f083a7",
+  "prompts": {},
+  "sessions": {
+    "s_c9720a58ac9654": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a04581-c42c-776c-af59-2ea8a0f4f0c2",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

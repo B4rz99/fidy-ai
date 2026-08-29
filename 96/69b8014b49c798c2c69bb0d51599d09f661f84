@@ -1,0 +1,27 @@
+apps/server/src/shell/db/migrations/0029-subscription-price-revisions.ts
+  s_43d0b06d99b29a::t_1158991c4c6681 1-63
+apps/server/src/shell/db/migrations/0041-subscription-price-vocabulary.ts
+  s_43d0b06d99b29a::t_ecfa2b1a0500d8 1-8,12-13
+  s_43d0b06d99b29a::t_8f16e20049c779 9-11
+apps/server/src/shell/db/migrations/registry.ts
+  s_43d0b06d99b29a::t_04912b29d2c09f 28,40-41,79,91-92
+apps/server/src/shell/db/migrations/0041-subscription-price-vocabulary.test.ts
+  s_43d0b06d99b29a::t_1baef3f6570b08 2-3
+  s_43d0b06d99b29a::t_db504af6c2cfbc 1,4-72
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "9669b8014b49c798c2c69bb0d51599d09f661f84",
+  "prompts": {},
+  "sessions": {
+    "s_43d0b06d99b29a": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a04ec6-46ac-7ac2-8a02-42d5c65eb727",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

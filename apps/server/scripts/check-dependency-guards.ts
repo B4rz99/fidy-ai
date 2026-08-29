@@ -551,28 +551,32 @@ const PROBES: readonly Probe[] = [
 const missingFrom = (report: string, expected: readonly string[]): readonly string[] =>
   expected.filter((entry) => !report.includes(entry));
 
-const assertProbe = (probe: Probe): void => {
+const assertProbeBatch = (probes: readonly Probe[], expectation: Expectation["kind"]): void => {
   const { exitCode, report } = runGraph();
+  const names = probes.map(({ name }) => name).join(" | ");
 
-  if (probe.expect.kind === "allowed") {
+  if (expectation === "allowed") {
     if (!Option.contains(exitCode, 0)) {
-      throw new Error(`${probe.name}\nThe gate rejected something it must allow.\n${report}`);
+      throw new Error(`${names}\nThe gate rejected an allowed probe batch.\n${report}`);
     }
     return;
   }
 
-  const missing = missingFrom(report, probe.expect.mustContain);
   if (Option.contains(exitCode, 0)) {
     throw new Error(
-      `${probe.name}\nThe gate PASSED on a graph that violates it — the rule did not fire, ` +
-        `or the cruiser never resolved the probe's imports.\n${report}`
+      `${names}\nThe gate PASSED on a graph containing rejected probes — a rule did not fire, ` +
+        `or the cruiser never resolved the probe imports.\n${report}`
     );
   }
-  if (missing.length > 0) {
-    throw new Error(
-      `${probe.name}\nThe gate failed, but not for the reason this probe exists.\n` +
-        `Absent from the report: ${missing.join(" | ")}\n${report}`
-    );
+  for (const probe of probes) {
+    if (probe.expect.kind !== "rejected") continue;
+    const missing = missingFrom(report, probe.expect.mustContain);
+    if (missing.length > 0) {
+      throw new Error(
+        `${probe.name}\nThe batch failed, but not for the reason this probe exists.\n` +
+          `Absent from the report: ${missing.join(" | ")}\n${report}`
+      );
+    }
   }
 };
 
@@ -607,16 +611,24 @@ if (stale.length > 0 || staleSource.length > 0 || staleShared.length > 0) {
   );
 }
 
-for (const probe of PROBES) {
+const writeProbeBatch = (probes: readonly Probe[]): Promise<void> =>
+  Promise.all(
+    probes.flatMap((probe) =>
+      probe.files.map((file) => Bun.write(`${serverRoot}${file.path}`, file.source))
+    )
+  ).then(() => undefined);
+
+for (const expectation of ["allowed", "rejected"] as const) {
+  const probes = PROBES.filter((probe) => probe.expect.kind === expectation);
   try {
-    for (const file of probe.files) {
-      await Bun.write(`${serverRoot}${file.path}`, file.source);
-    }
-    assertProbe(probe);
+    await writeProbeBatch(probes);
+    assertProbeBatch(probes, expectation);
   } finally {
-    remove(`${serverRoot}${probe.directory}`);
+    for (const probe of probes) remove(`${serverRoot}${probe.directory}`);
   }
-  process.stdout.write(`ok  ${probe.name}\n`);
+  for (const probe of probes) process.stdout.write(`ok  ${probe.name}\n`);
 }
 
-process.stdout.write(`\nall ${PROBES.length} dependency guard probes passed\n`);
+process.stdout.write(
+  `\nall ${PROBES.length} dependency guard probes passed in 2 graph traversals\n`
+);

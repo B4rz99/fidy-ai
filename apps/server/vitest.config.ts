@@ -3,12 +3,10 @@ import { defineConfig } from "vitest/config";
 import { SOURCE_EXCLUDE, SOURCE_SRC } from "./source-scope.mjs";
 
 // The main run (`bun run test`, CI's Test job): the whole suite, gated on total
-// line coverage. Its two siblings — vitest.core.config.ts and
-// vitest.crap.config.ts — are standalone rather than derived from this file,
-// and each states its own gate; the only thing all three share is the source
-// scope in source-scope.mjs. Changing a runner setting here therefore does not
-// reach them, which is the point: a gate you cannot see in the config that
-// enforces it is a gate nobody can debug.
+// line coverage. The core and sharded CI configurations are standalone rather
+// than derived from this file, and each states its own purpose; the only shared
+// input is the source scope in source-scope.mjs. Changing a runner setting here
+// therefore does not silently change another gate.
 export default defineConfig({
   resolve: {
     // `~/*` → `./src/*`, mirroring tsconfig `paths`. tsc, Bun and oxlint's

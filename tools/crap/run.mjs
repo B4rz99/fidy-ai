@@ -1,5 +1,5 @@
-// Runs the crap4ts CRAP-score gate against the coverage report produced by
-// `vitest run --config vitest.crap.config.ts --coverage`.
+// Runs the crap4ts CRAP-score gate against the merged coverage report produced
+// by the sharded CI suite.
 //
 // crap4ts is spawned from this directory's isolated node_modules so it resolves
 // the classic `typescript` pinned here rather than the root's Effect tsgo build,

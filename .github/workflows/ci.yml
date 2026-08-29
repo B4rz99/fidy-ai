@@ -49,6 +49,31 @@ jobs:
         env:
           RELEASE_GIT_SHA: ${{ github.event.pull_request.head.sha }}
         run: bun run verify -- --group builds
+      # Construct the credential-free preview while this runner is already warm.
+      # The trusted workflow_run consumer still publishes it only after every
+      # required check succeeds.
+      - name: Check out the exact preview source without credentials
+        if: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Reinstall dependencies for the exact preview source
+        if: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
+        uses: ./.github/actions/bun-install
+      - name: Build credential-free static preview artifact
+        if: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
+        env:
+          PREVIEW_GIT_SHA: ${{ github.event.pull_request.head.sha }}
+        run: bun run --cwd apps/web build:preview
+      - name: Publish static artifact for trusted validation
+        if: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: fidy-web-preview-${{ github.event.pull_request.head.sha }}
+          path: apps/web/preview.tar
+          if-no-files-found: error
+          retention-days: 1
 
   unit:
     name: Unit and artifact tests
@@ -83,6 +108,11 @@ jobs:
         env:
           PGPASSWORD: fidy
         run: psql -h localhost -U fidy -d fidy -v ON_ERROR_STOP=1 -f apps/server/tools/local-postgres-init.sql
+      - name: Restore Playwright browser cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ hashFiles('bun.lock') }}
       - name: Install Chromium
         run: bunx --bun playwright install --with-deps chromium
       - name: Static-shell browser validation
@@ -92,8 +122,13 @@ jobs:
         run: bun run verify -- --group browser
 
   server:
-    name: Server integration
+    name: Server integration (${{ matrix.shard }}/3)
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
     services:
       postgres:
         image: postgres:16-alpine
@@ -119,11 +154,23 @@ jobs:
         env:
           DATABASE_URL: postgres://fidy_runtime:fidy_runtime@localhost:5432/fidy
           MIGRATION_DATABASE_URL: postgres://fidy:fidy@localhost:5432/fidy
+          SERVER_TEST_SHARD: ${{ matrix.shard }}/3
           WHATSAPP_BUSINESS_PORTFOLIO_ID: portfolio-test
         run: bun run verify -- --group server
+      - name: Preserve server coverage and test evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: server-coverage-${{ matrix.shard }}
+          path: |
+            apps/server/coverage/coverage-final.json
+            apps/server/reports/server-tests.xml
+          if-no-files-found: warn
+          retention-days: 7
 
   quality:
     name: Quality thresholds
+    needs: server
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -146,8 +193,14 @@ jobs:
         env:
           PGPASSWORD: fidy
         run: psql -h localhost -U fidy -d fidy -v ON_ERROR_STOP=1 -f apps/server/tools/local-postgres-init.sql
-      - name: CRAP threshold validation
+      - name: Download server shard coverage
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+        with:
+          pattern: server-coverage-*
+          path: server-coverage
+      - name: Aggregate coverage and quality thresholds
         env:
+          SERVER_COVERAGE_INPUT: ../../server-coverage
           DATABASE_URL: postgres://fidy_runtime:fidy_runtime@localhost:5432/fidy
           MIGRATION_DATABASE_URL: postgres://fidy:fidy@localhost:5432/fidy
           WHATSAPP_BUSINESS_PORTFOLIO_ID: portfolio-test
@@ -239,30 +292,3 @@ jobs:
             echo "$failed" >&2
             exit 1
           fi
-
-  preview-artifact:
-    name: Preview Artifact
-    needs: required-checks
-    if: >-
-      ${{ needs.required-checks.result == 'success' &&
-          github.event.pull_request.head.repo.full_name == github.repository }}
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          ref: ${{ github.event.pull_request.head.sha }}
-          persist-credentials: false
-      - uses: ./.github/actions/bun-install
-      - name: Build credential-free static preview artifact
-        env:
-          PREVIEW_GIT_SHA: ${{ github.event.pull_request.head.sha }}
-        run: bun run --cwd apps/web build:preview
-      - name: Publish static artifact for trusted validation
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: fidy-web-preview-${{ github.event.pull_request.head.sha }}
-          path: apps/web/preview.tar
-          if-no-files-found: error
-          retention-days: 1

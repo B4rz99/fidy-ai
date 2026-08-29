@@ -419,33 +419,47 @@ const removeProbeFiles = async (probe: Probe): Promise<void> => {
 const missingFrom = (report: string, expected: readonly string[]): readonly string[] =>
   expected.filter((entry) => !report.includes(entry));
 
-const assertProbe = (probe: Probe): void => {
+const assertProbeBatch = (batch: readonly Probe[], expectation: Expectation["kind"]): void => {
   const { exitCode, report } = runGraph();
-  if (probe.expect.kind === "allowed") {
+  const names = batch.map(({ name }) => name).join(" | ");
+  if (expectation === "allowed") {
     if (!Option.contains(exitCode, 0)) {
-      throw new Error(`${probe.name}\nThe graph rejected an allowed import.\n${report}`);
+      throw new Error(`${names}\nThe graph rejected an allowed probe batch.\n${report}`);
     }
     return;
   }
-  const missing = missingFrom(report, probe.expect.mustContain);
   if (Option.contains(exitCode, 0)) {
-    throw new Error(`${probe.name}\nThe graph passed despite the expected violation.\n${report}`);
+    throw new Error(`${names}\nThe graph passed despite the rejected probe batch.\n${report}`);
   }
-  if (missing.length > 0) {
-    throw new Error(
-      `${probe.name}\nThe graph failed for another reason. Missing: ${missing.join(" | ")}\n${report}`
-    );
+  for (const probe of batch) {
+    if (probe.expect.kind !== "rejected") continue;
+    const missing = missingFrom(report, probe.expect.mustContain);
+    if (missing.length > 0) {
+      throw new Error(
+        `${probe.name}\nThe graph failed for another reason. Missing: ${missing.join(" | ")}\n${report}`
+      );
+    }
   }
 };
 
-for (const probe of probes) {
+const writeProbeBatch = (batch: readonly Probe[]): Promise<void> =>
+  Promise.all(
+    batch.flatMap((probe) =>
+      probe.files.map((file) => Bun.write(`${webRoot}/${file.path}`, file.source))
+    )
+  ).then(() => undefined);
+
+for (const expectation of ["allowed", "rejected"] as const) {
+  const batch = probes.filter((probe) => probe.expect.kind === expectation);
   try {
-    await Promise.all(probe.files.map((file) => Bun.write(`${webRoot}/${file.path}`, file.source)));
-    assertProbe(probe);
+    await writeProbeBatch(batch);
+    assertProbeBatch(batch, expectation);
   } finally {
-    await removeProbeFiles(probe);
+    await Promise.all(batch.map(removeProbeFiles));
   }
-  process.stdout.write(`ok  ${probe.name}\n`);
+  for (const probe of batch) process.stdout.write(`ok  ${probe.name}\n`);
 }
 
-process.stdout.write(`\nall ${probes.length} web dependency guard probes passed\n`);
+process.stdout.write(
+  `\nall ${probes.length} web dependency guard probes passed in 2 graph traversals\n`
+);

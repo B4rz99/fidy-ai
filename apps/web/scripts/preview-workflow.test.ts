@@ -3,18 +3,66 @@ import { describe, expect, it } from "vitest";
 const repositoryRoot = `${process.cwd()}/../..`;
 const checksWorkflow = await Bun.file(`${repositoryRoot}/.github/workflows/ci.yml`).text();
 const previewWorkflow = await Bun.file(`${repositoryRoot}/.github/workflows/preview.yml`).text();
+const bunInstallAction = await Bun.file(
+  `${repositoryRoot}/.github/actions/bun-install/action.yml`
+).text();
 
 describe("pull-request preview workflow policy", () => {
-  it("builds the artifact without Secrets only after required checks for same-repository pull requests", () => {
-    const previewJob = checksWorkflow.slice(checksWorkflow.indexOf("preview-artifact:"));
+  it("builds the credential-free artifact alongside required checks for same-repository pull requests", () => {
+    const buildsJob = checksWorkflow.slice(
+      checksWorkflow.indexOf("  builds:"),
+      checksWorkflow.indexOf("  unit:")
+    );
 
-    expect(previewJob).toContain("needs: required-checks");
-    expect(previewJob).toContain(
+    expect(buildsJob).toContain(
       "github.event.pull_request.head.repo.full_name == github.repository"
     );
-    expect(previewJob).not.toContain("CLOUDFLARE_API_TOKEN");
-    expect(previewJob).toContain("persist-credentials: false");
-    expect(previewJob).toContain("PREVIEW_GIT_SHA: ${{ github.event.pull_request.head.sha }}");
+    expect(buildsJob).not.toContain("CLOUDFLARE_API_TOKEN");
+    expect(buildsJob).toContain("persist-credentials: false");
+    expect(buildsJob).toContain("PREVIEW_GIT_SHA: ${{ github.event.pull_request.head.sha }}");
+    const exactSourceBuild = buildsJob.slice(
+      buildsJob.indexOf("Check out the exact preview source without credentials")
+    );
+    expect(exactSourceBuild).toContain("uses: ./.github/actions/bun-install");
+    expect(exactSourceBuild.indexOf("uses: ./.github/actions/bun-install")).toBeLessThan(
+      exactSourceBuild.indexOf("bun run --cwd apps/web build:preview")
+    );
+    expect(checksWorkflow).not.toContain("preview-artifact:");
+  });
+
+  it("shards server validation and aggregates its coverage once", () => {
+    const serverJob = checksWorkflow.slice(
+      checksWorkflow.indexOf("  server:"),
+      checksWorkflow.indexOf("  quality:")
+    );
+    const qualityJob = checksWorkflow.slice(
+      checksWorkflow.indexOf("  quality:"),
+      checksWorkflow.indexOf("  production-image:")
+    );
+
+    expect(serverJob).toContain("matrix:");
+    expect(serverJob).toContain("shard: [1, 2, 3]");
+    expect(serverJob).toContain("SERVER_TEST_SHARD");
+    expect(serverJob).toContain("server-coverage-${{ matrix.shard }}");
+    expect(qualityJob).toContain("needs: server");
+    expect(qualityJob).toContain("actions/download-artifact@");
+    expect(qualityJob).toContain("services:");
+    expect(qualityJob).toContain("Create restricted runtime role");
+    expect(qualityJob).toContain("DATABASE_URL:");
+    expect(qualityJob).toContain("bun run verify -- --group quality");
+  });
+
+  it("reuses browser downloads without restoring stale dependency caches", () => {
+    const browserJob = checksWorkflow.slice(
+      checksWorkflow.indexOf("  browser:"),
+      checksWorkflow.indexOf("  server:")
+    );
+
+    expect(browserJob).toContain("~/.cache/ms-playwright");
+    expect(browserJob.indexOf("actions/cache@")).toBeLessThan(
+      browserJob.indexOf("playwright install --with-deps chromium")
+    );
+    expect(bunInstallAction).not.toContain("restore-keys:");
   });
 
   it("deploys from a trusted workflow only after independently checking identity and artifact policy", () => {

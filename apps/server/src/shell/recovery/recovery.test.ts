@@ -296,14 +296,15 @@ layer(RecoveryHarness, { excludeTestServices: true, timeout: "30 seconds" })(
       Effect.gen(function* () {
         yield* prepare(userId, recoveryCode);
         const pairing = yield* startPairing("owner-expiry-recheck");
-        const attemptedAt = yield* DateTime.now;
+        const now = yield* DateTime.now;
+        const attemptedAt = DateTime.subtract(now, { seconds: 2 });
+        const expiredAt = DateTime.subtract(now, { seconds: 1 });
         const sql = yield* MigrationSqlClient;
         yield* sql`
           UPDATE browser_login_pairings
-          SET expires_at = clock_timestamp() + interval '100 milliseconds'
+          SET expires_at = ${expiredAt}
           WHERE id = ${pairing.pairingId}
         `;
-        yield* sql`SELECT pg_sleep(0.25)`;
 
         const approval = yield* withUserTransaction(
           userId,
@@ -715,7 +716,7 @@ layer(RecoveryHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         );
         const sql = yield* MigrationSqlClient;
         yield* sql`
-          UPDATE browser_login_pairings SET last_accepted_poll_at = now() - interval '5 seconds'
+          UPDATE browser_login_pairings SET last_accepted_poll_at = now() - interval '10 seconds'
           WHERE id = ${sessionPairing.pairingId}
         `;
         const session = yield* redeem(sessionPairing);
@@ -924,7 +925,7 @@ layer(RecoveryHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           const pairing = yield* startPairing("rollback-rotation");
           expect((yield* support(pairing.publicCode, recoveryCode)).status).toBe(200);
           yield* sql`
-            UPDATE browser_login_pairings SET last_accepted_poll_at = now() - interval '5 seconds'
+            UPDATE browser_login_pairings SET last_accepted_poll_at = now() - interval '10 seconds'
             WHERE id = ${pairing.pairingId}
           `;
           const redeemed = yield* redeem(pairing);
@@ -1062,7 +1063,7 @@ layer(RecoveryHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           ).toEqual([{ lifecycle: "pending_approval", userId: null }]);
 
           yield* sql`
-          UPDATE browser_login_pairings SET last_accepted_poll_at = now() - interval '5 seconds'
+          UPDATE browser_login_pairings SET last_accepted_poll_at = now() - interval '10 seconds'
           WHERE id = ${pairing.pairingId}
         `;
           const redeemed = yield* redeem(pairing);
@@ -1102,9 +1103,9 @@ layer(RecoveryHarness, { excludeTestServices: true, timeout: "30 seconds" })(
             `
           ).toEqual(beforeStaleRotation);
           yield* sql`
-            UPDATE web_sessions SET paired_at = now(),
-              fresh_until = now() + interval '10 minutes',
-              hard_expires_at = now() + interval '90 days'
+            UPDATE web_sessions SET paired_at = now() - interval '1 second',
+              fresh_until = now() - interval '1 second' + interval '10 minutes',
+              hard_expires_at = now() - interval '1 second' + interval '90 days'
             WHERE user_id = ${userId}
           `;
 

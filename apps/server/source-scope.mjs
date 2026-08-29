@@ -1,7 +1,7 @@
 // The set of behavioural source files the quality gates measure, shared by the
 // total-coverage threshold (vitest.config.ts), the core-only run
-// (vitest.core.config.ts), the CRAP coverage run (vitest.crap.config.ts), and
-// the CRAP analyzer (tools/crap/run.mjs) so they never drift.
+// (vitest.core.config.ts), the sharded CI run (vitest.ci.config.ts), and the
+// CRAP analyzer (tools/crap/run.mjs) so they never drift.
 //
 // The scope is split along the tree boundary (ARCHITECTURE.md §1) so the
 // core-only run measures core alone while the full run measures both. Note

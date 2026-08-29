@@ -61,15 +61,15 @@ not reached Production. Delete it after the removal reaches trunk.
 
 ## Repository verdict
 
-`bun run verify` is the mandatory repository-owned verdict. It performs the clean TypeScript
-project-reference build, generated-contract checks, dependency and architecture enforcement,
-production builds, browser bundle checks, tests, mutation/quality gates, and the production-image
+`bun run verify` is the mandatory repository-owned pull-request verdict. It performs the clean
+TypeScript project-reference build, generated-contract checks, dependency and architecture
+enforcement, production builds, browser bundle checks, tests, quality gates, and the production-image
 check when Docker is available. Database-backed server, observability, acceptance, and CRAP tests
 join the same command when both `DATABASE_URL` and `MIGRATION_DATABASE_URL` are provided. CI provides
-those values. Pull-request CI invokes selected groups in parallel; mutation testing is intentionally
-excluded from the pull-request gate and runs in its separate nightly workflow. The ungrouped command
-remains the complete local verdict. Provider-hosted secret, SAST, and SCA scanners remain required
-sibling jobs because a local command cannot orchestrate them meaningfully.
+those values. Mutation testing is CI-owned: the pull-request gate excludes it, the nightly workflow
+runs it explicitly, and the ungrouped local command does not select it. Provider-hosted secret, SAST,
+and SCA scanners remain required sibling jobs because a local command cannot orchestrate them
+meaningfully.
 
 The project-reference build proves that the web compiles against the same-revision browser-safe
 server declaration graph. OpenAPI comparison proves selected wire-shape compatibility. Neither can

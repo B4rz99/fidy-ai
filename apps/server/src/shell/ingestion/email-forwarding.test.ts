@@ -1,3 +1,4 @@
+import { UnknownJsonString } from "~/schema-compatibility";
 import { expect, layer } from "@effect/vitest";
 import { Webhook } from "svix";
 import {
@@ -54,7 +55,7 @@ import {
 } from "./resend-receiving-client";
 
 const webhookSecret = testResendWebhookSecret;
-const encodeJson = Schema.encodeSync(Schema.UnknownFromJsonString);
+const encodeJson = Schema.encodeSync(UnknownJsonString);
 
 const getTestRow = <Result extends Schema.Constraint>(
   sql: SqlClient.SqlClient,

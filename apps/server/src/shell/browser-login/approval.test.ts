@@ -1,3 +1,4 @@
+import { UnknownJsonString } from "~/schema-compatibility";
 import assert from "node:assert/strict";
 import { expect, layer } from "@effect/vitest";
 import {
@@ -254,7 +255,7 @@ layer(ApprovalHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         });
         const decision = yield* confirmation.decide({ binding, input });
         assert.equal(decision._tag, "RequireConfirmation");
-        const retained = yield* Schema.encodeEffect(Schema.UnknownFromJsonString)({
+        const retained = yield* Schema.encodeEffect(UnknownJsonString)({
           input,
           challenge: decision.failure.challenge,
           toolSchema: binding.wireJsonSchema,

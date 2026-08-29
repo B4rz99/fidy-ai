@@ -1,7 +1,8 @@
+import { UnknownJsonString } from "~/schema-compatibility";
 import { Schema } from "effect";
 
 const makeOpenAiResponse = (output: ReadonlyArray<unknown>): string =>
-  Schema.encodeSync(Schema.UnknownFromJsonString)({
+  Schema.encodeSync(UnknownJsonString)({
     id: "resp_test",
     object: "response",
     created_at: 0,

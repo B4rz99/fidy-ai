@@ -1,3 +1,4 @@
+import { jsonStringSchema } from "~/schema-compatibility";
 import { OpenAiClient, OpenAiLanguageModel, OpenAiSchema } from "@effect/ai-openai";
 import * as Generated from "@effect/ai-openai/Generated";
 import {
@@ -546,9 +547,7 @@ const countStructuredInputTokens = (
 ): Effect.Effect<number, HostedInferenceError> =>
   requestInputTokenCount(client, request).pipe(
     Effect.flatMap(readBoundedResponseText),
-    Effect.flatMap(
-      Schema.decodeUnknownEffect(Schema.fromJsonString(Generated.TokenCountsResource))
-    ),
+    Effect.flatMap(Schema.decodeUnknownEffect(jsonStringSchema(Generated.TokenCountsResource))),
     Effect.map(({ input_tokens }) => input_tokens),
     Effect.mapError((error) =>
       error instanceof HostedInferenceError
@@ -564,7 +563,7 @@ const readStructuredResponse = (
 ): Effect.Effect<OpenAiSchema.Response, HostedInferenceError> =>
   readBoundedResponseText(response).pipe(
     Effect.flatMap((body) =>
-      Schema.decodeEffect(Schema.fromJsonString(OpenAiSchema.Response))(body).pipe(
+      Schema.decodeEffect(jsonStringSchema(OpenAiSchema.Response))(body).pipe(
         Effect.mapError(() =>
           invalidProviderOutput("Hosted structured provider response was invalid")
         )
@@ -612,7 +611,7 @@ const executeStructuredRequest = function <Output>(
       Effect.mapError(countFailure),
       Effect.flatMap(readStructuredResponse),
       Effect.flatMap((response) =>
-        Schema.decodeEffect(Schema.fromJsonString(prepared.codec))(structuredText(response)).pipe(
+        Schema.decodeEffect(jsonStringSchema(prepared.codec))(structuredText(response)).pipe(
           Effect.mapError(() => invalidProviderOutput("Hosted structured output was malformed"))
         )
       ),

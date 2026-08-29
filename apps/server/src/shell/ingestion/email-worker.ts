@@ -1,3 +1,4 @@
+import { UnknownJsonString } from "~/schema-compatibility";
 import { createHash, randomUUID } from "node:crypto";
 import { Data, DateTime, Effect, Option, Result, Schema } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
@@ -53,7 +54,7 @@ const encodeReceivedEmailContent = Effect.fn("encodeReceivedEmailContent")(funct
   content: ReceivedEmailContentType
 ) {
   const encoded = yield* Schema.encodeEffect(ReceivedEmailContent)(content);
-  return yield* Schema.encodeEffect(Schema.UnknownFromJsonString)(encoded);
+  return yield* Schema.encodeEffect(UnknownJsonString)(encoded);
 });
 
 const candidateContent = (content: ReceivedEmailContentType): string =>

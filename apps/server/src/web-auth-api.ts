@@ -1,3 +1,4 @@
+import { SchemaSerializableError } from "./schema-compatibility";
 import { Schema } from "effect";
 import {
   HttpApi,
@@ -28,12 +29,12 @@ const BrowserLoginUnavailableError = Schema.Struct({
 });
 
 /** Documented 429 shape; the handler adds Retry-After on its raw encoded response. */
-export class BrowserLoginRateLimitedApi extends Schema.ErrorClass<BrowserLoginRateLimitedApi>(
+export class BrowserLoginRateLimitedApi extends SchemaSerializableError<BrowserLoginRateLimitedApi>(
   "BrowserLoginRateLimitedApi"
 )({ error: BrowserLoginUnavailableError }, { httpApiStatus: 429 }) {}
 
 /** Capacity exhaustion intentionally shares the generic public message. */
-export class BrowserLoginUnavailableApi extends Schema.ErrorClass<BrowserLoginUnavailableApi>(
+export class BrowserLoginUnavailableApi extends SchemaSerializableError<BrowserLoginUnavailableApi>(
   "BrowserLoginUnavailableApi"
 )({ error: BrowserLoginUnavailableError }, { httpApiStatus: 503 }) {}
 
@@ -51,12 +52,12 @@ const BrowserLoginPairingInvalidError = Schema.Struct({
 });
 
 /** One non-enumerating public refusal for every invalid pairing proof and terminal state. */
-export class BrowserLoginPairingInvalidApi extends Schema.ErrorClass<BrowserLoginPairingInvalidApi>(
+export class BrowserLoginPairingInvalidApi extends SchemaSerializableError<BrowserLoginPairingInvalidApi>(
   "BrowserLoginPairingInvalidApi"
 )({ error: BrowserLoginPairingInvalidError }, { httpApiStatus: 400 }) {}
 
 /** Polling cadence refusal; the global response adapter derives Retry-After from this body. */
-export class BrowserLoginPollingRateLimitedApi extends Schema.ErrorClass<BrowserLoginPollingRateLimitedApi>(
+export class BrowserLoginPollingRateLimitedApi extends SchemaSerializableError<BrowserLoginPollingRateLimitedApi>(
   "BrowserLoginPollingRateLimitedApi"
 )(
   {
@@ -140,7 +141,7 @@ export const CreatedVerifiedOnboarding = Schema.Struct({
   backupRecoveryCode: Schema.RedactedFromValue(BackupRecoveryCode),
 }).annotate({ identifier: "CreatedVerifiedOnboarding" });
 
-export class EmailVerificationInvalidApi extends Schema.ErrorClass<EmailVerificationInvalidApi>(
+export class EmailVerificationInvalidApi extends SchemaSerializableError<EmailVerificationInvalidApi>(
   "EmailVerificationInvalidApi"
 )(
   {
@@ -194,27 +195,27 @@ const emailReplacementInvalidFields = {
 };
 
 /** Generic browser response for an invalid or unavailable replacement proof. */
-export class EmailReplacementInvalidApi extends Schema.ErrorClass<EmailReplacementInvalidApi>(
+export class EmailReplacementInvalidApi extends SchemaSerializableError<EmailReplacementInvalidApi>(
   "EmailReplacementInvalidApi"
 )(emailReplacementInvalidFields, { httpApiStatus: 400 }) {}
 
 /** Browser response when replacement completion does not come from the first-party origin. */
-export class EmailReplacementOriginRejectedApi extends Schema.ErrorClass<EmailReplacementOriginRejectedApi>(
+export class EmailReplacementOriginRejectedApi extends SchemaSerializableError<EmailReplacementOriginRejectedApi>(
   "EmailReplacementOriginRejectedApi"
 )(emailReplacementInvalidFields, { httpApiStatus: 403 }) {}
 
 /** Browser response when the replacement-completion body exceeds its fixed bound. */
-export class EmailReplacementPayloadTooLargeApi extends Schema.ErrorClass<EmailReplacementPayloadTooLargeApi>(
+export class EmailReplacementPayloadTooLargeApi extends SchemaSerializableError<EmailReplacementPayloadTooLargeApi>(
   "EmailReplacementPayloadTooLargeApi"
 )(emailReplacementInvalidFields, { httpApiStatus: 413 }) {}
 
 /** Browser response when replacement completion is not encoded as JSON. */
-export class EmailReplacementUnsupportedMediaTypeApi extends Schema.ErrorClass<EmailReplacementUnsupportedMediaTypeApi>(
+export class EmailReplacementUnsupportedMediaTypeApi extends SchemaSerializableError<EmailReplacementUnsupportedMediaTypeApi>(
   "EmailReplacementUnsupportedMediaTypeApi"
 )(emailReplacementInvalidFields, { httpApiStatus: 415 }) {}
 
 /** Browser response requiring the User to establish fresh WebSession authority again. */
-export class EmailReplacementFreshPairingRequiredApi extends Schema.ErrorClass<EmailReplacementFreshPairingRequiredApi>(
+export class EmailReplacementFreshPairingRequiredApi extends SchemaSerializableError<EmailReplacementFreshPairingRequiredApi>(
   "EmailReplacementFreshPairingRequiredApi"
 )(
   {
@@ -297,23 +298,23 @@ export const ApprovedBrowserPairingEmailAuthentication = Schema.Struct({
 }).annotate({ identifier: "ApprovedBrowserPairingEmailAuthentication" });
 
 /** Generic malformed, mismatched, expired, or exhausted email-authentication failure. */
-export class BrowserPairingEmailAuthenticationInvalidApi extends Schema.ErrorClass<BrowserPairingEmailAuthenticationInvalidApi>(
+export class BrowserPairingEmailAuthenticationInvalidApi extends SchemaSerializableError<BrowserPairingEmailAuthenticationInvalidApi>(
   "BrowserPairingEmailAuthenticationInvalidApi"
 )(BrowserPairingEmailAuthenticationInvalidFields, { httpApiStatus: 400 }) {}
 /** Exact-origin rejection projected through the same non-enumerating error body. */
-export class BrowserPairingEmailAuthenticationOriginRejectedApi extends Schema.ErrorClass<BrowserPairingEmailAuthenticationOriginRejectedApi>(
+export class BrowserPairingEmailAuthenticationOriginRejectedApi extends SchemaSerializableError<BrowserPairingEmailAuthenticationOriginRejectedApi>(
   "BrowserPairingEmailAuthenticationOriginRejectedApi"
 )(BrowserPairingEmailAuthenticationInvalidFields, { httpApiStatus: 403 }) {}
 /** Bounded-body rejection projected through the same non-enumerating error body. */
-export class BrowserPairingEmailAuthenticationPayloadTooLargeApi extends Schema.ErrorClass<BrowserPairingEmailAuthenticationPayloadTooLargeApi>(
+export class BrowserPairingEmailAuthenticationPayloadTooLargeApi extends SchemaSerializableError<BrowserPairingEmailAuthenticationPayloadTooLargeApi>(
   "BrowserPairingEmailAuthenticationPayloadTooLargeApi"
 )(BrowserPairingEmailAuthenticationInvalidFields, { httpApiStatus: 413 }) {}
 /** Non-JSON request rejection projected through the same non-enumerating error body. */
-export class BrowserPairingEmailAuthenticationUnsupportedMediaTypeApi extends Schema.ErrorClass<BrowserPairingEmailAuthenticationUnsupportedMediaTypeApi>(
+export class BrowserPairingEmailAuthenticationUnsupportedMediaTypeApi extends SchemaSerializableError<BrowserPairingEmailAuthenticationUnsupportedMediaTypeApi>(
   "BrowserPairingEmailAuthenticationUnsupportedMediaTypeApi"
 )(BrowserPairingEmailAuthenticationInvalidFields, { httpApiStatus: 415 }) {}
 /** Local concurrency rejection projected through the same non-enumerating error body. */
-export class BrowserPairingEmailAuthenticationUnavailableApi extends Schema.ErrorClass<BrowserPairingEmailAuthenticationUnavailableApi>(
+export class BrowserPairingEmailAuthenticationUnavailableApi extends SchemaSerializableError<BrowserPairingEmailAuthenticationUnavailableApi>(
   "BrowserPairingEmailAuthenticationUnavailableApi"
 )(BrowserPairingEmailAuthenticationInvalidFields, { httpApiStatus: 503 }) {}
 

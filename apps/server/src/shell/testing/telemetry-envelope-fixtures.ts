@@ -1,3 +1,4 @@
+import { UnknownJsonString } from "~/schema-compatibility";
 import { Option, Schema } from "effect";
 import { ProjectedErrorEvent, ProjectedTransaction } from "~/shell/observability/projectors";
 
@@ -13,8 +14,8 @@ export const decodeEnvelopeItems = (bytes: Uint8Array): ReadonlyArray<DecodedEnv
   const items: Array<DecodedEnvelopeItem> = [];
   for (let index = 1; index + 1 < lines.length; index += 2) {
     items.push({
-      header: Schema.decodeSync(Schema.UnknownFromJsonString)(lines[index] ?? "null"),
-      payload: Schema.decodeSync(Schema.UnknownFromJsonString)(lines[index + 1] ?? "null"),
+      header: Schema.decodeSync(UnknownJsonString)(lines[index] ?? "null"),
+      payload: Schema.decodeSync(UnknownJsonString)(lines[index + 1] ?? "null"),
     });
   }
   return items;

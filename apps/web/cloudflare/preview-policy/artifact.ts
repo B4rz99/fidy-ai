@@ -1,4 +1,5 @@
 #!/usr/bin/env bun
+import { jsonStringSchema } from "../../src/schema-compatibility";
 
 import { lstat, mkdir, mkdtemp, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { basename, dirname, extname, join } from "node:path";
@@ -243,7 +244,7 @@ const validatedPath = (entry: TarEntry, files: ReadonlyMap<string, Uint8Array>):
 };
 
 const looksLikeSourceMap = (contents: Uint8Array): boolean =>
-  Option.isSome(Schema.decodeOption(Schema.fromJsonString(SourceMap))(decoder.decode(contents)));
+  Option.isSome(Schema.decodeOption(jsonStringSchema(SourceMap))(decoder.decode(contents)));
 
 const validateContents = (path: string, contents: Uint8Array): void => {
   if (FORBIDDEN_CONTENT_STRINGS.some((marker) => includesAsciiIgnoringCase(contents, marker))) {

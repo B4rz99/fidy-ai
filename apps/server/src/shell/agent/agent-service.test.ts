@@ -1,3 +1,4 @@
+import { UnknownJsonString } from "~/schema-compatibility";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { expect, layer } from "@effect/vitest";
@@ -2216,7 +2217,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       );
 
       expect(approved.text).toBe("Listo, completé la operación solicitada.");
-      const retained = yield* Schema.encodeEffect(Schema.UnknownFromJsonString)(
+      const retained = yield* Schema.encodeEffect(UnknownJsonString)(
         yield* selectTranscriptEntries(defaultUserId)
       );
       expect(retained).toContain("BCDF-GHJK");
@@ -2275,7 +2276,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
         "verified-whatsapp"
       );
       expect(listed.text).toBe("Listé los PAT activos.");
-      const listingTranscript = yield* Schema.encodeEffect(Schema.UnknownFromJsonString)(
+      const listingTranscript = yield* Schema.encodeEffect(UnknownJsonString)(
         yield* selectTranscriptEntries(defaultUserId)
       );
       expect(listingTranscript).toContain(issued.data.pat.shortId);
@@ -2822,7 +2823,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       const sessions = yield* sql`
         SELECT count(*)::int AS count FROM hosted_agent_sessions WHERE user_id = ${defaultUserId}
       `;
-      const retained = yield* Schema.encodeEffect(Schema.UnknownFromJsonString)(
+      const retained = yield* Schema.encodeEffect(UnknownJsonString)(
         yield* selectTranscriptEntries(defaultUserId)
       );
       const [secondPrompt] = yield* modelAttemptPrompts("¿Qué dije antes?");
@@ -2922,9 +2923,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
         WHERE user_id IN (${userA}, ${userB})
         ORDER BY user_id
       `;
-      const encodedBTranscript = yield* Schema.encodeEffect(Schema.UnknownFromJsonString)(
-        userBTranscript
-      );
+      const encodedBTranscript = yield* Schema.encodeEffect(UnknownJsonString)(userBTranscript);
       const modelPrompts = yield* readModelPrompts;
 
       expect(reply.text).toContain("Gasto guardado");
@@ -3018,7 +3017,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
         noDelivery
       );
       const transcript = yield* selectTranscriptEntries(defaultUserId);
-      const serialized = yield* Schema.encodeEffect(Schema.UnknownFromJsonString)(transcript);
+      const serialized = yield* Schema.encodeEffect(UnknownJsonString)(transcript);
 
       expect(reply.text).not.toContain("fin_deadbeef_");
       expect(serialized).not.toContain("fin_deadbeef_");
@@ -3057,7 +3056,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
             entry._tag === "CanonicalToolResultEntry" && entry.outcome._tag === "ToolOutputRejected"
         )
       ).toBe(true);
-      const serialized = yield* Schema.encodeEffect(Schema.UnknownFromJsonString)(transcript);
+      const serialized = yield* Schema.encodeEffect(UnknownJsonString)(transcript);
       expect(serialized).not.toContain("fin_deadbeef_");
     })
   );
@@ -3476,7 +3475,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       const transcript = yield* selectTranscriptEntries(defaultUserId);
       const result = transcript.find((entry) => entry._tag === "CanonicalToolResultEntry");
       const BoundedHistory = Schema.Struct({ data: Schema.Array(Schema.Unknown) });
-      const retained = yield* Schema.encodeEffect(Schema.UnknownFromJsonString)(transcript);
+      const retained = yield* Schema.encodeEffect(UnknownJsonString)(transcript);
       const boundedPrompt = (yield* readModelPrompts).find((prompt) =>
         prompt.includes("tool_result_too_large")
       );
@@ -3641,9 +3640,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
         "UserTranscriptEntry",
         "AssistantTranscriptEntry",
       ]);
-      const serializedTranscript = yield* Schema.encodeEffect(Schema.UnknownFromJsonString)(
-        transcript
-      );
+      const serializedTranscript = yield* Schema.encodeEffect(UnknownJsonString)(transcript);
       expect(serializedTranscript).not.toContain("fin_deadbeef_");
     })
   );

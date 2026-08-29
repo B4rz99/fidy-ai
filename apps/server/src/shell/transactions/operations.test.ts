@@ -1,3 +1,4 @@
+import { UnknownJsonString } from "~/schema-compatibility";
 import { expect, layer } from "@effect/vitest";
 import { Effect, Schema } from "effect";
 import { HttpBody, HttpClient } from "effect/unstable/http";
@@ -84,7 +85,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
             }),
           });
           const body = yield* response.json;
-          const encodedBody = yield* Schema.encodeUnknownEffect(Schema.UnknownFromJsonString)(body);
+          const encodedBody = yield* Schema.encodeUnknownEffect(UnknownJsonString)(body);
 
           expect(body).toMatchObject({
             error: { code: "validation_failed" },

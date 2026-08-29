@@ -1,3 +1,4 @@
+import { UnknownJsonString } from "~/schema-compatibility";
 import { Config, Context, Data, DateTime, Effect, Layer, Option, Redacted, Schema } from "effect";
 import type { E164PhoneNumber, WhatsAppBusinessScopedUserId } from "~/core/identity/reference";
 import type { TranscriptText } from "~/core/transcript/model";
@@ -250,7 +251,7 @@ const encodeTextMessage = (
   text: TranscriptText,
   opaqueCallbackData: Option.Option<DisclosureDeliveryCorrelationToken>
 ): Effect.Effect<string> =>
-  Schema.encodeEffect(Schema.UnknownFromJsonString)({
+  Schema.encodeEffect(UnknownJsonString)({
     messaging_product: "whatsapp",
     recipient_type: "individual",
     ...address,

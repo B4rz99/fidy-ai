@@ -1,10 +1,11 @@
+import { SchemaSerializableError } from "~/schema-compatibility";
 import { Schema } from "effect";
 import type { MemoryCapacityExceeded, MemoryNotFound } from "~/core/memory/rules";
 import { NotFound } from "~/shell/_shared/errors";
 import { NextOperations } from "~/shell/_shared/response";
 
 /** Declared content-free failure when a Memory write would exceed aggregate capacity. */
-export class MemoryCapacityExceededApi extends Schema.ErrorClass<MemoryCapacityExceededApi>(
+export class MemoryCapacityExceededApi extends SchemaSerializableError<MemoryCapacityExceededApi>(
   "MemoryCapacityExceededApi"
 )(
   {

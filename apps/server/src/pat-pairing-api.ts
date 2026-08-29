@@ -1,3 +1,4 @@
+import { SchemaSerializableError } from "./schema-compatibility";
 import { Schema } from "effect";
 import { HttpApi, HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi";
 import {
@@ -16,10 +17,10 @@ const UnavailableError = Schema.Struct({
   message: Schema.Literal(unavailableError.message),
 });
 
-export class PATPairingRateLimitedApi extends Schema.ErrorClass<PATPairingRateLimitedApi>(
+export class PATPairingRateLimitedApi extends SchemaSerializableError<PATPairingRateLimitedApi>(
   "PATPairingRateLimitedApi"
 )({ error: UnavailableError }, { httpApiStatus: 429 }) {}
-export class PATPairingUnavailableApi extends Schema.ErrorClass<PATPairingUnavailableApi>(
+export class PATPairingUnavailableApi extends SchemaSerializableError<PATPairingUnavailableApi>(
   "PATPairingUnavailableApi"
 )({ error: UnavailableError }, { httpApiStatus: 503 }) {}
 export const patPairingUnavailableBody = { error: unavailableError } as const;
@@ -32,12 +33,12 @@ const InvalidError = Schema.Struct({
   code: Schema.Literal(invalidError.code),
   message: Schema.Literal(invalidError.message),
 });
-export class PATPairingInvalidApi extends Schema.ErrorClass<PATPairingInvalidApi>(
+export class PATPairingInvalidApi extends SchemaSerializableError<PATPairingInvalidApi>(
   "PATPairingInvalidApi"
 )({ error: InvalidError }, { httpApiStatus: 400 }) {}
 export const patPairingInvalidBody = { error: invalidError } as const;
 
-export class PATPairingPollingRateLimitedApi extends Schema.ErrorClass<PATPairingPollingRateLimitedApi>(
+export class PATPairingPollingRateLimitedApi extends SchemaSerializableError<PATPairingPollingRateLimitedApi>(
   "PATPairingPollingRateLimitedApi"
 )(
   {

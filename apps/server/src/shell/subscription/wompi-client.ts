@@ -1,3 +1,4 @@
+import { UnknownJsonString, jsonStringSchema } from "~/schema-compatibility";
 import {
   Config,
   Context,
@@ -51,7 +52,7 @@ const AcceptanceClaims = Schema.Struct({
   permalink: Schema.URLFromString,
   file_hash: Schema.String.check(Schema.isPattern(/^[0-9a-f]{32,128}$/u)),
 });
-const decodeAcceptanceClaims = Schema.decodeUnknownResult(Schema.fromJsonString(AcceptanceClaims));
+const decodeAcceptanceClaims = Schema.decodeUnknownResult(jsonStringSchema(AcceptanceClaims));
 const SourceResponse = Schema.Struct({
   data: Schema.Struct({
     id: WompiSourceId,
@@ -68,7 +69,7 @@ const SourceLookupResponse = Schema.Struct({
 const decodeMerchant = Schema.decodeUnknownResult(MerchantResponse);
 const decodeSource = Schema.decodeUnknownResult(SourceResponse);
 const decodeSourceLookup = Schema.decodeUnknownResult(SourceLookupResponse);
-const decodeJson = Schema.decodeUnknownResult(Schema.UnknownFromJsonString);
+const decodeJson = Schema.decodeUnknownResult(UnknownJsonString);
 
 /** Transient Wompi token obtained by the browser; this value must never be persisted or logged. */
 export type WompiCardToken = string;
@@ -170,7 +171,7 @@ const SourceRequest = Schema.Struct({
   acceptance_token: Schema.String,
   accept_personal_auth: Schema.String,
 });
-const encodeSourceRequest = Schema.encodeSync(Schema.fromJsonString(SourceRequest));
+const encodeSourceRequest = Schema.encodeSync(jsonStringSchema(SourceRequest));
 
 const parseSourceResult = (
   body: unknown

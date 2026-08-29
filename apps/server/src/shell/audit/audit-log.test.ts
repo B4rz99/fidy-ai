@@ -1,3 +1,4 @@
+import { UnknownJsonString } from "~/schema-compatibility";
 import { expect, layer } from "@effect/vitest";
 import assert from "node:assert/strict";
 import { Cause, Context, DateTime, Effect, Exit, Layer, Option, Schema } from "effect";
@@ -154,7 +155,7 @@ layer(AuditHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           outcome: "failed",
         });
         expect(DateTime.isUtc(entries[0]?.occurredAt ?? DateTime.makeUnsafe(0))).toBe(true);
-        const serialized = yield* Schema.encodeEffect(Schema.UnknownFromJsonString)(entries);
+        const serialized = yield* Schema.encodeEffect(UnknownJsonString)(entries);
         expect(serialized).not.toContain(canary);
         expect(serialized).not.toContain(defaultPatBearer);
       })

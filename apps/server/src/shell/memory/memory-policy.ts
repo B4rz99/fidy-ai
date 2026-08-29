@@ -1,10 +1,11 @@
+import { jsonStringSchema } from "~/schema-compatibility";
 import { DateTime, Effect, Schema, Struct } from "effect";
 import { Memory } from "~/core/memory/model";
 import { admitMemory } from "~/core/memory/rules";
 import { HostedInference } from "~/shell/agent/hosted-inference";
 
 const MemoryProjection = Memory.mapFields(Struct.pick(["id", "text"]));
-const encodeMemoryProjection = Schema.encodeSync(Schema.fromJsonString(MemoryProjection));
+const encodeMemoryProjection = Schema.encodeSync(jsonStringSchema(MemoryProjection));
 
 /** Encodes recall-ordered `{id,text}` projections as one compact JSON object per LF-delimited line. */
 export const projectMemoryAggregate = (memories: ReadonlyArray<Memory>): string =>

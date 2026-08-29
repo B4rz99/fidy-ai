@@ -1,3 +1,4 @@
+import { UnknownJsonString, jsonStringSchema } from "~/schema-compatibility";
 import { Cause, Context, Effect, Exit, Layer, Option, Schema, type Scope } from "effect";
 import { SqlClient, type SqlError } from "effect/unstable/sql";
 import { PgLive } from "~/shell/db/client";
@@ -236,10 +237,10 @@ const fixture = Effect.scoped(
         Bun.file(serverPackageManifest).text(),
       ])
     );
-    const packageManifest = yield* Schema.decodeEffect(
-      Schema.fromJsonString(WorkspacePackageManifest)
-    )(workspacePackageManifestText);
-    const serverManifest = yield* Schema.decodeEffect(Schema.fromJsonString(ServerPackageManifest))(
+    const packageManifest = yield* Schema.decodeEffect(jsonStringSchema(WorkspacePackageManifest))(
+      workspacePackageManifestText
+    );
+    const serverManifest = yield* Schema.decodeEffect(jsonStringSchema(ServerPackageManifest))(
       serverPackageManifestText
     );
     const recorder = getCompatibilityRecorder();
@@ -329,12 +330,12 @@ const fixture = Effect.scoped(
     ];
     const serialized = envelopes.map((value) => new TextDecoder().decode(value)).join("\n");
     const envelopeHeaders = envelopes.map((value) =>
-      Schema.decodeSync(Schema.UnknownFromJsonString)(
+      Schema.decodeSync(UnknownJsonString)(
         new TextDecoder().decode(value).split("\n")[0] ?? "null"
       )
     );
     const sdkPinned = envelopeHeaders.every((header) =>
-      Schema.encodeUnknownSync(Schema.UnknownFromJsonString)(header).includes(
+      Schema.encodeUnknownSync(UnknownJsonString)(header).includes(
         `"version":"${expectedSentryVersion}"`
       )
     );

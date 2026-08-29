@@ -1,3 +1,4 @@
+import { jsonStringSchema } from "~/schema-compatibility";
 import { Config, Effect, Layer, Option, Schema } from "effect";
 import { HttpRouter, type HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
 import { HttpApiBuilder, HttpApiScalar } from "effect/unstable/httpapi";
@@ -188,7 +189,7 @@ const addRetryAfterHeader: RetryAfterHeader = (httpEffect) =>
     if (response.status !== tooManyRequestsStatus || response.body._tag !== "Uint8Array") {
       return response;
     }
-    const decoded = Schema.decodeOption(Schema.fromJsonString(CanonicalRetryAfterBody))(
+    const decoded = Schema.decodeOption(jsonStringSchema(CanonicalRetryAfterBody))(
       new TextDecoder().decode(response.body.body)
     );
     return Option.match(decoded, {

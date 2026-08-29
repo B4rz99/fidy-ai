@@ -1,3 +1,4 @@
+import { UnknownJsonString } from "~/schema-compatibility";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import { CapturedInterpretationContext } from "~/core/_shared/captured-interpretation-context";
@@ -646,7 +647,7 @@ export const completeForwardedEmailWithReviewInScope = Effect.fn(
     input.evidence._tag === "RawSample"
       ? Option.map(input.evidence.extraction, (value) => value.money)
       : Option.none<Money>();
-  const encodedIssues = yield* Schema.encodeEffect(Schema.UnknownFromJsonString)(input.issues).pipe(
+  const encodedIssues = yield* Schema.encodeEffect(UnknownJsonString)(input.issues).pipe(
     Effect.orDie
   );
   yield* sql`

@@ -1,3 +1,4 @@
+import { UnknownJsonString } from "~/schema-compatibility";
 import { Schema } from "effect";
 import type { SpanDescriptor } from "~/shell/observability/protocol";
 
@@ -24,7 +25,7 @@ export const decodeEnvelopeItems = (bytes: Uint8Array): ReadonlyArray<unknown> =
   const lines = new TextDecoder().decode(bytes).split("\n");
   const items: Array<unknown> = [];
   for (let index = 1; index + 1 < lines.length; index += 2) {
-    items.push(Schema.decodeSync(Schema.UnknownFromJsonString)(lines[index + 1] ?? "null"));
+    items.push(Schema.decodeSync(UnknownJsonString)(lines[index + 1] ?? "null"));
   }
   return items;
 };

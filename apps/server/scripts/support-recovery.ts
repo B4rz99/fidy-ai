@@ -1,3 +1,4 @@
+import { jsonStringSchema } from "../src/schema-compatibility";
 import { BunHttpClient, BunRuntime } from "@effect/platform-bun";
 import { Data, Effect, Option, Schema } from "effect";
 import { HttpBody, HttpClient, HttpClientRequest } from "effect/unstable/http";
@@ -193,7 +194,7 @@ const callSupportRecovery = Effect.fn("SupportRecoveryCli.callTransport")(functi
       message: "La operación devolvió una respuesta no válida.",
     });
   }
-  const decoded = Schema.decodeOption(Schema.fromJsonString(SupportResponse))(
+  const decoded = Schema.decodeOption(jsonStringSchema(SupportResponse))(
     new TextDecoder().decode(bytes.value)
   );
   if (Option.isSome(decoded)) return decoded.value;

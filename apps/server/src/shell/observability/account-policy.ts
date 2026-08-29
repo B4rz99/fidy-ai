@@ -1,3 +1,4 @@
+import { jsonStringSchema } from "~/schema-compatibility";
 import { Option, Schema } from "effect";
 
 /** The bounded storage-region codes returned by Sentry's read-only organization API. */
@@ -262,7 +263,7 @@ export const verifySentryAccount = (input: {
   };
 };
 
-const SentryVerificationReportJson = Schema.fromJsonString(SentryVerificationReport);
+const SentryVerificationReportJson = jsonStringSchema(SentryVerificationReport);
 
 /** Serializes only the closed report schema; account locators and provider payloads cannot enter it. */
 export const renderSentryVerificationReport = (report: SentryVerificationReport): string =>

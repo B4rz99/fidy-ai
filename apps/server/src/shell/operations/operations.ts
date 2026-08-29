@@ -1,3 +1,4 @@
+import { SchemaSerializableError } from "~/schema-compatibility";
 import * as Arr from "effect/Array";
 import { type Effect, Option, Schema } from "effect";
 import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi";
@@ -48,7 +49,7 @@ export type AtomicBatchOutput = Readonly<{ results: NonEmptyMutationResults }>;
  * Actionable failure of one child mutation. The whole batch has rolled back; `failedCallIndex` and
  * `operation` identify the correction target without retaining any request or response body.
  */
-export class AtomicBatchRejected extends Schema.ErrorClass<AtomicBatchRejected>(
+export class AtomicBatchRejected extends SchemaSerializableError<AtomicBatchRejected>(
   "AtomicBatchRejected"
 )(
   {

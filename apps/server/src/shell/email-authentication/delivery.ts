@@ -1,3 +1,4 @@
+import { UnknownJsonString, jsonStringSchema } from "~/schema-compatibility";
 import { Config, Context, Data, Effect, Layer, Option, Redacted, Result, Schema } from "effect";
 import { HttpBody, HttpClient, type HttpClientResponse } from "effect/unstable/http";
 import type {
@@ -78,7 +79,7 @@ const ResendSuccess = Schema.Struct({
   id: Schema.String.check(Schema.isNonEmpty(), Schema.isMaxLength(maximumResendMessageIdLength)),
 });
 const decodeResendSuccess = Schema.decodeUnknownResult(ResendSuccess);
-const decodeJson = Schema.decodeUnknownResult(Schema.UnknownFromJsonString);
+const decodeJson = Schema.decodeUnknownResult(UnknownJsonString);
 
 const decodeBoundedResendResponse = Effect.fn("Resend.decodeBoundedResponse")(function* (
   response: HttpClientResponse.HttpClientResponse
@@ -115,7 +116,7 @@ const ResendRequest = Schema.Struct({
   text: Schema.String,
   html: Schema.String,
 });
-const encodeResendRequest = Schema.encodeSync(Schema.fromJsonString(ResendRequest));
+const encodeResendRequest = Schema.encodeSync(jsonStringSchema(ResendRequest));
 
 const classifyResendResponse = (
   response: HttpClientResponse.HttpClientResponse

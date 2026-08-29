@@ -1,3 +1,4 @@
+import { UnknownJsonString } from "~/schema-compatibility";
 import {
   Config,
   Context,
@@ -120,9 +121,7 @@ const parseJsonResponse = Effect.fn("Resend.parseReceivingResponse")(function* <
   if (Option.isNone(body)) {
     return yield* new ResendReceivingFailed({ reason: "resource-limit" });
   }
-  const json = Schema.decodeResult(Schema.UnknownFromJsonString)(
-    new TextDecoder().decode(body.value)
-  );
+  const json = Schema.decodeResult(UnknownJsonString)(new TextDecoder().decode(body.value));
   if (Result.isFailure(json)) {
     return yield* new ResendReceivingFailed({ reason: "invalid-provider-response" });
   }

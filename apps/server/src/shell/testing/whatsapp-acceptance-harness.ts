@@ -1,3 +1,4 @@
+import { UnknownJsonString } from "~/schema-compatibility";
 import { BunHttpServer, BunServices } from "@effect/platform-bun";
 import {
   Clock,
@@ -262,7 +263,7 @@ const DeterministicLanguageModel = Layer.effectContext(
     const observedCalls = MutableRef.make<ReadonlyArray<WhatsAppAcceptanceModelCall>>([]);
     const model = yield* LanguageModel.make({
       generateText: ({ prompt }) =>
-        Schema.encodeEffect(Schema.UnknownFromJsonString)(prompt).pipe(
+        Schema.encodeEffect(UnknownJsonString)(prompt).pipe(
           Effect.orDie,
           Effect.tap((serializedPrompt) => recordModelCall(observedCalls, serializedPrompt)),
           Effect.map(acceptanceModelReply)
@@ -296,7 +297,7 @@ const makeAcceptanceKapsoFetch = (
     (resource: Parameters<typeof globalThis.fetch>[0], init?: RequestInit) => {
       const nextRequestNumber = MutableRef.updateAndGet(requestNumber, (value) => value + 1);
       const body = Schema.decodeUnknownSync(Schema.Json)(
-        Schema.decodeUnknownSync(Schema.UnknownFromJsonString)(init?.body)
+        Schema.decodeUnknownSync(UnknownJsonString)(init?.body)
       );
       const providerMessageId = WhatsAppProviderMessageId.make(
         `wamid.acceptance-outbound-${nextRequestNumber}`

@@ -1,3 +1,4 @@
+import { UnknownJsonString } from "~/schema-compatibility";
 import { expect, layer } from "@effect/vitest";
 import { Crypto, DateTime, Effect, Option, Ref, Schedule, Schema } from "effect";
 import { HttpBody, HttpClient, HttpClientResponse } from "effect/unstable/http";
@@ -95,7 +96,7 @@ const makeSignedWebhookAt = Effect.fn("Acceptance.makeSignedWhatsAppWebhookAt")(
     onNone: () => ({}),
     onSome: (phoneNumber) => ({ phone_number: phoneNumber.slice(1) }),
   });
-  const encodedBody = yield* Schema.encodeEffect(Schema.UnknownFromJsonString)({
+  const encodedBody = yield* Schema.encodeEffect(UnknownJsonString)({
     message: {
       id: input.providerMessageId,
       timestamp: `${Math.floor(DateTime.toEpochMillis(occurredAt) / 1_000)}`,
@@ -159,7 +160,7 @@ const postSignedLifecycleEvidence = Effect.fn("Acceptance.postSignedDisclosureLi
   }) {
     const occurredAt = yield* DateTime.now;
     const status = input.eventName.replace("whatsapp.message.", "");
-    const encoded = yield* Schema.encodeEffect(Schema.UnknownFromJsonString)({
+    const encoded = yield* Schema.encodeEffect(UnknownJsonString)({
       message: {
         id: input.providerMessageId,
         kapso: {

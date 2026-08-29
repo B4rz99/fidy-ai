@@ -1,3 +1,4 @@
+import { UnknownJsonString } from "~/schema-compatibility";
 import assert from "node:assert/strict";
 import { expect, layer } from "@effect/vitest";
 import {
@@ -1257,7 +1258,7 @@ const fixedFailureProgram = Effect.gen(function* () {
     expect(failed.turns[0]).toMatchObject({ _tag: "Failed", reason });
     const terminal = Option.getOrThrow(Arr.last(failed.entries));
     expect(withoutMetadata(terminal)).toEqual({ _tag: "FailedTurnTranscriptEntry", reason });
-    const serializedTerminal = yield* Schema.encodeEffect(Schema.UnknownFromJsonString)(terminal);
+    const serializedTerminal = yield* Schema.encodeEffect(UnknownJsonString)(terminal);
     expect(serializedTerminal).not.toContain(canary);
     expect(projectTranscriptForModel(failed.entries, 1_000)).toEqual([failed.entries[0]]);
   }
@@ -1462,7 +1463,7 @@ const malformedPersistedEntryProgram = Effect.gen(function* () {
   );
 
   const secret = "persisted-transcript-secret";
-  const malformedEntry = yield* Schema.encodeEffect(Schema.UnknownFromJsonString)({
+  const malformedEntry = yield* Schema.encodeEffect(UnknownJsonString)({
     _tag: "UserTranscriptEntry",
     text: secret,
   });

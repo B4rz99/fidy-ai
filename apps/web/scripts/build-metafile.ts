@@ -1,3 +1,4 @@
+import { jsonStringSchema } from "../src/schema-compatibility";
 import { Predicate, Schema } from "effect";
 
 const BuildImport = Schema.Struct({
@@ -22,7 +23,7 @@ export type BuildMetafile = typeof BuildMetafile.Type;
 export const decodeBuildMetafile = (value: unknown): BuildMetafile => {
   try {
     return Predicate.isString(value)
-      ? Schema.decodeSync(Schema.fromJsonString(BuildMetafile))(value)
+      ? Schema.decodeSync(jsonStringSchema(BuildMetafile))(value)
       : Schema.decodeUnknownSync(BuildMetafile)(value);
   } catch {
     throw new Error("Browser build did not return a module graph");

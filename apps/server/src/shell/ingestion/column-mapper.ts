@@ -1,3 +1,4 @@
+import { jsonStringSchema } from "~/schema-compatibility";
 import { Context, Data, Effect, Layer, Schema } from "effect";
 import { LanguageModel } from "effect/unstable/ai";
 import { StatementColumnMapping, type StatementMappingSample } from "~/core/ingestion/model";
@@ -14,9 +15,9 @@ export type StatementColumnMapperService = Readonly<{
   ) => Effect.Effect<StatementColumnMapping, StatementColumnMappingFailed>;
 }>;
 
-const jsonStringArray = Schema.encodeSync(Schema.fromJsonString(Schema.Array(Schema.String)));
+const jsonStringArray = Schema.encodeSync(jsonStringSchema(Schema.Array(Schema.String)));
 const jsonStringMatrix = Schema.encodeSync(
-  Schema.fromJsonString(Schema.Array(Schema.Array(Schema.String)))
+  jsonStringSchema(Schema.Array(Schema.Array(Schema.String)))
 );
 
 /**

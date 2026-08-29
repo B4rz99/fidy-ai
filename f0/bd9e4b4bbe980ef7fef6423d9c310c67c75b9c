@@ -1,0 +1,23 @@
+.agents/skills/cloudflare/references/argo-smart-routing/api.md
+  s_be0c89494ca11c::t_91d8a85a61b34e 31,93
+.agents/skills/cloudflare/references/bindings/patterns.md
+  s_be0c89494ca11c::t_acd9707f2dcbf1 89,187
+.agents/skills/cloudflare/references/argo-smart-routing/README.md
+  s_be0c89494ca11c::t_745e6a856acbc2 15
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "f0bd9e4b4bbe980ef7fef6423d9c310c67c75b9c",
+  "prompts": {},
+  "sessions": {
+    "s_be0c89494ca11c": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a04ee4-6a6c-7c5d-bf16-57a8108897ab",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

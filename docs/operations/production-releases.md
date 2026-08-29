@@ -21,6 +21,11 @@ Create the GitHub `production` environment without required reviewers. Configure
 | Variable | `PRODUCTION_API_CNAME_TARGET`       | Railway target for the API custom domain  |
 | Variable | `PRODUCTION_API_VERIFICATION_NAME`  | Railway ownership-proof record name       |
 | Variable | `PRODUCTION_API_VERIFICATION_VALUE` | Railway ownership-proof record value      |
+| Variable | `RESEND_INGEST_MX_TARGET`           | Resend Receiving MX target                |
+| Variable | `RESEND_INGEST_DKIM_NAME`           | Resend-provided DKIM record name          |
+| Variable | `RESEND_INGEST_DKIM_VALUE`          | Resend-provided DKIM public value         |
+| Variable | `RESEND_INGEST_SENDING_MX_TARGET`   | Resend sending MAIL FROM MX target        |
+| Variable | `RESEND_INGEST_SPF_VALUE`           | Resend-provided SPF value                 |
 | Variable | `CLOUDFLARE_BOOTSTRAP_REQUIRED`     | `true` only until first Worker deployment |
 
 In Railway, keep `apps/server/railway.json` as the config-as-code path and the repository root as the

@@ -180,7 +180,12 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           const now = yield* DateTime.now;
           const sql = yield* MigrationSqlClient;
           const crypto = yield* Crypto.Crypto;
-          const rejectedBearers = ["V", "W", "X", "Y"].map((value) => value.repeat(43));
+          const rejectedBearers = [
+            "web_auth_unknown_".padEnd(43, "u"),
+            "web_auth_revoked_".padEnd(43, "r"),
+            "web_auth_idle_expired_".padEnd(43, "i"),
+            "web_auth_hard_expired_".padEnd(43, "h"),
+          ];
           const digests = yield* Effect.forEach(rejectedBearers, (bearer) =>
             crypto.digest("SHA-256", new TextEncoder().encode(bearer)).pipe(Effect.orDie)
           );

@@ -54,6 +54,10 @@ export const advisoryLockKey = {
     value: `consent-subject:${userId}`,
     seed: 0,
   }),
+  consentExternalEffect: (userId: UserId): AdvisoryLockKey => ({
+    value: `consent-external-effect:${userId}`,
+    seed: 0,
+  }),
   consentGate: (caller: WhatsAppCallerReference): AdvisoryLockKey => ({
     value: `consent-gate:${caller.businessPortfolioId}:${caller.businessScopedUserId}`,
     seed: 0,
@@ -61,10 +65,9 @@ export const advisoryLockKey = {
   whatsAppAdmission: (userId: string): AdvisoryLockKey => ({ value: userId, seed: 0 }),
 } as const;
 
-const acquireUserTurnLock = Effect.fn("acquireUserTurnLock")(function* (userId: UserId) {
+const acquireSessionLock = Effect.fn("acquireSessionLock")(function* (lockKey: AdvisoryLockKey) {
   const sql = yield* SqlClient.SqlClient;
   const connection = yield* sql.reserve.pipe(Effect.orDie);
-  const lockKey = hostedAttemptLockKey(userId);
   yield* Effect.addFinalizer(() =>
     connection
       .executeRaw("SELECT pg_advisory_unlock(hashtextextended($1, $2))", [
@@ -90,7 +93,23 @@ export const withUserTurnLock = Effect.fn("withUserTurnLock")(function* <A, E, R
   userId: UserId,
   use: Effect.Effect<A, E, R>
 ) {
-  return yield* Effect.scoped(Effect.andThen(acquireUserTurnLock(userId), use));
+  return yield* Effect.scoped(
+    Effect.andThen(acquireSessionLock(hostedAttemptLockKey(userId)), use)
+  );
+});
+
+/**
+ * Linearizes one bounded forwarded-email provider/model call with Consent revocation without
+ * retaining a database transaction. The reserved session is scoped to `use` and always unlocked.
+ */
+export const withConsentExternalEffectLock = Effect.fn("withConsentExternalEffectLock")(function* <
+  A,
+  E,
+  R,
+>(userId: UserId, use: Effect.Effect<A, E, R>) {
+  return yield* Effect.scoped(
+    Effect.andThen(acquireSessionLock(advisoryLockKey.consentExternalEffect(userId)), use)
+  );
 });
 
 /** Acquires one User-owned advisory lock inside the caller's active transaction. */

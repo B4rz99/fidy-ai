@@ -2,6 +2,8 @@ import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema, type Statement } from "effect/unstable/sql";
 import { CategoryId } from "~/core/categories/reference";
 import type { IanaTimeZone } from "~/core/_shared/context";
+import { InterpretationRevision } from "~/core/_shared/interpretation-revision";
+import { ProviderMessageEvidence } from "~/core/_shared/provider-message-evidence";
 import { searchLikePattern } from "~/core/_shared/search";
 import { Currency, Money, type ReadonlyMoney, encodeMoneyAmount } from "~/core/_shared/money";
 import type { MoneyAggregation, SpendingGroupBy } from "~/core/dashboard/model";
@@ -9,10 +11,10 @@ import { UserId } from "~/core/identity/reference";
 import { normalizeCategoryKeyword } from "~/core/categories/rules";
 import { withUserTransaction } from "~/shell/db/user-transaction";
 import { normalizedTransactionSearchSql } from "./search-sql";
+import type { CapturedInterpretationContext } from "~/core/_shared/captured-interpretation-context";
 import {
-  type CapturedInterpretationContext,
   Counterparty,
-  InterpretationRevision,
+  NotificationEmailSourceAttestation,
   SourceAttestation,
   SourceAttestationCommon,
   StatementLineSourceAttestation,
@@ -607,7 +609,7 @@ export const softDeleteTransactionInScope = Effect.fn("softDeleteTransactionInSc
 const SourceAttestationRow = Schema.Struct({
   id: Schema.toEncoded(SourceAttestationCommon.fields.id),
   transactionId: Schema.toEncoded(TransactionId),
-  kind: Schema.Literals(["manual", "statement-line"]),
+  kind: Schema.Literals(["manual", "statement-line", "notification-email"]),
   serviceMarket: SourceAttestationCommon.fields.serviceMarket,
   locale: SourceAttestationCommon.fields.locale,
   timeZone: Schema.toEncoded(SourceAttestationCommon.fields.timeZone),
@@ -619,12 +621,27 @@ const SourceAttestationRow = Schema.Struct({
   ),
   statementRecordNumber: Schema.OptionFromNullOr(Schema.Int),
   statementContentHash: Schema.OptionFromNullOr(Schema.String),
-  sourceFormat: Schema.OptionFromNullOr(StatementLineSourceAttestation.fields.sourceFormat),
+  sourceFormat: Schema.OptionFromNullOr(
+    Schema.Union([
+      StatementLineSourceAttestation.fields.sourceFormat,
+      NotificationEmailSourceAttestation.fields.sourceFormat,
+    ])
+  ),
   extractorRevision: Schema.OptionFromNullOr(InterpretationRevision),
+  receivedEmailId: Schema.OptionFromNullOr(
+    NotificationEmailSourceAttestation.fields.receivedEmailId
+  ),
+  messageChannel: Schema.OptionFromNullOr(ProviderMessageEvidence.fields.channel),
+  messageProvider: Schema.OptionFromNullOr(ProviderMessageEvidence.fields.provider),
+  providerMessageId: Schema.OptionFromNullOr(ProviderMessageEvidence.fields.providerMessageId),
+  messageContentSha256: Schema.OptionFromNullOr(
+    NotificationEmailSourceAttestation.fields.messageContentSha256
+  ),
   createdAt: Schema.DateTimeUtcFromDate,
 });
 
 const decodeSourceAttestation = Schema.decodeUnknownEffect(SourceAttestation);
+
 const sourceAttestationFromRow = (
   source: typeof SourceAttestationRow.Type
 ): Effect.Effect<SourceAttestation, Schema.SchemaError> => {
@@ -636,25 +653,47 @@ const sourceAttestationFromRow = (
     statementContentHash,
     sourceFormat,
     extractorRevision,
+    receivedEmailId,
+    messageChannel,
+    messageProvider,
+    providerMessageId,
+    messageContentSha256,
     ...row
   } = source;
-  return decodeSourceAttestation({
+  const attestationBase = {
     ...row,
-    ...(Option.isNone(sourceChannel) ? {} : { sourceChannel: sourceChannel.value }),
-    ...(Option.isNone(sourceProvider) ? {} : { sourceProvider: sourceProvider.value }),
-    ...(Option.isNone(statementSubmissionId)
-      ? {}
-      : { statementSubmissionId: statementSubmissionId.value }),
-    ...(Option.isNone(statementRecordNumber)
-      ? {}
-      : { statementRecordNumber: statementRecordNumber.value }),
-    ...(Option.isNone(statementContentHash)
-      ? {}
-      : { statementContentHash: statementContentHash.value }),
-    ...(Option.isNone(sourceFormat) ? {} : { sourceFormat: sourceFormat.value }),
-    ...(Option.isNone(extractorRevision) ? {} : { extractorRevision: extractorRevision.value }),
+    ...(Option.isSome(sourceChannel) ? { sourceChannel: sourceChannel.value } : {}),
+    ...(Option.isSome(sourceProvider) ? { sourceProvider: sourceProvider.value } : {}),
     createdAt: DateTime.formatIso(row.createdAt),
-  });
+  };
+  switch (source.kind) {
+    case "manual":
+      return decodeSourceAttestation(attestationBase);
+    case "statement-line":
+      return decodeSourceAttestation({
+        ...attestationBase,
+        statementSubmissionId: Option.getOrThrow(statementSubmissionId),
+        statementRecordNumber: Option.getOrThrow(statementRecordNumber),
+        statementContentHash: Option.getOrThrow(statementContentHash),
+        sourceFormat: Option.getOrThrow(sourceFormat),
+        extractorRevision: Option.getOrThrow(extractorRevision),
+      });
+    case "notification-email":
+      return decodeSourceAttestation({
+        ...attestationBase,
+        receivedEmailId: Option.getOrThrow(receivedEmailId),
+        messageEvidence: Option.getOrThrow(
+          Option.all({
+            channel: messageChannel,
+            provider: messageProvider,
+            providerMessageId,
+          })
+        ),
+        messageContentSha256: Option.getOrThrow(messageContentSha256),
+        sourceFormat: Option.getOrThrow(sourceFormat),
+        extractorRevision: Option.getOrThrow(extractorRevision),
+      });
+  }
 };
 
 const sourceAttestationColumns = `id, transaction_id AS "transactionId", kind,
@@ -664,7 +703,10 @@ const sourceAttestationColumns = `id, transaction_id AS "transactionId", kind,
   statement_submission_id AS "statementSubmissionId",
   statement_record_number AS "statementRecordNumber",
   statement_content_hash AS "statementContentHash", source_format AS "sourceFormat",
-  extractor_revision AS "extractorRevision", created_at AS "createdAt"`;
+  extractor_revision AS "extractorRevision", received_email_id AS "receivedEmailId",
+  message_channel AS "messageChannel", message_provider AS "messageProvider",
+  provider_message_id AS "providerMessageId",
+  message_content_sha256 AS "messageContentSha256", created_at AS "createdAt"`;
 
 /**
  * Records immutable manual provenance for `transactionId`, which must belong to `userId`. The
@@ -751,6 +793,73 @@ export const insertStatementLineSourceAttestationInScope = Effect.fn(
     Effect.flatMap(sourceAttestationFromRow),
     Effect.orDie
   );
+});
+
+/** Facts retained for one Transaction extracted from an authenticated notification email. */
+export type NotificationEmailAttestationInput = Readonly<
+  Pick<
+    NotificationEmailSourceAttestation,
+    | "serviceMarket"
+    | "locale"
+    | "timeZone"
+    | "receivedEmailId"
+    | "messageEvidence"
+    | "messageContentSha256"
+    | "sourceFormat"
+    | "extractorRevision"
+  > & { readonly parserRevision: InterpretationRevision }
+>;
+
+/** Inserts immutable notification-email provenance in the caller-owned User transaction. */
+export const insertNotificationEmailSourceAttestationInScope = Effect.fn(
+  "insertNotificationEmailSourceAttestationInScope"
+)(function* (
+  userId: UserId,
+  transactionId: TransactionId,
+  input: NotificationEmailAttestationInput
+) {
+  const sql = yield* SqlClient.SqlClient;
+  return yield* SqlSchema.findOne({
+    Request: Schema.Struct({
+      userId: UserId,
+      transactionId: TransactionId,
+      serviceMarket: NotificationEmailSourceAttestation.fields.serviceMarket,
+      locale: NotificationEmailSourceAttestation.fields.locale,
+      timeZone: NotificationEmailSourceAttestation.fields.timeZone,
+      receivedEmailId: NotificationEmailSourceAttestation.fields.receivedEmailId,
+      messageChannel: Schema.String,
+      messageProvider: Schema.String,
+      providerMessageId: Schema.String,
+      messageContentSha256: NotificationEmailSourceAttestation.fields.messageContentSha256,
+      sourceFormat: NotificationEmailSourceAttestation.fields.sourceFormat,
+      parserRevision: InterpretationRevision,
+      extractorRevision: InterpretationRevision,
+    }),
+    Result: SourceAttestationRow,
+    execute: (row) => sql`
+      INSERT INTO source_attestations (
+        transaction_id, kind, service_market, locale, time_zone, source_channel,
+        source_provider, interpretation_revision, received_email_id, message_channel,
+        message_provider, provider_message_id, message_content_sha256, source_format,
+        extractor_revision
+      )
+      SELECT transaction.id, 'notification-email', ${row.serviceMarket}, ${row.locale},
+        ${row.timeZone}, 'forwarded-email', 'resend', ${row.parserRevision},
+        ${row.receivedEmailId}, ${row.messageChannel}, ${row.messageProvider},
+        ${row.providerMessageId}, ${row.messageContentSha256}, ${row.sourceFormat},
+        ${row.extractorRevision}
+      FROM transactions transaction
+      WHERE transaction.id = ${row.transactionId} AND transaction.user_id = ${row.userId}
+      RETURNING ${sql.literal(sourceAttestationColumns)}
+    `,
+  })({
+    userId,
+    transactionId,
+    ...input,
+    messageChannel: input.messageEvidence.channel,
+    messageProvider: input.messageEvidence.provider,
+    providerMessageId: input.messageEvidence.providerMessageId,
+  }).pipe(Effect.flatMap(sourceAttestationFromRow), Effect.orDie);
 });
 
 /** Lists retained immutable provenance for one User-owned Transaction, including after deletion. */

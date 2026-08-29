@@ -60,7 +60,7 @@ import { MigrationSqlClient, MigratorLive, PgLive } from "~/shell/db/client";
 import { TelemetryHttpStatus } from "~/shell/observability/protocol";
 import { makeDevelopmentSeedLive } from "~/shell/db/development-seed";
 import { defaultPatBearer } from "./identity-fixtures";
-import { TestPublicNamespace } from "./test-config";
+import { TestPublicNamespace, testResendWebhookSecret } from "./test-config";
 import { HttpLive } from "~/shell/http";
 import { TelemetryDisabled } from "~/shell/observability/disabled";
 import type { Telemetry } from "~/shell/observability/telemetry";
@@ -320,6 +320,8 @@ const AcceptancePublicNamespace = ConfigProvider.layer(
         PUBLIC_API_ORIGIN: "https://127.0.0.1:4174",
         INGEST_EMAIL_DOMAIN: "ingest.fidyapp.com",
         KAPSO_WEBHOOK_SECRET: "test-webhook-secret-32-characters",
+        RESEND_WEBHOOK_SECRET: testResendWebhookSecret,
+        EMAIL_INGEST_RETENTION_DAYS: "90",
         WHATSAPP_BUSINESS_PORTFOLIO_ID: "portfolio-test",
       },
     }),

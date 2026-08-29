@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import { DateTime, Effect, Layer, Option, Result, Schedule, Schema } from "effect";
+import { InterpretationRevision } from "~/core/_shared/interpretation-revision";
 import type {
   InterpretedStatementRow,
   NeedsReviewStatementRow,
@@ -7,7 +8,7 @@ import type {
 } from "~/core/ingestion/model";
 import { interpretStatementRows } from "~/core/ingestion/rules";
 import { NeedsReviewItemId } from "~/core/ingestion/reference";
-import { InterpretationRevision, TransactionExtraction } from "~/core/transactions/model";
+import { TransactionExtraction } from "~/core/transactions/model";
 import { freePatCaller } from "~/shell/_shared/suggested-operations";
 import { withUserTransaction } from "~/shell/db/user-transaction";
 import { captureStatementTransactionInScope } from "~/shell/transactions/mutations";

@@ -14,7 +14,9 @@ operational state expected by dependent deployments.
   sending region and enforced TLS.
 
 The root and ingestion domains deliberately have separate MX records. Never replace the root Google
-Workspace MX record with Resend's inbound record.
+Workspace MX record with Resend's inbound record. The production DNS reconciler writes only the exact
+`ingest.fidyapp.com`, `send.ingest.fidyapp.com`, and Resend-provided DKIM names; its negative test
+proves it never queries or mutates a root MX record.
 
 ## Runtime configuration
 
@@ -57,8 +59,11 @@ resend domains list
 resend domains get <domain-id>
 ```
 
-The `ingest.fidyapp.com` Receiving record must report `verified` before ingestion starts. Its DKIM
-and SPF records must also report `verified` before a dependent ticket sends outbound mail. Provider
-webhook handlers and the policy, browser-pairing, and recovery pages are delivered by their
-dependent tickets; this ticket reserves their DNS names and route contracts rather than implementing
-those capabilities.
+The `ingest.fidyapp.com` Receiving record must report `verified` before ingestion starts. Copy the
+exact Receiving MX, sending MX, SPF, and DKIM values returned by Resend into the
+`RESEND_INGEST_*` production variables, run `bun scripts/production/cloudflare-dns.ts`, and then
+request Resend verification. Provision the callback with
+`resend webhooks create --endpoint https://api.fidyapp.com/webhooks/resend --events email.received`
+and immediately store its one-time `signing_secret` as Railway's `RESEND_WEBHOOK_SECRET`; never
+print or commit it. Its Receiving, DKIM, and SPF records must all report `verified`, and
+`resend webhooks list` must show that enabled endpoint, before ingestion or outbound mail starts.

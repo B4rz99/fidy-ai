@@ -1,17 +1,28 @@
-import { createHash, randomUUID } from "node:crypto";
-import { DateTime, Effect, Encoding, Option, Result, Schema } from "effect";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
+import { Data, DateTime, Effect, Encoding, Option, Result, Schema } from "effect";
+import { InterpretationRevision } from "~/core/_shared/interpretation-revision";
 import { Money } from "~/core/_shared/money";
 import { decideEffectiveAccess } from "~/core/identity/rules";
-import { type NeedsReviewItemId, StatementSubmissionId } from "~/core/ingestion/reference";
+import { decideForwardedEmailAdmission, emailAllowancePeriod } from "~/core/ingestion/rules";
+import {
+  EmailForwardingAddressId,
+  EmailForwardingLocalPart,
+  type NeedsReviewItemId,
+  type ResendReceivedEmailId,
+  type ResendWebhookDeliveryId,
+  StatementSubmissionId,
+} from "~/core/ingestion/reference";
 import type { SubmitForExtractionInput } from "~/core/ingestion/model";
 import type { UserId } from "~/core/identity/reference";
-import { InterpretationRevision, type TransactionExtraction } from "~/core/transactions/model";
+import type { TransactionExtraction } from "~/core/transactions/model";
 import { NotFound, PaywallRequired, ValidationFailed } from "~/shell/_shared/errors";
 import type { SuggestedOperationCaller } from "~/shell/_shared/suggested-operations";
 import {
   checkpointSuggestedOperations,
   suggestOperation,
 } from "~/shell/_shared/suggested-operations";
+import { externalEndpoints } from "~/shell/_shared/external-endpoints";
+import { useCurrentConsent } from "~/shell/consent/repo";
 import { findUserInScope } from "~/shell/identity/repo";
 import { captureStatementTransactionInScope } from "~/shell/transactions/mutations";
 import {
@@ -24,9 +35,99 @@ import {
   statementAdmissionPressureInScope,
 } from "./repo";
 import { statementSourceFormat } from "./source-format";
+import {
+  admitKnownForwardedEmailInScope,
+  countDeferredEmailsInScope,
+  countForwardedEmailsInPeriodInScope,
+  countOutstandingEmailsInScope,
+  enableEmailForwardingAddressInScope,
+  findForwardedEmailReceiptInScope,
+  hasGlobalForwardedEmailCapacityInScope,
+  insertForwardedEmailReceiptInScope,
+  lockEmailForwardingAdmissionInScope,
+} from "./email-forwarding-repo";
+
+const forwardingAddressEntropyBytes = 24;
+
+/** Idempotently enables and returns the authenticated User's permanent forwarding address. */
+export const enableEmailForwardingInScope = Effect.fn("enableEmailForwardingInScope")(function* (
+  userId: UserId
+) {
+  const { ingestDomain } = yield* externalEndpoints.pipe(Effect.orDie);
+  const now = yield* DateTime.now;
+  const data = yield* enableEmailForwardingAddressInScope({
+    id: EmailForwardingAddressId.make(randomUUID()),
+    userId,
+    localPart: EmailForwardingLocalPart.make(
+      randomBytes(forwardingAddressEntropyBytes).toString("base64url").toLocaleLowerCase("en-US")
+    ),
+    domain: ingestDomain,
+    createdAt: now,
+  });
+  return { data, next: [] };
+});
+
+class ForwardedEmailConsentMissing extends Data.TaggedError("ForwardedEmailConsentMissing")<{}> {}
+
+/** Authenticated Resend event facts admitted after recipient resolution and proof verification. */
+export type AdmitForwardedEmailInput = Readonly<{
+  userId: UserId;
+  receivedEmailId: ResendReceivedEmailId;
+  webhookDeliveryId: ResendWebhookDeliveryId;
+  receivedAt: DateTime.Utc;
+}>;
+
+/** Deduplicates one provider email and atomically applies its Colombia-month allowance. */
+export const admitForwardedEmail = Effect.fn("admitForwardedEmail")(function* (
+  input: AdmitForwardedEmailInput
+) {
+  return yield* useCurrentConsent(
+    input.userId,
+    () => Effect.fail(new ForwardedEmailConsentMissing()),
+    Effect.gen(function* () {
+      const hasGlobalCapacity = yield* hasGlobalForwardedEmailCapacityInScope();
+      yield* lockEmailForwardingAdmissionInScope(input.userId);
+      const existing = yield* findForwardedEmailReceiptInScope(input.userId, input.receivedEmailId);
+      if (Option.isSome(existing)) return "duplicate" as const;
+      if (!hasGlobalCapacity) return "backlog-full" as const;
+      const user = yield* findUserInScope(input.userId).pipe(
+        Effect.flatMap(Effect.fromOption),
+        Effect.orDie
+      );
+      const access = yield* decideEffectiveAccess(user, input.receivedAt);
+      const period = emailAllowancePeriod(input.receivedAt);
+      const consumed = yield* countForwardedEmailsInPeriodInScope(input.userId, period);
+      const deferred = yield* countDeferredEmailsInScope(input.userId);
+      const outstanding = yield* countOutstandingEmailsInScope(input.userId);
+      const decision = decideForwardedEmailAdmission({ access, consumed, deferred, outstanding });
+      if (decision.status === "backlog-full") return "backlog-full" as const;
+      if (!(yield* admitKnownForwardedEmailInScope(input.userId))) {
+        return "rate-exceeded" as const;
+      }
+      const inserted = yield* insertForwardedEmailReceiptInScope({
+        ...input,
+        status: decision.status,
+        context: {
+          serviceMarket: user.serviceMarket,
+          locale: user.locale,
+          timeZone: user.timeZone,
+        },
+        periodStart: period.from,
+        consumesFreeAllowance: access === "free" && decision.status === "queued",
+        resumeAt: decision.status === "deferred" ? Option.some(period.toExclusive) : Option.none(),
+        admittedAt: input.receivedAt,
+      });
+      return Option.isSome(inserted) ? decision.status : ("duplicate" as const);
+    })
+  ).pipe(
+    Effect.catchTag("ForwardedEmailConsentMissing", () =>
+      Effect.succeed("consent-missing" as const)
+    )
+  );
+});
 
 /** Stable revision recorded on statement submissions and their provenance. */
-export const statementParserRevision = "statement-parser-v1";
+export const statementParserRevision = InterpretationRevision.make("statement-parser-v1");
 const bytesPerKibibyte = 1024;
 const maximumStatementMebibytes = 5;
 const maximumStatementBytes = maximumStatementMebibytes * bytesPerKibibyte * bytesPerKibibyte;

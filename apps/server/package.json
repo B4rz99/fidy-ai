@@ -12,7 +12,7 @@
   },
   "scripts": {
     "dev": "bun scripts/seed-development.ts && FIDY_HTTP_HOST=127.0.0.1 bun --preload ./src/shell/observability/preload.ts src/main.ts",
-    "build:production": "rm -rf dist && CONTRACT_DIGEST=$(bun run --silent contracts:digest) && [[ \"$CONTRACT_DIGEST\" =~ ^[0-9a-f]{64}$ ]] && bun build src/shell/observability/preload.ts src/main.ts --target=bun --outdir=dist --entry-naming='[name].js' --sourcemap=external --define \"FIDY_CONTRACT_DIGEST=\\\"$CONTRACT_DIGEST\\\"\" && bun build scripts/prepare-sentry-release.ts scripts/provision-runtime-role.ts scripts/migrate.ts scripts/support-recovery.ts --target=bun --outdir=dist/commands --entry-naming='[name].js' --sourcemap=external && bunx --bun sentry-cli sourcemaps inject dist",
+    "build:production": "rm -rf dist && CONTRACT_DIGEST=$(bun run --silent contracts:digest) && [[ \"$CONTRACT_DIGEST\" =~ ^[0-9a-f]{64}$ ]] && bun build src/shell/observability/preload.ts src/main.ts --target=bun --outdir=dist --entry-naming='[name].js' --sourcemap=external --define \"FIDY_CONTRACT_DIGEST=\\\"$CONTRACT_DIGEST\\\"\" && bun build scripts/prepare-sentry-release.ts scripts/provision-runtime-role.ts scripts/migrate.ts scripts/support-recovery.ts scripts/approve-email-ingest-sample.ts --target=bun --outdir=dist/commands --entry-naming='[name].js' --sourcemap=external && bunx --bun sentry-cli sourcemaps inject dist",
     "start:production": "bun --preload ./dist/preload.js dist/main.js",
     "agent:repl": "bun scripts/agent-repl.ts",
     "support:recovery": "bun scripts/support-recovery.ts",
@@ -38,7 +38,8 @@
     "lint:deps:probes": "bun scripts/check-dependency-guards.ts",
     "check:lint-guards": "bun scripts/check-lint-guards.ts",
     "check:migration-ids": "bun scripts/check-migration-ids.ts",
-    "migrate": "bun scripts/migrate.ts"
+    "migrate": "bun scripts/migrate.ts",
+    "approve:email-ingest-sample": "bun scripts/approve-email-ingest-sample.ts"
   },
   "dependencies": {
     "@effect/ai-openai": "4.0.0-beta.98",
@@ -50,6 +51,8 @@
     "effect": "4.0.0-beta.98",
     "jose": "6.2.10",
     "js-tiktoken": "1.0.21",
+    "sharp": "0.35.2",
+    "svix": "2.0.0",
     "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
   },
   "devDependencies": {

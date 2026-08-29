@@ -7,6 +7,11 @@ const productionDns = {
   cnameTarget: "server.up.railway.app",
   verificationName: "_railway-verify.api.fidyapp.com",
   verificationValue: "railway-verify=proof",
+  ingestMxTarget: "inbound-smtp.us-east-1.amazonaws.com",
+  ingestDkimName: "resend._domainkey.ingest.fidyapp.com",
+  ingestDkimValue: "p=public-key",
+  ingestSendingMxTarget: "feedback-smtp.sa-east-1.amazonses.com",
+  ingestSpfValue: "v=spf1 include:amazonses.com ~all",
   zoneName: "fidyapp.com",
 };
 
@@ -36,6 +41,15 @@ const dependencies = (
       return response;
     },
   };
+};
+
+const requiredRequest = (
+  requests: ReadonlyArray<RecordedRequest>,
+  index: number
+): RecordedRequest => {
+  const request = requests[index];
+  if (request === undefined) throw new Error(`missing request ${index}`);
+  return request;
 };
 
 const record = (
@@ -83,19 +97,71 @@ describe("Cloudflare Production DNS adapter", () => {
             content: "railway-verify=proof",
           }),
         }),
+        jsonResponse({ success: true, result: [] }),
+        jsonResponse({
+          success: true,
+          result: record("record-3", "MX", {
+            name: "ingest.fidyapp.com",
+            content: "inbound-smtp.us-east-1.amazonaws.com",
+          }),
+        }),
+        jsonResponse({ success: true, result: [] }),
+        jsonResponse({
+          success: true,
+          result: record("record-4", "TXT", {
+            name: "resend._domainkey.ingest.fidyapp.com",
+            content: "p=public-key",
+          }),
+        }),
+        jsonResponse({ success: true, result: [] }),
+        jsonResponse({
+          success: true,
+          result: record("record-5", "MX", {
+            name: "send.ingest.fidyapp.com",
+            content: "feedback-smtp.sa-east-1.amazonses.com",
+          }),
+        }),
+        jsonResponse({ success: true, result: [] }),
+        jsonResponse({
+          success: true,
+          result: record("record-6", "TXT", {
+            name: "send.ingest.fidyapp.com",
+            content: "v=spf1 include:amazonses.com ~all",
+          }),
+        }),
       ],
       requests
     );
 
     await expect(reconcileProductionDns(productionDns, adapter)).resolves.toBeUndefined();
-    expect(requests[0]?.url).toContain("/zones?name=fidyapp.com&account.id=cloudflare-account");
-    expect(requests[0]?.init.headers).toMatchObject({
-      Authorization: "Bearer cloudflare-token",
-    });
-    expect(requests[2]?.url).toContain("/dns_records/record-1");
-    expect(requests[2]?.init.method).toBe("PUT");
-    expect(requests[2]?.init.body).toContain('"proxied":false');
-    expect(requests[4]?.init.method).toBe("POST");
+    const zoneRequest = requiredRequest(requests, 0);
+    const apiWrite = requiredRequest(requests, 2);
+    const verificationWrite = requiredRequest(requests, 4);
+    const receivingMxWrite = requiredRequest(requests, 6);
+    const sendingMxWrite = requiredRequest(requests, 10);
+    expect(zoneRequest.url).toContain("/zones?name=fidyapp.com&account.id=cloudflare-account");
+    expect(zoneRequest.init.headers).toMatchObject({ Authorization: "Bearer cloudflare-token" });
+    expect(apiWrite.url).toContain("/dns_records/record-1");
+    expect(apiWrite.init.method).toBe("PUT");
+    expect(apiWrite.init.body).toContain('"proxied":false');
+    expect(verificationWrite.init.method).toBe("POST");
+    expect(receivingMxWrite.init.body).toContain('"name":"ingest.fidyapp.com"');
+    expect(receivingMxWrite.init.body).toContain('"priority":10');
+    expect(sendingMxWrite.init.body).toContain('"name":"send.ingest.fidyapp.com"');
+    expect(
+      requests.some(
+        (request) => request.url.includes("type=MX") && request.url.includes("name=fidyapp.com")
+      )
+    ).toBe(false);
+  });
+
+  it("rejects any DKIM name that could overwrite the root Workspace record", async () => {
+    await expect(
+      reconcileProductionDns(
+        { ...productionDns, ingestDkimName: "google._domainkey.fidyapp.com" },
+        dependencies([], [])
+      )
+    ).rejects.toThrow("Resend DKIM name must be exactly resend._domainkey.ingest.fidyapp.com");
   });
 
   it("fails closed when Cloudflare reports duplicate route records", async () => {

@@ -252,6 +252,12 @@ const probes: Record<OperationId, SuggestedOperationProbe> = {
 
   "memory.recall": (client) => Effect.map(client.memory.recall(), (response) => [response]),
 
+  "ingestion.enableEmailForwarding": (client) =>
+    Effect.map(client.ingestion.enableEmailForwarding(), (response) => [response]),
+
+  "ingestion.getEmailForwarding": (client) =>
+    Effect.map(client.ingestion.getEmailForwarding(), (response) => [response]),
+
   "ingestion.submitForExtraction": (client) =>
     Effect.map(
       client.ingestion.submitForExtraction({

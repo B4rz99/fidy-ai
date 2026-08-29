@@ -36,6 +36,11 @@ type ProductionDns = {
   readonly cnameTarget: string;
   readonly verificationName: string;
   readonly verificationValue: string;
+  readonly ingestMxTarget: string;
+  readonly ingestDkimName: string;
+  readonly ingestDkimValue: string;
+  readonly ingestSendingMxTarget: string;
+  readonly ingestSpfValue: string;
 };
 
 export type CloudflareDnsDependencies = {
@@ -50,6 +55,8 @@ type CloudflareRequest<Value> = {
   readonly decode: (value: unknown) => Value;
 };
 
+const mailExchangePriority = 10;
+
 type DesiredRecord =
   | {
       readonly type: "CNAME";
@@ -61,6 +68,12 @@ type DesiredRecord =
       readonly type: "TXT";
       readonly name: string;
       readonly content: string;
+    }
+  | {
+      readonly type: "MX";
+      readonly name: string;
+      readonly content: string;
+      readonly priority: typeof mailExchangePriority;
     };
 
 const liveDependencies: CloudflareDnsDependencies = {
@@ -147,51 +160,59 @@ const reconcileRecord = async (
   }
 };
 
+const validateProductionDns = (input: ProductionDns): void => {
+  if (Object.values(input).some((value) => value === "")) {
+    throw new Error("Production DNS configuration is incomplete");
+  }
+  const exactIngestDkimName = `resend._domainkey.ingest.${input.zoneName}`;
+  if (input.ingestDkimName !== exactIngestDkimName) {
+    throw new Error(`Resend DKIM name must be exactly ${exactIngestDkimName}`);
+  }
+};
+
+const desiredProductionRecords = (input: ProductionDns): ReadonlyArray<DesiredRecord> => [
+  {
+    type: "CNAME",
+    name: `api.${input.zoneName}`,
+    content: input.cnameTarget,
+    proxied: false,
+  },
+  { type: "TXT", name: input.verificationName, content: input.verificationValue },
+  {
+    type: "MX",
+    name: `ingest.${input.zoneName}`,
+    content: input.ingestMxTarget,
+    priority: mailExchangePriority,
+  },
+  { type: "TXT", name: input.ingestDkimName, content: input.ingestDkimValue },
+  {
+    type: "MX",
+    name: `send.ingest.${input.zoneName}`,
+    content: input.ingestSendingMxTarget,
+    priority: mailExchangePriority,
+  },
+  {
+    type: "TXT",
+    name: `send.ingest.${input.zoneName}`,
+    content: input.ingestSpfValue,
+  },
+];
+
 /**
- * Reconciles the public API's direct Railway CNAME and Railway ownership proof inside exactly one
- * Cloudflare zone. Existing records are replaced by identity; duplicate records and provider
- * failures stop the release before Railway or web promotion.
+ * Reconciles the exact Railway API/ownership and Resend receiving, sending, DKIM, SPF, API, and
+ * verification records inside one Cloudflare zone. Records are replaced by identity while
+ * unrelated records, including root Workspace mail records, remain unchanged; duplicates and
+ * provider failures stop the release before Railway or web promotion.
  */
 export const reconcileProductionDns = async (
   input: ProductionDns,
   dependencies: CloudflareDnsDependencies = liveDependencies
 ): Promise<void> => {
-  if (
-    input.apiToken === "" ||
-    input.accountId === "" ||
-    input.zoneName === "" ||
-    input.cnameTarget === "" ||
-    input.verificationName === "" ||
-    input.verificationValue === ""
-  ) {
-    throw new Error("Production DNS configuration is incomplete");
-  }
+  validateProductionDns(input);
   const zoneId = await findZone(input, dependencies);
-  await reconcileRecord(
-    {
-      zoneId,
-      desired: {
-        type: "CNAME",
-        name: `api.${input.zoneName}`,
-        content: input.cnameTarget,
-        proxied: false,
-      },
-    },
-    input,
-    dependencies
-  );
-  await reconcileRecord(
-    {
-      zoneId,
-      desired: {
-        type: "TXT",
-        name: input.verificationName,
-        content: input.verificationValue,
-      },
-    },
-    input,
-    dependencies
-  );
+  for (const desired of desiredProductionRecords(input)) {
+    await reconcileRecord({ zoneId, desired }, input, dependencies);
+  }
 };
 
 const requiredEnvironment = (name: string): string => {
@@ -208,5 +229,10 @@ if (import.meta.main) {
     cnameTarget: requiredEnvironment("PRODUCTION_API_CNAME_TARGET"),
     verificationName: requiredEnvironment("PRODUCTION_API_VERIFICATION_NAME"),
     verificationValue: requiredEnvironment("PRODUCTION_API_VERIFICATION_VALUE"),
+    ingestMxTarget: requiredEnvironment("RESEND_INGEST_MX_TARGET"),
+    ingestDkimName: requiredEnvironment("RESEND_INGEST_DKIM_NAME"),
+    ingestDkimValue: requiredEnvironment("RESEND_INGEST_DKIM_VALUE"),
+    ingestSendingMxTarget: requiredEnvironment("RESEND_INGEST_SENDING_MX_TARGET"),
+    ingestSpfValue: requiredEnvironment("RESEND_INGEST_SPF_VALUE"),
   });
 }

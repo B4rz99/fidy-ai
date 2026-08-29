@@ -1,9 +1,16 @@
 import { BigDecimal, Function, Schema, Struct } from "effect";
 import { CategoryId } from "~/core/categories/reference";
-import { IanaTimeZone, Locale, ServiceMarket } from "~/core/_shared/context";
+import { CapturedInterpretationContext } from "~/core/_shared/captured-interpretation-context";
+import { InterpretationRevision } from "~/core/_shared/interpretation-revision";
 import { Currency, Money } from "~/core/_shared/money";
+import { ProviderMessageEvidence } from "~/core/_shared/provider-message-evidence";
 import { UtcTimestamp } from "~/core/_shared/time";
-import { StatementSourceFormat, StatementSubmissionId } from "~/core/ingestion/reference";
+import {
+  EmailSourceFormat,
+  ResendReceivedEmailId,
+  StatementSourceFormat,
+  StatementSubmissionId,
+} from "~/core/ingestion/reference";
 import { TransactionId } from "./reference";
 
 export { TransactionId } from "./reference";
@@ -175,20 +182,11 @@ const SourceName = Schema.NonEmptyString.check(Schema.isTrimmed()).check(
   Schema.isMaxLength(maximumAttestationNameLength)
 );
 
-/** Names the parser, extractor, or manual interpretation contract used at capture time. */
-export const InterpretationRevision = Schema.NonEmptyString.check(Schema.isTrimmed())
-  .check(Schema.isMaxLength(maximumAttestationNameLength))
-  .pipe(Schema.brand("InterpretationRevision"))
-  .annotate({ identifier: "InterpretationRevision" });
-export type InterpretationRevision = typeof InterpretationRevision.Type;
-
 /** Fields shared by every immutable provenance statement. */
 export const SourceAttestationCommon = Schema.Struct({
   id: SourceAttestationId,
   transactionId: TransactionId,
-  serviceMarket: ServiceMarket,
-  locale: Locale,
-  timeZone: IanaTimeZone,
+  ...CapturedInterpretationContext.fields,
   sourceChannel: Schema.OptionFromOptionalKey(SourceName),
   sourceProvider: Schema.OptionFromOptionalKey(SourceName),
   interpretationRevision: InterpretationRevision,
@@ -212,15 +210,22 @@ export const StatementLineSourceAttestation = Schema.Struct({
 });
 export type StatementLineSourceAttestation = typeof StatementLineSourceAttestation.Type;
 
+/** Immutable provenance linking one captured Transaction to one authenticated Resend email. */
+export const NotificationEmailSourceAttestation = Schema.Struct({
+  ...SourceAttestationCommon.fields,
+  kind: Schema.Literal("notification-email"),
+  receivedEmailId: ResendReceivedEmailId,
+  messageEvidence: ProviderMessageEvidence,
+  messageContentSha256: Schema.String.check(Schema.isPattern(/^[0-9a-f]{64}$/u)),
+  sourceFormat: EmailSourceFormat,
+  extractorRevision: InterpretationRevision,
+});
+export type NotificationEmailSourceAttestation = typeof NotificationEmailSourceAttestation.Type;
+
 /** Immutable evidence of the context and mechanism that interpreted one Transaction. */
 export const SourceAttestation = Schema.Union([
   ManualSourceAttestation,
   StatementLineSourceAttestation,
+  NotificationEmailSourceAttestation,
 ]).annotate({ identifier: "SourceAttestation" });
 export type SourceAttestation = typeof SourceAttestation.Type;
-
-/** User interpretation context frozen into provenance when a Transaction is captured. */
-export const CapturedInterpretationContext = SourceAttestationCommon.mapFields(
-  Struct.pick(["serviceMarket", "locale", "timeZone"])
-).annotate({ identifier: "CapturedInterpretationContext" });
-export type CapturedInterpretationContext = typeof CapturedInterpretationContext.Type;

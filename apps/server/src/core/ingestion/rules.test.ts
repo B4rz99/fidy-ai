@@ -8,7 +8,15 @@ import {
   StatementColumnMapping,
   type XlsxCellEvidence,
 } from "./model";
-import { interpretStatementRows } from "./rules";
+import {
+  decideForwardedEmailAdmission,
+  decideForwardedEmailClaim,
+  decideForwardedEmailRecovery,
+  emailAllowancePeriod,
+  forwardedEmailAllowanceRemaining,
+  interpretStatementRows,
+  redactEmailCandidate,
+} from "./rules";
 
 const TestExtraction = Schema.Struct({
   money: Money,
@@ -57,6 +65,147 @@ const xlsxCell = (
   formattedText: Option.none<string>(),
   numberFormat: Option.none<string>(),
   formula,
+});
+
+it("closes provider failures after the bounded retry policy", () => {
+  expect(decideForwardedEmailRecovery({ reason: "provider-unavailable", attemptCount: 2 })).toEqual(
+    { _tag: "Retry" }
+  );
+  expect(
+    decideForwardedEmailRecovery({ reason: "provider-unavailable", attemptCount: 3 })
+  ).toMatchObject({
+    _tag: "CompleteReview",
+    reviewReason: "provider-retrieval-failed",
+  });
+  expect(
+    decideForwardedEmailRecovery({ reason: "invalid-provider-response", attemptCount: 1 })
+  ).toMatchObject({ _tag: "CompleteReview" });
+  expect(decideForwardedEmailRecovery({ reason: "resource-limit", attemptCount: 1 })).toMatchObject(
+    {
+      _tag: "CompleteReview",
+    }
+  );
+});
+
+it("selects claim transitions without embedding allowance policy in persistence", () => {
+  const now = DateTime.makeUnsafe("2026-09-01T05:00:00Z");
+  const base = {
+    access: "free" as const,
+    attemptCount: 0,
+    consumed: 0,
+    now,
+  };
+  expect(decideForwardedEmailClaim({ ...base, status: "queued" })).toMatchObject({
+    _tag: "Claim",
+    promotedFromDeferred: false,
+  });
+  expect(decideForwardedEmailClaim({ ...base, status: "queued", attemptCount: 3 })).toEqual({
+    _tag: "Skip",
+  });
+  expect(
+    decideForwardedEmailClaim({
+      ...base,
+      status: "processing",
+      startedAt: DateTime.makeUnsafe("2026-09-01T04:54:59Z"),
+    })
+  ).toMatchObject({ _tag: "Claim" });
+  expect(
+    decideForwardedEmailClaim({
+      ...base,
+      status: "processing",
+      attemptCount: 3,
+      startedAt: DateTime.makeUnsafe("2026-09-01T04:54:59Z"),
+    })
+  ).toEqual({
+    _tag: "Exhausted",
+    staleBefore: DateTime.makeUnsafe("2026-09-01T04:55:00Z"),
+  });
+  expect(
+    decideForwardedEmailClaim({
+      ...base,
+      status: "processing",
+      startedAt: DateTime.makeUnsafe("2026-09-01T04:55:00Z"),
+    })
+  ).toEqual({ _tag: "Skip" });
+  expect(
+    decideForwardedEmailClaim({ ...base, status: "deferred", resumeAt: now, access: "pro" })
+  ).toMatchObject({
+    _tag: "Claim",
+    consumesFreeAllowance: false,
+  });
+  expect(
+    decideForwardedEmailClaim({
+      ...base,
+      status: "deferred",
+      resumeAt: now,
+      consumed: 49,
+    })
+  ).toMatchObject({ _tag: "Claim", consumesFreeAllowance: true });
+  expect(
+    decideForwardedEmailClaim({
+      ...base,
+      status: "deferred",
+      resumeAt: now,
+      consumed: 50,
+    })
+  ).toEqual({ _tag: "Skip" });
+});
+
+it("applies the Free forwarded-email allowance to a Bogota calendar month", () => {
+  const period = emailAllowancePeriod(DateTime.makeUnsafe("2026-09-01T04:59:59Z"));
+  expect(DateTime.formatIso(period.from)).toBe("2026-08-01T05:00:00.000Z");
+  expect(DateTime.formatIso(period.toExclusive)).toBe("2026-09-01T05:00:00.000Z");
+  expect(
+    decideForwardedEmailAdmission({ access: "free", consumed: 49, deferred: 0, outstanding: 49 })
+  ).toEqual({
+    status: "queued",
+    remaining: Option.some(0),
+  });
+  expect(
+    decideForwardedEmailAdmission({ access: "free", consumed: 50, deferred: 0, outstanding: 50 })
+  ).toEqual({
+    status: "deferred",
+    remaining: Option.some(0),
+  });
+  expect(
+    decideForwardedEmailAdmission({ access: "free", consumed: 50, deferred: 50, outstanding: 99 })
+  ).toEqual({
+    status: "backlog-full",
+    remaining: Option.some(0),
+  });
+  expect(
+    decideForwardedEmailAdmission({ access: "free", consumed: 50, deferred: 0, outstanding: 100 })
+  ).toEqual({
+    status: "backlog-full",
+    remaining: Option.some(0),
+  });
+  expect(
+    decideForwardedEmailAdmission({ access: "pro", consumed: 500, deferred: 0, outstanding: 99 })
+  ).toEqual({
+    status: "queued",
+    remaining: Option.none(),
+  });
+  expect(
+    decideForwardedEmailAdmission({ access: "pro", consumed: 500, deferred: 0, outstanding: 100 })
+  ).toEqual({ status: "backlog-full", remaining: Option.none() });
+  expect(forwardedEmailAllowanceRemaining({ access: "free", consumed: 0 })).toEqual(
+    Option.some(50)
+  );
+  expect(forwardedEmailAllowanceRemaining({ access: "free", consumed: 51 })).toEqual(
+    Option.some(0)
+  );
+  expect(forwardedEmailAllowanceRemaining({ access: "pro", consumed: 51 })).toEqual(Option.none());
+});
+
+it("reduces an email to value-free structural evidence", () => {
+  const candidate = redactEmailCandidate(
+    "Hola Ana Pérez, compra por $45.900 COP en Restaurante El Sol, tarjeta 1234, ana@example.com"
+  );
+  expect(candidate).toContain("[TEXT]");
+  expect(candidate).toContain("[MONEY]");
+  expect(candidate).toContain("[DIGITS]");
+  expect(candidate).toContain("[EMAIL]");
+  expect(candidate).not.toMatch(/Ana|Pérez|Restaurante|Sol|45|1234|example/iu);
 });
 
 it("rejects contradictory duplicated CSV row facts", () => {

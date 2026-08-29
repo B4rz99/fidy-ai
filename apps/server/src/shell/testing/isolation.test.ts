@@ -340,6 +340,22 @@ const probes: Record<OperationId, IsolationProbe> = {
       expect((yield* attempt.strangerClient.memory.recall()).data).toEqual([]);
     }),
 
+  "ingestion.enableEmailForwarding": (attempt) =>
+    Effect.gen(function* () {
+      const enabled = yield* attempt.strangerClient.ingestion.enableEmailForwarding();
+      const ownerStatus = yield* attempt.ownerClient.ingestion.getEmailForwarding();
+      expect(enabled.data.address).toContain("@ingest.fidyapp.com");
+      expect(Option.isNone(ownerStatus.data.address)).toBe(true);
+    }),
+
+  "ingestion.getEmailForwarding": (attempt) =>
+    Effect.gen(function* () {
+      const status = yield* attempt.strangerClient.ingestion.getEmailForwarding();
+      const ownerStatus = yield* attempt.ownerClient.ingestion.getEmailForwarding();
+      expect(Option.isSome(status.data.address)).toBe(true);
+      expect(Option.isNone(ownerStatus.data.address)).toBe(true);
+    }),
+
   "ingestion.getStatementSubmission": (attempt) =>
     Effect.gen(function* () {
       const result = yield* Effect.result(

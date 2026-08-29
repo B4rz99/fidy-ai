@@ -18,6 +18,7 @@ import {
   listTransactions,
 } from "~/shell/transactions/queries";
 import { getStatementSubmission, listNeedsReviewItems } from "~/shell/ingestion/queries";
+import { forwardedEmailIngestion } from "~/shell/ingestion/forwarded-email-ingestion";
 import { listPendingInsights } from "~/shell/insights/queries";
 import { recall } from "~/shell/memory/queries";
 import { getUpgradeUrl, listSubscriptionOffers } from "~/shell/subscription/queries";
@@ -95,6 +96,8 @@ export const canonicalOperationImplementations: CanonicalOperationImplementation
       caller: suggestedCaller(caller),
     }),
 
+  "ingestion.getEmailForwarding": (_input, { resolved }) =>
+    forwardedEmailIngestion.getStatus(resolved.subjectUserId),
   "ingestion.getStatementSubmission": (input, { resolved }) =>
     getStatementSubmission({
       userId: resolved.subjectUserId,

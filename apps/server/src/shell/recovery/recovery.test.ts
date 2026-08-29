@@ -83,7 +83,7 @@ const prepare = (
 ): Effect.Effect<void, never, Crypto.Crypto | MigrationSqlClient | SqlClient.SqlClient> =>
   Effect.gen(function* () {
     const sql = yield* MigrationSqlClient;
-    yield* sql`DELETE FROM web_sessions`;
+    yield* sql`DELETE FROM web_sessions WHERE source_pairing_id IS NOT NULL`;
     yield* sql`DELETE FROM browser_login_start_attempts`;
     yield* sql`DELETE FROM browser_login_pairings`;
     yield* sql`DELETE FROM support_recovery_admission_attempts`;
@@ -1048,9 +1048,12 @@ layer(RecoveryHarness, { excludeTestServices: true, timeout: "30 seconds" })(
               events: ["open/accepted", "approve/accepted"],
             },
           ]);
-          expect(yield* sql`SELECT count(*)::int AS count FROM web_sessions`).toEqual([
-            { count: 0 },
-          ]);
+          expect(
+            yield* sql`
+              SELECT count(*)::int AS count FROM web_sessions
+              WHERE source_pairing_id = ${pairing.pairingId}
+            `
+          ).toEqual([{ count: 0 }]);
           expect(
             yield* sql`
               SELECT lifecycle, user_id AS "userId" FROM browser_login_pairings

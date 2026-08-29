@@ -22,8 +22,14 @@ import {
 import { InsightKind } from "~/core/insights/reference";
 import { PATId } from "~/core/tokens/reference";
 import { WebSessionId } from "~/core/web-session/reference";
-import { advisoryLockKey, withUserLock, withUserLockInScope } from "~/shell/db/advisory-lock";
+import {
+  advisoryLockKey,
+  withConsentExternalEffectLock,
+  withUserLock,
+  withUserLockInScope,
+} from "~/shell/db/advisory-lock";
 import { withUserTransaction } from "~/shell/db/user-transaction";
+import { revokePendingForwardedEmailsForConsentInScope } from "~/shell/ingestion/email-consent-revocation";
 import { currentDisclosure } from "./current-disclosure";
 
 const OptionalPATId = Schema.OptionFromNullOr(Schema.toEncoded(PATId));
@@ -356,6 +362,28 @@ export const useCurrentConsent = Effect.fn("useCurrentConsent")(function* <A, E,
   );
 });
 
+const revokesOnboardingGrant = Effect.fn("revokesOnboardingGrant")(function* (
+  record: ConsentRecord
+) {
+  if (record.event._tag !== "Revoked") return false;
+  const sql = yield* SqlClient.SqlClient;
+  return yield* SqlSchema.findOne({
+    Request: Schema.Struct({ grantId: ConsentRecordId, subjectUserId: UserId }),
+    Result: Schema.Struct({ matches: Schema.Boolean }),
+    execute: (input) => sql`
+      SELECT EXISTS (
+        SELECT 1 FROM consent_records
+        WHERE id = ${input.grantId}
+          AND subject_user_id = ${input.subjectUserId}
+          AND event_type = 'granted' AND grant_type = 'onboarding'
+      ) AS matches
+    `,
+  })({ grantId: record.event.grantId, subjectUserId: record.subjectUserId }).pipe(
+    Effect.map((row) => row.matches),
+    Effect.orDie
+  );
+});
+
 /**
  * Appends one immutable grant or revocation after serializing changes for its
  * subject. A revocation must reference that subject's existing grant, and an
@@ -366,7 +394,8 @@ export const appendConsentRecordInScope = Effect.fn("appendConsentRecordInScope"
   record: ConsentRecord
 ) {
   const sql = yield* SqlClient.SqlClient;
-  return yield* SqlSchema.findOne({
+  const revokesOnboarding = yield* revokesOnboardingGrant(record);
+  const appended = yield* SqlSchema.findOne({
     Request: ConsentRecordFromRow,
     Result: ConsentRecordFromRow,
     execute: (input) => sql`
@@ -411,13 +440,23 @@ export const appendConsentRecordInScope = Effect.fn("appendConsentRecordInScope"
           RETURNING ${sql.literal(consentColumns)}
         `,
   })(record).pipe(Effect.orDie);
+  if (revokesOnboarding) {
+    yield* revokePendingForwardedEmailsForConsentInScope({
+      userId: record.subjectUserId,
+      revokedAt: record.occurredAt,
+    });
+  }
+  return appended;
 });
 
 /** Opens the transaction and subject lock before appending one immutable Consent record. */
 export const appendConsentRecord = Effect.fn("appendConsentRecord")(function* (
   record: ConsentRecord
 ) {
-  return yield* withSubjectLock(record.subjectUserId, appendConsentRecordInScope(record));
+  const append = withSubjectLock(record.subjectUserId, appendConsentRecordInScope(record));
+  return yield* record.event._tag === "Revoked"
+    ? withConsentExternalEffectLock(record.subjectUserId, append)
+    : append;
 });
 
 /** Marks one delivered pending exchange accepted while the Consent caller lock is held. */

@@ -1,0 +1,25 @@
+scripts/check-pushed-secrets.ts
+  s_b8658db9652e53::t_79f2a049214ec2 1-2,7-9,11-80
+  s_b8658db9652e53::t_f2115cf23a5f9a 5-6
+  s_b8658db9652e53::t_cc8a9fea6c7106 3-4,10
+README.md
+  s_b8658db9652e53::t_7e861ff1671443 10-13
+lefthook.yml
+  s_b8658db9652e53::t_32aed3d748003c 31-33
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "8bf89f874a9ce8a4809f8cb9f315b1141316f186",
+  "prompts": {},
+  "sessions": {
+    "s_b8658db9652e53": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a045fb-152d-7a64-a33b-43aa07614304",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

@@ -7,7 +7,10 @@ The project is under development.
 
 ## Run locally
 
-Requirements: [Bun](https://bun.sh) and [Docker](https://www.docker.com/).
+Requirements: [Bun](https://bun.sh), [Docker](https://www.docker.com/),
+[Gitleaks](https://github.com/gitleaks/gitleaks), and
+[TruffleHog](https://github.com/trufflesecurity/trufflehog). Gitleaks and TruffleHog run in the
+pre-push hook so secret-shaped or verified credentials never reach the remote.
 
 ```sh
 bun install

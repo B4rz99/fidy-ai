@@ -45,7 +45,7 @@ const firstServerFailureStatus = 500;
 const successful = (status: number): boolean =>
   status >= firstSuccessfulStatus && status < firstRedirectStatus;
 const providerHttpFailureReason = (status: number): ResendReceivingFailed["reason"] =>
-  status === tooManyRequestsStatus || status >= firstServerFailureStatus
+  [status === tooManyRequestsStatus, status >= firstServerFailureStatus].some(Boolean)
     ? "provider-unavailable"
     : "invalid-provider-response";
 
@@ -181,9 +181,11 @@ const hasSafeDeclaredImage = Effect.fn("Resend.hasSafeDeclaredImage")(function* 
 type InlineAttachment = typeof AttachmentMetadata.Type;
 
 const isSupportedInlineAttachment = (attachment: InlineAttachment): boolean =>
-  Option.contains(attachment.content_disposition, "inline") &&
-  Option.isSome(attachment.content_id) &&
-  inlineMediaTypes.has(attachment.content_type);
+  [
+    Option.contains(attachment.content_disposition, "inline"),
+    Option.isSome(attachment.content_id),
+    inlineMediaTypes.has(attachment.content_type),
+  ].every(Boolean);
 
 const retrieveInlineImage = Effect.fn("Resend.retrieveInlineImage")(function* (input: {
   client: HttpClient.HttpClient;

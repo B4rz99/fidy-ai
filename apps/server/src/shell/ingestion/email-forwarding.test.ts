@@ -603,16 +603,25 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         );
         expect(unknownBurstReceipts.count).toBe(0);
 
+        yield* sql`
+          UPDATE resend_webhook_admission_window
+          SET window_start = date_trunc('minute', clock_timestamp()), admitted_count = 999
+          WHERE singleton = true
+        `;
         const authenticatedUnknownFlood = yield* Effect.forEach(
-          Array.from({ length: 1000 }, (_, index) => index + 1),
+          [1, 2],
           (number) =>
             makeDelivery(
               `email_authenticated_unknown_flood_${number}`,
               "zzzzzzzzzzzzzzzzzzzzzzzz@ingest.fidyapp.com"
             ),
-          { concurrency: 16 }
+          { concurrency: "unbounded" }
         );
-        expect(authenticatedUnknownFlood.some((response) => response.status === 429)).toBe(true);
+        expect(
+          authenticatedUnknownFlood
+            .map((response) => response.status)
+            .sort((left, right) => left - right)
+        ).toEqual([202, 429]);
 
         yield* sql`
           UPDATE resend_webhook_admission_window

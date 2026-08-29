@@ -92,11 +92,13 @@ export type ForwardedEmailRecoveryDecision =
       readonly issue: Readonly<{ readonly path: ""; readonly message: string }>;
     }>;
 
-/** Chooses retry versus visible terminal review independently of persistence mechanics. */
-export const decideForwardedEmailRecovery = (input: {
+type DecideForwardedEmailRecovery = (input: {
   readonly reason: ForwardedEmailProviderFailureReason;
   readonly attemptCount: number;
-}): ForwardedEmailRecoveryDecision =>
+}) => ForwardedEmailRecoveryDecision;
+
+/** Chooses retry versus visible terminal review independently of persistence mechanics. */
+export const decideForwardedEmailRecovery: DecideForwardedEmailRecovery = (input) =>
   input.reason === "provider-unavailable" && input.attemptCount < 3
     ? { _tag: "Retry" }
     : {
@@ -128,16 +130,18 @@ export const forwardedEmailAllowanceRemaining = (input: {
     ? Option.none()
     : Option.some(Math.max(0, freeForwardedEmailCap - input.consumed));
 
-/** Decides whether one already-deduplicated provider email runs now or at the next reset. */
-export const decideForwardedEmailAdmission = (input: {
+type DecideForwardedEmailAdmission = (input: {
   readonly access: "free" | "pro";
   readonly consumed: number;
   readonly deferred: number;
   readonly outstanding: number;
-}): Readonly<{
+}) => Readonly<{
   status: "queued" | "deferred" | "backlog-full";
   remaining: Option.Option<number>;
-}> => {
+}>;
+
+/** Decides whether one already-deduplicated provider email runs now or at the next reset. */
+export const decideForwardedEmailAdmission: DecideForwardedEmailAdmission = (input) => {
   if (input.outstanding >= forwardedEmailOutstandingCap) {
     return {
       status: "backlog-full",

@@ -142,6 +142,7 @@ apps/server/src/shell/ingestion/forwarded-email-ingestion.ts
   s_b8658db9652e53::t_3e4a58bb0b17af 239
   s_b8658db9652e53::t_f0453c399b747e 219-226
   s_b8658db9652e53::t_2c66683d336aad 227-229,231-234
+  s_b8658db9652e53::t_4cecdfd3da6b2d 230
 apps/server/src/shell/recovery/recovery.test.ts
   s_b8658db9652e53::t_800ec4f802a90b 86
   s_b8658db9652e53::t_5287862b8c03e5 1051-1056
@@ -544,6 +545,8 @@ apps/server/src/core/ingestion/email-policy.ts
   s_b8658db9652e53::t_84b5540703dc90 11
   s_b8658db9652e53::t_c64881ee7009a2 1-10,12,17-35,42-47
   s_b8658db9652e53::t_57da3e9faa7ce7 13-16,36-41
+apps/server/src/shell/db/migrations/registry.ts
+  s_b8658db9652e53::t_e4abb177e852c3 42,94
 ---
 {
   "schema_version": "authorship/3.0.0",

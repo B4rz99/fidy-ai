@@ -1,0 +1,20 @@
+apps/server/src/shell/testing/suggested-operations.test.ts
+  s_b8658db9652e53::t_ac551c76e8be4c 622
+  s_b8658db9652e53::t_258094f2b881b6 537-568,570-616,620-621
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "fe8d68310b0cf7c335f1445244c5a2364d54d045",
+  "prompts": {},
+  "sessions": {
+    "s_b8658db9652e53": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a045fb-152d-7a64-a33b-43aa07614304",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

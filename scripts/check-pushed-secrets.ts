@@ -73,6 +73,9 @@ for (const { baseSha, localSha } of scanTargets) {
       `--branch=${localSha}`,
       "--only-verified",
       "--exclude-paths=.trufflehog-exclude-paths.txt",
+      "--fail",
+      "--github-actions",
+      "--no-update",
     ],
     { stderr: "inherit", stdout: "inherit" }
   );

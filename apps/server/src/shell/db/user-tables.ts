@@ -7,6 +7,8 @@ export const userTableNames = [
   "browser_pairing_email_workflows",
   "budget_month_latches",
   "budgets",
+  "card_enrollments",
+  "card_payment_sources",
   "compacted_conversations",
   "consent_records",
   "conversation_continuity",

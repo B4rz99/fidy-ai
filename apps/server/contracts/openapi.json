@@ -4386,14 +4386,14 @@
         ],
         "type": "object"
       },
-      "PriceRevision": {
+      "Price": {
         "additionalProperties": false,
         "properties": {
           "billingPeriod": {
             "$ref": "#/components/schemas/BillingPeriod"
           },
           "id": {
-            "$ref": "#/components/schemas/PriceRevisionId"
+            "$ref": "#/components/schemas/PriceId"
           },
           "money": {
             "$ref": "#/components/schemas/Money5"
@@ -4422,7 +4422,7 @@
         ],
         "type": "object"
       },
-      "PriceRevisionId": {
+      "PriceId": {
         "allOf": [
           {
             "format": "uuid",
@@ -5772,13 +5772,13 @@
         "minItems": 3,
         "prefixItems": [
           {
-            "$ref": "#/components/schemas/PriceRevision"
+            "$ref": "#/components/schemas/Price"
           },
           {
-            "$ref": "#/components/schemas/PriceRevision"
+            "$ref": "#/components/schemas/Price"
           },
           {
-            "$ref": "#/components/schemas/PriceRevision"
+            "$ref": "#/components/schemas/Price"
           }
         ],
         "type": "array"
@@ -16880,7 +16880,7 @@
     },
     "/subscription/offers": {
       "get": {
-        "description": "List the authoritative immutable Colombia PriceRevisions and renewal terms available before payment-method enrollment.",
+        "description": "List the authoritative immutable Colombia Prices and renewal terms available before payment-method enrollment.",
         "operationId": "subscription.listSubscriptionOffers",
         "parameters": [],
         "responses": {

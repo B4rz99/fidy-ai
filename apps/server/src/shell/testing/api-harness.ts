@@ -7,8 +7,9 @@ import {
   Effect,
   Layer,
   Option,
+  Redacted,
   Ref,
-  type Schema,
+  Schema,
 } from "effect";
 import {
   type Etag,
@@ -21,6 +22,12 @@ import {
 import { HttpApiClient } from "effect/unstable/httpapi";
 import type { PgClient } from "@effect/sql-pg/PgClient";
 import type { Migrator, SqlClient, SqlError } from "effect/unstable/sql";
+import {
+  BillingEmail,
+  EndUserPolicyEvidence,
+  PersonalDataAuthorizationEvidence,
+  WompiSourceId,
+} from "~/core/subscription/enrollment-model";
 import { type TokenBearer } from "~/core/tokens/model";
 import { HostedInference } from "~/shell/agent/hosted-inference";
 import { ConversationCompactionInference } from "~/shell/transcript/conversation-compaction-inference";
@@ -39,6 +46,10 @@ import { FidyApi } from "~/shell/api";
 import { maximumPublicRequestBodySizeBytes } from "~/shell/runtime";
 import type { MemoryCapacityExceededApi } from "~/shell/memory/errors";
 import type { AtomicBatchRejected } from "~/shell/operations/operations";
+import {
+  WompiEnrollmentClient,
+  WompiSourceCreationFailed,
+} from "~/shell/subscription/wompi-client";
 import {
   KapsoClient,
   type KapsoClientService,
@@ -177,6 +188,62 @@ const BaselineCompactionInference = Layer.succeed(ConversationCompactionInferenc
   generate: () => Effect.die("Compaction is below threshold in the API harness"),
 });
 
+const sha256HexCharacters = 64;
+const wompiSourceIdFromText = Schema.decodeSync(
+  Schema.FiniteFromString.pipe(Schema.decodeTo(WompiSourceId))
+);
+const createdWompiSourceId = wompiSourceIdFromText("3891");
+const reconciledWompiSourceId = wompiSourceIdFromText("4991");
+
+export const TestWompiEnrollmentClient = Layer.succeed(WompiEnrollmentClient, {
+  publicKey: "pub_test_api_harness",
+  contracts: (observedAt) => {
+    const endUserPermalink = new URL("https://wompi.example/end-user.pdf");
+    const personalDataPermalink = new URL("https://wompi.example/personal-data.pdf");
+    return Effect.succeed({
+      publicKey: "pub_test_api_harness",
+      evidence: {
+        endUserPolicy: EndUserPolicyEvidence.make({
+          kind: "end-user-policy",
+          permalink: endUserPermalink,
+          displayedText: "Acepto el reglamento de Wompi.",
+          contentSha256: "0".repeat(sha256HexCharacters),
+          providerContentHash: "2".repeat(sha256HexCharacters),
+          observedAt,
+        }),
+        personalDataAuthorization: PersonalDataAuthorizationEvidence.make({
+          kind: "personal-data-authorization",
+          permalink: personalDataPermalink,
+          displayedText: "Autorizo el tratamiento de datos personales de Wompi.",
+          contentSha256: "1".repeat(sha256HexCharacters),
+          providerContentHash: "3".repeat(sha256HexCharacters),
+          observedAt,
+        }),
+      },
+      endUserAcceptance: Redacted.make("api-harness-end-user-acceptance"),
+      personalDataAcceptance: Redacted.make("api-harness-personal-data-acceptance"),
+    });
+  },
+  createPaymentSource: ({ cardToken }) => {
+    const token = Redacted.value(cardToken);
+    if (token === "tok_test_declined") return Effect.succeed({ _tag: "Refused" });
+    if (token === "tok_test_ambiguous") {
+      return Effect.fail(new WompiSourceCreationFailed({ certainty: "ambiguous" }));
+    }
+    if (token === "tok_test_rejected") {
+      return Effect.fail(new WompiSourceCreationFailed({ certainty: "rejected" }));
+    }
+    return Effect.succeed({ _tag: "Available", sourceId: createdWompiSourceId });
+  },
+  verifyPaymentSource: (sourceId) =>
+    Effect.succeed({
+      sourceId,
+      billingEmail: BillingEmail.make(
+        sourceId === reconciledWompiSourceId ? "outcome@example.com" : "wrong@example.com"
+      ),
+    }),
+});
+
 const BoundedBunHttpServerTest = HttpServer.layerTestClient.pipe(
   Layer.provide(
     FetchHttpClient.layer.pipe(
@@ -200,6 +267,7 @@ type SupportAccessApiHarnessOutput =
   | KapsoClient
   | MigrationSqlClient
   | PgClient
+  | WompiEnrollmentClient
   | SqlClient.SqlClient
   | BunServices.BunServices;
 type SupportAccessApiHarnessError =
@@ -225,6 +293,7 @@ const makeApiHarnessBase = (access: Layer.Layer<SupportAccessVerifier>): Support
     Layer.provideMerge(TestKapsoClient),
     Layer.provideMerge(MemoryInferenceTest),
     Layer.provideMerge(BaselineCompactionInference),
+    Layer.provideMerge(TestWompiEnrollmentClient),
     Layer.provideMerge(makeDevelopmentSeedLive(defaultPatBearer)),
     Layer.provideMerge(BoundedBunHttpServerTest),
     Layer.provideMerge(BunServices.layer),
@@ -272,6 +341,7 @@ export const makeBrowserLoginPairingAcceptanceServer = ({
     Layer.provide(TestKapsoClient),
     Layer.provide(MemoryInferenceTest),
     Layer.provide(BaselineCompactionInference),
+    Layer.provide(TestWompiEnrollmentClient),
     Layer.provide(
       BunHttpServer.layer({
         hostname: "127.0.0.1",
@@ -281,6 +351,7 @@ export const makeBrowserLoginPairingAcceptanceServer = ({
       })
     ),
     Layer.provide(BunServices.layer),
+    Layer.provide(FetchHttpClient.layer),
     Layer.provide(MigrationSqlClient.layer),
     Layer.provide(PgLive),
     Layer.provide(AcceptancePublicNamespace),

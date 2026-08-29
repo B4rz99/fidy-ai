@@ -868,8 +868,8 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
               "pat_pairing_start_attempts",
               "pat_pairings",
               "pending_consent_exchanges",
-              "price_revisions",
-              "published_price_revisions",
+              "prices",
+              "published_prices",
               "support_recovery_admission_attempts",
               "web_sessions",
               "whatsapp_consent_disclosure_delivery_attempts",
@@ -881,17 +881,17 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         })
     );
 
-    it.effect("keeps authoritative PriceRevision rows readable and immutable to runtime SQL", () =>
+    it.effect("keeps authoritative Price rows readable and immutable to runtime SQL", () =>
       Effect.gen(function* () {
         const sql = yield* SqlClient.SqlClient;
         const revisions = yield* sql`
-          SELECT id::text FROM price_revisions ORDER BY billing_period
+          SELECT id::text FROM prices ORDER BY billing_period
         `;
         const publications = yield* sql`
-          SELECT price_revision_id::text FROM published_price_revisions ORDER BY offer_order
+          SELECT price_id::text FROM published_prices ORDER BY offer_order
         `;
         const inserted = yield* Effect.exit(sql`
-          INSERT INTO price_revisions (
+          INSERT INTO prices (
             id, amount, currency, billing_period, service_market, tax_treatment,
             automatic_renewal, renewal_reminder, cancellation, paid_access_ends,
             payment_methods
@@ -901,17 +901,17 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
             ARRAY['card', 'nequi', 'daviplata']::text[]
           )
         `);
-        const updated = yield* Effect.exit(sql`UPDATE price_revisions SET amount = 1`);
-        const deleted = yield* Effect.exit(sql`DELETE FROM price_revisions`);
+        const updated = yield* Effect.exit(sql`UPDATE prices SET amount = 1`);
+        const deleted = yield* Effect.exit(sql`DELETE FROM prices`);
         const publicationInserted = yield* Effect.exit(sql`
-          INSERT INTO published_price_revisions (offer_order, price_revision_id)
+          INSERT INTO published_prices (offer_order, price_id)
           VALUES (1, '22700000-0000-4000-8000-000000000001')
           ON CONFLICT DO NOTHING
         `);
         const publicationUpdated = yield* Effect.exit(sql`
-          UPDATE published_price_revisions SET offer_order = 1
+          UPDATE published_prices SET offer_order = 1
         `);
-        const publicationDeleted = yield* Effect.exit(sql`DELETE FROM published_price_revisions`);
+        const publicationDeleted = yield* Effect.exit(sql`DELETE FROM published_prices`);
 
         expect(revisions).toHaveLength(3);
         expect(publications).toHaveLength(3);

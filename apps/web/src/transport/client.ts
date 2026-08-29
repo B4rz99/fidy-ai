@@ -1,15 +1,18 @@
 import {
   FidyApi,
   type FidyApiGroups,
+  SubscriptionEnrollmentApi,
+  type SubscriptionEnrollmentApiGroups,
   TokenAuthorizationClientAnonymousLive,
   WebAuthApi,
   type WebAuthApiGroups,
 } from "@fidy/server/client";
-import { Effect, Layer, Schema } from "effect";
+import { Context, Effect, Layer, ManagedRuntime, Schema } from "effect";
 import { FetchHttpClient, type HttpClient } from "effect/unstable/http";
+import { HttpApiClient } from "effect/unstable/httpapi";
 import { AtomHttpApi } from "effect/unstable/reactivity";
 
-export type { CanonicalInput, CanonicalSuccess } from "@fidy/server/client";
+export type { CanonicalInput, CanonicalSuccess, CardEnrollmentType } from "@fidy/server/client";
 export {
   BackupRecoveryCode,
   BrowserLoginPairingInvalidApi,
@@ -39,7 +42,11 @@ export {
   PATRecipientLabel,
   PATScope,
   PATScopes,
-  PriceRevisionId,
+  PriceId,
+  BillingEmail,
+  CardEnrollment,
+  CardEnrollmentDecisions,
+  CardEnrollmentId,
   TokenBearer,
   TokenShortId,
   buildPATDisclosure,
@@ -125,3 +132,29 @@ export const makeWebAuthClient = (
     baseUrl: apiOrigin,
     httpClient: withCredentials(httpClient),
   });
+
+type EnrollmentApiClient = HttpApiClient.Client<SubscriptionEnrollmentApiGroups, never, never>;
+class EnrollmentClientService extends Context.Service<
+  EnrollmentClientService,
+  EnrollmentApiClient
+>()("@fidy/web/transport/client/EnrollmentClientService") {}
+
+/** Dedicated browser-only enrollment transport, kept outside canonical operations and PATs. */
+export type SubscriptionEnrollmentClient = Readonly<{
+  execute: <A, E>(use: (client: EnrollmentApiClient) => Effect.Effect<A, E>) => Promise<A>;
+}>;
+
+/** Derives exact enrollment calls with first-party cookies over the shared browser runtime. */
+export const makeSubscriptionEnrollmentClient = (
+  apiOrigin: string,
+  httpClient: FidyClientLayer = FetchHttpClient.layer
+): SubscriptionEnrollmentClient => {
+  const live = Layer.effect(
+    EnrollmentClientService,
+    HttpApiClient.make(SubscriptionEnrollmentApi, { baseUrl: apiOrigin })
+  ).pipe(Layer.provide(withCredentials(httpClient)));
+  const runtime = ManagedRuntime.make(live);
+  return {
+    execute: (use) => runtime.runPromise(Effect.flatMap(EnrollmentClientService, use)),
+  };
+};

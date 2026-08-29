@@ -352,18 +352,31 @@ _Avoid_: Trial status, renewable trial, onboarding window.
 
 **Subscription**:
 The User's paid access to Fidy — weekly, monthly, or yearly Pro. Its activation ServiceMarket,
-billing periods, PriceRevisions, tax treatment, provider references, refunds, and UTC instants stay
+billing periods, Prices, tax treatment, provider references, refunds, and UTC instants stay
 historically interpretable.
 _Avoid_: Membership, plan (alone), recurring charge (that is a RecurringSeries).
 
-**PriceRevision**:
+**Price**:
 An immutable version of Subscription price terms: exact Money, billing period, tax treatment, and
 the ServiceMarket in which the terms were offered. A later price change never rewrites a prior
 billing period.
 _Avoid_: Current price, price config, rate.
 
+**CardEnrollment**:
+One short-lived, User-owned authorization intent for a selected Price and reusable card source. It
+retains the accepted billing email and safe displayed terms through `prepared`, `creating`,
+`available`, `refused`, `expired`, or `verifying`; only an atomic claim of `prepared` may create a
+provider source. Card details and transient provider tokens are never CardEnrollment state.
+_Avoid_: Checkout, payment attempt, card session.
+
+**CardPaymentSource**:
+The private reusable provider authority created by an available CardEnrollment. Its provider
+identity remains server-only; changing Price terms requires a new CardEnrollment but can reuse this
+source without collecting card details again.
+_Avoid_: Saved card (Fidy does not store a card), payment method token.
+
 **BillingAttempt**:
-One asynchronous attempt to collect a Subscription charge, retaining its Money, PriceRevision,
+One asynchronous attempt to collect a Subscription charge, retaining its Money, Price,
 provider references, and UTC instants. Starting one yields `pending`; only a verified provider
 outcome advances it to `succeeded` or `failed`.
 _Avoid_: Charge (alone), synchronous payment, settlement promise.

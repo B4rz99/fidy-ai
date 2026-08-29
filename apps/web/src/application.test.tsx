@@ -12,6 +12,7 @@ import {
   type FidyClient,
   type WebAuthClient,
   makeFidyClient,
+  makeSubscriptionEnrollmentClient,
   makeWebAuthClient,
 } from "@/transport/client";
 
@@ -63,6 +64,7 @@ const renderRoute = async (
   const router = createWebRouter({
     apiClient,
     webAuthClient,
+    subscriptionEnrollmentClient: makeSubscriptionEnrollmentClient("https://api.test.fidyapp.com"),
     history: Option.some(createMemoryHistory({ initialEntries: [path] })),
   });
 

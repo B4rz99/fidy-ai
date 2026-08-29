@@ -67,8 +67,21 @@ export {
 } from "./web-auth-api";
 export { StartedBrowserLoginPairing } from "~/core/browser-login/model";
 export { EmailAddress, EmailVerificationCode } from "~/core/email-authentication/model";
-export { PriceRevisionId } from "~/core/subscription/reference";
+export { PriceId } from "~/core/subscription/reference";
 export { BackupRecoveryCode, RotatedBackupRecoveryCode } from "~/core/recovery/model";
+export {
+  BillingEmail,
+  CardEnrollment,
+  CardEnrollmentDecisions,
+  CardEnrollmentId,
+} from "~/core/subscription/enrollment-model";
+export type { CardEnrollment as CardEnrollmentType } from "~/core/subscription/enrollment-model";
+export {
+  CardEnrollmentInvalidApi,
+  CardEnrollmentUnavailableApi,
+  SubscriptionEnrollmentApi,
+  type SubscriptionEnrollmentApiGroups,
+} from "./subscription-enrollment-api";
 export {
   BrowserLoginPairingInvalidApi,
   BrowserLoginPollingRateLimitedApi,

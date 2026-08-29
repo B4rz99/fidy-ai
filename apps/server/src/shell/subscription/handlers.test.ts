@@ -17,7 +17,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
       })
     );
 
-    it.effect("returns the three authoritative Colombia PriceRevisions", () =>
+    it.effect("returns the three authoritative Colombia Prices", () =>
       Effect.gen(function* () {
         const client = yield* ApiHarnessClient;
 

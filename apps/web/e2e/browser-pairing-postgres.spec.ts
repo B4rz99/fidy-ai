@@ -585,7 +585,7 @@ test("establishes, retains, replays, and revokes a real PostgreSQL WebSession", 
   await assertUnknownWrongVerifierRefused(request);
 });
 
-test("renders authoritative PostgreSQL Subscription offers without starting payment", async ({
+test("renders authoritative PostgreSQL Subscription offers and prepares card enrollment", async ({
   page,
   request,
 }) => {
@@ -623,16 +623,20 @@ test("renders authoritative PostgreSQL Subscription offers without starting paym
   await expect(page.getByText(/no enviaremos un recordatorio/iu)).toHaveCount(0);
   await expect(page.getByText(/Precio final|No se cobra IVA/iu)).toHaveCount(0);
   await expect(page.getByText(/Colombia · Cobro/iu)).toHaveCount(0);
+  const prepareResponse = page.waitForResponse(
+    (candidate) =>
+      candidate.url() === `${apiOrigin}/web/subscription/card-enrollments/prepare` &&
+      candidate.request().method() === "POST"
+  );
   await page.getByRole("button", { name: "Elegir mensual" }).click();
+  expect((await prepareResponse).status()).toBe(successStatus);
   await expect(page).toHaveURL(/\/upgrade$/u);
-  const methods = page.getByRole("region", { name: "Métodos de pago" });
-  await expect(
-    methods.getByText("Elegiste la oferta mensual. La selección todavía no genera ningún cobro.")
-  ).toBeVisible();
-  await expect(methods.getByText("Tarjeta")).toBeVisible();
-  await expect(methods.getByText("Nequi")).toBeVisible();
-  await expect(methods.getByText("DaviPlata")).toBeVisible();
-  expect(mutatingRequests).toEqual([]);
+  const payment = page.getByRole("region", { name: "Pago con tarjeta" });
+  await expect(payment.getByRole("textbox", { name: "Número de tarjeta" })).toBeVisible();
+  await expect(payment.getByRole("textbox", { name: "Vencimiento" })).toBeVisible();
+  await expect(payment.getByRole("button", { name: "Guardar tarjeta" })).toBeDisabled();
+  await expect(page.getByText(/Tarjeta|Nequi|DaviPlata/u)).toHaveCount(0);
+  expect(mutatingRequests).toEqual([`POST ${apiOrigin}/web/subscription/card-enrollments/prepare`]);
 });
 
 test("applies the same canonical Dashboard edit from the UI and a dashboard-scoped PAT", async ({

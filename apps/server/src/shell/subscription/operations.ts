@@ -27,7 +27,7 @@ const listSubscriptionOffers = HttpApiEndpoint.get(
 )
   .annotate(
     OpenApi.Description,
-    "List the authoritative immutable Colombia PriceRevisions and renewal terms available before " +
+    "List the authoritative immutable Colombia Prices and renewal terms available before " +
       "payment-method enrollment."
   )
   .annotateMerge(

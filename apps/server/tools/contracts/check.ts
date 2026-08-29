@@ -199,9 +199,7 @@ export const readProductionWebRelease = ({
           (accumulated, chunk) => appendBounded(accumulated, chunk, maximumBytes)
         ),
         Effect.flatMap((bytes) =>
-          Schema.decodeUnknownEffect(Schema.UnknownFromJsonString)(
-            new TextDecoder().decode(bytes)
-          ).pipe(
+          Schema.decodeEffect(Schema.UnknownFromJsonString)(new TextDecoder().decode(bytes)).pipe(
             Effect.mapError(
               (cause) =>
                 new ProductionEvidenceRejected({

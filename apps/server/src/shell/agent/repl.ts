@@ -87,7 +87,7 @@ export const runAgentRepl = Effect.fn("runAgentRepl")(function* (caller: ReplCal
   const turn = Effect.gen(function* () {
     yield* terminal.display("Fidy> ");
     const text = yield* terminal.readLine;
-    const message = yield* Schema.decodeUnknownEffect(InboundMessage)({ text }).pipe(
+    const message = yield* Schema.decodeEffect(InboundMessage)({ text }).pipe(
       Effect.map(Option.some),
       Effect.catchTag("SchemaError", () =>
         terminal.display(invalidMessage).pipe(Effect.as(Option.none<InboundMessage>()))

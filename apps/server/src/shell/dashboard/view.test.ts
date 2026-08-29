@@ -19,18 +19,18 @@ const commonStatus = {
 } as const;
 
 it("projects every closed Budget status without its acquisition facts", () => {
-  const under = Schema.decodeUnknownSync(BudgetStatus)({
+  const under = Schema.decodeSync(BudgetStatus)({
     ...commonStatus,
     type: "under",
     spent: { amount: "25", currency: "COP" },
     remaining: { amount: "75", currency: "COP" },
   });
-  const reached = Schema.decodeUnknownSync(BudgetStatus)({
+  const reached = Schema.decodeSync(BudgetStatus)({
     ...commonStatus,
     type: "reached",
     spent: { amount: "100", currency: "COP" },
   });
-  const over = Schema.decodeUnknownSync(BudgetStatus)({
+  const over = Schema.decodeSync(BudgetStatus)({
     ...commonStatus,
     type: "over",
     spent: { amount: "125", currency: "COP" },

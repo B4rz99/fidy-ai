@@ -50,7 +50,7 @@ const makeCanonicalTelemetry = (
       const method = yield* Schema.decodeUnknownEffect(TelemetryHttpMethod)(
         catalogEntry.method
       ).pipe(Effect.orDie);
-      const route = yield* Schema.decodeUnknownEffect(TelemetryCodeSchema.httpRoute)(
+      const route = yield* Schema.decodeEffect(TelemetryCodeSchema.httpRoute)(
         catalogEntry.route
       ).pipe(Effect.orDie);
       const classified = Effect.tapError(httpEffect, recordExpectedOutcome(telemetry));

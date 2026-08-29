@@ -40,7 +40,7 @@ export const admitAgentConversationTurn = Effect.fn("admitAgentConversationTurn"
   if (onboarding._tag !== "Proceed") return onboarding;
   if (input.content._tag !== "Text") return invalidAgentMessage();
 
-  const inbound = Schema.decodeUnknownOption(InboundMessage)({ text: input.content.text });
+  const inbound = Schema.decodeOption(InboundMessage)({ text: input.content.text });
   if (Option.isNone(inbound)) return invalidAgentMessage();
   return {
     _tag: "AuthorizedTurn",

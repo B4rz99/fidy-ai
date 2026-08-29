@@ -119,7 +119,7 @@ it("rejects incomplete or internally inconsistent report values", () => {
 
 it("renders only the complete closed secret-free verification shape", () => {
   const report = verifySentryAccount({ observation: makeObservation() });
-  const rendered = Schema.decodeUnknownSync(
+  const rendered = Schema.decodeSync(
     Schema.fromJsonString(Schema.Record(Schema.String, Schema.Unknown))
   )(renderSentryVerificationReport(report));
 

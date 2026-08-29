@@ -168,7 +168,7 @@ const normalizedRegion = (name: Option.Option<string>): Option.Option<SentryStor
   });
 
 const regionNameFromUrl = (value: string): Option.Option<string> => {
-  const url = Schema.decodeUnknownOption(Schema.URLFromString)(value);
+  const url = Schema.decodeOption(Schema.URLFromString)(value);
   return Option.flatMap(url, (candidate) =>
     candidate.protocol === "https:"
       ? Option.fromUndefinedOr(candidate.hostname.split(".")[0])

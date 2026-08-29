@@ -45,7 +45,7 @@ const requestBody = Effect.fn("Test.requestBody")(function* (
   if (request.body._tag !== "Uint8Array") {
     return yield* Effect.die("Expected an encoded OpenAI request body");
   }
-  const decoded = yield* Schema.decodeUnknownEffect(Schema.UnknownFromJsonString)(
+  const decoded = yield* Schema.decodeEffect(Schema.UnknownFromJsonString)(
     new TextDecoder().decode(request.body.body)
   );
   return yield* Schema.decodeUnknownEffect(JsonRecord)(decoded);

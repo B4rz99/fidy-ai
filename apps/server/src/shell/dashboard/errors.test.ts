@@ -13,9 +13,9 @@ import {
 import { LayoutRegionSelector, WidgetId } from "~/core/dashboard/model";
 import { DashboardCategoryNotFound, toApiFailure } from "./errors";
 
-const widgetId = Schema.decodeUnknownSync(WidgetId)("f1d1a000-0000-4000-8000-000000000991");
-const widgetIds = Schema.decodeUnknownSync(LayoutRegionSelector)([widgetId]);
-const categoryId = Schema.decodeUnknownSync(CategoryId)("f1d1a000-0000-4000-8000-000000000992");
+const widgetId = Schema.decodeSync(WidgetId)("f1d1a000-0000-4000-8000-000000000991");
+const widgetIds = Schema.decodeSync(LayoutRegionSelector)([widgetId]);
+const categoryId = Schema.decodeSync(CategoryId)("f1d1a000-0000-4000-8000-000000000992");
 const caller = {
   accessCaller: { _tag: "PAT" as const, capabilities: ["dashboard" as const] },
   tier: "free" as const,

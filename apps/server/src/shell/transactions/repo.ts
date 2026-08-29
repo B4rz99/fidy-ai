@@ -234,7 +234,7 @@ const DashboardSumRow = Schema.Struct({
 });
 
 const decodeDashboardMoney = (currency: Currency, amount: ReadonlyMoney["amount"]): ReadonlyMoney =>
-  Schema.decodeUnknownSync(Schema.toType(Money))({ currency, amount });
+  Schema.decodeSync(Schema.toType(Money))({ currency, amount });
 
 const dashboardSumKey = (
   row: typeof DashboardSumRow.Type,

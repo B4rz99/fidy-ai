@@ -91,9 +91,9 @@ export const deliverWhatsAppOnboardingOutcome = Effect.fn("WhatsApp.deliverOnboa
     > = Effect.void
   ) {
     if (isOutsideFreeFormWindow(event)) return;
-    const text = yield* Schema.decodeUnknownEffect(TranscriptText)(
-      onboardingOutcomeText(outcome)
-    ).pipe(Effect.orDie);
+    const text = yield* Schema.decodeEffect(TranscriptText)(onboardingOutcomeText(outcome)).pipe(
+      Effect.orDie
+    );
     if (outcome._tag === "SendDisclosure" || outcome._tag === "AwaitingDisclosureDelivery") {
       yield* requestConsentDisclosureDelivery({
         event,

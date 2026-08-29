@@ -193,7 +193,7 @@ const callSupportRecovery = Effect.fn("SupportRecoveryCli.callTransport")(functi
       message: "La operación devolvió una respuesta no válida.",
     });
   }
-  const decoded = Schema.decodeUnknownOption(Schema.fromJsonString(SupportResponse))(
+  const decoded = Schema.decodeOption(Schema.fromJsonString(SupportResponse))(
     new TextDecoder().decode(bytes.value)
   );
   if (Option.isSome(decoded)) return decoded.value;

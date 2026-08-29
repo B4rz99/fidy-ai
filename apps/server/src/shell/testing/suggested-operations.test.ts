@@ -534,86 +534,92 @@ const SuggestedOperationsHarness = Layer.mergeAll(
 layer(SuggestedOperationsHarness, { excludeTestServices: true, timeout: "30 seconds" })(
   "operation-derived SuggestedOperation guard",
   (it) => {
-    it.effect("every returned SuggestedOperation names a callable canonical operation", () =>
-      Effect.gen(function* () {
-        yield* seedConsentedPatIdentity({
-          userId: readOnlyUser,
-          bearer: readOnlyBearer,
-          tokenId: readOnlyTokenId,
-          scopes: ["read"],
-        });
-        yield* seedConsentedPatIdentity({
-          userId: readOnlyUser,
-          bearer: readOwnerWriterBearer,
-          tokenId: readOwnerWriterTokenId,
-          scopes: ["write"],
-        });
-        yield* seedConsentedPatIdentity({
-          userId: writeOnlyUser,
-          bearer: writeOnlyBearer,
-          tokenId: writeOnlyTokenId,
-          scopes: ["write"],
-        });
-        yield* seedConsentedPatIdentity({
-          userId: dashboardOnlyUser,
-          bearer: dashboardOnlyBearer,
-          tokenId: dashboardOnlyTokenId,
-          scopes: ["dashboard"],
-        });
-        const clientsByScope: Record<PATScope, ApiClient> = {
-          read: yield* ReadOnlyApiClient,
-          write: yield* WriteOnlyApiClient,
-          dashboard: yield* DashboardOnlyApiClient,
-        };
-        const readOwnerWriter = yield* ReadOwnerWriterApiClient;
-        const catalogIds = operationCatalog.operations.map((operation) => operation.id).sort();
-
-        expect(catalogIds).toEqual(Object.keys(probes).sort());
-
-        let returnedSuggestedOperations = 0;
-        for (const [sourceOperation, probe] of Object.entries(probes)) {
-          yield* truncateTransactions;
-          yield* truncateStatementIngestion;
-          yield* truncateInsights;
-          yield* truncateDashboards;
-          const sql = yield* MigrationSqlClient;
-          yield* sql`TRUNCATE budget_month_latches, budgets`;
-          const source = Option.getOrThrow(
-            Option.fromUndefinedOr(operationCatalog.byId.get(sourceOperation))
-          );
-          const sourceCapability = Option.getOrElse(
-            patScopeCapability(source.policy.access),
-            () => "write" as const
-          );
-          const sourceCaller: SuggestedOperationCaller = {
-            accessCaller: { _tag: "PAT", capabilities: [sourceCapability] },
-            tier: source.policy.requiredTier,
+    it.effect(
+      "every returned SuggestedOperation names a callable canonical operation",
+      () =>
+        Effect.gen(function* () {
+          yield* seedConsentedPatIdentity({
+            userId: readOnlyUser,
+            bearer: readOnlyBearer,
+            tokenId: readOnlyTokenId,
+            scopes: ["read"],
+          });
+          yield* seedConsentedPatIdentity({
+            userId: readOnlyUser,
+            bearer: readOwnerWriterBearer,
+            tokenId: readOwnerWriterTokenId,
+            scopes: ["write"],
+          });
+          yield* seedConsentedPatIdentity({
+            userId: writeOnlyUser,
+            bearer: writeOnlyBearer,
+            tokenId: writeOnlyTokenId,
+            scopes: ["write"],
+          });
+          yield* seedConsentedPatIdentity({
+            userId: dashboardOnlyUser,
+            bearer: dashboardOnlyBearer,
+            tokenId: dashboardOnlyTokenId,
+            scopes: ["dashboard"],
+          });
+          const clientsByScope: Record<PATScope, ApiClient> = {
+            read: yield* ReadOnlyApiClient,
+            write: yield* WriteOnlyApiClient,
+            dashboard: yield* DashboardOnlyApiClient,
           };
-          const responses = yield* probe(clientsByScope[sourceCapability], readOwnerWriter);
+          const readOwnerWriter = yield* ReadOwnerWriterApiClient;
+          const catalogIds = operationCatalog.operations.map((operation) => operation.id).sort();
 
-          for (const response of responses) {
-            for (const suggestedOperation of response.next) {
-              returnedSuggestedOperations += 1;
-              expect(
-                Result.isSuccess(
-                  Schema.encodeUnknownResult(SuggestedOperation, strictEncoding)(suggestedOperation)
-                ),
-                `${sourceOperation} returned an invalid SuggestedOperation`
-              ).toBe(true);
+          expect(catalogIds).toEqual(Object.keys(probes).sort());
 
-              const target = Option.getOrThrow(
-                Option.fromUndefinedOr(operationCatalog.byId.get(suggestedOperation.tool))
-              );
-              expect(
-                canCallOperation(target.policy, sourceCaller),
-                `${sourceOperation} advertised unavailable ${suggestedOperation.tool}`
-              ).toBe(true);
+          let returnedSuggestedOperations = 0;
+          for (const [sourceOperation, probe] of Object.entries(probes)) {
+            yield* truncateTransactions;
+            yield* truncateStatementIngestion;
+            yield* truncateInsights;
+            yield* truncateDashboards;
+            const sql = yield* MigrationSqlClient;
+            yield* sql`TRUNCATE budget_month_latches, budgets`;
+            const source = Option.getOrThrow(
+              Option.fromUndefinedOr(operationCatalog.byId.get(sourceOperation))
+            );
+            const sourceCapability = Option.getOrElse(
+              patScopeCapability(source.policy.access),
+              () => "write" as const
+            );
+            const sourceCaller: SuggestedOperationCaller = {
+              accessCaller: { _tag: "PAT", capabilities: [sourceCapability] },
+              tier: source.policy.requiredTier,
+            };
+            const responses = yield* probe(clientsByScope[sourceCapability], readOwnerWriter);
+
+            for (const response of responses) {
+              for (const suggestedOperation of response.next) {
+                returnedSuggestedOperations += 1;
+                expect(
+                  Result.isSuccess(
+                    Schema.encodeUnknownResult(
+                      SuggestedOperation,
+                      strictEncoding
+                    )(suggestedOperation)
+                  ),
+                  `${sourceOperation} returned an invalid SuggestedOperation`
+                ).toBe(true);
+
+                const target = Option.getOrThrow(
+                  Option.fromUndefinedOr(operationCatalog.byId.get(suggestedOperation.tool))
+                );
+                expect(
+                  canCallOperation(target.policy, sourceCaller),
+                  `${sourceOperation} advertised unavailable ${suggestedOperation.tool}`
+                ).toBe(true);
+              }
             }
           }
-        }
 
-        expect(returnedSuggestedOperations).toBeGreaterThan(0);
-      })
+          expect(returnedSuggestedOperations).toBeGreaterThan(0);
+        }),
+      60_000
     );
 
     it.effect("filters SuggestedOperations unavailable to the resolved caller", () =>

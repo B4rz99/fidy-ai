@@ -231,6 +231,7 @@ apps/web/src/features/subscription/presentation.ts
 apps/server/src/shell/db/migrations/registry.ts
   s_92114c81307c01::t_3824a35382ccae 78
   s_92114c81307c01::t_de4c2553f1d043 28
+  s_92114c81307c01::t_7e751215657b3f 40,90
 apps/server/src/shell/db/user-tables.ts
   s_92114c81307c01::t_6904e3ab7e19a0 10-11
 CONTEXT.md
@@ -348,6 +349,8 @@ apps/server/src/shell/testing/api-harness.ts
   s_92114c81307c01::t_1b0db2adcb3c07 26,29
   s_92114c81307c01::t_8dfba6b080fa36 239-241,243-244
   s_92114c81307c01::t_4d07f095b9db65 50-52,226,228-235
+  s_92114c81307c01::t_142dd99460e0d1 296
+  s_92114c81307c01::t_36b3290068011a 270
 apps/server/src/shell/subscription/enrollment-handlers.ts
   s_92114c81307c01::t_5204db55243e13 118,120,126
   s_92114c81307c01::t_41026f77984f07 137

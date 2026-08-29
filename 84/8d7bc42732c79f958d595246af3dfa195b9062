@@ -1,0 +1,26 @@
+scripts/check-credential-evidence.ts
+  s_b8658db9652e53::t_c807fc52ac16b3 40
+  s_b8658db9652e53::t_52a8be167882aa 41-44
+bun.lock
+  s_b8658db9652e53::t_588b3ec2380d00 36,320,322,324,326,328,330,332,334,336,338,340,342,344,346,348,350,352,354,356,358,360,362,364,366,368,370,1450,1694-1695,1768-1817,1828-1831
+apps/server/src/shell/ingestion/email-extractor.ts
+  s_b8658db9652e53::t_adb20444b09fc0 21,23-28
+apps/server/package.json
+  s_b8658db9652e53::t_ec027d0619273a 54
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "848d7bc42732c79f958d595246af3dfa195b9062",
+  "prompts": {},
+  "sessions": {
+    "s_b8658db9652e53": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a045fb-152d-7a64-a33b-43aa07614304",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": null
+    }
+  }
+}

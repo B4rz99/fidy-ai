@@ -852,6 +852,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           expect(publicTables.map((row) => row.tableName)).toEqual(
             [
               ...userTableNames,
+              "anonymized_email_ingest_samples",
               "browser_login_pairings",
               "browser_login_start_attempts",
               "browser_pairing_email_start_requests",
@@ -863,6 +864,8 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
               "email_enrollments",
               "email_pairing_login_admission_attempts",
               "email_pairing_login_admission_scopes",
+              "forwarded_email_known_admission_window",
+              "forwarded_email_user_admission_windows",
               "pat_pairing_claim_attempts",
               "pat_pairing_inspection_attempts",
               "pat_pairing_start_attempts",
@@ -870,6 +873,8 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
               "pending_consent_exchanges",
               "prices",
               "published_prices",
+              "resend_webhook_admission_window",
+              "resend_webhook_deliveries",
               "support_recovery_admission_attempts",
               "web_sessions",
               "whatsapp_consent_disclosure_delivery_attempts",

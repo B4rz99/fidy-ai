@@ -3,9 +3,9 @@ import type { SqlClient } from "effect/unstable/sql";
 import { type Category } from "~/core/categories/model";
 import { CategoryNotFound } from "~/core/categories/errors";
 import { type CategoryId } from "~/core/categories/reference";
+import type { CapturedInterpretationContext } from "~/core/_shared/captured-interpretation-context";
 import { TransactionNotFound } from "~/core/transactions/errors";
 import {
-  type CapturedInterpretationContext,
   type CreateTransactionInput,
   type Transaction,
   type TransactionExtraction,
@@ -30,8 +30,10 @@ import type { SpanDescriptor } from "~/shell/observability/protocol";
 import { Telemetry } from "~/shell/observability/telemetry";
 import { type TransactionApiFailure, mapTransactionFailure } from "./errors";
 import {
+  type NotificationEmailAttestationInput,
   type StatementLineAttestationInput,
   insertManualSourceAttestationInScope,
+  insertNotificationEmailSourceAttestationInScope,
   insertStatementLineSourceAttestationInScope,
   insertTransactionInScope,
   softDeleteTransactionInScope,
@@ -138,6 +140,32 @@ export const createTransaction: CanonicalMutationImplementation<
   return { data: transaction, next: capturedTransactionOperations(caller) };
 });
 
+const captureExtractedTransactionInScope = Effect.fn("captureExtractedTransactionInScope")(
+  function* (input: {
+    readonly userId: UserId;
+    readonly extraction: TransactionExtraction;
+    readonly caller: SuggestedOperationCaller;
+  }) {
+    const now = yield* DateTime.now;
+    yield* checkAlreadyOccurred({ occurredAt: input.extraction.occurredAt, now }).pipe(
+      mapTransactionFailure({ caller: input.caller })
+    );
+    const categoryId = yield* categorizeCapture({
+      userId: input.userId,
+      counterparty: input.extraction.counterparty,
+      callerCategory: Option.none(),
+    });
+    return yield* insertTransactionInScope(
+      input.userId,
+      UpdateTransactionInput.make({
+        ...input.extraction,
+        categoryId,
+        notes: Option.none(),
+      })
+    );
+  }
+);
+
 /** Accepted statement facts supplied by Ingestion inside its finalization transaction. */
 export type CaptureStatementTransactionInput = Readonly<{
   userId: UserId;
@@ -159,23 +187,11 @@ export const captureStatementTransactionInScope = Effect.fn("captureStatementTra
     attestation,
     caller,
   }: CaptureStatementTransactionInput) {
-    const now = yield* DateTime.now;
-    yield* checkAlreadyOccurred({ occurredAt: extraction.occurredAt, now }).pipe(
-      mapTransactionFailure({ caller })
-    );
-    const categoryId = yield* categorizeCapture({
+    const transaction = yield* captureExtractedTransactionInScope({
       userId,
-      counterparty: extraction.counterparty,
-      callerCategory: Option.none(),
+      extraction,
+      caller,
     });
-    const transaction = yield* insertTransactionInScope(
-      userId,
-      UpdateTransactionInput.make({
-        ...extraction,
-        categoryId,
-        notes: Option.none(),
-      })
-    );
     yield* insertStatementLineSourceAttestationInScope(userId, transaction.id, {
       ...context,
       ...attestation,
@@ -183,6 +199,37 @@ export const captureStatementTransactionInScope = Effect.fn("captureStatementTra
     return transaction;
   }
 );
+
+/** Accepted notification facts supplied by Ingestion inside its finalization transaction. */
+export type CaptureNotificationEmailTransactionInput = Readonly<{
+  userId: UserId;
+  extraction: TransactionExtraction;
+  context: CapturedInterpretationContext;
+  attestation: Omit<NotificationEmailAttestationInput, keyof CapturedInterpretationContext>;
+  caller: SuggestedOperationCaller;
+}>;
+
+/**
+ * Creates a categorized Transaction and immutable notification-email provenance without opening a
+ * transaction. Ingestion must call it inside the matching User-scoped finalization transaction and
+ * owns rollback together with the receipt's fenced terminal transition.
+ */
+export const captureNotificationEmailTransactionInScope = Effect.fn(
+  "captureNotificationEmailTransactionInScope"
+)(function* ({
+  userId,
+  extraction,
+  context,
+  attestation,
+  caller,
+}: CaptureNotificationEmailTransactionInput) {
+  const transaction = yield* captureExtractedTransactionInScope({ userId, extraction, caller });
+  yield* insertNotificationEmailSourceAttestationInScope(userId, transaction.id, {
+    ...context,
+    ...attestation,
+  });
+  return transaction;
+});
 
 /** Facts supplied after canonical decoding and caller authorization for Transaction correction. */
 export type CorrectTransactionInput = TransactionMutationContext &

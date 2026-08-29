@@ -3,11 +3,24 @@ import { HttpApiBuilder } from "effect/unstable/httpapi";
 import { resolveFreeSuggestedOperationCaller } from "~/shell/_shared/suggested-operations";
 import { FidyApi } from "~/shell/api";
 import { resolveNeedsReviewItemMutation, submitForExtractionInScope } from "./mutations";
+import { forwardedEmailIngestion } from "./forwarded-email-ingestion";
 import { getStatementSubmission, listNeedsReviewItems } from "./queries";
 
 /** Provides durable statement admission, status, review visibility, and later resolution. */
 export const IngestionLive = HttpApiBuilder.group(FidyApi, "ingestion", (handlers) =>
   handlers
+    .handle("enableEmailForwarding", () =>
+      Effect.gen(function* () {
+        const { userId } = yield* resolveFreeSuggestedOperationCaller;
+        return yield* forwardedEmailIngestion.enable(userId);
+      })
+    )
+    .handle("getEmailForwarding", () =>
+      Effect.gen(function* () {
+        const { userId } = yield* resolveFreeSuggestedOperationCaller;
+        return yield* forwardedEmailIngestion.getStatus(userId);
+      })
+    )
     .handle("submitForExtraction", ({ payload }) =>
       Effect.gen(function* () {
         const { userId, caller } = yield* resolveFreeSuggestedOperationCaller;

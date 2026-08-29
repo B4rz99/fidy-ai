@@ -79,6 +79,7 @@ assertApplicationRejected() {
     --env WOMPI_ENVIRONMENT --env WOMPI_PUBLIC_KEY --env WOMPI_PRIVATE_KEY \
     --env OPENAI_API_KEY --env OPENAI_API_URL \
     --env RESEND_API_KEY --env RESEND_FROM_EMAIL --env RESEND_FROM_NAME \
+    --env RESEND_WEBHOOK_SECRET --env EMAIL_INGEST_RETENTION_DAYS \
     --env PUBLIC_WEB_ORIGIN --env PUBLIC_API_ORIGIN --env INGEST_EMAIL_DOMAIN \
     --env CLOUDFLARE_ACCESS_ISSUER --env CLOUDFLARE_ACCESS_AUDIENCE \
     --env "RAILWAY_GIT_COMMIT_SHA=${releaseSha}" \
@@ -264,6 +265,8 @@ export OPENAI_API_URL="http://${openAiProbe}:8080/v1"
 export RESEND_API_KEY="re_production_smoke_resend_key"
 export RESEND_FROM_EMAIL="obarboza@fidyapp.com"
 export RESEND_FROM_NAME="Fidy"
+export RESEND_WEBHOOK_SECRET="whsec_$(printf '%s' 'production_smoke_secret' | base64)"
+export EMAIL_INGEST_RETENTION_DAYS="90"
 export PUBLIC_WEB_ORIGIN="https://fidyapp.com"
 export PUBLIC_API_ORIGIN="https://api.fidyapp.com"
 export INGEST_EMAIL_DOMAIN="ingest.fidyapp.com"
@@ -348,6 +351,7 @@ docker run --detach --name "$application" --network "$network" \
   --env WOMPI_ENVIRONMENT --env WOMPI_PUBLIC_KEY --env WOMPI_PRIVATE_KEY \
   --env OPENAI_API_KEY --env OPENAI_API_URL \
   --env RESEND_API_KEY --env RESEND_FROM_EMAIL --env RESEND_FROM_NAME \
+  --env RESEND_WEBHOOK_SECRET --env EMAIL_INGEST_RETENTION_DAYS \
   --env PUBLIC_WEB_ORIGIN --env PUBLIC_API_ORIGIN --env INGEST_EMAIL_DOMAIN \
   --env CLOUDFLARE_ACCESS_ISSUER --env CLOUDFLARE_ACCESS_AUDIENCE \
   --env "RAILWAY_GIT_COMMIT_SHA=${releaseSha}" \

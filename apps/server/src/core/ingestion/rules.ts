@@ -1,6 +1,12 @@
 import { BigDecimal, DateTime, Effect, Option, Result, Schema } from "effect";
 import { type Currency, Money, encodeMoneyAmount } from "~/core/_shared/money";
 import {
+  forwardedEmailClaimStaleMinutes,
+  forwardedEmailOutstandingCap,
+  freeForwardedEmailCap,
+  freeForwardedEmailDeferredCap,
+} from "./email-policy";
+import {
   type InterpretedStatementRow,
   type NeedsReviewReason,
   type NeedsReviewStatementRow,
@@ -8,6 +14,173 @@ import {
   type StatementAccounting,
   type StatementColumnMapping,
 } from "./model";
+
+const bogotaTimeZone = DateTime.zoneMakeNamedUnsafe("America/Bogota");
+
+/** Closed worker transition selected from one locked forwarded-email receipt snapshot. */
+export type ForwardedEmailClaimDecision =
+  | Readonly<{ readonly _tag: "Skip" }>
+  | Readonly<{ readonly _tag: "Exhausted"; readonly staleBefore: DateTime.Utc }>
+  | Readonly<{
+      readonly _tag: "Claim";
+      readonly promotedFromDeferred: boolean;
+      readonly consumesFreeAllowance: boolean;
+    }>;
+
+type ForwardedEmailClaimContext = Readonly<{
+  access: "free" | "pro";
+  attemptCount: number;
+  consumed: number;
+  now: DateTime.Utc;
+}>;
+
+/** One valid lifecycle snapshot supplied to forwarded-email claim policy. */
+export type ForwardedEmailClaimInput = ForwardedEmailClaimContext &
+  (
+    | Readonly<{ status: "queued" }>
+    | Readonly<{ status: "deferred"; resumeAt: DateTime.Utc }>
+    | Readonly<{ status: "processing"; startedAt: DateTime.Utc }>
+  );
+
+const claimQueued = (): ForwardedEmailClaimDecision => ({
+  _tag: "Claim",
+  promotedFromDeferred: false,
+  consumesFreeAllowance: false,
+});
+
+const decideDeferredClaim = (
+  input: ForwardedEmailClaimContext & Readonly<{ status: "deferred"; resumeAt: DateTime.Utc }>
+): ForwardedEmailClaimDecision => {
+  if (input.access === "pro") {
+    return { _tag: "Claim", promotedFromDeferred: true, consumesFreeAllowance: false };
+  }
+  const allowanceAvailable =
+    DateTime.Order(input.resumeAt, input.now) <= 0 && input.consumed < freeForwardedEmailCap;
+  return allowanceAvailable
+    ? { _tag: "Claim", promotedFromDeferred: true, consumesFreeAllowance: true }
+    : { _tag: "Skip" };
+};
+
+/** Decides claim eligibility from one valid locked lifecycle snapshot and caller-supplied time. */
+export const decideForwardedEmailClaim = (
+  input: ForwardedEmailClaimInput
+): ForwardedEmailClaimDecision => {
+  if (input.status !== "processing") {
+    if (input.attemptCount >= 3) return { _tag: "Skip" };
+    return input.status === "queued" ? claimQueued() : decideDeferredClaim(input);
+  }
+  const staleBefore = DateTime.subtract(input.now, {
+    minutes: forwardedEmailClaimStaleMinutes,
+  });
+  const isStale = DateTime.Order(input.startedAt, staleBefore) < 0;
+  if (!isStale) return { _tag: "Skip" };
+  return input.attemptCount >= 3 ? { _tag: "Exhausted", staleBefore } : claimQueued();
+};
+
+/** Provider failure classes that determine whether retrieving the notification email is retryable. */
+export type ForwardedEmailProviderFailureReason =
+  | "provider-unavailable"
+  | "invalid-provider-response"
+  | "resource-limit";
+
+/** Retry or terminal visible-review outcome for one failed notification-email retrieval. */
+export type ForwardedEmailRecoveryDecision =
+  | Readonly<{ readonly _tag: "Retry" }>
+  | Readonly<{
+      readonly _tag: "CompleteReview";
+      readonly reviewReason: "provider-retrieval-failed";
+      readonly issue: Readonly<{ readonly path: ""; readonly message: string }>;
+    }>;
+
+type DecideForwardedEmailRecovery = (input: {
+  readonly reason: ForwardedEmailProviderFailureReason;
+  readonly attemptCount: number;
+}) => ForwardedEmailRecoveryDecision;
+
+/** Chooses retry versus visible terminal review independently of persistence mechanics. */
+export const decideForwardedEmailRecovery: DecideForwardedEmailRecovery = (input) =>
+  input.reason === "provider-unavailable" && input.attemptCount < 3
+    ? { _tag: "Retry" }
+    : {
+        _tag: "CompleteReview",
+        reviewReason: "provider-retrieval-failed",
+        issue: {
+          path: "",
+          message: `Email retrieval stopped safely: ${input.reason}.`,
+        },
+      };
+
+/** Half-open Colombia calendar month used by every forwarded-email allowance decision. */
+export const emailAllowancePeriod = (
+  now: DateTime.Utc
+): Readonly<{ from: DateTime.Utc; toExclusive: DateTime.Utc }> => {
+  const from = DateTime.startOf(DateTime.setZone(now, bogotaTimeZone), "month");
+  return {
+    from: DateTime.toUtc(from),
+    toExclusive: DateTime.toUtc(DateTime.add(from, { months: 1 })),
+  };
+};
+
+/** Reports how many additional emails the User may admit in the current month. */
+export const forwardedEmailAllowanceRemaining = (input: {
+  readonly access: "free" | "pro";
+  readonly consumed: number;
+}): Option.Option<number> =>
+  input.access === "pro"
+    ? Option.none()
+    : Option.some(Math.max(0, freeForwardedEmailCap - input.consumed));
+
+type DecideForwardedEmailAdmission = (input: {
+  readonly access: "free" | "pro";
+  readonly consumed: number;
+  readonly deferred: number;
+  readonly outstanding: number;
+}) => Readonly<{
+  status: "queued" | "deferred" | "backlog-full";
+  remaining: Option.Option<number>;
+}>;
+
+/** Decides whether one already-deduplicated provider email runs now or at the next reset. */
+export const decideForwardedEmailAdmission: DecideForwardedEmailAdmission = (input) => {
+  if (input.outstanding >= forwardedEmailOutstandingCap) {
+    return {
+      status: "backlog-full",
+      remaining: input.access === "pro" ? Option.none() : Option.some(0),
+    };
+  }
+  if (input.access === "pro") return { status: "queued", remaining: Option.none() };
+  if (input.consumed >= freeForwardedEmailCap) {
+    return {
+      status: input.deferred >= freeForwardedEmailDeferredCap ? "backlog-full" : "deferred",
+      remaining: Option.some(0),
+    };
+  }
+  return {
+    status: "queued",
+    remaining: Option.some(Math.max(0, freeForwardedEmailCap - input.consumed - 1)),
+  };
+};
+
+const redactionEmail = "\uE000";
+const redactionMoney = "\uE001";
+const redactionDigits = "\uE002";
+const redactionText = "\uE003";
+
+/** Produces value-free structural evidence for explicit operator review. */
+export const redactEmailCandidate = (content: string): string =>
+  content
+    .replace(/[\uE000-\uE003]/gu, "")
+    .replace(
+      /[\p{L}\p{N}.!#$%&'*+/=?^_`{|}~-]+@[\p{L}\p{N}-]+(?:\.[\p{L}\p{N}-]+)+/gu,
+      redactionEmail
+    )
+    .replace(/(?:[$€£]|COP\s*\$?)\s*\d[\d.,]*/giu, redactionMoney)
+    .replace(/\b\d+\b/gu, redactionDigits)
+    .replace(/\p{L}+/gu, redactionText)
+    .replaceAll(redactionEmail, "[EMAIL]")
+    .replaceAll(redactionMoney, "[MONEY]")
+    .replaceAll(redactionDigits, "[DIGITS]")
+    .replaceAll(redactionText, "[TEXT]");
 
 type StatementDirection = "inflow" | "outflow";
 type ExtractionDecoder<Extraction> = (

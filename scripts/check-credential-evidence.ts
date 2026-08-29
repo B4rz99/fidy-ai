@@ -38,6 +38,11 @@ const credentialEvidence = [
     testName: "keeps Resend credentials out of typed failures",
   },
   {
+    configuration: "RESEND_WEBHOOK_SECRET",
+    testFile: "apps/server/src/shell/ingestion/email-forwarding.test.ts",
+    testName: "enables one permanent address and securely admits durable authenticated work",
+  },
+  {
     configuration: "KAPSO_API_KEY",
     testFile: "apps/server/src/shell/channels/whatsapp/kapso-client.test.ts",
     testName: "keeps provider bodies and send inputs out of typed failures",

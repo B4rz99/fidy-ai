@@ -278,6 +278,36 @@
       }
     },
     {
+      "id": "ingestion.enableEmailForwarding",
+      "policy": {
+        "access": {
+          "scope": {
+            "capability": "write",
+            "evaluation": "operation"
+          },
+          "type": "pat-scoped"
+        },
+        "agentConfirmation": "not-required",
+        "kind": "mutation",
+        "requiredTier": "free"
+      }
+    },
+    {
+      "id": "ingestion.getEmailForwarding",
+      "policy": {
+        "access": {
+          "scope": {
+            "capability": "read",
+            "evaluation": "operation"
+          },
+          "type": "pat-scoped"
+        },
+        "agentConfirmation": "not-required",
+        "kind": "query",
+        "requiredTier": "free"
+      }
+    },
+    {
       "id": "ingestion.getStatementSubmission",
       "policy": {
         "access": {

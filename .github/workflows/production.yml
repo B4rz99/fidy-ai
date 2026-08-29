@@ -62,6 +62,11 @@ jobs:
           PRODUCTION_API_VERIFICATION_NAME: ${{ vars.PRODUCTION_API_VERIFICATION_NAME }}
           PRODUCTION_API_VERIFICATION_VALUE: ${{ vars.PRODUCTION_API_VERIFICATION_VALUE }}
           PRODUCTION_DNS_ZONE: ${{ vars.PRODUCTION_DNS_ZONE }}
+          RESEND_INGEST_MX_TARGET: ${{ vars.RESEND_INGEST_MX_TARGET }}
+          RESEND_INGEST_DKIM_NAME: ${{ vars.RESEND_INGEST_DKIM_NAME }}
+          RESEND_INGEST_DKIM_VALUE: ${{ vars.RESEND_INGEST_DKIM_VALUE }}
+          RESEND_INGEST_SENDING_MX_TARGET: ${{ vars.RESEND_INGEST_SENDING_MX_TARGET }}
+          RESEND_INGEST_SPF_VALUE: ${{ vars.RESEND_INGEST_SPF_VALUE }}
         run: bun scripts/production/cloudflare-dns.ts
 
       - name: Deploy and verify the exact Railway revision

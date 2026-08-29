@@ -28,3 +28,6 @@ pre-push:
       files: git ls-files
       run: bun scripts/check-pushed-commit-messages.ts
       skip_output: false
+    pushed-secrets:
+      run: bun scripts/check-pushed-secrets.ts
+      skip_output: false

@@ -136,7 +136,11 @@ layer(FailingWorkerHarness, { excludeTestServices: true, timeout: "30 seconds" }
         const review = yield* client.ingestion.listNeedsReviewItems({
           query: { offset: Option.none(), limit: Option.none() },
         });
-        expect(review.data).toMatchObject([{ reason: "mapping-unavailable", status: "pending" }]);
+        expect(review.data).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({ reason: "mapping-unavailable", status: "pending" }),
+          ])
+        );
       })
     );
   }
@@ -180,10 +184,23 @@ layer(ReviewWorkerHarness, { excludeTestServices: true, timeout: "30 seconds" })
         const review = yield* client.ingestion.listNeedsReviewItems({
           query: { offset: Option.none(), limit: Option.none() },
         });
-        expect(review.data).toMatchObject([
-          { status: "pending", reason: "ambiguous-direction", recordNumber: 2 },
-        ]);
-        const pending = Option.getOrThrow(Option.fromUndefinedOr(review.data[0]));
+        expect(review.data).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({
+              status: "pending",
+              reason: "ambiguous-direction",
+              recordNumber: 2,
+            }),
+          ])
+        );
+        const pending = Option.getOrThrow(
+          Option.fromUndefinedOr(
+            review.data.find(
+              (item) =>
+                item.sourceChannel === "statement-upload" && item.reason === "ambiguous-direction"
+            )
+          )
+        );
         const changedMoney = yield* Effect.result(
           client.ingestion.resolveNeedsReviewItem({
             params: { id: pending.id },
@@ -216,7 +233,9 @@ layer(ReviewWorkerHarness, { excludeTestServices: true, timeout: "30 seconds" })
         const afterResolution = yield* client.ingestion.listNeedsReviewItems({
           query: { offset: Option.none(), limit: Option.none() },
         });
-        expect(afterResolution.data).toMatchObject([{ status: "resolved" }]);
+        expect(afterResolution.data).toEqual(
+          expect.arrayContaining([expect.objectContaining({ id: pending.id, status: "resolved" })])
+        );
 
         yield* client.ingestion.submitForExtraction({
           payload: mixedPayload("f1d1a000-0000-4000-8000-00000000c195"),
@@ -233,7 +252,12 @@ layer(ReviewWorkerHarness, { excludeTestServices: true, timeout: "30 seconds" })
         const afterExpiry = yield* client.ingestion.listNeedsReviewItems({
           query: { offset: Option.none(), limit: Option.none() },
         });
-        expect(afterExpiry.data.map((item) => item.status).sort()).toEqual(["expired", "resolved"]);
+        expect(
+          afterExpiry.data
+            .filter((item) => item.sourceChannel === "statement-upload")
+            .map((item) => item.status)
+            .sort()
+        ).toEqual(["expired", "resolved"]);
         yield* sql`UPDATE users SET paid_tier = 'free' WHERE id = ${defaultUserId}`;
       })
     );

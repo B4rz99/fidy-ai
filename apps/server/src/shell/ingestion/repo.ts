@@ -1,10 +1,13 @@
 import { type DateTime, Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
+import {
+  CapturedInterpretationContext,
+  type CapturedInterpretationContext as CapturedInterpretationContextType,
+} from "~/core/_shared/captured-interpretation-context";
+import { InterpretationRevision } from "~/core/_shared/interpretation-revision";
 import { Money, encodeMoneyAmount } from "~/core/_shared/money";
 import {
   CapturedFieldIssue,
-  CapturedStatementContext,
-  type CapturedStatementContext as CapturedStatementContextType,
   NeedsReviewItem,
   NeedsReviewReason,
   type NeedsReviewStatementRow,
@@ -28,7 +31,7 @@ import { withUserTransaction } from "~/shell/db/user-transaction";
 const SubmissionRow = Schema.Struct({
   id: StatementSubmissionId,
   sourceFormat: StatementSourceFormat,
-  parserRevision: Schema.String,
+  parserRevision: InterpretationRevision,
   status: StatementSubmissionStatus,
   submittedAt: Schema.DateTimeUtcFromDate,
   startedAt: Schema.OptionFromNullOr(Schema.DateTimeUtcFromDate),
@@ -151,8 +154,8 @@ export type InsertSubmissionInput = Readonly<{
   contentHash: string;
   sourceFormat: StatementSourceFormat;
   fileContent: Uint8Array;
-  context: CapturedStatementContextType;
-  parserRevision: string;
+  context: CapturedInterpretationContextType;
+  parserRevision: InterpretationRevision;
   submittedAt: DateTime.Utc;
 }>;
 
@@ -169,8 +172,8 @@ export const insertSubmissionInScope = Effect.fn("insertSubmissionInScope")(func
       contentHash: Schema.String,
       sourceFormat: StatementSourceFormat,
       fileContent: Schema.Uint8Array,
-      ...CapturedStatementContext.fields,
-      parserRevision: Schema.String,
+      ...CapturedInterpretationContext.fields,
+      parserRevision: InterpretationRevision,
       submittedAt: Schema.DateTimeUtc,
     }),
     Result: SubmissionRow,
@@ -228,8 +231,8 @@ export const ClaimedStatement = Schema.Struct({
   contentHash: Schema.String,
   sourceFormat: StatementSourceFormat,
   fileContent: Schema.Uint8Array,
-  ...CapturedStatementContext.fields,
-  parserRevision: Schema.String,
+  ...CapturedInterpretationContext.fields,
+  parserRevision: InterpretationRevision,
   attemptCount: Schema.Int,
 });
 export type ClaimedStatement = typeof ClaimedStatement.Type;
@@ -333,7 +336,7 @@ export const insertNeedsReviewItemInScope = Effect.fn("insertNeedsReviewItemInSc
     userId: UserId;
     submissionId: StatementSubmissionId;
     outcome: NeedsReviewStatementRow;
-    context: CapturedStatementContextType;
+    context: CapturedInterpretationContextType;
     sourceFormat: StatementSourceFormat;
     parserRevision: string;
     extractorRevision: string;
@@ -464,11 +467,11 @@ const ReviewRow = Schema.Struct({
   reason: NeedsReviewReason,
   knownAmount: Schema.OptionFromNullOr(Money.fields.amount),
   knownCurrency: Schema.OptionFromNullOr(Money.fields.currency),
-  ...CapturedStatementContext.fields,
+  ...CapturedInterpretationContext.fields,
   sourceFormat: StatementSourceFormat,
   sourceProvider: Schema.OptionFromNullOr(Schema.String),
-  parserRevision: Schema.String,
-  extractorRevision: Schema.String,
+  parserRevision: InterpretationRevision,
+  extractorRevision: InterpretationRevision,
   originalEvidence: Schema.OptionFromNullOr(Schema.Unknown),
   issues: Schema.Unknown,
   status: NeedsReviewStatus,

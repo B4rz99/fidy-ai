@@ -7,6 +7,8 @@ export const CURRENT_DISCLOSURE_TEXT = `Soy Fidy. Antes de crear tu cuenta neces
 
 Política completa: https://fidyapp.com/politica
 
+Si activas el reenvío de correos financieros, Fidy procesa su texto, HTML e imágenes integradas para registrar movimientos. Conserva el correo original hasta 90 días. Una muestra estructural solo puede conservarse indefinidamente después de anonimización automática y aprobación humana.
+
 Para crear tu cuenta, responde exactamente “Acepto” o usa la opción Aceptar. Si no quieres crearla, responde “No acepto”.`;
 
 /**
@@ -18,8 +20,8 @@ export const currentDisclosure = Config.map(externalEndpoints, ({ policyUrl }) =
   Schema.decodeUnknownSync(DisclosureSnapshot)({
     serviceMarket: "CO",
     locale: "es-CO",
-    revision: "onboarding-2026-08-25",
-    contentSha256: "e3d53b771ad54c0d05777aeefed717b8b93475aa35dcc52d381d8e1d629008c4",
+    revision: "onboarding-2026-08-28",
+    contentSha256: "e418eaafc42dd7833eea497deff8a250249fca7e520b2f7a81038b9fd6a8fbfa",
     text: CURRENT_DISCLOSURE_TEXT,
     policy: {
       publicUrl: policyUrl,
@@ -29,6 +31,8 @@ export const currentDisclosure = Config.map(externalEndpoints, ({ policyUrl }) =
     purposes: [
       "Crear, autenticar, administrar y proteger la cuenta",
       "Registrar, organizar, consultar y presentar las finanzas personales",
+      "Procesar correos financieros reenviados y conservar sus originales hasta 90 días",
+      "Conservar indefinidamente muestras estructurales solo después de anonimización y aprobación humana",
       "Responder instrucciones y producir tableros, resúmenes e insights",
       "Entregar comunicaciones del servicio expresamente autorizadas",
       "Prevenir abuso e incidentes y cumplir obligaciones legales",

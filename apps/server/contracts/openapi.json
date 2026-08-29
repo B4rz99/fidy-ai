@@ -2483,6 +2483,442 @@
       "EmailAddress": {
         "type": "string"
       },
+      "EmailForwardingAddress": {
+        "additionalProperties": false,
+        "properties": {
+          "address": {
+            "allOf": [
+              {
+                "minLength": 1
+              },
+              {
+                "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
+              },
+              {
+                "maxLength": 320
+              }
+            ],
+            "type": "string"
+          },
+          "createdAt": {
+            "$ref": "#/components/schemas/UtcTimestamp"
+          },
+          "id": {
+            "$ref": "#/components/schemas/EmailForwardingAddressId"
+          }
+        },
+        "required": [
+          "id",
+          "address",
+          "createdAt"
+        ],
+        "type": "object"
+      },
+      "EmailForwardingAddressId": {
+        "allOf": [
+          {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|[fF]{8}-[fF]{4}-[fF]{4}-[fF]{4}-[fF]{12})$"
+          }
+        ],
+        "type": "string"
+      },
+      "EmailForwardingStatus": {
+        "additionalProperties": false,
+        "properties": {
+          "address": {
+            "$ref": "#/components/schemas/EmailForwardingAddress"
+          },
+          "deferredCapacityRemaining": {
+            "allOf": [
+              {
+                "maximum": 50,
+                "minimum": 0
+              }
+            ],
+            "type": "integer"
+          },
+          "deferredEmails": {
+            "allOf": [
+              {
+                "maximum": 50,
+                "minimum": 0
+              }
+            ],
+            "type": "integer"
+          },
+          "remainingThisMonth": {
+            "allOf": [
+              {
+                "maximum": 50,
+                "minimum": 0
+              }
+            ],
+            "type": "integer"
+          },
+          "resetsAt": {
+            "$ref": "#/components/schemas/UtcTimestamp"
+          }
+        },
+        "required": [
+          "deferredEmails",
+          "deferredCapacityRemaining",
+          "resetsAt"
+        ],
+        "type": "object"
+      },
+      "EmailNeedsReviewItem": {
+        "anyOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "createdAt": {
+                "$ref": "#/components/schemas/UtcTimestamp"
+              },
+              "extractorRevision": {
+                "$ref": "#/components/schemas/InterpretationRevision"
+              },
+              "id": {
+                "$ref": "#/components/schemas/NeedsReviewItemId"
+              },
+              "ingestSampleId": {
+                "$ref": "#/components/schemas/IngestSampleId"
+              },
+              "issues": {
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    },
+                    "path": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "path",
+                    "message"
+                  ],
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              "knownMoney": {
+                "$ref": "#/components/schemas/Money7"
+              },
+              "locale": {
+                "$ref": "#/components/schemas/Locale"
+              },
+              "messageEvidence": {
+                "$ref": "#/components/schemas/ProviderMessageEvidence"
+              },
+              "parserRevision": {
+                "$ref": "#/components/schemas/InterpretationRevision"
+              },
+              "reason": {
+                "enum": [
+                  "model-unavailable",
+                  "canonical-validation-failed"
+                ],
+                "type": "string"
+              },
+              "receivedEmailId": {
+                "allOf": [
+                  {
+                    "minLength": 1
+                  },
+                  {
+                    "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
+                  },
+                  {
+                    "maxLength": 256
+                  }
+                ],
+                "type": "string"
+              },
+              "serviceMarket": {
+                "$ref": "#/components/schemas/ServiceMarket"
+              },
+              "sourceChannel": {
+                "enum": [
+                  "forwarded-email"
+                ],
+                "type": "string"
+              },
+              "sourceFormat": {
+                "enum": [
+                  "notification-email"
+                ],
+                "type": "string"
+              },
+              "sourceProvider": {
+                "enum": [
+                  "resend"
+                ],
+                "type": "string"
+              },
+              "status": {
+                "enum": [
+                  "pending"
+                ],
+                "type": "string"
+              },
+              "timeZone": {
+                "$ref": "#/components/schemas/IanaTimeZone"
+              }
+            },
+            "required": [
+              "id",
+              "receivedEmailId",
+              "reason",
+              "serviceMarket",
+              "locale",
+              "timeZone",
+              "sourceFormat",
+              "sourceChannel",
+              "sourceProvider",
+              "messageEvidence",
+              "parserRevision",
+              "extractorRevision",
+              "issues",
+              "createdAt",
+              "ingestSampleId",
+              "status"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "createdAt": {
+                "$ref": "#/components/schemas/UtcTimestamp"
+              },
+              "extractorRevision": {
+                "$ref": "#/components/schemas/InterpretationRevision"
+              },
+              "id": {
+                "$ref": "#/components/schemas/NeedsReviewItemId"
+              },
+              "issues": {
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    },
+                    "path": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "path",
+                    "message"
+                  ],
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              "knownMoney": {
+                "$ref": "#/components/schemas/Money7"
+              },
+              "locale": {
+                "$ref": "#/components/schemas/Locale"
+              },
+              "messageEvidence": {
+                "$ref": "#/components/schemas/ProviderMessageEvidence"
+              },
+              "parserRevision": {
+                "$ref": "#/components/schemas/InterpretationRevision"
+              },
+              "reason": {
+                "enum": [
+                  "provider-retrieval-failed",
+                  "processing-interrupted"
+                ],
+                "type": "string"
+              },
+              "receivedEmailId": {
+                "allOf": [
+                  {
+                    "minLength": 1
+                  },
+                  {
+                    "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
+                  },
+                  {
+                    "maxLength": 256
+                  }
+                ],
+                "type": "string"
+              },
+              "serviceMarket": {
+                "$ref": "#/components/schemas/ServiceMarket"
+              },
+              "sourceChannel": {
+                "enum": [
+                  "forwarded-email"
+                ],
+                "type": "string"
+              },
+              "sourceFormat": {
+                "enum": [
+                  "notification-email"
+                ],
+                "type": "string"
+              },
+              "sourceProvider": {
+                "enum": [
+                  "resend"
+                ],
+                "type": "string"
+              },
+              "status": {
+                "enum": [
+                  "pending"
+                ],
+                "type": "string"
+              },
+              "timeZone": {
+                "$ref": "#/components/schemas/IanaTimeZone"
+              }
+            },
+            "required": [
+              "id",
+              "receivedEmailId",
+              "reason",
+              "serviceMarket",
+              "locale",
+              "timeZone",
+              "sourceFormat",
+              "sourceChannel",
+              "sourceProvider",
+              "messageEvidence",
+              "parserRevision",
+              "extractorRevision",
+              "issues",
+              "createdAt",
+              "status"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "createdAt": {
+                "$ref": "#/components/schemas/UtcTimestamp"
+              },
+              "extractorRevision": {
+                "$ref": "#/components/schemas/InterpretationRevision"
+              },
+              "id": {
+                "$ref": "#/components/schemas/NeedsReviewItemId"
+              },
+              "issues": {
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    },
+                    "path": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "path",
+                    "message"
+                  ],
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              "knownMoney": {
+                "$ref": "#/components/schemas/Money7"
+              },
+              "locale": {
+                "$ref": "#/components/schemas/Locale"
+              },
+              "messageEvidence": {
+                "$ref": "#/components/schemas/ProviderMessageEvidence"
+              },
+              "parserRevision": {
+                "$ref": "#/components/schemas/InterpretationRevision"
+              },
+              "reason": {
+                "enum": [
+                  "model-unavailable",
+                  "canonical-validation-failed",
+                  "provider-retrieval-failed",
+                  "processing-interrupted"
+                ],
+                "type": "string"
+              },
+              "receivedEmailId": {
+                "allOf": [
+                  {
+                    "minLength": 1
+                  },
+                  {
+                    "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
+                  },
+                  {
+                    "maxLength": 256
+                  }
+                ],
+                "type": "string"
+              },
+              "serviceMarket": {
+                "$ref": "#/components/schemas/ServiceMarket"
+              },
+              "sourceChannel": {
+                "enum": [
+                  "forwarded-email"
+                ],
+                "type": "string"
+              },
+              "sourceFormat": {
+                "enum": [
+                  "notification-email"
+                ],
+                "type": "string"
+              },
+              "sourceProvider": {
+                "enum": [
+                  "resend"
+                ],
+                "type": "string"
+              },
+              "status": {
+                "enum": [
+                  "expired"
+                ],
+                "type": "string"
+              },
+              "timeZone": {
+                "$ref": "#/components/schemas/IanaTimeZone"
+              }
+            },
+            "required": [
+              "id",
+              "receivedEmailId",
+              "reason",
+              "serviceMarket",
+              "locale",
+              "timeZone",
+              "sourceFormat",
+              "sourceChannel",
+              "sourceProvider",
+              "messageEvidence",
+              "parserRevision",
+              "extractorRevision",
+              "issues",
+              "createdAt",
+              "status"
+            ],
+            "type": "object"
+          }
+        ]
+      },
       "EmailReplacementPending": {
         "additionalProperties": false,
         "properties": {
@@ -2521,6 +2957,15 @@
         "type": "object"
       },
       "IanaTimeZone": {
+        "type": "string"
+      },
+      "IngestSampleId": {
+        "allOf": [
+          {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|[fF]{8}-[fF]{4}-[fF]{4}-[fF]{4}-[fF]{12})$"
+          }
+        ],
         "type": "string"
       },
       "InsightDeliveryAttempt": {
@@ -3432,6 +3877,29 @@
         ],
         "type": "object"
       },
+      "Money7": {
+        "additionalProperties": false,
+        "description": "A non-negative exact decimal amount together with its ISO 4217 Currency. Currency precision is enforced and no conversion is implied.",
+        "properties": {
+          "amount": {
+            "allOf": [
+              {
+                "description": "A non-negative exact amount as plain decimal text. Responses remove insignificant trailing zeros and never use exponent or locale notation.",
+                "pattern": "^(?:0|[1-9]\\d*)(?:\\.\\d+)?$"
+              }
+            ],
+            "type": "string"
+          },
+          "currency": {
+            "$ref": "#/components/schemas/Currency"
+          }
+        },
+        "required": [
+          "amount",
+          "currency"
+        ],
+        "type": "object"
+      },
       "MoneyGroup": {
         "additionalProperties": false,
         "properties": {
@@ -3524,534 +3992,10 @@
       "NeedsReviewItem": {
         "anyOf": [
           {
-            "additionalProperties": false,
-            "properties": {
-              "createdAt": {
-                "$ref": "#/components/schemas/UtcTimestamp"
-              },
-              "extractorRevision": {
-                "allOf": [
-                  {
-                    "minLength": 1
-                  }
-                ],
-                "type": "string"
-              },
-              "id": {
-                "$ref": "#/components/schemas/NeedsReviewItemId"
-              },
-              "issues": {
-                "items": {
-                  "additionalProperties": false,
-                  "properties": {
-                    "message": {
-                      "type": "string"
-                    },
-                    "path": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "path",
-                    "message"
-                  ],
-                  "type": "object"
-                },
-                "type": "array"
-              },
-              "knownMoney": {
-                "$ref": "#/components/schemas/Money6"
-              },
-              "locale": {
-                "$ref": "#/components/schemas/Locale"
-              },
-              "originalEvidence": {
-                "anyOf": [
-                  {
-                    "additionalProperties": false,
-                    "properties": {
-                      "endLine": {
-                        "allOf": [
-                          {
-                            "exclusiveMinimum": 0
-                          }
-                        ],
-                        "type": "integer"
-                      },
-                      "fields": {
-                        "items": {
-                          "type": "string"
-                        },
-                        "type": "array"
-                      },
-                      "rawRecord": {
-                        "type": "string"
-                      },
-                      "recordNumber": {
-                        "allOf": [
-                          {
-                            "exclusiveMinimum": 0
-                          }
-                        ],
-                        "type": "integer"
-                      },
-                      "sourceFormat": {
-                        "enum": [
-                          "csv"
-                        ],
-                        "type": "string"
-                      },
-                      "startLine": {
-                        "allOf": [
-                          {
-                            "exclusiveMinimum": 0
-                          }
-                        ],
-                        "type": "integer"
-                      }
-                    },
-                    "required": [
-                      "sourceFormat",
-                      "recordNumber",
-                      "startLine",
-                      "endLine",
-                      "rawRecord",
-                      "fields"
-                    ],
-                    "type": "object"
-                  },
-                  {
-                    "additionalProperties": false,
-                    "properties": {
-                      "cells": {
-                        "items": {
-                          "additionalProperties": false,
-                          "properties": {
-                            "address": {
-                              "allOf": [
-                                {
-                                  "minLength": 1
-                                }
-                              ],
-                              "type": "string"
-                            },
-                            "cellType": {
-                              "enum": [
-                                "blank",
-                                "string",
-                                "number",
-                                "date",
-                                "boolean",
-                                "error"
-                              ],
-                              "type": "string"
-                            },
-                            "formattedText": {
-                              "type": "string"
-                            },
-                            "formula": {
-                              "type": "string"
-                            },
-                            "numberFormat": {
-                              "type": "string"
-                            },
-                            "value": {
-                              "type": "string"
-                            }
-                          },
-                          "required": [
-                            "address",
-                            "cellType",
-                            "value"
-                          ],
-                          "type": "object"
-                        },
-                        "type": "array"
-                      },
-                      "hidden": {
-                        "type": "boolean"
-                      },
-                      "rowNumber": {
-                        "allOf": [
-                          {
-                            "exclusiveMinimum": 0
-                          }
-                        ],
-                        "type": "integer"
-                      },
-                      "sheetIndex": {
-                        "allOf": [
-                          {
-                            "minimum": 0
-                          }
-                        ],
-                        "type": "integer"
-                      },
-                      "sheetName": {
-                        "allOf": [
-                          {
-                            "minLength": 1
-                          }
-                        ],
-                        "type": "string"
-                      },
-                      "sourceFormat": {
-                        "enum": [
-                          "xlsx"
-                        ],
-                        "type": "string"
-                      }
-                    },
-                    "required": [
-                      "sourceFormat",
-                      "sheetName",
-                      "sheetIndex",
-                      "rowNumber",
-                      "hidden",
-                      "cells"
-                    ],
-                    "type": "object"
-                  }
-                ]
-              },
-              "parserRevision": {
-                "allOf": [
-                  {
-                    "minLength": 1
-                  }
-                ],
-                "type": "string"
-              },
-              "reason": {
-                "enum": [
-                  "malformed-source-row",
-                  "missing-required-fact",
-                  "ambiguous-direction",
-                  "ambiguous-currency",
-                  "canonical-validation-failed",
-                  "mapping-unavailable"
-                ],
-                "type": "string"
-              },
-              "recordNumber": {
-                "allOf": [
-                  {
-                    "exclusiveMinimum": 0
-                  }
-                ],
-                "type": "integer"
-              },
-              "serviceMarket": {
-                "$ref": "#/components/schemas/ServiceMarket"
-              },
-              "sourceChannel": {
-                "enum": [
-                  "statement-upload"
-                ],
-                "type": "string"
-              },
-              "sourceFormat": {
-                "enum": [
-                  "csv",
-                  "xlsx"
-                ],
-                "type": "string"
-              },
-              "sourceProvider": {
-                "allOf": [
-                  {
-                    "minLength": 1
-                  }
-                ],
-                "type": "string"
-              },
-              "status": {
-                "enum": [
-                  "pending"
-                ],
-                "type": "string"
-              },
-              "submissionId": {
-                "$ref": "#/components/schemas/StatementSubmissionId"
-              },
-              "timeZone": {
-                "$ref": "#/components/schemas/IanaTimeZone"
-              }
-            },
-            "required": [
-              "id",
-              "submissionId",
-              "recordNumber",
-              "reason",
-              "serviceMarket",
-              "locale",
-              "timeZone",
-              "sourceFormat",
-              "sourceChannel",
-              "parserRevision",
-              "extractorRevision",
-              "issues",
-              "createdAt",
-              "status",
-              "originalEvidence"
-            ],
-            "type": "object"
+            "$ref": "#/components/schemas/StatementNeedsReviewItem"
           },
           {
-            "additionalProperties": false,
-            "properties": {
-              "createdAt": {
-                "$ref": "#/components/schemas/UtcTimestamp"
-              },
-              "extractorRevision": {
-                "allOf": [
-                  {
-                    "minLength": 1
-                  }
-                ],
-                "type": "string"
-              },
-              "id": {
-                "$ref": "#/components/schemas/NeedsReviewItemId"
-              },
-              "issues": {
-                "items": {
-                  "additionalProperties": false,
-                  "properties": {
-                    "message": {
-                      "type": "string"
-                    },
-                    "path": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "path",
-                    "message"
-                  ],
-                  "type": "object"
-                },
-                "type": "array"
-              },
-              "knownMoney": {
-                "$ref": "#/components/schemas/Money6"
-              },
-              "locale": {
-                "$ref": "#/components/schemas/Locale"
-              },
-              "parserRevision": {
-                "allOf": [
-                  {
-                    "minLength": 1
-                  }
-                ],
-                "type": "string"
-              },
-              "reason": {
-                "enum": [
-                  "malformed-source-row",
-                  "missing-required-fact",
-                  "ambiguous-direction",
-                  "ambiguous-currency",
-                  "canonical-validation-failed",
-                  "mapping-unavailable"
-                ],
-                "type": "string"
-              },
-              "recordNumber": {
-                "allOf": [
-                  {
-                    "exclusiveMinimum": 0
-                  }
-                ],
-                "type": "integer"
-              },
-              "serviceMarket": {
-                "$ref": "#/components/schemas/ServiceMarket"
-              },
-              "sourceChannel": {
-                "enum": [
-                  "statement-upload"
-                ],
-                "type": "string"
-              },
-              "sourceFormat": {
-                "enum": [
-                  "csv",
-                  "xlsx"
-                ],
-                "type": "string"
-              },
-              "sourceProvider": {
-                "allOf": [
-                  {
-                    "minLength": 1
-                  }
-                ],
-                "type": "string"
-              },
-              "status": {
-                "enum": [
-                  "expired"
-                ],
-                "type": "string"
-              },
-              "submissionId": {
-                "$ref": "#/components/schemas/StatementSubmissionId"
-              },
-              "timeZone": {
-                "$ref": "#/components/schemas/IanaTimeZone"
-              }
-            },
-            "required": [
-              "id",
-              "submissionId",
-              "recordNumber",
-              "reason",
-              "serviceMarket",
-              "locale",
-              "timeZone",
-              "sourceFormat",
-              "sourceChannel",
-              "parserRevision",
-              "extractorRevision",
-              "issues",
-              "createdAt",
-              "status"
-            ],
-            "type": "object"
-          },
-          {
-            "additionalProperties": false,
-            "properties": {
-              "createdAt": {
-                "$ref": "#/components/schemas/UtcTimestamp"
-              },
-              "extractorRevision": {
-                "allOf": [
-                  {
-                    "minLength": 1
-                  }
-                ],
-                "type": "string"
-              },
-              "id": {
-                "$ref": "#/components/schemas/NeedsReviewItemId"
-              },
-              "issues": {
-                "items": {
-                  "additionalProperties": false,
-                  "properties": {
-                    "message": {
-                      "type": "string"
-                    },
-                    "path": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "path",
-                    "message"
-                  ],
-                  "type": "object"
-                },
-                "type": "array"
-              },
-              "knownMoney": {
-                "$ref": "#/components/schemas/Money6"
-              },
-              "locale": {
-                "$ref": "#/components/schemas/Locale"
-              },
-              "parserRevision": {
-                "allOf": [
-                  {
-                    "minLength": 1
-                  }
-                ],
-                "type": "string"
-              },
-              "reason": {
-                "enum": [
-                  "malformed-source-row",
-                  "missing-required-fact",
-                  "ambiguous-direction",
-                  "ambiguous-currency",
-                  "canonical-validation-failed",
-                  "mapping-unavailable"
-                ],
-                "type": "string"
-              },
-              "recordNumber": {
-                "allOf": [
-                  {
-                    "exclusiveMinimum": 0
-                  }
-                ],
-                "type": "integer"
-              },
-              "resolvedAt": {
-                "$ref": "#/components/schemas/UtcTimestamp"
-              },
-              "serviceMarket": {
-                "$ref": "#/components/schemas/ServiceMarket"
-              },
-              "sourceChannel": {
-                "enum": [
-                  "statement-upload"
-                ],
-                "type": "string"
-              },
-              "sourceFormat": {
-                "enum": [
-                  "csv",
-                  "xlsx"
-                ],
-                "type": "string"
-              },
-              "sourceProvider": {
-                "allOf": [
-                  {
-                    "minLength": 1
-                  }
-                ],
-                "type": "string"
-              },
-              "status": {
-                "enum": [
-                  "resolved"
-                ],
-                "type": "string"
-              },
-              "submissionId": {
-                "$ref": "#/components/schemas/StatementSubmissionId"
-              },
-              "timeZone": {
-                "$ref": "#/components/schemas/IanaTimeZone"
-              },
-              "transactionId": {
-                "$ref": "#/components/schemas/TransactionId"
-              }
-            },
-            "required": [
-              "id",
-              "submissionId",
-              "recordNumber",
-              "reason",
-              "serviceMarket",
-              "locale",
-              "timeZone",
-              "sourceFormat",
-              "sourceChannel",
-              "parserRevision",
-              "extractorRevision",
-              "issues",
-              "createdAt",
-              "status",
-              "transactionId",
-              "resolvedAt"
-            ],
-            "type": "object"
+            "$ref": "#/components/schemas/EmailNeedsReviewItem"
           }
         ]
       },
@@ -4430,6 +4374,59 @@
           }
         ],
         "type": "string"
+      },
+      "ProviderMessageEvidence": {
+        "additionalProperties": false,
+        "properties": {
+          "channel": {
+            "allOf": [
+              {
+                "minLength": 1
+              },
+              {
+                "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
+              },
+              {
+                "maxLength": 32
+              }
+            ],
+            "type": "string"
+          },
+          "provider": {
+            "allOf": [
+              {
+                "minLength": 1
+              },
+              {
+                "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
+              },
+              {
+                "maxLength": 64
+              }
+            ],
+            "type": "string"
+          },
+          "providerMessageId": {
+            "allOf": [
+              {
+                "minLength": 1
+              },
+              {
+                "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
+              },
+              {
+                "maxLength": 256
+              }
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "channel",
+          "provider",
+          "providerMessageId"
+        ],
+        "type": "object"
       },
       "RecallOutput": {
         "items": {
@@ -5072,6 +5069,116 @@
               "extractorRevision"
             ],
             "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "createdAt": {
+                "$ref": "#/components/schemas/UtcTimestamp"
+              },
+              "extractorRevision": {
+                "$ref": "#/components/schemas/InterpretationRevision"
+              },
+              "id": {
+                "$ref": "#/components/schemas/SourceAttestationId"
+              },
+              "interpretationRevision": {
+                "$ref": "#/components/schemas/InterpretationRevision"
+              },
+              "kind": {
+                "enum": [
+                  "notification-email"
+                ],
+                "type": "string"
+              },
+              "locale": {
+                "$ref": "#/components/schemas/Locale"
+              },
+              "messageContentSha256": {
+                "allOf": [
+                  {
+                    "pattern": "^[0-9a-f]{64}$"
+                  }
+                ],
+                "type": "string"
+              },
+              "messageEvidence": {
+                "$ref": "#/components/schemas/ProviderMessageEvidence"
+              },
+              "receivedEmailId": {
+                "allOf": [
+                  {
+                    "minLength": 1
+                  },
+                  {
+                    "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
+                  },
+                  {
+                    "maxLength": 256
+                  }
+                ],
+                "type": "string"
+              },
+              "serviceMarket": {
+                "$ref": "#/components/schemas/ServiceMarket"
+              },
+              "sourceChannel": {
+                "allOf": [
+                  {
+                    "minLength": 1
+                  },
+                  {
+                    "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
+                  },
+                  {
+                    "maxLength": 80
+                  }
+                ],
+                "type": "string"
+              },
+              "sourceFormat": {
+                "enum": [
+                  "notification-email"
+                ],
+                "type": "string"
+              },
+              "sourceProvider": {
+                "allOf": [
+                  {
+                    "minLength": 1
+                  },
+                  {
+                    "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
+                  },
+                  {
+                    "maxLength": 80
+                  }
+                ],
+                "type": "string"
+              },
+              "timeZone": {
+                "$ref": "#/components/schemas/IanaTimeZone"
+              },
+              "transactionId": {
+                "$ref": "#/components/schemas/TransactionId"
+              }
+            },
+            "required": [
+              "id",
+              "transactionId",
+              "serviceMarket",
+              "locale",
+              "timeZone",
+              "interpretationRevision",
+              "createdAt",
+              "kind",
+              "receivedEmailId",
+              "messageEvidence",
+              "messageContentSha256",
+              "sourceFormat",
+              "extractorRevision"
+            ],
+            "type": "object"
           }
         ]
       },
@@ -5439,6 +5546,543 @@
           "needsReviewRows"
         ],
         "type": "object"
+      },
+      "StatementNeedsReviewItem": {
+        "anyOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "createdAt": {
+                "$ref": "#/components/schemas/UtcTimestamp"
+              },
+              "extractorRevision": {
+                "allOf": [
+                  {
+                    "minLength": 1
+                  }
+                ],
+                "type": "string"
+              },
+              "id": {
+                "$ref": "#/components/schemas/NeedsReviewItemId"
+              },
+              "issues": {
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    },
+                    "path": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "path",
+                    "message"
+                  ],
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              "knownMoney": {
+                "$ref": "#/components/schemas/Money6"
+              },
+              "locale": {
+                "$ref": "#/components/schemas/Locale"
+              },
+              "originalEvidence": {
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "endLine": {
+                        "allOf": [
+                          {
+                            "exclusiveMinimum": 0
+                          }
+                        ],
+                        "type": "integer"
+                      },
+                      "fields": {
+                        "items": {
+                          "type": "string"
+                        },
+                        "type": "array"
+                      },
+                      "rawRecord": {
+                        "type": "string"
+                      },
+                      "recordNumber": {
+                        "allOf": [
+                          {
+                            "exclusiveMinimum": 0
+                          }
+                        ],
+                        "type": "integer"
+                      },
+                      "sourceFormat": {
+                        "enum": [
+                          "csv"
+                        ],
+                        "type": "string"
+                      },
+                      "startLine": {
+                        "allOf": [
+                          {
+                            "exclusiveMinimum": 0
+                          }
+                        ],
+                        "type": "integer"
+                      }
+                    },
+                    "required": [
+                      "sourceFormat",
+                      "recordNumber",
+                      "startLine",
+                      "endLine",
+                      "rawRecord",
+                      "fields"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "cells": {
+                        "items": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "address": {
+                              "allOf": [
+                                {
+                                  "minLength": 1
+                                }
+                              ],
+                              "type": "string"
+                            },
+                            "cellType": {
+                              "enum": [
+                                "blank",
+                                "string",
+                                "number",
+                                "date",
+                                "boolean",
+                                "error"
+                              ],
+                              "type": "string"
+                            },
+                            "formattedText": {
+                              "type": "string"
+                            },
+                            "formula": {
+                              "type": "string"
+                            },
+                            "numberFormat": {
+                              "type": "string"
+                            },
+                            "value": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "address",
+                            "cellType",
+                            "value"
+                          ],
+                          "type": "object"
+                        },
+                        "type": "array"
+                      },
+                      "hidden": {
+                        "type": "boolean"
+                      },
+                      "rowNumber": {
+                        "allOf": [
+                          {
+                            "exclusiveMinimum": 0
+                          }
+                        ],
+                        "type": "integer"
+                      },
+                      "sheetIndex": {
+                        "allOf": [
+                          {
+                            "minimum": 0
+                          }
+                        ],
+                        "type": "integer"
+                      },
+                      "sheetName": {
+                        "allOf": [
+                          {
+                            "minLength": 1
+                          }
+                        ],
+                        "type": "string"
+                      },
+                      "sourceFormat": {
+                        "enum": [
+                          "xlsx"
+                        ],
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "sourceFormat",
+                      "sheetName",
+                      "sheetIndex",
+                      "rowNumber",
+                      "hidden",
+                      "cells"
+                    ],
+                    "type": "object"
+                  }
+                ]
+              },
+              "parserRevision": {
+                "allOf": [
+                  {
+                    "minLength": 1
+                  }
+                ],
+                "type": "string"
+              },
+              "reason": {
+                "enum": [
+                  "malformed-source-row",
+                  "missing-required-fact",
+                  "ambiguous-direction",
+                  "ambiguous-currency",
+                  "canonical-validation-failed",
+                  "mapping-unavailable",
+                  "model-unavailable"
+                ],
+                "type": "string"
+              },
+              "recordNumber": {
+                "allOf": [
+                  {
+                    "exclusiveMinimum": 0
+                  }
+                ],
+                "type": "integer"
+              },
+              "serviceMarket": {
+                "$ref": "#/components/schemas/ServiceMarket"
+              },
+              "sourceChannel": {
+                "enum": [
+                  "statement-upload"
+                ],
+                "type": "string"
+              },
+              "sourceFormat": {
+                "enum": [
+                  "csv",
+                  "xlsx"
+                ],
+                "type": "string"
+              },
+              "sourceProvider": {
+                "allOf": [
+                  {
+                    "minLength": 1
+                  }
+                ],
+                "type": "string"
+              },
+              "status": {
+                "enum": [
+                  "pending"
+                ],
+                "type": "string"
+              },
+              "submissionId": {
+                "$ref": "#/components/schemas/StatementSubmissionId"
+              },
+              "timeZone": {
+                "$ref": "#/components/schemas/IanaTimeZone"
+              }
+            },
+            "required": [
+              "id",
+              "submissionId",
+              "recordNumber",
+              "reason",
+              "serviceMarket",
+              "locale",
+              "timeZone",
+              "sourceFormat",
+              "sourceChannel",
+              "parserRevision",
+              "extractorRevision",
+              "issues",
+              "createdAt",
+              "status",
+              "originalEvidence"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "createdAt": {
+                "$ref": "#/components/schemas/UtcTimestamp"
+              },
+              "extractorRevision": {
+                "allOf": [
+                  {
+                    "minLength": 1
+                  }
+                ],
+                "type": "string"
+              },
+              "id": {
+                "$ref": "#/components/schemas/NeedsReviewItemId"
+              },
+              "issues": {
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    },
+                    "path": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "path",
+                    "message"
+                  ],
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              "knownMoney": {
+                "$ref": "#/components/schemas/Money6"
+              },
+              "locale": {
+                "$ref": "#/components/schemas/Locale"
+              },
+              "parserRevision": {
+                "allOf": [
+                  {
+                    "minLength": 1
+                  }
+                ],
+                "type": "string"
+              },
+              "reason": {
+                "enum": [
+                  "malformed-source-row",
+                  "missing-required-fact",
+                  "ambiguous-direction",
+                  "ambiguous-currency",
+                  "canonical-validation-failed",
+                  "mapping-unavailable",
+                  "model-unavailable"
+                ],
+                "type": "string"
+              },
+              "recordNumber": {
+                "allOf": [
+                  {
+                    "exclusiveMinimum": 0
+                  }
+                ],
+                "type": "integer"
+              },
+              "serviceMarket": {
+                "$ref": "#/components/schemas/ServiceMarket"
+              },
+              "sourceChannel": {
+                "enum": [
+                  "statement-upload"
+                ],
+                "type": "string"
+              },
+              "sourceFormat": {
+                "enum": [
+                  "csv",
+                  "xlsx"
+                ],
+                "type": "string"
+              },
+              "sourceProvider": {
+                "allOf": [
+                  {
+                    "minLength": 1
+                  }
+                ],
+                "type": "string"
+              },
+              "status": {
+                "enum": [
+                  "expired"
+                ],
+                "type": "string"
+              },
+              "submissionId": {
+                "$ref": "#/components/schemas/StatementSubmissionId"
+              },
+              "timeZone": {
+                "$ref": "#/components/schemas/IanaTimeZone"
+              }
+            },
+            "required": [
+              "id",
+              "submissionId",
+              "recordNumber",
+              "reason",
+              "serviceMarket",
+              "locale",
+              "timeZone",
+              "sourceFormat",
+              "sourceChannel",
+              "parserRevision",
+              "extractorRevision",
+              "issues",
+              "createdAt",
+              "status"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "createdAt": {
+                "$ref": "#/components/schemas/UtcTimestamp"
+              },
+              "extractorRevision": {
+                "allOf": [
+                  {
+                    "minLength": 1
+                  }
+                ],
+                "type": "string"
+              },
+              "id": {
+                "$ref": "#/components/schemas/NeedsReviewItemId"
+              },
+              "issues": {
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    },
+                    "path": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "path",
+                    "message"
+                  ],
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              "knownMoney": {
+                "$ref": "#/components/schemas/Money6"
+              },
+              "locale": {
+                "$ref": "#/components/schemas/Locale"
+              },
+              "parserRevision": {
+                "allOf": [
+                  {
+                    "minLength": 1
+                  }
+                ],
+                "type": "string"
+              },
+              "reason": {
+                "enum": [
+                  "malformed-source-row",
+                  "missing-required-fact",
+                  "ambiguous-direction",
+                  "ambiguous-currency",
+                  "canonical-validation-failed",
+                  "mapping-unavailable",
+                  "model-unavailable"
+                ],
+                "type": "string"
+              },
+              "recordNumber": {
+                "allOf": [
+                  {
+                    "exclusiveMinimum": 0
+                  }
+                ],
+                "type": "integer"
+              },
+              "resolvedAt": {
+                "$ref": "#/components/schemas/UtcTimestamp"
+              },
+              "serviceMarket": {
+                "$ref": "#/components/schemas/ServiceMarket"
+              },
+              "sourceChannel": {
+                "enum": [
+                  "statement-upload"
+                ],
+                "type": "string"
+              },
+              "sourceFormat": {
+                "enum": [
+                  "csv",
+                  "xlsx"
+                ],
+                "type": "string"
+              },
+              "sourceProvider": {
+                "allOf": [
+                  {
+                    "minLength": 1
+                  }
+                ],
+                "type": "string"
+              },
+              "status": {
+                "enum": [
+                  "resolved"
+                ],
+                "type": "string"
+              },
+              "submissionId": {
+                "$ref": "#/components/schemas/StatementSubmissionId"
+              },
+              "timeZone": {
+                "$ref": "#/components/schemas/IanaTimeZone"
+              },
+              "transactionId": {
+                "$ref": "#/components/schemas/TransactionId"
+              }
+            },
+            "required": [
+              "id",
+              "submissionId",
+              "recordNumber",
+              "reason",
+              "serviceMarket",
+              "locale",
+              "timeZone",
+              "sourceFormat",
+              "sourceChannel",
+              "parserRevision",
+              "extractorRevision",
+              "issues",
+              "createdAt",
+              "status",
+              "transactionId",
+              "resolvedAt"
+            ],
+            "type": "object"
+          }
+        ]
       },
       "StatementSubmission": {
         "anyOf": [
@@ -6760,6 +7404,68 @@
                 "description": "The canonical operation to call, spelled exactly as its `operationId` in this spec. Look that id up here to see the complete input and result.",
                 "enum": [
                   "transactions.listSourceAttestations"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "tool",
+              "hint"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "hint": {
+                "allOf": [
+                  {
+                    "minLength": 1
+                  },
+                  {
+                    "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
+                  },
+                  {
+                    "maxLength": 140
+                  }
+                ],
+                "type": "string"
+              },
+              "tool": {
+                "description": "The canonical operation to call, spelled exactly as its `operationId` in this spec. Look that id up here to see the complete input and result.",
+                "enum": [
+                  "ingestion.enableEmailForwarding"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "tool",
+              "hint"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "hint": {
+                "allOf": [
+                  {
+                    "minLength": 1
+                  },
+                  {
+                    "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
+                  },
+                  {
+                    "maxLength": 140
+                  }
+                ],
+                "type": "string"
+              },
+              "tool": {
+                "description": "The canonical operation to call, spelled exactly as its `operationId` in this spec. Look that id up here to see the complete input and result.",
+                "enum": [
+                  "ingestion.getEmailForwarding"
                 ],
                 "type": "string"
               }
@@ -10420,9 +11126,211 @@
         "x-fidy-required-tier": "free"
       }
     },
+    "/ingestion/email-forwarding": {
+      "get": {
+        "description": "Read the enabled address, remaining Free units in the current America/Bogota month, deferred email count, and exact reset instant. Trial and Pro report an uncapped remaining allowance.",
+        "operationId": "ingestion.getEmailForwarding",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/EmailForwardingStatus"
+                    },
+                    "next": {
+                      "allOf": [
+                        {
+                          "description": "Where to go next: up to three canonical operations worth calling after this one, best first. Empty when there is nothing worth suggesting, which is an answer rather than an omission. Each entry has passed the target-input and caller-authorization checkpoint.",
+                          "maxItems": 3
+                        }
+                      ],
+                      "items": {
+                        "$ref": "#/components/schemas/SuggestedOperation"
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "next"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationFailed"
+                }
+              }
+            },
+            "description": "ValidationFailed"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Unauthenticated"
+                }
+              }
+            },
+            "description": "Unauthenticated"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ConsentRequired"
+                    },
+                    {
+                      "$ref": "#/components/schemas/UserActionRequired"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ScopeMissing"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "ConsentRequired | UserActionRequired | ScopeMissing"
+          }
+        },
+        "security": [
+          {
+            "agentBearer": []
+          },
+          {
+            "webSession": []
+          }
+        ],
+        "tags": [
+          "ingestion"
+        ],
+        "x-fidy-access": {
+          "scope": {
+            "capability": "read",
+            "evaluation": "operation"
+          },
+          "type": "pat-scoped"
+        },
+        "x-fidy-agent-confirmation": "not-required",
+        "x-fidy-operation-kind": "query",
+        "x-fidy-required-tier": "free"
+      },
+      "post": {
+        "description": "Idempotently enable one permanent unpredictable forwarding address for the caller. Later calls return the same address.",
+        "operationId": "ingestion.enableEmailForwarding",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/EmailForwardingAddress"
+                    },
+                    "next": {
+                      "allOf": [
+                        {
+                          "description": "Where to go next: up to three canonical operations worth calling after this one, best first. Empty when there is nothing worth suggesting, which is an answer rather than an omission. Each entry has passed the target-input and caller-authorization checkpoint.",
+                          "maxItems": 3
+                        }
+                      ],
+                      "items": {
+                        "$ref": "#/components/schemas/SuggestedOperation"
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "next"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationFailed"
+                }
+              }
+            },
+            "description": "ValidationFailed"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Unauthenticated"
+                }
+              }
+            },
+            "description": "Unauthenticated"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ConsentRequired"
+                    },
+                    {
+                      "$ref": "#/components/schemas/UserActionRequired"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ScopeMissing"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "ConsentRequired | UserActionRequired | ScopeMissing"
+          }
+        },
+        "security": [
+          {
+            "agentBearer": []
+          },
+          {
+            "webSession": []
+          }
+        ],
+        "tags": [
+          "ingestion"
+        ],
+        "x-fidy-access": {
+          "scope": {
+            "capability": "write",
+            "evaluation": "operation"
+          },
+          "type": "pat-scoped"
+        },
+        "x-fidy-agent-confirmation": "not-required",
+        "x-fidy-operation-kind": "mutation",
+        "x-fidy-required-tier": "free"
+      }
+    },
     "/ingestion/needs-review": {
       "get": {
-        "description": "List up to 100 of the caller's visible statement rows requiring review, followed by retained resolution metadata. Use offset and limit to page; pending items include parser-bounded original row evidence.",
+        "description": "List up to 100 of the caller's visible statement rows and forwarded emails requiring review, followed by retained resolution metadata. Use offset and limit to page; pending statement items include parser-bounded original row evidence and email items reference their expiring IngestSample.",
         "operationId": "ingestion.listNeedsReviewItems",
         "parameters": [
           {
@@ -12427,6 +13335,30 @@
                             },
                             "input": {
                               "additionalProperties": false,
+                              "type": "object"
+                            },
+                            "operation": {
+                              "enum": [
+                                "ingestion.enableEmailForwarding"
+                              ],
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "callId",
+                            "operation",
+                            "input"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "callId": {
+                              "$ref": "#/components/schemas/AtomicBatchCallId"
+                            },
+                            "input": {
+                              "additionalProperties": false,
                               "properties": {
                                 "payload": {
                                   "$ref": "#/components/schemas/SubmitForExtractionInput"
@@ -13307,6 +14239,30 @@
                               "operation": {
                                 "enum": [
                                   "transactions.deleteTransaction"
+                                ],
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "callId",
+                              "operation",
+                              "input"
+                            ],
+                            "type": "object"
+                          },
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "callId": {
+                                "$ref": "#/components/schemas/AtomicBatchCallId"
+                              },
+                              "input": {
+                                "additionalProperties": false,
+                                "type": "object"
+                              },
+                              "operation": {
+                                "enum": [
+                                  "ingestion.enableEmailForwarding"
                                 ],
                                 "type": "string"
                               }
@@ -14335,6 +15291,51 @@
                                     "properties": {
                                       "data": {
                                         "$ref": "#/components/schemas/TransactionId"
+                                      },
+                                      "next": {
+                                        "allOf": [
+                                          {
+                                            "description": "Where to go next: up to three canonical operations worth calling after this one, best first. Empty when there is nothing worth suggesting, which is an answer rather than an omission. Each entry has passed the target-input and caller-authorization checkpoint.",
+                                            "maxItems": 3
+                                          }
+                                        ],
+                                        "items": {
+                                          "$ref": "#/components/schemas/SuggestedOperation"
+                                        },
+                                        "type": "array"
+                                      }
+                                    },
+                                    "required": [
+                                      "data",
+                                      "next"
+                                    ],
+                                    "type": "object"
+                                  }
+                                },
+                                "required": [
+                                  "callId",
+                                  "operation",
+                                  "output"
+                                ],
+                                "type": "object"
+                              },
+                              {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "callId": {
+                                    "$ref": "#/components/schemas/AtomicBatchCallId"
+                                  },
+                                  "operation": {
+                                    "enum": [
+                                      "ingestion.enableEmailForwarding"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "output": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "data": {
+                                        "$ref": "#/components/schemas/EmailForwardingAddress"
                                       },
                                       "next": {
                                         "allOf": [
@@ -15434,6 +16435,51 @@
                                       "properties": {
                                         "data": {
                                           "$ref": "#/components/schemas/TransactionId"
+                                        },
+                                        "next": {
+                                          "allOf": [
+                                            {
+                                              "description": "Where to go next: up to three canonical operations worth calling after this one, best first. Empty when there is nothing worth suggesting, which is an answer rather than an omission. Each entry has passed the target-input and caller-authorization checkpoint.",
+                                              "maxItems": 3
+                                            }
+                                          ],
+                                          "items": {
+                                            "$ref": "#/components/schemas/SuggestedOperation"
+                                          },
+                                          "type": "array"
+                                        }
+                                      },
+                                      "required": [
+                                        "data",
+                                        "next"
+                                      ],
+                                      "type": "object"
+                                    }
+                                  },
+                                  "required": [
+                                    "callId",
+                                    "operation",
+                                    "output"
+                                  ],
+                                  "type": "object"
+                                },
+                                {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "callId": {
+                                      "$ref": "#/components/schemas/AtomicBatchCallId"
+                                    },
+                                    "operation": {
+                                      "enum": [
+                                        "ingestion.enableEmailForwarding"
+                                      ],
+                                      "type": "string"
+                                    },
+                                    "output": {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "data": {
+                                          "$ref": "#/components/schemas/EmailForwardingAddress"
                                         },
                                         "next": {
                                           "allOf": [

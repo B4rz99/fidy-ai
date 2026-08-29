@@ -1,6 +1,8 @@
 import { Schema } from "effect";
 import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/unstable/httpapi";
 import {
+  EmailForwardingAddress,
+  EmailForwardingStatus,
   NeedsReviewItem,
   StatementSubmission,
   SubmitForExtractionInput,
@@ -32,8 +34,28 @@ const confirmedWrite = operationPolicy({
   kind: "mutation",
 });
 
-/** Canonical durable statement submission and visible review queue. */
+/** Canonical durable statement, forwarded-email, and visible review capabilities. */
 export const IngestionGroup = HttpApiGroup.make("ingestion")
+  .add(
+    HttpApiEndpoint.post("enableEmailForwarding", "/ingestion/email-forwarding", {
+      success: OperationResponse(EmailForwardingAddress),
+    })
+      .annotate(
+        OpenApi.Description,
+        "Idempotently enable one permanent unpredictable forwarding address for the caller. Later calls return the same address."
+      )
+      .annotateMerge(write)
+  )
+  .add(
+    HttpApiEndpoint.get("getEmailForwarding", "/ingestion/email-forwarding", {
+      success: OperationResponse(EmailForwardingStatus),
+    })
+      .annotate(
+        OpenApi.Description,
+        "Read the enabled address, remaining Free units in the current America/Bogota month, deferred email count, and exact reset instant. Trial and Pro report an uncapped remaining allowance."
+      )
+      .annotateMerge(read)
+  )
   .add(
     HttpApiEndpoint.post("submitForExtraction", "/ingestion/statements", {
       payload: SubmitForExtractionInput,
@@ -70,7 +92,7 @@ export const IngestionGroup = HttpApiGroup.make("ingestion")
     })
       .annotate(
         OpenApi.Description,
-        "List up to 100 of the caller's visible statement rows requiring review, followed by retained resolution metadata. Use offset and limit to page; pending items include parser-bounded original row evidence."
+        "List up to 100 of the caller's visible statement rows and forwarded emails requiring review, followed by retained resolution metadata. Use offset and limit to page; pending statement items include parser-bounded original row evidence and email items reference their expiring IngestSample."
       )
       .annotateMerge(read)
   )

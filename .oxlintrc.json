@@ -216,6 +216,34 @@
         "typescript/no-unsafe-assignment": "off"
       }
     },
+    // This integration scenario intentionally proves admission, privacy, retry, extraction, and
+    // retention as one stateful lifecycle; splitting its statements would duplicate expensive setup.
+    {
+      "files": ["apps/server/src/shell/ingestion/email-forwarding.test.ts"],
+      "rules": {
+        "max-statements": "off"
+      }
+    },
+    // A migration is one atomic, ordered DDL program; splitting it solely to hide its statement
+    // count would obscure ordering without creating a reusable module boundary.
+    {
+      "files": ["apps/server/src/shell/db/migrations/0043-email-ingestion.ts"],
+      "rules": {
+        "max-statements": "off"
+      }
+    },
+    // Svix and Sharp expose package roots that resolve to `.mjs`; the global `.mjs` exception then
+    // incorrectly asks source imports to append an extension that is not part of either exports map.
+    {
+      "files": [
+        "apps/server/src/shell/ingestion/email-forwarding.test.ts",
+        "apps/server/src/shell/ingestion/forwarded-email-ingestion.ts",
+        "apps/server/src/shell/ingestion/resend-receiving-client.ts"
+      ],
+      "rules": {
+        "import/extensions": "off"
+      }
+    },
     // The two tooling locations below also have no types. dependency-cruiser
     // lives in an isolated install under tools/depcruise (see its package.json)
     // that the root tsconfig does not see; the custom plugin is untyped .js

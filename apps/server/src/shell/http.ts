@@ -27,6 +27,14 @@ import { InsightsLive } from "~/shell/insights/handlers";
 import { StatementColumnMapper } from "~/shell/ingestion/column-mapper";
 import { IngestionLive } from "~/shell/ingestion/handlers";
 import { StatementIngestionWorkerLive } from "~/shell/ingestion/worker";
+import { NotificationEmailExtractor } from "~/shell/ingestion/email-extractor";
+import {
+  ForwardedEmailEvidenceRetentionLive,
+  ForwardedEmailProcessor,
+  ForwardedEmailProcessorWorkerLive,
+} from "~/shell/ingestion/forwarded-email-ingestion";
+import { ResendReceivingClient } from "~/shell/ingestion/resend-receiving-client";
+import { ResendWebhookLive } from "~/shell/ingestion/resend-webhook";
 import { MemoryLive } from "~/shell/memory/handlers";
 import { EmailDeliveryPort } from "~/shell/email-authentication/delivery";
 import { BrowserPairingEmailDeliveryWorkerLive } from "~/shell/email-authentication/authentication-delivery-worker";
@@ -240,6 +248,7 @@ export const HttpLive = HttpRouter.serve(
     HealthLive,
     KapsoWebhookLive,
     SupportRecoveryPrivateRouteLive,
+    ResendWebhookLive,
     ExactOriginCorsLive,
     RetryAfterHeaderLive
   ),
@@ -264,6 +273,15 @@ const HostedStatementIngestionWorkerLive = StatementIngestionWorkerLive.pipe(
   Layer.provide(StatementColumnMapper.layer.pipe(Layer.provide(OpenAiLanguageModelLive)))
 );
 
+const HostedForwardedEmailOperationsLive = Layer.merge(
+  ForwardedEmailProcessorWorkerLive,
+  ForwardedEmailEvidenceRetentionLive
+).pipe(
+  Layer.provide(ForwardedEmailProcessor.layer),
+  Layer.provide(ResendReceivingClient.layer),
+  Layer.provide(NotificationEmailExtractor.layer.pipe(Layer.provide(OpenAiLanguageModelLive)))
+);
+
 const HostedOnboardingDeliveryWorkerLive = OnboardingDeliveryWorkerLive.pipe(
   Layer.provide(EmailDeliveryPort.layer)
 );
@@ -278,6 +296,7 @@ export const AppLive = Layer.mergeAll(
   HttpLive.pipe(Layer.provide(KapsoClient.layer), Layer.provide(SupportRecoveryAccessLive)),
   HostedWhatsAppWorkerLive,
   HostedStatementIngestionWorkerLive,
+  HostedForwardedEmailOperationsLive,
   HostedOnboardingDeliveryWorkerLive,
   HostedEmailReplacementDeliveryWorkerLive,
   HostedBrowserPairingEmailDeliveryWorkerLive,

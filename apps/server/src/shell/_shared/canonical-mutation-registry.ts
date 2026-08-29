@@ -19,6 +19,7 @@ import {
   resolveNeedsReviewItemMutation,
   submitForExtractionInScope,
 } from "~/shell/ingestion/mutations";
+import { forwardedEmailIngestion } from "~/shell/ingestion/forwarded-email-ingestion";
 import { forgetMemory, rememberMemory, reviseMemory } from "~/shell/memory/mutations";
 import { dismissInsight, markInsightDelivered, markInsightRead } from "~/shell/insights/mutations";
 import {
@@ -143,6 +144,8 @@ export const canonicalMutationImplementations = {
       userId: caller.resolved.subjectUserId,
       memoryId: input.params.id,
     }),
+  "ingestion.enableEmailForwarding": (_input, caller) =>
+    forwardedEmailIngestion.enable(caller.resolved.subjectUserId),
   "ingestion.submitForExtraction": (input, caller) =>
     submitForExtractionInScope({
       userId: caller.resolved.subjectUserId,

@@ -1,13 +1,130 @@
-import { Option, Schema } from "effect";
-import { IanaTimeZone, Locale, ServiceMarket } from "~/core/_shared/context";
+import { DateTime, Option, Schema } from "effect";
+import { CapturedInterpretationContext } from "~/core/_shared/captured-interpretation-context";
+import { ServiceMarket } from "~/core/_shared/context";
+import { InterpretationRevision } from "~/core/_shared/interpretation-revision";
 import { Money } from "~/core/_shared/money";
+import { ProviderMessageEvidence } from "~/core/_shared/provider-message-evidence";
 import { UtcTimestamp } from "~/core/_shared/time";
 import { TransactionId } from "~/core/transactions/reference";
-import { NeedsReviewItemId, StatementSourceFormat, StatementSubmissionId } from "./reference";
+import {
+  maximumEmailAddressCharacters,
+  maximumEmailEvidenceIdCharacters,
+  maximumEmailHtmlCharacters,
+  maximumEmailInlineImages,
+  maximumEmailRecipients,
+  maximumEmailSubjectCharacters,
+  maximumEmailTextCharacters,
+} from "./email-policy";
+import {
+  EmailForwardingAddressId,
+  EmailSourceFormat,
+  IngestSampleId,
+  NeedsReviewItemId,
+  ResendReceivedEmailId,
+  StatementSourceFormat,
+  StatementSubmissionId,
+} from "./reference";
 
 const maximumEncodedFileLength = 6_990_508;
 const maximumFileNameLength = 255;
 const maximumMappingSampleRows = 5;
+
+/** One permanent unpredictable forwarding address owned by the authenticated User. */
+export const EmailForwardingAddress = Schema.Struct({
+  id: EmailForwardingAddressId,
+  address: Schema.NonEmptyString.check(
+    Schema.isTrimmed(),
+    Schema.isMaxLength(maximumEmailAddressCharacters)
+  ),
+  createdAt: UtcTimestamp,
+}).annotate({ identifier: "EmailForwardingAddress" });
+export type EmailForwardingAddress = typeof EmailForwardingAddress.Type;
+
+/** Current Colombia-month allowance and deferred work visible beside the forwarding address. */
+export const EmailForwardingStatus = Schema.Struct({
+  address: Schema.OptionFromOptionalKey(EmailForwardingAddress),
+  remainingThisMonth: Schema.OptionFromOptionalKey(
+    Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 50 }))
+  ),
+  deferredEmails: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 50 })),
+  deferredCapacityRemaining: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 50 })),
+  resetsAt: UtcTimestamp,
+}).annotate({ identifier: "EmailForwardingStatus" });
+export type EmailForwardingStatus = typeof EmailForwardingStatus.Type;
+
+/** Bounded inline image bytes referenced from received HTML; ordinary attachments are excluded. */
+export const ReceivedInlineImage = Schema.Struct({
+  contentId: Schema.NonEmptyString.check(
+    Schema.isTrimmed(),
+    Schema.isMaxLength(maximumEmailEvidenceIdCharacters)
+  ),
+  mediaType: Schema.Literals(["image/jpeg", "image/png", "image/gif", "image/webp"]),
+  content: Schema.Uint8Array,
+});
+export type ReceivedInlineImage = typeof ReceivedInlineImage.Type;
+
+/** Closed Resend projection retained as raw personal evidence for a configured 90 days. */
+export const ReceivedEmailContent = Schema.Struct({
+  receivedEmailId: ResendReceivedEmailId,
+  from: Schema.String.check(Schema.isMaxLength(maximumEmailAddressCharacters)),
+  to: Schema.Array(Schema.String.check(Schema.isMaxLength(maximumEmailAddressCharacters))).check(
+    Schema.isMaxLength(maximumEmailRecipients)
+  ),
+  subject: Schema.String.check(Schema.isMaxLength(maximumEmailSubjectCharacters)),
+  text: Schema.OptionFromOptionalKey(
+    Schema.String.check(Schema.isMaxLength(maximumEmailTextCharacters))
+  ),
+  html: Schema.OptionFromOptionalKey(
+    Schema.String.check(Schema.isMaxLength(maximumEmailHtmlCharacters))
+  ),
+  inlineImages: Schema.Array(ReceivedInlineImage).check(
+    Schema.isMaxLength(maximumEmailInlineImages)
+  ),
+  messageId: Schema.OptionFromOptionalKey(
+    Schema.String.check(Schema.isMaxLength(maximumEmailEvidenceIdCharacters))
+  ),
+  createdAt: UtcTimestamp,
+}).annotate({ identifier: "ReceivedEmailContent" });
+export type ReceivedEmailContent = typeof ReceivedEmailContent.Type;
+
+const RawEmailIngestSampleFields = Schema.Struct({
+  id: IngestSampleId,
+  receivedEmailId: ResendReceivedEmailId,
+  ...CapturedInterpretationContext.fields,
+  sourceFormat: EmailSourceFormat,
+  sourceProvider: Schema.Literal("resend"),
+  parserRevision: InterpretationRevision,
+  content: ReceivedEmailContent,
+  retainedAt: UtcTimestamp,
+  expiresAt: UtcTimestamp,
+});
+const validRawEmailRetention = Schema.makeFilter<
+  Readonly<Pick<typeof RawEmailIngestSampleFields.Type, "retainedAt" | "expiresAt">>
+>((sample) =>
+  DateTime.toEpochMillis(sample.retainedAt) < DateTime.toEpochMillis(sample.expiresAt)
+    ? undefined
+    : { path: ["expiresAt"], issue: "Expected expiry after retention" }
+);
+
+/** Raw personal IngestSample retained only until its explicit expiry. */
+export const RawEmailIngestSample = RawEmailIngestSampleFields.check(
+  validRawEmailRetention
+).annotate({ identifier: "RawEmailIngestSample" });
+export type RawEmailIngestSample = typeof RawEmailIngestSample.Type;
+
+/** Operator-approved, User-unlinked structural evidence eligible for indefinite retention. */
+export const AnonymizedEmailIngestSample = Schema.Struct({
+  id: IngestSampleId,
+  serviceMarket: ServiceMarket,
+  sourceFormat: EmailSourceFormat,
+  sourceProvider: Schema.Literal("resend"),
+  parserRevision: InterpretationRevision,
+  anonymizationRevision: InterpretationRevision,
+  structure: Schema.NonEmptyString,
+  approvedAt: UtcTimestamp,
+  retainedAt: UtcTimestamp,
+}).annotate({ identifier: "AnonymizedEmailIngestSample" });
+export type AnonymizedEmailIngestSample = typeof AnonymizedEmailIngestSample.Type;
 
 /** Declared media types accepted at the upload boundary; byte sniffing remains authoritative. */
 export const StatementMediaType = Schema.Literals([
@@ -42,14 +159,6 @@ export const SubmitForExtractionInput = Schema.Struct({
   }),
 }).annotate({ identifier: "SubmitForExtractionInput" });
 export type SubmitForExtractionInput = typeof SubmitForExtractionInput.Type;
-
-/** User interpretation facts frozen when a statement is admitted. */
-export const CapturedStatementContext = Schema.Struct({
-  serviceMarket: ServiceMarket,
-  locale: Locale,
-  timeZone: IanaTimeZone,
-}).annotate({ identifier: "CapturedStatementContext" });
-export type CapturedStatementContext = typeof CapturedStatementContext.Type;
 
 const StatementAccountingFields = Schema.Struct({
   inputRows: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
@@ -159,8 +268,18 @@ export const NeedsReviewReason = Schema.Literals([
   "ambiguous-currency",
   "canonical-validation-failed",
   "mapping-unavailable",
+  "model-unavailable",
 ]);
 export type NeedsReviewReason = typeof NeedsReviewReason.Type;
+
+/** Stable classifications for notification emails that could not be safely captured. */
+export const EmailNeedsReviewReason = Schema.Literals([
+  "model-unavailable",
+  "canonical-validation-failed",
+  "provider-retrieval-failed",
+  "processing-interrupted",
+]);
+export type EmailNeedsReviewReason = typeof EmailNeedsReviewReason.Type;
 
 /** A safe field-local explanation attached to a review item. */
 export const CapturedFieldIssue = Schema.Struct({
@@ -174,7 +293,7 @@ const NeedsReviewBase = Schema.Struct({
   recordNumber: Schema.Int.check(Schema.isGreaterThan(0)),
   reason: NeedsReviewReason,
   knownMoney: Schema.OptionFromOptionalKey(Money),
-  ...CapturedStatementContext.fields,
+  ...CapturedInterpretationContext.fields,
   sourceFormat: StatementSourceFormat,
   sourceChannel: Schema.Literal("statement-upload"),
   sourceProvider: Schema.OptionFromOptionalKey(Schema.NonEmptyString),
@@ -211,12 +330,50 @@ const matchingReviewEvidenceFormat = Schema.makeFilter<typeof NeedsReviewItemVar
       : { path: ["sourceFormat"], issue: "Expected the original evidence format" }
 );
 
-/** A visible rejected row; raw evidence expires independently while lifecycle metadata remains. */
-export const NeedsReviewItem = NeedsReviewItemVariants.check(matchingReviewEvidenceFormat).annotate(
-  {
-    identifier: "NeedsReviewItem",
-  }
-);
+/** A visible rejected statement row; raw evidence expires independently. */
+export const StatementNeedsReviewItem = NeedsReviewItemVariants.check(
+  matchingReviewEvidenceFormat
+).annotate({ identifier: "StatementNeedsReviewItem" });
+export type StatementNeedsReviewItem = typeof StatementNeedsReviewItem.Type;
+
+const EmailNeedsReviewFields = {
+  id: NeedsReviewItemId,
+  receivedEmailId: ResendReceivedEmailId,
+  reason: EmailNeedsReviewReason,
+  knownMoney: Schema.OptionFromOptionalKey(Money),
+  ...CapturedInterpretationContext.fields,
+  sourceFormat: EmailSourceFormat,
+  sourceChannel: Schema.Literal("forwarded-email"),
+  sourceProvider: Schema.Literal("resend"),
+  messageEvidence: ProviderMessageEvidence,
+  parserRevision: InterpretationRevision,
+  extractorRevision: InterpretationRevision,
+  issues: Schema.Array(CapturedFieldIssue),
+  createdAt: UtcTimestamp,
+} as const;
+
+/** A visible notification email that could not safely become a canonical Transaction. */
+export const EmailNeedsReviewItem = Schema.Union([
+  Schema.Struct({
+    ...EmailNeedsReviewFields,
+    reason: Schema.Literals(["model-unavailable", "canonical-validation-failed"]),
+    ingestSampleId: IngestSampleId,
+    status: Schema.Literal("pending"),
+  }),
+  Schema.Struct({
+    ...EmailNeedsReviewFields,
+    reason: Schema.Literals(["provider-retrieval-failed", "processing-interrupted"]),
+    status: Schema.Literal("pending"),
+  }),
+  Schema.Struct({ ...EmailNeedsReviewFields, status: Schema.Literal("expired") }),
+]).annotate({ identifier: "EmailNeedsReviewItem" });
+export type EmailNeedsReviewItem = typeof EmailNeedsReviewItem.Type;
+
+/** Every visible Ingestion outcome requiring User review, independent of source channel. */
+export const NeedsReviewItem = Schema.Union([
+  StatementNeedsReviewItem,
+  EmailNeedsReviewItem,
+]).annotate({ identifier: "NeedsReviewItem" });
 export type NeedsReviewItem = typeof NeedsReviewItem.Type;
 
 const StatementColumnMappingFields = Schema.Struct({

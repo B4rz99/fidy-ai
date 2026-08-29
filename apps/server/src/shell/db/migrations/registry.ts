@@ -39,6 +39,7 @@ import { verifiedEmailLogin } from "./0039-verified-email-login";
 import { supportRecovery } from "./0040-support-recovery";
 import { subscriptionPriceVocabulary } from "./0041-subscription-price-vocabulary";
 import { wompiCardEnrollments } from "./0042-wompi-card-enrollments";
+import { emailIngestion } from "./0043-email-ingestion";
 
 /**
  * The explicit index ARCHITECTURE.md §7 calls for: one ordered, append-only
@@ -90,4 +91,5 @@ export const migrations = {
   "0040_support_recovery": supportRecovery,
   "0041_subscription_price_vocabulary": subscriptionPriceVocabulary,
   "0042_wompi_card_enrollments": wompiCardEnrollments,
+  "0043_email_ingestion": emailIngestion,
 };

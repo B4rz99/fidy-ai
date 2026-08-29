@@ -131,9 +131,11 @@ const parseJsonResponse = Effect.fn("Resend.parseReceivingResponse")(function* <
   );
 });
 
-const withResendRetrievalDeadline = <A>(
+type ResendRetrievalDeadline = <A>(
   retrieval: Effect.Effect<A, ResendReceivingFailed>
-): Effect.Effect<A, ResendReceivingFailed> =>
+) => Effect.Effect<A, ResendReceivingFailed>;
+
+const withResendRetrievalDeadline: ResendRetrievalDeadline = (retrieval) =>
   retrieval.pipe(
     Effect.timeout(forwardedEmailRetrievalDeadline),
     Effect.catchTag("TimeoutError", () =>

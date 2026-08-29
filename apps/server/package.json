@@ -51,7 +51,7 @@
     "effect": "4.0.0-beta.98",
     "jose": "6.2.10",
     "js-tiktoken": "1.0.21",
-    "sharp": "0.35.2",
+    "sharp": "0.35.3",
     "svix": "2.0.0",
     "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
   },

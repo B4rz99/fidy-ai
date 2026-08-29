@@ -18,10 +18,14 @@ export type NotificationEmailExtractorService = Readonly<{
 /** Fixed upper bound for one hosted notification-email model call. */
 export const notificationEmailExtractionTimeout = "30 seconds" as const;
 
-/** Enforces the worker deadline even when a substituted model adapter does not provide one. */
-export const withNotificationEmailExtractionDeadline = <A>(
+type NotificationEmailExtractionDeadline = <A>(
   extraction: Effect.Effect<A, NotificationEmailExtractionFailed>
-): Effect.Effect<A, NotificationEmailExtractionFailed> =>
+) => Effect.Effect<A, NotificationEmailExtractionFailed>;
+
+/** Enforces the worker deadline even when a substituted model adapter does not provide one. */
+export const withNotificationEmailExtractionDeadline: NotificationEmailExtractionDeadline = (
+  extraction
+) =>
   extraction.pipe(
     Effect.timeout(notificationEmailExtractionTimeout),
     Effect.mapError(() => new NotificationEmailExtractionFailed({ reason: "model-unavailable" }))

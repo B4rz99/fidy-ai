@@ -455,6 +455,8 @@ apps/server/src/shell/db/migrations/0042-email-ingestion.ts
   s_b8658db9652e53::t_3d1ec7c5dff9e0 1-666
 bun.lock
   s_b8658db9652e53::t_b46f9d4d973eda 36-37,610-611,994-995,1436,1482-1483,1504-1505,1630-1631,1634-1637
+apps/server/src/shell/db/migrations/registry.ts
+  s_b8658db9652e53::t_1d43b2c439b589 41,92
 ---
 {
   "schema_version": "authorship/3.0.0",

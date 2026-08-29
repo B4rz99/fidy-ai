@@ -16,7 +16,7 @@ import {
 const categoryId = "10000000-0000-4000-8000-000000000001";
 
 it("decodes the one User dashboard without storage identity or format fields", () => {
-  const document = Schema.decodeUnknownSync(DashboardDocument)({
+  const document = Schema.decodeSync(DashboardDocument)({
     title: "Mi tablero",
     layout: {
       kind: "leaf",
@@ -182,7 +182,7 @@ it("requires exactly four catalog entries", () => {
 });
 
 it("collects every leaf in recursive mobile order", () => {
-  const decoded = Schema.decodeUnknownSync(DashboardDocument)({
+  const decoded = Schema.decodeSync(DashboardDocument)({
     title: "Resumen",
     layout: {
       kind: "split",
@@ -283,11 +283,11 @@ it("enforces the layout depth boundary and retains the first traversal issue", (
     }
     return node;
   };
-  const valid = Schema.decodeUnknownSync(DashboardDocument)({
+  const valid = Schema.decodeSync(DashboardDocument)({
     title: "Resumen",
     layout: nested(8),
   });
-  const tooDeep = Schema.decodeUnknownResult(DashboardDocument)({
+  const tooDeep = Schema.decodeResult(DashboardDocument)({
     title: "Resumen",
     layout: nested(9),
   });
@@ -298,7 +298,7 @@ it("enforces the layout depth boundary and retains the first traversal issue", (
   );
 
   const duplicate = leaf(399);
-  const firstIssue = Schema.decodeUnknownResult(DashboardDocument)({
+  const firstIssue = Schema.decodeResult(DashboardDocument)({
     title: "Resumen",
     layout: {
       kind: "split",

@@ -25,7 +25,7 @@ const rawSample = {
 
 it("rejects a Raw Email IngestSample whose expiry is not after retention", () => {
   expect(
-    Schema.decodeUnknownResult(RawEmailIngestSample)({
+    Schema.decodeResult(RawEmailIngestSample)({
       ...rawSample,
       expiresAt: rawSample.retainedAt,
     })._tag
@@ -61,7 +61,7 @@ it("requires raw evidence for model and canonical review reasons", () => {
     })._tag
   ).toBe("Failure");
   expect(
-    Schema.decodeUnknownResult(EmailNeedsReviewItem)({
+    Schema.decodeResult(EmailNeedsReviewItem)({
       ...reviewBase,
       reason: "provider-retrieval-failed",
     })._tag

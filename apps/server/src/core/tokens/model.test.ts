@@ -48,7 +48,7 @@ it.effect("builds and reads the TokenBearer bearer through one encoding contract
 it("accepts PAT identity in resolved authorization facts", () => {
   expect(
     Result.isSuccess(
-      Schema.decodeUnknownResult(ResolvedToken)({
+      Schema.decodeResult(ResolvedToken)({
         tokenId: "f1d1a000-0000-4000-8000-000000000012",
         subjectUserId: "f1d1a000-0000-4000-8000-000000000013",
         scopes: ["read"],

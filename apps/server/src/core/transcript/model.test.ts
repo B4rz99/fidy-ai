@@ -50,8 +50,8 @@ it("rejects unpersistable or oversized canonical tool evidence", () => {
 
 it("rejects UUID spellings PostgreSQL would canonicalize", () => {
   const uppercase = "F1D1A000-0000-4000-8000-000000000301";
-  expect(Result.isFailure(Schema.decodeUnknownResult(TranscriptEntryId)(uppercase))).toBe(true);
-  expect(Result.isFailure(Schema.decodeUnknownResult(TranscriptTurnId)(uppercase))).toBe(true);
+  expect(Result.isFailure(Schema.decodeResult(TranscriptEntryId)(uppercase))).toBe(true);
+  expect(Result.isFailure(Schema.decodeResult(TranscriptTurnId)(uppercase))).toBe(true);
 });
 
 it("accepts continuation and content unions at their public seams", () => {
@@ -72,12 +72,12 @@ it("accepts continuation and content unions at their public seams", () => {
     occurredAt: DateTime.makeUnsafe("2026-08-11T12:00:00Z"),
   });
 
-  expect(
-    Result.isSuccess(Schema.decodeUnknownResult(Schema.toType(TranscriptContentEntry))(user))
-  ).toBe(true);
-  expect(
-    Result.isSuccess(Schema.decodeUnknownResult(Schema.toType(TurnContinuationEntry))(call))
-  ).toBe(true);
+  expect(Result.isSuccess(Schema.decodeResult(Schema.toType(TranscriptContentEntry))(user))).toBe(
+    true
+  );
+  expect(Result.isSuccess(Schema.decodeResult(Schema.toType(TurnContinuationEntry))(call))).toBe(
+    true
+  );
 });
 
 it("accepts non-reversed terminal times for every terminal ConversationTurn", () => {
@@ -107,7 +107,7 @@ it("models fixed metadata-only failure markers and rejects reversed Turn time", 
 
   expect(Object.keys(marker).toSorted()).toEqual(["_tag", "id", "occurredAt", "reason", "turnId"]);
   expect(Result.isFailure(Schema.decodeUnknownResult(TranscriptContentEntry)(marker))).toBe(true);
-  const reversed = Schema.decodeUnknownResult(ConversationTurn)({
+  const reversed = Schema.decodeResult(ConversationTurn)({
     _tag: "Failed",
     id: turnId,
     reason: "DeliveryFailed",

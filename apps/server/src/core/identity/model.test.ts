@@ -4,11 +4,11 @@ import { EffectiveAccess, PaidTier, TrialPeriod, UserPreferences } from "./model
 
 it("accepts only a TrialPeriod lasting exactly 168 hours", () => {
   const startedAt = "2026-08-01T12:00:00Z";
-  const exact = Schema.decodeUnknownResult(TrialPeriod)({
+  const exact = Schema.decodeResult(TrialPeriod)({
     startedAt,
     endsAt: "2026-08-08T12:00:00Z",
   });
-  const tooLong = Schema.decodeUnknownResult(TrialPeriod)({
+  const tooLong = Schema.decodeResult(TrialPeriod)({
     startedAt,
     endsAt: "2026-08-08T12:00:00.001Z",
   });
@@ -20,14 +20,14 @@ it("accepts only a TrialPeriod lasting exactly 168 hours", () => {
 
 it("keeps PaidTier and EffectiveAccess closed to unknown values", () => {
   for (const schema of [PaidTier, EffectiveAccess]) {
-    expect(Result.isSuccess(Schema.decodeUnknownResult(schema)("free"))).toBe(true);
-    expect(Result.isSuccess(Schema.decodeUnknownResult(schema)("pro"))).toBe(true);
+    expect(Result.isSuccess(Schema.decodeResult(schema)("free"))).toBe(true);
+    expect(Result.isSuccess(Schema.decodeResult(schema)("pro"))).toBe(true);
     expect(Result.isFailure(Schema.decodeUnknownResult(schema)("trial"))).toBe(true);
   }
 });
 
 it("derives editable User preferences as locale and time zone together", () => {
-  const decoded = Schema.decodeUnknownResult(UserPreferences)({
+  const decoded = Schema.decodeResult(UserPreferences)({
     locale: "es-CO",
     timeZone: "America/Bogota",
   });

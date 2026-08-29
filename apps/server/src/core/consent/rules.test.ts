@@ -4,7 +4,7 @@ import { DisclosureSnapshot, PendingConsentExchangeId } from "./model";
 import { decideConsentReply, hasPendingConsentExpired, makePendingConsentDraft } from "./rules";
 
 const makeDisclosure = (): DisclosureSnapshot =>
-  Schema.decodeUnknownSync(DisclosureSnapshot)({
+  Schema.decodeSync(DisclosureSnapshot)({
     serviceMarket: "CO",
     locale: "es-CO",
     revision: "onboarding-2026-01",

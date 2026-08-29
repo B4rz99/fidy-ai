@@ -25,15 +25,15 @@ const budgetInput = {
 } as const;
 
 it("accepts a Budget with a positive nested Money cap", () => {
-  expect(Result.isSuccess(Schema.decodeUnknownResult(Budget)(budgetInput))).toBe(true);
+  expect(Result.isSuccess(Schema.decodeResult(Budget)(budgetInput))).toBe(true);
 });
 
 it("rejects a zero cap at the nested Money amount field in every write input", () => {
-  const create = Schema.decodeUnknownResult(CreateBudgetInput)({
+  const create = Schema.decodeResult(CreateBudgetInput)({
     categoryId: budgetInput.categoryId,
     cap: { amount: "0", currency: "COP" },
   });
-  const update = Schema.decodeUnknownResult(UpdateBudgetInput)({
+  const update = Schema.decodeResult(UpdateBudgetInput)({
     categoryId: budgetInput.categoryId,
     cap: { amount: "0", currency: "COP" },
   });
@@ -53,7 +53,7 @@ it("rejects either incorrect calendar bound and reports the end path", () => {
       to: "2026-08-02T05:00:00Z",
     },
   ]) {
-    const decoded = Schema.decodeUnknownResult(AppliedBudgetMonth)({
+    const decoded = Schema.decodeResult(AppliedBudgetMonth)({
       ...bounds,
       timeZone: "America/Bogota",
     });

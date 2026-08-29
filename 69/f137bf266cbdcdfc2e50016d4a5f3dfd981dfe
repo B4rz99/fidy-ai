@@ -1,0 +1,27 @@
+apps/server/src/shell/ingestion/resend-receiving-client.ts
+  s_b8658db9652e53::t_5e800fad0c7500 48,184-188
+apps/server/src/shell/ingestion/email-forwarding.test.ts
+  s_b8658db9652e53::t_e14c9b9ebf944b 606-610,612,618
+  s_b8658db9652e53::t_5b506af66bc620 620-624
+apps/server/src/core/ingestion/rules.ts
+  s_b8658db9652e53::t_f421ae92b5f8c2 99,141
+  s_b8658db9652e53::t_5283c3e9244fed 95,98,101,133,138,144
+  s_b8658db9652e53::t_387621fbd3bacf 100
+  s_b8658db9652e53::t_f57bdd9670c0c8 142-143
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "69f137bf266cbdcdfc2e50016d4a5f3dfd981dfe",
+  "prompts": {},
+  "sessions": {
+    "s_b8658db9652e53": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a045fb-152d-7a64-a33b-43aa07614304",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

@@ -208,6 +208,24 @@ it("reduces an email to value-free structural evidence", () => {
   expect(candidate).not.toMatch(/Ana|Pérez|Restaurante|Sol|45|1234|example/iu);
 });
 
+it.each([
+  ["a multi-character word", "Hola", "[TEXT]"],
+  ["a multi-character email local part", "ana@example.com", "[EMAIL]"],
+  ["a numeric email local part", "1@example.com", "[EMAIL]"],
+  ["a numeric email domain", "ana@123.co", "[EMAIL]"],
+  ["a multi-label email domain", "ana@example.com.co", "[EMAIL]"],
+  ["a multi-character email suffix", "ana@example.co", "[EMAIL]"],
+  ["an alphanumeric email suffix", "ana@example.c1", "[EMAIL]"],
+  ["an adjacent COP marker", "COP123", "[MONEY]"],
+  ["a spaced COP marker", "COP 123", "[MONEY]"],
+  ["a spaced currency symbol", "$ 123", "[MONEY]"],
+  ["a multi-digit amount", "$123", "[MONEY]"],
+  ["text between a COP marker and digits", "COPxyz 123", "[TEXT] [DIGITS]"],
+  ["punctuation after a currency symbol", "$!123", "$![DIGITS]"],
+])("preserves the redaction boundary for %s", (_case, content, expected) => {
+  expect(redactEmailCandidate(content)).toBe(expected);
+});
+
 it("rejects contradictory duplicated CSV row facts", () => {
   expect(Schema.is(ParsedStatementRow)({ ...csvRow(1, ["a"]), recordNumber: 2 })).toBe(false);
 });

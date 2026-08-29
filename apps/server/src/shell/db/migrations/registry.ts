@@ -25,7 +25,7 @@ import { monthlyBudgets } from "./0025-monthly-budgets";
 import { browserLoginPairings } from "./0026-browser-login-pairings";
 import { webSessions } from "./0027-web-sessions";
 import { persistedSchemaReconciliation } from "./0028-persisted-schema-reconciliation";
-import { subscriptionPrices } from "./0029-subscription-prices";
+import { subscriptionPriceRevisions } from "./0029-subscription-price-revisions";
 import { manualPATIssuance } from "./0030-manual-pat-issuance";
 import { retrySafeManualPATIssuance } from "./0031-retry-safe-manual-pat-issuance";
 import { dashboardTransactionAccess } from "./0032-dashboard-transaction-access";
@@ -37,7 +37,8 @@ import { patManagement } from "./0037-pat-management";
 import { whatsappConfirmationEvidence } from "./0038-whatsapp-confirmation-evidence";
 import { verifiedEmailLogin } from "./0039-verified-email-login";
 import { supportRecovery } from "./0040-support-recovery";
-import { wompiCardEnrollments } from "./0041-wompi-card-enrollments";
+import { subscriptionPriceVocabulary } from "./0041-subscription-price-vocabulary";
+import { wompiCardEnrollments } from "./0042-wompi-card-enrollments";
 
 /**
  * The explicit index ARCHITECTURE.md §7 calls for: one ordered, append-only
@@ -75,7 +76,7 @@ export const migrations = {
   "0026_browser_login_pairings": browserLoginPairings,
   "0027_web_sessions": webSessions,
   "0028_persisted_schema_reconciliation": persistedSchemaReconciliation,
-  "0029_subscription_prices": subscriptionPrices,
+  "0029_subscription_price_revisions": subscriptionPriceRevisions,
   "0030_manual_pat_issuance": manualPATIssuance,
   "0031_retry_safe_manual_pat_issuance": retrySafeManualPATIssuance,
   "0032_dashboard_transaction_access": dashboardTransactionAccess,
@@ -87,5 +88,6 @@ export const migrations = {
   "0038_whatsapp_confirmation_evidence": whatsappConfirmationEvidence,
   "0039_verified_email_login": verifiedEmailLogin,
   "0040_support_recovery": supportRecovery,
-  "0041_wompi_card_enrollments": wompiCardEnrollments,
+  "0041_subscription_price_vocabulary": subscriptionPriceVocabulary,
+  "0042_wompi_card_enrollments": wompiCardEnrollments,
 };

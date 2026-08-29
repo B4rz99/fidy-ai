@@ -8,7 +8,7 @@ Implement the work described by the user in the spec or tickets.
 
 Use /tdd where possible, at pre-agreed seams.
 
-Run typechecking regularly, single test files regularly, and the full test suite once at the end.
+Run typechecking regularly and run only the focused test files that cover the changed behaviour.
 
 Once done, use /code-review to review the work.
 

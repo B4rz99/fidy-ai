@@ -67,7 +67,7 @@ const parseGroup = (): Option.Option<VerifyGroup> => {
 
 const requestedGroup = parseGroup();
 const groupIsSelected = (group: VerifyGroup): boolean =>
-  Option.isNone(requestedGroup) || requestedGroup.value === group;
+  Option.isSome(requestedGroup) ? requestedGroup.value === group : group !== "mutation";
 const rootCheck = (group: VerifyGroup, label: string, command: ReadonlyArray<string>): Check => ({
   group,
   label,

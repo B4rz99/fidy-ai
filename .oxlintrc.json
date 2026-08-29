@@ -428,7 +428,7 @@
       "files": [
         "apps/server/vitest.config.ts",
         "apps/server/vitest.core.config.ts",
-        "apps/server/vitest.crap.config.ts",
+        "apps/server/vitest.ci.config.ts",
         "apps/server/vitest.acceptance.config.ts",
         "apps/server/vitest.compatibility.config.ts",
         "apps/server/stryker.config.mjs",

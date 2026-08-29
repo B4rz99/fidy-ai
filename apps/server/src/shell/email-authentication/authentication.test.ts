@@ -942,7 +942,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           expect(yield* completed.json).toEqual({ status: "pairing_approved" });
 
           yield* sql`
-          UPDATE browser_login_pairings SET last_accepted_poll_at = now() - interval '5 seconds'
+          UPDATE browser_login_pairings SET last_accepted_poll_at = now() - interval '10 seconds'
           WHERE id = ${pairing.pairingId}
         `;
           const redeemed = yield* HttpClient.post("/web/pairings/redeem", {

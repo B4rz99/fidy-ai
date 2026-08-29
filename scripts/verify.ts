@@ -82,6 +82,15 @@ delete coreEnvironment.MIGRATION_DATABASE_URL;
 const gitRevision = new TextDecoder()
   .decode(Bun.spawnSync(["git", "rev-parse", "HEAD"], { cwd: workspaceRoot }).stdout)
   .trim();
+const serverShard = Option.fromUndefinedOr(Bun.env.SERVER_TEST_SHARD);
+const serverTestCommand = [
+  "bun",
+  "run",
+  "--cwd",
+  "apps/server",
+  "test:ci",
+  ...(Option.isSome(serverShard) ? ["--", `--shard=${serverShard.value}`] : []),
+];
 
 const checks: Array<Check> = [
   {
@@ -132,6 +141,7 @@ const checks: Array<Check> = [
   rootCheck("unit", "Web Istanbul coverage", ["bun", "run", "--cwd", "apps/web", "test:coverage"]),
   rootCheck("unit", "Trusted preview artifact policy", ["bun", "run", "test:preview-policy"]),
   rootCheck("unit", "Production deployment adapters", ["bun", "run", "test:production-adapters"]),
+  rootCheck("unit", "CI tooling", ["bun", "run", "test:ci-tools"]),
   rootCheck("unit", "Contract checker tests", ["bun", "run", "test:contracts"]),
   rootCheck("browser", "Web static-shell browser checks", [
     "bun",
@@ -140,13 +150,6 @@ const checks: Array<Check> = [
     "apps/web",
     "test:browser",
   ]),
-  {
-    group: "quality",
-    label: "Install CRAP analyzer",
-    command: ["bun", "install", "--frozen-lockfile"],
-    cwd: `${workspaceRoot}/tools/crap`,
-    env: Bun.env,
-  },
   {
     group: "mutation",
     label: "Install mutation runner",
@@ -169,12 +172,7 @@ const runsDatabaseGroup = Option.isNone(requestedGroup) || databaseGroups.has(re
 if (runsDatabaseGroup) {
   if (databaseConfigured) {
     checks.push(
-      rootCheck("server", "Server tests", ["bun", "run", "--cwd", "apps/server", "test"]),
-      rootCheck("server", "Observability compatibility", [
-        "bun",
-        "run",
-        "test:observability-compatibility",
-      ]),
+      rootCheck("server", "Server tests", serverTestCommand),
       rootCheck("acceptance", "WhatsApp acceptance", ["bun", "run", "test:acceptance"]),
       rootCheck("acceptance", "Acceptance coverage ratchet", [
         "git",
@@ -182,14 +180,33 @@ if (runsDatabaseGroup) {
         "--exit-code",
         "--",
         "apps/server/vitest.acceptance.config.ts",
-      ]),
-      rootCheck("quality", "CRAP threshold", ["bun", "run", "test:crap"])
+      ])
     );
   } else {
     process.stdout.write(
       "Database-backed tests are not applicable: set DATABASE_URL and MIGRATION_DATABASE_URL to include them.\n"
     );
   }
+}
+
+const qualityRequested = Option.isSome(requestedGroup) && requestedGroup.value === "quality";
+if (databaseConfigured && (qualityRequested || Option.isNone(requestedGroup))) {
+  checks.push(
+    {
+      group: "quality",
+      label: "Install CRAP analyzer",
+      command: ["bun", "install", "--frozen-lockfile"],
+      cwd: `${workspaceRoot}/tools/crap`,
+      env: Bun.env,
+    },
+    rootCheck("quality", "CRAP parser preflight", ["bun", "tools/crap/preflight.ts"]),
+    rootCheck("quality", "Coverage and CRAP thresholds", ["bun", "run", "test:quality"]),
+    rootCheck("quality", "Observability compatibility", [
+      "bun",
+      "run",
+      "test:observability-compatibility",
+    ])
+  );
 }
 
 if (groupIsSelected("image")) {

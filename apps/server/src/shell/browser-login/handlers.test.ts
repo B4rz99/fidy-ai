@@ -135,7 +135,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         const admin = yield* MigrationSqlClient;
         yield* admin`
           UPDATE browser_login_pairings
-          SET last_accepted_poll_at = now() - interval '5 seconds'
+          SET last_accepted_poll_at = now() - interval '10 seconds'
           WHERE id = ${started.pairingId}::uuid
         `;
 

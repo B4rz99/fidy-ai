@@ -566,13 +566,20 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         );
         expect(promotedReceivedEmailId).toMatch(/^email_quota_\d+$/u);
         yield* sql`UPDATE users SET paid_tier = 'free' WHERE id = ${freeUserId}`;
+        yield* sql`
+          UPDATE forwarded_email_user_admission_windows
+          SET window_start = date_trunc('hour', clock_timestamp()) + interval '1 hour',
+            admitted_count = 99
+          WHERE user_id = ${freeUserId}
+        `;
         const burstResponses = yield* Effect.forEach(
-          Array.from({ length: 100 }, (_, index) => index + 1),
+          [1, 2],
           (number) => makeDelivery(`email_burst_${number}`, freeAddress),
-          { concurrency: 1 }
+          { concurrency: "unbounded" }
         );
-        expect(burstResponses.some((response) => response.status === 202)).toBe(true);
-        expect(burstResponses.some((response) => response.status === 429)).toBe(true);
+        expect(
+          burstResponses.map((response) => response.status).sort((left, right) => left - right)
+        ).toEqual([202, 429]);
         const afterRateLimit = yield* getTestRow(
           sql,
           Schema.Struct({ count: Schema.Int }),

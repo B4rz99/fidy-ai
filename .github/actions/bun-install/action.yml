@@ -2,8 +2,9 @@ name: Bun install
 description: Pin Bun, restore its install cache, and install the root dependencies.
 
 # The cache key hashes every lockfile in the repo, not just the root one, so all
-# jobs share a single entry — including the jobs that go on to install an
-# isolated tool tree under tools/, which draws from the same ~/.bun cache.
+# jobs share one exact entry — including jobs that install an isolated tool
+# tree under tools/. Stale fallback entries are intentionally not restored:
+# measured fallback transfer time exceeded a fresh Bun install.
 runs:
   using: composite
   steps:
@@ -14,8 +15,6 @@ runs:
       with:
         path: ~/.bun/install/cache
         key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock', 'tools/*/bun.lock') }}
-        restore-keys: |
-          ${{ runner.os }}-bun-
     - name: Install dependencies
       shell: bash
       run: bun install --frozen-lockfile

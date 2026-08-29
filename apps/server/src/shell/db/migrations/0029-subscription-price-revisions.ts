@@ -2,11 +2,11 @@ import { Effect } from "effect";
 import { SqlClient } from "effect/unstable/sql";
 
 /** Publishes the three immutable Colombia Subscription offers without granting runtime writes. */
-export const subscriptionPrices = Effect.gen(function* () {
+export const subscriptionPriceRevisions = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
 
   yield* sql`
-    CREATE TABLE prices (
+    CREATE TABLE price_revisions (
       id uuid PRIMARY KEY,
       amount numeric NOT NULL CHECK (amount > 0),
       currency text NOT NULL CHECK (currency = 'COP'),
@@ -24,7 +24,7 @@ export const subscriptionPrices = Effect.gen(function* () {
   `;
 
   yield* sql`
-    INSERT INTO prices (
+    INSERT INTO price_revisions (
       id, amount, currency, billing_period, service_market, tax_treatment, automatic_renewal,
       renewal_reminder, cancellation, paid_access_ends, payment_methods
     ) VALUES
@@ -46,18 +46,18 @@ export const subscriptionPrices = Effect.gen(function* () {
   `;
 
   yield* sql`
-    CREATE TABLE published_prices (
+    CREATE TABLE published_price_revisions (
       offer_order smallint PRIMARY KEY CHECK (offer_order BETWEEN 1 AND 3),
-      price_id uuid NOT NULL UNIQUE REFERENCES prices(id)
+      price_revision_id uuid NOT NULL UNIQUE REFERENCES price_revisions(id)
     )
   `;
 
   yield* sql`
-    INSERT INTO published_prices (offer_order, price_id) VALUES
+    INSERT INTO published_price_revisions (offer_order, price_revision_id) VALUES
       (1, '22700000-0000-4000-8000-000000000001'),
       (2, '22700000-0000-4000-8000-000000000002'),
       (3, '22700000-0000-4000-8000-000000000003')
   `;
 
-  yield* sql`GRANT SELECT ON prices, published_prices TO fidy_runtime`;
+  yield* sql`GRANT SELECT ON price_revisions, published_price_revisions TO fidy_runtime`;
 }).pipe(Effect.asVoid);

@@ -82,7 +82,7 @@ const EmailCodeForm = ({
       Schema.decodeUnknownOption(Schema.String)(
         new FormData(event.currentTarget).get("combinedCode")
       ),
-      (value) => Schema.decodeUnknownOption(EmailVerificationCode)(value.trim().toUpperCase())
+      (value) => Schema.decodeOption(EmailVerificationCode)(value.trim().toUpperCase())
     );
     if (code._tag === "Some") onCompleteEmail(code.value);
   };

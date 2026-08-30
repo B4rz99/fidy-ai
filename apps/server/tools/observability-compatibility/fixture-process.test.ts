@@ -329,7 +329,7 @@ const fixture = Effect.scoped(
     ];
     const serialized = envelopes.map((value) => new TextDecoder().decode(value)).join("\n");
     const envelopeHeaders = envelopes.map((value) =>
-      Schema.decodeUnknownSync(Schema.UnknownFromJsonString)(
+      Schema.decodeSync(Schema.UnknownFromJsonString)(
         new TextDecoder().decode(value).split("\n")[0] ?? "null"
       )
     );

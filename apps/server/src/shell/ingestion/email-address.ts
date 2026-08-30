@@ -24,6 +24,6 @@ export const forwardingLocalPartForDomain: {
     if (separator <= 0 || normalized.slice(separator + 1) !== domain.toLocaleLowerCase("en-US")) {
       return Option.none();
     }
-    return Schema.decodeUnknownOption(EmailForwardingLocalPart)(normalized.slice(0, separator));
+    return Schema.decodeOption(EmailForwardingLocalPart)(normalized.slice(0, separator));
   }
 );

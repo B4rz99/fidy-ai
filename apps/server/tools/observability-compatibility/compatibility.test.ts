@@ -48,7 +48,7 @@ const runFixture = async (input: {
   if (reportLine === undefined) {
     throw new Error(`compatibility fixture emitted no report\n${stderr}`);
   }
-  const report = Schema.decodeUnknownSync(Schema.fromJsonString(CompatibilityReport))(
+  const report = Schema.decodeSync(Schema.fromJsonString(CompatibilityReport))(
     reportLine.slice("FIDY_COMPATIBILITY_REPORT=".length)
   );
   return { exitCode, report, stderr };

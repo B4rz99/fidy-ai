@@ -136,7 +136,7 @@ it.effect.prop(
   [moneyArbitrary],
   ([generated]: readonly [ReadonlyMoney]) =>
     Effect.gen(function* () {
-      const decoded = yield* Schema.decodeUnknownEffect(Money)(encodeMoney(generated));
+      const decoded = yield* Schema.decodeEffect(Money)(encodeMoney(generated));
 
       expect(decoded.currency).toBe(generated.currency);
       expect(Equal.equals(decoded.amount, generated.amount)).toBe(true);

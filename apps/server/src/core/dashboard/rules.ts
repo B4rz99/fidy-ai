@@ -58,7 +58,7 @@ const toInvalidDashboardResult = (error: Schema.SchemaError): InvalidDashboardRe
 const revalidateDocument = (
   candidate: Readonly<DashboardDocument>
 ): Effect.Effect<DashboardDocument, InvalidDashboardResult> =>
-  Schema.decodeUnknownEffect(Schema.toType(DashboardDocument), { errors: "all" })(candidate).pipe(
+  Schema.decodeEffect(Schema.toType(DashboardDocument), { errors: "all" })(candidate).pipe(
     Effect.mapError(toInvalidDashboardResult)
   );
 
@@ -451,8 +451,8 @@ const resizeChildren = (
   }
   const [numerator, denominator] = ratioParts[size.ratio];
   const siblingCount = children.length - 1;
-  const targetWeight = Schema.decodeUnknownSync(SplitWeight)(numerator * siblingCount);
-  const siblingWeight = Schema.decodeUnknownSync(SplitWeight)(denominator - numerator);
+  const targetWeight = Schema.decodeSync(SplitWeight)(numerator * siblingCount);
+  const siblingWeight = Schema.decodeSync(SplitWeight)(denominator - numerator);
   return mapAtLeastTwo(children, (child, index) => ({
     ...child,
     weight: index === resizedIndex ? targetWeight : siblingWeight,

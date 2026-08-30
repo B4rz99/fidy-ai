@@ -31,7 +31,7 @@ const occurrence = (overrides: Partial<InsightOccurrenceInput> = {}): InsightOcc
 });
 
 it("decodes a generated occurrence with deterministic Currency groups", () => {
-  const event = Schema.decodeUnknownSync(InsightEvent)(occurrence());
+  const event = Schema.decodeSync(InsightEvent)(occurrence());
 
   expect(event.scheduleVersion).toBe(2);
   expect(event.moneyGroups).toHaveLength(2);
@@ -45,12 +45,12 @@ it("decodes a generated occurrence with deterministic Currency groups", () => {
 it("derives generation input without server-assigned identity or lifecycle", () => {
   const { id: _id, lifecycleState: _lifecycleState, ...input } = occurrence();
 
-  expect(() => Schema.decodeUnknownSync(InsightGenerationInput)(input)).not.toThrow();
+  expect(() => Schema.decodeSync(InsightGenerationInput)(input)).not.toThrow();
 });
 
 it("derives delivery input without server-assigned attempt or InsightEvent identity", () => {
   expect(() =>
-    Schema.decodeUnknownSync(DeliveryEvidenceInput)({
+    Schema.decodeSync(DeliveryEvidenceInput)({
       sentAt: "2026-08-09T23:00:08Z",
       channel: "whatsapp",
       provider: "kapso",
@@ -76,13 +76,13 @@ it("bounds persisted delivery evidence fields", () => {
 
 it("rejects schedule revision zero", () => {
   expect(
-    Result.isFailure(Schema.decodeUnknownResult(InsightEvent)(occurrence({ scheduleVersion: 0 })))
+    Result.isFailure(Schema.decodeResult(InsightEvent)(occurrence({ scheduleVersion: 0 })))
   ).toBe(true);
 });
 
 it("rejects Currency groups that are duplicated or out of alphabetic order", () => {
   const groups = occurrence().moneyGroups;
-  const unordered = Schema.decodeUnknownResult(InsightEvent)(
+  const unordered = Schema.decodeResult(InsightEvent)(
     occurrence({ moneyGroups: [...groups].reverse() })
   );
   expect(Result.isFailure(unordered)).toBe(true);
@@ -93,7 +93,7 @@ it("rejects Currency groups that are duplicated or out of alphabetic order", () 
   ).toEqual(["moneyGroups", 1, "currency"]);
   expect(
     Result.isFailure(
-      Schema.decodeUnknownResult(InsightEvent)(occurrence({ moneyGroups: [...groups, ...groups] }))
+      Schema.decodeResult(InsightEvent)(occurrence({ moneyGroups: [...groups, ...groups] }))
     )
   ).toBe(true);
 });
@@ -113,9 +113,7 @@ it("rejects inflow or outflow Money whose Currency disagrees with its group", ()
   ] satisfies ReadonlyArray<MoneyGroupInput>;
 
   for (const [index, mismatch] of mismatches.entries()) {
-    const result = Schema.decodeUnknownResult(InsightEvent)(
-      occurrence({ moneyGroups: [mismatch] })
-    );
+    const result = Schema.decodeResult(InsightEvent)(occurrence({ moneyGroups: [mismatch] }));
     expect(Result.isFailure(result)).toBe(true);
     expect(
       Result.isFailure(result)
@@ -128,7 +126,7 @@ it("rejects inflow or outflow Money whose Currency disagrees with its group", ()
 it("rejects all-zero Currency groups as meaningless persisted data", () => {
   expect(
     Result.isFailure(
-      Schema.decodeUnknownResult(InsightEvent)(
+      Schema.decodeResult(InsightEvent)(
         occurrence({
           moneyGroups: [
             {

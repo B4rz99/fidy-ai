@@ -564,7 +564,7 @@ const readStructuredResponse = (
 ): Effect.Effect<OpenAiSchema.Response, HostedInferenceError> =>
   readBoundedResponseText(response).pipe(
     Effect.flatMap((body) =>
-      Schema.decodeUnknownEffect(Schema.fromJsonString(OpenAiSchema.Response))(body).pipe(
+      Schema.decodeEffect(Schema.fromJsonString(OpenAiSchema.Response))(body).pipe(
         Effect.mapError(() =>
           invalidProviderOutput("Hosted structured provider response was invalid")
         )
@@ -612,9 +612,7 @@ const executeStructuredRequest = function <Output>(
       Effect.mapError(countFailure),
       Effect.flatMap(readStructuredResponse),
       Effect.flatMap((response) =>
-        Schema.decodeUnknownEffect(Schema.fromJsonString(prepared.codec))(
-          structuredText(response)
-        ).pipe(
+        Schema.decodeEffect(Schema.fromJsonString(prepared.codec))(structuredText(response)).pipe(
           Effect.mapError(() => invalidProviderOutput("Hosted structured output was malformed"))
         )
       ),

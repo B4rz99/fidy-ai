@@ -17,7 +17,7 @@ Para crear tu cuenta, responde exactamente “Acepto” o usa la opción Aceptar
  * material copy changes require updating the corresponding revision and digest.
  */
 export const currentDisclosure = Config.map(externalEndpoints, ({ policyUrl }) =>
-  Schema.decodeUnknownSync(DisclosureSnapshot)({
+  Schema.decodeSync(DisclosureSnapshot)({
     serviceMarket: "CO",
     locale: "es-CO",
     revision: "onboarding-2026-08-28",

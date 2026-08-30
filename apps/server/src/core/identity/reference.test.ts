@@ -61,7 +61,7 @@ it("projects a WhatsApp caller to its stable cross-slice reference", () => {
     businessScopedUserId: WhatsAppBusinessScopedUserId.make("CO.caller123"),
   };
 
-  expect(
-    Schema.decodeUnknownSync(WhatsAppCallerReference)(whatsAppCallerReference(caller))
-  ).toEqual(caller);
+  expect(Schema.decodeSync(WhatsAppCallerReference)(whatsAppCallerReference(caller))).toEqual(
+    caller
+  );
 });

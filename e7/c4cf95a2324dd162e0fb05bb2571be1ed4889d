@@ -1,0 +1,30 @@
+scripts/check-effect-family.ts
+  s_ce462e08ad16fa::t_bb46a9f0bf300d 141-144,146
+  s_ce462e08ad16fa::t_4c4b721d094924 145,147
+  s_ce462e08ad16fa::t_730bb74b922d10 6,140
+scripts/check-effect-family.test.ts
+  s_ce462e08ad16fa::t_eed22950c74b0e 153-160
+  s_ce462e08ad16fa::t_bb519a0bed0541 46-47,56-58,63-71
+  s_ce462e08ad16fa::t_08278a6f874074 31-33,35,84-85,87,97,105-107
+  s_ce462e08ad16fa::t_0fdd8d4d15395d 146-152
+  s_ce462e08ad16fa::t_0d0324e7a157c3 52-55,59-62
+  s_ce462e08ad16fa::t_ac82fd8edaca2a 88
+  s_ce462e08ad16fa::t_efb04b89473fff 161-178,213-221
+  s_ce462e08ad16fa::t_a70d06431bf5c9 48,72-75
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "e7c4cf95a2324dd162e0fb05bb2571be1ed4889d",
+  "prompts": {},
+  "sessions": {
+    "s_ce462e08ad16fa": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a05331-d73a-7b63-964a-cb71e2e11111",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

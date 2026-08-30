@@ -33,7 +33,7 @@ export const freshWidgetId = (): WidgetId => {
   const hex = Array.from(bytes, (byte) => byte.toString(hexadecimalRadix).padStart(2, "0")).join(
     ""
   );
-  return Schema.decodeUnknownSync(WidgetIdSchema)(
+  return Schema.decodeSync(WidgetIdSchema)(
     `${hex.slice(0, firstGroupEnd)}-${hex.slice(firstGroupEnd, secondGroupEnd)}-${hex.slice(secondGroupEnd, thirdGroupEnd)}-${hex.slice(thirdGroupEnd, fourthGroupEnd)}-${hex.slice(fourthGroupEnd)}`
   );
 };

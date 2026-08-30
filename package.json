@@ -57,7 +57,7 @@
     "@babel/traverse": "8.0.4",
     "@babel/types": "8.0.4",
     "@effect/platform-bun": "4.0.0-beta.98",
-    "@effect/tsgo": "0.32.1",
+    "@effect/tsgo": "0.36.5",
     "@types/istanbul-lib-coverage": "2.0.6",
     "bun-types": "1.4.0",
     "effect": "4.0.0-beta.98",

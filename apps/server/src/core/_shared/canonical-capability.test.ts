@@ -8,15 +8,13 @@ import {
 } from "./canonical-capability";
 
 it("keeps canonical capabilities distinct from public PAT scopes", () => {
-  const decodedPATScopes = Schema.decodeUnknownSync(PATScopes)(["write", "read"]);
+  const decodedPATScopes = Schema.decodeSync(PATScopes)(["write", "read"]);
   const capabilities = canonicalCapabilitiesFromPATScopes(decodedPATScopes);
 
   expect(capabilities).toEqual(["write", "read"]);
   expect(capabilities).not.toBe(decodedPATScopes);
-  expect(Result.isFailure(Schema.decodeUnknownResult(CanonicalCapabilities)([]))).toBe(true);
-  expect(
-    Result.isFailure(Schema.decodeUnknownResult(CanonicalCapabilities)(["read", "read"]))
-  ).toBe(true);
+  expect(Result.isFailure(Schema.decodeResult(CanonicalCapabilities)([]))).toBe(true);
+  expect(Result.isFailure(Schema.decodeResult(CanonicalCapabilities)(["read", "read"]))).toBe(true);
 });
 
 it("grants a hosted Turn every canonical capability exactly once", () => {

@@ -219,7 +219,7 @@ const authorizationFromChallenge = (
   return confirmationCommandFromChallenge(pending.challenge).pipe(
     Option.filter((command) => command.startsWith(commandPrefix)),
     Option.flatMap((command) =>
-      Schema.decodeUnknownOption(ConfirmationDigest)(command.slice(commandPrefix.length)).pipe(
+      Schema.decodeOption(ConfirmationDigest)(command.slice(commandPrefix.length)).pipe(
         Option.map((digest) => ({ command, digest }))
       )
     )

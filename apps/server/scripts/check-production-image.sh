@@ -14,6 +14,7 @@ releaseContainer="fidy-production-smoke-release-${suffix}"
 telemetryProbe="fidy-production-smoke-telemetry-${suffix}"
 openAiProbe="fidy-production-smoke-openai-${suffix}"
 image="fidy-production-smoke:${suffix}"
+postgresImage="postgres:18.6-alpine@sha256:d3e1620b530c944afa6e887d22eb899824da68e19c52024bf98f5220c88a65b2"
 provisionLog=$(mktemp)
 artifactRoot=$(mktemp -d)
 releaseRoot=$(mktemp -d)
@@ -109,7 +110,7 @@ assertApplicationRejected() {
 
 assertRuntimePassword() {
   local password=$1
-  docker run --rm --network "$network" postgres:18-alpine \
+  docker run --rm --network "$network" "$postgresImage" \
     psql "postgresql://fidy_runtime:${password}@${database}:5432/fidy" \
     --command "SELECT 1" >/dev/null
 }
@@ -242,7 +243,7 @@ assertReleasePreparation
 docker network create "$network" >/dev/null
 docker run --detach --name "$database" --network "$network" \
   --env POSTGRES_USER=fidy --env POSTGRES_PASSWORD=fidy --env POSTGRES_DB=fidy \
-  postgres:18-alpine -c log_connections=on >/dev/null
+  "$postgresImage" -c log_connections=on >/dev/null
 
 for _ in {1..30}; do
   if docker exec "$database" pg_isready --username fidy --dbname fidy >/dev/null 2>&1; then

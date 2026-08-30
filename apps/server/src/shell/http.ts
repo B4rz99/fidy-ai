@@ -188,7 +188,7 @@ const addRetryAfterHeader: RetryAfterHeader = (httpEffect) =>
     if (response.status !== tooManyRequestsStatus || response.body._tag !== "Uint8Array") {
       return response;
     }
-    const decoded = Schema.decodeUnknownOption(Schema.fromJsonString(CanonicalRetryAfterBody))(
+    const decoded = Schema.decodeOption(Schema.fromJsonString(CanonicalRetryAfterBody))(
       new TextDecoder().decode(response.body.body)
     );
     return Option.match(decoded, {

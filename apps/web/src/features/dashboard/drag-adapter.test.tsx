@@ -7,9 +7,9 @@ import type { DashboardDragSource, DashboardDropTarget } from "./drag-data";
 import type { DashboardCatalogEntry } from "./editor-model";
 import { dashboardTargetAcceptsSource, resolveDashboardDrop } from "./drag-model";
 
-const sourceId = Schema.decodeUnknownSync(WidgetId)("f1d1a000-0000-4000-8000-000000000801");
-const targetId = Schema.decodeUnknownSync(WidgetId)("f1d1a000-0000-4000-8000-000000000802");
-const newId = Schema.decodeUnknownSync(WidgetId)("f1d1a000-0000-4000-8000-000000000803");
+const sourceId = Schema.decodeSync(WidgetId)("f1d1a000-0000-4000-8000-000000000801");
+const targetId = Schema.decodeSync(WidgetId)("f1d1a000-0000-4000-8000-000000000802");
+const newId = Schema.decodeSync(WidgetId)("f1d1a000-0000-4000-8000-000000000803");
 const TransactionListLimit = Schema.Int.pipe(Schema.brand("TransactionListLimit"));
 const transactionListLimit = 10;
 const entry = {
@@ -19,7 +19,7 @@ const entry = {
   widget: {
     type: "transaction-list",
     title: "Recientes",
-    limit: Schema.decodeUnknownSync(TransactionListLimit)(transactionListLimit),
+    limit: Schema.decodeSync(TransactionListLimit)(transactionListLimit),
   },
 } satisfies DashboardCatalogEntry;
 const announcementSource = { kind: "widget" as const, widgetId: sourceId, label: "Gastos" };

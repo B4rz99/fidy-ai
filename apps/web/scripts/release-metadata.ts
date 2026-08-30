@@ -33,7 +33,7 @@ const decodeIdentity = <Identity>(
 
 /** Returns an exact release identity or throws when either value is not full lowercase hex. */
 export const releaseMetadata = (gitRevision: string, contractDigest: string): ReleaseMetadata =>
-  Schema.decodeUnknownSync(ReleaseMetadata)({
+  Schema.decodeSync(ReleaseMetadata)({
     contractDigest: decodeIdentity(
       Schema.decodeUnknownSync(ContractDigest),
       contractDigest,

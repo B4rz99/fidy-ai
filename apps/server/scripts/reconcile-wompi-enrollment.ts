@@ -22,7 +22,7 @@ const reconcile = Effect.gen(function* () {
       ? ({ _tag: "Refused" } as const)
       : ({
           _tag: "Available",
-          sourceId: yield* Schema.decodeUnknownOption(ProviderSourceId)(
+          sourceId: yield* Schema.decodeOption(ProviderSourceId)(
             Redacted.value(yield* Config.redacted("WOMPI_RECONCILIATION_SOURCE_ID"))
           ).pipe(Effect.fromOption(() => new InvalidProviderSourceId())),
         } as const);

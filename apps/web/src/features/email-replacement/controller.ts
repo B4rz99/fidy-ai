@@ -32,7 +32,7 @@ const makeRequest = (apiClient: FidyClient): Atom.AtomResultFn<RequestCommand, v
   apiClient.runtime.fn<RequestCommand>()(
     ({ candidateEmail, onStateChange }) =>
       Effect.gen(function* () {
-        const decoded = Schema.decodeUnknownOption(EmailAddress)(candidateEmail);
+        const decoded = Schema.decodeOption(EmailAddress)(candidateEmail);
         if (decoded._tag === "None") {
           yield* Effect.sync(() => onStateChange({ _tag: "Editing" }));
           return;

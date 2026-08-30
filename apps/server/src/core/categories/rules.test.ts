@@ -35,7 +35,7 @@ it("normalizes Category keywords without changing surrounding content", () => {
 });
 
 it("rejects a Category keyword erased by normalization at the keyword root", () => {
-  const result = Schema.decodeUnknownResult(CategoryKeyword)("́");
+  const result = Schema.decodeResult(CategoryKeyword)("́");
 
   expect(Result.isFailure(result)).toBe(true);
   if (Result.isFailure(result)) {

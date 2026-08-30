@@ -167,7 +167,7 @@ const recordedTransactions = Effect.fn("WhatsApp.recordedTransactions")(function
     const payloads: Array<ProjectedTransaction> = [];
     for (let index = 2; index < lines.length; index += 2) {
       const payload = Schema.decodeUnknownOption(ProjectedTransaction)(
-        Schema.decodeUnknownSync(Schema.UnknownFromJsonString)(lines[index] ?? "null")
+        Schema.decodeSync(Schema.UnknownFromJsonString)(lines[index] ?? "null")
       );
       if (Option.isSome(payload)) payloads.push(payload.value);
     }
@@ -233,7 +233,7 @@ const durableContextFixture = (
   parentSpanId: string,
   capturedAt: DateTime.Utc
 ): Effect.Effect<DurableTraceContext, Schema.SchemaError> =>
-  Schema.decodeUnknownEffect(DurableTraceContext)({
+  Schema.decodeEffect(DurableTraceContext)({
     version: 1,
     traceId,
     parentSpanId,
@@ -402,9 +402,9 @@ const OpenAiHttpClient = Layer.succeed(
         return yield* Effect.die("Expected an encoded OpenAI request body");
       }
       const requestText = new TextDecoder().decode(request.body.body);
-      const json = yield* Schema.decodeUnknownEffect(Schema.UnknownFromJsonString)(
-        requestText
-      ).pipe(Effect.orDie);
+      const json = yield* Schema.decodeEffect(Schema.UnknownFromJsonString)(requestText).pipe(
+        Effect.orDie
+      );
       const body = yield* Schema.decodeUnknownEffect(OpenAiRequest)(json).pipe(Effect.orDie);
       if (
         body.tools.some(
@@ -3088,7 +3088,7 @@ layer(WhatsAppTraceHarness, { excludeTestServices: true, timeout: "30 seconds" }
           const eventTime = yield* DateTime.now;
           const event = makeKapsoTextEvent("wamid.stale-propagation", "almuerzo 25 mil", eventTime);
           const staleTraceId = "1".repeat(32);
-          const stalePropagation = yield* Schema.decodeUnknownEffect(DurableTraceContext)({
+          const stalePropagation = yield* Schema.decodeEffect(DurableTraceContext)({
             version: 1,
             traceId: staleTraceId,
             parentSpanId: "2".repeat(16),

@@ -491,7 +491,7 @@ const startTelemetrySpan = (
 ): Effect.Effect<Option.Option<TelemetrySpan>> =>
   sink.capture.traces
     ? Effect.map(Clock.currentTimeMillis, (now) => {
-        const decoded = Schema.decodeUnknownOption(SpanDescriptor, strictDecoding)(descriptor);
+        const decoded = Schema.decodeOption(SpanDescriptor, strictDecoding)(descriptor);
         if (Option.isNone(decoded)) return Option.none();
         const traceId = Option.match(parent, {
           onNone: () => TelemetryTraceId.make(randomHex(traceIdByteLength)),

@@ -1121,7 +1121,7 @@ layer(RecoveryHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           assert.ok(rotated);
           expect(rotated.headers["cache-control"]).toBe("no-store");
           const body = yield* rotated.json;
-          const decodedRotation = yield* Schema.decodeUnknownEffect(
+          const decodedRotation = yield* Schema.decodeEffect(
             Schema.toCodecJson(Schema.Struct({ data: RotatedBackupRecoveryCode }))
           )(body);
           const replacement = Redacted.value(decodedRotation.data.backupRecoveryCode);

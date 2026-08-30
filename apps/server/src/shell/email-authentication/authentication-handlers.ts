@@ -64,7 +64,7 @@ const readJsonPayload = Effect.fn("EmailAuthentication.readBrowserPairingPayload
     Effect.mapError(payloadTooLarge)
   );
   if (Option.isNone(bytes)) return yield* payloadTooLarge();
-  const decoded = Schema.decodeUnknownResult(Schema.fromJsonString(schema), {
+  const decoded = Schema.decodeResult(Schema.fromJsonString(schema), {
     onExcessProperty: "error",
   })(new TextDecoder().decode(bytes.value));
   return yield* Result.match(decoded, { onFailure: invalid, onSuccess: Effect.succeed });

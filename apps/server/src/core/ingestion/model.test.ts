@@ -74,14 +74,14 @@ it("accepts every public statement lifecycle and conserves its accounting", () =
   }
   expect(
     Result.isSuccess(
-      Schema.decodeUnknownResult(StatementAccounting)({
+      Schema.decodeResult(StatementAccounting)({
         inputRows: 4,
         acceptedRows: 4,
         needsReviewRows: 0,
       })
     )
   ).toBe(true);
-  const invalidAccounting = Schema.decodeUnknownResult(StatementAccounting)({
+  const invalidAccounting = Schema.decodeResult(StatementAccounting)({
     inputRows: 3,
     acceptedRows: 1,
     needsReviewRows: 1,
@@ -131,11 +131,11 @@ it("accepts both parser evidence shapes", () => {
     ],
   };
 
-  expect(Result.isSuccess(Schema.decodeUnknownResult(StatementRowEvidence)(csv))).toBe(true);
-  expect(Result.isSuccess(Schema.decodeUnknownResult(StatementRowEvidence)(xlsx))).toBe(true);
+  expect(Result.isSuccess(Schema.decodeResult(StatementRowEvidence)(csv))).toBe(true);
+  expect(Result.isSuccess(Schema.decodeResult(StatementRowEvidence)(xlsx))).toBe(true);
   expect(
     Result.isSuccess(
-      Schema.decodeUnknownResult(XlsxCellEvidence)({
+      Schema.decodeResult(XlsxCellEvidence)({
         address: "B2",
         cellType: "number",
         value: "10",

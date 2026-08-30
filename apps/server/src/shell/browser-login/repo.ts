@@ -429,9 +429,7 @@ export const approveBrowserLoginPairingInScope = Effect.fn("BrowserLogin.approve
           return yield* browserLoginApprovalRateLimited(Math.max(1, admission.retryAfterSeconds));
         }
 
-        const publicCode = Schema.decodeUnknownOption(BrowserLoginPublicCodeInput)(
-          input.publicCode
-        );
+        const publicCode = Schema.decodeOption(BrowserLoginPublicCodeInput)(input.publicCode);
         if (Option.isNone(publicCode)) return yield* browserLoginApprovalRejected();
 
         const candidate = yield* findApprovalCandidate(sql, publicCode.value, attemptedAt);

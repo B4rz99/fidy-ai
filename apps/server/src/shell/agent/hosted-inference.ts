@@ -499,9 +499,7 @@ const makeStructuredBehavior: MakeStructuredBehavior = (execution, outputSchema)
     return execution.execute.pipe(
       Effect.flatMap(Schema.encodeUnknownEffect(outputSchema)),
       Effect.flatMap((output) =>
-        Schema.decodeUnknownEffect(outputSchema)(output).pipe(
-          Effect.mapError(invalidStructuredOutput)
-        )
+        Schema.decodeEffect(outputSchema)(output).pipe(Effect.mapError(invalidStructuredOutput))
       ),
       Effect.mapError((error) =>
         error instanceof HostedInferenceError ? error : invalidStructuredOutput()

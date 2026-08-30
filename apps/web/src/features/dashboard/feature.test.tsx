@@ -82,7 +82,7 @@ const money = (
 const context: DashboardView["context"] = {
   serviceMarket: "CO",
   locale: "es-CO",
-  timeZone: Schema.decodeUnknownSync(TestTimeZone)("America/Bogota"),
+  timeZone: Schema.decodeSync(TestTimeZone)("America/Bogota"),
   calculatedAt: DateTime.makeUnsafe("2026-07-20T12:30:00Z"),
 };
 const period: SpendingResult["appliedPeriod"] = {
@@ -92,15 +92,15 @@ const period: SpendingResult["appliedPeriod"] = {
   timeZone: context.timeZone,
 };
 const ids = {
-  chart: Schema.decodeUnknownSync(TestWidgetId)("f1d1a000-0000-4000-8000-000000000701"),
-  budget: Schema.decodeUnknownSync(TestWidgetId)("f1d1a000-0000-4000-8000-000000000702"),
-  transactions: Schema.decodeUnknownSync(TestWidgetId)("f1d1a000-0000-4000-8000-000000000703"),
-  metric: Schema.decodeUnknownSync(TestWidgetId)("f1d1a000-0000-4000-8000-000000000704"),
-  category: Schema.decodeUnknownSync(TestCategoryId)("f1d1a000-0000-4000-8000-000000000705"),
+  chart: Schema.decodeSync(TestWidgetId)("f1d1a000-0000-4000-8000-000000000701"),
+  budget: Schema.decodeSync(TestWidgetId)("f1d1a000-0000-4000-8000-000000000702"),
+  transactions: Schema.decodeSync(TestWidgetId)("f1d1a000-0000-4000-8000-000000000703"),
+  metric: Schema.decodeSync(TestWidgetId)("f1d1a000-0000-4000-8000-000000000704"),
+  category: Schema.decodeSync(TestCategoryId)("f1d1a000-0000-4000-8000-000000000705"),
 };
 const category: DashboardCategory = {
   id: ids.category,
-  label: Schema.decodeUnknownSync(TestCategoryLabel)("Restaurantes"),
+  label: Schema.decodeSync(TestCategoryLabel)("Restaurantes"),
 };
 
 type FixtureOptions = Readonly<{
@@ -187,8 +187,8 @@ const chartResult = (options: FixtureOptions): SpendingResult => {
         key: {
           kind: "category",
           category: {
-            id: Schema.decodeUnknownSync(TestCategoryId)("f1d1a000-0000-4000-8000-000000000707"),
-            label: Schema.decodeUnknownSync(TestCategoryLabel)("Transporte"),
+            id: Schema.decodeSync(TestCategoryId)("f1d1a000-0000-4000-8000-000000000707"),
+            label: Schema.decodeSync(TestCategoryLabel)("Transporte"),
           },
         },
         moneyGroups: [
@@ -220,7 +220,7 @@ const listResult = (options: FixtureOptions): ListResult => ({
     ? []
     : [
         {
-          id: Schema.decodeUnknownSync(TestTransactionId)("f1d1a000-0000-4000-8000-000000000706"),
+          id: Schema.decodeSync(TestTransactionId)("f1d1a000-0000-4000-8000-000000000706"),
           category,
           counterparty: options.transactionInflow ? Option.none() : Option.some("El Corral"),
           direction: options.transactionInflow ? "inflow" : "outflow",
@@ -235,7 +235,7 @@ const leftLayout = (options: FixtureOptions): DashboardLayout => ({
   axis: "column",
   children: [
     {
-      weight: Schema.decodeUnknownSync(TestSplitWeight)(1),
+      weight: Schema.decodeSync(TestSplitWeight)(1),
       node: {
         kind: "leaf",
         widget: {
@@ -250,7 +250,7 @@ const leftLayout = (options: FixtureOptions): DashboardLayout => ({
       },
     },
     {
-      weight: Schema.decodeUnknownSync(TestSplitWeight)(1),
+      weight: Schema.decodeSync(TestSplitWeight)(1),
       node: {
         kind: "leaf",
         widget: {
@@ -272,21 +272,21 @@ const rightLayout = (options: FixtureOptions): DashboardLayout => ({
   axis: "column",
   children: [
     {
-      weight: Schema.decodeUnknownSync(TestSplitWeight)(1),
+      weight: Schema.decodeSync(TestSplitWeight)(1),
       node: {
         kind: "leaf",
         widget: {
           widget: {
             id: ids.transactions,
             type: "transaction-list",
-            limit: Schema.decodeUnknownSync(TestTransactionListLimit)(transactionListLimit),
+            limit: Schema.decodeSync(TestTransactionListLimit)(transactionListLimit),
           },
           result: listResult(options),
         },
       },
     },
     {
-      weight: Schema.decodeUnknownSync(TestSplitWeight)(1),
+      weight: Schema.decodeSync(TestSplitWeight)(1),
       node: {
         kind: "leaf",
         widget: {
@@ -305,14 +305,14 @@ const rightLayout = (options: FixtureOptions): DashboardLayout => ({
 });
 
 const makeView = (options: FixtureOptions): DashboardView => ({
-  title: Schema.decodeUnknownSync(Schema.NonEmptyString)("Mi tablero"),
+  title: Schema.decodeSync(Schema.NonEmptyString)("Mi tablero"),
   context,
   layout: {
     kind: "split",
     axis: "row",
     children: [
-      { weight: Schema.decodeUnknownSync(TestSplitWeight)(2), node: leftLayout(options) },
-      { weight: Schema.decodeUnknownSync(TestSplitWeight)(1), node: rightLayout(options) },
+      { weight: Schema.decodeSync(TestSplitWeight)(2), node: leftLayout(options) },
+      { weight: Schema.decodeSync(TestSplitWeight)(1), node: rightLayout(options) },
     ],
   },
 });
@@ -384,7 +384,7 @@ const editorCatalog: ReadonlyArray<DashboardCatalogEntry> = [
     widget: {
       type: "transaction-list",
       title: "Otra lista",
-      limit: Schema.decodeUnknownSync(TestTransactionListLimit)(transactionListLimit),
+      limit: Schema.decodeSync(TestTransactionListLimit)(transactionListLimit),
     },
   },
 ];

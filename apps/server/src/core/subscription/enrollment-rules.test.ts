@@ -10,7 +10,7 @@ const now = DateTime.makeUnsafe("2026-04-01T12:00:00Z");
 const later = DateTime.makeUnsafe("2026-04-01T12:15:00Z");
 
 it("reuses canonical email normalization for billing", () => {
-  expect(Schema.decodeUnknownSync(BillingEmail)(" PAYER@Example.COM ")).toBe("payer@example.com");
+  expect(Schema.decodeSync(BillingEmail)(" PAYER@Example.COM ")).toBe("payer@example.com");
 });
 
 it("begins only a live prepared enrollment", () => {

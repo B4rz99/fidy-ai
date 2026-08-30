@@ -128,7 +128,7 @@ const decodeDsn = (
   approvedProject: Option.Option<SentryProjectIdentity>
 ): Effect.Effect<SentryDsn, InvalidTelemetryConfig> => {
   const value = Redacted.value(candidate);
-  const decoded = Schema.decodeUnknownOption(Schema.URLFromString)(value);
+  const decoded = Schema.decodeOption(Schema.URLFromString)(value);
   if (Option.isNone(decoded)) {
     return Effect.fail(new InvalidTelemetryConfig({ reason: "malformed_dsn" }));
   }
@@ -264,7 +264,7 @@ export const decodeSentryAccountSmokeConfig = (input: {
   readonly environment: "local" | "ci";
 }): Effect.Effect<NonProductionTelemetryConfig, InvalidTelemetryConfig> =>
   Effect.gen(function* () {
-    const candidate = Schema.decodeUnknownOption(Schema.URLFromString)(Redacted.value(input.dsn));
+    const candidate = Schema.decodeOption(Schema.URLFromString)(Redacted.value(input.dsn));
     if (Option.isNone(candidate) || !hasValidDsnShape(candidate.value)) {
       return yield* new InvalidTelemetryConfig({ reason: "malformed_dsn" });
     }

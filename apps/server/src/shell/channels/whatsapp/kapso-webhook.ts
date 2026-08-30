@@ -165,7 +165,7 @@ const constantTimeEqual = (left: string, right: string): boolean => {
 const normalizePhoneNumber = (
   phoneNumber: string
 ): Effect.Effect<E164PhoneNumber, Schema.SchemaError> =>
-  Schema.decodeUnknownEffect(E164PhoneNumber)(
+  Schema.decodeEffect(E164PhoneNumber)(
     phoneNumber.startsWith("+") ? phoneNumber : `+${phoneNumber}`
   );
 
@@ -187,7 +187,7 @@ const authenticateAndDecodeKapsoBody = Effect.fn("Kapso.authenticateAndDecodeBod
     if (!constantTimeEqual(expected, input.signature.toLowerCase())) {
       return yield* new InvalidKapsoSignature();
     }
-    return yield* Schema.decodeUnknownEffect(Schema.UnknownFromJsonString)(
+    return yield* Schema.decodeEffect(Schema.UnknownFromJsonString)(
       new TextDecoder().decode(input.rawBody)
     ).pipe(Effect.mapError(invalidKapsoPayload));
   }
@@ -287,10 +287,10 @@ export const decodeKapsoWebhook = Effect.fn("Kapso.decodeWebhook")(function* (in
   readonly receivedAt: DateTime.Utc;
 }) {
   const unknown = yield* authenticateAndDecodeKapsoBody(input);
-  const deliveryKey = yield* Schema.decodeUnknownEffect(WhatsAppDeliveryKey)(
-    input.deliveryKey
-  ).pipe(Effect.mapError(invalidKapsoPayload));
-  const businessPortfolioId = yield* Schema.decodeUnknownEffect(WhatsAppBusinessPortfolioId)(
+  const deliveryKey = yield* Schema.decodeEffect(WhatsAppDeliveryKey)(input.deliveryKey).pipe(
+    Effect.mapError(invalidKapsoPayload)
+  );
+  const businessPortfolioId = yield* Schema.decodeEffect(WhatsAppBusinessPortfolioId)(
     input.businessPortfolioId
   ).pipe(Effect.mapError(invalidKapsoPayload));
   const envelope = yield* Schema.decodeUnknownEffect(RawKapsoEnvelope)(unknown).pipe(
@@ -498,7 +498,7 @@ export const decodeKapsoIdentityWebhook = Effect.fn("Kapso.decodeIdentityWebhook
     readonly receivedAt: DateTime.Utc;
   }) {
     const unknown = yield* authenticateAndDecodeKapsoBody(input);
-    const businessPortfolioId = yield* Schema.decodeUnknownEffect(WhatsAppBusinessPortfolioId)(
+    const businessPortfolioId = yield* Schema.decodeEffect(WhatsAppBusinessPortfolioId)(
       input.businessPortfolioId
     ).pipe(Effect.mapError(invalidKapsoPayload));
     const envelope = yield* Schema.decodeUnknownEffect(RawMetaEnvelope)(unknown).pipe(

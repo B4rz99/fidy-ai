@@ -10,7 +10,7 @@ type BuildMetafile = typeof BuildMetafile.Type;
 export const decodeBuildMetafile = (value: unknown): BuildMetafile => {
   try {
     return Predicate.isString(value)
-      ? Schema.decodeUnknownSync(Schema.fromJsonString(BuildMetafile))(value)
+      ? Schema.decodeSync(Schema.fromJsonString(BuildMetafile))(value)
       : Schema.decodeUnknownSync(BuildMetafile)(value);
   } catch {
     throw new Error("Browser client build did not return a metafile");

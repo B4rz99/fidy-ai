@@ -1,0 +1,35 @@
+apps/server/src/shell/channels/whatsapp/kapso-client.test.ts
+  s_4fbb6340adf8e9::t_fef42d8231026c 26,30,49,51,63,65,97,99,108,111,121-132,134,136-145,156-158,170,177,227,229,323,329,335,393-394,410
+  s_4fbb6340adf8e9::t_0a691778088ae6 3,185-220
+  s_4fbb6340adf8e9::t_20e9a32db91d35 25,28-29,31-32,47-48,52-54,56-58,64,66,84-85,95-96,100-103,109-110,112,133,135,146-155,159-164,166,168-169,171-176,178-184,221-226,228,230,295,435
+  s_4fbb6340adf8e9::t_462b8feca566de 4-5,50,98,165,167,313-318,387-392
+  s_4fbb6340adf8e9::t_9ef8b5c60880df 27,231
+  s_4fbb6340adf8e9::t_a7750299b08d1d 55,327-328,471-474
+apps/server/src/shell/channels/whatsapp/kapso-client.ts
+  s_4fbb6340adf8e9::t_20e9a32db91d35 2-19,136-137,141-142,144,148,150-153,155,158,272,276,281-284,287-288,339,347
+  s_4fbb6340adf8e9::t_fef42d8231026c 138-139,149,157,290
+  s_4fbb6340adf8e9::t_0a1ac28ce06e7b 291,294-299,301-316
+  s_4fbb6340adf8e9::t_ffda52e2c5afdf 143
+  s_4fbb6340adf8e9::t_a7750299b08d1d 154,156
+  s_4fbb6340adf8e9::t_95f958cf446ca8 105-106,145,292-293,318-322
+  s_4fbb6340adf8e9::t_799f785d545671 31,103,146-147
+apps/server/src/shell/testing/whatsapp-acceptance-harness.ts
+  s_4fbb6340adf8e9::t_27b6468d58fc33 17,302,306-325,328,332,340,352
+  s_4fbb6340adf8e9::t_999df950216251 286-299,329-331
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "02919f14cb58aa79c7123f5a289c9ddf9722cf60",
+  "prompts": {},
+  "sessions": {
+    "s_4fbb6340adf8e9": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a053d3-e883-7fa4-8d21-2cee8bae8509",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": null
+    }
+  }
+}

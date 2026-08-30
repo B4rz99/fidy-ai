@@ -38,7 +38,7 @@ jobs:
           scope: changed
           blocking: error
           # Pinned, not `latest`: newest release past bunfig.toml's 7-day delay.
-          version: "0.9.11"
+          version: "0.9.12"
       - name: Require a perfect React health score
         # React Doctor intentionally skips PRs with no React-eligible changes.
         if: ${{ always() && steps.react-doctor.outputs.score != '' }}

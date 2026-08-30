@@ -1,5 +1,22 @@
 import { UnknownJsonString } from "~/schema-compatibility";
-import { Config, Context, Data, DateTime, Effect, Layer, Option, Redacted, Schema } from "effect";
+import {
+  Config,
+  Context,
+  Data,
+  DateTime,
+  Effect,
+  Layer,
+  Option,
+  Redacted,
+  Schema,
+  Stream,
+} from "effect";
+import {
+  HttpBody,
+  HttpClient,
+  HttpClientRequest,
+  type HttpClientResponse,
+} from "effect/unstable/http";
 import type { E164PhoneNumber, WhatsAppBusinessScopedUserId } from "~/core/identity/reference";
 import type { TranscriptText } from "~/core/transcript/model";
 import type {
@@ -11,6 +28,7 @@ import {
   firstServerErrorStatus,
   forbiddenStatus,
   lastServerErrorStatus,
+  okStatus,
   requestTimeoutStatus,
   tooManyRequestsStatus,
   unauthorizedStatus,
@@ -82,12 +100,11 @@ const bytesPerKibibyte = 1_024;
 const maximumKapsoResponseKibibytes = 64;
 const maximumKapsoResponseBytes = maximumKapsoResponseKibibytes * bytesPerKibibyte;
 const kapsoRequestTimeoutMilliseconds = 14_000;
+const firstNonSuccessStatus = 300;
 
-type KapsoFetch = typeof globalThis.fetch;
+const isSuccessfulStatus = (status: number): boolean =>
+  status >= okStatus && status < firstNonSuccessStatus;
 
-class KapsoTransportFailure extends Data.TaggedError("KapsoTransportFailure")<{
-  readonly timedOut: boolean;
-}> {}
 class KapsoInvalidResponse extends Data.TaggedError("KapsoInvalidResponse")<{
   readonly deliveryCertainty: KapsoDeliveryCertainty;
   readonly responseStatus: Option.Option<TelemetryHttpStatus>;
@@ -116,49 +133,34 @@ const ambiguous = (
     responseStatus,
   });
 
-type ByteReadResult =
-  | { readonly done: true }
-  | { readonly done: false; readonly value: Uint8Array };
+const invalidKapsoResponse = (
+  responseStatus: Option.Option<TelemetryHttpStatus>,
+  deliveryCertainty: KapsoDeliveryCertainty
+): KapsoInvalidResponse => new KapsoInvalidResponse({ deliveryCertainty, responseStatus });
 
-const boundKapsoResponse = (response: Response): Promise<Response> => {
-  const declaredLength = response.headers.get("content-length");
-  if (declaredLength !== null && Number(declaredLength) > maximumKapsoResponseBytes) {
-    return (response.body?.cancel() ?? Promise.resolve()).then(() =>
-      Promise.reject(
-        new KapsoInvalidResponse({
-          deliveryCertainty: response.ok ? "ambiguous" : "rejected",
-          responseStatus: Schema.decodeOption(TelemetryHttpStatus)(response.status),
-        })
-      )
+const readKapsoResponse = (
+  response: HttpClientResponse.HttpClientResponse,
+  responseStatus: Option.Option<TelemetryHttpStatus>
+): Effect.Effect<string, KapsoInvalidResponse> => {
+  const deliveryCertainty = isSuccessfulStatus(response.status) ? "ambiguous" : "rejected";
+  const invalidResponse = (): KapsoInvalidResponse =>
+    invalidKapsoResponse(responseStatus, deliveryCertainty);
+  const declaredLength = Number(response.headers["content-length"] ?? 0);
+  if (declaredLength > maximumKapsoResponseBytes) {
+    return Stream.runDrain(Stream.take(response.stream, 1)).pipe(
+      Effect.andThen(Effect.fail(invalidResponse())),
+      Effect.mapError(() => invalidResponse())
     );
   }
-  if (response.body === null) return Promise.resolve(response);
-  const reader = response.body.getReader();
-  const bytes = makeBoundedBytes(maximumKapsoResponseBytes);
-  const readNext = (): Promise<Response> => {
-    const nextResult: Promise<ByteReadResult> = reader.read();
-    return nextResult.then((next) => {
-      if (next.done) {
-        return new Response(bytes.materialize(), {
-          status: response.status,
-          statusText: response.statusText,
-          headers: response.headers,
-        });
-      }
-      if (!bytes.append(next.value)) {
-        return reader.cancel().then(() =>
-          Promise.reject(
-            new KapsoInvalidResponse({
-              deliveryCertainty: response.ok ? "ambiguous" : "rejected",
-              responseStatus: Schema.decodeOption(TelemetryHttpStatus)(response.status),
-            })
-          )
-        );
-      }
-      return readNext();
-    });
-  };
-  return readNext();
+
+  return Stream.runFoldEffect(
+    response.stream,
+    () => makeBoundedBytes(maximumKapsoResponseBytes),
+    (bytes, chunk) => (bytes.append(chunk) ? Effect.succeed(bytes) : Effect.fail(invalidResponse()))
+  ).pipe(
+    Effect.mapError((error) => (error instanceof KapsoInvalidResponse ? error : invalidResponse())),
+    Effect.map((bytes) => new TextDecoder().decode(bytes.materialize()))
+  );
 };
 
 const SendResponse = Schema.Struct({
@@ -212,29 +214,6 @@ type KapsoRecipientAddress =
   | Readonly<{ recipient: WhatsAppBusinessScopedUserId }>
   | Readonly<{ to: string }>;
 
-const boundedKapsoFetch = (nativeFetch: KapsoFetch): KapsoFetch =>
-  Object.assign(
-    (resource: Parameters<KapsoFetch>[0], init?: Parameters<KapsoFetch>[1]) => {
-      const timeout = AbortSignal.timeout(kapsoRequestTimeoutMilliseconds);
-      const signal =
-        init?.signal !== undefined && init.signal !== null
-          ? AbortSignal.any([init.signal, timeout])
-          : timeout;
-      return nativeFetch(resource, { ...init, signal })
-        .catch((error: unknown) =>
-          Promise.reject(
-            new KapsoTransportFailure({
-              timedOut:
-                error instanceof DOMException &&
-                ["TimeoutError", "AbortError"].includes(error.name),
-            })
-          )
-        )
-        .then(boundKapsoResponse);
-    },
-    { preconnect: nativeFetch.preconnect }
-  );
-
 const resolveRecipientAddress = (
   deliveryMode: KapsoDeliveryMode,
   destination: KapsoSendInput["destination"]
@@ -263,17 +242,10 @@ const encodeTextMessage = (
     }),
   }).pipe(Effect.orDie);
 
-const classifyTransportError = (error: unknown): KapsoSendFailed => {
-  if (error instanceof KapsoTransportFailure) {
-    return ambiguous(error.timedOut ? "timeout" : "provider_unavailable");
-  }
-  if (error instanceof KapsoInvalidResponse) {
-    return error.deliveryCertainty === "rejected"
-      ? rejected("invalid_response", false, error.responseStatus)
-      : ambiguous("invalid_response", error.responseStatus);
-  }
-  return ambiguous("invalid_response");
-};
+const classifyTransportError = (error: KapsoInvalidResponse): KapsoSendFailed =>
+  error.deliveryCertainty === "rejected"
+    ? rejected("invalid_response", false, error.responseStatus)
+    : ambiguous("invalid_response", error.responseStatus);
 
 const decodeSentMessage = (
   responseBody: unknown,
@@ -298,53 +270,60 @@ const decodeSentMessage = (
 export const makeKapsoClientService = ({
   apiKey,
   deliveryMode,
-  nativeFetch,
+  httpClient,
 }: Readonly<{
   apiKey: string;
   deliveryMode: KapsoDeliveryMode;
-  nativeFetch: KapsoFetch;
+  httpClient: HttpClient.HttpClient;
 }>): KapsoClientService => {
-  const boundedFetch = boundedKapsoFetch(nativeFetch);
   const postMessage = (
     input: KapsoSendInput,
     body: string
-  ): Effect.Effect<Response, KapsoSendFailed> =>
-    Effect.tryPromise({
-      try: (signal) =>
-        boundedFetch(
+  ): Effect.Effect<HttpClientResponse.HttpClientResponse, KapsoSendFailed> =>
+    httpClient
+      .execute(
+        HttpClientRequest.post(
           `https://api.kapso.ai/meta/whatsapp/v24.0/${input.businessPhoneNumberId}/messages`,
           {
-            method: "POST",
-            headers: { "content-type": "application/json", "x-api-key": apiKey },
-            body,
-            signal,
+            headers: { "x-api-key": apiKey },
+            body: HttpBody.text(body, "application/json"),
           }
-        ),
-      catch: classifyTransportError,
-    }).pipe(
-      Effect.timeout("15 seconds"),
-      Effect.catchTag("TimeoutError", () => Effect.fail(ambiguous("timeout")))
+        )
+      )
+      .pipe(
+        Effect.provideService(HttpClient.TracerPropagationEnabled, false),
+        Effect.mapError(() => ambiguous("provider_unavailable"))
+      );
+  const sendText = Effect.fn("Kapso.sendText")(function* (input: KapsoSendInput) {
+    const address = yield* resolveRecipientAddress(deliveryMode, input.destination);
+    const body = yield* encodeTextMessage(address, input.text, input.opaqueCallbackData);
+    const response = yield* postMessage(input, body);
+    const decodedStatus = Schema.decodeOption(TelemetryHttpStatus)(response.status);
+    const responseText = yield* readKapsoResponse(response, decodedStatus).pipe(
+      Effect.mapError(classifyTransportError)
     );
+    if (Option.isNone(decodedStatus)) return yield* rejected("invalid_response");
+    const responseStatus = decodedStatus.value;
+    const statusFailure = classifyHttpStatus(responseStatus);
+    if (Option.isSome(statusFailure)) return yield* statusFailure.value;
+    const responseBody = yield* Schema.decodeEffect(UnknownJsonString)(responseText).pipe(
+      Effect.mapError(() =>
+        isSuccessfulStatus(response.status)
+          ? ambiguous("invalid_response", Option.some(responseStatus))
+          : rejected("invalid_response", false, Option.some(responseStatus))
+      )
+    );
+    if (!isSuccessfulStatus(response.status)) {
+      return yield* classifyFailureBody(responseBody, responseStatus);
+    }
+    return yield* decodeSentMessage(responseBody, responseStatus);
+  });
   return KapsoClient.of({
-    sendText: Effect.fn("Kapso.sendText")(function* (input) {
-      const address = yield* resolveRecipientAddress(deliveryMode, input.destination);
-      const body = yield* encodeTextMessage(address, input.text, input.opaqueCallbackData);
-      const response = yield* postMessage(input, body);
-      const decodedStatus = Schema.decodeOption(TelemetryHttpStatus)(response.status);
-      if (Option.isNone(decodedStatus)) return yield* rejected("invalid_response");
-      const responseStatus = decodedStatus.value;
-      const statusFailure = classifyHttpStatus(responseStatus);
-      if (Option.isSome(statusFailure)) return yield* statusFailure.value;
-      const responseBody = yield* Effect.tryPromise({
-        try: () => response.json(),
-        catch: () =>
-          response.ok
-            ? ambiguous("invalid_response", Option.some(responseStatus))
-            : rejected("invalid_response", false, Option.some(responseStatus)),
-      });
-      if (!response.ok) return yield* classifyFailureBody(responseBody, responseStatus);
-      return yield* decodeSentMessage(responseBody, responseStatus);
-    }),
+    sendText: (input) =>
+      sendText(input).pipe(
+        Effect.timeout(`${kapsoRequestTimeoutMilliseconds} millis`),
+        Effect.catchTag("TimeoutError", () => Effect.fail(ambiguous("timeout")))
+      ),
   });
 };
 
@@ -361,6 +340,7 @@ export class KapsoClient extends Context.Service<KapsoClient, KapsoClientService
     this,
     Effect.gen(function* () {
       const apiKey = yield* Config.redacted("KAPSO_API_KEY");
+      const httpClient = yield* HttpClient.HttpClient;
       const deliveryMode = yield* Config.literals(
         ["bsuid", "sandbox-phone"],
         "WHATSAPP_DELIVERY_MODE"
@@ -368,7 +348,7 @@ export class KapsoClient extends Context.Service<KapsoClient, KapsoClientService
       return makeKapsoClientService({
         apiKey: Redacted.value(apiKey),
         deliveryMode,
-        nativeFetch: globalThis["fetch"],
+        httpClient,
       });
     })
   );

@@ -14,6 +14,7 @@ import {
   Stream,
 } from "effect";
 import { type Response as AiResponse, LanguageModel } from "effect/unstable/ai";
+import { HttpClient, HttpClientError, HttpClientResponse } from "effect/unstable/http";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import { type ConsentRecord, PendingConsentExchangeId } from "~/core/consent/model";
 import type { UserId, WhatsAppCallerReference } from "~/core/identity/reference";
@@ -282,48 +283,53 @@ const DeterministicLanguageModel = Layer.effectContext(
   })
 );
 
-const kapsoResourceUrl = (resource: Parameters<typeof globalThis.fetch>[0]): string => {
-  if (typeof resource === "string") return resource;
-  if (resource instanceof URL) return resource.href;
-  return resource.url;
+const makeAcceptanceKapsoResponse = (
+  outcome: WhatsAppAcceptanceKapsoOutcome,
+  providerMessageId: WhatsAppProviderMessageId
+): Response => {
+  if (outcome === "rejected") {
+    return Response.json({ error: { code: 130429 } }, { status: 429 });
+  }
+  if (outcome === "non-retryable-rejection") {
+    return Response.json({ error: { code: 100 } }, { status: 400 });
+  }
+  return Response.json({
+    messaging_product: "whatsapp",
+    messages: [{ id: providerMessageId }],
+  });
 };
 
-const makeAcceptanceKapsoFetch = (
+const makeAcceptanceKapsoHttpClient = (
   observedRequests: MutableRef.MutableRef<ReadonlyArray<WhatsAppAcceptanceKapsoRequest>>,
   configuredOutcomes: MutableRef.MutableRef<ReadonlyArray<WhatsAppAcceptanceKapsoOutcome>>,
   requestNumber: MutableRef.MutableRef<number>
-): typeof globalThis.fetch =>
-  Object.assign(
-    (resource: Parameters<typeof globalThis.fetch>[0], init?: RequestInit) => {
-      const nextRequestNumber = MutableRef.updateAndGet(requestNumber, (value) => value + 1);
-      const body = Schema.decodeUnknownSync(Schema.Json)(
-        Schema.decodeUnknownSync(UnknownJsonString)(init?.body)
-      );
-      const providerMessageId = WhatsAppProviderMessageId.make(
-        `wamid.acceptance-outbound-${nextRequestNumber}`
-      );
-      MutableRef.update(observedRequests, (requests) => [
-        ...requests,
-        { url: kapsoResourceUrl(resource), body, outcome: { providerMessageId } },
-      ]);
-      const [outcome = "accepted", ...remainingOutcomes] = MutableRef.get(configuredOutcomes);
-      MutableRef.set(configuredOutcomes, remainingOutcomes);
-      if (outcome === "ambiguous") return Promise.reject(new Error("synthetic transport loss"));
-      if (outcome === "rejected") {
-        return Promise.resolve(Response.json({ error: { code: 130429 } }, { status: 429 }));
-      }
-      if (outcome === "non-retryable-rejection") {
-        return Promise.resolve(Response.json({ error: { code: 100 } }, { status: 400 }));
-      }
-      return Promise.resolve(
-        Response.json({
-          messaging_product: "whatsapp",
-          messages: [{ id: providerMessageId }],
+): HttpClient.HttpClient =>
+  HttpClient.make((request) => {
+    if (request.body._tag !== "Uint8Array") return Effect.die("missing Kapso request body");
+    const nextRequestNumber = MutableRef.updateAndGet(requestNumber, (value) => value + 1);
+    const body = Schema.decodeUnknownSync(Schema.Json)(
+      Schema.decodeSync(UnknownJsonString)(new TextDecoder().decode(request.body.body))
+    );
+    const providerMessageId = WhatsAppProviderMessageId.make(
+      `wamid.acceptance-outbound-${nextRequestNumber}`
+    );
+    MutableRef.update(observedRequests, (requests) => [
+      ...requests,
+      { url: request.url, body, outcome: { providerMessageId } },
+    ]);
+    const [outcome = "accepted", ...remainingOutcomes] = MutableRef.get(configuredOutcomes);
+    MutableRef.set(configuredOutcomes, remainingOutcomes);
+    if (outcome === "ambiguous") {
+      return Effect.fail(
+        new HttpClientError.HttpClientError({
+          reason: new HttpClientError.TransportError({ request }),
         })
       );
-    },
-    { preconnect: () => undefined }
-  );
+    }
+    return Effect.succeed(
+      HttpClientResponse.fromWeb(request, makeAcceptanceKapsoResponse(outcome, providerMessageId))
+    );
+  });
 
 const AcceptanceKapsoTransport = Layer.effectContext(
   Effect.gen(function* () {
@@ -331,7 +337,7 @@ const AcceptanceKapsoTransport = Layer.effectContext(
     const observedRequests = MutableRef.make<ReadonlyArray<WhatsAppAcceptanceKapsoRequest>>([]);
     const configuredOutcomes = MutableRef.make<ReadonlyArray<WhatsAppAcceptanceKapsoOutcome>>([]);
     const requestNumber = MutableRef.make(0);
-    const nativeFetch = makeAcceptanceKapsoFetch(
+    const httpClient = makeAcceptanceKapsoHttpClient(
       observedRequests,
       configuredOutcomes,
       requestNumber
@@ -343,7 +349,7 @@ const AcceptanceKapsoTransport = Layer.effectContext(
             makeKapsoClientService({
               apiKey: "acceptance-test-api-key",
               deliveryMode: mode,
-              nativeFetch,
+              httpClient,
             }).sendText(input)
           )
         ),

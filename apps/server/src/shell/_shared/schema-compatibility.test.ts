@@ -24,7 +24,7 @@ describe("schema compatibility", () => {
   it("preserves schema-serializable failures across construction, encoding, and decoding", () => {
     const failure = ExampleFailure.make({ error: { code: "example_failure" } });
     const encoded = Schema.encodeUnknownSync(ExampleFailure)(failure);
-    const decoded = Schema.decodeUnknownSync(ExampleFailure)(encoded);
+    const decoded = Schema.decodeSync(ExampleFailure)(encoded);
 
     expect(encoded).toEqual({ error: { code: "example_failure" } });
     expect(decoded).toBeInstanceOf(ExampleFailure);
@@ -54,7 +54,7 @@ describe("schema compatibility", () => {
     const Boundary = jsonStringSchema(
       Schema.Struct({ money: Schema.Struct({ amount: Schema.BigDecimal }) })
     );
-    const decoded = Schema.decodeUnknownSync(Boundary)('{"money":{"amount":"25000.50"}}');
+    const decoded = Schema.decodeSync(Boundary)('{"money":{"amount":"25000.50"}}');
 
     expect(BigDecimal.equals(decoded.money.amount, BigDecimal.fromStringUnsafe("25000.50"))).toBe(
       true

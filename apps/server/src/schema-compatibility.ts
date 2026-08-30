@@ -1,10 +1,10 @@
 import { Schema } from "effect";
 
 /** Constructs schema-serializable yieldable failures. */
-export const SchemaSerializableError = Schema.ErrorClass;
+export const SchemaSerializableError = Schema.Error;
 
 /** Constructs schema-serializable yieldable failures with an encoded `_tag`. */
-export const TaggedSerializableError = Schema.TaggedErrorClass;
+export const TaggedSerializableError = Schema.TaggedError;
 
 /**
  * Derives a JSON-string boundary from a schema's JSON codec. Callers may rely on exact JSON text

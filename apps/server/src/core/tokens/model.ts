@@ -10,7 +10,9 @@ import { UtcTimestamp } from "~/core/_shared/time";
  * PAT. The literal set is the credential-neutral capability set, so a capability cannot become
  * grantable here without also being enforceable there.
  */
-export const PATScope = CanonicalCapability.annotate({ identifier: "PATScope" });
+export const PATScope = CanonicalCapability.annotate({
+  identifier: "PATScope",
+});
 export type PATScope = typeof PATScope.Type;
 
 /**
@@ -30,7 +32,7 @@ const hasValidRecipientLabelLength = Schema.makeFilter<string>(
   (label) => countPATLabelCharacters(label) <= recipientLabelLimit,
   {
     expected: `a string with at most ${recipientLabelLimit} Unicode characters`,
-    meta: { _tag: "isMaxLength", maxLength: recipientLabelLimit },
+    toJsonSchema: () => ({ maxLength: recipientLabelLimit }),
   }
 );
 

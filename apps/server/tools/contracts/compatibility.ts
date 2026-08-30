@@ -1,9 +1,10 @@
 import { type IOasdiffChange, runOasdiffBreakingFromSpecs } from "@oasdiff-js/oasdiff-js";
-import { Predicate, Schema } from "effect";
+import { Option, Predicate, Schema } from "effect";
 
+const JsonArray = Schema.Array(Schema.Json);
 const JsonObject = Schema.Record(Schema.String, Schema.Json);
 export type JsonValue = Schema.Json;
-export type JsonArray = ReadonlyArray<JsonValue>;
+export type JsonArray = typeof JsonArray.Type;
 export type JsonObject = typeof JsonObject.Type;
 
 const OperationPolicyManifest = Schema.Struct({
@@ -127,6 +128,101 @@ export const productionWebReleaseFrom = (value: unknown): ProductionWebRelease =
   }
 };
 
+const automaticSchemaIdentifier = /^(?:Arrays|Literal|Objects|Union)_?\d*$/u;
+const localSchemaReferencePrefix = "#/components/schemas/";
+
+const automaticSchemaReference = (value: JsonObject): Option.Option<string> => {
+  const entries = Object.entries(value);
+  if (entries.length !== 1 || entries[0]?.[0] !== "$ref") return Option.none();
+  const reference = entries[0][1];
+  if (typeof reference !== "string" || !reference.startsWith(localSchemaReferencePrefix)) {
+    return Option.none();
+  }
+  const identifier = reference.slice(localSchemaReferencePrefix.length);
+  return automaticSchemaIdentifier.test(identifier) ? Option.some(identifier) : Option.none();
+};
+
+const mergeLiteralAnyOf = (members: JsonArray): Option.Option<JsonObject> => {
+  let commonType = Option.none<string>();
+  const values: Array<JsonValue> = [];
+  for (const member of members) {
+    if (!Predicate.isObject(member)) return Option.none();
+    const object = Schema.decodeUnknownSync(JsonObject)(member);
+    if (
+      Object.keys(object).some((key) => key !== "enum" && key !== "type") ||
+      typeof object.type !== "string" ||
+      !Array.isArray(object.enum)
+    ) {
+      return Option.none();
+    }
+    if (Option.isSome(commonType) && commonType.value !== object.type) return Option.none();
+    commonType = Option.some(object.type);
+    for (const value of Schema.decodeSync(JsonArray)(object.enum)) {
+      if (!values.some((present) => canonicalJson(present) === canonicalJson(value))) {
+        values.push(value);
+      }
+    }
+  }
+  return Option.map(commonType, (type) => ({ type, enum: values }));
+};
+
+const normalizeSchemaRepresentations = (
+  value: JsonValue,
+  definitions: JsonObject,
+  resolving: ReadonlySet<string> = new Set()
+): JsonValue => {
+  if (Array.isArray(value)) {
+    return Schema.decodeSync(JsonArray)(value).map((entry) =>
+      normalizeSchemaRepresentations(entry, definitions, resolving)
+    );
+  }
+  if (!Predicate.isObject(value)) return value;
+
+  const object = Schema.decodeUnknownSync(JsonObject)(value);
+  const reference = automaticSchemaReference(object);
+  if (Option.isSome(reference) && !resolving.has(reference.value)) {
+    const definition = definitions[reference.value];
+    if (definition !== undefined) {
+      return normalizeSchemaRepresentations(
+        definition,
+        definitions,
+        new Set([...resolving, reference.value])
+      );
+    }
+  }
+
+  let normalized = Object.fromEntries(
+    Object.entries(object).map(([key, entry]) => [
+      key,
+      normalizeSchemaRepresentations(entry, definitions, resolving),
+    ])
+  );
+  if (Array.isArray(normalized.anyOf)) {
+    normalized = Option.match(
+      mergeLiteralAnyOf(Schema.decodeSync(JsonArray)(normalized.anyOf)),
+      {
+        onNone: () => normalized,
+        onSome: (merged) => ({
+          ...merged,
+          ...Object.fromEntries(Object.entries(normalized).filter(([key]) => key !== "anyOf")),
+        }),
+      }
+    );
+  }
+  return normalized;
+};
+
+const normalizeOpenApiRepresentations = (openapi: object): JsonObject => {
+  const document = asJsonObject(openapi);
+  const components = Predicate.isObject(document.components)
+    ? asJsonObject(document.components)
+    : {};
+  const definitions = Predicate.isObject(components.schemas)
+    ? asJsonObject(components.schemas)
+    : {};
+  return asJsonObject(normalizeSchemaRepresentations(document, definitions));
+};
+
 const normalizeOpenApiChange = (change: IOasdiffChange): ContractFinding => ({
   source: "openapi",
   rule: change.id ?? "unclassified-breaking-change",
@@ -185,11 +281,15 @@ export const findOpenApiBreakingChanges = async (
   base: object,
   candidate: object
 ): Promise<ReadonlyArray<ContractFinding>> => {
-  const result = await runOasdiffBreakingFromSpecs(base, candidate, {
-    failOn: "ERR",
-    flattenAllOf: true,
-    format: "json",
-  });
+  const result = await runOasdiffBreakingFromSpecs(
+    normalizeOpenApiRepresentations(base),
+    normalizeOpenApiRepresentations(candidate),
+    {
+      failOn: "ERR",
+      flattenAllOf: true,
+      format: "json",
+    }
+  );
   if (result.exitCode > 1) {
     throw new Error(`oasdiff could not compare the contracts: ${result.stderr || result.stdout}`);
   }
@@ -230,7 +330,10 @@ export const compareOperationPolicies = (
               source: "operation-policy",
               rule: "operation-policy-changed",
               operationId: operation.id,
-              detail: canonicalJson({ base: operation.policy, candidate: candidatePolicy }),
+              detail: canonicalJson({
+                base: operation.policy,
+                candidate: candidatePolicy,
+              }),
             },
           ];
     })
@@ -282,4 +385,9 @@ export const removalAcknowledgementCovers = ({
   !candidateChangesWeb &&
   deployedWeb.contractDigest === baseDigest &&
   deployedWeb.gitRevision === baseRevision &&
-  acknowledgementCovers({ acknowledgement, baseDigest, candidateDigest, findings });
+  acknowledgementCovers({
+    acknowledgement,
+    baseDigest,
+    candidateDigest,
+    findings,
+  });

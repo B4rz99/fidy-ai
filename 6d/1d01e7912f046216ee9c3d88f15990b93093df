@@ -1,0 +1,69 @@
+docs/research/effect-4-rc112-upgrade-assessment.md
+  s_19cd2c99b87114::t_6c6fb2d12f176d 1-31,51-80,82-89
+  s_19cd2c99b87114::t_e2d9236cd2ced4 32-50,81
+docs/research/effect-dependency-replacement-audit.md
+  s_af912a43589dc8::t_c2412f36095d1b 23-32
+  s_19cd2c99b87114::t_76074d4881beb8 1-2,5-22,33-62
+  s_af912a43589dc8::t_71277a7f22e1a7 3-4
+docs/research/free-llm-inference-providers.md
+  s_57ae3f89e4fe26::t_6506e958a3c6d9 55-58,60-78
+  s_57ae3f89e4fe26::t_b220c019904f72 59
+  s_57ae3f89e4fe26::t_eeebd29adac19d 41,43,45-46,50-53
+  s_57ae3f89e4fe26::t_6d088ec8c84a6c 1-18,29-40,42,44,54,79-83
+  s_57ae3f89e4fe26::t_d9d7f8e94e5d9e 47-49
+  s_af912a43589dc8::t_c2412f36095d1b 19-28
+.agents/skills/opening-a-pr/SKILL.md
+  s_be0c89494ca11c::t_a29a3d33c67ef9 20-21
+docs/research/dependency-freshness-2026-08-29.md
+  s_af912a43589dc8::t_685b3a11307f6f 3-4
+  s_af912a43589dc8::t_c2412f36095d1b 19-23,27-45,51-62
+  s_9e8dd228742d53::t_41c30fbbec87d8 1-2,5-18,24-26,46-50,63-80
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "6d1d01e7912f046216ee9c3d88f15990b93093df",
+  "prompts": {},
+  "sessions": {
+    "s_19cd2c99b87114": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0531b-ead4-7382-9a97-90c219710212",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": null
+    },
+    "s_57ae3f89e4fe26": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a04f23-0012-730d-95b0-6d1a676b94d4",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": null
+    },
+    "s_9e8dd228742d53": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a04f39-ded1-77fe-9aaa-b15f68432e36",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": null
+    },
+    "s_af912a43589dc8": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a053fa-080c-78a3-a2b4-a42edbe6e527",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": null
+    },
+    "s_be0c89494ca11c": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a04ee4-6a6c-7c5d-bf16-57a8108897ab",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": null
+    }
+  }
+}

@@ -1,7 +1,8 @@
 import { Accessibility, type DragEndEvent } from "@dnd-kit/dom";
 import { DragDropProvider, useDraggable, useDroppable } from "@dnd-kit/react";
+import { GripVerticalIcon } from "@hugeicons/core-free-icons";
+import { HugeiconsIcon } from "@hugeicons/react";
 import { Option } from "effect";
-import { GripVertical } from "lucide-react";
 import type { JSX, ReactNode } from "react";
 import { dashboardAnnouncements, dashboardCollisionPriority } from "./drag-accessibility";
 import { dashboardDragData } from "./drag-data";
@@ -83,7 +84,12 @@ export const DashboardDragHandle = ({
       }}
       type="button"
     >
-      <GripVertical aria-hidden="true" className="size-4" />
+      <HugeiconsIcon
+        aria-hidden="true"
+        className="size-4"
+        icon={GripVerticalIcon}
+        strokeWidth={2}
+      />
     </button>
   );
 };

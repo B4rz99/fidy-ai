@@ -1,4 +1,5 @@
-import { KeyRoundIcon, ShieldCheckIcon } from "lucide-react";
+import { KeyRoundIcon, ShieldCheckIcon } from "@hugeicons/core-free-icons";
+import { HugeiconsIcon } from "@hugeicons/react";
 import { type FormEvent, type JSX, useState } from "react";
 import { Alert, AlertDescription, AlertTitle } from "@/ui/components/alert";
 import { Button } from "@/ui/components/button";
@@ -83,7 +84,7 @@ const OnboardingState = ({
     return (
       <div className="flex flex-col gap-4">
         <Alert>
-          <ShieldCheckIcon aria-hidden="true" />
+          <HugeiconsIcon aria-hidden="true" icon={ShieldCheckIcon} strokeWidth={2} />
           <AlertTitle>Guarda tu código de recuperación</AlertTitle>
           <AlertDescription>
             Se muestra una sola vez. Guárdalo fuera de Fidy; no lo compartas por WhatsApp ni
@@ -123,7 +124,12 @@ export const EmailOnboardingView = (onboarding: EmailOnboardingViewProps): JSX.E
     <Card className="w-full max-w-md">
       <CardHeader>
         <div className="mb-2 flex size-10 items-center justify-center rounded-full bg-primary text-primary-foreground">
-          <KeyRoundIcon aria-hidden="true" className="size-5" />
+          <HugeiconsIcon
+            aria-hidden="true"
+            className="size-5"
+            icon={KeyRoundIcon}
+            strokeWidth={2}
+          />
         </div>
         <CardTitle>
           <h1 className="text-2xl">Verifica tu correo</h1>

@@ -2,7 +2,8 @@ import { Checkbox as CheckboxPrimitive } from "@base-ui/react/checkbox";
 import type { JSX } from "react";
 
 import { cn } from "@/ui/class-names";
-import { CheckIcon } from "lucide-react";
+import { Tick02Icon } from "@hugeicons/core-free-icons";
+import { HugeiconsIcon } from "@hugeicons/react";
 
 const Checkbox = ({ className, ...props }: CheckboxPrimitive.Root.Props): JSX.Element => (
   <CheckboxPrimitive.Root
@@ -17,7 +18,7 @@ const Checkbox = ({ className, ...props }: CheckboxPrimitive.Root.Props): JSX.El
       data-slot="checkbox-indicator"
       className="grid place-content-center text-current transition-none [&>svg]:size-3.5"
     >
-      <CheckIcon />
+      <HugeiconsIcon icon={Tick02Icon} strokeWidth={2} />
     </CheckboxPrimitive.Indicator>
   </CheckboxPrimitive.Root>
 );

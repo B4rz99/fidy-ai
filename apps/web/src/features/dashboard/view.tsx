@@ -1,6 +1,7 @@
+import { PencilIcon, Tick02Icon, XIcon } from "@hugeicons/core-free-icons";
+import { HugeiconsIcon } from "@hugeicons/react";
 import { BigDecimal, Option } from "effect";
 import { AsyncResult } from "effect/unstable/reactivity";
-import { CheckIcon, PencilIcon, XIcon } from "lucide-react";
 import {
   type FormEvent,
   Fragment,
@@ -405,7 +406,7 @@ const WidgetActions = ({
       type="button"
       variant="ghost"
     >
-      <PencilIcon />
+      <HugeiconsIcon icon={PencilIcon} strokeWidth={2} />
     </Button>
     <Button
       aria-label={`Eliminar ${label}`}
@@ -415,7 +416,7 @@ const WidgetActions = ({
       type="button"
       variant="ghost"
     >
-      <XIcon />
+      <HugeiconsIcon icon={XIcon} strokeWidth={2} />
     </Button>
   </div>
 );
@@ -460,7 +461,7 @@ const WidgetTitleEditor = ({
         type="submit"
         variant="ghost"
       >
-        <CheckIcon />
+        <HugeiconsIcon icon={Tick02Icon} strokeWidth={2} />
       </Button>
     </form>
   );

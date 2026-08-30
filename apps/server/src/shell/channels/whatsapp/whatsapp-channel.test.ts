@@ -403,9 +403,7 @@ const OpenAiHttpClient = Layer.succeed(
         return yield* Effect.die("Expected an encoded OpenAI request body");
       }
       const requestText = new TextDecoder().decode(request.body.body);
-      const json = yield* Schema.decodeEffect(UnknownJsonString)(requestText).pipe(
-        Effect.orDie
-      );
+      const json = yield* Schema.decodeEffect(UnknownJsonString)(requestText).pipe(Effect.orDie);
       const body = yield* Schema.decodeUnknownEffect(OpenAiRequest)(json).pipe(Effect.orDie);
       if (
         body.tools.some(

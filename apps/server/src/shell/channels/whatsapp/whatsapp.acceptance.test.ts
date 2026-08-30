@@ -590,11 +590,14 @@ layer(WhatsAppAcceptanceHarness, { excludeTestServices: true, timeout: "30 secon
         expect(records).toHaveLength(1);
         expect(records[0]).toMatchObject({
           event: { _tag: "Granted", grant: { _tag: "Onboarding" } },
-          disclosureMessage: {
-            providerMessageId: outbound[0]?.outcome.providerMessageId,
-          },
-          decisionMessage: {
-            providerMessageId: onboarding.decisionDelivery.providerMessageId,
+          evidence: {
+            _tag: "ProviderQualifiedMessages",
+            disclosureMessage: {
+              providerMessageId: outbound[0]?.outcome.providerMessageId,
+            },
+            decisionMessage: {
+              providerMessageId: onboarding.decisionDelivery.providerMessageId,
+            },
           },
         });
       })

@@ -32,7 +32,8 @@ export const agentOperationBindings: ReadonlyArray<AgentOperationBinding> =
   operationCatalog.operations
     .filter((operation) => isHostedVisible(operation.policy.access, "verified-whatsapp"))
     .map((operation) => {
-      const { codec: wireCodec, jsonSchema: wireJsonSchema } = toCodecOpenAI(operation.input);
+      const { codec: wireCodec } = toCodecOpenAI(operation.input);
+      const { jsonSchema: wireJsonSchema } = toCodecOpenAI(Schema.toEncoded(operation.input));
       const wireParameters: Schema.Codec<unknown, unknown, never, never> = Schema.make(
         wireCodec.ast
       );

@@ -26,6 +26,12 @@ const acceptanceExclude = [
   // focused suites; acceptance supplies an ApiHarness implementation instead.
   "src/shell/agent/hosted-inference.ts",
   "src/shell/agent/model-boundary.ts",
+  // Terminal REPL, confirmation settlement, and lower conversation projection have focused hosted
+  // Turn suites; the acceptance harness substitutes those model decisions.
+  "src/shell/agent/conversation.ts",
+  "src/shell/agent/repl.ts",
+  "src/shell/agent/confirmation-repo.ts",
+  "src/shell/agent/confirmation.ts",
   // Browser authentication and session authority are independent HTTP surfaces with focused
   // PostgreSQL-backed integration suites; signed WhatsApp transport does not exercise them.
   "src/core/browser-login/**",
@@ -43,6 +49,7 @@ const acceptanceExclude = [
   "src/core/operations/**",
   "src/core/subscription/**",
   "src/core/transactions/**",
+  "src/core/_shared/money.ts",
   "src/shell/audit/**",
   "src/shell/budgets/**",
   "src/shell/dashboard/**",
@@ -50,8 +57,29 @@ const acceptanceExclude = [
   "src/shell/operations/**",
   "src/shell/subscription/**",
   "src/shell/transactions/**",
+  // Migration reconciliation is qualified by the database-backed migration suites; acceptance
+  // consumes the resulting schema but does not own migration implementation coverage.
+  "src/shell/db/migrations/**",
+  // Email authentication, support recovery, PAT management, and category administration are
+  // independent canonical capabilities with focused PostgreSQL-backed integration suites. The
+  // WhatsApp harness only consumes their stable boundary effects while qualifying transport.
+  "src/core/email-authentication/**",
+  "src/core/recovery/**",
+  "src/core/tokens/**",
+  "src/shell/categories/**",
+  "src/shell/email-authentication/**",
+  "src/shell/recovery/**",
+  "src/shell/tokens/**",
+  // Canonical operation derivation and partial-input normalization are qualified where the real
+  // operation catalog and hosted model boundary are exercised, not by the substituted model used
+  // for WhatsApp transport acceptance.
+  "src/shell/_shared/canonical-*.ts",
+  "src/shell/_shared/operation-*.ts",
+  "src/shell/_shared/partial-input.ts",
+  "src/shell/_shared/suggested-operations.ts",
   // Transcript lifecycle persistence is covered against PostgreSQL at its public service seam.
   "src/shell/transcript/conversation-continuity.ts",
+  "src/shell/transcript/repo.ts",
   // Memory's canonical API and aggregate policy are covered by their real-PostgreSQL integration
   // suite; they are not part of the WhatsApp transport release signal.
   "src/core/memory/**",
@@ -91,8 +119,8 @@ export default defineConfig({
       exclude: acceptanceExclude,
       thresholds: {
         autoUpdate: true,
-        branches: 45.08,
-        lines: 76.82,
+        branches: 48.1,
+        lines: 76.91,
       },
     },
   },

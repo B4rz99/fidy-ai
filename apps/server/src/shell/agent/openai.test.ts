@@ -531,7 +531,10 @@ it.effect("rejects unsupported structured schemas before provider I/O", () =>
     const failure = yield* inference
       .prepareStructured({
         ...structuredRequest(),
-        outputSchema: Schema.Struct({ unsupported: Schema.Unknown }),
+        outputSchema: Schema.Union([
+          Schema.Struct({ left: Schema.String }),
+          Schema.Struct({ right: Schema.String }),
+        ]),
       })
       .pipe(Effect.flip);
 

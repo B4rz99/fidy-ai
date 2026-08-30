@@ -198,16 +198,13 @@ const normalizeSchemaRepresentations = (
     ])
   );
   if (Array.isArray(normalized.anyOf)) {
-    normalized = Option.match(
-      mergeLiteralAnyOf(Schema.decodeSync(JsonArray)(normalized.anyOf)),
-      {
-        onNone: () => normalized,
-        onSome: (merged) => ({
-          ...merged,
-          ...Object.fromEntries(Object.entries(normalized).filter(([key]) => key !== "anyOf")),
-        }),
-      }
-    );
+    normalized = Option.match(mergeLiteralAnyOf(Schema.decodeSync(JsonArray)(normalized.anyOf)), {
+      onNone: () => normalized,
+      onSome: (merged) => ({
+        ...merged,
+        ...Object.fromEntries(Object.entries(normalized).filter(([key]) => key !== "anyOf")),
+      }),
+    });
   }
   return normalized;
 };

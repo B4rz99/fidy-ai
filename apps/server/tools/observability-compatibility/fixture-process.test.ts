@@ -27,7 +27,7 @@ import {
 import { getCompatibilityRecorder, requireInstalled } from "./handoff";
 
 const expectedBunVersion = "1.3.14";
-const expectedEffectVersion = "4.0.0-beta.98";
+const expectedEffectVersion = "4.0.0-beta.107";
 const expectedSentryVersion = "10.70.0";
 const expectedTraceId = TelemetryTraceId.make("a".repeat(32));
 const expectedParentSpanId = TelemetrySpanId.make("b".repeat(16));
@@ -330,9 +330,7 @@ const fixture = Effect.scoped(
     ];
     const serialized = envelopes.map((value) => new TextDecoder().decode(value)).join("\n");
     const envelopeHeaders = envelopes.map((value) =>
-      Schema.decodeSync(UnknownJsonString)(
-        new TextDecoder().decode(value).split("\n")[0] ?? "null"
-      )
+      Schema.decodeSync(UnknownJsonString)(new TextDecoder().decode(value).split("\n")[0] ?? "null")
     );
     const sdkPinned = envelopeHeaders.every((header) =>
       Schema.encodeUnknownSync(UnknownJsonString)(header).includes(

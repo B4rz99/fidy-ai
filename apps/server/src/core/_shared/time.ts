@@ -27,6 +27,7 @@ const canonicalUtcDateTime = Schema.DateTimeUtc.check(
  */
 export const UtcTimestamp = Schema.String.annotate({ format: "date-time" })
   .check(Schema.isPattern(rfc3339))
+  .annotate({ identifier: "UtcTimestamp" })
   .pipe(Schema.decodeTo(canonicalUtcDateTime, SchemaTransformation.dateTimeUtcFromString))
   .annotate({ identifier: "UtcTimestamp" });
 export type UtcTimestamp = typeof UtcTimestamp.Type;

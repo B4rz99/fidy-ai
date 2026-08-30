@@ -1,0 +1,1373 @@
+apps/server/contracts/openapi.json
+  s_9cdf5f1f9b3599::t_92bd93c8b86612 188,192,199,206-207,213,220-221,239-241,244-245,269,279-280,307,406,469-470,635-637,667-669,700-702,715-716,832,852-853,857-859,863-865,888-890,989-992,1002-1004,1020-1023,1033-1035,1561-1563,1570-1572,1603-1605,1612-1614,1651-1653,1660-1662,1678-1680,1693-1695,1717-1719,1786-1789,1824-1826,1892,1989-1990,1997-1999,2003-2005,2009-2011,2030-2032,2036-2038,2042-2044,2060-2062,2080-2081,2091-2092,2096-2097,2101-2102,2156-2158,2247-2249,2339-2341,2419-2420,2433-2434,2441-2443,2453-2455,2459-2461,2539-2540,2544-2546,2660-2661,2720,2752,2759-2760,2766,2773-2774,2876,2898-2899,2986,3007-3008,3012-3014,3025-3026,3040-3041,3132-3133,3156-3158,3673-3674,3687-3688,3751,3814-3816,3851-3853,3910-3911,3918-3920,3924-3926,3930-3932,4235,4268-4269,4273,4296-4298,4334-4336,4356-4358,4391-4393,4397-4399,4449-4451,4458-4460,4464,4468,4523,4530-4532,4539-4541,4551-4553,4583-4584,4622,4648,4692-4694,4727-4729,4768-4770,4783-4784,4791,4795,4799,4819,4840,4853,4863,4885,4925,4929,4933,4956,4963,4979,5021,5037,5044,5060,5101,5117,5124,5143,5193,5225,5267,5318,5352-5353,5363-5364,5393-5395,5407-5408,5425-5426,5455-5457,5464-5465,5493-5495,5526-5528,5549-5551,5572-5574,5605-5607,5647-5649,5686-5688,5719-5721,5742-5744,5781-5783,5823-5825,5862-5864,5907-5909,5930-5932,5953-5955,5976-5978,6009-6011,6042-6044,6075-6077,6104-6106,6143-6145,6185-6187,6224-6226,6263-6265,6286-6288,6309-6311,6338-6344,6381-6383,6411,6415,6425-6427,6467-6469,6490-6492,6526-6528,6559-6561,6592-6594,6625-6627,6667-6669,6706-6708,6729-6731,6752-6754,6775-6777,6844,6848,6858-6861,6877-6879,6897,6899,6906-6909,6928-6931,6952-6953,6957-6958,6986-6988,6992-6994,7023-7025,7029-7031,7061-7063,7067-7069,7082,7084,7123-7125,8780-8783,8793-8795,8811-8814,8824-8826,8947-8949,8970-8971,9004,9034-9036,9074-9075,11054,11063
+  s_9cdf5f1f9b3599::t_4f28715069ccf0 12340,12373,13385-13387
+apps/server/tools/contracts/compatibility.test.ts
+  s_9cdf5f1f9b3599::t_a0d06b8162d4f8 142-174
+apps/server/package.json
+  s_9cdf5f1f9b3599::t_9fbf43daf500b3 46-48,52,60
+apps/server/tools/contracts/generate.ts
+  s_9cdf5f1f9b3599::t_3201d93e0e2647 21-24,32,34-48,62,64-65,67
+  s_9cdf5f1f9b3599::t_55383e352ec9b3 3,19-20,25-31,33,49-61,63
+apps/server/tools/contracts/compatibility.ts
+  s_9cdf5f1f9b3599::t_d0baa9ec935402 228-242,274-282,315-322
+docs/research/effect-4-rc112-admission-evidence.md
+  s_9cdf5f1f9b3599::t_36b3b70e516fcc 64-83
+  s_9cdf5f1f9b3599::t_2a0de69c52c5fb 1-26,32,39-63,84-91
+  s_9cdf5f1f9b3599::t_f826347c654651 27-31,33-38
+apps/server/tools/observability-compatibility/fixture-process.test.ts
+  s_9cdf5f1f9b3599::t_dfa337155e8beb 30
+apps/web/package.json
+  s_9cdf5f1f9b3599::t_3e0c59d74f6e5e 27,35
+package.json
+  s_9cdf5f1f9b3599::t_e1f0580fbcbff0 60,64,73
+.repos/effect/.changeset/pre.json
+  s_9cdf5f1f9b3599::t_210a6eec5441a7 3
+.repos/effect/.changeset/pre/add-mcp-2025-11-25-protocol.md
+  s_9cdf5f1f9b3599::t_ccf667cbc4d7fa 1-7
+.repos/effect/.changeset/pre/add-mcp-icons.md
+  s_9cdf5f1f9b3599::t_87e68ecee3b984 1-7
+.repos/effect/.changeset/pre/anthropic-claude-5-capabilities.md
+  s_9cdf5f1f9b3599::t_7f59da48f528e3 1-7
+.repos/effect/.changeset/pre/atomic-optional-rc-map.md
+  s_9cdf5f1f9b3599::t_785630f001c6e0 1-6
+.repos/effect/.changeset/pre/authentication-error-description.md
+  s_9cdf5f1f9b3599::t_f0cdcae1e58497 1-9
+.repos/effect/.changeset/pre/autocomplete-jk-filter.md
+  s_9cdf5f1f9b3599::t_9094202ff8854a 1-5
+.repos/effect/.changeset/pre/big-masks-care.md
+  s_9cdf5f1f9b3599::t_ded9f361c91e50 1-5
+.repos/effect/.changeset/pre/bright-docs-teach.md
+  s_9cdf5f1f9b3599::t_5f3202993990ff 1-5
+.repos/effect/.changeset/pre/bright-graphs-calculate.md
+  s_9cdf5f1f9b3599::t_eac02542b6a226 1-5
+.repos/effect/.changeset/pre/bright-graphs-trace.md
+  s_9cdf5f1f9b3599::t_e7dd96245889d5 1-5
+.repos/effect/.changeset/pre/brown-glasses-thank.md
+  s_9cdf5f1f9b3599::t_453327d20982e4 1-5
+.repos/effect/.changeset/pre/bun-websocket-outgoing-compression.md
+  s_9cdf5f1f9b3599::t_587b8cc633e13b 1-7
+.repos/effect/.changeset/pre/calm-atoms-relax.md
+  s_9cdf5f1f9b3599::t_3a85ddb6282539 1-5
+.repos/effect/.changeset/pre/calm-contexts-rest.md
+  s_9cdf5f1f9b3599::t_f31792cb7207b1 1-5
+.repos/effect/.changeset/pre/calm-graphs-span.md
+  s_9cdf5f1f9b3599::t_38eb8aaefdcc45 1-5
+.repos/effect/.changeset/pre/calm-graphs-travel.md
+  s_9cdf5f1f9b3599::t_3ff1549a7293e3 1-5
+.repos/effect/.changeset/pre/calm-pages-hide.md
+  s_9cdf5f1f9b3599::t_60f6d0e760f642 1-5
+.repos/effect/.changeset/pre/calm-queues-await.md
+  s_9cdf5f1f9b3599::t_c030b03449cea0 1-5
+.repos/effect/.changeset/pre/clean-formatters-agree.md
+  s_9cdf5f1f9b3599::t_b3299d4cce6d20 1-5
+.repos/effect/.changeset/pre/clear-graphs-reduce.md
+  s_9cdf5f1f9b3599::t_eea11f7cf34895 1-5
+.repos/effect/.changeset/pre/compact-json-schema-checks.md
+  s_9cdf5f1f9b3599::t_d0125c0d886295 1-5
+.repos/effect/.changeset/pre/configurable-schema-reference-policy.md
+  s_9cdf5f1f9b3599::t_81e9793702a115 1-5
+.repos/effect/.changeset/pre/curly-graphs-connect.md
+  s_9cdf5f1f9b3599::t_d1bf998a423d0e 1-5
+.repos/effect/.changeset/pre/curly-graphs-snapshot.md
+  s_9cdf5f1f9b3599::t_132311c4151b4d 1-5
+.repos/effect/.changeset/pre/curvy-graphs-code.md
+  s_9cdf5f1f9b3599::t_de743fb9530702 1-5
+.repos/effect/.changeset/pre/curvy-otters-sync.md
+  s_9cdf5f1f9b3599::t_4e91bd90f3d906 1-5
+.repos/effect/.changeset/pre/custom-cli-prompt-prefix.md
+  s_9cdf5f1f9b3599::t_35ca7bd3c5e107 1-5
+.repos/effect/.changeset/pre/dark-dancers-rule.md
+  s_9cdf5f1f9b3599::t_cae0d5c18bf6a5 1-5
+.repos/effect/.changeset/pre/deferred-cleanup-after-completion.md
+  s_9cdf5f1f9b3599::t_bf8ebaf47c507e 1-5
+.repos/effect/.changeset/pre/deferred-resume-starvation.md
+  s_9cdf5f1f9b3599::t_652aa2daaae2a5 1-5
+.repos/effect/.changeset/pre/eff-700-httpapi-middleware-errors.md
+  s_9cdf5f1f9b3599::t_f20c67afd1c688 9
+.repos/effect/.changeset/pre/eff-798-schema-parser.md
+  s_9cdf5f1f9b3599::t_4c6cdf081a5dac 1-5
+.repos/effect/.changeset/pre/eff-802-tagged-union-match-or-else.md
+  s_9cdf5f1f9b3599::t_38371d5d53a04f 1-5
+.repos/effect/.changeset/pre/eff-806-schema-error-stack.md
+  s_9cdf5f1f9b3599::t_3afdaa5c097d8e 1-5
+.repos/effect/.changeset/pre/eff-825-pool-performance.md
+  s_9cdf5f1f9b3599::t_2411a63fc092f7 1-8
+.repos/effect/.changeset/pre/eff-825-pool-use.md
+  s_9cdf5f1f9b3599::t_d8e8965e8e8da2 1-6
+.repos/effect/.changeset/pre/eff-825-scope-single-finalizer.md
+  s_9cdf5f1f9b3599::t_23b3da991a2a10 1-7
+.repos/effect/.changeset/pre/eff-837-dependency-updates.md
+  s_9cdf5f1f9b3599::t_8a8bbb5474132c 1-8
+.repos/effect/.changeset/pre/eff-851-skip-empty-remote-write.md
+  s_9cdf5f1f9b3599::t_1b4c4b5fa19011 1-6
+.repos/effect/.changeset/pre/eff-861-indexeddb-equals.md
+  s_9cdf5f1f9b3599::t_6dfaac7321b13b 1-5
+.repos/effect/.changeset/pre/escape-completion-choice-values.md
+  s_9cdf5f1f9b3599::t_49e2c5acf484dd 1-7
+.repos/effect/.changeset/pre/file-prompt-jk-filter.md
+  s_9cdf5f1f9b3599::t_0c76d29da6db01 1-5
+.repos/effect/.changeset/pre/fix-channel-effects-finalizer.md
+  s_9cdf5f1f9b3599::t_49dcbccea9909f 1-5
+.repos/effect/.changeset/pre/fix-cli-help-table-spacing.md
+  s_9cdf5f1f9b3599::t_5ccd7a15f1be9e 1-5
+.repos/effect/.changeset/pre/fix-durable-deferred-race.md
+  s_9cdf5f1f9b3599::t_ad19010edba90c 1-5
+.repos/effect/.changeset/pre/fix-effect-fn-self.md
+  s_9cdf5f1f9b3599::t_b7024f7ad1a176 1-5
+.repos/effect/.changeset/pre/fix-fiber-exit-observers.md
+  s_9cdf5f1f9b3599::t_72c7e747fbbc50 1-5
+.repos/effect/.changeset/pre/fix-from-option-inline-inference.md
+  s_9cdf5f1f9b3599::t_07e57a20bcc887 1-5
+.repos/effect/.changeset/pre/fix-graph-dfs-astar-edge-cases.md
+  s_9cdf5f1f9b3599::t_3016d38ebee5ff 1-5
+.repos/effect/.changeset/pre/fix-graph-mutation-errors.md
+  s_9cdf5f1f9b3599::t_6185da821791ad 1-5
+.repos/effect/.changeset/pre/fix-group-by-key-types.md
+  s_9cdf5f1f9b3599::t_ce1dce3ffe4f80 1-7
+.repos/effect/.changeset/pre/fix-httpapi-single-array-query.md
+  s_9cdf5f1f9b3599::t_a5fc0fba1316ac 1-5
+.repos/effect/.changeset/pre/fix-invalid-openapi-examples.md
+  s_9cdf5f1f9b3599::t_3542a9d0fab43b 1-5
+.repos/effect/.changeset/pre/fix-json-schema-reference-resolution.md
+  s_9cdf5f1f9b3599::t_fa4d440c6419a5 1-5
+.repos/effect/.changeset/pre/fix-memory-workflow-interrupt.md
+  s_9cdf5f1f9b3599::t_1988e54cf6e41c 1-5
+.repos/effect/.changeset/pre/fix-openapi-from-api-cache-copy.md
+  s_9cdf5f1f9b3599::t_bb9bf315b87dab 1-5
+.repos/effect/.changeset/pre/fix-schema-sentinel-declaration.md
+  s_9cdf5f1f9b3599::t_893ae0e4dd5add 1-5
+.repos/effect/.changeset/pre/fix-sqlite-persisted-queue.md
+  s_9cdf5f1f9b3599::t_58cbcadd0603c1 1-5
+.repos/effect/.changeset/pre/fix-zero-max-bytes.md
+  s_9cdf5f1f9b3599::t_f21d20fd3c5aeb 1-5
+.repos/effect/.changeset/pre/fix-zsh-mixed-command-completions.md
+  s_9cdf5f1f9b3599::t_49099e57317119 1-5
+.repos/effect/.changeset/pre/flat-graphs-agree.md
+  s_9cdf5f1f9b3599::t_15e262d1d39b10 1-5
+.repos/effect/.changeset/pre/fresh-deps-update.md
+  s_9cdf5f1f9b3599::t_b1f8fa24291a56 1-5
+.repos/effect/.changeset/pre/fresh-graphs-cycle.md
+  s_9cdf5f1f9b3599::t_d16dcddcedcb06 1-5
+.repos/effect/.changeset/pre/fuzzy-graphs-transform.md
+  s_9cdf5f1f9b3599::t_ecfd5bf506774c 1-5
+.repos/effect/.changeset/pre/general-json-schema-converters.md
+  s_9cdf5f1f9b3599::t_6f2b95e38a6f32 1-5
+.repos/effect/.changeset/pre/http-json-reviver.md
+  s_9cdf5f1f9b3599::t_7a3a82c32ddcdd 1-5
+.repos/effect/.changeset/pre/http-status-from-literal.md
+  s_9cdf5f1f9b3599::t_29010e359ffaf0 1-5
+.repos/effect/.changeset/pre/late-sockets-rest.md
+  s_9cdf5f1f9b3599::t_0cccc59d38cabf 1-5
+.repos/effect/.changeset/pre/lazy-openapi-initialization.md
+  s_9cdf5f1f9b3599::t_2579bcf0cfe4a4 1-5
+.repos/effect/.changeset/pre/match-generic-value-terminals.md
+  s_9cdf5f1f9b3599::t_0b88744531a586 1-10
+.repos/effect/.changeset/pre/mcp-http-initialize-version-header.md
+  s_9cdf5f1f9b3599::t_110c983d223e3a 1-16
+.repos/effect/.changeset/pre/mcp-protocol-versions.md
+  s_9cdf5f1f9b3599::t_9a66c5c5984fe9 1-5
+.repos/effect/.changeset/pre/merge-resource-failures.md
+  s_9cdf5f1f9b3599::t_789a872bc2e63b 1-5
+.repos/effect/.changeset/pre/migrate-persisted-queues.md
+  s_9cdf5f1f9b3599::t_8bcf9d40462b1a 1-5
+.repos/effect/.changeset/pre/narrow-schedule-while.md
+  s_9cdf5f1f9b3599::t_85b23f81fd385b 1-5
+.repos/effect/.changeset/pre/neat-graphs-induced.md
+  s_9cdf5f1f9b3599::t_210c1f13e82b95 1-5
+.repos/effect/.changeset/pre/nested-union-sentinels.md
+  s_9cdf5f1f9b3599::t_841139e585c983 1-5
+.repos/effect/.changeset/pre/node-redis-client.md
+  s_9cdf5f1f9b3599::t_49986164aee786 1-9
+.repos/effect/.changeset/pre/normalize-unbounded-pubsub-replay.md
+  s_9cdf5f1f9b3599::t_78a90bda1d51b7 1-5
+.repos/effect/.changeset/pre/open-objects-intersect.md
+  s_9cdf5f1f9b3599::t_45b12d2bec3b9c 1-7
+.repos/effect/.changeset/pre/openai-compat-null-tool-calls.md
+  s_9cdf5f1f9b3599::t_246b3c6ad73a95 1-5
+.repos/effect/.changeset/pre/openai-compatible-quota-errors.md
+  s_9cdf5f1f9b3599::t_7f26b5db941523 1-5
+.repos/effect/.changeset/pre/openai-text-prompt-cache.md
+  s_9cdf5f1f9b3599::t_03ad3acfa15105 1-6
+.repos/effect/.changeset/pre/openai-tolerant-error-stream-event.md
+  s_9cdf5f1f9b3599::t_42969866f5fa4a 1-5
+.repos/effect/.changeset/pre/openapi-path-parameters.md
+  s_9cdf5f1f9b3599::t_78bb4d2720a680 1-6
+.repos/effect/.changeset/pre/openapi-pointer-references.md
+  s_9cdf5f1f9b3599::t_f4455acf92b084 1-5
+.repos/effect/.changeset/pre/openapi-response-variants.md
+  s_9cdf5f1f9b3599::t_4e33be540aa127 1-6
+.repos/effect/.changeset/pre/optic-standalone-functions.md
+  s_9cdf5f1f9b3599::t_192c2eb9d0cf24 1-5
+.repos/effect/.changeset/pre/precise-test-clock-nanos.md
+  s_9cdf5f1f9b3599::t_6072443544a46b 1-5
+.repos/effect/.changeset/pre/preserve-openapi-raw-json.md
+  s_9cdf5f1f9b3599::t_24ddcdce62c116 1-5
+.repos/effect/.changeset/pre/preserve-unsafe-workflow-interrupts.md
+  s_9cdf5f1f9b3599::t_5a80de36699b69 1-5
+.repos/effect/.changeset/pre/proud-ears-say.md
+  s_9cdf5f1f9b3599::t_aabdd4c715f8ad 1-6
+.repos/effect/.changeset/pre/quick-graphs-paths.md
+  s_9cdf5f1f9b3599::t_32264706aed8c1 1-5
+.repos/effect/.changeset/pre/quick-schedulers-promise.md
+  s_9cdf5f1f9b3599::t_615505b54753fb 1-5
+.repos/effect/.changeset/pre/quiet-graphs-guard.md
+  s_9cdf5f1f9b3599::t_7dfe58e8949673 1-5
+.repos/effect/.changeset/pre/quiet-graphs-search.md
+  s_9cdf5f1f9b3599::t_d0ca63f14ac22d 1-5
+.repos/effect/.changeset/pre/quiet-rpcs-buffer.md
+  s_9cdf5f1f9b3599::t_3c3c736ce54312 1-5
+.repos/effect/.changeset/pre/random-hex-encoding.md
+  s_9cdf5f1f9b3599::t_fe6a80a78ef9c4 1-5
+.repos/effect/.changeset/pre/redact-cli-wizard-values.md
+  s_9cdf5f1f9b3599::t_3f35f0484c7117 1-5
+.repos/effect/.changeset/pre/redis-subscribe-api.md
+  s_9cdf5f1f9b3599::t_b972016b7326cc 1-8
+.repos/effect/.changeset/pre/remove-kubernetes-types.md
+  s_9cdf5f1f9b3599::t_191d01ad9ce09e 1-5
+.repos/effect/.changeset/pre/required-boolean-flags.md
+  s_9cdf5f1f9b3599::t_d98371695974b1 1-5
+.repos/effect/.changeset/pre/restore-effect-head.md
+  s_9cdf5f1f9b3599::t_b6edb649e22d16 1-5
+.repos/effect/.changeset/pre/rpc-server-notifications.md
+  s_9cdf5f1f9b3599::t_ea3600a73fd33a 1-6
+.repos/effect/.changeset/pre/schema-aware-rpc-serialization.md
+  s_9cdf5f1f9b3599::t_087579844ce6a1 1-9
+.repos/effect/.changeset/pre/schema-binary-codec.md
+  s_9cdf5f1f9b3599::t_36391fc6e980b1 1-5
+.repos/effect/.changeset/pre/sql-begin-failure-typed.md
+  s_9cdf5f1f9b3599::t_cbcc94faeb1930 1-16
+.repos/effect/.changeset/pre/stable-graph-traversal-config.md
+  s_9cdf5f1f9b3599::t_8b8cbc26a7da03 1-5
+.repos/effect/.changeset/pre/standard-schema-module.md
+  s_9cdf5f1f9b3599::t_4203baa7f35e2d 1-5
+.repos/effect/.changeset/pre/tall-melons-shave.md
+  s_9cdf5f1f9b3599::t_e8e95df11d08e3 1-9
+.repos/effect/.changeset/pre/tame-json-schema-intersections.md
+  s_9cdf5f1f9b3599::t_56a76ce44c6971 1-14
+.repos/effect/.changeset/pre/theme-cli-prompts.md
+  s_9cdf5f1f9b3599::t_58ebcd38e508c9 1-5
+.repos/effect/.changeset/pre/thirty-forks-march.md
+  s_9cdf5f1f9b3599::t_411a356049bc55 1-6
+.repos/effect/.changeset/pre/tidy-codecs-inherit.md
+  s_9cdf5f1f9b3599::t_4b4a28f2555c9c 1-5
+.repos/effect/.changeset/pre/tidy-graphs-cycle.md
+  s_9cdf5f1f9b3599::t_457c3c2609f282 1-5
+.repos/effect/.changeset/pre/tidy-json-objects.md
+  s_9cdf5f1f9b3599::t_557c1245e419e1 1-6
+.repos/effect/.changeset/pre/tidy-json-schema-object-scopes.md
+  s_9cdf5f1f9b3599::t_f12f1695552413 1-5
+.repos/effect/.changeset/pre/tidy-matches-select.md
+  s_9cdf5f1f9b3599::t_86e89ef7c57a1f 1-5
+.repos/effect/.changeset/pre/tidy-ravens-import.md
+  s_9cdf5f1f9b3599::t_9620b7d2cbd4b1 1-6
+.repos/effect/.changeset/pre/tidy-schema-errors.md
+  s_9cdf5f1f9b3599::t_3a8ad1ba73de64 1-5
+.repos/effect/.changeset/pre/tidy-tools-handle.md
+  s_9cdf5f1f9b3599::t_dc5cbb61b3a3ce 1-6
+.repos/effect/.changeset/pre/tidy-tools-juggle.md
+  s_9cdf5f1f9b3599::t_2e5762523d596f 1-5
+.repos/effect/.changeset/pre/tough-graphs-cache.md
+  s_9cdf5f1f9b3599::t_4577240b18350b 1-5
+.repos/effect/.changeset/pre/tracer-perf.md
+  s_9cdf5f1f9b3599::t_64dac217769b87 1-5
+.repos/effect/.changeset/pre/twenty-garlics-marry.md
+  s_9cdf5f1f9b3599::t_94f3b950e8a1cf 1-6
+.repos/effect/.changeset/pre/unique-directed-neighbors.md
+  s_9cdf5f1f9b3599::t_1fd3391caa8eec 1-5
+.repos/effect/.changeset/pre/warm-graphs-degree.md
+  s_9cdf5f1f9b3599::t_e792aa4e8418d9 1-5
+.repos/effect/.changeset/pre/wild-donuts-brake.md
+  s_9cdf5f1f9b3599::t_622ebda26edd52 1-31
+.repos/effect/.changeset/pre/wise-graphs-connect.md
+  s_9cdf5f1f9b3599::t_857e6f4f459021 1-5
+.repos/effect/.changeset/pre/worker-runner-multi-disconnect.md
+  s_9cdf5f1f9b3599::t_17fd0d414251ad 1-5
+.repos/effect/.changeset/pre/workflow-proxy-discard-execution-id.md
+  s_9cdf5f1f9b3599::t_03f282394cb390 1-5
+.repos/effect/.changeset/pre/zero-node-socket-timeout.md
+  s_9cdf5f1f9b3599::t_f7d6385364d4b8 1-5
+.repos/effect/.github/workflows/release-queue.yml
+  s_9cdf5f1f9b3599::t_b54d772d63114b 38
+.repos/effect/.github/workflows/snapshot.yml
+  s_9cdf5f1f9b3599::t_5ccbdd2b0c83e7 45
+.repos/effect/.oxlintrc.json
+  s_9cdf5f1f9b3599::t_66ede99cfbd299 11,14
+.repos/effect/.vscode/settings.json
+  s_9cdf5f1f9b3599::t_4df0888fa0fb62 45
+.repos/effect/LLMS.md
+  s_9cdf5f1f9b3599::t_0960880229a117 330-340,354-356
+.repos/effect/README.md
+  s_9cdf5f1f9b3599::t_3eb809697ab4c5 7,9,11,14,17-22,25,27-29,31-62
+.repos/effect/ai-docs/package.json
+  s_9cdf5f1f9b3599::t_70771824af227c 30-31
+.repos/effect/ai-docs/src/40_sql/10_basics.ts
+  s_9cdf5f1f9b3599::t_364757677c5823 1-175
+.repos/effect/ai-docs/src/40_sql/index.md
+  s_9cdf5f1f9b3599::t_1a17316d040484 1-6
+.repos/effect/ai-docs/src/51_http-server/10_basics.ts
+  s_9cdf5f1f9b3599::t_b59ee21e090200 27-29
+.repos/effect/ai-docs/src/51_http-server/20_testing.ts
+  s_9cdf5f1f9b3599::t_d37d4ad90a3905 1-100
+.repos/effect/ai-docs/src/51_http-server/fixtures/api/Users.ts
+  s_9cdf5f1f9b3599::t_25303a8063b983 13-16,24,45-48,50,64-82,85
+.repos/effect/ai-docs/src/51_http-server/fixtures/domain/User.ts
+  s_9cdf5f1f9b3599::t_08b79fc5506552 2,4,7-14,16-20
+.repos/effect/ai-docs/src/51_http-server/fixtures/server/Authorization.ts
+  s_9cdf5f1f9b3599::t_a5be6641f7718d 1,5-13,33
+.repos/effect/ai-docs/src/51_http-server/fixtures/server/Users.ts
+  s_9cdf5f1f9b3599::t_4ae397a57fb56b 1-5,8-31,35-36,38-40,43-76,78-81,83-139,155,166-167,172-180
+.repos/effect/ai-docs/src/51_http-server/fixtures/server/Users/http.ts
+  s_9cdf5f1f9b3599::t_3cefd2b91a37a4 8-10,16-17,22-37,39-41,48-49,61-68,71-72,74-78
+.repos/effect/ai-docs/src/70_cli/10_basics.ts
+  s_9cdf5f1f9b3599::t_7156f677150c32 8,26-27,33-40,45-48,53-57,60,69-72,80-83,96-97
+.repos/effect/deno.json
+  s_9cdf5f1f9b3599::t_40afaa855a0cf3 5,28-31
+.repos/effect/dprint.json
+  s_9cdf5f1f9b3599::t_94d70a42660bb6 22,24
+.repos/effect/flake.lock
+  s_9cdf5f1f9b3599::t_1d9d622c1c7ca0 5-6,9
+.repos/effect/flake.nix
+  s_9cdf5f1f9b3599::t_9258a38b28d85f 17-18
+.repos/effect/jsdocs.config.json
+  s_9cdf5f1f9b3599::t_51f8d42f7d72ad 11
+.repos/effect/migration/annotations/effect__Arbitrary.yaml
+  s_9cdf5f1f9b3599::t_1e7064d6b53250 8-9,13,15,17
+.repos/effect/migration/annotations/effect__Graph.yaml
+  s_9cdf5f1f9b3599::t_ea1dc3c57720b7 1-3
+.repos/effect/migration/annotations/effect__Inspectable.yaml
+  s_9cdf5f1f9b3599::t_10c28bb2bcfc63 1-3
+.repos/effect/migration/annotations/effect__Match.yaml
+  s_9cdf5f1f9b3599::t_fa9bf6a98af16d 7-12,49-51
+.repos/effect/migration/annotations/effect__ai__McpSchema.yaml
+  s_9cdf5f1f9b3599::t_32638f8f22b496 3-6
+.repos/effect/migration/annotations/effect__cli__Options.yaml
+  s_9cdf5f1f9b3599::t_b005334df61bc6 20-21
+.repos/effect/migration/annotations/effect__cluster__Message.yaml
+  s_9cdf5f1f9b3599::t_de8705403ffcce 3
+.repos/effect/migration/annotations/effect__cluster__MessageStorage.yaml
+  s_9cdf5f1f9b3599::t_dcdac5ef1ec75f 9-12,15
+.repos/effect/migration/annotations/effect__cluster__Reply.yaml
+  s_9cdf5f1f9b3599::t_ef8b274cc86627 3,6
+.repos/effect/migration/annotations/effect__cluster__Runners.yaml
+  s_9cdf5f1f9b3599::t_7ae12ca0f18e4c 6
+.repos/effect/migration/annotations/effect__cluster__ShardingConfig.yaml
+  s_9cdf5f1f9b3599::t_386e6c49158ef8 6
+.repos/effect/migration/annotations/effect__rpc__RpcMessage.yaml
+  s_9cdf5f1f9b3599::t_1d03dfd0d9a91c 1-3
+.repos/effect/migration/annotations/effect__rpc__RpcServer.yaml
+  s_9cdf5f1f9b3599::t_d9c6334d3a6c76 39
+.repos/effect/migration/v3-to-v4.md
+  s_9cdf5f1f9b3599::t_470dfab1b95091 7,4929-4931,5377,5677,5681-5683,5685,5689,5693,5709,5723,7593-7594,7643,10701-10702,10784-10785,11272-11273,11276-11277,11302-11303
+.repos/effect/package.json
+  s_9cdf5f1f9b3599::t_7a3e59cff07d18 4,40-41,48,51,56-60,63,65,69-73,75-77,79-80
+.repos/effect/packages/ai/anthropic/CHANGELOG.md
+  s_9cdf5f1f9b3599::t_e85e70b4ad7619 3-41
+.repos/effect/packages/ai/anthropic/README.md
+  s_9cdf5f1f9b3599::t_6f0e31a77d77c1 1,3,5,7-9,11,13-14
+.repos/effect/packages/ai/anthropic/package.json
+  s_9cdf5f1f9b3599::t_c5d79775d4b1cc 3
+.repos/effect/packages/ai/anthropic/src/AnthropicConfig.ts
+  s_9cdf5f1f9b3599::t_c084278393314a 38
+.repos/effect/packages/ai/anthropic/src/AnthropicLanguageModel.ts
+  s_9cdf5f1f9b3599::t_2298081df08b1f 91-96,687-693,705-708,716-717,2993,3006,3011,3014-3015,3020,3022-3025,3028,3033,3035,3038,3042-3043
+.repos/effect/packages/ai/anthropic/src/internal/errors.ts
+  s_9cdf5f1f9b3599::t_904faf3786e7ac 271,284,291,298,304,310
+.repos/effect/packages/ai/anthropic/test/AnthropicClient.test.ts
+  s_9cdf5f1f9b3599::t_6a01f422aeef6d 2,48-135,217-227
+.repos/effect/packages/ai/anthropic/test/AnthropicLanguageModel.test.ts
+  s_9cdf5f1f9b3599::t_83ba28649382e2 555-558,593,600,603,606-641,643-646
+.repos/effect/packages/ai/openai-compat/CHANGELOG.md
+  s_9cdf5f1f9b3599::t_a9031f4c63f5b8 3-39
+.repos/effect/packages/ai/openai-compat/README.md
+  s_9cdf5f1f9b3599::t_74fef01f1ccabc 1,3-9,13-14
+.repos/effect/packages/ai/openai-compat/package.json
+  s_9cdf5f1f9b3599::t_ef825a1f00eafb 3
+.repos/effect/packages/ai/openai-compat/src/OpenAiClient.ts
+  s_9cdf5f1f9b3599::t_7bd7a479662fbc 1126-1129
+.repos/effect/packages/ai/openai-compat/src/OpenAiConfig.ts
+  s_9cdf5f1f9b3599::t_4ddd72f4a04662 39
+.repos/effect/packages/ai/openai-compat/src/OpenAiEmbeddingModel.ts
+  s_9cdf5f1f9b3599::t_13b23f6cdcaf2e 124-126
+.repos/effect/packages/ai/openai-compat/src/OpenAiLanguageModel.ts
+  s_9cdf5f1f9b3599::t_ad5e9cd9b53922 581-583,1290
+.repos/effect/packages/ai/openai-compat/src/internal/errors.ts
+  s_9cdf5f1f9b3599::t_4ebeb18d7d0c8f 218,232,239,246,252,259
+.repos/effect/packages/ai/openai-compat/test/OpenAiClient.test.ts
+  s_9cdf5f1f9b3599::t_46b3a20429a927 2,380-459,619-629
+.repos/effect/packages/ai/openai-compat/test/OpenAiLanguageModel.test.ts
+  s_9cdf5f1f9b3599::t_15cc774ed331c9 904-945
+.repos/effect/packages/ai/openai/CHANGELOG.md
+  s_9cdf5f1f9b3599::t_06fad5187cad3f 3-42
+.repos/effect/packages/ai/openai/README.md
+  s_9cdf5f1f9b3599::t_d3521b39da3410 1-14
+.repos/effect/packages/ai/openai/package.json
+  s_9cdf5f1f9b3599::t_046dbd0200d68e 3
+.repos/effect/packages/ai/openai/src/OpenAiConfig.ts
+  s_9cdf5f1f9b3599::t_03a5b0e08e16f8 38
+.repos/effect/packages/ai/openai/src/OpenAiEmbeddingModel.ts
+  s_9cdf5f1f9b3599::t_1370e52a89149b 133-135
+.repos/effect/packages/ai/openai/src/OpenAiLanguageModel.ts
+  s_9cdf5f1f9b3599::t_445c8634e0192a 61-62,132-152,270-276,623,852-856,869-873,2951-2957
+.repos/effect/packages/ai/openai/src/OpenAiSchema.ts
+  s_9cdf5f1f9b3599::t_7313cbd104a87f 12,22-25,83-84,648,667-671,676,1055-1074,1163
+.repos/effect/packages/ai/openai/src/internal/errors.ts
+  s_9cdf5f1f9b3599::t_310784210f846c 31-35,155-165,170,173,252,266,273,280,286,293-298,306-308
+.repos/effect/packages/ai/openai/test/OpenAiClient.test.ts
+  s_9cdf5f1f9b3599::t_bde1c0dd533d58 294-298,303-304,307-326,336-337,379-406,644-646,800-810
+.repos/effect/packages/ai/openai/test/OpenAiLanguageModel.test.ts
+  s_9cdf5f1f9b3599::t_a64a4e5c248b7a 34-96
+.repos/effect/packages/ai/openai/test/OpenAiSchema.test.ts
+  s_9cdf5f1f9b3599::t_f634d7590ef574 20-27,286-389
+.repos/effect/packages/ai/openrouter/CHANGELOG.md
+  s_9cdf5f1f9b3599::t_0f94270cf7eb18 3-38
+.repos/effect/packages/ai/openrouter/README.md
+  s_9cdf5f1f9b3599::t_e82b6b2e4ee537 1,3-9,13-14
+.repos/effect/packages/ai/openrouter/package.json
+  s_9cdf5f1f9b3599::t_8281d447187143 3
+.repos/effect/packages/ai/openrouter/src/OpenRouterConfig.ts
+  s_9cdf5f1f9b3599::t_39e9cea29c3576 39
+.repos/effect/packages/ai/openrouter/src/OpenRouterLanguageModel.ts
+  s_9cdf5f1f9b3599::t_723cd9d2d47ee8 548-550
+.repos/effect/packages/ai/openrouter/src/internal/errors.ts
+  s_9cdf5f1f9b3599::t_a1391cf05465ed 267,281,288,295,303
+.repos/effect/packages/ai/openrouter/test/OpenRouterClient.test.ts
+  s_9cdf5f1f9b3599::t_d2874192b9fb8f 2,34-111,193-203
+.repos/effect/packages/atom/react/CHANGELOG.md
+  s_9cdf5f1f9b3599::t_a5a80f8f534092 3-38
+.repos/effect/packages/atom/react/README.md
+  s_9cdf5f1f9b3599::t_31baa7a71f58f0 1,3-9,13-14
+.repos/effect/packages/atom/react/package.json
+  s_9cdf5f1f9b3599::t_22857746880222 3,64-65,69,71-72,75-78
+.repos/effect/packages/atom/solid/CHANGELOG.md
+  s_9cdf5f1f9b3599::t_2185055f0aaba6 3-37
+.repos/effect/packages/atom/solid/README.md
+  s_9cdf5f1f9b3599::t_79009a0984a274 1,3-9,13-14
+.repos/effect/packages/atom/solid/package.json
+  s_9cdf5f1f9b3599::t_b0a2d7585bdb7f 3,67,69,71-72
+.repos/effect/packages/atom/vue/CHANGELOG.md
+  s_9cdf5f1f9b3599::t_6860c3f07c024d 3-37
+.repos/effect/packages/atom/vue/README.md
+  s_9cdf5f1f9b3599::t_0b6b9e52eb07ed 1,3-9,13-14
+.repos/effect/packages/atom/vue/package.json
+  s_9cdf5f1f9b3599::t_ed62eb03cfe99e 3,64
+.repos/effect/packages/effect/CHANGELOG.md
+  s_9cdf5f1f9b3599::t_309350a0377469 3-336,2827
+.repos/effect/packages/effect/HTTPAPI.md
+  s_9cdf5f1f9b3599::t_3c2852da145c7b 64,75-76,82,100,102,118-119,170,176-177,182,359,369-370,376,383-384,422,426-427,430-431,434-435,440-441,444-445,451,499,503-504,507-508,511-512,515-516,519-520,523-524,530,589,593-594,597-598,601-602,605-606,609-610,613-614,617-618,624,664,668-669,672-673,678-679,682-683,689,750,754-755,758-759,762-763,766-767,770-771,774-775,777-778,781-782,788,829,833-836,839-840,846,895,909-910,916,950,963-964,970,1024,1034-1035,1041,1089,1103-1104,1110,1161,1172-1173,1179,1214,1231-1232,1237,1289,1307,1316,1318-1319,1325,1355,1365-1366,1371,1379-1381,1387,1404,1408-1418,1421-1422,1427,1433-1434,1475,1487-1488,1494,1533,1543-1544,1550,1605,1617-1618,1623,1698,1712-1713,1718,1749,1762-1763,1768,1795,1812-1813,1818,1846,1850-1852,1855-1856,1859-1860,1866,1873-1880,1882-1884,1888-1889,1896-1898,1909,1915-1916,1920-1921,1926,1937-2033,2092,2096-2097,2103-2104,2110-2111,2114-2115,2121,2177,2191-2192,2198,2261,2275-2276,2282,2327,2355,2361-2363,2369,2431,2441,2455-2456,2458,2463,2505,2514,2630,2720,2762,2777-2778,2789,2848,2852-2853,2856-2857,2860-2861,2864-2865,2868-2869,2872-2873,2876-2877,2883,3409,3415-3416,3421,3468,3474-3475,3480,3514,3520-3521,3528
+.repos/effect/packages/effect/MCP.md
+  s_9cdf5f1f9b3599::t_d17e318503f49c 83-89
+.repos/effect/packages/effect/README.md
+  s_9cdf5f1f9b3599::t_db1222a72d7c74 1,3,5,7,9-17,29-30,32,34,46-47
+.repos/effect/packages/effect/SCHEMA.md
+  s_9cdf5f1f9b3599::t_a87b4780011e2a 2241,2254,2256,2266-2267,4793-4794,4816,4819,4821-4822,4824-4825,4828,4832,4917-4918,5159-5163,5208-5209,5377,6039,6120,6269-6271,6273,6275-6325,6425-6428,6452-6455,6459-6464,6467-6472
+.repos/effect/packages/effect/benchmark/Pool.ts
+  s_9cdf5f1f9b3599::t_18c51125c40513 1-76
+.repos/effect/packages/effect/benchmark/http/tracer.ts
+  s_9cdf5f1f9b3599::t_24e2184fbea3bc 1-143
+.repos/effect/packages/effect/benchmark/rpc/RpcSerialization.ts
+  s_9cdf5f1f9b3599::t_00aa2665ab61a8 1-299
+.repos/effect/packages/effect/benchmark/schema/SchemaBinary.md
+  s_9cdf5f1f9b3599::t_0916545bd968f5 1-155
+.repos/effect/packages/effect/benchmark/schema/SchemaBinary.ts
+  s_9cdf5f1f9b3599::t_3f1a7fddb32e53 1-930
+.repos/effect/packages/effect/benchmark/schema/SchemaError.ts
+  s_9cdf5f1f9b3599::t_f0c7b356155ca8 1-46
+.repos/effect/packages/effect/benchmark/schema/fixtures/msgpackr-example4.json
+  s_9cdf5f1f9b3599::t_c71c832033864c 1-284
+.repos/effect/packages/effect/package.json
+  s_9cdf5f1f9b3599::t_53081897e99026 4,108,112-114,119
+.repos/effect/packages/effect/runtimeperf/config.json
+  s_9cdf5f1f9b3599::t_27154980263b49 163-190
+.repos/effect/packages/effect/runtimeperf/suites/schema/fixtures/comparison.ts
+  s_9cdf5f1f9b3599::t_f974491fc9bc48 72-91
+.repos/effect/packages/effect/src/Array.ts
+  s_9cdf5f1f9b3599::t_ed7f10609eadf6 3035-3041,3065,3069,3073
+.repos/effect/packages/effect/src/Channel.ts
+  s_9cdf5f1f9b3599::t_924a165ebf206a 23,2174,2503
+.repos/effect/packages/effect/src/Context.ts
+  s_9cdf5f1f9b3599::t_8772470d1e3159 587-589,779-790,793,798,805,808
+.repos/effect/packages/effect/src/Crypto.ts
+  s_9cdf5f1f9b3599::t_e6e20e24d1ab08 14,274,276
+.repos/effect/packages/effect/src/Deferred.ts
+  s_9cdf5f1f9b3599::t_eea1486032d337 179-184,860-863,865-867
+.repos/effect/packages/effect/src/Effect.ts
+  s_9cdf5f1f9b3599::t_55649a9523a331 780-781,783-785,793-820,1846-1858,5855,5864,6933-6934,6951-6952,14565-14566,14570
+.repos/effect/packages/effect/src/Encoding.ts
+  s_9cdf5f1f9b3599::t_478406e4452021 408-433,772-777,779-780
+.repos/effect/packages/effect/src/ErrorReporter.ts
+  s_9cdf5f1f9b3599::t_8564560e76e9a4 207,220
+.repos/effect/packages/effect/src/Formatter.ts
+  s_9cdf5f1f9b3599::t_e6bf5f8e4d8102 147-162,242-244,290-297
+.repos/effect/packages/effect/src/Graph.ts
+  s_9cdf5f1f9b3599::t_bccf524c2c7233 17-18,23,25,82,86,101-149,159,174-178,199,216-221,246,256-260,361-369,379-396,422-561,590-592,594,597,605-614,641-650,679-690,703-704,711-712,719-723,725-726,739-740,748-753,766-770,772,776-792,810-811,886-890,895,903,916,938,988-992,1007,1034,1087-1091,1105-1106,1131,1151,1189-1193,1208,1235,1255,1279-1282,1299,1328,1384-1388,1391-1398,1400-1401,1419,1435-1437,1440,1442-1443,1446-1450,1453-1454,1457,1469,1473,1484-1487,1490-1501,1521,1540-1541,1569-1574,1578-1580,1582-1586,1591-1608,1610-1662,1721,1723-1725,1770,1790,1799,1826,1861-1866,1868-1869,1905-1911,1913-1914,1952-1957,1959-1960,1999-2005,2007-2008,2014-2023,2046-2050,2052-2055,2061-2070,2086,2094-2098,2100-2107,2114-2117,2122-2127,2143-2145,2152-2159,2163-2177,2196-2198,2205-2212,2216,2222-2234,2258,2265-2269,2272-2274,2284-2288,2312,2319-2331,2333,2336,2343-2347,2371,2378-2388,2391-2394,2396,2399,2405-2411,2431,2438-2446,2448,2451,2457-2462,2485,2492-2500,2502,2505,2514,2517,2524,2527,2546-2548,2579,2590-2592,2595,2635-2638,2661-2692,2695-2699,2701-2705,2708-2711,2713-2720,2723-2725,2729-2746,2754,2760-2763,2787,2790,2795-2846,2912,2929-2932,2937-2945,2962-2963,2981,3029-3284,3291-3314,3335-3340,3348-3354,3393,3404-3406,3409-3410,3433,3444-3446,3449-3450,3473,3483-3484,3536,3546-3549,3575-3576,3605-3609,3627,3643,3655-3657,3659-3663,3665-3669,3671-3673,3813-3817,3821,3845-3846,3902,3938,3940-3941,3943,3945-3947,3949,3954-3957,3960,3963,3979,3993-4005,4007-4012,4014-4018,4021-4022,4078-4170,4174-4178,4181-4182,4209-4210,4217,4223-4224,4226-4229,4231-4232,4235-4237,4240-4244,4247-4248,4252-4254,4258-4265,4268-4270,4272-4291,4304-4308,4312,4343,4350-4378,4381-4382,4384-4592,4597-4607,4618,4644,4646,4648-4649,4651,4653,4655-4656,4658-4660,4662-4698,4701-4704,4708-4714,4718,4720,4722-4723,4725,4727-4728,4730-5625,5631-5632,5643-5658,5660-5678,5680-5685,5688-5689,5692-5697,5699-5702,5705-5708,5710-5711,5713-5743,5748-5777,5779-5806,5808-5946,5949-5959,5961-5968,5970-6000,6002-6017,6019-6038,6042-6044,6048-6054,6067-6068,6072-6073,6085,6090-6097,6100-6135,6139-6142,6145-6150,6153-6158,6161-6169,6171-6178,6182,6186-6197,6200-6205,6208-6214,6236,6249-6253,6258-6263,6288-6290,6306,6315-6328,6330,6336,6342-6351,6353,6355-6359,6362-6363,6367-6379,6385-6386,6390,6392-6398,6400,6402-6404,6406,6415-6416,6420-6422,6430,6438-6442,6447-6453,6474-6475,6491-6504,6507-6527,6530,6532-6552,6558-6560,6564,6566,6568-6582,6584-6590,6592-6594,6597-6599,6601-6607,6609-6611,6616,6633-6636,6638,6652-6656,6660-6667,6669,6698-6699,6715,6724-6739,6741,6745-6747,6750,6756-6761,6764-6773,6775,6777-6780,6783-6784,6788-6805,6807,6812-6813,6817,6819-6825,6827,6829-6832,6848,6861-6865,6869-6876,6901,6917,6926-7244,7246-7287,7289,7291-7295,7297-7312,7314-7315,7318-7354,7358-7379,7382-7390,7392-7393,7395-7398,7400-7407,7454,7458-7459,7493-7530,7648-7652,7656-7659,7661,7674-7677,7682-7689,7707,7710-7711,7727-7728,7731-7735,7737-7741,7743-7747,7752-7756,7760-7761,7763-7766,7769-7827,7831-7835,7837,7843,7850-7854,7859-7866,7884,7887-7888,7904-7905,7908-7921,7924-7932,7934-7939,7941-7948,7950-7951,7953-7954,7956-7964,7966,7968-7995,7997,8017,8025-8030,8034-8042,8060,8085,8094-8112,8114-8115,8117-8122,8124,8126-8141,8145-8146,8149,8155,8162-8166,8172-8175,8179-8181,8200,8216-8217,8220-8236,8239-8248,8250-8256,8258-8261,8263-8275,8277,8279-8300,8305-8309,8312,8316,8320-8326,8351,8361,8368,8372-8378,8404,8414,8435,8445-8448,8452-8458,8501,8517
+.repos/effect/packages/effect/src/Inspectable.ts
+  s_9cdf5f1f9b3599::t_c157a8760967b3 133,137,142-146,155,165,192
+.repos/effect/packages/effect/src/Iterable.ts
+  s_9cdf5f1f9b3599::t_39a7c75d319c32 1279-1285,1323,1327,1331
+.repos/effect/packages/effect/src/JsonSchema.ts
+  s_9cdf5f1f9b3599::t_e3b68e63979c01 7,12,214,216-218,220-225,227,240-244,248-254,283,338-348,372-385,399-411,433,448-451,455-461,489,503-507,511-519,541-543,568-573,621-649,651-660,665-666,683-690,693,695,697,699,710,716,729,733-734,740-742,747-748,750-912,916-927,930-998,1001-1003,1005-1010,1014-1060,1062-1063,1065-1129,1131-1238,1242,1244-1253,1255-1259,1264-1272,1275-1280,1282-1320,1322-1472,1476-1563,1565-1566,1568-1573,1575-1579,1581-1592,1595-1597,1600-1622,1625-1640,1642-1643
+.repos/effect/packages/effect/src/Layer.ts
+  s_9cdf5f1f9b3599::t_d268a8258ed8a1 795,799
+.repos/effect/packages/effect/src/LayerMap.ts
+  s_9cdf5f1f9b3599::t_587abcd7731ece 18,96-107,199,333-346,461-462
+.repos/effect/packages/effect/src/Logger.ts
+  s_9cdf5f1f9b3599::t_82de4f0e5a2d7f 416,518,553,902,905
+.repos/effect/packages/effect/src/Match.ts
+  s_9cdf5f1f9b3599::t_2ca04f9f838c8f 23-30,37-40,67-77,108-115,123,126-127,137-138,160-168,175,179,235,269,316-341,387,529-531,586-587,592,599-600,648-649,653,660-661,706-707,711,717-719,1001-1002,1006,1013-1014,1210-1211,1216,1223-1224,1868,1871-1874,1920-1923,1962-1966,2011-2015,2049-2052
+.repos/effect/packages/effect/src/Optic.ts
+  s_9cdf5f1f9b3599::t_0f7842a7cdf11f 15,24,1278-1451,1462,1487-1537
+.repos/effect/packages/effect/src/Pool.ts
+  s_9cdf5f1f9b3599::t_a21afbceda1576 19-21,32-39,88,106-107,120,123-124,126,155-158,238,355,364,367-368,370,372,374-375,383-394,410,416-420,447-455,457,460-511,513-556,558-628,630-679,681-699,741,745,749,764-776,778,780-785,789-827,832-833,846,850,916
+.repos/effect/packages/effect/src/PubSub.ts
+  s_9cdf5f1f9b3599::t_a2589dc4918040 543-548
+.repos/effect/packages/effect/src/Pull.ts
+  s_9cdf5f1f9b3599::t_9ab2674d201556 217-222,229-245,257-258,269,312-315,329-331
+.repos/effect/packages/effect/src/Queue.ts
+  s_9cdf5f1f9b3599::t_9dc93e6bf3947a 1573,1575,1577,1580
+.repos/effect/packages/effect/src/RcMap.ts
+  s_9cdf5f1f9b3599::t_e486554381eba4 24,385-451
+.repos/effect/packages/effect/src/Record.ts
+  s_9cdf5f1f9b3599::t_023f7974f39727 129-143
+.repos/effect/packages/effect/src/Schedule.ts
+  s_9cdf5f1f9b3599::t_1e0f6018acfb96 1324-1330,1338-1343
+.repos/effect/packages/effect/src/Scheduler.ts
+  s_9cdf5f1f9b3599::t_30b3776f50e5cb 97
+.repos/effect/packages/effect/src/Schema.ts
+  s_9cdf5f1f9b3599::t_851cc7787faff0 33,37-38,46,66,1148-1222,1529-1531,6211-6218,6250-6274,6330,6376-6393,6430-6440,6446,6481-6482,11239-11516,15155-15158,15162-15165,15170-15174,15182-15193,15198,15264-15267,15270-15274,15276-15279,15286-15294,15305,15346-15352,15359-15361,15480-15491,15567-15573,16131-16135,16243-16247,16361-16382,16707-16712,16716-16721,16725-16730,16734-16741,16752
+.repos/effect/packages/effect/src/SchemaAST.ts
+  s_9cdf5f1f9b3599::t_2b54521a3c8350 660-669,692,694-698,702,707-708,714,724-730,732-733,735,739,743,1455,2215,2230-2242,2348-2409,2472-2500,2510,2696-2702,2708-2713,2719-2726,2732,2740,2747-2748,2750-2755,2758,2760,2764,2766-2791,2793-2813,2816-2850,2854-2855,2880,3343-3350
+.repos/effect/packages/effect/src/SchemaIssue.ts
+  s_9cdf5f1f9b3599::t_fc856506486808 19,1150,1156-1157,1159-1173,1175-1188,1190,1193-1207
+.repos/effect/packages/effect/src/SchemaRepresentation.ts
+  s_9cdf5f1f9b3599::t_674bfb897a47c1 701-766,770-773,776-779,784-785,791-794,797-800,806-807,809,836-841,844-852,875-880,939-940,1272-1277,1280-1298,1322-1335
+.repos/effect/packages/effect/src/Scope.ts
+  s_9cdf5f1f9b3599::t_8e5467081edf00 129-133,146,154-156
+.repos/effect/packages/effect/src/StandardSchema.ts
+  s_9cdf5f1f9b3599::t_2aa22f83ff8301 1-207
+.repos/effect/packages/effect/src/Tracer.ts
+  s_9cdf5f1f9b3599::t_82b85e11939e28 13,694-695
+.repos/effect/packages/effect/src/index.ts
+  s_9cdf5f1f9b3599::t_d4982c24e1eef0 579-583
+.repos/effect/packages/effect/src/internal/effect.ts
+  s_9cdf5f1f9b3599::t_d614bcd84640db 567,949-961,1261,2070,2232,3786,3788-3792,3800-3805,3808,3873,3875-3886,3896-3902,3906-3913,4027,4649-4650,4656,4697-4705,4779,5760-5762,5778-5779,5782-5783
+.repos/effect/packages/effect/src/internal/graph.ts
+  s_9cdf5f1f9b3599::t_abd46431f9fe3a 1-232
+.repos/effect/packages/effect/src/internal/graphCsr.ts
+  s_9cdf5f1f9b3599::t_32c92a70b8c286 1-279
+.repos/effect/packages/effect/src/internal/matcher.ts
+  s_9cdf5f1f9b3599::t_2b3de8e531cfe5 2-12,22,28-29,33,35-36,43-44,46,48,61-62,65,68,92-95,104,113,206-211,216,240,256,261-266,273-274,280,287-288,298-299,304,311-312,326-327,332,341-343,470-471,479,486-488,504-505,511,518-519,556-560,566,570-572,577-587,590-593,602-603,605,607,612-613,617,619,628-631,640-641,650-661,663,666-668,670-672,674,676
+.repos/effect/packages/effect/src/internal/schema/annotations.ts
+  s_9cdf5f1f9b3599::t_901d663d34aacc 58
+.repos/effect/packages/effect/src/internal/schema/fromJsonSchemaDocument.ts
+  s_9cdf5f1f9b3599::t_42172816b4acb0 1,30-47,52-56,59,61-69,76-81,84,87-88,210-213,218-232,259,264,267,271,294-297,438-439,441-485,487-534,538-603,606-634,636-715,718-736,762-764,852-860,870-873,877-896,899-902,904-930,934,970-975,978,984,1027-1030,1069-1072,1084,1087-1088,1095-1104,1112-1114,1123-1128,1139,1143,1185-1197
+.repos/effect/packages/effect/src/internal/schema/toCodeDocument.ts
+  s_9cdf5f1f9b3599::t_a1344c61e33866 547-553,556
+.repos/effect/packages/effect/src/internal/schema/toJsonSchemaDocument.ts
+  s_9cdf5f1f9b3599::t_1fdeb49a3725dc 109-124,127-128,141-146,149-151,254,261-267,273,276-277,300,419,433,435-446,449-450,452-462,476
+.repos/effect/packages/effect/src/internal/schema/toRepresentation.ts
+  s_9cdf5f1f9b3599::t_3c0e1bd510e3cc 8,14-20,23-24,27-28,30-33,36-37,39,42,44-45,49-68,73,86,89,97,112,115-146,149-150,169,180-182,184-185,187
+.repos/effect/packages/effect/src/internal/uuid.ts
+  s_9cdf5f1f9b3599::t_5f670da3bca966 1-51
+.repos/effect/packages/effect/src/testing/TestClock.ts
+  s_9cdf5f1f9b3599::t_9701c422f89cda 343-346,348-349,369-374,377-381
+.repos/effect/packages/effect/src/unstable/ai/AiError.ts
+  s_9cdf5f1f9b3599::t_3eaff3dd39f827 344-389,517-523,534,562-564
+.repos/effect/packages/effect/src/unstable/ai/AnthropicStructuredOutput.ts
+  s_9cdf5f1f9b3599::t_57e81a5ef84e85 12,65,88-89
+.repos/effect/packages/effect/src/unstable/ai/Chat.ts
+  s_9cdf5f1f9b3599::t_7b8b2e0609437e 243,256-259,325,338-341,399-403
+.repos/effect/packages/effect/src/unstable/ai/LanguageModel.ts
+  s_9cdf5f1f9b3599::t_bf706147e4a01e 118,130,150,177,189,367-371,373,413,478-480,486,560-571,1184-1188,1462-1468,1685,1697,1763-1767,1833,1845,2223-2229
+.repos/effect/packages/effect/src/unstable/ai/McpProtocol.ts
+  s_9cdf5f1f9b3599::t_03b62c21013e6c 6-10,12-16,19,21,24,27,32-35,38-100,105-146
+.repos/effect/packages/effect/src/unstable/ai/McpSchema.ts
+  s_9cdf5f1f9b3599::t_cd07857608c7ad 6-11,16,27,176,195,304-309,312-336,346-349,392-401,405-414,853,904-907,922,964-967,972,993,1022,1233-1238,1256-1257,1271,1280-1281,1295,1304-1305,1325-1326,1521-1552,1576,1578,1580,1585-1588,1595,1641-1644,1797-1860,1869-1870,1873-1885,1985-1987,2045-2053,2097,2195-2199,2261-2497,2519-2522,2570-2579,2581,2607-2649,2655-2656,2663-2665,2668,2901-2902
+.repos/effect/packages/effect/src/unstable/ai/McpServer.ts
+  s_9cdf5f1f9b3599::t_83bb7bea7683bd 27,41,46-47,50,56,64,70-71,79,91-160,174-178,266,283,285,293-296,302,308,314,319,321-325,331-383,386-403,405,414-436,439-475,477-488,490,493-507,513-534,536-551,553,556-563,566,568-574,576,578-580,585-586,603-604,608,621,632-634,664-666,668,676-678,680,692-695,698,701,706,714,716-729,731-742,770-780,782,786-789,794,801-802,819-834,873-874,905-908,923-924,928-929,935,938,945-960,971,1017-1021,1027-1033,1038,1044,1049-1050,1055-1059,1063-1065,1070-1072,1075-1076,1079-1082,1084-1089,1091-1110,1160-1162,1164,1173-1176,1187-1222,1224,1226-1231,1233,1235-1237,1240-1261,1263,1265,1268-1270,1275,1277,1279,1281,1287,1300-1309,1320-1322,1325,1334-1336,1361,1364,1367,1370-1371,1375-1380,1382-1392,1394,1396-1438,1441-1450,1458-1500,1535-1541,1545-1546,1563,2017-2025,2102-2103,2106-2107,2130,2178,2182-2185,2193,2195-2196,2199,2201-2210,2212-2213,2215-2222,2224-2225,2227-2231,2233-2245,2247-2275,2278-2292,2294-2317,2358-2369,2380-2381,2384-2386,2390-2399
+.repos/effect/packages/effect/src/unstable/ai/OpenAiStructuredOutput.ts
+  s_9cdf5f1f9b3599::t_2c4060600b231a 12,65
+.repos/effect/packages/effect/src/unstable/ai/Prompt.ts
+  s_9cdf5f1f9b3599::t_c0aadd3c8b8af5 1101
+.repos/effect/packages/effect/src/unstable/ai/Response.ts
+  s_9cdf5f1f9b3599::t_a42835bf08f048 227-230,233,308-311,321,411-418
+.repos/effect/packages/effect/src/unstable/ai/Toolkit.ts
+  s_9cdf5f1f9b3599::t_ca711acd5a8603 209,211
+.repos/effect/packages/effect/src/unstable/ai/internal/codec-transformer.ts
+  s_9cdf5f1f9b3599::t_d02d07cf1f314c 1,4,10
+.repos/effect/packages/effect/src/unstable/ai/internal/mcpCore.ts
+  s_9cdf5f1f9b3599::t_853f823deca3b9 1-455
+.repos/effect/packages/effect/src/unstable/ai/internal/mcpProtocol.ts
+  s_9cdf5f1f9b3599::t_c3906826e57176 1-4,6-7,9-10,12-14,16-58,62-83,85-217,220,226-228,230-231,241-260,269-271,282-298,304-306,308-309,314-315,321-343,346-348
+.repos/effect/packages/effect/src/unstable/ai/internal/mcpProtocol/v2024_11_05.ts
+  s_9cdf5f1f9b3599::t_4328025000df3d 1-321
+.repos/effect/packages/effect/src/unstable/ai/internal/mcpProtocol/v2025_03_26.ts
+  s_9cdf5f1f9b3599::t_c21bfa04c025d3 1-347
+.repos/effect/packages/effect/src/unstable/ai/internal/mcpProtocol/v2025_06_18.ts
+  s_9cdf5f1f9b3599::t_9333e5c4ee9c4b 1-364
+.repos/effect/packages/effect/src/unstable/ai/internal/mcpProtocol/v2025_11_25.ts
+  s_9cdf5f1f9b3599::t_554e127766d8ef 1-417
+.repos/effect/packages/effect/src/unstable/ai/internal/mcpProtocolRegistry.ts
+  s_9cdf5f1f9b3599::t_e87dd52268ba49 4,7-8,12-14,27-29,32-34,59,61,74-99
+.repos/effect/packages/effect/src/unstable/ai/internal/mcpSchema/v2024_11_05.ts
+  s_9cdf5f1f9b3599::t_05c52ae2c3f04e 1-521
+.repos/effect/packages/effect/src/unstable/ai/internal/mcpSchema/v2025_03_26.ts
+  s_9cdf5f1f9b3599::t_937666fd77c18f 1-204
+.repos/effect/packages/effect/src/unstable/ai/internal/mcpSchema/v2025_06_18.ts
+  s_9cdf5f1f9b3599::t_388d07f7d9a632 1-404
+.repos/effect/packages/effect/src/unstable/ai/internal/mcpSchema/v2025_11_25.ts
+  s_9cdf5f1f9b3599::t_665ff096d4b15d 1-481
+.repos/effect/packages/effect/src/unstable/ai/internal/structured-output.ts
+  s_9cdf5f1f9b3599::t_3ca80938ebe9d4 3,21-43
+.repos/effect/packages/effect/src/unstable/cli/CliOutput.ts
+  s_9cdf5f1f9b3599::t_195f3a0445f453 414
+.repos/effect/packages/effect/src/unstable/cli/Command.ts
+  s_9cdf5f1f9b3599::t_9302e6a367c43a 101,459,585-588,595,804,1629-1630,1905-1906,1915
+.repos/effect/packages/effect/src/unstable/cli/Flag.ts
+  s_9cdf5f1f9b3599::t_56d14f67fc6e2d 69
+.repos/effect/packages/effect/src/unstable/cli/GlobalFlag.ts
+  s_9cdf5f1f9b3599::t_9950af1560dafd 158-159,181-182,203-204
+.repos/effect/packages/effect/src/unstable/cli/Param.ts
+  s_9cdf5f1f9b3599::t_d7cd80d5562ce0 403-405,1276,1960
+.repos/effect/packages/effect/src/unstable/cli/Prompt.ts
+  s_9cdf5f1f9b3599::t_931d96dca9b74a 16,151-209,217,263,338,415,451,556,579,600-601,609-621,630-655,802-816,837,932,966-970,976,1249-1254,1554,1568,1574,1594-1596,1603,1609-1611,1644,1658,1661,1665,1673,1677-1679,1685,1692,1709-1712,1714,1719-1722,2193,2304,2308,2311-2320,2344-2356,2361,2364,2374,2377-2381,2385,2387,2390-2395,2400,2404,2408,2411,2418,2426,2433,2441,2445,2448-2450,2454-2456,2462-2466,2561-2562,2564-2578,2643,2655,2663,2665-2667,2677,2681,2683-2684,2694,2700,2706,2710,2731-2735,2738-2739,2746,2749-2756,2764,2766-2767,2769,2776,2781-2782,2784,2840,2842,2844,2899-2900,2912,2914-2917,2926,2934-2935,2942,2950,2952-2954,2966,2970,2975-2979,2984-2987,3209-3210,3251,3257,3260,3269,3272,3281,3284-3288,3292,3295,3297-3298,3301-3302,3310,3313-3317,3322,3326,3328-3329,3332-3333,3339,3348-3349,3352,3359,3369-3370,3379,3385,3395-3396,3403,3405-3406,3415,3417-3419,3424,3426-3427,3429,3436,3438-3441,3525,3527,3537,3539-3546,3583-3584,3586-3599,3633,3649,3651,3653,3663,3674,3682-3687,3689,3691-3692,3699,3710,3718,3720-3722,3734,3738,3743-3749,3754-3757,3939,3946,3948-3949,3957,3960-3964,3971,3980,3984-3987,3993-3996
+.repos/effect/packages/effect/src/unstable/cli/internal/completions/bash.ts
+  s_9cdf5f1f9b3599::t_710d4a149125d6 30,36-37,39-43,46-106,108,112-115,120,129,132,148-149,158-163,176,232,288,299-300,311-312,317-335,340-341
+.repos/effect/packages/effect/src/unstable/cli/internal/completions/fish.ts
+  s_9cdf5f1f9b3599::t_ff9d8a974ca646 15-18,70-78,103,116,163-164
+.repos/effect/packages/effect/src/unstable/cli/internal/completions/zsh.ts
+  s_9cdf5f1f9b3599::t_071312a20be2d4 17-19,41,58,139-146
+.repos/effect/packages/effect/src/unstable/cli/internal/config.ts
+  s_9cdf5f1f9b3599::t_2b2e5a98ea43e8 18
+.repos/effect/packages/effect/src/unstable/cli/internal/wizard.ts
+  s_9cdf5f1f9b3599::t_a14ca0e8cdbd55 19-28,32,36,39-42,65,110,123-128,151,158,163,171,177,193,197-203,206,208,210,212-215,217,221-222,242-243
+.repos/effect/packages/effect/src/unstable/cluster/ClusterError.ts
+  s_9cdf5f1f9b3599::t_c9c5ca3a195730 174-176
+.repos/effect/packages/effect/src/unstable/cluster/ClusterWorkflowEngine.ts
+  s_9cdf5f1f9b3599::t_178e9e4275817e 130,390,407-410,412,439,446-448,557-562,568-579,706-711,766-780,782-784
+.repos/effect/packages/effect/src/unstable/cluster/EntityResource.ts
+  s_9cdf5f1f9b3599::t_403dd7b02736b9 21,163,171
+.repos/effect/packages/effect/src/unstable/cluster/Envelope.ts
+  s_9cdf5f1f9b3599::t_a67bb7e164997a 30-58,135
+.repos/effect/packages/effect/src/unstable/cluster/HttpRunner.ts
+  s_9cdf5f1f9b3599::t_78ea21e04161ab 59-69,111-124,156-160,164-169,188-192,196-201
+.repos/effect/packages/effect/src/unstable/cluster/K8sHttpClient.ts
+  s_9cdf5f1f9b3599::t_3f833ce6284041 22,132
+.repos/effect/packages/effect/src/unstable/cluster/K8sTypes.ts
+  s_9cdf5f1f9b3599::t_f345ec88a53aa7 1-2467
+.repos/effect/packages/effect/src/unstable/cluster/Message.ts
+  s_9cdf5f1f9b3599::t_7508256b4238ba 18,94-100,164-165,169-172,207-208,227-228,233-242,259,275-276,279,303-304,317
+.repos/effect/packages/effect/src/unstable/cluster/MessageStorage.ts
+  s_9cdf5f1f9b3599::t_0ba80262ee6742 26,37-38,137-141,144-148,172-178,371-375,379-383,407,409-410,613,637,660,664,666,679-680,732-733,759,810,844-846,866,870-884,980,993,1003-1004,1006-1007,1013,1019-1021,1027-1030,1035,1054,1073,1078-1087
+.repos/effect/packages/effect/src/unstable/cluster/Reply.ts
+  s_9cdf5f1f9b3599::t_2aa8f94a15a05c 27,29,71,166-168,405-406,413-416,418-422,436-437,439,456-457,460,463-470,482-483,489
+.repos/effect/packages/effect/src/unstable/cluster/RunnerServer.ts
+  s_9cdf5f1f9b3599::t_49305e84c18bb4 37-38,40-47,59,63-73,83,85,135,137,146,202-204
+.repos/effect/packages/effect/src/unstable/cluster/Runners.ts
+  s_9cdf5f1f9b3599::t_4fd33bf3c809f2 28-29,94-95,103-110,151,162-166,170,175,186,366,372-373,444,485-486,489,551,557-562,568,571,586,608-615,618-621,625-640,642-645,649-667,673-674,676-691,713-714,721-724
+.repos/effect/packages/effect/src/unstable/cluster/Sharding.ts
+  s_9cdf5f1f9b3599::t_1885d1b06ad319 591-617,630,633-637,645-654,688,700-707,718,735-738,740-746,752-753,772-804,807-823,835-841,845-857,1141-1142,1604
+.repos/effect/packages/effect/src/unstable/cluster/ShardingConfig.ts
+  s_9cdf5f1f9b3599::t_c49a94af1e42d7 98-119,188-189,304-317
+.repos/effect/packages/effect/src/unstable/cluster/SqlMessageStorage.ts
+  s_9cdf5f1f9b3599::t_8e383d1c37f150 32,44,49-50,62,67,70,72,375-426,435,444-445,454,460,470,486-493,495,645-646,689-692,696-712,752-753,756-770,1118-1131
+.repos/effect/packages/effect/src/unstable/cluster/index.ts
+  s_9cdf5f1f9b3599::t_1851ac8321626d 87-91
+.repos/effect/packages/effect/src/unstable/cluster/internal/entityManager.ts
+  s_9cdf5f1f9b3599::t_ee0050aba552ab 59-61,69-81,113,148,155-163,619-620,685-686,689
+.repos/effect/packages/effect/src/unstable/cluster/internal/entityReaper.ts
+  s_9cdf5f1f9b3599::t_e73063a4f14933 18,25
+.repos/effect/packages/effect/src/unstable/cluster/internal/resourceMap.ts
+  s_9cdf5f1f9b3599::t_d13ff5827153e0 59-66
+.repos/effect/packages/effect/src/unstable/encoding/SchemaBinary.ts
+  s_9cdf5f1f9b3599::t_03488a3957e361 1-5154
+.repos/effect/packages/effect/src/unstable/encoding/index.ts
+  s_9cdf5f1f9b3599::t_5f5c59d3e170cd 22-26
+.repos/effect/packages/effect/src/unstable/eventlog/EventJournal.ts
+  s_9cdf5f1f9b3599::t_d50b91578e1470 14,20,22,83-87,91-92,187,256,480,714,724-725
+.repos/effect/packages/effect/src/unstable/eventlog/EventLog.ts
+  s_9cdf5f1f9b3599::t_a130e7d6296b86 766-770,868,877-880,883-891
+.repos/effect/packages/effect/src/unstable/eventlog/EventLogServerEncrypted.ts
+  s_9cdf5f1f9b3599::t_e1cab80b99984b 16
+.repos/effect/packages/effect/src/unstable/eventlog/SqlEventJournal.ts
+  s_9cdf5f1f9b3599::t_540c87301eb67d 11,13,253-254
+.repos/effect/packages/effect/src/unstable/http/FetchHttpClient.ts
+  s_9cdf5f1f9b3599::t_a0f0097a86bd72 55
+.repos/effect/packages/effect/src/unstable/http/Headers.ts
+  s_9cdf5f1f9b3599::t_8e3391d9ee82fb 419-447
+.repos/effect/packages/effect/src/unstable/http/HttpClient.ts
+  s_9cdf5f1f9b3599::t_e2e4506f9667ee 691,693-696,707,709-712
+.repos/effect/packages/effect/src/unstable/http/HttpClientResponse.ts
+  s_9cdf5f1f9b3599::t_aa0b62a295b4d5 99,102,106,110
+.repos/effect/packages/effect/src/unstable/http/HttpEffect.ts
+  s_9cdf5f1f9b3599::t_4477a58ff42c86 250,252-255,259,261
+.repos/effect/packages/effect/src/unstable/http/HttpIncomingMessage.ts
+  s_9cdf5f1f9b3599::t_26a76d66f39768 41-50,74-77,79-81,85-88
+.repos/effect/packages/effect/src/unstable/http/HttpMiddleware.ts
+  s_9cdf5f1f9b3599::t_acdbb62b2175cc 211-238,244-248,254-258
+.repos/effect/packages/effect/src/unstable/http/HttpRouter.ts
+  s_9cdf5f1f9b3599::t_1ffbf3c3e26a71 26,324,331,341,587,850-851,983
+.repos/effect/packages/effect/src/unstable/http/HttpServerRequest.ts
+  s_9cdf5f1f9b3599::t_1de0596023cfbd 247,349,353
+.repos/effect/packages/effect/src/unstable/http/HttpStatus.ts
+  s_9cdf5f1f9b3599::t_b06707e0963b95 2-8,12-75,78,80-86,88,91,93-94,97,100
+.repos/effect/packages/effect/src/unstable/http/Multipart.ts
+  s_9cdf5f1f9b3599::t_f74a36bcceb9cc 385-388,397
+.repos/effect/packages/effect/src/unstable/http/UrlParams.ts
+  s_9cdf5f1f9b3599::t_f47685387aaa0d 28,549,552
+.repos/effect/packages/effect/src/unstable/http/index.ts
+  s_9cdf5f1f9b3599::t_46753217303f2f 117-121
+.repos/effect/packages/effect/src/unstable/httpapi/HttpApiBuilder.ts
+  s_9cdf5f1f9b3599::t_89e9ce65aa7be5 18,103-110,767-770,893,1067
+.repos/effect/packages/effect/src/unstable/httpapi/HttpApiScalar.ts
+  s_9cdf5f1f9b3599::t_60290cb679b84d 12,148-164,170-173,175-178,190,192,197-198
+.repos/effect/packages/effect/src/unstable/httpapi/HttpApiSchema.ts
+  s_9cdf5f1f9b3599::t_e705a4ade99813 20,99,120
+.repos/effect/packages/effect/src/unstable/httpapi/HttpApiSwagger.ts
+  s_9cdf5f1f9b3599::t_023e025473931e 12,25-27,51-52
+.repos/effect/packages/effect/src/unstable/httpapi/OpenApi.ts
+  s_9cdf5f1f9b3599::t_70a7e897383ea3 25,215-219,221-233,252-256,269-277,283-284,286-296,299,301,672-679,1067,1072-1078
+.repos/effect/packages/effect/src/unstable/observability/OtlpTracer.ts
+  s_9cdf5f1f9b3599::t_3faaedcf0d151a 18,248,250
+.repos/effect/packages/effect/src/unstable/persistence/PersistedQueue.ts
+  s_9cdf5f1f9b3599::t_3ddaca29031027 30,783-789,1002-1010,1034,1093-1200
+.repos/effect/packages/effect/src/unstable/persistence/Redis.ts
+  s_9cdf5f1f9b3599::t_eb12ca93b09314 4-6,13,21,23,26-38,46-56,66,79-82,118-130,133
+.repos/effect/packages/effect/src/unstable/reactivity/Atom.ts
+  s_9cdf5f1f9b3599::t_22647d694896d1 551-555,896-899
+.repos/effect/packages/effect/src/unstable/reactivity/Reactivity.ts
+  s_9cdf5f1f9b3599::t_6dab202eb34a3c 94
+.repos/effect/packages/effect/src/unstable/rpc/RpcClient.ts
+  s_9cdf5f1f9b3599::t_a560c9084a5bc4 513,655-657,787-805,866-870,989-990,1048-1051,1174-1175,1397-1400
+.repos/effect/packages/effect/src/unstable/rpc/RpcGroup.ts
+  s_9cdf5f1f9b3599::t_e07221b5d01d0f 349
+.repos/effect/packages/effect/src/unstable/rpc/RpcMessage.ts
+  s_9cdf5f1f9b3599::t_61ed1b472f140f 57-59,201,332-342,349,357,363-368,373,375,411-464
+.repos/effect/packages/effect/src/unstable/rpc/RpcSerialization.ts
+  s_9cdf5f1f9b3599::t_d36191af7178ad 6-8,18-40,59,121,146,212,248,290,435-437,541,594-632,714-726
+.repos/effect/packages/effect/src/unstable/rpc/RpcServer.ts
+  s_9cdf5f1f9b3599::t_fee4c8e50ce31b 244,323-326,520,529,594,606,609,611-612,615-616,674,811,860-865,983-987,998,1000,1034-1038,1046-1050,1057,1089,1136-1138,1167,1173,1188,1207,1224,1227,1333-1335,1394,1409-1413,1453,1484,1511,1535-1537
+.repos/effect/packages/effect/src/unstable/schema/Model.ts
+  s_9cdf5f1f9b3599::t_3b94d87e5a31ad 17,758,801,844-848
+.repos/effect/packages/effect/src/unstable/sql/SqlClient.ts
+  s_9cdf5f1f9b3599::t_7f45b9c126bbde 15,261-290,293
+.repos/effect/packages/effect/src/unstable/sql/SqlResolver.ts
+  s_9cdf5f1f9b3599::t_a360ab55f4f405 15,399,401
+.repos/effect/packages/effect/src/unstable/workflow/DurableDeferred.ts
+  s_9cdf5f1f9b3599::t_be28e238868443 147-148,230-235
+.repos/effect/packages/effect/src/unstable/workflow/Workflow.ts
+  s_9cdf5f1f9b3599::t_bfd7eb450efd0b 792-794
+.repos/effect/packages/effect/src/unstable/workflow/WorkflowEngine.ts
+  s_9cdf5f1f9b3599::t_c57458d177819e 12,264-266,285,294-375,684,694-695,715,718,724,759,767-774,779,785,843-846
+.repos/effect/packages/effect/src/unstable/workflow/WorkflowProxy.ts
+  s_9cdf5f1f9b3599::t_1e64883cc59cd6 75-76,99,157-158,204-206
+.repos/effect/packages/effect/test/BigInt.test.ts
+  s_9cdf5f1f9b3599::t_469e73e9e2549c 69-111
+.repos/effect/packages/effect/test/Channel.test.ts
+  s_9cdf5f1f9b3599::t_e4c6ffa7d53673 171-193
+.repos/effect/packages/effect/test/Deferred.test.ts
+  s_9cdf5f1f9b3599::t_9df9bf50510ef9 6,120-175
+.repos/effect/packages/effect/test/Effect.test.ts
+  s_9cdf5f1f9b3599::t_ff961476c471be 616-636,2080,2092-2095,2120-2131,2181-2193,3175-3189
+.repos/effect/packages/effect/test/Encoding.test.ts
+  s_9cdf5f1f9b3599::t_18a469d6eadc0d 1-32
+.repos/effect/packages/effect/test/Fiber.test.ts
+  s_9cdf5f1f9b3599::t_b779e68e4a5038 10-26
+.repos/effect/packages/effect/test/Formatter.test.ts
+  s_9cdf5f1f9b3599::t_16806e2912b9c2 5,25-32,250-286,305-310,312-315,318-347
+.repos/effect/packages/effect/test/Graph.test.ts
+  s_9cdf5f1f9b3599::t_7bf94a3b5e3781 1,4-10,13-19,22-27,29-30,33-38,40-42,44-50,53-54,58-61,63-67,70-75,77-82,85-96,98-125,127-131,134-139,141-142,145-245,247,250-260,262-263,265,267-288,290-293,296-300,302-303,306-307,309-311,313,315,318-319,321,324,327,330,334-335,338,340-344,347-352,354-359,361-364,367-370,372-374,376-378,380-385,387-399,402-413,415-438,441-484,486-497,500-544,546-548,551-583,585-594,596,598-602,604-609,612-616,618,621-622,624-626,628,630-637,639-647,649,651-654,657-670,672-673,675-676,678-683,685,688-692,694-700,703-710,712-715,719-722,724-726,729-735,737,739-746,749-761,763-767,769-773,776-783,785,787-789,791-795,798-804,808-814,816,818-825,827-833,836-840,842-847,849-850,852-863,865-867,871-937,940-947,949-950,953-957,959-966,969-976,979-984,986-989,991-1017,1020-1024,1026-1031,1033-1055,1057-1109,1113-1170,1173-1178,1181-1192,1195-1202,1205-1225,1229-1250,1253-1272,1275-1293,1296-1330,1334,1336-1355,1358-1360,1363-1369,1372-1375,1378-1380,1382-1386,1389-1452,1456-1492,1494-1499,1501,1503-1528,1532,1534-1535,1538-1543,1546,1548-1588,1592-1596,1598-1601,1605-1609,1611,1613-1641,1643-1647,1651-1661,1664-1680,1682,1684-1688,1690-1717,1722-1751,1753-1754,1758-1767,1769-1775,1778-1780,1783-1801,1803,1805-1871,1875-1903,1907-1923,1926-1952,1955-1963,1965-1972,1974-1986,1988-2000,2003-2015,2017-2031,2033-2096,2098-2111,2113-2123,2127-2145,2148-2171,2174-2183,2185-2193,2195-2198,2200-2204,2206-2210,2212-2256,2259-2261,2263-2272,2274-2294,2298-2337,2340-2341,2343,2346-2354,2358-2389,2392-2404,2407-2409,2411-2416,2419-2423,2425-2426,2429-2441,2443-2450,2452-2457,2459-2463,2465,2467-2471,2474-2477,2480-2483,2485-2486,2488-2494,2496-2498
+.repos/effect/packages/effect/test/HttpClient.test.ts
+  s_9cdf5f1f9b3599::t_7ae16f3dd06d18 40,78-79,101,103
+.repos/effect/packages/effect/test/JsonSchema.test.ts
+  s_9cdf5f1f9b3599::t_8a308f9b968394 9-10,14,27-34,118-278,339-360,387-410,599,620,625,633-731,740-741,769,903-909,929-930,940-941,948-986,1061-1076,1196-1202,1204-1209,1211-1212,1232-1254,1257-1261,1265-1269,1290,1292,1300,1302,1315,1317,1329-1337,1339-1530,1532-1536,1539,1542-1547,1549-1578,1755-1756,1768-1787,1836,1849-1850,1884-1951,1980,2010,2034,2038-2041,2054-2126,2138-2158,2264,2270,2284,2360,2370,2445-2472,2598-2713,2884,2890,2896-2913,2917,2931,2943
+.repos/effect/packages/effect/test/LayerMap.test.ts
+  s_9cdf5f1f9b3599::t_c706907a0019ca 2,19-62
+.repos/effect/packages/effect/test/Logger.test.ts
+  s_9cdf5f1f9b3599::t_6856e5c25bf94d 93-117
+.repos/effect/packages/effect/test/Match.test.ts
+  s_9cdf5f1f9b3599::t_8d70c6b2163ec0 6-37
+.repos/effect/packages/effect/test/Optic.test.ts
+  s_9cdf5f1f9b3599::t_3a4b1122f3d6c6 81-109
+.repos/effect/packages/effect/test/Ordering.test.ts
+  s_9cdf5f1f9b3599::t_8dc61f140ac679 18-40
+.repos/effect/packages/effect/test/Pathfinding.test.ts
+  s_9cdf5f1f9b3599::t_e097988060e2a5 113-115,144-149
+.repos/effect/packages/effect/test/Pool.test.ts
+  s_9cdf5f1f9b3599::t_e184a2c3b92269 402-512
+.repos/effect/packages/effect/test/PubSub.test.ts
+  s_9cdf5f1f9b3599::t_eab14c1ea281c7 453-468
+.repos/effect/packages/effect/test/Pull.test.ts
+  s_9cdf5f1f9b3599::t_3a6c4dcabe90cd 1-40
+.repos/effect/packages/effect/test/Queue.test.ts
+  s_9cdf5f1f9b3599::t_d461400b56a3eb 322-343
+.repos/effect/packages/effect/test/RcMap.test.ts
+  s_9cdf5f1f9b3599::t_b96d73b65985eb 2,6-175
+.repos/effect/packages/effect/test/TestClock.test.ts
+  s_9cdf5f1f9b3599::t_665348760891a8 81-89
+.repos/effect/packages/effect/test/Tracer.test.ts
+  s_9cdf5f1f9b3599::t_8429134fcaafe9 1-2,16-41,43-58,62-65,73,162
+.repos/effect/packages/effect/test/Tuple.test.ts
+  s_9cdf5f1f9b3599::t_c04748e70bcd25 1,127-156
+.repos/effect/packages/effect/test/cluster/ClusterWorkflowEngine.test.ts
+  s_9cdf5f1f9b3599::t_7686cd367c1317 179-189,218-518,529-531,740-757,759,778,898-921,984-1313,1456-1457,1459-1473
+.repos/effect/packages/effect/test/cluster/Envelope.test.ts
+  s_9cdf5f1f9b3599::t_a3360c4837ff66 1-58
+.repos/effect/packages/effect/test/cluster/MessageStorage.test.ts
+  s_9cdf5f1f9b3599::t_e24038a38ccf06 19,52-86,95,113,123-178,191,209,220,230
+.repos/effect/packages/effect/test/cluster/RunnerServer.test.ts
+  s_9cdf5f1f9b3599::t_9f9a17005681ab 21,27-84,139-170
+.repos/effect/packages/effect/test/cluster/Runners.test.ts
+  s_9cdf5f1f9b3599::t_baf0ca6acb13ed 26,59-76,78,208-213,218-219,221-237,239,249-285,289-295,331-361,375-407
+.repos/effect/packages/effect/test/cluster/Sharding.test.ts
+  s_9cdf5f1f9b3599::t_becb41eb2ccdd5 26,28-29,31,43,927-993,1078-1269,1663,1669-1671,1695-1714,1716-1744
+.repos/effect/packages/effect/test/cluster/ShardingConfig.test.ts
+  s_9cdf5f1f9b3599::t_a6c49719155c37 6-32,64-78
+.repos/effect/packages/effect/test/internal/Uuid.test.ts
+  s_9cdf5f1f9b3599::t_c820240f1a8cd6 1-26
+.repos/effect/packages/effect/test/reactivity/Atom.test.ts
+  s_9cdf5f1f9b3599::t_82a7635b2347f5 2787,2802,2816,2833,2840,2850,2853-2855
+.repos/effect/packages/effect/test/rpc/RpcSerialization.test.ts
+  s_9cdf5f1f9b3599::t_29325bbce573a9 2-7,49-161,324,360-389,459-638
+.repos/effect/packages/effect/test/rpc/RpcServer.test.ts
+  s_9cdf5f1f9b3599::t_71d7132e8b2a47 2-4,7-47,49-107
+.repos/effect/packages/effect/test/schema/Graph.test.ts
+  s_9cdf5f1f9b3599::t_b8b0228a7d3644 1-300
+.repos/effect/packages/effect/test/schema/Schema.test.ts
+  s_9cdf5f1f9b3599::t_5291b8c3cc0b4d 37-44,58-81,115-126,221,226,231,4181-4206,9157-9175,9302-9315
+.repos/effect/packages/effect/test/schema/SchemaAST.test.ts
+  s_9cdf5f1f9b3599::t_1a91cc916ee491 319-339,479,493-500,545-569
+.repos/effect/packages/effect/test/schema/SchemaParser.test.ts
+  s_9cdf5f1f9b3599::t_61a0f02a7f343b 531-542
+.repos/effect/packages/effect/test/schema/jsonSchemaRoundTrip.test.ts
+  s_9cdf5f1f9b3599::t_951aaf040869a2 2-35,37,39-44,47-61,64-80,82-101,103-108,110-141,143-150,152-254,256-262
+.repos/effect/packages/effect/test/schema/representation/builtInRevivers.test.ts
+  s_9cdf5f1f9b3599::t_e4b423af758419 849-857
+.repos/effect/packages/effect/test/schema/representation/fromJsonSchemaDocument.test.ts
+  s_9cdf5f1f9b3599::t_4b3d8224733d3a 90-97,193-199,878-885,1954-1965,2051-2053,2058-2059,2063-2066,2072-2073,2077-2080,2087-2088,2531-2540,2572-2599,2603-2658,2976-3090,3255-3266,3373,3375-3378,3390,3392-3395,4160,4162-4165,5386-5403,5407-5507,5531,5580-5644
+.repos/effect/packages/effect/test/schema/representation/fromJsonSchemaMultiDocument.test.ts
+  s_9cdf5f1f9b3599::t_2c45189d261ba5 236
+.repos/effect/packages/effect/test/schema/representation/schemaToJsonSchemaDocument.test.ts
+  s_9cdf5f1f9b3599::t_d4cab5a341c9cf 2,19-71,81,88,100-130,190
+.repos/effect/packages/effect/test/schema/representation/toCodeDocument.test.ts
+  s_9cdf5f1f9b3599::t_a8eb92989e2f66 1311,1324,1827-1828,1839-1840
+.repos/effect/packages/effect/test/schema/representation/toJsonSchemaDocument.test.ts
+  s_9cdf5f1f9b3599::t_1275d5e39b1e50 519,532,596,728-984
+.repos/effect/packages/effect/test/schema/representation/toJsonSchemaMultiDocument.test.ts
+  s_9cdf5f1f9b3599::t_1926a7be494847 192-193
+.repos/effect/packages/effect/test/schema/representation/toRepresentation.test.ts
+  s_9cdf5f1f9b3599::t_d6398f196eace1 422-424,526-529,531,534,537-540,544-545,548-555,560-568,570-572
+.repos/effect/packages/effect/test/schema/representation/toRepresentations.test.ts
+  s_9cdf5f1f9b3599::t_8b81dd9cba5737 138,140-141,143-152,154-184,187-197
+.repos/effect/packages/effect/test/schema/toCodec.test.ts
+  s_9cdf5f1f9b3599::t_77b63e1c5ab7af 379-393,2765-2776
+.repos/effect/packages/effect/test/schema/toJsonSchemaDocument.test.ts
+  s_9cdf5f1f9b3599::t_b94585a5af0ccc 586,748,761,774,865,889,903-904,916-917,930-931,945-947,963,984-985,1027,1043,1054,1064,1074,1084,1094,1163,1178,1213,1228,1240,1247,1261-1263,1276,1289,1302,1377,1463,1475,1485,1494,1505-1506,1517-1518,1529-1530,1541-1542,1554,2741,2749-2750,2818,2831,2844-2845,2853-2875,2877-2896,3147,3160,3189,3309
+.repos/effect/packages/effect/test/schema/toStandardJSONSchemaV1.test.ts
+  s_9cdf5f1f9b3599::t_04db473567af1b 3
+.repos/effect/packages/effect/test/schema/toStandardSchemaV1.test.ts
+  s_9cdf5f1f9b3599::t_ef86f74aec79b7 3
+.repos/effect/packages/effect/test/unstable/ai/AiError.test.ts
+  s_9cdf5f1f9b3599::t_5e020e4a47f78a 67-96,583-594
+.repos/effect/packages/effect/test/unstable/ai/AnthropicStructuredOutput.test.ts
+  s_9cdf5f1f9b3599::t_b33bdf587c18e9 119,127,138,146
+.repos/effect/packages/effect/test/unstable/ai/AnthropicStructuredOutputRepresentation.test.ts
+  s_9cdf5f1f9b3599::t_0f50466912ba20 24,60,97
+.repos/effect/packages/effect/test/unstable/ai/LanguageModel.test.ts
+  s_9cdf5f1f9b3599::t_30c42c22bc018c 22-32,63-115,117-168
+.repos/effect/packages/effect/test/unstable/ai/LanguageModelRepresentation.test.ts
+  s_9cdf5f1f9b3599::t_594ce23b6a594a 21
+.repos/effect/packages/effect/test/unstable/ai/McpServer/McpConformance/CompletionTest.ts
+  s_9cdf5f1f9b3599::t_2e69eb01141862 50-51,53-58,60-62,85-93,95-97
+.repos/effect/packages/effect/test/unstable/ai/McpServer/McpConformance/ElicitationTest.ts
+  s_9cdf5f1f9b3599::t_dca3f6736f3d8e 42,55-59,78-95,110,114-136,154,170-191,207,218-235,247,266,292,303-329
+.repos/effect/packages/effect/test/unstable/ai/McpServer/McpConformance/McpTestPeer.ts
+  s_9cdf5f1f9b3599::t_66068eccdfb518 7,9,13,34,38,47,110,114-116,119-123,126-127
+.repos/effect/packages/effect/test/unstable/ai/McpServer/McpConformance/PromptsTest.ts
+  s_9cdf5f1f9b3599::t_788805803fe7af 321-335
+.repos/effect/packages/effect/test/unstable/ai/McpServer/McpConformance/RootsTest.ts
+  s_9cdf5f1f9b3599::t_a9f2c7ad03ee30 26,41,61,85,105,107-108
+.repos/effect/packages/effect/test/unstable/ai/McpServer/McpConformance/SamplingTest.ts
+  s_9cdf5f1f9b3599::t_3b57756a2e91de 87,91-227,235-237,243,280,312,318,323-342,344-346,348-352,354,371,373-374,377-464
+.repos/effect/packages/effect/test/unstable/ai/McpServer/McpConformance/ToolsTest.ts
+  s_9cdf5f1f9b3599::t_9cd62ee2e159b9 142-157,159-167,196,211-229,232,246-255,304-328,349-356
+.repos/effect/packages/effect/test/unstable/ai/McpServer/McpConformance/TransportsTest.ts
+  s_9cdf5f1f9b3599::t_99d0a8082d4774 31-35,118-140,142,156,158-168,201-219,382-426
+.repos/effect/packages/effect/test/unstable/ai/McpServer/McpProtocol.test.ts
+  s_9cdf5f1f9b3599::t_6d6eecf3acefb6 5-7,33-34,39-67,124,155-156,172-200
+.repos/effect/packages/effect/test/unstable/ai/McpServer/McpServer.test.ts
+  s_9cdf5f1f9b3599::t_1ec08fc63adff4 83-84,101-109,168-229,285-300,343-344,445-449,509-556,573-621,679-680,696-698
+.repos/effect/packages/effect/test/unstable/ai/McpServer/ProtocolAdapters.test.ts
+  s_9cdf5f1f9b3599::t_06b28087d7543b 1-1290
+.repos/effect/packages/effect/test/unstable/ai/McpServer/TestUtils/McpServerLayer.ts
+  s_9cdf5f1f9b3599::t_3f053a11822f31 5,20-21
+.repos/effect/packages/effect/test/unstable/ai/McpServer/v2024_11_05.test.ts
+  s_9cdf5f1f9b3599::t_18fd52c73e6ce3 1,4-15,17-18,20-30,32-38,40-43
+.repos/effect/packages/effect/test/unstable/ai/McpServer/v2025_03_26.test.ts
+  s_9cdf5f1f9b3599::t_33738519f90f49 1-134
+.repos/effect/packages/effect/test/unstable/ai/McpServer/v2025_06_18.test.ts
+  s_9cdf5f1f9b3599::t_45e42e7c3aae3f 7
+.repos/effect/packages/effect/test/unstable/ai/McpServer/v2025_11_25.test.ts
+  s_9cdf5f1f9b3599::t_bb2359cb273127 1-53
+.repos/effect/packages/effect/test/unstable/ai/ToolRepresentation.test.ts
+  s_9cdf5f1f9b3599::t_4d605493ebf28f 28
+.repos/effect/packages/effect/test/unstable/cli/Command.test.ts
+  s_9cdf5f1f9b3599::t_c199467df7774e 2,168-199,1556-1571,1599-1602
+.repos/effect/packages/effect/test/unstable/cli/Help.test.ts
+  s_9cdf5f1f9b3599::t_3a46d82e926455 133-155
+.repos/effect/packages/effect/test/unstable/cli/Param.test.ts
+  s_9cdf5f1f9b3599::t_ca6a2c91bb313e 30-67,125,312,314,317-318,324-337,376-423
+.repos/effect/packages/effect/test/unstable/cli/Prompt.test.ts
+  s_9cdf5f1f9b3599::t_1d700468b628f8 55-58,161-252,353-443,445-473,503-532,682-773,857-947,951-1001
+.repos/effect/packages/effect/test/unstable/cli/completions/completions.test.ts
+  s_9cdf5f1f9b3599::t_e1b1fa54972ba2 1,64-89,98-108,127-135,183-184,192,253-317,354-357,365,369-374,380-382,458-488,618-633,675,682-685,690,697-700
+.repos/effect/packages/effect/test/unstable/cli/fixtures/ComprehensiveCli.ts
+  s_9cdf5f1f9b3599::t_2c4d7dc2abe07c 15-16,21-22,50-51,123-124,143-144,148-149,176-177,196-197,201-202,206-207,227-228,266-267,279-280,292-293,352-353,419-420,429-430
+.repos/effect/packages/effect/test/unstable/encoding/SchemaBinary.test.ts
+  s_9cdf5f1f9b3599::t_85a77e15fe64ab 1-2953
+.repos/effect/packages/effect/test/unstable/eventlog/EventJournal.test.ts
+  s_9cdf5f1f9b3599::t_7560efbfb6b3f0 2,31-48
+.repos/effect/packages/effect/test/unstable/eventlog/EventLog.test.ts
+  s_9cdf5f1f9b3599::t_926af7b5f0b4f4 2-3,8,31-34,36,63-134
+.repos/effect/packages/effect/test/unstable/http/HttpClient.test.ts
+  s_9cdf5f1f9b3599::t_032e52c0825714 3,41-81
+.repos/effect/packages/effect/test/unstable/http/HttpServerRequest.test.ts
+  s_9cdf5f1f9b3599::t_665f3ddf5bdefe 181-184,189
+.repos/effect/packages/effect/test/unstable/http/HttpStatus.test.ts
+  s_9cdf5f1f9b3599::t_8625dca95b33a1 1-16
+.repos/effect/packages/effect/test/unstable/http/Multipart.test.ts
+  s_9cdf5f1f9b3599::t_65558fcd407696 14-22
+.repos/effect/packages/effect/test/unstable/http/UrlParams.test.ts
+  s_9cdf5f1f9b3599::t_b9d106810bd103 2,30-40
+.repos/effect/packages/effect/test/unstable/httpapi/HttpApiBuilder.test.ts
+  s_9cdf5f1f9b3599::t_e12dd102eca494 36-61,71,85,114,120,149,155,188,199,221,232,254,265,289,300,332,349,375,386,408,419,438,451,475,486,511,517,539,545,563,574,601,607,636,642,665,671,702,708,747,754,769,780,805,815,838,849,879,890,924,935,959,970,996,1006,1043,1055,1086,1092,1112,1123,1156,1177,1194,1199,1220,1228,1237-1238,1270,1276,1299,1312,1353,1358,1366-1367
+.repos/effect/packages/effect/test/unstable/httpapi/HttpApiDocumentation.test.ts
+  s_9cdf5f1f9b3599::t_74a2326565e8d0 1-88,91-182,219-286,300-303,306,310-316
+.repos/effect/packages/effect/test/unstable/httpapi/HttpApiSchema.test.ts
+  s_9cdf5f1f9b3599::t_24abd06fd099cd 277-283
+.repos/effect/packages/effect/test/unstable/httpapi/OpenApi.test.ts
+  s_9cdf5f1f9b3599::t_32c97e3165dc5a 73-127,285,312,336
+.repos/effect/packages/effect/test/unstable/httpapi/OpenApiRepresentation.test.ts
+  s_9cdf5f1f9b3599::t_924f9b66af4f66 2,16-33,126,131,143,145-146,154-179
+.repos/effect/packages/effect/test/unstable/persistence/Redis.test.ts
+  s_9cdf5f1f9b3599::t_ccfebf0d84a60a 2,27,47,92-93,132-133,152-219
+.repos/effect/packages/effect/test/unstable/sql/SqlClient.test.ts
+  s_9cdf5f1f9b3599::t_40652f2f2b3d2b 1-178
+.repos/effect/packages/effect/test/unstable/workflow/WorkflowEngine.test.ts
+  s_9cdf5f1f9b3599::t_16217713f40cc8 2-3,23-48,88-146,180-284
+.repos/effect/packages/effect/typetest/Array.tst.ts
+  s_9cdf5f1f9b3599::t_7b2067e1d89c01 162-171,173-177,180-183
+.repos/effect/packages/effect/typetest/Effect.tst.ts
+  s_9cdf5f1f9b3599::t_a2a8a9d5ff38b9 10,75,178,192,241-246,255-279,297-303,326,330,380,873-901
+.repos/effect/packages/effect/typetest/Graph.tst.ts
+  s_9cdf5f1f9b3599::t_b9cca44c2fcd6c 48-61,249-255,262-352
+.repos/effect/packages/effect/typetest/Iterable.tst.ts
+  s_9cdf5f1f9b3599::t_60c1455503d27c 1-46
+.repos/effect/packages/effect/typetest/Match.tst.ts
+  s_9cdf5f1f9b3599::t_4e4ef38c960c8a 1-197
+.repos/effect/packages/effect/typetest/Optic.tst.ts
+  s_9cdf5f1f9b3599::t_8a57a541d7a99c 1,5-64
+.repos/effect/packages/effect/typetest/Record.tst.ts
+  s_9cdf5f1f9b3599::t_3ea7356f61d1ff 1-89
+.repos/effect/packages/effect/typetest/Schedule.tst.ts
+  s_9cdf5f1f9b3599::t_4eedd369446648 76-85
+.repos/effect/packages/effect/typetest/schema/Graph.tst.ts
+  s_9cdf5f1f9b3599::t_f788a429445978 1-63
+.repos/effect/packages/effect/typetest/schema/Schema.tst.ts
+  s_9cdf5f1f9b3599::t_a33cbcdaf4da4c 381-385
+.repos/effect/packages/effect/typetest/schema/SchemaRepresentation.tst.ts
+  s_9cdf5f1f9b3599::t_33fd6ea87be75b 7-10,14-15
+.repos/effect/packages/effect/typetest/schema/Union.tst.ts
+  s_9cdf5f1f9b3599::t_6919611fd00316 205-259
+.repos/effect/packages/effect/typetest/unstable/ai/LanguageModel.tst.ts
+  s_9cdf5f1f9b3599::t_8e4d2718338181 2,34-38,41-82,206-219,252-285
+.repos/effect/packages/effect/typetest/unstable/ai/McpServer.tst.ts
+  s_9cdf5f1f9b3599::t_649bd734fa4dfa 15,73-100
+.repos/effect/packages/effect/typetest/unstable/cli/Prompt.tst.ts
+  s_9cdf5f1f9b3599::t_510ef3f6394075 9-22
+.repos/effect/packages/effect/typetest/unstable/cluster/K8sHttpClient.tst.ts
+  s_9cdf5f1f9b3599::t_330c80ed594f49 1-55
+.repos/effect/packages/effect/typetest/unstable/http/HttpRouter.tst.ts
+  s_9cdf5f1f9b3599::t_1bf6269338fb51 2,6-37
+.repos/effect/packages/effect/typetest/unstable/httpapi/HttpApiBuilder.tst.ts
+  s_9cdf5f1f9b3599::t_5015a77917e8b4 328,331
+.repos/effect/packages/opentelemetry/CHANGELOG.md
+  s_9cdf5f1f9b3599::t_b1ef271fc63d17 3-37
+.repos/effect/packages/opentelemetry/README.md
+  s_9cdf5f1f9b3599::t_8b2d87c4d4549e 1-11,15-16
+.repos/effect/packages/opentelemetry/package.json
+  s_9cdf5f1f9b3599::t_23732a225e7239 4,114-126
+.repos/effect/packages/opentelemetry/src/NodeSdk.ts
+  s_9cdf5f1f9b3599::t_bb066cf3b314bd 121,123,133,140,150-151
+.repos/effect/packages/opentelemetry/src/WebSdk.ts
+  s_9cdf5f1f9b3599::t_d7447054683c3c 115,117,124,131,137-138
+.repos/effect/packages/opentelemetry/test/OtelLogger.test.ts
+  s_9cdf5f1f9b3599::t_177f55f9f34121 34,47,97,123,131,147,154,164
+.repos/effect/packages/opentelemetry/test/OtelTracer.test.ts
+  s_9cdf5f1f9b3599::t_e82057867ce4dc 13,32,45,59,68,78,88,130,272
+.repos/effect/packages/platform/browser/CHANGELOG.md
+  s_9cdf5f1f9b3599::t_3f6a23336f7666 3-38
+.repos/effect/packages/platform/browser/README.md
+  s_9cdf5f1f9b3599::t_53c560c25e6662 1-14
+.repos/effect/packages/platform/browser/package.json
+  s_9cdf5f1f9b3599::t_857bf8a0271d41 4,11
+.repos/effect/packages/platform/browser/src/BrowserRuntime.ts
+  s_9cdf5f1f9b3599::t_48b2c742614ae3 5-6,14,25-26,30,51-54
+.repos/effect/packages/platform/browser/src/IndexedDbQueryBuilder.ts
+  s_9cdf5f1f9b3599::t_07fcd781002d46 230-231
+.repos/effect/packages/platform/browser/test/IndexedDbQueryBuilder.test.ts
+  s_9cdf5f1f9b3599::t_06aa32a0694cd3 234-254
+.repos/effect/packages/platform/browser/test/fixtures/rpc-e2e.ts
+  s_9cdf5f1f9b3599::t_c3d8f05c4e3613 12,22
+.repos/effect/packages/platform/browser/test/fixtures/rpc-schemas.ts
+  s_9cdf5f1f9b3599::t_d7e27991fad57b 72,85,95,143,147-149
+.repos/effect/packages/platform/browser/test/fixtures/rpc-worker.ts
+  s_9cdf5f1f9b3599::t_20c3cbd0b1be80 5,7,12
+.repos/effect/packages/platform/browser/tsconfig.json
+  s_9cdf5f1f9b3599::t_10745b5108636d 3,6
+.repos/effect/packages/platform/bun/CHANGELOG.md
+  s_9cdf5f1f9b3599::t_ef0807f9cf181d 3-46
+.repos/effect/packages/platform/bun/README.md
+  s_9cdf5f1f9b3599::t_61d0d19caeeabc 1-14
+.repos/effect/packages/platform/bun/package.json
+  s_9cdf5f1f9b3599::t_add37db9c75c88 4,11,72
+.repos/effect/packages/platform/bun/src/BunHttpServer.ts
+  s_9cdf5f1f9b3599::t_4a765efee69d50 80-83,87-100,117,128,179,201-202,374,383,394,417,589,593
+.repos/effect/packages/platform/bun/src/BunRedis.ts
+  s_9cdf5f1f9b3599::t_ff4c0879abb0b5 15,53-86
+.repos/effect/packages/platform/bun/test/BunHttpServer.test.ts
+  s_9cdf5f1f9b3599::t_15f6aac66b56b3 7,9,14-101,140-191
+.repos/effect/packages/platform/bun/tsconfig.json
+  s_9cdf5f1f9b3599::t_8b2d71a2320ce9 3,6-7
+.repos/effect/packages/platform/deno/CHANGELOG.md
+  s_9cdf5f1f9b3599::t_5e0c5d68a8dffe 3-43
+.repos/effect/packages/platform/deno/README.md
+  s_9cdf5f1f9b3599::t_fb658362e47597 1-14
+.repos/effect/packages/platform/deno/package.json
+  s_9cdf5f1f9b3599::t_a80c9ba56460a8 4,11,72,78-79
+.repos/effect/packages/platform/deno/src/DenoClusterSocket.ts
+  s_9cdf5f1f9b3599::t_c4c7d44fafacf2 51-64
+.repos/effect/packages/platform/deno/src/DenoRedis.ts
+  s_9cdf5f1f9b3599::t_4bb4a26690cfef 47-56,59,76-108
+.repos/effect/packages/platform/deno/test/DenoChildProcessSpawner.test.ts
+  s_9cdf5f1f9b3599::t_4b6fbbb4e3e5a2 12
+.repos/effect/packages/platform/deno/test/DenoFileSystem.test.ts
+  s_9cdf5f1f9b3599::t_f4013830d9386c 3
+.repos/effect/packages/platform/deno/test/DenoKeyValueStore.test.ts
+  s_9cdf5f1f9b3599::t_c97be46db2232b 3
+.repos/effect/packages/platform/deno/test/DenoRedis.integration.test.ts
+  s_9cdf5f1f9b3599::t_b790db9aae63f0 4-7,50-63
+.repos/effect/packages/platform/deno/test/cluster/SocketRunner.test.ts
+  s_9cdf5f1f9b3599::t_b459a5c5102aa6 3,31-35,96-102,105,108-119,134-147
+.repos/effect/packages/platform/deno/test/fixtures/rpc-e2e.ts
+  s_9cdf5f1f9b3599::t_8cc0a1de18e3b9 9,19
+.repos/effect/packages/platform/deno/test/fixtures/rpc-schemas.ts
+  s_9cdf5f1f9b3599::t_25843d758b963d 72,85,95,143,147-149
+.repos/effect/packages/platform/deno/test/fixtures/rpc-worker.ts
+  s_9cdf5f1f9b3599::t_36f9604b59b453 5,7,12
+.repos/effect/packages/platform/deno/tsconfig.json
+  s_9cdf5f1f9b3599::t_326403fb94e243 3,6-7
+.repos/effect/packages/platform/node-shared/CHANGELOG.md
+  s_9cdf5f1f9b3599::t_48ec9810dac282 3-39
+.repos/effect/packages/platform/node-shared/README.md
+  s_9cdf5f1f9b3599::t_b6940a6861a5e0 1-14
+.repos/effect/packages/platform/node-shared/package.json
+  s_9cdf5f1f9b3599::t_4edd198ef824fc 4,11,70,72,76
+.repos/effect/packages/platform/node-shared/src/NodeClusterSocket.ts
+  s_9cdf5f1f9b3599::t_fffd275d718c7f 37-51
+.repos/effect/packages/platform/node-shared/src/NodeSocket.ts
+  s_9cdf5f1f9b3599::t_f92c3ee319d21a 138
+.repos/effect/packages/platform/node-shared/src/NodeSocketServer.ts
+  s_9cdf5f1f9b3599::t_ccd80a5026c7af 245-247,260
+.repos/effect/packages/platform/node-shared/src/NodeStream.ts
+  s_9cdf5f1f9b3599::t_42d9419d18bc4c 225,247-250,277,301-304
+.repos/effect/packages/platform/node-shared/test/NodeFileSystem.test.ts
+  s_9cdf5f1f9b3599::t_7d1124fd300f13 9
+.repos/effect/packages/platform/node-shared/test/NodeStream.test.ts
+  s_9cdf5f1f9b3599::t_f3a1d7891d9675 183-220
+.repos/effect/packages/platform/node-shared/tsconfig.json
+  s_9cdf5f1f9b3599::t_cc7d7f43cec7be 3,6
+.repos/effect/packages/platform/node/CHANGELOG.md
+  s_9cdf5f1f9b3599::t_c90ccb48d33dbf 3-49
+.repos/effect/packages/platform/node/README.md
+  s_9cdf5f1f9b3599::t_3be3f8e8e50239 1-14
+.repos/effect/packages/platform/node/package.json
+  s_9cdf5f1f9b3599::t_a2d790a2360d49 4,11,71,75,78-83
+.repos/effect/packages/platform/node/src/NodeHttpIncomingMessage.ts
+  s_9cdf5f1f9b3599::t_f7fc3527e634b2 71
+.repos/effect/packages/platform/node/src/NodeRedis.ts
+  s_9cdf5f1f9b3599::t_1804ad8282d1d2 2,4,6-9,15,20-23,27,34-35,39,41-78,80,89,91-142,157-169,175-176,179-191,197-200
+.repos/effect/packages/platform/node/src/NodeWorker.ts
+  s_9cdf5f1f9b3599::t_d4256dfbb87b95 61
+.repos/effect/packages/platform/node/test/HttpApi.test.ts
+  s_9cdf5f1f9b3599::t_38c872e73d8f27 79,84-85,98,120,125,130-131,142,162,170,178-179,190,207,212,214-215,238,260,269-270,272-273,306,330,340,342-343,359,374,379,381-382,389,408,413,415-416,435,459,464,468-469,484,512,517,524-525,587,592,597,604,612,614-617,631,646,651-652,657,689,694-695,700,732,737-738,767,784,790-791,813,829,835-836,847,863,869-870,881,902,912-913,928,937,942-943,947,969,975-976,989,1025,1038-1039,1060,1108,1120,1132,1147,1153-1154,1162,1181,1191,1200,1213,1223,1233,1243,1269,1282,1301,1315,1328,1341,1347-1348,1362,1388,1401,1414,1448,1463,1476,1694,1699,1714,1771-1772,1776,1813,1819-1822,1825
+.repos/effect/packages/platform/node/test/NodeHttpClient.test.ts
+  s_9cdf5f1f9b3599::t_639f610b78ed3b 48,93,133-135,138
+.repos/effect/packages/platform/node/test/NodeHttpServer.test.ts
+  s_9cdf5f1f9b3599::t_5f8da4049135d4 5,65-85,336-342,575-611
+.repos/effect/packages/platform/node/test/NodeRedis.integration.test.ts
+  s_9cdf5f1f9b3599::t_2dc7eebd92465e 4,7-8,17-20,51-63,67-85,104,111,120-142
+.repos/effect/packages/platform/node/test/NodeSocket.test.ts
+  s_9cdf5f1f9b3599::t_bf98782e2c39f1 82-94
+.repos/effect/packages/platform/node/test/RpcServer.test.ts
+  s_9cdf5f1f9b3599::t_599ddb118f9652 9,16,58,102
+.repos/effect/packages/platform/node/test/__snapshots__/HttpApi.test.ts.snap
+  s_9cdf5f1f9b3599::t_94f2a4393fbb67 67-74,369,433,448-455,515-522,649
+.repos/effect/packages/platform/node/test/cluster-integration/Entity.test.ts
+  s_9cdf5f1f9b3599::t_1b8650b308fce7 2-3,118-126,156-456
+.repos/effect/packages/platform/node/test/cluster-integration/Locks.test.ts
+  s_9cdf5f1f9b3599::t_629450834c5930 1-155
+.repos/effect/packages/platform/node/test/cluster-integration/Persistence.test.ts
+  s_9cdf5f1f9b3599::t_a776e9e940e6a6 3,64-74,93-94,103-104,106-107,131-145,151-162,185-186,196-204,217-221,370-477,529-611,676-726
+.repos/effect/packages/platform/node/test/cluster-integration/README.md
+  s_9cdf5f1f9b3599::t_6e65bc20f1a482 20,24-26
+.repos/effect/packages/platform/node/test/cluster-integration/Residency.test.ts
+  s_9cdf5f1f9b3599::t_51cf5172635c83 1-76
+.repos/effect/packages/platform/node/test/cluster-integration/Transport.test.ts
+  s_9cdf5f1f9b3599::t_e07edd47274347 1-84
+.repos/effect/packages/platform/node/test/cluster-integration/Workflow.test.ts
+  s_9cdf5f1f9b3599::t_cd38e77786186f 74-192,289-300,308-311,320-323,487-646
+.repos/effect/packages/platform/node/test/cluster-integration/harness.ts
+  s_9cdf5f1f9b3599::t_37207679feb350 1,23-24,26,28,33-34,62,66-88,93,113,128-216,272-365,371-372,376,378,388-391,393,426,430-431,437,443,472-475,480,482-483,494,539-554,683,686,689
+.repos/effect/packages/platform/node/test/cluster/MessageStorageTest.ts
+  s_9cdf5f1f9b3599::t_1d1d1f3e8d0259 19,34,52,62,75,93,104-105,113,115
+.repos/effect/packages/platform/node/test/cluster/SocketRunner.test.ts
+  s_9cdf5f1f9b3599::t_39172d4a4ea510 3,31-35,105-107,110,113-124,148-161
+.repos/effect/packages/platform/node/test/cluster/SqlMessageStorage.integration.test.ts
+  s_9cdf5f1f9b3599::t_f150f60da4ef02 8-10,17,42,59,62-75,303-424,519,521
+.repos/effect/packages/platform/node/test/cluster/SqlRunnerStorage.integration.test.ts
+  s_9cdf5f1f9b3599::t_bbb44ead69d59f 4,19,24,43,48,54-63,73,75,77,79,81-82,86-92,95,97-98,104,124-125,128,131,136-142,147,169,175-178,183,186-192,197,220,222-223,226,228,233,239,242-243,283,286,354,365,375-390,400,422-424,426-438
+.repos/effect/packages/platform/node/test/fixtures/rpc-e2e.ts
+  s_9cdf5f1f9b3599::t_6e7a852f29b37a 12,22
+.repos/effect/packages/platform/node/test/fixtures/rpc-schemas.ts
+  s_9cdf5f1f9b3599::t_1aabdca1c66de6 79,92,102,161,165-167
+.repos/effect/packages/platform/node/tsconfig.json
+  s_9cdf5f1f9b3599::t_ed4ab5a2e7b4d1 3,6-7
+.repos/effect/packages/sql/clickhouse/CHANGELOG.md
+  s_9cdf5f1f9b3599::t_a3f5e37670f9e4 3-42
+.repos/effect/packages/sql/clickhouse/README.md
+  s_9cdf5f1f9b3599::t_c42a650c793dff 1,3-9,13-14
+.repos/effect/packages/sql/clickhouse/package.json
+  s_9cdf5f1f9b3599::t_93e1cbe1ab81dd 3
+.repos/effect/packages/sql/clickhouse/tsconfig.json
+  s_9cdf5f1f9b3599::t_7fcb395750911b 7
+.repos/effect/packages/sql/d1/CHANGELOG.md
+  s_9cdf5f1f9b3599::t_37bde0015bb7f6 3-38
+.repos/effect/packages/sql/d1/README.md
+  s_9cdf5f1f9b3599::t_dc206288c57b8c 1,3-9,13-14
+.repos/effect/packages/sql/d1/package.json
+  s_9cdf5f1f9b3599::t_e3acc409ff345e 3,69,75
+.repos/effect/packages/sql/libsql/CHANGELOG.md
+  s_9cdf5f1f9b3599::t_93ed2dd4c175c1 3-37
+.repos/effect/packages/sql/libsql/README.md
+  s_9cdf5f1f9b3599::t_1d85696a4d4aa1 1,3-9,13-14
+.repos/effect/packages/sql/libsql/package.json
+  s_9cdf5f1f9b3599::t_c2bb71c41dc88e 3,67
+.repos/effect/packages/sql/libsql/tsconfig.json
+  s_9cdf5f1f9b3599::t_476de98b4c1ef4 7
+.repos/effect/packages/sql/mssql/CHANGELOG.md
+  s_9cdf5f1f9b3599::t_384e3a98206573 3-37
+.repos/effect/packages/sql/mssql/README.md
+  s_9cdf5f1f9b3599::t_2c0583096f8065 1,3-9,13-14
+.repos/effect/packages/sql/mssql/package.json
+  s_9cdf5f1f9b3599::t_ace49b91118cfc 3,64,71
+.repos/effect/packages/sql/mysql2/CHANGELOG.md
+  s_9cdf5f1f9b3599::t_de0648d2adac93 3-38
+.repos/effect/packages/sql/mysql2/README.md
+  s_9cdf5f1f9b3599::t_1accfecafc1d8e 1,3-9,13-14
+.repos/effect/packages/sql/mysql2/package.json
+  s_9cdf5f1f9b3599::t_1ab18e1d76db03 3,64,71
+.repos/effect/packages/sql/mysql2/tsconfig.json
+  s_9cdf5f1f9b3599::t_61dc920fee2d9a 7
+.repos/effect/packages/sql/pg/CHANGELOG.md
+  s_9cdf5f1f9b3599::t_0282fabc17f8e6 3-42
+.repos/effect/packages/sql/pg/README.md
+  s_9cdf5f1f9b3599::t_d18eef1d6f44cf 1,3-9,13-14
+.repos/effect/packages/sql/pg/benchmark/PgCodec.ts
+  s_9cdf5f1f9b3599::t_3a2c5171b72f1d 1-471
+.repos/effect/packages/sql/pg/benchmark/README.md
+  s_9cdf5f1f9b3599::t_827c01cdd6c23b 1-53
+.repos/effect/packages/sql/pg/package.json
+  s_9cdf5f1f9b3599::t_6cbe0a414c740b 3,58,65-66,68-71,77,79
+.repos/effect/packages/sql/pg/src/PgAuth.ts
+  s_9cdf5f1f9b3599::t_1e9f9d6b77100e 1-287
+.repos/effect/packages/sql/pg/src/PgProtocol.ts
+  s_9cdf5f1f9b3599::t_28852d636649b2 1-1820
+.repos/effect/packages/sql/pg/src/PgTypes.ts
+  s_9cdf5f1f9b3599::t_54c707447a00e0 1-1930
+.repos/effect/packages/sql/pg/src/index.ts
+  s_9cdf5f1f9b3599::t_1f363565b4e4b6 7-11,21-30
+.repos/effect/packages/sql/pg/test/PgAuth.test.ts
+  s_9cdf5f1f9b3599::t_06df738d259134 1-171
+.repos/effect/packages/sql/pg/test/PgProtocol.test.ts
+  s_9cdf5f1f9b3599::t_841ae3d09f9970 1-765
+.repos/effect/packages/sql/pg/test/PgTypes.test.ts
+  s_9cdf5f1f9b3599::t_080401ffa5fb16 1-989
+.repos/effect/packages/sql/pg/test/fixtures/goldens.ts
+  s_9cdf5f1f9b3599::t_6dc897e0ccaed0 1-140
+.repos/effect/packages/sql/pg/test/fixtures/regenerate.ts
+  s_9cdf5f1f9b3599::t_1a90fab5101fbd 1-354
+.repos/effect/packages/sql/pg/tsconfig.json
+  s_9cdf5f1f9b3599::t_5afdd9a6ffc682 7
+.repos/effect/packages/sql/pglite/CHANGELOG.md
+  s_9cdf5f1f9b3599::t_7b45e0caaf7306 3-38
+.repos/effect/packages/sql/pglite/README.md
+  s_9cdf5f1f9b3599::t_aee5cece1bc2eb 1,3-9,13-14
+.repos/effect/packages/sql/pglite/package.json
+  s_9cdf5f1f9b3599::t_cf6e5ea4b09f7c 3,74
+.repos/effect/packages/sql/pglite/test/PersistedQueue.test.ts
+  s_9cdf5f1f9b3599::t_b58750df05915c 1-53
+.repos/effect/packages/sql/sqlite-bun/CHANGELOG.md
+  s_9cdf5f1f9b3599::t_822509a5832e7b 3-37
+.repos/effect/packages/sql/sqlite-bun/README.md
+  s_9cdf5f1f9b3599::t_bc2dc758aa64ec 1,3-9,13-14
+.repos/effect/packages/sql/sqlite-bun/package.json
+  s_9cdf5f1f9b3599::t_0dde4d3f3a192b 3,65
+.repos/effect/packages/sql/sqlite-do/CHANGELOG.md
+  s_9cdf5f1f9b3599::t_f0a86c280faf26 3-37
+.repos/effect/packages/sql/sqlite-do/README.md
+  s_9cdf5f1f9b3599::t_6f77dbc2869b28 1,3-9,13-14
+.repos/effect/packages/sql/sqlite-do/package.json
+  s_9cdf5f1f9b3599::t_d05e875622c942 3,64
+.repos/effect/packages/sql/sqlite-node/CHANGELOG.md
+  s_9cdf5f1f9b3599::t_0cb0538c008e9b 3-37
+.repos/effect/packages/sql/sqlite-node/README.md
+  s_9cdf5f1f9b3599::t_54f5917700b57d 1,3-13,17-18
+.repos/effect/packages/sql/sqlite-node/package.json
+  s_9cdf5f1f9b3599::t_233d62e81f885c 3,65
+.repos/effect/packages/sql/sqlite-node/test/Client.test.ts
+  s_9cdf5f1f9b3599::t_937ef3dc018d7e 4,119-144
+.repos/effect/packages/sql/sqlite-node/test/Persistence.test.ts
+  s_9cdf5f1f9b3599::t_8790746e411e3e 5,8,122-126
+.repos/effect/packages/sql/sqlite-node/test/SqlEventJournal.test.ts
+  s_9cdf5f1f9b3599::t_50a3186c5f165e 3,84-92,99-108
+.repos/effect/packages/sql/sqlite-react-native/CHANGELOG.md
+  s_9cdf5f1f9b3599::t_142ffc0c524dd8 3-37
+.repos/effect/packages/sql/sqlite-react-native/README.md
+  s_9cdf5f1f9b3599::t_83922c3c8c0ea9 1,3-9,13-14
+.repos/effect/packages/sql/sqlite-react-native/package.json
+  s_9cdf5f1f9b3599::t_654d537d2e9fd4 3,64
+.repos/effect/packages/sql/sqlite-react-native/src/SqliteClient.ts
+  s_9cdf5f1f9b3599::t_3f78fc3b6bb3b4 32-43,137,153
+.repos/effect/packages/sql/sqlite-wasm/CHANGELOG.md
+  s_9cdf5f1f9b3599::t_06eb23d43e0e25 3-37
+.repos/effect/packages/sql/sqlite-wasm/README.md
+  s_9cdf5f1f9b3599::t_9013827677eca2 1,3-9,13-14
+.repos/effect/packages/sql/sqlite-wasm/package.json
+  s_9cdf5f1f9b3599::t_91473e88f8540d 3
+.repos/effect/packages/tools/ai-codegen/package.json
+  s_9cdf5f1f9b3599::t_a3071b767e3946 56
+.repos/effect/packages/tools/ai-codegen/src/main.ts
+  s_9cdf5f1f9b3599::t_f610d140bfe352 31-32,36-37
+.repos/effect/packages/tools/ai-codegen/tsconfig.json
+  s_9cdf5f1f9b3599::t_05b00423e35e62 7
+.repos/effect/packages/tools/ai-docgen/package.json
+  s_9cdf5f1f9b3599::t_8ff48a63251cb7 55
+.repos/effect/packages/tools/ai-docgen/src/main.ts
+  s_9cdf5f1f9b3599::t_2134c5f1c137ab 28-29
+.repos/effect/packages/tools/ai-docgen/tsconfig.json
+  s_9cdf5f1f9b3599::t_0ef38dfaf0d21d 7
+.repos/effect/packages/tools/api-diff/package.json
+  s_9cdf5f1f9b3599::t_2b4d37b0282d0e 25,28
+.repos/effect/packages/tools/api-diff/src/Cli.ts
+  s_9cdf5f1f9b3599::t_d30d01b51dd370 30-31
+.repos/effect/packages/tools/bundle/fixtures/schema-binary.ts
+  s_9cdf5f1f9b3599::t_635a8ed60cca2f 1-10
+.repos/effect/packages/tools/bundle/package.json
+  s_9cdf5f1f9b3599::t_3d2b9171633d69 44,46,49
+.repos/effect/packages/tools/bundle/src/Plugins.ts
+  s_9cdf5f1f9b3599::t_352d13b6ba35ba 166,172
+.repos/effect/packages/tools/bundle/tsconfig.fixtures.json
+  s_9cdf5f1f9b3599::t_0e1eecf746e0b8 11
+.repos/effect/packages/tools/bundle/tsconfig.src.json
+  s_9cdf5f1f9b3599::t_071eaecbb57627 11
+.repos/effect/packages/tools/docgen/CHANGELOG.md
+  s_9cdf5f1f9b3599::t_ef9036e479bc72 3-42
+.repos/effect/packages/tools/docgen/README.md
+  s_9cdf5f1f9b3599::t_acd3ac4bb95dd4 1-2,5,7-9,11,13-14,16,18-22,24,32,45,83,96,138,144
+.repos/effect/packages/tools/docgen/package.json
+  s_9cdf5f1f9b3599::t_d6687a10a3c178 3,63,67-68,77,79-80,82
+.repos/effect/packages/tools/docgen/src/bin.ts
+  s_9cdf5f1f9b3599::t_38f3713cdf99ef 14,20
+.repos/effect/packages/tools/docgen/test/Configuration.test.ts
+  s_9cdf5f1f9b3599::t_115d4e0fb07523 82,127,162,175,193,209,224,239,253,269,287,299,317
+.repos/effect/packages/tools/doctest/CHANGELOG.md
+  s_9cdf5f1f9b3599::t_95d2a6770aa2be 3-39
+.repos/effect/packages/tools/doctest/README.md
+  s_9cdf5f1f9b3599::t_eb0e62a173d039 1,3-16,67,77
+.repos/effect/packages/tools/doctest/package.json
+  s_9cdf5f1f9b3599::t_d183f4d7a77ea5 3,49,58,60-61
+.repos/effect/packages/tools/doctest/src/Source.ts
+  s_9cdf5f1f9b3599::t_4ee74cf6478d38 101-103
+.repos/effect/packages/tools/doctest/test/Source.test.ts
+  s_9cdf5f1f9b3599::t_69bd08ff7f48aa 119-138
+.repos/effect/packages/tools/jsdocs/package.json
+  s_9cdf5f1f9b3599::t_13269cc650e7ae 57,59
+.repos/effect/packages/tools/openapi-generator/CHANGELOG.md
+  s_9cdf5f1f9b3599::t_a5470ed118351b 3-53
+.repos/effect/packages/tools/openapi-generator/README.md
+  s_9cdf5f1f9b3599::t_328011f08c5466 1,3-9,13-14
+.repos/effect/packages/tools/openapi-generator/package.json
+  s_9cdf5f1f9b3599::t_0b72d80122118f 4
+.repos/effect/packages/tools/openapi-generator/src/JsonSchemaGenerator.ts
+  s_9cdf5f1f9b3599::t_5dfc37aeed084d 22,25,216-218,222-225,230-254,256,361
+.repos/effect/packages/tools/openapi-generator/src/OpenApiGenerator.ts
+  s_9cdf5f1f9b3599::t_33f6c8c7179a2b 15,141,269,294-295,500-513,515,520-534,539,546,614-621,623,625,629,632-635,637,643-659,662-666,671-674,954-955,958-969,971-989,994,1016
+.repos/effect/packages/tools/openapi-generator/src/OpenApiTransformer.ts
+  s_9cdf5f1f9b3599::t_0b363c53e5e82f 16,54-55,57,63,73-87,109,112,125,152-154,156-159,161,163,169-171,182,208-210,212,255,258,271,274-276,325,358-362,364,367,370-372,388,420,542,545,558,583-588,590,593-594,598-600,611,637,680,683,692-696,746,755,785-790,792-806,906-911,973-1024
+.repos/effect/packages/tools/openapi-generator/src/ParsedOperation.ts
+  s_9cdf5f1f9b3599::t_87ca3f58aa2e48 179-194,235,282-290
+.repos/effect/packages/tools/openapi-generator/test/OpenApiGenerator.test.ts
+  s_9cdf5f1f9b3599::t_9cee2cb6220345 5-8,42-46,58-60,66-153,388-612,796-848,1029-1066,1266-1300,1438,1671-1729,2774-2812,2877-2925
+.repos/effect/packages/tools/openapi-generator/tsconfig.json
+  s_9cdf5f1f9b3599::t_647c633b044062 7
+.repos/effect/packages/tools/oxc/package.json
+  s_9cdf5f1f9b3599::t_a2a63bc82c6517 59,65,67
+.repos/effect/packages/tools/utils/package.json
+  s_9cdf5f1f9b3599::t_6be334a2aaabcd 54
+.repos/effect/packages/tools/utils/tsconfig.json
+  s_9cdf5f1f9b3599::t_83cf97fea20b71 7
+.repos/effect/packages/vitest/CHANGELOG.md
+  s_9cdf5f1f9b3599::t_2e6a60b589b3a9 3-37
+.repos/effect/packages/vitest/README.md
+  s_9cdf5f1f9b3599::t_de9fb9c299f6c1 1,3,5,7,10,13,15-16,18,36,50,76,108,155,179,203,226,257,280
+.repos/effect/packages/vitest/package.json
+  s_9cdf5f1f9b3599::t_679d8a992093d8 3,57,59
+.repos/effect/packages/vitest/src/index.ts
+  s_9cdf5f1f9b3599::t_455b9bbf30775b 187,191,197,204
+.repos/effect/packages/vitest/test/index.test.ts
+  s_9cdf5f1f9b3599::t_ac1314b7d427e2 87,91,109,116,126,143,151,186
+.repos/effect/packages/vitest/test/nested-isolation.test.ts
+  s_9cdf5f1f9b3599::t_c8143f5a29d92d 11,15,29-30,41,72,76,93,95,104,130,179
+.repos/effect/pnpm-lock.yaml
+  s_9cdf5f1f9b3599::t_8ba12d701d2981 8,27-28,30-31,51-52,60-61,64,67,70,75-76,78-79,81-82,84-85,87-88,96-97,102-103,106,112,114-115,117-118,120-121,123-124,126-127,130,132-133,135-136,138-139,144-145,147-148,151,184,187,228-229,231-232,268-269,272,274-275,277-278,286-287,289-290,292-293,295-296,304-305,310-311,316-317,319-320,328-329,337-338,341-342,353-357,359-360,375-376,378-379,381-382,384-385,387-388,390-391,393-394,396-397,399-400,402-403,405-406,408-409,411-412,414,418,426,430,433-434,437,439,446,457-458,461,464-465,471,473,477,482-483,486-487,489-490,492-493,495-496,499-502,504,510-511,514-515,518,520-521,531,539-540,546-547,559-560,565-566,569-570,578-579,582-583,591-592,597-598,601,607-608,610-611,618-626,631-632,642,644-645,653-654,663,665-666,674-675,696,708-709,715,727-728,734,746-747,755-756,762,765,768,771,779-780,783,785-786,789-790,802,804-805,816,819-820,829,835-836,838-839,844-845,850-851,857-858,863-864,866-867,882-883,888-889,895,919-920,923-924,929-930,936,945-946,951-952,957-958,979,982,1027,1030,1081-1083,1085-1087,1089-1091,1093-1095,1101-1103,1105-1107,1109-1111,1113-1115,1117-1123,1129-1130,1133-1138,1141-1142,1145-1146,1180-1181,1294-1295,1485-1486,1493-1494,1515-1516,1519-1520,1522-1523,1528-1529,1532-1533,1539-1540,1543-1544,1547-1548,1551-1552,1555-1556,1560-1561,1564-1565,1568-1569,1572-1573,1576-1577,1580-1581,1584-1585,1588-1589,1592-1593,1596-1597,1600-1601,1604-1605,1620-1621,1626-1627,1632-1633,1638-1639,1644-1645,1650-1651,1701-1702,1706-1707,1711-1712,1716-1717,1721-1722,1725,1727-1728,1731,1733-1734,1737,1739-1740,1743,1745-1746,1749,1751-1752,1755,1757-1758,1761,1763-1764,1767,1769-1770,1773,1775-1776,1780-1781,1798-1799,1803-1804,1808-1809,1813-1814,1818-1819,1823-1824,1828-1829,1833-1834,1840-1841,1846-1847,1852-1853,1858-1859,1864-1865,1870-1871,1876-1877,1882-1883,1888-1889,1894-1895,1900-1901,1906-1907,1912-1913,1918-1919,1924-1925,1930-1931,1936-1937,1942-1943,1948-1949,1954-1955,1960-1961,1966-1967,1972-1973,1978-1979,1984-1985,1990-1991,1996-1997,2014-2015,2036-2038,2042-2044,2048-2054,2058-2059,2063-2064,2067,2069-2070,2073,2075-2076,2079,2081-2082,2085,2087-2088,2091,2093-2094,2097,2099-2100,2103,2105-2106,2109,2111-2113,2116,2118-2120,2123,2125-2127,2130,2132-2134,2137,2139-2141,2144,2146-2148,2151,2153-2155,2158,2160-2162,2165,2167-2173,2176-2178,2182-2184,2188-2190,2260-2261,2285-2286,2306-2307,2411-2416,2421-2422,2431-2432,2439-2440,2445-2446,2451-2452,2457-2458,2463-2464,2469-2470,2475-2476,2481-2482,2487-2488,2493-2494,2499-2500,2505-2506,2511-2512,2517-2518,2523-2524,2527-2528,2530-2531,2536-2537,2542-2543,2548-2549,2554-2555,2560-2561,2566-2567,2572-2573,2577,2579-2580,2584,2586-2587,2591,2593-2594,2598,2600-2601,2605,2607-2608,2612,2614-2615,2619,2621-2622,2626,2628-2629,2634-2635,2640-2641,2646-2647,2652-2653,2759-2794,2801-2802,2805-2812,2817-2818,2823-2824,2829-2830,2835-2836,2841-2842,2846,2848-2849,2853,2855-2856,2860,2862-2863,2867,2869-2870,2874,2876-2877,2881,2883-2884,2889-2890,2895-2896,2940-2941,2945-2946,2950-2951,2955-2956,2960-2961,2965-2966,2970-2971,2974,2976-2977,2980,2982-2983,2986,2988-2989,2992,2994-2995,2998,3000-3001,3004,3006-3007,3010,3012-3013,3016,3018-3019,3022,3024-3025,3028,3030-3031,3034,3036-3037,3040,3042-3043,3046,3048-3049,3053-3054,3058-3059,3063-3064,3068-3069,3073-3074,3101-3102,3149-3150,3152-3153,3155-3156,3158-3159,3165-3166,3170-3173,3206-3207,3227-3228,3275-3276,3284-3285,3287-3288,3292-3293,3295-3296,3331-3332,3337-3338,3343-3344,3347-3348,3353-3354,3477-3479,3481-3482,3484,3486-3487,3489-3490,3495-3496,3498-3499,3509-3510,3512-3513,3515-3516,3518-3519,3521-3522,3524-3525,3527,3529-3530,3532-3533,3535-3536,3538-3539,3541-3542,3544-3545,3547-3548,3550-3551,3553-3554,3564-3565,3595-3596,3737-3739,3763-3764,3769-3770,3789-3790,3792-3794,3800-3801,3832-3833,3858-3859,3869-3871,4062-4063,4167-4168,4180-4181,4207-4208,4232-4233,4238-4239,4342-4343,4401-4402,4405-4406,4470-4471,4475,4500,4502-4503,4529-4530,4555-4556,4571-4572,4769-4770,4785-4786,4789-4790,4809-4810,4925,4932,4939,4946,5005,5058-5059,5183-5184,5188-5189,5263-5264,5266-5267,5279-5280,5294-5295,5325-5326,5333-5334,5394-5395,5415-5416,5504-5505,5522-5523,5533-5534,5572-5573,5576-5577,5581-5582,5600-5601,5639-5642,5647-5650,5704-5705,5728-5729,5731,5733-5734,5736,5738-5740,5763-5764,5781-5782,5785-5786,5793-5795,5862-5863,5867-5868,5872-5873,5889-5890,5904-5905,5917-5918,5932-5933,5983-5984,5990-5991,5996-5997,6015-6017,6078-6079,6096-6097,6113-6114,6176-6179,6267-6268,6271-6273,6278-6279,6306-6307,6310-6311,6318-6319,6392-6393,6398,6413-6414,6423-6424,6471-6472,6483-6484,6507-6508,6513,6555-6556,6563-6568,6599-6600,6660-6661,6712-6713,6728-6729,6778-6779,6814,6816-6820,6825,6829,6831-6832,6837,6839-6844,6849,6851-6853,6858,6862-6864,6866-6871,6876,6880,6882-6883,6888-6899,6905,6907-6913,6918-6929,6934,6936,6941,6943,6945,6947,6949,6977,6980,6982,6984,6986-6987,7016,7018-7019,7035,7041,7049,7053,7055,7057,7059-7061,7070,7072-7073,7077,7079-7080,7089,7091-7092,7094,7107,7115,7117-7118,7120,7124,7126-7127,7146,7153,7155,7181,7183,7201,7203,7246,7248,7251,7253-7254,7264,7266,7268,7270,7272-7273,7284,7286,7289,7291,7293,7297,7299-7300,7305,7307,7309,7311-7312,7316,7318,7321,7323,7325,7328-7330,7334,7336,7348-7349,7357,7360,7362,7364,7379,7399,7401-7403,7411,7413,7418,7424,7426-7427,7432,7434-7438,7443,7445-7448,7451,7453,7455,7457-7458,7460,7462-7473,7482,7484,7486-7488,7492,7494,7497,7499,7501,7504,7508,7510-7511,7514,7516,7518,7521,7523-7524,7527,7529-7531,7533,7535,7537,7539,7541-7543,7559,7562,7565,7568,7571,7574,7611,7614,7617,7620,7623,7626,7629,7632,7635,7638,7641,7644,7647,7650,7653,7679,7682,7685,7688,7691,7694,7697,7700,7702-7708,7712,7719,7722,7725,7728,7731,7734,7737,7740,7743,7746,7749,7752,7755,7758,7761,7764,7767,7770,7773,7776,7779,7782,7785,7788,7791,7794,7801,7824,7826,7829,7831,7834-7836,7839,7842,7845,7848,7851,7854,7857,7860,7863,7866-7869,7871,7874,7876,7879,7881,7884,7886,7889,7891,7894,7896,7899,7901,7904,7906,7909,7914-7916,7919,7922,7925-7926,7948,7961,7968,7977,7979,7982,8002,8035,8058,8064,8087,8091,8101,8110,8121,8129,8188,8193,8195-8196,8198,8204,8208,8211,8213,8216-8220,8222,8225-8228,8230,8233-8235,8237,8240-8241,8243,8246-8251,8253,8256-8257,8259,8262-8265,8267,8270-8271,8273,8276-8279,8281,8284-8286,8288,8291-8292,8294,8297-8299,8301,8303,8305,8308,8311,8314,8317,8320,8323,8326,8329,8332,8335,8338,8341,8344,8347,8350,8353,8356,8359,8362,8408,8415,8417,8420-8421,8436,8441-8443,8448,8461,8465-8466,8468-8490,8501,8508,8515,8518,8521,8524,8527,8530,8533,8536,8539,8542,8545,8548,8551,8554,8557,8562,8564,8570,8572,8574,8577,8579,8581,8583,8585,8587,8593,8595,8598,8601,8604,8607,8610,8613,8616,8619,8622,8625,8628,8631,8634,8637,8640,8643,8646,8649,8652,8655,8658,8661,8664,8667,8682,8685,8687,8712,8714,8721,8723,8730,8732,8739,8741,8750-8751,8759,8768-8769,8771,8773,8775-8776,8778-8779,8796,8798,8808-8809,8816,8820-8821,8825,8827,8829,8842,8848,8859,8874,8882,8888,8892-8893,8895,8897-8898,8901,8903,8905,8909,8911,8919,8923,8934,8941,8949,8951-8952,8958,8962,8964,8966-8969,8971,8979,8981,9044,9046,9052,9055-9056,9060-9062,9069,9072,9077,9080-9081,9083,9085,9089-9090,9092,9094,9096,9100,9102,9104,9106,9108,9111,9113-9114,9118,9120,9122,9124,9126,9129,9131,9133-9134,9139,9141-9142,9144,9146-9150,9153,9156,9158-9159,9161,9163,9165,9167-9168,9170,9172-9174,9177,9179-9181,9183,9194,9205,9215,9306,9309,9311,9323,9328,9336,9375,9380,9398,9404,9422,9432,9436,9444,9446-9450,9464,9479,9481,9497,9506,9512,9518,9520,9523,9527,9529,9532,9613,9615-9616,9667,9670-9671,9687,9700,9705,9734,9737-9738,9752,9754,9761,9764,9769,9780,9789,9794,9808,9810-9824,9834,9852,9871,9875,9877-9902,9962,9978,9998,10020,10022,10055,10057,10059,10103,10118,10140,10150,10152,10158,10183,10201,10217,10229,10326,10328-10329,10358,10368,10395,10403,10420,10427,10437,10442,10450-10462,10467,10473,10490,10587,10589,10713,10719,10736,10738-10739,10771,10773,10785,10794,10796,10799-10800,10815,10832,10843,10845-10846,10849,10857,10861,10868,10870-10871,10873,10879,10881-10884,10886-10888,10891-10892,10899,10902-10904,10906-10907,10910,10921-10922,10924,10926,10929-10932,10964,10967,10969,10976,10978,10986,10990,11044,11048,11050,11057,11066,11074,11097,11101,11103,11125,11170,11175,11177,11181-11182,11193,11213,11215-11233,11296,11298,11304,11306,11308,11328,11331-11332,11360,11362,11364,11366,11374,11378,11381,11383,11409-11410,11413-11415,11422,11426-11427,11430,11469,11471,11487,11497,11528,11530,11533,11535-11537,11543,11548,11552,11556,11567,11571,11582,11593,11623,11625,11638,11640-11647,11697,11699,11702-11722,11725-11727,11731,11735-11737,11742,11744-11746,11748,11750,11752-11753,11755-11756,11758,11760,11762-11764,11766,11770-11795,11809,11823,11825,11843,11847,11849,11851,11853,11858,11872,11878-11902,11958,11961-11962,11975,11985,12057-12061,12082,12126,12146,12164,12172,12180,12182-12186,12188,12202,12205,12215,12224,12227,12231,12255,12257,12264,12300,12307,12315,12329,12331,12346,12350,12352,12399,12408,12410,12424,12428-12429,12432-12433,12435-12436,12439,12442-12453,12461,12463-12464,12469-12472,12478,12480-12484,12542,12544-12548,12584,12590,12627,12632,12645
+.repos/effect/pnpm-workspace.yaml
+  s_9cdf5f1f9b3599::t_e8e82b7a353283 8,13-14,16-28,31
+.repos/effect/scripts/circular.mjs
+  s_9cdf5f1f9b3599::t_19128331504ea4 6
+.repos/effect/scripts/clean.mjs
+  s_9cdf5f1f9b3599::t_fde3e232945451 4
+.repos/effect/tsconfig.packages.json
+  s_9cdf5f1f9b3599::t_28153817b2136a 16-20
+.repos/effect/tsconfig.tests.json
+  s_9cdf5f1f9b3599::t_609ac6852cc287 17,46-53
+.repos/effect/vitest.config.ts
+  s_9cdf5f1f9b3599::t_71b0386eb7bc1d 124,131,134-136,139,143,157
+bun.lock
+  s_9cdf5f1f9b3599::t_8212d8fbbe2e71 11,15,28-30,34,42,58,66,95,221,223,225,227,229,247,937,1317,1323,1331
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "eb0ec54cc911f171c3da80471c31642db8a76d4d",
+  "prompts": {},
+  "sessions": {
+    "s_9cdf5f1f9b3599": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a05343-ae99-72e1-a0c0-0a892dc31a5e",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

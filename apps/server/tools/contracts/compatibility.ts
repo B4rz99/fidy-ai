@@ -128,18 +128,25 @@ export const productionWebReleaseFrom = (value: unknown): ProductionWebRelease =
   }
 };
 
-const automaticSchemaIdentifier = /^(?:Arrays|Literal|Objects|Union)_?\d*$/u;
 const localSchemaReferencePrefix = "#/components/schemas/";
 
-const automaticSchemaReference = (value: JsonObject): Option.Option<string> => {
+const schemaReference = (value: JsonObject): Option.Option<string> => {
+  if (!Object.hasOwn(value, "$ref")) return Option.none();
   const entries = Object.entries(value);
-  if (entries.length !== 1 || entries[0]?.[0] !== "$ref") return Option.none();
-  const reference = entries[0][1];
-  if (typeof reference !== "string" || !reference.startsWith(localSchemaReferencePrefix)) {
-    return Option.none();
+  const reference = value.$ref;
+  if (
+    entries.length !== 1 ||
+    typeof reference !== "string" ||
+    !reference.startsWith(localSchemaReferencePrefix)
+  ) {
+    throw new Error(`unsupported schema reference: ${canonicalJson(reference)}`);
   }
-  const identifier = reference.slice(localSchemaReferencePrefix.length);
-  return automaticSchemaIdentifier.test(identifier) ? Option.some(identifier) : Option.none();
+
+  const token = reference.slice(localSchemaReferencePrefix.length);
+  if (token.length === 0 || token.includes("/") || /~(?![01])/u.test(token)) {
+    throw new Error(`unsupported schema reference: ${reference}`);
+  }
+  return Option.some(token.replaceAll("~1", "/").replaceAll("~0", "~"));
 };
 
 const mergeLiteralAnyOf = (members: JsonArray): Option.Option<JsonObject> => {
@@ -166,35 +173,87 @@ const mergeLiteralAnyOf = (members: JsonArray): Option.Option<JsonObject> => {
   return Option.map(commonType, (type) => ({ type, enum: values }));
 };
 
+const getSchemaDefinition = (definitions: JsonObject, identifier: string): JsonValue => {
+  const definition = definitions[identifier];
+  if (definition === undefined) {
+    throw new Error(`missing local schema reference: ${identifier}`);
+  }
+  return definition;
+};
+
+const findCyclicSchemaIdentifiers = (definitions: JsonObject): ReadonlySet<string> => {
+  const states = new Map<string, "visiting" | "visited">();
+  const cyclic = new Set<string>();
+
+  const visitValue = (value: JsonValue, stack: ReadonlyArray<string>): void => {
+    if (Array.isArray(value)) {
+      for (const entry of Schema.decodeSync(JsonArray)(value)) visitValue(entry, stack);
+      return;
+    }
+    if (!Predicate.isObject(value)) return;
+
+    const object = Schema.decodeUnknownSync(JsonObject)(value);
+    const reference = schemaReference(object);
+    if (Option.isSome(reference)) {
+      visitDefinition(reference.value, stack);
+      return;
+    }
+    for (const [, entry] of Object.entries(object)) visitValue(entry, stack);
+  };
+
+  const visitDefinition = (identifier: string, stack: ReadonlyArray<string>): void => {
+    const definition = getSchemaDefinition(definitions, identifier);
+    if (states.get(identifier) === "visited") return;
+    if (states.get(identifier) === "visiting") {
+      const cycleStart = stack.indexOf(identifier);
+      for (const member of stack.slice(cycleStart)) cyclic.add(member);
+      return;
+    }
+
+    states.set(identifier, "visiting");
+    visitValue(definition, [...stack, identifier]);
+    states.set(identifier, "visited");
+  };
+
+  for (const identifier of Object.keys(definitions)) visitDefinition(identifier, []);
+  return cyclic;
+};
+
+type SchemaNormalization = {
+  readonly definitions: JsonObject;
+  readonly cyclic: ReadonlySet<string>;
+  readonly resolving: ReadonlySet<string>;
+};
+
 const normalizeSchemaRepresentations = (
   value: JsonValue,
-  definitions: JsonObject,
-  resolving: ReadonlySet<string> = new Set()
+  context: SchemaNormalization
 ): JsonValue => {
   if (Array.isArray(value)) {
     return Schema.decodeSync(JsonArray)(value).map((entry) =>
-      normalizeSchemaRepresentations(entry, definitions, resolving)
+      normalizeSchemaRepresentations(entry, context)
     );
   }
   if (!Predicate.isObject(value)) return value;
 
   const object = Schema.decodeUnknownSync(JsonObject)(value);
-  const reference = automaticSchemaReference(object);
-  if (Option.isSome(reference) && !resolving.has(reference.value)) {
-    const definition = definitions[reference.value];
-    if (definition !== undefined) {
-      return normalizeSchemaRepresentations(
-        definition,
-        definitions,
-        new Set([...resolving, reference.value])
-      );
+  const reference = schemaReference(object);
+  if (Option.isSome(reference)) {
+    const definition = getSchemaDefinition(context.definitions, reference.value);
+    if (context.cyclic.has(reference.value)) return object;
+    if (context.resolving.has(reference.value)) {
+      throw new Error(`cyclic local schema reference: ${reference.value}`);
     }
+    return normalizeSchemaRepresentations(definition, {
+      ...context,
+      resolving: new Set([...context.resolving, reference.value]),
+    });
   }
 
   let normalized = Object.fromEntries(
     Object.entries(object).map(([key, entry]) => [
       key,
-      normalizeSchemaRepresentations(entry, definitions, resolving),
+      normalizeSchemaRepresentations(entry, context),
     ])
   );
   if (Array.isArray(normalized.anyOf)) {
@@ -209,7 +268,9 @@ const normalizeSchemaRepresentations = (
   return normalized;
 };
 
-const normalizeOpenApiRepresentations = (openapi: object): JsonObject => {
+const normalizeOpenApiRepresentations = (
+  openapi: object
+): { readonly document: JsonObject; readonly cyclicDefinitions: JsonObject } => {
   const document = asJsonObject(openapi);
   const components = Predicate.isObject(document.components)
     ? asJsonObject(document.components)
@@ -217,7 +278,21 @@ const normalizeOpenApiRepresentations = (openapi: object): JsonObject => {
   const definitions = Predicate.isObject(components.schemas)
     ? asJsonObject(components.schemas)
     : {};
-  return asJsonObject(normalizeSchemaRepresentations(document, definitions));
+  const cyclic = findCyclicSchemaIdentifiers(definitions);
+  return {
+    document: asJsonObject(
+      normalizeSchemaRepresentations(document, {
+        definitions,
+        cyclic,
+        resolving: new Set(),
+      })
+    ),
+    cyclicDefinitions: Object.fromEntries(
+      [...cyclic]
+        .sort()
+        .map((identifier) => [identifier, getSchemaDefinition(definitions, identifier)])
+    ),
+  };
 };
 
 const normalizeOpenApiChange = (change: IOasdiffChange): ContractFinding => ({
@@ -278,9 +353,18 @@ export const findOpenApiBreakingChanges = async (
   base: object,
   candidate: object
 ): Promise<ReadonlyArray<ContractFinding>> => {
+  const normalizedBase = normalizeOpenApiRepresentations(base);
+  const normalizedCandidate = normalizeOpenApiRepresentations(candidate);
+  if (
+    canonicalJson(normalizedBase.cyclicDefinitions) !==
+    canonicalJson(normalizedCandidate.cyclicDefinitions)
+  ) {
+    throw new Error("cyclic local schema reference differs between contracts");
+  }
+
   const result = await runOasdiffBreakingFromSpecs(
-    normalizeOpenApiRepresentations(base),
-    normalizeOpenApiRepresentations(candidate),
+    normalizedBase.document,
+    normalizedCandidate.document,
     {
       failOn: "ERR",
       flattenAllOf: true,

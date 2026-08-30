@@ -17,8 +17,8 @@ All changes reach `trunk` through a squash-merged PR. Direct pushes to `trunk` a
 - Commit with the convention (enforced by the commit-msg hook): a `type(scope): summary` header, then `- ` bullet body lines only. Trailers (`Co-Authored-By`, etc.) are rejected.
   - **type** and **scope** come from the allowlist published in README.md's "Commit convention"
     section, which the hooks and the `PR Title` check parse directly. Read it there rather than
-    from a copy here — a copy is exactly what drifts. The scope is the slice the change lands in
-    (ARCHITECTURE.md §2); cross-cutting scopes are only for work that belongs to no slice.
+    from a copy here — a copy is exactly what drifts. For server domain work, use the owning slice
+    (`apps/server/ARCHITECTURE.md` §2); otherwise use the matching cross-cutting scope.
   - Print the current list without leaving the terminal:
     `bun scripts/check-commit-message.ts /dev/null`
 

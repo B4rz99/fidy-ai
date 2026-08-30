@@ -534,11 +534,22 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         );
         expect(multiUserDelivery.status).toBe(202);
         expect(multiUserReceipt.count).toBe(0);
-        yield* Effect.forEach(
-          Array.from({ length: 51 }, (_, index) => index + 1),
+        yield* sql`
+          INSERT INTO forwarded_email_receipts (
+            received_email_id, user_id, webhook_delivery_id, status, service_market, locale,
+            time_zone, period_start, consumes_free_allowance, admitted_at
+          )
+          SELECT 'email_quota_' || index::text, ${freeUserId},
+            'delivery_quota_' || index::text, 'queued', 'CO', 'es-CO', 'America/Bogota',
+            clock_timestamp(), true, clock_timestamp()
+          FROM generate_series(1, 49) AS index
+        `;
+        const boundaryQuotaResponses = yield* Effect.forEach(
+          [50, 51],
           (number) => makeDelivery(`email_quota_${number}`, freeAddress),
-          { concurrency: 8, discard: true }
+          { concurrency: "unbounded" }
         );
+        expect(boundaryQuotaResponses.every((response) => response.status === 202)).toBe(true);
         const quota = yield* getTestRow(
           sql,
           Schema.Struct({ queuedCount: Schema.Int, deferredCount: Schema.Int }),
@@ -789,15 +800,18 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         const currentWorker = yield* processWith(
           ResendReceivingClient.of({ retrieveEmail: () => Effect.succeed(content) })
         ).pipe(Effect.forkChild);
-        yield* Effect.sleep("50 millis");
         const replacement = yield* getTestRow(
           sql,
           Schema.Struct({ attemptCount: Schema.Int }),
           sql`
-          SELECT attempt_count::int AS "attemptCount"
-          FROM forwarded_email_receipts
-          WHERE received_email_id = ${receivedEmailId}
-        `
+            SELECT attempt_count::int AS "attemptCount"
+            FROM forwarded_email_receipts
+            WHERE received_email_id = ${receivedEmailId}
+          `
+        ).pipe(
+          Effect.delay("10 millis"),
+          Effect.repeat({ until: (row) => row.attemptCount === 2 }),
+          Effect.timeout("5 seconds")
         );
         expect(replacement.attemptCount).toBe(2);
         yield* Deferred.succeed(releaseStaleProvider, undefined);

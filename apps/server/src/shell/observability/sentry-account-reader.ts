@@ -1,3 +1,4 @@
+import { TaggedSerializableError, jsonStringSchema } from "~/schema-compatibility";
 import { Config, Effect, Option, Redacted, Schema, Stream } from "effect";
 import { HttpClient, HttpClientRequest, type HttpClientResponse } from "effect/unstable/http";
 import type {
@@ -37,7 +38,7 @@ const EnvironmentsResponse = Schema.Array(Schema.Struct({ name: providerString }
 );
 
 /** A bounded management-API failure that cannot retain authenticated response data or locators. */
-export class SentryAccountReadError extends Schema.TaggedErrorClass<SentryAccountReadError>()(
+export class SentryAccountReadError extends TaggedSerializableError<SentryAccountReadError>()(
   "SentryAccountReadError",
   {
     reason: Schema.Literals([
@@ -145,7 +146,7 @@ const readJson = function <A>(input: {
       Stream.runFoldEffect(response.stream, () => ({ chunks: [], size: 0 }), appendResponseChunk)
     ),
     Effect.map(decodeResponseBody),
-    Effect.flatMap(Schema.decodeUnknownEffect(Schema.fromJsonString(input.schema))),
+    Effect.flatMap(Schema.decodeUnknownEffect(jsonStringSchema(input.schema))),
     Effect.mapError((error) =>
       Schema.is(SentryAccountReadError)(error)
         ? error

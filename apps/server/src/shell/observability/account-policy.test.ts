@@ -1,3 +1,4 @@
+import { jsonStringSchema } from "~/schema-compatibility";
 import { expect, it } from "@effect/vitest";
 import { Option, Schema } from "effect";
 import {
@@ -120,7 +121,7 @@ it("rejects incomplete or internally inconsistent report values", () => {
 it("renders only the complete closed secret-free verification shape", () => {
   const report = verifySentryAccount({ observation: makeObservation() });
   const rendered = Schema.decodeSync(
-    Schema.fromJsonString(Schema.Record(Schema.String, Schema.Unknown))
+    jsonStringSchema(Schema.Record(Schema.String, Schema.Unknown))
   )(renderSentryVerificationReport(report));
 
   expect(Object.keys(rendered).sort()).toEqual([

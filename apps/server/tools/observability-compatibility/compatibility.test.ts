@@ -1,3 +1,4 @@
+import { jsonStringSchema } from "../../src/schema-compatibility";
 import { Schema } from "effect";
 import { describe, expect, it } from "vitest";
 import {
@@ -48,7 +49,7 @@ const runFixture = async (input: {
   if (reportLine === undefined) {
     throw new Error(`compatibility fixture emitted no report\n${stderr}`);
   }
-  const report = Schema.decodeSync(Schema.fromJsonString(CompatibilityReport))(
+  const report = Schema.decodeSync(jsonStringSchema(CompatibilityReport))(
     reportLine.slice("FIDY_COMPATIBILITY_REPORT=".length)
   );
   return { exitCode, report, stderr };

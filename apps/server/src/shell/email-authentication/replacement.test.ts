@@ -1,3 +1,4 @@
+import { UnknownJsonString } from "~/schema-compatibility";
 import { expect, layer } from "@effect/vitest";
 import {
   ConfigProvider,
@@ -50,7 +51,7 @@ const strangerWebSessionId = WebSessionId.make("f1d1a000-0000-4000-8000-00000000
 const strangerWebSessionBearer = "z".repeat(43);
 const strangerSessionCookie = `__Host-fidy_session=${strangerWebSessionBearer}`;
 const encodedBodySize = (body: unknown): number =>
-  Schema.encodeSync(Schema.UnknownFromJsonString)(body).length;
+  Schema.encodeSync(UnknownJsonString)(body).length;
 
 const seedReplacementSession = Effect.fn("seedReplacementSession")(function* (input: {
   subjectUserId: UserId;

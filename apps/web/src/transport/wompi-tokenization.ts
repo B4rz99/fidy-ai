@@ -1,3 +1,4 @@
+import { UnknownJsonString, jsonStringSchema } from "@/schema-compatibility";
 import { Data, Effect, Function, Result, Schema } from "effect";
 
 /** Card fields stay in this browser-owned value only until Wompi answers. */
@@ -20,7 +21,7 @@ const WompiCardRequest = Schema.Struct({
   exp_year: Schema.String,
   card_holder: Schema.String,
 });
-const encodeCardRequest = Schema.encodeSync(Schema.fromJsonString(WompiCardRequest));
+const encodeCardRequest = Schema.encodeSync(jsonStringSchema(WompiCardRequest));
 const WompiTokenResponse = Schema.Struct({
   data: Schema.Struct({
     id: Schema.String.check(Schema.isNonEmpty(), Schema.isMaxLength(maximumTokenCharacters)),
@@ -28,7 +29,7 @@ const WompiTokenResponse = Schema.Struct({
   }),
 });
 const decodeTokenResponse = Schema.decodeUnknownResult(WompiTokenResponse);
-const decodeJson = Schema.decodeUnknownResult(Schema.UnknownFromJsonString);
+const decodeJson = Schema.decodeUnknownResult(UnknownJsonString);
 const maximumResponseBytes = 16_384;
 
 const readBoundedResponse = (response: Response): Effect.Effect<string, CardTokenizationFailed> =>

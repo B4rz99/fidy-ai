@@ -1,3 +1,4 @@
+import { UnknownJsonString } from "~/schema-compatibility";
 import { expect, layer } from "@effect/vitest";
 import {
   Cause,
@@ -167,7 +168,7 @@ const recordedTransactions = Effect.fn("WhatsApp.recordedTransactions")(function
     const payloads: Array<ProjectedTransaction> = [];
     for (let index = 2; index < lines.length; index += 2) {
       const payload = Schema.decodeUnknownOption(ProjectedTransaction)(
-        Schema.decodeSync(Schema.UnknownFromJsonString)(lines[index] ?? "null")
+        Schema.decodeSync(UnknownJsonString)(lines[index] ?? "null")
       );
       if (Option.isSome(payload)) payloads.push(payload.value);
     }
@@ -298,7 +299,7 @@ const ScriptedWhatsAppModel = Layer.effect(
   LanguageModel.LanguageModel,
   LanguageModel.make({
     generateText: ({ prompt }) => {
-      const serialized = Schema.encodeSync(Schema.UnknownFromJsonString)(prompt.content);
+      const serialized = Schema.encodeSync(UnknownJsonString)(prompt.content);
       const completed = (callId: string): boolean => {
         const callIndex = serialized.lastIndexOf(callId);
         return callIndex >= 0 && serialized.lastIndexOf("tool-result") > callIndex;
@@ -402,9 +403,7 @@ const OpenAiHttpClient = Layer.succeed(
         return yield* Effect.die("Expected an encoded OpenAI request body");
       }
       const requestText = new TextDecoder().decode(request.body.body);
-      const json = yield* Schema.decodeEffect(Schema.UnknownFromJsonString)(requestText).pipe(
-        Effect.orDie
-      );
+      const json = yield* Schema.decodeEffect(UnknownJsonString)(requestText).pipe(Effect.orDie);
       const body = yield* Schema.decodeUnknownEffect(OpenAiRequest)(json).pipe(Effect.orDie);
       if (
         body.tools.some(
@@ -1325,7 +1324,7 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         expect(
           Option.isSome(cause) && Cause.isCause(cause.value) && Cause.hasDies(cause.value)
         ).toBe(true);
-        const encodedLogs = yield* Schema.encodeEffect(Schema.UnknownFromJsonString)(capturedLogs);
+        const encodedLogs = yield* Schema.encodeEffect(UnknownJsonString)(capturedLogs);
         expect(encodedLogs).not.toContain(sentinel);
         expect(encodedLogs).toContain("whatsapp-channel.test.ts");
       })
@@ -3000,7 +2999,7 @@ layer(WhatsAppTraceHarness, { excludeTestServices: true, timeout: "30 seconds" }
         expect(stored).toHaveLength(1);
         expect(stored[0]).toMatchObject({ traceVersion: 1, sampled: true, processingAttempt: 0 });
         expect(stored[0]?.traceId).not.toBe(forgedTraceId);
-        const serializedStored = yield* Schema.encodeEffect(Schema.UnknownFromJsonString)(stored);
+        const serializedStored = yield* Schema.encodeEffect(UnknownJsonString)(stored);
         expect(serializedStored).not.toContain(defaultUserId);
         expect(serializedStored).not.toContain("wamid.trace-causality");
         expect(serializedStored).not.toContain(bodySentinel);
@@ -3008,7 +3007,7 @@ layer(WhatsAppTraceHarness, { excludeTestServices: true, timeout: "30 seconds" }
         expect(yield* processNextWhatsAppTurn(DateTime.add(receivedAt, { seconds: 3 }))).toBe(true);
         const transactions = yield* recordedTransactions();
         expectAuthenticatedTrace(transactions, forgedTraceId);
-        const serialized = yield* Schema.encodeEffect(Schema.UnknownFromJsonString)(transactions);
+        const serialized = yield* Schema.encodeEffect(UnknownJsonString)(transactions);
         for (const sentinel of [
           bodySentinel,
           "private-baggage-sentinel",
@@ -3378,7 +3377,7 @@ layer(WhatsAppTraceHarness, { excludeTestServices: true, timeout: "30 seconds" }
             "fidy.input_count": 1,
           });
         }
-        const serialized = yield* Schema.encodeEffect(Schema.UnknownFromJsonString)(transactions);
+        const serialized = yield* Schema.encodeEffect(UnknownJsonString)(transactions);
         for (const { userId } of fixtures) expect(serialized).not.toContain(userId);
       })
     );

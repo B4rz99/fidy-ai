@@ -1,3 +1,4 @@
+import { UnknownJsonString } from "~/schema-compatibility";
 import { expect, it } from "@effect/vitest";
 import { Effect, Option, Schema } from "effect";
 import { E164PhoneNumber, WhatsAppBusinessScopedUserId } from "~/core/identity/reference";
@@ -40,7 +41,7 @@ it.effect("uses recipient without forwarding trace propagation to Kapso", () =>
       deliveryMode: "bsuid",
       nativeFetch: Object.assign(
         (_resource: Parameters<typeof globalThis.fetch>[0], init?: RequestInit) => {
-          requestBody = Schema.decodeUnknownSync(Schema.UnknownFromJsonString)(init?.body);
+          requestBody = Schema.decodeUnknownSync(UnknownJsonString)(init?.body);
           requestHeaders = new Headers(init?.headers);
           return Promise.resolve(
             Response.json({
@@ -83,7 +84,7 @@ it.effect("uses to only in explicit sandbox phone mode", () =>
       deliveryMode: "sandbox-phone",
       nativeFetch: Object.assign(
         (_resource: Parameters<typeof globalThis.fetch>[0], init?: RequestInit) => {
-          requestBody = Schema.decodeUnknownSync(Schema.UnknownFromJsonString)(init?.body);
+          requestBody = Schema.decodeUnknownSync(UnknownJsonString)(init?.body);
           return Promise.resolve(
             Response.json({
               messaging_product: "whatsapp",
@@ -346,7 +347,7 @@ it.effect("keeps provider bodies and send inputs out of typed failures", () =>
         })
       )
       .pipe(Effect.flip);
-    const ordinaryOutput = yield* Schema.encodeEffect(Schema.UnknownFromJsonString)(failure);
+    const ordinaryOutput = yield* Schema.encodeEffect(UnknownJsonString)(failure);
 
     expect(ordinaryOutput).toBe(
       '{"safeReason":"invalid_response","deliveryCertainty":"rejected","automaticRetry":false,"responseStatus":{"_id":"Option","_tag":"Some","value":400},"_tag":"KapsoSendFailed"}'

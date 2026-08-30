@@ -1,3 +1,4 @@
+import { TaggedSerializableError } from "~/schema-compatibility";
 import { timingSafeEqual } from "node:crypto";
 import {
   Crypto,
@@ -100,11 +101,11 @@ import {
   revokePairedPATInScope,
 } from "./repo";
 
-export class PATPairingInvalid extends Schema.TaggedErrorClass<PATPairingInvalid>()(
+export class PATPairingInvalid extends TaggedSerializableError<PATPairingInvalid>()(
   "PATPairingInvalid",
   {}
 ) {}
-export class PATPairingPollingRateLimited extends Schema.TaggedErrorClass<PATPairingPollingRateLimited>()(
+export class PATPairingPollingRateLimited extends TaggedSerializableError<PATPairingPollingRateLimited>()(
   "PATPairingPollingRateLimited",
   { retryAfterSeconds: Schema.Int }
 ) {}

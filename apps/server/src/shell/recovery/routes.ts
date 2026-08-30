@@ -1,3 +1,4 @@
+import { jsonStringSchema } from "~/schema-compatibility";
 import { DateTime, Effect, Layer, Option, Redacted, Schema } from "effect";
 import { HttpRouter, type HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
 import { BrowserLoginPublicCodeInput } from "~/core/browser-login/rules";
@@ -20,7 +21,7 @@ const TransportPayload = Schema.Struct({
   pairingCode: BrowserLoginPublicCodeInput,
   backupRecoveryCode: BackupRecoveryCode,
 });
-const decodePayload = Schema.decodeUnknownOption(Schema.fromJsonString(TransportPayload), {
+const decodePayload = Schema.decodeUnknownOption(jsonStringSchema(TransportPayload), {
   onExcessProperty: "error",
 });
 

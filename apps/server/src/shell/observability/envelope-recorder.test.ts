@@ -1,3 +1,4 @@
+import { UnknownJsonString } from "~/schema-compatibility";
 import { expect, it } from "@effect/vitest";
 import { Cause, Context, Effect, Exit, Layer, Option, Ref, Schema } from "effect";
 import { TestClock } from "effect/testing";
@@ -237,7 +238,7 @@ it.effect("derives a failed status without serializing the application error", (
     const transactions = transactionPayloads(yield* recorder.serializedEnvelopes);
     expect(transactions).toHaveLength(1);
     expect(transactions[0]?.contexts.trace.status).toBe("internal_error");
-    const serialized = yield* Schema.encodeEffect(Schema.UnknownFromJsonString)(transactions);
+    const serialized = yield* Schema.encodeEffect(UnknownJsonString)(transactions);
     expect(serialized).not.toContain("application-error-sentinel");
   })
 );
@@ -325,9 +326,7 @@ it.effect("continues fresh durable context and rejects malformed context into a 
     expect(transactions[2]?.contexts.trace.trace_id).not.toBe(context.traceId);
     expect(transactions[3]?.contexts.trace.trace_id).not.toBe(context.traceId);
     expect(transactions[4]?.contexts.trace.trace_id).not.toBe(context.traceId);
-    const serializedTransactions = yield* Schema.encodeEffect(Schema.UnknownFromJsonString)(
-      transactions
-    );
+    const serializedTransactions = yield* Schema.encodeEffect(UnknownJsonString)(transactions);
     expect(serializedTransactions).not.toContain("context-sentinel");
     expect(serializedTransactions).not.toContain("context-getter-sentinel");
   })
@@ -564,7 +563,7 @@ it.effect("attaches an exhausted operational failure to its provider and its act
     }
     expect(events[0]?.contexts?.trace.parent_span_id).toBeUndefined();
     expect(events[1]?.contexts?.trace.parent_span_id).toEqual(expect.any(String));
-    const serialized = yield* Schema.encodeEffect(Schema.UnknownFromJsonString)(events);
+    const serialized = yield* Schema.encodeEffect(UnknownJsonString)(events);
     expect(serialized).not.toContain("operational-message-sentinel");
   })
 );
@@ -640,7 +639,7 @@ it.effect("keeps only usable source coordinates and drops a cause carrying no st
     ]);
     expect(events[1]?.exception.values[0].stacktrace.frames).toEqual([]);
     expect(events[2]?.exception.values[0].stacktrace.frames).toEqual([]);
-    const serialized = yield* Schema.encodeEffect(Schema.UnknownFromJsonString)(events);
+    const serialized = yield* Schema.encodeEffect(UnknownJsonString)(events);
     expect(serialized).not.toContain("extensionSentinel");
     expect(serialized).not.toContain("columnSentinel");
     expect(serialized).not.toContain("plain-cause-sentinel");

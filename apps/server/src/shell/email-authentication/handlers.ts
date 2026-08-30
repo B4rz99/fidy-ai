@@ -1,3 +1,4 @@
+import { jsonStringSchema } from "~/schema-compatibility";
 import { DateTime, Effect, Option, Redacted, Result, Schema } from "effect";
 import type { HttpServerRequest } from "effect/unstable/http";
 import { HttpApiBuilder } from "effect/unstable/httpapi";
@@ -25,7 +26,7 @@ import { completeEmailReplacement } from "./replacement-transition";
 
 const maximumEmailVerificationRequestBytes = 128;
 const decodeVerificationPayload = Schema.decodeUnknownResult(
-  Schema.fromJsonString(VerifyEmailEnrollmentPayload),
+  jsonStringSchema(VerifyEmailEnrollmentPayload),
   { onExcessProperty: "error" }
 );
 const invalidApi = (): EmailVerificationInvalidApi =>
@@ -72,7 +73,7 @@ export const EmailOnboardingWebAuthHandlersLive = HttpApiBuilder.group(
 );
 
 const decodeReplacementPayload = Schema.decodeUnknownResult(
-  Schema.fromJsonString(CompleteEmailReplacementPayload),
+  jsonStringSchema(CompleteEmailReplacementPayload),
   { onExcessProperty: "error" }
 );
 const decodeReplacementCode = Schema.decodeUnknownResult(EmailVerificationCode);

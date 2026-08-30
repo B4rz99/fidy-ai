@@ -1,3 +1,4 @@
+import { UnknownJsonString } from "~/schema-compatibility";
 import { Data, DateTime, Effect, Array as EffectArray, Option, Schema } from "effect";
 import { Model } from "effect/unstable/schema";
 import {
@@ -187,7 +188,7 @@ const authenticateAndDecodeKapsoBody = Effect.fn("Kapso.authenticateAndDecodeBod
     if (!constantTimeEqual(expected, input.signature.toLowerCase())) {
       return yield* new InvalidKapsoSignature();
     }
-    return yield* Schema.decodeEffect(Schema.UnknownFromJsonString)(
+    return yield* Schema.decodeEffect(UnknownJsonString)(
       new TextDecoder().decode(input.rawBody)
     ).pipe(Effect.mapError(invalidKapsoPayload));
   }

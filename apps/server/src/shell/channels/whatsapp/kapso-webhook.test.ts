@@ -1,3 +1,4 @@
+import { UnknownJsonString } from "~/schema-compatibility";
 import { expect, it } from "@effect/vitest";
 import { DateTime, Effect, Schema } from "effect";
 import { decodeKapsoDisclosureLifecycleWebhook, maxKapsoWebhookBytes } from "./kapso-webhook";
@@ -9,7 +10,7 @@ const receivedAt = DateTime.makeUnsafe("2026-04-03T12:10:00.000Z");
 
 const encodedBody = (statuses: ReadonlyArray<unknown>, messageId = providerMessageId): Uint8Array =>
   new TextEncoder().encode(
-    Schema.encodeSync(Schema.UnknownFromJsonString)({
+    Schema.encodeSync(UnknownJsonString)({
       message: { id: messageId, kapso: { statuses } },
       phone_number_id: "123456789",
     })

@@ -1,5 +1,5 @@
 import { Effect, Option, Result, Schema, SchemaIssue } from "effect";
-import { HttpServerResponse } from "effect/unstable/http";
+import { HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
 import {
   type HttpApiEndpoint,
   type HttpApiError,
@@ -8,7 +8,10 @@ import {
 import { type FieldIssue, ValidationFailed, ValidationGate } from "./errors";
 
 /** How each rejected request component is named to the caller. */
-const requestPart: Record<Exclude<HttpApiError.HttpApiSchemaError["kind"], "Body">, string> = {
+const requestPart: Record<
+  Exclude<HttpApiError.HttpApiSchemaError["kind"], "Body" | "ResponseHeaders">,
+  string
+> = {
   Params: "path parameters",
   Query: "query string",
   Headers: "headers",
@@ -101,25 +104,31 @@ const isServiceFreePayloadSchema = (schema: Schema.Top): schema is Schema.Codec<
 const payloadFieldIssues = (
   cause: Schema.SchemaError,
   endpoint: HttpApiEndpoint.Top
-): ReadonlyArray<typeof FieldIssue.Type> => {
-  const schemas = Array.from(endpoint.payload.values()).flatMap(({ schemas }) => schemas);
-  const [schema, ...additionalSchemas] = schemas;
-  const actual = SchemaIssue.getActual(cause.issue);
+): Effect.Effect<
+  ReadonlyArray<typeof FieldIssue.Type>,
+  never,
+  HttpServerRequest.HttpServerRequest
+> =>
+  Effect.gen(function* () {
+    const schemas = Array.from(endpoint.payload.values()).flatMap(({ schemas }) => schemas);
+    const [schema, ...additionalSchemas] = schemas;
+    const request = yield* HttpServerRequest.HttpServerRequest;
+    const actual = yield* Effect.option(request.json);
 
-  if (
-    schema === undefined ||
-    additionalSchemas.length > 0 ||
-    Option.isNone(actual) ||
-    !isServiceFreePayloadSchema(schema)
-  ) {
-    return fieldIssues(cause);
-  }
+    if (
+      schema === undefined ||
+      additionalSchemas.length > 0 ||
+      Option.isNone(actual) ||
+      !isServiceFreePayloadSchema(schema)
+    ) {
+      return fieldIssues(cause);
+    }
 
-  return Result.match(Schema.decodeUnknownResult(schema, { errors: "all" })(actual.value), {
-    onFailure: fieldIssues,
-    onSuccess: () => fieldIssues(cause),
+    return Result.match(Schema.decodeResult(schema, { errors: "all" })(actual.value), {
+      onFailure: fieldIssues,
+      onSuccess: () => fieldIssues(cause),
+    });
   });
-};
 
 /**
  * Maps HTTP schema failures to the canonical `ValidationFailed` response. Invalid requests receive
@@ -127,19 +136,19 @@ const payloadFieldIssues = (
  */
 export const ValidationGateLive = HttpApiMiddleware.layerSchemaErrorTransform(
   ValidationGate,
-  (schemaError, { endpoint }) => {
-    if (schemaError.kind === "Body") {
-      return Effect.succeed(HttpServerResponse.empty({ status: 500 }));
-    }
+  (schemaError, { endpoint }) =>
+    Effect.gen(function* () {
+      if (schemaError.kind === "Body" || schemaError.kind === "ResponseHeaders") {
+        return HttpServerResponse.empty({ status: 500 });
+      }
 
-    const kind = schemaError.kind;
-    const fields =
-      kind === "Payload"
-        ? payloadFieldIssues(schemaError.cause, endpoint)
-        : fieldIssues(schemaError.cause);
+      const kind = schemaError.kind;
+      const fields =
+        kind === "Payload"
+          ? yield* payloadFieldIssues(schemaError.cause, endpoint)
+          : fieldIssues(schemaError.cause);
 
-    return Effect.fail(
-      ValidationFailed.make({
+      return yield* ValidationFailed.make({
         error: {
           code: "validation_failed",
           message:
@@ -148,7 +157,6 @@ export const ValidationGateLive = HttpApiMiddleware.layerSchemaErrorTransform(
           fields,
         },
         next: [],
-      })
-    );
-  }
+      });
+    })
 );

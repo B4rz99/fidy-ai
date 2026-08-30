@@ -1,3 +1,4 @@
+import { UnknownJsonString } from "~/schema-compatibility";
 import { expect, it } from "@effect/vitest";
 import { ConfigProvider, Context, Deferred, Effect, Exit, Fiber, Layer, Ref, Schema } from "effect";
 import { TestClock } from "effect/testing";
@@ -45,7 +46,7 @@ const requestBody = Effect.fn("Test.requestBody")(function* (
   if (request.body._tag !== "Uint8Array") {
     return yield* Effect.die("Expected an encoded OpenAI request body");
   }
-  const decoded = yield* Schema.decodeEffect(Schema.UnknownFromJsonString)(
+  const decoded = yield* Schema.decodeEffect(UnknownJsonString)(
     new TextDecoder().decode(request.body.body)
   );
   return yield* Schema.decodeUnknownEffect(JsonRecord)(decoded);
@@ -108,11 +109,11 @@ const makeFailingTransport = (status: number): Layer.Layer<HttpClient.HttpClient
   );
 
 const amendResponse = (body: string, patch: Readonly<Record<string, unknown>>): string => {
-  const decoded = Schema.decodeSync(Schema.UnknownFromJsonString)(body);
+  const decoded = Schema.decodeSync(UnknownJsonString)(body);
   if (typeof decoded !== "object" || decoded === null || Array.isArray(decoded)) {
     throw new Error("Expected an OpenAI response object");
   }
-  return Schema.encodeSync(Schema.UnknownFromJsonString)({ ...decoded, ...patch });
+  return Schema.encodeSync(UnknownJsonString)({ ...decoded, ...patch });
 };
 
 const buildInference = Effect.fn("Test.buildInference")(function* (
@@ -255,8 +256,8 @@ it.effect("counts complete framing and executes the exact prepared request", () 
     expect(execute.url).toContain("/responses");
     const countJson = yield* requestBody(count);
     const executeJson = yield* requestBody(execute);
-    const encodedCount = yield* Schema.encodeEffect(Schema.UnknownFromJsonString)(countJson);
-    const encodedExecution = yield* Schema.encodeEffect(Schema.UnknownFromJsonString)(executeJson);
+    const encodedCount = yield* Schema.encodeEffect(UnknownJsonString)(countJson);
+    const encodedExecution = yield* Schema.encodeEffect(UnknownJsonString)(executeJson);
 
     expect(count.headers.authorization).toBe("Bearer test-only-secret");
     expect(execute.headers.authorization).toBe("Bearer test-only-secret");
@@ -311,7 +312,7 @@ it.effect("publishes only the caller-visible canonical tools", () =>
 
 it.effect("measures and executes the exact strict structured schema, name, and framing", () =>
   Effect.gen(function* () {
-    const outputJson = yield* Schema.encodeEffect(Schema.UnknownFromJsonString)({
+    const outputJson = yield* Schema.encodeEffect(UnknownJsonString)({
       compactedConversation: "trusted",
       optionalLabel: null,
     });
@@ -345,7 +346,7 @@ it.effect("measures and executes the exact strict structured schema, name, and f
 it.effect("returns typed structured failures without retaining hostile model text", () =>
   Effect.gen(function* () {
     const canary = "HOSTILE_PRIVATE_MODEL_BODY";
-    const outputJson = yield* Schema.encodeEffect(Schema.UnknownFromJsonString)({
+    const outputJson = yield* Schema.encodeEffect(UnknownJsonString)({
       compactedConversation: canary,
       optionalLabel: 42,
     });
@@ -530,7 +531,10 @@ it.effect("rejects unsupported structured schemas before provider I/O", () =>
     const failure = yield* inference
       .prepareStructured({
         ...structuredRequest(),
-        outputSchema: Schema.Struct({ unsupported: Schema.Unknown }),
+        outputSchema: Schema.Union([
+          Schema.Struct({ left: Schema.String }),
+          Schema.Struct({ right: Schema.String }),
+        ]),
       })
       .pipe(Effect.flip);
 
@@ -559,7 +563,7 @@ it.effect("accumulates provider output and canonical outcomes across three round
     const requests = yield* Ref.get(transport.requests);
     const thirdCount = requests[4];
     if (thirdCount === undefined) return yield* Effect.die("missing third-round count request");
-    const input = yield* Schema.encodeEffect(Schema.UnknownFromJsonString)(
+    const input = yield* Schema.encodeEffect(UnknownJsonString)(
       (yield* requestBody(thirdCount)).input
     );
     expect(input.split('"type":"output_text"')).toHaveLength(3);
@@ -640,9 +644,7 @@ it.effect("projects replayed Assistant text and tool outcomes as Responses input
     yield* inference.prepareText(request);
     const [count] = yield* Ref.get(transport.requests);
     if (count === undefined) return yield* Effect.die("missing count request");
-    const input = yield* Schema.encodeEffect(Schema.UnknownFromJsonString)(
-      (yield* requestBody(count)).input
-    );
+    const input = yield* Schema.encodeEffect(UnknownJsonString)((yield* requestBody(count)).input);
     expect(input).toContain('"role":"assistant"');
     expect(input).toContain('"type":"input_text"');
     expect(input).toContain('"type":"function_call"');
@@ -876,7 +878,7 @@ it.effect("varies each continuity budget without changing the other four semanti
       const request = (yield* Ref.get(transport.requests))[0];
       if (request === undefined) return yield* Effect.die("missing varied startup request");
       const body = yield* requestBody(request);
-      const serialized = yield* Schema.encodeEffect(Schema.UnknownFromJsonString)(body.input);
+      const serialized = yield* Schema.encodeEffect(UnknownJsonString)(body.input);
 
       for (const [budget, marker] of sectionMarkers) {
         const expected = defaults[budget] - (varied === budget ? 1 : 0);
@@ -901,7 +903,7 @@ it.effect("frames every independent continuity maximum in startup's complete req
     expect(startup.url).toContain("/responses/input_tokens");
 
     const counted = yield* requestBody(startup);
-    const serializedInput = yield* Schema.encodeEffect(Schema.UnknownFromJsonString)(counted.input);
+    const serializedInput = yield* Schema.encodeEffect(UnknownJsonString)(counted.input);
     expect(serializedInput).toContain("Eres Fidy, un asistente de finanzas personales.");
     expect(serializedInput).toContain("El turno comenzó en 2000-01-01T00:00:00.000Z");
     expect(serializedInput).toContain("[UNTRUSTED_MEMORY]\\n[STARTUP_MAXIMUM_MEMORY:15000_TOKENS]");

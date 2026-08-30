@@ -1,3 +1,4 @@
+import { SchemaSerializableError } from "~/schema-compatibility";
 import { Schema } from "effect";
 import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi";
 import {
@@ -31,7 +32,7 @@ export const issuanceConsumedMessage =
 
 /** Safe refusal when a retried request cannot redisclose its previously consumed bearer. */
 export class ManualPATIssuanceConsumed
-  extends Schema.ErrorClass<ManualPATIssuanceConsumed>("ManualPATIssuanceConsumed")(
+  extends SchemaSerializableError<ManualPATIssuanceConsumed>("ManualPATIssuanceConsumed")(
     {
       _tag: Schema.tagDefaultOmit("ManualPATIssuanceConsumed"),
       error: Schema.Struct({
@@ -52,7 +53,7 @@ export const issuanceLimitedMessage =
 
 /** Cheap User-bound refusal preventing unbounded PAT and Consent evidence creation. */
 export class ManualPATIssuanceRateLimited
-  extends Schema.ErrorClass<ManualPATIssuanceRateLimited>("ManualPATIssuanceRateLimited")(
+  extends SchemaSerializableError<ManualPATIssuanceRateLimited>("ManualPATIssuanceRateLimited")(
     {
       _tag: Schema.tagDefaultOmit("ManualPATIssuanceRateLimited"),
       error: Schema.Struct({
@@ -74,7 +75,7 @@ export const reviewExpiredMessage =
 
 /** Safe refusal when confirmation no longer matches one recent reviewed absolute expiration. */
 export class ManualPATReviewExpired
-  extends Schema.ErrorClass<ManualPATReviewExpired>("ManualPATReviewExpired")(
+  extends SchemaSerializableError<ManualPATReviewExpired>("ManualPATReviewExpired")(
     {
       _tag: Schema.tagDefaultOmit("ManualPATReviewExpired"),
       error: Schema.Struct({
@@ -189,7 +190,7 @@ export const patPairingGenericMessage =
 
 /** One generic non-enumerating refusal for malformed, unknown, expired, or cross-User requests. */
 export class PATPairingReviewRejected
-  extends Schema.ErrorClass<PATPairingReviewRejected>("PATPairingReviewRejected")(
+  extends SchemaSerializableError<PATPairingReviewRejected>("PATPairingReviewRejected")(
     {
       _tag: Schema.tagDefaultOmit("PATPairingReviewRejected"),
       error: Schema.Struct({
@@ -207,7 +208,7 @@ export class PATPairingReviewRejected
 
 /** Bounded review admission failure without revealing whether a submitted code exists. */
 export class PATPairingReviewRateLimited
-  extends Schema.ErrorClass<PATPairingReviewRateLimited>("PATPairingReviewRateLimited")(
+  extends SchemaSerializableError<PATPairingReviewRateLimited>("PATPairingReviewRateLimited")(
     {
       _tag: Schema.tagDefaultOmit("PATPairingReviewRateLimited"),
       error: Schema.Struct({

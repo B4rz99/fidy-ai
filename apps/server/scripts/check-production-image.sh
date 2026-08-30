@@ -17,7 +17,9 @@ image="fidy-production-smoke:${suffix}"
 postgresImage="postgres:18.6-alpine@sha256:d3e1620b530c944afa6e887d22eb899824da68e19c52024bf98f5220c88a65b2"
 provisionLog=$(mktemp)
 artifactRoot=$(mktemp -d)
+artifactRoot=$(cd -- "$artifactRoot" && pwd -P)
 releaseRoot=$(mktemp -d)
+releaseRoot=$(cd -- "$releaseRoot" && pwd -P)
 releaseSha="0123456789abcdef0123456789abcdef01234567"
 contractDigest=$(bun run --cwd "$serverRoot" --silent contracts:digest)
 release="fidy@${releaseSha}"
@@ -193,12 +195,13 @@ set -eu
 printf '%s\n' "$*" >> /tmp/sentry-calls
 EOF
   chmod 755 "$releaseRoot/sentry-cli"
-  docker run --name "$releaseContainer" \
-    --volume "$releaseRoot/sentry-cli:/app/dist/commands/sentry-cli:ro" \
+  docker create --name "$releaseContainer" \
     --env "RAILWAY_GIT_COMMIT_SHA=${releaseSha}" --env "SENTRY_RELEASE=${release}" \
     --env SENTRY_AUTH_TOKEN=upload-token-sentinel --env SENTRY_ORG=fidy-org \
     --env SENTRY_PROJECT=fidy-api \
-    "$image" bun dist/commands/prepare-sentry-release.js
+    "$image" bun dist/commands/prepare-sentry-release.js >/dev/null
+  docker cp "$releaseRoot/sentry-cli" "${releaseContainer}:/app/dist/commands/sentry-cli"
+  docker start --attach "$releaseContainer"
   docker cp "${releaseContainer}:/tmp/sentry-calls" "$releaseRoot/calls"
   docker rm "$releaseContainer" >/dev/null
   printf '%s\n' \

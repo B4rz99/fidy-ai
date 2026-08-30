@@ -1,3 +1,4 @@
+import { jsonStringSchema } from "~/schema-compatibility";
 import { type DateTime, Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import {
@@ -327,7 +328,7 @@ export const insertStatementMappingInScope = Effect.fn("insertStatementMappingIn
 
 const reviewEvidence = (evidence: StatementRowEvidence): Effect.Effect<unknown> =>
   Schema.encodeUnknownEffect(StatementRowEvidence)(evidence).pipe(Effect.orDie);
-const CapturedFieldIssuesJson = Schema.fromJsonString(Schema.Array(CapturedFieldIssue));
+const CapturedFieldIssuesJson = jsonStringSchema(Schema.Array(CapturedFieldIssue));
 
 /** Inserts one rejected row while finalizing its submission. */
 export const insertNeedsReviewItemInScope = Effect.fn("insertNeedsReviewItemInScope")(function* (

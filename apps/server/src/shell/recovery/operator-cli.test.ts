@@ -1,3 +1,4 @@
+import { UnknownJsonString, jsonStringSchema } from "~/schema-compatibility";
 import { expect, it } from "@effect/vitest";
 import { Effect, Schema } from "effect";
 
@@ -25,15 +26,11 @@ const makeFixture = Effect.fn("SupportRecoveryCliTest.makeFixture")(function* (i
     input.response === "limited"
       ? { status: "limited", message: "Demasiados intentos.", retryAfterSeconds: 7 }
       : { status: input.response, message: "Resultado cerrado." };
-  const encodedRequestLog = yield* Schema.encodeEffect(Schema.UnknownFromJsonString)(requestLog);
-  const encodedCloudflaredLog = yield* Schema.encodeEffect(Schema.UnknownFromJsonString)(
-    cloudflaredLog
-  );
-  const encodedResponse = yield* Schema.encodeEffect(Schema.UnknownFromJsonString)(response);
-  const encodedResponseLiteral = yield* Schema.encodeEffect(Schema.UnknownFromJsonString)(
-    encodedResponse
-  );
-  const driverConfiguration = yield* Schema.encodeEffect(Schema.UnknownFromJsonString)({
+  const encodedRequestLog = yield* Schema.encodeEffect(UnknownJsonString)(requestLog);
+  const encodedCloudflaredLog = yield* Schema.encodeEffect(UnknownJsonString)(cloudflaredLog);
+  const encodedResponse = yield* Schema.encodeEffect(UnknownJsonString)(response);
+  const encodedResponseLiteral = yield* Schema.encodeEffect(UnknownJsonString)(encodedResponse);
+  const driverConfiguration = yield* Schema.encodeEffect(UnknownJsonString)({
     command: [
       "bun",
       "--preload",
@@ -52,9 +49,8 @@ const makeFixture = Effect.fn("SupportRecoveryCliTest.makeFixture")(function* (i
           ]
         : [],
   });
-  const encodedDriverConfiguration = yield* Schema.encodeEffect(Schema.UnknownFromJsonString)(
-    driverConfiguration
-  );
+  const encodedDriverConfiguration =
+    yield* Schema.encodeEffect(UnknownJsonString)(driverConfiguration);
   yield* Effect.promise(() =>
     Promise.all([
       Bun.write(
@@ -154,7 +150,7 @@ it.effect("authenticates before hidden bounded input without exposing credential
     expect(accessToken).toBe("fixture-access-token");
     expect(
       yield* Schema.decodeUnknownEffect(
-        Schema.fromJsonString(
+        jsonStringSchema(
           Schema.Struct({ pairingCode: Schema.String, backupRecoveryCode: Schema.String })
         )
       )(requestBody)

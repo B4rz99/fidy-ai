@@ -1,3 +1,4 @@
+import { jsonStringSchema } from "~/schema-compatibility";
 import { Effect, Option, Redacted, Result, Schema, Semaphore } from "effect";
 import { type HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
 import { HttpApiBuilder } from "effect/unstable/httpapi";
@@ -64,7 +65,7 @@ const readJsonPayload = Effect.fn("EmailAuthentication.readBrowserPairingPayload
     Effect.mapError(payloadTooLarge)
   );
   if (Option.isNone(bytes)) return yield* payloadTooLarge();
-  const decoded = Schema.decodeResult(Schema.fromJsonString(schema), {
+  const decoded = Schema.decodeResult(jsonStringSchema(schema), {
     onExcessProperty: "error",
   })(new TextDecoder().decode(bytes.value));
   return yield* Result.match(decoded, { onFailure: invalid, onSuccess: Effect.succeed });

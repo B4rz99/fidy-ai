@@ -1,3 +1,4 @@
+import { jsonStringSchema } from "~/schema-compatibility";
 import { DateTime, Effect, Option, Result, Schema } from "effect";
 import type { HttpServerRequest } from "effect/unstable/http";
 import { HttpApiBuilder } from "effect/unstable/httpapi";
@@ -25,15 +26,12 @@ import { getCardEnrollment, prepareCardEnrollment, submitCardEnrollment } from "
 
 const maximumEnrollmentRequestBytes = 6144;
 const decodePrepareEnrollmentPayload = Schema.decodeUnknownResult(
-  Schema.fromJsonString(PrepareCardEnrollmentPayload),
+  jsonStringSchema(PrepareCardEnrollmentPayload),
   { onExcessProperty: "error" }
 );
-const decodeSubmit = Schema.decodeUnknownResult(
-  Schema.fromJsonString(SubmitCardEnrollmentPayload),
-  {
-    onExcessProperty: "error",
-  }
-);
+const decodeSubmit = Schema.decodeUnknownResult(jsonStringSchema(SubmitCardEnrollmentPayload), {
+  onExcessProperty: "error",
+});
 
 const invalid = (): CardEnrollmentInvalidApi =>
   CardEnrollmentInvalidApi.make(cardEnrollmentInvalidBody);

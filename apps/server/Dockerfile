@@ -11,7 +11,7 @@ RUN bun install --frozen-lockfile --ignore-scripts
 
 COPY --chown=bun:bun tsconfig.json tsconfig.base.json ./
 COPY --chown=bun:bun apps/server ./apps/server
-RUN bun run build:production && cp "$(bun --cwd apps/server -e 'console.log(require("@sentry/cli").SentryCli.getPath())')" apps/server/dist/commands/sentry-cli
+RUN bun run build:production && cp -L "$(bun --cwd apps/server -e 'console.log(require("@sentry/cli").SentryCli.getPath())')" apps/server/dist/commands/sentry-cli
 
 FROM oven/bun:1.3.14-alpine@sha256:5acc90a93e91ff07bf72aa90a7c9f0fa189765aec90b47bdbf2152d2196383c0
 

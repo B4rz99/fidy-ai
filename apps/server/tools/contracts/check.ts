@@ -1,4 +1,5 @@
 #!/usr/bin/env bun
+import { UnknownJsonString } from "../../src/schema-compatibility";
 
 import { type Cause, Data, type Duration, Effect, Schema, Stream } from "effect";
 import { FetchHttpClient, HttpClient, type HttpClientError } from "effect/unstable/http";
@@ -199,7 +200,7 @@ export const readProductionWebRelease = ({
           (accumulated, chunk) => appendBounded(accumulated, chunk, maximumBytes)
         ),
         Effect.flatMap((bytes) =>
-          Schema.decodeEffect(Schema.UnknownFromJsonString)(new TextDecoder().decode(bytes)).pipe(
+          Schema.decodeEffect(UnknownJsonString)(new TextDecoder().decode(bytes)).pipe(
             Effect.mapError(
               (cause) =>
                 new ProductionEvidenceRejected({

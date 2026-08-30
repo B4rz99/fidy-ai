@@ -89,6 +89,35 @@ it.each([
   expect(findings.every((finding) => finding.rule.length > 0)).toBe(true);
 });
 
+it("treats equivalent Effect OpenAPI schema representations as compatible", async () => {
+  const base = spec({
+    "/widgets": operation({
+      type: "object",
+      properties: { kind: { type: "string", enum: ["small", "large"] } },
+    }),
+  });
+  const candidate = {
+    ...spec({
+      "/widgets": operation({
+        type: "object",
+        properties: { kind: { $ref: "#/components/schemas/Union_" } },
+      }),
+    }),
+    components: {
+      schemas: {
+        Union_: {
+          anyOf: [
+            { type: "string", enum: ["small"] },
+            { type: "string", enum: ["large"] },
+          ],
+        },
+      },
+    },
+  };
+
+  await expect(findOpenApiBreakingChanges(base, candidate)).resolves.toEqual([]);
+});
+
 it("rejects malformed generated contract artifacts at the contract boundary", () => {
   expect(() =>
     contractArtifactsFrom(

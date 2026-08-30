@@ -258,11 +258,7 @@ const partialObjectsAst = (ast: SchemaAST.Objects): SchemaAST.AST => {
     ),
     ast.indexSignatures.map(
       (signature) =>
-        new SchemaAST.IndexSignature(
-          signature.parameter,
-          partialInputAst(signature.type),
-          signature.merge
-        )
+        new SchemaAST.IndexSignature(signature.parameter, partialInputAst(signature.type))
     ),
     Option.getOrUndefined(partialAnnotations(Option.fromUndefinedOr(ast.annotations))),
     Option.getOrUndefined(conditionalChecks(Option.fromUndefinedOr(ast.checks), isComplete)),

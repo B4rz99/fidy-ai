@@ -225,6 +225,21 @@ type SchemaNormalization = {
   readonly resolving: ReadonlySet<string>;
 };
 
+const mergeObjectAllOf = (members: ReadonlyArray<JsonValue>): Option.Option<JsonObject> => {
+  const merged: Record<string, JsonValue> = {};
+  for (const member of members) {
+    if (!Predicate.isObject(member)) return Option.none();
+    for (const [key, value] of Object.entries(Schema.decodeUnknownSync(JsonObject)(member))) {
+      const existing = merged[key];
+      if (existing !== undefined && canonicalJson(existing) !== canonicalJson(value)) {
+        return Option.none();
+      }
+      merged[key] = value;
+    }
+  }
+  return Option.some(merged);
+};
+
 const normalizeSchemaRepresentations = (
   value: JsonValue,
   context: SchemaNormalization
@@ -256,6 +271,15 @@ const normalizeSchemaRepresentations = (
       normalizeSchemaRepresentations(entry, context),
     ])
   );
+  if (Array.isArray(normalized.allOf)) {
+    const siblings = Object.fromEntries(
+      Object.entries(normalized).filter(([key]) => key !== "allOf")
+    );
+    normalized = Option.getOrElse(
+      mergeObjectAllOf([...Schema.decodeSync(JsonArray)(normalized.allOf), siblings]),
+      () => normalized
+    );
+  }
   if (Array.isArray(normalized.anyOf)) {
     normalized = Option.match(mergeLiteralAnyOf(Schema.decodeSync(JsonArray)(normalized.anyOf)), {
       onNone: () => normalized,
@@ -288,9 +312,14 @@ const normalizeOpenApiRepresentations = (
       })
     ),
     cyclicDefinitions: Object.fromEntries(
-      [...cyclic]
-        .sort()
-        .map((identifier) => [identifier, getSchemaDefinition(definitions, identifier)])
+      [...cyclic].sort().map((identifier) => [
+        identifier,
+        normalizeSchemaRepresentations(getSchemaDefinition(definitions, identifier), {
+          definitions,
+          cyclic,
+          resolving: new Set([identifier]),
+        }),
+      ])
     ),
   };
 };

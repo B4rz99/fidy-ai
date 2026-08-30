@@ -3,7 +3,7 @@
 import { BunRuntime } from "@effect/platform-bun";
 import { Effect, Option, Schema } from "effect";
 
-const effectBetaVersion = /^4\.0\.0-beta\.\d+$/u;
+const effectPrereleaseVersion = /^4\.0\.0-(?:beta|rc)\.\d+$/u;
 const PackageEntry = Schema.TupleWithRest(Schema.Tuple([Schema.String]), [Schema.Unknown]);
 const Lockfile = Schema.Struct({
   packages: Schema.Record(Schema.String, PackageEntry),
@@ -137,9 +137,14 @@ const main = Effect.gen(function* () {
   });
   const direct = directPins(manifests);
   const selected = direct.find(({ packageName }) => packageName === "effect");
-  if (selected === undefined || !effectBetaVersion.test(selected.version)) {
-    const version = selected?.version ?? "missing";
-    process.stderr.write(`Effect dependency family check failed:\n- effect: ${version}\n`);
+  if (selected === undefined || !effectPrereleaseVersion.test(selected.version)) {
+    const finding = Option.match(Option.fromUndefinedOr(selected), {
+      onNone: () => ({ version: "missing", location: "workspace manifests" }),
+      onSome: ({ version, location }) => ({ version, location }),
+    });
+    process.stderr.write(
+      `Effect dependency family check failed:\n- effect: ${finding.version} (${finding.location})\n`
+    );
     return yield* Effect.sync(() => process.exit(1));
   }
 

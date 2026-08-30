@@ -33,10 +33,11 @@ const operation = (
   },
 });
 
-const spec = (paths: object): object => ({
+const spec = (paths: object, schemas: object = {}): object => ({
   openapi: "3.1.0",
   info: { title: "fixture", version: "1" },
   paths,
+  components: { schemas },
 });
 
 it.each([
@@ -116,6 +117,94 @@ it("treats equivalent Effect OpenAPI schema representations as compatible", asyn
   };
 
   await expect(findOpenApiBreakingChanges(base, candidate)).resolves.toEqual([]);
+});
+
+it("treats nested local request schema references and their inline form as compatible", async () => {
+  const inline = {
+    type: "object",
+    required: ["kind"],
+    properties: { kind: { type: "string", enum: ["small", "large"] } },
+  };
+  const base = spec(
+    {
+      "/widgets": operation({ $ref: "#/components/schemas/WidgetInput" }),
+    },
+    {
+      WidgetInput: { $ref: "#/components/schemas/WidgetDetails" },
+      WidgetDetails: inline,
+    }
+  );
+  const candidate = spec({ "/widgets": operation(inline) });
+
+  await expect(findOpenApiBreakingChanges(base, candidate)).resolves.toEqual([]);
+});
+
+it("preserves a deterministic finding when an anyOf request property loses a value", async () => {
+  const base = spec({
+    "/widgets": operation({
+      type: "object",
+      properties: {
+        kind: {
+          anyOf: [
+            { type: "string", enum: ["small"] },
+            { type: "string", enum: ["large"] },
+          ],
+        },
+      },
+    }),
+  });
+  const candidate = spec({
+    "/widgets": operation({
+      type: "object",
+      properties: { kind: { anyOf: [{ type: "string", enum: ["small"] }] } },
+    }),
+  });
+
+  await expect(findOpenApiBreakingChanges(base, candidate)).resolves.toEqual([
+    {
+      source: "openapi",
+      rule: "request-property-enum-value-removed",
+      location: {
+        operationId: "widgets.createWidget",
+        operation: "POST",
+        path: "/widgets",
+        section: "paths",
+        fingerprint: "0bfb96860e02",
+      },
+      detail: "removed the enum value `large` of the request property `kind`",
+    },
+  ]);
+});
+
+it.each([
+  {
+    name: "cyclic",
+    schemas: {
+      WidgetInput: { $ref: "#/components/schemas/WidgetDetails" },
+      WidgetDetails: { $ref: "#/components/schemas/WidgetInput" },
+    },
+    reference: "#/components/schemas/WidgetInput",
+    error: "cyclic local schema reference",
+  },
+  {
+    name: "missing",
+    schemas: {},
+    reference: "#/components/schemas/MissingInput",
+    error: "missing local schema reference",
+  },
+  {
+    name: "unsupported",
+    schemas: {},
+    reference: "https://schemas.example/widget.json",
+    error: "unsupported schema reference",
+  },
+])("fails closed for $name schema references", async ({ schemas, reference, error }) => {
+  const base = spec({ "/widgets": operation({ $ref: reference }) }, schemas);
+  const candidate = spec({
+    "/widgets": operation({ type: "object", properties: {} }),
+  });
+
+  await expect(findOpenApiBreakingChanges(base, candidate)).rejects.toThrow(error);
 });
 
 it("rejects malformed generated contract artifacts at the contract boundary", () => {

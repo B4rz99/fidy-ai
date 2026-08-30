@@ -185,56 +185,40 @@
         "type": "object"
       },
       "Arrays_": {
-        "allOf": [
-          {
-            "description": "Where to go next: up to three canonical operations worth calling after this one, best first. Empty when there is nothing worth suggesting, which is an answer rather than an omission. Each entry has passed the target-input and caller-authorization checkpoint.",
-            "maxItems": 3
-          }
-        ],
+        "description": "Where to go next: up to three canonical operations worth calling after this one, best first. Empty when there is nothing worth suggesting, which is an answer rather than an omission. Each entry has passed the target-input and caller-authorization checkpoint.",
         "items": {
           "$ref": "#/components/schemas/SuggestedOperation"
         },
+        "maxItems": 3,
         "type": "array"
       },
       "Arrays_1": {
-        "allOf": [
-          {
-            "maxItems": 16
-          },
-          {
-            "uniqueItems": true
-          }
-        ],
         "items": {
           "$ref": "#/components/schemas/CategoryId"
         },
+        "maxItems": 16,
         "minItems": 1,
         "prefixItems": [
           {
             "$ref": "#/components/schemas/CategoryId"
           }
         ],
-        "type": "array"
+        "type": "array",
+        "uniqueItems": true
       },
       "Arrays_2": {
-        "allOf": [
-          {
-            "maxItems": 16
-          },
-          {
-            "uniqueItems": true
-          }
-        ],
         "items": {
           "$ref": "#/components/schemas/CategoryId"
         },
+        "maxItems": 16,
         "minItems": 1,
         "prefixItems": [
           {
             "$ref": "#/components/schemas/CategoryId"
           }
         ],
-        "type": "array"
+        "type": "array",
+        "uniqueItems": true
       },
       "Arrays_3": {
         "items": {
@@ -249,26 +233,16 @@
         "type": "array"
       },
       "Arrays_5": {
-        "allOf": [
-          {
-            "uniqueItems": true
-          },
-          {
-            "minItems": 1
-          }
-        ],
         "items": {
           "$ref": "#/components/schemas/PATScope"
         },
-        "type": "array"
+        "minItems": 1,
+        "type": "array",
+        "uniqueItems": true
       },
       "AtomicBatchCallId": {
-        "allOf": [
-          {
-            "format": "uuid",
-            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|[fF]{8}-[fF]{4}-[fF]{4}-[fF]{4}-[fF]{12})$"
-          }
-        ],
+        "format": "uuid",
+        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|[fF]{8}-[fF]{4}-[fF]{4}-[fF]{4}-[fF]{12})$",
         "type": "string"
       },
       "AtomicBatchRejectedEncoded": {
@@ -292,11 +266,7 @@
                 "type": "string"
               },
               "failedCallIndex": {
-                "allOf": [
-                  {
-                    "minimum": 0
-                  }
-                ],
+                "minimum": 0,
                 "type": "integer"
               },
               "fields": {
@@ -306,14 +276,8 @@
                 "type": "array"
               },
               "message": {
-                "allOf": [
-                  {
-                    "minLength": 1
-                  },
-                  {
-                    "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
-                  }
-                ],
+                "minLength": 1,
+                "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
                 "type": "string"
               },
               "operation": {
@@ -340,11 +304,7 @@
         "type": "object"
       },
       "BackupRecoveryCode": {
-        "allOf": [
-          {
-            "pattern": "^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{5}(?:-[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{5}){4}$"
-          }
-        ],
+        "pattern": "^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{5}(?:-[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{5}){4}$",
         "type": "string"
       },
       "BesidePlacement": {
@@ -443,11 +403,7 @@
                 "type": "string"
               },
               "retryAfterSeconds": {
-                "allOf": [
-                  {
-                    "exclusiveMinimum": 0
-                  }
-                ],
+                "exclusiveMinimum": 0,
                 "type": "integer"
               }
             },
@@ -510,12 +466,8 @@
         "type": "object"
       },
       "BrowserLoginPairingId": {
-        "allOf": [
-          {
-            "format": "uuid",
-            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|[fF]{8}-[fF]{4}-[fF]{4}-[fF]{4}-[fF]{12})$"
-          }
-        ],
+        "format": "uuid",
+        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|[fF]{8}-[fF]{4}-[fF]{4}-[fF]{4}-[fF]{12})$",
         "type": "string"
       },
       "Budget": {
@@ -680,17 +632,9 @@
             "$ref": "#/components/schemas/Currency"
           },
           "title": {
-            "allOf": [
-              {
-                "minLength": 1
-              },
-              {
-                "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
-              },
-              {
-                "maxLength": 80
-              }
-            ],
+            "maxLength": 80,
+            "minLength": 1,
+            "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
             "type": "string"
           },
           "type": {
@@ -720,17 +664,9 @@
             "$ref": "#/components/schemas/WidgetId"
           },
           "title": {
-            "allOf": [
-              {
-                "minLength": 1
-              },
-              {
-                "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
-              },
-              {
-                "maxLength": 80
-              }
-            ],
+            "maxLength": 80,
+            "minLength": 1,
+            "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
             "type": "string"
           },
           "type": {
@@ -761,17 +697,9 @@
             "$ref": "#/components/schemas/WidgetId"
           },
           "title": {
-            "allOf": [
-              {
-                "minLength": 1
-              },
-              {
-                "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
-              },
-              {
-                "maxLength": 80
-              }
-            ],
+            "maxLength": 80,
+            "minLength": 1,
+            "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
             "type": "string"
           },
           "type": {
@@ -784,12 +712,8 @@
         "type": "object"
       },
       "BudgetId": {
-        "allOf": [
-          {
-            "format": "uuid",
-            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|[fF]{8}-[fF]{4}-[fF]{4}-[fF]{4}-[fF]{12})$"
-          }
-        ],
+        "format": "uuid",
+        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|[fF]{8}-[fF]{4}-[fF]{4}-[fF]{4}-[fF]{12})$",
         "type": "string"
       },
       "BudgetStatus": {
@@ -905,11 +829,7 @@
         "type": "object"
       },
       "CanonicalOperationId": {
-        "allOf": [
-          {
-            "pattern": "^[a-z][A-Za-z0-9]*\\.[a-z][A-Za-z0-9]*$"
-          }
-        ],
+        "pattern": "^[a-z][A-Za-z0-9]*\\.[a-z][A-Za-z0-9]*$",
         "type": "string"
       },
       "Category": {
@@ -929,40 +849,20 @@
         "type": "object"
       },
       "CategoryId": {
-        "allOf": [
-          {
-            "format": "uuid",
-            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|[fF]{8}-[fF]{4}-[fF]{4}-[fF]{4}-[fF]{12})$"
-          }
-        ],
+        "format": "uuid",
+        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|[fF]{8}-[fF]{4}-[fF]{4}-[fF]{4}-[fF]{12})$",
         "type": "string"
       },
       "CategoryKeyword": {
-        "allOf": [
-          {
-            "minLength": 1
-          },
-          {
-            "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
-          },
-          {
-            "maxLength": 80
-          }
-        ],
+        "maxLength": 80,
+        "minLength": 1,
+        "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
         "type": "string"
       },
       "CategoryLabel": {
-        "allOf": [
-          {
-            "minLength": 1
-          },
-          {
-            "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
-          },
-          {
-            "maxLength": 80
-          }
-        ],
+        "maxLength": 80,
+        "minLength": 1,
+        "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
         "type": "string"
       },
       "ConsentRequiredEncoded": {
@@ -985,15 +885,9 @@
                 "type": "string"
               },
               "message": {
-                "allOf": [
-                  {
-                    "minLength": 1
-                  },
-                  {
-                    "description": "Why the call failed and what to do about it, written to you rather than to the user. Decide your next move from it; do not relay it verbatim.",
-                    "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
-                  }
-                ],
+                "description": "Why the call failed and what to do about it, written to you rather than to the user. Decide your next move from it; do not relay it verbatim.",
+                "minLength": 1,
+                "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
                 "type": "string"
               }
             },
@@ -1092,18 +986,10 @@
             "$ref": "#/components/schemas/CategoryId"
           },
           "counterparty": {
-            "allOf": [
-              {
-                "minLength": 1
-              },
-              {
-                "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
-              },
-              {
-                "description": "The person or organization on the other side when the captured material explicitly identifies one — \"El Corral\", \"Claro\", \"Acme S.A.\". Omit this field rather than inferring a business, using a purchased item or purpose, or sending a placeholder.",
-                "maxLength": 120
-              }
-            ],
+            "description": "The person or organization on the other side when the captured material explicitly identifies one — \"El Corral\", \"Claro\", \"Acme S.A.\". Omit this field rather than inferring a business, using a purchased item or purpose, or sending a placeholder.",
+            "maxLength": 120,
+            "minLength": 1,
+            "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
             "type": "string"
           },
           "direction": {
@@ -1113,17 +999,9 @@
             "$ref": "#/components/schemas/Money"
           },
           "notes": {
-            "allOf": [
-              {
-                "minLength": 1
-              },
-              {
-                "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
-              },
-              {
-                "maxLength": 500
-              }
-            ],
+            "maxLength": 500,
+            "minLength": 1,
+            "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
             "type": "string"
           },
           "occurredAt": {
@@ -1139,18 +1017,10 @@
             "$ref": "#/components/schemas/CategoryId"
           },
           "counterparty": {
-            "allOf": [
-              {
-                "minLength": 1
-              },
-              {
-                "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
-              },
-              {
-                "description": "The person or organization on the other side when the captured material explicitly identifies one — \"El Corral\", \"Claro\", \"Acme S.A.\". Omit this field rather than inferring a business, using a purchased item or purpose, or sending a placeholder.",
-                "maxLength": 120
-              }
-            ],
+            "description": "The person or organization on the other side when the captured material explicitly identifies one — \"El Corral\", \"Claro\", \"Acme S.A.\". Omit this field rather than inferring a business, using a purchased item or purpose, or sending a placeholder.",
+            "maxLength": 120,
+            "minLength": 1,
+            "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
             "type": "string"
           },
           "direction": {
@@ -1160,17 +1030,9 @@
             "$ref": "#/components/schemas/Money_1"
           },
           "notes": {
-            "allOf": [
-              {
-                "minLength": 1
-              },
-              {
-                "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
-              },
-              {
-                "maxLength": 500
-              }
-            ],
+            "maxLength": 500,
+            "minLength": 1,
+            "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
             "type": "string"
           },
           "occurredAt": {
@@ -1696,34 +1558,18 @@
             "$ref": "#/components/schemas/Arrays_2"
           },
           "label": {
-            "allOf": [
-              {
-                "minLength": 1
-              },
-              {
-                "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
-              },
-              {
-                "maxLength": 80
-              }
-            ],
+            "maxLength": 80,
+            "minLength": 1,
+            "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
             "type": "string"
           },
           "period": {
             "$ref": "#/components/schemas/Union_4"
           },
           "title": {
-            "allOf": [
-              {
-                "minLength": 1
-              },
-              {
-                "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
-              },
-              {
-                "maxLength": 80
-              }
-            ],
+            "maxLength": 80,
+            "minLength": 1,
+            "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
             "type": "string"
           },
           "type": {
@@ -1754,34 +1600,18 @@
             "$ref": "#/components/schemas/WidgetId"
           },
           "label": {
-            "allOf": [
-              {
-                "minLength": 1
-              },
-              {
-                "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
-              },
-              {
-                "maxLength": 80
-              }
-            ],
+            "maxLength": 80,
+            "minLength": 1,
+            "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
             "type": "string"
           },
           "period": {
             "$ref": "#/components/schemas/Union_4"
           },
           "title": {
-            "allOf": [
-              {
-                "minLength": 1
-              },
-              {
-                "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
-              },
-              {
-                "maxLength": 80
-              }
-            ],
+            "maxLength": 80,
+            "minLength": 1,
+            "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
             "type": "string"
           },
           "type": {
@@ -1818,34 +1648,18 @@
             "$ref": "#/components/schemas/WidgetId"
           },
           "label": {
-            "allOf": [
-              {
-                "minLength": 1
-              },
-              {
-                "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
-              },
-              {
-                "maxLength": 80
-              }
-            ],
+            "maxLength": 80,
+            "minLength": 1,
+            "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
             "type": "string"
           },
           "period": {
             "$ref": "#/components/schemas/Union_"
           },
           "title": {
-            "allOf": [
-              {
-                "minLength": 1
-              },
-              {
-                "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
-              },
-              {
-                "maxLength": 80
-              }
-            ],
+            "maxLength": 80,
+            "minLength": 1,
+            "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
             "type": "string"
           },
           "type": {
@@ -1861,17 +1675,9 @@
         "additionalProperties": false,
         "properties": {
           "description": {
-            "allOf": [
-              {
-                "minLength": 1
-              },
-              {
-                "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
-              },
-              {
-                "maxLength": 160
-              }
-            ],
+            "maxLength": 160,
+            "minLength": 1,
+            "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
             "type": "string"
           },
           "id": {
@@ -1884,17 +1690,9 @@
             "type": "string"
           },
           "name": {
-            "allOf": [
-              {
-                "minLength": 1
-              },
-              {
-                "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
-              },
-              {
-                "maxLength": 160
-              }
-            ],
+            "maxLength": 160,
+            "minLength": 1,
+            "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
             "type": "string"
           },
           "widget": {
@@ -1916,17 +1714,9 @@
             "$ref": "#/components/schemas/LayoutNode"
           },
           "title": {
-            "allOf": [
-              {
-                "minLength": 1
-              },
-              {
-                "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
-              },
-              {
-                "maxLength": 80
-              }
-            ],
+            "maxLength": 80,
+            "minLength": 1,
+            "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
             "type": "string"
           }
         },
@@ -1993,18 +1783,10 @@
             "$ref": "#/components/schemas/Category"
           },
           "counterparty": {
-            "allOf": [
-              {
-                "minLength": 1
-              },
-              {
-                "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
-              },
-              {
-                "description": "The person or organization on the other side when the captured material explicitly identifies one — \"El Corral\", \"Claro\", \"Acme S.A.\". Omit this field rather than inferring a business, using a purchased item or purpose, or sending a placeholder.",
-                "maxLength": 120
-              }
-            ],
+            "description": "The person or organization on the other side when the captured material explicitly identifies one — \"El Corral\", \"Claro\", \"Acme S.A.\". Omit this field rather than inferring a business, using a purchased item or purpose, or sending a placeholder.",
+            "maxLength": 120,
+            "minLength": 1,
+            "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
             "type": "string"
           },
           "direction": {
@@ -2039,17 +1821,9 @@
             "$ref": "#/components/schemas/DashboardViewLayout"
           },
           "title": {
-            "allOf": [
-              {
-                "minLength": 1
-              },
-              {
-                "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
-              },
-              {
-                "maxLength": 80
-              }
-            ],
+            "maxLength": 80,
+            "minLength": 1,
+            "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
             "type": "string"
           }
         },
@@ -2112,14 +1886,10 @@
                 "$ref": "#/components/schemas/Union_6"
               },
               "children": {
-                "allOf": [
-                  {
-                    "maxItems": 24
-                  }
-                ],
                 "items": {
                   "$ref": "#/components/schemas/Objects_11"
                 },
+                "maxItems": 24,
                 "minItems": 2,
                 "prefixItems": [
                   {
@@ -2216,57 +1986,29 @@
         ]
       },
       "DeliveryAttemptId": {
-        "allOf": [
-          {
-            "format": "uuid",
-            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|[fF]{8}-[fF]{4}-[fF]{4}-[fF]{4}-[fF]{12})$"
-          }
-        ],
+        "format": "uuid",
+        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|[fF]{8}-[fF]{4}-[fF]{4}-[fF]{4}-[fF]{12})$",
         "type": "string"
       },
       "DeliveryEvidenceInput": {
         "additionalProperties": false,
         "properties": {
           "channel": {
-            "allOf": [
-              {
-                "minLength": 1
-              },
-              {
-                "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
-              },
-              {
-                "maxLength": 32
-              }
-            ],
+            "maxLength": 32,
+            "minLength": 1,
+            "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
             "type": "string"
           },
           "provider": {
-            "allOf": [
-              {
-                "minLength": 1
-              },
-              {
-                "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
-              },
-              {
-                "maxLength": 64
-              }
-            ],
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
             "type": "string"
           },
           "providerMessageId": {
-            "allOf": [
-              {
-                "minLength": 1
-              },
-              {
-                "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
-              },
-              {
-                "maxLength": 256
-              }
-            ],
+            "maxLength": 256,
+            "minLength": 1,
+            "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
             "type": "string"
           },
           "sentAt": {
@@ -2285,45 +2027,21 @@
         "additionalProperties": false,
         "properties": {
           "channel": {
-            "allOf": [
-              {
-                "minLength": 1
-              },
-              {
-                "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
-              },
-              {
-                "maxLength": 32
-              }
-            ],
+            "maxLength": 32,
+            "minLength": 1,
+            "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
             "type": "string"
           },
           "provider": {
-            "allOf": [
-              {
-                "minLength": 1
-              },
-              {
-                "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
-              },
-              {
-                "maxLength": 64
-              }
-            ],
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
             "type": "string"
           },
           "providerMessageId": {
-            "allOf": [
-              {
-                "minLength": 1
-              },
-              {
-                "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
-              },
-              {
-                "maxLength": 256
-              }
-            ],
+            "maxLength": 256,
+            "minLength": 1,
+            "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
             "type": "string"
           },
           "sentAt": {
@@ -2339,17 +2057,9 @@
         "additionalProperties": false,
         "properties": {
           "address": {
-            "allOf": [
-              {
-                "minLength": 1
-              },
-              {
-                "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
-              },
-              {
-                "maxLength": 320
-              }
-            ],
+            "maxLength": 320,
+            "minLength": 1,
+            "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
             "type": "string"
           },
           "createdAt": {
@@ -2367,12 +2077,8 @@
         "type": "object"
       },
       "EmailForwardingAddressId": {
-        "allOf": [
-          {
-            "format": "uuid",
-            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|[fF]{8}-[fF]{4}-[fF]{4}-[fF]{4}-[fF]{12})$"
-          }
-        ],
+        "format": "uuid",
+        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|[fF]{8}-[fF]{4}-[fF]{4}-[fF]{4}-[fF]{12})$",
         "type": "string"
       },
       "EmailForwardingStatus": {
@@ -2382,30 +2088,18 @@
             "$ref": "#/components/schemas/EmailForwardingAddress"
           },
           "deferredCapacityRemaining": {
-            "allOf": [
-              {
-                "maximum": 50,
-                "minimum": 0
-              }
-            ],
+            "maximum": 50,
+            "minimum": 0,
             "type": "integer"
           },
           "deferredEmails": {
-            "allOf": [
-              {
-                "maximum": 50,
-                "minimum": 0
-              }
-            ],
+            "maximum": 50,
+            "minimum": 0,
             "type": "integer"
           },
           "remainingThisMonth": {
-            "allOf": [
-              {
-                "maximum": 50,
-                "minimum": 0
-              }
-            ],
+            "maximum": 50,
+            "minimum": 0,
             "type": "integer"
           },
           "resetsAt": {
@@ -2459,17 +2153,9 @@
                 "type": "string"
               },
               "receivedEmailId": {
-                "allOf": [
-                  {
-                    "minLength": 1
-                  },
-                  {
-                    "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
-                  },
-                  {
-                    "maxLength": 256
-                  }
-                ],
+                "maxLength": 256,
+                "minLength": 1,
+                "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
                 "type": "string"
               },
               "serviceMarket": {
@@ -2558,17 +2244,9 @@
                 "type": "string"
               },
               "receivedEmailId": {
-                "allOf": [
-                  {
-                    "minLength": 1
-                  },
-                  {
-                    "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
-                  },
-                  {
-                    "maxLength": 256
-                  }
-                ],
+                "maxLength": 256,
+                "minLength": 1,
+                "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
                 "type": "string"
               },
               "serviceMarket": {
@@ -2658,17 +2336,9 @@
                 "type": "string"
               },
               "receivedEmailId": {
-                "allOf": [
-                  {
-                    "minLength": 1
-                  },
-                  {
-                    "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
-                  },
-                  {
-                    "maxLength": 256
-                  }
-                ],
+                "maxLength": 256,
+                "minLength": 1,
+                "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
                 "type": "string"
               },
               "serviceMarket": {
@@ -2746,12 +2416,8 @@
             "type": "string"
           },
           "path": {
-            "allOf": [
-              {
-                "description": "Dotted path to the value at fault inside what you sent — `amount`, or `items.0.counterparty`. Present when the failure could be pinned to one value; absent when it could not, and then `message` is about the request as a whole.",
-                "minLength": 1
-              }
-            ],
+            "description": "Dotted path to the value at fault inside what you sent — `amount`, or `items.0.counterparty`. Present when the failure could be pinned to one value; absent when it could not, and then `message` is about the request as a whole.",
+            "minLength": 1,
             "type": "string"
           }
         },
@@ -2764,29 +2430,17 @@
         "type": "string"
       },
       "IngestSampleId": {
-        "allOf": [
-          {
-            "format": "uuid",
-            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|[fF]{8}-[fF]{4}-[fF]{4}-[fF]{4}-[fF]{12})$"
-          }
-        ],
+        "format": "uuid",
+        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|[fF]{8}-[fF]{4}-[fF]{4}-[fF]{4}-[fF]{12})$",
         "type": "string"
       },
       "InsightDeliveryAttempt": {
         "additionalProperties": false,
         "properties": {
           "channel": {
-            "allOf": [
-              {
-                "minLength": 1
-              },
-              {
-                "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
-              },
-              {
-                "maxLength": 32
-              }
-            ],
+            "maxLength": 32,
+            "minLength": 1,
+            "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
             "type": "string"
           },
           "id": {
@@ -2796,31 +2450,15 @@
             "$ref": "#/components/schemas/InsightEventId"
           },
           "provider": {
-            "allOf": [
-              {
-                "minLength": 1
-              },
-              {
-                "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
-              },
-              {
-                "maxLength": 64
-              }
-            ],
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
             "type": "string"
           },
           "providerMessageId": {
-            "allOf": [
-              {
-                "minLength": 1
-              },
-              {
-                "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
-              },
-              {
-                "maxLength": 256
-              }
-            ],
+            "maxLength": 256,
+            "minLength": 1,
+            "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
             "type": "string"
           },
           "sentAt": {
@@ -2898,26 +2536,14 @@
         "type": "object"
       },
       "InsightEventId": {
-        "allOf": [
-          {
-            "format": "uuid",
-            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|[fF]{8}-[fF]{4}-[fF]{4}-[fF]{4}-[fF]{12})$"
-          }
-        ],
+        "format": "uuid",
+        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|[fF]{8}-[fF]{4}-[fF]{4}-[fF]{4}-[fF]{12})$",
         "type": "string"
       },
       "InterpretationRevision": {
-        "allOf": [
-          {
-            "minLength": 1
-          },
-          {
-            "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
-          },
-          {
-            "maxLength": 80
-          }
-        ],
+        "maxLength": 80,
+        "minLength": 1,
+        "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
         "type": "string"
       },
       "IssuedManualPATResponse": {
@@ -3031,12 +2657,8 @@
         "type": "object"
       },
       "KeywordRuleId": {
-        "allOf": [
-          {
-            "format": "uuid",
-            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|[fF]{8}-[fF]{4}-[fF]{4}-[fF]{4}-[fF]{12})$"
-          }
-        ],
+        "format": "uuid",
+        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|[fF]{8}-[fF]{4}-[fF]{4}-[fF]{4}-[fF]{12})$",
         "type": "string"
       },
       "LaunchPaymentMethods": {
@@ -3092,14 +2714,10 @@
                 "$ref": "#/components/schemas/Union_6"
               },
               "children": {
-                "allOf": [
-                  {
-                    "maxItems": 24
-                  }
-                ],
                 "items": {
                   "$ref": "#/components/schemas/Objects_9"
                 },
+                "maxItems": 24,
                 "minItems": 2,
                 "prefixItems": [
                   {
@@ -3128,44 +2746,32 @@
         ]
       },
       "LayoutRegionSelector": {
-        "allOf": [
-          {
-            "maxItems": 24
-          },
-          {
-            "uniqueItems": true
-          }
-        ],
         "items": {
           "$ref": "#/components/schemas/WidgetId"
         },
+        "maxItems": 24,
         "minItems": 1,
         "prefixItems": [
           {
             "$ref": "#/components/schemas/WidgetId"
           }
         ],
-        "type": "array"
+        "type": "array",
+        "uniqueItems": true
       },
       "LayoutRegionSelector_1": {
-        "allOf": [
-          {
-            "maxItems": 24
-          },
-          {
-            "uniqueItems": true
-          }
-        ],
         "items": {
           "$ref": "#/components/schemas/WidgetId"
         },
+        "maxItems": 24,
         "minItems": 1,
         "prefixItems": [
           {
             "$ref": "#/components/schemas/WidgetId"
           }
         ],
-        "type": "array"
+        "type": "array",
+        "uniqueItems": true
       },
       "Literal_": {
         "enum": [
@@ -3267,11 +2873,7 @@
                 "type": "string"
               },
               "retryAfterSeconds": {
-                "allOf": [
-                  {
-                    "exclusiveMinimum": 0
-                  }
-                ],
+                "exclusiveMinimum": 0,
                 "type": "integer"
               }
             },
@@ -3293,12 +2895,8 @@
         "type": "object"
       },
       "ManualPATRequestId": {
-        "allOf": [
-          {
-            "format": "uuid",
-            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
-          }
-        ],
+        "format": "uuid",
+        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
         "type": "string"
       },
       "ManualPATReviewExpiredEncoded": {
@@ -3385,11 +2983,7 @@
                 "type": "string"
               },
               "message": {
-                "allOf": [
-                  {
-                    "minLength": 1
-                  }
-                ],
+                "minLength": 1,
                 "type": "string"
               }
             },
@@ -3410,26 +3004,14 @@
         "type": "object"
       },
       "MemoryId": {
-        "allOf": [
-          {
-            "format": "uuid",
-            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|[fF]{8}-[fF]{4}-[fF]{4}-[fF]{4}-[fF]{12})$"
-          }
-        ],
+        "format": "uuid",
+        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|[fF]{8}-[fF]{4}-[fF]{4}-[fF]{4}-[fF]{12})$",
         "type": "string"
       },
       "MemoryText": {
-        "allOf": [
-          {
-            "minLength": 1
-          },
-          {
-            "maxLength": 2000
-          },
-          {
-            "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
-          }
-        ],
+        "maxLength": 2000,
+        "minLength": 1,
+        "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
         "type": "string"
       },
       "MemoryTextEncoded": {
@@ -3440,12 +3022,8 @@
         "description": "A non-negative exact decimal amount together with its ISO 4217 Currency. Currency precision is enforced and no conversion is implied.",
         "properties": {
           "amount": {
-            "allOf": [
-              {
-                "description": "A non-negative exact amount as plain decimal text. Responses remove insignificant trailing zeros and never use exponent or locale notation.",
-                "pattern": "^(?:0|[1-9]\\d*)(?:\\.\\d+)?$"
-              }
-            ],
+            "description": "A non-negative exact amount as plain decimal text. Responses remove insignificant trailing zeros and never use exponent or locale notation.",
+            "pattern": "^(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
             "type": "string"
           },
           "currency": {
@@ -3459,12 +3037,8 @@
         "description": "A non-negative exact decimal amount together with its ISO 4217 Currency. Currency precision is enforced and no conversion is implied.",
         "properties": {
           "amount": {
-            "allOf": [
-              {
-                "description": "A non-negative exact amount as plain decimal text. Responses remove insignificant trailing zeros and never use exponent or locale notation.",
-                "pattern": "^(?:0|[1-9]\\d*)(?:\\.\\d+)?$"
-              }
-            ],
+            "description": "A non-negative exact amount as plain decimal text. Responses remove insignificant trailing zeros and never use exponent or locale notation.",
+            "pattern": "^(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
             "type": "string"
           },
           "currency": {
@@ -3555,12 +3129,8 @@
         ]
       },
       "NeedsReviewItemId": {
-        "allOf": [
-          {
-            "format": "uuid",
-            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|[fF]{8}-[fF]{4}-[fF]{4}-[fF]{4}-[fF]{12})$"
-          }
-        ],
+        "format": "uuid",
+        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|[fF]{8}-[fF]{4}-[fF]{4}-[fF]{4}-[fF]{12})$",
         "type": "string"
       },
       "NotFoundEncoded": {
@@ -3583,15 +3153,9 @@
                 "type": "string"
               },
               "message": {
-                "allOf": [
-                  {
-                    "minLength": 1
-                  },
-                  {
-                    "description": "Why the call failed and what to do about it, written to you rather than to the user. Decide your next move from it; do not relay it verbatim.",
-                    "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
-                  }
-                ],
+                "description": "Why the call failed and what to do about it, written to you rather than to the user. Decide your next move from it; do not relay it verbatim.",
+                "minLength": 1,
+                "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
                 "type": "string"
               }
             },
@@ -4106,12 +3670,8 @@
         "type": "object"
       },
       "PATId": {
-        "allOf": [
-          {
-            "format": "uuid",
-            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|[fF]{8}-[fF]{4}-[fF]{4}-[fF]{4}-[fF]{12})$"
-          }
-        ],
+        "format": "uuid",
+        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|[fF]{8}-[fF]{4}-[fF]{4}-[fF]{4}-[fF]{12})$",
         "type": "string"
       },
       "PATLifetimeDays": {
@@ -4124,12 +3684,8 @@
         "type": "number"
       },
       "PATPairingId": {
-        "allOf": [
-          {
-            "format": "uuid",
-            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
-          }
-        ],
+        "format": "uuid",
+        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
         "type": "string"
       },
       "PATPairingReview": {
@@ -4192,11 +3748,7 @@
                 "type": "string"
               },
               "retryAfterSeconds": {
-                "allOf": [
-                  {
-                    "exclusiveMinimum": 0
-                  }
-                ],
+                "exclusiveMinimum": 0,
                 "type": "integer"
               }
             },
@@ -4259,17 +3811,9 @@
         "type": "object"
       },
       "PATRecipientLabel": {
-        "allOf": [
-          {
-            "minLength": 1
-          },
-          {
-            "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
-          },
-          {
-            "maxLength": 80
-          }
-        ],
+        "maxLength": 80,
+        "minLength": 1,
+        "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
         "type": "string"
       },
       "PATRecipientLabelInput": {
@@ -4304,15 +3848,9 @@
                 "type": "string"
               },
               "message": {
-                "allOf": [
-                  {
-                    "minLength": 1
-                  },
-                  {
-                    "description": "Why the call failed and what to do about it, written to you rather than to the user. Decide your next move from it; do not relay it verbatim.",
-                    "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
-                  }
-                ],
+                "description": "Why the call failed and what to do about it, written to you rather than to the user. Decide your next move from it; do not relay it verbatim.",
+                "minLength": 1,
+                "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
                 "type": "string"
               }
             },
@@ -4369,57 +3907,29 @@
         "type": "object"
       },
       "PriceId": {
-        "allOf": [
-          {
-            "format": "uuid",
-            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|[fF]{8}-[fF]{4}-[fF]{4}-[fF]{4}-[fF]{12})$"
-          }
-        ],
+        "format": "uuid",
+        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|[fF]{8}-[fF]{4}-[fF]{4}-[fF]{4}-[fF]{12})$",
         "type": "string"
       },
       "ProviderMessageEvidence": {
         "additionalProperties": false,
         "properties": {
           "channel": {
-            "allOf": [
-              {
-                "minLength": 1
-              },
-              {
-                "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
-              },
-              {
-                "maxLength": 32
-              }
-            ],
+            "maxLength": 32,
+            "minLength": 1,
+            "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
             "type": "string"
           },
           "provider": {
-            "allOf": [
-              {
-                "minLength": 1
-              },
-              {
-                "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
-              },
-              {
-                "maxLength": 64
-              }
-            ],
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
             "type": "string"
           },
           "providerMessageId": {
-            "allOf": [
-              {
-                "minLength": 1
-              },
-              {
-                "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
-              },
-              {
-                "maxLength": 256
-              }
-            ],
+            "maxLength": 256,
+            "minLength": 1,
+            "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
             "type": "string"
           }
         },
@@ -4722,11 +4232,7 @@
         "additionalProperties": false,
         "properties": {
           "revokedCount": {
-            "allOf": [
-              {
-                "minimum": 0
-              }
-            ],
+            "minimum": 0,
             "type": "integer"
           }
         },
@@ -4759,20 +4265,12 @@
         "type": "object"
       },
       "ScheduleId": {
-        "allOf": [
-          {
-            "format": "uuid",
-            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|[fF]{8}-[fF]{4}-[fF]{4}-[fF]{4}-[fF]{12})$"
-          }
-        ],
+        "format": "uuid",
+        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|[fF]{8}-[fF]{4}-[fF]{4}-[fF]{4}-[fF]{12})$",
         "type": "string"
       },
       "ScheduleVersion": {
-        "allOf": [
-          {
-            "exclusiveMinimum": 0
-          }
-        ],
+        "exclusiveMinimum": 0,
         "type": "integer"
       },
       "ScopeMissingEncoded": {
@@ -4795,15 +4293,9 @@
                 "type": "string"
               },
               "message": {
-                "allOf": [
-                  {
-                    "minLength": 1
-                  },
-                  {
-                    "description": "Why the call failed and what to do about it, written to you rather than to the user. Decide your next move from it; do not relay it verbatim.",
-                    "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
-                  }
-                ],
+                "description": "Why the call failed and what to do about it, written to you rather than to the user. Decide your next move from it; do not relay it verbatim.",
+                "minLength": 1,
+                "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
                 "type": "string"
               }
             },
@@ -4839,17 +4331,9 @@
             "type": "string"
           },
           "title": {
-            "allOf": [
-              {
-                "minLength": 1
-              },
-              {
-                "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
-              },
-              {
-                "maxLength": 80
-              }
-            ],
+            "maxLength": 80,
+            "minLength": 1,
+            "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
             "type": "string"
           }
         },
@@ -4869,17 +4353,9 @@
             "type": "string"
           },
           "title": {
-            "allOf": [
-              {
-                "minLength": 1
-              },
-              {
-                "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
-              },
-              {
-                "maxLength": 80
-              }
-            ],
+            "maxLength": 80,
+            "minLength": 1,
+            "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
             "type": "string"
           }
         },
@@ -4912,31 +4388,15 @@
                 "$ref": "#/components/schemas/ServiceMarket"
               },
               "sourceChannel": {
-                "allOf": [
-                  {
-                    "minLength": 1
-                  },
-                  {
-                    "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
-                  },
-                  {
-                    "maxLength": 80
-                  }
-                ],
+                "maxLength": 80,
+                "minLength": 1,
+                "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
                 "type": "string"
               },
               "sourceProvider": {
-                "allOf": [
-                  {
-                    "minLength": 1
-                  },
-                  {
-                    "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
-                  },
-                  {
-                    "maxLength": 80
-                  }
-                ],
+                "maxLength": 80,
+                "minLength": 1,
+                "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
                 "type": "string"
               },
               "timeZone": {
@@ -4986,50 +4446,26 @@
                 "$ref": "#/components/schemas/ServiceMarket"
               },
               "sourceChannel": {
-                "allOf": [
-                  {
-                    "minLength": 1
-                  },
-                  {
-                    "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
-                  },
-                  {
-                    "maxLength": 80
-                  }
-                ],
+                "maxLength": 80,
+                "minLength": 1,
+                "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
                 "type": "string"
               },
               "sourceFormat": {
                 "$ref": "#/components/schemas/Union_9"
               },
               "sourceProvider": {
-                "allOf": [
-                  {
-                    "minLength": 1
-                  },
-                  {
-                    "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
-                  },
-                  {
-                    "maxLength": 80
-                  }
-                ],
+                "maxLength": 80,
+                "minLength": 1,
+                "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
                 "type": "string"
               },
               "statementContentHash": {
-                "allOf": [
-                  {
-                    "minLength": 1
-                  }
-                ],
+                "minLength": 1,
                 "type": "string"
               },
               "statementRecordNumber": {
-                "allOf": [
-                  {
-                    "exclusiveMinimum": 0
-                  }
-                ],
+                "exclusiveMinimum": 0,
                 "type": "integer"
               },
               "statementSubmissionId": {
@@ -5084,45 +4520,25 @@
                 "$ref": "#/components/schemas/Locale"
               },
               "messageContentSha256": {
-                "allOf": [
-                  {
-                    "pattern": "^[0-9a-f]{64}$"
-                  }
-                ],
+                "pattern": "^[0-9a-f]{64}$",
                 "type": "string"
               },
               "messageEvidence": {
                 "$ref": "#/components/schemas/ProviderMessageEvidence"
               },
               "receivedEmailId": {
-                "allOf": [
-                  {
-                    "minLength": 1
-                  },
-                  {
-                    "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
-                  },
-                  {
-                    "maxLength": 256
-                  }
-                ],
+                "maxLength": 256,
+                "minLength": 1,
+                "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
                 "type": "string"
               },
               "serviceMarket": {
                 "$ref": "#/components/schemas/ServiceMarket"
               },
               "sourceChannel": {
-                "allOf": [
-                  {
-                    "minLength": 1
-                  },
-                  {
-                    "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
-                  },
-                  {
-                    "maxLength": 80
-                  }
-                ],
+                "maxLength": 80,
+                "minLength": 1,
+                "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
                 "type": "string"
               },
               "sourceFormat": {
@@ -5132,17 +4548,9 @@
                 "type": "string"
               },
               "sourceProvider": {
-                "allOf": [
-                  {
-                    "minLength": 1
-                  },
-                  {
-                    "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
-                  },
-                  {
-                    "maxLength": 80
-                  }
-                ],
+                "maxLength": 80,
+                "minLength": 1,
+                "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
                 "type": "string"
               },
               "timeZone": {
@@ -5172,12 +4580,8 @@
         ]
       },
       "SourceAttestationId": {
-        "allOf": [
-          {
-            "format": "uuid",
-            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|[fF]{8}-[fF]{4}-[fF]{4}-[fF]{4}-[fF]{12})$"
-          }
-        ],
+        "format": "uuid",
+        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|[fF]{8}-[fF]{4}-[fF]{4}-[fF]{4}-[fF]{12})$",
         "type": "string"
       },
       "SpendingChartResult": {
@@ -5215,11 +4619,7 @@
                       "additionalProperties": false,
                       "properties": {
                         "date": {
-                          "allOf": [
-                            {
-                              "pattern": "^\\d{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\\d|3[01])$"
-                            }
-                          ],
+                          "pattern": "^\\d{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\\d|3[01])$",
                           "type": "string"
                         },
                         "kind": {
@@ -5245,11 +4645,7 @@
                           "type": "string"
                         },
                         "month": {
-                          "allOf": [
-                            {
-                              "pattern": "^\\d{4}-(?:0[1-9]|1[0-2])$"
-                            }
-                          ],
+                          "pattern": "^\\d{4}-(?:0[1-9]|1[0-2])$",
                           "type": "string"
                         }
                       },
@@ -5293,17 +4689,9 @@
             "$ref": "#/components/schemas/Union_4"
           },
           "title": {
-            "allOf": [
-              {
-                "minLength": 1
-              },
-              {
-                "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
-              },
-              {
-                "maxLength": 80
-              }
-            ],
+            "maxLength": 80,
+            "minLength": 1,
+            "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
             "type": "string"
           },
           "type": {
@@ -5336,17 +4724,9 @@
             "$ref": "#/components/schemas/Union_4"
           },
           "title": {
-            "allOf": [
-              {
-                "minLength": 1
-              },
-              {
-                "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
-              },
-              {
-                "maxLength": 80
-              }
-            ],
+            "maxLength": 80,
+            "minLength": 1,
+            "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
             "type": "string"
           },
           "type": {
@@ -5385,17 +4765,9 @@
             "$ref": "#/components/schemas/Union_"
           },
           "title": {
-            "allOf": [
-              {
-                "minLength": 1
-              },
-              {
-                "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
-              },
-              {
-                "maxLength": 80
-              }
-            ],
+            "maxLength": 80,
+            "minLength": 1,
+            "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
             "type": "string"
           },
           "type": {
@@ -5408,39 +4780,23 @@
         "type": "object"
       },
       "SplitWeight": {
-        "allOf": [
-          {
-            "maximum": 1000,
-            "minimum": 0.001
-          }
-        ],
+        "maximum": 1000,
+        "minimum": 0.001,
         "type": "number"
       },
       "StatementAccounting": {
         "additionalProperties": false,
         "properties": {
           "acceptedRows": {
-            "allOf": [
-              {
-                "minimum": 0
-              }
-            ],
+            "minimum": 0,
             "type": "integer"
           },
           "inputRows": {
-            "allOf": [
-              {
-                "minimum": 0
-              }
-            ],
+            "minimum": 0,
             "type": "integer"
           },
           "needsReviewRows": {
-            "allOf": [
-              {
-                "minimum": 0
-              }
-            ],
+            "minimum": 0,
             "type": "integer"
           }
         },
@@ -5460,11 +4816,7 @@
                 "$ref": "#/components/schemas/UtcTimestamp"
               },
               "extractorRevision": {
-                "allOf": [
-                  {
-                    "minLength": 1
-                  }
-                ],
+                "minLength": 1,
                 "type": "string"
               },
               "id": {
@@ -5485,11 +4837,7 @@
                     "additionalProperties": false,
                     "properties": {
                       "endLine": {
-                        "allOf": [
-                          {
-                            "exclusiveMinimum": 0
-                          }
-                        ],
+                        "exclusiveMinimum": 0,
                         "type": "integer"
                       },
                       "fields": {
@@ -5502,11 +4850,7 @@
                         "type": "string"
                       },
                       "recordNumber": {
-                        "allOf": [
-                          {
-                            "exclusiveMinimum": 0
-                          }
-                        ],
+                        "exclusiveMinimum": 0,
                         "type": "integer"
                       },
                       "sourceFormat": {
@@ -5516,11 +4860,7 @@
                         "type": "string"
                       },
                       "startLine": {
-                        "allOf": [
-                          {
-                            "exclusiveMinimum": 0
-                          }
-                        ],
+                        "exclusiveMinimum": 0,
                         "type": "integer"
                       }
                     },
@@ -5542,11 +4882,7 @@
                           "additionalProperties": false,
                           "properties": {
                             "address": {
-                              "allOf": [
-                                {
-                                  "minLength": 1
-                                }
-                              ],
+                              "minLength": 1,
                               "type": "string"
                             },
                             "cellType": {
@@ -5586,27 +4922,15 @@
                         "type": "boolean"
                       },
                       "rowNumber": {
-                        "allOf": [
-                          {
-                            "exclusiveMinimum": 0
-                          }
-                        ],
+                        "exclusiveMinimum": 0,
                         "type": "integer"
                       },
                       "sheetIndex": {
-                        "allOf": [
-                          {
-                            "minimum": 0
-                          }
-                        ],
+                        "minimum": 0,
                         "type": "integer"
                       },
                       "sheetName": {
-                        "allOf": [
-                          {
-                            "minLength": 1
-                          }
-                        ],
+                        "minLength": 1,
                         "type": "string"
                       },
                       "sourceFormat": {
@@ -5629,22 +4953,14 @@
                 ]
               },
               "parserRevision": {
-                "allOf": [
-                  {
-                    "minLength": 1
-                  }
-                ],
+                "minLength": 1,
                 "type": "string"
               },
               "reason": {
                 "$ref": "#/components/schemas/Union_10"
               },
               "recordNumber": {
-                "allOf": [
-                  {
-                    "exclusiveMinimum": 0
-                  }
-                ],
+                "exclusiveMinimum": 0,
                 "type": "integer"
               },
               "serviceMarket": {
@@ -5660,11 +4976,7 @@
                 "$ref": "#/components/schemas/Union_9"
               },
               "sourceProvider": {
-                "allOf": [
-                  {
-                    "minLength": 1
-                  }
-                ],
+                "minLength": 1,
                 "type": "string"
               },
               "status": {
@@ -5706,11 +5018,7 @@
                 "$ref": "#/components/schemas/UtcTimestamp"
               },
               "extractorRevision": {
-                "allOf": [
-                  {
-                    "minLength": 1
-                  }
-                ],
+                "minLength": 1,
                 "type": "string"
               },
               "id": {
@@ -5726,22 +5034,14 @@
                 "$ref": "#/components/schemas/Locale"
               },
               "parserRevision": {
-                "allOf": [
-                  {
-                    "minLength": 1
-                  }
-                ],
+                "minLength": 1,
                 "type": "string"
               },
               "reason": {
                 "$ref": "#/components/schemas/Union_10"
               },
               "recordNumber": {
-                "allOf": [
-                  {
-                    "exclusiveMinimum": 0
-                  }
-                ],
+                "exclusiveMinimum": 0,
                 "type": "integer"
               },
               "serviceMarket": {
@@ -5757,11 +5057,7 @@
                 "$ref": "#/components/schemas/Union_9"
               },
               "sourceProvider": {
-                "allOf": [
-                  {
-                    "minLength": 1
-                  }
-                ],
+                "minLength": 1,
                 "type": "string"
               },
               "status": {
@@ -5802,11 +5098,7 @@
                 "$ref": "#/components/schemas/UtcTimestamp"
               },
               "extractorRevision": {
-                "allOf": [
-                  {
-                    "minLength": 1
-                  }
-                ],
+                "minLength": 1,
                 "type": "string"
               },
               "id": {
@@ -5822,22 +5114,14 @@
                 "$ref": "#/components/schemas/Locale"
               },
               "parserRevision": {
-                "allOf": [
-                  {
-                    "minLength": 1
-                  }
-                ],
+                "minLength": 1,
                 "type": "string"
               },
               "reason": {
                 "$ref": "#/components/schemas/Union_10"
               },
               "recordNumber": {
-                "allOf": [
-                  {
-                    "exclusiveMinimum": 0
-                  }
-                ],
+                "exclusiveMinimum": 0,
                 "type": "integer"
               },
               "resolvedAt": {
@@ -5856,11 +5140,7 @@
                 "$ref": "#/components/schemas/Union_9"
               },
               "sourceProvider": {
-                "allOf": [
-                  {
-                    "minLength": 1
-                  }
-                ],
+                "minLength": 1,
                 "type": "string"
               },
               "status": {
@@ -5910,11 +5190,7 @@
                 "$ref": "#/components/schemas/StatementSubmissionId"
               },
               "parserRevision": {
-                "allOf": [
-                  {
-                    "minLength": 1
-                  }
-                ],
+                "minLength": 1,
                 "type": "string"
               },
               "sourceFormat": {
@@ -5946,11 +5222,7 @@
                 "$ref": "#/components/schemas/StatementSubmissionId"
               },
               "parserRevision": {
-                "allOf": [
-                  {
-                    "minLength": 1
-                  }
-                ],
+                "minLength": 1,
                 "type": "string"
               },
               "sourceFormat": {
@@ -5992,11 +5264,7 @@
                 "$ref": "#/components/schemas/StatementSubmissionId"
               },
               "parserRevision": {
-                "allOf": [
-                  {
-                    "minLength": 1
-                  }
-                ],
+                "minLength": 1,
                 "type": "string"
               },
               "sourceFormat": {
@@ -6047,11 +5315,7 @@
                 "$ref": "#/components/schemas/StatementSubmissionId"
               },
               "parserRevision": {
-                "allOf": [
-                  {
-                    "minLength": 1
-                  }
-                ],
+                "minLength": 1,
                 "type": "string"
               },
               "sourceFormat": {
@@ -6085,12 +5349,8 @@
         ]
       },
       "StatementSubmissionId": {
-        "allOf": [
-          {
-            "format": "uuid",
-            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|[fF]{8}-[fF]{4}-[fF]{4}-[fF]{4}-[fF]{12})$"
-          }
-        ],
+        "format": "uuid",
+        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|[fF]{8}-[fF]{4}-[fF]{4}-[fF]{4}-[fF]{12})$",
         "type": "string"
       },
       "SubmitForExtractionInput": {
@@ -6100,14 +5360,8 @@
             "additionalProperties": false,
             "properties": {
               "contentBase64": {
-                "allOf": [
-                  {
-                    "pattern": "^[A-Za-z0-9+/]*={0,2}$"
-                  },
-                  {
-                    "maxLength": 6990508
-                  }
-                ],
+                "maxLength": 6990508,
+                "pattern": "^[A-Za-z0-9+/]*={0,2}$",
                 "type": "string"
               },
               "declaredMediaType": {
@@ -6136,17 +5390,9 @@
                 ]
               },
               "name": {
-                "allOf": [
-                  {
-                    "minLength": 1
-                  },
-                  {
-                    "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
-                  },
-                  {
-                    "maxLength": 255
-                  }
-                ],
+                "maxLength": 255,
+                "minLength": 1,
+                "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
                 "type": "string"
               }
             },
@@ -6158,12 +5404,8 @@
             "type": "object"
           },
           "idempotencyKey": {
-            "allOf": [
-              {
-                "format": "uuid",
-                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|[fF]{8}-[fF]{4}-[fF]{4}-[fF]{4}-[fF]{12})$"
-              }
-            ],
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|[fF]{8}-[fF]{4}-[fF]{4}-[fF]{4}-[fF]{12})$",
             "type": "string"
           }
         },
@@ -6180,14 +5422,8 @@
             "additionalProperties": false,
             "properties": {
               "contentBase64": {
-                "allOf": [
-                  {
-                    "pattern": "^[A-Za-z0-9+/]*={0,2}$"
-                  },
-                  {
-                    "maxLength": 6990508
-                  }
-                ],
+                "maxLength": 6990508,
+                "pattern": "^[A-Za-z0-9+/]*={0,2}$",
                 "type": "string"
               },
               "declaredMediaType": {
@@ -6216,29 +5452,17 @@
                 ]
               },
               "name": {
-                "allOf": [
-                  {
-                    "minLength": 1
-                  },
-                  {
-                    "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
-                  },
-                  {
-                    "maxLength": 255
-                  }
-                ],
+                "maxLength": 255,
+                "minLength": 1,
+                "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
                 "type": "string"
               }
             },
             "type": "object"
           },
           "idempotencyKey": {
-            "allOf": [
-              {
-                "format": "uuid",
-                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|[fF]{8}-[fF]{4}-[fF]{4}-[fF]{4}-[fF]{12})$"
-              }
-            ],
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|[fF]{8}-[fF]{4}-[fF]{4}-[fF]{4}-[fF]{12})$",
             "type": "string"
           }
         },
@@ -6266,17 +5490,9 @@
             "additionalProperties": false,
             "properties": {
               "hint": {
-                "allOf": [
-                  {
-                    "minLength": 1
-                  },
-                  {
-                    "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
-                  },
-                  {
-                    "maxLength": 140
-                  }
-                ],
+                "maxLength": 140,
+                "minLength": 1,
+                "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
                 "type": "string"
               },
               "tool": {
@@ -6307,17 +5523,9 @@
                 "type": "object"
               },
               "hint": {
-                "allOf": [
-                  {
-                    "minLength": 1
-                  },
-                  {
-                    "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
-                  },
-                  {
-                    "maxLength": 140
-                  }
-                ],
+                "maxLength": 140,
+                "minLength": 1,
+                "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
                 "type": "string"
               },
               "tool": {
@@ -6338,17 +5546,9 @@
             "additionalProperties": false,
             "properties": {
               "hint": {
-                "allOf": [
-                  {
-                    "minLength": 1
-                  },
-                  {
-                    "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
-                  },
-                  {
-                    "maxLength": 140
-                  }
-                ],
+                "maxLength": 140,
+                "minLength": 1,
+                "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
                 "type": "string"
               },
               "tool": {
@@ -6369,17 +5569,9 @@
             "additionalProperties": false,
             "properties": {
               "hint": {
-                "allOf": [
-                  {
-                    "minLength": 1
-                  },
-                  {
-                    "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
-                  },
-                  {
-                    "maxLength": 140
-                  }
-                ],
+                "maxLength": 140,
+                "minLength": 1,
+                "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
                 "type": "string"
               },
               "tool": {
@@ -6410,17 +5602,9 @@
                 "type": "object"
               },
               "hint": {
-                "allOf": [
-                  {
-                    "minLength": 1
-                  },
-                  {
-                    "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
-                  },
-                  {
-                    "maxLength": 140
-                  }
-                ],
+                "maxLength": 140,
+                "minLength": 1,
+                "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
                 "type": "string"
               },
               "tool": {
@@ -6460,17 +5644,9 @@
                 "type": "object"
               },
               "hint": {
-                "allOf": [
-                  {
-                    "minLength": 1
-                  },
-                  {
-                    "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
-                  },
-                  {
-                    "maxLength": 140
-                  }
-                ],
+                "maxLength": 140,
+                "minLength": 1,
+                "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
                 "type": "string"
               },
               "tool": {
@@ -6507,17 +5683,9 @@
                 "type": "object"
               },
               "hint": {
-                "allOf": [
-                  {
-                    "minLength": 1
-                  },
-                  {
-                    "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
-                  },
-                  {
-                    "maxLength": 140
-                  }
-                ],
+                "maxLength": 140,
+                "minLength": 1,
+                "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
                 "type": "string"
               },
               "tool": {
@@ -6548,17 +5716,9 @@
                 "type": "object"
               },
               "hint": {
-                "allOf": [
-                  {
-                    "minLength": 1
-                  },
-                  {
-                    "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
-                  },
-                  {
-                    "maxLength": 140
-                  }
-                ],
+                "maxLength": 140,
+                "minLength": 1,
+                "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
                 "type": "string"
               },
               "tool": {
@@ -6579,17 +5739,9 @@
             "additionalProperties": false,
             "properties": {
               "hint": {
-                "allOf": [
-                  {
-                    "minLength": 1
-                  },
-                  {
-                    "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
-                  },
-                  {
-                    "maxLength": 140
-                  }
-                ],
+                "maxLength": 140,
+                "minLength": 1,
+                "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
                 "type": "string"
               },
               "tool": {
@@ -6626,17 +5778,9 @@
                 "type": "object"
               },
               "hint": {
-                "allOf": [
-                  {
-                    "minLength": 1
-                  },
-                  {
-                    "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
-                  },
-                  {
-                    "maxLength": 140
-                  }
-                ],
+                "maxLength": 140,
+                "minLength": 1,
+                "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
                 "type": "string"
               },
               "tool": {
@@ -6676,17 +5820,9 @@
                 "type": "object"
               },
               "hint": {
-                "allOf": [
-                  {
-                    "minLength": 1
-                  },
-                  {
-                    "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
-                  },
-                  {
-                    "maxLength": 140
-                  }
-                ],
+                "maxLength": 140,
+                "minLength": 1,
+                "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
                 "type": "string"
               },
               "tool": {
@@ -6723,17 +5859,9 @@
                 "type": "object"
               },
               "hint": {
-                "allOf": [
-                  {
-                    "minLength": 1
-                  },
-                  {
-                    "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
-                  },
-                  {
-                    "maxLength": 140
-                  }
-                ],
+                "maxLength": 140,
+                "minLength": 1,
+                "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
                 "type": "string"
               },
               "tool": {
@@ -6776,17 +5904,9 @@
                 "type": "object"
               },
               "hint": {
-                "allOf": [
-                  {
-                    "minLength": 1
-                  },
-                  {
-                    "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
-                  },
-                  {
-                    "maxLength": 140
-                  }
-                ],
+                "maxLength": 140,
+                "minLength": 1,
+                "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
                 "type": "string"
               },
               "tool": {
@@ -6807,17 +5927,9 @@
             "additionalProperties": false,
             "properties": {
               "hint": {
-                "allOf": [
-                  {
-                    "minLength": 1
-                  },
-                  {
-                    "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
-                  },
-                  {
-                    "maxLength": 140
-                  }
-                ],
+                "maxLength": 140,
+                "minLength": 1,
+                "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
                 "type": "string"
               },
               "tool": {
@@ -6838,17 +5950,9 @@
             "additionalProperties": false,
             "properties": {
               "hint": {
-                "allOf": [
-                  {
-                    "minLength": 1
-                  },
-                  {
-                    "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
-                  },
-                  {
-                    "maxLength": 140
-                  }
-                ],
+                "maxLength": 140,
+                "minLength": 1,
+                "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
                 "type": "string"
               },
               "tool": {
@@ -6869,17 +5973,9 @@
             "additionalProperties": false,
             "properties": {
               "hint": {
-                "allOf": [
-                  {
-                    "minLength": 1
-                  },
-                  {
-                    "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
-                  },
-                  {
-                    "maxLength": 140
-                  }
-                ],
+                "maxLength": 140,
+                "minLength": 1,
+                "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
                 "type": "string"
               },
               "tool": {
@@ -6910,17 +6006,9 @@
                 "type": "object"
               },
               "hint": {
-                "allOf": [
-                  {
-                    "minLength": 1
-                  },
-                  {
-                    "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
-                  },
-                  {
-                    "maxLength": 140
-                  }
-                ],
+                "maxLength": 140,
+                "minLength": 1,
+                "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
                 "type": "string"
               },
               "tool": {
@@ -6951,17 +6039,9 @@
                 "type": "object"
               },
               "hint": {
-                "allOf": [
-                  {
-                    "minLength": 1
-                  },
-                  {
-                    "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
-                  },
-                  {
-                    "maxLength": 140
-                  }
-                ],
+                "maxLength": 140,
+                "minLength": 1,
+                "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
                 "type": "string"
               },
               "tool": {
@@ -6992,17 +6072,9 @@
                         "$ref": "#/components/schemas/CategoryId"
                       },
                       "counterparty": {
-                        "allOf": [
-                          {
-                            "minLength": 1
-                          },
-                          {
-                            "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
-                          },
-                          {
-                            "maxLength": 120
-                          }
-                        ],
+                        "maxLength": 120,
+                        "minLength": 1,
+                        "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
                         "type": "string"
                       },
                       "currency": {
@@ -7029,17 +6101,9 @@
                 "type": "object"
               },
               "hint": {
-                "allOf": [
-                  {
-                    "minLength": 1
-                  },
-                  {
-                    "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
-                  },
-                  {
-                    "maxLength": 140
-                  }
-                ],
+                "maxLength": 140,
+                "minLength": 1,
+                "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
                 "type": "string"
               },
               "tool": {
@@ -7076,17 +6140,9 @@
                 "type": "object"
               },
               "hint": {
-                "allOf": [
-                  {
-                    "minLength": 1
-                  },
-                  {
-                    "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
-                  },
-                  {
-                    "maxLength": 140
-                  }
-                ],
+                "maxLength": 140,
+                "minLength": 1,
+                "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
                 "type": "string"
               },
               "tool": {
@@ -7126,17 +6182,9 @@
                 "type": "object"
               },
               "hint": {
-                "allOf": [
-                  {
-                    "minLength": 1
-                  },
-                  {
-                    "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
-                  },
-                  {
-                    "maxLength": 140
-                  }
-                ],
+                "maxLength": 140,
+                "minLength": 1,
+                "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
                 "type": "string"
               },
               "tool": {
@@ -7173,17 +6221,9 @@
                 "type": "object"
               },
               "hint": {
-                "allOf": [
-                  {
-                    "minLength": 1
-                  },
-                  {
-                    "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
-                  },
-                  {
-                    "maxLength": 140
-                  }
-                ],
+                "maxLength": 140,
+                "minLength": 1,
+                "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
                 "type": "string"
               },
               "tool": {
@@ -7220,17 +6260,9 @@
                 "type": "object"
               },
               "hint": {
-                "allOf": [
-                  {
-                    "minLength": 1
-                  },
-                  {
-                    "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
-                  },
-                  {
-                    "maxLength": 140
-                  }
-                ],
+                "maxLength": 140,
+                "minLength": 1,
+                "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
                 "type": "string"
               },
               "tool": {
@@ -7251,17 +6283,9 @@
             "additionalProperties": false,
             "properties": {
               "hint": {
-                "allOf": [
-                  {
-                    "minLength": 1
-                  },
-                  {
-                    "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
-                  },
-                  {
-                    "maxLength": 140
-                  }
-                ],
+                "maxLength": 140,
+                "minLength": 1,
+                "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
                 "type": "string"
               },
               "tool": {
@@ -7282,17 +6306,9 @@
             "additionalProperties": false,
             "properties": {
               "hint": {
-                "allOf": [
-                  {
-                    "minLength": 1
-                  },
-                  {
-                    "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
-                  },
-                  {
-                    "maxLength": 140
-                  }
-                ],
+                "maxLength": 140,
+                "minLength": 1,
+                "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
                 "type": "string"
               },
               "tool": {
@@ -7323,17 +6339,9 @@
                 "type": "object"
               },
               "hint": {
-                "allOf": [
-                  {
-                    "minLength": 1
-                  },
-                  {
-                    "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
-                  },
-                  {
-                    "maxLength": 140
-                  }
-                ],
+                "maxLength": 140,
+                "minLength": 1,
+                "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
                 "type": "string"
               },
               "tool": {
@@ -7370,17 +6378,9 @@
                 "type": "object"
               },
               "hint": {
-                "allOf": [
-                  {
-                    "minLength": 1
-                  },
-                  {
-                    "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
-                  },
-                  {
-                    "maxLength": 140
-                  }
-                ],
+                "maxLength": 140,
+                "minLength": 1,
+                "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
                 "type": "string"
               },
               "tool": {
@@ -7408,19 +6408,11 @@
                     "additionalProperties": false,
                     "properties": {
                       "limit": {
-                        "allOf": [
-                          {
-                            "pattern": "^[+-]?\\d*\\.?\\d+(?:[Ee][+-]?\\d+)?$"
-                          }
-                        ],
+                        "pattern": "^[+-]?\\d*\\.?\\d+(?:[Ee][+-]?\\d+)?$",
                         "type": "string"
                       },
                       "offset": {
-                        "allOf": [
-                          {
-                            "pattern": "^[+-]?\\d*\\.?\\d+(?:[Ee][+-]?\\d+)?$"
-                          }
-                        ],
+                        "pattern": "^[+-]?\\d*\\.?\\d+(?:[Ee][+-]?\\d+)?$",
                         "type": "string"
                       }
                     },
@@ -7430,17 +6422,9 @@
                 "type": "object"
               },
               "hint": {
-                "allOf": [
-                  {
-                    "minLength": 1
-                  },
-                  {
-                    "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
-                  },
-                  {
-                    "maxLength": 140
-                  }
-                ],
+                "maxLength": 140,
+                "minLength": 1,
+                "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
                 "type": "string"
               },
               "tool": {
@@ -7480,17 +6464,9 @@
                 "type": "object"
               },
               "hint": {
-                "allOf": [
-                  {
-                    "minLength": 1
-                  },
-                  {
-                    "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
-                  },
-                  {
-                    "maxLength": 140
-                  }
-                ],
+                "maxLength": 140,
+                "minLength": 1,
+                "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
                 "type": "string"
               },
               "tool": {
@@ -7511,17 +6487,9 @@
             "additionalProperties": false,
             "properties": {
               "hint": {
-                "allOf": [
-                  {
-                    "minLength": 1
-                  },
-                  {
-                    "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
-                  },
-                  {
-                    "maxLength": 140
-                  }
-                ],
+                "maxLength": 140,
+                "minLength": 1,
+                "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
                 "type": "string"
               },
               "tool": {
@@ -7555,17 +6523,9 @@
                 "type": "object"
               },
               "hint": {
-                "allOf": [
-                  {
-                    "minLength": 1
-                  },
-                  {
-                    "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
-                  },
-                  {
-                    "maxLength": 140
-                  }
-                ],
+                "maxLength": 140,
+                "minLength": 1,
+                "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
                 "type": "string"
               },
               "tool": {
@@ -7596,17 +6556,9 @@
                 "type": "object"
               },
               "hint": {
-                "allOf": [
-                  {
-                    "minLength": 1
-                  },
-                  {
-                    "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
-                  },
-                  {
-                    "maxLength": 140
-                  }
-                ],
+                "maxLength": 140,
+                "minLength": 1,
+                "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
                 "type": "string"
               },
               "tool": {
@@ -7637,17 +6589,9 @@
                 "type": "object"
               },
               "hint": {
-                "allOf": [
-                  {
-                    "minLength": 1
-                  },
-                  {
-                    "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
-                  },
-                  {
-                    "maxLength": 140
-                  }
-                ],
+                "maxLength": 140,
+                "minLength": 1,
+                "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
                 "type": "string"
               },
               "tool": {
@@ -7678,17 +6622,9 @@
                 "type": "object"
               },
               "hint": {
-                "allOf": [
-                  {
-                    "minLength": 1
-                  },
-                  {
-                    "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
-                  },
-                  {
-                    "maxLength": 140
-                  }
-                ],
+                "maxLength": 140,
+                "minLength": 1,
+                "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
                 "type": "string"
               },
               "tool": {
@@ -7728,17 +6664,9 @@
                 "type": "object"
               },
               "hint": {
-                "allOf": [
-                  {
-                    "minLength": 1
-                  },
-                  {
-                    "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
-                  },
-                  {
-                    "maxLength": 140
-                  }
-                ],
+                "maxLength": 140,
+                "minLength": 1,
+                "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
                 "type": "string"
               },
               "tool": {
@@ -7775,17 +6703,9 @@
                 "type": "object"
               },
               "hint": {
-                "allOf": [
-                  {
-                    "minLength": 1
-                  },
-                  {
-                    "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
-                  },
-                  {
-                    "maxLength": 140
-                  }
-                ],
+                "maxLength": 140,
+                "minLength": 1,
+                "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
                 "type": "string"
               },
               "tool": {
@@ -7806,17 +6726,9 @@
             "additionalProperties": false,
             "properties": {
               "hint": {
-                "allOf": [
-                  {
-                    "minLength": 1
-                  },
-                  {
-                    "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
-                  },
-                  {
-                    "maxLength": 140
-                  }
-                ],
+                "maxLength": 140,
+                "minLength": 1,
+                "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
                 "type": "string"
               },
               "tool": {
@@ -7837,17 +6749,9 @@
             "additionalProperties": false,
             "properties": {
               "hint": {
-                "allOf": [
-                  {
-                    "minLength": 1
-                  },
-                  {
-                    "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
-                  },
-                  {
-                    "maxLength": 140
-                  }
-                ],
+                "maxLength": 140,
+                "minLength": 1,
+                "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
                 "type": "string"
               },
               "tool": {
@@ -7868,17 +6772,9 @@
             "additionalProperties": false,
             "properties": {
               "hint": {
-                "allOf": [
-                  {
-                    "minLength": 1
-                  },
-                  {
-                    "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
-                  },
-                  {
-                    "maxLength": 140
-                  }
-                ],
+                "maxLength": 140,
+                "minLength": 1,
+                "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
                 "type": "string"
               },
               "tool": {
@@ -7945,19 +6841,11 @@
         "type": "string"
       },
       "TokenBearer": {
-        "allOf": [
-          {
-            "pattern": "^fin_[a-z0-9]{8}_[A-Za-z0-9_-]{32,}$"
-          }
-        ],
+        "pattern": "^fin_[a-z0-9]{8}_[A-Za-z0-9_-]{32,}$",
         "type": "string"
       },
       "TokenShortId": {
-        "allOf": [
-          {
-            "pattern": "^[a-z0-9]{8}$"
-          }
-        ],
+        "pattern": "^[a-z0-9]{8}$",
         "type": "string"
       },
       "Transaction": {
@@ -7967,18 +6855,10 @@
             "$ref": "#/components/schemas/CategoryId"
           },
           "counterparty": {
-            "allOf": [
-              {
-                "minLength": 1
-              },
-              {
-                "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
-              },
-              {
-                "description": "The person or organization on the other side when the captured material explicitly identifies one — \"El Corral\", \"Claro\", \"Acme S.A.\". Omit this field rather than inferring a business, using a purchased item or purpose, or sending a placeholder.",
-                "maxLength": 120
-              }
-            ],
+            "description": "The person or organization on the other side when the captured material explicitly identifies one — \"El Corral\", \"Claro\", \"Acme S.A.\". Omit this field rather than inferring a business, using a purchased item or purpose, or sending a placeholder.",
+            "maxLength": 120,
+            "minLength": 1,
+            "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
             "type": "string"
           },
           "createdAt": {
@@ -7994,17 +6874,9 @@
             "$ref": "#/components/schemas/Money_1"
           },
           "notes": {
-            "allOf": [
-              {
-                "minLength": 1
-              },
-              {
-                "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
-              },
-              {
-                "maxLength": 500
-              }
-            ],
+            "maxLength": 500,
+            "minLength": 1,
+            "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
             "type": "string"
           },
           "occurredAt": {
@@ -8022,31 +6894,19 @@
         "type": "object"
       },
       "TransactionCreatedAt": {
-        "allOf": [
-          {
-            "description": "When fidy learned of it, which can be long after it occurred: a statement read in July carries movements from March. Reason about the user's spending from `occurredAt`; read this only to tell how freshly the record was captured.",
-            "pattern": "^(?:[0-9]{3}[1-9]|[0-9]{2}[1-9][0-9]|[0-9][1-9][0-9]{2}|[1-9][0-9]{3})-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12][0-9]|3[01])T(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9](?:\\.[0-9]+)?(?:Z|[+-](?:0[0-9]|1[0-5]):[0-5][0-9])$"
-          }
-        ],
+        "description": "When fidy learned of it, which can be long after it occurred: a statement read in July carries movements from March. Reason about the user's spending from `occurredAt`; read this only to tell how freshly the record was captured.",
         "format": "date-time",
+        "pattern": "^(?:[0-9]{3}[1-9]|[0-9]{2}[1-9][0-9]|[0-9][1-9][0-9]{2}|[1-9][0-9]{3})-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12][0-9]|3[01])T(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9](?:\\.[0-9]+)?(?:Z|[+-](?:0[0-9]|1[0-5]):[0-5][0-9])$",
         "type": "string"
       },
       "TransactionExtraction": {
         "additionalProperties": false,
         "properties": {
           "counterparty": {
-            "allOf": [
-              {
-                "minLength": 1
-              },
-              {
-                "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
-              },
-              {
-                "description": "The person or organization on the other side when the captured material explicitly identifies one — \"El Corral\", \"Claro\", \"Acme S.A.\". Omit this field rather than inferring a business, using a purchased item or purpose, or sending a placeholder.",
-                "maxLength": 120
-              }
-            ],
+            "description": "The person or organization on the other side when the captured material explicitly identifies one — \"El Corral\", \"Claro\", \"Acme S.A.\". Omit this field rather than inferring a business, using a purchased item or purpose, or sending a placeholder.",
+            "maxLength": 120,
+            "minLength": 1,
+            "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
             "type": "string"
           },
           "direction": {
@@ -8065,18 +6925,10 @@
         "additionalProperties": false,
         "properties": {
           "counterparty": {
-            "allOf": [
-              {
-                "minLength": 1
-              },
-              {
-                "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
-              },
-              {
-                "description": "The person or organization on the other side when the captured material explicitly identifies one — \"El Corral\", \"Claro\", \"Acme S.A.\". Omit this field rather than inferring a business, using a purchased item or purpose, or sending a placeholder.",
-                "maxLength": 120
-              }
-            ],
+            "description": "The person or organization on the other side when the captured material explicitly identifies one — \"El Corral\", \"Claro\", \"Acme S.A.\". Omit this field rather than inferring a business, using a purchased item or purpose, or sending a placeholder.",
+            "maxLength": 120,
+            "minLength": 1,
+            "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
             "type": "string"
           },
           "direction": {
@@ -8097,21 +6949,13 @@
         "type": "object"
       },
       "TransactionId": {
-        "allOf": [
-          {
-            "format": "uuid",
-            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|[fF]{8}-[fF]{4}-[fF]{4}-[fF]{4}-[fF]{12})$"
-          }
-        ],
+        "format": "uuid",
+        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|[fF]{8}-[fF]{4}-[fF]{4}-[fF]{4}-[fF]{12})$",
         "type": "string"
       },
       "TransactionListLimit": {
-        "allOf": [
-          {
-            "maximum": 50,
-            "minimum": 1
-          }
-        ],
+        "maximum": 50,
+        "minimum": 1,
         "type": "integer"
       },
       "TransactionListResult": {
@@ -8139,31 +6983,15 @@
             "$ref": "#/components/schemas/TransactionListLimit"
           },
           "search": {
-            "allOf": [
-              {
-                "minLength": 1
-              },
-              {
-                "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
-              },
-              {
-                "maxLength": 100
-              }
-            ],
+            "maxLength": 100,
+            "minLength": 1,
+            "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
             "type": "string"
           },
           "title": {
-            "allOf": [
-              {
-                "minLength": 1
-              },
-              {
-                "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
-              },
-              {
-                "maxLength": 80
-              }
-            ],
+            "maxLength": 80,
+            "minLength": 1,
+            "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
             "type": "string"
           },
           "type": {
@@ -8192,31 +7020,15 @@
             "$ref": "#/components/schemas/TransactionListLimit"
           },
           "search": {
-            "allOf": [
-              {
-                "minLength": 1
-              },
-              {
-                "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
-              },
-              {
-                "maxLength": 100
-              }
-            ],
+            "maxLength": 100,
+            "minLength": 1,
+            "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
             "type": "string"
           },
           "title": {
-            "allOf": [
-              {
-                "minLength": 1
-              },
-              {
-                "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
-              },
-              {
-                "maxLength": 80
-              }
-            ],
+            "maxLength": 80,
+            "minLength": 1,
+            "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
             "type": "string"
           },
           "type": {
@@ -8246,31 +7058,15 @@
             "$ref": "#/components/schemas/TransactionListLimit"
           },
           "search": {
-            "allOf": [
-              {
-                "minLength": 1
-              },
-              {
-                "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
-              },
-              {
-                "maxLength": 100
-              }
-            ],
+            "maxLength": 100,
+            "minLength": 1,
+            "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
             "type": "string"
           },
           "title": {
-            "allOf": [
-              {
-                "minLength": 1
-              },
-              {
-                "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
-              },
-              {
-                "maxLength": 80
-              }
-            ],
+            "maxLength": 80,
+            "minLength": 1,
+            "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
             "type": "string"
           },
           "type": {
@@ -8283,13 +7079,9 @@
         "type": "object"
       },
       "TransactionOccurredAt": {
-        "allOf": [
-          {
-            "description": "When the money actually moved. It must already have happened — a Transaction dated in the future is rejected — and the history is ordered by it, so send the instant the user is describing rather than the moment you are recording it.",
-            "pattern": "^(?:[0-9]{3}[1-9]|[0-9]{2}[1-9][0-9]|[0-9][1-9][0-9]{2}|[1-9][0-9]{3})-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12][0-9]|3[01])T(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9](?:\\.[0-9]+)?(?:Z|[+-](?:0[0-9]|1[0-5]):[0-5][0-9])$"
-          }
-        ],
+        "description": "When the money actually moved. It must already have happened — a Transaction dated in the future is rejected — and the history is ordered by it, so send the instant the user is describing rather than the moment you are recording it.",
         "format": "date-time",
+        "pattern": "^(?:[0-9]{3}[1-9]|[0-9]{2}[1-9][0-9]|[0-9][1-9][0-9]{2}|[1-9][0-9]{3})-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12][0-9]|3[01])T(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9](?:\\.[0-9]+)?(?:Z|[+-](?:0[0-9]|1[0-5]):[0-5][0-9])$",
         "type": "string"
       },
       "TrialPeriod": {
@@ -8328,15 +7120,9 @@
                 "type": "string"
               },
               "message": {
-                "allOf": [
-                  {
-                    "minLength": 1
-                  },
-                  {
-                    "description": "Why the call failed and what to do about it, written to you rather than to the user. Decide your next move from it; do not relay it verbatim.",
-                    "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
-                  }
-                ],
+                "description": "Why the call failed and what to do about it, written to you rather than to the user. Decide your next move from it; do not relay it verbatim.",
+                "minLength": 1,
+                "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
                 "type": "string"
               }
             },
@@ -9991,18 +8777,10 @@
             "$ref": "#/components/schemas/CategoryId"
           },
           "counterparty": {
-            "allOf": [
-              {
-                "minLength": 1
-              },
-              {
-                "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
-              },
-              {
-                "description": "The person or organization on the other side when the captured material explicitly identifies one — \"El Corral\", \"Claro\", \"Acme S.A.\". Omit this field rather than inferring a business, using a purchased item or purpose, or sending a placeholder.",
-                "maxLength": 120
-              }
-            ],
+            "description": "The person or organization on the other side when the captured material explicitly identifies one — \"El Corral\", \"Claro\", \"Acme S.A.\". Omit this field rather than inferring a business, using a purchased item or purpose, or sending a placeholder.",
+            "maxLength": 120,
+            "minLength": 1,
+            "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
             "type": "string"
           },
           "direction": {
@@ -10012,17 +8790,9 @@
             "$ref": "#/components/schemas/Money"
           },
           "notes": {
-            "allOf": [
-              {
-                "minLength": 1
-              },
-              {
-                "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
-              },
-              {
-                "maxLength": 500
-              }
-            ],
+            "maxLength": 500,
+            "minLength": 1,
+            "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
             "type": "string"
           },
           "occurredAt": {
@@ -10038,18 +8808,10 @@
             "$ref": "#/components/schemas/CategoryId"
           },
           "counterparty": {
-            "allOf": [
-              {
-                "minLength": 1
-              },
-              {
-                "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
-              },
-              {
-                "description": "The person or organization on the other side when the captured material explicitly identifies one — \"El Corral\", \"Claro\", \"Acme S.A.\". Omit this field rather than inferring a business, using a purchased item or purpose, or sending a placeholder.",
-                "maxLength": 120
-              }
-            ],
+            "description": "The person or organization on the other side when the captured material explicitly identifies one — \"El Corral\", \"Claro\", \"Acme S.A.\". Omit this field rather than inferring a business, using a purchased item or purpose, or sending a placeholder.",
+            "maxLength": 120,
+            "minLength": 1,
+            "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
             "type": "string"
           },
           "direction": {
@@ -10059,17 +8821,9 @@
             "$ref": "#/components/schemas/Money_1"
           },
           "notes": {
-            "allOf": [
-              {
-                "minLength": 1
-              },
-              {
-                "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
-              },
-              {
-                "maxLength": 500
-              }
-            ],
+            "maxLength": 500,
+            "minLength": 1,
+            "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
             "type": "string"
           },
           "occurredAt": {
@@ -10190,15 +8944,9 @@
                 "type": "string"
               },
               "message": {
-                "allOf": [
-                  {
-                    "minLength": 1
-                  },
-                  {
-                    "description": "Why the call failed and what to do about it, written to you rather than to the user. Decide your next move from it; do not relay it verbatim.",
-                    "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
-                  }
-                ],
+                "description": "Why the call failed and what to do about it, written to you rather than to the user. Decide your next move from it; do not relay it verbatim.",
+                "minLength": 1,
+                "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
                 "type": "string"
               }
             },
@@ -10219,12 +8967,8 @@
         "type": "object"
       },
       "UserId": {
-        "allOf": [
-          {
-            "format": "uuid",
-            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|[fF]{8}-[fF]{4}-[fF]{4}-[fF]{4}-[fF]{12})$"
-          }
-        ],
+        "format": "uuid",
+        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|[fF]{8}-[fF]{4}-[fF]{4}-[fF]{4}-[fF]{12})$",
         "type": "string"
       },
       "UserPreferences": {
@@ -10256,12 +9000,8 @@
         "type": "object"
       },
       "UtcTimestamp": {
-        "allOf": [
-          {
-            "pattern": "^(?:[0-9]{3}[1-9]|[0-9]{2}[1-9][0-9]|[0-9][1-9][0-9]{2}|[1-9][0-9]{3})-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12][0-9]|3[01])T(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9](?:\\.[0-9]+)?(?:Z|[+-](?:0[0-9]|1[0-5]):[0-5][0-9])$"
-          }
-        ],
         "format": "date-time",
+        "pattern": "^(?:[0-9]{3}[1-9]|[0-9]{2}[1-9][0-9]|[0-9][1-9][0-9]{2}|[1-9][0-9]{3})-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12][0-9]|3[01])T(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9](?:\\.[0-9]+)?(?:Z|[+-](?:0[0-9]|1[0-5]):[0-5][0-9])$",
         "type": "string"
       },
       "ValidationFailedEncoded": {
@@ -10291,15 +9031,9 @@
                 "type": "array"
               },
               "message": {
-                "allOf": [
-                  {
-                    "minLength": 1
-                  },
-                  {
-                    "description": "Why the call failed and what to do about it, written to you rather than to the user. Decide your next move from it; do not relay it verbatim.",
-                    "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
-                  }
-                ],
+                "description": "Why the call failed and what to do about it, written to you rather than to the user. Decide your next move from it; do not relay it verbatim.",
+                "minLength": 1,
+                "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
                 "type": "string"
               }
             },
@@ -10337,12 +9071,8 @@
         ]
       },
       "WidgetId": {
-        "allOf": [
-          {
-            "format": "uuid",
-            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|[fF]{8}-[fF]{4}-[fF]{4}-[fF]{4}-[fF]{12})$"
-          }
-        ],
+        "format": "uuid",
+        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|[fF]{8}-[fF]{4}-[fF]{4}-[fF]{4}-[fF]{12})$",
         "type": "string"
       },
       "WidgetPartial": {
@@ -12321,11 +11051,7 @@
             "name": "offset",
             "required": true,
             "schema": {
-              "allOf": [
-                {
-                  "pattern": "^[+-]?\\d*\\.?\\d+(?:[Ee][+-]?\\d+)?$"
-                }
-              ],
+              "pattern": "^[+-]?\\d*\\.?\\d+(?:[Ee][+-]?\\d+)?$",
               "type": "string"
             }
           },
@@ -12334,11 +11060,7 @@
             "name": "limit",
             "required": true,
             "schema": {
-              "allOf": [
-                {
-                  "pattern": "^[+-]?\\d*\\.?\\d+(?:[Ee][+-]?\\d+)?$"
-                }
-              ],
+              "pattern": "^[+-]?\\d*\\.?\\d+(?:[Ee][+-]?\\d+)?$",
               "type": "string"
             }
           }
@@ -13612,14 +12334,10 @@
                 "additionalProperties": false,
                 "properties": {
                   "calls": {
-                    "allOf": [
-                      {
-                        "maxItems": 12
-                      }
-                    ],
                     "items": {
                       "$ref": "#/components/schemas/Union_11"
                     },
+                    "maxItems": 12,
                     "minItems": 1,
                     "prefixItems": [
                       {
@@ -13649,14 +12367,10 @@
                       "additionalProperties": false,
                       "properties": {
                         "results": {
-                          "allOf": [
-                            {
-                              "maxItems": 12
-                            }
-                          ],
                           "items": {
                             "$ref": "#/components/schemas/Union_12"
                           },
+                          "maxItems": 12,
                           "minItems": 1,
                           "prefixItems": [
                             {
@@ -14668,17 +13382,9 @@
             "name": "counterparty",
             "required": false,
             "schema": {
-              "allOf": [
-                {
-                  "minLength": 1
-                },
-                {
-                  "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
-                },
-                {
-                  "maxLength": 120
-                }
-              ],
+              "maxLength": 120,
+              "minLength": 1,
+              "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
               "type": "string"
             }
           },

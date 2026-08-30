@@ -1,5 +1,6 @@
 #!/usr/bin/env bun
 
+import type { SchemaAST } from "effect";
 import { OpenApi } from "effect/unstable/httpapi";
 import { FidyApi, operationCatalog } from "~/shell/api";
 import { publishOperationAccess } from "~/shell/_shared/operation-policy";
@@ -15,8 +16,55 @@ import {
 const serverRoot = Bun.fileURLToPath(new URL("../..", import.meta.url)).replace(/\/$/u, "");
 const defaultOutputDirectory = `${serverRoot}/contracts`;
 
+const literalReferenceCostScale = 32;
+
+const isWorthReferencing = (bodyCost: number, occurrences: number): boolean =>
+  occurrences * bodyCost > bodyCost + occurrences + 1;
+
+const hasShareableStructure = (ast: SchemaAST.AST): boolean => {
+  if (
+    ast._tag === "Arrays" ||
+    ast._tag === "Objects" ||
+    ast._tag === "Suspend" ||
+    ast._tag === "Declaration"
+  ) {
+    return true;
+  }
+  return ast._tag === "Union" && ast.types.some(hasShareableStructure);
+};
+
+const contractReferencePolicy = ({
+  ast,
+  identifier,
+  occurrences,
+}: {
+  readonly ast: SchemaAST.AST;
+  readonly identifier: string | undefined;
+  readonly occurrences: number;
+}): string | undefined => {
+  if (identifier !== undefined) return identifier;
+  if (occurrences <= 1) return undefined;
+  if (hasShareableStructure(ast)) return `${ast._tag}_`;
+
+  if (ast._tag === "Union") {
+    return isWorthReferencing(ast.types.length + 1, occurrences) ? `${ast._tag}_` : undefined;
+  }
+  if (ast._tag === "Enum") {
+    return isWorthReferencing(ast.enums.length + 1, occurrences) ? `${ast._tag}_` : undefined;
+  }
+  if (ast._tag === "TemplateLiteral") {
+    return isWorthReferencing(ast.parts.length + 1, occurrences) ? `${ast._tag}_` : undefined;
+  }
+  if (ast._tag === "Literal" && typeof ast.literal === "string") {
+    return isWorthReferencing(ast.literal.length / literalReferenceCostScale + 1, occurrences)
+      ? `${ast._tag}_`
+      : undefined;
+  }
+  return undefined;
+};
+
 export const makeContractArtifacts = (): ContractArtifacts => ({
-  openapi: asJsonObject(OpenApi.fromApi(FidyApi)),
+  openapi: asJsonObject(OpenApi.fromApi(FidyApi, { referencePolicy: contractReferencePolicy })),
   operationPolicy: {
     operations: operationCatalog.operations
       .map(({ id, policy }) => ({

@@ -43,13 +43,13 @@
     "approve:email-ingest-sample": "bun scripts/approve-email-ingest-sample.ts"
   },
   "dependencies": {
-    "@effect/ai-openai": "4.0.0-beta.107",
-    "@effect/platform-bun": "4.0.0-beta.107",
-    "@effect/sql-pg": "4.0.0-beta.107",
+    "@effect/ai-openai": "4.0.0-rc.112",
+    "@effect/platform-bun": "4.0.0-rc.112",
+    "@effect/sql-pg": "4.0.0-rc.112",
     "@kapso/whatsapp-cloud-api": "0.3.0",
     "@sentry/bun": "10.70.0",
     "csv-parse": "7.0.2",
-    "effect": "4.0.0-beta.107",
+    "effect": "4.0.0-rc.112",
     "jose": "6.2.10",
     "js-tiktoken": "1.0.21",
     "sharp": "0.35.3",
@@ -57,7 +57,7 @@
     "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
   },
   "devDependencies": {
-    "@effect/vitest": "4.0.0-beta.107",
+    "@effect/vitest": "4.0.0-rc.112",
     "@oasdiff-js/oasdiff-js": "1.0.0",
     "@sentry/cli": "3.6.2",
     "@vitest/coverage-istanbul": "4.1.11",

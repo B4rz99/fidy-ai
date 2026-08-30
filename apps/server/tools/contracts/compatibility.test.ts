@@ -139,6 +139,39 @@ it("treats nested local request schema references and their inline form as compa
   await expect(findOpenApiBreakingChanges(base, candidate)).resolves.toEqual([]);
 });
 
+it("treats equivalent constraints inside cyclic schemas as compatible", async () => {
+  const base = spec(
+    { "/widgets": operation({ $ref: "#/components/schemas/WidgetNode" }) },
+    {
+      WidgetNode: {
+        type: "object",
+        properties: {
+          name: { type: "string", allOf: [{ minLength: 1 }, { maxLength: 80 }] },
+          child: {
+            anyOf: [{ $ref: "#/components/schemas/WidgetNode" }, { type: "null" }],
+          },
+        },
+      },
+    }
+  );
+  const candidate = spec(
+    { "/widgets": operation({ $ref: "#/components/schemas/WidgetNode" }) },
+    {
+      WidgetNode: {
+        type: "object",
+        properties: {
+          name: { type: "string", minLength: 1, maxLength: 80 },
+          child: {
+            anyOf: [{ $ref: "#/components/schemas/WidgetNode" }, { type: "null" }],
+          },
+        },
+      },
+    }
+  );
+
+  await expect(findOpenApiBreakingChanges(base, candidate)).resolves.toEqual([]);
+});
+
 it("preserves a deterministic finding when an anyOf request property loses a value", async () => {
   const base = spec({
     "/widgets": operation({

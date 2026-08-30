@@ -9,35 +9,36 @@ How `effect/unstable/httpapi` (v4) actually works, read from the source. Citatio
 One `HttpApi` definition derives three artifacts, all schema-enforced **at runtime**, not
 just at the type level:
 
-| Artifact | Derivation                                                                                                    | Where validation happens                                                                                                                                                         |
-| -------- | ------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Server   | `HttpApiBuilder.layer(api)` + `HttpApiBuilder.group` handlers                                                 | request decoded through the operation definition (400 on failure), handler return **encoded through the success schema** (`HttpApiBuilder.ts:758`, applied at `:809`)            |
-| Client   | `HttpApiClient.make(api)`                                                                                     | payload encoded through the operation definition; response body run through `Schema.decodeEffect` against the success schema per status (`HttpApiClient.ts:362-379`, `:726-730`) |
-| OpenAPI  | `OpenApi.fromApi(api)` — served by `HttpApiBuilder.layer(api, { openapiPath })` (`HttpApiBuilder.ts:103-106`) | n/a (spec generation; cached per api instance in a `WeakMap`, `OpenApi.ts:213`)                                                                                                  |
+| Artifact | Derivation                                                                                                   | Where validation happens                                                                                                                                                         |
+| -------- | ------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Server   | `HttpApiBuilder.layer(api)` + `HttpApiBuilder.group` handlers                                                | request decoded through the operation definition (400 on failure), handler return **encoded through the success schema** (`HttpApiBuilder.ts:756-775`, applied at `:819-827`)    |
+| Client   | `HttpApiClient.make(api)`                                                                                    | payload encoded through the operation definition; response body run through `Schema.decodeEffect` against the success schema per status (`HttpApiClient.ts:365-382`, `:728-742`) |
+| OpenAPI  | `OpenApi.fromApi(api)` — served by `HttpApiBuilder.layer(api, { openapiPath })` (`HttpApiBuilder.ts:63-108`) | n/a (spec generation; cached per api instance in a `WeakMap`, `OpenApi.ts:216-218`)                                                                                              |
 
 ## Defining endpoints
 
 `HttpApiEndpoint.get/post/put/patch/delete/head/options(identifier, path, options)`
-(`HttpApiEndpoint.ts:964-1080`). Options:
+(`HttpApiEndpoint.ts:979-1096`, method exports at `:1397-1449`). Options:
 
-- `params` — path params; must encode to strings (`:875`). Bridge branded/numeric types with
+- `params` — path params; must encode to strings (`HttpApiEndpoint.ts:105-107`). Bridge branded/numeric types with
   `Schema.FiniteFromString.pipe(Schema.decodeTo(UserId))` (ai-docs `api/Users.ts:42-45`).
 - `query`, `headers` — string-encodable schemas or bare fields records.
-- `payload` — body schema; **array of schemas** = content-type negotiation (`:1096-1130`).
-  On GET/HEAD, `payload` is modeled as query params (`:912`).
+- `payload` — body schema; **array of schemas** = content-type negotiation (`HttpApiEndpoint.ts:1111-1145`).
+  On GET/HEAD, `payload` is modeled as query params (`HttpApiSchema.ts:948-959`).
 - `success` — single schema or array (multiple statuses/content-types). Defaults to
-  `HttpApiSchema.NoContent` → 204 (`:264-267`).
-- `error` — single or array; streams forbidden in errors (`:1156-1158`).
+  `HttpApiSchema.NoContent` → 204 (`HttpApiEndpoint.ts:986-990`; `HttpApiSchema.ts:149`).
+- `error` — single or array; streams forbidden in errors (`HttpApiEndpoint.ts:1172-1181`).
 
 Statuses via `HttpApiSchema.status(201)(schema)` or `schema.pipe(HttpApiSchema.status(201))`;
-success defaults 200, error defaults **500** (`HttpApiSchema.ts:702-714`). `status` is sugar
-for the `httpApiStatus` schema annotation (`HttpApiSchema.ts:168`, resolved at `:670`), so an
+success defaults 200, error defaults **500** (`HttpApiSchema.ts:972-1003`). `status` is sugar
+for the `httpApiStatus` schema annotation (`HttpApiSchema.ts:101-121`, resolved at `:933-935`), so an
 error class can carry its status directly:
 `Schema.TaggedErrorClass<E>()("Tag", fields, { httpApiStatus: 401 })` — the repo's own idiom
 (ai-docs `api/Authorization.ts:7-14`).
 
 JSON codecs are applied automatically: params/query/headers get `Schema.toCodecStringTree`,
-payload/success/error get `Schema.toCodecJson` (`HttpApiEndpoint.ts:1065-1076`). This is why
+payload/success/error get their response-aware JSON codecs (`HttpApiEndpoint.ts:1080-1092`,
+`:1149-1186`). This is why
 `Schema.DateTimeUtc` in an operation definition "just works" as an encoded ISO string.
 
 `HttpApiSchema` inventory: `Empty(code)`, `NoContent`(204), `Created`(201), `Accepted`(202),
@@ -48,32 +49,34 @@ asFormUrlEncoded`, `asMultipart(limits?)` (buffered) and `asMultipartStream(limi
 
 ## Server pipeline semantics (the parts that surprise)
 
-Per-request flow is `handlerToHttpEffect` (`HttpApiBuilder.ts:751-819`):
+Per-request flow is `handlerToHttpEffect` (`HttpApiBuilder.ts:756-838`):
 
 1. **Request decode failure → empty 400.** Each component decode is wrapped in
-   `HttpApiSchemaError.wrap("Params"|"Headers"|"Query"|"Payload", ...)` (`:784-799`), then
-   re-thrown as a **defect** (`:812-816`) and rendered by `HttpServerRespondable` as an
-   **empty `400 Bad Request`** — no body, by design (`HttpApiError.ts:445-475`). There is
+   `HttpApiSchemaError.wrap("Params"|"Headers"|"Query"|"Payload", ...)` (`:792-807`), then
+   re-thrown as a **defect** (`:831-835`) and rendered by `HttpServerRespondable` as an
+   **empty `400 Bad Request`** — no body, by design (`HttpApiError.ts:447-468`). There is
    **no v3-style `HttpApiDecodeError` with an `issues` JSON body in v4**; field-level
    validation detail in responses must be built explicitly.
    The cause is still reported to logs (`HttpEffect.ts:45-47`).
    Payload decoding has two extra traps. `buildPayloadDecoders` always constructs
    `Schema.Union(schemas)`, even when there is exactly one payload schema, and invokes the decoder
-   without parse options (`HttpApiBuilder.ts:677`), so parsing uses `errors: "first"`, the default
+   without parse options (`HttpApiBuilder.ts:682`), so parsing uses `errors: "first"`, the default
    (`SchemaAST.ts:470`). The union parser first narrows candidates by literal sentinels; when no
    candidate matches, it raises `AnyOf(ast, input, [])` with no member issue
-   (`SchemaAST.ts:2671`). Formatting that empty `AnyOf` reports one root issue containing the whole
-   rejected value (`SchemaIssue.ts:1041-1048`), losing both the field path and the other offending
+   (`SchemaAST.ts:2965-2974`). Formatting that empty `AnyOf` reports one root issue containing the whole
+   rejected value (`SchemaIssue.ts:1084-1092`), losing both the field path and the other offending
    fields. To produce complete field-level payload failures in middleware, recover the `AnyOf`
    input and decode it against the single unwrapped payload schema with `{ errors: "all" }`.
    The official interception seam for all of this is
    `HttpApiMiddleware.layerSchemaErrorTransform` — see the Middleware section.
-2. **Unknown request content-type → 415** (`:702`).
+2. **Unknown request content-type → 415** (`:707`).
 3. **Success responses are runtime-validated.** The handler's return value is encoded
-   through the union of success schemas (`makeSuccessSchema`, `:1047-1093`); an encode
+   through the union of success schemas (`makeSuccessSchema`, `:1123-1128`); an encode
    failure is also an `HttpApiSchemaError("Body")` → **empty 400, not 500**, in this build.
+   A `WithHeaders` success validates its headers separately as `"ResponseHeaders"`
+   (`:819-829`).
 4. **Declared errors** encode through their schema with their annotated status; encoding an
-   _undeclared_ error is `Effect.orDie`'d (`:815`).
+   _undeclared_ error is `Effect.orDie`'d (`:835`).
 5. **Defects → empty 500** (`HttpServerError.ts:283-326`); interrupts → 499/503. A defect
    (or handler return) that implements `HttpServerRespondable` chooses its own response.
 6. **`Effect.orDie` on unexpected handler errors is the documented idiom** — the repo's own
@@ -85,7 +88,7 @@ Error modeling: `HttpApiError` ships `BadRequest`(400) … `ServiceUnavailable`(
 each with a `*NoContent` empty-body variant. **There is no `.addError` in v4** — errors are
 declared per-endpoint via `error:`, and cross-cutting errors ride on middleware (a
 middleware's `error` schema merges into every endpoint it covers,
-`HttpApiEndpoint.ts:270-279`).
+`HttpApiEndpoint.ts:283-291`).
 
 `handlers.handle(name, fn)` is fully type-enforced: `name` must be an unhandled endpoint of
 the group; the request arg carries decoded `payload/params/query/headers`; an unhandled
@@ -99,8 +102,8 @@ endpoint turns the builder's return type into the string literal
 
 - **Type safe AND runtime safe by default.** Payload/params/query/headers are encoded
   through the operation definition; the response body is decoded through the success schema selected by
-  exact status (`HttpClientResponse.matchStatus`, `:330-334`) and content-type
-  (`:754-766`). Opt out only via `responseMode: "response-only"`.
+  exact status (`HttpClientResponse.matchStatus`, `:330-337`) and content-type
+  (`:788-801`). Opt out only via `responseMode: "response-only"`.
 - Request keys in v4 are **`params` and `query`** (not v3's `path`/`urlParams`);
   `responseMode: "decoded-only" (default) | "decoded-and-response" | "response-only"`.
 - Error channel of every call: declared error types (decoded by status) ∪
@@ -108,7 +111,7 @@ endpoint turns the builder's return type into the string literal
   contract **fails typed**, it does not die) ∪ `HttpClientError` (transport, undocumented
   status, unsupported content-type).
 - An **undocumented status** (e.g. the framework's empty 400 on payload-decode failure) is
-  an `HttpClientError` with reason `DecodeError` (`:973-981`) — not structured data.
+  an `HttpClientError` with reason `DecodeError` (`:1033-1042`) — not structured data.
 - `baseUrl` prepends to the request URL (`:285-291`); needed for fetch-based clients hitting
   relative paths. `NodeHttpServer.layerTest`'s client is pre-pointed at the bound port, so
   no `baseUrl` there.
@@ -117,24 +120,24 @@ endpoint turns the builder's return type into the string literal
 
 ## OpenAPI derivation
 
-- `OpenApi.fromApi(api)` emits **OpenAPI 3.1.0** (`OpenApi.ts:259`); defaults
+- `OpenApi.fromApi(api)` emits **OpenAPI 3.1.0** (`OpenApi.ts:304-308`); defaults
   `info.title = "Api"`, `info.version = "0.0.1"`. Serving it is one option:
   `HttpApiBuilder.layer(api, { openapiPath: "/openapi.json" })` — that is the _only_ option
   `layer` takes, and the only spec-serving mechanism in v4 (replaces v3's
   `middlewareOpenApi`).
 - **operationId** defaults to `` `${group.identifier}.${endpoint.identifier}` ``
-  (`OpenApi.ts:335-339`); `topLevel: true` groups drop the prefix; override with
+  (`OpenApi.ts:383-386`); `topLevel: true` groups drop the prefix; override with
   `OpenApi.Identifier`. Duplicate ids or duplicate method+path **throw** at spec build.
 - Annotations (`.annotate(OpenApi.X, ...)` on api/group/endpoint): `Title`, `Version`,
   `Description`, `Summary`, `License`, `ExternalDocs`, `Servers`, `Deprecated`,
   `Identifier`, `Exclude` (group-level cascades), `Override` (shallow merge), `Transform`
   (function on the generated object), plus `OpenApi.annotations({...})` and
   `HttpApi.AdditionalSchemas`.
-- **Schema `identifier` annotations drive `$ref`/`components.schemas`**
-  (`internal/schema/representation.ts:62-73`). Without them, everything inlines and
-  `components.schemas` stays empty. Annotate shared operation schemas
-  (`Schema.annotate({ identifier: "Transaction" })`) so agent/codegen consumers get named
-  components.
+- **Schema `identifier` annotations drive `$ref`/`components.schemas`.** RC.112 resolves identifiers on the encoded AST and uses them as the default reference policy
+  (`internal/schema/toRepresentation.ts:8`, `:49-64`, `:112-139`). Anonymous non-recursive
+  schemas inline; recursive schemas still receive a synthetic reference. Annotate shared
+  operation schemas (`Schema.annotate({ identifier: "Transaction" })`) so agent/codegen
+  consumers get stable named components.
 - Check → JSON Schema mapping: `isUUID` → `pattern` + `format: "uuid"`; `isInt` → `integer`;
   `isGreaterThan` → `exclusiveMinimum`; `isMaxLength` → `maxLength`/`maxItems`; brands are
   **invisible**; objects get `additionalProperties: false`; unconstrained `Schema.Number`
@@ -143,29 +146,23 @@ endpoint turns the builder's return type into the string literal
   `.layerCdn`, and `HttpApiSwagger.layer` — all in core `effect/unstable/httpapi`, all embed
   the spec into the HTML; keep `openapiPath` for the raw JSON.
 
-## Dates in operation definitions — a trap
+## Dates in operation definitions
 
-`Schema.Date` accepts **invalid `Date` instances** (`Schema.ts:10449-10451`), and its JSON
-codec (`DateString`, `Schema.ts:10437`) decodes _any_ string — `"not-a-date"` decodes
-successfully to `Invalid Date`. In an HttpApi operation definition that means a garbage date passes the
-400 gate and detonates later (typically as a 500 deep in the handler). It also emits a bare
-`{ "type": "string" }` in OpenAPI.
+RC.112 made `Schema.Date` the valid-JavaScript-Date schema: it rejects instances whose timestamp
+is `NaN`, and its JSON codec decodes strings through the validating `dateFromString`
+transformation (`Schema.ts:12188-12241`; `SchemaTransformation.ts:879-897`). The old
+`Schema.DateValid` workaround no longer exists.
 
-Use instead, in preference order:
-
-1. `Schema.DateTimeUtc` — validates `DateTime.Utc`, transport codec is a **validated** ISO string
-   (`Schema.ts:12026`, `dateTimeUtcFromString` rejects garbage — `SchemaTransformation.ts:1811-1823`),
-   handlers get immutable `DateTime.Utc` values that compose with `Clock`/`DateTime`. The
-   `Date`-schema JSDoc itself points to `DateTimeUtcFromString` for date-time strings
-   (`Schema.ts:10525`).
-2. `Schema.DateValid` (`Schema.ts:10596`, = `Date.check(isDateValid())`) — keeps JS `Date`
-   but rejects `Invalid Date` at decode and adds `format: "date-time"` to the JSON schema
-   (`representation.ts:711-712`).
+Prefer `Schema.DateTimeUtc` when handlers should receive immutable `DateTime.Utc` values that
+compose directly with `Clock`/`DateTime`; its JSON transport is a validated UTC ISO string
+(`Schema.ts:13768-13804`, `:13887-13895`). Use `Schema.Date` when the domain genuinely requires a
+JS `Date`, or `Schema.DateFromString` at an explicit string boundary (`Schema.ts:12270-12295`).
+All three reject malformed date input rather than allowing an `Invalid Date` through the 400 gate.
 
 ## Schema patterns for operation definitions
 
 - **Derive, don't duplicate**: `Base.mapFields(Struct.omit(["id", "createdAt"]))` is the v4
-  idiom (`Schema.ts:3395-3402`; repo tests use it verbatim). Caveat: struct-level
+  idiom (`Schema.ts:3510-3551`; repo tests use it verbatim). Caveat: struct-level
   `.check(...)`s are dropped by `mapFields` unless `unsafePreserveChecks` — field-level
   checks survive.
 - **Branded ids**: `Schema.String.check(Schema.isUUID()).pipe(Schema.brand("XxxId"))`
@@ -198,10 +195,10 @@ accepts `middleware:` (e.g. `HttpMiddleware.cors({...})`). Serverless:
   real typed client, so the whole encode → route → handler → encode → decode pipeline runs,
   including middleware. Needs platform services (`FileSystem`, `Etag.Generator`,
   `HttpPlatform`, `Path`). This is what the effect repo's own HttpApiBuilder tests use.
-- **Real socket**: `NodeHttpServer.layerTest` (`platform-node/src/NodeHttpServer.ts:477-486`)
+- **Real socket**: `NodeHttpServer.layerTest` (`../platform/node/src/NodeHttpServer.ts:487-501`)
   binds an ephemeral port and configures an `HttpClient` pointed at it. Same schema pipeline,
   plus real transport. Bun equivalents: `BunHttpServer.layer`
-  (`platform-bun/src/BunHttpServer.ts:261`) and `BunHttpServer.layerTest` (`:279`).
+  (`../platform/bun/src/BunHttpServer.ts:301-309`) and `BunHttpServer.layerTest` (`:320-325`).
 
 ## Middleware
 
@@ -231,7 +228,7 @@ are not covered.
   functions also receive the decoded `credential` (`:83-102`). It wraps the **whole**
   per-endpoint pipeline — request decode, handler, success encode — so it runs before
   decoding and sees the final encoded success `HttpServerResponse`.
-- **Order**: `applyMiddleware` wraps in attachment order (`HttpApiBuilder.ts:836-851`) —
+- **Order**: `applyMiddleware` wraps in attachment order (`HttpApiBuilder.ts:856-871`) —
   first-attached is innermost. Since group/api attachment happens after endpoint
   construction, the practical nesting is endpoint-level closest to the handler, api-level
   outermost.
@@ -245,11 +242,11 @@ are not covered.
   declaration order; a middleware failure falls through to the next scheme, but errors from
   the wrapped handler short-circuit (`HandlerError` wrapping, `HttpApiBuilder.ts:876-899`).
 - **Middleware never sees encoded error responses.** Declared-error encoding happens
-  _outside_ `applyMiddleware` (`HttpApiBuilder.ts:810-816`): typed failures pass through the
+  _outside_ `applyMiddleware` (`HttpApiBuilder.ts:831-835`): typed failures pass through the
   middleware's error channel and are turned into responses afterwards. To decorate error
   responses (e.g. `Retry-After`), see Response headers below.
 - **Empty-400 interception**: `HttpApiMiddleware.layerSchemaErrorTransform(Tag, (error,
-{ endpoint, group }) => ...)` (`HttpApiMiddleware.ts:419-445`) catches the
+{ endpoint, group }) => ...)` (`HttpApiMiddleware.ts:466-495`) catches the
   `HttpApiSchemaError` before it becomes the empty 400. The error carries
   `kind: "Params" | "Headers" | "Query" | "Payload" | "Body"` and
   `cause: Schema.SchemaError` (`HttpApiError.ts:453-457`), so field-level `{ path, message }`
@@ -257,7 +254,7 @@ are not covered.
   hand-built `HttpServerResponse` or fail with the middleware's declared error.
 - **Client side**: `requiredForClient: true` adds a `ForClient<Id>` requirement to the
   derived client; satisfy it with `HttpApiMiddleware.layerClient(Tag, ({ request, next }) =>
-next(HttpClientRequest.bearerToken(request, token)))` (`HttpApiMiddleware.ts:457-486`;
+next(HttpClientRequest.bearerToken(request, token)))` (`HttpApiMiddleware.ts:504-533`;
   `HttpClientRequest.bearerToken`, `HttpClientRequest.ts:362-368`). The layer captures its
   surrounding services at build time. Full wiring — `layerClient` + `HttpApiClient.make`
   with `transformClient` for baseUrl/retries — is ai-docs `10_basics.ts:68-106`.
@@ -276,10 +273,10 @@ Endpoint/group/api annotations are a `Context.Context<never>` keyed by ordinary
 
 - **Define a key**: `class CostClass extends Context.Service<CostClass, "cheap" |
 "expensive">()("app/CostClass") {}` (exactly how `OpenApi.Description` is built,
-  `OpenApi.ts:62`), or `Context.Reference("app/CostClass", { defaultValue: () => "cheap" })`
+  `OpenApi.ts:64`), or `Context.Reference("app/CostClass", { defaultValue: () => "cheap" })`
   when reads without an attachment should yield a default (the `OpenApi.Exclude` pattern,
-  `OpenApi.ts:136`; `Context.Reference`, `Context.ts:1335`).
-- **Attach**: `endpoint.annotate(Key, value)` (`HttpApiEndpoint.ts:798-803`),
+  `OpenApi.ts:138`; `Context.Reference`, `Context.ts:1324-1331`).
+- **Attach**: `endpoint.annotate(Key, value)` (`HttpApiEndpoint.ts:811-815`),
   `group.annotate` (group-level value, `HttpApiGroup.ts:336-340`), `group.annotateEndpoints`
   (copies onto every endpoint **already added**, `:348-352`), `api.annotate`
   (`HttpApi.ts:185-189`).
@@ -291,21 +288,21 @@ Endpoint/group/api annotations are a `Context.Context<never>` keyed by ordinary
 - **At request time**: middleware receives `{ endpoint, group }` on every call
   (`HttpApiMiddleware.ts:64-72`), and handlers receive `request.endpoint` /
   `request.group` alongside the decoded parts (`HttpApiEndpoint.ts:97-110`, populated at
-  `HttpApiBuilder.ts:778-782`) — annotation-driven authz/limits need no side tables.
+  `HttpApiBuilder.ts:783-790`) — annotation-driven authz/limits need no side tables.
 - **Programmatic iteration**: `HttpApi.reflect(api, { predicate?, onGroup, onEndpoint })`
   (`HttpApi.ts:247`) walks every group/endpoint with `mergedAnnotations` (api ← group ←
   endpoint precedence), the endpoint's middleware set, and successes/errors grouped as
   `Map<status, schemas>`. This is the mechanism for deriving tool catalogs, affordance
   tables, and definition-lint tests from one metadata source.
 - **Operation id**: `` `${group.identifier}.${endpoint.identifier}` `` — same default as
-  OpenAPI's operationId (`OpenApi.ts:335-339`) — is computable at definition time (reflect),
+  OpenAPI's operationId (`OpenApi.ts:383-386`) — is computable at definition time (reflect),
   in middleware (`options.endpoint/group`), and in handlers (`request.endpoint/group`).
 
 ## Wrapping every success schema (envelopes)
 
 There is **no api- or group-level success-schema transform**: `success` is a frozen
 `ReadonlySet` fixed at construction and copied verbatim by every endpoint combinator
-(`optionsFromEndpoint`, `HttpApiEndpoint.ts:812-825`); nothing in `HttpApi`/`HttpApiGroup`
+(`HttpApiEndpoint.ts:176-189`; `optionsFromEndpoint`, `:825-835`); nothing in `HttpApi`/`HttpApiGroup`
 rewrites it. A universal envelope is therefore a discipline-plus-combinator pattern: a
 single `Envelope(schema)` combinator applied in every `success:`, enforced mechanically by a
 test that runs `HttpApi.reflect` over the api and asserts each entry in `successes` carries
@@ -313,49 +310,53 @@ the envelope's marker (e.g. an AST annotation the combinator sets).
 
 ## Response headers
 
-**Verdict: schemas cannot carry response headers.** The response encoder emits only
-`{ status, contentType }` (`getResponseEncode`, `HttpApiBuilder.ts:1095-1135`); nothing in
-`HttpApiSchema` models headers. Headers are set on the `HttpServerResponse` value:
+RC.112 models typed response headers directly. Wrap a success body with
+`HttpApiSchema.WithHeaders(bodySchema, headerFields)` and return
+`HttpApiSchema.withHeaders({ body, headers })`; headers are converted through
+`Schema.toCodecStringTree`, validated by the server, decoded by the typed client, and emitted in
+OpenAPI (`HttpApiSchema.ts:455-478`, `:523-590`; `OpenApi.ts:396-422`, `:755-775`). An invalid success header
+becomes `HttpApiSchemaError("ResponseHeaders")` (`HttpApiBuilder.ts:819-829`).
 
-- **On successes** (e.g. a quota header): httpapi middleware maps the encoded response —
-  `(httpEffect, { endpoint }) => Effect.map(httpEffect,
-HttpServerResponse.setHeader("x-quota-remaining", n))` (`HttpServerResponse.setHeader` /
-  `setHeaders`, `HttpServerResponse.ts:524-556`). Covers success and raw responses of every
-  endpoint it is attached to, **not** declared-error responses (encoded after middleware,
-  `HttpApiBuilder.ts:810-816`).
-- **On errors** (e.g. `Retry-After` on 429): either (a) the middleware _succeeds_ with a
-  hand-built response — `HttpServerResponse.json(body, { status: 429, headers:
-{ "retry-after": secs } })` (an `Effect`, `HttpServerResponse.ts:289`) — while still
-  declaring the 429 error schema so OpenAPI documents it and the typed client (which selects
-  the decode schema by status) round-trips the body; or (b) a router-global middleware.
-- **On literally every response** (api + webhooks + static): router-global middleware —
-  `HttpRouter.middleware(fn, { global: true })` registers via `addGlobalMiddleware`
-  (`HttpRouter.ts:919-949`) and wraps every route after all encoding. Right seam for
-  blanket headers; wrong seam for anything needing endpoint metadata (it gets none).
+For domain errors whose handler should still fail with the original error value, pipe the error
+schema through `HttpApiSchema.encodeToWithHeaders({ body, headers }, { decode, encode })`; the mapping
+projects that value into a validated body/header pair (`HttpApiSchema.ts:628-729`). Structural
+`WithHeaders` also works for errors when carrying `{ body, headers }` in the error channel is the
+right model. A header-bearing response cannot share the same status and content type with another
+member of its success/error union because the declaration would be ambiguous (`HttpApiSchema.ts:467-478`).
+
+Use response mutation only outside that typed contract:
+
+- **Cross-cutting success/raw headers**: httpapi middleware maps the encoded response with
+  `HttpServerResponse.setHeader` / `setHeaders` (`HttpServerResponse.ts:525-579`). Declared errors
+  are encoded outside endpoint middleware (`HttpApiBuilder.ts:831-835`), so model their headers in
+  the error schema instead.
+- **Literally every response** (api + webhooks + static): router-global middleware via
+  `HttpRouter.middleware(fn, { global: true })` (`HttpRouter.ts:919-949`). This is the seam for
+  blanket headers; it has no endpoint metadata.
 
 ## Multipart
 
 - Mark the payload with `HttpApiSchema.asMultipart(limits?)` (buffered,
-  `HttpApiSchema.ts:502-513`) or `asMultipartStream(limits?)` (streaming, `:546-557`).
+  `HttpApiSchema.ts:764-773`) or `asMultipartStream(limits?)` (streaming, `:808-814`).
   Per-endpoint limits: `{ maxParts, maxFieldSize, maxFileSize, maxTotalSize,
-fieldMimeTypes }` (`Multipart.ts:722-748`); unset limits fall back to fiber references
-  (`makeConfig`, `Multipart.ts:380-397`).
+fieldMimeTypes }` (`Multipart.ts:759-780`); unset limits fall back to fiber references
+  (`makeConfig`, `Multipart.ts:417-430`).
 - **Buffered**: the request is parsed to `Multipart.Persisted` — text fields as strings,
   files written into a per-request scoped temp directory (`toPersisted`,
-  `Multipart.ts:637-678`; paths valid for the request scope) — then decoded through your
+  `Multipart.ts:666-714`; paths valid for the request scope) — then decoded through your
   payload schema. Build that schema from `Multipart.FilesSchema` / `SingleFileSchema`
-  (`Multipart.ts:299`, `:312`) plus string fields; `Multipart.schemaJson` (`:352`) decodes a
+  (`Multipart.ts:332`, `:345`) plus string fields; `Multipart.schemaJson` (`:385`) decodes a
   JSON-string field through a schema.
 - **TRAP — limit violations are empty 500s, not 413s.** Buffered parsing is
-  `Effect.orDie`'d (`HttpApiBuilder.ts:706-712`), so `FileTooLarge` / `BodyTooLarge` /
-  `TooManyParts` (`Multipart.ts:197-200`) become defects → empty 500. To respond 413, use
+  `Effect.orDie`'d (`HttpApiBuilder.ts:711-717`), so `FileTooLarge` / `BodyTooLarge` /
+  `TooManyParts` (`Multipart.ts:194-209`) become defects → empty 500. To respond 413, use
   stream mode and map `MultipartError` yourself, or intercept at router middleware level.
 - **Streaming**: the handler's `payload` is `Stream<Multipart.Part, MultipartError>`
   regardless of the wrapped schema's Type (`HttpApiEndpoint.ts:97-105`) — the schema only
   documents the shape; validation is on you.
-- **Client**: a multipart payload is typed as raw `FormData` (`HttpApiEndpoint.ts:492-495`)
-  and sent verbatim (`HttpApiClient.ts:417-418`); schema-encoding it is Forbidden
-  (`HttpApiClient.ts:1011-1013`). No client-side runtime validation for multipart.
+- **Client**: a multipart payload is typed as raw `FormData` (`HttpApiEndpoint.ts:489-507`)
+  and sent verbatim (`HttpApiClient.ts:421-422`); schema-encoding it is Forbidden
+  (`HttpApiClient.ts:1066-1082`). No client-side runtime validation for multipart.
 
 ## Plain routes, raw bodies, static files
 
@@ -370,14 +371,14 @@ coexists — merge the layers before `HttpRouter.serve`:
 - **Webhook HMAC / raw bodies**: schema payload decoding consumes and reshapes the body, so
   signature checks need the raw bytes. Either (a) keep the endpoint in the api but implement
   it with `handlers.handleRaw(name, fn)` — payload decoding is skipped
-  (`HttpApiBuilder.ts:311-328`, `:765`), params/query/headers still decode, and the handler
-  reads `request.request.text` / `arrayBuffer` / `stream` (`HttpIncomingMessage.ts:51-55`)
+  (`HttpApiBuilder.ts:311-328`, payload bypass at `:774-775`), params/query/headers still decode, and the handler
+  reads `request.request.text` / `arrayBuffer` / `stream` (`HttpIncomingMessage.ts:51-65`)
   to verify before parsing; or (b) register a plain route outside the api. Request body cap
-  via the `MaxBodySize` reference (`HttpIncomingMessage.ts:114`).
+  via the `MaxBodySize` reference (`HttpIncomingMessage.ts:133-136`).
 - **Static files / SPA**: `HttpStaticServer.layer({ root, index?, spa?, cacheControl?,
-mimeTypes?, prefix? })` mounts a `GET /*` route (`HttpStaticServer.ts:199-231`) with
-  conditional 304s (ETag / If-Modified-Since), byte ranges, and MIME mapping; `spa: true`
+mimeTypes?, prefix? })` mounts a `GET /*` route (`HttpStaticServer.ts:227-250`) with
+  conditional 304s (ETag / If-Modified-Since), byte ranges, and MIME mapping (`:111-175`); `spa: true`
   serves the index only for extension-less paths whose `Accept` includes `text/html`
-  (`:158-160`). Requires `FileSystem`, `Path`, `HttpPlatform` (all in `BunServices.layer` /
+  (`:180-190`). Requires `FileSystem`, `Path`, `HttpPlatform` (all in `BunServices.layer` /
   `NodeServices.layer`). Single files: `HttpServerResponse.file(path)`
-  (`HttpServerResponse.ts:483`).
+  (`HttpServerResponse.ts:484-505`).

@@ -1,0 +1,42 @@
+apps/server/src/shell/testing/whatsapp-acceptance-harness.ts
+  s_4fbb6340adf8e9::t_27b6468d58fc33 17,302,306-325,328,332,340,352
+  s_4fbb6340adf8e9::t_999df950216251 286-299,329-331
+apps/server/src/shell/channels/whatsapp/kapso-client.ts
+  s_4fbb6340adf8e9::t_799f785d545671 31,103,146-147
+  s_4fbb6340adf8e9::t_20e9a32db91d35 2-19,136-137,141-142,144,148,155-158,160,163,273,277,282-285,288-289,343,351
+  s_4fbb6340adf8e9::t_95f958cf446ca8 105-106,145,297,322-326
+  s_4fbb6340adf8e9::t_fef42d8231026c 138-139,162,291
+  s_4fbb6340adf8e9::t_a7750299b08d1d 159,161
+  s_4fbb6340adf8e9::t_39664a3bc34b6d 245-248
+  s_4fbb6340adf8e9::t_53f3256de85929 149-152
+  s_4fbb6340adf8e9::t_ffda52e2c5afdf 143
+  s_4fbb6340adf8e9::t_0a1ac28ce06e7b 292,298-303,305-320
+  s_4fbb6340adf8e9::t_23b32491ac6bb0 293-296
+apps/server/src/shell/channels/whatsapp/kapso-client.test.ts
+  s_4fbb6340adf8e9::t_43d24c2aaa14af 46
+  s_4fbb6340adf8e9::t_fef42d8231026c 37,41,60,62,74,76,114,116,125,128,138-149,151,153-162,173-175,187,194,244,246,340,346,352,449-450,466
+  s_4fbb6340adf8e9::t_551f99e9265409 365-366,368-370,372,375-398,400-403
+  s_4fbb6340adf8e9::t_14012a7ba19dec 367,371,373-374,399
+  s_4fbb6340adf8e9::t_a7750299b08d1d 66,344-345,527-530
+  s_4fbb6340adf8e9::t_0a691778088ae6 202-237
+  s_4fbb6340adf8e9::t_462b8feca566de 15-16,61,115,182,184,330-335,443-448
+  s_4fbb6340adf8e9::t_20e9a32db91d35 36,39-40,42-43,58-59,63-65,67-69,75,77,101-102,112-113,117-120,126-127,129,150,152,163-172,176-181,183,185-186,188-193,195-201,238-243,245,247,312,491
+  s_4fbb6340adf8e9::t_ec80e5dbd92efe 3-14,81-95
+  s_4fbb6340adf8e9::t_9ef8b5c60880df 38,248
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "143df93b54a45ca348eba5ca7649579c72d28fa5",
+  "prompts": {},
+  "sessions": {
+    "s_4fbb6340adf8e9": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a053d3-e883-7fa4-8d21-2cee8bae8509",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": null
+    }
+  }
+}

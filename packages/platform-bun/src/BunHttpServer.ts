@@ -158,12 +158,12 @@ export const make = Effect.fnUntraced(
 
         function handler(request: Request, server: BunServer<WebSocketContext>) {
           return new Promise<Response>((resolve, _reject) => {
-            const map = new Map(services.mapUnsafe)
-            map.set(
-              ServerRequest.HttpServerRequest.key,
+            const context = Context.add(
+              services,
+              ServerRequest.HttpServerRequest,
               new BunServerRequest(request, resolve, removeHost(request.url), server)
             )
-            const fiber = Fiber.runIn(Effect.runForkWith(Context.makeUnsafe<any>(map))(httpEffect), scope)
+            const fiber = Fiber.runIn(Effect.runForkWith(context)(httpEffect), scope)
             request.signal.addEventListener("abort", () => {
               fiber.interruptUnsafe(parent.id, Error.ClientAbort.annotation)
             }, { once: true })
@@ -171,9 +171,10 @@ export const make = Effect.fnUntraced(
         }
 
         yield* Scope.addFinalizerExit(serveScope, () => {
-          handlerStack.pop()
+          const index = handlerStack.indexOf(handler)
+          if (index !== -1) handlerStack.splice(index, 1)
           server.reload({ fetch: handlerStack[handlerStack.length - 1] })
-          return preemptiveShutdown
+          return handlerStack.length === 1 ? preemptiveShutdown : Effect.void
         })
         handlerStack.push(handler)
         server.reload({ fetch: handler })
@@ -296,7 +297,7 @@ export const layer = <R extends string>(
 /**
  * Layer that starts a Bun HTTP server on an ephemeral port for tests.
  *
- * @category layers
+ * @category testing
  * @since 4.0.0
  */
 export const layerTest: Layer.Layer<

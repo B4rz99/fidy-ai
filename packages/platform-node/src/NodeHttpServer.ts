@@ -206,9 +206,8 @@ export const makeHandler = <
       nodeRequest: Http.IncomingMessage,
       nodeResponse: Http.ServerResponse
     ) {
-      const map = new Map(services.mapUnsafe)
-      map.set(HttpServerRequest.key, new ServerRequestImpl(nodeRequest, nodeResponse))
-      const fiber = Fiber.runIn(Effect.runForkWith(Context.makeUnsafe<any>(map))(handled), options.scope)
+      const context = Context.add(services, HttpServerRequest, new ServerRequestImpl(nodeRequest, nodeResponse))
+      const fiber = Fiber.runIn(Effect.runForkWith(context as Context.Context<any>)(handled), options.scope)
       nodeResponse.on("close", () => {
         if (!nodeResponse.writableEnded) {
           fiber.interruptUnsafe(parent.id, ClientAbort.annotation)
@@ -273,9 +272,13 @@ export const makeUpgradeHandler = <
             (ws) => Effect.sync(() => ws.close())
           )
       ))
-      const map = new Map(services.mapUnsafe)
-      map.set(HttpServerRequest.key, new ServerRequestImpl(nodeRequest, nodeResponse, upgradeEffect))
-      const fiber = Fiber.runIn(Effect.runForkWith(Context.makeUnsafe<any>(map))(handledApp), options.scope)
+      const context = Context.add(
+        services,
+        HttpServerRequest,
+        new ServerRequestImpl(nodeRequest, nodeResponse, upgradeEffect)
+      )
+      const fiber = Fiber.runIn(Effect.runForkWith(context as Context.Context<any>)(handledApp), options.scope)
+      socket.on("error", () => {})
       socket.on("close", () => {
         if (!socket.writableEnded) {
           fiber.interruptUnsafe(parent.id, ClientAbort.annotation)
@@ -347,8 +350,9 @@ class ServerRequestImpl extends NodeHttpIncomingMessage<HttpServerError> impleme
     return this.source.url!
   }
 
+  private cachedMethod: HttpMethod | undefined
   get method(): HttpMethod {
-    return this.source.method!.toUpperCase() as HttpMethod
+    return this.cachedMethod ??= this.source.method!.toUpperCase() as HttpMethod
   }
 
   override get headers(): Headers.Headers {
@@ -523,14 +527,20 @@ const handleResponse = (
 
   if (request.method === "HEAD") {
     nodeResponse.writeHead(response.status, headers)
-    return Effect.callback<void>((resume) => {
-      const done = () => {
-        nodeResponse.off("close", done)
-        resume(Effect.void)
-      }
-      nodeResponse.once("close", done)
-      nodeResponse.end(done)
-    })
+    return Effect.andThen(
+      cancelResponseBody(response.body),
+      Effect.callback<void>((resume) => {
+        let completed = false
+        const done = () => {
+          if (completed) return
+          completed = true
+          nodeResponse.off("close", done)
+          resume(Effect.void)
+        }
+        nodeResponse.once("close", done)
+        nodeResponse.end(done)
+      })
+    )
   }
   const body = response.body
   switch (body._tag) {
@@ -614,17 +624,9 @@ const handleResponse = (
       return body.stream.pipe(
         Stream.orDie,
         Stream.runForEachArray((array) => {
-          let needDrain = false
-          for (let i = 0; i < array.length; i++) {
-            const written = nodeResponse.write(array[i])
-            if (!written && !needDrain) {
-              needDrain = true
-              drainLatch.closeUnsafe()
-            } else if (written && needDrain) {
-              needDrain = false
-            }
-          }
-          if (!needDrain) return Effect.void
+          const chunk = array.length > 1 ? Buffer.concat(array) : array[0]
+          if (nodeResponse.write(chunk)) return Effect.void
+          drainLatch.closeUnsafe()
           return drainLatch.await
         }),
         Effect.interruptible,
@@ -635,6 +637,14 @@ const handleResponse = (
       )
     }
   }
+}
+
+const cancelResponseBody = (body: HttpServerResponse["body"]): Effect.Effect<void> => {
+  const stream = body._tag === "Raw" ? body.body : undefined
+  if (stream instanceof Readable) {
+    return Effect.sync(() => stream.destroy())
+  }
+  return Effect.void
 }
 
 const handleCause = (

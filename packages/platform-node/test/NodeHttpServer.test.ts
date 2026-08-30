@@ -29,7 +29,9 @@ import {
 } from "effect/unstable/http"
 import * as HttpApiError from "effect/unstable/httpapi/HttpApiError"
 import * as Buffer from "node:buffer"
+import { EventEmitter } from "node:events"
 import * as Http from "node:http"
+import * as Net from "node:net"
 
 const Todo = Schema.Struct({
   id: Schema.Number,
@@ -509,6 +511,120 @@ describe("HttpServer", () => {
       assert.strictEqual(res.status, 204)
     }).pipe(Effect.provide(NodeHttpServer.layerTest)))
 
+  it.effect("completes a HEAD response once when close precedes the end callback", () =>
+    Effect.gen(function*() {
+      const scope = yield* Effect.scope
+      const handler = yield* NodeHttpServer.makeHandler(
+        Effect.succeed(HttpServerResponse.empty()),
+        { scope }
+      )
+      const completed = Latch.makeUnsafe()
+      let writableEnded = false
+      const nodeResponse = Object.defineProperty(new EventEmitter(), "writableEnded", {
+        get: () => writableEnded
+      }) as Http.ServerResponse
+      let closeListenerRemovals = 0
+      nodeResponse.writeHead = () => nodeResponse
+      nodeResponse.off = ((event: string | symbol, listener: (...args: Array<unknown>) => void) => {
+        if (event === "close") {
+          closeListenerRemovals++
+        }
+        return EventEmitter.prototype.off.call(nodeResponse, event, listener) as Http.ServerResponse
+      }) as Http.ServerResponse["off"]
+      nodeResponse.end = ((callback: () => void) => {
+        writableEnded = true
+        nodeResponse.emit("close")
+        callback()
+        completed.openUnsafe()
+        return nodeResponse
+      }) as Http.ServerResponse["end"]
+
+      handler(
+        { method: "HEAD", url: "/", headers: {}, socket: {} } as Http.IncomingMessage,
+        nodeResponse
+      )
+      yield* completed.await
+
+      assert.strictEqual(closeListenerRemovals, 1)
+    }))
+
+  it.effect("coalesces streaming chunks from the same pull", () =>
+    Effect.gen(function*() {
+      const scope = yield* Effect.scope
+      const handler = yield* NodeHttpServer.makeHandler(
+        Effect.succeed(HttpServerResponse.stream(Stream.make(
+          Buffer.Buffer.from("a"),
+          Buffer.Buffer.from("b")
+        ))),
+        { scope }
+      )
+      const completed = Latch.makeUnsafe()
+      const writes: Array<Uint8Array> = []
+      let writableEnded = false
+      const nodeResponse = Object.defineProperty(new EventEmitter(), "writableEnded", {
+        get: () => writableEnded
+      }) as Http.ServerResponse
+      nodeResponse.writeHead = () => nodeResponse
+      nodeResponse.write = ((chunk: Uint8Array) => {
+        writes.push(chunk)
+        return true
+      }) as Http.ServerResponse["write"]
+      nodeResponse.end = (() => {
+        writableEnded = true
+        completed.openUnsafe()
+        return nodeResponse
+      }) as Http.ServerResponse["end"]
+
+      handler(
+        { method: "GET", url: "/", headers: {}, socket: {} } as Http.IncomingMessage,
+        nodeResponse
+      )
+      yield* completed.await
+
+      assert.deepStrictEqual(writes.map((chunk) => Buffer.Buffer.from(chunk).toString()), ["ab"])
+    }))
+
+  it.effect("waits for drain after a streaming write applies backpressure", () =>
+    Effect.gen(function*() {
+      const scope = yield* Effect.scope
+      const handler = yield* NodeHttpServer.makeHandler(
+        Effect.succeed(HttpServerResponse.stream(Stream.make(
+          Buffer.Buffer.from("a"),
+          Buffer.Buffer.from("b")
+        ))),
+        { scope }
+      )
+      const writeObserved = Latch.makeUnsafe()
+      const completed = Latch.makeUnsafe()
+      let writableEnded = false
+      const nodeResponse = Object.defineProperty(new EventEmitter(), "writableEnded", {
+        get: () => writableEnded
+      }) as Http.ServerResponse
+      let writeCount = 0
+      nodeResponse.writeHead = () => nodeResponse
+      nodeResponse.write = (() => {
+        writeCount++
+        queueMicrotask(() => writeObserved.openUnsafe())
+        return writeCount > 1
+      }) as Http.ServerResponse["write"]
+      nodeResponse.end = (() => {
+        writableEnded = true
+        completed.openUnsafe()
+        return nodeResponse
+      }) as Http.ServerResponse["end"]
+
+      handler(
+        { method: "GET", url: "/", headers: {}, socket: {} } as Http.IncomingMessage,
+        nodeResponse
+      )
+      yield* writeObserved.await
+      assert.strictEqual(nodeResponse.writableEnded, false)
+
+      nodeResponse.emit("drain")
+      yield* completed.await
+      assert.strictEqual(writeCount, 1)
+    }))
+
   it.live("disposes after a client aborts a handler awaiting an upstream request", () => {
     const upstreamStarted = Latch.makeUnsafe()
     const upstream = Http.createServer(() => {
@@ -586,7 +702,7 @@ describe("HttpServer", () => {
   describe("HttpServerRespondable", () => {
     it.effect("error/schema", () =>
       Effect.gen(function*() {
-        class CustomError extends Schema.ErrorClass<CustomError>("CustomError")({
+        class CustomError extends Schema.Error<CustomError>("CustomError")({
           _tag: Schema.tag("CustomError"),
           name: Schema.String
         }) {
@@ -712,6 +828,43 @@ describe("HttpServer", () => {
       const plain = yield* connect(false)
       expect(plain.extensions).not.toContain("permessage-deflate")
     }).pipe(Effect.scoped, Effect.provide(layerTestWebsocket)))
+
+  it.effect("an upgrade connection reset by the peer does not crash the process", () =>
+    Effect.gen(function*() {
+      yield* HttpRouter.add("GET", "/", HttpServerResponse.text("ok")).pipe(
+        HttpRouter.serve,
+        Layer.build
+      )
+      const server = yield* HttpServer.HttpServer
+      const port = (server.address as HttpServer.TcpAddress).port
+
+      const uncaught: Array<unknown> = []
+      const onUncaught = (error: unknown) => uncaught.push(error)
+      process.on("uncaughtException", onUncaught)
+      yield* Effect.addFinalizer(() => Effect.sync(() => process.off("uncaughtException", onUncaught)))
+
+      yield* Effect.callback<void>((resume) => {
+        const socket = Net.connect({ port, host: "127.0.0.1" }, () => {
+          socket.write(
+            "GET /ws HTTP/1.1\r\n" +
+              "Host: 127.0.0.1\r\n" +
+              "Upgrade: websocket\r\n" +
+              "Connection: Upgrade\r\n" +
+              "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n" +
+              "Sec-WebSocket-Version: 13\r\n\r\n"
+          )
+          setTimeout(() => {
+            socket.resetAndDestroy()
+            setTimeout(() => resume(Effect.void), 50)
+          }, 50)
+        })
+        socket.on("error", () => {})
+      })
+
+      expect(uncaught).toEqual([])
+      const response = yield* HttpClient.get("/")
+      expect(response.status).toEqual(200)
+    }).pipe(Effect.provide(layerTestWebsocket)))
 })
 
 const layerTestWebsocket = HttpServer.layerTestClient.pipe(

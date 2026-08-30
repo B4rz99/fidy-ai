@@ -215,7 +215,7 @@ class FileImpl implements FileSystem.File {
       } else {
         this.position += size
       }
-      return this.position
+      return FileSystem.Size(this.position)
     })
   }
 
@@ -321,7 +321,7 @@ class FileImpl implements FileSystem.File {
   }
 
   writeAll(buffer: Uint8Array) {
-    return this.writeAllChunk(buffer)
+    return buffer.length === 0 ? Effect.void : this.writeAllChunk(buffer)
   }
 }
 
@@ -390,11 +390,14 @@ const truncate: FileSystem.FileSystem["truncate"] = (path, length) =>
 const utimes: FileSystem.FileSystem["utimes"] = (path, atime, mtime) =>
   tryPromise("utimes", path, () => Deno.utime(path, atime, mtime))
 
-const watchNative = (path: string): Stream.Stream<FileSystem.WatchEvent, PlatformError.PlatformError> =>
+const watchNative = (
+  path: string,
+  options?: FileSystem.WatchOptions
+): Stream.Stream<FileSystem.WatchEvent, PlatformError.PlatformError> =>
   Stream.unwrap(
     Effect.map(
       Effect.try({
-        try: () => Deno.watchFs(path, { recursive: true }),
+        try: () => Deno.watchFs(path, { recursive: options?.recursive ?? false }),
         catch: handleError("FileSystem", "watch", path)
       }),
       (watcher) =>
@@ -421,27 +424,44 @@ const watchNative = (path: string): Stream.Stream<FileSystem.WatchEvent, Platfor
     )
   )
 
-const watch = (backend: Option.Option<FileSystem.WatchBackend["Service"]>, path: string) =>
+const watch = (
+  backend: Option.Option<FileSystem.WatchBackend["Service"]>,
+  path: string,
+  options?: FileSystem.WatchOptions
+) =>
   stat(path).pipe(
     Effect.map((info) =>
       backend.pipe(
-        Option.flatMap((backend) => backend.register(path, info)),
-        Option.getOrElse(() => watchNative(path))
+        Option.flatMap((backend) => backend.register(path, info, options)),
+        Option.getOrElse(() => watchNative(path, options))
       )
     ),
     Stream.unwrap
   )
 
 const writeFile: FileSystem.FileSystem["writeFile"] = (path, data, options) => {
-  const flag = options?.flag
-  return tryPromise("writeFile", path, (signal) =>
-    Deno.writeFile(path, data, {
-      append: flag?.startsWith("a") ?? false,
-      create: flag !== "r" && flag !== "r+",
-      createNew: flag?.includes("x") ?? false,
-      ...(options?.mode === undefined ? {} : { mode: options.mode }),
-      signal
-    }))
+  const flag = options?.flag ?? "w"
+  if (flag === "w" || flag === "wx" || flag === "a" || flag === "ax") {
+    return tryPromise("writeFile", path, (signal) =>
+      Deno.writeFile(path, data, {
+        append: flag.startsWith("a"),
+        createNew: flag.includes("x"),
+        ...(options?.mode === undefined ? {} : { mode: options.mode }),
+        signal
+      }))
+  }
+  return Effect.acquireUseRelease(
+    tryPromise("writeFile", path, () => Deno.open(path, openOptions(flag, options?.mode))),
+    (file) =>
+      new FileImpl(file, flag.startsWith("a")).writeAll(data).pipe(
+        Effect.mapError((error) =>
+          error.reason._tag !== "BadArgument"
+            ? PlatformError.systemError({ ...error.reason, method: "writeFile", pathOrDescriptor: path })
+            : error
+        )
+      ),
+    (file) => close(file, "writeFile", path)
+  )
 }
 
 const makeFileSystem = Effect.map(Effect.serviceOption(FileSystem.WatchBackend), (backend) =>
@@ -469,8 +489,8 @@ const makeFileSystem = Effect.map(Effect.serviceOption(FileSystem.WatchBackend),
     symlink,
     truncate,
     utimes,
-    watch(path) {
-      return watch(backend, path)
+    watch(path, options) {
+      return watch(backend, path, options)
     },
     writeFile
   }))

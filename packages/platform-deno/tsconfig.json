@@ -1,9 +1,10 @@
 {
-  "$schema": "http://json.schemastore.org/tsconfig",
+  "$schema": "https://json.schemastore.org/tsconfig",
   "extends": "../../tsconfig.base.json",
   "include": ["src"],
   "references": [
-    { "path": "../effect" }
+    { "path": "../effect" },
+    { "path": "../platform-node-shared" }
   ],
   "compilerOptions": {
     "types": ["deno"]

@@ -10,7 +10,7 @@ import {
 } from "./model";
 import { applyDashboardEdit } from "./rules";
 
-const document = Schema.decodeUnknownSync(DashboardDocument)({
+const document = Schema.decodeSync(DashboardDocument)({
   title: "Mi tablero",
   layout: {
     kind: "leaf",
@@ -60,7 +60,7 @@ const makeSplitDocument = (
   });
 
 const makeNestedDocument = (): DashboardDocument =>
-  Schema.decodeUnknownSync(DashboardDocument)({
+  Schema.decodeSync(DashboardDocument)({
     title: "Mi tablero",
     layout: {
       kind: "split",
@@ -101,7 +101,7 @@ const makeNestedDocument = (): DashboardDocument =>
   });
 
 it("sets the dashboard's visible heading through the shared edit vocabulary", () => {
-  const edit = Schema.decodeUnknownSync(DashboardEdit)({
+  const edit = Schema.decodeSync(DashboardEdit)({
     op: "set-title",
     title: "Flujo de caja",
   });
@@ -113,7 +113,7 @@ it("sets the dashboard's visible heading through the shared edit vocabulary", ()
 });
 
 it("reports schema failures when an edit revalidates malformed document data", () => {
-  const malformedDocument = Schema.decodeUnknownSync(DashboardDocument)({
+  const malformedDocument = Schema.decodeSync(DashboardDocument)({
     title: "Mi tablero",
     layout: {
       kind: "leaf",
@@ -127,7 +127,7 @@ it("reports schema failures when an edit revalidates malformed document data", (
   });
   if (malformedDocument.layout.kind !== "leaf") throw new Error("Expected a leaf layout");
   Object.assign(malformedDocument.layout.widget, { type: "not-a-dashboard-widget" });
-  const edit = Schema.decodeUnknownSync(DashboardEdit)({
+  const edit = Schema.decodeSync(DashboardEdit)({
     op: "set-title",
     title: "Flujo de caja",
   });
@@ -143,7 +143,7 @@ it("reports schema failures when an edit revalidates malformed document data", (
 });
 
 it("reports every malformed field when revalidating a moved root Widget", () => {
-  const malformedDocument = Schema.decodeUnknownSync(DashboardDocument)({
+  const malformedDocument = Schema.decodeSync(DashboardDocument)({
     title: "Mi tablero",
     layout: {
       kind: "leaf",
@@ -158,7 +158,7 @@ it("reports every malformed field when revalidating a moved root Widget", () => 
   if (malformedDocument.layout.kind !== "leaf") throw new Error("Expected a leaf layout");
   Object.assign(malformedDocument, { title: "" });
   Object.assign(malformedDocument.layout.widget, { type: "not-a-dashboard-widget" });
-  const edit = Schema.decodeUnknownSync(DashboardEdit)({
+  const edit = Schema.decodeSync(DashboardEdit)({
     op: "move-widget",
     widgetId: "f1d1a000-0000-4000-8000-000000000491",
     at: "bottom",
@@ -181,7 +181,7 @@ it("reports every malformed field when revalidating a moved root Widget", () => 
 });
 
 it("preserves string and numeric segments in a nested validation path", () => {
-  const malformedDocument = Schema.decodeUnknownSync(DashboardDocument)({
+  const malformedDocument = Schema.decodeSync(DashboardDocument)({
     title: "Mi tablero",
     layout: {
       kind: "leaf",
@@ -195,7 +195,7 @@ it("preserves string and numeric segments in a nested validation path", () => {
   });
   if (malformedDocument.layout.kind !== "leaf") throw new Error("Expected a leaf layout");
   Object.assign(malformedDocument.layout.widget, { categories: ["not-a-category-id"] });
-  const edit = Schema.decodeUnknownSync(DashboardEdit)({
+  const edit = Schema.decodeSync(DashboardEdit)({
     op: "set-title",
     title: "Flujo de caja",
   });
@@ -218,7 +218,7 @@ it("reports a root schema failure without inventing a field path", () => {
     title: document.title,
     layout: document.layout,
   });
-  const edit = Schema.decodeUnknownSync(DashboardEdit)({
+  const edit = Schema.decodeSync(DashboardEdit)({
     op: "move-widget",
     widgetId: "f1d1a000-0000-4000-8000-000000000401",
     at: "bottom",
@@ -238,7 +238,7 @@ it("reports a root schema failure without inventing a field path", () => {
 });
 
 it("adds a widget at the top of the whole dashboard in mobile reading order", () => {
-  const edit = Schema.decodeUnknownSync(DashboardEdit)({
+  const edit = Schema.decodeSync(DashboardEdit)({
     op: "add-widget",
     widget: {
       id: "f1d1a000-0000-4000-8000-000000000402",
@@ -260,7 +260,7 @@ it("adds a widget at the top of the whole dashboard in mobile reading order", ()
 });
 
 it("rejects adding a duplicate WidgetId without changing the document", () => {
-  const edit = Schema.decodeUnknownSync(DashboardEdit)({
+  const edit = Schema.decodeSync(DashboardEdit)({
     op: "add-widget",
     widget: {
       id: "f1d1a000-0000-4000-8000-000000000401",
@@ -278,7 +278,7 @@ it("rejects adding a duplicate WidgetId without changing the document", () => {
 
 it("distinguishes a missing placement target from a missing edit target", () => {
   const missingId = "f1d1a000-0000-4000-8000-000000000499";
-  const placementEdit = Schema.decodeUnknownSync(DashboardEdit)({
+  const placementEdit = Schema.decodeSync(DashboardEdit)({
     op: "add-widget",
     widget: {
       id: "f1d1a000-0000-4000-8000-000000000402",
@@ -287,7 +287,7 @@ it("distinguishes a missing placement target from a missing edit target", () => 
     },
     at: { besideWidget: missingId, axis: "row", side: "after" },
   });
-  const targetEdit = Schema.decodeUnknownSync(DashboardEdit)({
+  const targetEdit = Schema.decodeSync(DashboardEdit)({
     op: "remove-widget",
     widgetId: missingId,
   });
@@ -314,7 +314,7 @@ it("normalizes a same-axis insertion while preserving the target region's share"
     { weight: 3, widget: customMetricWidget(targetId) },
     { weight: 2, widget: transactionListWidget(siblingId) },
   ]);
-  const edit = Schema.decodeUnknownSync(DashboardEdit)({
+  const edit = Schema.decodeSync(DashboardEdit)({
     op: "add-widget",
     widget: {
       id: "f1d1a000-0000-4000-8000-000000000413",
@@ -343,7 +343,7 @@ it("returns a typed failure when exact normalized ratios exceed the weight bound
       widget: transactionListWidget("f1d1a000-0000-4000-8000-000000000415"),
     },
   ]);
-  const edit = Schema.decodeUnknownSync(DashboardEdit)({
+  const edit = Schema.decodeSync(DashboardEdit)({
     op: "add-widget",
     widget: transactionListWidget("f1d1a000-0000-4000-8000-000000000416"),
     at: { besideWidget: targetId, axis: "row", side: "after" },
@@ -374,7 +374,7 @@ it("accepts an exact normalized weight of 1000 at the upper boundary", () => {
       widget: transactionListWidget("f1d1a000-0000-4000-8000-000000000418"),
     },
   ]);
-  const edit = Schema.decodeUnknownSync(DashboardEdit)({
+  const edit = Schema.decodeSync(DashboardEdit)({
     op: "add-widget",
     widget: transactionListWidget("f1d1a000-0000-4000-8000-000000000419"),
     at: { besideWidget: targetId, axis: "row", side: "after" },
@@ -396,7 +396,7 @@ it("reduces same-axis insertion weights to their smallest exact integer ratio", 
       widget: transactionListWidget("f1d1a000-0000-4000-8000-00000000041b"),
     },
   ]);
-  const edit = Schema.decodeUnknownSync(DashboardEdit)({
+  const edit = Schema.decodeSync(DashboardEdit)({
     op: "add-widget",
     widget: transactionListWidget("f1d1a000-0000-4000-8000-00000000041c"),
     at: { besideWidget: targetId, axis: "row", side: "after" },
@@ -414,7 +414,7 @@ it("flattens only matching-axis regions and preserves a perpendicular sibling sp
   const columnFirstId = "f1d1a000-0000-4000-8000-00000000041e";
   const columnSecondId = "f1d1a000-0000-4000-8000-00000000041f";
   const addedId = "f1d1a000-0000-4000-8000-000000000420";
-  const source = Schema.decodeUnknownSync(DashboardDocument)({
+  const source = Schema.decodeSync(DashboardDocument)({
     title: "Mi tablero",
     layout: {
       kind: "split",
@@ -441,7 +441,7 @@ it("flattens only matching-axis regions and preserves a perpendicular sibling sp
       ],
     },
   });
-  const edit = Schema.decodeUnknownSync(DashboardEdit)({
+  const edit = Schema.decodeSync(DashboardEdit)({
     op: "add-widget",
     widget: transactionListWidget(addedId),
     at: { besideWidget: targetId, axis: "row", side: "after" },
@@ -472,7 +472,7 @@ it("keeps a perpendicular parent while placing beside a nested widget", () => {
   const siblingId = "f1d1a000-0000-4000-8000-000000000428";
   const outsideId = "f1d1a000-0000-4000-8000-000000000429";
   const addedId = "f1d1a000-0000-4000-8000-00000000042a";
-  const source = Schema.decodeUnknownSync(DashboardDocument)({
+  const source = Schema.decodeSync(DashboardDocument)({
     title: "Mi tablero",
     layout: {
       kind: "split",
@@ -502,7 +502,7 @@ it("keeps a perpendicular parent while placing beside a nested widget", () => {
       ],
     },
   });
-  const edit = Schema.decodeUnknownSync(DashboardEdit)({
+  const edit = Schema.decodeSync(DashboardEdit)({
     op: "add-widget",
     widget: transactionListWidget(addedId),
     at: { besideWidget: targetId, axis: "row", side: "after" },
@@ -535,7 +535,7 @@ it("removes a widget and collapses the single-child split it leaves behind", () 
     { weight: 1, widget: customMetricWidget(removableId) },
     { weight: 1, widget: transactionListWidget(retainedId) },
   ]);
-  const edit = Schema.decodeUnknownSync(DashboardEdit)({
+  const edit = Schema.decodeSync(DashboardEdit)({
     op: "remove-widget",
     widgetId: removableId,
   });
@@ -557,7 +557,7 @@ it("returns an actionable path when an edit exceeds a complete-document limit", 
       ),
     }))
   );
-  const edit = Schema.decodeUnknownSync(DashboardEdit)({
+  const edit = Schema.decodeSync(DashboardEdit)({
     op: "add-widget",
     widget: transactionListWidget("f1d1a000-0000-4000-8000-000000000499"),
     at: "bottom",
@@ -577,7 +577,7 @@ it("returns an actionable path when an edit exceeds a complete-document limit", 
 });
 
 it("refuses to remove the dashboard's last widget", () => {
-  const edit = Schema.decodeUnknownSync(DashboardEdit)({
+  const edit = Schema.decodeSync(DashboardEdit)({
     op: "remove-widget",
     widgetId: "f1d1a000-0000-4000-8000-000000000401",
   });
@@ -594,7 +594,7 @@ it("moves a widget by removing and structurally placing the same identity", () =
     { weight: 1, widget: transactionListWidget(movingId) },
     { weight: 1, widget: customMetricWidget(targetId) },
   ]);
-  const edit = Schema.decodeUnknownSync(DashboardEdit)({
+  const edit = Schema.decodeSync(DashboardEdit)({
     op: "move-widget",
     widgetId: movingId,
     at: { besideWidget: targetId, axis: "column", side: "after" },
@@ -615,7 +615,7 @@ it("swaps two Widgets without changing the recursive layout topology", () => {
   const firstId = "f1d1a000-0000-4000-8000-000000000461";
   const secondId = "f1d1a000-0000-4000-8000-000000000463";
   const source = makeNestedDocument();
-  const edit = Schema.decodeUnknownSync(DashboardEdit)({
+  const edit = Schema.decodeSync(DashboardEdit)({
     op: "swap-widgets",
     widgetId: firstId,
     withWidgetId: secondId,
@@ -634,7 +634,7 @@ it("swaps two Widgets without changing the recursive layout topology", () => {
 
 it("rejects moving a widget beside itself without changing the input document", () => {
   const widgetId = "f1d1a000-0000-4000-8000-000000000401";
-  const edit = Schema.decodeUnknownSync(DashboardEdit)({
+  const edit = Schema.decodeSync(DashboardEdit)({
     op: "move-widget",
     widgetId,
     at: { besideWidget: widgetId, axis: "row", side: "after" },
@@ -653,12 +653,12 @@ it("moves a widget to either root edge while preserving the requested order", ()
     { weight: 1, widget: transactionListWidget(movingId) },
     { weight: 1, widget: customMetricWidget(retainedId) },
   ]);
-  const topEdit = Schema.decodeUnknownSync(DashboardEdit)({
+  const topEdit = Schema.decodeSync(DashboardEdit)({
     op: "move-widget",
     widgetId: movingId,
     at: "top",
   });
-  const bottomEdit = Schema.decodeUnknownSync(DashboardEdit)({
+  const bottomEdit = Schema.decodeSync(DashboardEdit)({
     op: "move-widget",
     widgetId: movingId,
     at: "bottom",
@@ -680,7 +680,7 @@ it("continuously resizes a leaf region identified by its exact Widget contents",
       widget: customMetricWidget("f1d1a000-0000-4000-8000-000000000442"),
     },
   ]);
-  const edit = Schema.decodeUnknownSync(DashboardEdit)({
+  const edit = Schema.decodeSync(DashboardEdit)({
     op: "resize-region",
     widgetIds: [targetId],
     size: { kind: "weight", weight: 1.375 },
@@ -706,7 +706,7 @@ it("resizes only the selected boundary between adjacent regions", () => {
       widget: transactionListWidget("f1d1a000-0000-4000-8000-000000000443"),
     },
   ]);
-  const edit = Schema.decodeUnknownSync(DashboardEdit)({
+  const edit = Schema.decodeSync(DashboardEdit)({
     op: "resize-region",
     widgetIds: [targetId],
     size: { kind: "weight", weight: 1.5 },
@@ -743,7 +743,7 @@ it.each([
     ["f1d1a000-0000-4000-8000-000000000461", "f1d1a000-0000-4000-8000-000000000463"],
   ],
 ] as const)("normalizes decimal weights while applying %s", (_operation, input, expectedIds) => {
-  const resize = Schema.decodeUnknownSync(DashboardEdit)({
+  const resize = Schema.decodeSync(DashboardEdit)({
     op: "resize-region",
     widgetIds: ["f1d1a000-0000-4000-8000-000000000462", "f1d1a000-0000-4000-8000-000000000463"],
     size: { kind: "weight", weight: 1.375 },
@@ -751,7 +751,7 @@ it.each([
   const resized = Effect.runSync(
     applyDashboardEdit({ document: makeNestedDocument(), edit: resize })
   );
-  const edit = Schema.decodeUnknownSync(DashboardEdit)(input);
+  const edit = Schema.decodeSync(DashboardEdit)(input);
 
   const updated = Effect.runSync(applyDashboardEdit({ document: resized, edit }));
 
@@ -773,7 +773,7 @@ it.each([
       { weight: 999, widget: customMetricWidget("f1d1a000-0000-4000-8000-000000000444") },
       { weight: 1, widget: customMetricWidget("f1d1a000-0000-4000-8000-000000000445") },
     ]);
-    const edit = Schema.decodeUnknownSync(DashboardEdit)({
+    const edit = Schema.decodeSync(DashboardEdit)({
       op: "resize-region",
       widgetIds: [targetId],
       size: { kind: "ratio", ratio },
@@ -789,7 +789,7 @@ it.each([
 
 it("resizes a compound region through the same canonical edit", () => {
   const source = makeNestedDocument();
-  const edit = Schema.decodeUnknownSync(DashboardEdit)({
+  const edit = Schema.decodeSync(DashboardEdit)({
     op: "resize-region",
     widgetIds: ["f1d1a000-0000-4000-8000-000000000462", "f1d1a000-0000-4000-8000-000000000463"],
     size: { kind: "weight", weight: 4 },
@@ -803,10 +803,10 @@ it("resizes a compound region through the same canonical edit", () => {
 });
 
 it("rejects resizing the root region because it has no sibling-relative weight", () => {
-  const widgetIds = Schema.decodeUnknownSync(LayoutRegionSelector)([
+  const widgetIds = Schema.decodeSync(LayoutRegionSelector)([
     "f1d1a000-0000-4000-8000-000000000401",
   ]);
-  const edit = Schema.decodeUnknownSync(DashboardEdit)({
+  const edit = Schema.decodeSync(DashboardEdit)({
     op: "resize-region",
     widgetIds,
     size: { kind: "weight", weight: 2 },
@@ -825,7 +825,7 @@ it("wraps an existing row when adding a widget at the dashboard bottom", () => {
     { weight: 2, widget: transactionListWidget(firstId) },
     { weight: 3, widget: customMetricWidget(secondId) },
   ]);
-  const edit = Schema.decodeUnknownSync(DashboardEdit)({
+  const edit = Schema.decodeSync(DashboardEdit)({
     op: "add-widget",
     widget: transactionListWidget(addedId),
     at: "bottom",
@@ -860,7 +860,7 @@ it("prepends a root widget to an existing column without introducing another spl
     ],
     "column"
   );
-  const edit = Schema.decodeUnknownSync(DashboardEdit)({
+  const edit = Schema.decodeSync(DashboardEdit)({
     op: "add-widget",
     widget: transactionListWidget(addedId),
     at: "top",
@@ -891,7 +891,7 @@ it("appends a root widget to an existing column in mobile reading order", () => 
     ],
     "column"
   );
-  const edit = Schema.decodeUnknownSync(DashboardEdit)({
+  const edit = Schema.decodeSync(DashboardEdit)({
     op: "add-widget",
     widget: transactionListWidget("f1d1a000-0000-4000-8000-000000000473"),
     at: "bottom",
@@ -909,7 +909,7 @@ it("appends a root widget to an existing column in mobile reading order", () => 
 it("finds a duplicate nested in only one branch before a root insertion", () => {
   const duplicateId = "f1d1a000-0000-4000-8000-000000000463";
   const source = makeNestedDocument();
-  const edit = Schema.decodeUnknownSync(DashboardEdit)({
+  const edit = Schema.decodeSync(DashboardEdit)({
     op: "add-widget",
     widget: transactionListWidget(duplicateId),
     at: "bottom",
@@ -922,7 +922,7 @@ it("finds a duplicate nested in only one branch before a root insertion", () => 
 
 it("reports a missing beside target after searching every split branch", () => {
   const source = makeNestedDocument();
-  const edit = Schema.decodeUnknownSync(DashboardEdit)({
+  const edit = Schema.decodeSync(DashboardEdit)({
     op: "add-widget",
     widget: transactionListWidget("f1d1a000-0000-4000-8000-00000000046b"),
     at: {
@@ -949,12 +949,12 @@ it("inserts before a later sibling and still checks the complete document for du
     { weight: 1, widget: customMetricWidget(targetId) },
     { weight: 1, widget: transactionListWidget(duplicateId) },
   ]);
-  const insert = Schema.decodeUnknownSync(DashboardEdit)({
+  const insert = Schema.decodeSync(DashboardEdit)({
     op: "add-widget",
     widget: transactionListWidget("f1d1a000-0000-4000-8000-000000000477"),
     at: { besideWidget: targetId, axis: "row", side: "before" },
   });
-  const duplicate = Schema.decodeUnknownSync(DashboardEdit)({
+  const duplicate = Schema.decodeSync(DashboardEdit)({
     op: "add-widget",
     widget: transactionListWidget(duplicateId),
     at: { besideWidget: firstId, axis: "column", side: "after" },
@@ -983,7 +983,7 @@ it("removes a later sibling without collapsing a split that still has two childr
     { weight: 1, widget: customMetricWidget(removedId) },
     { weight: 1, widget: transactionListWidget(lastId) },
   ]);
-  const edit = Schema.decodeUnknownSync(DashboardEdit)({
+  const edit = Schema.decodeSync(DashboardEdit)({
     op: "remove-widget",
     widgetId: removedId,
   });
@@ -998,7 +998,7 @@ it("preserves exact weighted shares when removal exposes a same-axis split", () 
   const firstId = "f1d1a000-0000-4000-8000-000000000486";
   const secondId = "f1d1a000-0000-4000-8000-000000000487";
   const lastId = "f1d1a000-0000-4000-8000-000000000488";
-  const source = Schema.decodeUnknownSync(DashboardDocument)({
+  const source = Schema.decodeSync(DashboardDocument)({
     title: "Mi tablero",
     layout: {
       kind: "split",
@@ -1041,7 +1041,7 @@ it("preserves exact weighted shares when removal exposes a same-axis split", () 
       ],
     },
   });
-  const edit = Schema.decodeUnknownSync(DashboardEdit)({
+  const edit = Schema.decodeSync(DashboardEdit)({
     op: "remove-widget",
     widgetId: removedId,
   });
@@ -1060,7 +1060,7 @@ it("preserves exact weighted shares when removal exposes a same-axis split", () 
 
 it("collapses a nested split while retaining its parent region", () => {
   const source = makeNestedDocument();
-  const edit = Schema.decodeUnknownSync(DashboardEdit)({
+  const edit = Schema.decodeSync(DashboardEdit)({
     op: "remove-widget",
     widgetId: "f1d1a000-0000-4000-8000-000000000462",
   });
@@ -1076,11 +1076,11 @@ it("collapses a nested split while retaining its parent region", () => {
 it("updates a later nested Widget and rejects an absent update target", () => {
   const source = makeNestedDocument();
   const targetId = "f1d1a000-0000-4000-8000-000000000463";
-  const update = Schema.decodeUnknownSync(DashboardEdit)({
+  const update = Schema.decodeSync(DashboardEdit)({
     op: "update-widget",
     widget: customMetricWidget(targetId),
   });
-  const missing = Schema.decodeUnknownSync(DashboardEdit)({
+  const missing = Schema.decodeSync(DashboardEdit)({
     op: "update-widget",
     widget: customMetricWidget("f1d1a000-0000-4000-8000-00000000047b"),
   });
@@ -1098,11 +1098,11 @@ it("updates a later nested Widget and rejects an absent update target", () => {
 
 it("rejects stale region selectors without resizing a different region", () => {
   const source = makeNestedDocument();
-  const widgetIds = Schema.decodeUnknownSync(LayoutRegionSelector)([
+  const widgetIds = Schema.decodeSync(LayoutRegionSelector)([
     "f1d1a000-0000-4000-8000-000000000461",
     "f1d1a000-0000-4000-8000-000000000463",
   ]);
-  const stale = Schema.decodeUnknownSync(DashboardEdit)({
+  const stale = Schema.decodeSync(DashboardEdit)({
     op: "resize-region",
     widgetIds,
     size: { kind: "weight", weight: 4 },
@@ -1127,7 +1127,7 @@ it("moves through the no-duplicate-check branch and flattens the destination row
     { weight: 3, widget: customMetricWidget(targetId) },
     { weight: 2, widget: transactionListWidget(siblingId) },
   ]);
-  const edit = Schema.decodeUnknownSync(DashboardEdit)({
+  const edit = Schema.decodeSync(DashboardEdit)({
     op: "move-widget",
     widgetId: movingId,
     at: { besideWidget: targetId, axis: "row", side: "before" },
@@ -1155,17 +1155,17 @@ it("moves a later Widget in one traversal and reports both missing move targets"
     { weight: 1, widget: customMetricWidget(targetId) },
     { weight: 1, widget: transactionListWidget(movingId) },
   ]);
-  const move = Schema.decodeUnknownSync(DashboardEdit)({
+  const move = Schema.decodeSync(DashboardEdit)({
     op: "move-widget",
     widgetId: movingId,
     at: { besideWidget: targetId, axis: "column", side: "before" },
   });
-  const missingPlacement = Schema.decodeUnknownSync(DashboardEdit)({
+  const missingPlacement = Schema.decodeSync(DashboardEdit)({
     op: "move-widget",
     widgetId: firstId,
     at: { besideWidget: missingId, axis: "column", side: "after" },
   });
-  const missingTarget = Schema.decodeUnknownSync(DashboardEdit)({
+  const missingTarget = Schema.decodeSync(DashboardEdit)({
     op: "move-widget",
     widgetId: missingId,
     at: "top",
@@ -1195,7 +1195,7 @@ it("moves a later Widget in one traversal and reports both missing move targets"
 });
 
 it("treats moving the only root Widget to a root edge as an unchanged valid document", () => {
-  const edit = Schema.decodeUnknownSync(DashboardEdit)({
+  const edit = Schema.decodeSync(DashboardEdit)({
     op: "move-widget",
     widgetId: "f1d1a000-0000-4000-8000-000000000401",
     at: "bottom",
@@ -1208,7 +1208,7 @@ it("treats moving the only root Widget to a root edge as an unchanged valid docu
 
 it("replaces the complete widget configuration while retaining its identity and region", () => {
   const widgetId = "f1d1a000-0000-4000-8000-000000000401";
-  const edit = Schema.decodeUnknownSync(DashboardEdit)({
+  const edit = Schema.decodeSync(DashboardEdit)({
     op: "update-widget",
     widget: {
       id: widgetId,

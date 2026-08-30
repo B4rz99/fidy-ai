@@ -284,7 +284,7 @@ export const executeHostedCanonicalOperation = Effect.fn("executeHostedCanonical
     // In-process hosted execution reuses the canonical operation span the HTTP middleware emits, so
     // a hosted call stays as observable as the same operation invoked by the User's own agent.
     const telemetry = yield* Telemetry;
-    const spanOperation = yield* Schema.decodeUnknownEffect(TelemetryCodeSchema.operation)(
+    const spanOperation = yield* Schema.decodeEffect(TelemetryCodeSchema.operation)(
       binding.operation
     ).pipe(Effect.orDie);
     return yield* telemetry.span(

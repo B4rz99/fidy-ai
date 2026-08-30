@@ -26,17 +26,17 @@ const monthly = price("22700000-0000-4000-8000-000000000002", "monthly", "28900"
 const yearly = price("22700000-0000-4000-8000-000000000003", "yearly", "289900");
 
 it("accepts the exact ordered launch Subscription offers", () => {
-  const decoded = Schema.decodeUnknownResult(SubscriptionOffers)([weekly, monthly, yearly]);
+  const decoded = Schema.decodeResult(SubscriptionOffers)([weekly, monthly, yearly]);
 
   expect(Result.isSuccess(decoded)).toBe(true);
 });
 
 it("rejects a Price that is free or not denominated in COP", () => {
-  const free = Schema.decodeUnknownResult(Price)({
+  const free = Schema.decodeResult(Price)({
     ...weekly,
     money: { amount: "0", currency: "COP" },
   });
-  const foreignCurrency = Schema.decodeUnknownResult(Price)({
+  const foreignCurrency = Schema.decodeResult(Price)({
     ...weekly,
     money: { amount: "9.9", currency: "USD" },
   });
@@ -48,11 +48,7 @@ it("rejects a Price that is free or not denominated in COP", () => {
 });
 
 it("rejects reordered periods and payment methods outside the launch set", () => {
-  const reorderedPeriods = Schema.decodeUnknownResult(SubscriptionOffers)([
-    monthly,
-    weekly,
-    yearly,
-  ]);
+  const reorderedPeriods = Schema.decodeResult(SubscriptionOffers)([monthly, weekly, yearly]);
   const unsupportedMethod = Schema.decodeUnknownResult(Price)({
     ...weekly,
     paymentMethods: ["card", "pse", "daviplata"],
@@ -65,7 +61,7 @@ it("rejects reordered periods and payment methods outside the launch set", () =>
 });
 
 it("rejects duplicate Price identities and reports the identity failure path", () => {
-  const duplicateIdentity = Schema.decodeUnknownResult(SubscriptionOffers)([
+  const duplicateIdentity = Schema.decodeResult(SubscriptionOffers)([
     weekly,
     monthly,
     { ...yearly, id: monthly.id },
@@ -81,7 +77,7 @@ it("reports the ordering path when an authoritative offer check sees a missing p
     () => [Schema.Unknown, Schema.Unknown, Schema.Unknown] as const,
     { unsafePreserveChecks: true }
   );
-  const missingPeriod = Schema.decodeUnknownResult(checkableOffers)([
+  const missingPeriod = Schema.decodeResult(checkableOffers)([
     { id: weekly.id, billingPeriod: "weekly" },
     { id: monthly.id, billingPeriod: "monthly" },
     undefined,

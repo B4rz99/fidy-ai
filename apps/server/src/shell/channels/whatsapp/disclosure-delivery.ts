@@ -289,10 +289,10 @@ export const processDueConsentDisclosureDelivery = Effect.fn("WhatsApp.processDu
     const claimed = yield* claimNextConsentDisclosureRetry(now);
     if (Option.isNone(claimed)) return false;
     const attempt = claimed.value;
-    const businessPhoneNumberId = yield* Schema.decodeUnknownEffect(WhatsAppBusinessPhoneNumberId)(
+    const businessPhoneNumberId = yield* Schema.decodeEffect(WhatsAppBusinessPhoneNumberId)(
       attempt.businessPhoneNumberId
     ).pipe(Effect.orDie);
-    const text = yield* Schema.decodeUnknownEffect(TranscriptText)(attempt.disclosureText).pipe(
+    const text = yield* Schema.decodeEffect(TranscriptText)(attempt.disclosureText).pipe(
       Effect.orDie
     );
     yield* executeClaim({

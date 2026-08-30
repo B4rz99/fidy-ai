@@ -73,7 +73,7 @@ const assertMetricResult = (candidate: Option.Option<DashboardWidgetView>): void
 };
 
 const ExplainRow = Schema.Struct({ "QUERY PLAN": Schema.String });
-const testDashboardTimeZone = Schema.decodeUnknownSync(IanaTimeZone)("America/Bogota");
+const testDashboardTimeZone = Schema.decodeSync(IanaTimeZone)("America/Bogota");
 const explainDashboardTransactionAccess = Effect.gen(function* () {
   const admin = yield* MigrationSqlClient;
   return yield* admin.withTransaction(

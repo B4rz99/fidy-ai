@@ -144,7 +144,7 @@ const startSafely = (
       (started) =>
         Effect.sync(() =>
           Option.flatMap(started, (span) =>
-            Schema.decodeUnknownOption(TelemetrySpan, strictDecoding)(span)
+            Schema.decodeOption(TelemetrySpan, strictDecoding)(span)
           )
         )
     ),

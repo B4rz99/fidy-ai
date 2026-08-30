@@ -30,7 +30,7 @@ vi.mock("./view", () => ({
 }));
 
 const TestWidgetId = Schema.String.pipe(Schema.brand("WidgetId"));
-const widgetId = Schema.decodeUnknownSync(TestWidgetId)("f1d1a000-0000-4000-8000-000000000901");
+const widgetId = Schema.decodeSync(TestWidgetId)("f1d1a000-0000-4000-8000-000000000901");
 const view = Schema.decodeUnknownSync(
   Schema.declare((input: unknown): input is DashboardView => typeof input === "object")
 )({});

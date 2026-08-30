@@ -604,7 +604,7 @@ const prepareStartedTurn = Effect.fn("WhatsApp.prepareStartedTurn")(function* (i
       providerMessageId: newest.providerMessageId,
     },
   }));
-  const inboundMessage = yield* Schema.decodeUnknownEffect(InboundMessage)({
+  const inboundMessage = yield* Schema.decodeEffect(InboundMessage)({
     text: jobs.map(({ text }) => text).join("\n"),
     ...Option.match(confirmationEvidence, {
       onNone: () => ({}),

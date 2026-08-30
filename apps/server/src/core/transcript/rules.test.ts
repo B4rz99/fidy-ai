@@ -96,7 +96,7 @@ const windowCall = (
     iteration: AgentIteration.make(1),
     toolCallId: ToolCallId.make(toolCallId),
     operation: windowOperation,
-    input: Schema.decodeUnknownSync(Schema.Json)({}),
+    input: Schema.decodeSync(Schema.Json)({}),
     occurredAt,
   });
 /** A call whose serialized input alone overruns the character bounds under test. */
@@ -106,7 +106,7 @@ const windowOversizedCall = (
   toolCallId: string
 ): CanonicalToolCallEntry => ({
   ...windowCall(suffix, id, toolCallId),
-  input: Schema.decodeUnknownSync(Schema.Json)({ tooLarge: "x".repeat(20) }),
+  input: Schema.decodeSync(Schema.Json)({ tooLarge: "x".repeat(20) }),
 });
 const windowResult = (
   suffix: string,
@@ -172,13 +172,11 @@ it("accepts every canonical TranscriptEntry variant", () => {
   ];
 
   for (const entry of entries) {
-    expect(
-      Result.isSuccess(Schema.decodeUnknownResult(Schema.toType(TranscriptEntry))(entry))
-    ).toBe(true);
+    expect(Result.isSuccess(Schema.decodeResult(Schema.toType(TranscriptEntry))(entry))).toBe(true);
 
     const encoded = Schema.encodeSync(TranscriptEntry)(entry);
     expect(encoded.occurredAt).toBe("2026-07-20T12:00:00.000Z");
-    expect(Result.isSuccess(Schema.decodeUnknownResult(TranscriptEntry)(encoded))).toBe(true);
+    expect(Result.isSuccess(Schema.decodeResult(TranscriptEntry)(encoded))).toBe(true);
   }
 });
 

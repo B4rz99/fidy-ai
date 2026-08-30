@@ -4,14 +4,14 @@
   "private": true,
   "description": "Isolated classic-TypeScript install for StrykerJS. Stryker rewrites tsconfig.json on its way into the sandbox through the classic `typescript` compiler API; the root package pins the Effect tsgo `typescript` build, which does not expose `parseConfigFileTextToJson`, so a root-resolved Stryker crashes before planting its first mutant. Keeping Stryker and a classic typescript here fixes the resolution without disturbing the root toolchain — and Node's upward module resolution still finds the root's `vitest` from here, which is what the vitest runner must drive. The pin tracks the classic 6.x line and stops there on purpose: typescript@7 ships no compiler API at all — its main entry resolves to a version stub — so there is nothing for the tsconfig rewrite to call. Revisit when TypeScript ships the replacement API and Stryker adopts it.",
   "devDependencies": {
-    "@stryker-mutator/core": "9.6.1",
-    "@stryker-mutator/vitest-runner": "9.6.1",
+    "@stryker-mutator/core": "10.0.0",
+    "@stryker-mutator/vitest-runner": "10.0.0",
     "typescript": "6.0.3"
   },
   "overrides": {
     "brace-expansion": "5.0.9",
-    "fast-uri": "3.1.5",
-    "nanoid": "3.3.18",
+    "fast-uri": "4.1.2",
+    "nanoid": "6.0.1",
     "postcss": "8.5.26",
     "qs": "6.15.3"
   }

@@ -88,7 +88,7 @@ const observedRedemption = (
   outcome: DeclaredOutcome
 ): ObservedRedemption => ({
   response,
-  status: Schema.decodeUnknownSync(TelemetryHttpStatus)(status),
+  status: Schema.decodeSync(TelemetryHttpStatus)(status),
   outcome,
 });
 const succeededRedemption: DeclaredOutcome = {

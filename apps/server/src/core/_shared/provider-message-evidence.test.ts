@@ -9,7 +9,7 @@ const evidence = {
 };
 
 it("retains one provider-qualified message without treating it as identity", () => {
-  expect(Schema.decodeUnknownSync(ProviderMessageEvidence)(evidence)).toEqual(evidence);
+  expect(Schema.decodeSync(ProviderMessageEvidence)(evidence)).toEqual(evidence);
 });
 
 it("rejects blank, untrimmed, and oversized evidence fields", () => {

@@ -427,7 +427,7 @@ export const inspectPATPairing = (
       }
     }
     const inspectedAt = yield* DateTime.now;
-    const code = Schema.decodeUnknownOption(PATPairingPublicCodeInput)(input.publicCode);
+    const code = Schema.decodeOption(PATPairingPublicCodeInput)(input.publicCode);
     if (Option.isNone(code)) return yield* rejectPATPairingReview();
     const review = yield* inspectPATPairingInScope({
       userId: input.userId,

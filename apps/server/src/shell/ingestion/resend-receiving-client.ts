@@ -120,7 +120,7 @@ const parseJsonResponse = Effect.fn("Resend.parseReceivingResponse")(function* <
   if (Option.isNone(body)) {
     return yield* new ResendReceivingFailed({ reason: "resource-limit" });
   }
-  const json = Schema.decodeUnknownResult(Schema.UnknownFromJsonString)(
+  const json = Schema.decodeResult(Schema.UnknownFromJsonString)(
     new TextDecoder().decode(body.value)
   );
   if (Result.isFailure(json)) {
@@ -255,7 +255,7 @@ const retrieveReceivedEmail = Effect.fn("Resend.retrieveReceivedEmail")(function
       retrieveInlineImage({ client: input.client, baseUrl, authorization, attachment }),
     { concurrency: inlineImageDownloadConcurrency }
   );
-  return yield* Schema.decodeUnknownEffect(ReceivedEmailContent)({
+  return yield* Schema.decodeEffect(ReceivedEmailContent)({
     receivedEmailId: email.id,
     from: email.from,
     to: email.to,

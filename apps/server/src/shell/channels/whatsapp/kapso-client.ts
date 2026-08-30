@@ -126,7 +126,7 @@ const boundKapsoResponse = (response: Response): Promise<Response> => {
       Promise.reject(
         new KapsoInvalidResponse({
           deliveryCertainty: response.ok ? "ambiguous" : "rejected",
-          responseStatus: Schema.decodeUnknownOption(TelemetryHttpStatus)(response.status),
+          responseStatus: Schema.decodeOption(TelemetryHttpStatus)(response.status),
         })
       )
     );
@@ -149,7 +149,7 @@ const boundKapsoResponse = (response: Response): Promise<Response> => {
           Promise.reject(
             new KapsoInvalidResponse({
               deliveryCertainty: response.ok ? "ambiguous" : "rejected",
-              responseStatus: Schema.decodeUnknownOption(TelemetryHttpStatus)(response.status),
+              responseStatus: Schema.decodeOption(TelemetryHttpStatus)(response.status),
             })
           )
         );
@@ -329,7 +329,7 @@ export const makeKapsoClientService = ({
       const address = yield* resolveRecipientAddress(deliveryMode, input.destination);
       const body = yield* encodeTextMessage(address, input.text, input.opaqueCallbackData);
       const response = yield* postMessage(input, body);
-      const decodedStatus = Schema.decodeUnknownOption(TelemetryHttpStatus)(response.status);
+      const decodedStatus = Schema.decodeOption(TelemetryHttpStatus)(response.status);
       if (Option.isNone(decodedStatus)) return yield* rejected("invalid_response");
       const responseStatus = decodedStatus.value;
       const statusFailure = classifyHttpStatus(responseStatus);

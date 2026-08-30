@@ -39,7 +39,7 @@ export const confirmationDigestFromCommand = (text: string): Option.Option<Confi
   ) {
     return Option.none();
   }
-  return Schema.decodeUnknownOption(ConfirmationDigest)(command.slice(digestSeparator + 1));
+  return Schema.decodeOption(ConfirmationDigest)(command.slice(digestSeparator + 1));
 };
 
 /** Extracts the exact command digest only from a complete host-rendered challenge. */

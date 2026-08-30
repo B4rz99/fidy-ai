@@ -54,7 +54,7 @@ it("round-trips every published access variant through the canonical codec", () 
   ] as const;
 
   for (const { published, canonical } of examples) {
-    expect(Schema.decodeUnknownSync(OperationAccess)(published)).toEqual(canonical);
+    expect(Schema.decodeSync(OperationAccess)(published)).toEqual(canonical);
     expect(publishOperationAccess(canonical)).toEqual(published);
   }
 });

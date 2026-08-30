@@ -17,13 +17,6 @@
     "has nowhere to put them. An exclusion with no entry fails, an expired entry fails, and so does",
     "an entry whose exclusion is gone."
   ],
-  "deferredUpdates": [
-    {
-      "name": "@effect/tsgo",
-      "manifest": "package.json",
-      "reason": "0.35.0 makes the project-reference build fail on repository-wide preferTypedSchemaDecoder suggestions; migrate those call sites in a dedicated change before upgrading.",
-      "until": "2026-09-15T00:00:00Z"
-    }
-  ],
+  "deferredUpdates": [],
   "acceptedVulnerabilities": []
 }

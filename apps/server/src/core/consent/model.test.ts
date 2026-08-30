@@ -65,16 +65,16 @@ it("requires policy and disclosure revisions to match their complete lexical gra
 it("requires a SHA-256 digest to occupy the complete input", () => {
   const digest = "a".repeat(64);
 
-  expect(Result.isFailure(Schema.decodeUnknownResult(Sha256Digest)(`!${digest}`))).toBe(true);
-  expect(Result.isFailure(Schema.decodeUnknownResult(Sha256Digest)(`${digest}!`))).toBe(true);
+  expect(Result.isFailure(Schema.decodeResult(Sha256Digest)(`!${digest}`))).toBe(true);
+  expect(Result.isFailure(Schema.decodeResult(Sha256Digest)(`${digest}!`))).toBe(true);
 });
 
 it("requires a policy URL to be HTTPS without ignored prefixes or suffixes", () => {
+  expect(Result.isFailure(Schema.decodeResult(PolicyUrl)("xhttps://fidyapp.com/politica"))).toBe(
+    true
+  );
   expect(
-    Result.isFailure(Schema.decodeUnknownResult(PolicyUrl)("xhttps://fidyapp.com/politica"))
-  ).toBe(true);
-  expect(
-    Result.isFailure(Schema.decodeUnknownResult(PolicyUrl)("https://fidyapp.com/politica trailing"))
+    Result.isFailure(Schema.decodeResult(PolicyUrl)("https://fidyapp.com/politica trailing"))
   ).toBe(true);
 });
 
@@ -117,7 +117,7 @@ it("accepts both automatic expiry policies and rejects an unknown policy", () =>
 });
 
 it("decodes complete immutable onboarding consent evidence", () => {
-  const record = Schema.decodeUnknownSync(ConsentRecord)({
+  const record = Schema.decodeSync(ConsentRecord)({
     id: "f1d1a000-0000-4000-8000-000000000801",
     subjectUserId: "f1d1a000-0000-4000-8000-000000000802",
     event: { _tag: "Granted", grant: { _tag: "Onboarding" } },
@@ -138,7 +138,7 @@ it("decodes complete immutable onboarding consent evidence", () => {
 });
 
 it("records an authenticated WebSession as honest PAT decision evidence", () => {
-  const record = Schema.decodeUnknownSync(ConsentRecord)({
+  const record = Schema.decodeSync(ConsentRecord)({
     id: "f1d1a000-0000-4000-8000-000000000805",
     subjectUserId: "f1d1a000-0000-4000-8000-000000000802",
     event: {
@@ -239,16 +239,12 @@ it("rejects duplicate legal-purpose facts and malformed digests", () => {
   const purpose = "Registrar y organizar tus finanzas personales";
   expect(
     Result.isFailure(
-      Schema.decodeUnknownResult(DisclosureSnapshot)(
-        makeDisclosure({ purposes: [purpose, purpose] })
-      )
+      Schema.decodeResult(DisclosureSnapshot)(makeDisclosure({ purposes: [purpose, purpose] }))
     )
   ).toBe(true);
   expect(
     Result.isFailure(
-      Schema.decodeUnknownResult(DisclosureSnapshot)(
-        makeDisclosure({ contentSha256: "not-a-hash" })
-      )
+      Schema.decodeResult(DisclosureSnapshot)(makeDisclosure({ contentSha256: "not-a-hash" }))
     )
   ).toBe(true);
 });

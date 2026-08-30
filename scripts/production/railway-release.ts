@@ -261,8 +261,8 @@ export const deployRailwayRelease = async (
   input: RailwayReleaseRequest,
   dependencies: RailwayReleaseDependencies = liveDependencies
 ): Promise<string> => {
-  Schema.decodeUnknownSync(GitRevision)(input.gitRevision);
-  Schema.decodeUnknownSync(ContractDigest)(input.contractDigest);
+  Schema.decodeSync(GitRevision)(input.gitRevision);
+  Schema.decodeSync(ContractDigest)(input.contractDigest);
   const apiOrigin = checkedOrigin(input.apiOrigin);
   if (
     input.apiToken === "" ||

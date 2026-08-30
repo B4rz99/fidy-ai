@@ -1,4 +1,5 @@
-import { MailCheckIcon } from "lucide-react";
+import { MailCheckIcon } from "@hugeicons/core-free-icons";
+import { HugeiconsIcon } from "@hugeicons/react";
 import { type FormEvent, type JSX, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { Alert, AlertDescription, AlertTitle } from "@/ui/components/alert";
@@ -153,7 +154,7 @@ export const EmailReplacementView = (props: EmailReplacementViewProps): JSX.Elem
   <main className="mx-auto w-full max-w-2xl px-4 py-12 sm:px-6">
     <Card>
       <CardHeader>
-        <MailCheckIcon aria-hidden="true" />
+        <HugeiconsIcon aria-hidden="true" icon={MailCheckIcon} strokeWidth={2} />
         <CardTitle>
           <h1>Cambiar correo verificado</h1>
         </CardTitle>

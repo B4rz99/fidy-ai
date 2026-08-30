@@ -1,6 +1,7 @@
 import { EmailAddress, EmailVerificationCode } from "@/transport/client";
+import { KeyRoundIcon, MessageCircleIcon } from "@hugeicons/core-free-icons";
+import { HugeiconsIcon } from "@hugeicons/react";
 import { Option, Schema } from "effect";
-import { KeyRoundIcon, MessageCircleIcon } from "lucide-react";
 import type { FormEvent, JSX } from "react";
 import { Alert, AlertDescription, AlertTitle } from "@/ui/components/alert";
 import { Button } from "@/ui/components/button";
@@ -155,7 +156,7 @@ const AwaitingPairing = ({
 }>): JSX.Element => (
   <div className="flex flex-col gap-4">
     <Alert>
-      <MessageCircleIcon aria-hidden="true" />
+      <HugeiconsIcon aria-hidden="true" icon={MessageCircleIcon} strokeWidth={2} />
       <AlertTitle>Aprueba en WhatsApp</AlertTitle>
       <AlertDescription>
         Confirma que el código que muestra Fidy coincide con este código.
@@ -265,7 +266,12 @@ export const BrowserLoginPairingFeature = (): JSX.Element => {
       <Card className="w-full max-w-md">
         <CardHeader>
           <div className="mb-2 flex size-10 items-center justify-center rounded-full bg-primary text-primary-foreground">
-            <KeyRoundIcon aria-hidden="true" className="size-5" />
+            <HugeiconsIcon
+              aria-hidden="true"
+              className="size-5"
+              icon={KeyRoundIcon}
+              strokeWidth={2}
+            />
           </div>
           <CardTitle>
             <h1 className="text-2xl">Inicia sesión en Fidy</h1>

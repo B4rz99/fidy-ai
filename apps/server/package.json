@@ -46,7 +46,6 @@
     "@effect/ai-openai": "4.0.0-rc.112",
     "@effect/platform-bun": "4.0.0-rc.112",
     "@effect/sql-pg": "4.0.0-rc.112",
-    "@kapso/whatsapp-cloud-api": "0.3.0",
     "@sentry/bun": "10.70.0",
     "csv-parse": "7.0.2",
     "effect": "4.0.0-rc.112",

@@ -1,0 +1,19 @@
+docs/prototypes/reconciliation-links.md
+  s_eaeb192c3cf642::t_dcc442e919ce9b 5
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "ba71c70ba22ebe805548e09cbe993f27bf81c258",
+  "prompts": {},
+  "sessions": {
+    "s_eaeb192c3cf642": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a05991-5f2d-78ac-9154-ff4ab3cda444",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

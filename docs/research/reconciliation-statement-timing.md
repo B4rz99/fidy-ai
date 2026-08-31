@@ -4,6 +4,8 @@ Research date: 2026-08-31
 
 Scope: issue [#432](https://github.com/B4rz99/fidy-ai/issues/432), refining the Reconciliation specification in [#431](https://github.com/B4rz99/fidy-ai/issues/431). This note decides what “statement” means, how notification and statement dates are compared, and what capture event starts Reconciliation work. It does not define account hints or implement Reconciliation.
 
+> **Later decision:** the prototype in [#433](../prototypes/reconciliation-links.md) removed model judgment from the MVP. Timing findings and boundaries remain authoritative; references below to model ranking are superseded by deterministic linking or User review.
+
 ## Decision
 
 For this workflow, **statement evidence means one Transaction captured from one uploaded CSV or XLSX row and carrying a `statement-line` SourceAttestation**. A notification email is notification evidence, not statement evidence.

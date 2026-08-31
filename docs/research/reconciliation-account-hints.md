@@ -4,6 +4,8 @@ Research date: 2026-08-31
 
 Scope: issue [#434](https://github.com/B4rz99/fidy-ai/issues/434), refining the Reconciliation specification in [#431](https://github.com/B4rz99/fidy-ai/issues/431) and using the timing decision from [#432](https://github.com/B4rz99/fidy-ai/issues/432#issuecomment-5484359437). This note decides which account hints Reconciliation may retain, how it compares them, how candidates and outstanding work stay bounded, and which facts may reach model judgment. It does not implement hint extraction, matching, links, or User questions.
 
+> **Later decision:** the prototype in [#433](../prototypes/reconciliation-links.md) removed model judgment from the MVP. The safe hint shape, comparison, candidate policy, and resource bounds remain authoritative. The minimal model projection and model-dependent outcomes below are retained as historical research but are superseded; unclear candidates now wait for the User.
+
 ## Decision
 
 ### Safe hint shape

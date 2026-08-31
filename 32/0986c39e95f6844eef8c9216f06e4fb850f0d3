@@ -1,0 +1,138 @@
+docs/research/reconciliation-statement-timing.md
+  s_8395754972f69f::t_10be65c6ba5181 48,56
+  s_8395754972f69f::t_ab69925f26b439 1-6,8-11,13,20,22,24,26-33,36-47,49-55,57,59,61-81,89,91,94,97,99-105,107-114,117,119,121,123,126-132,137,139,141,143,145,147,149-159,161-167,169
+  s_8395754972f69f::t_566e34409e226f 12,14-19,21,23,25,34-35,58,60,83-88,90,92-93,95-96,98,106,115-116,118,120,122,124-125,133-136,138,140,142,144,146,148,160,168
+  s_8395754972f69f::t_2d191d3218ff13 82,170
+  s_eaeb192c3cf642::t_a604f572aed626 7
+docs/research/reconciliation-account-hints.md
+  s_95745c24ed21de::t_3911a70a21f645 1-6,9-48,50-63,74-193,195-250
+  s_95745c24ed21de::t_2853abde4b3b63 49,64-73,194
+  s_eaeb192c3cf642::t_2fcdbffe2bc798 7-8
+docs/prototypes/reconciliation-links.md
+  s_eaeb192c3cf642::t_132e7f5824c1fb 122-123,125,127,218
+  s_eaeb192c3cf642::t_ddcb7c6646d3ca 1-4,6-25,30-36,39-101,110-121,124,126,128-217,219-220
+  s_eaeb192c3cf642::t_5b065a93886783 26-29,37-38,102-109
+  s_eaeb192c3cf642::t_dcc442e919ce9b 5
+apps/server/src/shell/dashboard/handlers.test.ts
+  s_011c9b3242fd4b::t_b00cf661710b26 25
+  s_011c9b3242fd4b::t_b24378359922c3 26
+apps/server/src/shell/dashboard/view.ts
+  s_011c9b3242fd4b::t_77fde1ce5961b7 33
+apps/server/src/shell/transactions/repo.ts
+  s_011c9b3242fd4b::t_e049e54b313fde 1-3,5-6
+  s_011c9b3242fd4b::t_d776e04bdd0e01 8-16
+apps/server/src/shell/transactions/reads.ts
+  s_011c9b3242fd4b::t_75f4dbadca3b7f 73-77,87,416,433-434,439-440,442,472,474-475
+  s_011c9b3242fd4b::t_6658b890646cb6 9-14
+  s_011c9b3242fd4b::t_65a174601c0434 418-425,441,443-467
+  s_011c9b3242fd4b::t_aa05dbd58fc7d2 3,5-7,15,17-25,49,52-69,80-85,91-123,129-136,138-271,273-276,278-325,327-331,333-339,341-344,346-383,385-391,393-401,477-481,483-504,506
+  s_011c9b3242fd4b::t_ef8db2122ca606 482,505
+  s_011c9b3242fd4b::t_10a008eb6ce0e0 402-415,417,426-432,469-471,476
+  s_011c9b3242fd4b::t_574303c30ccfc7 28-30,39,44
+  s_011c9b3242fd4b::t_c738524543168b 124-128,137,272,277,326,332,340,345,384,392,435-438,468,473
+  s_011c9b3242fd4b::t_e715dfe8334bfd 8
+  s_011c9b3242fd4b::t_7a884577c92b13 16
+  s_011c9b3242fd4b::t_7f66f2816001eb 4,26-27,31-38,40-43,45-48,50-51,70-72,78-79,86,88-90
+  s_011c9b3242fd4b::t_9530e976636899 1
+  s_011c9b3242fd4b::t_9991aab1605b15 2
+apps/server/src/shell/transactions/read-statements.ts
+  s_011c9b3242fd4b::t_ce8c11318ef34f 1,3-126
+  s_011c9b3242fd4b::t_8827f3d672016b 2
+apps/server/src/shell/transactions/queries.ts
+  s_011c9b3242fd4b::t_90d990fa49325f 58,62
+  s_011c9b3242fd4b::t_75f4dbadca3b7f 12
+apps/server/src/shell/budgets/repo.ts
+  s_011c9b3242fd4b::t_7275c8152caa91 1,17-20,193-195,198,200-202,212,214,217,221,223,225,228-236,238-248
+  s_011c9b3242fd4b::t_75f4dbadca3b7f 190-191,199,237
+  s_011c9b3242fd4b::t_886cd90d31282a 4
+apps/server/src/shell/transactions/rows.ts
+  s_011c9b3242fd4b::t_aa05dbd58fc7d2 2-16,18-41,43-65,67-102,104-157,159-169
+  s_011c9b3242fd4b::t_424086e8cb6c47 17,42,66,103,158
+  s_011c9b3242fd4b::t_b5fe3bbf6f7a14 1
+.patterns/streams.md
+  s_36a9ca32f9b8c3::t_d89c66f8fc8bd7 1-82
+AGENTS.md
+  s_36a9ca32f9b8c3::t_707089a9823fce 39-40,48-49,53
+.patterns/http-client.md
+  s_36a9ca32f9b8c3::t_28054cb6d299ad 17-19
+  s_36a9ca32f9b8c3::t_4ff95657b92db0 1-16,20-111
+.patterns/observability.md
+  s_36a9ca32f9b8c3::t_28866e723317d6 1-118
+.patterns/effect-core.md
+  s_36a9ca32f9b8c3::t_dc139e97d42c9d 1-62,71-86
+  s_36a9ca32f9b8c3::t_28054cb6d299ad 63-70
+.patterns/effect-atom.md
+  s_36a9ca32f9b8c3::t_c52801b6e865b7 3-5
+.patterns/layers-runtime.md
+  s_36a9ca32f9b8c3::t_a929e5c7f530ff 109-131
+.patterns/effect-v4-audit.md
+  s_36a9ca32f9b8c3::t_e0e59f1ecc3d8c 144,146-164
+  s_36a9ca32f9b8c3::t_af34d37677323a 1-2,5-143,145,165-179
+  s_36a9ca32f9b8c3::t_a6ffe3b778faf2 3-4
+apps/server/package.json
+  s_0c8e046b8eefec::t_383f764639374a 49
+apps/web/package.json
+  s_0c8e046b8eefec::t_ef0541052e379c 50
+package.json
+  s_0c8e046b8eefec::t_7601c0759b5744 67-68
+bun.lock
+  s_0c8e046b8eefec::t_fc5c35f24e4667 18-19,31,80,442,444,446,448,450,452,454,456,458,460,462,464,466,468,470,472,474,476,478,492,494,496,498,500,502,504,506,508,510,512,514,516,518,520,522,524,526,528,576,598,600,602,604,606,702,1282,1284,1618,1684-1685
+apps/server/tools/observability-compatibility/fixture-process.test.ts
+  s_0c8e046b8eefec::t_f997d8fdc5a0e4 31
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "320986c39e95f6844eef8c9216f06e4fb850f0d3",
+  "prompts": {},
+  "sessions": {
+    "s_011c9b3242fd4b": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a059bb-307b-790a-9511-720242b5629d",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_0c8e046b8eefec": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a05a05-0345-7772-a196-22cc213ae6e9",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_36a9ca32f9b8c3": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a059e6-8021-72be-9134-1c989e8bd2bb",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_8395754972f69f": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0597a-9f97-76f6-b6f1-48f5ba405539",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_95745c24ed21de": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a05993-c384-7ecb-b827-0071b973ff87",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_eaeb192c3cf642": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a05991-5f2d-78ac-9154-ff4ab3cda444",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

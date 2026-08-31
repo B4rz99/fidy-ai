@@ -1,8 +1,9 @@
 import { useAtomSet } from "@effect/atom-react";
 import { useRouter } from "@tanstack/react-router";
-import { Effect, Redacted } from "effect";
+import { Effect, Option, Redacted } from "effect";
 import type { Atom } from "effect/unstable/reactivity";
 import { type JSX, useState } from "react";
+import { writeClipboardText } from "@/browser/clipboard";
 import type { BackupRecoveryCode, FidyClient } from "@/transport/client";
 import { Alert, AlertDescription, AlertTitle } from "@/ui/components/alert";
 import { Button } from "@/ui/components/button";
@@ -29,7 +30,7 @@ type RotationState =
 
 type RotationViewProps = Readonly<{
   rotate: (command: RotateBackupRecoveryCommand) => void;
-  copy: (code: BackupRecoveryCode) => void;
+  copy: (code: BackupRecoveryCode, onCopied: () => void) => void;
 }>;
 
 const RotationFeedback = ({ state }: { state: RotationState }): JSX.Element => (
@@ -93,8 +94,7 @@ export const BackupRecoveryRotationView = ({ rotate, copy }: RotationViewProps):
   };
   const copyCode = (): void => {
     if (state._tag !== "Disclosed") return;
-    copy(state.code);
-    setState({ ...state, copied: true });
+    copy(state.code, () => setState({ ...state, copied: true }));
   };
 
   return (
@@ -129,8 +129,13 @@ const makeRotateCommand = (
     { concurrent: false }
   );
 
-const copyRecoveryCode = (code: BackupRecoveryCode): void => {
-  Effect.runFork(Effect.promise(() => navigator.clipboard.writeText(code)).pipe(Effect.ignore));
+const copyRecoveryCode = (code: BackupRecoveryCode, onCopied: () => void): void => {
+  Effect.runFork(
+    writeClipboardText(Option.fromUndefinedOr(navigator.clipboard), code).pipe(
+      Effect.tap(() => Effect.sync(onCopied)),
+      Effect.ignore
+    )
+  );
 };
 
 /** Coordinates the canonical mutation without retaining its raw response in shared Atom state. */

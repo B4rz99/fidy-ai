@@ -9,7 +9,7 @@ afterEach(cleanup);
 
 it("keeps disclosure only in one mounted view identity", () => {
   const rotate = vi.fn((command: RotateBackupRecoveryCommand) => command.onRotated(code));
-  const copy = vi.fn();
+  const copy = vi.fn((_code: BackupRecoveryCode, onCopied: () => void) => onCopied());
   const { rerender, unmount } = render(
     <BackupRecoveryRotationView key="fresh" copy={copy} rotate={rotate} />
   );
@@ -27,7 +27,8 @@ it("keeps disclosure only in one mounted view identity", () => {
   }
 
   fireEvent.click(screen.getByRole("button", { name: "Copiar código" }));
-  expect(copy).toHaveBeenCalledWith(code);
+  expect(copy).toHaveBeenCalledWith(code, expect.any(Function));
+  expect(screen.getByRole("button", { name: "Copiado" })).toBeVisible();
 
   rerender(<BackupRecoveryRotationView key="navigated" copy={copy} rotate={rotate} />);
   expect(screen.queryByText(code)).not.toBeInTheDocument();
@@ -36,6 +37,18 @@ it("keeps disclosure only in one mounted view identity", () => {
   render(<BackupRecoveryRotationView copy={copy} rotate={rotate} />);
   expect(screen.queryByText(code)).not.toBeInTheDocument();
   expect(rotate).toHaveBeenCalledTimes(1);
+});
+
+it("does not report a denied clipboard write as successful", () => {
+  const rotate = vi.fn((command: RotateBackupRecoveryCommand) => command.onRotated(code));
+  const copy = vi.fn();
+  render(<BackupRecoveryRotationView copy={copy} rotate={rotate} />);
+
+  fireEvent.click(screen.getByRole("button", { name: "Crear un código nuevo" }));
+  fireEvent.click(screen.getByRole("button", { name: "Copiar código" }));
+
+  expect(copy).toHaveBeenCalledWith(code, expect.any(Function));
+  expect(screen.getByRole("button", { name: "Copiar código" })).toBeVisible();
 });
 
 it("shows a safe retry without retaining a code after rotation fails", () => {

@@ -1,8 +1,9 @@
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
 import { useRouter } from "@tanstack/react-router";
-import { Effect } from "effect";
+import { Effect, Option } from "effect";
 import { AsyncResult, type Atom, Reactivity } from "effect/unstable/reactivity";
 import { type JSX, useState } from "react";
+import { readClipboardText, writeClipboardText } from "@/browser/clipboard";
 import { useSession } from "@/session/session-context";
 import { type FidyClient, type TokenBearer } from "@/transport/client";
 import { bearerRevealLifetime } from "./policy";
@@ -102,9 +103,11 @@ const makeApprovePairingCommand = (
 
 const clearClipboard = (bearer: TokenBearer): void => {
   Effect.runFork(
-    Effect.promise(() => navigator.clipboard.readText()).pipe(
+    readClipboardText(Option.fromUndefinedOr(navigator.clipboard)).pipe(
       Effect.flatMap((current) =>
-        current === bearer ? Effect.promise(() => navigator.clipboard.writeText("")) : Effect.void
+        current === bearer
+          ? writeClipboardText(Option.fromUndefinedOr(navigator.clipboard), "")
+          : Effect.void
       ),
       Effect.ignore
     )
@@ -113,7 +116,7 @@ const clearClipboard = (bearer: TokenBearer): void => {
 
 const copyToClipboard = (bearer: TokenBearer, onCopied: () => void): void => {
   Effect.runFork(
-    Effect.promise(() => navigator.clipboard.writeText(bearer)).pipe(
+    writeClipboardText(Option.fromUndefinedOr(navigator.clipboard), bearer).pipe(
       Effect.tap(() => Effect.sync(onCopied)),
       Effect.tap(() => Effect.sleep(bearerRevealLifetime)),
       Effect.tap(() => Effect.sync(() => clearClipboard(bearer))),

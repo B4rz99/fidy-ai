@@ -1,4 +1,4 @@
-import { Effect, Redacted } from "effect";
+import { Data, Effect, Redacted } from "effect";
 import {
   BillingEmail,
   CardEnrollmentDecisions,
@@ -9,6 +9,9 @@ import {
 import { type CardFields, tokenizeCardWithWompi } from "@/transport/wompi-tokenization";
 
 export type Enrollment = CardEnrollmentType;
+
+class EnrollmentSubmissionFailed extends Data.TaggedError("EnrollmentSubmissionFailed")<{}> {}
+
 export type PreparedEnrollment = Extract<Enrollment, { status: "prepared" }>;
 
 export type EnrollmentGateway = Readonly<{
@@ -59,13 +62,15 @@ export const makeEnrollmentGateway = (
       ).pipe(
         Effect.map(Redacted.make),
         Effect.flatMap((cardToken) =>
-          Effect.promise(() =>
-            clientService.execute((client) =>
-              client.subscriptionEnrollment.submit({
-                payload: { paymentSourceMode: "create", ...common, cardToken },
-              })
-            )
-          )
+          Effect.tryPromise({
+            try: () =>
+              clientService.execute((client) =>
+                client.subscriptionEnrollment.submit({
+                  payload: { paymentSourceMode: "create", ...common, cardToken },
+                })
+              ),
+            catch: () => new EnrollmentSubmissionFailed(),
+          })
         )
       )
     );

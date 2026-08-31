@@ -170,34 +170,27 @@ const normalizePhoneNumber = (
     phoneNumber.startsWith("+") ? phoneNumber : `+${phoneNumber}`
   );
 
-const authenticateAndDecodeKapsoBody = Effect.fn("Kapso.authenticateAndDecodeBody")(
-  function* (input: {
-    readonly rawBody: Uint8Array;
-    readonly secret: string;
-    readonly signature: string;
-  }) {
-    if (input.rawBody.byteLength > maxKapsoWebhookBytes) {
-      return yield* new KapsoPayloadTooLarge();
-    }
-    if (input.secret.length < minimumWebhookSecretLength) {
-      return yield* new InvalidKapsoSignature();
-    }
-    const expected = new Bun.CryptoHasher("sha256", input.secret)
-      .update(input.rawBody)
-      .digest("hex");
-    if (!constantTimeEqual(expected, input.signature.toLowerCase())) {
-      return yield* new InvalidKapsoSignature();
-    }
-    return yield* Schema.decodeEffect(UnknownJsonString)(
-      new TextDecoder().decode(input.rawBody)
-    ).pipe(Effect.mapError(invalidKapsoPayload));
+const authenticateAndDecodeKapsoBody = Effect.fn(function* (input: {
+  readonly rawBody: Uint8Array;
+  readonly secret: string;
+  readonly signature: string;
+}) {
+  if (input.rawBody.byteLength > maxKapsoWebhookBytes) {
+    return yield* new KapsoPayloadTooLarge();
   }
-);
+  if (input.secret.length < minimumWebhookSecretLength) {
+    return yield* new InvalidKapsoSignature();
+  }
+  const expected = new Bun.CryptoHasher("sha256", input.secret).update(input.rawBody).digest("hex");
+  if (!constantTimeEqual(expected, input.signature.toLowerCase())) {
+    return yield* new InvalidKapsoSignature();
+  }
+  return yield* Schema.decodeEffect(UnknownJsonString)(
+    new TextDecoder().decode(input.rawBody)
+  ).pipe(Effect.mapError(invalidKapsoPayload));
+});
 
-const parseOccurredAt = Effect.fn("Kapso.parseOccurredAt")(function* (
-  timestamp: string,
-  receivedAt: DateTime.Utc
-) {
+const parseOccurredAt = Effect.fn(function* (timestamp: string, receivedAt: DateTime.Utc) {
   const seconds = Number(timestamp);
   if (!Number.isSafeInteger(seconds)) {
     return yield* invalidKapsoInvariant("Kapso timestamp was not a safe integer");
@@ -213,7 +206,7 @@ const parseOccurredAt = Effect.fn("Kapso.parseOccurredAt")(function* (
   return occurredAt;
 });
 
-const projectEvent = Effect.fn("Kapso.projectWebhookEvent")(function* (
+const projectEvent = Effect.fn(function* (
   raw: typeof RawKapsoEvent.Type,
   businessPortfolioId: WhatsAppBusinessPortfolioId,
   receivedAt: DateTime.Utc
@@ -326,9 +319,7 @@ const lifecycleFailure = (
 };
 
 /** Projects one provider-held raw status into the same metadata-only evidence used by webhooks. */
-const projectDecodedDisclosureLifecycleStatus = Effect.fn(
-  "Kapso.projectDecodedDisclosureLifecycleStatus"
-)(function* (input: {
+const projectDecodedDisclosureLifecycleStatus = Effect.fn(function* (input: {
   readonly status: typeof RawDisclosureStatus.Type;
   readonly receivedAt: DateTime.Utc;
 }) {
@@ -370,28 +361,29 @@ const lifecycleStatus = (
   }
 };
 
-const latestDisclosureLifecycleStatus = Effect.fn("Kapso.latestDisclosureLifecycleStatus")(
-  function* (statuses: ReadonlyArray<typeof RawDisclosureStatus.Type>, receivedAt: DateTime.Utc) {
-    const projected = yield* Effect.forEach(statuses, (status) =>
-      projectDecodedDisclosureLifecycleStatus({ status, receivedAt }).pipe(
-        Effect.map((evidence) => ({ evidence, status }))
-      )
-    );
-    return projected.reduce<
-      Option.Option<{
-        readonly evidence: KapsoDisclosureLifecycleEvidence;
-        readonly status: typeof RawDisclosureStatus.Type;
-      }>
-    >(
-      (latest, candidate) =>
-        Option.isNone(latest) ||
-        DateTime.Order(candidate.evidence.occurredAt, latest.value.evidence.occurredAt) > 0
-          ? Option.some(candidate)
-          : latest,
-      Option.none()
-    );
-  }
-);
+const latestDisclosureLifecycleStatus = Effect.fn(function* (
+  statuses: ReadonlyArray<typeof RawDisclosureStatus.Type>,
+  receivedAt: DateTime.Utc
+) {
+  const projected = yield* Effect.forEach(statuses, (status) =>
+    projectDecodedDisclosureLifecycleStatus({ status, receivedAt }).pipe(
+      Effect.map((evidence) => ({ evidence, status }))
+    )
+  );
+  return projected.reduce<
+    Option.Option<{
+      readonly evidence: KapsoDisclosureLifecycleEvidence;
+      readonly status: typeof RawDisclosureStatus.Type;
+    }>
+  >(
+    (latest, candidate) =>
+      Option.isNone(latest) ||
+      DateTime.Order(candidate.evidence.occurredAt, latest.value.evidence.occurredAt) > 0
+        ? Option.some(candidate)
+        : latest,
+    Option.none()
+  );
+});
 
 /**
  * Authenticates at most 1 MiB of exact raw bytes with the configured 16+-character secret and a
@@ -433,7 +425,7 @@ export const decodeKapsoDisclosureLifecycleWebhook = Effect.fn(
   return latest.value.evidence;
 });
 
-const projectIdentityChange = Effect.fn("Kapso.projectIdentityChange")(function* (
+const projectIdentityChange = Effect.fn(function* (
   message: unknown,
   businessPortfolioId: WhatsAppBusinessPortfolioId,
   receivedAt: DateTime.Utc

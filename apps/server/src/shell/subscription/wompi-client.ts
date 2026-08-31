@@ -112,9 +112,7 @@ export type WompiEnrollmentClientService = Readonly<{
   ) => Effect.Effect<WompiVerifiedSource, WompiSourceLookupFailed>;
 }>;
 
-const responseJson = Effect.fn("Wompi.responseJson")(function* (
-  response: HttpClientResponse.HttpClientResponse
-) {
+const responseJson = Effect.fn(function* (response: HttpClientResponse.HttpClientResponse) {
   const body = yield* collectBoundedResponseBytes(response, maximumProviderResponseBytes);
   if (Option.isNone(body)) return yield* Effect.fail("response-too-large" as const);
   const decoded = decodeJson(new TextDecoder().decode(body.value));
@@ -123,13 +121,13 @@ const responseJson = Effect.fn("Wompi.responseJson")(function* (
     : yield* Effect.fail("response-malformed" as const);
 });
 
-const digestText = Effect.fn("Wompi.digestText")(function* (text: string) {
+const digestText = Effect.fn(function* (text: string) {
   const crypto = yield* Crypto.Crypto;
   const digest = yield* crypto.digest("SHA-256", new TextEncoder().encode(text)).pipe(Effect.orDie);
   return Encoding.encodeHex(digest);
 });
 
-const acceptanceProviderContentHash = Effect.fn("Wompi.acceptanceProviderContentHash")(function* (
+const acceptanceProviderContentHash = Effect.fn(function* (
   acceptanceToken: string,
   permalink: URL
 ) {
@@ -144,7 +142,7 @@ const acceptanceProviderContentHash = Effect.fn("Wompi.acceptanceProviderContent
   return claims.success.file_hash;
 });
 
-const contractEvidenceFields = Effect.fn("Wompi.contractEvidenceFields")(function* (
+const contractEvidenceFields = Effect.fn(function* (
   input: Readonly<{
     permalink: URL;
     displayedText: string;

@@ -63,9 +63,7 @@ const unauthorized = (): HttpServerResponse.HttpServerResponse =>
 const unavailable = (): HttpServerResponse.HttpServerResponse =>
   jsonResponse({ status: "unavailable", message: unavailableMessage }, statusUnavailable);
 
-const readPayload = Effect.fn("Recovery.readPrivatePayload")(function* (
-  request: HttpServerRequest.HttpServerRequest
-) {
+const readPayload = Effect.fn(function* (request: HttpServerRequest.HttpServerRequest) {
   const contentType = request.headers["content-type"];
   if (contentType === undefined || !jsonMediaType.test(contentType)) return Option.none();
   const bytes = yield* collectBoundedBytes(request.stream, maximumSupportRecoveryBodyBytes).pipe(

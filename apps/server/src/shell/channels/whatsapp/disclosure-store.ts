@@ -26,9 +26,7 @@ const correlationTokenForAttempt = (
   attemptId: DisclosureDeliveryAttemptId
 ): DisclosureDeliveryCorrelationToken => DisclosureDeliveryCorrelationToken.make(attemptId);
 
-const hashCorrelationToken = Effect.fn("WhatsApp.hashDisclosureCorrelation")(function* (
-  token: DisclosureDeliveryCorrelationToken
-) {
+const hashCorrelationToken = Effect.fn(function* (token: DisclosureDeliveryCorrelationToken) {
   const crypto = yield* Crypto.Crypto;
   const digest = yield* crypto
     .digest("SHA-256", new TextEncoder().encode(token))
@@ -225,9 +223,7 @@ const RetryAttemptClaim = Schema.Struct({
   businessPhoneNumberId: WhatsAppBusinessPhoneNumberId,
 });
 
-const findDueConsentDisclosureRetry = Effect.fn("WhatsApp.findDueDisclosureRetry")(function* (
-  claimedAt: DateTime.Utc
-) {
+const findDueConsentDisclosureRetry = Effect.fn(function* (claimedAt: DateTime.Utc) {
   const sql = yield* SqlClient.SqlClient;
   return yield* SqlSchema.findOneOption({
     Request: Schema.DateTimeUtcFromDate,
@@ -240,7 +236,7 @@ const findDueConsentDisclosureRetry = Effect.fn("WhatsApp.findDueDisclosureRetry
   })(claimedAt).pipe(Effect.orDie);
 });
 
-const insertConsentDisclosureRetry = Effect.fn("WhatsApp.insertDisclosureRetry")(function* (input: {
+const insertConsentDisclosureRetry = Effect.fn(function* (input: {
   readonly previousAttemptId: DisclosureDeliveryAttemptId;
   readonly attemptId: DisclosureDeliveryAttemptId;
   readonly correlationToken: DisclosureDeliveryCorrelationToken;

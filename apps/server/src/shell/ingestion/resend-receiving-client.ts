@@ -105,7 +105,7 @@ const AttachmentResponse = Schema.Struct({
   download_url: ResendInboundDownloadUrl,
 });
 
-const parseJsonResponse = Effect.fn("Resend.parseReceivingResponse")(function* <A>(
+const parseJsonResponse = Effect.fn(function* <A>(
   response: HttpClientResponse.HttpClientResponse,
   decode: (input: unknown) => Effect.Effect<A, Schema.SchemaError>,
   maximumBytes: number
@@ -166,10 +166,7 @@ const metadataMatchesDeclaration = (metadata: Metadata, mediaType: string): bool
   return height <= maximumEmailInlineImageDimension;
 };
 
-const hasSafeDeclaredImage = Effect.fn("Resend.hasSafeDeclaredImage")(function* (
-  mediaType: string,
-  bytes: Uint8Array
-) {
+const hasSafeDeclaredImage = Effect.fn(function* (mediaType: string, bytes: Uint8Array) {
   const metadata = yield* Effect.tryPromise({
     try: () => sharp(bytes, { limitInputPixels: maximumInlineImagePixels, pages: 1 }).metadata(),
     catch: () => undefined,

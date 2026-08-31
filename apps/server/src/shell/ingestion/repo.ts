@@ -504,7 +504,7 @@ const reviewColumns = (qualifier: "" | "review."): string =>
     `${qualifier}resolved_at AS "resolvedAt"`,
   ].join(", ");
 
-const reviewFromRow = Effect.fn("reviewFromRow")(function* (row: typeof ReviewRow.Type) {
+const reviewFromRow = Effect.fn(function* (row: typeof ReviewRow.Type) {
   const knownMoney =
     Option.isSome(row.knownAmount) && Option.isSome(row.knownCurrency)
       ? Option.some(

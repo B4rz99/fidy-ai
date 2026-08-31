@@ -37,7 +37,7 @@ const StartAdmission = Schema.Struct({
   windowRetryAfterSeconds: Schema.Int,
 });
 
-const getStartAdmission = Effect.fn("BrowserLogin.getStartAdmission")(function* (
+const getStartAdmission = Effect.fn(function* (
   sql: SqlClient.SqlClient,
   input: Readonly<{ sourceDigest: Uint8Array; attemptedAt: DateTime.Utc }>
 ): Effect.fn.Return<typeof StartAdmission.Type, never> {
@@ -162,7 +162,7 @@ const ApprovalCandidate = Schema.Struct({
 
 const maximumApprovalFailures = 5;
 
-const findApprovalCandidate = Effect.fn("BrowserLogin.findApprovalCandidate")(function* (
+const findApprovalCandidate = Effect.fn(function* (
   sql: SqlClient.SqlClient,
   publicCode: BrowserLoginPublicCode,
   attemptedAt: DateTime.Utc

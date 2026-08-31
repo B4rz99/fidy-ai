@@ -362,9 +362,7 @@ export const useCurrentConsent = Effect.fn("useCurrentConsent")(function* <A, E,
   );
 });
 
-const revokesOnboardingGrant = Effect.fn("revokesOnboardingGrant")(function* (
-  record: ConsentRecord
-) {
+const revokesOnboardingGrant = Effect.fn(function* (record: ConsentRecord) {
   if (record.event._tag !== "Revoked") return false;
   const sql = yield* SqlClient.SqlClient;
   return yield* SqlSchema.findOne({
@@ -561,7 +559,7 @@ export const findConsentRecordByDecisionMessage = (
     );
   });
 
-const queryCurrentOnboardingConsent = Effect.fn("Consent.queryCurrentOnboardingConsent")(function* (
+const queryCurrentOnboardingConsent = Effect.fn(function* (
   subjectUserId: UserId,
   occurredAt: Option.Option<DateTime.Utc>
 ) {
@@ -934,9 +932,9 @@ const AdvanceDeliveredRequest = LocalDeliveredRequest.pipe(
 );
 const AppliedDelivery = Schema.Struct({ applied: Schema.Boolean });
 
-const advancePendingConsentDisclosureDelivery = Effect.fn(
-  "Consent.advancePendingDisclosureDelivery"
-)(function* (input: typeof AdvanceDeliveredRequest.Type) {
+const advancePendingConsentDisclosureDelivery = Effect.fn(function* (
+  input: typeof AdvanceDeliveredRequest.Type
+) {
   const sql = yield* SqlClient.SqlClient;
   return yield* sql
     .withTransaction(

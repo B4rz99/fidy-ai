@@ -360,7 +360,7 @@ const claimInputFromCandidate = (
   }
 };
 
-const claimCandidate = Effect.fn("claimForwardedEmailCandidate")(function* (
+const claimCandidate = Effect.fn(function* (
   candidate: ClaimCandidate,
   now: DateTime.Utc,
   period: AllowancePeriod

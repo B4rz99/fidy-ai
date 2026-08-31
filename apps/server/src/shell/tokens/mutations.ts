@@ -70,7 +70,7 @@ const manualPATResponse = (
   next: [],
 });
 
-const resolveReviewedExpiration = Effect.fn("resolveReviewedExpiration")(function* (
+const resolveReviewedExpiration = Effect.fn(function* (
   grant: ManualPATGrantInput,
   issuedAt: DateTime.Utc
 ) {
@@ -187,7 +187,7 @@ const patNotFound = (): NotFound =>
     next: [],
   });
 
-const revocationEvidence = Effect.fn("PAT.revocationEvidence")(function* (input: {
+const revocationEvidence = Effect.fn(function* (input: {
   readonly caller: CanonicalCaller;
   readonly confirmationEvidence: () => Option.Option<ProviderQualifiedMessages>;
 }): Effect.fn.Return<ConsentDecisionEvidence> {

@@ -153,9 +153,7 @@ const renderAtomicBatch = (pending: Readonly<ConfirmationSubject>): Option.Optio
     )
   );
 
-const confirmationBinding = Effect.fn("ToolConfirmation.confirmationBinding")(function* (
-  pending: Readonly<ConfirmationSubject>
-) {
+const confirmationBinding = Effect.fn(function* (pending: Readonly<ConfirmationSubject>) {
   const crypto = yield* Crypto.Crypto;
   const serializedInput = canonicalJsonString(pending.input);
   const nonce = yield* crypto.randomBytes(confirmationNonceBytes).pipe(Effect.orDie);

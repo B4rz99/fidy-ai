@@ -81,7 +81,7 @@ const ResendSuccess = Schema.Struct({
 const decodeResendSuccess = Schema.decodeUnknownResult(ResendSuccess);
 const decodeJson = Schema.decodeUnknownResult(UnknownJsonString);
 
-const decodeBoundedResendResponse = Effect.fn("Resend.decodeBoundedResponse")(function* (
+const decodeBoundedResendResponse = Effect.fn(function* (
   response: HttpClientResponse.HttpClientResponse
 ) {
   const successful =

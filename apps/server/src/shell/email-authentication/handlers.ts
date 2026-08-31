@@ -40,9 +40,7 @@ const handleVerification = Effect.fn("EmailAuthentication.handleVerification")(f
   }).pipe(Effect.catchTag("VerificationRejected", invalidApi));
 });
 
-const readVerificationPayload = Effect.fn("EmailAuthentication.readVerificationPayload")(function* (
-  request: HttpServerRequest.HttpServerRequest
-) {
+const readVerificationPayload = Effect.fn(function* (request: HttpServerRequest.HttpServerRequest) {
   const contentType = request.headers["content-type"];
   if (
     request.headers.origin === undefined ||
@@ -88,9 +86,7 @@ const payloadTooLarge = (): EmailReplacementPayloadTooLargeApi =>
 const unsupportedMediaType = (): EmailReplacementUnsupportedMediaTypeApi =>
   EmailReplacementUnsupportedMediaTypeApi.make(emailReplacementInvalidBody);
 
-const readReplacementCode = Effect.fn("EmailAuthentication.readReplacementCode")(function* (
-  request: HttpServerRequest.HttpServerRequest
-) {
+const readReplacementCode = Effect.fn(function* (request: HttpServerRequest.HttpServerRequest) {
   const { webOrigin } = yield* externalEndpoints.pipe(Effect.orDie);
   const contentType = request.headers["content-type"];
   if (request.headers.origin !== webOrigin) return yield* originRejected();

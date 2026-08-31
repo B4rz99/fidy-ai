@@ -89,7 +89,7 @@ const containsCounterparty = (counterparty: Option.Option<string>, normalized: s
     normalizeCategoryKeyword(candidate).includes(normalized)
   );
 
-const selectTransactionRowsInScope = Effect.fn("selectTransactionRowsInScope")(function* (
+const selectTransactionRowsInScope = Effect.fn(function* (
   userId: UserId,
   query: TransactionQuery,
   rowLimit: Option.Option<number>

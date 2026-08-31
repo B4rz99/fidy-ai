@@ -59,7 +59,7 @@ export type ApproveSupportRecoveryInput = Readonly<{
   backupRecoveryCode: Redacted.Redacted<BackupRecoveryCode>;
 }>;
 
-const digestRecoveryCode = Effect.fn("Recovery.digestCode")(function* (code: string) {
+const digestRecoveryCode = Effect.fn(function* (code: string) {
   const crypto = yield* Crypto.Crypto;
   return BackupRecoveryDigest.make(
     yield* crypto.digest("SHA-256", new TextEncoder().encode(code)).pipe(Effect.orDie)
@@ -82,7 +82,7 @@ export const generateBackupRecoveryMaterial = Effect.fn("Recovery.generateMateri
   };
 });
 
-const makeEventId = Effect.fn("Recovery.makeEventId")(function* () {
+const makeEventId = Effect.fn(function* () {
   const crypto = yield* Crypto.Crypto;
   return SupportRecoveryCaseEventId.make(yield* crypto.randomUUIDv7.pipe(Effect.orDie));
 });

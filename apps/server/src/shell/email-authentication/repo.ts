@@ -71,9 +71,7 @@ const decodePendingEmailEnrollment = Schema.decodeUnknownEffect(
   Schema.toType(PendingEmailEnrollment)
 );
 
-const enrollmentFromStorage = Effect.fn("EmailAuthentication.decodeEnrollmentStorage")(function* (
-  row: EnrollmentStorageRow
-) {
+const enrollmentFromStorage = Effect.fn(function* (row: EnrollmentStorageRow) {
   const caller: WhatsAppCaller = {
     businessPortfolioId: row.businessPortfolioId,
     businessScopedUserId: row.businessScopedUserId,

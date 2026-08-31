@@ -31,7 +31,7 @@ const BudgetFlatRow = Schema.Struct({
 const budgetColumns = `id, category_id AS "categoryId", cap_amount AS "capAmount",
   cap_currency AS "capCurrency", created_at AS "createdAt", updated_at AS "updatedAt"`;
 const decodeBudget = Schema.decodeUnknownEffect(Budget);
-const budgetFromRow = Effect.fn("budgetFromRow")((row: typeof BudgetFlatRow.Type) =>
+const budgetFromRow = Effect.fn((row: typeof BudgetFlatRow.Type) =>
   decodeBudget({
     id: row.id,
     categoryId: row.categoryId,
@@ -190,7 +190,7 @@ export const initializeBudgetMonthLatchInScope = Effect.fn("initializeBudgetMont
 const contributionKey = (fact: Readonly<{ categoryId: CategoryId; currency: Currency }>): string =>
   `${fact.categoryId}:${fact.currency}`;
 
-const statusFromBudget = Effect.fn("statusFromBudget")(function* (
+const statusFromBudget = Effect.fn(function* (
   budget: Budget,
   contribution: Option.Option<BudgetContributionFact>,
   period: AppliedBudgetMonth

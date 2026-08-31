@@ -50,7 +50,7 @@ const pairingInvalid = (): BrowserLoginPairingInvalidApi =>
 
 const jsonMediaType = /^application\/json(?:\s*;.*)?$/iu;
 
-const readJsonPayload = Effect.fn("EmailAuthentication.readBrowserPairingPayload")(function* <A>(
+const readJsonPayload = Effect.fn(function* <A>(
   request: HttpServerRequest.HttpServerRequest,
   maximumBytes: number,
   schema: Schema.Codec<A, unknown, never, never>

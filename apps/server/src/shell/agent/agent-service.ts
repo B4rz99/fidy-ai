@@ -996,9 +996,7 @@ const malformedOutputFeedback = (description: string): string => {
   );
 };
 
-const annotateModelUsage = Effect.fn("AgentService.annotateModelUsage")(function* (
-  generated: HostedTextResult
-) {
+const annotateModelUsage = Effect.fn(function* (generated: HostedTextResult) {
   yield* Effect.annotateCurrentSpan({
     "agent.model.usage.input_tokens.cache_read": generated.usage.cachedInputTokens,
     "agent.model.usage.input_tokens.total": generated.usage.inputTokens,
@@ -1006,7 +1004,7 @@ const annotateModelUsage = Effect.fn("AgentService.annotateModelUsage")(function
   });
 });
 
-const decodeModelToolCalls = Effect.fn("AgentService.decodeModelToolCalls")(function* (
+const decodeModelToolCalls = Effect.fn(function* (
   generated: HostedTextResult
 ): Effect.fn.Return<ReadonlyArray<AgentToolCall>, ModelResponseRejected> {
   const toolCalls: Array<AgentToolCall> = [];

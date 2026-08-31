@@ -35,15 +35,14 @@ type BudgetMutationContext = Readonly<{
   caller: SuggestedOperationCaller;
 }>;
 
-const requireCategory = Effect.fn("requireBudgetCategory")(
-  (categoryId: CategoryId, caller: SuggestedOperationCaller) =>
-    findCategory(categoryId).pipe(
-      Effect.flatMap(Effect.fromOption(() => new CategoryNotFound({ categoryId }))),
-      Effect.mapError((failure) => mapBudgetCategoryFailure({ failure, caller }))
-    )
+const requireCategory = Effect.fn((categoryId: CategoryId, caller: SuggestedOperationCaller) =>
+  findCategory(categoryId).pipe(
+    Effect.flatMap(Effect.fromOption(() => new CategoryNotFound({ categoryId }))),
+    Effect.mapError((failure) => mapBudgetCategoryFailure({ failure, caller }))
+  )
 );
 
-const requireBudget = Effect.fn("requireBudget")(
+const requireBudget = Effect.fn(
   (userId: UserId, budgetId: BudgetId, caller: SuggestedOperationCaller) =>
     findBudgetInScope(userId, budgetId).pipe(
       Effect.flatMap(Effect.fromOption(() => new BudgetNotFound({ budgetId }))),
@@ -83,7 +82,7 @@ const rejectDuplicate = ({
     : Effect.void;
 };
 
-const currentUserMonth = Effect.fn("currentUserMonth")(function* (userId: UserId) {
+const currentUserMonth = Effect.fn(function* (userId: UserId) {
   const user = yield* findUserInScope(userId).pipe(Effect.flatMap(Effect.fromOption), Effect.orDie);
   const now = yield* DateTime.now;
   return deriveCurrentBudgetMonth({ now, timeZone: user.timeZone });

@@ -5,7 +5,7 @@ import type { HttpClientResponse } from "effect/unstable/http";
  * Reads a streamed body without letting an oversized body fill memory. Stops at the byte limit and
  * returns `None`; otherwise returns the collected bytes.
  */
-export const collectBoundedBytes = Effect.fn("collectBoundedBytes")(function* <E, R>(
+export const collectBoundedBytes = Effect.fn(function* <E, R>(
   stream: Stream.Stream<Uint8Array, E, R>,
   maximumBytes: number
 ) {

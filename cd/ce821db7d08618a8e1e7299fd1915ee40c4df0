@@ -1,0 +1,28 @@
+apps/server/src/core/transactions/reconciliation-prototype.html
+  s_eaeb192c3cf642::t_65294a72cf70b3 1-2,549-559,583-584,586,588-590,663
+  s_eaeb192c3cf642::t_5b065a93886783 3-548,560-582,585,587,591-662
+docs/prototypes/reconciliation-links.md
+  s_eaeb192c3cf642::t_132e7f5824c1fb 122-123,125,127,218
+  s_eaeb192c3cf642::t_ddcb7c6646d3ca 1-25,30-36,39-101,110-121,124,126,128-217,219-220
+  s_eaeb192c3cf642::t_5b065a93886783 26-29,37-38,102-109
+docs/research/reconciliation-statement-timing.md
+  s_eaeb192c3cf642::t_a604f572aed626 7-8
+docs/research/reconciliation-account-hints.md
+  s_eaeb192c3cf642::t_2fcdbffe2bc798 7-8
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "cdce821db7d08618a8e1e7299fd1915ee40c4df0",
+  "prompts": {},
+  "sessions": {
+    "s_eaeb192c3cf642": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a05991-5f2d-78ac-9154-ff4ab3cda444",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

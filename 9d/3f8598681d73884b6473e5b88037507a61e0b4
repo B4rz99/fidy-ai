@@ -1,0 +1,196 @@
+docs/research/reconciliation-statement-timing.md
+  s_8395754972f69f::t_10be65c6ba5181 49,57
+  s_8395754972f69f::t_ab69925f26b439 1-6,9-12,14,21,23,25,27-34,37-48,50-56,58,60,62-82,90,92,95,98,100-106,108-115,118,120,122,124,127-133,138,140,142,144,146,148,150-160,162-168,170
+  s_8395754972f69f::t_566e34409e226f 13,15-20,22,24,26,35-36,59,61,84-89,91,93-94,96-97,99,107,116-117,119,121,123,125-126,134-137,139,141,143,145,147,149,161,169
+  s_8395754972f69f::t_2d191d3218ff13 83,171
+  s_eaeb192c3cf642::t_a604f572aed626 7
+docs/research/reconciliation-account-hints.md
+  s_95745c24ed21de::t_3911a70a21f645 1-6,9-48,50-63,74-193,195-250
+  s_95745c24ed21de::t_2853abde4b3b63 49,64-73,194
+  s_eaeb192c3cf642::t_2fcdbffe2bc798 7-8
+docs/prototypes/reconciliation-links.md
+  s_eaeb192c3cf642::t_132e7f5824c1fb 122-123,125,127,218
+  s_eaeb192c3cf642::t_ddcb7c6646d3ca 1-4,6-25,30-36,39-101,110-121,124,126,128-217,219-220
+  s_eaeb192c3cf642::t_5b065a93886783 26-29,37-38,102-109
+  s_eaeb192c3cf642::t_dcc442e919ce9b 5
+apps/server/src/shell/dashboard/handlers.test.ts
+  s_011c9b3242fd4b::t_b00cf661710b26 25
+  s_011c9b3242fd4b::t_b24378359922c3 26
+apps/server/src/shell/dashboard/view.ts
+  s_011c9b3242fd4b::t_77fde1ce5961b7 33
+apps/server/src/shell/transactions/repo.ts
+  s_011c9b3242fd4b::t_e049e54b313fde 1-3,6-7
+  s_011c9b3242fd4b::t_d776e04bdd0e01 9-17
+  s_09232231077c87::t_c96ed26d61d844 70-77,102-105
+  s_09232231077c87::t_f6340b983ee7c3 41-47,49-57,63,80,92,109
+  s_09232231077c87::t_4b355d53e1cdec 5,36-38
+apps/server/src/shell/transactions/reads.ts
+  s_011c9b3242fd4b::t_75f4dbadca3b7f 73-77,87,416,433-434,439-440,442,472,474-475
+  s_011c9b3242fd4b::t_6658b890646cb6 9-14
+  s_011c9b3242fd4b::t_65a174601c0434 418-425,441,443-467
+  s_011c9b3242fd4b::t_aa05dbd58fc7d2 3,5-7,15,17-25,49,52-69,80-85,91-123,129-136,138-271,273-276,278-325,327-331,333-339,341-344,346-383,385-391,393-401,477-481,483-504,506
+  s_011c9b3242fd4b::t_ef8db2122ca606 482,505
+  s_011c9b3242fd4b::t_10a008eb6ce0e0 402-415,417,426-432,469-471,476
+  s_011c9b3242fd4b::t_574303c30ccfc7 28-30,39,44
+  s_011c9b3242fd4b::t_c738524543168b 124-128,137,272,277,326,332,340,345,384,392,435-438,468,473
+  s_011c9b3242fd4b::t_e715dfe8334bfd 8
+  s_011c9b3242fd4b::t_7a884577c92b13 16
+  s_011c9b3242fd4b::t_7f66f2816001eb 4,26-27,31-38,40-43,45-48,50-51,70-72,78-79,86,88-90
+  s_011c9b3242fd4b::t_9530e976636899 1
+  s_011c9b3242fd4b::t_9991aab1605b15 2
+apps/server/src/shell/transactions/read-statements.ts
+  s_011c9b3242fd4b::t_ce8c11318ef34f 1,3-126
+  s_011c9b3242fd4b::t_8827f3d672016b 2
+apps/server/src/shell/transactions/queries.ts
+  s_011c9b3242fd4b::t_90d990fa49325f 58,62
+  s_011c9b3242fd4b::t_75f4dbadca3b7f 12
+apps/server/src/shell/budgets/repo.ts
+  s_011c9b3242fd4b::t_7275c8152caa91 1,17-20,193-195,198,200-202,212,214,217,221,223,225,228-236,238-248
+  s_011c9b3242fd4b::t_75f4dbadca3b7f 190-191,199,237
+  s_011c9b3242fd4b::t_886cd90d31282a 4
+apps/server/src/shell/transactions/rows.ts
+  s_011c9b3242fd4b::t_aa05dbd58fc7d2 2-16,18-41,43-65,67-102,104-157,159-169
+  s_011c9b3242fd4b::t_424086e8cb6c47 17,42,66,103,158
+  s_011c9b3242fd4b::t_b5fe3bbf6f7a14 1
+.patterns/streams.md
+  s_36a9ca32f9b8c3::t_d89c66f8fc8bd7 1-82
+AGENTS.md
+  s_36a9ca32f9b8c3::t_707089a9823fce 39-40,48-49,53
+.patterns/http-client.md
+  s_36a9ca32f9b8c3::t_28054cb6d299ad 17-19
+  s_36a9ca32f9b8c3::t_4ff95657b92db0 1-16,20-111
+.patterns/observability.md
+  s_36a9ca32f9b8c3::t_28866e723317d6 1-118
+.patterns/effect-core.md
+  s_36a9ca32f9b8c3::t_dc139e97d42c9d 1-62,71-86
+  s_36a9ca32f9b8c3::t_28054cb6d299ad 63-70
+.patterns/effect-atom.md
+  s_36a9ca32f9b8c3::t_c52801b6e865b7 3-5
+.patterns/layers-runtime.md
+  s_36a9ca32f9b8c3::t_a929e5c7f530ff 109-131
+.patterns/effect-v4-audit.md
+  s_36a9ca32f9b8c3::t_e0e59f1ecc3d8c 144,146-164
+  s_36a9ca32f9b8c3::t_af34d37677323a 1-2,5-143,145,165-179
+  s_36a9ca32f9b8c3::t_a6ffe3b778faf2 3-4
+apps/server/package.json
+  s_0c8e046b8eefec::t_383f764639374a 49
+apps/web/package.json
+  s_0c8e046b8eefec::t_ef0541052e379c 50
+package.json
+  s_0c8e046b8eefec::t_7601c0759b5744 67-68
+bun.lock
+  s_0c8e046b8eefec::t_fc5c35f24e4667 18-19,31,80,442,444,446,448,450,452,454,456,458,460,462,464,466,468,470,472,474,476,478,492,494,496,498,500,502,504,506,508,510,512,514,516,518,520,522,524,526,528,576,598,600,602,604,606,702,1282,1284,1618,1684-1685
+apps/server/tools/observability-compatibility/fixture-process.test.ts
+  s_0c8e046b8eefec::t_f997d8fdc5a0e4 31
+apps/server/src/shell/ingestion/email-forwarding.test.ts
+  s_09232231077c87::t_553eabf0172b34 410-412,421-424,427,435-437
+apps/server/src/shell/transactions/handlers.test.ts
+  s_09232231077c87::t_7e6b6db033ccc7 60-64,495-499
+  s_09232231077c87::t_1859efd6478a4e 15
+  s_09232231077c87::t_3bbcca0e129466 84-86
+  s_09232231077c87::t_16369391a9208a 54-59,65-83
+  s_09232231077c87::t_8a16547486bc66 505-509,534-538,552-556
+  s_09232231077c87::t_dd68d3f4b02706 504,533
+apps/server/src/shell/testing/isolation.test.ts
+  s_95a674d7e5a8b1::t_9f785898293e63 37
+  s_09232231077c87::t_19f458e2e74772 38-41,698,709,715
+  s_09232231077c87::t_e3e97b41a5441a 101
+apps/server/src/shell/db/migrations/registry.ts
+  s_09232231077c87::t_e5210126935259 43,96
+apps/server/src/shell/transactions/mutations.ts
+  s_09232231077c87::t_ff3d85a43dca32 16-20,133,169
+  s_09232231077c87::t_c08c1b67366856 139,164-165,170-171,266-269
+apps/server/src/core/transactions/user-decisions.ts
+  s_09232231077c87::t_5cf181c67802bb 1-39
+apps/server/src/shell/ingestion/worker.test.ts
+  s_09232231077c87::t_8820818a74cad6 483-487
+  s_09232231077c87::t_1859efd6478a4e 32
+apps/server/src/shell/db/migrations/0044-transaction-user-decisions.ts
+  s_09232231077c87::t_31e969a89ec019 9-11
+  s_09232231077c87::t_551d9651eef8e6 1-8,12-13
+apps/server/src/shell/transactions/fixtures.ts
+  s_09232231077c87::t_c383512575e8c3 1-2,6-7,15,19-31,33
+  s_09232231077c87::t_25f7d490822501 16-18
+  s_09232231077c87::t_f3289ce4e57be2 32
+  s_062eb90f81232e::t_c473989019fe3e 34
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "9d3f8598681d73884b6473e5b88037507a61e0b4",
+  "prompts": {},
+  "sessions": {
+    "s_011c9b3242fd4b": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a059bb-307b-790a-9511-720242b5629d",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_062eb90f81232e": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a05a17-074b-7a1d-8991-5c6ddceef21e",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_09232231077c87": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a05a06-b25d-744f-a4b4-ebc789e81dde",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": null
+    },
+    "s_0c8e046b8eefec": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a05a05-0345-7772-a196-22cc213ae6e9",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_36a9ca32f9b8c3": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a059e6-8021-72be-9134-1c989e8bd2bb",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_8395754972f69f": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0597a-9f97-76f6-b6f1-48f5ba405539",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_95745c24ed21de": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a05993-c384-7ecb-b827-0071b973ff87",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_95a674d7e5a8b1": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a05a17-71ff-76a0-92a1-688cd0b07fa3",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_eaeb192c3cf642": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a05991-5f2d-78ac-9154-ff4ab3cda444",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

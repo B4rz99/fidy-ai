@@ -1,0 +1,66 @@
+apps/server/src/shell/transactions/fixtures.ts
+  s_09232231077c87::t_f3289ce4e57be2 32
+  s_09232231077c87::t_c383512575e8c3 1-2,6-7,15,19-31,33
+  s_09232231077c87::t_25f7d490822501 16-18
+  s_062eb90f81232e::t_c473989019fe3e 34
+apps/server/src/shell/testing/isolation.test.ts
+  s_09232231077c87::t_19f458e2e74772 38-41,698,709,715
+  s_09232231077c87::t_e3e97b41a5441a 101
+  s_95a674d7e5a8b1::t_9f785898293e63 37
+apps/server/src/core/transactions/user-decisions.ts
+  s_09232231077c87::t_5cf181c67802bb 1-39
+apps/server/src/shell/transactions/repo.ts
+  s_09232231077c87::t_c96ed26d61d844 5,36-38,70-77,102-105
+  s_09232231077c87::t_f6340b983ee7c3 41-47,49-57,63,80,92,109
+apps/server/src/shell/db/migrations/registry.ts
+  s_09232231077c87::t_e5210126935259 43,96
+apps/server/src/shell/transactions/mutations.ts
+  s_09232231077c87::t_c08c1b67366856 139,164-165,170-171,266-269
+  s_09232231077c87::t_ff3d85a43dca32 16-20,133,169
+apps/server/src/shell/ingestion/worker.test.ts
+  s_09232231077c87::t_1859efd6478a4e 32
+  s_09232231077c87::t_8820818a74cad6 483-487
+apps/server/src/shell/db/migrations/0044-transaction-user-decisions.ts
+  s_09232231077c87::t_31e969a89ec019 9-11
+  s_09232231077c87::t_551d9651eef8e6 1-8,12-13
+apps/server/src/shell/ingestion/email-forwarding.test.ts
+  s_09232231077c87::t_553eabf0172b34 410-412,421-424,427,435-437
+apps/server/src/shell/transactions/handlers.test.ts
+  s_09232231077c87::t_dd68d3f4b02706 496,525
+  s_09232231077c87::t_1859efd6478a4e 15
+  s_09232231077c87::t_16369391a9208a 54-79
+  s_09232231077c87::t_8a16547486bc66 497-501,526-530,544-548
+  s_09232231077c87::t_3bbcca0e129466 80-82
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "926d3279157151fe154f46109b91f429a45c7b2e",
+  "prompts": {},
+  "sessions": {
+    "s_062eb90f81232e": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a05a17-074b-7a1d-8991-5c6ddceef21e",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_09232231077c87": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a05a06-b25d-744f-a4b4-ebc789e81dde",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_95a674d7e5a8b1": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a05a17-71ff-76a0-92a1-688cd0b07fa3",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

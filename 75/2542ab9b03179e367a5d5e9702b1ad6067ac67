@@ -1,0 +1,41 @@
+apps/web/src/transport/wompi-tokenization.ts
+  s_062eb90f81232e::t_00c6760fd6e571 35-40,65-67,77
+apps/web/src/features/pats/view.tsx
+  s_062eb90f81232e::t_00c6760fd6e571 17,75-87
+apps/web/src/transport/wompi-tokenization.test.ts
+  s_062eb90f81232e::t_00c6760fd6e571 1,75-94
+  s_062eb90f81232e::t_1f7bbdac7df585 95
+apps/web/src/features/pats/feature.tsx
+  s_062eb90f81232e::t_00c6760fd6e571 3,6,106,108-110,119
+apps/web/src/features/recovery/feature.tsx
+  s_062eb90f81232e::t_00c6760fd6e571 3,6,33,97,132-138
+apps/web/src/browser/clipboard.ts
+  s_062eb90f81232e::t_00c6760fd6e571 1-34
+apps/web/src/features/subscription/feature.test.tsx
+  s_062eb90f81232e::t_00c6760fd6e571 297
+apps/web/src/features/subscription/feature.tsx
+  s_062eb90f81232e::t_00c6760fd6e571 3,450-451,484-489
+apps/web/src/features/recovery/feature.test.tsx
+  s_062eb90f81232e::t_00c6760fd6e571 12,30-31,42-51
+  s_062eb90f81232e::t_8b3c430034843b 52-53
+apps/web/src/browser/clipboard.test.ts
+  s_062eb90f81232e::t_00c6760fd6e571 1-28
+apps/web/src/features/subscription/enrollment-gateway.ts
+  s_062eb90f81232e::t_00c6760fd6e571 1,12-14,65-73
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "752542ab9b03179e367a5d5e9702b1ad6067ac67",
+  "prompts": {},
+  "sessions": {
+    "s_062eb90f81232e": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a05a17-074b-7a1d-8991-5c6ddceef21e",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

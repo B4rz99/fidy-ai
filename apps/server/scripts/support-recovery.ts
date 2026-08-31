@@ -2,7 +2,7 @@ import { jsonStringSchema } from "../src/schema-compatibility";
 import { BunHttpClient, BunRuntime } from "@effect/platform-bun";
 import { Data, Effect, Option, Schema } from "effect";
 import { HttpBody, HttpClient, HttpClientRequest } from "effect/unstable/http";
-import { collectBoundedBytes } from "~/shell/_shared/bounded-bytes";
+import { collectBoundedResponseBytes } from "~/shell/_shared/bounded-bytes";
 
 const supportUrl = "https://api.fidyapp.com/internal/support-recovery";
 const maximumPairingCharacters = 16;
@@ -184,7 +184,7 @@ const callSupportRecovery = Effect.fn("SupportRecoveryCli.callTransport")(functi
         () => new SupportCliFailure({ message: "La operación de soporte no está disponible." })
       )
     );
-  const bytes = yield* collectBoundedBytes(response.stream, maximumResponseBytes).pipe(
+  const bytes = yield* collectBoundedResponseBytes(response, maximumResponseBytes).pipe(
     Effect.mapError(
       () => new SupportCliFailure({ message: "La operación devolvió una respuesta no válida." })
     )

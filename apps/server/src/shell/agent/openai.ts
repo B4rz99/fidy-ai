@@ -10,7 +10,6 @@ import {
   Layer,
   Option,
   Schema,
-  Stream,
 } from "effect";
 import { Tiktoken } from "js-tiktoken/lite";
 import o200kBase from "js-tiktoken/ranks/o200k_base";
@@ -24,6 +23,7 @@ import {
 import { type Prompt, Tool } from "effect/unstable/ai";
 import { toCodecOpenAI } from "effect/unstable/ai/OpenAiStructuredOutput";
 import type { TranscriptEntry } from "~/core/transcript/model";
+import { collectBoundedResponseBytes } from "~/shell/_shared/bounded-bytes";
 import { exactTranscriptPrompt } from "./model-boundary";
 import {
   HttpBody,
@@ -393,9 +393,15 @@ const countInputTokens = (
 ): Effect.Effect<number, HostedInferenceError> =>
   requestInputTokenCount(client, request).pipe(
     Effect.flatMap((response) =>
-      HttpClientResponse.schemaBodyJson(Generated.TokenCountsResource)(response).pipe(
-        Effect.mapError(() => invalidProviderOutput("Hosted provider response was invalid"))
+      readBoundedResponseText(response, () =>
+        invalidProviderOutput("Hosted provider response was invalid")
       )
+    ),
+    Effect.flatMap(Schema.decodeUnknownEffect(jsonStringSchema(Generated.TokenCountsResource))),
+    Effect.mapError((error) =>
+      error instanceof HostedInferenceError
+        ? error
+        : invalidProviderOutput("Hosted provider response was invalid")
     ),
     Effect.map(({ input_tokens }) => input_tokens)
   );
@@ -483,15 +489,19 @@ const executeRequest = (
       Effect.flatMap(HttpClientResponse.filterStatusOk),
       Effect.mapError(countFailure),
       Effect.flatMap((response) =>
-        HttpClientResponse.schemaBodyJson(OpenAiSchema.Response)(response).pipe(
-          Effect.mapError(() => invalidProviderOutput("Hosted provider response was invalid"))
+        readBoundedResponseText(response, () =>
+          invalidProviderOutput("Hosted provider response was invalid")
         )
+      ),
+      Effect.flatMap(Schema.decodeUnknownEffect(jsonStringSchema(OpenAiSchema.Response))),
+      Effect.mapError((error) =>
+        error instanceof HostedInferenceError
+          ? error
+          : invalidProviderOutput("Hosted provider response was invalid")
       )
     );
 
 const memoryTokenizer = new Tiktoken(o200kBase);
-
-type BoundedBody = Readonly<{ chunks: ReadonlyArray<Uint8Array>; size: number }>;
 
 const structuredOutputExceeded = (): HostedInferenceError =>
   new HostedInferenceError({
@@ -508,37 +518,18 @@ const structuredOutputTimedOut = (): HostedInferenceError =>
   });
 
 const readBoundedResponseText = (
-  response: HttpClientResponse.HttpClientResponse
-): Effect.Effect<string, HostedInferenceError> => {
-  const declaredLength = Number(response.headers["content-length"] ?? 0);
-  if (declaredLength > maximumStructuredResponseBytes) {
-    return Effect.fail(structuredOutputExceeded());
-  }
-  return Stream.runFoldEffect(
-    response.stream,
-    (): BoundedBody => ({ chunks: [], size: 0 }),
-    (body, chunk) =>
-      body.size + chunk.byteLength > maximumStructuredResponseBytes
-        ? Effect.fail(structuredOutputExceeded())
-        : Effect.succeed({
-            chunks: [...body.chunks, chunk],
-            size: body.size + chunk.byteLength,
-          })
-  ).pipe(
-    Effect.mapError((error) =>
-      error instanceof HostedInferenceError ? error : providerUnavailable()
-    ),
-    Effect.map((body) => {
-      const bytes = new Uint8Array(body.size);
-      let offset = 0;
-      for (const chunk of body.chunks) {
-        bytes.set(chunk, offset);
-        offset += chunk.byteLength;
-      }
-      return new TextDecoder().decode(bytes);
-    })
+  response: HttpClientResponse.HttpClientResponse,
+  overflowFailure: () => HostedInferenceError
+): Effect.Effect<string, HostedInferenceError> =>
+  collectBoundedResponseBytes(response, maximumStructuredResponseBytes).pipe(
+    Effect.mapError(() => providerUnavailable()),
+    Effect.flatMap(
+      Option.match({
+        onNone: () => Effect.fail(overflowFailure()),
+        onSome: (bytes) => Effect.succeed(new TextDecoder().decode(bytes)),
+      })
+    )
   );
-};
 
 const countStructuredInputTokens = (
   client: OpenAiClient.Service,
@@ -546,7 +537,7 @@ const countStructuredInputTokens = (
   policy: StructuredExecutionPolicy
 ): Effect.Effect<number, HostedInferenceError> =>
   requestInputTokenCount(client, request).pipe(
-    Effect.flatMap(readBoundedResponseText),
+    Effect.flatMap((response) => readBoundedResponseText(response, structuredOutputExceeded)),
     Effect.flatMap(Schema.decodeUnknownEffect(jsonStringSchema(Generated.TokenCountsResource))),
     Effect.map(({ input_tokens }) => input_tokens),
     Effect.mapError((error) =>
@@ -561,7 +552,7 @@ const countStructuredInputTokens = (
 const readStructuredResponse = (
   response: HttpClientResponse.HttpClientResponse
 ): Effect.Effect<OpenAiSchema.Response, HostedInferenceError> =>
-  readBoundedResponseText(response).pipe(
+  readBoundedResponseText(response, structuredOutputExceeded).pipe(
     Effect.flatMap((body) =>
       Schema.decodeEffect(jsonStringSchema(OpenAiSchema.Response))(body).pipe(
         Effect.mapError(() =>

@@ -53,14 +53,84 @@ describe("Wompi browser tokenization", () => {
     ).rejects.toBeInstanceOf(CardTokenizationFailed);
   });
 
-  it("stops reading a provider response at the browser-owned byte limit", async () => {
-    const fetchStub = vi
-      .fn<WompiFetch>()
-      .mockResolvedValue(new Response("x".repeat(16_385), { status: 200 }));
+  it.each([
+    ["missing content length", {}],
+    ["dishonest smaller content length", { "content-length": "1" }],
+  ])("stops a chunked %s response at the browser-owned byte limit", async (_label, headers) => {
+    let cancelled = false;
+    const fetchStub = vi.fn<WompiFetch>().mockResolvedValue(
+      new Response(
+        new ReadableStream<Uint8Array>({
+          start: (controller): void => {
+            controller.enqueue(new Uint8Array(16_000));
+            controller.enqueue(new Uint8Array(385));
+          },
+          cancel: (): void => {
+            cancelled = true;
+          },
+        }),
+        { status: 200, headers }
+      )
+    );
 
     await expect(
       Effect.runPromise(tokenizeCardWithWompi("pub_test_12345678", card, fetchStub))
     ).rejects.toBeInstanceOf(CardTokenizationFailed);
+    expect(cancelled).toBe(true);
+  });
+
+  it("rejects a declared oversized response before buffering and cancels its reader", async () => {
+    let cancelled = false;
+    const fetchStub = vi.fn<WompiFetch>().mockResolvedValue(
+      new Response(
+        new ReadableStream<Uint8Array>({
+          start: (controller): void => controller.enqueue(new Uint8Array([1])),
+          cancel: (): void => {
+            cancelled = true;
+          },
+        }),
+        { status: 200, headers: { "content-length": "16385" } }
+      )
+    );
+
+    await expect(
+      Effect.runPromise(tokenizeCardWithWompi("pub_test_12345678", card, fetchStub))
+    ).rejects.toBeInstanceOf(CardTokenizationFailed);
+    expect(cancelled).toBe(true);
+  });
+
+  it("accepts a provider response exactly at the browser-owned byte limit", async () => {
+    const body = JSON.stringify({ data: { id: "x".repeat(4_096), brand: "VISA" } });
+    const padding = " ".repeat(16_384 - body.length);
+    const fetchStub = vi
+      .fn<WompiFetch>()
+      .mockResolvedValue(new Response(`${body}${padding}`, { status: 200 }));
+
+    await expect(
+      Effect.runPromise(tokenizeCardWithWompi("pub_test_12345678", card, fetchStub))
+    ).resolves.toBe("x".repeat(4_096));
+  });
+
+  it("cancels the provider reader when tokenization is interrupted", async () => {
+    const { promise: cancelled, resolve: resolveCancellation } = Promise.withResolvers<void>();
+    const fetchStub = vi.fn<WompiFetch>().mockResolvedValue(
+      new Response(
+        new ReadableStream<Uint8Array>({
+          start: (controller): void => controller.enqueue(new Uint8Array([1])),
+          pull: (): Promise<void> => new Promise<void>(() => undefined),
+          cancel: (): void => resolveCancellation(),
+        }),
+        { status: 200 }
+      )
+    );
+    const fiber = Effect.runFork(tokenizeCardWithWompi("pub_test_12345678", card, fetchStub));
+    await Promise.resolve();
+
+    await Effect.runPromise(Fiber.interrupt(fiber));
+    await cancelled;
+    const exit = await Effect.runPromise(Fiber.await(fiber));
+
+    expect(Exit.isFailure(exit) && Cause.hasInterrupts(exit.cause)).toBe(true);
   });
 
   it("turns malformed provider responses into one detail-free failure", async () => {

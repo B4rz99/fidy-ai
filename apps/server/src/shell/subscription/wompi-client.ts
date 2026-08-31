@@ -21,7 +21,7 @@ import {
   type WompiContractEvidenceSet,
   WompiSourceId,
 } from "~/core/subscription/enrollment-model";
-import { collectBoundedBytes } from "~/shell/_shared/bounded-bytes";
+import { collectBoundedResponseBytes } from "~/shell/_shared/bounded-bytes";
 
 const maximumProviderResponseBytes = 16_384;
 const sandboxOrigin = "https://sandbox.wompi.co";
@@ -115,7 +115,7 @@ export type WompiEnrollmentClientService = Readonly<{
 const responseJson = Effect.fn("Wompi.responseJson")(function* (
   response: HttpClientResponse.HttpClientResponse
 ) {
-  const body = yield* collectBoundedBytes(response.stream, maximumProviderResponseBytes);
+  const body = yield* collectBoundedResponseBytes(response, maximumProviderResponseBytes);
   if (Option.isNone(body)) return yield* Effect.fail("response-too-large" as const);
   const decoded = decodeJson(new TextDecoder().decode(body.value));
   return Result.isSuccess(decoded)

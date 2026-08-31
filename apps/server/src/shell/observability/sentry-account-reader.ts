@@ -1,6 +1,7 @@
 import { TaggedSerializableError, jsonStringSchema } from "~/schema-compatibility";
-import { Config, Effect, Option, Redacted, Schema, Stream } from "effect";
+import { Config, Effect, Option, Redacted, Schema } from "effect";
 import { HttpClient, HttpClientRequest, type HttpClientResponse } from "effect/unstable/http";
+import { collectBoundedResponseBytes } from "~/shell/_shared/bounded-bytes";
 import type {
   SentryAccountObservation,
   SentryProjectObservation,
@@ -75,29 +76,6 @@ const firstSuccessStatus = 200;
 const firstRedirectionStatus = 300;
 const maximumResponseBytes = 65_536;
 
-type ResponseBody = Readonly<{
-  chunks: ReadonlyArray<Uint8Array>;
-  size: number;
-}>;
-
-const appendResponseChunk = (
-  body: ResponseBody,
-  chunk: Uint8Array
-): Effect.Effect<ResponseBody, SentryAccountReadError> =>
-  body.size + chunk.byteLength > maximumResponseBytes
-    ? Effect.fail(SentryAccountReadError.make({ reason: "unexpected-response" }))
-    : Effect.succeed({ chunks: [...body.chunks, chunk], size: body.size + chunk.byteLength });
-
-const decodeResponseBody = (body: ResponseBody): string => {
-  const bytes = new Uint8Array(body.size);
-  let offset = 0;
-  for (const chunk of body.chunks) {
-    bytes.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
-  return new TextDecoder().decode(bytes);
-};
-
 const reasonForStatus = (status: number): SentryAccountReadError["reason"] => {
   switch (status) {
     case unauthorizedStatus:
@@ -142,10 +120,13 @@ const readJson = function <A>(input: {
       (response) => !hasUnboundedNextPage(response.headers["link"] ?? ""),
       () => SentryAccountReadError.make({ reason: "unexpected-response" })
     ),
-    Effect.flatMap((response) =>
-      Stream.runFoldEffect(response.stream, () => ({ chunks: [], size: 0 }), appendResponseChunk)
+    Effect.flatMap((response) => collectBoundedResponseBytes(response, maximumResponseBytes)),
+    Effect.flatMap(
+      Option.match({
+        onNone: () => Effect.fail(SentryAccountReadError.make({ reason: "unexpected-response" })),
+        onSome: (bytes) => Effect.succeed(new TextDecoder().decode(bytes)),
+      })
     ),
-    Effect.map(decodeResponseBody),
     Effect.flatMap(Schema.decodeUnknownEffect(jsonStringSchema(input.schema))),
     Effect.mapError((error) =>
       Schema.is(SentryAccountReadError)(error)

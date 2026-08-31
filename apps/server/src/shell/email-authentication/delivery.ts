@@ -6,7 +6,7 @@ import type {
   EmailProofPurpose,
   EmailVerificationCode,
 } from "~/core/email-authentication/model";
-import { collectBoundedBytes } from "~/shell/_shared/bounded-bytes";
+import { collectBoundedResponseBytes } from "~/shell/_shared/bounded-bytes";
 
 const onboardingSubject = "Verifica tu correo en Fidy";
 const replacementSubject = "Verifica tu nuevo correo en Fidy";
@@ -87,7 +87,7 @@ const decodeBoundedResendResponse = Effect.fn("Resend.decodeBoundedResponse")(fu
   const successful =
     response.status >= successfulStatusMinimum &&
     response.status < successfulStatusMaximumExclusive;
-  const body = yield* collectBoundedBytes(response.stream, maximumResendResponseBytes).pipe(
+  const body = yield* collectBoundedResponseBytes(response, maximumResendResponseBytes).pipe(
     Effect.mapError(
       () =>
         new EmailSendFailed({ certainty: successful ? "ambiguous" : "rejected", retryable: false })

@@ -2,6 +2,7 @@ import { Webhook } from "svix";
 import {
   Config,
   Context,
+  type Crypto,
   Data,
   DateTime,
   Effect,
@@ -157,6 +158,7 @@ export const forwardedEmailIngestion = {
 } as const;
 
 type ForwardedEmailProcessorDependencies =
+  | Crypto.Crypto
   | SqlClient.SqlClient
   | ResendReceivingClient
   | NotificationEmailExtractor;

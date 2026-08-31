@@ -1,5 +1,15 @@
-import { createHash, randomUUID } from "node:crypto";
-import { DateTime, Effect, Layer, Option, Result, Schedule, Schema } from "effect";
+import {
+  Crypto,
+  DateTime,
+  Effect,
+  Encoding,
+  Layer,
+  Option,
+  Result,
+  Schedule,
+  Schema,
+} from "effect";
+import { UnknownJsonString } from "~/schema-compatibility";
 import { InterpretationRevision } from "~/core/_shared/interpretation-revision";
 import type {
   InterpretedStatementRow,
@@ -36,16 +46,18 @@ const valueShape = (value: string): string =>
     .replace(/[\p{L}]+/gu, "A");
 
 /** Fingerprints table structure without retaining account values in the mapping cache key. */
-const formatFingerprint = (parsed: ParsedStatement): string =>
-  createHash("sha256")
-    .update(
-      JSON.stringify({
-        sourceFormat: parsed.sourceFormat,
-        headers: parsed.headers.map((header) => header.trim().toLocaleLowerCase("en-US")),
-        shapes: parsed.sampleRows.map((row) => row.map(valueShape)),
-      })
-    )
-    .digest("hex");
+const formatFingerprint = (parsed: ParsedStatement): Effect.Effect<string, never, Crypto.Crypto> =>
+  Effect.gen(function* () {
+    const crypto = yield* Crypto.Crypto;
+    const encoded = yield* Schema.encodeEffect(UnknownJsonString)({
+      sourceFormat: parsed.sourceFormat,
+      headers: parsed.headers.map((header) => header.trim().toLocaleLowerCase("en-US")),
+      shapes: parsed.sampleRows.map((row) => row.map(valueShape)),
+    }).pipe(Effect.orDie);
+    const bytes = new TextEncoder().encode(encoded);
+    const digest = yield* crypto.digest("SHA-256", bytes).pipe(Effect.orDie);
+    return Encoding.encodeHex(digest);
+  });
 
 const cachedMapping = (
   claimed: ClaimedStatement,
@@ -57,7 +69,7 @@ const mappingFor = Effect.fn("statementMappingFor")(function* (
   claimed: ClaimedStatement,
   parsed: ParsedStatement
 ) {
-  const fingerprint = formatFingerprint(parsed);
+  const fingerprint = yield* formatFingerprint(parsed);
   const cached = yield* cachedMapping(claimed, fingerprint);
   if (Option.isSome(cached)) return { fingerprint, mapping: cached.value };
   const mapper = yield* StatementColumnMapper;
@@ -80,12 +92,13 @@ const captureFailureReview = (
   evidence: outcome.evidence,
 });
 
-const insertReview = (
+const insertReview = Effect.fnUntraced(function* (
   claimed: ClaimedStatement,
   outcome: NeedsReviewStatementRow
-): ReturnType<typeof insertNeedsReviewItemInScope> =>
-  insertNeedsReviewItemInScope({
-    id: NeedsReviewItemId.make(randomUUID()),
+) {
+  const crypto = yield* Crypto.Crypto;
+  return yield* insertNeedsReviewItemInScope({
+    id: NeedsReviewItemId.make(yield* crypto.randomUUIDv4.pipe(Effect.orDie)),
     userId: claimed.userId,
     submissionId: claimed.id,
     outcome,
@@ -98,6 +111,7 @@ const insertReview = (
     parserRevision: claimed.parserRevision,
     extractorRevision: statementExtractorRevision,
   });
+});
 
 const finalizeOutcome = Effect.fn("finalizeStatementOutcome")(function* (
   claimed: ClaimedStatement,

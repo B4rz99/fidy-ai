@@ -1,0 +1,37 @@
+.patterns/streams.md
+  s_36a9ca32f9b8c3::t_d89c66f8fc8bd7 1-82
+AGENTS.md
+  s_36a9ca32f9b8c3::t_707089a9823fce 39-40,48-49,53
+.patterns/http-client.md
+  s_36a9ca32f9b8c3::t_28054cb6d299ad 17-19
+  s_36a9ca32f9b8c3::t_4ff95657b92db0 1-16,20-111
+.patterns/observability.md
+  s_36a9ca32f9b8c3::t_28866e723317d6 1-118
+.patterns/effect-core.md
+  s_36a9ca32f9b8c3::t_dc139e97d42c9d 1-62,71-86
+  s_36a9ca32f9b8c3::t_28054cb6d299ad 63-70
+.patterns/effect-atom.md
+  s_36a9ca32f9b8c3::t_c52801b6e865b7 3-5
+.patterns/layers-runtime.md
+  s_36a9ca32f9b8c3::t_a929e5c7f530ff 109-131
+.patterns/effect-v4-audit.md
+  s_36a9ca32f9b8c3::t_e0e59f1ecc3d8c 144,146-164
+  s_36a9ca32f9b8c3::t_af34d37677323a 1-2,5-143,145,165-179
+  s_36a9ca32f9b8c3::t_a6ffe3b778faf2 3-4
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "3e298d894ea68ae9729ca347da24ee1463607a3e",
+  "prompts": {},
+  "sessions": {
+    "s_36a9ca32f9b8c3": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a059e6-8021-72be-9134-1c989e8bd2bb",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

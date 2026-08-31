@@ -2,7 +2,7 @@
 
 Decision date: 2026-08-31
 
-Scope: issue [#433](https://github.com/B4rz99/fidy-ai/issues/433), refining [#431](https://github.com/B4rz99/fidy-ai/issues/431). The interactive primary source is [`apps/server/src/core/transactions/reconciliation-prototype.html`](../../apps/server/src/core/transactions/reconciliation-prototype.html); open that file directly in a browser. This artifact decides presentation, reversibility, User fact authority, and remembered User decisions. It does not implement production Reconciliation.
+Scope: issue [#433](https://github.com/B4rz99/fidy-ai/issues/433), refining [#431](https://github.com/B4rz99/fidy-ai/issues/431). The interactive primary source is preserved in prototype commit `cdce821db7` at `apps/server/src/core/transactions/reconciliation-prototype.html`; the throwaway HTML is intentionally absent from the retained tree. This artifact decides presentation, reversibility, User fact authority, and remembered User decisions. It does not implement production Reconciliation.
 
 ## Plain-language decision
 

@@ -1,6 +1,5 @@
 import { UnknownJsonString } from "~/schema-compatibility";
-import { createHash, randomUUID } from "node:crypto";
-import { Data, DateTime, Effect, Option, Result, Schema } from "effect";
+import { Crypto, Data, DateTime, Effect, Encoding, Option, Result, Schema } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
 import { InterpretationRevision } from "~/core/_shared/interpretation-revision";
 import {
@@ -71,30 +70,30 @@ type ReviewInput = Readonly<{
   extraction: Option.Option<TransactionExtraction>;
 }>;
 
-const createReview = (input: ReviewInput): Effect.Effect<void, never, SqlClient.SqlClient> =>
-  Effect.flatMap(DateTime.now, (createdAt) =>
-    completeForwardedEmailWithReviewInScope({
-      claimed: input.claimed,
-      reviewId: NeedsReviewItemId.make(randomUUID()),
-      evidence: {
-        _tag: "RawSample",
-        sampleId: input.sampleId,
-        reason: input.reason,
-        extraction: input.extraction,
+const createReview = Effect.fnUntraced(function* (input: ReviewInput) {
+  const crypto = yield* Crypto.Crypto;
+  yield* completeForwardedEmailWithReviewInScope({
+    claimed: input.claimed,
+    reviewId: NeedsReviewItemId.make(yield* crypto.randomUUIDv4.pipe(Effect.orDie)),
+    evidence: {
+      _tag: "RawSample",
+      sampleId: input.sampleId,
+      reason: input.reason,
+      extraction: input.extraction,
+    },
+    extractorRevision: notificationEmailExtractorRevision,
+    issues: [
+      {
+        path: "",
+        message:
+          input.reason === "model-unavailable"
+            ? "The notification email could not be interpreted after bounded model attempts."
+            : "The interpreted email could not be captured as a canonical Transaction.",
       },
-      extractorRevision: notificationEmailExtractorRevision,
-      issues: [
-        {
-          path: "",
-          message:
-            input.reason === "model-unavailable"
-              ? "The notification email could not be interpreted after bounded model attempts."
-              : "The interpreted email could not be captured as a canonical Transaction.",
-        },
-      ],
-      createdAt,
-    })
-  );
+    ],
+    createdAt: yield* DateTime.now,
+  });
+});
 
 const finalizeExtraction = Effect.fn("finalizeNotificationEmailExtraction")(function* (input: {
   claimed: ClaimedForwardedEmail;
@@ -214,22 +213,24 @@ const recoverProviderFailure = Effect.fn("recoverForwardedEmailProviderFailure")
     reason,
     attemptCount: claimed.attemptCount,
   });
-  yield* useCurrentConsentOrDefer(
-    claimed,
+  const recovery =
     decision._tag === "Retry"
       ? retryForwardedEmailClaim(claimed)
-      : completeForwardedEmailWithReviewInScope({
-          claimed,
-          reviewId: NeedsReviewItemId.make(randomUUID()),
-          evidence: {
-            _tag: "ProviderMessage",
-            reason: decision.reviewReason,
-          },
-          extractorRevision: notificationEmailExtractorRevision,
-          issues: [decision.issue],
-          createdAt: yield* DateTime.now,
-        })
-  );
+      : Effect.gen(function* () {
+          const crypto = yield* Crypto.Crypto;
+          yield* completeForwardedEmailWithReviewInScope({
+            claimed,
+            reviewId: NeedsReviewItemId.make(yield* crypto.randomUUIDv4.pipe(Effect.orDie)),
+            evidence: {
+              _tag: "ProviderMessage",
+              reason: decision.reviewReason,
+            },
+            extractorRevision: notificationEmailExtractorRevision,
+            issues: [decision.issue],
+            createdAt: yield* DateTime.now,
+          });
+        });
+  yield* useCurrentConsentOrDefer(claimed, recovery);
 });
 
 const retainReceivedEmail = Effect.fn("retainReceivedEmail")(function* (
@@ -238,8 +239,9 @@ const retainReceivedEmail = Effect.fn("retainReceivedEmail")(function* (
 ) {
   const retainedAt = yield* DateTime.now;
   const retentionDays = yield* emailIngestRetentionDays;
+  const crypto = yield* Crypto.Crypto;
   const sample = RawEmailIngestSample.make({
-    id: IngestSampleId.make(randomUUID()),
+    id: IngestSampleId.make(yield* crypto.randomUUIDv4.pipe(Effect.orDie)),
     receivedEmailId: claimed.receivedEmailId,
     serviceMarket: claimed.serviceMarket,
     locale: claimed.locale,
@@ -252,7 +254,9 @@ const retainReceivedEmail = Effect.fn("retainReceivedEmail")(function* (
     expiresAt: DateTime.add(retainedAt, { days: retentionDays }),
   });
   const encoded = yield* encodeReceivedEmailContent(sample.content);
-  const contentHash = createHash("sha256").update(encoded).digest("hex");
+  const contentHash = Encoding.encodeHex(
+    yield* crypto.digest("SHA-256", new TextEncoder().encode(encoded)).pipe(Effect.orDie)
+  );
   const sampleId = yield* useCurrentConsentOrDefer(
     claimed,
     insertRawEmailSampleInScope({

@@ -1,5 +1,4 @@
-import { randomUUID } from "node:crypto";
-import { Context, DateTime, Effect, Layer, Option, Schema } from "effect";
+import { Context, Crypto, DateTime, Effect, Layer, Option, Schema } from "effect";
 import { SqlSchema } from "effect/unstable/sql";
 import { InterpretationRevision } from "~/core/_shared/interpretation-revision";
 import { AnonymizedEmailIngestSample } from "~/core/ingestion/model";
@@ -33,6 +32,7 @@ const approveAnonymizedEmailSample = Effect.fn("approveAnonymizedEmailSample")(f
   readonly sampleId: IngestSampleId;
   readonly approvedBy: ApprovedOperatorId;
 }) {
+  const crypto = yield* Crypto.Crypto;
   const sql = yield* MigrationSqlClient;
   const approvedAt = yield* DateTime.now;
   return yield* sql.withTransaction(
@@ -55,7 +55,7 @@ const approveAnonymizedEmailSample = Effect.fn("approveAnonymizedEmailSample")(f
             id, service_market, source_format, source_provider, parser_revision,
             anonymization_revision, structure, approved_by, approved_at, retained_at
           ) VALUES (
-            ${IngestSampleId.make(randomUUID())}, ${candidate.value.serviceMarket}, 'notification-email', 'resend',
+            ${IngestSampleId.make(yield* crypto.randomUUIDv4.pipe(Effect.orDie))}, ${candidate.value.serviceMarket}, 'notification-email', 'resend',
             ${candidate.value.parserRevision}, ${candidate.value.anonymizationRevision},
             ${candidate.value.structure}, ${input.approvedBy}, ${approvedAt},
             ${candidate.value.retainedAt}
@@ -67,12 +67,17 @@ const approveAnonymizedEmailSample = Effect.fn("approveAnonymizedEmailSample")(f
 });
 
 const makeForwardedEmailSampleApproval = Effect.gen(function* () {
+  const crypto = yield* Crypto.Crypto;
   const sql = yield* MigrationSqlClient;
   return {
     approve: (input: {
       readonly sampleId: IngestSampleId;
       readonly approvedBy: ApprovedOperatorId;
-    }) => approveAnonymizedEmailSample(input).pipe(Effect.provideService(MigrationSqlClient, sql)),
+    }) =>
+      approveAnonymizedEmailSample(input).pipe(
+        Effect.provideService(Crypto.Crypto, crypto),
+        Effect.provideService(MigrationSqlClient, sql)
+      ),
   } as const;
 });
 

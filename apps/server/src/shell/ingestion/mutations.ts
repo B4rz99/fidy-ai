@@ -1,5 +1,4 @@
-import { createHash, randomBytes, randomUUID } from "node:crypto";
-import { Data, DateTime, Effect, Encoding, Option, Result, Schema } from "effect";
+import { Crypto, Data, DateTime, Effect, Encoding, Option, Result, Schema } from "effect";
 import { InterpretationRevision } from "~/core/_shared/interpretation-revision";
 import { Money } from "~/core/_shared/money";
 import { decideEffectiveAccess } from "~/core/identity/rules";
@@ -54,12 +53,15 @@ export const enableEmailForwardingInScope = Effect.fn("enableEmailForwardingInSc
   userId: UserId
 ) {
   const { ingestDomain } = yield* externalEndpoints.pipe(Effect.orDie);
+  const crypto = yield* Crypto.Crypto;
   const now = yield* DateTime.now;
   const data = yield* enableEmailForwardingAddressInScope({
-    id: EmailForwardingAddressId.make(randomUUID()),
+    id: EmailForwardingAddressId.make(yield* crypto.randomUUIDv4.pipe(Effect.orDie)),
     userId,
     localPart: EmailForwardingLocalPart.make(
-      randomBytes(forwardingAddressEntropyBytes).toString("base64url").toLocaleLowerCase("en-US")
+      Encoding.encodeBase64Url(
+        yield* crypto.randomBytes(forwardingAddressEntropyBytes).pipe(Effect.orDie)
+      ).toLocaleLowerCase("en-US")
     ),
     domain: ingestDomain,
     createdAt: now,
@@ -205,7 +207,10 @@ export const submitForExtractionInScope = Effect.fn("submitForExtractionInScope"
     readonly payload: SubmitForExtractionInput;
   }) {
     const bytes = yield* decodedBytes(input.payload.file.contentBase64);
-    const contentHash = createHash("sha256").update(bytes).digest("hex");
+    const crypto = yield* Crypto.Crypto;
+    const contentHash = Encoding.encodeHex(
+      yield* crypto.digest("SHA-256", bytes).pipe(Effect.orDie)
+    );
     const freeGrantConsumed = yield* lockStatementBackfillInScope(input.userId);
     const existing = yield* findSubmissionByIdempotencyKeyInScope(
       input.userId,
@@ -231,7 +236,7 @@ export const submitForExtractionInScope = Effect.fn("submitForExtractionInScope"
     if (access === "free" && freeGrantConsumed) return yield* paywall(input.caller);
 
     const sourceFormat = statementSourceFormat(bytes);
-    const submissionId = StatementSubmissionId.make(randomUUID());
+    const submissionId = StatementSubmissionId.make(yield* crypto.randomUUIDv4.pipe(Effect.orDie));
     const submission = yield* insertSubmissionInScope({
       id: submissionId,
       userId: input.userId,

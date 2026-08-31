@@ -9,7 +9,7 @@ import {
 import { checkTransactionPeriod } from "~/core/transactions/rules";
 import type { SuggestedOperationCaller } from "~/shell/_shared/suggested-operations";
 import { mapTransactionFailure, mapTransactionValidationFailure } from "./errors";
-import { findTransaction, selectSourceAttestations, selectTransactions } from "./repo";
+import { findTransactionPresentation, selectSourceAttestations, selectTransactions } from "./reads";
 
 const missingTransaction = (transactionId: TransactionId) => (): TransactionNotFound =>
   new TransactionNotFound({ transactionId });
@@ -55,11 +55,11 @@ export const getTransaction = Effect.fn("getTransaction")(function* ({
   transactionId,
   caller,
 }: GetTransactionInput) {
-  const data = yield* findTransaction(userId, transactionId).pipe(
+  const presentation = yield* findTransactionPresentation(userId, transactionId).pipe(
     Effect.flatMap(Effect.fromOption(missingTransaction(transactionId))),
     mapTransactionFailure({ caller })
   );
-  return { data, next: [] };
+  return { data: presentation.transaction, next: [] };
 });
 
 export type ListSourceAttestationsInput = Readonly<{

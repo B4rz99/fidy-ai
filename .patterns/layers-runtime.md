@@ -106,6 +106,29 @@ Memoization facts (`Layer.ts:380-446`, `migration/layer-memoization.md`):
 - `ManagedRuntime`s do **not** share memoization unless you pass the same
   `memoMap: Layer.makeMemoMapUnsafe()` to each (`ai-docs/.../04_integration/10_managed-runtime.ts:60-69`).
 
+## Refreshable layer resources (`LayerRef`)
+
+RC.112 adds stable `LayerRef`: a reference-counted, refreshable cache for one layer-built service
+context (`LayerRef.ts:1-65`). `LayerRef.make(layer, { idleTimeToLive?, preload?,
+invalidationSchedule? })` lazily builds once, shares while borrowed, optionally retains the context
+while idle, and exposes:
+
+- `get` — a Layer providing the current context;
+- `contextEffect` — scoped direct access;
+- `invalidate` — mark the current context stale; the next borrower rebuilds;
+- `refresh` — invalidate and immediately reacquire (`LayerRef.ts:74-191`).
+
+`LayerRef.Service<Self>()("id", { layer, ... })` packages that mechanism as a service with static
+`layer`, `layerNoDeps`, `get`, `contextEffect`, `invalidate`, and `refresh`
+(`LayerRef.ts:196-326`). This is v4's replacement direction for the removed `Reloadable`
+(`migration/v3-to-v4.md:12722-12742`).
+
+Use it only for a genuinely refreshable scoped resource such as rotated provider configuration or a
+rebuildable client. It is not application state, a request cache, or a way to hot-swap domain rules.
+Invalidation does **not** revoke a context already borrowed by an active Scope; that borrower keeps
+using it until its Scope closes (`LayerRef.ts:74-131`). If immediate credential revocation is a
+security requirement, enforce revocation at use time rather than relying on LayerRef invalidation.
+
 ## Runtime assembly on Bun — the canonical main
 
 `BunRuntime.runMain` is literally `NodeRuntime.runMain` from `platform-node-shared`

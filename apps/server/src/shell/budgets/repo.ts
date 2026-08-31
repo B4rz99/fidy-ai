@@ -1,7 +1,7 @@
-import { DateTime, Effect, Option, Schema } from "effect";
+import { BigDecimal, DateTime, Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import { IanaTimeZone } from "~/core/_shared/context";
-import { Money, encodeMoneyAmount } from "~/core/_shared/money";
+import { type Currency, Money, encodeMoneyAmount } from "~/core/_shared/money";
 import {
   type AppliedBudgetMonth,
   Budget,
@@ -14,6 +14,10 @@ import { calculateBudgetStatus } from "~/core/budgets/rules";
 import { CategoryId } from "~/core/categories/reference";
 import { UserId } from "~/core/identity/reference";
 import { withUserTransaction } from "~/shell/db/user-transaction";
+import {
+  type BudgetContributionFact,
+  selectBudgetContributionsInScope,
+} from "~/shell/transactions/reads";
 
 const BudgetFlatRow = Schema.Struct({
   id: Schema.toEncoded(Budget.fields.id),
@@ -183,21 +187,19 @@ export const initializeBudgetMonthLatchInScope = Effect.fn("initializeBudgetMont
   }
 );
 
-const BudgetStatusFlatRow = Schema.Struct({
-  ...BudgetFlatRow.fields,
-  spentAmount: Money.fields.amount,
-});
+const contributionKey = (fact: Readonly<{ categoryId: CategoryId; currency: Currency }>): string =>
+  `${fact.categoryId}:${fact.currency}`;
 
-const statusFromRow = Effect.fn("statusFromRow")(function* (
-  row: typeof BudgetStatusFlatRow.Type,
+const statusFromBudget = Effect.fn("statusFromBudget")(function* (
+  budget: Budget,
+  contribution: Option.Option<BudgetContributionFact>,
   period: AppliedBudgetMonth
 ) {
-  const budget = yield* budgetFromRow(row);
-  return yield* calculateBudgetStatus({
-    budget,
-    spent: Money.make({ amount: row.spentAmount, currency: row.capCurrency }),
-    period,
-  }).pipe(Effect.orDie);
+  const spent = Option.match(contribution, {
+    onNone: () => Money.make({ amount: BigDecimal.make(0n, 0), currency: budget.cap.currency }),
+    onSome: (fact) => fact.spent,
+  });
+  return yield* calculateBudgetStatus({ budget, spent, period }).pipe(Effect.orDie);
 });
 
 /** Loads filtered monthly status inside the caller's User-scoped transaction. */
@@ -207,36 +209,43 @@ export const selectBudgetStatusesInScope = Effect.fn("selectBudgetStatusesInScop
   period: AppliedBudgetMonth
 ) {
   const sql = yield* SqlClient.SqlClient;
-  const conditions = [sql`budget.user_id = ${userId}`];
+  const conditions = [sql`user_id = ${userId}`];
   if (Option.isSome(query.categoryId)) {
-    conditions.push(sql`budget.category_id = ${query.categoryId.value}`);
+    conditions.push(sql`category_id = ${query.categoryId.value}`);
   }
   if (Option.isSome(query.currency)) {
-    conditions.push(sql`budget.cap_currency = ${query.currency.value}`);
+    conditions.push(sql`cap_currency = ${query.currency.value}`);
   }
   const rows = yield* SqlSchema.findAll({
     Request: Schema.Void,
-    Result: BudgetStatusFlatRow,
+    Result: BudgetFlatRow,
     execute: () => sql`
-      SELECT budget.id, budget.category_id AS "categoryId",
-        budget.cap_amount AS "capAmount", budget.cap_currency AS "capCurrency",
-        budget.created_at AS "createdAt", budget.updated_at AS "updatedAt",
-        COALESCE(SUM(transaction.amount), 0) AS "spentAmount"
-      FROM budgets budget
-      LEFT JOIN transactions transaction
-        ON transaction.user_id = budget.user_id
-        AND transaction.category_id = budget.category_id
-        AND transaction.currency = budget.cap_currency
-        AND transaction.direction = 'outflow'
-        AND transaction.deleted_at IS NULL
-        AND transaction.occurred_at >= ${period.from}
-        AND transaction.occurred_at < ${period.to}
+      SELECT ${sql.literal(budgetColumns)} FROM budgets
       WHERE ${sql.and(conditions)}
-      GROUP BY budget.id
-      ORDER BY budget.cap_currency, budget.category_id, budget.id
+      ORDER BY cap_currency, category_id, id
     `,
   })(undefined).pipe(Effect.orDie);
-  return yield* Effect.forEach(rows, (row) => statusFromRow(row, period)).pipe(Effect.orDie);
+  const budgets = yield* Effect.forEach(rows, budgetFromRow).pipe(Effect.orDie);
+  const contributions = yield* selectBudgetContributionsInScope(userId, {
+    from: period.from,
+    to: period.to,
+    scopes: budgets.map((budget) => ({
+      categoryId: budget.categoryId,
+      currency: budget.cap.currency,
+    })),
+  });
+  const contributionByScope = new Map(contributions.map((fact) => [contributionKey(fact), fact]));
+  return yield* Effect.forEach(budgets, (budget) =>
+    statusFromBudget(
+      budget,
+      Option.fromUndefinedOr(
+        contributionByScope.get(
+          contributionKey({ categoryId: budget.categoryId, currency: budget.cap.currency })
+        )
+      ),
+      period
+    )
+  );
 });
 
 /** Loads filtered monthly status under an independently established User transaction. */

@@ -30,7 +30,7 @@ import {
   selectDashboardTransactionMetricsInScope,
   selectDashboardTransactionSumsInScope,
   selectDashboardTransactionsInScope,
-} from "~/shell/transactions/repo";
+} from "~/shell/transactions/reads";
 import { loadOrCreateDashboard } from "./mutations";
 import { DashboardView, type DashboardWidgetView } from "./operations";
 import { withDashboardLockInScope } from "./repo";

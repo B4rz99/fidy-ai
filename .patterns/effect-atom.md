@@ -1,6 +1,8 @@
 # Effect Atom
 
-How Effect Atom works in Effect v4, read from the checked-out `effect@4.0.0-beta.98` source and its matching `@effect/atom-react` adapter. Citations are relative to `.repos/effect/`.
+How Effect Atom works in Effect v4, rechecked against the matching checked-out
+`effect@4.0.0-rc.112` and `@effect/atom-react@4.0.0-rc.112` sources. Citations are relative to
+`.repos/effect/`.
 
 ## Responsibility and boundaries
 

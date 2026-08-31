@@ -22,8 +22,8 @@ import { defaultPatBearer } from "~/shell/testing/identity-fixtures";
 import {
   dashboardListStatement,
   dashboardMetricStatement,
-  selectDashboardTransactionSumsInScope,
-} from "~/shell/transactions/repo";
+} from "~/shell/transactions/read-statements";
+import { selectDashboardTransactionSumsInScope } from "~/shell/transactions/reads";
 import { ApiHarness, ApiHarnessClient, headersFor } from "~/shell/testing/api-harness";
 import { truncateDashboards } from "./fixtures";
 import { applyDashboardEdit } from "./mutations";

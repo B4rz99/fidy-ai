@@ -2,6 +2,7 @@ import { Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import type { CapturedInterpretationContext } from "~/core/_shared/captured-interpretation-context";
 import { InterpretationRevision } from "~/core/_shared/interpretation-revision";
+import { TransactionUserDecisions } from "~/core/transactions/user-decisions";
 import { Money } from "~/core/_shared/money";
 import { CategoryId } from "~/core/categories/reference";
 import { UserId } from "~/core/identity/reference";
@@ -32,39 +33,51 @@ const TransactionWriteRow = Schema.Struct({
   categoryId: CategoryId,
   notes: Schema.OptionFromNullOr(Schema.String),
   occurredAt: Schema.DateTimeUtc,
+  categoryUserDecided: TransactionUserDecisions.fields.category,
+  counterpartyUserDecided: TransactionUserDecisions.fields.counterparty,
+  notesUserDecided: TransactionUserDecisions.fields.notes,
 });
 
-const writeRow = (
-  userId: UserId,
-  input: UpdateTransactionInput
-): typeof TransactionWriteRow.Type => ({
+/** Normalized Transaction facts paired with private User-decision bookkeeping. */
+export type TransactionWrite = Readonly<{
+  facts: UpdateTransactionInput;
+  userDecisions: TransactionUserDecisions;
+}>;
+
+const writeRow = (userId: UserId, write: TransactionWrite): typeof TransactionWriteRow.Type => ({
   userId,
-  ...input.money,
-  counterparty: input.counterparty,
-  direction: input.direction,
-  categoryId: input.categoryId,
-  notes: input.notes,
-  occurredAt: input.occurredAt,
+  ...write.facts.money,
+  counterparty: write.facts.counterparty,
+  direction: write.facts.direction,
+  categoryId: write.facts.categoryId,
+  notes: write.facts.notes,
+  occurredAt: write.facts.occurredAt,
+  categoryUserDecided: write.userDecisions.category,
+  counterpartyUserDecided: write.userDecisions.counterparty,
+  notesUserDecided: write.userDecisions.notes,
 });
 
 /** Inserts one valid normalized Transaction inside the caller's User-scoped transaction. */
 export const insertTransactionInScope = Effect.fn("insertTransactionInScope")(function* (
   userId: UserId,
-  input: UpdateTransactionInput
+  write: TransactionWrite
 ) {
   const sql = yield* SqlClient.SqlClient;
   return yield* SqlSchema.findOne({
     Request: TransactionWriteRow,
     Result: TransactionFlatRow,
     execute: (row) => sql`
-      INSERT INTO transactions
-        (user_id, amount, currency, counterparty, direction, category_id, notes, occurred_at)
-      VALUES
-        (${row.userId}, ${row.amount}, ${row.currency}, ${row.counterparty}, ${row.direction},
-         ${row.categoryId}, ${row.notes}, ${row.occurredAt})
+      INSERT INTO transactions (
+        user_id, amount, currency, counterparty, direction, category_id, notes, occurred_at,
+        category_user_decided, counterparty_user_decided, notes_user_decided
+      ) VALUES (
+        ${row.userId}, ${row.amount}, ${row.currency}, ${row.counterparty}, ${row.direction},
+        ${row.categoryId}, ${row.notes}, ${row.occurredAt}, ${row.categoryUserDecided},
+        ${row.counterpartyUserDecided}, ${row.notesUserDecided}
+      )
       RETURNING ${sql.literal(transactionColumns)}
     `,
-  })(writeRow(userId, input)).pipe(Effect.flatMap(transactionFromRow), Effect.orDie);
+  })(writeRow(userId, write)).pipe(Effect.flatMap(transactionFromRow), Effect.orDie);
 });
 
 /**
@@ -76,7 +89,7 @@ export const insertTransactionInScope = Effect.fn("insertTransactionInScope")(fu
 export const updateTransactionInScope = Effect.fn("updateTransactionInScope")(function* (
   userId: UserId,
   transactionId: TransactionId,
-  input: UpdateTransactionInput
+  write: TransactionWrite
 ) {
   const sql = yield* SqlClient.SqlClient;
   return yield* SqlSchema.findOneOption({
@@ -86,11 +99,14 @@ export const updateTransactionInScope = Effect.fn("updateTransactionInScope")(fu
       UPDATE transactions SET
         amount = ${row.amount}, currency = ${row.currency}, counterparty = ${row.counterparty},
         direction = ${row.direction}, category_id = ${row.categoryId}, notes = ${row.notes},
-        occurred_at = ${row.occurredAt}
+        occurred_at = ${row.occurredAt},
+        category_user_decided = ${row.categoryUserDecided},
+        counterparty_user_decided = ${row.counterpartyUserDecided},
+        notes_user_decided = ${row.notesUserDecided}
       WHERE id = ${row.transactionId} AND user_id = ${row.userId} AND deleted_at IS NULL
       RETURNING ${sql.literal(transactionColumns)}
     `,
-  })({ ...writeRow(userId, input), transactionId }).pipe(
+  })({ ...writeRow(userId, write), transactionId }).pipe(
     Effect.flatMap(
       Option.match({
         onNone: () => Effect.succeed(Option.none()),

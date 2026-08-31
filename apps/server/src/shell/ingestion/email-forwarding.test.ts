@@ -407,6 +407,9 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
             receiptStatus: Schema.String,
             reviewReason: Schema.NullOr(Schema.String),
             transactionId: Schema.NullOr(Schema.String),
+            categoryUserDecided: Schema.NullOr(Schema.Boolean),
+            counterpartyUserDecided: Schema.NullOr(Schema.Boolean),
+            notesUserDecided: Schema.NullOr(Schema.Boolean),
           }),
           sql`
           SELECT
@@ -415,9 +418,13 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
               AS "attestationCount",
             receipt.status AS "receiptStatus",
             review.reason AS "reviewReason",
-            receipt.transaction_id::text AS "transactionId"
+            receipt.transaction_id::text AS "transactionId",
+            transaction.category_user_decided AS "categoryUserDecided",
+            transaction.counterparty_user_decided AS "counterpartyUserDecided",
+            transaction.notes_user_decided AS "notesUserDecided"
           FROM forwarded_email_receipts AS receipt
           LEFT JOIN email_needs_review_items AS review ON review.id = receipt.review_item_id
+          LEFT JOIN transactions AS transaction ON transaction.id = receipt.transaction_id
           WHERE receipt.received_email_id = 'email_success_1'
         `
         );
@@ -425,6 +432,9 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         expect(captured.receiptStatus).toBe("completed");
         expect(captured.reviewReason).toBeNull();
         expect(typeof captured.transactionId).toBe("string");
+        expect(captured.categoryUserDecided).toBe(false);
+        expect(captured.counterpartyUserDecided).toBe(false);
+        expect(captured.notesUserDecided).toBe(false);
 
         const rawSample = yield* getTestRow(
           sql,

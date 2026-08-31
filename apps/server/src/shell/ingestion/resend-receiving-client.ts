@@ -21,7 +21,7 @@ import {
 } from "~/core/ingestion/email-policy";
 import { ReceivedEmailContent, ReceivedInlineImage } from "~/core/ingestion/model";
 import { ResendReceivedEmailId } from "~/core/ingestion/reference";
-import { collectBoundedBytes } from "~/shell/_shared/bounded-bytes";
+import { collectBoundedResponseBytes } from "~/shell/_shared/bounded-bytes";
 
 /** Closed bounded failure set exposed by direct Resend retrieval. */
 export class ResendReceivingFailed extends Data.TaggedError("ResendReceivingFailed")<{
@@ -115,7 +115,7 @@ const parseJsonResponse = Effect.fn("Resend.parseReceivingResponse")(function* <
       reason: providerHttpFailureReason(response.status),
     });
   }
-  const body = yield* collectBoundedBytes(response.stream, maximumBytes).pipe(
+  const body = yield* collectBoundedResponseBytes(response, maximumBytes).pipe(
     Effect.mapError(() => new ResendReceivingFailed({ reason: "resource-limit" }))
   );
   if (Option.isNone(body)) {
@@ -212,9 +212,10 @@ const retrieveInlineImage = Effect.fn("Resend.retrieveInlineImage")(function* (i
       reason: providerHttpFailureReason(imageResponse.status),
     });
   }
-  const bytes = yield* collectBoundedBytes(imageResponse.stream, maximumEmailInlineImageBytes).pipe(
-    Effect.mapError(() => new ResendReceivingFailed({ reason: "resource-limit" }))
-  );
+  const bytes = yield* collectBoundedResponseBytes(
+    imageResponse,
+    maximumEmailInlineImageBytes
+  ).pipe(Effect.mapError(() => new ResendReceivingFailed({ reason: "resource-limit" })));
   if (Option.isNone(bytes)) return yield* new ResendReceivingFailed({ reason: "resource-limit" });
   if (!(yield* hasSafeDeclaredImage(input.attachment.content_type, bytes.value))) {
     return yield* new ResendReceivingFailed({ reason: "invalid-provider-response" });

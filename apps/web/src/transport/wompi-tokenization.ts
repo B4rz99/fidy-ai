@@ -38,6 +38,16 @@ const cancelReader = (reader: ReadableStreamDefaultReader<Uint8Array>): Effect.E
     catch: () => new CardTokenizationFailed(),
   }).pipe(Effect.ignore);
 
+const decodeChunks = (chunks: ReadonlyArray<Uint8Array>, byteLength: number): string => {
+  const bytes = new Uint8Array(byteLength);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return new TextDecoder().decode(bytes);
+};
+
 const readBoundedResponse = (response: Response): Effect.Effect<string, CardTokenizationFailed> =>
   Effect.callback<string, CardTokenizationFailed>((resume) => {
     if (response.body === null) {
@@ -45,36 +55,50 @@ const readBoundedResponse = (response: Response): Effect.Effect<string, CardToke
       return;
     }
     const reader = response.body.getReader();
-    const chunks: Uint8Array[] = [];
+    const chunks: Array<Uint8Array> = [];
     let total = 0;
-    const readNext = (): void => {
-      reader.read().then(
-        (next) => {
+    let settled = false;
+    const releaseReader = (): void => {
+      try {
+        reader.releaseLock();
+      } catch {
+        // Cancellation may still own the reader until its promise settles.
+      }
+    };
+    const cancelAndRelease = (): void => {
+      reader.cancel().then(releaseReader, releaseReader);
+    };
+    const fail = (): void => {
+      if (settled) return;
+      settled = true;
+      cancelAndRelease();
+      resume(Effect.fail(new CardTokenizationFailed()));
+    };
+    const declaredLength = Number(response.headers.get("content-length") ?? 0);
+    if (declaredLength > maximumResponseBytes) {
+      fail();
+    } else {
+      const readNext = (): void => {
+        reader.read().then((next) => {
           if (next.done) {
-            const bytes = new Uint8Array(total);
-            let offset = 0;
-            for (const chunk of chunks) {
-              bytes.set(chunk, offset);
-              offset += chunk.byteLength;
-            }
-            resume(Effect.succeed(new TextDecoder().decode(bytes)));
+            if (settled) return;
+            settled = true;
+            releaseReader();
+            resume(Effect.succeed(decodeChunks(chunks, total)));
             return;
           }
           total += next.value.byteLength;
           if (total > maximumResponseBytes) {
-            resume(
-              cancelReader(reader).pipe(Effect.andThen(Effect.fail(new CardTokenizationFailed())))
-            );
+            fail();
             return;
           }
           chunks.push(next.value);
           readNext();
-        },
-        () => resume(Effect.fail(new CardTokenizationFailed()))
-      );
-    };
-    readNext();
-    return cancelReader(reader);
+        }, fail);
+      };
+      readNext();
+    }
+    return cancelReader(reader).pipe(Effect.ensuring(Effect.sync(releaseReader)));
   });
 
 const wompiOrigin = (publicKey: string): Effect.Effect<string, CardTokenizationFailed> => {

@@ -364,6 +364,21 @@ it.effect("returns typed structured failures without retaining hostile model tex
   })
 );
 
+it.effect("bounds ordinary provider responses before decoding", () =>
+  Effect.gen(function* () {
+    const transport = yield* makeTransport(100, "small", { "content-length": "1000001" });
+    const inference = yield* buildInference(transport.layer);
+    const prepared = yield* inference.prepareText(textRequest());
+
+    const failure = yield* prepared.execute.pipe(Effect.flip);
+
+    expect(failure.reason).toEqual({
+      _tag: "InvalidOutput",
+      description: "Hosted provider response was invalid",
+    });
+  })
+);
+
 it.effect("bounds structured provider responses before decoding", () =>
   Effect.gen(function* () {
     for (const transport of [

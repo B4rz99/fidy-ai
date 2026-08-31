@@ -1,16 +1,5 @@
 import { UnknownJsonString } from "~/schema-compatibility";
-import {
-  Config,
-  Context,
-  Data,
-  DateTime,
-  Effect,
-  Layer,
-  Option,
-  Redacted,
-  Schema,
-  Stream,
-} from "effect";
+import { Config, Context, Data, DateTime, Effect, Layer, Option, Redacted, Schema } from "effect";
 import {
   HttpBody,
   HttpClient,
@@ -34,7 +23,7 @@ import {
   unauthorizedStatus,
 } from "~/shell/_shared/http-status";
 import { TelemetryHttpStatus } from "~/shell/observability/protocol";
-import { makeBoundedBytes } from "./bounded-bytes";
+import { collectBoundedResponseBytes } from "~/shell/_shared/bounded-bytes";
 import {
   type WhatsAppBusinessPhoneNumberId,
   type WhatsAppInboundEvent,
@@ -145,21 +134,14 @@ const readKapsoResponse = (
   const deliveryCertainty = isSuccessfulStatus(response.status) ? "ambiguous" : "rejected";
   const invalidResponse = (): KapsoInvalidResponse =>
     invalidKapsoResponse(responseStatus, deliveryCertainty);
-  const declaredLength = Number(response.headers["content-length"] ?? 0);
-  if (declaredLength > maximumKapsoResponseBytes) {
-    return Stream.runDrain(Stream.take(response.stream, 1)).pipe(
-      Effect.andThen(Effect.fail(invalidResponse())),
-      Effect.mapError(() => invalidResponse())
-    );
-  }
-
-  return Stream.runFoldEffect(
-    response.stream,
-    () => makeBoundedBytes(maximumKapsoResponseBytes),
-    (bytes, chunk) => (bytes.append(chunk) ? Effect.succeed(bytes) : Effect.fail(invalidResponse()))
-  ).pipe(
-    Effect.mapError((error) => (error instanceof KapsoInvalidResponse ? error : invalidResponse())),
-    Effect.map((bytes) => new TextDecoder().decode(bytes.materialize()))
+  return collectBoundedResponseBytes(response, maximumKapsoResponseBytes).pipe(
+    Effect.mapError(() => invalidResponse()),
+    Effect.flatMap(
+      Option.match({
+        onNone: () => Effect.fail(invalidResponse()),
+        onSome: (bytes) => Effect.succeed(new TextDecoder().decode(bytes)),
+      })
+    )
   );
 };
 

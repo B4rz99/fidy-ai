@@ -154,6 +154,10 @@ layer(
 for (const [label, response] of [
   ["provider refusal", new Response("not found", { status: 404 })],
   ["malformed provider projection", new Response('{"data":{"id":3891}}', { status: 200 })],
+  [
+    "oversized provider projection",
+    new Response("x", { status: 200, headers: { "content-length": "16385" } }),
+  ],
 ] as const) {
   layer(clientLayer(response), { excludeTestServices: true })(
     `Wompi source verification ${label}`,

@@ -1,0 +1,43 @@
+apps/web/src/features/pats/view.tsx
+  s_062eb90f81232e::t_00c6760fd6e571 17,75-87
+apps/web/src/features/subscription/feature.test.tsx
+  s_062eb90f81232e::t_00c6760fd6e571 297
+apps/web/src/transport/wompi-tokenization.test.ts
+  s_062eb90f81232e::t_00c6760fd6e571 1,75-94
+  s_062eb90f81232e::t_1f7bbdac7df585 95
+apps/web/src/features/pats/feature.tsx
+  s_062eb90f81232e::t_00c6760fd6e571 3,6,106,108-110,119
+apps/web/src/features/recovery/feature.test.tsx
+  s_062eb90f81232e::t_8b3c430034843b 52-53
+  s_062eb90f81232e::t_00c6760fd6e571 12,30-31,42-51
+apps/web/src/features/recovery/feature.tsx
+  s_062eb90f81232e::t_00c6760fd6e571 3,6,33,97,132-138
+apps/web/src/features/subscription/feature.tsx
+  s_062eb90f81232e::t_00c6760fd6e571 3,450-451,484-489
+apps/web/src/features/subscription/enrollment-gateway.ts
+  s_062eb90f81232e::t_00c6760fd6e571 1,12-14,65-73
+apps/web/src/browser/clipboard.ts
+  s_062eb90f81232e::t_6cdcad63f5c48d 1,23,27-31,39-40
+  s_062eb90f81232e::t_34b2caa51d0f08 24-26
+  s_062eb90f81232e::t_00c6760fd6e571 2-22,32-38
+apps/web/src/browser/clipboard.test.ts
+  s_062eb90f81232e::t_00c6760fd6e571 1-28
+apps/web/src/transport/wompi-tokenization.ts
+  s_062eb90f81232e::t_00c6760fd6e571 35-40,65-67,77
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "7b3430924bd111222f22224f5343b98394a9377d",
+  "prompts": {},
+  "sessions": {
+    "s_062eb90f81232e": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a05a17-074b-7a1d-8991-5c6ddceef21e",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": null
+    }
+  }
+}

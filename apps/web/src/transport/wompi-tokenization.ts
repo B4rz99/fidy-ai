@@ -65,13 +65,13 @@ const readBoundedResponse = (response: Response): Effect.Effect<string, CardToke
         // Cancellation may still own the reader until its promise settles.
       }
     };
-    const cancelReader = (): void => {
+    const cancelAndRelease = (): void => {
       reader.cancel().then(releaseReader, releaseReader);
     };
     const fail = (): void => {
       if (settled) return;
       settled = true;
-      cancelReader();
+      cancelAndRelease();
       resume(Effect.fail(new CardTokenizationFailed()));
     };
     const declaredLength = Number(response.headers.get("content-length") ?? 0);

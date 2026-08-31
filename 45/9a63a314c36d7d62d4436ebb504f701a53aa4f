@@ -1,0 +1,19 @@
+apps/web/src/transport/wompi-tokenization.ts
+  s_4038b15ee409c8::t_daf35a1dc9b6f1 68,74
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "459a63a314c36d7d62d4436ebb504f701a53aa4f",
+  "prompts": {},
+  "sessions": {
+    "s_4038b15ee409c8": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a05a18-0868-7e18-886f-c95f746bb5fc",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

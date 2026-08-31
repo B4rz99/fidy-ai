@@ -24,6 +24,7 @@ import {
 } from "~/shell/_shared/http-status";
 import { TelemetryHttpStatus } from "~/shell/observability/protocol";
 import { collectBoundedResponseBytes } from "~/shell/_shared/bounded-bytes";
+import { makeExternalHttpClient } from "~/shell/_shared/external-http-policy";
 import {
   type WhatsAppBusinessPhoneNumberId,
   type WhatsAppInboundEvent,
@@ -258,11 +259,12 @@ export const makeKapsoClientService = ({
   deliveryMode: KapsoDeliveryMode;
   httpClient: HttpClient.HttpClient;
 }>): KapsoClientService => {
+  const externalHttpClient = httpClient.pipe(makeExternalHttpClient("kapso"));
   const postMessage = (
     input: KapsoSendInput,
     body: string
   ): Effect.Effect<HttpClientResponse.HttpClientResponse, KapsoSendFailed> =>
-    httpClient
+    externalHttpClient
       .execute(
         HttpClientRequest.post(
           `https://api.kapso.ai/meta/whatsapp/v24.0/${input.businessPhoneNumberId}/messages`,
@@ -272,10 +274,7 @@ export const makeKapsoClientService = ({
           }
         )
       )
-      .pipe(
-        Effect.provideService(HttpClient.TracerPropagationEnabled, false),
-        Effect.mapError(() => ambiguous("provider_unavailable"))
-      );
+      .pipe(Effect.mapError(() => ambiguous("provider_unavailable")));
   const sendText = Effect.fn("Kapso.sendText")(function* (input: KapsoSendInput) {
     const address = yield* resolveRecipientAddress(deliveryMode, input.destination);
     const body = yield* encodeTextMessage(address, input.text, input.opaqueCallbackData);

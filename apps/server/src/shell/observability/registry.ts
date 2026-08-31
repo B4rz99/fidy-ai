@@ -97,7 +97,7 @@ export const TelemetryRegistry = {
     "pairing_invalid",
     "capacity_exceeded",
   ],
-  provider: ["kapso", "openai", "resend", "wompi"],
+  provider: ["cloudflare-access", "kapso", "openai", "resend", "sentry", "wompi"],
   workKind: [
     ...TelemetryWorkKindGroup.http,
     ...TelemetryWorkKindGroup.queue,

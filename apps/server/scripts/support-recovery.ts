@@ -3,6 +3,7 @@ import { BunHttpClient, BunRuntime } from "@effect/platform-bun";
 import { Data, Effect, Option, Schema } from "effect";
 import { HttpBody, HttpClient, HttpClientRequest } from "effect/unstable/http";
 import { collectBoundedResponseBytes } from "~/shell/_shared/bounded-bytes";
+import { makeExternalHttpClient } from "~/shell/_shared/external-http-policy";
 
 const supportUrl = "https://api.fidyapp.com/internal/support-recovery";
 const maximumPairingCharacters = 16;
@@ -171,7 +172,7 @@ const callSupportRecovery = Effect.fn("SupportRecoveryCli.callTransport")(functi
   accessToken: string,
   input: Effect.Success<ReturnType<typeof readRecoveryInput>>
 ) {
-  const client = yield* HttpClient.HttpClient;
+  const client = (yield* HttpClient.HttpClient).pipe(makeExternalHttpClient("cloudflare-access"));
   const response = yield* client
     .execute(
       HttpClientRequest.post(supportUrl, {

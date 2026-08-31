@@ -28,9 +28,30 @@ export const TelemetryHttpStatus = Schema.Int.check(
 ).pipe(Schema.brand("TelemetryHttpStatus"));
 export type TelemetryHttpStatus = typeof TelemetryHttpStatus.Type;
 
+/** Low-cardinality class of a validated provider HTTP response status. */
+export const TelemetryHttpStatusClass = Schema.Literals(["1xx", "2xx", "3xx", "4xx", "5xx"]);
+export type TelemetryHttpStatusClass = typeof TelemetryHttpStatusClass.Type;
+
+/** Closed transport outcomes emitted by protected external HTTP spans. */
+export const TelemetryTransportOutcome = Schema.Literals(["response", "failure", "interrupted"]);
+export type TelemetryTransportOutcome = typeof TelemetryTransportOutcome.Type;
+
 /** HTTP methods admitted by the assembled canonical API. */
 export const TelemetryHttpMethod = Schema.Literals(["GET", "POST", "PUT", "PATCH", "DELETE"]);
 export type TelemetryHttpMethod = typeof TelemetryHttpMethod.Type;
+
+/** Closed HTTP method vocabulary admitted for external provider requests. */
+export const TelemetryExternalHttpMethod = Schema.Literals([
+  "GET",
+  "POST",
+  "PUT",
+  "PATCH",
+  "DELETE",
+  "HEAD",
+  "OPTIONS",
+  "TRACE",
+]);
+export type TelemetryExternalHttpMethod = typeof TelemetryExternalHttpMethod.Type;
 
 const NoSpanMetadata = Schema.TaggedStruct("None", {});
 const HttpSpanMetadata = Schema.TaggedStruct("Http", {

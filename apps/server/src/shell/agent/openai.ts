@@ -15,6 +15,7 @@ import { Tiktoken } from "js-tiktoken/lite";
 import o200kBase from "js-tiktoken/ranks/o200k_base";
 import type { ConfigError } from "effect/Config";
 import { IanaTimeZone } from "~/core/_shared/context";
+import { externalHttpClientLayer } from "~/shell/_shared/external-http-policy";
 import { maximumAggregateMemoryTokens } from "~/core/memory/rules";
 import {
   defaultCompactionMaximumTokens,
@@ -103,7 +104,7 @@ export const withHostedToolCallCap = (maximum: HostedToolCallMaximum): HostedToo
 const OpenAiClientLive = OpenAiClient.layerConfig({
   apiKey: Config.redacted("OPENAI_API_KEY"),
   apiUrl: Config.string("OPENAI_API_URL").pipe(Config.withDefault("https://api.openai.com/v1")),
-});
+}).pipe(Layer.provide(externalHttpClientLayer("openai")));
 
 /** Structured-output model used by bounded non-agent extraction adapters. */
 export const OpenAiLanguageModelLive = OpenAiLanguageModel.layer({

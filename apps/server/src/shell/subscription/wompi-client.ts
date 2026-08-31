@@ -22,6 +22,7 @@ import {
   WompiSourceId,
 } from "~/core/subscription/enrollment-model";
 import { collectBoundedResponseBytes } from "~/shell/_shared/bounded-bytes";
+import { makeExternalHttpClient } from "~/shell/_shared/external-http-policy";
 
 const maximumProviderResponseBytes = 16_384;
 const sandboxOrigin = "https://sandbox.wompi.co";
@@ -346,7 +347,7 @@ export class WompiEnrollmentClient extends Context.Service<
   static readonly layer = Layer.effect(
     WompiEnrollmentClient,
     Effect.gen(function* () {
-      const httpClient = yield* HttpClient.HttpClient;
+      const httpClient = (yield* HttpClient.HttpClient).pipe(makeExternalHttpClient("wompi"));
       const crypto = yield* Crypto.Crypto;
       const environment = yield* Config.schema(WompiEnvironment, "WOMPI_ENVIRONMENT");
       const publicKey = yield* Config.schema(PublicKey, "WOMPI_PUBLIC_KEY");

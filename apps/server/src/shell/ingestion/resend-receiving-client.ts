@@ -22,6 +22,7 @@ import {
 import { ReceivedEmailContent, ReceivedInlineImage } from "~/core/ingestion/model";
 import { ResendReceivedEmailId } from "~/core/ingestion/reference";
 import { collectBoundedResponseBytes } from "~/shell/_shared/bounded-bytes";
+import { makeExternalHttpClient } from "~/shell/_shared/external-http-policy";
 
 /** Closed bounded failure set exposed by direct Resend retrieval. */
 export class ResendReceivingFailed extends Data.TaggedError("ResendReceivingFailed")<{
@@ -275,7 +276,7 @@ export class ResendReceivingClient extends Context.Service<
   static readonly layer = Layer.effect(
     ResendReceivingClient,
     Effect.gen(function* () {
-      const httpClient = yield* HttpClient.HttpClient;
+      const httpClient = (yield* HttpClient.HttpClient).pipe(makeExternalHttpClient("resend"));
       const apiKey = yield* Config.redacted("RESEND_API_KEY");
       return ResendReceivingClient.of({
         retrieveEmail: (receivedEmailId) =>

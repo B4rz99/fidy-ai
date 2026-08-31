@@ -32,6 +32,12 @@ const decodeTokenResponse = Schema.decodeUnknownResult(WompiTokenResponse);
 const decodeJson = Schema.decodeUnknownResult(UnknownJsonString);
 const maximumResponseBytes = 16_384;
 
+const cancelReader = (reader: ReadableStreamDefaultReader<Uint8Array>): Effect.Effect<void> =>
+  Effect.tryPromise({
+    try: () => reader.cancel(),
+    catch: () => new CardTokenizationFailed(),
+  }).pipe(Effect.ignore);
+
 const readBoundedResponse = (response: Response): Effect.Effect<string, CardTokenizationFailed> =>
   Effect.callback<string, CardTokenizationFailed>((resume) => {
     if (response.body === null) {
@@ -56,8 +62,9 @@ const readBoundedResponse = (response: Response): Effect.Effect<string, CardToke
           }
           total += next.value.byteLength;
           if (total > maximumResponseBytes) {
-            reader.cancel().catch(() => undefined);
-            resume(Effect.fail(new CardTokenizationFailed()));
+            resume(
+              cancelReader(reader).pipe(Effect.andThen(Effect.fail(new CardTokenizationFailed())))
+            );
             return;
           }
           chunks.push(next.value);
@@ -67,7 +74,7 @@ const readBoundedResponse = (response: Response): Effect.Effect<string, CardToke
       );
     };
     readNext();
-    return Effect.promise(() => reader.cancel()).pipe(Effect.ignore);
+    return cancelReader(reader);
   });
 
 const wompiOrigin = (publicKey: string): Effect.Effect<string, CardTokenizationFailed> => {

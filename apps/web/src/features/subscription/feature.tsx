@@ -1,6 +1,6 @@
 import { useAtomValue } from "@effect/atom-react";
 import { useRouter } from "@tanstack/react-router";
-import { Effect, Array as EffectArray, Option } from "effect";
+import { Data, Effect, Array as EffectArray, Option } from "effect";
 import { AsyncResult, Atom } from "effect/unstable/reactivity";
 import { type FormEvent, type JSX, useState } from "react";
 import { Alert, AlertDescription, AlertTitle } from "@/ui/components/alert";
@@ -447,6 +447,8 @@ const SubscriptionTerms = ({
   </section>
 );
 
+class EnrollmentInteractionFailed extends Data.TaggedError("EnrollmentInteractionFailed")<{}> {}
+
 type EnrollmentInteraction = Readonly<{
   enrollment: Option.Option<Enrollment>;
   busy: boolean;
@@ -479,7 +481,12 @@ const useEnrollmentInteraction = (
     Option.match(gateway, {
       onNone: () => undefined,
       onSome: (availableGateway) =>
-        Effect.runFork(Effect.promise(() => run(() => work(availableGateway)))),
+        Effect.runFork(
+          Effect.tryPromise({
+            try: () => run(() => work(availableGateway)),
+            catch: () => new EnrollmentInteractionFailed(),
+          }).pipe(Effect.ignore)
+        ),
     });
   };
   const reset = (): void => {

@@ -14,7 +14,7 @@ import {
   patScopeCopy,
   recipientLabelLimit,
 } from "@/transport/client";
-import { Crypto, DateTime, Duration, Effect } from "effect";
+import { Crypto, DateTime, Duration, Effect, PlatformError } from "effect";
 import { bearerRevealLifetime } from "./policy";
 import {
   type Dispatch,
@@ -72,11 +72,19 @@ export type ManualPATCreationState =
 const browserCrypto = Crypto.make({
   randomBytes: (size) => globalThis.crypto.getRandomValues(new Uint8Array(size)),
   digest: (algorithm, data) =>
-    Effect.promise(() =>
-      globalThis.crypto.subtle
-        .digest(algorithm, Uint8Array.from(data))
-        .then((digest) => new Uint8Array(digest))
-    ),
+    Effect.tryPromise({
+      try: () =>
+        globalThis.crypto.subtle
+          .digest(algorithm, Uint8Array.from(data))
+          .then((digest) => new Uint8Array(digest)),
+      catch: (cause) =>
+        PlatformError.systemError({
+          _tag: "Unknown",
+          module: "BrowserCrypto",
+          method: "digest",
+          cause,
+        }),
+    }),
 });
 
 const makeManualPATRequestId = (): ManualPATRequestIdType =>

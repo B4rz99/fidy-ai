@@ -1,4 +1,4 @@
-import { Effect } from "effect";
+import { Cause, Effect, Exit, Fiber } from "effect";
 import { describe, expect, it, vi } from "vitest";
 import {
   CardTokenizationFailed,
@@ -71,5 +71,26 @@ describe("Wompi browser tokenization", () => {
     await expect(
       Effect.runPromise(tokenizeCardWithWompi("pub_test_12345678", card, fetchStub))
     ).rejects.toBeInstanceOf(CardTokenizationFailed);
+  });
+
+  it("cancels an owned response reader on interruption without cleanup defects", async () => {
+    const { promise: started, resolve: readingStarted } = Promise.withResolvers<void>();
+    const cancel = vi.fn(() => Promise.reject(new Error("reader already closed")));
+    const response = new Response(
+      new ReadableStream<Uint8Array>({
+        pull: (): void => readingStarted(),
+        cancel,
+      })
+    );
+    const fetchStub = vi.fn<WompiFetch>().mockResolvedValue(response);
+    const fiber = Effect.runFork(tokenizeCardWithWompi("pub_test_12345678", card, fetchStub));
+    await started;
+
+    await Effect.runPromise(Fiber.interrupt(fiber));
+    const exit = await Effect.runPromise(Fiber.await(fiber));
+
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(Exit.isFailure(exit) && Cause.hasInterrupts(exit.cause)).toBe(true);
+    expect(Exit.isFailure(exit) && Cause.hasDies(exit.cause)).toBe(false);
   });
 });

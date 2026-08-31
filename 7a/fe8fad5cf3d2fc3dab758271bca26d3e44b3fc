@@ -1,0 +1,19 @@
+apps/server/src/shell/subscription/wompi-client.test.ts
+  s_4038b15ee409c8::t_31dd0cc34ff4ab 157-160
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "7afe8fad5cf3d2fc3dab758271bca26d3e44b3fc",
+  "prompts": {},
+  "sessions": {
+    "s_4038b15ee409c8": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a05a18-0868-7e18-886f-c95f746bb5fc",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

@@ -1,0 +1,89 @@
+apps/server/src/shell/observability/protocol.ts
+  s_2175302151afdb::t_713c2ed0049521 43-44,54
+  s_2175302151afdb::t_7413ecd4bc06e5 35-38
+  s_2175302151afdb::t_fda99e300d073e 31-34
+  s_2175302151afdb::t_cb5c8f7d8eb73e 45-53
+  s_09232231077c87::t_6194d7244032e6 55
+apps/server/scripts/support-recovery.ts
+  s_2175302151afdb::t_c0fa4d5f3eb764 5
+  s_2175302151afdb::t_a38aad3669e193 175
+apps/server/src/shell/_shared/external-http-policy.test.ts
+  s_2175302151afdb::t_dbae4fee9a0eb9 3,33,209
+  s_2175302151afdb::t_a933d63b7e59e5 4,12-14,174-176
+  s_2175302151afdb::t_4075e6a2f65710 211-216
+  s_2175302151afdb::t_db39b2a86c44e7 21
+  s_2175302151afdb::t_1565cc3635d65a 15-17,142-149,153-173,177-199,201-204
+  s_2175302151afdb::t_ad1495eb355563 29-32,34-42,55-67,69-73,90-91,93-101
+  s_2175302151afdb::t_d6af7ffff62d54 200
+  s_2175302151afdb::t_f8f873f6300524 1,19-20,22-28,68,74-75,92,205-208,210,217-225
+  s_2175302151afdb::t_4d02a451cf8397 43-54,76-89,150-152
+  s_2175302151afdb::t_8266276531ec78 2,5-11,102-141
+  s_2175302151afdb::t_530bc9bc38bb8c 18
+  s_09232231077c87::t_ba4cc49c199cd5 226-227
+apps/server/src/shell/observability/registry.ts
+  s_2175302151afdb::t_47c8e13ba9a771 100
+apps/server/src/shell/channels/whatsapp/kapso-client.ts
+  s_2175302151afdb::t_f42109f9a376e8 285,295
+  s_2175302151afdb::t_d5d82ca061cf2e 37
+  s_2175302151afdb::t_99df24ba9cb916 280
+apps/server/src/shell/agent/openai.ts
+  s_2175302151afdb::t_2cb4cec879a070 19,107
+apps/server/src/shell/observability/sentry-account-reader.ts
+  s_2175302151afdb::t_da47758ec215b0 223,275-281,283-284
+  s_2175302151afdb::t_696f89088c3f3a 282
+  s_2175302151afdb::t_4773a5c9c61f60 285-287
+  s_2175302151afdb::t_3d9a07e79e28d8 4
+apps/server/src/shell/subscription/wompi-client.ts
+  s_2175302151afdb::t_5db4778f3c799d 25
+  s_2175302151afdb::t_8870c1eb2f742a 352
+apps/server/src/shell/observability/projectors.ts
+  s_2175302151afdb::t_9859a841072f96 16,221,223,226-228,310
+  s_2175302151afdb::t_07ace9c4eceb46 5,218-220,222,224-225,231-232
+  s_2175302151afdb::t_4810c160096756 22,217,229-230,233-245,313
+  s_2175302151afdb::t_da5f06a79fc012 209,214-215
+  s_2175302151afdb::t_c11aaf0ab6e336 18,216,279-282,312
+  s_2175302151afdb::t_5d880076bad45d 205-208,210-213
+apps/server/src/shell/_shared/external-http-policy.ts
+  s_2175302151afdb::t_9a4ee352655edc 90-95
+  s_2175302151afdb::t_acbeceb93f9e60 2-4,6-7,27,29,31-32,40,42,59-61,63-83,86-87,97-98,106
+  s_2175302151afdb::t_a0227836cd6ef3 1,5,33
+  s_2175302151afdb::t_dc1e391123ab6d 14-15,17-24,43,45-58,62,96,99-105,107
+  s_2175302151afdb::t_588565d84d206d 34-35,37-38,41
+  s_2175302151afdb::t_33dbdf0d7b7052 44
+  s_2175302151afdb::t_99c0bca18f50f5 88
+  s_2175302151afdb::t_45df6cd21c97f0 84-85,89
+  s_2175302151afdb::t_b675abee1791ad 25-26,28
+  s_2175302151afdb::t_d50316b5d931d5 8-13,16,30,36,39
+apps/server/src/shell/ingestion/resend-receiving-client.ts
+  s_2175302151afdb::t_15c9dda7c6d024 25
+  s_2175302151afdb::t_fcda2ec55869cc 281
+apps/server/src/shell/email-authentication/delivery.ts
+  s_2175302151afdb::t_cc76f6e79cc915 10
+  s_2175302151afdb::t_619a8886f21117 146
+apps/server/src/shell/observability/envelope-recorder.test.ts
+  s_2175302151afdb::t_58f56463ae247a 394,496
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "54ffcbd868c1091824632233837e0193e958e32e",
+  "prompts": {},
+  "sessions": {
+    "s_09232231077c87": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a05a06-b25d-744f-a4b4-ebc789e81dde",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_2175302151afdb": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a05a17-94c3-7716-ae79-c730044f557c",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": null
+    }
+  }
+}

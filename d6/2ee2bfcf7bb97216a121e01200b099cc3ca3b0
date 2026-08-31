@@ -1,0 +1,44 @@
+apps/server/src/shell/ingestion/email-worker.ts
+  s_95a674d7e5a8b1::t_c90f1f0a4c7c98 216,219-231
+  s_95a674d7e5a8b1::t_cbe02f54dffe67 2,73-91,93-96,232-233,242,244,257-259
+apps/server/src/shell/ingestion/worker.ts
+  s_95a674d7e5a8b1::t_e656df940a26e1 49-51,58-60,72,98-101,114
+  s_95a674d7e5a8b1::t_855d4ac762df88 12,52-57
+  s_95a674d7e5a8b1::t_c90f1f0a4c7c98 1-11
+  s_95a674d7e5a8b1::t_8557bdd63875e8 95
+apps/server/src/shell/ingestion/handlers.test.ts
+  s_95a674d7e5a8b1::t_451b80d77ad211 2,14-19,32-40,48-54,58-59
+  s_95a674d7e5a8b1::t_65fbea941c40db 55-57,75-99,101-116
+  s_95a674d7e5a8b1::t_d73216d87e862a 173-175,205-206,210-216
+  s_95a674d7e5a8b1::t_e574e350d501e9 47
+  s_95a674d7e5a8b1::t_c90f1f0a4c7c98 41-46,100
+  s_95a674d7e5a8b1::t_fd8b47feef3353 60,117
+apps/server/src/shell/ingestion/email-anonymization-approval.ts
+  s_95a674d7e5a8b1::t_ade7a1a9743980 1,35,58,70,76-80
+apps/server/src/shell/testing/api-harness.ts
+  s_95a674d7e5a8b1::t_212e10dca80c52 6,288-291,303,310,315-316
+  s_95a674d7e5a8b1::t_7b5b812d36eada 321-322,326
+  s_95a674d7e5a8b1::t_c90f1f0a4c7c98 323-325
+apps/server/src/shell/ingestion/forwarded-email-ingestion.ts
+  s_95a674d7e5a8b1::t_3628187cc7bf32 5
+  s_95a674d7e5a8b1::t_fcaf385fff864d 161
+apps/server/src/shell/ingestion/mutations.ts
+  s_95a674d7e5a8b1::t_b4f15f77cf274c 1,56,59,62-64,210-213
+  s_95a674d7e5a8b1::t_c90f1f0a4c7c98 239
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "d62ee2bfcf7bb97216a121e01200b099cc3ca3b0",
+  "prompts": {},
+  "sessions": {
+    "s_95a674d7e5a8b1": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a05a17-71ff-76a0-92a1-688cd0b07fa3",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

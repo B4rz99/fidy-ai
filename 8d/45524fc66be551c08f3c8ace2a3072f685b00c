@@ -1,0 +1,76 @@
+apps/server/src/shell/email-authentication/delivery.ts
+  s_07aa4773c2589f::t_74203e0af0943c 84
+apps/server/src/shell/channels/whatsapp/disclosure-store.ts
+  s_07aa4773c2589f::t_e64c44e1150b5a 29
+  s_07aa4773c2589f::t_497a15a00c402a 226,239
+apps/server/src/shell/agent/agent-service.ts
+  s_07aa4773c2589f::t_7c399785c9d3f4 999,1007
+apps/server/src/shell/_shared/bounded-bytes.ts
+  s_07aa4773c2589f::t_e4cac125948d12 7
+apps/server/src/shell/_shared/canonical-operation-executor.ts
+  s_07aa4773c2589f::t_0d60256e706414 187,203
+apps/server/src/shell/budgets/repo.ts
+  s_07aa4773c2589f::t_ae199ea9ae0078 34,193
+apps/server/src/shell/recovery/repo.ts
+  s_07aa4773c2589f::t_80e25963506091 83,103
+apps/server/src/shell/consent/repo.ts
+  s_07aa4773c2589f::t_3aba882f38a10a 365,562,935-937
+apps/server/src/shell/subscription/enrollment-handlers.ts
+  s_07aa4773c2589f::t_bed25c257705a1 77
+apps/server/src/shell/ingestion/repo.ts
+  s_07aa4773c2589f::t_6d8e74ca5eaa58 507
+apps/server/src/shell/budgets/handlers.test.ts
+  s_07aa4773c2589f::t_955640cf5c1126 10,14,93-104,106-109,111-125,136-137,157-158
+  s_07aa4773c2589f::t_03349fcce47518 2,143,146,151-155
+  s_07aa4773c2589f::t_dc8a54be5c2408 25-65,105,110,126-129,134-135
+  s_07aa4773c2589f::t_ce5c2cb92af58d 130-133
+  s_07aa4773c2589f::t_f3a95320b02b2e 11,138-142,144-145,147-150,156
+apps/server/src/shell/channels/whatsapp/repo.ts
+  s_07aa4773c2589f::t_a700c3c7c6960e 512,537,568-579,586
+  s_07aa4773c2589f::t_bdf9ddc5bedef4 587,589
+apps/server/src/shell/ingestion/worker.ts
+  s_07aa4773c2589f::t_f05c8e7d75fc63 56
+apps/server/src/shell/browser-login/repo.ts
+  s_07aa4773c2589f::t_20ab066c970557 40,165
+apps/server/src/shell/db/advisory-lock.ts
+  s_07aa4773c2589f::t_ae7b1faec276a2 68
+apps/server/src/shell/subscription/wompi-client.ts
+  s_07aa4773c2589f::t_674c5b5f025c23 132
+apps/server/src/shell/ingestion/email-forwarding-repo.ts
+  s_07aa4773c2589f::t_29b1e79090183b 363
+apps/server/src/shell/agent/tool-confirmation.ts
+  s_07aa4773c2589f::t_c1b97085d255cb 156
+apps/server/src/shell/transcript/repo.ts
+  s_07aa4773c2589f::t_61d8e3f904f6f1 32
+apps/server/src/shell/identity/repo.ts
+  s_07aa4773c2589f::t_25d39bdbabbd44 74,197
+apps/server/src/shell/email-authentication/repo.ts
+  s_07aa4773c2589f::t_30f8345d05e738 74
+apps/server/src/shell/subscription/repo.ts
+  s_07aa4773c2589f::t_5c70ab41d8a3bb 31
+apps/server/src/shell/transactions/reads.ts
+  s_07aa4773c2589f::t_ca0101604a1b52 92
+apps/server/src/shell/tokens/pat-pairing-persistence.ts
+  s_07aa4773c2589f::t_546e1ce52d7264 141
+  s_07aa4773c2589f::t_6069698195f2e8 165,174,191,211,380
+apps/server/src/shell/budgets/mutations.ts
+  s_07aa4773c2589f::t_694f9ad04dc2f5 38-42,45,85
+apps/server/src/shell/email-authentication/authentication-handlers.ts
+  s_07aa4773c2589f::t_9e406eb23561b3 53
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "8d45524fc66be551c08f3c8ace2a3072f685b00c",
+  "prompts": {},
+  "sessions": {
+    "s_07aa4773c2589f": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a05a17-4ae5-733f-895e-c2bb26eeb297",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

@@ -1,0 +1,55 @@
+apps/server/scripts/support-recovery.ts
+  s_2175302151afdb::t_c0fa4d5f3eb764 5,175
+apps/server/src/shell/_shared/external-http-policy.test.ts
+  s_2175302151afdb::t_f8f873f6300524 1,12,22,24-30,73,79-80,84,159-162,164,166-170,173-182
+  s_2175302151afdb::t_ad1495eb355563 3,31-72,74-78,81-83,85-93
+  s_2175302151afdb::t_af3551c43eb676 21,163
+  s_2175302151afdb::t_530bc9bc38bb8c 11
+  s_2175302151afdb::t_a933d63b7e59e5 4-7,129-131
+  s_2175302151afdb::t_1565cc3635d65a 2,8-10,94-128,132-158
+  s_2175302151afdb::t_db39b2a86c44e7 13-20,23
+  s_2175302151afdb::t_aca803e0f17512 165
+  s_2175302151afdb::t_fa318aca2dce7b 171-172
+apps/server/src/shell/channels/whatsapp/kapso-client.ts
+  s_2175302151afdb::t_f42109f9a376e8 285,295
+  s_2175302151afdb::t_397b43aadd139e 280
+  s_2175302151afdb::t_d5d82ca061cf2e 37
+apps/server/src/shell/_shared/external-http-policy.ts
+  s_2175302151afdb::t_b836cfe81fbc96 1,48
+  s_2175302151afdb::t_dc1e391123ab6d 2-4,12-19,23,25-44,49-53,59,61-63,65-71,73
+  s_2175302151afdb::t_b675abee1791ad 20-22,58,60
+  s_2175302151afdb::t_4a3be72a8c744c 45-47,64,72
+  s_2175302151afdb::t_33dbdf0d7b7052 5-11,24
+  s_2175302151afdb::t_ad1495eb355563 54-57
+apps/server/src/shell/subscription/wompi-client.ts
+  s_2175302151afdb::t_b39809a691f8f3 352
+  s_2175302151afdb::t_5db4778f3c799d 25
+apps/server/src/shell/ingestion/resend-receiving-client.ts
+  s_2175302151afdb::t_2ac769b7efde10 281
+  s_2175302151afdb::t_15c9dda7c6d024 25
+apps/server/src/shell/agent/openai.ts
+  s_2175302151afdb::t_2cb4cec879a070 19,107
+apps/server/src/shell/observability/sentry-account-reader.ts
+  s_2175302151afdb::t_da47758ec215b0 223,275-281,283-284
+  s_2175302151afdb::t_ad1495eb355563 282
+  s_2175302151afdb::t_3d9a07e79e28d8 4
+apps/server/src/shell/email-authentication/delivery.ts
+  s_2175302151afdb::t_5a0ecec003f413 146
+  s_2175302151afdb::t_cc76f6e79cc915 10
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "4073fda64d9c0e6af0ff5a4442af474903bfbebf",
+  "prompts": {},
+  "sessions": {
+    "s_2175302151afdb": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a05a17-94c3-7716-ae79-c730044f557c",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

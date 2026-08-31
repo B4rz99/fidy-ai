@@ -1,0 +1,20 @@
+docs/research/reconciliation-account-hints.md
+  s_95745c24ed21de::t_3911a70a21f645 1-46,48-61,72-191,193-248
+  s_95745c24ed21de::t_2853abde4b3b63 47,62-71,192
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "44e9f1e96bdbb7440c735d99c0223873c1039329",
+  "prompts": {},
+  "sessions": {
+    "s_95745c24ed21de": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a05993-c384-7ecb-b827-0071b973ff87",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

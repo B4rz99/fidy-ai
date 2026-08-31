@@ -1,0 +1,67 @@
+apps/server/src/shell/channels/whatsapp/kapso-client.ts
+  s_2175302151afdb::t_99df24ba9cb916 280
+  s_2175302151afdb::t_f42109f9a376e8 285,295
+  s_2175302151afdb::t_d5d82ca061cf2e 37
+apps/server/src/shell/subscription/wompi-client.ts
+  s_2175302151afdb::t_5db4778f3c799d 25
+  s_2175302151afdb::t_8870c1eb2f742a 352
+apps/server/src/shell/observability/envelope-recorder.test.ts
+  s_2175302151afdb::t_58f56463ae247a 394,496
+apps/server/src/shell/observability/protocol.ts
+  s_2175302151afdb::t_fda99e300d073e 31-34
+apps/server/src/shell/observability/projectors.ts
+  s_2175302151afdb::t_5d880076bad45d 204-207,209-212
+  s_2175302151afdb::t_c11aaf0ab6e336 18,215,249-252,282
+  s_2175302151afdb::t_da5f06a79fc012 208,213-214
+apps/server/src/shell/agent/openai.ts
+  s_2175302151afdb::t_2cb4cec879a070 19,107
+apps/server/src/shell/ingestion/resend-receiving-client.ts
+  s_2175302151afdb::t_fcda2ec55869cc 281
+  s_2175302151afdb::t_15c9dda7c6d024 25
+apps/server/scripts/support-recovery.ts
+  s_2175302151afdb::t_c0fa4d5f3eb764 5
+  s_2175302151afdb::t_a38aad3669e193 175
+apps/server/src/shell/_shared/external-http-policy.test.ts
+  s_2175302151afdb::t_530bc9bc38bb8c 12
+  s_2175302151afdb::t_4d02a451cf8397 37-48,70-83,104-106
+  s_2175302151afdb::t_d6af7ffff62d54 154
+  s_2175302151afdb::t_dbae4fee9a0eb9 3,27,163
+  s_2175302151afdb::t_a933d63b7e59e5 5-8,128-130
+  s_2175302151afdb::t_f8f873f6300524 1,13-14,16-22,62,68-69,86,159-162,164,171-179
+  s_2175302151afdb::t_1565cc3635d65a 2,9-11,96-103,107-127,131-153,155-158
+  s_2175302151afdb::t_db39b2a86c44e7 15
+  s_2175302151afdb::t_ad1495eb355563 4,23-26,28-36,49-61,63-67,84-85,87-95
+  s_2175302151afdb::t_4075e6a2f65710 165-170
+apps/server/src/shell/observability/sentry-account-reader.ts
+  s_2175302151afdb::t_3d9a07e79e28d8 4
+  s_2175302151afdb::t_da47758ec215b0 223,275-281,283-284
+  s_2175302151afdb::t_696f89088c3f3a 282
+  s_2175302151afdb::t_4773a5c9c61f60 285-287
+apps/server/src/shell/_shared/external-http-policy.ts
+  s_2175302151afdb::t_b675abee1791ad 25-26,29
+  s_2175302151afdb::t_33dbdf0d7b7052 10-16,51
+  s_2175302151afdb::t_dc1e391123ab6d 8-9,17-24,50,52-65,69,99,102-108,110
+  s_2175302151afdb::t_a0227836cd6ef3 1,5,39
+  s_2175302151afdb::t_588565d84d206d 28,40-44,46,48
+  s_2175302151afdb::t_a030997bb5ca77 31
+  s_2175302151afdb::t_acbeceb93f9e60 2-4,6-7,27,30,32-38,45,47,49,66-68,70-98,100-101,109
+apps/server/src/shell/email-authentication/delivery.ts
+  s_2175302151afdb::t_cc76f6e79cc915 10
+  s_2175302151afdb::t_619a8886f21117 146
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "a1eff970967643df338436b5b211e066b41b1563",
+  "prompts": {},
+  "sessions": {
+    "s_2175302151afdb": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a05a17-94c3-7716-ae79-c730044f557c",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": null
+    }
+  }
+}

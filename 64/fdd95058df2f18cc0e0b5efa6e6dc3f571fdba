@@ -1,0 +1,111 @@
+apps/server/src/shell/tokens/pat-pairing.ts
+  s_07aa4773c2589f::t_2fd9690d09c56e 121
+apps/server/src/shell/subscription/repo.ts
+  s_07aa4773c2589f::t_5c70ab41d8a3bb 31
+apps/server/src/shell/transcript/repo.ts
+  s_07aa4773c2589f::t_61d8e3f904f6f1 32
+apps/server/src/shell/agent/agent-service.ts
+  s_07aa4773c2589f::t_7c399785c9d3f4 999,1007
+apps/server/src/shell/recovery/repo.ts
+  s_07aa4773c2589f::t_80e25963506091 83,103
+apps/server/src/shell/email-authentication/browser-pairing-authentication.ts
+  s_07aa4773c2589f::t_118314d2f0775c 383
+apps/server/src/shell/ingestion/email-worker.ts
+  s_07aa4773c2589f::t_a0d2c08cb0c65b 52
+apps/server/src/shell/_shared/canonical-operation-executor.ts
+  s_07aa4773c2589f::t_0d60256e706414 187,203
+apps/server/src/shell/db/advisory-lock.ts
+  s_07aa4773c2589f::t_ae7b1faec276a2 68
+apps/server/src/shell/recovery/routes.ts
+  s_07aa4773c2589f::t_83c348fd301e26 66
+apps/server/src/shell/transcript/hosted-agent-session.ts
+  s_07aa4773c2589f::t_8470d5116cb183 79
+apps/server/src/shell/browser-login/service.ts
+  s_07aa4773c2589f::t_3f8ae4d79112b0 54-66,68-69
+  s_07aa4773c2589f::t_a69201612a4975 145-146
+apps/server/src/shell/channels/whatsapp/kapso-webhook.ts
+  s_07aa4773c2589f::t_5c8b281acc3931 193,209
+  s_07aa4773c2589f::t_6874891b010dfc 322,364-367,386,428
+  s_07aa4773c2589f::t_2439c519c64de6 173,191
+  s_07aa4773c2589f::t_21124e952eaf65 368-385
+  s_07aa4773c2589f::t_3f8ae4d79112b0 174-186,188-190
+apps/server/src/shell/_shared/bounded-bytes.ts
+  s_07aa4773c2589f::t_e4cac125948d12 8
+apps/server/src/shell/recovery/service.ts
+  s_07aa4773c2589f::t_705f1790b75101 62,85
+apps/server/src/shell/budgets/mutations.ts
+  s_07aa4773c2589f::t_694f9ad04dc2f5 38-42,45,85
+apps/server/src/shell/transactions/reads.ts
+  s_07aa4773c2589f::t_ca0101604a1b52 92
+apps/server/src/shell/subscription/enrollment-handlers.ts
+  s_07aa4773c2589f::t_bed25c257705a1 77
+apps/server/src/shell/ingestion/worker.ts
+  s_07aa4773c2589f::t_f05c8e7d75fc63 68
+apps/server/src/shell/email-authentication/delivery.ts
+  s_07aa4773c2589f::t_74203e0af0943c 84
+apps/server/src/shell/ingestion/email-forwarding-repo.ts
+  s_07aa4773c2589f::t_29b1e79090183b 363
+apps/server/src/shell/email-authentication/handlers.ts
+  s_07aa4773c2589f::t_3f8ae4d79112b0 89
+  s_07aa4773c2589f::t_83c348fd301e26 43
+apps/server/src/shell/email-authentication/authentication-handlers.ts
+  s_07aa4773c2589f::t_9e406eb23561b3 53
+apps/server/src/shell/subscription/card-enrollment.ts
+  s_07aa4773c2589f::t_ffd0fe8ced245f 61,67
+apps/server/src/shell/email-authentication/replacement-transition.ts
+  s_07aa4773c2589f::t_e3220f51d7196c 278
+apps/server/src/shell/browser-login/repo.ts
+  s_07aa4773c2589f::t_20ab066c970557 40,165
+apps/server/src/shell/budgets/repo.ts
+  s_07aa4773c2589f::t_ae199ea9ae0078 34,193
+apps/server/src/shell/tokens/pat-pairing-persistence.ts
+  s_07aa4773c2589f::t_546e1ce52d7264 141
+  s_07aa4773c2589f::t_94e344ff146655 165,174,191,211,380
+apps/server/src/shell/channels/whatsapp/disclosure-store.ts
+  s_07aa4773c2589f::t_e64c44e1150b5a 29
+  s_07aa4773c2589f::t_7b0caba3917fe1 226,239
+apps/server/src/shell/channels/whatsapp/repo.ts
+  s_07aa4773c2589f::t_a700c3c7c6960e 512,537,568-579,586
+  s_07aa4773c2589f::t_bdf9ddc5bedef4 587,589
+apps/server/src/shell/onboarding/completion-transition.ts
+  s_07aa4773c2589f::t_549269afe042d1 55
+  s_07aa4773c2589f::t_3f8ae4d79112b0 45
+apps/server/src/shell/email-authentication/repo.ts
+  s_07aa4773c2589f::t_30f8345d05e738 74
+apps/server/src/shell/subscription/wompi-client.ts
+  s_07aa4773c2589f::t_e7308a3e2f3ec9 115,124,145
+  s_07aa4773c2589f::t_674c5b5f025c23 130
+apps/server/src/shell/observability/canonical-api.test.ts
+  s_07aa4773c2589f::t_886ff5ceaf848f 31,53,88-89
+apps/server/src/shell/tokens/current-disclosure.ts
+  s_07aa4773c2589f::t_e01b7ff0d4c9e8 19
+apps/server/src/shell/agent/tool-confirmation.ts
+  s_07aa4773c2589f::t_c1b97085d255cb 156
+apps/server/src/shell/ingestion/resend-receiving-client.ts
+  s_07aa4773c2589f::t_33752430b60ad4 108
+  s_07aa4773c2589f::t_3f8ae4d79112b0 169
+apps/server/src/shell/identity/repo.ts
+  s_07aa4773c2589f::t_25d39bdbabbd44 74,197
+apps/server/src/shell/consent/repo.ts
+  s_07aa4773c2589f::t_3aba882f38a10a 365,562,935-937
+apps/server/src/shell/tokens/mutations.ts
+  s_07aa4773c2589f::t_d0bd10e5be12be 73,190
+apps/server/src/shell/ingestion/repo.ts
+  s_07aa4773c2589f::t_6d8e74ca5eaa58 507
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "64fdd95058df2f18cc0e0b5efa6e6dc3f571fdba",
+  "prompts": {},
+  "sessions": {
+    "s_07aa4773c2589f": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a05a17-4ae5-733f-895e-c2bb26eeb297",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": null
+    }
+  }
+}

@@ -28,25 +28,21 @@ const invalidCredentialLookupHmacKey = (): Config.ConfigError =>
     })
   );
 
-export const emailCredentialLookupKey = Effect.fn("EmailAuthentication.credentialLookupKey")(
-  function* (email: EmailAddress) {
-    const environment = yield* Config.string("NODE_ENV").pipe(Config.withDefault("development"));
-    let secret = Redacted.make("local-email-credential-lookup-key-not-for-production");
-    if (environment === "production") {
-      secret = yield* Config.redacted("EMAIL_CREDENTIAL_LOOKUP_HMAC_KEY");
-      if (!credentialLookupHmacKeyPattern.test(Redacted.value(secret))) {
-        return yield* Effect.fail(invalidCredentialLookupHmacKey());
-      }
+export const emailCredentialLookupKey = Effect.fn(function* (email: EmailAddress) {
+  const environment = yield* Config.string("NODE_ENV").pipe(Config.withDefault("development"));
+  let secret = Redacted.make("local-email-credential-lookup-key-not-for-production");
+  if (environment === "production") {
+    secret = yield* Config.redacted("EMAIL_CREDENTIAL_LOOKUP_HMAC_KEY");
+    if (!credentialLookupHmacKeyPattern.test(Redacted.value(secret))) {
+      return yield* Effect.fail(invalidCredentialLookupHmacKey());
     }
-    return createHmac("sha256", Redacted.value(secret))
-      .update(`verified-email-credential:${email}`)
-      .digest("hex");
   }
-);
+  return createHmac("sha256", Redacted.value(secret))
+    .update(`verified-email-credential:${email}`)
+    .digest("hex");
+});
 
-export const emailAuthenticationHmacKey = Effect.fn("EmailAuthentication.hmacKey")(function* (
-  scope: string
-) {
+export const emailAuthenticationHmacKey = Effect.fn(function* (scope: string) {
   const environment = yield* Config.string("NODE_ENV").pipe(Config.withDefault("development"));
   let secret = Redacted.make("local-email-admission-key-not-for-production");
   if (environment === "production") {

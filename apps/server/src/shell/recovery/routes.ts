@@ -73,9 +73,7 @@ const readPayload = Effect.fn(function* (request: HttpServerRequest.HttpServerRe
   return decodePayload(new TextDecoder().decode(bytes.value));
 });
 
-const handleSupportRecovery = Effect.fn("Recovery.handlePrivateTransport")(function* (
-  request: HttpServerRequest.HttpServerRequest
-) {
+const handleSupportRecovery = Effect.fn(function* (request: HttpServerRequest.HttpServerRequest) {
   const assertion = request.headers["cf-access-jwt-assertion"];
   if (assertion === undefined || assertion.length === 0) return unauthorized();
   const verifier = yield* SupportAccessVerifier;

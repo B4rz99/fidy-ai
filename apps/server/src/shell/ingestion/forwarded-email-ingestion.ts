@@ -79,36 +79,32 @@ export type ResendWebhookDisposition =
   | Readonly<{ readonly outcome: "accepted" }>
   | Readonly<{ readonly outcome: "retry-later"; readonly retryAfterSeconds: number }>;
 
-const authenticateResendEvent = Effect.fn("ForwardedEmailIngestion.authenticateResendEvent")(
-  function* (input: ResendWebhookInput) {
-    if (input.exactBody.byteLength > maximumResendWebhookBytes) {
-      return yield* new ResendWebhookPayloadTooLarge();
-    }
-    const proof = yield* Schema.decodeUnknownEffect(ResendWebhookProof)({
-      id: input.headers["svix-id"],
-      timestamp: input.headers["svix-timestamp"],
-      signature: input.headers["svix-signature"],
-    }).pipe(Effect.mapError(() => new InvalidResendWebhookProof()));
-    const secret = yield* Config.redacted("RESEND_WEBHOOK_SECRET");
-    const verified = yield* Effect.try({
-      try: () =>
-        new Webhook(Redacted.value(secret)).verify(Buffer.from(input.exactBody), {
-          "svix-id": proof.id,
-          "svix-timestamp": proof.timestamp,
-          "svix-signature": proof.signature,
-        }),
-      catch: () => new InvalidResendWebhookProof(),
-    });
-    const event = yield* Schema.decodeUnknownEffect(ResendEmailReceivedEvent)(verified).pipe(
-      Effect.mapError(() => new InvalidResendWebhookPayload())
-    );
-    return { event, deliveryId: proof.id };
+const authenticateResendEvent = Effect.fn(function* (input: ResendWebhookInput) {
+  if (input.exactBody.byteLength > maximumResendWebhookBytes) {
+    return yield* new ResendWebhookPayloadTooLarge();
   }
-);
+  const proof = yield* Schema.decodeUnknownEffect(ResendWebhookProof)({
+    id: input.headers["svix-id"],
+    timestamp: input.headers["svix-timestamp"],
+    signature: input.headers["svix-signature"],
+  }).pipe(Effect.mapError(() => new InvalidResendWebhookProof()));
+  const secret = yield* Config.redacted("RESEND_WEBHOOK_SECRET");
+  const verified = yield* Effect.try({
+    try: () =>
+      new Webhook(Redacted.value(secret)).verify(Buffer.from(input.exactBody), {
+        "svix-id": proof.id,
+        "svix-timestamp": proof.timestamp,
+        "svix-signature": proof.signature,
+      }),
+    catch: () => new InvalidResendWebhookProof(),
+  });
+  const event = yield* Schema.decodeUnknownEffect(ResendEmailReceivedEvent)(verified).pipe(
+    Effect.mapError(() => new InvalidResendWebhookPayload())
+  );
+  return { event, deliveryId: proof.id };
+});
 
-const resolveSingleRecipientUser = Effect.fn("ForwardedEmailIngestion.resolveRecipient")(function* (
-  recipients: ReadonlyArray<string>
-) {
+const resolveSingleRecipientUser = Effect.fn(function* (recipients: ReadonlyArray<string>) {
   const { ingestDomain } = yield* externalEndpoints;
   const localParts = recipients.flatMap((recipient) =>
     Option.toArray(forwardingLocalPartForDomain(recipient, ingestDomain))
@@ -122,9 +118,7 @@ const resolveSingleRecipientUser = Effect.fn("ForwardedEmailIngestion.resolveRec
   return userIds.length === 1 ? Option.fromUndefinedOr(userIds[0]) : Option.none();
 });
 
-const receiveResendWebhook = Effect.fn("ForwardedEmailIngestion.receiveResendWebhook")(function* (
-  input: ResendWebhookInput
-) {
+const receiveResendWebhook = Effect.fn(function* (input: ResendWebhookInput) {
   const { event, deliveryId } = yield* authenticateResendEvent(input);
   const providerAdmission = yield* admitAuthenticatedResendWebhookEvent(deliveryId);
   if (providerAdmission === "rate-exceeded") return yield* new ResendWebhookRateExceeded();

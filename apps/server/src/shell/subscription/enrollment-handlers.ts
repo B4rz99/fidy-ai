@@ -46,7 +46,7 @@ const unsupportedMediaType = (): CardEnrollmentUnsupportedMediaTypeApi =>
 const unavailable = (): CardEnrollmentUnavailableApi =>
   CardEnrollmentUnavailableApi.make(cardEnrollmentUnavailableBody);
 
-const authorizeEnrollmentRequest = Effect.fn("Subscription.authorizeEnrollmentRequest")(function* (
+const authorizeEnrollmentRequest = Effect.fn(function* (
   request: HttpServerRequest.HttpServerRequest
 ) {
   const { webOrigin } = yield* externalEndpoints.pipe(Effect.orDie);
@@ -85,9 +85,7 @@ const readJson = Effect.fn(function* (request: HttpServerRequest.HttpServerReque
   return Option.isSome(bytes) ? new TextDecoder().decode(bytes.value) : yield* payloadTooLarge();
 });
 
-const handlePrepare = Effect.fn("Subscription.handleEnrollmentPrepare")(function* (
-  request: HttpServerRequest.HttpServerRequest
-) {
+const handlePrepare = Effect.fn(function* (request: HttpServerRequest.HttpServerRequest) {
   const authority = yield* authorizeEnrollmentRequest(request);
   const body = yield* readJson(request);
   const decoded = decodePrepareEnrollmentPayload(body);
@@ -103,9 +101,7 @@ const handlePrepare = Effect.fn("Subscription.handleEnrollmentPrepare")(function
   );
 });
 
-const handleSubmit = Effect.fn("Subscription.handleEnrollmentSubmit")(function* (
-  request: HttpServerRequest.HttpServerRequest
-) {
+const handleSubmit = Effect.fn(function* (request: HttpServerRequest.HttpServerRequest) {
   const authority = yield* authorizeEnrollmentRequest(request);
   const body = yield* readJson(request);
   const decoded = decodeSubmit(body);

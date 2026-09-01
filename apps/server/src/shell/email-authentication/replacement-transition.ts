@@ -78,23 +78,22 @@ const replacementWorkflowFromRow = (
   throw new Error("Email replacement proof columns violated their database invariant");
 };
 
-const findLockedReplacementWorkflow = Effect.fn("EmailReplacementTransition.findLockedWorkflow")(
-  function* (userId: UserId) {
-    const sql = yield* SqlClient.SqlClient;
-    return yield* SqlSchema.findOneOption({
-      Request: Schema.Void,
-      Result: ReplacementWorkflowRow,
-      execute: () => sql`
+const findLockedReplacementWorkflow = Effect.fn(function* (userId: UserId) {
+  const sql = yield* SqlClient.SqlClient;
+  return yield* SqlSchema.findOneOption({
+    Request: Schema.Void,
+    Result: ReplacementWorkflowRow,
+    execute: () => sql`
       SELECT ${sql.literal(workflowProjection)} FROM email_replacement_workflows workflow
       WHERE workflow.user_id = ${userId} FOR UPDATE
     `,
-    })(undefined).pipe(Effect.orDie, Effect.map(Option.map(replacementWorkflowFromRow)));
-  }
-);
+  })(undefined).pipe(Effect.orDie, Effect.map(Option.map(replacementWorkflowFromRow)));
+});
 
-const findLockedReplacementWorkflowByPublicCode = Effect.fn(
-  "EmailReplacementTransition.findLockedWorkflowByPublicCode"
-)(function* (userId: UserId, publicCode: string) {
+const findLockedReplacementWorkflowByPublicCode = Effect.fn(function* (
+  userId: UserId,
+  publicCode: string
+) {
   const sql = yield* SqlClient.SqlClient;
   return yield* SqlSchema.findOneOption({
     Request: Schema.Void,
@@ -121,19 +120,15 @@ type RequestReplacementInput = Readonly<{
   requestedAt: DateTime.Utc;
 }>;
 
-const acquireCandidateLock = Effect.fn("EmailReplacementTransition.acquireCandidateLock")(
-  function* (candidateEmail: EmailAddress) {
-    const sql = yield* SqlClient.SqlClient;
-    const candidateLock = advisoryLockKey.emailReplacementCandidate(candidateEmail);
-    yield* sql`
+const acquireCandidateLock = Effect.fn(function* (candidateEmail: EmailAddress) {
+  const sql = yield* SqlClient.SqlClient;
+  const candidateLock = advisoryLockKey.emailReplacementCandidate(candidateEmail);
+  yield* sql`
       SELECT pg_advisory_xact_lock(hashtextextended(${candidateLock.value}, ${candidateLock.seed}))
     `.pipe(Effect.orDie);
-  }
-);
+});
 
-const candidateMatchesCurrentCredential = Effect.fn(
-  "EmailAuthentication.candidateMatchesCurrentCredential"
-)(function* (input: RequestReplacementInput) {
+const candidateMatchesCurrentCredential = Effect.fn(function* (input: RequestReplacementInput) {
   const sql = yield* SqlClient.SqlClient;
   const current = yield* SqlSchema.findOneOption({
     Request: Schema.Void,
@@ -146,9 +141,7 @@ const candidateMatchesCurrentCredential = Effect.fn(
   return Option.exists(current, ({ emailAddress }) => emailAddress === input.candidateEmail);
 });
 
-const decideLockedReplacementAdmission = Effect.fn(
-  "EmailAuthentication.decideLockedReplacementAdmission"
-)(function* (input: RequestReplacementInput) {
+const decideLockedReplacementAdmission = Effect.fn(function* (input: RequestReplacementInput) {
   const sql = yield* SqlClient.SqlClient;
   if (yield* candidateMatchesCurrentCredential(input)) {
     return rejectedRequest();
@@ -184,25 +177,27 @@ const decideLockedReplacementAdmission = Effect.fn(
   return admittedRequest(decision === "Start" ? Option.none() : existing);
 });
 
-const persistReplacementGeneration = Effect.fn("EmailAuthentication.persistReplacementGeneration")(
-  function* (input: RequestReplacementInput, existing: Option.Option<EmailReplacementWorkflow>) {
-    const sql = yield* SqlClient.SqlClient;
-    const crypto = yield* Crypto.Crypto;
-    const workflowId = Option.isSome(existing)
-      ? existing.value.id
-      : EmailReplacementWorkflowId.make(yield* crypto.randomUUIDv7.pipe(Effect.orDie));
-    const intentId = EmailDeliveryIntentId.make(yield* crypto.randomUUIDv7.pipe(Effect.orDie));
-    const publicCode = EmailVerificationPublicCode.make(
-      formatEmailCode({
-        symbols: selectEmailCodeSymbols({
-          bytes: yield* crypto.randomBytes(workflowPublicSymbolCount).pipe(Effect.orDie),
-          maximum: workflowPublicSymbolCount,
-        }),
-        groupSize: groupedCodeSymbolCount,
-      })
-    );
-    if (Option.isNone(existing)) {
-      const inserted = yield* sql`
+const persistReplacementGeneration = Effect.fn(function* (
+  input: RequestReplacementInput,
+  existing: Option.Option<EmailReplacementWorkflow>
+) {
+  const sql = yield* SqlClient.SqlClient;
+  const crypto = yield* Crypto.Crypto;
+  const workflowId = Option.isSome(existing)
+    ? existing.value.id
+    : EmailReplacementWorkflowId.make(yield* crypto.randomUUIDv7.pipe(Effect.orDie));
+  const intentId = EmailDeliveryIntentId.make(yield* crypto.randomUUIDv7.pipe(Effect.orDie));
+  const publicCode = EmailVerificationPublicCode.make(
+    formatEmailCode({
+      symbols: selectEmailCodeSymbols({
+        bytes: yield* crypto.randomBytes(workflowPublicSymbolCount).pipe(Effect.orDie),
+        maximum: workflowPublicSymbolCount,
+      }),
+      groupSize: groupedCodeSymbolCount,
+    })
+  );
+  if (Option.isNone(existing)) {
+    const inserted = yield* sql`
       INSERT INTO email_replacement_workflows (
         id, user_id, candidate_email_address, public_code, started_at, expires_at,
         delivery_generation, resend_available_at
@@ -212,14 +207,14 @@ const persistReplacementGeneration = Effect.fn("EmailAuthentication.persistRepla
         ${resendAvailability(input.requestedAt)}
       ) ON CONFLICT DO NOTHING RETURNING id
     `.pipe(Effect.orDie);
-      if (inserted.length === 0) return;
-    } else {
-      yield* sql`
+    if (inserted.length === 0) return;
+  } else {
+    yield* sql`
       UPDATE email_replacement_delivery_intents SET status = 'superseded',
         claim_token = NULL, claim_expires_at = NULL
       WHERE workflow_id = ${workflowId} AND status <> 'superseded'
     `.pipe(Effect.orDie);
-      yield* sql`
+    yield* sql`
       UPDATE email_replacement_workflows SET
         candidate_email_address = ${input.candidateEmail}, public_code = ${publicCode},
         delivery_generation = delivery_generation + 1,
@@ -227,33 +222,30 @@ const persistReplacementGeneration = Effect.fn("EmailAuthentication.persistRepla
         proof_digest = NULL, proof_expires_at = NULL, wrong_proof_attempts = 0
       WHERE id = ${workflowId}
     `.pipe(Effect.orDie);
-    }
-    yield* sql`
+  }
+  yield* sql`
     INSERT INTO email_replacement_delivery_intents (
       id, workflow_id, generation, email_address, status, idempotency_key, created_at
     ) SELECT ${intentId}, id, delivery_generation, candidate_email_address, 'pending',
       ${intentId}, ${input.requestedAt}
     FROM email_replacement_workflows WHERE id = ${workflowId}
   `.pipe(Effect.orDie);
-  }
-);
+});
 
-const requestReplacementInScope = Effect.fn("EmailAuthentication.requestReplacementInScope")(
-  function* (input: RequestReplacementInput) {
-    const admittedWorkflow = yield* decideLockedReplacementAdmission(input);
-    if (admittedWorkflow._tag === "Rejected") return;
-    if (
-      !(yield* admitEmailDeliveryInScope({
-        requester: { _tag: "User", userId: input.userId },
-        recipient: input.candidateEmail,
-        attemptedAt: input.requestedAt,
-      }))
-    ) {
-      return;
-    }
-    yield* persistReplacementGeneration(input, admittedWorkflow.existing);
+const requestReplacementInScope = Effect.fn(function* (input: RequestReplacementInput) {
+  const admittedWorkflow = yield* decideLockedReplacementAdmission(input);
+  if (admittedWorkflow._tag === "Rejected") return;
+  if (
+    !(yield* admitEmailDeliveryInScope({
+      requester: { _tag: "User", userId: input.userId },
+      recipient: input.candidateEmail,
+      attemptedAt: input.requestedAt,
+    }))
+  ) {
+    return;
   }
-);
+  yield* persistReplacementGeneration(input, admittedWorkflow.existing);
+});
 
 /**
  * Requests delivery of a replacement proof for the User and candidate mailbox in the payload.
@@ -290,69 +282,64 @@ type CompleteReplacementInput = Readonly<{
   combinedCode: Redacted.Redacted<EmailVerificationCode>;
 }>;
 
-const findCompletionWorkflow = Effect.fn("EmailAuthentication.findCompletionWorkflow")(function* (
-  input: CompleteReplacementInput
-) {
+const findCompletionWorkflow = Effect.fn(function* (input: CompleteReplacementInput) {
   return yield* findLockedReplacementWorkflowByPublicCode(
     input.userId,
     Redacted.value(input.combinedCode).slice(0, publicCodeLength)
   );
 });
 
-const applyCompletionProofAttempt = Effect.fn("EmailAuthentication.applyCompletionProofAttempt")(
-  function* (workflow: EmailReplacementWorkflow, input: CompleteReplacementInput) {
-    const sql = yield* SqlClient.SqlClient;
-    yield* acquireCandidateLock(workflow.candidateEmailAddress);
-    if (workflow.proofState._tag === "AwaitingDelivery") return false;
-    const proof = EmailVerificationProof.make(
-      Redacted.value(input.combinedCode).slice(proofOffset)
+const applyCompletionProofAttempt = Effect.fn(function* (
+  workflow: EmailReplacementWorkflow,
+  input: CompleteReplacementInput
+) {
+  const sql = yield* SqlClient.SqlClient;
+  yield* acquireCandidateLock(workflow.candidateEmailAddress);
+  if (workflow.proofState._tag === "AwaitingDelivery") return false;
+  const proof = EmailVerificationProof.make(Redacted.value(input.combinedCode).slice(proofOffset));
+  const actualDigest = yield* digestProof(proof);
+  const decision = yield* decideProofAttempt({
+    digestMatches:
+      actualDigest.length === workflow.proofState.proofDigest.length &&
+      timingSafeEqual(actualDigest, workflow.proofState.proofDigest),
+    wrongAttempts: workflow.wrongProofAttempts,
+    proofExpiresAt: workflow.proofState.proofExpiresAt,
+    enrollmentExpiresAt: workflow.expiresAt,
+    attemptedAt: input.attemptedAt,
+  });
+  if (decision._tag === "Accept") return true;
+  if (decision._tag === "Delete") {
+    yield* sql`DELETE FROM email_replacement_workflows WHERE id = ${workflow.id}`.pipe(
+      Effect.orDie
     );
-    const actualDigest = yield* digestProof(proof);
-    const decision = yield* decideProofAttempt({
-      digestMatches:
-        actualDigest.length === workflow.proofState.proofDigest.length &&
-        timingSafeEqual(actualDigest, workflow.proofState.proofDigest),
-      wrongAttempts: workflow.wrongProofAttempts,
-      proofExpiresAt: workflow.proofState.proofExpiresAt,
-      enrollmentExpiresAt: workflow.expiresAt,
-      attemptedAt: input.attemptedAt,
-    });
-    if (decision._tag === "Accept") return true;
-    if (decision._tag === "Delete") {
-      yield* sql`DELETE FROM email_replacement_workflows WHERE id = ${workflow.id}`.pipe(
-        Effect.orDie
-      );
-    } else if (decision._tag === "Wrong") {
-      yield* sql`
+  } else if (decision._tag === "Wrong") {
+    yield* sql`
       UPDATE email_replacement_workflows SET wrong_proof_attempts = ${decision.wrongAttempts}
       WHERE id = ${workflow.id}
     `.pipe(Effect.orDie);
-    } else {
-      yield* sql`
+  } else {
+    yield* sql`
       UPDATE email_replacement_workflows SET proof_digest = NULL, proof_expires_at = NULL
       WHERE id = ${workflow.id}
     `.pipe(Effect.orDie);
-    }
-    return false;
   }
-);
+  return false;
+});
 
-const appendReplacedLifecycleEvent = Effect.fn("EmailAuthentication.appendReplacedLifecycleEvent")(
-  function* (input: {
-    userId: UserId;
-    authorizingWebSessionId: WebSessionId;
-    occurredAt: DateTime.Utc;
-  }) {
-    const sql = yield* SqlClient.SqlClient;
-    yield* sql`
+const appendReplacedLifecycleEvent = Effect.fn(function* (input: {
+  userId: UserId;
+  authorizingWebSessionId: WebSessionId;
+  occurredAt: DateTime.Utc;
+}) {
+  const sql = yield* SqlClient.SqlClient;
+  yield* sql`
     INSERT INTO verified_email_credential_lifecycle_events (
       subject_user_id, authorizing_web_session_id, occurred_at
     ) VALUES (${input.userId}, ${input.authorizingWebSessionId}, ${input.occurredAt})
   `.pipe(Effect.orDie);
-  }
-);
+});
 
-const commitReplacement = Effect.fn("EmailAuthentication.commitReplacement")(function* (
+const commitReplacement = Effect.fn(function* (
   workflow: EmailReplacementWorkflow,
   input: CompleteReplacementInput
 ) {
@@ -403,14 +390,12 @@ const commitReplacement = Effect.fn("EmailAuthentication.commitReplacement")(fun
 });
 
 /** Consumes one current proof and commits credential, evidence, and cleanup as one transaction. */
-const completeReplacementInScope = Effect.fn("EmailAuthentication.completeReplacementInScope")(
-  function* (input: CompleteReplacementInput) {
-    const workflow = yield* findCompletionWorkflow(input);
-    if (Option.isNone(workflow)) return "rejected" as const;
-    if (!(yield* applyCompletionProofAttempt(workflow.value, input))) return "rejected" as const;
-    return (yield* commitReplacement(workflow.value, input)) ? "replaced" : "rejected";
-  }
-);
+const completeReplacementInScope = Effect.fn(function* (input: CompleteReplacementInput) {
+  const workflow = yield* findCompletionWorkflow(input);
+  if (Option.isNone(workflow)) return "rejected" as const;
+  if (!(yield* applyCompletionProofAttempt(workflow.value, input))) return "rejected" as const;
+  return (yield* commitReplacement(workflow.value, input)) ? "replaced" : "rejected";
+});
 
 /**
  * Attempts replacement for the named User using authority from the named current WebSession and a

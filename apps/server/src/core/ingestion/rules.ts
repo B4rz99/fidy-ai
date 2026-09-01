@@ -295,7 +295,7 @@ const currencyFor = (
       ),
   });
 
-const decodeMoney = Effect.fn("decodeStatementMoney")(function* (
+const decodeMoney = Effect.fn(function* (
   row: ParsedStatementRow,
   mapping: StatementColumnMapping,
   amount: string
@@ -388,7 +388,7 @@ const unsafeXlsxCells = (row: ParsedStatementRow, indexes: ReadonlyArray<number>
   });
 };
 
-const decodeKnownMoney = Effect.fn("decodeKnownStatementMoney")(function* (
+const decodeKnownMoney = Effect.fn(function* (
   row: ParsedStatementRow,
   mapping: StatementColumnMapping
 ) {
@@ -457,7 +457,7 @@ const interpretRow: InterpretRow = (row, mapping, context) =>
  * Mechanically interprets every parser row and proves the conservation equation. The caller owns
  * the canonical decoder for the entity it will persist; a decoding failure becomes review.
  */
-export const interpretStatementRows = Effect.fn("interpretStatementRows")(function* <Extraction>(
+export const interpretStatementRows = Effect.fn(function* <Extraction>(
   input: Readonly<{
     rows: ReadonlyArray<ParsedStatementRow>;
     mapping: StatementColumnMapping;

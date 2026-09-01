@@ -35,9 +35,7 @@ const ArmedReplacementDelivery = Schema.Struct({
 type ArmedReplacementDelivery = typeof ArmedReplacementDelivery.Type &
   Readonly<{ combinedCode: EmailVerificationCode }>;
 
-const claimNextDelivery = Effect.fn("EmailReplacementDelivery.claimNext")(function* (
-  claimedAt: DateTime.Utc
-) {
+const claimNextDelivery = Effect.fn(function* (claimedAt: DateTime.Utc) {
   const sql = yield* SqlClient.SqlClient;
   const crypto = yield* Crypto.Crypto;
   const claimToken = EmailDeliveryClaimToken.make(yield* crypto.randomUUIDv7.pipe(Effect.orDie));
@@ -53,14 +51,16 @@ const claimNextDelivery = Effect.fn("EmailReplacementDelivery.claimNext")(functi
   })(undefined).pipe(Effect.orDie);
 });
 
-const armClaimedDeliveryInScope = Effect.fn("EmailReplacementDelivery.armClaimedInScope")(
-  function* (claim: DeliveryGatewayClaim, claimedAt: DateTime.Utc) {
-    const sql = yield* SqlClient.SqlClient;
-    const { digest, proof } = yield* makeEmailDeliveryProof();
-    const armed = yield* SqlSchema.findOneOption({
-      Request: Schema.Void,
-      Result: ArmedReplacementDelivery,
-      execute: () => sql`
+const armClaimedDeliveryInScope = Effect.fn(function* (
+  claim: DeliveryGatewayClaim,
+  claimedAt: DateTime.Utc
+) {
+  const sql = yield* SqlClient.SqlClient;
+  const { digest, proof } = yield* makeEmailDeliveryProof();
+  const armed = yield* SqlSchema.findOneOption({
+    Request: Schema.Void,
+    Result: ArmedReplacementDelivery,
+    execute: () => sql`
         WITH armed_intent AS (
           UPDATE email_replacement_delivery_intents intent SET status = 'armed'
           FROM email_replacement_workflows workflow
@@ -82,23 +82,21 @@ const armClaimedDeliveryInScope = Effect.fn("EmailReplacementDelivery.armClaimed
           intent.email_address AS "emailAddress", intent.claim_token AS "claimToken",
           intent.idempotency_key AS "idempotencyKey", workflow.public_code AS "publicCode"
       `,
-    })(undefined).pipe(Effect.orDie);
-    if (Option.isNone(armed)) return Option.none<ArmedReplacementDelivery>();
-    return Option.some({
-      ...armed.value,
-      combinedCode: EmailVerificationCode.make(`${armed.value.publicCode}-${proof}`),
-    });
-  }
-);
+  })(undefined).pipe(Effect.orDie);
+  if (Option.isNone(armed)) return Option.none<ArmedReplacementDelivery>();
+  return Option.some({
+    ...armed.value,
+    combinedCode: EmailVerificationCode.make(`${armed.value.publicCode}-${proof}`),
+  });
+});
 
-const settleArmedDeliveryInScope = Effect.fn("EmailReplacementDelivery.settleArmedInScope")(
-  function* (input: {
-    claim: ArmedReplacementDelivery;
-    status: "sent" | "rejected" | "uncertain";
-    providerMessageId: Option.Option<string>;
-  }) {
-    const sql = yield* SqlClient.SqlClient;
-    const updated = yield* sql`
+const settleArmedDeliveryInScope = Effect.fn(function* (input: {
+  claim: ArmedReplacementDelivery;
+  status: "sent" | "rejected" | "uncertain";
+  providerMessageId: Option.Option<string>;
+}) {
+  const sql = yield* SqlClient.SqlClient;
+  const updated = yield* sql`
       UPDATE email_replacement_delivery_intents intent SET status = ${input.status},
         provider_message_id = ${Option.getOrNull(input.providerMessageId)},
         claim_token = NULL, claim_expires_at = NULL
@@ -112,9 +110,8 @@ const settleArmedDeliveryInScope = Effect.fn("EmailReplacementDelivery.settleArm
         AND workflow.delivery_generation = ${input.claim.generation}
       RETURNING intent.id
     `.pipe(Effect.orDie);
-    return updated.length === 1;
-  }
-);
+  return updated.length === 1;
+});
 
 /**
  * Processes at most one eligible replacement delivery. It returns `false` when no work is available

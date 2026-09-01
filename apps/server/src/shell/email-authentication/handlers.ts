@@ -32,9 +32,7 @@ const decodeVerificationPayload = Schema.decodeUnknownResult(
 const invalidApi = (): EmailVerificationInvalidApi =>
   EmailVerificationInvalidApi.make(emailVerificationInvalidBody);
 
-const handleVerification = Effect.fn("EmailAuthentication.handleVerification")(function* (
-  payload: VerifyEmailEnrollmentPayload
-) {
+const handleVerification = Effect.fn(function* (payload: VerifyEmailEnrollmentPayload) {
   return yield* completeVerifiedOnboarding({
     combinedCode: Redacted.make(payload.combinedCode),
   }).pipe(Effect.catchTag("VerificationRejected", invalidApi));
@@ -106,9 +104,7 @@ const readReplacementCode = Effect.fn(function* (request: HttpServerRequest.Http
   });
 });
 
-const completeReplacement = Effect.fn("EmailAuthentication.completeReplacement")(function* (
-  request: HttpServerRequest.HttpServerRequest
-) {
+const completeReplacement = Effect.fn(function* (request: HttpServerRequest.HttpServerRequest) {
   const combinedCode = yield* readReplacementCode(request);
   const attemptedAt = yield* DateTime.now;
   const session = yield* authenticateWebSession(

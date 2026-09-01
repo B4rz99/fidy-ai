@@ -8,7 +8,7 @@ import { type EffectiveAccess, User } from "./model";
  * identity, time, and paid tier from the shell; this decision supplies each
  * context value explicitly and starts the User's single 168-hour TrialPeriod.
  */
-export const makeColombianUser = Effect.fn("makeColombianUser")(function* (
+export const makeColombianUser = Effect.fn(function* (
   userId: UserId,
   input: Pick<User, "createdAt" | "paidTier">
 ) {
@@ -32,7 +32,7 @@ export const makeColombianUser = Effect.fn("makeColombianUser")(function* (
  * Derives the User's access at one caller-supplied UTC instant. TrialPeriod is
  * half-open: its start is included and its end is Free unless paid tier is Pro.
  */
-export const decideEffectiveAccess = Effect.fn("decideEffectiveAccess")(function* (
+export const decideEffectiveAccess = Effect.fn(function* (
   access: Pick<User, "paidTier" | "trialPeriod">,
   now: DateTime.Utc
 ) {

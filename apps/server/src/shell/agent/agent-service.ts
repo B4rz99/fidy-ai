@@ -395,7 +395,7 @@ const toolCallOutcome = (
 const completesTurn = (binding: AgentOperationBinding, outcome: CanonicalToolOutcome): boolean =>
   completesHostedTurn(binding.policy) && outcome._tag === "Succeeded";
 
-const recordToolOutcome = Effect.fn("AgentService.recordToolOutcome")(function* (
+const recordToolOutcome = Effect.fn(function* (
   turn: HostedTurn,
   call: RecordedCall,
   outcome: CanonicalToolOutcome
@@ -411,7 +411,7 @@ const recordToolOutcome = Effect.fn("AgentService.recordToolOutcome")(function* 
   turn.continuationEntries.push(content);
 });
 
-const recordToolCall = Effect.fn("AgentService.recordToolCall")(function* (
+const recordToolCall = Effect.fn(function* (
   turn: HostedTurn,
   call: RecordedCall,
   input: Schema.Json
@@ -483,7 +483,7 @@ const atomicBatchRequired: Schema.Json = {
     "Put the exact ordered mutations in its calls payload and retry.",
 };
 
-const prepareAgentToolCall = Effect.fn("AgentService.prepareToolCall")(function* (
+const prepareAgentToolCall = Effect.fn(function* (
   iteration: AgentIteration,
   toolCall: AgentToolCall
 ) {
@@ -563,7 +563,7 @@ const settleConfirmations = (
     { concurrency: 1 }
   );
 
-const executePreparedToolCall = Effect.fn("AgentService.executePreparedToolCall")(function* (
+const executePreparedToolCall = Effect.fn(function* (
   turn: HostedTurn,
   prepared: ValidPreparedToolCall
 ) {
@@ -575,7 +575,7 @@ const executePreparedToolCall = Effect.fn("AgentService.executePreparedToolCall"
   return turnCompletedOutcome(turn, prepared.call.binding, result);
 });
 
-const prepareGeneratedCalls = Effect.fn("AgentService.prepareGeneratedCalls")(function* (
+const prepareGeneratedCalls = Effect.fn(function* (
   turn: HostedTurn,
   iteration: AgentIteration,
   generated: AcceptedGeneration
@@ -599,7 +599,7 @@ const collectValidPreparedCalls = (
   return valid.length === prepared.length ? Option.some(valid) : Option.none();
 };
 
-const acceptGeneratedCalls = Effect.fn("AgentService.acceptGeneratedCalls")(function* (
+const acceptGeneratedCalls = Effect.fn(function* (
   turn: HostedTurn,
   prepared: ReadonlyArray<PreparedToolCall>
 ) {
@@ -615,40 +615,41 @@ const acceptGeneratedCalls = Effect.fn("AgentService.acceptGeneratedCalls")(func
   return valid;
 });
 
-const settleGeneratedConfirmation = Effect.fn("AgentService.settleGeneratedConfirmation")(
-  function* (turn: HostedTurn, prepared: ReadonlyArray<ValidPreparedToolCall>) {
-    const settledCalls = yield* settleConfirmations(turn, prepared);
-    const challenge = settledCalls.find(
-      ({ confirmation }) => confirmation._tag === "RequireConfirmation"
-    );
-    if (challenge?.confirmation._tag !== "RequireConfirmation") {
-      yield* Effect.forEach(
-        settledCalls,
-        ({ call, input, confirmation }) =>
-          confirmation._tag === "Execute"
-            ? turn.toolkit
-                .prepare(call.binding, input, confirmation.permit)
-                .pipe(Effect.mapError(modelResponseRejected))
-            : Effect.void,
-        { concurrency: 1, discard: true }
-      );
-      return Option.none();
-    }
+const settleGeneratedConfirmation = Effect.fn(function* (
+  turn: HostedTurn,
+  prepared: ReadonlyArray<ValidPreparedToolCall>
+) {
+  const settledCalls = yield* settleConfirmations(turn, prepared);
+  const challenge = settledCalls.find(
+    ({ confirmation }) => confirmation._tag === "RequireConfirmation"
+  );
+  if (challenge?.confirmation._tag !== "RequireConfirmation") {
     yield* Effect.forEach(
       settledCalls,
-      ({ call, confirmation }) =>
-        recordToolOutcome(turn, call, {
-          _tag: "ToolInputRejected",
-          failure:
-            confirmation._tag === "RequireConfirmation" ? confirmation.failure : preflightRejected,
-        }).pipe(Effect.andThen(turn.toolkit.recordPreflightRejection(call.binding))),
+      ({ call, input, confirmation }) =>
+        confirmation._tag === "Execute"
+          ? turn.toolkit
+              .prepare(call.binding, input, confirmation.permit)
+              .pipe(Effect.mapError(modelResponseRejected))
+          : Effect.void,
       { concurrency: 1, discard: true }
     );
-    return Option.some(challenge.confirmation.failure.challenge);
+    return Option.none();
   }
-);
+  yield* Effect.forEach(
+    settledCalls,
+    ({ call, confirmation }) =>
+      recordToolOutcome(turn, call, {
+        _tag: "ToolInputRejected",
+        failure:
+          confirmation._tag === "RequireConfirmation" ? confirmation.failure : preflightRejected,
+      }).pipe(Effect.andThen(turn.toolkit.recordPreflightRejection(call.binding))),
+    { concurrency: 1, discard: true }
+  );
+  return Option.some(challenge.confirmation.failure.challenge);
+});
 
-const executeGeneratedCalls = Effect.fn("AgentService.executeGeneratedCalls")(function* (
+const executeGeneratedCalls = Effect.fn(function* (
   turn: HostedTurn,
   prepared: ReadonlyArray<ValidPreparedToolCall>
 ) {
@@ -663,7 +664,7 @@ const executeGeneratedCalls = Effect.fn("AgentService.executeGeneratedCalls")(fu
   });
 });
 
-const respondToGeneration = Effect.fn("AgentService.respondToGeneration")(function* (
+const respondToGeneration = Effect.fn(function* (
   turn: HostedTurn,
   iteration: AgentIteration,
   generated: AcceptedGeneration
@@ -1036,7 +1037,7 @@ const malformedOutputRetry = (
         continuation,
       });
 
-const acceptGeneratedRound = Effect.fn("AgentService.acceptGeneratedRound")(function* (
+const acceptGeneratedRound = Effect.fn(function* (
   generated: HostedTextResult
 ): Effect.fn.Return<ModelRoundDecision, ModelResponseRejected> {
   yield* annotateModelUsage(generated);
@@ -1079,29 +1080,27 @@ const mapHostedInferenceFailure = (
     ? new HostedCapacityExceeded()
     : new ModelUnavailable({ cause: failure });
 
-const acceptHostedInferenceFailure = Effect.fn("AgentService.acceptHostedInferenceFailure")(
-  function* (
-    failure: HostedInferenceError
-  ): Effect.fn.Return<
-    ModelRoundDecision,
-    HostedCapacityExceeded | ModelUnavailable | ModelResponseRejected
-  > {
-    yield* Effect.annotateCurrentSpan({
-      "agent.model.failure.reason": failure.reason._tag,
-      "agent.model.failure.retryable": failure.retryable,
-      ...Option.match(failure.retryAfter, {
-        onNone: () => ({}),
-        onSome: (retryAfter) => ({
-          "agent.model.failure.retry_after_millis": Duration.toMillis(retryAfter),
-        }),
+const acceptHostedInferenceFailure = Effect.fn(function* (
+  failure: HostedInferenceError
+): Effect.fn.Return<
+  ModelRoundDecision,
+  HostedCapacityExceeded | ModelUnavailable | ModelResponseRejected
+> {
+  yield* Effect.annotateCurrentSpan({
+    "agent.model.failure.reason": failure.reason._tag,
+    "agent.model.failure.retryable": failure.retryable,
+    ...Option.match(failure.retryAfter, {
+      onNone: () => ({}),
+      onSome: (retryAfter) => ({
+        "agent.model.failure.retry_after_millis": Duration.toMillis(retryAfter),
       }),
-    });
-    if (failure.reason._tag !== "InvalidOutput") {
-      return yield* mapHostedInferenceFailure(failure);
-    }
-    return yield* malformedOutputRetry(failure.reason.description, Option.none());
+    }),
+  });
+  if (failure.reason._tag !== "InvalidOutput") {
+    return yield* mapHostedInferenceFailure(failure);
   }
-);
+  return yield* malformedOutputRetry(failure.reason.description, Option.none());
+});
 
 type ModelRound = Effect.Success<ReturnType<typeof generateCurrentTurn>>;
 
@@ -1405,7 +1404,7 @@ const prepareInitialRound = (
 
 // Admission follows the first model round so a model failure admits nothing, and a superseded or
 // revoked admission discards the round it can no longer use.
-const beginPreparedTurn = Effect.fn("AgentService.beginPreparedTurn")(function* (input: {
+const beginPreparedTurn = Effect.fn(function* (input: {
   readonly continuity: ContinuityService;
   readonly userId: UserId;
   readonly prepared: PreparedTurnContext;
@@ -1436,7 +1435,7 @@ const makeHostedCaller = (input: {
   authorityRoot: input.authorityRoot,
 });
 
-const generateHostedReply = Effect.fn("AgentService.generateHostedReply")(function* (input: {
+const generateHostedReply = Effect.fn(function* (input: {
   dependencies: AgentServiceDependencies;
   userId: UserId;
   message: InboundMessage;
@@ -1480,7 +1479,7 @@ const generateHostedReply = Effect.fn("AgentService.generateHostedReply")(functi
   );
 });
 
-const deliverAndComplete = Effect.fn("AgentService.deliverAndComplete")(function* <E, R>(input: {
+const deliverAndComplete = Effect.fn(function* <E, R>(input: {
   pending: TurnExecution;
   generated: PreparedAgentReply;
   deliver: (reply: AgentReply) => Effect.Effect<void, E, R>;
@@ -1501,7 +1500,7 @@ const deliverAndComplete = Effect.fn("AgentService.deliverAndComplete")(function
   return generated.reply;
 });
 
-const runPreparedTurn = Effect.fn("AgentService.runPreparedTurn")(function* <E, R>(input: {
+const runPreparedTurn = Effect.fn(function* <E, R>(input: {
   dependencies: AgentServiceDependencies;
   userId: UserId;
   message: InboundMessage;

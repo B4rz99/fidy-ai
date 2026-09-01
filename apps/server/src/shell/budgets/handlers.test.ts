@@ -145,11 +145,9 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         yield* resetBudgets;
         const client = yield* ApiHarnessClient;
         const zone = IanaTimeZone.make("America/New_York");
-        const period = deriveCurrentBudgetMonth({
-          now: yield* DateTime.now,
-          timeZone: zone,
-        });
-        const inMonth = DateTime.add(period.from, { days: 1 });
+        const now = yield* DateTime.now;
+        const period = deriveCurrentBudgetMonth({ now, timeZone: zone });
+        const inMonth = now;
         const copRestaurant = yield* client.budgets.createBudget({
           payload: { categoryId: categoryIds.restaurantes, cap: cap("100") },
         });

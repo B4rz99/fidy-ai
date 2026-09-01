@@ -35,7 +35,7 @@ const logDeliveryError = (error: DeliveryError): Effect.Effect<void> =>
       })
     : Effect.logError("WhatsApp delivery policy failed", { error: error._tag });
 
-const processStartedTurn = Effect.fn("WhatsApp.processStartedTurn")(function* (input: {
+const processStartedTurn = Effect.fn(function* (input: {
   readonly started: StartedTurn;
   readonly claimTime: DateTime.Utc;
 }) {

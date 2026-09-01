@@ -15,9 +15,7 @@ const RetentionGatewayClaim = Schema.Struct({
 });
 type RetentionGatewayClaim = typeof RetentionGatewayClaim.Type;
 
-const claimExpiredWorkflow = Effect.fn("EmailReplacementRetention.claimExpired")(function* (
-  claimedAt: DateTime.Utc
-) {
+const claimExpiredWorkflow = Effect.fn(function* (claimedAt: DateTime.Utc) {
   const sql = yield* SqlClient.SqlClient;
   const crypto = yield* Crypto.Crypto;
   const claimToken = EmailReplacementRetentionClaimToken.make(
@@ -35,9 +33,10 @@ const claimExpiredWorkflow = Effect.fn("EmailReplacementRetention.claimExpired")
   })(undefined).pipe(Effect.orDie);
 });
 
-const removeClaimedExpiredWorkflowInScope = Effect.fn(
-  "EmailReplacementRetention.removeClaimedInScope"
-)(function* (claim: RetentionGatewayClaim, attemptedAt: DateTime.Utc) {
+const removeClaimedExpiredWorkflowInScope = Effect.fn(function* (
+  claim: RetentionGatewayClaim,
+  attemptedAt: DateTime.Utc
+) {
   const sql = yield* SqlClient.SqlClient;
   const deleted = yield* sql`
     DELETE FROM email_replacement_workflows
@@ -68,9 +67,7 @@ export const processOneReplacementRetention = Effect.fn("EmailReplacementRetenti
 );
 
 /** Owner operation for the approved gateway; rows exactly at the cutoff remain retained. */
-export const removeReplacementLifecycleEventsBefore = Effect.fn(
-  "EmailReplacementLifecycleRetention.removeBefore"
-)(function* (cutoff: DateTime.Utc) {
+export const removeReplacementLifecycleEventsBefore = Effect.fn(function* (cutoff: DateTime.Utc) {
   const sql = yield* SqlClient.SqlClient;
   yield* sql`
     SELECT fidy_delete_verified_email_lifecycle_events_before(${cutoff}) AS deleted_count

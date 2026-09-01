@@ -93,7 +93,7 @@ const createReview = Effect.fnUntraced(function* (input: ReviewInput) {
   });
 });
 
-const finalizeExtraction = Effect.fn("finalizeNotificationEmailExtraction")(function* (input: {
+const finalizeExtraction = Effect.fn(function* (input: {
   claimed: ClaimedForwardedEmail;
   sampleId: IngestSampleId;
   contentHash: string;
@@ -159,11 +159,10 @@ const deferForMissingConsent = (
     deferForwardedEmailClaimForConsent(claimed, DateTime.add(now, { days: 1 }))
   );
 
-const useCurrentConsentOrDefer = Effect.fn("useCurrentConsentOrDeferForwardedEmail")(function* <
-  A,
-  E,
-  R,
->(claimed: ClaimedForwardedEmail, use: Effect.Effect<A, E, R>) {
+const useCurrentConsentOrDefer = Effect.fn(function* <A, E, R>(
+  claimed: ClaimedForwardedEmail,
+  use: Effect.Effect<A, E, R>
+) {
   return yield* withSubjectLock(
     claimed.userId,
     Effect.gen(function* () {
@@ -180,9 +179,10 @@ const useCurrentConsentOrDefer = Effect.fn("useCurrentConsentOrDeferForwardedEma
  * Starts one bounded external effect while holding the same session gate as Consent revocation.
  * The Consent transaction commits before `use` starts; no transaction spans provider/model I/O.
  */
-const useCurrentConsentForExternalEffect = Effect.fn(
-  "useCurrentConsentForForwardedEmailExternalEffect"
-)(function* <A, E, R>(claimed: ClaimedForwardedEmail, use: Effect.Effect<A, E, R>) {
+const useCurrentConsentForExternalEffect = Effect.fn(function* <A, E, R>(
+  claimed: ClaimedForwardedEmail,
+  use: Effect.Effect<A, E, R>
+) {
   return yield* withConsentExternalEffectLock(
     claimed.userId,
     Effect.gen(function* () {
@@ -203,7 +203,7 @@ const useCurrentConsentForExternalEffect = Effect.fn(
   );
 });
 
-const recoverProviderFailure = Effect.fn("recoverForwardedEmailProviderFailure")(function* (
+const recoverProviderFailure = Effect.fn(function* (
   claimed: ClaimedForwardedEmail,
   reason: ForwardedEmailProviderFailureReason
 ) {
@@ -231,7 +231,7 @@ const recoverProviderFailure = Effect.fn("recoverForwardedEmailProviderFailure")
   yield* useCurrentConsentOrDefer(claimed, recovery);
 });
 
-const retainReceivedEmail = Effect.fn("retainReceivedEmail")(function* (
+const retainReceivedEmail = Effect.fn(function* (
   claimed: ClaimedForwardedEmail,
   content: ReceivedEmailContentType
 ) {
@@ -269,9 +269,9 @@ const retainReceivedEmail = Effect.fn("retainReceivedEmail")(function* (
   return Option.map(sampleId, (value) => ({ sampleId: value, contentHash }));
 });
 
-const processClaimedForwardedEmailWithConsent = Effect.fn(
-  "processClaimedForwardedEmailWithConsent"
-)(function* (claimed: ClaimedForwardedEmail) {
+const processClaimedForwardedEmailWithConsent = Effect.fn(function* (
+  claimed: ClaimedForwardedEmail
+) {
   const client = yield* ResendReceivingClient;
   const provider = yield* useCurrentConsentForExternalEffect(
     claimed,
@@ -327,9 +327,7 @@ const processClaimedForwardedEmailWithConsent = Effect.fn(
   );
 });
 
-const processClaimedForwardedEmail = Effect.fn("processClaimedForwardedEmail")(function* (
-  claimed: ClaimedForwardedEmail
-) {
+const processClaimedForwardedEmail = Effect.fn(function* (claimed: ClaimedForwardedEmail) {
   const armed = yield* withSubjectLock(
     claimed.userId,
     Effect.gen(function* () {

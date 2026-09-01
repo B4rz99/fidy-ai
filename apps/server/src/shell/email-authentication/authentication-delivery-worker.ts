@@ -41,9 +41,7 @@ const ArmedDelivery = Schema.Struct({
 });
 type ArmedDelivery = typeof ArmedDelivery.Type & Readonly<{ combinedCode: EmailVerificationCode }>;
 
-const claimNextDelivery = Effect.fn("BrowserPairingEmailDelivery.claimNext")(function* (
-  claimedAt: DateTime.Utc
-) {
+const claimNextDelivery = Effect.fn(function* (claimedAt: DateTime.Utc) {
   const sql = yield* SqlClient.SqlClient;
   const crypto = yield* Crypto.Crypto;
   const claimToken = EmailDeliveryClaimToken.make(yield* crypto.randomUUIDv7.pipe(Effect.orDie));
@@ -61,9 +59,7 @@ const claimNextDelivery = Effect.fn("BrowserPairingEmailDelivery.claimNext")(fun
 
 const ClaimedPairingReference = Schema.Struct({ pairingId: BrowserLoginPairingId });
 
-const findClaimedPairingReferenceInScope = Effect.fn(
-  "BrowserPairingEmailDelivery.findClaimedPairingReferenceInScope"
-)(function* (claim: GatewayClaim) {
+const findClaimedPairingReferenceInScope = Effect.fn(function* (claim: GatewayClaim) {
   const sql = yield* SqlClient.SqlClient;
   return yield* SqlSchema.findOneOption({
     Request: Schema.Void,
@@ -78,33 +74,33 @@ const findClaimedPairingReferenceInScope = Effect.fn(
   })(undefined).pipe(Effect.orDie);
 });
 
-const rejectClaimedDeliveryInScope = Effect.fn("BrowserPairingEmailDelivery.rejectClaimedInScope")(
-  function* (claim: GatewayClaim) {
-    const sql = yield* SqlClient.SqlClient;
-    yield* sql`
+const rejectClaimedDeliveryInScope = Effect.fn(function* (claim: GatewayClaim) {
+  const sql = yield* SqlClient.SqlClient;
+  yield* sql`
       UPDATE browser_pairing_email_delivery_intents SET status = 'rejected',
         claim_token = NULL, claim_expires_at = NULL
       WHERE id = ${claim.intentId} AND status = 'claimed' AND claim_token = ${claim.claimToken}
     `.pipe(Effect.orDie);
-  }
-);
+});
 
-const armClaimedDeliveryInScope = Effect.fn("BrowserPairingEmailDelivery.armClaimedInScope")(
-  function* (claim: GatewayClaim, claimedAt: DateTime.Utc) {
-    const sql = yield* SqlClient.SqlClient;
-    const pairing = yield* findClaimedPairingReferenceInScope(claim);
-    if (Option.isNone(pairing)) return Option.none<ArmedDelivery>();
-    const live = yield* lockPendingBrowserLoginPairingInScope(pairing.value.pairingId, claimedAt);
-    if (Option.isNone(live)) {
-      yield* rejectClaimedDeliveryInScope(claim);
-      return Option.none<ArmedDelivery>();
-    }
-    const { proof } = yield* makeEmailDeliveryProof();
-    const digest = yield* digestBrowserPairingEmailProof(pairing.value.pairingId, proof);
-    const armed = yield* SqlSchema.findOneOption({
-      Request: Schema.Void,
-      Result: ArmedDelivery,
-      execute: () => sql`
+const armClaimedDeliveryInScope = Effect.fn(function* (
+  claim: GatewayClaim,
+  claimedAt: DateTime.Utc
+) {
+  const sql = yield* SqlClient.SqlClient;
+  const pairing = yield* findClaimedPairingReferenceInScope(claim);
+  if (Option.isNone(pairing)) return Option.none<ArmedDelivery>();
+  const live = yield* lockPendingBrowserLoginPairingInScope(pairing.value.pairingId, claimedAt);
+  if (Option.isNone(live)) {
+    yield* rejectClaimedDeliveryInScope(claim);
+    return Option.none<ArmedDelivery>();
+  }
+  const { proof } = yield* makeEmailDeliveryProof();
+  const digest = yield* digestBrowserPairingEmailProof(pairing.value.pairingId, proof);
+  const armed = yield* SqlSchema.findOneOption({
+    Request: Schema.Void,
+    Result: ArmedDelivery,
+    execute: () => sql`
         WITH armed_intent AS (
           UPDATE browser_pairing_email_delivery_intents intent SET status = 'armed'
           FROM browser_pairing_email_workflows workflow
@@ -128,22 +124,23 @@ const armClaimedDeliveryInScope = Effect.fn("BrowserPairingEmailDelivery.armClai
           intent.email_address AS "emailAddress", intent.claim_token AS "claimToken",
           intent.idempotency_key AS "idempotencyKey", workflow.public_code AS "publicCode"
       `,
-    })(undefined).pipe(Effect.orDie);
-    if (Option.isNone(armed)) {
-      yield* rejectClaimedDeliveryInScope(claim);
-      return Option.none<ArmedDelivery>();
-    }
-    return Option.some({
-      ...armed.value,
-      combinedCode: EmailVerificationCode.make(`${armed.value.publicCode}-${proof}`),
-    });
+  })(undefined).pipe(Effect.orDie);
+  if (Option.isNone(armed)) {
+    yield* rejectClaimedDeliveryInScope(claim);
+    return Option.none<ArmedDelivery>();
   }
-);
+  return Option.some({
+    ...armed.value,
+    combinedCode: EmailVerificationCode.make(`${armed.value.publicCode}-${proof}`),
+  });
+});
 
-const settleArmedDeliveryInScope = Effect.fn("BrowserPairingEmailDelivery.settleArmedInScope")(
-  function* (input: { claim: ArmedDelivery; status: "sent" | "rejected" | "uncertain" }) {
-    const sql = yield* SqlClient.SqlClient;
-    yield* sql`
+const settleArmedDeliveryInScope = Effect.fn(function* (input: {
+  claim: ArmedDelivery;
+  status: "sent" | "rejected" | "uncertain";
+}) {
+  const sql = yield* SqlClient.SqlClient;
+  yield* sql`
       UPDATE browser_pairing_email_delivery_intents intent SET status = ${input.status},
         claim_token = NULL, claim_expires_at = NULL
       FROM browser_pairing_email_workflows workflow
@@ -155,8 +152,7 @@ const settleArmedDeliveryInScope = Effect.fn("BrowserPairingEmailDelivery.settle
         AND workflow.user_id = ${input.claim.userId}
         AND workflow.delivery_generation = ${input.claim.generation}
     `.pipe(Effect.orDie);
-  }
-);
+});
 
 /**
  * Processes at most one RLS-safe email-login delivery outside provider transactions.
@@ -167,42 +163,40 @@ const settleArmedDeliveryInScope = Effect.fn("BrowserPairingEmailDelivery.settle
  * retries, and terminal failure are observed once by `sendEmailWithBoundedRetry`; durable intent
  * status is the continuation signal, so this layer emits no second workflow event or identity.
  */
-const processOneBrowserPairingEmailDelivery = Effect.fn("BrowserPairingEmailDelivery.processOne")(
-  function* () {
-    const claimedAt = yield* DateTime.now;
-    const gatewayClaim = yield* claimNextDelivery(claimedAt);
-    if (Option.isNone(gatewayClaim)) return false;
-    const claim = gatewayClaim.value;
-    const armed = yield* withUserTransaction(
+const processOneBrowserPairingEmailDelivery = Effect.fn(function* () {
+  const claimedAt = yield* DateTime.now;
+  const gatewayClaim = yield* claimNextDelivery(claimedAt);
+  if (Option.isNone(gatewayClaim)) return false;
+  const claim = gatewayClaim.value;
+  const armed = yield* withUserTransaction(
+    claim.userId,
+    withSubjectLock(
       claim.userId,
-      withSubjectLock(
-        claim.userId,
-        withUserLockInScope(
-          advisoryLockKey.browserLoginApproval(claim.userId),
-          armClaimedDeliveryInScope(claim, claimedAt)
-        )
+      withUserLockInScope(
+        advisoryLockKey.browserLoginApproval(claim.userId),
+        armClaimedDeliveryInScope(claim, claimedAt)
       )
-    );
-    if (Option.isNone(armed)) return false;
-    const status = yield* sendEmailWithBoundedRetry({
-      purpose: "browser-pairing-approval",
-      to: armed.value.emailAddress,
-      combinedCode: armed.value.combinedCode,
-      idempotencyKey: armed.value.idempotencyKey,
-    });
-    yield* withUserTransaction(
+    )
+  );
+  if (Option.isNone(armed)) return false;
+  const status = yield* sendEmailWithBoundedRetry({
+    purpose: "browser-pairing-approval",
+    to: armed.value.emailAddress,
+    combinedCode: armed.value.combinedCode,
+    idempotencyKey: armed.value.idempotencyKey,
+  });
+  yield* withUserTransaction(
+    claim.userId,
+    withSubjectLock(
       claim.userId,
-      withSubjectLock(
-        claim.userId,
-        withUserLockInScope(
-          advisoryLockKey.browserLoginApproval(claim.userId),
-          settleArmedDeliveryInScope({ claim: armed.value, status })
-        )
+      withUserLockInScope(
+        advisoryLockKey.browserLoginApproval(claim.userId),
+        settleArmedDeliveryInScope({ claim: armed.value, status })
       )
-    );
-    return true;
-  }
-);
+    )
+  );
+  return true;
+});
 
 /** Closed worker progress signal that projects no request, User, pairing, or delivery authority. */
 export type BrowserPairingEmailBackgroundStepOutcome =

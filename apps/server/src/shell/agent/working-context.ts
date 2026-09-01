@@ -206,8 +206,6 @@ export const makeStartupWorkingContext = (
  * immutable provider-neutral semantic context without retaining persistence state. Whether the
  * preparation is still current is the hosted runtime's decision, checked before this is called.
  */
-export const makeWorkingContext = Effect.fn("WorkingContext.make")(function* (
-  context: PreparedWorkingContextSnapshot
-) {
+export const makeWorkingContext = Effect.fn(function* (context: PreparedWorkingContextSnapshot) {
   return yield* makeWorkingContextFromInput(context);
 });

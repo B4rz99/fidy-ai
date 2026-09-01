@@ -1,5 +1,5 @@
 import { expect, it } from "@effect/vitest";
-import { BigDecimal, DateTime, Effect, Option, Result, Schema } from "effect";
+import { BigDecimal, DateTime, Effect, Option, Result, Schema, Tracer } from "effect";
 import { Currency, Money, type ReadonlyMoney } from "~/core/_shared/money";
 import {
   type InterpretedStatementRow,
@@ -66,6 +66,22 @@ const xlsxCell = (
   numberFormat: Option.none<string>(),
   formula,
 });
+
+const copDebitMapping = (): StatementColumnMapping =>
+  StatementColumnMapping.make({
+    dateColumn: 0,
+    amountColumn: 1,
+    counterpartyColumn: Option.some(2),
+    currencyColumn: Option.none(),
+    currencyLiteral: Option.some(Currency.make("COP")),
+    directionColumn: Option.some(3),
+    inflowMarkers: ["CREDIT"],
+    outflowMarkers: ["DEBIT"],
+    positiveDirection: "inflow",
+    dateFormat: "dd/MM/yyyy",
+    decimalSeparator: ",",
+    groupingSeparator: Option.some("."),
+  });
 
 it("closes provider failures after the bounded retry policy", () => {
   expect(decideForwardedEmailRecovery({ reason: "provider-unavailable", attemptCount: 2 })).toEqual(
@@ -287,29 +303,31 @@ it("rejects contradictory mapping strategies", () => {
   );
 });
 
+it.effect("does not create spans while interpreting statement rows", () =>
+  Effect.gen(function* () {
+    const tracer = Tracer.make({
+      span: () => {
+        throw new Error("statement interpretation created an unexpected span");
+      },
+    });
+
+    yield* interpretCanonicalRows({
+      rows: [csvRow(1, ["05/02/2026", "25.000", "Mercado", "DEBIT"])],
+      mapping: copDebitMapping(),
+      timeZone: "America/Bogota",
+    }).pipe(Effect.provideService(Tracer.Tracer, tracer));
+  })
+);
+
 it.effect("accounts for every row through the canonical Transaction and Money gate", () =>
   Effect.gen(function* () {
-    const mapping = StatementColumnMapping.make({
-      dateColumn: 0,
-      amountColumn: 1,
-      counterpartyColumn: Option.some(2),
-      currencyColumn: Option.none(),
-      currencyLiteral: Option.some(Currency.make("COP")),
-      directionColumn: Option.some(3),
-      inflowMarkers: ["CREDIT"],
-      outflowMarkers: ["DEBIT"],
-      positiveDirection: "inflow",
-      dateFormat: "dd/MM/yyyy",
-      decimalSeparator: ",",
-      groupingSeparator: Option.some("."),
-    });
     const interpreted = yield* interpretCanonicalRows({
       rows: [
         csvRow(1, ["05/02/2026", "25.000", "Mercado", "DEBIT"]),
         csvRow(2, ["06/02/2026", "10,555", "Taxi", "DEBIT"]),
         csvRow(3, ["", "8.000", "Panadería", "DEBIT"]),
       ],
-      mapping,
+      mapping: copDebitMapping(),
       timeZone: "America/Bogota",
     });
 

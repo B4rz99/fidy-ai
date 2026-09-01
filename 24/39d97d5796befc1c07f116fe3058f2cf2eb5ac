@@ -1,0 +1,106 @@
+apps/server/src/shell/channels/whatsapp/routes.ts
+  s_de6e1a349d7db8::t_2d62bc3ba688a0 269
+  s_de6e1a349d7db8::t_3ae366c8087eba 250
+apps/server/src/shell/onboarding/completion-transition.ts
+  s_de6e1a349d7db8::t_bbdb8575fce172 38,150-162
+  s_de6e1a349d7db8::t_225671774ba194 67,99,130
+apps/server/src/shell/ingestion/forwarded-email-ingestion.ts
+  s_de6e1a349d7db8::t_bbdb8575fce172 82-84,86-105,107,121
+apps/server/src/shell/subscription/card-enrollment.ts
+  s_de6e1a349d7db8::t_8b17846e5750d5 112,161,259,299
+  s_de6e1a349d7db8::t_2a399b558c74af 189,414
+apps/server/src/shell/channels/whatsapp/disclosure-delivery.ts
+  s_de6e1a349d7db8::t_4e5cafc04e5919 38,55,76,115,162
+apps/server/src/shell/agent/conversation.ts
+  s_de6e1a349d7db8::t_bbdb8575fce172 36
+apps/server/src/shell/channels/whatsapp/outbound.ts
+  s_de6e1a349d7db8::t_6b16e1a4612055 131
+apps/server/src/shell/subscription/enrollment-handlers.ts
+  s_de6e1a349d7db8::t_4c02a8523ee51e 49
+  s_de6e1a349d7db8::t_bbdb8575fce172 88,104
+apps/server/src/shell/email-authentication/delivery-retry.ts
+  s_de6e1a349d7db8::t_5626f44be877a5 10
+  s_de6e1a349d7db8::t_bbdb8575fce172 55-70
+apps/server/src/shell/email-authentication/authentication-retention.ts
+  s_de6e1a349d7db8::t_5051eced5a1f20 46,58
+  s_de6e1a349d7db8::t_bbdb8575fce172 18,36-38,43
+apps/server/src/shell/onboarding/turn-transition.ts
+  s_de6e1a349d7db8::t_bbdb8575fce172 199,372
+  s_de6e1a349d7db8::t_2fa11c0631806b 56,114,143,173,204,296,342
+apps/server/src/shell/email-authentication/replacement-transition.ts
+  s_de6e1a349d7db8::t_56dfec4b840c29 342
+  s_de6e1a349d7db8::t_bbdb8575fce172 81-86,90-91,93-96,123-126,129,180-200,210-212,217,225-226,233,235-245,247-248,285,292-313,315-316,320-321,326-327,329-335,340,393-398
+  s_de6e1a349d7db8::t_e634092786e6da 131,144
+apps/server/src/shell/agent/repl.ts
+  s_de6e1a349d7db8::t_bbdb8575fce172 46
+apps/server/src/shell/recovery/routes.ts
+  s_de6e1a349d7db8::t_bbdb8575fce172 76
+apps/server/src/shell/email-authentication/authentication-delivery-worker.ts
+  s_de6e1a349d7db8::t_70209e720a00d1 62
+  s_de6e1a349d7db8::t_bbdb8575fce172 44,77-79,84,86-103,127-130,132-136,138-143,155,166-173,175-177,179-190,192-194,196-199
+apps/server/src/shell/email-authentication/replacement-delivery-worker.ts
+  s_de6e1a349d7db8::t_bbdb8575fce172 38,54-63,85-91,93-99,113-114
+apps/server/src/shell/email-authentication/replacement-retention.ts
+  s_de6e1a349d7db8::t_bbdb8575fce172 18,36-39
+  s_de6e1a349d7db8::t_b29422d4242c4b 70
+apps/server/src/shell/agent/tool-confirmation.ts
+  s_de6e1a349d7db8::t_680743dcef6290 353
+  s_de6e1a349d7db8::t_5e89ab9efe97c7 308
+apps/server/src/shell/ingestion/email-anonymization-approval.ts
+  s_de6e1a349d7db8::t_7582709e1c4d5b 31
+apps/server/src/shell/email-authentication/browser-pairing-authentication.ts
+  s_de6e1a349d7db8::t_bbdb8575fce172 95-98,115-118,133-136,150-153,173-176,184-189,192-246,295-298,365,392-405,415-417,422-423,425-426,431,438-439,445,552-561,567-568,607-610,662-667,671-672,684-689,696-697,699-710,712-738,742-745,751-755
+  s_de6e1a349d7db8::t_88df7bf04c0d55 248,325,447,578,598,757
+apps/server/src/shell/email-authentication/handlers.ts
+  s_de6e1a349d7db8::t_bbdb8575fce172 35,107
+apps/server/src/shell/agent/working-context.ts
+  s_de6e1a349d7db8::t_bbdb8575fce172 209
+apps/server/src/shell/channels/whatsapp/worker.ts
+  s_de6e1a349d7db8::t_503fcf97d1ffa6 38
+apps/server/src/core/ingestion/rules.test.ts
+  s_de6e1a349d7db8::t_d4197c55f93bb5 2,308-314
+  s_de6e1a349d7db8::t_0cf9e128fd1589 70-85,306,316-328,335
+apps/server/src/shell/email-authentication/admission.ts
+  s_de6e1a349d7db8::t_bbdb8575fce172 31-37,40-43,45
+apps/server/src/core/ingestion/rules.ts
+  s_de6e1a349d7db8::t_8eb282c0dcd5f6 298,391,460
+apps/server/src/core/identity/rules.ts
+  s_de6e1a349d7db8::t_a8889923ccfda5 11,35
+apps/server/src/shell/recovery/service.ts
+  s_de6e1a349d7db8::t_6b450371b80733 70
+  s_de6e1a349d7db8::t_4eb1482fbda218 90,105,133
+  s_de6e1a349d7db8::t_bbdb8575fce172 171-182,203,206-215,253-269,271-279,281-283
+apps/server/src/shell/observability/scheduled-work.test.ts
+  s_de6e1a349d7db8::t_85db716a8357b7 2-14,103-123
+  s_de6e1a349d7db8::t_2e8ecb40ef1819 100-102,124-126
+apps/server/src/shell/email-authentication/authentication-handlers.ts
+  s_de6e1a349d7db8::t_bbdb8575fce172 74,95,110,115
+apps/server/src/shell/agent/agent-service.ts
+  s_de6e1a349d7db8::t_bbdb8575fce172 618-626,629-634,637,639-650,1083-1095,1097-1100,1102-1103
+  s_de6e1a349d7db8::t_022f43bf1d2aa2 398,414,486,566,578,602,652,667,1040,1407,1438,1482,1503
+apps/server/src/shell/ingestion/worker.ts
+  s_de6e1a349d7db8::t_8556e289f9e195 113,153,197,240
+apps/server/src/shell/channels/whatsapp/kapso-webhook.ts
+  s_de6e1a349d7db8::t_492ea0f3df40fd 398
+  s_de6e1a349d7db8::t_bbdb8575fce172 483-500,502-509
+  s_de6e1a349d7db8::t_45d6187a259624 275
+apps/server/src/shell/ingestion/email-worker.ts
+  s_de6e1a349d7db8::t_c450a71675c5da 96,206,234
+  s_de6e1a349d7db8::t_bbdb8575fce172 162-165,182-185,272-274,330
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "2439d97d5796befc1c07f116fe3058f2cf2eb5ac",
+  "prompts": {},
+  "sessions": {
+    "s_de6e1a349d7db8": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a05f33-3f42-7ff0-bf64-305bcc4f2f33",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

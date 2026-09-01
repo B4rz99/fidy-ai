@@ -2,7 +2,7 @@
  * Projectors rebuild an untrusted value into the exact shape allowed past the Sentry boundary,
  * constructing each field from a closed schema rather than removing fields from the original.
  */
-import { Cause, Option, Predicate, Schema } from "effect";
+import { Cause, Function, Option, Predicate, Schema } from "effect";
 import { strictDecoding } from "./decoding";
 import {
   ClassifiedFailure,
@@ -13,11 +13,14 @@ import {
   TelemetryBreadcrumb,
   TelemetryCount,
   TelemetryDuration,
+  type TelemetryExternalHttpMethod,
   TelemetryHttpMethod,
   TelemetryHttpStatus,
+  TelemetryHttpStatusClass,
   TelemetryModelUsage,
   TelemetrySpanId,
   TelemetryTraceId,
+  type TelemetryTransportOutcome,
 } from "./protocol";
 import { type TelemetryCode, TelemetryCodeSchema } from "./registry";
 
@@ -200,6 +203,58 @@ const elapsedDurationAttributes = (input: {
       }
     : {};
 
+const firstSuccessStatus = 200;
+const firstRedirectStatus = 300;
+const firstClientErrorStatus = 400;
+const firstServerErrorStatus = 500;
+const httpStatusClass = (status: TelemetryHttpStatus): TelemetryHttpStatusClass => {
+  if (status < firstSuccessStatus) return "1xx";
+  if (status < firstRedirectStatus) return "2xx";
+  if (status < firstClientErrorStatus) return "3xx";
+  if (status < firstServerErrorStatus) return "4xx";
+  return "5xx";
+};
+
+type ExternalHttpRequestAttributes = Readonly<{
+  "fidy.provider": TelemetryCode<"provider">;
+  "http.request.method": TelemetryExternalHttpMethod;
+}>;
+type ExternalHttpResponseAttributes = Readonly<
+  Partial<{ "http.response.status_class": TelemetryHttpStatusClass }>
+>;
+type ExternalHttpOutcomeAttributes = Readonly<{
+  "fidy.transport_outcome": TelemetryTransportOutcome;
+}>;
+
+/** Rebuilds the initial coordinates allowed on a protected external HTTP span. */
+export const projectExternalHttpRequest: {
+  (
+    provider: TelemetryCode<"provider">
+  ): (method: TelemetryExternalHttpMethod) => ExternalHttpRequestAttributes;
+  (
+    method: TelemetryExternalHttpMethod,
+    provider: TelemetryCode<"provider">
+  ): ExternalHttpRequestAttributes;
+} = Function.dual(
+  2,
+  (method: TelemetryExternalHttpMethod, provider: TelemetryCode<"provider">) => ({
+    "fidy.provider": provider,
+    "http.request.method": method,
+  })
+);
+
+/** Rebuilds a provider response status into its only allowed low-cardinality coordinate. */
+export const projectExternalHttpResponse = (status: number): ExternalHttpResponseAttributes =>
+  Option.match(decodeStrict(TelemetryHttpStatus, status), {
+    onNone: () => ({}),
+    onSome: (value) => ({ "http.response.status_class": httpStatusClass(value) }),
+  });
+
+/** Rebuilds an external HTTP transport completion into its closed outcome coordinate. */
+export const projectExternalHttpOutcome = (
+  outcome: TelemetryTransportOutcome
+): ExternalHttpOutcomeAttributes => ({ "fidy.transport_outcome": outcome });
+
 const spanAttributes = (
   metadata: SpanDescriptor["metadata"],
   modelUsage: Option.Option<TelemetryModelUsage>
@@ -233,7 +288,10 @@ const spanAttributes = (
         "fidy.attempt": metadata.attempt,
         ...Option.match(metadata.status, {
           onNone: () => ({}),
-          onSome: (value) => ({ "http.response.status_code": value }),
+          onSome: (value) => ({
+            "http.response.status_code": value,
+            "http.response.status_class": httpStatusClass(value),
+          }),
         }),
       };
     case "Model":
@@ -263,6 +321,7 @@ export const ProjectedTraceData = Schema.Struct({
   "fidy.retryable": Schema.Boolean,
   "http.request.method": Schema.optionalKey(TelemetryHttpMethod),
   "http.response.status_code": Schema.optionalKey(TelemetryHttpStatus),
+  "http.response.status_class": Schema.optionalKey(TelemetryHttpStatusClass),
   "http.route": Schema.optionalKey(TelemetryCodeSchema.httpRoute),
   "db.system.name": Schema.optionalKey(TelemetryCodeSchema.databaseSystem),
   "fidy.repository_operation": Schema.optionalKey(TelemetryCodeSchema.repositoryOperation),

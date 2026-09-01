@@ -7,6 +7,7 @@ import type {
   EmailVerificationCode,
 } from "~/core/email-authentication/model";
 import { collectBoundedResponseBytes } from "~/shell/_shared/bounded-bytes";
+import { makeExternalHttpClient } from "~/shell/_shared/external-http-policy";
 
 const onboardingSubject = "Verifica tu correo en Fidy";
 const replacementSubject = "Verifica tu nuevo correo en Fidy";
@@ -142,7 +143,7 @@ export class EmailDeliveryPort extends Context.Service<
   static readonly layer = Layer.effect(
     EmailDeliveryPort,
     Effect.gen(function* () {
-      const httpClient = yield* HttpClient.HttpClient;
+      const httpClient = (yield* HttpClient.HttpClient).pipe(makeExternalHttpClient("resend"));
       const environment = yield* Config.string("NODE_ENV").pipe(Config.withDefault("development"));
       if (environment !== "production") {
         return EmailDeliveryPort.of({

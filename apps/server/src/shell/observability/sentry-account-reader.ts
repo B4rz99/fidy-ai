@@ -2,6 +2,7 @@ import { TaggedSerializableError, jsonStringSchema } from "~/schema-compatibilit
 import { Config, Effect, Option, Redacted, Schema } from "effect";
 import { HttpClient, HttpClientRequest, type HttpClientResponse } from "effect/unstable/http";
 import { collectBoundedResponseBytes } from "~/shell/_shared/bounded-bytes";
+import { makeExternalHttpClient } from "~/shell/_shared/external-http-policy";
 import type {
   SentryAccountObservation,
   SentryProjectObservation,
@@ -200,8 +201,7 @@ export const unavailableSentryAccountObservation: SentryAccountObservation = {
   _tag: "unavailable",
 };
 
-/** Reads Sentry organization/project state without mutating it and drops all account locators. */
-export const inspectSentryAccount = (
+const inspectProtectedSentryAccount = (
   config: SentryAccountReaderConfig
 ): Effect.Effect<SentryAccountObservation, SentryAccountReadError, HttpClient.HttpClient> =>
   Effect.gen(function* () {
@@ -253,3 +253,16 @@ export const inspectSentryAccount = (
       nonProduction: nonProductionObservation,
     };
   });
+
+/** Reads Sentry organization/project state without mutating it and drops all account locators. */
+export const inspectSentryAccount = (
+  config: SentryAccountReaderConfig
+): Effect.Effect<SentryAccountObservation, SentryAccountReadError, HttpClient.HttpClient> =>
+  Effect.flatMap(HttpClient.HttpClient, (httpClient) =>
+    inspectProtectedSentryAccount(config).pipe(
+      Effect.provideService(
+        HttpClient.HttpClient,
+        httpClient.pipe(makeExternalHttpClient("sentry"))
+      )
+    )
+  );

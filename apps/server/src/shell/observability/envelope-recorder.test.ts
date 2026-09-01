@@ -391,6 +391,7 @@ const workAttributes = [
       "fidy.provider": "kapso",
       "fidy.attempt": 1,
       "http.response.status_code": 503,
+      "http.response.status_class": "5xx",
     },
   },
   {
@@ -492,6 +493,7 @@ it.effect("records a response status learned while provider work is active", () 
     expect(data).toMatchObject({
       "fidy.attempt": 2,
       "http.response.status_code": 202,
+      "http.response.status_class": "2xx",
     });
     expect(typeof data?.["fidy.duration_milliseconds"]).toBe("number");
   })

@@ -74,9 +74,7 @@ const withEnrollmentConsent = <A, E, R>(
     })
   );
 
-const readJson = Effect.fn("Subscription.readEnrollmentJson")(function* (
-  request: HttpServerRequest.HttpServerRequest
-) {
+const readJson = Effect.fn(function* (request: HttpServerRequest.HttpServerRequest) {
   const contentType = request.headers["content-type"];
   if (contentType === undefined || !/^application\/json(?:\s*;.*)?$/iu.test(contentType)) {
     return yield* unsupportedMediaType();

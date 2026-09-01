@@ -380,7 +380,7 @@ const findLockedWorkflow = Effect.fn("EmailAuthentication.findLockedPairingWorkf
   })(pairingId).pipe(Effect.orDie);
 });
 
-const makePublicCode = Effect.fn("EmailAuthentication.makePairingPublicCode")(function* () {
+const makePublicCode = Effect.fn(function* () {
   const crypto = yield* Crypto.Crypto;
   return EmailVerificationPublicCode.make(
     formatEmailCode({

@@ -275,9 +275,7 @@ export const requestEmailReplacement = Effect.fn("EmailReplacementTransition.req
   }
 );
 
-const digestProof = Effect.fn("EmailAuthentication.digestReplacementProof")(function* (
-  proof: EmailVerificationProof
-) {
+const digestProof = Effect.fn(function* (proof: EmailVerificationProof) {
   const crypto = yield* Crypto.Crypto;
   return yield* crypto.digest("SHA-256", new TextEncoder().encode(proof)).pipe(Effect.orDie);
 });

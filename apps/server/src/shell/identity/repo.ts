@@ -71,7 +71,7 @@ const userColumns = `id, service_market AS "serviceMarket", locale,
   trial_started_at AS "trialStartedAt", trial_ends_at AS "trialEndsAt",
   created_at AS "createdAt"`;
 
-const writeUser = Effect.fn("Identity.writeUser")(function* (
+const writeUser = Effect.fn(function* (
   mode: "insert" | "upsert",
   userId: UserId,
   attributes: typeof UserWithoutId.Type
@@ -194,7 +194,7 @@ export const updateUserPreferencesInScope = Effect.fn("updateUserPreferencesInSc
   })({ userId, ...preferences }).pipe(Effect.map(Option.map(decodeUserRow)), Effect.orDie);
 });
 
-const writeWhatsAppIdentity = Effect.fn("Identity.writeWhatsApp")(function* (
+const writeWhatsAppIdentity = Effect.fn(function* (
   mode: "insert" | "associate" | "observe",
   userId: UserId,
   identity: typeof WhatsAppIdentityWithoutUserId.Type

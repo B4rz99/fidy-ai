@@ -118,7 +118,7 @@ const stringOrEmpty = (value: unknown): string => (Predicate.isString(value) ? v
 const sha256 = (bytes: Uint8Array): Effect.Effect<Uint8Array, never, Crypto.Crypto> =>
   Effect.flatMap(Crypto.Crypto, (crypto) => crypto.digest("SHA-256", bytes)).pipe(Effect.orDie);
 
-const generatePublicCode = Effect.fn("PATPairing.generatePublicCode")(function* () {
+const generatePublicCode = Effect.fn(function* () {
   const crypto = yield* Crypto.Crypto;
   let symbols = "";
   while (symbols.length < publicCodeSymbols) {

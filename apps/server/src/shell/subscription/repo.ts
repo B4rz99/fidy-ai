@@ -28,7 +28,7 @@ const priceColumns = `revision.id, revision.amount, revision.currency,
   revision.paid_access_ends AS "paidAccessEnds", revision.payment_methods AS "paymentMethods"`;
 
 const decodePrice = Schema.decodeUnknownEffect(Price);
-const priceFromRow = Effect.fn("priceFromRow")((row: typeof PriceFlatRow.Type) =>
+const priceFromRow = Effect.fn((row: typeof PriceFlatRow.Type) =>
   decodePrice({
     id: row.id,
     money: { amount: encodeMoneyAmount(row.amount), currency: row.currency },

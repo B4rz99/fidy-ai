@@ -138,9 +138,7 @@ export type LockedPATPairingCandidate =
   | (LockedCandidateBase & Readonly<{ _tag: "ExpiredUnapproved"; lifecycle: "expired_unapproved" }>)
   | (LockedCandidateBase & Readonly<{ _tag: "RevokedUnclaimed"; lifecycle: "revoked_unclaimed" }>);
 
-const authorizationFromRow = Effect.fn("PATPairing.authorizationFromRow")(function* (
-  row: LockedPATPairingCandidateRow
-) {
+const authorizationFromRow = Effect.fn(function* (row: LockedPATPairingCandidateRow) {
   const fields = [
     Option.isSome(row.tokenId),
     Option.isSome(row.shortId),
@@ -164,9 +162,7 @@ const authorizationFromRow = Effect.fn("PATPairing.authorizationFromRow")(functi
 
 type ReviewBinding = Readonly<{ userId: UserId; inspectedAt: DateTime.Utc }>;
 
-const reviewBindingFromRow = Effect.fn("PATPairing.reviewBindingFromRow")(function* (
-  row: LockedPATPairingCandidateRow
-) {
+const reviewBindingFromRow = Effect.fn(function* (row: LockedPATPairingCandidateRow) {
   if (Option.isSome(row.userId) !== Option.isSome(row.inspectedAt)) {
     return yield* Effect.die("PATPairing review binding is partially present");
   }
@@ -175,7 +171,7 @@ const reviewBindingFromRow = Effect.fn("PATPairing.reviewBindingFromRow")(functi
     : Option.none<ReviewBinding>();
 });
 
-const approvedCandidate = Effect.fn("PATPairing.approvedCandidate")(function* (input: {
+const approvedCandidate = Effect.fn(function* (input: {
   readonly base: LockedCandidateBase;
   readonly binding: Option.Option<ReviewBinding>;
   readonly authorization: Option.Option<ClaimablePATProjection>;
@@ -192,7 +188,7 @@ const approvedCandidate = Effect.fn("PATPairing.approvedCandidate")(function* (i
   };
 });
 
-const terminalCandidate = Effect.fn("PATPairing.terminalCandidate")(function* (input: {
+const terminalCandidate = Effect.fn(function* (input: {
   readonly base: LockedCandidateBase;
   readonly lifecycle: "claimed" | "expired_unapproved" | "revoked_unclaimed";
   readonly binding: Option.Option<ReviewBinding>;
@@ -212,9 +208,7 @@ const terminalCandidate = Effect.fn("PATPairing.terminalCandidate")(function* (i
     : { ...input.base, _tag: "RevokedUnclaimed" as const, lifecycle: input.lifecycle };
 });
 
-const candidateFromRow = Effect.fn("PATPairing.candidateFromRow")(function* (
-  row: LockedPATPairingCandidateRow
-) {
+const candidateFromRow = Effect.fn(function* (row: LockedPATPairingCandidateRow) {
   const authorization = yield* authorizationFromRow(row);
   const binding = yield* reviewBindingFromRow(row);
   const { lifecycle } = row;
@@ -383,7 +377,7 @@ const ReviewRow = Schema.Struct({
   inspectedAt: Schema.DateTimeUtcFromDate,
 });
 
-const bindPATPairingReview = Effect.fn("PATPairing.bindReview")(function* (input: {
+const bindPATPairingReview = Effect.fn(function* (input: {
   readonly userId: UserId;
   readonly publicCode: PATPairingPublicCode;
   readonly attemptedAt: DateTime.Utc;

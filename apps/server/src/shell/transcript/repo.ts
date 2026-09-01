@@ -29,10 +29,7 @@ const OwnedTranscriptEntryRow = Schema.Struct({
   entry: PersistedTranscriptContentEntry,
 });
 
-const appendOne = Effect.fn("appendTranscriptEntry")(function* (
-  subjectUserId: UserId,
-  entry: TranscriptContentEntry
-) {
+const appendOne = Effect.fn(function* (subjectUserId: UserId, entry: TranscriptContentEntry) {
   const sql = yield* SqlClient.SqlClient;
   yield* SqlSchema.findOne({
     Request: OwnedTranscriptEntryRow,

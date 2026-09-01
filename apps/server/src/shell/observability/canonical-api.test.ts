@@ -28,6 +28,7 @@ layer(ApiTelemetryHarness, { excludeTestServices: true, timeout: "30 seconds" })
           const persisted = yield* client.transactions.getTransaction({
             params: { id: created.data.id },
           });
+          const listed = yield* client.transactions.listTransactions({ query: {} });
           const envelopes = yield* recorder.serializedEnvelopes;
           const transactions = transactionPayloads(envelopes);
           const captureTrace = transactions.filter(
@@ -49,6 +50,7 @@ layer(ApiTelemetryHarness, { excludeTestServices: true, timeout: "30 seconds" })
           const serialized = envelopes.map((bytes) => new TextDecoder().decode(bytes)).join("\n");
 
           expect(persisted.data).toEqual(created.data);
+          expect(listed.data).toEqual([created.data]);
           const observedRoot = Option.getOrThrow(Option.fromUndefinedOr(root));
           const observedOperation = Option.getOrThrow(Option.fromUndefinedOr(operation));
           const observedRepository = Option.getOrThrow(Option.fromUndefinedOr(repository));
@@ -83,6 +85,8 @@ layer(ApiTelemetryHarness, { excludeTestServices: true, timeout: "30 seconds" })
           expect(serialized).not.toContain(created.data.id);
           expect(serialized).not.toContain("authorization");
           expect(serialized).not.toContain("Bearer");
+          expect(serialized).not.toContain("selectTransactionRowsInScope");
+          expect(serialized).not.toContain("transactionFromRow");
           expect(serialized).not.toContain("INSERT INTO");
           expect(serialized).not.toContain('"request"');
           expect(serialized).not.toContain('"response"');

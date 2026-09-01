@@ -65,7 +65,7 @@ export const advisoryLockKey = {
   whatsAppAdmission: (userId: string): AdvisoryLockKey => ({ value: userId, seed: 0 }),
 } as const;
 
-const acquireSessionLock = Effect.fn("acquireSessionLock")(function* (lockKey: AdvisoryLockKey) {
+const acquireSessionLock = Effect.fn(function* (lockKey: AdvisoryLockKey) {
   const sql = yield* SqlClient.SqlClient;
   const connection = yield* sql.reserve.pipe(Effect.orDie);
   yield* Effect.addFinalizer(() =>

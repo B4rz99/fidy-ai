@@ -16,9 +16,7 @@ type PATDisclosureSnapshotInput = Readonly<{
   buildText: (input: { grant: ManualPATGrantInput; expiresAt: DateTime.Utc }) => string;
 }>;
 
-const snapshotPATDisclosure = Effect.fn("snapshotPATDisclosure")(function* (
-  input: PATDisclosureSnapshotInput
-) {
+const snapshotPATDisclosure = Effect.fn(function* (input: PATDisclosureSnapshotInput) {
   const { grant, expiresAt, revision, buildText } = input;
   const base = yield* currentDisclosure;
   const text = buildText({ grant, expiresAt });

@@ -51,20 +51,22 @@ const sha256 = (bytes: Uint8Array): Effect.Effect<Uint8Array, never, Crypto.Cryp
   Effect.flatMap(Crypto.Crypto, (crypto) => crypto.digest("SHA-256", bytes)).pipe(Effect.orDie);
 
 /** Selects uniform alphabet indexes by rejection sampling rather than modulo bias. */
-const generatePublicCodeSymbols = Effect.fn("BrowserLogin.generatePublicCodeSymbols")(
-  function* (): Effect.fn.Return<string, never, Crypto.Crypto> {
-    const crypto = yield* Crypto.Crypto;
-    let symbols = "";
-    while (symbols.length < publicCodeSymbols) {
-      const bytes = yield* crypto.randomBytes(randomCodeBatchOctets).pipe(Effect.orDie);
-      symbols += selectPublicCodeSymbols({
-        bytes: Array.from(bytes),
-        maximum: publicCodeSymbols - symbols.length,
-      });
-    }
-    return symbols;
+const generatePublicCodeSymbols = Effect.fn(function* (): Effect.fn.Return<
+  string,
+  never,
+  Crypto.Crypto
+> {
+  const crypto = yield* Crypto.Crypto;
+  let symbols = "";
+  while (symbols.length < publicCodeSymbols) {
+    const bytes = yield* crypto.randomBytes(randomCodeBatchOctets).pipe(Effect.orDie);
+    symbols += selectPublicCodeSymbols({
+      bytes: Array.from(bytes),
+      maximum: publicCodeSymbols - symbols.length,
+    });
   }
-);
+  return symbols;
+});
 
 type PairingWriteWithoutPublicCode = Omit<StartPairingWrite, "publicCode">;
 
@@ -140,8 +142,8 @@ export type CheckedBrowserLoginPrivateVerifier = Readonly<{
   expiresAt: DateTime.Utc;
 }>;
 
-const digestBrowserLoginVerifierInput = Effect.fn("BrowserLogin.digestVerifierInput")(
-  (input: unknown) => sha256(new TextEncoder().encode(normalizeOpaqueProof32(stringOrEmpty(input))))
+const digestBrowserLoginVerifierInput = Effect.fn((input: unknown) =>
+  sha256(new TextEncoder().encode(normalizeOpaqueProof32(stringOrEmpty(input))))
 );
 
 /**

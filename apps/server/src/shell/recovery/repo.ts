@@ -80,7 +80,7 @@ const retryForExceededBounds = (admission: typeof Admission.Type): number => {
   return Math.max(1, ...retries);
 };
 
-const recordAdmission = Effect.fn("Recovery.recordAdmission")(function* (
+const recordAdmission = Effect.fn(function* (
   operatorId: SupportOperatorId,
   attemptedAt: DateTime.Utc
 ) {
@@ -100,7 +100,7 @@ const recordAdmission = Effect.fn("Recovery.recordAdmission")(function* (
   `;
 });
 
-const readAdmission = Effect.fn("Recovery.readAdmission")(function* (
+const readAdmission = Effect.fn(function* (
   operatorId: SupportOperatorId,
   attemptedAt: DateTime.Utc
 ) {

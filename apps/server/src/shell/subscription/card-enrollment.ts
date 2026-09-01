@@ -58,13 +58,13 @@ export type SubmitCardEnrollment =
       billingEmail: BillingEmail;
     }>;
 
-const digestText = Effect.fn("Subscription.digestEnrollmentText")(function* (text: string) {
+const digestText = Effect.fn(function* (text: string) {
   const crypto = yield* Crypto.Crypto;
   const bytes = yield* crypto.digest("SHA-256", new TextEncoder().encode(text)).pipe(Effect.orDie);
   return Encoding.encodeHex(bytes);
 });
 
-const makeDisclosure = Effect.fn("Subscription.makeRecurringDisclosure")(function* () {
+const makeDisclosure = Effect.fn(function* () {
   const displayedText = "Autorizo los cobros recurrentes de mi suscripción.";
   return RecurringDisclosure.make({
     revision: "wompi-card-enrollment-v1",

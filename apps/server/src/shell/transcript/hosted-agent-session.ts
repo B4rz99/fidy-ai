@@ -76,7 +76,7 @@ const activeSessionInScope = Effect.fn("HostedAgentSession.activeInScope")(funct
   })(userId).pipe(Effect.orDie);
 });
 
-const makeSessionId = Effect.fn("HostedAgentSession.makeId")(function* () {
+const makeSessionId = Effect.fn(function* () {
   const crypto = yield* Crypto.Crypto;
   return HostedAgentSessionId.make(yield* crypto.randomUUIDv7.pipe(Effect.orDie));
 });

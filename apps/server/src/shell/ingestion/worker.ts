@@ -65,10 +65,7 @@ const cachedMapping = (
 ): ReturnType<typeof findStatementMappingInScope> =>
   withUserTransaction(claimed.userId, findStatementMappingInScope(claimed.userId, fingerprint));
 
-const mappingFor = Effect.fn("statementMappingFor")(function* (
-  claimed: ClaimedStatement,
-  parsed: ParsedStatement
-) {
+const mappingFor = Effect.fn(function* (claimed: ClaimedStatement, parsed: ParsedStatement) {
   const fingerprint = yield* formatFingerprint(parsed);
   const cached = yield* cachedMapping(claimed, fingerprint);
   if (Option.isSome(cached)) return { fingerprint, mapping: cached.value };

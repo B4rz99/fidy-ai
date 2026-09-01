@@ -49,9 +49,7 @@ export const notificationEmailExtractorRevision = "notification-email-extractor-
 /** Durable revision attached to automatic value-free redaction candidates. */
 export const notificationEmailAnonymizationRevision = "email-redaction-candidate-v1";
 
-const encodeReceivedEmailContent = Effect.fn("encodeReceivedEmailContent")(function* (
-  content: ReceivedEmailContentType
-) {
+const encodeReceivedEmailContent = Effect.fn(function* (content: ReceivedEmailContentType) {
   const encoded = yield* Schema.encodeEffect(ReceivedEmailContent)(content);
   return yield* Schema.encodeEffect(UnknownJsonString)(encoded);
 });

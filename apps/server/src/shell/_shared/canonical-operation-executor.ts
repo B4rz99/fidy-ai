@@ -184,7 +184,7 @@ export const executeCanonicalEffect = Effect.fn("executeCanonicalEffect")(functi
 });
 
 /** Records the declared rejection before failing, so hosted evidence exists for every refusal. */
-const rejectHostedCall = Effect.fn("rejectHostedCall")(function* (input: {
+const rejectHostedCall = Effect.fn(function* (input: {
   readonly caller: CanonicalCaller;
   readonly operation: CanonicalOperationId;
   readonly occurredAt: DateTime.Utc;
@@ -200,7 +200,7 @@ const rejectHostedCall = Effect.fn("rejectHostedCall")(function* (input: {
 });
 
 /** Resolves the declared operation, its implementation, and the exact input a permit must confirm. */
-const resolveHostedCall = Effect.fn("resolveHostedCall")(function* (input: {
+const resolveHostedCall = Effect.fn(function* (input: {
   readonly caller: CanonicalCaller;
   readonly binding: AgentOperationBinding;
   readonly untrustedInput: unknown;

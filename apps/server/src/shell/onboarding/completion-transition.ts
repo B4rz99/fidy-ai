@@ -42,9 +42,7 @@ const deleteBoundedEvidence = Effect.fn("Onboarding.deleteBoundedEvidence")(func
   yield* removePendingConsentExchange(enrollment.consent.pendingConsentExchangeId);
 });
 
-const makeProofCandidate = Effect.fn("Onboarding.makeProofCandidate")(function* (
-  combinedCode: EmailVerificationCode
-) {
+const makeProofCandidate = Effect.fn(function* (combinedCode: EmailVerificationCode) {
   const crypto = yield* Crypto.Crypto;
   const groups = combinedCode.split("-");
   const proof = groups.slice(2).join("-");
@@ -54,7 +52,7 @@ const makeProofCandidate = Effect.fn("Onboarding.makeProofCandidate")(function* 
   };
 });
 
-const makeStableMaterial = Effect.fn("Onboarding.makeStableMaterial")(function* () {
+const makeStableMaterial = Effect.fn(function* () {
   const crypto = yield* Crypto.Crypto;
   const recovery = yield* generateBackupRecoveryMaterial();
   return {

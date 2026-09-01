@@ -509,7 +509,7 @@ const StoredDurableTraceContext = Schema.Struct({
 const LoadClaimRequest = Schema.Struct({ userId: UserId, claimId: WhatsAppClaimId });
 type ClaimedJob = typeof ClaimedJob.Type;
 
-const markClaimStarted = Effect.fn("WhatsApp.markClaimStarted")(function* (
+const markClaimStarted = Effect.fn(function* (
   sql: SqlClient.SqlClient,
   claim: WhatsAppTurnClaim,
   claimTime: DateTime.Utc
@@ -534,10 +534,7 @@ const markClaimStarted = Effect.fn("WhatsApp.markClaimStarted")(function* (
   `;
 });
 
-const loadClaimedJobs = Effect.fn("WhatsApp.loadClaimedJobs")(function* (
-  sql: SqlClient.SqlClient,
-  claim: WhatsAppTurnClaim
-) {
+const loadClaimedJobs = Effect.fn(function* (sql: SqlClient.SqlClient, claim: WhatsAppTurnClaim) {
   return yield* SqlSchema.findAll({
     Request: LoadClaimRequest,
     Result: ClaimedJob,
@@ -568,26 +565,28 @@ const PreviousOutboundEvidence = Schema.Struct({
   providerMessageId: WhatsAppProviderMessageId,
 });
 
-const loadConfirmationOutboundEvidence = Effect.fn("WhatsApp.loadConfirmationOutboundEvidence")(
-  function* (sql: SqlClient.SqlClient, userId: UserId, digest: ConfirmationDigest) {
-    return yield* SqlSchema.findOneOption({
-      Request: Schema.Struct({
-        userId: UserId,
-        digest: ConfirmationDigest,
-      }),
-      Result: PreviousOutboundEvidence,
-      execute: (request) => sql`
+const loadConfirmationOutboundEvidence = Effect.fn(function* (
+  sql: SqlClient.SqlClient,
+  userId: UserId,
+  digest: ConfirmationDigest
+) {
+  return yield* SqlSchema.findOneOption({
+    Request: Schema.Struct({
+      userId: UserId,
+      digest: ConfirmationDigest,
+    }),
+    Result: PreviousOutboundEvidence,
+    execute: (request) => sql`
         SELECT provider_message_id AS "providerMessageId"
         FROM whatsapp_message_evidence
         WHERE user_id = ${request.userId} AND direction = 'outbound'
           AND confirmation_digest = ${request.digest}
         LIMIT 1
       `,
-    })({ userId, digest });
-  }
-);
+  })({ userId, digest });
+});
 
-const prepareStartedTurn = Effect.fn("WhatsApp.prepareStartedTurn")(function* (input: {
+const prepareStartedTurn = Effect.fn(function* (input: {
   readonly claim: WhatsAppTurnClaim;
   readonly claimTime: DateTime.Utc;
   readonly jobs: EffectArray.NonEmptyReadonlyArray<ClaimedJob>;

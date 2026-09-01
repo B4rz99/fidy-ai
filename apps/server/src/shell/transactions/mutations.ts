@@ -13,6 +13,11 @@ import {
   UpdateTransactionInput,
 } from "~/core/transactions/model";
 import { checkAlreadyOccurred } from "~/core/transactions/rules";
+import {
+  automaticUserDecisions,
+  correctedUserDecisions,
+  decideCaptureUserDecisions,
+} from "~/core/transactions/user-decisions";
 import { type UserId } from "~/core/identity/reference";
 import { type CanonicalMutationImplementation } from "~/shell/_shared/canonical-mutation";
 import { type NotFound, type ValidationFailed } from "~/shell/_shared/errors";
@@ -125,12 +130,13 @@ export const createTransaction: CanonicalMutationImplementation<
   yield* checkAlreadyOccurred({ occurredAt: payload.occurredAt, now }).pipe(
     mapTransactionFailure({ caller })
   );
+  const userDecisions = yield* decideCaptureUserDecisions(payload);
   const categoryId = yield* captureCategory(userId, payload, caller);
   const input = UpdateTransactionInput.make({ ...payload, categoryId });
   const user = yield* findUserInScope(userId).pipe(Effect.flatMap(Effect.fromOption), Effect.orDie);
   const transaction = yield* telemetry.span(
     captureTransactionSpan,
-    insertTransactionInScope(userId, input)
+    insertTransactionInScope(userId, { facts: input, userDecisions })
   );
   yield* insertManualSourceAttestationInScope(userId, transaction.id, {
     serviceMarket: user.serviceMarket,
@@ -155,14 +161,14 @@ const captureExtractedTransactionInScope = Effect.fn("captureExtractedTransactio
       counterparty: input.extraction.counterparty,
       callerCategory: Option.none(),
     });
-    return yield* insertTransactionInScope(
-      input.userId,
-      UpdateTransactionInput.make({
+    return yield* insertTransactionInScope(input.userId, {
+      facts: UpdateTransactionInput.make({
         ...input.extraction,
         categoryId,
         notes: Option.none(),
-      })
-    );
+      }),
+      userDecisions: automaticUserDecisions,
+    });
   }
 );
 
@@ -257,7 +263,10 @@ export const correctTransaction: CanonicalMutationImplementation<
     mapTransactionFailure({ caller })
   );
   yield* requireKnownCategory(payload.categoryId, caller);
-  const transaction = yield* updateTransactionInScope(userId, transactionId, payload).pipe(
+  const transaction = yield* updateTransactionInScope(userId, transactionId, {
+    facts: payload,
+    userDecisions: correctedUserDecisions,
+  }).pipe(
     Effect.flatMap(Effect.fromOption(missingTransaction(transactionId))),
     mapTransactionFailure({ caller })
   );

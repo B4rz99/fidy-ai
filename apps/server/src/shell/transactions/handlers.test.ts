@@ -12,7 +12,7 @@ import { TelemetryDisabled } from "~/shell/observability/disabled";
 import { ApiHarness, ApiHarnessClient } from "~/shell/testing/api-harness";
 import { withUserTransaction } from "~/shell/db/user-transaction";
 import { freePatCaller } from "~/shell/_shared/suggested-operations";
-import { transactionPayload, truncateTransactions } from "./fixtures";
+import { getTransactionUserDecisions, transactionPayload, truncateTransactions } from "./fixtures";
 import { correctTransaction, createTransaction, deleteTransaction } from "./mutations";
 
 const TransactionHarness = Layer.merge(ApiHarness, TelemetryDisabled);
@@ -48,6 +48,39 @@ layer(TransactionHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         const listed = yield* client.transactions.listTransactions({ query: {} });
 
         expect(listed.data).toEqual([created.data]);
+      })
+    );
+
+    it.effect("records exactly which caller capture facts the User decided", () =>
+      Effect.gen(function* () {
+        yield* truncateTransactions;
+        const client = yield* ApiHarnessClient;
+
+        const explicit = yield* client.transactions.createTransaction({
+          payload: transactionPayload({
+            counterparty: Option.some("Mercado Central"),
+            categoryId: Option.some(categoryIds.mercado),
+            notes: Option.some("Almuerzo del domingo"),
+          }),
+        });
+        const automatic = yield* client.transactions.createTransaction({
+          payload: transactionPayload({
+            counterparty: Option.none(),
+            categoryId: Option.none(),
+            notes: Option.none(),
+          }),
+        });
+
+        expect(yield* getTransactionUserDecisions(explicit.data.id)).toEqual({
+          category: true,
+          counterparty: true,
+          notes: true,
+        });
+        expect(yield* getTransactionUserDecisions(automatic.data.id)).toEqual({
+          category: false,
+          counterparty: false,
+          notes: false,
+        });
       })
     );
 
@@ -459,10 +492,20 @@ layer(TransactionHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         yield* truncateTransactions;
         const client = yield* ApiHarnessClient;
         const created = yield* client.transactions.createTransaction({
-          payload: transactionPayload(),
+          payload: transactionPayload({
+            counterparty: Option.some("Cafetería Central"),
+            categoryId: Option.some(categoryIds.restaurantes),
+            notes: Option.none(),
+          }),
         });
         const before = yield* client.transactions.listSourceAttestations({
           params: { id: created.data.id },
+        });
+        const keywordRulesBefore = yield* client.categories.listKeywordRules({});
+        expect(yield* getTransactionUserDecisions(created.data.id)).toEqual({
+          category: true,
+          counterparty: true,
+          notes: false,
         });
 
         const updated = yield* client.transactions.updateTransaction({
@@ -487,6 +530,12 @@ layer(TransactionHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           notes: Option.some("Corrección del usuario"),
         });
         expect(after.data).toEqual(before.data);
+        expect(yield* client.categories.listKeywordRules({})).toEqual(keywordRulesBefore);
+        expect(yield* getTransactionUserDecisions(created.data.id)).toEqual({
+          category: true,
+          counterparty: true,
+          notes: true,
+        });
 
         const cleared = yield* client.transactions.updateTransaction({
           params: { id: created.data.id },
@@ -500,6 +549,11 @@ layer(TransactionHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           },
         });
         expect(Option.isNone(cleared.data.counterparty)).toBe(true);
+        expect(yield* getTransactionUserDecisions(created.data.id)).toEqual({
+          category: true,
+          counterparty: true,
+          notes: true,
+        });
 
         expect(
           (yield* client.transactions.deleteTransaction({ params: { id: created.data.id } })).data

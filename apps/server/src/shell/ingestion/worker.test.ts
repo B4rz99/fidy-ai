@@ -29,7 +29,7 @@ import {
   ApiHarnessClient,
   makeApiClientLive,
 } from "~/shell/testing/api-harness";
-import { transactionPayload } from "~/shell/transactions/fixtures";
+import { getTransactionUserDecisions, transactionPayload } from "~/shell/transactions/fixtures";
 import { StatementColumnMapper, StatementColumnMappingFailed } from "./column-mapper";
 import { truncateStatementIngestion } from "./fixtures";
 import { completeSubmissionInScope } from "./repo";
@@ -480,6 +480,11 @@ layer(WorkerHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           params: { id: captured.id },
         });
         expect(attestations.data[0]).toMatchObject({ kind: "statement-line" });
+        expect(yield* getTransactionUserDecisions(captured.id)).toEqual({
+          category: false,
+          counterparty: false,
+          notes: false,
+        });
         yield* sql`UPDATE users SET paid_tier = 'free' WHERE id = ${defaultUserId}`;
       })
     );

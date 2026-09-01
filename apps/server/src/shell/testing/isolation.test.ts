@@ -34,7 +34,11 @@ import { generateInsightEvent } from "~/shell/insights/repo";
 import { MemoryId, MemoryText } from "~/core/memory/model";
 import { truncateMemories } from "~/shell/memory/fixtures";
 import { AtomicBatchCallId } from "~/shell/operations/operations";
-import { transactionPayload, truncateTransactions } from "~/shell/transactions/fixtures";
+import {
+  getTransactionUserDecisions,
+  transactionPayload,
+  truncateTransactions,
+} from "~/shell/transactions/fixtures";
 import {
   type ApiCallFailure,
   type ApiClient,
@@ -94,7 +98,7 @@ type IsolationAttempt = {
 
 type IsolationProbe = (
   attempt: IsolationAttempt
-) => Effect.Effect<void, ApiCallFailure, HttpClient.HttpClient>;
+) => Effect.Effect<void, ApiCallFailure, HttpClient.HttpClient | MigrationSqlClient>;
 
 /**
  * One probe per canonical operation: invoke it as the stranger, then assert the
@@ -691,6 +695,7 @@ const probes: Record<OperationId, IsolationProbe> = {
 
   "transactions.updateTransaction": (attempt) =>
     Effect.gen(function* () {
+      const before = yield* getTransactionUserDecisions(attempt.ownedTransaction.id);
       const { createdAt: _createdAt, id: _id, ...payload } = attempt.ownedTransaction;
       const denied = yield* Effect.result(
         attempt.strangerClient.transactions.updateTransaction({
@@ -701,11 +706,13 @@ const probes: Record<OperationId, IsolationProbe> = {
       const retained = yield* attempt.ownerClient.transactions.getTransaction({
         params: { id: attempt.ownedTransaction.id },
       });
+      const after = yield* getTransactionUserDecisions(attempt.ownedTransaction.id);
       expect(denied).toMatchObject({
         _tag: "Failure",
         failure: { error: { code: "not_found" } },
       });
       expect(retained.data).toEqual(attempt.ownedTransaction);
+      expect(after).toEqual(before);
     }),
 
   "transactions.deleteTransaction": (attempt) =>

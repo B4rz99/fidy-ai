@@ -110,7 +110,7 @@ const insertReview = Effect.fnUntraced(function* (
   });
 });
 
-const finalizeOutcome = Effect.fn("finalizeStatementOutcome")(function* (
+const finalizeOutcome = Effect.fn(function* (
   claimed: ClaimedStatement,
   outcome: InterpretedStatementRow<TransactionExtraction>
 ) {
@@ -150,7 +150,7 @@ type FinalizationInput = Readonly<{
   mapping: StatementColumnMapping;
 }>;
 
-const finalize = Effect.fn("finalizeStatementSubmission")(function* (input: FinalizationInput) {
+const finalize = Effect.fn(function* (input: FinalizationInput) {
   const { claimed, parsed, fingerprint, mapping } = input;
   const interpreted = yield* interpretStatementRows(
     {
@@ -194,7 +194,7 @@ const finalize = Effect.fn("finalizeStatementSubmission")(function* (input: Fina
   );
 });
 
-const finalizeUnmappedRows = Effect.fn("finalizeUnmappedStatementRows")(function* (
+const finalizeUnmappedRows = Effect.fn(function* (
   claimed: ClaimedStatement,
   parsed: ParsedStatement
 ) {
@@ -237,7 +237,7 @@ const finalizeUnmappedRows = Effect.fn("finalizeUnmappedStatementRows")(function
   );
 });
 
-const processClaimed = Effect.fn("processClaimedStatement")(function* (claimed: ClaimedStatement) {
+const processClaimed = Effect.fn(function* (claimed: ClaimedStatement) {
   const parsed = yield* parseStatementFile(claimed.fileContent).pipe(
     Effect.map(Option.some),
     Effect.catchTag("StatementParseFailed", (failure: StatementParseFailed) =>

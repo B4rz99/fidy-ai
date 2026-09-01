@@ -128,7 +128,7 @@ const kapsoDeliveryOutcome = (failure: KapsoSendFailed): DeclaredOutcome =>
         retryable: failure.automaticRetry,
       };
 
-const sendKapsoText = Effect.fn("WhatsApp.sendText")(function* (request: {
+const sendKapsoText = Effect.fn(function* (request: {
   readonly businessPhoneNumberId: WhatsAppInboundEvent["businessPhoneNumberId"];
   readonly destination: Parameters<KapsoClientService["sendText"]>[0]["destination"];
   readonly text: TranscriptText;

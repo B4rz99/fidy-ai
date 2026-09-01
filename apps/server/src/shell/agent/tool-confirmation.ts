@@ -305,7 +305,7 @@ type SubmittedConfirmationState = {
   value: Option.Option<ConfirmationSubmission>;
 };
 
-const decideConfirmation = Effect.fn("ToolConfirmation.decide")(function* (input: {
+const decideConfirmation = Effect.fn(function* (input: {
   readonly userId: UserId;
   readonly now: DateTime.Utc;
   readonly submitted: SubmittedConfirmationState;
@@ -350,7 +350,7 @@ const decideConfirmation = Effect.fn("ToolConfirmation.decide")(function* (input
  * the session's own recent Transcript, so a challenge issued under a closed session's Consent basis
  * is never consumable under the basis that replaced it.
  */
-export const makeTurnConfirmation = Effect.fn("ToolConfirmation.makeTurn")(function* (
+export const makeTurnConfirmation = Effect.fn(function* (
   userId: UserId,
   priorTranscript: ReadonlyArray<TranscriptEntry>,
   message: {

@@ -43,9 +43,7 @@ const terminalOutcomeText = (
   return "Aclara tu respuesta para continuar.";
 };
 
-const displayConversationOutcome = Effect.fn("displayConversationOutcome")(function* (
-  outcome: AgentConversationOutcome
-) {
+const displayConversationOutcome = Effect.fn(function* (outcome: AgentConversationOutcome) {
   const terminal = yield* Terminal.Terminal;
   if (outcome._tag === "AwaitingDisclosureDelivery") {
     return yield* terminal.display(unavailableMessage);

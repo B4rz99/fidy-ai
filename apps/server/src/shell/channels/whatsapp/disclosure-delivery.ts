@@ -35,7 +35,7 @@ export class ConsentDisclosureDeliveryUnavailable extends Data.TaggedError(
   "ConsentDisclosureDeliveryUnavailable"
 )<{}> {}
 
-const sendDisclosure = Effect.fn("WhatsApp.sendDisclosure")(function* (input: {
+const sendDisclosure = Effect.fn(function* (input: {
   readonly businessPhoneNumberId: WhatsAppBusinessPhoneNumberId;
   readonly destination: KapsoDestination;
   readonly text: TranscriptText;
@@ -52,7 +52,7 @@ const sendDisclosure = Effect.fn("WhatsApp.sendDisclosure")(function* (input: {
 
 const millisecondsPerSecond = 1_000;
 
-const decideDisclosureRetryAt = Effect.fn("WhatsApp.decideDisclosureRetryAt")(function* (input: {
+const decideDisclosureRetryAt = Effect.fn(function* (input: {
   readonly certainty: KapsoDeliveryCertainty;
   readonly attemptNumber: DisclosureDeliveryAttemptNumber;
   readonly occurredAt: DateTime.Utc;
@@ -73,7 +73,7 @@ const decideDisclosureRetryAt = Effect.fn("WhatsApp.decideDisclosureRetryAt")(fu
   );
 });
 
-const applyDelivered = Effect.fn("WhatsApp.applyDisclosureDelivered")(function* (
+const applyDelivered = Effect.fn(function* (
   input: Parameters<typeof recordConsentDisclosureAttemptDelivered>[0]
 ) {
   const sql = yield* SqlClient.SqlClient;
@@ -112,7 +112,7 @@ type DisclosureLifecycleDecision =
       readonly occurredAt: DateTime.Utc;
     }>;
 
-const applyLifecycleDecision = Effect.fn("WhatsApp.applyDisclosureLifecycleDecision")(function* (
+const applyLifecycleDecision = Effect.fn(function* (
   attempt: DisclosureDeliveryAttemptCapability & {
     readonly attemptNumber: DisclosureDeliveryAttemptNumber;
   },
@@ -159,7 +159,7 @@ const applyLifecycleDecision = Effect.fn("WhatsApp.applyDisclosureLifecycleDecis
   return retained ? ("applied" as const) : ("ignored" as const);
 });
 
-const executeClaim = Effect.fn("WhatsApp.executeDisclosureClaim")(function* (
+const executeClaim = Effect.fn(function* (
   input: DisclosureDeliveryAttemptCapability & {
     readonly attemptNumber: DisclosureDeliveryAttemptNumber;
     readonly businessPhoneNumberId: WhatsAppBusinessPhoneNumberId;

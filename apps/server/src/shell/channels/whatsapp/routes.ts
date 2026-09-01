@@ -247,9 +247,7 @@ type KapsoMessageWebhookHandler = (
 
 const isDisclosureLifecycleEvent = Schema.is(DisclosureLifecycleEventName);
 
-const handleKapsoDisclosureLifecycleWebhook = Effect.fn(
-  "WhatsApp.handleKapsoDisclosureLifecycleWebhook"
-)(function* (
+const handleKapsoDisclosureLifecycleWebhook = Effect.fn(function* (
   request: HttpServerRequest.HttpServerRequest,
   secret: string,
   bodyReaders: Semaphore.Semaphore
@@ -268,7 +266,7 @@ const handleKapsoDisclosureLifecycleWebhook = Effect.fn(
   return yield* HttpServerResponse.json({ resolution });
 });
 
-const processKapsoInboundReceipt = Effect.fn("WhatsApp.processKapsoInboundReceipt")(function* (
+const processKapsoInboundReceipt = Effect.fn(function* (
   receipt: Effect.Success<ReturnType<typeof decodeKapsoWebhook>>
 ) {
   let consentTurns = 0;

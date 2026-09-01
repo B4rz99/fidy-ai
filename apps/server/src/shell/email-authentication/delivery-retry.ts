@@ -7,7 +7,7 @@ import { Telemetry } from "~/shell/observability/telemetry";
 const maximumSendAttempts = 3;
 const initialRetryDelayMillis = 250;
 
-const observeSendAttempt = Effect.fn("EmailAuthentication.observeSendAttempt")(function* (
+const observeSendAttempt = Effect.fn(function* (
   send: Effect.Effect<void, EmailSendFailed>,
   attempt: number
 ) {
@@ -52,24 +52,22 @@ const observeSendAttempt = Effect.fn("EmailAuthentication.observeSendAttempt")(f
   return yield* Effect.result(observed);
 });
 
-const captureTerminalSendFailure = Effect.fn("EmailAuthentication.captureTerminalSendFailure")(
-  function* (failure: EmailSendFailed) {
-    const telemetry = yield* Effect.serviceOption(Telemetry);
-    yield* Option.match(telemetry, {
-      onNone: () => Effect.void,
-      onSome: (service) =>
-        service.captureFailure({
-          _tag: "ExhaustedOperationalFailure",
-          component: "resend",
-          operation: "provider.request",
-          error: failure.certainty === "rejected" ? "invalid_response" : "provider_unavailable",
-          provider: Option.some("resend"),
-          retryable: failure.retryable,
-          cause: failure,
-        }),
-    });
-  }
-);
+const captureTerminalSendFailure = Effect.fn(function* (failure: EmailSendFailed) {
+  const telemetry = yield* Effect.serviceOption(Telemetry);
+  yield* Option.match(telemetry, {
+    onNone: () => Effect.void,
+    onSome: (service) =>
+      service.captureFailure({
+        _tag: "ExhaustedOperationalFailure",
+        component: "resend",
+        operation: "provider.request",
+        error: failure.certainty === "rejected" ? "invalid_response" : "provider_unavailable",
+        provider: Option.some("resend"),
+        retryable: failure.retryable,
+        cause: failure,
+      }),
+  });
+});
 
 /** Executes the one shared bounded Resend retry policy for all email-proof purposes. */
 export const sendEmailWithBoundedRetry = Effect.fn("EmailAuthentication.sendWithBoundedRetry")(

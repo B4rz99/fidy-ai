@@ -35,9 +35,7 @@ const decodeCombinedCode = Schema.decodeUnknownOption(RedactedEmailVerificationC
 const constantTimeEqual = (left: Uint8Array, right: Uint8Array): boolean =>
   timingSafeEqual(left, right);
 
-const deleteBoundedEvidence = Effect.fn("Onboarding.deleteBoundedEvidence")(function* (
-  enrollment: EmailEnrollmentRow
-) {
+const deleteBoundedEvidence = Effect.fn(function* (enrollment: EmailEnrollmentRow) {
   yield* removeEmailEnrollment(enrollment.id);
   yield* removePendingConsentExchange(enrollment.consent.pendingConsentExchangeId);
 });
@@ -66,7 +64,7 @@ const makeStableMaterial = Effect.fn(function* () {
 type ReadyEmailEnrollment = Extract<EmailEnrollmentRow, { readonly _tag: "AwaitingProof" }>;
 type StableMaterial = Effect.Success<ReturnType<typeof makeStableMaterial>>;
 
-const admitLockedProof = Effect.fn("Onboarding.admitLockedProof")(function* (
+const admitLockedProof = Effect.fn(function* (
   enrollment: EmailEnrollmentRow,
   candidateDigest: Uint8Array,
   attemptedAt: DateTime.Utc
@@ -98,7 +96,7 @@ const admitLockedProof = Effect.fn("Onboarding.admitLockedProof")(function* (
   return Option.some(enrollment);
 });
 
-const createStableState = Effect.fn("Onboarding.createStableState")(function* (
+const createStableState = Effect.fn(function* (
   enrollment: ReadyEmailEnrollment,
   material: StableMaterial,
   verifiedAt: DateTime.Utc
@@ -129,7 +127,7 @@ const createStableState = Effect.fn("Onboarding.createStableState")(function* (
   yield* deleteBoundedEvidence(enrollment);
 });
 
-const runCompletionTransaction = Effect.fn("Onboarding.runCompletionTransaction")(function* (
+const runCompletionTransaction = Effect.fn(function* (
   input: Readonly<{ combinedCode: Redacted.Redacted<unknown> }>
 ) {
   if (!(yield* acquireEmailVerificationAdmissionInScope())) {
@@ -149,16 +147,16 @@ const runCompletionTransaction = Effect.fn("Onboarding.runCompletionTransaction"
 });
 
 /** Starts PostgreSQL before decoding or performing any proof or stable-material work. */
-export const completeVerifiedOnboardingTransition = Effect.fn("Onboarding.completeTransition")(
-  function* (input: Readonly<{ combinedCode: Redacted.Redacted<unknown> }>) {
-    const sql = yield* SqlClient.SqlClient;
-    const completed = yield* sql
-      .withTransaction(runCompletionTransaction(input))
-      .pipe(Effect.catchTag("SqlError", Effect.die));
-    if (Option.isNone(completed)) return yield* new EmailVerificationInvalid();
-    return {
-      status: "created" as const,
-      backupRecoveryCode: Redacted.make(completed.value),
-    };
-  }
-);
+export const completeVerifiedOnboardingTransition = Effect.fn(function* (
+  input: Readonly<{ combinedCode: Redacted.Redacted<unknown> }>
+) {
+  const sql = yield* SqlClient.SqlClient;
+  const completed = yield* sql
+    .withTransaction(runCompletionTransaction(input))
+    .pipe(Effect.catchTag("SqlError", Effect.die));
+  if (Option.isNone(completed)) return yield* new EmailVerificationInvalid();
+  return {
+    status: "created" as const,
+    backupRecoveryCode: Redacted.make(completed.value),
+  };
+});

@@ -92,9 +92,10 @@ type AdmissionRequest = Readonly<{
 const AdmissionCapacity = Schema.Struct({ totalKeys: Schema.Int, existingKeys: Schema.Int });
 const AdmissionAttemptCount = Schema.Struct({ count: Schema.Int });
 
-const lockAndPurgeAdmissionEvidenceInScope = Effect.fn(
-  "EmailAuthentication.lockAndPurgePairingAdmissionEvidenceInScope"
-)(function* (sql: SqlClient.SqlClient, attemptedAt: DateTime.Utc) {
+const lockAndPurgeAdmissionEvidenceInScope = Effect.fn(function* (
+  sql: SqlClient.SqlClient,
+  attemptedAt: DateTime.Utc
+) {
   const lock = yield* SqlSchema.findOne({
     Request: Schema.Void,
     Result: Schema.Struct({ acquired: Schema.Boolean }),
@@ -111,9 +112,10 @@ const lockAndPurgeAdmissionEvidenceInScope = Effect.fn(
   return true;
 });
 
-const hasAdmissionCapacityInScope = Effect.fn(
-  "EmailAuthentication.hasPairingAdmissionCapacityInScope"
-)(function* (sql: SqlClient.SqlClient, scopes: ReadonlyArray<AdmissionScope>) {
+const hasAdmissionCapacityInScope = Effect.fn(function* (
+  sql: SqlClient.SqlClient,
+  scopes: ReadonlyArray<AdmissionScope>
+) {
   const keys = scopes.map(({ key }) => key);
   const capacity = yield* SqlSchema.findOne({
     Request: Schema.Void,
@@ -128,9 +130,10 @@ const hasAdmissionCapacityInScope = Effect.fn(
   return capacity.totalKeys + scopes.length - capacity.existingKeys <= maximumEvidenceKeys;
 });
 
-const checksAllowAdmissionInScope = Effect.fn(
-  "EmailAuthentication.checkPairingAdmissionEvidenceInScope"
-)(function* (sql: SqlClient.SqlClient, checks: ReadonlyArray<AdmissionCheck>) {
+const checksAllowAdmissionInScope = Effect.fn(function* (
+  sql: SqlClient.SqlClient,
+  checks: ReadonlyArray<AdmissionCheck>
+) {
   const allowed = yield* Effect.forEach(checks, (check) =>
     SqlSchema.findOne({
       Request: Schema.Void,
@@ -144,9 +147,10 @@ const checksAllowAdmissionInScope = Effect.fn(
   return allowed.every(Boolean);
 });
 
-const persistAdmissionEvidenceInScope = Effect.fn(
-  "EmailAuthentication.persistPairingAdmissionEvidenceInScope"
-)(function* (sql: SqlClient.SqlClient, input: AdmissionRequest) {
+const persistAdmissionEvidenceInScope = Effect.fn(function* (
+  sql: SqlClient.SqlClient,
+  input: AdmissionRequest
+) {
   yield* Effect.forEach(
     input.scopes,
     (scope) =>
@@ -166,9 +170,10 @@ const persistAdmissionEvidenceInScope = Effect.fn(
   );
 });
 
-const consumeAdmissionEvidenceInScope = Effect.fn(
-  "EmailAuthentication.consumePairingAdmissionEvidenceInScope"
-)(function* (sql: SqlClient.SqlClient, input: AdmissionRequest) {
+const consumeAdmissionEvidenceInScope = Effect.fn(function* (
+  sql: SqlClient.SqlClient,
+  input: AdmissionRequest
+) {
   if (!(yield* lockAndPurgeAdmissionEvidenceInScope(sql, input.attemptedAt))) return false;
   if (!(yield* hasAdmissionCapacityInScope(sql, input.scopes))) return false;
   if (!(yield* checksAllowAdmissionInScope(sql, input.checks))) return false;
@@ -176,77 +181,71 @@ const consumeAdmissionEvidenceInScope = Effect.fn(
   return true;
 });
 
-const consumeAdmissionEvidence = Effect.fn("EmailAuthentication.consumePairingAdmission")(
-  function* (input: AdmissionRequest) {
-    const sql = yield* SqlClient.SqlClient;
-    return yield* sql
-      .withTransaction(consumeAdmissionEvidenceInScope(sql, input).pipe(Effect.orDie))
-      .pipe(Effect.catchTag("SqlError", Effect.die));
-  }
-);
+const consumeAdmissionEvidence = Effect.fn(function* (input: AdmissionRequest) {
+  const sql = yield* SqlClient.SqlClient;
+  return yield* sql
+    .withTransaction(consumeAdmissionEvidenceInScope(sql, input).pipe(Effect.orDie))
+    .pipe(Effect.catchTag("SqlError", Effect.die));
+});
 
 /** Consumes all three anonymous start budgets atomically, or changes no evidence. */
-const admitBrowserPairingEmailStart = Effect.fn("EmailAuthentication.admitPairingStart")(
-  function* (input: {
-    pairingId: BrowserLoginPairingId;
-    pairingExpiresAt: DateTime.Utc;
-    normalizedAddress: string;
-    sourceAddress: string;
-    attemptedAt: DateTime.Utc;
-  }) {
-    const addressKey = yield* emailAuthenticationHmacKey(
-      `browser-pairing-address:${input.normalizedAddress}`
-    ).pipe(Effect.orDie);
-    const sourceKey = yield* emailAuthenticationHmacKey(
-      `browser-pairing-source:${input.sourceAddress}`
-    ).pipe(Effect.orDie);
-    const pairingKey = yield* emailAuthenticationHmacKey(
-      `browser-pairing-id:${input.pairingId}`
-    ).pipe(Effect.orDie);
-    return yield* consumeAdmissionEvidence({
-      attemptedAt: input.attemptedAt,
-      scopes: [
-        {
-          key: addressKey,
-          kind: "address",
-          expiresAt: DateTime.add(input.attemptedAt, { hours: 24 }),
-        },
-        {
-          key: sourceKey,
-          kind: "source",
-          expiresAt: DateTime.add(input.attemptedAt, { minutes: 10 }),
-        },
-        { key: pairingKey, kind: "pairing", expiresAt: input.pairingExpiresAt },
-      ],
-      checks: [
-        {
-          key: addressKey,
-          startsAt: DateTime.subtract(input.attemptedAt, { hours: 24 }),
-          maximumAttempts: maximumAddressStarts,
-        },
-        {
-          key: pairingKey,
-          startsAt: DateTime.subtract(input.attemptedAt, { hours: 24 }),
-          maximumAttempts: maximumPairingStarts,
-        },
-        {
-          key: sourceKey,
-          startsAt: DateTime.subtract(input.attemptedAt, { minutes: 1 }),
-          maximumAttempts: maximumSourceBurstStarts,
-        },
-        {
-          key: sourceKey,
-          startsAt: DateTime.subtract(input.attemptedAt, { minutes: 10 }),
-          maximumAttempts: maximumSourceWindowStarts,
-        },
-      ],
-    });
-  }
-);
+const admitBrowserPairingEmailStart = Effect.fn(function* (input: {
+  pairingId: BrowserLoginPairingId;
+  pairingExpiresAt: DateTime.Utc;
+  normalizedAddress: string;
+  sourceAddress: string;
+  attemptedAt: DateTime.Utc;
+}) {
+  const addressKey = yield* emailAuthenticationHmacKey(
+    `browser-pairing-address:${input.normalizedAddress}`
+  ).pipe(Effect.orDie);
+  const sourceKey = yield* emailAuthenticationHmacKey(
+    `browser-pairing-source:${input.sourceAddress}`
+  ).pipe(Effect.orDie);
+  const pairingKey = yield* emailAuthenticationHmacKey(
+    `browser-pairing-id:${input.pairingId}`
+  ).pipe(Effect.orDie);
+  return yield* consumeAdmissionEvidence({
+    attemptedAt: input.attemptedAt,
+    scopes: [
+      {
+        key: addressKey,
+        kind: "address",
+        expiresAt: DateTime.add(input.attemptedAt, { hours: 24 }),
+      },
+      {
+        key: sourceKey,
+        kind: "source",
+        expiresAt: DateTime.add(input.attemptedAt, { minutes: 10 }),
+      },
+      { key: pairingKey, kind: "pairing", expiresAt: input.pairingExpiresAt },
+    ],
+    checks: [
+      {
+        key: addressKey,
+        startsAt: DateTime.subtract(input.attemptedAt, { hours: 24 }),
+        maximumAttempts: maximumAddressStarts,
+      },
+      {
+        key: pairingKey,
+        startsAt: DateTime.subtract(input.attemptedAt, { hours: 24 }),
+        maximumAttempts: maximumPairingStarts,
+      },
+      {
+        key: sourceKey,
+        startsAt: DateTime.subtract(input.attemptedAt, { minutes: 1 }),
+        maximumAttempts: maximumSourceBurstStarts,
+      },
+      {
+        key: sourceKey,
+        startsAt: DateTime.subtract(input.attemptedAt, { minutes: 10 }),
+        maximumAttempts: maximumSourceWindowStarts,
+      },
+    ],
+  });
+});
 
-const admitBrowserPairingEmailCompletionIngress = Effect.fn(
-  "EmailAuthentication.admitPairingCompletionIngress"
-)(function* (input: {
+const admitBrowserPairingEmailCompletionIngress = Effect.fn(function* (input: {
   pairingId: BrowserLoginPairingId;
   sourceAddress: string;
   attemptedAt: DateTime.Utc;
@@ -293,9 +292,10 @@ const admitBrowserPairingEmailCompletionIngress = Effect.fn(
   });
 });
 
-const admitBrowserPairingEmailCompletionOwner = Effect.fn(
-  "EmailAuthentication.admitPairingCompletionOwner"
-)(function* (owner: ResolvedWorkflowOwner, attemptedAt: DateTime.Utc) {
+const admitBrowserPairingEmailCompletionOwner = Effect.fn(function* (
+  owner: ResolvedWorkflowOwner,
+  attemptedAt: DateTime.Utc
+) {
   // One VerifiedEmailCredential exists per User; this HMAC closes the real per-address budget
   // without projecting the mailbox out of its User-scoped workflow.
   const addressKey = yield* emailAuthenticationHmacKey(
@@ -322,9 +322,7 @@ const ResolvedCredential = Schema.Struct({
 });
 type ResolvedCredential = typeof ResolvedCredential.Type;
 
-const credentialRevisionRemainsCurrent = Effect.fn(
-  "EmailAuthentication.credentialRevisionRemainsCurrent"
-)(function* (credential: ResolvedCredential) {
+const credentialRevisionRemainsCurrent = Effect.fn(function* (credential: ResolvedCredential) {
   const sql = yield* SqlClient.SqlClient;
   const result = yield* SqlSchema.findOne({
     Request: Schema.Void,
@@ -364,9 +362,7 @@ const ExistingWorkflow = BrowserPairingEmailWorkflowRowBase.mapFields(
 );
 type ExistingWorkflow = typeof ExistingWorkflow.Type;
 
-const findLockedWorkflow = Effect.fn("EmailAuthentication.findLockedPairingWorkflow")(function* (
-  pairingId: BrowserLoginPairingId
-) {
+const findLockedWorkflow = Effect.fn(function* (pairingId: BrowserLoginPairingId) {
   const sql = yield* SqlClient.SqlClient;
   return yield* SqlSchema.findOneOption({
     Request: BrowserLoginPairingId,
@@ -393,21 +389,20 @@ const makePublicCode = Effect.fn(function* () {
   );
 });
 
-const persistDeliveryGeneration = Effect.fn("EmailAuthentication.persistPairingDeliveryGeneration")(
-  function* (input: {
-    credential: ResolvedCredential;
-    email: EmailAddress;
-    pairingId: BrowserLoginPairingId;
-    pairingExpiresAt: DateTime.Utc;
-    requestedAt: DateTime.Utc;
-    existing: Option.Option<ExistingWorkflow>;
-  }) {
-    const sql = yield* SqlClient.SqlClient;
-    const crypto = yield* Crypto.Crypto;
-    const publicCode = yield* makePublicCode();
-    if (Option.isNone(input.existing)) {
-      const id = BrowserPairingEmailWorkflowId.make(yield* crypto.randomUUIDv7.pipe(Effect.orDie));
-      const inserted = yield* sql`
+const persistDeliveryGeneration = Effect.fn(function* (input: {
+  credential: ResolvedCredential;
+  email: EmailAddress;
+  pairingId: BrowserLoginPairingId;
+  pairingExpiresAt: DateTime.Utc;
+  requestedAt: DateTime.Utc;
+  existing: Option.Option<ExistingWorkflow>;
+}) {
+  const sql = yield* SqlClient.SqlClient;
+  const crypto = yield* Crypto.Crypto;
+  const publicCode = yield* makePublicCode();
+  if (Option.isNone(input.existing)) {
+    const id = BrowserPairingEmailWorkflowId.make(yield* crypto.randomUUIDv7.pipe(Effect.orDie));
+    const inserted = yield* sql`
       INSERT INTO browser_pairing_email_workflows (
         id, user_id, pairing_id, credential_verified_at, public_code, started_at, expires_at,
         delivery_generation, resend_available_at
@@ -417,42 +412,39 @@ const persistDeliveryGeneration = Effect.fn("EmailAuthentication.persistPairingD
         ${input.pairingExpiresAt}, 1, ${resendAvailability(input.requestedAt)}
       ) ON CONFLICT (pairing_id) DO NOTHING RETURNING id
     `.pipe(Effect.orDie);
-      if (inserted.length === 0) return;
-      const intentId = EmailDeliveryIntentId.make(yield* crypto.randomUUIDv7.pipe(Effect.orDie));
-      yield* sql`
+    if (inserted.length === 0) return;
+    const intentId = EmailDeliveryIntentId.make(yield* crypto.randomUUIDv7.pipe(Effect.orDie));
+    yield* sql`
       INSERT INTO browser_pairing_email_delivery_intents (
         id, workflow_id, generation, email_address, status, idempotency_key, created_at
       ) VALUES (${intentId}, ${id}, 1, ${input.email}, 'pending', ${intentId}, ${input.requestedAt})
     `.pipe(Effect.orDie);
-      return;
-    }
+    return;
+  }
 
-    const workflowId = input.existing.value.id;
-    yield* sql`
+  const workflowId = input.existing.value.id;
+  yield* sql`
     UPDATE browser_pairing_email_delivery_intents SET status = 'superseded',
       claim_token = NULL, claim_expires_at = NULL
     WHERE workflow_id = ${workflowId} AND status <> 'superseded'
   `.pipe(Effect.orDie);
-    yield* sql`
+  yield* sql`
     UPDATE browser_pairing_email_workflows SET public_code = ${publicCode},
       delivery_generation = delivery_generation + 1,
       resend_available_at = ${resendAvailability(input.requestedAt)}, proof_digest = NULL,
       proof_expires_at = NULL, wrong_proof_attempts = 0
     WHERE id = ${workflowId}
   `.pipe(Effect.orDie);
-    const intentId = EmailDeliveryIntentId.make(yield* crypto.randomUUIDv7.pipe(Effect.orDie));
-    yield* sql`
+  const intentId = EmailDeliveryIntentId.make(yield* crypto.randomUUIDv7.pipe(Effect.orDie));
+  yield* sql`
     INSERT INTO browser_pairing_email_delivery_intents (
       id, workflow_id, generation, email_address, status, idempotency_key, created_at
     ) SELECT ${intentId}, id, delivery_generation, ${input.email}, 'pending', ${intentId},
       ${input.requestedAt} FROM browser_pairing_email_workflows WHERE id = ${workflowId}
   `.pipe(Effect.orDie);
-  }
-);
+});
 
-const startForResolvedCredentialInScope = Effect.fn(
-  "EmailAuthentication.startForResolvedCredentialInScope"
-)(function* (input: {
+const startForResolvedCredentialInScope = Effect.fn(function* (input: {
   credential: ResolvedCredential;
   email: EmailAddress;
   pairingId: BrowserLoginPairingId;
@@ -557,25 +549,23 @@ type ClaimedStartRequest = Readonly<{
   claimToken: BrowserPairingEmailStartRequestClaimToken;
 }>;
 
-const claimNextStartRequest = Effect.fn("EmailAuthentication.claimNextPairingStartRequest")(
-  function* (claimedAt: DateTime.Utc) {
-    const sql = yield* SqlClient.SqlClient;
-    const crypto = yield* Crypto.Crypto;
-    const claimToken = BrowserPairingEmailStartRequestClaimToken.make(
-      yield* crypto.randomUUIDv7.pipe(Effect.orDie)
-    );
-    return yield* SqlSchema.findOneOption({
-      Request: Schema.Void,
-      Result: StartRequestGatewayOutcome,
-      execute: () => sql`
+const claimNextStartRequest = Effect.fn(function* (claimedAt: DateTime.Utc) {
+  const sql = yield* SqlClient.SqlClient;
+  const crypto = yield* Crypto.Crypto;
+  const claimToken = BrowserPairingEmailStartRequestClaimToken.make(
+    yield* crypto.randomUUIDv7.pipe(Effect.orDie)
+  );
+  return yield* SqlSchema.findOneOption({
+    Request: Schema.Void,
+    Result: StartRequestGatewayOutcome,
+    execute: () => sql`
         SELECT request_id AS "requestId", user_id AS "userId", claim_token AS "claimToken"
         FROM fidy_claim_browser_pairing_email_start_request(
           ${claimedAt}, ${claimToken}, ${DateTime.add(claimedAt, { minutes: 2 })}
         )
       `,
-    })(undefined).pipe(Effect.orDie);
-  }
-);
+  })(undefined).pipe(Effect.orDie);
+});
 
 const ResolvedStartRequest = Schema.Struct({
   pairingId: BrowserLoginPairingId,
@@ -585,9 +575,7 @@ const ResolvedStartRequest = Schema.Struct({
 });
 type ResolvedStartRequest = typeof ResolvedStartRequest.Type;
 
-const findClaimedStartRequestInScope = Effect.fn(
-  "EmailAuthentication.findClaimedPairingStartRequestInScope"
-)(function* (claim: ClaimedStartRequest) {
+const findClaimedStartRequestInScope = Effect.fn(function* (claim: ClaimedStartRequest) {
   const sql = yield* SqlClient.SqlClient;
   return yield* SqlSchema.findOneOption({
     Request: Schema.Void,
@@ -607,9 +595,7 @@ const findClaimedStartRequestInScope = Effect.fn(
   })(undefined).pipe(Effect.orDie);
 });
 
-const deleteClaimedStartRequestInScope = Effect.fn(
-  "EmailAuthentication.deleteClaimedPairingStartRequestInScope"
-)(function* (claim: ClaimedStartRequest) {
+const deleteClaimedStartRequestInScope = Effect.fn(function* (claim: ClaimedStartRequest) {
   const sql = yield* SqlClient.SqlClient;
   yield* sql`
     DELETE FROM browser_pairing_email_start_requests
@@ -618,9 +604,10 @@ const deleteClaimedStartRequestInScope = Effect.fn(
   `.pipe(Effect.orDie);
 });
 
-const processClaimedStartRequestInScope = Effect.fn(
-  "EmailAuthentication.processClaimedPairingStartRequestInScope"
-)(function* (claim: ClaimedStartRequest, processedAt: DateTime.Utc) {
+const processClaimedStartRequestInScope = Effect.fn(function* (
+  claim: ClaimedStartRequest,
+  processedAt: DateTime.Utc
+) {
   const request = yield* findClaimedStartRequestInScope(claim);
   yield* Option.match(request, {
     onNone: () => Effect.void,
@@ -672,19 +659,17 @@ const ResolvedWorkflowOwner = Schema.Struct({
 });
 type ResolvedWorkflowOwner = typeof ResolvedWorkflowOwner.Type;
 
-const resolveWorkflowOwner = Effect.fn("EmailAuthentication.resolvePairingWorkflowOwner")(
-  function* (pairingId: BrowserLoginPairingId) {
-    const sql = yield* SqlClient.SqlClient;
-    return yield* SqlSchema.findOneOption({
-      Request: BrowserLoginPairingId,
-      Result: ResolvedWorkflowOwner,
-      execute: (id) => sql`
+const resolveWorkflowOwner = Effect.fn(function* (pairingId: BrowserLoginPairingId) {
+  const sql = yield* SqlClient.SqlClient;
+  return yield* SqlSchema.findOneOption({
+    Request: BrowserLoginPairingId,
+    Result: ResolvedWorkflowOwner,
+    execute: (id) => sql`
         SELECT workflow_id AS "workflowId", user_id AS "userId", expires_at AS "expiresAt"
         FROM fidy_resolve_browser_pairing_email_workflow_owner(${id})
       `,
-    })(pairingId).pipe(Effect.orDie);
-  }
-);
+  })(pairingId).pipe(Effect.orDie);
+});
 
 const CompletionWorkflow = BrowserPairingEmailWorkflowRowBase.mapFields(
   Struct.pick(["id", "credentialVerifiedAt", "publicCode", "wrongProofAttempts", "expiresAt"])
@@ -696,85 +681,80 @@ const CompletionWorkflow = BrowserPairingEmailWorkflowRowBase.mapFields(
 );
 type CompletionWorkflow = typeof CompletionWorkflow.Type;
 
-const findCompletionWorkflow = Effect.fn("EmailAuthentication.findPairingCompletionWorkflow")(
-  function* (workflowId: BrowserPairingEmailWorkflowId) {
-    const sql = yield* SqlClient.SqlClient;
-    return yield* SqlSchema.findOneOption({
-      Request: Schema.Void,
-      Result: CompletionWorkflow,
-      execute: () => sql`
+const findCompletionWorkflow = Effect.fn(function* (workflowId: BrowserPairingEmailWorkflowId) {
+  const sql = yield* SqlClient.SqlClient;
+  return yield* SqlSchema.findOneOption({
+    Request: Schema.Void,
+    Result: CompletionWorkflow,
+    execute: () => sql`
         SELECT id, credential_verified_at AS "credentialVerifiedAt", public_code AS "publicCode",
           proof_digest AS "proofDigest", proof_expires_at AS "proofExpiresAt",
           wrong_proof_attempts AS "wrongProofAttempts", expires_at AS "expiresAt"
         FROM browser_pairing_email_workflows
         WHERE id = ${workflowId} FOR UPDATE
       `,
-    })(undefined).pipe(Effect.orDie);
-  }
-);
+  })(undefined).pipe(Effect.orDie);
+});
 
-export const digestBrowserPairingEmailProof = Effect.fn("EmailAuthentication.digestPairingProof")(
-  function* (pairingId: BrowserLoginPairingId, proof: EmailVerificationProof) {
-    const crypto = yield* Crypto.Crypto;
-    return yield* crypto
-      .digest(
-        "SHA-256",
-        new TextEncoder().encode(`browser-pairing-approval\u0000${pairingId}\u0000${proof}`)
-      )
-      .pipe(Effect.orDie);
-  }
-);
+export const digestBrowserPairingEmailProof = Effect.fn(function* (
+  pairingId: BrowserLoginPairingId,
+  proof: EmailVerificationProof
+) {
+  const crypto = yield* Crypto.Crypto;
+  return yield* crypto
+    .digest(
+      "SHA-256",
+      new TextEncoder().encode(`browser-pairing-approval\u0000${pairingId}\u0000${proof}`)
+    )
+    .pipe(Effect.orDie);
+});
 
-const applyCompletionProofAttempt = Effect.fn("EmailAuthentication.applyPairingCompletionProof")(
-  function* (
-    workflow: CompletionWorkflow,
-    input: Readonly<{
-      pairingId: BrowserLoginPairingId;
-      code: string;
-      attemptedAt: DateTime.Utc;
-    }>
-  ) {
-    const sql = yield* SqlClient.SqlClient;
-    if (Option.isNone(workflow.proofDigest) || Option.isNone(workflow.proofExpiresAt)) return false;
-    const digest = yield* digestBrowserPairingEmailProof(
-      input.pairingId,
-      EmailVerificationProof.make(input.code.slice(proofOffset))
-    );
-    const decision = yield* decideProofAttempt({
-      digestMatches:
-        input.code.startsWith(`${workflow.publicCode}-`) &&
-        digest.length === workflow.proofDigest.value.length &&
-        timingSafeEqual(digest, workflow.proofDigest.value),
-      wrongAttempts: workflow.wrongProofAttempts,
-      proofExpiresAt: workflow.proofExpiresAt.value,
-      enrollmentExpiresAt: workflow.expiresAt,
-      attemptedAt: input.attemptedAt,
-    });
-    if (decision._tag === "Accept") return true;
-    if (decision._tag === "Wrong") {
-      yield* sql`
+const applyCompletionProofAttempt = Effect.fn(function* (
+  workflow: CompletionWorkflow,
+  input: Readonly<{
+    pairingId: BrowserLoginPairingId;
+    code: string;
+    attemptedAt: DateTime.Utc;
+  }>
+) {
+  const sql = yield* SqlClient.SqlClient;
+  if (Option.isNone(workflow.proofDigest) || Option.isNone(workflow.proofExpiresAt)) return false;
+  const digest = yield* digestBrowserPairingEmailProof(
+    input.pairingId,
+    EmailVerificationProof.make(input.code.slice(proofOffset))
+  );
+  const decision = yield* decideProofAttempt({
+    digestMatches:
+      input.code.startsWith(`${workflow.publicCode}-`) &&
+      digest.length === workflow.proofDigest.value.length &&
+      timingSafeEqual(digest, workflow.proofDigest.value),
+    wrongAttempts: workflow.wrongProofAttempts,
+    proofExpiresAt: workflow.proofExpiresAt.value,
+    enrollmentExpiresAt: workflow.expiresAt,
+    attemptedAt: input.attemptedAt,
+  });
+  if (decision._tag === "Accept") return true;
+  if (decision._tag === "Wrong") {
+    yield* sql`
       UPDATE browser_pairing_email_workflows SET wrong_proof_attempts = ${decision.wrongAttempts}
       WHERE id = ${workflow.id}
     `.pipe(Effect.orDie);
-      return false;
-    }
-    if (decision._tag === "Expired") {
-      yield* sql`
+    return false;
+  }
+  if (decision._tag === "Expired") {
+    yield* sql`
       UPDATE browser_pairing_email_workflows SET proof_digest = NULL, proof_expires_at = NULL
       WHERE id = ${workflow.id}
     `.pipe(Effect.orDie);
-      return false;
-    }
-    yield* sql`DELETE FROM browser_pairing_email_workflows WHERE id = ${workflow.id}`.pipe(
-      Effect.orDie
-    );
     return false;
   }
-);
+  yield* sql`DELETE FROM browser_pairing_email_workflows WHERE id = ${workflow.id}`.pipe(
+    Effect.orDie
+  );
+  return false;
+});
 
-const completeForResolvedOwnerInScope = Effect.fn(
-  "EmailAuthentication.completeForResolvedOwnerInScope"
-)(function* (input: {
+const completeForResolvedOwnerInScope = Effect.fn(function* (input: {
   owner: ResolvedWorkflowOwner;
   pairingId: BrowserLoginPairingId;
   privateVerifier: unknown;

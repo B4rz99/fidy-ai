@@ -28,7 +28,7 @@ const ApprovalCandidate = Schema.Struct({
  * Privileged operator seam: an automatic candidate remains personal, expiring data until this
  * explicit approval copies only its reviewed structure into the User-unlinked indefinite IngestSample collection.
  */
-const approveAnonymizedEmailSample = Effect.fn("approveAnonymizedEmailSample")(function* (input: {
+const approveAnonymizedEmailSample = Effect.fn(function* (input: {
   readonly sampleId: IngestSampleId;
   readonly approvedBy: ApprovedOperatorId;
 }) {

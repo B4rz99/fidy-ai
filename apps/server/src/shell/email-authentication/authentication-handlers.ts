@@ -71,9 +71,7 @@ const readJsonPayload = Effect.fn(function* <A>(
   return yield* Result.match(decoded, { onFailure: invalid, onSuccess: Effect.succeed });
 });
 
-const handleStart = Effect.fn("EmailAuthentication.handleBrowserPairingStart")(function* (
-  request: HttpServerRequest.HttpServerRequest
-) {
+const handleStart = Effect.fn(function* (request: HttpServerRequest.HttpServerRequest) {
   const payload = yield* readJsonPayload(
     request,
     maximumStartBytes,
@@ -94,9 +92,7 @@ const handleStart = Effect.fn("EmailAuthentication.handleBrowserPairingStart")(f
   }).pipe(Effect.orDie);
 });
 
-const handleCompletion = Effect.fn("EmailAuthentication.handleBrowserPairingCompletion")(function* (
-  request: HttpServerRequest.HttpServerRequest
-) {
+const handleCompletion = Effect.fn(function* (request: HttpServerRequest.HttpServerRequest) {
   const payload = yield* readJsonPayload(
     request,
     maximumCompletionBytes,
@@ -111,16 +107,12 @@ const handleCompletion = Effect.fn("EmailAuthentication.handleBrowserPairingComp
   return approved ? { status: "pairing_approved" as const } : yield* invalid();
 });
 
-const withStartAdmission = Effect.fn("EmailAuthentication.withStartAdmission")(function* (
-  request: HttpServerRequest.HttpServerRequest
-) {
+const withStartAdmission = Effect.fn(function* (request: HttpServerRequest.HttpServerRequest) {
   const admitted = yield* startAdmission.withPermitsIfAvailable(1)(handleStart(request));
   return yield* Option.match(admitted, { onNone: unavailable, onSome: Effect.succeed });
 });
 
-const withCompletionAdmission = Effect.fn("EmailAuthentication.withCompletionAdmission")(function* (
-  request: HttpServerRequest.HttpServerRequest
-) {
+const withCompletionAdmission = Effect.fn(function* (request: HttpServerRequest.HttpServerRequest) {
   const admitted = yield* completionAdmission.withPermitsIfAvailable(1)(handleCompletion(request));
   return yield* Option.match(admitted, { onNone: unavailable, onSome: Effect.succeed });
 });

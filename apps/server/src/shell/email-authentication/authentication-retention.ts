@@ -15,9 +15,7 @@ const RetentionClaim = Schema.Struct({
 });
 type RetentionClaim = typeof RetentionClaim.Type;
 
-const claimExpiredWorkflow = Effect.fn("BrowserPairingEmailRetention.claimExpired")(function* (
-  claimedAt: DateTime.Utc
-) {
+const claimExpiredWorkflow = Effect.fn(function* (claimedAt: DateTime.Utc) {
   const sql = yield* SqlClient.SqlClient;
   const crypto = yield* Crypto.Crypto;
   const token = BrowserPairingEmailRetentionClaimToken.make(
@@ -35,21 +33,17 @@ const claimExpiredWorkflow = Effect.fn("BrowserPairingEmailRetention.claimExpire
   })(undefined).pipe(Effect.orDie);
 });
 
-const deleteClaimedWorkflowInScope = Effect.fn("BrowserPairingEmailRetention.deleteClaimedInScope")(
-  function* (claim: RetentionClaim) {
-    const sql = yield* SqlClient.SqlClient;
-    yield* sql`
+const deleteClaimedWorkflowInScope = Effect.fn(function* (claim: RetentionClaim) {
+  const sql = yield* SqlClient.SqlClient;
+  yield* sql`
     DELETE FROM browser_pairing_email_workflows
     WHERE id = ${claim.workflowId} AND user_id = ${claim.userId}
       AND retention_claim_token = ${claim.claimToken}
   `.pipe(Effect.orDie);
-  }
-);
+});
 
 /** Purges at most one expired User-owned email-login workflow. */
-export const purgeOneExpiredBrowserPairingEmailWorkflow = Effect.fn(
-  "BrowserPairingEmailRetention.purgeOneExpired"
-)(function* () {
+export const purgeOneExpiredBrowserPairingEmailWorkflow = Effect.fn(function* () {
   const now = yield* DateTime.now;
   const claim = yield* claimExpiredWorkflow(now);
   if (Option.isNone(claim)) return false;
@@ -61,9 +55,7 @@ export const purgeOneExpiredBrowserPairingEmailWorkflow = Effect.fn(
 });
 
 /** Purges one bounded batch of expired anonymous admission evidence. */
-export const purgeBrowserPairingEmailAdmissionEvidence = Effect.fn(
-  "BrowserPairingEmailRetention.purgeAdmissionEvidence"
-)(function* () {
+export const purgeBrowserPairingEmailAdmissionEvidence = Effect.fn(function* () {
   const sql = yield* SqlClient.SqlClient;
   const now = yield* DateTime.now;
   yield* sql`SELECT fidy_purge_email_pairing_login_admission_evidence(${now})`.pipe(Effect.orDie);

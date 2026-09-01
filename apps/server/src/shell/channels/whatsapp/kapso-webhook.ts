@@ -272,7 +272,7 @@ const projectEvent = Effect.fn(function* (
  * KapsoPayloadTooLarge, KapsoBatchTooLarge, or InvalidKapsoPayload and reveals no decoded content
  * when authentication fails.
  */
-export const decodeKapsoWebhook = Effect.fn("Kapso.decodeWebhook")(function* (input: {
+export const decodeKapsoWebhook = Effect.fn(function* (input: {
   readonly rawBody: Uint8Array;
   readonly secret: string;
   readonly signature: string;
@@ -395,9 +395,7 @@ const latestDisclosureLifecycleStatus = Effect.fn(function* (
  * event/status mismatch, timestamp, or body size fails with the corresponding Kapso boundary error
  * before any state change.
  */
-export const decodeKapsoDisclosureLifecycleWebhook = Effect.fn(
-  "Kapso.decodeDisclosureLifecycleWebhook"
-)(function* (input: {
+export const decodeKapsoDisclosureLifecycleWebhook = Effect.fn(function* (input: {
   readonly rawBody: Uint8Array;
   readonly secret: string;
   readonly signature: string;
@@ -482,32 +480,30 @@ const projectIdentityChange = Effect.fn(function* (
  * unrelated events are omitted. Invalid proof, configuration, JSON, identity fields, timestamps,
  * event count, or body size fail with the corresponding Kapso boundary error before any write.
  */
-export const decodeKapsoIdentityWebhook = Effect.fn("Kapso.decodeIdentityWebhook")(
-  function* (input: {
-    readonly rawBody: Uint8Array;
-    readonly secret: string;
-    readonly signature: string;
-    readonly businessPortfolioId: string;
-    readonly receivedAt: DateTime.Utc;
-  }) {
-    const unknown = yield* authenticateAndDecodeKapsoBody(input);
-    const businessPortfolioId = yield* Schema.decodeEffect(WhatsAppBusinessPortfolioId)(
-      input.businessPortfolioId
-    ).pipe(Effect.mapError(invalidKapsoPayload));
-    const envelope = yield* Schema.decodeUnknownEffect(RawMetaEnvelope)(unknown).pipe(
-      Effect.mapError(invalidKapsoPayload)
-    );
-    const messages = envelope.entry.flatMap((entry) =>
-      entry.changes.flatMap((change) => change.value.messages ?? [])
-    );
-    if (messages.length > maxKapsoDeliveryEvents) return yield* new KapsoBatchTooLarge();
+export const decodeKapsoIdentityWebhook = Effect.fn(function* (input: {
+  readonly rawBody: Uint8Array;
+  readonly secret: string;
+  readonly signature: string;
+  readonly businessPortfolioId: string;
+  readonly receivedAt: DateTime.Utc;
+}) {
+  const unknown = yield* authenticateAndDecodeKapsoBody(input);
+  const businessPortfolioId = yield* Schema.decodeEffect(WhatsAppBusinessPortfolioId)(
+    input.businessPortfolioId
+  ).pipe(Effect.mapError(invalidKapsoPayload));
+  const envelope = yield* Schema.decodeUnknownEffect(RawMetaEnvelope)(unknown).pipe(
+    Effect.mapError(invalidKapsoPayload)
+  );
+  const messages = envelope.entry.flatMap((entry) =>
+    entry.changes.flatMap((change) => change.value.messages ?? [])
+  );
+  if (messages.length > maxKapsoDeliveryEvents) return yield* new KapsoBatchTooLarge();
 
-    const projected = yield* Effect.forEach(
-      messages,
-      (message) => projectIdentityChange(message, businessPortfolioId, input.receivedAt),
-      { concurrency: 1 }
-    );
-    const changes: ReadonlyArray<WhatsAppIdentityChangeEvent> = EffectArray.getSomes(projected);
-    return changes;
-  }
-);
+  const projected = yield* Effect.forEach(
+    messages,
+    (message) => projectIdentityChange(message, businessPortfolioId, input.receivedAt),
+    { concurrency: 1 }
+  );
+  const changes: ReadonlyArray<WhatsAppIdentityChangeEvent> = EffectArray.getSomes(projected);
+  return changes;
+});

@@ -67,7 +67,7 @@ const digestRecoveryCode = Effect.fn(function* (code: string) {
 });
 
 /** Generates one uniformly selected code and its checked digest through application Crypto. */
-export const generateBackupRecoveryMaterial = Effect.fn("Recovery.generateMaterial")(function* () {
+export const generateBackupRecoveryMaterial = Effect.fn(function* () {
   const crypto = yield* Crypto.Crypto;
   const bytes = yield* crypto.randomBytes(recoverySymbolCount).pipe(Effect.orDie);
   let symbols = "";
@@ -87,7 +87,7 @@ const makeEventId = Effect.fn(function* () {
   return SupportRecoveryCaseEventId.make(yield* crypto.randomUUIDv7.pipe(Effect.orDie));
 });
 
-const rejectCase = Effect.fn("Recovery.rejectLockedCase")(function* (
+const rejectCase = Effect.fn(function* (
   recoveryCase: OpenSupportRecoveryCase,
   operatorId: SupportOperatorId,
   rejectedAt: DateTime.Utc
@@ -102,7 +102,7 @@ const rejectCase = Effect.fn("Recovery.rejectLockedCase")(function* (
   return "NotApproved" as const;
 });
 
-const openCase = Effect.fn("Recovery.openCase")(function* (input: {
+const openCase = Effect.fn(function* (input: {
   candidate: ResolvedSupportRecovery;
   operatorId: SupportOperatorId;
   openedAt: DateTime.Utc;
@@ -130,7 +130,7 @@ const openCase = Effect.fn("Recovery.openCase")(function* (input: {
   );
 });
 
-const currentCase = Effect.fn("Recovery.currentCase")(function* (input: {
+const currentCase = Effect.fn(function* (input: {
   candidate: ResolvedSupportRecovery;
   operatorId: SupportOperatorId;
   attemptedAt: DateTime.Utc;
@@ -168,18 +168,18 @@ const credentialMatchesCandidate = (
       }),
   });
 
-const currentCaseForApprovablePairing = Effect.fn("Recovery.currentCaseForApprovablePairing")(
-  function* (input: Parameters<typeof currentCase>[0]) {
-    const approvable = yield* isBrowserLoginPairingApprovableInScope(
-      input.candidate.pairingId,
-      input.attemptedAt
-    );
-    if (approvable) return yield* currentCase(input);
-    // Resolution only locates the transaction's User. A pairing that stopped being approvable
-    // while this invocation waited for the User locks is no longer attributable to an open case.
-    return Option.none<OpenSupportRecoveryCase>();
-  }
-);
+const currentCaseForApprovablePairing = Effect.fn(function* (
+  input: Parameters<typeof currentCase>[0]
+) {
+  const approvable = yield* isBrowserLoginPairingApprovableInScope(
+    input.candidate.pairingId,
+    input.attemptedAt
+  );
+  if (approvable) return yield* currentCase(input);
+  // Resolution only locates the transaction's User. A pairing that stopped being approvable
+  // while this invocation waited for the User locks is no longer attributable to an open case.
+  return Option.none<OpenSupportRecoveryCase>();
+});
 
 class SupportRecoveryAttributionLost extends Data.TaggedError(
   "SupportRecoveryAttributionLost"
@@ -200,21 +200,19 @@ type SupportRecoveryDecisionInput = Readonly<{
   caseAlreadyExists: boolean;
 }>;
 
-const rejectAttributedCredentialMismatch = Effect.fn("Recovery.rejectAttributedCredentialMismatch")(
-  function* (input: SupportRecoveryDecisionInput) {
-    if (!input.caseAlreadyExists) return "NotApproved" as const;
-    const attributedCase = yield* currentCaseForApprovablePairing(input);
-    if (Option.isNone(attributedCase)) return "NotApproved" as const;
-    const trackedCase = attributedCase.value;
-    return caseMatchesCandidate(trackedCase, input.candidate)
-      ? yield* rejectCase(trackedCase, input.operatorId, input.attemptedAt)
-      : ("NotApproved" as const);
-  }
-);
-
-const decideInUserScope = Effect.fn("Recovery.decideInUserScope")(function* (
+const rejectAttributedCredentialMismatch = Effect.fn(function* (
   input: SupportRecoveryDecisionInput
 ) {
+  if (!input.caseAlreadyExists) return "NotApproved" as const;
+  const attributedCase = yield* currentCaseForApprovablePairing(input);
+  if (Option.isNone(attributedCase)) return "NotApproved" as const;
+  const trackedCase = attributedCase.value;
+  return caseMatchesCandidate(trackedCase, input.candidate)
+    ? yield* rejectCase(trackedCase, input.operatorId, input.attemptedAt)
+    : ("NotApproved" as const);
+});
+
+const decideInUserScope = Effect.fn(function* (input: SupportRecoveryDecisionInput) {
   const credential = yield* lockBackupRecoveryCredential(input.candidate.userId);
   const credentialMatches = credentialMatchesCandidate(
     credential,
@@ -252,39 +250,37 @@ const decideInUserScope = Effect.fn("Recovery.decideInUserScope")(function* (
 });
 
 /** Runs the transactional decision before boundary-safe failure normalization. */
-const approveSupportRecoveryDecision = Effect.fn("Recovery.approveSupportRecoveryDecision")(
-  function* (
-    input: ApproveSupportRecoveryInput
-  ): Effect.fn.Return<
-    ApproveSupportRecoveryOutcome,
-    SupportRecoveryOperationalFailure | SupportRecoveryAttributionLost,
-    Crypto.Crypto | SqlClient.SqlClient
-  > {
-    const attemptedDigest = yield* digestRecoveryCode(Redacted.value(input.backupRecoveryCode));
-    const attributedCandidate = yield* resolveAttributedSupportRecovery(input.pairingCode);
-    const candidate = Option.isSome(attributedCandidate)
-      ? attributedCandidate
-      : yield* resolveSupportRecovery(attemptedDigest, input.pairingCode);
-    if (Option.isNone(candidate)) return "NotApproved";
-    const attemptedAt = yield* DateTime.now;
-    return yield* withUserTransaction(
+const approveSupportRecoveryDecision = Effect.fn(function* (
+  input: ApproveSupportRecoveryInput
+): Effect.fn.Return<
+  ApproveSupportRecoveryOutcome,
+  SupportRecoveryOperationalFailure | SupportRecoveryAttributionLost,
+  Crypto.Crypto | SqlClient.SqlClient
+> {
+  const attemptedDigest = yield* digestRecoveryCode(Redacted.value(input.backupRecoveryCode));
+  const attributedCandidate = yield* resolveAttributedSupportRecovery(input.pairingCode);
+  const candidate = Option.isSome(attributedCandidate)
+    ? attributedCandidate
+    : yield* resolveSupportRecovery(attemptedDigest, input.pairingCode);
+  if (Option.isNone(candidate)) return "NotApproved";
+  const attemptedAt = yield* DateTime.now;
+  return yield* withUserTransaction(
+    candidate.value.userId,
+    withSubjectLockInScope(
       candidate.value.userId,
-      withSubjectLockInScope(
-        candidate.value.userId,
-        withUserLockInScope(
-          advisoryLockKey.browserLoginApproval(candidate.value.userId),
-          decideInUserScope({
-            candidate: candidate.value,
-            attemptedDigest,
-            operatorId: input.operatorId,
-            attemptedAt,
-            caseAlreadyExists: Option.isSome(attributedCandidate),
-          })
-        )
+      withUserLockInScope(
+        advisoryLockKey.browserLoginApproval(candidate.value.userId),
+        decideInUserScope({
+          candidate: candidate.value,
+          attemptedDigest,
+          operatorId: input.operatorId,
+          attemptedAt,
+          caseAlreadyExists: Option.isSome(attributedCandidate),
+        })
       )
-    );
-  }
-);
+    )
+  );
+});
 
 /**
  * Verifies one pre-issued BackupRecoveryCode and approves an existing pairing in one transaction.

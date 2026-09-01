@@ -33,9 +33,7 @@ const invalidAgentMessage = (): Exclude<OnboardingTurnOutcome, { readonly _tag: 
  * admitted text against InboundMessage. Onboarding outcomes terminate; valid text returns an
  * AuthorizedTurn without invoking the model.
  */
-export const admitAgentConversationTurn = Effect.fn("admitAgentConversationTurn")(function* (
-  input: OnboardingTurn
-) {
+export const admitAgentConversationTurn = Effect.fn(function* (input: OnboardingTurn) {
   const onboarding = yield* handleOnboardingTurn(input);
   if (onboarding._tag !== "Proceed") return onboarding;
   if (input.content._tag !== "Text") return invalidAgentMessage();

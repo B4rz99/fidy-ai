@@ -109,7 +109,7 @@ const projectEnrollment = (
   }
 };
 
-const loadEnrollment = Effect.fn("Subscription.loadEnrollment")(function* (
+const loadEnrollment = Effect.fn(function* (
   userId: UserId,
   enrollmentId: CardEnrollmentId,
   publicKey: string
@@ -158,7 +158,7 @@ const matchingPendingEnrollment = (
       canUseExisting(record, requestedPriceId)
   );
 
-const findExistingEnrollment = Effect.fn("Subscription.findExistingEnrollment")(function* ({
+const findExistingEnrollment = Effect.fn(function* ({
   userId,
   requestedPriceId,
   preparedAt,
@@ -186,7 +186,7 @@ const findExistingEnrollment = Effect.fn("Subscription.findExistingEnrollment")(
 });
 
 /** Prepares or observes one replay-safe disclosure intent for the selected immutable Price. */
-export const prepareCardEnrollment = Effect.fn("Subscription.prepareCardEnrollment")(function* (
+export const prepareCardEnrollment = Effect.fn(function* (
   userId: UserId,
   requestedPriceId: PriceId,
   preparedAt: DateTime.Utc
@@ -256,7 +256,7 @@ const acceptanceTermsMatch = (record: EnrollmentRecord, current: WompiContracts)
   );
 };
 
-const beginSubmission = Effect.fn("Subscription.beginSubmission")(function* (
+const beginSubmission = Effect.fn(function* (
   userId: UserId,
   input: SubmitCardEnrollment,
   acceptedAt: DateTime.Utc
@@ -296,7 +296,7 @@ const beginSubmission = Effect.fn("Subscription.beginSubmission")(function* (
   );
 });
 
-const createAndSavePaymentSource = Effect.fn("Subscription.createAndSavePaymentSource")(function* ({
+const createAndSavePaymentSource = Effect.fn(function* ({
   userId,
   input,
   contracts,
@@ -411,7 +411,7 @@ export const reconcileCardEnrollment = Effect.fn("Subscription.reconcileCardEnro
 });
 
 /** Claims and settles one submission; no path can create a Wompi payment source twice. */
-export const submitCardEnrollment = Effect.fn("Subscription.submitCardEnrollment")(function* (
+export const submitCardEnrollment = Effect.fn(function* (
   userId: UserId,
   input: SubmitCardEnrollment,
   acceptedAt: DateTime.Utc

@@ -53,7 +53,7 @@ const sendDisclosure = (exchangeId: PendingConsentExchangeId): OnboardingTurnOut
   exchangeId,
 });
 
-const beginPendingExchange = Effect.fn("beginPendingConsentExchange")(function* (
+const beginPendingExchange = Effect.fn(function* (
   input: Pick<OnboardingTurn, "caller" | "message" | "receivedAt">
 ) {
   const crypto = yield* Crypto.Crypto;
@@ -111,7 +111,7 @@ const declinedOutcome: OnboardingTurnOutcome = { _tag: "Declined", reason: "decl
 const enrollmentPublicSymbolCount = 8;
 const groupedCodeSymbolCount = 4;
 
-const acceptPending = Effect.fn("acceptPendingConsent")(function* (
+const acceptPending = Effect.fn(function* (
   input: OnboardingTurn,
   pending: Extract<PendingConsentExchange, { readonly _tag: "AwaitingDecision" }>
 ) {
@@ -140,7 +140,7 @@ const acceptPending = Effect.fn("acceptPendingConsent")(function* (
   return awaitingEmailOutcome;
 });
 
-const settledReplayOutcome = Effect.fn("settledConsentReplayOutcome")(function* ({
+const settledReplayOutcome = Effect.fn(function* ({
   caller,
   replay,
   disclosure,
@@ -170,7 +170,7 @@ const settledReplayOutcome = Effect.fn("settledConsentReplayOutcome")(function* 
   );
 });
 
-const usablePendingExchange = Effect.fn("usablePendingConsentExchange")(function* ({
+const usablePendingExchange = Effect.fn(function* ({
   caller,
   disclosure,
   now,
@@ -196,14 +196,12 @@ const usablePendingExchange = Effect.fn("usablePendingConsentExchange")(function
 
 const decodeEmailAddress = Schema.decodeUnknownResult(EmailAddress);
 
-const removeBoundedEnrollmentEvidence = Effect.fn("removeBoundedEnrollmentEvidence")(function* (
-  enrollment: EmailEnrollmentRow
-) {
+const removeBoundedEnrollmentEvidence = Effect.fn(function* (enrollment: EmailEnrollmentRow) {
   yield* removeEmailEnrollment(enrollment.id);
   yield* removePendingConsentExchange(enrollment.consent.pendingConsentExchangeId);
 });
 
-const terminalEnrollmentOutcome = Effect.fn("terminalEnrollmentOutcome")(function* (
+const terminalEnrollmentOutcome = Effect.fn(function* (
   input: OnboardingTurn,
   enrollment: EmailEnrollmentRow
 ) {
@@ -295,7 +293,7 @@ const chooseEmailInstruction = (
   });
 };
 
-const handleEmailEnrollment = Effect.fn("handleEmailEnrollment")(function* (
+const handleEmailEnrollment = Effect.fn(function* (
   input: OnboardingTurn,
   enrollment: EmailEnrollmentRow
 ) {
@@ -341,7 +339,7 @@ const handleEmailEnrollment = Effect.fn("handleEmailEnrollment")(function* (
 
 const isSameProviderMessage = Schema.toEquivalence(ProviderMessageEvidence);
 
-const decideAwaitedConsent = Effect.fn("decideAwaitedConsent")(function* ({
+const decideAwaitedConsent = Effect.fn(function* ({
   input,
   pending,
   replay,
@@ -371,9 +369,7 @@ const decideAwaitedConsent = Effect.fn("decideAwaitedConsent")(function* ({
  * function stores no initiating content, deletes temporary state on all terminal paths, and never
  * returns `Proceed` for the acceptance message itself.
  */
-export const handleOnboardingTurnTransition = Effect.fn("Onboarding.handleTurn")(function* (
-  input: OnboardingTurn
-) {
+export const handleOnboardingTurnTransition = Effect.fn(function* (input: OnboardingTurn) {
   const outcome = yield* withConsentLock(
     input.caller,
     Effect.gen(function* () {

@@ -1,5 +1,17 @@
 import { expect, it } from "@effect/vitest";
-import { Cause, Context, Data, Deferred, Effect, Exit, Fiber, Layer, Option, Schema } from "effect";
+import {
+  Cause,
+  Context,
+  Data,
+  Deferred,
+  Effect,
+  Exit,
+  Fiber,
+  Layer,
+  Option,
+  Ref,
+  Schema,
+} from "effect";
 import { decodeEnvelopeItems } from "~/shell/testing/telemetry-fixtures";
 import { EnvelopeRecorder, TelemetryEnvelopeRecording } from "./envelope-recorder";
 import { ProjectedErrorEvent, ProjectedTransaction } from "./projectors";
@@ -82,6 +94,33 @@ it.effect("starts repeated and concurrent scheduled executions as isolated roots
             typeof data["fidy.duration_milliseconds"] === "number"
         )
     ).toBe(true);
+  })
+);
+
+it.effect("preserves successful, typed-failure, defect, and interrupted Work exits", () =>
+  Effect.gen(function* () {
+    const services = yield* Layer.build(TelemetryEnvelopeRecording);
+    const expectUnchangedExit = <A, E>(work: Effect.Effect<A, E>): Effect.Effect<void> =>
+      Effect.gen(function* () {
+        const innerExit = yield* Ref.make(Option.none<Exit.Exit<A, E>>());
+        const outerExit = yield* Effect.exit(
+          Effect.provide(
+            retentionWork(
+              work.pipe(Effect.onExit((exit) => Ref.set(innerExit, Option.some(exit))))
+            ),
+            services
+          )
+        );
+
+        expect(outerExit).toEqual(Option.getOrThrow(yield* Ref.get(innerExit)));
+      });
+
+    yield* expectUnchangedExit(Effect.succeed("unchanged"));
+    yield* expectUnchangedExit(
+      Effect.fail(new RetentionFailure({ cause: new Error("typed failure") }))
+    );
+    yield* expectUnchangedExit(Effect.die(new Error("defect")));
+    yield* expectUnchangedExit(Effect.interrupt);
   })
 );
 

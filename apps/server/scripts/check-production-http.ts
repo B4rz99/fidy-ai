@@ -74,11 +74,11 @@ const checkWebhookDuplicate = Effect.gen(function* () {
   const webhookSecret = Bun.env.KAPSO_WEBHOOK_SECRET;
   if (webhookSecret === undefined) return;
 
-  const body = yield* Effect.promise(() =>
+  const body = yield* Effect.tryPromise(() =>
     Bun.file(
       new URL("../src/shell/channels/whatsapp/fixtures/kapso-text-v2.json", import.meta.url)
     ).bytes()
-  );
+  ).pipe(Effect.orDie);
   const signature = new Bun.CryptoHasher("sha256", webhookSecret).update(body).digest("hex");
   const response = yield* HttpClient.post(new URL("/webhooks/kapso", origin).toString(), {
     headers: {

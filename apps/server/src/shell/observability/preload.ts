@@ -14,8 +14,9 @@ const bootstrap = await Effect.runPromise(
     makeTelemetryBootstrap({
       config,
       makeEnabled: (enabledConfig) =>
-        Effect.promise(() => import("./sentry-adapter")).pipe(
-          Effect.map(({ makeSentryTelemetry }) => makeSentryTelemetry(enabledConfig))
+        Effect.tryPromise(() => import("./sentry-adapter")).pipe(
+          Effect.map(({ makeSentryTelemetry }) => makeSentryTelemetry(enabledConfig)),
+          Effect.orDie
         ),
     })
   )

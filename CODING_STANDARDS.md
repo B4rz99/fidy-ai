@@ -182,11 +182,39 @@ Absence is an `Option` everywhere, and the linter enforces it. Two rules nothing
 
 ---
 
+## Promise interop
+
+Production application source does not use `Effect.promise`. A foreign Promise is rejectable unless
+its owning adapter makes and tests a stronger guarantee; representing it as `Effect<A, never>` turns
+an unexpected rejection into a defect before the workflow has deliberately classified it. Start with
+`Effect.tryPromise`, then map the rejection to the workflow's closed typed failure, contain it at an
+explicit best-effort boundary, or use `orDie` only when rejection genuinely violates an invariant.
+
+Interruption and rejection are separate decisions. Pass the supplied `AbortSignal` to APIs that
+accept it. When an API owns a reader, process, socket, or other resource that does not observe that
+signal, attach scoped cleanup and test interruption; stopping the fiber from waiting is not the same
+as stopping the underlying work.
+
+---
+
 ## Observability
 
 Every new or materially changed external workflow must decide whether its latency, failures, retries,
 or durable continuation need observing. If so, instrument its bounded Work at the shell orchestration
 boundary; otherwise state why not. Keep telemetry out of core and report each failure once.
+
+Every production outbound HTTP adapter applies the shared external-provider policy before execution.
+Automatic client telemetry must not export full URLs, paths, queries, request or response headers, or
+coordinate-bearing HTTP failures. Export only closed low-cardinality projections such as provider,
+method, status class, outcome, and latency. Credential-header redaction and trace propagation are an
+explicit exhaustive decision for each provider, never ambient client behaviour.
+
+Provider response bodies are hostile resource input. Bound the actual streamed byte count before
+buffering, parsing JSON, or Schema decoding; `Content-Length` is only an early rejection signal
+because it may be absent or dishonest. Overflow, stream failure, and interruption cancel or release
+the owned body. Provider adapters use the shared bounded-response module rather than direct `text`,
+`json`, `arrayBuffer`, form-data, or unbounded stream collection. A provider library that owns
+streaming internally must establish an equivalent bound at its client seam.
 
 ---
 

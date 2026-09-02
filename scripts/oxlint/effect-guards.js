@@ -81,6 +81,49 @@ const noDisableValidation = {
 // the v3 spelling of `callback`; both are listed so the fence survives either.
 const ESCAPE_HATCHES = new Set(["sync", "promise", "tryPromise", "async", "callback"]);
 
+const isWholeModuleImport = (specifier) =>
+  specifier.type === "ImportNamespaceSpecifier" || specifier.type === "ImportDefaultSpecifier";
+
+const bindsEffectNamespace = (source, specifier) =>
+  (source === "effect/Effect" && isWholeModuleImport(specifier)) ||
+  (source === "effect" && importsName(specifier, "Effect"));
+
+/**
+ * Reject `Effect.promise`, whose `never` failure channel turns an unexpected Promise rejection into
+ * a defect. Production adapters use `Effect.tryPromise` and then deliberately map, contain, or die
+ * on the foreign failure. This keeps the exceptional decision visible at the interop site.
+ */
+const noEffectPromise = {
+  meta: {
+    type: "problem",
+    docs: { description: "Disallow Effect.promise in production application source" },
+    messages: {
+      noEffectPromise:
+        "Do not use Effect.promise. A rejected Promise becomes a defect despite the Effect's `never` failure channel. Use Effect.tryPromise and deliberately map the rejection to a typed failure, contain it, or use orDie only when rejection is truly a defect.",
+    },
+    schema: [],
+  },
+  create(context) {
+    const effectNamespaces = new Set(["Effect"]);
+    return {
+      MemberExpression(node) {
+        if (node.object.type !== "Identifier" || !effectNamespaces.has(node.object.name)) return;
+        if (staticMemberName(node) !== "promise") return;
+        context.report({ node, messageId: "noEffectPromise" });
+      },
+      ImportDeclaration(node) {
+        const source = node.source.value;
+        if (source !== "effect" && source !== "effect/Effect") return;
+        for (const specifier of node.specifiers) {
+          if (bindsEffectNamespace(source, specifier)) effectNamespaces.add(specifier.local.name);
+          if (!importsName(specifier, "promise")) continue;
+          context.report({ node: specifier, messageId: "noEffectPromise" });
+        }
+      },
+    };
+  },
+};
+
 /** Rejects type-only cast helpers that suppress assignability errors without runtime proof. */
 const noTypeCast = {
   meta: {
@@ -711,6 +754,7 @@ const plugin = {
     "no-sql-type-parameter": noSqlTypeParameter,
     "no-disable-validation": noDisableValidation,
     "no-escape-hatch": noEscapeHatch,
+    "no-effect-promise": noEffectPromise,
     "no-datetime-internals": noDateTimeInternals,
     "require-interface-comment": requireInterfaceComment,
     "scalar-brand-only": scalarBrandOnly,

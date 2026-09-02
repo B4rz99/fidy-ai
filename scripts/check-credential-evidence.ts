@@ -283,7 +283,7 @@ const readConfiguredSecrets = Effect.fn("CredentialEvidenceGate.readConfiguredSe
       const sources = new Bun.Glob(pattern);
       for (const path of sources.scanSync({ cwd: "." })) {
         if (path.endsWith(".test.ts")) continue;
-        const source = yield* Effect.promise(() => Bun.file(path).text());
+        const source = yield* Effect.tryPromise(() => Bun.file(path).text()).pipe(Effect.orDie);
         for (const name of configuredSecretNames(source)) configured.add(name);
       }
     }
@@ -296,10 +296,10 @@ const testProblems = Effect.fn("CredentialEvidenceGate.testProblems")(function* 
   credential: CredentialEvidence
 ) {
   const file = Bun.file(credential.testFile);
-  if (!(yield* Effect.promise(() => file.exists()))) {
+  if (!(yield* Effect.tryPromise(() => file.exists()).pipe(Effect.orDie))) {
     return [`${credential.configuration} references missing ${credential.testFile}`];
   }
-  const source = yield* Effect.promise(() => file.text());
+  const source = yield* Effect.tryPromise(() => file.text()).pipe(Effect.orDie);
   const declarations = countActiveTestDeclarations(source, credential.testName);
   return declarations === 1
     ? []

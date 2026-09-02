@@ -698,7 +698,7 @@ export const closeTelemetryClient: CloseTelemetryClient = (close) =>
   );
 
 const closeClient = (client: Sentry.BunClient): Effect.Effect<void> =>
-  closeTelemetryClient((timeout) => Effect.promise(() => client.close(timeout)));
+  closeTelemetryClient((timeout) => Effect.tryPromise(() => client.close(timeout)));
 
 /** Constructs and globally binds the single production client during early preload. */
 export const makeSentryTelemetry = (config: SentryTelemetryConfig): SentryTelemetry => {
@@ -735,7 +735,7 @@ export const makeSentryRecordingClient = (
     resource: { adapter, close },
     adapter,
     serializedEnvelopes: Effect.map(
-      Effect.promise(() => client.flush(clientDrainMilliseconds)),
+      Effect.tryPromise(() => client.flush(clientDrainMilliseconds)).pipe(Effect.orDie),
       () => envelopes.map((envelope) => envelope.slice())
     ),
     clear: Effect.sync(() => {

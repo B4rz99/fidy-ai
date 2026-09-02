@@ -296,10 +296,10 @@ const testProblems = Effect.fn("CredentialEvidenceGate.testProblems")(function* 
   credential: CredentialEvidence
 ) {
   const file = Bun.file(credential.testFile);
-  if (!(yield* Effect.tryPromise(() => file.exists()).pipe(Effect.orDie))) {
+  if (!(yield* Effect.tryPromise(() => file.exists()))) {
     return [`${credential.configuration} references missing ${credential.testFile}`];
   }
-  const source = yield* Effect.tryPromise(() => file.text()).pipe(Effect.orDie);
+  const source = yield* Effect.tryPromise(() => file.text());
   const declarations = countActiveTestDeclarations(source, credential.testName);
   return declarations === 1
     ? []
@@ -307,7 +307,7 @@ const testProblems = Effect.fn("CredentialEvidenceGate.testProblems")(function* 
         `${credential.configuration} references ${declarations} concrete non-skipped declarations ` +
           `for "${credential.testName}" in ${credential.testFile}; expected exactly one`,
       ];
-});
+}, Effect.orDie);
 
 const mappingProblems = (configured: ReadonlySet<string>): ReadonlyArray<string> => [
   ...[...configured].flatMap((configuration) => {

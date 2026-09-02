@@ -194,6 +194,49 @@ it.effect("accepts an organization response with no data region", () =>
   })
 );
 
+it.effect("normalizes European and unknown organization regions", () =>
+  Effect.gen(function* () {
+    const organization = "private-organization";
+    for (const [regionName, expectedRegion] of [
+      ["de", Option.some("eu")],
+      ["eu", Option.some("eu")],
+      ["unknown", Option.none()],
+    ] as const) {
+      const client = makeHttpClient((request) => {
+        const path = new URL(request.url).pathname;
+        if (path.endsWith(`/organizations/${organization}/`)) {
+          return Effect.succeed(responseJson(request, { dataRegion: { name: regionName } }));
+        }
+        if (path.endsWith(`/organizations/${organization}/projects/`)) {
+          return Effect.succeed(
+            responseJson(request, [
+              { slug: "private-production" },
+              { slug: "private-non-production" },
+            ])
+          );
+        }
+        if (path.endsWith("/keys/")) {
+          return Effect.succeed(responseJson(request, [{ isActive: true, rateLimit: null }]));
+        }
+        return Effect.succeed(responseJson(request, [{ name: "production" }]));
+      });
+
+      const observation = yield* inspectSentryAccount(
+        readerConfig({
+          organization,
+          production: "private-production",
+          nonProduction: "private-non-production",
+          token: "private-token",
+        })
+      ).pipe(Effect.provideService(HttpClient.HttpClient, client));
+
+      expect(observation._tag).toBe("available");
+      if (observation._tag !== "available") throw new Error("expected available observation");
+      expect(observation.storageRegion).toEqual(expectedRegion);
+    }
+  })
+);
+
 it.effect("derives the organization region from the current region link", () =>
   Effect.gen(function* () {
     const organization = "private-organization";

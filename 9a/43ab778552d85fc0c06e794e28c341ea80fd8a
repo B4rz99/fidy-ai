@@ -1,0 +1,37 @@
+apps/server/src/shell/_shared/bounded-external-http.ts
+  s_7e8b2b2fb02110::t_fd912d930d0588 1,290-294,299-301,303,305-325
+  s_7e8b2b2fb02110::t_732efce38a2446 295-298,302,304
+apps/server/src/shell/_shared/bounded-external-http.test.ts
+  s_7e8b2b2fb02110::t_47a1e78182d3e2 289-297,303-304
+apps/server/src/shell/agent/openai.ts
+  s_7e8b2b2fb02110::t_af63f325ce1a86 103,108,812
+  s_7e8b2b2fb02110::t_5f93955118619c 115
+  s_7e8b2b2fb02110::t_e556ea01b89c0b 109-114
+  s_7e8b2b2fb02110::t_3ef88bc1d82a98 21
+  s_7e8b2b2fb02110::t_07e08e2f3ca48f 116
+CODING_STANDARDS.md
+  s_7e8b2b2fb02110::t_770d46be3df17c 218-220
+apps/server/src/shell/_shared/bounded-bytes.ts
+  s_7e8b2b2fb02110::t_2fcf38e6e7c87b 3-6
+apps/server/ARCHITECTURE.md
+  s_7e8b2b2fb02110::t_926edc7fc3e90d 277-280
+apps/server/src/shell/_shared/bounded-bytes.test.ts
+  s_7e8b2b2fb02110::t_e1e942d617b9de 103
+  s_7e8b2b2fb02110::t_5b62489060c16c 104-122
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "9a43ab778552d85fc0c06e794e28c341ea80fd8a",
+  "prompts": {},
+  "sessions": {
+    "s_7e8b2b2fb02110": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a05f68-bc94-7f02-bf7e-795702d2e3a8",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

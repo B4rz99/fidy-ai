@@ -319,6 +319,22 @@ layer(clientLayer(new Response("provider secret", { status: 503 })), {
   );
 });
 
+for (const [status, certainty] of [
+  [400, "rejected"],
+  [201, "ambiguous"],
+] as const) {
+  layer(clientLayer(new Response("x", { status, headers: { "content-length": "16385" } })), {
+    excludeTestServices: true,
+  })(`Wompi oversized ${status} source adapter`, (it) => {
+    it.effect(`classifies an oversized ${status} response as ${certainty}`, () =>
+      Effect.gen(function* () {
+        const failure = yield* Effect.flip(createPaymentSource);
+        expect(failure).toEqual(new WompiSourceCreationFailed({ certainty }));
+      })
+    );
+  });
+}
+
 layer(
   clientLayerWithConfig(new Response("contract"), new Response(null, { status: 101 }), config),
   { excludeTestServices: true }

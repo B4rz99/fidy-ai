@@ -14,7 +14,23 @@ for await (const path of productionSources.scan({ cwd: serverRoot })) {
   }
 }
 
-const probes = [
+type LintProbe = Readonly<{
+  name: string;
+  expectedRule: string;
+  source: string;
+}>;
+
+const probes: ReadonlyArray<LintProbe> = [
+  {
+    name: "effect-promise",
+    expectedRule: "effect-guards(no-effect-promise)",
+    source: `import { Effect } from "effect";\n\n/** Negative probe: a Promise rejection must not hide behind a never failure channel. */\nexport const hiddenRejection = Effect.promise(() => Promise.resolve("value"));\n`,
+  },
+  {
+    name: "ingestion-node-crypto",
+    expectedRule: "eslint(no-restricted-imports)",
+    source: `import { randomUUID } from "node:crypto";\n\nexport const platformId = (): string => randomUUID();\n`,
+  },
   {
     name: "type-cast",
     expectedRule: "effect-guards(no-type-cast)",
@@ -60,11 +76,13 @@ const probes = [
     expectedRule: "eslint(no-restricted-globals)",
     source: `/** Negative probe: core must not read ambient process state. */\nexport const platform = (): string => process.platform;\n`,
   },
-] as const;
+];
 
 const probeFiles = probes.map((probe) => ({
   ...probe,
-  path: `src/core/.lint-${probe.name}-probe-${process.pid}.ts`,
+  path: `${
+    probe.name === "ingestion-node-crypto" ? "src/shell/ingestion" : "src/core"
+  }/.lint-${probe.name}-probe-${process.pid}.ts`,
 }));
 
 try {

@@ -1,13 +1,16 @@
 import { UnknownJsonString, jsonStringSchema } from "~/schema-compatibility";
 import { Config, Context, Data, Effect, Layer, Option, Redacted, Result, Schema } from "effect";
-import { HttpBody, HttpClient, type HttpClientResponse } from "effect/unstable/http";
+import { HttpBody, HttpClient, HttpClientRequest } from "effect/unstable/http";
 import type {
   EmailAddress,
   EmailProofPurpose,
   EmailVerificationCode,
 } from "~/core/email-authentication/model";
-import { collectBoundedResponseBytes } from "~/shell/_shared/bounded-bytes";
-import { makeExternalHttpClient } from "~/shell/_shared/external-http-policy";
+import {
+  type BoundedExternalHttpResponse,
+  type ExternalHttpFailure,
+  makeBoundedExternalHttpClient,
+} from "~/shell/_shared/bounded-external-http";
 
 const onboardingSubject = "Verifica tu correo en Fidy";
 const replacementSubject = "Verifica tu nuevo correo en Fidy";
@@ -82,25 +85,11 @@ const ResendSuccess = Schema.Struct({
 const decodeResendSuccess = Schema.decodeUnknownResult(ResendSuccess);
 const decodeJson = Schema.decodeUnknownResult(UnknownJsonString);
 
-const decodeBoundedResendResponse = Effect.fn(function* (
-  response: HttpClientResponse.HttpClientResponse
-) {
+const decodeBoundedResendResponse = Effect.fn(function* (response: BoundedExternalHttpResponse) {
   const successful =
     response.status >= successfulStatusMinimum &&
     response.status < successfulStatusMaximumExclusive;
-  const body = yield* collectBoundedResponseBytes(response, maximumResendResponseBytes).pipe(
-    Effect.mapError(
-      () =>
-        new EmailSendFailed({ certainty: successful ? "ambiguous" : "rejected", retryable: false })
-    )
-  );
-  if (Option.isNone(body)) {
-    return yield* new EmailSendFailed({
-      certainty: successful ? "ambiguous" : "rejected",
-      retryable: false,
-    });
-  }
-  const json = decodeJson(new TextDecoder().decode(body.value));
+  const json = decodeJson(new TextDecoder().decode(response.body));
   if (Result.isFailure(json)) {
     return yield* new EmailSendFailed({
       certainty: successful ? "ambiguous" : "rejected",
@@ -120,7 +109,7 @@ const ResendRequest = Schema.Struct({
 const encodeResendRequest = Schema.encodeSync(jsonStringSchema(ResendRequest));
 
 const classifyResendResponse = (
-  response: HttpClientResponse.HttpClientResponse
+  response: BoundedExternalHttpResponse
 ): Effect.Effect<void, EmailSendFailed> =>
   Effect.flatMap(decodeBoundedResendResponse(response), (body) => {
     if (
@@ -136,6 +125,22 @@ const classifyResendResponse = (
     return new EmailSendFailed({ certainty: "rejected", retryable });
   });
 
+const mapResendRequestFailure = (
+  failure: ExternalHttpFailure | { readonly _tag: "TimeoutError" }
+): EmailSendFailed => {
+  const certainty =
+    failure._tag === "ExternalHttpFailure"
+      ? Option.match(failure.responseStatus, {
+          onNone: () => "ambiguous" as const,
+          onSome: (status) =>
+            status >= successfulStatusMinimum && status < successfulStatusMaximumExclusive
+              ? ("ambiguous" as const)
+              : ("rejected" as const),
+        })
+      : "ambiguous";
+  return new EmailSendFailed({ certainty, retryable: false });
+};
+
 export class EmailDeliveryPort extends Context.Service<
   EmailDeliveryPort,
   EmailDeliveryPortService
@@ -143,7 +148,9 @@ export class EmailDeliveryPort extends Context.Service<
   static readonly layer = Layer.effect(
     EmailDeliveryPort,
     Effect.gen(function* () {
-      const httpClient = (yield* HttpClient.HttpClient).pipe(makeExternalHttpClient("resend"));
+      const httpClient = (yield* HttpClient.HttpClient).pipe(
+        makeBoundedExternalHttpClient("resend")
+      );
       const environment = yield* Config.string("NODE_ENV").pipe(Config.withDefault("development"));
       if (environment !== "production") {
         return EmailDeliveryPort.of({
@@ -160,29 +167,28 @@ export class EmailDeliveryPort extends Context.Service<
       return EmailDeliveryPort.of({
         send: (input) => {
           const projection = verificationEmailFor(input.purpose, input.combinedCode);
+          const request = HttpClientRequest.post("https://api.resend.com/emails", {
+            headers: {
+              authorization: `Bearer ${Redacted.value(apiKey)}`,
+              "content-type": "application/json",
+              "idempotency-key": input.idempotencyKey,
+            },
+            body: HttpBody.text(
+              encodeResendRequest({
+                from: `${fromName} <${fromEmail}>`,
+                to: [input.to],
+                subject: projection.subject,
+                text: projection.text,
+                html: projection.html,
+              }),
+              "application/json"
+            ),
+          });
           return httpClient
-            .post("https://api.resend.com/emails", {
-              headers: {
-                authorization: `Bearer ${Redacted.value(apiKey)}`,
-                "content-type": "application/json",
-                "idempotency-key": input.idempotencyKey,
-              },
-              body: HttpBody.text(
-                encodeResendRequest({
-                  from: `${fromName} <${fromEmail}>`,
-                  to: [input.to],
-                  subject: projection.subject,
-                  text: projection.text,
-                  html: projection.html,
-                }),
-                "application/json"
-              ),
-            })
+            .execute(request, maximumResendResponseBytes)
             .pipe(
               Effect.timeout("14 seconds"),
-              Effect.mapError(
-                () => new EmailSendFailed({ certainty: "ambiguous", retryable: false })
-              ),
+              Effect.mapError(mapResendRequestFailure),
               Effect.flatMap(classifyResendResponse)
             );
         },

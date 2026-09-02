@@ -33,6 +33,7 @@
     "jsx-a11y/no-static-element-interactions": "error",
     "effect-guards/no-sql-type-parameter": "error",
     "effect-guards/no-disable-validation": "error",
+    "effect-guards/no-effect-promise": "error",
     "effect-guards/no-type-cast": "error",
     "effect-guards/no-react-use-effect": "error",
     "capitalized-comments": ["error", "always", { "ignoreConsecutiveComments": true }],
@@ -403,6 +404,31 @@
         ]
       }
     },
+    // Tests retain Effect.promise for fixture Promises whose rejection would itself mean the
+    // fixture is broken. All non-test first-party source starts foreign interop with tryPromise.
+    // Ingestion obtains entropy, UUIDs, and SHA digests through Effect's substitutable Crypto
+    // service. This subtree has no legitimate direct platform-crypto operation; HMAC and
+    // constant-time comparison remain permitted in their owning identity/security modules.
+    {
+      "files": ["apps/server/src/shell/ingestion/**/*.{ts,tsx}"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "paths": [
+              {
+                "name": "node:crypto",
+                "message": "Ingestion must use the Effect Crypto service (`import { Crypto } from \"effect\"; const crypto = yield* Crypto.Crypto`) so cryptographic failures stay typed and tests can provide a controlled implementation."
+              },
+              {
+                "name": "crypto",
+                "message": "Ingestion must use the Effect Crypto service (`import { Crypto } from \"effect\"; const crypto = yield* Crypto.Crypto`) so cryptographic failures stay typed and tests can provide a controlled implementation."
+              }
+            ]
+          }
+        ]
+      }
+    },
     // The API harness spends the whole nesting budget by construction:
     // layer()(name, (it) => …) → it.effect(name, () => …) → Effect.gen(function* …)
     // is already three, so a test's own first `.map` would violate a limit of 3.
@@ -411,6 +437,7 @@
     {
       "files": ["**/*.test.ts", "**/*.test.js"],
       "rules": {
+        "effect-guards/no-effect-promise": "off",
         "max-nested-callbacks": ["error", 4],
         "max-lines-per-function": "off",
         "no-magic-numbers": "off"

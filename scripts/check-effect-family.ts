@@ -47,14 +47,13 @@ const isCoordinatedEffectPackage = (name: string): boolean =>
 
 const readJson = <A>(schema: Schema.Codec<A, unknown>, path: string): Effect.Effect<A> =>
   Effect.map(
-    Effect.promise(() => Bun.file(path).json()),
+    Effect.tryPromise(() => Bun.file(path).json()).pipe(Effect.orDie),
     Schema.decodeUnknownSync(schema)
   );
 
 const readLockfile = (path: string): Effect.Effect<typeof Lockfile.Type> =>
-  Effect.map(
-    Effect.promise(() => Bun.file(path).text()),
-    (text) => Schema.decodeUnknownSync(Lockfile)(Bun.JSONC.parse(text))
+  Effect.map(Effect.tryPromise(() => Bun.file(path).text()).pipe(Effect.orDie), (text) =>
+    Schema.decodeUnknownSync(Lockfile)(Bun.JSONC.parse(text))
   );
 
 const manifestPath = (root: string, workspace: string): string =>

@@ -1,8 +1,11 @@
 import { TaggedSerializableError, jsonStringSchema } from "~/schema-compatibility";
 import { Config, Effect, Option, Redacted, Schema } from "effect";
-import { HttpClient, HttpClientRequest, type HttpClientResponse } from "effect/unstable/http";
-import { collectBoundedResponseBytes } from "~/shell/_shared/bounded-bytes";
-import { makeExternalHttpClient } from "~/shell/_shared/external-http-policy";
+import { HttpClient, HttpClientRequest } from "effect/unstable/http";
+import {
+  type BoundedExternalHttpClient,
+  type BoundedExternalHttpResponse,
+  makeBoundedExternalHttpClient,
+} from "~/shell/_shared/bounded-external-http";
 import type {
   SentryAccountObservation,
   SentryProjectObservation,
@@ -101,33 +104,29 @@ const hasUnboundedNextPage = (link: string): boolean =>
   });
 
 const successfulResponse = (
-  response: HttpClientResponse.HttpClientResponse
-): Effect.Effect<HttpClientResponse.HttpClientResponse, SentryAccountReadError> =>
+  response: BoundedExternalHttpResponse
+): Effect.Effect<BoundedExternalHttpResponse, SentryAccountReadError> =>
   isSuccessfulStatus(response.status)
     ? Effect.succeed(response)
     : Effect.fail(SentryAccountReadError.make({ reason: reasonForStatus(response.status) }));
 
 const readJson = function <A>(input: {
+  readonly client: BoundedExternalHttpClient;
   readonly url: string;
   readonly token: Redacted.Redacted;
   readonly schema: Schema.Codec<A, unknown>;
-}): Effect.Effect<A, SentryAccountReadError, HttpClient.HttpClient> {
-  return HttpClientRequest.get(input.url).pipe(
+}): Effect.Effect<A, SentryAccountReadError> {
+  const request = HttpClientRequest.get(input.url).pipe(
     HttpClientRequest.bearerToken(Redacted.value(input.token)),
-    HttpClientRequest.acceptJson,
-    HttpClient.execute,
+    HttpClientRequest.acceptJson
+  );
+  return input.client.execute(request, maximumResponseBytes).pipe(
     Effect.flatMap(successfulResponse),
     Effect.filterOrFail(
       (response) => !hasUnboundedNextPage(response.headers["link"] ?? ""),
       () => SentryAccountReadError.make({ reason: "unexpected-response" })
     ),
-    Effect.flatMap((response) => collectBoundedResponseBytes(response, maximumResponseBytes)),
-    Effect.flatMap(
-      Option.match({
-        onNone: () => Effect.fail(SentryAccountReadError.make({ reason: "unexpected-response" })),
-        onSome: (bytes) => Effect.succeed(new TextDecoder().decode(bytes)),
-      })
-    ),
+    Effect.map((response) => new TextDecoder().decode(response.body)),
     Effect.flatMap(Schema.decodeUnknownEffect(jsonStringSchema(input.schema))),
     Effect.mapError((error) =>
       Schema.is(SentryAccountReadError)(error)
@@ -160,25 +159,24 @@ const regionNameFromUrl = (value: string): Option.Option<string> => {
 };
 
 const inspectProject = (input: {
+  readonly client: BoundedExternalHttpClient;
   readonly baseUrl: string;
   readonly organization: string;
   readonly project: string;
   readonly token: Redacted.Redacted;
   readonly exists: boolean;
-}): Effect.Effect<
-  Option.Option<SentryProjectObservation>,
-  SentryAccountReadError,
-  HttpClient.HttpClient
-> =>
+}): Effect.Effect<Option.Option<SentryProjectObservation>, SentryAccountReadError> =>
   input.exists
     ? Effect.gen(function* () {
         const projectPath = `${input.baseUrl}/projects/${encodeURIComponent(input.organization)}/${encodeURIComponent(input.project)}`;
         const keys = yield* readJson({
+          client: input.client,
           url: `${projectPath}/keys/`,
           token: input.token,
           schema: ClientKeysResponse,
         });
         const environments = yield* readJson({
+          client: input.client,
           url: `${projectPath}/environments/`,
           token: input.token,
           schema: EnvironmentsResponse,
@@ -202,8 +200,9 @@ export const unavailableSentryAccountObservation: SentryAccountObservation = {
 };
 
 const inspectProtectedSentryAccount = (
-  config: SentryAccountReaderConfig
-): Effect.Effect<SentryAccountObservation, SentryAccountReadError, HttpClient.HttpClient> =>
+  config: SentryAccountReaderConfig,
+  client: BoundedExternalHttpClient
+): Effect.Effect<SentryAccountObservation, SentryAccountReadError> =>
   Effect.gen(function* () {
     const baseUrl = "https://sentry.io/api/0";
     const organization = Redacted.value(config.organizationSlug);
@@ -211,17 +210,20 @@ const inspectProtectedSentryAccount = (
     const nonProduction = Redacted.value(config.nonProductionProjectSlug);
     const organizationPath = `${baseUrl}/organizations/${encodeURIComponent(organization)}`;
     const organizationResponse = yield* readJson({
+      client,
       url: `${organizationPath}/`,
       token: config.authToken,
       schema: OrganizationResponse,
     });
     const projects = yield* readJson({
+      client,
       url: `${organizationPath}/projects/`,
       token: config.authToken,
       schema: ProjectsResponse,
     });
     const projectSlugs = new Set(projects.map((project) => project.slug));
     const productionObservation = yield* inspectProject({
+      client,
       baseUrl,
       organization,
       project: production,
@@ -229,6 +231,7 @@ const inspectProtectedSentryAccount = (
       exists: projectSlugs.has(production),
     });
     const nonProductionObservation = yield* inspectProject({
+      client,
       baseUrl,
       organization,
       project: nonProduction,
@@ -259,10 +262,5 @@ export const inspectSentryAccount = (
   config: SentryAccountReaderConfig
 ): Effect.Effect<SentryAccountObservation, SentryAccountReadError, HttpClient.HttpClient> =>
   Effect.flatMap(HttpClient.HttpClient, (httpClient) =>
-    inspectProtectedSentryAccount(config).pipe(
-      Effect.provideService(
-        HttpClient.HttpClient,
-        httpClient.pipe(makeExternalHttpClient("sentry"))
-      )
-    )
+    inspectProtectedSentryAccount(config, httpClient.pipe(makeBoundedExternalHttpClient("sentry")))
   );

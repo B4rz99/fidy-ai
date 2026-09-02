@@ -106,10 +106,10 @@ const assetNamePattern = /^\/assets\/[A-Za-z0-9._-]+$/u;
 
 const makeWebHandler = Effect.gen(function* () {
   const rules = parseHeaderRules(
-    yield* Effect.promise(() => Bun.file(new URL("_headers", webDirectory)).text())
+    yield* Effect.tryPromise(() => Bun.file(new URL("_headers", webDirectory)).text())
   );
   const assets = new Set(
-    yield* Effect.promise(() =>
+    yield* Effect.tryPromise(() =>
       Array.fromAsync(new Bun.Glob("assets/*").scan({ cwd: Bun.fileURLToPath(webDirectory) }))
     )
   );
@@ -129,7 +129,7 @@ const makeWebHandler = Effect.gen(function* () {
       headers: headersFor(rules, pathname),
     });
   };
-});
+}).pipe(Effect.orDie);
 
 const run = Effect.gen(function* () {
   yield* Effect.sync(createCertificate);
@@ -140,7 +140,9 @@ const run = Effect.gen(function* () {
     tls: { cert: certificate, key: privateKey },
     fetch: webHandler,
   });
-  yield* Effect.addFinalizer(() => Effect.promise(() => webServer.stop(true)));
+  yield* Effect.addFinalizer(() =>
+    Effect.tryPromise(() => webServer.stop(true)).pipe(Effect.orDie)
+  );
   yield* Effect.all(
     [
       Layer.launch(makeBrowserLoginPairingAcceptanceServer({ certificate, privateKey })),

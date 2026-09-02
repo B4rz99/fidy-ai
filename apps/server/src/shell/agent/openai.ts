@@ -15,7 +15,11 @@ import { Tiktoken } from "js-tiktoken/lite";
 import o200kBase from "js-tiktoken/ranks/o200k_base";
 import type { ConfigError } from "effect/Config";
 import { IanaTimeZone } from "~/core/_shared/context";
-import { externalHttpClientLayer } from "~/shell/_shared/external-http-policy";
+import {
+  type BoundedExternalHttpResponse,
+  boundedProviderLibraryHttpClientLayer,
+  makeBoundedExternalHttpClient,
+} from "~/shell/_shared/bounded-external-http";
 import { maximumAggregateMemoryTokens } from "~/core/memory/rules";
 import {
   defaultCompactionMaximumTokens,
@@ -24,14 +28,8 @@ import {
 import { type Prompt, Tool } from "effect/unstable/ai";
 import { toCodecOpenAI } from "effect/unstable/ai/OpenAiStructuredOutput";
 import type { TranscriptEntry } from "~/core/transcript/model";
-import { collectBoundedResponseBytes } from "~/shell/_shared/bounded-bytes";
 import { exactTranscriptPrompt } from "./model-boundary";
-import {
-  HttpBody,
-  type HttpClient,
-  HttpClientRequest,
-  HttpClientResponse,
-} from "effect/unstable/http";
+import { HttpBody, type HttpClient, HttpClientRequest } from "effect/unstable/http";
 import {
   HostedInference,
   type HostedInferenceAdapter,
@@ -101,10 +99,19 @@ type HostedToolCallCapOverride = <A, E, R>(
 export const withHostedToolCallCap = (maximum: HostedToolCallMaximum): HostedToolCallCapOverride =>
   OpenAiLanguageModel.withConfigOverride({ max_tool_calls: maximum });
 
-const OpenAiClientLive = OpenAiClient.layerConfig({
+const OpenAiClientBase = OpenAiClient.layerConfig({
   apiKey: Config.redacted("OPENAI_API_KEY"),
   apiUrl: Config.string("OPENAI_API_URL").pipe(Config.withDefault("https://api.openai.com/v1")),
-}).pipe(Layer.provide(externalHttpClientLayer("openai")));
+});
+
+const OpenAiClientLive = OpenAiClientBase.pipe(
+  Layer.provide(
+    boundedProviderLibraryHttpClientLayer({
+      provider: "openai",
+      maximumResponseBytes: maximumStructuredResponseBytes,
+    })
+  )
+);
 
 /** Structured-output model used by bounded non-agent extraction adapters. */
 export const OpenAiLanguageModelLive = OpenAiLanguageModel.layer({
@@ -171,19 +178,6 @@ type PreparedOpenAiRequest = Readonly<{
   continuationPrefix: OpenAiContinuation;
 }>;
 
-const providerStatus = (cause: unknown): Option.Option<number> =>
-  Option.liftPredicate(
-    typeof cause === "object" &&
-      cause !== null &&
-      "response" in cause &&
-      typeof cause.response === "object" &&
-      cause.response !== null &&
-      "status" in cause.response
-      ? cause.response.status
-      : null,
-    (status): status is number => typeof status === "number"
-  );
-
 const providerUnavailable = (
   retryable = false,
   retryAfter: Option.Option<Duration.Duration> = Option.none()
@@ -194,6 +188,8 @@ const providerUnavailable = (
     retryAfter,
   });
 
+const successfulStatusMinimum = 200;
+const successfulStatusMaximumExclusive = 300;
 const requestTimeoutStatus = 408;
 const conflictStatus = 409;
 const rateLimitedStatus = 429;
@@ -203,14 +199,6 @@ const retryableProviderStatuses = new Set([
   conflictStatus,
   rateLimitedStatus,
 ]);
-
-const countFailure = (cause: unknown): HostedInferenceError =>
-  providerUnavailable(
-    Option.exists(
-      providerStatus(cause),
-      (status) => retryableProviderStatuses.has(status) || status >= minimumServerFailureStatus
-    )
-  );
 
 const invalidProviderOutput = (description: HostedInvalidOutputDescription): HostedInferenceError =>
   new HostedInferenceError({
@@ -376,28 +364,60 @@ const makeExecutionRequest = (
     : { ...countedRequest, ...controls, max_tool_calls: maximumToolCalls };
 };
 
+const executeBoundedOpenAiRequest = (
+  client: OpenAiClient.Service,
+  request: HttpClientRequest.HttpClientRequest,
+  overflowFailure: () => HostedInferenceError
+): Effect.Effect<BoundedExternalHttpResponse, HostedInferenceError> =>
+  client.client
+    .pipe(makeBoundedExternalHttpClient("openai"))
+    .execute(request, maximumStructuredResponseBytes)
+    .pipe(
+      Effect.filterOrFail(
+        (response) =>
+          response.status >= successfulStatusMinimum &&
+          response.status < successfulStatusMaximumExclusive,
+        (response) =>
+          providerUnavailable(
+            retryableProviderStatuses.has(response.status) ||
+              response.status >= minimumServerFailureStatus
+          )
+      ),
+      Effect.mapError((failure) => {
+        if (failure instanceof HostedInferenceError) return failure;
+        if (failure.reason === "response-too-large") return overflowFailure();
+        if (failure.reason === "response-body-failed") return providerUnavailable();
+        return providerUnavailable(
+          Option.exists(
+            failure.responseStatus,
+            (status) =>
+              retryableProviderStatuses.has(status) || status >= minimumServerFailureStatus
+          )
+        );
+      })
+    );
+
 const requestInputTokenCount = (
   client: OpenAiClient.Service,
-  request: OpenAiCountedRequest | OpenAiStructuredCountedRequest
-): Effect.Effect<HttpClientResponse.HttpClientResponse, HostedInferenceError> =>
-  client.client
-    .execute(
-      HttpClientRequest.post("/responses/input_tokens", {
-        body: HttpBody.jsonUnsafe(request),
-      })
-    )
-    .pipe(Effect.flatMap(HttpClientResponse.filterStatusOk), Effect.mapError(countFailure));
+  request: OpenAiCountedRequest | OpenAiStructuredCountedRequest,
+  overflowFailure: () => HostedInferenceError
+): Effect.Effect<BoundedExternalHttpResponse, HostedInferenceError> =>
+  executeBoundedOpenAiRequest(
+    client,
+    HttpClientRequest.post("/responses/input_tokens", {
+      body: HttpBody.jsonUnsafe(request),
+    }),
+    overflowFailure
+  );
 
 const countInputTokens = (
   client: OpenAiClient.Service,
   request: OpenAiCountedRequest | OpenAiStructuredCountedRequest
 ): Effect.Effect<number, HostedInferenceError> =>
-  requestInputTokenCount(client, request).pipe(
-    Effect.flatMap((response) =>
-      readBoundedResponseText(response, () =>
-        invalidProviderOutput("Hosted provider response was invalid")
-      )
-    ),
+  requestInputTokenCount(client, request, () =>
+    invalidProviderOutput("Hosted provider response was invalid")
+  ).pipe(
+    Effect.flatMap(readBoundedResponseText),
     Effect.flatMap(Schema.decodeUnknownEffect(jsonStringSchema(Generated.TokenCountsResource))),
     Effect.mapError((error) =>
       error instanceof HostedInferenceError
@@ -480,27 +500,21 @@ const executeRequest = (
   client: OpenAiClient.Service,
   request: OpenAiRequest
 ): Effect.Effect<OpenAiSchema.Response, HostedInferenceError> =>
-  client.client
-    .execute(
-      HttpClientRequest.post("/responses", {
-        body: HttpBody.jsonUnsafe(request),
-      })
+  executeBoundedOpenAiRequest(
+    client,
+    HttpClientRequest.post("/responses", {
+      body: HttpBody.jsonUnsafe(request),
+    }),
+    () => invalidProviderOutput("Hosted provider response was invalid")
+  ).pipe(
+    Effect.flatMap(readBoundedResponseText),
+    Effect.flatMap(Schema.decodeUnknownEffect(jsonStringSchema(OpenAiSchema.Response))),
+    Effect.mapError((error) =>
+      error instanceof HostedInferenceError
+        ? error
+        : invalidProviderOutput("Hosted provider response was invalid")
     )
-    .pipe(
-      Effect.flatMap(HttpClientResponse.filterStatusOk),
-      Effect.mapError(countFailure),
-      Effect.flatMap((response) =>
-        readBoundedResponseText(response, () =>
-          invalidProviderOutput("Hosted provider response was invalid")
-        )
-      ),
-      Effect.flatMap(Schema.decodeUnknownEffect(jsonStringSchema(OpenAiSchema.Response))),
-      Effect.mapError((error) =>
-        error instanceof HostedInferenceError
-          ? error
-          : invalidProviderOutput("Hosted provider response was invalid")
-      )
-    );
+  );
 
 const memoryTokenizer = new Tiktoken(o200kBase);
 
@@ -519,26 +533,17 @@ const structuredOutputTimedOut = (): HostedInferenceError =>
   });
 
 const readBoundedResponseText = (
-  response: HttpClientResponse.HttpClientResponse,
-  overflowFailure: () => HostedInferenceError
+  response: BoundedExternalHttpResponse
 ): Effect.Effect<string, HostedInferenceError> =>
-  collectBoundedResponseBytes(response, maximumStructuredResponseBytes).pipe(
-    Effect.mapError(() => providerUnavailable()),
-    Effect.flatMap(
-      Option.match({
-        onNone: () => Effect.fail(overflowFailure()),
-        onSome: (bytes) => Effect.succeed(new TextDecoder().decode(bytes)),
-      })
-    )
-  );
+  Effect.succeed(new TextDecoder().decode(response.body));
 
 const countStructuredInputTokens = (
   client: OpenAiClient.Service,
   request: OpenAiStructuredCountedRequest,
   policy: StructuredExecutionPolicy
 ): Effect.Effect<number, HostedInferenceError> =>
-  requestInputTokenCount(client, request).pipe(
-    Effect.flatMap((response) => readBoundedResponseText(response, structuredOutputExceeded)),
+  requestInputTokenCount(client, request, structuredOutputExceeded).pipe(
+    Effect.flatMap(readBoundedResponseText),
     Effect.flatMap(Schema.decodeUnknownEffect(jsonStringSchema(Generated.TokenCountsResource))),
     Effect.map(({ input_tokens }) => input_tokens),
     Effect.mapError((error) =>
@@ -551,9 +556,9 @@ const countStructuredInputTokens = (
   );
 
 const readStructuredResponse = (
-  response: HttpClientResponse.HttpClientResponse
+  response: BoundedExternalHttpResponse
 ): Effect.Effect<OpenAiSchema.Response, HostedInferenceError> =>
-  readBoundedResponseText(response, structuredOutputExceeded).pipe(
+  readBoundedResponseText(response).pipe(
     Effect.flatMap((body) =>
       Schema.decodeEffect(jsonStringSchema(OpenAiSchema.Response))(body).pipe(
         Effect.mapError(() =>
@@ -592,24 +597,22 @@ const executeStructuredRequest = function <Output>(
     policy: StructuredExecutionPolicy;
   }>
 ): Effect.Effect<Output, HostedInferenceError> {
-  return client.client
-    .execute(
-      HttpClientRequest.post("/responses", {
-        body: HttpBody.jsonUnsafe(prepared.request),
-      })
-    )
-    .pipe(
-      Effect.flatMap(HttpClientResponse.filterStatusOk),
-      Effect.mapError(countFailure),
-      Effect.flatMap(readStructuredResponse),
-      Effect.flatMap((response) =>
-        Schema.decodeEffect(jsonStringSchema(prepared.codec))(structuredText(response)).pipe(
-          Effect.mapError(() => invalidProviderOutput("Hosted structured output was malformed"))
-        )
-      ),
-      Effect.timeout(prepared.policy.timeout),
-      Effect.catchTag("TimeoutError", () => Effect.fail(structuredOutputTimedOut()))
-    );
+  return executeBoundedOpenAiRequest(
+    client,
+    HttpClientRequest.post("/responses", {
+      body: HttpBody.jsonUnsafe(prepared.request),
+    }),
+    structuredOutputExceeded
+  ).pipe(
+    Effect.flatMap(readStructuredResponse),
+    Effect.flatMap((response) =>
+      Schema.decodeEffect(jsonStringSchema(prepared.codec))(structuredText(response)).pipe(
+        Effect.mapError(() => invalidProviderOutput("Hosted structured output was malformed"))
+      )
+    ),
+    Effect.timeout(prepared.policy.timeout),
+    Effect.catchTag("TimeoutError", () => Effect.fail(structuredOutputTimedOut()))
+  );
 };
 
 const makeStructuredAdapter = (
@@ -801,7 +804,7 @@ const makeOpenAiLayer = (
       }
       return inference;
     })
-  ).pipe(Layer.provide(OpenAiClientLive));
+  ).pipe(Layer.provide(OpenAiClientBase));
 
 /** Production OpenAI adapter with fail-closed maximum-request startup validation. */
 export const OpenAiHostedInferenceLive = makeOpenAiLayer(

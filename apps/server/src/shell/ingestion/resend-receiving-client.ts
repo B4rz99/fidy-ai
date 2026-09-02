@@ -11,7 +11,7 @@ import {
   Result,
   Schema,
 } from "effect";
-import { FetchHttpClient, HttpClient, type HttpClientResponse } from "effect/unstable/http";
+import { FetchHttpClient, HttpClient, HttpClientRequest } from "effect/unstable/http";
 import sharp, { type Metadata } from "sharp";
 import {
   forwardedEmailRetrievalDeadline,
@@ -21,8 +21,11 @@ import {
 } from "~/core/ingestion/email-policy";
 import { ReceivedEmailContent, ReceivedInlineImage } from "~/core/ingestion/model";
 import { ResendReceivedEmailId } from "~/core/ingestion/reference";
-import { collectBoundedResponseBytes } from "~/shell/_shared/bounded-bytes";
-import { makeExternalHttpClient } from "~/shell/_shared/external-http-policy";
+import {
+  type BoundedExternalHttpClient,
+  type BoundedExternalHttpResponse,
+  makeBoundedExternalHttpClient,
+} from "~/shell/_shared/bounded-external-http";
 
 /** Closed bounded failure set exposed by direct Resend retrieval. */
 export class ResendReceivingFailed extends Data.TaggedError("ResendReceivingFailed")<{
@@ -51,23 +54,35 @@ const providerHttpFailureReason = (status: number): ResendReceivingFailed["reaso
     ? "provider-unavailable"
     : "invalid-provider-response";
 
-const getProviderResponse = (
-  client: HttpClient.HttpClient,
-  url: string,
-  authorization: Option.Option<string>
-): Effect.Effect<HttpClientResponse.HttpClientResponse, ResendReceivingFailed> =>
-  client
-    .get(
-      url,
-      Option.match(authorization, {
-        onNone: () => undefined,
-        onSome: (value) => ({ headers: { authorization: value } }),
-      })
+const getProviderResponse = (input: {
+  client: BoundedExternalHttpClient;
+  url: string;
+  authorization: Option.Option<string>;
+  maximumResponseBytes: number;
+}): Effect.Effect<BoundedExternalHttpResponse, ResendReceivingFailed> =>
+  input.client
+    .execute(
+      HttpClientRequest.get(
+        input.url,
+        Option.match(input.authorization, {
+          onNone: () => undefined,
+          onSome: (value) => ({ headers: { authorization: value } }),
+        })
+      ),
+      input.maximumResponseBytes
     )
     .pipe(
       Effect.provideService(FetchHttpClient.RequestInit, { redirect: "manual" }),
       Effect.timeout("14 seconds"),
-      Effect.mapError(() => new ResendReceivingFailed({ reason: "provider-unavailable" }))
+      Effect.mapError(
+        (failure) =>
+          new ResendReceivingFailed({
+            reason:
+              failure._tag === "ExternalHttpFailure" && failure.reason !== "transport-failed"
+                ? "resource-limit"
+                : "provider-unavailable",
+          })
+      )
     );
 
 const AttachmentMetadata = Schema.Struct({
@@ -107,22 +122,15 @@ const AttachmentResponse = Schema.Struct({
 });
 
 const parseJsonResponse = Effect.fn(function* <A>(
-  response: HttpClientResponse.HttpClientResponse,
-  decode: (input: unknown) => Effect.Effect<A, Schema.SchemaError>,
-  maximumBytes: number
+  response: BoundedExternalHttpResponse,
+  decode: (input: unknown) => Effect.Effect<A, Schema.SchemaError>
 ) {
   if (!successful(response.status)) {
     return yield* new ResendReceivingFailed({
       reason: providerHttpFailureReason(response.status),
     });
   }
-  const body = yield* collectBoundedResponseBytes(response, maximumBytes).pipe(
-    Effect.mapError(() => new ResendReceivingFailed({ reason: "resource-limit" }))
-  );
-  if (Option.isNone(body)) {
-    return yield* new ResendReceivingFailed({ reason: "resource-limit" });
-  }
-  const json = Schema.decodeResult(UnknownJsonString)(new TextDecoder().decode(body.value));
+  const json = Schema.decodeResult(UnknownJsonString)(new TextDecoder().decode(response.body));
   if (Result.isFailure(json)) {
     return yield* new ResendReceivingFailed({ reason: "invalid-provider-response" });
   }
@@ -185,60 +193,61 @@ const isSupportedInlineAttachment = (attachment: InlineAttachment): boolean =>
   ].every(Boolean);
 
 const retrieveInlineImage = Effect.fn("Resend.retrieveInlineImage")(function* (input: {
-  client: HttpClient.HttpClient;
+  client: BoundedExternalHttpClient;
   baseUrl: string;
   authorization: string;
   attachment: InlineAttachment;
 }) {
-  const descriptorResponse = yield* getProviderResponse(
-    input.client,
-    `${input.baseUrl}/attachments/${encodeURIComponent(input.attachment.id)}`,
-    Option.some(input.authorization)
-  );
+  const descriptorResponse = yield* getProviderResponse({
+    client: input.client,
+    url: `${input.baseUrl}/attachments/${encodeURIComponent(input.attachment.id)}`,
+    authorization: Option.some(input.authorization),
+    maximumResponseBytes: maximumAttachmentDescriptorBytes,
+  });
   const descriptor = yield* parseJsonResponse(
     descriptorResponse,
-    Schema.decodeUnknownEffect(AttachmentResponse),
-    maximumAttachmentDescriptorBytes
+    Schema.decodeUnknownEffect(AttachmentResponse)
   );
-  const imageResponse = yield* getProviderResponse(
-    input.client,
-    descriptor.download_url.href,
-    Option.none()
-  );
+  const imageResponse = yield* getProviderResponse({
+    client: input.client,
+    url: descriptor.download_url.href,
+    authorization: Option.none(),
+    maximumResponseBytes: maximumEmailInlineImageBytes,
+  });
   if (!successful(imageResponse.status)) {
     return yield* new ResendReceivingFailed({
       reason: providerHttpFailureReason(imageResponse.status),
     });
   }
-  const bytes = yield* collectBoundedResponseBytes(
-    imageResponse,
-    maximumEmailInlineImageBytes
-  ).pipe(Effect.mapError(() => new ResendReceivingFailed({ reason: "resource-limit" })));
-  if (Option.isNone(bytes)) return yield* new ResendReceivingFailed({ reason: "resource-limit" });
-  if (!(yield* hasSafeDeclaredImage(input.attachment.content_type, bytes.value))) {
+  const bytes = imageResponse.body;
+  if (!(yield* hasSafeDeclaredImage(input.attachment.content_type, bytes))) {
     return yield* new ResendReceivingFailed({ reason: "invalid-provider-response" });
   }
   return yield* Schema.decodeUnknownEffect(ReceivedInlineImage)({
     contentId: Option.getOrThrow(input.attachment.content_id),
     mediaType: input.attachment.content_type,
-    content: bytes.value,
+    content: bytes,
   }).pipe(
     Effect.mapError(() => new ResendReceivingFailed({ reason: "invalid-provider-response" }))
   );
 });
 
 const retrieveReceivedEmail = Effect.fn("Resend.retrieveReceivedEmail")(function* (input: {
-  client: HttpClient.HttpClient;
+  client: BoundedExternalHttpClient;
   apiKey: Redacted.Redacted<string>;
   receivedEmailId: ResendReceivedEmailId;
 }) {
   const authorization = `Bearer ${Redacted.value(input.apiKey)}`;
   const baseUrl = `https://api.resend.com/emails/receiving/${encodeURIComponent(input.receivedEmailId)}`;
-  const response = yield* getProviderResponse(input.client, baseUrl, Option.some(authorization));
+  const response = yield* getProviderResponse({
+    client: input.client,
+    url: baseUrl,
+    authorization: Option.some(authorization),
+    maximumResponseBytes: maximumMetadataBytes,
+  });
   const email = yield* parseJsonResponse(
     response,
-    Schema.decodeUnknownEffect(ReceivedEmailResponse),
-    maximumMetadataBytes
+    Schema.decodeUnknownEffect(ReceivedEmailResponse)
   );
   const inline = email.attachments.filter(isSupportedInlineAttachment);
   if (
@@ -276,7 +285,9 @@ export class ResendReceivingClient extends Context.Service<
   static readonly layer = Layer.effect(
     ResendReceivingClient,
     Effect.gen(function* () {
-      const httpClient = (yield* HttpClient.HttpClient).pipe(makeExternalHttpClient("resend"));
+      const httpClient = (yield* HttpClient.HttpClient).pipe(
+        makeBoundedExternalHttpClient("resend")
+      );
       const apiKey = yield* Config.redacted("RESEND_API_KEY");
       return ResendReceivingClient.of({
         retrieveEmail: (receivedEmailId) =>

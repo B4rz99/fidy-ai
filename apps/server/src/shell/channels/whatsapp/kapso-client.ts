@@ -1,11 +1,6 @@
 import { UnknownJsonString } from "~/schema-compatibility";
 import { Config, Context, Data, DateTime, Effect, Layer, Option, Redacted, Schema } from "effect";
-import {
-  HttpBody,
-  HttpClient,
-  HttpClientRequest,
-  type HttpClientResponse,
-} from "effect/unstable/http";
+import { HttpBody, HttpClient, HttpClientRequest } from "effect/unstable/http";
 import type { E164PhoneNumber, WhatsAppBusinessScopedUserId } from "~/core/identity/reference";
 import type { TranscriptText } from "~/core/transcript/model";
 import type {
@@ -23,8 +18,11 @@ import {
   unauthorizedStatus,
 } from "~/shell/_shared/http-status";
 import { TelemetryHttpStatus } from "~/shell/observability/protocol";
-import { collectBoundedResponseBytes } from "~/shell/_shared/bounded-bytes";
-import { makeExternalHttpClient } from "~/shell/_shared/external-http-policy";
+import {
+  type BoundedExternalHttpResponse,
+  type ExternalHttpFailure,
+  makeBoundedExternalHttpClient,
+} from "~/shell/_shared/bounded-external-http";
 import {
   type WhatsAppBusinessPhoneNumberId,
   type WhatsAppInboundEvent,
@@ -128,24 +126,6 @@ const invalidKapsoResponse = (
   deliveryCertainty: KapsoDeliveryCertainty
 ): KapsoInvalidResponse => new KapsoInvalidResponse({ deliveryCertainty, responseStatus });
 
-const readKapsoResponse = (
-  response: HttpClientResponse.HttpClientResponse,
-  responseStatus: Option.Option<TelemetryHttpStatus>
-): Effect.Effect<string, KapsoInvalidResponse> => {
-  const deliveryCertainty = isSuccessfulStatus(response.status) ? "ambiguous" : "rejected";
-  const invalidResponse = (): KapsoInvalidResponse =>
-    invalidKapsoResponse(responseStatus, deliveryCertainty);
-  return collectBoundedResponseBytes(response, maximumKapsoResponseBytes).pipe(
-    Effect.mapError(() => invalidResponse()),
-    Effect.flatMap(
-      Option.match({
-        onNone: () => Effect.fail(invalidResponse()),
-        onSome: (bytes) => Effect.succeed(new TextDecoder().decode(bytes)),
-      })
-    )
-  );
-};
-
 const SendResponse = Schema.Struct({
   messaging_product: Schema.Literal("whatsapp"),
   messages: Schema.Tuple([Schema.Struct({ id: WhatsAppProviderMessageId })]),
@@ -230,6 +210,18 @@ const classifyTransportError = (error: KapsoInvalidResponse): KapsoSendFailed =>
     ? rejected("invalid_response", false, error.responseStatus)
     : ambiguous("invalid_response", error.responseStatus);
 
+const mapExternalKapsoFailure = (failure: ExternalHttpFailure): KapsoSendFailed => {
+  if (failure.reason === "transport-failed") return ambiguous("provider_unavailable");
+  const responseStatus = Option.flatMap(
+    failure.responseStatus,
+    Schema.decodeOption(TelemetryHttpStatus)
+  );
+  const deliveryCertainty = Option.exists(responseStatus, isSuccessfulStatus)
+    ? "ambiguous"
+    : "rejected";
+  return classifyTransportError(invalidKapsoResponse(responseStatus, deliveryCertainty));
+};
+
 const decodeSentMessage = (
   responseBody: unknown,
   responseStatus: TelemetryHttpStatus
@@ -259,11 +251,11 @@ export const makeKapsoClientService = ({
   deliveryMode: KapsoDeliveryMode;
   httpClient: HttpClient.HttpClient;
 }>): KapsoClientService => {
-  const externalHttpClient = httpClient.pipe(makeExternalHttpClient("kapso"));
+  const externalHttpClient = httpClient.pipe(makeBoundedExternalHttpClient("kapso"));
   const postMessage = (
     input: KapsoSendInput,
     body: string
-  ): Effect.Effect<HttpClientResponse.HttpClientResponse, KapsoSendFailed> =>
+  ): Effect.Effect<BoundedExternalHttpResponse, KapsoSendFailed> =>
     externalHttpClient
       .execute(
         HttpClientRequest.post(
@@ -272,17 +264,16 @@ export const makeKapsoClientService = ({
             headers: { "x-api-key": apiKey },
             body: HttpBody.text(body, "application/json"),
           }
-        )
+        ),
+        maximumKapsoResponseBytes
       )
-      .pipe(Effect.mapError(() => ambiguous("provider_unavailable")));
+      .pipe(Effect.mapError(mapExternalKapsoFailure));
   const sendText = Effect.fn("Kapso.sendText")(function* (input: KapsoSendInput) {
     const address = yield* resolveRecipientAddress(deliveryMode, input.destination);
     const body = yield* encodeTextMessage(address, input.text, input.opaqueCallbackData);
     const response = yield* postMessage(input, body);
     const decodedStatus = Schema.decodeOption(TelemetryHttpStatus)(response.status);
-    const responseText = yield* readKapsoResponse(response, decodedStatus).pipe(
-      Effect.mapError(classifyTransportError)
-    );
+    const responseText = new TextDecoder().decode(response.body);
     if (Option.isNone(decodedStatus)) return yield* rejected("invalid_response");
     const responseStatus = decodedStatus.value;
     const statusFailure = classifyHttpStatus(responseStatus);

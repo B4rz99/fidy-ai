@@ -270,11 +270,20 @@ know which transport exposes it.
 
 External providers stay at shell edges behind narrow services. Launch-specific behavior remains
 in its owning module rather than being hidden behind speculative provider or market registries.
-Resend is EmailAuthentication's launch outbound-email adapter; it receives only the recipient and bounded
-message projection required for the current proof, and provider work is driven by durable delivery
-state. The WhatsApp edge authenticates bounded exact webhook bytes before decoding and bounds Kapso
-response bytes before SDK decoding. Its worker appends a visible assistant Transcript entry only
-after provider delivery succeeds; failed or ambiguous sends do not claim that the User saw a reply.
+`_shared/bounded-external-http.ts` is the one ordinary outbound-provider transport boundary. It owns
+provider policy, trace propagation, credential redaction, coordinate-free telemetry, request
+execution, streamed byte counting, and response-body cleanup. Its public result contains only HTTP
+status, explicitly retained protocol headers, and bounded bytes; raw responses and streams remain
+private. Provider adapters still own request encoding, status interpretation, Schema decoding,
+retry certainty, and workflow-failure mapping. Incremental provider protocols must use a separate
+interface with explicit per-chunk and aggregate budgets rather than weakening this boundary.
+
+Resend is EmailAuthentication's launch outbound-email adapter; it receives only the recipient and
+bounded message projection required for the current proof, and provider work is driven by durable
+delivery state. The WhatsApp edge authenticates bounded exact webhook bytes before decoding and
+bounds Kapso response bytes before SDK decoding. Its worker appends a visible assistant Transcript
+entry only after provider delivery succeeds; failed or ambiguous sends do not claim that the User
+saw a reply.
 
 ---
 

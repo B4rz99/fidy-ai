@@ -15,7 +15,7 @@ import {
 import { TelemetryAttempt, TelemetryHttpStatus } from "~/shell/observability/protocol";
 import { Telemetry } from "~/shell/observability/telemetry";
 import { transactionEnvelopePayloads } from "~/shell/testing/telemetry-envelope-fixtures";
-import { type ExternalHttpProvider, makeExternalHttpClient } from "./external-http-policy";
+import { type ExternalHttpProvider, makeBoundedExternalHttpClient } from "./bounded-external-http";
 
 const failureSentinels = [
   "private-user-sentinel",
@@ -90,6 +90,30 @@ const providerCredentialHeaders: Readonly<Record<ExternalHttpProvider, ReadonlyA
   wompi: ["authorization"],
 };
 
+it.effect("returns only status, headers, and body after enforcing the response byte maximum", () =>
+  Effect.gen(function* () {
+    const transport = HttpClient.make((request) =>
+      Effect.succeed(
+        HttpClientResponse.fromWeb(
+          request,
+          new Response(new Uint8Array([1, 2, 3, 4]), { headers: { "x-safe": "coordinate" } })
+        )
+      )
+    );
+    const client = transport.pipe(makeBoundedExternalHttpClient("kapso"));
+
+    const response = yield* client.execute(HttpClientRequest.get("https://provider.example"), 4);
+    const oversized = yield* client
+      .execute(HttpClientRequest.get("https://provider.example"), 3)
+      .pipe(Effect.flip);
+
+    expect(Object.keys(response).sort()).toEqual(["body", "headers", "status"]);
+    expect(response.body).toEqual(new Uint8Array([1, 2, 3, 4]));
+    expect(response.headers["x-safe"]).toBeUndefined();
+    expect(oversized).toMatchObject({ _tag: "ExternalHttpFailure", reason: "response-too-large" });
+  })
+);
+
 it.effect(
   "suppresses coordinate-bearing automatic spans and propagation for every external provider",
   () =>
@@ -115,7 +139,7 @@ it.effect(
               })
             )
           );
-        }).pipe(makeExternalHttpClient(provider));
+        }).pipe(makeBoundedExternalHttpClient(provider));
 
         yield* client
           .execute(
@@ -129,7 +153,8 @@ it.effect(
                   ])
                 ),
               }
-            )
+            ),
+            1_024
           )
           .pipe(
             Effect.withSpan("safe.provider.operation"),
@@ -193,10 +218,15 @@ it.effect("ends a failed provider span without attaching the coordinate-bearing 
           }),
         })
       );
-    }).pipe(makeExternalHttpClient("kapso"));
+    }).pipe(makeBoundedExternalHttpClient("kapso"));
 
     const exit = yield* client
-      .get(url, { headers: { authorization: "credential-private-sentinel" } })
+      .execute(
+        HttpClientRequest.get(url, {
+          headers: { authorization: "credential-private-sentinel" },
+        }),
+        1_024
+      )
       .pipe(
         Effect.withSpan("safe.parent.operation"),
         Effect.exit,
@@ -226,19 +256,25 @@ it.effect.each(httpClientErrorReasonTags)("sanitizes the $ failure variant", (ta
       Effect.fail(
         new HttpClientError.HttpClientError({ reason: coordinateBearingReason(tag, request) })
       )
-    ).pipe(makeExternalHttpClient("kapso"));
+    ).pipe(makeBoundedExternalHttpClient("kapso"));
 
     const exit = yield* client
-      .get("https://provider.example/private-user-sentinel?token=query-private-sentinel", {
-        headers: { authorization: "credential-private-sentinel" },
-      })
+      .execute(
+        HttpClientRequest.get(
+          "https://provider.example/private-user-sentinel?token=query-private-sentinel",
+          { headers: { authorization: "credential-private-sentinel" } }
+        ),
+        1_024
+      )
       .pipe(Effect.exit);
 
     expectSanitizedFailure(exit);
     if (Exit.isFailure(exit)) {
       const failure = Option.getOrThrow(Cause.findErrorOption(exit.cause));
-      expect(failure.reason._tag).toBe(tag);
-      expect(failure.request.url).toBe("https://external.invalid");
+      expect(failure).toMatchObject({
+        _tag: "ExternalHttpFailure",
+        reason: "transport-failed",
+      });
     }
   })
 );
@@ -251,7 +287,7 @@ it.effect("exports safe provider telemetry without URL, query, or header coordin
       const recorder = Context.get(services, EnvelopeRecorder);
       const client = HttpClient.make((request) =>
         Effect.succeed(HttpClientResponse.fromWeb(request, new Response(null, { status: 202 })))
-      ).pipe(makeExternalHttpClient("kapso"));
+      ).pipe(makeBoundedExternalHttpClient("kapso"));
       const forbidden = [
         "private-user-sentinel",
         "query-private-sentinel",
@@ -273,9 +309,12 @@ it.effect("exports safe provider telemetry without URL, query, or header coordin
           },
         },
         client
-          .get(`https://kapso.example/${forbidden[0]}?token=${forbidden[1]}`, {
-            headers: { "x-api-key": forbidden[2] },
-          })
+          .execute(
+            HttpClientRequest.get(`https://kapso.example/${forbidden[0]}?token=${forbidden[1]}`, {
+              headers: { "x-api-key": forbidden[2] },
+            }),
+            1_024
+          )
           .pipe(
             Effect.tap((response) =>
               telemetry.recordResponseStatus(TelemetryHttpStatus.make(response.status))
@@ -315,9 +354,9 @@ it.effect("installs each provider's credential redaction policy at the transport
           redactedNames = yield* Headers.CurrentRedactedNames;
           return HttpClientResponse.fromWeb(request, new Response(null, { status: 204 }));
         })
-      ).pipe(makeExternalHttpClient(provider));
+      ).pipe(makeBoundedExternalHttpClient(provider));
 
-      yield* client.get(`https://${provider}.example/operation`);
+      yield* client.execute(HttpClientRequest.get(`https://${provider}.example/operation`), 1_024);
 
       for (const header of providerCredentialHeaders[provider]) {
         expect(Headers.isRedactedName(header, redactedNames)).toBe(true);

@@ -1,10 +1,6 @@
 import { Effect, Option, Stream } from "effect";
-import type { HttpClientResponse } from "effect/unstable/http";
 
-/**
- * Reads a streamed body without letting an oversized body fill memory. Stops at the byte limit and
- * returns `None`; otherwise returns the collected bytes.
- */
+/** Reads a stream without letting oversized input fill memory. */
 export const collectBoundedBytes = Effect.fn(function* <E, R>(
   stream: Stream.Stream<Uint8Array, E, R>,
   maximumBytes: number
@@ -30,22 +26,4 @@ export const collectBoundedBytes = Effect.fn(function* <E, R>(
     offset += chunk.byteLength;
   }
   return Option.some(bytes);
-});
-
-/**
- * Reads a provider response up to `maximumBytes`. A declared oversized body is rejected before
- * collection, while the streamed byte count remains authoritative when the header is absent or
- * dishonest. Early termination closes the response stream owned by the HTTP client.
- */
-export const collectBoundedResponseBytes = Effect.fn("collectBoundedResponseBytes")(function* (
-  response: HttpClientResponse.HttpClientResponse,
-  maximumBytes: number
-) {
-  const declaredLength = Number(response.headers["content-length"] ?? 0);
-  if (declaredLength > maximumBytes) {
-    return yield* Effect.scoped(
-      Stream.toPull(response.stream).pipe(Effect.as(Option.none<Uint8Array>()))
-    );
-  }
-  return yield* collectBoundedBytes(response.stream, maximumBytes);
 });

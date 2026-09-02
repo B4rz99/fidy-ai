@@ -209,12 +209,14 @@ coordinate-bearing HTTP failures. Export only closed low-cardinality projections
 method, status class, outcome, and latency. Credential-header redaction and trace propagation are an
 explicit exhaustive decision for each provider, never ambient client behaviour.
 
-Provider response bodies are hostile resource input. Bound the actual streamed byte count before
-buffering, parsing JSON, or Schema decoding; `Content-Length` is only an early rejection signal
-because it may be absent or dishonest. Overflow, stream failure, and interruption cancel or release
-the owned body. Provider adapters use the shared bounded-response module rather than direct `text`,
-`json`, `arrayBuffer`, form-data, or unbounded stream collection. A provider library that owns
-streaming internally must establish an equivalent bound at its client seam.
+Provider response bodies are hostile resource input. Ordinary provider adapters use
+`_shared/bounded-external-http.ts`, which executes the request and returns only status, explicitly
+retained protocol headers, and bounded bytes. Bound the actual streamed byte count before buffering,
+parsing JSON, or Schema decoding; `Content-Length` is only an early rejection signal because it may
+be absent or dishonest. Overflow, stream failure, and interruption cancel or release the owned body.
+Adapters must not receive raw responses or use direct `text`, `json`, `arrayBuffer`, form-data, or
+unbounded stream collection. Incremental providers require a separate interface with explicit
+per-chunk and aggregate budgets.
 
 ---
 

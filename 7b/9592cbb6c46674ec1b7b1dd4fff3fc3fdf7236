@@ -1,0 +1,19 @@
+apps/server/src/shell/observability/sentry-account-reader.test.ts
+  s_7e8b2b2fb02110::t_24c8eae089bc3d 197-239
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "7b9592cbb6c46674ec1b7b1dd4fff3fc3fdf7236",
+  "prompts": {},
+  "sessions": {
+    "s_7e8b2b2fb02110": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a05f68-bc94-7f02-bf7e-795702d2e3a8",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

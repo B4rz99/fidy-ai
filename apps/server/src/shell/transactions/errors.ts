@@ -1,9 +1,12 @@
 import { DateTime, Effect, Match, Option } from "effect";
 import {
+  type IneligibleTransactionPair,
   type InvalidTransactionPeriod,
+  type SameTransactionPair,
   type TransactionFailure,
   type TransactionNotFound,
   type TransactionNotYetOccurred,
+  type TransactionPairNotLinked,
 } from "~/core/transactions/errors";
 import { NotFound, ValidationFailed } from "~/shell/_shared/errors";
 import {
@@ -70,7 +73,30 @@ const futureMovementRejected = (failure: TransactionNotYetOccurred): ValidationF
     next: [],
   });
 
-type TransactionValidationFailure = InvalidTransactionPeriod | TransactionNotYetOccurred;
+const invalidPairRejected = (
+  failure: IneligibleTransactionPair | SameTransactionPair | TransactionPairNotLinked
+): ValidationFailed => {
+  const messages = {
+    IneligibleTransactionPair: "The Transactions cannot be linked in their current state.",
+    SameTransactionPair: "Linking requires two different Transaction ids.",
+    TransactionPairNotLinked: "That exact Transaction pair is not currently linked.",
+  } as const;
+  return ValidationFailed.make({
+    error: {
+      code: "validation_failed",
+      message: `${messages[failure._tag]} Correct the pair or list Transactions and retry.`,
+      fields: [],
+    },
+    next: [],
+  });
+};
+
+type TransactionValidationFailure =
+  | IneligibleTransactionPair
+  | InvalidTransactionPeriod
+  | SameTransactionPair
+  | TransactionNotYetOccurred
+  | TransactionPairNotLinked;
 
 type FailureMappingInput<Failure extends TransactionFailure> = {
   readonly failure: Failure;
@@ -84,10 +110,13 @@ function toApiFailure({
   caller,
 }: FailureMappingInput<TransactionFailure>): TransactionApiFailure {
   return Match.typeTags<TransactionFailure, TransactionApiFailure>()({
+    IneligibleTransactionPair: invalidPairRejected,
     InvalidTransactionPeriod: reversedPeriodRejected,
+    SameTransactionPair: invalidPairRejected,
     TransactionNotFound: (notFound) => unknownTransactionRejected(notFound, caller),
     // An API-shaped failure the input schema cannot express, because it depends on the clock.
     TransactionNotYetOccurred: futureMovementRejected,
+    TransactionPairNotLinked: invalidPairRejected,
   })(failure);
 }
 

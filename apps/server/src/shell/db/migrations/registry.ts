@@ -41,6 +41,7 @@ import { subscriptionPriceVocabulary } from "./0041-subscription-price-vocabular
 import { wompiCardEnrollments } from "./0042-wompi-card-enrollments";
 import { emailIngestion } from "./0043-email-ingestion";
 import { transactionUserDecisions } from "./0044-transaction-user-decisions";
+import { transactionReconciliation } from "./0045-transaction-reconciliation";
 
 /**
  * The explicit index ARCHITECTURE.md §7 calls for: one ordered, append-only
@@ -94,4 +95,5 @@ export const migrations = {
   "0042_wompi_card_enrollments": wompiCardEnrollments,
   "0043_email_ingestion": emailIngestion,
   "0044_transaction_user_decisions": transactionUserDecisions,
+  "0045_transaction_reconciliation": transactionReconciliation,
 };

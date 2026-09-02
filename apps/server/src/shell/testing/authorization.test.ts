@@ -405,6 +405,48 @@ layer(AuthorizationHarness, {
       })
   );
 
+  it.effect("rejects under-scoped link and unlink without changing reconciliation state", () =>
+    Effect.gen(function* () {
+      yield* truncateTransactions;
+      yield* truncateAuditLogEntries;
+      yield* seedReadOnlyIdentity;
+      yield* seedConsentedPatIdentity({
+        userId: readOnlyUser,
+        bearer: readOnlyWriterBearer,
+        scopes: ["read", "write"],
+      });
+      const reader = yield* ReadOnlyApiClient;
+      const writer = yield* ReadOnlyWriterClient;
+      const first = yield* writer.transactions.createTransaction({ payload: transactionPayload() });
+      const second = yield* writer.transactions.createTransaction({
+        payload: transactionPayload(),
+      });
+      const pair = {
+        firstTransactionId: first.data.id,
+        secondTransactionId: second.data.id,
+      };
+      yield* truncateAuditLogEntries;
+
+      const deniedLink = yield* Effect.flip(
+        reader.transactions.linkTransactions({ payload: pair })
+      );
+      yield* writer.transactions.linkTransactions({ payload: pair });
+      const deniedUnlink = yield* Effect.flip(
+        reader.transactions.unlinkTransactions({ payload: pair })
+      );
+      const retained = yield* writer.transactions.listTransactions({ query: {} });
+      const auditEntries = yield* observeAuditLogEntries(readOnlyUser);
+
+      expect([deniedLink, deniedUnlink].map(Schema.is(ScopeMissing))).toEqual([true, true]);
+      expect(retained.data).toHaveLength(1);
+      expect(
+        auditEntries
+          .filter((entry) => entry.outcome === "rejected")
+          .map(({ operation }) => operation)
+      ).toEqual(["transactions.linkTransactions", "transactions.unlinkTransactions"]);
+    })
+  );
+
   it.effect("rejects every new under-scoped mutation without changing owned records", () =>
     Effect.gen(function* () {
       yield* truncateTransactions;
@@ -533,7 +575,10 @@ layer(AuthorizationHarness, {
       ]);
       expect(memories.data).toEqual([memory.data]);
       expect(rules.data).toEqual([rule.data]);
-      expect(retained.data).toEqual(transaction.data);
+      expect(retained.data).toMatchObject({
+        ...transaction.data,
+        presentation: { kind: "independent" },
+      });
       expect(retainedBudgets.data.map(({ id }) => id)).toEqual([budget.data.id]);
       expect(
         auditEntries

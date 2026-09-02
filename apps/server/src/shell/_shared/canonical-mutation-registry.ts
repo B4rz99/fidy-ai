@@ -26,6 +26,8 @@ import {
   correctTransaction,
   createTransaction,
   deleteTransaction,
+  linkTransactions,
+  unlinkTransactions,
 } from "~/shell/transactions/mutations";
 import { createManualPAT, revokeAllPATs, revokePAT } from "~/shell/tokens/mutations";
 import { approvePATPairing, inspectPATPairing } from "~/shell/tokens/pat-pairing";
@@ -111,6 +113,18 @@ export const canonicalMutationImplementations = {
     }),
   "transactions.createTransaction": (input, caller) =>
     createTransaction({
+      userId: caller.resolved.subjectUserId,
+      caller: suggestedCaller(caller),
+      payload: input.payload,
+    }),
+  "transactions.linkTransactions": (input, caller) =>
+    linkTransactions({
+      userId: caller.resolved.subjectUserId,
+      caller: suggestedCaller(caller),
+      payload: input.payload,
+    }),
+  "transactions.unlinkTransactions": (input, caller) =>
+    unlinkTransactions({
       userId: caller.resolved.subjectUserId,
       caller: suggestedCaller(caller),
       payload: input.payload,

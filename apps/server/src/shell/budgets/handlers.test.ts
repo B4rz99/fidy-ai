@@ -90,6 +90,38 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         })
     );
 
+    it.effect("counts a linked Transaction pair once and restores both after unlinking", () =>
+      Effect.gen(function* () {
+        yield* resetBudgets;
+        const client = yield* ApiHarnessClient;
+        const timeZone = IanaTimeZone.make("America/Bogota");
+        const occurredAt = yield* DateTime.now;
+        yield* client.budgets.createBudget({
+          payload: { categoryId: categoryIds.restaurantes, cap: cap("100000") },
+        });
+        const first = yield* client.transactions.createTransaction({
+          payload: transactionPayload({ occurredAt }),
+        });
+        const second = yield* client.transactions.createTransaction({
+          payload: transactionPayload({ occurredAt }),
+        });
+        const pair = {
+          firstTransactionId: first.data.id,
+          secondTransactionId: second.data.id,
+        };
+
+        yield* client.transactions.linkTransactions({ payload: pair });
+        const linked = yield* client.budgets.getBudgetStatus({ query: { timeZone } });
+        yield* client.transactions.unlinkTransactions({ payload: pair });
+        const restored = yield* client.budgets.getBudgetStatus({ query: { timeZone } });
+
+        expect(Equal.equals(linked.data.statuses[0]?.spent.amount, cap("25000").amount)).toBe(true);
+        expect(Equal.equals(restored.data.statuses[0]?.spent.amount, cap("50000").amount)).toBe(
+          true
+        );
+      })
+    );
+
     it.effect(
       "rejects non-positive caps, duplicate Category/Currency scopes, and Currency edits",
       () =>

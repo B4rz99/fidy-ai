@@ -105,7 +105,7 @@ const waitForBlockedAdvisoryLocks = Effect.fn("Test.waitForBlockedAdvisoryLocks"
     `;
     const decoded = yield* Schema.decodeUnknownEffect(Schema.Struct({ count: Schema.Int }))(result);
     if (decoded.count >= expected) return;
-    yield* Effect.yieldNow;
+    yield* Effect.sleep("10 millis");
   }
   return yield* Effect.die("advisory-lock waiter did not arrive");
 });

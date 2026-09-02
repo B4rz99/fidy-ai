@@ -54,8 +54,8 @@ Ordinary list operations return only the effective Transaction under the anchor 
 
 A get using either member id succeeds:
 
-- getting the anchor returns an `effective` result;
-- getting the other member returns a `linked-member` result containing the requested id, the anchor's visible id, and the same effective Transaction.
+- getting the anchor returns a `visible-member` result whose Transaction id is the visible id;
+- getting the other member returns a `suppressed-member` result containing the requested id and the same effective Transaction under the anchor's visible id.
 
 The public result must explain the relationship rather than silently returning a Transaction whose id differs from the requested id. Before and after a link, either id returns its independent Transaction normally.
 
@@ -63,22 +63,18 @@ Conceptual get result:
 
 ```text
 independent
-  requestedId
   transaction
 
 or
 
-effective
-  requestedId
-  visibleId
+visible-member
   transaction
 
 or
 
-linked-member
+suppressed-member
   requestedId
-  visibleId
-  transaction
+  transaction (whose id is the visible id)
 ```
 
 This is a presentation result, not a new domain entity. The link itself remains state over the exact unordered Transaction pair and has no standalone identity.

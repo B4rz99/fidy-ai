@@ -32,6 +32,26 @@ export class InvalidTransactionPeriod extends Data.TaggedError("InvalidTransacti
   readonly to: DateTime.Utc;
 }> {}
 
+/** Identifies the repeated Transaction once rather than echoing indistinguishable pair positions. */
+export class SameTransactionPair extends Data.TaggedError("SameTransactionPair")<{
+  readonly transactionId: TransactionId;
+}> {}
+
+/** The exact pair cannot represent one effective purchase under the linking invariants. */
+export class IneligibleTransactionPair extends Data.TaggedError("IneligibleTransactionPair")<{
+  readonly reason:
+    | "different-currency"
+    | "different-amount"
+    | "incompatible-direction"
+    | "already-linked-member";
+}> {}
+
+/** Preserves canonical pair order, making this failure invariant to caller-supplied order. */
+export class TransactionPairNotLinked extends Data.TaggedError("TransactionPairNotLinked")<{
+  readonly firstTransactionId: TransactionId;
+  readonly secondTransactionId: TransactionId;
+}> {}
+
 /**
  * Every way an operation on transactions can fail for a reason its caller could
  * act on. Infrastructure that no caller can respond to — a dead connection, a
@@ -43,6 +63,9 @@ export class InvalidTransactionPeriod extends Data.TaggedError("InvalidTransacti
  * build (ARCHITECTURE.md §6).
  */
 export type TransactionFailure =
+  | IneligibleTransactionPair
   | InvalidTransactionPeriod
+  | SameTransactionPair
   | TransactionNotFound
-  | TransactionNotYetOccurred;
+  | TransactionNotYetOccurred
+  | TransactionPairNotLinked;

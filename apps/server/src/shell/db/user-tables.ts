@@ -35,6 +35,8 @@ export const userTableNames = [
   "support_recovery_case_events",
   "support_recovery_cases",
   "tokens",
+  "transaction_reconciliation_decisions",
+  "transaction_reconciliation_members",
   "transactions",
   "transcript_entries",
   "users",

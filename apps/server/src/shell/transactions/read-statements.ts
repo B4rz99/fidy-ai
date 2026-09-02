@@ -4,6 +4,7 @@ import { type CategoryId } from "~/core/categories/reference";
 import { type MoneyAggregation } from "~/core/dashboard/model";
 import { type UserId } from "~/core/identity/reference";
 import { searchLikePattern } from "~/core/_shared/search";
+import { effectiveTransactionCte, effectiveTransactionPeriodCte } from "./effective-relation";
 import { normalizedTransactionSearchSql } from "./search-sql";
 
 type DashboardMetricStatementQuery = Readonly<{
@@ -43,8 +44,14 @@ export const dashboardMetricStatement = ({
   const conditions = dashboardMetricConditions(sql, userId, query);
   if (query.aggregation === "average") {
     return sql`
+      WITH ${effectiveTransactionPeriodCte({
+        sql,
+        userId,
+        from: query.from,
+        toExclusive: query.toExclusive,
+      })}
       SELECT currency, direction, SUM(amount) AS sum, COUNT(*)::text AS count
-      FROM transactions
+      FROM effective_transaction
       WHERE ${sql.and(conditions)}
       GROUP BY currency, direction
       ORDER BY currency, direction
@@ -55,8 +62,14 @@ export const dashboardMetricStatement = ({
     maximum: sql`MAX(amount)`,
   };
   return sql`
+    WITH ${effectiveTransactionPeriodCte({
+      sql,
+      userId,
+      from: query.from,
+      toExclusive: query.toExclusive,
+    })}
     SELECT currency, direction, ${aggregates[query.aggregation]} AS amount
-    FROM transactions
+    FROM effective_transaction
     WHERE ${sql.and(conditions)}
     GROUP BY currency, direction
     ORDER BY currency, direction
@@ -115,10 +128,11 @@ export const dashboardListStatement = ({
   const conditions = dashboardListConditions(sql, userId, query);
   appendDashboardSearchCondition(sql, query, conditions);
   return sql`
+    WITH ${effectiveTransactionCte({ sql, userId })}
     SELECT transaction.id, transaction.amount, transaction.currency,
       transaction.counterparty, transaction.direction,
       transaction.category_id AS "categoryId", transaction.occurred_at AS "occurredAt"
-    FROM transactions transaction
+    FROM effective_transaction transaction
     WHERE ${sql.and(conditions)}
     ORDER BY transaction.occurred_at DESC, transaction.created_at DESC, transaction.id DESC
     LIMIT ${query.limit}

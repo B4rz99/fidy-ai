@@ -426,6 +426,40 @@ const probes: Record<OperationId, SuggestedOperationProbe> = {
       return [succeeded, notFound];
     }),
 
+  "transactions.linkTransactions": (client) =>
+    Effect.gen(function* () {
+      const first = yield* client.transactions.createTransaction({
+        payload: transactionPayload({ counterparty: "Primera" }),
+      });
+      const second = yield* client.transactions.createTransaction({
+        payload: transactionPayload({ counterparty: "Segunda" }),
+      });
+      return [
+        yield* client.transactions.linkTransactions({
+          payload: {
+            firstTransactionId: first.data.id,
+            secondTransactionId: second.data.id,
+          },
+        }),
+      ];
+    }),
+
+  "transactions.unlinkTransactions": (client) =>
+    Effect.gen(function* () {
+      const first = yield* client.transactions.createTransaction({
+        payload: transactionPayload({ counterparty: "Primera" }),
+      });
+      const second = yield* client.transactions.createTransaction({
+        payload: transactionPayload({ counterparty: "Segunda" }),
+      });
+      const pair = {
+        firstTransactionId: first.data.id,
+        secondTransactionId: second.data.id,
+      };
+      yield* client.transactions.linkTransactions({ payload: pair });
+      return [yield* client.transactions.unlinkTransactions({ payload: pair })];
+    }),
+
   "transactions.updateTransaction": (client) =>
     Effect.gen(function* () {
       const created = yield* client.transactions.createTransaction({

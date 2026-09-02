@@ -9,7 +9,10 @@ import { TransactionUserDecisions } from "~/core/transactions/user-decisions";
 /** Resets the Transactions slice's harness state between tests. */
 export const truncateTransactions = Effect.gen(function* () {
   const sql = yield* MigrationSqlClient;
-  yield* sql`TRUNCATE source_attestations, transactions, keyword_rules`;
+  yield* sql`
+    TRUNCATE transaction_reconciliation_members, transaction_reconciliation_decisions,
+      source_attestations, transactions, keyword_rules
+  `;
 });
 
 /** Reads private User-decision persistence for an already-created Transaction test fixture. */

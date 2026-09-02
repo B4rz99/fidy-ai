@@ -654,6 +654,21 @@
       }
     },
     {
+      "id": "transactions.linkTransactions",
+      "policy": {
+        "access": {
+          "scope": {
+            "capability": "write",
+            "evaluation": "operation"
+          },
+          "type": "pat-scoped"
+        },
+        "agentConfirmation": "not-required",
+        "kind": "mutation",
+        "requiredTier": "free"
+      }
+    },
+    {
       "id": "transactions.listSourceAttestations",
       "policy": {
         "access": {
@@ -680,6 +695,21 @@
         },
         "agentConfirmation": "not-required",
         "kind": "query",
+        "requiredTier": "free"
+      }
+    },
+    {
+      "id": "transactions.unlinkTransactions",
+      "policy": {
+        "access": {
+          "scope": {
+            "capability": "write",
+            "evaluation": "operation"
+          },
+          "type": "pat-scoped"
+        },
+        "agentConfirmation": "not-required",
+        "kind": "mutation",
         "requiredTier": "free"
       }
     },

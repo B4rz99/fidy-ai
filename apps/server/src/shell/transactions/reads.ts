@@ -9,10 +9,12 @@ import { UserId } from "~/core/identity/reference";
 import {
   type SourceAttestation,
   Transaction,
-  type TransactionId,
+  TransactionId,
+  type TransactionPresentation,
   type TransactionQuery,
 } from "~/core/transactions/model";
 import { withUserTransaction } from "~/shell/db/user-transaction";
+import { effectiveTransactionCte, effectiveTransactionPeriodCte } from "./effective-relation";
 import { dashboardListStatement, dashboardMetricStatement } from "./read-statements";
 import {
   SourceAttestationRow,
@@ -24,65 +26,75 @@ import {
   transactionFromRow,
 } from "./rows";
 
-/**
- * Resolves a requested original Transaction to its ordinary presentation. A member is one of the
- * two original Transactions in a reversible link; only `independent` is reachable before links
- * exist.
- */
-export type TransactionPresentation =
-  | Readonly<{
-      kind: "independent";
-      requestedId: TransactionId;
-      transaction: Transaction;
-    }>
-  | Readonly<{
-      kind: "visible-member";
-      requestedId: TransactionId;
-      transaction: Transaction;
-    }>
-  | Readonly<{
-      kind: "suppressed-member";
-      requestedId: TransactionId;
-      visibleId: TransactionId;
-      transaction: Transaction;
-    }>;
+const TransactionPresentationRow = Schema.Struct({
+  ...TransactionFlatRow.fields,
+  requestedId: TransactionId,
+  visibleId: TransactionId,
+  linked: Schema.Boolean,
+});
+
+const presentationFromRow = Effect.fn(function* (row: typeof TransactionPresentationRow.Type) {
+  const transaction = yield* transactionFromRow(row);
+  if (!row.linked) {
+    return {
+      ...transaction,
+      presentation: { kind: "independent" },
+    } satisfies TransactionPresentation;
+  }
+  return row.requestedId === row.visibleId
+    ? ({
+        ...transaction,
+        presentation: { kind: "visible-member" },
+      } satisfies TransactionPresentation)
+    : ({
+        ...transaction,
+        presentation: {
+          kind: "suppressed-member",
+          requestedId: row.requestedId,
+        },
+      } satisfies TransactionPresentation);
+});
+
+/** Resolves one active User-owned Transaction inside the caller's User-scoped transaction. */
+export const findTransactionPresentationInScope = Effect.fn("findTransactionPresentationInScope")(
+  function* (userId: UserId, id: TransactionId) {
+    const sql = yield* SqlClient.SqlClient;
+    const row = yield* SqlSchema.findOneOption({
+      Request: TransactionLookup,
+      Result: TransactionPresentationRow,
+      execute: (request) => sql`
+      WITH ${effectiveTransactionCte({ sql, userId })}
+      SELECT effective.id, effective.amount, effective.currency, effective.counterparty,
+        effective.direction, effective.category_id AS "categoryId", effective.notes,
+        effective.occurred_at AS "occurredAt", effective.created_at AS "createdAt",
+        requested.id AS "requestedId", effective.id AS "visibleId",
+        (member.transaction_id IS NOT NULL) AS linked
+      FROM transactions requested
+      LEFT JOIN transaction_reconciliation_members member
+        ON member.user_id = requested.user_id AND member.transaction_id = requested.id
+      LEFT JOIN transaction_reconciliation_decisions decision
+        ON decision.user_id = member.user_id
+        AND decision.first_transaction_id = member.first_transaction_id
+        AND decision.second_transaction_id = member.second_transaction_id
+        AND decision.state = 'linked'
+      INNER JOIN effective_transaction effective
+        ON effective.id = COALESCE(decision.visible_transaction_id, requested.id)
+      WHERE requested.id = ${request.id} AND requested.user_id = ${request.userId}
+        AND requested.deleted_at IS NULL
+    `,
+    })({ id, userId }).pipe(Effect.orDie);
+    return yield* Option.match(row, {
+      onNone: () => Effect.succeed(Option.none<TransactionPresentation>()),
+      onSome: (value) => presentationFromRow(value).pipe(Effect.map(Option.some), Effect.orDie),
+    });
+  }
+);
 
 /** Resolves one active User-owned Transaction; foreign, deleted, and absent ids return None. */
-export const findTransactionPresentation = Effect.fn("findTransactionPresentation")(function* (
-  userId: UserId,
-  id: TransactionId
-) {
-  return yield* withUserTransaction(
-    userId,
-    Effect.flatMap(SqlClient.SqlClient, (sql) =>
-      SqlSchema.findOneOption({
-        Request: TransactionLookup,
-        Result: TransactionFlatRow,
-        execute: (request) => sql`
-        SELECT ${sql.literal(transactionColumns)}
-        FROM transactions
-        WHERE id = ${request.id} AND user_id = ${request.userId} AND deleted_at IS NULL
-      `,
-      })({ id, userId })
-    ).pipe(
-      Effect.flatMap(
-        Option.match({
-          onNone: () => Effect.succeed(Option.none<TransactionPresentation>()),
-          onSome: (row) =>
-            transactionFromRow(row).pipe(
-              Effect.map((transaction): TransactionPresentation => ({
-                kind: "independent",
-                requestedId: id,
-                transaction,
-              })),
-              Effect.map(Option.some)
-            ),
-        })
-      ),
-      Effect.orDie
-    )
-  );
-});
+export const findTransactionPresentation = Effect.fn("findTransactionPresentation")(
+  (userId: UserId, id: TransactionId) =>
+    withUserTransaction(userId, findTransactionPresentationInScope(userId, id))
+);
 
 const containsCounterparty = (counterparty: Option.Option<string>, normalized: string): boolean =>
   Option.exists(counterparty, (candidate) =>
@@ -114,8 +126,9 @@ const selectTransactionRowsInScope = Effect.fn(function* (
     Request: Schema.Void,
     Result: TransactionFlatRow,
     execute: () => sql`
+      WITH ${effectiveTransactionCte({ sql, userId })}
       SELECT ${sql.literal(transactionColumns)}
-      FROM transactions
+      FROM effective_transaction
       WHERE ${sql.and(conditions)}
       ORDER BY occurred_at DESC, created_at DESC, id DESC
       ${limitClause}
@@ -261,9 +274,15 @@ export const selectDashboardTransactionSumsInScope = Effect.fn(
     Request: Schema.Void,
     Result: DashboardSumRow,
     execute: () => sql`
+      WITH ${effectiveTransactionPeriodCte({
+        sql,
+        userId,
+        from: query.from,
+        toExclusive: query.toExclusive,
+      })}
       SELECT ${grouping.select}, transaction.currency, transaction.direction,
         SUM(transaction.amount) AS amount
-      FROM transactions transaction
+      FROM effective_transaction transaction
       WHERE ${sql.and(conditions)}
       GROUP BY ${grouping.group}, transaction.currency, transaction.direction
       ORDER BY ${grouping.order}, transaction.currency, transaction.direction
@@ -441,14 +460,14 @@ export const selectBudgetContributionsInScope = Effect.fn("selectBudgetContribut
       Request: BudgetContributionRequest,
       Result: BudgetContributionRow,
       execute: (request) => sql`
-        WITH requested_scope AS (
+        WITH ${effectiveTransactionCte({ sql, userId })}, requested_scope AS (
           SELECT * FROM unnest(
             ${request.categoryIds}::uuid[], ${request.currencies}::text[]
           ) AS scope(category_id, currency)
         )
         SELECT transaction.category_id AS "categoryId", transaction.currency,
           SUM(transaction.amount) AS amount
-        FROM transactions transaction
+        FROM effective_transaction transaction
         INNER JOIN requested_scope scope
           ON scope.category_id = transaction.category_id
           AND scope.currency = transaction.currency
@@ -488,12 +507,18 @@ export const selectSourceAttestations = Effect.fn("selectSourceAttestations")(fu
         execute: (request) => sql`
         SELECT ${sql.literal(sourceAttestationColumns)}
         FROM source_attestations source
-        WHERE source.transaction_id = ${request.id}
-          AND EXISTS (
-            SELECT 1 FROM transactions transaction
-            WHERE transaction.id = source.transaction_id
-              AND transaction.user_id = ${request.userId}
-          )
+        WHERE source.transaction_id IN (
+          SELECT candidate.id
+          FROM transactions requested
+          LEFT JOIN transaction_reconciliation_members member
+            ON member.user_id = requested.user_id AND member.transaction_id = requested.id
+          INNER JOIN transactions candidate
+            ON candidate.user_id = requested.user_id
+            AND (candidate.id = requested.id OR candidate.id IN (
+              member.first_transaction_id, member.second_transaction_id
+            ))
+          WHERE requested.id = ${request.id} AND requested.user_id = ${request.userId}
+        )
         ORDER BY source.created_at, source.id
       `,
       })({ id, userId })

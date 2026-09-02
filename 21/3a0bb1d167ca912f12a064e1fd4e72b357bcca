@@ -1,0 +1,43 @@
+scripts/check-credential-evidence.ts
+  s_7e8b2b2fb02110::t_68e3eda0de1d29 286,299,302
+.oxlintrc.json
+  s_7e8b2b2fb02110::t_d31fcbb8d88e93 409-431,440
+  s_7e8b2b2fb02110::t_a2fc5535f9752e 36,407-408
+scripts/oxlint/effect-guards.js
+  s_7e8b2b2fb02110::t_113589a0d0172f 84-90,118-120
+  s_7e8b2b2fb02110::t_7949e36d7bc585 107,110
+  s_7e8b2b2fb02110::t_a6a904d2166e3d 91-106,108-109,111-117,121-126,757
+apps/server/src/shell/observability/preload.ts
+  s_7e8b2b2fb02110::t_5e99387358e969 17-19
+apps/server/scripts/check-production-http.ts
+  s_7e8b2b2fb02110::t_24ca60a6ed5973 77,81
+apps/server/src/shell/observability/sentry-adapter.ts
+  s_7e8b2b2fb02110::t_b8a6875ee180d8 701,738
+apps/server/scripts/check-lint-guards.ts
+  s_7e8b2b2fb02110::t_910f61276bb864 17-33,79
+  s_7e8b2b2fb02110::t_ec985bbe8d3fdb 83-85
+scripts/check-effect-family.ts
+  s_7e8b2b2fb02110::t_010432ba1a7113 50,55-56
+CODING_STANDARDS.md
+  s_7e8b2b2fb02110::t_9769edec5c8b02 185-199,206-217
+  s_7e8b2b2fb02110::t_0e70a59995ccce 218
+apps/server/scripts/run-browser-pairing-acceptance-server.ts
+  s_7e8b2b2fb02110::t_0755589c026741 109,132
+  s_7e8b2b2fb02110::t_178d3addd24a8e 112,143-145
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "213a0bb1d167ca912f12a064e1fd4e72b357bcca",
+  "prompts": {},
+  "sessions": {
+    "s_7e8b2b2fb02110": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a05f68-bc94-7f02-bf7e-795702d2e3a8",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

@@ -1,0 +1,19 @@
+scripts/check-credential-evidence.ts
+  s_7e8b2b2fb02110::t_164bb3642b60ad 299,302,310
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "47812a4c4c836f9c619b696b986c3d938438003a",
+  "prompts": {},
+  "sessions": {
+    "s_7e8b2b2fb02110": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a05f68-bc94-7f02-bf7e-795702d2e3a8",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

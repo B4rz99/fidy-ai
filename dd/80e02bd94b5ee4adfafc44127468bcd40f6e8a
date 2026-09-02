@@ -1,0 +1,82 @@
+apps/server/src/shell/observability/sentry-account-reader.ts
+  s_7e8b2b2fb02110::t_20955dcb35158f 3-7,107-108,114,118-119,121-123,129,162,168,173,179,203-205,213,219,226,234
+  s_7e8b2b2fb02110::t_aca688a7875247 265
+  s_7e8b2b2fb02110::t_7680aedba4501e 8
+apps/server/src/shell/ingestion/resend-receiving-client.ts
+  s_7e8b2b2fb02110::t_85803d837b7376 14,24-27,64-65,68-71,85,125-126,133,196,209,222-223,229,236,250,288-290
+  s_7e8b2b2fb02110::t_7680aedba4501e 28
+  s_7e8b2b2fb02110::t_aca688a7875247 77-84
+  s_7e8b2b2fb02110::t_1733db47d83db7 57-63,66-67,72,201-206,211-216,242-247
+apps/server/src/shell/_shared/bounded-bytes.ts
+  s_7e8b2b2fb02110::t_ea83fd44f906cb 3
+CODING_STANDARDS.md
+  s_7e8b2b2fb02110::t_d4a0c2c0ab046d 212-219
+apps/server/src/shell/_shared/bounded-bytes.test.ts
+  s_7e8b2b2fb02110::t_8b19e07fad9c83 2-3,33-40,45-51,55,62-70,72,74,85-93,95,97,106-113,115
+  s_7e8b2b2fb02110::t_f779a3b3585af6 4-8,29-32
+apps/server/src/shell/channels/whatsapp/kapso-client.ts
+  s_7e8b2b2fb02110::t_7680aedba4501e 25
+  s_7e8b2b2fb02110::t_169ef748a8fb35 3,21-24,213-224,254,258,267-268,270,276
+apps/server/src/shell/_shared/bounded-external-http.test.ts
+  s_7e8b2b2fb02110::t_7680aedba4501e 93-116,142,156-157,221,224-229,259,262-268,274-277,290,312-317,357,359
+  s_7e8b2b2fb02110::t_aca688a7875247 18
+apps/server/ARCHITECTURE.md
+  s_7e8b2b2fb02110::t_628a95d0d37721 273-286
+apps/server/src/shell/_shared/bounded-external-http.ts
+  s_7e8b2b2fb02110::t_d467bda12f1b87 145,150,163,204,210-211,213-244,264,266-269,279,284
+  s_7e8b2b2fb02110::t_ad5a4692a4f3d2 191-202,259-262
+  s_7e8b2b2fb02110::t_aca688a7875247 167-190
+  s_7e8b2b2fb02110::t_90ce5cfb0fadf1 146
+  s_7e8b2b2fb02110::t_0c576e28209e3c 149
+  s_7e8b2b2fb02110::t_bd008a67f7106c 151-153,160-162
+  s_7e8b2b2fb02110::t_0769fad5db570f 165-166
+  s_7e8b2b2fb02110::t_811e03ec81fd7a 203
+  s_7e8b2b2fb02110::t_33e7fcfa6a927d 205-209
+  s_7e8b2b2fb02110::t_caf2242e9158c5 212
+  s_7e8b2b2fb02110::t_f3c3b1f2cc048a 245-247,256-258
+  s_7e8b2b2fb02110::t_605cb4974bc88f 263
+  s_7e8b2b2fb02110::t_c397fffd2c90ec 265
+  s_7e8b2b2fb02110::t_2d6c5b116cc129 270-272,276-278
+  s_7e8b2b2fb02110::t_f79da5be44c0ad 280-283
+  s_7e8b2b2fb02110::t_537d3f6c95e966 285-287
+  s_7e8b2b2fb02110::t_db8f7052cb2121 1,15,25-26,33,36,96-105,109,114-124,128,132-133,142-143,154-159,248-255,273-275,288-289
+apps/server/src/shell/email-authentication/delivery.ts
+  s_7e8b2b2fb02110::t_567af45c6a6ae1 3,9-12,92,112,128-143,151-153,170-186
+  s_7e8b2b2fb02110::t_7680aedba4501e 13
+  s_7e8b2b2fb02110::t_aca688a7875247 88,188,191
+apps/server/src/shell/subscription/wompi-client.ts
+  s_7e8b2b2fb02110::t_7680aedba4501e 29
+  s_7e8b2b2fb02110::t_aca688a7875247 252-270
+  s_7e8b2b2fb02110::t_3f9629abfe9618 16,24-28,120-121,240,246-251,274,280-285,306-321,324,330-348,351,379-381
+apps/server/src/shell/agent/openai.ts
+  s_7e8b2b2fb02110::t_69fdc3b8ada78a 368
+  s_7e8b2b2fb02110::t_2513839b98b63c 375-376,397-398,404-405,412-414
+  s_7e8b2b2fb02110::t_a7426bd5040e06 502-503,540,599-600
+  s_7e8b2b2fb02110::t_7680aedba4501e 22
+  s_7e8b2b2fb02110::t_4b4c1c66df062b 20
+  s_7e8b2b2fb02110::t_f59fe1adeaf8ab 415
+  s_7e8b2b2fb02110::t_8f47385c06bf01 383,387-390
+  s_7e8b2b2fb02110::t_aca688a7875247 32,505-510,512,602-610
+  s_7e8b2b2fb02110::t_a094a93b77578b 182-183,358-367,369-370,384-386,392
+  s_7e8b2b2fb02110::t_1ce5e77b91452e 18-19,21,105,372-373,377,379-382,391,393,399-403,406,498-501,504,531,533,541,554,556,595-598,601
+  s_7e8b2b2fb02110::t_c7531031ea1aba 371,394-396
+apps/server/scripts/support-recovery.ts
+  s_7e8b2b2fb02110::t_7680aedba4501e 5
+  s_7e8b2b2fb02110::t_60ef9900ed3400 174-176,182-183,191
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "dd80e02bd94b5ee4adfafc44127468bcd40f6e8a",
+  "prompts": {},
+  "sessions": {
+    "s_7e8b2b2fb02110": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a05f68-bc94-7f02-bf7e-795702d2e3a8",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

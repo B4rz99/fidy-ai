@@ -17,7 +17,6 @@ import type { ConfigError } from "effect/Config";
 import { IanaTimeZone } from "~/core/_shared/context";
 import {
   type BoundedExternalHttpResponse,
-  type ExternalHttpFailure,
   boundedProviderLibraryHttpClientLayer,
   makeBoundedExternalHttpClient,
 } from "~/shell/_shared/bounded-external-http";
@@ -365,21 +364,6 @@ const makeExecutionRequest = (
     : { ...countedRequest, ...controls, max_tool_calls: maximumToolCalls };
 };
 
-const mapOpenAiTransportFailure = (
-  failure: HostedInferenceError | ExternalHttpFailure,
-  overflowFailure: () => HostedInferenceError
-): HostedInferenceError => {
-  if (failure instanceof HostedInferenceError) return failure;
-  if (failure.reason === "response-too-large") return overflowFailure();
-  if (failure.reason === "response-body-failed") return providerUnavailable();
-  return providerUnavailable(
-    Option.exists(
-      failure.responseStatus,
-      (status) => retryableProviderStatuses.has(status) || status >= minimumServerFailureStatus
-    )
-  );
-};
-
 const executeBoundedOpenAiRequest = (
   client: OpenAiClient.Service,
   request: HttpClientRequest.HttpClientRequest,
@@ -399,7 +383,18 @@ const executeBoundedOpenAiRequest = (
               response.status >= minimumServerFailureStatus
           )
       ),
-      Effect.mapError((failure) => mapOpenAiTransportFailure(failure, overflowFailure))
+      Effect.mapError((failure) => {
+        if (failure instanceof HostedInferenceError) return failure;
+        if (failure.reason === "response-too-large") return overflowFailure();
+        if (failure.reason === "response-body-failed") return providerUnavailable();
+        return providerUnavailable(
+          Option.exists(
+            failure.responseStatus,
+            (status) =>
+              retryableProviderStatuses.has(status) || status >= minimumServerFailureStatus
+          )
+        );
+      })
     );
 
 const requestInputTokenCount = (

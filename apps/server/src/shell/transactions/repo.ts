@@ -9,7 +9,6 @@ import { UserId } from "~/core/identity/reference";
 import {
   SourceAttestationRow,
   TransactionFlatRow,
-  TransactionLookup,
   sourceAttestationColumns,
   sourceAttestationFromRow,
   transactionColumns,
@@ -99,7 +98,7 @@ export const updateTransactionInScope = Effect.fn("updateTransactionInScope")(fu
       UPDATE transactions SET
         amount = ${row.amount}, currency = ${row.currency}, counterparty = ${row.counterparty},
         direction = ${row.direction}, category_id = ${row.categoryId}, notes = ${row.notes},
-        occurred_at = ${row.occurredAt},
+        occurred_at = ${row.occurredAt}, facts_corrected_at = now(),
         category_user_decided = ${row.categoryUserDecided},
         counterparty_user_decided = ${row.counterpartyUserDecided},
         notes_user_decided = ${row.notesUserDecided}
@@ -115,27 +114,6 @@ export const updateTransactionInScope = Effect.fn("updateTransactionInScope")(fu
     ),
     Effect.orDie
   );
-});
-
-/**
- * Hides one active Transaction owned by `userId` inside the caller's active User-scoped
- * transaction. Returns `None` when `id` is absent, foreign, or already deleted. The caller
- * establishes the matching User context and owns commit or rollback; database failures are defects.
- */
-export const softDeleteTransactionInScope = Effect.fn("softDeleteTransactionInScope")(function* (
-  userId: UserId,
-  id: TransactionId
-) {
-  const sql = yield* SqlClient.SqlClient;
-  return yield* SqlSchema.findOneOption({
-    Request: TransactionLookup,
-    Result: Schema.Struct({ id: TransactionId }),
-    execute: (request) => sql`
-      UPDATE transactions SET deleted_at = now()
-      WHERE id = ${request.id} AND user_id = ${request.userId} AND deleted_at IS NULL
-      RETURNING id
-    `,
-  })({ id, userId }).pipe(Effect.map(Option.map((row) => row.id)), Effect.orDie);
 });
 
 /**

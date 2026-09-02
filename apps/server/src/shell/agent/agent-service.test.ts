@@ -2432,7 +2432,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
   it.effect("confirms one exact atomic batch and rejects altered or replayed confirmation", () =>
     Effect.gen(function* () {
       const sql = yield* MigrationSqlClient;
-      yield* sql`TRUNCATE source_attestations, transactions, keyword_rules`;
+      yield* sql`TRUNCATE source_attestations, transactions, keyword_rules CASCADE`;
       yield* clearTranscript;
       const service = yield* AgentService;
 
@@ -2512,7 +2512,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
   it.effect("rejects confirmation when the model reorders the proposed batch", () =>
     Effect.gen(function* () {
       const sql = yield* MigrationSqlClient;
-      yield* sql`TRUNCATE source_attestations, transactions, keyword_rules`;
+      yield* sql`TRUNCATE source_attestations, transactions, keyword_rules CASCADE`;
       yield* clearTranscript;
       const service = yield* AgentService;
 
@@ -2548,7 +2548,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       yield* sql`DELETE FROM transcript_entries WHERE user_id = ${userB}`;
       yield* sql`DELETE FROM transactions WHERE user_id = ${userB}`;
       yield* sql`DELETE FROM tokens WHERE user_id = ${userB}`;
-      yield* sql`TRUNCATE source_attestations, transactions, keyword_rules`;
+      yield* sql`TRUNCATE source_attestations, transactions, keyword_rules CASCADE`;
       yield* clearTranscript;
       yield* seedConsentedPatIdentity({
         userId: userB,
@@ -2592,7 +2592,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
   it.effect("atomically consumes concurrent confirmation submissions once", () =>
     Effect.gen(function* () {
       const sql = yield* MigrationSqlClient;
-      yield* sql`TRUNCATE source_attestations, transactions, keyword_rules`;
+      yield* sql`TRUNCATE source_attestations, transactions, keyword_rules CASCADE`;
       yield* clearTranscript;
       const service = yield* AgentService;
 
@@ -2633,7 +2633,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
   it.effect("expires an unconsumed atomic batch confirmation", () =>
     Effect.gen(function* () {
       const sql = yield* MigrationSqlClient;
-      yield* sql`TRUNCATE source_attestations, transactions, keyword_rules`;
+      yield* sql`TRUNCATE source_attestations, transactions, keyword_rules CASCADE`;
       yield* clearTranscript;
       const service = yield* AgentService;
       const manualClock = makeManualClock();
@@ -2667,7 +2667,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       const sql = yield* MigrationSqlClient;
       const service = yield* AgentService;
       const client = yield* ApiHarnessClient;
-      yield* sql`TRUNCATE source_attestations, transactions, keyword_rules`;
+      yield* sql`TRUNCATE source_attestations, transactions, keyword_rules CASCADE`;
       yield* clearTranscript;
       yield* service.handleMessage(
         defaultUserId,
@@ -2705,7 +2705,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
   it.effect("executes nothing when a later generated call is malformed", () =>
     Effect.gen(function* () {
       const sql = yield* MigrationSqlClient;
-      yield* sql`TRUNCATE source_attestations, transactions, keyword_rules`;
+      yield* sql`TRUNCATE source_attestations, transactions, keyword_rules CASCADE`;
       yield* clearTranscript;
       const service = yield* AgentService;
 
@@ -2725,7 +2725,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
   it.effect("rolls back a confirmed batch and explains the failing child", () =>
     Effect.gen(function* () {
       const sql = yield* MigrationSqlClient;
-      yield* sql`TRUNCATE source_attestations, transactions, keyword_rules`;
+      yield* sql`TRUNCATE source_attestations, transactions, keyword_rules CASCADE`;
       yield* clearTranscript;
       const service = yield* AgentService;
 
@@ -3029,7 +3029,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
   it.effect("removes bearers returned by canonical reads before model context or Transcript", () =>
     Effect.gen(function* () {
       const sql = yield* MigrationSqlClient;
-      yield* sql`TRUNCATE source_attestations, transactions, keyword_rules`;
+      yield* sql`TRUNCATE source_attestations, transactions, keyword_rules CASCADE`;
       yield* clearTranscript;
       const service = yield* AgentService;
       yield* service.handleMessage(
@@ -3066,7 +3066,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
   it.effect("captures a Transaction without inventing a Counterparty", () =>
     Effect.gen(function* () {
       const sql = yield* MigrationSqlClient;
-      yield* sql`TRUNCATE source_attestations, transactions, keyword_rules`;
+      yield* sql`TRUNCATE source_attestations, transactions, keyword_rules CASCADE`;
       yield* clearTranscript;
       const service = yield* AgentService;
       const client = yield* ApiHarnessClient;
@@ -3089,7 +3089,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
   it.effect("executes a reversible addition without quick-log authorization grammar", () =>
     Effect.gen(function* () {
       const sql = yield* MigrationSqlClient;
-      yield* sql`TRUNCATE source_attestations, transactions, keyword_rules`;
+      yield* sql`TRUNCATE source_attestations, transactions, keyword_rules CASCADE`;
       yield* clearTranscript;
       yield* sql`DELETE FROM audit_log_entries WHERE user_id = ${defaultUserId}`;
       const service = yield* AgentService;
@@ -3147,7 +3147,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
   it.effect("executes a transaction capture without asking for confirmation", () =>
     Effect.gen(function* () {
       const sql = yield* MigrationSqlClient;
-      yield* sql`TRUNCATE source_attestations, transactions, keyword_rules`;
+      yield* sql`TRUNCATE source_attestations, transactions, keyword_rules CASCADE`;
       yield* clearTranscript;
       const service = yield* AgentService;
 
@@ -3269,7 +3269,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
   it.effect("executes reads and reversible additions from one model batch", () =>
     Effect.gen(function* () {
       const sql = yield* MigrationSqlClient;
-      yield* sql`TRUNCATE source_attestations, transactions, keyword_rules`;
+      yield* sql`TRUNCATE source_attestations, transactions, keyword_rules CASCADE`;
       yield* clearTranscript;
       yield* sql`DELETE FROM audit_log_entries WHERE user_id = ${defaultUserId}`;
       const service = yield* AgentService;
@@ -3387,7 +3387,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
     () =>
       Effect.gen(function* () {
         const sql = yield* MigrationSqlClient;
-        yield* sql`TRUNCATE source_attestations, transactions, keyword_rules`;
+        yield* sql`TRUNCATE source_attestations, transactions, keyword_rules CASCADE`;
         yield* clearTranscript;
         yield* resetModelPrompts;
         const service = yield* AgentService;
@@ -3445,7 +3445,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
     Effect.gen(function* () {
       const sql = yield* MigrationSqlClient;
       const service = yield* AgentService;
-      yield* sql`TRUNCATE source_attestations, transactions, keyword_rules`;
+      yield* sql`TRUNCATE source_attestations, transactions, keyword_rules CASCADE`;
       yield* clearTranscript;
       yield* service.handleMessage(
         defaultUserId,
@@ -3708,7 +3708,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       const sql = yield* MigrationSqlClient;
       const service = yield* AgentService;
       const client = yield* ApiHarnessClient;
-      yield* sql`TRUNCATE source_attestations, transactions, keyword_rules`;
+      yield* sql`TRUNCATE source_attestations, transactions, keyword_rules CASCADE`;
       yield* clearTranscript;
       yield* service.handleMessage(
         defaultUserId,
@@ -3845,7 +3845,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
     Effect.gen(function* () {
       const sql = yield* MigrationSqlClient;
       const service = yield* AgentService;
-      yield* sql`TRUNCATE source_attestations, transactions, keyword_rules`;
+      yield* sql`TRUNCATE source_attestations, transactions, keyword_rules CASCADE`;
       yield* clearTranscript;
       yield* service.handleMessage(
         defaultUserId,
@@ -3902,7 +3902,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       const sql = yield* MigrationSqlClient;
       const service = yield* AgentService;
       const client = yield* ApiHarnessClient;
-      yield* sql`TRUNCATE source_attestations, transactions, keyword_rules`;
+      yield* sql`TRUNCATE source_attestations, transactions, keyword_rules CASCADE`;
       yield* clearTranscript;
       yield* service.handleMessage(
         defaultUserId,
@@ -3950,7 +3950,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       const sql = yield* MigrationSqlClient;
       const service = yield* AgentService;
       const client = yield* ApiHarnessClient;
-      yield* sql`TRUNCATE source_attestations, transactions, keyword_rules`;
+      yield* sql`TRUNCATE source_attestations, transactions, keyword_rules CASCADE`;
       yield* clearTranscript;
       yield* service.handleMessage(
         defaultUserId,
@@ -4001,7 +4001,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
     Effect.gen(function* () {
       const sql = yield* MigrationSqlClient;
       const service = yield* AgentService;
-      yield* sql`TRUNCATE source_attestations, transactions, keyword_rules`;
+      yield* sql`TRUNCATE source_attestations, transactions, keyword_rules CASCADE`;
       yield* clearTranscript;
       yield* service.handleMessage(
         defaultUserId,
@@ -4050,7 +4050,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
     Effect.gen(function* () {
       const sql = yield* MigrationSqlClient;
       const service = yield* AgentService;
-      yield* sql`TRUNCATE source_attestations, transactions, keyword_rules`;
+      yield* sql`TRUNCATE source_attestations, transactions, keyword_rules CASCADE`;
       yield* clearTranscript;
       yield* service.handleMessage(
         defaultUserId,

@@ -113,6 +113,47 @@ export const Transaction = Schema.Struct({
   .annotate({ identifier: "Transaction" });
 export type Transaction = typeof Transaction.Type;
 
+/** An exact pair supplied to reversible Transaction linking; ownership is resolved from the caller. */
+export const TransactionPairInput = Schema.Struct({
+  firstTransactionId: TransactionId,
+  secondTransactionId: TransactionId,
+}).annotate({ identifier: "TransactionPairInput" });
+export type TransactionPairInput = typeof TransactionPairInput.Type;
+
+const IndependentPresentationMetadata = Schema.Struct({
+  kind: Schema.Literal("independent"),
+});
+const LinkedPresentationMetadata = Schema.Union([
+  Schema.Struct({
+    kind: Schema.Literal("visible-member"),
+  }),
+  Schema.Struct({
+    kind: Schema.Literal("suppressed-member"),
+    requestedId: TransactionId,
+  }),
+]);
+const IndependentTransactionPresentation = Schema.Struct({
+  ...Transaction.fields,
+  presentation: IndependentPresentationMetadata,
+});
+
+/**
+ * One effective Transaction with metadata explaining how the requested id maps to its visible
+ * identity. The nested discriminated union makes invalid presentation states unrepresentable.
+ */
+export const TransactionPresentation = Schema.Struct({
+  ...Transaction.fields,
+  presentation: Schema.Union([IndependentPresentationMetadata, LinkedPresentationMetadata]),
+}).annotate({ identifier: "TransactionPresentation" });
+export type TransactionPresentation = typeof TransactionPresentation.Type;
+
+/** The canonically ordered independent originals restored by one successful unlink mutation. */
+export const RestoredTransactionPair = Schema.Struct({
+  firstTransaction: IndependentTransactionPresentation,
+  secondTransaction: IndependentTransactionPresentation,
+}).annotate({ identifier: "RestoredTransactionPair" });
+export type RestoredTransactionPair = typeof RestoredTransactionPair.Type;
+
 /**
  * What a caller supplies to record a Transaction: the canonical shape minus the
  * two fields it does not own. `id` and `createdAt` are both assigned at insert,

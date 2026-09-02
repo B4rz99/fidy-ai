@@ -25,6 +25,7 @@ import {
 } from "~/shell/transactions/read-statements";
 import { selectDashboardTransactionSumsInScope } from "~/shell/transactions/reads";
 import { ApiHarness, ApiHarnessClient, headersFor } from "~/shell/testing/api-harness";
+import { transactionPayload, truncateTransactions } from "~/shell/transactions/fixtures";
 import { truncateDashboards } from "./fixtures";
 import { applyDashboardEdit } from "./mutations";
 import type { DashboardView } from "./operations";
@@ -183,6 +184,51 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         expect(first.data.layout.kind).toBe("split");
         expect(collectLayoutWidgets(first.data.layout)).toHaveLength(4);
         expect(second.data).toEqual(first.data);
+      })
+    );
+
+    it.effect("counts a linked Transaction pair once and restores both after unlinking", () =>
+      Effect.gen(function* () {
+        yield* truncateDashboards;
+        yield* truncateTransactions;
+        const client = yield* ApiHarnessClient;
+        const occurredAt = yield* DateTime.now;
+        const first = yield* client.transactions.createTransaction({
+          payload: transactionPayload({ occurredAt }),
+        });
+        const second = yield* client.transactions.createTransaction({
+          payload: transactionPayload({ occurredAt }),
+        });
+        const pair = {
+          firstTransactionId: first.data.id,
+          secondTransactionId: second.data.id,
+        };
+
+        yield* client.transactions.linkTransactions({ payload: pair });
+        const linked = yield* client.dashboard.getDashboardView();
+        yield* client.transactions.unlinkTransactions({ payload: pair });
+        const restored = yield* client.dashboard.getDashboardView();
+        const linkedChart = Option.getOrThrow(Array.get(collectWidgetViews(linked.data.layout), 0));
+        const restoredChart = Option.getOrThrow(
+          Array.get(collectWidgetViews(restored.data.layout), 0)
+        );
+        if (!("buckets" in linkedChart.result) || !("buckets" in restoredChart.result)) {
+          return yield* Effect.die("Expected the default Dashboard chart");
+        }
+        const linkedCop = linkedChart.result.buckets
+          .flatMap(({ moneyGroups }) => moneyGroups)
+          .find(({ currency }) => currency === "COP");
+        const restoredCop = restoredChart.result.buckets
+          .flatMap(({ moneyGroups }) => moneyGroups)
+          .find(({ currency }) => currency === "COP");
+
+        expect(
+          BigDecimal.format(Option.getOrThrow(Option.fromUndefinedOr(linkedCop)).outflow.amount)
+        ).toBe("25000");
+        expect(
+          BigDecimal.format(Option.getOrThrow(Option.fromUndefinedOr(restoredCop)).outflow.amount)
+        ).toBe("50000");
+        yield* truncateTransactions;
       })
     );
 
@@ -402,11 +448,11 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
       })
     );
 
-    it.effect("uses selective Dashboard Transaction indexes for top-K and period reads", () =>
+    it.effect("uses the selective Dashboard period index for effective reads", () =>
       Effect.gen(function* () {
         const { recent, aggregate } = yield* explainDashboardTransactionAccess;
         expect(recent.map((row) => row["QUERY PLAN"]).join("\n")).toContain(
-          "transactions_dashboard_recent_idx"
+          "transactions_dashboard_period_idx"
         );
         expect(aggregate.map((row) => row["QUERY PLAN"]).join("\n")).toContain(
           "transactions_dashboard_period_idx"

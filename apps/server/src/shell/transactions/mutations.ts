@@ -7,9 +7,12 @@ import type { CapturedInterpretationContext } from "~/core/_shared/captured-inte
 import { TransactionNotFound } from "~/core/transactions/errors";
 import {
   type CreateTransactionInput,
+  RestoredTransactionPair,
   type Transaction,
   type TransactionExtraction,
   type TransactionId,
+  type TransactionPairInput,
+  type TransactionPresentation,
   UpdateTransactionInput,
 } from "~/core/transactions/model";
 import { checkAlreadyOccurred } from "~/core/transactions/rules";
@@ -30,6 +33,7 @@ import {
 import { categorizeCapture } from "~/shell/categories/categorizer";
 import { toApiFailure as categoryToApiFailure } from "~/shell/categories/errors";
 import { findCategory } from "~/shell/categories/repo";
+import { advisoryLockKey, withUserLockInScope } from "~/shell/db/advisory-lock";
 import { findUserInScope } from "~/shell/identity/repo";
 import type { SpanDescriptor } from "~/shell/observability/protocol";
 import { Telemetry } from "~/shell/observability/telemetry";
@@ -41,9 +45,15 @@ import {
   insertNotificationEmailSourceAttestationInScope,
   insertStatementLineSourceAttestationInScope,
   insertTransactionInScope,
-  softDeleteTransactionInScope,
   updateTransactionInScope,
 } from "./repo";
+import {
+  deleteTransactionAndEndLinkInScope,
+  linkTransactionPairInScope,
+  refreshLinkedTransactionAuthoritiesInScope,
+  unlinkTransactionPairInScope,
+} from "./reconciliation-repo";
+import { findTransactionPresentationInScope } from "./reads";
 
 const missingTransaction = (transactionId: TransactionId) => (): TransactionNotFound =>
   new TransactionNotFound({ transactionId });
@@ -237,6 +247,95 @@ export const captureNotificationEmailTransactionInScope = Effect.fn(
   return transaction;
 });
 
+/** Facts supplied after canonical decoding and caller authorization for linking one exact pair. */
+export type LinkTransactionsInput = TransactionMutationContext &
+  Readonly<{ payload: TransactionPairInput }>;
+
+/** Links one exact pair without opening an inner transaction. */
+export const linkTransactions: CanonicalMutationImplementation<
+  LinkTransactionsInput,
+  MutationResponse<typeof TransactionPresentation>,
+  TransactionApiFailure
+> = Effect.fn("linkTransactions")(function* ({ userId, payload, caller }: LinkTransactionsInput) {
+  return yield* withUserLockInScope(
+    advisoryLockKey.transactionReconciliation(userId),
+    Effect.gen(function* () {
+      const decision = yield* linkTransactionPairInScope(userId, payload).pipe(
+        mapTransactionFailure({ caller })
+      );
+      const presentation = yield* findTransactionPresentationInScope(
+        userId,
+        decision.visibleTransactionId
+      ).pipe(Effect.flatMap(Effect.fromOption), Effect.orDie);
+      return {
+        data: presentation,
+        next: checkpointSuggestedOperations({
+          candidates: [
+            suggestOperation({
+              tool: "transactions.unlinkTransactions",
+              args: Option.some({ payload: decision.pair }),
+              hint: "Unlink these Transactions if they should remain separate purchases.",
+            }),
+          ],
+          caller,
+        }),
+      };
+    })
+  );
+});
+
+/** Facts supplied after canonical decoding and caller authorization for unlinking one exact pair. */
+export type UnlinkTransactionsInput = TransactionMutationContext &
+  Readonly<{ payload: TransactionPairInput }>;
+
+/** Unlinks one exact pair and records keep-separate in the same caller-owned transaction. */
+export const unlinkTransactions: CanonicalMutationImplementation<
+  UnlinkTransactionsInput,
+  MutationResponse<typeof RestoredTransactionPair>,
+  TransactionApiFailure
+> = Effect.fn("unlinkTransactions")(function* ({
+  userId,
+  payload,
+  caller,
+}: UnlinkTransactionsInput) {
+  return yield* withUserLockInScope(
+    advisoryLockKey.transactionReconciliation(userId),
+    Effect.gen(function* () {
+      const pair = yield* unlinkTransactionPairInScope(userId, payload).pipe(
+        mapTransactionFailure({ caller })
+      );
+      const first = yield* findTransactionPresentationInScope(userId, pair.firstTransactionId).pipe(
+        Effect.flatMap(Effect.fromOption),
+        Effect.orDie
+      );
+      const second = yield* findTransactionPresentationInScope(
+        userId,
+        pair.secondTransactionId
+      ).pipe(Effect.flatMap(Effect.fromOption), Effect.orDie);
+      if (first.presentation.kind !== "independent" || second.presentation.kind !== "independent") {
+        return yield* Effect.die("Unlink did not restore two independent Transactions");
+      }
+      const restored = RestoredTransactionPair.make({
+        firstTransaction: { ...first, presentation: { kind: "independent" } },
+        secondTransaction: { ...second, presentation: { kind: "independent" } },
+      });
+      return {
+        data: restored,
+        next: checkpointSuggestedOperations({
+          candidates: [
+            suggestOperation({
+              tool: "transactions.linkTransactions",
+              args: Option.some({ payload: pair }),
+              hint: "Link these Transactions again only if they describe one purchase.",
+            }),
+          ],
+          caller,
+        }),
+      };
+    })
+  );
+});
+
 /** Facts supplied after canonical decoding and caller authorization for Transaction correction. */
 export type CorrectTransactionInput = TransactionMutationContext &
   Readonly<{
@@ -263,14 +362,20 @@ export const correctTransaction: CanonicalMutationImplementation<
     mapTransactionFailure({ caller })
   );
   yield* requireKnownCategory(payload.categoryId, caller);
-  const transaction = yield* updateTransactionInScope(userId, transactionId, {
-    facts: payload,
-    userDecisions: correctedUserDecisions,
-  }).pipe(
-    Effect.flatMap(Effect.fromOption(missingTransaction(transactionId))),
-    mapTransactionFailure({ caller })
+  return yield* withUserLockInScope(
+    advisoryLockKey.transactionReconciliation(userId),
+    Effect.gen(function* () {
+      const transaction = yield* updateTransactionInScope(userId, transactionId, {
+        facts: payload,
+        userDecisions: correctedUserDecisions,
+      }).pipe(
+        Effect.flatMap(Effect.fromOption(missingTransaction(transactionId))),
+        mapTransactionFailure({ caller })
+      );
+      yield* refreshLinkedTransactionAuthoritiesInScope(userId, transactionId);
+      return { data: transaction, next: [] };
+    })
   );
-  return { data: transaction, next: [] };
 });
 
 /** Facts supplied after canonical decoding and caller authorization for Transaction deletion. */
@@ -292,9 +397,14 @@ export const deleteTransaction: CanonicalMutationImplementation<
   transactionId,
   caller,
 }: DeleteTransactionInput) {
-  const id = yield* softDeleteTransactionInScope(userId, transactionId).pipe(
-    Effect.flatMap(Effect.fromOption(missingTransaction(transactionId))),
-    mapTransactionFailure({ caller })
+  return yield* withUserLockInScope(
+    advisoryLockKey.transactionReconciliation(userId),
+    Effect.gen(function* () {
+      const id = yield* deleteTransactionAndEndLinkInScope(userId, transactionId).pipe(
+        Effect.flatMap(Effect.fromOption(missingTransaction(transactionId))),
+        mapTransactionFailure({ caller })
+      );
+      return { data: id, next: [] };
+    })
   );
-  return { data: id, next: [] };
 });

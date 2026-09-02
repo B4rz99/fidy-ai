@@ -546,7 +546,10 @@ const probes: Record<OperationId, IsolationProbe> = {
         else if ("transactions" in result) expect(result.transactions).toEqual([]);
         else expect(result.availability).toBe("missing-budget");
       }
-      expect(ownerTransaction.data).toEqual(attempt.ownedTransaction);
+      expect(ownerTransaction.data).toMatchObject({
+        ...attempt.ownedTransaction,
+        presentation: { kind: "independent" },
+      });
       expectSameBudget(ownerBudget.data, attempt.ownedBudget);
     }),
 
@@ -693,6 +696,50 @@ const probes: Record<OperationId, IsolationProbe> = {
       expect(strangersHistory.data).toHaveLength(2);
     }),
 
+  "transactions.linkTransactions": (attempt) =>
+    Effect.gen(function* () {
+      const strangerTransaction = yield* attempt.strangerClient.transactions.createTransaction({
+        payload: transactionPayload(),
+      });
+      const denied = yield* Effect.result(
+        attempt.strangerClient.transactions.linkTransactions({
+          payload: {
+            firstTransactionId: attempt.ownedTransaction.id,
+            secondTransactionId: strangerTransaction.data.id,
+          },
+        })
+      );
+      expect(denied).toMatchObject({
+        _tag: "Failure",
+        failure: { error: { code: "not_found" } },
+      });
+      expect(
+        (yield* attempt.ownerClient.transactions.listTransactions({ query: {} })).data
+      ).toEqual([attempt.ownedTransaction]);
+    }),
+
+  "transactions.unlinkTransactions": (attempt) =>
+    Effect.gen(function* () {
+      const second = yield* attempt.ownerClient.transactions.createTransaction({
+        payload: transactionPayload({ counterparty: "Segundo original" }),
+      });
+      const pair = {
+        firstTransactionId: attempt.ownedTransaction.id,
+        secondTransactionId: second.data.id,
+      };
+      yield* attempt.ownerClient.transactions.linkTransactions({ payload: pair });
+      const denied = yield* Effect.result(
+        attempt.strangerClient.transactions.unlinkTransactions({ payload: pair })
+      );
+      expect(denied).toMatchObject({
+        _tag: "Failure",
+        failure: { error: { code: "validation_failed" } },
+      });
+      expect(
+        (yield* attempt.ownerClient.transactions.listTransactions({ query: {} })).data
+      ).toHaveLength(1);
+    }),
+
   "transactions.updateTransaction": (attempt) =>
     Effect.gen(function* () {
       const before = yield* getTransactionUserDecisions(attempt.ownedTransaction.id);
@@ -711,7 +758,10 @@ const probes: Record<OperationId, IsolationProbe> = {
         _tag: "Failure",
         failure: { error: { code: "not_found" } },
       });
-      expect(retained.data).toEqual(attempt.ownedTransaction);
+      expect(retained.data).toMatchObject({
+        ...attempt.ownedTransaction,
+        presentation: { kind: "independent" },
+      });
       expect(after).toEqual(before);
     }),
 
@@ -729,7 +779,10 @@ const probes: Record<OperationId, IsolationProbe> = {
         _tag: "Failure",
         failure: { error: { code: "not_found" } },
       });
-      expect(retained.data).toEqual(attempt.ownedTransaction);
+      expect(retained.data).toMatchObject({
+        ...attempt.ownedTransaction,
+        presentation: { kind: "independent" },
+      });
     }),
 
   "transactions.listSourceAttestations": (attempt) =>
@@ -764,7 +817,10 @@ const probes: Record<OperationId, IsolationProbe> = {
         params: { id: attempt.ownedTransaction.id },
       });
 
-      expect(owners.data).toEqual(attempt.ownedTransaction);
+      expect(owners.data).toMatchObject({
+        ...attempt.ownedTransaction,
+        presentation: { kind: "independent" },
+      });
     }),
 
   "operations.executeAtomicBatch": (attempt) =>

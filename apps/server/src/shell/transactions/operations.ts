@@ -2,9 +2,12 @@ import { Schema, Struct } from "effect";
 import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/unstable/httpapi";
 import {
   CreateTransactionInput,
+  RestoredTransactionPair,
   SourceAttestation,
   Transaction,
   TransactionId,
+  TransactionPairInput,
+  TransactionPresentation,
   TransactionQueryValues,
   UpdateTransactionInput,
 } from "~/core/transactions/model";
@@ -69,14 +72,38 @@ export const TransactionsGroup = HttpApiGroup.make("transactions")
   .add(
     HttpApiEndpoint.get("getTransaction", "/transactions/:id", {
       params: Schema.Struct({ id: TransactionId }),
-      success: OperationResponse(Transaction),
+      success: OperationResponse(TransactionPresentation),
       error: NotFound,
     })
       .annotate(
         OpenApi.Description,
-        "Fetch one visible Transaction of the caller by id. Unknown, deleted, and another user's ids all answer not_found."
+        "Fetch one owned Transaction by id. Independent records return directly; either member of a linked pair succeeds and explains the earliest-created visible Transaction. Unknown, deleted, and another user's ids all answer not_found."
       )
       .annotateMerge(read)
+  )
+  .add(
+    HttpApiEndpoint.post("linkTransactions", "/transactions/link", {
+      payload: TransactionPairInput,
+      success: OperationResponse(TransactionPresentation),
+      error: [NotFound, ValidationFailed],
+    })
+      .annotate(
+        OpenApi.Description,
+        "Link two exact owned Transactions that describe one purchase. Both originals and every SourceAttestation remain retained; ordinary history, Dashboard calculations, and Budget status use one effective Transaction under the earliest-created id."
+      )
+      .annotateMerge(additiveWrite)
+  )
+  .add(
+    HttpApiEndpoint.post("unlinkTransactions", "/transactions/unlink", {
+      payload: TransactionPairInput,
+      success: OperationResponse(RestoredTransactionPair),
+      error: [NotFound, ValidationFailed],
+    })
+      .annotate(
+        OpenApi.Description,
+        "Remove the exact reversible link, restore both original Transactions to ordinary reads, and remember that the pair stays separate. No Transaction or SourceAttestation is deleted or rewritten."
+      )
+      .annotateMerge(additiveWrite)
   )
   .add(
     HttpApiEndpoint.put("updateTransaction", "/transactions/:id", {

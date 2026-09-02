@@ -24,6 +24,10 @@ export const advisoryLockKey = {
     value: `keyword-rules:${userId}`,
     seed: 0,
   }),
+  transactionReconciliation: (userId: UserId): AdvisoryLockKey => ({
+    value: `transactions:reconciliation:${userId}`,
+    seed: 0,
+  }),
   budgets: (userId: UserId): AdvisoryLockKey => ({
     value: `budgets:${userId}`,
     seed: 0,

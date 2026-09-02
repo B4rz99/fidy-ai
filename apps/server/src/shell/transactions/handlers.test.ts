@@ -18,7 +18,6 @@ import { correctTransaction, createTransaction, deleteTransaction } from "./muta
 const TransactionHarness = Layer.merge(ApiHarness, TelemetryDisabled);
 
 const utcDateTime = (iso: string): DateTime.Utc => DateTime.makeUnsafe(iso);
-
 /** Well-formed, so it passes the validation gate, and never logged by anyone. */
 const absentId = TransactionId.make("f1d1a000-0000-4000-8000-00000000dead");
 
@@ -48,6 +47,358 @@ layer(TransactionHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         const listed = yield* client.transactions.listTransactions({ query: {} });
 
         expect(listed.data).toEqual([created.data]);
+      })
+    );
+
+    it.effect("links one exact pair under the earliest-created visible Transaction", () =>
+      Effect.gen(function* () {
+        yield* truncateTransactions;
+        const client = yield* ApiHarnessClient;
+        const first = yield* client.transactions.createTransaction({
+          payload: transactionPayload({ counterparty: "Notificación" }),
+        });
+        const second = yield* client.transactions.createTransaction({
+          payload: transactionPayload({ counterparty: "Extracto" }),
+        });
+
+        const linked = yield* client.transactions.linkTransactions({
+          payload: {
+            firstTransactionId: first.data.id,
+            secondTransactionId: second.data.id,
+          },
+        });
+        const listed = yield* client.transactions.listTransactions({ query: {} });
+        const throughSecond = yield* client.transactions.getTransaction({
+          params: { id: second.data.id },
+        });
+
+        expect(linked.data).toMatchObject({
+          id: first.data.id,
+          presentation: { kind: "visible-member" },
+        });
+        expect(listed.data).toMatchObject([{ id: linked.data.id }]);
+        expect(throughSecond.data).toMatchObject({
+          id: first.data.id,
+          presentation: {
+            kind: "suppressed-member",
+            requestedId: second.data.id,
+          },
+        });
+      })
+    );
+
+    it.effect("preserves linked provenance and applies statement and explicit User authority", () =>
+      Effect.gen(function* () {
+        yield* truncateTransactions;
+        const client = yield* ApiHarnessClient;
+        const sql = yield* MigrationSqlClient;
+        const exactMoney = Money.make({
+          amount: BigDecimal.fromStringUnsafe("450000000000.75"),
+          currency: Currency.make("USD"),
+        });
+        const explicit = yield* client.transactions.createTransaction({
+          payload: transactionPayload({
+            money: exactMoney,
+            counterparty: Option.some("Decisión del usuario"),
+            categoryId: Option.some(categoryIds.mercado),
+            notes: Option.some("Conservar"),
+            occurredAt: utcDateTime("2026-07-20T12:30:00Z"),
+          }),
+        });
+        const statement = yield* client.transactions.createTransaction({
+          payload: transactionPayload({
+            money: exactMoney,
+            counterparty: Option.none(),
+            categoryId: Option.none(),
+            notes: Option.none(),
+            occurredAt: utcDateTime("2026-07-21T12:30:00Z"),
+          }),
+        });
+        yield* sql`
+          INSERT INTO source_attestations (
+            transaction_id, kind, service_market, locale, time_zone,
+            interpretation_revision, statement_submission_id, statement_record_number,
+            statement_content_hash, source_format, extractor_revision
+          ) VALUES (
+            ${statement.data.id}, 'statement-line', 'CO', 'es-CO', 'America/Bogota',
+            'statement-v1', gen_random_uuid(), 1, 'retained-content-hash', 'csv', 'extractor-v1'
+          )
+        `;
+
+        const linked = yield* client.transactions.linkTransactions({
+          payload: {
+            firstTransactionId: statement.data.id,
+            secondTransactionId: explicit.data.id,
+          },
+        });
+        const provenance = yield* client.transactions.listSourceAttestations({
+          params: { id: statement.data.id },
+        });
+        const provenanceThroughAnchor = yield* client.transactions.listSourceAttestations({
+          params: { id: explicit.data.id },
+        });
+
+        expect(linked.data).toMatchObject({
+          money: exactMoney,
+          occurredAt: statement.data.occurredAt,
+          categoryId: categoryIds.mercado,
+          counterparty: Option.some("Decisión del usuario"),
+          notes: Option.some("Conservar"),
+        });
+        expect(Equal.equals(linked.data.money.amount, exactMoney.amount)).toBe(true);
+        expect(provenance.data).toHaveLength(3);
+        expect(provenance.data.map(({ transactionId }) => transactionId)).toEqual(
+          expect.arrayContaining([explicit.data.id, statement.data.id, statement.data.id])
+        );
+        expect(provenance.data.map(({ kind }) => kind)).toContain("statement-line");
+        expect(provenanceThroughAnchor.data).toEqual(provenance.data);
+
+        const correctedMoney = Money.make({
+          amount: BigDecimal.fromStringUnsafe("450000000001.25"),
+          currency: Currency.make("USD"),
+        });
+        const corrected = yield* client.transactions.updateTransaction({
+          params: { id: explicit.data.id },
+          payload: {
+            money: correctedMoney,
+            counterparty: Option.some("Corrección del usuario"),
+            direction: "inflow",
+            categoryId: categoryIds.entretenimiento,
+            notes: Option.some("Corregido"),
+            occurredAt: utcDateTime("2026-07-22T09:00:00Z"),
+          },
+        });
+        const correctedThroughStatement = yield* client.transactions.getTransaction({
+          params: { id: statement.data.id },
+        });
+        expect(correctedThroughStatement.data).toMatchObject({
+          ...corrected.data,
+          presentation: { kind: "suppressed-member" },
+        });
+        expect(
+          Equal.equals(correctedThroughStatement.data.money.amount, correctedMoney.amount)
+        ).toBe(true);
+
+        yield* client.transactions.unlinkTransactions({
+          payload: {
+            firstTransactionId: explicit.data.id,
+            secondTransactionId: statement.data.id,
+          },
+        });
+        const explicitProvenance = yield* client.transactions.listSourceAttestations({
+          params: { id: explicit.data.id },
+        });
+        const statementProvenance = yield* client.transactions.listSourceAttestations({
+          params: { id: statement.data.id },
+        });
+        expect(explicitProvenance.data).toHaveLength(1);
+        expect(explicitProvenance.data[0]?.transactionId).toBe(explicit.data.id);
+        expect(statementProvenance.data).toHaveLength(2);
+        expect(
+          statementProvenance.data.every(({ transactionId }) => transactionId === statement.data.id)
+        ).toBe(true);
+      })
+    );
+
+    it.effect("unlinks one exact pair and restores both original Transactions", () =>
+      Effect.gen(function* () {
+        yield* truncateTransactions;
+        const client = yield* ApiHarnessClient;
+        const first = yield* client.transactions.createTransaction({
+          payload: transactionPayload({ counterparty: "Notificación" }),
+        });
+        const second = yield* client.transactions.createTransaction({
+          payload: transactionPayload({ counterparty: "Extracto" }),
+        });
+        const pair = {
+          firstTransactionId: second.data.id,
+          secondTransactionId: first.data.id,
+        };
+
+        yield* client.transactions.linkTransactions({ payload: pair });
+        const restored = yield* client.transactions.unlinkTransactions({ payload: pair });
+        const listed = yield* client.transactions.listTransactions({ query: {} });
+        const throughSecond = yield* client.transactions.getTransaction({
+          params: { id: second.data.id },
+        });
+
+        expect([restored.data.firstTransaction.id, restored.data.secondTransaction.id]).toEqual(
+          expect.arrayContaining([first.data.id, second.data.id])
+        );
+        expect(listed.data).toEqual(expect.arrayContaining([first.data, second.data]));
+        expect(throughSecond.data).toMatchObject({
+          ...second.data,
+          presentation: { kind: "independent" },
+        });
+      })
+    );
+
+    it.effect(
+      "makes a deleted pair inapplicable without rewriting its recorded link decision",
+      () =>
+        Effect.gen(function* () {
+          yield* truncateTransactions;
+          const client = yield* ApiHarnessClient;
+          const sql = yield* MigrationSqlClient;
+          const first = yield* client.transactions.createTransaction({
+            payload: transactionPayload(),
+          });
+          const second = yield* client.transactions.createTransaction({
+            payload: transactionPayload(),
+          });
+          yield* client.transactions.linkTransactions({
+            payload: { firstTransactionId: first.data.id, secondTransactionId: second.data.id },
+          });
+
+          yield* client.transactions.deleteTransaction({ params: { id: second.data.id } });
+          const listed = yield* client.transactions.listTransactions({ query: {} });
+          const decisions = yield* sql`
+          SELECT state, (
+            SELECT count(*)::int FROM transaction_reconciliation_members member
+            WHERE member.user_id = decision.user_id
+              AND member.first_transaction_id = decision.first_transaction_id
+              AND member.second_transaction_id = decision.second_transaction_id
+          ) AS member_count
+          FROM transaction_reconciliation_decisions decision
+          WHERE decision.user_id = ${defaultUserId}
+        `;
+
+          expect(listed.data).toEqual([first.data]);
+          expect(decisions).toMatchObject([{ state: "linked", member_count: 0 }]);
+        })
+    );
+
+    it.effect("serializes concurrent linking and anchor deletion without hiding the survivor", () =>
+      Effect.gen(function* () {
+        yield* truncateTransactions;
+        const client = yield* ApiHarnessClient;
+        const first = yield* client.transactions.createTransaction({
+          payload: transactionPayload(),
+        });
+        const second = yield* client.transactions.createTransaction({
+          payload: transactionPayload(),
+        });
+        yield* Effect.all(
+          [
+            Effect.result(
+              client.transactions.linkTransactions({
+                payload: {
+                  firstTransactionId: first.data.id,
+                  secondTransactionId: second.data.id,
+                },
+              })
+            ),
+            client.transactions.deleteTransaction({ params: { id: first.data.id } }),
+          ],
+          { concurrency: "unbounded" }
+        );
+        const listed = yield* client.transactions.listTransactions({ query: {} });
+
+        expect(listed.data).toEqual([second.data]);
+      })
+    );
+
+    it.effect("rejects an already-linked member without changing the existing pair", () =>
+      Effect.gen(function* () {
+        yield* truncateTransactions;
+        const client = yield* ApiHarnessClient;
+        const first = yield* client.transactions.createTransaction({
+          payload: transactionPayload(),
+        });
+        const second = yield* client.transactions.createTransaction({
+          payload: transactionPayload(),
+        });
+        const third = yield* client.transactions.createTransaction({
+          payload: transactionPayload(),
+        });
+        yield* client.transactions.linkTransactions({
+          payload: { firstTransactionId: first.data.id, secondTransactionId: second.data.id },
+        });
+
+        const failure = yield* Effect.flip(
+          client.transactions.linkTransactions({
+            payload: { firstTransactionId: first.data.id, secondTransactionId: third.data.id },
+          })
+        );
+        const listed = yield* client.transactions.listTransactions({ query: {} });
+
+        expect(isValidationFailed(failure)).toBe(true);
+        expect(listed.data).toHaveLength(2);
+        expect(listed.data.map(({ id }) => id)).toContain(first.data.id);
+        expect(listed.data.map(({ id }) => id)).toContain(third.data.id);
+      })
+    );
+
+    it.effect("rejects every invalid pair shape through the API without creating link state", () =>
+      Effect.gen(function* () {
+        yield* truncateTransactions;
+        const client = yield* ApiHarnessClient;
+        const sql = yield* MigrationSqlClient;
+        const base = yield* client.transactions.createTransaction({
+          payload: transactionPayload(),
+        });
+        const deleted = yield* client.transactions.createTransaction({
+          payload: transactionPayload(),
+        });
+        yield* client.transactions.deleteTransaction({ params: { id: deleted.data.id } });
+        const differentAmount = yield* client.transactions.createTransaction({
+          payload: transactionPayload({
+            money: Money.make({
+              amount: BigDecimal.fromStringUnsafe("25000.01"),
+              currency: Currency.make("COP"),
+            }),
+          }),
+        });
+        const differentCurrency = yield* client.transactions.createTransaction({
+          payload: transactionPayload({
+            money: Money.make({
+              amount: BigDecimal.fromStringUnsafe("25000"),
+              currency: Currency.make("USD"),
+            }),
+          }),
+        });
+        const incompatibleDirection = yield* client.transactions.createTransaction({
+          payload: transactionPayload({ direction: "inflow" }),
+        });
+
+        const same = yield* Effect.flip(
+          client.transactions.linkTransactions({
+            payload: {
+              firstTransactionId: base.data.id,
+              secondTransactionId: base.data.id,
+            },
+          })
+        );
+        const absent = yield* Effect.flip(
+          client.transactions.linkTransactions({
+            payload: { firstTransactionId: base.data.id, secondTransactionId: absentId },
+          })
+        );
+        const deletedFailure = yield* Effect.flip(
+          client.transactions.linkTransactions({
+            payload: { firstTransactionId: base.data.id, secondTransactionId: deleted.data.id },
+          })
+        );
+        const incompatible = yield* Effect.forEach(
+          [differentAmount.data.id, differentCurrency.data.id, incompatibleDirection.data.id],
+          (secondTransactionId) =>
+            Effect.flip(
+              client.transactions.linkTransactions({
+                payload: { firstTransactionId: base.data.id, secondTransactionId },
+              })
+            )
+        );
+        const rows = yield* sql`
+          SELECT
+            (SELECT count(*)::int FROM transaction_reconciliation_decisions) AS decisions,
+            (SELECT count(*)::int FROM transaction_reconciliation_members) AS members
+        `;
+
+        expect(isValidationFailed(same)).toBe(true);
+        expect(isNotFound(absent)).toBe(true);
+        expect(isNotFound(deletedFailure)).toBe(true);
+        expect(incompatible.every(isValidationFailed)).toBe(true);
+        expect(rows).toMatchObject([{ decisions: 0, members: 0 }]);
       })
     );
 
@@ -257,7 +608,10 @@ layer(TransactionHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         const listed = yield* client.transactions.listTransactions({ query: {} });
 
         expect(Equal.equals(created.data.money.amount, exactMoney.amount)).toBe(true);
-        expect(read.data).toEqual(created.data);
+        expect(read.data).toMatchObject({
+          ...created.data,
+          presentation: { kind: "independent" },
+        });
         expect(listed.data).toEqual([created.data]);
       })
     );
@@ -483,7 +837,10 @@ layer(TransactionHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         });
 
         expect(rollback).toEqual(Result.fail("rollback requested"));
-        expect(retained.data).toEqual(created.data);
+        expect(retained.data).toMatchObject({
+          ...created.data,
+          presentation: { kind: "independent" },
+        });
       })
     );
 
@@ -582,7 +939,13 @@ layer(TransactionHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           params: { id: created.data.id },
         });
 
-        expect(read).toEqual({ data: created.data, next: [] });
+        expect(read).toMatchObject({
+          data: {
+            ...created.data,
+            presentation: { kind: "independent" },
+          },
+          next: [],
+        });
       })
     );
 

@@ -49,7 +49,10 @@ layer(ApiTelemetryHarness, { excludeTestServices: true, timeout: "30 seconds" })
           );
           const serialized = envelopes.map((bytes) => new TextDecoder().decode(bytes)).join("\n");
 
-          expect(persisted.data).toEqual(created.data);
+          expect(persisted.data).toMatchObject({
+            ...created.data,
+            presentation: { kind: "independent" },
+          });
           expect(listed.data).toEqual([created.data]);
           const observedRoot = Option.getOrThrow(Option.fromUndefinedOr(root));
           const observedOperation = Option.getOrThrow(Option.fromUndefinedOr(operation));

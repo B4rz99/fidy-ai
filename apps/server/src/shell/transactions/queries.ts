@@ -59,7 +59,7 @@ export const getTransaction = Effect.fn("getTransaction")(function* ({
     Effect.flatMap(Effect.fromOption(missingTransaction(transactionId))),
     mapTransactionFailure({ caller })
   );
-  return { data: presentation.transaction, next: [] };
+  return { data: presentation, next: [] };
 });
 
 export type ListSourceAttestationsInput = Readonly<{

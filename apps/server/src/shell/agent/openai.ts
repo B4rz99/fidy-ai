@@ -18,6 +18,7 @@ import { IanaTimeZone } from "~/core/_shared/context";
 import {
   type BoundedExternalHttpResponse,
   type ExternalHttpFailure,
+  boundedProviderLibraryHttpClientLayer,
   makeBoundedExternalHttpClient,
 } from "~/shell/_shared/bounded-external-http";
 import { maximumAggregateMemoryTokens } from "~/core/memory/rules";
@@ -99,10 +100,19 @@ type HostedToolCallCapOverride = <A, E, R>(
 export const withHostedToolCallCap = (maximum: HostedToolCallMaximum): HostedToolCallCapOverride =>
   OpenAiLanguageModel.withConfigOverride({ max_tool_calls: maximum });
 
-const OpenAiClientLive = OpenAiClient.layerConfig({
+const OpenAiClientBase = OpenAiClient.layerConfig({
   apiKey: Config.redacted("OPENAI_API_KEY"),
   apiUrl: Config.string("OPENAI_API_URL").pipe(Config.withDefault("https://api.openai.com/v1")),
 });
+
+const OpenAiClientLive = OpenAiClientBase.pipe(
+  Layer.provide(
+    boundedProviderLibraryHttpClientLayer({
+      provider: "openai",
+      maximumResponseBytes: maximumStructuredResponseBytes,
+    })
+  )
+);
 
 /** Structured-output model used by bounded non-agent extraction adapters. */
 export const OpenAiLanguageModelLive = OpenAiLanguageModel.layer({
@@ -799,7 +809,7 @@ const makeOpenAiLayer = (
       }
       return inference;
     })
-  ).pipe(Layer.provide(OpenAiClientLive));
+  ).pipe(Layer.provide(OpenAiClientBase));
 
 /** Production OpenAI adapter with fail-closed maximum-request startup validation. */
 export const OpenAiHostedInferenceLive = makeOpenAiLayer(

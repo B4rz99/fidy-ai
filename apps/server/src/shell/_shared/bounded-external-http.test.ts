@@ -286,12 +286,22 @@ it.effect("exports safe provider telemetry without URL, query, or header coordin
       const telemetry = Context.get(services, Telemetry);
       const recorder = Context.get(services, EnvelopeRecorder);
       const client = HttpClient.make((request) =>
-        Effect.succeed(HttpClientResponse.fromWeb(request, new Response(null, { status: 202 })))
+        Effect.succeed(
+          HttpClientResponse.fromWeb(
+            request,
+            new Response("response-private-sentinel", {
+              status: 202,
+              headers: { "x-provider-coordinate": "provider-private-sentinel" },
+            })
+          )
+        )
       ).pipe(makeBoundedExternalHttpClient("kapso"));
       const forbidden = [
         "private-user-sentinel",
         "query-private-sentinel",
         "credential-private-sentinel",
+        "response-private-sentinel",
+        "provider-private-sentinel",
       ] as const;
 
       yield* telemetry.span(

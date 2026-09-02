@@ -100,6 +100,26 @@ it.effect("rejects a declared or chunked overflow and cancels the owned response
   })
 );
 
+it.effect("sanitizes a response stream failure", () =>
+  Effect.gen(function* () {
+    let pulls = 0;
+    const response = new Response(
+      new ReadableStream<Uint8Array>({
+        pull: (controller): void => {
+          pulls += 1;
+          if (pulls === 1) controller.enqueue(new Uint8Array([1]));
+          else controller.error(new Error("response-private-sentinel"));
+        },
+      })
+    );
+
+    const failure = yield* execute(response, 4).pipe(Effect.flip);
+
+    expect(failure.reason).toBe("response-body-failed");
+    expect(String(failure)).not.toContain("response-private-sentinel");
+  })
+);
+
 it.effect("cancels an owned provider reader when bounded reading is interrupted", () =>
   Effect.gen(function* () {
     let cancelled = false;

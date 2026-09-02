@@ -274,8 +274,10 @@ in its owning module rather than being hidden behind speculative provider or mar
 provider policy, trace propagation, credential redaction, coordinate-free telemetry, request
 execution, streamed byte counting, and response-body cleanup. Its public result contains only HTTP
 status, explicitly retained protocol headers, and bounded bytes; raw responses and streams remain
-private. Provider adapters still own request encoding, status interpretation, Schema decoding,
-retry certainty, and workflow-failure mapping. Incremental provider protocols must use a separate
+private. A provider library whose contract requires `HttpClient` receives a reconstructed response
+backed only by already-bounded bytes; application adapters still cannot access its raw body.
+Provider adapters own request encoding, status interpretation, Schema decoding, retry certainty,
+and workflow-failure mapping. Incremental provider protocols must use a separate
 interface with explicit per-chunk and aggregate budgets rather than weakening this boundary.
 
 Resend is EmailAuthentication's launch outbound-email adapter; it receives only the recipient and

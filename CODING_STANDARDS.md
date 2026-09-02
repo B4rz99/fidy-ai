@@ -215,8 +215,9 @@ retained protocol headers, and bounded bytes. Bound the actual streamed byte cou
 parsing JSON, or Schema decoding; `Content-Length` is only an early rejection signal because it may
 be absent or dishonest. Overflow, stream failure, and interruption cancel or release the owned body.
 Adapters must not receive raw responses or use direct `text`, `json`, `arrayBuffer`, form-data, or
-unbounded stream collection. Incremental providers require a separate interface with explicit
-per-chunk and aggregate budgets.
+unbounded stream collection. A provider library may receive a reconstructed response only through
+the shared library layer and only after its bytes have been bounded. Incremental providers require
+a separate interface with explicit per-chunk and aggregate budgets.
 
 ---
 

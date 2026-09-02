@@ -1,4 +1,4 @@
-import { Cause, Data, Effect, Exit, Option, Stream } from "effect";
+import { Cause, Data, Effect, Exit, Layer, Option, Stream } from "effect";
 import {
   Headers,
   HttpClient,
@@ -287,3 +287,39 @@ export const makeBoundedExternalHttpClient =
       },
     };
   };
+
+/**
+ * Bounds a provider library whose public client contract requires `HttpClient`. The reconstructed
+ * response is private to that library and is backed only by already-bounded bytes.
+ */
+export const boundedProviderLibraryHttpClientLayer = (options: {
+  provider: ExternalHttpProvider;
+  maximumResponseBytes: number;
+}): Layer.Layer<HttpClient.HttpClient, never, HttpClient.HttpClient> =>
+  Layer.effect(
+    HttpClient.HttpClient,
+    Effect.map(HttpClient.HttpClient, (httpClient) => {
+      const boundedClient = httpClient.pipe(makeBoundedExternalHttpClient(options.provider));
+      return HttpClient.make((request) =>
+        boundedClient.execute(request, options.maximumResponseBytes).pipe(
+          Effect.map((response) =>
+            HttpClientResponse.fromWeb(
+              request,
+              new Response(response.body, {
+                status: response.status,
+                headers: response.headers,
+              })
+            )
+          ),
+          Effect.mapError(
+            () =>
+              new HttpClientError.HttpClientError({
+                reason: new HttpClientError.TransportError({
+                  request: HttpClientRequest.make(request.method)(sanitizedRequestUrl),
+                }),
+              })
+          )
+        )
+      );
+    })
+  );

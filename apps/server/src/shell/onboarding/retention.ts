@@ -1,20 +1,27 @@
 import { DateTime, Effect, Layer, Schedule } from "effect";
+import type { MessageStorage, Sharding } from "effect/unstable/cluster";
 import { SqlClient, type SqlError } from "effect/unstable/sql";
 import {
   removeExpiredPendingConsentExchanges,
   removePendingConsentExchange,
 } from "~/shell/consent/repo";
 import {
+  lockExpiredEmailEnrollmentsForRetention,
   removeExpiredEmailDeliveryBudgets,
-  removeExpiredEmailEnrollments,
+  removeExpiredEmailEnrollment,
 } from "~/shell/email-authentication/repo";
 import { runScheduledWork } from "~/shell/observability/scheduled-work";
 import type { Telemetry } from "~/shell/observability/telemetry";
+import { onboardingEmailDeliveryRetention } from "./delivery-workflow";
 
 /** Removes expired pre-User onboarding state in one independently observed scheduled execution. */
 export const runOnboardingRetention = (
   now: DateTime.Utc
-): Effect.Effect<void, SqlError.SqlError, SqlClient.SqlClient | Telemetry> =>
+): Effect.Effect<
+  void,
+  SqlError.SqlError,
+  MessageStorage.MessageStorage | Sharding.Sharding | SqlClient.SqlClient | Telemetry
+> =>
   runScheduledWork({
     component: "onboarding",
     schedule: "task.onboardingRetention",
@@ -24,13 +31,28 @@ export const runOnboardingRetention = (
       const sql = yield* SqlClient.SqlClient;
       yield* sql.withTransaction(
         Effect.gen(function* () {
-          const released = yield* removeExpiredEmailEnrollments(now);
-          yield* Effect.forEach(
-            released,
-            ({ pendingConsentExchangeId }) =>
-              removePendingConsentExchange(pendingConsentExchangeId),
-            { discard: true }
-          );
+          const candidates = yield* lockExpiredEmailEnrollmentsForRetention(now);
+
+          for (const candidate of candidates) {
+            const durableExecutionsTerminal =
+              yield* onboardingEmailDeliveryRetention.executionsTerminal(
+                candidate.deliveryIntentIds,
+                candidate.pendingDeliveryIntentIds
+              );
+            if (!durableExecutionsTerminal) continue;
+
+            yield* Effect.forEach(
+              candidate.deliveryIntentIds,
+              onboardingEmailDeliveryRetention.clearWorkflowHistory,
+              { discard: true }
+            );
+            yield* onboardingEmailDeliveryRetention.removeCompletedQueueItems(
+              candidate.deliveryIntentIds
+            );
+            yield* removeExpiredEmailEnrollment(candidate.id, now);
+            yield* removePendingConsentExchange(candidate.pendingConsentExchangeId);
+          }
+
           yield* removeExpiredPendingConsentExchanges(now);
           yield* removeExpiredEmailDeliveryBudgets(now);
         })

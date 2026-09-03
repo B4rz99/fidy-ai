@@ -1,28 +1,21 @@
 import { expect, layer } from "@effect/vitest";
 import type { ProviderMessageEvidence } from "~/core/_shared/provider-message-evidence";
-import { EmailDeliveryClaimToken } from "~/core/email-authentication/model";
-import {
-  ConfigProvider,
-  Crypto,
-  DateTime,
-  Effect,
-  Exit,
-  Layer,
-  Option,
-  Redacted,
-  Ref,
-  Schema,
-} from "effect";
+import { EmailDeliveryIntentId } from "~/core/email-authentication/model";
+import { Crypto, DateTime, Effect, Exit, Option, Redacted, Ref, Schema } from "effect";
 import { HttpBody, HttpClient } from "effect/unstable/http";
+import { PersistedQueue } from "effect/unstable/persistence";
 import { SqlClient } from "effect/unstable/sql";
 import { E164PhoneNumber } from "~/core/identity/reference";
 import { MigrationSqlClient } from "~/shell/db/client";
 import { EmailDeliveryPort, EmailSendFailed } from "~/shell/email-authentication/delivery";
 import {
-  claimAndArmEmailDeliveryIntent,
+  armOnboardingEmailDelivery,
   findEmailEnrollmentByCaller,
 } from "~/shell/email-authentication/repo";
-import { OnboardingDeliveryWorkerLive, processOneOnboardingDelivery } from "./delivery-worker";
+import {
+  deliverOneOnboardingEmailForTesting,
+  publishOnboardingEmailDelivery,
+} from "./delivery-workflow";
 import { type OnboardingTurn, handleOnboardingTurn } from "./onboarding";
 import { ApiHarness } from "~/shell/testing/api-harness";
 import { deliverConsentDisclosureForTesting } from "~/shell/testing/consent-disclosure";
@@ -75,6 +68,20 @@ const cleanupCaller = Effect.fn("testCleanupOnboardingCaller")(function* (
             AND business_scoped_user_id = ${targetCaller.businessScopedUserId}
         )
       `;
+      const [queueTable] = yield* Schema.decodeUnknownEffect(
+        Schema.Array(Schema.Struct({ available: Schema.Boolean }))
+      )(yield* sql`SELECT to_regclass('fidy_durable.fidy_queue') IS NOT NULL AS available`);
+      if (queueTable?.available === true) {
+        yield* sql`
+          DELETE FROM fidy_durable.fidy_queue
+          WHERE queue_name = 'onboarding-email-delivery' AND id::uuid IN (
+            SELECT intent.id FROM email_delivery_intents AS intent
+            JOIN email_enrollments AS enrollment ON enrollment.id = intent.enrollment_id
+            WHERE enrollment.business_portfolio_id = ${targetCaller.businessPortfolioId}
+              AND enrollment.business_scoped_user_id = ${targetCaller.businessScopedUserId}
+          )
+        `;
+      }
       yield* sql`
         DELETE FROM email_enrollments
         WHERE business_portfolio_id = ${targetCaller.businessPortfolioId}
@@ -93,19 +100,43 @@ const cleanup = cleanupCaller(caller);
 layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
   "verified email onboarding",
   (it) => {
-    it.effect("starts the durable delivery worker only in production", () =>
-      Effect.scoped(
-        Layer.build(
-          OnboardingDeliveryWorkerLive.pipe(
-            Layer.provide(
-              Layer.succeed(EmailDeliveryPort, EmailDeliveryPort.of({ send: () => Effect.void }))
-            ),
-            Layer.provide(
-              ConfigProvider.layer(ConfigProvider.fromUnknown({ NODE_ENV: "production" }))
+    it.effect("publishes onboarding delivery transactionally and converges duplicates in SQL", () =>
+      Effect.gen(function* () {
+        const sql = yield* SqlClient.SqlClient;
+        const crypto = yield* Crypto.Crypto;
+        const intentId = EmailDeliveryIntentId.make(yield* crypto.randomUUIDv7.pipe(Effect.orDie));
+
+        yield* sql
+          .withTransaction(
+            publishOnboardingEmailDelivery(intentId).pipe(
+              Effect.andThen(Effect.fail("rollback" as const))
             )
           )
-        )
-      ).pipe(Effect.asVoid)
+          .pipe(Effect.flip);
+        expect(
+          yield* Schema.decodeUnknownEffect(Schema.Array(Schema.Struct({ count: Schema.Finite })))(
+            yield* sql`SELECT count(*)::int AS count FROM fidy_queue
+              WHERE queue_name = 'onboarding-email-delivery' AND id = ${intentId}`
+          )
+        ).toEqual([{ count: 0 }]);
+
+        yield* publishOnboardingEmailDelivery(intentId);
+        yield* publishOnboardingEmailDelivery(intentId);
+        const rows = yield* Schema.decodeUnknownEffect(
+          Schema.Array(Schema.Struct({ count: Schema.Finite, maximumPayloadBytes: Schema.Finite }))
+        )(
+          yield* sql`SELECT count(*)::int AS count,
+              max(octet_length(element))::int AS "maximumPayloadBytes"
+            FROM fidy_queue
+            WHERE queue_name = 'onboarding-email-delivery' AND id = ${intentId}`
+        );
+        expect(rows[0]?.count).toBe(1);
+        expect(rows[0]?.maximumPayloadBytes).toBeLessThanOrEqual(128);
+        yield* sql`
+          DELETE FROM fidy_queue
+          WHERE queue_name = 'onboarding-email-delivery' AND id = ${intentId}
+        `;
+      })
     );
 
     it.effect("creates every stable owner result atomically and discloses recovery once", () =>
@@ -181,7 +212,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           ReadonlyArray<Readonly<{ combinedCode: string; idempotencyKey: string }>>
         >([]);
         expect(
-          yield* processOneOnboardingDelivery().pipe(
+          yield* deliverOneOnboardingEmailForTesting().pipe(
             Effect.provideService(
               EmailDeliveryPort,
               EmailDeliveryPort.of({
@@ -195,19 +226,13 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
                         idempotencyKey: request.idempotencyKey,
                       },
                     ]);
-                    if (previousAttempts.length + 1 < 3) {
-                      return yield* new EmailSendFailed({
-                        certainty: "rejected",
-                        retryable: true,
-                      });
-                    }
                   }),
               })
             )
           )
         ).toBe(true);
         const attempts = yield* Ref.get(deliveryAttempts);
-        expect(attempts).toHaveLength(3);
+        expect(attempts).toHaveLength(1);
         expect(new Set(attempts.map((attempt) => attempt.combinedCode)).size).toBe(1);
         expect(new Set(attempts.map((attempt) => attempt.idempotencyKey)).size).toBe(1);
         const supersededCode = Option.getOrThrow(Option.fromUndefinedOr(attempts[0]?.combinedCode));
@@ -215,7 +240,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           turn("Reenviar", "wamid.email-resend", DateTime.add(acceptedAt, { seconds: 64 }))
         );
         const latestCode = yield* Ref.make(Option.none<string>());
-        yield* processOneOnboardingDelivery().pipe(
+        yield* deliverOneOnboardingEmailForTesting().pipe(
           Effect.provideService(
             EmailDeliveryPort,
             EmailDeliveryPort.of({
@@ -313,7 +338,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         expect(replay.status).toBe(400);
         expect(replay.headers["cache-control"]).toBe("no-store");
         expect(
-          yield* processOneOnboardingDelivery().pipe(
+          yield* deliverOneOnboardingEmailForTesting().pipe(
             Effect.provideService(
               EmailDeliveryPort,
               EmailDeliveryPort.of({
@@ -373,7 +398,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
               DateTime.add(startedAt, { minutes: submittedAfterMinutes })
             )
           );
-          return yield* processOneOnboardingDelivery().pipe(
+          return yield* deliverOneOnboardingEmailForTesting().pipe(
             Effect.provideService(EmailDeliveryPort, EmailDeliveryPort.of({ send: () => failure })),
             Effect.provideService(Telemetry, recordingTelemetry)
           );
@@ -409,7 +434,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           )
         );
         expect(
-          yield* processOneOnboardingDelivery().pipe(
+          yield* deliverOneOnboardingEmailForTesting().pipe(
             Effect.provideService(
               EmailDeliveryPort,
               EmailDeliveryPort.of({
@@ -468,8 +493,9 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           );
           const crypto = yield* Crypto.Crypto;
           const runtimeSql = yield* SqlClient.SqlClient;
+          const queueFactory = yield* PersistedQueue.PersistedQueueFactory;
           expect(
-            yield* processOneOnboardingDelivery().pipe(
+            yield* deliverOneOnboardingEmailForTesting().pipe(
               Effect.provideService(
                 EmailDeliveryPort,
                 EmailDeliveryPort.of({
@@ -483,6 +509,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
                     ).pipe(
                       Effect.provideService(Crypto.Crypto, crypto),
                       Effect.provideService(SqlClient.SqlClient, runtimeSql),
+                      Effect.provideService(PersistedQueue.PersistedQueueFactory, queueFactory),
                       Effect.orDie,
                       Effect.asVoid
                     ),
@@ -491,21 +518,25 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
             )
           ).toBe(true);
 
-          const currentClaim = yield* claimAndArmEmailDeliveryIntent({
-            claimToken: EmailDeliveryClaimToken.make(yield* crypto.randomUUIDv7.pipe(Effect.orDie)),
-            claimedAt: DateTime.subtract(startedAt, { seconds: 2 }),
-            claimExpiresAt: DateTime.subtract(startedAt, { seconds: 1 }),
-          });
-          expect(Option.isSome(currentClaim)).toBe(true);
+          const [currentIntent] = yield* runtimeSql<{ readonly id: string }>`
+            SELECT id FROM email_delivery_intents WHERE status = 'pending'
+            ORDER BY generation DESC LIMIT 1
+          `;
+          if (currentIntent === undefined) return yield* Effect.die("missing current intent");
+          const armed = yield* armOnboardingEmailDelivery(
+            EmailDeliveryIntentId.make(currentIntent.id),
+            DateTime.subtract(startedAt, { seconds: 2 })
+          );
+          expect(Option.isSome(armed)).toBe(true);
           const recoveredDelivery = yield* Ref.make(false);
           expect(
-            yield* processOneOnboardingDelivery().pipe(
+            yield* deliverOneOnboardingEmailForTesting().pipe(
               Effect.provideService(
                 EmailDeliveryPort,
                 EmailDeliveryPort.of({ send: () => Ref.set(recoveredDelivery, true) })
               )
             )
-          ).toBe(false);
+          ).toBe(true);
           expect(yield* Ref.get(recoveredDelivery)).toBe(false);
 
           yield* Effect.all(
@@ -558,15 +589,12 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
             )
           );
           expect(Exit.isFailure(terminalWithoutProof)).toBe(true);
-          const pendingWithProof = yield* Effect.exit(
-            sql.withTransaction(
-              sql`UPDATE email_enrollments
-                SET proof_digest = decode(repeat('00', 32), 'hex'),
-                  proof_expires_at = ${DateTime.add(startedAt, { minutes: 10 })}
-                WHERE id = ${enrollmentId}`
-            )
+          yield* sql.withTransaction(
+            sql`UPDATE email_enrollments
+              SET proof_digest = decode(repeat('00', 32), 'hex'),
+                proof_expires_at = ${DateTime.add(startedAt, { minutes: 10 })}
+              WHERE id = ${enrollmentId}`
           );
-          expect(Exit.isFailure(pendingWithProof)).toBe(true);
           const futureIntent = yield* Effect.exit(
             sql.withTransaction(
               sql`
@@ -620,7 +648,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
             )
           );
           const delivered = yield* Ref.make(Option.none<string>());
-          yield* processOneOnboardingDelivery().pipe(
+          yield* deliverOneOnboardingEmailForTesting().pipe(
             Effect.provideService(
               EmailDeliveryPort,
               EmailDeliveryPort.of({
@@ -719,7 +747,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
             )
           );
           const delivered = yield* Ref.make(Option.none<string>());
-          yield* processOneOnboardingDelivery().pipe(
+          yield* deliverOneOnboardingEmailForTesting().pipe(
             Effect.provideService(
               EmailDeliveryPort,
               EmailDeliveryPort.of({
@@ -779,7 +807,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           )
         );
         const deliveredCode = yield* Ref.make(Option.none<string>());
-        yield* processOneOnboardingDelivery().pipe(
+        yield* deliverOneOnboardingEmailForTesting().pipe(
           Effect.provideService(
             EmailDeliveryPort,
             EmailDeliveryPort.of({

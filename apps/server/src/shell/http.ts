@@ -22,7 +22,6 @@ import { KapsoClient } from "~/shell/channels/whatsapp/kapso-client";
 import { KapsoWebhookLive } from "~/shell/channels/whatsapp/routes";
 import { WhatsAppWorkerLive } from "~/shell/channels/whatsapp/worker";
 import { DashboardLive } from "~/shell/dashboard/handlers";
-import { MigratorLive, RuntimeAuthorityLive } from "~/shell/db/client";
 import { IdentityLive } from "~/shell/identity/handlers";
 import { InsightsLive } from "~/shell/insights/handlers";
 import { StatementColumnMapper } from "~/shell/ingestion/column-mapper";
@@ -48,7 +47,10 @@ import {
 import { EmailAuthenticationLive } from "~/shell/email-authentication/replacement-handlers";
 import { EmailReplacementDeliveryWorkerLive } from "~/shell/email-authentication/replacement-delivery-worker";
 import { EmailReplacementRetentionLive } from "~/shell/email-authentication/replacement-retention";
-import { OnboardingDeliveryWorkerLive } from "~/shell/onboarding/delivery-worker";
+import {
+  OnboardingEmailDeliveryQueueLive,
+  OnboardingEmailDeliveryWorkflowLive,
+} from "~/shell/onboarding/delivery-workflow";
 import { OperationsLive } from "~/shell/operations/handlers";
 import { CanonicalTelemetryLive } from "~/shell/observability/canonical-api";
 import { SubscriptionLive } from "~/shell/subscription/handlers";
@@ -258,13 +260,6 @@ export const HttpLive = HttpRouter.serve(
   { disableLogger: true }
 );
 
-/**
- * The whole service, and the layer to launch. The server and retention workers
- * do not start until every pending migration has run, so none can meet a schema
- * older than the code querying it. What is left to
- * supply is the environment: Postgres, an HTTP server, and the platform services
- * used by the canonical API and provider callbacks.
- */
 const HostedWhatsAppWorkerLive = WhatsAppWorkerLive.pipe(
   Layer.provide(AgentService.layer),
   Layer.provide(KapsoClient.layer)
@@ -283,9 +278,10 @@ const HostedForwardedEmailOperationsLive = Layer.merge(
   Layer.provide(NotificationEmailExtractor.layer.pipe(Layer.provide(OpenAiLanguageModelLive)))
 );
 
-const HostedOnboardingDeliveryWorkerLive = OnboardingDeliveryWorkerLive.pipe(
-  Layer.provide(EmailDeliveryPort.layer)
-);
+const HostedOnboardingDeliveryLive = Layer.merge(
+  OnboardingEmailDeliveryWorkflowLive,
+  OnboardingEmailDeliveryQueueLive
+).pipe(Layer.provide(EmailDeliveryPort.layer));
 const HostedEmailReplacementDeliveryWorkerLive = EmailReplacementDeliveryWorkerLive.pipe(
   Layer.provide(EmailDeliveryPort.layer)
 );
@@ -293,12 +289,16 @@ const HostedBrowserPairingEmailDeliveryWorkerLive = BrowserPairingEmailDeliveryW
   Layer.provide(EmailDeliveryPort.layer)
 );
 
+/**
+ * Application routes and hosted workers. The executable composition must provide the migration
+ * and runtime-authority gates, durable execution substrate, Postgres, HTTP server, and platform services.
+ */
 export const AppLive = Layer.mergeAll(
   HttpLive.pipe(Layer.provide(KapsoClient.layer), Layer.provide(SupportRecoveryAccessLive)),
   HostedWhatsAppWorkerLive,
   HostedStatementIngestionWorkerLive,
   HostedForwardedEmailOperationsLive,
-  HostedOnboardingDeliveryWorkerLive,
+  HostedOnboardingDeliveryLive,
   HostedEmailReplacementDeliveryWorkerLive,
   HostedBrowserPairingEmailDeliveryWorkerLive,
   BrowserPairingEmailRetentionLive,
@@ -307,9 +307,4 @@ export const AppLive = Layer.mergeAll(
   OnboardingRetentionLive,
   PATPairingExpiryWorkerLive,
   SupportRecoveryRetentionLive
-).pipe(
-  Layer.provide(WompiEnrollmentClient.layer),
-  Layer.provide(OpenAiHostedInferenceLive),
-  Layer.provide(RuntimeAuthorityLive),
-  Layer.provide(MigratorLive)
-);
+).pipe(Layer.provide(WompiEnrollmentClient.layer), Layer.provide(OpenAiHostedInferenceLive));

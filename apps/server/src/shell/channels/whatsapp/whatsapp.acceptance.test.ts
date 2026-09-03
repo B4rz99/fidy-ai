@@ -11,7 +11,7 @@ import {
 import { TranscriptText } from "~/core/transcript/model";
 import { CURRENT_DISCLOSURE_TEXT } from "~/shell/consent/current-disclosure";
 import { EmailDeliveryPort, EmailSendFailed } from "~/shell/email-authentication/delivery";
-import { processOneOnboardingDelivery } from "~/shell/onboarding/delivery-worker";
+import { deliverOneOnboardingEmailForTesting } from "~/shell/onboarding/delivery-workflow";
 import { handleOnboardingTurn } from "~/shell/onboarding/onboarding";
 import { TelemetrySpanId, TelemetryTraceId } from "~/shell/observability/protocol";
 import { Telemetry, makeTelemetryService } from "~/shell/observability/telemetry";
@@ -321,7 +321,7 @@ const establishCaller = Effect.fn("Acceptance.establishWhatsAppCaller")(function
         yield* Ref.set(deliveredCode, Option.some(combinedCode));
       }),
   });
-  yield* processOneOnboardingDelivery().pipe(
+  yield* deliverOneOnboardingEmailForTesting().pipe(
     Effect.provideService(EmailDeliveryPort, deliveryPort),
     Effect.provideService(Telemetry, acceptanceTelemetry)
   );
@@ -345,7 +345,7 @@ const establishCaller = Effect.fn("Acceptance.establishWhatsAppCaller")(function
       },
       receivedAt: DateTime.add(startedAt, { seconds: 4 }),
     });
-    yield* processOneOnboardingDelivery().pipe(
+    yield* deliverOneOnboardingEmailForTesting().pipe(
       Effect.provideService(EmailDeliveryPort, deliveryPort),
       Effect.provideService(Telemetry, acceptanceTelemetry)
     );

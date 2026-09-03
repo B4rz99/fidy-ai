@@ -42,6 +42,7 @@ import { wompiCardEnrollments } from "./0042-wompi-card-enrollments";
 import { emailIngestion } from "./0043-email-ingestion";
 import { transactionUserDecisions } from "./0044-transaction-user-decisions";
 import { transactionReconciliation } from "./0045-transaction-reconciliation";
+import { effectOnboardingDelivery } from "./0046-effect-onboarding-delivery";
 
 /**
  * The explicit index ARCHITECTURE.md §7 calls for: one ordered, append-only
@@ -96,4 +97,5 @@ export const migrations = {
   "0043_email_ingestion": emailIngestion,
   "0044_transaction_user_decisions": transactionUserDecisions,
   "0045_transaction_reconciliation": transactionReconciliation,
+  "0046_effect_onboarding_delivery": effectOnboardingDelivery,
 };

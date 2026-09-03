@@ -21,7 +21,9 @@ import {
 } from "effect/unstable/http";
 import { HttpApiClient } from "effect/unstable/httpapi";
 import type { PgClient } from "@effect/sql-pg/PgClient";
+import { type PersistedQueue } from "effect/unstable/persistence";
 import type { Migrator, SqlClient, SqlError } from "effect/unstable/sql";
+import { type WorkflowEngine } from "effect/unstable/workflow";
 import {
   BillingEmail,
   EndUserPolicyEvidence,
@@ -57,6 +59,11 @@ import {
 } from "~/shell/channels/whatsapp/kapso-client";
 import { WhatsAppProviderMessageId } from "~/shell/channels/whatsapp/model";
 import { MigrationSqlClient, MigratorLive, PgLive } from "~/shell/db/client";
+import {
+  DurableExecutionMemory,
+  DurableExecutionSqlQueueMemoryWorkflow,
+} from "~/shell/durable-execution";
+import type { MessageStorage, Sharding } from "effect/unstable/cluster";
 import { TelemetryHttpStatus } from "~/shell/observability/protocol";
 import { makeDevelopmentSeedLive } from "~/shell/db/development-seed";
 import { defaultPatBearer } from "./identity-fixtures";
@@ -259,6 +266,8 @@ type SupportAccessApiHarnessOutput =
   | ApiHarnessClient
   | ApiHarnessKapsoControl
   | ConversationCompactionInference
+  | MessageStorage.MessageStorage
+  | Sharding.Sharding
   | Etag.Generator
   | HostedInference
   | HttpClient.HttpClient
@@ -267,6 +276,8 @@ type SupportAccessApiHarnessOutput =
   | KapsoClient
   | MigrationSqlClient
   | PgClient
+  | PersistedQueue.PersistedQueueFactory
+  | WorkflowEngine.WorkflowEngine
   | WompiEnrollmentClient
   | SqlClient.SqlClient
   | BunServices.BunServices;
@@ -290,6 +301,7 @@ const makeApiHarnessBase = (access: Layer.Layer<SupportAccessVerifier>): Support
     bearer: defaultPatBearer,
   }).pipe(
     Layer.provideMerge(HttpLive.pipe(Layer.provide(MigratorLive), Layer.provide(access))),
+    Layer.provideMerge(DurableExecutionSqlQueueMemoryWorkflow),
     Layer.provideMerge(TestKapsoClient),
     Layer.provideMerge(MemoryInferenceTest),
     Layer.provideMerge(BaselineCompactionInference),
@@ -338,6 +350,7 @@ export const makeBrowserLoginPairingAcceptanceServer = ({
   readonly privateKey: Bun.BunFile;
 }): Layer.Layer<never, Config.ConfigError | Migrator.MigrationError | SqlError.SqlError> =>
   HttpLive.pipe(
+    Layer.provide(DurableExecutionMemory),
     Layer.provide(MigratorLive),
     Layer.provide(SupportRecoveryTestAccess),
     Layer.provide(TestKapsoClient),

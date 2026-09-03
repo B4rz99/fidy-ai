@@ -1,13 +1,31 @@
 import { PgClient, PgMigrator } from "@effect/sql-pg";
-import { Config, Context, Effect, Layer } from "effect";
+import { Config, ConfigProvider, Context, Effect, Layer, Redacted, Schema } from "effect";
 import { SqlClient } from "effect/unstable/sql";
 import { migrations } from "~/shell/db/migrations/registry";
 import { hasUnsafeAuthority, readRuntimeAuthority } from "./runtime-authority";
 
-/** Runtime Postgres pool. DATABASE_URL must authenticate as the restricted fidy_runtime role. */
-export const PgLive = PgClient.layerConfig({
-  url: Config.redacted("DATABASE_URL"),
-});
+const runtimeDatabaseUrl = Config.redacted("DATABASE_URL").pipe(
+  Config.mapOrFail((redacted) =>
+    Schema.decodeEffect(Schema.URLFromString)(Redacted.value(redacted)).pipe(
+      Effect.map((url) => {
+        url.searchParams.append("options", "-c search_path=fidy_durable,public");
+        return Redacted.make(url.href);
+      }),
+      Effect.mapError(
+        () =>
+          new Config.ConfigError(
+            new ConfigProvider.SourceError({ message: "DATABASE_URL must be a valid URL" })
+          )
+      )
+    )
+  )
+);
+
+/**
+ * Runtime Postgres pool. DATABASE_URL must authenticate as fidy_runtime; its dedicated first
+ * search-path schema permits Effect's native stores to migrate without authority over public.
+ */
+export const PgLive = PgClient.layerConfig({ url: runtimeDatabaseUrl });
 
 const PgMigrationLive = PgClient.layerConfig({
   url: Config.redacted("MIGRATION_DATABASE_URL"),

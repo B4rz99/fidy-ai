@@ -1,4 +1,5 @@
 import { Effect, Option, Result } from "effect";
+import { Activity } from "effect/unstable/workflow";
 import type { EmailDeliveryPortService, EmailSendFailed } from "./delivery";
 import { EmailDeliveryPort } from "./delivery";
 import { TelemetryAttempt } from "~/shell/observability/protocol";
@@ -69,7 +70,29 @@ const captureTerminalSendFailure = Effect.fn(function* (failure: EmailSendFailed
   });
 });
 
-/** Executes the one shared bounded Resend retry policy for all email-proof purposes. */
+const failureStatus = (failure: EmailSendFailed): "uncertain" | "rejected" =>
+  failure.certainty === "ambiguous" ? ("uncertain" as const) : ("rejected" as const);
+
+/** Executes one observed provider attempt and preserves its typed failure for its owning executor. */
+export const attemptEmailDelivery = Effect.fn("EmailAuthentication.attemptDelivery")(function* (
+  input: Parameters<EmailDeliveryPortService["send"]>[0]
+) {
+  const sender = yield* EmailDeliveryPort;
+  const attempt = yield* Activity.CurrentAttempt;
+  const result = yield* observeSendAttempt(sender.send(input), attempt);
+  if (Result.isSuccess(result)) return;
+  return yield* result.failure;
+});
+
+/** Records an exhausted provider failure once and projects its truthful domain settlement. */
+export const settleTerminalEmailFailure = Effect.fn("EmailAuthentication.settleTerminalFailure")(
+  function* (failure: EmailSendFailed) {
+    yield* captureTerminalSendFailure(failure);
+    return failureStatus(failure);
+  }
+);
+
+/** Executes the bounded Resend retry policy retained by non-workflow email deliveries. */
 export const sendEmailWithBoundedRetry = Effect.fn("EmailAuthentication.sendWithBoundedRetry")(
   function* (input: Parameters<EmailDeliveryPortService["send"]>[0]) {
     const sender = yield* EmailDeliveryPort;
@@ -83,9 +106,7 @@ export const sendEmailWithBoundedRetry = Effect.fn("EmailAuthentication.sendWith
         attempt === maximumSendAttempts;
       if (terminal) {
         yield* captureTerminalSendFailure(result.failure);
-        return result.failure.certainty === "ambiguous"
-          ? ("uncertain" as const)
-          : ("rejected" as const);
+        return failureStatus(result.failure);
       }
       yield* Effect.sleep(`${initialRetryDelayMillis * 2 ** (attempt - 1)} millis`);
       attempt += 1;

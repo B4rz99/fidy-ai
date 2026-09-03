@@ -18,6 +18,7 @@ import {
   type HttpServerRequest,
   HttpServerResponse,
 } from "effect/unstable/http";
+import { type PersistedQueue } from "effect/unstable/persistence";
 import type { SqlClient } from "effect/unstable/sql";
 import {
   TelemetryAttempt,
@@ -182,7 +183,7 @@ const deliverConsentTurn = (
   | KapsoSendFailed
   | Schema.SchemaError
   | WhatsAppReceiptInvalid,
-  Crypto.Crypto | KapsoClient | SqlClient.SqlClient
+  Crypto.Crypto | KapsoClient | PersistedQueue.PersistedQueueFactory | SqlClient.SqlClient
 > =>
   Effect.as(
     deliverWhatsAppOnboardingOutcome(event, admission, markWhatsAppReceiptOutboundStarted(claim)),
@@ -203,7 +204,7 @@ const admitInboundEvent = (
   | WhatsAppInboundCapacityExceeded
   | WhatsAppRateLimitExceeded
   | WhatsAppReceiptInvalid,
-  Crypto.Crypto | KapsoClient | SqlClient.SqlClient
+  Crypto.Crypto | KapsoClient | PersistedQueue.PersistedQueueFactory | SqlClient.SqlClient
 > =>
   Effect.gen(function* () {
     yield* chargeIngressBudgets(event);
@@ -242,7 +243,7 @@ type KapsoMessageWebhookHandler = (
   | WhatsAppRateLimitExceeded
   | WhatsAppReceiptInProgress
   | WhatsAppReceiptInvalid,
-  Crypto.Crypto | KapsoClient | SqlClient.SqlClient
+  Crypto.Crypto | KapsoClient | PersistedQueue.PersistedQueueFactory | SqlClient.SqlClient
 >;
 
 const isDisclosureLifecycleEvent = Schema.is(DisclosureLifecycleEventName);

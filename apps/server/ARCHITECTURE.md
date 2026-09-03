@@ -332,7 +332,17 @@ remain at-least-once across the provider-commit/durable-settlement gap.
 The production composition uses one memoized `SqlClient` identity for domain transactions and
 transaction-coupled publication, stable SQL queue and Cluster storage names, identical sharding and
 serialization across runners, private authenticated runner transport, and coordinated execution
-schemas across overlapping revisions. Migration is expand–migrate–contract: no item may be
+schemas across overlapping revisions. Runner HTTP requests require the shared, redacted
+`FIDY_CLUSTER_AUTH_TOKEN` in addition to deployment-private reachability. `fidy_runtime` may create Effect-owned tables only in the
+`fidy_durable` schema; the runtime connection resolves that schema before application objects in
+`public`. The onboarding delivery workflow publishes an identifier-only, versioned
+`EmailDeliveryIntentId` payload through `fidy_queue` in the same transaction that creates the
+intent. Its Activity arms the proof before calling Resend, settles only the still-current generation,
+and treats re-entry with an armed proof as ambiguous rather than risking a second provider call.
+At production startup, bounded idempotent publication also recovers pending intents translated from
+the previous executor. Onboarding retention first proves each queue item completed, then uses the
+Cluster storage API to clear terminal history with the pre-User intent. Migration is
+expand–migrate–contract: no item may be
 eligible in old and Effect execution simultaneously, and each migrated slice deletes the claims,
 leases, pollers, and execution-only status it replaces rather than wrapping them.
 

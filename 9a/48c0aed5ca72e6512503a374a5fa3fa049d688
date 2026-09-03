@@ -1,0 +1,21 @@
+apps/server/src/shell/email-authentication/delivery.test.ts
+  s_84fafb45fdba04::t_dfe0c1d636b246 2,10-16,20-63
+apps/server/src/shell/onboarding/retention.test.ts
+  s_84fafb45fdba04::t_8c0cb355655b25 11,29-37
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "9a48c0aed5ca72e6512503a374a5fa3fa049d688",
+  "prompts": {},
+  "sessions": {
+    "s_84fafb45fdba04": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a05ffd-3120-7f29-a7a3-bbe3de77bbe9",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

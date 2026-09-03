@@ -34,6 +34,7 @@ import {
   statementAdmissionPressureInScope,
 } from "./repo";
 import { statementSourceFormat } from "./source-format";
+import { publishStatementIngestion } from "./worker";
 import {
   admitKnownForwardedEmailInScope,
   countDeferredEmailsInScope,
@@ -255,6 +256,7 @@ export const submitForExtractionInScope = Effect.fn("submitForExtractionInScope"
     if (access === "free") {
       yield* reserveStatementBackfillInScope(input.userId, submissionId);
     }
+    yield* publishStatementIngestion(input.userId, submissionId);
     return { data: submission, next: [] };
   }
 );

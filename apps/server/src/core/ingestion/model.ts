@@ -177,7 +177,7 @@ export const StatementAccounting = StatementAccountingFields.check(conservedStat
 );
 export type StatementAccounting = typeof StatementAccounting.Type;
 
-/** Durable processing states exposed while a statement moves through the worker. */
+/** Durable public lifecycle after one statement submission is accepted. */
 export const StatementSubmissionStatus = Schema.Literals([
   "queued",
   "processing",

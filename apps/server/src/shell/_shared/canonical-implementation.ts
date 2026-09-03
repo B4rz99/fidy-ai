@@ -1,6 +1,7 @@
 import type { Crypto, Effect, Option } from "effect";
 import type { ProviderQualifiedMessages } from "~/core/consent/model";
 import type { HttpApiEndpoint } from "effect/unstable/httpapi";
+import type { PersistedQueue } from "effect/unstable/persistence";
 import type { SqlClient } from "effect/unstable/sql";
 import type { HostedInference } from "~/shell/agent/hosted-inference";
 import type { OperationId } from "~/shell/api";
@@ -21,7 +22,8 @@ export type CanonicalExecutionRequirements =
   | SqlClient.SqlClient
   | Telemetry
   | Crypto.Crypto
-  | HostedInference;
+  | HostedInference
+  | PersistedQueue.PersistedQueueFactory;
 
 /** Everything a canonical implementation may still require once the executor has resolved a caller. */
 export type CanonicalImplementationRequirements =

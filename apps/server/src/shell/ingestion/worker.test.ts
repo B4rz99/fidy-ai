@@ -1,17 +1,24 @@
 import { expect, layer } from "@effect/vitest";
+import { PersistedQueue } from "effect/unstable/persistence";
+import { SqlClient, type SqlError } from "effect/unstable/sql";
 import {
   BigDecimal,
+  type Config,
   Context,
   DateTime,
+  Deferred,
   Effect,
   Encoding,
+  Fiber,
   Layer,
   Option,
   Ref,
   Result,
+  Schema,
 } from "effect";
 import { Currency } from "~/core/_shared/money";
 import { UserId } from "~/core/identity/reference";
+import { StatementSubmissionId } from "~/core/ingestion/reference";
 import {
   Base64FileContent,
   StatementColumnMapping,
@@ -20,9 +27,8 @@ import {
 } from "~/core/ingestion/model";
 import { TokenBearer } from "~/core/tokens/model";
 import { PATId } from "~/core/tokens/reference";
-import { MigrationSqlClient } from "~/shell/db/client";
+import { MigrationSqlClient, PgLive } from "~/shell/db/client";
 import { defaultUserId, seedConsentedPatIdentity } from "~/shell/db/development-seed";
-import { withUserTransaction } from "~/shell/db/user-transaction";
 import {
   type ApiClient,
   ApiHarness,
@@ -33,7 +39,7 @@ import { getTransactionUserDecisions, transactionPayload } from "~/shell/transac
 import { StatementColumnMapper, StatementColumnMappingFailed } from "./column-mapper";
 import { truncateStatementIngestion } from "./fixtures";
 import { completeSubmissionInScope } from "./repo";
-import { processNextStatement } from "./worker";
+import { StatementIngestionPayload, processNextStatement, statementIngestionQueue } from "./worker";
 
 const mapping = StatementColumnMapping.make({
   dateColumn: 0,
@@ -70,12 +76,12 @@ const MapperOnce = Layer.effect(
 );
 
 const WorkerHarness = Layer.merge(ApiHarness, MapperOnce);
+const SucceedingMapper = StatementColumnMapper.of({
+  mapColumns: () => Effect.succeed(mapping),
+});
 const ReviewWorkerHarness = Layer.merge(
   ApiHarness,
-  Layer.succeed(
-    StatementColumnMapper,
-    StatementColumnMapper.of({ mapColumns: () => Effect.succeed(mapping) })
-  )
+  Layer.succeed(StatementColumnMapper, SucceedingMapper)
 );
 const otherUserId = UserId.make("f1d1a000-0000-4000-8000-00000000e001");
 const otherTokenId = PATId.make("f1d1a000-0000-4000-8000-00000000e002");
@@ -98,6 +104,13 @@ const FailingWorkerHarness = Layer.merge(
   )
 );
 
+const increment = (count: number): number => count + 1;
+const decrement = (count: number): number => count - 1;
+const maximumOf =
+  (current: number) =>
+  (maximum: number): number =>
+    Math.max(maximum, current);
+
 const statementPayload = (idempotencyKey: string): SubmitForExtractionInput => ({
   idempotencyKey: StatementIdempotencyKey.make(idempotencyKey),
   file: {
@@ -109,9 +122,32 @@ const statementPayload = (idempotencyKey: string): SubmitForExtractionInput => (
   },
 });
 
+const independentWorker = (
+  mapper: StatementColumnMapper["Service"]
+): Layer.Layer<
+  PersistedQueue.PersistedQueueFactory | StatementColumnMapper,
+  Config.ConfigError | SqlError.SqlError
+> =>
+  Layer.merge(
+    PersistedQueue.layer.pipe(
+      Layer.provideMerge(PersistedQueue.layerStoreSql({ tableName: "fidy_queue" }))
+    ),
+    Layer.succeed(StatementColumnMapper, mapper)
+  ).pipe(Layer.provideMerge(Layer.fresh(PgLive)));
+
 layer(FailingWorkerHarness, { excludeTestServices: true, timeout: "30 seconds" })(
   "statement mapping recovery",
   (it) => {
+    it.effect("decodes the revisionless queue envelope", () =>
+      Effect.gen(function* () {
+        const decoded = yield* Schema.decodeEffect(StatementIngestionPayload)({
+          submissionId: StatementSubmissionId.make("f1d1a000-0000-4000-8000-00000000c194"),
+          userId: defaultUserId,
+        });
+        expect(decoded.revision).toBe(1);
+      })
+    );
+
     it.effect("requeues transient mapping failures without losing uploaded bytes", () =>
       Effect.gen(function* () {
         yield* truncateStatementIngestion;
@@ -267,7 +303,7 @@ layer(ReviewWorkerHarness, { excludeTestServices: true, timeout: "30 seconds" })
 layer(IsolationWorkerHarness, { excludeTestServices: true, timeout: "30 seconds" })(
   "statement worker isolation",
   (it) => {
-    it.effect("keeps interleaved claimed outcomes attributed to their owning Users", () =>
+    it.effect("keeps interleaved durable outcomes attributed to their owning Users", () =>
       Effect.gen(function* () {
         yield* truncateStatementIngestion;
         yield* seedConsentedPatIdentity({
@@ -320,6 +356,102 @@ layer(IsolationWorkerHarness, { excludeTestServices: true, timeout: "30 seconds"
         yield* sql`UPDATE users SET paid_tier = 'free' WHERE id IN (${defaultUserId}, ${otherUserId})`;
       })
     );
+
+    it.effect("skips stale queue work before processing an owning submission", () =>
+      Effect.gen(function* () {
+        yield* truncateStatementIngestion;
+        const sql = yield* MigrationSqlClient;
+        yield* sql`UPDATE users SET paid_tier = 'pro' WHERE id = ${defaultUserId}`;
+        const staleId = StatementSubmissionId.make("f1d1a000-0000-4000-8000-00000000e003");
+        const queue = yield* statementIngestionQueue;
+        yield* queue.offer(
+          { submissionId: staleId, userId: defaultUserId, revision: 1 },
+          { id: staleId }
+        );
+        const client = yield* ApiHarnessClient;
+        const submitted = yield* client.ingestion.submitForExtraction({
+          payload: statementPayload("f1d1a000-0000-4000-8000-00000000e004"),
+        });
+
+        expect(yield* processNextStatement()).toBe(true);
+
+        const status = yield* client.ingestion.getStatementSubmission({
+          params: { id: submitted.data.id },
+        });
+        expect(status.data).toMatchObject({ status: "completed" });
+        yield* sql`UPDATE users SET paid_tier = 'free' WHERE id = ${defaultUserId}`;
+      })
+    );
+
+    it.effect("rejects queue metadata that mismatches its payload submission", () =>
+      Effect.gen(function* () {
+        yield* truncateStatementIngestion;
+        const sql = yield* MigrationSqlClient;
+        yield* sql`UPDATE users SET paid_tier = 'pro' WHERE id = ${defaultUserId}`;
+        const client = yield* ApiHarnessClient;
+        const submitted = yield* client.ingestion.submitForExtraction({
+          payload: statementPayload("f1d1a000-0000-4000-8000-00000000e006"),
+        });
+        const mismatchedId = StatementSubmissionId.make("f1d1a000-0000-4000-8000-00000000e007");
+        yield* sql`
+          UPDATE fidy_durable.fidy_queue
+          SET id = ${mismatchedId}
+          WHERE queue_name = 'statement-ingestion' AND id = ${submitted.data.id}
+        `;
+
+        expect(yield* processNextStatement()).toBe(false);
+
+        const status = yield* client.ingestion.getStatementSubmission({
+          params: { id: submitted.data.id },
+        });
+        expect(status.data).toMatchObject({ status: "queued" });
+        yield* sql`UPDATE users SET paid_tier = 'free' WHERE id = ${defaultUserId}`;
+      })
+    );
+
+    it.effect("rejects queue routing metadata that mismatches the submission User", () =>
+      Effect.gen(function* () {
+        yield* truncateStatementIngestion;
+        yield* seedConsentedPatIdentity({
+          userId: otherUserId,
+          bearer: otherBearer,
+          tokenId: otherTokenId,
+          scopes: ["read", "write"],
+        });
+        const sql = yield* MigrationSqlClient;
+        yield* sql`UPDATE users SET paid_tier = 'pro' WHERE id = ${defaultUserId}`;
+        const ownerClient = yield* ApiHarnessClient;
+        const submitted = yield* ownerClient.ingestion.submitForExtraction({
+          payload: statementPayload("f1d1a000-0000-4000-8000-00000000e005"),
+        });
+        yield* sql`
+          UPDATE fidy_durable.fidy_queue
+          SET element = json_build_object(
+            'submissionId', ${submitted.data.id}::text,
+            'userId', ${otherUserId}::text,
+            'revision', 1
+          )::text
+          WHERE queue_name = 'statement-ingestion' AND id = ${submitted.data.id}
+        `;
+
+        yield* processNextStatement();
+
+        const status = yield* ownerClient.ingestion.getStatementSubmission({
+          params: { id: submitted.data.id },
+        });
+        expect(status.data).toMatchObject({ status: "queued" });
+        const effects = yield* sql`
+          SELECT
+            (SELECT count(*)::int FROM transactions) AS transactions,
+            (SELECT count(*)::int FROM needs_review_items) AS reviews,
+            (SELECT attempts FROM fidy_durable.fidy_queue
+              WHERE queue_name = 'statement-ingestion' AND id = ${submitted.data.id})
+              AS queue_attempts
+        `;
+        expect(effects).toEqual([{ transactions: 0, reviews: 0, queue_attempts: 1 }]);
+        yield* sql`UPDATE users SET paid_tier = 'free' WHERE id = ${defaultUserId}`;
+      })
+    );
   }
 );
 
@@ -370,22 +502,12 @@ layer(WorkerHarness, { excludeTestServices: true, timeout: "30 seconds" })(
             },
           },
         });
-        const claimId = "f1d1a000-0000-4000-8000-00000000c201";
-        yield* sql`
-          UPDATE statement_submissions SET status = 'processing', claim_id = ${claimId},
-            started_at = now(), attempt_count = 1
-          WHERE id = ${empty.data.id}
-        `;
-        yield* withUserTransaction(
-          defaultUserId,
-          completeSubmissionInScope({
-            userId: defaultUserId,
-            id: empty.data.id,
-            claimId,
-            accounting: { inputRows: 0, acceptedRows: 0, needsReviewRows: 0 },
-            completedAt: yield* DateTime.now,
-          })
-        );
+        yield* completeSubmissionInScope({
+          userId: defaultUserId,
+          id: empty.data.id,
+          accounting: { inputRows: 0, acceptedRows: 0, needsReviewRows: 0 },
+          completedAt: yield* DateTime.now,
+        }).pipe(Effect.provideService(SqlClient.SqlClient, sql));
         const emptyStatus = yield* client.ingestion.getStatementSubmission({
           params: { id: empty.data.id },
         });
@@ -486,6 +608,123 @@ layer(WorkerHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           notes: false,
         });
         yield* sql`UPDATE users SET paid_tier = 'free' WHERE id = ${defaultUserId}`;
+      })
+    );
+
+    it.effect("coordinates one accepted submission across independent runtime workers", () =>
+      Effect.gen(function* () {
+        yield* truncateStatementIngestion;
+        const sql = yield* MigrationSqlClient;
+        yield* sql`UPDATE users SET paid_tier = 'pro' WHERE id = ${defaultUserId}`;
+        const active = yield* Ref.make(0);
+        const maximumActive = yield* Ref.make(0);
+        const calls = yield* Ref.make(0);
+        const mapper = StatementColumnMapper.of({
+          mapColumns: () =>
+            Effect.gen(function* () {
+              const current = yield* Ref.updateAndGet(active, increment);
+              yield* Ref.update(maximumActive, maximumOf(current));
+              yield* Ref.update(calls, increment);
+              yield* Effect.sleep("200 millis");
+              return mapping;
+            }).pipe(Effect.ensuring(Ref.update(active, decrement))),
+        });
+        const client = yield* ApiHarnessClient;
+        const submitted = yield* client.ingestion.submitForExtraction({
+          payload: statementPayload("f1d1a000-0000-4000-8000-00000000c202"),
+        });
+        const workerA = yield* Layer.build(Layer.fresh(independentWorker(mapper)));
+        const workerB = yield* Layer.build(Layer.fresh(independentWorker(mapper)));
+        yield* Effect.all(
+          [
+            processNextStatement().pipe(Effect.provide(workerA)),
+            processNextStatement().pipe(Effect.provide(workerB)),
+          ],
+          { concurrency: "unbounded" }
+        );
+        expect(yield* Ref.get(calls)).toBe(1);
+        expect(yield* Ref.get(maximumActive)).toBe(1);
+        const status = yield* client.ingestion.getStatementSubmission({
+          params: { id: submitted.data.id },
+        });
+        expect(status.data).toMatchObject({ status: "completed" });
+        yield* sql`UPDATE users SET paid_tier = 'free' WHERE id = ${defaultUserId}`;
+      })
+    );
+
+    it.effect("recovers a lease left by process loss after expiry", () =>
+      Effect.gen(function* () {
+        yield* truncateStatementIngestion;
+        const sql = yield* MigrationSqlClient;
+        yield* sql`UPDATE users SET paid_tier = 'pro' WHERE id = ${defaultUserId}`;
+        const client = yield* ApiHarnessClient;
+        const submitted = yield* client.ingestion.submitForExtraction({
+          payload: statementPayload("f1d1a000-0000-4000-8000-00000000c204"),
+        });
+        yield* sql`
+          UPDATE fidy_durable.fidy_queue
+          SET acquired_by = 'f1d1a000-0000-4000-8000-00000000dead',
+              acquired_at = now() - interval '3 minutes'
+          WHERE queue_name = 'statement-ingestion' AND id = ${submitted.data.id}
+        `;
+        const replacementContext = yield* Layer.build(
+          Layer.fresh(independentWorker(SucceedingMapper))
+        );
+
+        yield* processNextStatement().pipe(Effect.provide(replacementContext));
+
+        const status = yield* client.ingestion.getStatementSubmission({
+          params: { id: submitted.data.id },
+        });
+        expect(status.data).toMatchObject({ status: "completed" });
+        yield* sql`UPDATE users SET paid_tier = 'free' WHERE id = ${defaultUserId}`;
+      })
+    );
+
+    it.effect("releases interrupted work for a replacement runtime", () =>
+      Effect.gen(function* () {
+        yield* truncateStatementIngestion;
+        const entered = yield* Deferred.make<void>();
+        const interruptedMapper = StatementColumnMapper.of({
+          mapColumns: () => Deferred.succeed(entered, undefined).pipe(Effect.andThen(Effect.never)),
+        });
+        const client = yield* ApiHarnessClient;
+        const submitted = yield* client.ingestion.submitForExtraction({
+          payload: statementPayload("f1d1a000-0000-4000-8000-00000000c203"),
+        });
+        const interruptedContext = yield* Layer.build(
+          Layer.fresh(independentWorker(interruptedMapper))
+        );
+        const worker = yield* processNextStatement().pipe(
+          Effect.provide(interruptedContext),
+          Effect.forkChild
+        );
+        yield* Deferred.await(entered);
+        yield* Fiber.interrupt(worker);
+        const sql = yield* MigrationSqlClient;
+        const released = yield* sql`
+          SELECT attempts, completed, acquired_by IS NULL AS "released"
+          FROM fidy_durable.fidy_queue
+          WHERE queue_name = 'statement-ingestion' AND id = ${submitted.data.id}
+        `;
+        expect(released).toEqual([{ attempts: 0, completed: false, released: true }]);
+        const replacementContext = yield* Layer.build(
+          Layer.fresh(
+            independentWorker(
+              StatementColumnMapper.of({ mapColumns: () => Effect.succeed(mapping) })
+            )
+          )
+        );
+        yield* processNextStatement().pipe(Effect.provide(replacementContext));
+        const status = yield* client.ingestion.getStatementSubmission({
+          params: { id: submitted.data.id },
+        });
+        expect(status.data).toMatchObject({ status: "completed" });
+        const completed = yield* sql`
+          SELECT attempts, completed FROM fidy_durable.fidy_queue
+          WHERE queue_name = 'statement-ingestion' AND id = ${submitted.data.id}
+        `;
+        expect(completed).toEqual([{ attempts: 1, completed: true }]);
       })
     );
   }

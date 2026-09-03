@@ -276,6 +276,10 @@ export PUBLIC_API_ORIGIN="https://api.fidyapp.com"
 export INGEST_EMAIL_DOMAIN="ingest.fidyapp.com"
 export CLOUDFLARE_ACCESS_ISSUER="https://production-smoke.cloudflareaccess.com"
 export CLOUDFLARE_ACCESS_AUDIENCE="production-smoke-audience"
+export FIDY_CLUSTER_RUNNER_HOST="$application"
+export FIDY_CLUSTER_LISTEN_HOST="0.0.0.0"
+export FIDY_CLUSTER_RUNNER_PORT="3001"
+export FIDY_CLUSTER_AUTH_TOKEN="$(printf 'ab%.0s' {1..32})"
 export SENTRY_ENVIRONMENT="production"
 export SENTRY_CAPTURE_ERRORS="false"
 export SENTRY_CAPTURE_TRACES="false"
@@ -358,6 +362,8 @@ docker run --detach --name "$application" --network "$network" \
   --env RESEND_WEBHOOK_SECRET --env EMAIL_INGEST_RETENTION_DAYS \
   --env PUBLIC_WEB_ORIGIN --env PUBLIC_API_ORIGIN --env INGEST_EMAIL_DOMAIN \
   --env CLOUDFLARE_ACCESS_ISSUER --env CLOUDFLARE_ACCESS_AUDIENCE \
+  --env FIDY_CLUSTER_RUNNER_HOST --env FIDY_CLUSTER_LISTEN_HOST \
+  --env FIDY_CLUSTER_RUNNER_PORT --env FIDY_CLUSTER_AUTH_TOKEN \
   --env "RAILWAY_GIT_COMMIT_SHA=${releaseSha}" \
   --env SENTRY_ENVIRONMENT --env SENTRY_CAPTURE_ERRORS --env SENTRY_CAPTURE_TRACES \
   --env SENTRY_PRODUCTION_DSN --env SENTRY_NON_PRODUCTION_DSN \

@@ -1,0 +1,182 @@
+apps/server/src/shell/onboarding/retention.ts
+  s_84fafb45fdba04::t_56f24ef5c3a595 9,11,34-36,42-43,52-53,55
+  s_84fafb45fdba04::t_9fd3007947b923 20-22,24,44,47,51
+  s_84fafb45fdba04::t_56a78363650f4b 54
+  s_84fafb45fdba04::t_5c5ec6de7a5200 2,23
+  s_84fafb45fdba04::t_df45970a3b6168 15,38,46,49
+  s_84fafb45fdba04::t_a2276df2f85bbc 37,39-41,45,48,50
+apps/server/src/shell/authenticated-cluster-http.ts
+  s_84fafb45fdba04::t_ba8e16c1d35264 26-29,40-43,93-97
+  s_84fafb45fdba04::t_533e66abd64c1c 3,6,9,19,24
+  s_84fafb45fdba04::t_b4c6941d4662bc 79,104-105
+  s_84fafb45fdba04::t_7781525859a6b5 116
+  s_84fafb45fdba04::t_6dd560274f122e 57-63
+  s_84fafb45fdba04::t_18e2b1e7846402 1-2,4-5,7-8,10-18,20-23,25,30-31,35-39,44-46,50-56,64-70,80-89,91-92,98-103,106-111,113,118
+  s_84fafb45fdba04::t_ceaa6a820b4554 32-34,47-49,112
+  s_84fafb45fdba04::t_a759be01c17eb6 71-72,74
+  s_84fafb45fdba04::t_030d3e3cb64571 75-78,90,114-115,117
+  s_84fafb45fdba04::t_998d7d12e83221 73
+apps/server/src/shell/email-authentication/repo.ts
+  s_84fafb45fdba04::t_7f3f68a361fc68 275,283,285-296,371-373,382-393,399-401,404,407-416
+  s_84fafb45fdba04::t_4eb5e08b676596 320-324,330,333,338-344,346-353
+  s_84fafb45fdba04::t_5f25394eda46d9 276-277,280
+  s_84fafb45fdba04::t_530fe4f09fe8fb 375-381,394-398,402-403,405-406,417-429,536-546,556-557
+  s_84fafb45fdba04::t_182c919e6bd78c 463
+  s_84fafb45fdba04::t_865255709cf895 328,465
+  s_84fafb45fdba04::t_7fac9120cb23bd 459,461-462,464
+  s_84fafb45fdba04::t_1e2833b6f70805 460,471,503-507,509-512
+  s_84fafb45fdba04::t_b66f93d38172aa 535,548,550-553
+  s_84fafb45fdba04::t_e8f2b742afaf95 261
+  s_84fafb45fdba04::t_1d6d5ecdabe7e9 329,332,334,336-337,355,357-360,363,365-367
+  s_84fafb45fdba04::t_a53bf1fc6d789d 325-327,331,335,354,374,466-468,472-502
+  s_84fafb45fdba04::t_cb21041f950c7f 430-432
+apps/server/src/shell/db/migrations/0046-effect-onboarding-delivery.ts
+  s_84fafb45fdba04::t_29da5812a44058 78-79
+  s_84fafb45fdba04::t_a78e0932d3b3ca 21
+  s_84fafb45fdba04::t_5a5e65e3881a4b 1-16,19-20,22-77,80-83
+  s_84fafb45fdba04::t_75186f92861562 17-18
+apps/server/src/shell/durable-execution.ts
+  s_84fafb45fdba04::t_ddba91d396bb9f 1,7,11-12,16-26,28-34,43
+  s_84fafb45fdba04::t_4bfda657500bc3 57-58,60,63
+  s_84fafb45fdba04::t_280c3d33fa6802 3-4,6,8-10,13-14,35-41,44,50-51,53,56
+  s_84fafb45fdba04::t_24a2f20a25d924 52,54,59,61
+  s_84fafb45fdba04::t_a9907a17c797a5 2
+  s_84fafb45fdba04::t_31e51088f94621 5,27,49,55,62
+  s_84fafb45fdba04::t_b4c6941d4662bc 15
+  s_84fafb45fdba04::t_8cccbbaed10d05 42,45-48
+apps/server/ARCHITECTURE.md
+  s_84fafb45fdba04::t_b11e16899c7aee 335-336,342-345
+  s_84fafb45fdba04::t_d77da9380820a3 337-338
+  s_84fafb45fdba04::t_e44f304a3fa688 339-341
+apps/server/src/shell/authenticated-cluster-http.test.ts
+  s_84fafb45fdba04::t_c5a0ba8469afdb 2,19-29,31-38,44-49,51,53-54,56-57
+  s_84fafb45fdba04::t_33ee5fd2dfe4bb 7,12-14,39-43,50,55
+  s_84fafb45fdba04::t_e4f3e4f265639a 8-11
+  s_84fafb45fdba04::t_6f1c73ce638f9b 1,3-6,17-18,30,58
+  s_84fafb45fdba04::t_481fff47b6edc2 15-16,52
+apps/server/src/shell/db/client.ts
+  s_84fafb45fdba04::t_c7dde06dbd0c2b 7,22-28
+  s_84fafb45fdba04::t_c85215a0354b79 2,8,10-21
+  s_84fafb45fdba04::t_41149f7fa76818 9
+apps/server/src/shell/onboarding/delivery-workflow.ts
+  s_84fafb45fdba04::t_017077eeb2ed18 168,204-209,213
+  s_84fafb45fdba04::t_bf6b57ddce621d 60,106-108
+  s_84fafb45fdba04::t_6619de274a14f6 13,52,169-170,172-174,177-180,183-186,197-198,203
+  s_84fafb45fdba04::t_3e4833d290597c 130-135
+  s_84fafb45fdba04::t_ec791feba09e1c 12,171,175-176,181,201-202
+  s_84fafb45fdba04::t_17a0185e12d52b 3-8,182,187,189-195
+  s_84fafb45fdba04::t_750eb73882bead 127,129,136-139,148-149,153-158
+  s_84fafb45fdba04::t_530fe4f09fe8fb 118-119,163-165
+  s_84fafb45fdba04::t_70ac67224ab54a 19,21,63-67
+  s_84fafb45fdba04::t_f021fbc991e383 10-11,24-50,109-112,114-115,117,161
+  s_84fafb45fdba04::t_536b3f8bfc939b 1,14-17,53,74,80-83,86-87,89-92
+  s_84fafb45fdba04::t_54c7604cbd8dc1 55,61-62,69-73,75-79,84-85,88,93-105,113,126,166
+  s_84fafb45fdba04::t_5319d898c782f8 167
+  s_84fafb45fdba04::t_a9b7cb2cf67c94 210-212
+  s_84fafb45fdba04::t_22fd86fa80423b 199-200
+  s_84fafb45fdba04::t_0936fe8789c679 214
+  s_84fafb45fdba04::t_77189236b6916b 9,18,20,51,54,56-59,120-122,140-141,146-147,162
+  s_84fafb45fdba04::t_29af5357e6d2e5 142-145
+  s_84fafb45fdba04::t_8e2d89bbb358fb 188,196
+  s_84fafb45fdba04::t_656aa3577073b4 150-152
+  s_84fafb45fdba04::t_007695f9d38a17 128
+apps/server/src/shell/testing/whatsapp-acceptance-harness.ts
+  s_84fafb45fdba04::t_c9b5b6ef599767 44,543
+apps/server/src/shell/onboarding/retention.test.ts
+  s_84fafb45fdba04::t_cce2eba1b1023e 5-9,16,81-90,97-119,122-124,126-140,142-150
+  s_84fafb45fdba04::t_d7eae5cc644c50 151-153
+  s_84fafb45fdba04::t_5bc6493ad0b05e 168,196,201,204-210
+  s_84fafb45fdba04::t_12b75fd7401802 120-121,125,197,202-203
+  s_84fafb45fdba04::t_f10c383136c1f9 91-96,154-159
+  s_84fafb45fdba04::t_05b71cb2c124a2 141
+  s_84fafb45fdba04::t_5d637216580618 160-162
+apps/server/src/shell/onboarding/onboarding.test.ts
+  s_84fafb45fdba04::t_d56b7c2bfec639 77
+  s_84fafb45fdba04::t_ee1406745c71a1 117,126
+  s_84fafb45fdba04::t_249edd95d21d34 235
+  s_84fafb45fdba04::t_c03ded3c22705a 71-73,118-120,125,127-132
+  s_84fafb45fdba04::t_228884f54044eb 215,243,341,401,437,498,533,651,750,810
+  s_84fafb45fdba04::t_4bb3826a694327 6,496,512
+  s_84fafb45fdba04::t_8d8c24576406d4 103-112,115-116,121-124,135-139
+  s_84fafb45fdba04::t_642f5c87928cd0 133-134
+  s_84fafb45fdba04::t_f58856d5a9395c 592-596
+  s_84fafb45fdba04::t_8b9682c4c32411 3,12,521-530,539
+  s_84fafb45fdba04::t_b4c6941d4662bc 4
+  s_84fafb45fdba04::t_eec8f8971bd5b6 74-75,78-84
+  s_84fafb45fdba04::t_376b856c319ab4 76
+  s_84fafb45fdba04::t_08b0ce62a9b598 15-18
+apps/server/src/shell/onboarding/delivery-workflow.test.ts
+  s_84fafb45fdba04::t_0649f63eda25fd 4,35-42,47-48,50-52
+  s_84fafb45fdba04::t_b09fe867a3f73c 2-3,62,64-66
+  s_84fafb45fdba04::t_9515ecda545bbd 13-15,61,63
+  s_84fafb45fdba04::t_faa2feab562910 19
+  s_84fafb45fdba04::t_0566c313577674 5-8,10-12,16-18,20-34
+  s_84fafb45fdba04::t_6eaef5cc2e9c43 1,43-46,49,53-60,67-72
+  s_84fafb45fdba04::t_60b93516562ed2 9
+apps/server/src/shell/channels/whatsapp/whatsapp.acceptance.test.ts
+  s_84fafb45fdba04::t_228884f54044eb 324,348
+  s_84fafb45fdba04::t_53912c25a9e690 14
+apps/server/src/shell/onboarding/delivery-workflow.integration.test.ts
+  s_84fafb45fdba04::t_ef9f01ce61286b 17-18,20,23,160,164,166-170
+  s_84fafb45fdba04::t_684e05111e0b1f 4,52-58,276,333
+  s_84fafb45fdba04::t_204c0daf0e3e00 31,184
+  s_84fafb45fdba04::t_cae7dd186663ab 3,6-9,11-16,48-50,97-99,148-154
+  s_84fafb45fdba04::t_498d264b59dcb9 219-221,338-340
+  s_84fafb45fdba04::t_686cd1221fd58d 2,27-29,32-34,36-40,42-47,77-81,87-96,100-147,155-159,161-163,172-183,185-190,253-255,318,324,345-348
+  s_84fafb45fdba04::t_dfa692a8051877 35,51,59-69,224-241,243-250
+  s_84fafb45fdba04::t_b4c6941d4662bc 82-86,191-218,222-223,251-252,256,287-317,319-323,325-326,335-337,341-344
+  s_84fafb45fdba04::t_4863a8adac994f 242
+  s_84fafb45fdba04::t_fa01351b56cf34 257-275,277-286,327-332,334
+  s_84fafb45fdba04::t_2acbe7d209f338 5,19,21-22,24-26
+  s_84fafb45fdba04::t_9305159d3d537d 1,10,30,41,70-76,171
+  s_84fafb45fdba04::t_422d005061418e 165
+apps/server/src/shell/email-authentication/delivery-retry.ts
+  s_84fafb45fdba04::t_a8c9994196e7be 73
+  s_84fafb45fdba04::t_2c84cd9f813765 74-75,78-80,93-95,109
+  s_84fafb45fdba04::t_78cd0eb21b0e91 2,76-77,81-92
+apps/server/src/shell/http.ts
+  s_84fafb45fdba04::t_9500829110e6c9 294
+  s_84fafb45fdba04::t_2a2867d8a0f0c7 292-293,295
+  s_84fafb45fdba04::t_9050d8451b3e20 310
+  s_84fafb45fdba04::t_6ddf674f95728e 50-53,281-284,301
+apps/server/src/shell/testing/api-harness.ts
+  s_84fafb45fdba04::t_d70e7ca644500d 279-280
+  s_84fafb45fdba04::t_9f45defa8602af 353
+  s_84fafb45fdba04::t_4fbc9651076ac9 66,270
+  s_84fafb45fdba04::t_7bbf0627dbd5bb 62-65,304
+  s_84fafb45fdba04::t_13db3f54086a88 269
+  s_84fafb45fdba04::t_ec076e3c688648 24,26
+apps/server/scripts/agent-repl.ts
+  s_84fafb45fdba04::t_2cead6b1407b7a 8,22-27
+apps/server/src/main.ts
+  s_84fafb45fdba04::t_ce1d99358e52d2 3,13
+  s_84fafb45fdba04::t_c01230ee81a082 4,12
+  s_84fafb45fdba04::t_95e2277d4d4f99 14
+apps/server/src/shell/onboarding/turn-transition.ts
+  s_84fafb45fdba04::t_e0aa3cb445f670 32,338
+apps/server/src/shell/channels/whatsapp/routes.ts
+  s_84fafb45fdba04::t_8ccddd28a7b7ae 21,186,207,246
+apps/server/src/shell/durable-execution-retention.ts
+  s_84fafb45fdba04::t_b9901ff389bf55 12-13,34
+  s_84fafb45fdba04::t_41c814f9d75ca5 5,24,33
+  s_84fafb45fdba04::t_5115f7d831f0e2 4,6-7,19-23,25-32
+  s_84fafb45fdba04::t_2e4c8dcd114760 1,8-9
+  s_84fafb45fdba04::t_de45f01028ca2c 17-18
+  s_84fafb45fdba04::t_18bd088893744c 2-3,10-11,14-16,35-48
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "d2b9f0f269d23f865f2586df68820264d9a01af4",
+  "prompts": {},
+  "sessions": {
+    "s_84fafb45fdba04": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a05ffd-3120-7f29-a7a3-bbe3de77bbe9",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

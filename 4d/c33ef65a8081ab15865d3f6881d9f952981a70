@@ -1,0 +1,33 @@
+apps/server/ARCHITECTURE.md
+  s_84fafb45fdba04::t_ec250fcf08c528 324,334-335
+  s_84fafb45fdba04::t_95cba66d2355fd 316-323,325-333,336-338
+docs/architecture/durable-execution-inventory.md
+  s_84fafb45fdba04::t_74556ce3818d49 1-28,42-51,67-69,78-83,101-103,123-129,149-155,170-173
+  s_84fafb45fdba04::t_35a1504a9ff898 100
+  s_84fafb45fdba04::t_cdba3527f4599f 84-93,95-99,130-148
+  s_84fafb45fdba04::t_33aaee074b7894 62,122,166
+  s_84fafb45fdba04::t_9b98262cdbab2b 29-39,41,70-77
+  s_84fafb45fdba04::t_39f903ba7fb944 94
+  s_84fafb45fdba04::t_c19331c5dfc21e 40,52-61,63-66,104-121,156-165,167-169
+docs/adr/0024-effect-durable-execution.md
+  s_84fafb45fdba04::t_d6f200cde17d14 4
+  s_84fafb45fdba04::t_add641e969ce75 1-3,5-31,33-95,98-127,129-151,162-223
+  s_84fafb45fdba04::t_49b9c2b5f3931d 128
+  s_84fafb45fdba04::t_6494f67b0e9ee1 32,96-97,152-161
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "4dc33ef65a8081ab15865d3f6881d9f952981a70",
+  "prompts": {},
+  "sessions": {
+    "s_84fafb45fdba04": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a05ffd-3120-7f29-a7a3-bbe3de77bbe9",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

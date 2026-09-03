@@ -163,6 +163,8 @@ apps/server/src/shell/durable-execution-retention.ts
   s_84fafb45fdba04::t_2e4c8dcd114760 1,8-9
   s_84fafb45fdba04::t_de45f01028ca2c 17-18
   s_84fafb45fdba04::t_18bd088893744c 2-3,10-11,14-16,35-48
+apps/server/src/shell/db/migrations/registry.ts
+  s_84fafb45fdba04::t_99f24ca45c42eb 45,100
 ---
 {
   "schema_version": "authorship/3.0.0",

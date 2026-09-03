@@ -1,5 +1,5 @@
 import { expect, it } from "@effect/vitest";
-import { Cause, ConfigProvider, Effect, Exit, Layer, Option } from "effect";
+import { Cause, ConfigProvider, Effect, Exit, Layer, Option, Ref } from "effect";
 import {
   EmailAddress,
   type EmailProofPurpose,
@@ -7,11 +7,60 @@ import {
 } from "~/core/email-authentication/model";
 import { HttpClient, HttpClientResponse } from "effect/unstable/http";
 import type { HttpClientRequest } from "effect/unstable/http";
-import { EmailDeliveryPort, browserPairingVerificationEmail, verificationEmail } from "./delivery";
-import type { EmailSendFailed } from "./delivery";
+import {
+  EmailDeliveryPort,
+  EmailSendFailed,
+  browserPairingVerificationEmail,
+  verificationEmail,
+} from "./delivery";
+import { sendEmailWithBoundedRetry } from "./delivery-retry";
 
 const combinedCode = EmailVerificationCode.make("ABCD-2345-F7KM-9Q2D-X4PT-6RWC");
 const emailAddress = EmailAddress.make("persona@example.com");
+const deliveryInput = {
+  purpose: "verified-onboarding" as const,
+  to: emailAddress,
+  combinedCode,
+  idempotencyKey: "delivery-retry-test",
+};
+
+it.live("exhausts bounded retries for definitively rejected provider failures", () =>
+  Effect.gen(function* () {
+    const attempts = yield* Ref.make(0);
+    const status = yield* sendEmailWithBoundedRetry(deliveryInput).pipe(
+      Effect.provideService(
+        EmailDeliveryPort,
+        EmailDeliveryPort.of({
+          send: () =>
+            Ref.update(attempts, (count) => count + 1).pipe(
+              Effect.andThen(new EmailSendFailed({ certainty: "rejected", retryable: true }))
+            ),
+        })
+      )
+    );
+    expect(status).toBe("rejected");
+    expect(yield* Ref.get(attempts)).toBe(3);
+  })
+);
+
+it.effect("does not retry an ambiguous provider failure", () =>
+  Effect.gen(function* () {
+    const attempts = yield* Ref.make(0);
+    const status = yield* sendEmailWithBoundedRetry(deliveryInput).pipe(
+      Effect.provideService(
+        EmailDeliveryPort,
+        EmailDeliveryPort.of({
+          send: () =>
+            Ref.update(attempts, (count) => count + 1).pipe(
+              Effect.andThen(new EmailSendFailed({ certainty: "ambiguous", retryable: true }))
+            ),
+        })
+      )
+    );
+    expect(status).toBe("uncertain");
+    expect(yield* Ref.get(attempts)).toBe(1);
+  })
+);
 
 it("renders the fixed Spanish plain-text and minimal-HTML verification email", () => {
   expect(verificationEmail(combinedCode)).toEqual({

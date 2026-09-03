@@ -8,6 +8,7 @@ import {
   EmailVerificationPublicCode,
 } from "~/core/email-authentication/model";
 import { E164PhoneNumber, whatsAppCallerReference } from "~/core/identity/reference";
+import { durableQueueRetention } from "~/shell/durable-execution-retention";
 import { TelemetryDisabled } from "~/shell/observability/disabled";
 import { ApiHarness } from "~/shell/testing/api-harness";
 import { testWhatsAppCaller } from "~/shell/testing/whatsapp-caller";
@@ -25,6 +26,15 @@ const now = DateTime.makeUnsafe("2026-08-02T12:00:00Z");
 layer(OnboardingRetentionHarness, { excludeTestServices: true, timeout: "30 seconds" })(
   "onboarding retention",
   (it) => {
+    it.effect("treats an empty durable execution set as terminal", () =>
+      Effect.gen(function* () {
+        expect(yield* durableQueueRetention.completed("onboarding-email-delivery", [], [])).toBe(
+          true
+        );
+        yield* durableQueueRetention.removeCompleted("onboarding-email-delivery", []);
+      })
+    );
+
     it.effect("deletes exact-boundary expiry without deleting active exchanges", () =>
       Effect.gen(function* () {
         const sql = yield* SqlClient.SqlClient;

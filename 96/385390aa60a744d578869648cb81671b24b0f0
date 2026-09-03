@@ -1,0 +1,106 @@
+apps/server/src/shell/ingestion/mutations.ts
+  s_84fafb45fdba04::t_41d6ee3e890b91 38
+  s_84fafb45fdba04::t_e425209a0397b4 143-147
+  s_84fafb45fdba04::t_52a03d2e11e1e9 84-97,125-129,132,139-140
+apps/server/src/shell/ingestion/email-forwarding-repo.ts
+  s_84fafb45fdba04::t_50fff8a034e6b9 26,112,259,272
+  s_84fafb45fdba04::t_4246adcf32e542 363,365-372
+  s_84fafb45fdba04::t_7bb7a0ebd28a1c 450
+  s_84fafb45fdba04::t_fbc6c352300770 491,663,706,710-712,715-716,725-726,732
+  s_84fafb45fdba04::t_bffe5b3ca591fc 295,298,301,306-307,309-311,315-319,321-324,327-330,333-351,355-357,359,361,364,373,378-380,383-405
+  s_84fafb45fdba04::t_f42bb2c3071b88 406,662,664-666,668-671,673-680,689-697
+  s_84fafb45fdba04::t_1f73128432795b 227,443-444,446-447,484-485,493-501,505-511,513-525,527-536,545-569,648,651-658,717,730
+  s_84fafb45fdba04::t_3770678c0df467 14,486-490,492,512
+  s_84fafb45fdba04::t_fb80c745a7e93a 448-449,451-453,455-456,475
+  s_84fafb45fdba04::t_7ebdbb798a4a17 454,460-471,473,482-483
+  s_84fafb45fdba04::t_f7c1902eb09b9d 474,476-481,502-504
+  s_84fafb45fdba04::t_b61284967ddd2a 445
+  s_84fafb45fdba04::t_ba8d9dcb8b288a 721-724,727-729,731,733
+  s_84fafb45fdba04::t_e7f3d3eb52bb6f 526,537-544
+  s_84fafb45fdba04::t_89a4261caf965a 457-459
+  s_84fafb45fdba04::t_4c08d1de3ded07 25
+  s_84fafb45fdba04::t_a8e05067abdcfd 381-382,407
+apps/server/src/shell/ingestion/email-forwarding.test.ts
+  s_84fafb45fdba04::t_9a1b18bab1bf75 87,741,931,980
+  s_84fafb45fdba04::t_5f87bbb2031f57 274,397
+  s_84fafb45fdba04::t_abb310d861ec7d 510-513,577-580
+  s_84fafb45fdba04::t_683cab0db5be2e 81,735,925,974
+  s_84fafb45fdba04::t_015802aa527bec 553,568,576,721,783,1032,1041
+  s_84fafb45fdba04::t_bbb6792e5131fc 845,849-854,859
+  s_84fafb45fdba04::t_762c0f986b18b0 50,786-789
+apps/server/src/shell/http.ts
+  s_84fafb45fdba04::t_eba7660db708b2 35-38,275-277
+apps/server/src/shell/ingestion/forwarded-email-workflow.test.ts
+  s_84fafb45fdba04::t_65b0de154840e2 1-8,10-19
+  s_84fafb45fdba04::t_998f4917047b48 9
+apps/server/src/shell/db/migrations/registry.ts
+  s_84fafb45fdba04::t_47a37b94c5b39d 47,104
+apps/server/src/shell/ingestion/forwarded-email-workflow.integration.test.ts
+  s_84fafb45fdba04::t_62811353c583c8 26-29,40,207
+  s_84fafb45fdba04::t_2341b7fb2de7f5 4,17,19-20,22-24,35,63,65-74,121-125,154-155,195-196
+  s_84fafb45fdba04::t_b524ab68785a0a 1-2,5-14,25,30-32,34,36-39,41-46,48-62,64,75-76,78-109,117-118,127,130-137,143-153,156-164,166-167,169-178,180-194,197-206,208-209,211-212,214-216,219-226,228-238
+  s_84fafb45fdba04::t_da9323f0cf1053 15-16,18,21,47,110-116,119-120,126,128-129,138-140,165,168,210,213,217-218
+  s_84fafb45fdba04::t_742e6e638d3f09 141
+  s_84fafb45fdba04::t_98f433dbb57c55 142
+  s_84fafb45fdba04::t_294368030ace54 179,227
+  s_84fafb45fdba04::t_d968852889a465 3,33,77
+apps/server/src/shell/db/migrations/0048-effect-forwarded-email-workflow.ts
+  s_84fafb45fdba04::t_6bb2dbb4f4ba58 48
+  s_84fafb45fdba04::t_3776fe45b0b4f6 1-47,49-171
+apps/server/src/shell/ingestion/email-worker.ts
+  s_84fafb45fdba04::t_d872a85f10fa3c 180,184-188,190,192-193
+  s_84fafb45fdba04::t_efa73594455524 50
+  s_84fafb45fdba04::t_fb94c51165105e 100-101,202,204-205,207-211
+  s_84fafb45fdba04::t_63561397f93200 172-174,237-239
+  s_84fafb45fdba04::t_cca1c5988b3880 240-247,287-288,292-295
+  s_84fafb45fdba04::t_0740e73b00b34b 189,200
+  s_84fafb45fdba04::t_d52cbc83db3bde 19,30,33-34,37-39,41-43,45-49,51,98-99,102-109,121-127,129-171,175-179,181-183,191,195-199,201,212-236,248-254,256,299,308,312-314,317,321,325,332,340,346-348,350-351,353,355-356,358-365,368-369,376,383-385,389-396,398-399,401-402,404-410
+  s_84fafb45fdba04::t_1bdcc124ddcba8 1-10,12,65-67,69-80,128,194
+  s_84fafb45fdba04::t_f1a2599c0953b8 68
+  s_84fafb45fdba04::t_b38379c850369c 366,370-373
+  s_84fafb45fdba04::t_fbc6c352300770 265,403
+  s_84fafb45fdba04::t_72bbb6eff12963 203,206
+  s_84fafb45fdba04::t_c00f5e53eb6a10 57-64,110-120
+  s_84fafb45fdba04::t_5a174d13cb3a3e 377-382
+  s_84fafb45fdba04::t_c393c470c8b1db 89
+  s_84fafb45fdba04::t_09da7ead8b9ba2 11
+apps/server/src/shell/ingestion/forwarded-email-workflow.ts
+  s_84fafb45fdba04::t_74b7736bdcccfb 138
+  s_84fafb45fdba04::t_744c5ded15bbc1 13-17,33-40,99,101,115-116
+  s_84fafb45fdba04::t_20d0fa126ab9df 12,127-129
+  s_84fafb45fdba04::t_dcb92298917120 2,18-23,25
+  s_84fafb45fdba04::t_39849f0090eda0 50-55,58
+  s_84fafb45fdba04::t_5febe03da73114 24
+  s_84fafb45fdba04::t_22d167c668e433 1,83-86,102
+  s_84fafb45fdba04::t_8832bb2cef614b 133,154
+  s_84fafb45fdba04::t_2ad1a6b7dfbc91 3
+  s_84fafb45fdba04::t_e823a9adb12024 4-11,26-29,32,41-46,48,56-57,59-64,66-69,71-82,87-92,95-98,100,103-114,117-126,130,132,141-153,155-183
+  s_84fafb45fdba04::t_0146eb0025b8cc 30-31,47,49,65,70,93-94
+  s_84fafb45fdba04::t_6f1aaac82f822d 131,134-137,139-140
+apps/server/src/shell/ingestion/email-consent-revocation.ts
+  s_84fafb45fdba04::t_0b15eecaa0fcf7 8-9
+apps/server/src/shell/ingestion/forwarded-email-ingestion.ts
+  s_84fafb45fdba04::t_b91be8ac6e92aa 180-182
+  s_84fafb45fdba04::t_77609f12e5930c 17,160,162,170
+  s_84fafb45fdba04::t_2c99ad9f758955 31,183
+  s_84fafb45fdba04::t_57480b5540b9d4 15,161
+apps/server/src/shell/ingestion/forwarded-email-execution.ts
+  s_84fafb45fdba04::t_5977db7ab69ba9 1-16,18-42
+  s_84fafb45fdba04::t_6b260c4ed7dd5c 17
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "96385390aa60a744d578869648cb81671b24b0f0",
+  "prompts": {},
+  "sessions": {
+    "s_84fafb45fdba04": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a05ffd-3120-7f29-a7a3-bbe3de77bbe9",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

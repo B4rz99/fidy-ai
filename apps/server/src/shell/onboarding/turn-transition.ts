@@ -29,7 +29,7 @@ import type { WhatsAppCaller } from "~/shell/channels/whatsapp/model";
 import { findWhatsAppCaller, resolveWhatsAppCaller } from "~/shell/identity/repo";
 import type { OnboardingTurn, OnboardingTurnOutcome } from "./types";
 import { admitEmailDeliveryInScope } from "~/shell/email-authentication/admission";
-import { publishOnboardingEmailDelivery } from "~/shell/onboarding/delivery-workflow";
+import { publishOnboardingEmailDelivery } from "./delivery-workflow";
 import {
   type EmailEnrollmentRow,
   findAndLockEmailEnrollmentByCaller,

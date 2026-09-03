@@ -9,19 +9,23 @@ const post = (
   handler: RunnerHandler,
   headers: Readonly<Record<string, string>> = {}
 ): Effect.Effect<Response> =>
-  Effect.promise(() => handler(new Request("http://runner/", { method: "POST", headers })));
+  Effect.promise(() =>
+    handler(new Request("http://runner/_fidy/cluster", { method: "POST", headers }))
+  );
+const get = (handler: RunnerHandler, path: string): Effect.Effect<Response> =>
+  Effect.promise(() => handler(new Request(`http://runner${path}`)));
 const releaseHandler = (dispose: () => Promise<void>): Effect.Effect<void> =>
   Effect.promise(dispose);
 const responseText = (response: Response): Effect.Effect<string> =>
   Effect.promise(() => response.text());
 
-it.effect("rejects unauthenticated Cluster runner requests before route handling", () =>
+it.effect("keeps Cluster credentials out of authentication failures", () =>
   Effect.gen(function* () {
     const invocations = yield* Ref.make(0);
     const routes = HttpRouter.use((router) =>
       router.add(
         "POST",
-        "/",
+        "/_fidy/cluster",
         Ref.update(invocations, (count) => count + 1).pipe(
           Effect.as(HttpServerResponse.text("accepted"))
         )
@@ -45,12 +49,18 @@ it.effect("rejects unauthenticated Cluster runner requests before route handling
           expect(missing.status).toBe(401);
           expect(malformed.status).toBe(401);
           expect(incorrect.status).toBe(401);
+          expect(yield* responseText(missing)).toBe("");
+          expect(yield* responseText(malformed)).toBe("");
+          expect(yield* responseText(incorrect)).toBe("");
           expect(yield* Ref.get(invocations)).toBe(0);
 
           const accepted = yield* post(handler, { authorization: `Bearer ${token}` });
           expect(accepted.status).toBe(200);
           expect(yield* responseText(accepted)).toBe("accepted");
           expect(yield* Ref.get(invocations)).toBe(1);
+
+          const publicResponse = yield* get(handler, "/health");
+          expect(publicResponse.status).toBe(404);
         }),
       ({ dispose }) => releaseHandler(dispose)
     );

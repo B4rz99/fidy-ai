@@ -26,6 +26,7 @@ import type { SqlClient } from "effect/unstable/sql";
 const messageBufferKibibytes = 64;
 const bytesPerKibibyte = 1024;
 const maximumMessageBufferBytes = messageBufferKibibytes * bytesPerKibibyte;
+const clusterRunnerPath = "/_fidy/cluster";
 const registerRoutes = HttpRouter.use;
 const bearer = (token: string): string => `Bearer ${token}`;
 
@@ -44,7 +45,9 @@ export const authenticatedRunnerMiddleware = (
     router.addGlobalMiddleware((next) =>
       Effect.gen(function* () {
         const request = yield* HttpServerRequest.HttpServerRequest;
+        const path = new URL(request.url, "http://runner").pathname;
         if (
+          path === clusterRunnerPath &&
           !credentialsMatch(Option.fromUndefinedOr(request.headers.authorization), bearer(token))
         ) {
           return HttpServerResponse.empty({ status: 401 });
@@ -73,7 +76,7 @@ const authenticatedClientProtocol = (
           readonly port: number;
         }): ReturnType<Runners.RpcClientProtocol["Service"]["make"]> => {
           const prependUrl = HttpClientRequest.prependUrl(
-            `http://${address.host}:${address.port}/`
+            `http://${address.host}:${address.port}${clusterRunnerPath}`
           );
           const authenticatedClient = HttpClient.mapRequest(client, (request) =>
             HttpClientRequest.setHeader(prependUrl(request), "authorization", bearer(token))
@@ -101,7 +104,10 @@ const layerAuthenticatedSqlCluster = (
     Layer.provide(protocol)
   );
   const runner = HttpRouter.serve(
-    Layer.mergeAll(authenticatedRunnerMiddleware(token), HttpRunner.layerHttpOptions({ path: "/" }))
+    Layer.mergeAll(
+      authenticatedRunnerMiddleware(token),
+      HttpRunner.layerHttpOptions({ path: clusterRunnerPath })
+    )
   ).pipe(Layer.provide(protocol), Layer.provide(BunClusterHttp.layerHttpServer));
 
   return runner.pipe(

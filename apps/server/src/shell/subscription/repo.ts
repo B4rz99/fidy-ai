@@ -59,7 +59,7 @@ export const findPrice = Effect.fn("Subscription.findPrice")(function* (priceId:
   })(undefined).pipe(Effect.orDie);
   return yield* Option.match(row, {
     onNone: () => Effect.succeed(Option.none<Price>()),
-    onSome: (value) => Effect.map(priceFromRow(value), Option.some).pipe(Effect.orDie),
+    onSome: (value) => Effect.asSome(priceFromRow(value)).pipe(Effect.orDie),
   });
 });
 

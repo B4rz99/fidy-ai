@@ -28,7 +28,7 @@ import { getCompatibilityRecorder, requireInstalled } from "./handoff";
 
 const expectedBunVersion = "1.3.14";
 const expectedEffectVersion = "4.0.0-rc.112";
-const expectedSentryVersion = "10.71.0";
+const expectedSentryVersion = "10.72.0";
 const expectedTraceId = TelemetryTraceId.make("a".repeat(32));
 const expectedParentSpanId = TelemetrySpanId.make("b".repeat(16));
 const all = (...conditions: ReadonlyArray<boolean>): boolean => conditions.every(Boolean);

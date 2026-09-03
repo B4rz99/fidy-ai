@@ -900,10 +900,10 @@ const beginPersisted = Effect.fn("ConversationContinuity.begin")(function* ({
       })
     ).pipe(Effect.provideService(SqlClient.SqlClient, dependencies.sql))
   ).pipe(
-    Effect.catch((error) =>
-      error instanceof ContinuityChanged || error instanceof HostedAgentSessionConsentRequired
-        ? Effect.fail(error)
-        : Effect.die(new InvalidPersistedContinuity())
+    Effect.catchIf(
+      (error) =>
+        !(error instanceof ContinuityChanged || error instanceof HostedAgentSessionConsentRequired),
+      () => Effect.die(new InvalidPersistedContinuity())
     )
   );
 });

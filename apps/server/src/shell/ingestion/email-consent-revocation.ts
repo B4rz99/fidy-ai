@@ -5,8 +5,8 @@ import type { UserId } from "~/core/identity/reference";
 /**
  * Ingestion-owned participant in an onboarding Consent revocation transaction.
  * The caller must already hold the User lock and shared external-effect gate. The operation
- * deletes personal IngestSamples for queued, deferred, or processing work, marks those receipts
- * revoked, clears their claims, and leaves completed Transaction or NeedsReview outcomes intact.
+ * deletes personal IngestSamples and prepared interpretations for accepted or deferred receipts,
+ * marks those receipts revoked, and leaves completed Transaction or NeedsReview outcomes intact.
  */
 export const revokePendingForwardedEmailsForConsentInScope = Effect.fn(
   "ForwardedEmailIngestion.revokePendingForConsentInScope"

@@ -3356,12 +3356,9 @@ layer(WhatsAppTraceHarness, { excludeTestServices: true, timeout: "30 seconds" }
           }
           return processed;
         });
-        const processedByLoop = yield* Effect.all(
-          fixtures.map(() => workerLoop),
-          {
-            concurrency: "unbounded",
-          }
-        );
+        const processedByLoop = yield* Effect.forEach(fixtures, () => workerLoop, {
+          concurrency: "unbounded",
+        });
         expect(processedByLoop.reduce((total, count) => total + count, 0)).toBe(8);
         const transactions = yield* recordedTransactions();
         const processing = transactions.filter(

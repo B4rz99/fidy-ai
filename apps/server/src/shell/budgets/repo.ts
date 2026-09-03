@@ -79,7 +79,7 @@ export const findBudgetInScope = Effect.fn("findBudgetInScope")(function* (
   })({ userId, budgetId }).pipe(Effect.orDie);
   return yield* Option.match(row, {
     onNone: () => Effect.succeed(Option.none()),
-    onSome: (found) => budgetFromRow(found).pipe(Effect.map(Option.some), Effect.orDie),
+    onSome: (found) => budgetFromRow(found).pipe(Effect.asSome, Effect.orDie),
   });
 });
 
@@ -139,7 +139,7 @@ export const updateBudgetInScope = Effect.fn("updateBudgetInScope")(function* (
   })({ ...writeBudget(userId, input), budgetId }).pipe(Effect.orDie);
   return yield* Option.match(row, {
     onNone: () => Effect.succeed(Option.none()),
-    onSome: (found) => budgetFromRow(found).pipe(Effect.map(Option.some), Effect.orDie),
+    onSome: (found) => budgetFromRow(found).pipe(Effect.asSome, Effect.orDie),
   });
 });
 

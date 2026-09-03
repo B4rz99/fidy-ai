@@ -109,7 +109,7 @@ export const updateTransactionInScope = Effect.fn("updateTransactionInScope")(fu
     Effect.flatMap(
       Option.match({
         onNone: () => Effect.succeed(Option.none()),
-        onSome: (row) => transactionFromRow(row).pipe(Effect.map(Option.some)),
+        onSome: (row) => transactionFromRow(row).pipe(Effect.asSome),
       })
     ),
     Effect.orDie

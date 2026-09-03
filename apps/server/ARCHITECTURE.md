@@ -352,6 +352,28 @@ existing safe terminal Ingestion outcomes. Startup republishes one bounded recov
 readiness and paces later pages; scheduled retention erases expired raw material and removes queue
 rows only after both the domain lifecycle and Effect's completed flag prove terminal execution.
 
+Forwarded Email Ingestion publishes a versioned `UserId` and `ResendReceivedEmailId` through
+`forwarded-email-ingestion` in the receipt-admission transaction. SQL Cluster workflows own named
+retrieval, interpretation, and settlement activities; provider material and model outcomes remain in
+bounded User-owned RLS tables rather than workflow history. Only provider unavailability receives
+two retries; malformed or oversized responses settle directly as the existing visible review.
+`DurableClock` preserves monthly Free deferral, whose promotion is serialized under the User's
+forwarding-address row so concurrent resumptions cannot exceed the allowance. The existing Consent external-effect lock keeps
+explicit revocation ordered with provider/model calls, while every post-call persistence step rechecks
+Consent under the subject transaction lock. Explicit revocation terminates and cleans up the receipt;
+a noncurrent policy/disclosure basis preserves the prior one-day deferral so later re-consent can
+resume it. One exhaustive User-scoped receipt projection distinguishes actionable, completed,
+revoked, expired, and absent state; every activity reconciles it before Work, so a committed
+settlement is replayed as its persisted outcome rather than inferred from missing actionable data.
+The Workflow handler is the sole execution interface; named activities are private implementation
+partitions. Startup recovery exposes only execution identity and ownership.
+At the 90-day evidence horizon, evidence retention removes raw samples and temporary
+interpretations without changing unfinished receipt eligibility; execution re-enters retrieval when
+persisted activity progress outlives that evidence. Bounded durable retention clears only
+completed queue rows and `Workflow.Complete` Cluster history. Receipt-owned checked, started, and
+cleared markers make cleanup fair and resumable: suspended or unproved histories cannot starve later
+pages, while a started marker proves that missing history may be safely reconciled after interruption.
+
 Migration is expand–migrate–contract: no item may be
 eligible in old and Effect execution simultaneously, and each migrated slice deletes the claims,
 leases, pollers, and execution-only status it replaces rather than wrapping them.

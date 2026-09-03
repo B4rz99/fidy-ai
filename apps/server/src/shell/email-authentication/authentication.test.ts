@@ -230,14 +230,14 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         yield* resetAuthentication;
         const indexes = Array.from({ length: 8 }, (_, index) => index + 1);
         const pairings = yield* Effect.forEach(indexes, () => startBudgetPairing);
-        const responses = yield* Effect.all(
-          pairings.map((pairing, index) =>
+        const responses = yield* Effect.forEach(
+          pairings,
+          (pairing, index) =>
             requestEmail(
               pairing,
               `concurrent-budget-${index + 1}-326@example.com`,
               "198.51.100.201"
-            )
-          ),
+            ),
           { concurrency: "unbounded" }
         );
         expect(responses.every(({ status }) => status === 202)).toBe(true);

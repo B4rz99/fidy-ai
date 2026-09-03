@@ -18,6 +18,7 @@ export const userTableNames = [
   "email_needs_review_items",
   "email_replacement_delivery_intents",
   "email_replacement_workflows",
+  "forwarded_email_interpretations",
   "forwarded_email_receipts",
   "hosted_agent_sessions",
   "insight_delivery_attempts",

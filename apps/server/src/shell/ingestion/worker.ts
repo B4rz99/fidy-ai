@@ -276,7 +276,7 @@ const processQueued = Effect.fn("StatementIngestion.process")(function* (
   if (Option.isNone(queued)) return "stale" as const;
   const statement = queued.value;
   const parsed = yield* parseStatementFile(statement.fileContent).pipe(
-    Effect.map(Option.some),
+    Effect.asSome,
     Effect.catchTag("StatementParseFailed", (failure: StatementParseFailed) =>
       failSubmission({
         userId: statement.userId,
@@ -289,7 +289,7 @@ const processQueued = Effect.fn("StatementIngestion.process")(function* (
   if (Option.isNone(parsed)) return "processed" as const;
 
   const mapping = yield* mappingFor(statement, parsed.value).pipe(
-    Effect.map(Option.some),
+    Effect.asSome,
     Effect.catchTag("StatementColumnMappingFailed", () =>
       (attempts + 1 >= maximumAttempts
         ? finalizeUnmappedRows(statement, parsed.value)
@@ -422,12 +422,13 @@ const runStatementIngestionWorker = Effect.gen(function* () {
   yield* expireStatementIngestion();
   const firstQueuedPage = yield* publishQueuedPage(Option.none());
   const firstTerminalPage = yield* removeTerminalPage(Option.none());
-  yield* Effect.all(
+  yield* Effect.forEach(
     [
       consumeStatementQueue,
       retainTerminalExecutions(firstTerminalPage),
       continueQueuedRecovery(firstQueuedPage),
-    ].map((loop) => Effect.forkScoped(loop)),
+    ],
+    (loop) => Effect.forkScoped(loop),
     { concurrency: "unbounded", discard: true }
   );
 });

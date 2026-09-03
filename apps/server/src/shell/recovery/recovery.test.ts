@@ -508,8 +508,9 @@ layer(RecoveryHarness, { excludeTestServices: true, timeout: "30 seconds" })(
       Effect.gen(function* () {
         yield* prepare(userId, recoveryCode);
         const pairing = yield* startPairing("operator-race");
-        const outcomes = yield* Effect.all(
-          ["operator-a", "operator-b"].map((subject) =>
+        const outcomes = yield* Effect.forEach(
+          ["operator-a", "operator-b"],
+          (subject) =>
             approveSupportRecovery({
               operatorId: SupportOperatorId.make({
                 issuer: "https://test.cloudflareaccess.com",
@@ -517,8 +518,7 @@ layer(RecoveryHarness, { excludeTestServices: true, timeout: "30 seconds" })(
               }),
               pairingCode: pairing.publicCode,
               backupRecoveryCode: Redacted.make(recoveryCode),
-            })
-          ),
+            }),
           { concurrency: "unbounded" }
         );
         expect(outcomes.sort()).toEqual(["Approved", "NotApproved"]);

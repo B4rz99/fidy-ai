@@ -13,9 +13,6 @@ export const forwardedEmailOutstandingCap = freeForwardedEmailCap + freeForwarde
 /** Complete metadata and streamed inline-image retrieval must finish within this lease sub-window. */
 export const forwardedEmailRetrievalDeadline = "3 minutes";
 
-/** A claim becomes recoverable after the retrieval deadline plus two minutes of worker margin. */
-export const forwardedEmailClaimStaleMinutes = 5;
-
 /** The theoretical local-part, separator, and DNS-name envelope-address maximum is 320 characters. */
 export const maximumEmailAddressCharacters = 320;
 

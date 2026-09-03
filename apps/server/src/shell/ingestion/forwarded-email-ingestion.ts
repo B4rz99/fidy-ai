@@ -12,7 +12,9 @@ import {
   Schedule,
   Schema,
 } from "effect";
+import type { PersistedQueue } from "effect/unstable/persistence";
 import { type SqlClient } from "effect/unstable/sql";
+import type { WorkflowEngine } from "effect/unstable/workflow";
 import {
   maximumEmailAddressCharacters,
   maximumEmailRecipients,
@@ -26,8 +28,12 @@ import {
   resolveForwardingAddress,
 } from "./email-forwarding-repo";
 import { type NotificationEmailExtractor } from "./email-extractor";
-import { processNextForwardedEmail } from "./email-worker";
-import { runEmailIngestRetention } from "./email-retention";
+import {
+  ForwardedEmailWorkflowLive,
+  processNextCurrentForwardedEmail,
+  retainForwardedEmailExecutions,
+} from "./forwarded-email-workflow";
+import { emailIngestRetentionDays, runEmailIngestRetention } from "./email-retention";
 import { admitForwardedEmail, enableEmailForwardingInScope } from "./mutations";
 import { type ResendReceivingClient } from "./resend-receiving-client";
 import { getEmailForwarding } from "./queries";
@@ -155,7 +161,9 @@ type ForwardedEmailProcessorDependencies =
   | Crypto.Crypto
   | SqlClient.SqlClient
   | ResendReceivingClient
-  | NotificationEmailExtractor;
+  | NotificationEmailExtractor
+  | PersistedQueue.PersistedQueueFactory
+  | WorkflowEngine.WorkflowEngine;
 
 const makeForwardedEmailProcessor = Effect.gen(function* () {
   const dependencies = yield* Effect.context<ForwardedEmailProcessorDependencies>();
@@ -163,7 +171,7 @@ const makeForwardedEmailProcessor = Effect.gen(function* () {
     effect: Effect.Effect<A, E, ForwardedEmailProcessorDependencies>
   ): Effect.Effect<A, E> => Effect.provide(effect, dependencies);
   return {
-    processNext: provide(processNextForwardedEmail()),
+    processNext: provide(processNextCurrentForwardedEmail().pipe(Effect.asVoid)),
     expireEvidence: provide(Effect.flatMap(DateTime.now, runEmailIngestRetention)),
   } as const;
 });
@@ -173,16 +181,19 @@ export class ForwardedEmailProcessor extends Context.Service<
   ForwardedEmailProcessor,
   Effect.Success<typeof makeForwardedEmailProcessor>
 >()("@fidy/server/shell/ingestion/forwarded-email-ingestion/ForwardedEmailProcessor") {
-  static readonly layer = Layer.effect(ForwardedEmailProcessor, makeForwardedEmailProcessor);
+  static readonly layer = Layer.merge(
+    ForwardedEmailWorkflowLive,
+    Layer.effect(ForwardedEmailProcessor, makeForwardedEmailProcessor)
+  );
 }
 
-/** Hosted poller using only the processor facet of the deep module. */
-export const ForwardedEmailProcessorWorkerLive = Layer.effectDiscard(
+/** Bounded terminal durable-history cleanup with a shared evidence/replay horizon. */
+export const ForwardedEmailExecutionRetentionLive = Layer.effectDiscard(
   Effect.gen(function* () {
-    const processor = yield* ForwardedEmailProcessor;
-    yield* processor.processNext.pipe(
-      Effect.catchCause(() => Effect.logError("Forwarded email iteration failed")),
-      Effect.repeat(Schedule.spaced("1 second")),
+    const retentionDays = yield* emailIngestRetentionDays;
+    yield* retainForwardedEmailExecutions({ now: yield* DateTime.now, retentionDays }).pipe(
+      Effect.catchCause(() => Effect.logError("Forwarded email durable retention failed")),
+      Effect.repeat(Schedule.spaced("1 day")),
       Effect.forkScoped
     );
   })

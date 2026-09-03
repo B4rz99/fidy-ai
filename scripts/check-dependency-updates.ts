@@ -438,7 +438,7 @@ const readBunfig = (directory: string): Effect.Effect<Option.Option<typeof Bunfi
   Effect.tryPromise(() => Bun.file(`${REPO_ROOT}${directory}bunfig.toml`).text()).pipe(
     Effect.map((text) => Bun.TOML.parse(text)),
     Effect.flatMap(Schema.decodeUnknownEffect(Bunfig)),
-    Effect.map(Option.some),
+    Effect.asSome,
     Effect.catchCause(() => Effect.succeed(Option.none<typeof Bunfig.Type>()))
   );
 

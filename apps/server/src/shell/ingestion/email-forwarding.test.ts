@@ -4,6 +4,7 @@ import { Webhook } from "svix";
 import {
   BigDecimal,
   Context,
+  Crypto,
   DateTime,
   Deferred,
   Effect,
@@ -47,6 +48,7 @@ import {
   type NotificationEmailExtractorService,
 } from "./email-extractor";
 import { runEmailIngestRetention } from "./email-retention";
+import { publishForwardedEmailWorkflow } from "./forwarded-email-execution";
 import { ForwardedEmailProcessor, forwardedEmailIngestion } from "./forwarded-email-ingestion";
 import {
   ResendReceivingClient,
@@ -56,6 +58,18 @@ import {
 
 const webhookSecret = testResendWebhookSecret;
 const encodeJson = Schema.encodeSync(UnknownJsonString);
+
+const cleanupForwardedEmailFixtures = Effect.fnUntraced(function* (sql: SqlClient.SqlClient) {
+  yield* sql`
+    TRUNCATE forwarded_email_interpretations, anonymized_email_ingest_samples,
+      email_needs_review_items, raw_email_ingest_samples, source_attestations,
+      forwarded_email_receipts, email_forwarding_addresses,
+      forwarded_email_user_admission_windows, forwarded_email_known_admission_window,
+      resend_webhook_deliveries, resend_webhook_admission_window
+  `;
+  yield* sql`DELETE FROM fidy_durable.fidy_queue
+    WHERE queue_name = 'forwarded-email-ingestion'`;
+});
 
 const getTestRow = <Result extends Schema.Constraint>(
   sql: SqlClient.SqlClient,
@@ -76,13 +90,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         const client = yield* ApiHarnessClient;
         const http = yield* HttpClient.HttpClient;
         const sql = yield* MigrationSqlClient;
-        yield* sql`
-          TRUNCATE anonymized_email_ingest_samples, email_needs_review_items,
-            raw_email_ingest_samples, source_attestations, forwarded_email_receipts,
-            email_forwarding_addresses, forwarded_email_user_admission_windows,
-            forwarded_email_known_admission_window, resend_webhook_deliveries,
-            resend_webhook_admission_window
-        `;
+        yield* cleanupForwardedEmailFixtures(sql);
 
         const first = yield* client.ingestion.enableEmailForwarding();
         const second = yield* client.ingestion.enableEmailForwarding();
@@ -161,6 +169,50 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         expect(oversized.status).toBe(413);
         expect(stalledBody.status).toBe(429);
 
+        const dropRejectedOfferTrigger = Effect.gen(function* () {
+          yield* sql`DROP TRIGGER IF EXISTS fidy_test_reject_forwarded_email_offer
+            ON fidy_durable.fidy_queue`;
+          yield* sql`DROP FUNCTION IF EXISTS fidy_test_reject_forwarded_email_offer()`;
+        }).pipe(Effect.orDie);
+        const rejectedOffer = yield* Effect.gen(function* () {
+          yield* sql`
+            CREATE FUNCTION fidy_test_reject_forwarded_email_offer()
+            RETURNS trigger LANGUAGE plpgsql AS $function$
+            BEGIN
+              RAISE EXCEPTION 'test queue offer rejection';
+            END
+            $function$
+          `;
+          yield* sql`
+            CREATE TRIGGER fidy_test_reject_forwarded_email_offer
+            BEFORE INSERT ON fidy_durable.fidy_queue
+            FOR EACH ROW WHEN (NEW.queue_name = 'forwarded-email-ingestion')
+            EXECUTE FUNCTION fidy_test_reject_forwarded_email_offer()
+          `;
+          return yield* makeDelivery("email_known_1", first.data.address);
+        }).pipe(Effect.ensuring(dropRejectedOfferTrigger));
+        const rolledBackOffer = yield* getTestRow(
+          sql,
+          Schema.Struct({ queueCount: Schema.Int, receiptCount: Schema.Int }),
+          sql`
+            SELECT
+              (SELECT count(*)::int FROM fidy_durable.fidy_queue
+                WHERE queue_name = 'forwarded-email-ingestion') AS "queueCount",
+              (SELECT count(*)::int FROM forwarded_email_receipts
+                WHERE received_email_id = 'email_known_1') AS "receiptCount"
+          `
+        );
+        expect(rejectedOffer.status).toBe(500);
+        expect(rolledBackOffer).toEqual({ queueCount: 0, receiptCount: 0 });
+
+        yield* sql`
+          INSERT INTO fidy_durable.fidy_queue (
+            id, queue_name, element, completed, attempts, created_at, updated_at
+          ) VALUES (
+            'malformed-forwarded-email-envelope', 'forwarded-email-ingestion', '{}',
+            false, 0, now(), now()
+          )
+        `;
         const accepted = yield* makeDelivery("email_known_1", first.data.address);
         const replays = yield* Effect.forEach(
           Array.from({ length: 16 }),
@@ -265,14 +317,26 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           );
           yield* Context.get(context, ForwardedEmailProcessor).processNext;
         });
+        let unavailableRetrievals = 0;
         const unavailable = ResendReceivingClient.of({
-          retrieveEmail: () =>
-            Effect.fail(new ResendReceivingFailed({ reason: "provider-unavailable" })),
+          retrieveEmail: () => {
+            unavailableRetrievals += 1;
+            return Effect.fail(new ResendReceivingFailed({ reason: "provider-unavailable" }));
+          },
         });
-        yield* Effect.forEach([1, 2, 3], () => processWith(unavailable), {
-          concurrency: 1,
-          discard: true,
-        });
+        yield* processWith(unavailable);
+        expect(unavailableRetrievals).toBe(3);
+        expect(
+          yield* getTestRow(
+            sql,
+            Schema.Struct({ attempts: Schema.Int, rejected: Schema.Boolean }),
+            sql`
+              SELECT attempts, last_failure IS NOT NULL AS rejected
+              FROM fidy_durable.fidy_queue
+              WHERE id = 'malformed-forwarded-email-envelope'
+            `
+          )
+        ).toEqual({ attempts: 1, rejected: true });
         const review = yield* client.ingestion.listNeedsReviewItems({
           query: { offset: Option.none(), limit: Option.none() },
         });
@@ -301,6 +365,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
             messageId: Option.some("provider-message-success"),
             createdAt: receivedAt,
           });
+        let invalidResponseRetrievals = 0;
         for (const mismatch of [
           {
             admittedId: "email_mismatched_id",
@@ -316,13 +381,16 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           yield* makeDelivery(mismatch.admittedId, first.data.address);
           yield* processWith(
             ResendReceivingClient.of({
-              retrieveEmail: () =>
-                Effect.succeed(
+              retrieveEmail: () => {
+                invalidResponseRetrievals += 1;
+                return Effect.succeed(
                   providerContent(ResendReceivedEmailId.make(mismatch.returnedId), mismatch.to)
-                ),
+                );
+              },
             })
           );
         }
+        expect(invalidResponseRetrievals).toBe(2);
         const mismatchEffects = yield* getTestRow(
           sql,
           Schema.Struct({ count: Schema.Int }),
@@ -395,11 +463,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         expect(canonicalReview.count).toBe(1);
 
         yield* makeDelivery("email_success_1", first.data.address);
-        yield* Effect.forEach(
-          Array.from({ length: 10 }),
-          () => processWith(successfulProvider).pipe(Effect.delay("10 millis")),
-          { concurrency: 1, discard: true }
-        );
+        yield* processWith(successfulProvider);
         const captured = yield* getTestRow(
           sql,
           Schema.Struct({
@@ -445,6 +509,17 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         `
         );
         const approvedAt = yield* DateTime.now;
+        yield* sql`
+          INSERT INTO forwarded_email_receipts (
+            received_email_id, user_id, webhook_delivery_id, status, service_market, locale,
+            time_zone, period_start, consumes_free_allowance, resume_at, admitted_at
+          ) VALUES (
+            'email_consent_deferred_expiry', ${defaultUserId},
+            'delivery_consent_deferred_expiry', 'deferred', 'CO', 'es-CO',
+            'America/Bogota', ${approvedAt}, true, ${DateTime.add(approvedAt, { days: 1 })},
+            ${approvedAt}
+          )
+        `;
         const approvalContext = yield* Layer.build(ForwardedEmailSampleApproval.layer);
         const approval = Context.get(approvalContext, ForwardedEmailSampleApproval);
         expect(
@@ -453,6 +528,22 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
             approvedBy: ApprovedOperatorId.make("operator@example.test"),
           })
         ).toBe(true);
+        yield* sql`
+          UPDATE forwarded_email_receipts
+          SET status = 'accepted', completed_at = NULL, review_item_id = NULL
+          WHERE received_email_id IN ('email_model_failure', 'email_canonical_failure')
+        `;
+        yield* sql`
+          INSERT INTO forwarded_email_interpretations (
+            received_email_id, user_id, outcome, extraction, created_at, expires_at
+          )
+          SELECT receipt.received_email_id, receipt.user_id, 'model-unavailable', NULL,
+            now(), sample.expires_at
+          FROM forwarded_email_receipts AS receipt
+          JOIN raw_email_ingest_samples AS sample
+            ON sample.received_email_id = receipt.received_email_id
+          WHERE receipt.received_email_id = 'email_model_failure'
+        `;
         const removed = yield* runEmailIngestRetention(DateTime.add(approvedAt, { days: 91 }));
         const retention = yield* getTestRow(
           sql,
@@ -460,17 +551,37 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
             rawCount: Schema.Int,
             anonymizedCount: Schema.Int,
             leakedTextCount: Schema.Int,
+            interpretationCount: Schema.Int,
+            deferredReceiptStatus: Schema.String,
+            uninterpretedReceiptStatus: Schema.String,
+            noSampleReceiptStatus: Schema.String,
           }),
           sql`
           SELECT
             (SELECT count(*)::int FROM raw_email_ingest_samples) AS "rawCount",
             (SELECT count(*)::int FROM anonymized_email_ingest_samples) AS "anonymizedCount",
             (SELECT count(*)::int FROM anonymized_email_ingest_samples
-              WHERE structure LIKE '%Comercio%' OR structure LIKE '%25000%') AS "leakedTextCount"
+              WHERE structure LIKE '%Comercio%' OR structure LIKE '%25000%') AS "leakedTextCount",
+            (SELECT count(*)::int FROM forwarded_email_interpretations)
+              AS "interpretationCount",
+            (SELECT status FROM forwarded_email_receipts
+              WHERE received_email_id = 'email_model_failure') AS "deferredReceiptStatus",
+            (SELECT status FROM forwarded_email_receipts
+              WHERE received_email_id = 'email_canonical_failure') AS "uninterpretedReceiptStatus",
+            (SELECT status FROM forwarded_email_receipts
+              WHERE received_email_id = 'email_consent_deferred_expiry') AS "noSampleReceiptStatus"
         `
         );
         expect(removed).toBe(3);
-        expect(retention).toEqual({ rawCount: 0, anonymizedCount: 1, leakedTextCount: 0 });
+        expect(retention).toEqual({
+          rawCount: 0,
+          anonymizedCount: 1,
+          leakedTextCount: 0,
+          interpretationCount: 0,
+          deferredReceiptStatus: "accepted",
+          uninterpretedReceiptStatus: "accepted",
+          noSampleReceiptStatus: "deferred",
+        });
         const expiredReviewPage = yield* client.ingestion.listNeedsReviewItems({
           query: { offset: Option.none(), limit: Option.none() },
         });
@@ -512,6 +623,11 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         yield* sql`
           DELETE FROM forwarded_email_receipts WHERE user_id = ${tierTransitionUserId}
         `;
+        yield* sql`
+          DELETE FROM fidy_durable.fidy_queue
+          WHERE queue_name = 'forwarded-email-ingestion'
+          AND element::jsonb->>'receivedEmailId' LIKE 'email_pro_%'
+        `;
 
         const freeUserId = UserId.make("f1d1a000-0000-4000-8000-000000000099");
         yield* upsertStableUserFixture(
@@ -551,7 +667,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
             time_zone, period_start, consumes_free_allowance, admitted_at
           )
           SELECT 'email_quota_' || index::text, ${freeUserId},
-            'delivery_quota_' || index::text, 'queued', 'CO', 'es-CO', 'America/Bogota',
+            'delivery_quota_' || index::text, 'accepted', 'CO', 'es-CO', 'America/Bogota',
             clock_timestamp(), true, clock_timestamp()
           FROM generate_series(1, 49) AS index
         `;
@@ -566,7 +682,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           Schema.Struct({ queuedCount: Schema.Int, deferredCount: Schema.Int }),
           sql`
           SELECT
-            count(*) FILTER (WHERE status = 'queued')::int AS "queuedCount",
+            count(*) FILTER (WHERE status = 'accepted')::int AS "queuedCount",
             count(*) FILTER (WHERE status = 'deferred')::int AS "deferredCount"
           FROM forwarded_email_receipts WHERE user_id = ${freeUserId}
         `
@@ -574,7 +690,12 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         expect(quota).toEqual({ queuedCount: 50, deferredCount: 1 });
         yield* sql`
           DELETE FROM forwarded_email_receipts
-          WHERE user_id = ${freeUserId} AND status = 'queued'
+          WHERE user_id = ${freeUserId} AND status = 'accepted'
+        `;
+        yield* sql`
+          DELETE FROM fidy_durable.fidy_queue
+          WHERE queue_name = 'forwarded-email-ingestion'
+          AND element::jsonb->>'receivedEmailId' = 'email_quota_50'
         `;
         yield* sql`UPDATE users SET paid_tier = 'pro' WHERE id = ${freeUserId}`;
         let promotedReceivedEmailId = "";
@@ -715,7 +836,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           Schema.Struct({ count: Schema.Int }),
           sql`
           SELECT count(*)::int AS count FROM forwarded_email_receipts
-          WHERE user_id = ${freeUserId} AND status IN ('queued', 'deferred', 'processing')
+          WHERE user_id = ${freeUserId} AND status IN ('accepted', 'deferred')
         `
         );
         expect(pendingAfterRevocation.count).toBe(0);
@@ -725,343 +846,180 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
       })
     );
 
-    it.effect("fences a stale worker from every effect after another claim completes", () =>
-      Effect.gen(function* () {
-        const sql = yield* MigrationSqlClient;
-        yield* sql`
-          TRUNCATE anonymized_email_ingest_samples, email_needs_review_items,
-            raw_email_ingest_samples, source_attestations, forwarded_email_receipts,
-            email_forwarding_addresses, forwarded_email_user_admission_windows,
-            forwarded_email_known_admission_window, resend_webhook_deliveries,
-            resend_webhook_admission_window
-        `;
-        const localPart = "ffffffffffffffffffffffffffffffff";
-        const address = `${localPart}@ingest.fidyapp.com`;
-        const receivedEmailId = "email_stale_claim_fence";
-        yield* sql`
-          INSERT INTO email_forwarding_addresses (user_id, local_part)
-          VALUES (${defaultUserId}, ${localPart})
-        `;
-        yield* sql`
-          INSERT INTO forwarded_email_receipts (
-            received_email_id, user_id, webhook_delivery_id, status, service_market, locale,
-            time_zone, period_start, consumes_free_allowance, admitted_at
-          ) VALUES (
-            ${receivedEmailId}, ${defaultUserId}, 'delivery-stale-claim-fence',
-            'queued', 'CO', 'es-CO', 'America/Bogota', now(), true, now()
-          )
-        `;
-
-        const content = ReceivedEmailContent.make({
-          receivedEmailId: ResendReceivedEmailId.make(receivedEmailId),
-          from: "alerts@example.test",
-          to: [address],
-          subject: "Compra aprobada",
-          text: Option.some("Compra por COP 25000"),
-          html: Option.none(),
-          inlineImages: [],
-          messageId: Option.some("provider-message-stale-claim"),
-          createdAt: DateTime.makeUnsafe("2026-01-15T12:00:00Z"),
-        });
-        const extraction: TransactionExtraction = {
-          money: Money.make({
-            amount: BigDecimal.fromStringUnsafe("25000"),
-            currency: "COP",
-          }),
-          counterparty: Option.some("Comercio"),
-          direction: "outflow",
-          occurredAt: DateTime.makeUnsafe("2026-01-15T12:00:00Z"),
-        };
-        const extractor = NotificationEmailExtractor.of({
-          extract: () => Effect.succeed(extraction),
-        });
-        const processWith = Effect.fn("test.processStaleClaim")(function* (
-          provider: ResendReceivingClientService
-        ) {
-          const context = yield* Layer.build(
-            ForwardedEmailProcessor.layer.pipe(
-              Layer.provide(
-                Layer.merge(
-                  Layer.succeed(ResendReceivingClient, provider),
-                  Layer.succeed(NotificationEmailExtractor, extractor)
+    it.effect(
+      "linearizes Consent revocation with external work and releases the gate",
+      () =>
+        Effect.gen(function* () {
+          const sql = yield* MigrationSqlClient;
+          yield* cleanupForwardedEmailFixtures(sql);
+          const extractor = NotificationEmailExtractor.of({
+            extract: () => Effect.die("provider failure must stop before extraction"),
+          });
+          const processWith = Effect.fn("test.processConsentRace")(function* (
+            provider: ResendReceivingClientService,
+            usedExtractor: NotificationEmailExtractorService = extractor
+          ) {
+            const context = yield* Layer.build(
+              ForwardedEmailProcessor.layer.pipe(
+                Layer.provide(
+                  Layer.merge(
+                    Layer.succeed(ResendReceivingClient, provider),
+                    Layer.succeed(NotificationEmailExtractor, usedExtractor)
+                  )
                 )
               )
-            )
-          );
-          yield* Context.get(context, ForwardedEmailProcessor).processNext;
-        });
-
-        const staleProviderStarted = yield* Deferred.make<void>();
-        const releaseStaleProvider = yield* Deferred.make<void>();
-        const staleWorker = yield* processWith(
-          ResendReceivingClient.of({
-            retrieveEmail: () =>
-              Deferred.succeed(staleProviderStarted, undefined).pipe(
-                Effect.andThen(Deferred.await(releaseStaleProvider)),
-                Effect.as(content)
-              ),
-          })
-        ).pipe(Effect.forkChild);
-        yield* Deferred.await(staleProviderStarted);
-        yield* sql`
-          UPDATE forwarded_email_receipts
-          SET started_at = clock_timestamp() - interval '6 minutes'
-          WHERE received_email_id = ${receivedEmailId} AND status = 'processing'
-        `;
-        const currentWorker = yield* processWith(
-          ResendReceivingClient.of({ retrieveEmail: () => Effect.succeed(content) })
-        ).pipe(Effect.forkChild);
-        const replacement = yield* getTestRow(
-          sql,
-          Schema.Struct({ attemptCount: Schema.Int }),
-          sql`
-            SELECT attempt_count::int AS "attemptCount"
-            FROM forwarded_email_receipts
-            WHERE received_email_id = ${receivedEmailId}
-          `
-        ).pipe(
-          Effect.delay("10 millis"),
-          Effect.repeat({ until: (row) => row.attemptCount === 2 }),
-          Effect.timeout("5 seconds")
-        );
-        expect(replacement.attemptCount).toBe(2);
-        yield* Deferred.succeed(releaseStaleProvider, undefined);
-        yield* Fiber.join(staleWorker);
-        yield* Fiber.join(currentWorker);
-
-        const effects = yield* getTestRow(
-          sql,
-          Schema.Struct({
-            attestationCount: Schema.Int,
-            rawSampleCount: Schema.Int,
-            receiptStatus: Schema.String,
-            reviewCount: Schema.Int,
-            transactionCount: Schema.Int,
-          }),
-          sql`
-          SELECT
-            (SELECT count(*)::int FROM source_attestations
-              WHERE received_email_id = ${receivedEmailId}) AS "attestationCount",
-            (SELECT count(*)::int FROM raw_email_ingest_samples
-              WHERE received_email_id = ${receivedEmailId}) AS "rawSampleCount",
-            receipt.status AS "receiptStatus",
-            (SELECT count(*)::int FROM email_needs_review_items
-              WHERE received_email_id = ${receivedEmailId}) AS "reviewCount",
-            (SELECT count(*)::int FROM transactions
-              WHERE id = receipt.transaction_id) AS "transactionCount"
-          FROM forwarded_email_receipts AS receipt
-          WHERE receipt.received_email_id = ${receivedEmailId}
-        `
-        );
-        expect(effects).toEqual({
-          attestationCount: 1,
-          rawSampleCount: 1,
-          receiptStatus: "completed",
-          reviewCount: 0,
-          transactionCount: 1,
-        });
-
-        const exhaustedId = "email_exhausted_stale_claim";
-        yield* sql`
-          INSERT INTO forwarded_email_receipts (
-            received_email_id, user_id, webhook_delivery_id, status, service_market, locale,
-            time_zone, period_start, consumes_free_allowance, claim_id, attempt_count,
-            admitted_at, started_at
-          ) VALUES (
-            ${exhaustedId}, ${defaultUserId}, 'delivery-exhausted-stale-claim',
-            'processing', 'CO', 'es-CO', 'America/Bogota', now(), true,
-            'f1d1a000-0000-4000-8000-00000000c203', 3, now(), now() - interval '6 minutes'
-          )
-        `;
-        yield* processWith(
-          ResendReceivingClient.of({
-            retrieveEmail: () => Effect.die("exhausted work must not return to the provider"),
-          })
-        );
-        const exhausted = yield* getTestRow(
-          sql,
-          Schema.Struct({
-            outstandingCount: Schema.Int,
-            reason: Schema.String,
-            status: Schema.String,
-          }),
-          sql`
-          SELECT receipt.status, review.reason,
-            (SELECT count(*)::int FROM forwarded_email_receipts
-              WHERE status IN ('queued', 'deferred', 'processing')) AS "outstandingCount"
-          FROM forwarded_email_receipts AS receipt
-          JOIN email_needs_review_items AS review ON review.id = receipt.review_item_id
-          WHERE receipt.received_email_id = ${exhaustedId}
-        `
-        );
-        expect(exhausted).toEqual({
-          outstandingCount: 0,
-          reason: "processing-interrupted",
-          status: "completed",
-        });
-      })
-    );
-
-    it.effect("linearizes Consent revocation with external work and releases the gate", () =>
-      Effect.gen(function* () {
-        const sql = yield* MigrationSqlClient;
-        yield* sql`
-          TRUNCATE anonymized_email_ingest_samples, email_needs_review_items,
-            raw_email_ingest_samples, source_attestations, forwarded_email_receipts,
-            email_forwarding_addresses, forwarded_email_user_admission_windows,
-            forwarded_email_known_admission_window, resend_webhook_deliveries,
-            resend_webhook_admission_window
-        `;
-        const extractor = NotificationEmailExtractor.of({
-          extract: () => Effect.die("provider failure must stop before extraction"),
-        });
-        const processWith = Effect.fn("test.processConsentRace")(function* (
-          provider: ResendReceivingClientService,
-          usedExtractor: NotificationEmailExtractorService = extractor
-        ) {
-          const context = yield* Layer.build(
-            ForwardedEmailProcessor.layer.pipe(
-              Layer.provide(
-                Layer.merge(
-                  Layer.succeed(ResendReceivingClient, provider),
-                  Layer.succeed(NotificationEmailExtractor, usedExtractor)
-                )
-              )
-            )
-          );
-          yield* Context.get(context, ForwardedEmailProcessor).processNext;
-        });
-        const setup = Effect.fn("test.setupConsentRaceUser")(function* (input: {
-          readonly userId: UserId;
-          readonly localPart: string;
-          readonly receivedEmailId: string;
-        }) {
-          yield* upsertStableUserFixture(
-            input.userId,
-            yield* makeColombianUser(input.userId, {
-              paidTier: "free",
-              createdAt: DateTime.makeUnsafe("2020-01-01T00:00:00Z"),
-            })
-          );
-          yield* sql`
+            );
+            yield* Context.get(context, ForwardedEmailProcessor).processNext;
+          });
+          const setup = Effect.fn("test.setupConsentRaceUser")(function* (input: {
+            readonly userId: UserId;
+            readonly localPart: string;
+            readonly receivedEmailId: string;
+          }) {
+            yield* upsertStableUserFixture(
+              input.userId,
+              yield* makeColombianUser(input.userId, {
+                paidTier: "free",
+                createdAt: DateTime.makeUnsafe("2020-01-01T00:00:00Z"),
+              })
+            );
+            const crypto = yield* Crypto.Crypto;
+            yield* grantCurrentOnboardingConsentForTesting({
+              sourceUserId: defaultUserId,
+              subjectUserId: input.userId,
+              grantId: ConsentRecordId.make(yield* crypto.randomUUIDv4.pipe(Effect.orDie)),
+            });
+            yield* sql`
             INSERT INTO email_forwarding_addresses (user_id, local_part)
             VALUES (${input.userId}, ${input.localPart})
           `;
-          yield* sql`
+            yield* sql`
             INSERT INTO forwarded_email_receipts (
               received_email_id, user_id, webhook_delivery_id, status, service_market, locale,
               time_zone, period_start, consumes_free_allowance, admitted_at
             ) VALUES (
               ${input.receivedEmailId}, ${input.userId}, ${`delivery-${input.receivedEmailId}`},
-              'queued', 'CO', 'es-CO', 'America/Bogota', now(), true, now()
+              'accepted', 'CO', 'es-CO', 'America/Bogota', now(), true, now()
             )
           `;
-        });
+            yield* publishForwardedEmailWorkflow(
+              input.userId,
+              ResendReceivedEmailId.make(input.receivedEmailId)
+            );
+          });
 
-        const waitingUserId = UserId.make("f1d1a000-0000-4000-8000-0000000000a1");
-        yield* setup({
-          userId: waitingUserId,
-          localPart: "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
-          receivedEmailId: "email_external_work_wins",
-        });
-        const providerStarted = yield* Deferred.make<void>();
-        const releaseProvider = yield* Deferred.make<void>();
-        const processing = yield* processWith(
-          ResendReceivingClient.of({
-            retrieveEmail: () =>
-              Deferred.succeed(providerStarted, undefined).pipe(
-                Effect.andThen(Deferred.await(releaseProvider)),
-                Effect.andThen(
-                  Effect.fail(new ResendReceivingFailed({ reason: "provider-unavailable" }))
-                )
-              ),
-          })
-        ).pipe(Effect.forkChild);
-        yield* Deferred.await(providerStarted);
-        const revocationCompleted = yield* Deferred.make<void>();
-        const revocation = yield* revokeCurrentOnboardingConsentForTesting(
-          waitingUserId,
-          ConsentRecordId.make("f1d1a000-0000-4000-8000-0000000000a3")
-        ).pipe(
-          Effect.tap(() => Deferred.succeed(revocationCompleted, undefined)),
-          Effect.forkChild
-        );
-        yield* Effect.sleep("25 millis");
-        expect(yield* Deferred.isDone(revocationCompleted)).toBe(false);
-        yield* Deferred.succeed(releaseProvider, undefined);
-        yield* Fiber.join(processing);
-        yield* Fiber.join(revocation);
-        const workFirstOutcome = yield* getTestRow(
-          sql,
-          Schema.Struct({ revokedCount: Schema.Int, reviewCount: Schema.Int }),
-          sql`
+          const crypto = yield* Crypto.Crypto;
+          const waitingUserId = UserId.make(yield* crypto.randomUUIDv4.pipe(Effect.orDie));
+          yield* setup({
+            userId: waitingUserId,
+            localPart: "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+            receivedEmailId: "email_external_work_wins",
+          });
+          const providerStarted = yield* Deferred.make<void>();
+          const releaseProvider = yield* Deferred.make<void>();
+          const processing = yield* processWith(
+            ResendReceivingClient.of({
+              retrieveEmail: () =>
+                Deferred.succeed(providerStarted, undefined).pipe(
+                  Effect.andThen(Deferred.await(releaseProvider)),
+                  Effect.andThen(
+                    Effect.fail(new ResendReceivingFailed({ reason: "provider-unavailable" }))
+                  )
+                ),
+            })
+          ).pipe(Effect.forkChild);
+          yield* Deferred.await(providerStarted);
+          const revocationCompleted = yield* Deferred.make<void>();
+          const revocation = yield* revokeCurrentOnboardingConsentForTesting(
+            waitingUserId,
+            ConsentRecordId.make("f1d1a000-0000-4000-8000-0000000000a3")
+          ).pipe(
+            Effect.tap(() => Deferred.succeed(revocationCompleted, undefined)),
+            Effect.forkChild
+          );
+          yield* Effect.sleep("25 millis");
+          expect(yield* Deferred.isDone(revocationCompleted)).toBe(false);
+          yield* Deferred.succeed(releaseProvider, undefined);
+          yield* Fiber.join(processing);
+          yield* Fiber.join(revocation);
+          const workFirstOutcome = yield* getTestRow(
+            sql,
+            Schema.Struct({ revokedCount: Schema.Int, reviewCount: Schema.Int }),
+            sql`
           SELECT
             (SELECT count(*)::int FROM forwarded_email_receipts
               WHERE user_id = ${waitingUserId} AND status = 'revoked') AS "revokedCount",
             (SELECT count(*)::int FROM email_needs_review_items
               WHERE user_id = ${waitingUserId}) AS "reviewCount"
         `
-        );
-        expect(workFirstOutcome).toEqual({ revokedCount: 1, reviewCount: 0 });
+          );
+          expect(workFirstOutcome).toEqual({ revokedCount: 1, reviewCount: 0 });
 
-        const interruptedUserId = UserId.make("f1d1a000-0000-4000-8000-0000000000a4");
-        yield* setup({
-          userId: interruptedUserId,
-          localPart: "ffffffffffffffffffffffffffffffff",
-          receivedEmailId: "email_external_work_interrupted",
-        });
-        const interruptedStarted = yield* Deferred.make<void>();
-        const interrupted = yield* processWith(
-          ResendReceivingClient.of({
-            retrieveEmail: () =>
-              Deferred.succeed(interruptedStarted, undefined).pipe(Effect.andThen(Effect.never)),
-          })
-        ).pipe(Effect.forkChild);
-        yield* Deferred.await(interruptedStarted);
-        yield* Fiber.interrupt(interrupted);
-        const released = yield* revokeCurrentOnboardingConsentForTesting(
-          interruptedUserId,
-          ConsentRecordId.make("f1d1a000-0000-4000-8000-0000000000a6")
-        ).pipe(Effect.timeoutOption("1 second"));
-        expect(Option.isSome(released)).toBe(true);
+          const interruptedUserId = UserId.make(yield* crypto.randomUUIDv4.pipe(Effect.orDie));
+          yield* setup({
+            userId: interruptedUserId,
+            localPart: "ffffffffffffffffffffffffffffffff",
+            receivedEmailId: "email_external_work_interrupted",
+          });
+          const interruptedStarted = yield* Deferred.make<void>();
+          const releaseInterrupted = yield* Deferred.make<void>();
+          const interrupted = yield* processWith(
+            ResendReceivingClient.of({
+              retrieveEmail: () =>
+                Deferred.succeed(interruptedStarted, undefined).pipe(
+                  Effect.andThen(Deferred.await(releaseInterrupted)),
+                  Effect.andThen(
+                    Effect.fail(new ResendReceivingFailed({ reason: "provider-unavailable" }))
+                  )
+                ),
+            })
+          ).pipe(Effect.forkChild);
+          yield* Deferred.await(interruptedStarted);
+          yield* Fiber.interrupt(interrupted);
+          yield* Deferred.succeed(releaseInterrupted, undefined);
+          const released = yield* revokeCurrentOnboardingConsentForTesting(
+            interruptedUserId,
+            ConsentRecordId.make("f1d1a000-0000-4000-8000-0000000000a6")
+          ).pipe(Effect.timeoutOption("1 second"));
+          expect(Option.isSome(released)).toBe(true);
 
-        yield* sql`DELETE FROM forwarded_email_receipts`;
-        yield* sql`DELETE FROM email_forwarding_addresses`;
-        const revocationFirstUserId = UserId.make("f1d1a000-0000-4000-8000-0000000000a7");
-        yield* setup({
-          userId: revocationFirstUserId,
-          localPart: "dddddddddddddddddddddddddddddddd",
-          receivedEmailId: "email_revocation_wins",
-        });
-        const gateAcquired = yield* Deferred.make<void>();
-        const releaseRevocation = yield* Deferred.make<void>();
-        const revocationFirst = yield* revokeCurrentOnboardingConsentAtGateForTesting({
-          userId: revocationFirstUserId,
-          revocationId: ConsentRecordId.make("f1d1a000-0000-4000-8000-0000000000a9"),
-          gateAcquired,
-          releaseRevocation,
-        }).pipe(Effect.forkChild);
-        yield* Deferred.await(gateAcquired);
-        let providerCalls = 0;
-        const revocationFirstProcessing = yield* processWith(
-          ResendReceivingClient.of({
-            retrieveEmail: () => {
-              providerCalls += 1;
-              return Effect.die("revocation-first work must not reach the provider");
-            },
-          })
-        ).pipe(Effect.forkChild);
-        yield* Deferred.succeed(releaseRevocation, undefined);
-        yield* Fiber.join(revocationFirst);
-        yield* Fiber.join(revocationFirstProcessing);
-        const revocationFirstEffects = yield* getTestRow(
-          sql,
-          Schema.Struct({
-            rawCount: Schema.Int,
-            transactionCount: Schema.Int,
-            revokedCount: Schema.Int,
-          }),
-          sql`
+          yield* sql`DELETE FROM forwarded_email_receipts`;
+          yield* sql`DELETE FROM email_forwarding_addresses`;
+          const revocationFirstUserId = UserId.make(yield* crypto.randomUUIDv4.pipe(Effect.orDie));
+          yield* setup({
+            userId: revocationFirstUserId,
+            localPart: "dddddddddddddddddddddddddddddddd",
+            receivedEmailId: "email_revocation_wins",
+          });
+          const gateAcquired = yield* Deferred.make<void>();
+          const releaseRevocation = yield* Deferred.make<void>();
+          const revocationFirst = yield* revokeCurrentOnboardingConsentAtGateForTesting({
+            userId: revocationFirstUserId,
+            revocationId: ConsentRecordId.make("f1d1a000-0000-4000-8000-0000000000a9"),
+            gateAcquired,
+            releaseRevocation,
+          }).pipe(Effect.forkChild);
+          yield* Deferred.await(gateAcquired);
+          let providerCalls = 0;
+          const revocationFirstProcessing = yield* processWith(
+            ResendReceivingClient.of({
+              retrieveEmail: () => {
+                providerCalls += 1;
+                return Effect.die("revocation-first work must not reach the provider");
+              },
+            })
+          ).pipe(Effect.forkChild);
+          yield* Deferred.succeed(releaseRevocation, undefined);
+          yield* Fiber.join(revocationFirst);
+          yield* Fiber.join(revocationFirstProcessing);
+          const revocationFirstEffects = yield* getTestRow(
+            sql,
+            Schema.Struct({
+              rawCount: Schema.Int,
+              transactionCount: Schema.Int,
+              revokedCount: Schema.Int,
+            }),
+            sql`
           SELECT
             (SELECT count(*)::int FROM raw_email_ingest_samples
               WHERE user_id = ${revocationFirstUserId}) AS "rawCount",
@@ -1070,26 +1028,21 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
             (SELECT count(*)::int FROM forwarded_email_receipts
               WHERE user_id = ${revocationFirstUserId} AND status = 'revoked') AS "revokedCount"
         `
-        );
-        expect(providerCalls).toBe(0);
-        expect(revocationFirstEffects).toEqual({
-          rawCount: 0,
-          transactionCount: 0,
-          revokedCount: 1,
-        });
-      })
+          );
+          expect(providerCalls).toBe(0);
+          expect(revocationFirstEffects).toEqual({
+            rawCount: 0,
+            transactionCount: 0,
+            revokedCount: 1,
+          });
+        }),
+      30_000
     );
 
     it.effect("does not dispatch external work when no receipt is claimable", () =>
       Effect.gen(function* () {
         const sql = yield* MigrationSqlClient;
-        yield* sql`
-          TRUNCATE anonymized_email_ingest_samples, email_needs_review_items,
-            raw_email_ingest_samples, source_attestations, forwarded_email_receipts,
-            email_forwarding_addresses, forwarded_email_user_admission_windows,
-            forwarded_email_known_admission_window, resend_webhook_deliveries,
-            resend_webhook_admission_window
-        `;
+        yield* cleanupForwardedEmailFixtures(sql);
         const context = yield* Layer.build(
           ForwardedEmailProcessor.layer.pipe(
             Layer.provide(
@@ -1131,13 +1084,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
       Effect.gen(function* () {
         const http = yield* HttpClient.HttpClient;
         const sql = yield* MigrationSqlClient;
-        yield* sql`
-          TRUNCATE anonymized_email_ingest_samples, email_needs_review_items,
-            raw_email_ingest_samples, source_attestations, forwarded_email_receipts,
-            email_forwarding_addresses, forwarded_email_user_admission_windows,
-            forwarded_email_known_admission_window, resend_webhook_deliveries,
-            resend_webhook_admission_window
-        `;
+        yield* cleanupForwardedEmailFixtures(sql);
         const firstUserId = UserId.make("f1d1a000-0000-4000-8000-0000000000b1");
         const secondUserId = UserId.make("f1d1a000-0000-4000-8000-0000000000b3");
         for (const [userId, grantId] of [
@@ -1189,7 +1136,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
             'email_global_capacity_' || index::text,
             CASE WHEN index < 100 THEN ${firstUserId}::uuid ELSE ${secondUserId}::uuid END,
             'delivery_global_capacity_' || index::text,
-            'queued', 'CO', 'es-CO', 'America/Bogota', now(), false,
+            'accepted', 'CO', 'es-CO', 'America/Bogota', now(), false,
             NULL, now()
           FROM generate_series(0, 198) AS index
         `;
@@ -1198,7 +1145,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           Schema.Struct({ count: Schema.Int }),
           sql`
           SELECT count(*)::int AS count FROM forwarded_email_receipts
-          WHERE status IN ('queued', 'deferred', 'processing')
+          WHERE status IN ('accepted', 'deferred')
         `
         );
         expect(beforeOverflow.count).toBe(199);

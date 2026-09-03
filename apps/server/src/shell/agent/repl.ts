@@ -86,7 +86,7 @@ export const runAgentRepl = Effect.fn("runAgentRepl")(function* (caller: ReplCal
     yield* terminal.display("Fidy> ");
     const text = yield* terminal.readLine;
     const message = yield* Schema.decodeEffect(InboundMessage)({ text }).pipe(
-      Effect.map(Option.some),
+      Effect.asSome,
       Effect.catchTag("SchemaError", () =>
         terminal.display(invalidMessage).pipe(Effect.as(Option.none<InboundMessage>()))
       )
@@ -112,7 +112,7 @@ export const runAgentRepl = Effect.fn("runAgentRepl")(function* (caller: ReplCal
       },
       receivedAt: yield* DateTime.now,
     }).pipe(
-      Effect.map(Option.some),
+      Effect.asSome,
       Effect.catchTags({
         ModelUnavailable: () => unavailableOutcome,
         ModelResponseRejected: () => unavailableOutcome,

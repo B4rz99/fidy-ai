@@ -35,6 +35,7 @@ import {
 } from "./repo";
 import { statementSourceFormat } from "./source-format";
 import { publishStatementIngestion } from "./worker";
+import { publishForwardedEmailWorkflow } from "./forwarded-email-execution";
 import {
   admitKnownForwardedEmailInScope,
   countDeferredEmailsInScope,
@@ -80,6 +81,22 @@ export type AdmitForwardedEmailInput = Readonly<{
   receivedAt: DateTime.Utc;
 }>;
 
+type BuildReceiptAdmission = (
+  status: "queued" | "deferred",
+  access: "free" | "pro",
+  resumeAt: DateTime.Utc
+) => Readonly<{
+  status: "accepted" | "deferred";
+  consumesFreeAllowance: boolean;
+  resumeAt: Option.Option<DateTime.Utc>;
+}>;
+
+const buildReceiptAdmission: BuildReceiptAdmission = (status, access, resumeAt) => ({
+  status: status === "queued" ? "accepted" : "deferred",
+  consumesFreeAllowance: access === "free" && status === "queued",
+  resumeAt: status === "deferred" ? Option.some(resumeAt) : Option.none(),
+});
+
 /** Deduplicates one provider email and atomically applies its Colombia-month allowance. */
 export const admitForwardedEmail = Effect.fn("admitForwardedEmail")(function* (
   input: AdmitForwardedEmailInput
@@ -107,20 +124,25 @@ export const admitForwardedEmail = Effect.fn("admitForwardedEmail")(function* (
       if (!(yield* admitKnownForwardedEmailInScope(input.userId))) {
         return "rate-exceeded" as const;
       }
+      const durableAdmission = buildReceiptAdmission(decision.status, access, period.toExclusive);
       const inserted = yield* insertForwardedEmailReceiptInScope({
         ...input,
-        status: decision.status,
+        status: durableAdmission.status,
         context: {
           serviceMarket: user.serviceMarket,
           locale: user.locale,
           timeZone: user.timeZone,
         },
         periodStart: period.from,
-        consumesFreeAllowance: access === "free" && decision.status === "queued",
-        resumeAt: decision.status === "deferred" ? Option.some(period.toExclusive) : Option.none(),
+        consumesFreeAllowance: durableAdmission.consumesFreeAllowance,
+        resumeAt: durableAdmission.resumeAt,
         admittedAt: input.receivedAt,
       });
-      return Option.isSome(inserted) ? decision.status : ("duplicate" as const);
+      if (Option.isSome(inserted)) {
+        yield* publishForwardedEmailWorkflow(input.userId, input.receivedEmailId);
+        return decision.status;
+      }
+      return "duplicate" as const;
     })
   ).pipe(
     Effect.catchTag("ForwardedEmailConsentMissing", () =>

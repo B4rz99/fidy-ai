@@ -44,12 +44,6 @@ export const IngestSampleId = Schema.String.check(Schema.isUUID())
   .annotate({ identifier: "IngestSampleId" });
 export type IngestSampleId = typeof IngestSampleId.Type;
 
-/** Ephemeral ownership token for one durable forwarded-email processing claim. */
-export const ForwardedEmailClaimId = Schema.String.check(Schema.isUUID())
-  .pipe(Schema.brand("ForwardedEmailClaimId"))
-  .annotate({ identifier: "ForwardedEmailClaimId" });
-export type ForwardedEmailClaimId = typeof ForwardedEmailClaimId.Type;
-
 /** Resend's stable identity for one received provider email. */
 export const ResendReceivedEmailId = Schema.NonEmptyString.check(
   Schema.isTrimmed(),

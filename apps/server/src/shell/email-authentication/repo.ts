@@ -2,7 +2,6 @@ import { Crypto, DateTime, Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import {
   EmailAddress,
-  EmailDeliveryClaimToken,
   EmailDeliveryIntentId,
   EmailEnrollmentId,
   EmailVerificationCode,
@@ -259,8 +258,7 @@ export const submitEnrollmentEmail = Effect.fn("EmailAuthentication.submitEmail"
           WHERE id = ${input.enrollmentId} AND delivery_generation < 5
           RETURNING delivery_generation AS generation
         ), superseded AS (
-          UPDATE email_delivery_intents SET status = 'superseded',
-            claim_token = NULL, claim_expires_at = NULL
+          UPDATE email_delivery_intents SET status = 'superseded'
           WHERE enrollment_id = ${input.enrollmentId} AND status <> 'superseded'
             AND EXISTS (SELECT 1 FROM advanced)
         )
@@ -274,19 +272,28 @@ export const submitEnrollmentEmail = Effect.fn("EmailAuthentication.submitEmail"
   return Option.map(admitted, ({ generation }) => generation);
 });
 
-const ClaimedIntent = Schema.Struct({
-  id: Schema.toEncoded(EmailDeliveryIntentId),
-  enrollmentId: Schema.toEncoded(EmailEnrollmentId),
+const PendingDelivery = Schema.Struct({
+  id: EmailDeliveryIntentId,
+  enrollmentId: EmailEnrollmentId,
   generation: Schema.Int,
   email: EmailAddress,
-  publicCode: Schema.toEncoded(EmailVerificationPublicCode),
+  publicCode: EmailVerificationPublicCode,
   idempotencyKey: Schema.String,
-  claimToken: Schema.toEncoded(EmailDeliveryClaimToken),
   enrollmentExpiresAt: Schema.DateTimeUtcFromDate,
+  proofArmed: Schema.Boolean,
 });
-type ClaimedEmailDeliveryIntentRow = typeof ClaimedIntent.Type;
-export type ClaimedEmailDeliveryIntent = ClaimedEmailDeliveryIntentRow &
-  Readonly<{ combinedCode: EmailVerificationCode }>;
+
+type ArmedOnboardingEmailDelivery =
+  | Readonly<{
+      _tag: "Deliver";
+      id: EmailDeliveryIntentId;
+      enrollmentId: EmailEnrollmentId;
+      generation: number;
+      email: EmailAddress;
+      idempotencyKey: string;
+      combinedCode: EmailVerificationCode;
+    }>
+  | Readonly<{ _tag: "Uncertain" }>;
 
 const proofSymbolCount = 16;
 const verificationGroupSize = 4;
@@ -310,82 +317,118 @@ export const makeEmailDeliveryProof = Effect.fn("EmailAuthentication.makeDeliver
   }
 );
 
-/** Atomically claims one current intent and installs only its fresh proof digest. */
-export const claimAndArmEmailDeliveryIntent = Effect.fn("EmailAuthentication.claimAndArmDelivery")(
-  function* (
-    input: Readonly<{
-      claimToken: EmailDeliveryClaimToken;
-      claimedAt: DateTime.Utc;
-      claimExpiresAt: DateTime.Utc;
-    }>
-  ) {
-    const sql = yield* SqlClient.SqlClient;
-    return yield* sql.withTransaction(
-      Effect.gen(function* () {
-        const rows = yield* SqlSchema.findAll({
-          Request: Schema.Void,
-          Result: ClaimedIntent,
-          execute: () => sql`
-          WITH candidate AS (
-            SELECT intent.id FROM email_delivery_intents AS intent
-            JOIN email_enrollments AS enrollment ON enrollment.id = intent.enrollment_id
-            WHERE (intent.status = 'pending'
-              OR (intent.status = 'claimed' AND intent.claim_expires_at <= ${input.claimedAt}
-                AND enrollment.proof_digest IS NULL))
-              AND intent.generation = enrollment.delivery_generation
-              AND enrollment.expires_at > ${input.claimedAt}
-            ORDER BY intent.created_at, intent.id
-            FOR UPDATE OF intent SKIP LOCKED LIMIT 1
-          )
-          UPDATE email_delivery_intents AS intent
-          SET status = 'claimed', claim_token = ${input.claimToken},
-            claim_expires_at = ${input.claimExpiresAt}
-          FROM candidate, email_enrollments AS enrollment
-          WHERE intent.id = candidate.id AND enrollment.id = intent.enrollment_id
-          RETURNING intent.id, intent.enrollment_id AS "enrollmentId", intent.generation,
-            intent.email_address AS email, enrollment.public_code AS "publicCode",
-            intent.idempotency_key AS "idempotencyKey", intent.claim_token AS "claimToken",
-            enrollment.expires_at AS "enrollmentExpiresAt"
-        `,
-        })(undefined).pipe(Effect.orDie);
-        const claimed = Option.fromNullishOr(rows[0]);
-        if (Option.isNone(claimed)) return Option.none<ClaimedEmailDeliveryIntent>();
-        const { digest, proof } = yield* makeEmailDeliveryProof();
-        const intent = claimed.value;
-        const armed = yield* sql`
-        UPDATE email_enrollments AS enrollment
-        SET proof_digest = ${digest},
-          proof_expires_at = ${DateTime.min(proofExpiry(input.claimedAt), intent.enrollmentExpiresAt)},
-          wrong_proof_attempts = 0
-        FROM email_delivery_intents AS delivery
-        WHERE delivery.id = ${intent.id} AND delivery.enrollment_id = enrollment.id
-          AND delivery.claim_token = ${intent.claimToken} AND delivery.status = 'claimed'
-          AND delivery.generation = enrollment.delivery_generation
-        RETURNING enrollment.id
-      `.pipe(Effect.orDie);
-        if (armed.length !== 1) return yield* Effect.die("claimed delivery could not be armed");
-        return Option.some({
-          ...intent,
-          combinedCode: EmailVerificationCode.make(`${intent.publicCode}-${proof}`),
-        });
-      })
-    );
-  }
-);
+const PendingDeliveryIntent = Schema.Struct({
+  id: EmailDeliveryIntentId,
+  createdAt: Schema.DateTimeUtcFromDate,
+});
+type PendingDeliveryIntent = typeof PendingDeliveryIntent.Type;
+type FindPendingOnboardingEmailDeliveries = (
+  after: Option.Option<PendingDeliveryIntent>
+) => Effect.Effect<ReadonlyArray<PendingDeliveryIntent>, never, SqlClient.SqlClient>;
+const pendingDeliveryStartupLimit = 1_000;
 
-/** Marks armed claims whose process vanished as uncertain without generating another proof. */
-export const reconcileExpiredArmedClaims = Effect.fn(
-  "EmailAuthentication.reconcileExpiredArmedClaims"
-)(function* (reconciledAt: DateTime.Utc) {
+/** Reads one bounded keyset page of pending intents for idempotent startup publication. */
+export const findPendingOnboardingEmailDeliveries: FindPendingOnboardingEmailDeliveries = Effect.fn(
+  "EmailAuthentication.findPendingOnboardingDeliveries"
+)(function* (after: Option.Option<PendingDeliveryIntent>) {
+  const sql = yield* SqlClient.SqlClient;
+  return yield* SqlSchema.findAll({
+    Request: Schema.Void,
+    Result: PendingDeliveryIntent,
+    execute: () =>
+      Option.match(after, {
+        onNone: () => sql`
+          SELECT id, created_at AS "createdAt" FROM email_delivery_intents
+          WHERE status = 'pending'
+          ORDER BY created_at, id
+          LIMIT ${pendingDeliveryStartupLimit}
+        `,
+        onSome: (cursor) => sql`
+          SELECT id, created_at AS "createdAt" FROM email_delivery_intents
+          WHERE status = 'pending'
+            AND (created_at, id) > (${cursor.createdAt}, ${cursor.id})
+          ORDER BY created_at, id
+          LIMIT ${pendingDeliveryStartupLimit}
+        `,
+      }),
+  })(undefined).pipe(Effect.orDie);
+});
+
+/** Makes an expired or superseded pending intent explicitly terminal without arming a proof. */
+export const supersedeNotCurrentOnboardingEmailDelivery = Effect.fn(
+  "EmailAuthentication.supersedeNotCurrentOnboardingDelivery"
+)(function* (intentId: EmailDeliveryIntentId, observedAt: DateTime.Utc) {
   const sql = yield* SqlClient.SqlClient;
   yield* sql`
-    UPDATE email_delivery_intents AS intent SET status = 'uncertain',
-      claim_token = NULL, claim_expires_at = NULL
+    UPDATE email_delivery_intents AS intent SET status = 'superseded'
     FROM email_enrollments AS enrollment
-    WHERE intent.enrollment_id = enrollment.id AND intent.status = 'claimed'
-      AND intent.claim_expires_at <= ${reconciledAt} AND enrollment.proof_digest IS NOT NULL
+    WHERE intent.id = ${intentId} AND intent.enrollment_id = enrollment.id
+      AND intent.status = 'pending'
+      AND (intent.generation <> enrollment.delivery_generation OR enrollment.expires_at <= ${observedAt})
   `.pipe(Effect.orDie);
 });
+
+/** Arms one exact current intent; re-entry after arming records ambiguity without another send. */
+export const armOnboardingEmailDelivery = Effect.fn("EmailAuthentication.armOnboardingDelivery")(
+  function* (intentId: EmailDeliveryIntentId, armedAt: DateTime.Utc) {
+    const sql = yield* SqlClient.SqlClient;
+    return yield* sql
+      .withTransaction(
+        Effect.gen(function* () {
+          const pending = yield* SqlSchema.findOneOption({
+            Request: Schema.Void,
+            Result: PendingDelivery,
+            execute: () => sql`
+            SELECT intent.id, intent.enrollment_id AS "enrollmentId", intent.generation,
+              intent.email_address AS email, enrollment.public_code AS "publicCode",
+              intent.idempotency_key AS "idempotencyKey",
+              enrollment.expires_at AS "enrollmentExpiresAt",
+              (enrollment.proof_digest IS NOT NULL) AS "proofArmed"
+            FROM email_delivery_intents AS intent
+            JOIN email_enrollments AS enrollment ON enrollment.id = intent.enrollment_id
+            WHERE intent.id = ${intentId} AND intent.status = 'pending'
+              AND intent.generation = enrollment.delivery_generation
+              AND enrollment.expires_at > ${armedAt}
+            FOR UPDATE OF intent, enrollment
+          `,
+          })(undefined).pipe(Effect.orDie);
+          if (Option.isNone(pending)) return Option.none<ArmedOnboardingEmailDelivery>();
+          const intent = pending.value;
+          if (intent.proofArmed) {
+            yield* sql`
+            UPDATE email_delivery_intents SET status = 'uncertain'
+            WHERE id = ${intent.id} AND status = 'pending'
+          `.pipe(Effect.orDie);
+            return Option.some<ArmedOnboardingEmailDelivery>({ _tag: "Uncertain" });
+          }
+
+          const { digest, proof } = yield* makeEmailDeliveryProof();
+          const armed = yield* sql`
+          UPDATE email_enrollments AS enrollment
+          SET proof_digest = ${digest},
+            proof_expires_at = ${DateTime.min(proofExpiry(armedAt), intent.enrollmentExpiresAt)},
+            wrong_proof_attempts = 0
+          FROM email_delivery_intents AS delivery
+          WHERE delivery.id = ${intent.id} AND delivery.enrollment_id = enrollment.id
+            AND delivery.status = 'pending'
+            AND delivery.generation = enrollment.delivery_generation
+          RETURNING enrollment.id
+        `.pipe(Effect.orDie);
+          if (armed.length !== 1) return yield* Effect.die("current delivery could not be armed");
+          return Option.some<ArmedOnboardingEmailDelivery>({
+            _tag: "Deliver",
+            id: intent.id,
+            enrollmentId: intent.enrollmentId,
+            generation: intent.generation,
+            email: intent.email,
+            idempotencyKey: intent.idempotencyKey,
+            combinedCode: EmailVerificationCode.make(`${intent.publicCode}-${proof}`),
+          });
+        })
+      )
+      .pipe(Effect.catchTag("SqlError", Effect.die));
+  }
+);
 
 /** Installs the unique stable credential inside the coordinator's already-open transaction. */
 export const installVerifiedEmailCredentialInScope = Effect.fn(
@@ -413,32 +456,60 @@ export const installVerifiedEmailCredentialInScope = Effect.fn(
   return inserted.length > 0;
 });
 
-const ExpiredEnrollment = Schema.Struct({ pendingConsentExchangeId: PendingConsentExchangeId });
+const ExpiredEnrollment = Schema.Struct({
+  id: EmailEnrollmentId,
+  pendingConsentExchangeId: PendingConsentExchangeId,
+  deliveryIntentIds: Schema.Array(EmailDeliveryIntentId),
+  pendingDeliveryIntentIds: Schema.Array(EmailDeliveryIntentId),
+});
+type ExpiredEnrollment = typeof ExpiredEnrollment.Type;
+type LockExpiredEmailEnrollmentsForRetention = (
+  now: DateTime.Utc
+) => Effect.Effect<ReadonlyArray<ExpiredEnrollment>, never, SqlClient.SqlClient>;
 const retentionBatchSize = 100;
 
-/** Deletes one fixed-size indexed batch and returns the Consent exchanges it released. */
-export const removeExpiredEmailEnrollments = Effect.fn(
-  "EmailAuthentication.removeExpiredEnrollments"
-)(function* (now: DateTime.Utc) {
+/** Locks one bounded expiry batch so retention can first prove its durable executions terminal. */
+export const lockExpiredEmailEnrollmentsForRetention: LockExpiredEmailEnrollmentsForRetention =
+  Effect.fn("EmailAuthentication.lockExpiredEnrollmentsForRetention")(function* (
+    now: DateTime.Utc
+  ) {
+    const sql = yield* SqlClient.SqlClient;
+    return yield* SqlSchema.findAll({
+      Request: Schema.Void,
+      Result: ExpiredEnrollment,
+      execute: () => sql`
+        WITH expired AS (
+          SELECT id
+          FROM email_enrollments
+          WHERE expires_at <= ${now}
+          ORDER BY expires_at, id
+          LIMIT ${retentionBatchSize}
+          FOR UPDATE SKIP LOCKED
+        )
+        SELECT enrollment.id,
+          enrollment.pending_consent_exchange_id AS "pendingConsentExchangeId",
+          COALESCE(array_agg(intent.id) FILTER (WHERE intent.id IS NOT NULL), '{}') AS "deliveryIntentIds",
+          COALESCE(
+            array_agg(intent.id) FILTER (WHERE intent.status = 'pending'),
+            '{}'
+          ) AS "pendingDeliveryIntentIds"
+        FROM email_enrollments AS enrollment
+        JOIN expired ON expired.id = enrollment.id
+        LEFT JOIN email_delivery_intents AS intent ON intent.enrollment_id = enrollment.id
+        GROUP BY enrollment.id
+      `,
+    })(undefined).pipe(Effect.orDie);
+  });
+
+/** Deletes one still-locked expired enrollment after its durable executions are proven terminal. */
+export const removeExpiredEmailEnrollment = Effect.fn(
+  "EmailAuthentication.removeExpiredEnrollment"
+)(function* (enrollmentId: EmailEnrollmentId, now: DateTime.Utc) {
   const sql = yield* SqlClient.SqlClient;
-  return yield* SqlSchema.findAll({
-    Request: Schema.Void,
-    Result: ExpiredEnrollment,
-    execute: () => sql`
-      WITH expired AS (
-        SELECT id
-        FROM email_enrollments
-        WHERE expires_at <= ${now}
-        ORDER BY expires_at, id
-        LIMIT ${retentionBatchSize}
-        FOR UPDATE SKIP LOCKED
-      )
-      DELETE FROM email_enrollments AS enrollment
-      USING expired
-      WHERE enrollment.id = expired.id
-      RETURNING enrollment.pending_consent_exchange_id AS "pendingConsentExchangeId"
-    `,
-  })(undefined).pipe(Effect.orDie);
+  yield* sql`
+    DELETE FROM email_enrollments
+    WHERE id = ${enrollmentId} AND expires_at <= ${now}
+  `.pipe(Effect.orDie);
 });
 
 /** Deletes one indexed fixed-size batch of expired caller and recipient delivery budgets. */
@@ -461,29 +532,26 @@ export const removeExpiredEmailDeliveryBudgets = Effect.fn(
   `.pipe(Effect.orDie);
 });
 
-/**
- * Applies terminal delivery state only when intent, enrollment, claim token, and generation still
- * match. Returns `"stale"` for stale settlement and never mutates a superseded generation.
- */
-export const settleEmailDelivery = Effect.fn("EmailAuthentication.settleDelivery")(
-  function* (input: {
-    readonly intent: ClaimedEmailDeliveryIntent;
-    readonly status: "sent" | "rejected" | "uncertain";
-    readonly providerMessageId: Option.Option<string>;
-  }) {
-    const sql = yield* SqlClient.SqlClient;
-    const updated = yield* sql`
+/** Applies one terminal result only while the exact generation remains pending and current. */
+export const settleOnboardingEmailDelivery = Effect.fn(
+  "EmailAuthentication.settleOnboardingDelivery"
+)(function* (input: {
+  readonly intentId: EmailDeliveryIntentId;
+  readonly enrollmentId: EmailEnrollmentId;
+  readonly generation: number;
+  readonly status: "sent" | "rejected" | "uncertain";
+  readonly providerMessageId: Option.Option<string>;
+}) {
+  const sql = yield* SqlClient.SqlClient;
+  const updated = yield* sql`
       UPDATE email_delivery_intents AS intent SET status = ${input.status},
-        provider_message_id = ${Option.getOrNull(input.providerMessageId)},
-        claim_token = NULL, claim_expires_at = NULL
+        provider_message_id = ${Option.getOrNull(input.providerMessageId)}
       FROM email_enrollments AS enrollment
-      WHERE intent.id = ${input.intent.id} AND intent.enrollment_id = ${input.intent.enrollmentId}
-        AND enrollment.id = intent.enrollment_id
-        AND intent.claim_token = ${input.intent.claimToken} AND intent.status = 'claimed'
-        AND intent.generation = ${input.intent.generation}
-        AND enrollment.delivery_generation = ${input.intent.generation}
+      WHERE intent.id = ${input.intentId} AND intent.enrollment_id = ${input.enrollmentId}
+        AND enrollment.id = intent.enrollment_id AND intent.status = 'pending'
+        AND intent.generation = ${input.generation}
+        AND enrollment.delivery_generation = ${input.generation}
       RETURNING intent.id
     `.pipe(Effect.orDie);
-    return updated.length === 1 ? ("applied" as const) : ("stale" as const);
-  }
-);
+  return updated.length === 1 ? ("applied" as const) : ("stale" as const);
+});

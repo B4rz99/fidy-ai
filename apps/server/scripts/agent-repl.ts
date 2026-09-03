@@ -5,6 +5,7 @@ import { AgentService } from "~/shell/agent/agent-service";
 import { OpenAiHostedInferenceLive } from "~/shell/agent/openai";
 import { runAgentRepl } from "~/shell/agent/repl";
 import { MigratorLive, PgLive, RuntimeAuthorityLive } from "~/shell/db/client";
+import { DurableExecutionMemory } from "~/shell/durable-execution";
 import { TelemetryDisabled } from "~/shell/observability/disabled";
 
 const program = Effect.gen(function* () {
@@ -18,7 +19,12 @@ const program = Effect.gen(function* () {
 });
 
 const AgentLive = AgentService.layer.pipe(Layer.provide(OpenAiHostedInferenceLive));
-const InfrastructureLive = Layer.mergeAll(PgLive, BunHttpClient.layer, BunServices.layer);
+const InfrastructureLive = Layer.mergeAll(
+  PgLive,
+  DurableExecutionMemory,
+  BunHttpClient.layer,
+  BunServices.layer
+);
 const ReplLive = AgentLive.pipe(
   Layer.provide(RuntimeAuthorityLive),
   Layer.provide(MigratorLive),

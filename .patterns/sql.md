@@ -180,18 +180,10 @@ EXCLUSIVE MODE` (`:222-226,306`); a concurrent runner hits the insert conflict a
 
 ## Queues, LISTEN/NOTIFY, streaming
 
-- **`PersistedQueue` exists and is Pg-tested** (`effect/src/unstable/persistence/
-PersistedQueue.ts`, tests `sql/pg/test/Persistence.test.ts:20-64`): schema-encoded durable
-  queue with `offer` (id dedup via `isCustomId`) and scoped `take` (success = complete,
-  failure = retry up to `maxAttempts`, default 10) (`PersistedQueue.ts:62-96,176`).
-  `PersistedQueue.layerStoreSql({ tableName?, pollInterval?, lockRefreshInterval?,
-lockExpiration? })` needs only `SqlClient` (`:1187-1195`); it creates its own table
-  (`:812-826`) and acquires work with exactly the hand-rolled pattern fidy planned: CTE
-  `UPDATE … WHERE sequence IN (SELECT … FOR UPDATE SKIP LOCKED) RETURNING` (`:1026-1046`),
-  plus worker-id locks with expiry/refresh for crash recovery (`:766-780`). **It polls**
-  (default 1s, `:767`) — it does not use LISTEN/NOTIFY. Evaluate it before hand-rolling the
-  outbound scheduler / ingestion queues; if its shape doesn't fit (no priorities, no
-  scheduled-at), copy its pg poll CTE as the primitive.
+- **`PersistedQueue` is the native durable-job abstraction.** Read
+  `.patterns/persisted-queue.md` before implementing queue publication, claiming, retries,
+  crash recovery, schema evolution, or retention. Keep this document focused on the SQL
+  substrate rather than duplicating that operational contract.
 - **LISTEN/NOTIFY**: `PgClient.listen(channel): Stream<string, SqlError>` on a dedicated
   non-pool connection, and `notify(channel, payload)` via `pg_notify`
   (`PgClient.ts:605-629`; tests `Client.test.ts:319-373`) — usable to cut queue poll latency.

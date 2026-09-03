@@ -1,15 +1,15 @@
 {
   "$comment": [
     "Updates this repo has decided not to take yet. Read by scripts/check-dependency-updates.ts,",
-    "which fails on any compatible update — patch, minor, or prerelease-to-stable — that a pin has",
+    "which fails on any compatible update \u2014 patch, minor, or prerelease-to-stable \u2014 that a pin has",
     "not taken. An entry here downgrades that failure to a warning until its date; it never hides it.",
     "`until` is exclusive: a deferral dated 2026-09-01 stops applying on 2026-09-01. Give a reason a",
-    "reader in three months can act on — what breaks, and what has to happen first.",
+    "reader in three months can act on \u2014 what breaks, and what has to happen first.",
     "`manifest` scopes an entry to one manifest; omit it and the entry speaks for every pin of that",
     "name, which is wrong whenever the same package is pinned twice for different reasons.",
     "",
     "`acceptedVulnerabilities` is the other half: a vulnerability this repo ships with, because the",
-    "install delay in bunfig.toml is never punctured — not even to reach a fix. A release published",
+    "install delay in bunfig.toml is never punctured \u2014 not even to reach a fix. A release published",
     "days ago is how a compromised package arrives, so the delay outranks a known CVE, and when the",
     "only fix is too young the vulnerability is carried instead. Each entry pairs one advisory with",
     "one lockfile, matching an `sca.exclusions` entry in .fluidattacks/sca.yaml, which is where the",
@@ -18,5 +18,78 @@
     "an entry whose exclusion is gone."
   ],
   "deferredUpdates": [],
-  "acceptedVulnerabilities": []
+  "acceptedVulnerabilities": [
+    {
+      "cve": "CVE-2026-76172",
+      "path": "bun.lock",
+      "reason": "fast-uri reaches this development dependency graph transitively. The scanner-recommended fix (3.1.6 / 4.1.3) is still inside the mandatory seven-day install delay, so bun correctly refuses it. These build-time paths process repository-controlled inputs and are absent from the deployed runtime image. Install the safe version after the delay, then remove this record and its SCA exclusion.",
+      "until": "2026-09-11T00:00:00Z"
+    },
+    {
+      "cve": "CVE-2026-76172",
+      "path": "tools/mutation/bun.lock",
+      "reason": "fast-uri reaches this isolated mutation-test toolchain transitively. The scanner-recommended fix (3.1.6 / 4.1.3) is still inside the mandatory seven-day install delay, so bun correctly refuses it. These build-time paths process repository-controlled inputs and are absent from the deployed runtime image. Install the safe version after the delay, then remove this record and its SCA exclusion.",
+      "until": "2026-09-11T00:00:00Z"
+    },
+    {
+      "cve": "CVE-2026-75975",
+      "path": "bun.lock",
+      "reason": "fast-uri reaches this development dependency graph transitively. The scanner-recommended fix (3.1.6 / 4.1.3) is still inside the mandatory seven-day install delay, so bun correctly refuses it. These build-time paths process repository-controlled inputs and are absent from the deployed runtime image. Install the safe version after the delay, then remove this record and its SCA exclusion.",
+      "until": "2026-09-11T00:00:00Z"
+    },
+    {
+      "cve": "CVE-2026-75975",
+      "path": "tools/mutation/bun.lock",
+      "reason": "fast-uri reaches this isolated mutation-test toolchain transitively. The scanner-recommended fix (3.1.6 / 4.1.3) is still inside the mandatory seven-day install delay, so bun correctly refuses it. These build-time paths process repository-controlled inputs and are absent from the deployed runtime image. Install the safe version after the delay, then remove this record and its SCA exclusion.",
+      "until": "2026-09-11T00:00:00Z"
+    },
+    {
+      "cve": "CVE-2026-75899",
+      "path": "bun.lock",
+      "reason": "fast-uri reaches this development dependency graph transitively. The scanner-recommended fix (3.1.6 / 4.1.3) is still inside the mandatory seven-day install delay, so bun correctly refuses it. These build-time paths process repository-controlled inputs and are absent from the deployed runtime image. Install the safe version after the delay, then remove this record and its SCA exclusion.",
+      "until": "2026-09-11T00:00:00Z"
+    },
+    {
+      "cve": "CVE-2026-75899",
+      "path": "tools/mutation/bun.lock",
+      "reason": "fast-uri reaches this isolated mutation-test toolchain transitively. The scanner-recommended fix (3.1.6 / 4.1.3) is still inside the mandatory seven-day install delay, so bun correctly refuses it. These build-time paths process repository-controlled inputs and are absent from the deployed runtime image. Install the safe version after the delay, then remove this record and its SCA exclusion.",
+      "until": "2026-09-11T00:00:00Z"
+    },
+    {
+      "cve": "CVE-2026-75931",
+      "path": "bun.lock",
+      "reason": "fast-uri reaches this development dependency graph transitively. The scanner-recommended fix (3.1.6 / 4.1.3) is still inside the mandatory seven-day install delay, so bun correctly refuses it. These build-time paths process repository-controlled inputs and are absent from the deployed runtime image. Install the safe version after the delay, then remove this record and its SCA exclusion.",
+      "until": "2026-09-11T00:00:00Z"
+    },
+    {
+      "cve": "CVE-2026-75931",
+      "path": "tools/mutation/bun.lock",
+      "reason": "fast-uri reaches this isolated mutation-test toolchain transitively. The scanner-recommended fix (3.1.6 / 4.1.3) is still inside the mandatory seven-day install delay, so bun correctly refuses it. These build-time paths process repository-controlled inputs and are absent from the deployed runtime image. Install the safe version after the delay, then remove this record and its SCA exclusion.",
+      "until": "2026-09-11T00:00:00Z"
+    },
+    {
+      "cve": "CVE-2026-82417",
+      "path": "bun.lock",
+      "reason": "qs reaches this development dependency graph transitively. The scanner-recommended fix (6.16.0) is still inside the mandatory seven-day install delay, so bun correctly refuses it. These build-time paths process repository-controlled inputs and are absent from the deployed runtime image. Install the safe version after the delay, then remove this record and its SCA exclusion.",
+      "until": "2026-09-11T00:00:00Z"
+    },
+    {
+      "cve": "CVE-2026-82417",
+      "path": "tools/mutation/bun.lock",
+      "reason": "qs reaches this isolated mutation-test toolchain transitively. The scanner-recommended fix (6.16.0) is still inside the mandatory seven-day install delay, so bun correctly refuses it. These build-time paths process repository-controlled inputs and are absent from the deployed runtime image. Install the safe version after the delay, then remove this record and its SCA exclusion.",
+      "until": "2026-09-11T00:00:00Z"
+    },
+    {
+      "cve": "CVE-2026-82562",
+      "path": "bun.lock",
+      "reason": "qs reaches this development dependency graph transitively. The scanner-recommended fix (6.16.0) is still inside the mandatory seven-day install delay, so bun correctly refuses it. These build-time paths process repository-controlled inputs and are absent from the deployed runtime image. Install the safe version after the delay, then remove this record and its SCA exclusion.",
+      "until": "2026-09-11T00:00:00Z"
+    },
+    {
+      "cve": "CVE-2026-82562",
+      "path": "tools/mutation/bun.lock",
+      "reason": "qs reaches this isolated mutation-test toolchain transitively. The scanner-recommended fix (6.16.0) is still inside the mandatory seven-day install delay, so bun correctly refuses it. These build-time paths process repository-controlled inputs and are absent from the deployed runtime image. Install the safe version after the delay, then remove this record and its SCA exclusion.",
+      "until": "2026-09-11T00:00:00Z"
+    }
+  ]
 }

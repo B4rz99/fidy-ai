@@ -33,6 +33,11 @@ const credentialEvidence = [
     testName: "keeps the credential lookup HMAC key out of persistence and outcomes",
   },
   {
+    configuration: "FIDY_CLUSTER_AUTH_TOKEN",
+    testFile: "apps/server/src/shell/authenticated-cluster-http.test.ts",
+    testName: "keeps Cluster credentials out of authentication failures",
+  },
+  {
     configuration: "RESEND_API_KEY",
     testFile: "apps/server/src/shell/email-authentication/delivery.test.ts",
     testName: "keeps Resend credentials out of typed failures",

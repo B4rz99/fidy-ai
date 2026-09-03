@@ -1,5 +1,6 @@
 import { Crypto, Effect, Function, Option, Schema } from "effect";
 import { Tool, Toolkit } from "effect/unstable/ai";
+import { PersistedQueue } from "effect/unstable/persistence";
 import { SqlClient } from "effect/unstable/sql";
 import { toCodecOpenAI } from "effect/unstable/ai/OpenAiStructuredOutput";
 import { type AgentConfirmation, isHostedVisible } from "~/shell/_shared/operation-policy";
@@ -204,6 +205,7 @@ export const makeAgentToolkit = (input: {
     const telemetry = yield* Telemetry;
     const crypto = yield* Crypto.Crypto;
     const inference = yield* HostedInference;
+    const queueFactory = yield* PersistedQueue.PersistedQueueFactory;
     const ledger = makePermitLedger();
     const invoke = (
       binding: AgentOperationBinding,
@@ -219,6 +221,7 @@ export const makeAgentToolkit = (input: {
             Effect.provideService(Telemetry, telemetry),
             Effect.provideService(Crypto.Crypto, crypto),
             Effect.provideService(HostedInference, inference),
+            Effect.provideService(PersistedQueue.PersistedQueueFactory, queueFactory),
             // A refusal the declared failure schema cannot carry back to the model ends the Turn.
             // It is already audited as `rejected` before reaching here, so dying with the rejection
             // itself keeps its reason in the Cause for the log rather than replacing it with prose.

@@ -19,6 +19,7 @@ import {
 } from "effect";
 import type { Tool } from "effect/unstable/ai";
 import { HttpClient } from "effect/unstable/http";
+import { PersistedQueue } from "effect/unstable/persistence";
 import { SqlClient } from "effect/unstable/sql";
 import { allCanonicalCapabilities } from "~/core/_shared/canonical-capability";
 import { ProviderQualifiedMessages } from "~/core/consent/model";
@@ -1385,6 +1386,7 @@ type AgentServiceDependencies = Readonly<{
   crypto: Crypto.Crypto;
   httpClient: HttpClient.HttpClient;
   sqlClient: SqlClient.SqlClient;
+  queueFactory: PersistedQueue.PersistedQueueFactory["Service"];
 }>;
 
 const prepareInitialRound = (
@@ -1564,7 +1566,12 @@ const runBoundedPreparation = <E, R>(
 ): Effect.Effect<
   AgentReply,
   AgentTurnError | E | HostedAgentSessionConsentRequired,
-  R | Crypto.Crypto | HttpClient.HttpClient | SqlClient.SqlClient | HostedInference
+  | R
+  | Crypto.Crypto
+  | HttpClient.HttpClient
+  | SqlClient.SqlClient
+  | HostedInference
+  | PersistedQueue.PersistedQueueFactory
 > => {
   const {
     authorityRoot,
@@ -1598,7 +1605,12 @@ const runSerializedTurn = <E, R>(
 ): Effect.Effect<
   AgentReply,
   AgentTurnError | E,
-  R | Crypto.Crypto | HttpClient.HttpClient | SqlClient.SqlClient | HostedInference
+  | R
+  | Crypto.Crypto
+  | HttpClient.HttpClient
+  | SqlClient.SqlClient
+  | HostedInference
+  | PersistedQueue.PersistedQueueFactory
 > =>
   withUserTurnLock(
     input.userId,
@@ -1625,8 +1637,11 @@ const provideAgentDependencies = <A, E, R>(
   // Nested rather than one union Exclude: for an unresolved `R` these are deferred conditional
   // types, and TypeScript will not accept the collapsed form as equivalent.
   Exclude<
-    Exclude<Exclude<Exclude<R, Crypto.Crypto>, HttpClient.HttpClient>, SqlClient.SqlClient>,
-    HostedInference
+    Exclude<
+      Exclude<Exclude<Exclude<R, Crypto.Crypto>, HttpClient.HttpClient>, SqlClient.SqlClient>,
+      HostedInference
+    >,
+    PersistedQueue.PersistedQueueFactory
   >
 > =>
   effect.pipe(
@@ -1635,7 +1650,8 @@ const provideAgentDependencies = <A, E, R>(
     Effect.provideService(SqlClient.SqlClient, dependencies.sqlClient),
     // A canonical mutation reached from a hosted tool call may run inference of its own, so the
     // runtime hands down its own model rather than trusting the caller's ambient context.
-    Effect.provideService(HostedInference, dependencies.inference)
+    Effect.provideService(HostedInference, dependencies.inference),
+    Effect.provideService(PersistedQueue.PersistedQueueFactory, dependencies.queueFactory)
   );
 
 const makeHandleMessage =
@@ -1673,6 +1689,7 @@ const makeAgentService = Effect.gen(function* () {
     crypto: yield* Crypto.Crypto,
     httpClient: yield* HttpClient.HttpClient,
     sqlClient: yield* SqlClient.SqlClient,
+    queueFactory: yield* PersistedQueue.PersistedQueueFactory,
   };
   return AgentService.of({ handleMessage: makeHandleMessage(dependencies) });
 });

@@ -180,6 +180,17 @@ layer(IngestionHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u
         );
         expect(retry.data.id).toBe(first.data.id);
+        const queueRows = yield* Schema.decodeUnknownEffect(
+          Schema.Array(Schema.Struct({ count: Schema.Finite, maximumPayloadBytes: Schema.Finite }))
+        )(
+          yield* sql`SELECT count(*)::int AS count,
+            max(octet_length(element))::int AS "maximumPayloadBytes"
+          FROM fidy_durable.fidy_queue
+          WHERE queue_name = 'statement-ingestion' AND id = ${first.data.id}`
+        );
+        expect(queueRows).toHaveLength(1);
+        expect(queueRows[0]?.count).toBe(1);
+        expect(queueRows[0]?.maximumPayloadBytes).toBeLessThanOrEqual(160);
 
         const second = yield* Effect.result(
           client.ingestion.submitForExtraction({
@@ -225,6 +236,25 @@ layer(IngestionHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           params: { id: first.data.id },
         });
         expect(visible.data.status).toBe("queued");
+
+        yield* sql`UPDATE users SET paid_tier = 'pro' WHERE id = ${freeUserId}`;
+        const rollbackKey = "f1d1a000-0000-4000-8000-00000000c189";
+        yield* withUserTransaction(
+          freeUserId,
+          submitForExtractionInScope({
+            userId: freeUserId,
+            caller: freePatCaller(["write"]),
+            payload: statementPayload(rollbackKey),
+          }).pipe(Effect.andThen(Effect.fail("rollback")))
+        ).pipe(Effect.result);
+        const rolledBack = yield* sql`
+          SELECT
+            (SELECT count(*)::int FROM statement_submissions
+              WHERE user_id = ${freeUserId} AND idempotency_key = ${rollbackKey}) AS submissions,
+            (SELECT count(*)::int FROM fidy_durable.fidy_queue
+              WHERE queue_name = 'statement-ingestion') AS queue_items
+        `;
+        expect(rolledBack).toEqual([{ submissions: 0, queue_items: 1 }]);
       })
     );
   }

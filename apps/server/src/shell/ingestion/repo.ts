@@ -18,7 +18,6 @@ import {
   StatementFailureReason,
   StatementRowEvidence,
   type StatementSubmission,
-  StatementSubmissionStatus,
 } from "~/core/ingestion/model";
 import {
   NeedsReviewItemId,
@@ -33,7 +32,7 @@ const SubmissionRow = Schema.Struct({
   id: StatementSubmissionId,
   sourceFormat: StatementSourceFormat,
   parserRevision: InterpretationRevision,
-  status: StatementSubmissionStatus,
+  status: Schema.Literals(["queued", "completed", "failed"]),
   submittedAt: Schema.DateTimeUtcFromDate,
   startedAt: Schema.OptionFromNullOr(Schema.DateTimeUtcFromDate),
   completedAt: Schema.OptionFromNullOr(Schema.DateTimeUtcFromDate),
@@ -59,7 +58,6 @@ const submissionFromRow = (row: SubmissionRow): StatementSubmission => {
   };
   if (row.status === "queued") return { ...base, status: "queued" };
   const startedAt = Option.getOrThrow(row.startedAt);
-  if (row.status === "processing") return { ...base, status: "processing", startedAt };
   if (row.status === "failed") {
     return {
       ...base,
@@ -117,7 +115,7 @@ export const statementAdmissionPressureInScope = Effect.fn("statementAdmissionPr
       Result: Schema.Struct({ outstanding: Schema.Int, admittedThisHour: Schema.Int }),
       execute: (id) => sql`
       SELECT
-        count(*) FILTER (WHERE status IN ('queued', 'processing'))::int AS outstanding,
+        count(*) FILTER (WHERE status = 'queued')::int AS outstanding,
         count(*) FILTER (WHERE submitted_at >= now() - interval '1 hour')::int AS "admittedThisHour"
       FROM statement_submissions
       WHERE user_id = ${id}
@@ -223,58 +221,156 @@ export const findSubmission = Effect.fn("findSubmission")(function* (
   );
 });
 
-const StatementClaimId = Schema.NonEmptyString;
-
-export const ClaimedStatement = Schema.Struct({
+export const QueuedStatement = Schema.Struct({
   id: StatementSubmissionId,
   userId: UserId,
-  claimId: StatementClaimId,
   contentHash: Schema.String,
   sourceFormat: StatementSourceFormat,
   fileContent: Schema.Uint8Array,
   ...CapturedInterpretationContext.fields,
   parserRevision: InterpretationRevision,
-  attemptCount: Schema.Int,
 });
-export type ClaimedStatement = typeof ClaimedStatement.Type;
+export type QueuedStatement = typeof QueuedStatement.Type;
 
-/** Claims one queued submission through the narrow RLS-bypassing gateway function. */
-export const claimStatementSubmission = Effect.fn("claimStatementSubmission")(function* () {
-  const sql = yield* SqlClient.SqlClient;
-  return yield* SqlSchema.findOneOption({
-    Request: Schema.Void,
-    Result: ClaimedStatement,
-    execute: () => sql`
-      SELECT id, user_id AS "userId", claim_id AS "claimId", content_hash AS "contentHash",
-        source_format AS "sourceFormat", file_content AS "fileContent",
-        service_market AS "serviceMarket", locale, time_zone AS "timeZone",
-        parser_revision AS "parserRevision", attempt_count AS "attemptCount"
-      FROM fidy_claim_statement_submission()
-    `,
-  })(undefined).pipe(Effect.orDie);
-});
+/** Resolves the authoritative User before entering the submission's RLS scope. */
+export const resolveStatementSubmissionUser = Effect.fn("resolveStatementSubmissionUser")(
+  function* (id: StatementSubmissionId) {
+    const sql = yield* SqlClient.SqlClient;
+    const resolved = yield* SqlSchema.findOneOption({
+      Request: StatementSubmissionId,
+      Result: Schema.Struct({ userId: UserId }),
+      execute: (submissionId) => sql`
+        SELECT resolved AS "userId"
+        FROM (SELECT fidy_resolve_statement_submission_user(${submissionId}) AS resolved)
+        WHERE resolved IS NOT NULL
+      `,
+    })(id).pipe(Effect.orDie);
+    return Option.map(resolved, ({ userId }) => userId);
+  }
+);
 
-/** Locks a claim before finalization so a stale worker cannot duplicate row outcomes. */
-export const ownsStatementClaimInScope = Effect.fn("ownsStatementClaimInScope")(function* (
+/** Records the first execution instant and loads one queued submission in its User scope. */
+export const startQueuedStatement = Effect.fn("startQueuedStatement")(function* (
   userId: UserId,
   id: StatementSubmissionId,
-  claimId: string
+  startedAt: DateTime.Utc
+) {
+  return yield* withUserTransaction(
+    userId,
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      return yield* SqlSchema.findOneOption({
+        Request: Schema.Struct({
+          userId: UserId,
+          id: StatementSubmissionId,
+          startedAt: Schema.DateTimeUtc,
+        }),
+        Result: QueuedStatement,
+        execute: (input) => sql`
+          UPDATE statement_submissions SET started_at = coalesce(started_at, ${input.startedAt})
+          WHERE id = ${input.id} AND user_id = ${input.userId} AND status = 'queued'
+          RETURNING id, user_id AS "userId", content_hash AS "contentHash",
+            source_format AS "sourceFormat", file_content AS "fileContent",
+            service_market AS "serviceMarket", locale, time_zone AS "timeZone",
+            parser_revision AS "parserRevision"
+        `,
+      })({ userId, id, startedAt }).pipe(Effect.orDie);
+    })
+  );
+});
+
+/** Locks a still-queued submission before atomically writing its terminal outcomes. */
+export const lockQueuedStatementInScope = Effect.fn("lockQueuedStatementInScope")(function* (
+  userId: UserId,
+  id: StatementSubmissionId
 ) {
   const sql = yield* SqlClient.SqlClient;
   return yield* SqlSchema.findOneOption({
-    Request: Schema.Struct({
-      userId: UserId,
-      id: StatementSubmissionId,
-      claimId: StatementClaimId,
-    }),
+    Request: Schema.Struct({ userId: UserId, id: StatementSubmissionId }),
     Result: Schema.Struct({ id: StatementSubmissionId }),
     execute: (input) => sql`
       SELECT id FROM statement_submissions
-      WHERE id = ${input.id} AND user_id = ${input.userId} AND claim_id = ${input.claimId}
-        AND status = 'processing'
+      WHERE id = ${input.id} AND user_id = ${input.userId} AND status = 'queued'
       FOR UPDATE
     `,
-  })({ userId, id, claimId }).pipe(Effect.map(Option.isSome), Effect.orDie);
+  })({ userId, id }).pipe(Effect.map(Option.isSome), Effect.orDie);
+});
+
+const QueuedSubmissionCursor = Schema.Struct({
+  id: StatementSubmissionId,
+  userId: UserId,
+  submittedAt: Schema.DateTimeUtcFromDate,
+});
+export type QueuedSubmissionCursor = typeof QueuedSubmissionCursor.Type;
+
+/** Lists one bounded recovery page without granting access to statement contents. */
+export const findQueuedStatementSubmissions = Effect.fn("findQueuedStatementSubmissions")(
+  function* (cursor: Option.Option<QueuedSubmissionCursor>) {
+    const sql = yield* SqlClient.SqlClient;
+    const afterSubmittedAt = Option.match(cursor, {
+      onNone: () => null,
+      onSome: ({ submittedAt }) => submittedAt,
+    });
+    const afterId = Option.match(cursor, {
+      onNone: () => null,
+      onSome: ({ id }) => id,
+    });
+    return yield* SqlSchema.findAll({
+      Request: Schema.Struct({
+        afterSubmittedAt: Schema.NullOr(Schema.DateTimeUtc),
+        afterId: Schema.NullOr(StatementSubmissionId),
+        pageSize: Schema.Int,
+      }),
+      Result: QueuedSubmissionCursor,
+      execute: (request) => sql`
+        SELECT id, user_id AS "userId", submitted_at AS "submittedAt"
+        FROM fidy_list_queued_statement_submissions(
+          ${request.afterSubmittedAt}, ${request.afterId}, ${request.pageSize}
+        )
+      `,
+    })({ afterSubmittedAt, afterId, pageSize: 100 }).pipe(Effect.orDie);
+  }
+);
+
+const TerminalExecutionCursor = Schema.Struct({
+  id: StatementSubmissionId,
+  completedAt: Schema.DateTimeUtcFromDate,
+});
+export type TerminalExecutionCursor = typeof TerminalExecutionCursor.Type;
+
+/** Lists one bounded page whose domain lifecycle proves queue execution is terminal. */
+export const findTerminalStatementExecutions = Effect.fn("findTerminalStatementExecutions")(
+  function* (cursor: Option.Option<TerminalExecutionCursor>) {
+    const sql = yield* SqlClient.SqlClient;
+    const afterCompletedAt = Option.match(cursor, {
+      onNone: () => null,
+      onSome: ({ completedAt }) => completedAt,
+    });
+    const afterId = Option.match(cursor, {
+      onNone: () => null,
+      onSome: ({ id }) => id,
+    });
+    return yield* SqlSchema.findAll({
+      Request: Schema.Struct({
+        afterCompletedAt: Schema.NullOr(Schema.DateTimeUtc),
+        afterId: Schema.NullOr(StatementSubmissionId),
+        pageSize: Schema.Int,
+      }),
+      Result: TerminalExecutionCursor,
+      execute: (request) => sql`
+        SELECT id, completed_at AS "completedAt"
+        FROM fidy_list_terminal_statement_executions(
+          ${request.afterCompletedAt}, ${request.afterId}, ${request.pageSize}
+        )
+      `,
+    })({ afterCompletedAt, afterId, pageSize: 100 }).pipe(Effect.orDie);
+  }
+);
+
+/** Applies raw statement and review retention through the narrow scheduled gateway. */
+export const expireStatementIngestion = Effect.fn("expireStatementIngestion")(function* () {
+  const sql = yield* SqlClient.SqlClient;
+  yield* sql`SELECT fidy_expire_statement_ingestion()`.pipe(Effect.orDie);
 });
 
 /** Loads one versioned mapping profile within the claimed User context. */
@@ -374,7 +470,6 @@ export const completeSubmissionInScope = Effect.fn("completeSubmissionInScope")(
   input: Readonly<{
     userId: UserId;
     id: StatementSubmissionId;
-    claimId: string;
     accounting: StatementAccounting;
     completedAt: DateTime.Utc;
   }>
@@ -384,11 +479,11 @@ export const completeSubmissionInScope = Effect.fn("completeSubmissionInScope")(
   const sql = yield* SqlClient.SqlClient;
   yield* sql`
     WITH completed AS (
-      UPDATE statement_submissions SET status = 'completed', file_content = NULL, claim_id = NULL,
-        input_rows = ${accounting.inputRows}, accepted_rows = ${accounting.acceptedRows},
+      UPDATE statement_submissions SET status = 'completed', file_content = NULL,
+        started_at = coalesce(started_at, ${completedAt}), input_rows = ${accounting.inputRows},
+        accepted_rows = ${accounting.acceptedRows},
         needs_review_rows = ${accounting.needsReviewRows}, completed_at = ${completedAt}
-      WHERE id = ${id} AND user_id = ${userId} AND claim_id = ${input.claimId}
-        AND status = 'processing'
+      WHERE id = ${id} AND user_id = ${userId} AND status = 'queued'
       RETURNING id
     )
     UPDATE statement_backfill_entitlements SET
@@ -397,32 +492,6 @@ export const completeSubmissionInScope = Effect.fn("completeSubmissionInScope")(
     WHERE user_id = ${userId} AND submission_id = ${id} AND consumed_at IS NULL
       AND EXISTS (SELECT 1 FROM completed)
   `.pipe(Effect.orDie);
-});
-
-/** Releases a claimed submission after a transient adapter failure. */
-export const requeueSubmission = Effect.fn("requeueSubmission")(function* (
-  userId: UserId,
-  id: StatementSubmissionId,
-  claimId: string
-) {
-  yield* withUserTransaction(
-    userId,
-    Effect.flatMap(
-      SqlClient.SqlClient,
-      (sql) =>
-        sql`
-        UPDATE statement_submissions SET
-          status = CASE WHEN attempt_count >= 3 THEN 'failed' ELSE 'queued' END,
-          started_at = CASE WHEN attempt_count >= 3 THEN started_at ELSE NULL END,
-          completed_at = CASE WHEN attempt_count >= 3 THEN now() ELSE NULL END,
-          failure_reason = CASE WHEN attempt_count >= 3 THEN 'mapping-unavailable' ELSE NULL END,
-          file_content = CASE WHEN attempt_count >= 3 THEN NULL ELSE file_content END,
-          claim_id = NULL
-        WHERE id = ${id} AND user_id = ${userId} AND claim_id = ${claimId}
-          AND status = 'processing'
-      `
-    ).pipe(Effect.orDie)
-  );
 });
 
 /** Records a safe terminal failure and erases the uploaded bytes. */
@@ -435,7 +504,6 @@ export const failSubmission = Effect.fn("failSubmission")(function* (
       | "resource-limit"
       | "malformed-file"
       | "mapping-unavailable";
-    claimId: string;
     completedAt: DateTime.Utc;
   }>
 ) {
@@ -446,10 +514,10 @@ export const failSubmission = Effect.fn("failSubmission")(function* (
       (sql) =>
         sql`
         WITH failed AS (
-          UPDATE statement_submissions SET status = 'failed', file_content = NULL, claim_id = NULL,
+          UPDATE statement_submissions SET status = 'failed', file_content = NULL,
+            started_at = coalesce(started_at, ${input.completedAt}),
             failure_reason = ${input.failureReason}, completed_at = ${input.completedAt}
-          WHERE id = ${input.id} AND user_id = ${input.userId} AND claim_id = ${input.claimId}
-            AND status = 'processing'
+          WHERE id = ${input.id} AND user_id = ${input.userId} AND status = 'queued'
           RETURNING id
         )
         UPDATE statement_backfill_entitlements SET submission_id = NULL

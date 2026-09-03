@@ -341,8 +341,18 @@ intent. Its Activity arms the proof before calling Resend, settles only the stil
 and treats re-entry with an armed proof as ambiguous rather than risking a second provider call.
 At production startup, bounded idempotent publication also recovers pending intents translated from
 the previous executor. Onboarding retention first proves each queue item completed, then uses the
-Cluster storage API to clear terminal history with the pre-User intent. Migration is
-expand–migrate–contract: no item may be
+Cluster storage API to clear terminal history with the pre-User intent.
+
+Statement Ingestion publishes an identifier-only, versioned `StatementSubmissionId` plus explicit
+`UserId` through `statement-ingestion` in the same transaction that accepts the submission. Queue
+leases coordinate runtime processes; each execution activates that User's RLS scope before loading
+uploaded bytes. Mapping unavailability is the sole typed retry, capped at three queue attempts, and
+exhaustion conserves every row as a NeedsReviewItem. Parser failures and retention expiry settle the
+existing safe terminal Ingestion outcomes. Startup republishes one bounded recovery page before
+readiness and paces later pages; scheduled retention erases expired raw material and removes queue
+rows only after both the domain lifecycle and Effect's completed flag prove terminal execution.
+
+Migration is expand–migrate–contract: no item may be
 eligible in old and Effect execution simultaneously, and each migrated slice deletes the claims,
 leases, pollers, and execution-only status it replaces rather than wrapping them.
 

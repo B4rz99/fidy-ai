@@ -1,0 +1,87 @@
+apps/server/src/shell/agent/agent-service.ts
+  s_84fafb45fdba04::t_bd646901af0d03 22,1569-1574
+  s_84fafb45fdba04::t_915aa2db3b3f19 1389
+  s_84fafb45fdba04::t_633e199f966d88 1608-1613
+  s_84fafb45fdba04::t_57ff32ec5a7d5f 1640-1644,1653-1654,1692
+apps/server/src/shell/ingestion/fixtures.ts
+  s_84fafb45fdba04::t_4cc402be53db5c 7
+apps/server/src/shell/_shared/canonical-implementation.ts
+  s_84fafb45fdba04::t_d1408b48f438f3 4,25-26
+apps/server/src/shell/db/migrations/0047-effect-statement-ingestion.ts
+  s_84fafb45fdba04::t_abcc89db14a128 1-9,11-19,22-33,49-77,108-134
+  s_84fafb45fdba04::t_d28204cec96669 34-48
+  s_84fafb45fdba04::t_b8406c8f43441c 78-107
+  s_84fafb45fdba04::t_c7664613c8dc0f 10,20-21
+apps/server/src/shell/db/migrations/registry.ts
+  s_84fafb45fdba04::t_d7e633a5b131ce 46,102
+apps/server/src/shell/agent/toolkit.ts
+  s_84fafb45fdba04::t_4ebb58b93946d3 3,208,224
+apps/server/src/shell/ingestion/mutations.ts
+  s_84fafb45fdba04::t_f2a7ca630fb6b4 37,259
+docs/architecture/durable-execution-inventory.md
+  s_84fafb45fdba04::t_5451e77b4724d9 90
+  s_84fafb45fdba04::t_c3d7b11ee49b08 29-31,33-41,104-106
+  s_84fafb45fdba04::t_f135f62df0e047 32,107-122,159
+apps/server/src/shell/ingestion/worker.ts
+  s_84fafb45fdba04::t_34a424044261b9 53,55-60,253,257-261,263-268,276,289,300,307,311,315,333,338,341,344-346,385
+  s_84fafb45fdba04::t_fb926287b9683c 2,11-12,21,25,27,32,34,37-52,61-67,91,94,96,98,121,127-128,131-133,135-136,142,146,151,155-157,160,162-164,170,175,182,184,188,190,192,199,202-203,216,220,222,224,239-240,252,254-256,270,277-278,281-286,291,294-296,302,322-330,336,349,352,354,356-358,360-369,380-382,404-405,407-413
+  s_84fafb45fdba04::t_101f431cfba735 16,23,29,370-379,383,396-403
+  s_84fafb45fdba04::t_884994d817dba7 54
+  s_84fafb45fdba04::t_a4b2505af13303 22,355,359,384,386-395
+  s_84fafb45fdba04::t_8473d6817ab591 33,262,271-275
+  s_84fafb45fdba04::t_3c08fb9e04d444 310,314,320,331
+  s_84fafb45fdba04::t_823d6e6f2f3874 335,337,342-343,347-348
+  s_84fafb45fdba04::t_60c6536848ffb2 332
+  s_84fafb45fdba04::t_e516bd3e6e365a 406
+  s_84fafb45fdba04::t_8c7cec4f5d282e 269,312-313,316-319,321
+  s_84fafb45fdba04::t_53c83c7ca4feb5 1
+  s_84fafb45fdba04::t_d2f4990da97a7d 339-340
+apps/server/src/core/ingestion/model.ts
+  s_84fafb45fdba04::t_387acb6fb7ce64 180
+apps/server/src/shell/ingestion/handlers.test.ts
+  s_84fafb45fdba04::t_951f6acaf57a10 188,253
+  s_84fafb45fdba04::t_9acd4b46a08807 183-187,189-192,238-252,254-256
+apps/server/src/shell/ingestion/repo.ts
+  s_84fafb45fdba04::t_9e31e41279fd4b 280,310-317,331-366
+  s_84fafb45fdba04::t_8d8caf3ae91926 235-242,246-250
+  s_84fafb45fdba04::t_20f353fedf9aab 281
+  s_84fafb45fdba04::t_269a21eb7ba3ef 482-484,486,517-518,520
+  s_84fafb45fdba04::t_24835d50a2ba31 252-253,256,258-279
+  s_84fafb45fdba04::t_3bf93049fc208a 243-245
+  s_84fafb45fdba04::t_4aab045637445b 118,224,233,257,282-285,289,293,296-309,318-330,367-373
+  s_84fafb45fdba04::t_88c2bc273a8a7d 35
+apps/server/ARCHITECTURE.md
+  s_84fafb45fdba04::t_7eadabb85fb10d 344-355
+apps/server/src/shell/ingestion/worker.test.ts
+  s_84fafb45fdba04::t_a5998fe04bd503 378-380
+  s_84fafb45fdba04::t_f078c67c6065b0 2,9,30
+  s_84fafb45fdba04::t_d9f546f5777ae4 453-458
+  s_84fafb45fdba04::t_df0828385cac0b 654
+  s_84fafb45fdba04::t_27156d58d867fb 652-653,655-658,671-675
+  s_84fafb45fdba04::t_4f0389919c3819 3,6
+  s_84fafb45fdba04::t_b07c7cc926c4f4 360,390,393-395,397,399
+  s_84fafb45fdba04::t_69d2ed31d9e072 306,359,361-377,381-389,391-392,398,400
+  s_84fafb45fdba04::t_8b5cddd0a8c261 107-113,125-130,573-575,578
+  s_84fafb45fdba04::t_8ffb5cda1a335b 131-137
+  s_84fafb45fdba04::t_98800dbacaca09 12,401-402,561-572,576-577,579-583,586-587,590-594,624-642,646,649-651,661-665,667-670,676-677
+  s_84fafb45fdba04::t_3a9856b6e2193b 396
+  s_84fafb45fdba04::t_116ec49a3f68b2 17,42,141-142,144-150,595-623
+  s_84fafb45fdba04::t_c5dbfdac36f08b 21,79-81,84,143
+  s_84fafb45fdba04::t_7de107bf8a7dfd 584-585,588-589,643-645,647-648,659-660,666
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "dc3d5562908434f988494aeba13c98f183836011",
+  "prompts": {},
+  "sessions": {
+    "s_84fafb45fdba04": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a05ffd-3120-7f29-a7a3-bbe3de77bbe9",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": null
+    }
+  }
+}

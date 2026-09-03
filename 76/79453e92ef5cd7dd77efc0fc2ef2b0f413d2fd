@@ -1,0 +1,19 @@
+apps/server/scripts/check-production-image.sh
+  s_84fafb45fdba04::t_8b5aa4d6a4c956 279-282,365-366
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "7679453e92ef5cd7dd77efc0fc2ef2b0f413d2fd",
+  "prompts": {},
+  "sessions": {
+    "s_84fafb45fdba04": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a05ffd-3120-7f29-a7a3-bbe3de77bbe9",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

@@ -1,0 +1,20 @@
+.agents/skills/show-me/SKILL.md
+  s_0003ccbfad6818::t_242b11ffca7844 1-111,114-127
+  s_0003ccbfad6818::t_3ec95bf4e3aecd 112-113
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "8e01a87b28d31c2cc440f0b0ce02cc78b905639e",
+  "prompts": {},
+  "sessions": {
+    "s_0003ccbfad6818": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a06ec4-2cc5-76c3-959a-fd27e1e0fc06",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": null
+    }
+  }
+}

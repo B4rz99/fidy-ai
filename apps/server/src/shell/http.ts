@@ -30,9 +30,13 @@ import { StatementIngestionWorkerLive } from "~/shell/ingestion/worker";
 import { NotificationEmailExtractor } from "~/shell/ingestion/email-extractor";
 import {
   ForwardedEmailEvidenceRetentionLive,
+  ForwardedEmailExecutionRetentionLive,
   ForwardedEmailProcessor,
-  ForwardedEmailProcessorWorkerLive,
 } from "~/shell/ingestion/forwarded-email-ingestion";
+import {
+  ForwardedEmailQueueLive,
+  ForwardedEmailWorkflowLive,
+} from "~/shell/ingestion/forwarded-email-workflow";
 import { ResendReceivingClient } from "~/shell/ingestion/resend-receiving-client";
 import { ResendWebhookLive } from "~/shell/ingestion/resend-webhook";
 import { MemoryLive } from "~/shell/memory/handlers";
@@ -269,9 +273,11 @@ const HostedStatementIngestionWorkerLive = StatementIngestionWorkerLive.pipe(
   Layer.provide(StatementColumnMapper.layer.pipe(Layer.provide(OpenAiLanguageModelLive)))
 );
 
-const HostedForwardedEmailOperationsLive = Layer.merge(
-  ForwardedEmailProcessorWorkerLive,
-  ForwardedEmailEvidenceRetentionLive
+const HostedForwardedEmailOperationsLive = Layer.mergeAll(
+  ForwardedEmailWorkflowLive,
+  ForwardedEmailQueueLive,
+  ForwardedEmailEvidenceRetentionLive,
+  ForwardedEmailExecutionRetentionLive
 ).pipe(
   Layer.provide(ForwardedEmailProcessor.layer),
   Layer.provide(ResendReceivingClient.layer),

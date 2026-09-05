@@ -366,12 +366,12 @@ const commitReplacement = Effect.fn(function* (
       })
     )
     .pipe(
-      Effect.catch((error) =>
-        error.reason._tag === "UniqueViolation" &&
-        (error.reason.constraint === "verified_email_credentials_normalized_email_unique" ||
-          error.reason.constraint === "verified_email_auth_lookup_key_unique")
-          ? Effect.succeed(false)
-          : Effect.fail(error)
+      Effect.catchIf(
+        (error) =>
+          error.reason._tag === "UniqueViolation" &&
+          (error.reason.constraint === "verified_email_credentials_normalized_email_unique" ||
+            error.reason.constraint === "verified_email_auth_lookup_key_unique"),
+        () => Effect.succeed(false)
       ),
       Effect.orDie
     );

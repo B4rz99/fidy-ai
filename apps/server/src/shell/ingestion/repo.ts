@@ -392,7 +392,7 @@ export const findStatementMappingInScope = Effect.fn("findStatementMappingInScop
         onNone: () => Effect.succeed(Option.none()),
         onSome: ({ mapping }) =>
           Schema.decodeUnknownEffect(StatementColumnMapping)(mapping).pipe(
-            Effect.map(Option.some),
+            Effect.asSome,
             Effect.orDie
           ),
       })

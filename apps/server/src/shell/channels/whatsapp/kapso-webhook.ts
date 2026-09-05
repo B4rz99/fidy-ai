@@ -228,7 +228,7 @@ const projectEvent = Effect.fn(function* (
   const rawPhone = Option.orElse(raw.message.from, () => raw.conversation.phone_number);
   const phoneNumber = yield* Option.match(rawPhone, {
     onNone: () => Effect.succeed(Option.none<E164PhoneNumber>()),
-    onSome: (phone) => normalizePhoneNumber(phone).pipe(Effect.map(Option.some)),
+    onSome: (phone) => normalizePhoneNumber(phone).pipe(Effect.asSome),
   });
   const occurredAt = yield* parseOccurredAt(raw.message.timestamp, receivedAt);
   const content: WhatsAppInboundContent =
@@ -452,7 +452,7 @@ const projectIdentityChange = Effect.fn(function* (
   }
   const phoneNumber = yield* Option.match(Option.fromNullishOr(raw.system.wa_id), {
     onNone: () => Effect.succeed(Option.none<E164PhoneNumber>()),
-    onSome: (phone) => normalizePhoneNumber(phone).pipe(Effect.map(Option.some)),
+    onSome: (phone) => normalizePhoneNumber(phone).pipe(Effect.asSome),
   });
   const occurredAt = yield* parseOccurredAt(raw.timestamp, receivedAt);
   return Option.some({

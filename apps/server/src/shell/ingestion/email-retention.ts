@@ -15,7 +15,7 @@ export const emailIngestRetentionDays = Config.schema(
   "EMAIL_INGEST_RETENTION_DAYS"
 ).pipe(Config.withDefault(maximumEmailIngestRetentionDays));
 
-/** Deletes due raw samples and expires their visible review evidence through the narrow gateway. */
+/** Expires due raw samples, temporary interpretations, and visible review evidence atomically. */
 export const runEmailIngestRetention = Effect.fn("runEmailIngestRetention")(function* (
   now: DateTime.Utc
 ) {

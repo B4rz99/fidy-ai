@@ -52,8 +52,12 @@ Consent evidence, and protecting a User-owned revision. The protected body and l
 one short transaction.
 
 Do not hold a database transaction across model, email, messaging, billing, or other network work.
-The hosted-Turn session lock and Forwarded Email Ingestion's cross-transaction Consent gate are
-migration targets, not precedents for another session lock. Cluster entities may replace broad
+The hosted-Turn session lock is a migration target, not a precedent for another session lock. During
+#462 implementation, the Forwarded Email Ingestion decision was refined: its specialized
+cross-transaction Consent gate remains because it orders bounded provider/model egress with
+revocation rather than owning workflow execution. Every later persistence step rechecks Consent
+under the short subject transaction lock. A future User-keyed coordination replacement must prove
+the same revocation ordering before deleting this gate. Cluster entities may replace broad
 cross-transaction serialization; they do not replace constraints or locks that protect a commit-time
 invariant.
 

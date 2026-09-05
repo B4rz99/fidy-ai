@@ -308,7 +308,7 @@ export const withLockedPATPairingCandidate = Effect.fn("PATPairing.withLockedCan
       })(pairingId).pipe(Effect.orDie);
       const candidate = yield* Option.match(row, {
         onNone: () => Effect.succeed(Option.none<LockedPATPairingCandidate>()),
-        onSome: (value) => candidateFromRow(value).pipe(Effect.map(Option.some)),
+        onSome: (value) => candidateFromRow(value).pipe(Effect.asSome),
       });
       return yield* use(candidate);
     })

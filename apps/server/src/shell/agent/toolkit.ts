@@ -227,8 +227,9 @@ export const makeAgentToolkit = (input: {
             // itself keeps its reason in the Cause for the log rather than replacing it with prose.
             // Terminalization cannot read it: a defect carries no typed error, so the Turn records
             // the generic hosted reason.
-            Effect.catch((failure) =>
-              Schema.is(binding.failure)(failure) ? Effect.fail(failure) : Effect.die(failure)
+            Effect.catchIf(
+              (failure) => !Schema.is(binding.failure)(failure),
+              (failure) => Effect.die(failure)
             )
           ),
       ])

@@ -156,10 +156,9 @@ const collectBoundedResponseBytes = Effect.fn(function* (
       ? Effect.scoped(Stream.toPull(response.stream).pipe(Effect.as(Option.none<Uint8Array>())))
       : collectBoundedBytes(response.stream, maximumBytes);
   return yield* read.pipe(
-    Effect.catch((error: HttpClientError.HttpClientError) =>
-      error.reason._tag === "EmptyBodyError"
-        ? Effect.succeed(Option.some<Uint8Array>(new Uint8Array(0)))
-        : Effect.fail(error)
+    Effect.catchIf(
+      (error: HttpClientError.HttpClientError) => error.reason._tag === "EmptyBodyError",
+      () => Effect.succeed(Option.some<Uint8Array>(new Uint8Array(0)))
     )
   );
 });

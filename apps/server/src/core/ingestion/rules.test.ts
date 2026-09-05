@@ -9,9 +9,9 @@ import {
   type XlsxCellEvidence,
 } from "./model";
 import {
+  decideDeferredForwardedEmailActivation,
   decideForwardedEmailAdmission,
-  decideForwardedEmailClaim,
-  decideForwardedEmailRecovery,
+  describeForwardedEmailProviderFailure,
   emailAllowancePeriod,
   forwardedEmailAllowanceRemaining,
   interpretStatementRows,
@@ -83,88 +83,44 @@ const copDebitMapping = (): StatementColumnMapping =>
     groupingSeparator: Option.some("."),
   });
 
-it("closes provider failures after the bounded retry policy", () => {
-  expect(decideForwardedEmailRecovery({ reason: "provider-unavailable", attemptCount: 2 })).toEqual(
-    { _tag: "Retry" }
-  );
-  expect(
-    decideForwardedEmailRecovery({ reason: "provider-unavailable", attemptCount: 3 })
-  ).toMatchObject({
-    _tag: "CompleteReview",
-    reviewReason: "provider-retrieval-failed",
+it("preserves provider failure classification in visible review evidence", () => {
+  expect(describeForwardedEmailProviderFailure("invalid-provider-response")).toEqual({
+    path: "",
+    message: "Email retrieval stopped safely: invalid-provider-response.",
   });
-  expect(
-    decideForwardedEmailRecovery({ reason: "invalid-provider-response", attemptCount: 1 })
-  ).toMatchObject({ _tag: "CompleteReview" });
-  expect(decideForwardedEmailRecovery({ reason: "resource-limit", attemptCount: 1 })).toMatchObject(
-    {
-      _tag: "CompleteReview",
-    }
-  );
 });
 
-it("selects claim transitions without embedding allowance policy in persistence", () => {
-  const now = DateTime.makeUnsafe("2026-09-01T05:00:00Z");
-  const base = {
-    access: "free" as const,
-    attemptCount: 0,
-    consumed: 0,
-    now,
-  };
-  expect(decideForwardedEmailClaim({ ...base, status: "queued" })).toMatchObject({
-    _tag: "Claim",
-    promotedFromDeferred: false,
-  });
-  expect(decideForwardedEmailClaim({ ...base, status: "queued", attemptCount: 3 })).toEqual({
-    _tag: "Skip",
-  });
+it("activates deferred email from a locked allowance snapshot", () => {
+  const now = DateTime.makeUnsafe("2026-09-15T12:00:00Z");
+  const resumeAt = DateTime.makeUnsafe("2026-09-01T05:00:00Z");
+  const nextResumeAt = DateTime.makeUnsafe("2026-10-01T05:00:00Z");
   expect(
-    decideForwardedEmailClaim({
-      ...base,
-      status: "processing",
-      startedAt: DateTime.makeUnsafe("2026-09-01T04:54:59Z"),
-    })
-  ).toMatchObject({ _tag: "Claim" });
-  expect(
-    decideForwardedEmailClaim({
-      ...base,
-      status: "processing",
-      attemptCount: 3,
-      startedAt: DateTime.makeUnsafe("2026-09-01T04:54:59Z"),
-    })
-  ).toEqual({
-    _tag: "Exhausted",
-    staleBefore: DateTime.makeUnsafe("2026-09-01T04:55:00Z"),
-  });
-  expect(
-    decideForwardedEmailClaim({
-      ...base,
-      status: "processing",
-      startedAt: DateTime.makeUnsafe("2026-09-01T04:55:00Z"),
-    })
-  ).toEqual({ _tag: "Skip" });
-  expect(
-    decideForwardedEmailClaim({ ...base, status: "deferred", resumeAt: now, access: "pro" })
-  ).toMatchObject({
-    _tag: "Claim",
-    consumesFreeAllowance: false,
-  });
-  expect(
-    decideForwardedEmailClaim({
-      ...base,
-      status: "deferred",
-      resumeAt: now,
+    decideDeferredForwardedEmailActivation({
+      access: "free",
       consumed: 49,
+      now,
+      resumeAt,
+      nextResumeAt,
     })
-  ).toMatchObject({ _tag: "Claim", consumesFreeAllowance: true });
+  ).toEqual({ _tag: "Activate", consumesFreeAllowance: true });
   expect(
-    decideForwardedEmailClaim({
-      ...base,
-      status: "deferred",
-      resumeAt: now,
+    decideDeferredForwardedEmailActivation({
+      access: "free",
       consumed: 50,
+      now,
+      resumeAt,
+      nextResumeAt,
     })
-  ).toEqual({ _tag: "Skip" });
+  ).toEqual({ _tag: "RemainDeferred", resumeAt: nextResumeAt });
+  expect(
+    decideDeferredForwardedEmailActivation({
+      access: "pro",
+      consumed: 50,
+      now,
+      resumeAt: nextResumeAt,
+      nextResumeAt,
+    })
+  ).toEqual({ _tag: "Activate", consumesFreeAllowance: false });
 });
 
 it("applies the Free forwarded-email allowance to a Bogota calendar month", () => {

@@ -108,8 +108,9 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           { discard: true }
         );
 
-        const raced = yield* Effect.all(
-          ["race-a", "race-b"].map((keyword) =>
+        const raced = yield* Effect.forEach(
+          ["race-a", "race-b"],
+          (keyword) =>
             Effect.result(
               client.categories.createKeywordRule({
                 payload: {
@@ -117,8 +118,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
                   categoryId: categoryIds.otros,
                 },
               })
-            )
-          ),
+            ),
           { concurrency: "unbounded" }
         );
         const denied = yield* Effect.flip(

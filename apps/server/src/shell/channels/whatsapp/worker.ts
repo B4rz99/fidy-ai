@@ -200,10 +200,9 @@ const retentionLoop = Effect.forever(
 
 /** Runs independently supervised disclosure-retry, durable-turn, and retention loops. */
 export const WhatsAppWorkerLive = Layer.effectDiscard(
-  Effect.all(
-    [...Array.from({ length: 8 }, () => workerLoop), retentionLoop].map((loop) =>
-      Effect.forkScoped(loop)
-    ),
+  Effect.forEach(
+    [...Array.from({ length: 8 }, () => workerLoop), retentionLoop],
+    (loop) => Effect.forkScoped(loop),
     { concurrency: "unbounded", discard: true }
   )
 );

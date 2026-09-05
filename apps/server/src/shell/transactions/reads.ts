@@ -85,7 +85,7 @@ export const findTransactionPresentationInScope = Effect.fn("findTransactionPres
     })({ id, userId }).pipe(Effect.orDie);
     return yield* Option.match(row, {
       onNone: () => Effect.succeed(Option.none<TransactionPresentation>()),
-      onSome: (value) => presentationFromRow(value).pipe(Effect.map(Option.some), Effect.orDie),
+      onSome: (value) => presentationFromRow(value).pipe(Effect.asSome, Effect.orDie),
     });
   }
 );

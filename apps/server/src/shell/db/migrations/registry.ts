@@ -44,6 +44,7 @@ import { transactionUserDecisions } from "./0044-transaction-user-decisions";
 import { transactionReconciliation } from "./0045-transaction-reconciliation";
 import { effectOnboardingDelivery } from "./0046-effect-onboarding-delivery";
 import { effectStatementIngestion } from "./0047-effect-statement-ingestion";
+import { effectForwardedEmailWorkflow } from "./0048-effect-forwarded-email-workflow";
 
 /**
  * The explicit index ARCHITECTURE.md §7 calls for: one ordered, append-only
@@ -100,4 +101,5 @@ export const migrations = {
   "0045_transaction_reconciliation": transactionReconciliation,
   "0046_effect_onboarding_delivery": effectOnboardingDelivery,
   "0047_effect_statement_ingestion": effectStatementIngestion,
+  "0048_effect_forwarded_email_workflow": effectForwardedEmailWorkflow,
 };

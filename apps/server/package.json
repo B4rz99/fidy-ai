@@ -46,7 +46,7 @@
     "@effect/ai-openai": "4.0.0-rc.112",
     "@effect/platform-bun": "4.0.0-rc.112",
     "@effect/sql-pg": "4.0.0-rc.112",
-    "@sentry/bun": "10.71.0",
+    "@sentry/bun": "10.72.0",
     "csv-parse": "7.0.2",
     "effect": "4.0.0-rc.112",
     "jose": "6.2.10",
@@ -58,7 +58,7 @@
   "devDependencies": {
     "@effect/vitest": "4.0.0-rc.112",
     "@oasdiff-js/oasdiff-js": "1.0.0",
-    "@sentry/cli": "3.6.2",
+    "@sentry/cli": "3.7.0",
     "@vitest/coverage-istanbul": "4.1.11",
     "bun-types": "1.4.0",
     "typescript": "7.0.2",

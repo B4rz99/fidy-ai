@@ -420,8 +420,8 @@ const persistDeliveryGeneration = Effect.fn(function* (input: {
     const intentId = EmailDeliveryIntentId.make(yield* crypto.randomUUIDv7.pipe(Effect.orDie));
     yield* sql`
       INSERT INTO browser_pairing_email_delivery_intents (
-        id, workflow_id, generation, email_address, status, idempotency_key, created_at
-      ) VALUES (${intentId}, ${id}, 1, ${input.email}, 'pending', ${intentId}, ${input.requestedAt})
+        id, workflow_id, generation, email_address, status, created_at
+      ) VALUES (${intentId}, ${id}, 1, ${input.email}, 'pending', ${input.requestedAt})
     `.pipe(Effect.orDie);
     yield* publishPairingDelivery({ revision: 1, userId: input.credential.userId, intentId });
     yield* publishPairingExpiry({ revision: 1, userId: input.credential.userId, workflowId: id });
@@ -443,8 +443,8 @@ const persistDeliveryGeneration = Effect.fn(function* (input: {
   const intentId = EmailDeliveryIntentId.make(yield* crypto.randomUUIDv7.pipe(Effect.orDie));
   yield* sql`
     INSERT INTO browser_pairing_email_delivery_intents (
-      id, workflow_id, generation, email_address, status, idempotency_key, created_at
-    ) SELECT ${intentId}, id, delivery_generation, ${input.email}, 'pending', ${intentId},
+      id, workflow_id, generation, email_address, status, created_at
+    ) SELECT ${intentId}, id, delivery_generation, ${input.email}, 'pending',
       ${input.requestedAt} FROM browser_pairing_email_workflows WHERE id = ${workflowId}
   `.pipe(Effect.orDie);
   yield* publishPairingDelivery({ revision: 1, userId: input.credential.userId, intentId });

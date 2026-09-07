@@ -15,7 +15,7 @@ export const effectPairingEmail = Effect.gen(function* () {
     ALTER TABLE browser_pairing_email_workflows
       DROP COLUMN retention_claim_token, DROP COLUMN retention_claim_expires_at;
     ALTER TABLE browser_pairing_email_delivery_intents
-      DROP COLUMN claim_token, DROP COLUMN claim_expires_at,
+      DROP COLUMN claim_token, DROP COLUMN claim_expires_at, DROP COLUMN idempotency_key,
       DROP CONSTRAINT browser_pairing_email_delivery_intents_status_check,
       ADD CONSTRAINT pairing_email_delivery_status CHECK (status IN (
         'pending', 'armed', 'sent', 'rejected', 'uncertain', 'superseded', 'temporarily-refused', 'retry-exhausted'

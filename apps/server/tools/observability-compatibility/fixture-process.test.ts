@@ -26,7 +26,7 @@ import {
 } from "~/shell/observability/telemetry-bootstrap";
 import { getCompatibilityRecorder, requireInstalled } from "./handoff";
 
-const expectedBunVersion = "1.3.14";
+const expectedBunVersion = "1.4.1";
 const expectedEffectVersion = "4.0.0-rc.112";
 const expectedSentryVersion = "10.73.0";
 const expectedTraceId = TelemetryTraceId.make("a".repeat(32));

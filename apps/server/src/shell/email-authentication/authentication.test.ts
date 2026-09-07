@@ -1,8 +1,10 @@
 import { expect, layer } from "@effect/vitest";
 import {
+  Clock,
   ConfigProvider,
   DateTime,
   Deferred,
+  Duration,
   Effect,
   Fiber,
   Layer,
@@ -12,6 +14,7 @@ import {
   Schema,
 } from "effect";
 import { HttpBody, HttpClient } from "effect/unstable/http";
+import { TestClock } from "effect/testing";
 import { StartedBrowserLoginPairing } from "~/core/browser-login/model";
 import {
   EmailAddress,
@@ -130,7 +133,7 @@ const requestCompletion = (): ReturnType<typeof HttpClient.post> =>
     }),
   });
 
-const requestEmail = (
+const requestEmailHttp = (
   pairing: StartedBrowserLoginPairing,
   email: string,
   sourceAddress = "198.51.100.249"
@@ -148,14 +151,48 @@ const requestEmail = (
     }),
   });
 
+/** Drive admission with virtual time; a public 202 alone does not prove work was queued. */
+const requestEmail = Effect.fn(function* (
+  pairing: StartedBrowserLoginPairing,
+  email: string,
+  sourceAddress: string = "198.51.100.249"
+) {
+  const now = yield* DateTime.now;
+  const clock = yield* TestClock.make();
+  yield* clock.setTime(DateTime.toEpochMillis(now));
+  const responseScheduled = yield* Deferred.make<void>();
+  const controlledClock: Clock.Clock = {
+    ...clock,
+    sleep: (duration) =>
+      Effect.gen(function* () {
+        // The fixed response release is scheduled only after admission work finishes.
+        if (Duration.toMillis(duration) === 300) {
+          yield* Deferred.succeed(responseScheduled, undefined);
+        }
+        yield* clock.sleep(duration);
+      }),
+  };
+  const request = yield* browserPairingEmailAuthentication
+    .requestCode({
+      pairingId: pairing.pairingId,
+      privateVerifier: Redacted.value(pairing.privateVerifier),
+      email,
+      sourceAddress,
+    })
+    .pipe(Effect.provideService(Clock.Clock, controlledClock), Effect.forkChild);
+  yield* Deferred.await(responseScheduled);
+  yield* clock.adjust("300 millis");
+  return yield* Fiber.join(request);
+});
+
 layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
   "verified email browser-pairing authentication",
   (it) => {
     it.effect("gives known and unknown addresses the same pending start response", () =>
       Effect.gen(function* () {
         yield* resetAuthentication;
-        const known = yield* requestEmail(yield* startPairing, knownEmail);
-        const unknown = yield* requestEmail(yield* startPairing, "unknown-326@example.com");
+        const known = yield* requestEmailHttp(yield* startPairing, knownEmail);
+        const unknown = yield* requestEmailHttp(yield* startPairing, "unknown-326@example.com");
 
         expect(known.status).toBe(202);
         expect(unknown.status).toBe(202);
@@ -166,6 +203,10 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         expect(known.headers["cache-control"]).toBe("no-store");
         expect(unknown.headers["cache-control"]).toBe("no-store");
 
+        // Prove persistence separately from the deliberately non-enumerating HTTP response.
+        yield* resetAuthentication;
+        yield* requestEmail(yield* startPairing, knownEmail);
+        yield* requestEmail(yield* startPairing, "unknown-326@example.com");
         const sql = yield* MigrationSqlClient;
         expect(yield* sql`SELECT id FROM browser_pairing_email_workflows`).toEqual([]);
         expect(
@@ -183,6 +224,56 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         ).toEqual([]);
         expect(yield* sql`SELECT id FROM users WHERE id = ${userId}`).toHaveLength(1);
       })
+    );
+
+    it.effect(
+      "keeps deadline-expired HTTP starts private and controls time for workflow setup",
+      () =>
+        Effect.gen(function* () {
+          yield* resetAuthentication;
+          const sql = yield* MigrationSqlClient;
+          const pairing = yield* startPairing;
+          yield* sql`
+          CREATE FUNCTION fidy_test_delay_email_start() RETURNS trigger
+          LANGUAGE plpgsql AS $function$
+          BEGIN
+            PERFORM pg_sleep(0.3);
+            RETURN NEW;
+          END
+          $function$
+        `;
+          yield* Effect.gen(function* () {
+            yield* sql`
+            CREATE TRIGGER fidy_test_delay_email_start
+            BEFORE INSERT ON browser_pairing_email_start_requests
+            FOR EACH ROW EXECUTE FUNCTION fidy_test_delay_email_start()
+          `;
+            const response = yield* requestEmailHttp(pairing, knownEmail);
+            expect(response.status).toBe(202);
+            expect(yield* response.json).toEqual({ status: "pending", retryAfterSeconds: 60 });
+            expect(yield* sql`SELECT id FROM browser_pairing_email_start_requests`).toEqual([]);
+            expect(
+              yield* processNextBackgroundStep().pipe(
+                Effect.provideService(
+                  EmailDeliveryPort,
+                  EmailDeliveryPort.of({ send: () => Effect.die("Unexpected delivery") })
+                )
+              )
+            ).toEqual({ _tag: "Idle" });
+
+            // The same slow SQL must not make unrelated workflow assertions depend on host speed.
+            expect((yield* requestEmail(pairing, knownEmail)).status).toBe("pending");
+            expect(yield* sql`SELECT id FROM browser_pairing_email_start_requests`).toHaveLength(1);
+            yield* deliverCode;
+          }).pipe(
+            Effect.ensuring(
+              Effect.gen(function* () {
+                yield* sql`DROP TRIGGER IF EXISTS fidy_test_delay_email_start ON browser_pairing_email_start_requests`;
+                yield* sql`DROP FUNCTION fidy_test_delay_email_start()`;
+              }).pipe(Effect.orDie)
+            )
+          );
+        })
     );
 
     it.effect("atomically enforces address, pairing, and source start budgets", () =>
@@ -233,7 +324,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         const responses = yield* Effect.forEach(
           pairings,
           (pairing, index) =>
-            requestEmail(
+            requestEmailHttp(
               pairing,
               `concurrent-budget-${index + 1}-326@example.com`,
               "198.51.100.201"
@@ -278,7 +369,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
       Effect.gen(function* () {
         yield* resetAuthentication;
         const pairing = yield* startPairing;
-        expect((yield* requestEmail(pairing, knownEmail)).status).toBe(202);
+        expect((yield* requestEmail(pairing, knownEmail)).status).toBe("pending");
         const sql = yield* MigrationSqlClient;
         yield* sql`
           UPDATE browser_login_pairings SET lifecycle = 'expired', expired_at = now()
@@ -663,14 +754,14 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
       Effect.gen(function* () {
         yield* resetAuthentication;
         const pairing = yield* startPairing;
-        expect((yield* requestEmail(pairing, knownEmail)).status).toBe(202);
+        expect((yield* requestEmail(pairing, knownEmail)).status).toBe("pending");
         const firstCode = yield* deliverCode;
         const sql = yield* MigrationSqlClient;
         yield* sql`
           UPDATE browser_pairing_email_workflows SET resend_available_at = now() - interval '1 second'
           WHERE pairing_id = ${pairing.pairingId}
         `;
-        expect((yield* requestEmail(pairing, knownEmail)).status).toBe(202);
+        expect((yield* requestEmail(pairing, knownEmail)).status).toBe("pending");
         const replacementCode = yield* deliverCode;
         expect(replacementCode).not.toBe(firstCode);
         expect((yield* completeEmail(pairing, firstCode)).status).toBe(400);
@@ -682,7 +773,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
       Effect.gen(function* () {
         yield* resetAuthentication;
         const pairing = yield* startPairing;
-        expect((yield* requestEmail(pairing, knownEmail)).status).toBe(202);
+        expect((yield* requestEmail(pairing, knownEmail)).status).toBe("pending");
         const combinedCode = yield* deliverCode;
         const sql = yield* MigrationSqlClient;
         yield* sql`
@@ -702,7 +793,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
       Effect.gen(function* () {
         yield* resetAuthentication;
         const pairing = yield* startPairing;
-        expect((yield* requestEmail(pairing, knownEmail)).status).toBe(202);
+        expect((yield* requestEmail(pairing, knownEmail)).status).toBe("pending");
         const combinedCode = yield* deliverCode;
         const sql = yield* MigrationSqlClient;
         yield* sql`
@@ -774,10 +865,10 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           `;
 
           const pairing = yield* startPairing;
-          expect((yield* requestEmail(pairing, knownEmail)).status).toBe(202);
+          expect((yield* requestEmail(pairing, knownEmail)).status).toBe("pending");
           const combinedCode = yield* deliverCode;
           const otherPairing = yield* startPairing;
-          expect((yield* requestEmail(otherPairing, otherEmail)).status).toBe(202);
+          expect((yield* requestEmail(otherPairing, otherEmail)).status).toBe("pending");
           const otherCode = yield* deliverCode;
 
           expect((yield* completeEmail(pairing, otherCode)).status).toBe(400);
@@ -911,7 +1002,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
             AND grant_type = 'onboarding' ORDER BY occurred_at DESC LIMIT 1
         `;
           const pairing = yield* startPairing;
-          expect((yield* requestEmail(pairing, knownEmail)).status).toBe(202);
+          expect((yield* requestEmail(pairing, knownEmail)).status).toBe("pending");
 
           const deliveredCode = yield* Ref.make(Option.none<EmailVerificationCode>());
           expect(

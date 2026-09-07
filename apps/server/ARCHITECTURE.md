@@ -319,7 +319,11 @@ add a second scheduling mechanism without removing the first.
 `PersistedQueue`, Workflow, and Cluster facilities as the execution substrate. The
 [durable-execution inventory](../../docs/architecture/durable-execution-inventory.md) records every
 baseline claim, lease, retry field, polling loop, admission window, and lock plus its migration
-disposition.
+disposition. [ADR 0025](../../docs/adr/0025-retain-postgresql-admission.md) retains PostgreSQL
+admission after the [shared-store evaluation](../../docs/research/distributed-admission-rate-limiter.md):
+Effect RateLimiter's stock stores do not preserve the audited rolling-window, multi-key and
+transaction-coupled controls with net deletion. Memory-backed rate limits cannot replace
+cross-process security or spend admission; Redis is not part of the production topology.
 
 Effect owns queue-item delivery, durable continuation, retries, waits, runner coordination, and keyed
 cross-runtime execution. Slices still own domain lifecycle, User authorization and RLS activation,

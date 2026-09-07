@@ -114,7 +114,11 @@ v3 in-memory scoped constructor (`unstable/persistence/RateLimiter.ts:1-11`). On
 call per (string) key with per-call config: `{ algorithm?: "fixed-window" | "token-bucket",
 onExceeded?: "delay" | "fail", window, limit, key, tokens? }` (`:45-60`). Semantics:
 
-- **fixed-window**: counter per key; refill rate = `window / limit` (`:126-170`).
+- **fixed-window**: counter per key; refill rate = `window / limit` (`:126-170`). This is **not**
+  a sliding log or a calendar-aligned fixed window: first consumption sets TTL to
+  `tokens * refillRate`, later accepted consumption extends that expiry by the same amount
+  (`:721-738`, Redis Lua `:1020-1051` in RC.112). At 5/min, one token expires after 12s;
+  five more can then pass within the original minute. Do not substitute it for “5 in any minute”.
 - **token-bucket**: bucket of `limit` tokens refilled at `window / limit` per token — this is
   the burst-friendly one for "60 req/min with burst" (`:171-227`).
 - `onExceeded: "fail"` fails typed with `RateLimiterError` wrapping `RateLimitExceeded
@@ -128,6 +132,13 @@ onExceeded?: "delay" | "fail", window, limit, key, tokens? }` (`:45-60`). Semant
 - Stream-level shaping: `Stream.throttle({ cost, units, duration, burst?, strategy:
 "shape" | "enforce" })` is a token bucket holding up to `units + burst`; `"shape"` delays,
   `"enforce"` drops (`Stream.ts:8073-8090`, `:8119`).
+
+Fidy's [#470 evaluation](../docs/research/distributed-admission-rate-limiter.md) records the complete
+control classification, executable algorithm counterexamples, and two-OS-process PostgreSQL proof.
+[ADR 0025](../docs/adr/0025-retain-postgresql-admission.md) retains the current PostgreSQL controls:
+stock `consume` handles one key, has no joint-consume/rollback seam, and neither stock algorithm
+preserves the existing rolling logs unchanged. Fail-mode rejection also does not persist over-limit
+consumption; this matters for controls that deliberately count rejected attempts.
 
 Related: `PersistedQueue` (same package) is a durable, schema-encoded work queue with
 **in-memory, Redis, and SQL store layers**, id-based de-duplication and retry handling

@@ -127,6 +127,13 @@ continuation.
 
 ## Admission windows and capacity
 
+**#470 resolution:** the table below is the #459 baseline. The complete current P/D/T
+classification, corrected SupportRecovery operator identity, additional Statement/Subscription
+controls, source findings and two-process proof are in the
+[distributed-admission evaluation](../research/distributed-admission-rate-limiter.md).
+[ADR 0025](../adr/0025-retain-postgresql-admission.md) retains PostgreSQL admission; the
+“evaluate #470” dispositions below are historical, not outstanding migration work.
+
 | Control                                                                                                                     | Scope and invariant                                                                                                      | Disposition                                                                                                                                             |
 | --------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | BrowserLogin start/redeem Semaphores (`browser-login/handlers.ts`)                                                          | Per-process sockets/CPU and cheap overload refusal.                                                                      | **Effect process-local coordination.** Keep; distributed security admission remains separate.                                                           |
@@ -147,9 +154,10 @@ continuation.
 | Browser-login approval rejection count (`browser-login/repo.ts`)                                                            | User-stable rejection evidence read while holding the approval transition's transaction lock.                            | **Retained transactional lock.** Evaluate #470 only if existing Audit atomicity and Retry-After survive.                                                |
 | Manual PAT issuance count (`tokens/pat-pairing.ts`)                                                                         | User-stable spend evidence read while holding the issuance transition's transaction lock.                                | **Retained transactional lock.** Evaluate #470 only if existing Consent/Audit atomicity and Retry-After survive.                                        |
 
-Memory-backed Effect `RateLimiter` is rejected for every distributed row above. #470 may adopt
-Effect `RateLimiter` only after proving a shared store across two runtimes and net deletion; Redis is
-a separate infrastructure decision.
+Memory-backed Effect `RateLimiter` is rejected for every distributed row above. #470 proved the
+retained PostgreSQL topology across two OS processes and rejected adoption without net deletion.
+No counter, lock or expiry path is replaced. Redis remains an unapproved separate infrastructure
+decision under ADR 0025.
 
 ## Migration ownership and deletion ledger
 
@@ -165,7 +173,7 @@ a separate infrastructure decision.
 | #467   | WhatsApp                         | Turn claim table, `whatsapp_inbound_jobs` claim/attempt fields, receipt execution lease where replay evidence supersedes it, shared admission lock, eight poll loops.                                                                                                                     |
 | #468   | Subscription                     | Delete `withEnrollmentConsent` around whole requests and the Wompi-contract call inside `prepareCardEnrollment`'s SQL transaction/session lock; retain narrow Consent checks, CardEnrollment lifecycle, and commit-time transition locks. No BillingAttempt machinery exists at baseline. |
 | #469   | Cross-cutting shell              | Duplicate or superseded retention/expiry loops and retention claims; deliberate immediate maintenance stays explicit.                                                                                                                                                                     |
-| #470   | Security admission owners        | Only counters whose shared-store proof permits deleting the PostgreSQL table, lock, cleanup, and counter code.                                                                                                                                                                            |
+| #470   | Security admission owners        | **Evaluated; retain PostgreSQL (ADR 0025).** No stock shared RateLimiter store preserves the audited semantics with net deletion. Two-process PATPairing proof added; no table, lock or cleanup replaced.                                                                                 |
 | #471   | Repository                       | Shared obsolete lock keys/helpers, queue/lease vocabulary and SQL functions, dual-system remnants; add a narrow guard for future bespoke execution machinery.                                                                                                                             |
 
 The final contraction gate is not satisfied by wrapping the old mechanism, retaining dual claims as a

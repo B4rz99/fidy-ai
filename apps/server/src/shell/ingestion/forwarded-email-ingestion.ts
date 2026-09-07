@@ -21,6 +21,7 @@ import {
 } from "~/core/ingestion/email-policy";
 import { ResendReceivedEmailId, ResendWebhookDeliveryId } from "~/core/ingestion/reference";
 import { externalEndpoints } from "~/shell/_shared/external-endpoints";
+import { jsonStringSchema } from "~/schema-compatibility";
 import { forwardingLocalPartForDomain } from "./email-address";
 import {
   admitAuthenticatedResendWebhookEvent,
@@ -95,18 +96,20 @@ const authenticateResendEvent = Effect.fn(function* (input: ResendWebhookInput) 
     signature: input.headers["svix-signature"],
   }).pipe(Effect.mapError(() => new InvalidResendWebhookProof()));
   const secret = yield* Config.redacted("RESEND_WEBHOOK_SECRET");
-  const verified = yield* Effect.try({
+  const exactBody = Buffer.from(input.exactBody);
+  yield* Effect.try({
     try: () =>
-      new Webhook(Redacted.value(secret)).verify(Buffer.from(input.exactBody), {
+      new Webhook(Redacted.value(secret)).verify(exactBody, {
         "svix-id": proof.id,
         "svix-timestamp": proof.timestamp,
         "svix-signature": proof.signature,
       }),
     catch: () => new InvalidResendWebhookProof(),
   });
-  const event = yield* Schema.decodeUnknownEffect(ResendEmailReceivedEvent)(verified).pipe(
-    Effect.mapError(() => new InvalidResendWebhookPayload())
-  );
+  // Svix authenticates only; decode the same bytes after verification succeeds.
+  const event = yield* Schema.decodeEffect(jsonStringSchema(ResendEmailReceivedEvent))(
+    exactBody.toString("utf8")
+  ).pipe(Effect.mapError(() => new InvalidResendWebhookPayload()));
   return { event, deliveryId: proof.id };
 });
 

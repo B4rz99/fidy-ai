@@ -85,6 +85,36 @@ const getTestRow = <Result extends Schema.Constraint>(
 layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
   "Email forwarding operations",
   (it) => {
+    it.effect(
+      "authenticates exact bytes before rejecting malformed JSON without publishing work",
+      () =>
+        Effect.gen(function* () {
+          const http = yield* HttpClient.HttpClient;
+          const sql = yield* MigrationSqlClient;
+          yield* cleanupForwardedEmailFixtures(sql);
+          const now = DateTime.toDateUtc(yield* DateTime.now);
+          for (const validProof of [false, true]) {
+            const invalidJson = "{";
+            const messageId = "msg_invalid_json";
+            const rejected = yield* http.post("/webhooks/resend", {
+              headers: {
+                "svix-id": messageId,
+                "svix-timestamp": String(Math.floor(now.getTime() / 1000)),
+                "svix-signature": validProof
+                  ? new Webhook(webhookSecret).sign(messageId, now, invalidJson)
+                  : "v1,invalid",
+              },
+              body: HttpBody.text(invalidJson, "application/json"),
+            });
+            expect(rejected.status).toBe(validProof ? 400 : 401);
+          }
+          expect(yield* sql`SELECT received_email_id FROM forwarded_email_receipts`).toEqual([]);
+          expect(
+            yield* sql`SELECT id FROM fidy_durable.fidy_queue WHERE queue_name = 'forwarded-email-ingestion'`
+          ).toEqual([]);
+        })
+    );
+
     it.effect("enables one permanent address and securely admits durable authenticated work", () =>
       Effect.gen(function* () {
         const client = yield* ApiHarnessClient;

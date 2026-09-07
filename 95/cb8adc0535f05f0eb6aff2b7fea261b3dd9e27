@@ -1,0 +1,23 @@
+apps/server/src/shell/email-authentication/authentication.test.ts
+  s_fad9db0a6a1d64::t_651af179dfaa4a 158
+  s_fad9db0a6a1d64::t_8f9aa629add8c5 3,7,17,136,154-157,159-187,194-195,206-207,267
+  s_fad9db0a6a1d64::t_3cfa4442c9ba92 208-209
+  s_fad9db0a6a1d64::t_6a47fcaef3ef98 264-266
+  s_fad9db0a6a1d64::t_0c1b5ac6ab920f 268-270
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.2",
+  "base_commit_sha": "95cb8adc0535f05f0eb6aff2b7fea261b3dd9e27",
+  "prompts": {},
+  "sessions": {
+    "s_fad9db0a6a1d64": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a07d96-34ae-73c6-8074-f897603a3985",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

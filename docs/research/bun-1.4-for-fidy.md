@@ -1,5 +1,9 @@
 # Bun 1.4 for Fidy
 
+> Historical probe. The subsequent implementation rejected 1.4.0 because of upstream bundler
+> regression #40114. See [the 1.4.1 reassessment](bun-1.4.1-for-fidy.md) for the fixed release,
+> current adoption decision, and owner-authorized one-time dependency admission.
+
 _Research snapshot: 2026-08-22. Primary sources: Bun's 1.4 release notes and upgrade tracker, the npm registry, and this repository. Local probes used Bun 1.4.0 on macOS arm64 at commit `51d5673236bd40c97b80e68510b821d6a8de7df4`._
 
 ## Recommendation

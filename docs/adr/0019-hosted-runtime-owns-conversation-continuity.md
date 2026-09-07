@@ -26,28 +26,31 @@ all: it is a property of the row, checked inside the same transaction that mutat
 
 ## Decision
 
-The hosted agent runtime owns conversation continuity lexically. `AgentService` exposes exactly one
-public operation:
+The hosted agent runtime owns conversation continuity lexically. Issue #465 amends its transport
+contract for multi-runner execution: `AgentService` has two closed source-specific entrypoints into
+the same User-keyed Cluster entity, not a caller-supplied executable delivery capability.
 
 ```ts
-handleMessage: <E, R>(
-  userId: UserId,
-  message: InboundMessage,
-  deliver: (reply: AgentReply) => Effect.Effect<void, E, R>
-) => Effect.Effect<AgentReply, AgentTurnError | E, R>;
+handleMessage: (userId: UserId, message: InboundMessage, authorityRoot?: CanonicalAuthorityRoot) =>
+  Effect.Effect<AgentReply, AgentTurnError>;
+handleWhatsAppClaim: (claim: WhatsAppTurnClaim, now: DateTime.Utc) => Effect.Effect<void>;
 ```
 
-One inbound message in, one delivered reply out. Session admission, Turn admission, inference,
-complete hosted preflight, canonical execution, delivery, and terminalization all happen inside that
-call.
+Session admission, Turn admission, inference, complete hosted preflight, canonical execution,
+delivery, and terminalization remain one lexical flow inside `agent-service.ts`. The entity uses
+`concurrency: 1` and is keyed by the stable User, never the Hosted Agent Session or Turn. Delivery
+adapters are installed on the owning runner; arbitrary caller closures cannot cross runners or
+survive their process. CLI callers use the authenticated client-only SQL Cluster substrate and do
+not acquire shards. Immediate replies are not cached, and returning one does not claim the client
+acknowledged receipt.
 
 This supersedes ADR 0014's coordinator wording. Its HostedInference, WorkingContext, and Memory
 decisions stand unchanged.
 
 - **Persistence stays in private helpers.** `ConversationContinuity` remains a module and a service;
   it is now a private helper of `src/shell/agent`, not a boundary a peer coordinates with. It
-  exposes data-only operations — observe, lock, admit a session, require a session, prepare a Turn,
-  admit a Turn, append, complete, fail — and PostgreSQL remains concrete behind it.
+  exposes data-only operations — observe, admit a session, require a session, prepare a Turn,
+  admit a Turn, append, complete, fail, recover a named Turn — and PostgreSQL remains concrete behind it.
 - **No lifecycle handle crosses the seam.** A prepared attempt, a Turn authority, and the inferred
   Turn lifecycle handle do not leave the runtime. The `Turn` lifecycle scope is constructed and
   consumed within one lexical flow, so ordering is guaranteed by the flow rather than checked.
@@ -58,8 +61,11 @@ decisions stand unchanged.
 - **The mutable cross-module capability disappears.** Capability scopes, generation counters,
   claim-once registration, and supersession checks are deleted rather than relocated. Nothing
   reproduces them inside the runtime.
-- **Durable Pending Turn state remains** for abandoned-work recovery. The next preparation still
-  recovers an abandoned Pending Turn as Interrupted.
+- **Durable Pending Turn state remains** for abandoned-work recovery. Immediate admission atomically
+  publishes a persisted, identifier-only `Recover(UserId, TurnId)` on the same User entity. It runs
+  after the active handler or on its replacement, never beside it. Recovery needs no subsequent
+  User message. WhatsApp's persisted processing request performs the same targeted recovery on
+  re-entry. An admitted Turn is never re-executed; terminal evidence makes recovery a no-op.
 - **A module-graph rule enforces the boundary.** `continuity-reached-outside-hosted-runtime` in
   `apps/server/.dependency-cruiser.mjs` rejects every import of the Conversation Continuity, Hosted
   Agent Session, or Transcript-service operations except from `src/shell/transcript` itself, from
@@ -84,18 +90,19 @@ no Turn authority is reachable; a stale terminalization is refused by durable st
 counter that a restart resets. The deleted supersession tests were tests of a mechanism, not of a
 behavior — the behavior they protected is now covered by durable Pending checks.
 
-The runtime module is larger, and `handleMessage` is the only way to exercise hosted behavior from
-outside. Tests reach continuity directly only from inside `src/shell/agent` or from continuity's own
+The runtime module is larger, and its immediate-message and submitted-WhatsApp entrypoints are the
+only ways to exercise hosted behavior from outside. Tests reach continuity directly only from inside `src/shell/agent` or from continuity's own
 test, which the module-graph rule permits and enforces.
 
-Terminalization is durable but its evidence is sequential: `withUserTurnLock` serializes a User's
-hosted work, so no test drives two concurrent transactions at one Turn. The row-level guarantee is
-the mechanism; the test proves the sequential case.
+The hosted session advisory lock and its per-Turn reserved connection are deleted. Two independent
+SQL Cluster runtimes prove same-User exclusion through inference and delivery, different-User
+progress, caller disconnect, pooled-connection loss, and replacement recovery. The short domain
+transactions and Pending-only terminalization checks remain.
 
-Recovery of an abandoned Pending Turn happens after session admission, not before it, so admission
-sees the Turn still Pending. A Pending Turn counts as activity from when it started rather than
-exempting the session from the boundary: admission evaluates the boundary while holding the Turn
-lock, so any Pending Turn it observes was abandoned by an interrupted holder rather than in flight.
+Preparation still recovers after session admission. A standalone targeted recovery first closes an
+idle-ended Hosted Agent Session before updating the abandoned Turn's terminal activity. A Pending
+Turn counts as activity from when it started rather than exempting the session from the boundary:
+inside the User entity, a Pending Turn observed by a new handler is abandoned rather than in flight.
 Exempting one would let an arbitrarily old session resume and then stamp a fresh terminal time
 during its own recovery, rolling forward forever on nothing but that repair — and a session that
 never idle-ends is an onboarding Consent basis that never refreshes. Recovery is User-scoped
@@ -103,11 +110,10 @@ rather than session-scoped, so the abandoned Turn is still terminalized once the
 runs, under whichever session admission chose.
 
 This supersedes the originating issue's wording that a Pending Turn keeps its session active. That
-clause is redundant for a Turn in flight, which already holds the Turn lock that admission needs,
+clause is redundant for a Turn in flight, which already occupies the User entity that admission needs,
 and wrong for the only Pending Turn admission can observe, which is abandoned by construction. This
 ADR is the authority where the two disagree. It also keeps the existing `AgentService` name where
-the issue says `HostedAgentRuntime`: the requirement is the one-`handleMessage` seam, and renaming
-the service would churn every caller without changing that seam.
+the issue says `HostedAgentRuntime`: the requirement is lexical ownership, not a service rename.
 
 Terminalization covers defects as well as declared failures. A refused canonical call reaches the
 runtime as a defect, so generation is captured as an `Exit` rather than a `Result` and a Turn that
@@ -118,6 +124,37 @@ Session admission owns the committed close of a session whose Consent was revoke
 transaction with the refusal that follows it is rolled back, so the mid-Turn recheck only refuses:
 admission closes the stale session and opens a fresh one against current Consent. That is what keeps
 one-active-session-per-User from refusing every later message once a User re-grants.
+
+## SQL Cluster acceptance, recovery, and cutover (#465)
+
+- Immediate `Handle` is nonpersisted: a process loss before admission need not retain queued CLI
+  text. Its caller-generated TurnId is stable across transport retries; admitted or terminal
+  duplicates return a closed already-handled error, never re-run effects or reconstruct a reply.
+- WhatsApp keeps its already accepted input in its existing User-scoped jobs. Migration 0050 adds
+  `submitted`: the same SQL transaction validates the claimed input, clears its execution deadline,
+  and publishes identifier-only `ProcessWhatsApp`. The claim UUID is also the TurnId. Both global
+  claim eligibility checks exclude submitted work. The old timer owns only pre-handoff work;
+  #467 still owns replacing debounce/admission polling and the remaining claim table.
+- Admission and mailbox publication share the same `SqlClient` transaction. Publication uses
+  `discard: true`, never waiting on a same-entity reply before commit. Native polling discovers
+  committed work even if an early notification preceded commit.
+- `Uninterruptible = "client"` disconnects waiting from accepted execution, while owner shutdown
+  remains interruptible. Fatal-defect replay is disabled. Durable handlers retry storage failures
+  without persisting raw Causes; their completed mailbox replies are unit values. Hosted errors
+  crossing the immediate RPC are a closed safe vocabulary.
+- Native SQL row leases replace advisory shard locks: refresh is 10 seconds, entity termination
+  budget 15 seconds, expiration 35 seconds. A lost pooled SQL connection does not surrender
+  ownership. This assumes a responsive runner can stop within that budget. Arbitrarily paused
+  processes and already accepted external provider effects are not fenced by leases; the system
+  does not claim exactly-once provider delivery. Admitted-work recovery records Interrupted rather
+  than replaying potentially accepted effects.
+- Completed hosted mailbox records are pruned after 24 hours, in batches of 256, by the existing
+  hourly WhatsApp maintenance loop. The version-local adapter uses the final reply Snowflake for
+  age; it never deletes unfinished requests. Turn/claim guards outlive transport deduplication.
+- **Coordinated cutover, not a rolling mixed-version deployment:** stop/drain old hosted workers and
+  REPL owners, apply 0050, bootstrap native stores once, then start the new runners and client-only
+  REPL. Old advisory-lock owners must not overlap new entity owners. No compatibility path or
+  dual-execution period is supported.
 
 ## Rejected alternatives
 

@@ -45,6 +45,7 @@ import { withUserTransaction } from "~/shell/db/user-transaction";
 import {
   HostedAgentSessionConsentRequired,
   admitHostedAgentSession,
+  closeInactiveHostedSessionInScope,
   hostedAgentSessionConsentStandsInScope,
   requireHostedAgentSession,
   requireHostedAgentSessionInScope,
@@ -180,7 +181,13 @@ export type ConversationContinuityService = Readonly<{
   admitTurn: (input: {
     readonly userId: UserId;
     readonly prepared: PreparedTurnContext;
+    readonly turnId: TranscriptTurnId;
   }) => Effect.Effect<AdmittedTurn, ContinuityChanged | HostedAgentSessionConsentRequired>;
+  /** Recovers only the named abandoned Turn; absent means this request was never admitted. */
+  recoverTurn: (
+    userId: UserId,
+    turnId: TranscriptTurnId
+  ) => Effect.Effect<Option.Option<Exclude<ConversationTurn["_tag"], "Pending">>>;
   /** Appends canonical continuation content to a Turn that must still be Pending. */
   appendTurn: (input: {
     readonly userId: UserId;
@@ -247,9 +254,10 @@ const persistenceOrDie = <A, E, R>(effect: Effect.Effect<A, E, R>): Effect.Effec
     Effect.orDie
   );
 
+const TurnState = Schema.Union(ConversationTurn.members.map((member) => member.fields._tag));
 const StoredTurnRow = Schema.Struct({
   id: TranscriptTurnId,
-  state: Schema.Literals(["Pending", "Completed", "Failed", "Interrupted"]),
+  state: TurnState,
   startedAt: Schema.DateTimeUtcFromDate,
   terminalAt: Schema.OptionFromNullOr(Schema.DateTimeUtcFromDate),
   failureReason: OptionalFailureReason,
@@ -502,15 +510,10 @@ const makeEntryId = (crypto: CryptoService): Effect.Effect<TranscriptEntryId> =>
     Effect.orDie
   );
 
-const makeTurnId = (crypto: CryptoService): Effect.Effect<TranscriptTurnId> =>
-  crypto.randomUUIDv7.pipe(
-    Effect.map((id) => TranscriptTurnId.make(id)),
-    Effect.orDie
-  );
-
 const recoverPending = Effect.fn("ConversationContinuity.recoverPending")(function* (
   dependencies: Dependencies,
-  userId: UserId
+  userId: UserId,
+  turnId: Option.Option<TranscriptTurnId> = Option.none()
 ) {
   const { crypto, sql } = dependencies;
   yield* ensureContinuity(sql, userId);
@@ -530,6 +533,7 @@ const recoverPending = Effect.fn("ConversationContinuity.recoverPending")(functi
       JOIN transcript_entries AS entry
         ON entry.user_id = turn.user_id AND entry.turn_id = turn.id
       WHERE turn.user_id = ${ownedUserId} AND turn.state = 'Pending'
+        AND (${Option.getOrNull(turnId)}::uuid IS NULL OR turn.id = ${Option.getOrNull(turnId)})
       GROUP BY turn.id, turn.session_id, turn.started_at
       ORDER BY turn.started_at, turn.id
     `,
@@ -1138,6 +1142,7 @@ type AdmitTurnInput = {
   readonly dependencies: Dependencies;
   readonly userId: UserId;
   readonly prepared: PreparedTurnContext;
+  readonly turnId: TranscriptTurnId;
 };
 
 // The prepared snapshot is the only admission input, so the admitted text is exactly the text the
@@ -1146,9 +1151,9 @@ const admitTurnOwned = Effect.fn("ConversationContinuity.admitTurn")(function* (
   dependencies,
   userId,
   prepared,
+  turnId,
 }: AdmitTurnInput) {
   const { hostedAgentSessionId, request, startedAt } = prepared.snapshot;
-  const turnId = yield* makeTurnId(dependencies.crypto);
   const entry = UserTranscriptEntry.make({
     ...request,
     id: yield* makeEntryId(dependencies.crypto),
@@ -1192,6 +1197,29 @@ const makeConversationContinuity = Effect.gen(function* () {
     prepareTurn: (userId, hostedAgentSessionId, request) =>
       prepareTurnOwned({ dependencies, userId, hostedAgentSessionId, untrustedRequest: request }),
     admitTurn: (input) => admitTurnOwned({ dependencies, ...input }),
+    recoverTurn: (userId, turnId) =>
+      inUserTransaction(
+        dependencies.sql,
+        userId,
+        withSubjectLock(
+          userId,
+          Effect.gen(function* () {
+            const found = yield* SqlSchema.findOneOption({
+              Request: Schema.Void,
+              Result: Schema.Struct({ state: TurnState }),
+              execute: () => dependencies.sql`SELECT state FROM conversation_turns
+            WHERE user_id = ${userId} AND id = ${turnId}`,
+            })(undefined);
+            if (Option.isNone(found)) return Option.none();
+            if (found.value.state === "Pending") {
+              yield* closeInactiveHostedSessionInScope(userId);
+              yield* recoverPending(dependencies, userId, Option.some(turnId));
+              return Option.some("Interrupted" as const);
+            }
+            return Option.some(found.value.state);
+          })
+        ).pipe(Effect.provideService(SqlClient.SqlClient, dependencies.sql))
+      ).pipe(persistenceOrDie),
     appendTurn: ({ userId, turnId, entries }) =>
       appendTurnOwned({ dependencies, userId, turnId }, entries),
     completeTurn: ({ userId, turnId, assistant }) =>
@@ -1207,9 +1235,9 @@ const makeConversationContinuity = Effect.gen(function* () {
  *
  * Every operation is plain data in and plain data out; this module hands out no capability and no
  * lifecycle handle. Serializing one User's hosted work belongs to the runtime that owns the Turn,
- * which holds `withUserTurnLock` for the whole workflow so serialization spans inference and
- * delivery without one transaction spanning them. Callers supply only semantic content: this module
- * creates every persistence id and every nondecreasing lifecycle time.
+ * whose User-keyed Cluster handler spans inference and delivery without one transaction spanning
+ * them. The runtime supplies the stable request's Turn identity; this module creates entry ids and
+ * every nondecreasing lifecycle time. Targeted recovery never interrupts another request's Turn.
  * `prepareTurn` recovers abandoned Pending work before returning an exact snapshot, `admitTurn`
  * admits the active User text only if that snapshot is still current, and append and
  * terminalization are once-only because each rechecks Pending state inside its own transaction.

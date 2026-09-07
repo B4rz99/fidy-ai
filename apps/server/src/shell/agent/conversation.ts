@@ -4,7 +4,8 @@ import {
   type OnboardingTurnOutcome,
   handleOnboardingTurn,
 } from "~/shell/onboarding/onboarding";
-import { type AgentReply, AgentService, InboundMessage } from "./agent-service";
+import { AgentService } from "./agent-service";
+import { type AgentReply, type AuthorizedAgentTurn, InboundMessage } from "./message";
 
 /**
  * Onboarding-terminal outcome or a validated text turn bound to the resolved stable User. Admission
@@ -12,11 +13,7 @@ import { type AgentReply, AgentService, InboundMessage } from "./agent-service";
  */
 export type AgentConversationAdmission =
   | Exclude<OnboardingTurnOutcome, { readonly _tag: "Proceed" }>
-  | Readonly<{
-      readonly _tag: "AuthorizedTurn";
-      readonly userId: Extract<OnboardingTurnOutcome, { readonly _tag: "Proceed" }>["userId"];
-      readonly inboundMessage: InboundMessage;
-    }>;
+  | AuthorizedAgentTurn;
 
 /** Tells an adapter whether onboarding ended the turn or an authorized reply may be sent. */
 export type AgentConversationOutcome =
@@ -58,10 +55,6 @@ export const handleAgentConversationTurn = Effect.fn("handleAgentConversationTur
   const admission = yield* admitAgentConversationTurn(input);
   if (admission._tag !== "AuthorizedTurn") return admission;
   const service = yield* AgentService;
-  const reply = yield* service.handleMessage(
-    admission.userId,
-    admission.inboundMessage,
-    () => Effect.void
-  );
+  const reply = yield* service.handleMessage(admission.userId, admission.inboundMessage);
   return { _tag: "AgentReplied", reply } as const;
 });

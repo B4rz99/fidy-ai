@@ -170,7 +170,7 @@ const laterOf = (base: DateTime.Utc, candidate: Option.Option<DateTime.Utc>): Da
 /**
  * When this session last carried real work: its opening, its last terminal Turn, or a Pending Turn.
  * A Pending Turn counts as activity from when it started rather than exempting the session, because
- * admission evaluates the boundary under the Turn lock — so any Pending Turn it observes was
+ * admission evaluates the boundary inside the serialized User entity — so any Pending Turn it observes was
  * abandoned by an interrupted holder, and exempting one would let recovery, which stamps a terminal
  * time of its own, roll an arbitrarily old session forward on nothing but its own repair.
  */
@@ -212,6 +212,17 @@ const continueOrCloseActiveSessionInScope = Effect.fn("HostedAgentSession.contin
     return Option.none<HostedAgentSession>();
   }
 );
+
+/**
+ * Closes a no-longer-current session before abandoned Turn recovery can stamp fresh activity.
+ * Requires the User transaction and Consent subject lock; never opens a session without a request.
+ */
+export const closeInactiveHostedSessionInScope = Effect.fn(function* (userId: UserId) {
+  const active = yield* activeSessionInScope(userId);
+  if (Option.isSome(active)) {
+    yield* continueOrCloseActiveSessionInScope(userId, active.value, yield* DateTime.now);
+  }
+});
 
 /** Opens a fresh session that captures the exact current onboarding Consent basis. */
 const openSessionInScope = Effect.fn("HostedAgentSession.open")(function* (

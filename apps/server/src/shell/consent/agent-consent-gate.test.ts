@@ -17,7 +17,7 @@ import { appendConsentRecord, withSubjectLock } from "./repo";
 import { selectTranscriptEntries } from "~/shell/transcript/repo";
 
 // An HTTP caller returns the reply in its response, so it delivers nothing incrementally.
-const noDelivery = (): Effect.Effect<void> => Effect.void;
+const noVerifiedWhatsAppAuthority = "no-verified-whatsapp-authority" as const;
 
 const unconsentedUserId = UserId.make("f1d1a000-0000-4000-8000-0000000008b1");
 const concurrentlyRevokedUserId = UserId.make("f1d1a000-0000-4000-8000-0000000008b2");
@@ -84,7 +84,7 @@ layer(AgentConsentHarness, { excludeTestServices: true, timeout: "30 seconds" })
           .handleMessage(
             unconsentedUserId,
             InboundMessage.make({ text: TranscriptText.make("registra este dato privado") }),
-            noDelivery
+            noVerifiedWhatsAppAuthority
           )
           .pipe(Effect.flip);
 
@@ -151,7 +151,7 @@ layer(AgentConsentHarness, { excludeTestServices: true, timeout: "30 seconds" })
           .handleMessage(
             concurrentlyRevokedUserId,
             InboundMessage.make({ text: TranscriptText.make("registra dato concurrente") }),
-            noDelivery
+            noVerifiedWhatsAppAuthority
           )
           .pipe(Effect.flip, Effect.forkChild);
         yield* Deferred.succeed(commitRevocation, undefined);

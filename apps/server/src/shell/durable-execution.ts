@@ -30,6 +30,11 @@ const ProductionClusterLive = Layer.unwrap(
       availableShardGroups: ["default"],
       assignedShardGroups: ["default"],
       shardsPerGroup: 300,
+      // Row leases survive a dropped pool connection; refresh plus entity shutdown precede expiry.
+      shardLockDisableAdvisory: true,
+      shardLockRefreshInterval: "10 seconds",
+      entityTerminationTimeout: "15 seconds",
+      shardLockExpiration: "35 seconds",
     });
   })
 );
@@ -47,6 +52,36 @@ const ProductionWorkflowLive = ClusterWorkflowEngine.layer.pipe(
 );
 
 export const DurableExecutionLive = Layer.mergeAll(SqlPersistedQueueLive, ProductionWorkflowLive);
+
+/** CLI routes through production owners without acquiring shards or creating another local mailbox. */
+export const DurableExecutionClientLive = Layer.unwrap(
+  Effect.gen(function* () {
+    const token = yield* Config.redacted("FIDY_CLUSTER_AUTH_TOKEN");
+    if (!clusterAuthenticationTokenPattern.test(Redacted.value(token))) {
+      return yield* Effect.fail(
+        new Config.ConfigError(
+          new ConfigProvider.SourceError({
+            message: "FIDY_CLUSTER_AUTH_TOKEN must be a 32-byte lowercase hexadecimal key",
+          })
+        )
+      );
+    }
+    return Layer.mergeAll(
+      SqlPersistedQueueLive,
+      ClusterWorkflowEngine.layer.pipe(
+        Layer.provideMerge(
+          authenticatedClusterHttp.layerSql(Redacted.value(token), {
+            runnerAddress: Option.none(),
+            availableShardGroups: ["default"],
+            assignedShardGroups: [],
+            shardsPerGroup: 300,
+            shardLockDisableAdvisory: true,
+          })
+        )
+      )
+    );
+  })
+);
 
 /** Volatile native substrate for tests that do not assert process-loss or cross-runtime behavior. */
 export const DurableExecutionMemory = Layer.mergeAll(

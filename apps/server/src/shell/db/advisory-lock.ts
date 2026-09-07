@@ -9,11 +9,6 @@ type AdvisoryLockKey = {
   readonly seed: number;
 };
 
-const hostedAttemptLockKey = (userId: UserId): AdvisoryLockKey => ({
-  value: `hosted-attempt:${userId}`,
-  seed: 0,
-});
-
 /**
  * Registry of process-side PostgreSQL advisory-lock keys. Every unrelated resource has a distinct
  * namespace or seed; WhatsApp admission intentionally hashes the bare UserId to share its key with
@@ -49,7 +44,6 @@ export const advisoryLockKey = {
     seed: 0,
   }),
   dashboard: (userId: UserId): AdvisoryLockKey => ({ value: userId, seed: 15 }),
-  hostedAttempt: hostedAttemptLockKey,
   memories: (userId: UserId): AdvisoryLockKey => ({
     value: `memories:${userId}`,
     seed: 0,
@@ -83,23 +77,6 @@ const acquireSessionLock = Effect.fn(function* (lockKey: AdvisoryLockKey) {
   yield* connection
     .executeRaw("SELECT pg_advisory_lock(hashtextextended($1, $2))", [lockKey.value, lockKey.seed])
     .pipe(Effect.orDie, Effect.interruptible);
-});
-
-/**
- * Serializes one User's hosted work across runtime instances for exactly the duration of `use`.
- * Unlike the transaction-scoped locks above this one is held on a reserved connection, so it spans
- * the several transactions one hosted Turn commits. The unlock finalizer is registered before the
- * lock is taken so an interrupted wait still releases it, and waiting stays interruptible so a
- * cancelled Turn stops queueing instead of blocking the next one. Taking the lock is not reachable
- * apart from the work it guards, so no caller can hold one past the flow that acquired it.
- */
-export const withUserTurnLock = Effect.fn("withUserTurnLock")(function* <A, E, R>(
-  userId: UserId,
-  use: Effect.Effect<A, E, R>
-) {
-  return yield* Effect.scoped(
-    Effect.andThen(acquireSessionLock(hostedAttemptLockKey(userId)), use)
-  );
 });
 
 /**

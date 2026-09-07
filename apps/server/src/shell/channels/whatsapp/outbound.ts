@@ -2,8 +2,8 @@ import { Data, DateTime, Effect, Option, Schema } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
 import type { UserId } from "~/core/identity/reference";
 import { TranscriptText } from "~/core/transcript/model";
-import type { AgentReply } from "~/shell/agent/agent-service";
-import type { AgentConversationAdmission } from "~/shell/agent/conversation";
+import type { AgentReply } from "~/shell/agent/message";
+import type { OnboardingTurnOutcome } from "~/shell/onboarding/onboarding";
 import { confirmationDigestFromChallenge } from "~/shell/agent/tool-confirmation-model";
 import { CURRENT_DISCLOSURE_TEXT } from "~/shell/consent/current-disclosure";
 import type { DeclaredOutcome, TelemetryAttempt } from "~/shell/observability/protocol";
@@ -28,10 +28,7 @@ export class AgentReplyNotRenderable extends Data.TaggedError("AgentReplyNotRend
 const renderWhatsAppText = (text: TranscriptText): TranscriptText =>
   TranscriptText.make(text.replace(/\*\*(\S(?:[\s\S]*?\S)?)\*\*/gu, "*$1*"));
 
-type DeliverableOnboardingOutcome = Exclude<
-  AgentConversationAdmission,
-  { readonly _tag: "AuthorizedTurn" }
->;
+type DeliverableOnboardingOutcome = Exclude<OnboardingTurnOutcome, { readonly _tag: "Proceed" }>;
 
 const isOutsideFreeFormWindow = (event: WhatsAppInboundEvent): boolean =>
   DateTime.Order(event.occurredAt, DateTime.subtract(event.receivedAt, { hours: 24 })) < 0;

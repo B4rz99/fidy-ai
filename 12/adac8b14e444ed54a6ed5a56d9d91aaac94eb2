@@ -1,0 +1,20 @@
+apps/server/src/shell/ingestion/email-forwarding.test.ts
+  s_fad9db0a6a1d64::t_db98ae5ca9fd80 310
+  s_fad9db0a6a1d64::t_5d0e8a19d16bc5 252-257
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.2",
+  "base_commit_sha": "12adac8b14e444ed54a6ed5a56d9d91aaac94eb2",
+  "prompts": {},
+  "sessions": {
+    "s_fad9db0a6a1d64": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a07d96-34ae-73c6-8074-f897603a3985",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

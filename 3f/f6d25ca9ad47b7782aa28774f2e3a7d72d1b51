@@ -1,0 +1,19 @@
+apps/server/tools/observability-compatibility/fixture-process.test.ts
+  s_fad9db0a6a1d64::t_92c9f9d57c270f 31
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.2",
+  "base_commit_sha": "3ff6d25ca9ad47b7782aa28774f2e3a7d72d1b51",
+  "prompts": {},
+  "sessions": {
+    "s_fad9db0a6a1d64": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a07d96-34ae-73c6-8074-f897603a3985",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

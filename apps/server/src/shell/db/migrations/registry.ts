@@ -47,6 +47,7 @@ import { effectStatementIngestion } from "./0047-effect-statement-ingestion";
 import { effectForwardedEmailWorkflow } from "./0048-effect-forwarded-email-workflow";
 import { effectEmailReplacement } from "./0049-effect-email-replacement";
 import { clusterHostedTurns } from "./0050-cluster-hosted-turns";
+import { effectWhatsAppDisclosure } from "./0051-effect-whatsapp-disclosure";
 
 /**
  * The explicit index ARCHITECTURE.md §7 calls for: one ordered, append-only
@@ -106,4 +107,5 @@ export const migrations = {
   "0048_effect_forwarded_email_workflow": effectForwardedEmailWorkflow,
   "0049_effect_email_replacement": effectEmailReplacement,
   "0050_cluster_hosted_turns": clusterHostedTurns,
+  "0051_effect_whatsapp_disclosure": effectWhatsAppDisclosure,
 };

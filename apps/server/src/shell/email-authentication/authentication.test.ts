@@ -2,6 +2,7 @@ import { expect, layer } from "@effect/vitest";
 import {
   Clock,
   ConfigProvider,
+  Context,
   DateTime,
   Deferred,
   Duration,
@@ -13,8 +14,9 @@ import {
   Ref,
   Schema,
 } from "effect";
-import { HttpBody, HttpClient } from "effect/unstable/http";
+import { HttpBody, HttpClient, HttpClientResponse } from "effect/unstable/http";
 import { TestClock } from "effect/testing";
+import { jsonStringSchema } from "~/schema-compatibility";
 import { StartedBrowserLoginPairing } from "~/core/browser-login/model";
 import {
   EmailAddress,
@@ -452,6 +454,65 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         ).toEqual({ _tag: "Progressed" });
         expect(yield* sql`SELECT id FROM browser_pairing_email_workflows`).toEqual([]);
       })
+    );
+
+    it.effect(
+      "preserves the delivered proof without resending when Resend returns JSON 500 after acceptance",
+      () =>
+        Effect.gen(function* () {
+          yield* resetAuthentication;
+          const pairing = yield* startPairing;
+          yield* requestEmail(pairing, knownEmail);
+          const acceptedCodes: Array<EmailVerificationCode> = [];
+          const client = HttpClient.make(
+            Effect.fn(function* (request) {
+              if (request.body._tag !== "Uint8Array") {
+                return yield* Effect.die("expected encoded Resend body");
+              }
+              const body = yield* Schema.decodeEffect(
+                jsonStringSchema(Schema.Struct({ text: Schema.String }))
+              )(new TextDecoder().decode(request.body.body)).pipe(Effect.orDie);
+              acceptedCodes.push(
+                yield* Schema.decodeUnknownEffect(EmailVerificationCode)(
+                  body.text.split("\n")[2]
+                ).pipe(Effect.orDie)
+              );
+              // The fake remote provider accepts this message, then fails while returning its response.
+              return HttpClientResponse.fromWeb(
+                request,
+                new Response('{"name":"internal_server_error","message":"temporary failure"}', {
+                  status: 500,
+                })
+              );
+            })
+          );
+          const provider = yield* Layer.build(
+            EmailDeliveryPort.layer.pipe(
+              Layer.provide(Layer.succeed(HttpClient.HttpClient, client)),
+              Layer.provide(
+                ConfigProvider.layer(
+                  ConfigProvider.fromUnknown({
+                    NODE_ENV: "production",
+                    RESEND_API_KEY: "re_test_only_resend_key_463000000",
+                    RESEND_FROM_EMAIL: "obarboza@fidyapp.com",
+                    RESEND_FROM_NAME: "Fidy",
+                  })
+                )
+              )
+            )
+          );
+          yield* processNextBackgroundStep().pipe(
+            Effect.provideService(EmailDeliveryPort, Context.get(provider, EmailDeliveryPort))
+          );
+          expect(acceptedCodes).toHaveLength(1);
+          const code = acceptedCodes[0];
+          if (code === undefined) return yield* Effect.die("expected accepted email");
+          const sql = yield* MigrationSqlClient;
+          expect(yield* sql`SELECT status FROM browser_pairing_email_delivery_intents`).toEqual([
+            { status: "uncertain" },
+          ]);
+          expect((yield* completeEmail(pairing, code)).status).toBe(200);
+        })
     );
 
     it.effect("retries only refused sends with a fresh proof and rejects the refused proof", () =>

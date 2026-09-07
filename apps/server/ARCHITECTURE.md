@@ -291,7 +291,9 @@ interface with explicit per-chunk and aggregate budgets rather than weakening th
 
 Resend is EmailAuthentication's launch outbound-email adapter; it receives only the recipient and
 bounded message projection required for the current proof, and provider work is driven by durable
-delivery state. The WhatsApp edge authenticates bounded exact webhook bytes before decoding and
+delivery state. Resend server errors remain ambiguous even when their response body is valid JSON,
+malformed, oversized, or unreadable: they do not prove non-acceptance and never authorize a fresh-proof
+retry. The WhatsApp edge authenticates bounded exact webhook bytes before decoding and
 bounds Kapso response bytes before SDK decoding. Its worker appends a visible assistant Transcript
 entry only after provider delivery succeeds; failed or ambiguous sends do not claim that the User
 saw a reply.

@@ -1,3 +1,4 @@
+import assert from "node:assert/strict";
 import { expect, it } from "@effect/vitest";
 import { Cause, ConfigProvider, Effect, Exit, Layer, Option, Ref } from "effect";
 import {
@@ -255,6 +256,23 @@ it.effect("rejects malformed, oversized, and unreadable failed provider response
   })
 );
 
+it.effect(
+  "keeps server errors ambiguous even when their bodies are malformed, oversized, or unreadable",
+  () =>
+    Effect.gen(function* () {
+      for (const body of ["not-json", `{"error":"${"x".repeat(5_000)}"}`]) {
+        assert.deepStrictEqual(
+          yield* Effect.exit(sendWith(senderLayer(503, [], body))),
+          Exit.fail(new EmailSendFailed({ certainty: "ambiguous", retryable: false }))
+        );
+      }
+      assert.deepStrictEqual(
+        yield* Effect.exit(sendWith(failedResponseBodyLayer(502))),
+        Exit.fail(new EmailSendFailed({ certainty: "ambiguous", retryable: false }))
+      );
+    })
+);
+
 it.effect("treats a successful status with a valid but unexpected body as ambiguous", () =>
   Effect.gen(function* () {
     const exit = yield* Effect.exit(sendWith(senderLayer(200, [], "{}")));
@@ -304,7 +322,7 @@ it.effect.each([
   { status: 299, expected: "success" },
   { status: 400, expected: "rejected" },
   { status: 429, expected: "retryable" },
-  { status: 500, expected: "retryable" },
+  { status: 500, expected: "ambiguous" },
 ] as const)("classifies Resend status $status as $expected", ({ status, expected }) =>
   Effect.gen(function* () {
     const requests: Array<HttpClientRequest.HttpClientRequest> = [];
@@ -319,7 +337,7 @@ it.effect.each([
     } else if (Exit.isFailure(exit)) {
       expect(Option.getOrThrow(Cause.findErrorOption(exit.cause))).toMatchObject({
         _tag: "EmailSendFailed",
-        certainty: "rejected",
+        certainty: expected === "ambiguous" ? "ambiguous" : "rejected",
         retryable: expected === "retryable",
       });
     } else {

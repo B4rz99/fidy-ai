@@ -95,7 +95,6 @@ export const deliverWhatsAppOnboardingOutcome = Effect.fn("WhatsApp.deliverOnboa
       yield* requestConsentDisclosureDelivery({
         event,
         exchangeId: outcome.exchangeId,
-        text,
         beforeProviderCall,
       });
       return;

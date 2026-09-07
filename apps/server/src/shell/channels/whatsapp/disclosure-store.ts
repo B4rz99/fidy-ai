@@ -190,12 +190,14 @@ export const lockConsentDisclosure = Effect.fn("WhatsApp.lockDisclosure")(functi
   effect: Effect.Effect<A, E, R>
 ) {
   const sql = yield* SqlClient.SqlClient;
-  return yield* sql.withTransaction(
-    Effect.gen(function* () {
-      yield* sql`SELECT fidy_lock_whatsapp_disclosure(${exchangeId})`.pipe(Effect.orDie);
-      return yield* effect;
-    })
-  );
+  return yield* sql
+    .withTransaction(
+      Effect.gen(function* () {
+        yield* sql`SELECT fidy_lock_whatsapp_disclosure(${exchangeId})`.pipe(Effect.orDie);
+        return yield* effect;
+      })
+    )
+    .pipe(Effect.catchTag("SqlError", Effect.die));
 });
 
 const DeliveryRequest = Schema.Struct({

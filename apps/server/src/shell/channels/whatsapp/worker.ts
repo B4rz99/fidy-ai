@@ -5,7 +5,6 @@ import { pruneCompletedHostedTurnMessages } from "~/shell/durable-execution-rete
 import { projectStack } from "~/shell/observability/projectors";
 import { runScheduledWork } from "~/shell/observability/scheduled-work";
 import { Telemetry } from "~/shell/observability/telemetry";
-import { processDueConsentDisclosureDelivery } from "./disclosure-delivery";
 import { claimWhatsAppTurn, failWhatsAppTurn, pruneWhatsAppOperationalData } from "./repo";
 
 const projectCauseForLog = (
@@ -79,8 +78,7 @@ export const runSupervisedWhatsAppLoop: {
 
 const workerLoop = Effect.gen(function* () {
   const now = yield* DateTime.now;
-  const retriedDisclosure = yield* processDueConsentDisclosureDelivery(now);
-  const processed = retriedDisclosure ? true : yield* processNextWhatsAppTurn(now);
+  const processed = yield* processNextWhatsAppTurn(now);
   if (!processed) yield* Effect.sleep("250 millis");
 }).pipe(runSupervisedWhatsAppLoop("whatsapp.processWork"));
 
@@ -108,7 +106,7 @@ const retentionLoop = Effect.forever(
   )
 );
 
-/** Runs independently supervised disclosure-retry, durable-turn, and retention loops. */
+/** Runs independently supervised durable-turn and retention loops; disclosure Workflows run separately. */
 export const WhatsAppWorkerLive = Layer.effectDiscard(
   Effect.forEach(
     [...Array.from({ length: 8 }, () => workerLoop), retentionLoop],

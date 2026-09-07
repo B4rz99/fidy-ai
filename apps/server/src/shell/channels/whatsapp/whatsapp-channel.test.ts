@@ -2092,7 +2092,7 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
               provider: "kapso",
               providerMessageId: WhatsAppProviderMessageId.make("wamid.sent-only"),
             },
-            occurredAt: now,
+            occurredAt: yield* DateTime.now,
           })
         ).toBe("applied");
         expect(

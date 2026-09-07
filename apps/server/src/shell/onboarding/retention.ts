@@ -1,4 +1,7 @@
 import { DateTime, Effect, Layer, Schedule } from "effect";
+import type { PersistedQueue } from "effect/unstable/persistence";
+import type { WorkflowEngine } from "effect/unstable/workflow";
+import { pruneConsentDisclosureDelivery } from "~/shell/channels/whatsapp/disclosure-retention";
 import type { MessageStorage, Sharding } from "effect/unstable/cluster";
 import { SqlClient, type SqlError } from "effect/unstable/sql";
 import {
@@ -20,7 +23,12 @@ export const runOnboardingRetention = (
 ): Effect.Effect<
   void,
   SqlError.SqlError,
-  MessageStorage.MessageStorage | Sharding.Sharding | SqlClient.SqlClient | Telemetry
+  | MessageStorage.MessageStorage
+  | Sharding.Sharding
+  | SqlClient.SqlClient
+  | Telemetry
+  | WorkflowEngine.WorkflowEngine
+  | PersistedQueue.PersistedQueueFactory
 > =>
   runScheduledWork({
     component: "onboarding",
@@ -28,6 +36,7 @@ export const runOnboardingRetention = (
     operationalError: "database_unavailable",
   })(
     Effect.gen(function* () {
+      yield* pruneConsentDisclosureDelivery(now);
       const sql = yield* SqlClient.SqlClient;
       yield* sql.withTransaction(
         Effect.gen(function* () {

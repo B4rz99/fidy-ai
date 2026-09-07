@@ -1,4 +1,5 @@
 import { BunHttpServer, BunServices } from "@effect/platform-bun";
+import { ConsentDisclosureWorkflowLive } from "~/shell/channels/whatsapp/disclosure-delivery";
 import {
   type Config,
   ConfigProvider,
@@ -301,6 +302,7 @@ const makeApiHarnessBase = (access: Layer.Layer<SupportAccessVerifier>): Support
     bearer: defaultPatBearer,
   }).pipe(
     Layer.provideMerge(HttpLive.pipe(Layer.provide(MigratorLive), Layer.provide(access))),
+    Layer.provideMerge(ConsentDisclosureWorkflowLive),
     Layer.provideMerge(DurableExecutionSqlQueueMemoryWorkflow),
     Layer.provideMerge(TestKapsoClient),
     Layer.provideMerge(MemoryInferenceTest),

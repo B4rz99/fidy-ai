@@ -356,6 +356,14 @@ At production startup, bounded idempotent publication also recovers pending inte
 the previous executor. Onboarding retention first proves each queue item completed, then uses the
 Cluster storage API to clear terminal history with the pre-User intent.
 
+WhatsApp Consent disclosure delivery uses one identifier-only, versioned pending-exchange Workflow
+and native start/evidence queues. The authenticated request atomically binds the caller, receipt
+handoff, routing snapshot, and publication; acknowledgment does not await Kapso. Activities arm one
+provider attempt before sending and never resend an already armed attempt on replay. Verified
+lifecycle evidence, Consent advancement, and evidence-notification publication commit together;
+DurableDeferred completion happens outside SQL locks. Durable clocks own retry delays and exchange
+expiry. Expiry does not turn ambiguous delivery into success or rejection. See ADR 0013.
+
 Statement Ingestion publishes an identifier-only, versioned `StatementSubmissionId` plus explicit
 `UserId` through `statement-ingestion` in the same transaction that accepts the submission. Queue
 leases coordinate runtime processes; each execution activates that User's RLS scope before loading

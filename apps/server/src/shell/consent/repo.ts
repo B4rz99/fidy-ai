@@ -996,8 +996,10 @@ export const findPendingConsentExchange = (
   ).pipe(Effect.orDie);
 
 const ConsentDisclosureRetry = Schema.Struct({
+  businessPortfolioId: WhatsAppBusinessPortfolioId,
   businessScopedUserId: WhatsAppBusinessScopedUserId,
   disclosureText: DisclosureSnapshot.fields.text,
+  expiresAt: Schema.DateTimeUtcFromDate,
 });
 
 /** Publishes the Consent-owned routing snapshot needed for one already-claimed retry. */
@@ -1008,8 +1010,8 @@ export const findPendingConsentDisclosureRetry = Effect.fn("Consent.findPendingD
       Request: PendingConsentExchangeId,
       Result: ConsentDisclosureRetry,
       execute: (id) => sql`
-        SELECT business_scoped_user_id AS "businessScopedUserId",
-          disclosure_text AS "disclosureText"
+        SELECT business_portfolio_id AS "businessPortfolioId", business_scoped_user_id AS "businessScopedUserId",
+          disclosure_text AS "disclosureText", expires_at AS "expiresAt"
         FROM pending_consent_exchanges
         WHERE id = ${id} AND lifecycle = 'awaiting-disclosure-delivery'
       `,

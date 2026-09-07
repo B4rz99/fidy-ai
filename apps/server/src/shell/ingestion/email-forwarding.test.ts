@@ -249,6 +249,12 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           () => makeDelivery("email_known_1", first.data.address),
           { concurrency: 16 }
         );
+        // Force the minute rollover instead of depending on when CI executes these requests.
+        // Replays above remain deduplicated; the next unique delivery starts a fresh window.
+        yield* sql`
+          UPDATE resend_webhook_admission_window
+          SET window_start = date_trunc('minute', clock_timestamp()) - interval '1 minute'
+        `;
         const unknown = yield* makeDelivery(
           "email_unknown_1",
           "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa@ingest.fidyapp.com"
@@ -301,7 +307,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           forgedCount: 0,
           knownBudgetCount: 1,
           knownCount: 1,
-          providerBudgetCount: 2,
+          providerBudgetCount: 1,
           userBudgetCount: 1,
         });
         expect(forged.status).toBe(401);

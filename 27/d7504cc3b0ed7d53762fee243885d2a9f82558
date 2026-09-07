@@ -1,0 +1,27 @@
+apps/server/package.json
+  s_674b9aa44aaf8f::t_7af93a713a21bb 49,55
+apps/server/tools/observability-compatibility/fixture-process.test.ts
+  s_674b9aa44aaf8f::t_471757415cc85d 31
+docs/research/bun-1.4.1-for-fidy.md
+  s_674b9aa44aaf8f::t_23ed6dc88e08c3 192-207
+apps/web/package.json
+  s_674b9aa44aaf8f::t_0c8e1ec4150ab7 54
+bun.lock
+  s_674b9aa44aaf8f::t_4994d9031da9bc 31,37,84,574,596,598,600,602,604,1442,1476,1498
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.2",
+  "base_commit_sha": "27d7504cc3b0ed7d53762fee243885d2a9f82558",
+  "prompts": {},
+  "sessions": {
+    "s_674b9aa44aaf8f": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a07d99-5f7d-7439-8612-c5946f2e78f0",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

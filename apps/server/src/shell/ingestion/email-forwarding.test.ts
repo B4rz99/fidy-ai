@@ -184,6 +184,25 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           },
           body: HttpBody.text(malformedPayload, "application/json"),
         });
+        const malformedJson = "{";
+        const malformedJsonId = "msg_malformed_json";
+        const malformedJsonHeaders = {
+          "svix-id": malformedJsonId,
+          "svix-timestamp": String(Math.floor(webhookNow.getTime() / 1000)),
+          "svix-signature": new Webhook(webhookSecret).sign(
+            malformedJsonId,
+            webhookNow,
+            malformedJson
+          ),
+        };
+        const authenticatedMalformedJson = yield* http.post("/webhooks/resend", {
+          headers: malformedJsonHeaders,
+          body: HttpBody.text(malformedJson, "application/json"),
+        });
+        const unauthenticatedMalformedJson = yield* http.post("/webhooks/resend", {
+          headers: { ...malformedJsonHeaders, "svix-signature": "v1,invalid" },
+          body: HttpBody.text(malformedJson, "application/json"),
+        });
         const oversized = yield* http.post("/webhooks/resend", {
           body: HttpBody.text("x".repeat(65_537), "application/json"),
         });
@@ -196,6 +215,8 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         expect(missingTimestamp.status).toBe(401);
         expect(missingSignature.status).toBe(401);
         expect(malformed.status).toBe(400);
+        expect(authenticatedMalformedJson.status).toBe(400);
+        expect(unauthenticatedMalformedJson.status).toBe(401);
         expect(oversized.status).toBe(413);
         expect(stalledBody.status).toBe(429);
 

@@ -205,3 +205,23 @@ Bun rechecked the already-approved exact `bun-types@1.4.1` while resolving this 
 same package-specific external exception was temporarily reapplied and immediately removed. No new
 package exception or standing policy change was added, and the normal frozen install succeeds.
 The updated PR head must pass all required GitHub checks before squash merge.
+
+The [dependency follow-up run](https://github.com/B4rz99/fidy-ai/actions/runs/34166104286) passed
+Workspace Gate and every executed job except server shard 3. Its two forwarded-email failures
+reproduced in isolation on fresh local databases: HTTP 400 instead of the injected queue failure's
+500, and 199 outstanding receipts instead of 200. The installed `svix@2.2.0/src/webhook.ts:27-45`
+authenticates with `jsonParse: false` and returns `undefined`; our decoder had relied on the previous
+SDK's parsed return value. This was a confirmed svix integration incompatibility, not a Bun failure
+or a flaky test.
+
+The adapter now verifies a single byte snapshot before decoding that same snapshot through the
+existing event schema. Existing assertions remain intact, with added signed-malformed-JSON (400)
+and forged-malformed-JSON (401) checks to protect authentication ordering. The focused regression
+failed before the fix and passed afterward; all four tests in `email-forwarding.test.ts` then
+passed on another fresh database. Full GitHub validation is required again for this adapter fix.
+
+Before that rerun, [PR #478](https://github.com/B4rz99/fidy-ai/pull/478) merged the same dependency
+updates and independently reached the same svix adapter fix. This branch was rebased onto
+`df6620f2502c5b263f8e72f36be641378c3237fc`, retaining trunk's implementation and timing fixes,
+with only the additional malformed-JSON assertions remaining as an ingestion delta. Final CI
+must validate that combined tree, not the superseded pre-rebase heads.

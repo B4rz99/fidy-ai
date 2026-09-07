@@ -60,10 +60,7 @@ import {
 } from "~/shell/channels/whatsapp/kapso-client";
 import { WhatsAppProviderMessageId } from "~/shell/channels/whatsapp/model";
 import { MigrationSqlClient, MigratorLive, PgLive } from "~/shell/db/client";
-import {
-  DurableExecutionMemory,
-  DurableExecutionSqlQueueMemoryWorkflow,
-} from "~/shell/durable-execution";
+import { DurableExecutionSqlQueueMemoryWorkflow } from "~/shell/durable-execution";
 import type { MessageStorage, Sharding } from "effect/unstable/cluster";
 import { TelemetryHttpStatus } from "~/shell/observability/protocol";
 import { makeDevelopmentSeedLive } from "~/shell/db/development-seed";
@@ -352,7 +349,7 @@ export const makeBrowserLoginPairingAcceptanceServer = ({
   readonly privateKey: Bun.BunFile;
 }): Layer.Layer<never, Config.ConfigError | Migrator.MigrationError | SqlError.SqlError> =>
   HttpLive.pipe(
-    Layer.provide(DurableExecutionMemory),
+    Layer.provide(DurableExecutionSqlQueueMemoryWorkflow),
     Layer.provide(MigratorLive),
     Layer.provide(SupportRecoveryTestAccess),
     Layer.provide(TestKapsoClient),

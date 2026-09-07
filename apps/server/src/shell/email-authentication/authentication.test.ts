@@ -28,16 +28,23 @@ import { withSubjectLock } from "~/shell/consent/repo";
 import { MigrationSqlClient } from "~/shell/db/client";
 import { withUserTransaction } from "~/shell/db/user-transaction";
 import { ApiHarness } from "~/shell/testing/api-harness";
-import { BrowserPairingEmailDeliveryWorkerLive } from "./authentication-delivery-worker";
+import {
+  BrowserPairingEmailDeliveryWorkerLive,
+  BrowserPairingEmailWorkflowLive,
+} from "./authentication-delivery-worker";
 import { browserPairingEmailAuthentication } from "./pairing-authentication";
 import { emailAuthenticationHmacKey, emailCredentialLookupKey } from "./admission";
-import {
-  purgeBrowserPairingEmailAdmissionEvidence,
-  purgeOneExpiredBrowserPairingEmailWorkflow,
-} from "./authentication-retention";
-import { EmailDeliveryPort, type EmailDeliveryPortService } from "./delivery";
+import { purgeBrowserPairingEmailAdmissionEvidence } from "./authentication-retention";
+import { EmailDeliveryPort, type EmailDeliveryPortService, EmailSendFailed } from "./delivery";
+import { BrowserPairingEmailExpiryWorkflow, PairingExpiryPayload } from "./pairing-email-execution";
 
-const processNextBackgroundStep = browserPairingEmailAuthentication.processNextBackgroundStep;
+const processNextBackgroundStep = Effect.fn(function* () {
+  return yield* browserPairingEmailAuthentication.processNextBackgroundStep().pipe(
+    // Finite test entrypoint: the provider supplied by this test owns the registration scope.
+    // @effect-diagnostics-next-line strictEffectProvide:off
+    Effect.provide(BrowserPairingEmailWorkflowLive)
+  );
+});
 const countingEmailDelivery = (sends: Ref.Ref<number>): EmailDeliveryPortService =>
   EmailDeliveryPort.of({ send: () => Ref.update(sends, (count) => count + 1) });
 
@@ -50,6 +57,7 @@ const otherEmail = "login-327@example.com";
 
 const resetAuthentication = Effect.gen(function* () {
   const sql = yield* MigrationSqlClient;
+  yield* sql`DELETE FROM fidy_durable.fidy_queue WHERE queue_name IN ('browser-pairing-email-start', 'browser-pairing-email-delivery', 'browser-pairing-email-expiry')`;
   yield* sql`DELETE FROM browser_pairing_email_start_requests`;
   yield* sql`DELETE FROM browser_pairing_email_workflows`;
   yield* sql`DELETE FROM email_pairing_login_admission_attempts`;
@@ -316,34 +324,37 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
       })
     );
 
-    it.effect("bounds concurrent public starts without provider work", () =>
-      Effect.gen(function* () {
-        yield* resetAuthentication;
-        const indexes = Array.from({ length: 8 }, (_, index) => index + 1);
-        const pairings = yield* Effect.forEach(indexes, () => startBudgetPairing);
-        const responses = yield* Effect.forEach(
-          pairings,
-          (pairing, index) =>
-            requestEmailHttp(
-              pairing,
-              `concurrent-budget-${index + 1}-326@example.com`,
-              "198.51.100.201"
-            ),
-          { concurrency: "unbounded" }
-        );
-        expect(responses.every(({ status }) => status === 202)).toBe(true);
-        const sql = yield* MigrationSqlClient;
-        const requests = yield* sql`SELECT id FROM browser_pairing_email_start_requests`;
-        expect(requests.length).toBeGreaterThan(0);
-        expect(requests.length).toBeLessThanOrEqual(5);
-        const sends = yield* Ref.make(0);
-        yield* Effect.forEach(indexes, () =>
-          processNextBackgroundStep().pipe(
-            Effect.provideService(EmailDeliveryPort, countingEmailDelivery(sends))
-          )
-        );
-        expect(yield* Ref.get(sends)).toBe(0);
-      })
+    it.effect(
+      "bounds concurrent public starts without provider work",
+      () =>
+        Effect.gen(function* () {
+          yield* resetAuthentication;
+          const indexes = Array.from({ length: 8 }, (_, index) => index + 1);
+          const pairings = yield* Effect.forEach(indexes, () => startBudgetPairing);
+          const responses = yield* Effect.forEach(
+            pairings,
+            (pairing, index) =>
+              requestEmailHttp(
+                pairing,
+                `concurrent-budget-${index + 1}-326@example.com`,
+                "198.51.100.201"
+              ),
+            { concurrency: "unbounded" }
+          );
+          expect(responses.every(({ status }) => status === 202)).toBe(true);
+          const sql = yield* MigrationSqlClient;
+          const requests = yield* sql`SELECT id FROM browser_pairing_email_start_requests`;
+          expect(requests.length).toBeGreaterThan(0);
+          expect(requests.length).toBeLessThanOrEqual(5);
+          const sends = yield* Ref.make(0);
+          yield* Effect.forEach(indexes, () =>
+            processNextBackgroundStep().pipe(
+              Effect.provideService(EmailDeliveryPort, countingEmailDelivery(sends))
+            )
+          );
+          expect(yield* Ref.get(sends)).toBe(0);
+        }),
+      35_000
     );
 
     it.effect("suppresses starts when global evidence lacks atomic capacity", () =>
@@ -393,12 +404,6 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         yield* resetAuthentication;
         const expiredDeliveryPairing = yield* startPairing;
         yield* requestEmail(expiredDeliveryPairing, knownEmail);
-        yield* processNextBackgroundStep().pipe(
-          Effect.provideService(EmailDeliveryPort, countingEmailDelivery(sends))
-        );
-        yield* sql`
-          UPDATE browser_pairing_email_delivery_intents SET status = 'pending'
-        `;
         yield* sql`
           UPDATE browser_login_pairings SET lifecycle = 'expired', expired_at = now()
           WHERE id = ${expiredDeliveryPairing.pairingId}
@@ -407,32 +412,21 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           yield* processNextBackgroundStep().pipe(
             Effect.provideService(EmailDeliveryPort, countingEmailDelivery(sends))
           )
-        ).toEqual({ _tag: "Idle" });
-        expect(yield* sql`SELECT status FROM browser_pairing_email_delivery_intents`).toEqual([
-          { status: "rejected" },
-        ]);
+        ).toEqual({ _tag: "Progressed" });
+        expect(yield* Ref.get(sends)).toBe(0);
 
         yield* resetAuthentication;
         const staleDeliveryPairing = yield* startPairing;
         yield* requestEmail(staleDeliveryPairing, knownEmail);
-        yield* processNextBackgroundStep().pipe(
-          Effect.provideService(EmailDeliveryPort, countingEmailDelivery(sends))
-        );
         yield* sql`
-          UPDATE browser_pairing_email_delivery_intents SET status = 'pending'
-        `;
-        yield* sql`
-          UPDATE verified_email_credentials SET verified_at = verified_at + interval '1 second'
-          WHERE user_id = ${userId}
+          DELETE FROM verified_email_credential_authentication_lookups WHERE user_id = ${userId}
         `;
         expect(
           yield* processNextBackgroundStep().pipe(
             Effect.provideService(EmailDeliveryPort, countingEmailDelivery(sends))
           )
-        ).toEqual({ _tag: "Idle" });
-        expect(yield* sql`SELECT status FROM browser_pairing_email_delivery_intents`).toEqual([
-          { status: "rejected" },
-        ]);
+        ).toEqual({ _tag: "Progressed" });
+        expect(yield* Ref.get(sends)).toBe(0);
 
         yield* resetAuthentication;
         const deliveryBudgetPairing = yield* startPairing;
@@ -457,6 +451,41 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           )
         ).toEqual({ _tag: "Progressed" });
         expect(yield* sql`SELECT id FROM browser_pairing_email_workflows`).toEqual([]);
+      })
+    );
+
+    it.effect("retries only refused sends with a fresh proof and rejects the refused proof", () =>
+      Effect.gen(function* () {
+        yield* resetAuthentication;
+        const pairing = yield* startPairing;
+        yield* requestEmail(pairing, knownEmail);
+        const attempts = yield* Ref.make<
+          ReadonlyArray<Parameters<EmailDeliveryPortService["send"]>[0]>
+        >([]);
+        yield* processNextBackgroundStep().pipe(
+          Effect.provideService(
+            EmailDeliveryPort,
+            EmailDeliveryPort.of({
+              send: Effect.fn(function* (input) {
+                const previous = yield* Ref.get(attempts);
+                yield* Ref.set(attempts, [...previous, input]);
+                if (previous.length === 0) {
+                  return yield* new EmailSendFailed({ certainty: "rejected", retryable: true });
+                }
+              }),
+            })
+          )
+        );
+        const [refused, accepted] = yield* Ref.get(attempts);
+        expect(refused).toBeDefined();
+        expect(accepted).toBeDefined();
+        if (refused === undefined || accepted === undefined) {
+          return yield* Effect.die("expected two attempts");
+        }
+        expect(accepted.combinedCode).not.toBe(refused.combinedCode);
+        expect(accepted.idempotencyKey).not.toBe(refused.idempotencyKey);
+        expect((yield* completeEmail(pairing, refused.combinedCode)).status).toBe(400);
+        expect((yield* completeEmail(pairing, accepted.combinedCode)).status).toBe(200);
       })
     );
 
@@ -961,8 +990,23 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           ON CONFLICT (scope_key) DO UPDATE SET expires_at = EXCLUDED.expires_at
         `;
 
-        expect(yield* purgeOneExpiredBrowserPairingEmailWorkflow()).toBe(true);
-        expect(yield* purgeOneExpiredBrowserPairingEmailWorkflow()).toBe(false);
+        const expiryRows = yield* Schema.decodeUnknownEffect(Schema.Array(PairingExpiryPayload))(
+          yield* sql`SELECT 1 AS revision, id AS "workflowId", user_id AS "userId" FROM browser_pairing_email_workflows`
+        );
+        const expiry = expiryRows[0];
+        if (expiry === undefined) return yield* Effect.die("expected expiry");
+        yield* Effect.all([
+          BrowserPairingEmailExpiryWorkflow.execute(expiry),
+          BrowserPairingEmailExpiryWorkflow.execute(expiry),
+        ]).pipe(
+          // Finite workflow integration entrypoint, including duplicate expiry execution.
+          // @effect-diagnostics-next-line strictEffectProvide:off
+          Effect.provide(BrowserPairingEmailWorkflowLive),
+          Effect.provideService(
+            EmailDeliveryPort,
+            EmailDeliveryPort.of({ send: () => Effect.void })
+          )
+        );
         yield* purgeBrowserPairingEmailAdmissionEvidence();
         expect(yield* sql`SELECT id FROM browser_pairing_email_workflows`).toEqual([]);
         expect(

@@ -395,7 +395,23 @@ completed queue rows and `Workflow.Complete` Cluster history. Receipt-owned chec
 cleared markers make cleanup fair and resumable: suspended or unproved histories cannot starve later
 pages, while a started marker proves that missing history may be safely reconciled after interruption.
 
-Migration is expand–migrate–contract: no item may be
+Browser-pairing email starts publish a versioned request identity through a native SQL queue in
+one transaction with anonymous admission state. A request-specific gateway resolves only that
+admitted request, then its User-scoped transaction consumes it and publishes delivery and independent
+expiry work. Delivery identity includes the stable User and intent, preventing a mismatched-User
+payload from poisoning another User's execution. Each named Activity keeps prepare, send, and settle
+inside its private boundary: only the proof digest enters domain storage, and only closed outcomes
+enter workflow history. Armed re-entry is uncertain, never a second send. Confirmed temporary refusal
+records the provider-attempt fence and fixed retry deadline before returning; DurableClock owns the
+250/500-ms waits and a maximum of three attempts. A fresh proof and attempt-specific provider key are
+used only after confirmed refusal. Proof submission remains synchronous and verifier-bound.
+The independent expiry workflow reads the authoritative User-scoped deadline and deletes proof state
+idempotently after a durable wait. Native queue payloads retain cleanup identifiers after proof rows
+are deleted; bounded, fair retention removes only completed queue items and terminal Cluster history
+after 24 hours, transactionally together, and warns on overdue full pages. Migration 0049 directly
+contracts the undeployed executor; it adds no legacy drain or republication system.
+
+Migration is expand–migrate–contract where deployed work exists: no item may be
 eligible in old and Effect execution simultaneously, and each migrated slice deletes the claims,
 leases, pollers, and execution-only status it replaces rather than wrapping them.
 

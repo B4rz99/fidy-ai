@@ -13,7 +13,6 @@ import {
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import { BrowserLoginPairingId } from "~/core/browser-login/reference";
 import {
-  BrowserPairingEmailStartRequestClaimToken,
   BrowserPairingEmailStartRequestId,
   BrowserPairingEmailWorkflowAwaitingDelivery,
   BrowserPairingEmailWorkflowId,
@@ -49,6 +48,11 @@ import {
   emailCredentialLookupKey,
 } from "./admission";
 import { acquireEmailVerificationAdmissionInScope } from "./repo";
+import {
+  pairingStartQueue,
+  publishPairingDelivery,
+  publishPairingExpiry,
+} from "./pairing-email-execution";
 
 const maximumEvidenceKeys = 150_000;
 const maximumAddressStarts = 5;
@@ -419,13 +423,14 @@ const persistDeliveryGeneration = Effect.fn(function* (input: {
         id, workflow_id, generation, email_address, status, idempotency_key, created_at
       ) VALUES (${intentId}, ${id}, 1, ${input.email}, 'pending', ${intentId}, ${input.requestedAt})
     `.pipe(Effect.orDie);
+    yield* publishPairingDelivery({ revision: 1, userId: input.credential.userId, intentId });
+    yield* publishPairingExpiry({ revision: 1, userId: input.credential.userId, workflowId: id });
     return;
   }
 
   const workflowId = input.existing.value.id;
   yield* sql`
-    UPDATE browser_pairing_email_delivery_intents SET status = 'superseded',
-      claim_token = NULL, claim_expires_at = NULL
+    UPDATE browser_pairing_email_delivery_intents SET status = 'superseded'
     WHERE workflow_id = ${workflowId} AND status <> 'superseded'
   `.pipe(Effect.orDie);
   yield* sql`
@@ -442,6 +447,7 @@ const persistDeliveryGeneration = Effect.fn(function* (input: {
     ) SELECT ${intentId}, id, delivery_generation, ${input.email}, 'pending', ${intentId},
       ${input.requestedAt} FROM browser_pairing_email_workflows WHERE id = ${workflowId}
   `.pipe(Effect.orDie);
+  yield* publishPairingDelivery({ revision: 1, userId: input.credential.userId, intentId });
 });
 
 const startForResolvedCredentialInScope = Effect.fn(function* (input: {
@@ -519,14 +525,22 @@ export const requestBrowserPairingEmailCode = Effect.fn("EmailAuthentication.sta
       const addressLookupKey = yield* emailCredentialLookupKey(decodedEmail.success).pipe(
         Effect.orDie
       );
-      yield* sql`
-      INSERT INTO browser_pairing_email_start_requests (
-        id, pairing_id, address_lookup_key, requested_at, expires_at, status
-      ) VALUES (
-        ${requestId}, ${checked.value.pairingId}, ${addressLookupKey}, ${attemptedAt},
-        ${checked.value.expiresAt}, 'pending'
-      )
-    `.pipe(Effect.orDie);
+      const queue = yield* pairingStartQueue;
+      yield* sql
+        .withTransaction(
+          Effect.gen(function* () {
+            yield* sql`
+          INSERT INTO browser_pairing_email_start_requests (
+            id, pairing_id, address_lookup_key, requested_at, expires_at
+          ) VALUES (
+            ${requestId}, ${checked.value.pairingId}, ${addressLookupKey}, ${attemptedAt},
+            ${checked.value.expiresAt}
+          )
+        `;
+            yield* queue.offer({ revision: 1, requestId }, { id: requestId });
+          })
+        )
+        .pipe(Effect.orDie);
     }).pipe(Effect.timeoutOption(startWorkDeadlineMilliseconds));
     const releaseAt = DateTime.toEpochMillis(attemptedAt) + startResponseReleaseMilliseconds;
     const remainingDelay = releaseAt - DateTime.toEpochMillis(yield* DateTime.now);
@@ -538,34 +552,10 @@ export const requestBrowserPairingEmailCode = Effect.fn("EmailAuthentication.sta
   }
 );
 
-const StartRequestGatewayOutcome = Schema.Struct({
-  requestId: BrowserPairingEmailStartRequestId,
-  userId: Schema.OptionFromNullOr(UserId),
-  claimToken: Schema.OptionFromNullOr(BrowserPairingEmailStartRequestClaimToken),
-});
-type ClaimedStartRequest = Readonly<{
+type ResolvedStart = Readonly<{
   requestId: BrowserPairingEmailStartRequestId;
   userId: UserId;
-  claimToken: BrowserPairingEmailStartRequestClaimToken;
 }>;
-
-const claimNextStartRequest = Effect.fn(function* (claimedAt: DateTime.Utc) {
-  const sql = yield* SqlClient.SqlClient;
-  const crypto = yield* Crypto.Crypto;
-  const claimToken = BrowserPairingEmailStartRequestClaimToken.make(
-    yield* crypto.randomUUIDv7.pipe(Effect.orDie)
-  );
-  return yield* SqlSchema.findOneOption({
-    Request: Schema.Void,
-    Result: StartRequestGatewayOutcome,
-    execute: () => sql`
-        SELECT request_id AS "requestId", user_id AS "userId", claim_token AS "claimToken"
-        FROM fidy_claim_browser_pairing_email_start_request(
-          ${claimedAt}, ${claimToken}, ${DateTime.add(claimedAt, { minutes: 2 })}
-        )
-      `,
-  })(undefined).pipe(Effect.orDie);
-});
 
 const ResolvedStartRequest = Schema.Struct({
   pairingId: BrowserLoginPairingId,
@@ -575,7 +565,7 @@ const ResolvedStartRequest = Schema.Struct({
 });
 type ResolvedStartRequest = typeof ResolvedStartRequest.Type;
 
-const findClaimedStartRequestInScope = Effect.fn(function* (claim: ClaimedStartRequest) {
+const findStartRequestInScope = Effect.fn(function* (claim: ResolvedStart) {
   const sql = yield* SqlClient.SqlClient;
   return yield* SqlSchema.findOneOption({
     Request: Schema.Void,
@@ -589,26 +579,24 @@ const findClaimedStartRequestInScope = Effect.fn(function* (claim: ClaimedStartR
         AND lookup.authentication_lookup_key = request.address_lookup_key
       JOIN verified_email_credentials credential ON credential.user_id = lookup.user_id
       WHERE request.id = ${claim.requestId} AND request.user_id = ${claim.userId}
-        AND request.status = 'claimed' AND request.claim_token = ${claim.claimToken}
       FOR UPDATE OF request
     `,
   })(undefined).pipe(Effect.orDie);
 });
 
-const deleteClaimedStartRequestInScope = Effect.fn(function* (claim: ClaimedStartRequest) {
+const deleteStartRequestInScope = Effect.fn(function* (claim: ResolvedStart) {
   const sql = yield* SqlClient.SqlClient;
   yield* sql`
     DELETE FROM browser_pairing_email_start_requests
     WHERE id = ${claim.requestId} AND user_id = ${claim.userId}
-      AND status = 'claimed' AND claim_token = ${claim.claimToken}
   `.pipe(Effect.orDie);
 });
 
-const processClaimedStartRequestInScope = Effect.fn(function* (
-  claim: ClaimedStartRequest,
+const processStartRequestInScope = Effect.fn(function* (
+  claim: ResolvedStart,
   processedAt: DateTime.Utc
 ) {
-  const request = yield* findClaimedStartRequestInScope(claim);
+  const request = yield* findStartRequestInScope(claim);
   yield* Option.match(request, {
     onNone: () => Effect.void,
     onSome: (claimedRequest) =>
@@ -623,33 +611,39 @@ const processClaimedStartRequestInScope = Effect.fn(function* (
         processedAt,
       }),
   });
-  yield* deleteClaimedStartRequestInScope(claim);
+  yield* deleteStartRequestInScope(claim);
 });
 
-/** Advances at most one HMAC-only request into a User-owned delivery workflow. */
-export const processNextBrowserPairingEmailStartRequest = Effect.fn(
-  "EmailAuthentication.processNextPairingStartRequest"
-)(function* () {
+/** Resolves only one admitted request; resolution, consumption, and publication commit together. */
+export const processBrowserPairingEmailStartRequest = Effect.fn(
+  "EmailAuthentication.processPairingStartRequest"
+)(function* (requestId: BrowserPairingEmailStartRequestId) {
+  const sql = yield* SqlClient.SqlClient;
   const processedAt = yield* DateTime.now;
-  const claim = yield* claimNextStartRequest(processedAt);
-  if (Option.isNone(claim)) return false;
-  if (Option.isNone(claim.value.userId) || Option.isNone(claim.value.claimToken)) return true;
-  const claimed = {
-    requestId: claim.value.requestId,
-    userId: claim.value.userId.value,
-    claimToken: claim.value.claimToken.value,
-  } satisfies ClaimedStartRequest;
-  yield* withUserTransaction(
-    claimed.userId,
-    withSubjectLockInScope(
-      claimed.userId,
-      withUserLockInScope(
-        advisoryLockKey.browserLoginApproval(claimed.userId),
-        processClaimedStartRequestInScope(claimed, processedAt)
-      )
+  yield* sql
+    .withTransaction(
+      Effect.gen(function* () {
+        const owner = yield* SqlSchema.findOneOption({
+          Request: Schema.Void,
+          Result: Schema.Struct({ userId: UserId }),
+          execute: () => sql`SELECT user_id AS "userId"
+        FROM fidy_resolve_browser_pairing_email_start_request(${requestId}, ${processedAt})`,
+        })(undefined).pipe(Effect.orDie);
+        if (Option.isNone(owner)) return;
+        const userId = owner.value.userId;
+        yield* withUserTransaction(
+          userId,
+          withSubjectLockInScope(
+            userId,
+            withUserLockInScope(
+              advisoryLockKey.browserLoginApproval(userId),
+              processStartRequestInScope({ requestId, userId }, processedAt)
+            )
+          )
+        );
+      })
     )
-  );
-  return true;
+    .pipe(Effect.orDie);
 });
 
 const ResolvedWorkflowOwner = Schema.Struct({

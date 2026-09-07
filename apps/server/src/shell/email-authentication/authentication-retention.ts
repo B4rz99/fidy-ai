@@ -1,57 +1,97 @@
-import { Crypto, DateTime, Effect, Layer, Option, Schedule, Schema } from "effect";
-import { SqlClient, SqlSchema } from "effect/unstable/sql";
+import { DateTime, Effect, Layer, Option, Ref, Schedule, Schema } from "effect";
 import {
-  BrowserPairingEmailRetentionClaimToken,
-  BrowserPairingEmailWorkflowId,
-} from "~/core/email-authentication/model";
-import { UserId } from "~/core/identity/reference";
-import { withSubjectLock } from "~/shell/consent/repo";
-import { withUserTransaction } from "~/shell/db/user-transaction";
+  EntityAddress,
+  EntityId,
+  EntityType,
+  MessageStorage,
+  Sharding,
+} from "effect/unstable/cluster";
+import { SqlClient, SqlSchema } from "effect/unstable/sql";
+import { jsonStringSchema } from "~/schema-compatibility";
+import {
+  BrowserPairingEmailDeliveryWorkflow,
+  BrowserPairingEmailExpiryWorkflow,
+  PairingDeliveryPayload,
+  PairingExpiryPayload,
+} from "./pairing-email-execution";
 
-const RetentionClaim = Schema.Struct({
-  workflowId: BrowserPairingEmailWorkflowId,
-  userId: UserId,
-  claimToken: BrowserPairingEmailRetentionClaimToken,
+const CompletedQueueItem = Schema.Struct({
+  sequence: Schema.Int,
+  id: Schema.String,
+  queueName: Schema.Literals([
+    "browser-pairing-email-start",
+    "browser-pairing-email-delivery",
+    "browser-pairing-email-expiry",
+  ]),
+  element: Schema.String,
 });
-type RetentionClaim = typeof RetentionClaim.Type;
 
-const claimExpiredWorkflow = Effect.fn(function* (claimedAt: DateTime.Utc) {
+const purgeTerminalQueueItem = Effect.fn(function* (row: typeof CompletedQueueItem.Type) {
   const sql = yield* SqlClient.SqlClient;
-  const crypto = yield* Crypto.Crypto;
-  const token = BrowserPairingEmailRetentionClaimToken.make(
-    yield* crypto.randomUUIDv7.pipe(Effect.orDie)
-  );
-  return yield* SqlSchema.findOneOption({
+  const storage = yield* MessageStorage.MessageStorage;
+  const sharding = yield* Sharding.Sharding;
+  let address = Option.none<EntityAddress.EntityAddress>();
+  if (row.queueName !== "browser-pairing-email-start") {
+    const workflow =
+      row.queueName === "browser-pairing-email-delivery"
+        ? BrowserPairingEmailDeliveryWorkflow
+        : BrowserPairingEmailExpiryWorkflow;
+    const executionId =
+      row.queueName === "browser-pairing-email-delivery"
+        ? yield* BrowserPairingEmailDeliveryWorkflow.executionId(
+            yield* Schema.decodeEffect(jsonStringSchema(PairingDeliveryPayload))(row.element)
+          ).pipe(Effect.orDie)
+        : yield* BrowserPairingEmailExpiryWorkflow.executionId(
+            yield* Schema.decodeEffect(jsonStringSchema(PairingExpiryPayload))(row.element)
+          ).pipe(Effect.orDie);
+    const terminal =
+      row.queueName === "browser-pairing-email-delivery"
+        ? yield* BrowserPairingEmailDeliveryWorkflow.poll(executionId).pipe(
+            Effect.map(Option.exists((state) => state._tag === "Complete"))
+          )
+        : yield* BrowserPairingEmailExpiryWorkflow.poll(executionId).pipe(
+            Effect.map(Option.exists((state) => state._tag === "Complete"))
+          );
+    if (!terminal) return;
+    const entityId = EntityId.make(executionId);
+    address = Option.some(
+      EntityAddress.make({
+        entityId,
+        entityType: EntityType.make(`Workflow/${workflow.name}`),
+        shardId: sharding.getShardId(entityId, "default"),
+      })
+    );
+  }
+  yield* sql
+    .withTransaction(
+      Effect.gen(function* () {
+        if (Option.isSome(address)) yield* storage.clearAddress(address.value);
+        yield* sql`DELETE FROM fidy_queue WHERE id = ${row.id} AND queue_name = ${row.queueName} AND completed = TRUE`;
+      })
+    )
+    .pipe(Effect.orDie);
+});
+
+/** Removes a bounded page of terminal native history after the authentication replay horizon.
+ * Native queue payloads retain identifiers after proof erasure; no cleanup ledger is needed.
+ * History and completed queue deletion share the SQL transaction, including crash recovery.
+ */
+export const purgeBrowserPairingEmailExecutionHistory = Effect.fn(function* (afterSequence = 0) {
+  const sql = yield* SqlClient.SqlClient;
+  const cutoff = DateTime.subtract(yield* DateTime.now, { hours: 24 });
+  const rows = yield* SqlSchema.findAll({
     Request: Schema.Void,
-    Result: RetentionClaim,
-    execute: () => sql`
-      SELECT workflow_id AS "workflowId", user_id AS "userId", claim_token AS "claimToken"
-      FROM fidy_claim_expired_browser_pairing_email_workflow(
-        ${claimedAt}, ${token}, ${DateTime.add(claimedAt, { minutes: 2 })}
-      )
-    `,
+    Result: CompletedQueueItem,
+    execute: () => sql`SELECT sequence, id, queue_name AS "queueName", element FROM fidy_queue
+      WHERE sequence > ${afterSequence} AND completed = TRUE AND updated_at < ${cutoff}
+        AND queue_name IN ('browser-pairing-email-start', 'browser-pairing-email-delivery', 'browser-pairing-email-expiry')
+      ORDER BY sequence LIMIT 100`,
   })(undefined).pipe(Effect.orDie);
-});
-
-const deleteClaimedWorkflowInScope = Effect.fn(function* (claim: RetentionClaim) {
-  const sql = yield* SqlClient.SqlClient;
-  yield* sql`
-    DELETE FROM browser_pairing_email_workflows
-    WHERE id = ${claim.workflowId} AND user_id = ${claim.userId}
-      AND retention_claim_token = ${claim.claimToken}
-  `.pipe(Effect.orDie);
-});
-
-/** Purges at most one expired User-owned email-login workflow. */
-export const purgeOneExpiredBrowserPairingEmailWorkflow = Effect.fn(function* () {
-  const now = yield* DateTime.now;
-  const claim = yield* claimExpiredWorkflow(now);
-  if (Option.isNone(claim)) return false;
-  yield* withUserTransaction(
-    claim.value.userId,
-    withSubjectLock(claim.value.userId, deleteClaimedWorkflowInScope(claim.value))
-  );
-  return true;
+  for (const row of rows) yield* purgeTerminalQueueItem(row);
+  if (rows.length === 100) {
+    yield* Effect.logWarning("Browser pairing email history cleanup has an overdue full page");
+  }
+  return rows.length === 100 ? (rows.at(-1)?.sequence ?? 0) : 0;
 });
 
 /** Purges one bounded batch of expired anonymous admission evidence. */
@@ -61,19 +101,23 @@ export const purgeBrowserPairingEmailAdmissionEvidence = Effect.fn(function* () 
   yield* sql`SELECT fidy_purge_email_pairing_login_admission_evidence(${now})`.pipe(Effect.orDie);
 });
 
-/** Production retention loop for short-lived authentication state and evidence. */
+/** Best-effort bounded evidence/history maintenance, not a domain-expiry polling executor. */
 export const BrowserPairingEmailRetentionLive = Layer.effectDiscard(
   Effect.all(
     [
-      purgeOneExpiredBrowserPairingEmailWorkflow().pipe(
-        Effect.delay("1 second"),
-        Effect.forever,
-        Effect.forkScoped
-      ),
       purgeBrowserPairingEmailAdmissionEvidence().pipe(
         Effect.repeat(Schedule.spaced("1 minute")),
         Effect.forkScoped
       ),
+      Effect.gen(function* () {
+        // This process-local scan cursor provides fairness; it owns no execution or lease.
+        const cursor = yield* Ref.make(0);
+        yield* Ref.get(cursor).pipe(
+          Effect.flatMap(purgeBrowserPairingEmailExecutionHistory),
+          Effect.flatMap((next) => Ref.set(cursor, next)),
+          Effect.repeat(Schedule.spaced("1 minute"))
+        );
+      }).pipe(Effect.forkScoped),
     ],
     { discard: true }
   )

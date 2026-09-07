@@ -202,25 +202,11 @@ export const BrowserPairingEmailStartRequestId = Schema.String.check(Schema.isUU
   .annotate({ identifier: "BrowserPairingEmailStartRequestId" });
 export type BrowserPairingEmailStartRequestId = typeof BrowserPairingEmailStartRequestId.Type;
 
-/** Lease fence for one globally claimed browser-pairing email start request. */
-export const BrowserPairingEmailStartRequestClaimToken = Schema.String.check(Schema.isUUID())
-  .pipe(Schema.brand("BrowserPairingEmailStartRequestClaimToken"))
-  .annotate({ identifier: "BrowserPairingEmailStartRequestClaimToken" });
-export type BrowserPairingEmailStartRequestClaimToken =
-  typeof BrowserPairingEmailStartRequestClaimToken.Type;
-
 /** Stable identity of one User-owned email approval workflow for an existing browser pairing. */
 export const BrowserPairingEmailWorkflowId = Schema.String.check(Schema.isUUID())
   .pipe(Schema.brand("BrowserPairingEmailWorkflowId"))
   .annotate({ identifier: "BrowserPairingEmailWorkflowId" });
 export type BrowserPairingEmailWorkflowId = typeof BrowserPairingEmailWorkflowId.Type;
-
-/** Random lease fence for one globally discovered, User-scoped retention step. */
-export const BrowserPairingEmailRetentionClaimToken = Schema.String.check(Schema.isUUID())
-  .pipe(Schema.brand("BrowserPairingEmailRetentionClaimToken"))
-  .annotate({ identifier: "BrowserPairingEmailRetentionClaimToken" });
-export type BrowserPairingEmailRetentionClaimToken =
-  typeof BrowserPairingEmailRetentionClaimToken.Type;
 
 const BrowserPairingEmailWorkflowBase = {
   id: BrowserPairingEmailWorkflowId,

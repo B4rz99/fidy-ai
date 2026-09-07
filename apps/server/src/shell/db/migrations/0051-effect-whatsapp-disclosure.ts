@@ -20,7 +20,7 @@ export const effectWhatsAppDisclosure = Effect.gen(function* () {
       sandbox_phone text CHECK (sandbox_phone ~ '^[+][1-9][0-9]{6,14}$')
     );
     REVOKE ALL ON whatsapp_consent_disclosure_requests FROM PUBLIC, fidy_runtime;
-    GRANT SELECT, INSERT, DELETE ON whatsapp_consent_disclosure_requests TO fidy_gateway;
+    GRANT SELECT, INSERT, UPDATE, DELETE ON whatsapp_consent_disclosure_requests TO fidy_gateway;
     INSERT INTO whatsapp_consent_disclosure_requests(exchange_id, expires_at, business_phone_number_id)
       SELECT DISTINCT ON (a.exchange_id) a.exchange_id, e.expires_at, a.business_phone_number_id
       FROM whatsapp_consent_disclosure_delivery_attempts a
@@ -51,8 +51,11 @@ export const effectWhatsAppDisclosure = Effect.gen(function* () {
 
   yield* sql`
     CREATE OR REPLACE FUNCTION fidy_lock_whatsapp_disclosure(target_exchange_id uuid) RETURNS void
-    LANGUAGE sql SECURITY DEFINER SET search_path = pg_catalog, public AS \$function\$
-      SELECT 1 FROM public.pending_consent_exchanges WHERE id = target_exchange_id FOR UPDATE
+    LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public AS \$function\$
+    BEGIN
+      PERFORM 1 FROM public.pending_consent_exchanges WHERE id = target_exchange_id FOR UPDATE;
+      PERFORM 1 FROM public.whatsapp_consent_disclosure_requests WHERE exchange_id = target_exchange_id FOR UPDATE;
+    END
     \$function\$;
     REVOKE ALL ON FUNCTION fidy_lock_whatsapp_disclosure(uuid) FROM PUBLIC;
     ALTER FUNCTION fidy_lock_whatsapp_disclosure(uuid) OWNER TO fidy_gateway;
@@ -287,6 +290,22 @@ export const effectWhatsAppDisclosure = Effect.gen(function* () {
     REVOKE ALL ON FUNCTION fidy_find_expired_whatsapp_disclosure_requests(timestamptz) FROM PUBLIC;
     ALTER FUNCTION fidy_find_expired_whatsapp_disclosure_requests(timestamptz) OWNER TO fidy_gateway;
     GRANT EXECUTE ON FUNCTION fidy_find_expired_whatsapp_disclosure_requests(timestamptz) TO fidy_runtime;
+
+    CREATE FUNCTION fidy_is_whatsapp_disclosure_request_expired(target_exchange_id uuid, at_time timestamptz)
+    RETURNS boolean LANGUAGE sql SECURITY DEFINER
+    SET search_path = pg_catalog, public AS \$function\$
+      SELECT EXISTS (
+        SELECT 1 FROM public.whatsapp_consent_disclosure_requests request
+        WHERE request.exchange_id = target_exchange_id AND (
+          request.expires_at <= at_time OR NOT EXISTS (
+            SELECT 1 FROM public.pending_consent_exchanges owner WHERE owner.id = request.exchange_id
+          )
+        )
+      )
+    \$function\$;
+    REVOKE ALL ON FUNCTION fidy_is_whatsapp_disclosure_request_expired(uuid,timestamptz) FROM PUBLIC;
+    ALTER FUNCTION fidy_is_whatsapp_disclosure_request_expired(uuid,timestamptz) OWNER TO fidy_gateway;
+    GRANT EXECUTE ON FUNCTION fidy_is_whatsapp_disclosure_request_expired(uuid,timestamptz) TO fidy_runtime;
 
     CREATE FUNCTION fidy_remove_whatsapp_disclosure_request(target_exchange_id uuid)
     RETURNS void LANGUAGE plpgsql SECURITY DEFINER

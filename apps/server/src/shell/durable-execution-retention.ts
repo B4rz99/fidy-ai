@@ -1,6 +1,6 @@
 import { DateTime, Duration, Effect, Schema } from "effect";
 import { MachineId, Snowflake } from "effect/unstable/cluster";
-import { SqlClient } from "effect/unstable/sql";
+import { SqlClient, SqlSchema } from "effect/unstable/sql";
 
 /**
  * Version-local RC.112 mailbox cleanup: only completed HostedTurns requests and their unit replies.
@@ -67,6 +67,35 @@ export const durableQueueRetention = {
     return state?.incomplete === 0 && state.requiredCompleted === requiredItemIds.length;
   }),
 
+  /**
+   * Removes at most 100 completed identifier-bearing items and reports whether any remain.
+   * The caller must hold the producer's domain lock and prove its execution terminal and ineligible
+   * for new publication. Incomplete and actively handled items are never removed.
+   */
+  removeCompletedByPayload: Effect.fn("DurableQueueRetention.removeCompletedByPayload")(function* (
+    queueName: string,
+    identifierField: string,
+    identifier: string
+  ) {
+    const sql = yield* SqlClient.SqlClient;
+    yield* sql`
+      DELETE FROM fidy_queue WHERE sequence IN (
+        SELECT sequence FROM fidy_queue
+        WHERE queue_name = ${queueName} AND element::jsonb ->> ${identifierField} = ${identifier}
+          AND completed = TRUE
+        ORDER BY sequence LIMIT 100
+      )
+    `.pipe(Effect.orDie);
+    return (yield* SqlSchema.findOne({
+      Request: Schema.Void,
+      Result: Schema.Struct({ empty: Schema.Boolean }),
+      execute: () => sql`SELECT NOT EXISTS (
+        SELECT 1 FROM fidy_queue
+        WHERE queue_name = ${queueName} AND element::jsonb ->> ${identifierField} = ${identifier}
+      ) AS empty`,
+    })(undefined).pipe(Effect.orDie)).empty;
+  }),
+
   removeCompleted: Effect.fn("DurableQueueRetention.removeCompleted")(function* (
     queueName: string,
     itemIds: ReadonlyArray<string>
@@ -79,3 +108,29 @@ export const durableQueueRetention = {
     `;
   }),
 };
+
+/**
+ * Version-local read-only quiescence probe for the foundation's default SQL Cluster namespace.
+ * A processed request has committed its final reply; an unfinished or delayed clock/deferred
+ * request therefore prevents mailbox deletion. The caller must first fence every application
+ * producer and prove the workflow terminal. A memory-engine harness has no SQL mailbox table.
+ */
+export const durableWorkflowMailboxesTerminal = Effect.fn(
+  "DurableWorkflowRetention.mailboxesTerminal"
+)(function* (executionId: string, entityTypes: ReadonlyArray<string>) {
+  const sql = yield* SqlClient.SqlClient;
+  const present = yield* SqlSchema.findOne({
+    Request: Schema.Void,
+    Result: Schema.Struct({ present: Schema.Boolean }),
+    execute: () => sql`SELECT to_regclass('cluster_messages') IS NOT NULL AS present`,
+  })(undefined).pipe(Effect.orDie);
+  if (!present.present) return true;
+  return (yield* SqlSchema.findOne({
+    Request: Schema.Void,
+    Result: Schema.Struct({ terminal: Schema.Boolean }),
+    execute: () => sql`SELECT NOT EXISTS (
+        SELECT 1 FROM cluster_messages WHERE entity_id = ${executionId}
+          AND entity_type IN ${sql.in(entityTypes)} AND processed = FALSE
+      ) AS terminal`,
+  })(undefined).pipe(Effect.orDie)).terminal;
+});

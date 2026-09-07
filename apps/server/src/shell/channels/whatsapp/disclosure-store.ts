@@ -324,3 +324,19 @@ export const removeConsentDisclosureRequest = Effect.fn("WhatsApp.removeDisclosu
     })(exchangeId).pipe(Effect.orDie);
   }
 );
+
+/** Rechecks retention eligibility under the caller's exchange/request lock; missing requests are not candidates. */
+export const isConsentDisclosureRequestExpired = Effect.fn("WhatsApp.isDisclosureRequestExpired")(
+  function* (exchangeId: PendingConsentExchangeId, now: DateTime.Utc) {
+    const sql = yield* SqlClient.SqlClient;
+    return (yield* SqlSchema.findOne({
+      Request: Schema.Struct({
+        exchangeId: PendingConsentExchangeId,
+        now: Schema.DateTimeUtcFromDate,
+      }),
+      Result: Schema.Struct({ expired: Schema.Boolean }),
+      execute: (request) =>
+        sql`SELECT fidy_is_whatsapp_disclosure_request_expired(${request.exchangeId}, ${request.now}) AS expired`,
+    })({ exchangeId, now }).pipe(Effect.orDie)).expired;
+  }
+);

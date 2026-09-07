@@ -19,7 +19,7 @@ import {
   consentDisclosureEvidenceQueue,
   disclosureEvidenceQueueId,
 } from "./disclosure-workflow";
-import { KapsoClient } from "./kapso-client";
+import { KapsoClient, KapsoSendFailed } from "./kapso-client";
 
 const RetentionHarness = ConsentDisclosureWorkflowLive.pipe(
   Layer.provideMerge(
@@ -43,7 +43,17 @@ const RetentionHarness = ConsentDisclosureWorkflowLive.pipe(
   ),
   Layer.provide(
     Layer.succeed(KapsoClient, {
-      sendText: () => Effect.die("expired disclosure invoked provider"),
+      // A shared test database can contain older, still-current publications. Drain those
+      // through a terminal fake rejection rather than defecting or calling a real provider.
+      sendText: () =>
+        Effect.fail(
+          new KapsoSendFailed({
+            safeReason: "invalid_recipient",
+            deliveryCertainty: "rejected",
+            automaticRetry: false,
+            responseStatus: Option.none(),
+          })
+        ),
     })
   ),
   Layer.provideMerge(PgLive),
@@ -66,10 +76,17 @@ const awaitTerminal = Effect.fn("Test.awaitTerminalDisclosure")(function* (
   payload: typeof ConsentDisclosureWorkflow.payloadSchema.Type
 ) {
   const executionId = yield* ConsentDisclosureWorkflow.executionId(payload);
-  yield* ConsentDisclosureWorkflow.poll(executionId).pipe(
-    Effect.filterOrFail((result) => Option.isSome(result) && result.value._tag === "Complete"),
-    Effect.retry({ schedule: Schedule.spaced("25 millis"), times: 200 }),
-    Effect.orDie
+  yield* Effect.scoped(
+    Effect.gen(function* () {
+      // Queue ordering belongs to native persistence, not this fixture. Keep consuming until
+      // this execution is complete even when earlier suites left publications ahead of it.
+      yield* startNextConsentDisclosure().pipe(Effect.forever, Effect.forkScoped);
+      yield* ConsentDisclosureWorkflow.poll(executionId).pipe(
+        Effect.filterOrFail((result) => Option.isSome(result) && result.value._tag === "Complete"),
+        Effect.retry({ schedule: Schedule.spaced("25 millis"), times: 200 }),
+        Effect.orDie
+      );
+    })
   );
   return executionId;
 });
@@ -103,7 +120,6 @@ layer(RetentionHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           const payload = yield* orphanedRequest();
           yield* pruneConsentDisclosureDelivery(yield* DateTime.now);
           expect(yield* retained(payload.exchangeId)).toBe(true);
-          yield* startNextConsentDisclosure();
           const executionId = yield* awaitTerminal(payload);
           yield* awaitPruned(payload.exchangeId);
           expect(Option.isNone(yield* ConsentDisclosureWorkflow.poll(executionId))).toBe(true);
@@ -123,7 +139,6 @@ layer(RetentionHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         Effect.gen(function* () {
           const payload = yield* orphanedRequest();
           yield* pruneConsentDisclosureDelivery(yield* DateTime.now);
-          yield* startNextConsentDisclosure();
           const executionId = yield* awaitTerminal(payload);
           const crypto = yield* Crypto.Crypto;
           const evidence = {
@@ -144,7 +159,7 @@ layer(RetentionHarness, { excludeTestServices: true, timeout: "30 seconds" })(
             executionId,
             clock: DurableClock.make({ name: "Expiry", duration: "2 seconds" }),
           });
-          yield* startNextConsentDisclosureEvidence();
+          yield* startNextConsentDisclosureEvidence().pipe(Effect.forever, Effect.forkScoped);
           yield* pruneConsentDisclosureDelivery(yield* DateTime.now);
           expect(yield* retained(payload.exchangeId)).toBe(true);
           yield* awaitPruned(payload.exchangeId);
@@ -163,7 +178,6 @@ layer(RetentionHarness, { excludeTestServices: true, timeout: "30 seconds" })(
       Effect.gen(function* () {
         const payload = yield* orphanedRequest();
         yield* pruneConsentDisclosureDelivery(yield* DateTime.now);
-        yield* startNextConsentDisclosure();
         const executionId = yield* awaitTerminal(payload);
         const admin = yield* MigrationSqlClient;
         yield* admin`
@@ -171,7 +185,8 @@ layer(RetentionHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         BEGIN RAISE EXCEPTION 'retention fixture rejects deletion'; END
         \$body\$;
         CREATE TRIGGER test_reject_disclosure_retention BEFORE DELETE ON whatsapp_consent_disclosure_requests
-        FOR EACH ROW EXECUTE FUNCTION test_reject_disclosure_retention()
+        FOR EACH ROW WHEN (OLD.exchange_id = ${admin.literal(`'${payload.exchangeId}'::uuid`)})
+        EXECUTE FUNCTION test_reject_disclosure_retention()
       `;
         yield* Effect.addFinalizer(() =>
           admin`

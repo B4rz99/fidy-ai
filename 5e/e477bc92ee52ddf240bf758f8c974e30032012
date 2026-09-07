@@ -1,0 +1,25 @@
+apps/server/src/shell/channels/whatsapp/disclosure-races.test.ts
+  s_3f56268c3f81f2::t_c2b2323b31dc78 20,44-45,113-149,151-207,215-216
+  s_3f56268c3f81f2::t_be4b8034a3157f 27,150
+  s_3f56268c3f81f2::t_dfe713691f8ab3 1-10,12-19,21-26,28-38,40-43,46-56,58-67,69-112,208-214,217-254
+  s_3f56268c3f81f2::t_f3b39bbf7beb3c 11
+  s_3f56268c3f81f2::t_756fce21719ab0 39
+  s_3f56268c3f81f2::t_afc0bc0b034d22 57
+  s_3f56268c3f81f2::t_33a67e3d97f507 68
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.2",
+  "base_commit_sha": "5ee477bc92ee52ddf240bf758f8c974e30032012",
+  "prompts": {},
+  "sessions": {
+    "s_3f56268c3f81f2": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a06fd8-1f32-73ea-ac07-fa3aa66d9199",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

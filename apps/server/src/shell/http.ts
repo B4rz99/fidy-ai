@@ -49,7 +49,11 @@ import {
   EmailReplacementWebAuthHandlersLive,
 } from "~/shell/email-authentication/handlers";
 import { EmailAuthenticationLive } from "~/shell/email-authentication/replacement-handlers";
-import { EmailReplacementDeliveryWorkerLive } from "~/shell/email-authentication/replacement-delivery-worker";
+import {
+  EmailReplacementDeliveryWorkerLive,
+  ReplacementDeliveryWorkflowLive,
+  ReplacementExpiryWorkflowLive,
+} from "~/shell/email-authentication/replacement-workflow";
 import { EmailReplacementRetentionLive } from "~/shell/email-authentication/replacement-retention";
 import {
   OnboardingEmailDeliveryQueueLive,
@@ -288,9 +292,11 @@ const HostedOnboardingDeliveryLive = Layer.merge(
   OnboardingEmailDeliveryWorkflowLive,
   OnboardingEmailDeliveryQueueLive
 ).pipe(Layer.provide(EmailDeliveryPort.layer));
-const HostedEmailReplacementDeliveryWorkerLive = EmailReplacementDeliveryWorkerLive.pipe(
-  Layer.provide(EmailDeliveryPort.layer)
-);
+const HostedEmailReplacementDeliveryWorkerLive = Layer.mergeAll(
+  EmailReplacementDeliveryWorkerLive,
+  ReplacementDeliveryWorkflowLive,
+  ReplacementExpiryWorkflowLive
+).pipe(Layer.provide(EmailDeliveryPort.layer));
 const HostedBrowserPairingEmailDeliveryWorkerLive = BrowserPairingEmailDeliveryWorkerLive.pipe(
   Layer.provide(EmailDeliveryPort.layer)
 );

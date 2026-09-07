@@ -28,6 +28,7 @@ import { lockFreshWebSessionInScope } from "~/shell/web-session/repo";
 import { admitEmailDeliveryInScope, emailCredentialLookupKey } from "./admission";
 import type { RequestEmailReplacementPayload } from "./operations";
 import { acquireEmailVerificationAdmissionInScope } from "./repo";
+import { publishReplacementDelivery, publishReplacementExpiry } from "./replacement-protocol";
 
 const workflowPublicSymbolCount = 8;
 const groupedCodeSymbolCount = 4;
@@ -100,7 +101,11 @@ const findLockedReplacementWorkflowByPublicCode = Effect.fn(function* (
     Result: ReplacementWorkflowRow,
     execute: () => sql`
       SELECT ${sql.literal(workflowProjection)} FROM email_replacement_workflows workflow
-      WHERE workflow.user_id = ${userId} AND workflow.public_code = ${publicCode} FOR UPDATE
+      WHERE workflow.user_id = ${userId} AND workflow.public_code = ${publicCode}
+        AND EXISTS (SELECT 1 FROM verified_email_credentials credential
+          WHERE credential.user_id = ${userId}
+            AND credential.verified_at = workflow.credential_verified_at)
+      FOR UPDATE
     `,
   })(undefined).pipe(Effect.orDie, Effect.map(Option.map(replacementWorkflowFromRow)));
 });
@@ -177,6 +182,19 @@ const decideLockedReplacementAdmission = Effect.fn(function* (input: RequestRepl
   return admittedRequest(decision === "Start" ? Option.none() : existing);
 });
 
+const makeReplacementPublicCode = Effect.fn(function* () {
+  const crypto = yield* Crypto.Crypto;
+  return EmailVerificationPublicCode.make(
+    formatEmailCode({
+      symbols: selectEmailCodeSymbols({
+        bytes: yield* crypto.randomBytes(workflowPublicSymbolCount).pipe(Effect.orDie),
+        maximum: workflowPublicSymbolCount,
+      }),
+      groupSize: groupedCodeSymbolCount,
+    })
+  );
+});
+
 const persistReplacementGeneration = Effect.fn(function* (
   input: RequestReplacementInput,
   existing: Option.Option<EmailReplacementWorkflow>
@@ -187,31 +205,23 @@ const persistReplacementGeneration = Effect.fn(function* (
     ? existing.value.id
     : EmailReplacementWorkflowId.make(yield* crypto.randomUUIDv7.pipe(Effect.orDie));
   const intentId = EmailDeliveryIntentId.make(yield* crypto.randomUUIDv7.pipe(Effect.orDie));
-  const publicCode = EmailVerificationPublicCode.make(
-    formatEmailCode({
-      symbols: selectEmailCodeSymbols({
-        bytes: yield* crypto.randomBytes(workflowPublicSymbolCount).pipe(Effect.orDie),
-        maximum: workflowPublicSymbolCount,
-      }),
-      groupSize: groupedCodeSymbolCount,
-    })
-  );
+  const publicCode = yield* makeReplacementPublicCode();
   if (Option.isNone(existing)) {
     const inserted = yield* sql`
       INSERT INTO email_replacement_workflows (
         id, user_id, candidate_email_address, public_code, started_at, expires_at,
-        delivery_generation, resend_available_at
+        delivery_generation, resend_available_at, credential_verified_at
       ) VALUES (
         ${workflowId}, ${input.userId}, ${input.candidateEmail}, ${publicCode},
         ${input.requestedAt}, ${emailWorkflowExpiry(input.requestedAt)}, 1,
-        ${resendAvailability(input.requestedAt)}
+        ${resendAvailability(input.requestedAt)},
+        (SELECT verified_at FROM verified_email_credentials WHERE user_id = ${input.userId})
       ) ON CONFLICT DO NOTHING RETURNING id
     `.pipe(Effect.orDie);
     if (inserted.length === 0) return;
   } else {
     yield* sql`
-      UPDATE email_replacement_delivery_intents SET status = 'superseded',
-        claim_token = NULL, claim_expires_at = NULL
+      UPDATE email_replacement_delivery_intents SET status = 'superseded'
       WHERE workflow_id = ${workflowId} AND status <> 'superseded'
     `.pipe(Effect.orDie);
     yield* sql`
@@ -230,6 +240,13 @@ const persistReplacementGeneration = Effect.fn(function* (
       ${intentId}, ${input.requestedAt}
     FROM email_replacement_workflows WHERE id = ${workflowId}
   `.pipe(Effect.orDie);
+  const expiresAt = Option.isSome(existing)
+    ? existing.value.expiresAt
+    : emailWorkflowExpiry(input.requestedAt);
+  yield* publishReplacementDelivery({ userId: input.userId, intentId, revision: 1 }, expiresAt);
+  if (Option.isNone(existing)) {
+    yield* publishReplacementExpiry({ userId: input.userId, workflowId, revision: 1 }, expiresAt);
+  }
 });
 
 const requestReplacementInScope = Effect.fn(function* (input: RequestReplacementInput) {
@@ -354,6 +371,8 @@ const commitReplacement = Effect.fn(function* (
           UPDATE verified_email_credentials SET email_address = ${workflow.candidateEmailAddress},
             verified_at = ${input.attemptedAt}
           WHERE user_id = ${input.userId}
+            AND verified_at = (SELECT credential_verified_at FROM email_replacement_workflows
+              WHERE id = ${workflow.id} AND user_id = ${input.userId})
           RETURNING user_id
         `;
         if (updated.length !== 1) return false;

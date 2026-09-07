@@ -197,10 +197,19 @@ fresh same-User WebSession may replace the mailbox on the existing VerifiedEmail
 replacement-specific proof; the old mailbox remains authoritative until the credential update,
 workflow cleanup, and metadata-only lifecycle event commit atomically. EmailReplacementTransition
 owns initiation and completion lock order, workflow decoding, admission, and atomic commit behind
-one operation per transition. EmailReplacementDelivery owns claim, durable `Armed` proof state,
+one operation per transition. EmailReplacementDelivery owns durable `Armed` proof state,
 provider work outside PostgreSQL transactions, fully fenced settlement, and ambiguous-outcome
-reconciliation behind one worker step. Separate EmailAuthentication operations own expired-workflow
-and lifecycle-evidence retention; PostgreSQL remains their private implementation, and
+reconciliation inside named Effect Activities. Delivery publication carries only an explicit UserId
+and intent identity; independent durable expiry carries UserId and the original replacement identity.
+The existing credential `verified_at` revision fences arming, settlement, and completion. Definitively
+rejected attempts may retry with a fresh proof after a durable wait (three attempts maximum); Armed
+re-entry is uncertain and never resends. SQL failures become secret-free Activity outcomes and durable
+waits; delivery recovery re-enters the same provider attempt. Separate EmailAuthentication operations
+own expired-workflow and lifecycle-evidence retention. Identifier-only execution receipts survive
+domain cleanup until the original expiry; queue completion and observed terminal workflow history
+fence execution cleanup, and expiry receipts additionally require domain absence. Each scheduled GC
+pass inspects at most 100 receipts, advances discovery past blocked work, and reports overdue state.
+PostgreSQL remains their private implementation, and
 EmailDeliveryPort remains the only replacement-delivery Seam. The browser's private verifier
 remains necessary to create the WebSession. A User
 whose Consent is explicitly revoked may authenticate only to reach Fidy-owned re-consent and

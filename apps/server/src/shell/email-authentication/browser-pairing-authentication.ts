@@ -49,10 +49,9 @@ import {
 } from "./admission";
 import { acquireEmailVerificationAdmissionInScope } from "./repo";
 import {
-  admitPairingExecutionInScope,
-  pairingStartQueue,
   publishPairingDelivery,
   publishPairingExpiry,
+  publishPairingStart,
 } from "./pairing-email-execution";
 
 const maximumEvidenceKeys = 150_000;
@@ -518,7 +517,6 @@ export const requestBrowserPairingEmailCode = Effect.fn("EmailAuthentication.sta
       }
       const decodedEmail = decodeEmailAddress(input.email);
       if (Result.isFailure(decodedEmail)) return;
-      const sql = yield* SqlClient.SqlClient;
       const crypto = yield* Crypto.Crypto;
       const requestId = BrowserPairingEmailStartRequestId.make(
         yield* crypto.randomUUIDv7.pipe(Effect.orDie)
@@ -526,23 +524,13 @@ export const requestBrowserPairingEmailCode = Effect.fn("EmailAuthentication.sta
       const addressLookupKey = yield* emailCredentialLookupKey(decodedEmail.success).pipe(
         Effect.orDie
       );
-      const queue = yield* pairingStartQueue;
-      yield* sql
-        .withTransaction(
-          Effect.gen(function* () {
-            if (!(yield* admitPairingExecutionInScope())) return;
-            yield* sql`
-          INSERT INTO browser_pairing_email_start_requests (
-            id, pairing_id, address_lookup_key, requested_at, expires_at
-          ) VALUES (
-            ${requestId}, ${checked.value.pairingId}, ${addressLookupKey}, ${attemptedAt},
-            ${checked.value.expiresAt}
-          )
-        `;
-            yield* queue.offer({ revision: 1, requestId }, { id: requestId });
-          })
-        )
-        .pipe(Effect.orDie);
+      yield* publishPairingStart({
+        requestId,
+        pairingId: checked.value.pairingId,
+        addressLookupKey,
+        requestedAt: attemptedAt,
+        expiresAt: checked.value.expiresAt,
+      });
     }).pipe(Effect.timeoutOption(startWorkDeadlineMilliseconds));
     const releaseAt = DateTime.toEpochMillis(attemptedAt) + startResponseReleaseMilliseconds;
     const remainingDelay = releaseAt - DateTime.toEpochMillis(yield* DateTime.now);

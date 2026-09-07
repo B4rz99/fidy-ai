@@ -1,4 +1,5 @@
-import { Effect, Schema } from "effect";
+import { type DateTime, Effect, Schema } from "effect";
+import type { BrowserLoginPairingId } from "~/core/browser-login/reference";
 import { PersistedQueue } from "effect/unstable/persistence";
 import { Workflow } from "effect/unstable/workflow";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
@@ -67,13 +68,9 @@ export const pairingExpiryQueue = PersistedQueue.make({
 
 const maximumPairingExecutionRows = 50_000;
 
-/** Applies global storage backpressure equally to known and unknown addresses.
- * The caller must publish the admitted start in this same transaction. Count unfinished work and
- * completed history across all three queues: completion alone does not release storage capacity.
- * Already-admitted starts may still publish their at-most-two continuations, so draining never
- * waits for capacity. This bounds total queue rows conservatively to three times the threshold.
- */
-export const admitPairingExecutionInScope = Effect.fn(function* () {
+// Count unfinished work and completed history. Each admitted start can still create at most two
+// continuations, bounding all queue rows to three times the threshold without blocking drain.
+const admitPairingExecutionInScope = Effect.fn(function* () {
   const sql = yield* SqlClient.SqlClient;
   const lock = yield* SqlSchema.findOne({
     Request: Schema.Void,
@@ -91,6 +88,39 @@ export const admitPairingExecutionInScope = Effect.fn(function* () {
     ) AS retained`,
   })(undefined);
   return capacity.count < maximumPairingExecutionRows;
+});
+
+/** Atomically retains and publishes a proved, admission-budgeted pairing start.
+ * Global storage backpressure applies equally to known and unknown addresses. Saturation or lock
+ * contention publishes nothing and does not disclose mailbox existence. The capacity lock cannot
+ * outlive or be separated from the protected admission/publication transaction.
+ */
+export const publishPairingStart = Effect.fn(function* (request: {
+  requestId: BrowserPairingEmailStartRequestId;
+  pairingId: BrowserLoginPairingId;
+  addressLookupKey: string;
+  requestedAt: DateTime.Utc;
+  expiresAt: DateTime.Utc;
+}) {
+  const sql = yield* SqlClient.SqlClient;
+  const queue = yield* pairingStartQueue;
+  yield* sql
+    .withTransaction(
+      Effect.gen(function* () {
+        if (!(yield* admitPairingExecutionInScope())) return;
+        yield* sql`INSERT INTO browser_pairing_email_start_requests (
+      id, pairing_id, address_lookup_key, requested_at, expires_at
+    ) VALUES (
+      ${request.requestId}, ${request.pairingId}, ${request.addressLookupKey},
+      ${request.requestedAt}, ${request.expiresAt}
+    )`;
+        yield* queue.offer(
+          { revision: 1, requestId: request.requestId },
+          { id: request.requestId }
+        );
+      })
+    )
+    .pipe(Effect.orDie);
 });
 
 /** Publication shares the caller's SqlClient transaction with the admitted domain transition. */

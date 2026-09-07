@@ -1,0 +1,43 @@
+apps/server/package.json
+  s_674b9aa44aaf8f::t_80a4d5ee1dae36 63
+.github/workflows/production.yml
+  s_674b9aa44aaf8f::t_c714d18193917f 32
+.github/workflows/preview.yml
+  s_674b9aa44aaf8f::t_74d8513c788636 34
+.github/actions/bun-install/action.yml
+  s_674b9aa44aaf8f::t_6da7e186769643 13
+docs/research/bun-1.4.1-for-fidy.md
+  s_674b9aa44aaf8f::t_1642b07f4ce408 131,182-191
+  s_674b9aa44aaf8f::t_9548288d63b4a7 1-22,27,31-59,61-63,65-77,79-87,94-115
+  s_674b9aa44aaf8f::t_e5717343c3a049 23-26,29-30
+  s_674b9aa44aaf8f::t_cb0ef4110b1f32 60,64,78,127-129,152-153,159-165
+  s_674b9aa44aaf8f::t_394afcdf3cfec0 28
+  s_674b9aa44aaf8f::t_94a61d1991f331 88-93,116-126,130,132-151
+  s_674b9aa44aaf8f::t_1c0fd0ec7bebb4 154-158,166-181
+apps/server/Dockerfile
+  s_674b9aa44aaf8f::t_0d229b07110d93 1,16
+apps/server/tools/observability-compatibility/fixture-process.test.ts
+  s_674b9aa44aaf8f::t_73b44253df26f7 29
+docs/research/bun-1.4-for-fidy.md
+  s_674b9aa44aaf8f::t_044f277a9bcaea 3-6
+package.json
+  s_674b9aa44aaf8f::t_cea2579791ffbb 63,76
+bun.lock
+  s_674b9aa44aaf8f::t_39d75a2a0e96a4 14,45,810
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.2",
+  "base_commit_sha": "ca39207a9b25fc97dbecd768724e6c90d3a5a766",
+  "prompts": {},
+  "sessions": {
+    "s_674b9aa44aaf8f": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a07d99-5f7d-7439-8612-c5946f2e78f0",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

@@ -49,6 +49,7 @@ import {
 } from "./admission";
 import { acquireEmailVerificationAdmissionInScope } from "./repo";
 import {
+  admitPairingExecutionInScope,
   pairingStartQueue,
   publishPairingDelivery,
   publishPairingExpiry,
@@ -529,6 +530,7 @@ export const requestBrowserPairingEmailCode = Effect.fn("EmailAuthentication.sta
       yield* sql
         .withTransaction(
           Effect.gen(function* () {
+            if (!(yield* admitPairingExecutionInScope())) return;
             yield* sql`
           INSERT INTO browser_pairing_email_start_requests (
             id, pairing_id, address_lookup_key, requested_at, expires_at

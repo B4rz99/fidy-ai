@@ -446,6 +446,52 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
     );
 
     it.effect(
+      "refuses cross-User expiry without erasing proof or poisoning rightful expiry",
+      () =>
+        Effect.gen(function* () {
+          const { payload } = yield* admit();
+          yield* seedConsentedPatIdentity({
+            userId: otherUserId,
+            bearer: TokenBearer.make("fin_login464_abcdefghijklmnopqrstuvwxyz0123456789ABCD"),
+          });
+          const runtime = yield* runtimeFor(
+            44645,
+            EmailDeliveryPort.of({ send: () => Effect.void })
+          );
+          yield* Effect.tryPromise(() =>
+            runtime.runPromise(BrowserPairingEmailDeliveryWorkflow.execute(payload))
+          );
+          const sql = yield* MigrationSqlClient;
+          yield* sql`UPDATE browser_pairing_email_workflows SET started_at = now() - interval '2 seconds',
+            expires_at = now() - interval '1 second', proof_expires_at = now() - interval '1 second'
+            WHERE user_id = ${payload.userId}`;
+          const expiries = yield* Schema.decodeUnknownEffect(Schema.Array(PairingExpiryPayload))(
+            yield* sql`SELECT 1 AS revision, id AS "workflowId", user_id AS "userId" FROM browser_pairing_email_workflows WHERE user_id = ${payload.userId}`
+          );
+          const expiry = expiries[0];
+          if (expiry === undefined) return yield* Effect.die("expected expiry");
+          const proof =
+            yield* sql`SELECT proof_digest FROM browser_pairing_email_workflows WHERE id = ${expiry.workflowId} AND proof_digest IS NOT NULL`;
+          expect(proof).toHaveLength(1);
+          yield* Effect.tryPromise(() =>
+            runtime.runPromise(
+              BrowserPairingEmailExpiryWorkflow.execute({ ...expiry, userId: otherUserId })
+            )
+          );
+          expect(
+            yield* sql`SELECT proof_digest FROM browser_pairing_email_workflows WHERE id = ${expiry.workflowId}`
+          ).toEqual(proof);
+          yield* Effect.tryPromise(() =>
+            runtime.runPromise(BrowserPairingEmailExpiryWorkflow.execute(expiry))
+          );
+          expect(
+            yield* sql`SELECT id FROM browser_pairing_email_workflows WHERE id = ${expiry.workflowId}`
+          ).toEqual([]);
+        }),
+      30_000
+    );
+
+    it.effect(
       "expires proof state after killing the process that scheduled its durable deadline",
       () =>
         Effect.gen(function* () {

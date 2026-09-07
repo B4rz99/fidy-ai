@@ -410,7 +410,12 @@ used only after confirmed refusal. Proof submission remains synchronous and veri
 The independent expiry workflow reads the authoritative User-scoped deadline and deletes proof state
 idempotently after a durable wait. Native queue payloads retain cleanup identifiers after proof rows
 are deleted; bounded, fair retention removes only completed queue items and terminal Cluster history
-after 24 hours, transactionally together, and warns on overdue full pages. Migration 0049 directly
+after 24 hours, transactionally together, and warns on overdue full pages. Anonymous start publication
+also checks global storage capacity under a transaction-scoped admission lock. At 50,000 retained rows
+across all three queues, new starts keep the same non-enumerating response but publish no work.
+Completed history counts against capacity until removed. Already-admitted starts can still publish
+at most two continuations, bounding total queue rows conservatively to 150,000 without blocking drain
+or adding another execution ledger. Migration 0049 directly
 contracts the undeployed executor; it adds no legacy drain or republication system.
 
 Migration is expand–migrate–contract where deployed work exists: no item may be

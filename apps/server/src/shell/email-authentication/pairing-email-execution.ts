@@ -1,6 +1,7 @@
 import { Effect, Schema } from "effect";
 import { PersistedQueue } from "effect/unstable/persistence";
 import { Workflow } from "effect/unstable/workflow";
+import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import {
   BrowserPairingEmailStartRequestId,
   BrowserPairingEmailWorkflowId,
@@ -62,6 +63,34 @@ export const BrowserPairingEmailExpiryWorkflow = Workflow.make("BrowserPairingEm
 export const pairingExpiryQueue = PersistedQueue.make({
   name: "browser-pairing-email-expiry",
   schema: PairingExpiryPayload,
+});
+
+const maximumPairingExecutionRows = 50_000;
+
+/** Applies global storage backpressure equally to known and unknown addresses.
+ * The caller must publish the admitted start in this same transaction. Count unfinished work and
+ * completed history across all three queues: completion alone does not release storage capacity.
+ * Already-admitted starts may still publish their at-most-two continuations, so draining never
+ * waits for capacity. This bounds total queue rows conservatively to three times the threshold.
+ */
+export const admitPairingExecutionInScope = Effect.fn(function* () {
+  const sql = yield* SqlClient.SqlClient;
+  const lock = yield* SqlSchema.findOne({
+    Request: Schema.Void,
+    Result: Schema.Struct({ acquired: Schema.Boolean }),
+    execute: () =>
+      sql`SELECT pg_try_advisory_xact_lock(hashtextextended('email-authentication:browser-pairing-execution-capacity', 0)) AS acquired`,
+  })(undefined);
+  if (!lock.acquired) return false;
+  const capacity = yield* SqlSchema.findOne({
+    Request: Schema.Void,
+    Result: Schema.Struct({ count: Schema.Int }),
+    execute: () => sql`SELECT count(*)::int AS count FROM (
+      SELECT 1 FROM fidy_queue WHERE queue_name IN ('browser-pairing-email-start', 'browser-pairing-email-delivery', 'browser-pairing-email-expiry')
+      LIMIT ${maximumPairingExecutionRows}
+    ) AS retained`,
+  })(undefined);
+  return capacity.count < maximumPairingExecutionRows;
 });
 
 /** Publication shares the caller's SqlClient transaction with the admitted domain transition. */

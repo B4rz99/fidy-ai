@@ -286,6 +286,51 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         })
     );
 
+    it.effect(
+      "bounds retained native history under repeated concurrent anonymous starts without sending",
+      () =>
+        Effect.gen(function* () {
+          yield* resetAuthentication;
+          const sql = yield* MigrationSqlClient;
+          yield* sql`INSERT INTO fidy_durable.fidy_queue (id, queue_name, element, completed, created_at, updated_at)
+          SELECT gen_random_uuid()::text, 'browser-pairing-email-start',
+            jsonb_build_object('revision', 1, 'requestId', gen_random_uuid())::text, TRUE, now(), now()
+          FROM generate_series(1, 49999)`;
+          const pairings = yield* Effect.forEach([0, 1, 2], () => startBudgetPairing);
+          const sends = yield* Ref.make(0);
+          for (const round of [0, 1]) {
+            const responses = yield* Effect.forEach(
+              pairings,
+              (pairing, index) =>
+                requestEmailHttp(
+                  pairing,
+                  `unknown-capacity-${round}-${index}@example.com`,
+                  `198.51.100.${index + 10}`
+                ),
+              { concurrency: "unbounded" }
+            );
+            for (const response of responses) {
+              expect(response.status).toBe(202);
+              expect(yield* response.json).toEqual({ status: "pending", retryAfterSeconds: 60 });
+            }
+            expect(
+              yield* sql`SELECT count(*)::int AS count FROM fidy_durable.fidy_queue WHERE queue_name = 'browser-pairing-email-start'`
+            ).toEqual([{ count: 50000 }]);
+            if (round === 0) {
+              expect(
+                yield* processNextBackgroundStep().pipe(
+                  Effect.provideService(EmailDeliveryPort, countingEmailDelivery(sends))
+                )
+              ).toEqual({ _tag: "Progressed" });
+            }
+          }
+          expect(yield* sql`SELECT id FROM browser_pairing_email_start_requests`).toEqual([]);
+          expect(yield* sql`SELECT id FROM browser_pairing_email_workflows`).toEqual([]);
+          expect(yield* Ref.get(sends)).toBe(0);
+        }),
+      30_000
+    );
+
     it.effect("atomically enforces address, pairing, and source start budgets", () =>
       Effect.gen(function* () {
         const indexes = Array.from({ length: 6 }, (_, index) => index + 1);

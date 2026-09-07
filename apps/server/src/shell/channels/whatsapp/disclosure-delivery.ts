@@ -1,4 +1,5 @@
 import {
+  Cause,
   Config,
   Data,
   DateTime,
@@ -34,13 +35,18 @@ import {
   requestConsentDisclosure,
 } from "./disclosure-store";
 import {
-  ConsentDisclosureFailed,
   ConsentDisclosureWorkflow,
   consentDisclosureEvidenceQueue,
   consentDisclosureQueue,
   disclosureEvidenceChanged,
   disclosureEvidenceQueueId,
 } from "./disclosure-workflow";
+import {
+  observeConsentDisclosureAttempt,
+  observeConsentDisclosureQueue,
+  observeConsentDisclosureResume,
+  recordConsentDisclosureOutcome,
+} from "./disclosure-observation";
 import { KapsoClient, type KapsoSendFailed, kapsoDestinationFor } from "./kapso-client";
 import type { KapsoDisclosureLifecycleEvidence } from "./kapso-webhook";
 import type { WhatsAppInboundEvent } from "./model";
@@ -115,6 +121,19 @@ const applyFailure = (
     retryable: failure.deliveryCertainty === "rejected" && failure.automaticRetry,
   });
 
+const observeEvidence = Effect.fn(function* (evidence: DisclosureDeliveryEvidence) {
+  switch (evidence.state) {
+    case "started":
+    case "reconciliation-required":
+      return yield* recordConsentDisclosureOutcome("ambiguous");
+    case "definitively-failed":
+      return yield* recordConsentDisclosureOutcome(evidence.retryable ? "retrying" : "rejected");
+    case "delivered":
+    case "retry-exhausted":
+      return yield* recordConsentDisclosureOutcome(evidence.state);
+  }
+});
+
 /**
  * Performs at most one newly armed provider call. Re-entry never repeats an armed attempt. This
  * finite channel-worker seam retains provider evidence; the Workflow alone decides when to retry.
@@ -155,7 +174,9 @@ export const performConsentDisclosureAttempt = Effect.fn("WhatsApp.performDisclo
           }),
       })
     );
-  }
+    yield* readDisclosure(exchangeId);
+  },
+  (work, _exchangeId, attemptNumber) => observeConsentDisclosureAttempt(work, attemptNumber)
 );
 
 const applyLifecycleEvidence = Effect.fn(function* (
@@ -280,7 +301,7 @@ const retryDisclosure = Effect.fn(function* (
   });
   const now = yield* DateTime.now;
   if (DateTime.isLessThan(now, resumeAt)) return;
-  const current = yield* findConsentDisclosureWork(exchangeId, now);
+  const { work: current } = yield* readDisclosure(exchangeId).pipe(observeConsentDisclosureResume);
   if (Option.isNone(current) || Option.isNone(current.value.latestAttempt)) return;
   const latest = current.value.latestAttempt.value;
   if (
@@ -297,16 +318,8 @@ const continueDisclosure = Effect.fn(function* (
   attempt: DisclosureDeliveryEvidence,
   expiresAt: DateTime.Utc
 ) {
-  if (
-    attempt.state === "retry-exhausted" ||
-    (attempt.state === "definitively-failed" && !attempt.retryable)
-  ) {
-    const reason = yield* Effect.fromOption(attempt.reason).pipe(Effect.orDie);
-    return yield* ConsentDisclosureFailed.make({
-      outcome: attempt.state === "retry-exhausted" ? "retry-exhausted" : "rejected",
-      reason,
-    });
-  }
+  // Rejection/exhaustion stops sending, not authenticated reconciliation. A newer provider
+  // observation remains admissible until expiry, so completing here would strand late evidence.
   if (attempt.state === "definitively-failed" && attempt.retryable) {
     return yield* retryDisclosure(exchangeId, attempt, expiresAt);
   }
@@ -321,6 +334,19 @@ const continueDisclosure = Effect.fn(function* (
   });
 });
 
+const readDisclosure = Effect.fn(function* (exchangeId: PendingConsentExchangeId) {
+  const latest = yield* findConsentDisclosureDeliveryState(exchangeId);
+  const work = yield* findConsentDisclosureWork(exchangeId, yield* DateTime.now);
+  if (Option.isSome(latest) && latest.value.state === "delivered") {
+    yield* recordConsentDisclosureOutcome("delivered");
+  } else if (Option.isNone(work)) {
+    yield* recordConsentDisclosureOutcome("not-current");
+  } else if (Option.isSome(work.value.latestAttempt)) {
+    yield* observeEvidence(work.value.latestAttempt.value);
+  }
+  return { latest, work };
+});
+
 const runDisclosure = Effect.fn("WhatsApp.runDisclosure")(function* ({
   exchangeId,
 }: {
@@ -328,11 +354,10 @@ const runDisclosure = Effect.fn("WhatsApp.runDisclosure")(function* ({
 }) {
   while (true) {
     // Do not cache this read in an Activity: every resumption must see newer owner evidence.
-    const latest = yield* findConsentDisclosureDeliveryState(exchangeId);
+    const { latest, work } = yield* readDisclosure(exchangeId).pipe(observeConsentDisclosureResume);
     if (Option.isSome(latest) && latest.value.state === "delivered") {
       return { outcome: "delivered" as const };
     }
-    const work = yield* findConsentDisclosureWork(exchangeId, yield* DateTime.now);
     if (Option.isNone(work)) return { outcome: "not-current" as const };
     if (Option.isNone(work.value.latestAttempt)) {
       yield* sendAttempt(exchangeId, DisclosureDeliveryAttemptNumber.make(1));
@@ -348,32 +373,62 @@ export const ConsentDisclosureWorkflowLive = ConsentDisclosureWorkflow.toLayer(r
 /** Starts one accepted workflow without occupying a consumer while it awaits provider evidence. */
 export const startNextConsentDisclosure = Effect.fn("WhatsApp.startNextDisclosure")(function* () {
   const queue = yield* consentDisclosureQueue;
-  yield* queue.take((payload) =>
-    ConsentDisclosureWorkflow.execute(payload, { discard: true }).pipe(Effect.asVoid)
-  );
+  yield* queue
+    .take((payload) =>
+      ConsentDisclosureWorkflow.execute(payload, { discard: true }).pipe(
+        Effect.asVoid,
+        observeConsentDisclosureQueue("start")
+      )
+    )
+    .pipe(
+      Effect.catchTags({
+        PersistedQueueError: (error) => observeConsentDisclosureQueue(Effect.fail(error), "start"),
+        SchemaError: (error) => observeConsentDisclosureQueue(Effect.fail(error), "start"),
+      })
+    );
 });
 
 /** Completes one committed evidence notification outside the evidence transaction. */
 export const startNextConsentDisclosureEvidence = Effect.fn("WhatsApp.notifyDisclosureEvidence")(
   function* () {
     const queue = yield* consentDisclosureEvidenceQueue;
-    yield* queue.take((payload) =>
-      Effect.gen(function* () {
-        const deferred = disclosureEvidenceChanged(payload);
-        const executionId = yield* ConsentDisclosureWorkflow.executionId(payload).pipe(
-          Effect.orDie
-        );
-        yield* DurableDeferred.done(deferred, {
-          token: DurableDeferred.tokenFromExecutionId(deferred, {
-            workflow: ConsentDisclosureWorkflow,
-            executionId,
-          }),
-          exit: Exit.void,
-        });
-      })
-    );
+    yield* queue
+      .take((payload) =>
+        Effect.gen(function* () {
+          const deferred = disclosureEvidenceChanged(payload);
+          const executionId = yield* ConsentDisclosureWorkflow.executionId(payload).pipe(
+            Effect.orDie
+          );
+          yield* DurableDeferred.done(deferred, {
+            token: DurableDeferred.tokenFromExecutionId(deferred, {
+              workflow: ConsentDisclosureWorkflow,
+              executionId,
+            }),
+            exit: Exit.void,
+          });
+        }).pipe(observeConsentDisclosureQueue("evidence"))
+      )
+      .pipe(
+        Effect.catchTags({
+          PersistedQueueError: (error) =>
+            observeConsentDisclosureQueue(Effect.fail(error), "evidence"),
+          SchemaError: (error) => observeConsentDisclosureQueue(Effect.fail(error), "evidence"),
+        })
+      );
   }
 );
+
+const superviseDisclosureQueue = <E, R>(
+  iteration: Effect.Effect<void, E, R>
+): Effect.Effect<never, never, R> =>
+  iteration.pipe(
+    Effect.catchCause((cause) =>
+      Cause.hasInterrupts(cause) && !Cause.hasDies(cause) && !Cause.hasFails(cause)
+        ? Effect.interrupt
+        : Effect.sleep("1 second")
+    ),
+    Effect.forever
+  );
 
 /** Production queue handoff and a bounded, paced startup translation of drained legacy requests. */
 export const ConsentDisclosureQueueLive = Layer.effectDiscard(
@@ -392,8 +447,8 @@ export const ConsentDisclosureQueueLive = Layer.effectDiscard(
       return Option.fromUndefinedOr(ids.at(-1));
     });
     const first = yield* publishPage(Option.none());
-    yield* startNextConsentDisclosure().pipe(Effect.forever, Effect.forkScoped);
-    yield* startNextConsentDisclosureEvidence().pipe(Effect.forever, Effect.forkScoped);
+    yield* startNextConsentDisclosure().pipe(superviseDisclosureQueue, Effect.forkScoped);
+    yield* startNextConsentDisclosureEvidence().pipe(superviseDisclosureQueue, Effect.forkScoped);
     yield* Effect.gen(function* () {
       let after = first;
       while (Option.isSome(after)) {

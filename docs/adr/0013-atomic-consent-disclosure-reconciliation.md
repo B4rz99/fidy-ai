@@ -21,6 +21,8 @@ Under the exchange lock, authenticated callbacks recheck currentness using curre
 
 Kapso remains a true external seam with production and deterministic fake adapters. PostgreSQL remains concrete behind the module; no repository port is introduced. Delivery tables are private: `fidy_runtime` has no table DML or read authority and can execute only state-checked gateways. The module generates one random attempt UUID, sends that value as the opaque callback token, and stores only its SHA-256 hash. Authenticated callback evidence is hashed before lookup.
 
+Provider rejection or exhausted retry stops sending but does not complete the Workflow while newer authenticated evidence remains admissible. The Workflow continues waiting until verified delivery or exchange expiry; definitive failure and its safe reason remain in the owner evidence. This avoids a permanently rejected execution contradicting later Consent advancement or stranding reopened retry eligibility.
+
 Authenticated lifecycle bodies are authoritative. The unsigned event header must agree with the latest chronological status in the authenticated status history. `sent` is nonterminal; verified `delivered` or `read` evidence advances Consent, and only allowlisted transient failures can schedule another of at most four sends.
 
 Manual reconciliation, `fidy_operator`, `OPERATOR_DATABASE_URL`, and the operator CLI are removed. A future human recovery path requires a separate decision naming trustworthy evidence unavailable to automation and a narrowly scoped authority.
@@ -30,6 +32,8 @@ Manual reconciliation, `fidy_operator`, `OPERATOR_DATABASE_URL`, and the operato
 Stop and drain the old disclosure workers before applying migration 0048; do not overlap old and new executors. The migration translates retained requests and provider evidence, removes unarmed claim-only rows, and drops claim/retry scheduling gateways and fields. Start the new workers only after migration. Startup publishes a bounded page of eligible translated requests and paces remaining pages. No backward-compatible claim executor remains.
 
 Routing snapshots survive pending-exchange deletion solely for bounded terminal cleanup. Retention requires completed publication and evidence notifications, a completed Workflow, and quiescent workflow/clock mailboxes before erasing execution history and private request data. It does not delete active timers or interrupt execution to manufacture terminality.
+
+Finite provider attempts, owner-state evaluations, and native queue handlers use the application Telemetry seam with closed disclosure operation and outcome labels. Durable waits stay outside these spans. Expected rejection, ambiguity, and retry exhaustion declare outcomes without duplicate failure captures; escaped failures are reported once at their disjoint Work boundary, and pure interruption is not reported as failure. No routing, correlation, provider body, or exchange identity enters telemetry payloads.
 
 ## Consequences
 

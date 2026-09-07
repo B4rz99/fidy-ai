@@ -74,7 +74,10 @@ const admit = Effect.fn(function* (phone: string) {
 
 const acquireRuntime = Effect.fn(function* (port: number, client: KapsoClientService) {
   const crypto = yield* Crypto.Crypto;
-  const runtimeLayer = ConsentDisclosureWorkflowLive.pipe(
+  const runtimeLayer = Layer.effectDiscard(
+    startNextConsentDisclosureEvidence().pipe(Effect.forever, Effect.forkScoped)
+  ).pipe(
+    Layer.provideMerge(ConsentDisclosureWorkflowLive),
     Layer.provideMerge(
       ClusterWorkflowEngine.layer.pipe(
         Layer.provideMerge(
@@ -198,7 +201,6 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
             remote.runPromise(applyConsentDisclosureLifecycle(evidence))
           )
         ).toBe("ignored");
-        yield* Effect.tryPromise(() => remote.runPromise(startNextConsentDisclosureEvidence()));
         yield* Deferred.succeed(release, undefined);
         const results = yield* Effect.tryPromise(() =>
           Promise.all([
@@ -252,7 +254,6 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
             recovered.runPromise(applyConsentDisclosureLifecycle(evidence))
           )
         ).toBe("applied");
-        yield* Effect.tryPromise(() => recovered.runPromise(startNextConsentDisclosureEvidence()));
         expect(
           yield* Effect.tryPromise(() =>
             recovered.runPromise(ConsentDisclosureWorkflow.execute(payload))
@@ -323,7 +324,6 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         yield* Effect.tryPromise(() =>
           recovered.runPromise(applyConsentDisclosureLifecycle(evidence))
         );
-        yield* Effect.tryPromise(() => recovered.runPromise(startNextConsentDisclosureEvidence()));
         expect(
           yield* Effect.tryPromise(() =>
             recovered.runPromise(ConsentDisclosureWorkflow.execute(payload))
@@ -332,6 +332,62 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         expect(yield* Ref.get(calls)).toBe(2);
         const timestamps = yield* Ref.get(times);
         expect((timestamps[1] ?? 0) - (timestamps[0] ?? 0)).toBeGreaterThanOrEqual(1_000);
+      }),
+      30_000
+    );
+
+    it.effect(
+      "keeps terminal rejection observable without closing later verified delivery",
+      Effect.fn(function* () {
+        expect.assertions(3);
+        const payload = yield* admit("+573007774674");
+        const started =
+          yield* Deferred.make<Parameters<typeof applyConsentDisclosureLifecycle>[0]>();
+        const provider: KapsoClientService = {
+          sendText: (input) =>
+            Effect.gen(function* () {
+              const result = delivered("wamid.cluster-late-466", yield* DateTime.now);
+              const correlationToken = yield* Effect.fromOption(input.opaqueCallbackData).pipe(
+                Effect.orDie
+              );
+              yield* Deferred.succeed(started, {
+                outcome: "accepted",
+                correlationToken,
+                messageEvidence: result.messageEvidence,
+                occurredAt: result.sentAt,
+              });
+              return yield* new KapsoSendFailed({
+                deliveryCertainty: "rejected",
+                safeReason: "provider_unavailable",
+                automaticRetry: false,
+                responseStatus: Option.none(),
+              });
+            }),
+        };
+        const runtime = yield* acquireRuntime(44667, provider);
+        yield* Effect.tryPromise(() =>
+          runtime.runPromise(ConsentDisclosureWorkflow.execute(payload, { discard: true }))
+        );
+        const evidence = yield* Deferred.await(started);
+        const executionId = yield* ConsentDisclosureWorkflow.executionId(payload);
+        yield* Effect.sleep("100 millis");
+        const waiting = yield* Effect.tryPromise(() =>
+          runtime.runPromise(ConsentDisclosureWorkflow.poll(executionId))
+        );
+        expect(Option.isSome(waiting) && waiting.value._tag).toBe("Suspended");
+        const latest = yield* findConsentDisclosureDeliveryState(payload.exchangeId).pipe(
+          Effect.flatMap(Effect.fromOption)
+        );
+        expect(latest.state).toBe("definitively-failed");
+        const occurredAt = yield* DateTime.now;
+        yield* Effect.tryPromise(() =>
+          runtime.runPromise(applyConsentDisclosureLifecycle({ ...evidence, occurredAt }))
+        );
+        expect(
+          yield* Effect.tryPromise(() =>
+            runtime.runPromise(ConsentDisclosureWorkflow.execute(payload))
+          )
+        ).toEqual({ outcome: "delivered" });
       }),
       30_000
     );

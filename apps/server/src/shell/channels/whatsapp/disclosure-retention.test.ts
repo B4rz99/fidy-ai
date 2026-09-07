@@ -38,7 +38,9 @@ const RetentionHarness = ConsentDisclosureWorkflowLive.pipe(
   ),
   Layer.provideMerge(
     PersistedQueue.layer.pipe(
-      Layer.provideMerge(PersistedQueue.layerStoreSql({ tableName: "fidy_queue" }))
+      Layer.provideMerge(
+        PersistedQueue.layerStoreSql({ tableName: "fidy_queue", pollInterval: "10 millis" })
+      )
     )
   ),
   Layer.provide(

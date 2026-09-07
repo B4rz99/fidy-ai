@@ -3,7 +3,7 @@ import { Schema } from "effect";
 import { PersistedQueue } from "effect/unstable/persistence";
 import { DurableDeferred, Workflow } from "effect/unstable/workflow";
 import { PendingConsentExchangeId } from "~/core/consent/model";
-import { DisclosureDeliveryAttemptId, DisclosureDeliveryFailureReason } from "./disclosure-model";
+import { DisclosureDeliveryAttemptId } from "./disclosure-model";
 
 /** Identifier-only pre-User work. No User exists before verified onboarding completes. */
 export const ConsentDisclosurePayload = Schema.Struct({
@@ -16,20 +16,11 @@ export const ConsentDisclosureSuccess = Schema.Struct({
   outcome: Schema.Literals(["delivered", "not-current"]),
 });
 
-/** Closed provider failure retained by execution history without provider bodies or routing data. */
-export class ConsentDisclosureFailed extends Schema.Error<ConsentDisclosureFailed>(
-  "ConsentDisclosureFailed"
-)({
-  _tag: Schema.tag("ConsentDisclosureFailed"),
-  outcome: Schema.Literals(["rejected", "retry-exhausted"]),
-  reason: DisclosureDeliveryFailureReason,
-}) {}
-
 /** One durable execution per eligible pending Consent exchange, independently of inbound redelivery. */
 export const ConsentDisclosureWorkflow = Workflow.make("WhatsAppConsentDisclosureDelivery", {
   payload: ConsentDisclosurePayload,
   success: ConsentDisclosureSuccess,
-  error: ConsentDisclosureFailed,
+  error: Schema.Never,
   idempotencyKey: ({ exchangeId }) => exchangeId,
 });
 

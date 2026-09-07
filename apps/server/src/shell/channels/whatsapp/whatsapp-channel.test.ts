@@ -2276,20 +2276,32 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
             )
           ).toBe("ignored");
 
-          const result = yield* ConsentDisclosureWorkflow.execute({
+          yield* ConsentDisclosureWorkflow.execute(
+            {
+              exchangeId: admission.exchangeId,
+              revision: 1,
+            },
+            { discard: true }
+          ).pipe(
+            Effect.provideContext(workflowContext),
+            Effect.provideService(KapsoClient, retryingKapso)
+          );
+          const exhausted = yield* findConsentDisclosureDeliveryState(admission.exchangeId).pipe(
+            Effect.flatMap(Effect.fromOption),
+            Effect.filterOrFail((state) => state.state === "retry-exhausted"),
+            Effect.retry({ schedule: Schedule.spaced("50 millis"), times: 400 }),
+            Effect.orDie
+          );
+          expect(yield* Ref.get(retries)).toBe(3);
+          expect(exhausted.state).toBe("retry-exhausted");
+          const executionId = yield* ConsentDisclosureWorkflow.executionId({
             exchangeId: admission.exchangeId,
             revision: 1,
-          }).pipe(
-            Effect.provideContext(workflowContext),
-            Effect.provideService(KapsoClient, retryingKapso),
-            Effect.flip
+          });
+          const completion = yield* ConsentDisclosureWorkflow.poll(executionId).pipe(
+            Effect.provideContext(workflowContext)
           );
-          expect(result).toMatchObject({ outcome: "retry-exhausted", reason: "rate_limited" });
-          expect(yield* Ref.get(retries)).toBe(3);
-          const exhausted = yield* Effect.fromOption(
-            yield* findConsentDisclosureDeliveryState(admission.exchangeId)
-          ).pipe(Effect.orDie);
-          expect(exhausted.state).toBe("retry-exhausted");
+          expect(Option.isSome(completion) && completion.value._tag).not.toBe("Complete");
         }),
       30_000
     );

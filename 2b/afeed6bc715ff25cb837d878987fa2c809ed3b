@@ -78,6 +78,7 @@ apps/server/src/shell/email-authentication/authentication.test.ts
   s_b587c2cb25e983::t_346ea6bc5a650d 60
   s_b587c2cb25e983::t_50f5276d266225 43-46
   s_b587c2cb25e983::t_659a2273667072 33,37,40,327-336,338-355,463-464,489-491,1000
+  s_b587c2cb25e983::t_60d2ea8fbc98e6 337
 apps/server/src/shell/email-authentication/pairing-email-execution.ts
   s_b587c2cb25e983::t_a97a4c8dc26730 1-6,8-11,16-17,19-21,27-34,37-43,45,49-51,57-59,61,65-75
   s_b587c2cb25e983::t_44e0fdbac380e9 12-13,15,22-24,26,52-54,56

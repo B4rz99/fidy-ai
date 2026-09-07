@@ -265,10 +265,11 @@ const sleepUntil = Effect.fn(function* (name: string, at: DateTime.Utc) {
 
 const sendAttempt = Effect.fn(function* (
   exchangeId: PendingConsentExchangeId,
-  attemptNumber: DisclosureDeliveryAttemptNumber
+  attemptNumber: DisclosureDeliveryAttemptNumber,
+  evidenceRevision = 0
 ) {
   return yield* Activity.make({
-    name: `Send/${attemptNumber}`,
+    name: `Send/${attemptNumber}/AfterEvidence/${evidenceRevision}`,
     execute: performConsentDisclosureAttempt(exchangeId, attemptNumber),
   });
 });
@@ -310,7 +311,11 @@ const retryDisclosure = Effect.fn(function* (
   ) {
     return;
   }
-  yield* sendAttempt(exchangeId, DisclosureDeliveryAttemptNumber.make(attempt.attemptNumber + 1));
+  yield* sendAttempt(
+    exchangeId,
+    DisclosureDeliveryAttemptNumber.make(attempt.attemptNumber + 1),
+    attempt.evidenceRevision
+  );
 });
 
 const continueDisclosure = Effect.fn(function* (
@@ -335,8 +340,14 @@ const continueDisclosure = Effect.fn(function* (
 });
 
 const readDisclosure = Effect.fn(function* (exchangeId: PendingConsentExchangeId) {
-  const latest = yield* findConsentDisclosureDeliveryState(exchangeId);
-  const work = yield* findConsentDisclosureWork(exchangeId, yield* DateTime.now);
+  const { latest, work } = yield* lockConsentDisclosure(
+    exchangeId,
+    Effect.gen(function* () {
+      const latest = yield* findConsentDisclosureDeliveryState(exchangeId);
+      const work = yield* findConsentDisclosureWork(exchangeId, yield* DateTime.now);
+      return { latest, work };
+    })
+  );
   if (Option.isSome(latest) && latest.value.state === "delivered") {
     yield* recordConsentDisclosureOutcome("delivered");
   } else if (Option.isNone(work)) {

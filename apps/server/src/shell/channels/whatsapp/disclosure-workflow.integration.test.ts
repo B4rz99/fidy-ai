@@ -11,12 +11,12 @@ import {
   Result,
 } from "effect";
 import { ClusterWorkflowEngine, RunnerAddress } from "effect/unstable/cluster";
-import { SqlClient } from "effect/unstable/sql";
+import { SqlClient, Statement } from "effect/unstable/sql";
 import { PersistedQueue } from "effect/unstable/persistence";
 import { E164PhoneNumber } from "~/core/identity/reference";
 import { TranscriptText } from "~/core/transcript/model";
 import { authenticatedClusterHttp } from "~/shell/authenticated-cluster-http";
-import { PgLive } from "~/shell/db/client";
+import { MigrationSqlClient, PgLive } from "~/shell/db/client";
 import { findPendingConsentExchange, removePendingConsentExchange } from "~/shell/consent/repo";
 import { handleOnboardingTurn } from "~/shell/onboarding/onboarding";
 import { TelemetryHttpStatus } from "~/shell/observability/protocol";
@@ -25,9 +25,14 @@ import { testWhatsAppCaller } from "~/shell/testing/whatsapp-caller";
 import {
   ConsentDisclosureWorkflowLive,
   applyConsentDisclosureLifecycle,
+  performConsentDisclosureAttempt,
   requestConsentDisclosureDelivery,
   startNextConsentDisclosureEvidence,
 } from "./disclosure-delivery";
+import {
+  DisclosureDeliveryAttemptNumber,
+  DisclosureDeliveryCorrelationToken,
+} from "./disclosure-model";
 import { ConsentDisclosureWorkflow, disclosureEvidenceQueueId } from "./disclosure-workflow";
 import {
   findConsentDisclosureAttemptByCorrelation,
@@ -72,12 +77,17 @@ const admit = Effect.fn(function* (phone: string) {
   return { exchangeId: admission.exchangeId, revision: 1 as const };
 });
 
-const acquireRuntime = Effect.fn(function* (port: number, client: KapsoClientService) {
+const acquireRuntime = Effect.fn(function* (
+  port: number,
+  client: KapsoClientService,
+  transformer?: Statement.Transformer
+) {
   const crypto = yield* Crypto.Crypto;
   const runtimeLayer = Layer.effectDiscard(
     startNextConsentDisclosureEvidence().pipe(Effect.forever, Effect.forkScoped)
   ).pipe(
     Layer.provideMerge(ConsentDisclosureWorkflowLive),
+    Layer.provide(Layer.succeed(Statement.CurrentTransformer, transformer)),
     Layer.provideMerge(
       ClusterWorkflowEngine.layer.pipe(
         Layer.provideMerge(
@@ -383,6 +393,78 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         yield* Effect.tryPromise(() =>
           runtime.runPromise(applyConsentDisclosureLifecycle({ ...evidence, occurredAt }))
         );
+        expect(
+          yield* Effect.tryPromise(() =>
+            runtime.runPromise(ConsentDisclosureWorkflow.execute(payload))
+          )
+        ).toEqual({ outcome: "delivered" });
+      }),
+      30_000
+    );
+
+    it.effect(
+      "reads delivery and currentness coherently when a callback interleaves between queries",
+      Effect.fn(function* () {
+        expect.assertions(2);
+        const payload = yield* admit("+573007774675");
+        const provider: KapsoClientService = {
+          sendText: () =>
+            DateTime.now.pipe(Effect.map((now) => delivered("wamid.coherent-466", now))),
+        };
+        yield* performConsentDisclosureAttempt(
+          payload.exchangeId,
+          DisclosureDeliveryAttemptNumber.make(1)
+        ).pipe(Effect.provideService(KapsoClient, provider));
+        const attempt = yield* findConsentDisclosureDeliveryState(payload.exchangeId).pipe(
+          Effect.flatMap(Effect.fromOption)
+        );
+        const reached = yield* Deferred.make<void>();
+        const release = yield* Deferred.make<void>();
+        const first = yield* Ref.make(true);
+        const transformer: Statement.Transformer = (statement) =>
+          Effect.gen(function* () {
+            const [query, parameters] = statement.compile();
+            if (
+              query.includes("FROM fidy_find_whatsapp_disclosure_request") &&
+              parameters.includes(payload.exchangeId) &&
+              (yield* Ref.getAndSet(first, false))
+            ) {
+              yield* Deferred.succeed(reached, undefined);
+              yield* Deferred.await(release);
+            }
+            return statement;
+          });
+        const runtime = yield* acquireRuntime(44668, provider, transformer);
+        yield* Effect.tryPromise(() =>
+          runtime.runPromise(ConsentDisclosureWorkflow.execute(payload, { discard: true }))
+        );
+        yield* Deferred.await(reached);
+        const callbackDone = yield* Deferred.make<void>();
+        const occurredAt = yield* DateTime.now;
+        yield* applyConsentDisclosureLifecycle({
+          outcome: "accepted",
+          correlationToken: DisclosureDeliveryCorrelationToken.make(attempt.attemptId),
+          messageEvidence: delivered("wamid.coherent-466", occurredAt).messageEvidence,
+          occurredAt,
+        }).pipe(
+          Effect.tap((outcome) => {
+            expect(outcome).toBe("applied");
+            return Deferred.succeed(callbackDone, undefined);
+          }),
+          Effect.forkScoped
+        );
+        const admin = yield* MigrationSqlClient;
+        const callbackBlocked = Effect.gen(function* () {
+          while (true) {
+            const waiting =
+              yield* admin`SELECT pid FROM pg_stat_activity WHERE datname = current_database() AND wait_event_type = 'Lock' AND query LIKE '%fidy_lock_whatsapp_disclosure%'`;
+            if (waiting.length > 0) return;
+            yield* Effect.sleep("10 millis");
+          }
+        });
+        yield* Effect.race(Deferred.await(callbackDone), callbackBlocked);
+        yield* Deferred.succeed(release, undefined);
+        yield* Deferred.await(callbackDone);
         expect(
           yield* Effect.tryPromise(() =>
             runtime.runPromise(ConsentDisclosureWorkflow.execute(payload))

@@ -1,0 +1,21 @@
+apps/server/src/shell/db/migrations/0049-effect-pairing-email.ts
+  s_b587c2cb25e983::t_7add052a68e1f5 18
+apps/server/src/shell/email-authentication/browser-pairing-authentication.ts
+  s_b587c2cb25e983::t_e407ea94842d6e 423-424,446-447
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.2",
+  "base_commit_sha": "01e45d1b1a8a92db2166916e9b06cea34b0c05f3",
+  "prompts": {},
+  "sessions": {
+    "s_b587c2cb25e983": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a06ef8-6705-7557-9e4c-6c80422c6946",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

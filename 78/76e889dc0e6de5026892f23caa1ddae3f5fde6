@@ -1,0 +1,30 @@
+apps/server/src/shell/email-authentication/delivery.ts
+  s_b587c2cb25e983::t_6ea4fd739665f0 113-118,127-128,130,132
+  s_b587c2cb25e983::t_18319629151fc3 142-143
+  s_b587c2cb25e983::t_eb0a3f653f471b 129
+apps/server/ARCHITECTURE.md
+  s_b587c2cb25e983::t_0061774062456f 285-287
+apps/server/src/shell/email-authentication/authentication.test.ts
+  s_b587c2cb25e983::t_07ead2acab830c 5,17,19,459-468,470,472-473,475,477-481,483-509,511-512
+  s_b587c2cb25e983::t_20dad967e17efe 469,471,474,476
+  s_b587c2cb25e983::t_fe6d3b8d187610 482,510,513-517
+apps/server/src/shell/email-authentication/delivery.test.ts
+  s_b587c2cb25e983::t_dea2558df8f4f4 259-275,325,340
+  s_b587c2cb25e983::t_5fbffc533e55f6 1
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.2",
+  "base_commit_sha": "7876e889dc0e6de5026892f23caa1ddae3f5fde6",
+  "prompts": {},
+  "sessions": {
+    "s_b587c2cb25e983": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a06ef8-6705-7557-9e4c-6c80422c6946",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

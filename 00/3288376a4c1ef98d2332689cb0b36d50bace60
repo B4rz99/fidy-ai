@@ -9,6 +9,7 @@ apps/server/src/shell/email-authentication/pairing-workflow.integration.test.ts
 apps/server/src/shell/email-authentication/authentication.test.ts
   s_b587c2cb25e983::t_2d76d3074d05de 289-295,299-304,306-325,327-331
   s_b587c2cb25e983::t_399bea7613a4d1 296-298,326,332-333
+  s_b587c2cb25e983::t_a7aafc8cfa4a64 305
 apps/server/src/shell/email-authentication/pairing-email-execution.ts
   s_b587c2cb25e983::t_d8a8c21ed8cf42 4,68-78,83-85,88-93
   s_b587c2cb25e983::t_2d76d3074d05de 79-82,86-87

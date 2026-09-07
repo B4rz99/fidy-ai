@@ -33,7 +33,11 @@ import {
 } from "~/shell/channels/whatsapp/kapso-client";
 import { WhatsAppProviderMessageId } from "~/shell/channels/whatsapp/model";
 import { WhatsAppWorkerLive } from "~/shell/channels/whatsapp/worker";
-import { processDueConsentDisclosureDelivery } from "~/shell/channels/whatsapp/disclosure-delivery";
+import {
+  ConsentDisclosureWorkflowLive,
+  startNextConsentDisclosure,
+  startNextConsentDisclosureEvidence,
+} from "~/shell/channels/whatsapp/disclosure-delivery";
 import {
   DisclosureDeliveryAttemptId,
   DisclosureDeliveryCorrelationToken,
@@ -90,10 +94,8 @@ export class WhatsAppAcceptanceKapsoControl extends Context.Service<
 const AcceptanceDisclosureState = Schema.Struct({
   attemptId: DisclosureDeliveryAttemptId,
   state: Schema.Literals([
-    "claimed",
     "started",
     "reconciliation-required",
-    "retry-scheduled",
     "delivered",
     "definitively-failed",
     "retry-exhausted",
@@ -132,7 +134,6 @@ export class WhatsAppAcceptanceDisclosureControl extends Context.Service<
       attemptId: DisclosureDeliveryAttemptId
     ) => Effect.Effect<Option.Option<typeof AcceptanceDisclosureFailureMetadata.Type>>;
     readonly runtimeHasDirectDeliveryUpdate: Effect.Effect<boolean>;
-    readonly processDue: (now: DateTime.Utc) => Effect.Effect<boolean>;
   }
 >()("@fidy/server/shell/testing/whatsapp-acceptance-harness/WhatsAppAcceptanceDisclosureControl") {}
 
@@ -436,8 +437,6 @@ const AcceptanceDisclosureControl = Layer.effect(
   Effect.gen(function* () {
     const migrationSql: SqlClient.SqlClient = yield* MigrationSqlClient;
     const runtimeSql = yield* SqlClient.SqlClient;
-    const kapso = yield* KapsoClient;
-    const crypto = yield* Crypto.Crypto;
     return WhatsAppAcceptanceDisclosureControl.of({
       find: (caller) => findAcceptanceDisclosure(migrationSql, runtimeSql, caller),
       findAttemptByCorrelation: (token) => {
@@ -463,13 +462,6 @@ const AcceptanceDisclosureControl = Layer.effect(
           `,
         })(attemptId).pipe(Effect.orDie),
       runtimeHasDirectDeliveryUpdate: runtimeHasDirectDeliveryUpdate(runtimeSql),
-      processDue: (now) =>
-        processDueConsentDisclosureDelivery(now).pipe(
-          Effect.provideService(SqlClient.SqlClient, runtimeSql),
-          Effect.provideService(KapsoClient, kapso),
-          Effect.provideService(Crypto.Crypto, crypto),
-          Effect.orDie
-        ),
     });
   })
 );
@@ -524,6 +516,12 @@ const DeterministicHostedInference = HostedInferenceFromLanguageModel.pipe(
 
 const AcceptanceApplication = Layer.mergeAll(
   HttpLive,
+  Layer.effectDiscard(
+    Effect.gen(function* () {
+      yield* startNextConsentDisclosure().pipe(Effect.forever, Effect.forkScoped);
+      yield* startNextConsentDisclosureEvidence().pipe(Effect.forever, Effect.forkScoped);
+    })
+  ).pipe(Layer.provide(ConsentDisclosureWorkflowLive)),
   DeterministicLanguageModel,
   WhatsAppWorkerLive.pipe(
     Layer.provide(AgentService.layer.pipe(Layer.provide(WhatsAppReplyDeliveryLive)))

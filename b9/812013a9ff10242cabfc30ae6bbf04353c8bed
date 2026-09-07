@@ -1,0 +1,26 @@
+apps/server/src/shell/channels/whatsapp/disclosure-workflow.integration.test.ts
+  s_05b0ebf6eb4c9b::t_911068ea032b0d 32-35,80-84,405-467
+  s_05b0ebf6eb4c9b::t_c448f4d2cd4892 14,19,28,90,404
+  s_05b0ebf6eb4c9b::t_e73ba1a0fdba92 468-475
+docs/adr/0013-atomic-consent-disclosure-reconciliation.md
+  s_05b0ebf6eb4c9b::t_523965fcfe0c64 18,20
+apps/server/src/shell/channels/whatsapp/disclosure-delivery.ts
+  s_05b0ebf6eb4c9b::t_911068ea032b0d 269,314-318,343-350
+  s_05b0ebf6eb4c9b::t_73b9fc2a015a92 268,272
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.2",
+  "base_commit_sha": "b9812013a9ff10242cabfc30ae6bbf04353c8bed",
+  "prompts": {},
+  "sessions": {
+    "s_05b0ebf6eb4c9b": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a06efb-de89-72c4-a725-1ff3b26ab002",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

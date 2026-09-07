@@ -1,0 +1,29 @@
+apps/web/package.json
+  s_fad9db0a6a1d64::t_6711985658d9bf 54
+apps/server/src/shell/ingestion/email-forwarding.test.ts
+  s_fad9db0a6a1d64::t_fa83803b4e1853 88-115,117
+  s_fad9db0a6a1d64::t_3b53b2e6fe22ff 116
+apps/server/package.json
+  s_fad9db0a6a1d64::t_7b260c49a35457 49,55
+apps/server/src/shell/ingestion/forwarded-email-ingestion.ts
+  s_fad9db0a6a1d64::t_0b44888ff706c9 110
+  s_fad9db0a6a1d64::t_735d186c56b4d7 24,99-100,102,109,111-112
+bun.lock
+  s_fad9db0a6a1d64::t_6c5602491c5fb2 31,37,84,574,596,598,600,602,604,1442,1476,1498
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.2",
+  "base_commit_sha": "1ece5ef1630c5d72189e439479534f5a620fcf15",
+  "prompts": {},
+  "sessions": {
+    "s_fad9db0a6a1d64": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a07d96-34ae-73c6-8074-f897603a3985",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

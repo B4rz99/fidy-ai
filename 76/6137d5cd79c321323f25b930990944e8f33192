@@ -1,0 +1,48 @@
+apps/server/src/shell/testing/pat-admission-process.ts
+  s_fad9db0a6a1d64::t_6a36b3bd7f1b40 20,25-28
+  s_fad9db0a6a1d64::t_dfbc41b41b5710 1-19,21-24
+docs/architecture/durable-execution-inventory.md
+  s_fad9db0a6a1d64::t_0345d3d44f716e 176
+  s_fad9db0a6a1d64::t_41421dd6121e05 130-136,157-160
+.patterns/concurrency-time.md
+  s_fad9db0a6a1d64::t_40d32668f4628f 117-121,136-141
+  s_fad9db0a6a1d64::t_b93b48998149fc 142
+docs/adr/0025-retain-postgresql-admission.md
+  s_fad9db0a6a1d64::t_182b8eb085d3d5 1-47
+apps/server/ARCHITECTURE.md
+  s_fad9db0a6a1d64::t_c90251a17f94ec 322-326
+docs/research/distributed-admission-rate-limiter.md
+  s_fad9db0a6a1d64::t_02dbe1654c8215 1-35,68-69,72-112,114-142,160,176-183
+  s_fad9db0a6a1d64::t_0345d3d44f716e 36-44,47-66
+  s_fad9db0a6a1d64::t_febe64420f1a1f 45-46
+  s_fad9db0a6a1d64::t_3ae52ce1f5b187 67
+  s_fad9db0a6a1d64::t_505756f0e537b5 70-71
+  s_fad9db0a6a1d64::t_c635e5a969a8a7 161-175
+  s_fad9db0a6a1d64::t_3ed6f47f0c30b4 113,143-159
+apps/server/src/shell/tokens/rate-limiter-evaluation.test.ts
+  s_fad9db0a6a1d64::t_eb5262f37f7aae 1-2,14-20,24-29,44-45,50-53
+  s_fad9db0a6a1d64::t_0345d3d44f716e 7-12,21-23,31-43
+  s_fad9db0a6a1d64::t_c7df06b5853eec 3-6,13,30,46-49,54-58
+apps/server/src/shell/tokens/distributed-admission.test.ts
+  s_fad9db0a6a1d64::t_676c8361c77701 1,13,19,68-70
+  s_fad9db0a6a1d64::t_a24fbc03625618 2-12,14-16,18,20-51,56-59,61-63,65-67,71-74,167-170
+  s_fad9db0a6a1d64::t_4e47711ffa0b6c 17,60,64
+  s_fad9db0a6a1d64::t_0345d3d44f716e 75-166
+  s_fad9db0a6a1d64::t_a1d8cc896097ca 52-55
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.2",
+  "base_commit_sha": "766137d5cd79c321323f25b930990944e8f33192",
+  "prompts": {},
+  "sessions": {
+    "s_fad9db0a6a1d64": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a07d96-34ae-73c6-8074-f897603a3985",
+        "model": "gpt-6-astra"
+      },
+      "human_author": null
+    }
+  }
+}

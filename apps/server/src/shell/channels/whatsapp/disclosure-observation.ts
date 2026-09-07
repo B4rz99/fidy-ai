@@ -69,7 +69,7 @@ const observe = <A, E, R>(
     );
   });
 
-/** Finite provider Activity only. Escaped failures are reported by the enclosing resume Work, not twice. */
+/** Finite provider Activity owns its escaped failures. Keep it disjoint from observed resume Work. */
 export const observeConsentDisclosureAttempt: {
   (
     attempt: DisclosureDeliveryAttemptNumber
@@ -99,11 +99,11 @@ export const observeConsentDisclosureAttempt: {
           status: Option.none(),
         },
       },
-      false
+      true
     )
 );
 
-/** One finite state evaluation/decision. Keep durable waiting and the overall workflow lifetime outside. */
+/** One finite owner snapshot/decision. Keep provider Activities, durable waits, and workflow lifetime outside. */
 export const observeConsentDisclosureResume = <A, E, R>(
   work: Effect.Effect<A, E, R>
 ): Effect.Effect<A, E, R> =>

@@ -59,43 +59,39 @@ it.effect(
     })
 );
 
-it.effect(
-  "captures escaped failure once at resume rather than its child attempt, and at each queue handler",
-  () =>
-    Effect.gen(function* () {
-      const services = yield* Layer.build(TelemetryEnvelopeRecording);
-      const recorder = Context.get(services, EnvelopeRecorder);
-      const failure = { _tag: "PrivateFailure", body: protectedValues };
-      const result = yield* Effect.exit(
-        observeConsentDisclosureResume(
-          observeConsentDisclosureAttempt(Effect.fail(failure), firstAttempt)
-        ).pipe(Effect.provide(services))
-      );
-      expect(Exit.isFailure(result)).toBe(true);
-      yield* Effect.exit(
-        observeConsentDisclosureResume(Effect.die(new Error(protectedValues.join(" ")))).pipe(
-          Effect.provide(services)
-        )
-      );
-      yield* Effect.exit(
-        observeConsentDisclosureQueue(Effect.fail(failure), "start").pipe(Effect.provide(services))
-      );
-      yield* Effect.exit(
-        observeConsentDisclosureQueue(Effect.die(failure), "evidence").pipe(
-          Effect.provide(services)
-        )
-      );
-      const envelopes = yield* recorder.serializedEnvelopes;
-      const errors = payloadsOf(ProjectedErrorEvent, envelopes);
-      expect(errors.map(({ tags }) => [tags.operation, tags.error])).toEqual([
-        ["whatsapp.disclosureResume", "operational_failure"],
-        ["whatsapp.disclosureResume", "unexpected_defect"],
-        ["whatsapp.disclosureStart", "operational_failure"],
-        ["whatsapp.disclosureEvidence", "unexpected_defect"],
-      ]);
-      const serialized = envelopes.map((envelope) => new TextDecoder().decode(envelope)).join("\n");
-      for (const value of protectedValues) expect(serialized).not.toContain(value);
-    })
+it.effect("captures escaped failure once at each disjoint attempt, resume, and queue handler", () =>
+  Effect.gen(function* () {
+    const services = yield* Layer.build(TelemetryEnvelopeRecording);
+    const recorder = Context.get(services, EnvelopeRecorder);
+    const failure = { _tag: "PrivateFailure", body: protectedValues };
+    const result = yield* Effect.exit(
+      observeConsentDisclosureAttempt(Effect.fail(failure), firstAttempt).pipe(
+        Effect.provide(services)
+      )
+    );
+    expect(Exit.isFailure(result)).toBe(true);
+    yield* Effect.exit(
+      observeConsentDisclosureResume(Effect.die(new Error(protectedValues.join(" ")))).pipe(
+        Effect.provide(services)
+      )
+    );
+    yield* Effect.exit(
+      observeConsentDisclosureQueue(Effect.fail(failure), "start").pipe(Effect.provide(services))
+    );
+    yield* Effect.exit(
+      observeConsentDisclosureQueue(Effect.die(failure), "evidence").pipe(Effect.provide(services))
+    );
+    const envelopes = yield* recorder.serializedEnvelopes;
+    const errors = payloadsOf(ProjectedErrorEvent, envelopes);
+    expect(errors.map(({ tags }) => [tags.operation, tags.error])).toEqual([
+      ["whatsapp.disclosureAttempt", "operational_failure"],
+      ["whatsapp.disclosureResume", "unexpected_defect"],
+      ["whatsapp.disclosureStart", "operational_failure"],
+      ["whatsapp.disclosureEvidence", "unexpected_defect"],
+    ]);
+    const serialized = envelopes.map((envelope) => new TextDecoder().decode(envelope)).join("\n");
+    for (const value of protectedValues) expect(serialized).not.toContain(value);
+  })
 );
 
 it.effect("preserves exact exits and records pure interruption without reporting a failure", () =>

@@ -37,6 +37,7 @@ import { ConsentDisclosureWorkflow, disclosureEvidenceQueueId } from "./disclosu
 import {
   findConsentDisclosureAttemptByCorrelation,
   findConsentDisclosureDeliveryState,
+  lockConsentDisclosure,
 } from "./disclosure-store";
 import { KapsoClient, type KapsoClientService, KapsoSendFailed } from "./kapso-client";
 import {
@@ -380,11 +381,18 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         );
         const evidence = yield* Deferred.await(started);
         const executionId = yield* ConsentDisclosureWorkflow.executionId(payload);
-        yield* Effect.sleep("100 millis");
         const waiting = yield* Effect.tryPromise(() =>
-          runtime.runPromise(ConsentDisclosureWorkflow.poll(executionId))
+          runtime.runPromise(
+            Effect.gen(function* () {
+              while (true) {
+                const state = yield* ConsentDisclosureWorkflow.poll(executionId);
+                if (Option.isSome(state) && state.value._tag === "Suspended") return state.value;
+                yield* Effect.sleep("20 millis");
+              }
+            }).pipe(Effect.timeout("5 seconds"))
+          )
         );
-        expect(Option.isSome(waiting) && waiting.value._tag).toBe("Suspended");
+        expect(waiting._tag).toBe("Suspended");
         const latest = yield* findConsentDisclosureDeliveryState(payload.exchangeId).pipe(
           Effect.flatMap(Effect.fromOption)
         );
@@ -398,6 +406,50 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
             runtime.runPromise(ConsentDisclosureWorkflow.execute(payload))
           )
         ).toEqual({ outcome: "delivered" });
+      }),
+      30_000
+    );
+
+    it.effect(
+      "does not arm after expiry while waiting for the exchange lock",
+      Effect.fn(function* () {
+        expect.assertions(2);
+        const payload = yield* admit("+573007774676");
+        const calls = yield* Ref.make(0);
+        const provider: KapsoClientService = {
+          sendText: () =>
+            Effect.gen(function* () {
+              yield* Ref.update(calls, (count) => count + 1);
+              return delivered("wamid.expiry-lock-466", yield* DateTime.now);
+            }),
+        };
+        const runtime = yield* acquireRuntime(44669, provider);
+        const admin = yield* MigrationSqlClient;
+        yield* admin`UPDATE pending_consent_exchanges SET created_at = now() - interval '24 hours' + interval '1 second', expires_at = now() + interval '1 second' WHERE id = ${payload.exchangeId}`;
+        const finished = yield* Deferred.make<void>();
+        yield* lockConsentDisclosure(
+          payload.exchangeId,
+          Effect.gen(function* () {
+            // ManagedRuntime starts independently of this transaction, unlike an inherited SQL fiber.
+            yield* Effect.tryPromise(() =>
+              runtime.runPromise(
+                performConsentDisclosureAttempt(
+                  payload.exchangeId,
+                  DisclosureDeliveryAttemptNumber.make(1)
+                ).pipe(Effect.provideService(KapsoClient, provider))
+              )
+            ).pipe(
+              Effect.tap(() => Deferred.succeed(finished, undefined)),
+              Effect.forkScoped
+            );
+            yield* Effect.sleep("1100 millis");
+          })
+        );
+        yield* Deferred.await(finished);
+        expect(yield* Ref.get(calls)).toBe(0);
+        expect(Option.isNone(yield* findConsentDisclosureDeliveryState(payload.exchangeId))).toBe(
+          true
+        );
       }),
       30_000
     );

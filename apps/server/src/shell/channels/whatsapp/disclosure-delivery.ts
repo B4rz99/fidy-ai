@@ -69,7 +69,6 @@ export const requestConsentDisclosureDelivery = Effect.fn("WhatsApp.requestDiscl
     readonly exchangeId: PendingConsentExchangeId;
     readonly beforeProviderCall: Effect.Effect<void, WhatsAppReceiptInvalid, SqlClient.SqlClient>;
   }) {
-    const now = yield* DateTime.now;
     const queue = yield* consentDisclosureQueue;
     const destination = kapsoDestinationFor(input.event.caller);
     yield* lockConsentDisclosure(
@@ -83,7 +82,7 @@ export const requestConsentDisclosureDelivery = Effect.fn("WhatsApp.requestDiscl
           exchangeId: input.exchangeId,
           businessPhoneNumberId: input.event.businessPhoneNumberId,
           sandboxPhone: destination.sandboxPhone,
-          now,
+          now: yield* DateTime.now,
         });
         if (!eligible) return;
         yield* input.beforeProviderCall;
@@ -139,44 +138,60 @@ const observeEvidence = Effect.fn(function* (evidence: DisclosureDeliveryEvidenc
  * finite channel-worker seam retains provider evidence; the Workflow alone decides when to retry.
  */
 export const performConsentDisclosureAttempt = Effect.fn("WhatsApp.performDisclosureAttempt")(
-  function* (exchangeId: PendingConsentExchangeId, attemptNumber: DisclosureDeliveryAttemptNumber) {
-    const now = yield* DateTime.now;
-    const work = yield* findConsentDisclosureWork(exchangeId, now);
-    if (Option.isNone(work)) return;
-    const armed = yield* armConsentDisclosureAttempt(exchangeId, attemptNumber, now);
-    if (Option.isNone(armed)) return;
-    const attempt = { ...armed.value, exchangeId };
-    const text = yield* Schema.decodeEffect(TranscriptText)(work.value.disclosureText).pipe(
-      Effect.orDie
-    );
-    const client = yield* KapsoClient;
-    const result = yield* client
-      .sendText({
-        businessPhoneNumberId: work.value.businessPhoneNumberId,
-        destination: {
-          recipient: work.value.businessScopedUserId,
-          sandboxPhone: work.value.sandboxPhone,
-        },
-        text,
-        opaqueCallbackData: Option.some(attempt.correlationToken),
-      })
-      .pipe(Effect.result);
-    yield* lockConsentDisclosure(
-      exchangeId,
-      Result.match(result, {
-        onFailure: (failure) =>
-          DateTime.now.pipe(Effect.flatMap((at) => applyFailure(attempt, failure, at))),
-        onSuccess: (sent) =>
-          recordConsentDisclosureAttemptAccepted({
-            ...attempt,
-            message: sent.messageEvidence,
-            acceptedAt: sent.sentAt,
-          }),
-      })
-    );
-    yield* readDisclosure(exchangeId);
-  },
-  (work, _exchangeId, attemptNumber) => observeConsentDisclosureAttempt(work, attemptNumber)
+  function* (
+    exchangeId: PendingConsentExchangeId,
+    attemptNumber: DisclosureDeliveryAttemptNumber,
+    expectedEvidenceRevision: Option.Option<number> = Option.none()
+  ) {
+    return yield* Effect.gen(function* () {
+      const prepared = yield* lockConsentDisclosure(
+        exchangeId,
+        Effect.gen(function* () {
+          const work = yield* findConsentDisclosureWork(exchangeId, yield* DateTime.now);
+          if (Option.isNone(work)) return Option.none();
+          const armed = yield* armConsentDisclosureAttempt({
+            exchangeId,
+            attemptNumber,
+            now: yield* DateTime.now,
+            expectedEvidenceRevision,
+          });
+          if (Option.isNone(armed)) return Option.none();
+          return Option.some({ work: work.value, attempt: { ...armed.value, exchangeId } });
+        })
+      );
+      if (Option.isNone(prepared)) return;
+      const { work, attempt } = prepared.value;
+      const text = yield* Schema.decodeEffect(TranscriptText)(work.disclosureText).pipe(
+        Effect.orDie
+      );
+      const client = yield* KapsoClient;
+      const result = yield* client
+        .sendText({
+          businessPhoneNumberId: work.businessPhoneNumberId,
+          destination: {
+            recipient: work.businessScopedUserId,
+            sandboxPhone: work.sandboxPhone,
+          },
+          text,
+          opaqueCallbackData: Option.some(attempt.correlationToken),
+        })
+        .pipe(Effect.result);
+      yield* lockConsentDisclosure(
+        exchangeId,
+        Result.match(result, {
+          onFailure: (failure) =>
+            DateTime.now.pipe(Effect.flatMap((at) => applyFailure(attempt, failure, at))),
+          onSuccess: (sent) =>
+            recordConsentDisclosureAttemptAccepted({
+              ...attempt,
+              message: sent.messageEvidence,
+              acceptedAt: sent.sentAt,
+            }),
+        })
+      );
+      yield* readDisclosure(exchangeId);
+    }).pipe((work) => observeConsentDisclosureAttempt(work, attemptNumber));
+  }
 );
 
 const applyLifecycleEvidence = Effect.fn(function* (
@@ -270,7 +285,11 @@ const sendAttempt = Effect.fn(function* (
 ) {
   return yield* Activity.make({
     name: `Send/${attemptNumber}/AfterEvidence/${evidenceRevision}`,
-    execute: performConsentDisclosureAttempt(exchangeId, attemptNumber),
+    execute: performConsentDisclosureAttempt(
+      exchangeId,
+      attemptNumber,
+      attemptNumber === 1 ? Option.none() : Option.some(evidenceRevision)
+    ),
   });
 });
 

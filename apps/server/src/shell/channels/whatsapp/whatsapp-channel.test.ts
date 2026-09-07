@@ -2386,17 +2386,18 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
               occurredAt: DateTime.add(now, { seconds: 2 }),
             })
           ).toBe("applied");
+          const delivered = yield* Effect.fromOption(
+            yield* findConsentDisclosureDeliveryState(admission.exchangeId)
+          ).pipe(Effect.orDie);
           yield* performConsentDisclosureAttempt(
             admission.exchangeId,
-            DisclosureDeliveryAttemptNumber.make(2)
+            DisclosureDeliveryAttemptNumber.make(2),
+            Option.some(delivered.evidenceRevision)
           ).pipe(
             Effect.provideService(KapsoClient, {
               sendText: () => Effect.die("delivered disclosure retried"),
             })
           );
-          const delivered = yield* Effect.fromOption(
-            yield* findConsentDisclosureDeliveryState(admission.exchangeId)
-          ).pipe(Effect.orDie);
           expect(delivered.state).toBe("delivered");
         })
     );
@@ -2498,7 +2499,8 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           expect(rejected.reason).toEqual(Option.some("invalid_recipient"));
           yield* performConsentDisclosureAttempt(
             admission.exchangeId,
-            DisclosureDeliveryAttemptNumber.make(2)
+            DisclosureDeliveryAttemptNumber.make(2),
+            Option.some(rejected.evidenceRevision)
           ).pipe(
             Effect.provideService(KapsoClient, {
               sendText: () => Effect.die("terminal rejection retried"),

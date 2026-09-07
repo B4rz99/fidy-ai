@@ -108,12 +108,15 @@ export const effectWhatsAppDisclosure = Effect.gen(function* () {
   `;
 
   yield* sql`
-    CREATE OR REPLACE FUNCTION fidy_arm_whatsapp_disclosure_attempt(target_exchange_id uuid, target_attempt_id uuid, target_hash text, ordinal integer, at_time timestamptz) RETURNS TABLE(attempt_id uuid, attempt_number integer)
+    CREATE OR REPLACE FUNCTION fidy_arm_whatsapp_disclosure_attempt(target_exchange_id uuid, target_attempt_id uuid, target_hash text, ordinal integer, at_time timestamptz, p_expected_evidence_revision integer) RETURNS TABLE(attempt_id uuid, attempt_number integer)
     LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public AS \$function\$
     DECLARE previous public.whatsapp_consent_disclosure_delivery_attempts%ROWTYPE;
     BEGIN
       PERFORM public.fidy_lock_whatsapp_disclosure(target_exchange_id);
-      IF ordinal NOT BETWEEN 1 AND 4 OR NOT EXISTS (
+      IF ordinal NOT BETWEEN 1 AND 4
+        OR (ordinal = 1 AND p_expected_evidence_revision IS NOT NULL)
+        OR (ordinal > 1 AND p_expected_evidence_revision IS NULL)
+        OR NOT EXISTS (
         SELECT 1 FROM public.pending_consent_exchanges e JOIN public.whatsapp_consent_disclosure_requests r ON r.exchange_id = e.id
         WHERE e.id = target_exchange_id AND e.lifecycle = 'awaiting-disclosure-delivery' AND e.expires_at > at_time
       ) THEN RETURN; END IF;
@@ -121,6 +124,7 @@ export const effectWhatsAppDisclosure = Effect.gen(function* () {
         WHERE prior.exchange_id = target_exchange_id ORDER BY prior.attempt_number DESC LIMIT 1 FOR UPDATE;
       IF FOUND THEN
         IF previous.attempt_number + 1 <> ordinal OR previous.status <> 'definitively-failed'
+          OR previous.evidence_revision IS DISTINCT FROM p_expected_evidence_revision
           OR NOT previous.retryable OR previous.failure_certainty <> 'rejected'
           OR previous.failure_occurred_at > at_time THEN RETURN; END IF;
       ELSIF ordinal <> 1 THEN RETURN;
@@ -132,9 +136,9 @@ export const effectWhatsAppDisclosure = Effect.gen(function* () {
       RETURN QUERY SELECT target_attempt_id, ordinal;
     END
     \$function\$;
-    REVOKE ALL ON FUNCTION fidy_arm_whatsapp_disclosure_attempt(uuid,uuid,text,integer,timestamptz) FROM PUBLIC;
-    ALTER FUNCTION fidy_arm_whatsapp_disclosure_attempt(uuid,uuid,text,integer,timestamptz) OWNER TO fidy_gateway;
-    GRANT EXECUTE ON FUNCTION fidy_arm_whatsapp_disclosure_attempt(uuid,uuid,text,integer,timestamptz) TO fidy_runtime;
+    REVOKE ALL ON FUNCTION fidy_arm_whatsapp_disclosure_attempt(uuid,uuid,text,integer,timestamptz,integer) FROM PUBLIC;
+    ALTER FUNCTION fidy_arm_whatsapp_disclosure_attempt(uuid,uuid,text,integer,timestamptz,integer) OWNER TO fidy_gateway;
+    GRANT EXECUTE ON FUNCTION fidy_arm_whatsapp_disclosure_attempt(uuid,uuid,text,integer,timestamptz,integer) TO fidy_runtime;
   `;
 
   yield* sql`

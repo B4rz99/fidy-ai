@@ -246,12 +246,18 @@ export const findConsentDisclosureWork = Effect.fn("WhatsApp.findDisclosureWork"
   return Option.some({ ...routing.value, ...disclosure.value, latestAttempt });
 });
 
-/** Arms exactly the next safe ordinal once. An armed or ambiguous attempt is never replayable. */
-export const armConsentDisclosureAttempt = Effect.fn("WhatsApp.armDisclosureAttempt")(function* (
-  exchangeId: PendingConsentExchangeId,
-  attemptNumber: DisclosureDeliveryAttemptNumber,
-  now: DateTime.Utc
-) {
+/** Arms the next safe ordinal only against the evidence revision whose retry delay elapsed. */
+export const armConsentDisclosureAttempt = Effect.fn("WhatsApp.armDisclosureAttempt")(function* ({
+  exchangeId,
+  attemptNumber,
+  now,
+  expectedEvidenceRevision,
+}: Readonly<{
+  exchangeId: PendingConsentExchangeId;
+  attemptNumber: DisclosureDeliveryAttemptNumber;
+  now: DateTime.Utc;
+  expectedEvidenceRevision: Option.Option<number>;
+}>) {
   const crypto = yield* Crypto.Crypto;
   const attemptId = DisclosureDeliveryAttemptId.make(yield* crypto.randomUUIDv4.pipe(Effect.orDie));
   const correlationToken = correlationTokenForAttempt(attemptId);
@@ -264,14 +270,17 @@ export const armConsentDisclosureAttempt = Effect.fn("WhatsApp.armDisclosureAtte
       attemptNumber: DisclosureDeliveryAttemptNumber,
       correlationHash: CorrelationHash,
       now: Schema.DateTimeUtcFromDate,
+      expectedEvidenceRevision: Schema.OptionFromNullOr(
+        Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))
+      ),
     }),
     Result: Schema.Struct({
       attemptId: DisclosureDeliveryAttemptId,
       attemptNumber: DisclosureDeliveryAttemptNumber,
     }),
     execute: (request) => sql`SELECT attempt_id AS "attemptId", attempt_number AS "attemptNumber"
-        FROM fidy_arm_whatsapp_disclosure_attempt(${request.exchangeId}, ${request.attemptId}, ${request.correlationHash}, ${request.attemptNumber}, ${request.now})`,
-  })({ exchangeId, attemptId, attemptNumber, correlationHash, now }).pipe(
+        FROM fidy_arm_whatsapp_disclosure_attempt(${request.exchangeId}, ${request.attemptId}, ${request.correlationHash}, ${request.attemptNumber}, ${request.now}, ${request.expectedEvidenceRevision})`,
+  })({ exchangeId, attemptId, attemptNumber, correlationHash, now, expectedEvidenceRevision }).pipe(
     Effect.map(Option.map((attempt) => ({ ...attempt, correlationToken }))),
     Effect.orDie
   );

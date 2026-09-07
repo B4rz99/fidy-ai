@@ -12,7 +12,14 @@ import {
 } from "effect";
 import { ClusterWorkflowEngine, RunnerAddress } from "effect/unstable/cluster";
 import { PersistedQueue } from "effect/unstable/persistence";
-import { Activity, DurableDeferred, WorkflowEngine } from "effect/unstable/workflow";
+import {
+  Activity,
+  DurableClock,
+  DurableDeferred,
+  Workflow,
+  WorkflowEngine,
+} from "effect/unstable/workflow";
+import { PendingConsentExchangeId } from "~/core/consent/model";
 import { E164PhoneNumber } from "~/core/identity/reference";
 import { TranscriptText } from "~/core/transcript/model";
 import { authenticatedClusterHttp } from "~/shell/authenticated-cluster-http";
@@ -30,7 +37,10 @@ import {
   startNextConsentDisclosureEvidence,
 } from "./disclosure-delivery";
 import { DisclosureDeliveryAttemptNumber } from "./disclosure-model";
-import { findConsentDisclosureDeliveryState } from "./disclosure-store";
+import {
+  armConsentDisclosureAttempt,
+  findConsentDisclosureDeliveryState,
+} from "./disclosure-store";
 import { ConsentDisclosureWorkflow } from "./disclosure-workflow";
 import { KapsoClient, type KapsoClientService } from "./kapso-client";
 import {
@@ -168,7 +178,8 @@ const primeRegistration = (
           success: Schema.Void,
           execute: performConsentDisclosureAttempt(
             payload.exchangeId,
-            DisclosureDeliveryAttemptNumber.make(2)
+            DisclosureDeliveryAttemptNumber.make(2),
+            Option.some(previous.evidenceRevision)
           ),
         });
       }
@@ -203,6 +214,38 @@ const primeAndSuspend = Effect.fn(function* (
   yield* Effect.tryPromise(() => first.dispose());
 
   return { revision, executionId };
+});
+
+const RetryDelay = Workflow.make("TestDisclosureEvidenceRetryDelay", {
+  payload: Schema.Struct({ exchangeId: PendingConsentExchangeId, evidenceRevision: Schema.Int }),
+  success: Schema.Void,
+  idempotencyKey: ({ exchangeId, evidenceRevision }) => `${exchangeId}/${evidenceRevision}`,
+});
+const RetryDelayLive = RetryDelay.toLayer(() =>
+  DurableClock.sleep({ name: "RetryDelay", duration: "25 millis" })
+);
+
+const replaceFailureEvidence = Effect.fn(function* (
+  accepted: Parameters<typeof applyConsentDisclosureLifecycle>[0]
+) {
+  yield* Effect.sleep("5 millis");
+  expect(
+    yield* applyConsentDisclosureLifecycle({
+      ...accepted,
+      outcome: "sent",
+      occurredAt: yield* DateTime.now,
+    })
+  ).toBe("applied");
+  yield* Effect.sleep("5 millis");
+  expect(
+    yield* applyConsentDisclosureLifecycle({
+      ...accepted,
+      outcome: "failed",
+      reason: "provider_unavailable",
+      automaticRetry: true,
+      occurredAt: yield* DateTime.now,
+    })
+  ).toBe("applied");
 });
 
 layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
@@ -248,6 +291,86 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           Effect.flatMap(Effect.fromOption)
         );
         expect(latest.attemptNumber).toBe(2);
+      })
+    );
+    it.effect(
+      "an elapsed retry clock cannot arm against newer evidence without its renewed delay",
+      Effect.fn(function* () {
+        const payload = yield* admit();
+        const one = DisclosureDeliveryAttemptNumber.make(1);
+        const two = DisclosureDeliveryAttemptNumber.make(2);
+        expect(
+          Option.isNone(
+            yield* armConsentDisclosureAttempt({
+              exchangeId: payload.exchangeId,
+              attemptNumber: one,
+              now: yield* DateTime.now,
+              expectedEvidenceRevision: Option.some(0),
+            })
+          )
+        ).toBe(true);
+        const { provider, firstSend } = yield* makeProvider(payload);
+        yield* performConsentDisclosureAttempt(payload.exchangeId, one).pipe(
+          Effect.provideService(KapsoClient, provider)
+        );
+        const accepted = yield* Deferred.await(firstSend);
+        yield* replaceFailureEvidence(accepted);
+        const original = yield* findConsentDisclosureDeliveryState(payload.exchangeId).pipe(
+          Effect.flatMap(Effect.fromOption)
+        );
+        const runtime = yield* acquireRuntime(44691, provider, RetryDelayLive);
+        yield* Effect.tryPromise(() =>
+          runtime.runPromise(
+            RetryDelay.execute({
+              exchangeId: payload.exchangeId,
+              evidenceRevision: original.evidenceRevision,
+            })
+          )
+        );
+        yield* replaceFailureEvidence(accepted);
+        const changed = yield* findConsentDisclosureDeliveryState(payload.exchangeId).pipe(
+          Effect.flatMap(Effect.fromOption)
+        );
+        expect(changed.evidenceRevision).toBeGreaterThan(original.evidenceRevision);
+        expect(changed.state).toBe("definitively-failed");
+        expect(
+          Option.isNone(
+            yield* armConsentDisclosureAttempt({
+              exchangeId: payload.exchangeId,
+              attemptNumber: two,
+              now: yield* DateTime.now,
+              expectedEvidenceRevision: Option.some(original.evidenceRevision),
+            })
+          )
+        ).toBe(true);
+        expect(
+          Option.isNone(
+            yield* armConsentDisclosureAttempt({
+              exchangeId: payload.exchangeId,
+              attemptNumber: two,
+              now: yield* DateTime.now,
+              expectedEvidenceRevision: Option.none(),
+            })
+          )
+        ).toBe(true);
+        expect(yield* findConsentDisclosureDeliveryState(payload.exchangeId)).toEqual(
+          Option.some(changed)
+        );
+        yield* Effect.tryPromise(() =>
+          runtime.runPromise(
+            RetryDelay.execute({
+              exchangeId: payload.exchangeId,
+              evidenceRevision: changed.evidenceRevision,
+            })
+          )
+        );
+        const armed = yield* armConsentDisclosureAttempt({
+          exchangeId: payload.exchangeId,
+          attemptNumber: two,
+          now: yield* DateTime.now,
+          expectedEvidenceRevision: Option.some(changed.evidenceRevision),
+        });
+        expect(Option.map(armed, (attempt) => attempt.attemptNumber)).toEqual(Option.some(two));
       })
     );
   }

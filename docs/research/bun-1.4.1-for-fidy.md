@@ -189,3 +189,19 @@ so the earlier nine-pin freshness result and local compatibility/smoke results a
 original baseline, not the rebased PR head. The PR retains trunk's dependency updates and changes
 only the Bun runtime/types pins and their documentation. Required GitHub jobs will grade that exact
 updated tree; the earlier local results are not substitutes for those verdicts.
+
+### GitHub CI and dependency follow-up — 2026-09-07
+
+[PR #479's initial run](https://github.com/B4rz99/fidy-ai/actions/runs/34165341049), on
+`ca39207a9b25fc97dbecd768724e6c90d3a5a766`, passed all three server shards, merged coverage/quality,
+observability compatibility, builds, unit/artifact tests, browser checks, production-image smoke,
+and security jobs. Linux lint and type checking also passed. Workspace Gate failed only on three
+inherited outdated pins: `@sentry/bun`, `svix`, and `shadcn`.
+
+The owner requested those updates before merging: Sentry 10.73.0 (including its exact compatibility
+assertion), svix 2.2.0, and shadcn 4.19.1. Their dependency changes include Sentry's matching internal
+packages and standardwebhooks 1.1.1. All are resolved under the ordinary seven-day admission delay.
+Bun rechecked the already-approved exact `bun-types@1.4.1` while resolving this changed graph; its
+same package-specific external exception was temporarily reapplied and immediately removed. No new
+package exception or standing policy change was added, and the normal frozen install succeeds.
+The updated PR head must pass all required GitHub checks before squash merge.

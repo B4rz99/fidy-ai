@@ -1,0 +1,24 @@
+docs/research/bun-1.4.1-for-fidy.md
+  s_674b9aa44aaf8f::t_d5772445ccc850 208-221
+apps/server/src/shell/ingestion/forwarded-email-ingestion.ts
+  s_674b9aa44aaf8f::t_fbb8831a630a39 1,100-101,103,112-113
+  s_674b9aa44aaf8f::t_641d051e2171e4 111
+apps/server/src/shell/ingestion/email-forwarding.test.ts
+  s_674b9aa44aaf8f::t_2cef814bfd2978 187-205,218-219
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.2",
+  "base_commit_sha": "e717e629a24590fbd6f5b048946b55d52b7f9095",
+  "prompts": {},
+  "sessions": {
+    "s_674b9aa44aaf8f": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a07d99-5f7d-7439-8612-c5946f2e78f0",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

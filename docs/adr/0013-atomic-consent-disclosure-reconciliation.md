@@ -29,7 +29,7 @@ Manual reconciliation, `fidy_operator`, `OPERATOR_DATABASE_URL`, and the operato
 
 ## Cutover and retention (#466)
 
-Stop and drain the old disclosure workers before applying migration 0048; do not overlap old and new executors. The migration translates retained requests and provider evidence, removes unarmed claim-only rows, and drops claim/retry scheduling gateways and fields. Start the new workers only after migration. Startup publishes a bounded page of eligible translated requests and paces remaining pages. No backward-compatible claim executor remains.
+Stop and drain the old disclosure workers before applying migration 0051; do not overlap old and new executors. The migration translates retained requests and provider evidence, removes unarmed claim-only rows, and drops claim/retry scheduling gateways and fields. Start the new workers only after migration. Startup publishes a bounded page of eligible translated requests and paces remaining pages. No backward-compatible claim executor remains.
 
 Routing snapshots survive pending-exchange deletion solely for bounded terminal cleanup. Retention requires completed publication and evidence notifications, a completed Workflow, and quiescent workflow/clock mailboxes before erasing execution history and private request data. It does not delete active timers or interrupt execution to manufacture terminality.
 

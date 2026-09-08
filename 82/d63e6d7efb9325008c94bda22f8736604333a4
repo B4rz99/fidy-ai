@@ -1,0 +1,19 @@
+docs/research/mistral-compaction-preflight.md
+  s_8061aea7e969cc::t_fecf2a8f85942b 1-128
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.2",
+  "base_commit_sha": "82d63e6d7efb9325008c94bda22f8736604333a4",
+  "prompts": {},
+  "sessions": {
+    "s_8061aea7e969cc": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a07e6a-02b9-7125-a200-3155427e5a02",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

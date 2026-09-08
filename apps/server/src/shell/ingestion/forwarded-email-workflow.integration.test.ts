@@ -1,12 +1,9 @@
 import { expect, layer } from "@effect/vitest";
 import {
-  BigDecimal,
   type Config,
   Crypto,
   DateTime,
-  Deferred,
   Effect,
-  Fiber,
   Layer,
   ManagedRuntime,
   Option,
@@ -23,7 +20,6 @@ import {
 import type { HttpServerError } from "effect/unstable/http";
 import type { SqlClient, SqlError } from "effect/unstable/sql";
 import type { WorkflowEngine } from "effect/unstable/workflow";
-import { Money } from "~/core/_shared/money";
 import { makeColombianUser } from "~/core/identity/rules";
 import { UserId } from "~/core/identity/reference";
 import {
@@ -37,12 +33,7 @@ import { defaultUserId } from "~/shell/db/development-seed";
 import { ApiHarness, ApiHarnessClient } from "~/shell/testing/api-harness";
 import { upsertStableUserFixture } from "~/shell/testing/identity-fixtures";
 import { TestPublicNamespace } from "~/shell/testing/test-config";
-import { runEmailIngestRetention } from "./email-retention";
 import { publishForwardedEmailWorkflow } from "./forwarded-email-execution";
-import {
-  NotificationEmailExtractor,
-  type NotificationEmailExtractorService,
-} from "./email-extractor";
 import {
   ForwardedEmailWorkflow,
   ForwardedEmailWorkflowLive,
@@ -113,29 +104,26 @@ const providerContent = (
     receivedEmailId,
     from: "alerts@example.test",
     to: [address],
-    subject: "Compra aprobada",
-    text: Option.some("Compra por COP 25000"),
-    html: Option.none(),
+    subject: "Compra con Tarjeta de Crédito",
+    text: Option.none(),
+    html: Option.some(`
+      <p>DAVIbank te notifica una compra con tu tarjeta <span>Visa Oro</span></p>
+      <table>
+        <tr><td>Comercio</td><td>COMERCIO FICTICIO</td></tr>
+        <tr><td>Monto</td><td>12,500</td></tr>
+        <tr><td>Fecha</td><td>2026/01/15</td></tr>
+        <tr><td>Hora</td><td>10:15:30</td></tr>
+      </table>
+    `),
     inlineImages: [],
     messageId: Option.some(`provider-${receivedEmailId}`),
     createdAt: DateTime.makeUnsafe("2026-09-01T12:00:00Z"),
   });
 
-const successfulExtractor: NotificationEmailExtractorService = NotificationEmailExtractor.of({
-  extract: () =>
-    Effect.succeed({
-      money: Money.make({ amount: BigDecimal.fromStringUnsafe("25000"), currency: "COP" }),
-      counterparty: Option.some("Comercio de prueba"),
-      direction: "outflow",
-      occurredAt: DateTime.makeUnsafe("2026-09-01T12:00:00Z"),
-    }),
-});
-
 type RuntimeLayerInput = Readonly<{
   crypto: Crypto.Crypto;
   port: number;
   provider: ResendReceivingClientService;
-  extractor: NotificationEmailExtractorService;
 }>;
 
 const makeRuntimeLayer = (
@@ -161,7 +149,6 @@ const makeRuntimeLayer = (
   return ForwardedEmailWorkflowLive.pipe(
     Layer.provideMerge(ClusterWorkflowEngine.layer.pipe(Layer.provideMerge(cluster))),
     Layer.provide(Layer.succeed(ResendReceivingClient, input.provider)),
-    Layer.provide(Layer.succeed(NotificationEmailExtractor, input.extractor)),
     Layer.provideMerge(Layer.succeed(Crypto.Crypto, input.crypto)),
     Layer.provideMerge(PgLive),
     Layer.provide(TestPublicNamespace)
@@ -186,12 +173,8 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
                 Effect.as(providerContent(receivedEmailId, admitted.address))
               ),
           });
-          const runtimeA = ManagedRuntime.make(
-            makeRuntimeLayer({ crypto, port: 44611, provider, extractor: successfulExtractor })
-          );
-          const runtimeB = ManagedRuntime.make(
-            makeRuntimeLayer({ crypto, port: 44612, provider, extractor: successfulExtractor })
-          );
+          const runtimeA = ManagedRuntime.make(makeRuntimeLayer({ crypto, port: 44611, provider }));
+          const runtimeB = ManagedRuntime.make(makeRuntimeLayer({ crypto, port: 44612, provider }));
           yield* Effect.promise(() => runtimeA.runPromise(Effect.void));
           yield* Effect.promise(() => runtimeB.runPromise(Effect.void));
           yield* Effect.tryPromise(() =>
@@ -304,9 +287,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           const provider = ResendReceivingClient.of({
             retrieveEmail: () => Effect.die(new Error("Retention performed provider Work")),
           });
-          const runtime = ManagedRuntime.make(
-            makeRuntimeLayer({ crypto, port: 44620, provider, extractor: successfulExtractor })
-          );
+          const runtime = ManagedRuntime.make(makeRuntimeLayer({ crypto, port: 44620, provider }));
           yield* Effect.promise(() => runtime.runPromise(Effect.void));
           const retentionNow = DateTime.add(yield* DateTime.now, { days: 91 });
           expect(
@@ -349,9 +330,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
                 Effect.as(providerContent(receivedEmailId, admitted.address))
               ),
           });
-          const runtime = ManagedRuntime.make(
-            makeRuntimeLayer({ crypto, port: 44617, provider, extractor: successfulExtractor })
-          );
+          const runtime = ManagedRuntime.make(makeRuntimeLayer({ crypto, port: 44617, provider }));
           yield* Effect.promise(() => runtime.runPromise(Effect.void));
           expect(
             yield* Effect.promise(() =>
@@ -382,9 +361,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
                 Effect.as(providerContent(receivedEmailId, admitted.address))
               ),
           });
-          const runtime = ManagedRuntime.make(
-            makeRuntimeLayer({ crypto, port: 44619, provider, extractor: successfulExtractor })
-          );
+          const runtime = ManagedRuntime.make(makeRuntimeLayer({ crypto, port: 44619, provider }));
           yield* Effect.promise(() => runtime.runPromise(Effect.void));
           expect(
             yield* Effect.promise(() =>
@@ -420,9 +397,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
                 Effect.as(providerContent(receivedEmailId, admitted.address))
               ),
           });
-          const runtime = ManagedRuntime.make(
-            makeRuntimeLayer({ crypto, port: 44615, provider, extractor: successfulExtractor })
-          );
+          const runtime = ManagedRuntime.make(makeRuntimeLayer({ crypto, port: 44615, provider }));
           yield* Effect.promise(() => runtime.runPromise(Effect.void));
           const result = yield* Effect.promise(() =>
             runtime.runPromise(
@@ -483,9 +458,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
                 Effect.as(providerContent(receivedEmailId, admitted.address))
               ),
           });
-          const runtime = ManagedRuntime.make(
-            makeRuntimeLayer({ crypto, port: 44616, provider, extractor: successfulExtractor })
-          );
+          const runtime = ManagedRuntime.make(makeRuntimeLayer({ crypto, port: 44616, provider }));
           yield* Effect.promise(() => runtime.runPromise(Effect.void));
           yield* Effect.promise(() =>
             runtime.runPromise(
@@ -516,103 +489,6 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           ).toEqual([{ status: "completed" }]);
           yield* sql`UPDATE users SET paid_tier = 'pro' WHERE id = ${defaultUserId}`;
           yield* Effect.promise(() => runtime.dispose());
-          yield* cleanup();
-        }),
-      30_000
-    );
-
-    it.effect(
-      "resumes after runner replacement without repeating retained provider retrieval",
-      () =>
-        Effect.gen(function* () {
-          const crypto = yield* Crypto.Crypto;
-          const suffix = yield* crypto.randomUUIDv4.pipe(Effect.orDie);
-          const admitted = yield* admit(suffix);
-          const calls = yield* Ref.make(0);
-          const interpretationStarted = yield* Deferred.make<void>();
-          const provider = ResendReceivingClient.of({
-            retrieveEmail: (receivedEmailId) =>
-              Ref.update(calls, (count) => count + 1).pipe(
-                Effect.as(providerContent(receivedEmailId, admitted.address))
-              ),
-          });
-          const blockedExtractor = NotificationEmailExtractor.of({
-            extract: () =>
-              Deferred.succeed(interpretationStarted, undefined).pipe(Effect.andThen(Effect.never)),
-          });
-          const runtimeA = ManagedRuntime.make(
-            makeRuntimeLayer({ crypto, port: 44613, provider, extractor: blockedExtractor })
-          );
-          const runtimeB = ManagedRuntime.make(
-            makeRuntimeLayer({ crypto, port: 44614, provider, extractor: successfulExtractor })
-          );
-          yield* Effect.promise(() => runtimeA.runPromise(Effect.void));
-          const first = yield* Effect.promise(() =>
-            runtimeA.runPromise(ForwardedEmailWorkflow.execute(admitted.payload))
-          ).pipe(Effect.ignore, Effect.forkChild);
-          yield* Deferred.await(interpretationStarted);
-          yield* Effect.promise(() => runtimeB.runPromise(Effect.void));
-          yield* Effect.promise(() => runtimeA.dispose());
-          yield* Fiber.interrupt(first);
-          yield* Effect.promise(() =>
-            runtimeB.runPromise(ForwardedEmailWorkflow.execute(admitted.payload))
-          );
-          expect(yield* Ref.get(calls)).toBe(1);
-          const sql = yield* MigrationSqlClient;
-          expect(
-            yield* sql`SELECT status FROM forwarded_email_receipts
-              WHERE received_email_id = ${admitted.payload.receivedEmailId}`
-          ).toEqual([{ status: "completed" }]);
-          yield* Effect.promise(() => runtimeB.dispose());
-          yield* cleanup();
-        }),
-      30_000
-    );
-
-    it.effect(
-      "re-enters retrieval when evidence retention outlives persisted activity progress",
-      () =>
-        Effect.gen(function* () {
-          const crypto = yield* Crypto.Crypto;
-          const suffix = yield* crypto.randomUUIDv4.pipe(Effect.orDie);
-          const admitted = yield* admit(suffix);
-          const calls = yield* Ref.make(0);
-          const interpretationStarted = yield* Deferred.make<void>();
-          const provider = ResendReceivingClient.of({
-            retrieveEmail: (receivedEmailId) =>
-              Ref.update(calls, (count) => count + 1).pipe(
-                Effect.as(providerContent(receivedEmailId, admitted.address))
-              ),
-          });
-          const blockedExtractor = NotificationEmailExtractor.of({
-            extract: () =>
-              Deferred.succeed(interpretationStarted, undefined).pipe(Effect.andThen(Effect.never)),
-          });
-          const runtimeA = ManagedRuntime.make(
-            makeRuntimeLayer({ crypto, port: 44621, provider, extractor: blockedExtractor })
-          );
-          const runtimeB = ManagedRuntime.make(
-            makeRuntimeLayer({ crypto, port: 44622, provider, extractor: successfulExtractor })
-          );
-          yield* Effect.promise(() => runtimeA.runPromise(Effect.void));
-          const first = yield* Effect.promise(() =>
-            runtimeA.runPromise(ForwardedEmailWorkflow.execute(admitted.payload))
-          ).pipe(Effect.ignore, Effect.forkChild);
-          yield* Deferred.await(interpretationStarted);
-          yield* Effect.promise(() => runtimeB.runPromise(Effect.void));
-          yield* Effect.promise(() => runtimeA.dispose());
-          yield* Fiber.interrupt(first);
-          yield* runEmailIngestRetention(DateTime.add(yield* DateTime.now, { days: 91 }));
-          yield* Effect.promise(() =>
-            runtimeB.runPromise(ForwardedEmailWorkflow.execute(admitted.payload))
-          );
-          expect(yield* Ref.get(calls)).toBe(2);
-          const sql = yield* MigrationSqlClient;
-          expect(
-            yield* sql`SELECT status FROM forwarded_email_receipts
-              WHERE received_email_id = ${admitted.payload.receivedEmailId}`
-          ).toEqual([{ status: "completed" }]);
-          yield* Effect.promise(() => runtimeB.dispose());
           yield* cleanup();
         }),
       30_000

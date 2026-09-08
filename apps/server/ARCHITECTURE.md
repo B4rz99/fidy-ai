@@ -289,6 +289,14 @@ Provider adapters own request encoding, status interpretation, Schema decoding, 
 and workflow-failure mapping. Incremental provider protocols must use a separate
 interface with explicit per-chunk and aggregate budgets rather than weakening this boundary.
 
+[ADR 0025](../../docs/adr/0025-evidence-backed-notification-interpretation.md) seals the replacement
+of raw-email model interpretation with one deterministic notification interpretation module. Reviewed
+format modules are discovered at build time into a static catalog, with bounded recognition and
+fail-closed ambiguity handling; neither global handwritten format unions nor runtime plugin loading
+are part of the interface. Its evidenced launch formats own versioned COP assumptions, safe hints,
+and immutable interpretation evidence. The decision includes downstream model-egress checks and
+defers statement hint capture; it is adopted incrementally through #438.
+
 Resend is EmailAuthentication's launch outbound-email adapter; it receives only the recipient and
 bounded message projection required for the current proof, and provider work is driven by durable
 delivery state. Resend server errors remain ambiguous even when their response body is valid JSON,

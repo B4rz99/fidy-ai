@@ -272,12 +272,34 @@ export const NeedsReviewReason = Schema.Literals([
 ]);
 export type NeedsReviewReason = typeof NeedsReviewReason.Type;
 
-/** Stable classifications for notification emails that could not be safely captured. */
-export const EmailNeedsReviewReason = Schema.Literals([
-  "model-unavailable",
-  "canonical-validation-failed",
+/** Closed deterministic interpretation outcomes that are safe to persist and expose. */
+export const NotificationEmailInterpretationReviewReason = Schema.Literals([
+  "unsupported-content",
+  "unknown-format",
+  "ambiguous-format",
+  "invalid-format",
+]);
+export type NotificationEmailInterpretationReviewReason =
+  typeof NotificationEmailInterpretationReviewReason.Type;
+
+/** Review reasons backed by a retained bounded raw IngestSample. */
+export const EmailRawSampleReviewReason = Schema.Union([
+  Schema.Literal("canonical-validation-failed"),
+  NotificationEmailInterpretationReviewReason,
+]);
+export type EmailRawSampleReviewReason = typeof EmailRawSampleReviewReason.Type;
+
+/** Review reasons that have no retained raw IngestSample. */
+export const EmailNoSampleReviewReason = Schema.Literals([
   "provider-retrieval-failed",
   "processing-interrupted",
+]);
+export type EmailNoSampleReviewReason = typeof EmailNoSampleReviewReason.Type;
+
+/** Stable classifications for notification emails that could not be safely captured. */
+export const EmailNeedsReviewReason = Schema.Union([
+  EmailRawSampleReviewReason,
+  EmailNoSampleReviewReason,
 ]);
 export type EmailNeedsReviewReason = typeof EmailNeedsReviewReason.Type;
 
@@ -356,13 +378,13 @@ const EmailNeedsReviewFields = {
 export const EmailNeedsReviewItem = Schema.Union([
   Schema.Struct({
     ...EmailNeedsReviewFields,
-    reason: Schema.Literals(["model-unavailable", "canonical-validation-failed"]),
+    reason: EmailRawSampleReviewReason,
     ingestSampleId: IngestSampleId,
     status: Schema.Literal("pending"),
   }),
   Schema.Struct({
     ...EmailNeedsReviewFields,
-    reason: Schema.Literals(["provider-retrieval-failed", "processing-interrupted"]),
+    reason: EmailNoSampleReviewReason,
     status: Schema.Literal("pending"),
   }),
   Schema.Struct({ ...EmailNeedsReviewFields, status: Schema.Literal("expired") }),

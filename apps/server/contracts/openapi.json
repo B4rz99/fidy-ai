@@ -1,6 +1,21 @@
 {
   "components": {
     "schemas": {
+      "AccountHints": {
+        "additionalProperties": false,
+        "properties": {
+          "accountLastFour": {
+            "$ref": "#/components/schemas/LastFourDigits"
+          },
+          "cardLastFour": {
+            "$ref": "#/components/schemas/LastFourDigits"
+          },
+          "instrumentLabel": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "ActivePATList": {
         "additionalProperties": false,
         "properties": {
@@ -2147,8 +2162,11 @@
               },
               "reason": {
                 "enum": [
-                  "model-unavailable",
-                  "canonical-validation-failed"
+                  "canonical-validation-failed",
+                  "unsupported-content",
+                  "unknown-format",
+                  "ambiguous-format",
+                  "invalid-format"
                 ],
                 "type": "string"
               },
@@ -2328,8 +2346,11 @@
               },
               "reason": {
                 "enum": [
-                  "model-unavailable",
                   "canonical-validation-failed",
+                  "unsupported-content",
+                  "unknown-format",
+                  "ambiguous-format",
+                  "invalid-format",
                   "provider-retrieval-failed",
                   "processing-interrupted"
                 ],
@@ -2659,6 +2680,10 @@
       "KeywordRuleId": {
         "format": "uuid",
         "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|[fF]{8}-[fF]{4}-[fF]{4}-[fF]{4}-[fF]{12})$",
+        "type": "string"
+      },
+      "LastFourDigits": {
+        "pattern": "^[0-9]{4}$",
         "type": "string"
       },
       "LaunchPaymentMethods": {
@@ -3172,6 +3197,35 @@
         "required": [
           "error",
           "next"
+        ],
+        "type": "object"
+      },
+      "NotificationFormatId": {
+        "maxLength": 64,
+        "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+        "type": "string"
+      },
+      "NotificationInterpretationEvidence": {
+        "additionalProperties": false,
+        "properties": {
+          "accountHints": {
+            "$ref": "#/components/schemas/AccountHints"
+          },
+          "currencyBasis": {
+            "enum": [
+              "explicit",
+              "format-cop-default-v1"
+            ],
+            "type": "string"
+          },
+          "formatId": {
+            "$ref": "#/components/schemas/NotificationFormatId"
+          }
+        },
+        "required": [
+          "formatId",
+          "currencyBasis",
+          "accountHints"
         ],
         "type": "object"
       },
@@ -4612,6 +4666,9 @@
             "properties": {
               "createdAt": {
                 "$ref": "#/components/schemas/UtcTimestamp"
+              },
+              "deterministicInterpretation": {
+                "$ref": "#/components/schemas/NotificationInterpretationEvidence"
               },
               "extractorRevision": {
                 "$ref": "#/components/schemas/InterpretationRevision"

@@ -11,6 +11,7 @@ import {
   StatementSourceFormat,
   StatementSubmissionId,
 } from "~/core/ingestion/reference";
+import { NotificationInterpretationEvidence } from "./account-hints";
 import { TransactionId } from "./reference";
 
 export { TransactionId } from "./reference";
@@ -260,6 +261,7 @@ export const NotificationEmailSourceAttestation = Schema.Struct({
   messageContentSha256: Schema.String.check(Schema.isPattern(/^[0-9a-f]{64}$/u)),
   sourceFormat: EmailSourceFormat,
   extractorRevision: InterpretationRevision,
+  deterministicInterpretation: Schema.OptionFromOptionalKey(NotificationInterpretationEvidence),
 });
 export type NotificationEmailSourceAttestation = typeof NotificationEmailSourceAttestation.Type;
 

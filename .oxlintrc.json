@@ -458,6 +458,7 @@
         "apps/server/vitest.ci.config.ts",
         "apps/server/vitest.acceptance.config.ts",
         "apps/server/vitest.compatibility.config.ts",
+        "apps/server/vitest.email-interpretation.config.ts",
         "apps/server/stryker.config.mjs",
         "apps/web/.dependency-cruiser.mjs",
         "apps/server/.dependency-cruiser.mjs",

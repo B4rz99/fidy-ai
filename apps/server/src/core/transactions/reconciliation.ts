@@ -1,6 +1,7 @@
 import { DateTime, Effect, Equal, Option } from "effect";
 import { IneligibleTransactionPair, SameTransactionPair } from "./errors";
 import type { ReadonlyMoney } from "~/core/_shared/money";
+import { type AccountHints, type HintComparison, compareAccountHints } from "./account-hints";
 import type { Transaction, TransactionId, TransactionPairInput } from "./model";
 /** Canonical policy facts required to validate a link and choose authoritative members. */
 export type ReconciliationMember = Readonly<{
@@ -14,6 +15,27 @@ export type ReconciliationMember = Readonly<{
   counterpartyUserDecided: boolean;
   notesUserDecided: boolean;
 }>;
+
+/**
+ * Projects source-attached hints into the only semantics candidate selection may expose. Any
+ * conflict excludes the pair; otherwise equality is supporting evidence and absence stays unknown.
+ */
+export const projectReconciliationHints = Effect.fn("projectReconciliationHints")(function* (
+  anchor: ReadonlyArray<AccountHints>,
+  candidate: ReadonlyArray<AccountHints>
+) {
+  const comparisons = yield* Effect.forEach(anchor, (anchorHints) =>
+    Effect.forEach(candidate, (candidateHints) => compareAccountHints(anchorHints, candidateHints))
+  );
+  const flattened = comparisons.flat();
+  let hintComparison: HintComparison = "unknown";
+  if (flattened.includes("conflict")) {
+    hintComparison = "conflict";
+  } else if (flattened.includes("equal")) {
+    hintComparison = "equal";
+  }
+  return { hintComparison };
+});
 
 /** Canonically ordered pair used by persistence so caller order cannot create a second decision. */
 export type TransactionPair = TransactionPairInput;
@@ -142,7 +164,6 @@ export const decideTransactionLink = Effect.fn(function* (
   if (first.direction !== second.direction) {
     return yield* new IneligibleTransactionPair({ reason: "incompatible-direction" });
   }
-
   const pair = yield* orderTransactionPair({
     firstTransactionId: first.id,
     secondTransactionId: second.id,

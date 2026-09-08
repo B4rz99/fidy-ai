@@ -28,7 +28,6 @@ import {
   completeAuthenticatedResendWebhookEvent,
   resolveForwardingAddress,
 } from "./email-forwarding-repo";
-import { type NotificationEmailExtractor } from "./email-extractor";
 import {
   ForwardedEmailWorkflowLive,
   processNextCurrentForwardedEmail,
@@ -164,7 +163,6 @@ type ForwardedEmailProcessorDependencies =
   | Crypto.Crypto
   | SqlClient.SqlClient
   | ResendReceivingClient
-  | NotificationEmailExtractor
   | PersistedQueue.PersistedQueueFactory
   | WorkflowEngine.WorkflowEngine;
 

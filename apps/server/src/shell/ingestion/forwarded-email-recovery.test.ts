@@ -1,6 +1,5 @@
 import { expect, layer } from "@effect/vitest";
 import {
-  BigDecimal,
   ConfigProvider,
   Crypto,
   DateTime,
@@ -14,7 +13,6 @@ import {
 } from "effect";
 import { TestClock } from "effect/testing";
 import { WorkflowEngine } from "effect/unstable/workflow";
-import { Money } from "~/core/_shared/money";
 import { ConsentRecordId } from "~/core/consent/model";
 import { UserId } from "~/core/identity/reference";
 import { makeColombianUser } from "~/core/identity/rules";
@@ -28,7 +26,6 @@ import {
   revokeCurrentOnboardingConsentForTesting,
 } from "~/shell/testing/consent";
 import { upsertStableUserFixture } from "~/shell/testing/identity-fixtures";
-import { NotificationEmailExtractor } from "./email-extractor";
 import {
   ForwardedEmailQueueLive,
   ForwardedEmailWorkflow,
@@ -69,13 +66,6 @@ const recoveredQueueCount =
 const hasDeferredReceipt = (rows: ReadonlyArray<{ readonly status: string }>): boolean =>
   rows.some((row) => row.status === "deferred");
 const resolutionOutcomes = { restored: "completed", revoked: "revoked", absent: "stale" } as const;
-
-const extraction = {
-  money: Money.make({ amount: BigDecimal.fromStringUnsafe("25000"), currency: "COP" }),
-  counterparty: Option.some("Recovery test"),
-  direction: "outflow" as const,
-  occurredAt: DateTime.makeUnsafe("2026-09-01T12:00:00Z"),
-};
 
 layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
   "Forwarded email recovery",
@@ -121,14 +111,6 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
                     retrieveEmail: () => Effect.die("deferred work must not retrieve"),
                   })
                 )
-              ),
-              Layer.provide(
-                Layer.succeed(
-                  NotificationEmailExtractor,
-                  NotificationEmailExtractor.of({
-                    extract: () => Effect.die("deferred work must not interpret"),
-                  })
-                )
               )
             );
             const context = yield* Layer.build(runtime.pipe(Layer.provideMerge(TestClock.layer())));
@@ -165,31 +147,83 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         20_000
       );
     }
-    for (const phase of ["retrieval", "interpretation"] as const) {
-      for (const transition of ["expired", "revoked", "absent", "defect"] as const) {
-        if (phase === "retrieval" && transition === "absent") continue;
-        it.effect(`reconciles ${transition} during ${phase} without repeating domain work`, () =>
+    for (const transition of ["expired", "revoked", "defect"] as const) {
+      it.effect(`reconciles ${transition} during retrieval without repeating domain work`, () =>
+        Effect.gen(function* () {
+          const { sql, userId, receivedEmailId, localPart } = yield* prepare();
+          const change = Effect.gen(function* () {
+            if (transition === "defect") return yield* Effect.die("test provider defect");
+            yield* sql`UPDATE forwarded_email_receipts SET status = ${transition}, completed_at = now() WHERE received_email_id = ${receivedEmailId}`;
+          }).pipe(Effect.orDie);
+          const provider = ResendReceivingClient.of({
+            retrieveEmail: () =>
+              Effect.gen(function* () {
+                yield* change;
+                return ReceivedEmailContent.make({
+                  receivedEmailId,
+                  from: "alerts@example.test",
+                  to: [`${localPart}@ingest.fidyapp.com`],
+                  subject: "Compra",
+                  text: Option.some("Compra"),
+                  html: Option.none(),
+                  inlineImages: [],
+                  messageId: Option.none(),
+                  createdAt: yield* DateTime.now,
+                });
+              }),
+          });
+          const context = yield* Layer.build(
+            ForwardedEmailWorkflowLive.pipe(
+              Layer.provideMerge(WorkflowEngine.layerMemory),
+              Layer.provide(Layer.succeed(ResendReceivingClient, provider))
+            )
+          );
+          const result = yield* ForwardedEmailWorkflow.execute({
+            userId,
+            receivedEmailId,
+            revision: 1,
+          }).pipe(Effect.exit, Effect.provide(context));
+          if (transition === "defect") {
+            expect(result._tag).toBe("Failure");
+          } else {
+            expect(result).toMatchObject({
+              _tag: "Success",
+              value: { outcome: transition },
+            });
+          }
+          expect(
+            yield* sql`SELECT id FROM source_attestations WHERE transaction_id IN (SELECT id FROM transactions WHERE user_id = ${userId})`
+          ).toEqual([]);
+        })
+      );
+    }
+    for (const resolution of ["restored", "revoked", "absent"] as const) {
+      it.effect(
+        `resumes retrieval Consent deferral when the User becomes ${resolution}`,
+        () =>
           Effect.gen(function* () {
-            const { sql, userId, receivedEmailId, localPart } = yield* prepare();
-            const change = Effect.gen(function* () {
-              if (transition === "defect") return yield* Effect.die("test provider defect");
-              if (transition === "revoked" || transition === "expired") {
-                yield* sql`UPDATE forwarded_email_receipts SET status = ${transition}, completed_at = now() WHERE received_email_id = ${receivedEmailId}`;
-              } else {
-                yield* sql`DELETE FROM raw_email_ingest_samples WHERE user_id = ${userId}`;
-                yield* sql`DELETE FROM forwarded_email_receipts WHERE user_id = ${userId}`;
-              }
-            }).pipe(Effect.orDie);
+            const fixture = yield* prepare();
+            const { sql, userId, receivedEmailId, crypto, localPart } = fixture;
+            const blocked = yield* Deferred.make<void>();
+            let calls = 0;
+            const loseConsent = Effect.gen(function* () {
+              calls++;
+              if (calls !== 1) return;
+              yield* sql`UPDATE consent_records SET policy_revision = 'outdated-recovery-test' WHERE subject_user_id = ${userId}`.pipe(
+                Effect.orDie
+              );
+              yield* Deferred.succeed(blocked, undefined);
+            });
             const provider = ResendReceivingClient.of({
               retrieveEmail: () =>
                 Effect.gen(function* () {
-                  if (phase === "retrieval") yield* change;
+                  yield* loseConsent;
                   return ReceivedEmailContent.make({
                     receivedEmailId,
                     from: "alerts@example.test",
                     to: [`${localPart}@ingest.fidyapp.com`],
                     subject: "Compra",
-                    text: Option.some("Compra"),
+                    text: Option.some("Compra COP 25000"),
                     html: Option.none(),
                     inlineImages: [],
                     messageId: Option.none(),
@@ -197,137 +231,57 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
                   });
                 }),
             });
-            const extractor = NotificationEmailExtractor.of({
-              extract: () =>
-                Effect.gen(function* () {
-                  if (phase === "interpretation") yield* change;
-                  return extraction;
-                }),
-            });
-            const context = yield* Layer.build(
-              ForwardedEmailWorkflowLive.pipe(
-                Layer.provideMerge(WorkflowEngine.layerMemory),
-                Layer.provide(Layer.succeed(ResendReceivingClient, provider)),
-                Layer.provide(Layer.succeed(NotificationEmailExtractor, extractor))
-              )
+            const runtime = ForwardedEmailWorkflowLive.pipe(
+              Layer.provideMerge(WorkflowEngine.layerMemory),
+              Layer.provide(Layer.succeed(ResendReceivingClient, provider))
             );
-            const result = yield* ForwardedEmailWorkflow.execute({
-              userId,
-              receivedEmailId,
-              revision: 1,
-            }).pipe(Effect.exit, Effect.provide(context));
-            if (transition === "defect") {
-              expect(result._tag).toBe("Failure");
-            } else {
-              expect(result).toMatchObject({
-                _tag: "Success",
-                value: { outcome: transition === "absent" ? "stale" : transition },
-              });
-            }
-            expect(
-              yield* sql`SELECT id FROM source_attestations WHERE transaction_id IN (SELECT id FROM transactions WHERE user_id = ${userId})`
-            ).toEqual([]);
-          })
-        );
-      }
-    }
-    for (const phase of ["retrieval", "interpretation"] as const) {
-      for (const resolution of ["restored", "revoked", "absent"] as const) {
-        it.effect(
-          `resumes ${phase} Consent deferral when the User becomes ${resolution}`,
-          () =>
-            Effect.gen(function* () {
-              const fixture = yield* prepare();
-              const { sql, userId, receivedEmailId, crypto, localPart } = fixture;
-              const blocked = yield* Deferred.make<void>();
-              let calls = 0;
-              const loseConsent = Effect.gen(function* () {
-                calls++;
-                if (calls !== 1) return;
-                yield* sql`UPDATE consent_records SET policy_revision = 'outdated-recovery-test' WHERE subject_user_id = ${userId}`.pipe(
-                  Effect.orDie
-                );
-                yield* Deferred.succeed(blocked, undefined);
-              });
-              const provider = ResendReceivingClient.of({
-                retrieveEmail: () =>
-                  Effect.gen(function* () {
-                    if (phase === "retrieval") yield* loseConsent;
-                    return ReceivedEmailContent.make({
-                      receivedEmailId,
-                      from: "alerts@example.test",
-                      to: [`${localPart}@ingest.fidyapp.com`],
-                      subject: "Compra",
-                      text: Option.some("Compra COP 25000"),
-                      html: Option.none(),
-                      inlineImages: [],
-                      messageId: Option.none(),
-                      createdAt: yield* DateTime.now,
-                    });
+            const now = yield* DateTime.now;
+            const context = yield* Layer.build(runtime.pipe(Layer.provideMerge(TestClock.layer())));
+            yield* Effect.gen(function* () {
+              yield* TestClock.setTime(DateTime.toEpochMillis(now));
+              const fiber = yield* ForwardedEmailWorkflow.execute({
+                userId,
+                receivedEmailId,
+                revision: 1,
+              }).pipe(Effect.forkChild);
+              yield* Deferred.await(blocked);
+              yield* TestClock.withLive(
+                sql`SELECT status FROM forwarded_email_receipts WHERE received_email_id = ${receivedEmailId}`.pipe(
+                  Effect.flatMap(
+                    Schema.decodeUnknownEffect(
+                      Schema.Array(Schema.Struct({ status: Schema.String }))
+                    )
+                  ),
+                  Effect.repeat({
+                    until: hasDeferredReceipt,
+                    schedule: Schedule.spaced("10 millis"),
                   }),
-              });
-              const extractor = NotificationEmailExtractor.of({
-                extract: () =>
-                  Effect.gen(function* () {
-                    if (phase === "interpretation") yield* loseConsent;
-                    return extraction;
-                  }),
-              });
-              const runtime = ForwardedEmailWorkflowLive.pipe(
-                Layer.provideMerge(WorkflowEngine.layerMemory),
-                Layer.provide(Layer.succeed(ResendReceivingClient, provider)),
-                Layer.provide(Layer.succeed(NotificationEmailExtractor, extractor))
+                  Effect.timeout("5 seconds")
+                )
               );
-              const now = yield* DateTime.now;
-              const context = yield* Layer.build(
-                runtime.pipe(Layer.provideMerge(TestClock.layer()))
-              );
-              yield* Effect.gen(function* () {
-                yield* TestClock.setTime(DateTime.toEpochMillis(now));
-                const fiber = yield* ForwardedEmailWorkflow.execute({
-                  userId,
-                  receivedEmailId,
-                  revision: 1,
-                }).pipe(Effect.forkChild);
-                yield* Deferred.await(blocked);
-                yield* TestClock.withLive(
-                  sql`SELECT status FROM forwarded_email_receipts WHERE received_email_id = ${receivedEmailId}`.pipe(
-                    Effect.flatMap(
-                      Schema.decodeUnknownEffect(
-                        Schema.Array(Schema.Struct({ status: Schema.String }))
-                      )
-                    ),
-                    Effect.repeat({
-                      until: hasDeferredReceipt,
-                      schedule: Schedule.spaced("10 millis"),
-                    }),
-                    Effect.timeout("5 seconds")
-                  )
-                );
-                yield* TestClock.adjust("1 second");
-                yield* sql`UPDATE consent_records SET policy_revision = (
+              yield* TestClock.adjust("1 second");
+              yield* sql`UPDATE consent_records SET policy_revision = (
                   SELECT policy_revision FROM consent_records WHERE subject_user_id = ${defaultUserId}
                   AND event_type = 'granted' ORDER BY occurred_at DESC LIMIT 1
                 ) WHERE subject_user_id = ${userId}`;
-                if (resolution === "revoked") {
-                  yield* revokeCurrentOnboardingConsentForTesting(
-                    userId,
-                    ConsentRecordId.make(yield* crypto.randomUUIDv4.pipe(Effect.orDie))
-                  );
-                }
-                if (resolution === "absent") {
-                  yield* sql`DELETE FROM raw_email_ingest_samples WHERE user_id = ${userId}`;
-                  yield* sql`DELETE FROM forwarded_email_receipts WHERE user_id = ${userId}`;
-                }
-                yield* TestClock.adjust("2 days");
-                expect(yield* Fiber.join(fiber)).toEqual({
-                  outcome: resolutionOutcomes[resolution],
-                });
-              }).pipe(Effect.provide(context));
-            }),
-          20_000
-        );
-      }
+              if (resolution === "revoked") {
+                yield* revokeCurrentOnboardingConsentForTesting(
+                  userId,
+                  ConsentRecordId.make(yield* crypto.randomUUIDv4.pipe(Effect.orDie))
+                );
+              }
+              if (resolution === "absent") {
+                yield* sql`DELETE FROM raw_email_ingest_samples WHERE user_id = ${userId}`;
+                yield* sql`DELETE FROM forwarded_email_receipts WHERE user_id = ${userId}`;
+              }
+              yield* TestClock.adjust("2 days");
+              expect(yield* Fiber.join(fiber)).toEqual({
+                outcome: resolutionOutcomes[resolution],
+              });
+            }).pipe(Effect.provide(context));
+          }),
+        20_000
+      );
     }
   }
 );

@@ -1,0 +1,213 @@
+docs/adr/0025-evidence-backed-notification-interpretation.md
+  s_8ae25420841aa7::t_46a4512c2cf062 1-35
+apps/server/src/shell/ingestion/email-forwarding-repo.ts
+  s_8ae25420841aa7::t_cfc28f4d3bb845 14
+  s_8ae25420841aa7::t_6aaf130fc3f883 625-628,630,634-635,637,639-647
+  s_8ae25420841aa7::t_2dc18e7603937b 13,631
+  s_8ae25420841aa7::t_69c2bc83c27ead 636
+apps/server/tools/email-formats/generate.ts
+  s_8ae25420841aa7::t_0aa40cdf7775ea 29
+  s_8ae25420841aa7::t_16f673d0abf680 27-28,30
+  s_8ae25420841aa7::t_f9af847c15e696 1-3,5-8,10-21,26,31-33,35,37,41-43,46
+  s_8ae25420841aa7::t_b134228631318e 4,9,25,34,36,38-40,44-45,47
+  s_8ae25420841aa7::t_6761ae6ba03c74 22-24
+apps/server/src/shell/ingestion/email-forwarding.test.ts
+  s_8ae25420841aa7::t_370b2c72e824a6 869,873,1095-1099
+  s_8ae25420841aa7::t_9e6b5ec00ffd57 853-860
+  s_8ae25420841aa7::t_730b5ebd399409 211-214,711-714
+  s_8ae25420841aa7::t_240d4787d5d45c 982,986-989,991,1006
+  s_8ae25420841aa7::t_a37e09e3b61493 4
+  s_8ae25420841aa7::t_d3d988de1d5115 951-981,983-985,990,992-1005,1007
+  s_8ae25420841aa7::t_535969d7ebee1f 709-710,715-716,722-723,733
+  s_8ae25420841aa7::t_66fdad48e81492 435
+  s_8ae25420841aa7::t_d8d055d7e56fcd 209-210,215-216,218,222,257-258,299-305,307,313,321-322,331-337,339,346
+apps/server/src/shell/ingestion/email-interpretation/formats/bbva-pse/format.ts
+  s_8ae25420841aa7::t_9a9f41fff05b0f 1,11-13,16-18,22,26,30-38,40-42,47-51
+  s_8ae25420841aa7::t_1a7d5c9ce93855 3,39,43-46
+  s_8ae25420841aa7::t_995a2ca018f311 5-10
+  s_8ae25420841aa7::t_4908fdc4ac7737 19,21,23-25,27-29
+  s_8ae25420841aa7::t_a37e09e3b61493 20
+  s_8ae25420841aa7::t_157a1562d20853 2,4,14-15
+apps/server/src/shell/ingestion/email-interpretation/interpret.test.ts
+  s_8ae25420841aa7::t_751ebedb6aaf95 138,140,142
+  s_8ae25420841aa7::t_54ed5d79452923 115
+  s_8ae25420841aa7::t_287edcc0605942 123-127
+  s_8ae25420841aa7::t_0499d43f3425d9 82-83,90-91,135-136
+  s_8ae25420841aa7::t_a37e09e3b61493 35-53,55-62,64-72,77-79,105,170-176,191
+  s_8ae25420841aa7::t_b7c2b781ddaa33 2-3,8-12,31,167,195
+  s_8ae25420841aa7::t_380237260a6a65 4,6-7,17-30,32,54,63,73-74,149-150,155-166,168-169,180-181,183-190,192-194,196-197
+  s_8ae25420841aa7::t_1ae61772e3e62d 116-117,139,141
+  s_8ae25420841aa7::t_36e15d6182ad8b 129,145,198-216
+  s_8ae25420841aa7::t_252129812eac58 15
+  s_8ae25420841aa7::t_e8611361e1356b 106-114,118-122,130-131,143
+  s_8ae25420841aa7::t_b00b1092c0541c 80-81,84,132-134,137,144
+  s_8ae25420841aa7::t_3ce4ad9a904625 75,85-89,92-104,146-148,177-179
+  s_8ae25420841aa7::t_90d6af9153f6d3 13
+  s_8ae25420841aa7::t_8bbe3e95046de3 14,151-154
+  s_8ae25420841aa7::t_0a9edde3c10639 128
+apps/server/contracts/openapi.json
+  s_8ae25420841aa7::t_20e1f6457fa50d 4672
+  s_8ae25420841aa7::t_411896bc665a68 4-18,2165-2169,2350-2353,2685-2688,3203-3231,4670-4671
+apps/server/src/core/ingestion/model.ts
+  s_8ae25420841aa7::t_02aef840472fa7 292-293,297-298,302,387
+  s_8ae25420841aa7::t_6c9e013966333c 287
+  s_8ae25420841aa7::t_3ca84f4fd20b43 277-280
+  s_8ae25420841aa7::t_8105717e352c8f 275-276,281-286,288-291,299-301,303,381
+apps/server/src/shell/ingestion/email-interpretation/format-definition.ts
+  s_8ae25420841aa7::t_8cb414d4b72b8d 3,5-9,16,26-27
+  s_8ae25420841aa7::t_3fb9877eac8de7 4,15
+  s_8ae25420841aa7::t_754b188edc5581 1-2,10-14,17-25,28-33
+apps/server/src/shell/ingestion/email-interpretation/formats/bbva-pse/fixtures/positive.synthetic.html
+  s_8ae25420841aa7::t_a37e09e3b61493 1-112
+apps/server/src/shell/transactions/rows.ts
+  s_8ae25420841aa7::t_158836f422091e 116-122,124,132-133,135-144,149,158
+  s_8ae25420841aa7::t_5b1236913b76ca 115,123,125-131,134,145-146,150-157,159-163,166,168,175-179,184,187-189,192-195
+  s_8ae25420841aa7::t_7ba3b4a9d743fb 16,18-22,105-109,211-214
+  s_8ae25420841aa7::t_59f9ba10da4532 147-148
+  s_8ae25420841aa7::t_05b4708ba8425d 17
+apps/server/vitest.email-interpretation.config.ts
+  s_8ae25420841aa7::t_e866e2a714c769 1-13
+apps/server/src/shell/ingestion/email-interpretation/formats/davibank-card/format.ts
+  s_8ae25420841aa7::t_138c90bab60351 3,28,32-35
+  s_8ae25420841aa7::t_8ca3f7292293e1 2,4,14-15
+  s_8ae25420841aa7::t_07c3b22bd56c51 5-10
+  s_8ae25420841aa7::t_23181f5154aed0 1,11-13,16-27,29-31,36-40
+apps/server/src/shell/transactions/repo.ts
+  s_8ae25420841aa7::t_4d0dcd11375cb8 265-266,272-273
+  s_8ae25420841aa7::t_a11bef891c59ba 285-289
+  s_8ae25420841aa7::t_c2744cf80292ba 5-7,9,253-257
+  s_8ae25420841aa7::t_2819e4cf931673 8,223-226
+bun.lock
+  s_8ae25420841aa7::t_171d94c0a15db8 36
+apps/server/src/core/transactions/model.ts
+  s_8ae25420841aa7::t_a37e09e3b61493 14
+  s_8ae25420841aa7::t_e203df6eea3e0f 264
+apps/server/src/core/transactions/account-hints.test.ts
+  s_8ae25420841aa7::t_778726c5cf0684 2
+  s_8ae25420841aa7::t_94be688c8e3b9e 3-8,11-25,27-41,43-57
+  s_8ae25420841aa7::t_a37e09e3b61493 61-70,87-88
+  s_8ae25420841aa7::t_4fc89195805b6b 71,77,79
+  s_8ae25420841aa7::t_e2ec7bd45d90ec 1,10,84,86,90-92,95
+  s_8ae25420841aa7::t_ba60fe101c188e 60,72-73,75-76,78,80-82
+apps/server/src/shell/ingestion/email-interpretation/formats/rappicard-purchase/format.ts
+  s_8ae25420841aa7::t_d95681020b34f8 3,38,44-47
+  s_8ae25420841aa7::t_f8ac6e8675b7c3 2,4,14-15
+  s_8ae25420841aa7::t_a9537e644e6a69 5-10
+  s_8ae25420841aa7::t_a37e09e3b61493 32
+  s_8ae25420841aa7::t_1a3d91ac4ace74 1,11-13,16-31,33-37,39-43,48-52
+apps/server/src/shell/ingestion/email-interpretation/interpret.ts
+  s_8ae25420841aa7::t_8b675b1c9c554b 21
+  s_8ae25420841aa7::t_77cd3b674fe41b 90,114
+  s_8ae25420841aa7::t_addad7a16c8a11 23-24
+  s_8ae25420841aa7::t_8c18d14a0cf9d8 104
+  s_8ae25420841aa7::t_31b7239ca7865e 14
+  s_8ae25420841aa7::t_6cf86f51babc29 3,134,141-142
+  s_8ae25420841aa7::t_c3e406e4bd29ca 8
+  s_8ae25420841aa7::t_8776e9ab6a8b57 16,164-166
+  s_8ae25420841aa7::t_67c95c772d7938 1-2,13,15,18,22,25-40,65-68,70-71,75-89,91-94,172-179
+  s_8ae25420841aa7::t_bbaf5cb35e1ee6 9-12,51
+  s_8ae25420841aa7::t_50fb2431843d8d 17
+  s_8ae25420841aa7::t_a37e09e3b61493 73
+  s_8ae25420841aa7::t_591e59106a56d9 117
+  s_8ae25420841aa7::t_cf0e95e865b0d7 4-7,19-20,150-157
+  s_8ae25420841aa7::t_2e6063d0024f11 41-50,52-64,69,72,74,95-103,105-113,115-116,118-133,135-140,143-149,158-163,167-171,180-184
+apps/server/src/shell/http.ts
+  s_8ae25420841aa7::t_a37e09e3b61493 274
+apps/server/src/shell/ingestion/email-interpretation/formats/davibank-card/fixtures/positive.synthetic.html
+  s_8ae25420841aa7::t_a37e09e3b61493 1-29
+apps/server/src/shell/ingestion/email-interpretation/document.ts
+  s_8ae25420841aa7::t_583503b5712914 10-12,14-22,25-38,92-94,96,99-101,104-109,112-116,119-120,124-129,135,139-140,143-146,148,166-168,170-172
+  s_8ae25420841aa7::t_a37e09e3b61493 48-52
+  s_8ae25420841aa7::t_42b71295812406 64-73,77,84,88,98
+  s_8ae25420841aa7::t_ad2e56984b5c52 1,3-9,13,40-47,102-103,110,117-118,121-123,130-132,137,163-165,169,173
+  s_8ae25420841aa7::t_6e17c1c971dbcb 2,23-24,39
+  s_8ae25420841aa7::t_71b48c2a9707ab 54-63,74-76,78-83,85-87,89-91,95,97,133-134,136,138,141-142,147,149-162
+  s_8ae25420841aa7::t_a834a1416f9fd2 53
+  s_8ae25420841aa7::t_6b3f7f46eb1d8d 111
+scripts/verify.ts
+  s_8ae25420841aa7::t_1536cb606982e9 114-118,146-152
+apps/server/src/shell/ingestion/email-interpretation/format-support.ts
+  s_8ae25420841aa7::t_55a62425ce6768 61
+  s_8ae25420841aa7::t_634344d0cabdf7 101-107,109-132,134-146,171
+  s_8ae25420841aa7::t_47a4e2e88d4685 31,73
+  s_8ae25420841aa7::t_a37e09e3b61493 58-60,133
+  s_8ae25420841aa7::t_eacb08d2478a2a 1,12-15,18-20,54,84-87,94-97
+  s_8ae25420841aa7::t_b9ab30fa25e9fe 48-49
+  s_8ae25420841aa7::t_8f68274f9ca42c 69-72,74-76
+  s_8ae25420841aa7::t_d32025aa0f8db9 44-45
+  s_8ae25420841aa7::t_cc989813af9651 2-3,8-11,16-17,21-23,46,50-53,56-57,62,65-66,77-83,88-93,98-100,108,147-151,153-159,161-162,168-170,172-179
+  s_8ae25420841aa7::t_1b75dd5f2cf547 43,47
+  s_8ae25420841aa7::t_e108c8ac9a1d97 25-30,32-42,55,63-64,67-68,152,160,163-167
+  s_8ae25420841aa7::t_2316897f868c80 4-7,24
+apps/server/src/shell/ingestion/email-interpretation.integration.test.ts
+  s_8ae25420841aa7::t_7c4702689ed1bc 51-54
+  s_8ae25420841aa7::t_b36590cc01f4f3 57,59-61,73-74,81-84
+  s_8ae25420841aa7::t_59b71b74791b7d 9-10
+  s_8ae25420841aa7::t_b96712107947f6 1-8,11-50,55-56,58,62-72,75-80,85-119,171-174
+  s_8ae25420841aa7::t_453807aae5377a 120-170
+apps/server/src/shell/ingestion/email-interpretation/formats/rappicard-purchase/fixtures/positive.synthetic.html
+  s_8ae25420841aa7::t_a37e09e3b61493 1-67
+apps/server/src/core/transactions/account-hints.ts
+  s_8ae25420841aa7::t_c2d100664e725a 11-13,15-20,22-23
+  s_8ae25420841aa7::t_a37e09e3b61493 21,25-29,39
+  s_8ae25420841aa7::t_045c7726faedf3 65-71
+  s_8ae25420841aa7::t_c33d12e0e05591 3-4,14,40-43
+  s_8ae25420841aa7::t_ebd27dfab9f0d4 64
+  s_8ae25420841aa7::t_5fe4bb55cfb5b8 2,5-10,24,30-38,44-63
+  s_8ae25420841aa7::t_94be688c8e3b9e 1,72-107
+docs/research/notification-email-format-evidence.md
+  s_8ae25420841aa7::t_9c461cf9caf3cc 20-22,126-128
+  s_8ae25420841aa7::t_c1db1285a2a797 1-19,23-125,129-155
+apps/server/src/core/transactions/reconciliation.ts
+  s_8ae25420841aa7::t_94be688c8e3b9e 4,19-38
+  s_8ae25420841aa7::t_a9c158716d076d 39
+apps/server/ARCHITECTURE.md
+  s_8ae25420841aa7::t_1a30056004c5e7 283-290
+apps/server/package.json
+  s_8ae25420841aa7::t_c912e567079938 35
+  s_8ae25420841aa7::t_a8cb2b339e7802 26-27
+  s_8ae25420841aa7::t_092933d8ab8b60 57
+apps/server/src/shell/db/migrations/0048-notification-email-interpretation.ts
+  s_8ae25420841aa7::t_a66b7e8495fd0b 1-64,66-71
+  s_8ae25420841aa7::t_567cb860449d55 65
+apps/server/src/shell/ingestion/email-interpretation/catalog.generated.ts
+  s_8ae25420841aa7::t_4f44dd69540cab 1-7
+apps/server/src/core/transactions/reconciliation.test.ts
+  s_8ae25420841aa7::t_df404f6a8940d4 100-101
+  s_8ae25420841aa7::t_94be688c8e3b9e 2,4,6-10,84-99
+.oxlintrc.json
+  s_8ae25420841aa7::t_18c1281c645b2d 461
+apps/server/src/shell/ingestion/email-worker.ts
+  s_8ae25420841aa7::t_5a15636234a06b 46-47,81,86-88,100,236,320-328
+  s_8ae25420841aa7::t_e66863a453fbde 6,66
+  s_8ae25420841aa7::t_83239ad3484185 21,28
+  s_8ae25420841aa7::t_e72ed001e11ab3 190
+  s_8ae25420841aa7::t_a3fade3957d346 103-105,289,293,299,301-302,305-308,313,318
+  s_8ae25420841aa7::t_6f086d1dfcd999 279
+  s_8ae25420841aa7::t_99eb309907145b 95,101-102,106-135,148
+  s_8ae25420841aa7::t_1bebc8ff8a7ee7 244,268-276
+  s_8ae25420841aa7::t_d570950aea0cfe 281-284,344-354
+  s_8ae25420841aa7::t_3971e82922b2c6 304,309-312,315-317,319,329,332,334-343
+apps/server/src/shell/db/migrations/registry.ts
+  s_8ae25420841aa7::t_8d69845e4e7277 47,104
+apps/server/src/shell/ingestion/forwarded-email-ingestion.ts
+  s_8ae25420841aa7::t_9850b04ccdb639 156
+package.json
+  s_8ae25420841aa7::t_f28ac38e638b96 32-33
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.2",
+  "base_commit_sha": "aa85ba04a598643cb311012c151ca934af526b8e",
+  "prompts": {},
+  "sessions": {
+    "s_8ae25420841aa7": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a07e6c-b6cb-7653-9f71-249a41003a31",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": null
+    }
+  }
+}

@@ -1,0 +1,21 @@
+apps/server/src/shell/channels/whatsapp/disclosure-observation.test.ts
+  s_3f56268c3f81f2::t_de7e51ea99f3ad 62-94
+apps/server/src/shell/channels/whatsapp/disclosure-observation.ts
+  s_3f56268c3f81f2::t_5d33ca8fbdbeb1 72,102,106
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.2",
+  "base_commit_sha": "d71d6d550e1119454c0cd1ed3caf5b2ccba83922",
+  "prompts": {},
+  "sessions": {
+    "s_3f56268c3f81f2": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a06fd8-1f32-73ea-ac07-fa3aa66d9199",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

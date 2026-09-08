@@ -1,0 +1,17 @@
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.2",
+  "base_commit_sha": "c830a141389722e3eefe14dcc2806c878abc91ee",
+  "prompts": {},
+  "sessions": {
+    "s_05b0ebf6eb4c9b": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a06efb-de89-72c4-a725-1ff3b26ab002",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

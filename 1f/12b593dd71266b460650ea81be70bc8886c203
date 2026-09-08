@@ -1,0 +1,40 @@
+docs/adr/0013-atomic-consent-disclosure-reconciliation.md
+  s_05b0ebf6eb4c9b::t_2950724633dbc5 36-37
+  s_05b0ebf6eb4c9b::t_51670d9b106e3b 24-25
+apps/server/src/shell/channels/whatsapp/disclosure-workflow.ts
+  s_05b0ebf6eb4c9b::t_1595964b981d6a 6,23
+apps/server/src/shell/channels/whatsapp/disclosure-workflow.integration.test.ts
+  s_05b0ebf6eb4c9b::t_eb24c75a498e77 80
+  s_05b0ebf6eb4c9b::t_257a309d35d73a 338
+  s_05b0ebf6eb4c9b::t_867fd8b11e8c08 77-79,339-390
+  s_05b0ebf6eb4c9b::t_26d1171c9ad1b4 391-393
+apps/server/src/shell/channels/whatsapp/whatsapp-channel.test.ts
+  s_05b0ebf6eb4c9b::t_867fd8b11e8c08 2279-2285,2287-2288,2293,2297-2303
+  s_05b0ebf6eb4c9b::t_991dee767f5da4 2289-2292,2304
+apps/server/src/shell/channels/whatsapp/disclosure-delivery.ts
+  s_05b0ebf6eb4c9b::t_e2ba47bf2045a1 384-387,412-415
+  s_05b0ebf6eb4c9b::t_1c08fd3cee8acd 127-130,132-133,179,376-383,388,395-411,416-417,421-422,424-429
+  s_05b0ebf6eb4c9b::t_2cda07ddf81605 2,423,430-432,450
+  s_05b0ebf6eb4c9b::t_09ca80a3e04c0b 44-49,124-126,131,134-136,178
+  s_05b0ebf6eb4c9b::t_3323d863b0ef80 177,304,337-349,357
+  s_05b0ebf6eb4c9b::t_c783a1bf61bf2e 321-322
+  s_05b0ebf6eb4c9b::t_528f8b2af41472 451
+apps/server/src/shell/channels/whatsapp/disclosure-retention.test.ts
+  s_05b0ebf6eb4c9b::t_1c08fd3cee8acd 41-43
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.2",
+  "base_commit_sha": "1f12b593dd71266b460650ea81be70bc8886c203",
+  "prompts": {},
+  "sessions": {
+    "s_05b0ebf6eb4c9b": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a06efb-de89-72c4-a725-1ff3b26ab002",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

@@ -1,0 +1,27 @@
+apps/server/src/shell/channels/whatsapp/disclosure-store.ts
+  s_3f56268c3f81f2::t_7b268d2ad06621 249-254
+  s_3f56268c3f81f2::t_758afe4143cf46 255-260,273-275,282-283
+apps/server/src/shell/db/migrations/0051-effect-whatsapp-disclosure.ts
+  s_3f56268c3f81f2::t_1f0688b122a75b 111,116-119,127,139-141
+apps/server/src/shell/channels/whatsapp/disclosure-races.test.ts
+  s_3f56268c3f81f2::t_6fe8cb4c5db2d9 304-372
+  s_3f56268c3f81f2::t_b603f607d597e1 181-182
+  s_3f56268c3f81f2::t_410c066f4b243d 235
+  s_3f56268c3f81f2::t_b3e45dcba393c6 15-22,40-43,219-234,236-250,296-303,373-375
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.2",
+  "base_commit_sha": "402e6447b1ec659ece2361737eb488d844ba0361",
+  "prompts": {},
+  "sessions": {
+    "s_3f56268c3f81f2": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a06fd8-1f32-73ea-ac07-fa3aa66d9199",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

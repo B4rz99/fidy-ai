@@ -1,0 +1,36 @@
+apps/server/src/shell/durable-execution-retention.ts
+  s_3f56268c3f81f2::t_9a2dc622c03ca1 3,70-96
+  s_3f56268c3f81f2::t_7c4219ff44f5e9 97-98,111-136
+apps/server/src/shell/db/migrations/0051-effect-whatsapp-disclosure.ts
+  s_3f56268c3f81f2::t_6b9512bcbd2c90 54-58,294-308
+  s_3f56268c3f81f2::t_5a02278085ccc4 23
+  s_3f56268c3f81f2::t_a816c996684930 309
+apps/server/src/shell/channels/whatsapp/disclosure-retention.ts
+  s_3f56268c3f81f2::t_d9135f5d8e24d8 1-2,10,14-25,46-66,68-76,78,80-88,90,92-93,95-101
+  s_3f56268c3f81f2::t_b99d3229b2e627 29-31,36-37,43-45,77,79,91,94
+  s_3f56268c3f81f2::t_24659bbb070a65 26-28,32-35,38-42
+  s_3f56268c3f81f2::t_3b5999bf21d446 3-9,11-13,67,89
+apps/server/src/shell/channels/whatsapp/disclosure-retention.test.ts
+  s_3f56268c3f81f2::t_24659bbb070a65 3,161-193
+  s_3f56268c3f81f2::t_885affd86d708e 52,68
+  s_3f56268c3f81f2::t_d61495cde6c039 1-2,4-19,21-32,34-45,47-51,53-67,69-133,135-144,146-158,160,194-196
+  s_3f56268c3f81f2::t_a318fe3751d6f4 20,33,46,134,145,159
+apps/server/src/shell/channels/whatsapp/disclosure-store.ts
+  s_3f56268c3f81f2::t_c62b9ba7bbcfd0 327-342
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.2",
+  "base_commit_sha": "091e50c09c6996b6b7023c34f9b44600809d0d99",
+  "prompts": {},
+  "sessions": {
+    "s_3f56268c3f81f2": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a06fd8-1f32-73ea-ac07-fa3aa66d9199",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

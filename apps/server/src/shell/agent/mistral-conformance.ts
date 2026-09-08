@@ -29,7 +29,7 @@ type ResponseFormat = Readonly<{
   }>;
 }>;
 
-const JsonSchemaFormat = (name: string, schema: JsonSchema.JsonSchema): ResponseFormat => ({
+const jsonSchemaFormat = (name: string, schema: JsonSchema.JsonSchema): ResponseFormat => ({
   type: "json_schema",
   json_schema: { name, strict: true, schema },
 });
@@ -82,7 +82,7 @@ const cases: ReadonlyArray<ConformanceCase> = [
     id: "small-schema",
     messages: differentialMessages,
     maxTokens: 64,
-    responseFormat: Option.some(JsonSchemaFormat("book", bookJsonSchema)),
+    responseFormat: Option.some(jsonSchemaFormat("book", bookJsonSchema)),
     validateContent: Option.some((content) =>
       Schema.decodeEffect(BookJson)(content, { onExcessProperty: "error", errors: "all" })
     ),
@@ -92,7 +92,7 @@ const cases: ReadonlyArray<ConformanceCase> = [
     messages: differentialMessages,
     maxTokens: 64,
     responseFormat: Option.some(
-      JsonSchemaFormat("large_differential", largeDifferentialJsonSchema)
+      jsonSchemaFormat("large_differential", largeDifferentialJsonSchema)
     ),
     validateContent: Option.some((content) =>
       Schema.decodeEffect(BookJson)(content, { onExcessProperty: "error", errors: "all" })
@@ -102,7 +102,7 @@ const cases: ReadonlyArray<ConformanceCase> = [
     id: "production-compaction",
     messages: makeSyntheticConversationCompactionContext().messages,
     maxTokens: hostedOutputTokenReserve,
-    responseFormat: Option.some(JsonSchemaFormat("compacted_conversation", productionJsonSchema)),
+    responseFormat: Option.some(jsonSchemaFormat("compacted_conversation", productionJsonSchema)),
     validateContent: Option.some((content) =>
       Schema.decodeEffect(CompactedConversationJson)(content, {
         onExcessProperty: "error",

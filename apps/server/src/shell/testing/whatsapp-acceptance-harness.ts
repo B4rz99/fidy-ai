@@ -24,6 +24,7 @@ import { computePATExpiration } from "~/core/tokens/rules";
 import { hashTokenBearer } from "~/shell/_shared/token-digest";
 import { categoryIds } from "~/core/categories/taxonomy";
 import { AgentService } from "~/shell/agent/agent-service";
+import { WhatsAppReplyDeliveryLive } from "~/shell/agent/whatsapp-delivery";
 import { HostedInferenceFromLanguageModel } from "./hosted-inference-fixtures";
 import {
   KapsoClient,
@@ -524,7 +525,9 @@ const DeterministicHostedInference = HostedInferenceFromLanguageModel.pipe(
 const AcceptanceApplication = Layer.mergeAll(
   HttpLive,
   DeterministicLanguageModel,
-  WhatsAppWorkerLive.pipe(Layer.provide(AgentService.layer))
+  WhatsAppWorkerLive.pipe(
+    Layer.provide(AgentService.layer.pipe(Layer.provide(WhatsAppReplyDeliveryLive)))
+  )
 ).pipe(
   Layer.provide(DeterministicHostedInference),
   Layer.provide(SupportRecoveryTestAccess),

@@ -10,6 +10,7 @@ import { externalEndpoints } from "~/shell/_shared/external-endpoints";
 import { EvidenceRetentionLive } from "./evidence-retention";
 import { OnboardingRetentionLive } from "~/shell/onboarding/retention";
 import { AgentService } from "~/shell/agent/agent-service";
+import { WhatsAppReplyDeliveryLive } from "~/shell/agent/whatsapp-delivery";
 import { OpenAiHostedInferenceLive, OpenAiLanguageModelLive } from "~/shell/agent/openai";
 import {
   BrowserLoginEvidenceRetentionLive,
@@ -269,7 +270,7 @@ export const HttpLive = HttpRouter.serve(
 );
 
 const HostedWhatsAppWorkerLive = WhatsAppWorkerLive.pipe(
-  Layer.provide(AgentService.layer),
+  Layer.provide(AgentService.layer.pipe(Layer.provide(WhatsAppReplyDeliveryLive))),
   Layer.provide(KapsoClient.layer)
 );
 

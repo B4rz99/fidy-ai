@@ -20,6 +20,7 @@ import {
   Option,
   Random,
   Ref,
+  Schedule,
   Schema,
   Stream,
   Terminal,
@@ -80,11 +81,31 @@ import {
   ModelUnavailable,
 } from "./agent-service";
 import { makeTurnConfirmation } from "./tool-confirmation";
+import { ImmediateDelivery } from "./immediate-delivery";
+import type { AgentReply } from "./message";
 import { agentOperationBindings } from "./toolkit";
 import { createManualPAT } from "~/shell/tokens/mutations";
 
+const successfulDelivery = (): Effect.Effect<void> => Effect.void;
+
+class DeliveryControl extends Context.Service<
+  DeliveryControl,
+  Ref.Ref<(reply: AgentReply) => Effect.Effect<void, "delivery_failed">>
+>()("@fidy/server/shell/agent/agent-service.test/DeliveryControl") {
+  static readonly layer = Layer.effect(
+    this,
+    Ref.make<(reply: AgentReply) => Effect.Effect<void, "delivery_failed">>(successfulDelivery)
+  );
+}
+const ImmediateDeliveryHarness = Layer.effect(
+  ImmediateDelivery,
+  Effect.map(DeliveryControl, (current) => ({
+    deliver: (reply: AgentReply): Effect.Effect<void, "delivery_failed"> =>
+      Ref.get(current).pipe(Effect.flatMap((deliver) => deliver(reply))),
+  }))
+).pipe(Layer.provideMerge(DeliveryControl.layer));
 // An HTTP caller returns the reply in its response, so it delivers nothing incrementally.
-const noDelivery = (): Effect.Effect<void> => Effect.void;
+const noVerifiedWhatsAppAuthority = "no-verified-whatsapp-authority" as const;
 
 /** Reads the exact confirmation command out of a challenge, failing if the reply carries none. */
 const confirmationCommand = (replyText: string): string => {
@@ -1342,6 +1363,7 @@ const ScriptedHostedInference = HostedInferenceFromLanguageModel.pipe(
 );
 
 const AgentHarness = AgentService.layer.pipe(
+  Layer.provideMerge(ImmediateDeliveryHarness),
   Layer.provideMerge(ScriptedHostedInference),
   Layer.provideMerge(ApiHarness),
   Layer.provideMerge(TelemetryEnvelopeRecording)
@@ -1462,6 +1484,7 @@ const CompactingAgentHarness = AgentService.layer.pipe(
 );
 
 const AgentTelemetryHarness = AgentService.layer.pipe(
+  Layer.provideMerge(ImmediateDeliveryHarness),
   Layer.provideMerge(ScriptedHostedInference),
   Layer.provideMerge(ApiTelemetryHarness)
 );
@@ -1514,18 +1537,18 @@ layer(CompactingAgentHarness, { excludeTestServices: true, timeout: "30 seconds"
           yield* service.handleMessage(
             compactionUserId,
             InboundMessage.make({ text: TranscriptText.make("MARCADOR_COMPACTADO") }),
-            noDelivery
+            noVerifiedWhatsAppAuthority
           );
           yield* service.handleMessage(
             compactionUserId,
             InboundMessage.make({ text: TranscriptText.make("ACTIVA_COMPACTACION") }),
-            noDelivery
+            noVerifiedWhatsAppAuthority
           );
           for (const index of Arr.range(1, 41)) {
             yield* service.handleMessage(
               compactionUserId,
               InboundMessage.make({ text: TranscriptText.make(`HISTORIAL_PROFUNDO_${index}`) }),
-              noDelivery
+              noVerifiedWhatsAppAuthority
             );
           }
           const compacted = yield* sql`
@@ -1540,7 +1563,7 @@ layer(CompactingAgentHarness, { excludeTestServices: true, timeout: "30 seconds"
           const reply = yield* service.handleMessage(
             compactionUserId,
             InboundMessage.make({ text: TranscriptText.make("RECUERDA_COMPACTADO") }),
-            noDelivery
+            noVerifiedWhatsAppAuthority
           );
 
           expect(compacted).toEqual([{ text: "MARCADOR_COMPACTADO" }]);
@@ -1564,7 +1587,7 @@ layer(AgentTelemetryHarness, { excludeTestServices: true, timeout: "30 seconds" 
           service.handleMessage(
             defaultUserId,
             InboundMessage.make({ text: TranscriptText.make("Lista las categorías") }),
-            noDelivery
+            noVerifiedWhatsAppAuthority
           )
         );
         const transcript = yield* selectTranscriptEntries(defaultUserId);
@@ -1670,7 +1693,7 @@ layer(AgentTelemetryHarness, { excludeTestServices: true, timeout: "30 seconds" 
               service.handleMessage(
                 defaultUserId,
                 InboundMessage.make({ text: TranscriptText.make(scenario.text) }),
-                noDelivery
+                noVerifiedWhatsAppAuthority
               )
             );
             const exit = yield* Effect.exit(
@@ -1716,7 +1739,7 @@ layer(AgentTelemetryHarness, { excludeTestServices: true, timeout: "30 seconds" 
             service.handleMessage(
               defaultUserId,
               InboundMessage.make({ text: TranscriptText.make("RETRY_NON_RETRYABLE") }),
-              noDelivery
+              noVerifiedWhatsAppAuthority
             )
           )
           .pipe(Effect.exit);
@@ -1749,7 +1772,7 @@ layer(AgentTelemetryHarness, { excludeTestServices: true, timeout: "30 seconds" 
           service.handleMessage(
             defaultUserId,
             InboundMessage.make({ text: TranscriptText.make("SALIDA_INVALIDA_OTRA_CAUSA") }),
-            noDelivery
+            noVerifiedWhatsAppAuthority
           )
         );
 
@@ -1785,7 +1808,7 @@ layer(AgentTelemetryHarness, { excludeTestServices: true, timeout: "30 seconds" 
           service.handleMessage(
             defaultUserId,
             InboundMessage.make({ text: TranscriptText.make("SALIDA_INVALIDA_RECUPERABLE") }),
-            noDelivery
+            noVerifiedWhatsAppAuthority
           )
         );
         const envelopes = yield* recorder.serializedEnvelopes;
@@ -1809,7 +1832,7 @@ layer(AgentTelemetryHarness, { excludeTestServices: true, timeout: "30 seconds" 
           service.handleMessage(
             defaultUserId,
             InboundMessage.make({ text: TranscriptText.make("SALIDA_INVALIDA_PERSISTENTE") }),
-            noDelivery
+            noVerifiedWhatsAppAuthority
           )
         );
         const envelopes = yield* recorder.serializedEnvelopes;
@@ -1841,7 +1864,7 @@ layer(AgentTelemetryHarness, { excludeTestServices: true, timeout: "30 seconds" 
             service.handleMessage(
               defaultUserId,
               InboundMessage.make({ text: TranscriptText.make("RESPUESTA_TRUNCADA") }),
-              noDelivery
+              noVerifiedWhatsAppAuthority
             )
           )
           .pipe(Effect.exit);
@@ -1868,7 +1891,7 @@ layer(AgentTelemetryHarness, { excludeTestServices: true, timeout: "30 seconds" 
           service.handleMessage(
             defaultUserId,
             InboundMessage.make({ text: TranscriptText.make("Busca la transacción inexistente") }),
-            noDelivery
+            noVerifiedWhatsAppAuthority
           )
         );
         const canonicalEnvelopes = yield* recorder.serializedEnvelopes;
@@ -1884,7 +1907,7 @@ layer(AgentTelemetryHarness, { excludeTestServices: true, timeout: "30 seconds" 
             service.handleMessage(
               unknownUser,
               InboundMessage.make({ text: TranscriptText.make("identidad ausente") }),
-              noDelivery
+              noVerifiedWhatsAppAuthority
             )
           )
           .pipe(Effect.exit);
@@ -1915,7 +1938,7 @@ layer(AgentTelemetryHarness, { excludeTestServices: true, timeout: "30 seconds" 
             service.handleMessage(
               defaultUserId,
               InboundMessage.make({ text: TranscriptText.make("MODELO_DEFECTUOSO") }),
-              noDelivery
+              noVerifiedWhatsAppAuthority
             )
           )
           .pipe(Effect.exit);
@@ -1961,7 +1984,7 @@ layer(AgentTelemetryHarness, { excludeTestServices: true, timeout: "30 seconds" 
             service.handleMessage(
               defaultUserId,
               InboundMessage.make({ text: TranscriptText.make("almuerzo 25 mil") }),
-              noDelivery
+              noVerifiedWhatsAppAuthority
             )
           )
           .pipe(Effect.exit, Effect.ensuring(removeFailure));
@@ -1980,31 +2003,51 @@ layer(AgentTelemetryHarness, { excludeTestServices: true, timeout: "30 seconds" 
       })
     );
 
-    it.effect("does not report normal turn interruption as a defect", () =>
+    it.effect("does not report a disconnected caller as a hosted failure", () =>
       Effect.gen(function* () {
         const { service, telemetry, recorder } = yield* prepareTelemetryTest;
-
+        const delivery = yield* DeliveryControl;
+        const started = yield* Deferred.make<void>();
+        const release = yield* Deferred.make<void>();
+        yield* Ref.set(delivery, () =>
+          Deferred.succeed(started, undefined).pipe(Effect.andThen(Deferred.await(release)))
+        );
+        yield* Effect.addFinalizer(() =>
+          Deferred.succeed(release, undefined).pipe(
+            Effect.andThen(Ref.set(delivery, successfulDelivery))
+          )
+        );
         const fiber = yield* telemetry
           .span(
             activeCallerDescriptor,
             service.handleMessage(
               defaultUserId,
-              InboundMessage.make({ text: TranscriptText.make("MODELO_BLOQUEADO") }),
-              noDelivery
+              InboundMessage.make({ text: TranscriptText.make("Lista las categorías") }),
+              noVerifiedWhatsAppAuthority
             )
           )
           .pipe(
             Effect.provideService(CurrentAgentLimits, agentLimits({ maxModelRoundMillis: 10_000 })),
             Effect.forkChild
           );
-        yield* awaitModelAttempts("MODELO_BLOQUEADO", 1);
+        yield* Deferred.await(started);
         yield* Fiber.interrupt(fiber);
-        const envelopes = yield* recorder.serializedEnvelopes;
+        yield* Deferred.succeed(release, undefined);
+        const envelopes = yield* recorder.serializedEnvelopes.pipe(
+          Effect.repeat({
+            until: (items) =>
+              transactionEnvelopePayloads(items).some(
+                ({ contexts }) => contexts.trace.op === "agent.turn"
+              ),
+            schedule: Schedule.spaced("10 millis"),
+          }),
+          Effect.timeout("5 seconds")
+        );
         const turn = transactionEnvelopePayloads(envelopes).find(
           ({ contexts }) => contexts.trace.op === "agent.turn"
         );
 
-        expect(turn?.tags).toMatchObject({ outcome: "interrupted" });
+        expect(turn?.tags).toMatchObject({ outcome: "succeeded" });
         expect(errorEnvelopePayloads(envelopes)).toEqual([]);
       })
     );
@@ -2034,7 +2077,7 @@ layer(AgentTelemetryHarness, { excludeTestServices: true, timeout: "30 seconds" 
                 service.handleMessage(
                   defaultUserId,
                   InboundMessage.make({ text: TranscriptText.make("RETRY_AFTER_SUCCESS") }),
-                  noDelivery
+                  noVerifiedWhatsAppAuthority
                 )
               )
               .pipe(Effect.exit),
@@ -2044,7 +2087,7 @@ layer(AgentTelemetryHarness, { excludeTestServices: true, timeout: "30 seconds" 
                 service.handleMessage(
                   userB,
                   InboundMessage.make({ text: TranscriptText.make("RESPUESTA_TRUNCADA") }),
-                  noDelivery
+                  noVerifiedWhatsAppAuthority
                 )
               )
               .pipe(Effect.exit),
@@ -2091,7 +2134,7 @@ layer(CapacityFailingAgentHarness, { excludeTestServices: true, timeout: "30 sec
             .handleMessage(
               defaultUserId,
               InboundMessage.make({ text: TranscriptText.make("solicitud demasiado grande") }),
-              noDelivery
+              noVerifiedWhatsAppAuthority
             )
             .pipe(Effect.flip);
 
@@ -2114,7 +2157,7 @@ layer(StaleContinuityAgentHarness, { excludeTestServices: true, timeout: "30 sec
         });
 
         const first = yield* service
-          .handleMessage(defaultUserId, message, noDelivery)
+          .handleMessage(defaultUserId, message, noVerifiedWhatsAppAuthority)
           .pipe(Effect.flip);
         expect(first).toBeInstanceOf(ModelUnavailable);
         expect(yield* selectTranscriptEntries(defaultUserId)).toEqual([]);
@@ -2124,7 +2167,7 @@ layer(StaleContinuityAgentHarness, { excludeTestServices: true, timeout: "30 sec
         // revision exactly once, so the delta is the retry bound, and a leaked advisory lock or
         // reserved connection would block this call instead of letting it fail closed again.
         const second = yield* service
-          .handleMessage(defaultUserId, message, noDelivery)
+          .handleMessage(defaultUserId, message, noVerifiedWhatsAppAuthority)
           .pipe(Effect.flip);
         expect(second).toBeInstanceOf(ModelUnavailable);
         expect((yield* continuityRevision) - afterFirst).toBe(3);
@@ -2167,15 +2210,14 @@ layer(DefectiveAgentHarness, { excludeTestServices: true, timeout: "30 seconds" 
           service.handleMessage(
             defaultUserId,
             InboundMessage.make({ text: TranscriptText.make("Lista las categorías") }),
-            noDelivery
+            noVerifiedWhatsAppAuthority
           )
         );
         const terminal = yield* latestTerminalTurn(defaultUserId);
 
-        // The defect must stay a defect: a Turn that recorded Failed still owes the caller the
-        // original Cause, not a failure synthesised from it.
+        // The runner records the failure locally; only a safe closed error crosses Cluster.
         assert.ok(Exit.isFailure(exit));
-        expect(Cause.hasDies(exit.cause)).toBe(true);
+        expect(Cause.squash(exit.cause)).toBeInstanceOf(ModelUnavailable);
         expect(terminal[0]).toEqual({
           state: "Failed",
           failureReason: Option.some("HostedInferenceFailed"),
@@ -2207,14 +2249,12 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
         InboundMessage.make({
           text: TranscriptText.make("EMPAREJA_NAVEGADOR BCDF-GHJK"),
         }),
-        noDelivery,
         "verified-whatsapp"
       );
       const command = confirmationCommand(challenge.text);
       const approved = yield* service.handleMessage(
         defaultUserId,
         InboundMessage.make({ text: TranscriptText.make(command) }),
-        noDelivery,
         "verified-whatsapp"
       );
 
@@ -2274,7 +2314,6 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       const listed = yield* service.handleMessage(
         defaultUserId,
         InboundMessage.make({ text: TranscriptText.make("Lista PATs administrables") }),
-        noDelivery,
         "verified-whatsapp"
       );
       expect(listed.text).toBe("Listé los PAT activos.");
@@ -2290,7 +2329,6 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
         InboundMessage.make({
           text: TranscriptText.make(`Revoca PAT administrable ${issued.data.pat.shortId}`),
         }),
-        noDelivery,
         "verified-whatsapp"
       );
       const command = confirmationCommand(challenge.text);
@@ -2313,13 +2351,11 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
             },
           },
         }),
-        noDelivery,
         "verified-whatsapp"
       );
       const replayed = yield* service.handleMessage(
         defaultUserId,
         InboundMessage.make({ text: TranscriptText.make(command) }),
-        noDelivery,
         "verified-whatsapp"
       );
       const records = yield* sql`
@@ -2344,17 +2380,42 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
     })
   );
 
+  it.effect("finishes accepted work when its caller stops waiting during delivery", () =>
+    Effect.gen(function* () {
+      yield* clearTranscript;
+      const service = yield* AgentService;
+      const started = yield* Deferred.make<void>();
+      const release = yield* Deferred.make<void>();
+      const delivery = yield* DeliveryControl;
+      yield* Ref.set(delivery, () =>
+        Deferred.succeed(started, undefined).pipe(Effect.andThen(Deferred.await(release)))
+      );
+      yield* Effect.addFinalizer(() => Ref.set(delivery, successfulDelivery));
+      const waiting = yield* service
+        .handleMessage(
+          defaultUserId,
+          InboundMessage.make({ text: TranscriptText.make("Lista las categorías") })
+        )
+        .pipe(Effect.forkChild);
+      yield* Deferred.await(started);
+      yield* Fiber.interrupt(waiting);
+      yield* Deferred.succeed(release, undefined);
+      yield* Effect.sleep("100 millis");
+      expect((yield* latestTerminalTurn(defaultUserId))[0]?.state).toBe("Completed");
+    })
+  );
+
   it.effect("marks a hosted Turn failed when delivery rejects the generated reply", () =>
     Effect.gen(function* () {
       yield* clearTranscript;
       const service = yield* AgentService;
-      const deliveryFailure = { _tag: "TestDeliveryFailure" } as const;
-
+      const delivery = yield* DeliveryControl;
+      yield* Ref.set(delivery, () => Effect.fail("delivery_failed"));
+      yield* Effect.addFinalizer(() => Ref.set(delivery, successfulDelivery));
       const exit = yield* Effect.exit(
         service.handleMessage(
           defaultUserId,
-          InboundMessage.make({ text: TranscriptText.make("Lista las categorías") }),
-          () => Effect.fail(deliveryFailure)
+          InboundMessage.make({ text: TranscriptText.make("Lista las categorías") })
         )
       );
       const terminal = yield* latestTerminalTurn(defaultUserId);
@@ -2375,12 +2436,13 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
     Effect.gen(function* () {
       yield* clearTranscript;
       const service = yield* AgentService;
-
+      const delivery = yield* DeliveryControl;
+      yield* Ref.set(delivery, () => Effect.die(new Error("delivery channel defect")));
+      yield* Effect.addFinalizer(() => Ref.set(delivery, successfulDelivery));
       const exit = yield* Effect.exit(
         service.handleMessage(
           defaultUserId,
-          InboundMessage.make({ text: TranscriptText.make("Lista las categorías") }),
-          () => Effect.die(new Error("delivery channel defect"))
+          InboundMessage.make({ text: TranscriptText.make("Lista las categorías") })
         )
       );
       const terminal = yield* latestTerminalTurn(defaultUserId);
@@ -2395,38 +2457,49 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
     })
   );
 
-  it.effect("leaves interrupted delivery Pending for the next serialized preparation", () =>
-    Effect.gen(function* () {
-      yield* clearTranscript;
-      const service = yield* AgentService;
-      const deliveryStarted = yield* Deferred.make<void>();
-      const interrupted = yield* service
-        .handleMessage(
-          defaultUserId,
-          InboundMessage.make({ text: TranscriptText.make("Lista las categorías") }),
-          () => Deferred.succeed(deliveryStarted, undefined).pipe(Effect.andThen(Effect.never))
-        )
-        .pipe(Effect.forkChild);
+  it.effect(
+    "keeps accepted delivery Pending when its caller disconnects, then completes normally",
+    () =>
+      Effect.gen(function* () {
+        yield* clearTranscript;
+        const service = yield* AgentService;
+        const deliveryStarted = yield* Deferred.make<void>();
+        const release = yield* Deferred.make<void>();
+        const delivery = yield* DeliveryControl;
+        yield* Ref.set(delivery, () =>
+          Deferred.succeed(deliveryStarted, undefined).pipe(Effect.andThen(Deferred.await(release)))
+        );
+        yield* Effect.addFinalizer(() =>
+          Deferred.succeed(release, undefined).pipe(
+            Effect.andThen(Ref.set(delivery, successfulDelivery))
+          )
+        );
+        const interrupted = yield* service
+          .handleMessage(
+            defaultUserId,
+            InboundMessage.make({ text: TranscriptText.make("Lista las categorías") })
+          )
+          .pipe(Effect.forkChild);
 
-      yield* Deferred.await(deliveryStarted);
-      yield* Fiber.interrupt(interrupted);
-      const sql = yield* MigrationSqlClient;
-      const pending = yield* sql`SELECT state FROM conversation_turns
+        yield* Deferred.await(deliveryStarted);
+        yield* Fiber.interrupt(interrupted);
+        const sql = yield* MigrationSqlClient;
+        const pending = yield* sql`SELECT state FROM conversation_turns
         WHERE user_id = ${defaultUserId}
         ORDER BY started_at DESC
         LIMIT 1`;
-      expect(pending).toEqual([{ state: "Pending" }]);
-
-      yield* service.handleMessage(
-        defaultUserId,
-        InboundMessage.make({ text: TranscriptText.make("Lista las categorías de nuevo") }),
-        noDelivery
-      );
-      const recovered = yield* sql`SELECT state FROM conversation_turns
+        expect(pending).toEqual([{ state: "Pending" }]);
+        yield* Deferred.succeed(release, undefined);
+        yield* service.handleMessage(
+          defaultUserId,
+          InboundMessage.make({ text: TranscriptText.make("Lista las categorías de nuevo") }),
+          noVerifiedWhatsAppAuthority
+        );
+        const recovered = yield* sql`SELECT state FROM conversation_turns
         WHERE user_id = ${defaultUserId}
         ORDER BY started_at`;
-      expect(recovered).toEqual([{ state: "Interrupted" }, { state: "Completed" }]);
-    })
+        expect(recovered).toEqual([{ state: "Completed" }, { state: "Completed" }]);
+      })
   );
 
   it.effect("confirms one exact atomic batch and rejects altered or replayed confirmation", () =>
@@ -2439,7 +2512,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       const challenge = yield* service.handleMessage(
         defaultUserId,
         InboundMessage.make({ text: TranscriptText.make("LOTE_ATOMICO_EXITO") }),
-        noDelivery
+        noVerifiedWhatsAppAuthority
       );
       expect(batchConfirmationCommand(challenge.text)).toMatch(/^CONFIRMAR LOTE/u);
       const transactionCountAfterChallenge =
@@ -2452,7 +2525,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       const altered = yield* service.handleMessage(
         defaultUserId,
         InboundMessage.make({ text: TranscriptText.make(`CONFIRMAR LOTE ${"0".repeat(64)}`) }),
-        noDelivery
+        noVerifiedWhatsAppAuthority
       );
       const transactionCountAfterAlteredConfirmation =
         yield* sql`SELECT count(*)::int AS count FROM transactions WHERE deleted_at IS NULL`;
@@ -2464,7 +2537,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       const completed = yield* service.handleMessage(
         defaultUserId,
         InboundMessage.make({ text: TranscriptText.make(correctedCommand) }),
-        noDelivery
+        noVerifiedWhatsAppAuthority
       );
       const createdTransactions =
         yield* sql`SELECT counterparty FROM transactions WHERE deleted_at IS NULL ORDER BY occurred_at`;
@@ -2492,12 +2565,12 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       const replayed = yield* service.handleMessage(
         defaultUserId,
         InboundMessage.make({ text: TranscriptText.make(correctedCommand) }),
-        noDelivery
+        noVerifiedWhatsAppAuthority
       );
       const replayedAgain = yield* service.handleMessage(
         defaultUserId,
         InboundMessage.make({ text: TranscriptText.make(correctedCommand) }),
-        noDelivery
+        noVerifiedWhatsAppAuthority
       );
       const afterReplay =
         yield* sql`SELECT count(*)::int AS count FROM transactions WHERE deleted_at IS NULL`;
@@ -2519,14 +2592,14 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       const challenge = yield* service.handleMessage(
         defaultUserId,
         InboundMessage.make({ text: TranscriptText.make("LOTE_ATOMICO_ENTRADA_ALTERADA") }),
-        noDelivery
+        noVerifiedWhatsAppAuthority
       );
       const rejected = yield* service.handleMessage(
         defaultUserId,
         InboundMessage.make({
           text: TranscriptText.make(batchConfirmationCommand(challenge.text)),
         }),
-        noDelivery
+        noVerifiedWhatsAppAuthority
       );
       const rows =
         yield* sql`SELECT count(*)::int AS count FROM transactions WHERE deleted_at IS NULL`;
@@ -2559,19 +2632,19 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       const userAChallenge = yield* service.handleMessage(
         defaultUserId,
         InboundMessage.make({ text: TranscriptText.make("LOTE_ATOMICO_CROSS_USER") }),
-        noDelivery
+        noVerifiedWhatsAppAuthority
       );
       const userBChallenge = yield* service.handleMessage(
         userB,
         InboundMessage.make({ text: TranscriptText.make("LOTE_ATOMICO_CROSS_USER") }),
-        noDelivery
+        noVerifiedWhatsAppAuthority
       );
       const rejected = yield* service.handleMessage(
         userB,
         InboundMessage.make({
           text: TranscriptText.make(batchConfirmationCommand(userAChallenge.text)),
         }),
-        noDelivery
+        noVerifiedWhatsAppAuthority
       );
       const rows = yield* sql`SELECT count(*)::int AS count FROM transactions`;
       const consumptions = yield* sql`
@@ -2599,7 +2672,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       const challenge = yield* service.handleMessage(
         defaultUserId,
         InboundMessage.make({ text: TranscriptText.make("LOTE_ATOMICO_EXITO") }),
-        noDelivery
+        noVerifiedWhatsAppAuthority
       );
       const command = batchConfirmationCommand(challenge.text);
       const replies = yield* Effect.all(
@@ -2607,12 +2680,12 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
           service.handleMessage(
             defaultUserId,
             InboundMessage.make({ text: TranscriptText.make(command) }),
-            noDelivery
+            noVerifiedWhatsAppAuthority
           ),
           service.handleMessage(
             defaultUserId,
             InboundMessage.make({ text: TranscriptText.make(command) }),
-            noDelivery
+            noVerifiedWhatsAppAuthority
           ),
         ],
         { concurrency: "unbounded" }
@@ -2642,7 +2715,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
         .handleMessage(
           defaultUserId,
           InboundMessage.make({ text: TranscriptText.make("LOTE_ATOMICO_EXPIRA") }),
-          noDelivery
+          noVerifiedWhatsAppAuthority
         )
         .pipe(Effect.provideService(Clock.Clock, manualClock.clock));
       const command = batchConfirmationCommand(challenge.text);
@@ -2651,7 +2724,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
         .handleMessage(
           defaultUserId,
           InboundMessage.make({ text: TranscriptText.make(command) }),
-          noDelivery
+          noVerifiedWhatsAppAuthority
         )
         .pipe(Effect.provideService(Clock.Clock, manualClock.clock));
       const rows =
@@ -2672,12 +2745,12 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       yield* service.handleMessage(
         defaultUserId,
         InboundMessage.make({ text: TranscriptText.make("almuerzo 25 mil") }),
-        noDelivery
+        noVerifiedWhatsAppAuthority
       );
       yield* service.handleMessage(
         defaultUserId,
         InboundMessage.make({ text: TranscriptText.make("registra papelería 25 usd") }),
-        noDelivery
+        noVerifiedWhatsAppAuthority
       );
       const seeded = yield* client.transactions.listTransactions({ query: {} });
       const [first, second] = seeded.data;
@@ -2690,7 +2763,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
         InboundMessage.make({
           text: TranscriptText.make(`LOTE_MUTACIONES_INDEPENDIENTES ${first.id} ${second.id}`),
         }),
-        noDelivery
+        noVerifiedWhatsAppAuthority
       );
       const remaining = yield* client.transactions.listTransactions({ query: {} });
       const prompts = yield* readModelPrompts;
@@ -2712,7 +2785,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       const reply = yield* service.handleMessage(
         defaultUserId,
         InboundMessage.make({ text: TranscriptText.make("LOTE_RESPUESTA_MALFORMADA") }),
-        noDelivery
+        noVerifiedWhatsAppAuthority
       );
       const rows =
         yield* sql`SELECT count(*)::int AS count FROM transactions WHERE deleted_at IS NULL`;
@@ -2732,13 +2805,13 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       const challenge = yield* service.handleMessage(
         defaultUserId,
         InboundMessage.make({ text: TranscriptText.make("LOTE_ATOMICO_FALLA") }),
-        noDelivery
+        noVerifiedWhatsAppAuthority
       );
       const command = batchConfirmationCommand(challenge.text);
       const failed = yield* service.handleMessage(
         defaultUserId,
         InboundMessage.make({ text: TranscriptText.make(command) }),
-        noDelivery
+        noVerifiedWhatsAppAuthority
       );
       const rows =
         yield* sql`SELECT count(*)::int AS count FROM transactions WHERE deleted_at IS NULL`;
@@ -2749,7 +2822,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       const replayed = yield* service.handleMessage(
         defaultUserId,
         InboundMessage.make({ text: TranscriptText.make(command) }),
-        noDelivery
+        noVerifiedWhatsAppAuthority
       );
       const afterReplay =
         yield* sql`SELECT count(*)::int AS count FROM transactions WHERE deleted_at IS NULL`;
@@ -2765,14 +2838,14 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       const firstReply = yield* firstService.handleMessage(
         defaultUserId,
         InboundMessage.make({ text: TranscriptText.make("Primer mensaje") }),
-        noDelivery
+        noVerifiedWhatsAppAuthority
       );
 
       const secondService = yield* AgentService;
       const secondReply = yield* secondService.handleMessage(
         defaultUserId,
         InboundMessage.make({ text: TranscriptText.make("¿Qué dije antes?") }),
-        noDelivery
+        noVerifiedWhatsAppAuthority
       );
 
       expect(firstReply.text).toBe("Primera respuesta");
@@ -2789,7 +2862,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       const first = yield* service.handleMessage(
         defaultUserId,
         InboundMessage.make({ text: TranscriptText.make("Primer mensaje") }),
-        noDelivery
+        noVerifiedWhatsAppAuthority
       );
       // Idling the first session out is what makes the next message open a second one.
       yield* sql`
@@ -2820,7 +2893,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       const second = yield* service.handleMessage(
         defaultUserId,
         InboundMessage.make({ text: TranscriptText.make("¿Qué dije antes?") }),
-        noDelivery
+        noVerifiedWhatsAppAuthority
       );
       const sessions = yield* sql`
         SELECT count(*)::int AS count FROM hosted_agent_sessions WHERE user_id = ${defaultUserId}
@@ -2857,7 +2930,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
         const activeReply = yield* service.handleMessage(
           defaultUserId,
           InboundMessage.make({ text: TranscriptText.make("CONTEXT_ACTIVE_TURN") }),
-          noDelivery
+          noVerifiedWhatsAppAuthority
         );
         const activeTranscript = yield* selectTranscriptEntries(defaultUserId);
 
@@ -2865,7 +2938,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
         const laterReply = yield* service.handleMessage(
           defaultUserId,
           InboundMessage.make({ text: TranscriptText.make("CONTEXT_LATER_TURN") }),
-          noDelivery
+          noVerifiedWhatsAppAuthority
         );
         const laterPrompts = yield* readModelPrompts;
 
@@ -2905,7 +2978,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       yield* service.handleMessage(
         userA,
         InboundMessage.make({ text: TranscriptText.make("A_PRIVATE_TRANSCRIPT_MARKER") }),
-        noDelivery
+        noVerifiedWhatsAppAuthority
       );
       const userABefore = yield* selectTranscriptEntries(userA);
       yield* resetModelPrompts;
@@ -2913,7 +2986,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       const reply = yield* service.handleMessage(
         userB,
         InboundMessage.make({ text: TranscriptText.make("registra aislamientob 25 cop") }),
-        noDelivery
+        noVerifiedWhatsAppAuthority
       );
       const userAAfter = yield* selectTranscriptEntries(userA);
       const userBTranscript = yield* selectTranscriptEntries(userB);
@@ -2996,7 +3069,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
           const reply = yield* service.handleMessage(
             defaultUserId,
             InboundMessage.make({ text: TranscriptText.make(text) }),
-            noDelivery
+            noVerifiedWhatsAppAuthority
           );
           const transcript = yield* selectTranscriptEntries(defaultUserId);
           const audit = yield* observeAuditLogEntries(defaultUserId);
@@ -3016,7 +3089,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       const reply = yield* service.handleMessage(
         defaultUserId,
         InboundMessage.make({ text: TranscriptText.make("Expón token") }),
-        noDelivery
+        noVerifiedWhatsAppAuthority
       );
       const transcript = yield* selectTranscriptEntries(defaultUserId);
       const serialized = yield* Schema.encodeEffect(UnknownJsonString)(transcript);
@@ -3035,7 +3108,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       yield* service.handleMessage(
         defaultUserId,
         InboundMessage.make({ text: TranscriptText.make("almuerzo 25 mil") }),
-        noDelivery
+        noVerifiedWhatsAppAuthority
       );
       yield* sql`UPDATE transactions SET notes = 'fin_deadbeef_abcdefghijklmnopqrstuvwxyzABCDEF'`;
       yield* clearTranscript;
@@ -3044,7 +3117,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       const reply = yield* service.handleMessage(
         defaultUserId,
         InboundMessage.make({ text: TranscriptText.make("Lista movimientos secretos") }),
-        noDelivery
+        noVerifiedWhatsAppAuthority
       );
       const transcript = yield* selectTranscriptEntries(defaultUserId);
       const modelPrompts = yield* readModelPrompts;
@@ -3074,7 +3147,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       const reply = yield* service.handleMessage(
         defaultUserId,
         InboundMessage.make({ text: TranscriptText.make("helado 9 mil") }),
-        noDelivery
+        noVerifiedWhatsAppAuthority
       );
       const history = yield* client.transactions.listTransactions({ query: {} });
 
@@ -3099,7 +3172,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
         InboundMessage.make({
           text: TranscriptText.make("debería registrar almuerzo 25 mil"),
         }),
-        noDelivery
+        noVerifiedWhatsAppAuthority
       );
       const rows = yield* sql`SELECT count(*)::int AS count FROM transactions`;
       const audit = yield* observeAuditLogEntries(defaultUserId);
@@ -3123,7 +3196,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       yield* service.handleMessage(
         defaultUserId,
         InboundMessage.make({ text: TranscriptText.make("Lista las categorías") }),
-        noDelivery
+        noVerifiedWhatsAppAuthority
       );
       const [admitted] = yield* Schema.decodeUnknownEffect(SingleSessionRow)(
         yield* sql`SELECT id FROM hosted_agent_sessions WHERE user_id = ${defaultUserId}`
@@ -3154,7 +3227,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       const reply = yield* service.handleMessage(
         defaultUserId,
         InboundMessage.make({ text: TranscriptText.make("captura sin confirmación 25 mil") }),
-        noDelivery
+        noVerifiedWhatsAppAuthority
       );
       const rows = yield* sql`SELECT count(*)::int AS count FROM transactions`;
 
@@ -3173,7 +3246,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       const reply = yield* service.handleMessage(
         defaultUserId,
         InboundMessage.make({ text: TranscriptText.make("Guarda una memoria sintética") }),
-        noDelivery
+        noVerifiedWhatsAppAuthority
       );
       const rows = yield* sql`SELECT text FROM memories WHERE user_id = ${defaultUserId}`;
 
@@ -3218,7 +3291,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
           InboundMessage.make({
             text: TranscriptText.make(`${testCase.prompt} ${testCase.id}`),
           }),
-          noDelivery
+          noVerifiedWhatsAppAuthority
         );
         const command = confirmationCommand(challenge.text);
         expect(command).toMatch(
@@ -3233,7 +3306,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
           InboundMessage.make({
             text: TranscriptText.make(`${command}x`),
           }),
-          noDelivery
+          noVerifiedWhatsAppAuthority
         );
         expect(altered.text).toContain(`Operación exacta: ${testCase.operation}`);
         expect(yield* sql`SELECT text FROM memories WHERE id = ${testCase.id}`).toEqual([
@@ -3246,14 +3319,14 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
           InboundMessage.make({
             text: TranscriptText.make(correctedCommand),
           }),
-          noDelivery
+          noVerifiedWhatsAppAuthority
         );
         yield* service.handleMessage(
           defaultUserId,
           InboundMessage.make({
             text: TranscriptText.make(correctedCommand),
           }),
-          noDelivery
+          noVerifiedWhatsAppAuthority
         );
         const rows = yield* sql`SELECT text FROM memories WHERE id = ${testCase.id}`;
         const audit = (yield* observeAuditLogEntries(defaultUserId)).filter(
@@ -3277,7 +3350,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       const reply = yield* service.handleMessage(
         defaultUserId,
         InboundMessage.make({ text: TranscriptText.make("anota almuerzo 25 mil") }),
-        noDelivery
+        noVerifiedWhatsAppAuthority
       );
       const transcript = yield* selectTranscriptEntries(defaultUserId);
       const audit = yield* observeAuditLogEntries(defaultUserId);
@@ -3401,12 +3474,12 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
         yield* service.handleMessage(
           defaultUserId,
           InboundMessage.make({ text: TranscriptText.make("almuerzo 25 usd") }),
-          noDelivery
+          noVerifiedWhatsAppAuthority
         );
         yield* service.handleMessage(
           defaultUserId,
           InboundMessage.make({ text: TranscriptText.make("registra papelería 25 usd") }),
-          noDelivery
+          noVerifiedWhatsAppAuthority
         );
         const history = yield* client.transactions.listTransactions({ query: {} });
         const cop = history.data.find((transaction) => transaction.money.currency === "COP");
@@ -3450,7 +3523,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       yield* service.handleMessage(
         defaultUserId,
         InboundMessage.make({ text: TranscriptText.make("almuerzo 25 mil") }),
-        noDelivery
+        noVerifiedWhatsAppAuthority
       );
       yield* sql`
         INSERT INTO transactions (
@@ -3471,7 +3544,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
         .handleMessage(
           defaultUserId,
           InboundMessage.make({ text: TranscriptText.make("Lista historial acotado") }),
-          noDelivery
+          noVerifiedWhatsAppAuthority
         )
         .pipe(Effect.provideService(CurrentAgentLimits, limits));
       const transcript = yield* selectTranscriptEntries(defaultUserId);
@@ -3522,7 +3595,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       const reply = yield* service.handleMessage(
         defaultUserId,
         InboundMessage.make({ text: TranscriptText.make("Provoca entrada malformada") }),
-        noDelivery
+        noVerifiedWhatsAppAuthority
       );
       const transcript = yield* selectTranscriptEntries(defaultUserId);
 
@@ -3543,7 +3616,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       const reply = yield* service.handleMessage(
         defaultUserId,
         InboundMessage.make({ text: TranscriptText.make("Provoca herramienta desconocida") }),
-        noDelivery
+        noVerifiedWhatsAppAuthority
       );
 
       expect(reply.text).toBe("Corregí la herramienta desconocida.");
@@ -3558,7 +3631,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       const reply = yield* service.handleMessage(
         defaultUserId,
         InboundMessage.make({ text: TranscriptText.make("Provoca entrada sensible en Memoria") }),
-        noDelivery
+        noVerifiedWhatsAppAuthority
       );
       const transcript = yield* selectTranscriptEntries(defaultUserId);
 
@@ -3581,7 +3654,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
           InboundMessage.make({
             text: TranscriptText.make("Provoca entrada sensible en mutación válida"),
           }),
-          noDelivery
+          noVerifiedWhatsAppAuthority
         )
       );
       const transcript = yield* selectTranscriptEntries(defaultUserId);
@@ -3605,7 +3678,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
           InboundMessage.make({
             text: TranscriptText.make("Provoca entrada sensible en herramienta"),
           }),
-          noDelivery
+          noVerifiedWhatsAppAuthority
         )
       );
       const transcript = yield* selectTranscriptEntries(defaultUserId);
@@ -3627,7 +3700,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
         .handleMessage(
           defaultUserId,
           InboundMessage.make({ text: TranscriptText.make("Provoca salida sensible") }),
-          noDelivery
+          noVerifiedWhatsAppAuthority
         )
         .pipe(Effect.exit);
       const transcript = yield* selectTranscriptEntries(defaultUserId);
@@ -3657,7 +3730,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
         InboundMessage.make({
           text: TranscriptText.make("Almuerzo 25000 2099-07-20T17:30:00Z"),
         }),
-        noDelivery
+        noVerifiedWhatsAppAuthority
       );
       const transcript = yield* selectTranscriptEntries(defaultUserId);
 
@@ -3690,7 +3763,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
             "Busca la transacción inexistente f1d1a000-0000-4000-8000-00000000dead"
           ),
         }),
-        noDelivery
+        noVerifiedWhatsAppAuthority
       );
       const transcript = yield* selectTranscriptEntries(defaultUserId);
       const result = transcript.find((entry) => entry._tag === "CanonicalToolResultEntry");
@@ -3713,7 +3786,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       yield* service.handleMessage(
         defaultUserId,
         InboundMessage.make({ text: TranscriptText.make("almuerzo 25 mil") }),
-        noDelivery
+        noVerifiedWhatsAppAuthority
       );
       const history = yield* client.transactions.listTransactions({ query: {} });
       const transaction = history.data[0];
@@ -3726,7 +3799,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
         InboundMessage.make({
           text: TranscriptText.make(`Describe el movimiento ${transaction?.id}`),
         }),
-        noDelivery
+        noVerifiedWhatsAppAuthority
       );
       const transcript = yield* selectTranscriptEntries(defaultUserId);
       const audit = yield* observeAuditLogEntries(defaultUserId);
@@ -3754,7 +3827,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
           .handleMessage(
             defaultUserId,
             InboundMessage.make({ text: TranscriptText.make("Prueba el presupuesto") }),
-            noDelivery
+            noVerifiedWhatsAppAuthority
           )
           .pipe(Effect.provideService(CurrentAgentLimits, limits));
         const policies = yield* readModelToolPolicies;
@@ -3782,7 +3855,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       const reply = yield* service.handleMessage(
         defaultUserId,
         InboundMessage.make({ text: TranscriptText.make("Desborda herramientas") }),
-        noDelivery
+        noVerifiedWhatsAppAuthority
       );
       const audit = yield* observeAuditLogEntries(defaultUserId);
 
@@ -3801,7 +3874,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
         .handleMessage(
           defaultUserId,
           InboundMessage.make({ text: TranscriptText.make("Prueba el límite") }),
-          noDelivery
+          noVerifiedWhatsAppAuthority
         )
         .pipe(Effect.provideService(CurrentAgentLimits, limits));
       const transcript = yield* selectTranscriptEntries(defaultUserId);
@@ -3818,14 +3891,14 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       yield* service.handleMessage(
         defaultUserId,
         InboundMessage.make({ text: TranscriptText.make("MARCADOR_ANTIGUO") }),
-        noDelivery
+        noVerifiedWhatsAppAuthority
       );
       const retainedBefore = yield* selectTranscriptEntries(defaultUserId);
 
       const reply = yield* service.handleMessage(
         defaultUserId,
         InboundMessage.make({ text: TranscriptText.make("MENSAJE_ACTUAL") }),
-        noDelivery
+        noVerifiedWhatsAppAuthority
       );
       const retainedAfter = yield* selectTranscriptEntries(defaultUserId);
       const loadedWindow = yield* selectRecentTranscriptEntries(
@@ -3850,7 +3923,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       yield* service.handleMessage(
         defaultUserId,
         InboundMessage.make({ text: TranscriptText.make("almuerzo 25 mil") }),
-        noDelivery
+        noVerifiedWhatsAppAuthority
       );
       yield* sql`UPDATE transactions SET counterparty = 'BORRA_TODO_INYECCION'`;
       yield* clearTranscript;
@@ -3859,7 +3932,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       const reply = yield* service.handleMessage(
         defaultUserId,
         InboundMessage.make({ text: TranscriptText.make("revisa historial secretos") }),
-        noDelivery
+        noVerifiedWhatsAppAuthority
       );
       expect(reply.text).toContain("Operación exacta: transactions.deleteTransaction");
       expect(reply.text).toContain("Argumentos exactos:");
@@ -3869,7 +3942,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
         InboundMessage.make({
           text: TranscriptText.make("CONFIRMAR transactions.deleteTransaction"),
         }),
-        noDelivery
+        noVerifiedWhatsAppAuthority
       );
       const rows =
         yield* sql`SELECT count(*)::int AS count FROM transactions WHERE deleted_at IS NULL`;
@@ -3907,7 +3980,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       yield* service.handleMessage(
         defaultUserId,
         InboundMessage.make({ text: TranscriptText.make("almuerzo 25 mil") }),
-        noDelivery
+        noVerifiedWhatsAppAuthority
       );
       const history = yield* client.transactions.listTransactions({ query: {} });
       const transaction = history.data[0];
@@ -3920,7 +3993,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
         InboundMessage.make({
           text: TranscriptText.make(`borra con lectura posterior ${transaction?.id}`),
         }),
-        noDelivery
+        noVerifiedWhatsAppAuthority
       );
       const command = confirmationCommand(challenge.text);
       expect(command).toMatch(/^CONFIRMAR transactions\.deleteTransaction [0-9a-f]{64}$/u);
@@ -3928,7 +4001,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       const confirmed = yield* service.handleMessage(
         defaultUserId,
         InboundMessage.make({ text: TranscriptText.make(command) }),
-        noDelivery
+        noVerifiedWhatsAppAuthority
       );
       const rows =
         yield* sql`SELECT count(*)::int AS count FROM transactions WHERE deleted_at IS NULL`;
@@ -3955,7 +4028,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       yield* service.handleMessage(
         defaultUserId,
         InboundMessage.make({ text: TranscriptText.make("almuerzo 25 mil") }),
-        noDelivery
+        noVerifiedWhatsAppAuthority
       );
       const history = yield* client.transactions.listTransactions({ query: {} });
       const transaction = history.data[0];
@@ -3966,7 +4039,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
         InboundMessage.make({
           text: TranscriptText.make(`borra con lectura posterior ${transaction.id}`),
         }),
-        noDelivery
+        noVerifiedWhatsAppAuthority
       );
       const command = confirmationCommand(challenge.text);
       const issuingSession = yield* activeHostedAgentSession(defaultUserId);
@@ -4006,7 +4079,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       yield* service.handleMessage(
         defaultUserId,
         InboundMessage.make({ text: TranscriptText.make("almuerzo 25 mil") }),
-        noDelivery
+        noVerifiedWhatsAppAuthority
       );
       yield* sql`UPDATE transactions SET counterparty = 'BORRA_TODO_INYECCION'`;
       yield* clearTranscript;
@@ -4015,7 +4088,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       const challenge = yield* service.handleMessage(
         defaultUserId,
         InboundMessage.make({ text: TranscriptText.make("revisa historial secretos") }),
-        noDelivery
+        noVerifiedWhatsAppAuthority
       );
       const command = confirmationCommand(challenge.text);
       expect(command).toMatch(/^CONFIRMAR transactions\.deleteTransaction [0-9a-f]{64}$/u);
@@ -4023,12 +4096,12 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       const confirmed = yield* service.handleMessage(
         defaultUserId,
         InboundMessage.make({ text: TranscriptText.make(command) }),
-        noDelivery
+        noVerifiedWhatsAppAuthority
       );
       const replayed = yield* service.handleMessage(
         defaultUserId,
         InboundMessage.make({ text: TranscriptText.make(command) }),
-        noDelivery
+        noVerifiedWhatsAppAuthority
       );
       const rows =
         yield* sql`SELECT count(*)::int AS count FROM transactions WHERE deleted_at IS NULL`;
@@ -4055,7 +4128,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       yield* service.handleMessage(
         defaultUserId,
         InboundMessage.make({ text: TranscriptText.make("almuerzo 25 mil") }),
-        noDelivery
+        noVerifiedWhatsAppAuthority
       );
       yield* sql`UPDATE transactions SET counterparty = 'BORRA_TODO_INYECCION'`;
       yield* clearTranscript;
@@ -4064,7 +4137,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       yield* service.handleMessage(
         defaultUserId,
         InboundMessage.make({ text: TranscriptText.make("revisa historial secretos") }),
-        noDelivery
+        noVerifiedWhatsAppAuthority
       );
       yield* sql`
         DELETE FROM transcript_entries
@@ -4076,7 +4149,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
         InboundMessage.make({
           text: TranscriptText.make("CONFIRMAR transactions.deleteTransaction"),
         }),
-        noDelivery
+        noVerifiedWhatsAppAuthority
       );
       const rows =
         yield* sql`SELECT count(*)::int AS count FROM transactions WHERE deleted_at IS NULL`;
@@ -4101,7 +4174,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       const reply = yield* service.handleMessage(
         defaultUserId,
         InboundMessage.make({ text: TranscriptText.make("RETRY_AFTER_SUCCESS") }),
-        noDelivery
+        noVerifiedWhatsAppAuthority
       );
       const attempts = yield* modelAttemptPrompts("RETRY_AFTER_SUCCESS");
       const transcript = yield* selectTranscriptEntries(defaultUserId);
@@ -4125,7 +4198,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
         .handleMessage(
           defaultUserId,
           InboundMessage.make({ text: TranscriptText.make("RETRY_FALLBACK_SUCCESS") }),
-          noDelivery
+          noVerifiedWhatsAppAuthority
         )
         .pipe(
           Effect.provideService(Clock.Clock, manualClock.clock),
@@ -4164,7 +4237,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
         .handleMessage(
           defaultUserId,
           InboundMessage.make({ text: TranscriptText.make("RETRY_AFTER_FALLBACK_SUCCESS") }),
-          noDelivery
+          noVerifiedWhatsAppAuthority
         )
         .pipe(
           Effect.provideService(Clock.Clock, manualClock.clock),
@@ -4192,7 +4265,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
         .handleMessage(
           defaultUserId,
           InboundMessage.make({ text: TranscriptText.make("RETRY_SHARED_DEADLINE") }),
-          noDelivery
+          noVerifiedWhatsAppAuthority
         )
         .pipe(
           Effect.provideService(CurrentAgentLimits, agentLimits({ maxModelRoundMillis: 300 })),
@@ -4219,7 +4292,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
         .handleMessage(
           defaultUserId,
           InboundMessage.make({ text: TranscriptText.make("RETRY_NON_RETRYABLE") }),
-          noDelivery
+          noVerifiedWhatsAppAuthority
         )
         .pipe(Effect.exit);
       const attempts = yield* modelAttemptPrompts("RETRY_NON_RETRYABLE");
@@ -4231,11 +4304,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
         }),
         Exit.fail(
           new ModelUnavailable({
-            cause: new HostedInferenceError({
-              reason: { _tag: "ProviderUnavailable" },
-              retryable: false,
-              retryAfter: Option.none(),
-            }),
+            cause: "Hosted execution unavailable",
           })
         )
       );
@@ -4258,7 +4327,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
         .handleMessage(
           defaultUserId,
           InboundMessage.make({ text: TranscriptText.make("RETRY_DEADLINE_EXHAUSTED") }),
-          noDelivery
+          noVerifiedWhatsAppAuthority
         )
         .pipe(
           Effect.provideService(CurrentAgentLimits, agentLimits({ maxModelRoundMillis: 100 })),
@@ -4280,7 +4349,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
         .handleMessage(
           defaultUserId,
           InboundMessage.make({ text: TranscriptText.make("PROVEEDOR_LIMITADO") }),
-          noDelivery
+          noVerifiedWhatsAppAuthority
         )
         .pipe(Effect.flip);
       const attempts = yield* modelAttemptPrompts("PROVEEDOR_LIMITADO");
@@ -4299,7 +4368,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
         .handleMessage(
           defaultUserId,
           InboundMessage.make({ text: TranscriptText.make("RESPUESTA_TRUNCADA") }),
-          noDelivery
+          noVerifiedWhatsAppAuthority
         )
         .pipe(Effect.flip);
       const transcript = yield* selectTranscriptEntries(defaultUserId);
@@ -4320,7 +4389,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
         .handleMessage(
           defaultUserId,
           InboundMessage.make({ text: TranscriptText.make("MODELO_BLOQUEADO") }),
-          noDelivery
+          noVerifiedWhatsAppAuthority
         )
         .pipe(
           Effect.provideService(CurrentAgentLimits, agentLimits({ maxModelRoundMillis: 20 })),
@@ -4348,7 +4417,7 @@ layer(AgentHarness, { excludeTestServices: true, timeout: "30 seconds" })("hoste
       const reply = yield* service.handleMessage(
         defaultUserId,
         InboundMessage.make({ text: TranscriptText.make("Lista las categorías") }),
-        noDelivery
+        noVerifiedWhatsAppAuthority
       );
       const transcript = yield* selectTranscriptEntries(defaultUserId);
       const audit = yield* observeAuditLogEntries(defaultUserId);

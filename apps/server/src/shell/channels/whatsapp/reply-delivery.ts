@@ -1,6 +1,6 @@
 import { Context, DateTime, Duration, Effect, Schema } from "effect";
 import type { UserId } from "~/core/identity/reference";
-import type { AgentReply } from "~/shell/agent/agent-service";
+import type { AgentReply } from "~/shell/agent/message";
 import { TelemetryAttempt } from "~/shell/observability/protocol";
 import { type KapsoSendFailed } from "./kapso-client";
 import { sendKapsoFreeForm } from "./outbound";

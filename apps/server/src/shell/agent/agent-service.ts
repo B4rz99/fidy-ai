@@ -5,7 +5,7 @@ import {
   Context,
   Crypto,
   Data,
-  type DateTime,
+  DateTime,
   Duration,
   Effect,
   Exit,
@@ -13,6 +13,7 @@ import {
   Option,
   Random,
   Result,
+  Schedule,
   Schema,
   Stream,
   Struct,
@@ -22,11 +23,26 @@ import { HttpClient } from "effect/unstable/http";
 import { PersistedQueue } from "effect/unstable/persistence";
 import { SqlClient } from "effect/unstable/sql";
 import { allCanonicalCapabilities } from "~/core/_shared/canonical-capability";
-import { ProviderQualifiedMessages } from "~/core/consent/model";
+import { ClusterSchema, Entity } from "effect/unstable/cluster";
+import { Rpc, type RpcGroup } from "effect/unstable/rpc";
+import { AgentReply, InboundMessage } from "./message";
+import { ImmediateDelivery } from "./immediate-delivery";
+import { OnboardingConsentRequired } from "./consent-error";
+
+import { WhatsAppReplyDelivery } from "./whatsapp-delivery";
+import {
+  WhatsAppClaimId,
+  type WhatsAppTurnClaim,
+  completeWhatsAppTurn,
+  failWhatsAppTurn,
+  loadSubmittedWhatsAppTurn,
+  submitWhatsAppTurn,
+} from "~/shell/channels/whatsapp/repo";
+
 import type { CanonicalCaller } from "~/shell/_shared/authz";
 import { type CanonicalAuthorityRoot, completesHostedTurn } from "~/shell/_shared/operation-policy";
 import type { User } from "~/core/identity/model";
-import type { UserId } from "~/core/identity/reference";
+import { UserId } from "~/core/identity/reference";
 import { CompactedConversationOutput } from "~/core/transcript/compacted-conversation";
 import type { HostedAgentSessionId } from "~/core/transcript/hosted-agent-session";
 import {
@@ -38,9 +54,10 @@ import {
   type CanonicalToolOutcome,
   ToolCallId,
   TranscriptText,
+  TranscriptTurnId,
   type TurnFailureReason,
 } from "~/core/transcript/model";
-import { withUserTurnLock } from "~/shell/db/advisory-lock";
+import { withUserTransaction } from "~/shell/db/user-transaction";
 import { listRecentTranscriptEntries } from "~/shell/transcript/transcript-service";
 import { ValidationFailed } from "~/shell/_shared/errors";
 import { findUser } from "~/shell/identity/repo";
@@ -165,46 +182,12 @@ export const CurrentAgentLimits = Context.Reference<AgentLimits>(
   }
 );
 
-/** Channel-neutral text and optional provider evidence accepted by the hosted agent. */
-export const InboundMessage = Schema.Struct({
-  text: TranscriptText,
-  confirmationEvidence: Schema.optionalKey(ProviderQualifiedMessages),
-});
-export type InboundMessage = typeof InboundMessage.Type;
-
-/** One channel-neutral media reference that an adapter may render or deliver. */
-export const AgentAttachment = Schema.Struct({
-  mediaType: Schema.NonEmptyString,
-  url: Schema.URLFromString,
-});
-/** One channel-neutral follow-up action that an adapter may present to the User. */
-export const AgentChoice = Schema.Struct({
-  label: Schema.NonEmptyString,
-  message: TranscriptText,
-});
-/** Semantic response returned to whichever channel initiated the turn. */
-export const AgentReply = Schema.Struct({
-  text: TranscriptText,
-  attachments: Schema.OptionFromOptionalKey(Schema.NonEmptyArray(AgentAttachment)),
-  choices: Schema.OptionFromOptionalKey(Schema.NonEmptyArray(AgentChoice)),
-});
-export type AgentReply = typeof AgentReply.Type;
-
 /** Failure returned when no stable User and interpretation context exist. */
 export class UnknownUser extends Data.TaggedError("UnknownUser")<{
   readonly userId: UserId;
 }> {
   override get message(): string {
     return "No stable User and interpretation context exist for this turn";
-  }
-}
-
-/** Failure returned before any model or transcript work when onboarding consent is absent. */
-export class OnboardingConsentRequired extends Data.TaggedError("OnboardingConsentRequired")<{
-  readonly userId: UserId;
-}> {
-  override get message(): string {
-    return "The User has no current onboarding consent";
   }
 }
 
@@ -239,7 +222,52 @@ export type AgentTurnError =
   | OnboardingConsentRequired
   | HostedCapacityExceeded
   | ModelUnavailable
-  | ModelResponseRejected;
+  | ModelResponseRejected
+  | HostedTurnAlreadyHandled;
+
+/** A retried immediate call cannot repeat effects or promise an unretained original reply. */
+export class HostedTurnAlreadyHandled extends Data.TaggedError("HostedTurnAlreadyHandled")<{}> {}
+
+const TurnFailure = Schema.Literals([
+  "UnknownUser",
+  "OnboardingConsentRequired",
+  "HostedCapacityExceeded",
+  "ModelUnavailable",
+  "ModelResponseRejected",
+  "HostedTurnAlreadyHandled",
+  "delivery_failed",
+]);
+
+const HostedTurns = Entity.make("HostedTurns", [
+  Rpc.make("Handle", {
+    payload: {
+      userId: UserId,
+      turnId: TranscriptTurnId,
+      message: InboundMessage,
+      limits: AgentLimits,
+      authorityRoot: Schema.Literals(["no-verified-whatsapp-authority", "verified-whatsapp"]),
+    },
+    success: AgentReply,
+    error: TurnFailure,
+  }).annotate(ClusterSchema.Uninterruptible, "client"),
+  Rpc.make("ProcessWhatsApp", {
+    payload: { version: Schema.Literal(1), userId: UserId, claimId: WhatsAppClaimId },
+    primaryKey: ({ claimId }) => claimId,
+  })
+    .annotate(ClusterSchema.Persisted, true)
+    .annotate(ClusterSchema.Uninterruptible, "client"),
+  Rpc.make("Recover", {
+    payload: { userId: UserId, turnId: TranscriptTurnId },
+    primaryKey: ({ turnId }) => turnId,
+  })
+    .annotate(ClusterSchema.Persisted, true)
+    .annotate(ClusterSchema.Uninterruptible, "client"),
+]);
+
+type HostedTurnsClient = Effect.Success<typeof HostedTurns.client>;
+
+export { AgentReply, InboundMessage, AgentAttachment, AgentChoice } from "./message";
+export { OnboardingConsentRequired } from "./consent-error";
 
 const makeTextReply = (text: TranscriptText): AgentReply =>
   AgentReply.make({ text, attachments: Option.none(), choices: Option.none() });
@@ -1310,6 +1338,7 @@ const decodeAgentTurnFailureTag = Schema.decodeUnknownOption(
     "HostedCapacityExceeded",
     "ModelUnavailable",
     "ModelResponseRejected",
+    "HostedTurnAlreadyHandled",
   ])
 );
 
@@ -1320,23 +1349,29 @@ const turnFailureTag = (failure: unknown): Option.Option<AgentTurnError["_tag"]>
   return decodeAgentTurnFailureTag(failure._tag);
 };
 
-const turnFailureOutcomeFromTag = (tag: AgentTurnError["_tag"]): DeclaredOutcome => {
-  switch (tag) {
-    case "UnknownUser":
-      return { outcome: "rejected", error: Option.some("unknown_user"), retryable: false };
-    case "OnboardingConsentRequired":
-      return { outcome: "rejected", error: Option.some("consent_required"), retryable: false };
-    case "HostedCapacityExceeded":
-      return { outcome: "rejected", error: Option.some("model_unavailable"), retryable: false };
-    case "ModelResponseRejected":
-      return {
-        outcome: "rejected",
-        error: Option.some("model_response_rejected"),
-        retryable: false,
-      };
-    case "ModelUnavailable":
-      return { outcome: "failed", error: Option.some("model_unavailable"), retryable: false };
-  }
+const turnFailureOutcomes: Readonly<Record<AgentTurnError["_tag"], DeclaredOutcome>> = {
+  HostedTurnAlreadyHandled: { outcome: "interrupted", error: Option.none(), retryable: false },
+  UnknownUser: { outcome: "rejected", error: Option.some("unknown_user"), retryable: false },
+  OnboardingConsentRequired: {
+    outcome: "rejected",
+    error: Option.some("consent_required"),
+    retryable: false,
+  },
+  HostedCapacityExceeded: {
+    outcome: "rejected",
+    error: Option.some("model_unavailable"),
+    retryable: false,
+  },
+  ModelResponseRejected: {
+    outcome: "rejected",
+    error: Option.some("model_response_rejected"),
+    retryable: false,
+  },
+  ModelUnavailable: {
+    outcome: "failed",
+    error: Option.some("model_unavailable"),
+    retryable: false,
+  },
 };
 
 const recordTurnExit = (
@@ -1373,7 +1408,7 @@ const recordTurnExit = (
   }
   return Option.match(Exit.findErrorOption(exit).pipe(Option.flatMap(turnFailureTag)), {
     onNone: () => Effect.void,
-    onSome: (tag) => telemetry.recordOutcome(turnFailureOutcomeFromTag(tag)),
+    onSome: (tag) => telemetry.recordOutcome(turnFailureOutcomes[tag]),
   });
 };
 
@@ -1411,9 +1446,20 @@ const beginPreparedTurn = Effect.fn(function* (input: {
   readonly userId: UserId;
   readonly prepared: PreparedTurnContext;
   readonly firstRound: PreparedHostedText;
+  readonly turnId: TranscriptTurnId;
+  readonly publishRecovery: Effect.Effect<void>;
 }) {
   const { continuity, firstRound, prepared, userId } = input;
-  const admission = yield* Effect.result(continuity.admitTurn({ userId, prepared }));
+  const admission = yield* Effect.result(
+    withUserTransaction(
+      userId,
+      Effect.gen(function* () {
+        const admitted = yield* continuity.admitTurn({ userId, prepared, turnId: input.turnId });
+        yield* input.publishRecovery;
+        return admitted;
+      })
+    )
+  );
   if (Result.isSuccess(admission)) {
     return makeTurnExecution(continuity, userId, admission.success);
   }
@@ -1508,6 +1554,8 @@ const runPreparedTurn = Effect.fn(function* <E, R>(input: {
   message: InboundMessage;
   prepared: PreparedTurnContext;
   authorityRoot: CanonicalAuthorityRoot;
+  turnId: TranscriptTurnId;
+  publishRecovery: Effect.Effect<void>;
   deliver: (reply: AgentReply) => Effect.Effect<void, E, R>;
 }) {
   const { authorityRoot, dependencies, userId, message, prepared, deliver } = input;
@@ -1526,6 +1574,8 @@ const runPreparedTurn = Effect.fn(function* <E, R>(input: {
     userId,
     prepared,
     firstRound,
+    turnId: input.turnId,
+    publishRecovery: input.publishRecovery,
   });
   // Generation is captured as an Exit, not a Result: a refused canonical call reaches here as a
   // defect, and a defect still owes this Turn a terminal state. An interrupted fiber never reaches
@@ -1555,6 +1605,8 @@ type SerializedTurnInput<E, R> = Readonly<{
   userId: UserId;
   message: InboundMessage;
   authorityRoot: CanonicalAuthorityRoot;
+  turnId: TranscriptTurnId;
+  publishRecovery: Effect.Effect<void>;
   deliver: (reply: AgentReply) => Effect.Effect<void, E, R>;
 }>;
 
@@ -1586,9 +1638,16 @@ const runBoundedPreparation = <E, R>(
   return continuity.requireSession(userId, hostedAgentSessionId).pipe(
     Effect.andThen(continuity.prepareTurn(userId, hostedAgentSessionId, message)),
     Effect.flatMap((prepared) =>
-      runPreparedTurn({ dependencies, userId, message, prepared, authorityRoot, deliver }).pipe(
-        Effect.provideService(Telemetry, dependencies.telemetry)
-      )
+      runPreparedTurn({
+        dependencies,
+        userId,
+        message,
+        prepared,
+        authorityRoot,
+        deliver,
+        turnId: input.turnId,
+        publishRecovery: input.publishRecovery,
+      }).pipe(Effect.provideService(Telemetry, dependencies.telemetry))
     ),
     Effect.catchTag("ContinuityChanged", (changed) =>
       preparationNumber < maximumContinuityPreparations
@@ -1612,17 +1671,14 @@ const runSerializedTurn = <E, R>(
   | HostedInference
   | PersistedQueue.PersistedQueueFactory
 > =>
-  withUserTurnLock(
-    input.userId,
-    Effect.gen(function* () {
-      const session = yield* input.dependencies.continuity.admitSession(input.userId);
-      return yield* runBoundedPreparation({
-        ...input,
-        hostedAgentSessionId: session,
-        preparationNumber: 1,
-      });
-    })
-  ).pipe(
+  Effect.gen(function* () {
+    const session = yield* input.dependencies.continuity.admitSession(input.userId);
+    return yield* runBoundedPreparation({
+      ...input,
+      hostedAgentSessionId: session,
+      preparationNumber: 1,
+    });
+  }).pipe(
     Effect.catchTag("HostedAgentSessionConsentRequired", () =>
       Effect.fail(new OnboardingConsentRequired({ userId: input.userId }))
     )
@@ -1654,32 +1710,248 @@ const provideAgentDependencies = <A, E, R>(
     Effect.provideService(PersistedQueue.PersistedQueueFactory, dependencies.queueFactory)
   );
 
+const executeMessage = <E, R>(
+  input: SerializedTurnInput<E, R>
+): Effect.Effect<AgentReply, AgentTurnError | E, R> => {
+  const { dependencies, message, deliver } = input;
+  if (containsSensitiveChatValue(message.text)) {
+    const refusal = makeTextReply(credentialRejectedReply);
+    return Effect.as(deliver(refusal), refusal);
+  }
+  const work = runSerializedTurn(input);
+  const traced = dependencies.telemetry.span(
+    turnDescriptor,
+    Effect.onExit(work.pipe(Effect.provideService(Telemetry, dependencies.telemetry)), (exit) =>
+      recordTurnExit(dependencies.telemetry, exit)
+    )
+  );
+  return provideAgentDependencies(dependencies, traced);
+};
+
+const turnFailureConstructors: Readonly<
+  Record<typeof TurnFailure.Type, (userId: UserId) => AgentTurnError>
+> = {
+  UnknownUser: (userId) => new UnknownUser({ userId }),
+  OnboardingConsentRequired: (userId) => new OnboardingConsentRequired({ userId }),
+  HostedCapacityExceeded: () => new HostedCapacityExceeded(),
+  ModelResponseRejected: () => new ModelResponseRejected({ cause: "Hosted output rejected" }),
+  HostedTurnAlreadyHandled: () => new HostedTurnAlreadyHandled(),
+  delivery_failed: () => new ModelUnavailable({ cause: "Hosted execution unavailable" }),
+  ModelUnavailable: () => new ModelUnavailable({ cause: "Hosted execution unavailable" }),
+};
+
 const makeHandleMessage =
-  (dependencies: AgentServiceDependencies) =>
-  <E, R>(
+  (dependencies: AgentServiceDependencies, client: HostedTurnsClient) =>
+  (
     userId: UserId,
     message: InboundMessage,
-    ...turn: readonly [
-      deliver: (reply: AgentReply) => Effect.Effect<void, E, R>,
-      authorityRoot?: CanonicalAuthorityRoot,
-    ]
-  ): Effect.Effect<AgentReply, AgentTurnError | E, R> => {
-    const [deliver, authorityRoot = "no-verified-whatsapp-authority"] = turn;
-    // Refusing a credential still owes the User the refusal: a channel caller reads its reply from
-    // delivery, not from this return value.
-    if (containsSensitiveChatValue(message.text)) {
-      const refusal = makeTextReply(credentialRejectedReply);
-      return Effect.as(deliver(refusal), refusal);
+    authorityRoot: CanonicalAuthorityRoot = "no-verified-whatsapp-authority"
+  ): Effect.Effect<AgentReply, AgentTurnError> =>
+    Effect.gen(function* () {
+      const turnId = TranscriptTurnId.make(
+        yield* dependencies.crypto.randomUUIDv7.pipe(Effect.orDie)
+      );
+      const limits = yield* CurrentAgentLimits;
+      return yield* client(userId)
+        .Handle({ userId, turnId, message, authorityRoot, limits })
+        .pipe(
+          Effect.mapError((failure) =>
+            typeof failure === "string"
+              ? turnFailureConstructors[failure](userId)
+              : new ModelUnavailable({ cause: "Hosted execution unavailable" })
+          )
+        );
+    });
+
+/** Durable RPCs never retain raw defect Causes. Database outages retry; runner shutdown stays interruptible. */
+const settleDurableHostedWork = (
+  dependencies: AgentServiceDependencies,
+  work: Effect.Effect<void>
+): Effect.Effect<void> =>
+  work.pipe(
+    Effect.catchCause((cause) =>
+      Cause.hasInterrupts(cause)
+        ? Effect.interrupt
+        : dependencies.telemetry
+            .captureFailure({
+              _tag: "Defect",
+              component: "agent",
+              operation: "agent.hostedTurn",
+              error: "unexpected_defect",
+              cause,
+            })
+            .pipe(Effect.andThen(Effect.fail("hosted_turn_retry")))
+    ),
+    Effect.retry(Schedule.spaced("1 second")),
+    Effect.orDie
+  );
+
+type HostedTurnRpc = RpcGroup.Rpcs<typeof HostedTurns.protocol>;
+type ImmediateTurnPayload = Rpc.Payload<Rpc.ExtractTag<HostedTurnRpc, "Handle">>;
+type WhatsAppTurnPayload = Rpc.Payload<Rpc.ExtractTag<HostedTurnRpc, "ProcessWhatsApp">>;
+type RecoveryPayload = Rpc.Payload<Rpc.ExtractTag<HostedTurnRpc, "Recover">>;
+type HostedTurnContext = Readonly<{
+  dependencies: AgentServiceDependencies;
+  client: HostedTurnsClient;
+  immediate: typeof ImmediateDelivery.Service;
+  whatsapp: typeof WhatsAppReplyDelivery.Service;
+  entityUserId: string;
+}>;
+
+const handleImmediateTurn = Effect.fn(
+  function* (
+    { dependencies, client, immediate, entityUserId }: HostedTurnContext,
+    { userId, turnId, message, limits, authorityRoot }: ImmediateTurnPayload
+  ) {
+    if (entityUserId !== userId) return yield* Effect.fail("UnknownUser" as const);
+    if (Option.isSome(yield* dependencies.continuity.recoverTurn(userId, turnId))) {
+      return yield* Effect.fail("HostedTurnAlreadyHandled" as const);
     }
-    const work = runSerializedTurn({ dependencies, userId, message, authorityRoot, deliver });
-    const traced = dependencies.telemetry.span(
-      turnDescriptor,
-      Effect.onExit(work.pipe(Effect.provideService(Telemetry, dependencies.telemetry)), (exit) =>
-        recordTurnExit(dependencies.telemetry, exit)
+    return yield* executeMessage({
+      dependencies,
+      userId,
+      turnId,
+      message,
+      authorityRoot,
+      deliver: immediate.deliver,
+      publishRecovery: client(userId)
+        .Recover({ userId, turnId }, { discard: true })
+        .pipe(Effect.orDie),
+    }).pipe(
+      Effect.provideService(CurrentAgentLimits, limits),
+      Effect.mapError((failure): typeof TurnFailure.Type =>
+        typeof failure === "string" ? failure : failure._tag
       )
     );
-    return provideAgentDependencies(dependencies, traced);
+  },
+  Effect.catchDefect(() => Effect.fail("ModelUnavailable" as const))
+);
+
+const executeWhatsAppMessage = Effect.fn(function* (
+  { dependencies, whatsapp }: HostedTurnContext,
+  claim: WhatsAppTurnClaim,
+  message: InboundMessage
+) {
+  const outcome = yield* Effect.exit(
+    executeMessage({
+      dependencies,
+      userId: claim.userId,
+      turnId: TranscriptTurnId.make(claim.claimId),
+      message,
+      authorityRoot: "verified-whatsapp",
+      deliver: (reply) => whatsapp.deliver(claim.userId, reply),
+      publishRecovery: Effect.void,
+    })
+  );
+  const now = yield* DateTime.now;
+  if (Exit.isSuccess(outcome)) return yield* completeWhatsAppTurn(claim, now);
+  if (Cause.hasInterrupts(outcome.cause)) return yield* Effect.interrupt;
+  return yield* failWhatsAppTurn(
+    claim,
+    now,
+    Option.getOrUndefined(Cause.findErrorOption(outcome.cause)) === "delivery_failed"
+      ? "send_failed"
+      : "agent_failed"
+  );
+});
+
+const processSubmittedWhatsAppTurn = Effect.fn(function* (
+  context: HostedTurnContext,
+  { userId, claimId }: WhatsAppTurnPayload
+) {
+  const { dependencies, entityUserId } = context;
+  if (entityUserId !== userId) return;
+  const claim: WhatsAppTurnClaim = { userId, claimId, action: "process" };
+  const previous = yield* dependencies.continuity.recoverTurn(
+    userId,
+    TranscriptTurnId.make(claimId)
+  );
+  if (Option.isSome(previous)) {
+    const now = yield* DateTime.now;
+    return yield* previous.value === "Completed"
+      ? completeWhatsAppTurn(claim, now)
+      : failWhatsAppTurn(claim, now, "ambiguous_crash");
+  }
+  const submitted = yield* loadSubmittedWhatsAppTurn(claim);
+  if (Option.isNone(submitted)) return;
+  return yield* dependencies.telemetry.continueSpan(
+    Option.getOrUndefined(submitted.value.propagation),
+    {
+      component: "whatsapp",
+      operation: "whatsapp.processTurn",
+      trigger: "queue",
+      spanOperation: "queue.process",
+      workKind: "queue_attempt",
+      metadata: {
+        _tag: "Queue",
+        attempt: submitted.value.processingAttempt,
+        inputCount: TelemetryCount.make(submitted.value.inputCount),
+        delayMilliseconds: submitted.value.queueDelayMilliseconds,
+      },
+    },
+    executeWhatsAppMessage(context, claim, submitted.value.inboundMessage)
+  );
+});
+
+const makeHostedTurnHandlers = Effect.fn(function* (
+  dependencies: AgentServiceDependencies,
+  client: HostedTurnsClient
+) {
+  const address = yield* Entity.CurrentAddress;
+  const entityUserId = String(address.entityId);
+  const immediate = yield* ImmediateDelivery;
+  const whatsapp = yield* WhatsAppReplyDelivery;
+  const context: HostedTurnContext = { dependencies, client, immediate, whatsapp, entityUserId };
+  return {
+    Handle: ({
+      payload,
+    }: {
+      payload: ImmediateTurnPayload;
+    }): Effect.Effect<AgentReply, typeof TurnFailure.Type> => handleImmediateTurn(context, payload),
+    ProcessWhatsApp: ({ payload }: { payload: WhatsAppTurnPayload }): Effect.Effect<void> =>
+      settleDurableHostedWork(
+        dependencies,
+        provideAgentDependencies(dependencies, processSubmittedWhatsAppTurn(context, payload))
+      ),
+    Recover: ({ payload: { userId, turnId } }: { payload: RecoveryPayload }): Effect.Effect<void> =>
+      settleDurableHostedWork(
+        dependencies,
+        entityUserId === userId
+          ? dependencies.continuity.recoverTurn(userId, turnId).pipe(Effect.asVoid)
+          : Effect.void
+      ),
   };
+});
+
+const makeHandleWhatsAppClaim =
+  (
+    dependencies: AgentServiceDependencies,
+    client: HostedTurnsClient
+  ): AgentService["Service"]["handleWhatsAppClaim"] =>
+  (claim, now) =>
+    provideAgentDependencies(
+      dependencies,
+      Effect.gen(function* () {
+        yield* withUserTransaction(
+          claim.userId,
+          Effect.gen(function* () {
+            yield* submitWhatsAppTurn(claim, now);
+            yield* client(claim.userId)
+              .ProcessWhatsApp(
+                { version: 1, userId: claim.userId, claimId: claim.claimId },
+                { discard: true }
+              )
+              .pipe(Effect.orDie);
+          })
+        );
+        yield* client(claim.userId)
+          .ProcessWhatsApp({ version: 1, userId: claim.userId, claimId: claim.claimId })
+          .pipe(Effect.orDie);
+      })
+    ).pipe(
+      Effect.catchTag("WhatsAppClaimInvalid", () => Effect.void),
+      Effect.orDie
+    );
 
 const makeAgentService = Effect.gen(function* () {
   const dependencies: AgentServiceDependencies = {
@@ -1691,7 +1963,18 @@ const makeAgentService = Effect.gen(function* () {
     sqlClient: yield* SqlClient.SqlClient,
     queueFactory: yield* PersistedQueue.PersistedQueueFactory,
   };
-  return AgentService.of({ handleMessage: makeHandleMessage(dependencies) });
+  const client = yield* HostedTurns.client;
+  yield* Layer.build(
+    HostedTurns.toLayer(makeHostedTurnHandlers(dependencies, client), {
+      concurrency: 1,
+      mailboxCapacity: 64,
+      disableFatalDefects: true,
+    })
+  );
+  return AgentService.of({
+    handleMessage: makeHandleMessage(dependencies, client),
+    handleWhatsAppClaim: makeHandleWhatsAppClaim(dependencies, client),
+  });
 });
 
 /**
@@ -1703,14 +1986,16 @@ const makeAgentService = Effect.gen(function* () {
 export class AgentService extends Context.Service<
   AgentService,
   {
-    readonly handleMessage: <E, R>(
+    readonly handleMessage: (
       userId: UserId,
       message: InboundMessage,
-      ...turn: readonly [
-        deliver: (reply: AgentReply) => Effect.Effect<void, E, R>,
-        authorityRoot?: CanonicalAuthorityRoot,
-      ]
-    ) => Effect.Effect<AgentReply, AgentTurnError | E, R>;
+      authorityRoot?: CanonicalAuthorityRoot
+    ) => Effect.Effect<AgentReply, AgentTurnError>;
+    /** Atomically hands an authenticated channel burst to its User's entity and waits for settlement. */
+    readonly handleWhatsAppClaim: (
+      claim: WhatsAppTurnClaim,
+      now: DateTime.Utc
+    ) => Effect.Effect<void>;
   }
 >()("@fidy/server/shell/agent/agent-service/AgentService") {
   /** Constructs the hosted agent from the external model and persistent slice seams. */

@@ -16,8 +16,9 @@ import {
   type Statement,
 } from "effect/unstable/sql";
 import { UserId, type WhatsAppCallerReference } from "~/core/identity/reference";
-import { InboundMessage, OnboardingConsentRequired } from "~/shell/agent/agent-service";
-import type { AgentConversationAdmission } from "~/shell/agent/conversation";
+import { InboundMessage } from "~/shell/agent/message";
+import { OnboardingConsentRequired } from "~/shell/agent/consent-error";
+import type { AuthorizedAgentTurn } from "~/shell/agent/message";
 import {
   ConfirmationDigest,
   confirmationDigestFromCommand,
@@ -395,7 +396,7 @@ const enqueueInboundJob = (
   });
 
 type EnqueueWhatsAppTurnInput = Readonly<{
-  admission: Extract<AgentConversationAdmission, { readonly _tag: "AuthorizedTurn" }>;
+  admission: AuthorizedAgentTurn;
   event: WhatsAppInboundEvent;
   deliveryKey: WhatsAppDeliveryKey;
   propagation: Option.Option<DurableTraceContext>;
@@ -657,6 +658,56 @@ export const startWhatsAppTurn = Effect.fn("WhatsApp.startTurn")(function* (
       return yield* prepareStartedTurn({ claim, claimTime, jobs, previousOutbound });
     }).pipe(Effect.catchTag("SqlError", Effect.die))
   );
+});
+
+/**
+ * Transfers a fresh claimed burst to Cluster in the caller's publication transaction. The input is
+ * validated before handoff; submitted work no longer has a channel execution deadline.
+ */
+export const submitWhatsAppTurn = Effect.fn(function* (
+  claim: WhatsAppTurnClaim,
+  now: DateTime.Utc
+) {
+  yield* startWhatsAppTurn(claim, now);
+  const sql = yield* SqlClient.SqlClient;
+  yield* sql`UPDATE whatsapp_turn_claims SET status = 'submitted', claim_expires_at = NULL
+    WHERE user_id = ${claim.userId} AND id = ${claim.claimId} AND status = 'started'`.pipe(
+    Effect.orDie
+  );
+});
+
+/** Reloads only live submitted work under its explicit User; terminal redelivery contains no input. */
+export const loadSubmittedWhatsAppTurn = Effect.fn(function* (claim: WhatsAppTurnClaim) {
+  const sql = yield* SqlClient.SqlClient;
+  return yield* withUserTransaction(
+    claim.userId,
+    Effect.gen(function* () {
+      const found = yield* SqlSchema.findOneOption({
+        Request: LoadClaimRequest,
+        Result: Schema.Struct({ startedAt: Schema.DateTimeUtcFromDate }),
+        execute: (row) => sql`SELECT started_at AS "startedAt" FROM whatsapp_turn_claims
+        WHERE user_id = ${row.userId} AND id = ${row.claimId} AND status = 'submitted'`,
+      })(claim);
+      if (Option.isNone(found)) return Option.none();
+      const jobs = yield* loadClaimedJobs(sql, claim);
+      if (!EffectArray.isArrayNonEmpty(jobs)) return Option.none();
+      const command = jobs.map(({ text }) => text).join("\n");
+      const previousOutbound = yield* confirmationDigestFromCommand(command).pipe(
+        Option.match({
+          onNone: () => Effect.succeed(Option.none()),
+          onSome: (digest) => loadConfirmationOutboundEvidence(sql, claim.userId, digest),
+        })
+      );
+      return Option.some(
+        yield* prepareStartedTurn({
+          claim,
+          claimTime: found.value.startedAt,
+          jobs,
+          previousOutbound,
+        })
+      );
+    })
+  ).pipe(Effect.orDie);
 });
 
 const retireClaimContent = (

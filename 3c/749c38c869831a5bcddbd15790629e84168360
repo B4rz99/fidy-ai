@@ -1,0 +1,38 @@
+apps/server/src/shell/agent/agent-service.ts
+  s_e8baa7cba14293::t_89af2a802bac5e 1352-1354,1734-1740,1760
+  s_e8baa7cba14293::t_54dd69a75d16d0 1355-1374,1731-1733
+  s_e8baa7cba14293::t_c5889243279784 1411
+apps/server/src/shell/agent/hosted-turns.integration.test.ts
+  s_e8baa7cba14293::t_3c98dd377cdbf1 568-569,614-615
+  s_e8baa7cba14293::t_d173c193e0faf0 41
+  s_e8baa7cba14293::t_54dd69a75d16d0 53-57,67-75,77-84,502-567,570-594,596-613
+  s_e8baa7cba14293::t_a25bf6759f3af1 595
+  s_e8baa7cba14293::t_50da11b3abb178 16-17,24,37-38,58,64-66,76,85
+  s_cfe47ac0afd905::t_8b65afcf3f8580 86
+apps/server/src/shell/channels/whatsapp/worker.ts
+  s_e8baa7cba14293::t_b3c3441063ec90 11-12
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.2",
+  "base_commit_sha": "3c749c38c869831a5bcddbd15790629e84168360",
+  "prompts": {},
+  "sessions": {
+    "s_cfe47ac0afd905": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a06efa-14b6-7772-8494-49b4e4155260",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_e8baa7cba14293": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a06efb-7ef4-7072-882f-0d66fca12cef",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

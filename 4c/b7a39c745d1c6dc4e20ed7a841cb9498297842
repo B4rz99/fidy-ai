@@ -1,0 +1,28 @@
+apps/server/src/shell/channels/whatsapp/disclosure-delivery.ts
+  s_05b0ebf6eb4c9b::t_7583288da794da 385
+apps/server/src/shell/channels/whatsapp/disclosure-races.test.ts
+  s_05b0ebf6eb4c9b::t_b6727d1f319702 206
+apps/server/src/shell/db/row-level-security.test.ts
+  s_05b0ebf6eb4c9b::t_7d93de6c66dd09 881
+apps/server/src/shell/testing/consent-disclosure.ts
+  s_05b0ebf6eb4c9b::t_2df89e2d18e0be 1,77-91
+  s_05b0ebf6eb4c9b::t_6c75e6e6a8017a 92-94
+apps/server/src/shell/channels/whatsapp/disclosure-workflow.integration.test.ts
+  s_05b0ebf6eb4c9b::t_54cd809bb16d8c 321,387,510
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.2",
+  "base_commit_sha": "4cb7a39c745d1c6dc4e20ed7a841cb9498297842",
+  "prompts": {},
+  "sessions": {
+    "s_05b0ebf6eb4c9b": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a06efb-de89-72c4-a725-1ff3b26ab002",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

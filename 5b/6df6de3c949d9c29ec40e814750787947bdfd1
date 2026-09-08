@@ -132,6 +132,8 @@ apps/server/src/shell/agent/agent-service.ts
   s_e8baa7cba14293::t_e3ca554b032445 1795-1801,1805,1833,1861,1864,1894,1906,1913,1919
   s_e8baa7cba14293::t_e58a25814986bb 26
   s_e8baa7cba14293::t_6e50ae0d8f7db4 31,41
+apps/server/src/shell/db/migrations/registry.ts
+  s_e8baa7cba14293::t_7852fdf567cdac 48,106
 ---
 {
   "schema_version": "authorship/3.0.0",

@@ -203,7 +203,7 @@ const primeAndSuspend = Effect.fn(function* (
   yield* Effect.tryPromise(() =>
     first.runPromise(
       Effect.gen(function* () {
-        while (true) {
+        for (;;) {
           const result = yield* ConsentDisclosureWorkflow.poll(executionId);
           if (Option.isSome(result) && result.value._tag === "Suspended") return;
           yield* Effect.sleep("20 millis");

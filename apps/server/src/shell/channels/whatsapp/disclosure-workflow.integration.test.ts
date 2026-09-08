@@ -318,7 +318,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         yield* Effect.tryPromise(() =>
           first.runPromise(
             Effect.gen(function* () {
-              while (true) {
+              for (;;) {
                 const state = yield* ConsentDisclosureWorkflow.poll(executionId);
                 if (Option.isSome(state) && state.value._tag === "Suspended") return;
                 yield* Effect.sleep("20 millis");
@@ -384,7 +384,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         const waiting = yield* Effect.tryPromise(() =>
           runtime.runPromise(
             Effect.gen(function* () {
-              while (true) {
+              for (;;) {
                 const state = yield* ConsentDisclosureWorkflow.poll(executionId);
                 if (Option.isSome(state) && state.value._tag === "Suspended") return state.value;
                 yield* Effect.sleep("20 millis");
@@ -507,7 +507,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         );
         const admin = yield* MigrationSqlClient;
         const callbackBlocked = Effect.gen(function* () {
-          while (true) {
+          for (;;) {
             const waiting =
               yield* admin`SELECT pid FROM pg_stat_activity WHERE datname = current_database() AND wait_event_type = 'Lock' AND query LIKE '%fidy_lock_whatsapp_disclosure%'`;
             if (waiting.length > 0) return;

@@ -1,4 +1,4 @@
-import { Effect, Option, Ref, Schema } from "effect";
+import { Clock, DateTime, Effect, Option, Ref, Schema } from "effect";
 import type { ProviderMessageEvidence } from "~/core/_shared/provider-message-evidence";
 import type { PendingConsentExchangeId } from "~/core/consent/model";
 import { findPendingConsentDisclosureRetry } from "~/shell/consent/repo";
@@ -74,5 +74,22 @@ export const deliverConsentDisclosureForTesting = Effect.fn("Test.deliverConsent
       occurredAt: input.deliveredAt,
     });
     return { correlationToken, result } as const;
-  }
+  },
+  (work, input) =>
+    Clock.clockWith((clock) => {
+      // Neighboring slices use historical scenarios: run the real delivery at that scenario's time.
+      const millis = DateTime.toEpochMillis(input.deliveredAt);
+      const nanos = BigInt(millis) * 1_000_000n;
+      return work.pipe(
+        Effect.provideService(Clock.Clock, {
+          currentTimeMillisUnsafe: () => millis,
+          currentTimeMillis: Effect.succeed(millis),
+          currentTimeNanosUnsafe: () => nanos,
+          currentTimeNanos: Effect.succeed(nanos),
+          monotonicTimeNanosUnsafe: () => clock.monotonicTimeNanosUnsafe(),
+          monotonicTimeNanos: clock.monotonicTimeNanos,
+          sleep: (duration) => clock.sleep(duration),
+        })
+      );
+    })
 );

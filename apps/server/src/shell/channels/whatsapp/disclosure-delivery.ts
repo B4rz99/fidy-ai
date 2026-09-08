@@ -382,7 +382,7 @@ const runDisclosure = Effect.fn("WhatsApp.runDisclosure")(function* ({
 }: {
   readonly exchangeId: PendingConsentExchangeId;
 }) {
-  while (true) {
+  for (;;) {
     // Do not cache this read in an Activity: every resumption must see newer owner evidence.
     const { latest, work } = yield* readDisclosure(exchangeId).pipe(observeConsentDisclosureResume);
     if (Option.isSome(latest) && latest.value.state === "delivered") {

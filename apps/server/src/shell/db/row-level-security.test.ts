@@ -146,11 +146,11 @@ const seedEveryPolicyShape = Effect.gen(function* () {
   yield* admin`
     INSERT INTO email_replacement_workflows (
       id, user_id, candidate_email_address, public_code, started_at, expires_at,
-      delivery_generation, resend_available_at
+      delivery_generation, resend_available_at, credential_verified_at
     ) VALUES (
       'f1d1a000-0000-4000-8000-0000000006c1', ${policyOwner},
       'replacement-rls-probe@fidyapp.com', 'ABCD-EFGH', '2026-01-01T00:00:00Z',
-      '2026-01-02T00:00:00Z', 1, '2026-01-01T00:01:00Z'
+      '2026-01-02T00:00:00Z', 1, '2026-01-01T00:01:00Z', '2026-01-01T00:00:00Z'
     ) ON CONFLICT (id) DO NOTHING
   `;
   yield* admin`
@@ -162,6 +162,15 @@ const seedEveryPolicyShape = Effect.gen(function* () {
       'replacement-rls-probe@fidyapp.com', 'pending',
       'f1d1a000-0000-4000-8000-0000000006c2', '2026-01-01T00:00:00Z'
     ) ON CONFLICT (id) DO NOTHING
+  `;
+  yield* admin`
+    INSERT INTO email_replacement_delivery_attempts (intent_id, attempt, outcome)
+    VALUES ('f1d1a000-0000-4000-8000-0000000006c2', 1, 'rejected') ON CONFLICT DO NOTHING
+  `;
+  yield* admin`
+    INSERT INTO email_replacement_executions (id, user_id, kind, expires_at)
+    VALUES ('f1d1a000-0000-4000-8000-0000000006c2', ${policyOwner}, 'delivery', '2026-01-02T00:00:00Z')
+    ON CONFLICT DO NOTHING
   `;
   yield* admin`
     INSERT INTO verified_email_credential_lifecycle_events (
@@ -420,6 +429,16 @@ const policyProbes: ReadonlyArray<PolicyProbe> = [
     tableName: "email_replacement_delivery_intents",
     stableColumn: "status",
     ownerPredicate: "id = 'f1d1a000-0000-4000-8000-0000000006c2'",
+  },
+  {
+    tableName: "email_replacement_delivery_attempts",
+    stableColumn: "outcome",
+    ownerPredicate: "intent_id = 'f1d1a000-0000-4000-8000-0000000006c2'",
+  },
+  {
+    tableName: "email_replacement_executions",
+    stableColumn: "terminal_observed",
+    ownerPredicate: `user_id = '${policyOwner}'`,
   },
   {
     tableName: "tokens",

@@ -196,12 +196,6 @@ export const EmailReplacementWorkflow = Schema.Struct({
 }).annotate({ identifier: "EmailReplacementWorkflow" });
 export type EmailReplacementWorkflow = typeof EmailReplacementWorkflow.Type;
 
-/** Random lease fence for one globally claimed replacement-retention step. */
-export const EmailReplacementRetentionClaimToken = Schema.String.check(Schema.isUUID())
-  .pipe(Schema.brand("EmailReplacementRetentionClaimToken"))
-  .annotate({ identifier: "EmailReplacementRetentionClaimToken" });
-export type EmailReplacementRetentionClaimToken = typeof EmailReplacementRetentionClaimToken.Type;
-
 /** Durable identity of one HMAC-only browser-pairing email start request. */
 export const BrowserPairingEmailStartRequestId = Schema.String.check(Schema.isUUID())
   .pipe(Schema.brand("BrowserPairingEmailStartRequestId"))

@@ -28,12 +28,10 @@ import { seedConsentedPatIdentity } from "~/shell/db/development-seed";
 import { MigrationSqlClient } from "~/shell/db/client";
 import { withUserTransaction } from "~/shell/db/user-transaction";
 import { admitEmailDeliveryInScope, emailCredentialLookupKey } from "./admission";
-import { EmailDeliveryPort } from "./delivery";
-import { processOneReplacementDelivery } from "./replacement-delivery-worker";
-import {
-  processOneReplacementRetention,
-  removeReplacementLifecycleEventsBefore,
-} from "./replacement-retention";
+import { EmailDeliveryPort, EmailSendFailed } from "./delivery";
+import { performReplacementAttempt } from "./replacement-delivery-worker";
+import { ReplacementDeliveryPayload, ReplacementExpiryPayload } from "./replacement-protocol";
+import { expireReplacement, removeReplacementLifecycleEventsBefore } from "./replacement-retention";
 import { completeEmailReplacement } from "./replacement-transition";
 import { ApiHarness } from "~/shell/testing/api-harness";
 
@@ -69,6 +67,10 @@ const seedReplacementSession = Effect.fn("seedReplacementSession")(function* (in
   const sql = yield* MigrationSqlClient;
   yield* sql`DELETE FROM verified_email_credential_lifecycle_events WHERE subject_user_id = ${input.subjectUserId}`;
   yield* sql`DELETE FROM email_replacement_workflows WHERE user_id = ${input.subjectUserId}`;
+  yield* sql`DELETE FROM fidy_durable.fidy_queue
+    WHERE queue_name IN ('email-replacement-delivery', 'email-replacement-expiry')
+      AND element::jsonb->>'userId' = ${input.subjectUserId}`;
+  yield* sql`DELETE FROM email_replacement_executions WHERE user_id = ${input.subjectUserId}`;
   yield* sql`DELETE FROM audit_log_entries WHERE user_id = ${input.subjectUserId}`;
   yield* sql`
     UPDATE verified_email_credentials SET email_address = ${`seed-${input.subjectUserId}@fidyapp.com`},
@@ -115,7 +117,35 @@ const verifyCode = (
     body: HttpBody.jsonUnsafe({ combinedCode }),
   });
 
-const captureNextDelivery = (): Effect.Effect<string, never, Crypto.Crypto | SqlClient.SqlClient> =>
+// Select a fixture, then exercise the explicit-User finite Activity seam (not a second executor).
+const processOneReplacementDelivery = Effect.fn(function* () {
+  const sql = yield* MigrationSqlClient;
+  const [payload] = yield* Schema.decodeUnknownEffect(Schema.Array(ReplacementDeliveryPayload))(
+    yield* sql`SELECT intent.id AS "intentId", workflow.user_id AS "userId", 1 AS revision
+      FROM email_replacement_delivery_intents intent
+      JOIN email_replacement_workflows workflow ON workflow.id = intent.workflow_id
+      WHERE workflow.user_id IN (${userId}, ${strangerUserId}) AND intent.status = 'pending'
+      ORDER BY intent.created_at, intent.id LIMIT 1`.pipe(Effect.orDie)
+  ).pipe(Effect.orDie);
+  return payload === undefined
+    ? false
+    : (yield* performReplacementAttempt(payload, 1)) !== "not-current";
+});
+
+const processOneReplacementRetention = Effect.fn(function* () {
+  const sql = yield* MigrationSqlClient;
+  const [payload] = yield* Schema.decodeUnknownEffect(Schema.Array(ReplacementExpiryPayload))(
+    yield* sql`SELECT id AS "workflowId", user_id AS "userId", 1 AS revision
+      FROM email_replacement_workflows WHERE expires_at <= now() ORDER BY expires_at LIMIT 1`
+  );
+  return payload === undefined ? false : yield* expireReplacement(payload);
+});
+
+const captureNextDelivery = (): Effect.Effect<
+  string,
+  never,
+  Crypto.Crypto | SqlClient.SqlClient | MigrationSqlClient
+> =>
   Effect.gen(function* () {
     const code = yield* Ref.make(Option.none<string>());
     yield* processOneReplacementDelivery().pipe(
@@ -503,7 +533,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
       })
     );
 
-    it.effect("keeps gateway claims matched to their forced-RLS workflow owner", () =>
+    it.effect("keeps queued delivery matched to its forced-RLS workflow owner", () =>
       Effect.gen(function* () {
         yield* seedFreshSession();
         yield* seedReplacementSession({
@@ -548,106 +578,90 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
       })
     );
 
-    it.effect("rejects mismatched gateway owners through the deep worker Interfaces", () =>
+    it.effect("rejects invalid and out-of-order provider attempts without arming a proof", () =>
       Effect.gen(function* () {
         yield* seedFreshSession();
-        yield* seedReplacementSession({
-          subjectUserId: strangerUserId,
-          tokenBearer: strangerBearer,
-          sessionId: strangerWebSessionId,
-          sessionBearer: strangerWebSessionBearer,
-        });
+        expect((yield* requestCandidate("replacement-attempt-order@example.com")).status).toBe(200);
         const sql = yield* MigrationSqlClient;
-        yield* sql`DELETE FROM email_delivery_admission_budgets`;
-        yield* requestCandidate("mismatched-delivery-owner@example.com");
-        const providerSends = yield* Ref.make(0);
-        const dropDeliveryMismatch = sql`
-          DROP TRIGGER IF EXISTS fidy_test_mismatch_delivery_owner
-            ON email_replacement_delivery_intents;
-          DROP FUNCTION IF EXISTS fidy_test_mismatch_delivery_owner()
-        `.pipe(Effect.orDie, Effect.asVoid);
-        yield* Effect.gen(function* () {
-          yield* sql`
-            CREATE FUNCTION fidy_test_mismatch_delivery_owner() RETURNS trigger
-            LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public AS $$
-            BEGIN
-              IF NEW.status = 'claimed'
-                AND NEW.email_address = 'mismatched-delivery-owner@example.com' THEN
-                UPDATE email_replacement_workflows
-                SET user_id = 'f1d1a000-0000-4000-8000-000000000327'::uuid
-                WHERE id = NEW.workflow_id;
-              END IF;
-              RETURN NEW;
-            END
-            $$;
-            CREATE TRIGGER fidy_test_mismatch_delivery_owner
-              AFTER UPDATE ON email_replacement_delivery_intents
-              FOR EACH ROW EXECUTE FUNCTION fidy_test_mismatch_delivery_owner()
-          `;
+        const payload = yield* Schema.decodeUnknownEffect(ReplacementDeliveryPayload)(
+          (yield* sql`SELECT intent.id AS "intentId", workflow.user_id AS "userId", 1 AS revision
+            FROM email_replacement_delivery_intents intent
+            JOIN email_replacement_workflows workflow ON workflow.id = intent.workflow_id
+            WHERE workflow.user_id = ${userId}`)[0]
+        );
+        for (const attempt of [0, 4, 1.5, 2, 3]) {
           expect(
-            yield* processOneReplacementDelivery().pipe(
+            yield* performReplacementAttempt(payload, attempt).pipe(
               Effect.provideService(
                 EmailDeliveryPort,
                 EmailDeliveryPort.of({
-                  send: () => Ref.set(providerSends, 1),
+                  send: () => Effect.die("invalid or out-of-order attempt must not send"),
                 })
               )
             )
-          ).toBe(false);
-        }).pipe(Effect.ensuring(dropDeliveryMismatch));
-        expect(yield* Ref.get(providerSends)).toBe(0);
+          ).toBe("not-current");
+        }
         expect(
-          yield* sql`
-            SELECT workflow.user_id, workflow.proof_digest, intent.status
-            FROM email_replacement_delivery_intents intent
-            JOIN email_replacement_workflows workflow ON workflow.id = intent.workflow_id
-            WHERE intent.email_address = 'mismatched-delivery-owner@example.com'
-          `
-        ).toEqual([{ user_id: strangerUserId, proof_digest: null, status: "claimed" }]);
-        yield* sql`
-          DELETE FROM email_replacement_workflows
-          WHERE candidate_email_address = 'mismatched-delivery-owner@example.com'
-        `;
-
-        yield* requestCandidate("mismatched-retention-owner@example.com");
-        yield* sql`
-          UPDATE email_replacement_workflows SET
-            started_at = started_at - interval '25 hours',
-            expires_at = expires_at - interval '25 hours'
-          WHERE candidate_email_address = 'mismatched-retention-owner@example.com'
-        `;
-        const dropRetentionMismatch = sql`
-          DROP TRIGGER IF EXISTS fidy_test_mismatch_retention_owner ON email_replacement_workflows;
-          DROP FUNCTION IF EXISTS fidy_test_mismatch_retention_owner()
-        `.pipe(Effect.orDie, Effect.asVoid);
-        yield* Effect.gen(function* () {
-          yield* sql`
-            CREATE FUNCTION fidy_test_mismatch_retention_owner() RETURNS trigger
-            LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public AS $$
-            BEGIN
-              IF OLD.retention_claim_token IS NULL AND NEW.retention_claim_token IS NOT NULL
-                AND NEW.candidate_email_address = 'mismatched-retention-owner@example.com' THEN
-                UPDATE email_replacement_workflows
-                SET user_id = 'f1d1a000-0000-4000-8000-000000000327'::uuid
-                WHERE id = NEW.id;
-              END IF;
-              RETURN NEW;
-            END
-            $$;
-            CREATE TRIGGER fidy_test_mismatch_retention_owner
-              AFTER UPDATE ON email_replacement_workflows
-              FOR EACH ROW EXECUTE FUNCTION fidy_test_mismatch_retention_owner()
-          `;
-          expect(yield* processOneReplacementRetention()).toBe(false);
-        }).pipe(Effect.ensuring(dropRetentionMismatch));
+          yield* sql`SELECT attempt FROM email_replacement_delivery_attempts
+          WHERE intent_id = ${payload.intentId}`
+        ).toEqual([]);
         expect(
-          yield* sql`
-            SELECT user_id FROM email_replacement_workflows
-            WHERE candidate_email_address = 'mismatched-retention-owner@example.com'
-          `
-        ).toEqual([{ user_id: strangerUserId }]);
-        yield* sql`DELETE FROM email_delivery_admission_budgets`;
+          yield* sql`SELECT status FROM email_replacement_delivery_intents
+          WHERE id = ${payload.intentId}`
+        ).toEqual([{ status: "pending" }]);
+        expect(
+          yield* sql`SELECT proof_digest FROM email_replacement_workflows
+          WHERE user_id = ${userId}`
+        ).toEqual([{ proof_digest: null }]);
       })
+    );
+
+    it.effect(
+      "rejects a wrong-User durable payload without sending, installing proof, or expiring another User's workflow",
+      () =>
+        Effect.gen(function* () {
+          yield* seedFreshSession();
+          yield* seedReplacementSession({
+            subjectUserId: strangerUserId,
+            tokenBearer: strangerBearer,
+            sessionId: strangerWebSessionId,
+            sessionBearer: strangerWebSessionBearer,
+          });
+          const sql = yield* MigrationSqlClient;
+          yield* sql`DELETE FROM email_delivery_admission_budgets`;
+          yield* requestCandidate("wrong-worker-owner@example.com");
+          const [delivery] = yield* Schema.decodeUnknownEffect(
+            Schema.Array(ReplacementDeliveryPayload)
+          )(
+            yield* sql`SELECT id AS "intentId", ${strangerUserId}::text AS "userId", 1 AS revision
+            FROM email_replacement_delivery_intents`
+          );
+          const [expiry] = yield* Schema.decodeUnknownEffect(
+            Schema.Array(ReplacementExpiryPayload)
+          )(
+            yield* sql`SELECT id AS "workflowId", ${strangerUserId}::text AS "userId", 1 AS revision
+            FROM email_replacement_workflows WHERE user_id = ${userId}`
+          );
+          if (delivery === undefined || expiry === undefined) {
+            return yield* Effect.die("expected work");
+          }
+          const calls = yield* Ref.make(0);
+          expect(
+            yield* performReplacementAttempt(delivery, 1).pipe(
+              Effect.provideService(
+                EmailDeliveryPort,
+                EmailDeliveryPort.of({ send: () => Ref.update(calls, (count) => count + 1) })
+              )
+            )
+          ).toBe("not-current");
+          expect(yield* Ref.get(calls)).toBe(0);
+          yield* sql`UPDATE email_replacement_workflows SET started_at = started_at - interval '25 hours',
+          expires_at = expires_at - interval '25 hours' WHERE user_id = ${userId}`;
+          expect(yield* expireReplacement(expiry)).toBe(false);
+          expect(
+            yield* sql`SELECT user_id, proof_digest FROM email_replacement_workflows WHERE user_id = ${userId}`
+          ).toEqual([{ user_id: userId, proof_digest: null }]);
+        })
     );
 
     it.effect("deletes a workflow after the bounded wrong-proof allowance", () =>
@@ -761,7 +775,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
     );
 
     it.effect(
-      "supersedes old proofs, reclaims abandoned delivery, and rejects global duplicates",
+      "preserves uncertain proof without redelivery, supersedes old proofs, and rejects global duplicates",
       () =>
         Effect.gen(function* () {
           yield* seedFreshSession();
@@ -777,19 +791,17 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
             body: HttpBody.jsonUnsafe({ candidateEmail: "first-generation@example.com" }),
           });
           const firstCode = yield* Ref.make(Option.none<string>());
-          yield* sql`
-          UPDATE email_replacement_delivery_intents SET status = 'claimed',
-            claim_token = gen_random_uuid(), claim_expires_at = now() - interval '1 second'
-          WHERE workflow_id IN (
-            SELECT id FROM email_replacement_workflows WHERE user_id = ${userId}
-          )
-        `;
           expect(
             yield* processOneReplacementDelivery().pipe(
               Effect.provideService(
                 EmailDeliveryPort,
                 EmailDeliveryPort.of({
-                  send: ({ combinedCode }) => Ref.set(firstCode, Option.some(combinedCode)),
+                  send: ({ combinedCode }) =>
+                    Ref.set(firstCode, Option.some(combinedCode)).pipe(
+                      Effect.andThen(
+                        new EmailSendFailed({ certainty: "ambiguous", retryable: false })
+                      )
+                    ),
                 })
               )
             )
@@ -797,21 +809,25 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           const armedDigest = yield* sql`
             SELECT proof_digest FROM email_replacement_workflows WHERE user_id = ${userId}
           `;
-          yield* sql`
-            UPDATE email_replacement_delivery_intents SET status = 'armed',
-              claim_token = gen_random_uuid(), claim_expires_at = now() - interval '1 second'
-            WHERE workflow_id IN (
-              SELECT id FROM email_replacement_workflows WHERE user_id = ${userId}
-            )
-          `;
+          const [payload] = yield* Schema.decodeUnknownEffect(
+            Schema.Array(ReplacementDeliveryPayload)
+          )(
+            yield* sql`SELECT intent.id AS "intentId", workflow.user_id AS "userId", 1 AS revision
+              FROM email_replacement_delivery_intents intent
+              JOIN email_replacement_workflows workflow ON workflow.id = intent.workflow_id
+              WHERE workflow.user_id = ${userId}`
+          );
+          if (payload === undefined) return yield* Effect.die("expected delivery");
           expect(
-            yield* processOneReplacementDelivery().pipe(
+            yield* performReplacementAttempt(payload, 1).pipe(
               Effect.provideService(
                 EmailDeliveryPort,
-                EmailDeliveryPort.of({ send: () => Effect.die("must not redeliver armed proof") })
+                EmailDeliveryPort.of({
+                  send: () => Effect.die("must not redeliver uncertain proof"),
+                })
               )
             )
-          ).toBe(false);
+          ).toBe("uncertain");
           expect(
             yield* sql`
               SELECT status FROM email_replacement_delivery_intents WHERE workflow_id IN (
@@ -856,6 +872,118 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
             yield* sql`SELECT id FROM email_replacement_workflows WHERE user_id = ${userId}`
           ).toEqual([]);
         })
+    );
+
+    it.effect(
+      "replaying a recorded replacement delivery does not send or install another proof",
+      () =>
+        Effect.gen(function* () {
+          yield* seedFreshSession();
+          const sql = yield* MigrationSqlClient;
+          yield* sql`DELETE FROM email_delivery_admission_budgets`;
+          yield* requestCandidate("duplicate-delivery@example.com");
+          const [payload] = yield* Schema.decodeUnknownEffect(
+            Schema.Array(ReplacementDeliveryPayload)
+          )(
+            yield* sql`SELECT intent.id AS "intentId", workflow.user_id AS "userId", 1 AS revision
+            FROM email_replacement_delivery_intents intent
+            JOIN email_replacement_workflows workflow ON workflow.id = intent.workflow_id
+            WHERE workflow.user_id = ${userId}`
+          );
+          if (payload === undefined) return yield* Effect.die("expected admitted delivery");
+          const codes = yield* Ref.make<ReadonlyArray<string>>([]);
+          const delivery = performReplacementAttempt(payload, 1).pipe(
+            Effect.provideService(
+              EmailDeliveryPort,
+              EmailDeliveryPort.of({
+                send: ({ combinedCode }) =>
+                  Ref.update(codes, (values) => [...values, combinedCode]),
+              })
+            )
+          );
+          expect(yield* delivery).toBe("sent");
+          expect(yield* delivery).toBe("sent");
+          const sent = yield* Ref.get(codes);
+          expect(sent).toHaveLength(1);
+          expect((yield* verifyCode(sent[0] ?? "")).status).toBe(200);
+        })
+    );
+
+    it.effect(
+      "refuses stale credential work before sending and refuses stale settlement after provider I/O",
+      () =>
+        Effect.gen(function* () {
+          yield* seedFreshSession();
+          const sql = yield* MigrationSqlClient;
+          yield* sql`DELETE FROM email_delivery_admission_budgets`;
+          yield* requestCandidate("stale-provider-work@example.com");
+          const [payload] = yield* Schema.decodeUnknownEffect(
+            Schema.Array(ReplacementDeliveryPayload)
+          )(
+            yield* sql`SELECT intent.id AS "intentId", workflow.user_id AS "userId", 1 AS revision
+            FROM email_replacement_delivery_intents intent JOIN email_replacement_workflows workflow ON workflow.id = intent.workflow_id
+            WHERE workflow.user_id = ${userId}`
+          );
+          if (payload === undefined) return yield* Effect.die("expected delivery");
+          yield* sql`UPDATE verified_email_credentials SET verified_at = verified_at + interval '1 second' WHERE user_id = ${userId}`;
+          expect(
+            yield* performReplacementAttempt(payload, 1).pipe(
+              Effect.provideService(
+                EmailDeliveryPort,
+                EmailDeliveryPort.of({
+                  send: () => Effect.die("stale work must not reach provider"),
+                })
+              )
+            )
+          ).toBe("not-current");
+          expect(
+            yield* sql`SELECT proof_digest FROM email_replacement_workflows WHERE user_id = ${userId}`
+          ).toEqual([{ proof_digest: null }]);
+          yield* sql`UPDATE verified_email_credentials SET verified_at = verified_at - interval '1 second' WHERE user_id = ${userId}`;
+          const code = yield* Ref.make(Option.none<string>());
+          expect(
+            yield* performReplacementAttempt(payload, 1).pipe(
+              Effect.provideService(
+                EmailDeliveryPort,
+                EmailDeliveryPort.of({
+                  send: ({ combinedCode }) =>
+                    Ref.set(code, Option.some(combinedCode)).pipe(
+                      Effect.andThen(
+                        sql`UPDATE verified_email_credentials SET verified_at = verified_at + interval '1 second'
+              WHERE user_id = ${userId}`.pipe(Effect.orDie, Effect.asVoid)
+                      )
+                    ),
+                })
+              )
+            )
+          ).toBe("not-current");
+          expect((yield* verifyCode(Option.getOrThrow(yield* Ref.get(code)))).status).toBe(400);
+          expect(
+            yield* sql`SELECT status FROM email_replacement_delivery_intents WHERE id = ${payload.intentId}`
+          ).toEqual([{ status: "armed" }]);
+          expect(
+            yield* sql`SELECT id FROM verified_email_credential_lifecycle_events WHERE subject_user_id = ${userId}`
+          ).toEqual([]);
+        })
+    );
+
+    it.effect("rejects a replacement proof pinned to an obsolete credential revision", () =>
+      Effect.gen(function* () {
+        yield* seedFreshSession();
+        const sql = yield* MigrationSqlClient;
+        yield* sql`DELETE FROM email_delivery_admission_budgets`;
+        yield* requestCandidate("obsolete-replacement@example.com");
+        const code = yield* captureNextDelivery();
+        yield* sql`UPDATE verified_email_credentials SET verified_at = verified_at + interval '1 second'
+          WHERE user_id = ${userId}`;
+        expect((yield* verifyCode(code)).status).toBe(400);
+        expect(
+          yield* sql`SELECT email_address FROM verified_email_credentials WHERE user_id = ${userId}`
+        ).toEqual([{ email_address: `seed-${userId}@fidyapp.com` }]);
+        expect(
+          yield* sql`SELECT id FROM verified_email_credential_lifecycle_events WHERE subject_user_id = ${userId}`
+        ).toEqual([]);
+      })
     );
 
     it.effect("revalidates cached WebSession authority at the atomic completion boundary", () =>
@@ -1061,7 +1189,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
             headers: { cookie: sessionCookie, "content-type": "application/json" },
             body: HttpBody.jsonUnsafe({ candidateEmail }),
           });
-        const deliver = (): Effect.Effect<string, never, Crypto.Crypto | SqlClient.SqlClient> =>
+        const deliver = (): ReturnType<typeof captureNextDelivery> =>
           Effect.gen(function* () {
             const code = yield* Ref.make(Option.none<string>());
             yield* processOneReplacementDelivery().pipe(
@@ -1140,7 +1268,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           200
         );
         yield* Deferred.succeed(releaseSend, undefined);
-        expect(yield* Fiber.join(worker)).toBe(true);
+        expect(yield* Fiber.join(worker)).toBe(false);
         expect(
           yield* sql`SELECT id FROM email_replacement_workflows WHERE user_id = ${userId}`
         ).toEqual([]);
@@ -1278,7 +1406,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
       })
     );
 
-    it.effect("retains expired workflows through a minimum-data leased User-scoped claim", () =>
+    it.effect("removes expired workflows through the exact User-scoped expiry operation", () =>
       Effect.gen(function* () {
         yield* seedFreshSession();
         const sql = yield* MigrationSqlClient;

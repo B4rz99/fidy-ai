@@ -14,6 +14,8 @@ apps/server/src/shell/db/migrations/0049-effect-whatsapp-disclosure.ts
 apps/server/src/shell/channels/whatsapp/disclosure-model.ts
   s_3f56268c3f81f2::t_bde85ea51b016d 39-41,47-62
   s_3f56268c3f81f2::t_e26b2ada62680a 42-46
+apps/server/src/shell/db/migrations/registry.ts
+  s_05b0ebf6eb4c9b::t_1cfb1817b16373 48,106
 ---
 {
   "schema_version": "authorship/3.0.0",

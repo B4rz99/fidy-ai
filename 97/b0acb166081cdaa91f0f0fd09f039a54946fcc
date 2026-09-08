@@ -1,0 +1,19 @@
+apps/server/src/shell/agent/mistral-conformance.ts
+  s_8061aea7e969cc::t_c6eb9bbb7a1cd5 120,212
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.2",
+  "base_commit_sha": "97b0acb166081cdaa91f0f0fd09f039a54946fcc",
+  "prompts": {},
+  "sessions": {
+    "s_8061aea7e969cc": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a07e6a-02b9-7125-a200-3155427e5a02",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

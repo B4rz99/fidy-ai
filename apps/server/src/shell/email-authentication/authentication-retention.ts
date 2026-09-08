@@ -57,7 +57,7 @@ const purgeTerminalQueueItem = Effect.fn(function* (row: typeof CompletedQueueIt
     address = Option.some(
       EntityAddress.make({
         entityId,
-        entityType: EntityType.make(`Workflow/${workflow.name}`),
+        entityType: EntityType.make(`Workflow/${workflow._tag}`),
         shardId: sharding.getShardId(entityId, "default"),
       })
     );
@@ -65,7 +65,17 @@ const purgeTerminalQueueItem = Effect.fn(function* (row: typeof CompletedQueueIt
   yield* sql
     .withTransaction(
       Effect.gen(function* () {
-        if (Option.isSome(address)) yield* storage.clearAddress(address.value);
+        if (Option.isSome(address)) {
+          yield* storage.clearAddress(address.value);
+          // DurableClock stores a separate entity under the same execution identity.
+          yield* storage.clearAddress(
+            EntityAddress.make({
+              entityType: EntityType.make("Workflow/-/DurableClock"),
+              entityId: address.value.entityId,
+              shardId: address.value.shardId,
+            })
+          );
+        }
         yield* sql`DELETE FROM fidy_queue WHERE id = ${row.id} AND queue_name = ${row.queueName} AND completed = TRUE`;
       })
     )

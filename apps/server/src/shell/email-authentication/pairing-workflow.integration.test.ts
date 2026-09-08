@@ -32,6 +32,7 @@ import {
   PairingDeliveryPayload,
   PairingExpiryPayload,
   pairingDeliveryQueue,
+  pairingExpiryQueue,
   pairingStartQueue,
   publishPairingDelivery,
 } from "./pairing-email-execution";
@@ -298,6 +299,41 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
     );
 
     it.effect(
+      "stops after a permanent provider refusal and erases the unusable proof",
+      () =>
+        Effect.gen(function* () {
+          const { payload } = yield* admit();
+          const sends = yield* Ref.make(0);
+          const runtime = yield* runtimeFor(
+            44647,
+            EmailDeliveryPort.of({
+              send: () =>
+                Ref.update(sends, (count) => count + 1).pipe(
+                  Effect.andThen(new EmailSendFailed({ certainty: "rejected", retryable: false }))
+                ),
+            })
+          );
+          expect(
+            yield* Effect.tryPromise(() =>
+              runtime.runPromise(BrowserPairingEmailDeliveryWorkflow.execute(payload))
+            )
+          ).toEqual({ outcome: "refused" });
+          expect(yield* Ref.get(sends)).toBe(1);
+          const sql = yield* MigrationSqlClient;
+          expect(
+            yield* sql`SELECT proof_digest, proof_expires_at FROM browser_pairing_email_workflows WHERE user_id = ${payload.userId}`
+          ).toEqual([{ proof_digest: null, proof_expires_at: null }]);
+          expect(
+            yield* Effect.tryPromise(() =>
+              runtime.runPromise(BrowserPairingEmailDeliveryWorkflow.execute(payload))
+            )
+          ).toEqual({ outcome: "refused" });
+          expect(yield* Ref.get(sends)).toBe(1);
+        }),
+      30_000
+    );
+
+    it.effect(
       "resumes a confirmed temporary refusal after replacing its retrying runtime",
       () =>
         Effect.gen(function* () {
@@ -387,6 +423,83 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           expect(
             yield* sql`SELECT id FROM fidy_durable.fidy_queue WHERE queue_name = 'browser-pairing-email-expiry'`
           ).toHaveLength(1);
+        }),
+      30_000
+    );
+
+    it.effect(
+      "drains bounded history pages without erasing a suspended expiry",
+      () =>
+        Effect.gen(function* () {
+          const { payload } = yield* admit();
+          const sql = yield* MigrationSqlClient;
+          yield* sql`UPDATE browser_pairing_email_workflows SET expires_at = ${DateTime.add(yield* DateTime.now, { seconds: 10 })}
+            WHERE user_id = ${payload.userId}`;
+          const runtime = yield* runtimeFor(
+            44646,
+            EmailDeliveryPort.of({ send: () => Effect.die("expiry must not send") })
+          );
+          const queue = yield* pairingExpiryQueue;
+          const expiry = yield* queue.take((input) =>
+            Effect.tryPromise(
+              runtime.runPromise.bind(
+                runtime,
+                BrowserPairingEmailExpiryWorkflow.execute(input, { discard: true }),
+                undefined
+              )
+            ).pipe(Effect.as(input))
+          );
+          const executionId = yield* BrowserPairingEmailExpiryWorkflow.executionId(expiry);
+          const suspended = BrowserPairingEmailExpiryWorkflow.poll(executionId).pipe(
+            Effect.delay("25 millis"),
+            Effect.repeat({ until: Option.exists((state) => state._tag === "Suspended") }),
+            Effect.timeout("5 seconds")
+          );
+          yield* Effect.tryPromise(() => runtime.runPromise(suspended));
+          yield* sql`INSERT INTO fidy_durable.fidy_queue (id, queue_name, element, completed, created_at, updated_at)
+            SELECT gen_random_uuid()::text, 'browser-pairing-email-start',
+              jsonb_build_object('revision', 1, 'requestId', gen_random_uuid())::text, TRUE, now(), now()
+            FROM generate_series(1, 100)`;
+          yield* sql`UPDATE fidy_durable.fidy_queue SET updated_at = now() - interval '25 hours'
+            WHERE queue_name IN ('browser-pairing-email-start', 'browser-pairing-email-expiry')`;
+          const cursor = yield* Effect.tryPromise(() =>
+            runtime.runPromise(purgeBrowserPairingEmailExecutionHistory())
+          );
+          expect(cursor).toBeGreaterThan(0);
+          expect(
+            yield* sql`SELECT id FROM fidy_durable.fidy_queue WHERE queue_name = 'browser-pairing-email-start'`
+          ).toHaveLength(2);
+          expect(
+            yield* Effect.tryPromise(() =>
+              runtime.runPromise(purgeBrowserPairingEmailExecutionHistory(cursor))
+            )
+          ).toBe(0);
+          expect(
+            yield* sql`SELECT id FROM fidy_durable.fidy_queue WHERE queue_name = 'browser-pairing-email-start'`
+          ).toEqual([]);
+          expect(
+            yield* sql`SELECT id FROM fidy_durable.fidy_queue WHERE queue_name = 'browser-pairing-email-expiry'`
+          ).toHaveLength(1);
+          expect(
+            yield* sql`SELECT id FROM browser_pairing_email_workflows WHERE id = ${expiry.workflowId}`
+          ).toHaveLength(1);
+          yield* Effect.tryPromise(() =>
+            runtime.runPromise(BrowserPairingEmailExpiryWorkflow.execute(expiry))
+          );
+          expect(
+            yield* sql`SELECT id FROM browser_pairing_email_workflows WHERE id = ${expiry.workflowId}`
+          ).toEqual([]);
+          expect(
+            yield* Effect.tryPromise(() =>
+              runtime.runPromise(purgeBrowserPairingEmailExecutionHistory())
+            )
+          ).toBe(0);
+          expect(
+            yield* sql`SELECT id FROM fidy_durable.fidy_queue WHERE queue_name = 'browser-pairing-email-expiry'`
+          ).toEqual([]);
+          expect(
+            yield* sql`SELECT id FROM fidy_durable.cluster_messages WHERE entity_id = ${executionId}`
+          ).toEqual([]);
         }),
       30_000
     );

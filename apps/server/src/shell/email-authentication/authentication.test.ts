@@ -286,6 +286,40 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         })
     );
 
+    it.effect("keeps capacity contention private and admits work after the lock is released", () =>
+      Effect.gen(function* () {
+        yield* resetAuthentication;
+        const pairing = yield* startPairing;
+        const sql = yield* MigrationSqlClient;
+        const acquired = yield* Deferred.make<void>();
+        const release = yield* Deferred.make<void>();
+        const holder = yield* sql
+          .withTransaction(
+            Effect.gen(function* () {
+              yield* sql`SELECT pg_advisory_xact_lock(hashtextextended('email-authentication:browser-pairing-execution-capacity', 0))`;
+              yield* Deferred.succeed(acquired, undefined);
+              yield* Deferred.await(release);
+            })
+          )
+          .pipe(Effect.forkScoped);
+        yield* Deferred.await(acquired);
+        for (const address of [knownEmail, "unknown-contention@example.com"]) {
+          const response = yield* requestEmailHttp(pairing, address);
+          expect(response.status).toBe(202);
+          expect(yield* response.json).toEqual({ status: "pending", retryAfterSeconds: 60 });
+        }
+        expect(yield* sql`SELECT id FROM browser_pairing_email_start_requests`).toEqual([]);
+        expect(
+          yield* sql`SELECT id FROM fidy_durable.fidy_queue WHERE queue_name = 'browser-pairing-email-start'`
+        ).toEqual([]);
+        yield* Deferred.succeed(release, undefined);
+        yield* Fiber.join(holder);
+        yield* requestEmail(pairing, knownEmail);
+        expect(yield* sql`SELECT id FROM browser_pairing_email_start_requests`).toHaveLength(1);
+        yield* deliverCode;
+      })
+    );
+
     it.effect(
       "bounds retained native history under repeated concurrent anonymous starts without sending",
       () =>

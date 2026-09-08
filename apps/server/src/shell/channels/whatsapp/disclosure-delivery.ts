@@ -1,308 +1,490 @@
-import { Data, DateTime, Effect, Option, Random, Result, Schema } from "effect";
-import { SqlClient } from "effect/unstable/sql";
+import {
+  Cause,
+  Config,
+  Data,
+  DateTime,
+  Effect,
+  Exit,
+  Layer,
+  Option,
+  Random,
+  Result,
+  Schema,
+} from "effect";
+import { type SqlClient } from "effect/unstable/sql";
+import { Activity, DurableClock, DurableDeferred } from "effect/unstable/workflow";
+import { type PendingConsentExchangeId } from "~/core/consent/model";
 import { TranscriptText } from "~/core/transcript/model";
-import { recordConsentDisclosureDelivery } from "~/shell/consent/repo";
+import { findPendingConsentExchange, recordConsentDisclosureDelivery } from "~/shell/consent/repo";
 import {
   type DisclosureDeliveryAttemptCapability,
-  type DisclosureDeliveryAttemptNumber,
-  type DisclosureDeliveryCorrelationToken,
+  DisclosureDeliveryAttemptNumber,
+  type DisclosureDeliveryEvidence,
 } from "./disclosure-model";
 import {
-  claimConsentDisclosureDelivery,
-  claimNextConsentDisclosureRetry,
+  armConsentDisclosureAttempt,
   findConsentDisclosureAttemptByCorrelation,
-  markConsentDisclosureDeliveryStarted,
+  findConsentDisclosureDeliveryState,
+  findConsentDisclosureWork,
+  findPendingConsentDisclosureRequests,
+  lockConsentDisclosure,
   recordConsentDisclosureAttemptAccepted,
   recordConsentDisclosureAttemptDelivered,
   recordConsentDisclosureAttemptSent,
   recordConsentDisclosureDeliveryFailure,
+  requestConsentDisclosure,
 } from "./disclosure-store";
 import {
-  KapsoClient,
-  type KapsoDeliveryCertainty,
-  type KapsoDestination,
-  KapsoSendFailed,
-  kapsoDestinationFor,
-} from "./kapso-client";
+  ConsentDisclosureWorkflow,
+  consentDisclosureEvidenceQueue,
+  consentDisclosureQueue,
+  disclosureEvidenceChanged,
+  disclosureEvidenceQueueId,
+} from "./disclosure-workflow";
+import {
+  observeConsentDisclosureAttempt,
+  observeConsentDisclosureQueue,
+  observeConsentDisclosureResume,
+  recordConsentDisclosureOutcome,
+} from "./disclosure-observation";
+import { KapsoClient, type KapsoSendFailed, kapsoDestinationFor } from "./kapso-client";
 import type { KapsoDisclosureLifecycleEvidence } from "./kapso-webhook";
-import { WhatsAppBusinessPhoneNumberId, type WhatsAppInboundEvent } from "./model";
+import type { WhatsAppInboundEvent } from "./model";
 import type { WhatsAppReceiptInvalid } from "./repo";
 
 export { DisclosureDeliveryCorrelationToken } from "./disclosure-model";
 
-/** Another worker owns disclosure delivery or its durable outcome could not be applied. */
+/** Delivery cannot be admitted or verified evidence cannot be committed consistently. */
 export class ConsentDisclosureDeliveryUnavailable extends Data.TaggedError(
   "ConsentDisclosureDeliveryUnavailable"
 )<{}> {}
 
-const sendDisclosure = Effect.fn(function* (input: {
-  readonly businessPhoneNumberId: WhatsAppBusinessPhoneNumberId;
-  readonly destination: KapsoDestination;
-  readonly text: TranscriptText;
-  readonly correlationToken: DisclosureDeliveryCorrelationToken;
-}) {
-  const client = yield* KapsoClient;
-  return yield* client.sendText({
-    businessPhoneNumberId: input.businessPhoneNumberId,
-    destination: input.destination,
-    text: input.text,
-    opaqueCallbackData: Option.some(input.correlationToken),
-  });
-});
-
-const millisecondsPerSecond = 1_000;
-
-const decideDisclosureRetryAt = Effect.fn(function* (input: {
-  readonly certainty: KapsoDeliveryCertainty;
-  readonly attemptNumber: DisclosureDeliveryAttemptNumber;
-  readonly occurredAt: DateTime.Utc;
-  readonly automaticRetry: boolean;
-}) {
-  if (input.certainty !== "rejected" || !input.automaticRetry || input.attemptNumber >= 4) {
-    return Option.none<DateTime.Utc>();
-  }
-  const baseSeconds = 2 ** (input.attemptNumber - 1);
-  const jitterMilliseconds = yield* Random.nextIntBetween(
-    0,
-    baseSeconds * millisecondsPerSecond + 1
-  );
-  return Option.some(
-    DateTime.add(input.occurredAt, {
-      milliseconds: baseSeconds * millisecondsPerSecond + jitterMilliseconds,
-    })
-  );
-});
-
-const applyDelivered = Effect.fn(function* (
-  input: Parameters<typeof recordConsentDisclosureAttemptDelivered>[0]
-) {
-  const sql = yield* SqlClient.SqlClient;
-  return yield* sql
-    .withTransaction(
-      Effect.gen(function* () {
-        if (!(yield* recordConsentDisclosureAttemptDelivered(input))) return Option.none();
-        const recorded = yield* recordConsentDisclosureDelivery(input);
-        if (Option.isNone(recorded)) return yield* new ConsentDisclosureDeliveryUnavailable();
-        return recorded;
-      })
-    )
-    .pipe(Effect.catchTag("SqlError", Effect.die));
-});
-
-type DisclosureLifecycleDecision =
-  | Readonly<{
-      readonly _tag: "SendAccepted";
-      readonly message: Parameters<typeof recordConsentDisclosureAttemptAccepted>[0]["message"];
-      readonly occurredAt: DateTime.Utc;
-    }>
-  | Readonly<{
-      readonly _tag: "Delivered";
-      readonly message: Parameters<typeof recordConsentDisclosureAttemptDelivered>[0]["message"];
-      readonly occurredAt: DateTime.Utc;
-    }>
-  | Readonly<{
-      readonly _tag: "Failed";
-      readonly failure: KapsoSendFailed;
-      readonly occurredAt: DateTime.Utc;
-      readonly providerEvidence: boolean;
-    }>
-  | Readonly<{
-      readonly _tag: "Sent";
-      readonly message: Parameters<typeof recordConsentDisclosureAttemptSent>[0]["message"];
-      readonly occurredAt: DateTime.Utc;
-    }>;
-
-const applyLifecycleDecision = Effect.fn(function* (
-  attempt: DisclosureDeliveryAttemptCapability & {
-    readonly attemptNumber: DisclosureDeliveryAttemptNumber;
-  },
-  decision: DisclosureLifecycleDecision
-) {
-  if (decision._tag === "Sent") {
-    const retained = yield* recordConsentDisclosureAttemptSent({
-      ...attempt,
-      message: decision.message,
-      occurredAt: decision.occurredAt,
-    });
-    return retained ? ("applied" as const) : ("ignored" as const);
-  }
-  if (decision._tag === "SendAccepted") {
-    const retained = yield* recordConsentDisclosureAttemptAccepted({
-      ...attempt,
-      message: decision.message,
-      acceptedAt: decision.occurredAt,
-    });
-    return retained ? ("applied" as const) : ("ignored" as const);
-  }
-  if (decision._tag === "Delivered") {
-    const applied = yield* applyDelivered({
-      ...attempt,
-      message: decision.message,
-      deliveredAt: decision.occurredAt,
-    });
-    return Option.isSome(applied) ? ("applied" as const) : ("ignored" as const);
-  }
-  const retryAt = yield* decideDisclosureRetryAt({
-    certainty: decision.failure.deliveryCertainty,
-    attemptNumber: attempt.attemptNumber,
-    occurredAt: decision.occurredAt,
-    automaticRetry: decision.failure.automaticRetry,
-  });
-  const retained = yield* recordConsentDisclosureDeliveryFailure({
-    ...attempt,
-    reason: decision.failure.safeReason,
-    certainty: decision.failure.deliveryCertainty,
-    occurredAt: decision.occurredAt,
-    providerEvidence: decision.providerEvidence,
-    retryAt,
-  });
-  return retained ? ("applied" as const) : ("ignored" as const);
-});
-
-const executeClaim = Effect.fn(function* (
-  input: DisclosureDeliveryAttemptCapability & {
-    readonly attemptNumber: DisclosureDeliveryAttemptNumber;
-    readonly businessPhoneNumberId: WhatsAppBusinessPhoneNumberId;
-    readonly startedAt: DateTime.Utc;
-    readonly destination: KapsoDestination;
-    readonly text: TranscriptText;
-    readonly propagateTerminalFailure: boolean;
-  }
-) {
-  const started = yield* markConsentDisclosureDeliveryStarted(
-    {
-      exchangeId: input.exchangeId,
-      attemptId: input.attemptId,
-      businessPhoneNumberId: input.businessPhoneNumberId,
-    },
-    input.startedAt
-  );
-  if (!started) return yield* new ConsentDisclosureDeliveryUnavailable();
-
-  const sent = yield* Effect.result(
-    sendDisclosure({
-      businessPhoneNumberId: input.businessPhoneNumberId,
-      destination: input.destination,
-      text: input.text,
-      correlationToken: input.correlationToken,
-    })
-  );
-  const attempt = {
-    exchangeId: input.exchangeId,
-    attemptId: input.attemptId,
-    attemptNumber: input.attemptNumber,
-    correlationToken: input.correlationToken,
-  };
-  if (Result.isFailure(sent)) {
-    const applied = yield* applyLifecycleDecision(attempt, {
-      _tag: "Failed",
-      failure: sent.failure,
-      occurredAt: DateTime.max(yield* DateTime.now, input.startedAt),
-      providerEvidence: false,
-    });
-    if (applied === "ignored") return yield* new ConsentDisclosureDeliveryUnavailable();
-    if (input.propagateTerminalFailure && !sent.failure.automaticRetry) return yield* sent.failure;
-    return;
-  }
-
-  const applied = yield* applyLifecycleDecision(attempt, {
-    _tag: "SendAccepted",
-    message: sent.success.messageEvidence,
-    occurredAt: sent.success.sentAt,
-  });
-  if (applied === "ignored") return yield* new ConsentDisclosureDeliveryUnavailable();
-});
-
 /**
- * Starts the sole durable WhatsApp delivery for a pending Consent exchange. The module owns claim
- * expiry, exact-attempt correlation, provider invocation, retry scheduling, and atomic Consent
- * advancement. The caller supplies only authenticated routing context, disclosure text, and work
- * that must commit before the provider seam is crossed.
+ * Accepts one disclosure without waiting for Kapso. Receipt handoff, immutable routing, and native
+ * queue publication commit together. Duplicates converge on the same exchange execution.
  */
 export const requestConsentDisclosureDelivery = Effect.fn("WhatsApp.requestDisclosureDelivery")(
   function* (input: {
     readonly event: WhatsAppInboundEvent;
-    readonly exchangeId: DisclosureDeliveryAttemptCapability["exchangeId"];
-    readonly text: TranscriptText;
+    readonly exchangeId: PendingConsentExchangeId;
     readonly beforeProviderCall: Effect.Effect<void, WhatsAppReceiptInvalid, SqlClient.SqlClient>;
   }) {
-    const claim = yield* claimConsentDisclosureDelivery(input.exchangeId, input.event.receivedAt);
-    if (Option.isNone(claim)) return yield* new ConsentDisclosureDeliveryUnavailable();
-    yield* input.beforeProviderCall;
-    yield* executeClaim({
-      ...claim.value,
-      exchangeId: input.exchangeId,
-      businessPhoneNumberId: input.event.businessPhoneNumberId,
-      destination: kapsoDestinationFor(input.event.caller),
-      text: input.text,
-      startedAt: input.event.receivedAt,
-      propagateTerminalFailure: true,
-    });
+    const queue = yield* consentDisclosureQueue;
+    const destination = kapsoDestinationFor(input.event.caller);
+    yield* lockConsentDisclosure(
+      input.exchangeId,
+      Effect.gen(function* () {
+        const pending = yield* findPendingConsentExchange(input.event.caller);
+        if (Option.isNone(pending) || pending.value.id !== input.exchangeId) {
+          return yield* new ConsentDisclosureDeliveryUnavailable();
+        }
+        const eligible = yield* requestConsentDisclosure({
+          exchangeId: input.exchangeId,
+          businessPhoneNumberId: input.event.businessPhoneNumberId,
+          sandboxPhone: destination.sandboxPhone,
+          now: yield* DateTime.now,
+        });
+        if (!eligible) return;
+        yield* input.beforeProviderCall;
+        yield* queue
+          .offer({ exchangeId: input.exchangeId, revision: 1 }, { id: input.exchangeId })
+          .pipe(Effect.orDie);
+      })
+    );
   }
 );
 
+const applyDelivered = Effect.fn(function* (
+  input: Parameters<typeof recordConsentDisclosureAttemptDelivered>[0]
+) {
+  if (!(yield* recordConsentDisclosureAttemptDelivered(input))) return false;
+  const recorded = yield* recordConsentDisclosureDelivery(input);
+  if (Option.isNone(recorded)) return yield* new ConsentDisclosureDeliveryUnavailable();
+  return true;
+});
+
+const applyFailure = (
+  attempt: DisclosureDeliveryAttemptCapability & {
+    readonly attemptNumber: DisclosureDeliveryAttemptNumber;
+  },
+  failure: KapsoSendFailed,
+  occurredAt: DateTime.Utc
+): ReturnType<typeof recordConsentDisclosureDeliveryFailure> =>
+  recordConsentDisclosureDeliveryFailure({
+    ...attempt,
+    reason: failure.safeReason,
+    certainty: failure.deliveryCertainty,
+    occurredAt,
+    providerEvidence: false,
+    message: Option.none(),
+    retryable: failure.deliveryCertainty === "rejected" && failure.automaticRetry,
+  });
+
+const observeEvidence = Effect.fn(function* (evidence: DisclosureDeliveryEvidence) {
+  switch (evidence.state) {
+    case "started":
+    case "reconciliation-required":
+      return yield* recordConsentDisclosureOutcome("ambiguous");
+    case "definitively-failed":
+      return yield* recordConsentDisclosureOutcome(evidence.retryable ? "retrying" : "rejected");
+    case "delivered":
+    case "retry-exhausted":
+      return yield* recordConsentDisclosureOutcome(evidence.state);
+  }
+});
+
 /**
- * Applies authenticated provider lifecycle evidence by opaque correlation. Replays and stale
- * history are ignored; nonterminal `sent` evidence advances chronology only. Verified delivery
- * advances Consent atomically, while definitive failures alone may schedule a bounded retry.
+ * Performs at most one newly armed provider call. Re-entry never repeats an armed attempt. This
+ * finite channel-worker seam retains provider evidence; the Workflow alone decides when to retry.
+ */
+export const performConsentDisclosureAttempt = Effect.fn("WhatsApp.performDisclosureAttempt")(
+  function* (
+    exchangeId: PendingConsentExchangeId,
+    attemptNumber: DisclosureDeliveryAttemptNumber,
+    expectedEvidenceRevision: Option.Option<number> = Option.none()
+  ) {
+    return yield* Effect.gen(function* () {
+      const prepared = yield* lockConsentDisclosure(
+        exchangeId,
+        Effect.gen(function* () {
+          const work = yield* findConsentDisclosureWork(exchangeId, yield* DateTime.now);
+          if (Option.isNone(work)) return Option.none();
+          const armed = yield* armConsentDisclosureAttempt({
+            exchangeId,
+            attemptNumber,
+            now: yield* DateTime.now,
+            expectedEvidenceRevision,
+          });
+          if (Option.isNone(armed)) return Option.none();
+          return Option.some({ work: work.value, attempt: { ...armed.value, exchangeId } });
+        })
+      );
+      if (Option.isNone(prepared)) return;
+      const { work, attempt } = prepared.value;
+      const text = yield* Schema.decodeEffect(TranscriptText)(work.disclosureText).pipe(
+        Effect.orDie
+      );
+      const client = yield* KapsoClient;
+      const result = yield* client
+        .sendText({
+          businessPhoneNumberId: work.businessPhoneNumberId,
+          destination: {
+            recipient: work.businessScopedUserId,
+            sandboxPhone: work.sandboxPhone,
+          },
+          text,
+          opaqueCallbackData: Option.some(attempt.correlationToken),
+        })
+        .pipe(Effect.result);
+      yield* lockConsentDisclosure(
+        exchangeId,
+        Result.match(result, {
+          onFailure: (failure) =>
+            DateTime.now.pipe(Effect.flatMap((at) => applyFailure(attempt, failure, at))),
+          onSuccess: (sent) =>
+            recordConsentDisclosureAttemptAccepted({
+              ...attempt,
+              message: sent.messageEvidence,
+              acceptedAt: sent.sentAt,
+            }),
+        })
+      );
+      yield* readDisclosure(exchangeId);
+    }).pipe((work) => observeConsentDisclosureAttempt(work, attemptNumber));
+  }
+);
+
+const applyLifecycleEvidence = Effect.fn(function* (
+  attempt: DisclosureDeliveryAttemptCapability & {
+    readonly attemptNumber: DisclosureDeliveryAttemptNumber;
+  },
+  evidence: KapsoDisclosureLifecycleEvidence
+) {
+  switch (evidence.outcome) {
+    case "sent":
+      return yield* recordConsentDisclosureAttemptSent({
+        ...attempt,
+        message: evidence.messageEvidence,
+        occurredAt: evidence.occurredAt,
+      });
+    case "accepted":
+      return yield* applyDelivered({
+        ...attempt,
+        message: evidence.messageEvidence,
+        deliveredAt: evidence.occurredAt,
+      });
+    case "failed":
+      return yield* recordConsentDisclosureDeliveryFailure({
+        ...attempt,
+        reason: evidence.reason,
+        certainty: "rejected",
+        occurredAt: evidence.occurredAt,
+        providerEvidence: true,
+        message: Option.some(evidence.messageEvidence),
+        retryable: evidence.automaticRetry,
+      });
+  }
+});
+
+/**
+ * Applies authenticated exact-attempt evidence and atomically records its durable wake command.
+ * Consent advancement is in that same transaction. The signal contains no provider facts; resumed
+ * execution re-reads the owner. Replays and conflicting chronology cause neither writes nor wakes.
  */
 export const applyConsentDisclosureLifecycle = Effect.fn("WhatsApp.applyDisclosureLifecycle")(
   function* (evidence: KapsoDisclosureLifecycleEvidence) {
     const correlated = yield* findConsentDisclosureAttemptByCorrelation(evidence.correlationToken);
     if (Option.isNone(correlated)) return "ignored" as const;
-    const attempt = { ...correlated.value, correlationToken: evidence.correlationToken };
-    if (evidence.outcome === "sent") {
-      return yield* applyLifecycleDecision(attempt, {
-        _tag: "Sent",
-        message: evidence.messageEvidence,
-        occurredAt: evidence.occurredAt,
-      });
-    }
-    if (evidence.outcome === "accepted") {
-      return yield* applyLifecycleDecision(attempt, {
-        _tag: "Delivered",
-        message: evidence.messageEvidence,
-        occurredAt: evidence.occurredAt,
-      });
-    }
-    return yield* applyLifecycleDecision(attempt, {
-      _tag: "Failed",
-      failure: new KapsoSendFailed({
-        deliveryCertainty: "rejected",
-        safeReason: evidence.reason,
-        automaticRetry: evidence.automaticRetry,
-        responseStatus: Option.none(),
-      }),
-      occurredAt: evidence.occurredAt,
-      providerEvidence: true,
-    });
+    return yield* lockConsentDisclosure(
+      correlated.value.exchangeId,
+      Effect.gen(function* () {
+        const work = yield* findConsentDisclosureWork(
+          correlated.value.exchangeId,
+          yield* DateTime.now
+        );
+        if (Option.isNone(work)) return "ignored" as const;
+        const current = yield* findConsentDisclosureAttemptByCorrelation(evidence.correlationToken);
+        if (Option.isNone(current)) return "ignored" as const;
+        const attempt = { ...current.value, correlationToken: evidence.correlationToken };
+        const applied = yield* applyLifecycleEvidence(attempt, evidence);
+        if (!applied) return "ignored" as const;
+        const queue = yield* consentDisclosureEvidenceQueue;
+        yield* queue
+          .offer(
+            {
+              revision: 1,
+              exchangeId: attempt.exchangeId,
+              attemptId: attempt.attemptId,
+              evidenceRevision: attempt.evidenceRevision,
+            },
+            { id: disclosureEvidenceQueueId(attempt) }
+          )
+          .pipe(Effect.orDie);
+        return "applied" as const;
+      })
+    );
   }
 );
 
-/**
- * Processes at most one due definitive retry. Ambiguous attempts are never sent again and await
- * authenticated lifecycle webhooks; definitive transient rejection creates the next of at most
- * four attempts. Returns false only when no retry is due.
- */
-export const processDueConsentDisclosureDelivery = Effect.fn("WhatsApp.processDueDisclosure")(
-  function* (now: DateTime.Utc) {
-    const claimed = yield* claimNextConsentDisclosureRetry(now);
-    if (Option.isNone(claimed)) return false;
-    const attempt = claimed.value;
-    const businessPhoneNumberId = yield* Schema.decodeEffect(WhatsAppBusinessPhoneNumberId)(
-      attempt.businessPhoneNumberId
-    ).pipe(Effect.orDie);
-    const text = yield* Schema.decodeEffect(TranscriptText)(attempt.disclosureText).pipe(
-      Effect.orDie
-    );
-    yield* executeClaim({
-      ...attempt,
-      businessPhoneNumberId,
-      destination: { recipient: attempt.businessScopedUserId, sandboxPhone: Option.none() },
-      text,
-      startedAt: now,
-      propagateTerminalFailure: false,
-    });
-    return true;
+const sleepUntil = Effect.fn(function* (name: string, at: DateTime.Utc) {
+  return yield* DateTime.now.pipe(
+    Effect.flatMap((now) =>
+      DurableClock.sleep({
+        name,
+        duration: Math.max(0, DateTime.toEpochMillis(at) - DateTime.toEpochMillis(now)),
+        inMemoryThreshold: "0 millis",
+      })
+    )
+  );
+});
+
+const sendAttempt = Effect.fn(function* (
+  exchangeId: PendingConsentExchangeId,
+  attemptNumber: DisclosureDeliveryAttemptNumber,
+  evidenceRevision = 0
+) {
+  return yield* Activity.make({
+    name: `Send/${attemptNumber}/AfterEvidence/${evidenceRevision}`,
+    execute: performConsentDisclosureAttempt(
+      exchangeId,
+      attemptNumber,
+      attemptNumber === 1 ? Option.none() : Option.some(evidenceRevision)
+    ),
+  });
+});
+
+const millisecondsPerSecond = 1_000;
+const retryDisclosure = Effect.fn(function* (
+  exchangeId: PendingConsentExchangeId,
+  attempt: DisclosureDeliveryEvidence,
+  expiresAt: DateTime.Utc
+) {
+  const resumeAt = yield* Activity.make({
+    name: `Retry/${attempt.attemptNumber}/${attempt.evidenceRevision}`,
+    success: Schema.DateTimeUtc,
+    execute: Effect.gen(function* () {
+      const failedAt = yield* Effect.fromOption(attempt.failureOccurredAt).pipe(Effect.orDie);
+      const base = 2 ** (attempt.attemptNumber - 1) * millisecondsPerSecond;
+      const jitter = yield* Random.nextIntBetween(0, base + 1);
+      return DateTime.add(failedAt, { milliseconds: base + jitter });
+    }),
+  });
+  yield* DurableDeferred.raceAll({
+    name: `RetryWake/${attempt.attemptId}/${attempt.evidenceRevision}`,
+    success: Schema.Void,
+    error: Schema.Never,
+    effects: [
+      DurableDeferred.await(disclosureEvidenceChanged(attempt)),
+      sleepUntil(`Retry/${attempt.attemptId}/${attempt.evidenceRevision}`, resumeAt),
+      sleepUntil("Expiry", expiresAt),
+    ],
+  });
+  const now = yield* DateTime.now;
+  if (DateTime.isLessThan(now, resumeAt)) return;
+  const { work: current } = yield* readDisclosure(exchangeId).pipe(observeConsentDisclosureResume);
+  if (Option.isNone(current) || Option.isNone(current.value.latestAttempt)) return;
+  const latest = current.value.latestAttempt.value;
+  if (
+    latest.attemptId !== attempt.attemptId ||
+    latest.evidenceRevision !== attempt.evidenceRevision
+  ) {
+    return;
   }
+  yield* sendAttempt(
+    exchangeId,
+    DisclosureDeliveryAttemptNumber.make(attempt.attemptNumber + 1),
+    attempt.evidenceRevision
+  );
+});
+
+const continueDisclosure = Effect.fn(function* (
+  exchangeId: PendingConsentExchangeId,
+  attempt: DisclosureDeliveryEvidence,
+  expiresAt: DateTime.Utc
+) {
+  // Rejection/exhaustion stops sending, not authenticated reconciliation. A newer provider
+  // observation remains admissible until expiry, so completing here would strand late evidence.
+  if (attempt.state === "definitively-failed" && attempt.retryable) {
+    return yield* retryDisclosure(exchangeId, attempt, expiresAt);
+  }
+  yield* DurableDeferred.raceAll({
+    name: `EvidenceWake/${attempt.attemptId}/${attempt.evidenceRevision}`,
+    success: Schema.Void,
+    error: Schema.Never,
+    effects: [
+      DurableDeferred.await(disclosureEvidenceChanged(attempt)),
+      sleepUntil("Expiry", expiresAt),
+    ],
+  });
+});
+
+const readDisclosure = Effect.fn(function* (exchangeId: PendingConsentExchangeId) {
+  const { latest, work } = yield* lockConsentDisclosure(
+    exchangeId,
+    Effect.gen(function* () {
+      const latest = yield* findConsentDisclosureDeliveryState(exchangeId);
+      const work = yield* findConsentDisclosureWork(exchangeId, yield* DateTime.now);
+      return { latest, work };
+    })
+  );
+  if (Option.isSome(latest) && latest.value.state === "delivered") {
+    yield* recordConsentDisclosureOutcome("delivered");
+  } else if (Option.isNone(work)) {
+    yield* recordConsentDisclosureOutcome("not-current");
+  } else if (Option.isSome(work.value.latestAttempt)) {
+    yield* observeEvidence(work.value.latestAttempt.value);
+  }
+  return { latest, work };
+});
+
+const runDisclosure = Effect.fn("WhatsApp.runDisclosure")(function* ({
+  exchangeId,
+}: {
+  readonly exchangeId: PendingConsentExchangeId;
+}) {
+  for (;;) {
+    // Do not cache this read in an Activity: every resumption must see newer owner evidence.
+    const { latest, work } = yield* readDisclosure(exchangeId).pipe(observeConsentDisclosureResume);
+    if (Option.isSome(latest) && latest.value.state === "delivered") {
+      return { outcome: "delivered" as const };
+    }
+    if (Option.isNone(work)) return { outcome: "not-current" as const };
+    if (Option.isNone(work.value.latestAttempt)) {
+      yield* sendAttempt(exchangeId, DisclosureDeliveryAttemptNumber.make(1));
+      continue;
+    }
+    yield* continueDisclosure(exchangeId, work.value.latestAttempt.value, work.value.expiresAt);
+  }
+});
+
+/** Registers the slice-owned execution with the one configured engine. */
+export const ConsentDisclosureWorkflowLive = ConsentDisclosureWorkflow.toLayer(runDisclosure);
+
+/** Starts one accepted workflow without occupying a consumer while it awaits provider evidence. */
+export const startNextConsentDisclosure = Effect.fn("WhatsApp.startNextDisclosure")(function* () {
+  const queue = yield* consentDisclosureQueue;
+  yield* queue
+    .take((payload) =>
+      ConsentDisclosureWorkflow.execute(payload, { discard: true }).pipe(
+        Effect.asVoid,
+        observeConsentDisclosureQueue("start")
+      )
+    )
+    .pipe(
+      Effect.catchTags({
+        PersistedQueueError: (error) => observeConsentDisclosureQueue(Effect.fail(error), "start"),
+        SchemaError: (error) => observeConsentDisclosureQueue(Effect.fail(error), "start"),
+      })
+    );
+});
+
+/** Completes one committed evidence notification outside the evidence transaction. */
+export const startNextConsentDisclosureEvidence = Effect.fn("WhatsApp.notifyDisclosureEvidence")(
+  function* () {
+    const queue = yield* consentDisclosureEvidenceQueue;
+    yield* queue
+      .take((payload) =>
+        Effect.gen(function* () {
+          const deferred = disclosureEvidenceChanged(payload);
+          const executionId = yield* ConsentDisclosureWorkflow.executionId(payload).pipe(
+            Effect.orDie
+          );
+          yield* DurableDeferred.done(deferred, {
+            token: DurableDeferred.tokenFromExecutionId(deferred, {
+              workflow: ConsentDisclosureWorkflow,
+              executionId,
+            }),
+            exit: Exit.void,
+          });
+        }).pipe(observeConsentDisclosureQueue("evidence"))
+      )
+      .pipe(
+        Effect.catchTags({
+          PersistedQueueError: (error) =>
+            observeConsentDisclosureQueue(Effect.fail(error), "evidence"),
+          SchemaError: (error) => observeConsentDisclosureQueue(Effect.fail(error), "evidence"),
+        })
+      );
+  }
+);
+
+const superviseDisclosureQueue = <E, R>(
+  iteration: Effect.Effect<void, E, R>
+): Effect.Effect<never, never, R> =>
+  iteration.pipe(
+    Effect.catchCause((cause) =>
+      Cause.hasInterrupts(cause) && !Cause.hasDies(cause) && !Cause.hasFails(cause)
+        ? Effect.interrupt
+        : Effect.sleep("1 second")
+    ),
+    Effect.forever
+  );
+
+/** Production queue handoff and a bounded, paced startup translation of drained legacy requests. */
+export const ConsentDisclosureQueueLive = Layer.effectDiscard(
+  Effect.gen(function* () {
+    const environment = yield* Config.string("NODE_ENV").pipe(Config.withDefault("development"));
+    if (environment !== "production") return;
+    const queue = yield* consentDisclosureQueue;
+    const publishPage = Effect.fn(function* (after: Option.Option<PendingConsentExchangeId>) {
+      const ids = yield* findPendingConsentDisclosureRequests(yield* DateTime.now, after);
+      yield* Effect.forEach(
+        ids,
+        (exchangeId) =>
+          queue.offer({ exchangeId, revision: 1 }, { id: exchangeId }).pipe(Effect.orDie),
+        { discard: true }
+      );
+      return Option.fromUndefinedOr(ids.at(-1));
+    });
+    const first = yield* publishPage(Option.none());
+    yield* startNextConsentDisclosure().pipe(superviseDisclosureQueue, Effect.forkScoped);
+    yield* startNextConsentDisclosureEvidence().pipe(superviseDisclosureQueue, Effect.forkScoped);
+    yield* Effect.gen(function* () {
+      let after = first;
+      while (Option.isSome(after)) {
+        yield* Effect.sleep("1 minute");
+        after = yield* publishPage(after);
+      }
+    }).pipe(Effect.forkScoped);
+  })
 );

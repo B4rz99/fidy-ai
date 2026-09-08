@@ -36,3 +36,27 @@ export const DisclosureDeliveryFailureReason = Schema.Literals([
   "invalid_response",
 ]);
 export type DisclosureDeliveryFailureReason = typeof DisclosureDeliveryFailureReason.Type;
+
+/** Provider evidence lifecycle, independent of execution scheduling. */
+export const DisclosureDeliveryState = Schema.Literals([
+  "started",
+  "reconciliation-required",
+  "delivered",
+  "definitively-failed",
+  "retry-exhausted",
+]);
+
+/** Monotone observation version; duplicate provider evidence does not advance it. */
+export const DisclosureEvidenceRevision = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
+
+/** Safe latest-attempt observation used to decide durable continuation without replaying sends. */
+export const DisclosureDeliveryEvidence = Schema.Struct({
+  attemptId: DisclosureDeliveryAttemptId,
+  attemptNumber: DisclosureDeliveryAttemptNumber,
+  state: DisclosureDeliveryState,
+  retryable: Schema.Boolean,
+  reason: Schema.OptionFromNullOr(DisclosureDeliveryFailureReason),
+  failureOccurredAt: Schema.OptionFromNullOr(Schema.DateTimeUtcFromDate),
+  evidenceRevision: DisclosureEvidenceRevision,
+});
+export type DisclosureDeliveryEvidence = typeof DisclosureDeliveryEvidence.Type;

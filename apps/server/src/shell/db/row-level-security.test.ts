@@ -897,6 +897,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
               "support_recovery_admission_attempts",
               "web_sessions",
               "whatsapp_consent_disclosure_delivery_attempts",
+              "whatsapp_consent_disclosure_requests",
               "whatsapp_ingress_budget_receipts",
               "whatsapp_ingress_budgets",
               "whatsapp_inbound_receipts",

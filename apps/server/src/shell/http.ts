@@ -22,6 +22,10 @@ import { CategoriesLive } from "~/shell/categories/handlers";
 import { KapsoClient } from "~/shell/channels/whatsapp/kapso-client";
 import { KapsoWebhookLive } from "~/shell/channels/whatsapp/routes";
 import { WhatsAppWorkerLive } from "~/shell/channels/whatsapp/worker";
+import {
+  ConsentDisclosureQueueLive,
+  ConsentDisclosureWorkflowLive,
+} from "~/shell/channels/whatsapp/disclosure-delivery";
 import { DashboardLive } from "~/shell/dashboard/handlers";
 import { IdentityLive } from "~/shell/identity/handlers";
 import { InsightsLive } from "~/shell/insights/handlers";
@@ -269,6 +273,11 @@ export const HttpLive = HttpRouter.serve(
   { disableLogger: true }
 );
 
+const HostedDisclosureLive = ConsentDisclosureQueueLive.pipe(
+  Layer.provide(ConsentDisclosureWorkflowLive),
+  Layer.provide(KapsoClient.layer)
+);
+
 const HostedWhatsAppWorkerLive = WhatsAppWorkerLive.pipe(
   Layer.provide(AgentService.layer.pipe(Layer.provide(WhatsAppReplyDeliveryLive))),
   Layer.provide(KapsoClient.layer)
@@ -309,6 +318,7 @@ const HostedBrowserPairingEmailDeliveryWorkerLive = BrowserPairingEmailDeliveryW
 export const AppLive = Layer.mergeAll(
   HttpLive.pipe(Layer.provide(KapsoClient.layer), Layer.provide(SupportRecoveryAccessLive)),
   HostedWhatsAppWorkerLive,
+  HostedDisclosureLive,
   HostedStatementIngestionWorkerLive,
   HostedForwardedEmailOperationsLive,
   HostedOnboardingDeliveryLive,

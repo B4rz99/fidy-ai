@@ -250,6 +250,22 @@ const acceptanceCaller = (
   businessScopedUserId,
 });
 
+const awaitDisclosureEvidence = Effect.fn("Acceptance.awaitDisclosureEvidence")(function* (
+  disclosures: typeof WhatsAppAcceptanceDisclosureControl.Service,
+  caller: Parameters<typeof acceptanceCaller>[0]
+) {
+  return yield* disclosures.find(acceptanceCaller(caller)).pipe(
+    Effect.filterOrFail(
+      (observed) =>
+        Option.isSome(observed) &&
+        Option.isSome(observed.value.state) &&
+        observed.value.state.value.state !== "started"
+    ),
+    Effect.retry({ schedule: Schedule.spaced("50 millis"), times: 120 }),
+    Effect.orDie
+  );
+});
+
 const establishCaller = Effect.fn("Acceptance.establishWhatsAppCaller")(function* (input: {
   readonly scenarioId: WhatsAppAcceptanceObserverId;
   readonly phoneNumber: E164PhoneNumber;
@@ -268,7 +284,7 @@ const establishCaller = Effect.fn("Acceptance.establishWhatsAppCaller")(function
   const disclosures = yield* WhatsAppAcceptanceDisclosureControl;
   const requests = yield* awaitKapsoRequests(1);
   const request = yield* Effect.fromOption(Option.fromUndefinedOr(requests[0])).pipe(Effect.orDie);
-  const observed = yield* disclosures.find(acceptanceCaller(identity.businessScopedUserId));
+  const observed = yield* awaitDisclosureEvidence(disclosures, identity.businessScopedUserId);
   const attempt = yield* Effect.fromOption(observed).pipe(
     Effect.flatMap((value) => Effect.fromOption(value.state)),
     Effect.orDie
@@ -459,7 +475,7 @@ layer(WhatsAppAcceptanceHarness, { excludeTestServices: true, timeout: "30 secon
           enqueued: 0,
           duplicates: 0,
         });
-        const requests = yield* kapso.requests;
+        const requests = yield* awaitKapsoRequests(1);
         expect(requests).toHaveLength(1);
         const sent = yield* Schema.decodeUnknownEffect(KapsoTextRequest)(requests[0]?.body);
         expect(sent).toMatchObject({ to: "573001111111", type: "text" });
@@ -533,7 +549,7 @@ layer(WhatsAppAcceptanceHarness, { excludeTestServices: true, timeout: "30 secon
           enqueued: 0,
           duplicates: 0,
         });
-        const requests = yield* kapso.requests;
+        const requests = yield* awaitKapsoRequests(2);
         expect(requests).toHaveLength(2);
         const disclosure = yield* Schema.decodeUnknownEffect(KapsoTextRequest)(requests[1]?.body);
         expect(disclosure).toMatchObject({ to: "573001234567" });
@@ -554,7 +570,18 @@ layer(WhatsAppAcceptanceHarness, { excludeTestServices: true, timeout: "30 secon
           text: TranscriptText.make("Quiero empezar sin teléfono"),
         });
 
-        expect(response.status).toBe(500);
+        expect(response.status).toBe(200);
+        const disclosures = yield* WhatsAppAcceptanceDisclosureControl;
+        const observed = yield* awaitDisclosureEvidence(disclosures, identity.businessScopedUserId);
+        expect(
+          observed.pipe(
+            Option.flatMap((value) => value.state),
+            Option.getOrUndefined
+          )
+        ).toMatchObject({
+          state: "definitively-failed",
+          reason: Option.some("invalid_recipient"),
+        });
         expect(yield* kapso.requests).toEqual([]);
       })
     );
@@ -758,7 +785,7 @@ layer(WhatsAppAcceptanceHarness, { excludeTestServices: true, timeout: "30 secon
         expect((yield* postSignedDelivery(delivery)).status).toBe(200);
         yield* Effect.sleep("500 millis");
         expect(yield* kapso.requests).toHaveLength(2);
-        const observed = yield* disclosures.find(acceptanceCaller(identity.businessScopedUserId));
+        const observed = yield* awaitDisclosureEvidence(disclosures, identity.businessScopedUserId);
         const retryAttempt = yield* Effect.fromOption(observed).pipe(
           Effect.flatMap((value) => Effect.fromOption(value.state)),
           Effect.orDie
@@ -772,9 +799,9 @@ layer(WhatsAppAcceptanceHarness, { excludeTestServices: true, timeout: "30 secon
             phoneNumber: Option.none(),
             text: TranscriptText.make("Acepto"),
           })).status
-        ).toBe(503);
+        ).toBe(200);
         expect(
-          (yield* disclosures.find(acceptanceCaller(identity.businessScopedUserId))).pipe(
+          (yield* awaitDisclosureEvidence(disclosures, identity.businessScopedUserId)).pipe(
             Option.map((value) => value.lifecycle),
             Option.getOrUndefined
           )
@@ -792,7 +819,7 @@ layer(WhatsAppAcceptanceHarness, { excludeTestServices: true, timeout: "30 secon
           })).status
         ).toBe(200);
         expect(
-          (yield* disclosures.find(acceptanceCaller(identity.businessScopedUserId))).pipe(
+          (yield* awaitDisclosureEvidence(disclosures, identity.businessScopedUserId)).pipe(
             Option.flatMap((value) => value.state),
             Option.map((state) => state.state),
             Option.getOrUndefined
@@ -806,12 +833,13 @@ layer(WhatsAppAcceptanceHarness, { excludeTestServices: true, timeout: "30 secon
           phoneNumber: Option.none(),
           text: TranscriptText.make("Inicio con rechazo terminal"),
         });
-        expect((yield* postSignedDelivery(terminalDelivery)).status).toBe(500);
+        expect((yield* postSignedDelivery(terminalDelivery)).status).toBe(200);
         expect((yield* postSignedDelivery(terminalDelivery)).status).toBe(200);
         yield* Effect.sleep("500 millis");
-        expect(yield* kapso.requests).toHaveLength(3);
-        const terminalObserved = yield* disclosures.find(
-          acceptanceCaller(terminalIdentity.businessScopedUserId)
+        expect(yield* awaitKapsoRequests(3)).toHaveLength(3);
+        const terminalObserved = yield* awaitDisclosureEvidence(
+          disclosures,
+          terminalIdentity.businessScopedUserId
         );
         expect(
           Option.getOrUndefined(terminalObserved)?.state.pipe(Option.getOrUndefined)
@@ -833,12 +861,13 @@ layer(WhatsAppAcceptanceHarness, { excludeTestServices: true, timeout: "30 secon
           phoneNumber: Option.none(),
           text: TranscriptText.make("Quiero empezar"),
         });
-        expect((yield* postSignedDelivery(delivery)).status).toBe(500);
         expect((yield* postSignedDelivery(delivery)).status).toBe(200);
-        yield* Effect.sleep("500 millis");
+        expect((yield* postSignedDelivery(delivery)).status).toBe(200);
+        yield* awaitKapsoRequests(1);
+        yield* Effect.sleep("100 millis");
         expect(yield* kapso.requests).toHaveLength(1);
 
-        const observed = yield* disclosures.find(acceptanceCaller(identity.businessScopedUserId));
+        const observed = yield* awaitDisclosureEvidence(disclosures, identity.businessScopedUserId);
         const observedValue = yield* Effect.fromOption(observed).pipe(Effect.orDie);
         const attempt = yield* Effect.fromOption(observedValue.state).pipe(Effect.orDie);
         expect(attempt.state).toBe("reconciliation-required");
@@ -864,7 +893,7 @@ layer(WhatsAppAcceptanceHarness, { excludeTestServices: true, timeout: "30 secon
         expect(mismatchedResponse.status).toBe(400);
         expect(yield* kapso.requests).toHaveLength(1);
         expect(
-          (yield* disclosures.find(acceptanceCaller(identity.businessScopedUserId))).pipe(
+          (yield* awaitDisclosureEvidence(disclosures, identity.businessScopedUserId)).pipe(
             Option.flatMap((value) => value.state),
             Option.map((state) => state.state),
             Option.getOrUndefined
@@ -890,9 +919,11 @@ layer(WhatsAppAcceptanceHarness, { excludeTestServices: true, timeout: "30 secon
             phoneNumber: Option.none(),
             text: TranscriptText.make("Inicio con fallo confirmado"),
           })).status
-        ).toBe(500);
-        const failedObserved = yield* disclosures.find(
-          acceptanceCaller(failedIdentity.businessScopedUserId)
+        ).toBe(200);
+        yield* awaitKapsoRequests(2);
+        const failedObserved = yield* awaitDisclosureEvidence(
+          disclosures,
+          failedIdentity.businessScopedUserId
         );
         const failedObservedValue = yield* Effect.fromOption(failedObserved).pipe(Effect.orDie);
         const failedAttempt = yield* Effect.fromOption(failedObservedValue.state).pipe(
@@ -921,9 +952,11 @@ layer(WhatsAppAcceptanceHarness, { excludeTestServices: true, timeout: "30 secon
             phoneNumber: Option.none(),
             text: TranscriptText.make("Inicio con fallo permanente"),
           })).status
-        ).toBe(500);
-        const terminalObserved = yield* disclosures.find(
-          acceptanceCaller(terminalIdentity.businessScopedUserId)
+        ).toBe(200);
+        yield* awaitKapsoRequests(4);
+        const terminalObserved = yield* awaitDisclosureEvidence(
+          disclosures,
+          terminalIdentity.businessScopedUserId
         );
         const terminalObservedValue = yield* Effect.fromOption(terminalObserved).pipe(Effect.orDie);
         const terminalAttempt = yield* Effect.fromOption(terminalObservedValue.state).pipe(
@@ -940,8 +973,9 @@ layer(WhatsAppAcceptanceHarness, { excludeTestServices: true, timeout: "30 secon
             signature: Option.none(),
           })).status
         ).toBe(200);
-        const sentObserved = yield* disclosures.find(
-          acceptanceCaller(terminalIdentity.businessScopedUserId)
+        const sentObserved = yield* awaitDisclosureEvidence(
+          disclosures,
+          terminalIdentity.businessScopedUserId
         );
         expect(
           sentObserved.pipe(
@@ -960,9 +994,7 @@ layer(WhatsAppAcceptanceHarness, { excludeTestServices: true, timeout: "30 secon
           (yield* postSignedLifecycleEvidence({
             eventName: "whatsapp.message.failed",
             correlationToken: terminalAttempt.correlationToken,
-            providerMessageId: WhatsAppProviderMessageId.make(
-              "wamid.acceptance-terminal-evidence-a08"
-            ),
+            providerMessageId: WhatsAppProviderMessageId.make("wamid.acceptance-sent-evidence-a08"),
             failureDisposition: "terminal",
             previousStatus: Option.none(),
             additionalStatus: Option.none(),
@@ -972,7 +1004,7 @@ layer(WhatsAppAcceptanceHarness, { excludeTestServices: true, timeout: "30 secon
         yield* Effect.sleep("500 millis");
         expect(yield* kapso.requests).toHaveLength(4);
         expect(
-          (yield* disclosures.find(acceptanceCaller(terminalIdentity.businessScopedUserId))).pipe(
+          (yield* awaitDisclosureEvidence(disclosures, terminalIdentity.businessScopedUserId)).pipe(
             Option.flatMap((value) => value.state),
             Option.map((state) => state.state),
             Option.getOrUndefined
@@ -996,16 +1028,19 @@ layer(WhatsAppAcceptanceHarness, { excludeTestServices: true, timeout: "30 secon
             phoneNumber: Option.none(),
             text: TranscriptText.make("Quiero empezar"),
           })).status
-        ).toBe(500);
-        const observed = yield* disclosures.find(acceptanceCaller(identity.businessScopedUserId));
+        ).toBe(200);
+        yield* awaitKapsoRequests(1);
+        yield* Effect.sleep("100 millis");
+        const observed = yield* awaitDisclosureEvidence(disclosures, identity.businessScopedUserId);
         const attempt = yield* Effect.fromOption(
           Option.getOrUndefined(observed)?.state ?? Option.none()
         ).pipe(Effect.orDie);
 
-        expect(yield* disclosures.processDue(DateTime.add(yield* DateTime.now, { days: 1 }))).toBe(
-          false
+        yield* Effect.sleep("3 seconds");
+        const unresolved = yield* awaitDisclosureEvidence(
+          disclosures,
+          identity.businessScopedUserId
         );
-        const unresolved = yield* disclosures.find(acceptanceCaller(identity.businessScopedUserId));
         expect(
           unresolved.pipe(
             Option.flatMap((value) => value.state),
@@ -1031,6 +1066,7 @@ layer(WhatsAppAcceptanceHarness, { excludeTestServices: true, timeout: "30 secon
           text: TranscriptText.make("Inicio sandbox"),
         });
         expect(sandboxResponse.status).toBe(200);
+        yield* awaitKapsoRequests(1);
 
         yield* kapso.setDeliveryMode("bsuid");
         const bsuidIdentity = yield* makeScenarioIdentity("WA-A10");
@@ -1041,7 +1077,7 @@ layer(WhatsAppAcceptanceHarness, { excludeTestServices: true, timeout: "30 secon
         });
         expect(bsuidResponse.status).toBe(200);
 
-        const requests = yield* kapso.requests;
+        const requests = yield* awaitKapsoRequests(2);
         expect(requests).toHaveLength(2);
         expect(requests[0]?.body).toMatchObject({ to: "573001010101" });
         expect(requests[0]?.body).not.toHaveProperty("recipient");

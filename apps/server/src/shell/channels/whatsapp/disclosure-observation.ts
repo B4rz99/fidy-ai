@@ -11,7 +11,7 @@ import type { DisclosureDeliveryAttemptNumber } from "./disclosure-model";
 const recordExit = (
   telemetry: TelemetryService,
   exit: Exit.Exit<unknown, unknown>,
-  { descriptor, captureFailure }: Readonly<{ descriptor: SpanDescriptor; captureFailure: boolean }>
+  descriptor: SpanDescriptor
 ): Effect.Effect<void> => {
   if (Exit.isSuccess(exit)) return Effect.void;
   const cause = exit.cause;
@@ -28,44 +28,39 @@ const recordExit = (
     .recordOutcome({ outcome: "failed", error: Option.some(error), retryable: !defect })
     .pipe(
       Effect.andThen(
-        captureFailure
-          ? telemetry.captureFailure(
-              defect
-                ? {
-                    _tag: "Defect",
-                    component: "whatsapp",
-                    operation: descriptor.operation,
-                    error,
-                    cause,
-                  }
-                : {
-                    _tag: "ExhaustedOperationalFailure",
-                    component: "whatsapp",
-                    operation: descriptor.operation,
-                    error,
-                    provider: Option.none(),
-                    retryable: true,
-                    cause,
-                  }
-            )
-          : Effect.void
+        telemetry.captureFailure(
+          defect
+            ? {
+                _tag: "Defect",
+                component: "whatsapp",
+                operation: descriptor.operation,
+                error,
+                cause,
+              }
+            : {
+                _tag: "ExhaustedOperationalFailure",
+                component: "whatsapp",
+                operation: descriptor.operation,
+                error,
+                provider: Option.none(),
+                retryable: true,
+                cause,
+              }
+        )
       )
     );
 };
 
 const observe = <A, E, R>(
   work: Effect.Effect<A, E, R>,
-  descriptor: SpanDescriptor,
-  captureFailure: boolean
+  descriptor: SpanDescriptor
 ): Effect.Effect<A, E, R> =>
   Effect.gen(function* () {
     const telemetry = yield* Effect.serviceOption(Telemetry);
     if (Option.isNone(telemetry)) return yield* work;
     return yield* telemetry.value.span(
       descriptor,
-      Effect.onExit(work, (exit) =>
-        recordExit(telemetry.value, exit, { descriptor, captureFailure })
-      )
+      Effect.onExit(work, (exit) => recordExit(telemetry.value, exit, descriptor))
     );
   });
 
@@ -84,41 +79,33 @@ export const observeConsentDisclosureAttempt: {
     work: Effect.Effect<A, E, R>,
     attempt: DisclosureDeliveryAttemptNumber
   ): Effect.Effect<A, E, R> =>
-    observe(
-      work,
-      {
-        component: "whatsapp",
-        operation: "whatsapp.disclosureAttempt",
-        trigger: "queue",
-        spanOperation: "http.client",
-        workKind: "provider_call",
-        metadata: {
-          _tag: "Provider",
-          provider: "kapso",
-          attempt: TelemetryAttempt.make(attempt),
-          status: Option.none(),
-        },
+    observe(work, {
+      component: "whatsapp",
+      operation: "whatsapp.disclosureAttempt",
+      trigger: "queue",
+      spanOperation: "http.client",
+      workKind: "provider_call",
+      metadata: {
+        _tag: "Provider",
+        provider: "kapso",
+        attempt: TelemetryAttempt.make(attempt),
+        status: Option.none(),
       },
-      true
-    )
+    })
 );
 
 /** One finite owner snapshot/decision. Keep provider Activities, durable waits, and workflow lifetime outside. */
 export const observeConsentDisclosureResume = <A, E, R>(
   work: Effect.Effect<A, E, R>
 ): Effect.Effect<A, E, R> =>
-  observe(
-    work,
-    {
-      component: "whatsapp",
-      operation: "whatsapp.disclosureResume",
-      trigger: "queue",
-      spanOperation: "fidy.operation",
-      workKind: "canonical_operation",
-      metadata: { _tag: "None" },
-    },
-    true
-  );
+  observe(work, {
+    component: "whatsapp",
+    operation: "whatsapp.disclosureResume",
+    trigger: "queue",
+    spanOperation: "fidy.operation",
+    workKind: "canonical_operation",
+    metadata: { _tag: "None" },
+  });
 
 /** Wrap the native take handler, not its blocking wait or an infinite loop. This owns escaped failures. */
 export const observeConsentDisclosureQueue: {
@@ -127,18 +114,14 @@ export const observeConsentDisclosureQueue: {
 } = dual(
   2,
   <A, E, R>(work: Effect.Effect<A, E, R>, kind: "start" | "evidence"): Effect.Effect<A, E, R> =>
-    observe(
-      work,
-      {
-        component: "whatsapp",
-        operation: kind === "start" ? "whatsapp.disclosureStart" : "whatsapp.disclosureEvidence",
-        trigger: "queue",
-        spanOperation: "queue.process",
-        workKind: "canonical_operation",
-        metadata: { _tag: "None" },
-      },
-      true
-    )
+    observe(work, {
+      component: "whatsapp",
+      operation: kind === "start" ? "whatsapp.disclosureStart" : "whatsapp.disclosureEvidence",
+      trigger: "queue",
+      spanOperation: "queue.process",
+      workKind: "canonical_operation",
+      metadata: { _tag: "None" },
+    })
 );
 
 const ownerOutcomes = {

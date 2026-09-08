@@ -176,6 +176,24 @@ layer(RetentionHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           expect(Option.isNone(yield* ConsentDisclosureWorkflow.poll(executionId))).toBe(true);
         })
     );
+    it.effect("retains terminal history until its separate start publication is completed", () =>
+      Effect.gen(function* () {
+        const payload = yield* orphanedRequest();
+        expect(yield* ConsentDisclosureWorkflow.execute(payload)).toEqual({
+          outcome: "not-current",
+        });
+        yield* pruneConsentDisclosureDelivery(yield* DateTime.now);
+        expect(yield* retained(payload.exchangeId)).toBe(true);
+        yield* Effect.scoped(
+          Effect.gen(function* () {
+            yield* startNextConsentDisclosure().pipe(Effect.forever, Effect.forkScoped);
+            yield* awaitPruned(payload.exchangeId);
+          })
+        );
+        expect(yield* retained(payload.exchangeId)).toBe(false);
+      })
+    );
+
     it.effect("rolls back queue and mailbox erasure if private request deletion fails", () =>
       Effect.gen(function* () {
         const payload = yield* orphanedRequest();

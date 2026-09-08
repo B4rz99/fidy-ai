@@ -9,7 +9,7 @@ import { makeSyntheticConversationCompactionContext } from "./conversation-compa
 import { hostedOutputTokenReserve } from "./hosted-inference";
 
 /** Fixed candidate whose hosted accounting must agree with the pinned local v13 tokenizer. */
-export const MistralConformanceModel = "ministral-3b-2512";
+export const mistralConformanceModel = "ministral-3b-2512";
 
 const maximumConformanceResponseBytes = 1_000_000;
 const conformanceTimeout = "30 seconds";
@@ -170,7 +170,7 @@ const makeRequest = (
   apiKey: Redacted.Redacted<string>
 ): HttpClientRequest.HttpClientRequest => {
   const requestBody = {
-    model: MistralConformanceModel,
+    model: mistralConformanceModel,
     messages: conformanceCase.messages,
     max_tokens: conformanceCase.maxTokens,
     temperature: 0,
@@ -206,7 +206,7 @@ const validateResponse = Effect.fn("MistralConformance.validateResponse")(functi
   conformanceCase: ConformanceCase,
   decoded: typeof ProviderResponse.Type
 ) {
-  if (decoded.model !== MistralConformanceModel) {
+  if (decoded.model !== mistralConformanceModel) {
     return yield* conformanceError(conformanceCase, "provider_model_mismatch");
   }
   const content = decoded.choices[0]?.message.content;

@@ -3,7 +3,7 @@ import { expect, it } from "@effect/vitest";
 import { Cause, Effect, Exit, Redacted, Ref, Schema } from "effect";
 import { HttpClient, type HttpClientRequest, HttpClientResponse } from "effect/unstable/http";
 import { type MistralV13Messages, countMistralV13Messages } from "./mistral-tokenizer";
-import { MistralConformanceModel, verifyMistralTokenConformance } from "./mistral-conformance";
+import { mistralConformanceModel, verifyMistralTokenConformance } from "./mistral-conformance";
 
 const JsonRecord = Schema.Record(Schema.String, Schema.Unknown);
 const MistralMessage = Schema.Struct({
@@ -33,7 +33,7 @@ const responseBody = (promptTokens: number, content: string): string =>
     id: "probe",
     object: "chat.completion",
     created: 1,
-    model: MistralConformanceModel,
+    model: mistralConformanceModel,
     choices: [
       {
         index: 0,
@@ -101,7 +101,7 @@ it.effect("sends schema differentials and the production Compaction reserve", ()
     expect(bodies[1]?.response_format).toBeDefined();
     expect(bodies[2]?.response_format).toBeDefined();
     expect(bodies[3]).toMatchObject({
-      model: MistralConformanceModel,
+      model: mistralConformanceModel,
       max_tokens: 16_000,
       temperature: 0,
     });
@@ -146,7 +146,7 @@ it.effect("rejects malformed provider envelopes and oversized responses", () =>
             id: "probe",
             object: "chat.completion",
             created: 1,
-            model: MistralConformanceModel,
+            model: mistralConformanceModel,
             choices: [],
             usage: { prompt_tokens: promptTokens, completion_tokens: 1, total_tokens: 1 },
             unexpected: content,

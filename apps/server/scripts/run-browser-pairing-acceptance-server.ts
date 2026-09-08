@@ -1,7 +1,8 @@
 #!/usr/bin/env bun
 
-import { BunRuntime } from "@effect/platform-bun";
+import { BunRuntime, BunServices } from "@effect/platform-bun";
 import { Effect, Layer } from "effect";
+import { MigratorLive } from "~/shell/db/client";
 import { makeBrowserLoginPairingAcceptanceServer } from "~/shell/testing/api-harness";
 import { makeBrowserLoginPairingAcceptanceControlServer } from "~/shell/testing/browser-pairing-acceptance-control";
 
@@ -132,6 +133,8 @@ const makeWebHandler = Effect.gen(function* () {
 }).pipe(Effect.orDie);
 
 const run = Effect.gen(function* () {
+  // Both servers build SQL queues; their dedicated schema must exist before either starts.
+  yield* Layer.build(MigratorLive.pipe(Layer.provide(BunServices.layer)));
   yield* Effect.sync(createCertificate);
   const webHandler = yield* makeWebHandler;
   const webServer = Bun.serve({

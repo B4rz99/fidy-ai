@@ -46,7 +46,10 @@ import { ResendReceivingClient } from "~/shell/ingestion/resend-receiving-client
 import { ResendWebhookLive } from "~/shell/ingestion/resend-webhook";
 import { MemoryLive } from "~/shell/memory/handlers";
 import { EmailDeliveryPort } from "~/shell/email-authentication/delivery";
-import { BrowserPairingEmailDeliveryWorkerLive } from "~/shell/email-authentication/authentication-delivery-worker";
+import {
+  BrowserPairingEmailDeliveryWorkerLive,
+  BrowserPairingEmailWorkflowLive,
+} from "~/shell/email-authentication/authentication-delivery-worker";
 import { BrowserPairingEmailAuthenticationWebAuthHandlersLive } from "~/shell/email-authentication/authentication-handlers";
 import { BrowserPairingEmailRetentionLive } from "~/shell/email-authentication/authentication-retention";
 import {
@@ -307,9 +310,10 @@ const HostedEmailReplacementDeliveryWorkerLive = Layer.mergeAll(
   ReplacementDeliveryWorkflowLive,
   ReplacementExpiryWorkflowLive
 ).pipe(Layer.provide(EmailDeliveryPort.layer));
-const HostedBrowserPairingEmailDeliveryWorkerLive = BrowserPairingEmailDeliveryWorkerLive.pipe(
-  Layer.provide(EmailDeliveryPort.layer)
-);
+const HostedBrowserPairingEmailDeliveryWorkerLive = Layer.merge(
+  BrowserPairingEmailWorkflowLive,
+  BrowserPairingEmailDeliveryWorkerLive
+).pipe(Layer.provide(EmailDeliveryPort.layer));
 
 /**
  * Application routes and hosted workers. The executable composition must provide the migration

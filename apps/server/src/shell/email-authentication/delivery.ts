@@ -110,8 +110,12 @@ const encodeResendRequest = Schema.encodeSync(jsonStringSchema(ResendRequest));
 
 const classifyResendResponse = (
   response: BoundedExternalHttpResponse
-): Effect.Effect<void, EmailSendFailed> =>
-  Effect.flatMap(decodeBoundedResendResponse(response), (body) => {
+): Effect.Effect<void, EmailSendFailed> => {
+  // A server error can follow acceptance; a different proof/key must not bypass deduplication.
+  if (response.status >= serverErrorStatusMinimum) {
+    return new EmailSendFailed({ certainty: "ambiguous", retryable: false });
+  }
+  return Effect.flatMap(decodeBoundedResendResponse(response), (body) => {
     if (
       response.status >= successfulStatusMinimum &&
       response.status < successfulStatusMaximumExclusive
@@ -120,10 +124,12 @@ const classifyResendResponse = (
         ? Effect.void
         : new EmailSendFailed({ certainty: "ambiguous", retryable: false });
     }
-    const retryable =
-      response.status === rateLimitedStatus || response.status >= serverErrorStatusMinimum;
-    return new EmailSendFailed({ certainty: "rejected", retryable });
+    return new EmailSendFailed({
+      certainty: "rejected",
+      retryable: response.status === rateLimitedStatus,
+    });
   });
+};
 
 const mapResendRequestFailure = (
   failure: ExternalHttpFailure | { readonly _tag: "TimeoutError" }
@@ -133,7 +139,8 @@ const mapResendRequestFailure = (
       ? Option.match(failure.responseStatus, {
           onNone: () => "ambiguous" as const,
           onSome: (status) =>
-            status >= successfulStatusMinimum && status < successfulStatusMaximumExclusive
+            (status >= successfulStatusMinimum && status < successfulStatusMaximumExclusive) ||
+            status >= serverErrorStatusMinimum
               ? ("ambiguous" as const)
               : ("rejected" as const),
         })

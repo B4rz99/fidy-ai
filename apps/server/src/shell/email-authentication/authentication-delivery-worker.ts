@@ -1,233 +1,354 @@
-import { Config, Crypto, DateTime, Effect, Layer, Option, Schema } from "effect";
+import { Config, DateTime, Effect, Layer, Option, Result, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
+import { Activity, DurableClock } from "effect/unstable/workflow";
 import { BrowserLoginPairingId } from "~/core/browser-login/reference";
 import {
   BrowserPairingEmailWorkflowId,
   EmailAddress,
-  EmailDeliveryClaimToken,
-  EmailDeliveryIntentId,
   EmailVerificationCode,
   EmailVerificationPublicCode,
 } from "~/core/email-authentication/model";
 import { proofExpiry } from "~/core/email-authentication/rules";
-import { UserId } from "~/core/identity/reference";
 import { lockPendingBrowserLoginPairingInScope } from "~/shell/browser-login/service";
-import { withSubjectLock } from "~/shell/consent/repo";
+import { withSubjectLockInScope } from "~/shell/consent/repo";
 import { advisoryLockKey, withUserLockInScope } from "~/shell/db/advisory-lock";
 import { withUserTransaction } from "~/shell/db/user-transaction";
-import { sendEmailWithBoundedRetry } from "./delivery-retry";
+import { attemptEmailDelivery, settleTerminalEmailFailure } from "./delivery-retry";
 import {
   digestBrowserPairingEmailProof,
-  processNextBrowserPairingEmailStartRequest,
+  processBrowserPairingEmailStartRequest,
 } from "./browser-pairing-authentication";
 import { makeEmailDeliveryProof } from "./repo";
+import {
+  BrowserPairingEmailDeliveryWorkflow,
+  BrowserPairingEmailExpiryWorkflow,
+  type PairingDeliveryPayload,
+  PairingDeliveryResult,
+  type PairingExpiryPayload,
+  pairingDeliveryQueue,
+  pairingExpiryQueue,
+  pairingStartQueue,
+} from "./pairing-email-execution";
 
-const GatewayClaim = Schema.Struct({
-  intentId: EmailDeliveryIntentId,
-  userId: UserId,
-  claimToken: EmailDeliveryClaimToken,
-});
-type GatewayClaim = typeof GatewayClaim.Type;
-
-const ArmedDelivery = Schema.Struct({
-  intentId: EmailDeliveryIntentId,
+const AttemptResult = Schema.Union([
+  PairingDeliveryResult,
+  Schema.Struct({ outcome: Schema.Literal("retry"), retryAt: Schema.DateTimeUtc }),
+]);
+type AttemptResult = typeof AttemptResult.Type;
+const DeliveryRow = Schema.Struct({
   workflowId: BrowserPairingEmailWorkflowId,
-  userId: UserId,
+  pairingId: BrowserLoginPairingId,
   generation: Schema.Int,
   emailAddress: EmailAddress,
-  claimToken: EmailDeliveryClaimToken,
-  idempotencyKey: Schema.String,
   publicCode: EmailVerificationPublicCode,
+  expiresAt: Schema.DateTimeUtcFromDate,
+  status: Schema.Literals([
+    "pending",
+    "armed",
+    "sent",
+    "rejected",
+    "uncertain",
+    "superseded",
+    "temporarily-refused",
+    "retry-exhausted",
+  ]),
+  providerAttempt: Schema.Int,
+  retryAt: Schema.OptionFromNullOr(Schema.DateTimeUtcFromDate),
+  current: Schema.Boolean,
 });
-type ArmedDelivery = typeof ArmedDelivery.Type & Readonly<{ combinedCode: EmailVerificationCode }>;
+type DeliveryRow = typeof DeliveryRow.Type;
+type Prepared = Readonly<{ row: DeliveryRow; combinedCode: EmailVerificationCode }>;
 
-const claimNextDelivery = Effect.fn(function* (claimedAt: DateTime.Utc) {
-  const sql = yield* SqlClient.SqlClient;
-  const crypto = yield* Crypto.Crypto;
-  const claimToken = EmailDeliveryClaimToken.make(yield* crypto.randomUUIDv7.pipe(Effect.orDie));
-  return yield* SqlSchema.findOneOption({
-    Request: Schema.Void,
-    Result: GatewayClaim,
-    execute: () => sql`
-      SELECT intent_id AS "intentId", user_id AS "userId", claim_token AS "claimToken"
-      FROM fidy_claim_browser_pairing_email_delivery(
-        ${claimedAt}, ${claimToken}, ${DateTime.add(claimedAt, { minutes: 2 })}
-      )
-    `,
-  })(undefined).pipe(Effect.orDie);
-});
+const initialRetryDelayMilliseconds = 250;
+const maximumProviderAttempts = 3;
 
-const ClaimedPairingReference = Schema.Struct({ pairingId: BrowserLoginPairingId });
+const terminalResult: Readonly<
+  Record<DeliveryRow["status"], Option.Option<PairingDeliveryResult>>
+> = {
+  pending: Option.none(),
+  armed: Option.some({ outcome: "uncertain" }),
+  sent: Option.some({ outcome: "sent" }),
+  rejected: Option.some({ outcome: "refused" }),
+  uncertain: Option.some({ outcome: "uncertain" }),
+  superseded: Option.some({ outcome: "not-current" }),
+  "temporarily-refused": Option.none(),
+  "retry-exhausted": Option.some({ outcome: "retry-exhausted" }),
+};
 
-const findClaimedPairingReferenceInScope = Effect.fn(function* (claim: GatewayClaim) {
-  const sql = yield* SqlClient.SqlClient;
-  return yield* SqlSchema.findOneOption({
-    Request: Schema.Void,
-    Result: ClaimedPairingReference,
-    execute: () => sql`
-      SELECT workflow.pairing_id AS "pairingId"
-      FROM browser_pairing_email_delivery_intents intent
-      JOIN browser_pairing_email_workflows workflow ON workflow.id = intent.workflow_id
-      WHERE intent.id = ${claim.intentId} AND workflow.user_id = ${claim.userId}
-        AND intent.status = 'claimed' AND intent.claim_token = ${claim.claimToken}
-    `,
-  })(undefined).pipe(Effect.orDie);
-});
-
-const rejectClaimedDeliveryInScope = Effect.fn(function* (claim: GatewayClaim) {
-  const sql = yield* SqlClient.SqlClient;
-  yield* sql`
-      UPDATE browser_pairing_email_delivery_intents SET status = 'rejected',
-        claim_token = NULL, claim_expires_at = NULL
-      WHERE id = ${claim.intentId} AND status = 'claimed' AND claim_token = ${claim.claimToken}
-    `.pipe(Effect.orDie);
-});
-
-const armClaimedDeliveryInScope = Effect.fn(function* (
-  claim: GatewayClaim,
-  claimedAt: DateTime.Utc
+const replayProviderEvidence = Effect.fn(function* (
+  payload: PairingDeliveryPayload,
+  row: DeliveryRow,
+  attempt: number
 ) {
-  const sql = yield* SqlClient.SqlClient;
-  const pairing = yield* findClaimedPairingReferenceInScope(claim);
-  if (Option.isNone(pairing)) return Option.none<ArmedDelivery>();
-  const live = yield* lockPendingBrowserLoginPairingInScope(pairing.value.pairingId, claimedAt);
-  if (Option.isNone(live)) {
-    yield* rejectClaimedDeliveryInScope(claim);
-    return Option.none<ArmedDelivery>();
+  if (row.status === "armed") {
+    // The raw body is intentionally unrecoverable. Armed replay cannot repeat a remote effect.
+    const sql = yield* SqlClient.SqlClient;
+    yield* sql`UPDATE browser_pairing_email_delivery_intents SET status = 'uncertain'
+      WHERE id = ${payload.intentId}`.pipe(Effect.orDie);
   }
-  const { proof } = yield* makeEmailDeliveryProof();
-  const digest = yield* digestBrowserPairingEmailProof(pairing.value.pairingId, proof);
-  const armed = yield* SqlSchema.findOneOption({
+  if (row.status === "temporarily-refused" && row.providerAttempt === attempt) {
+    return Option.some<AttemptResult>({
+      outcome: "retry",
+      retryAt: Option.getOrThrow(row.retryAt),
+    });
+  }
+  return terminalResult[row.status];
+});
+
+const inDeliveryScope = <A, E, R>(
+  payload: PairingDeliveryPayload,
+  work: Effect.Effect<A, E, R>
+): Effect.Effect<A, E, R | SqlClient.SqlClient> =>
+  withUserTransaction(
+    payload.userId,
+    withSubjectLockInScope(
+      payload.userId,
+      withUserLockInScope(advisoryLockKey.browserLoginApproval(payload.userId), work)
+    )
+  );
+
+const prepare = Effect.fn(function* (payload: PairingDeliveryPayload, attempt: number) {
+  const sql = yield* SqlClient.SqlClient;
+  const now = yield* DateTime.now;
+  const found = yield* SqlSchema.findOneOption({
     Request: Schema.Void,
-    Result: ArmedDelivery,
+    Result: DeliveryRow,
     execute: () => sql`
-        WITH armed_intent AS (
-          UPDATE browser_pairing_email_delivery_intents intent SET status = 'armed'
-          FROM browser_pairing_email_workflows workflow
-          JOIN verified_email_credentials credential ON credential.user_id = workflow.user_id
-          WHERE intent.id = ${claim.intentId} AND intent.workflow_id = workflow.id
-            AND workflow.user_id = ${claim.userId} AND intent.status = 'claimed'
-            AND intent.claim_token = ${claim.claimToken}
-            AND intent.generation = workflow.delivery_generation
-            AND workflow.expires_at > ${claimedAt}
+      SELECT workflow.id AS "workflowId", workflow.pairing_id AS "pairingId", intent.generation,
+        intent.email_address AS "emailAddress", workflow.public_code AS "publicCode",
+        workflow.expires_at AS "expiresAt", intent.status, intent.provider_attempt AS "providerAttempt",
+        intent.retry_at AS "retryAt",
+        (intent.generation = workflow.delivery_generation AND EXISTS (
+          SELECT 1 FROM verified_email_credentials credential WHERE credential.user_id = ${payload.userId}
             AND credential.email_address = intent.email_address
             AND credential.verified_at = workflow.credential_verified_at
-          RETURNING intent.id, intent.workflow_id, intent.generation, intent.email_address,
-            intent.claim_token, intent.idempotency_key
-        )
-        UPDATE browser_pairing_email_workflows workflow SET proof_digest = ${digest},
-          proof_expires_at = LEAST(${proofExpiry(claimedAt)}, workflow.expires_at),
-          wrong_proof_attempts = 0
-        FROM armed_intent intent WHERE workflow.id = intent.workflow_id
-        RETURNING intent.id AS "intentId", workflow.id AS "workflowId",
-          workflow.user_id AS "userId", intent.generation,
-          intent.email_address AS "emailAddress", intent.claim_token AS "claimToken",
-          intent.idempotency_key AS "idempotencyKey", workflow.public_code AS "publicCode"
-      `,
+        )) AS current
+      FROM browser_pairing_email_delivery_intents intent
+      JOIN browser_pairing_email_workflows workflow ON workflow.id = intent.workflow_id
+      WHERE intent.id = ${payload.intentId} AND workflow.user_id = ${payload.userId}
+      FOR UPDATE OF intent, workflow
+    `,
   })(undefined).pipe(Effect.orDie);
-  if (Option.isNone(armed)) {
-    yield* rejectClaimedDeliveryInScope(claim);
-    return Option.none<ArmedDelivery>();
+  if (Option.isNone(found)) return { outcome: "not-current" } satisfies AttemptResult;
+  const row = found.value;
+  if (!row.current || row.status === "superseded") {
+    return { outcome: "not-current" } satisfies AttemptResult;
   }
-  return Option.some({
-    ...armed.value,
-    combinedCode: EmailVerificationCode.make(`${armed.value.publicCode}-${proof}`),
-  });
+  if (DateTime.toEpochMillis(row.expiresAt) <= DateTime.toEpochMillis(now)) {
+    return { outcome: "expired" } satisfies AttemptResult;
+  }
+  const replayed = yield* replayProviderEvidence(payload, row, attempt);
+  if (Option.isSome(replayed)) return replayed.value;
+  if (row.providerAttempt !== attempt - 1) {
+    return { outcome: "not-current" } satisfies AttemptResult;
+  }
+  const live = yield* lockPendingBrowserLoginPairingInScope(row.pairingId, now);
+  if (Option.isNone(live)) return { outcome: "not-current" } satisfies AttemptResult;
+  const { proof } = yield* makeEmailDeliveryProof();
+  const digest = yield* digestBrowserPairingEmailProof(row.pairingId, proof);
+  yield* sql`UPDATE browser_pairing_email_delivery_intents
+    SET status = 'armed', provider_attempt = ${attempt}, retry_at = NULL WHERE id = ${payload.intentId}`.pipe(
+    Effect.orDie
+  );
+  yield* sql`UPDATE browser_pairing_email_workflows SET proof_digest = ${digest},
+    proof_expires_at = LEAST(${proofExpiry(now)}, expires_at), wrong_proof_attempts = 0
+    WHERE id = ${row.workflowId}`.pipe(Effect.orDie);
+  return {
+    row,
+    combinedCode: EmailVerificationCode.make(`${row.publicCode}-${proof}`),
+  } satisfies Prepared;
 });
 
-const settleArmedDeliveryInScope = Effect.fn(function* (input: {
-  claim: ArmedDelivery;
-  status: "sent" | "rejected" | "uncertain";
+const deliveryStatus = (result: AttemptResult): string => {
+  if (result.outcome === "retry") return "temporarily-refused";
+  if (result.outcome === "refused") return "rejected";
+  return result.outcome;
+};
+
+const settle = Effect.fn(function* ({
+  payload,
+  prepared,
+  attempt,
+  result,
+}: {
+  payload: PairingDeliveryPayload;
+  prepared: Prepared;
+  attempt: number;
+  result: AttemptResult;
 }) {
   const sql = yield* SqlClient.SqlClient;
-  yield* sql`
-      UPDATE browser_pairing_email_delivery_intents intent SET status = ${input.status},
-        claim_token = NULL, claim_expires_at = NULL
-      FROM browser_pairing_email_workflows workflow
-      WHERE intent.id = ${input.claim.intentId} AND intent.workflow_id = ${input.claim.workflowId}
-        AND workflow.id = intent.workflow_id AND intent.status = 'armed'
-        AND intent.claim_token = ${input.claim.claimToken}
-        AND intent.generation = ${input.claim.generation}
-        AND intent.idempotency_key = ${input.claim.idempotencyKey}
-        AND workflow.user_id = ${input.claim.userId}
-        AND workflow.delivery_generation = ${input.claim.generation}
-    `.pipe(Effect.orDie);
-});
-
-/**
- * Processes at most one RLS-safe email-login delivery outside provider transactions.
- *
- * This orchestration intentionally remains separate from replacement delivery: BrowserLogin
- * approval has an additional pairing lock and terminal-state check, and sharing the claim/arm/
- * settle pipeline would widen settlement authority across the two workflows. Provider latency,
- * retries, and terminal failure are observed once by `sendEmailWithBoundedRetry`; durable intent
- * status is the continuation signal, so this layer emits no second workflow event or identity.
- */
-const processOneBrowserPairingEmailDelivery = Effect.fn(function* () {
-  const claimedAt = yield* DateTime.now;
-  const gatewayClaim = yield* claimNextDelivery(claimedAt);
-  if (Option.isNone(gatewayClaim)) return false;
-  const claim = gatewayClaim.value;
-  const armed = yield* withUserTransaction(
-    claim.userId,
-    withSubjectLock(
-      claim.userId,
-      withUserLockInScope(
-        advisoryLockKey.browserLoginApproval(claim.userId),
-        armClaimedDeliveryInScope(claim, claimedAt)
-      )
-    )
-  );
-  if (Option.isNone(armed)) return false;
-  const status = yield* sendEmailWithBoundedRetry({
-    purpose: "browser-pairing-approval",
-    to: armed.value.emailAddress,
-    combinedCode: armed.value.combinedCode,
-    idempotencyKey: armed.value.idempotencyKey,
-  });
-  yield* withUserTransaction(
-    claim.userId,
-    withSubjectLock(
-      claim.userId,
-      withUserLockInScope(
-        advisoryLockKey.browserLoginApproval(claim.userId),
-        settleArmedDeliveryInScope({ claim: armed.value, status })
-      )
-    )
-  );
-  return true;
-});
-
-/** Closed worker progress signal that projects no request, User, pairing, or delivery authority. */
-export type BrowserPairingEmailBackgroundStepOutcome =
-  | Readonly<{ readonly _tag: "Idle" }>
-  | Readonly<{ readonly _tag: "Progressed" }>;
-
-/** Advances one queued request and, when available, one closed-authority delivery step. */
-export const processNextBackgroundStep = Effect.fn("EmailAuthentication.processNextBackgroundStep")(
-  function* () {
-    const requestProcessed = yield* processNextBrowserPairingEmailStartRequest();
-    const deliveryProcessed = yield* processOneBrowserPairingEmailDelivery();
-    return requestProcessed || deliveryProcessed
-      ? ({ _tag: "Progressed" } as const)
-      : ({ _tag: "Idle" } as const);
+  const status = deliveryStatus(result);
+  const updated = yield* sql`
+    UPDATE browser_pairing_email_delivery_intents intent
+    SET status = ${status}, retry_at = ${result.outcome === "retry" ? sql`${result.retryAt}` : sql`NULL`}
+    FROM browser_pairing_email_workflows workflow
+    WHERE intent.id = ${payload.intentId} AND workflow.id = intent.workflow_id
+      AND workflow.id = ${prepared.row.workflowId} AND workflow.user_id = ${payload.userId}
+      AND intent.status = 'armed' AND intent.provider_attempt = ${attempt}
+      AND intent.generation = ${prepared.row.generation}
+      AND workflow.delivery_generation = ${prepared.row.generation}
+    RETURNING intent.id
+  `.pipe(Effect.orDie);
+  if (updated.length === 0) return { outcome: "not-current" } satisfies AttemptResult;
+  if (
+    result.outcome === "retry" ||
+    result.outcome === "refused" ||
+    result.outcome === "retry-exhausted"
+  ) {
+    yield* sql`UPDATE browser_pairing_email_workflows SET proof_digest = NULL, proof_expires_at = NULL
+      WHERE id = ${prepared.row.workflowId}`.pipe(Effect.orDie);
   }
+  return result;
+});
+
+const deliverAttempt = Effect.fn(function* (payload: PairingDeliveryPayload, attempt: number) {
+  const prepared = yield* inDeliveryScope(payload, prepare(payload, attempt));
+  if ("outcome" in prepared) return prepared;
+  const sent = yield* attemptEmailDelivery({
+    purpose: "browser-pairing-approval",
+    to: prepared.row.emailAddress,
+    combinedCode: prepared.combinedCode,
+    idempotencyKey: `${payload.intentId}/${attempt}`,
+  }).pipe(Effect.result);
+  let result: AttemptResult;
+  if (Result.isSuccess(sent)) result = { outcome: "sent" };
+  else if (
+    sent.failure.certainty === "rejected" &&
+    sent.failure.retryable &&
+    attempt < maximumProviderAttempts
+  ) {
+    result = {
+      outcome: "retry",
+      retryAt: DateTime.add(yield* DateTime.now, {
+        milliseconds: initialRetryDelayMilliseconds * 2 ** (attempt - 1),
+      }),
+    };
+  } else {
+    const status = yield* settleTerminalEmailFailure(sent.failure);
+    const refusedOutcome = sent.failure.retryable ? "retry-exhausted" : "refused";
+    result = { outcome: status === "uncertain" ? "uncertain" : refusedOutcome };
+  }
+  return yield* inDeliveryScope(payload, settle({ payload, prepared, attempt, result }));
+});
+
+const runDelivery = Effect.fn("EmailAuthentication.deliverPairingEmail")(function* (
+  payload: PairingDeliveryPayload
+) {
+  for (let attempt = 1; attempt <= maximumProviderAttempts; attempt++) {
+    const result = yield* Activity.make({
+      name: "DeliverPairingEmail",
+      success: AttemptResult,
+      execute: deliverAttempt(payload, attempt),
+    }).pipe(Effect.provideService(Activity.CurrentAttempt, attempt));
+    if (result.outcome !== "retry") return result;
+    const remaining =
+      DateTime.toEpochMillis(result.retryAt) - DateTime.toEpochMillis(yield* DateTime.now);
+    if (remaining > 0) {
+      yield* DurableClock.sleep({
+        name: `PairingEmailRetry/${attempt}`,
+        duration: remaining,
+        inMemoryThreshold: "0 millis",
+      });
+    }
+  }
+  return { outcome: "retry-exhausted" } satisfies PairingDeliveryResult;
+});
+
+const expirePairingEmail = Effect.fn(function* (payload: PairingExpiryPayload) {
+  const sql = yield* SqlClient.SqlClient;
+  const now = yield* DateTime.now;
+  yield* withUserTransaction(
+    payload.userId,
+    withSubjectLockInScope(
+      payload.userId,
+      withUserLockInScope(
+        advisoryLockKey.browserLoginApproval(payload.userId),
+        sql`DELETE FROM browser_pairing_email_workflows
+        WHERE id = ${payload.workflowId} AND user_id = ${payload.userId} AND expires_at <= ${now}`.pipe(
+          Effect.orDie
+        )
+      )
+    )
+  );
+});
+
+/** Native durable definitions; activities never serialize their in-memory email projection. */
+export const BrowserPairingEmailWorkflowLive = Layer.mergeAll(
+  BrowserPairingEmailDeliveryWorkflow.toLayer(runDelivery),
+  BrowserPairingEmailExpiryWorkflow.toLayer(
+    Effect.fn(function* (payload) {
+      const deadline = yield* Activity.make({
+        name: "PairingEmailDeadline",
+        success: Schema.Option(Schema.DateTimeUtc),
+        execute: withUserTransaction(
+          payload.userId,
+          Effect.gen(function* () {
+            const sql = yield* SqlClient.SqlClient;
+            return yield* SqlSchema.findOneOption({
+              Request: Schema.Void,
+              Result: Schema.Struct({ expiresAt: Schema.DateTimeUtcFromDate }),
+              execute:
+                () => sql`SELECT expires_at AS "expiresAt" FROM browser_pairing_email_workflows
+            WHERE id = ${payload.workflowId} AND user_id = ${payload.userId}`,
+            })(undefined).pipe(Effect.orDie, Effect.map(Option.map((row) => row.expiresAt)));
+          })
+        ),
+      });
+      if (Option.isNone(deadline)) return;
+      const remaining =
+        DateTime.toEpochMillis(deadline.value) - DateTime.toEpochMillis(yield* DateTime.now);
+      if (remaining > 0) {
+        yield* DurableClock.sleep({
+          name: "PairingEmailExpiry",
+          duration: remaining,
+          inMemoryThreshold: "0 millis",
+        });
+      }
+      yield* Activity.make({ name: "ExpirePairingEmail", execute: expirePairingEmail(payload) });
+    })
+  )
 );
 
-/**
- * Scoped production loop that polls durable request/delivery work once per second. It requires the
- * database, cryptography, and EmailDeliveryPort services; provider retries and terminal failures
- * are observed by the bounded sender, while defects terminate the layer for runtime supervision.
- * Scope closure interrupts polling and waits for no PostgreSQL transaction across provider I/O.
- */
+/** Native consumers own acquisition and wakeups; fixed concurrency bounds provider work per process. */
 export const BrowserPairingEmailDeliveryWorkerLive = Layer.effectDiscard(
   Effect.gen(function* () {
-    const environment = yield* Config.string("NODE_ENV").pipe(Config.withDefault("development"));
-    if (environment !== "production") return;
-    yield* processNextBackgroundStep().pipe(
-      Effect.delay("1 second"),
-      Effect.forever,
-      Effect.forkScoped
-    );
+    if (
+      (yield* Config.string("NODE_ENV").pipe(Config.withDefault("development"))) !== "production"
+    ) {
+      return;
+    }
+    const starts = yield* pairingStartQueue;
+    const deliveries = yield* pairingDeliveryQueue;
+    const expiries = yield* pairingExpiryQueue;
+    yield* starts
+      .take(({ requestId }) => processBrowserPairingEmailStartRequest(requestId))
+      .pipe(Effect.forever, Effect.forkScoped);
+    yield* deliveries
+      .take((payload) => BrowserPairingEmailDeliveryWorkflow.execute(payload))
+      .pipe(Effect.forever, Effect.forkScoped);
+    // Expiry is submitted without occupying a worker until the ten-minute deadline.
+    yield* expiries
+      .take((payload) => BrowserPairingEmailExpiryWorkflow.execute(payload, { discard: true }))
+      .pipe(Effect.forever, Effect.forkScoped);
   })
+);
+
+/** Closed progress signal for the finite channel-worker acceptance seam. */
+export type BrowserPairingEmailBackgroundStepOutcome = Readonly<{ _tag: "Idle" | "Progressed" }>;
+
+/** Drives native queues and the real workflow handler without a production polling fiber. */
+export const processNextBackgroundStep = Effect.fn("EmailAuthentication.processNextBackgroundStep")(
+  function* () {
+    const starts = yield* pairingStartQueue;
+    const deliveries = yield* pairingDeliveryQueue;
+    const started = yield* starts
+      .take(({ requestId }) => processBrowserPairingEmailStartRequest(requestId))
+      .pipe(Effect.as(true), Effect.timeoutOption("1100 millis"));
+    const delivered = yield* deliveries
+      .take((payload) => BrowserPairingEmailDeliveryWorkflow.execute(payload))
+      .pipe(Effect.as(true), Effect.timeoutOption("2 seconds"));
+    return {
+      _tag: Option.isSome(started) || Option.isSome(delivered) ? "Progressed" : "Idle",
+    } satisfies BrowserPairingEmailBackgroundStepOutcome;
+  }
 );

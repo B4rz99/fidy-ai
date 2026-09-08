@@ -3,9 +3,11 @@ import { expect, layer } from "@effect/vitest";
 import { Crypto, DateTime, Effect, Exit, Layer, Option, Schedule, Schema } from "effect";
 import { ClusterWorkflowEngine, SingleRunner } from "effect/unstable/cluster";
 import { PersistedQueue } from "effect/unstable/persistence";
+import { SqlClient } from "effect/unstable/sql";
 import { DurableClock, WorkflowEngine } from "effect/unstable/workflow";
 import { PendingConsentExchangeId } from "~/core/consent/model";
 import { MigrationSqlClient, MigratorLive, PgLive } from "~/shell/db/client";
+import { durableWorkflowMailboxesTerminal } from "~/shell/durable-execution-retention";
 import {
   ConsentDisclosureWorkflowLive,
   startNextConsentDisclosure,
@@ -115,6 +117,18 @@ const awaitPruned = Effect.fn("Test.awaitPrunedDisclosure")(function* (
 layer(RetentionHarness, { excludeTestServices: true, timeout: "30 seconds" })(
   "WhatsApp disclosure retention",
   (it) => {
+    it.effect("treats an absent SQL Cluster mailbox table as terminal", () =>
+      Effect.gen(function* () {
+        const sql = yield* SqlClient.SqlClient;
+        const terminal = yield* sql.withTransaction(
+          sql`SET LOCAL search_path TO public`.pipe(
+            Effect.andThen(durableWorkflowMailboxesTerminal("missing-execution", ["Workflow"]))
+          )
+        );
+        expect(terminal).toBe(true);
+      })
+    );
+
     it.effect(
       "publishes an orphaned request without execution and removes it only after native completion",
       () =>

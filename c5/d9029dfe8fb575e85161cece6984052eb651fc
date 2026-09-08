@@ -1,0 +1,19 @@
+apps/server/ARCHITECTURE.md
+  s_b587c2cb25e983::t_f8d800138f19d3 410
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.2",
+  "base_commit_sha": "c5d9029dfe8fb575e85161cece6984052eb651fc",
+  "prompts": {},
+  "sessions": {
+    "s_b587c2cb25e983": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a06ef8-6705-7557-9e4c-6c80422c6946",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

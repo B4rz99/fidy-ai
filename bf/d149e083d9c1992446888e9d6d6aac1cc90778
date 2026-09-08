@@ -1,0 +1,21 @@
+docs/adr/0013-atomic-consent-disclosure-reconciliation.md
+  s_05b0ebf6eb4c9b::t_28e92bce863785 32
+docs/architecture/durable-execution-inventory.md
+  s_05b0ebf6eb4c9b::t_7aee91fab14bc6 29-36,38-41
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.2",
+  "base_commit_sha": "bfd149e083d9c1992446888e9d6d6aac1cc90778",
+  "prompts": {},
+  "sessions": {
+    "s_05b0ebf6eb4c9b": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a06efb-de89-72c4-a725-1ff3b26ab002",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

@@ -578,6 +578,44 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
       })
     );
 
+    it.effect("rejects invalid and out-of-order provider attempts without arming a proof", () =>
+      Effect.gen(function* () {
+        yield* seedFreshSession();
+        expect((yield* requestCandidate("replacement-attempt-order@example.com")).status).toBe(200);
+        const sql = yield* MigrationSqlClient;
+        const payload = yield* Schema.decodeUnknownEffect(ReplacementDeliveryPayload)(
+          (yield* sql`SELECT intent.id AS "intentId", workflow.user_id AS "userId", 1 AS revision
+            FROM email_replacement_delivery_intents intent
+            JOIN email_replacement_workflows workflow ON workflow.id = intent.workflow_id
+            WHERE workflow.user_id = ${userId}`)[0]
+        );
+        for (const attempt of [0, 4, 1.5, 2, 3]) {
+          expect(
+            yield* performReplacementAttempt(payload, attempt).pipe(
+              Effect.provideService(
+                EmailDeliveryPort,
+                EmailDeliveryPort.of({
+                  send: () => Effect.die("invalid or out-of-order attempt must not send"),
+                })
+              )
+            )
+          ).toBe("not-current");
+        }
+        expect(
+          yield* sql`SELECT attempt FROM email_replacement_delivery_attempts
+          WHERE intent_id = ${payload.intentId}`
+        ).toEqual([]);
+        expect(
+          yield* sql`SELECT status FROM email_replacement_delivery_intents
+          WHERE id = ${payload.intentId}`
+        ).toEqual([{ status: "pending" }]);
+        expect(
+          yield* sql`SELECT proof_digest FROM email_replacement_workflows
+          WHERE user_id = ${userId}`
+        ).toEqual([{ proof_digest: null }]);
+      })
+    );
+
     it.effect(
       "rejects a wrong-User durable payload without sending, installing proof, or expiring another User's workflow",
       () =>

@@ -106,6 +106,10 @@ apps/server/src/shell/email-authentication/replacement-workflow.integration.test
 apps/server/src/shell/http.ts
   s_cfe47ac0afd905::t_f624280bb3351c 295
   s_cfe47ac0afd905::t_47dd9b7295e316 52-56,296-299
+apps/server/src/shell/db/migrations/registry.ts
+  s_cfe47ac0afd905::t_dcdc7aa17a106d 48,106
+docs/architecture/durable-execution-inventory.md
+  s_cfe47ac0afd905::t_17a11da59f93eb 35,110,113,170
 ---
 {
   "schema_version": "authorship/3.0.0",

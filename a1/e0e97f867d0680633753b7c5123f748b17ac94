@@ -1,0 +1,90 @@
+apps/server/src/shell/testing/api-harness.ts
+  s_05b0ebf6eb4c9b::t_aeede638df12ea 2,305
+apps/server/src/shell/testing/consent-disclosure.ts
+  s_05b0ebf6eb4c9b::t_925c9beee34455 4,33-35,40-46
+  s_05b0ebf6eb4c9b::t_419882466be316 9,13,53-57
+apps/server/src/shell/channels/whatsapp/whatsapp-channel.test.ts
+  s_05b0ebf6eb4c9b::t_d5f7def637d4ae 2094
+apps/server/src/shell/channels/whatsapp/disclosure-store.ts
+  s_05b0ebf6eb4c9b::t_4756077e5fbb66 198
+  s_05b0ebf6eb4c9b::t_da4d2d15a085c1 193-197,199-200
+apps/server/src/shell/channels/whatsapp/disclosure-delivery.ts
+  s_05b0ebf6eb4c9b::t_ae22716d7e812c 114
+  s_05b0ebf6eb4c9b::t_1884c60f8a89a7 290
+  s_05b0ebf6eb4c9b::t_0fae2587551dcf 21,340
+  s_05b0ebf6eb4c9b::t_266aebc7c22c48 161,166-167,191,213
+  s_05b0ebf6eb4c9b::t_9f74e62e3fd490 17,72-75
+  s_05b0ebf6eb4c9b::t_5ec218e3fac357 233-234,243,245,248-249,253-256,260-272,280-285,291-294,298,303-304,307,310-313,320-321
+  s_05b0ebf6eb4c9b::t_aae0158c5dd708 39,215-222,355-372,374
+  s_05b0ebf6eb4c9b::t_cc2eb44e066e4f 42,223-226
+  s_05b0ebf6eb4c9b::t_d0dd4c83d1b539 205-209
+  s_05b0ebf6eb4c9b::t_9d19255b6b1f1e 1-14,24,26-29,34,37-38,41,43-44,46,51,56-71,76-88,90,95-98,101,105-108,110-113,115,119-120,122-157,194-196,198-204,210-212,214,227-228,230-232,235-242,244,246-247,250-252,322-330,334-338,342-354,382-385,392
+  s_05b0ebf6eb4c9b::t_8e9f92e95cf25c 162-165,168-170,174-176,178-184,186-188,257-259,273-279,286-289,295-297,299-302,305-306,314-319,331-333,379,402
+  s_05b0ebf6eb4c9b::t_7a269e32c67a50 15,20,40,339,341,373,375-378,380-381,386-391,393-401,403-404
+apps/server/src/shell/onboarding/retention.ts
+  s_05b0ebf6eb4c9b::t_c6332967268607 4
+  s_05b0ebf6eb4c9b::t_9ce26f20db4f34 3
+  s_05b0ebf6eb4c9b::t_cccb89aceccb31 2,26
+  s_05b0ebf6eb4c9b::t_384bc6d9fd576a 27-31,39
+apps/server/src/shell/channels/whatsapp/disclosure-workflow.ts
+  s_05b0ebf6eb4c9b::t_a6dd64609c9725 53-54,63
+  s_05b0ebf6eb4c9b::t_68b826b000b1e6 1,49,52,55-62
+  s_05b0ebf6eb4c9b::t_973e696a63d6a8 20-26,66-70
+  s_05b0ebf6eb4c9b::t_cb83dcf1ef5e27 40-48,50
+  s_05b0ebf6eb4c9b::t_87364feeb8e13f 2-19,27-39,51,64-65
+apps/server/src/shell/consent/repo.ts
+  s_05b0ebf6eb4c9b::t_75aea224666201 999,1013
+  s_05b0ebf6eb4c9b::t_0af63c4cca3be8 1002,1014
+apps/server/src/shell/channels/whatsapp/worker.ts
+  s_05b0ebf6eb4c9b::t_53c860baf23b72 172,199
+apps/server/src/shell/http.ts
+  s_05b0ebf6eb4c9b::t_fe2ba172702c8b 271
+  s_05b0ebf6eb4c9b::t_1884c60f8a89a7 24
+  s_05b0ebf6eb4c9b::t_2224b0e18a4038 272
+  s_05b0ebf6eb4c9b::t_b38c8e45426f6e 25-27,273-275,314
+apps/server/src/shell/channels/whatsapp/disclosure-delivery.test.ts
+  s_05b0ebf6eb4c9b::t_e9b395772faada 6
+  s_05b0ebf6eb4c9b::t_ea22de024e618a 9-13,21-51,59,61-62,78-102
+  s_05b0ebf6eb4c9b::t_5cb10151da3fab 1-5,7-8,14,20,52-58,60,63-77,103-107
+  s_05b0ebf6eb4c9b::t_461a9aa9f46ec3 15-19
+apps/server/src/shell/channels/whatsapp/disclosure-workflow.integration.test.ts
+  s_05b0ebf6eb4c9b::t_2347194fea2762 214-216,251,257,336-337
+  s_05b0ebf6eb4c9b::t_8e9f92e95cf25c 110-113,129-211,218-250,252-256,258-262,269-285,287-327,329-335
+  s_05b0ebf6eb4c9b::t_7bdb71bea1a5cb 3-11,31-35
+  s_05b0ebf6eb4c9b::t_66101e43eb0329 36,263-267,286,328
+  s_05b0ebf6eb4c9b::t_c4aa458a33a57b 87-89
+  s_05b0ebf6eb4c9b::t_a133bcafe56931 15,25-30
+  s_05b0ebf6eb4c9b::t_3b55ec5c1a5b23 1-2,12-14,16-24,37-74,78-86,90-95,101-104,106-109,114-127,212-213,338-339
+  s_05b0ebf6eb4c9b::t_189f38bebf6cfd 75-77,105,128,217,268
+  s_05b0ebf6eb4c9b::t_81295e6c5d920b 96-100
+docs/adr/0013-atomic-consent-disclosure-reconciliation.md
+  s_05b0ebf6eb4c9b::t_13e90aed8d68fa 28-32
+  s_05b0ebf6eb4c9b::t_7d8df081f8fa3f 10,16-20
+  s_cfe47ac0afd905::t_29df68d04751ae 33
+apps/server/ARCHITECTURE.md
+  s_05b0ebf6eb4c9b::t_e27742993e6708 350-357
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.2",
+  "base_commit_sha": "a1e0e97f867d0680633753b7c5123f748b17ac94",
+  "prompts": {},
+  "sessions": {
+    "s_05b0ebf6eb4c9b": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a06efb-de89-72c4-a725-1ff3b26ab002",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_cfe47ac0afd905": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a06efa-14b6-7772-8494-49b4e4155260",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

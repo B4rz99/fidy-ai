@@ -1,0 +1,20 @@
+apps/server/src/shell/channels/whatsapp/disclosure-retention.test.ts
+  s_3f56268c3f81f2::t_621b07628ad42a 49
+  s_3f56268c3f81f2::t_b425da2bc7cdfa 22,46-48,50-56,79-89,162,188-189
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.2",
+  "base_commit_sha": "dc69614c49bac3195193785b638fcd56ff39e1c9",
+  "prompts": {},
+  "sessions": {
+    "s_3f56268c3f81f2": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a06fd8-1f32-73ea-ac07-fa3aa66d9199",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

@@ -1,0 +1,34 @@
+docs/adr/0013-atomic-consent-disclosure-reconciliation.md
+  s_05b0ebf6eb4c9b::t_f48f49c0aae2f2 18
+apps/server/src/shell/channels/whatsapp/disclosure-workflow.integration.test.ts
+  s_05b0ebf6eb4c9b::t_2195129d25ac83 40
+  s_05b0ebf6eb4c9b::t_e0a7ebc8fadb1a 413-425,427-436,438-450
+  s_05b0ebf6eb4c9b::t_2f9b8fb1e748b4 437
+  s_05b0ebf6eb4c9b::t_a113e3be830b76 426
+  s_05b0ebf6eb4c9b::t_adb837e530a688 385-393
+  s_05b0ebf6eb4c9b::t_27bc1dc01d3cbe 451-453
+  s_05b0ebf6eb4c9b::t_76e9075e4b9992 395,454-456
+apps/server/src/shell/channels/whatsapp/disclosure-delivery.ts
+  s_05b0ebf6eb4c9b::t_057d2c34323ffb 146,193-194
+  s_05b0ebf6eb4c9b::t_1fede48f180502 144,151-154,156-159,162-192,288-292
+  s_05b0ebf6eb4c9b::t_0c733e159bacdc 85,141-143,145
+  s_05b0ebf6eb4c9b::t_067a8f75aab7f3 147-150,155,160-161
+apps/server/src/shell/channels/whatsapp/whatsapp-channel.test.ts
+  s_05b0ebf6eb4c9b::t_fab0696b80f310 2388-2390,2393-2394,2501-2502
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.2",
+  "base_commit_sha": "97029fe617ba03d0d0f746bd0d620a649d855527",
+  "prompts": {},
+  "sessions": {
+    "s_05b0ebf6eb4c9b": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a06efb-de89-72c4-a725-1ff3b26ab002",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

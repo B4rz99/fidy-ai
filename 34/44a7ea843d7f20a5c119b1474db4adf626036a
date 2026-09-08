@@ -1,0 +1,43 @@
+apps/server/src/shell/channels/whatsapp/whatsapp-channel.test.ts
+  s_3f56268c3f81f2::t_37ef2d121383e2 64
+  s_3f56268c3f81f2::t_713154a49504e2 60,1905-1932,1934-1939,1971-1974,1977-1980,2005-2011,2020,2048-2052,2054-2056,2072-2078,2150-2156,2296-2388,2409-2412,2442-2494
+  s_3f56268c3f81f2::t_d9bac07be68022 61-62,67,1970,1976,2004,2079,2157,2391,2408,2433-2434
+  s_3f56268c3f81f2::t_cced8dd3dc98de 2284,2286
+  s_3f56268c3f81f2::t_fafab856c5d07a 68,2242-2247
+  s_3f56268c3f81f2::t_4ee682a2431d0f 2173-2213,2215-2232,2234-2240,2248-2252,2255,2257,2260-2283,2285,2287-2292
+  s_cfe47ac0afd905::t_1a5546100eec89 23,529,2293-2295
+apps/server/src/shell/channels/whatsapp/whatsapp.acceptance.test.ts
+  s_3f56268c3f81f2::t_0bd64bd407327d 1069,1080
+  s_3f56268c3f81f2::t_713154a49504e2 802,804,822,836,865-867,870,896,922-923,955-956,997,1007,1031-1034,1039
+  s_3f56268c3f81f2::t_4ee682a2431d0f 258-268,287,478,552,573-583,840-842,924-926,957-959,976-978,1040-1042
+  s_3f56268c3f81f2::t_827250365b8692 253-257,584,788,839
+apps/server/src/shell/testing/whatsapp-acceptance-harness.ts
+  s_3f56268c3f81f2::t_d330f780adf500 518-523
+  s_3f56268c3f81f2::t_713154a49504e2 36-37,39
+  s_3f56268c3f81f2::t_fafab856c5d07a 38
+  s_cfe47ac0afd905::t_7ca6875be1f93c 35
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.2",
+  "base_commit_sha": "3444a7ea843d7f20a5c119b1474db4adf626036a",
+  "prompts": {},
+  "sessions": {
+    "s_3f56268c3f81f2": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a06fd8-1f32-73ea-ac07-fa3aa66d9199",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_cfe47ac0afd905": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a06efa-14b6-7772-8494-49b4e4155260",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

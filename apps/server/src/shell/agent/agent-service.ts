@@ -48,6 +48,7 @@ import type { HostedAgentSessionId } from "~/core/transcript/hosted-agent-sessio
 import {
   ConversationCompactionInference,
   ConversationCompactionInferenceError,
+  conversationCompactionSystemPrompt,
 } from "~/shell/transcript/conversation-compaction-inference";
 import {
   AgentIteration,
@@ -2017,8 +2018,7 @@ export class AgentService extends Context.Service<
                       messages: [
                         {
                           role: "system",
-                          content:
-                            "Replace the prior compacted conversation and exact transcript with one faithful concise conversation record.",
+                          content: conversationCompactionSystemPrompt,
                         },
                         ...Option.match(prior, {
                           onNone: () => [],

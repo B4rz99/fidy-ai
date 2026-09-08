@@ -1,27 +1,16 @@
 import { gunzipSync } from "node:zlib";
-import { type JsonSchema, Option } from "effect";
+import { Option } from "effect";
 import { Tiktoken } from "js-tiktoken/lite";
 import { ministral3bVocabulary } from "./fixtures/ministral-3b-2512-vocabulary";
 
-/** Hosted text roles reproduced by the Ministral 3 v13 Compaction request. */
-export type MistralStructuredMessage = Readonly<{
-  role: "system" | "user" | "assistant";
-  content: string;
-}>;
-
-/** Exact count-bearing portion of one hosted strict structured request. */
-export type MistralStructuredCountedRequest = Readonly<{
-  messages: ReadonlyArray<MistralStructuredMessage>;
-  /** Enforced by hosted constrained decoding; Mistral usage does not charge it as prompt tokens. */
-  response_format: Readonly<{
-    type: "json_schema";
-    json_schema: Readonly<{
-      name: string;
-      strict: true;
-      schema: JsonSchema.JsonSchema;
-    }>;
-  }>;
-}>;
+/** Explicit non-empty v13 conversation shape supported by the Compaction probe. */
+export type MistralV13Messages = readonly [
+  system: Readonly<{ role: "system"; content: string }>,
+  firstUser: Readonly<{ role: "user"; content: string }>,
+  ...continuation: ReadonlyArray<
+    Readonly<{ role: "system" | "user" | "assistant"; content: string }>
+  >,
+];
 
 const tekkenPattern =
   "[^\\r\\n\\p{L}\\p{N}]?[\\p{Lu}\\p{Lt}\\p{Lm}\\p{Lo}\\p{M}]*[\\p{Ll}\\p{Lm}\\p{Lo}\\p{M}]+|[^\\r\\n\\p{L}\\p{N}]?[\\p{Lu}\\p{Lt}\\p{Lm}\\p{Lo}\\p{M}]+[\\p{Ll}\\p{Lm}\\p{Lo}\\p{M}]*|\\p{N}| ?[^\\s\\p{L}\\p{N}]+[\\r\\n/]*|\\s*[\\r\\n]+|\\s+(?!\\S)|\\s+";
@@ -49,7 +38,7 @@ type ConversationMessage = Readonly<{
 }>;
 
 const normalizeMessages = (
-  messages: ReadonlyArray<MistralStructuredMessage>
+  messages: MistralV13Messages
 ): Readonly<{
   system: Option.Option<string>;
   conversation: ReadonlyArray<ConversationMessage>;
@@ -77,13 +66,11 @@ const normalizeMessages = (
 const encodeText = (text: string): ReadonlyArray<number> => tokenizer.encode(text);
 
 /**
- * Encodes exactly the v13 system/User/assistant representation submitted for strict Compaction.
- * The strict JSON Schema remains in the HTTP request but is absent from hosted prompt usage.
+ * Reproduces mistral-common v13 instruct framing for explicit system/User/assistant messages.
+ * This does not claim that any hosted response-format metadata is free from prompt accounting.
  */
-export const encodeMistralStructuredRequest = (
-  request: MistralStructuredCountedRequest
-): ReadonlyArray<number> => {
-  const normalized = normalizeMessages(request.messages);
+export const encodeMistralV13Messages = (messages: MistralV13Messages): ReadonlyArray<number> => {
+  const normalized = normalizeMessages(messages);
   const tokens: Array<number> = [beginningOfSequence];
   if (Option.isSome(normalized.system)) {
     tokens.push(beginningOfSystem, ...encodeText(normalized.system.value), endOfSystem);
@@ -98,6 +85,6 @@ export const encodeMistralStructuredRequest = (
   return tokens;
 };
 
-/** Counts provider-reported prompt usage for one strict Ministral structured request. */
-export const countMistralStructuredRequest = (request: MistralStructuredCountedRequest): number =>
-  encodeMistralStructuredRequest(request).length;
+/** Counts the pinned local v13 message representation without hosted request metadata. */
+export const countMistralV13Messages = (messages: MistralV13Messages): number =>
+  encodeMistralV13Messages(messages).length;

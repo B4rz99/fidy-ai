@@ -24,8 +24,8 @@ const credentialEvidence = [
   },
   {
     configuration: "MISTRAL_API_KEY",
-    testFile: "apps/server/src/shell/_shared/bounded-external-http.test.ts",
-    testName: "installs each provider's credential redaction policy at the transport boundary",
+    testFile: "apps/server/src/shell/agent/mistral-conformance.test.ts",
+    testName: "rejects excess structured output without exposing the credential or provider body",
   },
   {
     configuration: "EMAIL_ADMISSION_HMAC_KEY",

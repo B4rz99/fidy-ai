@@ -41,6 +41,7 @@ import {
   type HostedTextResult,
   type HostedTextToolPolicy,
   HostedToolCallMaximum,
+  hostedOutputTokenReserve,
   makeHostedInference,
   maximumActiveRequestTokens,
 } from "./hosted-inference";
@@ -51,8 +52,6 @@ import { type WorkingContext, makeStartupWorkingContext } from "./working-contex
 export const FidyAgentModel = "gpt-5.6-luna";
 
 const hostedContextCapacity = 1_050_000;
-/** Server-owned production output allowance included in every complete capacity decision. */
-export const hostedOutputTokenReserve = 16_000;
 
 type ContinuityBudget =
   | "memory"

@@ -36,9 +36,9 @@ Mistral's `Ministral-3-3B-Instruct-2512` checkpoint, revision
   `response_format` or inject the structured-response schema. It also inserts a default system
   prompt when none is supplied, so raw text counting and complete chat counting are distinct.
 
-**Conclusion:** a Bun-only implementation of vocabulary and ordinary instruct framing remains
-plausible. No Bun tokenizer was installed or validated in this investigation; these artifacts alone
-are not a verified counter for hosted strict structured requests.
+**Conclusion:** the checked-in Bun implementation can reproduce the checkpoint's vocabulary and
+ordinary v13 instruct framing. These artifacts alone are still not a verified counter for hosted
+strict structured requests.
 
 ### The hosted structured-output API adds prompt material
 
@@ -50,13 +50,14 @@ Your output should be an instance of a JSON object following this schema: {{ jso
 ```
 
 The same pinned documentation source includes a complete Book request and response whose
-`usage.prompt_tokens` is **23**. Encoding that request with the selected checkpoint's published
-vocabulary and v13 controls also yields 23: five system-text tokens, thirteen User-text tokens, and
-five control tokens. Prefixing the compact schema serialization and documented sentence would yield
-91 instead. Therefore the worked hosted usage does not count that sentence or schema as prompt
-framing; constrained decoding is count-bearing out-of-band state for this request. This resolves the
-local accounting rule, while the contradictory prose remains recorded rather than silently treated
-as a serialization specification.
+`usage.prompt_tokens` is **23**. Encoding that request's messages with the selected checkpoint's
+published vocabulary and v13 controls also yields 23: five system-text tokens, thirteen User-text
+tokens, and five control tokens. Prefixing one compact schema serialization and the documented
+sentence would yield 91 instead. This is evidence compatible with out-of-band schema accounting for
+the documented `ministral-8b-latest` example, but one aggregate value cannot rule out undocumented
+framing differences or establish the selected 3B deployment's behavior. The local counter therefore
+counts only explicit messages; it makes no claim about hosted response-format metadata. Controlled
+absent/small/large-schema comparisons remain the decision gate.
 
 The source is pinned at
 [`platform-docs-public@2e094f7.../custom/page.mdx`](https://github.com/mistralai/platform-docs-public/blob/2e094f7bbe1395de4a738a3483def3573143d973/src/content/en/docs/studio/conversations/structured-output/custom/page.mdx).
@@ -102,7 +103,12 @@ Bun with `js-tiktoken`. Its bundled vocabulary is derived from the selected chec
 
 - upstream `tekken.json` SHA-256: `600bb27946565481ecf51ba8aee252e49b9a68507866080ac9c30185bb312843`;
 - transformed rank text SHA-256: `a437159c587e82ed8fc7e0dc7cfd0df5db0e3eccd323ce718bdcb0c0b3674bcf`;
-- deterministic gzip SHA-256: `8befe274efff10d098b3b15ded36b6bbe095546bde808ccbf1d78a0e06dbdfcc`.
+- deterministic gzip SHA-256: `94190b1851d64902c4e30567e0415fcb27d7f9918c0eace1e0f3de3d070ad418`.
+
+`apps/server/tools/mistral/generate-vocabulary.mjs` owns the reproducible transformation: it fetches
+only that pinned revision, verifies the upstream and transformed hashes, applies the reserved-token
+offset, and emits the checked-in compressed module. Regenerate it explicitly with
+`bun apps/server/tools/mistral/generate-vocabulary.mjs`; ordinary builds and tests perform no fetch.
 
 The transformation preserves every published BPE byte token and offsets ordinary ranks by the
 checkpoint's 1,000 reserved control slots, matching Mistral's
@@ -126,20 +132,23 @@ the checkpoint's pinned `tokenizer.json`, then frozen as counts and token-id dig
 implementation uses `js-tiktoken` and transformed `tekken.json` instead. They are reference vectors
 from an official model artifact, not hosted-usage evidence.
 
-`bun run mistral:conformance` is the separate manual command. It calls only the fixed
-`ministral-3b-2512` model with the official Book and synthetic `es-CO` requests, validates strict
-outputs, and compares local counts with `usage.prompt_tokens`. It bounds responses, applies the shared
-Mistral credential-redaction/telemetry policy, and prints only case ids, model id, counts, match, and
-validation status. Default tests and CI never invoke it; credential presence alone never invokes it.
+`bun run mistral:conformance` is the separate manual command. Against only the fixed
+`ministral-3b-2512` model, it first sends identical messages with absent, small, and large schema
+metadata; all three hosted prompt counts must equal the pinned local message count. It then sends a
+synthetic production-shaped Compaction request using the real system instruction, canonical output
+schema, and 16K output reserve. Strict outputs and provider envelopes reject excess fields. Responses
+are bounded, failures contain no request or response content, and the shared Mistral
+credential-redaction/telemetry policy applies. The command prints only numeric reports after every
+case succeeds. Default tests and CI never invoke it; credential presence alone never invokes it.
 Running it without a configured credential failed closed before network work, as intended.
 
 ## Remaining block before adapter implementation
 
 Selected-model hosted parity has not passed because `MISTRAL_API_KEY` is absent. The 23-token
-official worked example establishes the candidate accounting rule, but it cannot prove that the
-fixed 3B API deployment currently uses the published checkpoint tokenizer. Do not claim live
-conformance or wire this counter into production until the manual command reports exact equality for
-both cases.
+official worked example suggests, but does not establish, schema-free hosted accounting. Do not
+claim live conformance or wire this message counter into production until the manual command proves
+exact equality across the baseline, both schema differentials, and the production-shaped Compaction
+case.
 
 Do not work around a mismatch by counting JSON characters, applying a safety multiplier, dropping
 the response schema, switching to non-strict JSON output, silently reducing budgets, or changing a
@@ -148,8 +157,9 @@ fixture to match unexplained provider usage. Leave the existing OpenAI runtime i
 ## Resume conditions and implementation sequence
 
 1. Configure the credential outside chat/source and explicitly run `bun run mistral:conformance`.
-   Require exact local/provider prompt equality for both cases; investigate rather than bless any
-   mismatch. Confirm the API's fixed model capacity separately before production admission.
+   Require exact local/provider prompt equality for all four cases and equality across the controlled
+   schema differential; investigate rather than bless any mismatch. Confirm the API's fixed model
+   capacity separately before production admission.
 2. TDD the Mistral structured implementation through HostedInference with stub Effect HTTP. Keep
    schema derivation and the matching output decoder together; retain and send the same prepared
    request; prove capacity boundaries, bounded bodies, deadlines, error classification, and secrecy.
@@ -159,6 +169,6 @@ fixture to match unexplained provider usage. Leave the existing OpenAI runtime i
 4. Preserve the distinction between prompt usage and the separately reserved 16K output allowance.
    Perform Standards/Security/Spec review of the actual adapter implementation before completion.
 
-The counter/reference-vector slice passes its focused tests and server typecheck. The Mistral adapter,
-Compaction integration acceptance, maximum-budget startup proof, and live conformance remain
-outstanding; no provider conformance result is claimed.
+The counter/reference-vector and manual-workflow slices pass focused deterministic tests and server
+typecheck. The Mistral adapter, Compaction integration acceptance, maximum-budget startup proof, and
+live conformance remain outstanding; no provider conformance result is claimed.

@@ -101,7 +101,7 @@ export const purgeBrowserPairingEmailExecutionHistory = Effect.fn(function* (aft
   if (rows.length === 100) {
     yield* Effect.logWarning("Browser pairing email history cleanup has an overdue full page");
   }
-  return rows.length === 100 ? (rows.at(-1)?.sequence ?? 0) : 0;
+  return rows.length === 100 ? Option.getOrThrow(Option.fromNullishOr(rows.at(-1))).sequence : 0;
 });
 
 /** Purges one bounded batch of expired anonymous admission evidence. */

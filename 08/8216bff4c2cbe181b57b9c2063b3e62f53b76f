@@ -1,0 +1,21 @@
+apps/server/ARCHITECTURE.md
+  s_b587c2cb25e983::t_ce495eeac5f5e7 410
+docs/architecture/durable-execution-inventory.md
+  s_b587c2cb25e983::t_2930a74fec361b 34
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.2",
+  "base_commit_sha": "088216bff4c2cbe181b57b9c2063b3e62f53b76f",
+  "prompts": {},
+  "sessions": {
+    "s_b587c2cb25e983": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a06ef8-6705-7557-9e4c-6c80422c6946",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": null
+    }
+  }
+}

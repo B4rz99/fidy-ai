@@ -48,7 +48,6 @@ import type { HostedAgentSessionId } from "~/core/transcript/hosted-agent-sessio
 import {
   ConversationCompactionInference,
   ConversationCompactionInferenceError,
-  conversationCompactionSystemPrompt,
 } from "~/shell/transcript/conversation-compaction-inference";
 import {
   AgentIteration,
@@ -85,10 +84,10 @@ import {
   containsSensitiveChatValue,
   containsSensitiveJson,
   credentialRejectedReply,
-  exactTranscriptPrompt,
   sensitiveEntryRejected,
   type transcriptPrompt,
 } from "./model-boundary";
+import { makeConversationCompactionContext } from "./conversation-compaction-context";
 import {
   HostedInference,
   HostedInferenceError,
@@ -2014,19 +2013,7 @@ export class AgentService extends Context.Service<
               ): Effect.Effect<CompactedConversationOutput, ConversationCompactionInferenceError> =>
                 inference
                   .prepareStructured({
-                    context: {
-                      messages: [
-                        {
-                          role: "system",
-                          content: conversationCompactionSystemPrompt,
-                        },
-                        ...Option.match(prior, {
-                          onNone: () => [],
-                          onSome: (text) => [{ role: "user" as const, content: text }],
-                        }),
-                        ...exactTranscriptPrompt(entries),
-                      ],
-                    },
+                    context: makeConversationCompactionContext({ prior, entries }),
                     objectName: HostedStructuredObjectName.make("compacted_conversation"),
                     outputSchema: CompactedConversationOutput,
                   })

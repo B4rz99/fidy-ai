@@ -1,11 +1,11 @@
 import { jsonStringSchema } from "~/schema-compatibility";
 import { CompactedConversationOutput } from "~/core/transcript/compacted-conversation";
-import { conversationCompactionSystemPrompt } from "~/shell/transcript/conversation-compaction-inference";
 import { Data, Effect, Option, Redacted, Schema } from "effect";
 import type { JsonSchema } from "effect";
 import { HttpBody, HttpClient, HttpClientRequest } from "effect/unstable/http";
 import { makeBoundedExternalHttpClient } from "~/shell/_shared/bounded-external-http";
 import { type MistralV13Messages, countMistralV13Messages } from "./mistral-tokenizer";
+import { makeSyntheticConversationCompactionContext } from "./conversation-compaction-context";
 import { hostedOutputTokenReserve } from "./hosted-inference";
 
 /** Fixed candidate whose hosted accounting must agree with the pinned local v13 tokenizer. */
@@ -100,15 +100,7 @@ const cases: ReadonlyArray<ConformanceCase> = [
   },
   {
     id: "production-compaction",
-    messages: [
-      { role: "system", content: conversationCompactionSystemPrompt },
-      {
-        role: "user",
-        content: "Earlier compacted conversation: the User tracks a grocery budget.",
-      },
-      { role: "user", content: "User: I paid COP 48,900 for groceries." },
-      { role: "assistant", content: "Assistant: I recorded the grocery purchase." },
-    ],
+    messages: makeSyntheticConversationCompactionContext().messages,
     maxTokens: hostedOutputTokenReserve,
     responseFormat: Option.some(JsonSchemaFormat("compacted_conversation", productionJsonSchema)),
     validateContent: Option.some((content) =>

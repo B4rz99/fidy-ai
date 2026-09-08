@@ -94,6 +94,10 @@ apps/server/src/shell/testing/api-harness.ts
 apps/server/src/shell/http.ts
   s_b587c2cb25e983::t_7554621915eb85 45-46,48
   s_b587c2cb25e983::t_edc99afacf2b4d 47,304-307
+docs/architecture/durable-execution-inventory.md
+  s_b587c2cb25e983::t_862facf85d57b9 34,112
+apps/server/src/shell/db/migrations/registry.ts
+  s_b587c2cb25e983::t_babace254b1e69 50,110
 ---
 {
   "schema_version": "authorship/3.0.0",

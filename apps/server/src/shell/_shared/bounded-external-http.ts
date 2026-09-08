@@ -103,6 +103,11 @@ const externalHttpPolicies: Readonly<Record<ExternalHttpProvider, ExternalHttpPo
     redactedHeaders: ["x-api-key"],
     retainedResponseHeaders: [],
   },
+  mistral: {
+    propagateTrace: false,
+    redactedHeaders: ["authorization"],
+    retainedResponseHeaders: [],
+  },
   openai: {
     propagateTrace: false,
     redactedHeaders: ["authorization", "openai-organization", "openai-project"],

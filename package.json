@@ -21,6 +21,7 @@
     "build:production": "bun run --cwd apps/server build:production",
     "start:production": "bun run --cwd apps/server start:production",
     "agent:repl": "bun run --cwd apps/server agent:repl",
+    "mistral:conformance": "bun run --cwd apps/server mistral:conformance",
     "shadcn": "bun run --cwd apps/web shadcn",
     "sentry:verify": "bun run --cwd apps/server sentry:verify",
     "sentry:smoke:build": "bun run --cwd apps/server sentry:smoke:build",

@@ -2,9 +2,10 @@
 
 ## Status
 
-**Issue #384 is blocked at exact structured-request preflight, not implemented.** No runtime
-adapter, production assembly change, credential configuration, or live inference call was made.
-This report records an evidence gap; it does not establish that exact counting is impossible.
+**The Bun v13 counter and an explicitly manual conformance command now exist, but selected-model
+hosted parity remains unverified.** No runtime adapter, production assembly change, credential
+configuration, or live inference call was made. The initial evidence gap was narrowed by an official
+worked usage example; credentials are still required to validate the fixed candidate model.
 
 The approved direction is Ministral 3 3B Instruct as the initial candidate, Bun-only execution,
 unchanged continuity budgets, deterministic CI tests, and a separately invoked synthetic live
@@ -48,13 +49,19 @@ says this is always prepended to the system prompt:
 Your output should be an instance of a JSON object following this schema: {{ json_schema }}
 ```
 
-The inspected page does not specify the exact JSON serialization, separator joining this text to
-an existing system prompt, or handling of multiple system messages. Those details can affect BPE
-counts. Counting only caller messages and the published chat template would omit documented
-provider-added material.
+The same pinned documentation source includes a complete Book request and response whose
+`usage.prompt_tokens` is **23**. Encoding that request with the selected checkpoint's published
+vocabulary and v13 controls also yields 23: five system-text tokens, thirteen User-text tokens, and
+five control tokens. Prefixing the compact schema serialization and documented sentence would yield
+91 instead. Therefore the worked hosted usage does not count that sentence or schema as prompt
+framing; constrained decoding is count-bearing out-of-band state for this request. This resolves the
+local accounting rule, while the contradictory prose remains recorded rather than silently treated
+as a serialization specification.
 
-This observation comes from the page's rendered HTML code block; the readable-text extraction
-omitted the code block. The documentation URL is mutable, unlike the source revisions below.
+The source is pinned at
+[`platform-docs-public@2e094f7.../custom/page.mdx`](https://github.com/mistralai/platform-docs-public/blob/2e094f7bbe1395de4a738a3483def3573143d973/src/content/en/docs/studio/conversations/structured-output/custom/page.mdx).
+The selected model still requires a live comparison because the worked example uses
+`ministral-8b-latest`, not `ministral-3b-2512`.
 
 ### The inspected official tokenizer does not accept strict schema format
 
@@ -87,42 +94,71 @@ constructs the schema-format object with `strict: true`.
 maps its fields to the HTTP wire format. Neither cited helper supplies the missing prompt expansion
 contract. A compatible JSON request is not by itself evidence of exact prompt counting.
 
-## Why this blocks the current implementation plan
+## Bun reproduction and evidence
 
-The ticket requires exact complete structured-request admission, execution of the unchanged prepared
-representation, and official-reference vectors for strict framing. A counter based on an assumed
-separator or schema serialization cannot honestly satisfy those criteria, even if a deterministic
-HTTP fixture returns success. Provider usage after execution cannot replace preflight.
+`apps/server/src/shell/agent/mistral-tokenizer.ts` implements the pinned v13 text and role framing in
+Bun with `js-tiktoken`. Its bundled vocabulary is derived from the selected checkpoint's
+[`tekken.json`](https://huggingface.co/mistralai/Ministral-3-3B-Instruct-2512/blob/b35d4dfe56c142746f54dbd64f579faab2744308/tekken.json):
 
-Do not work around this by counting JSON characters, applying a safety multiplier, dropping the
-response schema, switching to non-strict JSON output, silently reducing budgets, or shipping a
-Mistral adapter that claims an unverified count is exact. Leave the existing OpenAI runtime intact.
+- upstream `tekken.json` SHA-256: `600bb27946565481ecf51ba8aee252e49b9a68507866080ac9c30185bb312843`;
+- transformed rank text SHA-256: `a437159c587e82ed8fc7e0dc7cfd0df5db0e3eccd323ce718bdcb0c0b3674bcf`;
+- deterministic gzip SHA-256: `8befe274efff10d098b3b15ded36b6bbe095546bde808ccbf1d78a0e06dbdfcc`.
 
-This gate surfaced earlier than anticipated: live conformance was initially planned as final
-validation, but the inspected reference leaves a serving-specific expansion to establish first.
-Credentials alone do not establish that contract; representative usage comparisons would validate
-an independently specified candidate expansion, not prove an arbitrary guessed algorithm correct.
+The transformation preserves every published BPE byte token and offsets ordinary ranks by the
+checkpoint's 1,000 reserved control slots, matching Mistral's
+[`Tekkenizer.encode`](https://github.com/mistralai/mistral-common/blob/1fdcf24b5591bb882558336890d020a0ea756713/src/mistral_common/tokens/tokenizers/tekken.py#L420-L438).
+The framing follows v13's system/User/assistant controls and consecutive-message normalization in
+[`normalize.py`](https://github.com/mistralai/mistral-common/blob/1fdcf24b5591bb882558336890d020a0ea756713/src/mistral_common/protocol/instruct/normalize.py#L100-L251)
+and
+[`instruct.py`](https://github.com/mistralai/mistral-common/blob/1fdcf24b5591bb882558336890d020a0ea756713/src/mistral_common/tokens/tokenizers/instruct.py#L790-L953).
+
+The focused test uses literals independent of the production implementation:
+
+- the official Book request: 23 tokens and token-id digest
+  `0c467ee75e8ba4f12d9432ce82ee20d931a6f99d7b24547366eba1cb2a93c642`;
+- an `es-CO` Unicode/Colombian-finance vector: 65 tokens and digest
+  `3c96fc68f1c50da14a37aa7170a6a4df0617936578cb31d03d7d1f212c5c8ce8`;
+- a continued system/User/assistant/User vector: 61 tokens and digest
+  `3b00a9437c0a0dd4269b6bc4a983d19348c793ac7078dd6452c547af6effb715`.
+
+The latter two were independently generated in Bun using Hugging Face Transformers 3.8.1 against
+the checkpoint's pinned `tokenizer.json`, then frozen as counts and token-id digests; the production
+implementation uses `js-tiktoken` and transformed `tekken.json` instead. They are reference vectors
+from an official model artifact, not hosted-usage evidence.
+
+`bun run mistral:conformance` is the separate manual command. It calls only the fixed
+`ministral-3b-2512` model with the official Book and synthetic `es-CO` requests, validates strict
+outputs, and compares local counts with `usage.prompt_tokens`. It bounds responses, applies the shared
+Mistral credential-redaction/telemetry policy, and prints only case ids, model id, counts, match, and
+validation status. Default tests and CI never invoke it; credential presence alone never invokes it.
+Running it without a configured credential failed closed before network work, as intended.
+
+## Remaining block before adapter implementation
+
+Selected-model hosted parity has not passed because `MISTRAL_API_KEY` is absent. The 23-token
+official worked example establishes the candidate accounting rule, but it cannot prove that the
+fixed 3B API deployment currently uses the published checkpoint tokenizer. Do not claim live
+conformance or wire this counter into production until the manual command reports exact equality for
+both cases.
+
+Do not work around a mismatch by counting JSON characters, applying a safety multiplier, dropping
+the response schema, switching to non-strict JSON output, silently reducing budgets, or changing a
+fixture to match unexplained provider usage. Leave the existing OpenAI runtime intact.
 
 ## Resume conditions and implementation sequence
 
-1. Obtain a provider-owned specification or reference implementation for the selected hosted
-   model's schema serialization and system-prompt expansion, including separators and multiple
-   system messages. Confirm the fixed hosted model id, tokenizer correspondence, and API capacity.
-2. Implement that framing with the pinned vocabulary in Bun. Verify it against independently
-   generated official-reference token vectors, including Unicode Spanish, Colombian financial
-   terminology, roles, and strict schemas. Reject unsupported representations rather than omit them.
-3. TDD the Mistral structured implementation through HostedInference with stub Effect HTTP. Keep
+1. Configure the credential outside chat/source and explicitly run `bun run mistral:conformance`.
+   Require exact local/provider prompt equality for both cases; investigate rather than bless any
+   mismatch. Confirm the API's fixed model capacity separately before production admission.
+2. TDD the Mistral structured implementation through HostedInference with stub Effect HTTP. Keep
    schema derivation and the matching output decoder together; retain and send the same prepared
    request; prove capacity boundaries, bounded bodies, deadlines, error classification, and secrecy.
-4. Prove maximum-budget startup admission and AgentService/PostgreSQL Compaction success and safe
+3. Prove maximum-budget startup admission and AgentService/PostgreSQL Compaction success and safe
    failure. Count operation definitions **in the full hosted startup request**, where they consume
    context; do not add them to the tool-free Compaction request.
-5. Add a **separate, manually invoked** synthetic conformance command. It must not be collected by
-   the default test suite or CI, nor activated just because an API key exists. Credentials have not
-   been configured; do not request them in chat. Report case ids and safe counts/status only.
-6. Require exact local/provider prompt-count agreement before claiming live conformance. Preserve
-   the distinction between prompt usage and the separately reserved 16K output allowance. Perform
-   Standards/Security/Spec review of the actual implementation before completion.
+4. Preserve the distinction between prompt usage and the separately reserved 16K output allowance.
+   Perform Standards/Security/Spec review of the actual adapter implementation before completion.
 
-All feature acceptance criteria remain outstanding. No application test or typecheck was run for
-this documentation-only checkpoint, and no provider conformance result is claimed.
+The counter/reference-vector slice passes its focused tests and server typecheck. The Mistral adapter,
+Compaction integration acceptance, maximum-budget startup proof, and live conformance remain
+outstanding; no provider conformance result is claimed.

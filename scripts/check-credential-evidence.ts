@@ -23,6 +23,11 @@ const credentialEvidence = [
     testName: "counts complete framing and executes the exact prepared request",
   },
   {
+    configuration: "MISTRAL_API_KEY",
+    testFile: "apps/server/src/shell/_shared/bounded-external-http.test.ts",
+    testName: "installs each provider's credential redaction policy at the transport boundary",
+  },
+  {
     configuration: "EMAIL_ADMISSION_HMAC_KEY",
     testFile: "apps/server/src/shell/onboarding/onboarding-turn.test.ts",
     testName: "keeps the email admission HMAC credential out of persistence and outcomes",

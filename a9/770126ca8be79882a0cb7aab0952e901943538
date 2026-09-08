@@ -1,0 +1,20 @@
+apps/server/src/shell/email-authentication/replacement.test.ts
+  s_cfe47ac0afd905::t_14c52a9a56836d 593-602,604-615
+  s_cfe47ac0afd905::t_18dfd2ac0beb5b 581-592,603,616-618
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.2",
+  "base_commit_sha": "a9770126ca8be79882a0cb7aab0952e901943538",
+  "prompts": {},
+  "sessions": {
+    "s_cfe47ac0afd905": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a06efa-14b6-7772-8494-49b4e4155260",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

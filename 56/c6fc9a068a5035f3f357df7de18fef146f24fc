@@ -1,0 +1,33 @@
+apps/server/ARCHITECTURE.md
+  s_b587c2cb25e983::t_ca11448cff06c4 405-410
+apps/server/src/shell/email-authentication/browser-pairing-authentication.ts
+  s_b587c2cb25e983::t_7577ae05ddecc1 52,533
+apps/server/src/shell/email-authentication/pairing-workflow.integration.test.ts
+  s_b587c2cb25e983::t_d583e31d032896 465-467
+  s_b587c2cb25e983::t_2d76d3074d05de 448-464,468-491
+  s_b587c2cb25e983::t_1a4153be9bd9b2 492-493
+apps/server/src/shell/email-authentication/authentication.test.ts
+  s_b587c2cb25e983::t_2d76d3074d05de 289-295,299-304,306-325,327-331
+  s_b587c2cb25e983::t_399bea7613a4d1 296-298,326,332-333
+  s_b587c2cb25e983::t_a7aafc8cfa4a64 305
+apps/server/src/shell/email-authentication/pairing-email-execution.ts
+  s_b587c2cb25e983::t_d8a8c21ed8cf42 4,68-78,83-85,88-93
+  s_b587c2cb25e983::t_2d76d3074d05de 79-82,86-87
+  s_b587c2cb25e983::t_a60748ef9eb194 94-95
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.2",
+  "base_commit_sha": "56c6fc9a068a5035f3f357df7de18fef146f24fc",
+  "prompts": {},
+  "sessions": {
+    "s_b587c2cb25e983": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a06ef8-6705-7557-9e4c-6c80422c6946",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

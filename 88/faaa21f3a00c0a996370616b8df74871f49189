@@ -1,0 +1,23 @@
+apps/server/src/shell/email-authentication/pairing-email-execution.ts
+  s_b587c2cb25e983::t_9535d64606ec8d 1-2,71-73,93-106,112-116
+  s_b587c2cb25e983::t_dba88fee027a94 107-111,117-123
+  s_b587c2cb25e983::t_3699ad5a660cca 124-125
+apps/server/src/shell/email-authentication/browser-pairing-authentication.ts
+  s_b587c2cb25e983::t_9cf58455a50ac6 54,527-533
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.2",
+  "base_commit_sha": "88faaa21f3a00c0a996370616b8df74871f49189",
+  "prompts": {},
+  "sessions": {
+    "s_b587c2cb25e983": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a06ef8-6705-7557-9e4c-6c80422c6946",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

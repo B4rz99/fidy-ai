@@ -1,0 +1,20 @@
+apps/server/scripts/run-browser-pairing-acceptance-server.ts
+  s_243a5133f887cb::t_7e01453e517f7c 3,5,137
+  s_243a5133f887cb::t_aa697070bb6a41 136
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.2",
+  "base_commit_sha": "2f95a851ac0db889611aaace8673dad4b3d49685",
+  "prompts": {},
+  "sessions": {
+    "s_243a5133f887cb": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a07e65-12c5-776c-82ef-9a3004f30c79",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

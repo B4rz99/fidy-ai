@@ -117,7 +117,7 @@ const ProviderResponse = Schema.Struct({
   object: Schema.String,
   created: Schema.Finite,
   model: Schema.String,
-  choices: Schema.Array(
+  choices: Schema.NonEmptyArray(
     Schema.Struct({
       index: Schema.Finite,
       message: Schema.Struct({
@@ -209,10 +209,7 @@ const validateResponse = Effect.fn("MistralConformance.validateResponse")(functi
   if (decoded.model !== mistralConformanceModel) {
     return yield* conformanceError(conformanceCase, "provider_model_mismatch");
   }
-  const content = decoded.choices[0]?.message.content;
-  if (content === undefined) {
-    return yield* conformanceError(conformanceCase, "provider_response_invalid");
-  }
+  const content = decoded.choices[0].message.content;
   if (Option.isSome(conformanceCase.validateContent)) {
     yield* conformanceCase.validateContent
       .value(content)

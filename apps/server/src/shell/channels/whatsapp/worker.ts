@@ -8,8 +8,8 @@ import { Telemetry } from "~/shell/observability/telemetry";
 import { processDueConsentDisclosureDelivery } from "./disclosure-delivery";
 import { claimWhatsAppTurn, failWhatsAppTurn, pruneWhatsAppOperationalData } from "./repo";
 
-const projectCauseForLog = <E>(
-  cause: Cause.Cause<E>
+const projectCauseForLog = (
+  cause: Cause.Cause<unknown>
 ): Readonly<{
   reasons: ReadonlyArray<string>;
   stack: ReturnType<typeof projectStack>;

@@ -13,14 +13,15 @@ import {
   Schedule,
   Schema,
 } from "effect";
-import { RunnerAddress, ShardId, Sharding } from "effect/unstable/cluster";
+import { ClusterSchema, Entity, RunnerAddress, ShardId, Sharding } from "effect/unstable/cluster";
+import { Rpc } from "effect/unstable/rpc";
 import { HttpClient } from "effect/unstable/http";
 import { PersistedQueue } from "effect/unstable/persistence";
 import { SqlClient } from "effect/unstable/sql";
 import { pruneCompletedHostedTurnMessages } from "~/shell/durable-execution-retention";
 import { UserId } from "~/core/identity/reference";
 import { TokenBearer } from "~/core/tokens/model";
-import { TranscriptText } from "~/core/transcript/model";
+import { TranscriptText, TranscriptTurnId } from "~/core/transcript/model";
 import { authenticatedClusterHttp } from "~/shell/authenticated-cluster-http";
 import { MigrationSqlClient, PgLive } from "~/shell/db/client";
 import {
@@ -33,9 +34,11 @@ import { ApiHarness } from "~/shell/testing/api-harness";
 import { TestPublicNamespace } from "~/shell/testing/test-config";
 import { TelemetryDisabled } from "~/shell/observability/disabled";
 import {
-  type AgentReply,
+  AgentLimits,
+  AgentReply,
   AgentService,
   type AgentTurnError,
+  CurrentAgentLimits,
   InboundMessage,
 } from "./agent-service";
 import { HostedInference, type HostedTextContext, makeHostedInference } from "./hosted-inference";
@@ -47,12 +50,39 @@ import {
   WhatsAppDeliveryKey,
   WhatsAppProviderMessageId,
 } from "~/shell/channels/whatsapp/model";
-import { claimWhatsAppTurn, enqueueWhatsAppTurn } from "~/shell/channels/whatsapp/repo";
-import { processNextWhatsAppTurn } from "~/shell/channels/whatsapp/worker";
+import {
+  WhatsAppClaimId,
+  claimWhatsAppTurn,
+  enqueueWhatsAppTurn,
+} from "~/shell/channels/whatsapp/repo";
+import { WhatsAppWorkerLive, processNextWhatsAppTurn } from "~/shell/channels/whatsapp/worker";
 import { truncateWhatsAppChannel } from "~/shell/channels/whatsapp/fixtures";
 import { defaultPatBearer } from "~/shell/testing/identity-fixtures";
 import { testWhatsAppCaller } from "~/shell/testing/whatsapp-caller";
 import { TelemetryHttpStatus } from "~/shell/observability/protocol";
+
+/** Independent wire client: exercise malformed addresses and replay without exposing lifecycle APIs. */
+const HostedWire = Entity.make("HostedTurns", [
+  Rpc.make("Handle", {
+    payload: {
+      userId: UserId,
+      turnId: TranscriptTurnId,
+      message: InboundMessage,
+      limits: AgentLimits,
+      authorityRoot: Schema.Literals(["no-verified-whatsapp-authority", "verified-whatsapp"]),
+    },
+    success: AgentReply,
+    error: Schema.String,
+  }),
+  Rpc.make("Recover", {
+    payload: { userId: UserId, turnId: TranscriptTurnId },
+    primaryKey: ({ turnId }) => turnId,
+  }).annotate(ClusterSchema.Persisted, true),
+  Rpc.make("ProcessWhatsApp", {
+    payload: { version: Schema.Literal(1), userId: UserId, claimId: WhatsAppClaimId },
+    primaryKey: ({ claimId }) => claimId,
+  }).annotate(ClusterSchema.Persisted, true),
+]);
 
 const otherUserId = UserId.make("f1d1a000-0000-4000-8000-000000000465");
 const token = "a".repeat(64);
@@ -464,6 +494,120 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "45 seconds" })(
           expect(yield* Ref.get(sends)).toBe(0);
           // The invalid handoff neither consumed the claim nor occupied its durable identity.
           yield* Effect.promise(() => runtime.runPromise(agent.handleWhatsAppClaim(claim, due)));
+          expect(yield* Ref.get(calls)).toBe(1);
+          expect(yield* Ref.get(sends)).toBe(1);
+        })
+    );
+
+    it.effect(
+      "rejects mismatched entity addresses and never replays terminal or missing work",
+      () =>
+        Effect.gen(function* () {
+          yield* reset;
+          yield* seedDevelopmentIdentity(defaultPatBearer);
+          yield* truncateWhatsAppChannel;
+          const crypto = yield* Crypto.Crypto;
+          const http = yield* HttpClient.HttpClient;
+          const calls = yield* Ref.make(0);
+          const generate = (): Effect.Effect<void> => Ref.update(calls, (count) => count + 1);
+          const deliver = (): Effect.Effect<void> => Effect.void;
+          const runtime = ManagedRuntime.make(
+            runtimeLayer({ crypto, http, port: 44660, generate, deliver })
+          );
+          yield* Effect.addFinalizer(() => disposeRuntimes([runtime]));
+          const client = yield* Effect.promise(() => runtime.runPromise(HostedWire.client));
+          yield* waitForAssignments([
+            yield* Effect.promise(() => runtime.runPromise(Sharding.Sharding)),
+          ]);
+          const turnId = TranscriptTurnId.make(yield* crypto.randomUUIDv7.pipe(Effect.orDie));
+          const claimId = WhatsAppClaimId.make(turnId);
+          const request = {
+            userId: defaultUserId,
+            turnId,
+            limits: yield* CurrentAgentLimits,
+            message: InboundMessage.make({ text: TranscriptText.make("wire-identity") }),
+            authorityRoot: "no-verified-whatsapp-authority" as const,
+          };
+          expect(
+            yield* Effect.promise(() =>
+              runtime.runPromise(client(otherUserId).Handle(request).pipe(Effect.flip))
+            )
+          ).toBe("UnknownUser");
+          yield* Effect.promise(() =>
+            runtime.runPromise(client(otherUserId).Recover({ userId: defaultUserId, turnId }))
+          );
+          yield* Effect.promise(() =>
+            runtime.runPromise(
+              client(otherUserId).ProcessWhatsApp({ version: 1, userId: defaultUserId, claimId })
+            )
+          );
+          yield* Effect.promise(() =>
+            runtime.runPromise(
+              client(defaultUserId).ProcessWhatsApp({ version: 1, userId: defaultUserId, claimId })
+            )
+          );
+          expect(yield* Ref.get(calls)).toBe(0);
+          expect(yield* states(defaultUserId)).toEqual([]);
+          yield* Effect.promise(() => runtime.runPromise(client(defaultUserId).Handle(request)));
+          expect(
+            yield* Effect.promise(() =>
+              runtime.runPromise(client(defaultUserId).Handle(request).pipe(Effect.flip))
+            )
+          ).toBe("HostedTurnAlreadyHandled");
+          yield* pruneCompletedHostedTurnMessages(DateTime.add(yield* DateTime.now, { days: 2 }));
+          // The same durable identity must remain harmless after the transport cache is gone.
+          yield* Effect.promise(() =>
+            runtime.runPromise(
+              client(defaultUserId).ProcessWhatsApp({ version: 1, userId: defaultUserId, claimId })
+            )
+          );
+          expect(yield* Ref.get(calls)).toBe(1);
+          expect(yield* states(defaultUserId)).toEqual([{ state: "Completed" }]);
+          expect(yield* states(otherUserId)).toEqual([]);
+        })
+    );
+
+    it.effect(
+      "the composed channel worker polls, hands off, maintains retention, and shuts down",
+      () =>
+        Effect.gen(function* () {
+          yield* reset;
+          yield* seedDevelopmentIdentity(defaultPatBearer);
+          yield* truncateWhatsAppChannel;
+          const crypto = yield* Crypto.Crypto;
+          const http = yield* HttpClient.HttpClient;
+          const calls = yield* Ref.make(0);
+          const sends = yield* Ref.make(0);
+          const generate = (): Effect.Effect<void> => Ref.update(calls, (count) => count + 1);
+          const deliver = (): Effect.Effect<void> => Ref.update(sends, (count) => count + 1);
+          const runtime = ManagedRuntime.make(
+            runtimeLayer({ crypto, http, port: 44661, generate, deliver })
+          );
+          yield* Effect.addFinalizer(() => disposeRuntimes([runtime]));
+          yield* Effect.promise(() => runtime.runPromise(Effect.void));
+          yield* waitForAssignments([
+            yield* Effect.promise(() => runtime.runPromise(Sharding.Sharding)),
+          ]);
+          const worker = runtime.runFork(
+            Layer.build(WhatsAppWorkerLive).pipe(
+              Effect.andThen(Effect.never),
+              Effect.scoped,
+              Effect.provide(yield* Layer.build(TelemetryDisabled)),
+              Effect.provideService(Crypto.Crypto, crypto),
+              Effect.provideService(KapsoClient, {
+                sendText: () => Effect.die("Unexpected disclosure"),
+              })
+            )
+          );
+          yield* enqueue("composed-worker");
+          yield* states(defaultUserId).pipe(
+            Effect.repeat({
+              until: (rows) => rows.length === 1 && rows[0]?.state === "Completed",
+              schedule: Schedule.spaced("20 millis"),
+            }),
+            Effect.timeout("10 seconds")
+          );
+          yield* Fiber.interrupt(worker);
           expect(yield* Ref.get(calls)).toBe(1);
           expect(yield* Ref.get(sends)).toBe(1);
         })

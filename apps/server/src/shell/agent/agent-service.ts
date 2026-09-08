@@ -1349,25 +1349,29 @@ const turnFailureTag = (failure: unknown): Option.Option<AgentTurnError["_tag"]>
   return decodeAgentTurnFailureTag(failure._tag);
 };
 
-const turnFailureOutcomeFromTag = (tag: AgentTurnError["_tag"]): DeclaredOutcome => {
-  switch (tag) {
-    case "HostedTurnAlreadyHandled":
-      return { outcome: "interrupted", error: Option.none(), retryable: false };
-    case "UnknownUser":
-      return { outcome: "rejected", error: Option.some("unknown_user"), retryable: false };
-    case "OnboardingConsentRequired":
-      return { outcome: "rejected", error: Option.some("consent_required"), retryable: false };
-    case "HostedCapacityExceeded":
-      return { outcome: "rejected", error: Option.some("model_unavailable"), retryable: false };
-    case "ModelResponseRejected":
-      return {
-        outcome: "rejected",
-        error: Option.some("model_response_rejected"),
-        retryable: false,
-      };
-    case "ModelUnavailable":
-      return { outcome: "failed", error: Option.some("model_unavailable"), retryable: false };
-  }
+const turnFailureOutcomes: Readonly<Record<AgentTurnError["_tag"], DeclaredOutcome>> = {
+  HostedTurnAlreadyHandled: { outcome: "interrupted", error: Option.none(), retryable: false },
+  UnknownUser: { outcome: "rejected", error: Option.some("unknown_user"), retryable: false },
+  OnboardingConsentRequired: {
+    outcome: "rejected",
+    error: Option.some("consent_required"),
+    retryable: false,
+  },
+  HostedCapacityExceeded: {
+    outcome: "rejected",
+    error: Option.some("model_unavailable"),
+    retryable: false,
+  },
+  ModelResponseRejected: {
+    outcome: "rejected",
+    error: Option.some("model_response_rejected"),
+    retryable: false,
+  },
+  ModelUnavailable: {
+    outcome: "failed",
+    error: Option.some("model_unavailable"),
+    retryable: false,
+  },
 };
 
 const recordTurnExit = (
@@ -1404,7 +1408,7 @@ const recordTurnExit = (
   }
   return Option.match(Exit.findErrorOption(exit).pipe(Option.flatMap(turnFailureTag)), {
     onNone: () => Effect.void,
-    onSome: (tag) => telemetry.recordOutcome(turnFailureOutcomeFromTag(tag)),
+    onSome: (tag) => telemetry.recordOutcome(turnFailureOutcomes[tag]),
   });
 };
 
@@ -1724,22 +1728,16 @@ const executeMessage = <E, R>(
   return provideAgentDependencies(dependencies, traced);
 };
 
-const fromTurnFailure = (userId: UserId, failure: typeof TurnFailure.Type): AgentTurnError => {
-  switch (failure) {
-    case "UnknownUser":
-      return new UnknownUser({ userId });
-    case "OnboardingConsentRequired":
-      return new OnboardingConsentRequired({ userId });
-    case "HostedCapacityExceeded":
-      return new HostedCapacityExceeded();
-    case "ModelResponseRejected":
-      return new ModelResponseRejected({ cause: "Hosted output rejected" });
-    case "HostedTurnAlreadyHandled":
-      return new HostedTurnAlreadyHandled();
-    case "delivery_failed":
-    case "ModelUnavailable":
-      return new ModelUnavailable({ cause: "Hosted execution unavailable" });
-  }
+const turnFailureConstructors: Readonly<
+  Record<typeof TurnFailure.Type, (userId: UserId) => AgentTurnError>
+> = {
+  UnknownUser: (userId) => new UnknownUser({ userId }),
+  OnboardingConsentRequired: (userId) => new OnboardingConsentRequired({ userId }),
+  HostedCapacityExceeded: () => new HostedCapacityExceeded(),
+  ModelResponseRejected: () => new ModelResponseRejected({ cause: "Hosted output rejected" }),
+  HostedTurnAlreadyHandled: () => new HostedTurnAlreadyHandled(),
+  delivery_failed: () => new ModelUnavailable({ cause: "Hosted execution unavailable" }),
+  ModelUnavailable: () => new ModelUnavailable({ cause: "Hosted execution unavailable" }),
 };
 
 const makeHandleMessage =
@@ -1759,7 +1757,7 @@ const makeHandleMessage =
         .pipe(
           Effect.mapError((failure) =>
             typeof failure === "string"
-              ? fromTurnFailure(userId, failure)
+              ? turnFailureConstructors[failure](userId)
               : new ModelUnavailable({ cause: "Hosted execution unavailable" })
           )
         );

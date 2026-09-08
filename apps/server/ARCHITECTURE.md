@@ -415,7 +415,7 @@ also checks global storage capacity under a transaction-scoped admission lock. A
 across all three queues, new starts keep the same non-enumerating response but publish no work.
 Completed history counts against capacity until removed. Already-admitted starts can still publish
 at most two continuations, bounding total queue rows conservatively to 150,000 without blocking drain
-or adding another execution ledger. Migration 0049 directly
+or adding another execution ledger. Migration 0052 directly
 contracts the undeployed executor; it adds no legacy drain or republication system.
 
 Migration is expand–migrate–contract where deployed work exists: no item may be

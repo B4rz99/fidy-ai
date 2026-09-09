@@ -27,7 +27,7 @@ it("preserves two distinct equal-Money movements in multiset comparisons", () =>
   expect(sameFinancialFacts(expected, expected.slice(0, 1))).toBe(false);
 });
 
-it("makes a critical failure dominate unobserved human review", () => {
+it("marks a run incomplete when failed and unobserved checks coexist", () => {
   const scored = scoreRun([
     {
       id: "synthetic",
@@ -40,7 +40,7 @@ it("makes a critical failure dominate unobserved human review", () => {
       ],
     },
   ]);
-  expect(scored.conclusion).toBe("expectations-failed");
+  expect(scored.conclusion).toBe("incomplete");
   expect(scored.critical).toEqual({ planned: 1, passed: 0, failed: 1, notObserved: 0 });
 });
 

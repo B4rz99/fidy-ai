@@ -40,10 +40,11 @@ export class EvaluationProviderMetadata extends Context.Service<
     readonly generationSourcePath: string;
     readonly outputReserveTokens: number;
     readonly temperature: number;
-    readonly parallelToolCalls: false;
-    readonly providerStorage: false;
-    readonly reasoningEffort: "none";
-    readonly truncation: "disabled";
+    readonly parallelToolCalls: boolean;
+    readonly providerStorage: boolean;
+    readonly reasoningEffort: string;
+    readonly truncation: string;
+    readonly observedModelFallback: ReadonlyArray<string>;
   }
 >()("@fidy/server/shell/testing/evaluation/runner/EvaluationProviderMetadata") {}
 
@@ -187,8 +188,12 @@ const runCase = Effect.fn("Evaluation.runCase")(function* (
     : completeResult(entry, repetition, attempted.value);
 });
 
-const safeFileName = (mode: RunPlan["mode"], sourceCommit: string): string =>
-  `evaluation-results/es-co-v1-openai-${mode}-${sourceCommit.slice(0, commitPrefixLength)}.json`;
+const safeFileName = (
+  mode: RunPlan["mode"],
+  provider: RunReport["provider"],
+  sourceCommit: string
+): string =>
+  `evaluation-results/es-co-v1-${provider}-${mode}-${sourceCommit.slice(0, commitPrefixLength)}.json`;
 
 /** Writes only the schema-projected report and checks its byte bound before persistence. */
 const writeReport = Effect.fn("Evaluation.writeReport")(function* (report: RunReport) {
@@ -199,7 +204,7 @@ const writeReport = Effect.fn("Evaluation.writeReport")(function* (report: RunRe
     return yield* new EvaluationFailure({ reason: "report-write-failed" });
   }
   yield* fs.makeDirectory("evaluation-results", { recursive: true });
-  const path = safeFileName(report.plan.mode, report.sourceCommit);
+  const path = safeFileName(report.plan.mode, report.provider, report.sourceCommit);
   yield* fs.writeFile(path, bytes);
   return path;
 });
@@ -222,6 +227,26 @@ const assertLocalDatabase = Effect.fn("Evaluation.assertLocalDatabase")(function
   }
 });
 
+const reportedModels = (
+  observed: ReadonlyArray<string>,
+  fallback: ReadonlyArray<string>
+): ReadonlyArray<string> => (observed.length > 0 ? observed : fallback);
+
+const runCases = Effect.fn("Evaluation.runCases")(function* (
+  entries: ReadonlyArray<EvaluationCase>,
+  plan: RunPlan,
+  corpus: Effect.Success<typeof loadCorpus>
+) {
+  const results: Array<CaseResult> = [];
+  for (const entry of entries) {
+    const repetitions = entry.kind === "safety" ? 1 : plan.repetitions;
+    for (let repetition = 1; repetition <= repetitions; repetition += 1) {
+      results.push(yield* runCase(entry, repetition, corpus));
+    }
+  }
+  return results;
+});
+
 /** Runs one immutable synthetic corpus through production controls under finite wall/request bounds. */
 const executeEvaluation = Effect.fn("Evaluation.run")(function* (mode: RunPlan["mode"]) {
   yield* assertLocalDatabase();
@@ -235,16 +260,13 @@ const executeEvaluation = Effect.fn("Evaluation.run")(function* (mode: RunPlan["
   const source = yield* sourceEvidence(provider.generationSourcePath);
   const policy = evaluationPolicy(mode);
   const plan = policy.plan;
-  const entries = policy.selectCases(corpus.corpus.cases);
-  const results: Array<CaseResult> = [];
-  for (const entry of entries) {
-    const repetitions = entry.kind === "safety" ? 1 : plan.repetitions;
-    for (let repetition = 1; repetition <= repetitions; repetition += 1) {
-      results.push(yield* runCase(entry, repetition, corpus));
-    }
-  }
+  const results = yield* runCases(policy.selectCases(corpus.corpus.cases), plan, corpus);
   const budget = yield* EvaluationRequestBudget;
   const limits = yield* CurrentAgentLimits;
+  const observedModels = reportedModels(
+    yield* budget.observedModels,
+    provider.observedModelFallback
+  );
   const report = RunReport.make({
     revision: "evaluation-report-v1",
     corpusRevision: corpus.corpus.revision,
@@ -253,6 +275,7 @@ const executeEvaluation = Effect.fn("Evaluation.run")(function* (mode: RunPlan["
     sourceSha256: source.sourceSha256,
     provider: provider.provider,
     requestedModel: provider.requestedModel,
+    observedModels,
     controls: {
       generationSha256: source.generationSha256,
       contractSha256: source.contractSha256,

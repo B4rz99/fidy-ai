@@ -23,12 +23,14 @@ const maximumReportItems = 1_000;
 const notificationDeadlineMillis = 30_000;
 const maximumRepetitions = 10;
 const maximumIsoCharacters = 30;
+const maximumObservedModels = 10;
 
 const identifier = Schema.String.check(Schema.isPattern(/^[a-z][a-z0-9-]{0,79}$/u));
 const prose = Schema.String.check(Schema.isMaxLength(maximumProseCharacters));
 const count = Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 100_000 }));
 const tokenCount = Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 1_000_000_000 }));
 const digest = Schema.String.check(Schema.isPattern(/^[a-f0-9]{64}$/u));
+const modelIdentity = Schema.String.check(Schema.isPattern(/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/u));
 
 /** Exact normalized facts, derived from the owning Transaction schema rather than a wire copy. */
 export const FinancialFacts = Transaction.mapFields(
@@ -215,7 +217,8 @@ export const RunReport = Schema.Struct({
   sourceCommit: Schema.String.check(Schema.isPattern(/^[a-f0-9]{40}$/u)),
   sourceSha256: digest,
   provider: identifier,
-  requestedModel: Schema.String.check(Schema.isPattern(/^[a-z0-9][a-z0-9.-]{0,79}$/u)),
+  requestedModel: modelIdentity,
+  observedModels: Schema.Array(modelIdentity).check(Schema.isMaxLength(maximumObservedModels)),
   controls: Schema.Struct({
     generationSha256: digest,
     contractSha256: digest,
@@ -226,10 +229,10 @@ export const RunReport = Schema.Struct({
     maxModelRoundMillis: count,
     outputReserveTokens: count,
     temperature: Schema.Finite,
-    parallelToolCalls: Schema.Literal(false),
-    providerStorage: Schema.Literal(false),
-    reasoningEffort: Schema.Literal("none"),
-    truncation: Schema.Literal("disabled"),
+    parallelToolCalls: Schema.Boolean,
+    providerStorage: Schema.Boolean,
+    reasoningEffort: identifier,
+    truncation: identifier,
     notificationDeadlineMillis: Schema.Literal(notificationDeadlineMillis),
   }),
   plan: RunPlan,

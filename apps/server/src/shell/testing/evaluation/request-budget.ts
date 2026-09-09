@@ -13,21 +13,26 @@ export type EvaluationRequestBudgetService = Readonly<{
   inputTokens: Effect.Effect<number>;
   cachedInputTokens: Effect.Effect<number>;
   outputTokens: Effect.Effect<number>;
+  observedModels: Effect.Effect<ReadonlyArray<string>>;
 }>;
 
 const ResponseUsage = Schema.Struct({
+  model: Schema.String,
   usage: Schema.Struct({
     input_tokens: Schema.Int,
     output_tokens: Schema.Int,
     input_tokens_details: Schema.optionalKey(Schema.Struct({ cached_tokens: Schema.Int })),
   }),
 });
-type UsageCounts = { input: number; cachedInput: number; output: number };
+type ProviderObservations = {
+  usage: { input: number; cachedInput: number; output: number };
+  models: Set<string>;
+};
 
 const observeProviderResponse = (
   response: Response,
   pathname: string,
-  counts: UsageCounts
+  observations: ProviderObservations
 ): Promise<Response> => {
   process.stderr.write(`Evaluation provider request: ${pathname} -> ${response.status}.\n`);
   if (!response.ok || !pathname.endsWith("/responses")) return Promise.resolve(response);
@@ -37,9 +42,11 @@ const observeProviderResponse = (
     .then(Schema.decodeUnknownOption(ResponseUsage), Option.none)
     .then((decoded) => {
       if (Option.isSome(decoded)) {
-        counts.input += decoded.value.usage.input_tokens;
-        counts.cachedInput += decoded.value.usage.input_tokens_details?.cached_tokens ?? 0;
-        counts.output += decoded.value.usage.output_tokens;
+        observations.models.add(decoded.value.model);
+        observations.usage.input += decoded.value.usage.input_tokens;
+        observations.usage.cachedInput +=
+          decoded.value.usage.input_tokens_details?.cached_tokens ?? 0;
+        observations.usage.output += decoded.value.usage.output_tokens;
         process.stderr.write(
           `Evaluation provider usage: input=${decoded.value.usage.input_tokens}, ` +
             `cached=${decoded.value.usage.input_tokens_details?.cached_tokens ?? 0}, ` +
@@ -63,7 +70,10 @@ export const requestBudgetLayer = (
   Layer.syncContext(() => {
     let count = 0;
     let rejected = 0;
-    const usage = { input: 0, cachedInput: 0, output: 0 } satisfies UsageCounts;
+    const observations: ProviderObservations = {
+      usage: { input: 0, cachedInput: 0, output: 0 },
+      models: new Set<string>(),
+    };
     const nativeFetch = globalThis.fetch.bind(globalThis);
     const budgetedFetch: typeof globalThis.fetch = Object.assign(
       (
@@ -78,7 +88,7 @@ export const requestBudgetLayer = (
           return Promise.reject(new EvaluationRequestBudgetExceeded());
         }
         return nativeFetch(input, init).then((response) =>
-          observeProviderResponse(response, new URL(url).pathname, usage)
+          observeProviderResponse(response, new URL(url).pathname, observations)
         );
       },
       { preconnect: globalThis.fetch.preconnect }
@@ -88,9 +98,10 @@ export const requestBudgetLayer = (
         count: Effect.sync(() => count),
         rejected: Effect.sync(() => rejected),
         exhausted: Effect.sync(() => rejected > 0),
-        inputTokens: Effect.sync(() => usage.input),
-        cachedInputTokens: Effect.sync(() => usage.cachedInput),
-        outputTokens: Effect.sync(() => usage.output),
+        inputTokens: Effect.sync(() => observations.usage.input),
+        cachedInputTokens: Effect.sync(() => observations.usage.cachedInput),
+        outputTokens: Effect.sync(() => observations.usage.output),
+        observedModels: Effect.sync(() => [...observations.models].toSorted()),
       })
     );
   });

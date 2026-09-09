@@ -64,6 +64,7 @@ const SafetyWork = Layer.mergeAll(
       provider: "scripted",
       requestedModel: "scripted-safety-v1",
       generationSourcePath: "src/shell/testing/evaluation/safety.ts",
+      observedModelFallback: ["scripted-safety-v1"],
       ...providerControls,
     })
   ),
@@ -97,6 +98,7 @@ const ModelWork = Layer.mergeAll(
       provider: "openai",
       requestedModel: FidyAgentModel,
       generationSourcePath: "src/shell/agent/openai.ts",
+      observedModelFallback: [],
       ...providerControls,
     })
   ),

@@ -127,19 +127,20 @@ const countChecks = (checks: ReadonlyArray<CheckResult>): RunReport["quality"] =
   notObserved: checks.filter((item) => item.status === "not-observed").length,
 });
 
-/** Critical failures across any repetition dominate the conclusion; not-observed is never dropped. */
+/** Missing evidence dominates failures so a partial baseline can never present as complete. */
 export const scoreRun = (
   results: ReadonlyArray<CaseResult>
 ): Pick<RunReport, "quality" | "safety" | "critical" | "conclusion"> => {
   const checks = results.flatMap((entry) => entry.checks);
   const critical = countChecks(checks.filter((item) => item.critical));
   let conclusion: RunReport["conclusion"] = "expectations-met";
-  if (checks.some((item) => item.status === "failed")) conclusion = "expectations-failed";
-  else if (
+  if (
     checks.some((item) => item.status === "not-observed") ||
     results.some((entry) => entry.outcome !== "scored")
   ) {
     conclusion = "incomplete";
+  } else if (checks.some((item) => item.status === "failed")) {
+    conclusion = "expectations-failed";
   }
   return {
     quality: countChecks(

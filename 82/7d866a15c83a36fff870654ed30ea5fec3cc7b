@@ -1,0 +1,30 @@
+tools/mutation/package.json
+  s_8061aea7e969cc::t_2e0e4c5088fd78 5,9-10
+package.json
+  s_8061aea7e969cc::t_262f522bef9ddf 74-77
+  s_8061aea7e969cc::t_0d59422be058a6 67-68
+dependency-policy.json
+  s_8061aea7e969cc::t_5e04df3c612bb1 20-27
+apps/web/package.json
+  s_8061aea7e969cc::t_c15804bf72b825 59
+bun.lock
+  s_8061aea7e969cc::t_79b1f36fa4821d 18-19,89,95-96,98,181,183,185,187,189,443,445,447,449,451,453,455,457,459,461,463,465,467,469,471,473,475,477,479,493,495,497,499,501,503,505,507,509,511,513,515,517,519,521,523,525,527,529,1053,1133,1239,1283,1285,1589,1591
+tools/mutation/bun.lock
+  s_8061aea7e969cc::t_f282281b426bc9 11,208,210,212,214,216,218,220,484
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.2",
+  "base_commit_sha": "827d866a15c83a36fff870654ed30ea5fec3cc7b",
+  "prompts": {},
+  "sessions": {
+    "s_8061aea7e969cc": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a07e6a-02b9-7125-a200-3155427e5a02",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

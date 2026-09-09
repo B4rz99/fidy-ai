@@ -239,7 +239,7 @@ const runCases = Effect.fn("Evaluation.runCases")(function* (
 ) {
   const results: Array<CaseResult> = [];
   for (const entry of entries) {
-    const repetitions = entry.kind === "safety" ? 1 : plan.repetitions;
+    const repetitions = plan.repetitions;
     for (let repetition = 1; repetition <= repetitions; repetition += 1) {
       results.push(yield* runCase(entry, repetition, corpus));
     }

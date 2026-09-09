@@ -1,4 +1,4 @@
-import { Crypto, DateTime, Effect, Encoding, Layer, Option, Schema } from "effect";
+import { Context, Crypto, DateTime, Effect, Encoding, Layer, Option, Ref, Schema } from "effect";
 import { HttpApiClient } from "effect/unstable/httpapi";
 import { HttpBody, HttpClient } from "effect/unstable/http";
 import * as XLSX from "xlsx/xlsx.mjs";
@@ -21,7 +21,10 @@ import {
   seedConsentedPatIdentity,
 } from "~/shell/db/development-seed";
 import { ForwardedEmailProcessor } from "~/shell/ingestion/forwarded-email-ingestion";
-import { ResendReceivingClient } from "~/shell/ingestion/resend-receiving-client";
+import {
+  ResendReceivingClient,
+  ResendReceivingFailed,
+} from "~/shell/ingestion/resend-receiving-client";
 import { processNextStatement } from "~/shell/ingestion/worker";
 import type { ApiClient } from "~/shell/testing/api-harness";
 import { signResendWebhook } from "~/shell/testing/sign-resend-webhook";
@@ -341,6 +344,42 @@ const imageMediaType = (
 const webhookTimestampDivisor = 1_000;
 const acceptedStatus = 202;
 
+class EvaluationEmailInbox extends Context.Service<
+  EvaluationEmailInbox,
+  {
+    readonly register: (content: ReceivedEmailContent) => Effect.Effect<void>;
+    readonly retrieve: (
+      receivedEmailId: ResendReceivedEmailId
+    ) => Effect.Effect<ReceivedEmailContent, ResendReceivingFailed>;
+  }
+>()("@fidy/server/shell/testing/evaluation/scenarios/EvaluationEmailInbox") {}
+
+const EvaluationEmailInboxLive = Layer.effect(
+  EvaluationEmailInbox,
+  Effect.map(Ref.make(new Map<ResendReceivedEmailId, ReceivedEmailContent>()), (state) => ({
+    register: (content: ReceivedEmailContent): Effect.Effect<void> =>
+      Ref.update(state, (entries) => new Map(entries).set(content.receivedEmailId, content)),
+    retrieve: (
+      receivedEmailId: ResendReceivedEmailId
+    ): Effect.Effect<ReceivedEmailContent, ResendReceivingFailed> =>
+      Effect.flatMap(Ref.get(state), (entries) =>
+        Effect.fromOption(Option.fromUndefinedOr(entries.get(receivedEmailId))).pipe(
+          Effect.mapError(() => new ResendReceivingFailed({ reason: "invalid-provider-response" }))
+        )
+      ),
+  }))
+);
+const EvaluationResendClientLive = Layer.effect(
+  ResendReceivingClient,
+  Effect.map(EvaluationEmailInbox, (inbox) => ({ retrieveEmail: inbox.retrieve }))
+).pipe(Layer.provide(EvaluationEmailInboxLive));
+
+/** One long-lived workflow runner and mutable fake provider avoid per-case cluster teardown delays. */
+export const EvaluationEmailProcessingLive = Layer.merge(
+  EvaluationEmailInboxLive,
+  ForwardedEmailProcessor.layer.pipe(Layer.provide(EvaluationResendClientLive))
+);
+
 const processEmailDeliveries = Effect.fn("Evaluation.processEmailDeliveries")(function* (
   input: Readonly<{
     ids: ReadonlyArray<ResendReceivedEmailId>;
@@ -372,6 +411,32 @@ const processEmailDeliveries = Effect.fn("Evaluation.processEmailDeliveries")(fu
   }
 });
 
+const syntheticEmail = (input: {
+  entry: EmailCase;
+  receivedEmailId: ResendReceivedEmailId;
+  firstId: ResendReceivedEmailId;
+  address: string;
+  receivedAt: DateTime.Utc;
+  image: Option.Option<Uint8Array>;
+}): ReceivedEmailContent =>
+  ReceivedEmailContent.make({
+    receivedEmailId: input.receivedEmailId,
+    from: "notificaciones@example.test",
+    to: [input.address],
+    subject: input.entry.subject,
+    text: Option.some(
+      input.entry.delivery === "distinct-same-money" && input.receivedEmailId !== input.firstId
+        ? input.entry.text.replace("15/01/2025", "16/01/2025").replace("A-1", "A-2")
+        : input.entry.text
+    ),
+    html: Option.none(),
+    messageId: Option.some(`synthetic-${input.receivedEmailId}`),
+    createdAt: input.receivedAt,
+    inlineImages: Option.map(input.image, (content) => [
+      { contentId: "synthetic", mediaType: imageMediaType(input.entry.image), content },
+    ]).pipe(Option.getOrElse(() => [])),
+  });
+
 /** Signed local webhook plus fake Resend retrieval; the real Workflow owns interpretation/settlement. */
 export const runEmail = Effect.fn("Evaluation.runEmail")(function* (
   entry: EmailCase,
@@ -394,31 +459,10 @@ export const runEmail = Effect.fn("Evaluation.runEmail")(function* (
   if (entry.image !== "none" && Option.isNone(image)) {
     return yield* new EvaluationFailure({ reason: "invalid-corpus" });
   }
-  const mediaType = imageMediaType(entry.image);
-  const provider = Layer.succeed(ResendReceivingClient, {
-    retrieveEmail: (receivedEmailId: ResendReceivedEmailId) =>
-      Effect.succeed(
-        ReceivedEmailContent.make({
-          receivedEmailId,
-          from: "notificaciones@example.test",
-          to: [address],
-          subject: entry.subject,
-          text: Option.some(
-            entry.delivery === "distinct-same-money" && receivedEmailId !== firstId
-              ? entry.text.replace("15/01/2025", "16/01/2025").replace("A-1", "A-2")
-              : entry.text
-          ),
-          html: Option.none(),
-          messageId: Option.some(`synthetic-${receivedEmailId}`),
-          createdAt: receivedAt,
-          inlineImages: Option.isSome(image)
-            ? [{ contentId: "synthetic", mediaType, content: image.value }]
-            : [],
-        })
-      ),
-  });
-  yield* processEmailDeliveries({ ids, address }).pipe(
-    Effect.provide(yield* Layer.build(ForwardedEmailProcessor.layer.pipe(Layer.provide(provider))))
+  const inbox = yield* EvaluationEmailInbox;
+  yield* Effect.forEach(ids, (receivedEmailId) =>
+    inbox.register(syntheticEmail({ entry, receivedEmailId, firstId, address, receivedAt, image }))
   );
+  yield* processEmailDeliveries({ ids, address });
   return scoreObservation(entry, yield* observeScenario(scenario.client));
 });

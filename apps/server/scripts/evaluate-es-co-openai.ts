@@ -16,6 +16,7 @@ import { TelemetryDisabled } from "~/shell/observability/disabled";
 import { ApiHarness } from "~/shell/testing/api-harness";
 import { EvaluationFailure, RunPlan } from "~/shell/testing/evaluation/model";
 import { requestBudgetLayer } from "~/shell/testing/evaluation/request-budget";
+import { EvaluationEmailProcessingLive } from "~/shell/testing/evaluation/scenarios";
 import { scriptedInference } from "~/shell/testing/evaluation/safety";
 import {
   EvaluationProviderMetadata,
@@ -73,7 +74,8 @@ const SafetyWork = Layer.mergeAll(
     StatementColumnMapper.of({
       mapColumns: () => Effect.die("Statement evaluation is unavailable in safety mode"),
     })
-  )
+  ),
+  EvaluationEmailProcessingLive
 );
 const SafetyApp = SafetyWork.pipe(
   Layer.provideMerge(ApiHarness),
@@ -96,7 +98,8 @@ const ModelWork = Layer.mergeAll(
     })
   ),
   AgentService.layer.pipe(Layer.provide(HostedInferenceLive)),
-  StatementColumnMapper.layer.pipe(Layer.provide(LanguageModelLive))
+  StatementColumnMapper.layer.pipe(Layer.provide(LanguageModelLive)),
+  EvaluationEmailProcessingLive
 );
 const EvaluationApp = ModelWork.pipe(
   Layer.provideMerge(ApiHarness),

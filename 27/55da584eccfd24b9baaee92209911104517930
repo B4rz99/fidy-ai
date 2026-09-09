@@ -1,0 +1,28 @@
+bun.lock
+  s_8061aea7e969cc::t_79b1f36fa4821d 95-96,98,1053,1133
+dependency-policy.json
+  s_8061aea7e969cc::t_b0d6da2de0fc1b 26-43
+  s_8061aea7e969cc::t_5e04df3c612bb1 20-25,44-45
+tools/mutation/bun.lock
+  s_8061aea7e969cc::t_f282281b426bc9 11,208,210,212,214,216,218,220,484
+tools/mutation/package.json
+  s_8061aea7e969cc::t_2e0e4c5088fd78 5,9-10
+package.json
+  s_8061aea7e969cc::t_262f522bef9ddf 74-77
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.2",
+  "base_commit_sha": "2755da584eccfd24b9baaee92209911104517930",
+  "prompts": {},
+  "sessions": {
+    "s_8061aea7e969cc": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a07e6a-02b9-7125-a200-3155427e5a02",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": null
+    }
+  }
+}

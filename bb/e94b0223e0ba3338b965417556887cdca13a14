@@ -1,0 +1,21 @@
+apps/server/src/shell/testing/evaluation/scenarios.ts
+  s_2f8b45504a0c31::t_a39e457ee71186 16,36,483,485-496,498-502,508
+  s_2f8b45504a0c31::t_0cc22cd375e092 360-363,497
+  s_2f8b45504a0c31::t_948e8b25ae6196 359
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.2",
+  "base_commit_sha": "bbe94b0223e0ba3338b965417556887cdca13a14",
+  "prompts": {},
+  "sessions": {
+    "s_2f8b45504a0c31": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a07e6a-da20-75b9-b327-53224696adae",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

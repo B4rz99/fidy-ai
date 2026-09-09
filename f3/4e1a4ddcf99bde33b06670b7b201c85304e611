@@ -1,0 +1,60 @@
+apps/server/src/shell/agent/mistral-tokenizer.test.ts
+  s_8061aea7e969cc::t_316d11d2b56f1d 5-7,24-32,34,41-51,60-68
+  s_8061aea7e969cc::t_f176c31f0ab19d 17
+apps/server/scripts/verify-mistral-token-counts.ts
+  s_8061aea7e969cc::t_60e2c4a23918a7 8,10
+  s_8061aea7e969cc::t_9730d090afe21b 1-3,7,11-12,15-16,19
+apps/server/src/shell/agent/mistral-conformance.ts
+  s_8061aea7e969cc::t_e71a1cae71c312 87,115,126,130,141-143,207
+  s_8061aea7e969cc::t_c370258c67da9a 4,8,23-34,61,74-80,85-86,88,94-96,113-114,118-119
+  s_8061aea7e969cc::t_eb697676d31aba 39-42,45-53,97-99
+  s_8061aea7e969cc::t_822c2a06d68049 16-17,171-176,179,185-188,190,197-205,208-216,218,222,224-227,231,240-255
+  s_8061aea7e969cc::t_953d1182b06fea 1-3,5-7,9-15,18-22,35-38,43-44,54-60,63-73,81-84,89-93,100-106,108-112,116-117,120-125,127-129,131-140,144-170,177-178,180-184,189,191-196,206,217,219-221,223,228-230,232-239,256-271
+  s_8061aea7e969cc::t_bb5c82d802c71a 62
+  s_8061aea7e969cc::t_30022ced8f95bf 107
+apps/server/src/shell/agent/mistral-tokenizer.ts
+  s_8061aea7e969cc::t_b49417422d27eb 2,6-13,41,69-70,72-73,88-90
+apps/server/src/shell/transcript/conversation-compaction-inference.ts
+  s_8061aea7e969cc::t_c3084c08973777 5-8
+apps/server/src/shell/agent/fixtures/ministral-3b-2512-vocabulary.ts
+  s_8061aea7e969cc::t_719e72bb49bbc4 1-4,7
+scripts/check-credential-evidence.ts
+  s_8061aea7e969cc::t_43e29e347f31f6 27-28
+apps/server/src/shell/agent/hosted-inference.ts
+  s_8061aea7e969cc::t_5dc612bcbb4acd 17-19
+docs/research/mistral-compaction-preflight.md
+  s_8061aea7e969cc::t_c0521b51cd2a0c 106
+  s_8061aea7e969cc::t_71295c8c3fe2b3 39-41,53-60,108-111,135-142,148-151,160-162,172-174
+  s_8061aea7e969cc::t_aaf13f2eceadfe 107
+apps/server/src/shell/agent/mistral-conformance.test.ts
+  s_8061aea7e969cc::t_7dfe0ca5896f04 3,132-133
+  s_8061aea7e969cc::t_4a6cd46ee07f4b 5,9-19,64-65
+  s_8061aea7e969cc::t_c27ff08df8042c 63
+  s_8061aea7e969cc::t_12445c2221c7c1 66
+  s_8061aea7e969cc::t_028684f6053448 50
+  s_8061aea7e969cc::t_b5a115131fae8c 1-2,4,6-8,20-49,51-62,67-131,134-172
+apps/server/src/shell/agent/agent-service.ts
+  s_8061aea7e969cc::t_6221a970b3a5af 51,2021
+apps/server/tools/mistral/generate-vocabulary.mjs
+  s_8061aea7e969cc::t_1c3dfff5357567 8,26
+  s_8061aea7e969cc::t_40b227262d1631 1-6,9-25,27-31,35-43
+  s_8061aea7e969cc::t_4e1bb3370c5a27 7,32-34
+apps/server/src/shell/agent/openai.ts
+  s_8061aea7e969cc::t_e07521963f05f2 44
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.2",
+  "base_commit_sha": "f34e1a4ddcf99bde33b06670b7b201c85304e611",
+  "prompts": {},
+  "sessions": {
+    "s_8061aea7e969cc": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a07e6a-02b9-7125-a200-3155427e5a02",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

@@ -47,5 +47,5 @@ fi
 if [[ "$mode" == test ]]; then
   bun --bun vitest run --config vitest.config.ts --coverage.enabled=false src/shell/testing/evaluation/*.test.ts
 else
-  bun scripts/evaluate-es-co.ts "$mode"
+  bun scripts/evaluate-es-co-openai.ts "$mode"
 fi

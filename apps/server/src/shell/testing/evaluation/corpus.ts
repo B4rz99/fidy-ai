@@ -69,22 +69,37 @@ export const loadCorpus = Effect.gen(function* () {
 
 const awaitedEntry = (path: string, hash: string): string => `${path}:${hash}`;
 
-/** Captures actual source bytes, including uncommitted evaluator code, separately from Git identity. */
-export const sourceEvidence = Effect.gen(function* () {
+const readSourceEvidence = Effect.fn("Evaluation.readSourceEvidence")(function* (
+  generationSourcePath: string
+) {
   const fs = yield* FileSystem.FileSystem;
   const sourcePaths = (yield* fs.readDirectory("src", { recursive: true }))
     .filter((path) => path.endsWith(".ts") && !path.endsWith(".test.ts"))
     .map((path) => `src/${path}`);
-  const paths = [...sourcePaths, "scripts/evaluate-es-co.ts", "scripts/evaluate-es-co.sh"];
+  const paths = [...sourcePaths, "scripts/evaluate-es-co-openai.ts", "scripts/evaluate-es-co.sh"];
   const hashes: Array<string> = [];
   for (const path of paths.toSorted()) {
     hashes.push(awaitedEntry(path, yield* sha256(yield* fs.readFile(path))));
   }
-  const controls = yield* sha256(yield* fs.readFile("src/shell/agent/openai.ts"));
+  const controls = yield* sha256(yield* fs.readFile(generationSourcePath));
   const contract = yield* sha256(yield* fs.readFile("contracts/operation-policy.json"));
   return {
     sourceSha256: yield* sha256(new TextEncoder().encode(hashes.join("\n"))),
     generationSha256: controls,
     contractSha256: contract,
   };
-}).pipe(Effect.mapError(() => new EvaluationFailure({ reason: "harness-failed" })));
+});
+
+type SourceEvidence = Readonly<{
+  sourceSha256: string;
+  generationSha256: string;
+  contractSha256: string;
+}>;
+
+/** Captures evaluator and selected provider-control bytes separately from Git identity. */
+export const sourceEvidence = (
+  generationSourcePath: string
+): Effect.Effect<SourceEvidence, EvaluationFailure, Crypto.Crypto | FileSystem.FileSystem> =>
+  readSourceEvidence(generationSourcePath).pipe(
+    Effect.mapError(() => new EvaluationFailure({ reason: "harness-failed" }))
+  );

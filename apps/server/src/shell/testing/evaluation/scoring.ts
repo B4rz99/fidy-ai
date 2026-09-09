@@ -37,13 +37,6 @@ export const check: {
   status: passed ? "passed" : "failed",
 }));
 
-/** Human language quality is explicitly unobserved until reviewed, never a fabricated automatic pass. */
-export const rubricPending: CheckResult = {
-  id: "reply-rubric",
-  critical: false,
-  status: "not-observed",
-};
-
 /** Every interrupted or skipped case retains the same planned denominator as a completed case. */
 const plannedChecks = (entry: EvaluationCase): ReadonlyArray<CheckResult> => {
   const commonChecks = [check("exact-financial-facts", false), check("review-outcomes", false)];
@@ -53,12 +46,11 @@ const plannedChecks = (entry: EvaluationCase): ReadonlyArray<CheckResult> => {
         ...commonChecks,
         check("canonical-operations", false),
         check("reply-delivered", false),
-        check("reply-behavior", false),
+        check("reply-rubric", false),
         check("no-unexpected-mutations", false),
         ...(entry.coverage.includes("confirmation")
           ? [check("confirmation-before-effect", false)]
           : []),
-        rubricPending,
       ];
     case "statement":
       return [...commonChecks, check("row-accounting", false)];

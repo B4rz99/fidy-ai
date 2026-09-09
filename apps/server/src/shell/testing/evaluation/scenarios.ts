@@ -1,4 +1,4 @@
-import { Crypto, DateTime, Effect, Encoding, Layer, Option, Result, Schema } from "effect";
+import { Crypto, DateTime, Effect, Encoding, Layer, Option, Schema } from "effect";
 import { HttpApiClient } from "effect/unstable/httpapi";
 import { HttpBody, HttpClient } from "effect/unstable/http";
 import * as XLSX from "xlsx/xlsx.mjs";
@@ -34,7 +34,7 @@ import {
   type HostedCase,
   type StatementCase,
 } from "./model";
-import { check, rubricPending, sameFinancialFacts, scoreObservation } from "./scoring";
+import { check, sameFinancialFacts, scoreObservation } from "./scoring";
 import { UnknownJsonString } from "~/schema-compatibility";
 
 /** New User and PAT per case/repetition: no prior Transcript, mapping cache, quota or replay state. */
@@ -130,26 +130,19 @@ const mutationNames = new Set(
     .map((operation) => operation.id)
 );
 
-const groundedReplyPattern = /(cop|transacci|registr|hecho|segur|compra|movimiento)/iu;
-const clarificationReplyPattern = /[¿?]/u;
-const abstentionReplyPattern = /(no puedo|no tengo|no hay|sin registros|no sería correcto)/iu;
+const normalizeReplyEvidence = (text: string): string =>
+  text.normalize("NFD").replaceAll(/\p{M}/gu, "").toLocaleLowerCase("es-CO");
 
-const replyBehaviorMatches = (
+const replyRubricMatches = (
   entry: HostedCase,
   replies: ReadonlyArray<string>,
   sawChallenge: boolean
 ): boolean => {
-  const replyText = replies.join("\n");
-  switch (entry.replyRubric) {
-    case "grounded-es-co":
-      return groundedReplyPattern.test(replyText);
-    case "clarifies":
-      return clarificationReplyPattern.test(replyText);
-    case "abstains":
-      return abstentionReplyPattern.test(replyText);
-    case "confirms":
-      return sawChallenge;
-  }
+  const replyText = normalizeReplyEvidence(replies.join("\n"));
+  const includesEvidence = entry.replyIncludes.every((alternatives) =>
+    alternatives.some((alternative) => replyText.includes(normalizeReplyEvidence(alternative)))
+  );
+  return includesEvidence && (entry.replyRubric !== "confirms" || sawChallenge);
 };
 
 const hostedChecks = (
@@ -157,7 +150,7 @@ const hostedChecks = (
     entry: HostedCase;
     succeeded: ReadonlyArray<CanonicalOperationId>;
     delivered: boolean;
-    replyBehavior: boolean;
+    replyRubric: boolean;
     confirmationBeforeEffect: boolean;
   }>
 ): ReadonlyArray<CheckResult> => [
@@ -168,7 +161,7 @@ const hostedChecks = (
     )
   ),
   check("reply-delivered", input.delivered),
-  check("reply-behavior", input.replyBehavior),
+  check("reply-rubric", input.replyRubric),
   check(
     "no-unexpected-mutations",
     input.succeeded.every(
@@ -178,7 +171,6 @@ const hostedChecks = (
   ...(input.entry.coverage.includes("confirmation")
     ? [check("confirmation-before-effect", input.confirmationBeforeEffect)]
     : []),
-  rubricPending,
 ];
 
 /** Live hosted evaluation never supplies model state or owns the runtime's private Turn lifecycle. */
@@ -237,7 +229,7 @@ export const runHosted = Effect.fn("Evaluation.runHosted")(function* (
       entry,
       succeeded,
       delivered,
-      replyBehavior: replyBehaviorMatches(entry, replies, sawChallenge),
+      replyRubric: replyRubricMatches(entry, replies, sawChallenge),
       confirmationBeforeEffect,
     }),
   ];
@@ -247,9 +239,6 @@ const csvCell = (cell: string): string => `"${cell.replaceAll('"', '""')}"`;
 
 /** Deterministic file construction makes the versioned row matrix the source of fixture bytes. */
 export const statementBytes = (entry: StatementCase): Uint8Array => {
-  if (entry.format === "unsupported") {
-    return new TextEncoder().encode("synthetic unsupported document");
-  }
   if (entry.format === "csv") {
     return new TextEncoder().encode(
       entry.rows.map((row) => row.map(csvCell).join(",")).join("\n") + "\n"
@@ -269,15 +258,13 @@ export const statementBytes = (entry: StatementCase): Uint8Array => {
 
 const statementFile = (
   format: StatementCase["format"]
-): Readonly<{ name: string; mediaType: SubmitForExtractionInput["file"]["declaredMediaType"] }> => {
-  if (format === "xlsx") {
-    return {
-      name: "synthetic.xlsx",
-      mediaType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    };
-  }
-  return { name: "synthetic.csv", mediaType: "text/csv" };
-};
+): Readonly<{ name: string; mediaType: SubmitForExtractionInput["file"]["declaredMediaType"] }> =>
+  format === "xlsx"
+    ? {
+        name: "synthetic.xlsx",
+        mediaType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      }
+    : { name: "synthetic.csv", mediaType: "text/csv" };
 const maximumMappingAttempts = 3;
 const rowAccountingMatches = (
   input: Readonly<{
@@ -306,25 +293,17 @@ export const runStatement = Effect.fn("Evaluation.runStatement")(function* (
       contentBase64: Base64FileContent.make(Encoding.encodeBase64(statementBytes(entry))),
     },
   };
-  const submitted = yield* Effect.result(
-    scenario.client.ingestion.submitForExtraction({ payload })
-  );
-  if (Result.isFailure(submitted)) {
-    return [
-      ...scoreObservation(entry, yield* observeScenario(scenario.client)),
-      check("row-accounting", entry.format === "unsupported"),
-    ];
-  }
+  const submitted = yield* scenario.client.ingestion.submitForExtraction({ payload });
   // Exactly the production maximum mapping attempts; no retry-until-green model sampling.
   for (let attempt = 0; attempt < maximumMappingAttempts; attempt += 1) {
     yield* processNextStatement();
     const status = (yield* scenario.client.ingestion.getStatementSubmission({
-      params: { id: submitted.success.data.id },
+      params: { id: submitted.data.id },
     })).data;
     if (status.status !== "queued" && status.status !== "processing") break;
   }
   const submission = (yield* scenario.client.ingestion.getStatementSubmission({
-    params: { id: submitted.success.data.id },
+    params: { id: submitted.data.id },
   })).data;
   const accounting =
     submission.status === "completed" &&
@@ -336,10 +315,7 @@ export const runStatement = Effect.fn("Evaluation.runStatement")(function* (
     });
   return [
     ...scoreObservation(entry, yield* observeScenario(scenario.client)),
-    check(
-      "row-accounting",
-      entry.format === "unsupported" ? submission.status === "failed" : accounting
-    ),
+    check("row-accounting", accounting),
   ];
 });
 

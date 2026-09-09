@@ -4,7 +4,13 @@ import { BunRuntime } from "@effect/platform-bun";
 import { Config, Effect, Layer, Schema } from "effect";
 import { FetchHttpClient } from "effect/unstable/http";
 import { AgentService } from "~/shell/agent/agent-service";
-import { OpenAiHostedInferenceLive, OpenAiLanguageModelLive } from "~/shell/agent/openai";
+import {
+  FidyAgentModel,
+  HostedAgentGenerationConfig,
+  OpenAiHostedInferenceLive,
+  OpenAiLanguageModelLive,
+  hostedOutputTokenReserve,
+} from "~/shell/agent/openai";
 import { StatementColumnMapper } from "~/shell/ingestion/column-mapper";
 import { NotificationEmailExtractor } from "~/shell/ingestion/email-extractor";
 import { TelemetryDisabled } from "~/shell/observability/disabled";
@@ -12,7 +18,11 @@ import { ApiHarness } from "~/shell/testing/api-harness";
 import { EvaluationFailure, RunPlan } from "~/shell/testing/evaluation/model";
 import { requestBudgetLayer } from "~/shell/testing/evaluation/request-budget";
 import { scriptedInference } from "~/shell/testing/evaluation/safety";
-import { evaluationPolicy, runEvaluation } from "~/shell/testing/evaluation/runner";
+import {
+  EvaluationProviderMetadata,
+  evaluationPolicy,
+  runEvaluation,
+} from "~/shell/testing/evaluation/runner";
 
 const mode = Schema.decodeUnknownSync(RunPlan.fields.mode)(Bun.argv[2] ?? "safety");
 const policy = evaluationPolicy(mode);
@@ -39,7 +49,24 @@ const program = Effect.gen(function* () {
 });
 
 const Budget = requestBudgetLayer(plan.maximumRequests);
+const providerControls = {
+  outputReserveTokens: hostedOutputTokenReserve,
+  temperature: HostedAgentGenerationConfig.temperature,
+  parallelToolCalls: HostedAgentGenerationConfig.parallel_tool_calls,
+  providerStorage: HostedAgentGenerationConfig.store,
+  reasoningEffort: HostedAgentGenerationConfig.reasoning.effort,
+  truncation: "disabled",
+} as const;
 const SafetyWork = Layer.mergeAll(
+  Layer.succeed(
+    EvaluationProviderMetadata,
+    EvaluationProviderMetadata.of({
+      provider: "scripted",
+      requestedModel: "scripted-safety-v1",
+      generationSourcePath: "src/shell/testing/evaluation/safety.ts",
+      ...providerControls,
+    })
+  ),
   AgentService.layer.pipe(Layer.provide(scriptedInference([]))),
   Layer.succeed(
     StatementColumnMapper,
@@ -64,6 +91,15 @@ const ProviderHttp = FetchHttpClient.layer.pipe(Layer.provide(Budget));
 const HostedInferenceLive = OpenAiHostedInferenceLive.pipe(Layer.provide(ProviderHttp));
 const LanguageModelLive = OpenAiLanguageModelLive.pipe(Layer.provide(ProviderHttp));
 const ModelWork = Layer.mergeAll(
+  Layer.succeed(
+    EvaluationProviderMetadata,
+    EvaluationProviderMetadata.of({
+      provider: "openai",
+      requestedModel: FidyAgentModel,
+      generationSourcePath: "src/shell/agent/openai.ts",
+      ...providerControls,
+    })
+  ),
   AgentService.layer.pipe(Layer.provide(HostedInferenceLive)),
   StatementColumnMapper.layer.pipe(Layer.provide(LanguageModelLive)),
   NotificationEmailExtractor.layer.pipe(Layer.provide(LanguageModelLive))

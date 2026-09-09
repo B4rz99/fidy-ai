@@ -14,6 +14,8 @@ const maximumSeedFacts = 10;
 const maximumSteps = 5;
 const maximumOperationCharacters = 80;
 const maximumOperations = 12;
+const maximumReplyEvidenceGroups = 5;
+const maximumReplyAlternatives = 5;
 const maximumColumns = 8;
 const maximumRows = 31;
 const maximumChecks = 12;
@@ -95,11 +97,14 @@ export const EvaluationCase = Schema.Union([
       )
     ).check(Schema.isMaxLength(maximumOperations)),
     replyRubric: Schema.Literals(["grounded-es-co", "clarifies", "abstains", "confirms"]),
+    replyIncludes: Schema.NonEmptyArray(
+      Schema.NonEmptyArray(prose).check(Schema.isMaxLength(maximumReplyAlternatives))
+    ).check(Schema.isMaxLength(maximumReplyEvidenceGroups)),
   }),
   Schema.Struct({
     ...commonCaseFields,
     kind: Schema.Literal("statement"),
-    format: Schema.Literals(["csv", "xlsx", "unsupported"]),
+    format: Schema.Literals(["csv", "xlsx"]),
     rows: Schema.NonEmptyArray(Schema.Array(prose).check(Schema.isMaxLength(maximumColumns))).check(
       Schema.isMaxLength(maximumRows)
     ),
@@ -178,7 +183,6 @@ export const CheckId = Schema.Literals([
   "no-unauthorized-effects",
   "audit-evidence",
   "reply-delivered",
-  "reply-behavior",
   "reply-rubric",
   "no-unexpected-mutations",
 ]);
@@ -210,7 +214,7 @@ export const RunReport = Schema.Struct({
   corpusSha256: digest,
   sourceCommit: Schema.String.check(Schema.isPattern(/^[a-f0-9]{40}$/u)),
   sourceSha256: digest,
-  provider: Schema.Literals(["openai", "scripted"]),
+  provider: identifier,
   requestedModel: Schema.String.check(Schema.isPattern(/^[a-z0-9][a-z0-9.-]{0,79}$/u)),
   controls: Schema.Struct({
     generationSha256: digest,

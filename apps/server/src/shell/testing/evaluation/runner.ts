@@ -2,6 +2,7 @@ import {
   Cause,
   Clock,
   Config,
+  Context,
   DateTime,
   Effect,
   Exit,
@@ -24,20 +25,30 @@ import { runSafety } from "./safety";
 import { EvaluationRequestBudget } from "./request-budget";
 import { CurrentAgentLimits } from "~/shell/agent/agent-service";
 import { HostedInferenceError } from "~/shell/agent/hosted-inference";
-import {
-  FidyAgentModel,
-  HostedAgentGenerationConfig,
-  hostedOutputTokenReserve,
-} from "~/shell/agent/openai";
 
 const smokeCases = new Set(["hosted-query", "statement-refund-csv", "email-inline-png"]);
 const commitPrefixLength = 12;
 const maximumReportBytes = 1_000_000;
 const maximumFailureTagCharacters = 80;
 
+/** Provider adapters supply identity and generation controls without exposing request content. */
+export class EvaluationProviderMetadata extends Context.Service<
+  EvaluationProviderMetadata,
+  {
+    readonly provider: RunReport["provider"];
+    readonly requestedModel: RunReport["requestedModel"];
+    readonly generationSourcePath: string;
+    readonly outputReserveTokens: number;
+    readonly temperature: number;
+    readonly parallelToolCalls: false;
+    readonly providerStorage: false;
+    readonly reasoningEffort: "none";
+    readonly truncation: "disabled";
+  }
+>()("@fidy/server/shell/testing/evaluation/runner/EvaluationProviderMetadata") {}
+
 type EvaluationModePolicy = Readonly<{
   plan: RunPlan;
-  provider: RunReport["provider"];
   requiresApproval: boolean;
   startupValidation: boolean;
   usesSafetyStack: boolean;
@@ -52,7 +63,6 @@ const modePolicies: Readonly<Record<RunPlan["mode"], EvaluationModePolicy>> = {
       maximumRequests: 60,
       maximumMillis: 600_000,
     }),
-    provider: "openai",
     requiresApproval: false,
     startupValidation: true,
     usesSafetyStack: false,
@@ -65,7 +75,6 @@ const modePolicies: Readonly<Record<RunPlan["mode"], EvaluationModePolicy>> = {
       maximumRequests: 1_000,
       maximumMillis: 7_200_000,
     }),
-    provider: "openai",
     requiresApproval: true,
     startupValidation: true,
     usesSafetyStack: false,
@@ -78,7 +87,6 @@ const modePolicies: Readonly<Record<RunPlan["mode"], EvaluationModePolicy>> = {
       maximumRequests: 1,
       maximumMillis: 600_000,
     }),
-    provider: "scripted",
     requiresApproval: false,
     startupValidation: false,
     usesSafetyStack: true,
@@ -223,7 +231,8 @@ const executeEvaluation = Effect.fn("Evaluation.run")(function* (mode: RunPlan["
     Effect.flatMap(Schema.decodeEffect(Schema.String.check(Schema.isPattern(/^[a-f0-9]{40}$/u))))
   );
   const corpus = yield* loadCorpus;
-  const source = yield* sourceEvidence;
+  const provider = yield* EvaluationProviderMetadata;
+  const source = yield* sourceEvidence(provider.generationSourcePath);
   const policy = evaluationPolicy(mode);
   const plan = policy.plan;
   const entries = policy.selectCases(corpus.corpus.cases);
@@ -242,8 +251,8 @@ const executeEvaluation = Effect.fn("Evaluation.run")(function* (mode: RunPlan["
     corpusSha256: corpus.sha256,
     sourceCommit,
     sourceSha256: source.sourceSha256,
-    provider: policy.provider,
-    requestedModel: FidyAgentModel,
+    provider: provider.provider,
+    requestedModel: provider.requestedModel,
     controls: {
       generationSha256: source.generationSha256,
       contractSha256: source.contractSha256,
@@ -252,12 +261,12 @@ const executeEvaluation = Effect.fn("Evaluation.run")(function* (mode: RunPlan["
       maxToolCallsPerTurn: limits.maxToolCallsPerTurn,
       maxToolResultCharacters: limits.maxToolResultCharacters,
       maxModelRoundMillis: limits.maxModelRoundMillis,
-      outputReserveTokens: hostedOutputTokenReserve,
-      temperature: HostedAgentGenerationConfig.temperature,
-      parallelToolCalls: HostedAgentGenerationConfig.parallel_tool_calls,
-      providerStorage: HostedAgentGenerationConfig.store,
-      reasoningEffort: HostedAgentGenerationConfig.reasoning.effort,
-      truncation: "disabled",
+      outputReserveTokens: provider.outputReserveTokens,
+      temperature: provider.temperature,
+      parallelToolCalls: provider.parallelToolCalls,
+      providerStorage: provider.providerStorage,
+      reasoningEffort: provider.reasoningEffort,
+      truncation: provider.truncation,
       notificationDeadlineMillis: 30_000,
     },
     plan,

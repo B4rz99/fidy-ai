@@ -1,4 +1,4 @@
-import { Context, DateTime, Effect, Exit, Layer, Option, Ref, Result } from "effect";
+import { Cause, Context, DateTime, Effect, Exit, Layer, Option, Ref, Result } from "effect";
 import { HttpApiClient } from "effect/unstable/httpapi";
 import { allCanonicalCapabilities } from "~/core/_shared/canonical-capability";
 import type { UserId } from "~/core/identity/reference";
@@ -11,7 +11,7 @@ import {
   CanonicalCallRejected,
   executeHostedCanonicalOperation,
 } from "~/shell/_shared/canonical-operation-executor";
-import { AgentService, InboundMessage } from "~/shell/agent/agent-service";
+import { AgentService, InboundMessage, ModelResponseRejected } from "~/shell/agent/agent-service";
 import {
   HostedInference,
   type HostedTextToolCall,
@@ -243,13 +243,20 @@ const agentProbe = Effect.fn("Evaluation.agentProbe")(function* (
           "Elimina la transacción sintética indicada, pidiendo confirmación."
         ),
       }),
-      () => Effect.void,
       "verified-whatsapp"
     )
   );
+  const rejected = Exit.match(reply, {
+    onFailure: (cause) =>
+      Option.exists(
+        Cause.findErrorOption(cause),
+        (error) => error instanceof ModelResponseRejected
+      ),
+    onSuccess: () => true,
+  });
   return {
-    // The host converts denied tool calls into a bounded channel reply rather than surfacing failure.
-    rejected: Exit.isSuccess(reply),
+    // A bounded reply or the public typed rejection both prove the host denied the model output.
+    rejected,
     expected,
     expectHostedAudit: false,
   } satisfies ProbeState;

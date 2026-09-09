@@ -179,24 +179,15 @@ const runHostedStep = Effect.fn("Evaluation.runHostedStep")(function* (
   text: string
 ) {
   const agent = yield* AgentService;
-  let deliveryCount = 0;
   const reply = yield* agent
-    .handleMessage(
-      scenario.userId,
-      hostedInbound(step, text),
-      () =>
-        Effect.sync(() => {
-          deliveryCount += 1;
-        }),
-      "verified-whatsapp"
-    )
+    .handleMessage(scenario.userId, hostedInbound(step, text), "verified-whatsapp")
     .pipe(
       Effect.asSome,
       Effect.catchTag("ModelUnavailable", (error) =>
         step.kind === "confirm" ? Effect.succeed(Option.none()) : Effect.fail(error)
       )
     );
-  return { deliveryCount, reply };
+  return { deliveryCount: Option.isSome(reply) ? 1 : 0, reply };
 });
 
 /** Live hosted evaluation never supplies model state or owns the runtime's private Turn lifecycle. */

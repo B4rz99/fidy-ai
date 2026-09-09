@@ -9,10 +9,9 @@ import {
   HostedAgentGenerationConfig,
   OpenAiHostedInferenceLive,
   OpenAiLanguageModelLive,
-  hostedOutputTokenReserve,
 } from "~/shell/agent/openai";
+import { hostedOutputTokenReserve } from "~/shell/agent/hosted-inference";
 import { StatementColumnMapper } from "~/shell/ingestion/column-mapper";
-import { NotificationEmailExtractor } from "~/shell/ingestion/email-extractor";
 import { TelemetryDisabled } from "~/shell/observability/disabled";
 import { ApiHarness } from "~/shell/testing/api-harness";
 import { EvaluationFailure, RunPlan } from "~/shell/testing/evaluation/model";
@@ -74,12 +73,6 @@ const SafetyWork = Layer.mergeAll(
     StatementColumnMapper.of({
       mapColumns: () => Effect.die("Statement evaluation is unavailable in safety mode"),
     })
-  ),
-  Layer.succeed(
-    NotificationEmailExtractor,
-    NotificationEmailExtractor.of({
-      extract: () => Effect.die("Email evaluation is unavailable in safety mode"),
-    })
   )
 );
 const SafetyApp = SafetyWork.pipe(
@@ -103,8 +96,7 @@ const ModelWork = Layer.mergeAll(
     })
   ),
   AgentService.layer.pipe(Layer.provide(HostedInferenceLive)),
-  StatementColumnMapper.layer.pipe(Layer.provide(LanguageModelLive)),
-  NotificationEmailExtractor.layer.pipe(Layer.provide(LanguageModelLive))
+  StatementColumnMapper.layer.pipe(Layer.provide(LanguageModelLive))
 );
 const EvaluationApp = ModelWork.pipe(
   Layer.provideMerge(ApiHarness),

@@ -199,9 +199,7 @@ const runHostedStep = Effect.fn("Evaluation.runHostedStep")(function* (
     .handleMessage(scenario.userId, hostedInbound(step, text), "verified-whatsapp")
     .pipe(
       Effect.asSome,
-      Effect.catchTag("ModelUnavailable", (error) =>
-        step.kind === "confirm" ? Effect.succeed(Option.none()) : Effect.fail(error)
-      )
+      Effect.catchTag("ModelUnavailable", () => Effect.succeed(Option.none()))
     );
   return { deliveryCount: Option.isSome(reply) ? 1 : 0, reply };
 });

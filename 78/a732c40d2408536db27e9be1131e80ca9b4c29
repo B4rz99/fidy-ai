@@ -1,0 +1,52 @@
+apps/server/scripts/evaluate-es-co.sh
+  s_2f8b45504a0c31::t_1f06954f8ac3a0 50
+apps/server/scripts/evaluate-es-co-openai.ts
+  s_2f8b45504a0c31::t_c6cb90269fcbf6 12
+  s_8061aea7e969cc::t_c261c169852478 7-11,13,21-25,52-59,61-69,94-102
+apps/server/src/shell/testing/evaluation/runner.ts
+  s_2f8b45504a0c31::t_4d47b6afd5c431 5,34-49,234-235,254-255,264-269
+apps/server/src/shell/testing/evaluation/model.ts
+  s_2f8b45504a0c31::t_df0768d90c8b6f 107
+  s_2f8b45504a0c31::t_218658e4a0610d 217
+  s_2f8b45504a0c31::t_800c25bd947f2c 17-18,100-102
+apps/server/src/shell/testing/evaluation/corpora/es-co-v1/corpus.json
+  s_2f8b45504a0c31::t_582d2ec7a7acfa 641-642
+  s_2f8b45504a0c31::t_6c1517e8cecacf 530-531,574-575,585,591,595,601,608-609,637,643,681-682,709-710,739-740,777-778,794-795,811-812,850-851
+apps/server/src/shell/testing/evaluation/scenarios.ts
+  s_2f8b45504a0c31::t_3e76126ef4bd55 1,263-267
+  s_2f8b45504a0c31::t_b3f8d938ad3572 37,133-134,136,141-145,153,164,232
+  s_2f8b45504a0c31::t_e74534b70526d4 296,301,306,318
+  s_2f8b45504a0c31::t_4891ef7e70602e 261-262
+apps/server/src/shell/testing/evaluation/corpus.ts
+  s_2f8b45504a0c31::t_335370a9bf5188 73-74,84
+  s_2f8b45504a0c31::t_e5c40d8c68e659 72,91-92,99,103-105
+  s_2f8b45504a0c31::t_9821d3f8313554 79
+  s_2f8b45504a0c31::t_dc8e1a91c48ba4 93-98,100-101
+  s_2f8b45504a0c31::t_7eda455e38e775 102
+apps/server/src/shell/testing/evaluation/scoring.ts
+  s_2f8b45504a0c31::t_e3d839f959064d 49
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.2",
+  "base_commit_sha": "78a732c40d2408536db27e9be1131e80ca9b4c29",
+  "prompts": {},
+  "sessions": {
+    "s_2f8b45504a0c31": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a07e6a-da20-75b9-b327-53224696adae",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_8061aea7e969cc": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a07e6a-02b9-7125-a200-3155427e5a02",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

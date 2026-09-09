@@ -1,0 +1,23 @@
+apps/server/src/shell/testing/evaluation/scenarios.ts
+  s_2f8b45504a0c31::t_298ecc8f7fe8b4 183,190
+apps/server/src/shell/testing/evaluation/safety.ts
+  s_2f8b45504a0c31::t_344c95b280c1c2 1,14,249-256,258-259
+apps/server/scripts/evaluate-es-co-openai.ts
+  s_2f8b45504a0c31::t_28ea03a08d42a0 13,99
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.2",
+  "base_commit_sha": "f1aabb4c0a1310068356e61169301604ebc3dd2d",
+  "prompts": {},
+  "sessions": {
+    "s_2f8b45504a0c31": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a07e6a-da20-75b9-b327-53224696adae",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

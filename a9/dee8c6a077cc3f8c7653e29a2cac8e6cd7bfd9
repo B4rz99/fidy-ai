@@ -1,0 +1,29 @@
+apps/server/src/shell/testing/evaluation/corpus.test.ts
+  s_2f8b45504a0c31::t_de57d47abaf480 22-24
+  s_2f8b45504a0c31::t_dbc4c6c1f46546 3,19-21,25-33
+  s_42471e805e9b67::t_acef92c8e0bb46 34-36
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.2",
+  "base_commit_sha": "a9dee8c6a077cc3f8c7653e29a2cac8e6cd7bfd9",
+  "prompts": {},
+  "sessions": {
+    "s_2f8b45504a0c31": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a07e6a-da20-75b9-b327-53224696adae",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    },
+    "s_42471e805e9b67": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a083cc-2ce8-7422-b3c7-579a870ae987",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

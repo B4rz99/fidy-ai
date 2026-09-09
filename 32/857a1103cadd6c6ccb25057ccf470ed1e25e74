@@ -1,0 +1,14 @@
+apps/server/evaluation-results/es-co-v1-openai-baseline-38897fedbe89.json
+  h_c6d49c804e0ad2 1
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.2",
+  "base_commit_sha": "32857a1103cadd6c6ccb25057ccf470ed1e25e74",
+  "prompts": {},
+  "humans": {
+    "h_c6d49c804e0ad2": {
+      "author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

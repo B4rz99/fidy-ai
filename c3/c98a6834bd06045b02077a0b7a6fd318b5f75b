@@ -1,0 +1,19 @@
+apps/server/evaluation-results/es-co-v1-openai-baseline-b67bb812a13e.json
+  s_42471e805e9b67::t_bf8dcf59fae5d8 1
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.2",
+  "base_commit_sha": "c3c98a6834bd06045b02077a0b7a6fd318b5f75b",
+  "prompts": {},
+  "sessions": {
+    "s_42471e805e9b67": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a083cc-2ce8-7422-b3c7-579a870ae987",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

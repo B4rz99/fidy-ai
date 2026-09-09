@@ -23,6 +23,11 @@ const credentialEvidence = [
     testName: "counts complete framing and executes the exact prepared request",
   },
   {
+    configuration: "MISTRAL_API_KEY",
+    testFile: "apps/server/src/shell/agent/mistral-conformance.test.ts",
+    testName: "fails without exposing the credential or provider body",
+  },
+  {
     configuration: "EMAIL_ADMISSION_HMAC_KEY",
     testFile: "apps/server/src/shell/onboarding/onboarding-turn.test.ts",
     testName: "keeps the email admission HMAC credential out of persistence and outcomes",

@@ -84,6 +84,7 @@ const coordinateBearingReason = (
 const providerCredentialHeaders: Readonly<Record<ExternalHttpProvider, ReadonlyArray<string>>> = {
   "cloudflare-access": ["cf-access-token"],
   kapso: ["x-api-key"],
+  mistral: ["authorization"],
   openai: ["authorization", "openai-organization", "openai-project"],
   resend: ["authorization", "idempotency-key"],
   sentry: ["authorization"],

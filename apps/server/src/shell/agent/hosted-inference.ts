@@ -14,6 +14,9 @@ export type HostedTextContext = Readonly<{
   activeRequest: Readonly<{ _tag: "Absent" }> | Readonly<{ _tag: "Present"; text: string }>;
 }>;
 
+/** Server-owned production output allowance included in every complete capacity decision. */
+export const hostedOutputTokenReserve = 16_000;
+
 /** Immutable semantic messages for one structured generation. */
 export type HostedStructuredContext = Readonly<{
   messages: ReadonlyArray<Prompt.MessageEncoded>;

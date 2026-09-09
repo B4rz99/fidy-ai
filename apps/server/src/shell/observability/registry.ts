@@ -46,6 +46,7 @@ export const TelemetryRegistry = {
     "whatsapp",
     "postgres",
     "kapso",
+    "mistral",
     "openai",
     "resend",
     "wompi",
@@ -106,7 +107,7 @@ export const TelemetryRegistry = {
     "disclosure_rejected",
     "disclosure_not_current",
   ],
-  provider: ["cloudflare-access", "kapso", "openai", "resend", "sentry", "wompi"],
+  provider: ["cloudflare-access", "kapso", "mistral", "openai", "resend", "sentry", "wompi"],
   workKind: [
     ...TelemetryWorkKindGroup.http,
     ...TelemetryWorkKindGroup.queue,

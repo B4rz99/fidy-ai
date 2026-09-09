@@ -15,6 +15,7 @@
     "build:production": "rm -rf dist && CONTRACT_DIGEST=$(bun run --silent contracts:digest) && [[ \"$CONTRACT_DIGEST\" =~ ^[0-9a-f]{64}$ ]] && bun build src/shell/observability/preload.ts src/main.ts --target=bun --outdir=dist --entry-naming='[name].js' --sourcemap=external --define \"FIDY_CONTRACT_DIGEST=\\\"$CONTRACT_DIGEST\\\"\" && bun build scripts/prepare-sentry-release.ts scripts/provision-runtime-role.ts scripts/migrate.ts scripts/support-recovery.ts scripts/approve-email-ingest-sample.ts --target=bun --outdir=dist/commands --entry-naming='[name].js' --sourcemap=external && bunx --bun sentry-cli sourcemaps inject dist",
     "start:production": "bun --preload ./dist/preload.js dist/main.js",
     "agent:repl": "bun scripts/agent-repl.ts",
+    "mistral:conformance": "bun scripts/verify-mistral-token-counts.ts",
     "support:recovery": "bun scripts/support-recovery.ts",
     "sentry:verify": "bun scripts/verify-sentry-account.ts",
     "wompi:reconcile-enrollment": "bun scripts/reconcile-wompi-enrollment.ts",

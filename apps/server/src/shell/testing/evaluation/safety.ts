@@ -61,17 +61,15 @@ type ProbeState = Readonly<{
   expectHostedAudit: boolean;
 }>;
 
-/** Scripted output still traverses host validation, budgets, confirmation and canonical execution. */
-export const scriptedInference = (
-  calls: ReadonlyArray<HostedTextToolCall>
-): Layer.Layer<HostedInference> =>
-  Layer.succeed(
-    HostedInference,
-    makeHostedInference({
-      countText: (text) => Effect.succeed(new TextEncoder().encode(text).length),
-      countTranscript: (entries) => Effect.succeed(entries.length),
-      prepare: (input) => Effect.succeed(input),
-      execute: (request) => {
+const scriptedInferenceService = (
+  calls: Effect.Effect<ReadonlyArray<HostedTextToolCall>>
+): HostedInference["Service"] =>
+  makeHostedInference({
+    countText: (text) => Effect.succeed(new TextEncoder().encode(text).length),
+    countTranscript: (entries) => Effect.succeed(entries.length),
+    prepare: (input) => Effect.succeed(input),
+    execute: (request) =>
+      Effect.map(calls, (activeCalls) => {
         const serialized = JSON.stringify(request);
         const challenge = /Responde exactamente: (CONFIRMAR [^"\\n]+)/u.exec(serialized)?.[1];
         const lastToolResult = serialized.lastIndexOf("tool-result");
@@ -81,21 +79,56 @@ export const scriptedInference = (
         const confirmedResult = lastUserConfirmation >= 0 && lastToolResult > lastUserConfirmation;
         const shouldCall = lastToolResult < 0 || lastUserConfirmation > lastToolResult;
         const text = confirmedResult ? "Operación sintética procesada." : (challenge ?? "");
-        return Effect.succeed({
+        return {
           result: {
             text,
-            toolCalls: shouldCall ? calls : [],
-            finishReason: shouldCall ? "tool-calls" : "stop",
+            toolCalls: shouldCall ? activeCalls : [],
+            finishReason: shouldCall ? ("tool-calls" as const) : ("stop" as const),
             usage: { inputTokens: 0, outputTokens: 0, cachedInputTokens: 0 },
           },
           continuation: {},
-        });
-      },
-      structured: {
-        prepare: () => Effect.die("Structured generation is outside this scripted safety fixture"),
-      },
-    })
-  );
+        };
+      }),
+    structured: {
+      prepare: () => Effect.die("Structured generation is outside this scripted safety fixture"),
+    },
+  });
+
+/** Scripted output still traverses host validation, budgets, confirmation and canonical execution. */
+export const scriptedInference = (
+  calls: ReadonlyArray<HostedTextToolCall>
+): Layer.Layer<HostedInference> =>
+  Layer.succeed(HostedInference, scriptedInferenceService(Effect.succeed(calls)));
+
+export class EvaluationInferenceControl extends Context.Service<
+  EvaluationInferenceControl,
+  { readonly useScriptedCalls: (calls: ReadonlyArray<HostedTextToolCall>) => Effect.Effect<void> }
+>()("@fidy/server/shell/testing/evaluation/safety/EvaluationInferenceControl") {}
+
+/** Routes one long-lived AgentService between its live provider and deterministic safety output. */
+export const EvaluationInferenceRouter = Layer.effectContext(
+  Effect.gen(function* () {
+    const live = yield* HostedInference;
+    const active = yield* Ref.make(live);
+    const routed: HostedInference["Service"] = {
+      countText: (text) => Effect.flatMap(Ref.get(active), (service) => service.countText(text)),
+      countTranscript: (entries) =>
+        Effect.flatMap(Ref.get(active), (service) => service.countTranscript(entries)),
+      prepareText: (request) =>
+        Effect.flatMap(Ref.get(active), (service) => service.prepareText(request)),
+      validateText: (request) =>
+        Effect.flatMap(Ref.get(active), (service) => service.validateText(request)),
+      prepareStructured: (request) =>
+        Effect.flatMap(Ref.get(active), (service) => service.prepareStructured(request)),
+    };
+    return Context.make(HostedInference, routed).pipe(
+      Context.add(EvaluationInferenceControl, {
+        useScriptedCalls: (calls) =>
+          Ref.set(active, scriptedInferenceService(Effect.succeed(calls))),
+      })
+    );
+  })
+);
 
 const bindingFor = Effect.fn("Evaluation.bindingFor")(function* (operation: string) {
   return yield* Effect.fromOption(
@@ -231,10 +264,9 @@ const agentProbe = Effect.fn("Evaluation.agentProbe")(function* (
             params: { params: { id: transactionId } },
           },
         ];
-  const services = yield* Layer.build(
-    Layer.fresh(AgentService.layer).pipe(Layer.provide(scriptedInference(calls)))
-  );
-  const agent = Context.get(services, AgentService);
+  const control = yield* EvaluationInferenceControl;
+  yield* control.useScriptedCalls(calls);
+  const agent = yield* AgentService;
   const reply = yield* Effect.exit(
     agent.handleMessage(
       scenario.userId,

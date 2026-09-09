@@ -17,7 +17,7 @@ import { ApiHarness } from "~/shell/testing/api-harness";
 import { EvaluationFailure, RunPlan } from "~/shell/testing/evaluation/model";
 import { requestBudgetLayer } from "~/shell/testing/evaluation/request-budget";
 import { EvaluationEmailProcessingLive } from "~/shell/testing/evaluation/scenarios";
-import { scriptedInference } from "~/shell/testing/evaluation/safety";
+import { EvaluationInferenceRouter, scriptedInference } from "~/shell/testing/evaluation/safety";
 import {
   EvaluationProviderMetadata,
   evaluationPolicy,
@@ -57,6 +57,7 @@ const providerControls = {
   reasoningEffort: HostedAgentGenerationConfig.reasoning.effort,
   truncation: "disabled",
 } as const;
+const SafetyInference = EvaluationInferenceRouter.pipe(Layer.provide(scriptedInference([])));
 const SafetyWork = Layer.mergeAll(
   Layer.succeed(
     EvaluationProviderMetadata,
@@ -68,7 +69,8 @@ const SafetyWork = Layer.mergeAll(
       ...providerControls,
     })
   ),
-  AgentService.layer.pipe(Layer.provide(scriptedInference([]))),
+  AgentService.layer.pipe(Layer.provide(SafetyInference)),
+  SafetyInference,
   Layer.succeed(
     StatementColumnMapper,
     StatementColumnMapper.of({
@@ -85,6 +87,7 @@ const SafetyApp = SafetyWork.pipe(
 // Capture a provider-only client before the local ApiHarness client enters application scope.
 const ProviderHttp = FetchHttpClient.layer.pipe(Layer.provide(Budget));
 const HostedInferenceLive = OpenAiHostedInferenceLive.pipe(Layer.provide(ProviderHttp));
+const EvaluationInferenceLive = EvaluationInferenceRouter.pipe(Layer.provide(HostedInferenceLive));
 const LanguageModelLive = OpenAiLanguageModelLive.pipe(Layer.provide(ProviderHttp));
 const ModelWork = Layer.mergeAll(
   Layer.succeed(
@@ -97,7 +100,8 @@ const ModelWork = Layer.mergeAll(
       ...providerControls,
     })
   ),
-  AgentService.layer.pipe(Layer.provide(HostedInferenceLive)),
+  AgentService.layer.pipe(Layer.provide(EvaluationInferenceLive)),
+  EvaluationInferenceLive,
   StatementColumnMapper.layer.pipe(Layer.provide(LanguageModelLive)),
   EvaluationEmailProcessingLive
 );

@@ -17,7 +17,32 @@
     "has nowhere to put them. An exclusion with no entry fails, an expired entry fails, and so does",
     "an entry whose exclusion is gone."
   ],
-  "deferredUpdates": [],
+  "deferredUpdates": [
+    {
+      "name": "@effect/tsgo",
+      "manifest": "package.json",
+      "reason": "Version 0.39 enables new diagnostics across existing server modules. Migrate those call sites as a focused Effect tooling change rather than bundling broad source rewrites into the September dependency security patch.",
+      "until": "2026-09-16T00:00:00Z"
+    },
+    {
+      "name": "oxfmt",
+      "manifest": "package.json",
+      "reason": "Keep this security patch limited to vulnerable dependency paths; take the formatter update through the normal dependency-update workflow.",
+      "until": "2026-09-16T00:00:00Z"
+    },
+    {
+      "name": "oxlint",
+      "manifest": "package.json",
+      "reason": "Keep this security patch limited to vulnerable dependency paths; take the linter update through the normal dependency-update workflow.",
+      "until": "2026-09-16T00:00:00Z"
+    },
+    {
+      "name": "wrangler",
+      "manifest": "apps/web/package.json",
+      "reason": "Keep this security patch limited to vulnerable dependency paths; validate the Cloudflare toolchain update separately.",
+      "until": "2026-09-16T00:00:00Z"
+    }
+  ],
   "acceptedVulnerabilities": [
     {
       "cve": "CVE-2026-76172",

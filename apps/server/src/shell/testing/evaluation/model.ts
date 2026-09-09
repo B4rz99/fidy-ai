@@ -179,6 +179,7 @@ export const CheckId = Schema.Literals([
   "exact-financial-facts",
   "review-outcomes",
   "row-accounting",
+  "workflow-completed",
   "canonical-operations",
   "confirmation-before-effect",
   "rejection",

@@ -1,4 +1,15 @@
-import { Context, Crypto, DateTime, Effect, Encoding, Layer, Option, Ref, Schema } from "effect";
+import {
+  Context,
+  Crypto,
+  DateTime,
+  Effect,
+  Encoding,
+  Exit,
+  Layer,
+  Option,
+  Ref,
+  Schema,
+} from "effect";
 import { HttpApiClient } from "effect/unstable/httpapi";
 import { HttpBody, HttpClient } from "effect/unstable/http";
 import * as XLSX from "xlsx/xlsx.mjs";
@@ -388,6 +399,7 @@ const processEmailDeliveries = Effect.fn("Evaluation.processEmailDeliveries")(fu
 ) {
   const http = yield* HttpClient.HttpClient;
   const processor = yield* ForwardedEmailProcessor;
+  let completed = true;
   for (const id of input.ids) {
     const now = DateTime.toDateUtc(yield* DateTime.now);
     const body = yield* Schema.encodeEffect(UnknownJsonString)({
@@ -407,8 +419,9 @@ const processEmailDeliveries = Effect.fn("Evaluation.processEmailDeliveries")(fu
       process.stderr.write(`Evaluation webhook response status: ${response.status}.\n`);
       return yield* new EvaluationFailure({ reason: "harness-failed" });
     }
-    yield* processor.processNext;
+    if (Exit.isFailure(yield* Effect.exit(processor.processNext))) completed = false;
   }
+  return completed;
 });
 
 const syntheticEmail = (input: {
@@ -463,6 +476,9 @@ export const runEmail = Effect.fn("Evaluation.runEmail")(function* (
   yield* Effect.forEach(ids, (receivedEmailId) =>
     inbox.register(syntheticEmail({ entry, receivedEmailId, firstId, address, receivedAt, image }))
   );
-  yield* processEmailDeliveries({ ids, address });
-  return scoreObservation(entry, yield* observeScenario(scenario.client));
+  const completed = yield* processEmailDeliveries({ ids, address });
+  return [
+    ...scoreObservation(entry, yield* observeScenario(scenario.client)),
+    check("workflow-completed", completed),
+  ];
 });

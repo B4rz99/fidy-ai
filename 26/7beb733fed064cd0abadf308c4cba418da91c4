@@ -1,0 +1,30 @@
+.agents/skills/show-me/SKILL.md
+  s_0003ccbfad6818::t_242b11ffca7844 1-111,114-127
+  s_0003ccbfad6818::t_3ec95bf4e3aecd 112-113
+docs/research/mistral-compaction-preflight.md
+  s_8061aea7e969cc::t_fecf2a8f85942b 1-128
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "267beb733fed064cd0abadf308c4cba418da91c4",
+  "prompts": {},
+  "sessions": {
+    "s_0003ccbfad6818": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a06ec4-2cc5-76c3-959a-fd27e1e0fc06",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": null
+    },
+    "s_8061aea7e969cc": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a07e6a-02b9-7125-a200-3155427e5a02",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

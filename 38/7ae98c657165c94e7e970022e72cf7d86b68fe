@@ -7,6 +7,8 @@ apps/server/src/shell/ingestion/email-forwarding-repo.ts
   s_8ae25420841aa7::t_cfc28f4d3bb845 13
   s_8ae25420841aa7::t_6aaf130fc3f883 911-912,915-916,918,920-924
   s_8ae25420841aa7::t_69c2bc83c27ead 917
+  s_8ae25420841aa7::t_189f2d873bcb38 34
+  s_8ae25420841aa7::t_1c6504976dd535 14,633-637,678,687,694-701,707-708,710-712,734,736-737,740-742,749,751-754,756-766
 apps/server/tools/email-formats/generate.ts
   s_8ae25420841aa7::t_0aa40cdf7775ea 29
   s_8ae25420841aa7::t_16f673d0abf680 27-28,30
@@ -17,6 +19,9 @@ apps/server/src/shell/ingestion/email-forwarding.test.ts
   s_8ae25420841aa7::t_370b2c72e824a6 974-978
   s_8ae25420841aa7::t_d3d988de1d5115 882
   s_8ae25420841aa7::t_d8d055d7e56fcd 329,333,380
+  s_8ae25420841aa7::t_0e2d4c26142976 790,794
+  s_8ae25420841aa7::t_cc0469e10456c8 515,522
+  s_8ae25420841aa7::t_3353b324b6c9c8 379,381-389
 apps/server/src/shell/ingestion/email-interpretation/formats/bbva-pse/format.ts
   s_8ae25420841aa7::t_9a9f41fff05b0f 1,11-13,16-18,22,26,30-38,40-42,47-51
   s_8ae25420841aa7::t_1a7d5c9ce93855 3,39,43-46
@@ -106,6 +111,8 @@ apps/server/src/shell/ingestion/email-interpretation/interpret.ts
   s_8ae25420841aa7::t_591e59106a56d9 121
   s_8ae25420841aa7::t_cf0e95e865b0d7 4-7,19-20,154-161
   s_8ae25420841aa7::t_2e6063d0024f11 45-54,56-68,73,76,78,99-107,109-117,119-120,122-137,139-144,147-153,162-167,171-175,184-188
+  s_8ae25420841aa7::t_9431fea58dd7af 11,23-24,26-28
+  s_8ae25420841aa7::t_21c3c27217538a 3,25
 apps/server/src/shell/http.ts
   s_8ae25420841aa7::t_a37e09e3b61493 297
 apps/server/src/shell/ingestion/email-interpretation/formats/davibank-card/fixtures/positive.synthetic.html
@@ -140,6 +147,7 @@ apps/server/src/shell/ingestion/email-interpretation.integration.test.ts
   s_8ae25420841aa7::t_59b71b74791b7d 12,14
   s_8ae25420841aa7::t_b96712107947f6 1-3,5-9,15-36,42-53,55-59,64-65,67,71-81,84,86-90,95-129,182-185
   s_8ae25420841aa7::t_453807aae5377a 130-137,139-141,143-181
+  s_8ae25420841aa7::t_9db69c0aa48988 4,10-11,13,37-41,54,85,138,142
 apps/server/src/shell/ingestion/email-interpretation/formats/rappicard-purchase/fixtures/positive.synthetic.html
   s_8ae25420841aa7::t_a37e09e3b61493 1-67
 apps/server/src/core/transactions/account-hints.ts
@@ -165,6 +173,7 @@ apps/server/package.json
 apps/server/src/shell/db/migrations/0053-notification-email-interpretation.ts
   s_8ae25420841aa7::t_a66b7e8495fd0b 1-7,27-83,85-90
   s_8ae25420841aa7::t_567cb860449d55 84
+  s_8ae25420841aa7::t_d1c370ed55b354 8-26
 apps/server/src/shell/ingestion/email-interpretation/catalog.generated.ts
   s_8ae25420841aa7::t_4f44dd69540cab 1-7
 apps/server/src/core/transactions/reconciliation.test.ts
@@ -177,8 +186,17 @@ apps/server/src/shell/ingestion/email-worker.ts
   s_8ae25420841aa7::t_e66863a453fbde 15,345
   s_8ae25420841aa7::t_99eb309907145b 380-381
   s_8ae25420841aa7::t_d570950aea0cfe 457
+  s_8ae25420841aa7::t_8d4e7f3182c87e 59
+  s_8ae25420841aa7::t_ad53beee6cee16 58,60,94,328-334,336,414-419,480,484,493,513
 package.json
   s_8ae25420841aa7::t_f28ac38e638b96 32-33
+apps/server/src/shell/db/migrations/registry.ts
+  s_8ae25420841aa7::t_3838c5f0f86781 52,114
+apps/server/src/shell/ingestion/forwarded-email-workflow.integration.test.ts
+  s_8ae25420841aa7::t_22199727c74eb8 107-117,176-177,290,333,364,400,461
+apps/server/src/shell/ingestion/forwarded-email-recovery.test.ts
+  s_8ae25420841aa7::t_17cf7a5d86b220 150-151
+  s_8ae25420841aa7::t_e6cc8a4aa41664 152-203,205-216,220,226,234-236,238-257,259-260,262-263,267-284
 ---
 {
   "schema_version": "authorship/3.0.0",

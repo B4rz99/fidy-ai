@@ -111,6 +111,11 @@ const checks: Array<Check> = [
   rootCheck("static", "Web design-system policy", ["bun", "run", "check:design-system"]),
   rootCheck("static", "Shadcn output integrity", ["bun", "run", "check:shadcn"]),
   rootCheck("static", "Generated contract freshness", ["bun", "run", "contracts:check:freshness"]),
+  rootCheck("static", "Generated notification-email format freshness", [
+    "bun",
+    "run",
+    "email-formats:check",
+  ]),
   rootCheck("static", "Base contract compatibility", [
     "bun",
     "run",
@@ -138,6 +143,13 @@ const checks: Array<Check> = [
     ...rootCheck("unit", "Server core tests", ["bun", "run", "test:core"]),
     env: coreEnvironment,
   },
+  rootCheck("unit", "Notification-email interpretation tests", [
+    "bun",
+    "run",
+    "--cwd",
+    "apps/server",
+    "test:email-interpretation",
+  ]),
   rootCheck("unit", "Web tests", ["bun", "run", "--cwd", "apps/web", "test"]),
   rootCheck("unit", "Web Istanbul coverage", ["bun", "run", "--cwd", "apps/web", "test:coverage"]),
   rootCheck("unit", "Trusted preview artifact policy", ["bun", "run", "test:preview-policy"]),

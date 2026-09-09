@@ -32,7 +32,6 @@ import { InsightsLive } from "~/shell/insights/handlers";
 import { StatementColumnMapper } from "~/shell/ingestion/column-mapper";
 import { IngestionLive } from "~/shell/ingestion/handlers";
 import { StatementIngestionWorkerLive } from "~/shell/ingestion/worker";
-import { NotificationEmailExtractor } from "~/shell/ingestion/email-extractor";
 import {
   ForwardedEmailEvidenceRetentionLive,
   ForwardedEmailExecutionRetentionLive,
@@ -295,11 +294,7 @@ const HostedForwardedEmailOperationsLive = Layer.mergeAll(
   ForwardedEmailQueueLive,
   ForwardedEmailEvidenceRetentionLive,
   ForwardedEmailExecutionRetentionLive
-).pipe(
-  Layer.provide(ForwardedEmailProcessor.layer),
-  Layer.provide(ResendReceivingClient.layer),
-  Layer.provide(NotificationEmailExtractor.layer.pipe(Layer.provide(OpenAiLanguageModelLive)))
-);
+).pipe(Layer.provide(ForwardedEmailProcessor.layer), Layer.provide(ResendReceivingClient.layer));
 
 const HostedOnboardingDeliveryLive = Layer.merge(
   OnboardingEmailDeliveryWorkflowLive,

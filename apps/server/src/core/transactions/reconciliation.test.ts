@@ -1,8 +1,13 @@
 import { expect, it } from "@effect/vitest";
-import { BigDecimal, DateTime, Effect, Option } from "effect";
+import { BigDecimal, DateTime, Effect, Option, Schema } from "effect";
 import { Currency, Money } from "~/core/_shared/money";
+import { AccountHints } from "./account-hints";
 import { TransactionId } from "./model";
-import { type ReconciliationMember, decideTransactionLink } from "./reconciliation";
+import {
+  type ReconciliationMember,
+  decideTransactionLink,
+  projectReconciliationHints,
+} from "./reconciliation";
 
 const member = (id: string): ReconciliationMember => ({
   id: TransactionId.make(id),
@@ -52,8 +57,10 @@ it.effect("uses the greater Transaction id to break equal statement timestamps",
     } satisfies ReconciliationMember;
 
     const decision = yield* decideTransactionLink(first, second);
+    const reversedDecision = yield* decideTransactionLink(second, first);
 
     expect(decision.statementTransactionId).toEqual(Option.some(second.id));
+    expect(reversedDecision.statementTransactionId).toEqual(Option.some(second.id));
   })
 );
 
@@ -73,6 +80,24 @@ it.effect("rejects a different Currency before choosing authoritative members", 
     expect(failure).toMatchObject({
       _tag: "IneligibleTransactionPair",
       reason: "different-currency",
+    });
+  })
+);
+
+it.effect("projects only comparison semantics for account hints", () =>
+  Effect.gen(function* () {
+    const card0012 = yield* Schema.decodeEffect(AccountHints)({ cardLastFour: "0012" });
+    const card0099 = yield* Schema.decodeEffect(AccountHints)({ cardLastFour: "0099" });
+    const absent = yield* Schema.decodeEffect(AccountHints)({});
+
+    expect(yield* projectReconciliationHints([card0012], [card0012])).toEqual({
+      hintComparison: "equal",
+    });
+    expect(yield* projectReconciliationHints([card0012], [absent])).toEqual({
+      hintComparison: "unknown",
+    });
+    expect(yield* projectReconciliationHints([card0012], [card0099])).toEqual({
+      hintComparison: "conflict",
     });
   })
 );

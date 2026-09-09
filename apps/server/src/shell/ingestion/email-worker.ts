@@ -12,6 +12,7 @@ import {
 } from "effect";
 import { InterpretationRevision } from "~/core/_shared/interpretation-revision";
 import {
+  type EmailRawSampleReviewReason,
   RawEmailIngestSample,
   ReceivedEmailContent,
   type ReceivedEmailContent as ReceivedEmailContentType,
@@ -54,10 +55,9 @@ import {
   storeForwardedEmailInterpretationInScope,
 } from "./email-forwarding-repo";
 import {
-  type NotificationEmailExtractionFailed,
-  NotificationEmailExtractor,
-  withNotificationEmailExtractionDeadline,
-} from "./email-extractor";
+  type NotificationEmailInterpretationEvidence,
+  interpretNotificationEmail,
+} from "~/shell/ingestion/email-interpretation/interpret";
 import { emailIngestRetentionDays } from "./email-retention";
 import type { ForwardedEmailWorkflowPayload } from "./forwarded-email-execution";
 import { ResendReceivingClient } from "./resend-receiving-client";
@@ -91,8 +91,8 @@ class ForwardedEmailWorkerConfig extends Context.Service<
 /** Production configuration Adapter for bounded retrieval and evidence retention. */
 export const ForwardedEmailWorkerConfigLive = ForwardedEmailWorkerConfig.layer;
 
-/** Durable revision attached to model-derived notification-email interpretations. */
-export const notificationEmailExtractorRevision = "notification-email-extractor-v1";
+/** Durable revision attached to review decisions without a recognized format revision. */
+export const notificationEmailInterpreterRevision = "notification-email-interpreter-v1";
 /** Durable revision attached to automatic value-free redaction candidates. */
 export const notificationEmailAnonymizationRevision = "email-redaction-candidate-v1";
 
@@ -192,26 +192,6 @@ const classifyConsentLossInScope = Effect.fn(function* (context: ForwardedEmailE
 const classifyConsentLoss = Effect.fn(function* (context: ForwardedEmailExecutionContext) {
   return yield* withSubjectLock(context.userId, classifyConsentLossInScope(context));
 });
-
-type InterpretationFromResult = (
-  result: Result.Result<
-    TransactionExtractionType,
-    ConsentRevokedDuringEmailProcessing | NotificationEmailExtractionFailed
-  >
-) => Option.Option<ForwardedEmailInterpretation>;
-
-const interpretationFromResult: InterpretationFromResult = (result) => {
-  if (Result.isFailure(result)) {
-    return result.failure._tag === "ConsentRevokedDuringEmailProcessing"
-      ? Option.none()
-      : Option.some({ _tag: "ModelUnavailable" });
-  }
-  return Option.some(
-    Result.isSuccess(Schema.encodeUnknownResult(TransactionExtraction)(result.success))
-      ? { _tag: "Extracted", extraction: result.success }
-      : { _tag: "InvalidExtraction" }
-  );
-};
 
 const persistForwardedEmailInterpretation = Effect.fn(function* (input: {
   readonly context: ForwardedEmailExecutionContext;
@@ -345,21 +325,15 @@ export const interpretForwardedEmail = Effect.fn("ForwardedEmail.interpret")(fun
     findRetainedForwardedEmailInScope(context)
   );
   if (Option.isNone(retained)) return { outcome: "evidence-expired" as const };
-  const extractor = yield* NotificationEmailExtractor;
-  const result = yield* Effect.result(
-    useCurrentConsentForExternalEffect(
-      context,
-      withNotificationEmailExtractionDeadline(extractor.extract(retained.value.content))
-    )
-  );
-  const interpretation = interpretationFromResult(result);
-  if (Option.isNone(interpretation)) {
-    return { outcome: yield* classifyConsentLoss(context) };
-  }
-  const stored = yield* persistForwardedEmailInterpretation({
-    context,
-    interpretation: interpretation.value,
+  const interpretation = yield* interpretNotificationEmail({
+    content: retained.value.content,
+    context: {
+      serviceMarket: context.serviceMarket,
+      locale: context.locale,
+      timeZone: context.timeZone,
+    },
   });
+  const stored = yield* persistForwardedEmailInterpretation({ context, interpretation });
   return stored
     ? { outcome: "prepared" as const }
     : { outcome: yield* classifyConsentLoss(context) };
@@ -368,7 +342,7 @@ export const interpretForwardedEmail = Effect.fn("ForwardedEmail.interpret")(fun
 type ReviewInput = Readonly<{
   context: ForwardedEmailExecutionContext;
   sampleId: IngestSampleId;
-  reason: "model-unavailable" | "canonical-validation-failed";
+  reason: EmailRawSampleReviewReason;
   extraction: Option.Option<TransactionExtraction>;
 }>;
 
@@ -383,14 +357,14 @@ const createReview = Effect.fnUntraced(function* (input: ReviewInput) {
       reason: input.reason,
       extraction: input.extraction,
     },
-    extractorRevision: notificationEmailExtractorRevision,
+    extractorRevision: notificationEmailInterpreterRevision,
     issues: [
       {
         path: "",
         message:
-          input.reason === "model-unavailable"
-            ? "The notification email could not be interpreted after bounded model attempts."
-            : "The interpreted email could not be captured as a canonical Transaction.",
+          input.reason === "canonical-validation-failed"
+            ? "The interpreted email could not be captured as a canonical Transaction."
+            : "The notification email requires review because deterministic interpretation was not safe.",
       },
     ],
     createdAt: yield* DateTime.now,
@@ -402,6 +376,7 @@ type SettlementExtraction = Readonly<{
   sampleId: IngestSampleId;
   contentHash: string;
   extraction: TransactionExtractionType;
+  evidence: NotificationEmailInterpretationEvidence;
 }>;
 
 const settleExtraction = Effect.fn(function* (input: SettlementExtraction) {
@@ -436,7 +411,12 @@ const settleExtraction = Effect.fn(function* (input: SettlementExtraction) {
         messageContentSha256: contentHash,
         sourceFormat: "notification-email",
         parserRevision: InterpretationRevision.make(context.parserRevision),
-        extractorRevision: InterpretationRevision.make(notificationEmailExtractorRevision),
+        extractorRevision: input.evidence.revision,
+        deterministicInterpretation: {
+          formatId: input.evidence.formatId,
+          currencyBasis: input.evidence.currencyBasis,
+          accountHints: input.evidence.accountHints,
+        },
       },
     })
   );
@@ -497,14 +477,11 @@ export const settleForwardedEmail = Effect.fn("ForwardedEmail.settle")(
         if (Option.isNone(retained) || Option.isNone(interpretation)) {
           return { outcome: "evidence-expired" as const };
         }
-        if (interpretation.value._tag !== "Extracted") {
+        if (interpretation.value._tag === "NeedsReview") {
           yield* createReview({
             context,
             sampleId: retained.value.id,
-            reason:
-              interpretation.value._tag === "ModelUnavailable"
-                ? "model-unavailable"
-                : "canonical-validation-failed",
+            reason: interpretation.value.reason,
             extraction: Option.none(),
           });
         } else {
@@ -513,6 +490,7 @@ export const settleForwardedEmail = Effect.fn("ForwardedEmail.settle")(
             sampleId: retained.value.id,
             contentHash: retained.value.contentHash,
             extraction: interpretation.value.extraction,
+            evidence: interpretation.value.evidence,
           });
         }
         return { outcome: "completed" as const };
@@ -532,7 +510,7 @@ export const settleForwardedEmailRetrievalFailure = Effect.fn(
         context,
         reviewId: NeedsReviewItemId.make(yield* crypto.randomUUIDv4.pipe(Effect.orDie)),
         evidence: { _tag: "ProviderMessage", reason: "provider-retrieval-failed" },
-        extractorRevision: notificationEmailExtractorRevision,
+        extractorRevision: notificationEmailInterpreterRevision,
         issues: [describeForwardedEmailProviderFailure(reason)],
         createdAt: yield* DateTime.now,
       });

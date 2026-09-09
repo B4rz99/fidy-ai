@@ -13,6 +13,13 @@ import {
   Transaction,
   TransactionId,
 } from "~/core/transactions/model";
+import {
+  type AccountHints,
+  InstrumentLabel,
+  LastFourDigits,
+  NotificationCurrencyBasis,
+  NotificationFormatId,
+} from "~/core/transactions/account-hints";
 
 /** Relational Transaction projection decoded before reconstruction into the canonical model. */
 export const TransactionFlatRow = Schema.Struct({
@@ -95,62 +102,97 @@ export const SourceAttestationRow = Schema.Struct({
   messageContentSha256: Schema.OptionFromNullOr(
     NotificationEmailSourceAttestation.fields.messageContentSha256
   ),
+  notificationFormatId: Schema.OptionFromNullOr(NotificationFormatId),
+  currencyBasis: Schema.OptionFromNullOr(NotificationCurrencyBasis),
+  cardLastFour: Schema.OptionFromNullOr(LastFourDigits),
+  accountLastFour: Schema.OptionFromNullOr(LastFourDigits),
+  instrumentLabel: Schema.OptionFromNullOr(InstrumentLabel),
   createdAt: Schema.DateTimeUtcFromDate,
 });
 
 const decodeSourceAttestation = Schema.decodeUnknownEffect(SourceAttestation);
 
+type SourceAttestationRowType = typeof SourceAttestationRow.Type;
+type AttestationBase = typeof SourceAttestationCommon.Encoded & {
+  readonly kind: SourceAttestationRowType["kind"];
+};
+type DeterministicInterpretationProperty = Pick<
+  typeof NotificationEmailSourceAttestation.Encoded,
+  "deterministicInterpretation"
+>;
+
+const attestationBaseFromRow = (source: SourceAttestationRowType): AttestationBase => ({
+  id: source.id,
+  transactionId: source.transactionId,
+  kind: source.kind,
+  serviceMarket: source.serviceMarket,
+  locale: source.locale,
+  timeZone: source.timeZone,
+  interpretationRevision: source.interpretationRevision,
+  ...(Option.isSome(source.sourceChannel) ? { sourceChannel: source.sourceChannel.value } : {}),
+  ...(Option.isSome(source.sourceProvider) ? { sourceProvider: source.sourceProvider.value } : {}),
+  createdAt: DateTime.formatIso(source.createdAt),
+});
+
+const accountHintsFromRow = (source: SourceAttestationRowType): typeof AccountHints.Encoded => ({
+  ...(Option.isSome(source.cardLastFour) ? { cardLastFour: source.cardLastFour.value } : {}),
+  ...(Option.isSome(source.accountLastFour)
+    ? { accountLastFour: source.accountLastFour.value }
+    : {}),
+  ...(Option.isSome(source.instrumentLabel)
+    ? { instrumentLabel: source.instrumentLabel.value }
+    : {}),
+});
+
+const deterministicInterpretationFromRow = (
+  source: SourceAttestationRowType
+): DeterministicInterpretationProperty =>
+  Option.match(
+    Option.all({ formatId: source.notificationFormatId, currencyBasis: source.currencyBasis }),
+    {
+      onNone: () => ({}),
+      onSome: ({ formatId, currencyBasis }) => ({
+        deterministicInterpretation: {
+          formatId,
+          currencyBasis,
+          accountHints: accountHintsFromRow(source),
+        },
+      }),
+    }
+  );
+
 /** Reconstructs the canonical SourceAttestation variant from one decoded relational row. */
 export const sourceAttestationFromRow = (
-  source: typeof SourceAttestationRow.Type
+  source: SourceAttestationRowType
 ): Effect.Effect<SourceAttestation, Schema.SchemaError> => {
-  const {
-    sourceChannel,
-    sourceProvider,
-    statementSubmissionId,
-    statementRecordNumber,
-    statementContentHash,
-    sourceFormat,
-    extractorRevision,
-    receivedEmailId,
-    messageChannel,
-    messageProvider,
-    providerMessageId,
-    messageContentSha256,
-    ...row
-  } = source;
-  const attestationBase = {
-    ...row,
-    ...(Option.isSome(sourceChannel) ? { sourceChannel: sourceChannel.value } : {}),
-    ...(Option.isSome(sourceProvider) ? { sourceProvider: sourceProvider.value } : {}),
-    createdAt: DateTime.formatIso(row.createdAt),
-  };
+  const attestationBase = attestationBaseFromRow(source);
   switch (source.kind) {
     case "manual":
       return decodeSourceAttestation(attestationBase);
     case "statement-line":
       return decodeSourceAttestation({
         ...attestationBase,
-        statementSubmissionId: Option.getOrThrow(statementSubmissionId),
-        statementRecordNumber: Option.getOrThrow(statementRecordNumber),
-        statementContentHash: Option.getOrThrow(statementContentHash),
-        sourceFormat: Option.getOrThrow(sourceFormat),
-        extractorRevision: Option.getOrThrow(extractorRevision),
+        statementSubmissionId: Option.getOrThrow(source.statementSubmissionId),
+        statementRecordNumber: Option.getOrThrow(source.statementRecordNumber),
+        statementContentHash: Option.getOrThrow(source.statementContentHash),
+        sourceFormat: Option.getOrThrow(source.sourceFormat),
+        extractorRevision: Option.getOrThrow(source.extractorRevision),
       });
     case "notification-email":
       return decodeSourceAttestation({
         ...attestationBase,
-        receivedEmailId: Option.getOrThrow(receivedEmailId),
+        receivedEmailId: Option.getOrThrow(source.receivedEmailId),
         messageEvidence: Option.getOrThrow(
           Option.all({
-            channel: messageChannel,
-            provider: messageProvider,
-            providerMessageId,
+            channel: source.messageChannel,
+            provider: source.messageProvider,
+            providerMessageId: source.providerMessageId,
           })
         ),
-        messageContentSha256: Option.getOrThrow(messageContentSha256),
-        sourceFormat: Option.getOrThrow(sourceFormat),
-        extractorRevision: Option.getOrThrow(extractorRevision),
+        messageContentSha256: Option.getOrThrow(source.messageContentSha256),
+        sourceFormat: Option.getOrThrow(source.sourceFormat),
+        extractorRevision: Option.getOrThrow(source.extractorRevision),
+        ...deterministicInterpretationFromRow(source),
       });
   }
 };
@@ -166,4 +208,7 @@ export const sourceAttestationColumns = `id, transaction_id AS "transactionId", 
   extractor_revision AS "extractorRevision", received_email_id AS "receivedEmailId",
   message_channel AS "messageChannel", message_provider AS "messageProvider",
   provider_message_id AS "providerMessageId",
-  message_content_sha256 AS "messageContentSha256", created_at AS "createdAt"`;
+  message_content_sha256 AS "messageContentSha256",
+  notification_format_id AS "notificationFormatId", currency_basis AS "currencyBasis",
+  card_last_four AS "cardLastFour", account_last_four AS "accountLastFour",
+  instrument_label AS "instrumentLabel", created_at AS "createdAt"`;

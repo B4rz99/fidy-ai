@@ -10,6 +10,8 @@ import {
   type EmailForwardingAddress,
   EmailNeedsReviewItem,
   EmailNeedsReviewReason,
+  type EmailRawSampleReviewReason,
+  NotificationEmailInterpretationReviewReason,
   type RawEmailIngestSample,
   ReceivedEmailContent,
 } from "~/core/ingestion/model";
@@ -29,6 +31,7 @@ import {
   emailAllowancePeriod,
 } from "~/core/ingestion/rules";
 import { TransactionExtraction, type TransactionId } from "~/core/transactions/model";
+import { NotificationEmailInterpretationEvidence } from "~/shell/ingestion/email-interpretation/interpret";
 import { withUserTransaction } from "~/shell/db/user-transaction";
 
 const AddressRow = Schema.Struct({
@@ -627,9 +630,11 @@ export const insertRawEmailSampleInScope = Effect.fn("insertRawEmailSampleInScop
 );
 
 const ForwardedEmailInterpretation = Schema.Union([
-  Schema.TaggedStruct("Extracted", { extraction: TransactionExtraction }),
-  Schema.TaggedStruct("InvalidExtraction", {}),
-  Schema.TaggedStruct("ModelUnavailable", {}),
+  Schema.TaggedStruct("Interpreted", {
+    extraction: TransactionExtraction,
+    evidence: NotificationEmailInterpretationEvidence,
+  }),
+  Schema.TaggedStruct("NeedsReview", { reason: NotificationEmailInterpretationReviewReason }),
 ]);
 type RetainedForwardedEmail = Readonly<{
   id: IngestSampleId;
@@ -670,16 +675,7 @@ export const findRetainedForwardedEmailInScope: (
 /** Bounded interpretation retained in User-owned storage until terminal settlement. */
 export type ForwardedEmailInterpretation = typeof ForwardedEmailInterpretation.Type;
 
-type PersistedInterpretationOutcome = (
-  interpretation: ForwardedEmailInterpretation
-) => "extracted" | "invalid-extraction" | "model-unavailable";
-
-const persistedInterpretationOutcome: PersistedInterpretationOutcome = (interpretation) => {
-  if (interpretation._tag === "Extracted") return "extracted";
-  return interpretation._tag === "InvalidExtraction" ? "invalid-extraction" : "model-unavailable";
-};
-
-/** Idempotently retains one model outcome outside generic workflow storage. */
+/** Idempotently retains one deterministic outcome outside generic workflow storage. */
 export const storeForwardedEmailInterpretationInScope = Effect.fn(
   "storeForwardedEmailInterpretationInScope"
 )(function* (
@@ -688,11 +684,19 @@ export const storeForwardedEmailInterpretationInScope = Effect.fn(
 ) {
   const sql = yield* SqlClient.SqlClient;
   const extraction =
-    interpretation._tag === "Extracted"
+    interpretation._tag === "Interpreted"
       ? yield* Schema.encodeEffect(UnknownJsonString)(
           yield* Schema.encodeEffect(TransactionExtraction)(interpretation.extraction).pipe(
             Effect.orDie
           )
+        ).pipe(Effect.orDie)
+      : null;
+  const evidence =
+    interpretation._tag === "Interpreted"
+      ? yield* Schema.encodeEffect(UnknownJsonString)(
+          yield* Schema.encodeEffect(NotificationEmailInterpretationEvidence)(
+            interpretation.evidence
+          ).pipe(Effect.orDie)
         ).pipe(Effect.orDie)
       : null;
   const inserted = yield* SqlSchema.findOneOption({
@@ -700,11 +704,12 @@ export const storeForwardedEmailInterpretationInScope = Effect.fn(
     Result: Schema.Struct({ stored: Schema.Boolean }),
     execute: () => sql`
       INSERT INTO forwarded_email_interpretations (
-        received_email_id, user_id, outcome, extraction, created_at, expires_at
+        received_email_id, user_id, outcome, extraction, interpretation_evidence,
+        review_reason, created_at, expires_at
       )
-      SELECT ${context.receivedEmailId}, ${context.userId},
-        ${persistedInterpretationOutcome(interpretation)}, ${extraction}::jsonb, now(),
-        sample.expires_at
+      SELECT ${context.receivedEmailId}, ${context.userId}, ${interpretation._tag === "Interpreted" ? "interpreted" : "needs-review"},
+        ${extraction}::jsonb, ${evidence}::jsonb,
+        ${interpretation._tag === "NeedsReview" ? interpretation.reason : null}, now(), sample.expires_at
       FROM forwarded_email_receipts AS receipt
       JOIN raw_email_ingest_samples AS sample
         ON sample.received_email_id = receipt.received_email_id
@@ -726,29 +731,39 @@ export const findForwardedEmailInterpretationInScope = Effect.fn(
   const row = yield* SqlSchema.findOneOption({
     Request: Schema.Struct({ userId: UserId, receivedEmailId: ResendReceivedEmailId }),
     Result: Schema.Struct({
-      outcome: Schema.Literals(["extracted", "invalid-extraction", "model-unavailable"]),
+      outcome: Schema.Literals(["interpreted", "needs-review"]),
       extraction: Schema.OptionFromNullOr(Schema.Unknown),
+      evidence: Schema.OptionFromNullOr(Schema.Unknown),
+      reviewReason: Schema.OptionFromNullOr(NotificationEmailInterpretationReviewReason),
     }),
     execute: (input) => sql`
-      SELECT outcome, extraction FROM forwarded_email_interpretations
+      SELECT outcome, extraction, interpretation_evidence AS evidence,
+        review_reason AS "reviewReason"
+      FROM forwarded_email_interpretations
       WHERE user_id = ${input.userId} AND received_email_id = ${input.receivedEmailId}
     `,
   })(context).pipe(Effect.orDie);
   return yield* Option.match(row, {
     onNone: () => Effect.succeed(Option.none<ForwardedEmailInterpretation>()),
     onSome: (value) =>
-      value.outcome !== "extracted"
+      value.outcome === "needs-review"
         ? Effect.succeed(
-            Option.some(
-              value.outcome === "model-unavailable"
-                ? ({ _tag: "ModelUnavailable" } as const)
-                : ({ _tag: "InvalidExtraction" } as const)
-            )
+            Option.some({
+              _tag: "NeedsReview" as const,
+              reason: Option.getOrThrow(value.reviewReason),
+            })
           )
-        : Schema.decodeUnknownEffect(TransactionExtraction)(
-            Option.getOrThrow(value.extraction)
-          ).pipe(
-            Effect.map((extraction) => Option.some({ _tag: "Extracted" as const, extraction })),
+        : Effect.all({
+            extraction: Schema.decodeUnknownEffect(TransactionExtraction)(
+              Option.getOrThrow(value.extraction)
+            ),
+            evidence: Schema.decodeUnknownEffect(NotificationEmailInterpretationEvidence)(
+              Option.getOrThrow(value.evidence)
+            ),
+          }).pipe(
+            Effect.map(({ extraction, evidence }) =>
+              Option.some({ _tag: "Interpreted" as const, extraction, evidence })
+            ),
             Effect.orDie
           ),
   });
@@ -899,7 +914,7 @@ type CompleteForwardedEmailReviewInput = Readonly<{
     | Readonly<{
         _tag: "RawSample";
         sampleId: IngestSampleId;
-        reason: "model-unavailable" | "canonical-validation-failed";
+        reason: EmailRawSampleReviewReason;
         extraction: Option.Option<TransactionExtraction>;
       }>;
   extractorRevision: string;

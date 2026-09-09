@@ -2,7 +2,6 @@ import { UnknownJsonString } from "~/schema-compatibility";
 import { expect, layer } from "@effect/vitest";
 import { Webhook } from "svix";
 import {
-  BigDecimal,
   Context,
   Crypto,
   DateTime,
@@ -14,10 +13,8 @@ import {
   Schema,
   Stream,
 } from "effect";
-import { LanguageModel } from "effect/unstable/ai";
 import { HttpBody, HttpClient } from "effect/unstable/http";
 import { type SqlClient, SqlSchema, type Statement } from "effect/unstable/sql";
-import { Money } from "~/core/_shared/money";
 import { ConsentRecordId } from "~/core/consent/model";
 import { makeColombianUser } from "~/core/identity/rules";
 import { UserId } from "~/core/identity/reference";
@@ -25,7 +22,6 @@ import {
   ReceivedEmailContent,
   type ReceivedEmailContent as ReceivedEmailContentType,
 } from "~/core/ingestion/model";
-import { type TransactionExtraction } from "~/core/transactions/model";
 import {
   IngestSampleId,
   ResendReceivedEmailId,
@@ -42,11 +38,6 @@ import {
 import { upsertStableUserFixture } from "~/shell/testing/identity-fixtures";
 import { testResendWebhookSecret } from "~/shell/testing/test-config";
 import { ApprovedOperatorId, ForwardedEmailSampleApproval } from "./email-anonymization-approval";
-import {
-  NotificationEmailExtractionFailed,
-  NotificationEmailExtractor,
-  type NotificationEmailExtractorService,
-} from "./email-extractor";
 import { runEmailIngestRetention } from "./email-retention";
 import { publishForwardedEmailWorkflow } from "./forwarded-email-execution";
 import { ForwardedEmailProcessor, forwardedEmailIngestion } from "./forwarded-email-ingestion";
@@ -334,42 +325,12 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         expect(forged.status).toBe(401);
 
         const receivedAt = DateTime.makeUnsafe("2020-01-02T02:00:00Z");
-        const SuccessfulLanguageModel = Layer.effect(
-          LanguageModel.LanguageModel,
-          LanguageModel.make({
-            generateText: () =>
-              Effect.succeed([
-                {
-                  type: "text" as const,
-                  text: encodeJson({
-                    money: { amount: "25000", currency: "COP" },
-                    counterparty: "Comercio de prueba",
-                    direction: "outflow",
-                    occurredAt: DateTime.formatIso(receivedAt),
-                  }),
-                },
-              ]),
-            streamText: () => Stream.die(new Error("email extraction is non-streaming")),
-          })
-        );
-        const extractor = Context.get(
-          yield* Layer.build(
-            NotificationEmailExtractor.layer.pipe(Layer.provide(SuccessfulLanguageModel))
-          ),
-          NotificationEmailExtractor
-        );
         const processWith = Effect.fn("test.processForwardedEmailThroughInterface")(function* (
-          provider: ResendReceivingClientService,
-          usedExtractor: NotificationEmailExtractorService = extractor
+          provider: ResendReceivingClientService
         ) {
           const context = yield* Layer.build(
             ForwardedEmailProcessor.layer.pipe(
-              Layer.provide(
-                Layer.merge(
-                  Layer.succeed(ResendReceivingClient, provider),
-                  Layer.succeed(NotificationEmailExtractor, usedExtractor)
-                )
-              )
+              Layer.provide(Layer.succeed(ResendReceivingClient, provider))
             )
           );
           yield* Context.get(context, ForwardedEmailProcessor).processNext;
@@ -415,9 +376,17 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
             receivedEmailId,
             from: "alerts@example.test",
             to,
-            subject: "Compra aprobada",
-            text: Option.some("Compra por COP 25000"),
-            html: Option.none(),
+            subject: "Compra con Tarjeta de Crédito",
+            text: Option.none(),
+            html: Option.some(`
+              <p>DAVIbank te notifica una compra con tu tarjeta <span>Visa Oro</span></p>
+              <table>
+                <tr><td>Comercio</td><td>COMERCIO FICTICIO</td></tr>
+                <tr><td>Monto</td><td>12,500</td></tr>
+                <tr><td>Fecha</td><td>2026/01/15</td></tr>
+                <tr><td>Hora</td><td>10:15:30</td></tr>
+              </table>
+            `),
             inlineImages: [],
             messageId: Option.some("provider-message-success"),
             createdAt: receivedAt,
@@ -462,63 +431,6 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           retrieveEmail: (receivedEmailId) =>
             Effect.succeed(providerContent(receivedEmailId, [first.data.address])),
         });
-        yield* makeDelivery("email_model_failure", first.data.address);
-        yield* processWith(
-          successfulProvider,
-          NotificationEmailExtractor.of({
-            extract: () =>
-              Effect.fail(new NotificationEmailExtractionFailed({ reason: "model-unavailable" })),
-          })
-        );
-        const modelReview = yield* getTestRow(
-          sql,
-          Schema.Struct({ count: Schema.Int }),
-          sql`
-          SELECT count(*)::int AS count FROM email_needs_review_items
-          WHERE received_email_id = 'email_model_failure' AND reason = 'model-unavailable'
-        `
-        );
-        expect(modelReview.count).toBe(1);
-        const modelReviewPage = yield* client.ingestion.listNeedsReviewItems({
-          query: { offset: Option.none(), limit: Option.none() },
-        });
-        const visibleModelReview = modelReviewPage.data.find(
-          (item) => item.sourceChannel === "forwarded-email" && item.reason === "model-unavailable"
-        );
-        expect(
-          visibleModelReview?.sourceChannel === "forwarded-email" &&
-            visibleModelReview.status === "pending"
-            ? "ingestSampleId" in visibleModelReview
-            : false
-        ).toBe(true);
-
-        const nonCanonicalExtraction: TransactionExtraction = {
-          money: Money.make({
-            amount: BigDecimal.fromStringUnsafe("0"),
-            currency: "COP",
-          }),
-          counterparty: Option.none(),
-          direction: "outflow",
-          occurredAt: receivedAt,
-        };
-        yield* makeDelivery("email_canonical_failure", first.data.address);
-        yield* processWith(
-          successfulProvider,
-          NotificationEmailExtractor.of({
-            extract: () => Effect.succeed(nonCanonicalExtraction),
-          })
-        );
-        const canonicalReview = yield* getTestRow(
-          sql,
-          Schema.Struct({ count: Schema.Int }),
-          sql`
-          SELECT count(*)::int AS count FROM email_needs_review_items
-          WHERE received_email_id = 'email_canonical_failure'
-            AND reason = 'canonical-validation-failed'
-        `
-        );
-        expect(canonicalReview.count).toBe(1);
-
         yield* makeDelivery("email_success_1", first.data.address);
         yield* processWith(successfulProvider);
         const captured = yield* getTestRow(
@@ -585,22 +497,6 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
             approvedBy: ApprovedOperatorId.make("operator@example.test"),
           })
         ).toBe(true);
-        yield* sql`
-          UPDATE forwarded_email_receipts
-          SET status = 'accepted', completed_at = NULL, review_item_id = NULL
-          WHERE received_email_id IN ('email_model_failure', 'email_canonical_failure')
-        `;
-        yield* sql`
-          INSERT INTO forwarded_email_interpretations (
-            received_email_id, user_id, outcome, extraction, created_at, expires_at
-          )
-          SELECT receipt.received_email_id, receipt.user_id, 'model-unavailable', NULL,
-            now(), sample.expires_at
-          FROM forwarded_email_receipts AS receipt
-          JOIN raw_email_ingest_samples AS sample
-            ON sample.received_email_id = receipt.received_email_id
-          WHERE receipt.received_email_id = 'email_model_failure'
-        `;
         const removed = yield* runEmailIngestRetention(DateTime.add(approvedAt, { days: 91 }));
         const retention = yield* getTestRow(
           sql,
@@ -609,8 +505,6 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
             anonymizedCount: Schema.Int,
             leakedTextCount: Schema.Int,
             interpretationCount: Schema.Int,
-            deferredReceiptStatus: Schema.String,
-            uninterpretedReceiptStatus: Schema.String,
             noSampleReceiptStatus: Schema.String,
           }),
           sql`
@@ -618,38 +512,21 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
             (SELECT count(*)::int FROM raw_email_ingest_samples) AS "rawCount",
             (SELECT count(*)::int FROM anonymized_email_ingest_samples) AS "anonymizedCount",
             (SELECT count(*)::int FROM anonymized_email_ingest_samples
-              WHERE structure LIKE '%Comercio%' OR structure LIKE '%25000%') AS "leakedTextCount",
+              WHERE structure LIKE '%Comercio%' OR structure LIKE '%12500%') AS "leakedTextCount",
             (SELECT count(*)::int FROM forwarded_email_interpretations)
               AS "interpretationCount",
-            (SELECT status FROM forwarded_email_receipts
-              WHERE received_email_id = 'email_model_failure') AS "deferredReceiptStatus",
-            (SELECT status FROM forwarded_email_receipts
-              WHERE received_email_id = 'email_canonical_failure') AS "uninterpretedReceiptStatus",
             (SELECT status FROM forwarded_email_receipts
               WHERE received_email_id = 'email_consent_deferred_expiry') AS "noSampleReceiptStatus"
         `
         );
-        expect(removed).toBe(3);
+        expect(removed).toBe(1);
         expect(retention).toEqual({
           rawCount: 0,
           anonymizedCount: 1,
           leakedTextCount: 0,
           interpretationCount: 0,
-          deferredReceiptStatus: "accepted",
-          uninterpretedReceiptStatus: "accepted",
           noSampleReceiptStatus: "deferred",
         });
-        const expiredReviewPage = yield* client.ingestion.listNeedsReviewItems({
-          query: { offset: Option.none(), limit: Option.none() },
-        });
-        expect(
-          expiredReviewPage.data.some(
-            (item) =>
-              item.sourceChannel === "forwarded-email" &&
-              item.reason === "model-unavailable" &&
-              item.status === "expired"
-          )
-        ).toBe(true);
         const tierTransitionUserId = UserId.make("f1d1a000-0000-4000-8000-00000000009d");
         yield* upsertStableUserFixture(
           tierTransitionUserId,
@@ -909,21 +786,12 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         Effect.gen(function* () {
           const sql = yield* MigrationSqlClient;
           yield* cleanupForwardedEmailFixtures(sql);
-          const extractor = NotificationEmailExtractor.of({
-            extract: () => Effect.die("provider failure must stop before extraction"),
-          });
           const processWith = Effect.fn("test.processConsentRace")(function* (
-            provider: ResendReceivingClientService,
-            usedExtractor: NotificationEmailExtractorService = extractor
+            provider: ResendReceivingClientService
           ) {
             const context = yield* Layer.build(
               ForwardedEmailProcessor.layer.pipe(
-                Layer.provide(
-                  Layer.merge(
-                    Layer.succeed(ResendReceivingClient, provider),
-                    Layer.succeed(NotificationEmailExtractor, usedExtractor)
-                  )
-                )
+                Layer.provide(Layer.succeed(ResendReceivingClient, provider))
               )
             );
             yield* Context.get(context, ForwardedEmailProcessor).processNext;
@@ -1103,19 +971,11 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         const context = yield* Layer.build(
           ForwardedEmailProcessor.layer.pipe(
             Layer.provide(
-              Layer.merge(
-                Layer.succeed(
-                  ResendReceivingClient,
-                  ResendReceivingClient.of({
-                    retrieveEmail: () => Effect.die("idle processing must not retrieve email"),
-                  })
-                ),
-                Layer.succeed(
-                  NotificationEmailExtractor,
-                  NotificationEmailExtractor.of({
-                    extract: () => Effect.die("idle processing must not call the model"),
-                  })
-                )
+              Layer.succeed(
+                ResendReceivingClient,
+                ResendReceivingClient.of({
+                  retrieveEmail: () => Effect.die("idle processing must not retrieve email"),
+                })
               )
             )
           )

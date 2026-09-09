@@ -2,6 +2,11 @@ import { Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import type { CapturedInterpretationContext } from "~/core/_shared/captured-interpretation-context";
 import { InterpretationRevision } from "~/core/_shared/interpretation-revision";
+import {
+  AccountHints,
+  NotificationInterpretationEvidence,
+  type NotificationInterpretationEvidence as NotificationInterpretationEvidenceType,
+} from "~/core/transactions/account-hints";
 import { TransactionUserDecisions } from "~/core/transactions/user-decisions";
 import { Money } from "~/core/_shared/money";
 import { CategoryId } from "~/core/categories/reference";
@@ -215,7 +220,10 @@ export type NotificationEmailAttestationInput = Readonly<
     | "messageContentSha256"
     | "sourceFormat"
     | "extractorRevision"
-  > & { readonly parserRevision: InterpretationRevision }
+  > & {
+    readonly parserRevision: InterpretationRevision;
+    readonly deterministicInterpretation: NotificationInterpretationEvidenceType;
+  }
 >;
 
 /** Inserts immutable notification-email provenance in the caller-owned User transaction. */
@@ -242,6 +250,11 @@ export const insertNotificationEmailSourceAttestationInScope = Effect.fn(
       sourceFormat: NotificationEmailSourceAttestation.fields.sourceFormat,
       parserRevision: InterpretationRevision,
       extractorRevision: InterpretationRevision,
+      notificationFormatId: NotificationInterpretationEvidence.fields.formatId,
+      currencyBasis: NotificationInterpretationEvidence.fields.currencyBasis,
+      cardLastFour: AccountHints.fields.cardLastFour,
+      accountLastFour: AccountHints.fields.accountLastFour,
+      instrumentLabel: AccountHints.fields.instrumentLabel,
     }),
     Result: SourceAttestationRow,
     execute: (row) => sql`
@@ -249,13 +262,15 @@ export const insertNotificationEmailSourceAttestationInScope = Effect.fn(
         transaction_id, kind, service_market, locale, time_zone, source_channel,
         source_provider, interpretation_revision, received_email_id, message_channel,
         message_provider, provider_message_id, message_content_sha256, source_format,
-        extractor_revision
+        extractor_revision, notification_format_id, currency_basis, card_last_four,
+        account_last_four, instrument_label
       )
       SELECT transaction.id, 'notification-email', ${row.serviceMarket}, ${row.locale},
         ${row.timeZone}, 'forwarded-email', 'resend', ${row.parserRevision},
         ${row.receivedEmailId}, ${row.messageChannel}, ${row.messageProvider},
         ${row.providerMessageId}, ${row.messageContentSha256}, ${row.sourceFormat},
-        ${row.extractorRevision}
+        ${row.extractorRevision}, ${row.notificationFormatId}, ${row.currencyBasis},
+        ${row.cardLastFour}, ${row.accountLastFour}, ${row.instrumentLabel}
       FROM transactions transaction
       WHERE transaction.id = ${row.transactionId} AND transaction.user_id = ${row.userId}
       RETURNING ${sql.literal(sourceAttestationColumns)}
@@ -267,5 +282,10 @@ export const insertNotificationEmailSourceAttestationInScope = Effect.fn(
     messageChannel: input.messageEvidence.channel,
     messageProvider: input.messageEvidence.provider,
     providerMessageId: input.messageEvidence.providerMessageId,
+    notificationFormatId: input.deterministicInterpretation.formatId,
+    currencyBasis: input.deterministicInterpretation.currencyBasis,
+    cardLastFour: input.deterministicInterpretation.accountHints.cardLastFour,
+    accountLastFour: input.deterministicInterpretation.accountHints.accountLastFour,
+    instrumentLabel: input.deterministicInterpretation.accountHints.instrumentLabel,
   }).pipe(Effect.flatMap(sourceAttestationFromRow), Effect.orDie);
 });

@@ -17,6 +17,7 @@
     "**/build",
     "**/coverage",
     "apps/server/contracts",
+    "apps/server/evaluation-results",
     ".claude",
     ".repos",
     ".pi/skills/shadcn",

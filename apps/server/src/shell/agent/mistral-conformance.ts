@@ -152,19 +152,6 @@ const makeRequest = (
   );
 };
 
-const decodeResponse = (
-  conformanceCase: ConformanceCase,
-  status: number,
-  body: Uint8Array
-): Effect.Effect<typeof ProviderResponse.Type, MistralConformanceError> => {
-  if (status < successfulStatusMinimum || status >= successfulStatusMaximumExclusive) {
-    return Effect.fail(conformanceError(conformanceCase, "provider_failed"));
-  }
-  return Schema.decodeEffect(ProviderResponseJson)(new TextDecoder().decode(body)).pipe(
-    Effect.mapError(() => conformanceError(conformanceCase, "provider_response_invalid"))
-  );
-};
-
 const validateResponse = Effect.fn("MistralConformance.validateResponse")(function* (
   conformanceCase: ConformanceCase,
   decoded: typeof ProviderResponse.Type
@@ -197,7 +184,15 @@ const executeCase = Effect.fn("MistralConformance.executeCase")(function* (
       Effect.timeout(conformanceTimeout),
       Effect.mapError(() => conformanceError(conformanceCase, "provider_failed"))
     );
-  const decoded = yield* decodeResponse(conformanceCase, response.status, response.body);
+  if (
+    response.status < successfulStatusMinimum ||
+    response.status >= successfulStatusMaximumExclusive
+  ) {
+    return yield* conformanceError(conformanceCase, "provider_failed");
+  }
+  const decoded = yield* Schema.decodeEffect(ProviderResponseJson)(
+    new TextDecoder().decode(response.body)
+  ).pipe(Effect.mapError(() => conformanceError(conformanceCase, "provider_response_invalid")));
   return yield* validateResponse(conformanceCase, decoded);
 });
 

@@ -1,0 +1,46 @@
+apps/server/src/shell/testing/pairing-workflow-crash-runner.ts
+  s_42471e805e9b67::t_22fc550efe01fd 17
+apps/server/src/shell/channels/whatsapp/disclosure-workflow.integration.test.ts
+  s_42471e805e9b67::t_b614fd18713afc 169-170,253,259,313,330,378,426,489
+apps/server/src/shell/channels/whatsapp/whatsapp-channel.test.ts
+  s_42471e805e9b67::t_1368ff54362e9e 133,142,147,896,3462
+  s_42471e805e9b67::t_5c28253877d3a9 138
+  s_42471e805e9b67::t_9c42e7ca62951a 550,563-564,570,572,1988,2449-2454,2458
+  s_42471e805e9b67::t_3cf317e3ea904d 134-137,139-141,143-146,850-866,3464-3465,3467-3471
+  s_42471e805e9b67::t_d5ce249fd94f69 201-203,3466
+  s_42471e805e9b67::t_b09297aa5fc63a 148
+apps/server/src/shell/channels/whatsapp/disclosure-races.test.ts
+  s_42471e805e9b67::t_dddafb6b037fc2 229,239,248,270,319
+  s_42471e805e9b67::t_e390268dcdd008 230,232-234,332
+  s_42471e805e9b67::t_b614fd18713afc 197,278,323
+apps/server/src/shell/email-authentication/replacement-workflow.integration.test.ts
+  s_42471e805e9b67::t_b614fd18713afc 197,215,242-243,271,290,293,317,332,352,374,404,462,485,511,566,581
+apps/server/src/shell/channels/whatsapp/disclosure-retention.test.ts
+  s_42471e805e9b67::t_0950d7e3c5bb7d 50-51,70-72
+apps/server/src/shell/email-authentication/pairing-workflow.integration.test.ts
+  s_42471e805e9b67::t_b614fd18713afc 176,203-204,225,242,268,308,345,369,384,402,439,514,571,622
+apps/server/src/shell/onboarding/delivery-workflow.integration.test.ts
+  s_42471e805e9b67::t_22fc550efe01fd 203-204,238,267,301,322
+apps/server/src/shell/agent/hosted-turns.integration.test.ts
+  s_42471e805e9b67::t_b614fd18713afc 320,323,411,414,435,463,515,584,642,645,740,743,765
+apps/server/src/shell/ingestion/email-forwarding.test.ts
+  s_42471e805e9b67::t_4063246c4f4fa1 626-630,633-634
+apps/server/src/shell/ingestion/forwarded-email-workflow.integration.test.ts
+  s_42471e805e9b67::t_710d0614ae6564 176-177,290,333,364,400,461
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.2",
+  "base_commit_sha": "09e0e99d62aed86d515faa60ef2fef55ae2a7911",
+  "prompts": {},
+  "sessions": {
+    "s_42471e805e9b67": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a083cc-2ce8-7422-b3c7-579a870ae987",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": null
+    }
+  }
+}

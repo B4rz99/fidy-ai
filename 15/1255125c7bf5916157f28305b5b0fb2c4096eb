@@ -1,0 +1,28 @@
+apps/server/src/shell/agent/mistral-conformance.ts
+  s_8061aea7e969cc::t_bb7691c3f693ff 101,110,163-165
+apps/server/src/shell/agent/fixtures/ministral-3b-2512-vocabulary.ts
+  s_8061aea7e969cc::t_3f72b38f183820 2-4
+docs/research/mistral-compaction-preflight.md
+  s_8061aea7e969cc::t_f8536d5164edd5 108,121,123,132-133
+apps/server/src/shell/agent/mistral-conformance.test.ts
+  s_8061aea7e969cc::t_71127033a4b1e6 31-34,42-46,53
+  s_8061aea7e969cc::t_0c7fb914217eff 52,54-57,79,83-86
+scripts/check-credential-evidence.ts
+  s_8061aea7e969cc::t_50c04ed7128131 28
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.2",
+  "base_commit_sha": "151255125c7bf5916157f28305b5b0fb2c4096eb",
+  "prompts": {},
+  "sessions": {
+    "s_8061aea7e969cc": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a07e6a-02b9-7125-a200-3155427e5a02",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

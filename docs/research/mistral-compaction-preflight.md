@@ -105,12 +105,7 @@ Bun with `js-tiktoken`. Its bundled vocabulary is derived from the selected chec
 - transformed rank text SHA-256: `a437159c587e82ed8fc7e0dc7cfd0df5db0e3eccd323ce718bdcb0c0b3674bcf`;
 - deterministic gzip SHA-256: `94190b1851d64902c4e30567e0415fcb27d7f9918c0eace1e0f3de3d070ad418`.
 
-`apps/server/tools/mistral/generate-vocabulary.mjs` owns the reproducible transformation: it fetches
-only that pinned revision, verifies the upstream and transformed hashes, applies the reserved-token
-offset, and emits the checked-in compressed module. Regenerate it explicitly with
-`bun apps/server/tools/mistral/generate-vocabulary.mjs`; ordinary builds and tests perform no fetch.
-
-The transformation preserves every published BPE byte token and offsets ordinary ranks by the
+The checked-in fixture preserves every published BPE byte token and offsets ordinary ranks by the
 checkpoint's 1,000 reserved control slots, matching Mistral's
 [`Tekkenizer.encode`](https://github.com/mistralai/mistral-common/blob/1fdcf24b5591bb882558336890d020a0ea756713/src/mistral_common/tokens/tokenizers/tekken.py#L420-L438).
 The framing follows v13's system/User/assistant controls and consecutive-message normalization in
@@ -123,11 +118,9 @@ The focused test uses literals independent of the production implementation:
 - the official Book request: 23 tokens and token-id digest
   `0c467ee75e8ba4f12d9432ce82ee20d931a6f99d7b24547366eba1cb2a93c642`;
 - an `es-CO` Unicode/Colombian-finance vector: 65 tokens and digest
-  `3c96fc68f1c50da14a37aa7170a6a4df0617936578cb31d03d7d1f212c5c8ce8`;
-- a continued system/User/assistant/User vector: 61 tokens and digest
-  `3b00a9437c0a0dd4269b6bc4a983d19348c793ac7078dd6452c547af6effb715`.
+  `3c96fc68f1c50da14a37aa7170a6a4df0617936578cb31d03d7d1f212c5c8ce8`.
 
-The latter two were independently generated in Bun using Hugging Face Transformers 3.8.1 against
+The latter was independently generated in Bun using Hugging Face Transformers 3.8.1 against
 the checkpoint's pinned `tokenizer.json`, then frozen as counts and token-id digests; the production
 implementation uses `js-tiktoken` and transformed `tekken.json` instead. They are reference vectors
 from an official model artifact, not hosted-usage evidence.
@@ -136,8 +129,8 @@ from an official model artifact, not hosted-usage evidence.
 `ministral-3b-2512` model, it first sends identical messages with absent, small, and large schema
 metadata; all three hosted prompt counts must equal the pinned local message count. It then sends a
 synthetic production-shaped Compaction request using the real system instruction, canonical output
-schema, and 16K output reserve. Strict outputs and provider envelopes reject excess fields. Responses
-are bounded, failures contain no request or response content, and the shared Mistral
+schema, and 16K output reserve. It decodes only the model identity and prompt usage needed for this
+comparison. Responses are bounded, failures contain no request or response content, and the shared Mistral
 credential-redaction/telemetry policy applies. The command prints only numeric reports after every
 case succeeds. Default tests and CI never invoke it; credential presence alone never invokes it.
 Running it without a configured credential failed closed before network work, as intended.

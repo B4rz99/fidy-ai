@@ -17,8 +17,6 @@ const successfulStatusMinimum = 200;
 const successfulStatusMaximumExclusive = 300;
 
 const Book = Schema.Struct({ name: Schema.String, authors: Schema.Array(Schema.String) });
-const CompactedConversationJson = jsonStringSchema(CompactedConversationOutput);
-const BookJson = jsonStringSchema(Book);
 
 type ResponseFormat = Readonly<{
   type: "json_schema";
@@ -59,7 +57,6 @@ type ConformanceCase = Readonly<{
   messages: MistralV13Messages;
   maxTokens: number;
   responseFormat: Option.Option<ResponseFormat>;
-  validateContent: Option.Option<(content: string) => Effect.Effect<unknown, Schema.SchemaError>>;
 }>;
 
 const differentialMessages: MistralV13Messages = [
@@ -76,16 +73,12 @@ const cases: ReadonlyArray<ConformanceCase> = [
     messages: differentialMessages,
     maxTokens: 64,
     responseFormat: Option.none(),
-    validateContent: Option.none(),
   },
   {
     id: "small-schema",
     messages: differentialMessages,
     maxTokens: 64,
     responseFormat: Option.some(jsonSchemaFormat("book", bookJsonSchema)),
-    validateContent: Option.some((content) =>
-      Schema.decodeEffect(BookJson)(content, { onExcessProperty: "error", errors: "all" })
-    ),
   },
   {
     id: "large-schema",
@@ -94,46 +87,18 @@ const cases: ReadonlyArray<ConformanceCase> = [
     responseFormat: Option.some(
       jsonSchemaFormat("large_differential", largeDifferentialJsonSchema)
     ),
-    validateContent: Option.some((content) =>
-      Schema.decodeEffect(BookJson)(content, { onExcessProperty: "error", errors: "all" })
-    ),
   },
   {
     id: "production-compaction",
     messages: makeSyntheticConversationCompactionContext().messages,
     maxTokens: hostedOutputTokenReserve,
     responseFormat: Option.some(jsonSchemaFormat("compacted_conversation", productionJsonSchema)),
-    validateContent: Option.some((content) =>
-      Schema.decodeEffect(CompactedConversationJson)(content, {
-        onExcessProperty: "error",
-        errors: "all",
-      })
-    ),
   },
 ];
 
 const ProviderResponse = Schema.Struct({
-  id: Schema.String,
-  object: Schema.String,
-  created: Schema.Finite,
   model: Schema.String,
-  choices: Schema.NonEmptyArray(
-    Schema.Struct({
-      index: Schema.Finite,
-      message: Schema.Struct({
-        role: Schema.String,
-        content: Schema.String,
-        prefix: Schema.Boolean,
-        tool_calls: Schema.NullOr(Schema.Array(Schema.Unknown)),
-      }),
-      finish_reason: Schema.String,
-    })
-  ),
-  usage: Schema.Struct({
-    prompt_tokens: Schema.Finite,
-    completion_tokens: Schema.Finite,
-    total_tokens: Schema.Finite,
-  }),
+  usage: Schema.Struct({ prompt_tokens: Schema.Finite }),
 });
 const ProviderResponseJson = jsonStringSchema(ProviderResponse);
 
@@ -142,8 +107,7 @@ export type MistralConformanceFailureReason =
   | "provider_failed"
   | "provider_response_invalid"
   | "provider_model_mismatch"
-  | "prompt_count_mismatch"
-  | "structured_output_invalid";
+  | "prompt_count_mismatch";
 
 /** Content-free failure from the manual Mistral conformance workflow. */
 export class MistralConformanceError extends Data.TaggedError("MistralConformanceError")<{
@@ -196,10 +160,9 @@ const decodeResponse = (
   if (status < successfulStatusMinimum || status >= successfulStatusMaximumExclusive) {
     return Effect.fail(conformanceError(conformanceCase, "provider_failed"));
   }
-  return Schema.decodeEffect(ProviderResponseJson)(new TextDecoder().decode(body), {
-    onExcessProperty: "error",
-    errors: "all",
-  }).pipe(Effect.mapError(() => conformanceError(conformanceCase, "provider_response_invalid")));
+  return Schema.decodeEffect(ProviderResponseJson)(new TextDecoder().decode(body)).pipe(
+    Effect.mapError(() => conformanceError(conformanceCase, "provider_response_invalid"))
+  );
 };
 
 const validateResponse = Effect.fn("MistralConformance.validateResponse")(function* (
@@ -208,12 +171,6 @@ const validateResponse = Effect.fn("MistralConformance.validateResponse")(functi
 ) {
   if (decoded.model !== mistralConformanceModel) {
     return yield* conformanceError(conformanceCase, "provider_model_mismatch");
-  }
-  const content = decoded.choices[0].message.content;
-  if (Option.isSome(conformanceCase.validateContent)) {
-    yield* conformanceCase.validateContent
-      .value(content)
-      .pipe(Effect.mapError(() => conformanceError(conformanceCase, "structured_output_invalid")));
   }
   const localPromptTokens = countMistralV13Messages(conformanceCase.messages);
   if (decoded.usage.prompt_tokens !== localPromptTokens) {

@@ -13,6 +13,7 @@ import {
 import { HttpApiClient } from "effect/unstable/httpapi";
 import { HttpBody, HttpClient } from "effect/unstable/http";
 import * as XLSX from "xlsx/xlsx.mjs";
+import { CapturedInterpretationContext } from "~/core/_shared/captured-interpretation-context";
 import type { CanonicalOperationId } from "~/core/audit/model";
 import { UserId } from "~/core/identity/reference";
 import {
@@ -32,6 +33,7 @@ import {
   seedConsentedPatIdentity,
 } from "~/shell/db/development-seed";
 import { ForwardedEmailProcessor } from "~/shell/ingestion/forwarded-email-ingestion";
+import { interpretNotificationEmail } from "~/shell/ingestion/email-interpretation/interpret";
 import {
   ResendReceivingClient,
   ResendReceivingFailed,
@@ -354,6 +356,11 @@ const imageMediaType = (
 };
 const webhookTimestampDivisor = 1_000;
 const acceptedStatus = 202;
+const syntheticInterpretationContext = Schema.decodeSync(CapturedInterpretationContext)({
+  serviceMarket: "CO",
+  locale: "es-CO",
+  timeZone: "America/Bogota",
+});
 
 class EvaluationEmailInbox extends Context.Service<
   EvaluationEmailInbox,
@@ -473,12 +480,31 @@ export const runEmail = Effect.fn("Evaluation.runEmail")(function* (
     return yield* new EvaluationFailure({ reason: "invalid-corpus" });
   }
   const inbox = yield* EvaluationEmailInbox;
+  let adversarialContentRejected = true;
   yield* Effect.forEach(ids, (receivedEmailId) =>
-    inbox.register(syntheticEmail({ entry, receivedEmailId, firstId, address, receivedAt, image }))
+    Effect.gen(function* () {
+      const content = syntheticEmail({
+        entry,
+        receivedEmailId,
+        firstId,
+        address,
+        receivedAt,
+        image,
+      });
+      if (entry.image === "injection.png") {
+        const interpretation = yield* interpretNotificationEmail({
+          content,
+          context: syntheticInterpretationContext,
+        });
+        adversarialContentRejected &&= interpretation._tag === "NeedsReview";
+      }
+      yield* inbox.register(ReceivedEmailContent.make({ ...content, inlineImages: [] }));
+    })
   );
   const completed = yield* processEmailDeliveries({ ids, address });
   return [
     ...scoreObservation(entry, yield* observeScenario(scenario.client)),
     check("workflow-completed", completed),
+    ...(entry.image === "injection.png" ? [check("rejection", adversarialContentRejected)] : []),
   ];
 });

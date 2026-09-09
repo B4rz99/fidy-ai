@@ -317,10 +317,10 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "45 seconds" })(
               )
             );
           const firstRuntime = ManagedRuntime.make(
-            runtimeLayer({ crypto, http, port: 44651, generate, deliver })
+            runtimeLayer({ crypto, http, port: 24651, generate, deliver })
           );
           const secondRuntime = ManagedRuntime.make(
-            runtimeLayer({ crypto, http, port: 44652, generate, deliver })
+            runtimeLayer({ crypto, http, port: 24652, generate, deliver })
           );
           yield* Effect.addFinalizer(() => disposeRuntimes([firstRuntime, secondRuntime]));
           yield* Effect.promise(() => firstRuntime.runPromise(Effect.void));
@@ -408,10 +408,10 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "45 seconds" })(
               );
           const deliver = (): Effect.Effect<void> => Ref.update(sends, (count) => count + 1);
           const firstRuntime = ManagedRuntime.make(
-            runtimeLayer({ crypto, http, port: 44653, generate: generate(44653), deliver })
+            runtimeLayer({ crypto, http, port: 24653, generate: generate(24653), deliver })
           );
           const secondRuntime = ManagedRuntime.make(
-            runtimeLayer({ crypto, http, port: 44654, generate: generate(44654), deliver })
+            runtimeLayer({ crypto, http, port: 24654, generate: generate(24654), deliver })
           );
           yield* Effect.addFinalizer(() => disposeRuntimes([firstRuntime, secondRuntime]));
           yield* Effect.promise(() => firstRuntime.runPromise(Effect.void));
@@ -432,7 +432,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "45 seconds" })(
             )
           );
           expect(yield* states(defaultUserId)).toEqual([{ state: "Pending" }]);
-          yield* Effect.promise(() => (running === 44653 ? firstRuntime : secondRuntime).dispose());
+          yield* Effect.promise(() => (running === 24653 ? firstRuntime : secondRuntime).dispose());
           const recovered = yield* states(defaultUserId).pipe(
             Effect.repeat({
               until: (rows) => rows[0]?.state === "Interrupted",
@@ -460,7 +460,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "45 seconds" })(
           const generate = (): Effect.Effect<void> => Ref.update(calls, (count) => count + 1);
           const deliver = (): Effect.Effect<void> => Ref.update(sends, (count) => count + 1);
           const runtime = ManagedRuntime.make(
-            runtimeLayer({ crypto, http, port: 44659, generate, deliver })
+            runtimeLayer({ crypto, http, port: 24659, generate, deliver })
           );
           yield* Effect.addFinalizer(() => disposeRuntimes([runtime]));
           const agent = yield* Effect.promise(() => runtime.runPromise(AgentService));
@@ -512,7 +512,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "45 seconds" })(
           const generate = (): Effect.Effect<void> => Ref.update(calls, (count) => count + 1);
           const deliver = (): Effect.Effect<void> => Effect.void;
           const runtime = ManagedRuntime.make(
-            runtimeLayer({ crypto, http, port: 44660, generate, deliver })
+            runtimeLayer({ crypto, http, port: 24660, generate, deliver })
           );
           yield* Effect.addFinalizer(() => disposeRuntimes([runtime]));
           const client = yield* Effect.promise(() => runtime.runPromise(HostedWire.client));
@@ -581,7 +581,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "45 seconds" })(
           const generate = (): Effect.Effect<void> => Ref.update(calls, (count) => count + 1);
           const deliver = (): Effect.Effect<void> => Ref.update(sends, (count) => count + 1);
           const runtime = ManagedRuntime.make(
-            runtimeLayer({ crypto, http, port: 44661, generate, deliver })
+            runtimeLayer({ crypto, http, port: 24661, generate, deliver })
           );
           yield* Effect.addFinalizer(() => disposeRuntimes([runtime]));
           yield* Effect.promise(() => runtime.runPromise(Effect.void));
@@ -639,10 +639,10 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "45 seconds" })(
           const deliver = (text: string): Effect.Effect<void> =>
             Ref.update(delivered, (items) => [...items, text]);
           const firstRuntime = ManagedRuntime.make(
-            runtimeLayer({ crypto, http, port: 44655, generate, deliver })
+            runtimeLayer({ crypto, http, port: 24655, generate, deliver })
           );
           const secondRuntime = ManagedRuntime.make(
-            runtimeLayer({ crypto, http, port: 44656, generate, deliver })
+            runtimeLayer({ crypto, http, port: 24656, generate, deliver })
           );
           yield* Effect.addFinalizer(() => disposeRuntimes([firstRuntime, secondRuntime]));
           yield* Effect.promise(() => firstRuntime.runPromise(Effect.void));
@@ -737,10 +737,10 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "45 seconds" })(
                 Effect.andThen(Effect.never)
               );
           const firstRuntime = ManagedRuntime.make(
-            runtimeLayer({ crypto, http, port: 44657, generate, deliver: deliver(44657) })
+            runtimeLayer({ crypto, http, port: 24657, generate, deliver: deliver(24657) })
           );
           const secondRuntime = ManagedRuntime.make(
-            runtimeLayer({ crypto, http, port: 44658, generate, deliver: deliver(44658) })
+            runtimeLayer({ crypto, http, port: 24658, generate, deliver: deliver(24658) })
           );
           yield* Effect.addFinalizer(() => disposeRuntimes([firstRuntime, secondRuntime]));
           yield* Effect.promise(() => firstRuntime.runPromise(Effect.void));
@@ -762,7 +762,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "45 seconds" })(
             )
           );
           expect(yield* states(defaultUserId)).toEqual([{ state: "Pending" }]);
-          yield* Effect.promise(() => (running === 44657 ? firstRuntime : secondRuntime).dispose());
+          yield* Effect.promise(() => (running === 24657 ? firstRuntime : secondRuntime).dispose());
           const recovered = yield* claimState.pipe(
             Effect.repeat({
               until: (rows) => rows[0]?.status === "failed",

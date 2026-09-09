@@ -194,7 +194,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           const calls = yield* Ref.make(0);
           const { delivery } = yield* admit("replacement-exhausted@example.com");
           const retrying = yield* acquireRuntime(
-            44649,
+            24649,
             EmailDeliveryPort.of({
               send: () =>
                 Ref.update(calls, (count) => count + 1).pipe(
@@ -212,7 +212,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           const permanent = yield* admit("replacement-permanent@example.com");
           yield* Ref.set(calls, 0);
           const rejecting = yield* acquireRuntime(
-            44650,
+            24650,
             EmailDeliveryPort.of({
               send: () =>
                 Ref.update(calls, (count) => count + 1).pipe(
@@ -239,8 +239,8 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           const provider = EmailDeliveryPort.of({
             send: ({ combinedCode }) => Ref.update(codes, (old) => [...old, combinedCode]),
           });
-          const runtimeA = yield* acquireRuntime(44641, provider);
-          const runtimeB = yield* acquireRuntime(44642, provider);
+          const runtimeA = yield* acquireRuntime(24641, provider);
+          const runtimeB = yield* acquireRuntime(24642, provider);
           const sql = yield* MigrationSqlClient;
           yield* sql`DELETE FROM fidy_durable.fidy_queue WHERE queue_name = 'email-replacement-delivery' AND id <> ${delivery.intentId}`;
           yield* submitDelivery(runtimeA);
@@ -268,7 +268,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
             ).toEqual([]);
           }
           yield* Effect.tryPromise(() => Promise.all([runtimeA.dispose(), runtimeB.dispose()]));
-          const runtimeC = yield* acquireRuntime(44651, provider);
+          const runtimeC = yield* acquireRuntime(24651, provider);
           expect(
             yield* Effect.tryPromise(() =>
               runtimeC.runPromise(ReplacementDeliveryWorkflow.execute(delivery))
@@ -287,10 +287,10 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
             ["before-call", "after-call", "after-settlement"] as const
           ).entries()) {
             const { delivery } = yield* admit(`replacement-hard-kill-${phase}@example.com`);
-            const codes = yield* killAtBoundary(delivery, phase, 44660 + index);
+            const codes = yield* killAtBoundary(delivery, phase, 24660 + index);
             expect(yield* Ref.get(codes)).toHaveLength(phase === "before-call" ? 0 : 1);
             const runtime = yield* acquireRuntime(
-              44670 + index,
+              24670 + index,
               EmailDeliveryPort.of({
                 send: ({ combinedCode }) => Ref.update(codes, (old) => [...old, combinedCode]),
               })
@@ -314,7 +314,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           const started = yield* Deferred.make<void>();
           const calls = yield* Ref.make(0);
           const runtimeA = yield* acquireRuntime(
-            44643,
+            24643,
             EmailDeliveryPort.of({
               send: () =>
                 Ref.update(calls, (count) => count + 1).pipe(
@@ -329,7 +329,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           yield* Deferred.await(started);
           yield* Effect.tryPromise(() => runtimeA.dispose());
           const runtimeB = yield* acquireRuntime(
-            44644,
+            24644,
             EmailDeliveryPort.of({ send: () => Ref.update(calls, (count) => count + 1) })
           );
           expect(
@@ -349,7 +349,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           const { delivery } = yield* admit("replacement-cluster-retry@example.com");
           const codes = yield* Ref.make<ReadonlyArray<string>>([]);
           const runtimeA = yield* acquireRuntime(
-            44645,
+            24645,
             EmailDeliveryPort.of({
               send: ({ combinedCode }) =>
                 Ref.update(codes, (old) => [...old, combinedCode]).pipe(
@@ -371,7 +371,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           );
           yield* Effect.tryPromise(() => runtimeA.dispose());
           const runtimeB = yield* acquireRuntime(
-            44646,
+            24646,
             EmailDeliveryPort.of({
               send: ({ combinedCode }) => Ref.update(codes, (old) => [...old, combinedCode]),
             })
@@ -401,7 +401,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
             const { delivery } = yield* admit(`replacement-database-${phase}@example.com`);
             const calls = yield* Ref.make(0);
             const runtime = yield* acquireRuntime(
-              44680 + index,
+              24680 + index,
               EmailDeliveryPort.of({ send: () => Ref.update(calls, (count) => count + 1) })
             );
             yield* sql`CREATE OR REPLACE FUNCTION test_delivery_failure() RETURNS trigger LANGUAGE plpgsql AS $$
@@ -459,7 +459,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           CREATE TRIGGER test_replacement_expiry_failure BEFORE DELETE ON email_replacement_workflows
           FOR EACH ROW EXECUTE FUNCTION test_replacement_expiry_failure()`;
           const runtimeA = yield* acquireRuntime(
-            44653,
+            24653,
             EmailDeliveryPort.of({ send: () => Effect.void })
           );
           yield* sql`DELETE FROM fidy_durable.fidy_queue WHERE queue_name = 'email-replacement-expiry' AND id <> ${expiry.workflowId}`;
@@ -482,7 +482,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           yield* Effect.tryPromise(() => runtimeA.dispose());
           yield* sql`DROP TRIGGER test_replacement_expiry_failure ON email_replacement_workflows`;
           const runtimeB = yield* acquireRuntime(
-            44654,
+            24654,
             EmailDeliveryPort.of({ send: () => Effect.void })
           );
           yield* Effect.tryPromise(() =>
@@ -508,7 +508,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           // Isolate this publication for the finite native consumer; other tests intentionally execute directly.
           yield* sql`DELETE FROM fidy_durable.fidy_queue WHERE queue_name = 'email-replacement-delivery' AND id <> ${delivery.intentId}`;
           const runtime = yield* acquireRuntime(
-            44652,
+            24652,
             EmailDeliveryPort.of({ send: () => Effect.void })
           );
           const executionId = yield* ReplacementDeliveryWorkflow.executionId(delivery);
@@ -563,7 +563,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           const provider = EmailDeliveryPort.of({
             send: () => Effect.die("expiry cannot send email"),
           });
-          const runtimeA = yield* acquireRuntime(44647, provider);
+          const runtimeA = yield* acquireRuntime(24647, provider);
           yield* Effect.tryPromise(() =>
             runtimeA.runPromise(ReplacementExpiryWorkflow.execute(expiry, { discard: true }))
           );
@@ -578,7 +578,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           );
           yield* Effect.tryPromise(() => runtimeA.dispose());
           yield* Effect.sleep("2 seconds");
-          const runtimeB = yield* acquireRuntime(44648, provider);
+          const runtimeB = yield* acquireRuntime(24648, provider);
           yield* Effect.tryPromise(() =>
             runtimeB.runPromise(ReplacementExpiryWorkflow.execute(expiry))
           );

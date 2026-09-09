@@ -14,7 +14,7 @@ import {
 } from "~/shell/email-authentication/pairing-email-execution";
 
 const testSecretLength = 64;
-const crashRunnerPort = 44643;
+const crashRunnerPort = 24643;
 const cluster = authenticatedClusterHttp.layerSql("c".repeat(testSecretLength), {
   runnerAddress: Option.some(RunnerAddress.make("127.0.0.1", crashRunnerPort)),
   runnerListenAddress: Option.some(RunnerAddress.make("127.0.0.1", crashRunnerPort)),

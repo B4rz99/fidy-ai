@@ -130,6 +130,22 @@ const processNextWhatsAppTurn = Effect.fn(function* (now: DateTime.Utc) {
   return yield* processNextTurn(now).pipe(Effect.provide(context));
 }, Effect.scoped);
 
+const awaitWhatsAppTurnsSettled = Effect.fn("WhatsApp.awaitTurnsSettled")(function* () {
+  const admin = yield* MigrationSqlClient;
+  yield* admin<{ readonly active: number }>`
+    SELECT count(*)::int AS active
+    FROM whatsapp_turn_claims
+    WHERE status IN ('claimed', 'started', 'submitted')
+  `.pipe(
+    Effect.filterOrFail(
+      (rows) => rows[0]?.active === 0,
+      () => "WhatsApp Turns have not settled"
+    ),
+    Effect.retry({ schedule: Schedule.spaced("25 millis"), times: 400 }),
+    Effect.orDie
+  );
+});
+
 const deliveryKey = WhatsAppDeliveryKey.make("delivery-worker-fixture");
 const enqueueTurn = (
   input: Omit<Parameters<typeof enqueueWhatsAppTurn>[0], "propagation">
@@ -182,6 +198,9 @@ const postSignedTextFixture = Effect.fn("WhatsApp.postSignedTextFixture")(functi
     body: HttpBody.uint8Array(body, "application/json"),
   });
 });
+const countProcessingTransactions = (transactions: ReadonlyArray<ProjectedTransaction>): number =>
+  transactions.filter((transaction) => transaction.transaction === "whatsapp.processTurn").length;
+
 const recordedTransactions = Effect.fn("WhatsApp.recordedTransactions")(function* () {
   const recorder = yield* EnvelopeRecorder;
   const envelopes = yield* recorder.serializedEnvelopes;
@@ -528,7 +547,7 @@ const textInferenceFixture = (
   );
 const kapsoClientFixture = (
   providerMessageId: string,
-  sentAt: DateTime.Utc,
+  sentAt: DateTime.Utc | (() => Effect.Effect<DateTime.Utc>),
   beforeSend: Effect.Effect<void> = Effect.void
 ): KapsoClientService => ({
   sendText: (): Effect.Effect<{
@@ -541,15 +560,16 @@ const kapsoClientFixture = (
     responseStatus: TelemetryHttpStatus;
   }> =>
     beforeSend.pipe(
-      Effect.as({
+      Effect.andThen(typeof sentAt === "function" ? sentAt() : Effect.succeed(sentAt)),
+      Effect.map((resolvedSentAt) => ({
         messageEvidence: {
           channel: "whatsapp",
           provider: "kapso",
           providerMessageId: WhatsAppProviderMessageId.make(providerMessageId),
         },
-        sentAt,
+        sentAt: resolvedSentAt,
         responseStatus: TelemetryHttpStatus.make(200),
-      })
+      }))
     ),
 });
 const deliverLatestDisclosure = Effect.fn("Test.deliverLatestDisclosure")(function* (
@@ -827,21 +847,23 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           ...makeKapsoTextEvent("wamid.isolation-b", "taxi 18 mil", eventTime),
           caller: testWhatsAppCaller(secondPhone),
         };
-        yield* Effect.all(
-          [
-            enqueueTurn({
-              admission: authorizedTurn(first),
-              event: first,
-              deliveryKey,
-            }),
-            enqueueTurn({
-              admission: authorizedTurn(second, secondUserId),
-              event: second,
-              deliveryKey,
-            }),
-          ],
-          { concurrency: "unbounded" }
-        );
+        expect(
+          yield* Effect.all(
+            [
+              enqueueTurn({
+                admission: authorizedTurn(first),
+                event: first,
+                deliveryKey,
+              }),
+              enqueueTurn({
+                admission: authorizedTurn(second, secondUserId),
+                event: second,
+                deliveryKey,
+              }),
+            ],
+            { concurrency: "unbounded" }
+          )
+        ).toEqual([{ inserted: true }, { inserted: true }]);
 
         const recipients = yield* Ref.make<ReadonlyArray<string>>([]);
         const kapsoService: KapsoClientService = {
@@ -871,6 +893,7 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         yield* processNextWhatsAppTurn(claimTime).pipe(
           Effect.provideService(KapsoClient, kapsoService)
         );
+        yield* awaitWhatsAppTurnsSettled();
 
         expect((yield* Ref.get(recipients)).toSorted()).toEqual(
           [
@@ -1962,7 +1985,7 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         const sends = yield* Ref.make(0);
         const kapsoService = kapsoClientFixture(
           "wamid.concurrent-disclosure-reply",
-          now,
+          () => DateTime.now,
           Ref.update(sends, (count) => count + 1).pipe(
             Effect.andThen(Deferred.succeed(sendStarted, undefined)),
             Effect.andThen(Deferred.await(allowSend))
@@ -2423,10 +2446,16 @@ layer(WhatsAppHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         yield* performConsentDisclosureAttempt(
           admission.exchangeId,
           DisclosureDeliveryAttemptNumber.make(1)
-        ).pipe(Effect.provideService(KapsoClient, kapsoClientFixture("wamid.atomic-send", now)));
+        ).pipe(
+          Effect.provideService(
+            KapsoClient,
+            kapsoClientFixture("wamid.atomic-send", () => DateTime.now)
+          )
+        );
         const attempt = yield* Effect.fromOption(
           yield* findConsentDisclosureDeliveryState(admission.exchangeId)
         ).pipe(Effect.orDie);
+        expect(attempt.state).toBe("reconciliation-required");
         const admin = yield* MigrationSqlClient;
         yield* admin`
           UPDATE pending_consent_exchanges
@@ -3430,8 +3459,16 @@ layer(WhatsAppTraceHarness, { excludeTestServices: true, timeout: "30 seconds" }
         const processedByLoop = yield* Effect.forEach(fixtures, () => workerLoop, {
           concurrency: "unbounded",
         });
+        yield* awaitWhatsAppTurnsSettled();
         expect(processedByLoop.reduce((total, count) => total + count, 0)).toBe(8);
-        const transactions = yield* recordedTransactions();
+        const transactions = yield* recordedTransactions().pipe(
+          Effect.filterOrFail(
+            (recorded) => countProcessingTransactions(recorded) === 8,
+            () => "WhatsApp processing telemetry has not settled"
+          ),
+          Effect.retry({ schedule: Schedule.spaced("25 millis"), times: 400 }),
+          Effect.orDie
+        );
         const processing = transactions.filter(
           (transaction) => transaction.transaction === "whatsapp.processTurn"
         );

@@ -77,10 +77,23 @@ export type HintComparison = typeof HintComparison.Type;
 const differs = (
   left: Option.Option<LastFourDigits>,
   right: Option.Option<LastFourDigits>
-): boolean => Option.isSome(left) && Option.isSome(right) && left.value !== right.value;
+): boolean =>
+  Option.match(Option.all([left, right]), {
+    onNone: () => false,
+    onSome: (values: readonly [LastFourDigits, LastFourDigits]) => values[0] !== values[1],
+  });
 
-const equals = <Value>(left: Option.Option<Value>, right: Option.Option<Value>): boolean =>
-  Option.isSome(left) && Option.isSome(right) && left.value === right.value;
+const tupleEquals: <Value>(values: readonly [Value, Value]) => boolean = (values) =>
+  values[0] === values[1];
+
+const equals: <Value>(left: Option.Option<Value>, right: Option.Option<Value>) => boolean = (
+  left,
+  right
+) =>
+  Option.match(Option.all([left, right]), {
+    onNone: () => false,
+    onSome: tupleEquals,
+  });
 
 /**
  * Compares already-decoded SourceAttestation hints without exposing their values to callers of

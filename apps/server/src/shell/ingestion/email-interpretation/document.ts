@@ -1,4 +1,4 @@
-import { Option } from "effect";
+import { Array as EffectArray, Option } from "effect";
 import { type DefaultTreeAdapterMap, defaultTreeAdapter, parse } from "parse5";
 
 type Node = DefaultTreeAdapterMap["node"];
@@ -51,13 +51,15 @@ export const normalizeDocumentText = (text: string): string =>
     .trim()
     .toLowerCase();
 
+const requiredNode = (node: Option.Option<Node>): Node => Option.getOrThrow(node);
+
+const requiredPendingNode = (node: Option.Option<PendingNode>): PendingNode =>
+  Option.getOrThrow(node);
+
 const appendChildren = (element: Element, depth: number, pending: Array<PendingNode>): void => {
   const children = defaultTreeAdapter.getChildNodes(element);
   for (let index = children.length - 1; index >= 0; index -= 1) {
-    const child = children[index];
-    if (child !== undefined) {
-      pending.push({ node: child, depth: depth + 1 });
-    }
+    pending.push({ node: requiredNode(EffectArray.get(children, index)), depth: depth + 1 });
   }
 };
 
@@ -77,26 +79,32 @@ const inspectPendingNode = (current: PendingNode, state: CellTextState): void =>
     state.text.push(current.node.value);
     return;
   }
-  if (!defaultTreeAdapter.isElementNode(current.node)) {
-    return;
-  }
-  if (hasUnsafeVisibility(current.node)) {
-    state.traversal.unsafeVisibility = true;
-    return;
-  }
-  if (!ignoredElements.has(current.node.tagName)) {
-    appendChildren(current.node, current.depth, state.pending);
-  }
+  Option.match(
+    Option.liftPredicate(current.node, (node) => defaultTreeAdapter.isElementNode(node)),
+    {
+      onNone: () => undefined,
+      onSome: (element) => {
+        if (hasUnsafeVisibility(element)) {
+          state.traversal.unsafeVisibility = true;
+          return;
+        }
+        if (!ignoredElements.has(element.tagName)) {
+          appendChildren(element, current.depth, state.pending);
+        }
+      },
+    }
+  );
 };
 
 const boundedNodeText = (root: Node, rootDepth: number, traversal: TraversalState): string => {
   const text: Array<string> = [];
   const pending: Array<PendingNode> = [{ node: root, depth: rootDepth }];
   while (pending.length > 0 && !traversal.overflow) {
-    const current = pending.pop();
-    if (current !== undefined) {
-      inspectPendingNode(current, { traversal, text, pending });
-    }
+    inspectPendingNode(requiredPendingNode(Option.fromNullishOr(pending.pop())), {
+      traversal,
+      text,
+      pending,
+    });
   }
   return text.join(" ");
 };

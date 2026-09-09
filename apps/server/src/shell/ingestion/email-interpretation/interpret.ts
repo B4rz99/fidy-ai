@@ -6,10 +6,7 @@ import {
   type ReceivedEmailContent,
 } from "~/core/ingestion/model";
 import { TransactionExtraction } from "~/core/transactions/model";
-import {
-  NotificationFormatId,
-  NotificationInterpretationEvidence,
-} from "~/core/transactions/account-hints";
+import { NotificationInterpretationEvidence } from "~/core/transactions/account-hints";
 import { generatedFormats } from "./catalog.generated";
 import { type EmailDocument, normalizeDocumentText, parseEmailDocument } from "./document";
 import type { NotificationEmailFormat } from "./format-definition";
@@ -47,20 +44,25 @@ type ValidatedCatalog = Readonly<{
   matcher: RegExp;
 }>;
 
+const assertUniqueFormatId = (format: NotificationEmailFormat, ids: Set<string>): void => {
+  if (ids.has(format.id)) {
+    throw new Error("Invalid generated notification format id");
+  }
+};
+
+const assertUniqueRevision = (format: NotificationEmailFormat, revisions: Set<string>): void => {
+  if (revisions.has(format.revision)) {
+    throw new Error("Invalid generated notification format revision");
+  }
+};
+
 const validateIdentity = (
   format: NotificationEmailFormat,
   ids: Set<string>,
   revisions: Set<string>
 ): void => {
-  if (!Schema.is(NotificationFormatId)(format.id) || ids.has(format.id)) {
-    throw new Error("Invalid generated notification format id");
-  }
-  if (
-    !/^[a-z0-9]+(?:-[a-z0-9]+)*-v[1-9]\d*$/u.test(format.revision) ||
-    revisions.has(format.revision)
-  ) {
-    throw new Error("Invalid generated notification format revision");
-  }
+  assertUniqueFormatId(format, ids);
+  assertUniqueRevision(format, revisions);
   ids.add(format.id);
   revisions.add(format.revision);
 };
@@ -92,7 +94,10 @@ const candidatesFor = (text: string): ReadonlyArray<NotificationEmailFormat> => 
   const candidates = new Set<NotificationEmailFormat>();
   for (const match of text.matchAll(validatedCatalog.matcher)) {
     const anchor = match[0];
-    for (const format of validatedCatalog.anchorFormats.get(anchor) ?? []) candidates.add(format);
+    const formats = Option.getOrThrow(
+      Option.fromNullishOr(validatedCatalog.anchorFormats.get(anchor))
+    );
+    for (const format of formats) candidates.add(format);
     if (candidates.size > maximumCandidates) break;
   }
   return [...candidates];

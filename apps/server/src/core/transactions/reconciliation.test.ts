@@ -57,8 +57,10 @@ it.effect("uses the greater Transaction id to break equal statement timestamps",
     } satisfies ReconciliationMember;
 
     const decision = yield* decideTransactionLink(first, second);
+    const reversedDecision = yield* decideTransactionLink(second, first);
 
     expect(decision.statementTransactionId).toEqual(Option.some(second.id));
+    expect(reversedDecision.statementTransactionId).toEqual(Option.some(second.id));
   })
 );
 

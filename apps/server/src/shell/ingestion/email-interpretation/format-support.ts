@@ -6,14 +6,17 @@ import type { EmailDocument } from "./document";
 import type { FormatInterpretation } from "./format-definition";
 
 /** Exact value for one unique two-cell label row; duplicates are ambiguous. */
+const rowCell = (row: ReadonlyArray<string>, index: number): string =>
+  Option.getOrThrow(Option.fromNullishOr(row[index]));
+
 export const findField: {
   (labels: ReadonlyArray<string>): (document: EmailDocument) => Option.Option<string>;
   (document: EmailDocument, labels: ReadonlyArray<string>): Option.Option<string>;
 } = Function.dual(2, (document: EmailDocument, labels: ReadonlyArray<string>) => {
   const values = document.rows
-    .filter((row) => row.length === 2 && labels.includes(row[0] ?? ""))
-    .flatMap((row) => (row[1] === undefined ? [] : [row[1]]));
-  return values.length === 1 && values[0] !== "" ? Option.some(values[0] ?? "") : Option.none();
+    .filter((row) => row.length === 2 && labels.includes(rowCell(row, 0)))
+    .map((row) => rowCell(row, 1));
+  return values.length === 1 && values[0] !== "" ? Option.some(rowCell(values, 0)) : Option.none();
 });
 
 type CurrencyEvidence = Readonly<{
@@ -37,8 +40,8 @@ export const resolveCurrency = (input: {
   defaultRule: FormatCurrencyDefault;
 }): Option.Option<CurrencyEvidence> => {
   const currencyFields = input.document.rows
-    .filter((row) => currencyFieldLabels.includes(row[0] ?? ""))
-    .flatMap((row) => (row[1] === undefined ? [] : [row[1]]));
+    .filter((row) => currencyFieldLabels.includes(rowCell(row, 0)))
+    .map((row) => rowCell(row, 1));
   if (currencyFields.length > 1) return Option.none();
   const localEvidenceText = [input.amountText, ...currencyFields].join(" ");
   const localCodes = Array.from(localEvidenceText.matchAll(/\b[A-Za-z]{3}\b/gu), (match) =>
@@ -48,7 +51,7 @@ export const resolveCurrency = (input: {
   const distinctCodes = [...new Set(localCodes)];
   if (distinctCodes.length > 1 || /[€£¥]/u.test(localEvidenceText)) return Option.none();
   if (distinctCodes.length === 1) {
-    const decoded = Schema.decodeUnknownOption(Currency)(distinctCodes[0] ?? "");
+    const decoded = Schema.decodeUnknownOption(Currency)(rowCell(distinctCodes, 0));
     return Option.map(decoded, (currency) => ({
       currency,
       basis: "explicit" as const,
@@ -70,7 +73,9 @@ export const containsCompleteFinancialNumber = (text: string): boolean => {
   for (const match of text.matchAll(/[0-9][0-9 .-]*[0-9]/gu)) {
     const candidate = match[0].trim();
     if (/^[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}$/u.test(candidate)) continue;
-    if ((candidate.match(/[0-9]/gu) ?? []).length >= minimumCompleteFinancialDigits) return true;
+    if (Array.from(candidate.matchAll(/[0-9]/gu)).length >= minimumCompleteFinancialDigits) {
+      return true;
+    }
   }
   return false;
 };
@@ -125,21 +130,20 @@ const parseOccurredAt = (input: OccurredAtInput): Option.Option<DateTime.Utc> =>
     timeZone: input.context.timeZone,
     adjustForTimeZone: true,
   });
-  if (Option.isNone(zoned)) {
-    return Option.none();
-  }
-  const actual = DateTime.toParts(zoned.value);
-  const actualValues = [
-    actual.year,
-    actual.month,
-    actual.day,
-    actual.hour,
-    actual.minute,
-    actual.second,
-  ];
-  return actualValues.every((value, index) => value === Object.values(parts)[index])
-    ? Option.some(DateTime.toUtc(zoned.value))
-    : Option.none();
+  return Option.flatMap(zoned, (value) => {
+    const actual = DateTime.toParts(value);
+    const actualValues = [
+      actual.year,
+      actual.month,
+      actual.day,
+      actual.hour,
+      actual.minute,
+      actual.second,
+    ];
+    return actualValues.every((part, index) => part === Object.values(parts)[index])
+      ? Option.some(DateTime.toUtc(value))
+      : Option.none();
+  });
 };
 
 /** Constructs decoded safe hints; invalid source projections become format rejection. */

@@ -140,6 +140,7 @@ it.effect("uses explicit Currency and rejects conflicting Currency or unsafe suf
       interpret(html.replace("TIENDA FICTICIA", "1234.5678.9012")),
       interpret(html.replace("TIENDA FICTICIA", "411111-111111-1111")),
       interpret(html.replace("TIENDA FICTICIA", "12345678901234567890")),
+      interpret(html.replace("TIENDA FICTICIA", "４１１１１１１１１１１１１１１１")),
     ]) {
       expect(yield* unsafe).toEqual({ _tag: "NeedsReview", reason: "invalid-format" });
     }

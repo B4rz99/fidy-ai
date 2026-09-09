@@ -36,8 +36,8 @@ export const format: NotificationEmailFormat = {
         makeInterpretation({
           ...evidence,
           document,
-          dateText: occurredMatch[1] ?? "",
-          timeText: occurredMatch[2] ?? "",
+          dateText: Option.getOrThrow(Option.fromNullishOr(occurredMatch[1])),
+          timeText: Option.getOrThrow(Option.fromNullishOr(occurredMatch[2])),
           amountStyle: "dot-grouped",
           dateStyle: "dash",
           context,

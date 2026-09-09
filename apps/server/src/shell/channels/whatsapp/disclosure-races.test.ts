@@ -194,7 +194,7 @@ const primeAndSuspend = Effect.fn(function* (
   provider: KapsoClientService
 ) {
   const primed = yield* Deferred.make<number>();
-  const first = yield* acquireRuntime(44689, provider, primeRegistration(payload, primed));
+  const first = yield* acquireRuntime(24689, provider, primeRegistration(payload, primed));
   yield* Effect.tryPromise(() =>
     first.runPromise(ConsentDisclosureWorkflow.execute(payload, { discard: true }))
   );
@@ -226,24 +226,26 @@ const RetryDelayLive = RetryDelay.toLayer(() =>
 );
 
 const replaceFailureEvidence = Effect.fn(function* (
-  accepted: Parameters<typeof applyConsentDisclosureLifecycle>[0]
+  accepted: Parameters<typeof applyConsentDisclosureLifecycle>[0],
+  millisecondsAfterAcceptance: number
 ) {
-  yield* Effect.sleep("5 millis");
+  const sentAt = DateTime.add(accepted.occurredAt, {
+    milliseconds: millisecondsAfterAcceptance,
+  });
   expect(
     yield* applyConsentDisclosureLifecycle({
       ...accepted,
       outcome: "sent",
-      occurredAt: yield* DateTime.now,
+      occurredAt: sentAt,
     })
   ).toBe("applied");
-  yield* Effect.sleep("5 millis");
   expect(
     yield* applyConsentDisclosureLifecycle({
       ...accepted,
       outcome: "failed",
       reason: "provider_unavailable",
       automaticRetry: true,
-      occurredAt: yield* DateTime.now,
+      occurredAt: DateTime.add(sentAt, { milliseconds: 1 }),
     })
   ).toBe("applied");
 });
@@ -265,7 +267,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
             outcome: "failed",
             reason: "provider_unavailable",
             automaticRetry: true,
-            occurredAt: yield* DateTime.now,
+            occurredAt: DateTime.add(accepted.occurredAt, { milliseconds: 1 }),
           })
         ).toBe("applied");
         const failed = yield* findConsentDisclosureDeliveryState(payload.exchangeId).pipe(
@@ -273,7 +275,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         );
         expect(failed.evidenceRevision).toBeGreaterThan(revision);
         expect(failed.state).toBe("definitively-failed");
-        const recovered = yield* acquireRuntime(44690, provider, ConsentDisclosureWorkflowLive);
+        const recovered = yield* acquireRuntime(24690, provider, ConsentDisclosureWorkflowLive);
         yield* Effect.tryPromise(() =>
           recovered.runPromise(
             Effect.scoped(
@@ -314,11 +316,11 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           Effect.provideService(KapsoClient, provider)
         );
         const accepted = yield* Deferred.await(firstSend);
-        yield* replaceFailureEvidence(accepted);
+        yield* replaceFailureEvidence(accepted, 1);
         const original = yield* findConsentDisclosureDeliveryState(payload.exchangeId).pipe(
           Effect.flatMap(Effect.fromOption)
         );
-        const runtime = yield* acquireRuntime(44691, provider, RetryDelayLive);
+        const runtime = yield* acquireRuntime(24691, provider, RetryDelayLive);
         yield* Effect.tryPromise(() =>
           runtime.runPromise(
             RetryDelay.execute({
@@ -327,7 +329,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
             })
           )
         );
-        yield* replaceFailureEvidence(accepted);
+        yield* replaceFailureEvidence(accepted, 3);
         const changed = yield* findConsentDisclosureDeliveryState(payload.exchangeId).pipe(
           Effect.flatMap(Effect.fromOption)
         );

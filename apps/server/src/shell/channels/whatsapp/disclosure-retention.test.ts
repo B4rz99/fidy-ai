@@ -47,8 +47,8 @@ const RetentionHarness = ConsentDisclosureWorkflowLive.pipe(
   ),
   Layer.provide(
     Layer.succeed(KapsoClient, {
-      // A shared test database can contain older, still-current publications. Drain those
-      // through a terminal fake rejection rather than defecting or calling a real provider.
+      // The fixture isolates its queue rows before every disclosure request. Any send therefore
+      // belongs to the current test and receives a terminal fake rejection.
       sendText: () =>
         Effect.fail(
           new KapsoSendFailed({
@@ -67,10 +67,12 @@ const RetentionHarness = ConsentDisclosureWorkflowLive.pipe(
 );
 
 const orphanedRequest = Effect.fn("Test.orphanedDisclosureRequest")(function* () {
+  const admin = yield* MigrationSqlClient;
+  yield* admin`DELETE FROM fidy_durable.fidy_queue
+    WHERE queue_name IN ('whatsapp-consent-disclosure', 'whatsapp-consent-disclosure-evidence')`;
   const crypto = yield* Crypto.Crypto;
   const exchangeId = PendingConsentExchangeId.make(yield* crypto.randomUUIDv4.pipe(Effect.orDie));
   const now = yield* DateTime.now;
-  const admin = yield* MigrationSqlClient;
   yield* admin`INSERT INTO whatsapp_consent_disclosure_requests(exchange_id, expires_at, business_phone_number_id)
     VALUES (${exchangeId}, ${DateTime.toDateUtc(DateTime.subtract(now, { hours: 1 }))}, '123456789012345')`;
   return { exchangeId, revision: 1 as const };

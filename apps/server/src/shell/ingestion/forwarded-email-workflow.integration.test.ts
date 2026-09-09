@@ -173,8 +173,8 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
                 Effect.as(providerContent(receivedEmailId, admitted.address))
               ),
           });
-          const runtimeA = ManagedRuntime.make(makeRuntimeLayer({ crypto, port: 44611, provider }));
-          const runtimeB = ManagedRuntime.make(makeRuntimeLayer({ crypto, port: 44612, provider }));
+          const runtimeA = ManagedRuntime.make(makeRuntimeLayer({ crypto, port: 24611, provider }));
+          const runtimeB = ManagedRuntime.make(makeRuntimeLayer({ crypto, port: 24612, provider }));
           yield* Effect.promise(() => runtimeA.runPromise(Effect.void));
           yield* Effect.promise(() => runtimeB.runPromise(Effect.void));
           yield* Effect.tryPromise(() =>
@@ -287,7 +287,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           const provider = ResendReceivingClient.of({
             retrieveEmail: () => Effect.die(new Error("Retention performed provider Work")),
           });
-          const runtime = ManagedRuntime.make(makeRuntimeLayer({ crypto, port: 44620, provider }));
+          const runtime = ManagedRuntime.make(makeRuntimeLayer({ crypto, port: 24620, provider }));
           yield* Effect.promise(() => runtime.runPromise(Effect.void));
           const retentionNow = DateTime.add(yield* DateTime.now, { days: 91 });
           expect(
@@ -330,7 +330,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
                 Effect.as(providerContent(receivedEmailId, admitted.address))
               ),
           });
-          const runtime = ManagedRuntime.make(makeRuntimeLayer({ crypto, port: 44617, provider }));
+          const runtime = ManagedRuntime.make(makeRuntimeLayer({ crypto, port: 24617, provider }));
           yield* Effect.promise(() => runtime.runPromise(Effect.void));
           expect(
             yield* Effect.promise(() =>
@@ -361,7 +361,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
                 Effect.as(providerContent(receivedEmailId, admitted.address))
               ),
           });
-          const runtime = ManagedRuntime.make(makeRuntimeLayer({ crypto, port: 44619, provider }));
+          const runtime = ManagedRuntime.make(makeRuntimeLayer({ crypto, port: 24619, provider }));
           yield* Effect.promise(() => runtime.runPromise(Effect.void));
           expect(
             yield* Effect.promise(() =>
@@ -397,7 +397,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
                 Effect.as(providerContent(receivedEmailId, admitted.address))
               ),
           });
-          const runtime = ManagedRuntime.make(makeRuntimeLayer({ crypto, port: 44615, provider }));
+          const runtime = ManagedRuntime.make(makeRuntimeLayer({ crypto, port: 24615, provider }));
           yield* Effect.promise(() => runtime.runPromise(Effect.void));
           const result = yield* Effect.promise(() =>
             runtime.runPromise(
@@ -458,7 +458,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
                 Effect.as(providerContent(receivedEmailId, admitted.address))
               ),
           });
-          const runtime = ManagedRuntime.make(makeRuntimeLayer({ crypto, port: 44616, provider }));
+          const runtime = ManagedRuntime.make(makeRuntimeLayer({ crypto, port: 24616, provider }));
           yield* Effect.promise(() => runtime.runPromise(Effect.void));
           yield* Effect.promise(() =>
             runtime.runPromise(

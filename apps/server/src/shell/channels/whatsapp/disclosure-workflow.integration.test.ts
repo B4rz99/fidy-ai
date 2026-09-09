@@ -166,8 +166,8 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
               return result;
             }),
         });
-        const first = yield* acquireRuntime(44661, provider(1));
-        const second = yield* acquireRuntime(44662, provider(2));
+        const first = yield* acquireRuntime(24661, provider(1));
+        const second = yield* acquireRuntime(24662, provider(2));
         yield* Effect.tryPromise(() => first.runPromise(Effect.void));
         yield* Effect.tryPromise(() => second.runPromise(Effect.void));
         yield* Effect.tryPromise(() =>
@@ -250,13 +250,13 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
               return yield* Effect.never;
             }),
         };
-        const first = yield* acquireRuntime(44663, provider);
+        const first = yield* acquireRuntime(24663, provider);
         yield* Effect.tryPromise(() =>
           first.runPromise(ConsentDisclosureWorkflow.execute(payload, { discard: true }))
         );
         const evidence = yield* Deferred.await(started);
         yield* Effect.tryPromise(() => first.dispose());
-        const recovered = yield* acquireRuntime(44664, provider);
+        const recovered = yield* acquireRuntime(24664, provider);
         yield* Effect.tryPromise(() =>
           recovered.runPromise(ConsentDisclosureWorkflow.execute(payload, { discard: true }))
         );
@@ -310,7 +310,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
               return result;
             }),
         };
-        const first = yield* acquireRuntime(44665, provider);
+        const first = yield* acquireRuntime(24665, provider);
         yield* Effect.tryPromise(() =>
           first.runPromise(ConsentDisclosureWorkflow.execute(payload, { discard: true }))
         );
@@ -327,7 +327,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           )
         );
         yield* Effect.tryPromise(() => first.dispose());
-        const recovered = yield* acquireRuntime(44666, provider);
+        const recovered = yield* acquireRuntime(24666, provider);
         yield* Effect.tryPromise(() =>
           recovered.runPromise(ConsentDisclosureWorkflow.execute(payload, { discard: true }))
         );
@@ -375,7 +375,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
               });
             }),
         };
-        const runtime = yield* acquireRuntime(44667, provider);
+        const runtime = yield* acquireRuntime(24667, provider);
         yield* Effect.tryPromise(() =>
           runtime.runPromise(ConsentDisclosureWorkflow.execute(payload, { discard: true }))
         );
@@ -423,7 +423,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
               return delivered("wamid.expiry-lock-466", yield* DateTime.now);
             }),
         };
-        const runtime = yield* acquireRuntime(44669, provider);
+        const runtime = yield* acquireRuntime(24669, provider);
         const admin = yield* MigrationSqlClient;
         yield* admin`UPDATE pending_consent_exchanges SET created_at = now() - interval '24 hours' + interval '1 second', expires_at = now() + interval '1 second' WHERE id = ${payload.exchangeId}`;
         const finished = yield* Deferred.make<void>();
@@ -486,7 +486,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
             }
             return statement;
           });
-        const runtime = yield* acquireRuntime(44668, provider, transformer);
+        const runtime = yield* acquireRuntime(24668, provider, transformer);
         yield* Effect.tryPromise(() =>
           runtime.runPromise(ConsentDisclosureWorkflow.execute(payload, { discard: true }))
         );

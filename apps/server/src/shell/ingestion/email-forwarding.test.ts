@@ -623,13 +623,15 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         );
         expect(quota).toEqual({ queuedCount: 50, deferredCount: 1 });
         yield* sql`
-          DELETE FROM forwarded_email_receipts
-          WHERE user_id = ${freeUserId} AND status = 'accepted'
+          DELETE FROM fidy_durable.fidy_queue AS queue
+          USING forwarded_email_receipts AS receipt
+          WHERE queue.queue_name = 'forwarded-email-ingestion'
+            AND queue.element::jsonb->>'receivedEmailId' = receipt.received_email_id
+            AND receipt.user_id = ${freeUserId} AND receipt.status = 'accepted'
         `;
         yield* sql`
-          DELETE FROM fidy_durable.fidy_queue
-          WHERE queue_name = 'forwarded-email-ingestion'
-          AND element::jsonb->>'receivedEmailId' = 'email_quota_50'
+          DELETE FROM forwarded_email_receipts
+          WHERE user_id = ${freeUserId} AND status = 'accepted'
         `;
         yield* sql`UPDATE users SET paid_tier = 'pro' WHERE id = ${freeUserId}`;
         let promotedReceivedEmailId = "";

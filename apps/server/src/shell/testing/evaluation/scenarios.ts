@@ -173,12 +173,37 @@ const hostedChecks = (
     : []),
 ];
 
+const runHostedStep = Effect.fn("Evaluation.runHostedStep")(function* (
+  scenario: Scenario,
+  step: HostedCase["steps"][number],
+  text: string
+) {
+  const agent = yield* AgentService;
+  let deliveryCount = 0;
+  const reply = yield* agent
+    .handleMessage(
+      scenario.userId,
+      hostedInbound(step, text),
+      () =>
+        Effect.sync(() => {
+          deliveryCount += 1;
+        }),
+      "verified-whatsapp"
+    )
+    .pipe(
+      Effect.asSome,
+      Effect.catchTag("ModelUnavailable", (error) =>
+        step.kind === "confirm" ? Effect.succeed(Option.none()) : Effect.fail(error)
+      )
+    );
+  return { deliveryCount, reply };
+});
+
 /** Live hosted evaluation never supplies model state or owns the runtime's private Turn lifecycle. */
 export const runHosted = Effect.fn("Evaluation.runHosted")(function* (
   entry: HostedCase,
   scenario: Scenario
 ) {
-  const agent = yield* AgentService;
   const seeded = yield* seedTransactions(scenario.client, entry.seed);
   const initialAudit = yield* observeAuditLogEntries(scenario.userId);
   let challenge = Option.none<string>();
@@ -197,19 +222,14 @@ export const runHosted = Effect.fn("Evaluation.runHosted")(function* (
       confirmationBeforeEffect = false;
       break;
     }
-    let deliveryCount = 0;
-    const reply = yield* agent.handleMessage(
-      scenario.userId,
-      hostedInbound(step, text),
-      () =>
-        Effect.sync(() => {
-          deliveryCount += 1;
-        }),
-      "verified-whatsapp"
-    );
-    if (!validDelivery(deliveryCount, reply.text)) delivered = false;
-    replies.push(reply.text);
-    challenge = extractChallenge(reply.text);
+    const { deliveryCount, reply } = yield* runHostedStep(scenario, step, text);
+    if (Option.isNone(reply)) {
+      delivered = false;
+      continue;
+    }
+    if (!validDelivery(deliveryCount, reply.value.text)) delivered = false;
+    replies.push(reply.value.text);
+    challenge = extractChallenge(reply.value.text);
     if (Option.isSome(challenge)) sawChallenge = true;
     if (step.kind === "delete-first") {
       const observed = yield* observeScenario(scenario.client);

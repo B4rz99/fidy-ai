@@ -1,0 +1,34 @@
+apps/server/src/shell/testing/evaluation/model.ts
+  s_2f8b45504a0c31::t_989c6d4cc2a94c 26,33,220-221,232-235
+apps/server/src/shell/testing/evaluation/runner.ts
+  s_2f8b45504a0c31::t_7c3eb0b0ffb277 43-47,191-196,207
+  s_2f8b45504a0c31::t_caf7dc47c45236 235-249,263
+  s_2f8b45504a0c31::t_94bfb97c6e0835 230-234,266-269,278
+apps/server/src/shell/testing/evaluation/scoring.test.ts
+  s_2f8b45504a0c31::t_5dd72e6a128c20 30,43
+apps/server/src/shell/testing/evaluation/scoring.ts
+  s_2f8b45504a0c31::t_99a5f7913c599d 130,137,142-143
+apps/server/src/shell/testing/evaluation/request-budget.ts
+  s_2f8b45504a0c31::t_c65e837adc1ffe 16,20
+  s_2f8b45504a0c31::t_8219113d720408 27-30,35,45-49,73-76,91,101-104
+apps/server/scripts/evaluate-es-co-openai.ts
+  s_2f8b45504a0c31::t_25eb7a2f361740 67,101
+apps/server/src/shell/testing/evaluation/corpora/es-co-v1/corpus.json
+  s_2f8b45504a0c31::t_d57c5ebc08ab3d 232,243,254,265,276
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.2",
+  "base_commit_sha": "4ca999b5c075ba13c914327c30ddb48800402df4",
+  "prompts": {},
+  "sessions": {
+    "s_2f8b45504a0c31": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a07e6a-da20-75b9-b327-53224696adae",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

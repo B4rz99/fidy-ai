@@ -117,9 +117,12 @@ const failSafely = (classification: string): Effect.Effect<void> =>
     process.exitCode = 1;
   });
 const command = Effect.scoped(Layer.build(EvaluationCommand)).pipe(
-  Effect.catch((failure) =>
-    failSafely(failure._tag === "HostedInferenceError" ? failure.reason._tag : failure._tag)
-  ),
+  Effect.catch((failure) => {
+    let classification: string = failure._tag;
+    if (failure._tag === "HostedInferenceError") classification = failure.reason._tag;
+    if (failure._tag === "EvaluationFailure") classification = failure.reason;
+    return failSafely(classification);
+  }),
   Effect.catchCause(() => failSafely("UnexpectedFailure"))
 );
 BunRuntime.runMain(command, { disableErrorReporting: true });

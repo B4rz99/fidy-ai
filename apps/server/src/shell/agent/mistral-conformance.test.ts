@@ -28,8 +28,17 @@ const decodeRequest = Effect.fn("Test.decodeMistralRequest")(function* (
   return yield* Schema.decodeUnknownEffect(JsonRecord)(json);
 });
 
+type AccountingResponse = Readonly<{
+  model: string;
+  usage: Readonly<{ prompt_tokens: number }>;
+}>;
+
 const makeAccountingClient = (
-  requests: Ref.Ref<ReadonlyArray<HttpClientRequest.HttpClientRequest>>
+  requests: Ref.Ref<ReadonlyArray<HttpClientRequest.HttpClientRequest>>,
+  responseForPromptTokens: (promptTokens: number) => AccountingResponse = (promptTokens) => ({
+    model: mistralConformanceModel,
+    usage: { prompt_tokens: promptTokens },
+  })
 ): HttpClient.HttpClient =>
   HttpClient.make((request) =>
     Effect.gen(function* () {
@@ -39,10 +48,9 @@ const makeAccountingClient = (
         body.messages
       ).pipe(Effect.orDie);
       const promptTokens = countMistralV13Messages(messages);
-      const responseBody = yield* Schema.encodeEffect(UnknownJsonString)({
-        model: mistralConformanceModel,
-        usage: { prompt_tokens: promptTokens },
-      }).pipe(Effect.orDie);
+      const responseBody = yield* Schema.encodeEffect(UnknownJsonString)(
+        responseForPromptTokens(promptTokens)
+      ).pipe(Effect.orDie);
       return HttpClientResponse.fromWeb(request, new Response(responseBody, { status: 200 }));
     })
   );
@@ -73,6 +81,39 @@ it.effect("sends schema differentials and the production Compaction reserve", ()
       temperature: 0,
     });
     expect(reports[3]?.completeRequestTokens).toBe((reports[3]?.localPromptTokens ?? 0) + 16_000);
+  })
+);
+
+it.effect("rejects provider identity and prompt accounting disagreement", () =>
+  Effect.gen(function* () {
+    const probes = [
+      {
+        reason: "provider_model_mismatch",
+        response: (promptTokens: number): AccountingResponse => ({
+          model: "different-model",
+          usage: { prompt_tokens: promptTokens },
+        }),
+      },
+      {
+        reason: "prompt_count_mismatch",
+        response: (promptTokens: number): AccountingResponse => ({
+          model: mistralConformanceModel,
+          usage: { prompt_tokens: promptTokens + 1 },
+        }),
+      },
+    ] as const;
+
+    for (const probe of probes) {
+      const requests = yield* Ref.make<ReadonlyArray<HttpClientRequest.HttpClientRequest>>([]);
+      const failure = yield* verifyMistralTokenConformance(Redacted.make("secret")).pipe(
+        Effect.provideService(
+          HttpClient.HttpClient,
+          makeAccountingClient(requests, probe.response)
+        ),
+        Effect.flip
+      );
+      expect(failure.reason).toBe(probe.reason);
+    }
   })
 );
 

@@ -1,7 +1,7 @@
 import { gunzipSync } from "node:zlib";
 import { Option } from "effect";
 import { Tiktoken } from "js-tiktoken/lite";
-import { ministral3bVocabulary } from "./fixtures/ministral-3b-2512-vocabulary";
+import { ministral3bVocabulary } from "~/shell/agent/fixtures/ministral-3b-2512-vocabulary";
 
 /** Explicit non-empty v13 conversation shape supported by the Compaction probe. */
 export type MistralV13Messages = readonly [

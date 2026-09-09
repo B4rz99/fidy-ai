@@ -1,0 +1,41 @@
+apps/server/src/shell/channels/whatsapp/disclosure-retention.test.ts
+  s_42471e805e9b67::t_0950d7e3c5bb7d 50-51,70-72
+apps/server/src/shell/channels/whatsapp/disclosure-races.test.ts
+  s_42471e805e9b67::t_e390268dcdd008 230,232-234,332
+  s_42471e805e9b67::t_b614fd18713afc 197,278,323
+  s_42471e805e9b67::t_dddafb6b037fc2 229,239,248,270,319
+apps/server/src/shell/agent/hosted-turns.integration.test.ts
+  s_42471e805e9b67::t_b614fd18713afc 320,323,411,414,435,463,515,584,642,645,740,743,765
+apps/server/src/shell/email-authentication/pairing-workflow.integration.test.ts
+  s_42471e805e9b67::t_b614fd18713afc 176,203-204,225,242,268,308,345,369,384,402,439,514,571,622
+apps/server/src/shell/onboarding/delivery-workflow.integration.test.ts
+  s_42471e805e9b67::t_22fc550efe01fd 203-204,238,267,301,322
+apps/server/src/shell/ingestion/email-forwarding.test.ts
+  s_42471e805e9b67::t_4063246c4f4fa1 626-630,633-634
+apps/server/src/shell/channels/whatsapp/whatsapp-channel.test.ts
+  s_42471e805e9b67::t_d5ce249fd94f69 200-202,3463
+  s_42471e805e9b67::t_3cf317e3ea904d 130-145,849-865,3461-3462,3464-3468
+  s_42471e805e9b67::t_9c42e7ca62951a 549,562-563,569,571,1986,2447-2452,2456
+apps/server/src/shell/channels/whatsapp/disclosure-workflow.integration.test.ts
+  s_42471e805e9b67::t_b614fd18713afc 169-170,253,259,313,330,378,426,489
+apps/server/src/shell/testing/pairing-workflow-crash-runner.ts
+  s_42471e805e9b67::t_22fc550efe01fd 17
+apps/server/src/shell/email-authentication/replacement-workflow.integration.test.ts
+  s_42471e805e9b67::t_b614fd18713afc 197,215,242-243,271,290,293,317,332,352,374,404,462,485,511,566,581
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.2",
+  "base_commit_sha": "16888fea9cc278028ece78fc8c6726036e329c13",
+  "prompts": {},
+  "sessions": {
+    "s_42471e805e9b67": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a083cc-2ce8-7422-b3c7-579a870ae987",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

@@ -50,6 +50,7 @@ import { clusterHostedTurns } from "./0050-cluster-hosted-turns";
 import { effectWhatsAppDisclosure } from "./0051-effect-whatsapp-disclosure";
 import { effectPairingEmail } from "./0052-effect-pairing-email";
 import { notificationEmailInterpretation } from "./0053-notification-email-interpretation";
+import { effectWhatsAppInbound } from "./0054-effect-whatsapp-inbound";
 
 /**
  * The explicit index ARCHITECTURE.md §7 calls for: one ordered, append-only
@@ -112,4 +113,5 @@ export const migrations = {
   "0051_effect_whatsapp_disclosure": effectWhatsAppDisclosure,
   "0052_effect_pairing_email": effectPairingEmail,
   "0053_notification_email_interpretation": notificationEmailInterpretation,
+  "0054_effect_whatsapp_inbound": effectWhatsAppInbound,
 };

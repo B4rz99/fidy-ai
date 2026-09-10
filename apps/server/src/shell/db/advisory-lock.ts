@@ -11,8 +11,7 @@ type AdvisoryLockKey = {
 
 /**
  * Registry of process-side PostgreSQL advisory-lock keys. Every unrelated resource has a distinct
- * namespace or seed; WhatsApp admission intentionally hashes the bare UserId to share its key with
- * the database claim function.
+ * namespace or seed.
  */
 export const advisoryLockKey = {
   keywordRules: (userId: UserId): AdvisoryLockKey => ({
@@ -60,7 +59,10 @@ export const advisoryLockKey = {
     value: `consent-gate:${caller.businessPortfolioId}:${caller.businessScopedUserId}`,
     seed: 0,
   }),
-  whatsAppAdmission: (userId: string): AdvisoryLockKey => ({ value: userId, seed: 0 }),
+  whatsAppBurst: (userId: UserId): AdvisoryLockKey => ({
+    value: `whatsapp-burst:${userId}`,
+    seed: 0,
+  }),
 } as const;
 
 const acquireSessionLock = Effect.fn(function* (lockKey: AdvisoryLockKey) {

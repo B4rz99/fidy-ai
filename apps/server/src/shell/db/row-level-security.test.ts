@@ -361,17 +361,13 @@ const seedEveryPolicyShape = Effect.gen(function* () {
     ) VALUES ('policy-whatsapp-evidence', ${policyOwner}, 'inbound', 'policy-delivery', '2026-01-01T00:00:00Z')
   `;
   yield* admin`
-    INSERT INTO whatsapp_turn_claims(id, user_id, status, claim_expires_at)
-    VALUES ('f1d1a000-0000-4000-8000-0000000005a1', ${policyOwner}, 'claimed', '2026-01-01T00:01:00Z')
-  `;
-  yield* admin`
     INSERT INTO whatsapp_inbound_jobs(
-      id, user_id, message_evidence_id, content, occurred_at, enqueued_at, debounce_until, claim_id
+      id, user_id, message_evidence_id, content, occurred_at, enqueued_at, debounce_until
     ) VALUES (
       'f1d1a000-0000-4000-8000-0000000005b2', ${policyOwner},
       (SELECT id FROM whatsapp_message_evidence WHERE provider_message_id = 'policy-whatsapp-evidence'),
       'policy content', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z',
-      '2026-01-01T00:00:02Z', 'f1d1a000-0000-4000-8000-0000000005a1'
+      '2026-01-01T00:00:02Z'
     )
   `;
   yield* admin`
@@ -543,11 +539,6 @@ const policyProbes: ReadonlyArray<PolicyProbe> = [
     ownerPredicate: "provider_message_id = 'policy-whatsapp-evidence'",
   },
   {
-    tableName: "whatsapp_turn_claims",
-    stableColumn: "claim_expires_at",
-    ownerPredicate: "id = 'f1d1a000-0000-4000-8000-0000000005a1'",
-  },
-  {
     tableName: "whatsapp_inbound_jobs",
     stableColumn: "debounce_until",
     ownerPredicate: "id = 'f1d1a000-0000-4000-8000-0000000005b2'",
@@ -627,13 +618,6 @@ const deniedInsertProbes = (sql: SqlClient.SqlClient) =>
       INSERT INTO whatsapp_message_evidence(
         provider_message_id, user_id, direction, delivery_key, occurred_at
       ) VALUES ('denied-whatsapp-evidence', ${policyOwner}, 'inbound', 'denied-delivery', '2026-01-02T00:00:00Z')
-    `,
-    },
-    {
-      tableName: "whatsapp_turn_claims",
-      insert: sql`
-      INSERT INTO whatsapp_turn_claims(id, user_id, status, claim_expires_at)
-      VALUES ('f1d1a000-0000-4000-8000-0000000005c3', ${policyOwner}, 'claimed', '2026-01-02T00:01:00Z')
     `,
     },
     {

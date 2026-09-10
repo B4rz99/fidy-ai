@@ -15,13 +15,9 @@ it("keeps unrelated slice locks distinct for the same User", () => {
     advisoryLockKey.dashboard(userId),
     advisoryLockKey.consentSubject(userId),
     advisoryLockKey.consentExternalEffect(userId),
-    advisoryLockKey.whatsAppAdmission(userId),
+    advisoryLockKey.whatsAppBurst(userId),
   ].map(({ value, seed }) => `${seed}:${value}`);
   expect(new Set(keys).size).toBe(keys.length);
-});
-
-it("shares the bare User key only between WhatsApp admission and database claims", () => {
-  expect(advisoryLockKey.whatsAppAdmission(userId)).toEqual({ value: userId, seed: 0 });
 });
 
 it("namespaces pre-subject Consent locks by both WhatsApp identity coordinates", () => {

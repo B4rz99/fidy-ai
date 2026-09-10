@@ -11,6 +11,12 @@ import type { TranscriptText } from "~/core/transcript/model";
 
 const maximumProviderIdentifierLength = 256;
 
+/** Stable identity of one accepted User-owned inbound message and its durable queue item. */
+export const WhatsAppInboundJobId = Schema.String.check(Schema.isUUID()).pipe(
+  Schema.brand("WhatsAppInboundJobId")
+);
+export type WhatsAppInboundJobId = typeof WhatsAppInboundJobId.Type;
+
 /** Immutable WhatsApp message identifier retained as evidence, never identity or authority. */
 export const WhatsAppProviderMessageId = Schema.String.check(
   Schema.isTrimmed(),

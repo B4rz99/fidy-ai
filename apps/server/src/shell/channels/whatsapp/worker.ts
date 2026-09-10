@@ -1,4 +1,4 @@
-import { Cause, DateTime, Effect, Layer, Option } from "effect";
+import { Cause, DateTime, Effect, Layer } from "effect";
 import { dual } from "effect/Function";
 import { AgentService } from "~/shell/agent/agent-service";
 import { pruneCompletedHostedTurnMessages } from "~/shell/durable-execution-retention";
@@ -6,7 +6,12 @@ import { projectStack } from "~/shell/observability/projectors";
 import { runBestEffortMaintenance } from "~/shell/maintenance-schedule";
 import { runScheduledWork } from "~/shell/observability/scheduled-work";
 import { Telemetry } from "~/shell/observability/telemetry";
-import { claimWhatsAppTurn, failWhatsAppTurn, pruneWhatsAppOperationalData } from "./repo";
+import { maximumWhatsAppInboundAttempts, whatsappInboundQueue } from "./inbound-execution";
+import {
+  pruneWhatsAppOperationalData,
+  pruneWhatsAppQueueHistory,
+  retireExhaustedWhatsAppWork,
+} from "./repo";
 
 const projectCauseForLog = (
   cause: Cause.Cause<unknown>
@@ -15,20 +20,15 @@ const projectCauseForLog = (
   stack: ReturnType<typeof projectStack>;
 }> => ({ reasons: cause.reasons.map((reason) => reason._tag), stack: projectStack(cause) });
 
-/** Hands one due burst to durable hosted execution; only pre-handoff legacy claims use the old timer. */
-export const processNextWhatsAppTurn = Effect.fn("WhatsApp.processNextTurn")(function* (
-  claimTime: DateTime.Utc
-) {
-  const claimed = yield* claimWhatsAppTurn(claimTime);
-  if (Option.isNone(claimed)) return false;
-  const claim = claimed.value;
-  if (claim.action === "retire_ambiguous") {
-    yield* failWhatsAppTurn(claim, claimTime, "ambiguous_crash");
-    return true;
-  }
+/** Takes and settles one durable accepted message without imposing an execution deadline. */
+export const processNextWhatsAppTurn = Effect.fn("WhatsApp.processNextTurn")(function* () {
+  const queue = yield* whatsappInboundQueue;
   const agent = yield* AgentService;
-  yield* agent.handleWhatsAppClaim(claim, claimTime);
-  return true;
+  return yield* queue
+    .take((work) => agent.handleWhatsAppWork(work), {
+      maxAttempts: maximumWhatsAppInboundAttempts,
+    })
+    .pipe(Effect.as(true));
 });
 
 /**
@@ -77,11 +77,10 @@ export const runSupervisedWhatsAppLoop: {
     )
 );
 
-const workerLoop = Effect.gen(function* () {
-  const now = yield* DateTime.now;
-  const processed = yield* processNextWhatsAppTurn(now);
-  if (!processed) yield* Effect.sleep("250 millis");
-}).pipe(runSupervisedWhatsAppLoop("whatsapp.processWork"));
+const workerLoop = processNextWhatsAppTurn().pipe(
+  Effect.asVoid,
+  runSupervisedWhatsAppLoop("whatsapp.processWork")
+);
 
 /** Removes expired WhatsApp operational data as one independently observed scheduled execution. */
 export const runWhatsAppRetention = runScheduledWork({
@@ -91,7 +90,10 @@ export const runWhatsAppRetention = runScheduledWork({
 })(
   Effect.gen(function* () {
     yield* pruneWhatsAppOperationalData();
-    yield* pruneCompletedHostedTurnMessages(yield* DateTime.now);
+    const now = yield* DateTime.now;
+    yield* retireExhaustedWhatsAppWork(now);
+    yield* pruneWhatsAppQueueHistory(now);
+    yield* pruneCompletedHostedTurnMessages(now);
     yield* Effect.logInfo("Applied WhatsApp operational retention");
   })
 );
@@ -105,7 +107,7 @@ export const WhatsAppRetentionLive = Layer.effectDiscard(
   }).pipe(Effect.forkScoped)
 );
 
-/** Runs independently supervised legacy Turn handoff loops; disclosure Workflows run separately. */
+/** Runs bounded native queue consumers; disclosure Workflows and retention run separately. */
 export const WhatsAppWorkerLive = Layer.effectDiscard(
   Effect.forEach(
     Array.from({ length: 8 }, () => workerLoop),

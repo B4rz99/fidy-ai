@@ -9,6 +9,7 @@ import {
   ReplacementDeliveryPayload,
   ReplacementDeliveryWorkflow,
 } from "~/shell/email-authentication/replacement-protocol";
+import { ReplacementExpiryWorkflowLive } from "~/shell/email-authentication/replacement-workflow";
 import { replacementRuntimeLayer } from "./replacement-runtime";
 
 /** Test-only runner: park at precise Activity boundaries so the parent can SIGKILL without finalizers. */
@@ -54,12 +55,15 @@ const run = Effect.gen(function* () {
     })
   );
   const crypto = yield* Crypto.Crypto;
+  const runtimeLayer = replacementRuntimeLayer({
+    crypto,
+    port: options.port,
+    provider,
+    deliveryLive,
+    expiryLive: ReplacementExpiryWorkflowLive,
+  });
   const runtime = yield* Effect.acquireRelease(
-    Effect.sync(() =>
-      ManagedRuntime.make(
-        replacementRuntimeLayer({ crypto, port: options.port, provider, deliveryLive })
-      )
-    ),
+    Effect.sync(() => ManagedRuntime.make(runtimeLayer)),
     (value) => Effect.tryPromise(() => value.dispose()).pipe(Effect.orDie)
   );
   yield* Effect.tryPromise(() =>

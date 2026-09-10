@@ -18,7 +18,7 @@ import {
 } from "~/shell/email-authentication/delivery";
 import {
   type ReplacementDeliveryWorkflowLive,
-  ReplacementExpiryWorkflowLive,
+  type ReplacementExpiryWorkflowLive,
 } from "~/shell/email-authentication/replacement-workflow";
 
 /** Real SQL/HTTP Cluster configuration shared by in-process and hard-killed replacement test runners. */
@@ -29,11 +29,13 @@ export const replacementRuntimeLayer = ({
   port,
   provider,
   deliveryLive,
+  expiryLive,
 }: Readonly<{
   crypto: Crypto.Crypto;
   port: number;
   provider: EmailDeliveryPortService;
   deliveryLive: typeof ReplacementDeliveryWorkflowLive;
+  expiryLive: typeof ReplacementExpiryWorkflowLive;
 }>): Layer.Layer<
   | MessageStorage.MessageStorage
   | Runners.Runners
@@ -43,7 +45,7 @@ export const replacementRuntimeLayer = ({
   | PgClient,
   Config.ConfigError | HttpServerError.ServeError | SqlError.SqlError
 > =>
-  Layer.mergeAll(deliveryLive, ReplacementExpiryWorkflowLive).pipe(
+  Layer.mergeAll(deliveryLive, expiryLive).pipe(
     Layer.provideMerge(
       ClusterWorkflowEngine.layer.pipe(
         Layer.provideMerge(

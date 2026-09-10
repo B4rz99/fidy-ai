@@ -1,0 +1,23 @@
+/** Prior successful CI durations for shell files whose runtime materially affects shard balance. */
+export const serverTestTimings = {
+  "src/shell/email-authentication/authentication.test.ts": "89",
+  "src/shell/email-authentication/pairing-workflow.integration.test.ts": "47",
+  "src/shell/email-authentication/replacement-workflow.integration.test.ts": "41",
+  "src/shell/channels/whatsapp/whatsapp-channel.test.ts": "25",
+  "src/shell/onboarding/delivery-workflow.integration.test.ts": "17",
+  "src/shell/agent/agent-service.test.ts": "16",
+  "src/shell/onboarding/onboarding.test.ts": "16",
+  "src/shell/agent/hosted-turns.integration.test.ts": "13",
+  "src/shell/channels/whatsapp/disclosure-workflow.integration.test.ts": "11",
+  "src/shell/dashboard/handlers.test.ts": "10",
+  "src/shell/ingestion/forwarded-email-workflow.integration.test.ts": "9",
+  "src/shell/transactions/handlers.test.ts": "9",
+  "src/shell/transcript/conversation-continuity.test.ts": "8",
+  "src/shell/testing/isolation.test.ts": "8",
+  "src/shell/ingestion/worker.test.ts": "7",
+  "src/shell/ingestion/email-forwarding.test.ts": "5",
+  "src/shell/db/migrations/0028-persisted-schema-reconciliation.test.ts": "5",
+  "src/shell/testing/suggested-operations.test.ts": "4",
+  "src/shell/email-authentication/replacement.test.ts": "4",
+  "src/shell/ingestion/email-interpretation.integration.test.ts": "4",
+};

@@ -31,7 +31,10 @@ import {
   replacementExpiryQueue,
 } from "./replacement-protocol";
 import { removeExpiredReplacementExecutions } from "./replacement-retention";
-import { ReplacementDeliveryWorkflowLive } from "./replacement-workflow";
+import {
+  replacementDeliveryWorkflowLayer,
+  replacementExpiryWorkflowLayer,
+} from "./replacement-workflow";
 import { replacementRuntimeLayer as runtimeLayer } from "~/shell/testing/replacement-runtime";
 
 const killAtBoundary = Effect.fn(function* (
@@ -95,6 +98,9 @@ const killAtBoundary = Effect.fn(function* (
   return codes;
 });
 
+const TestReplacementDeliveryWorkflow = replacementDeliveryWorkflowLayer("2 seconds");
+const TestReplacementExpiryWorkflow = replacementExpiryWorkflowLayer("2 seconds");
+
 const userId = UserId.make("f1d1a000-0000-4000-8000-000000004640");
 const bearer = TokenBearer.make("fin_durable1_abcdefghijklmnopqrstuvwxyz0123456789ABCD");
 const admit = Effect.fn(function* (email: string) {
@@ -151,7 +157,8 @@ const acquireRuntime = Effect.fn(function* (port: number, provider: EmailDeliver
     crypto,
     port,
     provider,
-    deliveryLive: ReplacementDeliveryWorkflowLive,
+    deliveryLive: TestReplacementDeliveryWorkflow,
+    expiryLive: TestReplacementExpiryWorkflow,
   });
   const runtime = ManagedRuntime.make(base);
   yield* Effect.addFinalizer(() => Effect.tryPromise(() => runtime.dispose()).pipe(Effect.orDie));
@@ -414,12 +421,16 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
             yield* Effect.tryPromise(() =>
               runtime.runPromise(ReplacementDeliveryWorkflow.execute(delivery, { discard: true }))
             );
-            yield* Effect.sleep("2 seconds");
             const executionId = yield* ReplacementDeliveryWorkflow.executionId(delivery);
-            const result = yield* Effect.tryPromise(() =>
+            yield* Effect.tryPromise(() =>
               runtime.runPromise(ReplacementDeliveryWorkflow.poll(executionId))
+            ).pipe(
+              Effect.repeat({
+                schedule: Schedule.spaced("20 millis"),
+                until: (state) => Option.exists(state, (value) => value._tag === "Suspended"),
+              }),
+              Effect.timeout("5 seconds")
             );
-            expect(Option.exists(result, (state) => state._tag === "Complete")).toBe(false);
             expect(yield* Ref.get(calls)).toBe(phase === "arming" ? 0 : 1);
             expect(
               yield* sql`SELECT 1 FROM fidy_durable.cluster_replies row
@@ -464,12 +475,16 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           );
           yield* sql`DELETE FROM fidy_durable.fidy_queue WHERE queue_name = 'email-replacement-expiry' AND id <> ${expiry.workflowId}`;
           yield* submitExpiry(runtimeA);
-          yield* Effect.sleep("2 seconds");
           const executionId = yield* ReplacementExpiryWorkflow.executionId(expiry);
-          const result = yield* Effect.tryPromise(() =>
+          yield* Effect.tryPromise(() =>
             runtimeA.runPromise(ReplacementExpiryWorkflow.poll(executionId))
+          ).pipe(
+            Effect.repeat({
+              schedule: Schedule.spaced("20 millis"),
+              until: (state) => Option.exists(state, (value) => value._tag === "Suspended"),
+            }),
+            Effect.timeout("5 seconds")
           );
-          expect(Option.exists(result, (state) => state._tag === "Complete")).toBe(false);
           yield* Effect.tryPromise(() => runtimeA.runPromise(removeExpiredReplacementExecutions()));
           expect(
             yield* sql`SELECT id FROM email_replacement_executions WHERE id = ${expiry.workflowId}`

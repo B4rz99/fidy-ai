@@ -1,0 +1,74 @@
+apps/server/src/shell/onboarding/retention.ts
+  s_a2e7c5d2313c51::t_f891a268cc16b3 1,17,80-84
+docs/architecture/durable-execution-inventory.md
+  s_a2e7c5d2313c51::t_28b6054e3d105a 104-123
+apps/server/src/shell/maintenance.ts
+  s_a2e7c5d2313c51::t_f09a0e11a64fe9 6
+  s_a2e7c5d2313c51::t_f168559e6b9524 11,30
+  s_a2e7c5d2313c51::t_d451d02b67345d 14,29
+  s_a2e7c5d2313c51::t_2d98a62e6e4ff2 1-5,7-10,12-13,15-28,31-33
+apps/server/src/shell/maintenance-schedule.test.ts
+  s_a2e7c5d2313c51::t_985c7b1bdba7d4 4
+  s_a2e7c5d2313c51::t_d6e5a5e30629a5 1-3
+  s_a2e7c5d2313c51::t_36c7f38674edb5 5-7
+  s_e0660da544eb35::t_8b42a848701fd6 8-32
+apps/server/src/shell/email-authentication/replacement-retention.ts
+  s_a2e7c5d2313c51::t_892dc563623741 1,18,196,208,210-214
+apps/server/ARCHITECTURE.md
+  s_a2e7c5d2313c51::t_437fa241951d97 429-437
+apps/server/src/shell/evidence-retention.ts
+  s_a2e7c5d2313c51::t_4e3e033e34c242 1,56-60
+  s_a2e7c5d2313c51::t_457d8f251191c7 6
+apps/server/src/shell/browser-login/handlers.ts
+  s_a2e7c5d2313c51::t_6f570f5650e378 2,68-72
+apps/server/src/shell/maintenance-schedule.ts
+  s_a2e7c5d2313c51::t_2e060f6f0e76be 1-17
+apps/server/src/shell/http.ts
+  s_a2e7c5d2313c51::t_c0c73b66f1303a 284-285
+  s_a2e7c5d2313c51::t_774fb9ddb27bf9 10
+  s_a2e7c5d2313c51::t_21de4e5bed4f9a 14,30,278,280,283,286-287,315
+apps/server/src/shell/recovery/retention.ts
+  s_a2e7c5d2313c51::t_b04e394312d1d7 1-2,31-35
+apps/server/src/shell/tokens/pairing-maintenance.ts
+  s_a2e7c5d2313c51::t_386c6adc2a0eab 7-9
+  s_a2e7c5d2313c51::t_7a0d2271098c2d 2,10-11
+  s_a2e7c5d2313c51::t_b284f14ac7b32e 5-6
+apps/server/src/shell/ingestion/forwarded-email-ingestion.ts
+  s_a2e7c5d2313c51::t_30b34bef758452 198-199
+  s_a2e7c5d2313c51::t_aa37ee46d30e33 23,195-197,200-202,210-216
+apps/server/src/shell/audit/retention.ts
+  s_a2e7c5d2313c51::t_f2f6c83cbeb3cc 1
+apps/server/src/shell/channels/whatsapp/worker.ts
+  s_a2e7c5d2313c51::t_657bb5f4baee17 6,99-105,108,111
+apps/server/src/shell/email-authentication/authentication-retention.ts
+  s_a2e7c5d2313c51::t_b08b82a515d412 127,132-135
+  s_a2e7c5d2313c51::t_f1db6485f5716c 1,11,119-123,128-131,136-137
+apps/server/src/shell/ingestion/worker.ts
+  s_a2e7c5d2313c51::t_9b0f76d22d7c2d 17,407-411,413,420,426-435
+  s_a2e7c5d2313c51::t_e9986cbc941de4 437
+  s_e0660da544eb35::t_7f6a2ad6f398d6 436
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "4da778763db648bee068985860bfd5f38076e320",
+  "prompts": {},
+  "sessions": {
+    "s_a2e7c5d2313c51": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a08918-7ec8-7199-89e7-c59f1bba038d",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": null
+    },
+    "s_e0660da544eb35": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a08911-1c55-744c-9d99-9d5d24577005",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

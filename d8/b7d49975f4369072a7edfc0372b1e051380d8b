@@ -1,0 +1,25 @@
+apps/server/package.json
+  s_2f8b45504a0c31::t_0250268c4f8f26 62
+apps/web/package.json
+  s_2f8b45504a0c31::t_e47ab0faf86f86 54
+apps/server/src/shell/testing/evaluation/request-budget.ts
+  s_2f8b45504a0c31::t_73576a64f21c6f 67
+bun.lock
+  s_2f8b45504a0c31::t_9515aca609c2fe 38,85,1446,1502
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "d8b7d49975f4369072a7edfc0372b1e051380d8b",
+  "prompts": {},
+  "sessions": {
+    "s_2f8b45504a0c31": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a07e6a-da20-75b9-b327-53224696adae",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

@@ -16,6 +16,8 @@
     "start:production": "bun --preload ./dist/preload.js dist/main.js",
     "agent:repl": "bun scripts/agent-repl.ts",
     "mistral:conformance": "bun scripts/verify-mistral-token-counts.ts",
+    "evaluate:es-co": "./scripts/evaluate-es-co.sh",
+    "test:evaluation": "./scripts/evaluate-es-co.sh test",
     "support:recovery": "bun scripts/support-recovery.ts",
     "sentry:verify": "bun scripts/verify-sentry-account.ts",
     "wompi:reconcile-enrollment": "bun scripts/reconcile-wompi-enrollment.ts",
@@ -57,7 +59,7 @@
     "js-tiktoken": "1.0.21",
     "parse5": "8.0.1",
     "sharp": "0.35.4",
-    "svix": "2.2.0",
+    "svix": "2.3.0",
     "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
   },
   "devDependencies": {

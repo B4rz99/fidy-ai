@@ -239,7 +239,8 @@
       "files": [
         "apps/server/src/shell/ingestion/email-forwarding.test.ts",
         "apps/server/src/shell/ingestion/forwarded-email-ingestion.ts",
-        "apps/server/src/shell/ingestion/resend-receiving-client.ts"
+        "apps/server/src/shell/ingestion/resend-receiving-client.ts",
+        "apps/server/src/shell/testing/sign-resend-webhook.ts"
       ],
       "rules": {
         "import/extensions": "off"

@@ -1,0 +1,54 @@
+scripts/ci/server-test-sequencer.test.ts
+  s_e0660da544eb35::t_eec8182c60ce32 22,37-39
+  s_e0660da544eb35::t_42e6367a335429 4-8
+  s_e0660da544eb35::t_9ca882bc9ad422 12-20,29-33
+  s_e0660da544eb35::t_e3090b6e4d50a4 1-3,9-11,21,23-28,34-36,40-41
+apps/server/vitest.core.config.ts
+  s_e0660da544eb35::t_5382641b9d0e91 29
+apps/web/scripts/preview-workflow.test.ts
+  s_e0660da544eb35::t_0e5e83a1bd7e05 47-48
+apps/server/src/shell/testing/replacement-runtime.ts
+  s_e0660da544eb35::t_4e765eb350a8ad 21,32,38,48
+apps/server/vitest.ci.config.ts
+  s_e0660da544eb35::t_e91a1e1065da21 3
+  s_e0660da544eb35::t_69aa801bc2ae14 7-10
+  s_e0660da544eb35::t_c652902fc57e6d 18,24
+  s_e0660da544eb35::t_fbe81cd2ede44e 6
+apps/server/src/shell/email-authentication/replacement-workflow.integration.test.ts
+  s_e0660da544eb35::t_1b6bf4ab3a21f2 425,479
+  s_e0660da544eb35::t_d1a76609c98de1 34-37,101-103,160-161
+  s_e0660da544eb35::t_78257c96e5d240 427-432,481-486
+.github/workflows/ci.yml
+  s_e0660da544eb35::t_8fb5c4ee37c337 86-92,180-182
+apps/server/src/shell/testing/replacement-crash-runner.ts
+  s_e0660da544eb35::t_6107587293d2d7 12
+  s_e0660da544eb35::t_18aeb019326443 58-64,66
+scripts/ci/server-test-timings.ts
+  s_e0660da544eb35::t_05c01450a907cd 1-23
+apps/server/src/shell/email-authentication/replacement-workflow.ts
+  s_e0660da544eb35::t_fa37b3bb6e131a 36,49,55,63-79,100,104-127
+  s_e0660da544eb35::t_8294a24d7a6fb0 1-14,56-62,101-103
+  s_e0660da544eb35::t_8249ee1c050d29 37
+scripts/ci/server-test-sequencer.ts
+  s_e0660da544eb35::t_8d30c6ae4f4bc4 7,49,61-63
+  s_e0660da544eb35::t_693d43ac27fb70 2,4-6
+  s_e0660da544eb35::t_78d2d093f7dd87 69
+  s_e0660da544eb35::t_94d578241a5190 1,3,8-20,28-48,51,54,58-60,64-65,71-72
+  s_e0660da544eb35::t_e8431b65ce457f 21-27,50,52-53,55-57,66-68,70
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "843a6f456e1f2699dd129c22c9ff7d561b970ec8",
+  "prompts": {},
+  "sessions": {
+    "s_e0660da544eb35": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a08911-1c55-744c-9d99-9d5d24577005",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": null
+    }
+  }
+}

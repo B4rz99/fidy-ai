@@ -83,6 +83,13 @@ jobs:
       - uses: ./.github/actions/bun-install
       - name: Unit and artifact validation
         run: bun run verify -- --group unit
+      - name: Preserve core coverage evidence
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: server-coverage-core
+          path: apps/server/coverage/coverage-final.json
+          if-no-files-found: error
+          retention-days: 7
 
   browser:
     name: Web browser and accessibility checks
@@ -170,7 +177,9 @@ jobs:
 
   quality:
     name: Quality thresholds
-    needs: server
+    needs:
+      - server
+      - unit
     runs-on: ubuntu-latest
     services:
       postgres:

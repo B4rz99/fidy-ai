@@ -26,7 +26,7 @@ export default defineConfig({
       provider: "istanbul",
       enabled: true,
       all: true,
-      reporter: ["text"],
+      reporter: ["text", "json"],
       include: CORE_SRC.map((sourceDir) => `${sourceDir}/**/*.ts`),
       exclude: [...CORE_EXCLUDE],
       thresholds: {

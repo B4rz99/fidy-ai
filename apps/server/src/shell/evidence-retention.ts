@@ -1,8 +1,9 @@
-import { DateTime, Duration, Effect, Layer, Schedule } from "effect";
+import { DateTime, Duration, Effect, Layer } from "effect";
 import type { SqlClient, SqlError } from "effect/unstable/sql";
 import { runAuditRetentionBefore } from "~/shell/audit/retention";
 import { removeReplacementLifecycleEventsBefore } from "~/shell/email-authentication/replacement-retention";
 import { runScheduledWork } from "~/shell/observability/scheduled-work";
+import { runBestEffortMaintenance } from "./maintenance-schedule";
 import type { Telemetry } from "~/shell/observability/telemetry";
 
 const retainedEvidenceDays = 365;
@@ -52,5 +53,9 @@ const applyEvidenceRetention = Effect.flatMap(DateTime.now, runEvidenceRetention
 
 /** Shell-owned daily scheduler; Audit and EmailAuthentication retain separate persistence calls. */
 export const EvidenceRetentionLive = Layer.effectDiscard(
-  applyEvidenceRetention.pipe(Effect.repeat(Schedule.spaced("1 day")), Effect.forkScoped)
+  runBestEffortMaintenance({
+    timing: "best-effort",
+    cadence: "1 day",
+    work: applyEvidenceRetention,
+  }).pipe(Effect.forkScoped)
 );

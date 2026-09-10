@@ -14,6 +14,7 @@ import { TransactionExtraction } from "~/core/transactions/model";
 import { freePatCaller } from "~/shell/_shared/suggested-operations";
 import { withUserTransaction } from "~/shell/db/user-transaction";
 import { durableQueueRetention } from "~/shell/durable-execution-retention";
+import { runBestEffortMaintenance } from "~/shell/maintenance-schedule";
 import { captureStatementTransactionInScope } from "~/shell/transactions/mutations";
 import { StatementColumnMapper } from "./column-mapper";
 import { type ParsedStatement, type StatementParseFailed, parseStatementFile } from "./parser";
@@ -403,37 +404,37 @@ const consumeStatementQueue = Effect.gen(function* () {
 });
 
 const retainTerminalExecutions = Effect.fn("StatementIngestion.retainTerminalExecutions")(
-  function* (firstPage: Option.Option<TerminalExecutionCursor>) {
-    let cursor = firstPage;
-    return yield* Effect.gen(function* () {
-      yield* Effect.sleep(
-        Option.match(cursor, { onNone: () => "1 day" as const, onSome: () => "1 minute" as const })
-      );
-      yield* Option.match(cursor, {
-        onNone: () => expireStatementIngestion(),
-        onSome: () => Effect.void,
-      });
+  function* () {
+    yield* expireStatementIngestion();
+    let cursor = yield* removeTerminalPage(Option.none());
+    while (Option.isSome(cursor)) {
+      yield* Effect.sleep("1 minute");
       cursor = yield* removeTerminalPage(cursor);
-    }).pipe(Effect.forever);
+    }
   }
 );
 
 const runStatementIngestionWorker = Effect.gen(function* () {
-  yield* expireStatementIngestion();
   const firstQueuedPage = yield* publishQueuedPage(Option.none());
-  const firstTerminalPage = yield* removeTerminalPage(Option.none());
   yield* Effect.forEach(
-    [
-      consumeStatementQueue,
-      retainTerminalExecutions(firstTerminalPage),
-      continueQueuedRecovery(firstQueuedPage),
-    ],
+    [consumeStatementQueue, continueQueuedRecovery(firstQueuedPage)],
     (loop) => Effect.forkScoped(loop),
     { concurrency: "unbounded", discard: true }
   );
 });
 
-/** Runs SQL queue consumption, bounded startup recovery, and repeat-safe evidence retention. */
+/** Best-effort evidence and completed queue retention; expiry is independently enforced on use. */
+export const StatementIngestionRetentionLive = Layer.effectDiscard(
+  runBestEffortMaintenance({
+    timing: "best-effort",
+    cadence: "1 day",
+    work: retainTerminalExecutions().pipe(
+      Effect.catchCause(() => Effect.logError("Statement ingestion retention failed"))
+    ),
+  }).pipe(Effect.forkScoped)
+);
+
+/** Runs SQL queue consumption and bounded startup recovery. */
 export const StatementIngestionWorkerLive = Layer.effectDiscard(
   Config.string("NODE_ENV").pipe(
     Config.withDefault("development"),

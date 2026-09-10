@@ -3,6 +3,7 @@ import { dual } from "effect/Function";
 import { AgentService } from "~/shell/agent/agent-service";
 import { pruneCompletedHostedTurnMessages } from "~/shell/durable-execution-retention";
 import { projectStack } from "~/shell/observability/projectors";
+import { runBestEffortMaintenance } from "~/shell/maintenance-schedule";
 import { runScheduledWork } from "~/shell/observability/scheduled-work";
 import { Telemetry } from "~/shell/observability/telemetry";
 import { claimWhatsAppTurn, failWhatsAppTurn, pruneWhatsAppOperationalData } from "./repo";
@@ -95,21 +96,19 @@ export const runWhatsAppRetention = runScheduledWork({
   })
 );
 
-const retentionLoop = Effect.forever(
-  runWhatsAppRetention.pipe(
-    Effect.andThen(Effect.sleep("1 hour")),
-    Effect.catchCause((cause) =>
-      Cause.hasInterrupts(cause) && !Cause.hasDies(cause) && !Cause.hasFails(cause)
-        ? Effect.interrupt
-        : Effect.sleep("1 second")
-    )
-  )
+/** Best-effort operational cleanup; authoritative expiry checks remain in owning operations. */
+export const WhatsAppRetentionLive = Layer.effectDiscard(
+  runBestEffortMaintenance({
+    timing: "best-effort",
+    cadence: "1 hour",
+    work: runWhatsAppRetention.pipe(Effect.ignoreCause),
+  }).pipe(Effect.forkScoped)
 );
 
-/** Runs independently supervised durable-turn and retention loops; disclosure Workflows run separately. */
+/** Runs independently supervised legacy Turn handoff loops; disclosure Workflows run separately. */
 export const WhatsAppWorkerLive = Layer.effectDiscard(
   Effect.forEach(
-    [...Array.from({ length: 8 }, () => workerLoop), retentionLoop],
+    Array.from({ length: 8 }, () => workerLoop),
     (loop) => Effect.forkScoped(loop),
     { concurrency: "unbounded", discard: true }
   )

@@ -1,4 +1,4 @@
-import { Data, DateTime, Effect, Layer, Option, Ref, Schedule, Schema } from "effect";
+import { Data, DateTime, Effect, Layer, Option, Ref, Schema } from "effect";
 import {
   EntityAddress,
   EntityId,
@@ -15,6 +15,7 @@ import { UserId } from "~/core/identity/reference";
 import { withSubjectLock } from "~/shell/consent/repo";
 import { withUserTransaction } from "~/shell/db/user-transaction";
 import { durableQueueRetention } from "~/shell/durable-execution-retention";
+import { runBestEffortMaintenance } from "~/shell/maintenance-schedule";
 import { runScheduledWork } from "~/shell/observability/scheduled-work";
 import {
   ReplacementDeliveryWorkflow,
@@ -192,7 +193,7 @@ export const EmailReplacementRetentionLive = Layer.effectDiscard(
   Effect.gen(function* () {
     // Discovery progress only: restart may rescan a page, never forget a retained execution.
     const cursor = yield* Ref.make(Option.none<string>());
-    yield* Effect.gen(function* () {
+    const work = Effect.gen(function* () {
       const batch = yield* removeExpiredReplacementExecutions(yield* Ref.get(cursor));
       yield* Ref.set(cursor, batch.nextCursor);
       if (batch.overdue > 0) {
@@ -204,9 +205,12 @@ export const EmailReplacementRetentionLive = Layer.effectDiscard(
         schedule: "task.emailAuthenticationRetention",
         operationalError: "operational_failure",
       }),
-      Effect.ignoreCause,
-      Effect.repeat(Schedule.spaced("1 minute")),
-      Effect.forkScoped
+      Effect.ignoreCause
     );
+    yield* runBestEffortMaintenance({
+      timing: "best-effort",
+      cadence: "1 minute",
+      work,
+    }).pipe(Effect.forkScoped);
   })
 );

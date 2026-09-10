@@ -1,4 +1,4 @@
-import { DateTime, Effect, Layer, Schedule } from "effect";
+import { DateTime, Effect, Layer } from "effect";
 import type { PersistedQueue } from "effect/unstable/persistence";
 import type { WorkflowEngine } from "effect/unstable/workflow";
 import { pruneConsentDisclosureDelivery } from "~/shell/channels/whatsapp/disclosure-retention";
@@ -14,6 +14,7 @@ import {
   removeExpiredEmailEnrollment,
 } from "~/shell/email-authentication/repo";
 import { runScheduledWork } from "~/shell/observability/scheduled-work";
+import { runBestEffortMaintenance } from "~/shell/maintenance-schedule";
 import type { Telemetry } from "~/shell/observability/telemetry";
 import { onboardingEmailDeliveryRetention } from "./delivery-workflow";
 
@@ -76,5 +77,9 @@ const applyOnboardingRetention = Effect.flatMap(DateTime.now, runOnboardingReten
 
 /** Production retention worker. Cleanup runs immediately and once per hour; idle waits are unobserved. */
 export const OnboardingRetentionLive = Layer.effectDiscard(
-  applyOnboardingRetention.pipe(Effect.repeat(Schedule.spaced("1 hour")), Effect.forkScoped)
+  runBestEffortMaintenance({
+    timing: "best-effort",
+    cadence: "1 hour",
+    work: applyOnboardingRetention,
+  }).pipe(Effect.forkScoped)
 );

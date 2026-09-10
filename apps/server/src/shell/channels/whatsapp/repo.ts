@@ -16,6 +16,7 @@ import {
   type Statement,
 } from "effect/unstable/sql";
 import { UserId, type WhatsAppCallerReference } from "~/core/identity/reference";
+import { TranscriptTurnId } from "~/core/transcript/model";
 import { InboundMessage } from "~/shell/agent/message";
 import { OnboardingConsentRequired } from "~/shell/agent/consent-error";
 import type { AuthorizedAgentTurn } from "~/shell/agent/message";
@@ -24,7 +25,7 @@ import {
   confirmationDigestFromCommand,
 } from "~/shell/agent/tool-confirmation-model";
 import { hasCurrentOnboardingConsentAt, useCurrentConsent } from "~/shell/consent/repo";
-import { advisoryLockKey } from "~/shell/db/advisory-lock";
+import { advisoryLockKey, withUserLockInScope } from "~/shell/db/advisory-lock";
 import { withUserTransaction } from "~/shell/db/user-transaction";
 import {
   DurableTraceContext,
@@ -37,18 +38,18 @@ import {
   WhatsAppCaller,
   WhatsAppDeliveryKey,
   type WhatsAppInboundEvent,
+  WhatsAppInboundJobId,
   type WhatsAppMessageEvidence,
   WhatsAppProviderMessageId,
 } from "./model";
+import {
+  WhatsAppInboundWork,
+  maximumWhatsAppInboundAttempts,
+  whatsappInboundQueue,
+} from "./inbound-execution";
 
 const maximumBudgetKeyLength = 256;
 const maximumQueueDelayMilliseconds = 86_400_000;
-
-/** Opaque identity for one durable attempt to process a User's due burst. */
-export const WhatsAppClaimId = Schema.String.check(Schema.isUUID()).pipe(
-  Schema.brand("WhatsAppClaimId")
-);
-export type WhatsAppClaimId = typeof WhatsAppClaimId.Type;
 
 const WhatsAppReceiptClaimId = Schema.String.check(Schema.isUUID()).pipe(
   Schema.brand("WhatsAppReceiptClaimId")
@@ -59,12 +60,6 @@ type WhatsAppReceiptClaim = Readonly<{
   readonly claimId: WhatsAppReceiptClaimId;
 }>;
 
-/** Minimal pre-subject claim projection; message content requires User context. */
-export type WhatsAppTurnClaim = Readonly<{
-  readonly claimId: WhatsAppClaimId;
-  readonly userId: UserId;
-  readonly action: "process" | "retire_ambiguous";
-}>;
 /** Constructive result of inspecting the current User's free-form messaging window. */
 export type WhatsAppWindowState =
   | Readonly<{ readonly _tag: "Open"; readonly windowOpenUntil: DateTime.Utc }>
@@ -90,8 +85,6 @@ export class WhatsAppWindowClosed extends Data.TaggedError("WhatsAppWindowClosed
     });
   }
 }
-/** The claimed burst no longer exists in the expected claim lifecycle state. */
-export class WhatsAppClaimInvalid extends Data.TaggedError("WhatsAppClaimInvalid")<{}> {}
 /** Provider evidence collided with an already retained message identity. */
 export class WhatsAppEvidenceConflict extends Data.TaggedError("WhatsAppEvidenceConflict")<{}> {}
 /** The authenticated receipt claim was superseded before it could be completed. */
@@ -168,6 +161,104 @@ export const pruneWhatsAppOperationalData = Effect.fn("WhatsApp.pruneOperational
     yield* sql`SELECT fidy_prune_whatsapp_operational_data()`.pipe(Effect.asVoid, Effect.orDie);
   }
 );
+
+const ExhaustedWhatsAppQueueItem = Schema.Struct({
+  sequence: Schema.Int,
+  element: Schema.String,
+});
+const WhatsAppInboundIdentity = Schema.fromJsonString(
+  Schema.Struct({ userId: UserId, inboundJobId: WhatsAppInboundJobId })
+);
+
+/** Terminally retires one bounded page of work whose native retry budget is exhausted. */
+export const retireExhaustedWhatsAppWork = Effect.fn("WhatsApp.retireExhaustedWork")(function* (
+  now: DateTime.Utc
+) {
+  const sql = yield* SqlClient.SqlClient;
+  const exhausted = yield* SqlSchema.findAll({
+    Request: Schema.Void,
+    Result: ExhaustedWhatsAppQueueItem,
+    execute: () => sql`SELECT sequence, element FROM fidy_queue
+      WHERE queue_name = 'whatsapp-inbound-turn' AND completed = FALSE
+        AND attempts >= ${maximumWhatsAppInboundAttempts}
+      ORDER BY sequence LIMIT 256`,
+  })(undefined).pipe(Effect.orDie);
+  for (const item of exhausted) {
+    const identity = Schema.decodeOption(WhatsAppInboundIdentity)(item.element);
+    if (Option.isNone(identity)) {
+      yield* sql`UPDATE fidy_queue SET last_failure = 'schema_incompatible', updated_at = ${now}
+        WHERE sequence = ${item.sequence} AND completed = FALSE`.pipe(Effect.asVoid, Effect.orDie);
+      yield* Effect.logWarning("Retained malformed exhausted WhatsApp work", {
+        sequence: item.sequence,
+      });
+      continue;
+    }
+    yield* withUserTransaction(
+      identity.value.userId,
+      sql`UPDATE public.whatsapp_inbound_jobs AS job
+        SET turn_id = coalesce(job.turn_id, job.id), content = NULL, completed_at = ${now},
+          terminal_outcome = 'agent_failed'
+        WHERE job.user_id = ${identity.value.userId} AND job.completed_at IS NULL
+          AND (job.id = ${identity.value.inboundJobId} OR job.turn_id = (
+            SELECT trigger.turn_id FROM public.whatsapp_inbound_jobs AS trigger
+            WHERE trigger.user_id = ${identity.value.userId}
+              AND trigger.id = ${identity.value.inboundJobId}
+          ))`.pipe(Effect.asVoid, Effect.catchTag("SqlError", Effect.die))
+    );
+    yield* sql`UPDATE fidy_queue SET completed = TRUE, acquired_at = NULL, acquired_by = NULL,
+      updated_at = ${now} WHERE sequence = ${item.sequence} AND completed = FALSE
+        AND attempts >= ${maximumWhatsAppInboundAttempts}`.pipe(Effect.asVoid, Effect.orDie);
+  }
+  if (exhausted.length > 0) {
+    yield* Effect.logWarning("Retired exhausted WhatsApp work", { count: exhausted.length });
+  }
+});
+
+const QueueHistoryCandidate = Schema.Struct({
+  sequence: Schema.Int,
+  element: Schema.String,
+  id: Schema.String,
+});
+const UnfinishedJob = Schema.Struct({ id: WhatsAppInboundJobId });
+
+/** Removes one bounded page of completed queue history after the replay horizon. */
+export const pruneWhatsAppQueueHistory = Effect.fn("WhatsApp.pruneQueueHistory")(function* (
+  now: DateTime.Utc
+) {
+  const sql = yield* SqlClient.SqlClient;
+  const cutoff = DateTime.subtract(now, { hours: 24 });
+  const candidates = yield* SqlSchema.findAll({
+    Request: Schema.DateTimeUtc,
+    Result: QueueHistoryCandidate,
+    execute: (before) => sql`SELECT sequence, element, id FROM fidy_queue
+      WHERE queue_name = 'whatsapp-inbound-turn' AND completed = TRUE AND updated_at < ${before}
+      ORDER BY sequence LIMIT 256`,
+  })(cutoff).pipe(Effect.orDie);
+  for (const candidate of candidates) {
+    const identity = Schema.decodeOption(WhatsAppInboundIdentity)(candidate.element);
+    if (Option.isNone(identity)) {
+      yield* Effect.logWarning("Retained malformed WhatsApp queue history", {
+        sequence: candidate.sequence,
+      });
+      continue;
+    }
+    const unfinished = yield* withUserTransaction(
+      identity.value.userId,
+      SqlSchema.findAll({
+        Request: Schema.String,
+        Result: UnfinishedJob,
+        execute: (id) => sql`SELECT id FROM public.whatsapp_inbound_jobs
+          WHERE user_id = ${identity.value.userId} AND id::text = ${id} AND completed_at IS NULL`,
+      })(candidate.id).pipe(Effect.orDie)
+    );
+    if (unfinished.length === 0) {
+      yield* sql`DELETE FROM fidy_queue WHERE sequence = ${candidate.sequence} AND completed = TRUE`.pipe(
+        Effect.asVoid,
+        Effect.orDie
+      );
+    }
+  }
+});
 
 const ReceiptClaimRequest = Schema.Struct({
   providerMessageId: WhatsAppProviderMessageId,
@@ -271,6 +362,7 @@ export const completeWhatsAppReceipt = Effect.fn("WhatsApp.completeReceipt")(fun
 });
 
 const EnqueueRequest = Schema.Struct({
+  inboundJobId: WhatsAppInboundJobId,
   userId: UserId,
   providerMessageId: WhatsAppProviderMessageId,
   deliveryKey: WhatsAppDeliveryKey,
@@ -322,10 +414,8 @@ type EnqueueStatement = (
 ) => Statement.Statement<SqlConnection.Row>;
 
 const enqueueStatement: EnqueueStatement = (sql, row) => sql`
-  WITH admission_lock AS MATERIALIZED (
-    SELECT pg_advisory_xact_lock(hashtextextended(${advisoryLockKey.whatsAppAdmission(row.userId).value}, ${advisoryLockKey.whatsAppAdmission(row.userId).seed}))
-  ), existing AS (
-    SELECT 1 FROM whatsapp_message_evidence, admission_lock
+  WITH existing AS (
+    SELECT 1 FROM whatsapp_message_evidence
     WHERE provider_message_id = ${row.providerMessageId}
   ), capacity AS (
     SELECT
@@ -333,7 +423,7 @@ const enqueueStatement: EnqueueStatement = (sql, row) => sql`
       AND COALESCE(sum(char_length(job.content)), 0)
         + char_length(${row.text}) + count(job.id) <= 16000
       AS available
-    FROM admission_lock
+    FROM (SELECT 1) AS capacity_check
     LEFT JOIN whatsapp_inbound_jobs AS job
       ON job.user_id = ${row.userId} AND job.completed_at IS NULL
   ), evidence AS (
@@ -347,10 +437,10 @@ const enqueueStatement: EnqueueStatement = (sql, row) => sql`
     RETURNING id
   ), inserted_job AS (
     INSERT INTO whatsapp_inbound_jobs(
-      user_id, message_evidence_id, content, occurred_at, enqueued_at, debounce_until,
+      id, user_id, message_evidence_id, content, occurred_at, enqueued_at, debounce_until,
       trace_version, trace_id, parent_span_id, trace_sampled, trace_captured_at
     )
-    SELECT ${row.userId}, id, ${row.text}, ${row.occurredAt}, ${row.enqueuedAt},
+    SELECT ${row.inboundJobId}, ${row.userId}, id, ${row.text}, ${row.occurredAt}, ${row.enqueuedAt},
       ${row.debounceUntil}, ${row.traceVersion}, ${row.traceId}, ${row.parentSpanId},
       ${row.traceSampled}, ${row.traceCapturedAt}
     FROM evidence
@@ -395,12 +485,36 @@ const enqueueInboundJob = (
     execute: (row) => enqueueStatement(sql, row),
   });
 
+const propagationColumns = (
+  propagation: Option.Option<DurableTraceContext>
+): Pick<
+  typeof EnqueueRequest.Type,
+  "traceVersion" | "traceId" | "parentSpanId" | "traceSampled" | "traceCapturedAt"
+> => ({
+  traceVersion: Option.map(propagation, (context) => context.version),
+  traceId: Option.map(propagation, (context) => context.traceId),
+  parentSpanId: Option.map(propagation, (context) => context.parentSpanId),
+  traceSampled: Option.map(propagation, (context) => context.sampled),
+  traceCapturedAt: Option.map(propagation, (context) => context.capturedAtUnixMilliseconds),
+});
+
 type EnqueueWhatsAppTurnInput = Readonly<{
   admission: AuthorizedAgentTurn;
   event: WhatsAppInboundEvent;
   deliveryKey: WhatsAppDeliveryKey;
   propagation: Option.Option<DurableTraceContext>;
 }>;
+
+const publishWhatsAppInbound = Effect.fn(function* (work: WhatsAppInboundWork) {
+  const queue = yield* whatsappInboundQueue;
+  yield* queue.offer(work, { id: work.inboundJobId }).pipe(Effect.orDie);
+});
+const publishAcceptedWhatsAppInbound = Effect.fn(function* (
+  status: typeof EnqueueResult.Type.status,
+  work: WhatsAppInboundWork
+) {
+  if (status === "enqueued") yield* publishWhatsAppInbound(work);
+});
 
 /**
  * Under current onboarding consent, atomically deduplicates by provider-message evidence, admits
@@ -413,45 +527,50 @@ export const enqueueWhatsAppTurn = Effect.fn("WhatsApp.enqueueTurn")(function* (
   input: EnqueueWhatsAppTurnInput
 ) {
   const sql = yield* SqlClient.SqlClient;
-  const propagation = input.propagation;
-  const { admission } = input;
-  const debounceUntil = DateTime.add(input.event.receivedAt, { milliseconds: 2_500 });
-  const windowOpenUntil = DateTime.add(input.event.occurredAt, { hours: 24 });
+  const crypto = yield* Crypto.Crypto;
+  const { admission, propagation } = input;
+  const inboundJobId = WhatsAppInboundJobId.make(yield* crypto.randomUUIDv4.pipe(Effect.orDie));
   return yield* withUserTransaction(
     admission.userId,
-    useCurrentConsent(
-      admission.userId,
-      () => new OnboardingConsentRequired({ userId: admission.userId }),
-      Effect.gen(function* () {
-        const identity = yield* findAndLockWhatsAppIdentity(admission.userId);
-        const consentExisted = yield* hasCurrentOnboardingConsentAt(
-          admission.userId,
-          input.event.occurredAt
-        );
-        if (Option.isNone(identity)) return { status: "stale_authority" as const };
-        if (!hasCurrentAuthority(identity.value, input.event, consentExisted)) {
-          return { status: "stale_authority" as const };
-        }
-        return yield* enqueueInboundJob(sql)({
-          userId: admission.userId,
-          providerMessageId: input.event.messageEvidence.providerMessageId,
-          deliveryKey: input.deliveryKey,
-          text: admission.inboundMessage.text,
-          occurredAt: input.event.occurredAt,
-          enqueuedAt: input.event.receivedAt,
-          debounceUntil,
-          identityVerifiedAt: identity.value.verifiedAt,
-          businessPhoneNumberId: input.event.businessPhoneNumberId,
-          businessPortfolioId: input.event.caller.businessPortfolioId,
-          businessScopedUserId: input.event.caller.businessScopedUserId,
-          windowOpenUntil,
-          traceVersion: Option.map(propagation, (context) => context.version),
-          traceId: Option.map(propagation, (context) => context.traceId),
-          parentSpanId: Option.map(propagation, (context) => context.parentSpanId),
-          traceSampled: Option.map(propagation, (context) => context.sampled),
-          traceCapturedAt: Option.map(propagation, (context) => context.capturedAtUnixMilliseconds),
-        }).pipe(Effect.orDie);
-      })
+    withUserLockInScope(
+      advisoryLockKey.whatsAppBurst(admission.userId),
+      useCurrentConsent(
+        admission.userId,
+        () => new OnboardingConsentRequired({ userId: admission.userId }),
+        Effect.gen(function* () {
+          const identity = yield* findAndLockWhatsAppIdentity(admission.userId);
+          const consentExisted = yield* hasCurrentOnboardingConsentAt(
+            admission.userId,
+            input.event.occurredAt
+          );
+          if (Option.isNone(identity)) return { status: "stale_authority" as const };
+          if (!hasCurrentAuthority(identity.value, input.event, consentExisted)) {
+            return { status: "stale_authority" as const };
+          }
+          const result = yield* enqueueInboundJob(sql)({
+            inboundJobId,
+            userId: admission.userId,
+            providerMessageId: input.event.messageEvidence.providerMessageId,
+            deliveryKey: input.deliveryKey,
+            text: admission.inboundMessage.text,
+            occurredAt: input.event.occurredAt,
+            enqueuedAt: input.event.receivedAt,
+            debounceUntil: DateTime.add(input.event.receivedAt, { milliseconds: 2_500 }),
+            identityVerifiedAt: identity.value.verifiedAt,
+            businessPhoneNumberId: input.event.businessPhoneNumberId,
+            businessPortfolioId: input.event.caller.businessPortfolioId,
+            businessScopedUserId: input.event.caller.businessScopedUserId,
+            windowOpenUntil: DateTime.add(input.event.occurredAt, { hours: 24 }),
+            ...propagationColumns(propagation),
+          }).pipe(Effect.orDie);
+          yield* publishAcceptedWhatsAppInbound(result.status, {
+            version: 1,
+            userId: admission.userId,
+            inboundJobId,
+          });
+          return result;
+        })
+      )
     )
   ).pipe(
     Effect.flatMap((result) =>
@@ -462,31 +581,8 @@ export const enqueueWhatsAppTurn = Effect.fn("WhatsApp.enqueueTurn")(function* (
   );
 });
 
-const ClaimRow = Schema.Struct({
-  claimId: WhatsAppClaimId,
-  userId: UserId,
-  action: Schema.Literals(["process", "retire_ambiguous"]),
-});
-/**
- * Atomically claims one globally due User without exposing content. Returns none when no work is
- * due; otherwise the action directs the caller either to process a new claim or retire an expired
- * started claim.
- */
-export const claimWhatsAppTurn = (
-  now: DateTime.Utc
-): Effect.Effect<Option.Option<typeof ClaimRow.Type>, never, SqlClient.SqlClient> =>
-  Effect.flatMap(SqlClient.SqlClient, (sql) =>
-    SqlSchema.findOneOption({
-      Request: Schema.DateTimeUtcFromDate,
-      Result: ClaimRow,
-      execute: (claimTime) => sql`
-        SELECT claim_id AS "claimId", subject_user_id AS "userId", claim_action AS action
-        FROM fidy_claim_whatsapp_turn(${claimTime})
-      `,
-    })(now)
-  ).pipe(Effect.map(Option.map((row) => row satisfies WhatsAppTurnClaim)), Effect.orDie);
-
-const ClaimedJob = Schema.Struct({
+const StoredInboundJob = Schema.Struct({
+  id: WhatsAppInboundJobId,
   text: InboundMessage.fields.text,
   providerMessageId: WhatsAppProviderMessageId,
   occurredAt: Schema.DateTimeUtcFromDate,
@@ -507,53 +603,9 @@ const StoredDurableTraceContext = Schema.Struct({
     Schema.decodeTo(DurableTraceContext.fields.capturedAtUnixMilliseconds)
   ),
 });
-const LoadClaimRequest = Schema.Struct({ userId: UserId, claimId: WhatsAppClaimId });
-type ClaimedJob = typeof ClaimedJob.Type;
+type StoredInboundJob = typeof StoredInboundJob.Type;
 
-const markClaimStarted = Effect.fn(function* (
-  sql: SqlClient.SqlClient,
-  claim: WhatsAppTurnClaim,
-  claimTime: DateTime.Utc
-) {
-  const started = yield* SqlSchema.findOneOption({
-    Request: LoadClaimRequest,
-    Result: Schema.Struct({ started: Schema.Boolean }),
-    execute: (row) => sql`
-      UPDATE whatsapp_turn_claims
-      SET status = 'started', started_at = ${claimTime},
-        claim_expires_at = ${claimTime}::timestamptz + interval '10 minutes'
-      WHERE id = ${row.claimId} AND user_id = ${row.userId} AND status = 'claimed'
-      RETURNING true AS started
-    `,
-  })(claim);
-  if (Option.isNone(started)) return yield* new WhatsAppClaimInvalid();
-  yield* sql`
-    UPDATE whatsapp_inbound_jobs
-    SET processing_attempt = processing_attempt + 1
-    WHERE user_id = ${claim.userId} AND claim_id = ${claim.claimId}
-      AND completed_at IS NULL AND content IS NOT NULL
-  `;
-});
-
-const loadClaimedJobs = Effect.fn(function* (sql: SqlClient.SqlClient, claim: WhatsAppTurnClaim) {
-  return yield* SqlSchema.findAll({
-    Request: LoadClaimRequest,
-    Result: ClaimedJob,
-    execute: (row) => sql`
-      SELECT job.content AS text, evidence.provider_message_id AS "providerMessageId",
-        evidence.occurred_at AS "occurredAt", job.enqueued_at AS "enqueuedAt", job.trace_version AS "traceVersion", job.trace_id AS "traceId",
-        job.parent_span_id AS "parentSpanId", job.trace_sampled AS "traceSampled",
-        job.trace_captured_at AS "traceCapturedAt", job.processing_attempt AS "processingAttempt"
-      FROM whatsapp_inbound_jobs AS job
-      JOIN whatsapp_message_evidence AS evidence ON evidence.id = job.message_evidence_id
-      WHERE job.user_id = ${row.userId} AND job.claim_id = ${row.claimId}
-        AND job.completed_at IS NULL AND job.content IS NOT NULL
-      ORDER BY job.enqueued_at, evidence.id
-    `,
-  })(claim);
-});
-
-const durableContextFromJob = (job: ClaimedJob): Option.Option<DurableTraceContext> =>
+const durableContextFromJob = (job: StoredInboundJob): Option.Option<DurableTraceContext> =>
   Option.all({
     version: job.traceVersion,
     traceId: job.traceId,
@@ -572,28 +624,48 @@ const loadConfirmationOutboundEvidence = Effect.fn(function* (
   digest: ConfirmationDigest
 ) {
   return yield* SqlSchema.findOneOption({
-    Request: Schema.Struct({
-      userId: UserId,
-      digest: ConfirmationDigest,
-    }),
+    Request: Schema.Struct({ userId: UserId, digest: ConfirmationDigest }),
     Result: PreviousOutboundEvidence,
     execute: (request) => sql`
-        SELECT provider_message_id AS "providerMessageId"
-        FROM whatsapp_message_evidence
-        WHERE user_id = ${request.userId} AND direction = 'outbound'
-          AND confirmation_digest = ${request.digest}
-        LIMIT 1
-      `,
+      SELECT provider_message_id AS "providerMessageId"
+      FROM whatsapp_message_evidence
+      WHERE user_id = ${request.userId} AND direction = 'outbound'
+        AND confirmation_digest = ${request.digest}
+      LIMIT 1
+    `,
   })({ userId, digest });
 });
 
-const prepareStartedTurn = Effect.fn(function* (input: {
-  readonly claim: WhatsAppTurnClaim;
-  readonly claimTime: DateTime.Utc;
-  readonly jobs: EffectArray.NonEmptyReadonlyArray<ClaimedJob>;
-  readonly previousOutbound: Option.Option<typeof PreviousOutboundEvidence.Type>;
+const WhatsAppTurnWork = Schema.Struct({ userId: UserId, turnId: TranscriptTurnId });
+export type WhatsAppTurnWork = typeof WhatsAppTurnWork.Type;
+
+const loadBurstJobs = Effect.fn(function* (sql: SqlClient.SqlClient, turn: WhatsAppTurnWork) {
+  return yield* SqlSchema.findAll({
+    Request: WhatsAppTurnWork,
+    Result: StoredInboundJob,
+    execute: (row) => sql`
+      SELECT job.id, job.content AS text, evidence.provider_message_id AS "providerMessageId",
+        evidence.occurred_at AS "occurredAt", job.enqueued_at AS "enqueuedAt",
+        job.trace_version AS "traceVersion", job.trace_id AS "traceId",
+        job.parent_span_id AS "parentSpanId", job.trace_sampled AS "traceSampled",
+        job.trace_captured_at AS "traceCapturedAt",
+        job.processing_attempt AS "processingAttempt"
+      FROM whatsapp_inbound_jobs AS job
+      JOIN whatsapp_message_evidence AS evidence ON evidence.id = job.message_evidence_id
+      WHERE job.user_id = ${row.userId} AND job.turn_id = ${row.turnId}
+        AND job.completed_at IS NULL AND job.content IS NOT NULL
+      ORDER BY job.enqueued_at, evidence.id
+    `,
+  })(turn);
+});
+
+const prepareBurst = Effect.fn(function* (input: {
+  turn: WhatsAppTurnWork;
+  preparedAt: DateTime.Utc;
+  jobs: EffectArray.NonEmptyReadonlyArray<StoredInboundJob>;
+  previousOutbound: Option.Option<typeof PreviousOutboundEvidence.Type>;
 }) {
-  const { claim, claimTime, jobs, previousOutbound } = input;
+  const { jobs, preparedAt, previousOutbound, turn } = input;
   const newest = EffectArray.lastNonEmpty(jobs);
   const confirmationEvidence = Option.map(previousOutbound, ({ providerMessageId }) => ({
     _tag: "ProviderQualifiedMessages" as const,
@@ -611,151 +683,157 @@ const prepareStartedTurn = Effect.fn(function* (input: {
       onSome: (evidence) => ({ confirmationEvidence: evidence }),
     }),
   });
-  const queueDelayMilliseconds = TelemetryDuration.make(
-    Math.min(
-      maximumQueueDelayMilliseconds,
-      Math.max(0, DateTime.toEpochMillis(claimTime) - DateTime.toEpochMillis(newest.enqueuedAt))
-    )
-  );
   return {
-    claim,
+    _tag: "Ready" as const,
+    turn,
     inboundMessage,
     messages: jobs,
     propagation: durableContextFromJob(newest),
     inputCount: jobs.length,
     processingAttempt: TelemetryAttempt.make(Math.max(...jobs.map((job) => job.processingAttempt))),
-    queueDelayMilliseconds,
-  } as const;
+    queueDelayMilliseconds: TelemetryDuration.make(
+      Math.min(
+        maximumQueueDelayMilliseconds,
+        Math.max(0, DateTime.toEpochMillis(preparedAt) - DateTime.toEpochMillis(newest.enqueuedAt))
+      )
+    ),
+  };
 });
 
-/**
- * Starts one claimed lease at `claimTime` with a ten-minute ambiguous-crash deadline, loads its
- * non-empty jobs ordered by internal arrival and evidence id, and collapses text with
- * newlines into one bounded InboundMessage. It selects only the newest job's bounded propagation
- * context as the parent for this attempt; missing or invalid context becomes a new root.
- * A missing or stale claim fails WhatsAppClaimInvalid.
- */
-export const startWhatsAppTurn = Effect.fn("WhatsApp.startTurn")(function* (
-  claim: WhatsAppTurnClaim,
-  claimTime: DateTime.Utc
+const TriggerState = Schema.Struct({
+  turnId: Schema.OptionFromNullOr(TranscriptTurnId),
+  completed: Schema.Boolean,
+});
+
+/** Confirms identifier-only durable routing against the explicit User before Cluster publication. */
+export const ownsWhatsAppInboundWork = Effect.fn("WhatsApp.ownsInboundWork")(function* (
+  work: WhatsAppInboundWork
 ) {
   const sql = yield* SqlClient.SqlClient;
   return yield* withUserTransaction(
-    claim.userId,
-    Effect.gen(function* () {
-      yield* markClaimStarted(sql, claim, claimTime);
-      const jobs = yield* loadClaimedJobs(sql, claim);
-      if (!EffectArray.isArrayNonEmpty(jobs)) {
-        return yield* Effect.die(new Error("Started WhatsApp claim contained no jobs"));
-      }
-      const command = jobs.map(({ text }) => text).join("\n");
-      const previousOutbound = yield* confirmationDigestFromCommand(command).pipe(
-        Option.match({
-          onNone: () => Effect.succeed(Option.none()),
-          onSome: (digest) => loadConfirmationOutboundEvidence(sql, claim.userId, digest),
-        })
-      );
-      return yield* prepareStartedTurn({ claim, claimTime, jobs, previousOutbound });
-    }).pipe(Effect.catchTag("SqlError", Effect.die))
+    work.userId,
+    SqlSchema.findOneOption({
+      Request: WhatsAppInboundWork,
+      Result: Schema.Struct({ present: Schema.Boolean }),
+      execute: (row) => sql`SELECT true AS present FROM whatsapp_inbound_jobs
+        WHERE user_id = ${row.userId} AND id = ${row.inboundJobId}`,
+    })(work).pipe(Effect.map(Option.isSome), Effect.catchTag("SqlError", Effect.die))
   );
+});
+const QuietPeriod = Schema.Struct({
+  debounceUntil: Schema.OptionFromNullOr(Schema.DateTimeUtcFromDate),
+});
+
+const loadWhatsAppTrigger = Effect.fn(function* (
+  sql: SqlClient.SqlClient,
+  work: WhatsAppInboundWork
+) {
+  return yield* SqlSchema.findOneOption({
+    Request: WhatsAppInboundWork,
+    Result: TriggerState,
+    execute: (row) => sql`
+      SELECT turn_id AS "turnId", completed_at IS NOT NULL AS completed
+      FROM whatsapp_inbound_jobs
+      WHERE user_id = ${row.userId} AND id = ${row.inboundJobId}
+      FOR UPDATE
+    `,
+  })(work);
 });
 
 /**
- * Transfers a fresh claimed burst to Cluster in the caller's publication transaction. The input is
- * validated before handoff; submitted work no longer has a channel execution deadline.
+ * Under the explicit User scope, either observes terminal work, returns the current quiet-period
+ * deadline, or durably binds every currently pending ordered message to one stable Turn identity.
+ * The User-keyed Cluster entity serializes callers; the transaction preserves burst membership
+ * across process loss without a claim, lease, or execution deadline.
  */
-export const submitWhatsAppTurn = Effect.fn(function* (
-  claim: WhatsAppTurnClaim,
+export const prepareWhatsAppTurn = Effect.fn("WhatsApp.prepareTurn")(function* (
+  work: WhatsAppInboundWork,
   now: DateTime.Utc
 ) {
-  yield* startWhatsAppTurn(claim, now);
   const sql = yield* SqlClient.SqlClient;
-  yield* sql`UPDATE whatsapp_turn_claims SET status = 'submitted', claim_expires_at = NULL
-    WHERE user_id = ${claim.userId} AND id = ${claim.claimId} AND status = 'started'`.pipe(
-    Effect.orDie
+  return yield* withUserTransaction(
+    work.userId,
+    withUserLockInScope(
+      advisoryLockKey.whatsAppBurst(work.userId),
+      Effect.gen(function* () {
+        const trigger = yield* loadWhatsAppTrigger(sql, work);
+        if (Option.isNone(trigger) || trigger.value.completed) return { _tag: "Settled" as const };
+        const turnId = Option.getOrElse(trigger.value.turnId, () =>
+          TranscriptTurnId.make(work.inboundJobId)
+        );
+        if (Option.isNone(trigger.value.turnId)) {
+          const quiet = yield* SqlSchema.findOne({
+            Request: UserId,
+            Result: QuietPeriod,
+            execute: (userId) => sql`
+            SELECT max(debounce_until) AS "debounceUntil"
+            FROM whatsapp_inbound_jobs
+            WHERE user_id = ${userId} AND completed_at IS NULL AND turn_id IS NULL
+          `,
+          })(work.userId);
+          if (
+            Option.isSome(quiet.debounceUntil) &&
+            DateTime.Order(now, quiet.debounceUntil.value) < 0
+          ) {
+            return { _tag: "Wait" as const, until: quiet.debounceUntil.value };
+          }
+          yield* sql`
+          UPDATE whatsapp_inbound_jobs SET turn_id = ${turnId}
+          WHERE user_id = ${work.userId} AND completed_at IS NULL AND turn_id IS NULL
+        `;
+        }
+        const selectedTurn = WhatsAppTurnWork.make({ userId: work.userId, turnId });
+        yield* sql`UPDATE whatsapp_inbound_jobs
+        SET processing_attempt = processing_attempt + 1
+        WHERE user_id = ${work.userId} AND turn_id = ${turnId}
+          AND completed_at IS NULL AND content IS NOT NULL`;
+        const jobs = yield* loadBurstJobs(sql, selectedTurn);
+        if (!EffectArray.isArrayNonEmpty(jobs)) return { _tag: "Settled" as const };
+        const command = jobs.map(({ text }) => text).join("\n");
+        const previousOutbound = yield* confirmationDigestFromCommand(command).pipe(
+          Option.match({
+            onNone: () => Effect.succeed(Option.none()),
+            onSome: (digest) => loadConfirmationOutboundEvidence(sql, work.userId, digest),
+          })
+        );
+        return yield* prepareBurst({ turn: selectedTurn, preparedAt: now, jobs, previousOutbound });
+      }).pipe(Effect.catchTag("SqlError", Effect.die))
+    )
   );
 });
 
-/** Reloads only live submitted work under its explicit User; terminal redelivery contains no input. */
-export const loadSubmittedWhatsAppTurn = Effect.fn(function* (claim: WhatsAppTurnClaim) {
-  const sql = yield* SqlClient.SqlClient;
-  return yield* withUserTransaction(
-    claim.userId,
-    Effect.gen(function* () {
-      const found = yield* SqlSchema.findOneOption({
-        Request: LoadClaimRequest,
-        Result: Schema.Struct({ startedAt: Schema.DateTimeUtcFromDate }),
-        execute: (row) => sql`SELECT started_at AS "startedAt" FROM whatsapp_turn_claims
-        WHERE user_id = ${row.userId} AND id = ${row.claimId} AND status = 'submitted'`,
-      })(claim);
-      if (Option.isNone(found)) return Option.none();
-      const jobs = yield* loadClaimedJobs(sql, claim);
-      if (!EffectArray.isArrayNonEmpty(jobs)) return Option.none();
-      const command = jobs.map(({ text }) => text).join("\n");
-      const previousOutbound = yield* confirmationDigestFromCommand(command).pipe(
-        Option.match({
-          onNone: () => Effect.succeed(Option.none()),
-          onSome: (digest) => loadConfirmationOutboundEvidence(sql, claim.userId, digest),
-        })
-      );
-      return Option.some(
-        yield* prepareStartedTurn({
-          claim,
-          claimTime: found.value.startedAt,
-          jobs,
-          previousOutbound,
-        })
-      );
-    })
-  ).pipe(Effect.orDie);
-});
-
-const retireClaimContent = (
-  sql: SqlClient.SqlClient,
-  claim: WhatsAppTurnClaim,
-  completedAt: DateTime.Utc
-): Statement.Statement<SqlConnection.Row> => sql`
-  UPDATE whatsapp_inbound_jobs
-  SET content = NULL, completed_at = ${completedAt}, claim_id = NULL
-  WHERE user_id = ${claim.userId} AND claim_id = ${claim.claimId}
-`;
-
-/** Removes transient content after terminal dispatch while retaining metadata evidence. */
-export const completeWhatsAppTurn = Effect.fn("WhatsApp.completeTurn")(function* (
-  claim: WhatsAppTurnClaim,
-  completedAt: DateTime.Utc
+const settleWhatsAppTurn = Effect.fn(function* (
+  turn: WhatsAppTurnWork,
+  settledAt: DateTime.Utc,
+  outcome: "delivered" | "agent_failed" | "send_failed" | "ambiguous_crash"
 ) {
   const sql = yield* SqlClient.SqlClient;
   yield* withUserTransaction(
-    claim.userId,
-    Effect.gen(function* () {
-      yield* retireClaimContent(sql, claim, completedAt);
-      yield* sql`
-        DELETE FROM whatsapp_turn_claims
-        WHERE user_id = ${claim.userId} AND id = ${claim.claimId}
-      `;
-    }).pipe(Effect.catchTag("SqlError", Effect.die))
+    turn.userId,
+    sql`
+      UPDATE whatsapp_inbound_jobs
+      SET content = NULL, completed_at = ${settledAt}, terminal_outcome = ${outcome}
+      WHERE user_id = ${turn.userId} AND turn_id = ${turn.turnId}
+        AND completed_at IS NULL
+    `.pipe(Effect.asVoid, Effect.catchTag("SqlError", Effect.die))
   );
 });
 
-/** Converts terminal processing failure to metadata-only evidence without replay. */
+/** Removes transient content only after the selected burst has a successfully delivered reply. */
+export const completeWhatsAppTurn = Effect.fn("WhatsApp.completeTurn")(function* (
+  turn: WhatsAppTurnWork,
+  completedAt: DateTime.Utc
+) {
+  yield* settleWhatsAppTurn(turn, completedAt, "delivered");
+});
+
+/** Retires one selected burst with metadata-only failure evidence and no provider replay. */
 export const failWhatsAppTurn = Effect.fn("WhatsApp.failTurn")(function* (
-  claim: WhatsAppTurnClaim,
+  turn: WhatsAppTurnWork,
   failedAt: DateTime.Utc,
   safeReason: "agent_failed" | "send_failed" | "ambiguous_crash"
 ) {
-  const sql = yield* SqlClient.SqlClient;
-  yield* withUserTransaction(
-    claim.userId,
-    Effect.gen(function* () {
-      yield* retireClaimContent(sql, claim, failedAt);
-      yield* sql`
-        UPDATE whatsapp_turn_claims
-        SET status = 'failed', failed_at = ${failedAt}, safe_reason = ${safeReason}
-        WHERE user_id = ${claim.userId} AND id = ${claim.claimId}
-      `;
-    }).pipe(Effect.catchTag("SqlError", Effect.die))
-  );
+  yield* settleWhatsAppTurn(turn, failedAt, safeReason);
 });
 
 const WindowRow = Schema.Struct({ windowOpenUntil: Schema.DateTimeUtcFromDate });

@@ -137,7 +137,7 @@ const enqueueAuthorizedTurn = (
 ): Effect.Effect<
   "duplicate" | "enqueued",
   OnboardingConsentRequired | WhatsAppInboundCapacityExceeded | WhatsAppRateLimitExceeded,
-  SqlClient.SqlClient
+  Crypto.Crypto | PersistedQueue.PersistedQueueFactory | SqlClient.SqlClient
 > =>
   Effect.gen(function* () {
     yield* consumeWhatsAppIngressBudget(

@@ -31,13 +31,15 @@ import { OnboardingConsentRequired } from "./consent-error";
 
 import { WhatsAppReplyDelivery } from "./whatsapp-delivery";
 import {
-  WhatsAppClaimId,
-  type WhatsAppTurnClaim,
   completeWhatsAppTurn,
   failWhatsAppTurn,
-  loadSubmittedWhatsAppTurn,
-  submitWhatsAppTurn,
+  ownsWhatsAppInboundWork,
+  prepareWhatsAppTurn,
 } from "~/shell/channels/whatsapp/repo";
+import {
+  WhatsAppInboundWork,
+  type WhatsAppInboundWork as WhatsAppInboundWorkType,
+} from "~/shell/channels/whatsapp/inbound-execution";
 
 import type { CanonicalCaller } from "~/shell/_shared/authz";
 import { type CanonicalAuthorityRoot, completesHostedTurn } from "~/shell/_shared/operation-policy";
@@ -251,8 +253,8 @@ const HostedTurns = Entity.make("HostedTurns", [
     error: TurnFailure,
   }).annotate(ClusterSchema.Uninterruptible, "client"),
   Rpc.make("ProcessWhatsApp", {
-    payload: { version: Schema.Literal(1), userId: UserId, claimId: WhatsAppClaimId },
-    primaryKey: ({ claimId }) => claimId,
+    payload: WhatsAppInboundWork.fields,
+    primaryKey: ({ inboundJobId }) => inboundJobId,
   })
     .annotate(ClusterSchema.Persisted, true)
     .annotate(ClusterSchema.Uninterruptible, "client"),
@@ -1763,11 +1765,11 @@ const makeHandleMessage =
         );
     });
 
-/** Durable RPCs never retain raw defect Causes. Database outages retry; runner shutdown stays interruptible. */
-const settleDurableHostedWork = (
+/** Durable RPCs never retain raw defect Causes. Brief outages retry; queue attempts own exhaustion. */
+const settleDurableHostedWork: <E>(
   dependencies: AgentServiceDependencies,
-  work: Effect.Effect<void>
-): Effect.Effect<void> =>
+  work: Effect.Effect<void, E>
+) => Effect.Effect<void> = (dependencies, work) =>
   work.pipe(
     Effect.catchCause((cause) =>
       Cause.hasInterrupts(cause)
@@ -1782,7 +1784,7 @@ const settleDurableHostedWork = (
             })
             .pipe(Effect.andThen(Effect.fail("hosted_turn_retry")))
     ),
-    Effect.retry(Schedule.spaced("1 second")),
+    Effect.retry({ schedule: Schedule.spaced("1 second"), times: 2 }),
     Effect.orDie
   );
 
@@ -1827,27 +1829,45 @@ const handleImmediateTurn = Effect.fn(
   Effect.catchDefect(() => Effect.fail("ModelUnavailable" as const))
 );
 
+type PreparedWhatsAppTurn = Extract<
+  Effect.Success<ReturnType<typeof prepareWhatsAppTurn>>,
+  { readonly _tag: "Ready" }
+>;
+
+const awaitPreparedWhatsAppTurn = Effect.fn(function* (work: WhatsAppInboundWorkType) {
+  for (;;) {
+    const now = yield* DateTime.now;
+    const prepared = yield* prepareWhatsAppTurn(work, now);
+    if (prepared._tag !== "Wait") return prepared;
+    const remaining = Math.max(
+      0,
+      DateTime.toEpochMillis(prepared.until) - DateTime.toEpochMillis(now)
+    );
+    yield* Effect.sleep(Duration.millis(remaining));
+  }
+});
+
 const executeWhatsAppMessage = Effect.fn(function* (
   { dependencies, whatsapp }: HostedTurnContext,
-  claim: WhatsAppTurnClaim,
-  message: InboundMessage
+  prepared: PreparedWhatsAppTurn
 ) {
+  const { turn } = prepared;
   const outcome = yield* Effect.exit(
     executeMessage({
       dependencies,
-      userId: claim.userId,
-      turnId: TranscriptTurnId.make(claim.claimId),
-      message,
+      userId: turn.userId,
+      turnId: turn.turnId,
+      message: prepared.inboundMessage,
       authorityRoot: "verified-whatsapp",
-      deliver: (reply) => whatsapp.deliver(claim.userId, reply),
+      deliver: (reply) => whatsapp.deliver(turn.userId, reply),
       publishRecovery: Effect.void,
     })
   );
   const now = yield* DateTime.now;
-  if (Exit.isSuccess(outcome)) return yield* completeWhatsAppTurn(claim, now);
+  if (Exit.isSuccess(outcome)) return yield* completeWhatsAppTurn(turn, now);
   if (Cause.hasInterrupts(outcome.cause)) return yield* Effect.interrupt;
   return yield* failWhatsAppTurn(
-    claim,
+    turn,
     now,
     Option.getOrUndefined(Cause.findErrorOption(outcome.cause)) === "delivery_failed"
       ? "send_failed"
@@ -1857,25 +1877,22 @@ const executeWhatsAppMessage = Effect.fn(function* (
 
 const processSubmittedWhatsAppTurn = Effect.fn(function* (
   context: HostedTurnContext,
-  { userId, claimId }: WhatsAppTurnPayload
+  payload: WhatsAppTurnPayload
 ) {
   const { dependencies, entityUserId } = context;
-  if (entityUserId !== userId) return;
-  const claim: WhatsAppTurnClaim = { userId, claimId, action: "process" };
-  const previous = yield* dependencies.continuity.recoverTurn(
-    userId,
-    TranscriptTurnId.make(claimId)
-  );
+  if (entityUserId !== payload.userId) return;
+  const prepared = yield* awaitPreparedWhatsAppTurn(payload);
+  if (prepared._tag === "Settled") return;
+  const { turn } = prepared;
+  const previous = yield* dependencies.continuity.recoverTurn(turn.userId, turn.turnId);
   if (Option.isSome(previous)) {
     const now = yield* DateTime.now;
     return yield* previous.value === "Completed"
-      ? completeWhatsAppTurn(claim, now)
-      : failWhatsAppTurn(claim, now, "ambiguous_crash");
+      ? completeWhatsAppTurn(turn, now)
+      : failWhatsAppTurn(turn, now, "ambiguous_crash");
   }
-  const submitted = yield* loadSubmittedWhatsAppTurn(claim);
-  if (Option.isNone(submitted)) return;
   return yield* dependencies.telemetry.continueSpan(
-    Option.getOrUndefined(submitted.value.propagation),
+    Option.getOrUndefined(prepared.propagation),
     {
       component: "whatsapp",
       operation: "whatsapp.processTurn",
@@ -1884,23 +1901,23 @@ const processSubmittedWhatsAppTurn = Effect.fn(function* (
       workKind: "queue_attempt",
       metadata: {
         _tag: "Queue",
-        attempt: submitted.value.processingAttempt,
-        inputCount: TelemetryCount.make(submitted.value.inputCount),
-        delayMilliseconds: submitted.value.queueDelayMilliseconds,
+        attempt: prepared.processingAttempt,
+        inputCount: TelemetryCount.make(prepared.inputCount),
+        delayMilliseconds: prepared.queueDelayMilliseconds,
       },
     },
-    executeWhatsAppMessage(context, claim, submitted.value.inboundMessage)
+    executeWhatsAppMessage(context, prepared)
   );
 });
 
 const makeHostedTurnHandlers = Effect.fn(function* (
   dependencies: AgentServiceDependencies,
-  client: HostedTurnsClient
+  client: HostedTurnsClient,
+  whatsapp: typeof WhatsAppReplyDelivery.Service
 ) {
   const address = yield* Entity.CurrentAddress;
   const entityUserId = String(address.entityId);
   const immediate = yield* ImmediateDelivery;
-  const whatsapp = yield* WhatsAppReplyDelivery;
   const context: HostedTurnContext = { dependencies, client, immediate, whatsapp, entityUserId };
   return {
     Handle: ({
@@ -1923,34 +1940,18 @@ const makeHostedTurnHandlers = Effect.fn(function* (
   };
 });
 
-const makeHandleWhatsAppClaim =
+const makeHandleWhatsAppWork =
   (
     dependencies: AgentServiceDependencies,
     client: HostedTurnsClient
-  ): AgentService["Service"]["handleWhatsAppClaim"] =>
-  (claim, now) =>
+  ): AgentService["Service"]["handleWhatsAppWork"] =>
+  (work) =>
     provideAgentDependencies(
       dependencies,
       Effect.gen(function* () {
-        yield* withUserTransaction(
-          claim.userId,
-          Effect.gen(function* () {
-            yield* submitWhatsAppTurn(claim, now);
-            yield* client(claim.userId)
-              .ProcessWhatsApp(
-                { version: 1, userId: claim.userId, claimId: claim.claimId },
-                { discard: true }
-              )
-              .pipe(Effect.orDie);
-          })
-        );
-        yield* client(claim.userId)
-          .ProcessWhatsApp({ version: 1, userId: claim.userId, claimId: claim.claimId })
-          .pipe(Effect.orDie);
-      })
-    ).pipe(
-      Effect.catchTag("WhatsAppClaimInvalid", () => Effect.void),
-      Effect.orDie
+        if (!(yield* ownsWhatsAppInboundWork(work))) return;
+        yield* client(work.userId).ProcessWhatsApp(work);
+      }).pipe(Effect.orDie)
     );
 
 const makeAgentService = Effect.gen(function* () {
@@ -1964,8 +1965,9 @@ const makeAgentService = Effect.gen(function* () {
     queueFactory: yield* PersistedQueue.PersistedQueueFactory,
   };
   const client = yield* HostedTurns.client;
+  const whatsapp = yield* WhatsAppReplyDelivery;
   yield* Layer.build(
-    HostedTurns.toLayer(makeHostedTurnHandlers(dependencies, client), {
+    HostedTurns.toLayer(makeHostedTurnHandlers(dependencies, client, whatsapp), {
       concurrency: 1,
       mailboxCapacity: 64,
       disableFatalDefects: true,
@@ -1973,7 +1975,7 @@ const makeAgentService = Effect.gen(function* () {
   );
   return AgentService.of({
     handleMessage: makeHandleMessage(dependencies, client),
-    handleWhatsAppClaim: makeHandleWhatsAppClaim(dependencies, client),
+    handleWhatsAppWork: makeHandleWhatsAppWork(dependencies, client),
   });
 });
 
@@ -1991,11 +1993,8 @@ export class AgentService extends Context.Service<
       message: InboundMessage,
       authorityRoot?: CanonicalAuthorityRoot
     ) => Effect.Effect<AgentReply, AgentTurnError>;
-    /** Atomically hands an authenticated channel burst to its User's entity and waits for settlement. */
-    readonly handleWhatsAppClaim: (
-      claim: WhatsAppTurnClaim,
-      now: DateTime.Utc
-    ) => Effect.Effect<void>;
+    /** Routes one durable identifier-only channel item through its User's serialized entity. */
+    readonly handleWhatsAppWork: (work: WhatsAppInboundWorkType) => Effect.Effect<void>;
   }
 >()("@fidy/server/shell/agent/agent-service/AgentService") {
   /** Constructs the hosted agent from the external model and persistent slice seams. */

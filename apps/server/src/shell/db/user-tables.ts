@@ -51,5 +51,4 @@ export const userTableNames = [
   "whatsapp_identity_change_evidence",
   "whatsapp_inbound_jobs",
   "whatsapp_message_evidence",
-  "whatsapp_turn_claims",
 ] as const;

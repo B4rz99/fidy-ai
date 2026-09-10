@@ -48,13 +48,11 @@ import { KapsoClient } from "~/shell/channels/whatsapp/kapso-client";
 import {
   WhatsAppBusinessPhoneNumberId,
   WhatsAppDeliveryKey,
+  WhatsAppInboundJobId,
   WhatsAppProviderMessageId,
 } from "~/shell/channels/whatsapp/model";
-import {
-  WhatsAppClaimId,
-  claimWhatsAppTurn,
-  enqueueWhatsAppTurn,
-} from "~/shell/channels/whatsapp/repo";
+import { enqueueWhatsAppTurn } from "~/shell/channels/whatsapp/repo";
+import { WhatsAppInboundWork } from "~/shell/channels/whatsapp/inbound-execution";
 import { WhatsAppWorkerLive, processNextWhatsAppTurn } from "~/shell/channels/whatsapp/worker";
 import { truncateWhatsAppChannel } from "~/shell/channels/whatsapp/fixtures";
 import { defaultPatBearer } from "~/shell/testing/identity-fixtures";
@@ -79,10 +77,14 @@ const HostedWire = Entity.make("HostedTurns", [
     primaryKey: ({ turnId }) => turnId,
   }).annotate(ClusterSchema.Persisted, true),
   Rpc.make("ProcessWhatsApp", {
-    payload: { version: Schema.Literal(1), userId: UserId, claimId: WhatsAppClaimId },
-    primaryKey: ({ claimId }) => claimId,
+    payload: WhatsAppInboundWork.fields,
+    primaryKey: ({ inboundJobId }) => inboundJobId,
   }).annotate(ClusterSchema.Persisted, true),
 ]);
+
+const SqlWhatsAppQueueLive = PersistedQueue.layer.pipe(
+  Layer.provideMerge(PersistedQueue.layerStoreSql({ tableName: "fidy_queue" }))
+);
 
 const otherUserId = UserId.make("f1d1a000-0000-4000-8000-000000000465");
 const token = "a".repeat(64);
@@ -133,11 +135,12 @@ const runtimeLayer = (input: {
   deliver: (text: string) => Effect.Effect<void>;
 }): Layer.Layer<
   | AgentService
+  | PersistedQueue.PersistedQueueFactory
   | Layer.Success<typeof PgLive>
   | Layer.Success<ReturnType<typeof authenticatedClusterHttp.layerSql>>,
   Layer.Error<typeof PgLive> | Layer.Error<ReturnType<typeof authenticatedClusterHttp.layerSql>>
-> =>
-  AgentService.layer.pipe(
+> => {
+  const agentRuntime = AgentService.layer.pipe(
     Layer.provideMerge(
       authenticatedClusterHttp.layerSql(token, {
         runnerAddress: Option.some(RunnerAddress.make("127.0.0.1", input.port)),
@@ -182,13 +185,15 @@ const runtimeLayer = (input: {
     Layer.provide(
       Layer.succeed(ImmediateDelivery, { deliver: (reply) => input.deliver(reply.text) })
     ),
-    Layer.provide(PersistedQueue.layer.pipe(Layer.provide(PersistedQueue.layerStoreMemory))),
+    Layer.provide(SqlWhatsAppQueueLive),
     Layer.provide(Layer.succeed(Crypto.Crypto, input.crypto)),
     Layer.provide(Layer.succeed(HttpClient.HttpClient, input.http)),
     Layer.provide(TelemetryDisabled),
     Layer.provideMerge(PgLive),
     Layer.provide(TestPublicNamespace)
   );
+  return SqlWhatsAppQueueLive.pipe(Layer.provideMerge(agentRuntime));
+};
 /** Waits for the initial rebalance, so a serialization test does not accidentally test owner shutdown. */
 const waitForAssignments = Effect.fn(function* (
   runners: ReadonlyArray<{ readonly hasShardId: (id: ShardId.ShardId) => boolean }>
@@ -230,10 +235,10 @@ const reset = Effect.gen(function* () {
     bearer: TokenBearer.make("fin_clst0465_0123456789abcdefghijklmnopqrstuvwxyzABCD"),
   });
 });
-const enqueue = Effect.fn(function* (text: string) {
+const admit = Effect.fn(function* (text: string) {
   const now = yield* DateTime.now;
   const message = TranscriptText.make(text);
-  yield* enqueueWhatsAppTurn({
+  return yield* enqueueWhatsAppTurn({
     admission: {
       _tag: "AuthorizedTurn",
       userId: defaultUserId,
@@ -254,22 +259,36 @@ const enqueue = Effect.fn(function* (text: string) {
     deliveryKey: WhatsAppDeliveryKey.make("465-delivery"),
     propagation: Option.none(),
   });
-  return DateTime.add(now, { seconds: 3 });
 });
-const claimState = Effect.gen(function* () {
+const enqueue = Effect.fn(function* (text: string) {
+  yield* admit(text);
+  const sql = yield* MigrationSqlClient;
+  const [row] = yield* Schema.decodeUnknownEffect(
+    Schema.Array(Schema.Struct({ id: WhatsAppInboundJobId }))
+  )(
+    yield* sql`SELECT job.id FROM whatsapp_inbound_jobs AS job
+      JOIN whatsapp_message_evidence AS evidence ON evidence.id = job.message_evidence_id
+      WHERE evidence.provider_message_id = ${`wamid.${text}`}`
+  );
+  if (row === undefined) return yield* Effect.die("accepted WhatsApp job was not retained");
+  return WhatsAppInboundWork.make({
+    version: 1,
+    userId: defaultUserId,
+    inboundJobId: row.id,
+  });
+});
+const inboundState = Effect.gen(function* () {
   const sql = yield* MigrationSqlClient;
   return yield* Schema.decodeUnknownEffect(
     Schema.Array(
       Schema.Struct({
-        status: Schema.String,
-        noDeadline: Schema.Boolean,
-        safeReason: Schema.NullOr(Schema.String),
+        assigned: Schema.Boolean,
+        terminalOutcome: Schema.NullOr(Schema.String),
       })
     )
   )(
-    yield* sql`
-    SELECT status, claim_expires_at IS NULL AS "noDeadline", safe_reason AS "safeReason"
-    FROM whatsapp_turn_claims WHERE user_id = ${defaultUserId}`
+    yield* sql`SELECT turn_id IS NOT NULL AS assigned, terminal_outcome AS "terminalOutcome"
+      FROM whatsapp_inbound_jobs WHERE user_id = ${defaultUserId}`
   );
 });
 
@@ -284,6 +303,30 @@ const states = Effect.fn(function* (userId: UserId) {
 layer(ApiHarness, { excludeTestServices: true, timeout: "45 seconds" })(
   "SQL hosted User entities",
   (it) => {
+    it.effect("rolls back accepted evidence and durable publication together", () =>
+      Effect.gen(function* () {
+        yield* reset;
+        yield* seedDevelopmentIdentity(defaultPatBearer);
+        yield* truncateWhatsAppChannel;
+        const sql = yield* SqlClient.SqlClient;
+        yield* sql
+          .withTransaction(
+            admit("rollback-publication").pipe(Effect.andThen(Effect.fail("rollback")))
+          )
+          .pipe(Effect.ignore);
+        const admin = yield* MigrationSqlClient;
+        expect(
+          yield* admin`SELECT provider_message_id FROM whatsapp_message_evidence
+            WHERE provider_message_id = 'wamid.rollback-publication'`
+        ).toEqual([]);
+        expect(yield* admin`SELECT id FROM whatsapp_inbound_jobs`).toEqual([]);
+        expect(
+          yield* admin`SELECT id FROM fidy_durable.fidy_queue
+            WHERE queue_name = 'whatsapp-inbound-turn'`
+        ).toEqual([]);
+      })
+    );
+
     it.effect(
       "serializes one User through model and delivery while another User advances across two runtimes",
       () =>
@@ -457,43 +500,41 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "45 seconds" })(
           const http = yield* HttpClient.HttpClient;
           const calls = yield* Ref.make(0);
           const sends = yield* Ref.make(0);
-          const generate = (): Effect.Effect<void> => Ref.update(calls, (count) => count + 1);
-          const deliver = (): Effect.Effect<void> => Ref.update(sends, (count) => count + 1);
           const runtime = ManagedRuntime.make(
-            runtimeLayer({ crypto, http, port: 24659, generate, deliver })
+            runtimeLayer({
+              crypto,
+              http,
+              port: 24659,
+              generate: () => Ref.update(calls, (count) => count + 1),
+              deliver: () => Ref.update(sends, (count) => count + 1),
+            })
           );
           yield* Effect.addFinalizer(() => disposeRuntimes([runtime]));
           const agent = yield* Effect.promise(() => runtime.runPromise(AgentService));
           yield* waitForAssignments([
             yield* Effect.promise(() => runtime.runPromise(Sharding.Sharding)),
           ]);
-          const due = yield* enqueue("owned-whatsapp-input");
-          const claim = Option.getOrThrow(yield* claimWhatsAppTurn(due));
+          const work = yield* enqueue("owned-whatsapp-input");
           const sql = yield* MigrationSqlClient;
-          const claimRows = sql`SELECT * FROM whatsapp_turn_claims WHERE id = ${claim.claimId}`;
-          const inputRows = sql`SELECT * FROM whatsapp_inbound_jobs WHERE user_id = ${defaultUserId}`;
-          const beforeClaim = yield* claimRows;
-          const beforeInput = yield* inputRows;
+          const before =
+            yield* sql`SELECT * FROM whatsapp_inbound_jobs WHERE id = ${work.inboundJobId}`;
           yield* Effect.promise(() =>
-            runtime.runPromise(agent.handleWhatsAppClaim({ ...claim, userId: otherUserId }, due))
+            runtime.runPromise(agent.handleWhatsAppWork({ ...work, userId: otherUserId }))
           );
-          expect(yield* claimRows).toEqual(beforeClaim);
-          expect(yield* inputRows).toEqual(beforeInput);
+          expect(
+            yield* sql`SELECT * FROM whatsapp_inbound_jobs WHERE id = ${work.inboundJobId}`
+          ).toEqual(before);
           expect(
             yield* sql`SELECT request_id FROM fidy_durable.cluster_messages
-          WHERE entity_type = 'HostedTurns' AND tag = 'ProcessWhatsApp'
-          AND payload::text LIKE ${`%${claim.claimId}%`}`
-          ).toEqual([]);
-          expect(
-            yield* sql`SELECT entry_id FROM transcript_entries
-          WHERE user_id IN (${defaultUserId}, ${otherUserId})`
+              WHERE entity_type = 'HostedTurns' AND tag = 'ProcessWhatsApp'
+              AND payload::text LIKE ${`%${work.inboundJobId}%`}`
           ).toEqual([]);
           expect(yield* states(defaultUserId)).toEqual([]);
           expect(yield* states(otherUserId)).toEqual([]);
           expect(yield* Ref.get(calls)).toBe(0);
           expect(yield* Ref.get(sends)).toBe(0);
-          // The invalid handoff neither consumed the claim nor occupied its durable identity.
-          yield* Effect.promise(() => runtime.runPromise(agent.handleWhatsAppClaim(claim, due)));
+
+          yield* Effect.promise(() => runtime.runPromise(agent.handleWhatsAppWork(work)));
           expect(yield* Ref.get(calls)).toBe(1);
           expect(yield* Ref.get(sends)).toBe(1);
         })
@@ -520,7 +561,9 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "45 seconds" })(
             yield* Effect.promise(() => runtime.runPromise(Sharding.Sharding)),
           ]);
           const turnId = TranscriptTurnId.make(yield* crypto.randomUUIDv7.pipe(Effect.orDie));
-          const claimId = WhatsAppClaimId.make(turnId);
+          const inboundJobId = WhatsAppInboundJobId.make(
+            yield* crypto.randomUUIDv4.pipe(Effect.orDie)
+          );
           const request = {
             userId: defaultUserId,
             turnId,
@@ -538,12 +581,20 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "45 seconds" })(
           );
           yield* Effect.promise(() =>
             runtime.runPromise(
-              client(otherUserId).ProcessWhatsApp({ version: 1, userId: defaultUserId, claimId })
+              client(otherUserId).ProcessWhatsApp({
+                version: 1,
+                userId: defaultUserId,
+                inboundJobId,
+              })
             )
           );
           yield* Effect.promise(() =>
             runtime.runPromise(
-              client(defaultUserId).ProcessWhatsApp({ version: 1, userId: defaultUserId, claimId })
+              client(defaultUserId).ProcessWhatsApp({
+                version: 1,
+                userId: defaultUserId,
+                inboundJobId,
+              })
             )
           );
           expect(yield* Ref.get(calls)).toBe(0);
@@ -558,7 +609,11 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "45 seconds" })(
           // The same durable identity must remain harmless after the transport cache is gone.
           yield* Effect.promise(() =>
             runtime.runPromise(
-              client(defaultUserId).ProcessWhatsApp({ version: 1, userId: defaultUserId, claimId })
+              client(defaultUserId).ProcessWhatsApp({
+                version: 1,
+                userId: defaultUserId,
+                inboundJobId,
+              })
             )
           );
           expect(yield* Ref.get(calls)).toBe(1);
@@ -580,25 +635,31 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "45 seconds" })(
           const sends = yield* Ref.make(0);
           const generate = (): Effect.Effect<void> => Ref.update(calls, (count) => count + 1);
           const deliver = (): Effect.Effect<void> => Ref.update(sends, (count) => count + 1);
-          const runtime = ManagedRuntime.make(
-            runtimeLayer({ crypto, http, port: 24661, generate, deliver })
-          );
-          yield* Effect.addFinalizer(() => disposeRuntimes([runtime]));
-          yield* Effect.promise(() => runtime.runPromise(Effect.void));
-          yield* waitForAssignments([
-            yield* Effect.promise(() => runtime.runPromise(Sharding.Sharding)),
-          ]);
-          const worker = runtime.runFork(
-            Layer.build(WhatsAppWorkerLive).pipe(
-              Effect.andThen(Effect.never),
-              Effect.scoped,
-              Effect.provide(yield* Layer.build(TelemetryDisabled)),
-              Effect.provideService(Crypto.Crypto, crypto),
-              Effect.provideService(KapsoClient, {
-                sendText: () => Effect.die("Unexpected disclosure"),
-              })
+          const runtimes = [
+            ManagedRuntime.make(runtimeLayer({ crypto, http, port: 24661, generate, deliver })),
+            ManagedRuntime.make(runtimeLayer({ crypto, http, port: 24662, generate, deliver })),
+          ] as const;
+          yield* Effect.addFinalizer(() => disposeRuntimes(runtimes));
+          yield* Effect.promise(() => runtimes[0].runPromise(Effect.void));
+          yield* Effect.promise(() => runtimes[1].runPromise(Effect.void));
+          yield* waitForAssignments(
+            yield* Effect.promise(() =>
+              Promise.all([
+                runtimes[0].runPromise(Sharding.Sharding),
+                runtimes[1].runPromise(Sharding.Sharding),
+              ])
             )
           );
+          const workerLayer = Layer.build(WhatsAppWorkerLive).pipe(
+            Effect.andThen(Effect.never),
+            Effect.scoped,
+            Effect.provide(yield* Layer.build(TelemetryDisabled)),
+            Effect.provideService(Crypto.Crypto, crypto),
+            Effect.provideService(KapsoClient, {
+              sendText: () => Effect.die("Unexpected disclosure"),
+            })
+          );
+          const workers = runtimes.map((runtime) => runtime.runFork(workerLayer));
           yield* enqueue("composed-worker");
           yield* states(defaultUserId).pipe(
             Effect.repeat({
@@ -607,7 +668,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "45 seconds" })(
             }),
             Effect.timeout("10 seconds")
           );
-          yield* Fiber.interrupt(worker);
+          yield* Effect.forEach(workers, Fiber.interrupt, { discard: true });
           expect(yield* Ref.get(calls)).toBe(1);
           expect(yield* Ref.get(sends)).toBe(1);
         })
@@ -660,32 +721,21 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "45 seconds" })(
             Deferred.await(entered),
             Fiber.join(first).pipe(Effect.andThen(Effect.die("Request completed before barrier")))
           );
-          const due = yield* enqueue("queued-whatsapp");
-          const waiter = secondRuntime.runFork(processNextWhatsAppTurn(due));
-          yield* claimState.pipe(
-            Effect.repeat({
-              until: (rows) => rows[0]?.status === "submitted",
-              schedule: Schedule.spaced("20 millis"),
-            }),
-            Effect.timeout("5 seconds")
-          );
-          yield* Fiber.interrupt(waiter);
-          expect(yield* claimWhatsAppTurn(DateTime.add(due, { hours: 1 }))).toEqual(Option.none());
-          expect(yield* claimState).toEqual([
-            { status: "submitted", noDeadline: true, safeReason: null },
-          ]);
-          yield* pruneCompletedHostedTurnMessages(DateTime.add(due, { days: 2 }));
-          expect((yield* mailbox).some(({ processed }) => !processed)).toBe(true);
+          yield* enqueue("queued-whatsapp");
+          yield* Effect.sleep("2100 millis");
+          expect(yield* inboundState).toEqual([{ assigned: false, terminalOutcome: null }]);
           expect(yield* Ref.get(generated)).toEqual(["holds-user"]);
           yield* Deferred.succeed(release, undefined);
           yield* Fiber.join(first);
-          yield* claimState.pipe(
+          const replacement = firstRuntime.runFork(processNextWhatsAppTurn());
+          yield* inboundState.pipe(
             Effect.repeat({
-              until: (rows) => rows.length === 0,
+              until: (rows) => rows[0]?.terminalOutcome === "delivered",
               schedule: Schedule.spaced("20 millis"),
             }),
             Effect.timeout("10 seconds")
           );
+          yield* Fiber.interrupt(replacement);
           expect(yield* Ref.get(generated)).toEqual(["holds-user", "queued-whatsapp"]);
           expect(yield* Ref.get(delivered)).toEqual(["holds-user", "queued-whatsapp"]);
           expect(yield* states(defaultUserId)).toEqual([
@@ -711,7 +761,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "45 seconds" })(
           expect(completed.length).toBeGreaterThan(0);
           yield* pruneCompletedHostedTurnMessages(yield* DateTime.now);
           expect(yield* mailbox).toEqual(completed);
-          yield* pruneCompletedHostedTurnMessages(DateTime.add(due, { days: 2 }));
+          yield* pruneCompletedHostedTurnMessages(DateTime.add(yield* DateTime.now, { days: 2 }));
           expect(yield* mailbox).toEqual([]);
         })
     );
@@ -753,8 +803,8 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "45 seconds" })(
               ])
             )
           );
-          const due = yield* enqueue("ambiguous-whatsapp");
-          const first = firstRuntime.runFork(processNextWhatsAppTurn(due));
+          yield* enqueue("ambiguous-whatsapp");
+          const first = firstRuntime.runFork(processNextWhatsAppTurn());
           const running = yield* Effect.raceFirst(
             Deferred.await(owner),
             Fiber.join(first).pipe(
@@ -763,16 +813,17 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "45 seconds" })(
           );
           expect(yield* states(defaultUserId)).toEqual([{ state: "Pending" }]);
           yield* Effect.promise(() => (running === 24657 ? firstRuntime : secondRuntime).dispose());
-          const recovered = yield* claimState.pipe(
+          const replacementRuntime = running === 24657 ? secondRuntime : firstRuntime;
+          const replacement = replacementRuntime.runFork(processNextWhatsAppTurn());
+          const recovered = yield* inboundState.pipe(
             Effect.repeat({
-              until: (rows) => rows[0]?.status === "failed",
+              until: (rows) => rows[0]?.terminalOutcome === "ambiguous_crash",
               schedule: Schedule.spaced("50 millis"),
             }),
             Effect.timeout("20 seconds")
           );
-          expect(recovered).toEqual([
-            { status: "failed", noDeadline: true, safeReason: "ambiguous_crash" },
-          ]);
+          expect(recovered).toEqual([{ assigned: true, terminalOutcome: "ambiguous_crash" }]);
+          yield* Fiber.interrupt(replacement);
           expect(yield* states(defaultUserId)).toEqual([{ state: "Interrupted" }]);
           expect(yield* Ref.get(calls)).toBe(1);
           expect(yield* Ref.get(sends)).toBe(1);

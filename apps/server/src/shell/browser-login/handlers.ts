@@ -1,4 +1,5 @@
 import { Effect, Layer, Option, Redacted, Schema, Semaphore } from "effect";
+import { runBestEffortMaintenance } from "~/shell/maintenance-schedule";
 import { HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
 import { HttpApiBuilder } from "effect/unstable/httpapi";
 import { ResolvedCaller, webSessionCookieName } from "~/shell/_shared/authz";
@@ -64,11 +65,11 @@ const handleStartPairing = Effect.fn("BrowserLogin.handleStartPairing")(function
 });
 
 export const BrowserLoginEvidenceRetentionLive = Layer.effectDiscard(
-  purgeBrowserLoginAnonymousEvidence().pipe(
-    Effect.delay("10 minutes"),
-    Effect.forever,
-    Effect.forkScoped
-  )
+  runBestEffortMaintenance({
+    timing: "best-effort",
+    cadence: "10 minutes",
+    work: purgeBrowserLoginAnonymousEvidence(),
+  }).pipe(Effect.forkScoped)
 );
 
 type RedeemedBrowserLoginPairing = Effect.Success<ReturnType<typeof redeemBrowserLoginPairing>>;

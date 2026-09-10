@@ -426,6 +426,15 @@ at most two continuations, bounding total queue rows conservatively to 150,000 w
 or adding another execution ledger. Migration 0052 directly
 contracts the undeployed executor; it adds no legacy drain or republication system.
 
+Process-local expiry and retention scheduling is composed once by `MaintenanceLive`. Every registered
+maintenance action declares `timing: "best-effort"`, runs immediately at process startup, and then
+repeats at its bounded cadence. Its owner operation remains repeat-safe and independently enforces
+batch limits, User scope, legal cutoffs, and terminal-state checks. A missed maintenance tick may delay
+cleanup but cannot authorize expired work. Correctness-critical delay is never registered there:
+typed Workflows and DurableClock retain it under stable execution identity across process replacement
+and overlapping runtimes. The legacy WhatsApp Turn handoff poll remains owned by #467 and is not
+misclassified as retention merely because its worker also used to host cleanup.
+
 Migration is expand–migrate–contract where deployed work exists: no item may be
 eligible in old and Effect execution simultaneously, and each migrated slice deletes the claims,
 leases, pollers, and execution-only status it replaces rather than wrapping them.

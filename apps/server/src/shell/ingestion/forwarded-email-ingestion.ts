@@ -9,7 +9,6 @@ import {
   Layer,
   Option,
   Redacted,
-  Schedule,
   Schema,
 } from "effect";
 import type { PersistedQueue } from "effect/unstable/persistence";
@@ -21,6 +20,7 @@ import {
 } from "~/core/ingestion/email-policy";
 import { ResendReceivedEmailId, ResendWebhookDeliveryId } from "~/core/ingestion/reference";
 import { externalEndpoints } from "~/shell/_shared/external-endpoints";
+import { runBestEffortMaintenance } from "~/shell/maintenance-schedule";
 import { jsonStringSchema } from "~/schema-compatibility";
 import { forwardingLocalPartForDomain } from "./email-address";
 import {
@@ -192,11 +192,14 @@ export class ForwardedEmailProcessor extends Context.Service<
 export const ForwardedEmailExecutionRetentionLive = Layer.effectDiscard(
   Effect.gen(function* () {
     const retentionDays = yield* emailIngestRetentionDays;
-    yield* retainForwardedEmailExecutions({ now: yield* DateTime.now, retentionDays }).pipe(
-      Effect.catchCause(() => Effect.logError("Forwarded email durable retention failed")),
-      Effect.repeat(Schedule.spaced("1 day")),
-      Effect.forkScoped
-    );
+    yield* runBestEffortMaintenance({
+      timing: "best-effort",
+      cadence: "1 day",
+      work: DateTime.now.pipe(
+        Effect.flatMap((now) => retainForwardedEmailExecutions({ now, retentionDays })),
+        Effect.catchCause(() => Effect.logError("Forwarded email durable retention failed"))
+      ),
+    }).pipe(Effect.forkScoped);
   })
 );
 
@@ -204,10 +207,12 @@ export const ForwardedEmailExecutionRetentionLive = Layer.effectDiscard(
 export const ForwardedEmailEvidenceRetentionLive = Layer.effectDiscard(
   Effect.gen(function* () {
     const processor = yield* ForwardedEmailProcessor;
-    yield* processor.expireEvidence.pipe(
-      Effect.catchCause(() => Effect.logError("Email ingestion retention failed")),
-      Effect.repeat(Schedule.spaced("1 day")),
-      Effect.forkScoped
-    );
+    yield* runBestEffortMaintenance({
+      timing: "best-effort",
+      cadence: "1 day",
+      work: processor.expireEvidence.pipe(
+        Effect.catchCause(() => Effect.logError("Email ingestion retention failed"))
+      ),
+    }).pipe(Effect.forkScoped);
   })
 );

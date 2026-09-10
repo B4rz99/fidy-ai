@@ -1,4 +1,5 @@
-import { DateTime, Effect, Layer, Schedule } from "effect";
+import { DateTime, Effect, Layer } from "effect";
+import { runBestEffortMaintenance } from "~/shell/maintenance-schedule";
 import { runScheduledWork } from "~/shell/observability/scheduled-work";
 import {
   deleteExpiredSupportRecoveryEvidence,
@@ -27,8 +28,9 @@ const applyScheduledSupportRecoveryRetention = runScheduledSupportRecoveryRetent
 
 /** Production policy loop; every iteration is bounded and safe to repeat after interruption. */
 export const SupportRecoveryRetentionLive = Layer.effectDiscard(
-  applyScheduledSupportRecoveryRetention.pipe(
-    Effect.repeat(Schedule.spaced("1 minute")),
-    Effect.forkScoped
-  )
+  runBestEffortMaintenance({
+    timing: "best-effort",
+    cadence: "1 minute",
+    work: applyScheduledSupportRecoveryRetention,
+  }).pipe(Effect.forkScoped)
 );

@@ -7,16 +7,11 @@ import { makeExactOriginCors } from "~/shell/_shared/exact-origin-cors";
 import { ValidationGateLive } from "~/shell/_shared/errors-live";
 import { CanonicalRetryAfterBody } from "~/shell/_shared/errors";
 import { externalEndpoints } from "~/shell/_shared/external-endpoints";
-import { EvidenceRetentionLive } from "./evidence-retention";
-import { OnboardingRetentionLive } from "~/shell/onboarding/retention";
+import { MaintenanceLive } from "./maintenance";
 import { AgentService } from "~/shell/agent/agent-service";
 import { WhatsAppReplyDeliveryLive } from "~/shell/agent/whatsapp-delivery";
 import { OpenAiHostedInferenceLive, OpenAiLanguageModelLive } from "~/shell/agent/openai";
-import {
-  BrowserLoginEvidenceRetentionLive,
-  BrowserLoginLive,
-  BrowserLoginWebAuthHandlersLive,
-} from "~/shell/browser-login/handlers";
+import { BrowserLoginLive, BrowserLoginWebAuthHandlersLive } from "~/shell/browser-login/handlers";
 import { BudgetsLive } from "~/shell/budgets/handlers";
 import { CategoriesLive } from "~/shell/categories/handlers";
 import { KapsoClient } from "~/shell/channels/whatsapp/kapso-client";
@@ -32,11 +27,7 @@ import { InsightsLive } from "~/shell/insights/handlers";
 import { StatementColumnMapper } from "~/shell/ingestion/column-mapper";
 import { IngestionLive } from "~/shell/ingestion/handlers";
 import { StatementIngestionWorkerLive } from "~/shell/ingestion/worker";
-import {
-  ForwardedEmailEvidenceRetentionLive,
-  ForwardedEmailExecutionRetentionLive,
-  ForwardedEmailProcessor,
-} from "~/shell/ingestion/forwarded-email-ingestion";
+import { ForwardedEmailProcessor } from "~/shell/ingestion/forwarded-email-ingestion";
 import {
   ForwardedEmailQueueLive,
   ForwardedEmailWorkflowLive,
@@ -50,7 +41,6 @@ import {
   BrowserPairingEmailWorkflowLive,
 } from "~/shell/email-authentication/authentication-delivery-worker";
 import { BrowserPairingEmailAuthenticationWebAuthHandlersLive } from "~/shell/email-authentication/authentication-handlers";
-import { BrowserPairingEmailRetentionLive } from "~/shell/email-authentication/authentication-retention";
 import {
   EmailOnboardingWebAuthHandlersLive,
   EmailReplacementWebAuthHandlersLive,
@@ -61,7 +51,6 @@ import {
   ReplacementDeliveryWorkflowLive,
   ReplacementExpiryWorkflowLive,
 } from "~/shell/email-authentication/replacement-workflow";
-import { EmailReplacementRetentionLive } from "~/shell/email-authentication/replacement-retention";
 import {
   OnboardingEmailDeliveryQueueLive,
   OnboardingEmailDeliveryWorkflowLive,
@@ -77,9 +66,7 @@ import {
   SupportRecoveryAccessLive,
   SupportRecoveryPrivateRouteLive,
 } from "~/shell/recovery/routes";
-import { SupportRecoveryRetentionLive } from "~/shell/recovery/retention";
 import { PATPairingHandlersLive } from "~/shell/tokens/pairing-handlers";
-import { PATPairingExpiryWorkerLive } from "~/shell/tokens/pairing-expiry";
 import { PATPairingApi } from "~/pat-pairing-api";
 import { TransactionsLive } from "~/shell/transactions/handlers";
 import { WebAuthApi, browserPairingEmailAuthenticationInvalidBody } from "~/web-auth-api";
@@ -261,7 +248,6 @@ export const HttpLive = HttpRouter.serve(
     WebAuthLive,
     PATPairingDirectLive,
     SubscriptionEnrollmentDirectLive,
-    BrowserLoginEvidenceRetentionLive,
     HttpApiScalar.layer(FidyApi, { path: "/docs" }),
     HealthLive,
     KapsoWebhookLive,
@@ -289,12 +275,15 @@ const HostedStatementIngestionWorkerLive = StatementIngestionWorkerLive.pipe(
   Layer.provide(StatementColumnMapper.layer.pipe(Layer.provide(OpenAiLanguageModelLive)))
 );
 
-const HostedForwardedEmailOperationsLive = Layer.mergeAll(
+const HostedForwardedEmailOperationsLive = Layer.merge(
   ForwardedEmailWorkflowLive,
-  ForwardedEmailQueueLive,
-  ForwardedEmailEvidenceRetentionLive,
-  ForwardedEmailExecutionRetentionLive
+  ForwardedEmailQueueLive
 ).pipe(Layer.provide(ForwardedEmailProcessor.layer), Layer.provide(ResendReceivingClient.layer));
+
+const HostedMaintenanceLive = MaintenanceLive.pipe(
+  Layer.provide(ForwardedEmailProcessor.layer),
+  Layer.provide(ResendReceivingClient.layer)
+);
 
 const HostedOnboardingDeliveryLive = Layer.merge(
   OnboardingEmailDeliveryWorkflowLive,
@@ -323,10 +312,5 @@ export const AppLive = Layer.mergeAll(
   HostedOnboardingDeliveryLive,
   HostedEmailReplacementDeliveryWorkerLive,
   HostedBrowserPairingEmailDeliveryWorkerLive,
-  BrowserPairingEmailRetentionLive,
-  EmailReplacementRetentionLive,
-  EvidenceRetentionLive,
-  OnboardingRetentionLive,
-  PATPairingExpiryWorkerLive,
-  SupportRecoveryRetentionLive
+  HostedMaintenanceLive
 ).pipe(Layer.provide(WompiEnrollmentClient.layer), Layer.provide(OpenAiHostedInferenceLive));

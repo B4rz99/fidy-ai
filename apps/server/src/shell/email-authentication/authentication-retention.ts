@@ -1,4 +1,4 @@
-import { DateTime, Effect, Layer, Option, Ref, Schedule, Schema } from "effect";
+import { DateTime, Effect, Layer, Option, Ref, Schema } from "effect";
 import {
   EntityAddress,
   EntityId,
@@ -8,6 +8,7 @@ import {
 } from "effect/unstable/cluster";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import { jsonStringSchema } from "~/schema-compatibility";
+import { runBestEffortMaintenance } from "~/shell/maintenance-schedule";
 import {
   BrowserPairingEmailDeliveryWorkflow,
   BrowserPairingEmailExpiryWorkflow,
@@ -115,18 +116,25 @@ export const purgeBrowserPairingEmailAdmissionEvidence = Effect.fn(function* () 
 export const BrowserPairingEmailRetentionLive = Layer.effectDiscard(
   Effect.all(
     [
-      purgeBrowserPairingEmailAdmissionEvidence().pipe(
-        Effect.repeat(Schedule.spaced("1 minute")),
-        Effect.forkScoped
-      ),
+      runBestEffortMaintenance({
+        timing: "best-effort",
+        cadence: "1 minute",
+        work: purgeBrowserPairingEmailAdmissionEvidence(),
+      }).pipe(Effect.forkScoped),
       Effect.gen(function* () {
         // This process-local scan cursor provides fairness; it owns no execution or lease.
         const cursor = yield* Ref.make(0);
-        yield* Ref.get(cursor).pipe(
-          Effect.flatMap(purgeBrowserPairingEmailExecutionHistory),
-          Effect.flatMap((next) => Ref.set(cursor, next)),
-          Effect.repeat(Schedule.spaced("1 minute"))
-        );
+        return yield* runBestEffortMaintenance({
+          timing: "best-effort",
+          cadence: "1 minute",
+          work: Ref.get(cursor).pipe(
+            Effect.flatMap(purgeBrowserPairingEmailExecutionHistory),
+            Effect.flatMap((next) => Ref.set(cursor, next)),
+            Effect.catchCause(() =>
+              Effect.logError("Browser pairing email durable retention failed")
+            )
+          ),
+        });
       }).pipe(Effect.forkScoped),
     ],
     { discard: true }

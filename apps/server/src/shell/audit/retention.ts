@@ -1,4 +1,4 @@
-import { DateTime, Duration, Effect, Layer, Schedule } from "effect";
+import { DateTime, Duration, Effect } from "effect";
 import type { SqlClient, SqlError } from "effect/unstable/sql";
 import { runScheduledWork } from "~/shell/observability/scheduled-work";
 import type { Telemetry } from "~/shell/observability/telemetry";
@@ -29,15 +29,3 @@ export const runScheduledAuditRetention = (
   })(
     runAuditRetention(now).pipe(Effect.tap(() => Effect.logInfo("Applied AuditLogEntry retention")))
   );
-
-const applyScheduledAuditRetention = Effect.flatMap(DateTime.now, runScheduledAuditRetention).pipe(
-  Effect.ignoreCause
-);
-
-/**
- * Production retention worker. Cleanup runs immediately and once per day. Database failures are
- * captured at scheduled-work ownership and retried on the next run without stopping the worker.
- */
-export const AuditRetentionLive = Layer.effectDiscard(
-  applyScheduledAuditRetention.pipe(Effect.repeat(Schedule.spaced("1 day")), Effect.forkScoped)
-);

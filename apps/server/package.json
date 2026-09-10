@@ -59,7 +59,7 @@
     "js-tiktoken": "1.0.21",
     "parse5": "8.0.1",
     "sharp": "0.35.4",
-    "svix": "2.2.0",
+    "svix": "2.3.0",
     "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
   },
   "devDependencies": {

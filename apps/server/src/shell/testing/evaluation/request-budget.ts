@@ -64,9 +64,7 @@ export class EvaluationRequestBudget extends Context.Service<
 >()("@fidy/server/shell/testing/evaluation/request-budget/EvaluationRequestBudget") {}
 
 /** Installs the actual fetch implementation used below production provider HTTP policies. */
-export const requestBudgetLayer = (
-  maximumRequests: number
-): Layer.Layer<EvaluationRequestBudget | (typeof FetchHttpClient.Fetch)["Identifier"]> =>
+export const requestBudgetLayer = (maximumRequests: number): Layer.Layer<EvaluationRequestBudget> =>
   Layer.syncContext(() => {
     let count = 0;
     let rejected = 0;

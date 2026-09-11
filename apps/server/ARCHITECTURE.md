@@ -1,472 +1,178 @@
 # Server architecture
 
-This document owns the internal architecture of `@fidy/server`. Read the repository
+This document owns the stable internal architecture of `@fidy/server`. Read the repository
 [`ARCHITECTURE.md`](../../ARCHITECTURE.md) first for system shape, cross-application contracts,
 production topology, and browser-to-server ownership.
 
----
+This is an orientation map of server boundaries, ownership, and durable invariants. It does not
+repeat domain definitions, ADR rationale, operational procedures, migration inventories, or
+implementation-level configuration. Those belong in `CONTEXT.md`, the relevant
+[ADRs](../../docs/adr/), [security and coding standards](../../SECURITY_STANDARDS.md),
+the [durable-execution inventory](../../docs/architecture/durable-execution-inventory.md), and
+[operational runbooks](../../docs/operations/).
 
 ## 1. Application shape
 
-`apps/server` is the `@fidy/server` application package. Its `src/` is layer-major:
+`apps/server` is the `@fidy/server` application package. Its source tree is layer-major:
 
 - `core/` contains pure business decisions typed `Effect<A, E, never>` and touches no external
   service.
-- `shell/` contains repositories, handlers, API assembly, adapters, and every other side effect.
-- `src/main.ts` is the only production entrypoint. Command-level preloads may initialize process
-  infrastructure before it, but cannot start application work. Scripts compose shell layers and
-  contain no domain decisions.
+- `shell/` contains repositories, handlers, API assembly, adapters, and all other effects.
+- `src/main.ts` is the only production entrypoint. Scripts compose shell layers and contain no
+  domain decisions.
 
-The API assembly imports slice operation definitions. Handlers import the assembled API as required
-by the HTTP builder, and `http.ts` composes the handler layers. This direction is acyclic and is
-protected by the dependency graph.
-
-Server-specific build and deployment adapters live with `@fidy/server`. Its Dockerfile intentionally
-uses the repository root as build context so Bun can install the one workspace lockfile, while the
-runtime image receives only built server artifacts. Railway must use `/apps/server/railway.json` as
-its config-as-code path; that adapter selects `apps/server/Dockerfile` without changing the repository
-source root.
+The API assembly imports slice operation definitions. Handlers use the assembled API as required by
+the HTTP builder, and `http.ts` composes the handler layers. This direction is acyclic and is
+protected by the dependency graph. Server-specific build and deployment adapters remain with the
+package; production topology and release procedures remain in the repository-level architecture and
+runbook.
 
 ## 2. Slices and ownership
 
 > **A slice owns data. A process coordinates slices.**
 
-A process touching one slice's data lives inside that slice. A process that owns data nobody else
-owns is a slice, including a pipeline. A process that owns no data is shell-only. A process never
-writes another slice's tables; it calls the owning slice's operations so that invariants and
-atomicity remain in one place. This rule applies to the nested WhatsApp operational slice: its
-durable delivery state is WhatsApp-owned even though the surrounding channel area is shell
-coordination.
+A process that touches one slice's data lives inside that slice. A process that owns data nobody
+else owns is a slice; a process that owns no data is shell-only. A process never writes another
+slice's tables. It calls the owning slice's operations so that invariants and atomicity remain in
+one place. The nested WhatsApp operational slice follows the same rule for its delivery and ingress
+state.
 
 Use three checks when drawing a boundary:
 
-1. Data that must commit atomically belongs to one slice unless an accepted coordination decision
-   says otherwise. ADR 0005 coordinates canonical state with Audit evidence, ADR 0009 coordinates
-   verified onboarding bootstrap, ADR 0008 serializes consent revocation with consent-dependent
-   work, ADR 0013 lets the deep WhatsApp disclosure-delivery module atomically coordinate verified
-   attempt evidence with the Consent owner operation, and ADR 0017 coordinates PAT lifecycle with
-   its append-only Consent evidence. These exceptions compose only owner-published operations and
-   do not transfer data ownership.
+1. Data that must commit atomically has one owner unless an accepted coordination decision composes
+   owner-published operations.
 2. Cross-slice references use stable ids, not embedded objects.
 3. An invariant that must hold immediately is enforceable inside one slice.
 
-A slice is not a bounded context or a use case. fidy is one bounded context with one vocabulary;
-API groups are presentation choices.
+A slice is not a bounded context or a use case. Fidy is one bounded context with one vocabulary;
+API groups are presentation choices. See [ADR 0003](../../docs/adr/0003-layer-major-core-shell-and-slice-ownership.md)
+and [ADR 0010](../../docs/adr/0010-whatsapp-channel-operational-slice.md).
 
 ### Core references
 
-A core slice may import ownerless values from `core/_shared` or a sibling's narrow `reference.ts`.
-A reference publishes only stable ids, stable compound identifiers, or kind codes that a genuine
-sibling needs to name or persist. Mutable provider evidence is not a cross-slice reference. Core may
+Core may import ownerless values from `core/_shared` or a sibling's narrow `reference.ts`. It may
 not import a sibling's model, rules, errors, taxonomy, repository, or other implementation. Shell
 loads data and passes plain values to core decisions.
 
----
-
 ## 3. The functional core
 
-Core code returns `Effect<A, E, never>`. The `never` requirement is the compiler-visible fence:
-requesting a service stops compiling. Core takes time and generated ids as values; the shell
-supplies them. Core decides; it does not gather data or perform I/O.
+Core code returns `Effect<A, E, never>`. The `never` requirement is the compiler-visible purity
+fence: requesting a service does not compile. Core takes time, generated ids, user context, and
+already-loaded values as inputs. The shell supplies those values, performs I/O, and coordinates
+processes around the decisions.
 
----
-
-## 4. Canonical operation surface
+## 4. Canonical operations and agent surface
 
 The canonical schema for a domain entity lives in `core/<slice>/model.ts`. The canonical operation
-lives in `shell/<slice>/operations.ts`, where transport and access policy belong: paths, status
-codes, access requirement, Subscription tier, hosted-agent confirmation policy, and whether the
-operation is a canonical query or canonical mutation. The access requirement is an algebra:
-domain operations require one PAT scope, while account-security operations require a fresh web
-session or a web-or-hosted caller.
+lives in `shell/<slice>/operations.ts`, where transport and access policy belong: path, status,
+caller requirement, tier, cost class, hosted-agent confirmation policy, and query-or-mutation kind.
+The operation references the core schema rather than maintaining a transport model.
 
-A canonical query observes domain state without requesting a domain transition or external effect;
-audit, quota, and access-accounting writes do not change that classification. A canonical mutation
-requests a domain transition, records durable work, or causes an external effect. As decided in ADR
-0012, PAT-scoped canonical mutations are transaction-composable: an individual operation and an
-atomic batch call the same reusable implementation inside a caller-owned, User-scoped PostgreSQL
-transaction. The implementation does not open or commit an inner transaction. External work is
-inserted as a durable job in that transaction and performed after commit when rollback compatibility
-requires it. Account-security mutations that require fresh WebSession or hosted confirmation
-instead remain outside PAT and atomic-batch authority.
+The assembled `FidyApi` is the source for reflected operation ids, access metadata, suggested
+operations, OpenAPI, MCP definitions, and the hosted-agent toolkit. The browser consumes one
+server-owned declaration seam and never imports server implementations. Derived shapes and
+relational projections are built from their source schemas; parallel operation maps and DTOs are
+not maintained. See [ADR 0004](../../docs/adr/0004-canonical-operation-derivation.md).
 
-The atomic-batch child union derives from reflected PAT-scoped canonical mutations and their encoded
-input schemas through the shared policy predicate. There is no feature-specific eligibility
-allowlist; the batch excludes itself structurally.
+A canonical query observes domain state without requesting a domain transition or external effect.
+A canonical mutation requests a domain transition, records durable work, or causes an external
+effect. Mutations are transaction-composable: individual and atomic-batch execution share the same
+implementation, and the batch child union is derived from canonical mutations rather than a
+feature-specific allowlist. See [ADR 0012](../../docs/adr/0012-canonical-mutations-are-transaction-composable.md).
 
-ADR 0012 is adopted through an expand sequence. Operation kind records semantics immediately;
-Transaction creation, correction, and deletion establish the implementation tracer, and the
-remaining pre-existing mutations migrate in the follow-up slice issues linked from issue 137. The
-batch operation remains unpublished until that migration is complete. During expansion, `kind` is
-not an implementation-readiness flag.
+Proof-bearing bootstrap APIs and browser-only payment-credential enrollment are deliberate narrow
+exceptions when transient credentials must remain unrepresentable to canonical callers, hosted
+agents, OpenAPI, logs, or persistence. They end at stable-User canonical authority and do not
+create parallel domain contracts. See [ADR 0015](../../docs/adr/0015-browser-paired-web-authentication.md)
+and [ADR 0021](../../docs/adr/0021-browser-only-payment-credential-enrollment.md).
 
-Cross-operation coordination that owns no data stays in its shell area as a named implementation
-module rather than being forced into `queries.ts` or `mutations.ts`. Atomic batch execution therefore
-lives in `shell/operations/atomic-batch.ts`: HTTP handlers and canonical registries are peer adapters
-that delegate to it and never import one another.
+### Hosted agent
 
-The operation references the core schema. All stable-User domain API and agent surfaces derive from
-the canonical operation definition; parallel operation maps are not maintained. A browser-only
-payment-credential enrollment boundary is the narrow exception recorded in ADR 0021: it may expose
-a separate first-party `HttpApi` only when its transient provider credential must remain
-unrepresentable in canonical operations, PATs, hosted-agent tools, OpenAPI, logs, and persistence.
-It requires an exact Origin, a fresh WebSession, current Consent serialized with the whole external
-workflow, no-store responses, bounded JSON, User-stable provider admission, and browser-safe output
-schemas. A credential bootstrap with no stable User may expose one separate proof-bearing `HttpApi`,
-as browser login and PATPairing do. Such an API reuses core schemas, has no hosted-agent binding, persists only proof
-digests, and ends at the transition into stable-User canonical authority. Anonymous admission keys
-use the socket peer directly unless it is a private or loopback trusted ingress proxy. A trusted
-proxy request must carry a valid `X-Forwarded-For` chain; the server uses only its rightmost,
-proxy-observed address and rejects missing or malformed source identity.
+`AgentService` owns the hosted runtime and is its only public service boundary. Its closed
+source-specific entrypoints lexically own session and Turn admission, context construction,
+hosted inference, canonical execution, delivery, and terminalization. HostedInference,
+WorkingContext, and ConversationContinuity remain private runtime concerns; executable lifecycle
+capabilities do not cross that boundary. Hosted calls use the same canonical authorization and
+confirmation policy as other callers. See [ADR 0014](../../docs/adr/0014-deep-hosted-turn-modules.md)
+and [ADR 0019](../../docs/adr/0019-hosted-runtime-owns-conversation-continuity.md).
 
-The package has one browser-safe `@fidy/server/client` export backed by `src/client.ts`. It
-re-exports the assembled `FidyApi`, the client-side authorization layer factory required by the
-middleware declaration, and genuinely useful derived types such as `OperationId` and
-`CanonicalInput`. Its transitive consumer graph may reach core and declaration-only operation
-modules, but not live middleware, repositories, handlers, workers, adapters, observability
-implementations, database, filesystem, provider, or runtime modules. Browser-build and module-graph
-guards are executable checks for that boundary.
+### Browser authentication and delegated authority
 
-Every shape that differs from a canonical shape is derived from it. This includes extraction
-schemas, response variants, and relational row projections. Money remains nested in domain and
-canonical operation shapes; repositories may flatten it into exact adjacent columns and reconstruct
-it on read. A type that never mentions the schema it derives from is a review smell.
-
-A non-empty `SuggestedOperation` derives only from PAT-scoped canonical operations, then is validated
-against its target operation and filtered by caller access and tier before it reaches a response.
-Account-security operations outside PAT authority are not suggestion candidates. The operation
-checkpoint is the source of truth, not a parallel tool map or a host-side parser.
-
-OpenAI hosted-tool bindings derive one strict-mode wire codec from each canonical input schema.
-Tools expose the canonical schema's encoded side so the provider applies strict adaptation exactly
-once; returned arguments are normalized from either strict wire form or the provider's
-canonical-encoded form before canonical re-encoding. This returns OpenAI's required-nullable
-optional properties to canonical absence. A raw strict JSON Schema paired with an unadapted decoder
-is invalid: it can advertise `null` values that its own handler rejects.
-
-### Hosted-turn continuity
-
-Hosted turns run inside the hosted agent runtime, whose whole public seam for callers is
-`AgentService.handleMessage` — one inbound message in, one delivered reply out
-([ADR 0019](../../docs/adr/0019-hosted-runtime-owns-conversation-continuity.md)). Behind it are three deep
-shell modules under [ADR 0014](../../docs/adr/0014-deep-hosted-turn-modules.md):
-
-- HostedInference alone converts, completely measures, and executes opaque provider requests.
-- WorkingContext alone constructs the trusted-policy-first semantic context order and projects
-  persisted prose as untrusted User material.
-- ConversationContinuity alone owns explicit Turn lifecycle, exact retained Transcript,
-  complete-prefix Compaction, optimistic replacement, and physical deletion. It is a private helper
-  of the runtime rather than a boundary a peer coordinates with, fenced by a module-graph rule whose
-  exact arms ADR 0019 records.
-
-The legal sequence is continuity preparation and recovery, one WorkingContext construction, complete
-hosted preflight, stale-snapshot-checked Turn admission, prepared execution, delivery without replay,
-and explicit terminalization. Production startup submits separately framed 15K Memory, 15K
-CompactedConversation, approximately 100K exact Transcript, and 16K active-request token maxima
-through that same complete preparer, with every canonical tool and the 16K output reserve. The active
-request also retains its independent 16K-character storage bound and is never silently truncated.
-Provider state, model or tokenizer identity, context capacity, prompt fragments, and constructible
-executable authorities do not cross these public boundaries. The tests in the ordinary suite are the
-contract; every configured credential path additionally needs its own named evidence, enforced by
-`bun run check:credential-evidence`.
-
-### Browser authentication, recovery, and PAT lifecycle
-
-ADR 0015 replaces WhatsApp-delivered web login links with browser-initiated pairing at
-`/auth/pair`. The browser retains the private verifier while WhatsApp approval, email
-authentication, and support recovery receive only the proof each authority needs; none can establish
-a session without the browser proof. Pairing expires after ten minutes and succeeds once.
-Security-sensitive web actions
-require pairing completed within the preceding ten minutes; passkeys are deferred under the
-accepted MVP threat model. The hosted Kapso delivery attempt and direct-browser redemption emit
-only registry-closed operation, outcome, safe reason, retry, HTTP status, attempt, and latency
-coordinates. They never project the private verifier, public code, bearer, cookie, URL, reply text,
-UserId, request/response payload, User prose, or domain data.
-
-[ADR 0020](../../docs/adr/0020-mandatory-verified-email-authentication-and-recovery.md) makes one
-VerifiedEmailCredential a prerequisite to stable User creation. EmailAuthentication owns pre-User
-mailbox verification attempts, the User's single credential, and Resend delivery state; Recovery
-owns the digest-only BackupRecoveryCode and tracked support cases. Identity still owns User,
-WhatsAppIdentity, and TrialPeriod facts; Consent still owns pending decision evidence and
-ConsentRecords. The shell-only onboarding completion process composes those owners under ADR 0009
-and creates all stable onboarding state only after email proof succeeds.
-
-Email authentication and support recovery approve an existing BrowserLoginPairing for the existing
-UserId. They do not create a parallel session, create another User, or change WhatsAppIdentity. A
-fresh same-User WebSession may replace the mailbox on the existing VerifiedEmailCredential after a
-replacement-specific proof; the old mailbox remains authoritative until the credential update,
-workflow cleanup, and metadata-only lifecycle event commit atomically. EmailReplacementTransition
-owns initiation and completion lock order, workflow decoding, admission, and atomic commit behind
-one operation per transition. EmailReplacementDelivery owns durable `Armed` proof state,
-provider work outside PostgreSQL transactions, fully fenced settlement, and ambiguous-outcome
-reconciliation inside named Effect Activities. Delivery publication carries only an explicit UserId
-and intent identity; independent durable expiry carries UserId and the original replacement identity.
-The existing credential `verified_at` revision fences arming, settlement, and completion. Definitively
-rejected attempts may retry with a fresh proof after a durable wait (three attempts maximum); Armed
-re-entry is uncertain and never resends. SQL failures become secret-free Activity outcomes and durable
-waits; delivery recovery re-enters the same provider attempt. Separate EmailAuthentication operations
-own expired-workflow and lifecycle-evidence retention. Identifier-only execution receipts survive
-domain cleanup until the original expiry; queue completion and observed terminal workflow history
-fence execution cleanup, and expiry receipts additionally require domain absence. Each scheduled GC
-pass inspects at most 100 receipts, advances discovery past blocked work, and reports overdue state.
-PostgreSQL remains their private implementation, and
-EmailDeliveryPort remains the only replacement-delivery Seam. The browser's private verifier
-remains necessary to create the WebSession. A User
-whose Consent is explicitly revoked may authenticate only to reach Fidy-owned re-consent and
-data-rights surfaces; ordinary canonical work remains blocked with `user_action_required`.
-
-ADR 0016 makes `/settings/pats` the only PAT-issuance authority. Manual issuance reveals the raw PAT
-once to the first-party browser; PATPairing returns it once directly to the initiating client that
-retained the private device code. WhatsApp may list safe PAT metadata, answer bounded activity
-questions, and revoke PATs, but cannot issue or approve them and never transports a PAT, private
-proof, or bearer-equivalent link. Manual issuance offers 7, 30, 90, and 365-day fixed lifetimes,
-records one reviewed absolute expiration, and never changes that expiration on successful use.
-ADR 0017 commits each PAT grant or revocation with its ConsentRecord through owner-published
-operations in one User-scoped transaction.
-
----
+Browser login is a browser-held proof paired with an established User proof. Browser Login alone
+creates the WebSession; email authentication, recovery, WhatsApp approval, and PAT lifecycle do not
+create parallel Users or sessions. Identity, EmailAuthentication, Recovery, Consent, and PAT owners
+publish operations for the shell to compose without transferring data ownership. Details belong in
+[ADR 0015](../../docs/adr/0015-browser-paired-web-authentication.md),
+[ADR 0016](../../docs/adr/0016-web-authorized-pat-issuance.md),
+[ADR 0017](../../docs/adr/0017-atomic-pat-consent-lifecycle.md), and
+[ADR 0020](../../docs/adr/0020-mandatory-verified-email-authentication-and-recovery.md).
 
 ## 5. User context and isolation
 
-`UserId` is an explicit argument to every repository function and every core function that needs
-user context. The caller is resolved at the adapter boundary and passed inward. There is no ambient
-`CurrentUser` service. PostgreSQL row-level security reinforces that explicit boundary: each short
-User-owned transaction establishes transaction-local context through the restricted runtime role.
-Migrations use a separate authority, and narrow deny-by-default gateways resolve pre-subject bearer
-or authenticated identity without exposing general privileged SQL. WhatsApp authorization resolves
-only the trusted Business Portfolio plus authenticated BSUID pair; phone, username, and parent BSUID
-remain mutable evidence and cannot resolve or reassociate a User.
-
-Ordinary aggregates carry no owner field: the user is the context in which an operation runs.
+`UserId` is an explicit argument to every repository and core function that needs user context. The
+caller is resolved at the adapter boundary and passed inward; there is no ambient `CurrentUser`
+service. Ordinary aggregates do not carry an owner field because the User is the operation context.
 `ConsentRecord` and `AuditLogEntry` carry an explicit subject because they attest who acted.
 
-Isolation is guarded by a test derived from the assembled `HttpApi`: seed two users, enumerate
-every canonical operation, and assert that one user's data is neither visible nor mutable to the
-other. Background jobs and ingestion paths pass the user explicitly as well. The WhatsApp durable queue
-claims only the work identity and stable User through a narrow gateway, then processes it in a
-separate User-scoped transaction; no database transaction spans model or provider network work.
-A scheduled no-input gateway removes expired ingress budgets and free-form windows without exposing
-or accepting identifiers.
+PostgreSQL RLS reinforces the same boundary. Every User-owned path activates transaction-local
+User context before reading or writing data, and background work carries its `UserId` explicitly.
+A claim, provider id, entity id, execution id, or opaque UUID is never authorization. No database
+transaction spans model or provider work. See [ADR 0005](../../docs/adr/0005-explicit-user-context-and-isolation.md),
+[ADR 0007](../../docs/adr/0007-postgresql-row-level-user-isolation.md), and
+[SECURITY_STANDARDS.md](../../SECURITY_STANDARDS.md).
 
-A User's current ServiceMarket, locale, and IANA time zone are explicit independent context. An
-existing record is not reinterpreted when current User preferences change; artifacts that need
-later interpretation retain the relevant context at creation.
-
-Authorization is the auditing boundary for every reflected canonical operation. Resolved calls
-record metadata-only audit entries; unresolved bearers create no invented evidence. Successful
-state and success evidence share a database transaction, while rejection and failure evidence
-survives the operation transaction. Hosted Agent Session admission serializes the current Consent basis without holding a transaction
-across inference or delivery. That basis governs the active session until 15 minutes of inactivity;
-terms updates wait for the next session, while explicit revocation prevents another Turn without
-interrupting one already admitted. User-owned agents never manage Consent: terms updates neither
-revoke nor block PATs, while explicit revocation prevents subsequent PAT work with
-`user_action_required`.
-
-Every canonical operation declares hosted-agent confirmation policy. A confirmation for a risky
-operation is bound to the exact operation and canonical input, is single-use, and is recoverable
-only from the eligible recent Transcript turn. The hosted agent does not infer authority from
-phrases outside that policy.
-
----
+Authorization is derived from the canonical operation and is applied consistently to HTTP, hosted,
+MCP, CLI, and suggested-operation surfaces. The operation-derived API seam proves User isolation;
+non-request paths use the same explicit subject flow rather than a separate ownership mechanism.
 
 ## 6. Errors and external effects
 
-Core failures are `Data.TaggedError` values and contain no HTTP vocabulary. API failures are
-schema-backed tagged error classes because they are encoded into response bodies and must remain
-selectively catchable in-process. Their `_tag` is omitted on encoding: the closed `code` field is the
-wire discriminator. Each slice has one exhaustive core-to-API mapper in shell. Core never needs to
-know which transport exposes it.
+Core exposes domain failures without HTTP vocabulary. Shell adapters map those failures to the
+transport contract and keep each mapping exhaustive.
 
-External providers stay at shell edges behind narrow services. Launch-specific behavior remains
-in its owning module rather than being hidden behind speculative provider or market registries.
-`_shared/bounded-external-http.ts` is the one ordinary outbound-provider transport boundary. It owns
-provider policy, trace propagation, credential redaction, coordinate-free telemetry, request
-execution, streamed byte counting, and response-body cleanup. Its public result contains only HTTP
-status, explicitly retained protocol headers, and bounded bytes; raw responses and streams remain
-private. A provider library whose contract requires `HttpClient` receives a reconstructed response
-backed only by already-bounded bytes; application adapters still cannot access its raw body.
-Provider adapters own request encoding, status interpretation, Schema decoding, retry certainty,
-and workflow-failure mapping. Incremental provider protocols must use a separate
-interface with explicit per-chunk and aggregate budgets rather than weakening this boundary.
+External providers stay at narrow shell boundaries. Shared outbound transport applies the repository's
+bounds, credential, tracing, and telemetry policy; the provider adapter owns request encoding, status
+interpretation, runtime decoding, retry certainty, and workflow-failure mapping. Raw provider
+responses and bodies do not cross the boundary. Provider work never runs inside a PostgreSQL
+transaction; ambiguous external outcomes are handled by the owning durable workflow or domain
+state. See [CODING_STANDARDS.md](../../CODING_STANDARDS.md) and
+[SECURITY_STANDARDS.md](../../SECURITY_STANDARDS.md).
 
-[ADR 0025](../../docs/adr/0025-evidence-backed-notification-interpretation.md) seals the replacement
-of raw-email model interpretation with one deterministic notification interpretation module. Reviewed
-format modules are discovered at build time into a static catalog, with bounded recognition and
-fail-closed ambiguity handling; neither global handwritten format unions nor runtime plugin loading
-are part of the interface. Its evidenced launch formats own versioned COP assumptions, safe hints,
-and immutable interpretation evidence. The decision includes downstream model-egress checks and
-defers statement hint capture; it is adopted incrementally through #438.
+## 7. Persistence and durable execution
 
-Resend is EmailAuthentication's launch outbound-email adapter; it receives only the recipient and
-bounded message projection required for the current proof, and provider work is driven by durable
-delivery state. Resend server errors remain ambiguous even when their response body is valid JSON,
-malformed, oversized, or unreadable: they do not prove non-acceptance and never authorize a fresh-proof
-retry. The WhatsApp edge authenticates bounded exact webhook bytes before decoding and
-bounds Kapso response bytes before SDK decoding. Its worker appends a visible assistant Transcript
-entry only after provider delivery succeeds; failed or ambiguous sends do not claim that the User
-saw a reply.
+Migrations form one globally ordered history in `shell/db/migrations/`. Relational rows are
+projections of core models, not parallel domain models. Repositories may flatten values for storage
+and queries, but reconstruct the canonical value on every read.
 
----
+PostgreSQL owns User isolation and immediate invariants: constraints, atomic statements, short
+transactions, and commit-time locks. Effect's SQL-backed `PersistedQueue`, `Workflow`, and Cluster
+facilities own durable execution mechanics. Slices retain domain lifecycle, authorization and RLS,
+provider idempotency or reconciliation, retention policy, and safe observability. Every durable
+path that can reach User data carries an explicit `UserId` and only a bounded resume projection.
 
-## 7. Persistence
+Distributed security and spend admission remains PostgreSQL-backed; process-local Effect limits
+only own restart-safe resource bounds. Best-effort maintenance may delay cleanup but cannot authorize
+expired work. Correctness-critical continuation uses durable execution. No Fidy queue, lease,
+workflow, or runner framework should be layered over the Effect substrate.
 
-Migrations are one globally ordered database history, stored in `shell/db/migrations/` and composed
-through an explicit index. The numbering is global because foreign keys cross slices and the
-migrator applies one sequence.
-
-Relational rows are projections of core models, not parallel domain models. Repositories flatten
-nested Money only where storage and queries require it, then decode and reconstruct the canonical
-value on every read. Ordinary totals remain derived rather than persisted.
-
-PostgreSQL advisory-lock keys are namespaced by the owning slice and protected resource before
-hashing. WhatsApp admission and burst preparation share the namespaced `whatsapp-burst` User lock:
-those two steps coordinate the same per-User pending-burst invariant while Effect's PersistedQueue
-owns acquisition and settlement. Lock APIs fuse lock acquisition with the protected body and
-transaction, so a transaction-scoped lock cannot silently be acquired and released before its work
-runs.
-
-Postgres returns `jsonb` as decoded JSON, so relational projections decode the bare column rather
-than casting it through text. Global query/result name transforms remain waived: adopting them
-would require a repository-wide alias audit, and recursive JSON transforms could alter domain
-keys; the current explicit aliases keep that boundary local. Insight Money groups use one bulk
-insert per event. WhatsApp work uses Effect's native PersistedQueue polling and leasing rather than
-a second slice-owned wake-up or claim mechanism.
-
-### Durable execution
-
-[ADR 0024](../../docs/adr/0024-effect-durable-execution.md) adopts Effect's SQL-backed
-`PersistedQueue`, Workflow, and Cluster facilities as the execution substrate. The
-[durable-execution inventory](../../docs/architecture/durable-execution-inventory.md) records every
-baseline claim, lease, retry field, polling loop, admission window, and lock plus its migration
-disposition. [ADR 0025](../../docs/adr/0025-retain-postgresql-admission.md) retains PostgreSQL
-admission after the [shared-store evaluation](../../docs/research/distributed-admission-rate-limiter.md):
-Effect RateLimiter's stock stores do not preserve the audited rolling-window, multi-key and
-transaction-coupled controls with net deletion. Memory-backed rate limits cannot replace
-cross-process security or spend admission; Redis is not part of the production topology.
-
-Effect owns queue-item delivery, durable continuation, retries, waits, runner coordination, and keyed
-cross-runtime execution. Slices still own domain lifecycle, User authorization and RLS activation,
-provider idempotency or reconciliation, payload bounds, retention, telemetry, and short PostgreSQL
-transactions, constraints, and locks that enforce immediate invariants. Every persisted execution
-that can reach User-owned data carries an explicit `UserId`; no provider, entity, execution, or
-deferred identity grants authority. Provider calls never run inside PostgreSQL transactions and
-remain at-least-once across the provider-commit/durable-settlement gap.
-
-The production composition uses one memoized `SqlClient` identity for domain transactions and
-transaction-coupled publication, stable SQL queue and Cluster storage names, identical sharding and
-serialization across runners, private authenticated runner transport, and coordinated execution
-schemas across overlapping revisions. Runner HTTP requests require the shared, redacted
-`FIDY_CLUSTER_AUTH_TOKEN` in addition to deployment-private reachability. `fidy_runtime` may create Effect-owned tables only in the
-`fidy_durable` schema; the runtime connection resolves that schema before application objects in
-`public`. The onboarding delivery workflow publishes an identifier-only, versioned
-`EmailDeliveryIntentId` payload through `fidy_queue` in the same transaction that creates the
-intent. Its Activity arms the proof before calling Resend, settles only the still-current generation,
-and treats re-entry with an armed proof as ambiguous rather than risking a second provider call.
-At production startup, bounded idempotent publication also recovers pending intents translated from
-the previous executor. Onboarding retention first proves each queue item completed, then uses the
-Cluster storage API to clear terminal history with the pre-User intent.
-
-WhatsApp Consent disclosure delivery uses one identifier-only, versioned pending-exchange Workflow
-and native start/evidence queues. The authenticated request atomically binds the caller, receipt
-handoff, routing snapshot, and publication; acknowledgment does not await Kapso. Activities arm one
-provider attempt before sending and never resend an already armed attempt on replay. Verified
-lifecycle evidence, Consent advancement, and evidence-notification publication commit together;
-DurableDeferred completion happens outside SQL locks. Durable clocks own retry delays and exchange
-expiry. Expiry does not turn ambiguous delivery into success or rejection. See ADR 0013.
-
-Statement Ingestion publishes an identifier-only, versioned `StatementSubmissionId` plus explicit
-`UserId` through `statement-ingestion` in the same transaction that accepts the submission. Queue
-leases coordinate runtime processes; each execution activates that User's RLS scope before loading
-uploaded bytes. Mapping unavailability is the sole typed retry, capped at three queue attempts, and
-exhaustion conserves every row as a NeedsReviewItem. Parser failures and retention expiry settle the
-existing safe terminal Ingestion outcomes. Startup republishes one bounded recovery page before
-readiness and paces later pages; scheduled retention erases expired raw material and removes queue
-rows only after both the domain lifecycle and Effect's completed flag prove terminal execution.
-
-Forwarded Email Ingestion publishes a versioned `UserId` and `ResendReceivedEmailId` through
-`forwarded-email-ingestion` in the receipt-admission transaction. SQL Cluster workflows own named
-retrieval, interpretation, and settlement activities; provider material and model outcomes remain in
-bounded User-owned RLS tables rather than workflow history. Only provider unavailability receives
-two retries; malformed or oversized responses settle directly as the existing visible review.
-`DurableClock` preserves monthly Free deferral, whose promotion is serialized under the User's
-forwarding-address row so concurrent resumptions cannot exceed the allowance. The existing Consent external-effect lock keeps
-explicit revocation ordered with provider/model calls, while every post-call persistence step rechecks
-Consent under the subject transaction lock. Explicit revocation terminates and cleans up the receipt;
-a noncurrent policy/disclosure basis preserves the prior one-day deferral so later re-consent can
-resume it. One exhaustive User-scoped receipt projection distinguishes actionable, completed,
-revoked, expired, and absent state; every activity reconciles it before Work, so a committed
-settlement is replayed as its persisted outcome rather than inferred from missing actionable data.
-The Workflow handler is the sole execution interface; named activities are private implementation
-partitions. Startup recovery exposes only execution identity and ownership.
-At the 90-day evidence horizon, evidence retention removes raw samples and temporary
-interpretations without changing unfinished receipt eligibility; execution re-enters retrieval when
-persisted activity progress outlives that evidence. Bounded durable retention clears only
-completed queue rows and `Workflow.Complete` Cluster history. Receipt-owned checked, started, and
-cleared markers make cleanup fair and resumable: suspended or unproved histories cannot starve later
-pages, while a started marker proves that missing history may be safely reconciled after interruption.
-
-Browser-pairing email starts publish a versioned request identity through a native SQL queue in
-one transaction with anonymous admission state. A request-specific gateway resolves only that
-admitted request, then its User-scoped transaction consumes it and publishes delivery and independent
-expiry work. Delivery identity includes the stable User and intent, preventing a mismatched-User
-payload from poisoning another User's execution. Each named Activity keeps prepare, send, and settle
-inside its private boundary: only the proof digest enters domain storage, and only closed outcomes
-enter workflow history. Armed re-entry is uncertain, never a second send. Confirmed temporary refusal
-records the provider-attempt fence and fixed retry deadline before returning; DurableClock owns the
-250/500-ms waits and a maximum of three attempts. A fresh proof and attempt-specific provider key are
-used only after confirmed refusal. Proof submission remains synchronous and verifier-bound.
-The independent expiry workflow reads the authoritative User-scoped deadline and deletes proof state
-idempotently after a durable wait. Native queue payloads retain cleanup identifiers after proof rows
-are deleted; bounded, fair retention removes only completed queue items and terminal Cluster history
-after 24 hours, transactionally together, and warns on overdue full pages. Anonymous start publication
-also checks global storage capacity under a transaction-scoped admission lock. At 50,000 retained rows
-across all three queues, new starts keep the same non-enumerating response but publish no work.
-Completed history counts against capacity until removed. Already-admitted starts can still publish
-at most two continuations, bounding total queue rows conservatively to 150,000 without blocking drain
-or adding another execution ledger. Migration 0052 directly
-contracts the undeployed executor; it adds no legacy drain or republication system.
-
-Process-local expiry and retention scheduling is composed once by `MaintenanceLive`. Every registered
-maintenance action declares `timing: "best-effort"`, runs immediately at process startup, and then
-repeats at its bounded cadence. Its owner operation remains repeat-safe and independently enforces
-batch limits, User scope, legal cutoffs, and terminal-state checks. A missed maintenance tick may delay
-cleanup but cannot authorize expired work. Correctness-critical delay is never registered there:
-typed Workflows and DurableClock retain it under stable execution identity across process replacement
-and overlapping runtimes. The legacy WhatsApp Turn handoff poll remains owned by #467 and is not
-misclassified as retention merely because its worker also used to host cleanup.
-
-Migration is expand–migrate–contract where deployed work exists: no item may be
-eligible in old and Effect execution simultaneously, and each migrated slice deletes the claims,
-leases, pollers, and execution-only status it replaces rather than wrapping them.
-
----
+See [ADR 0024](../../docs/adr/0024-effect-durable-execution.md),
+[ADR 0025](../../docs/adr/0025-retain-postgresql-admission.md), and the
+[durable-execution inventory](../../docs/architecture/durable-execution-inventory.md) for
+substrate choices, per-flow mechanics, migration status, and retention details.
 
 ## 8. Testing seams
 
-Use these seams:
+Use the smallest seam that proves the behaviour:
 
-- **Core seam:** exported pure decisions, with no server or database.
-- **API seam:** operation decoding, authorization, handlers, repositories, and real PostgreSQL.
-  It proves persistence, responses, suggested operations, and per-user isolation.
-- **Agent seam:** `AgentService.handleMessage` through the CLI harness, with external language-model
-  and terminal adapters substituted while the canonical application path remains real.
-- **Hosted execution-boundary seam:** `makeAgentToolkit` and `executeHostedCanonicalOperation`
-  driven directly against real PostgreSQL. `AgentService.handleMessage` cannot reach a refused
-  canonical call, because its own preflight never issues a mismatched permit, so this seam is the
-  only place the refusal paths, their audit evidence, and their all-or-nothing rollback are
-  observable.
-- **Channel-worker seam:** the exported durable worker step with real Consent, Identity, RLS
-  repositories, and AgentService; only language-model and provider clients are substituted.
-- **Public-channel acceptance seam:** the signed provider webhook over a real socket, real PostgreSQL,
-  and the production Identity, Consent, queue, worker, AgentService, and canonical operation path;
-  only the provider transport and language-model behavior are substituted. This seam owns named
-  end-to-end channel scenarios and a separate source-coverage ratchet.
+- **Core:** call exported pure decisions directly, without a server or database.
+- **API:** traverse the assembled operations with real PostgreSQL to prove decoding, authorization,
+  persistence, responses, derived suggestions, and User isolation.
+- **Agent:** call `AgentService` through the CLI harness with language-model and terminal adapters
+  substituted while canonical application paths remain real.
+- **Asynchronous and public-channel:** exercise the exported worker step and signed provider ingress
+  with real Consent, Identity, repositories, PostgreSQL, durable execution, and canonical paths;
+  substitute only external provider and model behaviour.
 
-Core tests do not mock repositories or handlers. They prove decisions directly; the API seam proves
-load-decide-persist integration. A stable pure policy may be tested directly, but its integration
-still needs API-seam coverage. Caller-resolution boundaries may use concrete persistence observers
-when they protect data that must remain absent from public responses.
-
-The core mutation gate requires every in-scope behavioural mutant to be killed. Exact scope,
-exclusions, runner, and coverage settings belong in the test configuration rather than here. The
-shell retains its coverage and CRAP gates.
+Core tests do not mock shell collaborators. A stable pure policy may be tested directly, but its
+integration remains covered at the API seam. Exact mutation, coverage, and acceptance gate settings
+belong to the test configuration and [ADR 0006](../../docs/adr/0006-test-seams-and-core-mutation-gate.md).

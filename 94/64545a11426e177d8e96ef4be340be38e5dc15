@@ -1,0 +1,21 @@
+apps/server/src/core/subscription/billing-rules.ts
+  s_454b5956e38502::t_e35bbab7586de2 17-42,49-50
+apps/server/src/shell/subscription/card-enrollment.ts
+  s_454b5956e38502::t_daccbbbfa358db 278-281
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "9464545a11426e177d8e96ef4be340be38e5dc15",
+  "prompts": {},
+  "sessions": {
+    "s_454b5956e38502": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a08d4a-515a-73b6-9939-901713b5a92e",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

@@ -35,8 +35,9 @@ import {
   insertPendingBillingAttemptInScope,
 } from "./billing-repo";
 import { reconcileCardEnrollment } from "./card-enrollment";
+import type { WompiTransaction } from "./wompi-billing-client";
 import { findPrice } from "./repo";
-import { receiveWompiSettlement } from "./wompi-settlement";
+import { receiveWompiSettlement, reconcileWompiSettlement } from "./wompi-settlement";
 
 const userId = UserId.make("22800000-0000-4000-8000-000000000001");
 const sessionId = WebSessionId.make("22800000-0000-4000-8000-000000000002");
@@ -71,16 +72,23 @@ const signedWompiEvent = (
     sourceId: number;
     finalizedAt: Option.Option<string>;
   },
-  validChecksum = true,
-  completeSignature = true
+  options:
+    | Readonly<{ _tag: "default" }>
+    | Readonly<{ _tag: "invalid-checksum" }>
+    | Readonly<{ _tag: "partial" }>
+    | Readonly<{ _tag: "properties"; properties: ReadonlyArray<string> }> = { _tag: "default" }
 ): unknown => {
+  const validChecksum = options._tag !== "invalid-checksum";
+  const completeSignature = options._tag !== "partial";
   const timestamp = 1_772_323_200;
   const completeProperties = [
     "transaction.id",
     "transaction.status",
     "transaction.amount_in_cents",
   ];
-  const properties = completeSignature ? completeProperties : completeProperties.slice(0, 2);
+  let properties: ReadonlyArray<string> = completeProperties;
+  if (options._tag === "properties") properties = options.properties;
+  else if (!completeSignature) properties = completeProperties.slice(0, 2);
   const signedValues = completeSignature
     ? `${transaction.id}${transaction.status}${transaction.amountInCents}`
     : `${transaction.id}${transaction.status}`;
@@ -196,6 +204,56 @@ const assertArmedRedeliveryCannotRearm = Effect.fn(function* (input: {
     )
   );
   expect(Option.isNone(redeliveryArm)).toBe(true);
+});
+
+const assertAuthoritativeEvidenceBoundaries = Effect.fn(function* (provider: WompiTransaction) {
+  for (const mismatch of [
+    {
+      provider: { ...provider, amountInCents: provider.amountInCents + 1 },
+      environment: "sandbox" as const,
+    },
+    { provider, environment: "production" as const },
+    { provider: { ...provider, currency: "USD" as const }, environment: "sandbox" as const },
+    {
+      provider: { ...provider, sourceId: WompiSourceId.make(9999) },
+      environment: "sandbox" as const,
+    },
+    {
+      provider: {
+        ...provider,
+        transactionId: WompiTransactionId.make("mismatched-transaction"),
+      },
+      environment: "sandbox" as const,
+    },
+    {
+      provider: {
+        ...provider,
+        reference: WompiTransactionReference.make("fidy-22900000-0000-4000-8000-000000000099"),
+      },
+      environment: "sandbox" as const,
+    },
+  ]) {
+    const rejected = yield* Effect.flip(
+      reconcileWompiSettlement({
+        ...mismatch,
+        observedAt: DateTime.makeUnsafe("2026-03-01T11:59:59Z"),
+      })
+    );
+    expect(rejected._tag).toBe("MismatchedWompiEvidence");
+  }
+  yield* reconcileWompiSettlement({
+    provider: { ...provider, status: "PENDING", finalizedAt: Option.none() },
+    environment: "sandbox",
+    observedAt: DateTime.makeUnsafe("2026-03-01T11:59:59.100Z"),
+  });
+  const missingFinalization = yield* Effect.flip(
+    reconcileWompiSettlement({
+      provider: { ...provider, finalizedAt: Option.none() },
+      environment: "sandbox",
+      observedAt: DateTime.makeUnsafe("2026-03-01T11:59:59.200Z"),
+    })
+  );
+  expect(missingFinalization._tag).toBe("MismatchedWompiEvidence");
 });
 
 const assertBillingAttemptVisibilityBoundaries = Effect.fn(function* (
@@ -438,7 +496,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
             sourceId: 3891,
             finalizedAt: Option.some("2026-03-01T00:00:00.000Z"),
           },
-          false
+          { _tag: "invalid-checksum" }
         );
         const failure = yield* Effect.flip(
           receiveWompiSettlement({
@@ -448,6 +506,44 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         );
         expect(failure).toMatchObject({ _tag: "InvalidWompiEvent" });
         expect(String(failure)).not.toContain(testWompiEventSecret);
+
+        const unsupportedProperty = signedWompiEvent(
+          {
+            id: "event-secret-test",
+            reference: "fidy-22900000-0000-4000-8000-000000000099",
+            status: "APPROVED",
+            amountInCents: 1_000,
+            sourceId: 3891,
+            finalizedAt: Option.some("2026-03-01T00:00:00.000Z"),
+          },
+          {
+            _tag: "properties",
+            properties: ["transaction.id", "transaction.status", "unsupported"],
+          }
+        );
+        const unsupportedFailure = yield* Effect.flip(
+          receiveWompiSettlement({
+            payload: unsupportedProperty,
+            observedAt: DateTime.makeUnsafe("2026-03-01T00:00:01Z"),
+          }).pipe(Effect.provideService(ConfigProvider.ConfigProvider, WompiEventConfig))
+        );
+        expect(unsupportedFailure._tag).toBe("InvalidWompiEvent");
+
+        for (const [environment, eventSecret] of [
+          ["production", "prod_events_examplekey"],
+          ["sandbox", "invalid"],
+          ["sandbox", "prod_events_examplekey"],
+        ] as const) {
+          const provider = ConfigProvider.fromUnknown({
+            WOMPI_ENVIRONMENT: environment,
+            WOMPI_EVENT_SECRET: eventSecret,
+          });
+          const authenticated = receiveWompiSettlement({
+            payload: signed,
+            observedAt: DateTime.makeUnsafe("2026-03-01T00:00:01Z"),
+          }).pipe(Effect.provideService(ConfigProvider.ConfigProvider, provider));
+          expect((yield* Effect.exit(authenticated))._tag).toBe("Failure");
+        }
       })
     );
 
@@ -504,8 +600,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
                 sourceId: 3891,
                 finalizedAt: Option.some("2026-03-01T00:00:00.000Z"),
               },
-              true,
-              false
+              { _tag: "partial" }
             )
           ),
         });
@@ -903,6 +998,15 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           ...providerAttemptWithTransaction,
           transactionId: providerAttemptWithTransaction.transactionId.value,
         };
+        const authoritativeProvider = {
+          transactionId: provider.transactionId,
+          reference: provider.reference,
+          status: "APPROVED" as const,
+          amountInCents: Number(provider.amount) * 100,
+          currency: "COP" as const,
+          sourceId: WompiSourceId.make(Number(provider.sourceId)),
+          finalizedAt: Option.some(DateTime.makeUnsafe("2026-03-01T12:00:00.000Z")),
+        };
         yield* assertArmedRedeliveryCannotRearm({
           userId,
           billingAttemptId: firstPayment.billingAttempt.id,
@@ -927,7 +1031,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
                 sourceId: Number(provider.sourceId),
                 finalizedAt: Option.some(finalizedAt),
               },
-              false
+              { _tag: "invalid-checksum" }
             )
           ),
         });
@@ -964,6 +1068,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           `,
         })({ id: firstPayment.billingAttempt.id }).pipe(Effect.orDie);
         expect(rejectedEvidenceState).toEqual({ status: "pending", paid: false, observations: 0 });
+        yield* assertAuthoritativeEvidenceBoundaries(authoritativeProvider);
         yield* receiveWompiSettlement({
           payload: signedWompiEvent({
             id: provider.transactionId,

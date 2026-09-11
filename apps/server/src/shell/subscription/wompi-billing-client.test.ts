@@ -1,5 +1,5 @@
 import { BunServices } from "@effect/platform-bun";
-import { expect, layer } from "@effect/vitest";
+import { expect, it, layer } from "@effect/vitest";
 import { type Config, ConfigProvider, Effect, Layer } from "effect";
 import { HttpClient, HttpClientResponse } from "effect/unstable/http";
 import { BillingEmail, WompiSourceId } from "~/core/subscription/enrollment-model";
@@ -28,7 +28,8 @@ const successResponse = (method: string): Response =>
     ? new Response(recordedApprovedTransaction)
     : new Response(recordedCreatedTransaction, { status: 201 });
 const clientLayer = (
-  response: (method: string) => Response
+  response: (method: string) => Response,
+  configLayer: typeof config = config
 ): Layer.Layer<WompiBillingClient, Config.ConfigError> =>
   WompiBillingClient.layer.pipe(
     Layer.provide(
@@ -39,24 +40,25 @@ const clientLayer = (
             Effect.succeed(HttpClientResponse.fromWeb(request, response(request.method)))
           )
         ),
-        config
+        configLayer
       )
     ),
     Layer.provide(BunServices.layer)
   );
 const TestLayer = clientLayer(successResponse);
+const creationInput = {
+  reference: WompiTransactionReference.make("fidy-22900000-0000-4000-8000-000000000001"),
+  amountInCents: 2_890_000,
+  currency: "COP" as const,
+  billingEmail: BillingEmail.make("payer@example.com"),
+  sourceId: WompiSourceId.make(3891),
+};
 
 layer(TestLayer, { excludeTestServices: true })("Wompi billing adapter", (it) => {
   it.effect("creates and projects a pending source transaction", () =>
     Effect.gen(function* () {
       const wompi = yield* WompiBillingClient;
-      const result = yield* wompi.createTransaction({
-        reference: WompiTransactionReference.make("fidy-22900000-0000-4000-8000-000000000001"),
-        amountInCents: 2_890_000,
-        currency: "COP",
-        billingEmail: BillingEmail.make("payer@example.com"),
-        sourceId: WompiSourceId.make(3891),
-      });
+      const result = yield* wompi.createTransaction(creationInput);
       expect(result).toMatchObject({
         transactionId: WompiTransactionId.make("transaction-123"),
         reference: "fidy-22900000-0000-4000-8000-000000000001",
@@ -102,15 +104,7 @@ layer(
   it.effect("keeps Wompi integrity credentials and response bodies out of failures", () =>
     Effect.gen(function* () {
       const wompi = yield* WompiBillingClient;
-      const failure = yield* Effect.flip(
-        wompi.createTransaction({
-          reference: WompiTransactionReference.make("fidy-22900000-0000-4000-8000-000000000001"),
-          amountInCents: 2_890_000,
-          currency: "COP",
-          billingEmail: BillingEmail.make("payer@example.com"),
-          sourceId: WompiSourceId.make(3891),
-        })
-      );
+      const failure = yield* Effect.flip(wompi.createTransaction(creationInput));
       expect(failure).toMatchObject({
         _tag: "WompiTransactionCreationFailed",
         certainty: "rejected",
@@ -120,3 +114,93 @@ layer(
     })
   );
 });
+
+layer(
+  clientLayer((method) =>
+    method === "GET" ? Response.json({ data: {} }) : new Response("not-json", { status: 201 })
+  ),
+  { excludeTestServices: true }
+)("malformed Wompi responses", (it) => {
+  it.effect("rejects malformed creation and lookup bodies", () =>
+    Effect.gen(function* () {
+      const wompi = yield* WompiBillingClient;
+      const creation = yield* Effect.flip(wompi.createTransaction(creationInput));
+      expect(creation.certainty).toBe("ambiguous");
+      yield* Effect.flip(wompi.findTransaction(WompiTransactionId.make("transaction-123")));
+    })
+  );
+});
+
+layer(
+  clientLayer(() => new Response(undefined, { status: 503 })),
+  {
+    excludeTestServices: true,
+  }
+)("unavailable Wompi responses", (it) => {
+  it.effect("classifies server refusal as ambiguous and rejects failed lookup", () =>
+    Effect.gen(function* () {
+      const wompi = yield* WompiBillingClient;
+      const creation = yield* Effect.flip(wompi.createTransaction(creationInput));
+      expect(creation.certainty).toBe("ambiguous");
+      yield* Effect.flip(wompi.findTransaction(WompiTransactionId.make("transaction-123")));
+    })
+  );
+});
+
+layer(
+  clientLayer(() => Response.error()),
+  { excludeTestServices: true }
+)("Wompi transport failure response", (it) => {
+  it.effect("rejects responses below the HTTP success range", () =>
+    Effect.gen(function* () {
+      const wompi = yield* WompiBillingClient;
+      const creation = yield* Effect.flip(wompi.createTransaction(creationInput));
+      expect(creation.certainty).toBe("rejected");
+      yield* Effect.flip(wompi.findTransaction(WompiTransactionId.make("transaction-123")));
+    })
+  );
+});
+
+const productionConfig = ConfigProvider.layer(
+  ConfigProvider.fromUnknown({
+    WOMPI_ENVIRONMENT: "production",
+    WOMPI_PRIVATE_KEY: "prv_prod_examplekey",
+    WOMPI_INTEGRITY_SECRET: "prod_integrity_examplekey",
+  })
+);
+layer(clientLayer(successResponse, productionConfig), { excludeTestServices: true })(
+  "production Wompi configuration",
+  (it) => {
+    it.effect("selects the production provider environment", () =>
+      Effect.gen(function* () {
+        const wompi = yield* WompiBillingClient;
+        expect(wompi.environment).toBe("production");
+      })
+    );
+  }
+);
+
+const invalidConfiguration = (privateKey: string, integritySecret: string): typeof config =>
+  ConfigProvider.layer(
+    ConfigProvider.fromUnknown({
+      WOMPI_ENVIRONMENT: "sandbox",
+      WOMPI_PRIVATE_KEY: privateKey,
+      WOMPI_INTEGRITY_SECRET: integritySecret,
+    })
+  );
+
+for (const [name, privateKey, integritySecret] of [
+  ["private-key shape", "invalid", "test_integrity_examplekey"],
+  ["integrity-secret shape", "prv_test_examplekey", "invalid"],
+  ["private-key prefix", "prv_prod_examplekey", "test_integrity_examplekey"],
+  ["integrity-secret prefix", "prv_test_examplekey", "prod_integrity_examplekey"],
+] as const) {
+  it.effect(`rejects invalid Wompi ${name}`, () =>
+    Effect.gen(function* () {
+      const built = Effect.scoped(
+        Layer.build(clientLayer(successResponse, invalidConfiguration(privateKey, integritySecret)))
+      );
+      expect((yield* Effect.exit(built))._tag).toBe("Failure");
+    })
+  );
+}

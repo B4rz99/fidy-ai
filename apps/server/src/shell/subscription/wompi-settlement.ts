@@ -84,21 +84,10 @@ const propertyValue = (event: Event, property: string): Option.Option<string> =>
   switch (property) {
     case "transaction.id":
       return Option.some(transaction.id);
-    case "transaction.reference":
-      return Option.some(transaction.reference);
     case "transaction.status":
       return Option.some(transaction.status);
     case "transaction.amount_in_cents":
       return Option.some(String(transaction.amount_in_cents));
-    case "transaction.currency":
-      return Option.some(transaction.currency);
-    case "transaction.payment_source_id":
-      return Option.some(String(transaction.payment_source_id));
-    case "transaction.finalized_at":
-      return Option.match(Option.fromNullOr(transaction.finalized_at), {
-        onNone: () => Option.some(""),
-        onSome: (value) => Option.some(DateTime.formatIso(value)),
-      });
     default:
       return Option.none();
   }
@@ -137,11 +126,12 @@ const authenticateEvent = Effect.fn("Subscription.authenticateWompiEvent")(funct
   if (!secretValue.startsWith(expectedPrefix)) {
     return yield* Effect.die("WOMPI_EVENT_SECRET does not match WOMPI_ENVIRONMENT");
   }
+  const checksumValid = yield* checksumMatches(event, secretValue);
   const signedProperties = new Set(event.signature.properties);
   if (
     signedProperties.size !== settlementProperties.length ||
     settlementProperties.some((property) => !signedProperties.has(property)) ||
-    !(yield* checksumMatches(event, secretValue))
+    !checksumValid
   ) {
     return yield* new InvalidWompiEvent();
   }

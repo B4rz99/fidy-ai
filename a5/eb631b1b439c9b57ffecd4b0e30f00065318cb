@@ -1,0 +1,197 @@
+apps/server/src/shell/agent/toolkit.test.ts
+  s_700fb6b56c4949::t_98738bca020f49 51,56
+apps/server/src/core/identity/rules.test.ts
+  s_700fb6b56c4949::t_bfa6a3dead0d4d 4,27,29-30,32-34,36
+  s_700fb6b56c4949::t_b5c1f3ba81dc47 11
+  s_700fb6b56c4949::t_d09c6460ab9585 37
+apps/server/src/shell/agent/toolkit.ts
+  s_700fb6b56c4949::t_35e7985d270546 7,10,66-75
+apps/server/src/shell/_shared/access-tier.ts
+  s_700fb6b56c4949::t_5b535a6bf6ecbd 2-3,15-16
+  s_700fb6b56c4949::t_1ea2e69580ebbd 1
+  s_700fb6b56c4949::t_3fcc8e77b52bdd 4-14,17
+apps/server/src/shell/testing/identity-fixtures.test.ts
+  s_700fb6b56c4949::t_29cf7feb9e8c9d 38,48-50
+apps/server/src/core/ingestion/rules.ts
+  s_700fb6b56c4949::t_329606d7698489 2,46,71,79
+  s_700fb6b56c4949::t_c419de6bf969be 298-301,367-370,420-423
+apps/server/src/shell/db/development-seed.ts
+  s_700fb6b56c4949::t_61222b4f6b9e94 44,207
+apps/server/src/shell/categories/handlers.ts
+  s_700fb6b56c4949::t_92e2a35c8158d6 4,26,32,38
+apps/server/src/shell/ingestion/worker.ts
+  s_700fb6b56c4949::t_fc3eb3d541dd7d 154
+  s_700fb6b56c4949::t_d8f95da925d3c9 14,150
+apps/server/src/core/_shared/access-tier.ts
+  s_700fb6b56c4949::t_0df4b61e64aeb3 1,8-17
+  s_700fb6b56c4949::t_4b102ab5122472 2-7
+apps/server/src/shell/subscription/access-repo.ts
+  s_700fb6b56c4949::t_ecaf4827151360 4,13
+  s_700fb6b56c4949::t_1aa3e140d8f7f8 1-3,5-12,14-57
+apps/server/src/shell/channels/whatsapp/whatsapp.acceptance.test.ts
+  s_700fb6b56c4949::t_ad520f44772ab8 19,613-620
+apps/server/src/shell/testing/identity-fixtures.ts
+  s_700fb6b56c4949::t_2d748ffbf634f9 16
+  s_700fb6b56c4949::t_2c28ab25185721 27
+apps/server/src/shell/ingestion/email-forwarding-repo.ts
+  s_700fb6b56c4949::t_a6093712725b0d 34,434,444,470
+apps/server/src/shell/ingestion/operations.ts
+  s_700fb6b56c4949::t_41a88480f175af 67
+apps/server/src/shell/db/user-tables.ts
+  s_700fb6b56c4949::t_058f7d2ee3d78e 38
+apps/server/src/shell/insights/handlers.ts
+  s_700fb6b56c4949::t_92e2a35c8158d6 3,13,19,30,36
+apps/server/src/shell/agent/agent-service.ts
+  s_700fb6b56c4949::t_fa839d48a5ae53 63,1569-1575
+apps/server/contracts/openapi.json
+  s_700fb6b56c4949::t_3159397a19e014 11733
+apps/server/src/core/subscription/model.test.ts
+  s_700fb6b56c4949::t_c419de6bf969be 29-31,36-37
+  s_700fb6b56c4949::t_caa6f97eabbc9a 32,35,40
+  s_700fb6b56c4949::t_632a260e61326b 3,28,33-34,38-39
+apps/server/src/shell/_shared/authz-live.ts
+  s_700fb6b56c4949::t_3ea11a934424ee 294
+apps/server/src/shell/_shared/canonical-mutation-registry.ts
+  s_700fb6b56c4949::t_95556ba544ee45 45
+  s_700fb6b56c4949::t_23aca11a5924b1 41-43
+  s_700fb6b56c4949::t_8c818f0c408e0b 2,44
+apps/server/src/shell/ingestion/handlers.ts
+  s_700fb6b56c4949::t_92e2a35c8158d6 3,14,20,26,32,38,44
+apps/server/src/shell/db/migrations/registry.ts
+  s_700fb6b56c4949::t_609fdcdee1b47f 54,118
+apps/server/src/shell/operations/atomic-batch.ts
+  s_700fb6b56c4949::t_acc090dfb99de2 128-132,162,216
+  s_700fb6b56c4949::t_6e5348b7fc7def 140,174,200,224,258
+  s_700fb6b56c4949::t_3203001e746db0 207
+  s_700fb6b56c4949::t_4565d6fc4c1f32 221-222,228-230
+  s_700fb6b56c4949::t_70f1eb9ea24cac 10,111
+apps/server/contracts/breaking-change-acknowledgement.json
+  s_700fb6b56c4949::t_4541c58df8fce9 1-2,4-43
+  s_700fb6b56c4949::t_965a890ca85459 3
+apps/server/src/shell/ingestion/worker.test.ts
+  s_700fb6b56c4949::t_abd33324248188 317-318
+  s_700fb6b56c4949::t_7d1f8c0488b2f5 192,297,356,364,382,390,408,422,452,573,610,618,651,659,680
+apps/server/src/shell/db/row-level-security.test.ts
+  s_700fb6b56c4949::t_7d1f8c0488b2f5 75,79,83,112,116,120,124,128,596,599
+apps/server/src/shell/db/development-seed.test.ts
+  s_700fb6b56c4949::t_23aca11a5924b1 68-70
+  s_700fb6b56c4949::t_5bafa600fa3559 6,8
+apps/server/src/shell/onboarding/onboarding.test.ts
+  s_700fb6b56c4949::t_19c37b0d884997 717,777-780,784
+apps/server/src/shell/transactions/handlers.ts
+  s_700fb6b56c4949::t_92e2a35c8158d6 3,19,25,31,37,43,49,60,70
+apps/server/src/shell/ingestion/forwarded-email-recovery.test.ts
+  s_700fb6b56c4949::t_a25e5f020f42b8 46
+apps/server/src/shell/_shared/canonical-operation-executor.ts
+  s_700fb6b56c4949::t_c419de6bf969be 127,133,135,139-153,173-175,177-183,185-190,192-194,330-335,349-354
+  s_700fb6b56c4949::t_0f06ecbccca9e3 184
+  s_700fb6b56c4949::t_7bd4103c1efb7a 155-163,176,191,197-207,212-213,221
+  s_700fb6b56c4949::t_4ac1ce44ae4b9f 32-33,41
+  s_700fb6b56c4949::t_9fb9a8a35fcc93 3,116
+  s_700fb6b56c4949::t_5a2d7b20960c43 119
+  s_700fb6b56c4949::t_3d73d326cee64a 164-172,195-196
+  s_700fb6b56c4949::t_c30a78510c5535 154
+apps/server/src/shell/dashboard/handlers.ts
+  s_700fb6b56c4949::t_92e2a35c8158d6 4,33
+apps/server/src/shell/ingestion/email-worker.ts
+  s_700fb6b56c4949::t_74c9fcbd2d44c4 31,394
+  s_700fb6b56c4949::t_eb462e756c7ed8 398
+apps/server/src/shell/consent/repo.test.ts
+  s_700fb6b56c4949::t_a25e5f020f42b8 302
+apps/server/src/shell/ingestion/queries.ts
+  s_700fb6b56c4949::t_de86909bceb56d 9,40
+apps/server/src/shell/_shared/operation-policy.ts
+  s_700fb6b56c4949::t_0e81ff4d9ca10e 4,257
+apps/server/src/shell/_shared/canonical-operation-registry.ts
+  s_700fb6b56c4949::t_5161d1380c3fc2 9,46
+  s_700fb6b56c4949::t_ac629e943430a5 126
+  s_700fb6b56c4949::t_db78267bd6475c 45
+  s_700fb6b56c4949::t_33d0010a7e56ff 47
+apps/server/src/shell/db/migrations/0028-persisted-schema-reconciliation.test.ts
+  s_700fb6b56c4949::t_9db6fc77245929 54
+apps/server/src/shell/operations/handlers.ts
+  s_700fb6b56c4949::t_8e5fb80df8e0b5 22,26-27
+  s_700fb6b56c4949::t_d553df7845d5d1 1,4,15-18
+apps/server/src/shell/ingestion/forwarded-email-workflow.integration.test.ts
+  s_700fb6b56c4949::t_7d1f8c0488b2f5 440,488
+apps/server/src/shell/testing/openapi.ts
+  s_700fb6b56c4949::t_65b502d045bd66 4,17,41
+apps/server/src/core/subscription/model.ts
+  s_700fb6b56c4949::t_c419de6bf969be 57-60,64-67,102-105
+  s_700fb6b56c4949::t_4d84a472f32931 8-13
+apps/server/src/shell/budgets/handlers.ts
+  s_700fb6b56c4949::t_92e2a35c8158d6 4,14,26,32,38
+CONTEXT.md
+  s_700fb6b56c4949::t_00b2d05381dedc 346-350
+apps/server/src/shell/_shared/canonical-pre-transaction.ts
+  s_700fb6b56c4949::t_494057a71ac6ef 75-86
+  s_700fb6b56c4949::t_c5564735797ac7 3,13-16,50-51,53,59,61-64
+apps/server/src/shell/identity/repo.ts
+  s_700fb6b56c4949::t_634b1d7fad677e 70-71,84,93,96,130,132
+apps/server/src/shell/_shared/access-tier.test.ts
+  s_700fb6b56c4949::t_1f2cf23887e1aa 16
+  s_700fb6b56c4949::t_ea88c34f616ccf 28-30
+  s_700fb6b56c4949::t_23aca11a5924b1 64-66,78-79,114,123-131
+  s_700fb6b56c4949::t_4ce005f3df0872 6,10-12,80-92,94-98,100-113
+  s_700fb6b56c4949::t_4815e5d7f96108 20,46-51,53-55,93
+  s_700fb6b56c4949::t_4b05b589011c07 25-27,31-35
+  s_700fb6b56c4949::t_3898ba1b1c899a 4,99
+  s_700fb6b56c4949::t_3d832fdda7d36c 52
+  s_700fb6b56c4949::t_1880d0b73160b6 1
+  s_700fb6b56c4949::t_b1a52f5850a489 2-3,5,7-9,13-15,17-19,21-24,36-45,56-63,67-77,115-122,132-146
+apps/server/src/core/identity/model.test.ts
+  s_700fb6b56c4949::t_40b06307fba677 3
+apps/server/src/shell/db/migrations/0055-subscription-standing.ts
+  s_700fb6b56c4949::t_50aaf3843d4121 1-22,62-65
+  s_700fb6b56c4949::t_f33120f425ca16 23,26-35,37,39,41-42,50-55,57-61
+  s_700fb6b56c4949::t_a0ec8341efaab8 24-25,36,38,40,43-49,56
+apps/server/src/shell/ingestion/mutations.ts
+  s_700fb6b56c4949::t_ebc9cc8a33fdd0 26
+  s_700fb6b56c4949::t_c419de6bf969be 118,123-128,211-216,269
+  s_700fb6b56c4949::t_797ea3a19671c8 2,87
+apps/server/src/shell/_shared/suggested-operations.ts
+  s_700fb6b56c4949::t_603db63fdb1f55 49
+  s_700fb6b56c4949::t_e70616e45768b1 1,6,63-64,66
+  s_700fb6b56c4949::t_d3e9d4bca06bcd 5
+  s_700fb6b56c4949::t_462e23d328614b 50-56,69
+  s_700fb6b56c4949::t_a3e640f6849365 61
+  s_700fb6b56c4949::t_2fe3fa18bcf269 74-77,91
+  s_700fb6b56c4949::t_49a9002f4349cb 3,46,58,65,67-68,70-71,73
+apps/server/src/shell/ingestion/email-forwarding.test.ts
+  s_700fb6b56c4949::t_7d1f8c0488b2f5 537,553,634,645
+apps/server/src/shell/ingestion/handlers.test.ts
+  s_700fb6b56c4949::t_8540ba72c2f990 176
+  s_700fb6b56c4949::t_7d1f8c0488b2f5 82,137,243
+  s_700fb6b56c4949::t_b6063613e5d947 170,174-175
+apps/server/src/core/identity/rules.ts
+  s_700fb6b56c4949::t_52cf7184fe0116 19
+  s_700fb6b56c4949::t_3f6a7ad269f423 16
+  s_700fb6b56c4949::t_48053e2b8121c2 4,6-15
+apps/server/src/shell/onboarding/completion-transition.ts
+  s_700fb6b56c4949::t_c6400019a53e5c 29,112
+apps/server/src/shell/recovery/recovery.test.ts
+  s_700fb6b56c4949::t_a25e5f020f42b8 64
+apps/server/src/shell/_shared/canonical-implementation.ts
+  s_700fb6b56c4949::t_f8c262bad08f6e 3,17
+apps/server/src/core/_shared/access-tier.test.ts
+  s_700fb6b56c4949::t_4c8994dd5ca278 1,4-9
+  s_700fb6b56c4949::t_d8c652cd38b754 2-3,10-17
+apps/server/src/shell/transcript/conversation-continuity.test.ts
+  s_700fb6b56c4949::t_a25e5f020f42b8 490
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "a5eb631b1b439c9b57ffecd4b0e30f00065318cb",
+  "prompts": {},
+  "sessions": {
+    "s_700fb6b56c4949": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a08dab-fa83-73b7-a50a-e9a96a9fc23b",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": null
+    }
+  }
+}

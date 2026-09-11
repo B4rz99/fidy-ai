@@ -21,7 +21,7 @@
     "test:browser": "bun --bun playwright test --config playwright.config.ts"
   },
   "dependencies": {
-    "@base-ui/react": "1.7.0",
+    "@base-ui/react": "1.8.0",
     "@dnd-kit/dom": "0.5.0",
     "@dnd-kit/react": "0.5.0",
     "@effect/atom-react": "4.0.0-rc.112",
@@ -51,7 +51,7 @@
     "@vitejs/plugin-react": "6.1.1",
     "@vitest/coverage-istanbul": "4.1.11",
     "jsdom": "30.0.1",
-    "shadcn": "4.20.1",
+    "shadcn": "4.21.0",
     "tailwindcss": "4.3.3",
     "typescript": "7.0.2",
     "vite": "8.2.2",

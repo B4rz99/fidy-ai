@@ -1,0 +1,35 @@
+apps/server/package.json
+  s_700fb6b56c4949::t_f307d02577cd08 58
+.fluidattacks/sca.yaml
+  s_700fb6b56c4949::t_086c2a57f26bc1 26
+tools/mutation/package.json
+  s_700fb6b56c4949::t_4aec2496916f66 19
+  s_700fb6b56c4949::t_33318ea23580f3 22
+  s_700fb6b56c4949::t_2e7bc0e30c3525 6-9
+apps/web/package.json
+  s_700fb6b56c4949::t_544c1229af1857 24,54
+package.json
+  s_700fb6b56c4949::t_18414ffc504d04 77,81
+bun.lock
+  s_700fb6b56c4949::t_eab180e80b608c 34,55,85,96,100,174,176,844-845,1008,1132,1384,1450
+tools/mutation/bun.lock
+  s_700fb6b56c4949::t_cac529190dfec2 7-10,22,25,296,422
+dependency-policy.json
+  s_700fb6b56c4949::t_328ad10c36b732 46
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "7eb2f78f4aad4fcceeb31d1f07d4063c40d652d2",
+  "prompts": {},
+  "sessions": {
+    "s_700fb6b56c4949": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a08dab-fa83-73b7-a50a-e9a96a9fc23b",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

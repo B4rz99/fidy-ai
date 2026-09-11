@@ -112,6 +112,17 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+it("gives an unauthenticated User a path to browser login", () => {
+  render(
+    <SubscriptionOffersView gateway={Option.none()} state={{ _tag: "AuthenticationRequired" }} />
+  );
+
+  expect(screen.getByRole("link", { name: "Iniciar sesión" })).toHaveAttribute(
+    "href",
+    "/auth/pair"
+  );
+});
+
 it("renders loading and load-failure states", () => {
   const { rerender } = render(
     <SubscriptionOffersView gateway={Option.none()} state={{ _tag: "Loading" }} />

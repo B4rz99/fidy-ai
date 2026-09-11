@@ -3,6 +3,7 @@ import { useRouter } from "@tanstack/react-router";
 import { Data, Effect, Array as EffectArray, Option } from "effect";
 import { AsyncResult, Atom } from "effect/unstable/reactivity";
 import { type FormEvent, type JSX, useState } from "react";
+import { useSession } from "@/session/session-context";
 import { Alert, AlertDescription, AlertTitle } from "@/ui/components/alert";
 import { Badge } from "@/ui/components/badge";
 import { Button } from "@/ui/components/button";
@@ -29,6 +30,7 @@ import {
 export type SubscriptionOffersPageState =
   | Readonly<{ _tag: "Loading" }>
   | Readonly<{ _tag: "Ready"; offers: SubscriptionOffers }>
+  | Readonly<{ _tag: "AuthenticationRequired" }>
   | Readonly<{ _tag: "LoadFailure" }>;
 
 const LoadingOffers = (): JSX.Element => (
@@ -646,6 +648,18 @@ const ReadyOffers = ({
   );
 };
 
+const AuthenticationRequired = (): JSX.Element => (
+  <Alert>
+    <AlertTitle>Inicia sesión para activar Pro</AlertTitle>
+    <AlertDescription className="flex flex-col items-start gap-3">
+      <p>Vincula este navegador con tu cuenta de Fidy para continuar.</p>
+      <Button render={<a aria-label="Iniciar sesión" href="/auth/pair" />} size="sm">
+        Iniciar sesión
+      </Button>
+    </AlertDescription>
+  </Alert>
+);
+
 const LoadFailure = (): JSX.Element => (
   <Alert variant="destructive">
     <AlertTitle>No pudimos cargar las ofertas</AlertTitle>
@@ -665,6 +679,8 @@ const SubscriptionOffersContent = ({
       return <LoadingOffers />;
     case "Ready":
       return <ReadyOffers gateway={gateway} offers={state.offers} />;
+    case "AuthenticationRequired":
+      return <AuthenticationRequired />;
     case "LoadFailure":
       return <LoadFailure />;
   }
@@ -694,11 +710,14 @@ const subscriptionOffersQuery = Atom.family((client: FidyClient) =>
 /** Authenticated route that displays offers and invokes only the direct enrollment transport. */
 export const SubscriptionOffersFeature = (): JSX.Element => {
   const router = useRouter();
+  const { authentication } = useSession();
   const offers = subscriptionOffersQuery(router.options.context.apiClient);
   const result = useAtomValue(offers);
   const gateway = makeEnrollmentGateway(router.options.context.subscriptionEnrollmentClient);
   if (AsyncResult.isFailure(result)) {
-    return <SubscriptionOffersView gateway={Option.none()} state={{ _tag: "LoadFailure" }} />;
+    const state: SubscriptionOffersPageState =
+      authentication === "expired" ? { _tag: "AuthenticationRequired" } : { _tag: "LoadFailure" };
+    return <SubscriptionOffersView gateway={Option.none()} state={state} />;
   }
   return AsyncResult.isSuccess(result) ? (
     <SubscriptionOffersView

@@ -189,7 +189,10 @@ const applySettlementInScope = Effect.fn("Subscription.applyWompiSettlementInSco
       finalizedAt: Option.fromNullOr(transaction.finalized_at),
       observedAt: input.observedAt,
     });
-    const outcome = yield* decideBillingAttemptOutcome(attempt.status, transaction.status);
+    const outcome = yield* decideBillingAttemptOutcome({
+      current: attempt.status,
+      observed: transaction.status,
+    });
     if (outcome === attempt.status || outcome === "pending") return;
     if (outcome === "failed") {
       return yield* failBillingAttemptInScope(input.userId, attempt.id, input.observedAt);

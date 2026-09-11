@@ -12,11 +12,21 @@ const bogota = IanaTimeZone.make("America/Bogota");
 
 it.effect("keeps BillingAttempt settlement monotonic while allowing a late approval", () =>
   Effect.gen(function* () {
-    expect(yield* decideBillingAttemptOutcome("pending", "PENDING")).toBe("pending");
-    expect(yield* decideBillingAttemptOutcome("pending", "DECLINED")).toBe("failed");
-    expect(yield* decideBillingAttemptOutcome("failed", "APPROVED")).toBe("succeeded");
-    expect(yield* decideBillingAttemptOutcome("succeeded", "ERROR")).toBe("succeeded");
-    expect(yield* decideBillingAttemptOutcome("failed", "VOIDED")).toBe("failed");
+    expect(yield* decideBillingAttemptOutcome({ current: "pending", observed: "PENDING" })).toBe(
+      "pending"
+    );
+    expect(yield* decideBillingAttemptOutcome({ current: "pending", observed: "DECLINED" })).toBe(
+      "failed"
+    );
+    expect(yield* decideBillingAttemptOutcome({ current: "failed", observed: "APPROVED" })).toBe(
+      "succeeded"
+    );
+    expect(yield* decideBillingAttemptOutcome({ current: "succeeded", observed: "ERROR" })).toBe(
+      "succeeded"
+    );
+    expect(yield* decideBillingAttemptOutcome({ current: "failed", observed: "VOIDED" })).toBe(
+      "failed"
+    );
   })
 );
 

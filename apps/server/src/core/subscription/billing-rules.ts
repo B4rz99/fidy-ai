@@ -15,18 +15,15 @@ export const amountInCentsForBilling = (
 export type BillingAttemptStatus = "pending" | "failed" | "succeeded";
 
 /** Advances settlement monotonically without allowing later evidence to downgrade success. */
-export const decideBillingAttemptOutcome: {
-  (
-    observed: WompiBillingStatus
-  ): (current: BillingAttemptStatus) => Effect.Effect<BillingAttemptStatus>;
-  (
-    current: BillingAttemptStatus,
-    observed: WompiBillingStatus
-  ): Effect.Effect<BillingAttemptStatus>;
-} = Function.dual(2, (current: BillingAttemptStatus, observed: WompiBillingStatus) => {
-  if (current === "succeeded" || observed === "APPROVED") return Effect.succeed("succeeded");
-  return Effect.succeed(observed === "PENDING" ? current : "failed");
-});
+export const decideBillingAttemptOutcome = (input: {
+  current: BillingAttemptStatus;
+  observed: WompiBillingStatus;
+}): Effect.Effect<BillingAttemptStatus> => {
+  if (input.current === "succeeded" || input.observed === "APPROVED") {
+    return Effect.succeed("succeeded");
+  }
+  return Effect.succeed(input.observed === "PENDING" ? input.current : "failed");
+};
 
 /** Calendar paid-period facts derived from verified settlement in the captured named time zone. */
 export type PaidPeriodWindow = Readonly<{

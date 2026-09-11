@@ -1,0 +1,37 @@
+apps/web/src/transport/client.ts
+  s_454b5956e38502::t_943f423a57e7a4 56
+apps/web/src/features/subscription/feature.tsx
+  s_454b5956e38502::t_27dc40777acffd 416-417
+  s_454b5956e38502::t_a9d772a1e29a9f 366
+  s_454b5956e38502::t_69c3bc829a6361 367,375-377
+  s_454b5956e38502::t_c7845772e979b2 444,446,478
+  s_454b5956e38502::t_1997f2eceee436 400-401,412-415,548-551,558-559,567
+  s_454b5956e38502::t_f7c3141094352a 403-406
+  s_454b5956e38502::t_a8b5beeba54442 402,407-411
+  s_454b5956e38502::t_0152dd8ffc50bd 418-436,552-557
+apps/web/src/features/subscription/feature.test.tsx
+  s_454b5956e38502::t_fe319d2646b9f8 2,9,288-290,292-295,298-305,307,313,318
+  s_454b5956e38502::t_083ea8fc425fdd 1,113,285-286,330-333,337-341,343
+  s_454b5956e38502::t_f46b6fa69cca95 291,296,309-311
+  s_454b5956e38502::t_f4b8fcab3480ab 326-327
+  s_454b5956e38502::t_ab8cf5a0bfea2d 287,297,306,308,312,314-317,319-325,328-329,342
+  s_454b5956e38502::t_74fbbf237dc8ef 53,334-336
+apps/server/src/client.ts
+  s_454b5956e38502::t_d1375b849c99a3 77
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "ac9d0988e68167bf5a6c456bb9c537cacfcef0af",
+  "prompts": {},
+  "sessions": {
+    "s_454b5956e38502": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a08d4a-515a-73b6-9939-901713b5a92e",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": null
+    }
+  }
+}

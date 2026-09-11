@@ -97,6 +97,8 @@ apps/server/src/client.ts
 apps/server/src/subscription-enrollment-api.ts
   s_454b5956e38502::t_014ba5ba916a80 12,124-128
   s_92114c81307c01::t_be092fa0c79f73 129-130
+apps/server/ARCHITECTURE.md
+  s_454b5956e38502::t_d78c39529ebd88 88-91
 ---
 {
   "schema_version": "authorship/3.0.0",

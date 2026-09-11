@@ -1,0 +1,37 @@
+apps/server/src/shell/subscription/wompi-billing-client.test.ts
+  s_454b5956e38502::t_ee0bf2ce78456f 49-55,61,107
+  s_454b5956e38502::t_b3bd2b3e69f03e 117-148
+  s_454b5956e38502::t_e40f782204750c 32
+  s_454b5956e38502::t_3adda3c4a46e17 149-181
+  s_454b5956e38502::t_750baa79794a1b 31,43
+  s_454b5956e38502::t_8583dee9070325 2
+  s_454b5956e38502::t_54b417de93dcbc 182-206
+apps/server/src/shell/subscription/wompi-settlement.ts
+  s_454b5956e38502::t_09364612ef5b85 129,134
+apps/server/src/shell/subscription/enrollment-handlers.test.ts
+  s_454b5956e38502::t_c1b3797f0481a9 1071
+  s_454b5956e38502::t_9ce69636fc8499 40,1001-1009
+  s_454b5956e38502::t_7bf4671b91a21b 509-518,523-546
+  s_454b5956e38502::t_fa47daa70f3cf4 38,209-212,214-256
+  s_454b5956e38502::t_817c4387e2b8f7 499,1034
+  s_454b5956e38502::t_6e958a3d316c32 75-79,81-82,519-522,603
+  s_454b5956e38502::t_3ccadf04e2edbf 89-91
+  s_454b5956e38502::t_097994e62b2ddd 213
+  s_454b5956e38502::t_cd12ea8c18a863 257-258
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "8efaddd954d47f98cae31be37ce3c180acb58a3a",
+  "prompts": {},
+  "sessions": {
+    "s_454b5956e38502": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a08d4a-515a-73b6-9939-901713b5a92e",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

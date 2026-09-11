@@ -1,0 +1,19 @@
+apps/server/ARCHITECTURE.md
+  s_050dea518a3d07::t_96fabd21a0cba2 3,7-12,16,20-22,24-28,34-38,42-43,47-49,53,59-62,64,67-108,112-114,117-126,130-161,165-178
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "7ff944e4394203a12f95b2e9e536b959da2f2db3",
+  "prompts": {},
+  "sessions": {
+    "s_050dea518a3d07": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a0927d-1dfe-744c-9d99-9d6751918993",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": "obarbozaa <obarbozaa@gmail.com>"
+    }
+  }
+}

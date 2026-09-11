@@ -43,7 +43,7 @@ const prepare = Effect.fn("test.prepareEmailRecovery")(function* () {
   const localPart = receivedEmailId.replaceAll("-", "");
   yield* upsertStableUserFixture(
     userId,
-    yield* makeColombianUser(userId, { paidTier: "pro", createdAt: yield* DateTime.now })
+    yield* makeColombianUser(userId, { createdAt: yield* DateTime.now })
   );
   yield* grantCurrentOnboardingConsentForTesting({
     sourceUserId: defaultUserId,

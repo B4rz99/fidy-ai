@@ -57,7 +57,6 @@ layer(ApiTelemetryHarness, { excludeTestServices: true, timeout: "30 seconds" })
         });
         const telemetryUser = yield* makeColombianUser(telemetryUserId, {
           createdAt: DateTime.makeUnsafe("2026-08-01T00:00:00Z"),
-          paidTier: "free",
         });
         yield* upsertStableUserFixture(telemetryUserId, telemetryUser);
         yield* sql`

@@ -60,6 +60,7 @@ import {
   type TurnFailureReason,
 } from "~/core/transcript/model";
 import { withUserTransaction } from "~/shell/db/user-transaction";
+import { resolveAccessTierInScope } from "~/shell/_shared/access-tier";
 import { listRecentTranscriptEntries } from "~/shell/transcript/transcript-service";
 import { ValidationFailed } from "~/shell/_shared/errors";
 import { findUser } from "~/shell/identity/repo";
@@ -1565,7 +1566,13 @@ const runPreparedTurn = Effect.fn(function* <E, R>(input: {
   const context = yield* makeWorkingContext(prepared.snapshot).pipe(
     Effect.mapError(() => new UnknownUser({ userId }))
   );
-  const availableOperations = hostedBindings(authorityRoot).map(({ operation }) => operation);
+  const accessTier = yield* withUserTransaction(
+    userId,
+    resolveAccessTierInScope(userId, context.startedAt)
+  );
+  const availableOperations = hostedBindings({ authorityRoot, accessTier }).map(
+    ({ operation }) => operation
+  );
   const firstRound = yield* prepareInitialRound(dependencies.inference, {
     context,
     maximumToolCalls: limits.maxToolCallsPerTurn,

@@ -1,5 +1,4 @@
 import { DateTime, Effect } from "effect";
-import { decideEffectiveAccess } from "~/core/identity/rules";
 import { freeForwardedEmailDeferredCap } from "~/core/ingestion/email-policy";
 import { emailAllowancePeriod, forwardedEmailAllowanceRemaining } from "~/core/ingestion/rules";
 import type { UserId } from "~/core/identity/reference";
@@ -7,7 +6,7 @@ import type { StatementSubmissionId } from "~/core/ingestion/reference";
 import { NotFound } from "~/shell/_shared/errors";
 import { externalEndpoints } from "~/shell/_shared/external-endpoints";
 import { withUserTransaction } from "~/shell/db/user-transaction";
-import { findUserInScope } from "~/shell/identity/repo";
+import { resolveAccessTierInScope } from "~/shell/_shared/access-tier";
 import {
   type NeedsReviewPageRequest,
   applyNeedsReviewPageDefaults,
@@ -38,11 +37,7 @@ export const getEmailForwarding = Effect.fn("getEmailForwarding")(function* (use
   return yield* withUserTransaction(
     userId,
     Effect.gen(function* () {
-      const user = yield* findUserInScope(userId).pipe(
-        Effect.flatMap(Effect.fromOption),
-        Effect.orDie
-      );
-      const access = yield* decideEffectiveAccess(user, now);
+      const access = yield* resolveAccessTierInScope(userId, now);
       const consumed = yield* countForwardedEmailsInPeriodInScope(userId, period);
       const remaining = forwardedEmailAllowanceRemaining({ access, consumed });
       const deferredEmails = yield* countDeferredEmailsInScope(userId);

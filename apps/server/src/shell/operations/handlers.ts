@@ -1,6 +1,7 @@
-import { Effect, Option } from "effect";
+import { DateTime, Effect, Option } from "effect";
 import { HttpApiBuilder } from "effect/unstable/httpapi";
 import { ResolvedCaller } from "~/shell/_shared/authz";
+import { resolveAccessTierInScope } from "~/shell/_shared/access-tier";
 import { CanonicalPreTransactions } from "~/shell/_shared/canonical-pre-transaction";
 import { FidyApi } from "~/shell/api";
 import { executeAtomicBatch } from "./atomic-batch";
@@ -11,13 +12,19 @@ export const OperationsLive = HttpApiBuilder.group(FidyApi, "operations", (handl
     CanonicalPreTransactions.preserve(
       Effect.gen(function* () {
         const caller = yield* ResolvedCaller;
+        const accessTier = yield* resolveAccessTierInScope(
+          caller.subjectUserId,
+          yield* DateTime.now
+        );
         return yield* executeAtomicBatch({
           payload,
           caller,
+          accessTier,
           confirmationEvidence: Option.none,
         });
       }),
-      (caller) => executeAtomicBatch({ payload, caller, confirmationEvidence: Option.none })
+      (caller, accessTier) =>
+        executeAtomicBatch({ payload, caller, accessTier, confirmationEvidence: Option.none })
     )
   )
 );

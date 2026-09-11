@@ -19,19 +19,16 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         yield* sql`DELETE FROM users WHERE id = ${userId}`;
         const original = yield* makeColombianUser(userId, {
           createdAt: originalCreatedAt,
-          paidTier: "free",
         });
         yield* upsertStableUserFixture(userId, original);
 
         const attemptedReplacement = yield* makeColombianUser(userId, {
           createdAt: DateTime.makeUnsafe("2026-09-01T12:00:00Z"),
-          paidTier: "pro",
         });
         const upserted = yield* upsertDevelopmentUser(userId, attemptedReplacement);
         const persisted = Option.getOrThrow(yield* findUser(userId));
 
         expect(upserted).toMatchObject({
-          paidTier: "pro",
           trialPeriod: original.trialPeriod,
           createdAt: originalCreatedAt,
         });

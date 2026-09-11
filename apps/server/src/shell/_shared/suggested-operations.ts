@@ -1,13 +1,13 @@
-import { Effect, Function, type Option, Schema } from "effect";
+import { DateTime, Effect, Function, type Option, Schema } from "effect";
 import type { CanonicalCapability } from "~/core/_shared/canonical-capability";
-import type { UserId } from "~/core/identity/reference";
+import type { AccessTier } from "~/core/_shared/access-tier";
 import { type OperationId, operationCatalog } from "~/shell/api";
-import { ResolvedCaller, toAccessCaller } from "./authz";
+import { type CanonicalCaller, ResolvedCaller, toAccessCaller } from "./authz";
+import { resolveAccessTierInScope } from "./access-tier";
 import type { CanonicalInput } from "./canonical-input";
 import {
   type OperationAccessCaller,
   type OperationPolicyValue,
-  type OperationTier,
   decideOperationAccess,
 } from "./operation-policy";
 import { type PartialInput } from "./partial-input";
@@ -43,34 +43,38 @@ export const suggestOperation = <Id extends OperationId>(
 /** The explicit caller facts needed to decide whether a target is callable. */
 export type SuggestedOperationCaller = {
   readonly accessCaller: OperationAccessCaller;
-  readonly tier: OperationTier;
+  readonly tier: AccessTier;
 };
 
-/** Converts the current free-tier authorization facts into suggestion checkpoint input. */
-export const makeFreeSuggestedOperationCaller = (
-  accessCaller: OperationAccessCaller
-): SuggestedOperationCaller => ({ accessCaller, tier: "free" });
+/** Projects a canonical caller and resolved tier into suggestion-policy facts. */
+export const toSuggestedOperationCaller = (input: {
+  readonly resolved: CanonicalCaller;
+  readonly accessTier: AccessTier;
+}): SuggestedOperationCaller => ({
+  accessCaller: toAccessCaller(input.resolved),
+  tier: input.accessTier,
+});
 
-/** Explicit test and worker adapter for a free-tier PAT with fixed capabilities. */
+/** Explicit test adapter for a Free PAT with fixed capabilities. */
 export const freePatCaller = (
   capabilities: ReadonlyArray<CanonicalCapability>
-): SuggestedOperationCaller => makeFreeSuggestedOperationCaller({ _tag: "PAT", capabilities });
+): SuggestedOperationCaller => ({ accessCaller: { _tag: "PAT", capabilities }, tier: "free" });
 
-/**
- * Resolves the authorized caller into the owner id and free-tier suggestion facts a scoped handler
- * takes. Every caller is free tier today, so a paid tier changes this and `makeFree…` alone.
- */
-export const resolveFreeSuggestedOperationCaller: Effect.Effect<
-  Readonly<{ userId: UserId; caller: SuggestedOperationCaller }>,
-  never,
-  ResolvedCaller
-> = Effect.map(ResolvedCaller, (resolved) => ({
-  userId: resolved.subjectUserId,
-  caller: makeFreeSuggestedOperationCaller(toAccessCaller(resolved)),
-}));
+/** Resolves the owner and current AccessTier inside the canonical User-scoped transaction. */
+export const resolveSuggestedOperationCaller = Effect.gen(function* () {
+  const resolved = yield* ResolvedCaller;
+  const tier = yield* resolveAccessTierInScope(resolved.subjectUserId, yield* DateTime.now);
+  return {
+    userId: resolved.subjectUserId,
+    caller: toSuggestedOperationCaller({ resolved, accessTier: tier }),
+  };
+});
 
-const hasRequiredTier = (requiredTier: OperationTier, callerTier: OperationTier): boolean =>
-  requiredTier === "free" || callerTier === "pro";
+/** Whether current capabilities satisfy one canonical operation's declared tier. */
+export const grantsRequiredTier = (input: {
+  readonly requiredTier: AccessTier;
+  readonly callerTier: AccessTier;
+}): boolean => input.requiredTier === "free" || input.callerTier === "pro";
 
 /**
  * Decides callability from the same policy authorization and generated surfaces
@@ -84,7 +88,7 @@ export const canCallOperation: {
   2,
   (self: OperationPolicyValue, caller: SuggestedOperationCaller): boolean =>
     decideOperationAccess(self.access, caller.accessCaller)._tag === "Allowed" &&
-    hasRequiredTier(self.requiredTier, caller.tier)
+    grantsRequiredTier({ requiredTier: self.requiredTier, callerTier: caller.tier })
 );
 
 const validationOptions = {

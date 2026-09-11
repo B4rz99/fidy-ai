@@ -70,7 +70,6 @@ const prepare = Effect.gen(function* () {
       userId,
       yield* makeColombianUser(userId, {
         createdAt: DateTime.makeUnsafe("2026-08-01T12:00:00Z"),
-        paidTier: "free",
       })
     );
   }

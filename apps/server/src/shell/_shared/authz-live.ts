@@ -291,7 +291,7 @@ const executeAuthorizedEndpoint = Effect.fn("executeAuthorizedEndpoint")(functio
       caller: canonicalCallerFromCredential(credential, occurredAt),
       operation,
       policy,
-      effect: httpEffect,
+      effect: () => httpEffect,
       executionCheckpoint: Effect.void,
       occurredAt,
     })

@@ -1,5 +1,6 @@
 import { Context, Effect, Function, Option, Ref, type Schema } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
+import type { AccessTier } from "~/core/_shared/access-tier";
 import type { CanonicalOperationId } from "~/core/_shared/canonical-operation";
 import type { CanonicalCaller } from "./authz";
 
@@ -9,7 +10,10 @@ type CanonicalPreTransactionPlan = Effect.Effect<
   SqlClient.SqlClient
 >;
 
-type CanonicalPreTransactionPlanFactory = (caller: CanonicalCaller) => CanonicalPreTransactionPlan;
+type CanonicalPreTransactionPlanFactory = (
+  caller: CanonicalCaller,
+  accessTier: AccessTier
+) => CanonicalPreTransactionPlan;
 
 const plans = new WeakMap<object, CanonicalPreTransactionPlanFactory>();
 const operationFallbacks = new Map<CanonicalOperationId, CanonicalPreTransactionPlanFactory>();
@@ -43,19 +47,21 @@ export const withCanonicalPreTransaction: {
 
 const findCanonicalPreTransaction = (
   effect: object,
-  caller: CanonicalCaller
+  caller: CanonicalCaller,
+  accessTier: AccessTier
 ): Option.Option<CanonicalPreTransactionPlan> =>
-  Option.map(Option.fromNullishOr(plans.get(effect)), (prepare) => prepare(caller));
+  Option.map(Option.fromNullishOr(plans.get(effect)), (prepare) => prepare(caller, accessTier));
 
 /** Preparation lookup and preservation for canonical execution adapters. */
 export const CanonicalPreTransactions = {
   preserve<A, E, R>(
     effect: Effect.Effect<A, E, R>,
-    source: (caller: CanonicalCaller) => object
+    source: (caller: CanonicalCaller, accessTier: AccessTier) => object
   ): Effect.Effect<A, E, R> {
-    plans.set(effect, (caller) =>
-      Option.getOrElse(findCanonicalPreTransaction(source(caller), caller), () =>
-        Effect.succeed([])
+    plans.set(effect, (caller, accessTier) =>
+      Option.getOrElse(
+        findCanonicalPreTransaction(source(caller, accessTier), caller, accessTier),
+        () => Effect.succeed([])
       )
     );
     return effect;
@@ -66,15 +72,18 @@ export const CanonicalPreTransactions = {
   ): void {
     operationFallbacks.set(operation, prepare);
   },
-  find(
-    effect: object,
-    caller: CanonicalCaller,
-    operation: CanonicalOperationId
-  ): Option.Option<CanonicalPreTransactionPlan> {
-    return Option.orElse(findCanonicalPreTransaction(effect, caller), () =>
-      Option.map(Option.fromNullishOr(operationFallbacks.get(operation)), (prepare) =>
-        prepare(caller)
-      )
+  find(input: {
+    readonly effect: object;
+    readonly caller: CanonicalCaller;
+    readonly operation: CanonicalOperationId;
+    readonly accessTier: AccessTier;
+  }): Option.Option<CanonicalPreTransactionPlan> {
+    return Option.orElse(
+      findCanonicalPreTransaction(input.effect, input.caller, input.accessTier),
+      () =>
+        Option.map(Option.fromNullishOr(operationFallbacks.get(input.operation)), (prepare) =>
+          prepare(input.caller, input.accessTier)
+        )
     );
   },
 } as const;

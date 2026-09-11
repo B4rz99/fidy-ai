@@ -1,6 +1,6 @@
 import { Effect } from "effect";
 import { HttpApiBuilder } from "effect/unstable/httpapi";
-import { resolveFreeSuggestedOperationCaller } from "~/shell/_shared/suggested-operations";
+import { resolveSuggestedOperationCaller } from "~/shell/_shared/suggested-operations";
 import { FidyApi } from "~/shell/api";
 import { dismissInsight, markInsightDelivered, markInsightRead } from "./mutations";
 import { listPendingInsights } from "./queries";
@@ -10,13 +10,13 @@ export const InsightsLive = HttpApiBuilder.group(FidyApi, "insights", (handlers)
   handlers
     .handle("listPendingInsights", () =>
       Effect.gen(function* () {
-        const { userId, caller } = yield* resolveFreeSuggestedOperationCaller;
+        const { userId, caller } = yield* resolveSuggestedOperationCaller;
         return yield* listPendingInsights({ userId, caller });
       })
     )
     .handle("markInsightDelivered", ({ params, payload }) =>
       Effect.gen(function* () {
-        const { userId, caller } = yield* resolveFreeSuggestedOperationCaller;
+        const { userId, caller } = yield* resolveSuggestedOperationCaller;
         return yield* markInsightDelivered({
           userId,
           caller,
@@ -27,13 +27,13 @@ export const InsightsLive = HttpApiBuilder.group(FidyApi, "insights", (handlers)
     )
     .handle("markInsightRead", ({ params }) =>
       Effect.gen(function* () {
-        const { userId, caller } = yield* resolveFreeSuggestedOperationCaller;
+        const { userId, caller } = yield* resolveSuggestedOperationCaller;
         return yield* markInsightRead({ userId, caller, insightEventId: params.id });
       })
     )
     .handle("dismissInsight", ({ params }) =>
       Effect.gen(function* () {
-        const { userId, caller } = yield* resolveFreeSuggestedOperationCaller;
+        const { userId, caller } = yield* resolveSuggestedOperationCaller;
         return yield* dismissInsight({ userId, caller, insightEventId: params.id });
       })
     )

@@ -13,6 +13,7 @@ import { withUserTransaction } from "~/shell/db/user-transaction";
 import { installVerifiedEmailCredentialInScope } from "~/shell/email-authentication/repo";
 import { associateWhatsAppIdentity, upsertDevelopmentUser } from "~/shell/identity/repo";
 import { upsertDevelopmentBackupRecoveryCredentialInScope } from "~/shell/recovery/repo";
+import { upsertDevelopmentSubscriptionInScope } from "~/shell/subscription/access-repo";
 
 /** Creates the complete stable-state invariant for tests that need an existing User. */
 export const upsertStableUserFixture = Effect.fn("Testing.upsertStableUserFixture")(function* (
@@ -23,6 +24,7 @@ export const upsertStableUserFixture = Effect.fn("Testing.upsertStableUserFixtur
     userId,
     Effect.gen(function* () {
       yield* upsertDevelopmentUser(userId, user);
+      yield* upsertDevelopmentSubscriptionInScope(userId, false);
       if (!(yield* hasCurrentOnboardingConsent(userId))) yield* seedOnboardingConsent(userId);
       const compactUserId = userId.replaceAll("-", "");
       yield* associateWhatsAppIdentity(userId, {

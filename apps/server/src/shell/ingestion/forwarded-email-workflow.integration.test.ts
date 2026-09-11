@@ -214,7 +214,6 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           yield* upsertStableUserFixture(
             isolatedUserId,
             yield* makeColombianUser(isolatedUserId, {
-              paidTier: "free",
               createdAt: DateTime.makeUnsafe("2020-01-01T00:00:00Z"),
             })
           );
@@ -386,7 +385,6 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           yield* upsertStableUserFixture(
             isolatedUserId,
             yield* makeColombianUser(isolatedUserId, {
-              paidTier: "pro",
               createdAt: DateTime.makeUnsafe("2020-01-01T00:00:00Z"),
             })
           );
@@ -439,7 +437,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           );
           const admitted = yield* admit(readyId);
           const sql = yield* MigrationSqlClient;
-          yield* sql`UPDATE users SET paid_tier = 'free' WHERE id = ${defaultUserId}`;
+          yield* sql`UPDATE subscriptions SET paid_pro_active = false WHERE user_id = ${defaultUserId}`;
           const now = yield* DateTime.now;
           yield* sql`
             INSERT INTO forwarded_email_receipts (
@@ -487,7 +485,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
             yield* sql`SELECT status FROM forwarded_email_receipts
               WHERE received_email_id = ${deferredId}`
           ).toEqual([{ status: "completed" }]);
-          yield* sql`UPDATE users SET paid_tier = 'pro' WHERE id = ${defaultUserId}`;
+          yield* sql`UPDATE subscriptions SET paid_pro_active = true WHERE user_id = ${defaultUserId}`;
           yield* Effect.promise(() => runtime.dispose());
           yield* cleanup();
         }),

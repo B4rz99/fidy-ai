@@ -51,6 +51,7 @@ const prepareLegacyTableShape = Effect.gen(function* () {
     DROP TRIGGER complete_user_from_email ON verified_email_credentials;
     DROP TRIGGER complete_user_from_recovery ON backup_recovery_credentials
   `;
+  yield* sql`ALTER TABLE users ADD COLUMN paid_tier text NOT NULL DEFAULT 'free'`;
   yield* sql`ALTER TABLE tokens RENAME TO agent_tokens`;
   yield* sql`ALTER TABLE agent_tokens RENAME COLUMN expires_at TO idle_expires_at`;
   yield* sql`ALTER TABLE agent_tokens DROP COLUMN lifetime_days`;

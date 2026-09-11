@@ -1,11 +1,11 @@
 import { expect } from "@effect/vitest";
 import { Effect, Option, Schema } from "effect";
 import { HttpClient } from "effect/unstable/http";
+import { AccessTier } from "~/core/_shared/access-tier";
 import { okStatus } from "~/shell/_shared/http-status";
 import {
   AgentConfirmation,
   CanonicalOperationKind,
-  OperationTier,
   PublishedOperationAccess,
   type PublishedOperationAccess as PublishedOperationAccessValue,
 } from "~/shell/_shared/operation-policy";
@@ -14,7 +14,7 @@ const SpecOperation = Schema.Struct({
   operationId: Schema.String,
   description: Schema.optional(Schema.String),
   "x-fidy-access": Schema.optional(PublishedOperationAccess),
-  "x-fidy-required-tier": Schema.optional(OperationTier),
+  "x-fidy-required-tier": Schema.optional(AccessTier),
   "x-fidy-agent-confirmation": Schema.optional(AgentConfirmation),
   "x-fidy-operation-kind": Schema.optional(CanonicalOperationKind),
 });
@@ -38,7 +38,7 @@ export type PublishedOperation = {
   /** `None` when the spec omits the canonical operation's access metadata. */
   readonly access: Option.Option<PublishedOperationAccessValue>;
   /** `None` when the spec omits the canonical operation's required-tier metadata. */
-  readonly requiredTier: Option.Option<OperationTier>;
+  readonly requiredTier: Option.Option<AccessTier>;
   /** `None` when the spec omits the hosted-agent confirmation metadata. */
   readonly agentConfirmation: Option.Option<AgentConfirmation>;
   /** `None` when the spec omits the canonical operation kind metadata. */

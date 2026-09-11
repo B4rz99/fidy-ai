@@ -21,7 +21,6 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           serviceMarket: "CO",
           locale: "es-CO",
           timeZone: "America/Bogota",
-          paidTier: "pro",
           trialPeriod: {
             startedAt: DateTime.makeUnsafe("2026-01-01T00:00:00Z"),
             endsAt: DateTime.makeUnsafe("2026-01-08T00:00:00Z"),

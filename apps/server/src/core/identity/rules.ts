@@ -1,16 +1,22 @@
 import { DateTime, Effect } from "effect";
 import { IanaTimeZone, Locale, ServiceMarket } from "~/core/_shared/context";
 import { type UserId } from "./reference";
-import { type EffectiveAccess, User } from "./model";
+import { type TrialPeriod, User } from "./model";
 
-/**
- * Creates the stable User record for a new Colombian User. The caller supplies
- * identity, time, and paid tier from the shell; this decision supplies each
- * context value explicitly and starts the User's single 168-hour TrialPeriod.
- */
+/** Whether the caller-supplied instant falls inside the immutable half-open TrialPeriod. */
+export const isTrialPeriodActive = Effect.fn("isTrialPeriodActive")(function* (
+  trialPeriod: TrialPeriod,
+  now: DateTime.Utc
+) {
+  return yield* Effect.succeed(
+    DateTime.Order(trialPeriod.startedAt, now) <= 0 && DateTime.Order(now, trialPeriod.endsAt) < 0
+  );
+});
+
+/** Creates a Colombian User and its one immutable 168-hour TrialPeriod at createdAt. */
 export const makeColombianUser = Effect.fn(function* (
   userId: UserId,
-  input: Pick<User, "createdAt" | "paidTier">
+  input: Pick<User, "createdAt">
 ) {
   return yield* Effect.succeed(
     User.make({
@@ -18,28 +24,11 @@ export const makeColombianUser = Effect.fn(function* (
       serviceMarket: ServiceMarket.make("CO"),
       locale: Locale.make("es-CO"),
       timeZone: IanaTimeZone.make("America/Bogota"),
-      paidTier: input.paidTier,
       trialPeriod: {
         startedAt: input.createdAt,
         endsAt: DateTime.addDuration(input.createdAt, "168 hours"),
       },
       createdAt: input.createdAt,
     })
-  );
-});
-
-/**
- * Derives the User's access at one caller-supplied UTC instant. TrialPeriod is
- * half-open: its start is included and its end is Free unless paid tier is Pro.
- */
-export const decideEffectiveAccess = Effect.fn(function* (
-  access: Pick<User, "paidTier" | "trialPeriod">,
-  now: DateTime.Utc
-) {
-  const trialActive =
-    DateTime.Order(access.trialPeriod.startedAt, now) <= 0 &&
-    DateTime.Order(now, access.trialPeriod.endsAt) < 0;
-  return yield* Effect.succeed<EffectiveAccess>(
-    access.paidTier === "pro" || trialActive ? "pro" : "free"
   );
 });

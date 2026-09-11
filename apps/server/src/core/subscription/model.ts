@@ -5,6 +5,12 @@ import { PriceId } from "./reference";
 
 export { PriceId } from "./reference";
 
+/** Subscription-owned private fact recording whether paid Pro access is active. */
+export const SubscriptionStanding = Schema.Struct({
+  paidProActive: Schema.Boolean,
+}).annotate({ identifier: "SubscriptionStanding" });
+export type SubscriptionStanding = typeof SubscriptionStanding.Type;
+
 /** The canonical public web destination where a User can start a Pro Subscription. */
 export const UpgradeDestination = Schema.Struct({
   url: Schema.URLFromString,
@@ -48,11 +54,17 @@ const colombiaPaidOffer = Schema.makeFilter<{
   };
 }>((revision) => {
   if (BigDecimal.Order(revision.money.amount, zero) !== 1) {
-    return { path: ["money", "amount"], issue: "Price Money must be greater than zero" };
+    return {
+      path: ["money", "amount"],
+      issue: "Price Money must be greater than zero",
+    };
   }
   return revision.money.currency === "COP"
     ? undefined
-    : { path: ["money", "currency"], issue: "Colombia Price Money must use COP" };
+    : {
+        path: ["money", "currency"],
+        issue: "Colombia Price Money must use COP",
+      };
 });
 
 /** One immutable authoritative version of Subscription price and renewal terms. */
@@ -87,7 +99,10 @@ const authoritativeOfferSet = Schema.makeFilter<
   }
   return new Set(offers.map((offer) => offer.id)).size === offers.length
     ? undefined
-    : { path: ["id"], issue: "Subscription offers must have distinct Price identities" };
+    : {
+        path: ["id"],
+        issue: "Subscription offers must have distinct Price identities",
+      };
 });
 
 /** Exact authoritative offer set in weekly, monthly, yearly presentation order. */

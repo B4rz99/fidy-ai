@@ -189,7 +189,7 @@ layer(ReviewWorkerHarness, { excludeTestServices: true, timeout: "30 seconds" })
       Effect.gen(function* () {
         yield* truncateStatementIngestion;
         const sql = yield* MigrationSqlClient;
-        yield* sql`UPDATE users SET paid_tier = 'pro' WHERE id = ${defaultUserId}`;
+        yield* sql`UPDATE subscriptions SET paid_pro_active = true WHERE user_id = ${defaultUserId}`;
         const client = yield* ApiHarnessClient;
         const mixedPayload = (idempotencyKey: string): SubmitForExtractionInput => ({
           ...statementPayload(idempotencyKey),
@@ -294,7 +294,7 @@ layer(ReviewWorkerHarness, { excludeTestServices: true, timeout: "30 seconds" })
             .map((item) => item.status)
             .sort()
         ).toEqual(["expired", "resolved"]);
-        yield* sql`UPDATE users SET paid_tier = 'free' WHERE id = ${defaultUserId}`;
+        yield* sql`UPDATE subscriptions SET paid_pro_active = false WHERE user_id = ${defaultUserId}`;
       })
     );
   }
@@ -314,8 +314,8 @@ layer(IsolationWorkerHarness, { excludeTestServices: true, timeout: "30 seconds"
         });
         const sql = yield* MigrationSqlClient;
         yield* sql`
-          UPDATE users SET paid_tier = 'pro'
-          WHERE id IN (${defaultUserId}, ${otherUserId})
+          UPDATE subscriptions SET paid_pro_active = true
+          WHERE user_id IN (${defaultUserId}, ${otherUserId})
         `;
         const ownerClient = yield* ApiHarnessClient;
         const otherClient = yield* OtherApiClient;
@@ -353,7 +353,7 @@ layer(IsolationWorkerHarness, { excludeTestServices: true, timeout: "30 seconds"
             BigDecimal.fromStringUnsafe("999")
           )
         ).toBe(true);
-        yield* sql`UPDATE users SET paid_tier = 'free' WHERE id IN (${defaultUserId}, ${otherUserId})`;
+        yield* sql`UPDATE subscriptions SET paid_pro_active = false WHERE user_id IN (${defaultUserId}, ${otherUserId})`;
       })
     );
 
@@ -361,7 +361,7 @@ layer(IsolationWorkerHarness, { excludeTestServices: true, timeout: "30 seconds"
       Effect.gen(function* () {
         yield* truncateStatementIngestion;
         const sql = yield* MigrationSqlClient;
-        yield* sql`UPDATE users SET paid_tier = 'pro' WHERE id = ${defaultUserId}`;
+        yield* sql`UPDATE subscriptions SET paid_pro_active = true WHERE user_id = ${defaultUserId}`;
         const staleId = StatementSubmissionId.make("f1d1a000-0000-4000-8000-00000000e003");
         const queue = yield* statementIngestionQueue;
         yield* queue.offer(
@@ -379,7 +379,7 @@ layer(IsolationWorkerHarness, { excludeTestServices: true, timeout: "30 seconds"
           params: { id: submitted.data.id },
         });
         expect(status.data).toMatchObject({ status: "completed" });
-        yield* sql`UPDATE users SET paid_tier = 'free' WHERE id = ${defaultUserId}`;
+        yield* sql`UPDATE subscriptions SET paid_pro_active = false WHERE user_id = ${defaultUserId}`;
       })
     );
 
@@ -387,7 +387,7 @@ layer(IsolationWorkerHarness, { excludeTestServices: true, timeout: "30 seconds"
       Effect.gen(function* () {
         yield* truncateStatementIngestion;
         const sql = yield* MigrationSqlClient;
-        yield* sql`UPDATE users SET paid_tier = 'pro' WHERE id = ${defaultUserId}`;
+        yield* sql`UPDATE subscriptions SET paid_pro_active = true WHERE user_id = ${defaultUserId}`;
         const client = yield* ApiHarnessClient;
         const submitted = yield* client.ingestion.submitForExtraction({
           payload: statementPayload("f1d1a000-0000-4000-8000-00000000e006"),
@@ -405,7 +405,7 @@ layer(IsolationWorkerHarness, { excludeTestServices: true, timeout: "30 seconds"
           params: { id: submitted.data.id },
         });
         expect(status.data).toMatchObject({ status: "queued" });
-        yield* sql`UPDATE users SET paid_tier = 'free' WHERE id = ${defaultUserId}`;
+        yield* sql`UPDATE subscriptions SET paid_pro_active = false WHERE user_id = ${defaultUserId}`;
       })
     );
 
@@ -419,7 +419,7 @@ layer(IsolationWorkerHarness, { excludeTestServices: true, timeout: "30 seconds"
           scopes: ["read", "write"],
         });
         const sql = yield* MigrationSqlClient;
-        yield* sql`UPDATE users SET paid_tier = 'pro' WHERE id = ${defaultUserId}`;
+        yield* sql`UPDATE subscriptions SET paid_pro_active = true WHERE user_id = ${defaultUserId}`;
         const ownerClient = yield* ApiHarnessClient;
         const submitted = yield* ownerClient.ingestion.submitForExtraction({
           payload: statementPayload("f1d1a000-0000-4000-8000-00000000e005"),
@@ -449,7 +449,7 @@ layer(IsolationWorkerHarness, { excludeTestServices: true, timeout: "30 seconds"
               AS queue_attempts
         `;
         expect(effects).toEqual([{ transactions: 0, reviews: 0, queue_attempts: 1 }]);
-        yield* sql`UPDATE users SET paid_tier = 'free' WHERE id = ${defaultUserId}`;
+        yield* sql`UPDATE subscriptions SET paid_pro_active = false WHERE user_id = ${defaultUserId}`;
       })
     );
   }
@@ -570,7 +570,7 @@ layer(WorkerHarness, { excludeTestServices: true, timeout: "30 seconds" })(
       Effect.gen(function* () {
         yield* truncateStatementIngestion;
         const sql = yield* MigrationSqlClient;
-        yield* sql`UPDATE users SET paid_tier = 'pro' WHERE id = ${defaultUserId}`;
+        yield* sql`UPDATE subscriptions SET paid_pro_active = true WHERE user_id = ${defaultUserId}`;
         const client = yield* ApiHarnessClient;
         const first = yield* client.ingestion.submitForExtraction({
           payload: statementPayload("f1d1a000-0000-4000-8000-00000000c191"),
@@ -607,7 +607,7 @@ layer(WorkerHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           counterparty: false,
           notes: false,
         });
-        yield* sql`UPDATE users SET paid_tier = 'free' WHERE id = ${defaultUserId}`;
+        yield* sql`UPDATE subscriptions SET paid_pro_active = false WHERE user_id = ${defaultUserId}`;
       })
     );
 
@@ -615,7 +615,7 @@ layer(WorkerHarness, { excludeTestServices: true, timeout: "30 seconds" })(
       Effect.gen(function* () {
         yield* truncateStatementIngestion;
         const sql = yield* MigrationSqlClient;
-        yield* sql`UPDATE users SET paid_tier = 'pro' WHERE id = ${defaultUserId}`;
+        yield* sql`UPDATE subscriptions SET paid_pro_active = true WHERE user_id = ${defaultUserId}`;
         const active = yield* Ref.make(0);
         const maximumActive = yield* Ref.make(0);
         const calls = yield* Ref.make(0);
@@ -648,7 +648,7 @@ layer(WorkerHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           params: { id: submitted.data.id },
         });
         expect(status.data).toMatchObject({ status: "completed" });
-        yield* sql`UPDATE users SET paid_tier = 'free' WHERE id = ${defaultUserId}`;
+        yield* sql`UPDATE subscriptions SET paid_pro_active = false WHERE user_id = ${defaultUserId}`;
       })
     );
 
@@ -656,7 +656,7 @@ layer(WorkerHarness, { excludeTestServices: true, timeout: "30 seconds" })(
       Effect.gen(function* () {
         yield* truncateStatementIngestion;
         const sql = yield* MigrationSqlClient;
-        yield* sql`UPDATE users SET paid_tier = 'pro' WHERE id = ${defaultUserId}`;
+        yield* sql`UPDATE subscriptions SET paid_pro_active = true WHERE user_id = ${defaultUserId}`;
         const client = yield* ApiHarnessClient;
         const submitted = yield* client.ingestion.submitForExtraction({
           payload: statementPayload("f1d1a000-0000-4000-8000-00000000c204"),
@@ -677,7 +677,7 @@ layer(WorkerHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           params: { id: submitted.data.id },
         });
         expect(status.data).toMatchObject({ status: "completed" });
-        yield* sql`UPDATE users SET paid_tier = 'free' WHERE id = ${defaultUserId}`;
+        yield* sql`UPDATE subscriptions SET paid_pro_active = false WHERE user_id = ${defaultUserId}`;
       })
     );
 

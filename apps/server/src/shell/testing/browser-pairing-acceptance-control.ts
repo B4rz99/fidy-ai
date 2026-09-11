@@ -72,7 +72,6 @@ const reset = Effect.gen(function* () {
   yield* sql`DELETE FROM budgets WHERE user_id = ${acceptanceUserId}`;
   const user = yield* makeColombianUser(acceptanceUserId, {
     createdAt: yield* DateTime.now,
-    paidTier: "free",
   });
   yield* upsertStableUserFixture(acceptanceUserId, user);
   const lookupKey = yield* emailCredentialLookupKey(EmailAddress.make(acceptanceEmail)).pipe(

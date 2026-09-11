@@ -32,17 +32,6 @@ export const TrialPeriod = TrialPeriodFields.check(exactTrialDuration).annotate(
 export type TrialPeriod = typeof TrialPeriod.Type;
 
 /**
- * PaidTier records whether the User has no paid Subscription (`free`) or an active Pro
- * Subscription (`pro`); TrialPeriod does not alter it.
- */
-export const PaidTier = Schema.Literals(["free", "pro"]);
-export type PaidTier = typeof PaidTier.Type;
-
-/** Free or Pro access after applying both PaidTier and TrialPeriod. */
-export const EffectiveAccess = Schema.Literals(["free", "pro"]);
-export type EffectiveAccess = typeof EffectiveAccess.Type;
-
-/**
  * The concrete association between a stable User and one WhatsApp caller, keyed by Business
  * Portfolio plus BSUID. Phone number, parent BSUID, and username are mutable evidence only.
  * `verifiedAt` records when an explicit association was established; later observations may
@@ -70,7 +59,6 @@ export const User = Schema.Struct({
   serviceMarket: ServiceMarket,
   locale: Locale,
   timeZone: IanaTimeZone,
-  paidTier: PaidTier,
   trialPeriod: TrialPeriod,
   createdAt: UtcTimestamp,
 }).annotate({ identifier: "User" });

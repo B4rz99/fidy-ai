@@ -67,9 +67,8 @@ const WhatsAppReassociationRequest = Schema.Struct({
 });
 
 const userColumns = `id, service_market AS "serviceMarket", locale,
-  time_zone AS "timeZone", paid_tier AS "paidTier",
-  trial_started_at AS "trialStartedAt", trial_ends_at AS "trialEndsAt",
-  created_at AS "createdAt"`;
+  time_zone AS "timeZone", trial_started_at AS "trialStartedAt",
+  trial_ends_at AS "trialEndsAt", created_at AS "createdAt"`;
 
 const writeUser = Effect.fn(function* (
   mode: "insert" | "upsert",
@@ -82,8 +81,7 @@ const writeUser = Effect.fn(function* (
       ? sql`ON CONFLICT (id) DO UPDATE SET
           service_market = EXCLUDED.service_market,
           locale = EXCLUDED.locale,
-          time_zone = EXCLUDED.time_zone,
-          paid_tier = EXCLUDED.paid_tier`
+          time_zone = EXCLUDED.time_zone`
       : sql``;
   return yield* withUserTransaction(
     userId,
@@ -92,11 +90,10 @@ const writeUser = Effect.fn(function* (
       Result: UserRow,
       execute: (row) => sql`
         INSERT INTO users (
-          id, service_market, locale, time_zone, paid_tier,
-          trial_started_at, trial_ends_at, created_at
+          id, service_market, locale, time_zone, trial_started_at, trial_ends_at, created_at
         )
         VALUES (
-          ${row.id}, ${row.serviceMarket}, ${row.locale}, ${row.timeZone}, ${row.paidTier},
+          ${row.id}, ${row.serviceMarket}, ${row.locale}, ${row.timeZone},
           ${row.trialStartedAt}, ${row.trialEndsAt}, ${row.createdAt}
         )
         ${conflict}
@@ -130,10 +127,9 @@ export const createVerifiedOnboardingIdentityInScope = Effect.fn(
   const sql = yield* SqlClient.SqlClient;
   yield* sql`
     INSERT INTO users (
-      id, service_market, locale, time_zone, paid_tier,
-      trial_started_at, trial_ends_at, created_at
+      id, service_market, locale, time_zone, trial_started_at, trial_ends_at, created_at
     ) VALUES (
-      ${input.userId}, 'CO', 'es-CO', 'America/Bogota', 'free',
+      ${input.userId}, 'CO', 'es-CO', 'America/Bogota',
       ${input.createdAt}, ${DateTime.add(input.createdAt, { hours: 168 })}, ${input.createdAt}
     )
   `;

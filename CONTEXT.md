@@ -343,6 +343,11 @@ _Avoid_: Advice (unqualified), recommendation.
 
 ### Money in, money out
 
+**AccessTier**:
+The User's current capability tier: `free` or `pro`. It is derived at the decision instant from an
+active TrialPeriod or active paid Subscription; it is never persisted as a separate owner fact.
+_Avoid_: PaidTier, effective access, access basis, trial tier.
+
 **TrialPeriod**:
 The immutable half-open UTC interval during which a newly onboarded User receives Pro access without
 a Subscription. It starts once, when verified email completes onboarding and creates the

@@ -714,6 +714,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           "consent_records",
           "verified_email_credentials",
           "backup_recovery_credentials",
+          "subscriptions",
         ] as const;
 
         for (const [index, table] of ownerTables.entries()) {
@@ -773,10 +774,14 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
                 (SELECT count(*)::int FROM users AS users
                   JOIN whatsapp_identities AS identity ON identity.user_id = users.id
                   WHERE identity.business_scoped_user_id = ${targetCaller.businessScopedUserId}) AS users,
+                (SELECT count(*)::int FROM subscriptions AS subscription
+                  JOIN whatsapp_identities AS identity ON identity.user_id = subscription.user_id
+                  WHERE identity.business_scoped_user_id = ${targetCaller.businessScopedUserId})
+                  AS subscriptions,
                 (SELECT count(*)::int FROM email_enrollments
                   WHERE business_scoped_user_id = ${targetCaller.businessScopedUserId}) AS enrollment
             `
-          ).toEqual([{ users: 0, enrollment: 1 }]);
+          ).toEqual([{ users: 0, subscriptions: 0, enrollment: 1 }]);
           yield* cleanupCaller(targetCaller);
         }
         yield* sql`DROP FUNCTION fidy_test_reject_verified_onboarding_insert()`;

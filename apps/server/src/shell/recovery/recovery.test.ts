@@ -61,7 +61,7 @@ const installStableRecoveryFixture = (
     const createdAt = DateTime.makeUnsafe("2026-08-01T12:00:00Z");
     yield* upsertStableUserFixture(
       targetUserId,
-      yield* makeColombianUser(targetUserId, { createdAt, paidTier: "free" })
+      yield* makeColombianUser(targetUserId, { createdAt })
     );
     const crypto = yield* Crypto.Crypto;
     const codeDigest = yield* crypto

@@ -9360,13 +9360,6 @@
           "locale": {
             "$ref": "#/components/schemas/Locale"
           },
-          "paidTier": {
-            "enum": [
-              "free",
-              "pro"
-            ],
-            "type": "string"
-          },
           "serviceMarket": {
             "$ref": "#/components/schemas/ServiceMarket"
           },
@@ -9382,7 +9375,6 @@
           "serviceMarket",
           "locale",
           "timeZone",
-          "paidTier",
           "trialPeriod",
           "createdAt"
         ],
@@ -11738,7 +11730,7 @@
     },
     "/ingestion/statements": {
       "post": {
-        "description": "Idempotently queue one bounded CSV or XLSX statement. Free includes one lifetime backfill; effective Trial or Pro access permits ongoing submissions. Poll the returned submission and inspect NeedsReviewItems after completion.",
+        "description": "Idempotently queue one bounded CSV or XLSX statement. Free includes one lifetime backfill; Pro access permits ongoing submissions. Poll the returned submission and inspect NeedsReviewItems after completion.",
         "operationId": "ingestion.submitForExtraction",
         "parameters": [],
         "requestBody": {

@@ -6,8 +6,7 @@ import type {
   CanonicalOperationImplementations,
 } from "./canonical-implementation";
 import { canonicalMutationImplementations } from "./canonical-mutation-registry";
-import { toAccessCaller } from "./authz";
-import { makeFreeSuggestedOperationCaller } from "./suggested-operations";
+import { type SuggestedOperationCaller, toSuggestedOperationCaller } from "./suggested-operations";
 import { getCurrentUser } from "~/shell/identity/queries";
 import { listCategories, listKeywordRules } from "~/shell/categories/queries";
 import { getBudget, getBudgetStatus, listBudgets } from "~/shell/budgets/queries";
@@ -43,8 +42,9 @@ type ErasedCanonicalImplementation = {
 
 const suggestedCaller = ({
   resolved,
-}: CanonicalImplementationCaller): ReturnType<typeof makeFreeSuggestedOperationCaller> =>
-  makeFreeSuggestedOperationCaller(toAccessCaller(resolved));
+  accessTier,
+}: CanonicalImplementationCaller): SuggestedOperationCaller =>
+  toSuggestedOperationCaller({ resolved, accessTier });
 
 /**
  * Every canonical implementation behind both HTTP handlers and hosted Turn authority. Catalog
@@ -123,6 +123,7 @@ export const canonicalOperationImplementations: CanonicalOperationImplementation
     executeAtomicBatch({
       payload: input.payload,
       caller: caller.resolved,
+      accessTier: caller.accessTier,
       confirmationEvidence: caller.confirmationEvidence,
     }),
 } as const;

@@ -63,7 +63,6 @@ const installStartAndLogoutRoutes = async (
           serviceMarket: "CO",
           locale: "es-CO",
           timeZone: "America/Bogota",
-          paidTier: "free",
           trialPeriod: {
             startedAt: "2026-08-01T00:00:00Z",
             endsAt: "2026-08-08T00:00:00Z",

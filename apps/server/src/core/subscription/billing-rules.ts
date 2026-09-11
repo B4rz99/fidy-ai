@@ -14,18 +14,40 @@ export const amountInCentsForBilling = (
 /** Persisted lifecycle of one BillingAttempt. */
 export type BillingAttemptStatus = "pending" | "failed" | "succeeded";
 
+const settlementOutcome: Readonly<
+  Record<BillingAttemptStatus, Readonly<Record<WompiBillingStatus, BillingAttemptStatus>>>
+> = {
+  pending: {
+    PENDING: "pending",
+    APPROVED: "succeeded",
+    DECLINED: "failed",
+    VOIDED: "failed",
+    ERROR: "failed",
+  },
+  failed: {
+    PENDING: "failed",
+    APPROVED: "succeeded",
+    DECLINED: "failed",
+    VOIDED: "failed",
+    ERROR: "failed",
+  },
+  succeeded: {
+    PENDING: "succeeded",
+    APPROVED: "succeeded",
+    DECLINED: "succeeded",
+    VOIDED: "succeeded",
+    ERROR: "succeeded",
+  },
+};
+
 /** Advances settlement monotonically without allowing later evidence to downgrade success. */
 export const decideBillingAttemptOutcome = (
   input: Readonly<{
     current: BillingAttemptStatus;
     observed: WompiBillingStatus;
   }>
-): Effect.Effect<BillingAttemptStatus> => {
-  if (input.current === "succeeded" || input.observed === "APPROVED") {
-    return Effect.succeed("succeeded");
-  }
-  return Effect.succeed(input.observed === "PENDING" ? input.current : "failed");
-};
+): Effect.Effect<BillingAttemptStatus> =>
+  Effect.succeed(settlementOutcome[input.current][input.observed]);
 
 /** Calendar paid-period facts derived from verified settlement in the captured named time zone. */
 export type PaidPeriodWindow = Readonly<{

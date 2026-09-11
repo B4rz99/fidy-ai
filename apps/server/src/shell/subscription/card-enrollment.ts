@@ -275,8 +275,10 @@ const acceptanceTermsMatch = (record: EnrollmentRecord, current: WompiContracts)
 };
 
 const submissionModeMatches = (record: EnrollmentRecord, input: SubmitCardEnrollment): boolean =>
-  record.paymentSourceMode === input.paymentSourceMode ||
-  (record.status === "available" && input.paymentSourceMode === "reuse");
+  new Set([
+    record.paymentSourceMode,
+    record.status === "available" ? "reuse" : record.paymentSourceMode,
+  ]).has(input.paymentSourceMode);
 
 const beginSubmission = Effect.fn(function* (
   userId: UserId,

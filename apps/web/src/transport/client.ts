@@ -53,6 +53,7 @@ export {
   CardEnrollment,
   CardEnrollmentDecisions,
   CardEnrollmentId,
+  CardPaymentSubmission,
   TokenBearer,
   TokenShortId,
   buildPATDisclosure,

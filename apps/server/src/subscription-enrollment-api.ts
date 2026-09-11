@@ -9,7 +9,7 @@ import {
   CardPaymentSubmission,
   maximumTransientCardTokenCharacters,
 } from "~/core/subscription/enrollment-model";
-import { PaymentRequestId } from "~/core/subscription/model";
+import { BillingAttempt, BillingAttemptId, PaymentRequestId } from "~/core/subscription/model";
 import { PriceId } from "~/core/subscription/reference";
 
 const invalidError = {
@@ -119,6 +119,13 @@ export const SubscriptionEnrollmentGroup = HttpApiGroup.make("subscriptionEnroll
     HttpApiEndpoint.get("status", "/web/subscription/card-enrollments/:enrollmentId", {
       params: { enrollmentId: CardEnrollmentId },
       success: CardEnrollment,
+      error: directErrors,
+    })
+  )
+  .add(
+    HttpApiEndpoint.get("billingAttempt", "/web/subscription/billing-attempts/:billingAttemptId", {
+      params: { billingAttemptId: BillingAttemptId },
+      success: BillingAttempt,
       error: directErrors,
     })
   );

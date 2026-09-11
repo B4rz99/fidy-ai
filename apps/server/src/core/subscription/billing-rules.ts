@@ -15,10 +15,12 @@ export const amountInCentsForBilling = (
 export type BillingAttemptStatus = "pending" | "failed" | "succeeded";
 
 /** Advances settlement monotonically without allowing later evidence to downgrade success. */
-export const decideBillingAttemptOutcome = (input: {
-  current: BillingAttemptStatus;
-  observed: WompiBillingStatus;
-}): Effect.Effect<BillingAttemptStatus> => {
+export const decideBillingAttemptOutcome = (
+  input: Readonly<{
+    current: BillingAttemptStatus;
+    observed: WompiBillingStatus;
+  }>
+): Effect.Effect<BillingAttemptStatus> => {
   if (input.current === "succeeded" || input.observed === "APPROVED") {
     return Effect.succeed("succeeded");
   }

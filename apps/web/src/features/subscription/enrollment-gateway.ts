@@ -9,6 +9,7 @@ import {
   type SubscriptionEnrollmentClient,
 } from "@/transport/client";
 import { type CardFields, tokenizeCardWithWompi } from "@/transport/wompi-tokenization";
+import { paymentSubmissionIsTerminal } from "./payment-status";
 
 export type Enrollment = CardEnrollmentType;
 export type PaymentSubmission = CardPaymentSubmissionType;
@@ -45,6 +46,8 @@ const makePaymentRequestId = (): ReturnType<typeof PaymentRequestId.make> => {
   );
 };
 
+type PendingPayment = Extract<PaymentSubmission, { status: "payment-pending" }>;
+
 export type EnrollmentGateway = Readonly<{
   prepare: (priceId: PriceId) => Promise<Enrollment>;
   submit: (
@@ -55,6 +58,10 @@ export type EnrollmentGateway = Readonly<{
   continue: (
     enrollmentId: PreparedEnrollment["enrollmentId"],
     billingEmail: string
+  ) => Promise<PaymentSubmission>;
+  observeBillingAttempt: (
+    enrollmentId: PreparedEnrollment["enrollmentId"],
+    billingAttemptId: PendingPayment["billingAttempt"]["id"]
   ) => Promise<PaymentSubmission>;
   status: (enrollmentId: PreparedEnrollment["enrollmentId"]) => Promise<Enrollment>;
 }>;
@@ -90,10 +97,7 @@ const completed = (
   request: Promise<PaymentSubmission>
 ): Promise<PaymentSubmission> =>
   request.then((submission) => {
-    const terminal =
-      submission.status === "refused" ||
-      (submission.status === "payment-pending" && submission.billingAttempt.status !== "pending");
-    if (terminal) {
+    if (paymentSubmissionIsTerminal(submission)) {
       paymentRequests.delete(enrollment.enrollmentId);
       globalThis.sessionStorage.removeItem(paymentRequestStorageKey(enrollment));
     }
@@ -189,6 +193,20 @@ export const makeEnrollmentGateway = (
   const paymentRequests: PaymentRequestStore = new Map();
   return {
     continue: makeContinue(clientService, paymentRequests),
+    observeBillingAttempt: (enrollmentId, billingAttemptId) =>
+      completed(
+        paymentRequests,
+        { enrollmentId },
+        clientService
+          .execute((client) =>
+            client.subscriptionEnrollment.billingAttempt({ params: { billingAttemptId } })
+          )
+          .then((billingAttempt) => ({
+            status: "payment-pending" as const,
+            enrollmentId,
+            billingAttempt,
+          }))
+      ),
     prepare: (priceId) =>
       clientService.execute((client) =>
         client.subscriptionEnrollment.prepare({ payload: { priceId } })

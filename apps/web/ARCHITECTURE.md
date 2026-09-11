@@ -30,7 +30,12 @@ web does not maintain copied canonical schemas, operation maps, or access policy
 is one browser action, **Activar Pro**: a fresh browser-generated `PaymentRequestId` accompanies the
 server-declared submission while card fields are tokenized directly with Wompi. The action disables
 immediately through response handling, and the view renders only browser-safe pending, verifying,
-refused, or settled BillingAttempt state; provider references never enter web state.
+refused, or settled BillingAttempt state; provider references never enter web state. Pending payment
+feedback polls the existing BillingAttempt through its read-only endpoint rather than replaying the
+submission; it pauses while hidden, resumes immediately on visibility, and stops at terminal state,
+screen disposal, or the bounded feedback window. While settlement is pending, the payment form remains visible and disabled with its
+in-progress action; terminal status replaces it. Offer selection remains locked after submission so
+one pending flow cannot be replaced by another plan collection.
 
 ## 3. Browser authentication
 

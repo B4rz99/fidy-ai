@@ -198,6 +198,43 @@ const assertArmedRedeliveryCannotRearm = Effect.fn(function* (input: {
   expect(Option.isNone(redeliveryArm)).toBe(true);
 });
 
+const assertBillingAttemptVisibilityBoundaries = Effect.fn(function* (
+  billingAttemptId: BillingAttemptId
+) {
+  const sql = yield* MigrationSqlClient;
+  yield* sql`
+    UPDATE web_sessions SET paired_at = now() - interval '1 hour',
+      fresh_until = now() - interval '50 minutes',
+      hard_expires_at = now() + interval '89 days 23 hours'
+    WHERE id = ${sessionId}
+  `;
+  const ownerObservation = yield* HttpClient.get(
+    `/web/subscription/billing-attempts/${billingAttemptId}`,
+    { headers: { origin: "https://fidyapp.com", cookie: sessionCookie } }
+  );
+  expect(ownerObservation.status).toBe(200);
+  expect(yield* ownerObservation.json).toMatchObject({ id: billingAttemptId, status: "succeeded" });
+  const crossUserObservation = yield* HttpClient.get(
+    `/web/subscription/billing-attempts/${billingAttemptId}`,
+    { headers: { origin: "https://fidyapp.com", cookie: outcomeCookie } }
+  );
+  expect(crossUserObservation.status).toBe(400);
+});
+
+const assertEnrollmentLifecycleStatuses = Effect.fn(function* (enrollmentId: CardEnrollmentId) {
+  const sql = yield* MigrationSqlClient;
+  for (const status of ["creating", "verifying"] as const) {
+    yield* sql`
+      UPDATE card_enrollments SET status = ${status}, payment_source_id = NULL
+      WHERE id = ${enrollmentId} AND user_id = ${userId}
+    `;
+    const observed = yield* HttpClient.get(`/web/subscription/card-enrollments/${enrollmentId}`, {
+      headers: { origin: "https://fidyapp.com", cookie: sessionCookie },
+    });
+    expect(yield* observed.json).toMatchObject({ status });
+  }
+});
+
 const assertPublicationRollsBack = Effect.fn(function* (input: {
   userId: UserId;
   enrollmentId: CardEnrollmentId;
@@ -1070,17 +1107,8 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           },
         });
 
-        for (const status of ["creating", "verifying"] as const) {
-          yield* sql`
-            UPDATE card_enrollments SET status = ${status}, payment_source_id = NULL
-            WHERE id = ${yearly.enrollmentId} AND user_id = ${userId}
-          `;
-          const observed = yield* HttpClient.get(
-            `/web/subscription/card-enrollments/${yearly.enrollmentId}`,
-            { headers: { origin: "https://fidyapp.com", cookie: sessionCookie } }
-          );
-          expect(yield* observed.json).toMatchObject({ status });
-        }
+        yield* assertEnrollmentLifecycleStatuses(yearly.enrollmentId);
+        yield* assertBillingAttemptVisibilityBoundaries(firstPayment.billingAttempt.id);
       })
     );
   }

@@ -1,11 +1,17 @@
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
-import { BigDecimal, DateTime, Option } from "effect";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { BigDecimal, DateTime, Option, Schema } from "effect";
 import { afterEach, expect, it, vi } from "vitest";
 import { SubscriptionOffersView } from "./feature";
+import {
+  isAwaitingPaymentStatus,
+  paymentStatusRefreshDelay,
+  paymentSubmissionIsTerminal,
+} from "./payment-status";
 import { type PaymentSubmission, makeEnrollmentGateway } from "./enrollment-gateway";
 import {
   BillingEmail,
   CardEnrollmentId,
+  CardPaymentSubmission,
   PriceId,
   type SubscriptionEnrollmentClient,
 } from "@/transport/client";
@@ -92,6 +98,11 @@ const enrollmentGateway = {
       status: "source-verifying",
       enrollmentId: preparedEnrollment.enrollmentId,
     }),
+  observeBillingAttempt: (): Promise<PaymentSubmission> =>
+    Promise.resolve({
+      status: "source-verifying",
+      enrollmentId: preparedEnrollment.enrollmentId,
+    }),
   prepare: (): Promise<typeof preparedEnrollment> => Promise.resolve(preparedEnrollment),
   submit: (): Promise<
     Readonly<{
@@ -106,8 +117,18 @@ const enrollmentGateway = {
   status: (): Promise<typeof preparedEnrollment> => Promise.resolve(preparedEnrollment),
 };
 
+it("uses adaptive payment-status refresh intervals", () => {
+  const firstBackoffRefresh = 3;
+  const finalBackoffRefresh = 9;
+  expect(paymentStatusRefreshDelay(0)).toBe("1 second");
+  expect(paymentStatusRefreshDelay(firstBackoffRefresh)).toBe("5 seconds");
+  expect(paymentStatusRefreshDelay(finalBackoffRefresh)).toBe("10 seconds");
+});
+
 afterEach(() => {
   cleanup();
+  vi.useRealTimers();
+  vi.restoreAllMocks();
   sessionStorage.clear();
   vi.unstubAllGlobals();
 });
@@ -254,8 +275,21 @@ it("shows the card form with only Wompi's required checks and constrained fields
 });
 
 it("disables Activar Pro immediately until submission handling completes", async () => {
+  let visibilityState: DocumentVisibilityState = "hidden";
+  vi.spyOn(document, "visibilityState", "get").mockImplementation(() => visibilityState);
   const pending = Promise.withResolvers<PaymentSubmission>();
-  const gateway = { ...enrollmentGateway, submit: vi.fn(() => pending.promise) };
+  const continuePayment = vi.fn(() =>
+    Promise.resolve<PaymentSubmission>({
+      status: "refused",
+      enrollmentId: preparedEnrollment.enrollmentId,
+      reason: "provider-declined",
+    })
+  );
+  const gateway = {
+    ...enrollmentGateway,
+    continue: continuePayment,
+    submit: vi.fn(() => pending.promise),
+  };
   render(
     <SubscriptionOffersView gateway={Option.some(gateway)} state={{ _tag: "Ready", offers }} />
   );
@@ -272,11 +306,232 @@ it("disables Activar Pro immediately until submission handling completes", async
   for (const checkbox of screen.getAllByRole("checkbox")) fireEvent.click(checkbox);
   fireEvent.click(screen.getByRole("button", { name: "Activar Pro" }));
   expect(await screen.findByRole("button", { name: "Activando Pro…" })).toBeDisabled();
+  expect(screen.getByRole("button", { name: "Oferta mensual seleccionada" })).toBeDisabled();
+  expect(screen.getByRole("button", { name: "Elegir semanal" })).toBeDisabled();
   pending.resolve({
     status: "source-verifying",
     enrollmentId: preparedEnrollment.enrollmentId,
   });
-  expect(await screen.findByText(/Estamos verificando tu fuente de pago/iu)).toBeVisible();
+  expect(await screen.findByText("Estamos verificando tu fuente de pago.")).toBeVisible();
+  expect(screen.getByRole("button", { name: "Activando Pro…" })).toBeDisabled();
+  expect(screen.getByLabelText("Número de tarjeta")).toBeDisabled();
+
+  await act(async () => {
+    visibilityState = "visible";
+    document.dispatchEvent(new Event("visibilitychange"));
+    await Promise.resolve();
+  });
+  expect(continuePayment).toHaveBeenCalledWith(
+    preparedEnrollment.enrollmentId,
+    "verified@example.com"
+  );
+  expect(await screen.findByRole("alert")).toHaveTextContent(
+    "No pudimos iniciar el pago. Puedes intentarlo de nuevo."
+  );
+});
+
+type BillingAttemptFixture = Readonly<{
+  id: string;
+  priceId: (typeof offers)[number]["id"];
+  money: Readonly<{ amount: string; currency: "COP" }>;
+  billingPeriod: (typeof offers)[number]["billingPeriod"];
+  serviceMarket: (typeof offers)[number]["serviceMarket"];
+  taxTreatment: (typeof offers)[number]["taxTreatment"];
+  timeZone: string;
+  createdAt: string;
+  status: "pending" | "failed" | "succeeded";
+  failedAt: Option.Option<string>;
+  finalizedAt: Option.Option<string>;
+  paidPeriodEndsAt: Option.Option<string>;
+  renewalAnchor: Option.Option<string>;
+}>;
+
+const defaultBillingAttemptFixture: BillingAttemptFixture = {
+  id: "22700000-0000-4000-8000-000000000091",
+  priceId: offers[1].id,
+  money: { amount: "28900", currency: "COP" },
+  billingPeriod: offers[1].billingPeriod,
+  serviceMarket: offers[1].serviceMarket,
+  taxTreatment: offers[1].taxTreatment,
+  timeZone: "America/Bogota",
+  createdAt: "2026-03-01T00:00:00Z",
+  status: "pending",
+  failedAt: Option.none(),
+  finalizedAt: Option.none(),
+  paidPeriodEndsAt: Option.none(),
+  renewalAnchor: Option.none(),
+};
+
+const paymentSubmissionFixture = (
+  billingAttemptOverrides: Partial<BillingAttemptFixture> = {}
+): Extract<PaymentSubmission, { status: "payment-pending" }> => {
+  const fixture = { ...defaultBillingAttemptFixture, ...billingAttemptOverrides };
+  const commonBillingAttempt = {
+    id: fixture.id,
+    priceId: fixture.priceId,
+    money: fixture.money,
+    billingPeriod: fixture.billingPeriod,
+    serviceMarket: fixture.serviceMarket,
+    taxTreatment: fixture.taxTreatment,
+    timeZone: fixture.timeZone,
+    createdAt: fixture.createdAt,
+  };
+  let submission: PaymentSubmission;
+  if (fixture.status === "succeeded") {
+    submission = Schema.decodeSync(CardPaymentSubmission)({
+      status: "payment-pending",
+      enrollmentId: preparedEnrollment.enrollmentId,
+      billingAttempt: {
+        ...commonBillingAttempt,
+        status: "succeeded",
+        finalizedAt: Option.getOrElse(fixture.finalizedAt, () => "2026-03-01T00:01:00Z"),
+        paidPeriodEndsAt: Option.getOrElse(fixture.paidPeriodEndsAt, () => "2026-04-01T00:01:00Z"),
+        renewalAnchor: Option.getOrElse(fixture.renewalAnchor, () => "2026-04-01T00:01:00Z"),
+      },
+    });
+  } else if (fixture.status === "failed") {
+    submission = Schema.decodeSync(CardPaymentSubmission)({
+      status: "payment-pending",
+      enrollmentId: preparedEnrollment.enrollmentId,
+      billingAttempt: {
+        ...commonBillingAttempt,
+        status: "failed",
+        failedAt: Option.getOrElse(fixture.failedAt, () => "2026-03-01T00:01:00Z"),
+      },
+    });
+  } else {
+    submission = Schema.decodeSync(CardPaymentSubmission)({
+      status: "payment-pending",
+      enrollmentId: preparedEnrollment.enrollmentId,
+      billingAttempt: { ...commonBillingAttempt, status: "pending" },
+    });
+  }
+  if (submission.status !== "payment-pending") {
+    throw new Error("payment submission fixture did not decode");
+  }
+  return submission;
+};
+
+it("refreshes only nonterminal payment submissions", () => {
+  expect(
+    isAwaitingPaymentStatus({
+      status: "source-verifying",
+      enrollmentId: preparedEnrollment.enrollmentId,
+    })
+  ).toBe(true);
+  expect(isAwaitingPaymentStatus(paymentSubmissionFixture())).toBe(true);
+  expect(isAwaitingPaymentStatus(paymentSubmissionFixture({ status: "succeeded" }))).toBe(false);
+  expect(
+    isAwaitingPaymentStatus({
+      status: "refused",
+      enrollmentId: preparedEnrollment.enrollmentId,
+      reason: "provider-declined",
+    })
+  ).toBe(false);
+});
+
+it("releases retained payment requests only for terminal submissions", () => {
+  const pending = paymentSubmissionFixture();
+  const succeeded = paymentSubmissionFixture({ status: "succeeded" });
+  expect(paymentSubmissionIsTerminal(pending)).toBe(false);
+  expect(paymentSubmissionIsTerminal(succeeded)).toBe(true);
+  expect(
+    paymentSubmissionIsTerminal({
+      status: "source-verifying",
+      enrollmentId: preparedEnrollment.enrollmentId,
+    })
+  ).toBe(false);
+  expect(
+    paymentSubmissionIsTerminal({
+      status: "refused",
+      enrollmentId: preparedEnrollment.enrollmentId,
+      reason: "provider-declined",
+    })
+  ).toBe(true);
+});
+
+it("automatically refreshes a visible pending payment without resubmitting it", async () => {
+  let visibilityState: DocumentVisibilityState = "hidden";
+  vi.spyOn(document, "visibilityState", "get").mockImplementation(() => visibilityState);
+  const reuseEnrollment = { ...preparedEnrollment, paymentSourceMode: "reuse" as const };
+  const pendingSubmission = paymentSubmissionFixture();
+  const succeededSubmission = paymentSubmissionFixture({ status: "succeeded" });
+  const submit = vi.fn(() => Promise.resolve(pendingSubmission));
+  const continuePayment = vi.fn(enrollmentGateway.continue);
+  const observePayment = vi.fn(() => Promise.resolve(succeededSubmission));
+  const gateway = {
+    ...enrollmentGateway,
+    prepare: (): Promise<typeof reuseEnrollment> => Promise.resolve(reuseEnrollment),
+    submit,
+    continue: continuePayment,
+    observeBillingAttempt: observePayment,
+  };
+  render(
+    <SubscriptionOffersView gateway={Option.some(gateway)} state={{ _tag: "Ready", offers }} />
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Elegir mensual" }));
+  await act(async () => Promise.resolve());
+  expect(screen.getByRole("textbox", { name: "Correo de facturación" })).toBeVisible();
+  for (const checkbox of screen.getAllByRole("checkbox")) fireEvent.click(checkbox);
+  fireEvent.click(screen.getByRole("button", { name: "Activar Pro" }));
+  await act(async () => Promise.resolve());
+
+  expect(screen.queryByText(/Esperando confirmación de Wompi/iu)).not.toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Activando Pro…" })).toBeDisabled();
+  expect(screen.getByRole("textbox", { name: "Correo de facturación" })).toBeDisabled();
+  expect(screen.queryByRole("button", { name: "Consultar estado" })).not.toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Oferta mensual seleccionada" })).toBeDisabled();
+  expect(screen.getByRole("button", { name: "Elegir semanal" })).toBeDisabled();
+  expect(observePayment).not.toHaveBeenCalled();
+
+  await act(async () => {
+    visibilityState = "visible";
+    document.dispatchEvent(new Event("visibilitychange"));
+    await Promise.resolve();
+  });
+
+  expect(observePayment).toHaveBeenCalledWith(
+    preparedEnrollment.enrollmentId,
+    pendingSubmission.billingAttempt.id
+  );
+  expect(continuePayment).not.toHaveBeenCalled();
+  expect(submit).toHaveBeenCalledTimes(1);
+  expect(screen.getByText("Tu pago fue realizado y tu suscripción está activa.")).toBeVisible();
+  expect(screen.queryByRole("textbox", { name: "Correo de facturación" })).not.toBeInTheDocument();
+});
+
+it.each([
+  {
+    name: "provider refusal",
+    submission: {
+      status: "refused" as const,
+      enrollmentId: preparedEnrollment.enrollmentId,
+      reason: "provider-declined" as const,
+    },
+    message: "No pudimos iniciar el pago. Puedes intentarlo de nuevo.",
+  },
+  {
+    name: "failed BillingAttempt",
+    submission: paymentSubmissionFixture({ status: "failed" }),
+    message: "Wompi rechazó el pago. Puedes intentarlo de nuevo.",
+  },
+])("replaces the form after $name", async ({ submission, message }) => {
+  const reuseEnrollment = { ...preparedEnrollment, paymentSourceMode: "reuse" as const };
+  const gateway = {
+    ...enrollmentGateway,
+    prepare: (): Promise<typeof reuseEnrollment> => Promise.resolve(reuseEnrollment),
+    submit: (): Promise<PaymentSubmission> => Promise.resolve(submission),
+  };
+  render(
+    <SubscriptionOffersView gateway={Option.some(gateway)} state={{ _tag: "Ready", offers }} />
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Elegir mensual" }));
+  await screen.findByText(/fuente de pago guardada/iu);
+  for (const checkbox of screen.getAllByRole("checkbox")) fireEvent.click(checkbox);
+  fireEvent.click(screen.getByRole("button", { name: "Activar Pro" }));
+
+  expect(await screen.findByRole("alert")).toHaveTextContent(message);
+  expect(screen.queryByRole("textbox", { name: "Correo de facturación" })).not.toBeInTheDocument();
 });
 
 it("submits normalized billing data and card fields after both Wompi checks", async () => {

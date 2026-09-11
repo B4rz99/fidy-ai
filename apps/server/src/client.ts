@@ -74,6 +74,7 @@ export {
   BillingEmail,
   CardEnrollment,
   CardEnrollmentDecisions,
+  CardPaymentSubmission,
   CardEnrollmentId,
 } from "~/core/subscription/enrollment-model";
 export type {

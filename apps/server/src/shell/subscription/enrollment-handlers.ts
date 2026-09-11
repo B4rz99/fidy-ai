@@ -21,7 +21,9 @@ import { webSessionCookieName } from "~/shell/_shared/authz";
 import { collectBoundedBytes } from "~/shell/_shared/bounded-bytes";
 import { externalEndpoints } from "~/shell/_shared/external-endpoints";
 import { onboardingConsentStandingInScope, withSubjectLock } from "~/shell/consent/repo";
+import { withUserTransaction } from "~/shell/db/user-transaction";
 import { authenticateWebSession } from "~/shell/web-session/service";
+import { findBillingAttemptByIdInScope, projectBillingAttempt } from "./billing-repo";
 import { getCardEnrollment, prepareCardEnrollment, submitCardEnrollment } from "./card-enrollment";
 
 const maximumEnrollmentRequestBytes = 6144;
@@ -46,7 +48,7 @@ const unsupportedMediaType = (): CardEnrollmentUnsupportedMediaTypeApi =>
 const unavailable = (): CardEnrollmentUnavailableApi =>
   CardEnrollmentUnavailableApi.make(cardEnrollmentUnavailableBody);
 
-const authorizeEnrollmentRequest = Effect.fn(function* (
+const authenticateEnrollmentRequest = Effect.fn(function* (
   request: HttpServerRequest.HttpServerRequest
 ) {
   const { webOrigin } = yield* externalEndpoints.pipe(Effect.orDie);
@@ -54,10 +56,17 @@ const authorizeEnrollmentRequest = Effect.fn(function* (
   const now = yield* DateTime.now;
   const session = yield* authenticateWebSession(request.cookies[webSessionCookieName] ?? "", now);
   if (Option.isNone(session)) return yield* unauthenticated();
-  if (DateTime.Order(now, session.value.freshUntil) >= 0) {
+  return { session: session.value, userId: session.value.subjectUserId, now };
+});
+
+const authorizeEnrollmentRequest = Effect.fn(function* (
+  request: HttpServerRequest.HttpServerRequest
+) {
+  const authority = yield* authenticateEnrollmentRequest(request);
+  if (DateTime.Order(authority.now, authority.session.freshUntil) >= 0) {
     return yield* unauthenticated();
   }
-  return { userId: session.value.subjectUserId, now };
+  return authority;
 });
 
 const withEnrollmentConsent = <A, E, R>(
@@ -149,5 +158,16 @@ export const SubscriptionEnrollmentHandlersLive = HttpApiBuilder.group(
             )
           )
         )
+      )
+      .handleRaw("billingAttempt", ({ params, request }) =>
+        Effect.gen(function* () {
+          const authority = yield* authenticateEnrollmentRequest(request);
+          const attempt = yield* withUserTransaction(
+            authority.userId,
+            findBillingAttemptByIdInScope(authority.userId, params.billingAttemptId)
+          );
+          if (Option.isNone(attempt)) return yield* invalid();
+          return projectBillingAttempt(attempt.value);
+        })
       )
 );

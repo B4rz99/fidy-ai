@@ -85,8 +85,10 @@ exceptions when transient credentials must remain unrepresentable to canonical c
 agents, OpenAPI, logs, or persistence. They end at stable-User canonical authority and do not
 create parallel domain contracts. The payment boundary requires exact Origin, a fresh WebSession,
 current Consent, no-store responses, bounded JSON, User-stable provider admission, and browser-safe
-outputs. It starts first collection with a browser-generated `PaymentRequestId`; provider responses
-and redirects are observations, never settlement authority. See
+outputs. Read-only BillingAttempt observation still requires exact Origin and an active WebSession,
+but not session freshness, and never replays submission. The boundary starts first collection with a
+browser-generated `PaymentRequestId`; provider responses and redirects are observations, never
+settlement authority. See
 [ADR 0015](../../docs/adr/0015-browser-paired-web-authentication.md) and
 [ADR 0021](../../docs/adr/0021-browser-only-payment-credential-enrollment.md).
 

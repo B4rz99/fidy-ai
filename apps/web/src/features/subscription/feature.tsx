@@ -1,4 +1,4 @@
-import { useAtomValue } from "@effect/atom-react";
+import { make as makeScopedAtom, useAtom, useAtomSet, useAtomValue } from "@effect/atom-react";
 import { useRouter } from "@tanstack/react-router";
 import { Data, Effect, Array as EffectArray, Option } from "effect";
 import { AsyncResult, Atom } from "effect/unstable/reactivity";
@@ -25,6 +25,7 @@ import {
   type PreparedEnrollment,
   makeEnrollmentGateway,
 } from "./enrollment-gateway";
+import { isAwaitingPaymentStatus, paymentStatusRefreshDelay } from "./payment-status";
 
 /** Exhaustive rendering state for the authenticated Subscription offer page. */
 export type SubscriptionOffersPageState =
@@ -42,10 +43,12 @@ const LoadingOffers = (): JSX.Element => (
 );
 
 const OfferButton = ({
+  disabled,
   offer,
   selected,
   select,
 }: Readonly<{
+  disabled: boolean;
   offer: SubscriptionOfferPresentation;
   selected: boolean;
   select: (id: PriceId) => void;
@@ -56,6 +59,7 @@ const OfferButton = ({
     }
     aria-pressed={selected}
     className="h-auto w-full py-6 font-heading text-xl font-semibold tabular-nums"
+    disabled={disabled}
     onClick={() => select(offer.id)}
     type="button"
     variant={selected ? "secondary" : "default"}
@@ -83,11 +87,12 @@ const digitsOnly = (value: string): string => value.replace(/\D/gu, "");
 const nameCharactersOnly = (value: string): string => value.replace(/[^\p{L} ]/gu, "");
 
 type CardFieldsControlProps = Readonly<{
+  disabled: boolean;
   fields: CardFields;
   setFields: (fields: CardFields) => void;
 }>;
 
-const CardNumberField = ({ fields, setFields }: CardFieldsControlProps): JSX.Element => (
+const CardNumberField = ({ disabled, fields, setFields }: CardFieldsControlProps): JSX.Element => (
   <CardField
     id="card-number"
     label="Número de tarjeta"
@@ -95,6 +100,7 @@ const CardNumberField = ({ fields, setFields }: CardFieldsControlProps): JSX.Ele
       <Input
         id="card-number"
         autoComplete="cc-number"
+        disabled={disabled}
         inputMode="numeric"
         pattern="[0-9]*"
         required
@@ -107,7 +113,7 @@ const CardNumberField = ({ fields, setFields }: CardFieldsControlProps): JSX.Ele
 );
 
 const expirationDigitCount = 6;
-const ExpirationField = ({ fields, setFields }: CardFieldsControlProps): JSX.Element => {
+const ExpirationField = ({ disabled, fields, setFields }: CardFieldsControlProps): JSX.Element => {
   const expiration =
     fields.expirationYear.length > 0
       ? `${fields.expirationMonth}/${fields.expirationYear}`
@@ -128,6 +134,7 @@ const ExpirationField = ({ fields, setFields }: CardFieldsControlProps): JSX.Ele
         <Input
           id="card-expiration"
           autoComplete="cc-exp"
+          disabled={disabled}
           inputMode="numeric"
           maxLength={7}
           pattern="[0-9/]*"
@@ -142,7 +149,7 @@ const ExpirationField = ({ fields, setFields }: CardFieldsControlProps): JSX.Ele
   );
 };
 
-const CvcField = ({ fields, setFields }: CardFieldsControlProps): JSX.Element => (
+const CvcField = ({ disabled, fields, setFields }: CardFieldsControlProps): JSX.Element => (
   <CardField
     id="card-cvc"
     label="CVC"
@@ -150,6 +157,7 @@ const CvcField = ({ fields, setFields }: CardFieldsControlProps): JSX.Element =>
       <Input
         id="card-cvc"
         autoComplete="cc-csc"
+        disabled={disabled}
         inputMode="numeric"
         maxLength={4}
         pattern="[0-9]*"
@@ -162,7 +170,11 @@ const CvcField = ({ fields, setFields }: CardFieldsControlProps): JSX.Element =>
   />
 );
 
-const CardholderNameField = ({ fields, setFields }: CardFieldsControlProps): JSX.Element => (
+const CardholderNameField = ({
+  disabled,
+  fields,
+  setFields,
+}: CardFieldsControlProps): JSX.Element => (
   <CardField
     id="cardholder-name"
     label="Nombre en la tarjeta"
@@ -170,6 +182,7 @@ const CardholderNameField = ({ fields, setFields }: CardFieldsControlProps): JSX
       <Input
         id="cardholder-name"
         autoComplete="cc-name"
+        disabled={disabled}
         required
         type="text"
         value={fields.cardholderName}
@@ -181,13 +194,13 @@ const CardholderNameField = ({ fields, setFields }: CardFieldsControlProps): JSX
   />
 );
 
-const CardFieldsForm = ({ fields, setFields }: CardFieldsControlProps): JSX.Element => (
+const CardFieldsForm = ({ disabled, fields, setFields }: CardFieldsControlProps): JSX.Element => (
   <fieldset className="grid gap-3 sm:grid-cols-2">
     <legend className="sr-only">Datos de pago</legend>
-    <CardNumberField fields={fields} setFields={setFields} />
-    <ExpirationField fields={fields} setFields={setFields} />
-    <CvcField fields={fields} setFields={setFields} />
-    <CardholderNameField fields={fields} setFields={setFields} />
+    <CardNumberField disabled={disabled} fields={fields} setFields={setFields} />
+    <ExpirationField disabled={disabled} fields={fields} setFields={setFields} />
+    <CvcField disabled={disabled} fields={fields} setFields={setFields} />
+    <CardholderNameField disabled={disabled} fields={fields} setFields={setFields} />
   </fieldset>
 );
 
@@ -199,16 +212,19 @@ type EnrollmentDecisions = Readonly<{
 const EnrollmentConsent = ({
   enrollment,
   decisions,
+  disabled,
   setDecisions,
 }: Readonly<{
   enrollment: PreparedEnrollment;
   decisions: EnrollmentDecisions;
+  disabled: boolean;
   setDecisions: (decisions: EnrollmentDecisions) => void;
 }>): JSX.Element => (
   <div className="flex flex-col gap-2">
     <label className="flex items-start gap-2">
       <input
         checked={decisions.endUserPolicy}
+        disabled={disabled}
         onChange={(event) => setDecisions({ ...decisions, endUserPolicy: event.target.checked })}
         type="checkbox"
       />
@@ -228,6 +244,7 @@ const EnrollmentConsent = ({
     <label className="flex items-start gap-2">
       <input
         checked={decisions.personalData}
+        disabled={disabled}
         onChange={(event) => setDecisions({ ...decisions, personalData: event.target.checked })}
         type="checkbox"
       />
@@ -290,7 +307,7 @@ const PreparedEnrollmentForm = ({
   return (
     <form className="flex flex-col gap-5" onSubmit={onSubmit}>
       {enrollment.paymentSourceMode === "create" ? (
-        <CardFieldsForm fields={fields} setFields={setFields} />
+        <CardFieldsForm disabled={busy} fields={fields} setFields={setFields} />
       ) : (
         <p>Usaremos de nuevo tu fuente de pago guardada. No necesitas ingresar la tarjeta.</p>
       )}
@@ -299,6 +316,7 @@ const PreparedEnrollmentForm = ({
         <Input
           id="billing-email"
           autoComplete="email"
+          disabled={busy}
           required
           type="email"
           value={billingEmail}
@@ -311,6 +329,7 @@ const PreparedEnrollmentForm = ({
       </p>
       <EnrollmentConsent
         decisions={decisions}
+        disabled={busy}
         enrollment={enrollment}
         setDecisions={setDecisions}
       />
@@ -363,35 +382,26 @@ const EnrollmentStatusAction = ({
   );
 };
 
+const maximumPaymentStatusRefreshes = 65;
+
 const PaymentSubmissionStatus = ({
   submission,
-  continuePayment,
 }: Readonly<{
   submission: PaymentSubmission;
-  continuePayment: (enrollmentId: PreparedEnrollment["enrollmentId"]) => void;
 }>): JSX.Element => {
   if (submission.status === "source-verifying") {
-    return (
-      <div className="flex flex-col gap-2">
-        <output aria-live="polite">
-          Estamos verificando tu fuente de pago. No vuelvas a enviarla.
-        </output>
-        <Button onClick={() => continuePayment(submission.enrollmentId)} type="button">
-          Consultar estado
-        </Button>
-      </div>
-    );
+    return <output aria-live="polite">Estamos verificando tu fuente de pago.</output>;
   }
   if (submission.status === "refused") {
     return <p role="alert">No pudimos iniciar el pago. Puedes intentarlo de nuevo.</p>;
   }
   if (submission.billingAttempt.status === "succeeded") {
-    return <output aria-live="polite">Tu pago fue confirmado y Pro está activo.</output>;
+    return <output aria-live="polite">Tu pago fue realizado y tu suscripción está activa.</output>;
   }
   if (submission.billingAttempt.status === "failed") {
     return <p role="alert">Wompi rechazó el pago. Puedes intentarlo de nuevo.</p>;
   }
-  return <output aria-live="polite">Pago enviado. Esperando confirmación de Wompi…</output>;
+  return <></>;
 };
 
 type PaymentFlowState =
@@ -400,7 +410,86 @@ type PaymentFlowState =
       _tag: "PaymentSubmission";
       value: PaymentSubmission;
       billingEmail: string;
+      prepared: PreparedEnrollment;
     }>;
+
+type PaymentSubmissionFlowState = Extract<PaymentFlowState, { _tag: "PaymentSubmission" }>;
+
+const enrollmentFlow = (value: Enrollment): PaymentFlowState => ({ _tag: "Enrollment", value });
+const submissionFlow = (
+  value: PaymentSubmission,
+  billingEmail: string,
+  prepared: PreparedEnrollment
+): PaymentSubmissionFlowState => ({
+  _tag: "PaymentSubmission",
+  value,
+  billingEmail,
+  prepared,
+});
+
+const pageIsHidden = (): boolean => globalThis.document.visibilityState === "hidden";
+
+const awaitVisiblePage = (): Effect.Effect<boolean> => {
+  if (!pageIsHidden()) return Effect.succeed(false);
+  return Effect.callback<boolean>((resume) => {
+    const onVisibilityChange = (): void => {
+      if (pageIsHidden()) return;
+      globalThis.document.removeEventListener("visibilitychange", onVisibilityChange);
+      resume(Effect.succeed(true));
+    };
+    globalThis.document.addEventListener("visibilitychange", onVisibilityChange);
+    onVisibilityChange();
+    return Effect.sync(() =>
+      globalThis.document.removeEventListener("visibilitychange", onVisibilityChange)
+    );
+  });
+};
+
+class EnrollmentInteractionFailed extends Data.TaggedError("EnrollmentInteractionFailed")<{}> {}
+
+const refreshPaymentUntilTerminal = Effect.fn(function* (
+  gateway: EnrollmentGateway,
+  initial: PaymentSubmissionFlowState,
+  publish: (current: PaymentSubmissionFlowState) => void
+) {
+  let current = initial;
+  let refreshCount = 0;
+  while (isAwaitingPaymentStatus(current.value) && refreshCount < maximumPaymentStatusRefreshes) {
+    const resumedFromHiddenPage = yield* awaitVisiblePage();
+    if (!resumedFromHiddenPage) yield* Effect.sleep(paymentStatusRefreshDelay(refreshCount));
+    if (pageIsHidden()) continue;
+    refreshCount += 1;
+    const refreshed = yield* Effect.tryPromise({
+      try: () =>
+        current.value.status === "payment-pending"
+          ? gateway.observeBillingAttempt(
+              current.value.enrollmentId,
+              current.value.billingAttempt.id
+            )
+          : gateway.continue(current.value.enrollmentId, current.billingEmail),
+      catch: () => new EnrollmentInteractionFailed(),
+    }).pipe(Effect.option);
+    if (Option.isSome(refreshed)) {
+      current = submissionFlow(refreshed.value, current.billingEmail, current.prepared);
+      yield* Effect.sync(() => publish(current));
+    }
+  }
+});
+
+type PaymentStatusRefreshCommand = Readonly<{
+  gateway: EnrollmentGateway;
+  initial: PaymentSubmissionFlowState;
+  publish: (current: PaymentSubmissionFlowState) => void;
+}>;
+
+const PaymentStatusRefresh = makeScopedAtom(() =>
+  Atom.fn<PaymentStatusRefreshCommand>()(
+    ({ gateway, initial, publish }) => refreshPaymentUntilTerminal(gateway, initial, publish),
+    { concurrent: false }
+  )
+);
+
+const PaymentFlow = makeScopedAtom(() => Atom.make<Option.Option<PaymentFlowState>>(Option.none()));
 
 const renderPaymentEnrollment = (input: {
   current: PaymentFlowState;
@@ -408,25 +497,33 @@ const renderPaymentEnrollment = (input: {
   prepare: () => void;
   submit: (prepared: PreparedEnrollment, email: string, card?: CardFields) => void;
   refresh: (enrollmentId: PreparedEnrollment["enrollmentId"]) => void;
-  continuePayment: (enrollmentId: PreparedEnrollment["enrollmentId"], billingEmail: string) => void;
 }): JSX.Element => {
-  const { current, busy, prepare, submit, refresh, continuePayment } = input;
+  const { current, busy, prepare, submit, refresh } = input;
   if (current._tag === "PaymentSubmission") {
+    if (!isAwaitingPaymentStatus(current.value)) {
+      return <PaymentSubmissionStatus submission={current.value} />;
+    }
     return (
-      <PaymentSubmissionStatus
-        continuePayment={(enrollmentId) => continuePayment(enrollmentId, current.billingEmail)}
-        submission={current.value}
-      />
+      <div className="flex flex-col gap-5">
+        <PreparedEnrollmentForm
+          busy
+          enrollment={current.prepared}
+          submit={(email, card) => submit(current.prepared, email, card)}
+        />
+        <PaymentSubmissionStatus submission={current.value} />
+      </div>
     );
   }
   const enrollment = current.value;
   if (enrollment.status === "prepared") {
     return (
-      <PreparedEnrollmentForm
-        busy={busy}
-        enrollment={enrollment}
-        submit={(email, card) => submit(enrollment, email, card)}
-      />
+      <div className="flex flex-col gap-5">
+        <PreparedEnrollmentForm
+          busy={busy}
+          enrollment={enrollment}
+          submit={(email, card) => submit(enrollment, email, card)}
+        />
+      </div>
     );
   }
   return (
@@ -440,19 +537,16 @@ const EnrollmentContent = ({
   prepare,
   submit,
   refresh,
-  continuePayment,
 }: Readonly<{
   enrollment: Option.Option<PaymentFlowState>;
   busy: boolean;
   prepare: () => void;
   submit: (prepared: PreparedEnrollment, email: string, card?: CardFields) => void;
   refresh: (enrollmentId: PreparedEnrollment["enrollmentId"]) => void;
-  continuePayment: (enrollmentId: PreparedEnrollment["enrollmentId"], billingEmail: string) => void;
 }>): JSX.Element =>
   Option.match(enrollment, {
     onNone: () => (busy ? <p aria-live="polite">Cargando formulario…</p> : <></>),
-    onSome: (current) =>
-      renderPaymentEnrollment({ current, busy, prepare, submit, refresh, continuePayment }),
+    onSome: (current) => renderPaymentEnrollment({ current, busy, prepare, submit, refresh }),
   });
 
 const PaymentDetails = ({
@@ -462,7 +556,6 @@ const PaymentDetails = ({
   prepare,
   submit,
   refresh,
-  continuePayment,
 }: Readonly<{
   enrollment: Option.Option<PaymentFlowState>;
   busy: boolean;
@@ -470,7 +563,6 @@ const PaymentDetails = ({
   prepare: () => void;
   submit: (prepared: PreparedEnrollment, email: string, card?: CardFields) => void;
   refresh: (enrollmentId: PreparedEnrollment["enrollmentId"]) => void;
-  continuePayment: (enrollmentId: PreparedEnrollment["enrollmentId"], billingEmail: string) => void;
 }>): JSX.Element => (
   <section aria-label="Pago con tarjeta">
     <Card>
@@ -486,7 +578,6 @@ const PaymentDetails = ({
         <EnrollmentContent
           busy={busy}
           enrollment={enrollment}
-          continuePayment={continuePayment}
           prepare={prepare}
           refresh={refresh}
           submit={submit}
@@ -511,8 +602,6 @@ const SubscriptionTerms = ({
   </section>
 );
 
-class EnrollmentInteractionFailed extends Data.TaggedError("EnrollmentInteractionFailed")<{}> {}
-
 type EnrollmentInteraction = Readonly<{
   enrollment: Option.Option<PaymentFlowState>;
   busy: boolean;
@@ -524,9 +613,22 @@ type EnrollmentInteraction = Readonly<{
 const useEnrollmentInteraction = (
   gateway: Option.Option<EnrollmentGateway>
 ): EnrollmentInteraction => {
-  const [enrollment, setEnrollment] = useState<Option.Option<PaymentFlowState>>(Option.none);
+  const [enrollment, setEnrollment] = useAtom(PaymentFlow.use());
   const [busy, setBusy] = useState(false);
   const [failed, setFailed] = useState(false);
+  const refreshPaymentStatus = useAtomSet(PaymentStatusRefresh.use());
+  const startAutomaticRefresh = (value: PaymentFlowState): void => {
+    if (value._tag !== "PaymentSubmission" || !isAwaitingPaymentStatus(value.value)) return;
+    Option.match(gateway, {
+      onNone: () => undefined,
+      onSome: (availableGateway) =>
+        refreshPaymentStatus({
+          gateway: availableGateway,
+          initial: value,
+          publish: (current) => setEnrollment(Option.some(current)),
+        }),
+    });
+  };
   const run = (work: () => Promise<PaymentFlowState>): Promise<void> => {
     setBusy(true);
     setFailed(false);
@@ -534,6 +636,7 @@ const useEnrollmentInteraction = (
       (value) => {
         setEnrollment(Option.some(value));
         setBusy(false);
+        startAutomaticRefresh(value);
       },
       () => {
         setFailed(true);
@@ -560,18 +663,13 @@ const useEnrollmentInteraction = (
   return { enrollment, busy, failed, start, reset };
 };
 
-const enrollmentFlow = (value: Enrollment): PaymentFlowState => ({ _tag: "Enrollment", value });
-const submissionFlow = (value: PaymentSubmission, billingEmail: string): PaymentFlowState => ({
-  _tag: "PaymentSubmission",
-  value,
-  billingEmail,
-});
-
 const OfferSelection = ({
+  disabled,
   presented,
   selectedId,
   select,
 }: Readonly<{
+  disabled: boolean;
   presented: ReadonlyArray<SubscriptionOfferPresentation>;
   selectedId: Option.Option<PriceId>;
   select: (id: PriceId) => void;
@@ -580,6 +678,7 @@ const OfferSelection = ({
     {presented.map((offer) => (
       <OfferButton
         key={offer.id}
+        disabled={disabled}
         offer={offer}
         selected={Option.contains(selectedId, offer.id)}
         select={select}
@@ -588,7 +687,7 @@ const OfferSelection = ({
   </section>
 );
 
-const ReadyOffers = ({
+const ReadyOffersContent = ({
   offers,
   gateway,
 }: Readonly<{
@@ -599,6 +698,10 @@ const ReadyOffers = ({
   const { enrollment, busy, failed, start, reset } = useEnrollmentInteraction(gateway);
   const presented = offers.map(presentSubscriptionOffer);
   const sharedTerms = presentSubscriptionOffer(offers[0]);
+  const selectionDisabled = Option.exists(
+    enrollment,
+    (current) => current._tag === "PaymentSubmission"
+  );
   const selectedOffer = Option.flatMap(selectedId, (id) =>
     EffectArray.findFirst(presented, (offer) => offer.id === id)
   );
@@ -606,6 +709,7 @@ const ReadyOffers = ({
     <div className="flex flex-col gap-6">
       <SubscriptionTerms offer={sharedTerms} />
       <OfferSelection
+        disabled={busy || selectionDisabled}
         presented={presented}
         selectedId={selectedId}
         select={(id) => {
@@ -621,13 +725,6 @@ const ReadyOffers = ({
             busy={busy}
             enrollment={enrollment}
             failed={failed}
-            continuePayment={(enrollmentId, billingEmail) =>
-              start((availableGateway) =>
-                availableGateway
-                  .continue(enrollmentId, billingEmail)
-                  .then((submission) => submissionFlow(submission, billingEmail))
-              )
-            }
             prepare={() =>
               start((availableGateway) => availableGateway.prepare(offer.id).then(enrollmentFlow))
             }
@@ -638,7 +735,7 @@ const ReadyOffers = ({
               start((availableGateway) =>
                 availableGateway
                   .submit(prepared, email, card)
-                  .then((submission) => submissionFlow(submission, email))
+                  .then((submission) => submissionFlow(submission, email, prepared))
               )
             }
           />
@@ -647,6 +744,20 @@ const ReadyOffers = ({
     </div>
   );
 };
+
+const ReadyOffers = ({
+  offers,
+  gateway,
+}: Readonly<{
+  offers: SubscriptionOffers;
+  gateway: Option.Option<EnrollmentGateway>;
+}>): JSX.Element => (
+  <PaymentFlow.Provider>
+    <PaymentStatusRefresh.Provider>
+      <ReadyOffersContent gateway={gateway} offers={offers} />
+    </PaymentStatusRefresh.Provider>
+  </PaymentFlow.Provider>
+);
 
 const AuthenticationRequired = (): JSX.Element => (
   <Alert>

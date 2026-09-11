@@ -585,7 +585,7 @@ test("establishes, retains, replays, and revokes a real PostgreSQL WebSession", 
   await assertUnknownWrongVerifierRefused(request);
 });
 
-test("renders authoritative PostgreSQL Subscription offers and prepares card enrollment", async ({
+test("renders authoritative PostgreSQL Subscription offers and prepares Pro payment", async ({
   page,
   request,
 }) => {
@@ -634,7 +634,7 @@ test("renders authoritative PostgreSQL Subscription offers and prepares card enr
   const payment = page.getByRole("region", { name: "Pago con tarjeta" });
   await expect(payment.getByRole("textbox", { name: "Número de tarjeta" })).toBeVisible();
   await expect(payment.getByRole("textbox", { name: "Vencimiento" })).toBeVisible();
-  await expect(payment.getByRole("button", { name: "Guardar tarjeta" })).toBeDisabled();
+  await expect(payment.getByRole("button", { name: "Activar Pro" })).toBeDisabled();
   await expect(page.getByText(/Tarjeta|Nequi|DaviPlata/u)).toHaveCount(0);
   expect(mutatingRequests).toEqual([`POST ${apiOrigin}/web/subscription/card-enrollments/prepare`]);
 });

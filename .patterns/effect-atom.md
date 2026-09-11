@@ -10,7 +10,7 @@ Effect Atom owns reactive values, their dependency graph, Effect-backed work, an
 
 An atom cache is not an authorization boundary. Keep credentials out of atom-family arguments, serialization keys, reactivity keys, labels, and persisted or hydrated values. When an authenticated principal changes, dispose the old registry and mount a fresh provider rather than relying on component unmounts to isolate cached state.
 
-Use atoms for shared state, derived state, Effect-backed operations, and resources with meaningful lifetime. Keep one-component interaction state local to React and URL/navigation state in the router.
+Use atoms for shared state, server-derived state, derived state, Effect-backed operations, and resources with meaningful lifetime. Keep irreducible one-component interaction state local to React and URL/navigation state in the router. Classify state by authority and lifecycle, not consumer count: an authoritative server observation remains server state even when only one component renders it. Split mixed models so local form interaction does not absorb server-derived state.
 
 ## Effect runtimes and resource lifetime
 
@@ -24,7 +24,7 @@ Atoms are disposed after inactivity according to their idle TTL unless kept aliv
 
 Read dependencies through `AtomContext`; the registry records the graph and refreshes dependent atoms. Use `Atom.map` or `Atom.transform` for pure derivation rather than copying values into another writable atom (`packages/effect/src/unstable/reactivity/Atom.ts:116-161`, `packages/effect/src/unstable/reactivity/Atom.ts:1628-1704`).
 
-Use `Atom.family` when an input identifies a stable set of parameterized atoms. Family inputs are cache identity, so use deterministic, non-secret coordinates (`packages/effect/src/unstable/reactivity/Atom.ts:1329-1378`).
+Use `Atom.family` when an input identifies a stable set of parameterized atoms. Family inputs are cache identity, so use deterministic, non-secret domain coordinates rather than synthetic component-mount identifiers (`packages/effect/src/unstable/reactivity/Atom.ts:1358-1396`). The implementation uses weak references and finalization when available, with a strong-map fallback; stable coordinates are therefore an identity requirement rather than a claim that every runtime retains family entries forever.
 
 ## AsyncResult and refreshes
 
@@ -48,7 +48,9 @@ Use optimistic combinators only with a complete rollback and concurrency model. 
 
 Create one registry/provider at the application root. The React adapter subscribes through `useSyncExternalStore`; use `useAtomValue` to read, `useAtomSet` to write without subscribing, `useAtom` for both, and `useAtomRefresh` for explicit refresh (`packages/atom/react/src/Hooks.ts:21-55`, `packages/atom/react/src/Hooks.ts:113-247`).
 
-Define stable atoms outside render or memoize parameterized atom creation through `Atom.family`. A new atom object is a new state identity.
+Define stable shared atoms outside render and memoize domain-parameterized atom creation through `Atom.family`. A new atom object is a new state identity.
+
+For state or Effect-backed commands owned by one React subtree, use `ScopedAtom.make` from `@effect/atom-react`. Its Provider creates one Atom instance for that provider lifetime, while separate providers receive isolated instances (`packages/atom/react/src/ScopedAtom.ts:1-4`, `packages/atom/react/src/ScopedAtom.ts:71-145`; `packages/atom/react/test/index.test.tsx:194-229`). Prefer this over manufacturing per-mount `Atom.family` keys in React state.
 
 ## Test seam
 

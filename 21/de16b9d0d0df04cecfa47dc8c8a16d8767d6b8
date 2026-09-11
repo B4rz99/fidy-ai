@@ -420,6 +420,8 @@ apps/server/src/client.ts
   s_454b5956e38502::t_6c5d26c575e301 19-25
 apps/server/src/shell/testing/whatsapp-acceptance-harness.ts
   s_454b5956e38502::t_b872e558480a4e 55-60,538
+apps/server/ARCHITECTURE.md
+  s_454b5956e38502::t_5ed0a6a246a014 86-91,162-166
 ---
 {
   "schema_version": "authorship/3.0.0",

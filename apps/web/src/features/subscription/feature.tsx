@@ -20,6 +20,7 @@ import { type CardFields } from "@/transport/wompi-tokenization";
 import {
   type Enrollment,
   type EnrollmentGateway,
+  type PaymentSubmission,
   type PreparedEnrollment,
   makeEnrollmentGateway,
 } from "./enrollment-gateway";
@@ -258,14 +259,7 @@ const emptyDecisions: EnrollmentDecisions = {
 const allDecisionsAccepted = (decisions: EnrollmentDecisions): boolean =>
   decisions.endUserPolicy && decisions.personalData;
 
-const enrollmentSubmitLabel = (
-  busy: boolean,
-  paymentSourceMode: PreparedEnrollment["paymentSourceMode"]
-): string => {
-  if (busy) return "Procesando…";
-  if (paymentSourceMode === "create") return "Guardar tarjeta";
-  return "Confirmar";
-};
+const enrollmentSubmitLabel = (busy: boolean): string => (busy ? "Activando Pro…" : "Activar Pro");
 
 const PreparedEnrollmentForm = ({
   enrollment,
@@ -289,7 +283,7 @@ const PreparedEnrollmentForm = ({
     );
   };
 
-  const submitLabel = enrollmentSubmitLabel(busy, enrollment.paymentSourceMode);
+  const submitLabel = enrollmentSubmitLabel(busy);
 
   return (
     <form className="flex flex-col gap-5" onSubmit={onSubmit}>
@@ -367,31 +361,96 @@ const EnrollmentStatusAction = ({
   );
 };
 
+const PaymentSubmissionStatus = ({
+  submission,
+  continuePayment,
+}: Readonly<{
+  submission: PaymentSubmission;
+  continuePayment: (enrollmentId: PreparedEnrollment["enrollmentId"]) => void;
+}>): JSX.Element => {
+  if (submission.status === "source-verifying") {
+    return (
+      <div className="flex flex-col gap-2">
+        <output aria-live="polite">
+          Estamos verificando tu fuente de pago. No vuelvas a enviarla.
+        </output>
+        <Button onClick={() => continuePayment(submission.enrollmentId)} type="button">
+          Consultar estado
+        </Button>
+      </div>
+    );
+  }
+  if (submission.status === "refused") {
+    return <p role="alert">No pudimos iniciar el pago. Puedes intentarlo de nuevo.</p>;
+  }
+  if (submission.billingAttempt.status === "succeeded") {
+    return <output aria-live="polite">Tu pago fue confirmado y Pro está activo.</output>;
+  }
+  if (submission.billingAttempt.status === "failed") {
+    return <p role="alert">Wompi rechazó el pago. Puedes intentarlo de nuevo.</p>;
+  }
+  return <output aria-live="polite">Pago enviado. Esperando confirmación de Wompi…</output>;
+};
+
+type PaymentFlowState =
+  | Readonly<{ _tag: "Enrollment"; value: Enrollment }>
+  | Readonly<{
+      _tag: "PaymentSubmission";
+      value: PaymentSubmission;
+      billingEmail: string;
+    }>;
+
+const renderPaymentEnrollment = (input: {
+  current: PaymentFlowState;
+  busy: boolean;
+  prepare: () => void;
+  submit: (prepared: PreparedEnrollment, email: string, card?: CardFields) => void;
+  refresh: (enrollmentId: PreparedEnrollment["enrollmentId"]) => void;
+  continuePayment: (enrollmentId: PreparedEnrollment["enrollmentId"], billingEmail: string) => void;
+}): JSX.Element => {
+  const { current, busy, prepare, submit, refresh, continuePayment } = input;
+  if (current._tag === "PaymentSubmission") {
+    return (
+      <PaymentSubmissionStatus
+        continuePayment={(enrollmentId) => continuePayment(enrollmentId, current.billingEmail)}
+        submission={current.value}
+      />
+    );
+  }
+  const enrollment = current.value;
+  if (enrollment.status === "prepared") {
+    return (
+      <PreparedEnrollmentForm
+        busy={busy}
+        enrollment={enrollment}
+        submit={(email, card) => submit(enrollment, email, card)}
+      />
+    );
+  }
+  return (
+    <EnrollmentStatusAction busy={busy} current={enrollment} prepare={prepare} refresh={refresh} />
+  );
+};
+
 const EnrollmentContent = ({
   enrollment,
   busy,
   prepare,
   submit,
   refresh,
+  continuePayment,
 }: Readonly<{
-  enrollment: Option.Option<Enrollment>;
+  enrollment: Option.Option<PaymentFlowState>;
   busy: boolean;
   prepare: () => void;
   submit: (prepared: PreparedEnrollment, email: string, card?: CardFields) => void;
   refresh: (enrollmentId: PreparedEnrollment["enrollmentId"]) => void;
+  continuePayment: (enrollmentId: PreparedEnrollment["enrollmentId"], billingEmail: string) => void;
 }>): JSX.Element =>
   Option.match(enrollment, {
     onNone: () => (busy ? <p aria-live="polite">Cargando formulario…</p> : <></>),
     onSome: (current) =>
-      current.status === "prepared" ? (
-        <PreparedEnrollmentForm
-          busy={busy}
-          enrollment={current}
-          submit={(email, card) => submit(current, email, card)}
-        />
-      ) : (
-        <EnrollmentStatusAction busy={busy} current={current} prepare={prepare} refresh={refresh} />
-      ),
+      renderPaymentEnrollment({ current, busy, prepare, submit, refresh, continuePayment }),
   });
 
 const PaymentDetails = ({
@@ -401,13 +460,15 @@ const PaymentDetails = ({
   prepare,
   submit,
   refresh,
+  continuePayment,
 }: Readonly<{
-  enrollment: Option.Option<Enrollment>;
+  enrollment: Option.Option<PaymentFlowState>;
   busy: boolean;
   failed: boolean;
   prepare: () => void;
   submit: (prepared: PreparedEnrollment, email: string, card?: CardFields) => void;
   refresh: (enrollmentId: PreparedEnrollment["enrollmentId"]) => void;
+  continuePayment: (enrollmentId: PreparedEnrollment["enrollmentId"], billingEmail: string) => void;
 }>): JSX.Element => (
   <section aria-label="Pago con tarjeta">
     <Card>
@@ -423,6 +484,7 @@ const PaymentDetails = ({
         <EnrollmentContent
           busy={busy}
           enrollment={enrollment}
+          continuePayment={continuePayment}
           prepare={prepare}
           refresh={refresh}
           submit={submit}
@@ -450,20 +512,20 @@ const SubscriptionTerms = ({
 class EnrollmentInteractionFailed extends Data.TaggedError("EnrollmentInteractionFailed")<{}> {}
 
 type EnrollmentInteraction = Readonly<{
-  enrollment: Option.Option<Enrollment>;
+  enrollment: Option.Option<PaymentFlowState>;
   busy: boolean;
   failed: boolean;
-  start: (work: (gateway: EnrollmentGateway) => Promise<Enrollment>) => void;
+  start: (work: (gateway: EnrollmentGateway) => Promise<PaymentFlowState>) => void;
   reset: () => void;
 }>;
 
 const useEnrollmentInteraction = (
   gateway: Option.Option<EnrollmentGateway>
 ): EnrollmentInteraction => {
-  const [enrollment, setEnrollment] = useState<Option.Option<Enrollment>>(Option.none);
+  const [enrollment, setEnrollment] = useState<Option.Option<PaymentFlowState>>(Option.none);
   const [busy, setBusy] = useState(false);
   const [failed, setFailed] = useState(false);
-  const run = (work: () => Promise<Enrollment>): Promise<void> => {
+  const run = (work: () => Promise<PaymentFlowState>): Promise<void> => {
     setBusy(true);
     setFailed(false);
     return work().then(
@@ -477,7 +539,7 @@ const useEnrollmentInteraction = (
       }
     );
   };
-  const start = (work: (gateway: EnrollmentGateway) => Promise<Enrollment>): void => {
+  const start = (work: (gateway: EnrollmentGateway) => Promise<PaymentFlowState>): void => {
     Option.match(gateway, {
       onNone: () => undefined,
       onSome: (availableGateway) =>
@@ -496,6 +558,34 @@ const useEnrollmentInteraction = (
   return { enrollment, busy, failed, start, reset };
 };
 
+const enrollmentFlow = (value: Enrollment): PaymentFlowState => ({ _tag: "Enrollment", value });
+const submissionFlow = (value: PaymentSubmission, billingEmail: string): PaymentFlowState => ({
+  _tag: "PaymentSubmission",
+  value,
+  billingEmail,
+});
+
+const OfferSelection = ({
+  presented,
+  selectedId,
+  select,
+}: Readonly<{
+  presented: ReadonlyArray<SubscriptionOfferPresentation>;
+  selectedId: Option.Option<PriceId>;
+  select: (id: PriceId) => void;
+}>): JSX.Element => (
+  <section className="grid gap-4 lg:grid-cols-3" aria-label="Ofertas de suscripción">
+    {presented.map((offer) => (
+      <OfferButton
+        key={offer.id}
+        offer={offer}
+        selected={Option.contains(selectedId, offer.id)}
+        select={select}
+      />
+    ))}
+  </section>
+);
+
 const ReadyOffers = ({
   offers,
   gateway,
@@ -513,20 +603,15 @@ const ReadyOffers = ({
   return (
     <div className="flex flex-col gap-6">
       <SubscriptionTerms offer={sharedTerms} />
-      <section className="grid gap-4 lg:grid-cols-3" aria-label="Ofertas de suscripción">
-        {presented.map((offer) => (
-          <OfferButton
-            key={offer.id}
-            offer={offer}
-            selected={Option.contains(selectedId, offer.id)}
-            select={(id) => {
-              setSelectedId(Option.some(id));
-              reset();
-              start((availableGateway) => availableGateway.prepare(id));
-            }}
-          />
-        ))}
-      </section>
+      <OfferSelection
+        presented={presented}
+        selectedId={selectedId}
+        select={(id) => {
+          setSelectedId(Option.some(id));
+          reset();
+          start((availableGateway) => availableGateway.prepare(id).then(enrollmentFlow));
+        }}
+      />
       {Option.match(selectedOffer, {
         onNone: () => null,
         onSome: (offer) => (
@@ -534,10 +619,25 @@ const ReadyOffers = ({
             busy={busy}
             enrollment={enrollment}
             failed={failed}
-            prepare={() => start((availableGateway) => availableGateway.prepare(offer.id))}
-            refresh={(id) => start((availableGateway) => availableGateway.status(id))}
+            continuePayment={(enrollmentId, billingEmail) =>
+              start((availableGateway) =>
+                availableGateway
+                  .continue(enrollmentId, billingEmail)
+                  .then((submission) => submissionFlow(submission, billingEmail))
+              )
+            }
+            prepare={() =>
+              start((availableGateway) => availableGateway.prepare(offer.id).then(enrollmentFlow))
+            }
+            refresh={(id) =>
+              start((availableGateway) => availableGateway.status(id).then(enrollmentFlow))
+            }
             submit={(prepared, email, card) =>
-              start((availableGateway) => availableGateway.submit(prepared, email, card))
+              start((availableGateway) =>
+                availableGateway
+                  .submit(prepared, email, card)
+                  .then((submission) => submissionFlow(submission, email))
+              )
             }
           />
         ),

@@ -49,6 +49,12 @@ import { FidyApi } from "~/shell/api";
 import { maximumPublicRequestBodySizeBytes } from "~/shell/runtime";
 import type { MemoryCapacityExceededApi } from "~/shell/memory/errors";
 import type { AtomicBatchRejected } from "~/shell/operations/operations";
+import { WompiTransactionId } from "~/core/subscription/model";
+import { BillingAttemptWorkerLive } from "~/shell/subscription/billing-attempt-execution";
+import {
+  WompiBillingClient,
+  type WompiTransaction,
+} from "~/shell/subscription/wompi-billing-client";
 import {
   WompiEnrollmentClient,
   WompiSourceCreationFailed,
@@ -249,6 +255,48 @@ export const TestWompiEnrollmentClient = Layer.succeed(WompiEnrollmentClient, {
     }),
 });
 
+const TestWompiBillingClientService = Effect.gen(function* () {
+  const transactions = yield* Ref.make(new Map<string, WompiTransaction>());
+  const lookupCount = yield* Ref.make(0);
+  return WompiBillingClient.of({
+    environment: "sandbox",
+    createTransaction: (input) =>
+      Effect.gen(function* () {
+        const transaction = {
+          transactionId: WompiTransactionId.make(`api-harness-${input.reference}`),
+          reference: input.reference,
+          status: "PENDING" as const,
+          amountInCents: input.amountInCents,
+          currency: input.currency,
+          sourceId: input.sourceId,
+          finalizedAt: Option.none(),
+        };
+        yield* Ref.update(transactions, (current) =>
+          new Map(current).set(transaction.transactionId, transaction)
+        );
+        return transaction;
+      }),
+    findTransaction: (transactionId) =>
+      Effect.gen(function* () {
+        const transaction = (yield* Ref.get(transactions)).get(transactionId);
+        if (transaction === undefined) return yield* Effect.die("unknown test Wompi transaction");
+        const sequence = yield* Ref.getAndUpdate(lookupCount, (count) => count + 1);
+        const approved = sequence === 2;
+        return {
+          ...transaction,
+          status: approved ? ("APPROVED" as const) : ("DECLINED" as const),
+          finalizedAt: approved
+            ? Option.some(DateTime.makeUnsafe("2026-03-01T12:00:00.000Z"))
+            : Option.none(),
+        };
+      }),
+  });
+});
+export const TestWompiBillingClient = Layer.effect(
+  WompiBillingClient,
+  TestWompiBillingClientService
+);
+
 const BoundedBunHttpServerTest = HttpServer.layerTestClient.pipe(
   Layer.provide(
     FetchHttpClient.layer.pipe(
@@ -277,6 +325,7 @@ type SupportAccessApiHarnessOutput =
   | PersistedQueue.PersistedQueueFactory
   | WorkflowEngine.WorkflowEngine
   | WompiEnrollmentClient
+  | WompiBillingClient
   | SqlClient.SqlClient
   | BunServices.BunServices;
 type SupportAccessApiHarnessError =
@@ -300,11 +349,13 @@ const makeApiHarnessBase = (access: Layer.Layer<SupportAccessVerifier>): Support
   }).pipe(
     Layer.provideMerge(HttpLive.pipe(Layer.provide(MigratorLive), Layer.provide(access))),
     Layer.provideMerge(ConsentDisclosureWorkflowLive),
+    Layer.provideMerge(BillingAttemptWorkerLive),
     Layer.provideMerge(DurableExecutionSqlQueueMemoryWorkflow),
     Layer.provideMerge(TestKapsoClient),
     Layer.provideMerge(MemoryInferenceTest),
     Layer.provideMerge(BaselineCompactionInference),
     Layer.provideMerge(TestWompiEnrollmentClient),
+    Layer.provideMerge(TestWompiBillingClient),
     Layer.provideMerge(makeDevelopmentSeedLive(defaultPatBearer)),
     Layer.provideMerge(BoundedBunHttpServerTest),
     Layer.provideMerge(BunServices.layer),
@@ -334,6 +385,8 @@ const AcceptancePublicNamespace = ConfigProvider.layer(
         RESEND_WEBHOOK_SECRET: testResendWebhookSecret,
         EMAIL_INGEST_RETENTION_DAYS: "90",
         WHATSAPP_BUSINESS_PORTFOLIO_ID: "portfolio-test",
+        WOMPI_ENVIRONMENT: "sandbox",
+        WOMPI_EVENT_SECRET: "test_events_subscription_settlement",
       },
     }),
     ConfigProvider.fromEnv()
@@ -356,6 +409,7 @@ export const makeBrowserLoginPairingAcceptanceServer = ({
     Layer.provide(MemoryInferenceTest),
     Layer.provide(BaselineCompactionInference),
     Layer.provide(TestWompiEnrollmentClient),
+    Layer.provide(TestWompiBillingClient),
     Layer.provide(
       BunHttpServer.layer({
         hostname: "127.0.0.1",

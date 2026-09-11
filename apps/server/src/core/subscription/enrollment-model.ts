@@ -1,7 +1,7 @@
 import { Schema, SchemaTransformation } from "effect";
 import { UtcTimestamp } from "~/core/_shared/time";
 import { canonicalEmailAddressChecks } from "~/core/email-authentication/reference";
-import { Price, PriceId } from "./model";
+import { BillingAttempt, Price, PriceId } from "./model";
 
 /** Maximum safe displayed-term snapshot retained with one CardEnrollment. */
 export const maximumEnrollmentEvidenceCharacters = 4096;
@@ -142,3 +142,19 @@ export const CardEnrollment = Schema.Union([
   VerifyingCardEnrollment,
 ]).annotate({ identifier: "CardEnrollment" });
 export type CardEnrollment = typeof CardEnrollment.Type;
+
+/** Closed result of the one-click browser payment action. */
+export const CardPaymentSubmission = Schema.Union([
+  Schema.Struct({
+    status: Schema.Literal("payment-pending"),
+    enrollmentId: CardEnrollmentId,
+    billingAttempt: BillingAttempt,
+  }),
+  Schema.Struct({ status: Schema.Literal("source-verifying"), enrollmentId: CardEnrollmentId }),
+  Schema.Struct({
+    status: Schema.Literal("refused"),
+    enrollmentId: CardEnrollmentId,
+    reason: Schema.Literals(["provider-declined", "provider-error", "terms-changed", "expired"]),
+  }),
+]).annotate({ identifier: "CardPaymentSubmission" });
+export type CardPaymentSubmission = typeof CardPaymentSubmission.Type;

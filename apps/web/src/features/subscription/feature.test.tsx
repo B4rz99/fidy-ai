@@ -2,7 +2,7 @@ import { cleanup, fireEvent, render, screen, within } from "@testing-library/rea
 import { BigDecimal, DateTime, Option } from "effect";
 import { afterEach, expect, it, vi } from "vitest";
 import { SubscriptionOffersView } from "./feature";
-import { makeEnrollmentGateway } from "./enrollment-gateway";
+import { type PaymentSubmission, makeEnrollmentGateway } from "./enrollment-gateway";
 import {
   BillingEmail,
   CardEnrollmentId,
@@ -82,24 +82,33 @@ const preparedEnrollment = {
   expiresAt: DateTime.makeUnsafe("2026-03-01T00:15:00Z"),
 };
 const enrollmentGateway = {
-  prepare: (): Promise<typeof preparedEnrollment> => Promise.resolve(preparedEnrollment),
-  submit: (): Promise<
+  continue: (): Promise<
     Readonly<{
-      status: "available";
+      status: "source-verifying";
       enrollmentId: typeof preparedEnrollment.enrollmentId;
-      priceId: (typeof offers)[number]["id"];
     }>
   > =>
     Promise.resolve({
-      status: "available",
+      status: "source-verifying",
       enrollmentId: preparedEnrollment.enrollmentId,
-      priceId: offers[1].id,
+    }),
+  prepare: (): Promise<typeof preparedEnrollment> => Promise.resolve(preparedEnrollment),
+  submit: (): Promise<
+    Readonly<{
+      status: "source-verifying";
+      enrollmentId: typeof preparedEnrollment.enrollmentId;
+    }>
+  > =>
+    Promise.resolve({
+      status: "source-verifying",
+      enrollmentId: preparedEnrollment.enrollmentId,
     }),
   status: (): Promise<typeof preparedEnrollment> => Promise.resolve(preparedEnrollment),
 };
 
 afterEach(() => {
   cleanup();
+  sessionStorage.clear();
   vi.unstubAllGlobals();
 });
 
@@ -226,11 +235,37 @@ it("shows the card form with only Wompi's required checks and constrained fields
 
   fireEvent.change(email, { target: { value: "billing@example.net" } });
   expect(email).toHaveValue("billing@example.net");
-  const save = screen.getByRole("button", { name: "Guardar tarjeta" });
+  const save = screen.getByRole("button", { name: "Activar Pro" });
   expect(save).toBeDisabled();
   for (const checkbox of screen.getAllByRole("checkbox")) fireEvent.click(checkbox);
   expect(save).toBeEnabled();
   expect(screen.getByText(/Fidy conservará este correo.*cobros automáticos/iu)).toBeVisible();
+});
+
+it("disables Activar Pro immediately until submission handling completes", async () => {
+  const pending = Promise.withResolvers<PaymentSubmission>();
+  const gateway = { ...enrollmentGateway, submit: vi.fn(() => pending.promise) };
+  render(
+    <SubscriptionOffersView gateway={Option.some(gateway)} state={{ _tag: "Ready", offers }} />
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Elegir mensual" }));
+  await screen.findByRole("textbox", { name: "Correo de facturación" });
+  fireEvent.change(screen.getByLabelText("Número de tarjeta"), {
+    target: { value: "4111111111111111" },
+  });
+  fireEvent.change(screen.getByLabelText("Vencimiento"), { target: { value: "12/2030" } });
+  fireEvent.change(screen.getByLabelText("CVC"), { target: { value: "123" } });
+  fireEvent.change(screen.getByLabelText("Nombre en la tarjeta"), {
+    target: { value: "Ana López" },
+  });
+  for (const checkbox of screen.getAllByRole("checkbox")) fireEvent.click(checkbox);
+  fireEvent.click(screen.getByRole("button", { name: "Activar Pro" }));
+  expect(await screen.findByRole("button", { name: "Activando Pro…" })).toBeDisabled();
+  pending.resolve({
+    status: "source-verifying",
+    enrollmentId: preparedEnrollment.enrollmentId,
+  });
+  expect(await screen.findByText(/Estamos verificando tu fuente de pago/iu)).toBeVisible();
 });
 
 it("submits normalized billing data and card fields after both Wompi checks", async () => {
@@ -254,7 +289,7 @@ it("submits normalized billing data and card fields after both Wompi checks", as
   });
   fireEvent.change(email, { target: { value: " BILLING@Example.NET " } });
   for (const checkbox of screen.getAllByRole("checkbox")) fireEvent.click(checkbox);
-  fireEvent.click(screen.getByRole("button", { name: "Guardar tarjeta" }));
+  fireEvent.click(screen.getByRole("button", { name: "Activar Pro" }));
 
   await vi.waitFor(() => {
     expect(submit).toHaveBeenCalledWith(preparedEnrollment, "billing@example.net", {
@@ -278,6 +313,17 @@ it("derives enrollment operations from the browser enrollment client", async () 
   await expect(gateway.prepare(offers[1].id)).rejects.toBe(transportFailure);
   await expect(gateway.status(preparedEnrollment.enrollmentId)).rejects.toBe(transportFailure);
   await expect(gateway.submit(reuseEnrollment, "payer@example.com")).rejects.toBe(transportFailure);
+  const retainedRequestId = sessionStorage.getItem(
+    `fidy.payment-request.${reuseEnrollment.enrollmentId}`
+  );
+  expect(retainedRequestId).not.toBeNull();
+  const refreshedGateway = makeEnrollmentGateway(service);
+  await expect(refreshedGateway.submit(reuseEnrollment, "payer@example.com")).rejects.toBe(
+    transportFailure
+  );
+  expect(sessionStorage.getItem(`fidy.payment-request.${reuseEnrollment.enrollmentId}`)).toBe(
+    retainedRequestId
+  );
   await expect(gateway.submit(preparedEnrollment, "payer@example.com")).rejects.toBeDefined();
 
   vi.stubGlobal(
@@ -313,7 +359,7 @@ it("reuses a saved payment source without asking for card fields", async () => {
   expect(await screen.findByText(/fuente de pago guardada/iu)).toBeVisible();
   expect(screen.queryByLabelText("Número de tarjeta")).not.toBeInTheDocument();
   for (const checkbox of screen.getAllByRole("checkbox")) fireEvent.click(checkbox);
-  fireEvent.click(screen.getByRole("button", { name: "Confirmar" }));
+  fireEvent.click(screen.getByRole("button", { name: "Activar Pro" }));
 
   await vi.waitFor(() => {
     expect(submit).toHaveBeenCalledWith(reuseEnrollment, "verified@example.com", undefined);

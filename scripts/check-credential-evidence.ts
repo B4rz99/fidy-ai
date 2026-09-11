@@ -68,6 +68,16 @@ const credentialEvidence = [
     testName: "keeps provider credentials, card tokens, and response bodies out of failures",
   },
   {
+    configuration: "WOMPI_INTEGRITY_SECRET",
+    testFile: "apps/server/src/shell/subscription/wompi-billing-client.test.ts",
+    testName: "keeps Wompi integrity credentials and response bodies out of failures",
+  },
+  {
+    configuration: "WOMPI_EVENT_SECRET",
+    testFile: "apps/server/src/shell/subscription/enrollment-handlers.test.ts",
+    testName: "keeps Wompi event secrets out of authentication failures",
+  },
+  {
     configuration: "WOMPI_RECONCILIATION_SOURCE_ID",
     testFile: "apps/server/src/shell/subscription/wompi-client.test.ts",
     testName: "keeps reconciliation source IDs out of lookup failures",

@@ -12,7 +12,12 @@ import { FetchHttpClient, type HttpClient } from "effect/unstable/http";
 import { HttpApiClient } from "effect/unstable/httpapi";
 import { AtomHttpApi } from "effect/unstable/reactivity";
 
-export type { CanonicalInput, CanonicalSuccess, CardEnrollmentType } from "@fidy/server/client";
+export type {
+  CanonicalInput,
+  CanonicalSuccess,
+  CardEnrollmentType,
+  CardPaymentSubmissionType,
+} from "@fidy/server/client";
 export {
   BackupRecoveryCode,
   BrowserLoginPairingInvalidApi,
@@ -43,6 +48,7 @@ export {
   PATScope,
   PATScopes,
   PriceId,
+  PaymentRequestId,
   BillingEmail,
   CardEnrollment,
   CardEnrollmentDecisions,

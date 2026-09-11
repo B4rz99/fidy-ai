@@ -111,12 +111,14 @@ const handleSubmit = Effect.fn(function* (request: HttpServerRequest.HttpServerR
       ? {
           paymentSourceMode: "create" as const,
           enrollmentId: decoded.success.enrollmentId,
+          paymentRequestId: decoded.success.paymentRequestId,
           billingEmail: decoded.success.billingEmail,
           cardToken: decoded.success.cardToken,
         }
       : {
           paymentSourceMode: "reuse" as const,
           enrollmentId: decoded.success.enrollmentId,
+          paymentRequestId: decoded.success.paymentRequestId,
           billingEmail: decoded.success.billingEmail,
         };
   return yield* withEnrollmentConsent(

@@ -1,10 +1,16 @@
 import { Crypto, Data, DateTime, Effect, Encoding, Option, type Redacted } from "effect";
 import type { UserId } from "~/core/identity/reference";
 import {
+  BillingAttemptId,
+  type PaymentRequestId,
+  WompiTransactionReference,
+} from "~/core/subscription/model";
+import {
   BillingEmail,
   type CardEnrollment,
   CardEnrollmentId,
   CardPaymentSourceId,
+  type CardPaymentSubmission,
   RecurringDisclosure,
   type WompiSourceId,
 } from "~/core/subscription/enrollment-model";
@@ -37,6 +43,16 @@ import {
   reusePaymentSourceInScope,
   verifyEnrollmentInScope,
 } from "./enrollment-repo";
+import {
+  type BillingAttemptRecord,
+  findBillingAttemptByRequestInScope,
+  findPendingBillingAttemptInScope,
+  getBillingContextInScope,
+  insertPendingBillingAttemptInScope,
+  projectBillingAttempt,
+} from "./billing-repo";
+import { publishBillingAttemptInScope } from "./billing-attempt-execution";
+import { WompiBillingClient, type WompiBillingClientService } from "./wompi-billing-client";
 import { findPrice } from "./repo";
 import { type WompiCardToken, type WompiContracts, WompiEnrollmentClient } from "./wompi-client";
 
@@ -49,12 +65,14 @@ export type SubmitCardEnrollment =
   | Readonly<{
       paymentSourceMode: "create";
       enrollmentId: CardEnrollmentId;
+      paymentRequestId: PaymentRequestId;
       billingEmail: BillingEmail;
       cardToken: Redacted.Redacted<WompiCardToken>;
     }>
   | Readonly<{
       paymentSourceMode: "reuse";
       enrollmentId: CardEnrollmentId;
+      paymentRequestId: PaymentRequestId;
       billingEmail: BillingEmail;
     }>;
 
@@ -256,6 +274,10 @@ const acceptanceTermsMatch = (record: EnrollmentRecord, current: WompiContracts)
   );
 };
 
+const submissionModeMatches = (record: EnrollmentRecord, input: SubmitCardEnrollment): boolean =>
+  record.paymentSourceMode === input.paymentSourceMode ||
+  (record.status === "available" && input.paymentSourceMode === "reuse");
+
 const beginSubmission = Effect.fn(function* (
   userId: UserId,
   input: SubmitCardEnrollment,
@@ -268,7 +290,7 @@ const beginSubmission = Effect.fn(function* (
       Effect.gen(function* () {
         const record = yield* findEnrollmentInScope(userId, input.enrollmentId);
         if (Option.isNone(record)) return yield* new CardEnrollmentInvalid();
-        if (record.value.paymentSourceMode !== input.paymentSourceMode) {
+        if (!submissionModeMatches(record.value, input)) {
           return yield* new CardEnrollmentInvalid();
         }
         switch (decideEnrollmentSubmission(record.value, acceptedAt)._tag) {
@@ -410,7 +432,152 @@ export const reconcileCardEnrollment = Effect.fn("Subscription.reconcileCardEnro
   );
 });
 
-/** Claims and settles one submission; no path can create a Wompi payment source twice. */
+const paymentSubmissionFor = (
+  enrollmentId: CardEnrollmentId,
+  attempt: BillingAttemptRecord
+): CardPaymentSubmission => ({
+  status: "payment-pending",
+  enrollmentId,
+  billingAttempt: projectBillingAttempt(attempt),
+});
+
+const prepareBillingAttempt = Effect.fn("Subscription.prepareBillingAttempt")(function* (input: {
+  userId: UserId;
+  submission: SubmitCardEnrollment;
+  acceptedAt: DateTime.Utc;
+  environment: WompiBillingClientService["environment"];
+}) {
+  const context = yield* getBillingContextInScope(input.userId, input.submission.enrollmentId);
+  if (Option.isNone(context)) return yield* Effect.die("available billing context is missing");
+  const enrollment = yield* findEnrollmentInScope(input.userId, input.submission.enrollmentId);
+  if (Option.isNone(enrollment)) return yield* Effect.die("available enrollment is missing");
+  const price = yield* findPrice(enrollment.value.priceId);
+  if (Option.isNone(price)) return yield* Effect.die("retained enrollment Price is missing");
+  const crypto = yield* Crypto.Crypto;
+  const billingAttemptId = BillingAttemptId.make(yield* crypto.randomUUIDv7.pipe(Effect.orDie));
+  const reference = WompiTransactionReference.make(
+    `fidy-${yield* crypto.randomUUIDv7.pipe(Effect.orDie)}`
+  );
+  yield* insertPendingBillingAttemptInScope({
+    userId: input.userId,
+    billingAttemptId,
+    subscriptionId: context.value.subscriptionId,
+    paymentRequestId: input.submission.paymentRequestId,
+    enrollmentId: input.submission.enrollmentId,
+    paymentSourceId: context.value.paymentSourceId,
+    price: price.value,
+    timeZone: context.value.timeZone,
+    wompiEnvironment: input.environment,
+    reference,
+    createdAt: input.acceptedAt,
+  });
+  const inserted = yield* findBillingAttemptByRequestInScope(
+    input.userId,
+    input.submission.paymentRequestId
+  );
+  const attempt = Option.isSome(inserted)
+    ? inserted
+    : yield* findPendingBillingAttemptInScope(
+        input.userId,
+        context.value.subscriptionId,
+        price.value.id
+      );
+  if (Option.isNone(attempt)) return yield* Effect.die("admitted BillingAttempt is missing");
+  yield* publishBillingAttemptInScope({
+    userId: input.userId,
+    billingAttemptId: attempt.value.id,
+  });
+  return attempt.value;
+});
+
+const startBillingAttempt = Effect.fn("Subscription.startBillingAttempt")(function* (
+  userId: UserId,
+  input: SubmitCardEnrollment,
+  acceptedAt: DateTime.Utc
+) {
+  const billing = yield* WompiBillingClient;
+  const existing = yield* withUserTransaction(
+    userId,
+    findBillingAttemptByRequestInScope(userId, input.paymentRequestId)
+  );
+  if (Option.isSome(existing)) {
+    return paymentSubmissionFor(input.enrollmentId, existing.value);
+  }
+  const admitted = yield* withUserTransaction(
+    userId,
+    prepareBillingAttempt({
+      userId,
+      submission: input,
+      acceptedAt,
+      environment: billing.environment,
+    })
+  );
+  return paymentSubmissionFor(input.enrollmentId, admitted);
+});
+
+const continuePaymentSubmission = Effect.fn(function* (args: {
+  userId: UserId;
+  submission: SubmitCardEnrollment;
+  acceptedAt: DateTime.Utc;
+  wompiPublicKey: string;
+}) {
+  const { userId, submission: input, acceptedAt, wompiPublicKey } = args;
+  const enrollment = yield* loadEnrollment(userId, input.enrollmentId, wompiPublicKey);
+  switch (enrollment.status) {
+    case "available":
+      return yield* startBillingAttempt(userId, input, acceptedAt);
+    case "verifying":
+    case "creating":
+    case "prepared":
+      return { status: "source-verifying" as const, enrollmentId: input.enrollmentId };
+    case "expired":
+      return {
+        status: "refused" as const,
+        enrollmentId: input.enrollmentId,
+        reason: "expired" as const,
+      };
+    case "refused":
+      return {
+        status: "refused" as const,
+        enrollmentId: input.enrollmentId,
+        reason: enrollment.reason,
+      };
+  }
+});
+
+const saveAcceptedPaymentSource = Effect.fn("Subscription.saveAcceptedPaymentSource")(
+  function* (input: {
+    userId: UserId;
+    submission: SubmitCardEnrollment;
+    contracts: WompiContracts;
+    acceptedAt: DateTime.Utc;
+  }) {
+    if (input.submission.paymentSourceMode === "create") {
+      return yield* createAndSavePaymentSource({
+        userId: input.userId,
+        input: input.submission,
+        contracts: input.contracts,
+        acceptedAt: input.acceptedAt,
+      });
+    }
+    yield* withUserTransaction(
+      input.userId,
+      Effect.gen(function* () {
+        const paymentSource = yield* findPaymentSourceInScope(input.userId);
+        if (Option.isNone(paymentSource)) {
+          return yield* Effect.die("reusable payment source is missing");
+        }
+        yield* reusePaymentSourceInScope(
+          input.userId,
+          input.submission.enrollmentId,
+          paymentSource.value.id
+        );
+      })
+    );
+  }
+);
+
+/** Claims one enrollment and begins one replay-safe first collection. */
 export const submitCardEnrollment = Effect.fn(function* (
   userId: UserId,
   input: SubmitCardEnrollment,
@@ -418,8 +585,15 @@ export const submitCardEnrollment = Effect.fn(function* (
 ) {
   return yield* Effect.gen(function* () {
     const wompi = yield* WompiEnrollmentClient;
+    const continuePayment = (): ReturnType<typeof continuePaymentSubmission> =>
+      continuePaymentSubmission({
+        userId,
+        submission: input,
+        acceptedAt,
+        wompiPublicKey: wompi.publicKey,
+      });
     const began = yield* beginSubmission(userId, input, acceptedAt);
-    if (!began) return yield* loadEnrollment(userId, input.enrollmentId, wompi.publicKey);
+    if (!began) return yield* continuePayment();
     const record = yield* withUserTransaction(
       userId,
       Effect.flatMap(findEnrollmentInScope(userId, input.enrollmentId), (found) =>
@@ -435,37 +609,26 @@ export const submitCardEnrollment = Effect.fn(function* (
         userId,
         refuseEnrollmentInScope(userId, input.enrollmentId, "provider-error")
       );
-      return yield* loadEnrollment(userId, input.enrollmentId, wompi.publicKey);
+      return yield* continuePayment();
     }
     if (!acceptanceTermsMatch(record, freshAcceptanceTerms.success)) {
       yield* withUserTransaction(
         userId,
         refuseEnrollmentInScope(userId, input.enrollmentId, "terms-changed")
       );
-      return yield* loadEnrollment(userId, input.enrollmentId, wompi.publicKey);
+      return yield* continuePayment();
     }
-    if (input.paymentSourceMode === "reuse") {
-      yield* withUserTransaction(
-        userId,
-        Effect.gen(function* () {
-          const paymentSource = yield* findPaymentSourceInScope(userId);
-          if (Option.isNone(paymentSource)) {
-            return yield* Effect.die("reusable payment source is missing");
-          }
-          yield* reusePaymentSourceInScope(userId, input.enrollmentId, paymentSource.value.id);
-        })
-      );
-      return yield* loadEnrollment(userId, input.enrollmentId, wompi.publicKey);
-    }
-    yield* createAndSavePaymentSource({
+    yield* saveAcceptedPaymentSource({
       userId,
-      input,
+      submission: input,
       contracts: freshAcceptanceTerms.success,
       acceptedAt,
     });
-    return yield* loadEnrollment(userId, input.enrollmentId, wompi.publicKey);
+    return yield* continuePayment();
   }).pipe(
-    Effect.tap((enrollment) => Effect.annotateCurrentSpan("enrollment.status", enrollment.status)),
+    Effect.tap((submission) =>
+      Effect.annotateCurrentSpan("payment.submission_status", submission.status)
+    ),
     Effect.withSpan("Subscription.submitCardEnrollment")
   );
 });

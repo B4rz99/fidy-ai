@@ -14,6 +14,8 @@ export const TestPublicNamespace = ConfigProvider.layer(
         RESEND_WEBHOOK_SECRET: testResendWebhookSecret,
         EMAIL_INGEST_RETENTION_DAYS: "90",
         WHATSAPP_BUSINESS_PORTFOLIO_ID: "portfolio-test",
+        WOMPI_ENVIRONMENT: "sandbox",
+        WOMPI_EVENT_SECRET: "test_events_subscription_settlement",
       },
     }),
     ConfigProvider.fromEnv()

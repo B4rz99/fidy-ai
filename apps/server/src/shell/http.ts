@@ -59,7 +59,10 @@ import { OperationsLive } from "~/shell/operations/handlers";
 import { CanonicalTelemetryLive } from "~/shell/observability/canonical-api";
 import { SubscriptionLive } from "~/shell/subscription/handlers";
 import { SubscriptionEnrollmentHandlersLive } from "~/shell/subscription/enrollment-handlers";
+import { BillingAttemptWorkerLive } from "~/shell/subscription/billing-attempt-execution";
+import { WompiBillingClient } from "~/shell/subscription/wompi-billing-client";
 import { WompiEnrollmentClient } from "~/shell/subscription/wompi-client";
+import { WompiWebhookLive } from "~/shell/subscription/wompi-webhook";
 import { PATsLive } from "~/shell/tokens/handlers";
 import { RecoveryLive } from "~/shell/recovery/handlers";
 import {
@@ -253,6 +256,7 @@ export const HttpLive = HttpRouter.serve(
     KapsoWebhookLive,
     SupportRecoveryPrivateRouteLive,
     ResendWebhookLive,
+    WompiWebhookLive,
     ExactOriginCorsLive,
     RetryAfterHeaderLive
   ),
@@ -312,5 +316,10 @@ export const AppLive = Layer.mergeAll(
   HostedOnboardingDeliveryLive,
   HostedEmailReplacementDeliveryWorkerLive,
   HostedBrowserPairingEmailDeliveryWorkerLive,
+  BillingAttemptWorkerLive,
   HostedMaintenanceLive
-).pipe(Layer.provide(WompiEnrollmentClient.layer), Layer.provide(OpenAiHostedInferenceLive));
+).pipe(
+  Layer.provide(WompiEnrollmentClient.layer),
+  Layer.provide(WompiBillingClient.layer),
+  Layer.provide(OpenAiHostedInferenceLive)
+);

@@ -26,7 +26,11 @@ and lifecycle. Publicly accessible flows with independent product behavior, such
 or onboarding, remain separate features.
 
 Presentation shapes derive from the canonical server declaration or from web-owned view state. The
-web does not maintain copied canonical schemas, operation maps, or access policy.
+web does not maintain copied canonical schemas, operation maps, or access policy. The Pro card flow
+is one browser action, **Activar Pro**: a fresh browser-generated `PaymentRequestId` accompanies the
+server-declared submission while card fields are tokenized directly with Wompi. The action disables
+immediately through response handling, and the view renders only browser-safe pending, verifying,
+refused, or settled BillingAttempt state; provider references never enter web state.
 
 ## 3. Browser authentication
 

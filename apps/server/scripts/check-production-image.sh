@@ -80,6 +80,7 @@ assertApplicationRejected() {
     --env MIGRATION_DATABASE_URL --env DATABASE_URL \
     --env KAPSO_API_KEY --env KAPSO_WEBHOOK_SECRET --env WHATSAPP_BUSINESS_PORTFOLIO_ID \
     --env WOMPI_ENVIRONMENT --env WOMPI_PUBLIC_KEY --env WOMPI_PRIVATE_KEY \
+    --env WOMPI_EVENT_SECRET --env WOMPI_INTEGRITY_SECRET \
     --env OPENAI_API_KEY --env OPENAI_API_URL \
     --env RESEND_API_KEY --env RESEND_FROM_EMAIL --env RESEND_FROM_NAME \
     --env RESEND_WEBHOOK_SECRET --env EMAIL_INGEST_RETENTION_DAYS \
@@ -264,6 +265,8 @@ export WHATSAPP_BUSINESS_PORTFOLIO_ID="portfolio-production-smoke"
 export WOMPI_ENVIRONMENT="production"
 export WOMPI_PUBLIC_KEY="$(printf 'pub_%s_%s' prod production-smoke)"
 export WOMPI_PRIVATE_KEY="$(printf 'prv_%s_%s' prod production-smoke)"
+export WOMPI_EVENT_SECRET="$(printf 'prod_events_%s' production-smoke)"
+export WOMPI_INTEGRITY_SECRET="$(printf 'prod_integrity_%s' production-smoke)"
 export OPENAI_API_KEY="production-smoke-openai-key"
 export OPENAI_API_URL="http://${openAiProbe}:8080/v1"
 export RESEND_API_KEY="re_production_smoke_resend_key"
@@ -357,6 +360,7 @@ docker run --detach --name "$application" --network "$network" \
   --env MIGRATION_DATABASE_URL --env DATABASE_URL \
   --env KAPSO_API_KEY --env KAPSO_WEBHOOK_SECRET --env WHATSAPP_BUSINESS_PORTFOLIO_ID \
   --env WOMPI_ENVIRONMENT --env WOMPI_PUBLIC_KEY --env WOMPI_PRIVATE_KEY \
+  --env WOMPI_EVENT_SECRET --env WOMPI_INTEGRITY_SECRET \
   --env OPENAI_API_KEY --env OPENAI_API_URL \
   --env RESEND_API_KEY --env RESEND_FROM_EMAIL --env RESEND_FROM_NAME \
   --env RESEND_WEBHOOK_SECRET --env EMAIL_INGEST_RETENTION_DAYS \

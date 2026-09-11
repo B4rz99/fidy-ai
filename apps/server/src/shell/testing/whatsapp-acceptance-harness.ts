@@ -52,7 +52,12 @@ import { upsertPAT } from "~/shell/tokens/repo";
 import { HttpLive } from "~/shell/http";
 import { TelemetryDisabled } from "~/shell/observability/disabled";
 import { SupportRecoveryTestAccess } from "~/shell/recovery/routes";
-import { type ApiClient, TestWompiEnrollmentClient, makeApiClientLive } from "./api-harness";
+import {
+  type ApiClient,
+  TestWompiBillingClient,
+  TestWompiEnrollmentClient,
+  makeApiClientLive,
+} from "./api-harness";
 import { defaultPatBearer } from "./identity-fixtures";
 import { makeLanguageModelFinishPart } from "./language-model-fixtures";
 import { TestPublicNamespace } from "./test-config";
@@ -530,6 +535,7 @@ const AcceptanceApplication = Layer.mergeAll(
   Layer.provide(DeterministicHostedInference),
   Layer.provide(SupportRecoveryTestAccess),
   Layer.provide(TestWompiEnrollmentClient),
+  Layer.provide(TestWompiBillingClient),
   Layer.provide(RuntimeAuthorityLive),
   Layer.provide(MigratorLive),
   Layer.provide(TelemetryDisabled)

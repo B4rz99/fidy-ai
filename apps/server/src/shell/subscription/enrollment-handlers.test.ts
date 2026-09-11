@@ -1,18 +1,43 @@
+import { createHash } from "node:crypto";
 import { expect, layer } from "@effect/vitest";
-import { Crypto, DateTime, Deferred, Effect, Fiber, Option, Schema } from "effect";
+import { ConfigProvider, Crypto, DateTime, Deferred, Effect, Fiber, Option, Schema } from "effect";
 import { HttpBody, HttpClient, HttpClientRequest } from "effect/unstable/http";
+import { SqlSchema } from "effect/unstable/sql";
 import { ConsentRecordId } from "~/core/consent/model";
 import { UserId } from "~/core/identity/reference";
 import { TokenBearer } from "~/core/tokens/model";
 import { WebSessionId } from "~/core/web-session/reference";
 import { calculateWebSessionDeadlines } from "~/core/web-session/rules";
 import { MigrationSqlClient } from "~/shell/db/client";
+import { withUserTransaction } from "~/shell/db/user-transaction";
 import { seedConsentedPatIdentity } from "~/shell/db/development-seed";
 import { withSubjectLock } from "~/shell/consent/repo";
 import { ApiHarness } from "~/shell/testing/api-harness";
 import { revokeCurrentOnboardingConsentForTesting } from "~/shell/testing/consent";
-import { CardEnrollment, WompiSourceId } from "~/core/subscription/enrollment-model";
+import {
+  BillingAttemptId,
+  PaymentRequestId,
+  type PriceId,
+  WompiTransactionId,
+  WompiTransactionReference,
+} from "~/core/subscription/model";
+import {
+  CardEnrollment,
+  type CardEnrollmentId,
+  CardPaymentSubmission,
+  WompiSourceId,
+} from "~/core/subscription/enrollment-model";
+import { publishBillingAttemptInScope } from "./billing-attempt-execution";
+import {
+  armBillingAttemptInScope,
+  findBillingAttemptByRequestInScope,
+  getBillingContextInScope,
+  insertPendingBillingAttemptInScope,
+} from "./billing-repo";
 import { reconcileCardEnrollment } from "./card-enrollment";
+import type { WompiTransaction } from "./wompi-billing-client";
+import { findPrice } from "./repo";
+import { receiveWompiSettlement, reconcileWompiSettlement } from "./wompi-settlement";
 
 const userId = UserId.make("22800000-0000-4000-8000-000000000001");
 const sessionId = WebSessionId.make("22800000-0000-4000-8000-000000000002");
@@ -29,8 +54,64 @@ const limitedSessionId = WebSessionId.make("22800000-0000-4000-8000-000000000022
 const limitedSeedBearer = TokenBearer.make("fin_wompise3_abcdefghijklmnopqrstuvwxyz0123456789ABCD");
 const limitedBearer = `wompi_rl_${"3".repeat(34)}`;
 const limitedCookie = `__Host-fidy_session=${limitedBearer}`;
+const weeklyPriceId = "22700000-0000-4000-8000-000000000001";
 const monthlyPriceId = "22700000-0000-4000-8000-000000000002";
 const yearlyPriceId = "22700000-0000-4000-8000-000000000003";
+const testWompiEventSecret = "test_events_subscription_settlement";
+const WompiEventConfig = ConfigProvider.fromUnknown({
+  WOMPI_ENVIRONMENT: "sandbox",
+  WOMPI_EVENT_SECRET: testWompiEventSecret,
+});
+
+const signedWompiEvent = (
+  transaction: {
+    id: string;
+    reference: string;
+    status: "APPROVED" | "DECLINED";
+    amountInCents: number;
+    sourceId: number;
+    finalizedAt: Option.Option<string>;
+  },
+  options:
+    | Readonly<{ _tag: "default" }>
+    | Readonly<{ _tag: "invalid-checksum" }>
+    | Readonly<{ _tag: "partial" }>
+    | Readonly<{ _tag: "properties"; properties: ReadonlyArray<string> }> = { _tag: "default" }
+): unknown => {
+  const validChecksum = options._tag !== "invalid-checksum";
+  const completeSignature = options._tag !== "partial";
+  const timestamp = 1_772_323_200;
+  const completeProperties = [
+    "transaction.id",
+    "transaction.status",
+    "transaction.amount_in_cents",
+  ];
+  let properties: ReadonlyArray<string> = completeProperties;
+  if (options._tag === "properties") properties = options.properties;
+  else if (!completeSignature) properties = completeProperties.slice(0, 2);
+  const signedValues = completeSignature
+    ? `${transaction.id}${transaction.status}${transaction.amountInCents}`
+    : `${transaction.id}${transaction.status}`;
+  const checksum = createHash("sha256")
+    .update(`${signedValues}${timestamp}${testWompiEventSecret}`)
+    .digest("hex");
+  return {
+    event: "transaction.updated",
+    data: {
+      transaction: {
+        id: transaction.id,
+        reference: transaction.reference,
+        status: transaction.status,
+        amount_in_cents: transaction.amountInCents,
+        currency: "COP",
+        payment_source_id: transaction.sourceId,
+        finalized_at: Option.getOrNull(transaction.finalizedAt),
+      },
+    },
+    timestamp,
+    signature: { checksum: validChecksum ? checksum : "0".repeat(64), properties },
+  };
+};
 
 const prepareRequest = (origin?: string, cookie?: string): HttpClientRequest.HttpClientRequest => {
   const request = HttpClientRequest.post("/web/subscription/card-enrollments/prepare").pipe(
@@ -110,6 +191,156 @@ const waitForBlockedAdvisoryLocks = Effect.fn("Test.waitForBlockedAdvisoryLocks"
   return yield* Effect.die("advisory-lock waiter did not arrive");
 });
 
+const assertArmedRedeliveryCannotRearm = Effect.fn(function* (input: {
+  userId: UserId;
+  billingAttemptId: BillingAttemptId;
+}) {
+  const redeliveryArm = yield* withUserTransaction(
+    input.userId,
+    armBillingAttemptInScope(
+      input.userId,
+      input.billingAttemptId,
+      DateTime.makeUnsafe("2026-03-01T11:59:58Z")
+    )
+  );
+  expect(Option.isNone(redeliveryArm)).toBe(true);
+});
+
+const assertAuthoritativeEvidenceBoundaries = Effect.fn(function* (provider: WompiTransaction) {
+  for (const mismatch of [
+    {
+      provider: { ...provider, amountInCents: provider.amountInCents + 1 },
+      environment: "sandbox" as const,
+    },
+    { provider, environment: "production" as const },
+    { provider: { ...provider, currency: "USD" as const }, environment: "sandbox" as const },
+    {
+      provider: { ...provider, sourceId: WompiSourceId.make(9999) },
+      environment: "sandbox" as const,
+    },
+    {
+      provider: {
+        ...provider,
+        transactionId: WompiTransactionId.make("mismatched-transaction"),
+      },
+      environment: "sandbox" as const,
+    },
+    {
+      provider: {
+        ...provider,
+        reference: WompiTransactionReference.make("fidy-22900000-0000-4000-8000-000000000099"),
+      },
+      environment: "sandbox" as const,
+    },
+  ]) {
+    const rejected = yield* Effect.flip(
+      reconcileWompiSettlement({
+        ...mismatch,
+        observedAt: DateTime.makeUnsafe("2026-03-01T11:59:59Z"),
+      })
+    );
+    expect(rejected._tag).toBe("MismatchedWompiEvidence");
+  }
+  yield* reconcileWompiSettlement({
+    provider: { ...provider, status: "PENDING", finalizedAt: Option.none() },
+    environment: "sandbox",
+    observedAt: DateTime.makeUnsafe("2026-03-01T11:59:59.100Z"),
+  });
+  const missingFinalization = yield* Effect.flip(
+    reconcileWompiSettlement({
+      provider: { ...provider, finalizedAt: Option.none() },
+      environment: "sandbox",
+      observedAt: DateTime.makeUnsafe("2026-03-01T11:59:59.200Z"),
+    })
+  );
+  expect(missingFinalization._tag).toBe("MismatchedWompiEvidence");
+});
+
+const assertBillingAttemptVisibilityBoundaries = Effect.fn(function* (
+  billingAttemptId: BillingAttemptId
+) {
+  const sql = yield* MigrationSqlClient;
+  yield* sql`
+    UPDATE web_sessions SET paired_at = now() - interval '1 hour',
+      fresh_until = now() - interval '50 minutes',
+      hard_expires_at = now() + interval '89 days 23 hours'
+    WHERE id = ${sessionId}
+  `;
+  const ownerObservation = yield* HttpClient.get(
+    `/web/subscription/billing-attempts/${billingAttemptId}`,
+    { headers: { origin: "https://fidyapp.com", cookie: sessionCookie } }
+  );
+  expect(ownerObservation.status).toBe(200);
+  expect(yield* ownerObservation.json).toMatchObject({ id: billingAttemptId, status: "succeeded" });
+  const crossUserObservation = yield* HttpClient.get(
+    `/web/subscription/billing-attempts/${billingAttemptId}`,
+    { headers: { origin: "https://fidyapp.com", cookie: outcomeCookie } }
+  );
+  expect(crossUserObservation.status).toBe(400);
+});
+
+const assertEnrollmentLifecycleStatuses = Effect.fn(function* (enrollmentId: CardEnrollmentId) {
+  const sql = yield* MigrationSqlClient;
+  for (const status of ["creating", "verifying"] as const) {
+    yield* sql`
+      UPDATE card_enrollments SET status = ${status}, payment_source_id = NULL
+      WHERE id = ${enrollmentId} AND user_id = ${userId}
+    `;
+    const observed = yield* HttpClient.get(`/web/subscription/card-enrollments/${enrollmentId}`, {
+      headers: { origin: "https://fidyapp.com", cookie: sessionCookie },
+    });
+    expect(yield* observed.json).toMatchObject({ status });
+  }
+});
+
+const assertPublicationRollsBack = Effect.fn(function* (input: {
+  userId: UserId;
+  enrollmentId: CardEnrollmentId;
+  priceId: PriceId;
+}) {
+  const rollbackAttemptId = BillingAttemptId.make("22900000-0000-4000-8000-000000000090");
+  const rollback = yield* Effect.result(
+    withUserTransaction(
+      input.userId,
+      Effect.gen(function* () {
+        const context = yield* getBillingContextInScope(input.userId, input.enrollmentId);
+        const price = yield* findPrice(input.priceId);
+        if (Option.isNone(context) || Option.isNone(price)) {
+          return yield* Effect.die("rollback fixture context is missing");
+        }
+        yield* insertPendingBillingAttemptInScope({
+          userId: input.userId,
+          billingAttemptId: rollbackAttemptId,
+          subscriptionId: context.value.subscriptionId,
+          paymentRequestId: PaymentRequestId.make("22900000-0000-4000-8000-000000000090"),
+          enrollmentId: input.enrollmentId,
+          paymentSourceId: context.value.paymentSourceId,
+          price: price.value,
+          timeZone: context.value.timeZone,
+          wompiEnvironment: "sandbox",
+          reference: WompiTransactionReference.make("fidy-22900000-0000-4000-8000-000000000090"),
+          createdAt: DateTime.makeUnsafe("2026-03-01T12:00:02Z"),
+        });
+        yield* publishBillingAttemptInScope({
+          userId: input.userId,
+          billingAttemptId: rollbackAttemptId,
+        });
+        return yield* Effect.fail("force publication rollback" as const);
+      })
+    )
+  );
+  expect(rollback._tag).toBe("Failure");
+  const sql = yield* MigrationSqlClient;
+  const rolledBack = yield* SqlSchema.findOne({
+    Request: Schema.Struct({ id: BillingAttemptId }),
+    Result: Schema.Struct({ count: Schema.Int }),
+    execute: ({ id }) => sql`
+      SELECT count(*)::int AS count FROM billing_attempts WHERE id = ${id}
+    `,
+  })({ id: rollbackAttemptId }).pipe(Effect.orDie);
+  expect(rolledBack.count).toBe(0);
+});
+
 layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
   "subscription enrollment HTTP boundary",
   (it) => {
@@ -157,6 +388,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           headers: { origin: "https://fidyapp.com", cookie: sessionCookie },
           body: HttpBody.jsonUnsafe({
             paymentSourceMode: "reuse",
+            paymentRequestId: "22900000-0000-4000-8000-000000000001",
             enrollmentId: "22800000-0000-4000-8000-000000000088",
             billingEmail: "verified@example.com",
           }),
@@ -223,6 +455,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           headers: { origin: "https://fidyapp.com", cookie: sessionCookie },
           body: HttpBody.jsonUnsafe({
             paymentSourceMode: "create",
+            paymentRequestId: "22900000-0000-4000-8000-000000000001",
             enrollmentId: prepared.enrollmentId,
             billingEmail: "verified@example.com",
             cardToken: "tok_test_consent_race",
@@ -249,6 +482,68 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           SELECT COUNT(*)::int AS count FROM card_payment_sources WHERE user_id = ${userId}
         `;
         expect(sources?.count).toBe(0);
+      })
+    );
+
+    it.effect("keeps Wompi event secrets out of authentication failures", () =>
+      Effect.gen(function* () {
+        const signed = signedWompiEvent(
+          {
+            id: "event-secret-test",
+            reference: "fidy-22900000-0000-4000-8000-000000000099",
+            status: "APPROVED",
+            amountInCents: 1_000,
+            sourceId: 3891,
+            finalizedAt: Option.some("2026-03-01T00:00:00.000Z"),
+          },
+          { _tag: "invalid-checksum" }
+        );
+        const failure = yield* Effect.flip(
+          receiveWompiSettlement({
+            payload: signed,
+            observedAt: DateTime.makeUnsafe("2026-03-01T00:00:01Z"),
+          }).pipe(Effect.provideService(ConfigProvider.ConfigProvider, WompiEventConfig))
+        );
+        expect(failure).toMatchObject({ _tag: "InvalidWompiEvent" });
+        expect(String(failure)).not.toContain(testWompiEventSecret);
+
+        const unsupportedProperty = signedWompiEvent(
+          {
+            id: "event-secret-test",
+            reference: "fidy-22900000-0000-4000-8000-000000000099",
+            status: "APPROVED",
+            amountInCents: 1_000,
+            sourceId: 3891,
+            finalizedAt: Option.some("2026-03-01T00:00:00.000Z"),
+          },
+          {
+            _tag: "properties",
+            properties: ["transaction.id", "transaction.status", "unsupported"],
+          }
+        );
+        const unsupportedFailure = yield* Effect.flip(
+          receiveWompiSettlement({
+            payload: unsupportedProperty,
+            observedAt: DateTime.makeUnsafe("2026-03-01T00:00:01Z"),
+          }).pipe(Effect.provideService(ConfigProvider.ConfigProvider, WompiEventConfig))
+        );
+        expect(unsupportedFailure._tag).toBe("InvalidWompiEvent");
+
+        for (const [environment, eventSecret] of [
+          ["production", "prod_events_examplekey"],
+          ["sandbox", "invalid"],
+          ["sandbox", "prod_events_examplekey"],
+        ] as const) {
+          const provider = ConfigProvider.fromUnknown({
+            WOMPI_ENVIRONMENT: environment,
+            WOMPI_EVENT_SECRET: eventSecret,
+          });
+          const authenticated = receiveWompiSettlement({
+            payload: signed,
+            observedAt: DateTime.makeUnsafe("2026-03-01T00:00:01Z"),
+          }).pipe(Effect.provideService(ConfigProvider.ConfigProvider, provider));
+          expect((yield* Effect.exit(authenticated))._tag).toBe("Failure");
+        }
       })
     );
 
@@ -279,9 +574,41 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         expect(invalid.status).toBe(400);
         const invalidSubmit = yield* HttpClient.post("/web/subscription/card-enrollments/submit", {
           headers: { ...headers, "content-type": "application/json" },
-          body: HttpBody.jsonUnsafe({ paymentSourceMode: "create", unexpected: true }),
+          body: HttpBody.jsonUnsafe({
+            paymentSourceMode: "create",
+            paymentRequestId: "22900000-0000-4000-8000-000000000001",
+            unexpected: true,
+          }),
         });
         expect(invalidSubmit.status).toBe(400);
+        const malformedWebhook = yield* HttpClient.post("/webhooks/wompi", {
+          body: HttpBody.text("{", "application/json"),
+        });
+        expect(malformedWebhook.status).toBe(400);
+        const unauthenticatedWebhook = yield* HttpClient.post("/webhooks/wompi", {
+          body: HttpBody.jsonUnsafe({ event: "transaction.updated" }),
+        });
+        expect(unauthenticatedWebhook.status).toBe(401);
+        const partiallySignedWebhook = yield* HttpClient.post("/webhooks/wompi", {
+          body: HttpBody.jsonUnsafe(
+            signedWompiEvent(
+              {
+                id: "partially-signed",
+                reference: "fidy-22900000-0000-4000-8000-000000000099",
+                status: "APPROVED",
+                amountInCents: 1_000,
+                sourceId: 3891,
+                finalizedAt: Option.some("2026-03-01T00:00:00.000Z"),
+              },
+              { _tag: "partial" }
+            )
+          ),
+        });
+        expect(partiallySignedWebhook.status).toBe(401);
+        const oversizedWebhook = yield* HttpClient.post("/webhooks/wompi", {
+          body: HttpBody.text("x".repeat(33_000), "application/json"),
+        });
+        expect(oversizedWebhook.status).toBe(413);
       })
     );
 
@@ -337,6 +664,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           headers,
           body: HttpBody.jsonUnsafe({
             paymentSourceMode: "reuse",
+            paymentRequestId: "22900000-0000-4000-8000-000000000001",
             enrollmentId: replacement.enrollmentId,
             billingEmail: "payer@example.com",
             decisions: {
@@ -358,6 +686,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           headers,
           body: HttpBody.jsonUnsafe({
             paymentSourceMode: "create",
+            paymentRequestId: "22900000-0000-4000-8000-000000000001",
             enrollmentId: replacement.enrollmentId,
             billingEmail: "payer@example.com",
             cardToken: "tok_test_expired",
@@ -368,7 +697,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
             },
           }),
         });
-        expect(yield* expired.json).toMatchObject({ status: "expired" });
+        expect(yield* expired.json).toMatchObject({ status: "refused", reason: "expired" });
       })
     );
 
@@ -385,7 +714,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         for (const [cardToken, expectedStatus] of [
           ["tok_test_declined", "refused"],
           ["tok_test_rejected", "refused"],
-          ["tok_test_ambiguous", "verifying"],
+          ["tok_test_ambiguous", "source-verifying"],
         ] as const) {
           const preparedResponse = yield* HttpClient.execute(
             prepareRequest("https://fidyapp.com", outcomeCookie)
@@ -403,6 +732,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
             },
             body: HttpBody.jsonUnsafe({
               paymentSourceMode: "create",
+              paymentRequestId: "22900000-0000-4000-8000-000000000001",
               enrollmentId: prepared.enrollmentId,
               billingEmail: "outcome@example.com",
               cardToken,
@@ -415,7 +745,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           });
           const outcome = yield* submitted.json;
           expect(outcome).toMatchObject({ status: expectedStatus });
-          if (expectedStatus === "verifying") {
+          if (expectedStatus === "source-verifying") {
             const replayedPrepare = yield* HttpClient.execute(
               prepareRequest("https://fidyapp.com", outcomeCookie)
             );
@@ -467,6 +797,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
             },
             body: HttpBody.jsonUnsafe({
               paymentSourceMode: "create",
+              paymentRequestId: "22900000-0000-4000-8000-000000000001",
               enrollmentId,
               billingEmail: "limited@example.com",
               cardToken: "tok_test_declined",
@@ -526,6 +857,11 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
     it.effect("claims one prepared enrollment and observes submit replay without duplication", () =>
       Effect.gen(function* () {
         yield* seedWebSession;
+        const fixtureSql = yield* MigrationSqlClient;
+        yield* fixtureSql`DELETE FROM wompi_billing_observations WHERE user_id = ${userId}`;
+        yield* fixtureSql`DELETE FROM paid_subscription_periods WHERE user_id = ${userId}`;
+        yield* fixtureSql`DELETE FROM billing_attempts WHERE user_id = ${userId}`;
+        yield* fixtureSql`UPDATE subscriptions SET paid_pro_active = false WHERE user_id = ${userId}`;
         const preparedResponse = yield* HttpClient.execute(
           prepareRequest("https://fidyapp.com", sessionCookie)
         );
@@ -554,6 +890,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           HttpClientRequest.setBody(
             HttpBody.jsonUnsafe({
               paymentSourceMode: "create",
+              paymentRequestId: "22900000-0000-4000-8000-000000000001",
               enrollmentId: prepared.enrollmentId,
               billingEmail: "billing@example.com",
               cardToken: "tok_test_browser_only",
@@ -569,8 +906,233 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
         const replay = yield* HttpClient.execute(submitRequest);
         expect(first.status).toBe(200);
         expect(replay.status).toBe(200);
-        expect(yield* first.json).toMatchObject({ status: "available" });
-        expect(yield* replay.json).toMatchObject({ status: "available" });
+        const firstPayment = yield* Schema.decodeUnknownEffect(CardPaymentSubmission)(
+          yield* first.json
+        );
+        const replayedPayment = yield* Schema.decodeUnknownEffect(CardPaymentSubmission)(
+          yield* replay.json
+        );
+        if (
+          firstPayment.status !== "payment-pending" ||
+          replayedPayment.status !== "payment-pending"
+        ) {
+          return yield* Effect.die("payment fixture did not start");
+        }
+        expect(replayedPayment).toMatchObject({
+          status: "payment-pending",
+          billingAttempt: { id: firstPayment.billingAttempt.id },
+        });
+        const distinctRequest = yield* HttpClient.post(
+          "/web/subscription/card-enrollments/submit",
+          {
+            headers: {
+              origin: "https://fidyapp.com",
+              cookie: sessionCookie,
+              "content-type": "application/json",
+            },
+            body: HttpBody.jsonUnsafe({
+              paymentSourceMode: "reuse",
+              paymentRequestId: "22900000-0000-4000-8000-000000000099",
+              enrollmentId: prepared.enrollmentId,
+              billingEmail: "billing@example.com",
+              decisions: {
+                acceptedEndUserPolicy: true,
+                acceptedPersonalDataAuthorization: true,
+                authorizedRecurringCharges: true,
+              },
+            }),
+          }
+        );
+        expect(yield* distinctRequest.json).toMatchObject({
+          status: "payment-pending",
+          billingAttempt: { id: firstPayment.billingAttempt.id },
+        });
+        const crossUserAttempt = yield* withUserTransaction(
+          outcomeUserId,
+          findBillingAttemptByRequestInScope(
+            outcomeUserId,
+            PaymentRequestId.make("22900000-0000-4000-8000-000000000001")
+          )
+        );
+        expect(Option.isNone(crossUserAttempt)).toBe(true);
+        const sql = yield* MigrationSqlClient;
+        const providerAttempt = yield* SqlSchema.findOne({
+          Request: Schema.Struct({ id: Schema.String }),
+          Result: Schema.Struct({
+            reference: WompiTransactionReference,
+            transactionId: Schema.OptionFromNullOr(WompiTransactionId),
+            amount: Schema.String,
+            sourceId: Schema.String,
+          }),
+          execute: ({ id }) => sql`
+            SELECT attempt.wompi_transaction_reference AS reference,
+              attempt.wompi_transaction_id AS "transactionId", attempt.amount::text AS amount,
+              source.wompi_source_id::text AS "sourceId"
+            FROM billing_attempts AS attempt
+            INNER JOIN card_payment_sources AS source ON source.id = attempt.payment_source_id
+            WHERE attempt.id = ${id}
+          `,
+        })({ id: firstPayment.billingAttempt.id }).pipe(Effect.orDie);
+        let providerAttemptWithTransaction = providerAttempt;
+        while (Option.isNone(providerAttemptWithTransaction.transactionId)) {
+          yield* Effect.sleep("10 millis");
+          providerAttemptWithTransaction = yield* SqlSchema.findOne({
+            Request: Schema.Struct({ id: Schema.String }),
+            Result: Schema.Struct({
+              reference: WompiTransactionReference,
+              transactionId: Schema.OptionFromNullOr(WompiTransactionId),
+              amount: Schema.String,
+              sourceId: Schema.String,
+            }),
+            execute: ({ id }) => sql`
+              SELECT attempt.wompi_transaction_reference AS reference,
+                attempt.wompi_transaction_id AS "transactionId", attempt.amount::text AS amount,
+                source.wompi_source_id::text AS "sourceId"
+              FROM billing_attempts AS attempt
+              INNER JOIN card_payment_sources AS source ON source.id = attempt.payment_source_id
+              WHERE attempt.id = ${id}
+            `,
+          })({ id: firstPayment.billingAttempt.id }).pipe(Effect.orDie);
+        }
+        const provider = {
+          ...providerAttemptWithTransaction,
+          transactionId: providerAttemptWithTransaction.transactionId.value,
+        };
+        const authoritativeProvider = {
+          transactionId: provider.transactionId,
+          reference: provider.reference,
+          status: "APPROVED" as const,
+          amountInCents: Number(provider.amount) * 100,
+          currency: "COP" as const,
+          sourceId: WompiSourceId.make(Number(provider.sourceId)),
+          finalizedAt: Option.some(DateTime.makeUnsafe("2026-03-01T12:00:00.000Z")),
+        };
+        yield* assertArmedRedeliveryCannotRearm({
+          userId,
+          billingAttemptId: firstPayment.billingAttempt.id,
+        });
+        const finalizedAt = "2026-03-01T12:00:00.000Z";
+        const approvedEvent = signedWompiEvent({
+          id: provider.transactionId,
+          reference: provider.reference,
+          status: "APPROVED",
+          amountInCents: Number(provider.amount) * 100,
+          sourceId: Number(provider.sourceId),
+          finalizedAt: Option.some(finalizedAt),
+        });
+        const invalidSignature = yield* HttpClient.post("/webhooks/wompi", {
+          body: HttpBody.jsonUnsafe(
+            signedWompiEvent(
+              {
+                id: provider.transactionId,
+                reference: provider.reference,
+                status: "APPROVED",
+                amountInCents: Number(provider.amount) * 100,
+                sourceId: Number(provider.sourceId),
+                finalizedAt: Option.some(finalizedAt),
+              },
+              { _tag: "invalid-checksum" }
+            )
+          ),
+        });
+        expect(invalidSignature.status).toBe(401);
+        const mismatchedAmount = yield* HttpClient.post("/webhooks/wompi", {
+          body: HttpBody.jsonUnsafe(
+            signedWompiEvent({
+              id: provider.transactionId,
+              reference: provider.reference,
+              status: "APPROVED",
+              amountInCents: Number(provider.amount) * 100 + 1,
+              sourceId: Number(provider.sourceId),
+              finalizedAt: Option.some(finalizedAt),
+            })
+          ),
+        });
+        expect(mismatchedAmount.status).toBe(400);
+        const rejectedEvidenceState = yield* SqlSchema.findOne({
+          Request: Schema.Struct({ id: Schema.String }),
+          Result: Schema.Struct({
+            status: Schema.String,
+            paid: Schema.Boolean,
+            observations: Schema.Int,
+          }),
+          execute: ({ id }) => sql`
+            SELECT attempt.status, subscription.paid_pro_active AS paid,
+              count(observation.id)::int AS observations
+            FROM billing_attempts AS attempt
+            INNER JOIN subscriptions AS subscription ON subscription.id = attempt.subscription_id
+            LEFT JOIN wompi_billing_observations AS observation
+              ON observation.billing_attempt_id = attempt.id
+            WHERE attempt.id = ${id}
+            GROUP BY attempt.status, subscription.paid_pro_active
+          `,
+        })({ id: firstPayment.billingAttempt.id }).pipe(Effect.orDie);
+        expect(rejectedEvidenceState).toEqual({ status: "pending", paid: false, observations: 0 });
+        yield* assertAuthoritativeEvidenceBoundaries(authoritativeProvider);
+        yield* receiveWompiSettlement({
+          payload: signedWompiEvent({
+            id: provider.transactionId,
+            reference: provider.reference,
+            status: "DECLINED",
+            amountInCents: Number(provider.amount) * 100,
+            sourceId: Number(provider.sourceId),
+            finalizedAt: Option.none(),
+          }),
+          observedAt: DateTime.makeUnsafe("2026-03-01T12:00:00Z"),
+        }).pipe(Effect.provideService(ConfigProvider.ConfigProvider, WompiEventConfig));
+        const failedBeforeApproval = yield* SqlSchema.findOne({
+          Request: Schema.Struct({ id: Schema.String }),
+          Result: Schema.Struct({ status: Schema.String, paid: Schema.Boolean }),
+          execute: ({ id }) => sql`
+            SELECT attempt.status, subscription.paid_pro_active AS paid
+            FROM billing_attempts AS attempt
+            INNER JOIN subscriptions AS subscription ON subscription.id = attempt.subscription_id
+            WHERE attempt.id = ${id}
+          `,
+        })({ id: firstPayment.billingAttempt.id }).pipe(Effect.orDie);
+        expect(failedBeforeApproval).toEqual({ status: "failed", paid: false });
+        yield* receiveWompiSettlement({
+          payload: approvedEvent,
+          observedAt: DateTime.makeUnsafe("2026-03-01T12:00:01Z"),
+        }).pipe(Effect.provideService(ConfigProvider.ConfigProvider, WompiEventConfig));
+        yield* receiveWompiSettlement({
+          payload: signedWompiEvent({
+            id: provider.transactionId,
+            reference: provider.reference,
+            status: "DECLINED",
+            amountInCents: Number(provider.amount) * 100,
+            sourceId: Number(provider.sourceId),
+            finalizedAt: Option.none(),
+          }),
+          observedAt: DateTime.makeUnsafe("2026-03-01T12:00:02Z"),
+        }).pipe(Effect.provideService(ConfigProvider.ConfigProvider, WompiEventConfig));
+        yield* receiveWompiSettlement({
+          payload: approvedEvent,
+          observedAt: DateTime.makeUnsafe("2026-03-01T12:00:03Z"),
+        }).pipe(Effect.provideService(ConfigProvider.ConfigProvider, WompiEventConfig));
+        const settled = yield* SqlSchema.findOne({
+          Request: Schema.Struct({ id: Schema.String }),
+          Result: Schema.Struct({
+            status: Schema.String,
+            paid: Schema.Boolean,
+            periods: Schema.Int,
+          }),
+          execute: ({ id }) => sql`
+            SELECT attempt.status, subscription.paid_pro_active AS paid,
+              (SELECT COUNT(*)::int FROM paid_subscription_periods AS period
+               WHERE period.billing_attempt_id = attempt.id) AS periods
+            FROM billing_attempts AS attempt
+            INNER JOIN subscriptions AS subscription ON subscription.id = attempt.subscription_id
+            WHERE attempt.id = ${id}
+          `,
+        })({ id: firstPayment.billingAttempt.id }).pipe(Effect.orDie);
+        expect(settled).toEqual({ status: "succeeded", paid: true, periods: 1 });
+
+        yield* assertPublicationRollsBack({
+          userId,
+          enrollmentId: prepared.enrollmentId,
+          priceId: firstPayment.billingAttempt.priceId,
+        });
 
         const yearlyPrepare = HttpClientRequest.post(
           "/web/subscription/card-enrollments/prepare"
@@ -592,6 +1154,7 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
           },
           body: HttpBody.jsonUnsafe({
             paymentSourceMode: "reuse",
+            paymentRequestId: "22900000-0000-4000-8000-000000000002",
             enrollmentId: yearly.enrollmentId,
             billingEmail: "renewal@example.com",
             decisions: {
@@ -601,25 +1164,56 @@ layer(ApiHarness, { excludeTestServices: true, timeout: "30 seconds" })(
             },
           }),
         });
-        expect(yield* reuse.json).toMatchObject({ status: "available", priceId: yearlyPriceId });
+        expect(yield* reuse.json).toMatchObject({
+          status: "payment-pending",
+          billingAttempt: { priceId: yearlyPriceId },
+        });
         const observedAvailable = yield* HttpClient.execute(yearlyPrepare);
         expect(yield* observedAvailable.json).toMatchObject({
           enrollmentId: yearly.enrollmentId,
           status: "available",
         });
 
-        const sql = yield* MigrationSqlClient;
-        for (const status of ["creating", "verifying"] as const) {
-          yield* sql`
-            UPDATE card_enrollments SET status = ${status}, payment_source_id = NULL
-            WHERE id = ${yearly.enrollmentId} AND user_id = ${userId}
-          `;
-          const observed = yield* HttpClient.get(
-            `/web/subscription/card-enrollments/${yearly.enrollmentId}`,
-            { headers: { origin: "https://fidyapp.com", cookie: sessionCookie } }
-          );
-          expect(yield* observed.json).toMatchObject({ status });
-        }
+        const weeklyResponse = yield* HttpClient.post(
+          "/web/subscription/card-enrollments/prepare",
+          {
+            headers: { origin: "https://fidyapp.com", cookie: sessionCookie },
+            body: HttpBody.jsonUnsafe({ priceId: weeklyPriceId }),
+          }
+        );
+        const weekly = yield* Schema.decodeUnknownEffect(CardEnrollment)(
+          yield* weeklyResponse.json
+        );
+        if (weekly.status !== "prepared") return yield* Effect.die("weekly Price not prepared");
+        const weeklyPayment = yield* HttpClient.post("/web/subscription/card-enrollments/submit", {
+          headers: {
+            origin: "https://fidyapp.com",
+            cookie: sessionCookie,
+            "content-type": "application/json",
+          },
+          body: HttpBody.jsonUnsafe({
+            paymentSourceMode: "reuse",
+            paymentRequestId: "22900000-0000-4000-8000-000000000003",
+            enrollmentId: weekly.enrollmentId,
+            billingEmail: "renewal@example.com",
+            decisions: {
+              acceptedEndUserPolicy: true,
+              acceptedPersonalDataAuthorization: true,
+              authorizedRecurringCharges: true,
+            },
+          }),
+        });
+        expect(yield* weeklyPayment.json).toMatchObject({
+          status: "payment-pending",
+          billingAttempt: {
+            priceId: weeklyPriceId,
+            money: { currency: "COP" },
+            billingPeriod: "weekly",
+          },
+        });
+
+        yield* assertEnrollmentLifecycleStatuses(yearly.enrollmentId);
+        yield* assertBillingAttemptVisibilityBoundaries(firstPayment.billingAttempt.id);
       })
     );
   }

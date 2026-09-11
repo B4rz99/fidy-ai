@@ -3,6 +3,7 @@ export const userTableNames = [
   "agent_confirmation_consumptions",
   "audit_log_entries",
   "backup_recovery_credentials",
+  "billing_attempts",
   "browser_pairing_email_delivery_intents",
   "browser_pairing_email_workflows",
   "budget_month_latches",
@@ -30,6 +31,7 @@ export const userTableNames = [
   "memories",
   "memory_revisions",
   "needs_review_items",
+  "paid_subscription_periods",
   "raw_email_ingest_samples",
   "source_attestations",
   "statement_backfill_entitlements",
@@ -52,4 +54,5 @@ export const userTableNames = [
   "whatsapp_identity_change_evidence",
   "whatsapp_inbound_jobs",
   "whatsapp_message_evidence",
+  "wompi_billing_observations",
 ] as const;

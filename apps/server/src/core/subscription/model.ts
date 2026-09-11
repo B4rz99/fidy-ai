@@ -1,6 +1,7 @@
 import { BigDecimal, Schema } from "effect";
-import { ServiceMarket } from "~/core/_shared/context";
+import { IanaTimeZone, ServiceMarket } from "~/core/_shared/context";
 import { Money } from "~/core/_shared/money";
+import { UtcTimestamp } from "~/core/_shared/time";
 import { PriceId } from "./reference";
 
 export { PriceId } from "./reference";
@@ -110,3 +111,95 @@ export const SubscriptionOffers = Schema.Tuple([Price, Price, Price])
   .check(authoritativeOfferSet)
   .annotate({ identifier: "SubscriptionOffers" });
 export type SubscriptionOffers = typeof SubscriptionOffers.Type;
+
+/** Stable identity of one ongoing paid Subscription. */
+export const SubscriptionId = Schema.String.check(Schema.isUUID())
+  .pipe(Schema.brand("SubscriptionId"))
+  .annotate({ identifier: "SubscriptionId" });
+export type SubscriptionId = typeof SubscriptionId.Type;
+
+/** Browser-generated identity of one intentional payment action, scoped by User in persistence. */
+export const PaymentRequestId = Schema.String.check(Schema.isUUID())
+  .pipe(Schema.brand("PaymentRequestId"))
+  .annotate({ identifier: "PaymentRequestId" });
+export type PaymentRequestId = typeof PaymentRequestId.Type;
+
+/** Stable Fidy identity of one attempt to collect Subscription Money and its successful period. */
+export const BillingAttemptId = Schema.String.check(Schema.isUUID())
+  .pipe(Schema.brand("BillingAttemptId"))
+  .annotate({ identifier: "BillingAttemptId" });
+export type BillingAttemptId = typeof BillingAttemptId.Type;
+
+/** Private Wompi merchant reference used only to correlate authenticated provider evidence. */
+export const WompiTransactionReference = Schema.String.check(
+  Schema.isPattern(/^fidy-[0-9a-f-]{36}$/u)
+)
+  .pipe(Schema.brand("WompiTransactionReference"))
+  .annotate({ identifier: "WompiTransactionReference" });
+export type WompiTransactionReference = typeof WompiTransactionReference.Type;
+
+const maximumWompiTransactionIdCharacters = 128;
+
+/** Private Wompi transaction identity retained only behind the Subscription shell seam. */
+export const WompiTransactionId = Schema.String.check(
+  Schema.isNonEmpty(),
+  Schema.isMaxLength(maximumWompiTransactionIdCharacters)
+)
+  .pipe(Schema.brand("WompiTransactionId"))
+  .annotate({ identifier: "WompiTransactionId" });
+export type WompiTransactionId = typeof WompiTransactionId.Type;
+
+/** Provider environment snapshotted with each BillingAttempt and checked during settlement. */
+export const WompiEnvironment = Schema.Literals(["sandbox", "production"]).annotate({
+  identifier: "WompiEnvironment",
+});
+export type WompiEnvironment = typeof WompiEnvironment.Type;
+
+/** Provider transaction state accepted from bounded Wompi responses and signed events. */
+export const WompiBillingStatus = Schema.Literals([
+  "PENDING",
+  "APPROVED",
+  "DECLINED",
+  "VOIDED",
+  "ERROR",
+]);
+export type WompiBillingStatus = typeof WompiBillingStatus.Type;
+
+const BillingAttemptSnapshot = {
+  id: BillingAttemptId,
+  priceId: PriceId,
+  money: Money,
+  billingPeriod: BillingPeriod,
+  serviceMarket: ServiceMarket,
+  taxTreatment: TaxTreatment,
+  timeZone: IanaTimeZone,
+  createdAt: UtcTimestamp,
+};
+
+/** Browser-safe projection of an unsettled BillingAttempt. */
+export const PendingBillingAttempt = Schema.Struct({
+  status: Schema.Literal("pending"),
+  ...BillingAttemptSnapshot,
+});
+/** Browser-safe projection of a BillingAttempt settled by verified negative evidence. */
+export const FailedBillingAttempt = Schema.Struct({
+  status: Schema.Literal("failed"),
+  ...BillingAttemptSnapshot,
+  failedAt: UtcTimestamp,
+});
+/** Browser-safe projection of a BillingAttempt settled by verified approval. */
+export const SucceededBillingAttempt = Schema.Struct({
+  status: Schema.Literal("succeeded"),
+  ...BillingAttemptSnapshot,
+  finalizedAt: UtcTimestamp,
+  paidPeriodEndsAt: UtcTimestamp,
+  renewalAnchor: UtcTimestamp,
+});
+
+/** Browser-safe BillingAttempt projection; all provider and payment-source references are absent. */
+export const BillingAttempt = Schema.Union([
+  PendingBillingAttempt,
+  FailedBillingAttempt,
+  SucceededBillingAttempt,
+]).annotate({ identifier: "BillingAttempt" });
+export type BillingAttempt = typeof BillingAttempt.Type;

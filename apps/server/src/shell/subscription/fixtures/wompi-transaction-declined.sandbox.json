@@ -1,0 +1,11 @@
+{
+  "data": {
+    "id": "transaction-123",
+    "reference": "fidy-22900000-0000-4000-8000-000000000001",
+    "status": "DECLINED",
+    "amount_in_cents": 2890000,
+    "currency": "COP",
+    "payment_source_id": 3891,
+    "finalized_at": null
+  }
+}

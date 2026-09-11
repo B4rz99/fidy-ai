@@ -6,8 +6,10 @@ import {
   CardEnrollment,
   CardEnrollmentDecisions,
   CardEnrollmentId,
+  CardPaymentSubmission,
   maximumTransientCardTokenCharacters,
 } from "~/core/subscription/enrollment-model";
+import { BillingAttempt, BillingAttemptId, PaymentRequestId } from "~/core/subscription/model";
 import { PriceId } from "~/core/subscription/reference";
 
 const invalidError = {
@@ -72,6 +74,7 @@ const TokenText = Schema.String.check(
 );
 const SubmitBase = {
   enrollmentId: CardEnrollmentId,
+  paymentRequestId: PaymentRequestId,
   billingEmail: BillingEmail,
   decisions: CardEnrollmentDecisions,
 };
@@ -108,7 +111,7 @@ export const SubscriptionEnrollmentGroup = HttpApiGroup.make("subscriptionEnroll
   .add(
     HttpApiEndpoint.post("submit", "/web/subscription/card-enrollments/submit", {
       payload: SubmitCardEnrollmentPayload,
-      success: CardEnrollment,
+      success: CardPaymentSubmission,
       error: directErrors,
     })
   )
@@ -116,6 +119,13 @@ export const SubscriptionEnrollmentGroup = HttpApiGroup.make("subscriptionEnroll
     HttpApiEndpoint.get("status", "/web/subscription/card-enrollments/:enrollmentId", {
       params: { enrollmentId: CardEnrollmentId },
       success: CardEnrollment,
+      error: directErrors,
+    })
+  )
+  .add(
+    HttpApiEndpoint.get("billingAttempt", "/web/subscription/billing-attempts/:billingAttemptId", {
+      params: { billingAttemptId: BillingAttemptId },
+      success: BillingAttempt,
       error: directErrors,
     })
   );

@@ -83,8 +83,14 @@ feature-specific allowlist. See [ADR 0012](../../docs/adr/0012-canonical-mutatio
 Proof-bearing bootstrap APIs and browser-only payment-credential enrollment are deliberate narrow
 exceptions when transient credentials must remain unrepresentable to canonical callers, hosted
 agents, OpenAPI, logs, or persistence. They end at stable-User canonical authority and do not
-create parallel domain contracts. See [ADR 0015](../../docs/adr/0015-browser-paired-web-authentication.md)
-and [ADR 0021](../../docs/adr/0021-browser-only-payment-credential-enrollment.md).
+create parallel domain contracts. The payment boundary requires exact Origin, a fresh WebSession,
+current Consent, no-store responses, bounded JSON, User-stable provider admission, and browser-safe
+outputs. Read-only BillingAttempt observation still requires exact Origin and an active WebSession,
+but not session freshness, and never replays submission. The boundary starts first collection with a
+browser-generated `PaymentRequestId`; provider responses and redirects are observations, never
+settlement authority. See
+[ADR 0015](../../docs/adr/0015-browser-paired-web-authentication.md) and
+[ADR 0021](../../docs/adr/0021-browser-only-payment-credential-enrollment.md).
 
 ### Hosted agent
 
@@ -154,6 +160,12 @@ Distributed security and spend admission remains PostgreSQL-backed; process-loca
 only own restart-safe resource bounds. Best-effort maintenance may delay cleanup but cannot authorize
 expired work. Correctness-critical continuation uses durable execution. No Fidy queue, lease,
 workflow, or runner framework should be layered over the Effect substrate.
+
+Subscription atomically persists and publishes an immutable pending `BillingAttempt` before arming
+a provider mutation once. An ambiguous armed mutation is never resent. Reconciliation uses retained
+Wompi transaction identity because Wompi does not document merchant-reference lookup. Only bounded,
+authoritative evidence matching the attempt may atomically create its paid period and activate paid
+Pro.
 
 See [ADR 0024](../../docs/adr/0024-effect-durable-execution.md),
 [ADR 0025](../../docs/adr/0025-retain-postgresql-admission.md), and the
